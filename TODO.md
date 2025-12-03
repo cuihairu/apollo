@@ -28,6 +28,9 @@
   - [ ] Refactor existing services to inherit from `IComponent`.
   - [ ] Implement `AutoRegistry` for component registration.
   - [ ] Implement **Component Discovery** (Service Locator) for type-based lookups.
+  - [ ] Implement **Auto-Registration** macro (`REGISTER_COMPONENT`).
+  - [ ] Implement **Config Injection** helper (`ConfigProperty<T>`).
+  - [ ] Implement **Phased Lifecycle** (`GetPhase`, `IsAutoStartup`) and `Application.run()`.
 
 ## 2. Documentation
 
