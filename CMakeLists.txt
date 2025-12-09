@@ -60,14 +60,30 @@ target_include_directories(apollo PUBLIC
 # 添加 CMake 模块路径
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-find_package(nlohmann_json QUIET)
+# 使用 vcpkg 或系统包管理器
+if(DEFINED CMAKE_TOOLCHAIN_FILE)
+    # 使用 vcpkg
+    find_package(nlohmann_json CONFIG REQUIRED)
+    find_package(protobuf CONFIG REQUIRED)
+    find_package(gtest CONFIG REQUIRED)
+    find_package(fmt CONFIG REQUIRED)
 
-if(nlohmann_json_FOUND)
-    target_link_libraries(apollo PRIVATE nlohmann_json::nlohmann_json)
-    target_compile_definitions(apollo PRIVATE HAVE_NLOHMANN_JSON)
+    target_link_libraries(apollo PRIVATE
+        nlohmann_json::nlohmann_json
+        protobuf::libprotobuf
+        fmt::fmt
+    )
 else()
-    message(STATUS "nlohmann/json not found, using bundled header")
-    target_include_directories(apollo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+    # 回退到系统包管理器
+    find_package(nlohmann_json QUIET)
+
+    if(nlohmann_json_FOUND)
+        target_link_libraries(apollo PRIVATE nlohmann_json::nlohmann_json)
+        target_compile_definitions(apollo PRIVATE HAVE_NLOHMANN_JSON)
+    else()
+        message(STATUS "nlohmann/json not found, using bundled header")
+        target_include_directories(apollo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+    endif()
 endif()
 
 if(ENABLE_FILEWATCHER)
