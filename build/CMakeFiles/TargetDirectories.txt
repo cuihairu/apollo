@@ -1,0 +1,16 @@
+/Users/cui/Workspaces/apollo/build/CMakeFiles/common.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/test.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/edit_cache.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/rebuild_cache.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/list_install_components.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/install.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/install/local.dir
+/Users/cui/Workspaces/apollo/build/CMakeFiles/install/strip.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/ioc_tests_simple.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/test.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/edit_cache.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/rebuild_cache.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/list_install_components.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/install.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/install/local.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/install/strip.dir

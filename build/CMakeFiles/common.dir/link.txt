@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcommon.a CMakeFiles/common.dir/src/common/ConfigManager.cpp.o CMakeFiles/common.dir/src/common/FileWatcher.cpp.o
+/usr/bin/ranlib libcommon.a
