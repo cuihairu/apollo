@@ -32,7 +32,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.14
@@ -93,7 +93,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Coverage Tools
       run: |
@@ -152,7 +152,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Analysis Tools
       run: |
@@ -195,7 +195,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Documentation Tools
       run: |
@@ -236,7 +236,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Configure CMake for Release
       run: >

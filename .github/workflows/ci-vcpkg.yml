@@ -24,6 +24,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Configure CMake
       run: |
@@ -54,6 +55,7 @@ jobs:
       uses: lukka/run-vcpkg@v10
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Doxygen
       run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
