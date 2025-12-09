@@ -16,7 +16,7 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libjson-dev libprotobuf-dev protobuf-compiler
+        sudo apt-get install -y nlohmann-json3-dev libprotobuf-dev protobuf-compiler
 
     - name: Configure CMake
       run: |
