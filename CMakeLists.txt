@@ -16,7 +16,14 @@ add_library(common STATIC
     src/thread_pool.cpp
     src/net/net_common.cpp
     src/net/socket.cpp
+    src/net/protobuf_message.cpp
+    src/net/rpc.cpp
+    src/net/reactor.cpp
     src/attribute.cpp
+    src/aoi.cpp
+    src/battle/ecs.cpp
+    src/db/connection_pool.cpp
+    src/db/redis.cpp
 )
 
 target_include_directories(common PUBLIC

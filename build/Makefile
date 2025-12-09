@@ -210,6 +210,30 @@ all_features_test/fast:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/all_features_test.dir/build.make tests/CMakeFiles/all_features_test.dir/build
 .PHONY : all_features_test/fast
 
+src/aoi.o: src/aoi.cpp.o
+.PHONY : src/aoi.o
+
+# target to build an object file
+src/aoi.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/aoi.cpp.o
+.PHONY : src/aoi.cpp.o
+
+src/aoi.i: src/aoi.cpp.i
+.PHONY : src/aoi.i
+
+# target to preprocess a source file
+src/aoi.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/aoi.cpp.i
+.PHONY : src/aoi.cpp.i
+
+src/aoi.s: src/aoi.cpp.s
+.PHONY : src/aoi.s
+
+# target to generate assembly for a file
+src/aoi.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/aoi.cpp.s
+.PHONY : src/aoi.cpp.s
+
 src/attribute.o: src/attribute.cpp.o
 .PHONY : src/attribute.o
 
@@ -233,6 +257,30 @@ src/attribute.s: src/attribute.cpp.s
 src/attribute.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/attribute.cpp.s
 .PHONY : src/attribute.cpp.s
+
+src/battle/ecs.o: src/battle/ecs.cpp.o
+.PHONY : src/battle/ecs.o
+
+# target to build an object file
+src/battle/ecs.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/battle/ecs.cpp.o
+.PHONY : src/battle/ecs.cpp.o
+
+src/battle/ecs.i: src/battle/ecs.cpp.i
+.PHONY : src/battle/ecs.i
+
+# target to preprocess a source file
+src/battle/ecs.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/battle/ecs.cpp.i
+.PHONY : src/battle/ecs.cpp.i
+
+src/battle/ecs.s: src/battle/ecs.cpp.s
+.PHONY : src/battle/ecs.s
+
+# target to generate assembly for a file
+src/battle/ecs.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/battle/ecs.cpp.s
+.PHONY : src/battle/ecs.cpp.s
 
 src/common/ConfigManager.o: src/common/ConfigManager.cpp.o
 .PHONY : src/common/ConfigManager.o
@@ -282,6 +330,54 @@ src/common/FileWatcher.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/common/FileWatcher.cpp.s
 .PHONY : src/common/FileWatcher.cpp.s
 
+src/db/connection_pool.o: src/db/connection_pool.cpp.o
+.PHONY : src/db/connection_pool.o
+
+# target to build an object file
+src/db/connection_pool.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/db/connection_pool.cpp.o
+.PHONY : src/db/connection_pool.cpp.o
+
+src/db/connection_pool.i: src/db/connection_pool.cpp.i
+.PHONY : src/db/connection_pool.i
+
+# target to preprocess a source file
+src/db/connection_pool.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/db/connection_pool.cpp.i
+.PHONY : src/db/connection_pool.cpp.i
+
+src/db/connection_pool.s: src/db/connection_pool.cpp.s
+.PHONY : src/db/connection_pool.s
+
+# target to generate assembly for a file
+src/db/connection_pool.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/db/connection_pool.cpp.s
+.PHONY : src/db/connection_pool.cpp.s
+
+src/db/redis.o: src/db/redis.cpp.o
+.PHONY : src/db/redis.o
+
+# target to build an object file
+src/db/redis.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/db/redis.cpp.o
+.PHONY : src/db/redis.cpp.o
+
+src/db/redis.i: src/db/redis.cpp.i
+.PHONY : src/db/redis.i
+
+# target to preprocess a source file
+src/db/redis.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/db/redis.cpp.i
+.PHONY : src/db/redis.cpp.i
+
+src/db/redis.s: src/db/redis.cpp.s
+.PHONY : src/db/redis.s
+
+# target to generate assembly for a file
+src/db/redis.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/db/redis.cpp.s
+.PHONY : src/db/redis.cpp.s
+
 src/logger.o: src/logger.cpp.o
 .PHONY : src/logger.o
 
@@ -329,6 +425,78 @@ src/net/net_common.s: src/net/net_common.cpp.s
 src/net/net_common.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/net_common.cpp.s
 .PHONY : src/net/net_common.cpp.s
+
+src/net/protobuf_message.o: src/net/protobuf_message.cpp.o
+.PHONY : src/net/protobuf_message.o
+
+# target to build an object file
+src/net/protobuf_message.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/protobuf_message.cpp.o
+.PHONY : src/net/protobuf_message.cpp.o
+
+src/net/protobuf_message.i: src/net/protobuf_message.cpp.i
+.PHONY : src/net/protobuf_message.i
+
+# target to preprocess a source file
+src/net/protobuf_message.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/protobuf_message.cpp.i
+.PHONY : src/net/protobuf_message.cpp.i
+
+src/net/protobuf_message.s: src/net/protobuf_message.cpp.s
+.PHONY : src/net/protobuf_message.s
+
+# target to generate assembly for a file
+src/net/protobuf_message.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/protobuf_message.cpp.s
+.PHONY : src/net/protobuf_message.cpp.s
+
+src/net/reactor.o: src/net/reactor.cpp.o
+.PHONY : src/net/reactor.o
+
+# target to build an object file
+src/net/reactor.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/reactor.cpp.o
+.PHONY : src/net/reactor.cpp.o
+
+src/net/reactor.i: src/net/reactor.cpp.i
+.PHONY : src/net/reactor.i
+
+# target to preprocess a source file
+src/net/reactor.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/reactor.cpp.i
+.PHONY : src/net/reactor.cpp.i
+
+src/net/reactor.s: src/net/reactor.cpp.s
+.PHONY : src/net/reactor.s
+
+# target to generate assembly for a file
+src/net/reactor.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/reactor.cpp.s
+.PHONY : src/net/reactor.cpp.s
+
+src/net/rpc.o: src/net/rpc.cpp.o
+.PHONY : src/net/rpc.o
+
+# target to build an object file
+src/net/rpc.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/rpc.cpp.o
+.PHONY : src/net/rpc.cpp.o
+
+src/net/rpc.i: src/net/rpc.cpp.i
+.PHONY : src/net/rpc.i
+
+# target to preprocess a source file
+src/net/rpc.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/rpc.cpp.i
+.PHONY : src/net/rpc.cpp.i
+
+src/net/rpc.s: src/net/rpc.cpp.s
+.PHONY : src/net/rpc.s
+
+# target to generate assembly for a file
+src/net/rpc.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/rpc.cpp.s
+.PHONY : src/net/rpc.cpp.s
 
 src/net/socket.o: src/net/socket.cpp.o
 .PHONY : src/net/socket.o
@@ -394,21 +562,42 @@ help:
 	@echo "... all_features_test"
 	@echo "... common"
 	@echo "... ioc_tests_simple"
+	@echo "... src/aoi.o"
+	@echo "... src/aoi.i"
+	@echo "... src/aoi.s"
 	@echo "... src/attribute.o"
 	@echo "... src/attribute.i"
 	@echo "... src/attribute.s"
+	@echo "... src/battle/ecs.o"
+	@echo "... src/battle/ecs.i"
+	@echo "... src/battle/ecs.s"
 	@echo "... src/common/ConfigManager.o"
 	@echo "... src/common/ConfigManager.i"
 	@echo "... src/common/ConfigManager.s"
 	@echo "... src/common/FileWatcher.o"
 	@echo "... src/common/FileWatcher.i"
 	@echo "... src/common/FileWatcher.s"
+	@echo "... src/db/connection_pool.o"
+	@echo "... src/db/connection_pool.i"
+	@echo "... src/db/connection_pool.s"
+	@echo "... src/db/redis.o"
+	@echo "... src/db/redis.i"
+	@echo "... src/db/redis.s"
 	@echo "... src/logger.o"
 	@echo "... src/logger.i"
 	@echo "... src/logger.s"
 	@echo "... src/net/net_common.o"
 	@echo "... src/net/net_common.i"
 	@echo "... src/net/net_common.s"
+	@echo "... src/net/protobuf_message.o"
+	@echo "... src/net/protobuf_message.i"
+	@echo "... src/net/protobuf_message.s"
+	@echo "... src/net/reactor.o"
+	@echo "... src/net/reactor.i"
+	@echo "... src/net/reactor.s"
+	@echo "... src/net/rpc.o"
+	@echo "... src/net/rpc.i"
+	@echo "... src/net/rpc.s"
 	@echo "... src/net/socket.o"
 	@echo "... src/net/socket.i"
 	@echo "... src/net/socket.s"

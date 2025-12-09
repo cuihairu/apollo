@@ -6,3 +6,6 @@ target_link_libraries(config_example PRIVATE common)
 
 add_executable(dependency_example dependency_example.cpp)
 target_link_libraries(dependency_example PRIVATE common)
+
+add_executable(all_features_demo all_features_demo.cpp)
+target_link_libraries(all_features_demo PRIVATE common)
