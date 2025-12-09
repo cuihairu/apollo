@@ -1,11 +1,11 @@
 add_executable(ioc_example basic_example.cpp)
-target_link_libraries(ioc_example PRIVATE common)
+target_link_libraries(ioc_example PRIVATE apollo)
 
 add_executable(config_example config_example.cpp)
-target_link_libraries(config_example PRIVATE common)
+target_link_libraries(config_example PRIVATE apollo)
 
 add_executable(dependency_example dependency_example.cpp)
-target_link_libraries(dependency_example PRIVATE common)
+target_link_libraries(dependency_example PRIVATE apollo)
 
 add_executable(all_features_demo all_features_demo.cpp)
-target_link_libraries(all_features_demo PRIVATE common)
+target_link_libraries(all_features_demo PRIVATE apollo)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ApolloIoC VERSION 1.0.0 LANGUAGES CXX)
+project(ApolloMMORPG VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,24 +21,38 @@ if(BUILD_TESTS)
     set(APOLLO_BUILD_TESTS ON CACHE BOOL "Build unit tests" FORCE)
 endif()
 
-add_library(common STATIC
-    src/common/ConfigManager.cpp
-    src/common/FileWatcher.cpp
-    src/logger.cpp
-    src/thread_pool.cpp
-    src/net/net_common.cpp
-    src/net/socket.cpp
-    src/net/protobuf_message.cpp
-    src/net/rpc.cpp
-    src/net/reactor.cpp
-    src/attribute.cpp
-    src/aoi.cpp
-    src/battle/ecs.cpp
-    src/db/connection_pool.cpp
-    src/db/redis.cpp
+# Apollo 核心库
+add_library(apollo STATIC
+    # Framework
+    src/framework/ioc/ConfigManager.cpp
+
+    # Game
+    src/game/aoi/aoi.cpp
+    src/game/attributes/attribute.cpp
+    src/game/battle/ecs/ecs.cpp
+
+    # Network
+    src/network/net_common.cpp
+    src/network/socket.cpp
+    src/network/protobuf_message.cpp
+    src/network/rpc.cpp
+    src/network/reactor.cpp
+
+    # Storage
+    src/storage/cache/redis.cpp
+    src/storage/database/connection_pool.cpp
+
+    # Utils
+    src/utils/config/config_loader.cpp
+    src/utils/io/FileWatcher.cpp
+    src/utils/logging/logger.cpp
+    src/utils/threading/thread_pool.cpp
 )
 
-target_include_directories(common PUBLIC
+# 设置目标名称为 apollo
+set_target_properties(apollo PROPERTIES OUTPUT_NAME apollo)
+
+target_include_directories(apollo PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
@@ -49,26 +63,26 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(nlohmann_json QUIET)
 
 if(nlohmann_json_FOUND)
-    target_link_libraries(common PRIVATE nlohmann_json::nlohmann_json)
-    target_compile_definitions(common PRIVATE HAVE_NLOHMANN_JSON)
+    target_link_libraries(apollo PRIVATE nlohmann_json::nlohmann_json)
+    target_compile_definitions(apollo PRIVATE HAVE_NLOHMANN_JSON)
 else()
     message(STATUS "nlohmann/json not found, using bundled header")
-    target_include_directories(common PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+    target_include_directories(apollo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 endif()
 
 if(ENABLE_FILEWATCHER)
     if(WIN32)
-        target_compile_definitions(common PRIVATE ENABLE_FILEWATCHER)
+        target_compile_definitions(apollo PRIVATE ENABLE_FILEWATCHER)
     else()
-        target_compile_definitions(common PRIVATE ENABLE_FILEWATCHER)
+        target_compile_definitions(apollo PRIVATE ENABLE_FILEWATCHER)
     endif()
 endif()
 
 # 代码覆盖率支持
 if(APOLLO_ENABLE_COVERAGE)
     include(CodeCoverage)
-    target_compile_options(common PRIVATE ${CMAKE_CXX_FLAGS_COVERAGE})
-    target_link_libraries(common PRIVATE --coverage)
+    target_compile_options(apollo PRIVATE ${CMAKE_CXX_FLAGS_COVERAGE})
+    target_link_libraries(apollo PRIVATE --coverage)
     message(STATUS "Code coverage enabled")
 endif()
 
@@ -83,17 +97,17 @@ if(APOLLO_ENABLE_CLANG_TIDY)
     endif()
 endif()
 
-target_compile_features(common PUBLIC cxx_std_17)
+target_compile_features(apollo PUBLIC cxx_std_17)
 
 # 编译选项
 if(MSVC)
-    target_compile_options(common PRIVATE /W4 /WX)
-    target_compile_definitions(common PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(apollo PRIVATE /W4 /WX)
+    target_compile_definitions(apollo PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
-    target_compile_options(common PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(apollo PRIVATE -Wall -Wextra -Wpedantic -Werror)
 
     # 调试模式下的额外检查
-    target_compile_options(common PRIVATE
+    target_compile_options(apollo PRIVATE
         $<$<CONFIG:Debug>:-g -O0>
         $<$<CONFIG:Release>:-O3 -DNDEBUG>
     )
@@ -104,8 +118,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(GNUInstallDirs)
 
-install(TARGETS common
-    EXPORT ApolloIoCTargets
+install(TARGETS apollo
+    EXPORT ApolloTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -113,30 +127,30 @@ install(TARGETS common
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(EXPORT ApolloIoCTargets
-    FILE ApolloIoCTargets.cmake
-    NAMESPACE ApolloIoC::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ApolloIoC
+install(EXPORT ApolloTargets
+    FILE ApolloTargets.cmake
+    NAMESPACE Apollo::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Apollo
 )
 
 include(CMakePackageConfigHelpers)
 
 write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloIoCConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfigVersion.cmake"
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY AnyNewerVersion
 )
 
 configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApolloIoCConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloIoCConfig.cmake"
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ApolloIoC
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApolloConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Apollo
 )
 
 install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloIoCConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloIoCConfigVersion.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ApolloIoC
+    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Apollo
 )
 
 # Doxygen 文档生成

@@ -14,7 +14,7 @@ if(GTest_FOUND)
 
     target_link_libraries(ioc_tests
         PRIVATE
-        common
+        apollo
         GTest::gtest
         GTest::gtest_main
     )
@@ -41,7 +41,7 @@ if(GTest_FOUND)
 
     target_link_libraries(redis_tests
         PRIVATE
-        common
+        apollo
         GTest::gtest
         GTest::gtest_main
     )
@@ -61,7 +61,7 @@ if(GTest_FOUND)
 
     target_link_libraries(protobuf_tests
         PRIVATE
-        common
+        apollo
         GTest::gtest
         GTest::gtest_main
     )
@@ -85,8 +85,8 @@ else()
     add_executable(ioc_tests_simple test_simple.cpp)
     add_executable(all_features_test test_all_features.cpp)
 
-    target_link_libraries(ioc_tests_simple PRIVATE common)
-    target_link_libraries(all_features_test PRIVATE common)
+    target_link_libraries(ioc_tests_simple PRIVATE apollo)
+    target_link_libraries(all_features_test PRIVATE apollo)
 
     # 为Windows添加网络库链接
     if(WIN32)

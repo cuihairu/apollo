@@ -1,0 +1,25 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# 查找依赖项
+find_dependency(nlohmann_json QUIET)
+
+# 包含 targets 文件
+include("${CMAKE_CURRENT_LIST_DIR}/ApolloTargets.cmake")
+
+# 设置变量
+set(APOLLO_VERSION @PROJECT_VERSION@)
+
+# 检查组件
+set(_apollo_supported_components core framework game network storage utils)
+
+foreach(_comp ${Apollo_FIND_COMPONENTS})
+    if(NOT _comp IN_LIST _apollo_supported_components)
+        set(Apollo_FOUND False)
+        set(Apollo_NOT_FOUND_MESSAGE Apollo: Unsupported component: ${_comp})
+    endif()
+endforeach()
+
+# 导出目标
+check_required_components(Apollo)
