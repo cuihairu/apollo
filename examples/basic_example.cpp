@@ -1,6 +1,6 @@
 #include "apollo/BaseComponent.h"
 #include "apollo/ComponentRegistry.h"
-#include "apollo/ApplicationContext.h"
+#include "apollo/framework/ioc/ApplicationContext.h"
 #include <iostream>
 
 using namespace Apollo;

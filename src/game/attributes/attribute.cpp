@@ -1,4 +1,4 @@
-#include "apollo/attribute.hpp"
+#include "apollo/game/attributes/attribute.hpp"
 #include <stdexcept>
 
 namespace apollo {

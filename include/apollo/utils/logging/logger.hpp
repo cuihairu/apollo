@@ -8,6 +8,7 @@
 #include <thread>
 #include <chrono>
 #include <queue>
+#include <unordered_map>
 #include <condition_variable>
 #include <atomic>
 

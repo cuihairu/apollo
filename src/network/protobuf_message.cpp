@@ -1,4 +1,4 @@
-#include "apollo/net/protobuf_message.hpp"
+#include "apollo/network/protobuf_message.hpp"
 #include <google/protobuf/message.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/coded_stream.h>

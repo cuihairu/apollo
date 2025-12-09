@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>

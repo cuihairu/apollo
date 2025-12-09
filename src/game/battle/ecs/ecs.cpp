@@ -1,4 +1,4 @@
-#include "apollo/battle/ecs.hpp"
+#include "apollo/game/battle/ecs/ecs.hpp"
 
 namespace apollo::battle::ecs {
 

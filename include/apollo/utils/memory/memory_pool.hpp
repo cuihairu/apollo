@@ -5,6 +5,9 @@
 #include <mutex>
 #include <cstddef>
 #include <atomic>
+#include <functional>
+#include <stack>
+#include <array>
 
 namespace apollo {
 

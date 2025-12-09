@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <atomic>
 #include <functional>
+#include <mutex>
 
 namespace apollo::net {
 
@@ -15,17 +16,17 @@ using EventCallback = std::function<void(socket_t sockfd, NetEventType events)>;
 class Reactor {
 public:
     Reactor();
-    ~Reactor();
+    virtual ~Reactor();
 
     // 禁止拷贝
     Reactor(const Reactor&) = delete;
     Reactor& operator=(const Reactor&) = delete;
 
     /// 初始化反应器
-    bool Initialize();
+    virtual bool Initialize();
 
     /// 关闭反应器
-    void Shutdown();
+    virtual void Shutdown();
 
     /// 添加Socket监听
     bool AddSocket(socket_t sockfd, NetEventType events, EventCallback callback);
@@ -37,10 +38,10 @@ public:
     bool RemoveSocket(socket_t sockfd);
 
     /// 事件循环（在独立线程中运行）
-    bool EventLoop();
+    virtual bool EventLoop();
 
     /// 停止事件循环
-    void Stop();
+    virtual void Stop();
 
     /// 是否运行中
     bool IsRunning() const { return running_; }

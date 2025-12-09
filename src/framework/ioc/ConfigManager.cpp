@@ -1,5 +1,5 @@
-#include "apollo/ConfigManager.h"
-#include "apollo/FileWatcher.h"
+#include "apollo/framework/ioc/ConfigManager.h"
+#include "apollo/utils/io/FileWatcher.h"
 #include <fstream>
 #include <sstream>
 

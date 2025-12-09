@@ -1,6 +1,6 @@
 #pragma once
 
-#include "protobuf_message.hpp"
+#include "apollo/network/messaging/protobuf_message.hpp"
 #include "socket.hpp"
 #include <google/protobuf/service.h>
 #include <google/protobuf/descriptor.h>
