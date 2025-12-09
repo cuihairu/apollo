@@ -7,6 +7,7 @@
 /Users/cui/Workspaces/apollo/build/CMakeFiles/install/local.dir
 /Users/cui/Workspaces/apollo/build/CMakeFiles/install/strip.dir
 /Users/cui/Workspaces/apollo/build/tests/CMakeFiles/ioc_tests_simple.dir
+/Users/cui/Workspaces/apollo/build/tests/CMakeFiles/all_features_test.dir
 /Users/cui/Workspaces/apollo/build/tests/CMakeFiles/test.dir
 /Users/cui/Workspaces/apollo/build/tests/CMakeFiles/edit_cache.dir
 /Users/cui/Workspaces/apollo/build/tests/CMakeFiles/rebuild_cache.dir

@@ -63,4 +63,5 @@ set(CMAKE_MAKEFILE_PRODUCTS
 set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/common.dir/DependInfo.cmake"
   "tests/CMakeFiles/ioc_tests_simple.dir/DependInfo.cmake"
+  "tests/CMakeFiles/all_features_test.dir/DependInfo.cmake"
   )

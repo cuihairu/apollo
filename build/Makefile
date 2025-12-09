@@ -197,6 +197,43 @@ ioc_tests_simple/fast:
 	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/ioc_tests_simple.dir/build.make tests/CMakeFiles/ioc_tests_simple.dir/build
 .PHONY : ioc_tests_simple/fast
 
+#=============================================================================
+# Target rules for targets named all_features_test
+
+# Build rule for target.
+all_features_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all_features_test
+.PHONY : all_features_test
+
+# fast build rule for target.
+all_features_test/fast:
+	$(MAKE) $(MAKESILENT) -f tests/CMakeFiles/all_features_test.dir/build.make tests/CMakeFiles/all_features_test.dir/build
+.PHONY : all_features_test/fast
+
+src/attribute.o: src/attribute.cpp.o
+.PHONY : src/attribute.o
+
+# target to build an object file
+src/attribute.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/attribute.cpp.o
+.PHONY : src/attribute.cpp.o
+
+src/attribute.i: src/attribute.cpp.i
+.PHONY : src/attribute.i
+
+# target to preprocess a source file
+src/attribute.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/attribute.cpp.i
+.PHONY : src/attribute.cpp.i
+
+src/attribute.s: src/attribute.cpp.s
+.PHONY : src/attribute.s
+
+# target to generate assembly for a file
+src/attribute.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/attribute.cpp.s
+.PHONY : src/attribute.cpp.s
+
 src/common/ConfigManager.o: src/common/ConfigManager.cpp.o
 .PHONY : src/common/ConfigManager.o
 
@@ -245,6 +282,102 @@ src/common/FileWatcher.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/common/FileWatcher.cpp.s
 .PHONY : src/common/FileWatcher.cpp.s
 
+src/logger.o: src/logger.cpp.o
+.PHONY : src/logger.o
+
+# target to build an object file
+src/logger.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/logger.cpp.o
+.PHONY : src/logger.cpp.o
+
+src/logger.i: src/logger.cpp.i
+.PHONY : src/logger.i
+
+# target to preprocess a source file
+src/logger.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/logger.cpp.i
+.PHONY : src/logger.cpp.i
+
+src/logger.s: src/logger.cpp.s
+.PHONY : src/logger.s
+
+# target to generate assembly for a file
+src/logger.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/logger.cpp.s
+.PHONY : src/logger.cpp.s
+
+src/net/net_common.o: src/net/net_common.cpp.o
+.PHONY : src/net/net_common.o
+
+# target to build an object file
+src/net/net_common.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/net_common.cpp.o
+.PHONY : src/net/net_common.cpp.o
+
+src/net/net_common.i: src/net/net_common.cpp.i
+.PHONY : src/net/net_common.i
+
+# target to preprocess a source file
+src/net/net_common.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/net_common.cpp.i
+.PHONY : src/net/net_common.cpp.i
+
+src/net/net_common.s: src/net/net_common.cpp.s
+.PHONY : src/net/net_common.s
+
+# target to generate assembly for a file
+src/net/net_common.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/net_common.cpp.s
+.PHONY : src/net/net_common.cpp.s
+
+src/net/socket.o: src/net/socket.cpp.o
+.PHONY : src/net/socket.o
+
+# target to build an object file
+src/net/socket.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/socket.cpp.o
+.PHONY : src/net/socket.cpp.o
+
+src/net/socket.i: src/net/socket.cpp.i
+.PHONY : src/net/socket.i
+
+# target to preprocess a source file
+src/net/socket.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/socket.cpp.i
+.PHONY : src/net/socket.cpp.i
+
+src/net/socket.s: src/net/socket.cpp.s
+.PHONY : src/net/socket.s
+
+# target to generate assembly for a file
+src/net/socket.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/net/socket.cpp.s
+.PHONY : src/net/socket.cpp.s
+
+src/thread_pool.o: src/thread_pool.cpp.o
+.PHONY : src/thread_pool.o
+
+# target to build an object file
+src/thread_pool.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/thread_pool.cpp.o
+.PHONY : src/thread_pool.cpp.o
+
+src/thread_pool.i: src/thread_pool.cpp.i
+.PHONY : src/thread_pool.i
+
+# target to preprocess a source file
+src/thread_pool.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/thread_pool.cpp.i
+.PHONY : src/thread_pool.cpp.i
+
+src/thread_pool.s: src/thread_pool.cpp.s
+.PHONY : src/thread_pool.s
+
+# target to generate assembly for a file
+src/thread_pool.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/common.dir/build.make CMakeFiles/common.dir/src/thread_pool.cpp.s
+.PHONY : src/thread_pool.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -258,14 +391,30 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... test"
+	@echo "... all_features_test"
 	@echo "... common"
 	@echo "... ioc_tests_simple"
+	@echo "... src/attribute.o"
+	@echo "... src/attribute.i"
+	@echo "... src/attribute.s"
 	@echo "... src/common/ConfigManager.o"
 	@echo "... src/common/ConfigManager.i"
 	@echo "... src/common/ConfigManager.s"
 	@echo "... src/common/FileWatcher.o"
 	@echo "... src/common/FileWatcher.i"
 	@echo "... src/common/FileWatcher.s"
+	@echo "... src/logger.o"
+	@echo "... src/logger.i"
+	@echo "... src/logger.s"
+	@echo "... src/net/net_common.o"
+	@echo "... src/net/net_common.i"
+	@echo "... src/net/net_common.s"
+	@echo "... src/net/socket.o"
+	@echo "... src/net/socket.i"
+	@echo "... src/net/socket.s"
+	@echo "... src/thread_pool.o"
+	@echo "... src/thread_pool.i"
+	@echo "... src/thread_pool.s"
 .PHONY : help
 
 

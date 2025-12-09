@@ -100,19 +100,99 @@ CMakeFiles/common.dir/src/common/FileWatcher.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/common.dir/src/common/FileWatcher.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/cui/Workspaces/apollo/src/common/FileWatcher.cpp -o CMakeFiles/common.dir/src/common/FileWatcher.cpp.s
 
+CMakeFiles/common.dir/src/logger.cpp.o: CMakeFiles/common.dir/flags.make
+CMakeFiles/common.dir/src/logger.cpp.o: /Users/cui/Workspaces/apollo/src/logger.cpp
+CMakeFiles/common.dir/src/logger.cpp.o: CMakeFiles/common.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/common.dir/src/logger.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/common.dir/src/logger.cpp.o -MF CMakeFiles/common.dir/src/logger.cpp.o.d -o CMakeFiles/common.dir/src/logger.cpp.o -c /Users/cui/Workspaces/apollo/src/logger.cpp
+
+CMakeFiles/common.dir/src/logger.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/common.dir/src/logger.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/cui/Workspaces/apollo/src/logger.cpp > CMakeFiles/common.dir/src/logger.cpp.i
+
+CMakeFiles/common.dir/src/logger.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/common.dir/src/logger.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/cui/Workspaces/apollo/src/logger.cpp -o CMakeFiles/common.dir/src/logger.cpp.s
+
+CMakeFiles/common.dir/src/thread_pool.cpp.o: CMakeFiles/common.dir/flags.make
+CMakeFiles/common.dir/src/thread_pool.cpp.o: /Users/cui/Workspaces/apollo/src/thread_pool.cpp
+CMakeFiles/common.dir/src/thread_pool.cpp.o: CMakeFiles/common.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/common.dir/src/thread_pool.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/common.dir/src/thread_pool.cpp.o -MF CMakeFiles/common.dir/src/thread_pool.cpp.o.d -o CMakeFiles/common.dir/src/thread_pool.cpp.o -c /Users/cui/Workspaces/apollo/src/thread_pool.cpp
+
+CMakeFiles/common.dir/src/thread_pool.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/common.dir/src/thread_pool.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/cui/Workspaces/apollo/src/thread_pool.cpp > CMakeFiles/common.dir/src/thread_pool.cpp.i
+
+CMakeFiles/common.dir/src/thread_pool.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/common.dir/src/thread_pool.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/cui/Workspaces/apollo/src/thread_pool.cpp -o CMakeFiles/common.dir/src/thread_pool.cpp.s
+
+CMakeFiles/common.dir/src/net/net_common.cpp.o: CMakeFiles/common.dir/flags.make
+CMakeFiles/common.dir/src/net/net_common.cpp.o: /Users/cui/Workspaces/apollo/src/net/net_common.cpp
+CMakeFiles/common.dir/src/net/net_common.cpp.o: CMakeFiles/common.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/common.dir/src/net/net_common.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/common.dir/src/net/net_common.cpp.o -MF CMakeFiles/common.dir/src/net/net_common.cpp.o.d -o CMakeFiles/common.dir/src/net/net_common.cpp.o -c /Users/cui/Workspaces/apollo/src/net/net_common.cpp
+
+CMakeFiles/common.dir/src/net/net_common.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/common.dir/src/net/net_common.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/cui/Workspaces/apollo/src/net/net_common.cpp > CMakeFiles/common.dir/src/net/net_common.cpp.i
+
+CMakeFiles/common.dir/src/net/net_common.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/common.dir/src/net/net_common.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/cui/Workspaces/apollo/src/net/net_common.cpp -o CMakeFiles/common.dir/src/net/net_common.cpp.s
+
+CMakeFiles/common.dir/src/net/socket.cpp.o: CMakeFiles/common.dir/flags.make
+CMakeFiles/common.dir/src/net/socket.cpp.o: /Users/cui/Workspaces/apollo/src/net/socket.cpp
+CMakeFiles/common.dir/src/net/socket.cpp.o: CMakeFiles/common.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/common.dir/src/net/socket.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/common.dir/src/net/socket.cpp.o -MF CMakeFiles/common.dir/src/net/socket.cpp.o.d -o CMakeFiles/common.dir/src/net/socket.cpp.o -c /Users/cui/Workspaces/apollo/src/net/socket.cpp
+
+CMakeFiles/common.dir/src/net/socket.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/common.dir/src/net/socket.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/cui/Workspaces/apollo/src/net/socket.cpp > CMakeFiles/common.dir/src/net/socket.cpp.i
+
+CMakeFiles/common.dir/src/net/socket.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/common.dir/src/net/socket.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/cui/Workspaces/apollo/src/net/socket.cpp -o CMakeFiles/common.dir/src/net/socket.cpp.s
+
+CMakeFiles/common.dir/src/attribute.cpp.o: CMakeFiles/common.dir/flags.make
+CMakeFiles/common.dir/src/attribute.cpp.o: /Users/cui/Workspaces/apollo/src/attribute.cpp
+CMakeFiles/common.dir/src/attribute.cpp.o: CMakeFiles/common.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/common.dir/src/attribute.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/common.dir/src/attribute.cpp.o -MF CMakeFiles/common.dir/src/attribute.cpp.o.d -o CMakeFiles/common.dir/src/attribute.cpp.o -c /Users/cui/Workspaces/apollo/src/attribute.cpp
+
+CMakeFiles/common.dir/src/attribute.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/common.dir/src/attribute.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/cui/Workspaces/apollo/src/attribute.cpp > CMakeFiles/common.dir/src/attribute.cpp.i
+
+CMakeFiles/common.dir/src/attribute.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/common.dir/src/attribute.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/cui/Workspaces/apollo/src/attribute.cpp -o CMakeFiles/common.dir/src/attribute.cpp.s
+
 # Object files for target common
 common_OBJECTS = \
 "CMakeFiles/common.dir/src/common/ConfigManager.cpp.o" \
-"CMakeFiles/common.dir/src/common/FileWatcher.cpp.o"
+"CMakeFiles/common.dir/src/common/FileWatcher.cpp.o" \
+"CMakeFiles/common.dir/src/logger.cpp.o" \
+"CMakeFiles/common.dir/src/thread_pool.cpp.o" \
+"CMakeFiles/common.dir/src/net/net_common.cpp.o" \
+"CMakeFiles/common.dir/src/net/socket.cpp.o" \
+"CMakeFiles/common.dir/src/attribute.cpp.o"
 
 # External object files for target common
 common_EXTERNAL_OBJECTS =
 
 libcommon.a: CMakeFiles/common.dir/src/common/ConfigManager.cpp.o
 libcommon.a: CMakeFiles/common.dir/src/common/FileWatcher.cpp.o
+libcommon.a: CMakeFiles/common.dir/src/logger.cpp.o
+libcommon.a: CMakeFiles/common.dir/src/thread_pool.cpp.o
+libcommon.a: CMakeFiles/common.dir/src/net/net_common.cpp.o
+libcommon.a: CMakeFiles/common.dir/src/net/socket.cpp.o
+libcommon.a: CMakeFiles/common.dir/src/attribute.cpp.o
 libcommon.a: CMakeFiles/common.dir/build.make
 libcommon.a: CMakeFiles/common.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX static library libcommon.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/cui/Workspaces/apollo/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Linking CXX static library libcommon.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/common.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/common.dir/link.txt --verbose=$(VERBOSE)
 

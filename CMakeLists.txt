@@ -12,6 +12,11 @@ option(ENABLE_FILEWATCHER "Enable file watcher support" ON)
 add_library(common STATIC
     src/common/ConfigManager.cpp
     src/common/FileWatcher.cpp
+    src/logger.cpp
+    src/thread_pool.cpp
+    src/net/net_common.cpp
+    src/net/socket.cpp
+    src/attribute.cpp
 )
 
 target_include_directories(common PUBLIC

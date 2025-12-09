@@ -185,6 +185,44 @@ ioc_tests_simple/fast:
 	cd /Users/cui/Workspaces/apollo/build && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/ioc_tests_simple.dir/build.make tests/CMakeFiles/ioc_tests_simple.dir/build
 .PHONY : ioc_tests_simple/fast
 
+# Convenience name for target.
+tests/CMakeFiles/all_features_test.dir/rule:
+	cd /Users/cui/Workspaces/apollo/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tests/CMakeFiles/all_features_test.dir/rule
+.PHONY : tests/CMakeFiles/all_features_test.dir/rule
+
+# Convenience name for target.
+all_features_test: tests/CMakeFiles/all_features_test.dir/rule
+.PHONY : all_features_test
+
+# fast build rule for target.
+all_features_test/fast:
+	cd /Users/cui/Workspaces/apollo/build && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/all_features_test.dir/build.make tests/CMakeFiles/all_features_test.dir/build
+.PHONY : all_features_test/fast
+
+test_all_features.o: test_all_features.cpp.o
+.PHONY : test_all_features.o
+
+# target to build an object file
+test_all_features.cpp.o:
+	cd /Users/cui/Workspaces/apollo/build && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/all_features_test.dir/build.make tests/CMakeFiles/all_features_test.dir/test_all_features.cpp.o
+.PHONY : test_all_features.cpp.o
+
+test_all_features.i: test_all_features.cpp.i
+.PHONY : test_all_features.i
+
+# target to preprocess a source file
+test_all_features.cpp.i:
+	cd /Users/cui/Workspaces/apollo/build && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/all_features_test.dir/build.make tests/CMakeFiles/all_features_test.dir/test_all_features.cpp.i
+.PHONY : test_all_features.cpp.i
+
+test_all_features.s: test_all_features.cpp.s
+.PHONY : test_all_features.s
+
+# target to generate assembly for a file
+test_all_features.cpp.s:
+	cd /Users/cui/Workspaces/apollo/build && $(MAKE) $(MAKESILENT) -f tests/CMakeFiles/all_features_test.dir/build.make tests/CMakeFiles/all_features_test.dir/test_all_features.cpp.s
+.PHONY : test_all_features.cpp.s
+
 test_simple.o: test_simple.cpp.o
 .PHONY : test_simple.o
 
@@ -222,7 +260,11 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... test"
+	@echo "... all_features_test"
 	@echo "... ioc_tests_simple"
+	@echo "... test_all_features.o"
+	@echo "... test_all_features.i"
+	@echo "... test_all_features.s"
 	@echo "... test_simple.o"
 	@echo "... test_simple.i"
 	@echo "... test_simple.s"
