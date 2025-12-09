@@ -24,31 +24,226 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 
 ## 🏛️ 架构设计
 
-### 服务器架构
+### 系统架构概览
 
+```mermaid
+graph TB
+    subgraph "客户端层"
+        C1[Unity客户端]
+        C2[Web客户端]
+        C3[移动客户端]
+    end
+
+    subgraph "接入层"
+        LB[负载均衡器<br/>Nginx/HAProxy]
+        GW[网关服务器<br/>Gateway]
+    end
+
+    subgraph "服务层"
+        LS[登录服务器<br/>Login Server]
+        GS1[游戏服务器1<br/>Game Server]
+        GS2[游戏服务器2<br/>Game Server]
+        CS[聊天服务器<br/>Chat Server]
+        MS[匹配服务器<br/>Match Server]
+    end
+
+    subgraph "数据层"
+        subgraph "MySQL集群"
+            DB1[(主数据库)]
+            DB2[(从数据库1)]
+            DB3[(从数据库2)]
+        end
+
+        subgraph "Redis集群"
+            R1[(Redis缓存)]
+            R2[(Redis缓存)]
+            R3[(Redis缓存)]
+        end
+
+        subgraph "消息队列"
+            MQ[Kafka/RabbitMQ]
+        end
+    end
+
+    subgraph "监控层"
+        MON[监控系统<br/>Prometheus]
+        LOG[日志中心<br/>ELK Stack]
+    end
+
+    C1 --> LB
+    C2 --> LB
+    C3 --> LB
+    LB --> GW
+    GW --> LS
+    GW --> GS1
+    GW --> GS2
+    GW --> CS
+    GW --> MS
+
+    LS --> DB1
+    GS1 --> DB1
+    GS2 --> DB1
+    GS1 --> R1
+    GS2 --> R2
+    CS --> R3
+
+    GS1 --> MQ
+    GS2 --> MQ
+    CS --> MQ
+
+    DB1 -.-> DB2
+    DB1 -.-> DB3
+
+    LS --> LOG
+    GS1 --> LOG
+    GS2 --> LOG
+    CS --> LOG
+    MS --> LOG
+
+    LS --> MON
+    GW --> MON
+    GS1 --> MON
+    GS2 --> MON
 ```
-                  ┌─────────────┐
-                  │     Client    │
-                  │    (Unity)    │
-                  └──────┬──────┘
-                         │ TCP/WebSocket + Protobuf
-              ┌────────────┴──────────────┐
-              │                                │
-              ▼                                ▼
-    ┌─────────────────┐          ┌─────────────────┐
-    │   Login Server   │          │   Game Server   │
-    │   (登录认证)      │          │   (游戏逻辑)      │
-    │                 │          │                 │
-    └────────┬────────┘          └────────┬────────┘
-             │                           │
-             ▼                           ▼
-    ┌─────────────────────────────────────────┐
-    │            Database Cluster            │
-    │   ├─────────────┬─────────────────────────┤
-    │   │  MySQL      │      Redis             │
-    │   │  (持久化)    │     (缓存)            │
-    │   └─────────────┴─────────────────────────┘
-    └─────────────────────────────────────────┘
+
+### 核心模块架构
+
+```mermaid
+graph LR
+    subgraph "网络层"
+        T1[传输层<br/>TCP/WebSocket/KCP]
+        P1[协议层<br/>Protobuf]
+        R1[路由层<br/>Message Router]
+    end
+
+    subgraph "业务层"
+        A1[玩家管理]
+        S1[场景管理]
+        B1[战斗系统]
+        I1[物品系统]
+        G1[公会系统]
+    end
+
+    subgraph "基础服务层"
+        IOC[IoC容器]
+        LOG[日志服务]
+        CONF[配置管理]
+        CACHE[缓存服务]
+        DB[数据库服务]
+    end
+
+    T1 --> P1
+    P1 --> R1
+    R1 --> A1
+    R1 --> S1
+    R1 --> B1
+    R1 --> I1
+    R1 --> G1
+
+    A1 --> IOC
+    S1 --> IOC
+    B1 --> IOC
+    I1 --> IOC
+    G1 --> IOC
+
+    IOC --> LOG
+    IOC --> CONF
+    IOC --> CACHE
+    IOC --> DB
+```
+
+### 分布式部署架构
+
+```mermaid
+graph TB
+    subgraph "区域1 - 华东"
+        subgraph "接入区"
+            ELB1[负载均衡]
+            GW1_1[网关1]
+            GW1_2[网关2]
+        end
+
+        subgraph "游戏区"
+            LS1[登录服务器]
+            GS1_1[游戏服1]
+            GS1_2[游戏服2]
+            GS1_3[游戏服3]
+            CS1[聊天服务器]
+        end
+
+        subgraph "数据区"
+            M1[(MySQL主)]
+            S1[(MySQL从)]
+            R1_1[(Redis集群)]
+        end
+    end
+
+    subgraph "区域2 - 华北"
+        subgraph "接入区"
+            ELB2[负载均衡]
+            GW2_1[网关1]
+            GW2_2[网关2]
+        end
+
+        subgraph "游戏区"
+            LS2[登录服务器]
+            GS2_1[游戏服1]
+            GS2_2[游戏服2]
+            GS2_3[游戏服3]
+            CS2[聊天服务器]
+        end
+
+        subgraph "数据区"
+            M2[(MySQL主)]
+            S2[(MySQL从)]
+            R2_1[(Redis集群)]
+        end
+    end
+
+    subgraph "中心服务"
+        CC[控制中心]
+        MON[监控中心]
+        LOG[日志中心]
+        MQ[消息中心]
+    end
+
+    ELB1 --> GW1_1
+    ELB1 --> GW1_2
+    ELB2 --> GW2_1
+    ELB2 --> GW2_2
+
+    GW1_1 --> LS1
+    GW1_1 --> GS1_1
+    GW1_1 --> GS1_2
+    GW1_1 --> GS1_3
+    GW1_1 --> CS1
+
+    GW2_1 --> LS2
+    GW2_1 --> GS2_1
+    GW2_1 --> GS2_2
+    GW2_1 --> GS2_3
+    GW2_1 --> CS2
+
+    LS1 --> M1
+    GS1_1 --> R1_1
+    GS1_2 --> R1_1
+    GS1_3 --> R1_1
+
+    LS2 --> M2
+    GS2_1 --> R2_1
+    GS2_2 --> R2_1
+    GS2_3 --> R2_1
+
+    M1 -.-> S1
+    M2 -.-> S2
+
+    M1 <==> M2
+    R1_1 <==> R2_1
+
+    LS1 --> MQ
+    LS2 --> MQ
+    GS1_1 --> MQ
+    GS2_1 --> MQ
 ```
 
 ### 技术栈
@@ -58,8 +253,12 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 - **网络库**: 自实现跨平台网络层
 - **序列化**: Google Protobuf
 - **数据库**: MySQL (主存储), Redis (缓存)
+- **消息队列**: Kafka/RabbitMQ
+- **监控系统**: Prometheus + Grafana
+- **日志系统**: ELK Stack (Elasticsearch + Logstash + Kibana)
+- **容器化**: Docker + Kubernetes
 - **测试框架**: GTest
-- **日志**: 自定义异步日志系统
+- **CI/CD**: GitHub Actions
 
 ## 🚀 快速开始
 
