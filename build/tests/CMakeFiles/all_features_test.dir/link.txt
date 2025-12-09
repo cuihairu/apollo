@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/all_features_test.dir/test_all_features.cpp.o -o all_features_test  ../libcommon.a

@@ -1,0 +1,102 @@
+# Git属性文件 - 用于正确统计代码行数和识别语言类型
+
+# 自动检测语言类型
+*.cpp linguist-language=C++
+*.hpp linguist-language=C++
+*.cc linguist-language=C++
+*.cxx linguist-language=C++
+*.c linguist-language=C
+*.h linguist-language=C++
+*.hh linguist-language=C++
+*.hxx linguist-language=C++
+
+# C# 文件
+*.cs linguist-language=C#
+*.csx linguist-language=C#
+
+# 脚本文件
+*.sh linguist-language=Shell
+*.bash linguist-language=Shell
+*.zsh linguist-language=Shell
+*.fish linguist-language=Shell
+*.py linguist-language=Python
+*.js linguist-language=JavaScript
+*.ts linguist-language=TypeScript
+*.lua linguist-language=Lua
+
+# 配置文件
+*.json linguist-language=JSON
+*.xml linguist-language=XML
+*.yaml linguist-language=YAML
+*.yml linguist-language=YAML
+*.toml linguist-language=TOML
+*.ini linguist-language=INI
+
+# 文档文件
+*.md linguist-language=Markdown
+*.rst linguist-language=reStructuredText
+*.txt linguist-language=Text
+*.cmake linguist-language=CMake
+
+# Protobuf文件
+*.proto linguist-language=Protocol Buffers
+
+# SQL文件
+*.sql linguist-language=SQL
+
+# Make文件
+Makefile linguist-language=Makefile
+*.mk linguist-language=Makefile
+
+# 忽略的文件/目录
+*.bin linguist-generated
+*.o linguist-generated
+*.a linguist-generated
+*.so linguist-generated
+*.dll linguist-generated
+*.exe linguist-generated
+*.class linguist-generated
+*.pyc linguist-generated
+*.pyo linguist-generated
+*.pyd linguist-generated
+# 忽略构建输出
+build/ linguist-generated
+dist/ linguist-generated
+target/ linguist-generated
+bin/ linguist-generated
+out/ linguist-generated
+# 忽略日志文件
+*.log linguist-generated
+# 忽略临时文件
+*.tmp linguist-generated
+*.bak linguist-generated
+*.swp linguist-generated
+*.swo linguist-generated
+*~ linguist-generated
+# 忽略Git文件
+.git linguist-vendored
+.gitignore linguist-vendored
+
+# 设置文件的换行符风格
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.rar binary

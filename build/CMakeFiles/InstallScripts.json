@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Users/cui/Workspaces/apollo/build/cmake_install.cmake",
-		"/Users/cui/Workspaces/apollo/build/tests/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
