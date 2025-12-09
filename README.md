@@ -183,3 +183,31 @@ sudo make install
 ## 许可证
 
 MIT License
+## 目录结构
+
+项目采用模块化的目录结构，详见 [Directory Structure](docs/Directory_Structure.md) 文档。
+
+主要模块：
+- `framework/` - 核心框架（IoC容器、组件系统）
+- `game/` - 游戏逻辑（AOI、战斗、属性等）
+- `network/` - 网络通信（Socket、消息、RPC）
+- `storage/` - 存储层（数据库、缓存）
+- `utils/` - 工具类（日志、线程池、内存池）
+- `server/` - 服务器实现
+
+## 快速开始
+
+```bash
+# 克隆项目
+git clone https://github.com/cuihairu/apollo.git
+cd apollo
+
+# 构建项目
+mkdir build && cd build
+cmake ..
+make -j4
+
+# 运行示例
+./examples/all_features_demo
+```
+
