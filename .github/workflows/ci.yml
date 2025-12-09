@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+env:
+  # 加速 vcpkg 构建缓存
+  VCPKG_BINARY_SOURCES: "clear;x-azblob,binarycaching,https://vcpkgcache.blob.core.windows.net/public,,readwrite"
+
 jobs:
   build:
     strategy:
@@ -21,21 +25,42 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v10
+      with:
+        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v1.14
+      with:
+        cmake-version: '3.20'
 
     - name: Configure CMake
       run: >
-        cmake
-        -B ${{ github.workspace }}/build
+        cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DVCPKG_TARGET_TRIPLET=${{ matrix.os == 'windows-latest' && 'x64-windows' || matrix.os == 'macos-latest' && 'x64-osx' || 'x64-linux' }}
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
+        -DAPOLLO_ENABLE_CLANG_TIDY=ON
 
     - name: Build
-      run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} --parallel
+      run: >
+        cmake --build ${{ github.workspace }}/build
+        --config ${{ matrix.build_type }}
+        --parallel
 
     - name: Test
       working-directory: ${{ github.workspace }}/build
-      run: ctest --output-on-failure -C ${{ matrix.build_type }}
+      run: >
+        ctest --output-on-failure
+        -C ${{ matrix.build_type }}
+        --parallel
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
@@ -44,38 +69,68 @@ jobs:
         name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
         path: build/Testing/**/*.xml
 
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-${{ matrix.os }}-${{ matrix.build_type }}
+        path: |
+          build/lib/
+          build/bin/
+          build/*.a
+          build/*.lib
+        retention-days: 30
+
   coverage:
     runs-on: ubuntu-latest
     needs: build
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-    - name: Install GCov
-      run: sudo apt-get update && sudo apt-get install -y gcov
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v10
+      with:
+        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+
+    - name: Install Coverage Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lcov
 
     - name: Configure CMake with Coverage
       run: >
-        cmake
-        -B ${{ github.workspace }}/build
+        cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DVCPKG_TARGET_TRIPLET=x64-linux
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_ENABLE_COVERAGE=ON
         -DCMAKE_CXX_FLAGS="--coverage -g -O0"
+        -DCMAKE_C_FLAGS="--coverage -g -O0"
 
     - name: Build with Coverage
-      run: cmake --build ${{ github.workspace }}/build --config Debug --parallel
+      run: >
+        cmake --build ${{ github.workspace }}/build
+        --config Debug
+        --parallel
 
     - name: Run Tests
       working-directory: ${{ github.workspace }}/build
-      run: ctest --output-on-failure -C Debug
+      run: >
+        ctest --output-on-failure
+        -C Debug
+        --parallel
 
     - name: Generate Coverage Report
-      working-directory: ${{ github.workspace }}/build
       run: |
-        gcov -r ../src/**/*.cpp
+        cd build
         lcov --capture --directory . --output-file coverage.info
         lcov --remove coverage.info '/usr/*' --output-file coverage.info
+        lcov --remove coverage.info '*/tests/*' --output-file coverage.info
+        lcov --remove coverage.info '*/examples/*' --output-file coverage.info
         lcov --list coverage.info
 
     - name: Upload Coverage to Codecov
@@ -90,19 +145,28 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-    - name: Install Clang-Tidy and cppcheck
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v10
+      with:
+        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+
+    - name: Install Analysis Tools
       run: |
         sudo apt-get update
         sudo apt-get install -y clang-tidy cppcheck
 
-    - name: Configure CMake for Clang-Tidy
+    - name: Configure CMake for Analysis
       run: >
-        cmake
-        -B ${{ github.workspace }}/build
+        cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Debug
-        -DAPOLLO_BUILD_TESTS=ON
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DVCPKG_TARGET_TRIPLET=x64-linux
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        -DAPOLLO_BUILD_TESTS=ON
 
     - name: Run Clang-Tidy
       run: |
@@ -110,7 +174,8 @@ jobs:
         xargs -I {} clang-tidy -p build/ {} --
 
     - name: Run Cppcheck
-      run: cppcheck --enable=all --xml --xml-version=2 src include 2> cppcheck-report.xml
+      run: |
+        cppcheck --enable=all --xml --xml-version=2 src include 2> cppcheck-report.xml
 
     - name: Upload Cppcheck Results
       uses: actions/upload-artifact@v4
@@ -123,25 +188,39 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-    - name: Install Doxygen
-      run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v10
+      with:
+        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
+
+    - name: Install Documentation Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y doxygen graphviz
+
+    - name: Configure CMake for Docs
+      run: >
+        cmake -B ${{ github.workspace }}/build
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DVCPKG_TARGET_TRIPLET=x64-linux
+        -DAPOLLO_ENABLE_DOXYGEN=ON
 
     - name: Generate Documentation
       run: |
-        if [ -f docs/Doxyfile ]; then
-          cd docs
-          doxygen Doxyfile
-        else
-          echo "Doxyfile not found, skipping documentation generation"
-        fi
+        cd build
+        make doc
 
     - name: Upload Documentation
       uses: actions/upload-artifact@v4
       if: success()
       with:
         name: documentation
-        path: docs/html/
+        path: build/docs/html/
 
   package:
     runs-on: ubuntu-latest
@@ -150,21 +229,34 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v10
+      with:
+        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+        vcpkgConfigurationJsonFilePath: '${{ github.workspace }}/vcpkg.json'
 
     - name: Configure CMake for Release
       run: >
-        cmake
-        -B ${{ github.workspace }}/build
+        cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DVCPKG_TARGET_TRIPLET=x64-linux
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
 
     - name: Build Release
-      run: cmake --build ${{ github.workspace }}/build --config Release --parallel
+      run: >
+        cmake --build ${{ github.workspace }}/build
+        --config Release
+        --parallel
 
-    - name: Create Package
-      working-directory: ${{ github.workspace }}/build
-      run: cpack -G TGZ
+    - name: Install CPack
+      run: |
+        cd build
+        cpack -G TGZ
 
     - name: Upload Package
       uses: actions/upload-artifact@v4
