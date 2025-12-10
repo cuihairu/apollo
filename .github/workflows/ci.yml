@@ -70,10 +70,6 @@ jobs:
       run: |
         cd vcpkg
         ./vcpkg install \
-          nlohmann-json \
-          protobuf \
-          gtest \
-          fmt \
           --triplet=x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }} \
           --x-install-root=../vcpkg_installed/x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }}
       shell: bash
@@ -83,10 +79,6 @@ jobs:
       run: |
         cd vcpkg
         .\vcpkg.exe install `
-          nlohmann-json `
-          protobuf `
-          gtest `
-          fmt `
           --triplet=x64-windows `
           --x-install-root=../vcpkg_installed/x64-windows
       shell: powershell
@@ -181,10 +173,6 @@ jobs:
       run: |
         cd vcpkg
         ./vcpkg install \
-          nlohmann-json \
-          protobuf \
-          gtest \
-          fmt \
           --triplet=x64-linux \
           --x-install-root=../vcpkg_installed/x64-linux
       shell: bash
