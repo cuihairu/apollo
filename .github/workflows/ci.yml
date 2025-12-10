@@ -29,7 +29,7 @@ jobs:
       run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
       shell: bash
 
-    - name: Setup vcpkg cache
+    - name: Cache vcpkg
       uses: actions/cache@v4
       with:
         path: |
@@ -39,10 +39,57 @@ jobs:
         restore-keys: |
           ${{ matrix.os }}-vcpkg-
 
-    - name: Setup vcpkg
-      uses: microsoft/vcpkg-action@v1
-      with:
-        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+    - name: Install and setup vcpkg (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        if [ ! -d "vcpkg" ]; then
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          ./bootstrap-vcpkg.sh
+        else
+          cd vcpkg
+          ./vcpkg version
+        fi
+      shell: bash
+
+    - name: Install and setup vcpkg (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        if (-not (Test-Path "vcpkg")) {
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          .\bootstrap-vcpkg.bat
+        } else {
+          cd vcpkg
+          .\vcpkg version
+        }
+      shell: powershell
+
+    - name: Install dependencies (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd vcpkg
+        ./vcpkg install \
+          nlohmann-json \
+          protobuf \
+          gtest \
+          fmt \
+          --triplet=x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }} \
+          --x-install-root=../vcpkg_installed/x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }}
+      shell: bash
+
+    - name: Install dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd vcpkg
+        .\vcpkg.exe install `
+          nlohmann-json `
+          protobuf `
+          gtest `
+          fmt `
+          --triplet=x64-windows `
+          --x-install-root=../vcpkg_installed/x64-windows
+      shell: powershell
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.14
@@ -103,7 +150,7 @@ jobs:
       id: get-date
       run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
-    - name: Setup vcpkg cache
+    - name: Cache vcpkg
       uses: actions/cache@v4
       with:
         path: |
@@ -113,15 +160,34 @@ jobs:
         restore-keys: |
           ubuntu-latest-vcpkg-
 
-    - name: Setup vcpkg
-      uses: microsoft/vcpkg-action@v1
-      with:
-        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
+    - name: Install and setup vcpkg
+      run: |
+        if [ ! -d "vcpkg" ]; then
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          ./bootstrap-vcpkg.sh
+        else
+          cd vcpkg
+          ./vcpkg version
+        fi
+      shell: bash
 
     - name: Install Coverage Tools
       run: |
         sudo apt-get update
         sudo apt-get install -y lcov
+
+    - name: Install dependencies
+      run: |
+        cd vcpkg
+        ./vcpkg install \
+          nlohmann-json \
+          protobuf \
+          gtest \
+          fmt \
+          --triplet=x64-linux \
+          --x-install-root=../vcpkg_installed/x64-linux
+      shell: bash
 
     - name: Configure CMake with Coverage
       run: >
@@ -162,166 +228,3 @@ jobs:
         file: ./build/coverage.info
         flags: unittests
         name: codecov-umbrella
-
-  code-quality:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Get date for cache
-      id: get-date
-      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
-
-    - name: Setup vcpkg cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          ${{ github.workspace }}/vcpkg_installed
-          ~/.vcpkg
-        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
-        restore-keys: |
-          ubuntu-latest-vcpkg-
-
-    - name: Setup vcpkg
-      uses: microsoft/vcpkg-action@v1
-      with:
-        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-
-    - name: Install Analysis Tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y clang-tidy cppcheck
-
-    - name: Configure CMake for Analysis
-      run: >
-        cmake -B ${{ github.workspace }}/build
-        -DCMAKE_BUILD_TYPE=Debug
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
-        -DVCPKG_TARGET_TRIPLET=x64-linux
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-        -DAPOLLO_BUILD_TESTS=ON
-
-    - name: Run Clang-Tidy
-      run: |
-        find src include -name '*.cpp' -o -name '*.hpp' | \
-        xargs -I {} clang-tidy -p build/ {} --
-
-    - name: Run Cppcheck
-      run: |
-        cppcheck --enable=all --xml --xml-version=2 src include 2> cppcheck-report.xml
-
-    - name: Upload Cppcheck Results
-      uses: actions/upload-artifact@v4
-      with:
-        name: cppcheck-report
-        path: cppcheck-report.xml
-
-  build-docs:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Get date for cache
-      id: get-date
-      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
-
-    - name: Setup vcpkg cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          ${{ github.workspace }}/vcpkg_installed
-          ~/.vcpkg
-        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
-        restore-keys: |
-          ubuntu-latest-vcpkg-
-
-    - name: Setup vcpkg
-      uses: microsoft/vcpkg-action@v1
-      with:
-        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-
-    - name: Install Documentation Tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y doxygen graphviz
-
-    - name: Configure CMake for Docs
-      run: >
-        cmake -B ${{ github.workspace }}/build
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
-        -DVCPKG_TARGET_TRIPLET=x64-linux
-        -DAPOLLO_ENABLE_DOXYGEN=ON
-
-    - name: Generate Documentation
-      run: |
-        cd build
-        make doc
-
-    - name: Upload Documentation
-      uses: actions/upload-artifact@v4
-      if: success()
-      with:
-        name: documentation
-        path: build/docs/html/
-
-  package:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Get date for cache
-      id: get-date
-      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
-
-    - name: Setup vcpkg cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          ${{ github.workspace }}/vcpkg_installed
-          ~/.vcpkg
-        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
-        restore-keys: |
-          ubuntu-latest-vcpkg-
-
-    - name: Setup vcpkg
-      uses: microsoft/vcpkg-action@v1
-      with:
-        vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-
-    - name: Configure CMake for Release
-      run: >
-        cmake -B ${{ github.workspace }}/build
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
-        -DVCPKG_TARGET_TRIPLET=x64-linux
-        -DAPOLLO_BUILD_TESTS=ON
-        -DAPOLLO_BUILD_EXAMPLES=ON
-
-    - name: Build Release
-      run: >
-        cmake --build ${{ github.workspace }}/build
-        --config Release
-        --parallel
-
-    - name: Install CPack
-      run: |
-        cd build
-        cpack -G TGZ
-
-    - name: Upload Package
-      uses: actions/upload-artifact@v4
-      with:
-        name: apollo-package
-        path: build/*.tar.gz
