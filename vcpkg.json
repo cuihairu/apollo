@@ -24,7 +24,53 @@
     {
       "name": "fmt",
       "version>=": "9.0.0"
+    },
+    {
+      "name": "spdlog",
+      "version>=": "1.12.0"
+    },
+    {
+      "name": "boost-asio",
+      "version>=": "1.82.0"
+    },
+    {
+      "name": "boost-system",
+      "version>=": "1.82.0"
+    },
+    {
+      "name": "boost-filesystem",
+      "version>=": "1.82.0"
+    },
+    {
+      "name": "boost-thread",
+      "version>=": "1.82.0"
     }
   ],
+  "features": {
+    "tests": {
+      "description": "Build with test dependencies",
+      "dependencies": [
+        {
+          "name": "gtest",
+          "features": ["gmock"]
+        }
+      ]
+    },
+    "redis": {
+      "description": "Redis client support",
+      "dependencies": [
+        "redis-plus-plus"
+      ]
+    },
+    "protobuf": {
+      "description": "Protocol Buffers support",
+      "dependencies": [
+        {
+          "name": "protobuf",
+          "features": ["zlib"]
+        }
+      ]
+    }
+  },
   "builtin-baseline": "4c930f26d346a88c879c137a5e6414855fc5bd8e"
 }

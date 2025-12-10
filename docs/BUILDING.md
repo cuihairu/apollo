@@ -73,11 +73,38 @@ cmake --build build --config Release
 
 ## 构建选项
 
+### CMake 选项
 - `APOLLO_BUILD_TESTS=ON` - 构建单元测试（默认：ON）
 - `APOLLO_BUILD_EXAMPLES=ON` - 构建示例程序（默认：ON）
 - `APOLLO_ENABLE_COVERAGE=ON` - 启用代码覆盖率（需要 gcov/lcov）
 - `APOLLO_ENABLE_DOXYGEN=ON` - 生成 API 文档（需要 Doxygen）
 - `APOLLO_ENABLE_CLANG_TIDY=ON` - 启用 clang-tidy 静态分析
+
+### vcpkg Features
+vcpkg.json 定义了以下可选功能：
+
+```bash
+# 安装所有依赖（默认）
+vcpkg install --triplet=x64-linux
+
+# 只安装基本依赖（不包括 Redis 和额外功能）
+vcpkg install --triplet=x64-linux --x-feature=basic
+
+# 安装包含所有功能的依赖
+vcpkg install --triplet=x64-linux --x-feature=full
+
+# 或者在 vcpkg.json 中指定要安装的 features：
+{
+  "dependencies": [
+    "apollo-mmorpg[tests,redis]"
+  ]
+}
+```
+
+可用的 features：
+- `tests` - 包含 gtest 和 gmock
+- `redis` - Redis 客户端支持
+- `protobuf` - Protocol Buffers 支持（包含 zlib）
 
 ## 运行测试
 
