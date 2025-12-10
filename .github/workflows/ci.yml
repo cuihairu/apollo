@@ -6,10 +6,6 @@ on:
   pull_request:
     branches: [ main, develop ]
 
-env:
-  # 加速 vcpkg 构建缓存
-  VCPKG_BINARY_SOURCES: "clear;x-azblob,binarycaching,https://vcpkgcache.blob.core.windows.net/public,,readwrite"
-
 jobs:
   build:
     strategy:
@@ -28,11 +24,25 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Get date for cache
+      id: get-date
+      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Setup vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed
+          ~/.vcpkg
+        key: ${{ matrix.os }}-vcpkg-${{ steps.get-date.outputs.date }}
+        restore-keys: |
+          ${{ matrix.os }}-vcpkg-
+
     - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v10
+      uses: microsoft/vcpkg-action@v1
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.14
@@ -43,8 +53,8 @@ jobs:
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
-        -DVCPKG_TARGET_TRIPLET=${{ matrix.os == 'windows-latest' && 'x64-windows' || matrix.os == 'macos-latest' && 'x64-osx' || 'x64-linux' }}
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}/scripts/buildsystems/vcpkg.cmake
+        -DVCPKG_TARGET_TRIPLET=x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
         -DAPOLLO_ENABLE_CLANG_TIDY=ON
@@ -89,11 +99,24 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Get date for cache
+      id: get-date
+      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+    - name: Setup vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed
+          ~/.vcpkg
+        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
+        restore-keys: |
+          ubuntu-latest-vcpkg-
+
     - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v10
+      uses: microsoft/vcpkg-action@v1
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Coverage Tools
       run: |
@@ -104,7 +127,7 @@ jobs:
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Debug
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
         -DVCPKG_TARGET_TRIPLET=x64-linux
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_ENABLE_COVERAGE=ON
@@ -148,11 +171,24 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Get date for cache
+      id: get-date
+      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+    - name: Setup vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed
+          ~/.vcpkg
+        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
+        restore-keys: |
+          ubuntu-latest-vcpkg-
+
     - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v10
+      uses: microsoft/vcpkg-action@v1
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Analysis Tools
       run: |
@@ -163,7 +199,7 @@ jobs:
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Debug
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
         -DVCPKG_TARGET_TRIPLET=x64-linux
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         -DAPOLLO_BUILD_TESTS=ON
@@ -191,11 +227,24 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Get date for cache
+      id: get-date
+      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+    - name: Setup vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed
+          ~/.vcpkg
+        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
+        restore-keys: |
+          ubuntu-latest-vcpkg-
+
     - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v10
+      uses: microsoft/vcpkg-action@v1
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Install Documentation Tools
       run: |
@@ -206,7 +255,7 @@ jobs:
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
         -DVCPKG_TARGET_TRIPLET=x64-linux
         -DAPOLLO_ENABLE_DOXYGEN=ON
 
@@ -232,17 +281,30 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Get date for cache
+      id: get-date
+      run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+    - name: Setup vcpkg cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/vcpkg_installed
+          ~/.vcpkg
+        key: ubuntu-latest-vcpkg-${{ steps.get-date.outputs.date }}
+        restore-keys: |
+          ubuntu-latest-vcpkg-
+
     - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v10
+      uses: microsoft/vcpkg-action@v1
       with:
         vcpkgGitCommitId: 'da9c5c948de8abfed44086968aebb0c1e4154eca'
-        vcpkgJsonGlob: 'vcpkg.json'
 
     - name: Configure CMake for Release
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/vcpkg/scripts/buildsystems/vcpkg.cmake
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
         -DVCPKG_TARGET_TRIPLET=x64-linux
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
