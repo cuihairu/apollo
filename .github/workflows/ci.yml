@@ -63,6 +63,7 @@ jobs:
           cd vcpkg
           .\vcpkg version
         }
+        echo "C:\Program Files\CMake\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       shell: powershell
 
     - name: Install dependencies (Linux/macOS)
@@ -83,6 +84,18 @@ jobs:
           --x-install-root=../vcpkg_installed/x64-windows
       shell: powershell
 
+    - name: Install build tools (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential ninja-build
+
+    - name: Install build tools (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        # Install Xcode command line tools if not already installed
+        xcode-select --install 2>/dev/null || true
+
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.14
       with:
@@ -96,7 +109,7 @@ jobs:
         -DVCPKG_TARGET_TRIPLET=x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
-        -DAPOLLO_ENABLE_CLANG_TIDY=ON
+        -G "Ninja Multi-Config"
 
     - name: Build
       run: >
@@ -167,7 +180,7 @@ jobs:
     - name: Install Coverage Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y lcov
+        sudo apt-get install -y lcov build-essential ninja-build
 
     - name: Install dependencies
       run: |
@@ -187,6 +200,7 @@ jobs:
         -DAPOLLO_ENABLE_COVERAGE=ON
         -DCMAKE_CXX_FLAGS="--coverage -g -O0"
         -DCMAKE_C_FLAGS="--coverage -g -O0"
+        -G "Ninja Multi-Config"
 
     - name: Build with Coverage
       run: >
