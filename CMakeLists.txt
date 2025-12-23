@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
+
+# When using vcpkg, avoid treating imported include dirs as SYSTEM (-isystem).
+# Otherwise, globally-installed headers (e.g. /usr/local/include/google/protobuf)
+# can be picked up instead of the vcpkg headers, causing ABI mismatches and UB.
+if(DEFINED VCPKG_INSTALLED_DIR)
+    set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
+endif()
+
 project(ApolloMMORPG VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -60,30 +68,58 @@ target_include_directories(apollo PUBLIC
 # 添加 CMake 模块路径
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# 使用 vcpkg 或系统包管理器
-if(DEFINED CMAKE_TOOLCHAIN_FILE)
-    # 使用 vcpkg
-    find_package(nlohmann_json CONFIG REQUIRED)
-    find_package(protobuf CONFIG REQUIRED)
-    find_package(gtest CONFIG REQUIRED)
-    find_package(fmt CONFIG REQUIRED)
+# 依赖项
+#
+# 说明：
+# - Protobuf 出现在 public headers 里（如 include/apollo/network/messaging/protobuf_message.hpp），
+#   因此必须以 PUBLIC 方式链接，确保下游目标获得 include/link 需求。
+# - nlohmann_json 仅影响实现（ConfigManager.cpp），找不到时回退到 bundled header。
 
-    target_link_libraries(apollo PRIVATE
-        nlohmann_json::nlohmann_json
-        protobuf::libprotobuf
-        fmt::fmt
-    )
-else()
-    # 回退到系统包管理器
-    find_package(nlohmann_json QUIET)
+# Protobuf (required)
+set(_apollo_protobuf_target "")
+find_package(protobuf CONFIG QUIET)
+if(TARGET protobuf::libprotobuf)
+    set(_apollo_protobuf_target protobuf::libprotobuf)
+endif()
 
-    if(nlohmann_json_FOUND)
-        target_link_libraries(apollo PRIVATE nlohmann_json::nlohmann_json)
-        target_compile_definitions(apollo PRIVATE HAVE_NLOHMANN_JSON)
-    else()
-        message(STATUS "nlohmann/json not found, using bundled header")
-        target_include_directories(apollo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+if(NOT _apollo_protobuf_target)
+    find_package(Protobuf CONFIG QUIET)
+    if(TARGET protobuf::libprotobuf)
+        set(_apollo_protobuf_target protobuf::libprotobuf)
+    elseif(TARGET Protobuf::libprotobuf)
+        set(_apollo_protobuf_target Protobuf::libprotobuf)
     endif()
+endif()
+
+if(NOT _apollo_protobuf_target)
+    message(FATAL_ERROR "Protobuf not found. If you are using vcpkg, configure with -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake")
+endif()
+
+# vcpkg may mark dependency includes as SYSTEM (-isystem), which can cause Clang to
+# prefer /usr/local/include over the vcpkg headers (same header names, different ABI).
+if(TARGET ${_apollo_protobuf_target})
+    set_property(TARGET ${_apollo_protobuf_target} PROPERTY INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "")
+endif()
+
+target_link_libraries(apollo PUBLIC ${_apollo_protobuf_target})
+
+# nlohmann/json (optional)
+find_package(nlohmann_json CONFIG QUIET)
+if(nlohmann_json_FOUND)
+    target_link_libraries(apollo PRIVATE nlohmann_json::nlohmann_json)
+    target_compile_definitions(apollo PRIVATE HAVE_NLOHMANN_JSON=1)
+else()
+    message(STATUS "nlohmann/json not found, using bundled header")
+    target_include_directories(apollo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+endif()
+
+# Fruit DI (required for Spring-like auto-configuration)
+find_package(fruit CONFIG QUIET)
+if(TARGET fruit)
+    target_link_libraries(apollo PUBLIC fruit)
+    target_compile_definitions(apollo PRIVATE HAVE_FRUIT=1)
+else()
+    message(FATAL_ERROR "Fruit not found. If you are using vcpkg, configure with -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake")
 endif()
 
 if(ENABLE_FILEWATCHER)
@@ -121,6 +157,12 @@ if(MSVC)
     target_compile_definitions(apollo PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(apollo PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # Protobuf/abseil headers may trigger this warning with some Clang setups.
+        target_compile_options(apollo PRIVATE -Wno-nullability-extension)
+        target_compile_options(apollo PRIVATE -Wno-variadic-macro-arguments-omitted)
+        target_compile_options(apollo PRIVATE -Wno-gcc-compat)
+    endif()
 
     # 调试模式下的额外检查
     target_compile_options(apollo PRIVATE

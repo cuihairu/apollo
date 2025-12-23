@@ -22,6 +22,9 @@
     },
     {
       "name": "boost-system"
+    },
+    {
+      "name": "fruit"
     }
   ],
   "builtin-baseline": "4c930f26d346a88c879c137a5e6414855fc5bd8e"
