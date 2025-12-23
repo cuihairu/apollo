@@ -34,6 +34,9 @@ add_library(apollo STATIC
     # Framework
     src/framework/ioc/ConfigManager.cpp
 
+    # Starter (Spring-like auto-configuration)
+    src/starter/ApolloApplication.cpp
+
     # Game
     src/game/aoi/aoi.cpp
     src/game/attributes/attribute.cpp
@@ -113,13 +116,18 @@ else()
     target_include_directories(apollo PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 endif()
 
-# Fruit DI (required for Spring-like auto-configuration)
-find_package(fruit CONFIG QUIET)
-if(TARGET fruit)
-    target_link_libraries(apollo PUBLIC fruit)
+# Fruit DI (optional for Spring-like auto-configuration)
+# Note: Fruit from vcpkg community triplet doesn't provide CMake config
+# We manually add the include paths and libraries
+set(FRUIT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/packages/fruit_x64-osx")
+if(EXISTS "${FRUIT_ROOT}")
+    target_include_directories(apollo SYSTEM PRIVATE "${FRUIT_ROOT}/include")
+    target_link_libraries(apollo PRIVATE "${FRUIT_ROOT}/lib/libfruit.a")
     target_compile_definitions(apollo PRIVATE HAVE_FRUIT=1)
+    message(STATUS "Fruit DI enabled (vcpkg community triplet)")
 else()
-    message(FATAL_ERROR "Fruit not found. If you are using vcpkg, configure with -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake")
+    message(STATUS "Fruit not found, using built-in IoC framework")
+    target_compile_definitions(apollo PRIVATE APOLLO_USE_BUILTIN_DI=1)
 endif()
 
 if(ENABLE_FILEWATCHER)
