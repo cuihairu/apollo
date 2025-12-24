@@ -78,6 +78,118 @@ if(GTest_FOUND)
     endif()
 
     add_test(NAME ProtobufTests COMMAND protobuf_tests)
+
+    # ========== Network Tests ==========
+
+    # Buffer tests
+    add_executable(buffer_tests test_buffer.cpp)
+
+    target_link_libraries(buffer_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(buffer_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME BufferTests COMMAND buffer_tests)
+
+    # Network integration tests
+    add_executable(network_tests
+        test_network.cpp
+        test_network_main.cpp
+    )
+
+    target_link_libraries(network_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(network_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME NetworkTests COMMAND network_tests)
+
+    # ========== Log Tests ==========
+
+    add_executable(log_tests test_log.cpp)
+
+    target_link_libraries(log_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(log_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME LogTests COMMAND log_tests)
+
+    # ========== Timer Tests ==========
+
+    add_executable(timer_tests test_timer.cpp)
+
+    target_link_libraries(timer_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(timer_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME TimerTests COMMAND timer_tests)
+
+    # ========== Config Tests ==========
+
+    add_executable(config_tests test_config.cpp)
+
+    target_link_libraries(config_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(config_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME ConfigTests COMMAND config_tests)
+
+    # ========== Redis Tests ==========
+
+    add_executable(redis_tests test_redis_new.cpp)
+
+    target_link_libraries(redis_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(redis_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME RedisTests COMMAND redis_tests)
+
+    # ========== Database Tests ==========
+
+    add_executable(database_tests test_database.cpp)
+
+    target_link_libraries(database_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(database_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME DatabaseTests COMMAND database_tests)
+
+    # ========== IdPool Tests ==========
+
+    add_executable(id_pool_tests test_id_pool.cpp)
+
+    target_link_libraries(id_pool_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(id_pool_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME IdPoolTests COMMAND id_pool_tests)
+
+    # ========== Utils Tests ==========
+
+    add_executable(utils_tests test_utils.cpp)
+
+    target_link_libraries(utils_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(utils_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME UtilsTests COMMAND utils_tests)
+
 else()
     message(STATUS "GTest not found, building simple test")
 

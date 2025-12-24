@@ -9,7 +9,7 @@ endif()
 
 project(ApolloMMORPG VERSION 0.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -48,6 +48,10 @@ add_library(apollo STATIC
     src/network/protobuf_message.cpp
     src/network/rpc.cpp
     src/network/reactor.cpp
+    src/apollo/net/adapters/native_adapter.cpp
+    src/apollo/net/session_manager.cpp
+    src/apollo/net/message_codec.cpp
+    src/apollo/net/rpc.cpp
 
     # Storage
     src/storage/cache/redis.cpp
@@ -58,6 +62,40 @@ add_library(apollo STATIC
     src/utils/io/FileWatcher.cpp
     src/utils/logging/logger.cpp
     src/utils/threading/thread_pool.cpp
+    src/apollo/utils/id_pool.cpp
+    src/apollo/utils/crypto.cpp
+
+    # Core - Log
+    src/apollo/core/log/logger.cpp
+    src/apollo/core/log/file_appender.cpp
+    src/apollo/core/log/console_appender.cpp
+    src/apollo/core/log/log_manager.cpp
+
+    # Core - Timer
+    src/apollo/core/timer/timer_manager.cpp
+
+    # Core - Config
+    src/apollo/core/config/config_value.cpp
+    src/apollo/core/config/config_manager.cpp
+
+    # Core - Service Discovery
+    src/apollo/core/service_discovery.cpp
+
+    # Core - Distributed Lock
+    src/apollo/core/distributed_lock.cpp
+
+    # Server
+    src/apollo/server/game_server.cpp
+
+    # Storage - Redis
+    src/apollo/storage/redis/redis.cpp
+    src/apollo/storage/redis/redis_client_impl.cpp
+
+    # Storage - Database
+    src/apollo/storage/database/db.cpp
+    src/apollo/storage/database/db_common.cpp
+    src/apollo/storage/database/db_mysql.cpp
+    src/apollo/storage/database/db_mock.cpp
 )
 
 # 设置目标名称为 apollo

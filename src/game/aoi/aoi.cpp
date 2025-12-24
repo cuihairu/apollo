@@ -1,7 +1,7 @@
 #include "apollo/game/aoi/aoi.hpp"
 #include <cmath>
 
-namespace apollo::game {
+namespace apollo {
 
 GridCell* AOIGrid::GetOrCreateCell(int x, int z) {
     uint64_t key = (static_cast<uint64_t>(x) << 32) | static_cast<uint64_t>(z);
@@ -253,4 +253,4 @@ AOIManager::Stats AOIManager::GetStats() const {
     return stats;
 }
 
-}  // namespace apollo::game
+}  // namespace apollo
