@@ -1,31 +1,13 @@
 {
-  "name": "apollo-mmorpg",
-  "version": "0.1.0",
-  "description": "A high-performance, modular MMORPG server development framework",
-  "homepage": "https://github.com/cuihairu/apollo",
-  "license": "MIT",
+  "name": "apollo",
+  "version": "1.0.0",
+  "description": "Apollo Framework with GametestClient",
   "dependencies": [
+    "nlohmann-json",
     {
-      "name": "nlohmann-json"
-    },
-    {
-      "name": "protobuf"
-    },
-    {
-      "name": "gtest"
-    },
-    {
-      "name": "fmt"
-    },
-    {
-      "name": "boost-asio"
-    },
-    {
-      "name": "boost-system"
-    },
-    {
-      "name": "fruit"
+      "name": "readline",
+      "platform": "linux"
     }
   ],
-  "builtin-baseline": "4c930f26d346a88c879c137a5e6414855fc5bd8e"
+  "builtin-baseline": "2024-01-01"
 }
