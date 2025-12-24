@@ -38,27 +38,21 @@ void IdPool::init(uint32_t minId, uint32_t maxId) {
 
     // 计算需要的 bitmap 大小（每个 uint64_t 存储 64 位）
     size_t bitmapSize = (size_ + 63) / 64;
-    bitmap_.resize(bitmapSize, 0);
+    bitmap_.assign(bitmapSize, 0);
 
-    // 初始化空闲链表
-    uint32_t nodeCount = (size_ < 1000) ? size_ : 1000;  // 限制初始节点数
-    nodes_.reserve(nodeCount);
-
+    nodes_.clear();
+    nodes_.reserve(size_);
     for (uint32_t i = 0; i < size_; ++i) {
-        if (i < nodeCount) {
-            auto node = std::make_unique<FreeNode>();
-            node->id = minId_ + i;
-            node->next = (i + 1 < size_) ? i + 1 : UINT32_MAX;
-
-            if (i == 0) {
-                freeList_ = node.get();
-            } else {
-                nodes_[i - 1]->next = node.get();
-            }
-
-            nodes_.push_back(std::move(node));
-        }
+        auto node = std::make_unique<FreeNode>();
+        node->id = minId_ + i;
+        node->next = nullptr;
+        nodes_.push_back(std::move(node));
     }
+
+    for (uint32_t i = 0; i + 1 < size_; ++i) {
+        nodes_[i]->next = nodes_[i + 1].get();
+    }
+    freeList_ = (size_ > 0) ? nodes_[0].get() : nullptr;
 
     allocatedCount_ = 0;
 }
@@ -68,8 +62,10 @@ uint32_t IdPool::allocate() {
         return UINT32_MAX;  // 池已满
     }
 
-    uint32_t id = freeList_->id;
-    freeList_ = reinterpret_cast<FreeNode*>(freeList_->next);
+    FreeNode* node = freeList_;
+    freeList_ = node->next;
+    node->next = nullptr;
+    uint32_t id = node->id;
 
     setBit(id - minId_);
     ++allocatedCount_;
@@ -78,6 +74,9 @@ uint32_t IdPool::allocate() {
 }
 
 void IdPool::release(uint32_t id) {
+    if (size_ == 0) {
+        return;
+    }
     if (id < minId_ || id > maxId_) {
         return;  // 无效 ID
     }
@@ -91,19 +90,26 @@ void IdPool::release(uint32_t id) {
     clearBit(index);
     --allocatedCount_;
 
-    // 加入空闲链表
-    auto node = std::make_unique<FreeNode>();
-    node->id = id;
-    node->next = reinterpret_cast<uintptr_t>(freeList_);
-    nodes_.push_back(std::move(node));
-    freeList_ = nodes_.back().get();
+    // 加入空闲链表（复用节点）
+    FreeNode* node = nodes_[index].get();
+    node->next = freeList_;
+    freeList_ = node;
 }
 
 bool IdPool::isValid(uint32_t id) const {
-    return id >= minId_ && id <= maxId_ && getBit(id - minId_);
+    if (size_ == 0) {
+        return false;
+    }
+    if (id < minId_ || id > maxId_) {
+        return false;
+    }
+    return !getBit(id - minId_);
 }
 
 bool IdPool::isAllocated(uint32_t id) const {
+    if (size_ == 0) {
+        return false;
+    }
     if (id < minId_ || id > maxId_) {
         return false;
     }
@@ -112,32 +118,19 @@ bool IdPool::isAllocated(uint32_t id) const {
 
 void IdPool::reset() {
     std::fill(bitmap_.begin(), bitmap_.end(), 0);
-    nodes_.clear();
-    freeList_ = nullptr;
     allocatedCount_ = 0;
 
-    // 重新初始化
-    uint32_t nodeCount = (size_ < 1000) ? size_ : 1000;
-    nodes_.reserve(nodeCount);
-
     for (uint32_t i = 0; i < size_; ++i) {
-        if (i < nodeCount) {
-            auto node = std::make_unique<FreeNode>();
-            node->id = minId_ + i;
-            node->next = (i + 1 < size_) ? i + 1 : UINT32_MAX;
-
-            if (i == 0) {
-                freeList_ = node.get();
-            } else {
-                nodes_[i - 1]->next = node.get();
-            }
-
-            nodes_.push_back(std::move(node));
-        }
+        nodes_[i]->id = minId_ + i;
+        nodes_[i]->next = (i + 1 < size_) ? nodes_[i + 1].get() : nullptr;
     }
+    freeList_ = (size_ > 0) ? nodes_[0].get() : nullptr;
 }
 
 bool IdPool::reserve(uint32_t id) {
+    if (size_ == 0) {
+        return false;
+    }
     if (id < minId_ || id > maxId_) {
         return false;
     }
@@ -149,15 +142,19 @@ bool IdPool::reserve(uint32_t id) {
     }
 
     // 从空闲链表中移除该 ID
-    FreeNode** prev = &freeList_;
-    for (FreeNode* curr = freeList_; curr != nullptr; curr = reinterpret_cast<FreeNode*>(curr->next)) {
+    FreeNode* prev = nullptr;
+    for (FreeNode* curr = freeList_; curr != nullptr; prev = curr, curr = curr->next) {
         if (curr->id == id) {
-            *prev = reinterpret_cast<FreeNode*>(curr->next);
+            if (prev) {
+                prev->next = curr->next;
+            } else {
+                freeList_ = curr->next;
+            }
+            curr->next = nullptr;
             setBit(index);
             ++allocatedCount_;
             return true;
         }
-        prev = reinterpret_cast<FreeNode**>(&curr->next);
     }
 
     return false;

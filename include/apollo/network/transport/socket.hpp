@@ -85,6 +85,9 @@ public:
     /// 是否有效
     bool IsValid() const { return sockfd_ != INVALID_SOCKET; }
 
+    /// 是否已连接（仅对TCP有效）
+    bool IsConnected() const { return connected_; }
+
     /// 获取错误码
     int GetLastError() const;
 
@@ -166,6 +169,16 @@ public:
     /// 获取可读字节数
     size_t GetReadableSize() const {
         return writePos_ - readPos_;
+    }
+
+    /// 当前可读数据指针（从 readPos_ 开始）
+    const void* Data() const {
+        return buffer_.empty() ? nullptr : (buffer_.data() + readPos_);
+    }
+
+    /// 当前可读数据长度（同 GetReadableSize）
+    size_t Size() const {
+        return GetReadableSize();
     }
 
     /// 获取可写字节数

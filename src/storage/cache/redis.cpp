@@ -14,6 +14,7 @@
     #include <netinet/in.h>
     #include <arpa/inet.h>
     #include <netdb.h>
+    #include <sys/time.h>
     #include <unistd.h>
     #include <fcntl.h>
     #include <errno.h>
@@ -64,10 +65,16 @@ RedisConnection::~RedisConnection() {
     Disconnect();
 }
 
-bool RedisConnection::Connect(const std::string& host, int port, const std::string& password) {
+bool RedisConnection::Connect(const std::string& host,
+                              int port,
+                              const std::string& password,
+                              int connectionTimeoutSeconds,
+                              int commandTimeoutSeconds) {
     host_ = host;
     port_ = port;
     password_ = password;
+    connectionTimeoutSeconds_ = std::max(1, connectionTimeoutSeconds);
+    commandTimeoutSeconds_ = std::max(1, commandTimeoutSeconds);
     state_ = RedisConnectionState::CONNECTING;
 
     if (!ConnectSocket()) {
@@ -100,9 +107,11 @@ bool RedisConnection::ConnectSocket() {
         return false;
     }
 
-    // 设置非阻塞模式
+    // 设置非阻塞模式用于连接超时处理
     int flags = fcntl(sockfd_, F_GETFL, 0);
-    fcntl(sockfd_, F_SETFL, flags | O_NONBLOCK);
+    if (flags >= 0) {
+        fcntl(sockfd_, F_SETFL, flags | O_NONBLOCK);
+    }
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -135,7 +144,7 @@ bool RedisConnection::ConnectSocket() {
     FD_SET(sockfd_, &write_fds);
 
     struct timeval timeout;
-    timeout.tv_sec = 5;
+    timeout.tv_sec = connectionTimeoutSeconds_;
     timeout.tv_usec = 0;
 
     if (select(sockfd_ + 1, NULL, &write_fds, NULL, &timeout) <= 0) {
@@ -154,6 +163,23 @@ bool RedisConnection::ConnectSocket() {
         sockfd_ = INVALID_SOCKET;
         return false;
     }
+
+    // 恢复阻塞模式，简化后续读写逻辑
+    if (flags >= 0) {
+        fcntl(sockfd_, F_SETFL, flags);
+    }
+
+#ifdef _WIN32
+    DWORD timeoutMs = static_cast<DWORD>(commandTimeoutSeconds_) * 1000;
+    setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+    setsockopt(sockfd_, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeoutMs), sizeof(timeoutMs));
+#else
+    struct timeval ioTimeout;
+    ioTimeout.tv_sec = commandTimeoutSeconds_;
+    ioTimeout.tv_usec = 0;
+    setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO, &ioTimeout, sizeof(ioTimeout));
+    setsockopt(sockfd_, SOL_SOCKET, SO_SNDTIMEO, &ioTimeout, sizeof(ioTimeout));
+#endif
 
     return true;
 }
@@ -217,9 +243,14 @@ bool RedisConnection::SendCommand(const RedisCommand& command) {
 
     std::string cmd = oss.str();
 
-    if (send(sockfd_, cmd.c_str(), cmd.length(), 0) < 0) {
-        lastError_ = "Failed to send command: " + std::string(strerror(errno));
-        return false;
+    size_t sentTotal = 0;
+    while (sentTotal < cmd.size()) {
+        int sent = send(sockfd_, cmd.data() + sentTotal, cmd.size() - sentTotal, 0);
+        if (sent <= 0) {
+            lastError_ = "Failed to send command: " + std::string(strerror(errno));
+            return false;
+        }
+        sentTotal += static_cast<size_t>(sent);
     }
 
     return true;
@@ -255,16 +286,16 @@ RedisReply RedisConnection::ParseReply() {
         return reply;
     } else if (line[0] == '$') {
         // 批量字符串
-        size_t len = std::stoull(line.substr(1));
-        if (len == (size_t)-1) {
+        long long len = std::stoll(line.substr(1));
+        if (len < 0) {
             RedisReply reply(RedisReplyType::NIL);
             reply.SetNil();
             return reply;
         }
 
         std::string data;
-        data.resize(len);
-        if (ReadBytes(&data[0], len) != len) {
+        data.resize(static_cast<size_t>(len));
+        if (ReadBytes(&data[0], static_cast<size_t>(len)) != static_cast<size_t>(len)) {
             RedisReply reply;
             reply.SetError("Failed to read bulk string");
             return reply;
@@ -279,15 +310,15 @@ RedisReply RedisConnection::ParseReply() {
         return reply;
     } else if (line[0] == '*') {
         // 数组
-        size_t count = std::stoull(line.substr(1));
-        if (count == (size_t)-1) {
+        long long count = std::stoll(line.substr(1));
+        if (count < 0) {
             RedisReply reply(RedisReplyType::NIL);
             reply.SetNil();
             return reply;
         }
 
         std::vector<RedisReply> array;
-        for (size_t i = 0; i < count; ++i) {
+        for (long long i = 0; i < count; ++i) {
             array.push_back(ParseReply());
         }
 
@@ -370,7 +401,10 @@ RedisConnectionPool::~RedisConnectionPool() {
 bool RedisConnectionPool::Initialize() {
     // 创建最小数量的连接
     for (size_t i = 0; i < config_.minConnections; ++i) {
-        CreateConnection();
+        if (!CreateConnection()) {
+            CloseAll();
+            return false;
+        }
     }
 
     // 启动连接检查线程
@@ -386,16 +420,23 @@ std::shared_ptr<RedisConnection> RedisConnectionPool::GetConnection() {
     if (!idleConnections_.empty()) {
         auto conn = idleConnections_.front();
         idleConnections_.pop();
-        stats_.idleConnections--;
+        if (stats_.idleConnections > 0) {
+            stats_.idleConnections--;
+        }
         stats_.activeConnections++;
 
         // 检查连接是否有效
         if (!ValidateConnection(conn)) {
             // 连接无效，重新创建
-            CreateConnection();
+            stats_.activeConnections--;
+            if (!CreateConnection() || idleConnections_.empty()) {
+                return nullptr;
+            }
             conn = idleConnections_.front();
             idleConnections_.pop();
-            stats_.idleConnections--;
+            if (stats_.idleConnections > 0) {
+                stats_.idleConnections--;
+            }
             stats_.activeConnections++;
         }
 
@@ -404,11 +445,15 @@ std::shared_ptr<RedisConnection> RedisConnectionPool::GetConnection() {
 
     // 如果还能创建新连接
     if (allConnections_.size() < config_.maxConnections) {
-        CreateConnection();
-        auto conn = allConnections_.back();
-        allConnections_.pop_back();
+        if (!CreateConnection() || idleConnections_.empty()) {
+            return nullptr;
+        }
+        auto conn = idleConnections_.front();
+        idleConnections_.pop();
+        if (stats_.idleConnections > 0) {
+            stats_.idleConnections--;
+        }
         stats_.activeConnections++;
-
         return conn;
     }
 
@@ -446,10 +491,16 @@ void RedisConnectionPool::ReturnConnection(std::shared_ptr<RedisConnection> conn
 
     if (shutdown_) {
         // 连接池正在关闭，直接销毁连接
-        allConnections_.erase(
-            std::remove(allConnections_.begin(), allConnections_.end(), conn)
-        );
-        stats_.activeConnections--;
+        auto it = std::remove(allConnections_.begin(), allConnections_.end(), conn);
+        if (it != allConnections_.end()) {
+            allConnections_.erase(it, allConnections_.end());
+            if (stats_.totalConnections > 0) {
+                stats_.totalConnections--;
+            }
+        }
+        if (stats_.activeConnections > 0) {
+            stats_.activeConnections--;
+        }
         stats_.destroyedConnections++;
         return;
     }
@@ -457,13 +508,18 @@ void RedisConnectionPool::ReturnConnection(std::shared_ptr<RedisConnection> conn
     // 连接有效，放回空闲队列
     idleConnections_.push(conn);
     stats_.idleConnections++;
-    stats_.activeConnections--;
+    if (stats_.activeConnections > 0) {
+        stats_.activeConnections--;
+    }
 
     condition_.notify_one();
 }
 
 void RedisConnectionPool::CloseAll() {
-    shutdown_ = true;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        shutdown_ = true;
+    }
     condition_.notify_all();
 
     if (checkThread_.joinable()) {
@@ -481,10 +537,15 @@ void RedisConnectionPool::CloseAll() {
     stats_.idleConnections = 0;
 }
 
-void RedisConnectionPool::CreateConnection() {
+bool RedisConnectionPool::CreateConnection() {
     auto conn = std::make_shared<RedisConnection>();
 
-    if (conn->Connect(config_.host, config_.port, config_.password)) {
+    if (conn->Connect(config_.host,
+                      config_.port,
+                      config_.password,
+                      config_.connectionTimeout,
+                      config_.commandTimeout) &&
+        conn->Ping()) {
         if (config_.db != 0) {
             conn->Select(config_.db);
         }
@@ -494,41 +555,51 @@ void RedisConnectionPool::CreateConnection() {
         stats_.totalConnections++;
         stats_.idleConnections++;
         stats_.createdConnections++;
+        return true;
     }
+    return false;
 }
 
 void RedisConnectionPool::CheckConnections() {
-    while (!shutdown_) {
-        std::this_thread::sleep_for(std::chrono::seconds(config_.keepAlive));
+    while (true) {
+        std::unique_lock<std::mutex> lock(mutex_);
+
+        if (condition_.wait_for(
+                lock,
+                std::chrono::seconds(config_.keepAlive),
+                [this]() { return shutdown_.load(); })) {
+            break;
+        }
 
         if (shutdown_) {
             break;
         }
 
-        std::unique_lock<std::mutex> lock(mutex_);
-        size_t i = 0;
-        while (i < idleConnections_.size()) {
+        const size_t idleCount = idleConnections_.size();
+        for (size_t i = 0; i < idleCount; ++i) {
             auto conn = idleConnections_.front();
             idleConnections_.pop();
+            if (stats_.idleConnections > 0) {
+                stats_.idleConnections--;
+            }
 
             if (!ValidateConnection(conn)) {
-                // 连接无效，移除
-                allConnections_.erase(
-                    std::remove(allConnections_.begin(), allConnections_.end(), conn)
-                );
-                stats_.totalConnections--;
-                stats_.idleConnections--;
+                auto it = std::remove(allConnections_.begin(), allConnections_.end(), conn);
+                if (it != allConnections_.end()) {
+                    allConnections_.erase(it, allConnections_.end());
+                    if (stats_.totalConnections > 0) {
+                        stats_.totalConnections--;
+                    }
+                }
                 stats_.destroyedConnections++;
 
-                // 尝试创建新连接
                 CreateConnection();
             } else {
-                // 连接有效，放回队列
                 idleConnections_.push(conn);
                 stats_.idleConnections++;
-                i++;
             }
         }
+
         condition_.notify_all();
     }
 }
@@ -575,7 +646,17 @@ RedisReply RedisClient::Execute(const std::string& command) {
 }
 
 RedisReply RedisClient::Execute(const RedisCommand& command) {
-    auto conn = pool_.GetConnection();
+    std::shared_ptr<RedisConnection> conn;
+    {
+        std::lock_guard<std::mutex> lock(txMutex_);
+        conn = txConnection_;
+    }
+
+    if (conn) {
+        return conn->Execute(command);
+    }
+
+    conn = pool_.GetConnection();
     if (!conn) {
         RedisReply reply;
         reply.SetError("Failed to get connection from pool");
@@ -584,7 +665,6 @@ RedisReply RedisClient::Execute(const RedisCommand& command) {
 
     auto reply = conn->Execute(command);
     pool_.ReturnConnection(conn);
-
     return reply;
 }
 
@@ -616,14 +696,14 @@ bool RedisClient::Set(const std::string& key, const std::string& value) {
     RedisCommand cmd("SET");
     cmd.Append(key).Append(value);
     auto reply = Execute(cmd);
-    return !reply.IsError() && reply.AsString() == "OK";
+    return !reply.IsError() && (reply.AsString() == "OK" || reply.AsString() == "QUEUED");
 }
 
 bool RedisClient::Set(const std::string& key, const std::string& value, int ttl) {
     RedisCommand cmd("SETEX");
     cmd.Append(key).Append(ttl).Append(value);
     auto reply = Execute(cmd);
-    return !reply.IsError() && reply.AsString() == "OK";
+    return !reply.IsError() && (reply.AsString() == "OK" || reply.AsString() == "QUEUED");
 }
 
 std::string RedisClient::Get(const std::string& key) {
@@ -877,20 +957,61 @@ bool RedisClient::Publish(const std::string& channel, const std::string& message
 }
 
 bool RedisClient::Multi() {
+    std::lock_guard<std::mutex> lock(txMutex_);
+    if (txConnection_) {
+        return false;
+    }
+
+    auto conn = pool_.GetConnection();
+    if (!conn) {
+        return false;
+    }
+
     RedisCommand cmd("MULTI");
-    auto reply = Execute(cmd);
-    return !reply.IsError() && reply.AsString() == "OK";
+    auto reply = conn->Execute(cmd);
+    if (reply.IsError() || reply.AsString() != "OK") {
+        pool_.ReturnConnection(conn);
+        return false;
+    }
+
+    txConnection_ = std::move(conn);
+    return true;
 }
 
 bool RedisClient::Discard() {
+    std::shared_ptr<RedisConnection> conn;
+    {
+        std::lock_guard<std::mutex> lock(txMutex_);
+        conn = std::exchange(txConnection_, nullptr);
+    }
+
+    if (!conn) {
+        RedisCommand cmd("DISCARD");
+        auto reply = Execute(cmd);
+        return !reply.IsError() && reply.AsString() == "OK";
+    }
+
     RedisCommand cmd("DISCARD");
-    auto reply = Execute(cmd);
+    auto reply = conn->Execute(cmd);
+    pool_.ReturnConnection(conn);
     return !reply.IsError() && reply.AsString() == "OK";
 }
 
 std::vector<RedisReply> RedisClient::Exec() {
+    std::shared_ptr<RedisConnection> conn;
+    {
+        std::lock_guard<std::mutex> lock(txMutex_);
+        conn = std::exchange(txConnection_, nullptr);
+    }
+
+    RedisReply reply;
     RedisCommand cmd("EXEC");
-    auto reply = Execute(cmd);
+    if (conn) {
+        reply = conn->Execute(cmd);
+        pool_.ReturnConnection(conn);
+    } else {
+        reply = Execute(cmd);
+    }
 
     std::vector<RedisReply> result;
     if (reply.IsArray()) {

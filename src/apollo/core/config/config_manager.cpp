@@ -8,8 +8,11 @@
 #include <sstream>
 #include <algorithm>
 #include <regex>
-#include <crypto-hash/sha256.h>  // 或使用简单的哈希
 #include <filesystem>
+
+#ifdef HAVE_NLOHMANN_JSON
+    #include <nlohmann/json.hpp>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -490,12 +493,16 @@ bool ConfigManager::parseJson(const std::string& content, ConfigNode& root) {
 }
 
 bool ConfigManager::parseXml(const std::string& content, ConfigNode& root) {
+    (void)content;
+    (void)root;
     // XML解析需要专门的库（如tinyxml2）
     // 这里提供基本实现
     return false;
 }
 
 bool ConfigManager::parseLua(const std::string& content, ConfigNode& root) {
+    (void)content;
+    (void)root;
     // Lua table解析需要Lua解释器
     // 这里提供基本实现
     return false;

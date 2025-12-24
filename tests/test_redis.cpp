@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "apollo/db/redis.hpp"
 #include <chrono>
+#include <future>
 #include <thread>
 
 using namespace apollo::db;
@@ -32,11 +33,20 @@ protected:
     void CleanupTestData() {
         if (client) {
             client->Del("test_key");
+            client->Del("test_key_expire");
             client->Del("test_hash");
             client->Del("test_list");
             client->Del("test_set");
             client->Del("test_zset");
             client->Del("test_counter");
+            client->Del("expire_key");
+            client->Del("async_key");
+            client->Del("tx_key1");
+            client->Del("tx_key2");
+            client->Del("tx_key3");
+            for (int i = 0; i < 10; ++i) {
+                client->Del("pool_test_" + std::to_string(i));
+            }
         }
     }
 

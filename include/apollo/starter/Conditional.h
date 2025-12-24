@@ -34,12 +34,18 @@ public:
         : key_(std::move(key)), value_(expectedValue ? "true" : "false"), hasValue_(true) {}
 
     bool matches(const ConditionContext& ctx) const {
-        if (!ctx.getProperty(key_, !hasValue_)) {
-            // 如果 key 不存在且有期望值，返回 false
-            return !hasValue_;
+        // 获取属性值作为字符串
+        std::string defaultValue("");
+        std::string actualValue = ctx.getProperty(key_, defaultValue);
+        bool hasProperty = !actualValue.empty();
+
+        if (!hasProperty) {
+            // 如果 key 不存在
+            return !hasValue_;  // 如果没有期望值，则返回 true
         }
+
         if (hasValue_) {
-            return ctx.getProperty(key_, "") == value_;
+            return actualValue == value_;
         }
         // 只检查属性存在
         return true;

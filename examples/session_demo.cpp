@@ -44,6 +44,8 @@ private:
 
 namespace net {
 
+using utils::IdPool;
+
 /// 会话状态
 enum class SessionState : uint8_t {
     Disconnected = 0,
@@ -319,7 +321,15 @@ public:
     }
 
     bool kickPlayer(uint64_t playerId, int reason = 0) {
-        return closeSessionByPlayerId(playerId, reason);
+        std::shared_lock<std::shared_mutex> lock(mutex_);
+        auto it = playerIdToSessionId_.find(playerId);
+        if (it == playerIdToSessionId_.end()) {
+            return false;
+        }
+        uint64_t sessionId = it->second;
+        lock.unlock();
+        closeSession(sessionId, reason);
+        return true;
     }
 
     size_t broadcast(const void* data, size_t length, uint64_t exceptSessionId = 0) {
@@ -374,19 +384,21 @@ private:
 
 class GameSessionListener : public apollo::net::ISessionListener {
 public:
-    void onEvent(SessionEvent event, uint64_t sessionId,
+    void onEvent(apollo::net::SessionEvent event, uint64_t sessionId,
                 const void* data, size_t length) override {
+        (void)data;
+        (void)length;
         switch (event) {
-            case SessionEvent::Connected:
+            case apollo::net::SessionEvent::Connected:
                 std::cout << "  [Event] Session " << sessionId << " connected" << std::endl;
                 break;
-            case SessionEvent::Disconnected:
+            case apollo::net::SessionEvent::Disconnected:
                 std::cout << "  [Event] Session " << sessionId << " disconnected" << std::endl;
                 break;
-            case SessionEvent::Authenticated:
+            case apollo::net::SessionEvent::Authenticated:
                 std::cout << "  [Event] Session " << sessionId << " authenticated" << std::endl;
                 break;
-            case SessionEvent::DataReceived:
+            case apollo::net::SessionEvent::DataReceived:
                 break;
             default:
                 break;

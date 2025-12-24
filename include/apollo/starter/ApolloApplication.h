@@ -183,7 +183,7 @@ private:
      * @brief 组合所有 Starter 的组件
      */
 #ifdef HAVE_FRUIT
-    fruit::Component<> combineStarterComponents(
+    fruit::PartialComponentVoid combineStarterComponents(
         const std::vector<std::shared_ptr<ApolloStarter>>& starters);
 #endif
 

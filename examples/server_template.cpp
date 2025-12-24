@@ -706,7 +706,7 @@ private:
 class GameServer {
 public:
     GameServer(const ServerConfig& config)
-        : config_(config), running_(false) {}
+        : config_(config), running_(false), network_(config) {}
 
     bool start() {
         cout << "========================================" << endl;

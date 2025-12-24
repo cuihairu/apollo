@@ -1,6 +1,7 @@
 #pragma once
 
-#include "IComponent.h"
+#include "apollo/framework/ioc/IComponent.h"
+#include "apollo/framework/ioc/ApplicationContext.h"
 #include <atomic>
 #include <sstream>
 #include <random>
@@ -100,6 +101,11 @@ public:
     }
 
 protected:
+    template<typename T>
+    std::shared_ptr<T> getComponent() {
+        return ApplicationContext::getInstance().getComponent<T>();
+    }
+
     virtual bool onInitialize() { return true; }
     virtual bool onStart() { return true; }
     virtual bool onStop() { return true; }

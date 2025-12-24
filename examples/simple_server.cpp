@@ -36,7 +36,13 @@ protected:
 
         // 模拟一些初始化的游戏数据
         for (int i = 0; i < 100; ++i) {
-            monsters_.push_back({i, 100 + i, 100 + i, 100});
+            monsters_.push_back({
+                i,
+                static_cast<float>(100 + i),
+                static_cast<float>(100 + i),
+                0.0f,
+                100
+            });
         }
 
         std::cout << "[MyGameServer] Spawned " << monsters_.size() << " monsters" << std::endl;
@@ -52,8 +58,8 @@ protected:
         tickCount_++;
 
         // 每秒更新一次
-        static auto lastPrint = Time::now();
-        uint64_t now = Time::now();
+        static auto lastPrint = static_cast<uint64_t>(apollo::utils::Time::now());
+        uint64_t now = static_cast<uint64_t>(apollo::utils::Time::now());
 
         if (now - lastPrint >= 1000) {
             lastPrint = now;
@@ -176,7 +182,7 @@ void example3_CustomServer() {
 void example4_ServiceDiscovery() {
     std::cout << "\n=== Example 4: Service Discovery ===" << std::endl;
 
-    auto& discovery = LocalServiceDiscovery::instance();
+    LocalServiceDiscovery discovery;
 
     ServiceDiscoveryConfig config;
     config.heartbeatIntervalMs = 5000;
@@ -217,7 +223,7 @@ void example4_ServiceDiscovery() {
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    discovery.shutdown();
+    discovery.stop();
 }
 
 void example5_Metrics() {
@@ -236,7 +242,7 @@ void example5_Metrics() {
     std::cout << "Simulating requests..." << std::endl;
 
     for (int i = 0; i < 1000; ++i) {
-        requestCounter->mark();
+        requestCounter->increment();
         activeGauge->set(i % 100);
 
         // 模拟延迟（微秒）

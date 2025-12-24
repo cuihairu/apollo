@@ -4,6 +4,13 @@ include(CMakeFindDependencyMacro)
 
 # 查找依赖项
 find_dependency(nlohmann_json QUIET)
+find_dependency(protobuf CONFIG QUIET)
+if(NOT protobuf_FOUND)
+    find_dependency(Protobuf QUIET)
+endif()
+if(NOT protobuf_FOUND AND NOT Protobuf_FOUND)
+    message(FATAL_ERROR "Apollo: missing dependency: Protobuf")
+endif()
 
 # 包含 targets 文件
 include("${CMAKE_CURRENT_LIST_DIR}/ApolloTargets.cmake")

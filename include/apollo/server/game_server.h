@@ -81,19 +81,19 @@ public:
     virtual ~IServerLifecycleListener() = default;
 
     /// 配置加载后
-    virtual void onConfigLoaded(const ServerConfig& config) {}
+    virtual void onConfigLoaded(const ServerConfig&) {}
 
     /// 初始化开始
     virtual void onInitializeStart() {}
 
     /// 初始化完成
-    virtual void onInitializeComplete(bool success) {}
+    virtual void onInitializeComplete(bool) {}
 
     /// 启动开始
     virtual void onStartupStart() {}
 
     /// 启动完成
-    virtual void onStartupComplete(bool success) {}
+    virtual void onStartupComplete(bool) {}
 
     /// 关闭开始
     virtual void onShutdownStart() {}
@@ -102,7 +102,7 @@ public:
     virtual void onShutdownComplete() {}
 
     /// 阶段变化
-    virtual void onPhaseChanged(StartupPhase from, StartupPhase to) {}
+    virtual void onPhaseChanged(StartupPhase, StartupPhase) {}
 };
 
 /// 默认生命周期监听器

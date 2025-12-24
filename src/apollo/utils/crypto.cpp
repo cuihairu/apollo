@@ -14,11 +14,6 @@
     #include <windows.h>
     #include <bcrypt.h>
     #pragma comment(lib, "bcrypt.lib")
-#else
-    #include <openssl/evp.h>
-    #include <openssl/md5.h>
-    #include <openssl/sha.h>
-    #include <openssl/rand.h>
 #endif
 
 namespace apollo {
@@ -52,13 +47,10 @@ void SecureRandom::nextBytes(void* buffer, size_t size) {
         }
     }
 #else
-    if (RAND_bytes(static_cast<unsigned char*>(buffer), size) != 1) {
-        // OpenSSL 失败，回退
-        uint8_t* ptr = static_cast<uint8_t*>(buffer);
-        std::uniform_int_distribution<int> dist(0, 255);
-        for (size_t i = 0; i < size; ++i) {
-            ptr[i] = static_cast<uint8_t>(dist(g_generator));
-        }
+    uint8_t* ptr = static_cast<uint8_t*>(buffer);
+    std::uniform_int_distribution<int> dist(0, 255);
+    for (size_t i = 0; i < size; ++i) {
+        ptr[i] = static_cast<uint8_t>(dist(g_generator));
     }
 #endif
 }
@@ -148,41 +140,21 @@ std::string SecureRandom::generateGUID() {
 //==============================================================================
 
 std::string Hash::md5(const void* data, size_t size) {
-#ifdef _WIN32
-    // Windows 使用 BCrypt
-    // 简化实现：使用软件实现
     detail::MD5 md5;
     md5.update(data, size);
     return md5.finish();
-#else
-    unsigned char hash[MD5_DIGEST_LENGTH];
-    MD5(reinterpret_cast<const unsigned char*>(data), size, hash);
-    return toHexString(hash, MD5_DIGEST_LENGTH);
-#endif
 }
 
 std::string Hash::sha256(const void* data, size_t size) {
-#ifdef _WIN32
     detail::SHA256 sha256;
     sha256.update(data, size);
     return sha256.finish();
-#else
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(reinterpret_cast<const unsigned char*>(data), size, hash);
-    return toHexString(hash, SHA256_DIGEST_LENGTH);
-#endif
 }
 
 std::string Hash::sha1(const void* data, size_t size) {
-#ifdef _WIN32
     detail::SHA1 sha1;
     sha1.update(data, size);
     return sha1.finish();
-#else
-    unsigned char hash[SHA_DIGEST_LENGTH];
-    SHA1(reinterpret_cast<const unsigned char*>(data), size, hash);
-    return toHexString(hash, SHA_DIGEST_LENGTH);
-#endif
 }
 
 uint32_t Hash::murmur3_32(const void* data, size_t size, uint32_t seed) {
@@ -233,11 +205,12 @@ uint32_t Hash::murmur3_32(const void* data, size_t size, uint32_t seed) {
 }
 
 void Hash::murmur3_128(const void* data, size_t size, uint32_t seed, uint64_t out[2]) {
+    const uint8_t* bytes = static_cast<const uint8_t*>(data);
     const uint64_t c1 = 0x87c37b91114253d5ULL;
     const uint64_t c2 = 0x4cf5ad432745937fULL;
 
     const int nblocks = static_cast<int>(size / 16);
-    const uint64_t* blocks = reinterpret_cast<const uint64_t*>(data);
+    const uint64_t* blocks = reinterpret_cast<const uint64_t*>(bytes);
 
     uint64_t h1 = seed;
     uint64_t h2 = seed;
@@ -253,7 +226,7 @@ void Hash::murmur3_128(const void* data, size_t size, uint32_t seed, uint64_t ou
         h2 = (h2 << 31) | (h2 >> 33); h2 += h1; h2 = h2 * 5 + 0x38495ab5;
     }
 
-    const uint8_t* tail = reinterpret_cast<const uint8_t*>(data + nblocks * 16);
+    const uint8_t* tail = bytes + nblocks * 16;
     uint64_t k1 = 0;
     uint64_t k2 = 0;
 
@@ -434,7 +407,7 @@ std::vector<uint8_t> Base64::decode(const std::string& str) {
         uint8_t indices[4];
         for (int j = 0; j < 4; ++j) {
             uint8_t c = static_cast<uint8_t>(str[i + j]);
-            indices[j] = (c < 256) ? g_base64Lookup[c] : 0xFF;
+            indices[j] = g_base64Lookup[c];
             if (indices[j] == 0xFF && str[i + j] != '=') {
                 return {}; // 无效字符
             }
@@ -700,7 +673,7 @@ std::string HMAC::sha256(const std::string& key, const void* data, size_t size) 
     // 外层哈希
     detail::SHA256 outerHash;
     outerHash.update(outerPad.data(), outerPad.size());
-    outerHash.update(innerResult);
+    outerHash.update(innerResult.data(), innerResult.size());
     return outerHash.finish();
 }
 
@@ -963,15 +936,15 @@ namespace detail {
 
 SHA256::SHA256() : totalSize_(0), bufferLen_(0) {
     // 初始状态
-    state_[0] = 0x6a09e667;
-    state_[1] = 0xbb67ae85;
-    state_[2] = 0x3c6ef372;
-    state_[3] = 0xa54ff53a;
-    state_[4] = 0x510e527f;
-    state_[5] = 0x9b05688c;
-    state_[6] = 0x1f83d9ab;
-    state_[7] = 0x5be0cd19;
-    std::memset(buffer_, 0, sizeof(buffer_));
+    state[0] = 0x6a09e667;
+    state[1] = 0xbb67ae85;
+    state[2] = 0x3c6ef372;
+    state[3] = 0xa54ff53a;
+    state[4] = 0x510e527f;
+    state[5] = 0x9b05688c;
+    state[6] = 0x1f83d9ab;
+    state[7] = 0x5be0cd19;
+    std::memset(buffer, 0, sizeof(buffer));
 }
 
 void SHA256::update(const void* data, size_t size) {
@@ -980,13 +953,13 @@ void SHA256::update(const void* data, size_t size) {
 
     while (size > 0) {
         size_t copy = std::min(size, BLOCK_SIZE - bufferLen_);
-        std::memcpy(buffer_ + bufferLen_, ptr, copy);
+        std::memcpy(buffer + bufferLen_, ptr, copy);
         bufferLen_ += copy;
         ptr += copy;
         size -= copy;
 
         if (bufferLen_ == BLOCK_SIZE) {
-            transform(buffer_);
+            transform(buffer);
             bufferLen_ = 0;
         }
     }
@@ -995,33 +968,33 @@ void SHA256::update(const void* data, size_t size) {
 void SHA256::finish(uint8_t hash[HASH_SIZE]) {
     // 填充
     uint64_t totalBits = totalSize_ * 8;
-    buffer_[bufferLen_++] = 0x80;
+    buffer[bufferLen_++] = 0x80;
 
     if (bufferLen_ > 56) {
         while (bufferLen_ < BLOCK_SIZE) {
-            buffer_[bufferLen_++] = 0;
+            buffer[bufferLen_++] = 0;
         }
-        transform(buffer_);
+        transform(buffer);
         bufferLen_ = 0;
     }
 
     while (bufferLen_ < 56) {
-        buffer_[bufferLen_++] = 0;
+        buffer[bufferLen_++] = 0;
     }
 
     // 长度（大端序）
     for (int i = 7; i >= 0; --i) {
-        buffer_[bufferLen_++] = (totalBits >> (i * 8)) & 0xFF;
+        buffer[bufferLen_++] = (totalBits >> (i * 8)) & 0xFF;
     }
 
-    transform(buffer_);
+    transform(buffer);
 
     // 输出
     for (int i = 0; i < 8; ++i) {
-        hash[i * 4 + 0] = (state_[i] >> 24) & 0xFF;
-        hash[i * 4 + 1] = (state_[i] >> 16) & 0xFF;
-        hash[i * 4 + 2] = (state_[i] >> 8) & 0xFF;
-        hash[i * 4 + 3] = state_[i] & 0xFF;
+        hash[i * 4 + 0] = (state[i] >> 24) & 0xFF;
+        hash[i * 4 + 1] = (state[i] >> 16) & 0xFF;
+        hash[i * 4 + 2] = (state[i] >> 8) & 0xFF;
+        hash[i * 4 + 3] = state[i] & 0xFF;
     }
 }
 
@@ -1058,8 +1031,8 @@ void SHA256::transform(const uint8_t block[BLOCK_SIZE]) {
         W[i] = W[i - 16] + s0 + W[i - 7] + s1;
     }
 
-    uint32_t a = state_[0], b = state_[1], c = state_[2], d = state_[3];
-    uint32_t e = state_[4], f = state_[5], g = state_[6], h = state_[7];
+    uint32_t a = state[0], b = state[1], c = state[2], d = state[3];
+    uint32_t e = state[4], f = state[5], g = state[6], h = state[7];
 
     for (int i = 0; i < 64; ++i) {
         uint32_t S1 = (e >> 6) | (e << 26);
@@ -1083,14 +1056,14 @@ void SHA256::transform(const uint8_t block[BLOCK_SIZE]) {
         a = temp1 + temp2;
     }
 
-    state_[0] += a;
-    state_[1] += b;
-    state_[2] += c;
-    state_[3] += d;
-    state_[4] += e;
-    state_[5] += f;
-    state_[6] += g;
-    state_[7] += h;
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
+    state[5] += f;
+    state[6] += g;
+    state[7] += h;
 }
 
 //==============================================================================
@@ -1098,12 +1071,12 @@ void SHA256::transform(const uint8_t block[BLOCK_SIZE]) {
 //==============================================================================
 
 SHA1::SHA1() : totalSize_(0), bufferLen_(0) {
-    state_[0] = 0x67452301;
-    state_[1] = 0xEFCDAB89;
-    state_[2] = 0x98BADCFE;
-    state_[3] = 0x10325476;
-    state_[4] = 0xC3D2E1F0;
-    std::memset(buffer_, 0, sizeof(buffer_));
+    state[0] = 0x67452301;
+    state[1] = 0xEFCDAB89;
+    state[2] = 0x98BADCFE;
+    state[3] = 0x10325476;
+    state[4] = 0xC3D2E1F0;
+    std::memset(buffer, 0, sizeof(buffer));
 }
 
 void SHA1::update(const void* data, size_t size) {
@@ -1112,13 +1085,13 @@ void SHA1::update(const void* data, size_t size) {
 
     while (size > 0) {
         size_t copy = std::min(size, BLOCK_SIZE - bufferLen_);
-        std::memcpy(buffer_ + bufferLen_, ptr, copy);
+        std::memcpy(buffer + bufferLen_, ptr, copy);
         bufferLen_ += copy;
         ptr += copy;
         size -= copy;
 
         if (bufferLen_ == BLOCK_SIZE) {
-            transform(buffer_);
+            transform(buffer);
             bufferLen_ = 0;
         }
     }
@@ -1126,31 +1099,31 @@ void SHA1::update(const void* data, size_t size) {
 
 void SHA1::finish(uint8_t hash[HASH_SIZE]) {
     uint64_t totalBits = totalSize_ * 8;
-    buffer_[bufferLen_++] = 0x80;
+    buffer[bufferLen_++] = 0x80;
 
     if (bufferLen_ > 56) {
         while (bufferLen_ < BLOCK_SIZE) {
-            buffer_[bufferLen_++] = 0;
+            buffer[bufferLen_++] = 0;
         }
-        transform(buffer_);
+        transform(buffer);
         bufferLen_ = 0;
     }
 
     while (bufferLen_ < 56) {
-        buffer_[bufferLen_++] = 0;
+        buffer[bufferLen_++] = 0;
     }
 
     for (int i = 7; i >= 0; --i) {
-        buffer_[bufferLen_++] = (totalBits >> (i * 8)) & 0xFF;
+        buffer[bufferLen_++] = (totalBits >> (i * 8)) & 0xFF;
     }
 
-    transform(buffer_);
+    transform(buffer);
 
     for (int i = 0; i < 5; ++i) {
-        hash[i * 4 + 0] = (state_[i] >> 24) & 0xFF;
-        hash[i * 4 + 1] = (state_[i] >> 16) & 0xFF;
-        hash[i * 4 + 2] = (state_[i] >> 8) & 0xFF;
-        hash[i * 4 + 3] = state_[i] & 0xFF;
+        hash[i * 4 + 0] = (state[i] >> 24) & 0xFF;
+        hash[i * 4 + 1] = (state[i] >> 16) & 0xFF;
+        hash[i * 4 + 2] = (state[i] >> 8) & 0xFF;
+        hash[i * 4 + 3] = state[i] & 0xFF;
     }
 }
 
@@ -1172,7 +1145,7 @@ void SHA1::transform(const uint8_t block[BLOCK_SIZE]) {
         W[i] = (W[i] << 1) | (W[i] >> 31);
     }
 
-    uint32_t a = state_[0], b = state_[1], c = state_[2], d = state_[3], e = state_[4];
+    uint32_t a = state[0], b = state[1], c = state[2], d = state[3], e = state[4];
 
     for (int i = 0; i < 80; ++i) {
         uint32_t f, k;
@@ -1198,11 +1171,11 @@ void SHA1::transform(const uint8_t block[BLOCK_SIZE]) {
         a = temp;
     }
 
-    state_[0] += a;
-    state_[1] += b;
-    state_[2] += c;
-    state_[3] += d;
-    state_[4] += e;
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
+    state[4] += e;
 }
 
 //==============================================================================
@@ -1210,11 +1183,11 @@ void SHA1::transform(const uint8_t block[BLOCK_SIZE]) {
 //==============================================================================
 
 MD5::MD5() : totalSize_(0), bufferLen_(0) {
-    state_[0] = 0x67452301;
-    state_[1] = 0xEFCDAB89;
-    state_[2] = 0x98BADCFE;
-    state_[3] = 0x10325476;
-    std::memset(buffer_, 0, sizeof(buffer_));
+    state[0] = 0x67452301;
+    state[1] = 0xEFCDAB89;
+    state[2] = 0x98BADCFE;
+    state[3] = 0x10325476;
+    std::memset(buffer, 0, sizeof(buffer));
 }
 
 void MD5::update(const void* data, size_t size) {
@@ -1223,13 +1196,13 @@ void MD5::update(const void* data, size_t size) {
 
     while (size > 0) {
         size_t copy = std::min(size, BLOCK_SIZE - bufferLen_);
-        std::memcpy(buffer_ + bufferLen_, ptr, copy);
+        std::memcpy(buffer + bufferLen_, ptr, copy);
         bufferLen_ += copy;
         ptr += copy;
         size -= copy;
 
         if (bufferLen_ == BLOCK_SIZE) {
-            transform(buffer_);
+            transform(buffer);
             bufferLen_ = 0;
         }
     }
@@ -1237,31 +1210,31 @@ void MD5::update(const void* data, size_t size) {
 
 void MD5::finish(uint8_t hash[HASH_SIZE]) {
     uint64_t totalBits = totalSize_ * 8;
-    buffer_[bufferLen_++] = 0x80;
+    buffer[bufferLen_++] = 0x80;
 
     if (bufferLen_ > 56) {
         while (bufferLen_ < BLOCK_SIZE) {
-            buffer_[bufferLen_++] = 0;
+            buffer[bufferLen_++] = 0;
         }
-        transform(buffer_);
+        transform(buffer);
         bufferLen_ = 0;
     }
 
     while (bufferLen_ < 56) {
-        buffer_[bufferLen_++] = 0;
+        buffer[bufferLen_++] = 0;
     }
 
     for (int i = 0; i < 8; ++i) {
-        buffer_[bufferLen_++] = (totalBits >> (i * 8)) & 0xFF;
+        buffer[bufferLen_++] = (totalBits >> (i * 8)) & 0xFF;
     }
 
-    transform(buffer_);
+    transform(buffer);
 
     for (int i = 0; i < 4; ++i) {
-        hash[i * 4 + 0] = state_[i] & 0xFF;
-        hash[i * 4 + 1] = (state_[i] >> 8) & 0xFF;
-        hash[i * 4 + 2] = (state_[i] >> 16) & 0xFF;
-        hash[i * 4 + 3] = (state_[i] >> 24) & 0xFF;
+        hash[i * 4 + 0] = state[i] & 0xFF;
+        hash[i * 4 + 1] = (state[i] >> 8) & 0xFF;
+        hash[i * 4 + 2] = (state[i] >> 16) & 0xFF;
+        hash[i * 4 + 3] = (state[i] >> 24) & 0xFF;
     }
 }
 
@@ -1298,7 +1271,7 @@ void MD5::transform(const uint8_t block[BLOCK_SIZE]) {
         6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
     };
 
-    uint32_t a = state_[0], b = state_[1], c = state_[2], d = state_[3];
+    uint32_t a = state[0], b = state[1], c = state[2], d = state[3];
     uint32_t M[16];
 
     for (int i = 0; i < 16; ++i) {
@@ -1330,10 +1303,10 @@ void MD5::transform(const uint8_t block[BLOCK_SIZE]) {
         a = temp;
     }
 
-    state_[0] += a;
-    state_[1] += b;
-    state_[2] += c;
-    state_[3] += d;
+    state[0] += a;
+    state[1] += b;
+    state[2] += c;
+    state[3] += d;
 }
 
 } // namespace detail

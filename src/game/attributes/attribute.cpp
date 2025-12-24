@@ -129,6 +129,7 @@ void AttributeManager::DestroyContainer(uint64_t objectId) {
 }
 
 bool AttributeManager::LoadFromConfig(const std::string& configFile) {
+    (void)configFile;
     // TODO: 从配置文件加载属性定义
     return true;
 }

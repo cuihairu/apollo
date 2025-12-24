@@ -15,11 +15,12 @@ RpcClient::~RpcClient() {
 bool RpcClient::Connect() {
     socket_ = std::make_unique<Socket>();
 
-    if (!socket_->Create()) {
+    if (!socket_->CreateTCP()) {
         return false;
     }
 
-    if (!socket_->Connect(serverAddr_, serverPort_)) {
+    NetAddress addr(serverAddr_, static_cast<uint16_t>(serverPort_));
+    if (!socket_->Connect(addr)) {
         return false;
     }
 
@@ -44,6 +45,7 @@ void RpcClient::Disconnect() {
     if (receiveThread_.joinable()) {
         receiveThread_.join();
     }
+    socket_.reset();
 }
 
 bool RpcClient::SendMessage(const Message& msg) {
@@ -56,7 +58,10 @@ bool RpcClient::SendMessage(const Message& msg) {
         return false;
     }
 
-    return socket_->Send(buffer.Data(), buffer.Size()) > 0;
+    if (buffer.Size() == 0) {
+        return true;
+    }
+    return socket_->SendAll(buffer.Data(), buffer.Size());
 }
 
 void RpcClient::RemoveCallback(uint64_t requestId) {
@@ -77,19 +82,27 @@ void RpcServer::RegisterService(std::shared_ptr<google::protobuf::Service> servi
         return;
     }
 
-    uint32_t serviceId = GetServiceId(service->GetDescriptor()->full_name());
+    std::string serviceName = std::string(service->GetDescriptor()->full_name());
+    uint32_t serviceId = RpcServiceManager::Instance().GetServiceId(serviceName);
+    if (serviceId == 0) {
+        serviceId = static_cast<uint32_t>(std::hash<std::string>{}(serviceName) & 0xFFFFFFFFu);
+        if (serviceId == 0) {
+            serviceId = 1;
+        }
+        RpcServiceManager::Instance().RegisterService(serviceId, service);
+    }
     services_[serviceId] = service;
-    serviceNames_[serviceId] = service->GetDescriptor()->full_name();
+    serviceNames_[serviceId] = serviceName;
 }
 
 bool RpcServer::Start() {
     serverSocket_ = std::make_unique<Socket>();
 
-    if (!serverSocket_->Create()) {
+    if (!serverSocket_->CreateTCP()) {
         return false;
     }
 
-    if (!serverSocket_->Bind("", port_)) {
+    if (!serverSocket_->Bind(NetAddress("0.0.0.0", static_cast<uint16_t>(port_)))) {
         return false;
     }
 
@@ -125,9 +138,11 @@ void RpcServer::AcceptLoop() {
         auto client = serverSocket_->Accept();
         if (client) {
             // 为每个连接创建处理线程
-            handlerThreads_.emplace_back([this, client = std::move(client)]() {
+            handlerThreads_.emplace_back([this, client = std::move(client)]() mutable {
                 HandleConnection(std::move(client));
             });
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 }
@@ -154,13 +169,14 @@ void RpcServiceManager::RegisterService(uint32_t serviceId,
     }
 
     services_[serviceId] = service;
-    serviceIds_[service->GetDescriptor()->full_name()] = serviceId;
+    const auto* descriptor = service->GetDescriptor();
+    std::string serviceName = std::string(descriptor->full_name());
+    serviceIds_[serviceName] = serviceId;
 
     // 注册方法ID
-    const auto* descriptor = service->GetDescriptor();
     for (int i = 0; i < descriptor->method_count(); ++i) {
         const auto* method = descriptor->method(i);
-        methodIds_[{descriptor->full_name(), method->name()]] = i;
+        methodIds_[{serviceName, std::string(method->name())}] = static_cast<uint32_t>(i);
     }
 }
 

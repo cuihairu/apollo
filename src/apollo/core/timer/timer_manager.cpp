@@ -44,7 +44,6 @@ TimerManager::TimerManager(uint32_t resolutionMs)
     : resolutionMs_(resolutionMs)
     , currentTime_(0)
     , tickCount_(0)
-    , nextTimerId_(1)
 {
     wheels_.resize(WHEEL_COUNT);
     for (auto& wheel : wheels_) {
@@ -156,7 +155,6 @@ bool TimerManager::update(int maxProcess) {
     }
 
     int processed = 0;
-    uint64_t targetTick = currentTime_ + maxProcess;
 
     while (currentTime_ < nowTicks) {
         if (maxProcess > 0 && processed >= maxProcess) {
@@ -257,7 +255,7 @@ void TimerManager::processTick() {
     uint32_t slotIndex = tickCount_ & WHEEL_MASK;
 
     // 处理第一层时间轮的当前槽
-    size_t processed = processSlot(0, slotIndex);
+    processSlot(0, slotIndex);
 
     // 检查是否需要降级
     // 每当低8位全为0时，检查上一层
@@ -337,9 +335,6 @@ void TimerManager::cascadeTimer(uint32_t level) {
         }
 
         // 计算在低层时间轮中的新位置
-        uint64_t remainingMs = it->second.intervalMs;
-        uint64_t elapsedMs = tickCount_ * resolutionMs_;
-
         // 这里简化处理：直接重新添加
         // 实际应该计算剩余时间
         addToWheel(it->second);

@@ -277,27 +277,38 @@ graph TB
 git clone https://github.com/cuihairu/apollo.git
 cd apollo
 
-# 创建构建目录
-mkdir build && cd build
+# 安装 vcpkg（用于依赖管理）
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
 
-# 配置项目
-cmake .. -DCMAKE_BUILD_TYPE=Release
+# 创建构建目录
+cmake -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_TARGET_TRIPLET=x64-linux   # macOS: x64-osx / arm64-osx
 
 # 编译
-make -j$(nproc)
+cmake --build build --parallel
 
 # 运行示例
-./examples/all_features_demo
+./build/examples/all_features_demo
 ```
 
 ### Windows (Visual Studio)
 
 ```bash
-# 使用Visual Studio 2019或更高版本
-mkdir build
-cd build
-cmake .. -G "Visual Studio 16 2019"
-# 打开Apollo.sln进行编译
+# 使用 Visual Studio 2019 或更高版本
+git clone https://github.com/cuihairu/apollo.git
+cd apollo
+
+git clone https://github.com/microsoft/vcpkg.git
+.\vcpkg\bootstrap-vcpkg.bat
+
+cmake -B build -G "Visual Studio 16 2019" ^
+  -DCMAKE_TOOLCHAIN_FILE=%cd%\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake ^
+  -DVCPKG_TARGET_TRIPLET=x64-windows
+
+# 打开 build\\Apollo.sln 进行编译
 ```
 
 ## 📚 模块说明

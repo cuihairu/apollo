@@ -18,15 +18,15 @@ public:
     bool onInitialize() override {
         auto config = ConfigManager::getInstance();
 
-        port.set(config->getValue<int>("server.port", 8080));
-        maxConnections.set(config->getValue<int>("server.max_connections", 100));
-        enableSsl.set(config->getValue<bool>("server.ssl.enabled", false));
+        portWritable.set(config->getValue<int>("server.port", 8080));
+        maxConnectionsWritable.set(config->getValue<int>("server.max_connections", 100));
+        enableSslWritable.set(config->getValue<bool>("server.ssl.enabled", false));
 
         std::cout << "WebServerComponent: Initializing with port=" << port
                   << ", max_connections=" << maxConnections
                   << ", ssl=" << (enableSsl ? "enabled" : "disabled") << std::endl;
 
-        port.addChangeListener([this](int newPort) {
+        portWritable.addChangeListener([this](int newPort) {
             std::cout << "WebServerComponent: Port changed to " << newPort << std::endl;
         });
 
@@ -53,8 +53,8 @@ public:
     bool onInitialize() override {
         auto config = ConfigManager::getInstance();
 
-        maxSize.set(config->getValue<int>("cache.max_size", 1000));
-        ttl.set(config->getValue<int>("cache.ttl_seconds", 3600));
+        maxSizeWritable.set(config->getValue<int>("cache.max_size", 1000));
+        ttlWritable.set(config->getValue<int>("cache.ttl_seconds", 3600));
 
         std::cout << "CacheComponent: Initializing with max_size=" << maxSize
                   << ", ttl=" << ttl << "s" << std::endl;

@@ -29,12 +29,25 @@ public:
         return true;
     }
 
+    bool onDestroy() override {
+        initialized = false;
+        started = false;
+        return true;
+    }
+
     bool isInitialized() const { return initialized; }
     bool isStarted() const { return started; }
 
 private:
     bool initialized = false;
     bool started = false;
+};
+
+// Test helper: expose dependency API for unit tests.
+class TestComponentWithDeps : public TestComponent {
+public:
+    using TestComponent::TestComponent;
+    using BaseComponent::addDependency;
 };
 
 class ServiceWithDependency : public BaseComponent {
@@ -79,7 +92,7 @@ TEST(ComponentTest, BasicLifecycle) {
 }
 
 TEST(ComponentTest, DependencyManagement) {
-    auto component = std::make_shared<TestComponent>();
+    auto component = std::make_shared<TestComponentWithDeps>();
 
     component->addDependency("Dep1");
     component->addDependency("Dep2");
@@ -162,16 +175,16 @@ TEST(ConfigTest, BasicOperations) {
 TEST(ConfigTest, ChangeListeners) {
     auto config = ConfigManager::getInstance();
 
-    int callCount = 0;
-    config->addGlobalChangeListener([&](const std::string& key) {
-        callCount++;
+    auto callCount = std::make_shared<std::atomic<int>>(0);
+    config->addGlobalChangeListener([callCount](const std::string&) {
+        callCount->fetch_add(1);
     });
 
     config->setValue("test.key", 1);
-    EXPECT_EQ(1, callCount);
+    EXPECT_EQ(1, callCount->load());
 
     config->setValue("test.key2", 2);
-    EXPECT_EQ(2, callCount);
+    EXPECT_EQ(2, callCount->load());
 }
 
 // Dependency Tests

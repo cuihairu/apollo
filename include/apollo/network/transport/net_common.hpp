@@ -62,12 +62,38 @@ private:
 };
 
 /// 网络事件类型
-enum class NetEventType {
-    READABLE = 0x01,   // 可读事件
-    WRITABLE = 0x02,   // 可写事件
-    ERROR    = 0x04,   // 错误事件
-    CLOSE    = 0x08    // 关闭事件
+enum class NetEventType : uint8_t {
+    NONE  = 0x00,
+    READ  = 0x01,   // 可读事件
+    WRITE = 0x02,   // 可写事件
+    ERROR = 0x04,   // 错误事件
+    CLOSE = 0x08,   // 关闭事件
+
+    // Backward-compatible aliases
+    READABLE = READ,
+    WRITABLE = WRITE
 };
+
+constexpr NetEventType operator|(NetEventType a, NetEventType b) {
+    return static_cast<NetEventType>(
+        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
+    );
+}
+
+constexpr NetEventType operator&(NetEventType a, NetEventType b) {
+    return static_cast<NetEventType>(
+        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
+    );
+}
+
+constexpr NetEventType& operator|=(NetEventType& a, NetEventType b) {
+    a = a | b;
+    return a;
+}
+
+constexpr bool HasEvent(NetEventType value, NetEventType flag) {
+    return static_cast<uint8_t>(value & flag) != 0;
+}
 
 /// 网络事件处理器接口
 class INetEventHandler {
@@ -75,19 +101,21 @@ public:
     virtual ~INetEventHandler() = default;
 
     /// 连接建立
-    virtual void OnConnected(socket_t sockfd, const NetAddress& addr) {}
+    virtual void OnConnected([[maybe_unused]] socket_t sockfd,
+                             [[maybe_unused]] const NetAddress& addr) {}
 
     /// 连接断开
-    virtual void OnDisconnected(socket_t sockfd) {}
+    virtual void OnDisconnected([[maybe_unused]] socket_t sockfd) {}
 
     /// 数据可读
-    virtual void OnReadable(socket_t sockfd) {}
+    virtual void OnReadable([[maybe_unused]] socket_t sockfd) {}
 
     /// 数据可写
-    virtual void OnWritable(socket_t sockfd) {}
+    virtual void OnWritable([[maybe_unused]] socket_t sockfd) {}
 
     /// 错误发生
-    virtual void OnError(socket_t sockfd, NetError error) {}
+    virtual void OnError([[maybe_unused]] socket_t sockfd,
+                         [[maybe_unused]] NetError error) {}
 };
 
 /// 网络统计信息

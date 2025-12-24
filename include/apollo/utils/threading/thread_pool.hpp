@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <atomic>
+#include <type_traits>
 
 namespace apollo {
 
@@ -29,7 +30,7 @@ public:
     /// 提交任务
     template<typename F, typename... Args>
     auto Submit(F&& f, Args&&... args)
-        -> std::future<typename std::result_of<F(Args...)>::type>;
+        -> std::future<std::invoke_result_t<F, Args...>>;
 
     /// 获取线程数量
     size_t GetThreadCount() const { return threads_.size(); }
@@ -57,9 +58,9 @@ private:
 
 template<typename F, typename... Args>
 auto ThreadPool::Submit(F&& f, Args&&... args)
-    -> std::future<typename std::result_of<F(Args...)>::type> {
+    -> std::future<std::invoke_result_t<F, Args...>> {
 
-    using ReturnType = typename std::result_of<F(Args...)>::type;
+    using ReturnType = std::invoke_result_t<F, Args...>;
 
     auto task = std::make_shared<std::packaged_task<ReturnType()>>(
         std::bind(std::forward<F>(f), std::forward<Args>(args)...)

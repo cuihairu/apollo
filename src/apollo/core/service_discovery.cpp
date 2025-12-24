@@ -8,6 +8,8 @@
 #include "apollo/utils/random.h"
 #include <algorithm>
 #include <cstring>
+#include <chrono>
+#include <thread>
 
 namespace apollo {
 namespace core {
@@ -28,7 +30,7 @@ bool LocalServiceDiscovery::registerServer(const ServerNode& node) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     ServerNode new_node = node;
-    new_node.startTime = Time::now();
+    new_node.startTime = utils::Time::now();
     new_node.lastHeartbeat = new_node.startTime;
 
     bool isNew = servers_.find(node.id) == servers_.end();
@@ -65,7 +67,7 @@ bool LocalServiceDiscovery::sendHeartbeat(uint32_t serverId) {
         return false;
     }
 
-    it->second.lastHeartbeat = Time::now();
+    it->second.lastHeartbeat = utils::Time::now();
     return true;
 }
 
@@ -73,7 +75,7 @@ std::vector<ServerNode> LocalServiceDiscovery::discoverServers(ServerType type) 
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::vector<ServerNode> result;
-    uint64_t now = Time::now();
+    uint64_t now = utils::Time::now();
 
     for (const auto& pair : servers_) {
         const auto& node = pair.second;
@@ -108,7 +110,7 @@ bool LocalServiceDiscovery::selectLeastLoaded(ServerType type, ServerNode& node)
 
     ServerNode* bestNode = nullptr;
     uint32_t minLoad = UINT32_MAX;
-    uint64_t now = Time::now();
+    uint64_t now = utils::Time::now();
 
     for (auto& pair : servers_) {
         auto& server = pair.second;
@@ -152,7 +154,7 @@ bool LocalServiceDiscovery::selectRandom(ServerType type, ServerNode& node) {
     }
 
     // 随机选择
-    utils::Random rng(static_cast<uint32_t>(Time::now()));
+    utils::Random rng(static_cast<uint32_t>(utils::Time::now()));
     size_t idx = rng.next(static_cast<uint32_t>(availableServers.size()));
     node = availableServers[idx];
 
@@ -192,7 +194,7 @@ bool LocalServiceDiscovery::updateLoad(uint32_t serverId, uint32_t currentLoad) 
 
     uint32_t oldLoad = it->second.currentLoad;
     it->second.currentLoad = currentLoad;
-    it->second.lastHeartbeat = Time::now();
+    it->second.lastHeartbeat = utils::Time::now();
 
     if (listener_ && oldLoad != currentLoad) {
         listener_->onServerLoadChanged(it->second, oldLoad);
@@ -211,7 +213,7 @@ bool LocalServiceDiscovery::updateStatus(uint32_t serverId, ServerStatus status)
 
     ServerStatus oldStatus = it->second.status;
     it->second.status = status;
-    it->second.lastHeartbeat = Time::now();
+    it->second.lastHeartbeat = utils::Time::now();
 
     if (listener_ && oldStatus != status) {
         listener_->onServerStatusChanged(it->second, oldStatus);
@@ -260,7 +262,7 @@ void LocalServiceDiscovery::heartbeatThread() {
 
 void LocalServiceDiscovery::checkTimeouts() {
     std::vector<uint32_t> timeoutServers;
-    uint64_t now = Time::now();
+    uint64_t now = utils::Time::now();
 
     {
         std::lock_guard<std::mutex> lock(mutex_);

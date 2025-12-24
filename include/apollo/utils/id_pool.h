@@ -16,6 +16,8 @@ namespace utils {
  */
 class IdPool {
 public:
+    IdPool() = default;
+
     /**
      * @brief 构造函数
      *
@@ -36,6 +38,10 @@ public:
     // 禁止拷贝
     IdPool(const IdPool&) = delete;
     IdPool& operator=(const IdPool&) = delete;
+
+    // 允许移动
+    IdPool(IdPool&&) noexcept = default;
+    IdPool& operator=(IdPool&&) noexcept = default;
 
     /**
      * @brief 分配一个ID

@@ -140,13 +140,13 @@ public:
 template<typename T>
 class ComponentPool : public IComponentPool {
 public:
-    T* get(EntityId entityId) override {
+    T* getTyped(EntityId entityId) {
         auto it = components_.find(entityId);
         return (it != components_.end()) ? &it->second : nullptr;
     }
 
     void* get(EntityId entityId) override {
-        return get(entityId);
+        return getTyped(entityId);
     }
 
     void* add(EntityId entityId) override {
@@ -444,7 +444,7 @@ T* World::getComponent(EntityId entityId) {
     }
 
     auto pool = static_cast<ComponentPool<T>*>(poolIt->second.get());
-    return pool->get(entityId);
+    return pool->getTyped(entityId);
 }
 
 template<typename T>

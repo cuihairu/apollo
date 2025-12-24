@@ -5,14 +5,15 @@ namespace Apollo {
 
 FileWatcher::FileWatcher()
     : running_(false)
-    , pollInterval_(std::chrono::milliseconds(1000)) {
+    , pollInterval_(std::chrono::milliseconds(1000))
 #ifdef _WIN32
-    directoryHandle_ = INVALID_HANDLE_VALUE;
+    , directoryHandle_(INVALID_HANDLE_VALUE)
 #else
 #ifndef USE_POLLING_WATCHER
-    inotifyInstance_ = -1;
+    , inotifyInstance_(-1)
 #endif
 #endif
+{
 }
 
 FileWatcher::~FileWatcher() {

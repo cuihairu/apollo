@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/network/messaging/protobuf_message.hpp"
-#include "socket.hpp"
+#include "apollo/network/transport/socket.hpp"
 #include <google/protobuf/service.h>
 #include <google/protobuf/descriptor.h>
 #include <unordered_map>
@@ -106,7 +106,7 @@ public:
         return false;
     }
 
-    void NotifyOnCancel(google::protobuf::Closure* callback) override {
+    void NotifyOnCancel([[maybe_unused]] google::protobuf::Closure* callback) override {
         // TODO: 实现取消功能
     }
 
@@ -341,11 +341,6 @@ public:
                          const std::string& methodName) const;
 
 private:
-    std::unordered_map<uint32_t, std::shared_ptr<google::protobuf::Service>> services_;
-    std::unordered_map<std::string, uint32_t> serviceIds_;
-    std::unordered_map<std::pair<std::string, std::string>, uint32_t,
-                       PairHash> methodIds_;
-
     struct PairHash {
         std::size_t operator()(const std::pair<std::string, std::string>& p) const {
             auto h1 = std::hash<std::string>{}(p.first);
@@ -353,6 +348,11 @@ private:
             return h1 ^ (h2 << 1);
         }
     };
+
+    std::unordered_map<uint32_t, std::shared_ptr<google::protobuf::Service>> services_;
+    std::unordered_map<std::string, uint32_t> serviceIds_;
+    std::unordered_map<std::pair<std::string, std::string>, uint32_t,
+                       PairHash> methodIds_;
 };
 
 /// 服务代理生成器（用于客户端）

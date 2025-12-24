@@ -44,3 +44,7 @@ target_link_libraries(netutil_demo PRIVATE apollo)
 # ========== Simple Server ==========
 add_executable(simple_server simple_server.cpp)
 target_link_libraries(simple_server PRIVATE apollo)
+
+# Starter 自动配置示例
+add_executable(starter_example starter_example.cpp)
+target_link_libraries(starter_example PRIVATE apollo)

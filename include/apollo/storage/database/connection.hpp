@@ -51,7 +51,7 @@ public:
     }
 
     /// 获取指定列名的值
-    std::string GetValue(const std::string& columnName, size_t row = 0) const {
+    std::string GetValue([[maybe_unused]] const std::string& columnName, size_t row = 0) const {
         // 简化实现，实际项目需要列名映射
         return GetValue(row, 0);
     }

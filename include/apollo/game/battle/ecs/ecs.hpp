@@ -144,29 +144,18 @@ public:
     Entity(uint32_t id) : id(id) {}
 
     template<typename T, typename... Args>
-    T* AddComponent(Args&&... args) {
-        return world_->AddComponent<T>(id, std::forward<Args>(args)...);
-    }
+    T* AddComponent(Args&&... args);
 
     template<typename T>
-    T* GetComponent() {
-        return world_->GetComponent<T>(id);
-    }
+    T* GetComponent();
 
     template<typename T>
-    void RemoveComponent() {
-        world_->RemoveComponent<T>(id);
-    }
+    void RemoveComponent();
 
     template<typename T>
-    bool HasComponent() {
-        return world_->HasComponent<T>(id);
-    }
+    bool HasComponent();
 
-    void Destroy() {
-        active = false;
-        world_->DestroyEntity(id);
-    }
+    void Destroy();
 
 private:
     World* world_ = nullptr;
@@ -220,16 +209,8 @@ public:
         return GetComponent<T>(entityId) != nullptr;
     }
 
-    void AddSystem(std::shared_ptr<System> system) {
-        systems_.push_back(system);
-        system->world_ = this;
-    }
-
-    void Update(float deltaTime) {
-        for (auto& system : systems_) {
-            system->Update(deltaTime);
-        }
-    }
+    void AddSystem(std::shared_ptr<System> system);
+    void Update(float deltaTime);
 
     ComponentManager& GetComponentManager() { return componentManager_; }
 
@@ -272,5 +253,43 @@ public:
 private:
     std::vector<std::shared_ptr<System>> systems_;
 };
+
+// ---- Entity inline implementations (require World definition) ----
+
+template<typename T, typename... Args>
+T* Entity::AddComponent(Args&&... args) {
+    return world_->AddComponent<T>(id, std::forward<Args>(args)...);
+}
+
+template<typename T>
+T* Entity::GetComponent() {
+    return world_->GetComponent<T>(id);
+}
+
+template<typename T>
+void Entity::RemoveComponent() {
+    world_->RemoveComponent<T>(id);
+}
+
+template<typename T>
+bool Entity::HasComponent() {
+    return world_->HasComponent<T>(id);
+}
+
+inline void Entity::Destroy() {
+    active = false;
+    world_->DestroyEntity(id);
+}
+
+inline void World::AddSystem(std::shared_ptr<System> system) {
+    systems_.push_back(system);
+    system->world_ = this;
+}
+
+inline void World::Update(float deltaTime) {
+    for (auto& system : systems_) {
+        system->Update(deltaTime);
+    }
+}
 
 }  // namespace apollo::battle::ecs

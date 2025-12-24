@@ -8,6 +8,7 @@
 #include "apollo/storage/database/db.h"
 #include <unordered_map>
 #include <functional>
+#include <algorithm>
 
 namespace apollo {
 namespace storage {
@@ -18,7 +19,8 @@ namespace database {
  *
  * 用于单元测试，不需要真实数据库
  */
-class MockDbConnection : public IDbConnection {
+class MockDbConnection : public IDbConnection,
+                         public std::enable_shared_from_this<MockDbConnection> {
 public:
     MockDbConnection() = default;
     ~MockDbConnection() override = default;
@@ -140,7 +142,16 @@ public:
     }
 
     void bind(const std::string& name, const DbValue& value) override {
-        namedParams_[name] = value;
+        auto it = std::find_if(
+            namedParams_.begin(),
+            namedParams_.end(),
+            [&](const auto& kv) { return kv.first == name; }
+        );
+        if (it != namedParams_.end()) {
+            it->second = value;
+        } else {
+            namedParams_.emplace_back(name, value);
+        }
     }
 
     DbResult executeQuery() override {

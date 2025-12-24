@@ -20,6 +20,8 @@ IDbConnectionPtr DbFactory::create(const DbConfig& config) {
     if (config.type == DbType::MySQL) {
         return std::make_shared<MySQLConnection>();
     }
+#else
+    (void)config;
 #endif
 
     // 其他数据库类型可以在这里添加

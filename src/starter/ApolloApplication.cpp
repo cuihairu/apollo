@@ -112,7 +112,7 @@ std::vector<std::shared_ptr<ApolloStarter>> ApolloApplication::filterEnabledStar
 }
 
 #ifdef HAVE_FRUIT
-fruit::Component<> ApolloApplication::combineStarterComponents(
+fruit::PartialComponentVoid ApolloApplication::combineStarterComponents(
     const std::vector<std::shared_ptr<ApolloStarter>>& starters) {
     (void)starters;  // 避免未使用参数警告
 

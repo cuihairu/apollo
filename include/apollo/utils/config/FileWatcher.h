@@ -63,8 +63,10 @@ private:
 #ifdef _WIN32
     HANDLE directoryHandle_;
 #else
+#ifndef USE_POLLING_WATCHER
     int inotifyInstance_;
     std::unordered_map<int, std::string> watchDescriptors_;
+#endif
 #endif
 };
 

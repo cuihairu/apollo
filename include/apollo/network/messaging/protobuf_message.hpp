@@ -5,6 +5,7 @@
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <cstring>
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -56,7 +57,7 @@ public:
     }
 
     /// 从Buffer反序列化
-    bool Deserialize(const Buffer& buffer) override {
+    bool Deserialize(Buffer& buffer) override {
         google::protobuf::Message* msg = GetProtoMessage();
         if (!msg) {
             return false;
@@ -104,7 +105,7 @@ public:
     uint32_t GetType() const override {
         // 使用消息类型的哈希值作为类型ID
         static const uint32_t type = static_cast<uint32_t>(
-            std::hash<std::string>{}(T::descriptor()->full_name()) & 0xFFFFFFFF
+            std::hash<std::string>{}(std::string(T::descriptor()->full_name())) & 0xFFu
         );
         return type;
     }
@@ -150,14 +151,14 @@ public:
                       "T must be a protobuf message");
 
         uint32_t type = static_cast<uint32_t>(
-            std::hash<std::string>{}(T::descriptor()->full_name()) & 0xFFFFFFFF
+            std::hash<std::string>{}(std::string(T::descriptor()->full_name())) & 0xFFu
         );
 
         creators_[type] = []() -> Message::Ptr {
             return std::make_shared<ProtobufMessageWrapper<T>>();
         };
 
-        names_[type] = T::descriptor()->full_name();
+        names_[type] = std::string(T::descriptor()->full_name());
     }
 
     /// 创建消息
@@ -225,11 +226,13 @@ public:
     }
 
     /// 解码消息
-    static std::pair<uint32_t, std::vector<uint8_t>> Decode(const Buffer& buffer) {
+    static std::pair<uint32_t, std::vector<uint8_t>> Decode(Buffer& buffer) {
         MessageHeader header;
-        if (buffer.Peek(&header, sizeof(header)) != sizeof(header)) {
+        if (buffer.GetReadableSize() < sizeof(header)) {
             return {0, {}};
         }
+
+        std::memcpy(&header, buffer.Peek(), sizeof(header));
 
         uint32_t totalSize = sizeof(header) + header.GetLength();
         if (buffer.GetReadableSize() < totalSize) {
@@ -262,7 +265,7 @@ inline uint32_t GetMessageType() {
     static_assert(std::is_base_of<google::protobuf::Message, T>::value,
                   "T must be a protobuf message");
     return static_cast<uint32_t>(
-        std::hash<std::string>{}(T::descriptor()->full_name()) & 0xFFFFFFFF
+        std::hash<std::string>{}(std::string(T::descriptor()->full_name())) & 0xFFu
     );
 }
 

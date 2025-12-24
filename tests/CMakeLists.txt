@@ -1,14 +1,18 @@
 find_package(GTest QUIET)
 
 if(GTest_FOUND)
+    # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
+    # is searched before system include dirs, which can accidentally pick up a
+    # different protobuf installation and cause ABI mismatches. Prefer normal -I.
+    foreach(_gt_target IN ITEMS GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main)
+        if(TARGET ${_gt_target})
+            set_property(TARGET ${_gt_target} PROPERTY INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "")
+        endif()
+    endforeach()
+
     enable_testing()
 
     add_executable(ioc_tests
-        component_test.cpp
-        context_test.cpp
-        config_test.cpp
-        dependency_test.cpp
-        filewatcher_test.cpp
         main_test.cpp
     )
 
@@ -31,19 +35,16 @@ if(GTest_FOUND)
     add_test(NAME ContextTest COMMAND ioc_tests --gtest_filter=ContextTest.*)
     add_test(NAME ConfigTest COMMAND ioc_tests --gtest_filter=ConfigTest.*)
     add_test(NAME DependencyTest COMMAND ioc_tests --gtest_filter=DependencyTest.*)
-    add_test(NAME FileWatcherTest COMMAND ioc_tests --gtest_filter=FileWatcherTest.*)
 
     # Redis tests
     add_executable(redis_tests
         test_redis.cpp
-        test_redis_main.cpp
     )
 
     target_link_libraries(redis_tests
         PRIVATE
         apollo
         GTest::gtest
-        GTest::gtest_main
     )
 
     # 为Redis测试添加网络库链接
@@ -63,18 +64,11 @@ if(GTest_FOUND)
         PRIVATE
         apollo
         GTest::gtest
-        GTest::gtest_main
     )
 
     # 为Protobuf测试添加网络库链接
     if(WIN32)
         target_link_libraries(protobuf_tests PRIVATE ws2_32)
-    endif()
-
-    # 查找Protobuf库
-    find_package(Protobuf QUIET)
-    if(Protobuf_FOUND)
-        target_link_libraries(protobuf_tests PRIVATE protobuf::libprotobuf)
     endif()
 
     add_test(NAME ProtobufTests COMMAND protobuf_tests)

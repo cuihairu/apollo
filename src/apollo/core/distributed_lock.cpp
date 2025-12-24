@@ -37,8 +37,9 @@ bool RedisDistributedLock::tryLock() {
 }
 
 bool RedisDistributedLock::lock(int timeoutMs) {
+    uint64_t now = static_cast<uint64_t>(utils::Time::now());
     uint64_t deadline = timeoutMs > 0
-        ? Time::now() + timeoutMs
+        ? now + static_cast<uint64_t>(timeoutMs)
         : UINT64_MAX;
 
     int retries = 0;
@@ -51,7 +52,7 @@ bool RedisDistributedLock::lock(int timeoutMs) {
         }
 
         // 检查超时
-        if (Time::now() >= deadline) {
+        if (static_cast<uint64_t>(utils::Time::now()) >= deadline) {
             return false;
         }
 
@@ -73,7 +74,7 @@ bool RedisDistributedLock::unlock() {
 bool RedisDistributedLock::renew(uint64_t addTimeMs) {
     // 实际实现需要调用 Redis EXPIRE 命令
     // 这里简化处理
-    lockExpiryTime_ = Time::now() + addTimeMs;
+    lockExpiryTime_ = utils::Time::now() + addTimeMs;
     return true;
 }
 
@@ -81,7 +82,7 @@ int64_t RedisDistributedLock::getRemainingTime() const {
     if (!locked_) {
         return -1;
     }
-    int64_t remaining = static_cast<int64_t>(lockExpiryTime_) - static_cast<int64_t>(Time::now());
+    int64_t remaining = static_cast<int64_t>(lockExpiryTime_) - static_cast<int64_t>(utils::Time::now());
     return remaining > 0 ? remaining : 0;
 }
 
@@ -96,7 +97,7 @@ bool RedisDistributedLock::acquireLock(uint64_t expiryMs) {
 
     if (success) {
         locked_ = true;
-        lockExpiryTime_ = Time::now() + expiryMs;
+        lockExpiryTime_ = utils::Time::now() + expiryMs;
     }
 
     return success;
@@ -225,7 +226,7 @@ std::string generateLockValue() {
     // 生成唯一标识：机器ID + 进程ID + 线程ID + 时间戳 + 随机数
     std::ostringstream oss;
 
-    uint64_t now = Time::now();
+    uint64_t now = utils::Time::now();
     utils::Random rng;
 
     oss << std::hex << std::setfill('0')
@@ -252,6 +253,7 @@ RwLock::RwLock(const std::string& name)
 }
 
 bool RwLock::lockRead(int timeoutMs) {
+    (void)timeoutMs;
     // 读锁可以通过计数器实现
     // 简化实现：直接返回成功
     return true;
@@ -266,6 +268,7 @@ void RwLock::unlockRead() {
 }
 
 bool RwLock::lockWrite(int timeoutMs) {
+    (void)timeoutMs;
     // 写锁需要等待所有读锁释放
     return true;
 }
@@ -287,6 +290,7 @@ Semaphore::Semaphore(const std::string& name, int permits)
 }
 
 bool Semaphore::acquire(int timeoutMs) {
+    (void)timeoutMs;
     // 实际实现使用 Redis 计数器
     return true;
 }

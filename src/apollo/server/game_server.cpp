@@ -85,7 +85,7 @@ bool GameServer::initialize() {
         lifecycleListener_->onInitializeComplete(true);
     }
 
-    stats_.startTime = Time::now();
+    stats_.startTime = utils::Time::now();
 
     return true;
 }
@@ -239,7 +239,7 @@ void GameServer::stopComponents() {
 void GameServer::updateStats() {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    uint64_t now = Time::now();
+    uint64_t now = utils::Time::now();
     stats_.uptime = now - stats_.startTime;
 
     // 更新其他统计信息
@@ -333,6 +333,7 @@ LoggingComponent::LoggingComponent(const std::string& logPath)
 }
 
 bool LoggingComponent::initialize(const ServerConfig& config) {
+    (void)config;
     // 实际实现会初始化日志系统
     std::cout << "[LoggingComponent] Path: " << logPath_ << std::endl;
     running_ = true;
@@ -347,6 +348,7 @@ TimerComponent::TimerComponent() {
 }
 
 bool TimerComponent::initialize(const ServerConfig& config) {
+    (void)config;
     std::cout << "[TimerComponent] Initialized" << std::endl;
     return true;
 }
@@ -387,6 +389,7 @@ RpcComponent::RpcComponent() {
 }
 
 bool RpcComponent::initialize(const ServerConfig& config) {
+    (void)config;
     std::cout << "[RpcComponent] Initialized" << std::endl;
     return true;
 }
@@ -405,6 +408,7 @@ DatabaseComponent::DatabaseComponent() {
 }
 
 bool DatabaseComponent::initialize(const ServerConfig& config) {
+    (void)config;
     std::cout << "[DatabaseComponent] Initialized" << std::endl;
     return true;
 }

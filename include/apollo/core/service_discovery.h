@@ -8,6 +8,7 @@
 #include <mutex>
 #include <atomic>
 #include <chrono>
+#include <thread>
 
 namespace apollo {
 namespace core {
@@ -82,16 +83,16 @@ public:
     virtual ~IServiceDiscoveryListener() = default;
 
     /// 服务器上线
-    virtual void onServerUp(const ServerNode& node) {}
+    virtual void onServerUp(const ServerNode&) {}
 
     /// 服务器下线
-    virtual void onServerDown(const ServerNode& node) {}
+    virtual void onServerDown(const ServerNode&) {}
 
     /// 服务器状态变化
-    virtual void onServerStatusChanged(const ServerNode& node, ServerStatus oldStatus) {}
+    virtual void onServerStatusChanged(const ServerNode&, ServerStatus) {}
 
     /// 服务器负载变化
-    virtual void onServerLoadChanged(const ServerNode& node, uint32_t oldLoad) {}
+    virtual void onServerLoadChanged(const ServerNode&, uint32_t) {}
 };
 
 /// 服务发现接口
@@ -107,6 +108,12 @@ public:
 
     /// 发送心跳
     virtual bool sendHeartbeat(uint32_t serverId) = 0;
+
+    /// 更新服务器负载（可选）
+    virtual bool updateLoad(uint32_t, uint32_t) { return false; }
+
+    /// 更新服务器状态（可选）
+    virtual bool updateStatus(uint32_t, ServerStatus) { return false; }
 
     /// 发现服务（按类型）
     virtual std::vector<ServerNode> discoverServers(ServerType type) = 0;
@@ -149,10 +156,10 @@ public:
     void stop() override;
 
     /// 更新服务器负载
-    bool updateLoad(uint32_t serverId, uint32_t currentLoad);
+    bool updateLoad(uint32_t serverId, uint32_t currentLoad) override;
 
     /// 更新服务器状态
-    bool updateStatus(uint32_t serverId, ServerStatus status);
+    bool updateStatus(uint32_t serverId, ServerStatus status) override;
 
     /// 获取所有服务器
     std::vector<ServerNode> getAllServers() const;

@@ -105,7 +105,11 @@ public:
     ~RedisConnection();
 
     /// 连接到Redis服务器
-    bool Connect(const std::string& host, int port, const std::string& password = "");
+    bool Connect(const std::string& host,
+                 int port,
+                 const std::string& password = "",
+                 int connectionTimeoutSeconds = 5,
+                 int commandTimeoutSeconds = 30);
 
     /// 断开连接
     bool Disconnect();
@@ -140,6 +144,8 @@ private:
     std::string password_;
     std::string lastError_;
     std::string buffer_;
+    int connectionTimeoutSeconds_ = 5;
+    int commandTimeoutSeconds_ = 30;
 
     bool ConnectSocket();
     bool Authenticate();
@@ -197,7 +203,7 @@ public:
     Stats GetStats() const;
 
 private:
-    void CreateConnection();
+    bool CreateConnection();
     void CheckConnections();
     bool ValidateConnection(std::shared_ptr<RedisConnection> conn);
 
@@ -285,6 +291,8 @@ public:
 private:
     RedisConnectionPool pool_;
     std::string lastError_;
+    std::shared_ptr<RedisConnection> txConnection_;
+    mutable std::mutex txMutex_;
 };
 
 }  // namespace db

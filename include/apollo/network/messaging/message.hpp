@@ -1,6 +1,6 @@
 #pragma once
 
-#include "apollo/network/transport/net_common.hpp"
+#include "apollo/network/transport/socket.hpp"  // Buffer
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -9,15 +9,26 @@
 namespace apollo::net {
 
 /// 消息头（4字节）
+///
+/// 布局（host endian 的 32-bit packed 值）：
+/// - low  24 bits: length（最大 16MB）
+/// - high  8 bits: type（0-255）
 struct MessageHeader {
-    uint32_t length : 24;    // 消息长度（最大16MB）
-    uint32_t type : 8;       // 消息类型（0-255）
+    uint32_t packed = 0;
 
-    uint32_t GetLength() const { return length; }
-    uint32_t GetType() const { return type; }
-    void SetLength(uint32_t len) { length = len & 0xFFFFFF; }
-    void SetType(uint32_t t) { type = t & 0xFF; }
+    uint32_t GetLength() const { return packed & 0x00FFFFFFu; }
+    uint32_t GetType() const { return (packed >> 24) & 0xFFu; }
+
+    void SetLength(uint32_t len) {
+        packed = (packed & 0xFF000000u) | (len & 0x00FFFFFFu);
+    }
+
+    void SetType(uint32_t t) {
+        packed = (packed & 0x00FFFFFFu) | ((t & 0xFFu) << 24);
+    }
 };
+
+static_assert(sizeof(MessageHeader) == 4, "MessageHeader must be 4 bytes");
 
 /// 消息基类
 class Message {
@@ -29,7 +40,7 @@ public:
 
     virtual uint32_t GetType() const = 0;
     virtual bool Serialize(Buffer& buffer) const = 0;
-    virtual bool Deserialize(const Buffer& buffer) = 0;
+    virtual bool Deserialize(Buffer& buffer) = 0;
     virtual std::shared_ptr<Message> Clone() const = 0;
 };
 

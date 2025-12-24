@@ -14,7 +14,7 @@ GridCell* AOIGrid::GetOrCreateCell(int x, int z) {
     GridCell* ptr = cell.get();
     gridCells_[key] = std::move(cell);
     return ptr;
-}
+}  // namespace apollo
 
 void AOIGrid::RemoveFromGrid(const EntityInfo& info) {
     GridCell* cell = GetOrCreateCell(info.lastGridX, info.lastGridZ);
@@ -243,11 +243,11 @@ AOIManager::Stats AOIManager::GetStats() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
     Stats stats{};
-    for (const auto& sceneGrid : sceneGrids_) {
+    for (const auto& _ : sceneGrids_) {
         // TODO: 获取网格统计信息
-        stats.totalEntities += 0; // sceneGrid.second->GetEntityCount();
-        stats.totalGridCells += 0; // sceneGrid.second->GetGridCellCount();
-        stats.activeGridCells += 0; // sceneGrid.second->GetActiveGridCellCount();
+        stats.totalEntities += 0;
+        stats.totalGridCells += 0;
+        stats.activeGridCells += 0;
     }
 
     return stats;

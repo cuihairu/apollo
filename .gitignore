@@ -51,5 +51,11 @@ Thumbs.db
 
 # Build directories
 build/
+build-*/
+build-vcpkg/
 cmake-build-*/
 out/
+
+# vcpkg
+vcpkg/
+vcpkg_installed/

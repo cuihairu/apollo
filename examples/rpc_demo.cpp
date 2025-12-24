@@ -259,8 +259,8 @@ public:
                    std::function<void(bool)> callback) {
 
         std::thread([this, session, serviceId, methodId, request, callback]() {
-            bool result = call(session, serviceId, methodId,
-                              request, int(), 1000);
+            int dummyResponse = 0;
+            bool result = call(session, serviceId, methodId, request, dummyResponse, 1000);
             callback(result);
         }).detach();
     }

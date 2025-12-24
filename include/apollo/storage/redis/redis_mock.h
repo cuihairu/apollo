@@ -7,7 +7,10 @@
 
 #include "apollo/storage/redis/redis.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
+#include <algorithm>
+#include <iterator>
 
 namespace apollo {
 namespace storage {
@@ -36,6 +39,10 @@ public:
 
     bool isConnected() const override {
         return connected_;
+    }
+
+    RedisReply ping() override {
+        return connected_ ? RedisReply::String("PONG") : RedisReply::Error("Not connected");
     }
 
     // ========== 字符串操作 ==========
@@ -352,7 +359,7 @@ public:
                 // 从尾删除 |count| 个
                 for (auto i = vec.rbegin(); i != vec.rend() && removed < -count; ) {
                     if (pred(*i)) {
-                        i = std::reverse_iterator<decltype(i)>(vec.erase(std::next(i).base()));
+                        i = std::make_reverse_iterator(vec.erase(std::next(i).base()));
                         removed++;
                     } else {
                         ++i;
@@ -602,7 +609,7 @@ public:
         return RedisReply::Array(result);
     }
 
-    std::vector<std::string> scan(const std::string& pattern, uint64_t cursor, uint64_t* newCursor) override {
+    std::vector<std::string> scan(const std::string& pattern, uint64_t, uint64_t* newCursor) override {
         std::vector<std::string> result;
         auto reply = keys(pattern);
         if (reply.isOk()) {
@@ -626,7 +633,7 @@ public:
         return RedisReply::Int64(static_cast<int64_t>(data_.size()));
     }
 
-    std::string info(const std::string& section) override {
+    std::string info(const std::string&) override {
         return "# Mock Redis\n"
                "redis_version:999.999.999\n"
                "connected_clients:1\n"

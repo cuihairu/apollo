@@ -161,7 +161,6 @@ private:
     uint32_t resolutionMs_;          ///< 定时器精度
     uint64_t currentTime_;           ///< 当前时间（相对于启动时间）
     uint32_t tickCount_;             ///< tick计数（用于时间轮旋转）
-    TimerId nextTimerId_;            ///< 下一个定时器ID
     TimerMap timers_;                ///< 活跃定时器
     std::vector<Wheel> wheels_;      ///< 时间轮数组
     mutable std::mutex mutex_;       ///< 保护定时器操作

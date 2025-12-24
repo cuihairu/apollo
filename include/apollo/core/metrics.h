@@ -153,8 +153,15 @@ public:
 
     uint64_t getCount() const { return count_; }
     int64_t getSum() const { return sum_; }
-    int64_t getMin() const { return (min_ == INT64_MAX) ? 0 : min_; }
-    int64_t getMax() const { return (max_ == INT64_MIN) ? 0 : max_; }
+    int64_t getMin() const {
+        int64_t value = min_.load();
+        return (value == INT64_MAX) ? 0 : value;
+    }
+
+    int64_t getMax() const {
+        int64_t value = max_.load();
+        return (value == INT64_MIN) ? 0 : value;
+    }
 
     double getAvg() const {
         uint64_t c = count_;

@@ -44,11 +44,9 @@ jobs:
       run: |
         if [ ! -d "vcpkg" ]; then
           git clone https://github.com/microsoft/vcpkg.git
-          cd vcpkg
-          ./bootstrap-vcpkg.sh
+          ./vcpkg/bootstrap-vcpkg.sh
         else
-          cd vcpkg
-          ./vcpkg version
+          ./vcpkg/vcpkg version
         fi
       shell: bash
 
@@ -60,8 +58,7 @@ jobs:
           cd vcpkg
           .\bootstrap-vcpkg.bat
         } else {
-          cd vcpkg
-          .\vcpkg version
+          .\vcpkg\vcpkg version
         }
         echo "C:\Program Files\CMake\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       shell: powershell
@@ -69,19 +66,13 @@ jobs:
     - name: Install dependencies (Linux/macOS)
       if: matrix.os != 'windows-latest'
       run: |
-        cd vcpkg
-        ./vcpkg install \
-          --triplet=x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }} \
-          --x-install-root=../vcpkg_installed/x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }}
+        ./vcpkg/vcpkg install --triplet=x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }}
       shell: bash
 
     - name: Install dependencies (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        cd vcpkg
-        .\vcpkg.exe install `
-          --triplet=x64-windows `
-          --x-install-root=../vcpkg_installed/x64-windows
+        .\vcpkg\vcpkg.exe install --triplet=x64-windows
       shell: powershell
 
     - name: Install build tools (Linux)
@@ -105,8 +96,9 @@ jobs:
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}/scripts/buildsystems/vcpkg.cmake
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
         -DVCPKG_TARGET_TRIPLET=x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}
+        -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
         -G "Ninja Multi-Config"
@@ -169,11 +161,9 @@ jobs:
       run: |
         if [ ! -d "vcpkg" ]; then
           git clone https://github.com/microsoft/vcpkg.git
-          cd vcpkg
-          ./bootstrap-vcpkg.sh
+          ./vcpkg/bootstrap-vcpkg.sh
         else
-          cd vcpkg
-          ./vcpkg version
+          ./vcpkg/vcpkg version
         fi
       shell: bash
 
@@ -184,18 +174,16 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd vcpkg
-        ./vcpkg install \
-          --triplet=x64-linux \
-          --x-install-root=../vcpkg_installed/x64-linux
+        ./vcpkg/vcpkg install --triplet=x64-linux
       shell: bash
 
     - name: Configure CMake with Coverage
       run: >
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=Debug
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg_installed/x64-linux/scripts/buildsystems/vcpkg.cmake
+        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
         -DVCPKG_TARGET_TRIPLET=x64-linux
+        -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_ENABLE_COVERAGE=ON
         -DCMAKE_CXX_FLAGS="--coverage -g -O0"

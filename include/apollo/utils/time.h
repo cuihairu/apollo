@@ -83,7 +83,7 @@ public:
      * @brief 格式化当前时间
      */
     static std::string formatNow(const char* format = "%Y-%m-%d %H:%M:%S") {
-        return format(unixTime(), format);
+        return Time::format(unixTime(), format);
     }
 
     /**

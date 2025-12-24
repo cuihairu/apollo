@@ -167,6 +167,7 @@ void ConfigManager::addGlobalChangeListener(std::function<void(const std::string
 }
 
 void ConfigManager::removeGlobalChangeListener(std::function<void(const std::string&)> listener) {
+    (void)listener;
     // Note: std::function cannot be compared directly, so we use a different approach
     // For now, this method is not implemented - consider using listener IDs instead
     // std::lock_guard<std::mutex> lock(mutex_);

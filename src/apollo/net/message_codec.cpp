@@ -15,7 +15,7 @@ namespace net {
 // ProtobufMessage 实现
 //==============================================================================
 
-ProtobufMessage::ProtobufMessage(std::unique_ptr<google::protobuf::Message> message,
+ProtobufMessage::ProtobufMessage(std::unique_ptr<::google::protobuf::Message> message,
                                  uint16_t msgId)
     : protoMessage_(std::move(message)), msgId_(msgId) {
 }
@@ -41,7 +41,11 @@ bool ProtobufMessage::decode(const uint8_t* buffer, size_t length) {
 
 const char* ProtobufMessage::getMessageName() const {
     if (protoMessage_) {
-        return protoMessage_->GetTypeName().c_str();
+        // GetTypeName() may return std::string_view in newer protobuf versions,
+        // so we materialize it into a stable thread-local buffer.
+        static thread_local std::string typeName;
+        typeName = std::string(protoMessage_->GetTypeName());
+        return typeName.c_str();
     }
     return "ProtobufMessage";
 }
@@ -221,7 +225,7 @@ size_t MessageCodec::handleReceivedData(const uint8_t* data, size_t length) {
     return messages.size();
 }
 
-bool MessageCodec::processCompleteMessage(const MessageHeader& header) {
+bool MessageCodec::processCompleteMessage(const MessageHeader&) {
     // 这个方法由 decode 内部调用处理
     return true;
 }

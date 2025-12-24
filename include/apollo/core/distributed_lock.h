@@ -4,6 +4,8 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <atomic>
+#include <thread>
 
 namespace apollo {
 namespace core {
@@ -75,7 +77,7 @@ private:
     void stopAutoRenew();
     void autoRenewLoop();
 
-    void* redisClient_;  // 实际使用时是 RedisClient*
+    [[maybe_unused]] void* redisClient_;  // 实际使用时是 RedisClient*
     std::string key_;
     std::string value_;
     DistributedLockOptions options_;

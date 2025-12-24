@@ -179,13 +179,23 @@ public:
  *
  * @param StarterClass Starter 类名
  */
+#define APOLLO_CONCAT_IMPL(x, y) x##y
+#define APOLLO_CONCAT(x, y) APOLLO_CONCAT_IMPL(x, y)
+
+// 使用 __COUNTER__ 宏确保每次展开都有唯一的变量名
+#if defined(__COUNTER__)
 #define APOLLO_REGISTER_STARTER(StarterClass) \
     namespace { \
         Apollo::Starter::StarterAutoRegistrar<StarterClass> \
-            APOLLO_CONCAT(registrar_, __LINE__); \
+            APOLLO_CONCAT(APOLLO_CONCAT(registrar_, __COUNTER__), _); \
     }
-
-#define APOLLO_CONCAT_IMPL(x, y) x##y
-#define APOLLO_CONCAT(x, y) APOLLO_CONCAT_IMPL(x, y)
+#else
+// 如果不支持 __COUNTER__，使用类名作为唯一标识
+#define APOLLO_REGISTER_STARTER(StarterClass) \
+    namespace { \
+        Apollo::Starter::StarterAutoRegistrar<StarterClass> \
+            APOLLO_CONCAT(registrar_, StarterClass); \
+    }
+#endif
 
 } // namespace Apollo::Starter

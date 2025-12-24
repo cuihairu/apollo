@@ -110,8 +110,8 @@ bool NativeConnection::sendAsync(const char* data, uint32_t length) {
 void NativeConnection::disconnect(const char* reason) {
     (void)reason;
     if (socket_ != INVALID_SOCKET_VALUE) {
-        shutdown(socket_, SD_BOTH);
-        closesocket(socket_);
+        shutdownSocketBoth(socket_);
+        closeSocket(socket_);
         socket_ = INVALID_SOCKET_VALUE;
     }
     state_ = ConnectionState::Disconnected;
@@ -119,6 +119,10 @@ void NativeConnection::disconnect(const char* reason) {
 
 void NativeConnection::close() {
     disconnect(nullptr);
+}
+
+void NativeConnection::updateActiveTime() {
+    lastActiveTime_ = getCurrentTimeMs();
 }
 
 const std::string& NativeConnection::getRemoteAddress() const {
@@ -276,6 +280,7 @@ NativeSession::~NativeSession() {
 }
 
 void NativeSession::onEstablish(Connection* connection) {
+    (void)connection;
     active_ = true;
     lastHeartbeat_ = getCurrentTimeMs();
     handleEstablish();
@@ -368,14 +373,14 @@ bool NativeListener::start(const std::string& ip, uint16_t port) {
     }
 
     if (bind(listenSocket_, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR_VALUE) {
-        closesocket(listenSocket_);
+        closeSocket(listenSocket_);
         listenSocket_ = INVALID_SOCKET_VALUE;
         return false;
     }
 
     // 开始监听
     if (listen(listenSocket_, SOMAXCONN) == SOCKET_ERROR_VALUE) {
-        closesocket(listenSocket_);
+        closeSocket(listenSocket_);
         listenSocket_ = INVALID_SOCKET_VALUE;
         return false;
     }
@@ -393,7 +398,7 @@ bool NativeListener::stop() {
     running_ = false;
 
     if (listenSocket_ != INVALID_SOCKET_VALUE) {
-        closesocket(listenSocket_);
+        closeSocket(listenSocket_);
         listenSocket_ = INVALID_SOCKET_VALUE;
     }
 
@@ -476,7 +481,7 @@ bool NativeListener::handleAccept() {
 
     // 检查连接数限制
     if (currentConnections_.load() >= maxConnections_) {
-        closesocket(clientSocket);
+        closeSocket(clientSocket);
         return true;
     }
 
@@ -517,6 +522,9 @@ bool NativeListener::handleAccept() {
 
     // 设置数据包处理器
     conn->setPacketHandler([this](NativeConnection* nc, const char* data, uint32_t len) {
+        (void)nc;
+        (void)data;
+        (void)len;
         if (callbacks_.onAccept) {
             // 这里可以触发数据回调
         }
@@ -589,16 +597,6 @@ int32_t NativeConnector::connect(const std::string& host, uint16_t port) {
     fcntl(socket_, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-    // 设置套接字选项
-    if (config_.recvBufferSize > 0) {
-        setsockopt(socket_, SOL_SOCKET, SO_RCVBUF,
-                   (char*)&config_.recvBufferSize, sizeof(config_.recvBufferSize));
-    }
-    if (config_.sendBufferSize > 0) {
-        setsockopt(socket_, SOL_SOCKET, SO_SNDBUF,
-                   (char*)&config_.sendBufferSize, sizeof(config_.sendBufferSize));
-    }
-
     // 连接服务器
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -606,7 +604,7 @@ int32_t NativeConnector::connect(const std::string& host, uint16_t port) {
 
     if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) <= 0) {
         // 需要域名解析
-        closesocket(socket_);
+        closeSocket(socket_);
         socket_ = INVALID_SOCKET_VALUE;
         return -1;
     }
@@ -616,14 +614,14 @@ int32_t NativeConnector::connect(const std::string& host, uint16_t port) {
 #ifdef _WIN32
     int err = WSAGetLastError();
     if (result == SOCKET_ERROR_VALUE && err != WSAEWOULDBLOCK) {
-        closesocket(socket_);
+        closeSocket(socket_);
         socket_ = INVALID_SOCKET_VALUE;
         state_ = ConnectorState::Failed;
         return -1;
     }
 #else
     if (result == SOCKET_ERROR_VALUE && errno != EINPROGRESS) {
-        closesocket(socket_);
+        closeSocket(socket_);
         socket_ = INVALID_SOCKET_VALUE;
         state_ = ConnectorState::Failed;
         return -1;
@@ -643,7 +641,7 @@ int32_t NativeConnector::reconnect() {
 
 void NativeConnector::disconnect() {
     if (socket_ != INVALID_SOCKET_VALUE) {
-        closesocket(socket_);
+        closeSocket(socket_);
         socket_ = INVALID_SOCKET_VALUE;
     }
     state_ = ConnectorState::Stopped;
@@ -790,12 +788,14 @@ bool NativeNetworkManager::initialize(const NetworkConfig& config) {
         return false;
     }
 #else
+#if defined(__linux__)
     // Linux: 创建 epoll
     epollFd_ = epoll_create1(EPOLL_CLOEXEC);
     if (epollFd_ < 0) {
         cleanupNetwork();
         return false;
     }
+#endif
 #endif
 
     return true;
@@ -846,10 +846,12 @@ void NativeNetworkManager::stop() {
         }
     }
 #else
+#if defined(__linux__)
     if (epollFd_ >= 0) {
         close(epollFd_);
         epollFd_ = -1;
     }
+#endif
 #endif
 
     // 等待 IO 线程结束
@@ -1036,6 +1038,7 @@ void NativeNetworkManager::ioThreadProc() {
 }
 
 bool NativeNetworkManager::processEvents(int timeoutMs) {
+    (void)timeoutMs;
     // 处理监听器的接受事件
     for (auto& kv : listeners_) {
         auto& listener = kv.second;

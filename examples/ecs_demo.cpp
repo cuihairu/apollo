@@ -170,13 +170,15 @@ public:
         currentTime_ += deltaTime;
 
         // 获取所有玩家
-        auto players = world->view<Player, Position, Health, Attacker>();
+        auto players = world->view<Player, Position, Health, Attacker, Name>();
         // 获取所有敌人
         auto enemies = world->view<Enemy, Position, Health, Name>();
 
         // 玩家攻击敌人
         players.each([&](Entity playerEntity, Player& player, Position& playerPos,
-                          Health& playerHealth, Attacker& attacker) {
+                          Health& playerHealth, Attacker& attacker, Name& playerName) {
+            (void)playerEntity;
+            (void)playerName;
             // 检查玩家是否存活
             if (!playerHealth.isAlive()) return;
 
@@ -210,11 +212,16 @@ public:
 
         // 敌人攻击玩家
         enemies.each([&](Entity enemyEntity, Enemy& enemy, Position& enemyPos,
-                          Health& enemyHealth) {
+                          Health& enemyHealth, Name& enemyName) {
+            (void)enemyEntity;
+            (void)enemyName;
             if (!enemyHealth.isAlive()) return;
 
             players.each([&](Entity playerEntity, Player& player, Position& playerPos,
-                              Health& playerHealth, Name& playerName) {
+                              Health& playerHealth, Attacker& attacker, Name& playerName) {
+                (void)playerEntity;
+                (void)player;
+                (void)attacker;
                 if (!playerHealth.isAlive()) return;
 
                 float distance = enemyPos.distanceTo(playerPos);
@@ -333,7 +340,7 @@ public:
     }
 
     void update(float deltaTime) {
-        systemManager_.updateAll(&world_, deltaTime);
+        systemManager_.update(&world_, deltaTime);
     }
 
     size_t getEntityCount() const {

@@ -621,9 +621,9 @@ private:
         }
     }
 
-    void notifyEntityLeave(uint64_t entityId) {
+    void notifyEntityLeave(uint64_t playerId, uint64_t entityId) {
         std::cout << "[" << name_ << "] Entity " << entityId
-                  << " left AOI" << std::endl;
+                  << " left " << playerId << "'s AOI" << std::endl;
     }
 
     void broadcastMove(uint64_t playerId, const OnlinePlayer& player) {

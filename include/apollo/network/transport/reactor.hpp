@@ -6,6 +6,10 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#ifndef _WIN32
+#include <vector>
+#include <poll.h>
+#endif
 
 namespace apollo::net {
 
@@ -47,63 +51,16 @@ public:
     bool IsRunning() const { return running_; }
 
 private:
-    void HandleEvents();
-
     struct SocketInfo {
         socket_t sockfd;
         NetEventType events;
         EventCallback callback;
     };
 
-#ifdef _WIN32
-    HANDLE iocpHandle_;
-    std::vector<std::thread> workerThreads_;
-#else
-    int epollFd_;
-    struct epoll_event* events_;
-    static const size_t MAX_EVENTS = 1024;
-#endif
-
     std::unordered_map<socket_t, SocketInfo> socketMap_;
     std::mutex socketMutex_;
     std::atomic<bool> running_{false};
     std::atomic<bool> stopped_{false};
 };
-
-#ifdef _WIN32
-/// IOCP操作数据
-struct OverlappedData {
-    WSAOVERLAPPED overlapped;
-    socket_t sockfd;
-    NetEventType eventType;
-    Buffer buffer;
-    DWORD bytesTransferred;
-};
-
-class IOCPReactor : public Reactor {
-public:
-    IOCPReactor();
-    ~IOCPReactor();
-
-    bool Initialize() override;
-    bool AddSocket(socket_t sockfd, NetEventType events, EventCallback callback) override;
-    bool EventLoop() override;
-
-private:
-    void StartReceive(socket_t sockfd);
-    void StartSend(socket_t sockfd);
-    void HandleCompletion(OverlappedData* data);
-};
-#else
-/// Epoll反应器
-class EpollReactor : public Reactor {
-public:
-    EpollReactor();
-    ~EpollReactor();
-
-    bool Initialize() override;
-    bool EventLoop() override;
-};
-#endif
 
 }  // namespace apollo::net

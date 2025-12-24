@@ -25,6 +25,11 @@ public:
     bool loadFromJson(const std::string& jsonStr);
     std::string saveToJson() const;
 
+    // Convenience overload: avoid template deduction as `char[N]` for string literals.
+    void setValue(const std::string& key, const char* value) {
+        setValue<std::string>(key, value ? std::string(value) : std::string());
+    }
+
     template<typename T>
     void setValue(const std::string& key, const T& value) {
         std::lock_guard<std::mutex> lock(mutex_);

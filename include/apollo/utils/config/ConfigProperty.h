@@ -1,13 +1,13 @@
 #pragma once
 
+#include "apollo/framework/ioc/ConfigManager.h"
 #include <string>
 #include <functional>
 #include <sstream>
 #include <type_traits>
+#include <vector>
 
 namespace Apollo {
-
-class ConfigManager;
 
 template<typename T>
 class ConfigProperty {

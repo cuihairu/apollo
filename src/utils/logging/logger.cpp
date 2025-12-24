@@ -146,6 +146,7 @@ std::shared_ptr<Logger> LogManager::GetLogger(const std::string& name) {
 }
 
 bool LogManager::Initialize(const std::string& config) {
+    (void)config;
     std::lock_guard<std::mutex> lock(mutex_);
 
     // 这里可以根据配置文件进行初始化

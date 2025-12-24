@@ -22,7 +22,7 @@ Session::Session(uint64_t sessionId, std::unique_ptr<IConnection> connection,
     , sendBufferOffset_(0) {
     info_.sessionId = sessionId;
     info_.state = SessionState::Connecting;
-    info_.connectTime = Time::now();
+    info_.connectTime = static_cast<uint64_t>(utils::Time::now());
     info_.lastActiveTime = info_.connectTime;
 
     if (connection_) {
@@ -66,7 +66,7 @@ bool Session::send(const void* data, size_t length) {
     if (sent > 0) {
         info_.totalSentBytes += sent;
         info_.sentPackets++;
-        info_.lastActiveTime = Time::now();
+        info_.lastActiveTime = static_cast<uint64_t>(utils::Time::now());
 
         if (listener_) {
             listener_->onDataSent(info_.sessionId);
@@ -111,7 +111,7 @@ void Session::update(uint64_t currentTime) {
 void Session::handleReceivedData(const void* data, size_t length) {
     info_.totalRecvBytes += length;
     info_.recvPackets++;
-    info_.lastActiveTime = Time::now();
+    info_.lastActiveTime = static_cast<uint64_t>(utils::Time::now());
 
     if (listener_) {
         listener_->onDataReceived(info_.sessionId, data, length);
@@ -318,7 +318,15 @@ std::vector<uint64_t> SessionManager::getAllSessionIds() const {
 }
 
 bool SessionManager::kickPlayer(uint64_t playerId, int reason) {
-    return closeSessionByPlayerId(playerId, reason);
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = playerIdToSessionId_.find(playerId);
+    if (it == playerIdToSessionId_.end()) {
+        return false;
+    }
+
+    internalCloseSession(it->second, reason);
+    return true;
 }
 
 size_t SessionManager::broadcast(const void* data, size_t length, uint64_t exceptSessionId) {
@@ -371,7 +379,7 @@ void processPacket(ISession* session, const uint8_t* buffer, size_t length,
         return;
     }
 
-    static thread_local ByteLoopBuffer packetBuffer(64 * 1024);
+    static thread_local utils::ByteLoopBuffer packetBuffer(64 * 1024);
 
     // 写入接收到的数据
     packetBuffer.write(buffer, length);
@@ -380,7 +388,7 @@ void processPacket(ISession* session, const uint8_t* buffer, size_t length,
     while (packetBuffer.availableRead() >= 4) {
         // 读取包长度
         uint8_t lengthHeader[4];
-        size_t peeked = packetBuffer.peek(lengthHeader, 4);
+        (void)packetBuffer.peek(lengthHeader, 4);
 
         uint32_t packetLength = (static_cast<uint32_t>(lengthHeader[0]) << 24) |
                                 (static_cast<uint32_t>(lengthHeader[1]) << 16) |

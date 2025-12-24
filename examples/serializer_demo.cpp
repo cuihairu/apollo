@@ -64,7 +64,7 @@ void example1_BasicTypes() {
     // 读取
     BinaryReader(writer.buffer(), writer.size());
 
-    BinaryReader reader(writer.buffer(), writer.size());
+    BinaryReader reader(writer.buffer());
 
     int32_t i32; uint32_t u32; int64_t i64;
     float f; double d; bool b; std::string str;
@@ -309,7 +309,7 @@ void example7_BitOperations() {
     std::cout << "BitWriter size: " << writer.size() << " bytes" << std::endl;
 
     // 读取
-    BitReader reader(writer.buffer(), writer.size());
+    BitReader reader(writer.buffer().data(), writer.size());
 
     uint32_t v1, v2, v3;
     bool b1, b2, b3;

@@ -2,17 +2,31 @@
 
 #ifdef HAVE_FRUIT
 #include <fruit/fruit.h>
+
+// 使用 Fruit 提供的类型别名
+namespace fruit {
+    using PartialComponentVoid = PartialComponent<>;
+}
 #else
 // 简化的内置 DI 组件类型定义
 namespace fruit {
+    // 前向声明
     template<typename...>
-    struct Component {
-        // 占位符，实际实现由内置框架提供
+    struct Component;
+
+    // 空的 PartialComponent 占位符
+    struct PartialComponentVoid {
+        // 占位符
     };
-    using Component<> = Component<void>;
+
     struct Injector {
         // 占位符
     };
+
+    // 内置的简化版本
+    inline PartialComponentVoid createComponent() {
+        return PartialComponentVoid();
+    }
 }
 #endif
 
@@ -90,9 +104,13 @@ public:
 
     /**
      * @brief 获取 Starter 的 Fruit 组件配置
-     * @return Fruit 组件，包含此 Starter 注册的所有服务
+     * @return Fruit PartialComponentVoid，包含此 Starter 注册的所有服务
+     *
+     * 注意：返回的是 PartialComponentVoid，可以链式调用绑定方法
      */
-    virtual fruit::Component<> getComponent() = 0;
+    virtual fruit::PartialComponentVoid getComponent() {
+        return fruit::createComponent();
+    }
 
     /**
      * @brief 条件匹配判断

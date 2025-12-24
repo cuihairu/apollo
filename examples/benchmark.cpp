@@ -12,6 +12,11 @@
 #include <random>
 #include <atomic>
 #include <iomanip>
+#include <map>
+#include <unordered_map>
+#include <mutex>
+#include <cstdlib>
+#include <cstring>
 
 using namespace std;
 using namespace std::chrono;
@@ -429,7 +434,7 @@ void benchmarkMemoryPool() {
 
     // 简单对象池模拟
     struct Pool {
-        static constexpr int SIZE = 1024;
+        enum { SIZE = 1024 };
         char buffer[SIZE * objectSize];
         bool used[SIZE] = {false};
 
