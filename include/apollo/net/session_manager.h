@@ -63,19 +63,22 @@ public:
     virtual ~ISessionListener() = default;
 
     /// 连接建立
-    virtual void onConnected(uint64_t sessionId) {}
+    virtual void onConnected(uint64_t sessionId) = 0;
 
     /// 连接断开
-    virtual void onDisconnected(uint64_t sessionId, int reason) {}
+    virtual void onDisconnected(uint64_t sessionId, int reason) = 0;
 
     /// 数据接收
-    virtual void onDataReceived(uint64_t sessionId, const void* data, size_t length) {}
+    virtual void onDataReceived(uint64_t sessionId, const void* data, size_t length) = 0;
+
+    /// 数据发送
+    virtual void onDataSent(uint64_t sessionId) = 0;
 
     /// 认证成功
-    virtual void onAuthenticated(uint64_t sessionId, uint64_t playerId) {}
+    virtual void onAuthenticated(uint64_t sessionId, uint64_t playerId) = 0;
 
     /// 会话超时
-    virtual void onTimeout(uint64_t sessionId) {}
+    virtual void onTimeout(uint64_t sessionId) = 0;
 };
 
 /// 会话接口
@@ -226,6 +229,7 @@ public:
     void onConnected(uint64_t sessionId) override;
     void onDisconnected(uint64_t sessionId, int reason) override;
     void onDataReceived(uint64_t sessionId, const void* data, size_t length) override;
+    void onDataSent(uint64_t sessionId) override;
     void onAuthenticated(uint64_t sessionId, uint64_t playerId) override;
     void onTimeout(uint64_t sessionId) override;
 

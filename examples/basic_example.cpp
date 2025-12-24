@@ -1,5 +1,4 @@
-#include "apollo/BaseComponent.h"
-#include "apollo/ComponentRegistry.h"
+#include "apollo/framework/base/BaseComponent.h"
 #include "apollo/framework/ioc/ApplicationContext.h"
 #include <iostream>
 

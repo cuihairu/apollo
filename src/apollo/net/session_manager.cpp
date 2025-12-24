@@ -287,6 +287,12 @@ void SessionManager::onDataReceived(uint64_t sessionId, const void* data, size_t
     }
 }
 
+void SessionManager::onDataSent(uint64_t sessionId) {
+    if (listener_) {
+        listener_->onDataSent(sessionId);
+    }
+}
+
 void SessionManager::onAuthenticated(uint64_t sessionId, uint64_t playerId) {
     {
         std::lock_guard<std::mutex> lock(mutex_);

@@ -110,7 +110,7 @@ void example2_StructSerialization() {
 
     // 反序列化
     PlayerInfo decoded;
-    BinaryReader reader(writer.buffer(), writer.size());
+    BinaryReader reader(writer.data(), writer.size());
     decoded.deserialize(reader);
 
     std::cout << "Decoded PlayerInfo:" << std::endl;
@@ -148,7 +148,7 @@ void example3_ContainerSerialization() {
     std::cout << "Serialized vectors: " << writer.size() << " bytes" << std::endl;
 
     // 读取
-    BinaryReader reader(writer.buffer(), writer.size());
+    BinaryReader reader(writer.data(), writer.size());
 
     std::vector<int32_t> readScores;
     reader.readVector(readScores);
@@ -257,7 +257,7 @@ void example6_ProtocolCodec() {
     std::cout << "Encoded message: " << writer.size() << " bytes" << std::endl;
 
     // 解码
-    BinaryReader reader(writer.buffer(), writer.size());
+    BinaryReader reader(writer.data(), writer.size());
 
     uint16_t msgId; uint32_t seq; uint32_t len;
     reader.read(msgId);

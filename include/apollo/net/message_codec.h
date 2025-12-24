@@ -8,6 +8,9 @@
 #include <stdexcept>
 #include "apollo/utils/loop_buffer.h"
 
+// Protobuf 前向声明（全局命名空间）
+namespace google { namespace protobuf { class Message; } }
+
 namespace apollo {
 namespace net {
 
@@ -123,17 +126,10 @@ private:
     T message_;
 };
 
-/// Protobuf 消息类型（前向声明）
-namespace google {
-namespace protobuf {
-class Message;
-}
-}
-
 /// Protobuf 消息包装器
 class ProtobufMessage : public IMessage {
 public:
-    explicit ProtobufMessage(std::unique_ptr<google::protobuf::Message> message,
+    explicit ProtobufMessage(std::unique_ptr<::google::protobuf::Message> message,
                             uint16_t msgId);
 
     uint16_t getMessageId() const override { return msgId_; }
@@ -141,11 +137,11 @@ public:
     bool decode(const uint8_t* buffer, size_t length) override;
     const char* getMessageName() const override;
 
-    google::protobuf::Message* getProtoMessage() { return protoMessage_.get(); }
-    const google::protobuf::Message* getProtoMessage() const { return protoMessage_.get(); }
+    ::google::protobuf::Message* getProtoMessage() { return protoMessage_.get(); }
+    const ::google::protobuf::Message* getProtoMessage() const { return protoMessage_.get(); }
 
 private:
-    std::unique_ptr<google::protobuf::Message> protoMessage_;
+    std::unique_ptr<::google::protobuf::Message> protoMessage_;
     uint16_t msgId_;
 };
 
@@ -204,7 +200,7 @@ public:
     }
 
     /// 获取接收缓冲区
-    ByteLoopBuffer& getRecvBuffer() { return recvBuffer_; }
+    utils::ByteLoopBuffer& getRecvBuffer() { return recvBuffer_; }
 
     /// 清空接收缓冲区
     void clear() { recvBuffer_.clear(); }
@@ -221,7 +217,7 @@ public:
 private:
     std::unordered_map<uint16_t, MessageHandler> handlers_;
     MessageHandler defaultHandler_;
-    ByteLoopBuffer recvBuffer_;
+    utils::ByteLoopBuffer recvBuffer_;
     uint32_t nextSeq_;
 
     // 处理单个完整消息

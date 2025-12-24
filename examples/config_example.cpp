@@ -1,8 +1,7 @@
-#include "apollo/BaseComponent.h"
-#include "apollo/ComponentRegistry.h"
+#include "apollo/framework/base/BaseComponent.h"
 #include "apollo/framework/ioc/ApplicationContext.h"
-#include "apollo/ConfigProperty.h"
-#include "apollo/ConfigManager.h"
+#include "apollo/utils/config/ConfigProperty.h"
+#include "apollo/framework/ioc/ConfigManager.h"
 #include <iostream>
 #include <thread>
 #include <chrono>

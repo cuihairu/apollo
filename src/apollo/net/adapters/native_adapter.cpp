@@ -6,14 +6,6 @@ namespace apollo {
 namespace net {
 namespace adapters {
 
-// ========== 静态工具函数 ==========
-
-inline uint64_t getCurrentTimeMs() {
-    auto now = std::chrono::steady_clock::now();
-    auto duration = now.time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-}
-
 // ========== NativeConnection ==========
 
 NativeConnection::NativeConnection(socket_t sock, uint64_t connId,
@@ -54,7 +46,7 @@ ConnectionState NativeConnection::getState() const {
 int32_t NativeConnection::send(const char* data, uint32_t length) {
     if (!isConnected()) return -1;
 
-    ssize_t sent = ::send(socket_, data, length, 0);
+    ssize_t sent = syscalls::sys_send(socket_, data, length, 0);
     if (sent > 0) {
         sentBytes_ += sent;
         lastActiveTime_ = getCurrentTimeMs();
@@ -80,7 +72,7 @@ bool NativeConnection::sendAsync(const char* data, uint32_t length) {
     std::lock_guard<std::mutex> lock(sendMutex_);
 
     // 尝试直接发送
-    ssize_t sent = ::send(socket_, data, length, 0);
+    ssize_t sent = syscalls::sys_send(socket_, data, length, 0);
     if (sent == length) {
         sentBytes_ += sent;
         lastActiveTime_ = getCurrentTimeMs();
@@ -110,8 +102,13 @@ bool NativeConnection::sendAsync(const char* data, uint32_t length) {
 void NativeConnection::disconnect(const char* reason) {
     (void)reason;
     if (socket_ != INVALID_SOCKET_VALUE) {
-        shutdownSocketBoth(socket_);
-        closeSocket(socket_);
+#ifdef _WIN32
+        shutdown(socket_, SD_BOTH);
+        syscalls::sys_close(socket_);
+#else
+        shutdown(socket_, SHUT_RDWR);
+        syscalls::sys_close(socket_);
+#endif
         socket_ = INVALID_SOCKET_VALUE;
     }
     state_ = ConnectionState::Disconnected;
@@ -119,10 +116,6 @@ void NativeConnection::disconnect(const char* reason) {
 
 void NativeConnection::close() {
     disconnect(nullptr);
-}
-
-void NativeConnection::updateActiveTime() {
-    lastActiveTime_ = getCurrentTimeMs();
 }
 
 const std::string& NativeConnection::getRemoteAddress() const {
@@ -171,7 +164,7 @@ uint64_t NativeConnection::getReceivedBytes() const {
 
 bool NativeConnection::handleRecv() {
     char tempBuffer[8192];
-    ssize_t recvLen = ::recv(socket_, tempBuffer, sizeof(tempBuffer), 0);
+    ssize_t recvLen = syscalls::sys_recv(socket_, tempBuffer, sizeof(tempBuffer), 0);
 
     if (recvLen > 0) {
         receivedBytes_ += recvLen;
@@ -230,7 +223,7 @@ bool NativeConnection::handleSend() {
 
     while (!sendQueue_.empty() && socket_ != INVALID_SOCKET_VALUE) {
         auto& packet = sendQueue_.front();
-        ssize_t sent = ::send(socket_, packet.data(), packet.size(), 0);
+        ssize_t sent = syscalls::sys_send(socket_, packet.data(), packet.size(), 0);
 
         if (sent > 0) {
             sentBytes_ += sent;
@@ -373,14 +366,14 @@ bool NativeListener::start(const std::string& ip, uint16_t port) {
     }
 
     if (bind(listenSocket_, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR_VALUE) {
-        closeSocket(listenSocket_);
+syscalls::sys_close(listenSocket_);
         listenSocket_ = INVALID_SOCKET_VALUE;
         return false;
     }
 
     // 开始监听
     if (listen(listenSocket_, SOMAXCONN) == SOCKET_ERROR_VALUE) {
-        closeSocket(listenSocket_);
+syscalls::sys_close(listenSocket_);
         listenSocket_ = INVALID_SOCKET_VALUE;
         return false;
     }
@@ -398,7 +391,7 @@ bool NativeListener::stop() {
     running_ = false;
 
     if (listenSocket_ != INVALID_SOCKET_VALUE) {
-        closeSocket(listenSocket_);
+syscalls::sys_close(listenSocket_);
         listenSocket_ = INVALID_SOCKET_VALUE;
     }
 
@@ -481,7 +474,7 @@ bool NativeListener::handleAccept() {
 
     // 检查连接数限制
     if (currentConnections_.load() >= maxConnections_) {
-        closeSocket(clientSocket);
+syscalls::sys_close(clientSocket);
         return true;
     }
 
@@ -604,24 +597,24 @@ int32_t NativeConnector::connect(const std::string& host, uint16_t port) {
 
     if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) <= 0) {
         // 需要域名解析
-        closeSocket(socket_);
+syscalls::sys_close(socket_);
         socket_ = INVALID_SOCKET_VALUE;
         return -1;
     }
 
-    int result = ::connect(socket_, (struct sockaddr*)&addr, sizeof(addr));
+    int result = syscalls::sys_connect(socket_, (struct sockaddr*)&addr, sizeof(addr));
 
 #ifdef _WIN32
     int err = WSAGetLastError();
     if (result == SOCKET_ERROR_VALUE && err != WSAEWOULDBLOCK) {
-        closeSocket(socket_);
+        ::closesocket(socket_);
         socket_ = INVALID_SOCKET_VALUE;
         state_ = ConnectorState::Failed;
         return -1;
     }
 #else
     if (result == SOCKET_ERROR_VALUE && errno != EINPROGRESS) {
-        closeSocket(socket_);
+        syscalls::sys_close(socket_);
         socket_ = INVALID_SOCKET_VALUE;
         state_ = ConnectorState::Failed;
         return -1;
@@ -641,7 +634,7 @@ int32_t NativeConnector::reconnect() {
 
 void NativeConnector::disconnect() {
     if (socket_ != INVALID_SOCKET_VALUE) {
-        closeSocket(socket_);
+syscalls::sys_close(socket_);
         socket_ = INVALID_SOCKET_VALUE;
     }
     state_ = ConnectorState::Stopped;

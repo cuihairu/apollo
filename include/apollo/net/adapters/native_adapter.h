@@ -1,7 +1,15 @@
 #pragma once
 
+// 确保在 POSIX 系统上获取完整的 timespec 定义
+#if defined(__APPLE__) || defined(__linux__)
+    #ifndef _POSIX_C_SOURCE
+        #define _POSIX_C_SOURCE 200809L
+    #endif
+#endif
+
 #include "apollo/net/net.h"
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <condition_variable>
 #include <thread>
@@ -35,8 +43,13 @@ constexpr const char* NATIVE_BACKEND = "native";
     using ssize_t = SSIZE_T;
 
 #else // Linux/macOS
+    #include <time.h>
     #include <sys/socket.h>
-    #include <sys/epoll.h>
+    #if defined(__linux__)
+        #include <sys/epoll.h>
+    #elif defined(__APPLE__)
+        #include <sys/event.h>
+    #endif
     #include <netinet/in.h>
     #include <netinet/tcp.h>
     #include <arpa/inet.h>
@@ -101,6 +114,38 @@ inline int getLastNetError() {
 }
 
 // ========== 套接字工具函数 ==========
+
+// 系统调用包装器（避免与类方法名冲突）
+namespace syscalls {
+    inline ssize_t sys_send(socket_t sock, const char* buf, size_t len, int flags) {
+#ifdef _WIN32
+        return ::send(sock, buf, static_cast<int>(len), flags);
+#else
+        return send(sock, buf, len, flags);
+#endif
+    }
+    inline ssize_t sys_recv(socket_t sock, char* buf, size_t len, int flags) {
+#ifdef _WIN32
+        return ::recv(sock, buf, static_cast<int>(len), flags);
+#else
+        return recv(sock, buf, len, flags);
+#endif
+    }
+    inline int sys_connect(socket_t sock, const struct sockaddr* addr, socklen_t len) {
+#ifdef _WIN32
+        return ::connect(sock, addr, len);
+#else
+        return connect(sock, addr, len);
+#endif
+    }
+    inline int sys_close(socket_t sock) {
+#ifdef _WIN32
+        return ::closesocket(sock);
+#else
+        return close(sock);
+#endif
+    }
+}
 
 /**
  * @brief 初始化网络库
@@ -177,6 +222,15 @@ inline bool setSocketOptions(socket_t sock, bool noDelay = true,
     }
 
     return true;
+}
+
+/**
+ * @brief 获取当前时间（毫秒）
+ */
+inline uint64_t getCurrentTimeMs() {
+    auto now = std::chrono::steady_clock::now();
+    auto duration = now.time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 }
 
 // ========== 缓冲区管理 ==========
@@ -460,9 +514,9 @@ public:
 
 protected:
     virtual void handleEstablish() {}
-    virtual void handleTerminate(TerminateReason reason) {}
-    virtual uint32_t handlePacket(const char* data, uint32_t length) { return length; }
-    virtual void handleError(int32_t errorCode, const char* errorMsg) {}
+    virtual void handleTerminate(TerminateReason reason) { (void)reason; }
+    virtual uint32_t handlePacket(const char* data, uint32_t length) { (void)data; (void)length; return length; }
+    virtual void handleError(int32_t errorCode, const char* errorMsg) { (void)errorCode; (void)errorMsg; }
 
 private:
     static uint64_t generateSessionId();
