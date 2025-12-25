@@ -37,6 +37,10 @@ target_link_libraries(server_template PRIVATE apollo)
 add_executable(serializer_demo serializer_demo.cpp)
 target_link_libraries(serializer_demo PRIVATE apollo)
 
+# ========== Config Serialization Demo ==========
+add_executable(config_serialization_demo config_serialization_demo.cpp)
+target_link_libraries(config_serialization_demo PRIVATE apollo)
+
 # ========== Network Utility Demo ==========
 add_executable(netutil_demo netutil_demo.cpp)
 target_link_libraries(netutil_demo PRIVATE apollo)
