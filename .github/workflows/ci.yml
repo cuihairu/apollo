@@ -101,7 +101,7 @@ jobs:
         -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=ON
-        -G "Ninja Multi-Config"
+        -G "${{ matrix.os == 'windows-latest' && 'Ninja Multi-Config' || 'Ninja' }}"
 
     - name: Build
       run: >
@@ -188,7 +188,7 @@ jobs:
         -DAPOLLO_ENABLE_COVERAGE=ON
         -DCMAKE_CXX_FLAGS="--coverage -g -O0"
         -DCMAKE_C_FLAGS="--coverage -g -O0"
-        -G "Ninja Multi-Config"
+        -G "Ninja"
 
     - name: Build with Coverage
       run: >
