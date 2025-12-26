@@ -52,3 +52,15 @@ target_link_libraries(simple_server PRIVATE apollo)
 # Starter 自动配置示例
 add_executable(starter_example starter_example.cpp)
 target_link_libraries(starter_example PRIVATE apollo)
+
+# ========== HTTP Demo ==========
+add_executable(http_demo http_demo.cpp)
+target_link_libraries(http_demo PRIVATE apollo)
+
+# ========== WebSocket Demo ==========
+add_executable(websocket_demo websocket_demo.cpp)
+target_link_libraries(websocket_demo PRIVATE apollo)
+
+# ========== Event Loop Demo ==========
+add_executable(event_loop_demo event_loop_demo.cpp)
+target_link_libraries(event_loop_demo PRIVATE apollo)

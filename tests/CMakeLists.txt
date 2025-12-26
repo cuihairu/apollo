@@ -184,6 +184,78 @@ if(GTest_FOUND)
 
     add_test(NAME UtilsTests COMMAND utils_tests)
 
+    # ========== SqlTemplate Tests (New) ==========
+
+    add_executable(sql_template_tests test_sql_template.cpp)
+
+    target_link_libraries(sql_template_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(sql_template_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME SqlTemplateTests COMMAND sql_template_tests)
+
+    # ========== RestTemplate Tests (New) ==========
+
+    add_executable(rest_template_tests test_rest_template.cpp)
+
+    target_link_libraries(rest_template_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(rest_template_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME RestTemplateTests COMMAND rest_template_tests)
+
+    # ========== Integration Tests (New) ==========
+
+    add_executable(integration_tests test_integration.cpp)
+
+    target_link_libraries(integration_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(integration_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME IntegrationTests COMMAND integration_tests)
+
+    # ========== Channel Tests (New) - Shared Memory + Backpressure ==========
+
+    add_executable(channel_tests test_channel.cpp)
+
+    target_link_libraries(channel_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(channel_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME ChannelTests COMMAND channel_tests)
+
+    # ========== Actor Framework Tests (New) ==========
+
+    # Basic Actor tests
+    add_executable(actor_framework_tests test_actor_framework.cpp)
+
+    target_link_libraries(actor_framework_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(actor_framework_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME ActorFrameworkTests COMMAND actor_framework_tests)
+
+    # Concurrency and stress tests
+    add_executable(actor_concurrency_tests test_actor_concurrency.cpp)
+
+    target_link_libraries(actor_concurrency_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(actor_concurrency_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME ActorConcurrencyTests COMMAND actor_concurrency_tests)
+
 else()
     message(STATUS "GTest not found, building simple test")
 

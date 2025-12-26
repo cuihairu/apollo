@@ -52,6 +52,15 @@ add_library(apollo STATIC
     src/apollo/net/session_manager.cpp
     src/apollo/net/message_codec.cpp
     src/apollo/net/rpc.cpp
+    src/apollo/net/http.cpp
+    src/apollo/net/websocket.cpp
+    src/apollo/net/event_loop.cpp
+    src/apollo/net/http/rest_client.cpp
+
+    # Redis
+    src/apollo/storage/redis/redis.cpp
+    src/apollo/storage/redis/redis_client_impl.cpp
+    src/apollo/redis/redis_template.cpp
 
     # Storage
     src/storage/cache/redis.cpp
@@ -96,6 +105,33 @@ add_library(apollo STATIC
     src/apollo/storage/database/db_common.cpp
     src/apollo/storage/database/db_mysql.cpp
     src/apollo/storage/database/db_mock.cpp
+
+    # Database - SqlTemplate
+    src/apollo/database/sql_template.cpp
+    src/apollo/database/datasource.cpp
+
+    # IPC - Shared Memory Channel
+    src/apollo/ipc/shared_memory_channel.cpp
+    src/apollo/ipc/channel.cpp
+    src/apollo/ipc/qos.cpp
+
+    # IPC - Service Discovery
+    src/apollo/ipc/service_discovery.cpp
+    src/apollo/ipc/sqlite_service_discovery.cpp
+    src/apollo/ipc/redis_service_discovery.cpp
+    src/apollo/ipc/service_endpoint_ex.cpp
+
+    # Actor Framework
+    src/apollo/actor/actor_cell.cpp
+    src/apollo/actor/actor_system.cpp
+    src/apollo/actor/message_bus.cpp
+    src/apollo/actor/dispatcher.cpp
+    src/apollo/actor/actor_manager.cpp
+    src/apollo/actor/monitoring.cpp
+    src/apollo/actor/timer_service.cpp
+    src/apollo/actor/actor_ref.cpp
+    src/apollo/actor/actor_utils.cpp
+    src/apollo/actor/message_serialization.cpp
 )
 
 # 设置目标名称为 apollo
@@ -175,6 +211,68 @@ if(APOLLO_ENABLE_YAML)
         message(STATUS "YAML support enabled (yaml-cpp)")
     else()
         message(STATUS "yaml-cpp not found, YAML support disabled (simplified fallback only)")
+    endif()
+endif()
+
+# OpenSSL (required for WebSocket SHA-1)
+find_package(OpenSSL REQUIRED)
+if(OpenSSL_FOUND)
+    if(TARGET OpenSSL::Crypto)
+        target_link_libraries(apollo PUBLIC OpenSSL::Crypto)
+    else()
+        target_link_libraries(apollo PUBLIC ${OPENSSL_CRYPTO_LIBRARY})
+        target_include_directories(apollo SYSTEM PUBLIC ${OPENSSL_INCLUDE_DIR})
+    endif()
+    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
+endif()
+
+# libcurl (optional for RestTemplate)
+option(APOLLO_ENABLE_CURL "Enable libcurl support for RestTemplate" ON)
+if(APOLLO_ENABLE_CURL)
+    find_package(CURL CONFIG QUIET)
+    if(NOT CURL_FOUND)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(CURL libcurl)
+        endif()
+    endif()
+    if(CURL_FOUND)
+        if(TARGET CURL::libcurl)
+            target_link_libraries(apollo PUBLIC CURL::libcurl)
+        else()
+            target_link_libraries(apollo PUBLIC ${CURL_LIBRARIES})
+            target_include_directories(apollo SYSTEM PUBLIC ${CURL_INCLUDE_DIRS})
+        endif()
+        target_compile_definitions(apollo PRIVATE APOLLO_HAS_CURL=1)
+        message(STATUS "libcurl found, RestTemplate enabled")
+    else()
+        message(STATUS "libcurl not found, RestTemplate will be stub only")
+    endif()
+endif()
+
+# hiredis (optional for RedisTemplate)
+option(APOLLO_ENABLE_HIREDIS "Enable hiredis support for RedisTemplate" ON)
+if(APOLLO_ENABLE_HIREDIS)
+    find_package(hiredis CONFIG QUIET)
+    if(NOT hiredis_FOUND)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(hiredis hiredis)
+        endif()
+    endif()
+    if(hiredis_FOUND OR hiredis_FOUND)
+        if(TARGET hiredis::hiredis)
+            target_link_libraries(apollo PUBLIC hiredis::hiredis)
+        elseif(hiredis_FOUND)
+            target_link_libraries(apollo PUBLIC ${hiredis_LIBRARIES})
+            target_include_directories(apollo SYSTEM PUBLIC ${hiredis_INCLUDE_DIRS})
+        else()
+            target_link_libraries(apollo PUBLIC hiredis::hiredis)
+        endif()
+        target_compile_definitions(apollo PRIVATE APOLLO_HAS_HIREDIS=1)
+        message(STATUS "hiredis found, RedisTemplate enabled")
+    else()
+        message(STATUS "hiredis not found, RedisTemplate will be stub only")
     endif()
 endif()
 
