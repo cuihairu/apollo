@@ -3,6 +3,8 @@
 #include "apollo/serialization/serializer.h"
 #include "apollo/serialization/reflect.h"
 #include <sstream>
+#include <fstream>
+#include <iostream>
 
 // YAML 支持 - 需要 yaml-cpp
 #ifdef APOLLO_HAS_YAML

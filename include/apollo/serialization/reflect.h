@@ -4,6 +4,11 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <optional>
+#include <vector>
+#include <sstream>
+#include <iostream>
+#include <cctype>
 
 namespace apollo {
 namespace serialization {

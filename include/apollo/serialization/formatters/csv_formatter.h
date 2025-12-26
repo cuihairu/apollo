@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <sstream>
 #include <fstream>
+#include <iostream>
+#include <functional>
 
 namespace apollo {
 namespace serialization {
@@ -499,8 +501,60 @@ inline bool DataTable::loadFromCsvString(const std::string& content, const CsvFo
 }
 
 inline bool DataTable::loadFromJson(const std::string& filePath) {
-    // TODO: 实现 JSON 数组加载
+#ifdef HAVE_NLOHMANN_JSON
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    try {
+        nlohmann::json j = nlohmann::json::parse(file);
+
+        clear();
+
+        if (j.is_array() && !j.empty()) {
+            // 从第一个对象获取表头
+            auto firstObj = j[0];
+            if (firstObj.is_object()) {
+                for (auto& [key, value] : firstObj.items()) {
+                    headers_.push_back(key);
+                }
+                buildColumnIndices();
+
+                // 加载所有行数据
+                for (const auto& item : j) {
+                    if (item.is_object()) {
+                        std::vector<std::string> row;
+                        row.reserve(headers_.size());
+                        for (const auto& header : headers_) {
+                            if (item.contains(header)) {
+                                auto val = item[header];
+                                if (val.is_string()) {
+                                    row.push_back(val.get<std::string>());
+                                } else if (val.is_null()) {
+                                    row.push_back("");
+                                } else {
+                                    row.push_back(val.dump());
+                                }
+                            } else {
+                                row.push_back("");
+                            }
+                        }
+                        rows_.push_back(std::move(row));
+                    }
+                }
+                return true;
+            }
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+
     return false;
+#else
+    (void)filePath;
+    return false;
+#endif
 }
 
 inline std::optional<size_t> DataTable::getColumnIndex(const std::string& columnName) const {

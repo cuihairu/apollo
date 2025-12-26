@@ -76,3 +76,7 @@ target_link_libraries(actor_demo PRIVATE apollo)
 # ========== Actor Advanced Demo ==========
 add_executable(actor_advanced_demo actor_advanced_demo.cpp)
 target_link_libraries(actor_advanced_demo PRIVATE apollo)
+
+# ========== Unified Serialization Demo ==========
+add_executable(serialization_demo serialization_demo.cpp)
+target_link_libraries(serialization_demo PRIVATE apollo)

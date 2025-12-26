@@ -2,6 +2,20 @@
 
 #include "apollo/serialization/serializer.h"
 #include "apollo/serialization/reflect.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
+// 前向声明其他 formatter
+namespace apollo {
+namespace serialization {
+namespace formatters {
+class YamlFormatter;
+class IniFormatter;
+class CsvFormatter;
+}
+}
+}
 
 #ifdef HAVE_NLOHMANN_JSON
     #include <nlohmann/json.hpp>
@@ -162,36 +176,60 @@ JsonFormatter::structToJson(const T& value) {
 }
 
 //==============================================================================
-// Serializer 特化
+// Serializer 特化（统一入口）
 //==============================================================================
 
 template<typename T>
-class Serializer<T> {
+class Serializer {
 public:
     static std::string serialize(const T& value, Format format, const SerializeOptions& options = {}) {
-        if (format == Format::Json) {
-            return JsonFormatter::serialize(value, options);
+        switch (format) {
+            case Format::Json:
+                return JsonFormatter::serialize(value, options);
+            case Format::Yaml:
+                return formatters::YamlFormatter::serialize(value, options);
+            case Format::Ini:
+                return formatters::IniFormatter::serialize(value, {});
+            default:
+                throw SerializationException("Unsupported format for serialize");
         }
-        throw SerializationException("JSON formatter only supports JSON format");
     }
 
     static bool serializeToFile(const T& value, const std::string& filePath,
                                 const SerializeOptions& options = {}) {
-        std::string content = serialize(value, Format::Json, options);
-        // TODO: 写入文件
-        return true;
+        Format format = detectFormat(filePath);
+        std::string content = serialize(value, format, options);
+        std::ofstream file(filePath);
+        if (!file.is_open()) {
+            return false;
+        }
+        file << content;
+        return file.good();
     }
 
     static T deserialize(const std::string& content, Format format) {
-        if (format == Format::Json || format == Format::Auto) {
-            return JsonFormatter::deserialize<T>(content);
+        switch (format) {
+            case Format::Json:
+            case Format::Auto:
+                return JsonFormatter::deserialize<T>(content);
+            case Format::Yaml:
+                return formatters::YamlFormatter::deserialize<T>(content);
+            case Format::Ini:
+                return formatters::IniFormatter::deserialize<T>(content, {});
+            default:
+                throw SerializationException("Unsupported format for deserialize");
         }
-        throw SerializationException("Unsupported format");
     }
 
     static T deserializeFromFile(const std::string& filePath) {
-        // TODO: 从文件读取
-        return T{};
+        Format format = detectFormat(filePath);
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            throw SerializationException("Cannot open file: " + filePath);
+        }
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        return deserialize(content, format);
     }
 
     // JSON 便捷函数
@@ -204,7 +242,70 @@ public:
     }
 
     static T fromJsonFile(const std::string& filePath) {
-        return deserializeFromFile(filePath);
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            throw SerializationException("Cannot open file: " + filePath);
+        }
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        return fromJson(content);
+    }
+
+    // YAML 便捷函数
+    static std::string toYaml(const T& value) {
+        return formatters::YamlFormatter::serialize(value, {});
+    }
+
+    static T fromYaml(const std::string& content) {
+        return formatters::YamlFormatter::deserialize<T>(content);
+    }
+
+    static T fromYamlFile(const std::string& filePath) {
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            throw SerializationException("Cannot open file: " + filePath);
+        }
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        return fromYaml(content);
+    }
+
+    // INI 便捷函数
+    static std::string toIni(const T& value) {
+        return formatters::IniFormatter::serialize(value, {});
+    }
+
+    static T fromIni(const std::string& content) {
+        return formatters::IniFormatter::deserialize<T>(content, {});
+    }
+
+    static T fromIniFile(const std::string& filePath) {
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            throw SerializationException("Cannot open file: " + filePath);
+        }
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        return fromIni(content);
+    }
+
+    // CSV 便捷函数（仅容器类型）
+    static std::string toCsv(const std::vector<T>& values, bool hasHeader = true) {
+        return formatters::CsvFormatter::serialize(values, {',', '"', hasHeader});
+    }
+
+    static std::vector<T> fromCsv(const std::string& content) {
+        return formatters::CsvFormatter::deserialize<T>(content, {});
+    }
+
+    static std::vector<T> fromCsvFile(const std::string& filePath) {
+        std::ifstream file(filePath);
+        if (!file.is_open()) {
+            throw SerializationException("Cannot open file: " + filePath);
+        }
+        std::string content((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        return fromCsv(content);
     }
 };
 
