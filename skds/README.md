@@ -11,7 +11,7 @@ Apollo 游戏服务器框架的多平台客户端 SDK。
 ## 目录结构
 
 ```
-sdk/
+skds/
 ├── unity/          # Unity SDK
 ├── cocos/          # Cocos Creator SDK
 └── laya/           # LayaBox SDK

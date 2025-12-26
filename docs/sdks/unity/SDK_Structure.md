@@ -2,12 +2,12 @@
 
 ## 概述
 
-`sdk/` 目录存放各平台的客户端 SDK，与服务端框架保持协议和接口一致。
+`skds/` 目录存放各平台的客户端 SDK，与服务端框架保持协议和接口一致。
 
 ## 目录结构
 
 ```
-sdks/
+skds/
 ├── unity/                    # Unity SDK
 │   └── ApolloSDK/
 │       ├── ApolloClient.cs         # 主客户端
@@ -24,10 +24,11 @@ sdks/
 │       ├── Messaging/             # 消息处理
 │       └── Utilities/             # 工具类
 │
-├── unreal/                   # Unreal SDK (TODO)
+├── cocos/                   # Cocos Creator SDK
 │   └── ApolloSDK/
 │
-├── godot/                   # Godot SDK (TODO)
+├── laya/                    # LayaBox SDK
+│   └── ApolloSDK/
 │   └── ApolloSDK/
 │
 └── web/                     # Web SDK (TODO)

@@ -178,10 +178,10 @@ apollo/
 │   ├── advanced/                   # 高级示例
 │   └── tutorials/                  # 教程示例
 │
-├── sdk/                            # SDK
+├── skds/                           # SDK (复数形式)
 │   ├── unity/                      # Unity SDK
-│   ├── unreal/                     # Unreal SDK
-│   └── csharp/                     # C#通用SDK
+│   ├── cocos/                      # Cocos Creator SDK
+│   └── laya/                       # LayaBox SDK
 │
 ├── tools/                          # 工具
 │   ├── code_gen/                   # 代码生成器

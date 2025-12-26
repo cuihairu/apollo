@@ -475,8 +475,10 @@ apollo/
 │   └── utils/
 ├── tests/                  # 测试代码
 ├── examples/               # 示例代码
-├── sdk/                    # 客户端SDK
-│   └── unity/              # Unity SDK
+├── skds/                   # 客户端SDK
+│   ├── unity/              # Unity SDK
+│   ├── cocos/              # Cocos Creator SDK
+│   └── laya/               # LayaBox SDK
 ├── docs/                   # 文档
 └── build/                  # 构建输出
 ```
