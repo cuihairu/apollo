@@ -6,6 +6,9 @@
 #include "apollo/core/config/config_manager.h"
 #include <iostream>
 #include <cassert>
+#include <filesystem>
+#include <fstream>
+#include <chrono>
 
 using namespace apollo::core::config;
 
@@ -75,11 +78,11 @@ bool test_default_values() {
     auto& manager = ConfigManager::instance();
     manager.clear();
 
-    manager.loadString("[Test]\nkey=value", ConfigFormat::Ini, "default_test");
+    manager.loadString("[Test]\nkey=value", ConfigFormat::Ini);
 
     // 存在的键
     TEST_ASSERT(manager.getString("Test/key", "default") == "value", "Existing key");
-    TEST_ASSERT(manager.getInt("Test/key", 99) == 0, "Non-int key returns default");
+    TEST_ASSERT(manager.getInt("Test/key", 99) == 99, "Non-int key returns default");
     TEST_ASSERT(manager.getBool("Test/key", true) == false, "Non-bool key returns default");
 
     // 不存在的键
@@ -249,7 +252,7 @@ bool test_macros() {
     manager.clear();
 
     manager.loadString("[Test]\nstr=value\nint=42\nbool=true\ndbl=3.14",
-                      ConfigFormat::Ini, "macro_test");
+                      ConfigFormat::Ini);
 
     TEST_ASSERT(APOLLO_CONFIG_STR("Test/str", "def") == "value", "STR macro");
     TEST_ASSERT(APOLLO_CONFIG_INT("Test/int", 0) == 42, "INT macro");
@@ -282,6 +285,46 @@ bool test_dump() {
     return true;
 }
 
+/**
+ * @brief 测试loadFile + reload（确保记录filePath/format）
+ */
+bool test_loadfile_reload() {
+    std::cout << "Running: test_loadfile_reload..." << std::endl;
+
+    auto& manager = ConfigManager::instance();
+    manager.clear();
+
+    auto now = std::chrono::system_clock::now().time_since_epoch().count();
+    std::filesystem::path path = std::filesystem::temp_directory_path() /
+        ("apollo_config_test_" + std::to_string(now) + ".ini");
+
+    {
+        std::ofstream out(path, std::ios::binary);
+        TEST_ASSERT(out.is_open(), "Open temp ini file for write");
+        out << "[Test]\nvalue=1\n";
+    }
+
+    bool success = manager.loadFile(path.string(), ConfigFormat::Auto, "file_test");
+    TEST_ASSERT(success, "Load INI file with Auto format");
+    TEST_ASSERT(manager.getInt("Test/value", 0, "file_test") == 1, "Read initial value");
+
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        TEST_ASSERT(out.is_open(), "Open temp ini file for rewrite");
+        out << "[Test]\nvalue=2\n";
+    }
+
+    success = manager.reload("file_test");
+    TEST_ASSERT(success, "Reload file_test section");
+    TEST_ASSERT(manager.getInt("Test/value", 0, "file_test") == 2, "Read reloaded value");
+
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 //==============================================================================
 // 测试运行器
 //==============================================================================
@@ -295,7 +338,7 @@ int main() {
     int passed = 0;
     int total = 0;
 
-    auto run = [&](const char* name, bool (*test)()) {
+    auto run = [&](const char*, bool (*test)()) {
         total++;
         if (test()) passed++;
         else {
@@ -313,6 +356,7 @@ int main() {
     run("test_json_format", test_json_format);
     run("test_macros", test_macros);
     run("test_dump", test_dump);
+    run("test_loadfile_reload", test_loadfile_reload);
 
     std::cout << std::endl;
     std::cout << "====================================" << std::endl;
@@ -320,8 +364,4 @@ int main() {
     std::cout << "====================================" << std::endl;
 
     return (passed == total) ? 0 : 1;
-}
-
-int test_config_main() {
-    return main();
 }

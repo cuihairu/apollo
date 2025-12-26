@@ -1,8 +1,160 @@
 #include "apollo/starter/ApolloApplication.h"
+#include "apollo/core/config/config_manager.h"
 #include <fstream>
 #include <sstream>
+#include <cctype>
+
+#ifdef HAVE_NLOHMANN_JSON
+    #include <nlohmann/json.hpp>
+#endif
 
 namespace Apollo::Starter {
+
+namespace {
+
+bool endsWith(const std::string& s, const std::string& suffix) {
+    return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string trim(std::string s) {
+    auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+    while (!s.empty() && isSpace(static_cast<unsigned char>(s.front()))) {
+        s.erase(s.begin());
+    }
+    while (!s.empty() && isSpace(static_cast<unsigned char>(s.back()))) {
+        s.pop_back();
+    }
+    return s;
+}
+
+std::string stripOptionalQuotes(std::string s) {
+    s = trim(std::move(s));
+    if (s.size() >= 2) {
+        char first = s.front();
+        char last = s.back();
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return s.substr(1, s.size() - 2);
+        }
+    }
+    return s;
+}
+
+std::unordered_map<std::string, std::string> parseIniLikeProperties(const std::string& content) {
+    std::unordered_map<std::string, std::string> props;
+    std::istringstream iss(content);
+
+    std::string line;
+    std::string section;
+
+    while (std::getline(iss, line)) {
+        line = trim(std::move(line));
+        if (line.empty()) {
+            continue;
+        }
+        if (line.rfind("#", 0) == 0 || line.rfind(";", 0) == 0) {
+            continue;
+        }
+
+        if (line.size() >= 2 && line.front() == '[' && line.back() == ']') {
+            section = trim(line.substr(1, line.size() - 2));
+            continue;
+        }
+
+        auto pos = line.find('=');
+        if (pos == std::string::npos) {
+            continue;
+        }
+
+        std::string key = trim(line.substr(0, pos));
+        std::string value = stripOptionalQuotes(line.substr(pos + 1));
+        if (key.empty()) {
+            continue;
+        }
+
+        std::string fullKey = section.empty() ? key : (section + "/" + key);
+        props[std::move(fullKey)] = std::move(value);
+    }
+
+    return props;
+}
+
+#ifdef HAVE_NLOHMANN_JSON
+void flattenJsonToProperties(const nlohmann::json& j,
+                             const std::string& prefix,
+                             std::unordered_map<std::string, std::string>& out) {
+    auto join = [&](const std::string& key) -> std::string {
+        return prefix.empty() ? key : (prefix + "/" + key);
+    };
+
+    if (j.is_object()) {
+        for (auto it = j.begin(); it != j.end(); ++it) {
+            flattenJsonToProperties(it.value(), join(it.key()), out);
+        }
+        return;
+    }
+
+    if (j.is_array()) {
+        bool allPrimitive = true;
+        for (const auto& item : j) {
+            if (!(item.is_string() || item.is_boolean() || item.is_number() || item.is_null())) {
+                allPrimitive = false;
+                break;
+            }
+        }
+
+        if (allPrimitive) {
+            std::string joined;
+            for (size_t i = 0; i < j.size(); ++i) {
+                if (i > 0) joined += ",";
+                const auto& item = j[i];
+                if (item.is_string()) joined += item.get<std::string>();
+                else if (item.is_boolean()) joined += (item.get<bool>() ? "true" : "false");
+                else if (item.is_number_integer()) joined += std::to_string(item.get<int64_t>());
+                else if (item.is_number_float()) joined += std::to_string(item.get<double>());
+            }
+            if (!prefix.empty()) {
+                out[prefix] = std::move(joined);
+            }
+            return;
+        }
+
+        if (!prefix.empty()) {
+            out[prefix] = j.dump();
+        }
+        return;
+    }
+
+    if (prefix.empty()) {
+        return;
+    }
+
+    if (j.is_string()) {
+        out[prefix] = j.get<std::string>();
+    } else if (j.is_boolean()) {
+        out[prefix] = j.get<bool>() ? "true" : "false";
+    } else if (j.is_number_integer()) {
+        out[prefix] = std::to_string(j.get<int64_t>());
+    } else if (j.is_number_float()) {
+        out[prefix] = std::to_string(j.get<double>());
+    } else if (j.is_null()) {
+        out[prefix] = "";
+    } else {
+        out[prefix] = j.dump();
+    }
+}
+
+std::unordered_map<std::string, std::string> parseJsonProperties(const std::string& content) {
+    std::unordered_map<std::string, std::string> props;
+    try {
+        nlohmann::json j = nlohmann::json::parse(content);
+        flattenJsonToProperties(j, "", props);
+    } catch (...) {
+    }
+    return props;
+}
+#endif
+
+} // namespace
 
 void ApolloApplication::start() {
     for (const auto& starter : activeStarters_) {
@@ -49,27 +201,42 @@ void ApolloApplication::initialize() {
 }
 
 void ApolloApplication::loadConfiguration() {
-    // 如果指定了配置文件，从文件加载
+    std::unordered_map<std::string, std::string> fileProps;
+
     if (!configPath_.empty()) {
-        std::ifstream file(configPath_);
+        std::ifstream file(configPath_, std::ios::binary);
         if (file.is_open()) {
             std::stringstream buffer;
             buffer << file.rdbuf();
-            file.close();
+            std::string content = buffer.str();
 
-            // 根据文件扩展名决定解析方式
-            if (configPath_.find(".json") != std::string::npos) {
+            if (endsWith(configPath_, ".json")) {
 #ifdef HAVE_NLOHMANN_JSON
-                // JSON 解析将在 DefaultConditionContext 中处理
+                fileProps = parseJsonProperties(content);
+#else
+                (void)content;
 #endif
             } else {
-                // 默认 key=value 格式
-                // properties_ 已在 Builder 中设置
+                fileProps = parseIniLikeProperties(content);
             }
+        }
+
+        apollo::core::config::ConfigManager::instance().loadFile(
+            configPath_, apollo::core::config::ConfigFormat::Auto, "starter");
+    }
+
+    if (!fileProps.empty()) {
+        auto builderProps = properties_;
+        properties_ = std::move(fileProps);
+        for (const auto& [k, v] : builderProps) {
+            properties_[k] = v;
         }
     }
 
-    // TODO: 整合 ConfigManager 来加载配置
+    auto& cfg = apollo::core::config::ConfigManager::instance();
+    for (const auto& [k, v] : properties_) {
+        cfg.setValue(k, v, "starter");
+    }
 }
 
 std::unique_ptr<ConditionContext> ApolloApplication::createConditionContext() {

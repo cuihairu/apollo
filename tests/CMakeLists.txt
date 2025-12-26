@@ -286,16 +286,20 @@ else()
     # Simple test without GTest
     add_executable(ioc_tests_simple test_simple.cpp)
     add_executable(all_features_test test_all_features.cpp)
+    add_executable(config_tests_simple test_config.cpp)
 
     target_link_libraries(ioc_tests_simple PRIVATE apollo)
     target_link_libraries(all_features_test PRIVATE apollo)
+    target_link_libraries(config_tests_simple PRIVATE apollo)
 
     # 为Windows添加网络库链接
     if(WIN32)
         target_link_libraries(ioc_tests_simple PRIVATE ws2_32)
         target_link_libraries(all_features_test PRIVATE ws2_32)
+        target_link_libraries(config_tests_simple PRIVATE ws2_32)
     endif()
 
     enable_testing()
     add_test(NAME SimpleTests COMMAND ioc_tests_simple)
+    add_test(NAME ConfigTestsSimple COMMAND config_tests_simple)
 endif()

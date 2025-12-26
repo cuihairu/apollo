@@ -20,6 +20,38 @@ namespace apollo {
 namespace core {
 namespace config {
 
+namespace {
+
+ConfigNode* getOrCreateByPath(ConfigNode& root, const std::string& path) {
+    if (path.empty()) {
+        return &root;
+    }
+
+    ConfigNode* node = &root;
+    size_t i = 0;
+    while (i < path.size()) {
+        while (i < path.size() && (path[i] == '.' || path[i] == '/')) {
+            ++i;
+        }
+        if (i >= path.size()) {
+            break;
+        }
+
+        size_t j = i;
+        while (j < path.size() && path[j] != '.' && path[j] != '/') {
+            ++j;
+        }
+
+        std::string key = path.substr(i, j - i);
+        node = &node->getChild(key);
+        i = j;
+    }
+
+    return node;
+}
+
+} // namespace
+
 //==============================================================================
 // ConfigManager 实现
 //==============================================================================
@@ -37,7 +69,28 @@ bool ConfigManager::loadFile(const std::string& filePath,
         return false;
     }
 
-    return loadString(content, format, section);
+    ConfigFormat actualFormat = format;
+    if (actualFormat == ConfigFormat::Auto) {
+        ConfigFormat extFormat = detectFormat(filePath);
+        if (extFormat != ConfigFormat::Auto) {
+            actualFormat = extFormat;
+        }
+    }
+
+    if (!loadString(content, actualFormat, section)) {
+        return false;
+    }
+
+    {
+        std::unique_lock<std::shared_mutex> lock(mutex_);
+        auto it = configs_.find(section);
+        if (it != configs_.end()) {
+            it->second.filePath = filePath;
+            it->second.lastModified = getFileModifiedTime(filePath);
+        }
+    }
+
+    return true;
 }
 
 bool ConfigManager::loadString(const std::string& content,
@@ -50,6 +103,7 @@ bool ConfigManager::loadString(const std::string& content,
 
     // 解析内容
     bool success = false;
+    ConfigFormat usedFormat = format;
     switch (format) {
         case ConfigFormat::Ini:
             success = parseIni(content, cs.root);
@@ -70,11 +124,14 @@ bool ConfigManager::loadString(const std::string& content,
             if (trimmed.empty()) break;
 
             if (trimmed[0] == '{') {
+                usedFormat = ConfigFormat::Json;
                 success = parseJson(content, cs.root);
             } else if (trimmed[0] == '<') {
+                usedFormat = ConfigFormat::Xml;
                 success = parseXml(content, cs.root);
             } else if (trimmed.find('=') != std::string::npos ||
                        trimmed.find('[') != std::string::npos) {
+                usedFormat = ConfigFormat::Ini;
                 success = parseIni(content, cs.root);
             }
             break;
@@ -85,7 +142,7 @@ bool ConfigManager::loadString(const std::string& content,
         return false;
     }
 
-    cs.format = format;
+    cs.format = (format == ConfigFormat::Auto) ? usedFormat : format;
     cs.lastHash = calculateHash(content);
     configs_[section] = std::move(cs);
 
@@ -236,10 +293,7 @@ void ConfigManager::setValue(const std::string& key, const std::string& value,
     std::unique_lock<std::shared_mutex> lock(mutex_);
 
     auto& sectionData = configs_[section];
-    auto* node = sectionData.root.getByPath(key);
-    if (node) {
-        node->setString(value);
-    }
+    getOrCreateByPath(sectionData.root, key)->setString(value);
 }
 
 void ConfigManager::setValue(const std::string& key, int64_t value,
@@ -247,10 +301,7 @@ void ConfigManager::setValue(const std::string& key, int64_t value,
     std::unique_lock<std::shared_mutex> lock(mutex_);
 
     auto& sectionData = configs_[section];
-    auto* node = sectionData.root.getByPath(key);
-    if (node) {
-        node->setInt64(value);
-    }
+    getOrCreateByPath(sectionData.root, key)->setInt64(value);
 }
 
 void ConfigManager::setValue(const std::string& key, double value,
@@ -258,10 +309,7 @@ void ConfigManager::setValue(const std::string& key, double value,
     std::unique_lock<std::shared_mutex> lock(mutex_);
 
     auto& sectionData = configs_[section];
-    auto* node = sectionData.root.getByPath(key);
-    if (node) {
-        node->setDouble(value);
-    }
+    getOrCreateByPath(sectionData.root, key)->setDouble(value);
 }
 
 void ConfigManager::setValue(const std::string& key, bool value,
@@ -269,10 +317,7 @@ void ConfigManager::setValue(const std::string& key, bool value,
     std::unique_lock<std::shared_mutex> lock(mutex_);
 
     auto& sectionData = configs_[section];
-    auto* node = sectionData.root.getByPath(key);
-    if (node) {
-        node->setBool(value);
-    }
+    getOrCreateByPath(sectionData.root, key)->setBool(value);
 }
 
 size_t ConfigManager::addListener(const std::string& key,
@@ -371,6 +416,8 @@ bool ConfigManager::parseIni(const std::string& content, ConfigNode& root) {
     std::regex sectionRegex(R"(^\s*\[([^\]]+)\]\s*(?:;.*)?$)");
     std::regex keyRegex(R"(^\s*([^=;]+)\s*=\s*([^;]*?)\s*(?:;.*)?$)");
     std::regex arrayRegex(R"(^\s*([^=;]+)\s*=\s*([^;]*?)\s*(?:;.*)?$)");
+    std::regex intRegex(R"(^[+-]?\d+$)");
+    std::regex floatRegex(R"(^[+-]?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$)");
 
     while (std::getline(stream, line)) {
         // 移除BOM
@@ -379,7 +426,11 @@ bool ConfigManager::parseIni(const std::string& content, ConfigNode& root) {
         }
 
         // 跳过空行和注释
-        if (line.empty() || line[0] == ';' || line[0] == '#') {
+        auto firstNonSpace = line.find_first_not_of(" \t");
+        if (firstNonSpace == std::string::npos) {
+            continue;
+        }
+        if (line[firstNonSpace] == ';' || line[firstNonSpace] == '#') {
             continue;
         }
 
@@ -387,6 +438,8 @@ bool ConfigManager::parseIni(const std::string& content, ConfigNode& root) {
         std::smatch match;
         if (std::regex_match(line, match, sectionRegex)) {
             std::string sectionName = match[1];
+            sectionName.erase(0, sectionName.find_first_not_of(" \t"));
+            sectionName.erase(sectionName.find_last_not_of(" \t") + 1);
             currentSection = &root.getChild(sectionName);
             continue;
         }
@@ -397,6 +450,7 @@ bool ConfigManager::parseIni(const std::string& content, ConfigNode& root) {
             std::string value = match[2];
 
             // 去除空白
+            key.erase(0, key.find_first_not_of(" \t"));
             key.erase(key.find_last_not_of(" \t") + 1);
             value.erase(0, value.find_first_not_of(" \t"));
             value.erase(value.find_last_not_of(" \t") + 1);
@@ -413,13 +467,15 @@ bool ConfigManager::parseIni(const std::string& content, ConfigNode& root) {
                 currentSection->getChild(key).setBool(true);
             } else if (value == "false" || value == "no") {
                 currentSection->getChild(key).setBool(false);
-            } else if (!value.empty() && std::isdigit(value[0])) {
+            } else if (std::regex_match(value, intRegex)) {
                 try {
-                    if (value.find('.') != std::string::npos) {
-                        currentSection->getChild(key).setDouble(std::stod(value));
-                    } else {
-                        currentSection->getChild(key).setInt64(std::stoll(value));
-                    }
+                    currentSection->getChild(key).setInt64(std::stoll(value));
+                } catch (...) {
+                    currentSection->getChild(key).setString(value);
+                }
+            } else if (std::regex_match(value, floatRegex)) {
+                try {
+                    currentSection->getChild(key).setDouble(std::stod(value));
                 } catch (...) {
                     currentSection->getChild(key).setString(value);
                 }
