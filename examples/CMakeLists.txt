@@ -64,3 +64,15 @@ target_link_libraries(websocket_demo PRIVATE apollo)
 # ========== Event Loop Demo ==========
 add_executable(event_loop_demo event_loop_demo.cpp)
 target_link_libraries(event_loop_demo PRIVATE apollo)
+
+# ========== Skill System Demo ==========
+add_executable(skill_system_demo skill_system_demo.cpp)
+target_link_libraries(skill_system_demo PRIVATE apollo)
+
+# ========== Actor Demo ==========
+add_executable(actor_demo actor_demo.cpp)
+target_link_libraries(actor_demo PRIVATE apollo)
+
+# ========== Actor Advanced Demo ==========
+add_executable(actor_advanced_demo actor_advanced_demo.cpp)
+target_link_libraries(actor_advanced_demo PRIVATE apollo)

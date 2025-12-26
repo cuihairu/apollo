@@ -256,6 +256,18 @@ if(GTest_FOUND)
 
     add_test(NAME ActorConcurrencyTests COMMAND actor_concurrency_tests)
 
+    # ========== Data Structures Tests (New) ==========
+
+    add_executable(data_structures_tests test_data_structures.cpp)
+
+    target_link_libraries(data_structures_tests PRIVATE apollo)
+
+    if(WIN32)
+        target_link_libraries(data_structures_tests PRIVATE ws2_32)
+    endif()
+
+    add_test(NAME DataStructuresTests COMMAND data_structures_tests)
+
 else()
     message(STATUS "GTest not found, building simple test")
 
