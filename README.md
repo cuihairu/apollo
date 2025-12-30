@@ -21,6 +21,7 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 - 💾 **数据存储层** - 数据库连接池和Redis缓存
 - ⚡ **日志系统** - 多级别异步日志
 - 🔧 **工具类库** - 线程池、内存池、配置管理等
+- 🧩 **BigWorld兼容层** - BigWorld 风格 C++ API facade（见 `docs/33-BigWorld_Compatibility.md`）
 
 ## 🏛️ 架构设计
 
@@ -342,6 +343,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ### Compatibility 兼容层
 - **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
+- **BigWorld API Tests**: `tests/test_bigworld_api.cpp` (CTest: `BigWorldApiTests`)
 
 ## 🔧 使用示例
 
@@ -447,6 +449,9 @@ world->Update(deltaTime);
 # 运行所有测试
 cd build && ctest
 
+# 仅运行 BigWorld 兼容层测试
+cd build && ctest -R BigWorldApiTests
+
 # 运行功能演示
 ./examples/all_features_demo
 ```
@@ -458,6 +463,7 @@ cd build && ctest
 - Redis操作测试
 - AOI系统测试
 - 属性系统测试
+- BigWorld 兼容层 API 测试（`BigWorldApiTests`）
 
 ## 📋 目录结构
 
