@@ -12,7 +12,7 @@
 
 ## 依赖项
 
-- **C++17** 或更高版本
+- **C++20** 或更高版本
 - **nlohmann-json** (通过 vcpkg 集成)
 - **readline** (Linux/macOS) / **WS2_32** (Windows)
 

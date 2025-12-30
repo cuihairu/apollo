@@ -2,14 +2,14 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
-[![Language](https://img.shields.io/badge/language-C%2B%2B17-blue.svg)](https://github.com/cuihairu/apollo)
+[![Language](https://img.shields.io/badge/language-C%2B%2B20-blue.svg)](https://github.com/cuihairu/apollo)
 [![Build Status](https://img.shields.io/github/workflow/cuihairu/apollo/badge/main.svg)](https://github.com/cuihairu/apollo/actions)
 
 > 一个高性能、模块化的MMORPG服务器开发框架
 
 ## 📖 项目简介
 
-Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的服务器框架。它采用现代C++17开发，提供了完整的游戏服务器解决方案，包括网络通信、数据存储、游戏逻辑、战斗系统等核心模块。
+Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的服务器框架。它采用现代C++20开发，提供了完整的游戏服务器解决方案，包括网络通信、数据存储、游戏逻辑、战斗系统等核心模块。
 
 ### 核心特性
 
@@ -248,7 +248,7 @@ graph TB
 
 ### 技术栈
 
-- **编程语言**: C++17
+- **编程语言**: C++20
 - **构建系统**: CMake
 - **网络库**: 自实现跨平台网络层
 - **序列化**: Google Protobuf
@@ -264,7 +264,7 @@ graph TB
 
 ### 环境要求
 
-- C++17 或更高版本
+- C++20 或更高版本
 - CMake 3.16+
 - GCC 9+ / Clang 10+ / MSVC 2019+
 - MySQL 8.0+ (可选)
@@ -339,6 +339,9 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **线程池**: 高性能任务调度
 - **内存池**: 优化的内存管理
 - **配置系统**: JSON/XML/Lua配置支持
+
+### Compatibility 兼容层
+- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
 
 ## 🔧 使用示例
 

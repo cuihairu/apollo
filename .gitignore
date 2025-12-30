@@ -59,3 +59,7 @@ out/
 # vcpkg
 vcpkg/
 vcpkg_installed/
+
+# LLVM coverage
+*.profraw
+*.profdata

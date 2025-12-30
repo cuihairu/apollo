@@ -45,7 +45,7 @@ float distance = (pos1 - pos2).Length();
 - **序列化**: Protobuf, FlatBuffers完美支持
 - **框架积累**: 大量MMORPG开发经验和代码积累
 
-#### 3. 现代C++特性(C++17/20)
+#### 3. 现代C++特性(C++20)
 ```cpp
 // std::optional 处理可能为空的值
 std::optional<Player*> FindPlayer(uint64_t id);

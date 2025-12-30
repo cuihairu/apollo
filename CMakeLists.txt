@@ -132,6 +132,9 @@ add_library(apollo STATIC
     src/apollo/actor/actor_ref.cpp
     src/apollo/actor/actor_utils.cpp
     src/apollo/actor/message_serialization.cpp
+
+    # BigWorld 兼容层（增量实现）
+    src/apollo/bw/runtime.cpp
 )
 
 # 设置目标名称为 apollo
@@ -317,7 +320,7 @@ if(APOLLO_ENABLE_CLANG_TIDY)
     endif()
 endif()
 
-target_compile_features(apollo PUBLIC cxx_std_17)
+target_compile_features(apollo PUBLIC cxx_std_20)
 
 # 编译选项
 if(MSVC)
