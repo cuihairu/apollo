@@ -282,8 +282,6 @@ void ConnectionPool::maintenanceThread() {
         }
 
         // 清理超时的空闲连接
-        auto now = std::chrono::steady_clock::now();
-
         auto it = idleConnections_.begin();
         while (it != idleConnections_.end()) {
             // TODO: 检查连接空闲时间和生命周期
@@ -413,8 +411,7 @@ SqlTemplate SqlTemplateBuilder::build() {
     }
 
     if (usePool) {
-        auto dataSource = std::make_shared<ConnectionPool>(
-            detectType(), url);
+        std::shared_ptr<DataSource> dataSource(new ConnectionPool(detectType(), url));
         dataSource->setPoolConfig(config_.poolConfig);
         dataSource->start();
 
@@ -429,7 +426,7 @@ std::unique_ptr<SqlTemplate> SqlTemplateBuilder::buildUnique() {
 }
 
 std::shared_ptr<DataSource> SqlTemplateBuilder::buildDataSource() {
-    auto pool = std::make_shared<ConnectionPool>(detectType(), buildUrl());
+    std::shared_ptr<DataSource> pool(new ConnectionPool(detectType(), buildUrl()));
     pool->setPoolConfig(config_.poolConfig);
     pool->start();
     return pool;

@@ -7,6 +7,14 @@
 #include <string>
 #include <atomic>
 #include <typeindex>
+#include <type_traits>
+#include <unordered_map>
+#include <stdexcept>
+#include <cstring>
+
+#ifdef HAVE_NLOHMANN_JSON
+#include <nlohmann/json.hpp>
+#endif
 
 namespace apollo {
 namespace actor {
@@ -143,15 +151,25 @@ class JsonSerializer : public MessageSerializer<T> {
 public:
     std::vector<uint8_t> serialize(const T& msg) const override {
         // 使用 nlohmann/json 或其他 JSON 库
+#ifdef HAVE_NLOHMANN_JSON
         auto json = nlohmann::json(msg);
         std::string str = json.dump();
         return std::vector<uint8_t>(str.begin(), str.end());
+#else
+        (void)msg;
+        throw std::runtime_error("JSON serializer not available (missing nlohmann-json)");
+#endif
     }
 
     T deserialize(const std::vector<uint8_t>& data) const override {
+#ifdef HAVE_NLOHMANN_JSON
         std::string str(data.begin(), data.end());
         auto json = nlohmann::json::parse(str);
         return json.get<T>();
+#else
+        (void)data;
+        throw std::runtime_error("JSON serializer not available (missing nlohmann-json)");
+#endif
     }
 
     MessageType getType() const override {
@@ -270,7 +288,7 @@ public:
 
     // 注册消息类型和序列化器
     template<typename T>
-    void register() {
+    void registerType() {
         std::type_index idx(typeid(T));
         serializers_[idx] = std::make_shared<FlatBuffersSerializer<T>>();
     }

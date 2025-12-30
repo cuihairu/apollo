@@ -5,6 +5,10 @@
 #include <vector>
 #include <chrono>
 #include <functional>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include "apollo/database/sql_template.h"
 
 namespace apollo {
@@ -237,7 +241,7 @@ inline std::shared_ptr<DataSource> createPoolingDataSource(
     const std::string& connectionString,
     const PoolConfig& config = {}) {
 
-    auto pool = std::make_shared<ConnectionPool>(type, connectionString);
+    std::shared_ptr<DataSource> pool(new ConnectionPool(type, connectionString));
     pool->setPoolConfig(config);
     pool->start();
     return pool;

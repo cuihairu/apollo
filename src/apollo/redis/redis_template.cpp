@@ -7,6 +7,7 @@
 #include <sstream>
 #include <cstring>
 #include <mutex>
+#include <cstdarg>
 
 // 检查是否启用了 hiredis
 #ifdef APOLLO_HAS_HIREDIS
@@ -23,7 +24,7 @@ namespace redis {
 // 类型转换
 //==============================================================================
 
-static const char* redisTypeToString(RedisType type) {
+[[maybe_unused]] static const char* redisTypeToString(RedisType type) {
     switch (type) {
         case RedisType::String: return "string";
         case RedisType::List: return "list";
@@ -39,25 +40,9 @@ static const char* redisTypeToString(RedisType type) {
 // RedisLock 实现
 //==============================================================================
 
-class RedisTemplate::Lock::Impl {
-public:
-    Impl(RedisTemplate* redis, const std::string& key,
-         const std::string& value, uint64_t ttlMs)
-        : redis_(redis), key_(key), value_(value), ttlMs_(ttlMs), acquired_(false) {}
-    ~Impl() = default;
-
-    RedisTemplate* redis_;
-    std::string key_;
-    std::string value_;
-    uint64_t ttlMs_;
-    bool acquired_;
-};
-
 RedisTemplate::Lock::Lock(RedisTemplate* redis, const std::string& key,
                           const std::string& value, uint64_t ttlMs)
-    : impl_(new Impl(redis, key, value, ttlMs)),
-      redis_(redis), key_(key), value_(value), ttlMs_(ttlMs),
-      acquired_(false) {
+    : redis_(redis), key_(key), value_(value), ttlMs_(ttlMs), acquired_(false) {
 
     // 尝试获取锁 (SET key value NX PX ttlMs)
     acquired_ = redis_->setNx(key, value);
@@ -167,14 +152,14 @@ public:
         if (context_) {
             redisFree(context_);
             context_ = nullptr;
-        }
+    }
 #endif
         connected_ = false;
         inTransaction_ = false;
         inPipeline_ = false;
     }
 
-    bool isConnected() const { return connected_; && context_; }
+    bool isConnected() const { return connected_ && context_ != nullptr; }
 
     bool ping() {
         return executeCommand("PING").ok;
@@ -450,6 +435,8 @@ public:
     RedisResponse eval(const std::string& script,
                       const std::vector<std::string>& keys,
                       const std::vector<std::string>& args) {
+        (void)keys;
+        (void)args;
 
         std::string cmd = "EVAL " + script;
         // 简化实现
@@ -458,9 +445,9 @@ public:
 
     std::string getLastError() const { return lastError_; }
 
-private:
-    RedisResponse executeCommand(const char* format, ...) {
-        RedisResponse response;
+	public:
+	    RedisResponse executeCommand(const char* format, ...) {
+	        RedisResponse response;
 #ifdef APOLLO_HAS_HIREDIS
         if (!context_) {
             response.error = "Not connected";
@@ -475,22 +462,28 @@ private:
 
         response = parseReply(reply);
         if (reply) freeReplyObject(reply);
+#else
+        (void)format;
+        response.error = "hiredis not available";
 #endif
         return response;
     }
 
-    RedisResponse executeCommandRaw(const std::string& cmd) {
+	    RedisResponse executeCommandRaw(const std::string& cmd) {
         RedisResponse response;
 #ifdef APOLLO_HAS_HIREDIS
         if (!context_) {
             response.error = "Not connected";
             return response;
-        }
+	}
 
         redisReply* reply = reinterpret_cast<redisReply*>(
             redisCommand(context_, cmd.c_str()));
         response = parseReply(reply);
         if (reply) freeReplyObject(reply);
+#else
+        (void)cmd;
+        response.error = "hiredis not available";
 #endif
         return response;
     }
@@ -737,7 +730,7 @@ std::vector<std::string> RedisTemplate::zRange(const std::string& key, int64_t s
 
 std::vector<std::string> RedisTemplate::zRevRange(const std::string& key, int64_t start,
                                                   int64_t stop, bool withScores) {
-    auto arr = impl_->zRange(key, 0, -1, withScores);
+    auto arr = impl_->zRange(key, start, stop, withScores);
     std::reverse(arr.begin(), arr.end());
     return arr;
 }
@@ -755,17 +748,23 @@ int64_t RedisTemplate::zCard(const std::string& key) {
 }
 
 int64_t RedisTemplate::zCount(const std::string& key, double min, double max) {
+    (void)min;
+    (void)max;
     return impl_->zCard(key);  // 简化实现
 }
 
 std::vector<std::string> RedisTemplate::zRangeByScore(const std::string& key, double min,
                                                        double max, bool withScores) {
+    (void)min;
+    (void)max;
     // 简化实现
     return zRange(key, 0, -1, withScores);
 }
 
 std::vector<std::string> RedisTemplate::zRevRangeByScore(const std::string& key, double min,
                                                           double max, bool withScores) {
+    (void)min;
+    (void)max;
     // 简化实现
     return zRevRange(key, 0, -1, withScores);
 }
@@ -844,11 +843,13 @@ std::string RedisTemplate::rPop(const std::string& key) {
 }
 
 std::string RedisTemplate::bLPop(const std::string& key, uint64_t timeoutMs) {
+    (void)timeoutMs;
     // 简化实现，非阻塞
     return impl_->lPop(key);
 }
 
 std::string RedisTemplate::bRPop(const std::string& key, uint64_t timeoutMs) {
+    (void)timeoutMs;
     return impl_->rPop(key);
 }
 
@@ -867,11 +868,17 @@ std::vector<std::string> RedisTemplate::lRange(const std::string& key, int64_t s
 }
 
 bool RedisTemplate::lTrim(const std::string& key, int64_t start, int64_t stop) {
+    (void)key;
+    (void)start;
+    (void)stop;
     // 简化实现
     return true;
 }
 
 bool RedisTemplate::lSet(const std::string& key, int64_t index, const std::string& value) {
+    (void)key;
+    (void)index;
+    (void)value;
     // 简化实现
     return true;
 }
@@ -919,6 +926,7 @@ std::string RedisTemplate::sRandMember(const std::string& key) {
 }
 
 std::vector<std::string> RedisTemplate::sRandMember(const std::string& key, int64_t count) {
+    (void)count;
     auto members = impl_->sMembers(key);
     // 简化实现
     return members;
@@ -937,14 +945,17 @@ std::vector<std::string> RedisTemplate::sPop(const std::string& key, int64_t cou
 }
 
 std::vector<std::string> RedisTemplate::sInter(const std::vector<std::string>& keys) {
+    (void)keys;
     return {};  // 简化实现
 }
 
 std::vector<std::string> RedisTemplate::sUnion(const std::vector<std::string>& keys) {
+    (void)keys;
     return {};  // 简化实现
 }
 
 std::vector<std::string> RedisTemplate::sDiff(const std::vector<std::string>& keys) {
+    (void)keys;
     return {};  // 简化实现
 }
 
@@ -1041,14 +1052,19 @@ int64_t RedisTemplate::publish(const std::string& channel, const std::string& me
 }
 
 void RedisTemplate::subscribe(const std::string& channel, SubscribeCallback callback) {
+    (void)channel;
+    (void)callback;
     // 订阅需要单独的连接
 }
 
 void RedisTemplate::unsubscribe(const std::string& channel) {
+    (void)channel;
     // 取消订阅
 }
 
 void RedisTemplate::pSubscribe(const std::string& pattern, SubscribeCallback callback) {
+    (void)pattern;
+    (void)callback;
     // 模式订阅
 }
 
@@ -1072,14 +1088,17 @@ std::string RedisTemplate::scriptLoad(const std::string& script) {
 
 // 其他方法 (存根实现)
 std::vector<std::string> RedisTemplate::mGet(const std::vector<std::string>& keys) {
+    (void)keys;
     return {};
 }
 
 bool RedisTemplate::mSet(const std::map<std::string, std::string>& keyValuePairs) {
+    (void)keyValuePairs;
     return false;
 }
 
 int64_t RedisTemplate::count(const std::vector<std::string>& keys) {
+    (void)keys;
     return 0;
 }
 
@@ -1123,6 +1142,8 @@ std::vector<std::string> RedisTemplate::keys(const std::string& pattern) {
 
 std::vector<std::string> RedisTemplate::scan(const std::string& pattern, uint64_t cursor,
                                               uint64_t& newCursor) {
+    (void)pattern;
+    (void)cursor;
     newCursor = 0;
     return {};
 }
@@ -1168,11 +1189,11 @@ std::vector<std::string> RedisTemplate::hVals(const std::string& key) {
 void RedisTemplate::multi() {}
 std::vector<RedisResponse> RedisTemplate::exec() { return {}; }
 void RedisTemplate::discard() {}
-bool RedisTemplate::watch(const std::vector<std::string>& keys) { return true; }
+bool RedisTemplate::watch(const std::vector<std::string>& keys) { (void)keys; return true; }
 void RedisTemplate::unwatch() {}
 void RedisTemplate::pipelineEnable() {}
 std::vector<RedisResponse> RedisTemplate::pipelineExec() { return {}; }
-void RedisTemplate::pUnsubscribe(const std::string& pattern) {}
+void RedisTemplate::pUnsubscribe(const std::string& pattern) { (void)pattern; }
 
 int64_t RedisTemplate::strLen(const std::string& key) {
     auto resp = impl_->executeCommand("STRLEN %s", key.c_str());

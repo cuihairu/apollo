@@ -493,6 +493,7 @@ std::vector<std::string> SqlTemplate::getTableNames() {
 }
 
 std::vector<std::string> SqlTemplate::getColumnNames(const std::string& table) {
+    (void)table;
     // TODO: 查询列信息
     return {};
 }

@@ -55,7 +55,7 @@ struct SocketInfo {
 
 class EventLoop::Impl {
 public:
-    Impl() : running_(false), wakeupFd_(-1), nextTimerId_(1) {
+    explicit Impl(EventLoop& outer) : outer_(outer), running_(false), nextTimerId_(1) {
 #ifdef _WIN32
         // Windows 使用管道进行唤醒
         SECURITY_ATTRIBUTES sa = {sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
@@ -82,6 +82,10 @@ public:
     bool init(const EventLoopConfig& config) {
         config_ = config;
         return true;
+    }
+
+    bool isRunning() const {
+        return running_.load();
     }
 
     bool run() {
@@ -388,9 +392,7 @@ private:
 // EventLoop 实现
 //==============================================================================
 
-EventLoop::EventLoop() : impl_(new Impl()) {
-    impl_->outer_ = *this;
-}
+EventLoop::EventLoop() : impl_(new Impl(*this)) {}
 
 EventLoop::~EventLoop() {
     stop();
@@ -407,7 +409,7 @@ bool EventLoop::run() {
 }
 
 bool EventLoop::runInThread() {
-    if (impl_->running_) return false;
+    if (impl_->isRunning()) return false;
 
     eventThread_ = std::thread([this]() {
         impl_->loopThreadId_ = std::this_thread::get_id();
@@ -426,6 +428,10 @@ void EventLoop::stop() {
 
 void EventLoop::wakeup() {
     impl_->wakeup();
+}
+
+bool EventLoop::isRunning() const {
+    return impl_ && impl_->isRunning();
 }
 
 bool EventLoop::addSocket(socket_t sockfd, EventType events, SocketCallback callback) {
@@ -481,7 +487,7 @@ void EventLoop::resetStats() {
 //==============================================================================
 
 HeartbeatManager::HeartbeatManager(EventLoop* loop)
-    : loop_(loop), nextTimerId_(1) {
+    : loop_(loop) {
 
     // 启动定时检查
     checkTimerId_ = loop_->addPeriodicTimer(1000, [this]() {
@@ -530,14 +536,15 @@ void HeartbeatManager::onCheckTimer() {
         for (auto& [sockfd, info] : heartbeats_) {
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now - info.lastBeat).count();
+            const uint64_t elapsedMs = static_cast<uint64_t>(elapsed);
 
             // 发送心跳
-            if (elapsed >= info.intervalMs && info.heartbeatCallback) {
+            if (elapsedMs >= info.intervalMs && info.heartbeatCallback) {
                 info.heartbeatCallback(sockfd);
             }
 
             // 检查超时 (3倍心跳间隔)
-            if (elapsed >= info.intervalMs * 3) {
+            if (elapsedMs >= info.intervalMs * 3) {
                 timedOut.push_back(sockfd);
             }
         }

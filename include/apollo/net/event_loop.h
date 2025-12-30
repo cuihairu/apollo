@@ -43,6 +43,11 @@ inline EventType operator&(EventType a, EventType b) {
     return static_cast<EventType>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
 }
 
+inline EventType& operator|=(EventType& a, EventType b) {
+    a = a | b;
+    return a;
+}
+
 inline bool HasEvent(EventType events, EventType flag) {
     return (static_cast<uint32_t>(events) & static_cast<uint32_t>(flag)) != 0;
 }
@@ -159,7 +164,7 @@ public:
     void wakeup();
 
     // 是否运行中
-    bool isRunning() const { return running_; }
+    bool isRunning() const;
 
     // 在事件循环线程中执行任务
     using Task = std::function<void()>;
@@ -215,6 +220,7 @@ private:
     // 实现
     class Impl;
     Impl* impl_;
+    std::thread eventThread_;
 };
 
 //==============================================================================
@@ -256,7 +262,6 @@ private:
     std::unordered_map<socket_t, HeartbeatInfo> heartbeats_;
     std::mutex mutex_;
     TimerId checkTimerId_;
-    uint64_t nextTimerId_;
 
     void onCheckTimer();
 };

@@ -9,6 +9,7 @@
 #include <sstream>
 #include <random>
 #include <array>
+#include <openssl/evp.h>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -146,9 +147,22 @@ std::string Hash::md5(const void* data, size_t size) {
 }
 
 std::string Hash::sha256(const void* data, size_t size) {
-    detail::SHA256 sha256;
-    sha256.update(data, size);
-    return sha256.finish();
+    uint8_t digest[32];
+    unsigned int digestLen = 0;
+
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        return {};
+    }
+
+    bool ok = EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) == 1 &&
+              EVP_DigestUpdate(ctx, data, size) == 1 &&
+              EVP_DigestFinal_ex(ctx, digest, &digestLen) == 1 &&
+              digestLen == sizeof(digest);
+
+    EVP_MD_CTX_free(ctx);
+
+    return ok ? Hash::toHexString(digest, sizeof(digest)) : std::string();
 }
 
 std::string Hash::sha1(const void* data, size_t size) {
@@ -642,39 +656,72 @@ std::string HMAC::sha1(const std::string& key, const void* data, size_t size) {
 }
 
 std::string HMAC::sha256(const std::string& key, const void* data, size_t size) {
-    // 简化的 HMAC 实现
-    std::string actualKey = key;
+    // HMAC-SHA256 per RFC 2104 / FIPS 198-1
+    std::array<uint8_t, 64> keyBlock{};
+    if (key.size() > keyBlock.size()) {
+        uint8_t digest[32];
+        unsigned int digestLen = 0;
 
-    // 密钥长度调整
-    if (actualKey.size() > 64) {
-        actualKey = Hash::sha256(actualKey);
+        EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+        if (!ctx) {
+            return {};
+        }
+
+        bool ok = EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) == 1 &&
+                  EVP_DigestUpdate(ctx, key.data(), key.size()) == 1 &&
+                  EVP_DigestFinal_ex(ctx, digest, &digestLen) == 1 &&
+                  digestLen == sizeof(digest);
+
+        EVP_MD_CTX_free(ctx);
+
+        if (!ok) {
+            return {};
+        }
+
+        std::memcpy(keyBlock.data(), digest, sizeof(digest));
+    } else {
+        std::memcpy(keyBlock.data(), key.data(), key.size());
     }
 
-    // 填充密钥
-    while (actualKey.size() < 64) {
-        actualKey += '\0';
+    std::array<uint8_t, 64> innerPad{};
+    std::array<uint8_t, 64> outerPad{};
+    innerPad.fill(0x36);
+    outerPad.fill(0x5c);
+    for (size_t i = 0; i < keyBlock.size(); ++i) {
+        innerPad[i] ^= keyBlock[i];
+        outerPad[i] ^= keyBlock[i];
     }
 
-    // 内外填充
-    std::string innerPad(64, 0x36);
-    std::string outerPad(64, 0x5C);
-
-    for (size_t i = 0; i < 64; ++i) {
-        innerPad[i] ^= actualKey[i];
-        outerPad[i] ^= actualKey[i];
+    uint8_t innerDigest[32];
+    unsigned int innerLen = 0;
+    EVP_MD_CTX* inner = EVP_MD_CTX_new();
+    if (!inner) {
+        return {};
+    }
+    bool innerOk = EVP_DigestInit_ex(inner, EVP_sha256(), nullptr) == 1 &&
+                   EVP_DigestUpdate(inner, innerPad.data(), innerPad.size()) == 1 &&
+                   EVP_DigestUpdate(inner, data, size) == 1 &&
+                   EVP_DigestFinal_ex(inner, innerDigest, &innerLen) == 1 &&
+                   innerLen == sizeof(innerDigest);
+    EVP_MD_CTX_free(inner);
+    if (!innerOk) {
+        return {};
     }
 
-    // 内层哈希
-    detail::SHA256 innerHash;
-    innerHash.update(innerPad.data(), innerPad.size());
-    innerHash.update(data, size);
-    std::string innerResult = innerHash.finish();
+    uint8_t outDigest[32];
+    unsigned int outLen = 0;
+    EVP_MD_CTX* outer = EVP_MD_CTX_new();
+    if (!outer) {
+        return {};
+    }
+    bool outerOk = EVP_DigestInit_ex(outer, EVP_sha256(), nullptr) == 1 &&
+                   EVP_DigestUpdate(outer, outerPad.data(), outerPad.size()) == 1 &&
+                   EVP_DigestUpdate(outer, innerDigest, sizeof(innerDigest)) == 1 &&
+                   EVP_DigestFinal_ex(outer, outDigest, &outLen) == 1 &&
+                   outLen == sizeof(outDigest);
+    EVP_MD_CTX_free(outer);
 
-    // 外层哈希
-    detail::SHA256 outerHash;
-    outerHash.update(outerPad.data(), outerPad.size());
-    outerHash.update(innerResult.data(), innerResult.size());
-    return outerHash.finish();
+    return outerOk ? Hash::toHexString(outDigest, sizeof(outDigest)) : std::string();
 }
 
 //==============================================================================

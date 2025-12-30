@@ -4,6 +4,12 @@
  */
 
 #include "apollo/actor/message.h"
+#include <cstdint>
+#include <cstring>
+#include <unordered_map>
+#include <type_traits>
+#include <stdexcept>
+#include <cstdio>
 #include <sstream>
 #include <algorithm>
 
@@ -14,32 +20,64 @@ namespace actor {
 // Message 实现
 //==============================================================================
 
+namespace {
+
+#pragma pack(push, 1)
+struct MessageWireHeader {
+    uint32_t magic;
+    uint32_t version;
+    uint32_t length;
+    uint32_t typeHash;
+    uint8_t format;
+    uint8_t reserved[7];
+};
+#pragma pack(pop)
+
+static constexpr uint32_t MESSAGE_MAGIC = 0x41435452;        // "ACTR"
+static constexpr uint32_t MESSAGE_VERSION = 1;
+
+} // namespace
+
 std::vector<uint8_t> Message::toBytes() const {
-    NetworkMessage netMsg;
-    netMsg.header.magic = MessageHeader::MAGIC;
-    netMsg.header.version = MessageHeader::CURRENT_VERSION;
-    netMsg.header.length = static_cast<uint32_t>(data_.size());
-    netMsg.header.format = static_cast<uint8_t>(format_);
-    netMsg.header.typeHash = std::hash<std::string>{}(type_.name);
+    MessageWireHeader header{};
+    header.magic = MESSAGE_MAGIC;
+    header.version = MESSAGE_VERSION;
+    header.length = static_cast<uint32_t>(data_.size());
+    header.format = static_cast<uint8_t>(format_);
+    header.typeHash = std::hash<std::string>{}(type_.name);
 
-    netMsg.body = data_;
-
-    return netMsg.toBytes();
+    std::vector<uint8_t> out(sizeof(MessageWireHeader) + data_.size());
+    std::memcpy(out.data(), &header, sizeof(header));
+    if (!data_.empty()) {
+        std::memcpy(out.data() + sizeof(MessageWireHeader), data_.data(), data_.size());
+    }
+    return out;
 }
 
 Message Message::fromBytes(const std::vector<uint8_t>& bytes) {
-    NetworkMessage netMsg = NetworkMessage::fromBytes(bytes);
+    if (bytes.size() < sizeof(MessageWireHeader)) {
+        return Message{};
+    }
 
-    if (!netMsg.isValid()) {
+    MessageWireHeader header{};
+    std::memcpy(&header, bytes.data(), sizeof(header));
+    if (header.magic != MESSAGE_MAGIC || header.version != MESSAGE_VERSION) {
+        return Message{};
+    }
+    if (bytes.size() != sizeof(MessageWireHeader) + header.length) {
         return Message{};
     }
 
     Message msg;
-    msg.format_ = static_cast<MessageFormat>(netMsg.header.format);
-    msg.data_ = netMsg.body;
+    msg.format_ = static_cast<MessageFormat>(header.format);
+    if (header.length > 0) {
+        msg.data_.assign(bytes.begin() + sizeof(MessageWireHeader), bytes.end());
+    }
 
     // TODO: 根据 typeHash 查找类型
     msg.type_.name = "";  // 需要类型注册表
+    msg.type_.hash = header.typeHash;
+    msg.type_.format = msg.format_;
 
     return msg;
 }
@@ -230,6 +268,7 @@ std::string toJson(const T& value) {
 // 快捷函数：从 JSON 解析
 template<typename T>
 T fromJson(const std::string& json) {
+    (void)json;
     T result;
     // TODO: 完整 JSON 解析
     return result;

@@ -6,7 +6,11 @@
 #include <functional>
 #include <memory>
 #include <chrono>
-#include <vector>
+#include <mutex>
+#include <shared_mutex>
+#include <atomic>
+#include <unordered_map>
+#include <random>
 
 namespace apollo {
 namespace ipc {
@@ -316,7 +320,7 @@ public:
     void increment(const std::string& id);
     void decrement(const std::string& id);
 
-    LoadBalancerStrategy getStrategy() const override { return LoadBalanceStrategy::LeastConnection; }
+    LoadBalanceStrategy getStrategy() const override { return LoadBalanceStrategy::LeastConnection; }
 
 private:
     struct EndpointWithConn {

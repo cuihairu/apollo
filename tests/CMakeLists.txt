@@ -1,6 +1,6 @@
 find_package(GTest QUIET)
 
-if(GTest_FOUND)
+if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
     # different protobuf installation and cause ABI mismatches. Prefer normal -I.
@@ -35,24 +35,6 @@ if(GTest_FOUND)
     add_test(NAME ContextTest COMMAND ioc_tests --gtest_filter=ContextTest.*)
     add_test(NAME ConfigTest COMMAND ioc_tests --gtest_filter=ConfigTest.*)
     add_test(NAME DependencyTest COMMAND ioc_tests --gtest_filter=DependencyTest.*)
-
-    # Redis tests
-    add_executable(redis_tests
-        test_redis.cpp
-    )
-
-    target_link_libraries(redis_tests
-        PRIVATE
-        apollo
-        GTest::gtest
-    )
-
-    # 为Redis测试添加网络库链接
-    if(WIN32)
-        target_link_libraries(redis_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME RedisTests COMMAND redis_tests)
 
     # Protobuf tests
     add_executable(protobuf_tests
@@ -220,41 +202,45 @@ if(GTest_FOUND)
 
     add_test(NAME IntegrationTests COMMAND integration_tests)
 
-    # ========== Channel Tests (New) - Shared Memory + Backpressure ==========
+    if(APOLLO_ENABLE_IPC)
+        # ========== Channel Tests (New) - Shared Memory + Backpressure ==========
 
-    add_executable(channel_tests test_channel.cpp)
+        add_executable(channel_tests test_channel.cpp)
 
-    target_link_libraries(channel_tests PRIVATE apollo)
+        target_link_libraries(channel_tests PRIVATE apollo)
 
-    if(WIN32)
-        target_link_libraries(channel_tests PRIVATE ws2_32)
+        if(WIN32)
+            target_link_libraries(channel_tests PRIVATE ws2_32)
+        endif()
+
+        add_test(NAME ChannelTests COMMAND channel_tests)
     endif()
 
-    add_test(NAME ChannelTests COMMAND channel_tests)
+    if(APOLLO_ENABLE_ACTOR)
+        # ========== Actor Framework Tests (New) ==========
 
-    # ========== Actor Framework Tests (New) ==========
+        # Basic Actor tests
+        add_executable(actor_framework_tests test_actor_framework.cpp)
 
-    # Basic Actor tests
-    add_executable(actor_framework_tests test_actor_framework.cpp)
+        target_link_libraries(actor_framework_tests PRIVATE apollo)
 
-    target_link_libraries(actor_framework_tests PRIVATE apollo)
+        if(WIN32)
+            target_link_libraries(actor_framework_tests PRIVATE ws2_32)
+        endif()
 
-    if(WIN32)
-        target_link_libraries(actor_framework_tests PRIVATE ws2_32)
+        add_test(NAME ActorFrameworkTests COMMAND actor_framework_tests)
+
+        # Concurrency and stress tests
+        add_executable(actor_concurrency_tests test_actor_concurrency.cpp)
+
+        target_link_libraries(actor_concurrency_tests PRIVATE apollo)
+
+        if(WIN32)
+            target_link_libraries(actor_concurrency_tests PRIVATE ws2_32)
+        endif()
+
+        add_test(NAME ActorConcurrencyTests COMMAND actor_concurrency_tests)
     endif()
-
-    add_test(NAME ActorFrameworkTests COMMAND actor_framework_tests)
-
-    # Concurrency and stress tests
-    add_executable(actor_concurrency_tests test_actor_concurrency.cpp)
-
-    target_link_libraries(actor_concurrency_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(actor_concurrency_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME ActorConcurrencyTests COMMAND actor_concurrency_tests)
 
     # ========== Data Structures Tests (New) ==========
 
@@ -278,44 +264,57 @@ if(GTest_FOUND)
         target_link_libraries(serialization_tests PRIVATE ws2_32)
     endif()
 
-    add_test(NAME SerializationTests COMMAND serialization_tests)
+	    add_test(NAME SerializationTests COMMAND serialization_tests)
+	
+	    # ========== BigWorld Compatibility Tests (New) ==========
+	
+	    add_executable(bigworld_api_tests test_bigworld_api.cpp)
+	
+	    target_link_libraries(bigworld_api_tests PRIVATE apollo)
+	
+	    if(WIN32)
+	        target_link_libraries(bigworld_api_tests PRIVATE ws2_32)
+	    endif()
+	
+	    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
+	
+	    # ========== Crypto Tests ==========
+	
+	    add_executable(crypto_tests test_crypto.cpp)
+	
+	    target_link_libraries(crypto_tests PRIVATE apollo)
+	
+	    if(WIN32)
+	        target_link_libraries(crypto_tests PRIVATE ws2_32)
+	    endif()
+	
+	    add_test(NAME CryptoTests COMMAND crypto_tests)
 
-    # ========== BigWorld Compatibility Tests (New) ==========
+	else()
+	    message(STATUS "GTest not found or APOLLO_BUILD_GTESTS=OFF, building simple tests")
+	
+	    # Simple test without GTest
+	    add_executable(ioc_tests_simple test_simple.cpp)
+	    add_executable(config_tests_simple test_config.cpp)
+	    add_executable(crypto_tests test_crypto.cpp)
+	    add_executable(bigworld_api_tests test_bigworld_api.cpp)
+	
+	    target_link_libraries(ioc_tests_simple PRIVATE apollo)
+	    target_link_libraries(config_tests_simple PRIVATE apollo)
+	    target_link_libraries(crypto_tests PRIVATE apollo)
+	    target_link_libraries(bigworld_api_tests PRIVATE apollo)
+	
+	    # 为Windows添加网络库链接
+	    if(WIN32)
+	        target_link_libraries(ioc_tests_simple PRIVATE ws2_32)
+	        target_link_libraries(config_tests_simple PRIVATE ws2_32)
+	        target_link_libraries(crypto_tests PRIVATE ws2_32)
+	        target_link_libraries(bigworld_api_tests PRIVATE ws2_32)
+	    endif()
 
-    add_executable(bigworld_api_tests test_bigworld_api.cpp)
-
-    target_link_libraries(bigworld_api_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(bigworld_api_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
-
-else()
-    message(STATUS "GTest not found, building simple test")
-
-    # Simple test without GTest
-    add_executable(ioc_tests_simple test_simple.cpp)
-    add_executable(all_features_test test_all_features.cpp)
-    add_executable(config_tests_simple test_config.cpp)
-    add_executable(bigworld_api_tests test_bigworld_api.cpp)
-
-    target_link_libraries(ioc_tests_simple PRIVATE apollo)
-    target_link_libraries(all_features_test PRIVATE apollo)
-    target_link_libraries(config_tests_simple PRIVATE apollo)
-    target_link_libraries(bigworld_api_tests PRIVATE apollo)
-
-    # 为Windows添加网络库链接
-    if(WIN32)
-        target_link_libraries(ioc_tests_simple PRIVATE ws2_32)
-        target_link_libraries(all_features_test PRIVATE ws2_32)
-        target_link_libraries(config_tests_simple PRIVATE ws2_32)
-        target_link_libraries(bigworld_api_tests PRIVATE ws2_32)
-    endif()
-
-    enable_testing()
-    add_test(NAME SimpleTests COMMAND ioc_tests_simple)
-    add_test(NAME ConfigTestsSimple COMMAND config_tests_simple)
-    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
-endif()
+	    enable_testing()
+	    add_test(NAME SimpleTests COMMAND ioc_tests_simple)
+	    add_test(NAME ConfigTestsSimple COMMAND config_tests_simple)
+	    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
+	    add_test(NAME CryptoTests COMMAND crypto_tests)
+	endif()

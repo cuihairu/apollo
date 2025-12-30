@@ -8,9 +8,13 @@
 #include <optional>
 #include <variant>
 #include <iterator>
+#include <string_view>
+#include <type_traits>
 
 namespace apollo {
 namespace database {
+
+class IDatabaseConnection;
 
 //==============================================================================
 // 数据库类型
@@ -81,9 +85,9 @@ public:
         template<typename T>
         T get(const std::string& name) const;
 
-        int getInt(size_t index) const { return std::stoi(get<std::string>(index)); }
-        int64_t getInt64(size_t index) const { return std::stoll(get<std::string>(index)); }
-        double getDouble(size_t index) const { return std::stod(get<std::string>(index)); }
+        int getInt(size_t index) const { return index < values.size() ? std::stoi(values[index]) : 0; }
+        int64_t getInt64(size_t index) const { return index < values.size() ? std::stoll(values[index]) : 0; }
+        double getDouble(size_t index) const { return index < values.size() ? std::stod(values[index]) : 0.0; }
     };
 
     ResultSet(std::vector<std::vector<std::string>> rows,

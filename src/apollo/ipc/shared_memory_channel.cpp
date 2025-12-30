@@ -90,7 +90,7 @@ bool SharedMemoryRingBuffer::create() {
     // 设置大小
     if (ftruncate(fd_, totalSize_) < 0) {
         std::cerr << "Failed to set size: " << strerror(errno) << "\n";
-        close(fd_);
+        ::close(fd_);
         fd_ = -1;
         return false;
     }
@@ -99,7 +99,7 @@ bool SharedMemoryRingBuffer::create() {
     void* ptr = mmap(nullptr, totalSize_, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
     if (ptr == MAP_FAILED) {
         std::cerr << "Failed to mmap: " << strerror(errno) << "\n";
-        close(fd_);
+        ::close(fd_);
         fd_ = -1;
         return false;
     }
@@ -160,7 +160,7 @@ bool SharedMemoryRingBuffer::open() {
 
     void* ptr = mmap(nullptr, totalSize_, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
     if (ptr == MAP_FAILED) {
-        close(fd_);
+        ::close(fd_);
         fd_ = -1;
         return false;
     }
@@ -169,7 +169,7 @@ bool SharedMemoryRingBuffer::open() {
     if (header_->magic != SHM_MAGIC) {
         std::cerr << "Invalid shared memory magic\n";
         munmap(ptr, totalSize_);
-        close(fd_);
+        ::close(fd_);
         fd_ = -1;
         return false;
     }
@@ -199,7 +199,7 @@ void SharedMemoryRingBuffer::close() {
     }
 #else
     if (fd_ >= 0) {
-        close(fd_);
+        ::close(fd_);
         fd_ = -1;
     }
 

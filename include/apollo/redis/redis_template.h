@@ -379,6 +379,9 @@ public:
     // PSUBSCRIBE (模式订阅)
     void pSubscribe(const std::string& pattern, SubscribeCallback callback);
 
+    // PUNSUBSCRIBE
+    void pUnsubscribe(const std::string& pattern);
+
     //==========================================================================
     // 脚本 (Lua)
     //==========================================================================

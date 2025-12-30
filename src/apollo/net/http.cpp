@@ -774,6 +774,7 @@ private:
 
 // 快速创建 HTTP GET 请求
 inline Response httpGet(const std::string& url, uint32_t timeoutMs) {
+    (void)url;
     // 简化 URL 解析: http://host:port/path
     std::string host = "localhost";
     uint16_t port = 80;
@@ -794,6 +795,7 @@ inline Response httpGet(const std::string& url, uint32_t timeoutMs) {
 inline Response httpPost(const std::string& url, const std::string& body,
                          const std::string& contentType = "application/json",
                          uint32_t timeoutMs = 5000) {
+    (void)url;
     std::string host = "localhost";
     uint16_t port = 80;
     std::string path = "/";

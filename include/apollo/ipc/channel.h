@@ -14,7 +14,7 @@ namespace apollo {
 namespace ipc {
 
 //==============================================================================
-// Ç°ÏòÉùÃ÷
+// å‰å‘å£°æ˜
 //==============================================================================
 
 class ITransport;
@@ -22,42 +22,42 @@ class Channel;
 struct ChannelConfig;
 
 //==============================================================================
-// ±³Ñ¹²ßÂÔ
+// èƒŒå‹ç­–ç•¥
 //==============================================================================
 
 enum class BackpressureStrategy : uint8_t {
-    Drop,       // ¶ªÆúĞÂÏûÏ¢
-    Buffer,     // »º³åËùÓĞÏûÏ¢
-    Block,      // ×èÈû·¢ËÍÕß
-    Fail,       // ·µ»ØÊ§°Ü
-    Signal      // ´¥·¢ĞÅºÅ
+    Drop,       // ä¸¢å¼ƒæ–°æ¶ˆæ¯
+    Buffer,     // ç¼“å†²æ‰€æœ‰æ¶ˆæ¯
+    Block,      // é˜»å¡å‘é€è€…
+    Fail,       // è¿”å›å¤±è´¥
+    Signal      // è§¦å‘ä¿¡å·
 };
 
 //==============================================================================
-// ±³Ñ¹ÅäÖÃ - Ö§³ÖË«ÖØË®Î»Ïß£¨ÏûÏ¢ÊıÁ¿ + ×Ö½Ú´óĞ¡£©
+// èƒŒå‹é…ç½® - æ”¯æŒåŒé‡æ°´ä½çº¿ï¼ˆæ¶ˆæ¯æ•°é‡ + å­—èŠ‚å¤§å°ï¼‰
 //==============================================================================
 
 struct BackpressureConfig {
     BackpressureStrategy strategy = BackpressureStrategy::Buffer;
     
-    // ĞÂÔö£º»ùÓÚÏûÏ¢ÊıÁ¿µÄË®Î»Ïß£¨ÀàËÆ Go Channel£©
-    size_t lowMessageCount = 32;       // µÍË®Î»£º32ÌõÏûÏ¢
-    size_t highMessageCount = 128;     // ¸ßË®Î»£º128ÌõÏûÏ¢
-    size_t maxMessageCount = 256;      // ×î´óÏûÏ¢Êı
+    // æ–°å¢ï¼šåŸºäºæ¶ˆæ¯æ•°é‡çš„æ°´ä½çº¿ï¼ˆç±»ä¼¼ Go Channelï¼‰
+    size_t lowMessageCount = 32;       // ä½æ°´ä½ï¼š32æ¡æ¶ˆæ¯
+    size_t highMessageCount = 128;     // é«˜æ°´ä½ï¼š128æ¡æ¶ˆæ¯
+    size_t maxMessageCount = 256;      // æœ€å¤§æ¶ˆæ¯æ•°
     
-    // ĞÂÔö£º»ùÓÚ×Ö½Ú´óĞ¡µÄË®Î»Ïß£¨·ÀÖ¹ OOM£©
-    size_t lowByteCount = 32 * 1024;   // µÍË®Î»£º32KB
-    size_t highByteCount = 128 * 1024; // ¸ßË®Î»£º128KB
-    size_t maxByteCount = 256 * 1024;  // ×î´ó×Ö½ÚÊı
+    // æ–°å¢ï¼šåŸºäºå­—èŠ‚å¤§å°çš„æ°´ä½çº¿ï¼ˆé˜²æ­¢ OOMï¼‰
+    size_t lowByteCount = 32 * 1024;   // ä½æ°´ä½ï¼š32KB
+    size_t highByteCount = 128 * 1024; // é«˜æ°´ä½ï¼š128KB
+    size_t maxByteCount = 256 * 1024;  // æœ€å¤§å­—èŠ‚æ•°
     
-    // ×èÈûÅäÖÃ
+    // é˜»å¡é…ç½®
     uint32_t blockTimeoutMs = 30000;
     
-    // »Øµ÷
+    // å›è°ƒ
     std::function<void()> onHighWatermark;
     std::function<void()> onLowWatermark;
     
-    // ¼æÈİ¾É°æ±¾£ºÒÑÆúÓÃµÄ×Ö¶Î
+    // å…¼å®¹æ—§ç‰ˆæœ¬ï¼šå·²å¼ƒç”¨çš„å­—æ®µ
     [[deprecated("Use lowMessageCount and lowByteCount instead")]]
     size_t lowWatermark = 32 * 1024;
     
@@ -68,7 +68,7 @@ struct BackpressureConfig {
     size_t bufferSize = 256 * 1024;
 };
 //==============================================================================
-// ±³Ñ¹¹ÜÀíÆ÷ - Ë«ÖØË®Î»ÏßÊµÏÖ
+// èƒŒå‹ç®¡ç†å™¨ - åŒé‡æ°´ä½çº¿å®ç°
 //==============================================================================
 
 class BackpressureManager {
@@ -76,30 +76,30 @@ public:
     explicit BackpressureManager(const BackpressureConfig& config);
     ~BackpressureManager() = default;
     
-    // ÅäÖÃ
+    // é…ç½®
     const BackpressureConfig& getConfig() const { return config_; }
     void setConfig(const BackpressureConfig& config) { config_ = config; }
     
-    // ĞÂÔö£ºÏûÏ¢ÊıÁ¿×·×Ù
+    // æ–°å¢ï¼šæ¶ˆæ¯æ•°é‡è¿½è¸ª
     void addMessage(size_t messageSize);
     void removeMessage(size_t messageSize);
     size_t getPendingCount() const { return pendingCount_.load(std::memory_order_acquire); }
     size_t getPendingSize() const { return pendingSize_.load(std::memory_order_acquire); }
     
-    // Ë®Î»ÏßÅĞ¶Ï - Ë«ÖØÌõ¼ş
+    // æ°´ä½çº¿åˆ¤æ–­ - åŒé‡æ¡ä»¶
     bool isHighWatermark() const;
     bool isLowWatermark() const;
     
-    // ·¢ËÍ¼ì²é
+    // å‘é€æ£€æŸ¥
     bool canSend(size_t pendingSize) const;
     
-    // Ó¦ÓÃ±³Ñ¹²ßÂÔ
+    // åº”ç”¨èƒŒå‹ç­–ç•¥
     SendResult applyBackpressure(size_t messageSize);
     
-    // µÈ´ı¿ÉÓÃ¿Õ¼ä
+    // ç­‰å¾…å¯ç”¨ç©ºé—´
     bool waitForAvailable(size_t requiredSize, uint32_t timeoutMs);
     
-    // ÖØÖÃ
+    // é‡ç½®
     void reset();
     
 private:
@@ -107,10 +107,10 @@ private:
     
     BackpressureConfig config_;
     
-    // ĞÂÔö£ºÏûÏ¢ÊıÁ¿¼ÆÊıÆ÷
+    // æ–°å¢ï¼šæ¶ˆæ¯æ•°é‡è®¡æ•°å™¨
     std::atomic<size_t> pendingCount_{0};
     
-    // Ô­ÓĞ£º×Ö½Ú´óĞ¡¼ÆÊıÆ÷
+    // åŸæœ‰ï¼šå­—èŠ‚å¤§å°è®¡æ•°å™¨
     std::atomic<size_t> pendingSize_{0};
     
     std::atomic<bool> highWatermarkTriggered_{false};
@@ -118,17 +118,17 @@ private:
     std::condition_variable cv_;
 };
 //==============================================================================
-// ÖØÁ¬²ßÂÔ
+// é‡è¿ç­–ç•¥
 //==============================================================================
 
 enum class ReconnectStrategy : uint8_t {
-    FixedDelay,     // ¹Ì¶¨ÑÓ³Ù
-    ExponentialBackoff,  // Ö¸ÊıÍË±Ü
-    LinearBackoff   // ÏßĞÔÍË±Ü
+    FixedDelay,     // å›ºå®šå»¶è¿Ÿ
+    ExponentialBackoff,  // æŒ‡æ•°é€€é¿
+    LinearBackoff   // çº¿æ€§é€€é¿
 };
 
 //==============================================================================
-// ÖØÁ¬ÅäÖÃ
+// é‡è¿é…ç½®
 //==============================================================================
 
 struct ReconnectConfig {
@@ -136,27 +136,27 @@ struct ReconnectConfig {
     ReconnectStrategy strategy = ReconnectStrategy::ExponentialBackoff;
     uint32_t initialDelayMs = 1000;
     uint32_t maxDelayMs = 30000;
-    int maxRetries = -1;  // -1 ±íÊ¾ÎŞÏŞÖØÊÔ
+    int maxRetries = -1;  // -1 è¡¨ç¤ºæ— é™é‡è¯•
     uint32_t retryIntervalMs = 2000;
     
-    // ĞÄÌø¼ì²â
+    // å¿ƒè·³æ£€æµ‹
     bool enableHeartbeat = false;
     uint32_t heartbeatIntervalMs = 30000;
     uint32_t heartbeatTimeoutMs = 5000;
     
-    // ½¡¿µ¼ì²é
+    // å¥åº·æ£€æŸ¥
     bool enableHealthCheck = false;
     uint32_t healthCheckIntervalMs = 60000;
     uint32_t healthCheckTimeoutMs = 5000;
     
-    // »Øµ÷
+    // å›è°ƒ
     std::function<void()> onReconnecting;
     std::function<void()> onReconnected;
     std::function<void(int)> onReconnectFailed;
     std::function<void()> onGiveUp;
 };
 //==============================================================================
-// Channel ÅäÖÃ
+// Channel é…ç½®
 //==============================================================================
 
 enum class ChannelMode : uint8_t {
@@ -165,41 +165,41 @@ enum class ChannelMode : uint8_t {
 };
 
 struct ChannelConfig {
-    // »ù±¾ĞÅÏ¢
+    // åŸºæœ¬ä¿¡æ¯
     std::string name;
     TransportType transport = TransportType::Tcp;
     ChannelMode mode = ChannelMode::Client;
     
-    // ÍøÂçÅäÖÃ
+    // ç½‘ç»œé…ç½®
     std::string host = "127.0.0.1";
     uint16_t port = 8080;
-    std::string path;  // ÓÃÓÚ Unix Socket / ¹²ÏíÄÚ´æ
+    std::string path;  // ç”¨äº Unix Socket / å…±äº«å†…å­˜
     
-    // »º³åÇøÅäÖÃ
+    // ç¼“å†²åŒºé…ç½®
     size_t sendBufferSize = 64 * 1024;
     size_t recvBufferSize = 64 * 1024;
     size_t maxMessageSize = 16 * 1024 * 1024;
     size_t sharedMemorySize = 1024 * 1024;
     
-    // ³¬Ê±ÅäÖÃ
+    // è¶…æ—¶é…ç½®
     uint32_t connectTimeoutMs = 5000;
     uint32_t sendTimeoutMs = 5000;
     uint32_t recvTimeoutMs = 30000;
     
-    // ±³Ñ¹ÅäÖÃ
+    // èƒŒå‹é…ç½®
     BackpressureConfig backpressure;
     
-    // ÖØÁ¬ÅäÖÃ
+    // é‡è¿é…ç½®
     ReconnectConfig reconnect;
     
-    // TCP Ñ¡Ïî
+    // TCP é€‰é¡¹
     bool enableNagle = true;
     bool enableKeepAlive = true;
     uint32_t keepAliveIdleSec = 60;
     uint32_t keepAliveIntervalSec = 5;
     uint32_t keepAliveCount = 3;
     
-    // ÆäËû
+    // å…¶ä»–
     bool blocking = false;
 };
 //==============================================================================
@@ -226,7 +226,7 @@ inline const char* toString(ChannelState state) {
 }
 
 //==============================================================================
-// ÏûÏ¢ÀàĞÍ
+// æ¶ˆæ¯ç±»å‹
 //==============================================================================
 
 enum class MessageType : uint32_t {
@@ -238,7 +238,7 @@ enum class MessageType : uint32_t {
     Custom = 100
 };
 //==============================================================================
-// ÏûÏ¢»ùÀà
+// æ¶ˆæ¯åŸºç±»
 //==============================================================================
 
 class Message {
@@ -252,7 +252,7 @@ public:
 };
 
 //==============================================================================
-// ÎÄ±¾ÏûÏ¢
+// æ–‡æœ¬æ¶ˆæ¯
 //==============================================================================
 
 class TextMessage : public Message {
@@ -282,7 +282,7 @@ private:
     std::string text_;
 };
 //==============================================================================
-// ¶ş½øÖÆÏûÏ¢
+// äºŒè¿›åˆ¶æ¶ˆæ¯
 //==============================================================================
 
 class BinaryMessage : public Message {
@@ -313,7 +313,7 @@ private:
     std::vector<uint8_t> data_;
 };
 //==============================================================================
-// ·¢ËÍ½á¹û
+// å‘é€ç»“æœ
 //==============================================================================
 
 enum class SendResult : uint8_t {
@@ -326,7 +326,7 @@ enum class SendResult : uint8_t {
 };
 
 //==============================================================================
-// »Øµ÷ÀàĞÍ
+// å›è°ƒç±»å‹
 //==============================================================================
 
 using MessageCallback = std::function<void(const Message&)>;
@@ -335,19 +335,19 @@ using ErrorCallback = std::function<void(const std::string&)>;
 using CloseCallback = std::function<void()>;
 using WatermarkCallback = std::function<void()>;
 //==============================================================================
-// Channel ½Ó¿Ú
+// Channel æ¥å£
 //==============================================================================
 
 class Channel : public std::enable_shared_from_this<Channel> {
 public:
     virtual ~Channel() = default;
     
-    // ¹¤³§·½·¨
+    // å·¥å‚æ–¹æ³•
     static std::unique_ptr<Channel> create(const std::string& name, const ChannelConfig& config);
     static std::unique_ptr<Channel> createClient(const std::string& host, uint16_t port);
     static std::unique_ptr<Channel> createServer(const std::string& host, uint16_t port);
     
-    // Á¬½Ó¹ÜÀí
+    // è¿æ¥ç®¡ç†
     virtual bool connect() = 0;
     virtual void disconnect() = 0;
     virtual bool isConnected() const = 0;
@@ -357,7 +357,7 @@ public:
     virtual bool listen() = 0;
     virtual std::unique_ptr<Channel> accept() = 0;
     
-    // ·¢ËÍÏûÏ¢
+    // å‘é€æ¶ˆæ¯
     virtual SendResult send(const Message& msg) = 0;
     virtual SendResult send(const BinaryMessage& msg) = 0;
     virtual SendResult send(const TextMessage& msg) = 0;
@@ -365,14 +365,14 @@ public:
     
     virtual void sendAsync(const Message& msg, std::function<void(SendResult)> callback) = 0;
     virtual SendResult trySend(const Message& msg) = 0;
-    // ½ÓÊÕÏûÏ¢
+    // æ¥æ”¶æ¶ˆæ¯
     virtual Message receive() = 0;
     virtual bool receive(Message& msg) = 0;
     virtual bool tryReceive(Message& msg) = 0;
     virtual void receiveAsync(std::function<void(Message)> callback) = 0;
     virtual bool receive(Message& msg, uint32_t timeoutMs) = 0;
     
-    // ¶©ÔÄÄ£Ê½
+    // è®¢é˜…æ¨¡å¼
     virtual void subscribe(uint32_t msgType, MessageCallback callback) = 0;
     virtual void unsubscribe(uint32_t msgType) = 0;
     virtual void subscribeAll(MessageCallback callback) = 0;
@@ -385,7 +385,7 @@ public:
     // Request-Reply Ä£Ê½
     virtual std::future<Message> request(const Message& req, uint32_t timeoutMs) = 0;
     virtual void setRequestHandler(std::function<Message(const Message&)> handler) = 0;
-    // ±³Ñ¹¿ØÖÆ
+    // èƒŒå‹æ§åˆ¶
     virtual void setBackpressureStrategy(BackpressureStrategy strategy) = 0;
     virtual BackpressureStrategy getBackpressureStrategy() const = 0;
     virtual bool isHighWatermark() const = 0;
@@ -395,7 +395,7 @@ public:
     virtual void onHighWatermark(WatermarkCallback callback) = 0;
     virtual void onLowWatermark(WatermarkCallback callback) = 0;
     
-    // ×Ô¶¯ÖØÁ¬
+    // è‡ªåŠ¨é‡è¿
     virtual void enableAutoReconnect(bool enable) = 0;
     virtual bool isAutoReconnectEnabled() const = 0;
     virtual bool reconnect() = 0;
@@ -404,29 +404,29 @@ public:
     virtual uint32_t getNextReconnectDelay() const = 0;
     virtual void setReconnectConfig(const ReconnectConfig& config) = 0;
     virtual ReconnectConfig getReconnectConfig() const = 0;
-    // ÊôĞÔ
+    // å±æ€§
     virtual std::string getName() const = 0;
     virtual TransportType getTransportType() const = 0;
     virtual ChannelMode getMode() const = 0;
     virtual ChannelConfig getConfig() const = 0;
     
-    // Í³¼Æ
+    // ç»Ÿè®¡
     virtual size_t getSentBytes() const = 0;
     virtual size_t getReceivedBytes() const = 0;
     virtual size_t getSentMessages() const = 0;
     virtual size_t getReceivedMessages() const = 0;
     virtual size_t getDroppedMessages() const = 0;
     
-    // ÊÂ¼ş»Øµ÷
+    // äº‹ä»¶å›è°ƒ
     virtual void onStateChange(StateCallback callback) = 0;
     virtual void onError(ErrorCallback callback) = 0;
     virtual void onClose(CloseCallback callback) = 0;
     
-    // »ñÈ¡´«Êä²ã
+    // è·å–ä¼ è¾“å±‚
     virtual ITransport* getTransport() const = 0;
 };
 //==============================================================================
-// ChannelBuilder - Á÷Ê½¹¹½¨Æ÷
+// ChannelBuilder - æµå¼æ„å»ºå™¨
 //==============================================================================
 
 class ChannelBuilder {
@@ -434,38 +434,38 @@ public:
     ChannelBuilder();
     ~ChannelBuilder() = default;
     
-    // »ù±¾ĞÅÏ¢
+    // åŸºæœ¬ä¿¡æ¯
     ChannelBuilder& name(const std::string& name);
     ChannelBuilder& transport(TransportType type);
     ChannelBuilder& mode(ChannelMode mode);
     
-    // ÍøÂçÅäÖÃ
+    // ç½‘ç»œé…ç½®
     ChannelBuilder& host(const std::string& host);
     ChannelBuilder& port(uint16_t port);
     ChannelBuilder& path(const std::string& path);
     
-    // »º³åÇøÅäÖÃ
+    // ç¼“å†²åŒºé…ç½®
     ChannelBuilder& bufferSize(size_t size);
     ChannelBuilder& maxMessageSize(size_t size);
     ChannelBuilder& sharedMemorySize(size_t size);
     
-    // ±³Ñ¹ÅäÖÃ
+    // èƒŒå‹é…ç½®
     ChannelBuilder& backpressure(BackpressureStrategy strategy);
     ChannelBuilder& watermarks(size_t low, size_t high);
     ChannelBuilder& bufferSize(size_t low, size_t high, size_t max);
     ChannelBuilder& blockTimeout(uint32_t ms);
-    // ³¬Ê±ÅäÖÃ
+    // è¶…æ—¶é…ç½®
     ChannelBuilder& connectTimeout(uint32_t ms);
     ChannelBuilder& sendTimeout(uint32_t ms);
     ChannelBuilder& recvTimeout(uint32_t ms);
     ChannelBuilder& blocking(bool enabled);
     ChannelBuilder& nagle(bool enabled);
     
-    // »Øµ÷
+    // å›è°ƒ
     ChannelBuilder& onHighWatermark(std::function<void()> callback);
     ChannelBuilder& onLowWatermark(std::function<void()> callback);
     
-    // ÖØÁ¬ÅäÖÃ
+    // é‡è¿é…ç½®
     ChannelBuilder& autoReconnect(bool enable);
     ChannelBuilder& reconnectStrategy(ReconnectStrategy strategy);
     ChannelBuilder& reconnectDelay(uint32_t initialMs, uint32_t maxMs);
@@ -476,7 +476,7 @@ public:
     ChannelBuilder& onReconnected(std::function<void()> callback);
     ChannelBuilder& onReconnectFailed(std::function<void(int)> callback);
     ChannelBuilder& onGiveUp(std::function<void()> callback);
-    // ¹¹½¨
+    // æ„å»º
     std::unique_ptr<Channel> build();
     std::unique_ptr<Channel> connect();
     
@@ -485,7 +485,7 @@ private:
     ChannelConfig config_;
 };
 //==============================================================================
-// ±ã½İ¹¤³§º¯Êı
+// ä¾¿æ·å·¥å‚å‡½æ•°
 //==============================================================================
 
 inline std::unique_ptr<Channel> createTcpClient(const std::string& host, uint16_t port) {
@@ -496,7 +496,7 @@ inline std::unique_ptr<Channel> createTcpServer(const std::string& host, uint16_
     return Channel::createServer(host, port);
 }
 //==============================================================================
-// ¸¨Öúº¯Êı - ·¢ËÍ½á¹û×ª×Ö·û´®
+// è¾…åŠ©å‡½æ•° - å‘é€ç»“æœè½¬å­—ç¬¦ä¸²
 //==============================================================================
 
 inline const char* toString(SendResult result) {
@@ -511,7 +511,7 @@ inline const char* toString(SendResult result) {
     }
 }
 //==============================================================================
-// ¸¨Öúº¯Êı - ±³Ñ¹²ßÂÔ×ª×Ö·û´®
+// è¾…åŠ©å‡½æ•° - èƒŒå‹ç­–ç•¥è½¬å­—ç¬¦ä¸²
 //==============================================================================
 
 inline const char* toString(BackpressureStrategy strategy) {

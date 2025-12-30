@@ -100,7 +100,7 @@ jobs:
         -DVCPKG_TARGET_TRIPLET=x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}
         -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed
         -DAPOLLO_BUILD_TESTS=ON
-        -DAPOLLO_BUILD_EXAMPLES=ON
+        -DAPOLLO_BUILD_EXAMPLES=OFF
         -G "${{ matrix.os == 'windows-latest' && 'Ninja Multi-Config' || 'Ninja' }}"
 
     - name: Build
@@ -206,15 +206,34 @@ jobs:
     - name: Generate Coverage Report
       run: |
         cd build
-        lcov --capture --directory . --output-file coverage.info
+        lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch
         lcov --remove coverage.info '/usr/*' --output-file coverage.info
         lcov --remove coverage.info '*/tests/*' --output-file coverage.info
         lcov --remove coverage.info '*/examples/*' --output-file coverage.info
+        lcov --remove coverage.info '*/vcpkg_installed/*' --output-file coverage.info
+        lcov --remove coverage.info '*/_deps/*' --output-file coverage.info
         lcov --list coverage.info
+        genhtml -o coverage-html coverage.info
+
+    - name: Upload Coverage Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-lcov
+        path: build/coverage.info
+        retention-days: 30
+
+    - name: Upload Coverage HTML
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-html
+        path: build/coverage-html
+        retention-days: 30
 
     - name: Upload Coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
-        file: ./build/coverage.info
+        files: ./build/coverage.info
         flags: unittests
         name: codecov-umbrella
+        disable_search: true
+        fail_ci_if_error: false

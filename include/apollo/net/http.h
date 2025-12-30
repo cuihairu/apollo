@@ -171,6 +171,32 @@ struct Version {
 //==============================================================================
 
 struct Headers {
+private:
+    // 不区分大小写的哈希和相等比较
+    struct StringHashIgnoreCase {
+        size_t operator()(const std::string& key) const {
+            size_t hash = 0;
+            for (char c : key) {
+                hash = hash * 31 + std::tolower(static_cast<unsigned char>(c));
+            }
+            return hash;
+        }
+    };
+
+    struct StringEqualIgnoreCase {
+        bool operator()(const std::string& a, const std::string& b) const {
+            if (a.size() != b.size()) return false;
+            for (size_t i = 0; i < a.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(a[i])) !=
+                    std::tolower(static_cast<unsigned char>(b[i]))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+
+public:
     using Map = std::unordered_map<std::string, std::string, StringHashIgnoreCase, StringEqualIgnoreCase>;
 
     Map headers;
@@ -228,31 +254,6 @@ struct Headers {
 
     std::string userAgent() const { return get("User-Agent"); }
     void setUserAgent(const std::string& value) { set("User-Agent", value); }
-
-private:
-    // 不区分大小写的哈希和相等比较
-    struct StringHashIgnoreCase {
-        size_t operator()(const std::string& key) const {
-            size_t hash = 0;
-            for (char c : key) {
-                hash = hash * 31 + std::tolower(static_cast<unsigned char>(c));
-            }
-            return hash;
-        }
-    };
-
-    struct StringEqualIgnoreCase {
-        bool operator()(const std::string& a, const std::string& b) const {
-            if (a.size() != b.size()) return false;
-            for (size_t i = 0; i < a.size(); ++i) {
-                if (std::tolower(static_cast<unsigned char>(a[i])) !=
-                    std::tolower(static_cast<unsigned char>(b[i]))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    };
 };
 
 //==============================================================================
@@ -360,7 +361,7 @@ struct Response {
 
         // 状态行
         oss << version.toString() << " " << static_cast<int>(status)
-            << " " << toString(status) << "\r\n";
+            << " " << ::apollo::net::http::toString(status) << "\r\n";
 
         // 头部
         for (const auto& [key, value] : headers.headers) {

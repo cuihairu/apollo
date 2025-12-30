@@ -36,7 +36,9 @@
 
 // SHA-1 实现 (简化版)
 #include <openssl/sha.h>
+#if defined(_MSC_VER)
 #pragma comment(lib, "libcrypto.lib")
+#endif
 
 namespace apollo {
 namespace net {
@@ -748,6 +750,7 @@ public:
               const Config& config) override {
 
         if (running_) return false;
+        (void)host;
 
         // 创建监听 socket
         listenSocket_.setSocket(::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
@@ -1056,9 +1059,7 @@ public:
 
     void disconnect() override {
         if (connected_) {
-            sendClose(CloseStatus::Normal);
-            connected_ = false;
-            socket_.close();
+            close(CloseStatus::Normal, "");
         }
     }
 
@@ -1086,10 +1087,6 @@ public:
 
     bool close(CloseStatus status, const std::string& reason) override {
         auto frame = FrameParser::encodeClose(status, reason);
-        // 客户端发送需要掩码
-        std::vector<uint8_t> maskedFrame;
-        uint8_t mask[4] = {0, 0, 0, 0};
-        // 简化: 不掩码
         int sent = socket_.send(frame.data(), frame.size());
 
         connected_ = false;

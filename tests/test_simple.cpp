@@ -1,8 +1,8 @@
-#include "apollo/BaseComponent.h"
-#include "apollo/ComponentRegistry.h"
-#include "apollo/ApplicationContext.h"
-#include "apollo/ConfigManager.h"
-#include "apollo/DependencyManager.h"
+#include "apollo/framework/base/BaseComponent.h"
+#include "apollo/framework/ioc/ApplicationContext.h"
+#include "apollo/framework/ioc/ComponentRegistry.h"
+#include "apollo/framework/ioc/ConfigManager.h"
+#include "apollo/framework/ioc/DependencyManager.h"
 #include <iostream>
 
 using namespace Apollo;

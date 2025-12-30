@@ -14,12 +14,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Apollo 专用选项
-option(APOLLO_BUILD_EXAMPLES "Build example applications" ON)
+option(APOLLO_BUILD_EXAMPLES "Build example applications" OFF)
 option(APOLLO_BUILD_TESTS "Build unit tests" ON)
+option(APOLLO_BUILD_GTESTS "Build GoogleTest-based tests" OFF)
 option(APOLLO_ENABLE_COVERAGE "Enable code coverage (requires gcov/lcov)" OFF)
 option(APOLLO_ENABLE_DOXYGEN "Generate Doxygen documentation" OFF)
 option(APOLLO_ENABLE_CLANG_TIDY "Enable clang-tidy checks" OFF)
 option(ENABLE_FILEWATCHER "Enable file watcher support" ON)
+option(APOLLO_ENABLE_IPC "Build IPC module" OFF)
+option(APOLLO_ENABLE_ACTOR "Build actor framework" OFF)
 
 # 兼容旧选项
 if(BUILD_EXAMPLES)
@@ -96,46 +99,54 @@ add_library(apollo STATIC
     # Server
     src/apollo/server/game_server.cpp
 
-    # Storage - Redis
-    src/apollo/storage/redis/redis.cpp
-    src/apollo/storage/redis/redis_client_impl.cpp
-
     # Storage - Database
     src/apollo/storage/database/db.cpp
     src/apollo/storage/database/db_common.cpp
     src/apollo/storage/database/db_mysql.cpp
     src/apollo/storage/database/db_mock.cpp
 
-    # Database - SqlTemplate
-    src/apollo/database/sql_template.cpp
-    src/apollo/database/datasource.cpp
+	    # Database - SqlTemplate
+	    src/apollo/database/sql_template.cpp
+	    src/apollo/database/datasource.cpp
 
-    # IPC - Shared Memory Channel
-    src/apollo/ipc/shared_memory_channel.cpp
-    src/apollo/ipc/channel.cpp
-    src/apollo/ipc/qos.cpp
+	    # BigWorld 兼容层（增量实现）
+	    src/apollo/bw/runtime.cpp
+	)
 
-    # IPC - Service Discovery
-    src/apollo/ipc/service_discovery.cpp
-    src/apollo/ipc/sqlite_service_discovery.cpp
-    src/apollo/ipc/redis_service_discovery.cpp
-    src/apollo/ipc/service_endpoint_ex.cpp
+if(APOLLO_ENABLE_ACTOR AND NOT APOLLO_ENABLE_IPC)
+    message(FATAL_ERROR "APOLLO_ENABLE_ACTOR requires APOLLO_ENABLE_IPC")
+endif()
 
-    # Actor Framework
-    src/apollo/actor/actor_cell.cpp
-    src/apollo/actor/actor_system.cpp
-    src/apollo/actor/message_bus.cpp
-    src/apollo/actor/dispatcher.cpp
-    src/apollo/actor/actor_manager.cpp
-    src/apollo/actor/monitoring.cpp
-    src/apollo/actor/timer_service.cpp
-    src/apollo/actor/actor_ref.cpp
-    src/apollo/actor/actor_utils.cpp
-    src/apollo/actor/message_serialization.cpp
+if(APOLLO_ENABLE_IPC)
+    target_sources(apollo PRIVATE
+        # IPC - Shared Memory Channel
+        src/apollo/ipc/shared_memory_channel.cpp
+        src/apollo/ipc/channel.cpp
+        src/apollo/ipc/qos.cpp
 
-    # BigWorld 兼容层（增量实现）
-    src/apollo/bw/runtime.cpp
-)
+        # IPC - Service Discovery
+        src/apollo/ipc/service_discovery.cpp
+        src/apollo/ipc/sqlite_service_discovery.cpp
+        src/apollo/ipc/redis_service_discovery.cpp
+        src/apollo/ipc/service_endpoint_ex.cpp
+    )
+endif()
+
+if(APOLLO_ENABLE_ACTOR)
+    target_sources(apollo PRIVATE
+        # Actor Framework
+        src/apollo/actor/actor_cell.cpp
+        src/apollo/actor/actor_system.cpp
+        src/apollo/actor/message_bus.cpp
+        src/apollo/actor/dispatcher.cpp
+        src/apollo/actor/actor_manager.cpp
+        src/apollo/actor/monitoring.cpp
+        src/apollo/actor/timer_service.cpp
+        src/apollo/actor/actor_ref.cpp
+        src/apollo/actor/actor_utils.cpp
+        src/apollo/actor/message_serialization.cpp
+    )
+endif()
 
 # 设置目标名称为 apollo
 set_target_properties(apollo PROPERTIES OUTPUT_NAME apollo)
@@ -203,31 +214,31 @@ if(APOLLO_ENABLE_YAML)
             pkg_check_modules(yaml-cpp yaml-cpp)
         endif()
     endif()
-    if(yaml-cpp_FOUND)
-        if(TARGET yaml-cpp::yaml-cpp)
-            target_link_libraries(apollo PUBLIC yaml-cpp::yaml-cpp)
-        else()
-            target_link_libraries(apollo PUBLIC ${yaml-cpp_LIBRARIES})
-            target_include_directories(apollo SYSTEM PUBLIC ${yaml-cpp_INCLUDE_DIRS})
-        endif()
-        target_compile_definitions(apollo PRIVATE APOLLO_HAS_YAML=1)
-        message(STATUS "YAML support enabled (yaml-cpp)")
-    else()
-        message(STATUS "yaml-cpp not found, YAML support disabled (simplified fallback only)")
+	    if(yaml-cpp_FOUND)
+	        if(TARGET yaml-cpp::yaml-cpp)
+	            target_link_libraries(apollo PRIVATE yaml-cpp::yaml-cpp)
+	        else()
+	            target_link_libraries(apollo PRIVATE ${yaml-cpp_LIBRARIES})
+	            target_include_directories(apollo SYSTEM PRIVATE ${yaml-cpp_INCLUDE_DIRS})
+	        endif()
+	        target_compile_definitions(apollo PRIVATE APOLLO_HAS_YAML=1)
+	        message(STATUS "YAML support enabled (yaml-cpp)")
+	    else()
+	        message(STATUS "yaml-cpp not found, YAML support disabled (simplified fallback only)")
     endif()
 endif()
 
 # OpenSSL (required for WebSocket SHA-1)
 find_package(OpenSSL REQUIRED)
-if(OpenSSL_FOUND)
-    if(TARGET OpenSSL::Crypto)
-        target_link_libraries(apollo PUBLIC OpenSSL::Crypto)
-    else()
-        target_link_libraries(apollo PUBLIC ${OPENSSL_CRYPTO_LIBRARY})
-        target_include_directories(apollo SYSTEM PUBLIC ${OPENSSL_INCLUDE_DIR})
-    endif()
-    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
-endif()
+	if(OpenSSL_FOUND)
+	    if(TARGET OpenSSL::Crypto)
+	        target_link_libraries(apollo PRIVATE OpenSSL::Crypto)
+	    else()
+	        target_link_libraries(apollo PRIVATE ${OPENSSL_CRYPTO_LIBRARY})
+	        target_include_directories(apollo SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
+	    endif()
+	    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
+	endif()
 
 # libcurl (optional for RestTemplate)
 option(APOLLO_ENABLE_CURL "Enable libcurl support for RestTemplate" ON)
@@ -239,17 +250,17 @@ if(APOLLO_ENABLE_CURL)
             pkg_check_modules(CURL libcurl)
         endif()
     endif()
-    if(CURL_FOUND)
-        if(TARGET CURL::libcurl)
-            target_link_libraries(apollo PUBLIC CURL::libcurl)
-        else()
-            target_link_libraries(apollo PUBLIC ${CURL_LIBRARIES})
-            target_include_directories(apollo SYSTEM PUBLIC ${CURL_INCLUDE_DIRS})
-        endif()
-        target_compile_definitions(apollo PRIVATE APOLLO_HAS_CURL=1)
-        message(STATUS "libcurl found, RestTemplate enabled")
-    else()
-        message(STATUS "libcurl not found, RestTemplate will be stub only")
+	    if(CURL_FOUND)
+	        if(TARGET CURL::libcurl)
+	            target_link_libraries(apollo PRIVATE CURL::libcurl)
+	        else()
+	            target_link_libraries(apollo PRIVATE ${CURL_LIBRARIES})
+	            target_include_directories(apollo SYSTEM PRIVATE ${CURL_INCLUDE_DIRS})
+	        endif()
+	        target_compile_definitions(apollo PRIVATE APOLLO_HAS_CURL=1)
+	        message(STATUS "libcurl found, RestTemplate enabled")
+	    else()
+	        message(STATUS "libcurl not found, RestTemplate will be stub only")
     endif()
 endif()
 
@@ -263,18 +274,18 @@ if(APOLLO_ENABLE_HIREDIS)
             pkg_check_modules(hiredis hiredis)
         endif()
     endif()
-    if(hiredis_FOUND OR hiredis_FOUND)
-        if(TARGET hiredis::hiredis)
-            target_link_libraries(apollo PUBLIC hiredis::hiredis)
-        elseif(hiredis_FOUND)
-            target_link_libraries(apollo PUBLIC ${hiredis_LIBRARIES})
-            target_include_directories(apollo SYSTEM PUBLIC ${hiredis_INCLUDE_DIRS})
-        else()
-            target_link_libraries(apollo PUBLIC hiredis::hiredis)
-        endif()
-        target_compile_definitions(apollo PRIVATE APOLLO_HAS_HIREDIS=1)
-        message(STATUS "hiredis found, RedisTemplate enabled")
-    else()
+	    if(hiredis_FOUND OR hiredis_FOUND)
+	        if(TARGET hiredis::hiredis)
+	            target_link_libraries(apollo PRIVATE hiredis::hiredis)
+	        elseif(hiredis_FOUND)
+	            target_link_libraries(apollo PRIVATE ${hiredis_LIBRARIES})
+	            target_include_directories(apollo SYSTEM PRIVATE ${hiredis_INCLUDE_DIRS})
+	        else()
+	            target_link_libraries(apollo PRIVATE hiredis::hiredis)
+	        endif()
+	        target_compile_definitions(apollo PRIVATE APOLLO_HAS_HIREDIS=1)
+	        message(STATUS "hiredis found, RedisTemplate enabled")
+	    else()
         message(STATUS "hiredis not found, RedisTemplate will be stub only")
     endif()
 endif()

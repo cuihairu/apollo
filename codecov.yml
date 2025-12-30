@@ -1,0 +1,22 @@
+codecov:
+  require_ci_to_pass: true
+
+comment: false
+
+ignore:
+  - "tests/**"
+  - "examples/**"
+  - "vcpkg/**"
+  - "vcpkg_installed/**"
+  - "build/**"
+  - "build-*/**"
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 0%

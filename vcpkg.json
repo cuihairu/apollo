@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Apollo Framework with GametestClient",
   "dependencies": [
+    "openssl",
+    "protobuf",
+    "gtest",
     "nlohmann-json",
     {
       "name": "readline",
