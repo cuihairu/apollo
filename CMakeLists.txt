@@ -314,6 +314,17 @@ if(ENABLE_FILEWATCHER)
     endif()
 endif()
 
+# Add utf-8 flag to all sub-targets that might be compiled
+if(MSVC AND TARGET apollo)
+    # The utf-8 flag was already added above
+endif()
+    if(WIN32)
+        target_compile_definitions(apollo PRIVATE ENABLE_FILEWATCHER)
+    else()
+        target_compile_definitions(apollo PRIVATE ENABLE_FILEWATCHER)
+    endif()
+endif()
+
 # 代码覆盖率支持
 if(APOLLO_ENABLE_COVERAGE)
     include(CodeCoverage)
@@ -337,8 +348,10 @@ target_compile_features(apollo PUBLIC cxx_std_20)
 
 # 编译选项
 if(MSVC)
-    target_compile_options(apollo PRIVATE /W4 /WX)
+    target_compile_options(apollo PRIVATE /W4 /utf-8)
     target_compile_definitions(apollo PRIVATE _CRT_SECURE_NO_WARNINGS)
+    # Set MSVC_RUNTIME_LIBRARY to use static runtime
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 else()
     target_compile_options(apollo PRIVATE -Wall -Wextra -Wpedantic -Werror)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
