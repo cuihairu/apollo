@@ -1,34 +1,10 @@
 #pragma once
 
-// 确保在 POSIX 系统上获取完整的 timespec 定义
-#if defined(__APPLE__) || defined(__linux__)
-    #ifndef _POSIX_C_SOURCE
-        #define _POSIX_C_SOURCE 200809L
-    #endif
-#endif
-
-#include "apollo/net/net.h"
-#include <atomic>
-#include <chrono>
-#include <mutex>
-#include <condition_variable>
-#include <thread>
-#include <queue>
-#include <unordered_map>
-#include <functional>
-
-namespace apollo {
-namespace net {
-namespace adapters {
-
-/**
- * @brief 原生网络后端标识
- */
-constexpr const char* NATIVE_BACKEND = "native";
-
-// ========== 平台相关定义 ==========
-
+// ========== 平台相关头文件（必须最先包含）==========
 #ifdef _WIN32
+    #ifndef _WINSOCKAPI_
+        #define _WINSOCKAPI_    // 防止包含 winsock.h
+    #endif
     #include <winsock2.h>
     #include <mswsock.h>
     #include <ws2tcpip.h>
@@ -43,6 +19,13 @@ constexpr const char* NATIVE_BACKEND = "native";
     using ssize_t = SSIZE_T;
 
 #else // Linux/macOS
+    // 确保在 POSIX 系统上获取完整的 timespec 定义
+    #if defined(__APPLE__) || defined(__linux__)
+        #ifndef _POSIX_C_SOURCE
+            #define _POSIX_C_SOURCE 200809L
+        #endif
+    #endif
+
     #include <time.h>
     #include <sys/socket.h>
     #if defined(__linux__)
@@ -65,6 +48,25 @@ constexpr const char* NATIVE_BACKEND = "native";
     #define SD_BOTH SHUT_RDWR
 
 #endif // _WIN32
+
+#include "apollo/net/net.h"
+#include <atomic>
+#include <chrono>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <queue>
+#include <unordered_map>
+#include <functional>
+
+namespace apollo {
+namespace net {
+namespace adapters {
+
+/**
+ * @brief 原生网络后端标识
+ */
+constexpr const char* NATIVE_BACKEND = "native";
 
 // ========== 网络错误码 ==========
 

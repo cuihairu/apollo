@@ -4,8 +4,8 @@
 #include <vector>
 #include <queue>
 #include <cstring>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
+
+// Platform specific headers are already included in net_common.hpp
 
 namespace apollo::net {
 

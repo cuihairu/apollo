@@ -20,7 +20,7 @@ namespace apollo::net {
 enum class RpcMessageType {
     REQUEST = 1,
     RESPONSE = 2,
-    ERROR = 3
+    ERR = 3
 };
 
 /// RPC请求头

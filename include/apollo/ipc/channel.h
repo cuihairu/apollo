@@ -1,6 +1,17 @@
 #pragma once
 
+// Windows 平台宏保护
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #ifdef ERROR
+        #undef ERROR
+    #endif
+#endif
+
 #include "apollo/ipc/transport.h"
+#include "apollo/ipc/service_endpoint_ex.h"  // For TransportType
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -20,6 +31,8 @@ namespace ipc {
 class ITransport;
 class Channel;
 struct ChannelConfig;
+enum class SendResult : uint8_t;
+enum class TransportType : uint8_t;
 
 //==============================================================================
 // 背压策略

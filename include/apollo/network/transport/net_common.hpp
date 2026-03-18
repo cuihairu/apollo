@@ -1,11 +1,9 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <memory>
-#include <functional>
-
 #ifdef _WIN32
+    #ifdef ERROR
+        #undef ERROR
+    #endif
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #pragma comment(lib, "ws2_32.lib")
@@ -23,6 +21,11 @@
     const int SD_BOTH = SHUT_RDWR;
     #define closesocket close
 #endif
+
+#include <cstdint>
+#include <string>
+#include <memory>
+#include <functional>
 
 namespace apollo::net {
 
@@ -66,7 +69,7 @@ enum class NetEventType : uint8_t {
     NONE  = 0x00,
     READ  = 0x01,   // 可读事件
     WRITE = 0x02,   // 可写事件
-    ERROR = 0x04,   // 错误事件
+    ERR   = 0x04,   // 错误事件
     CLOSE = 0x08,   // 关闭事件
 
     // Backward-compatible aliases

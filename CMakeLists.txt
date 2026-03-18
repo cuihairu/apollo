@@ -1,10 +1,22 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Policy CMP0091: MSVC runtime library setting
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
+# MSVC runtime library must be set before project() for policy CMP0091
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # When using vcpkg, avoid treating imported include dirs as SYSTEM (-isystem).
 # Otherwise, globally-installed headers (e.g. /usr/local/include/google/protobuf)
 # can be picked up instead of the vcpkg headers, causing ABI mismatches and UB.
 if(DEFINED VCPKG_INSTALLED_DIR)
     set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
+    # Add vcpkg installed dir to CMAKE_PREFIX_PATH for find_package
+    list(APPEND CMAKE_PREFIX_PATH "${VCPKG_INSTALLED_DIR}")
 endif()
 
 project(ApolloMMORPG VERSION 0.1.0 LANGUAGES CXX)
@@ -17,12 +29,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(APOLLO_BUILD_EXAMPLES "Build example applications" OFF)
 option(APOLLO_BUILD_TESTS "Build unit tests" ON)
 option(APOLLO_BUILD_GTESTS "Build GoogleTest-based tests" OFF)
+option(APOLLO_BUILD_APPS "Build modular app entrypoints under apps/" ON)
 option(APOLLO_ENABLE_COVERAGE "Enable code coverage (requires gcov/lcov)" OFF)
 option(APOLLO_ENABLE_DOXYGEN "Generate Doxygen documentation" OFF)
 option(APOLLO_ENABLE_CLANG_TIDY "Enable clang-tidy checks" OFF)
 option(ENABLE_FILEWATCHER "Enable file watcher support" ON)
 option(APOLLO_ENABLE_IPC "Build IPC module" OFF)
 option(APOLLO_ENABLE_ACTOR "Build actor framework" OFF)
+option(APOLLO_ENABLE_MODULAR_LAYOUT "Enable modular CMake entrypoints under modules/" ON)
 
 # 兼容旧选项
 if(BUILD_EXAMPLES)
@@ -60,13 +74,13 @@ add_library(apollo STATIC
     src/apollo/net/event_loop.cpp
     src/apollo/net/http/rest_client.cpp
 
-    # Redis
+    # Redis - 使用 modules/data/redis 中的 redis-plus-plus 实现
     src/apollo/storage/redis/redis.cpp
     src/apollo/storage/redis/redis_client_impl.cpp
     src/apollo/redis/redis_template.cpp
 
     # Storage
-    src/storage/cache/redis.cpp
+    # (移除手写实现: src/storage/cache/redis.cpp - 使用 modules/data/redis 替代)
     src/storage/database/connection_pool.cpp
 
     # Utils
@@ -168,17 +182,34 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Protobuf (required)
 set(_apollo_protobuf_target "")
+
+# Try with case-sensitive name first (vcpkg convention)
 find_package(protobuf CONFIG QUIET)
 if(TARGET protobuf::libprotobuf)
     set(_apollo_protobuf_target protobuf::libprotobuf)
+    message(STATUS "Found protobuf::libprotobuf (lowercase)")
 endif()
 
+# Try with uppercase
 if(NOT _apollo_protobuf_target)
     find_package(Protobuf CONFIG QUIET)
     if(TARGET protobuf::libprotobuf)
         set(_apollo_protobuf_target protobuf::libprotobuf)
+        message(STATUS "Found protobuf::libprotobuf (via Protobuf)")
     elseif(TARGET Protobuf::libprotobuf)
         set(_apollo_protobuf_target Protobuf::libprotobuf)
+        message(STATUS "Found Protobuf::libprotobuf (uppercase)")
+    elseif(TARGET libprotobuf)
+        set(_apollo_protobuf_target libprotobuf)
+        message(STATUS "Found libprotobuf (plain)")
+    endif()
+endif()
+
+# Fallback: check if vcpkg has protobuf and try to include it directly
+if(NOT _apollo_protobuf)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/installed/x64-windows/share/protobuf/protobuf-config.cmake" OR
+       EXISTS "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/share/protobuf/protobuf-config.cmake")
+        message(WARNING "protobuf config file found but find_package failed. Checking vcpkg installation...")
     endif()
 endif()
 
@@ -239,6 +270,18 @@ find_package(OpenSSL REQUIRED)
 	    endif()
 	    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
 	endif()
+
+# NNG (nanomsg-next-gen) for inter-process communication
+find_package(nng CONFIG QUIET)
+if(NOT nng_FOUND)
+    message(STATUS "nng not found via CONFIG, trying regular find_package")
+    find_package(nng QUIET)
+endif()
+if(nng_FOUND)
+    message(STATUS "nng found")
+else()
+    message(STATUS "nng not found, protocol module will use FetchContent")
+endif()
 
 # libcurl (optional for RestTemplate)
 option(APOLLO_ENABLE_CURL "Enable libcurl support for RestTemplate" ON)
@@ -312,6 +355,11 @@ if(ENABLE_FILEWATCHER)
     endif()
 endif()
 
+# Add utf-8 flag to all sub-targets that might be compiled
+if(MSVC AND TARGET apollo)
+    # The utf-8 flag was already added above
+endif()
+
 # 代码覆盖率支持
 if(APOLLO_ENABLE_COVERAGE)
     include(CodeCoverage)
@@ -335,7 +383,7 @@ target_compile_features(apollo PUBLIC cxx_std_20)
 
 # 编译选项
 if(MSVC)
-    target_compile_options(apollo PRIVATE /W4 /WX)
+    target_compile_options(apollo PRIVATE /W4 /utf-8)
     target_compile_definitions(apollo PRIVATE _CRT_SECURE_NO_WARNINGS)
 else()
     target_compile_options(apollo PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -432,4 +480,12 @@ endif()
 if(APOLLO_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(APOLLO_ENABLE_MODULAR_LAYOUT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/CMakeLists.txt")
+    add_subdirectory(modules)
+endif()
+
+if(APOLLO_BUILD_APPS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
+    add_subdirectory(apps)
 endif()

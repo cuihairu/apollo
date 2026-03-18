@@ -1,0 +1,27 @@
+{
+  "name": "apollo-docs",
+  "version": "1.0.0",
+  "description": "Apollo 技术文档",
+  "scripts": {
+    "docs:dev": "vuepress dev .",
+    "docs:build": "vuepress build .",
+    "docs:clean": "rm -rf .vuepress/.temp .vuepress/.cache"
+  },
+  "keywords": [
+    "apollo",
+    "mmorpg",
+    "game-server",
+    "documentation"
+  ],
+  "author": "Apollo Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@vuepress/bundler-vite": "^2.0.0",
+    "@vuepress/cli": "^2.0.0",
+    "@vuepress/plugin-git": "^2.0.0",
+    "@vuepress/plugin-medium-zoom": "^2.0.0",
+    "@vuepress/plugin-search": "^2.0.0",
+    "@vuepress/theme-default": "^2.0.0",
+    "vuepress": "^2.0.0"
+  }
+}

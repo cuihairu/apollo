@@ -3,18 +3,14 @@
  * @brief WebSocket 实现
  */
 
-#include "apollo/net/websocket.h"
-#include "apollo/net/http.h"
-#include <thread>
-#include <mutex>
-#include <atomic>
-#include <unordered_map>
-#include <cstring>
-#include <random>
-#include <sstream>
-#include <iomanip>
-
+// ========== 平台相关头文件（必须最先包含）==========
 #ifdef _WIN32
+    #ifndef _WINSOCKAPI_
+        #define _WINSOCKAPI_    // 防止包含 winsock.h
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX       // 防止 min/max 宏冲突
+    #endif
     #pragma comment(lib, "ws2_32.lib")
     #include <winsock2.h>
     #include <ws2tcpip.h>
@@ -33,6 +29,17 @@
     #define SOCKET_ERROR_VALUE -1
     #define closesocket close
 #endif
+
+#include "apollo/net/websocket.h"
+#include "apollo/net/http.h"
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <unordered_map>
+#include <cstring>
+#include <random>
+#include <sstream>
+#include <iomanip>
 
 // SHA-1 实现 (简化版)
 #include <openssl/sha.h>
@@ -128,10 +135,10 @@ std::string generateWebSocketKey() {
     std::vector<uint8_t> raw(16);
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<uint8_t> dis(0, 255);
+    std::uniform_int_distribution<unsigned int> dis(0, 255);
 
     for (auto& byte : raw) {
-        byte = dis(gen);
+        byte = static_cast<uint8_t>(dis(gen));
     }
 
     return base64Encode(raw);
@@ -464,9 +471,9 @@ std::vector<uint8_t> FrameParser::encode(
         // 生成随机掩码
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<uint8_t> dis(0, 255);
+        std::uniform_int_distribution<unsigned int> dis(0, 255);
         for (auto& byte : maskingKey) {
-            byte = dis(gen);
+            byte = static_cast<uint8_t>(dis(gen));
         }
 
         frame.push_back(maskingKey[0]);

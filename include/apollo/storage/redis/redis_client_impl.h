@@ -109,7 +109,8 @@ public:
 
 private:
     std::shared_ptr<sw::redis::Redis> redis_;
-    std::unique_ptr<sw::redis::Transaction> transaction_;
+    std::unique_ptr<sw::redis::Transaction> transaction_;  // Note: redis-plus-plus Transaction is used differently
+    bool inTransaction_ = false;
     RedisConfig config_;
 
     // 辅助函数：转换异常为 RedisReply

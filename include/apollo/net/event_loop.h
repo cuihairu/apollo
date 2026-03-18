@@ -1,5 +1,17 @@
 #pragma once
 
+// Windows 平台相关头文件（必须最先包含）
+#ifdef _WIN32
+    #ifndef _WINSOCKAPI_
+        #define _WINSOCKAPI_    // 防止包含 winsock.h
+    #endif
+    #include <winsock2.h>
+    typedef SOCKET socket_t;
+#else
+    #include <sys/types.h>
+    typedef int socket_t;
+#endif
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -12,14 +24,6 @@
 #include <queue>
 #include <chrono>
 
-#ifdef _WIN32
-    #include <winsock2.h>
-    typedef SOCKET socket_t;
-#else
-    #include <sys/types.h>
-    typedef int socket_t;
-#endif
-
 namespace apollo {
 namespace net {
 
@@ -31,7 +35,7 @@ enum class EventType : uint32_t {
     NONE = 0,
     READ = 1 << 0,      // 可读事件
     WRITE = 1 << 1,     // 可写事件
-    ERROR = 1 << 2,     // 错误事件
+    ERR = 1 << 2,       // 错误事件
     EDGE_TRIGGER = 1 << 3  // 边缘触发 (仅支持 EPOLL)
 };
 
