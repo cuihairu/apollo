@@ -16,12 +16,12 @@
   "author": "Apollo Team",
   "license": "MIT",
   "devDependencies": {
-    "@vuepress/bundler-vite": "^2.19.0",
-    "@vuepress/cli": "^2.19.0",
-    "@vuepress/plugin-git": "^2.19.0",
-    "@vuepress/plugin-medium-zoom": "^2.19.0",
-    "@vuepress/plugin-search": "^2.19.0",
-    "@vuepress/theme-default": "^2.19.0",
-    "vuepress": "^2.19.0"
+    "@vuepress/bundler-vite": "^2.0.0-rc.27",
+    "@vuepress/cli": "^2.0.0-rc.27",
+    "@vuepress/plugin-git": "^2.0.0-rc.27",
+    "@vuepress/plugin-medium-zoom": "^2.0.0-rc.27",
+    "@vuepress/plugin-search": "^2.0.0-rc.27",
+    "@vuepress/theme-default": "^2.0.0-rc.27",
+    "vuepress": "^2.0.0-rc.27"
   }
 }
