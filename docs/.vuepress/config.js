@@ -47,6 +47,10 @@ module.exports = {
         ]
       },
       {
+        text: '服务器应用',
+        link: '/apps/',
+      },
+      {
         text: 'API 参考',
         link: '/api/',
       },
@@ -104,6 +108,15 @@ module.exports = {
         '/modules/actor.md',
         '/modules/game.md',
         '/modules/bigworld.md',
+      ],
+
+      '/apps/': [
+        {
+          text: 'BigWorld 服务器应用',
+          children: [
+            '/apps/BigWorld服务器应用实现.md',
+          ],
+        },
       ],
 
       '/api/': [

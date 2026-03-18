@@ -95,6 +95,7 @@ cmake --build build --config Release
 | **快速开始** | 安装、构建、运行 | [指南](/guide/) |
 | **架构设计** | BigWorld、AOI、进程架构 | [架构](/architecture/) |
 | **模块说明** | 各模块详细文档 | [模块](/modules/) |
+| **服务器应用** | GatewayApp、LoginApp、BaseApp、CellApp | [应用](/apps/) |
 | **API 参考** | 接口与类说明 | [API](/api/) |
 
 ## 社区
