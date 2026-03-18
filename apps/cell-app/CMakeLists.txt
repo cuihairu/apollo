@@ -16,7 +16,7 @@ target_link_libraries(cell-app
         Apollo::core
         Apollo::game_core
         Apollo::game_world
-        apollo::protocol
+        Apollo::protocol
 )
 
 target_compile_features(cell-app PRIVATE cxx_std_20)

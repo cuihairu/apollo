@@ -17,7 +17,7 @@ target_link_libraries(gateway-app
         Apollo::core
         Apollo::runtime
         Apollo::net_tcp
-        apollo::protocol
+        Apollo::protocol
 )
 
 target_compile_features(gateway-app PRIVATE cxx_std_20)

@@ -16,7 +16,7 @@ target_link_libraries(base-app
         Apollo::core
         Apollo::data_orm
         Apollo::data_cache
-        apollo::protocol
+        Apollo::protocol
 )
 
 target_compile_features(base-app PRIVATE cxx_std_20)
