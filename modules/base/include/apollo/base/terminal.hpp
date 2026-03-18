@@ -3,11 +3,13 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <cstdio>
 
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>
+#include <fcntl.h>
 #else
-#include <cstdio>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <termios.h>

@@ -278,6 +278,41 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	
 	    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
 
+	    # ========== Base Module Tests (New) ==========
+
+	    # Memory utilities tests
+	    add_executable(memory_tests test_memory.cpp)
+
+	    target_link_libraries(memory_tests PRIVATE apollo apollo::base)
+
+	    if(WIN32)
+	        target_link_libraries(memory_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME MemoryTests COMMAND memory_tests)
+
+	    # String utilities tests
+	    add_executable(string_tests test_string.cpp)
+
+	    target_link_libraries(string_tests PRIVATE apollo apollo::base)
+
+	    if(WIN32)
+	        target_link_libraries(string_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME StringTests COMMAND string_tests)
+
+	    # Terminal utilities tests
+	    add_executable(terminal_tests test_terminal.cpp)
+
+	    target_link_libraries(terminal_tests PRIVATE apollo apollo::base)
+
+	    if(WIN32)
+	        target_link_libraries(terminal_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME TerminalTests COMMAND terminal_tests)
+
 	    # ========== Crypto Tests ==========
 	    # Note: OpenSSL header conflicts on Windows, disabled pending fix
 	    # # Note: OpenSSL header conflicts - disabled
@@ -316,5 +351,28 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_test(NAME SimpleTests COMMAND ioc_tests_simple)
 	    # add_test(NAME ConfigTestsSimple COMMAND config_tests_simple)
 	    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
+
+	    # ========== Base Module Tests (New) ==========
+	    add_executable(memory_tests test_memory.cpp)
+	    target_link_libraries(memory_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(memory_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME MemoryTests COMMAND memory_tests)
+
+	    add_executable(string_tests test_string.cpp)
+	    target_link_libraries(string_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(string_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME StringTests COMMAND string_tests)
+
+	    add_executable(terminal_tests test_terminal.cpp)
+	    target_link_libraries(terminal_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(terminal_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME TerminalTests COMMAND terminal_tests)
+
 	    # add_test(NAME CryptoTests COMMAND crypto_tests)
 	endif()
