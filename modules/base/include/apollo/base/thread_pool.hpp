@@ -45,16 +45,21 @@ public:
     auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
         using ReturnType = std::invoke_result_t<F, Args...>;
 
-        auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+        auto task_ptr = std::make_shared<std::packaged_task<ReturnType()>>(
+            [f = std::forward<F>(f), tuple = std::make_tuple(std::forward<Args>(args)...)]() mutable {
+                return std::apply([f](Args&&... args) -> ReturnType {
+                    return std::invoke(f, std::forward<Args>(args)...);
+                }, tuple);
+            }
+        );
 
-        auto result = task->get_future();
+        auto result = task_ptr->get_future();
         {
             std::unique_lock<std::mutex> lock(mutex_);
             if (stop_) {
                 throw std::runtime_error("submit on stopped ThreadPool");
             }
-            tasks_.emplace([task]() { (*task)(); });
+            tasks_.emplace([task_ptr]() { (*task_ptr)(); });
         }
         condition_.notify_one();
         return result;

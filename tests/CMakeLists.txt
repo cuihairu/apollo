@@ -313,6 +313,28 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    add_test(NAME TerminalTests COMMAND terminal_tests)
 
+	    # ThreadPool tests
+	    add_executable(thread_pool_tests test_thread_pool.cpp)
+
+	    target_link_libraries(thread_pool_tests PRIVATE apollo apollo::base)
+
+	    if(WIN32)
+	        target_link_libraries(thread_pool_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME ThreadPoolTests COMMAND thread_pool_tests)
+
+	    # Time utilities tests
+	    add_executable(time_tests test_time.cpp)
+
+	    target_link_libraries(time_tests PRIVATE apollo apollo::base)
+
+	    if(WIN32)
+	        target_link_libraries(time_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME TimeTests COMMAND time_tests)
+
 	    # ========== Crypto Tests ==========
 	    # Note: OpenSSL header conflicts on Windows, disabled pending fix
 	    # # Note: OpenSSL header conflicts - disabled
@@ -373,6 +395,20 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(terminal_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME TerminalTests COMMAND terminal_tests)
+
+	    add_executable(thread_pool_tests test_thread_pool.cpp)
+	    target_link_libraries(thread_pool_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(thread_pool_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME ThreadPoolTests COMMAND thread_pool_tests)
+
+	    add_executable(time_tests test_time.cpp)
+	    target_link_libraries(time_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(time_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME TimeTests COMMAND time_tests)
 
 	    # add_test(NAME CryptoTests COMMAND crypto_tests)
 	endif()
