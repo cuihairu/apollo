@@ -318,12 +318,6 @@ endif()
 if(MSVC AND TARGET apollo)
     # The utf-8 flag was already added above
 endif()
-    if(WIN32)
-        target_compile_definitions(apollo PRIVATE ENABLE_FILEWATCHER)
-    else()
-        target_compile_definitions(apollo PRIVATE ENABLE_FILEWATCHER)
-    endif()
-endif()
 
 # 代码覆盖率支持
 if(APOLLO_ENABLE_COVERAGE)

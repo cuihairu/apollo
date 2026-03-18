@@ -20,14 +20,26 @@ public:
         return str;
     }
 
+    static std::string trim(std::string_view str) {
+        return trim(std::string(str));
+    }
+
     static std::string ltrim(std::string str) {
         ltrim_in_place(str);
         return str;
     }
 
+    static std::string ltrim(std::string_view str) {
+        return ltrim(std::string(str));
+    }
+
     static std::string rtrim(std::string str) {
         rtrim_in_place(str);
         return str;
+    }
+
+    static std::string rtrim(std::string_view str) {
+        return rtrim(std::string(str));
     }
 
     static void ltrim_in_place(std::string& str) {
