@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="generator" content="VuePress 2.0.0-rc.27" />
+    <style>
+      :root {
+        --vp-c-bg: #fff;
+      }
+
+      [data-theme='dark'] {
+        --vp-c-bg: #1b1b1f;
+      }
+
+      html,
+      body {
+        background-color: var(--vp-c-bg);
+      }
+    </style>
+    <script>
+      const useChoice = localStorage.getItem('vuepress-color-scheme')
+      const systemStatus =
+        'matchMedia' in window
+          ? window.matchMedia('(prefers-color-scheme: dark)').matches
+          : false
+
+      if (useChoice === 'light') {
+        document.documentElement.dataset.theme = 'light'
+      } else if (useChoice === 'dark' || systemStatus) {
+        document.documentElement.dataset.theme = 'dark'
+      }
+    </script>
+    <title>Apollo 项目目录结构 | Apollo 技术文档</title><meta name="description" content="高性能 MMORPG 服务器框架">
+    <link rel="preload" href="/apollo/assets/style-Bmm5iZYJ.css" as="style"><link rel="stylesheet" href="/apollo/assets/style-Bmm5iZYJ.css">
+    <link rel="modulepreload" href="/apollo/assets/app-DuH0mZgh.js"><link rel="modulepreload" href="/apollo/assets/Directory_Structure-DVQB6GoC.js">
+    <link rel="prefetch" href="/apollo/assets/00-Recommended_Framework-CPr1zpjA.js" as="script"><link rel="prefetch" href="/apollo/assets/01-通信架构设计-ZlzEbDKz.js" as="script"><link rel="prefetch" href="/apollo/assets/02-配置自动加载系统-Bylumyat.js" as="script"><link rel="prefetch" href="/apollo/assets/03-属性系统与同步机制-BIlW3YZV.js" as="script"><link rel="prefetch" href="/apollo/assets/04-框架架构设计方案-CCfPmO7Z.js" as="script"><link rel="prefetch" href="/apollo/assets/05-MMORPG服务器架构设计方案-Codex审核版-CxBfNrbv.js" as="script"><link rel="prefetch" href="/apollo/assets/06-生命周期管理设计-C-Gf8DUl.js" as="script"><link rel="prefetch" href="/apollo/assets/07-Recommended_MMORPG_Architecture-DPKrhXUQ.js" as="script"><link rel="prefetch" href="/apollo/assets/07-Scope管理设计-Cq6Plg3U.js" as="script"><link rel="prefetch" href="/apollo/assets/08-Player_Data_Storage_and_BI-CoH29LCq.js" as="script"><link rel="prefetch" href="/apollo/assets/08-Spring Bean生命周期与Scope知识点总结-DVWvdJha.js" as="script"><link rel="prefetch" href="/apollo/assets/09-Apollo_Comprehensive_Architecture-nCRv4NYh.js" as="script"><link rel="prefetch" href="/apollo/assets/10-Technology_Selection-Ct50h0Cn.js" as="script"><link rel="prefetch" href="/apollo/assets/11-Implementation_Plan-BiRsQhVi.js" as="script"><link rel="prefetch" href="/apollo/assets/12-API_Design-BoEwluEo.js" as="script"><link rel="prefetch" href="/apollo/assets/13-Transport_Design-BwDZJTOc.js" as="script"><link rel="prefetch" href="/apollo/assets/14-SpringLike_Infrastructure-CKqNrP1e.js" as="script"><link rel="prefetch" href="/apollo/assets/15-Plugin_Architecture-C2Cggvlo.js" as="script"><link rel="prefetch" href="/apollo/assets/16-NetCore_Design-BP9Qr6Ay.js" as="script"><link rel="prefetch" href="/apollo/assets/17-AOI_and_Scene_Design-c1gPWHXs.js" as="script"><link rel="prefetch" href="/apollo/assets/18-Data_Architecture_Whitepaper-Di65E1zx.js" as="script"><link rel="prefetch" href="/apollo/assets/19-API_and_SDK_Standard-C8mzNNvl.js" as="script"><link rel="prefetch" href="/apollo/assets/20-DevOps_and_Monitoring-CZWip1Ay.js" as="script"><link rel="prefetch" href="/apollo/assets/21-Security_Strategy-dznRIdKx.js" as="script"><link rel="prefetch" href="/apollo/assets/22-Attribute_IDL_Plan-B4AyoTYs.js" as="script"><link rel="prefetch" href="/apollo/assets/23-Performance_Testing_Plan-CpzJiq6z.js" as="script"><link rel="prefetch" href="/apollo/assets/24-TLog_and_BI_Spec-DrNDdLcs.js" as="script"><link rel="prefetch" href="/apollo/assets/25-Battle_Service_Design-BcUNKFKV.js" as="script"><link rel="prefetch" href="/apollo/assets/26-Client_Resource_and_Patch-Bccgk53y.js" as="script"><link rel="prefetch" href="/apollo/assets/27-Module_Interface_Spec-UYqiU99T.js" as="script"><link rel="prefetch" href="/apollo/assets/28-Testing_Strategy-R7UIhto0.js" as="script"><link rel="prefetch" href="/apollo/assets/29-Deployment_Architecture-JerH-Rlx.js" as="script"><link rel="prefetch" href="/apollo/assets/30-Compact_GameServer_Design-w5JhiP-Q.js" as="script"><link rel="prefetch" href="/apollo/assets/31-Unity_SDK_Design-C9Vsrm2g.js" as="script"><link rel="prefetch" href="/apollo/assets/32-Coding_and_Contribution_Guidelines-CY5jx4rS.js" as="script"><link rel="prefetch" href="/apollo/assets/33-BigWorld_Compatibility-D8f6_VtR.js" as="script"><link rel="prefetch" href="/apollo/assets/34-Modularization_and_CMake_Plan-Dn0ZdpAp.js" as="script"><link rel="prefetch" href="/apollo/assets/35-Modularization_Execution_Checklist-0KtzC6Uo.js" as="script"><link rel="prefetch" href="/apollo/assets/actor_build_guide-CZ45ztsf.js" as="script"><link rel="prefetch" href="/apollo/assets/actor_complete_guide-Cz40e8T2.js" as="script"><link rel="prefetch" href="/apollo/assets/actor_framework-CKRHhuQL.js" as="script"><link rel="prefetch" href="/apollo/assets/actor_summary-DqgnLjUj.js" as="script"><link rel="prefetch" href="/apollo/assets/AOI九宫格系统详解-C5LvEZfX.js" as="script"><link rel="prefetch" href="/apollo/assets/AOI广播与消息去重-BGu5QT4h.js" as="script"><link rel="prefetch" href="/apollo/assets/BigWorld架构深度解析-SraI2i3s.js" as="script"><link rel="prefetch" href="/apollo/assets/BigWorld进程架构与玩家生命周期-B8-xW2CO.js" as="script"><link rel="prefetch" href="/apollo/assets/BUILDING-yYXf8eD4.js" as="script"><link rel="prefetch" href="/apollo/assets/extraction-progress-CSND2vCA.js" as="script"><link rel="prefetch" href="/apollo/assets/network-design-DFIr5Kvr.js" as="script"><link rel="prefetch" href="/apollo/assets/README-D33X_u7Y.js" as="script"><link rel="prefetch" href="/apollo/assets/base-RI_Yz8_2.js" as="script"><link rel="prefetch" href="/apollo/assets/core-DRi3Hl3t.js" as="script"><link rel="prefetch" href="/apollo/assets/data-CquYbnuY.js" as="script"><link rel="prefetch" href="/apollo/assets/game-FErim0DC.js" as="script"><link rel="prefetch" href="/apollo/assets/net-C7-o6PBn.js" as="script"><link rel="prefetch" href="/apollo/assets/README-D-Actdhk.js" as="script"><link rel="prefetch" href="/apollo/assets/runtime-BqpTM1pD.js" as="script"><link rel="prefetch" href="/apollo/assets/BigWorld服务器应用实现-BO5icQCA.js" as="script"><link rel="prefetch" href="/apollo/assets/README-ZxafT2E_.js" as="script"><link rel="prefetch" href="/apollo/assets/aoi-broadcast-Cm0IVSuN.js" as="script"><link rel="prefetch" href="/apollo/assets/aoi-DWAMwINq.js" as="script"><link rel="prefetch" href="/apollo/assets/bigworld-lifecycle-B1JJFA4R.js" as="script"><link rel="prefetch" href="/apollo/assets/bigworld-XfeSS6aI.js" as="script"><link rel="prefetch" href="/apollo/assets/overview-DGChOowh.js" as="script"><link rel="prefetch" href="/apollo/assets/concepts-109JT-FP.js" as="script"><link rel="prefetch" href="/apollo/assets/configuration-bEwmyVTC.js" as="script"><link rel="prefetch" href="/apollo/assets/installation-C0-sYb4U.js" as="script"><link rel="prefetch" href="/apollo/assets/module-system-kClLGXl1.js" as="script"><link rel="prefetch" href="/apollo/assets/quick-start-zC6edRbY.js" as="script"><link rel="prefetch" href="/apollo/assets/README-Dr6eNbCF.js" as="script"><link rel="prefetch" href="/apollo/assets/actor-BPmV4DFK.js" as="script"><link rel="prefetch" href="/apollo/assets/base-BNAcglUy.js" as="script"><link rel="prefetch" href="/apollo/assets/bigworld-BvtaPqvH.js" as="script"><link rel="prefetch" href="/apollo/assets/core-Dc0kh8HJ.js" as="script"><link rel="prefetch" href="/apollo/assets/data-BxjEYU1Q.js" as="script"><link rel="prefetch" href="/apollo/assets/game-CcZqCzPi.js" as="script"><link rel="prefetch" href="/apollo/assets/net-B-fLOPP7.js" as="script"><link rel="prefetch" href="/apollo/assets/runtime-BQ9N-0CU.js" as="script"><link rel="prefetch" href="/apollo/assets/README-BwLQVih5.js" as="script"><link rel="prefetch" href="/apollo/assets/Attribute_SDK-CoLXxqO5.js" as="script"><link rel="prefetch" href="/apollo/assets/SDK_Structure-DYy3ITh5.js" as="script"><link rel="prefetch" href="/apollo/assets/404.html-Cvk0nJOT.js" as="script">
+  </head>
+  <body>
+    <div id="app"><!--[--><div class="vp-theme-container no-sidebar external-link-icon" vp-container><!--[--><header class="vp-navbar" vp-navbar><div class="vp-toggle-sidebar-button" title="toggle sidebar" aria-expanded="false" role="button" tabindex="0"><div class="icon" aria-hidden="true"><span></span><span></span><span></span></div></div><span><a class="route-link" href="/apollo/"><img class="vp-site-logo" src="/apollo/logo.png" alt="Apollo 技术文档"><span class="vp-site-name vp-hide-mobile" aria-hidden="true">Apollo 技术文档</span></a></span><div class="vp-navbar-items-wrapper" style=""><!--[--><!--]--><nav class="vp-navbar-items vp-hide-mobile" aria-label="site navigation"><!--[--><div class="vp-navbar-item"><a class="route-link auto-link" href="/apollo/guide/" aria-label="指南"><!--[--><!--[--><!--]--><!--]-->指南<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><div class="vp-navbar-dropdown-wrapper"><button class="vp-navbar-dropdown-title" type="button" aria-label="架构"><span class="title">架构</span><span class="arrow down"></span></button><button class="vp-navbar-dropdown-title-mobile" type="button" aria-label="架构"><span class="title">架构</span><span class="right arrow"></span></button><ul class="vp-navbar-dropdown" style="display:none;"><!--[--><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/overview.html" aria-label="架构概述"><!--[--><!--[--><!--]--><!--]-->架构概述<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/bigworld.html" aria-label="BigWorld 架构深度解析"><!--[--><!--[--><!--]--><!--]-->BigWorld 架构深度解析<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/bigworld-lifecycle.html" aria-label="BigWorld 进程架构与玩家生命周期"><!--[--><!--[--><!--]--><!--]-->BigWorld 进程架构与玩家生命周期<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/aoi.html" aria-label="AOI九宫格系统详解"><!--[--><!--[--><!--]--><!--]-->AOI九宫格系统详解<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/aoi-broadcast.html" aria-label="AOI广播与消息去重"><!--[--><!--[--><!--]--><!--]-->AOI广播与消息去重<!--[--><!--[--><!--]--><!--]--></a></li><!--]--></ul></div></div><div class="vp-navbar-item"><div class="vp-navbar-dropdown-wrapper"><button class="vp-navbar-dropdown-title" type="button" aria-label="模块"><span class="title">模块</span><span class="arrow down"></span></button><button class="vp-navbar-dropdown-title-mobile" type="button" aria-label="模块"><span class="title">模块</span><span class="right arrow"></span></button><ul class="vp-navbar-dropdown" style="display:none;"><!--[--><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/base.html" aria-label="Base 模块"><!--[--><!--[--><!--]--><!--]-->Base 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/core.html" aria-label="Core 模块"><!--[--><!--[--><!--]--><!--]-->Core 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/runtime.html" aria-label="Runtime 模块"><!--[--><!--[--><!--]--><!--]-->Runtime 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/data.html" aria-label="Data 模块"><!--[--><!--[--><!--]--><!--]-->Data 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/net.html" aria-label="Network 模块"><!--[--><!--[--><!--]--><!--]-->Network 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/actor.html" aria-label="Actor 模块"><!--[--><!--[--><!--]--><!--]-->Actor 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/game.html" aria-label="Game 模块"><!--[--><!--[--><!--]--><!--]-->Game 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/bigworld.html" aria-label="BigWorld 模块"><!--[--><!--[--><!--]--><!--]-->BigWorld 模块<!--[--><!--[--><!--]--><!--]--></a></li><!--]--></ul></div></div><div class="vp-navbar-item"><a class="route-link auto-link" href="/apollo/apps/" aria-label="服务器应用"><!--[--><!--[--><!--]--><!--]-->服务器应用<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><a class="route-link auto-link" href="/apollo/api/" aria-label="API 参考"><!--[--><!--[--><!--]--><!--]-->API 参考<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><a class="auto-link external-link" href="https://github.com/your-org/apollo" aria-label="GitHub" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><!--]--><!--]-->GitHub<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><a class="auto-link external-link" href="https://github.com/cuijw/apollo" aria-label="GitHub" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><!--]--><!--]-->GitHub<!--[--><!--[--><!--]--><!--]--></a></div><!--]--></nav><!--[--><!--]--><button type="button" class="vp-toggle-color-mode-button" title="toggle color mode"><svg class="light-icon" viewbox="0 0 32 32" style=""><path d="M16 12.005a4 4 0 1 1-4 4a4.005 4.005 0 0 1 4-4m0-2a6 6 0 1 0 6 6a6 6 0 0 0-6-6z" fill="currentColor"></path><path d="M5.394 6.813l1.414-1.415l3.506 3.506L8.9 10.318z" fill="currentColor"></path><path d="M2 15.005h5v2H2z" fill="currentColor"></path><path d="M5.394 25.197L8.9 21.691l1.414 1.415l-3.506 3.505z" fill="currentColor"></path><path d="M15 25.005h2v5h-2z" fill="currentColor"></path><path d="M21.687 23.106l1.414-1.415l3.506 3.506l-1.414 1.414z" fill="currentColor"></path><path d="M25 15.005h5v2h-5z" fill="currentColor"></path><path d="M21.687 8.904l3.506-3.506l1.414 1.415l-3.506 3.505z" fill="currentColor"></path><path d="M15 2.005h2v5h-2z" fill="currentColor"></path></svg><svg class="dark-icon" viewbox="0 0 32 32" style="display:none;"><path d="M13.502 5.414a15.075 15.075 0 0 0 11.594 18.194a11.113 11.113 0 0 1-7.975 3.39c-.138 0-.278.005-.418 0a11.094 11.094 0 0 1-3.2-21.584M14.98 3a1.002 1.002 0 0 0-.175.016a13.096 13.096 0 0 0 1.825 25.981c.164.006.328 0 .49 0a13.072 13.072 0 0 0 10.703-5.555a1.01 1.01 0 0 0-.783-1.565A13.08 13.08 0 0 1 15.89 4.38A1.015 1.015 0 0 0 14.98 3z" fill="currentColor"></path></svg></button><form class="search-box" role="search"><input type="search" placeholder="Search" autocomplete="off" spellcheck="false" value><!----></form></div></header><!--]--><div class="vp-sidebar-mask"></div><!--[--><aside class="vp-sidebar" vp-sidebar><nav class="vp-navbar-items" aria-label="site navigation"><!--[--><div class="vp-navbar-item"><a class="route-link auto-link" href="/apollo/guide/" aria-label="指南"><!--[--><!--[--><!--]--><!--]-->指南<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><div class="vp-navbar-dropdown-wrapper"><button class="vp-navbar-dropdown-title" type="button" aria-label="架构"><span class="title">架构</span><span class="arrow down"></span></button><button class="vp-navbar-dropdown-title-mobile" type="button" aria-label="架构"><span class="title">架构</span><span class="right arrow"></span></button><ul class="vp-navbar-dropdown" style="display:none;"><!--[--><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/overview.html" aria-label="架构概述"><!--[--><!--[--><!--]--><!--]-->架构概述<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/bigworld.html" aria-label="BigWorld 架构深度解析"><!--[--><!--[--><!--]--><!--]-->BigWorld 架构深度解析<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/bigworld-lifecycle.html" aria-label="BigWorld 进程架构与玩家生命周期"><!--[--><!--[--><!--]--><!--]-->BigWorld 进程架构与玩家生命周期<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/aoi.html" aria-label="AOI九宫格系统详解"><!--[--><!--[--><!--]--><!--]-->AOI九宫格系统详解<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/architecture/aoi-broadcast.html" aria-label="AOI广播与消息去重"><!--[--><!--[--><!--]--><!--]-->AOI广播与消息去重<!--[--><!--[--><!--]--><!--]--></a></li><!--]--></ul></div></div><div class="vp-navbar-item"><div class="vp-navbar-dropdown-wrapper"><button class="vp-navbar-dropdown-title" type="button" aria-label="模块"><span class="title">模块</span><span class="arrow down"></span></button><button class="vp-navbar-dropdown-title-mobile" type="button" aria-label="模块"><span class="title">模块</span><span class="right arrow"></span></button><ul class="vp-navbar-dropdown" style="display:none;"><!--[--><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/base.html" aria-label="Base 模块"><!--[--><!--[--><!--]--><!--]-->Base 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/core.html" aria-label="Core 模块"><!--[--><!--[--><!--]--><!--]-->Core 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/runtime.html" aria-label="Runtime 模块"><!--[--><!--[--><!--]--><!--]-->Runtime 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/data.html" aria-label="Data 模块"><!--[--><!--[--><!--]--><!--]-->Data 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/net.html" aria-label="Network 模块"><!--[--><!--[--><!--]--><!--]-->Network 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/actor.html" aria-label="Actor 模块"><!--[--><!--[--><!--]--><!--]-->Actor 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/game.html" aria-label="Game 模块"><!--[--><!--[--><!--]--><!--]-->Game 模块<!--[--><!--[--><!--]--><!--]--></a></li><li class="vp-navbar-dropdown-item"><a class="route-link auto-link" href="/apollo/modules/bigworld.html" aria-label="BigWorld 模块"><!--[--><!--[--><!--]--><!--]-->BigWorld 模块<!--[--><!--[--><!--]--><!--]--></a></li><!--]--></ul></div></div><div class="vp-navbar-item"><a class="route-link auto-link" href="/apollo/apps/" aria-label="服务器应用"><!--[--><!--[--><!--]--><!--]-->服务器应用<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><a class="route-link auto-link" href="/apollo/api/" aria-label="API 参考"><!--[--><!--[--><!--]--><!--]-->API 参考<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><a class="auto-link external-link" href="https://github.com/your-org/apollo" aria-label="GitHub" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><!--]--><!--]-->GitHub<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-navbar-item"><a class="auto-link external-link" href="https://github.com/cuijw/apollo" aria-label="GitHub" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><!--]--><!--]-->GitHub<!--[--><!--[--><!--]--><!--]--></a></div><!--]--></nav><!--[--><!--]--><!----><!--[--><!--]--></aside><!--]--><!--[--><main class="vp-page"><!--[--><!--]--><div vp-content><!--[--><!--]--><div id="content"><h1 id="apollo-项目目录结构" tabindex="-1"><a class="header-anchor" href="#apollo-项目目录结构"><span>Apollo 项目目录结构</span></a></h1><h2 id="概述" tabindex="-1"><a class="header-anchor" href="#概述"><span>概述</span></a></h2><p>本文档描述了Apollo MMORPG服务器框架的目录结构设计原则和最佳实践。</p><h2 id="目录结构设计原则" tabindex="-1"><a class="header-anchor" href="#目录结构设计原则"><span>目录结构设计原则</span></a></h2><ol><li><strong>模块化分离</strong>：不同功能模块的代码物理分离</li><li><strong>清晰命名</strong>：目录和文件名要能清楚表达其功能</li><li><strong>层次合理</strong>：避免过深的嵌套层次</li><li><strong>易于维护</strong>：相关文件集中放置</li></ol><h2 id="推荐目录结构" tabindex="-1"><a class="header-anchor" href="#推荐目录结构"><span>推荐目录结构</span></a></h2><div class="language-text line-numbers-mode" data-highlighter="prismjs" data-ext="text"><pre><code class="language-text"><span class="line">apollo/</span>
+<span class="line">├── include/apollo/                 # 公共头文件</span>
+<span class="line">│   ├── framework/                  # 核心框架</span>
+<span class="line">│   │   ├── ioc/                   # IoC容器</span>
+<span class="line">│   │   │   ├── IComponent.h</span>
+<span class="line">│   │   │   ├── ApplicationContext.h</span>
+<span class="line">│   │   │   └── ComponentFactory.h</span>
+<span class="line">│   │   └── base/                  # 基础类</span>
+<span class="line">│   │       ├── BaseComponent.h</span>
+<span class="line">│   │       ├── Singleton.h</span>
+<span class="line">│   │       └── NonCopyable.h</span>
+<span class="line">│   │</span>
+<span class="line">│   ├── game/                       # 游戏逻辑</span>
+<span class="line">│   │   ├── aoi/                   # 九宫格系统</span>
+<span class="line">│   │   │   ├── aoi.hpp</span>
+<span class="line">│   │   │   ├── AOIManager.h</span>
+<span class="line">│   │   │   └── GridCell.h</span>
+<span class="line">│   │   ├── battle/                # 战斗系统</span>
+<span class="line">│   │   │   ├── ecs/              # ECS架构</span>
+<span class="line">│   │   │   │   ├── ecs.hpp</span>
+<span class="line">│   │   │   │   ├── Entity.h</span>
+<span class="line">│   │   │   │   ├── Component.h</span>
+<span class="line">│   │   │   │   └── System.h</span>
+<span class="line">│   │   │   ├── skills/           # 技能系统</span>
+<span class="line">│   │   │   │   ├── Skill.h</span>
+<span class="line">│   │   │   │   ├── SkillManager.h</span>
+<span class="line">│   │   │   │   └── SkillEffect.h</span>
+<span class="line">│   │   │   └── buff/              # Buff系统</span>
+<span class="line">│   │   │       ├── Buff.h</span>
+<span class="line">│   │   │       ├── BuffManager.h</span>
+<span class="line">│   │   │       └── BuffEffect.h</span>
+<span class="line">│   │   ├── attributes/           # 属性系统</span>
+<span class="line">│   │   │   ├── attribute.hpp</span>
+<span class="line">│   │   │   ├── AttributeContainer.h</span>
+<span class="line">│   │   │   └── AttributeCalculator.h</span>
+<span class="line">│   │   ├── scene/                 # 场景系统</span>
+<span class="line">│   │   │   ├── Scene.h</span>
+<span class="line">│   │   │   ├── SceneManager.h</span>
+<span class="line">│   │   │   └── SceneObject.h</span>
+<span class="line">│   │   └── player/                # 玩家系统</span>
+<span class="line">│   │       ├── Player.h</span>
+<span class="line">│   │       ├── PlayerManager.h</span>
+<span class="line">│   │       └── PlayerData.h</span>
+<span class="line">│   │</span>
+<span class="line">│   ├── network/                    # 网络通信</span>
+<span class="line">│   │   ├── transport/             # 传输层</span>
+<span class="line">│   │   │   ├── socket.hpp</span>
+<span class="line">│   │   │   ├── net_common.hpp</span>
+<span class="line">│   │   │   ├── reactor.hpp</span>
+<span class="line">│   │   │   └── Connection.h</span>
+<span class="line">│   │   ├── messaging/             # 消息层</span>
+<span class="line">│   │   │   ├── message.hpp</span>
+<span class="line">│   │   │   ├── MessageRouter.h</span>
+<span class="line">│   │   │   ├── protobuf_message.hpp</span>
+<span class="line">│   │   │   └── MessageHandler.h</span>
+<span class="line">│   │   ├── rpc/                   # RPC框架</span>
+<span class="line">│   │   │   ├── rpc.hpp</span>
+<span class="line">│   │   │   ├── RpcClient.h</span>
+<span class="line">│   │   │   ├── RpcServer.h</span>
+<span class="line">│   │   │   └── RpcService.h</span>
+<span class="line">│   │   └── protocol/              # 协议定义</span>
+<span class="line">│   │       ├── Protocol.h</span>
+<span class="line">│   │       ├── MessageIDs.h</span>
+<span class="line">│   │       └── Packet.h</span>
+<span class="line">│   │</span>
+<span class="line">│   ├── storage/                    # 存储层</span>
+<span class="line">│   │   ├── database/               # 数据库</span>
+<span class="line">│   │   │   ├── connection.hpp</span>
+<span class="line">│   │   │   ├── mysql_connection.hpp</span>
+<span class="line">│   │   │   ├── Query.h</span>
+<span class="line">│   │   │   ├── Transaction.h</span>
+<span class="line">│   │   │   └── ConnectionPool.h</span>
+<span class="line">│   │   ├── cache/                  # 缓存</span>
+<span class="line">│   │   │   ├── redis.hpp</span>
+<span class="line">│   │   │   ├── RedisClient.h</span>
+<span class="line">│   │   │   ├── CacheManager.h</span>
+<span class="line">│   │   │   └── CacheKey.h</span>
+<span class="line">│   │   └── serialization/          # 序列化</span>
+<span class="line">│   │       ├── Serializer.h</span>
+<span class="line">│   │       ├── JsonSerializer.h</span>
+<span class="line">│   │       └── BinarySerializer.h</span>
+<span class="line">│   │</span>
+<span class="line">│   ├── server/                     # 服务器相关</span>
+<span class="line">│   │   ├── core/                   # 核心定义</span>
+<span class="line">│   │   │   ├── server_id.hpp</span>
+<span class="line">│   │   │   ├── server_types.hpp</span>
+<span class="line">│   │   │   └── ServerConfig.h</span>
+<span class="line">│   │   ├── gateway/                # 网关</span>
+<span class="line">│   │   │   ├── GatewayServer.h</span>
+<span class="line">│   │   │   ├── ConnectionManager.h</span>
+<span class="line">│   │   │   └── LoadBalancer.h</span>
+<span class="line">│   │   ├── login/                  # 登录服务</span>
+<span class="line">│   │   │   ├── LoginServer.h</span>
+<span class="line">│   │   │   ├── AuthManager.h</span>
+<span class="line">│   │   │   └── TokenManager.h</span>
+<span class="line">│   │   └── game/                   # 游戏服务</span>
+<span class="line">│   │       ├── GameServer.h</span>
+<span class="line">│   │       ├── ZoneManager.h</span>
+<span class="line">│   │       └── WorldManager.h</span>
+<span class="line">│   │</span>
+<span class="line">│   └── utils/                       # 工具类</span>
+<span class="line">│       ├── logging/               # 日志</span>
+<span class="line">│       │   ├── logger.hpp</span>
+<span class="line">│       │   ├── LogAppender.h</span>
+<span class="line">│       │   ├── LogManager.h</span>
+<span class="line">│       │   └── FileAppender.h</span>
+<span class="line">│       ├── threading/             # 线程</span>
+<span class="line">│       │   ├── thread_pool.hpp</span>
+<span class="line">│       │   ├── Thread.h</span>
+<span class="line">│       │   ├── Mutex.h</span>
+<span class="line">│       │   └── Atomic.h</span>
+<span class="line">│       ├── memory/                 # 内存</span>
+<span class="line">│       │   ├── memory_pool.hpp</span>
+<span class="line">│       │   ├── ObjectPool.h</span>
+<span class="line">│       │   ├── SmartPtr.h</span>
+<span class="line">│       │   └── Allocator.h</span>
+<span class="line">│       ├── time/                   # 时间</span>
+<span class="line">│       │   ├── Timer.h</span>
+<span class="line">│       │   ├── TimeUtil.h</span>
+<span class="line">│       │   └── Clock.h</span>
+<span class="line">│       ├── math/                   # 数学</span>
+<span class="line">│       │   ├── Vector3.h</span>
+<span class="line">│       │   ├── Matrix4.h</span>
+<span class="line">│       │   ├── Quaternion.h</span>
+<span class="line">│       │   └── MathUtil.h</span>
+<span class="line">│       ├── string/                 # 字符串</span>
+<span class="line">│       │   ├── StringUtil.h</span>
+<span class="line">│       │   ├── StringBuilder.h</span>
+<span class="line">│       │   └── Format.h</span>
+<span class="line">│       ├── container/              # 容器</span>
+<span class="line">│       │   ├── RingBuffer.h</span>
+<span class="line">│       │   ├── FixedQueue.h</span>
+<span class="line">│       │   └── LRUCache.h</span>
+<span class="line">│       ├── config/                 # 配置</span>
+<span class="line">│       │   ├── config_loader.hpp</span>
+<span class="line">│       │   ├── ConfigManager.h</span>
+<span class="line">│       │   ├── JsonConfig.h</span>
+<span class="line">│       │   └── XmlConfig.h</span>
+<span class="line">│       └── crypto/                 # 加密</span>
+<span class="line">│           ├── CryptoUtil.h</span>
+<span class="line">│           ├── AES.h</span>
+<span class="line">│           ├── MD5.h</span>
+<span class="line">│           └── SHA256.h</span>
+<span class="line">│</span>
+<span class="line">├── src/                            # 实现文件</span>
+<span class="line">│   ├── framework/                  # 对应include/apollo/framework</span>
+<span class="line">│   ├── game/                       # 对应include/apollo/game</span>
+<span class="line">│   ├── network/                    # 对应include/apollo/network</span>
+<span class="line">│   ├── storage/                    # 对应include/apollo/storage</span>
+<span class="line">│   ├── server/                     # 对应include/apollo/server</span>
+<span class="line">│   └── utils/                       # 对应include/apollo/utils</span>
+<span class="line">│</span>
+<span class="line">├── tests/                          # 测试代码</span>
+<span class="line">│   ├── framework/                  # 框架测试</span>
+<span class="line">│   ├── game/                       # 游戏逻辑测试</span>
+<span class="line">│   ├── network/                    # 网络测试</span>
+<span class="line">│   ├── storage/                    # 存储测试</span>
+<span class="line">│   └── utils/                       # 工具测试</span>
+<span class="line">│</span>
+<span class="line">├── examples/                       # 示例代码</span>
+<span class="line">│   ├── basic/                      # 基础示例</span>
+<span class="line">│   ├── advanced/                   # 高级示例</span>
+<span class="line">│   └── tutorials/                  # 教程示例</span>
+<span class="line">│</span>
+<span class="line">├── skds/                           # SDK (复数形式)</span>
+<span class="line">│   ├── unity/                      # Unity SDK</span>
+<span class="line">│   ├── cocos/                      # Cocos Creator SDK</span>
+<span class="line">│   └── laya/                       # LayaBox SDK</span>
+<span class="line">│</span>
+<span class="line">├── tools/                          # 工具</span>
+<span class="line">│   ├── code_gen/                   # 代码生成器</span>
+<span class="line">│   ├── protocol_gen/              # 协议生成器</span>
+<span class="line">│   └── config_gen/                 # 配置生成器</span>
+<span class="line">│</span>
+<span class="line">├── docs/                           # 文档</span>
+<span class="line">│   ├── design/                     # 设计文档</span>
+<span class="line">│   ├── api/                        # API文档</span>
+<span class="line">│   ├── tutorials/                  # 教程文档</span>
+<span class="line">│   └── architecture/               # 架构文档</span>
+<span class="line">│</span>
+<span class="line">├── third_party/                    # 第三方库</span>
+<span class="line">│   ├── protobuf/                   # Protobuf库</span>
+<span class="line">│   ├── json/                       # JSON库</span>
+<span class="line">│   └── testing/                    # 测试框架</span>
+<span class="line">│</span>
+<span class="line">├── cmake/                          # CMake模块</span>
+<span class="line">├── scripts/                        # 脚本</span>
+<span class="line">├── assets/                         # 资源文件</span>
+<span class="line">├── build/                          # 构建输出</span>
+<span class="line">├── CMakeLists.txt                  # 主CMake文件</span>
+<span class="line">├── README.md                       # 项目说明</span>
+<span class="line">├── LICENSE                          # 许可证</span>
+<span class="line">└── .gitignore                      # Git忽略文件</span>
+<span class="line"></span></code></pre><div class="line-numbers" aria-hidden="true" style="counter-reset:line-number 0;"><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div><div class="line-number"></div></div></div><h2 id="目录说明" tabindex="-1"><a class="header-anchor" href="#目录说明"><span>目录说明</span></a></h2><h3 id="framework" tabindex="-1"><a class="header-anchor" href="#framework"><span>framework/</span></a></h3><p>核心框架代码，包含IoC容器、组件系统等基础设施。</p><h3 id="game" tabindex="-1"><a class="header-anchor" href="#game"><span>game/</span></a></h3><p>游戏相关的所有逻辑代码，包括AOI、战斗、属性、场景等。</p><h3 id="network" tabindex="-1"><a class="header-anchor" href="#network"><span>network/</span></a></h3><p>网络通信相关代码，从底层的Socket传输到高层的RPC框架。</p><h3 id="storage" tabindex="-1"><a class="header-anchor" href="#storage"><span>storage/</span></a></h3><p>数据存储相关代码，包括数据库操作、缓存管理、序列化等。</p><h3 id="server" tabindex="-1"><a class="header-anchor" href="#server"><span>server/</span></a></h3><p>服务器相关代码，包括各类服务器的实现。</p><h3 id="utils" tabindex="-1"><a class="header-anchor" href="#utils"><span>utils/</span></a></h3><p>通用工具类，不依赖具体业务逻辑的可复用代码。</p><h2 id="命名规范" tabindex="-1"><a class="header-anchor" href="#命名规范"><span>命名规范</span></a></h2><ol><li><strong>目录名</strong>：小写字母，使用下划线分隔</li><li><strong>文件名</strong>：小写字母+下划线，或使用驼峰命名（根据项目约定）</li><li><strong>类名</strong>：大驼峰命名（PascalCase）</li><li><strong>函数名</strong>：小驼峰命名（camelCase）</li><li><strong>常量</strong>：全大写字母+下划线</li></ol><h2 id="文件组织原则" tabindex="-1"><a class="header-anchor" href="#文件组织原则"><span>文件组织原则</span></a></h2><ol><li><strong>头文件与实现文件分离</strong>：.h/.hpp 与 .cpp/.cc 对应</li><li><strong>单职责原则</strong>：每个文件只负责一个功能模块</li><li><strong>依赖清晰</strong>：避免循环依赖</li><li><strong>接口优先</strong>：先定义接口，再实现具体功能</li></ol><h2 id="注意事项" tabindex="-1"><a class="header-anchor" href="#注意事项"><span>注意事项</span></a></h2><ol><li>避免过深的目录嵌套（建议不超过4层）</li><li>相关功能的文件要放在一起</li><li>公共头文件放在合适的公共目录</li><li>私有实现放在src目录对应位置</li></ol><h2 id="最佳实践" tabindex="-1"><a class="header-anchor" href="#最佳实践"><span>最佳实践</span></a></h2><ol><li>按功能模块组织代码，而不是按文件类型</li><li>使用清晰的包/命名空间结构</li><li>提供统一的公共头文件（如apollo.h）</li><li>定期重构和整理目录结构</li><li>保持文档和代码同步更新</li></ol></div><!--[--><!--]--></div><footer class="vp-page-meta"><div class="vp-meta-item edit-link"><a class="auto-link external-link label" href="https://github.com/cuijw/apollo/edit/main/docs/Directory_Structure.md" aria-label="在 GitHub 上编辑此页" rel="noopener noreferrer" target="_blank"><!--[--><!--[--><svg class="edit-icon" viewbox="0 0 1024 1024"><g fill="currentColor"><path d="M430.818 653.65a60.46 60.46 0 0 1-50.96-93.281l71.69-114.012 7.773-10.365L816.038 80.138A60.46 60.46 0 0 1 859.225 62a60.46 60.46 0 0 1 43.186 18.138l43.186 43.186a60.46 60.46 0 0 1 0 86.373L588.879 565.55l-8.637 8.637-117.466 68.234a60.46 60.46 0 0 1-31.958 11.229z"></path><path d="M728.802 962H252.891A190.883 190.883 0 0 1 62.008 771.98V296.934a190.883 190.883 0 0 1 190.883-192.61h267.754a60.46 60.46 0 0 1 0 120.92H252.891a69.962 69.962 0 0 0-69.098 69.099V771.98a69.962 69.962 0 0 0 69.098 69.098h475.911A69.962 69.962 0 0 0 797.9 771.98V503.363a60.46 60.46 0 1 1 120.922 0V771.98A190.883 190.883 0 0 1 728.802 962z"></path></g></svg><!--]--><!--]-->在 GitHub 上编辑此页<!--[--><!--[--><!--]--><!--]--></a></div><div class="vp-meta-item git-info"><div class="vp-meta-item last-updated"><span class="meta-item-label">最后更新: </span><time class="meta-item-info" datetime="2025-12-26T16:11:06.000Z" data-allow-mismatch>12/27/25, 12:11 AM</time></div><div class="vp-meta-item contributors"><span class="meta-item-label">贡献者: </span><span class="meta-item-info"><!--[--><!--[--><span class="contributor" title="email: chuihairu@gmail.com">cuihairu</span><!----><!--]--><!--]--></span></div></div></footer><!----><!--[--><!--]--></main><!--]--></div><!--[--><!----><!--]--><!--]--></div>
+    <script type="module" src="/apollo/assets/app-DuH0mZgh.js" defer></script>
+  </body>
+</html>

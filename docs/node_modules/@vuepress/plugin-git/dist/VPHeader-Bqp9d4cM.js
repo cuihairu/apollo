@@ -1,0 +1,2 @@
+import{h as e}from"vue";import{useLocale as t}from"@vuepress/helper/client";const n=typeof __GIT_LOCALES__>`u`?{}:__GIT_LOCALES__,r=()=>t(n),i=({level:t=2,text:n,anchor:r})=>e(`h${t||2}`,{id:r,tabindex:`-1`},e(`a`,{href:`#${r}`,class:`header-anchor`},e(`span`,n)));export{n,r,i as t};
+//# sourceMappingURL=VPHeader-Bqp9d4cM.js.map

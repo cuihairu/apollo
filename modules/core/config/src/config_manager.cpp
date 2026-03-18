@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <regex>
 #include <filesystem>
+#include <mutex>
 
 #ifdef HAVE_NLOHMANN_JSON
     #include <nlohmann/json.hpp>

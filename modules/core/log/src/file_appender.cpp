@@ -4,6 +4,7 @@
  */
 
 #include "apollo/core/log/file_appender.h"
+#include "apollo/core/log/log_record.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
