@@ -696,7 +696,7 @@ private:
                                    static_cast<uint16_t>(frame.payload[1]);
                     std::string reason;
                     if (frame.payload.size() > 2) {
-                        size_t reason_len = std::min(frame.payload.size() - 2, static_cast<size_t>(123));
+                        size_t reason_len = (frame.payload.size() - 2) < 123 ? (frame.payload.size() - 2) : 123;
                         const char* reason_data = reinterpret_cast<const char*>(frame.payload.data() + 2);
                         reason.assign(reason_data, reason_len);
                     }

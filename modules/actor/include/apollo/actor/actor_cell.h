@@ -4,8 +4,10 @@
 #include "apollo/actor/actor.h"
 #include "apollo/actor/message.h"
 #include "apollo/ipc/channel.h"
+#include "apollo/ipc/service_endpoint_ex.h"
 #include <queue>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
 #include <atomic>
 #include <functional>

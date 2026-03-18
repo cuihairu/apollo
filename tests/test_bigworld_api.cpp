@@ -3,6 +3,15 @@
  * @brief BigWorld 兼容层 API 测试
  */
 
+// 测试辅助宏 - define before any includes to avoid macro conflicts
+#define TEST_ASSERT(cond, msg) \
+    do { \
+        if (!(cond)) { \
+            std::cerr << "  FAILED: " << msg << " at line " << __LINE__ << std::endl; \
+            return false; \
+        } \
+    } while (0)
+
 #include "bigworld/BigWorld.h"
 #include <atomic>
 #include <chrono>
@@ -15,15 +24,6 @@
 #include <vector>
 
 using namespace BigWorld;
-
-// 测试辅助宏
-#define TEST_ASSERT(cond, msg) \
-    do { \
-        if (!(cond)) { \
-            std::cerr << "  FAILED: " << msg << " at line " << __LINE__ << std::endl; \
-            return false; \
-        } \
-    } while (0)
 
 namespace {
 

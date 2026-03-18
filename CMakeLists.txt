@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Policy CMP0091: MSVC runtime library setting
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
+# MSVC runtime library must be set before project() for policy CMP0091
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # When using vcpkg, avoid treating imported include dirs as SYSTEM (-isystem).
 # Otherwise, globally-installed headers (e.g. /usr/local/include/google/protobuf)
 # can be picked up instead of the vcpkg headers, causing ABI mismatches and UB.
@@ -64,13 +74,13 @@ add_library(apollo STATIC
     src/apollo/net/event_loop.cpp
     src/apollo/net/http/rest_client.cpp
 
-    # Redis
+    # Redis - 使用 modules/data/redis 中的 redis-plus-plus 实现
     src/apollo/storage/redis/redis.cpp
     src/apollo/storage/redis/redis_client_impl.cpp
     src/apollo/redis/redis_template.cpp
 
     # Storage
-    src/storage/cache/redis.cpp
+    # (移除手写实现: src/storage/cache/redis.cpp - 使用 modules/data/redis 替代)
     src/storage/database/connection_pool.cpp
 
     # Utils
@@ -172,17 +182,34 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Protobuf (required)
 set(_apollo_protobuf_target "")
+
+# Try with case-sensitive name first (vcpkg convention)
 find_package(protobuf CONFIG QUIET)
 if(TARGET protobuf::libprotobuf)
     set(_apollo_protobuf_target protobuf::libprotobuf)
+    message(STATUS "Found protobuf::libprotobuf (lowercase)")
 endif()
 
+# Try with uppercase
 if(NOT _apollo_protobuf_target)
     find_package(Protobuf CONFIG QUIET)
     if(TARGET protobuf::libprotobuf)
         set(_apollo_protobuf_target protobuf::libprotobuf)
+        message(STATUS "Found protobuf::libprotobuf (via Protobuf)")
     elseif(TARGET Protobuf::libprotobuf)
         set(_apollo_protobuf_target Protobuf::libprotobuf)
+        message(STATUS "Found Protobuf::libprotobuf (uppercase)")
+    elseif(TARGET libprotobuf)
+        set(_apollo_protobuf_target libprotobuf)
+        message(STATUS "Found libprotobuf (plain)")
+    endif()
+endif()
+
+# Fallback: check if vcpkg has protobuf and try to include it directly
+if(NOT _apollo_protobuf)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/installed/x64-windows/share/protobuf/protobuf-config.cmake" OR
+       EXISTS "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/share/protobuf/protobuf-config.cmake")
+        message(WARNING "protobuf config file found but find_package failed. Checking vcpkg installation...")
     endif()
 endif()
 
@@ -358,8 +385,6 @@ target_compile_features(apollo PUBLIC cxx_std_20)
 if(MSVC)
     target_compile_options(apollo PRIVATE /W4 /utf-8)
     target_compile_definitions(apollo PRIVATE _CRT_SECURE_NO_WARNINGS)
-    # Set MSVC_RUNTIME_LIBRARY to use static runtime
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 else()
     target_compile_options(apollo PRIVATE -Wall -Wextra -Wpedantic -Werror)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")

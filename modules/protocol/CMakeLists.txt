@@ -1,24 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 
-# 查找 NNG 依赖 - 直接使用 vcpkg 路径
-if(NOT TARGET nng::nng)
-    # 尝试使用 vcpkg (CONFIG 模式)
-    find_package(nng CONFIG QUIET)
+# 查找 NNG 依赖 - 通过 find_package (由 vcpkg toolchain 处理)
+find_package(nng CONFIG QUIET)
 
-    # 如果 vcpkg 未找到，手动尝试 vcpkg 路径
-    if(NOT nng_FOUND)
-        if(DEFINED VCPKG_INSTALLED_DIR AND EXISTS "${VCPKG_INSTALLED_DIR}/x64-windows/share/nng/nng-config.cmake")
-            message(STATUS "Found nng via VCPKG_INSTALLED_DIR")
-            include("${VCPKG_INSTALLED_DIR}/x64-windows/share/nng/nng-config.cmake")
-        elseif(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows/share/nng/nng-config.cmake")
-            message(STATUS "Found nng via build/vcpkg_installed")
-            include("${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows/share/nng/nng-config.cmake")
-        else()
-            message(STATUS "nng not found, will need stub implementation")
-        endif()
-    else()
-        message(STATUS "nng found via find_package")
-    endif()
+if(nng_FOUND)
+    message(STATUS "NNG found via CONFIG")
+elseif(TARGET nng::nng)
+    message(STATUS "NNG target already exists")
+else()
+    message(STATUS "NNG not found, using stub implementation")
 endif()
 
 # 协议消息定义
@@ -56,23 +46,10 @@ target_link_libraries(apollo_protocol
 # 链接 NNG
 if(TARGET nng::nng)
     target_link_libraries(apollo_protocol PUBLIC nng::nng)
+    target_compile_definitions(apollo_protocol PRIVATE APOLLO_USE_NNG=1)
 elseif(TARGET nng)
     target_link_libraries(apollo_protocol PUBLIC nng)
-endif()
-
-# 如果 nng 已通过 vcpkg 安装，手动设置 include 路径
-if(DEFINED VCPKG_INSTALLED_DIR AND EXISTS "${VCPKG_INSTALLED_DIR}/x64-windows/include/nng")
-    target_include_directories(apollo_protocol SYSTEM PRIVATE "${VCPKG_INSTALLED_DIR}/x64-windows/include")
-    target_link_libraries(apollo_protocol PRIVATE "${VCPKG_INSTALLED_DIR}/x64-windows/lib/nng.lib")
-elseif(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows/include/nng")
-    target_include_directories(apollo_protocol SYSTEM PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows/include")
-    target_link_libraries(apollo_protocol PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/x64-windows/lib/nng.lib")
-else()
-    # 尝试直接使用 vcpkg 默认路径
-    if(EXISTS "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/include/nng")
-        target_include_directories(apollo_protocol SYSTEM PRIVATE "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/include")
-        target_link_libraries(apollo_protocol PRIVATE "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/lib/nng.lib")
-    endif()
+    target_compile_definitions(apollo_protocol PRIVATE APOLLO_USE_NNG=1)
 endif()
 
 target_compile_features(apollo_protocol PUBLIC cxx_std_20)

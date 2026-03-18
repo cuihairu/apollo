@@ -3,6 +3,17 @@
  * @brief RedisTemplate 实现 (类似 Spring Data Redis)
  */
 
+// Windows 平台头文件（必须最先包含）
+#ifdef _WIN32
+    #ifndef _WINSOCKAPI_
+        #define _WINSOCKAPI_
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <winsock2.h>
+#endif
+
 #include "apollo/redis/redis_template.h"
 #include <sstream>
 #include <cstring>

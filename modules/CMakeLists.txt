@@ -20,17 +20,30 @@ add_subdirectory(data)
 # Level 5: Network (depends on runtime)
 add_subdirectory(net)
 
-# Level 5.5: Protocol (depends on base, NNG)
-add_subdirectory(protocol)
+# Level 5.5: Protocol (old NNG wrapper - deprecated, use net/protocol instead)
+# Note: Old protocol module has issues, disabled in favor of modules/net/protocol
+# add_subdirectory(protocol)
 
 # Level 6: Actor (depends on runtime, net)
-add_subdirectory(actor)
+# Note: Actor module requires IPC/NNG integration - currently disabled pending refactoring
+option(APOLLO_BUILD_ACTOR_MODULE "Build actor framework module" OFF)
+if(APOLLO_BUILD_ACTOR_MODULE)
+    add_subdirectory(actor)
+endif()
 
 # Level 7: Game (depends on core)
-add_subdirectory(game)
+# Note: Game module has compilation issues, temporarily disabled
+option(APOLLO_BUILD_GAME_MODULE "Build game framework module" OFF)
+if(APOLLO_BUILD_GAME_MODULE)
+    add_subdirectory(game)
+endif()
 
 # Level 8: BigWorld compatibility (depends on game, runtime)
-add_subdirectory(bigworld)
+# Note: BigWorld module depends on game, also disabled
+option(APOLLO_BUILD_BIGWORLD_MODULE "Build BigWorld compatibility module" OFF)
+if(APOLLO_BUILD_BIGWORLD_MODULE)
+    add_subdirectory(bigworld)
+endif()
 
 # Level 9: Starter (assembly layer)
 add_subdirectory(starter)

@@ -3,6 +3,8 @@
 #include <chrono>
 #include <iostream>
 
+#ifdef APOLLO_USE_NNG
+
 namespace apollo {
 namespace protocol {
 
@@ -425,3 +427,61 @@ void RpcServer::stop() {
 
 } // namespace protocol
 } // namespace apollo
+
+#else // !APOLLO_USE_NNG - Stub implementations
+
+namespace apollo {
+namespace protocol {
+
+// Stub implementations when NNG is not available
+
+ReqSocket::ReqSocket(const std::string&, const SocketConfig&) {}
+ReqSocket::~ReqSocket() = default;
+void ReqSocket::start() {}
+void ReqSocket::stop() {}
+std::vector<uint8_t> ReqSocket::sendRequest(const std::vector<uint8_t>&) { return {}; }
+void ReqSocket::sendRequestAsync(const std::vector<uint8_t>&, ResponseCallback) {}
+
+RepSocket::RepSocket(const std::string&, const SocketConfig&) {}
+RepSocket::~RepSocket() = default;
+void RepSocket::start() {}
+void RepSocket::stop() {}
+void RepSocket::setRequestHandler(RequestHandler) {}
+void RepSocket::workerLoop() {}
+
+PubSocket::PubSocket(const std::string&, const SocketConfig&) {}
+PubSocket::~PubSocket() = default;
+void PubSocket::start() {}
+void PubSocket::stop() {}
+void PubSocket::publish(const std::vector<uint8_t>&) {}
+
+SubSocket::SubSocket(const std::string&, const SocketConfig&) {}
+SubSocket::~SubSocket() = default;
+void SubSocket::start() {}
+void SubSocket::stop() {}
+void SubSocket::setMessageCallback(MessageCallback) {}
+void SubSocket::subscribe(const std::string&) {}
+void SubSocket::workerLoop() {}
+
+PairSocket::PairSocket(const std::string&, bool, const SocketConfig&) {}
+PairSocket::~PairSocket() = default;
+void PairSocket::start() {}
+void PairSocket::stop() {}
+void PairSocket::send(const std::vector<uint8_t>&) {}
+void PairSocket::setMessageCallback(MessageCallback) {}
+void PairSocket::workerLoop() {}
+
+RpcClient::RpcClient(const std::string&, const SocketConfig&) {}
+RpcClient::~RpcClient() = default;
+void RpcClient::connect() {}
+void RpcClient::disconnect() {}
+
+RpcServer::RpcServer(const std::string&, const SocketConfig&) {}
+RpcServer::~RpcServer() = default;
+void RpcServer::start() {}
+void RpcServer::stop() {}
+
+} // namespace protocol
+} // namespace apollo
+
+#endif // APOLLO_USE_NNG

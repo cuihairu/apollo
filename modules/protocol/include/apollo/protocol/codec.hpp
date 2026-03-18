@@ -6,6 +6,7 @@
 #include <string>
 #include <cstring>
 #include <memory>
+#include <functional>
 
 namespace apollo {
 namespace protocol {

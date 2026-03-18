@@ -1,5 +1,12 @@
 #pragma once
 
+#include <string>
+#include <vector>
+#include <system_error>
+#include <memory>
+#include <functional>
+
+#ifdef APOLLO_USE_NNG
 #include <nng/nng.h>
 #include <nng/protocol/reqrep0/rep.h>
 #include <nng/protocol/reqrep0/req.h>
@@ -7,11 +14,7 @@
 #include <nng/protocol/pubsub0/sub.h>
 #include <nng/protocol/pair0/pair.h>
 #include <nng/supplemental/util/platform.h>
-#include <string>
-#include <vector>
-#include <system_error>
-#include <memory>
-#include <functional>
+#endif
 
 namespace apollo {
 namespace protocol {
@@ -19,6 +22,8 @@ namespace protocol {
 //==============================================================================
 // NNG 错误处理
 //==============================================================================
+
+#ifdef APOLLO_USE_NNG
 
 class NngError : public std::system_error {
 public:
@@ -443,6 +448,86 @@ private:
 
     nng_msg* msg_;
 };
+
+#else // !APOLLO_USE_NNG
+
+// Stub implementations when NNG is not available
+
+// NNG error constants (subset)
+#define NNG_EINVAL  (4)
+#define NNG_EPROTO  (11)
+#define NNG_ECLOSED (16)
+#define NNG_ENOTSUP (15)
+#define NNG_ETIMEDOUT (5)
+#define NNG_ECONNREFUSED (12)
+
+// Forward declarations
+struct nng_socket;
+struct nng_aio;
+struct nng_msg;
+
+class NngError : public std::system_error {
+public:
+    explicit NngError(int rv)
+        : std::system_error(rv, std::generic_category()) {}
+    static std::error_category const& nng_category();
+};
+
+struct nng_socket {
+    int id;
+    constexpr nng_socket() : id(0) {}
+    constexpr nng_socket(int i) : id(i) {}
+    bool operator==(const nng_socket& other) const { return id == other.id; }
+    bool operator!=(const nng_socket& other) const { return id != other.id; }
+};
+
+class NngSocket {
+public:
+    NngSocket() = default;
+    void close() {}
+    int get_id() const { return 0; }
+};
+
+class NngAio {
+public:
+    NngAio() = default;
+    template<typename F> void set_callback(F&&) {}
+    int result() const { return 0; }
+    nng_msg* get_msg() const { return nullptr; }
+    void set_msg(nng_msg*) {}
+    size_t get_output_size() const { return 0; }
+    void* get_output_data() const { return nullptr; }
+};
+
+class NngMsg {
+public:
+    NngMsg() = default;
+    explicit NngMsg(size_t) {}
+    ~NngMsg() = default;
+
+    NngMsg(const NngMsg&) = delete;
+    NngMsg& operator=(const NngMsg&) = delete;
+
+    NngMsg(NngMsg&&) noexcept = default;
+    NngMsg& operator=(NngMsg&&) noexcept = default;
+
+    nng_msg* get() const { return nullptr; }
+    nng_msg* release() { return nullptr; }
+
+    void* body() { return nullptr; }
+    const void* body() const { return nullptr; }
+    size_t len() const { return 0; }
+
+    void append(const void*, size_t) {}
+    void append(const std::vector<uint8_t>&) {}
+
+    static NngMsg from_data(const void*, size_t) { return NngMsg(); }
+    static NngMsg from_data(const std::vector<uint8_t>&) { return NngMsg(); }
+
+    std::vector<uint8_t> to_vector() const { return {}; }
+};
+
+#endif // APOLLO_USE_NNG
 
 //==============================================================================
 // 辅助函数

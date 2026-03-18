@@ -3,6 +3,8 @@ add_library(apollo_data_redis STATIC
     src/redis_client_impl.cpp
     src/redis_template.cpp
     src/redis_connection_pool.cpp
+    src/redis_client_wrapper.cpp
+    src/redis_template_wrapper.cpp
 )
 add_library(apollo::data_redis ALIAS apollo_data_redis)
 
@@ -18,26 +20,28 @@ target_link_libraries(apollo_data_redis
         apollo::core
 )
 
-# Find hiredis
-find_package(hiredis CONFIG QUIET)
-if(NOT hiredis_FOUND)
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(hiredis hiredis)
-    endif()
-endif()
+# 设置 vcpkg 路径用于 find_package
+set(CMAKE_PREFIX_PATH "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows" ${CMAKE_PREFIX_PATH})
 
-if(hiredis_FOUND OR TARGET hiredis::hiredis)
-    if(TARGET hiredis::hiredis)
-        target_link_libraries(apollo_data_redis PRIVATE hiredis::hiredis)
-    elseif(hiredis_FOUND)
-        target_link_libraries(apollo_data_redis PRIVATE ${hiredis_LIBRARIES})
-        target_include_directories(apollo_data_redis SYSTEM PRIVATE ${hiredis_INCLUDE_DIRS})
+# Find redis-plus-plus (includes hiredis dependency)
+find_package(redis++ CONFIG QUIET)
+
+if(NOT redis++_FOUND)
+    # 备用：直接链接
+    if(EXISTS "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/lib/redis++.lib")
+        message(STATUS "Found redis-plus-plus via direct path")
+        target_include_directories(apollo_data_redis SYSTEM PUBLIC
+            "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/include")
+        target_link_libraries(apollo_data_redis PUBLIC
+            "C:/Users/cui/Workspaces/vcpkg/installed/x64-windows/lib/redis++.lib")
+        target_compile_definitions(apollo_data_redis PRIVATE APOLLO_USE_REDIS_PLUS_PLUS=1)
+    else()
+        message(STATUS "redis-plus-plus not found, apollo_data_redis will use stub implementation")
     endif()
-    target_compile_definitions(apollo_data_redis PRIVATE APOLLO_HAS_HIREDIS=1)
-    message(STATUS "hiredis found for apollo_data_redis")
-else()
-    message(STATUS "hiredis not found, apollo_data_redis will use stub implementation")
+elseif(TARGET redis++::redis++)
+    target_link_libraries(apollo_data_redis PUBLIC redis++::redis++)
+    target_compile_definitions(apollo_data_redis PRIVATE APOLLO_USE_REDIS_PLUS_PLUS=1)
+    message(STATUS "redis-plus-plus found for apollo_data_redis")
 endif()
 
 target_compile_features(apollo_data_redis PUBLIC cxx_std_20)

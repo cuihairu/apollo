@@ -189,7 +189,7 @@ public:
                     fired |= EventType::WRITE;
                 }
                 if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                    fired |= EventType::ERROR;
+                    fired |= EventType::ERR;
                 }
 
                 SocketCallback cb;

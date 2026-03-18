@@ -66,7 +66,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const GatewayAssignRequest& msg) {
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, GatewayAssignRequest& msg) {
     const uint8_t* ptr = data.data();
     const uint8_t* end = data.data() + data.size();
-    if (ptr + sizeof(PlayerID) + sizeof(SessionID) > end) throw NngError(NNG_EINVAL);
+    if (ptr + sizeof(PlayerID) + sizeof(SessionID) > end) throw std::runtime_error("Invalid data size");
     std::memcpy(&msg.playerId, ptr, sizeof(PlayerID)); ptr += sizeof(PlayerID);
     std::memcpy(&msg.sessionId, ptr, sizeof(SessionID));
 }
@@ -210,7 +210,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const Ping& msg) {
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, Ping& msg) {
-    if (data.size() < sizeof(uint64_t)) throw NngError(NNG_EINVAL);
+    if (data.size() < sizeof(uint64_t)) throw std::runtime_error("Invalid data size");
     std::memcpy(&msg.timestamp, data.data(), sizeof(uint64_t));
 }
 
@@ -221,7 +221,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const Pong& msg) {
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, Pong& msg) {
-    if (data.size() < sizeof(uint64_t)) throw NngError(NNG_EINVAL);
+    if (data.size() < sizeof(uint64_t)) throw std::runtime_error("Invalid data size");
     std::memcpy(&msg.timestamp, data.data(), sizeof(uint64_t));
 }
 

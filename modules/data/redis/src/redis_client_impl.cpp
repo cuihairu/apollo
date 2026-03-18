@@ -33,8 +33,9 @@ bool RedisPlusPlusClient::connect(const RedisConfig& config) {
         opts.connect_timeout = std::chrono::milliseconds(config.connectTimeoutMs);
         opts.socket_timeout = std::chrono::milliseconds(config.socketTimeoutMs);
         opts.keep_alive = config.keepAlive;
-        opts.auto_reconnect = config.autoReconnect;
-        opts.reconnect_interval = std::chrono::milliseconds(config.reconnectIntervalMs);
+        // Note: redis-plus-plus auto-reconnects by default
+        // opts.reconnect = config.autoReconnect;  // Different field name
+        // opts.reconnect_interval = std::chrono::milliseconds(config.reconnectIntervalMs);
 
         // 创建连接池选项
         sw::redis::ConnectionPoolOptions poolOpts;
@@ -121,7 +122,10 @@ RedisReply RedisPlusPlusClient::del(const std::string& key) {
 
 RedisReply RedisPlusPlusClient::del(const std::vector<std::string>& keys) {
     return tryExecute([this, &keys]() {
-        auto count = redis_->del(keys);
+        long long count = 0;
+        for (const auto& key : keys) {
+            count += redis_->del(key);
+        }
         return RedisReply::Int64(count);
     });
 }
@@ -178,20 +182,16 @@ RedisReply RedisPlusPlusClient::pexpire(const std::string& key, int64_t millisec
 RedisReply RedisPlusPlusClient::ttl(const std::string& key) {
     return tryExecute([this, &key]() {
         auto val = redis_->ttl(key);
-        if (val) {
-            return RedisReply::Int64(static_cast<int64_t>(val->count()));
-        }
-        return RedisReply::Int64(-1);
+        // Redis returns: -2 if key doesn't exist, -1 if no expiry
+        return RedisReply::Int64(val);
     });
 }
 
 RedisReply RedisPlusPlusClient::pttl(const std::string& key) {
     return tryExecute([this, &key]() {
         auto val = redis_->pttl(key);
-        if (val) {
-            return RedisReply::Int64(static_cast<int64_t>(val->count()));
-        }
-        return RedisReply::Int64(-1);
+        // Redis returns: -2 if key doesn't exist, -1 if no expiry
+        return RedisReply::Int64(val);
     });
 }
 
@@ -216,9 +216,10 @@ RedisReply RedisPlusPlusClient::hGet(const std::string& key, const std::string& 
 
 RedisReply RedisPlusPlusClient::hGetAll(const std::string& key) {
     return tryExecute([this, &key]() {
-        auto map = redis_->hgetall(key);
-        std::map<std::string, std::string> result(map.begin(), map.end());
-        return RedisReply::Map(result);
+        std::vector<std::pair<std::string, std::string>> result;
+        redis_->hgetall(key, std::back_inserter(result));
+        std::map<std::string, std::string> mapResult(result.begin(), result.end());
+        return RedisReply::Map(mapResult);
     });
 }
 
@@ -238,16 +239,16 @@ RedisReply RedisPlusPlusClient::hExists(const std::string& key, const std::strin
 
 RedisReply RedisPlusPlusClient::hKeys(const std::string& key) {
     return tryExecute([this, &key]() {
-        auto vec = redis_->hkeys(key);
-        std::vector<std::string> result(vec.begin(), vec.end());
+        std::vector<std::string> result;
+        redis_->hkeys(key, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
 
 RedisReply RedisPlusPlusClient::hVals(const std::string& key) {
     return tryExecute([this, &key]() {
-        auto vec = redis_->hvals(key);
-        std::vector<std::string> result(vec.begin(), vec.end());
+        std::vector<std::string> result;
+        redis_->hvals(key, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
@@ -261,19 +262,21 @@ RedisReply RedisPlusPlusClient::hLen(const std::string& key) {
 
 RedisReply RedisPlusPlusClient::hMSet(const std::string& key, const std::map<std::string, std::string>& values) {
     return tryExecute([this, &key, &values]() {
-        redis_->hmset(key, values);
+        // redis-plus-plus uses hset() with multiple fields
+        redis_->hset(key, values.begin(), values.end());
         return RedisReply::Ok();
     });
 }
 
 RedisReply RedisPlusPlusClient::hMGet(const std::string& key, const std::vector<std::string>& fields) {
     return tryExecute([this, &key, &fields]() {
-        auto vec = redis_->hmget(key, fields.begin(), fields.end());
-        std::vector<std::string> result;
-        for (auto& val : vec) {
-            result.push_back(val ? *val : "");
+        std::vector<sw::redis::OptionalString> result;
+        redis_->hmget(key, fields.begin(), fields.end(), std::back_inserter(result));
+        std::vector<std::string> stringResult;
+        for (const auto& val : result) {
+            stringResult.push_back(val ? *val : "");
         }
-        return RedisReply::Array(result);
+        return RedisReply::Array(stringResult);
     });
 }
 
@@ -322,8 +325,8 @@ RedisReply RedisPlusPlusClient::rPop(const std::string& key) {
 
 RedisReply RedisPlusPlusClient::lRange(const std::string& key, int64_t start, int64_t stop) {
     return tryExecute([this, &key, start, stop]() {
-        auto vec = redis_->lrange(key, start, stop);
-        std::vector<std::string> result(vec.begin(), vec.end());
+        std::vector<std::string> result;
+        redis_->lrange(key, start, stop, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
@@ -377,8 +380,8 @@ RedisReply RedisPlusPlusClient::sRem(const std::string& key, const std::string& 
 
 RedisReply RedisPlusPlusClient::sMembers(const std::string& key) {
     return tryExecute([this, &key]() {
-        auto set = redis_->smembers(key);
-        std::vector<std::string> result(set.begin(), set.end());
+        std::vector<std::string> result;
+        redis_->smembers(key, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
@@ -425,22 +428,16 @@ RedisReply RedisPlusPlusClient::zRem(const std::string& key, const std::string& 
 
 RedisReply RedisPlusPlusClient::zRange(const std::string& key, int64_t start, int64_t stop) {
     return tryExecute([this, &key, start, stop]() {
-        auto vec = redis_->zrange(key, start, stop);
         std::vector<std::string> result;
-        for (auto& pair : vec) {
-            result.push_back(pair.first);  // 只返回 member
-        }
+        redis_->zrange(key, start, stop, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
 
 RedisReply RedisPlusPlusClient::zRevRange(const std::string& key, int64_t start, int64_t stop) {
     return tryExecute([this, &key, start, stop]() {
-        auto vec = redis_->zrevrange(key, start, stop);
         std::vector<std::string> result;
-        for (auto& pair : vec) {
-            result.push_back(pair.first);
-        }
+        redis_->zrevrange(key, start, stop, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
@@ -457,8 +454,10 @@ RedisReply RedisPlusPlusClient::zScore(const std::string& key, const std::string
 
 RedisReply RedisPlusPlusClient::zRangeByScore(const std::string& key, double min, double max) {
     return tryExecute([this, &key, min, max]() {
-        auto vec = redis_->zrangebyscore(key, min, max);
-        std::vector<std::string> result(vec.begin(), vec.end());
+        std::vector<std::string> result;
+        // Use BoundedInterval for zrangebyscore
+        redis_->zrangebyscore(key, sw::redis::BoundedInterval<double>(min, max, sw::redis::BoundType::CLOSED),
+                              std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
@@ -504,7 +503,11 @@ RedisReply RedisPlusPlusClient::publish(const std::string& channel, const std::s
 bool RedisPlusPlusClient::multi() {
     if (!redis_) return false;
     try {
-        transaction_ = redis_->transaction(true);  // pipelined = false
+        // redis-plus-plus transaction() returns Transaction by value
+        // We create a new Transaction and store it
+        auto tx = redis_->transaction(true);  // pipelined = false
+        transaction_ = std::make_unique<sw::redis::Transaction>(std::move(tx));
+        inTransaction_ = true;
         return true;
     } catch (...) {
         return false;
@@ -548,22 +551,26 @@ RedisReply RedisPlusPlusClient::select(int database) {
 
 RedisReply RedisPlusPlusClient::keys(const std::string& pattern) {
     return tryExecute([this, &pattern]() {
-        auto vec = redis_->keys(pattern);
-        std::vector<std::string> result(vec.begin(), vec.end());
+        std::vector<std::string> result;
+        redis_->keys(pattern, std::back_inserter(result));
         return RedisReply::Array(result);
     });
 }
 
 std::vector<std::string> RedisPlusPlusClient::scan(const std::string& pattern, uint64_t cursor, uint64_t* newCursor) {
     std::vector<std::string> result;
-    if (!redis_) return result;
+    if (!redis_) {
+        if (newCursor) *newCursor = 0;
+        return result;
+    }
 
     try {
-        auto pair = redis_->scan(cursor, pattern);
-        if (newCursor) *newCursor = pair.first;
-        result.assign(pair.second.begin(), pair.second.end());
+        // redis-plus-plus scan uses output iterator
+        sw::redis::Cursor cur(cursor);
+        cur = redis_->scan(cur, pattern, std::back_inserter(result));
+        if (newCursor) *newCursor = cur;
     } catch (...) {
-        // 错误处理
+        if (newCursor) *newCursor = 0;
     }
 
     return result;

@@ -1,3 +1,6 @@
+# Runtime module
+find_package(Drogon CONFIG QUIET)
+
 add_library(apollo_runtime STATIC
     src/application_host.cpp
     src/runtime_manifest.cpp
@@ -16,6 +19,23 @@ target_link_libraries(apollo_runtime
         apollo_core
 )
 
+# Link with Trantor (from Drogon) for Boost.Asio integration
+if(TARGET Drogon::Drogon)
+    # Trantor is part of Drogon, provides:
+    # - Async I/O (based on Boost.Asio)
+    # - Timers
+    # - Thread pools
+    # - Event loops
+    target_link_libraries(apollo_runtime
+        PUBLIC
+            Trantor::Trantor
+    )
+    target_compile_definitions(apollo_runtime PUBLIC APOLLO_USE_TRANTOR=1)
+    message(STATUS "Runtime module: using Trantor (Boost.Asio via Drogon)")
+else()
+    message(STATUS "Runtime module: using built-in implementation")
+endif()
+
 target_compile_features(apollo_runtime PUBLIC cxx_std_20)
 
 if(MSVC)
@@ -24,7 +44,6 @@ if(MSVC)
 endif()
 
 if(BUILD_TESTING)
-    # Find GTest
     find_package(GTest QUIET)
 
     # Original simple tests
