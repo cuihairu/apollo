@@ -1,6 +1,8 @@
 #include "apollo/core/config/config_registry.hpp"
 
 #include <charconv>
+#include <mutex>
+#include <shared_mutex>
 
 namespace apollo::core::config {
 
