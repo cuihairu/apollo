@@ -12,9 +12,9 @@ target_include_directories(login-app
 
 target_link_libraries(login-app
     PRIVATE
-        apollo::base
-        apollo::core
-        apollo::runtime
+        Apollo::base
+        Apollo::core
+        Apollo::runtime
         apollo::protocol
 )
 

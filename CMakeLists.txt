@@ -5,6 +5,8 @@ cmake_minimum_required(VERSION 3.16)
 # can be picked up instead of the vcpkg headers, causing ABI mismatches and UB.
 if(DEFINED VCPKG_INSTALLED_DIR)
     set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
+    # Add vcpkg installed dir to CMAKE_PREFIX_PATH for find_package
+    list(APPEND CMAKE_PREFIX_PATH "${VCPKG_INSTALLED_DIR}")
 endif()
 
 project(ApolloMMORPG VERSION 0.1.0 LANGUAGES CXX)
@@ -241,6 +243,18 @@ find_package(OpenSSL REQUIRED)
 	    endif()
 	    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
 	endif()
+
+# NNG (nanomsg-next-gen) for inter-process communication
+find_package(nng CONFIG QUIET)
+if(NOT nng_FOUND)
+    message(STATUS "nng not found via CONFIG, trying regular find_package")
+    find_package(nng QUIET)
+endif()
+if(nng_FOUND)
+    message(STATUS "nng found")
+else()
+    message(STATUS "nng not found, protocol module will use FetchContent")
+endif()
 
 # libcurl (optional for RestTemplate)
 option(APOLLO_ENABLE_CURL "Enable libcurl support for RestTemplate" ON)

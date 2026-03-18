@@ -12,9 +12,10 @@ target_include_directories(base-app
 
 target_link_libraries(base-app
     PRIVATE
-        apollo::base
-        apollo::core
-        apollo::data
+        Apollo::base
+        Apollo::core
+        Apollo::data_orm
+        Apollo::data_cache
         apollo::protocol
 )
 
