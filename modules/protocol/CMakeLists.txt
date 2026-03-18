@@ -50,7 +50,7 @@ target_include_directories(apollo_protocol
 
 target_link_libraries(apollo_protocol
     PUBLIC
-        Apollo::base
+        apollo::base
 )
 
 # 链接 NNG
@@ -78,7 +78,7 @@ endif()
 target_compile_features(apollo_protocol PUBLIC cxx_std_20)
 
 # alias
-add_library(Apollo::protocol ALIAS apollo_protocol)
+add_library(apollo::protocol ALIAS apollo_protocol)
 
 # 测试
 if(APOLLO_BUILD_TESTS)

@@ -4,7 +4,7 @@ add_library(apollo_data_redis STATIC
     src/redis_template.cpp
     src/redis_connection_pool.cpp
 )
-add_library(Apollo::data_redis ALIAS apollo_data_redis)
+add_library(apollo::data_redis ALIAS apollo_data_redis)
 
 target_include_directories(apollo_data_redis
     PUBLIC
@@ -15,7 +15,7 @@ target_include_directories(apollo_data_redis
 
 target_link_libraries(apollo_data_redis
     PUBLIC
-        Apollo::core
+        apollo::core
 )
 
 # Find hiredis

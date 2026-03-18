@@ -3,7 +3,7 @@ add_library(apollo_core_config STATIC
     src/config_value.cpp
     src/config_manager.cpp
 )
-add_library(Apollo::core_config ALIAS apollo_core_config)
+add_library(apollo::core_config ALIAS apollo_core_config)
 
 target_include_directories(apollo_core_config
     PUBLIC
@@ -14,7 +14,7 @@ target_include_directories(apollo_core_config
 
 target_link_libraries(apollo_core_config
     PUBLIC
-        Apollo::base
+        apollo::base
 )
 
 # Optional: nlohmann/json for JSON config support

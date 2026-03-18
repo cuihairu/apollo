@@ -1,5 +1,5 @@
 add_library(apollo_base INTERFACE)
-add_library(Apollo::base ALIAS apollo_base)
+add_library(apollo::base ALIAS apollo_base)
 
 target_include_directories(apollo_base
     INTERFACE

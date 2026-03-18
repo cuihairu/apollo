@@ -12,11 +12,11 @@ target_include_directories(base-app
 
 target_link_libraries(base-app
     PRIVATE
-        Apollo::base
-        Apollo::core
-        Apollo::data_orm
-        Apollo::data_cache
-        Apollo::protocol
+        apollo::base
+        apollo::core
+        apollo::data_orm
+        apollo::data_cache
+        apollo::protocol
 )
 
 target_compile_features(base-app PRIVATE cxx_std_20)

@@ -8,7 +8,7 @@ add_library(apollo_bigworld STATIC
     src/callback.cpp
     src/timer.cpp
 )
-add_library(Apollo::bigworld ALIAS apollo_bigworld)
+add_library(apollo::bigworld ALIAS apollo_bigworld)
 
 target_include_directories(apollo_bigworld
     PUBLIC
@@ -19,8 +19,8 @@ target_include_directories(apollo_bigworld
 
 target_link_libraries(apollo_bigworld
     PUBLIC
-        Apollo::game_core
-        Apollo::runtime
+        apollo::game_core
+        apollo::runtime
 )
 
 target_compile_features(apollo_bigworld PUBLIC cxx_std_20)
@@ -43,7 +43,7 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_bigworld_comprehensive_tests
             PRIVATE
                 apollo_bigworld
-                Apollo::base
+                apollo::base
                 GTest::gtest
                 GTest::gtest_main
         )

@@ -2,7 +2,7 @@ add_library(apollo_data_orm STATIC
     src/memory_connection.cpp
     src/sql_template.cpp
 )
-add_library(Apollo::data_orm ALIAS apollo_data_orm)
+add_library(apollo::data_orm ALIAS apollo_data_orm)
 
 target_include_directories(apollo_data_orm
     PUBLIC

@@ -12,11 +12,11 @@ target_include_directories(cell-app
 
 target_link_libraries(cell-app
     PRIVATE
-        Apollo::base
-        Apollo::core
-        Apollo::game_core
-        Apollo::game_world
-        Apollo::protocol
+        apollo::base
+        apollo::core
+        apollo::game_core
+        apollo::game_world
+        apollo::protocol
 )
 
 target_compile_features(cell-app PRIVATE cxx_std_20)

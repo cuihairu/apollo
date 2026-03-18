@@ -1,6 +1,6 @@
 # Network module - core abstractions
 add_library(apollo_net_core INTERFACE)
-add_library(Apollo::net_core ALIAS apollo_net_core)
+add_library(apollo::net_core ALIAS apollo_net_core)
 
 target_include_directories(apollo_net_core
     INTERFACE
@@ -17,7 +17,7 @@ endif()
 
 target_link_libraries(apollo_net_core
     INTERFACE
-        Apollo::runtime
+        apollo::runtime
 )
 
 # Find protobuf for TCP module (same logic as root CMakeLists)
@@ -57,7 +57,7 @@ add_library(apollo_net_tcp STATIC
     tcp/src/rpc.cpp
     tcp/src/protobuf_message.cpp
 )
-add_library(Apollo::net_tcp ALIAS apollo_net_tcp)
+add_library(apollo::net_tcp ALIAS apollo_net_tcp)
 
 target_include_directories(apollo_net_tcp
     PUBLIC
@@ -68,7 +68,7 @@ target_include_directories(apollo_net_tcp
 
 target_link_libraries(apollo_net_tcp
     PUBLIC
-        Apollo::net_core
+        apollo::net_core
         ${_net_protobuf_target}
 )
 
@@ -85,7 +85,7 @@ add_library(apollo_net_http STATIC
     http/src/rest_client.cpp
     http/src/event_loop.cpp
 )
-add_library(Apollo::net_http ALIAS apollo_net_http)
+add_library(apollo::net_http ALIAS apollo_net_http)
 
 target_include_directories(apollo_net_http
     PUBLIC
@@ -96,7 +96,7 @@ target_include_directories(apollo_net_http
 
 target_link_libraries(apollo_net_http
     PUBLIC
-        Apollo::net_core
+        apollo::net_core
 )
 
 target_compile_features(apollo_net_http PUBLIC cxx_std_20)
@@ -110,7 +110,7 @@ endif()
 add_library(apollo_net_websocket STATIC
     websocket/src/websocket.cpp
 )
-add_library(Apollo::net_websocket ALIAS apollo_net_websocket)
+add_library(apollo::net_websocket ALIAS apollo_net_websocket)
 
 target_include_directories(apollo_net_websocket
     PUBLIC
@@ -121,7 +121,7 @@ target_include_directories(apollo_net_websocket
 
 target_link_libraries(apollo_net_websocket
     PUBLIC
-        Apollo::net_core
+        apollo::net_core
         OpenSSL::Crypto
 )
 
@@ -139,7 +139,7 @@ add_library(apollo_net_rpc STATIC
     rpc/src/session_manager.cpp
     rpc/src/adapters/native_adapter.cpp
 )
-add_library(Apollo::net_rpc ALIAS apollo_net_rpc)
+add_library(apollo::net_rpc ALIAS apollo_net_rpc)
 
 target_include_directories(apollo_net_rpc
     PUBLIC
@@ -150,7 +150,7 @@ target_include_directories(apollo_net_rpc
 
 target_link_libraries(apollo_net_rpc
     PUBLIC
-        Apollo::net_tcp
+        apollo::net_tcp
 )
 
 target_compile_features(apollo_net_rpc PUBLIC cxx_std_20)
@@ -176,7 +176,7 @@ if(BUILD_TESTING)
                 apollo_net_http
                 apollo_net_websocket
                 apollo_net_rpc
-                Apollo::base
+                apollo::base
                 GTest::gtest
                 GTest::gtest_main
         )

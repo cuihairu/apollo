@@ -1,6 +1,6 @@
 # Starter - Core module
 add_library(apollo_starter_core INTERFACE)
-add_library(Apollo::starter_core ALIAS apollo_starter_core)
+add_library(apollo::starter_core ALIAS apollo_starter_core)
 
 target_include_directories(apollo_starter_core
     INTERFACE
@@ -11,9 +11,9 @@ target_include_directories(apollo_starter_core
 
 target_link_libraries(apollo_starter_core
     INTERFACE
-        Apollo::base
-        Apollo::core
-        Apollo::runtime
+        apollo::base
+        apollo::core
+        apollo::runtime
 )
 
 target_compile_features(apollo_starter_core INTERFACE cxx_std_20)

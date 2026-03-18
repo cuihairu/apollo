@@ -1,5 +1,5 @@
 add_library(apollo_data_core INTERFACE)
-add_library(Apollo::data_core ALIAS apollo_data_core)
+add_library(apollo::data_core ALIAS apollo_data_core)
 
 target_include_directories(apollo_data_core
     INTERFACE

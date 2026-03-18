@@ -16,8 +16,8 @@ if(BUILD_TESTING)
             PRIVATE
                 apollo_starter_core
                 apollo_starter_net
-                Apollo::base
-                Apollo::core
+                apollo::base
+                apollo::core
                 GTest::gtest
                 GTest::gtest_main
         )

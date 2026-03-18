@@ -3,7 +3,7 @@ add_library(apollo_game_world STATIC
     src/aoi.cpp
     src/scene.cpp
 )
-add_library(Apollo::game_world ALIAS apollo_game_world)
+add_library(apollo::game_world ALIAS apollo_game_world)
 
 target_include_directories(apollo_game_world
     PUBLIC
@@ -14,7 +14,7 @@ target_include_directories(apollo_game_world
 
 target_link_libraries(apollo_game_world
     PUBLIC
-        Apollo::game_core
+        apollo::game_core
 )
 
 target_compile_features(apollo_game_world PUBLIC cxx_std_20)

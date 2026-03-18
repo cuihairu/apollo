@@ -13,11 +13,11 @@ target_include_directories(gateway-app
 
 target_link_libraries(gateway-app
     PRIVATE
-        Apollo::base
-        Apollo::core
-        Apollo::runtime
-        Apollo::net_tcp
-        Apollo::protocol
+        apollo::base
+        apollo::core
+        apollo::runtime
+        apollo::net_tcp
+        apollo::protocol
 )
 
 target_compile_features(gateway-app PRIVATE cxx_std_20)

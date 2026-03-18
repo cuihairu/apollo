@@ -2,7 +2,7 @@ add_library(apollo_runtime STATIC
     src/application_host.cpp
     src/runtime_manifest.cpp
 )
-add_library(Apollo::runtime ALIAS apollo_runtime)
+add_library(apollo::runtime ALIAS apollo_runtime)
 
 target_include_directories(apollo_runtime
     PUBLIC

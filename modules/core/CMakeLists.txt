@@ -7,7 +7,7 @@ add_library(apollo_core STATIC
     src/di/application_context.cpp
     src/module_manifest.cpp
 )
-add_library(Apollo::core ALIAS apollo_core)
+add_library(apollo::core ALIAS apollo_core)
 
 target_include_directories(apollo_core
     PUBLIC

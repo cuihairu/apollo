@@ -1,6 +1,6 @@
 # Starter - Network module
 add_library(apollo_starter_net INTERFACE)
-add_library(Apollo::starter_net ALIAS apollo_starter_net)
+add_library(apollo::starter_net ALIAS apollo_starter_net)
 
 target_include_directories(apollo_starter_net
     INTERFACE
@@ -11,11 +11,11 @@ target_include_directories(apollo_starter_net
 
 target_link_libraries(apollo_starter_net
     INTERFACE
-        Apollo::starter_core
-        Apollo::net_core
-        Apollo::net_tcp
-        Apollo::net_http
-        Apollo::net_websocket
+        apollo::starter_core
+        apollo::net_core
+        apollo::net_tcp
+        apollo::net_http
+        apollo::net_websocket
 )
 
 target_compile_features(apollo_starter_net INTERFACE cxx_std_20)

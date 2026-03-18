@@ -2,7 +2,7 @@
 add_library(apollo_game_core STATIC
     src/entity.cpp
 )
-add_library(Apollo::game_core ALIAS apollo_game_core)
+add_library(apollo::game_core ALIAS apollo_game_core)
 
 target_include_directories(apollo_game_core
     PUBLIC
@@ -13,7 +13,7 @@ target_include_directories(apollo_game_core
 
 target_link_libraries(apollo_game_core
     PUBLIC
-        Apollo::core
+        apollo::core
 )
 
 target_compile_features(apollo_game_core PUBLIC cxx_std_20)

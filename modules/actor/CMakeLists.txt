@@ -11,7 +11,7 @@ add_library(apollo_actor STATIC
     src/monitoring.cpp
     src/timer_service.cpp
 )
-add_library(Apollo::actor ALIAS apollo_actor)
+add_library(apollo::actor ALIAS apollo_actor)
 
 target_include_directories(apollo_actor
     PUBLIC
@@ -22,8 +22,8 @@ target_include_directories(apollo_actor
 
 target_link_libraries(apollo_actor
     PUBLIC
-        Apollo::runtime
-        Apollo::net_tcp
+        apollo::runtime
+        apollo::net_tcp
 )
 
 target_compile_features(apollo_actor PUBLIC cxx_std_20)
@@ -46,7 +46,7 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_actor_comprehensive_tests
             PRIVATE
                 apollo_actor
-                Apollo::base
+                apollo::base
                 GTest::gtest
                 GTest::gtest_main
         )

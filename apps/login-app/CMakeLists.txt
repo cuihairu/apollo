@@ -12,10 +12,10 @@ target_include_directories(login-app
 
 target_link_libraries(login-app
     PRIVATE
-        Apollo::base
-        Apollo::core
-        Apollo::runtime
-        Apollo::protocol
+        apollo::base
+        apollo::core
+        apollo::runtime
+        apollo::protocol
 )
 
 target_compile_features(login-app PRIVATE cxx_std_20)
