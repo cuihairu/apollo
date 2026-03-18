@@ -20,6 +20,9 @@ add_subdirectory(data)
 # Level 5: Network (depends on runtime)
 add_subdirectory(net)
 
+# Level 5.5: Protocol (depends on base, NNG)
+add_subdirectory(protocol)
+
 # Level 6: Actor (depends on runtime, net)
 add_subdirectory(actor)
 
