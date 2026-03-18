@@ -53,7 +53,7 @@ struct SocketInfo {
 // 事件循环实现
 //==============================================================================
 
-class EventLoop::Impl {
+class net::EventLoop::Impl {
 public:
     explicit Impl(EventLoop& outer) : outer_(outer), running_(false), nextTimerId_(1) {
 #ifdef _WIN32
@@ -392,23 +392,23 @@ private:
 // EventLoop 实现
 //==============================================================================
 
-EventLoop::EventLoop() : impl_(new Impl(*this)) {}
+net::EventLoop::EventLoop() : impl_(new Impl(*this)) {}
 
-EventLoop::~EventLoop() {
+net::EventLoop::~EventLoop() {
     stop();
     delete impl_;
 }
 
-bool EventLoop::init(const EventLoopConfig& config) {
+bool net::EventLoop::init(const EventLoopConfig& config) {
     return impl_->init(config);
 }
 
-bool EventLoop::run() {
+bool net::EventLoop::run() {
     impl_->loopThreadId_ = std::this_thread::get_id();
     return impl_->run();
 }
 
-bool EventLoop::runInThread() {
+bool net::EventLoop::runInThread() {
     if (impl_->isRunning()) return false;
 
     eventThread_ = std::thread([this]() {
@@ -419,54 +419,54 @@ bool EventLoop::runInThread() {
     return true;
 }
 
-void EventLoop::stop() {
+void net::EventLoop::stop() {
     impl_->stop();
     if (eventThread_.joinable()) {
         eventThread_.join();
     }
 }
 
-void EventLoop::wakeup() {
+void net::EventLoop::wakeup() {
     impl_->wakeup();
 }
 
-bool EventLoop::isRunning() const {
+bool net::EventLoop::isRunning() const {
     return impl_ && impl_->isRunning();
 }
 
-bool EventLoop::addSocket(socket_t sockfd, EventType events, SocketCallback callback) {
+bool net::EventLoop::addSocket(socket_t sockfd, EventType events, SocketCallback callback) {
     return impl_->addSocket(sockfd, events, std::move(callback));
 }
 
-bool EventLoop::modifySocket(socket_t sockfd, EventType events) {
+bool net::EventLoop::modifySocket(socket_t sockfd, EventType events) {
     return impl_->modifySocket(sockfd, events);
 }
 
-bool EventLoop::removeSocket(socket_t sockfd) {
+bool net::EventLoop::removeSocket(socket_t sockfd) {
     return impl_->removeSocket(sockfd);
 }
 
-TimerId EventLoop::addTimer(uint64_t delayMs, TimerCallback callback) {
+TimerId net::EventLoop::addTimer(uint64_t delayMs, TimerCallback callback) {
     return impl_->addTimer(delayMs, std::move(callback), false);
 }
 
-TimerId EventLoop::addPeriodicTimer(uint64_t intervalMs, TimerCallback callback) {
+TimerId net::EventLoop::addPeriodicTimer(uint64_t intervalMs, TimerCallback callback) {
     return impl_->addTimer(intervalMs, std::move(callback), true);
 }
 
-bool EventLoop::removeTimer(TimerId timerId) {
+bool net::EventLoop::removeTimer(TimerId timerId) {
     return impl_->removeTimer(timerId);
 }
 
-bool EventLoop::hasTimer(TimerId timerId) const {
+bool net::EventLoop::hasTimer(TimerId timerId) const {
     return impl_->hasTimer(timerId);
 }
 
-void EventLoop::executeInLoop(Task task) {
+void net::EventLoop::executeInLoop(Task task) {
     impl_->executeInLoop(std::move(task));
 }
 
-void EventLoop::executeInLoopAsync(Task task) {
+void net::EventLoop::executeInLoopAsync(Task task) {
     {
         std::lock_guard<std::mutex> lock(impl_->taskMutex_);
         impl_->pendingTasks_.push(std::move(task));
@@ -474,11 +474,11 @@ void EventLoop::executeInLoopAsync(Task task) {
     impl_->wakeup();
 }
 
-EventLoopStats EventLoop::getStats() const {
+EventLoopStats net::EventLoop::getStats() const {
     return impl_->getStats();
 }
 
-void EventLoop::resetStats() {
+void net::EventLoop::resetStats() {
     impl_->resetStats();
 }
 
@@ -486,7 +486,7 @@ void EventLoop::resetStats() {
 // HeartbeatManager 实现
 //==============================================================================
 
-HeartbeatManager::HeartbeatManager(EventLoop* loop)
+net::HeartbeatManager::HeartbeatManager(EventLoop* loop)
     : loop_(loop) {
 
     // 启动定时检查
@@ -495,7 +495,7 @@ HeartbeatManager::HeartbeatManager(EventLoop* loop)
     });
 }
 
-void HeartbeatManager::addHeartbeat(socket_t sockfd, uint64_t intervalMs,
+void net::HeartbeatManager::addHeartbeat(socket_t sockfd, uint64_t intervalMs,
                                    HeartbeatCallback heartbeatCb,
                                    TimeoutCallback timeoutCb) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -510,12 +510,12 @@ void HeartbeatManager::addHeartbeat(socket_t sockfd, uint64_t intervalMs,
     heartbeats_[sockfd] = std::move(info);
 }
 
-void HeartbeatManager::removeHeartbeat(socket_t sockfd) {
+void net::HeartbeatManager::removeHeartbeat(socket_t sockfd) {
     std::lock_guard<std::mutex> lock(mutex_);
     heartbeats_.erase(sockfd);
 }
 
-void HeartbeatManager::updateHeartbeat(socket_t sockfd) {
+void net::HeartbeatManager::updateHeartbeat(socket_t sockfd) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = heartbeats_.find(sockfd);
     if (it != heartbeats_.end()) {
@@ -523,11 +523,11 @@ void HeartbeatManager::updateHeartbeat(socket_t sockfd) {
     }
 }
 
-void HeartbeatManager::checkTimeouts() {
+void net::HeartbeatManager::checkTimeouts() {
     onCheckTimer();
 }
 
-void HeartbeatManager::onCheckTimer() {
+void net::HeartbeatManager::onCheckTimer() {
     auto now = std::chrono::steady_clock::now();
     std::vector<socket_t> timedOut;
 
@@ -567,11 +567,11 @@ void HeartbeatManager::onCheckTimer() {
 // ReconnectManager 实现
 //==============================================================================
 
-ReconnectManager::ReconnectManager(EventLoop* loop)
+net::ReconnectManager::ReconnectManager(EventLoop* loop)
     : loop_(loop), nextReconnectId_(1) {
 }
 
-uint64_t ReconnectManager::addReconnect(const std::string& address, uint16_t port,
+uint64_t net::ReconnectManager::addReconnect(const std::string& address, uint16_t port,
                                        uint64_t intervalMs, uint32_t maxRetries,
                                        ReconnectCallback callback) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -597,7 +597,7 @@ uint64_t ReconnectManager::addReconnect(const std::string& address, uint16_t por
     return id;
 }
 
-bool ReconnectManager::removeReconnect(uint64_t reconnectId) {
+bool net::ReconnectManager::removeReconnect(uint64_t reconnectId) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = reconnects_.find(reconnectId);
     if (it == reconnects_.end()) return false;
@@ -607,7 +607,7 @@ bool ReconnectManager::removeReconnect(uint64_t reconnectId) {
     return true;
 }
 
-bool ReconnectManager::triggerReconnect(uint64_t reconnectId) {
+bool net::ReconnectManager::triggerReconnect(uint64_t reconnectId) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = reconnects_.find(reconnectId);
     if (it == reconnects_.end() || !it->second.active) return false;
@@ -615,7 +615,7 @@ bool ReconnectManager::triggerReconnect(uint64_t reconnectId) {
     return it->second.callback ? it->second.callback() : false;
 }
 
-void ReconnectManager::onReconnectTimer(uint64_t reconnectId) {
+void net::ReconnectManager::onReconnectTimer(uint64_t reconnectId) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = reconnects_.find(reconnectId);
     if (it == reconnects_.end() || !it->second.active) return;

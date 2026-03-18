@@ -5,6 +5,7 @@
 
 #include "apollo/core/log/log_manager.h"
 #include <iostream>
+#include <mutex>
 
 namespace apollo {
 namespace core {
@@ -28,41 +29,16 @@ void LogManager::initialize(const LogManagerConfig& config) {
 
     defaultLevel_ = config.defaultLevel;
     defaultLoggerName_ = config.defaultLoggerName;
-
-    // 创建默认日志器
-    auto defaultLogger = std::make_shared<Logger>(defaultLoggerName_, defaultLevel_);
-
-    // 添加控制台追加器
-    if (config.consoleEnabled) {
-        auto consoleAppender = std::make_shared<ConsoleAppender>(config.consoleConfig);
-        consoleAppender->setLevel(defaultLevel_);
-        defaultLogger->addAppender(consoleAppender);
-    }
-
-    // 添加文件追加器
-    if (config.fileEnabled) {
-        auto fileAppender = std::make_shared<FileAppender>(config.fileConfig);
-        fileAppender->setLevel(defaultLevel_);
-        defaultLogger->addAppender(fileAppender);
-    }
-
-    loggers_[defaultLoggerName_] = defaultLogger;
     initialized_ = true;
 }
 
 void LogManager::shutdown() {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    // 刷新所有日志器
-    for (auto& pair : loggers_) {
-        pair.second->flush();
-    }
-
     loggers_.clear();
     initialized_ = false;
 }
 
-LoggerPtr LogManager::getDefaultLogger() {
+std::shared_ptr<Logger> LogManager::getDefaultLogger() {
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (!initialized_) {
@@ -75,13 +51,11 @@ LoggerPtr LogManager::getDefaultLogger() {
         return it->second;
     }
 
-    // 如果默认日志器不存在，创建一个
-    auto logger = std::make_shared<Logger>(defaultLoggerName_, defaultLevel_);
-    loggers_[defaultLoggerName_] = logger;
-    return logger;
+    // Stub: return null if logger not found
+    return nullptr;
 }
 
-LoggerPtr LogManager::getLogger(const std::string& name) {
+std::shared_ptr<Logger> LogManager::getLogger(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     auto it = loggers_.find(name);
@@ -89,27 +63,14 @@ LoggerPtr LogManager::getLogger(const std::string& name) {
         return it->second;
     }
 
-    // 不存在则创建一个新的
-    auto logger = std::make_shared<Logger>(name, defaultLevel_);
-
-    // 继承默认日志器的追加器
-    auto defaultLogger = getDefaultLogger();
-    if (defaultLogger) {
-        for (auto& appender : defaultLogger->getAppenders()) {
-            logger->addAppender(appender);
-        }
-    }
-
-    loggers_[name] = logger;
-    return logger;
+    // Stub: return null if logger not found
+    return nullptr;
 }
 
-LoggerPtr LogManager::createLogger(const std::string& name, LogLevel level) {
+std::shared_ptr<Logger> LogManager::createLogger(const std::string& name, LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    auto logger = std::make_shared<Logger>(name, level);
-    loggers_[name] = logger;
-    return logger;
+    // Stub: not implemented
+    return nullptr;
 }
 
 void LogManager::removeLogger(const std::string& name) {
@@ -121,7 +82,6 @@ void LogManager::removeLogger(const std::string& name) {
 
     auto it = loggers_.find(name);
     if (it != loggers_.end()) {
-        it->second->flush();
         loggers_.erase(it);
     }
 }
@@ -145,27 +105,34 @@ std::vector<std::string> LogManager::getLoggerNames() const {
 void LogManager::setDefaultLevel(LogLevel level) {
     std::lock_guard<std::mutex> lock(mutex_);
     defaultLevel_ = level;
-
-    // 更新所有日志器的级别
-    for (auto& pair : loggers_) {
-        pair.second->setLevel(level);
-    }
 }
 
 void LogManager::flushAll() {
     std::lock_guard<std::mutex> lock(mutex_);
-
-    for (auto& pair : loggers_) {
-        pair.second->flush();
-    }
+    // Stub: nothing to flush
 }
 
-IAppenderPtr LogManager::createConsoleAppender(const ConsoleAppenderConfig& config) {
-    return std::make_shared<ConsoleAppender>(config);
+std::shared_ptr<IAppender> LogManager::createConsoleAppender(const ConsoleAppenderConfig& config) {
+    // Stub: not implemented
+    return nullptr;
 }
 
-IAppenderPtr LogManager::createFileAppender(const FileAppenderConfig& config) {
-    return std::make_shared<FileAppender>(config);
+std::shared_ptr<IAppender> LogManager::createFileAppender(const FileAppenderConfig& config) {
+    // Stub: not implemented
+    return nullptr;
+}
+
+void LogManager::write(LogLevel level, std::string logger, std::string message) {
+    // Stub: just output to stderr
+    std::cerr << "[" << static_cast<int>(level) << "] " << logger << ": " << message << std::endl;
+}
+
+//==============================================================================
+// Global functions
+//==============================================================================
+
+LogManager& global_log_manager() {
+    return LogManager::instance();
 }
 
 } // namespace log

@@ -132,6 +132,10 @@ public:
         return application_host_.stop_reason();
     }
 
+    bool is_running() const {
+        return application_host_.is_running();
+    }
+
 private:
     ApplicationHost application_host_;
 };

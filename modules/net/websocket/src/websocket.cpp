@@ -128,10 +128,10 @@ std::string generateWebSocketKey() {
     std::vector<uint8_t> raw(16);
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<uint8_t> dis(0, 255);
+    std::uniform_int_distribution<unsigned int> dis(0, 255);
 
     for (auto& byte : raw) {
-        byte = dis(gen);
+        byte = static_cast<uint8_t>(dis(gen));
     }
 
     return base64Encode(raw);
@@ -464,9 +464,9 @@ std::vector<uint8_t> FrameParser::encode(
         // 生成随机掩码
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<uint8_t> dis(0, 255);
+        std::uniform_int_distribution<unsigned int> dis(0, 255);
         for (auto& byte : maskingKey) {
-            byte = dis(gen);
+            byte = static_cast<uint8_t>(dis(gen));
         }
 
         frame.push_back(maskingKey[0]);
@@ -696,9 +696,9 @@ private:
                                    static_cast<uint16_t>(frame.payload[1]);
                     std::string reason;
                     if (frame.payload.size() > 2) {
-                        reason.assign(frame.payload.begin() + 2,
-                                     frame.payload.begin() +
-                                     std::min(frame.payload.size(), static_cast<size_t>(125)));
+                        size_t reason_len = std::min(frame.payload.size() - 2, static_cast<size_t>(123));
+                        const char* reason_data = reinterpret_cast<const char*>(frame.payload.data() + 2);
+                        reason.assign(reason_data, reason_len);
                     }
                     if (callbacks_.onClose) {
                         callbacks_.onClose(static_cast<CloseStatus>(code), reason);

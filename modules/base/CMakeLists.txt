@@ -30,7 +30,6 @@ if(BUILD_TESTING)
     add_test(NAME apollo_base_tests COMMAND apollo_base_tests)
 
     # Comprehensive tests with 80%+ coverage
-    # GTest should be available via vcpkg toolchain
     add_executable(apollo_base_comprehensive_tests
         tests/base_comprehensive_tests.cpp
     )
@@ -38,8 +37,6 @@ if(BUILD_TESTING)
     target_link_libraries(apollo_base_comprehensive_tests
         PRIVATE
             apollo_base
-            GTest::gtest
-            GTest::gtest_main
     )
 
     target_compile_features(apollo_base_comprehensive_tests PRIVATE cxx_std_20)

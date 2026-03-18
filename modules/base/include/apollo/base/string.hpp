@@ -13,33 +13,23 @@ namespace apollo::base {
 
 class String {
 public:
-    // Trim functions
-    static std::string trim(std::string str) {
-        ltrim_in_place(str);
-        rtrim_in_place(str);
-        return str;
-    }
-
+    // Trim functions - use string_view to avoid ambiguity with const char*
     static std::string trim(std::string_view str) {
-        return trim(std::string(str));
-    }
-
-    static std::string ltrim(std::string str) {
-        ltrim_in_place(str);
-        return str;
+        std::string result(str);
+        trim_in_place(result);
+        return result;
     }
 
     static std::string ltrim(std::string_view str) {
-        return ltrim(std::string(str));
-    }
-
-    static std::string rtrim(std::string str) {
-        rtrim_in_place(str);
-        return str;
+        std::string result(str);
+        ltrim_in_place(result);
+        return result;
     }
 
     static std::string rtrim(std::string_view str) {
-        return rtrim(std::string(str));
+        std::string result(str);
+        rtrim_in_place(result);
+        return result;
     }
 
     static void ltrim_in_place(std::string& str) {

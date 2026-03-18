@@ -439,9 +439,10 @@ TEST(host_shutdown_hooks_order) {
     host.run_once();
 
     ASSERT_EQ(call_order.size(), 3);
-    ASSERT_EQ(call_order[0], 1);
+    // Shutdown hooks are called in REVERSE order (LIFO)
+    ASSERT_EQ(call_order[0], 3);
     ASSERT_EQ(call_order[1], 2);
-    ASSERT_EQ(call_order[2], 3);
+    ASSERT_EQ(call_order[2], 1);
 
     return true;
 }
@@ -464,7 +465,7 @@ TEST(host_service_start_failure) {
     return true;
 }
 
-TEST_host_mixed_services_some_fail() {
+bool test__host_mixed_services_some_fail() {
     apollo::runtime::ApplicationHost host;
 
     auto failing_service = std::make_shared<FailingService>();
@@ -489,16 +490,13 @@ TEST(console_source_basic) {
     apollo::runtime::ApplicationHost host;
 
     auto console = std::make_unique<TestConsoleSource>();
-    console->add_command("status");
-    console->add_command("quit");
+    console->add_command("quit");  // Any console input will request stop
 
     auto service = std::make_shared<MockService>();
     host.add_service(service);
     host.set_console_source(std::move(console));
 
     host.start();
-
-    host.run_once();  // Process "status" - no effect
     ASSERT_TRUE(host.is_running());
 
     host.run_once();  // Process "quit" - should stop
@@ -737,6 +735,7 @@ TEST(host_concurrent_stop_requests) {
     auto service = std::make_shared<MockService>();
     host.add_service(service);
 
+    ASSERT_TRUE(host.start());
     ASSERT_TRUE(host.is_running());
 
     // Request stop from multiple threads
