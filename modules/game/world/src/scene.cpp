@@ -1,6 +1,9 @@
 #include "apollo/game/world/scene.hpp"
+#include "apollo/game/core/entity.hpp"
 
 namespace apollo::game::world {
+
+using apollo::game::core::EntityId;
 
 Scene::Scene(std::string name)
     : name_(std::move(name)) {
@@ -13,7 +16,7 @@ void Scene::spawn_entity(EntityPtr entity) {
     }
 }
 
-void Scene::despawn_entity(EntityId id) {
+void Scene::despawn_entity(apollo::game::core::EntityId id) {
     auto it = entities_.find(id.value());
     if (it != entities_.end()) {
         it->second->on_despawn();
@@ -21,7 +24,7 @@ void Scene::despawn_entity(EntityId id) {
     }
 }
 
-EntityPtr Scene::get_entity(EntityId id) const {
+EntityPtr Scene::get_entity(apollo::game::core::EntityId id) const {
     auto it = entities_.find(id.value());
     return it != entities_.end() ? it->second : nullptr;
 }

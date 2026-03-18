@@ -141,14 +141,14 @@ public:
     // 类型检查
     bool isNull() const { return type_ == EComValType::ECVT_NULL; }
     bool isBool() const { return type_ == EComValType::ECVT_BOOL; }
-    isInt8_t() const { return type_ == EComValType::ECVT_BYTE; }
-    isInt16() const { return type_ == EComValType::ECVT_INT; }
-    isUInt16() const { return type_ == EComValType::ECVT_WORD; }
-    isInt32() const { return type_ == EComValType::ECVT_INT; }
-    isUInt32() const { return type_ == EComValType::ECVT_DWORD; }
-    isInt64() const { return type_ == EComValType::ECVT_INT64; }
-    isDouble() const { return type_ == EComValType::ECVT_DOUBLE; }
-    isString() const { return type_ == EComValType::ECVT_STRING; }
+    bool isInt8() const { return type_ == EComValType::ECVT_BYTE; }
+    bool isInt16() const { return type_ == EComValType::ECVT_INT; }
+    bool isUInt16() const { return type_ == EComValType::ECVT_WORD; }
+    bool isInt32() const { return type_ == EComValType::ECVT_INT; }
+    bool isUInt32() const { return type_ == EComValType::ECVT_DWORD; }
+    bool isInt64() const { return type_ == EComValType::ECVT_INT64; }
+    bool isDouble() const { return type_ == EComValType::ECVT_DOUBLE; }
+    bool isString() const { return type_ == EComValType::ECVT_STRING; }
 
     // ========== 值获取 ==========
 
@@ -419,7 +419,7 @@ public:
                 offset += 8;
                 break;
 
-            case EComValType::ECVT_STRING:
+            case EComValType::ECVT_STRING: {
                 if (offset + 2 + stringLen_ > bufSize) return false;
                 uint16_t len = static_cast<uint16_t>(stringLen_);
                 std::memcpy(buf + offset, &len, 2);
@@ -429,6 +429,7 @@ public:
                     offset += stringLen_;
                 }
                 break;
+            }
 
             default:
                 break;
@@ -580,7 +581,7 @@ private:
 };
 
 /// 空值常量
-extern const ComVal NullComVal;
+inline const ComVal NullComVal;
 
 } // namespace game
 } // namespace apollo

@@ -216,31 +216,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
         add_test(NAME ChannelTests COMMAND channel_tests)
     endif()
 
-    if(APOLLO_ENABLE_ACTOR)
-        # ========== Actor Framework Tests (New) ==========
-
-        # Basic Actor tests
-        add_executable(actor_framework_tests test_actor_framework.cpp)
-
-        target_link_libraries(actor_framework_tests PRIVATE apollo)
-
-        if(WIN32)
-            target_link_libraries(actor_framework_tests PRIVATE ws2_32)
-        endif()
-
-        add_test(NAME ActorFrameworkTests COMMAND actor_framework_tests)
-
-        # Concurrency and stress tests
-        add_executable(actor_concurrency_tests test_actor_concurrency.cpp)
-
-        target_link_libraries(actor_concurrency_tests PRIVATE apollo)
-
-        if(WIN32)
-            target_link_libraries(actor_concurrency_tests PRIVATE ws2_32)
-        endif()
-
-        add_test(NAME ActorConcurrencyTests COMMAND actor_concurrency_tests)
-    endif()
+    # ========== Actor Framework Tests ==========
+    # REMOVED: Actor module removed in favor of CAF (C++ Actor Framework)
+    # See: https://github.com/actor-framework/actor-framework
 
     # ========== Data Structures Tests (New) ==========
 
@@ -335,6 +313,68 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    add_test(NAME TimeTests COMMAND time_tests)
 
+	    # Core lifecycle tests
+	    add_executable(core_lifecycle_tests test_core_lifecycle.cpp)
+
+	    target_link_libraries(core_lifecycle_tests PRIVATE apollo apollo::core)
+
+	    if(WIN32)
+	        target_link_libraries(core_lifecycle_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME CoreLifecycleTests COMMAND core_lifecycle_tests)
+
+	    # Core log tests
+	    add_executable(core_log_tests test_core_log.cpp)
+
+	    target_link_libraries(core_log_tests PRIVATE apollo apollo::base apollo::core)
+
+	    if(WIN32)
+	        target_link_libraries(core_log_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME CoreLogTests COMMAND core_log_tests)
+
+	    # Core config tests
+	    add_executable(core_config_tests test_core_config.cpp)
+
+	    target_link_libraries(core_config_tests PRIVATE apollo apollo::base apollo::core)
+
+	    if(WIN32)
+	        target_link_libraries(core_config_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME CoreConfigTests COMMAND core_config_tests)
+
+	    # Runtime tests
+	    add_executable(runtime_tests test_runtime.cpp)
+
+	    target_link_libraries(runtime_tests PRIVATE apollo apollo::base apollo::core apollo::runtime)
+
+	    if(WIN32)
+	        target_link_libraries(runtime_tests PRIVATE ws2_32)
+	    endif()
+
+	    add_test(NAME RuntimeTests COMMAND runtime_tests)
+
+	    # Data module tests
+	    add_executable(data_tests test_data.cpp)
+	    target_link_libraries(data_tests PRIVATE apollo apollo::base apollo::core apollo::runtime apollo::data_cache apollo::data_orm)
+	    if(WIN32)
+	        target_link_libraries(data_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME DataTests COMMAND data_tests)
+
+	    # ========== Net Module Tests (New) ==========
+	    add_executable(net_tests test_net.cpp)
+	    target_link_libraries(net_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(net_tests PRIVATE ws2_32)
+	        target_compile_options(net_tests PRIVATE /utf-8)
+	        target_compile_definitions(net_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	    endif()
+	    add_test(NAME NetTests COMMAND net_tests)
+
 	    # ========== Crypto Tests ==========
 	    # Note: OpenSSL header conflicts on Windows, disabled pending fix
 	    # # Note: OpenSSL header conflicts - disabled
@@ -410,5 +450,81 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME TimeTests COMMAND time_tests)
 
+	    add_executable(core_lifecycle_tests test_core_lifecycle.cpp)
+	    target_link_libraries(core_lifecycle_tests PRIVATE apollo apollo::base apollo::core)
+	    if(WIN32)
+	        target_link_libraries(core_lifecycle_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME CoreLifecycleTests COMMAND core_lifecycle_tests)
+
+	    # Core log tests
+	    add_executable(core_log_tests test_core_log.cpp)
+	    target_link_libraries(core_log_tests PRIVATE apollo apollo::base apollo::core)
+	    if(WIN32)
+	        target_link_libraries(core_log_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME CoreLogTests COMMAND core_log_tests)
+
+	    # Core config tests
+	    add_executable(core_config_tests test_core_config.cpp)
+	    target_link_libraries(core_config_tests PRIVATE apollo apollo::base apollo::core)
+	    if(WIN32)
+	        target_link_libraries(core_config_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME CoreConfigTests COMMAND core_config_tests)
+
+	    # Runtime tests
+	    add_executable(runtime_tests test_runtime.cpp)
+	    target_link_libraries(runtime_tests PRIVATE apollo apollo::base apollo::core apollo::runtime)
+	    if(WIN32)
+	        target_link_libraries(runtime_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME RuntimeTests COMMAND runtime_tests)
+
+	    # Data module tests
+	    add_executable(data_tests test_data.cpp)
+	    target_link_libraries(data_tests PRIVATE apollo apollo::base apollo::core apollo::runtime apollo::data_cache apollo::data_orm)
+	    if(WIN32)
+	        target_link_libraries(data_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME DataTests COMMAND data_tests)
+
+	    # ========== Net Module Tests (New) ==========
+	    add_executable(net_tests test_net.cpp)
+	    target_link_libraries(net_tests PRIVATE apollo apollo::base)
+	    if(WIN32)
+	        target_link_libraries(net_tests PRIVATE ws2_32)
+	        target_compile_options(net_tests PRIVATE /utf-8)
+	        target_compile_definitions(net_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	    endif()
+	    add_test(NAME NetTests COMMAND net_tests)
+
 	    # add_test(NAME CryptoTests COMMAND crypto_tests)
+
+	    # ========== Game Module Tests (New) ==========
+	    # Game module tests include source files directly
+	    add_executable(game_tests
+	        test_game.cpp
+	        # Game Core
+	        ../modules/game/core/src/entity.cpp
+	        # Game World
+	        ../modules/game/world/src/aoi.cpp
+	        ../modules/game/world/src/scene.cpp
+	        # Game Attributes (using attribute.hpp, not attribute_value.h)
+	        ../modules/game/attributes/src/attribute.cpp
+	        # Game Battle ECS
+	        ../modules/game/battle/src/ecs.cpp
+	    )
+	    target_include_directories(game_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/include
+	        ${CMAKE_SOURCE_DIR}/modules/game/core/include
+	        ${CMAKE_SOURCE_DIR}/modules/game/world/include
+	    )
+	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core)
+	    if(WIN32)
+	        target_link_libraries(game_tests PRIVATE ws2_32)
+	        target_compile_options(game_tests PRIVATE /utf-8)
+	        target_compile_definitions(game_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	    endif()
+	    add_test(NAME GameTests COMMAND game_tests)
 	endif()

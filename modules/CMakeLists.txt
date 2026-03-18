@@ -24,12 +24,9 @@ add_subdirectory(net)
 # Note: Old protocol module has issues, disabled in favor of modules/net/protocol
 # add_subdirectory(protocol)
 
-# Level 6: Actor (depends on runtime, net)
-# Note: Actor module requires IPC/NNG integration - currently disabled pending refactoring
-option(APOLLO_BUILD_ACTOR_MODULE "Build actor framework module" OFF)
-if(APOLLO_BUILD_ACTOR_MODULE)
-    add_subdirectory(actor)
-endif()
+# Level 6: Actor - REMOVED
+# Actor module has been removed in favor of CAF (C++ Actor Framework)
+# See: https://github.com/actor-framework/actor-framework
 
 # Level 7: Game (depends on core)
 # Note: Game module has compilation issues, temporarily disabled

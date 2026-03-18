@@ -2,6 +2,7 @@
 add_library(apollo_core_config STATIC
     src/config_value.cpp
     src/config_manager.cpp
+    ../src/config/config_registry.cpp
 )
 add_library(apollo::core_config ALIAS apollo_core_config)
 
@@ -9,6 +10,7 @@ target_include_directories(apollo_core_config
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
         $<INSTALL_INTERFACE:include>
 )
 

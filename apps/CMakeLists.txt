@@ -5,11 +5,22 @@
 
 message(STATUS "Apollo app scaffold enabled: apps/")
 
-# BigWorld 服务器应用
-add_subdirectory(gateway-app)
-add_subdirectory(login-app)
-add_subdirectory(base-app)
-add_subdirectory(cell-app)
+# 检查依赖是否可用
+# Protocol 模块 (需要 NNG)
+if(TARGET apollo::protocol)
+    add_subdirectory(gateway-app)
+    add_subdirectory(login-app)
+    add_subdirectory(base-app)
+    add_subdirectory(cell-app)
+    message(STATUS "Protocol apps enabled (apollo::protocol found)")
+else()
+    message(STATUS "Protocol apps disabled (apollo::protocol not found - NNG required)")
+endif()
 
-# 传统游戏服务器
-add_subdirectory(game-server)
+# Game 模块
+if(TARGET apollo::game_core)
+    add_subdirectory(game-server)
+    message(STATUS "Game-server app enabled (apollo::game_core found)")
+else()
+    message(STATUS "Game-server app disabled (apollo::game_core not found - set APOLLO_BUILD_GAME_MODULE=ON)")
+endif()

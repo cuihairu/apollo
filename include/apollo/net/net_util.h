@@ -4,10 +4,12 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
+    #include <mstcpip.h>
     typedef int socklen_t;
 #else
     #include <sys/socket.h>
@@ -241,7 +243,7 @@ public:
     static bool setKeepAliveParams(SOCKET socket, int idleSec, int intervalSec, int count) {
 #ifdef _WIN32
         tcp_keepalive ka;
-        ka.on_off = 1;
+        ka.onoff = 1;
         ka.keepalivetime = idleSec * 1000;
         ka.keepaliveinterval = intervalSec * 1000;
         DWORD bytesReturned;

@@ -45,6 +45,13 @@ endif()
 
 target_compile_features(apollo_net_protocol PUBLIC cxx_std_20)
 
+# Alias for backward compatibility (apps reference apollo::protocol)
+if(NOT TARGET apollo::protocol)
+    add_library(apollo_protocol INTERFACE)
+    add_library(apollo::protocol ALIAS apollo_protocol)
+    target_link_libraries(apollo_protocol INTERFACE apollo::net_protocol)
+endif()
+
 if(MSVC)
     target_compile_options(apollo_net_protocol PUBLIC /utf-8)
     target_compile_definitions(apollo_net_protocol PUBLIC _CRT_SECURE_NO_WARNINGS)
