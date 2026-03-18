@@ -4,6 +4,7 @@
 #include <chrono>
 #include <memory>
 #include <vector>
+#include <array>
 #include <mutex>
 #include <unordered_map>
 

@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <functional>
+#include <unordered_set>
 
 namespace apollo {
 namespace actor {

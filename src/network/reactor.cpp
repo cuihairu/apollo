@@ -109,7 +109,7 @@ bool Reactor::EventLoop() {
                 fired |= NetEventType::WRITE;
             }
             if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                fired |= NetEventType::ERROR;
+                fired |= NetEventType::ERR;
             }
 
             EventCallback cb;

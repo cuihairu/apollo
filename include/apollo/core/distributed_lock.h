@@ -6,6 +6,8 @@
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
 
 namespace apollo {
 namespace core {

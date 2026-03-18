@@ -3,6 +3,16 @@
  * @brief 加密和哈希工具实现
  */
 
+// ========== 平台相关头文件（必须最先包含）==========
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX       // 防止 min/max 宏冲突
+    #endif
+    #include <windows.h>
+    #include <bcrypt.h>
+    #pragma comment(lib, "bcrypt.lib")
+#endif
+
 #include "apollo/utils/crypto.h"
 #include <algorithm>
 #include <iomanip>
@@ -10,12 +20,6 @@
 #include <random>
 #include <array>
 #include <openssl/evp.h>
-
-#ifdef _WIN32
-    #include <windows.h>
-    #include <bcrypt.h>
-    #pragma comment(lib, "bcrypt.lib")
-#endif
 
 namespace apollo {
 namespace utils {

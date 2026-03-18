@@ -1,11 +1,13 @@
 #include "apollo/storage/cache/redis.hpp"
-#include <sstream>
-#include <iostream>
-#include <cstring>
-#include <chrono>
-#include <algorithm>
 
+// Windows 平台头文件（必须最先包含）
 #ifdef _WIN32
+    #ifndef _WINSOCKAPI_
+        #define _WINSOCKAPI_
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #pragma comment(lib, "ws2_32.lib")
@@ -22,6 +24,12 @@
     #define SOCKET int
     #define INVALID_SOCKET -1
 #endif
+
+#include <sstream>
+#include <iostream>
+#include <cstring>
+#include <chrono>
+#include <algorithm>
 
 namespace apollo {
 namespace db {

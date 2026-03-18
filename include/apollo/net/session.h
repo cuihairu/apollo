@@ -2,6 +2,7 @@
 
 #include "apollo/net/connection.h"
 #include <cstdint>
+#include <memory>
 
 namespace apollo {
 namespace net {
