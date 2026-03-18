@@ -3,6 +3,10 @@
 #include <cerrno>
 #include <fcntl.h>
 
+#ifndef _WIN32
+    #include <netinet/tcp.h>
+#endif
+
 #ifdef _WIN32
     #define LAST_ERROR WSAGetLastError()
     #define ERROR_WOULDBLOCK WSAEWOULDBLOCK
