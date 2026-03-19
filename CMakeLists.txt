@@ -170,10 +170,6 @@ target_include_directories(apollo PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
-endif() # NOT APOLLO_ENABLE_MODULAR_LAYOUT
-
-# 添加 CMake 模块路径
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # 依赖项
 #
@@ -247,31 +243,31 @@ if(APOLLO_ENABLE_YAML)
             pkg_check_modules(yaml-cpp yaml-cpp)
         endif()
     endif()
-	    if(yaml-cpp_FOUND)
-	        if(TARGET yaml-cpp::yaml-cpp)
-	            target_link_libraries(apollo PRIVATE yaml-cpp::yaml-cpp)
-	        else()
-	            target_link_libraries(apollo PRIVATE ${yaml-cpp_LIBRARIES})
-	            target_include_directories(apollo SYSTEM PRIVATE ${yaml-cpp_INCLUDE_DIRS})
-	        endif()
-	        target_compile_definitions(apollo PRIVATE APOLLO_HAS_YAML=1)
-	        message(STATUS "YAML support enabled (yaml-cpp)")
-	    else()
-	        message(STATUS "yaml-cpp not found, YAML support disabled (simplified fallback only)")
+    if(yaml-cpp_FOUND)
+        if(TARGET yaml-cpp::yaml-cpp)
+            target_link_libraries(apollo PRIVATE yaml-cpp::yaml-cpp)
+        else()
+            target_link_libraries(apollo PRIVATE ${yaml-cpp_LIBRARIES})
+            target_include_directories(apollo SYSTEM PRIVATE ${yaml-cpp_INCLUDE_DIRS})
+        endif()
+        target_compile_definitions(apollo PRIVATE APOLLO_HAS_YAML=1)
+        message(STATUS "YAML support enabled (yaml-cpp)")
+    else()
+        message(STATUS "yaml-cpp not found, YAML support disabled (simplified fallback only)")
     endif()
 endif()
 
 # OpenSSL (required for WebSocket SHA-1)
 find_package(OpenSSL REQUIRED)
-	if(OpenSSL_FOUND)
-	    if(TARGET OpenSSL::Crypto)
-	        target_link_libraries(apollo PRIVATE OpenSSL::Crypto)
-	    else()
-	        target_link_libraries(apollo PRIVATE ${OPENSSL_CRYPTO_LIBRARY})
-	        target_include_directories(apollo SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
-	    endif()
-	    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
-	endif()
+if(OpenSSL_FOUND)
+    if(TARGET OpenSSL::Crypto)
+        target_link_libraries(apollo PRIVATE OpenSSL::Crypto)
+    else()
+        target_link_libraries(apollo PRIVATE ${OPENSSL_CRYPTO_LIBRARY})
+        target_include_directories(apollo SYSTEM PRIVATE ${OPENSSL_INCLUDE_DIR})
+    endif()
+    message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
+endif()
 
 # NNG (nanomsg-next-gen) for inter-process communication
 find_package(nng CONFIG QUIET)
@@ -295,17 +291,17 @@ if(APOLLO_ENABLE_CURL)
             pkg_check_modules(CURL libcurl)
         endif()
     endif()
-	    if(CURL_FOUND)
-	        if(TARGET CURL::libcurl)
-	            target_link_libraries(apollo PRIVATE CURL::libcurl)
-	        else()
-	            target_link_libraries(apollo PRIVATE ${CURL_LIBRARIES})
-	            target_include_directories(apollo SYSTEM PRIVATE ${CURL_INCLUDE_DIRS})
-	        endif()
-	        target_compile_definitions(apollo PRIVATE APOLLO_HAS_CURL=1)
-	        message(STATUS "libcurl found, RestTemplate enabled")
-	    else()
-	        message(STATUS "libcurl not found, RestTemplate will be stub only")
+    if(CURL_FOUND)
+        if(TARGET CURL::libcurl)
+            target_link_libraries(apollo PRIVATE CURL::libcurl)
+        else()
+            target_link_libraries(apollo PRIVATE ${CURL_LIBRARIES})
+            target_include_directories(apollo SYSTEM PRIVATE ${CURL_INCLUDE_DIRS})
+        endif()
+        target_compile_definitions(apollo PRIVATE APOLLO_HAS_CURL=1)
+        message(STATUS "libcurl found, RestTemplate enabled")
+    else()
+        message(STATUS "libcurl not found, RestTemplate will be stub only")
     endif()
 endif()
 
@@ -319,18 +315,18 @@ if(APOLLO_ENABLE_HIREDIS)
             pkg_check_modules(hiredis hiredis)
         endif()
     endif()
-	    if(hiredis_FOUND OR hiredis_FOUND)
-	        if(TARGET hiredis::hiredis)
-	            target_link_libraries(apollo PRIVATE hiredis::hiredis)
-	        elseif(hiredis_FOUND)
-	            target_link_libraries(apollo PRIVATE ${hiredis_LIBRARIES})
-	            target_include_directories(apollo SYSTEM PRIVATE ${hiredis_INCLUDE_DIRS})
-	        else()
-	            target_link_libraries(apollo PRIVATE hiredis::hiredis)
-	        endif()
-	        target_compile_definitions(apollo PRIVATE APOLLO_HAS_HIREDIS=1)
-	        message(STATUS "hiredis found, RedisTemplate enabled")
-	    else()
+    if(hiredis_FOUND OR hiredis_FOUND)
+        if(TARGET hiredis::hiredis)
+            target_link_libraries(apollo PRIVATE hiredis::hiredis)
+        elseif(hiredis_FOUND)
+            target_link_libraries(apollo PRIVATE ${hiredis_LIBRARIES})
+            target_include_directories(apollo SYSTEM PRIVATE ${hiredis_INCLUDE_DIRS})
+        else()
+            target_link_libraries(apollo PRIVATE hiredis::hiredis)
+        endif()
+        target_compile_definitions(apollo PRIVATE APOLLO_HAS_HIREDIS=1)
+        message(STATUS "hiredis found, RedisTemplate enabled")
+    else()
         message(STATUS "hiredis not found, RedisTemplate will be stub only")
     endif()
 endif()
@@ -403,45 +399,24 @@ else()
     )
 endif()
 
+endif() # NOT APOLLO_ENABLE_MODULAR_LAYOUT
+
+# 添加 CMake 模块路径
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 # 导出 compile_commands.json for clang-tidy
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(GNUInstallDirs)
-
-install(TARGETS apollo
-    EXPORT ApolloTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-install(EXPORT ApolloTargets
-    FILE ApolloTargets.cmake
-    NAMESPACE Apollo::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Apollo
-)
-
-include(CMakePackageConfigHelpers)
-
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfigVersion.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY AnyNewerVersion
-)
-
-configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApolloConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfig.cmake"
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Apollo
-)
-
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/ApolloConfigVersion.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Apollo
-)
+# Clang-tidy 支持 (global setting, not tied to apollo target)
+if(APOLLO_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if(CLANG_TIDY_EXE)
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+        message(STATUS "Clang-tidy enabled: ${CLANG_TIDY_EXE}")
+    else()
+        message(WARNING "Clang-tidy requested but not found")
+    endif()
+endif()
 
 # Doxygen 文档生成
 if(APOLLO_ENABLE_DOXYGEN)
