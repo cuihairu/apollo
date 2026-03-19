@@ -264,7 +264,8 @@ bool RedisServiceRegistry::heartbeat(const std::string& service) {
 #else // Stub when Redis not available
 
 RedisServiceRegistry::RedisServiceRegistry(const std::string&) {}
-bool RedisServiceRegistry::register(const Endpoint&) { return false; }
+RedisServiceRegistry::~RedisServiceRegistry() = default;
+bool RedisServiceRegistry::registerService(const Endpoint&) { return false; }
 bool RedisServiceRegistry::unregister(const std::string&) { return false; }
 std::vector<Endpoint> RedisServiceRegistry::discover(const std::string&) { return {}; }
 bool RedisServiceRegistry::getBestEndpoint(const std::string&, Endpoint&) { return false; }
