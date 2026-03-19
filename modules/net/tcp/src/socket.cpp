@@ -7,6 +7,7 @@
     #define LAST_ERROR WSAGetLastError()
     #define ERROR_WOULDBLOCK WSAEWOULDBLOCK
 #else
+    #include <netinet/tcp.h>
     #define LAST_ERROR errno
     #define ERROR_WOULDBLOCK EWOULDBLOCK
 #endif
