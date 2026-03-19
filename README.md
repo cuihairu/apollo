@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/public/apollo.png" alt="Apollo Logo" width="200"/>
+</div>
+
 # Apollo MMORPG 服务器框架
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)

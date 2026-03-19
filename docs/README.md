@@ -1,7 +1,7 @@
 ---
 home: true
 title: Apollo
-heroImage: /logo.png
+heroImage: /apollo.png
 heroText: Apollo
 tagline: 高性能 MMORPG 服务器框架
 actions:
