@@ -265,6 +265,7 @@ bool RedisServiceRegistry::heartbeat(const std::string& service) {
 
 RedisServiceRegistry::RedisServiceRegistry(const std::string&) {}
 RedisServiceRegistry::~RedisServiceRegistry() = default;
+
 bool RedisServiceRegistry::registerService(const Endpoint&) { return false; }
 bool RedisServiceRegistry::unregister(const std::string&) { return false; }
 std::vector<Endpoint> RedisServiceRegistry::discover(const std::string&) { return {}; }

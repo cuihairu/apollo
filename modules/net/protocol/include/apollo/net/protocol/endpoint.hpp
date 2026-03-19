@@ -108,6 +108,7 @@ private:
 class RedisServiceRegistry : public ServiceRegistry {
 public:
     explicit RedisServiceRegistry(const std::string& redisUrl = "redis://127.0.0.1:6379");
+    ~RedisServiceRegistry();
 
     bool registerService(const Endpoint& endpoint) override;
     bool unregister(const std::string& service) override;
