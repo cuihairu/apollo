@@ -263,7 +263,14 @@ bool RedisServiceRegistry::heartbeat(const std::string& service) {
 
 #else // Stub when Redis not available
 
-RedisServiceRegistry::RedisServiceRegistry(const std::string&) {}
+// Define empty Impl for stub
+class RedisServiceRegistry::Impl {
+    // Empty implementation
+};
+
+RedisServiceRegistry::RedisServiceRegistry(const std::string&)
+    : impl_(std::make_unique<Impl>()) {}
+
 RedisServiceRegistry::~RedisServiceRegistry() = default;
 
 bool RedisServiceRegistry::registerService(const Endpoint&) { return false; }
