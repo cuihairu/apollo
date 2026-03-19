@@ -58,10 +58,7 @@ add_library(apollo STATIC
     # Starter (Spring-like auto-configuration)
     src/starter/ApolloApplication.cpp
 
-    # Game
-    src/game/aoi/aoi.cpp
-    src/game/attributes/attribute.cpp
-    src/game/battle/ecs/ecs.cpp
+    # Game - migrated to modules/game/, use modular layout instead
 
     # Network
     src/network/net_common.cpp
