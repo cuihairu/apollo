@@ -58,6 +58,7 @@
 #include <queue>
 #include <unordered_map>
 #include <functional>
+#include <cstring>  // For std::memcpy, std::memmove
 
 namespace apollo {
 namespace net {
