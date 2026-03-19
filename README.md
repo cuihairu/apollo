@@ -1,6 +1,6 @@
-<div align="center">
-  <img src="docs/public/apollo.png" alt="Apollo Logo" width="200"/>
-</div>
+<p align="center">
+  <img src="docs/public/apollo.png" alt="Apollo Logo" height="80"/>
+</p>
 
 # Apollo MMORPG 服务器框架
 
