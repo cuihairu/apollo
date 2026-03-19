@@ -244,6 +244,7 @@ AOIManager::Stats AOIManager::GetStats() const {
 
     Stats stats{};
     for (const auto& _ : sceneGrids_) {
+        (void)_; // Suppress unused variable warning
         // TODO: 获取网格统计信息
         stats.totalEntities += 0;
         stats.totalGridCells += 0;
