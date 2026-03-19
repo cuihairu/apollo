@@ -44,3 +44,53 @@ endif()
 
 # Level 9: Starter (assembly layer)
 add_subdirectory(starter)
+
+# Apollo aggregated library (for backward compatibility)
+#
+# This library aggregates all modular components into a single 'apollo' target
+# to maintain compatibility with existing tests and applications.
+
+if(NOT TARGET apollo)
+    add_library(apollo INTERFACE)
+    add_library(apollo::lib ALIAS apollo)
+
+    # Link all modular components
+    target_link_libraries(apollo INTERFACE
+        apollo::base
+        apollo::core
+        apollo::runtime
+        apollo::data_cache
+        apollo::data_orm
+        apollo::net_tcp
+        apollo::net_http
+        apollo::net_websocket
+        apollo::net_rpc
+        apollo::net_protocol
+    )
+
+    # Include directories
+    target_include_directories(apollo INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+        $<INSTALL_INTERFACE:include>
+    )
+
+    # Additional components (optional)
+    if(TARGET apollo::data_redis)
+        target_link_libraries(apollo INTERFACE apollo::data_redis)
+    endif()
+
+    if(TARGET apollo::game_core)
+        target_link_libraries(apollo INTERFACE
+            apollo::game_core
+            apollo::game_world
+            apollo::game_attributes
+            apollo::game_battle
+        )
+    endif()
+
+    if(TARGET apollo::bigworld)
+        target_link_libraries(apollo INTERFACE apollo::bigworld)
+    endif()
+
+    message(STATUS "Apollo aggregated library created (alias: apollo::lib)")
+endif()

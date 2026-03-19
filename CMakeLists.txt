@@ -46,6 +46,10 @@ if(BUILD_TESTS)
     set(APOLLO_BUILD_TESTS ON CACHE BOOL "Build unit tests" FORCE)
 endif()
 
+# Apollo 核心库 (legacy layout - use modular layout instead)
+if(NOT APOLLO_ENABLE_MODULAR_LAYOUT)
+    message(DEPRECATION "Direct apollo library build is deprecated. Use APOLLO_ENABLE_MODULAR_LAYOUT=ON for modular architecture.")
+
 # Apollo 核心库
 add_library(apollo STATIC
     # Framework
@@ -169,6 +173,7 @@ target_include_directories(apollo PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+endif() # NOT APOLLO_ENABLE_MODULAR_LAYOUT
 
 # 添加 CMake 模块路径
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
