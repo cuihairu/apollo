@@ -174,9 +174,10 @@
 | 113 | 如何平衡代码质量和开发速度？ | ✅ | [q113-quality-vs-speed.md](qa/q113-quality-vs-speed.md) |
 | 114 | 你对哪些开源游戏服务器框架有了解？各有什么特点？ | ✅ | [q114-open-source-frameworks.md](qa/q114-open-source-frameworks.md) |
 | 115 | 如果让你重新设计，你会如何改进当前框架？ | ✅ | [q115-framework-redesign.md](qa/q115-framework-redesign.md) |
+| 116 | C++ 设计模式在 KBEngine 中有哪些实践？为什么这样设计？ | ✅ | [q116-cpp-design-patterns-in-kbengine.md](qa/q116-cpp-design-patterns-in-kbengine.md) |
 
 ---
 
-**进度: 115/115 完成 ✅**
+**进度: 116/116 完成 ✅**
 
-*共 115 题，覆盖 MMO 框架开发的核心领域*
+*共 116 题，覆盖 MMO 框架开发的核心领域*
