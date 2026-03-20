@@ -24,7 +24,8 @@ namespace {
 
 std::unique_ptr<netproto::Channel> connectBackendChannel(const std::string& url) {
     auto channel = std::make_unique<netproto::Channel>();
-    if (!channel->connect(url)) {
+    std::error_code ec;
+    if (!channel->connect(url, ec)) {
         throw std::runtime_error("Failed to connect backend channel: " + url);
     }
     return channel;

@@ -6,22 +6,29 @@
 message(STATUS "Apollo app scaffold enabled: apps/")
 
 # 检查依赖是否可用
-# Protocol 模块 (需要 NNG)
-if(TARGET apollo::protocol)
+# Gateway app has been migrated to the modular net/protocol target.
+if(TARGET apollo::net_protocol)
     add_subdirectory(gateway-app)
-    add_subdirectory(login-app)
-    add_subdirectory(base-app)
-    message(STATUS "Protocol apps enabled (apollo::protocol found)")
+    message(STATUS "Gateway app enabled (apollo::net_protocol found)")
 else()
-    message(STATUS "Protocol apps disabled (apollo::protocol not found - NNG required)")
+    message(STATUS "Gateway app disabled (apollo::net_protocol not found - NNG required)")
 endif()
 
-# Cell app 需要 protocol 和 game 模块
-if(TARGET apollo::protocol AND TARGET apollo::game_core AND TARGET apollo::game_world)
-    add_subdirectory(cell-app)
-    message(STATUS "Cell-app enabled (all dependencies found)")
+# Legacy protocol apps still depend on modules/protocol.
+if(TARGET apollo_protocol)
+    add_subdirectory(login-app)
+    add_subdirectory(base-app)
+    message(STATUS "Legacy protocol apps enabled (apollo_protocol found)")
 else()
-    message(STATUS "Cell-app disabled (missing protocol or game modules)")
+    message(STATUS "Legacy protocol apps disabled (legacy protocol module not enabled)")
+endif()
+
+# Cell app 需要 legacy protocol 和 game 模块
+if(TARGET apollo_protocol AND TARGET apollo::game_core AND TARGET apollo::game_world)
+    add_subdirectory(cell-app)
+    message(STATUS "Cell-app enabled (legacy protocol and game modules found)")
+else()
+    message(STATUS "Cell-app disabled (missing legacy protocol or game modules)")
 endif()
 
 # Game 模块
