@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <atomic>
+#include <vector>
 
 namespace gateway {
 
@@ -74,6 +75,8 @@ public:
     bool hasSession(SessionID sessionId) const;
 
 private:
+    int64_t getCurrentTimeMs() const;
+
     mutable std::mutex mutex_;
     std::unordered_map<SessionID, std::shared_ptr<ClientConnection>> sessions_;
     std::atomic<uint64_t> nextSessionId_{1};

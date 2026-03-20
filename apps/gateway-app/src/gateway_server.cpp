@@ -1,8 +1,7 @@
 #include "gateway/gateway_server.hpp"
-#include "apollo/protocol/messages.hpp"
-#include "apollo/protocol/codec.hpp"
 #include <iostream>
 #include <algorithm>
+#include <sstream>
 
 #ifdef _WIN32
     #include <winsock2.h>
@@ -18,6 +17,38 @@
 #endif
 
 namespace gateway {
+
+namespace netproto = apollo::net::protocol;
+
+namespace {
+
+std::unique_ptr<netproto::Channel> connectBackendChannel(const std::string& url) {
+    auto channel = std::make_unique<netproto::Channel>();
+    if (!channel->connect(url)) {
+        throw std::runtime_error("Failed to connect backend channel: " + url);
+    }
+    return channel;
+}
+
+std::vector<uint8_t> encodeDisconnectMessage(SessionID sessionId, PlayerID playerId, bool normalClose) {
+    std::ostringstream stream;
+    stream << "gateway_client_disconnect"
+           << "|sessionId=" << sessionId
+           << "|playerId=" << playerId
+           << "|normalClose=" << (normalClose ? 1 : 0);
+    const auto payload = stream.str();
+    return std::vector<uint8_t>(payload.begin(), payload.end());
+}
+
+bool sendPayload(netproto::Channel* channel, const std::vector<uint8_t>& message) {
+    if (channel == nullptr || !channel->isConnected()) {
+        return false;
+    }
+
+    return channel->send(netproto::Message(message));
+}
+
+} // namespace
 
 //==============================================================================
 // MessageRouter 实现
@@ -35,24 +66,20 @@ void MessageRouter::start() {
     if (running_) return;
 
     // 连接 LoginApp
-    loginAppClient_ = std::make_unique<protocol::ReqSocket>(config_.loginAppUrl);
-    loginAppClient_->start();
+    loginAppClient_ = connectBackendChannel(config_.loginAppUrl);
 
     // 连接 BaseApp
-    baseAppClient_ = std::make_unique<protocol::ReqSocket>(config_.baseAppUrl);
-    baseAppClient_->start();
+    baseAppClient_ = connectBackendChannel(config_.baseAppUrl);
 
     // 连接 ChatApp
-    chatAppClient_ = std::make_unique<protocol::ReqSocket>(config_.chatAppUrl);
-    chatAppClient_->start();
+    chatAppClient_ = connectBackendChannel(config_.chatAppUrl);
 
     // 初始化 CellApp 池
     auto cellApp = std::make_unique<CellAppInfo>();
     cellApp->url = config_.cellAppUrl;
-    cellApp->client = std::make_unique<protocol::ReqSocket>(cellApp->url);
+    cellApp->client = connectBackendChannel(cellApp->url);
     cellApp->load = 0;
-    cellApp->available = true;
-    cellApp->client->start();
+    cellApp->available = cellApp->client->isConnected();
 
     cellApps_.push_back(std::move(cellApp));
 
@@ -78,8 +105,9 @@ void MessageRouter::forwardToCellApp(SessionID sessionId, const std::vector<uint
     for (auto& cellApp : cellApps_) {
         if (cellApp->url == cellAppUrl && cellApp->available) {
             try {
-                // 添加会话头信息
-                // cellApp->client->sendRequest(message);
+                if (!sendPayload(cellApp->client.get(), message)) {
+                    throw std::runtime_error("send failed");
+                }
                 cellApp->load++;
             } catch (...) {
                 cellApp->available = false;
@@ -90,21 +118,19 @@ void MessageRouter::forwardToCellApp(SessionID sessionId, const std::vector<uint
 }
 
 void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint8_t>& message) {
+    (void)sessionId;
     if (baseAppClient_) {
-        try {
-            baseAppClient_->sendRequest(message);
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to forward to BaseApp: " << e.what() << std::endl;
+        if (!sendPayload(baseAppClient_.get(), message)) {
+            std::cerr << "Failed to forward to BaseApp" << std::endl;
         }
     }
 }
 
 void MessageRouter::forwardToChatApp(SessionID sessionId, const std::vector<uint8_t>& message) {
+    (void)sessionId;
     if (chatAppClient_) {
-        try {
-            chatAppClient_->sendRequest(message);
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to forward to ChatApp: " << e.what() << std::endl;
+        if (!sendPayload(chatAppClient_.get(), message)) {
+            std::cerr << "Failed to forward to ChatApp" << std::endl;
         }
     }
 }
@@ -255,12 +281,7 @@ void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {
               << " disconnected (" << (normalClose ? "normal" : "timeout") << ")" << std::endl;
 
     // 通知后端服务
-    GatewayClientDisconnect msg;
-    msg.sessionId = sessionId;
-    msg.playerId = session->playerId;
-    msg.normalClose = normalClose;
-
-    auto data = protocol::MessageCodec::encode(msg);
+    auto data = encodeDisconnectMessage(sessionId, session->playerId, normalClose);
 
     if (session->state == SessionState::IN_GAME) {
         messageRouter_->forwardToCellApp(sessionId, data);

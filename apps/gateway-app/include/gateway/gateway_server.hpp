@@ -2,7 +2,7 @@
 
 #include "gateway/config.hpp"
 #include "gateway/session_manager.hpp"
-#include "apollo/protocol/socket.hpp"
+#include "apollo/net/protocol/channel.hpp"
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -38,14 +38,14 @@ private:
     GatewayConfig config_;
 
     // 后端服务连接
-    std::unique_ptr<protocol::ReqSocket> loginAppClient_;
-    std::unique_ptr<protocol::ReqSocket> baseAppClient_;
-    std::unique_ptr<protocol::ReqSocket> chatAppClient_;
+    std::unique_ptr<apollo::net::protocol::Channel> loginAppClient_;
+    std::unique_ptr<apollo::net::protocol::Channel> baseAppClient_;
+    std::unique_ptr<apollo::net::protocol::Channel> chatAppClient_;
 
     // CellApp 池
     struct CellAppInfo {
         std::string url;
-        std::unique_ptr<protocol::ReqSocket> client;
+        std::unique_ptr<apollo::net::protocol::Channel> client;
         int load;  // 负载计数
         std::atomic<bool> available;
     };

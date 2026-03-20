@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.20)
 # GatewayApp 可执行文件
 add_executable(gateway-app
     src/main.cpp
+    src/gateway_server.cpp
+    include/gateway/session_manager.cpp
 )
 
 target_include_directories(gateway-app
@@ -17,7 +19,7 @@ target_link_libraries(gateway-app
         apollo::core
         apollo::runtime
         apollo::net_tcp
-        apollo::protocol
+        apollo::net_protocol
 )
 
 target_compile_features(gateway-app PRIVATE cxx_std_20)
