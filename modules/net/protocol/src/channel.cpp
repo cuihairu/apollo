@@ -6,19 +6,7 @@
 #include "apollo/net/protocol/channel.hpp"
 #include "apollo/net/protocol/endpoint.hpp"
 
-#ifdef APOLLO_USE_NNG
-
-#include <nng/nng.h>
-#include <nng/protocol/reqrep0/req.h>
-#include <nng/protocol/pair0/pair.h>
-#include <nng/protocol/pubsub/pub.h>
-#include <nng/supplemental/util/platform.h>
-#include <nng/supplemental/util/id_generator.h>
-
 #include <cstring>
-#include <thread>
-#include <chrono>
-#include <unordered_map>
 
 namespace apollo {
 namespace net {
@@ -42,6 +30,27 @@ Message::Message(const void* data, size_t size) {
 std::string Message::toString() const {
     return std::string(data_.begin(), data_.end());
 }
+
+} // namespace protocol
+} // namespace net
+} // namespace apollo
+
+#ifdef APOLLO_USE_NNG
+
+#include <nng/nng.h>
+#include <nng/protocol/reqrep0/req.h>
+#include <nng/protocol/pair0/pair.h>
+#include <nng/protocol/pubsub/pub.h>
+#include <nng/supplemental/util/platform.h>
+#include <nng/supplemental/util/id_generator.h>
+
+#include <thread>
+#include <chrono>
+#include <unordered_map>
+
+namespace apollo {
+namespace net {
+namespace protocol {
 
 //==============================================================================
 // Channel implementation
@@ -272,13 +281,15 @@ void Channel::close() {
 }
 
 Channel Channel::connect(const std::string& service, const ChannelConfig& config) {
-    Channel ch(config);
+    Channel ch;
+    ch.config_ = config;
     ch.connect(service);
     return ch;
 }
 
 Channel Channel::bind(const std::string& url, const ChannelConfig& config) {
-    Channel ch(config);
+    Channel ch;
+    ch.config_ = config;
     ch.bind(url);
     return ch;
 }
