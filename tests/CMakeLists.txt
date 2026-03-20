@@ -1,5 +1,14 @@
 find_package(GTest QUIET)
 
+set(APOLLO_LEGACY_IOC_TEST_SOURCES
+    ../src/framework/ioc/ConfigManager.cpp
+    ../src/utils/io/FileWatcher.cpp
+)
+
+set(APOLLO_BIGWORLD_TEST_SOURCES
+    ../modules/bigworld/src/runtime.cpp
+)
+
 if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
@@ -14,6 +23,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
     add_executable(ioc_tests
         main_test.cpp
+        ${APOLLO_LEGACY_IOC_TEST_SOURCES}
     )
 
     target_link_libraries(ioc_tests
@@ -246,7 +256,10 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	
 	    # ========== BigWorld Compatibility Tests (New) ==========
 	
-	    add_executable(bigworld_api_tests test_bigworld_api.cpp)
+	    add_executable(bigworld_api_tests
+            test_bigworld_api.cpp
+            ${APOLLO_BIGWORLD_TEST_SOURCES}
+        )
 	
 	    target_link_libraries(bigworld_api_tests PRIVATE apollo)
 	
@@ -389,12 +402,18 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    message(STATUS "GTest not found or APOLLO_BUILD_GTESTS=OFF, building simple tests")
 	
 	    # Simple test without GTest
-	    add_executable(ioc_tests_simple test_simple.cpp)
+	    add_executable(ioc_tests_simple
+            test_simple.cpp
+            ${APOLLO_LEGACY_IOC_TEST_SOURCES}
+        )
 	    # Note:暂时禁用
     # add_executable(config_tests_simple test_config.cpp)
 	    # Note: OpenSSL header conflicts - disabled
     # add_executable(crypto_tests test_crypto.cpp)
-	    add_executable(bigworld_api_tests test_bigworld_api.cpp)
+	    add_executable(bigworld_api_tests
+            test_bigworld_api.cpp
+            ${APOLLO_BIGWORLD_TEST_SOURCES}
+        )
 	
 	    target_link_libraries(ioc_tests_simple PRIVATE apollo)
 	    # target_link_libraries(config_tests_simple PRIVATE apollo)
