@@ -1,1 +1,0 @@
-{"version":3,"file":"noopComponent.js","names":[],"sources":["../../src/client/noopComponent.ts"],"sourcesContent":["import type { FunctionalComponent } from 'vue'\n\n/**\n * A noop component that renders nothing\n *\n * 一个不渲染任何内容的空组件\n *\n * @returns null\n */\nconst noopComponent: FunctionalComponent = () => null\n\nexport default noopComponent\n"],"mappings":"AASA,MAAM,MAA2C"}
