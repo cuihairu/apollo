@@ -1,2 +1,0 @@
-import{getDirname as e,path as t}from"vuepress/utils";const n=import.meta.dirname||e(import.meta.url),r=()=>({name:`@vuepress/plugin-nprogress`,clientConfigFile:t.resolve(n,`../client/config.js`)});export{r as nprogressPlugin};
-//# sourceMappingURL=index.js.map

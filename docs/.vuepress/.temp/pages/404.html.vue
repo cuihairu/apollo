@@ -4,4 +4,15 @@
 export const _pageData = JSON.parse("{\"path\":\"/404.html\",\"title\":\"\",\"lang\":\"en-US\",\"frontmatter\":{\"layout\":\"NotFound\"},\"filePathRelative\":null,\"git\":{}}")
 export default { name: "404.html.vue" }
 
-if (impo
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  __VUE_HMR_RUNTIME__.updatePageData?.(_pageData)
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept((m) => {
+    __VUE_HMR_RUNTIME__.updatePageData?.(m._pageData)
+  })
+}
+
+</script>

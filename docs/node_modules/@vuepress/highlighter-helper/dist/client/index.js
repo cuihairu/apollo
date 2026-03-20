@@ -1,2 +1,0 @@
-import{useEventListener as e}from"@vueuse/core";const t=({selector:t=`div[class*="language-"].has-collapsed-lines > .collapsed-lines`}={})=>{e(`click`,e=>{let n=e.target;if(n.matches(t)){let e=n.parentElement;e?.classList.toggle(`collapsed`)&&e.scrollIntoView({block:`center`,behavior:`instant`})}},{passive:!0})};export{t as setupCollapsedLines};
-//# sourceMappingURL=index.js.map
