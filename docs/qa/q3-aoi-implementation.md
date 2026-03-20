@@ -157,6 +157,72 @@ public:
 | **精确控制** | 重要事件（如世界BOSS）可以广播更远 |
 | **减少冗余** | 采集物等小范围对象不需要全局同步 |
 
+### 分层 AOI 不只是“半径不同”
+
+很多人把分层 AOI 理解成“给不同对象配置不同可见半径”，这还不够。
+
+真正工程上的分层，通常至少分成三层：
+
+#### 1. 实体层分层
+
+不同类型对象使用不同关注范围：
+
+- 玩家：100m 左右
+- 普通怪：30m 到 50m
+- 采集物：10m 到 20m
+- 世界事件/BOSS：300m 到 500m
+
+#### 2. 算法层分层
+
+不同层可以用不同空间索引：
+
+- 近距离高频对象：九宫格/空间哈希
+- 中距离常规对象：十字链表或网格
+- 低频大范围对象：四叉树/R-Tree/全局索引
+
+#### 3. 更新频率分层
+
+不是所有 AOI 层都要每 tick 精确更新：
+
+- 玩家移动层：高频更新
+- 怪物感知层：中频更新
+- 世界标记/大事件层：低频更新
+
+### 一个更合理的分层 AOI 架构
+
+```text
+Layer 0: Global Layer
+- 系统公告、公会标记、世界事件
+- 查询方式：订阅列表 / 全局索引
+- 更新频率：低
+
+Layer 1: Long-range Layer
+- 世界 BOSS、攻城器械、远距离可见目标
+- 查询方式：四叉树 / R-Tree
+- 更新频率：中低
+
+Layer 2: Normal Gameplay Layer
+- 玩家、怪物、可战斗对象
+- 查询方式：九宫格 / 十字链表 / 空间哈希
+- 更新频率：高
+
+Layer 3: Near-interaction Layer
+- 采集物、掉落物、交互点
+- 查询方式：小网格 / 小半径邻域
+- 更新频率：中
+```
+
+### 更完整的关键点
+
+如果被问“为什么要分层 AOI”，更好的回答不是“因为半径不同”，而是：
+
+1. 不同实体的可见需求不同
+2. 不同实体的移动频率不同
+3. 不同实体的广播价值不同
+4. 不同实体适合的数据结构不同
+
+也就是说，分层 AOI 的本质不是“多套半径”，而是“多套索引 + 多套更新策略 + 多套广播策略”。
+
 ---
 
 ## AOI 实现方式对比
@@ -318,15 +384,206 @@ class SpatialHashAOI {
 };
 ```
 
+### 4. 四叉树
+
+四叉树适合二维地图中“局部密、整体稀”的场景。它的核心思想是：
+
+- 一个区域里实体少，就保持叶子节点
+- 一个区域里实体多，就继续拆成四个子区域
+- 查询时只访问与视野范围相交的节点
+
+#### 四叉树示意
+
+```text
+整个地图
+┌───────────────────────────────┐
+│               root            │
+│   ┌───────────┬───────────┐   │
+│   │ NW        │ NE        │   │
+│   │     ┌─────┼─────┐     │   │
+│   │     │细分 │细分 │     │   │
+│   ├───────────┼───────────┤   │
+│   │ SW        │ SE        │   │
+│   └───────────┴───────────┘   │
+└───────────────────────────────┘
+```
+
+#### 四叉树实现思路
+
+```cpp
+class QuadTreeAOI {
+    struct Rect {
+        float minX, minY, maxX, maxY;
+
+        bool intersectsCircle(float x, float y, float radius) const;
+        bool contains(float x, float y) const;
+    };
+
+    struct Node {
+        Rect bounds;
+        std::vector<Entity*> entities;
+        std::unique_ptr<Node> nw;
+        std::unique_ptr<Node> ne;
+        std::unique_ptr<Node> sw;
+        std::unique_ptr<Node> se;
+        bool divided = false;
+    };
+
+public:
+    std::vector<Entity*> queryCircle(float x, float y, float radius) {
+        std::vector<Entity*> result;
+        queryCircle(root_.get(), x, y, radius, result);
+        return result;
+    }
+
+private:
+    void queryCircle(Node* node, float x, float y, float radius,
+                     std::vector<Entity*>& out) {
+        if (node == nullptr || !node->bounds.intersectsCircle(x, y, radius)) {
+            return;
+        }
+
+        for (auto* entity : node->entities) {
+            if (distance(entity->x, entity->y, x, y) <= radius) {
+                out.push_back(entity);
+            }
+        }
+
+        if (!node->divided) {
+            return;
+        }
+
+        queryCircle(node->nw.get(), x, y, radius, out);
+        queryCircle(node->ne.get(), x, y, radius, out);
+        queryCircle(node->sw.get(), x, y, radius, out);
+        queryCircle(node->se.get(), x, y, radius, out);
+    }
+
+    std::unique_ptr<Node> root_;
+};
+```
+
+#### 四叉树优缺点
+
+| 维度 | 表现 |
+|------|------|
+| 优点 | 适合分布不均匀地图，热点区域可继续细分 |
+| 优点 | 查询范围比固定大网格更精细 |
+| 缺点 | 高频移动时，节点插入/删除/分裂/合并有维护成本 |
+| 缺点 | 实现复杂度高于九宫格 |
+| 缺点 | 对“超大半径查询”并不友好 |
+
+#### 四叉树适用场景
+
+- 大地图
+- 实体分布明显不均匀
+- 希望避免固定网格在热点区域过粗
+- 但实体移动频率不能高到让树持续重构成为瓶颈
+
+#### 实际使用时的关键判断
+
+四叉树“能不能用”，关键不在于查询复杂度写成了 `O(log N)`，而在于：
+
+- 你的实体是不是高频移动
+- 你的地图是不是动态变化很大
+- 你的热点区域是不是很密集
+
+如果对象移动极高频，很多 MMO 实际上还是会优先选简单网格，而不是四叉树。
+
+### 5. R-Tree
+
+R-Tree 更适合做“矩形/包围盒”的空间索引，典型特点是：
+
+- 节点维护多个最小外接矩形（MBR）
+- 查询时根据矩形相交关系递归裁剪
+- 天然适合矩形区域、范围查询、碰撞候选筛选
+
+它在 GIS、地图检索、矩形对象管理里非常常见。
+
+#### 为什么 MMO 里有时会提到 R-Tree
+
+因为 MMO 里有不少对象不是“一个点”：
+
+- 建筑
+- 城墙
+- 大型怪物
+- 触发区
+- 安全区 / 禁战区
+- 采集区 / 任务区域
+
+这些对象更像“区域”，而不是点坐标。R-Tree 处理这类数据会比普通点网格更自然。
+
+#### R-Tree 示例
+
+```cpp
+class RTreeAOI {
+    struct AABB {
+        float minX, minY, maxX, maxY;
+    };
+
+    struct Entry {
+        AABB box;
+        Entity* entity;
+    };
+
+public:
+    void insert(Entity* entity, const AABB& box) {
+        // 插入到最合适的叶子，必要时分裂节点
+    }
+
+    std::vector<Entity*> queryRange(const AABB& range) {
+        std::vector<Entity*> result;
+        // 遍历与 range 相交的节点
+        return result;
+    }
+};
+```
+
+#### R-Tree 优缺点
+
+| 维度 | 表现 |
+|------|------|
+| 优点 | 非常适合矩形范围查询、区域对象管理 |
+| 优点 | 对复杂地形块、建筑块、触发区比较自然 |
+| 缺点 | 实现和维护复杂度高 |
+| 缺点 | 高频移动点对象未必比网格更划算 |
+| 缺点 | 在玩家/NPC 这种大量移动点对象场景下，常常不是首选 |
+
+#### R-Tree 在 MMO 中更适合做什么
+
+更合理的定位通常不是“主 AOI 算法”，而是：
+
+- 地图静态区域索引
+- 建筑/障碍物/安全区索引
+- 大型矩形触发器检索
+- 低频更新的大对象检索
+
+也就是说，R-Tree 往往是“辅助空间索引”，而不一定是“玩家视野主索引”。
+
 ### 对比总结
 
-| 算法 | 时间复杂度 | 空间复杂度 | 适用场景 |
-|------|-----------|-----------|----------|
-| **九宫格** | O(1) 查询 | O(N) | 均匀分布，固定地图 |
-| **十字链表** | O(K) 查询，K=可见数 | O(N) | 大范围，稀疏分布 |
-| **空间哈希** | O(1) 平均 | O(N) | 动态地图，无限世界 |
-| **四叉树** | O(log N) | O(N) | 需要动态分区 |
-| **R-Tree** | O(log N) | O(N) | 复杂查询 |
+| 算法 | 查询特点 | 更新成本 | 更适合的场景 |
+|------|----------|----------|----------------|
+| **九宫格** | 常数级邻域查询 | 低 | 玩家/NPC 高频移动，规则地图 |
+| **十字链表** | 适合按坐标有序裁剪 | 中 | 稀疏分布，要求较精细的邻域筛选 |
+| **空间哈希** | 平均 O(1) | 低 | 无限地图、动态区域、哈希桶方案 |
+| **四叉树** | 区域裁剪较强 | 中高 | 分布不均匀的二维地图 |
+| **R-Tree** | 矩形范围检索强 | 中高 | 区域对象、建筑、触发区、大对象 |
+
+### 实战里的一个常见结论
+
+很多 MMO 最终不会“只选一种 AOI”。
+
+更常见的是混合方案：
+
+- 玩家/NPC：九宫格或空间哈希
+- 大型静态区域：R-Tree
+- 非均匀热点区域：四叉树或动态分块
+- 跨 Cell 边界对象：Ghost / Shadow
+
+所以更成熟的回答通常不是“最优算法是哪一个”，而是：
+
+> 主流程用最稳定、更新成本最低的结构，复杂对象和特殊查询交给辅助索引处理。
 
 ---
 

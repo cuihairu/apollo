@@ -57,7 +57,7 @@
 | 31 | 如何设计好友系统？ | ✅ | [q31-friend-system.md](qa/q31-friend-system.md) |
 | 32 | 如何设计邮件系统？ | ✅ | [q32-mail-system.md](qa/q32-mail-system.md) |
 | 33 | 如何处理热点数据？ | ✅ | [q33-hot-data.md](qa/q33-hot-data.md) |
-| 35 | 数据库连接池如何设计？ | ✅ | [q34-connection-pool.md](qa/q34-connection-pool.md) |
+| 34 | 数据库连接池如何设计？ | ✅ | [q34-connection-pool.md](qa/q34-connection-pool.md) |
 | 35 | 如何实现数据库分片？ | ✅ | [q35-database-sharding.md](qa/q35-database-sharding.md) |
 | 36 | 如何处理数据库事务？ | ✅ | [q36-database-transaction.md](qa/q36-database-transaction.md) |
 | 37 | 如何实现数据的缓存淘汰策略？ | ✅ | [q37-cache-eviction.md](qa/q37-cache-eviction.md) |
@@ -178,6 +178,14 @@
 
 ---
 
-**进度: 116/116 完成 ✅**
+## 十一、深入问题篇
 
-*共 116 题，覆盖 MMO 框架开发的核心领域*
+| # | 问题 | 状态 | 链接 |
+|---|------|------|------|
+| 117 | 如果你已经回答了 MMO 基础题，接下来还应该继续思考哪些深入问题？ | ✅ | [q117-interviewer-follow-up.md](qa/q117-interviewer-follow-up.md) |
+
+---
+
+**进度: 117/117 完成 ✅**
+
+*共 117 题，覆盖 MMO 框架开发的核心领域*
