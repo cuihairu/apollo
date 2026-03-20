@@ -45,7 +45,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./docs
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Build docs
         working-directory: ./docs
