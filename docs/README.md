@@ -74,7 +74,7 @@ Apollo 是一个专为 **大型多人在线角色扮演游戏 (MMORPG)** 设计�
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/apollo.git
+git clone https://github.com/cuihairu/apollo.git
 cd apollo
 
 # 安装依赖 (使用 vcpkg)
@@ -100,9 +100,9 @@ cmake --build build --config Release
 
 ## 社区
 
-- **GitHub**: [https://github.com/your-org/apollo](https://github.com/your-org/apollo)
-- **Issues**: [https://github.com/your-org/apollo/issues](https://github.com/your-org/apollo/issues)
-- **Discussions**: [https://github.com/your-org/apollo/discussions](https://github.com/your-org/apollo/discussions)
+- **GitHub**: [https://github.com/cuihairu/apollo](https://github.com/cuihairu/apollo)
+- **Issues**: [https://github.com/cuihairu/apollo/issues](https://github.com/cuihairu/apollo/issues)
+- **Discussions**: [https://github.com/cuihairu/apollo/discussions](https://github.com/cuihairu/apollo/discussions)
 
 ## 许可证
 

@@ -3,6 +3,7 @@ import { defaultTheme } from '@vuepress/theme-default'
 import { searchPlugin } from '@vuepress/plugin-search'
 import { mediumZoomPlugin } from '@vuepress/plugin-medium-zoom'
 import { gitPlugin } from '@vuepress/plugin-git'
+import { markdownChartPlugin } from '@vuepress/plugin-markdown-chart'
 import { defineUserConfig } from 'vuepress/cli'
 
 const isProd = process.env.NODE_ENV === 'production'
@@ -10,6 +11,11 @@ const isProd = process.env.NODE_ENV === 'production'
 export default defineUserConfig({
   title: 'Apollo 技术文档',
   description: '高性能 MMORPG 服务器框架',
+
+  // 头部配置（favicon）
+  head: [
+    ['link', { rel: 'icon', type: 'image/png', href: '/apollo.png' }],
+  ],
 
   // GitHub Pages base URL (修改为你的仓库名)
   base: isProd ? '/apollo/' : '/',
@@ -20,7 +26,7 @@ export default defineUserConfig({
 
   // 主题配置
   theme: defaultTheme({
-    logo: '/logo.png',
+    logo: '/apollo.png',
 
     // 导航栏
     navbar: [
@@ -60,8 +66,8 @@ export default defineUserConfig({
         link: '/api/',
       },
       {
-        text: 'GitHub',
-        link: 'https://github.com/your-org/apollo',
+        text: 'QA',
+        link: '/QA.md',
       },
     ],
 
@@ -130,15 +136,19 @@ export default defineUserConfig({
         '/api/core.md',
         '/api/runtime.md',
       ],
+
+      '/qa/': [
+        '/QA.md',
+      ],
     },
 
     // 社交链接
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/cuijw/apollo' },
+      { icon: 'github', link: 'https://github.com/cuihairu/apollo' },
     ],
 
     // 仓库配置 (用于编辑链接和贡献者)
-    repo: 'cuijw/apollo',
+    repo: 'cuihairu/apollo',
 
     // 编辑链接
     editLink: true,
@@ -180,6 +190,10 @@ export default defineUserConfig({
       createdTime: true,
       updatedTime: true,
       contributors: true,
+    }),
+    markdownChartPlugin({
+      // 启用 mermaid
+      mermaid: true,
     }),
   ],
 

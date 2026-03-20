@@ -292,7 +292,8 @@ std::string Socket::GetErrorString() const {
                    nullptr, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                    buffer, sizeof(buffer), nullptr);
 #else
-    strerror_r(err, buffer, sizeof(buffer));
+    // Note: strerror_r return value is intentionally ignored for XSI-compliant version
+    (void)strerror_r(err, buffer, sizeof(buffer));
 #endif
 
     return std::string(buffer);

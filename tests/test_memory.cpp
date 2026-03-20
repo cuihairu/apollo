@@ -6,6 +6,7 @@
 #include "apollo/base/memory.hpp"
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <thread>
 #include <vector>

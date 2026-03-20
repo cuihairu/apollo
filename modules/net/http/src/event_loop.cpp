@@ -63,7 +63,10 @@ public:
 #else
         // Unix 使用 pipe
         int pipefds[2];
-        pipe(pipefds);
+        if (pipe(pipefds) != 0) {
+            // Handle error
+            return;
+        }
         wakeupRead_ = pipefds[0];
         wakeupWrite_ = pipefds[1];
 #endif
@@ -174,7 +177,7 @@ public:
                     DWORD bytesRead;
                     ReadFile(wakeupRead_, buf, sizeof(buf), &bytesRead, nullptr);
 #else
-                    ::read(wakeupRead_, buf, sizeof(buf));
+                    (void)::read(wakeupRead_, buf, sizeof(buf));  // Return value intentionally ignored for wakeup
 #endif
                     stats_.wakeups++;
                     continue;
@@ -222,7 +225,7 @@ public:
         DWORD bytesWritten;
         WriteFile(wakeupWrite_, &c, 1, &bytesWritten, nullptr);
 #else
-        ::write(wakeupWrite_, &c, 1);
+        (void)::write(wakeupWrite_, &c, 1);  // Return value intentionally ignored for wakeup
 #endif
     }
 
