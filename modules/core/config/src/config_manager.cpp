@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <mutex>
 
-#ifdef HAVE_NLOHMANN_JSON
+#if defined(HAVE_NLOHMANN_JSON) || defined(APOLLO_HAS_NLOHMANN_JSON)
     #include <nlohmann/json.hpp>
 #endif
 
@@ -495,7 +495,7 @@ bool ConfigManager::parseJson(const std::string& content, ConfigNode& root) {
     // 这里只实现基本功能
 
     // 尝试使用nlohmann/json
-#ifdef HAVE_NLOHMANN_JSON
+#if defined(HAVE_NLOHMANN_JSON) || defined(APOLLO_HAS_NLOHMANN_JSON)
     try {
         nlohmann::json j = nlohmann::json::parse(content);
         // 递归转换到ConfigNode
@@ -533,15 +533,27 @@ bool ConfigManager::parseJson(const std::string& content, ConfigNode& root) {
         return false;
     }
 #else
-    // 简单的键值对解析 {"key": "value"}
-    std::regex kvRegex(R"("\"?([^\"]+)\"?\s*:\s*\"?([^\"]+)\"?)");
+    // 简单的扁平 JSON 解析，覆盖字符串/整数/浮点/布尔常量。
+    std::regex kvRegex(R"("([^"]+)"\s*:\s*("(?:[^"\\]|\\.)*"|true|false|null|[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))");
     std::string::const_iterator searchStart = content.begin();
     std::smatch match;
     while (std::regex_search(searchStart, content.cend(), match, kvRegex)) {
-        if (match.size() >= 3) {
-            std::string key = match[1];
-            std::string value = match[2];
-            root.getChild(key).setString(value);
+        if (match.size() >= 3 && match[1].matched && match[2].matched) {
+            const std::string key = match[1].str();
+            const std::string rawValue = match[2].str();
+            auto& child = root.getChild(key);
+
+            if (rawValue == "true" || rawValue == "false") {
+                child.setBool(rawValue == "true");
+            } else if (rawValue == "null") {
+                child = ConfigNode{};
+            } else if (rawValue.size() >= 2 && rawValue.front() == '"' && rawValue.back() == '"') {
+                child.setString(rawValue.substr(1, rawValue.size() - 2));
+            } else if (rawValue.find_first_of(".eE") != std::string::npos) {
+                child.setDouble(std::stod(rawValue));
+            } else {
+                child.setInt64(std::stoll(rawValue));
+            }
         }
         searchStart = match.suffix().first;
     }

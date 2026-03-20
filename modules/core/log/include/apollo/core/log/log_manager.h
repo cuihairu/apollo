@@ -1,41 +1,63 @@
 #pragma once
 
-#include <string>
+#include "apollo/core/log/logger.hpp"
+#include "apollo/core/log/log_level.h"
+#include "apollo/core/log/appender.h"
+#include "apollo/core/log/file_appender.h"
+#include "apollo/core/log/console_appender.h"
 #include <memory>
-#include <vector>
+#include <string>
 #include <unordered_map>
 #include <mutex>
-#include "apollo/core/log/log_level.hpp"
 
 namespace apollo {
 namespace core {
 namespace log {
 
-class Logger;
-class IAppender;
-
-struct ConsoleAppenderConfig {
-    bool useColors = true;
-    bool timestamp = true;
-};
-
-struct FileAppenderConfig {
-    std::string filePath;
-    size_t maxSize = 10 * 1024 * 1024;  // 10 MB
-    int maxFiles = 5;
-    bool autoFlush = true;
-};
-
 struct LogManagerConfig {
+    std::string defaultLoggerName = "root";
     LogLevel defaultLevel = LogLevel::Info;
-    std::string defaultLoggerName = "default";
+
     bool consoleEnabled = true;
-    bool fileEnabled = false;
     ConsoleAppenderConfig consoleConfig;
+
+    bool fileEnabled = false;
     FileAppenderConfig fileConfig;
 
     static LogManagerConfig createDefault() {
         return LogManagerConfig{};
+    }
+
+    static LogManagerConfig createConsoleOnly(LogLevel level = LogLevel::Info) {
+        LogManagerConfig cfg;
+        cfg.defaultLevel = level;
+        cfg.consoleEnabled = true;
+        cfg.fileEnabled = false;
+        return cfg;
+    }
+
+    static LogManagerConfig createFileOnly(
+        const std::string& filePath,
+        LogLevel level = LogLevel::Info)
+    {
+        LogManagerConfig cfg;
+        cfg.defaultLevel = level;
+        cfg.consoleEnabled = false;
+        cfg.fileEnabled = true;
+        cfg.fileConfig.baseName = filePath;
+        return cfg;
+    }
+
+    static LogManagerConfig createCombined(
+        const std::string& filePath,
+        LogLevel level = LogLevel::Info)
+    {
+        LogManagerConfig cfg;
+        cfg.defaultLevel = level;
+        cfg.consoleEnabled = true;
+        cfg.fileEnabled = true;
+        cfg.fileConfig.baseName = filePath;
+        return cfg;
     }
 };
 
@@ -43,42 +65,41 @@ class LogManager {
 public:
     static LogManager& instance();
 
-    void initialize(const LogManagerConfig& config);
+    LogManager(const LogManager&) = delete;
+    LogManager& operator=(const LogManager&) = delete;
+    LogManager(LogManager&&) = delete;
+    LogManager& operator=(LogManager&&) = delete;
+
+    void initialize(const LogManagerConfig& config = LogManagerConfig::createDefault());
     void shutdown();
 
-    std::shared_ptr<Logger> getDefaultLogger();
-    std::shared_ptr<Logger> getLogger(const std::string& name);
-    std::shared_ptr<Logger> createLogger(const std::string& name, LogLevel level);
+    LoggerPtr getDefaultLogger();
+    LoggerPtr getLogger(const std::string& name);
+    LoggerPtr createLogger(const std::string& name, LogLevel level = LogLevel::All);
     void removeLogger(const std::string& name);
 
     bool hasLogger(const std::string& name) const;
     std::vector<std::string> getLoggerNames() const;
 
     void setDefaultLevel(LogLevel level);
+    LogLevel getDefaultLevel() const { return defaultLevel_; }
+
     void flushAll();
-
-    std::shared_ptr<IAppender> createConsoleAppender(const ConsoleAppenderConfig& config);
-    std::shared_ptr<IAppender> createFileAppender(const FileAppenderConfig& config);
-
-    // Write log message directly
     void write(LogLevel level, std::string logger, std::string message);
 
 private:
     LogManager() = default;
     ~LogManager() = default;
 
-    LogManager(const LogManager&) = delete;
-    LogManager& operator=(const LogManager&) = delete;
-
     mutable std::mutex mutex_;
     bool initialized_ = false;
     LogLevel defaultLevel_ = LogLevel::Info;
-    std::string defaultLoggerName_ = "default";
-    std::unordered_map<std::string, std::shared_ptr<Logger>> loggers_;
-};
+    std::string defaultLoggerName_ = "root";
+    std::unordered_map<std::string, LoggerPtr> loggers_;
 
-// Global accessor function
-LogManager& global_log_manager();
+    IAppenderPtr createConsoleAppender(const ConsoleAppenderConfig& config);
+    IAppenderPtr createFileAppender(const FileAppenderConfig& config);
+};
 
 } // namespace log
 } // namespace core

@@ -194,9 +194,10 @@ void LogManager::write(LogLevel level, std::string logger, std::string message) 
 
 #else // !APOLLO_USE_SPDLOG
 
-// 使用内置实现的占位符
-#include <iostream>
-#include <mutex>
+// 使用内置 Logger/Appender 实现
+#include "apollo/core/log/logger.hpp"
+#include "apollo/core/log/console_appender.h"
+#include "apollo/core/log/file_appender.h"
 
 namespace apollo {
 namespace core {
@@ -207,20 +208,134 @@ LogManager& LogManager::instance() {
     return instance;
 }
 
-void LogManager::initialize(const LogManagerConfig&) { initialized_ = true; }
-void LogManager::shutdown() { initialized_ = false; }
-std::shared_ptr<Logger> LogManager::getDefaultLogger() { return nullptr; }
-std::shared_ptr<Logger> LogManager::getLogger(const std::string&) { return nullptr; }
-std::shared_ptr<Logger> LogManager::createLogger(const std::string&, LogLevel) { return nullptr; }
-void LogManager::removeLogger(const std::string&) {}
-bool LogManager::hasLogger(const std::string&) const { return false; }
-std::vector<std::string> LogManager::getLoggerNames() const { return {}; }
-void LogManager::setDefaultLevel(LogLevel) {}
-void LogManager::flushAll() {}
-std::shared_ptr<IAppender> LogManager::createConsoleAppender(const ConsoleAppenderConfig&) { return nullptr; }
-std::shared_ptr<IAppender> LogManager::createFileAppender(const FileAppenderConfig&) { return nullptr; }
-void LogManager::write(LogLevel, std::string, std::string message) {
-    std::cerr << "[LOG] " << message << std::endl;
+void LogManager::initialize(const LogManagerConfig& config) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (initialized_) {
+        return;
+    }
+
+    defaultLevel_ = config.defaultLevel;
+    defaultLoggerName_ = config.defaultLoggerName;
+
+    auto defaultLogger = std::make_shared<Logger>(defaultLoggerName_, defaultLevel_);
+    if (config.consoleEnabled) {
+        defaultLogger->addAppender(createConsoleAppender(config.consoleConfig));
+    }
+    if (config.fileEnabled) {
+        defaultLogger->addAppender(createFileAppender(config.fileConfig));
+    }
+
+    loggers_.clear();
+    loggers_.emplace(defaultLoggerName_, std::move(defaultLogger));
+    initialized_ = true;
+}
+
+void LogManager::shutdown() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [_, logger] : loggers_) {
+        if (logger) {
+            logger->flush();
+        }
+    }
+    loggers_.clear();
+    initialized_ = false;
+}
+
+std::shared_ptr<Logger> LogManager::getDefaultLogger() {
+    if (!initialized_) {
+        initialize(LogManagerConfig::createDefault());
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = loggers_.find(defaultLoggerName_);
+    return it != loggers_.end() ? it->second : nullptr;
+}
+
+std::shared_ptr<Logger> LogManager::getLogger(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = loggers_.find(name);
+    return it != loggers_.end() ? it->second : nullptr;
+}
+
+std::shared_ptr<Logger> LogManager::createLogger(const std::string& name, LogLevel level) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = loggers_.find(name);
+    if (it != loggers_.end()) {
+        it->second->setLevel(level);
+        return it->second;
+    }
+
+    auto logger = std::make_shared<Logger>(name, level);
+    auto defaultIt = loggers_.find(defaultLoggerName_);
+    if (defaultIt != loggers_.end() && defaultIt->second) {
+        for (const auto& appender : defaultIt->second->getAppenders()) {
+            logger->addAppender(appender);
+        }
+    }
+
+    loggers_.emplace(name, logger);
+    return logger;
+}
+
+void LogManager::removeLogger(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (name != defaultLoggerName_) {
+        loggers_.erase(name);
+    }
+}
+
+bool LogManager::hasLogger(const std::string& name) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return loggers_.find(name) != loggers_.end();
+}
+
+std::vector<std::string> LogManager::getLoggerNames() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::string> names;
+    names.reserve(loggers_.size());
+    for (const auto& [name, _] : loggers_) {
+        names.push_back(name);
+    }
+    return names;
+}
+
+void LogManager::setDefaultLevel(LogLevel level) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    defaultLevel_ = level;
+    auto it = loggers_.find(defaultLoggerName_);
+    if (it != loggers_.end() && it->second) {
+        it->second->setLevel(level);
+    }
+}
+
+void LogManager::flushAll() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [_, logger] : loggers_) {
+        if (logger) {
+            logger->flush();
+        }
+    }
+}
+
+std::shared_ptr<IAppender> LogManager::createConsoleAppender(const ConsoleAppenderConfig& config) {
+    return std::make_shared<ConsoleAppender>(config);
+}
+
+std::shared_ptr<IAppender> LogManager::createFileAppender(const FileAppenderConfig& config) {
+    return std::make_shared<FileAppender>(config);
+}
+
+void LogManager::write(LogLevel level, std::string logger, std::string message) {
+    auto target = getLogger(logger);
+    if (!target) {
+        target = getDefaultLogger();
+    }
+    if (!target) {
+        return;
+    }
+    target->log(LogRecord(level, std::move(message), std::move(logger)));
 }
 
 } // namespace log

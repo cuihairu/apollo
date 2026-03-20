@@ -145,11 +145,26 @@ public:
     }
 
     float fps() const {
-        return fps_;
+        if (fps_ > 0.0f) {
+            return fps_;
+        }
+
+        if (frame_count_ == 0) {
+            return 0.0f;
+        }
+
+        const auto elapsed_ms = Time::now() - last_update_time_;
+        if (elapsed_ms <= 0) {
+            return 0.0f;
+        }
+
+        const double elapsed = static_cast<double>(elapsed_ms) / 1000.0;
+        return elapsed > 0.0 ? static_cast<float>(frame_count_ / elapsed) : 0.0f;
     }
 
     float frame_time_ms() const {
-        return fps_ > 0.0f ? 1000.0f / fps_ : 0.0f;
+        const float current_fps = fps();
+        return current_fps > 0.0f ? 1000.0f / current_fps : 0.0f;
     }
 
 private:

@@ -24,6 +24,7 @@ find_package(nlohmann_json CONFIG QUIET)
 if(nlohmann_json_FOUND)
     target_link_libraries(apollo_core_config PRIVATE nlohmann_json::nlohmann_json)
     target_compile_definitions(apollo_core_config PRIVATE APOLLO_HAS_NLOHMANN_JSON=1)
+    target_compile_definitions(apollo_core_config PRIVATE HAVE_NLOHMANN_JSON=1)
 endif()
 
 # Optional: yaml-cpp for YAML config support
