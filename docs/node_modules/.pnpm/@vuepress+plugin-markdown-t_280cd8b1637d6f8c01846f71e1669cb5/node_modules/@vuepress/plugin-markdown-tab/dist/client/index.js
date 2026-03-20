@@ -1,0 +1,1 @@
+import{CodeTabs as e}from"./components/CodeTabs.js";import{Tabs as t}from"./components/Tabs.js";export{e as CodeTabs,t as Tabs};

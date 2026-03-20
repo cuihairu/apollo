@@ -5598,930 +5598,6 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
-    "title": "Apollo Actor 框架 - 构建和使用指南",
-    "headers": [
-      {
-        "level": 2,
-        "title": "目录结构",
-        "slug": "目录结构",
-        "link": "#目录结构",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "头文件依赖关系",
-        "slug": "头文件依赖关系",
-        "link": "#头文件依赖关系",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "编译配置",
-        "slug": "编译配置",
-        "link": "#编译配置",
-        "children": [
-          {
-            "level": 3,
-            "title": "CMake 最低要求",
-            "slug": "cmake-最低要求",
-            "link": "#cmake-最低要求",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "C++ 标准",
-            "slug": "c-标准",
-            "link": "#c-标准",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "编译步骤",
-        "slug": "编译步骤",
-        "link": "#编译步骤",
-        "children": [
-          {
-            "level": 3,
-            "title": "Linux/macOS",
-            "slug": "linux-macos",
-            "link": "#linux-macos",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Windows (Visual Studio)",
-            "slug": "windows-visual-studio",
-            "link": "#windows-visual-studio",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Windows (MinGW)",
-            "slug": "windows-mingw",
-            "link": "#windows-mingw",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "可选依赖",
-        "slug": "可选依赖",
-        "link": "#可选依赖",
-        "children": [
-          {
-            "level": 3,
-            "title": "FlatBuffers（推荐）",
-            "slug": "flatbuffers-推荐",
-            "link": "#flatbuffers-推荐",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "YAML 支持",
-            "slug": "yaml-支持",
-            "link": "#yaml-支持",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "SQLite（服务发现）",
-            "slug": "sqlite-服务发现",
-            "link": "#sqlite-服务发现",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "编译选项",
-        "slug": "编译选项",
-        "link": "#编译选项",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "常见编译问题",
-        "slug": "常见编译问题",
-        "link": "#常见编译问题",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 找不到 protobuf",
-            "slug": "_1-找不到-protobuf",
-            "link": "#_1-找不到-protobuf",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. C++20 不可用",
-            "slug": "_2-c-20-不可用",
-            "link": "#_2-c-20-不可用",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 链接错误",
-            "slug": "_3-链接错误",
-            "link": "#_3-链接错误",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "运行时配置",
-        "slug": "运行时配置",
-        "link": "#运行时配置",
-        "children": [
-          {
-            "level": 3,
-            "title": "环境变量",
-            "slug": "环境变量",
-            "link": "#环境变量",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "配置文件",
-            "slug": "配置文件",
-            "link": "#配置文件",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "性能调优",
-        "slug": "性能调优",
-        "link": "#性能调优",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 线程池配置",
-            "slug": "_1-线程池配置",
-            "link": "#_1-线程池配置",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 邮箱大小",
-            "slug": "_2-邮箱大小",
-            "link": "#_2-邮箱大小",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 消息序列化",
-            "slug": "_3-消息序列化",
-            "link": "#_3-消息序列化",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "4. 本地通信优先",
-            "slug": "_4-本地通信优先",
-            "link": "#_4-本地通信优先",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "调试",
-        "slug": "调试",
-        "link": "#调试",
-        "children": [
-          {
-            "level": 3,
-            "title": "启用调试日志",
-            "slug": "启用调试日志",
-            "link": "#启用调试日志",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "内存检测",
-            "slug": "内存检测",
-            "link": "#内存检测",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "性能分析",
-            "slug": "性能分析",
-            "link": "#性能分析",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "部署",
-        "slug": "部署",
-        "link": "#部署",
-        "children": [
-          {
-            "level": 3,
-            "title": "Docker",
-            "slug": "docker",
-            "link": "#docker",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "系统服务",
-            "slug": "系统服务",
-            "link": "#系统服务",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "故障排查",
-        "slug": "故障排查",
-        "link": "#故障排查",
-        "children": [
-          {
-            "level": 3,
-            "title": "问题：Actor 消息丢失",
-            "slug": "问题-actor-消息丢失",
-            "link": "#问题-actor-消息丢失",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "问题：性能下降",
-            "slug": "问题-性能下降",
-            "link": "#问题-性能下降",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "问题：死锁",
-            "slug": "问题-死锁",
-            "link": "#问题-死锁",
-            "children": []
-          }
-        ]
-      }
-    ],
-    "path": "/actor_build_guide.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "Apollo Actor 框架 - 完整指南",
-    "headers": [
-      {
-        "level": 2,
-        "title": "概述",
-        "slug": "概述",
-        "link": "#概述",
-        "children": [
-          {
-            "level": 3,
-            "title": "核心特性",
-            "slug": "核心特性",
-            "link": "#核心特性",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "架构",
-        "slug": "架构",
-        "link": "#架构",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "文件结构",
-        "slug": "文件结构",
-        "link": "#文件结构",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "快速开始",
-        "slug": "快速开始",
-        "link": "#快速开始",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 定义消息",
-            "slug": "_1-定义消息",
-            "link": "#_1-定义消息",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 定义 Actor",
-            "slug": "_2-定义-actor",
-            "link": "#_2-定义-actor",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 配置系统",
-            "slug": "_3-配置系统",
-            "link": "#_3-配置系统",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "4. 启动系统",
-            "slug": "_4-启动系统",
-            "link": "#_4-启动系统",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "5. 创建 Actor",
-            "slug": "_5-创建-actor",
-            "link": "#_5-创建-actor",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "6. 发送消息",
-            "slug": "_6-发送消息",
-            "link": "#_6-发送消息",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "线程池配置",
-        "slug": "线程池配置",
-        "link": "#线程池配置",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "调度策略",
-        "slug": "调度策略",
-        "link": "#调度策略",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "可观测性",
-        "slug": "可观测性",
-        "link": "#可观测性",
-        "children": [
-          {
-            "level": 3,
-            "title": "HTTP API",
-            "slug": "http-api",
-            "link": "#http-api",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Prometheus 指标",
-            "slug": "prometheus-指标",
-            "link": "#prometheus-指标",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "健康检查",
-            "slug": "健康检查",
-            "link": "#健康检查",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "定时器",
-        "slug": "定时器",
-        "link": "#定时器",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "远程 Actor",
-        "slug": "远程-actor",
-        "link": "#远程-actor",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "API 参考",
-        "slug": "api-参考",
-        "link": "#api-参考",
-        "children": [
-          {
-            "level": 3,
-            "title": "ActorSystem",
-            "slug": "actorsystem",
-            "link": "#actorsystem",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "ActorManager",
-            "slug": "actormanager",
-            "link": "#actormanager",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "ActorRef",
-            "slug": "actorref",
-            "link": "#actorref",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Actor",
-            "slug": "actor",
-            "link": "#actor",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "编译",
-        "slug": "编译",
-        "link": "#编译",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "依赖",
-        "slug": "依赖",
-        "link": "#依赖",
-        "children": []
-      }
-    ],
-    "path": "/actor_complete_guide.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "Apollo Actor 框架",
-    "headers": [
-      {
-        "level": 2,
-        "title": "概述",
-        "slug": "概述",
-        "link": "#概述",
-        "children": [
-          {
-            "level": 3,
-            "title": "核心特性",
-            "slug": "核心特性",
-            "link": "#核心特性",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "架构",
-        "slug": "架构",
-        "link": "#架构",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "文件结构",
-        "slug": "文件结构",
-        "link": "#文件结构",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "快速开始",
-        "slug": "快速开始",
-        "link": "#快速开始",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 定义消息",
-            "slug": "_1-定义消息",
-            "link": "#_1-定义消息",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 定义 Actor",
-            "slug": "_2-定义-actor",
-            "link": "#_2-定义-actor",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 创建 Actor 系统",
-            "slug": "_3-创建-actor-系统",
-            "link": "#_3-创建-actor-系统",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "4. 创建 Actor",
-            "slug": "_4-创建-actor",
-            "link": "#_4-创建-actor",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "5. 发送消息",
-            "slug": "_5-发送消息",
-            "link": "#_5-发送消息",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "消息序列化",
-        "slug": "消息序列化",
-        "link": "#消息序列化",
-        "children": [
-          {
-            "level": 3,
-            "title": "支持的格式",
-            "slug": "支持的格式",
-            "link": "#支持的格式",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "使用方式",
-            "slug": "使用方式",
-            "link": "#使用方式",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "传输优先级",
-        "slug": "传输优先级",
-        "link": "#传输优先级",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "服务发现集成",
-        "slug": "服务发现集成",
-        "link": "#服务发现集成",
-        "children": [
-          {
-            "level": 3,
-            "title": "配置",
-            "slug": "配置",
-            "link": "#配置",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Actor 自动注册",
-            "slug": "actor-自动注册",
-            "link": "#actor-自动注册",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "查找远程 Actor",
-            "slug": "查找远程-actor",
-            "link": "#查找远程-actor",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "API 参考",
-        "slug": "api-参考",
-        "link": "#api-参考",
-        "children": [
-          {
-            "level": 3,
-            "title": "ActorSystem",
-            "slug": "actorsystem",
-            "link": "#actorsystem",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "ActorRef",
-            "slug": "actorref",
-            "link": "#actorref",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Actor",
-            "slug": "actor",
-            "link": "#actor",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "示例",
-        "slug": "示例",
-        "link": "#示例",
-        "children": []
-      }
-    ],
-    "path": "/actor_framework.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "Apollo Actor 框架 - 开发总结",
-    "headers": [
-      {
-        "level": 2,
-        "title": "项目概述",
-        "slug": "项目概述",
-        "link": "#项目概述",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "开发历程",
-        "slug": "开发历程",
-        "link": "#开发历程",
-        "children": [
-          {
-            "level": 3,
-            "title": "第一阶段：基础 IPC 机制",
-            "slug": "第一阶段-基础-ipc-机制",
-            "link": "#第一阶段-基础-ipc-机制",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第二阶段：服务发现",
-            "slug": "第二阶段-服务发现",
-            "link": "#第二阶段-服务发现",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第三阶段：Actor 框架核心",
-            "slug": "第三阶段-actor-框架核心",
-            "link": "#第三阶段-actor-框架核心",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第四阶段：调度和管理",
-            "slug": "第四阶段-调度和管理",
-            "link": "#第四阶段-调度和管理",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第五阶段：消息传输",
-            "slug": "第五阶段-消息传输",
-            "link": "#第五阶段-消息传输",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第六阶段：定时器",
-            "slug": "第六阶段-定时器",
-            "link": "#第六阶段-定时器",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第七阶段：监控和观测",
-            "slug": "第七阶段-监控和观测",
-            "link": "#第七阶段-监控和观测",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "第八阶段：测试",
-            "slug": "第八阶段-测试",
-            "link": "#第八阶段-测试",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "完整文件清单",
-        "slug": "完整文件清单",
-        "link": "#完整文件清单",
-        "children": [
-          {
-            "level": 3,
-            "title": "头文件 (include/apollo/actor/)",
-            "slug": "头文件-include-apollo-actor",
-            "link": "#头文件-include-apollo-actor",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "实现文件 (src/apollo/actor/)",
-            "slug": "实现文件-src-apollo-actor",
-            "link": "#实现文件-src-apollo-actor",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "IPC 扩展 (include/apollo/ipc/)",
-            "slug": "ipc-扩展-include-apollo-ipc",
-            "link": "#ipc-扩展-include-apollo-ipc",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "IPC 实现 (src/apollo/ipc/)",
-            "slug": "ipc-实现-src-apollo-ipc",
-            "link": "#ipc-实现-src-apollo-ipc",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "测试 (tests/)",
-            "slug": "测试-tests",
-            "link": "#测试-tests",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "示例 (examples/)",
-            "slug": "示例-examples",
-            "link": "#示例-examples",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "文档 (docs/)",
-            "slug": "文档-docs",
-            "link": "#文档-docs",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "核心设计模式",
-        "slug": "核心设计模式",
-        "link": "#核心设计模式",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 消息传递模式",
-            "slug": "_1-消息传递模式",
-            "link": "#_1-消息传递模式",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 本地优先通信",
-            "slug": "_2-本地优先通信",
-            "link": "#_2-本地优先通信",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 调度策略",
-            "slug": "_3-调度策略",
-            "link": "#_3-调度策略",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "技术亮点",
-        "slug": "技术亮点",
-        "link": "#技术亮点",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 零拷贝本地通信",
-            "slug": "_1-零拷贝本地通信",
-            "link": "#_1-零拷贝本地通信",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 双水位线背压",
-            "slug": "_2-双水位线背压",
-            "link": "#_2-双水位线背压",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 服务 ID 编码",
-            "slug": "_3-服务-id-编码",
-            "link": "#_3-服务-id-编码",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "4. 多格式序列化",
-            "slug": "_4-多格式序列化",
-            "link": "#_4-多格式序列化",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "5. 完整可观测性",
-            "slug": "_5-完整可观测性",
-            "link": "#_5-完整可观测性",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "性能指标（设计目标）",
-        "slug": "性能指标-设计目标",
-        "link": "#性能指标-设计目标",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "依赖项",
-        "slug": "依赖项",
-        "link": "#依赖项",
-        "children": [
-          {
-            "level": 3,
-            "title": "必需",
-            "slug": "必需",
-            "link": "#必需",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "可选",
-            "slug": "可选",
-            "link": "#可选",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "编译命令",
-        "slug": "编译命令",
-        "link": "#编译命令",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "未来扩展",
-        "slug": "未来扩展",
-        "link": "#未来扩展",
-        "children": [
-          {
-            "level": 3,
-            "title": "短期",
-            "slug": "短期",
-            "link": "#短期",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "中期",
-            "slug": "中期",
-            "link": "#中期",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "长期",
-            "slug": "长期",
-            "link": "#长期",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "总结",
-        "slug": "总结",
-        "link": "#总结",
-        "children": []
-      }
-    ],
-    "path": "/actor_summary.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
     "title": "AOI九宫格系统 - 高效的视野管理",
     "headers": [
       {
@@ -7374,6 +6450,129 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "CAF (C++ Actor Framework) 集成指南",
+    "headers": [
+      {
+        "level": 2,
+        "title": "为什么选择 CAF？",
+        "slug": "为什么选择-caf",
+        "link": "#为什么选择-caf",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "安装 CAF",
+        "slug": "安装-caf",
+        "link": "#安装-caf",
+        "children": [
+          {
+            "level": 3,
+            "title": "使用 vcpkg (推荐)",
+            "slug": "使用-vcpkg-推荐",
+            "link": "#使用-vcpkg-推荐",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "使用 conan",
+            "slug": "使用-conan",
+            "link": "#使用-conan",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "从源码编译",
+            "slug": "从源码编译",
+            "link": "#从源码编译",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "CMake 集成",
+        "slug": "cmake-集成",
+        "link": "#cmake-集成",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "基本 CAF Actor 示例",
+        "slug": "基本-caf-actor-示例",
+        "link": "#基本-caf-actor-示例",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "CAF 核心概念",
+        "slug": "caf-核心概念",
+        "link": "#caf-核心概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. Actor 基类",
+            "slug": "_1-actor-基类",
+            "link": "#_1-actor-基类",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 消息发送",
+            "slug": "_2-消息发送",
+            "link": "#_2-消息发送",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. Actor 监督",
+            "slug": "_3-actor-监督",
+            "link": "#_3-actor-监督",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4. 分布式 Actor",
+            "slug": "_4-分布式-actor",
+            "link": "#_4-分布式-actor",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "迁移指南",
+        "slug": "迁移指南",
+        "link": "#迁移指南",
+        "children": [
+          {
+            "level": 3,
+            "title": "从 Apollo Actor 迁移到 CAF",
+            "slug": "从-apollo-actor-迁移到-caf",
+            "link": "#从-apollo-actor-迁移到-caf",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "代码对比",
+            "slug": "代码对比",
+            "link": "#代码对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资源",
+        "slug": "参考资源",
+        "link": "#参考资源",
+        "children": []
+      }
+    ],
+    "path": "/caf_integration.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Apollo 项目目录结构",
     "headers": [
       {
@@ -7801,6 +7000,84 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "MMORPG 架构 QA",
+    "headers": [
+      {
+        "level": 2,
+        "title": "一、架构设计篇",
+        "slug": "一、架构设计篇",
+        "link": "#一、架构设计篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "二、网络通信篇",
+        "slug": "二、网络通信篇",
+        "link": "#二、网络通信篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "三、数据存储篇",
+        "slug": "三、数据存储篇",
+        "link": "#三、数据存储篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "四、游戏逻辑篇",
+        "slug": "四、游戏逻辑篇",
+        "link": "#四、游戏逻辑篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "五、性能优化篇",
+        "slug": "五、性能优化篇",
+        "link": "#五、性能优化篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "六、并发与多线程篇",
+        "slug": "六、并发与多线程篇",
+        "link": "#六、并发与多线程篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "七、安全篇",
+        "slug": "七、安全篇",
+        "link": "#七、安全篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "八、运维与监控篇",
+        "slug": "八、运维与监控篇",
+        "link": "#八、运维与监控篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "九、脚本系统篇",
+        "slug": "九、脚本系统篇",
+        "link": "#九、脚本系统篇",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "十、实战经验篇",
+        "slug": "十、实战经验篇",
+        "link": "#十、实战经验篇",
+        "children": []
+      }
+    ],
+    "path": "/QA.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Apollo",
     "headers": [
       {
@@ -7869,6 +7146,79 @@ export const SEARCH_INDEX = [
       }
     ],
     "path": "/",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "TODO 任务计划",
+    "headers": [
+      {
+        "level": 2,
+        "title": "组件补充计划",
+        "slug": "组件补充计划",
+        "link": "#组件补充计划",
+        "children": [
+          {
+            "level": 3,
+            "title": "高优先级",
+            "slug": "高优先级",
+            "link": "#高优先级",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "中优先级",
+            "slug": "中优先级",
+            "link": "#中优先级",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "功能补充计划",
+        "slug": "功能补充计划",
+        "link": "#功能补充计划",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心 MMO 功能",
+            "slug": "核心-mmo-功能",
+            "link": "#核心-mmo-功能",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "客户端 SDK",
+            "slug": "客户端-sdk",
+            "link": "#客户端-sdk",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "脚本系统",
+            "slug": "脚本系统",
+            "link": "#脚本系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "监控与运维",
+            "slug": "监控与运维",
+            "link": "#监控与运维",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "文档完善计划",
+        "slug": "文档完善计划",
+        "link": "#文档完善计划",
+        "children": []
+      }
+    ],
+    "path": "/todo.html",
     "pathLocale": "/",
     "extraFields": []
   },
@@ -9298,483 +8648,6 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
-    "title": "核心概念",
-    "headers": [
-      {
-        "level": 2,
-        "title": "应用 (Application)",
-        "slug": "应用-application",
-        "link": "#应用-application",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "模块 (Module)",
-        "slug": "模块-module",
-        "link": "#模块-module",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "依赖注入 (DI)",
-        "slug": "依赖注入-di",
-        "link": "#依赖注入-di",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "配置 (Config)",
-        "slug": "配置-config",
-        "link": "#配置-config",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "日志 (Log)",
-        "slug": "日志-log",
-        "link": "#日志-log",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "实体 (Entity)",
-        "slug": "实体-entity",
-        "link": "#实体-entity",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "AOI (Area of Interest)",
-        "slug": "aoi-area-of-interest",
-        "link": "#aoi-area-of-interest",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "Actor 模型",
-        "slug": "actor-模型",
-        "link": "#actor-模型",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "下一步",
-        "slug": "下一步",
-        "link": "#下一步",
-        "children": []
-      }
-    ],
-    "path": "/guide/concepts.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "配置",
-    "headers": [
-      {
-        "level": 2,
-        "title": "配置文件格式",
-        "slug": "配置文件格式",
-        "link": "#配置文件格式",
-        "children": [
-          {
-            "level": 3,
-            "title": "config.json",
-            "slug": "config-json",
-            "link": "#config-json",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "使用配置",
-        "slug": "使用配置",
-        "link": "#使用配置",
-        "children": [
-          {
-            "level": 3,
-            "title": "加载配置",
-            "slug": "加载配置",
-            "link": "#加载配置",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "读取配置",
-            "slug": "读取配置",
-            "link": "#读取配置",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "配置监听",
-            "slug": "配置监听",
-            "link": "#配置监听",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "热更新",
-        "slug": "热更新",
-        "link": "#热更新",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "环境变量覆盖",
-        "slug": "环境变量覆盖",
-        "link": "#环境变量覆盖",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "命令行参数",
-        "slug": "命令行参数",
-        "link": "#命令行参数",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "配置验证",
-        "slug": "配置验证",
-        "link": "#配置验证",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "下一步",
-        "slug": "下一步",
-        "link": "#下一步",
-        "children": []
-      }
-    ],
-    "path": "/guide/configuration.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "安装",
-    "headers": [
-      {
-        "level": 2,
-        "title": "环境要求",
-        "slug": "环境要求",
-        "link": "#环境要求",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "安装步骤",
-        "slug": "安装步骤",
-        "link": "#安装步骤",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 安装 vcpkg",
-            "slug": "_1-安装-vcpkg",
-            "link": "#_1-安装-vcpkg",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 安装依赖",
-            "slug": "_2-安装依赖",
-            "link": "#_2-安装依赖",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 克隆 Apollo",
-            "slug": "_3-克隆-apollo",
-            "link": "#_3-克隆-apollo",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "4. 配置与构建",
-            "slug": "_4-配置与构建",
-            "link": "#_4-配置与构建",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "5. 验证安装",
-            "slug": "_5-验证安装",
-            "link": "#_5-验证安装",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "目录结构",
-        "slug": "目录结构",
-        "link": "#目录结构",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "下一步",
-        "slug": "下一步",
-        "link": "#下一步",
-        "children": []
-      }
-    ],
-    "path": "/guide/installation.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "模块系统",
-    "headers": [
-      {
-        "level": 2,
-        "title": "模块分层",
-        "slug": "模块分层",
-        "link": "#模块分层",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "使用模块",
-        "slug": "使用模块",
-        "link": "#使用模块",
-        "children": [
-          {
-            "level": 3,
-            "title": "CMakeLists.txt 配置",
-            "slug": "cmakelists-txt-配置",
-            "link": "#cmakelists-txt-配置",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "条件加载",
-            "slug": "条件加载",
-            "link": "#条件加载",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "模块依赖",
-        "slug": "模块依赖",
-        "link": "#模块依赖",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "自定义模块",
-        "slug": "自定义模块",
-        "link": "#自定义模块",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 创建模块目录",
-            "slug": "_1-创建模块目录",
-            "link": "#_1-创建模块目录",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 编写 CMakeLists.txt",
-            "slug": "_2-编写-cmakelists-txt",
-            "link": "#_2-编写-cmakelists-txt",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "下一步",
-        "slug": "下一步",
-        "link": "#下一步",
-        "children": []
-      }
-    ],
-    "path": "/guide/module-system.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "快速开始",
-    "headers": [
-      {
-        "level": 2,
-        "title": "创建项目",
-        "slug": "创建项目",
-        "link": "#创建项目",
-        "children": [
-          {
-            "level": 3,
-            "title": "1. 初始化项目结构",
-            "slug": "_1-初始化项目结构",
-            "link": "#_1-初始化项目结构",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "2. 创建 CMakeLists.txt",
-            "slug": "_2-创建-cmakelists-txt",
-            "link": "#_2-创建-cmakelists-txt",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "3. 创建主程序",
-            "slug": "_3-创建主程序",
-            "link": "#_3-创建主程序",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "4. 构建运行",
-            "slug": "_4-构建运行",
-            "link": "#_4-构建运行",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "添加网络通信",
-        "slug": "添加网络通信",
-        "link": "#添加网络通信",
-        "children": [
-          {
-            "level": 3,
-            "title": "创建 TCP 服务器",
-            "slug": "创建-tcp-服务器",
-            "link": "#创建-tcp-服务器",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "下一步",
-        "slug": "下一步",
-        "link": "#下一步",
-        "children": []
-      }
-    ],
-    "path": "/guide/quick-start.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "指南",
-    "headers": [
-      {
-        "level": 2,
-        "title": "指南章节",
-        "slug": "指南章节",
-        "link": "#指南章节",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "下一步",
-        "slug": "下一步",
-        "link": "#下一步",
-        "children": []
-      }
-    ],
-    "path": "/guide/",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
-    "title": "Actor 模块",
-    "headers": [
-      {
-        "level": 2,
-        "title": "Actor 基础",
-        "slug": "actor-基础",
-        "link": "#actor-基础",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "Actor 通信",
-        "slug": "actor-通信",
-        "link": "#actor-通信",
-        "children": [
-          {
-            "level": 3,
-            "title": "Tell 发送",
-            "slug": "tell-发送",
-            "link": "#tell-发送",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "Ask 请求",
-            "slug": "ask-请求",
-            "link": "#ask-请求",
-            "children": []
-          },
-          {
-            "level": 3,
-            "title": "广播",
-            "slug": "广播",
-            "link": "#广播",
-            "children": []
-          }
-        ]
-      },
-      {
-        "level": 2,
-        "title": "Actor 生命周期",
-        "slug": "actor-生命周期",
-        "link": "#actor-生命周期",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "Actor 监督",
-        "slug": "actor-监督",
-        "link": "#actor-监督",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "Actor 定时器",
-        "slug": "actor-定时器",
-        "link": "#actor-定时器",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "分布式 Actor",
-        "slug": "分布式-actor",
-        "link": "#分布式-actor",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "依赖",
-        "slug": "依赖",
-        "link": "#依赖",
-        "children": []
-      },
-      {
-        "level": 2,
-        "title": "链接",
-        "slug": "链接",
-        "link": "#链接",
-        "children": []
-      }
-    ],
-    "path": "/modules/actor.html",
-    "pathLocale": "/",
-    "extraFields": []
-  },
-  {
     "title": "Base 模块",
     "headers": [
       {
@@ -10241,6 +9114,397 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "核心概念",
+    "headers": [
+      {
+        "level": 2,
+        "title": "应用 (Application)",
+        "slug": "应用-application",
+        "link": "#应用-application",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "模块 (Module)",
+        "slug": "模块-module",
+        "link": "#模块-module",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "依赖注入 (DI)",
+        "slug": "依赖注入-di",
+        "link": "#依赖注入-di",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "配置 (Config)",
+        "slug": "配置-config",
+        "link": "#配置-config",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "日志 (Log)",
+        "slug": "日志-log",
+        "link": "#日志-log",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "实体 (Entity)",
+        "slug": "实体-entity",
+        "link": "#实体-entity",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "AOI (Area of Interest)",
+        "slug": "aoi-area-of-interest",
+        "link": "#aoi-area-of-interest",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "Actor 模型",
+        "slug": "actor-模型",
+        "link": "#actor-模型",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "下一步",
+        "slug": "下一步",
+        "link": "#下一步",
+        "children": []
+      }
+    ],
+    "path": "/guide/concepts.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "配置",
+    "headers": [
+      {
+        "level": 2,
+        "title": "配置文件格式",
+        "slug": "配置文件格式",
+        "link": "#配置文件格式",
+        "children": [
+          {
+            "level": 3,
+            "title": "config.json",
+            "slug": "config-json",
+            "link": "#config-json",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "使用配置",
+        "slug": "使用配置",
+        "link": "#使用配置",
+        "children": [
+          {
+            "level": 3,
+            "title": "加载配置",
+            "slug": "加载配置",
+            "link": "#加载配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "读取配置",
+            "slug": "读取配置",
+            "link": "#读取配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "配置监听",
+            "slug": "配置监听",
+            "link": "#配置监听",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "热更新",
+        "slug": "热更新",
+        "link": "#热更新",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "环境变量覆盖",
+        "slug": "环境变量覆盖",
+        "link": "#环境变量覆盖",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "命令行参数",
+        "slug": "命令行参数",
+        "link": "#命令行参数",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "配置验证",
+        "slug": "配置验证",
+        "link": "#配置验证",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "下一步",
+        "slug": "下一步",
+        "link": "#下一步",
+        "children": []
+      }
+    ],
+    "path": "/guide/configuration.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "安装",
+    "headers": [
+      {
+        "level": 2,
+        "title": "环境要求",
+        "slug": "环境要求",
+        "link": "#环境要求",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "安装步骤",
+        "slug": "安装步骤",
+        "link": "#安装步骤",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 安装 vcpkg",
+            "slug": "_1-安装-vcpkg",
+            "link": "#_1-安装-vcpkg",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 安装依赖",
+            "slug": "_2-安装依赖",
+            "link": "#_2-安装依赖",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 克隆 Apollo",
+            "slug": "_3-克隆-apollo",
+            "link": "#_3-克隆-apollo",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4. 配置与构建",
+            "slug": "_4-配置与构建",
+            "link": "#_4-配置与构建",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5. 验证安装",
+            "slug": "_5-验证安装",
+            "link": "#_5-验证安装",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "目录结构",
+        "slug": "目录结构",
+        "link": "#目录结构",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "下一步",
+        "slug": "下一步",
+        "link": "#下一步",
+        "children": []
+      }
+    ],
+    "path": "/guide/installation.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "模块系统",
+    "headers": [
+      {
+        "level": 2,
+        "title": "模块分层",
+        "slug": "模块分层",
+        "link": "#模块分层",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "使用模块",
+        "slug": "使用模块",
+        "link": "#使用模块",
+        "children": [
+          {
+            "level": 3,
+            "title": "CMakeLists.txt 配置",
+            "slug": "cmakelists-txt-配置",
+            "link": "#cmakelists-txt-配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "条件加载",
+            "slug": "条件加载",
+            "link": "#条件加载",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "模块依赖",
+        "slug": "模块依赖",
+        "link": "#模块依赖",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "自定义模块",
+        "slug": "自定义模块",
+        "link": "#自定义模块",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 创建模块目录",
+            "slug": "_1-创建模块目录",
+            "link": "#_1-创建模块目录",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 编写 CMakeLists.txt",
+            "slug": "_2-编写-cmakelists-txt",
+            "link": "#_2-编写-cmakelists-txt",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "下一步",
+        "slug": "下一步",
+        "link": "#下一步",
+        "children": []
+      }
+    ],
+    "path": "/guide/module-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "快速开始",
+    "headers": [
+      {
+        "level": 2,
+        "title": "创建项目",
+        "slug": "创建项目",
+        "link": "#创建项目",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 初始化项目结构",
+            "slug": "_1-初始化项目结构",
+            "link": "#_1-初始化项目结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 创建 CMakeLists.txt",
+            "slug": "_2-创建-cmakelists-txt",
+            "link": "#_2-创建-cmakelists-txt",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 创建主程序",
+            "slug": "_3-创建主程序",
+            "link": "#_3-创建主程序",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4. 构建运行",
+            "slug": "_4-构建运行",
+            "link": "#_4-构建运行",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "添加网络通信",
+        "slug": "添加网络通信",
+        "link": "#添加网络通信",
+        "children": [
+          {
+            "level": 3,
+            "title": "创建 TCP 服务器",
+            "slug": "创建-tcp-服务器",
+            "link": "#创建-tcp-服务器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "下一步",
+        "slug": "下一步",
+        "link": "#下一步",
+        "children": []
+      }
+    ],
+    "path": "/guide/quick-start.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "指南",
+    "headers": [
+      {
+        "level": 2,
+        "title": "指南章节",
+        "slug": "指南章节",
+        "link": "#指南章节",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "下一步",
+        "slug": "下一步",
+        "link": "#下一步",
+        "children": []
+      }
+    ],
+    "path": "/guide/",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Public Assets",
     "headers": [
       {
@@ -10259,6 +9523,1920 @@ export const SEARCH_INDEX = [
       }
     ],
     "path": "/public/",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q1: 请画出你熟悉的 MMORPG 服务器架构图，说明各组件的职责和通信方式",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考架构：BigWorld/KBEngine 风格",
+        "slug": "参考架构-bigworld-kbengine-风格",
+        "link": "#参考架构-bigworld-kbengine-风格",
+        "children": [
+          {
+            "level": 3,
+            "title": "整体架构图",
+            "slug": "整体架构图",
+            "link": "#整体架构图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "登录流程图",
+            "slug": "登录流程图",
+            "link": "#登录流程图",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "各组件职责详解",
+        "slug": "各组件职责详解",
+        "link": "#各组件职责详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 客户端层",
+            "slug": "_1-客户端层",
+            "link": "#_1-客户端层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 接入层",
+            "slug": "_2-接入层",
+            "link": "#_2-接入层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 登录服务",
+            "slug": "_3-登录服务",
+            "link": "#_3-登录服务",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4. 管理服务层",
+            "slug": "_4-管理服务层",
+            "link": "#_4-管理服务层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5. 基础服务层",
+            "slug": "_5-基础服务层",
+            "link": "#_5-基础服务层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6. 空间服务层",
+            "slug": "_6-空间服务层",
+            "link": "#_6-空间服务层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7. 数据服务层",
+            "slug": "_7-数据服务层",
+            "link": "#_7-数据服务层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "8. 其他服务",
+            "slug": "_8-其他服务",
+            "link": "#_8-其他服务",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "通信方式总结",
+        "slug": "通信方式总结",
+        "link": "#通信方式总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "通信协议栈",
+            "slug": "通信协议栈",
+            "link": "#通信协议栈",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "消息格式",
+            "slug": "消息格式",
+            "link": "#消息格式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "RPC调用流程",
+            "slug": "rpc调用流程",
+            "link": "#rpc调用流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "架构特点总结",
+        "slug": "架构特点总结",
+        "link": "#架构特点总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q1-server-architecture.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q2: BigWorld 架构中的 CellApp 和 BaseApp 分别负责什么？为什么这样分离？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "CellApp vs BaseApp 对比",
+        "slug": "cellapp-vs-baseapp-对比",
+        "link": "#cellapp-vs-baseapp-对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "职责对比表",
+            "slug": "职责对比表",
+            "link": "#职责对比表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "详细职责",
+            "slug": "详细职责",
+            "link": "#详细职责",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "为什么这样分离？",
+        "slug": "为什么这样分离",
+        "link": "#为什么这样分离",
+        "children": [
+          {
+            "level": 3,
+            "title": "原因 1：空间与非空间逻辑的本质差异",
+            "slug": "原因-1-空间与非空间逻辑的本质差异",
+            "link": "#原因-1-空间与非空间逻辑的本质差异",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "原因 2：支持动态负载均衡",
+            "slug": "原因-2-支持动态负载均衡",
+            "link": "#原因-2-支持动态负载均衡",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "原因 3：Entity 迁移的复杂性",
+            "slug": "原因-3-entity-迁移的复杂性",
+            "link": "#原因-3-entity-迁移的复杂性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "原因 4：网络通信优化",
+            "slug": "原因-4-网络通信优化",
+            "link": "#原因-4-网络通信优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "优势与挑战",
+        "slug": "优势与挑战",
+        "link": "#优势与挑战",
+        "children": [
+          {
+            "level": 3,
+            "title": "优势",
+            "slug": "优势",
+            "link": "#优势",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "挑战",
+            "slug": "挑战",
+            "link": "#挑战",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "数据流转示例",
+        "slug": "数据流转示例",
+        "link": "#数据流转示例",
+        "children": [
+          {
+            "level": 3,
+            "title": "玩家登录流程",
+            "slug": "玩家登录流程",
+            "link": "#玩家登录流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "玩家移动流程",
+            "slug": "玩家移动流程",
+            "link": "#玩家移动流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "使用背包流程",
+            "slug": "使用背包流程",
+            "link": "#使用背包流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q2-bigworld-cell-base.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q26: KBEngine 消息路由机制：Gateway、Proxy、CellApp 之间如何高效转发？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "整体架构",
+        "slug": "整体架构",
+        "link": "#整体架构",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "Gateway vs Proxy 的区别",
+        "slug": "gateway-vs-proxy-的区别",
+        "link": "#gateway-vs-proxy-的区别",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "消息路由流程",
+        "slug": "消息路由流程",
+        "link": "#消息路由流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "全局流程图",
+            "slug": "全局流程图",
+            "link": "#全局流程图",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "Proxy 路由机制详解",
+        "slug": "proxy-路由机制详解",
+        "link": "#proxy-路由机制详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "消息路由规则",
+            "slug": "消息路由规则",
+            "link": "#消息路由规则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Entity 位置映射表",
+            "slug": "entity-位置映射表",
+            "link": "#entity-位置映射表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "为什么必须通过 Proxy 转发？",
+        "slug": "为什么必须通过-proxy-转发",
+        "link": "#为什么必须通过-proxy-转发",
+        "children": [
+          {
+            "level": 3,
+            "title": "原因分析",
+            "slug": "原因分析",
+            "link": "#原因分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "消息\"信封\"格式详解",
+        "slug": "消息-信封-格式详解",
+        "link": "#消息-信封-格式详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "KBEngine 网络协议帧结构",
+            "slug": "kbengine-网络协议帧结构",
+            "link": "#kbengine-网络协议帧结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "字段详细说明",
+            "slug": "字段详细说明",
+            "link": "#字段详细说明",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "消息类型（MsgType）枚举",
+            "slug": "消息类型-msgtype-枚举",
+            "link": "#消息类型-msgtype-枚举",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "多 CellApp 场景下的路由处理",
+        "slug": "多-cellapp-场景下的路由处理",
+        "link": "#多-cellapp-场景下的路由处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "问题：玩家在多个 CellApp 的 AOI 范围内",
+            "slug": "问题-玩家在多个-cellapp-的-aoi-范围内",
+            "link": "#问题-玩家在多个-cellapp-的-aoi-范围内",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "解决方案：Entity 位置注册表",
+            "slug": "解决方案-entity-位置注册表",
+            "link": "#解决方案-entity-位置注册表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "跨 CellApp 消息处理流程",
+            "slug": "跨-cellapp-消息处理流程",
+            "link": "#跨-cellapp-消息处理流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "分布式位置服务",
+            "slug": "分布式位置服务",
+            "link": "#分布式位置服务",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "完整的消息路由示例",
+        "slug": "完整的消息路由示例",
+        "link": "#完整的消息路由示例",
+        "children": [
+          {
+            "level": 3,
+            "title": "玩家攻击跨 CellApp 的 NPC",
+            "slug": "玩家攻击跨-cellapp-的-npc",
+            "link": "#玩家攻击跨-cellapp-的-npc",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "优化：热点 Entity 的路由",
+        "slug": "优化-热点-entity-的路由",
+        "link": "#优化-热点-entity-的路由",
+        "children": [
+          {
+            "level": 3,
+            "title": "问题：热门 NPC 被大量玩家同时访问",
+            "slug": "问题-热门-npc-被大量玩家同时访问",
+            "link": "#问题-热门-npc-被大量玩家同时访问",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "解决方案：请求合并与排队",
+            "slug": "解决方案-请求合并与排队",
+            "link": "#解决方案-请求合并与排队",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "总结：协议帧与多 CellApp 路由",
+        "slug": "总结-协议帧与多-cellapp-路由",
+        "link": "#总结-协议帧与多-cellapp-路由",
+        "children": [
+          {
+            "level": 3,
+            "title": "协议帧格式速查表",
+            "slug": "协议帧格式速查表",
+            "link": "#协议帧格式速查表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "多 CellApp 路由流程",
+            "slug": "多-cellapp-路由流程",
+            "link": "#多-cellapp-路由流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "高效路由优化",
+        "slug": "高效路由优化",
+        "link": "#高效路由优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. Entity ID 编码",
+            "slug": "_1-entity-id-编码",
+            "link": "#_1-entity-id-编码",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 长连接复用",
+            "slug": "_2-长连接复用",
+            "link": "#_2-长连接复用",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 消息批处理",
+            "slug": "_3-消息批处理",
+            "link": "#_3-消息批处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4. 零拷贝转发",
+            "slug": "_4-零拷贝转发",
+            "link": "#_4-零拷贝转发",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "对比：统一网关 vs Proxy 转发",
+        "slug": "对比-统一网关-vs-proxy-转发",
+        "link": "#对比-统一网关-vs-proxy-转发",
+        "children": [
+          {
+            "level": 3,
+            "title": "KBEngine 选择 Proxy 转发的原因",
+            "slug": "kbengine-选择-proxy-转发的原因",
+            "link": "#kbengine-选择-proxy-转发的原因",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "总结",
+        "slug": "总结",
+        "link": "#总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料-1",
+        "link": "#参考资料-1",
+        "children": []
+      }
+    ],
+    "path": "/qa/q26-kbengine-message-routing.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q27: Real、Ghost、Shadow Entity 之间如何转换？如何高效同步？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "Entity 三态定义",
+        "slug": "entity-三态定义",
+        "link": "#entity-三态定义",
+        "children": [
+          {
+            "level": 3,
+            "title": "概念对比表",
+            "slug": "概念对比表",
+            "link": "#概念对比表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "三态关系图",
+            "slug": "三态关系图",
+            "link": "#三态关系图",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三种 Entity 详解",
+        "slug": "三种-entity-详解",
+        "link": "#三种-entity-详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "Real Entity（权威实体）",
+            "slug": "real-entity-权威实体",
+            "link": "#real-entity-权威实体",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Ghost Entity（影子实体）",
+            "slug": "ghost-entity-影子实体",
+            "link": "#ghost-entity-影子实体",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Shadow Entity（阴影实体）",
+            "slug": "shadow-entity-阴影实体",
+            "link": "#shadow-entity-阴影实体",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "Entity 转换机制",
+        "slug": "entity-转换机制",
+        "link": "#entity-转换机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "Real ↔ Ghost 转换",
+            "slug": "real-↔-ghost-转换",
+            "link": "#real-↔-ghost-转换",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Real ↔ Shadow 转换",
+            "slug": "real-↔-shadow-转换",
+            "link": "#real-↔-shadow-转换",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Ghost ↔ Shadow 关系",
+            "slug": "ghost-↔-shadow-关系",
+            "link": "#ghost-↔-shadow-关系",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "高效同步策略",
+        "slug": "高效同步策略",
+        "link": "#高效同步策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 状态同步优化",
+            "slug": "_1-状态同步优化",
+            "link": "#_1-状态同步优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. Ghost 同步策略",
+            "slug": "_2-ghost-同步策略",
+            "link": "#_2-ghost-同步策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. Shadow 同步策略",
+            "slug": "_3-shadow-同步策略",
+            "link": "#_3-shadow-同步策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4. 带宽优化",
+            "slug": "_4-带宽优化",
+            "link": "#_4-带宽优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "转换流程图",
+        "slug": "转换流程图",
+        "link": "#转换流程图",
+        "children": [
+          {
+            "level": 3,
+            "title": "Entity 完整生命周期",
+            "slug": "entity-完整生命周期",
+            "link": "#entity-完整生命周期",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "实现示例",
+        "slug": "实现示例",
+        "link": "#实现示例",
+        "children": [
+          {
+            "level": 3,
+            "title": "Ghost 创建代码示例",
+            "slug": "ghost-创建代码示例",
+            "link": "#ghost-创建代码示例",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Shadow 同步代码示例",
+            "slug": "shadow-同步代码示例",
+            "link": "#shadow-同步代码示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "常见问题",
+        "slug": "常见问题",
+        "link": "#常见问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "Q1: Ghost 和 Real 数据不一致怎么办？",
+            "slug": "q1-ghost-和-real-数据不一致怎么办",
+            "link": "#q1-ghost-和-real-数据不一致怎么办",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Q2: Shadow 预测错误太多怎么办？",
+            "slug": "q2-shadow-预测错误太多怎么办",
+            "link": "#q2-shadow-预测错误太多怎么办",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Q3: 边界频繁切换导致大量 Ghost 创建/销毁？",
+            "slug": "q3-边界频繁切换导致大量-ghost-创建-销毁",
+            "link": "#q3-边界频繁切换导致大量-ghost-创建-销毁",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q27-entity-ghost-shadow-relationship.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q28: KBEngine 是否存在注册中心？CellApp 如何部署和通信？Actor 模型适用吗？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、服务注册中心",
+        "slug": "一、服务注册中心",
+        "link": "#一、服务注册中心",
+        "children": [
+          {
+            "level": 3,
+            "title": "KBEngine 的注册机制",
+            "slug": "kbengine-的注册机制",
+            "link": "#kbengine-的注册机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Apollo 的改进架构",
+            "slug": "apollo-的改进架构",
+            "link": "#apollo-的改进架构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、CellApp 部署策略",
+        "slug": "二、cellapp-部署策略",
+        "link": "#二、cellapp-部署策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "部署方式对比",
+            "slug": "部署方式对比",
+            "link": "#部署方式对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "单机多进程部署",
+            "slug": "单机多进程部署",
+            "link": "#单机多进程部署",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "多机分布式部署",
+            "slug": "多机分布式部署",
+            "link": "#多机分布式部署",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、CellApp 通信机制",
+        "slug": "三、cellapp-通信机制",
+        "link": "#三、cellapp-通信机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "通信方式对比",
+            "slug": "通信方式对比",
+            "link": "#通信方式对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "NNG 通信框架",
+            "slug": "nng-通信框架",
+            "link": "#nng-通信框架",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "共享内存通道",
+            "slug": "共享内存通道",
+            "link": "#共享内存通道",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Actor 模型应用",
+        "slug": "四、actor-模型应用",
+        "link": "#四、actor-模型应用",
+        "children": [
+          {
+            "level": 3,
+            "title": "Actor 模型与 CellApp",
+            "slug": "actor-模型与-cellapp",
+            "link": "#actor-模型与-cellapp",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Actor 模型适用性分析",
+            "slug": "actor-模型适用性分析",
+            "link": "#actor-模型适用性分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "CAF 框架对比",
+            "slug": "caf-框架对比",
+            "link": "#caf-框架对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Apollo Actor 实现",
+            "slug": "apollo-actor-实现",
+            "link": "#apollo-actor-实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、通信优化策略",
+        "slug": "五、通信优化策略",
+        "link": "#五、通信优化策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "批量消息合并",
+            "slug": "批量消息合并",
+            "link": "#批量消息合并",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "背压控制",
+            "slug": "背压控制",
+            "link": "#背压控制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "零拷贝优化",
+            "slug": "零拷贝优化",
+            "link": "#零拷贝优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、部署建议",
+        "slug": "六、部署建议",
+        "link": "#六、部署建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "小规模部署（< 1000 人）",
+            "slug": "小规模部署-1000-人",
+            "link": "#小规模部署-1000-人",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "中等规模（1000-5000 人）",
+            "slug": "中等规模-1000-5000-人",
+            "link": "#中等规模-1000-5000-人",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "大规模（> 5000 人）",
+            "slug": "大规模-5000-人",
+            "link": "#大规模-5000-人",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、参考资料",
+        "slug": "七、参考资料",
+        "link": "#七、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q28-kbengine-registry-actor-transport.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q29: KBEngine CellApp 之间如何通信？如何发现自己的空间位置？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、CellApp 通信架构",
+        "slug": "一、cellapp-通信架构",
+        "link": "#一、cellapp-通信架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "通信拓扑",
+            "slug": "通信拓扑",
+            "link": "#通信拓扑",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "通信方式",
+            "slug": "通信方式",
+            "link": "#通信方式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、CellApp 启动与空间分配流程",
+        "slug": "二、cellapp-启动与空间分配流程",
+        "link": "#二、cellapp-启动与空间分配流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "启动流程",
+            "slug": "启动流程",
+            "link": "#启动流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "空间分配策略",
+            "slug": "空间分配策略",
+            "link": "#空间分配策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、空间位置发现机制",
+        "slug": "三、空间位置发现机制",
+        "link": "#三、空间位置发现机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "CellApp 的空间元数据",
+            "slug": "cellapp-的空间元数据",
+            "link": "#cellapp-的空间元数据",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "边界感知",
+            "slug": "边界感知",
+            "link": "#边界感知",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "邻居方向定义（3D）",
+            "slug": "邻居方向定义-3d",
+            "link": "#邻居方向定义-3d",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、CellApp 间通信协议",
+        "slug": "四、cellapp-间通信协议",
+        "link": "#四、cellapp-间通信协议",
+        "children": [
+          {
+            "level": 3,
+            "title": "通信类型",
+            "slug": "通信类型",
+            "link": "#通信类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Entity 迁移协议",
+            "slug": "entity-迁移协议",
+            "link": "#entity-迁移协议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Ghost 同步协议",
+            "slug": "ghost-同步协议",
+            "link": "#ghost-同步协议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、边界协调机制",
+        "slug": "五、边界协调机制",
+        "link": "#五、边界协调机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "边界宽度设计",
+            "slug": "边界宽度设计",
+            "link": "#边界宽度设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "跨边界判断",
+            "slug": "跨边界判断",
+            "link": "#跨边界判断",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、邻居发现与维护",
+        "slug": "六、邻居发现与维护",
+        "link": "#六、邻居发现与维护",
+        "children": [
+          {
+            "level": 3,
+            "title": "邻居表维护",
+            "slug": "邻居表维护",
+            "link": "#邻居表维护",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "邻居变化通知",
+            "slug": "邻居变化通知",
+            "link": "#邻居变化通知",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、动态空间调整",
+        "slug": "七、动态空间调整",
+        "link": "#七、动态空间调整",
+        "children": [
+          {
+            "level": 3,
+            "title": "负载触发的边界调整",
+            "slug": "负载触发的边界调整",
+            "link": "#负载触发的边界调整",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "边界调整协议",
+            "slug": "边界调整协议",
+            "link": "#边界调整协议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、通信优化",
+        "slug": "八、通信优化",
+        "link": "#八、通信优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "批量 Ghost 更新",
+            "slug": "批量-ghost-更新",
+            "link": "#批量-ghost-更新",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "消息优先级",
+            "slug": "消息优先级",
+            "link": "#消息优先级",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "九、故障处理",
+        "slug": "九、故障处理",
+        "link": "#九、故障处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "CellApp 故障检测",
+            "slug": "cellapp-故障检测",
+            "link": "#cellapp-故障检测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "故障恢复策略",
+            "slug": "故障恢复策略",
+            "link": "#故障恢复策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十、参考资料",
+        "slug": "十、参考资料",
+        "link": "#十、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q29-cellapp-communication-space-discovery.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q3: 什么是 AOI（Area of Interest）？有哪些实现方式？各有什么优缺点？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "AOI 基本概念",
+        "slug": "aoi-基本概念",
+        "link": "#aoi-基本概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "什么是 AOI？",
+            "slug": "什么是-aoi",
+            "link": "#什么是-aoi",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "AOI 的作用",
+            "slug": "aoi-的作用",
+            "link": "#aoi-的作用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "分层 AOI 设计",
+        "slug": "分层-aoi-设计",
+        "link": "#分层-aoi-设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "为什么需要分层？",
+            "slug": "为什么需要分层",
+            "link": "#为什么需要分层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "分层 AOI 架构",
+            "slug": "分层-aoi-架构",
+            "link": "#分层-aoi-架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "分层 AOI 实现",
+            "slug": "分层-aoi-实现",
+            "link": "#分层-aoi-实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "分层 AOI 的优势",
+            "slug": "分层-aoi-的优势",
+            "link": "#分层-aoi-的优势",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "AOI 实现方式对比",
+        "slug": "aoi-实现方式对比",
+        "link": "#aoi-实现方式对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 九宫格算法",
+            "slug": "_1-九宫格算法",
+            "link": "#_1-九宫格算法",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 十字链表",
+            "slug": "_2-十字链表",
+            "link": "#_2-十字链表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 空间哈希",
+            "slug": "_3-空间哈希",
+            "link": "#_3-空间哈希",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "对比总结",
+            "slug": "对比总结",
+            "link": "#对比总结",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "CellApp 中的 AOI",
+        "slug": "cellapp-中的-aoi",
+        "link": "#cellapp-中的-aoi",
+        "children": [
+          {
+            "level": 3,
+            "title": "CellApp 中的 AOI 职责",
+            "slug": "cellapp-中的-aoi-职责",
+            "link": "#cellapp-中的-aoi-职责",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "CellApp AOI 实现",
+            "slug": "cellapp-aoi-实现",
+            "link": "#cellapp-aoi-实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "CellApp 重叠部分的处理",
+        "slug": "cellapp-重叠部分的处理",
+        "link": "#cellapp-重叠部分的处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "问题：边界处的 Entity",
+            "slug": "问题-边界处的-entity",
+            "link": "#问题-边界处的-entity",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "解决方案：Ghost 机制",
+            "slug": "解决方案-ghost-机制",
+            "link": "#解决方案-ghost-机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "性能优化",
+        "slug": "性能优化",
+        "link": "#性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 分帧处理",
+            "slug": "_1-分帧处理",
+            "link": "#_1-分帧处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 空间索引",
+            "slug": "_2-空间索引",
+            "link": "#_2-空间索引",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 事件合并",
+            "slug": "_3-事件合并",
+            "link": "#_3-事件合并",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q3-aoi-implementation.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q30: KBEngine 的 Space 是什么？与物理空间划分有什么区别？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、Space 的真实定义",
+        "slug": "一、space-的真实定义",
+        "link": "#一、space-的真实定义",
+        "children": [
+          {
+            "level": 3,
+            "title": "官方定义",
+            "slug": "官方定义",
+            "link": "#官方定义",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "关键特性",
+            "slug": "关键特性",
+            "link": "#关键特性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "源码证据",
+            "slug": "源码证据",
+            "link": "#源码证据",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Space vs 物理空间划分",
+        "slug": "二、space-vs-物理空间划分",
+        "link": "#二、space-vs-物理空间划分",
+        "children": [
+          {
+            "level": 3,
+            "title": "常见误解",
+            "slug": "常见误解",
+            "link": "#常见误解",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 的实际设计",
+            "slug": "kbengine-的实际设计",
+            "link": "#kbengine-的实际设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Space 与 CoordinateSystem 的区别",
+        "slug": "三、space-与-coordinatesystem-的区别",
+        "link": "#三、space-与-coordinatesystem-的区别",
+        "children": [
+          {
+            "level": 3,
+            "title": "对比表",
+            "slug": "对比表",
+            "link": "#对比表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "CoordinateSystem 的实际作用",
+            "slug": "coordinatesystem-的实际作用",
+            "link": "#coordinatesystem-的实际作用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Space 的创建和管理",
+        "slug": "四、space-的创建和管理",
+        "link": "#四、space-的创建和管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "Space 创建流程",
+            "slug": "space-创建流程",
+            "link": "#space-创建流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Space 负载均衡",
+            "slug": "space-负载均衡",
+            "link": "#space-负载均衡",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "指定 Space 到特定 CellApp",
+            "slug": "指定-space-到特定-cellapp",
+            "link": "#指定-space-到特定-cellapp",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、Space 的边界管理",
+        "slug": "五、space-的边界管理",
+        "link": "#五、space-的边界管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "Space 边界 vs 物理边界",
+            "slug": "space-边界-vs-物理边界",
+            "link": "#space-边界-vs-物理边界",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "边界的用途",
+            "slug": "边界的用途",
+            "link": "#边界的用途",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、多 Space 管理",
+        "slug": "六、多-space-管理",
+        "link": "#六、多-space-管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "一个 CellApp 多 Space 示例",
+            "slug": "一个-cellapp-多-space-示例",
+            "link": "#一个-cellapp-多-space-示例",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Space 之间 Entity 迁移",
+            "slug": "space-之间-entity-迁移",
+            "link": "#space-之间-entity-迁移",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、与物理空间划分的对比",
+        "slug": "七、与物理空间划分的对比",
+        "link": "#七、与物理空间划分的对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "不同引擎的 Space 概念",
+            "slug": "不同引擎的-space-概念",
+            "link": "#不同引擎的-space-概念",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 的选择",
+            "slug": "kbengine-的选择",
+            "link": "#kbengine-的选择",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、实际应用示例",
+        "slug": "八、实际应用示例",
+        "link": "#八、实际应用示例",
+        "children": [
+          {
+            "level": 3,
+            "title": "场景：MMO 的多 Space 管理",
+            "slug": "场景-mmo-的多-space-管理",
+            "link": "#场景-mmo-的多-space-管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "九、常见问题",
+        "slug": "九、常见问题",
+        "link": "#九、常见问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "Q1: Entity 如何跨 Space 移动？",
+            "slug": "q1-entity-如何跨-space-移动",
+            "link": "#q1-entity-如何跨-space-移动",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Q2: 不同 Space 的 Entity 能交互吗？",
+            "slug": "q2-不同-space-的-entity-能交互吗",
+            "link": "#q2-不同-space-的-entity-能交互吗",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Q3: CoordinateSystem 是全局的还是每个 Space 独立？",
+            "slug": "q3-coordinatesystem-是全局的还是每个-space-独立",
+            "link": "#q3-coordinatesystem-是全局的还是每个-space-独立",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十、参考资料",
+        "slug": "十、参考资料",
+        "link": "#十、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q30-kbengine-space-concept.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q31: KBEngine 如何高效广播？如何保证消息不重复？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、KBEngine 的 AOI 实现",
+        "slug": "一、kbengine-的-aoi-实现",
+        "link": "#一、kbengine-的-aoi-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "三轴十字链表",
+            "slug": "三轴十字链表",
+            "link": "#三轴十字链表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "CoordinateSystem 核心",
+            "slug": "coordinatesystem-核心",
+            "link": "#coordinatesystem-核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、ViewEntity 和 Witness 机制",
+        "slug": "二、viewentity-和-witness-机制",
+        "link": "#二、viewentity-和-witness-机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "视野管理架构",
+            "slug": "视野管理架构",
+            "link": "#视野管理架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Witness 生命周期",
+            "slug": "witness-生命周期",
+            "link": "#witness-生命周期",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "onEnterWitness / onLeaveWitness",
+            "slug": "onenterwitness-onleavewitness",
+            "link": "#onenterwitness-onleavewitness",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、广播去重机制",
+        "slug": "三、广播去重机制",
+        "link": "#三、广播去重机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "去重策略 1：ViewEntity 自动去重",
+            "slug": "去重策略-1-viewentity-自动去重",
+            "link": "#去重策略-1-viewentity-自动去重",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "去重策略 2：坐标系层级",
+            "slug": "去重策略-2-坐标系层级",
+            "link": "#去重策略-2-坐标系层级",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "去重策略 3：帧标记",
+            "slug": "去重策略-3-帧标记",
+            "link": "#去重策略-3-帧标记",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、高效广播策略",
+        "slug": "四、高效广播策略",
+        "link": "#四、高效广播策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "策略 1：只广播视野内的变化",
+            "slug": "策略-1-只广播视野内的变化",
+            "link": "#策略-1-只广播视野内的变化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "策略 2：增量广播",
+            "slug": "策略-2-增量广播",
+            "link": "#策略-2-增量广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "策略 3：频率控制",
+            "slug": "策略-3-频率控制",
+            "link": "#策略-3-频率控制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、完整的广播流程",
+        "slug": "五、完整的广播流程",
+        "link": "#五、完整的广播流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "Entity 移动时的广播",
+            "slug": "entity-移动时的广播",
+            "link": "#entity-移动时的广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "多人广播去重图解",
+            "slug": "多人广播去重图解",
+            "link": "#多人广播去重图解",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、性能优化技巧",
+        "slug": "六、性能优化技巧",
+        "link": "#六、性能优化技巧",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 视野半径控制",
+            "slug": "_1-视野半径控制",
+            "link": "#_1-视野半径控制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 分层广播",
+            "slug": "_2-分层广播",
+            "link": "#_2-分层广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 批量打包",
+            "slug": "_3-批量打包",
+            "link": "#_3-批量打包",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、常见问题",
+        "slug": "七、常见问题",
+        "link": "#七、常见问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "Q1: 如果两个 Entity 同时移动，会重复广播吗？",
+            "slug": "q1-如果两个-entity-同时移动-会重复广播吗",
+            "link": "#q1-如果两个-entity-同时移动-会重复广播吗",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Q2: 客户端如何知道哪些 Entity 在视野内？",
+            "slug": "q2-客户端如何知道哪些-entity-在视野内",
+            "link": "#q2-客户端如何知道哪些-entity-在视野内",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Q3: 如何避免视野边界频繁进出？",
+            "slug": "q3-如何避免视野边界频繁进出",
+            "link": "#q3-如何避免视野边界频繁进出",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、参考资料",
+        "slug": "八、参考资料",
+        "link": "#八、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q31-kbengine-broadcast-dedup.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q9: CellAppMgr 如果宕机了怎么办？有哪些解决方案？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "KBEngine 的实际情况",
+        "slug": "kbengine-的实际情况",
+        "link": "#kbengine-的实际情况",
+        "children": [
+          {
+            "level": 3,
+            "title": "官方确认",
+            "slug": "官方确认",
+            "link": "#官方确认",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "宕机影响",
+            "slug": "宕机影响",
+            "link": "#宕机影响",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "解决方案",
+        "slug": "解决方案",
+        "link": "#解决方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "方案 1: 进程监控 + 自动重启（最简单）",
+            "slug": "方案-1-进程监控-自动重启-最简单",
+            "link": "#方案-1-进程监控-自动重启-最简单",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "方案 2: 状态持久化 + 快速恢复",
+            "slug": "方案-2-状态持久化-快速恢复",
+            "link": "#方案-2-状态持久化-快速恢复",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "方案 3: 主备模式（需修改源码）",
+            "slug": "方案-3-主备模式-需修改源码",
+            "link": "#方案-3-主备模式-需修改源码",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "方案 4: RAFT + ETCD（推荐）",
+            "slug": "方案-4-raft-etcd-推荐",
+            "link": "#方案-4-raft-etcd-推荐",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "方案对比",
+        "slug": "方案对比",
+        "link": "#方案对比",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "Apollo 建议方案",
+        "slug": "apollo-建议方案",
+        "link": "#apollo-建议方案",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q9-cellappmgr-failure.html",
     "pathLocale": "/",
     "extraFields": []
   },
@@ -10399,3 +11577,16 @@ export const SEARCH_INDEX = [
     "extraFields": []
   }
 ]
+
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept()
+  if (__VUE_HMR_RUNTIME__.updateSearchIndex) {
+    __VUE_HMR_RUNTIME__.updateSearchIndex(searchIndex)
+  }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept(({ searchIndex }) => {
+    __VUE_HMR_RUNTIME__.updateSearchIndex(searchIndex)
+  })
+}

@@ -1,0 +1,2 @@
+import{getDirname as e,path as t}from"vuepress/utils";const n=import.meta.dirname||e(import.meta.url),r=({headerLinkSelector:e=`a.vp-sidebar-item`,headerAnchorSelector:r=`.header-anchor`,delay:i=200,offset:a=5}={})=>({name:`@vuepress/plugin-active-header-links`,clientConfigFile:t.resolve(n,`../client/config.js`),define:{__AHL_HEADER_LINK_SELECTOR__:e,__AHL_HEADER_ANCHOR_SELECTOR__:r,__AHL_DELAY__:i,__AHL_OFFSET__:a}});export{r as activeHeaderLinksPlugin};
+//# sourceMappingURL=index.js.map

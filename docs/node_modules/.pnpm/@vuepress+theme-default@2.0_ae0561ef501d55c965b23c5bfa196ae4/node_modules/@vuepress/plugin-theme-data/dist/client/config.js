@@ -1,0 +1,2 @@
+import{a as e,n as t,o as n,t as r}from"../useThemeLocaleData-Px-kSq-k.js";import{computed as i}from"vue";import{clientDataSymbol as a,defineClientConfig as o}from"vuepress/client";var s=o({enhance({app:o}){let s=e(),c=o._context.provides[a],l=i(()=>r(s.value,c.routeLocale.value));o.provide(t,l),Object.defineProperties(o.config.globalProperties,{$theme:{get(){return s.value}},$themeLocale:{get(){return l.value}}}),n(o,s,l)}});export{s as default};
+//# sourceMappingURL=config.js.map
