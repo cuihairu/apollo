@@ -9,6 +9,8 @@
 
 ## 参考架构：BigWorld/KBEngine 风格
 
+> 说明：这里采用 BigWorld/KBEngine 的典型进程模型来回答，不混入通用 `Gateway` 前置网关架构。
+
 ### 整体架构图
 
 ```mermaid
@@ -17,11 +19,6 @@ flowchart TB
         U["Unity客户端"]
         W["Web客户端"]
         M["移动客户端"]
-    end
-
-    subgraph Edge["接入层"]
-        LB["负载均衡器<br/>Nginx/HAProxy"]
-        GW["GatewayApp<br/>网关服务器"]
     end
 
     subgraph Login["登录服务"]
@@ -34,9 +31,9 @@ flowchart TB
     end
 
     subgraph Base["基础服务层"]
-        BA1["BaseApp1"]
-        BA2["BaseApp2"]
-        BA3["BaseApp3"]
+        BA1["BaseApp1<br/>Proxy/Base Entity"]
+        BA2["BaseApp2<br/>Proxy/Base Entity"]
+        BA3["BaseApp3<br/>Proxy/Base Entity"]
     end
 
     subgraph Cell["空间服务层"]
@@ -53,17 +50,15 @@ flowchart TB
     end
 
     subgraph Other["其他服务"]
-        CHAT["ChatApp<br/>聊天服务"]
-        MATCH["MatchApp<br/>匹配服务"]
+        CHAT["ChatApp<br/>可选聊天服务"]
+        MATCH["MatchApp<br/>可选匹配服务"]
     end
 
     %% 连接关系
-    U & W & M --> LB
-    LB --> GW
-    GW --> LA
-    GW --> BA1
-    GW --> BA2
-    GW --> BA3
+    U & W & M --> LA
+    U & W & M -.登录后重连.-> BA1
+    U & W & M -.登录后重连.-> BA2
+    U & W & M -.登录后重连.-> BA3
 
     LA --> BAM
     LA --> DBM
@@ -85,17 +80,14 @@ flowchart TB
     CAM <--> CA4
 
     BA1 & BA2 & BA3 --> DBM
-    CA1 & CA2 & CA3 & CA4 --> DBM
 
     BA1 & BA2 & BA3 --> RD
-    CA1 & CA2 & CA3 & CA4 --> RD
 
     DBM --> DB
 
     BA1 & BA2 & BA3 --> CHAT
     BA1 & BA2 & BA3 --> MATCH
 
-    style GW fill:#e1f5ff
     style LA fill:#e1f5ff
     style DBM fill:#fff4e1
     style BAM fill:#f0e1ff
@@ -107,35 +99,27 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant C as 客户端
-    participant LB as 负载均衡
-    participant GW as GatewayApp
     participant LA as LoginApp
     participant DBM as DBMgr
     participant BAM as BaseAppMgr
     participant BA as BaseApp
     participant CA as CellApp
 
-    C->>LB: 连接请求
-    LB->>GW: 转发连接
-    C->>GW: 登录请求(账号/密码)
-
-    GW->>LA: 转发登录请求
+    C->>LA: 登录请求(账号/密码)
     LA->>DBM: 请求账号验证
     DBM-->>LA: 返回验证结果
 
     alt 登录失败
-        LA-->>GW: 登录失败
-        GW-->>C: 登录失败
+        LA-->>C: 登录失败
     else 登录成功
         LA->>BAM: 请求分配BaseApp
         BAM-->>LA: 返回BaseApp地址
-        LA->>BA: 创建Proxy
+        LA->>BA: 创建Base/Proxy
         BA->>DBM: 加载玩家数据
         DBM-->>BA: 返回玩家数据
         BA->>CA: 创建Cell Entity
-        LA-->>GW: 登录成功+服务器信息
-        GW-->>C: 登录成功+网关信息
-        C->>GW: 切换连接到Gateway
+        LA-->>C: 返回BaseApp地址/令牌
+        C->>BA: 断开Login后重连BaseApp
     end
 ```
 
@@ -153,29 +137,27 @@ sequenceDiagram
 
 ### 2. 接入层
 
-#### GatewayApp（网关服务器）
+#### LoginApp + BaseApp/Proxy（接入主链路）
 **职责**：
-- 客户端连接管理（维持长连接）
-- 消息路由转发
-- 会话管理（Session管理）
-- 防攻击（限流、黑名单）
-- 消息编解码
+- `LoginApp` 负责首次接入、账号验证、分配目标 `BaseApp`
+- `BaseApp` 中的 `Proxy` 负责玩家的长期会话锚点
+- 处理客户端消息编解码、会话管理、断线重连
+- 将需要空间计算的消息转发到 `CellApp`
 
 **通信方式**：
-- 与客户端：TCP/KCP/WebSocket + Protobuf
-- 与内部服务：TCP + 自定义RPC协议
+- 与客户端：通常是 TCP 长连接 + 自定义二进制协议/Protobuf
+- 与内部服务：进程间 TCP + 内部消息/RPC
 
 ### 3. 登录服务
 
 #### LoginApp（登录服务器）
 **职责**：
 - 账号密码验证
-- 服务器列表分发
-- 与BaseAppMgr协调分配BaseApp
-- 登录态管理
+- 与 `BaseAppMgr` 协调分配目标 `BaseApp`
+- 创建登录票据或连接信息
+- 返回后续接入地址
 
 **通信方式**：
-- 与GatewayApp：RPC
 - 与DBMgr：RPC
 - 与BaseAppMgr：RPC
 
@@ -199,7 +181,7 @@ sequenceDiagram
 
 #### BaseApp（基础应用）
 **职责**：
-- 管理玩家的Proxy（Base Entity）
+- 管理玩家的 `Base` / `Proxy`
 - 处理非空间相关逻辑：
   - 背包系统
   - 好友系统
@@ -207,10 +189,11 @@ sequenceDiagram
   - 任务系统
   - 商城交易
 - 作为客户端的通信锚点
-- 消息重定向到CellApp
+- 将空间相关请求转发给 `CellApp`
+- 负责玩家数据加载、保存和生命周期管理
 
 **通信方式**：
-- 与GatewayApp：长连接RPC
+- 与客户端：长连接
 - 与CellApp：长连接RPC
 - 与DBMgr：异步RPC
 
@@ -231,7 +214,6 @@ sequenceDiagram
 **通信方式**：
 - 与BaseApp：长连接RPC
 - 与相邻CellApp：Entity同步
-- 与DBMgr：异步RPC
 
 ### 7. 数据服务层
 
@@ -249,10 +231,10 @@ sequenceDiagram
 
 #### Redis（缓存集群）
 **职责**：
-- 热点数据缓存
+- 热点数据缓存（实现上通常由 `BaseApp` 等服务访问）
 - 排行榜实时计算
-- 会话状态存储
-- 分布式锁
+- 会话/状态辅助存储
+- 分布式协调辅助能力
 
 ### 8. 其他服务
 
@@ -283,7 +265,7 @@ sequenceDiagram
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                      传输协议层                              │
-│   客户端↔网关: TCP/KCP/WebSocket                            │
+│   客户端↔Login/Base: TCP长连接                               │
 │   内部服务: TCP长连接                                        │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -321,10 +303,10 @@ sequenceDiagram
 
 | 特性 | 说明 |
 |------|------|
-| **分层设计** | 客户端→网关→业务服务→数据服务，职责清晰 |
+| **分层设计** | 客户端→LoginApp/BaseApp→CellApp/数据服务，职责清晰 |
 | **空间分离** | BaseApp处理非空间逻辑，CellApp处理空间逻辑 |
 | **水平扩展** | BaseApp/CellApp可动态增减 |
-| **高可用** | 无单点故障，各服务可多实例部署 |
+| **高可用潜力** | Cell/Base可横向扩展，但 LoginApp、Mgr、DBMgr 仍需额外HA方案 |
 | **异步通信** | 内部采用异步RPC，提高吞吐量 |
 
 ---

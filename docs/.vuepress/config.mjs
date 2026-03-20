@@ -191,14 +191,8 @@ export default defineUserConfig({
       updatedTime: true,
       contributors: true,
     }),
-    markdownChartPlugin({
-      // 启用 mermaid
-      mermaid: true,
-    }),
   ],
 
   // 构建配置
-  bundler: viteBundler({
-    viteOptions: {},
-  }),
+  bundler: viteBundler(),
 })
