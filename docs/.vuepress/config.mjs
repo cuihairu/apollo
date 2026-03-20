@@ -1,8 +1,6 @@
 import { viteBundler } from '@vuepress/bundler-vite'
 import { defaultTheme } from '@vuepress/theme-default'
 import { searchPlugin } from '@vuepress/plugin-search'
-import { mediumZoomPlugin } from '@vuepress/plugin-medium-zoom'
-import { gitPlugin } from '@vuepress/plugin-git'
 import { markdownChartPlugin } from '@vuepress/plugin-markdown-chart'
 import { defineUserConfig } from 'vuepress/cli'
 
@@ -173,6 +171,15 @@ export default defineUserConfig({
     search: true,
     searchMaxSuggestions: 10,
     searchPlaceholder: '搜索文档...',
+
+    // 主题内置插件配置
+    themePlugins: {
+      git: {
+        createdTime: true,
+        updatedTime: true,
+        contributors: true,
+      },
+    },
   }),
 
   // Markdown 配置
@@ -185,11 +192,8 @@ export default defineUserConfig({
   // 插件
   plugins: [
     searchPlugin(),
-    mediumZoomPlugin(),
-    gitPlugin({
-      createdTime: true,
-      updatedTime: true,
-      contributors: true,
+    markdownChartPlugin({
+      mermaid: true,
     }),
   ],
 
