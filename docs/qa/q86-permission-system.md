@@ -1,338 +1,109 @@
 # Q86: 如何设计权限系统？
 
-## 问题分析
-
-本题考察对权限系统的理解：
-- 权限模型设计
-- RBAC 实现
-- 权限验证
-- KBEngine 权限
-
----
-
-## 一、RBAC 模型
-
-### 1.1 基本概念
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    RBAC 模型                                  │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  用户 (User) → 角色 (Role) → 权限 (Permission)              │
-│                                                             │
-│  示例:                                                      │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────┐          │
-│  │ Player   │───→│ VIP      │───→│ Chat         │          │
-│  └──────────┘    └──────────┘    │ Trade        │          │
-│                                   │ Kick Player  │          │
-│  ┌──────────┐                   └──────────────┘          │
-│  │ GM       │───→┐                                            │
-│  └──────────┘    │                                            │
-│                  ▼                                            │
-│          ┌──────────────┐                                    │
-│          │ All Permissions│                                  │
-│          │ Ban Player     │                                  │
-│          │ Spawn Item     │                                  │
-│          └──────────────┘                                    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 二、权限实现
-
-### 2.1 权限定义
-
-```cpp
-// 权限定义
-
-enum class Permission {
-    // 基础权限
-    MOVE,
-    ATTACK,
-    CHAT,
-
-    // VIP 权限
-    VIP_CHAT,
-    VIP_TRADE,
-    VIP_DUNGEON,
-
-    // GM 权限
-    GM_KICK,
-    GM_BAN,
-    GM_SPAWN,
-    GM_TELEPORT,
-    GM_INVISIBLE,
-
-    // 管理员权限
-    ADMIN_ALL
-};
-
-// 权限检查器
-class PermissionChecker {
-public:
-    bool hasPermission(uint64_t playerId, Permission perm) {
-        Player* player = getPlayer(playerId);
-        if (!player) return false;
-
-        // 管理员拥有所有权限
-        if (player->isAdmin()) {
-            return true;
-        }
-
-        // 检查角色权限
-        for (const std::string& role : player->getRoles()) {
-            if (roleHasPermission(role, perm)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool hasAnyPermission(uint64_t playerId,
-                          const std::vector<Permission>& perms) {
-        for (Permission perm : perms) {
-            if (hasPermission(playerId, perm)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-private:
-    bool roleHasPermission(const std::string& role, Permission perm) {
-        const auto& rolePerms = rolePermissions_[role];
-        return rolePerms.count(perm) > 0;
-    }
-
-    std::unordered_map<std::string, std::set<Permission>> rolePermissions_;
-};
-```
-
-### 2.2 命令权限
-
-```cpp
-// GM 命令权限系统
-
-class GMCommandSystem {
-public:
-    struct Command {
-        std::string name;
-        int requiredLevel;  // 0=Player, 1=VIP, 2=GM, 3=Admin
-        std::set<Permission> requiredPerms;
-        std::function<void(uint64_t, const std::vector<std::string>&)> handler;
-    };
-
-    void registerCommand(const Command& cmd) {
-        commands_[cmd.name] = cmd;
-    }
-
-    bool executeCommand(uint64_t playerId, const std::string& cmdName,
-                       const std::vector<std::string>& args) {
-        auto it = commands_.find(cmdName);
-        if (it == commands_.end()) {
-            sendErrorMessage(playerId, "Unknown command");
-            return false;
-        }
-
-        const Command& cmd = it->second;
-
-        // 检查权限等级
-        Player* player = getPlayer(playerId);
-        if (player->getGMLevel() < cmd.requiredLevel) {
-            sendErrorMessage(playerId, "Permission denied");
-            return false;
-        }
-
-        // 检查具体权限
-        for (Permission perm : cmd.requiredPerms) {
-            if (!permissionChecker_.hasPermission(playerId, perm)) {
-                sendErrorMessage(playerId, "Missing permission");
-                return false;
-            }
-        }
-
-        // 执行命令
-        cmd.handler(playerId, args);
-
-        // 记录日志
-        logGMCommand(playerId, cmdName, args);
-
-        return true;
-    }
-
-    // 注册常用命令
-    void registerCommonCommands() {
-        registerCommand({"kick", 2, {Permission::GM_KICK},
-            [](uint64_t gmId, const auto& args) {
-                if (args.empty()) return;
-                uint64_t targetId = std::stoull(args[0]);
-                kickPlayer(gmId, targetId);
-            }
-        });
-
-        registerCommand({"ban", 3, {Permission::GM_BAN},
-            [](uint64_t gmId, const auto& args) {
-                if (args.size() < 2) return;
-                uint64_t targetId = std::stoull(args[0]);
-                int duration = std::stoi(args[1]);
-                banPlayer(gmId, targetId, duration);
-            }
-        });
-
-        registerCommand({"spawn", 2, {Permission::GM_SPAWN},
-            [](uint64_t gmId, const auto& args) {
-                if (args.size() < 2) return;
-                int itemId = std::stoi(args[0]);
-                int count = std::stoi(args[1]);
-                spawnItem(gmId, itemId, count);
-            }
-        });
-    }
-
-private:
-    std::unordered_map<std::string, Command> commands_;
-    PermissionChecker permissionChecker_;
-};
-```
-
----
-
-## 三、KBEngine 权限
-
-### 3.1 KBEngine 权限系统
-
-```python
-# KBEngine 风格的权限系统
-
-class Permission:
-    """权限定义"""
-
-    # 基础权限
-    MOVE = "move"
-    ATTACK = "attack"
-    CHAT = "chat"
-
-    # VIP 权限
-    VIP_CHAT = "vip_chat"
-    VIP_TRADE = "vip_trade"
-
-    # GM 权限
-    GM_KICK = "gm_kick"
-    GM_BAN = "gm_ban"
-    GM_SPAWN = "gm_spawn"
-    GM_TELEPORT = "gm_teleport"
-
-    # 管理员
-    ADMIN_ALL = "admin_all"
-
-
-class Role:
-    """角色定义"""
-
-    ROLES = {
-        "player": [Permission.MOVE, Permission.ATTACK, Permission.CHAT],
-        "vip": [Permission.MOVE, Permission.ATTACK, Permission.CHAT,
-                Permission.VIP_CHAT, Permission.VIP_TRADE],
-        "gm": [Permission.MOVE, Permission.ATTACK, Permission.CHAT,
-               Permission.GM_KICK, Permission.GM_BAN, Permission.GM_SPAWN,
-               Permission.GM_TELEPORT],
-        "admin": [Permission.ADMIN_ALL]
-    }
-
-
-class PermissionSystem:
-    """权限系统"""
-
-    def __init__(self):
-        self.player_roles = {}  # player_id -> [roles]
-        self.role_permissions = Role.ROLES
-
-    def assign_role(self, player_id, role):
-        """分配角色"""
-        if player_id not in self.player_roles:
-            self.player_roles[player_id] = []
-
-        if role not in self.player_roles[player_id]:
-            self.player_roles[player_id].append(role)
-
-    def has_permission(self, player_id, permission):
-        """检查权限"""
-        roles = self.player_roles.get(player_id, [])
-
-        for role in roles:
-            if permission in self.role_permissions.get(role, []):
-                return True
-
-        return False
-
-    def check_gm_command(self, player_id, command):
-        """检查 GM 命令权限"""
-        # GM 命令权限映射
-        GM_PERMISSIONS = {
-            "/kick": Permission.GM_KICK,
-            "/ban": Permission.GM_BAN,
-            "/spawn": Permission.GM_SPAWN,
-            "/teleport": Permission.GM_TELEPORT,
-        }
-
-        perm = GM_PERMISSIONS.get(command)
-        if perm:
-            return self.has_permission(player_id, perm)
-
-        return False
-
-    def execute_gm_command(self, player_id, command, args):
-        """执行 GM 命令"""
-        if not self.check_gm_command(player_id, command):
-            self.send_error(player_id, "Permission denied")
-            return
-
-        # 执行命令
-        if command == "/kick":
-            self.cmd_kick(player_id, args)
-        elif command == "/ban":
-            self.cmd_ban(player_id, args)
-        # ...
-
-    def cmd_kick(self, gm_id, args):
-        """踢人命令"""
-        target_id = int(args[0])
-        KBEngine.kick(target_id)
-
-        KBEngine.info(f"Player {gm_id} kicked player {target_id}")
-
-    def cmd_ban(self, gm_id, args):
-        """封禁命令"""
-        target_id = int(args[0])
-        duration = int(args[1])
-
-        # 执行封禁
-        ban_player(target_id, duration)
-
-        KBEngine.info(f"Player {gm_id} banned player {target_id} for {duration}s")
-```
-
----
-
-## 四、总结
-
-### 权限系统核心
-
-```
-权限系统 = RBAC 模型 + 命令检查 + 日志审计
-- 角色分配权限
-- 最小权限原则
-- 所有关键操作检查
-- 完整的审计日志
-```
-
----
+## 核心结论
+
+权限系统不是“给用户贴几个角色标签”，而是把“谁能对什么对象执行什么操作”表达清楚，并且能被服务端稳定验证。
+
+真正需要先想清楚的是：
+
+- 权限作用于哪些资源
+- 权限是角色级、对象级还是上下文级
+- 谁负责做最终校验
+- 高风险操作如何审计
+
+如果这些边界不清晰，权限系统很快就会变成零散的 `if` 判断集合。
+
+## 一、先分清权限控制的对象
+
+常见对象包括：
+
+- 玩家自己的角色数据
+- 后台管理能力
+- GM 操作
+- 公会、队伍、拍卖等组织或共享资源
+
+这些对象的权限模型差别很大，不适合一刀切。
+
+## 二、角色模型只是起点，不是全部
+
+RBAC 很常见，但在游戏里通常还不够。
+
+因为很多权限不是“你是不是 GM”这么简单，而是：
+
+- 你是不是当前公会会长
+- 你是不是这封邮件的接收者
+- 你是不是这个对象的拥有者
+
+也就是说，很多权限是对象上下文相关的。
+
+## 三、服务端必须做最终鉴权
+
+客户端展示层可以决定按钮是否可点，但不能作为最终权限判断。
+
+服务端至少要确认：
+
+- 调用者身份
+- 操作目标
+- 当前上下文是否合法
+
+否则越权只需要绕过客户端界面即可。
+
+## 四、高风险操作需要额外约束
+
+例如：
+
+- 封号
+- 发奖
+- 改资产
+- 批量执行命令
+
+这类操作通常应具备：
+
+- 最小权限
+- 双重确认或更严格审批
+- 审计日志
+
+否则后台误操作的风险会非常高。
+
+## 五、权限系统要和审计系统一起设计
+
+权限不是只看“能不能做”，还要看“做了之后能不能追溯”。
+
+更稳妥的做法通常是记录：
+
+- 谁执行的
+- 对谁执行
+- 执行了什么
+- 何时执行
+- 是否成功
+
+这样权限系统才能真正承担治理职责。
+
+## 六、工程上更稳妥的组织方式
+
+常见做法是：
+
+- 身份认证系统确认“你是谁”
+- 权限系统判断“你能做什么”
+- 资源层判断“你对这个对象是否有权”
+- 审计系统记录“你实际做了什么”
+
+这四层不要混在一起。
+
+## 七、常见误区
+
+### 1. 权限系统就是 RBAC
+
+RBAC 很常见，但对象级和上下文级权限在游戏里同样重要。
+
+### 2. 前端把按钮隐藏了就算没权限
+
+不对。最终校验必须在服务端。
+
+### 3. 只有后台系统才需要权限设计
+
+公会、队伍、交易、共享资源同样有权限边界。
 
 ## 参考资料
 
-- [RBAC NIST Standard](https://csrc.nist.gov/projects/role-based-access-control/)
-- [OWASP Access Control](https://owasp.org/www-project-access-control/)
+- RBAC、ABAC 和高风险操作审计实践资料

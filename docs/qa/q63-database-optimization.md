@@ -1,153 +1,107 @@
 # Q63: 如何优化数据库查询？
 
-## 问题分析
+## 核心结论
 
-本题考察对数据库查询优化的理解：
-- 索引优化
-- 查询语句优化
-- 表结构设计
-- 读写分离
-- 缓存策略
+数据库查询优化的核心，不是背多少 SQL 技巧，而是先弄清楚：
 
----
+- 哪些查询最贵
+- 为什么贵
+- 能不能减少查询次数
 
-## 一、查询优化基础
+很多数据库问题不是“SQL 写得不够花”，而是系统把不该落到数据库的压力全打到了数据库上。
 
-### 1.1 索引类型
+## 一、先判断问题是不是查询本身
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    索引类型                                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  B-Tree 索引:                                               │
-│  ├── 适合: 范围查询、排序                                   │
-│  ├── 示例: WHERE level > 10                                 │
-│  └── 限制: 不适合前缀模糊查询                                │
-│                                                             │
-│  哈希索引:                                                  │
-│  ├── 适合: 等值查询                                         │
-│  ├── 示例: WHERE id = 123                                   │
-│  └── 限制: 不支持范围查询                                    │
-│                                                             │
-│  组合索引:                                                  │
-│  ├── 遵循最左前缀原则                                       │
-│  ├── 示例: INDEX(player_id, item_type)                      │
-│  └── 注意: 列顺序很重要                                     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+常见数据库慢，可能来自：
 
-### 1.2 查询优化示例
+- SQL 语句差
+- 索引不对
+- 表设计不合理
+- 查询次数太多
+- 热点数据没缓存
 
-```sql
--- 1. 避免 SELECT *
--- ✅ 好
-SELECT id, name, level FROM players WHERE id = 123;
+如果不先区分原因，容易只会一味加索引。
 
--- 2. 使用索引
--- ❌ 不好 - 索引列上使用函数
-SELECT * FROM players WHERE YEAR(create_time) = 2024;
--- ✅ 好
-SELECT * FROM players WHERE create_time >= '2024-01-01';
+## 二、减少查询次数通常比优化单条 SQL 更值
 
--- 3. 批量操作
--- ✅ 好 - 一次查询
-SELECT * FROM items WHERE player_id IN (1, 2, 3, ...);
+常见收益很高的做法包括：
 
--- 4. 分页优化
--- ❌ 不好 - 深分页
-SELECT * FROM logs ORDER BY id LIMIT 1000000, 10;
--- ✅ 好 - 使用游标
-SELECT * FROM logs WHERE id > last_seen_id ORDER BY id LIMIT 10;
-```
+- 批量查询
+- 缓存热点数据
+- 合理预加载
+- 避免 N+1 查询
 
----
+很多系统真正的瓶颈，不是某一条 SQL 太慢，而是同一类小查询打得太多。
 
-## 二、KBEngine 数据库设计
+## 三、索引优化要围绕真实访问模式
 
-### 2.1 玩家表结构
+索引不是越多越好。
 
-```sql
-CREATE TABLE `players` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `account_id` BIGINT UNSIGNED NOT NULL,
-  `name` VARCHAR(64) NOT NULL,
-  `level` INT UNSIGNED NOT NULL DEFAULT 1,
-  `exp` BIGINT UNSIGNED NOT NULL DEFAULT 0,
-  `hp` INT NOT NULL DEFAULT 100,
-  `position_x` FLOAT NOT NULL DEFAULT 0,
-  `position_y` FLOAT NOT NULL DEFAULT 0,
-  `position_z` FLOAT NOT NULL DEFAULT 0,
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `login_time` DATETIME,
-  `logout_time` DATETIME,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_account_id` (`account_id`),
-  UNIQUE KEY `uk_name` (`name`),
-  KEY `idx_level` (`level`),
-  KEY `idx_create_time` (`create_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-```
+设计索引时应该先问：
 
----
+- 这条查询最常见的 where 条件是什么
+- 是否有排序和分页
+- 是否只需要覆盖索引
 
-## 三、多级缓存
+如果和真实访问模式不匹配，再多索引也没用，还会放大写入成本。
 
-```cpp
-// 三级缓存架构
+## 四、深分页、模糊查询和大范围扫描要特别小心
 
-class CacheSystem {
-public:
-    PlayerData getPlayerData(uint64_t playerId) {
-        // L1: 本地缓存
-        if (auto data = localCache.get(playerId)) {
-            return *data;
-        }
+这几类查询最容易在业务做大后出问题。
 
-        // L2: Redis
-        if (auto data = redisCache.get(playerId)) {
-            localCache.put(playerId, data);
-            return data;
-        }
+常见改法包括：
 
-        // L3: 数据库
-        auto data = databaseCache.get(playerId);
-        redisCache.put(playerId, data);
-        localCache.put(playerId, data);
-        return data;
-    }
+- 用游标或基于主键翻页替代深分页
+- 把搜索交给更合适的索引或搜索层
+- 让报表和在线主库隔离
 
-private:
-    LocalCache localCache;
-    RedisCache redisCache;
-    DatabaseCache databaseCache;
-};
-```
+不要指望一条“万能 SQL”同时搞定在线查询和分析查询。
 
----
+## 五、读写分离和缓存不是银弹
 
-## 四、最佳实践
+它们确实常用，但前提是：
 
-| 实践 | 说明 |
-|------|------|
-| **索引覆盖** | 查询字段都在索引中 |
-| **批量操作** | 减少网络往返 |
-| **避免 SELECT *** | 只查询需要的字段 |
-| **使用连接池** | 复用数据库连接 |
-| **定期分析** | ANALYZE TABLE |
+- 业务能接受读延迟
+- 缓存失效策略清晰
+- 不会制造新的热点
 
----
+否则只是把问题换个地方爆发。
 
-## 五、总结
+## 六、查询优化必须和表结构一起看
 
-```
-查询优化 = 索引设计 + SQL 优化 + 缓存策略 + 读写分离
-```
+如果表结构本身不适合查询，例如：
 
----
+- 超宽表
+- 高频字段和低频字段混在一起
+- 大量 JSON 难以过滤
+
+那再怎么改 SQL 也只能止损。
+
+## 七、工程上更稳妥的优化顺序
+
+常见做法是：
+
+1. 先抓慢查询和高频查询
+2. 先减查询次数
+3. 再调整索引和 SQL
+4. 最后再考虑拆表、读写分离和搜索层
+
+这样通常比一上来重构数据库更有效。
+
+## 八、常见误区
+
+### 1. 数据库慢就先加索引
+
+不一定。可能真正的问题是查询模式或数据模型错了。
+
+### 2. `SELECT *` 改成列名就算优化了
+
+有时有用，但往往不是主要瓶颈。
+
+### 3. 所有慢查询都应该进缓存
+
+缓存可以缓解一部分问题，但会带来一致性和回源压力，需要看场景。
 
 ## 参考资料
 
-- [MySQL Optimization](https://dev.mysql.com/doc/refman/8.0/en/optimization.html)
-- [KBEngine Database](https://kbengine.github.io/docs/)
+- 慢查询分析、索引设计和在线数据库治理实践资料

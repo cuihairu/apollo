@@ -1,141 +1,122 @@
 # Q89: 如何设计限流和防刷机制？
 
-## 问题分析
+## 核心结论
 
-本题考察对限流防刷的理解：
-- 限流算法
-- 防刷策略
-- 令牌桶
-- 漏桶算法
+限流和防刷的目标，不只是拦住“太多请求”，而是区分：
 
----
+- 正常高频行为
+- 恶意或异常重复行为
+- 关键资源保护需求
 
-## 一、限流算法
+真正有效的系统通常不是只上一种令牌桶算法，而是分层做：
 
-### 1.1 令牌桶
+- 接入层限流
+- 会话层限流
+- 业务层防刷
 
-```cpp
-// 令牌桶算法
+## 一、先区分限流和防刷
 
-class TokenBucketRateLimiter {
-public:
-    TokenBucketRateLimiter(size_t capacity, size_t refillRate)
-        : capacity_(capacity), refillRate_(refillRate),
-          tokens_(capacity), lastRefill_(getCurrentTime()) {}
+两者相关，但不完全一样。
 
-    bool allowRequest(int tokens = 1) {
-        uint64_t now = getCurrentTime();
+### 1. 限流
 
-        // 补充令牌
-        refill(now);
+更关注：
 
-        // 检查是否有足够令牌
-        if (tokens_ >= tokens) {
-            tokens_ -= tokens;
-            return true;
-        }
+- 资源保护
+- 系统稳定性
 
-        return false;
-    }
+### 2. 防刷
 
-private:
-    void refill(uint64_t now) {
-        uint64_t elapsed = now - lastRefill_;
-        uint64_t tokensToAdd = (elapsed * refillRate_) / 1000;
+更关注：
 
-        tokens_ = std::min(capacity_, tokens_ + tokensToAdd);
-        lastRefill_ = now;
-    }
+- 恶意收益获取
+- 自动化滥用
+- 异常重复操作
 
-    size_t capacity_;    // 桶容量
-    size_t refillRate_;  // 补充速率 (tokens/second)
-    size_t tokens_;      // 当前令牌数
-    uint64_t lastRefill_;
-};
-```
+有些请求量不大，但收益异常高，也属于防刷问题。
 
----
+## 二、限流粒度必须分层
 
-## 二、应用场景
+常见粒度包括：
 
-### 2.1 多级限流
+- IP
+- 账号
+- 角色
+- 会话
+- 接口或消息类型
 
-```cpp
-// 多级限流系统
+不同层级解决的问题不同。
 
-class RateLimiter {
-public:
-    enum class LimitResult {
-        ALLOW,
-        WARN,
-        DENY
-    };
+例如：
 
-    LimitResult check(uint64_t playerId, const std::string& action) {
-        // 检查个人限制
-        if (!checkPlayerLimit(playerId, action)) {
-            return LimitResult::DENY;
-        }
+- IP 更偏外部攻击与接入保护
+- 角色和接口粒度更贴近业务刷取行为
 
-        // 检查 IP 限制
-        std::string ip = getPlayerIP(playerId);
-        if (!checkIPLimit(ip, action)) {
-            return LimitResult::DENY;
-        }
+## 三、业务层防刷比算法更重要
 
-        // 检查全局限制
-        if (!checkGlobalLimit(action)) {
-            return LimitResult::WARN;
-        }
+很多高价值漏洞不是靠大流量触发，而是靠：
 
-        return LimitResult::ALLOW;
-    }
+- 重复点击
+- 自动脚本
+- 边界状态重试
 
-private:
-    bool checkPlayerLimit(uint64_t playerId, const std::string& action) {
-        PlayerLimits& limits = playerLimits_[playerId];
+所以业务层通常还需要：
 
-        uint64_t now = getCurrentTime();
-        uint64_t window = 60000;  // 1分钟窗口
+- 幂等
+- 冷却时间
+- 状态机校验
+- 收益上限
 
-        // 滑动窗口计数
-        limits.counter++;
-        limits.windowStart = now;
+这些比单纯“每秒多少次”更关键。
 
-        // 1分钟内最多 100 次
-        if (limits.counter > 100) {
-            return false;
-        }
+## 四、不同接口应采用不同策略
 
-        return true;
-    }
+例如：
 
-    struct PlayerLimits {
-        uint64_t counter = 0;
-        uint64_t windowStart = 0;
-    };
+- 登录接口适合严格接入限流
+- 聊天适合频率和内容双控
+- 领奖和购买适合幂等加频率限制
+- 移动消息不能直接按普通接口限流思路处理
 
-    std::unordered_map<uint64_t, PlayerLimits> playerLimits_;
-};
-```
+如果所有请求都套同一桶参数，体验和安全都不会太好。
 
----
+## 五、限流触发后的处理也要设计
 
-## 三、总结
+常见处理方式包括：
 
-### 限流防刷核心
+- 直接拒绝
+- 延迟响应
+- 降级服务
+- 进入验证码或人工复核
+- 记入风控分
 
-```
-限流防刷 = 令牌桶 + 滑动窗口 + 多级防护
-- 令牌桶算法
-- 滑动窗口计数
-- 个人/IP/全局三级
-- 超限返回错误
-```
+并不是所有超限都该一刀切封禁。
 
----
+## 六、工程上更稳妥的组合
+
+常见做法是：
+
+- 接入层做粗限流
+- 会话层做频率控制
+- 业务层做幂等、状态机和收益限制
+- 风控层做持续异常统计
+
+这样才能同时保护系统和业务收益。
+
+## 七、常见误区
+
+### 1. 限流就是令牌桶
+
+令牌桶很常见，但只是基础工具，不是完整防刷方案。
+
+### 2. 请求量不大就不算刷
+
+很多刷子恰恰利用低频高收益漏洞。
+
+### 3. 超限就封号最稳
+
+很多时候更合理的是逐级处置和持续观察。
 
 ## 参考资料
 
-- [Rate Limiting Algorithms](https://konghq.com/blog/how-to-design-a-scalable-rate-limiting-service/)
-- [Token Bucket Wikipedia](https://en.wikipedia.org/wiki/Token_bucket)
+- 限流、幂等和风控评分实践资料

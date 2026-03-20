@@ -1,269 +1,125 @@
 # Q90: 如何应对 DDoS 攻击？
 
-## 问题分析
+## 核心结论
 
-本题考察对 DDoS 防护的理解：
-- DDoS 攻击类型
-- 防护策略
-- 流量清洗
-- 游戏服务器防护
+DDoS 防护不是应用层单独能解决的问题，它本质上是“分层削峰和隔离故障域”的能力建设。
 
----
+更现实的思路通常是：
 
-## 一、DDoS 类型
+- 上游网络层挡大流量
+- 接入层挡连接和协议滥用
+- 应用层挡高成本逻辑请求
 
-### 1.1 攻击分类
+如果希望单靠游戏服自己扛住大规模 DDoS，通常是不现实的。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    DDoS 攻击类型                              │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. 容量攻击                                                │
-│  ├── UDP Flood                                             │
-│  ├── ICMP Flood                                            │
-│  └── 目标: 耗尽带宽                                        │
-│                                                             │
-│  2. 协议攻击                                                │
-│  ├── SYN Flood                                             │
-│  ├── ACK Flood                                             │
-│  └── 目标: 耗尽连接资源                                    │
-│                                                             │
-│  3. 应用攻击                                                │
-│  ├── HTTP Flood                                            │
-│  ├── 慢速 POST                                             │
-│  └── 目标: 耗尽应用资源                                    │
-│                                                             │
-│  4. 游戏攻击                                                │
-│  ├── 登录 Flood                                            │
-│  ├── 假人攻击                                               │
-│  └── 目标: 逻辑漏洞                                        │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+## 一、先区分几类攻击
 
----
+常见可以分成：
 
-## 二、防护策略
+- 容量型攻击：打满带宽
+- 协议型攻击：打满连接和内核资源
+- 应用型攻击：耗尽业务处理能力
 
-### 2.1 多层防护
+对在线游戏来说，还经常会出现“伪正常行为”的攻击：
 
-```cpp
-// DDoS 防护架构
+- 登录洪峰
+- 假角色接入
+- 高频但看似合法的业务请求
 
-class DDoSProtection {
-public:
-    // 1. 接入层防护
-    bool checkIP(const std::string& ip) {
-        // 检查黑名单
-        if (isBlacklisted(ip)) {
-            return false;
-        }
+## 二、为什么必须分层防
 
-        // 检查白名单
-        if (isWhitelisted(ip)) {
-            return true;
-        }
+因为不同层的成本差别很大：
 
-        // 检查威胁情报
-        if (isThreatIP(ip)) {
-            addToGraylist(ip);
-            return false;
-        }
+- 越靠近上游，越便宜
+- 越靠近业务，越贵
 
-        return true;
-    }
+所以最理想的处理顺序是：
 
-    // 2. 速率限制
-    bool checkRateLimit(const std::string& ip) {
-        auto& counter = ipCounters_[ip];
+- 在网络和清洗层挡掉大流量
+- 在网关层挡掉异常连接和格式错误
+- 只有较可信的请求才进入业务服
 
-        uint64_t now = getCurrentTime();
+## 三、网关层是关键防线
 
-        // 滑动窗口
-        while (!counter.slots.empty() && counter.slots.front() < now - 60000) {
-            counter.slots.pop_front();
-        }
+对游戏系统来说，网关层通常要承担：
 
-        // 1秒内最多 100 个请求
-        if (counter.slots.size() > 100) {
-            // 超限，升级防御
-            if (counter.slots.size() > 500) {
-                // 严重超限，加入黑名单
-                blacklistIP(ip, 3600);
-            }
-            return false;
-        }
+- 连接限速
+- 握手和协议校验
+- 基本鉴权
+- 早期丢弃无效请求
 
-        counter.slots.push_back(now);
-        return true;
-    }
+这层做得越稳，后端业务服越不容易被拖垮。
 
-    // 3. 连接限制
-    bool checkConnectionLimit(const std::string& ip) {
-        auto& info = ipInfo_[ip];
+## 四、应用层也要防“低流量高成本”攻击
 
-        // 单 IP 连接数限制
-        if (info.connections > 100) {
-            return false;
-        }
+很多攻击并不追求超大流量，而是专门命中高成本路径，例如：
 
-        // 新连接速率限制
-        uint64_t now = getCurrentTime();
-        if (now - info.lastConnect < 100) {  // 100ms 内
-            info.rapidCount++;
+- 登录验证
+- 匹配入队
+- 排行榜查询
+- 高频创建会话
 
-            if (info.rapidCount > 50) {
-                return false;
-            }
-        } else {
-            info.rapidCount = 0;
-        }
+这类问题更需要：
 
-        info.lastConnect = now;
-        return true;
-    }
+- 接口限流
+- 缓存和降级
+- 高成本路径保护
 
-    // 4. 挑战验证
-    void challengeClient(const std::string& ip) {
-        // 发送 JS 挑战
-        sendChallenge(ip, generateChallenge());
+## 五、降级策略必须提前准备
 
-        // 等待响应
-        // 验证通过才放行
-    }
+攻击期间，不是所有功能都必须保持完全正常。
 
-private:
-    struct IPCounter {
-        std::deque<uint64_t> slots;
-    };
+更稳妥的做法通常是预先定义：
 
-    struct IPInfo {
-        int connections = 0;
-        uint64_t lastConnect = 0;
-        int rapidCount = 0;
-    };
+- 哪些功能可以关闭或降级
+- 哪些路径必须优先保活
+- 哪些非核心功能暂时停用
 
-    std::unordered_map<std::string, IPCounter> ipCounters_;
-    std::unordered_map<std::string, IPInfo> ipInfo_;
-};
-```
+例如：
 
----
+- 暂停部分排行榜实时更新
+- 限制注册和某些后台功能
+- 收紧高成本接口
 
-## 三、游戏服务器防护
+## 六、观测和联动很重要
 
-### 3.1 登录保护
+DDoS 防护不能只靠单机日志判断。
 
-```cpp
-// 游戏登录 DDoS 防护
+通常至少要联动观察：
 
-class LoginProtection {
-public:
-    // 处理登录请求
-    LoginResult handleLogin(const std::string& account,
-                            const std::string& ip,
-                            const std::string& fingerprint) {
-        // 1. 检查 IP 信誉
-        if (!checkIPReputation(ip)) {
-            // 需要验证码
-            return LoginResult::NEED_CAPTCHA;
-        }
+- 带宽与连接数
+- SYN / ACK 异常
+- 登录成功率
+- 网关拒绝率
+- 业务接口异常分布
 
-        // 2. 检查账号状态
-        if (isAccountLocked(account)) {
-            return LoginResult::ACCOUNT_LOCKED;
-        }
+这样才能判断攻击打到了哪一层。
 
-        // 3. 检查登录频率
-        if (!checkLoginRate(account, ip)) {
-            return LoginResult::TOO_FREQUENT;
-        }
+## 七、工程上更稳妥的组合
 
-        // 4. 验证指纹 (防止多开)
-        if (!checkFingerprint(account, fingerprint)) {
-            return LoginResult::FINGERPRINT_MISMATCH;
-        }
+常见做法是：
 
-        // 5. 执行登录
-        return performLogin(account, ip);
-    }
+- 上游高防或清洗服务
+- 网关层限速和连接保护
+- 应用层限流与降级
+- 关键业务接口加风控和缓存
 
-private:
-    bool checkLoginRate(const std::string& account, const std::string& ip) {
-        // 检查账号级别限制
-        auto& accountCounter = loginCounters_[account];
+这是一套体系，不是某一台机器或某一个中间件的能力。
 
-        uint64_t now = getCurrentTime();
-        uint64_t windowStart = now - 300000;  // 5分钟窗口
+## 八、常见误区
 
-        // 清理过期记录
-        while (!accountCounter.attempts.empty() &&
-               accountCounter.attempts.front().timestamp < windowStart) {
-            accountCounter.attempts.pop_front();
-        }
+### 1. DDoS 主要是带宽问题
 
-        // 5分钟内最多 10 次失败
-        int failCount = 0;
-        for (const auto& attempt : accountCounter.attempts) {
-            if (!attempt.success) {
-                failCount++;
-            }
-        }
+不完整。很多游戏系统真正先死的是连接资源和应用层高成本路径。
 
-        if (failCount > 10) {
-            // 账号临时锁定
-            lockAccount(account, 300);
-            return false;
-        }
+### 2. 有 CDN 或高防就够了
 
-        return true;
-    }
+上游能挡很多流量，但应用层滥用和业务热点仍要自己处理。
 
-    struct LoginAttempt {
-        uint64_t timestamp;
-        bool success;
-    };
+### 3. 只有攻击时才需要想降级方案
 
-    struct AccountCounter {
-        std::deque<LoginAttempt> attempts;
-    };
-
-    std::unordered_map<std::string, AccountCounter> loginCounters_;
-};
-```
-
----
-
-## 四、最佳实践
-
-### 4.1 防护层次
-
-```
-DDoS 防护 = 多层防御 + 流量清洗 + 游戏层防护
-- 接入层过滤
-- CDN 分流
-- 游戏层限流
-- 应急预案
-```
-
----
-
-## 五、总结
-
-### DDoS 防护核心
-
-```
-防 DDoS = 预防 + 检测 + 响应 + 恢复
-- 接入层防护
-- 速率限制
-- 挑战验证
-- 专业服务 (Cloudflare 等)
-```
-
----
+真到攻击来了再设计，通常已经太晚。
 
 ## 参考资料
 
-- [DDoS Protection Best Practices](https://www.cloudflare.com/learning/ddos/)
-- [Game DDoS Protection](https://www.akamai.com/)
+- 高防、接入层限速和应用层降级实践资料

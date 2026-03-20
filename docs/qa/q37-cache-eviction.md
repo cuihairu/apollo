@@ -1,154 +1,140 @@
 # Q37: 如何实现数据的缓存淘汰策略？
 
-## 问题分析
+## 核心结论
 
-本题考察对缓存淘汰的理解：
-- 缓存淘汰算法
-- LRU/LFU 实现
-- Redis 淘汰策略
-| 淘汰策略 | 说明 |
-|--------|------|
-| **noeviction** | 不淘汰，内存满时报错 |
-| **allkeys-lru** | 所有键的 LRU |
-| **volatile-lru** | 设置了 TTL 的键的 LRU |
-| **allkeys-lfu** | 所有键的 LFU |
-| **volatile-lfu** | 设置了 TTL 的键的 LFU |
+缓存淘汰策略的目标，不是单纯提高命中率，而是在有限内存下优先保住最有价值的数据。
 
----
+真正需要先想清楚的是：
 
-## 一、淘汰算法
+- 缓存里放的是什么数据
+- 这些数据是读热点还是写热点
+- 淘汰后代价是什么
+- 是否允许短时间脏读或回源抖动
 
-### 1.1 LRU 实现
+脱离数据价值只谈 `LRU`、`LFU`，通常意义不大。
 
-```cpp
-// LRU 缓存实现
+## 一、先判断哪些数据适合进入缓存
 
-template<typename K, typename V>
-class LRUCache {
-public:
-    LRUCache(size_t capacity) : capacity_(capacity) {}
+不是所有数据都值得缓存。
 
-    void put(const K& key, const V& value) {
-        auto it = cache_.find(key);
+更适合缓存的通常是：
 
-        if (it != cache_.end()) {
-            // 更新现有值
-            it->second.second = value;
-            // 移到最前面
-            lruList_.splice(lruList_.begin(), lruList_, it->second.first);
-        } else {
-            // 检查容量
-            if (cache_.size() >= capacity_) {
-                // 淘汰最久未使用
-                auto last = lruList_.back();
-                cache_.erase(last->first);
-                lruList_.pop_back();
-            }
+- 读多写少
+- 回源成本高
+- 访问集中
+- 生命周期明确
 
-            // 添加新项
-            lruList_.push_front(key);
-            cache_[key] = {lruList_.begin(), value};
-        }
-    }
+例如：
 
-    V* get(const K& key) {
-        auto it = cache_.find(key);
-        if (it == cache_.end()) {
-            return nullptr;
-        }
+- 配置
+- 排行榜摘要
+- 玩家资料摘要
+- 热门公会信息
 
-        // 移到最前面（最近使用）
-        lruList_.splice(lruList_.begin(), lruList_, it->second.first);
+## 二、淘汰策略和数据类型强相关
 
-        return &it->second.second;
-    }
+### 1. LRU
 
-private:
-    size_t capacity_;
-    std::list<K> lruList_;
-    std::unordered_map<K, std::pair<typename std::list<K>::iterator, V>> cache_;
-};
-```
+适合“最近访问过的数据大概率还会继续访问”的场景。
 
-### 1.2 LFU 实现
+优点是简单直观，但对周期性扫描和突发访问不一定稳定。
 
-```cpp
-// LFU 缓存实现
+### 2. LFU
 
-template<typename K, typename V>
-class LFUCache {
-public:
-    LFUCache(size_t capacity) : capacity_(capacity) {}
+适合“长期稳定热点”的场景。
 
-    void put(const K& key, const V& value) {
-        // 增加访问频率
-        accessCount_[key]++;
+例如长期热门榜单或持续高频访问的公共数据。
 
-        if (cache_.size() >= capacity_) && cache_.find(key) == cache_.end()) {
-            // 淘汰访问频率最低的
-            evictLFU();
-        }
+但 LFU 容易让旧热点长期占位，所以常需要衰减机制。
 
-        cache_[key] = value;
-    }
+### 3. TTL 驱动
 
-    V* get(const K& key) {
-        accessCount_[key]++;
-        auto it = cache_.find(key);
-        return it != cache_.end() ? &it->second : nullptr;
-    }
+适合本身就有明确生命周期的数据。
 
-private:
-    void evictLFU() {
-        K minKey;
-        size_t minCount = SIZE_MAX;
+例如：
 
-        for (const auto& [key, count] : accessCount_) {
-            if (count < minCount) {
-                minCount = count;
-                minKey = key;
-            }
-        }
+- 临时活动状态
+- 会话摘要
+- 限流计数
 
-        cache_.erase(minKey);
-        accessCount_.erase(minKey);
-    }
+这类数据很多时候比复杂淘汰算法更适合直接按过期时间管理。
 
-    size_t capacity_;
-    std::unordered_map<K, V> cache_;
-    std::unordered_map<K, size_t> accessCount_;
-};
-```
+## 三、淘汰策略不能只靠一个全局规则
 
----
+很多系统的问题在于：
 
-## 二、Redis 淘汰策略
+- 所有缓存共用一个大池
+- 所有 key 共用一套淘汰策略
 
-```
-maxmemory-policy 配置:
+这会导致低价值大对象把高价值热点挤掉。
 
-# 内存使用达到上限时淘汰
-volatile-lru → 淘汰设置了 TTL 的键中很少使用的
-allkeys-lru → 淘汰所有键中很少使用的
-volatile-lfu → 淘汰设置了 TTL 的键中使用频率最低的
-allkeys-lfu → 淘汰所有键中使用频率最低的
-```
+更稳妥的方式通常是：
 
----
+- 按模块分缓存域
+- 为不同数据设置不同 TTL 和容量
+- 对关键热点做单独保护
 
-## 三、最佳实践
+## 四、淘汰之后会发生什么更重要
 
-### 缓存淘汰建议
+缓存淘汰的真实代价在于回源。
 
-| 场景 | 策略 | TTL 设置 |
-|------|------|---------|
-| 热点数据 | volatile-lru | 短 TTL |
-| 会话数据 | volatile-lru | 会话过期 |
-| 静态资源 | allkeys-lru | 长 TTL |
-| 计算结果 | volatile-lru | 短 TTL |
+要先判断：
 
----
+- 回数据库是否会形成突刺
+- 回源数据是否昂贵
+- 淘汰后是否会触发大量重建
+
+如果淘汰一批热点 key 会把数据库直接打爆，再好的命中率数字也没有意义。
+
+## 五、工程上常见治理手段
+
+### 1. 预热
+
+对可预期热点，提前加载可以减少冷启动抖动。
+
+### 2. 分级缓存
+
+例如：
+
+- 本地缓存
+- Redis 缓存
+- 数据库回源
+
+### 3. 大 key 控制
+
+缓存淘汰失败很多时候不是算法问题，而是大 key 把内存结构扭曲了。
+
+### 4. 保护关键数据
+
+某些核心热点不应完全交给自然淘汰，应有更稳定的容量和 TTL 策略。
+
+## 六、Redis 淘汰策略只是底线，不是完整方案
+
+Redis 的 `allkeys-lru`、`allkeys-lfu` 等策略很有用，但它们只负责在内存紧张时选择谁先被删。
+
+真正的系统设计还要补上：
+
+- key 设计
+- TTL 设计
+- 热点分层
+- 回源限流
+- 缓存击穿保护
+
+## 七、常见误区
+
+### 1. LRU 一定最好
+
+没有通用最优，取决于访问模式。
+
+### 2. 命中率高就说明缓存设计好
+
+不一定。命中的是不是高价值请求、回源是否平稳，同样重要。
+
+### 3. 淘汰策略可以事后再想
+
+缓存一旦成规模，淘汰策略会直接影响数据库稳定性和业务体验。
 
 ## 参考资料
 
-- [Redis 内存淘汰策略](https://redis.io/docs/manual/eviction/)
+- Redis 内存淘汰策略文档
+- 各类在线业务多级缓存与热点回源治理实践资料

@@ -1,200 +1,110 @@
 # Q87: 敏感数据如何加密传输？
 
-## 问题分析
+## 核心结论
 
-本题考察对加密传输的理解：
-- 加密算法选择
-- 密钥交换
-- TLS/SSL
-- 游戏协议加密
+敏感数据加密传输的第一选择通常不是自研协议加密，而是成熟的传输层安全方案。
 
----
+更务实的顺序通常是：
 
-## 一、加密基础
+- 优先使用 TLS 保护传输通道
+- 在必要场景补充消息级签名或应用层保护
+- 把精力更多放在密钥管理、会话绑定和业务校验上
 
-### 1.1 加密层次
+因为很多系统的真实问题不是“算法不够强”，而是：
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    加密层次                                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  传输层: TLS/SSL                                           │
-│  ├── 握手协商密钥                                           │
-│  ├── 加密通道传输                                           │
-│  └── 证书验证身份                                           │
-│                                                             │
-│  应用层: 自定义加密                                         │
-│  ├── 消息加密                                               │
-│  ├── 签名验证                                               │
-│  └── 密钥轮换                                               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+- 密钥管理差
+- 明文落日志
+- 会话和重放控制没做好
 
----
+## 一、先区分传输加密和业务安全
 
-## 二、TLS 实现
+传输加密解决的是：
 
-### 2.1 TLS 握手
+- 数据在链路上不被窃听
+- 中间人难以篡改
 
-```cpp
-// TLS 握手处理
+它不自动解决：
 
-class TLSServer {
-public:
-    void onConnection(int fd) {
-        // TLS 握手
-        SSL* ssl = SSL_new(ctx_);
-        SSL_set_fd(ssl, fd);
+- 重放
+- 业务越权
+- 客户端伪造合法请求
 
-        if (SSL_accept(ssl) <= 0) {
-            SSL_free(ssl);
-            close(fd);
-            return;
-        }
+所以“加密传输”和“业务可信”不是一回事。
 
-        // 握手成功
-        connections_[fd] = ssl;
-    }
+## 二、为什么通常优先 TLS
 
-    void sendMessage(int fd, const std::string& msg) {
-        auto it = connections_.find(fd);
-        if (it == connections_.end()) return;
+原因很简单：
 
-        SSL* ssl = it->second;
+- 协议成熟
+- 实现成熟
+- 工具链成熟
+- 漏洞暴露和修复路径更清晰
 
-        int written = SSL_write(ssl, msg.data(), msg.size());
-        if (written <= 0) {
-            // 错误处理
-        }
-    }
+对大多数在线系统来说，自研一套“消息加密协议”很少比 TLS 更稳。
 
-    std::string receiveMessage(int fd) {
-        auto it = connections_.find(fd);
-        if (it == connections_.end()) return "";
+## 三、应用层额外保护什么时候有价值
 
-        SSL* ssl = it->second;
+一些场景仍可能需要补充：
 
-        char buffer[4096];
-        int bytesRead = SSL_read(ssl, buffer, sizeof(buffer));
+- 敏感后台接口签名
+- 支付回调鉴权
+- 重放控制
+- 关键消息完整性校验
 
-        if (bytesRead > 0) {
-            return std::string(buffer, bytesRead);
-        }
+但这里更常见的是“补充校验”，而不是替代传输层安全。
 
-        return "";
-    }
+## 四、真正容易出问题的是密钥和会话管理
 
-private:
-    SSL_CTX* ctx_;
-    std::unordered_map<int, SSL*> connections_;
-};
-```
+即使加密算法没问题，如果：
 
----
+- 会话票据泄露
+- 密钥长期不轮换
+- 调试日志写了明文
+- 重连票据可重复使用
 
-## 三、游戏协议加密
+系统仍然很危险。
 
-### 3.1 自定义加密
+所以工程上更重要的是：
 
-```cpp
-// 游戏协议加密
+- 密钥轮换
+- 会话绑定
+- 票据过期
+- 最小暴露面
 
-class GameProtocol {
-public:
-    // 加密消息
-    std::string encryptMessage(const std::string& plaintext) {
-        // 1. 生成 IV
-        std::string iv = generateRandomIV();
+## 五、游戏里哪些数据最值得优先保护
 
-        // 2. AES 加密
-        std::string ciphertext = aesEncrypt(plaintext, sessionKey_, iv);
+通常包括：
 
-        // 3. HMAC 签名
-        std::string signature = hmacSign(ciphertext, sessionKey_);
+- 账号认证信息
+- 支付相关信息
+- GM 与后台操作
+- 高价值业务请求
 
-        // 4. 组装: IV(16) + 签名(32) + 密文
-        return iv + signature + ciphertext;
-    }
+不是所有消息都要做同样重的保护，但关键链路必须上强保护。
 
-    // 解密消息
-    bool decryptMessage(const std::string& encrypted, std::string& plaintext) {
-        if (encrypted.size() < 48) return false;  // 16+32 最小
+## 六、工程上更稳妥的组合
 
-        // 1. 提取 IV
-        std::string iv = encrypted.substr(0, 16);
+常见做法是：
 
-        // 2. 提取签名
-        std::string signature = encrypted.substr(16, 32);
+- 外部传输统一走 TLS
+- 高价值接口补签名和时效控制
+- 会话票据短期有效并与连接或身份绑定
+- 日志和监控避免输出敏感明文
 
-        // 3. 提取密文
-        std::string ciphertext = encrypted.substr(48);
+## 七、常见误区
 
-        // 4. 验证签名
-        std::string expectedSig = hmacSign(ciphertext, sessionKey_);
-        if (!hmacCompare(signature, expectedSig)) {
-            return false;
-        }
+### 1. 自定义加密一定比 TLS 更安全
 
-        // 5. 解密
-        plaintext = aesDecrypt(ciphertext, sessionKey_, iv);
+通常不是。大多数团队很难把自研协议做到比成熟 TLS 更稳。
 
-        return true;
-    }
+### 2. 只要链路加密了，业务就安全了
 
-    // 密钥交换
-    void performKeyExchange(int fd) {
-        // ECDH 密钥交换
-        // 1. 生成密钥对
-        EVP_PKEY* key = generateECDHKey();
+重放、越权和幂等仍然要单独处理。
 
-        // 2. 发送公钥
-        sendPublicKey(fd, key);
+### 3. 所有消息都值得做很重的加密
 
-        // 3. 接收对方公钥
-        EVP_PKEY* peerKey = receivePeerPublicKey(fd);
-
-        // 4. 派生共享密钥
-        deriveSessionKey(key, peerKey);
-    }
-
-private:
-    std::string sessionKey_;
-};
-```
-
----
-
-## 四、最佳实践
-
-### 4.1 加密建议
-
-```
-敏感数据传输 = TLS + 应用层加密 + 密钥轮换
-- 使用 TLS/SSL
-- 定期更换密钥
-- 消息签名验证
-- 前向保密
-```
-
----
-
-## 五、总结
-
-### 加密传输核心
-
-```
-加密传输 = 标准协议 + 密钥管理 + 完整性验证
-- 优先使用 TLS
-- 强加密算法
-- 安全密钥交换
-- 定期更新密钥
-```
-
----
+要看成本和价值，重点保护关键链路。
 
 ## 参考资料
 
-- [OpenSSL Documentation](https://www.openssl.org/)
-- [TLS 1.3 RFC](https://datatracker.ietf.org/doc/html/rfc8446)
+- TLS、消息签名和票据管理实践资料

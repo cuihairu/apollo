@@ -1,177 +1,103 @@
 # Q88: 如何防止 SQL 注入？
 
-## 问题分析
+## 核心结论
 
-本题考察对 SQL 注入防护的理解：
-- 注入原理
-- 参数化查询
-- ORM 使用
-- 输入验证
+防 SQL 注入最核心的一条原则很简单：
 
----
+- SQL 结构和用户输入必须分离
 
-## 一、SQL 注入原理
+也就是说，查询语句的结构由程序定义，外部输入只能作为参数，而不能拼进 SQL 结构里。
 
-### 1.1 常见手法
+剩下的输入校验、ORM、权限控制，都是补充层。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    SQL 注入示例                                │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ❌ 不安全的查询:                                           │
-│  query = "SELECT * FROM users WHERE name = '" + name + "'"  │
-│                                                             │
-│  输入: name = "admin' OR '1'='1"                            │
-│  结果: SELECT * FROM users WHERE name = 'admin' OR '1'='1'│
-│        → 返回所有用户 (绕过认证)                            │
-│                                                             │
-│  输入: name = "admin'; DROP TABLE users; --"                │
-│  结果: SELECT * FROM users WHERE name = 'admin';           │
-│         DROP TABLE users; --'                                │
-│        → 删除 users 表                                       │
-│                                                             │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  ✅ 安全的参数化查询:                             │       │
-│  │  query = "SELECT * FROM users WHERE name = ?"      │       │
-│  │  execute(query, [name])                             │       │
-│  │                                                    │       │
-│  │  数据库驱动会正确转义输入                           │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+## 一、SQL 注入真正的根因是什么
 
----
+根因通常不是“用户输入脏”，而是程序把外部输入当成 SQL 语法的一部分拼接进去。
 
-## 二、防护方法
+只要结构和数据混在一起，注入风险就一直存在。
 
-### 2.1 参数化查询
+## 二、参数化查询是主方案，不是建议项
 
-```cpp
-// 参数化查询 (C++)
+无论使用：
 
-class SafeDatabase {
-public:
-    User* getUserByUsername(const std::string& username) {
-        // ✅ 参数化查询
-        const char* query = "SELECT * FROM users WHERE username = ?";
+- 原生驱动
+- ORM
+- 查询构建器
 
-        PreparedStatement stmt = prepareStatement(query);
-        stmt.bindString(1, username);
+核心都应该是参数绑定，而不是字符串拼接。
 
-        ResultSet rs = stmt.executeQuery();
+这不是风格问题，而是边界问题。
 
-        if (rs.next()) {
-            User* user = new User();
-            user->id = rs.getInt("id");
-            user->username = rs.getString("username");
-            user->password = rs.getString("password");
-            return user;
-        }
+## 三、ORM 也不能自动保证安全
 
-        return nullptr;
-    }
+ORM 能减少手写 SQL，但不代表天然没有注入风险。
 
-    // ❌ 不安全的字符串拼接
-    User* getUserByUsername_BAD(const std::string& username) {
-        std::string query = "SELECT * FROM users WHERE username = '";
-        query += username;
-        query += "'";
+一旦出现：
 
-        // SQL 注入风险！
-        ResultSet rs = executeQuery(query);
-        // ...
-    }
-};
-```
+- 拼接原生 SQL
+- 动态表名或排序字段直拼
+- 拼接 where 条件片段
 
-### 2.2 ORM 使用
+风险仍然存在。
 
-```python
-# 使用 ORM 防止 SQL 注入
+所以真正要防的是“不受控拼接”，而不是只看是不是 ORM。
 
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+## 四、白名单校验对动态字段尤其重要
 
-Base = declarative_base()
+有些场景确实需要动态控制，例如：
 
-class User(Base):
-    __tablename__ = 'users'
+- 排序字段
+- 排序方向
+- 可选查询列
 
-    id = Column(Integer, primary_key=True)
-    username = Column(String(80), unique=True)
-    password = Column(String(256))
+这些不能简单参数化的部分，通常应使用白名单映射，而不是把客户端输入原样拼进去。
 
-# ORM 查询 (自动参数化)
-def get_user_by_username(username):
-    # ✅ ORM 自动处理参数化
-    user = session.query(User).filter(User.username == username).first()
-    return user
+## 五、权限和最小暴露面也很重要
 
-# 等价于: SELECT * FROM users WHERE username = ?
-```
+即使有注入风险，如果数据库账号权限被严格限制，破坏面也会小很多。
 
-### 2.3 输入验证
+更稳妥的做法通常是：
 
-```cpp
-// 输入验证
+- 应用账号最小权限
+- 读写账号分离
+- 后台高危库隔离
 
-class InputValidator {
-public:
-    static std::string sanitizeUsername(const std::string& username) {
-        // 1. 检查长度
-        if (username.empty() || username.length() > 32) {
-            throw std::invalid_argument("Invalid username length");
-        }
+这样能降低事故影响范围。
 
-        // 2. 检查字符
-        for (char c : username) {
-            if (!isalnum(c) && c != '_' && c != '-') {
-                throw std::invalid_argument("Invalid username characters");
-            }
-        }
+## 六、日志和监控里也要注意注入面
 
-        // 3. 检查保留字
-        if (isReservedWord(username)) {
-            throw std::invalid_argument("Username is reserved");
-        }
+很多系统只盯主查询路径，却忽略：
 
-        return username;
-    }
+- 报表查询
+- 后台搜索
+- 运维脚本
+- 临时 SQL 工具
 
-    static int validateId(const std::string& idStr) {
-        try {
-            int id = std::stoi(idStr);
-            if (id <= 0) {
-                throw std::invalid_argument("ID must be positive");
-            }
-            return id;
-        } catch (...) {
-            throw std::invalid_argument("Invalid ID format");
-        }
-    }
-};
-```
+这些地方往往更容易因为“临时方便”而回到字符串拼接。
 
----
+## 七、工程上更稳妥的做法
 
-## 三、总结
+常见做法是：
 
-### SQL 注入防护
+- 所有查询默认参数化
+- 动态 SQL 的结构部分走白名单
+- 数据库账号最小权限
+- 高风险后台接口单独审查
 
-```
-防 SQL 注入 = 参数化查询 + ORM + 输入验证 + 最小权限
-- 永远使用参数化
-- ORM 自动处理
-- 验证所有输入
-- 数据库用户最小权限
-```
+## 八、常见误区
 
----
+### 1. 用 ORM 就不会有 SQL 注入
+
+不对。只要有原生拼接，风险仍然存在。
+
+### 2. 只过滤特殊字符就够了
+
+过滤只能辅助，不能替代参数化。
+
+### 3. 只有登录接口才需要防注入
+
+后台查询、报表、搜索和脚本同样是高风险点。
 
 ## 参考资料
 
-- [OWASP SQL Injection](https://owasp.org/www-community/attacks/SQL_Injection)
-- [SQLAlchemy](https://www.sqlalchemy.org/)
+- 参数化查询、白名单动态 SQL 和最小权限实践资料

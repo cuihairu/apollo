@@ -1,669 +1,209 @@
 # Q25: 连接数上限由什么决定？如何突破 C10K 问题？
 
-## 问题分析
-
-本题考察对服务器并发连接能力的理解：
-- C10K 问题的本质
-- 操作系统的连接数限制
-- IO 多路复用技术
-- KBEngine 如何处理高并发
-
----
-
-## 一、C10K 问题
-
-### 1.1 什么是 C10K
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      C10K 问题                              │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  C10K = Concurrent 10,000 connections                       │
-│                                                             │
-│  问题：单机同时处理 10,000 个并发连接                       │
-│                                                             │
-│  历史背景：                                                 │
-│  ├── 1999年：Dan Kegel 提出 C10K 问题                      │
-│  ├── 当时：每连接一个线程/进程                              │
-│  ├── 问题：10,000 连接 = 10,000 线程 = 资源耗尽            │
-│  └── 挑战：如何高效处理大量并发连接？                       │
-│                                                             │
-│  现在的标准：                                               │
-│  ├── C10K ✓ 已解决                                        │
-│  ├── C100K ✓ 可实现                                       │
-│  └── C1M ✓ 某些场景可达                                   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 1.2 传统模型的局限
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              传统模型 vs 高并发模型                          │
-├─────────────────────────────────────────────────────────────┤
-                                                             │
-│  传统模型（每连接一线程）：                                  │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  Client 1 ──► Thread 1                          │       │
-│  │  Client 2 ──► Thread 2                          │       │
-│  │  ...                                              │       │
-│  │  Client 10000 ──► Thread 10000                  │       │
-│  │                                                    │       │
-│  │  问题：                                            │       │
-│  │  ├── 内存消耗：10,000 线程 × 8MB = 80GB           │       │
-│  │  ├── 上下文切换：10,000 线程频繁切换              │       │
-│  │  └── CPU 浪费：大部分线程在等待                   │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  高并发模型（单线程 + IO 多路复用）：                         │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  所有客户端                                       │       │
-│  │      │                                            │       │
-│  │      ▼                                            │       │
-│  │  ┌─────────────────────────────────────┐         │       │
-│  │  │  IO 多路复用 (epoll/kqueue/IOCP)     │         │       │
-│  │  │  ┌───────────────────────────────┐   │         │       │
-│  │  │  │ 事件循环                     │   │         │       │
-│  │  │  │ while(true) {               │   │         │       │
-│  │  │  │   events = epoll_wait();   │   │         │       │
-│  │  │  │   for (e : events) {       │   │         │       │
-│  │  │  │     handle(e);             │   │         │       │
-│  │  │  │   }                        │   │         │       │
-│  │  │  │ }                          │   │         │       │
-│  │  │  └───────────────────────────────┘   │         │       │
-│  │  └─────────────────────────────────────┘         │       │
-│  │                                                    │       │
-│  │  优势：                                            │       │
-│  │  ├── 单线程处理所有连接                            │       │
-│  │  ├── 内存占用小                                    │       │
-│  │  └── 无上下文切换                                  │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 二、系统限制因素
-
-### 2.1 限制因素分析
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    连接数限制因素                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. 文件描述符限制                                           │
-│     ├── 单进程打开文件数限制                                 │
-│     ├── 默认：1024 (Linux)                                  │
-│     └── 调整：ulimit -n 65536                               │
-│                                                             │
-│  2. 端口范围限制                                             │
-│     ├── 客户端端口范围：1024-65535                          │
-│     ├── 可用端口：~64,000                                   │
-│     └── TIME_WAIT 占用端口                                  │
-│                                                             │
-│  3. 内存限制                                                 │
-│     ├── 每连接内存占用                                      │
-│     ├── TCP 读写缓冲区                                      │
-│     └── 连接状态结构                                        │
-│                                                             │
-│  4. CPU 限制                                                │
-│     ├── 上下文切换开销                                      │
-│     ├── 中断处理                                            │
-│     └── 数据拷贝                                            │
-│                                                             │
-│  5. 网络带宽限制                                             │
-│     ├── 出口带宽                                            │
-│     ├── 入口带宽                                            │
-│     └── PPS (包每秒) 限制                                   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 系统参数调优
-
-```bash
-# Linux 系统参数调优
-
-# 1. 文件描述符限制
-# /etc/security/limits.conf
-* soft nofile 65536
-* hard nofile 65536
-
-# 2. 内核参数
-# /etc/sysctl.conf
-
-# TCP 读写缓冲区
-net.core.rmem_max = 16777216    # 接收缓冲区最大值 16MB
-net.core.wmem_max = 16777216    # 发送缓冲区最大值 16MB
-net.ipv4.tcp_rmem = 4096 87380 16777216
-net.ipv4.tcp_wmem = 4096 65536 16777216
-
-# TIME_WAIT 优化
-net.ipv4.tcp_tw_reuse = 1       # 重用 TIME_WAIT socket
-net.ipv4.tcp_tw_recycle = 0     # 禁用快速回收（有问题）
-net.ipv4.tcp_fin_timeout = 30   # TIME_WAIT 超时 30s
-
-# 连接队列
-net.core.somaxconn = 32768       # 连接队列长度
-net.ipv4.tcp_max_syn_backlog = 8192
-
-# 端口范围
-net.ipv4.ip_local_port_range = 10000 65535
-
-# 应用配置
-sysctl -p
-```
-
----
-
-## 三、IO 多路复用技术
-
-### 3.1 技术对比
-
-| 技术 | 平台 | 复杂度 | 性能 | 连接数上限 |
-|------|------|--------|------|-----------|
-| **select** | 跨平台 | 低 | 低 | ~1024 |
-| **poll** | 跨平台 | 低 | 中 | ~10,000 |
-| **epoll** | Linux | 中 | 高 | ~100,000+ |
-| **kqueue** | BSD/macOS | 中 | 高 | ~100,000+ |
-| **IOCP** | Windows | 高 | 高 | ~100,000+ |
-
-### 3.2 epoll 实现示例
-
-```cpp
-// epoll 高并发服务器实现
-
-class EpollServer {
-public:
-    static constexpr int MAX_EVENTS = 1024;
-    static constexpr int MAX_CONNECTIONS = 100000;
-
-    // epoll 文件描述符
-    int epfd_;
-
-    // 事件数组
-    struct epoll_event events_[MAX_EVENTS];
-
-    // 连接管理
-    std::unordered_map<int, Connection*> connections_;
-
-    void start(int port) {
-        // 1. 创建 epoll
-        epfd_ = epoll_create1(0);
-        if (epfd_ == -1) {
-            perror("epoll_create1");
-            return;
-        }
-
-        // 2. 创建监听 socket
-        int listenfd = createListenSocket(port);
-
-        // 3. 添加到 epoll
-        struct epoll_event ev;
-        ev.events = EPOLLIN | EPOLLET;  // 边缘触发
-        ev.data.fd = listenfd;
-        epoll_ctl(epfd_, EPOLL_CTL_ADD, listenfd, &ev);
-
-        // 4. 事件循环
-        while (running_) {
-            int nfds = epoll_wait(epfd_, events_, MAX_EVENTS, -1);
-
-            for (int i = 0; i < nfds; ++i) {
-                if (events_[i].data.fd == listenfd) {
-                    // 新连接
-                    acceptConnection();
-                } else {
-                    // 数据到达
-                    handleData(events_[i].data.fd);
-                }
-            }
-        }
-    }
-
-    void acceptConnection() {
-        while (true) {
-            struct sockaddr_in clientAddr;
-            socklen_t addrLen = sizeof(clientAddr);
-
-            int clientfd = accept(listenfd_,
-                                  (struct sockaddr*)&clientAddr,
-                                  &addrLen);
-
-            if (clientfd == -1) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;  // 没有更多连接
-                }
-                continue;
-            }
-
-            // 设置非阻塞
-            setNonBlocking(clientfd);
-
-            // 创建连接对象
-            Connection* conn = new Connection(clientfd);
-            connections_[clientfd] = conn;
-
-            // 添加到 epoll
-            struct epoll_event ev;
-            ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-            ev.data.ptr = conn;
-            epoll_ctl(epfd_, EPOLL_CTL_ADD, clientfd, &ev);
-        }
-    }
-
-    void handleData(int fd) {
-        Connection* conn = connections_[fd];
-        if (!conn) return;
-
-        // 读取数据
-        char buffer[4096];
-        while (true) {
-            ssize_t n = read(fd, buffer, sizeof(buffer));
-
-            if (n > 0) {
-                // 处理数据
-                conn->onData(buffer, n);
-            } else if (n == 0) {
-                // 连接关闭
-                closeConnection(fd);
-                break;
-            } else {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;  // 没有更多数据
-                }
-                // 错误
-                closeConnection(fd);
-                break;
-            }
-        }
-    }
-
-    void setNonBlocking(int fd) {
-        int flags = fcntl(fd, F_GETFL, 0);
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    }
-};
-```
-
-### 3.3 边缘触发 vs 水平触发
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│              EPOLLLT vs EPOLLET                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  水平触发 (Level Triggered, EPOLLLT)：                       │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  特点：只要缓冲区有数据，就会触发事件           │       │
-│  │                                                    │       │
-│  │  优点：                                           │       │
-│  │  ├── 编程简单                                    │       │
-│  │  ├── 不容易遗漏事件                              │       │
-│  │                                                    │       │
-│  │  缺点：                                           │       │
-│  │  ├── 可能重复触发                                │       │
-│  │  ├── 需要处理 EAGAIN                            │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  边缘触发 (Edge Triggered, EPOLLET)：                         │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  特点：只在状态变化时触发一次                   │       │
-│  │                                                    │       │
-│  │  优点：                                           │       │
-│  │  ├── 减少触发次数                                │       │
-│  │  ├── 更高性能                                    │       │
-│  │                                                    │       │
-│  │  缺点：                                           │       │
-│  │  ├── 编程复杂                                    │       │
-│  │  ├── 必须一次性读完所有数据                      │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 四、KBEngine 的高并发实现
-
-### 4.1 Poller 机制
-
-根据 [KBEngine 源码](https://github.com/kbengine/kbengine)：
-
-```cpp
-// KBEngine Poller 实现
-// src/lib/network/poller.h
-
-class Poller {
-public:
-    // 事件处理器接口
-    class PollerDescriptor {
-    public:
-        virtual int readFD() const = 0;
-        virtual int writeFD() const = 0;
-
-        virtual bool handleInputNotification(int fd) = 0;
-        virtual bool handleOutputNotification(int fd) = 0;
-    };
-
-    // 添加到 poller
-    bool addToPoller(PollerDescriptor* pDescriptor, bool isRead = true) {
-        int fd = isRead ? pDescriptor->readFD() : pDescriptor->writeFD();
-
-#ifdef USE_EPOLL
-        struct epoll_event ev;
-        ev.events = isRead ? EPOLLIN : EPOLLOUT;
-        ev.events |= EPOLLET;  // 边缘触发
-        ev.data.ptr = pDescriptor;
-
-        if (epoll_ctl(epfd_, EPOLL_CTL_ADD, fd, &ev) < 0) {
-            return false;
-        }
-#endif
-
-        return true;
-    }
-
-    // 事件循环
-    int processUntilBreak() {
-#ifdef USE_EPOLL
-        struct epoll_event events[MAX_EVENTS];
-        int nfds = epoll_wait(epfd_, events, MAX_EVENTS, timeout_);
-
-        for (int i = 0; i < nfds; ++i) {
-            PollerDescriptor* pDescriptor =
-                (PollerDescriptor*)events[i].data.ptr;
-
-            if (events[i].events & EPOLLIN) {
-                pDescriptor->handleInputNotification(pDescriptor->readFD());
-            }
-            if (events[i].events & EPOLLOUT) {
-                pDescriptor->handleOutputNotification(pDescriptor->writeFD());
-            }
-        }
-#endif
-
-        return nfds;
-    }
-
-private:
-    int epfd_;
-    static constexpr int MAX_EVENTS = 256;
-    int timeout_ = 100;  // 100ms
-};
-```
-
-### 4.2 Channel 管理
-
-```cpp
-// KBEngine Channel 管理
-// src/lib/network/channel.h
-
-class Channel : public Poller::PollerDescriptor {
-public:
-    // 接收数据
-    bool handleInputNotification(int fd) override {
-        while (true) {
-            // 接收数据包
-            Packet* pPacket = this->pNetworkInterface_->receivePacket();
-            if (!pPacket) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;  // 没有更多数据
-                }
-                return false;  // 错误
-            }
-
-            // 处理数据包
-            this->processPacket(pPacket);
-        }
-
-        return true;
-    }
-
-    // 发送数据
-    bool handleOutputNotification(int fd) override {
-        // 发送缓冲区中的数据
-        while (!sendQueue_.empty()) {
-            Packet* pPacket = sendQueue_.front();
-
-            ssize_t sent = send(fd_, pPacket->data(),
-                              pPacket->size(), 0);
-
-            if (sent > 0) {
-                sendQueue_.pop();
-                delete pPacket;
-            } else if (sent == 0) {
-                break;
-            } else {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    break;  // 发送缓冲区满
-                }
-                return false;  // 错误
-            }
-        }
-
-        return true;
-    }
-};
-```
-
----
-
-## 五、性能优化技巧
-
-### 5.1 连接复用
-
-```cpp
-// 连接池管理
-
-class ConnectionPool {
-public:
-    // 连接池
-    std::vector<Connection*> pool_;
-    std::queue<Connection*> freeList_;
-
-    // 获取连接
-    Connection* acquire() {
-        if (!freeList_.empty()) {
-            Connection* conn = freeList_.front();
-            freeList_.pop();
-            return conn;
-        }
-
-        // 创建新连接
-        Connection* conn = new Connection();
-        pool_.push_back(conn);
-        return conn;
-    }
-
-    // 释放连接
-    void release(Connection* conn) {
-        conn->reset();
-        freeList_.push(conn);
-    }
-};
-```
-
-### 5.2 零拷贝技术
-
-```cpp
-// 零拷贝发送 (sendfile)
-
-class ZeroCopySender {
-public:
-    // 使用 sendfile 零拷贝发送文件
-    bool sendFile(int outfd, int infd, off_t offset, size_t count) {
-#ifdef USE_SENDFILE
-        off_t sent = offset;
-        ssize_t n = sendfile(outfd, infd, &sent, count);
-
-        if (n == count) {
-            return true;
-        }
-#endif
-
-        return false;
-    }
-
-    // 使用 splice 零拷贝管道传输
-    bool spliceData(int pipefd, int sockfd, size_t len) {
-#ifdef USE_SPLICE
-        ssize_t n = splice(pipefd, NULL, sockfd, NULL, len, 0);
-
-        return n == len;
-#endif
-
-        return false;
-    }
-};
-```
-
-### 5.3 内存池优化
-
-```cpp
-// 连接对象内存池
-
-template<typename T>
-class ConnectionPool {
-public:
-    static constexpr int POOL_SIZE = 10000;
-
-    ConnectionPool() {
-        // 预分配对象池
-        for (int i = 0; i < POOL_SIZE; ++i) {
-            freeList_.push(new T());
-        }
-    }
-
-    T* acquire() {
-        if (freeList_.empty()) {
-            return new T();  // 池空，分配新的
-        }
-
-        T* obj = freeList_.back();
-        freeList_.pop();
-        return obj;
-    }
-
-    void release(T* obj) {
-        obj->reset();
-        freeList_.push(obj);
-    }
-
-private:
-    std::vector<T*> freeList_;
-};
-```
-
----
-
-## 六、实战配置
-
-### 6.1 生产环境配置
-
-```bash
-# KBEngine 生产环境配置脚本
-
-#!/bin/bash
-
-# 1. 修改文件描述符限制
-echo "* soft nofile 100000" >> /etc/security/limits.conf
-echo "* hard nofile 100000" >> /etc/security/limits.conf
-
-# 2. 优化内核参数
-cat >> /etc/sysctl.conf << EOF
-# TCP 连接优化
-net.ipv4.tcp_max_syn_backlog = 8192
-net.core.somaxconn = 8192
-
-# TCP 缓冲区优化
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.ipv4.tcp_rmem = 4096 87380 16777216
-net.ipv4.tcp_wmem = 4096 65536 16777216
-
-# TIME_WAIT 优化
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 15
-
-# 端口范围
-net.ipv4.ip_local_port_range = 1024 65535
-EOF
-
-# 3. 应用配置
-sysctl -p
-
-# 4. 验证
-ulimit -n
-cat /proc/sys/net/core/somaxconn
-```
-
-### 6.2 监控连接数
-
-```bash
-# 监控脚本
-
-#!/bin/bash
-
-while true; do
-    # 当前连接数
-    ESTABLISHED=$(netstat -an | grep ESTABLISHED | wc -l)
-    TIME_WAIT=$(netstat -an | grep TIME_WAIT | wc -l)
-
-    # 系统资源
-    CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
-    MEM=$(free -m | grep Mem | awk '{printf "%.1f", $3/$2 * 100.0}')
-
-    echo "[$(date)] ESTABLISHED: $ESTABLISHED, TIME_WAIT: $TIME_WAIT, CPU: ${CPU}%, MEM: ${MEM}%"
-
-    sleep 5
-done
-```
-
----
-
-## 七、总结
-
-### 连接数限制总结
-
-| 限制因素 | 默认值 | 调优后 | 影响 |
-|----------|--------|--------|------|
-| **文件描述符** | 1024 | 100,000 | 连接数上限 |
-| **端口范围** | ~28,000 | ~65,000 | 客户端连接 |
-| **内存** | 取决于配置 | 优化后 | 每连接内存 |
-| **CPU** | 100% 核心 | 多核 | 处理能力 |
-
-### C10K 解决方案
-
-```
-1. 使用 IO 多路复用
-   - Linux: epoll
-   - Windows: IOCP
-   - BSD/macOS: kqueue
-
-2. 调整系统参数
-   - 文件描述符限制
-   - TCP 缓冲区大小
-   - TIME_WAIT 优化
-
-3. 采用事件驱动架构
-   - 单线程事件循环
-   - 非阻塞 IO
-   - 异步处理
-
-4. 优化内存使用
-   - 对象池
-   - 零拷贝
-   - 内存复用
-```
-
----
+## 核心结论
+
+连接数上限从来不是一个单独的“网络库指标”，而是操作系统、协议栈、内存、CPU、事件模型、业务负载共同决定的结果。
+
+所谓 C10K，今天早已不是神秘门槛；真正难的是在高连接数下继续保证：
+
+- 延迟稳定
+- 广播可控
+- 心跳扫描不过载
+- 单连接异常不会拖垮整体
+
+所以“能连上 1 万个 socket”和“能稳定服务 1 万个在线玩家”不是同一回事。
+
+## 一、连接数上限到底受什么影响
+
+### 1. 文件描述符和内核参数
+
+每个连接都要占用系统资源，最直观的是：
+
+- 文件描述符上限
+- 监听 backlog
+- socket 缓冲区
+- 端口与内核网络参数
+
+这些是基础门槛，但通常不是最终瓶颈。
+
+### 2. 每连接内存成本
+
+高连接数系统很容易被忽视的一点是“每条连接实际占多少内存”。
+
+除了内核 socket 本身，还包括：
+
+- 发送缓冲
+- 接收缓冲
+- 会话对象
+- 定时器
+- 认证信息
+- 待发送队列
+
+如果每连接多浪费几十 KB，上万连接时很快就是数百 MB 到 GB 级开销。
+
+### 3. 事件模型和线程模型
+
+如果仍然采用“一连接一线程”，C10K 很快会被线程栈、调度开销和上下文切换拖垮。
+
+高连接数系统通常依赖：
+
+- `epoll`
+- `kqueue`
+- `IOCP`
+- 事件驱动或少线程 Reactor/Proactor 模型
+
+### 4. 业务处理成本
+
+连接数高并不一定可怕，可怕的是：
+
+- 每条连接都高频发消息
+- 每条消息都要复杂解码、鉴权、路由
+- 每次更新都触发大范围广播
+
+很多 MMO 实际瓶颈并不在 accept 连接，而在连接建立后附带的业务负载。
+
+## 二、为什么“一连接一线程”扛不住
+
+这类模型的问题不是概念上不能工作，而是成本线性膨胀得太快：
+
+- 线程栈占内存
+- 调度器开销上升
+- 锁竞争加重
+- 空闲连接也要被线程管理
+
+连接数一高，CPU 时间花在调度和同步上的比例就会越来越离谱。
+
+所以 C10K 时代真正的突破点，是从阻塞式模型切到事件驱动多路复用模型。
+
+## 三、今天讨论 C10K，重点已经变了
+
+现代系统里，单机承载几万乃至更多长连接并不罕见。真正需要回答的是：
+
+- 这些连接是否都活跃
+- 心跳和超时扫描怎么做
+- 广播和路由怎么分摊
+- 慢连接怎么隔离
+- 网关和逻辑服是否解耦
+
+也就是说，难点已经从“能否接 1 万连接”变成“如何在大规模连接下保持系统稳定”。
+
+## 四、工程上怎么把连接数做上去
+
+### 1. 使用事件驱动 I/O
+
+这是前提。
+
+典型做法是：
+
+- 少量 I/O 线程负责收发
+- 业务处理线程或逻辑线程解耦
+- 连接状态在事件循环里推进
+
+这样可以显著降低线程数和调度成本。
+
+### 2. 把接入层和业务层分开
+
+MMO 常见做法是网关单独承载连接，业务服处理逻辑。
+
+这样做的好处是：
+
+- 连接抖动不会直接冲击逻辑服
+- TLS、心跳、限流、压缩可集中处理
+- 网关可以横向扩展
+
+如果逻辑服自己直接扛大量公网连接，扩容和故障隔离都会更难。
+
+### 3. 控制每连接状态大小
+
+这点很朴素，但非常关键。
+
+常见优化包括：
+
+- 缩小会话对象
+- 避免每连接独立大缓冲区
+- 延迟分配重资源对象
+- 把少访问数据移出热路径
+
+### 4. 管好慢连接
+
+高连接数系统非常怕少量慢连接把发送队列拖爆。
+
+需要明确策略：
+
+- 发送队列上限
+- 过期状态消息可覆盖或丢弃
+- 长期跟不上的连接主动断开
+
+否则广播系统会被反压放大。
+
+## 五、MMO 里连接数不是唯一指标
+
+同样是 1 万连接，压力可能完全不同。
+
+例如：
+
+- 1 万挂机连接，几乎只发心跳
+- 1 万人同屏战斗，高频状态广播
+- 1 万分散在线，AOI 内只有少量互动
+
+这三种情况下，真正的瓶颈可能分别落在：
+
+- 心跳与定时器
+- 广播与序列化
+- 路由与状态同步
+
+所以评估连接承载能力必须结合在线行为模型，而不是只看 socket 数。
+
+## 六、如何继续从 C10K 走向更高规模
+
+### 1. 水平扩展网关
+
+把连接均匀分摊到多个接入节点，通常比在单机上无限挤压更现实。
+
+### 2. 业务分区
+
+让不同场景、房间、分片、逻辑域分散到不同节点处理，避免所有连接最终汇聚到同一逻辑热点。
+
+### 3. 降低无效流量
+
+包括：
+
+- AOI 裁剪
+- 批量发送
+- 压缩
+- 低优先级消息降频
+
+减少单位连接的平均成本，往往比继续抠内核参数更有效。
+
+### 4. 完整观测
+
+必须持续观察：
+
+- 活跃连接数
+- 心跳超时数
+- 每连接收发速率
+- 发送队列堆积
+- 事件循环延迟
+- GC 或主线程卡顿
+
+否则很难知道真实瓶颈在哪。
+
+## 七、常见误区
+
+### 1. 把 `ulimit` 调大就算解决 C10K
+
+这只是入场券，不是最终答案。
+
+### 2. 连接数越高，系统就越强
+
+没有意义。更重要的是在目标业务模型下，系统是否还能保持稳定延迟和可恢复性。
+
+### 3. 单机能扛很多连接，就不需要网关层
+
+不对。连接承载、协议处理、限流、TLS、观测和业务逻辑最好分层。
 
 ## 参考资料
 
-- [KBEngine GitHub - Poller](https://github.com/kbengine/kbengine/tree/master/kbe/src/lib/network)
-- [C10K Problem](https://www.kegel.com/c10k.html)
-- [epoll 官方文档](https://man7.org/linux/man-pages/man7/epoll.7.html)
+- Dan Kegel, *The C10K Problem*
+- Linux `epoll` / Windows IOCP 相关资料
+- 各类长连接网关与 MMO 接入层实践资料

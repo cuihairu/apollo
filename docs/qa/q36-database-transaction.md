@@ -1,151 +1,137 @@
 # Q36: 如何处理数据库事务？
 
-## 问题分析
+## 核心结论
 
-本题考察对数据库事务的理解：
-- ACID 特性
-- 事务隔离级别
-- 分布式事务
-- 死锁处理
+事务的价值不是“把一切都包起来”，而是在必要边界内保证一组修改要么都成功，要么都失败。
 
----
+在线游戏里最重要的不是背 ACID，而是先判断：
 
-## 一、事务基础
+- 这条链路是否真的需要事务
+- 事务边界能不能控制在单库单对象附近
+- 超时、重试、幂等和审计是否同时设计了
 
-### 1.1 ACID 特性
+很多系统的事故，不是因为没有事务，而是把事务用在了错误位置，或者错误地指望事务解决所有一致性问题。
 
-```
-ACID:
-- Atomicity (原子性): 全部成功或全部失败
-- Consistency (一致性): 数据始终有效
-- Isolation (隔离性): 事务间互不干扰
-- Durability (持久性): 提交后永久保存
-```
+## 一、哪些场景特别需要事务
 
-### 1.2 隔离级别
+通常包括：
 
-| 级别 | 脏读 | 不可重复读 | 幻读 | 性能 |
-|------|------|-----------|------|------|
-| Read Uncommitted | ✅ | ✅ | ✅ | 最高 |
-| Read Committed | ❌ | ✅ | ✅ | 高 |
-| Repeatable Read | ❌ | ❌ | ✅ | 中 |
-| Serializable | ❌ | ❌ | ❌ | 低 |
+- 扣钱加道具
+- 邮件领取附件并标记已领
+- 交易确认时的多表更新
+- 拍卖成交的状态切换
 
-### 1.3 事务实现
+这类操作有一个共同点：
 
-```cpp
-// 事务处理
+- 结果必须原子
+- 中间状态不能暴露
 
-class TransactionManager {
-public:
-    // 执行事务
-    template<typename Func>
-    bool execute(Func&& func) {
-        try {
-            beginTransaction();
+## 二、事务边界越小越好
 
-            func();
+事务不是越大越稳，往往恰恰相反。
 
-            commit();
-            return true;
-        } catch (const std::exception& e) {
-            rollback();
-            LOG_ERROR("Transaction failed: " + std::string(e.what()));
-            return false;
-        }
-    }
+大事务常见问题：
 
-private:
-    void beginTransaction() {
-        db_->execute("START TRANSACTION");
-    }
+- 锁持有时间长
+- 冲突概率高
+- 回滚成本高
+- 故障影响范围大
 
-    void commit() {
-        db_->execute("COMMIT");
-    }
+更稳妥的原则通常是：
 
-    void rollback() {
-        db_->execute("ROLLBACK");
-    }
+- 只包必要 SQL
+- 尽量不把外部 RPC、网络等待、复杂业务计算放进事务
 
-    Database* db_;
-};
+## 三、本地事务和分布式事务不是一回事
 
-// 使用示例
-void transferGold(uint64_t from, uint64_t to, int64_t amount) {
-    TransactionManager txn;
+### 1. 本地事务
 
-    txn.execute([&]() {
-        // 检查余额
-        auto balance = queryBalance(from);
-        if (balance < amount) {
-            throw std::runtime_error("Insufficient balance");
-        }
+适用于单数据库内的一组更新，是最常用也最可靠的事务形式。
 
-        // 扣除发送者
-        updateBalance(from, -amount);
+### 2. 分布式事务
 
-        // 增加接收者
-        updateBalance(to, amount);
+跨服务、跨库、跨队列时问题会复杂得多。
 
-        // 记录日志
-        logTransfer(from, to, amount);
-    });
-}
-```
+很多在线游戏并不会在主链路大量使用分布式事务，而是更偏向：
 
----
+- 单权威写入
+- 幂等
+- 事件驱动
+- 补偿
 
-## 二、死锁处理
+因为强行把所有跨服务链路做成分布式事务，代价通常很高。
 
-### 2.1 死锁检测
+## 四、隔离级别要按冲突模型选
 
-```cpp
-// 死锁重试机制
+隔离级别不是越高越好。
 
-class DeadlockRetryExecutor {
-public:
-    template<typename Func>
-    auto execute(Func&& func, int maxRetries = 3) -> decltype(func()) {
-        int retries = 0;
+更高隔离通常意味着：
 
-        while (retries < maxRetries) {
-            try {
-                return func();
-            } catch (const DeadlockException& e) {
-                retries++;
+- 吞吐更低
+- 冲突更多
+- 延迟更高
 
-                // 指数退避
-                std::this_thread::sleep_for(
-                    std::chrono::milliseconds(100 * (1 << retries))
-                );
+实际选择要看：
 
-                LOG_WARNING("Deadlock detected, retrying... (" +
-                           std::to_string(retries) + "/" +
-                           std::to_string(maxRetries) + ")");
-            }
-        }
+- 是否会出现并发扣减
+- 是否有范围查询
+- 是否担心幻读
 
-        throw std::runtime_error("Transaction failed after retries");
-    }
-};
-```
+很多业务并不需要最高隔离级别，但必须配合正确的更新方式，例如条件更新、版本号或行锁。
 
----
+## 五、死锁是设计问题，不只是数据库问题
 
-## 三、最佳实践
+死锁常见原因包括：
 
-### 事务使用建议
+- 多事务访问资源顺序不一致
+- 大事务持锁过久
+- 一次事务更新太多对象
 
-| 建议 | 说明 |
-|------|------|
-| **保持事务简短** | 减少锁持有时间 |
-| **按固定顺序访问** | 避免死锁 |
-| **设置合理超时** | 避免长时间等待 |
-| **使用保存点** | 大事务分段提交 |
+常见治理手段：
 
----
+- 固定访问顺序
+- 缩小事务范围
+- 失败后有限重试
+- 加监控和慢事务排查
+
+## 六、事务和幂等要一起看
+
+事务保证的是一段数据库修改的原子性，不保证“外部重试不会重复执行”。
+
+例如客户端超时重试时，即使第一次事务已经成功，第二次请求仍可能再次进入。
+
+所以关键写操作通常还需要：
+
+- 请求唯一 ID
+- 幂等保护
+- 流水记录
+
+## 七、工程上更稳妥的处理方式
+
+很多核心链路会采用：
+
+- 单库内关键步骤用本地事务
+- 跨服务修改改成事件驱动
+- 外层请求做幂等
+- 关键结果保留流水
+
+这样能把事务用于它最擅长的边界，而不是滥用。
+
+## 八、常见误区
+
+### 1. 所有写操作都应该开事务
+
+不对。事务有成本，很多单语句原子更新并不需要额外大事务。
+
+### 2. 事务能解决跨服务一致性
+
+单库事务不行，跨服务还需要额外机制。
+
+### 3. 用最高隔离级别最安全
+
+很多时候只是更慢、更容易冲突，并不一定更适合业务。
 
 ## 参考资料
 
-- [MySQL 事务隔离级别](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation.html)
+- MySQL / InnoDB 事务与隔离级别资料
+- 各类在线游戏资产链路本地事务与幂等实践资料

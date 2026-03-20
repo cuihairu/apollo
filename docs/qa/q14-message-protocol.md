@@ -1,717 +1,354 @@
 # Q14: 如何设计消息协议？Protobuf vs JSON vs 自定义协议？
 
-## 问题分析
+## 核心结论
 
-本题考察对消息协议设计的理解：
-- 消息协议的核心需求
-- Protobuf、JSON、自定义协议的对比
-- KBEngine 的消息协议设计
-- 不同场景的最佳选择
+消息协议设计的重点，不是先在 `JSON / Protobuf / 自定义二进制` 里站队，而是先回答四个问题：
 
----
+- 消息边界怎么划分
+- 版本怎么演进
+- 调试怎么做
+- 性能瓶颈到底在哪
 
-## 一、消息协议需求
+大多数 MMO 项目里，更稳妥的做法通常是：
 
-### 1.1 核心需求
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  消息协议的核心需求                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. 性能需求                                                │
-│     ├── 序列化/反序列化速度                                 │
-│     ├── 数据大小（带宽占用）                                │
-│     └── 内存占用                                           │
-│                                                             │
-│  2. 开发效率                                                │
-│     ├── 可读性（调试方便）                                   │
-│     ├── 易用性（开发体验）                                   │
-│     └── 工具支持（代码生成）                                 │
-│                                                             │
-│  3. 兼容性                                                  │
-│     ├── 向后兼容（老版本能解析新版本数据）                    │
-│     ├── 跨语言支持                                          │
-│     └── 平台支持                                           │
-│                                                             │
-│  4. 安全性                                                  │
-│     ├── 数据验证                                           │
-│     ├── 防篡改                                             │
-│     └── 加密支持                                           │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 1.2 协议对比概览
-
-| 维度 | JSON | XML | Protobuf | FlatBuffers | MsgPack |
-|------|------|-----|----------|-------------|---------|
-| **可读性** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐ | ⭐ | ⭐⭐ |
-| **序列化速度** | ⭐⭐ | ⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **数据大小** | ⭐ | ⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **向后兼容** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **跨语言** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **工具支持** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ |
+- 协议层先做统一消息头和版本边界
+- 业务消息体优先用 Protobuf 这类成熟方案
+- JSON 更多用于配置、调试、后台接口
+- 真正极高频、极高性能场景才考虑少量自定义二进制
 
 ---
 
-## 二、JSON 协议
+## 一、先明确“消息协议”到底在设计什么
 
-### 2.1 JSON 示例
+很多人一提消息协议，就直接开始对比 JSON 和 Protobuf。
 
-```json
-// 玩家登录请求
-{
-  "msgId": 1001,
-  "seq": 1,
-  "timestamp": 1640000000,
-  "data": {
-    "username": "player1",
-    "password": "hashed_password",
-    "version": "1.0.0",
-    "device": {
-      "type": "ios",
-      "model": "iPhone 12",
-      "osVersion": "15.0"
-    }
-  }
-}
+其实消息协议至少有三层含义：
 
-// 玩家移动请求
-{
-  "msgId": 2001,
-  "seq": 2,
-  "timestamp": 1640000100,
-  "data": {
-    "entityId": 12345,
-    "position": {
-      "x": 100.5,
-      "y": 0.0,
-      "z": 200.3
-    },
-    "rotation": 45.0
-  }
-}
-```
+### 1.1 传输封装层
 
-### 2.2 JSON 优缺点
+负责回答：
 
-```
-优点：
-✅ 可读性强 - 人类可读，调试方便
-✅ 易于使用 - 所有语言都有成熟库
-✅ 灵活性高 - 动态添加字段
-✅ Web 友好 - 前后端统一格式
+- 一条消息从哪里开始、哪里结束
+- 消息长度怎么表示
+- 消息类型怎么区分
+- 序列号、会话号、校验位放在哪里
 
-缺点：
-❌ 数据量大 - 大量重复的键名和引号
-❌ 解析慢 - 需要完整的解析过程
-❌ 无类型 - 类型信息丢失
-❌ 不支持二进制数据
-```
+### 1.2 消息体结构层
 
-### 2.3 性能测试
+负责回答：
 
-```
-测试：序列化 10000 次玩家对象
+- 业务字段怎么编码
+- 数组、嵌套、枚举怎么表示
+- 类型系统怎么定义
 
-┌─────────────────────────────────────────────────────────────┐
-│  格式   │ 序列化(ms) │ 反序列化(ms) │ 数据大小(KB) │         │
-├─────────────────────────────────────────────────────────────┤
-│  JSON   │    45      │     52      │     125      │         │
-│  Protobuf│    8       │     12      │      35      │         │
-│  MsgPack│    12      │     18      │      42      │         │
-└─────────────────────────────────────────────────────────────┘
-```
+### 1.3 演进与兼容层
+
+负责回答：
+
+- 老版本能否看懂新消息
+- 新版本能否兼容旧客户端
+- 字段删除、替换、保留怎么做
+
+所以协议设计不是“选一个序列化库”就结束了。
 
 ---
 
-## 三、Protobuf 协议
+## 二、一个好协议最重要的不是快，而是可控
 
-### 3.1 Protobuf 示例
+协议设计真正要优先保证的通常是：
 
-```protobuf
-// player.proto
+- 边界清楚
+- 兼容可演进
+- 容易排查
+- 性能足够
 
-syntax = "proto3";
+顺序不要反过来。
 
-package game;
+如果一开始只盯着“字节最小、速度最快”，最后很容易得到一套：
 
-// 玩家信息
-message PlayerInfo {
-    uint64 player_id = 1;
-    string username = 2;
-    int32 level = 3;
-    int64 exp = 4;
-    int32 hp = 5;
-    int32 max_hp = 6;
+- 开发效率低
+- 调试极痛苦
+- 版本兼容很脆
+- 团队没人敢改
 
-    message Position {
-        float x = 1;
-        float y = 2;
-        float z = 3;
-    }
-
-    Position position = 7;
-}
-
-// 登录请求
-message LoginRequest {
-    string username = 1;
-    string password = 2;
-    string version = 3;
-}
-
-// 登录响应
-message LoginResponse {
-    int32 code = 1;
-    string message = 2;
-    PlayerInfo player_info = 3;
-}
-
-// 移动请求
-message MoveRequest {
-    uint64 entity_id = 1;
-    Position position = 2;
-    float rotation = 3;
-}
-```
-
-### 3.2 Protobuf 编码原理
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  Protobuf 编码结构                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  每个 Tag-Length-Value (TLV):                              │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  Tag (1-5 bytes) │ Length │ Value (n bytes)    │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  Tag 结构：                                                 │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  Field Number (高位) │ Wire Type (低位)        │       │
-│  │  (field_id >> 3)      │ (field_id & 0x07)      │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  Wire Type:                                                │
-│  ├── 0: Varint (变长整数)                                  │
-│  ├── 1: 64-bit (固定 8 字节)                               │
-│  ├── 2: Length-delimited (字符串、嵌套消息)                 │
-│  ├── 5: 32-bit (固定 4 字节)                               │
-│                                                             │
-│  示例：int32 x = 150;                                      │
-│  ├── field_id = 1, wire_type = 0 (Varint)                 │
-│  ├── tag = (1 << 3) | 0 = 0x08                            │
-│  ├── value = 150 = 0x96 0x01 (Varint 编码)                │
-│  └── 编码结果: 0x08 0x96 0x01 (3 bytes)                   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 3.3 Protobuf 优缺点
-
-```
-优点：
-✅ 高效 - 编码紧凑，解析快速
-✅ 跨语言 - 支持所有主流语言
-✅ 向后兼容 - 可安全添加/删除字段
-✅ 强类型 - 有完整的类型定义
-✅ 代码生成 - 自动生成序列化代码
-
-缺点：
-❌ 不可读 - 二进制格式，调试困难
-❌ 需要 .proto 文件 - 增加编译步骤
-❌ 不支持动态结构 - 修改需要重新编译
-❌ 学习成本 - 需要了解 proto 语法
-```
+这类协议在长期项目里通常不是好协议。
 
 ---
 
-## 四、KBEngine 消息协议
+## 三、协议设计时先定哪些基础规则
 
-### 4.1 KBEngine 协议格式
+### 3.1 统一消息头
 
-根据 [KBEngine 源码](https://github.com/kbengine/kbengine)：
+无论消息体用什么格式，通常都建议先有统一头部，至少包含：
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  KBEngine 消息协议                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  消息头 (Message Header)                         │       │
-│  │  ┌────────┬────────┬────────┬────────┐          │       │
-│  │  │MsgType │ MsgID  │ Length │ ...    │          │       │
-│  │  │(2bytes)│(2bytes)│(2bytes)│        │          │       │
-│  │  └────────┴────────┴────────┴────────┘          │       │
-│  ├─────────────────────────────────────────────────┤       │
-│  │  消息体 (Message Body)                           │       │
-│  │  ┌─────────────────────────────────────────┐    │       │
-│  │  │  实体ID │ 参数列表 │ ...                 │    │       │
-│  │  │(4 bytes)│ (变长)   │                     │    │       │
-│  │  └─────────────────────────────────────────┘    │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  消息类型 (MsgType):                                        │
-│  ├── 0x01: 客户端 → 服务器                                  │
-│  ├── 0x02: 服务器 → 客户端                                  │
-│  ├── 0x03: 服务器内部                                       │
-│  └── 0x04: 广播消息                                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+- 消息 ID
+- 长度
+- 序列号
+- 会话或连接上下文
+- 版本号或协议标记
 
-### 4.2 KBEngine 源码实现
+这样做的好处是：
 
-```cpp
-// KBEngine 消息定义
-// src/server/network/message.h
+- 解包边界清楚
+- 调试更容易
+- 后续切换消息体格式也更方便
 
-class Message {
-public:
-    // 消息 ID
-    MessageID id_;
+### 3.2 明确请求、响应、通知三种语义
 
-    // 消息类型
-    MessageType msgType_;
+这一步经常被忽略。
 
-    // 消息长度
-    uint16_t length_;
+通常至少要区分：
 
-    // 实体 ID
-    EntityID entityID_;
+- Request：客户端发起请求
+- Response：服务端返回结果
+- Notify / Push：服务端主动推送
 
-    // 参数列表
-    MemoryStream args_;
-};
+如果这些语义不清楚，后面很容易出现：
 
-// 消息打包器
-class Bundle : public MemoryStream {
-public:
-    // 开始写入新消息
-    void newMessage(MessageID msgID) {
-        // 写入消息 ID
-        (*this) << msgID;
+- 谁该带序列号不清楚
+- 谁该等待回包不清楚
+- 超时和重试逻辑不好做
 
-        // 写入消息长度（占位）
-        uint16_t length = 0;
-        uint16_t* lengthPos = (uint16_t*)(wpos() + sizeof(msgID));
-        (*this) << length;
-    }
+### 3.3 先设计错误码与可观测性
 
-    // 结束消息写入
-    void finishMessage() {
-        // 回填消息长度
-        uint16_t* lengthPos = ...;
-        *lengthPos = wpos() - startPos_;
-    }
-};
-```
+协议不只是“能传数据”，还要能让线上问题被看见。
 
-### 4.3 KBEngine 参数序列化
+至少要考虑：
 
-```cpp
-// KBEngine 参数序列化
-// src/lib/python/Serialization/PyMemberDef.h
-
-class PyMemberDef {
-public:
-    // 类型枚举
-    enum DataType {
-        UINT8, UINT16, UINT32, UINT64,
-        INT8, INT16, INT32, INT64,
-        FLOAT, DOUBLE,
-        STRING, UNICODE,
-        PYTHON, BLOB,
-        ARRAY, FIXED_DICT,
-        ENTITYCALL, MAILBOX
-    };
-
-    // 序列化
-    void addToStream(MemoryStream* stream, PyObject* value) {
-        switch (type_) {
-            case UINT8:
-                stream->writeUint8(PyLong_AsLong(value));
-                break;
-            case UINT16:
-                stream->writeUint16(PyLong_AsLong(value));
-                break;
-            case UINT32:
-                stream->writeUint32(PyLong_AsUnsignedLongMask(value));
-                break;
-            case STRING:
-                stream->writeString(PyUnicode_AsUTF8(value));
-                break;
-            // ... 其他类型
-        }
-    }
-
-    // 反序列化
-    PyObject* createFromStream(MemoryStream* stream) {
-        switch (type_) {
-            case UINT8:
-                return PyLong_FromLong(stream->readUint8());
-            case STRING:
-                return PyUnicode_FromString(stream->readString().c_str());
-            // ... 其他类型
-        }
-    }
-};
-```
+- 通用错误码
+- 非法消息处理
+- 日志里如何打印消息摘要
+- 调试工具能否快速查看包内容
 
 ---
 
-## 五、自定义协议设计
+## 四、JSON、Protobuf、自定义协议分别适合什么
 
-### 5.1 混合协议设计
+### 4.1 JSON
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              混合协议设计（推荐）                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  协议分层：                                                 │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  应用层 (Application)                            │       │
-│  │  ├── 业务逻辑 (Protobuf 定义)                     │       │
-│  │  └── 类型安全 (代码生成)                          │       │
-│  ├─────────────────────────────────────────────────┤       │
-│  │  传输层 (Transport)                               │       │
-│  │  ├── 消息 ID (uint16)                             │       │
-│  │  ├── 序列号 (uint16)                              │       │
-│  │  ├── 时间戳 (uint32)                              │       │
-│  │  └── 数据体 (Protobuf binary)                    │       │
-│  ├─────────────────────────────────────────────────┤       │
-│  │  网络层 (Network)                                 │       │
-│  │  └── TCP/UDP/KCP                                  │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+JSON 的最大价值不是性能，而是：
 
-### 5.2 协议头设计
+- 人类可读
+- 调试方便
+- 与 Web、后台系统天然兼容
 
-```cpp
-// 统一消息头
+它适合：
 
-#pragma pack(push, 1)
+- 配置文件
+- GM / 管理后台接口
+- 调试接口
+- 开发阶段临时协议
 
-struct MessageHeader {
-    // 魔数 (用于校验)
-    uint32_t magic;        // 0x4D534747 ("MSGG")
+它不太适合：
 
-    // 协议版本
-    uint16_t version;      // 当前版本 1
+- 高频二进制消息
+- 带宽敏感的实时主链路
 
-    // 消息类型
-    uint16_t msgType;      // 请求/响应/推送
+原因很简单：
 
-    // 消息 ID
-    uint16_t msgId;
+- 体积大
+- 解析慢
+- 类型约束弱
 
-    // 序列号 (用于匹配请求响应)
-    uint16_t sequence;
+### 4.2 Protobuf
 
-    // 时间戳
-    uint32_t timestamp;
+Protobuf 的最大价值是：
 
-    // 会话 ID
-    uint64_t sessionId;
+- 有类型系统
+- 有成熟代码生成
+- 有明确的字段编号与演进规则
+- 体积和性能都比较平衡
 
-    // 数据长度
-    uint32_t bodyLength;
+它通常很适合：
 
-    // 校验和 (CRC16)
-    uint16_t checksum;
+- 客户端与服务端主业务通信
+- 服务端内部 RPC
+- 需要跨语言协作的消息定义
 
-    // 保留字段
-    uint16_t reserved;
-};
+多数项目里，如果没有特别强的理由，Protobuf 往往是比“自研协议”更稳的默认选择。
 
-#pragma pack(pop)
+### 4.3 自定义二进制协议
 
-// 消息类型枚举
-enum class MsgType : uint16_t {
-    // 客户端请求
-    REQUEST = 0x0001,
+自定义协议的优势是：
 
-    // 服务器响应
-    RESPONSE = 0x0002,
+- 可以完全按业务裁剪
+- 可以极致压缩
+- 可以减少多余字段和元信息
 
-    // 服务器推送
-    PUSH = 0x0003,
+但代价同样明显：
 
-    // 广播消息
-    BROADCAST = 0x0004,
-};
+- 开发成本高
+- 调试难
+- 兼容性风险高
+- 团队维护门槛高
 
-// 消息 ID 定义
-enum class MessageID : uint16_t {
-    // 认证相关 (1000-1999)
-    LOGIN_REQUEST = 1001,
-    LOGIN_RESPONSE = 1002,
-    LOGOUT_REQUEST = 1003,
-    LOGOUT_RESPONSE = 1004,
+所以它更适合：
 
-    // 玩家相关 (2000-2999)
-    PLAYER_INFO_REQUEST = 2001,
-    PLAYER_INFO_RESPONSE = 2002,
-    PLAYER_MOVE_REQUEST = 2003,
-    PLAYER_MOVE_NOTIFY = 2004,
+- 极高频消息
+- 极致性能热点
+- 团队有长期维护能力的场景
 
-    // 战斗相关 (3000-3999)
-    SKILL_CAST_REQUEST = 3001,
-    SKILL_CAST_NOTIFY = 3002,
-    DAMAGE_NOTIFY = 3003,
-
-    // ... 更多消息
-};
-```
-
-### 5.3 消息编解码器
-
-```cpp
-// 消息编解码器
-
-class MessageCodec {
-public:
-    // 编码消息
-    std::vector<uint8_t> encode(MsgType type,
-                               MessageID msgId,
-                               uint16_t sequence,
-                               uint64_t sessionId,
-                               const google::protobuf::Message& body) {
-        // 1. 序列化消息体
-        std::string bodyData;
-        body.SerializeToString(&bodyData);
-
-        // 2. 构建消息头
-        MessageHeader header;
-        header.magic = 0x4D534747;
-        header.version = 1;
-        header.msgType = static_cast<uint16_t>(type);
-        header.msgId = static_cast<uint16_t>(msgId);
-        header.sequence = sequence;
-        header.timestamp = getTime();
-        header.sessionId = sessionId;
-        header.bodyLength = bodyData.size();
-        header.checksum = calculateChecksum(&header, bodyData);
-        header.reserved = 0;
-
-        // 3. 组合完整消息
-        std::vector<uint8_t> buffer;
-        buffer.resize(sizeof(MessageHeader) + bodyData.size());
-        memcpy(buffer.data(), &header, sizeof(MessageHeader));
-        memcpy(buffer.data() + sizeof(MessageHeader),
-               bodyData.data(), bodyData.size());
-
-        return buffer;
-    }
-
-    // 解码消息
-    bool decode(const std::vector<uint8_t>& buffer,
-                MessageHeader& outHeader,
-                std::string& outBody) {
-        if (buffer.size() < sizeof(MessageHeader)) {
-            return false;
-        }
-
-        // 解析消息头
-        memcpy(&outHeader, buffer.data(), sizeof(MessageHeader));
-
-        // 校验魔数
-        if (outHeader.magic != 0x4D534747) {
-            return false;
-        }
-
-        // 校验长度
-        if (buffer.size() != sizeof(MessageHeader) + outHeader.bodyLength) {
-            return false;
-        }
-
-        // 校验校验和
-        uint16_t calculatedChecksum = calculateChecksum(
-            &outHeader,
-            std::string(buffer.begin() + sizeof(MessageHeader),
-                       buffer.end())
-        );
-        if (calculatedChecksum != outHeader.checksum) {
-            return false;
-        }
-
-        // 提取消息体
-        outBody.assign(buffer.begin() + sizeof(MessageHeader),
-                       buffer.end());
-
-        return true;
-    }
-
-private:
-    // 计算 CRC16 校验和
-    static uint16_t calculateChecksum(const MessageHeader* header,
-                                      const std::string& body) {
-        // 简化的 CRC16 计算
-        uint16_t crc = 0;
-
-        const uint8_t* data = reinterpret_cast<const uint8_t*>(header);
-        size_t len = sizeof(MessageHeader) - sizeof(uint16_t);
-
-        for (size_t i = 0; i < len; ++i) {
-            crc ^= (data[i] << 8);
-            for (int j = 0; j < 8; ++j) {
-                if (crc & 0x8000) {
-                    crc = (crc << 1) ^ 0x1021;
-                } else {
-                    crc = crc << 1;
-                }
-            }
-        }
-
-        return crc;
-    }
-};
-```
+而不是“项目一开始就全部自定义”。
 
 ---
 
-## 六、协议选择策略
+## 五、为什么大多数项目优先选 Protobuf
 
-### 6.1 决策树
+这是一个很务实的选择。
 
-```mermaid
-flowchart TD
-    Start[选择消息协议] --> Q1{需要人类可读?}
+原因通常不是它绝对最快，而是它在多个维度上比较平衡：
 
-    Q1 -->|是| JSON[JSON]
-    Q1 -->|否| Q2{性能要求?}
+- 性能足够高
+- 体积足够小
+- 兼容机制清晰
+- 工具链成熟
+- 团队协作成本低
 
-    Q2 -->|一般| JSON
-    Q2 -->|高| Q3{兼容性要求?}
+对 MMO 来说，这种“整体最稳”的价值往往高于某个单点性能指标。
 
-    Q3 -->|强| Protobuf[Protobuf]
-    Q3 -->|弱| Custom[自定义二进制]
-
-    JSON --> JSONEnd[适用: 配置、调试、Web]
-    Protobuf --> ProtoEnd[适用: 高频消息、跨平台]
-    Custom --> CustomEnd[适用: 极致性能、特殊需求]
-
-    style JSONEnd fill:#ffccbc
-    style ProtoEnd fill:#c8e6c9
-    style CustomEnd fill:#b39ddb
-```
-
-### 6.2 场景推荐
-
-| 场景 | 推荐协议 | 原因 |
-|------|----------|------|
-| **配置文件** | JSON | 可读、易编辑 |
-| **日志输出** | JSON | 结构化、可读 |
-| **Web API** | JSON | 前后端通用 |
-| **客户端通信** | Protobuf | 高效、跨平台 |
-| **服务器内部** | 自定义 | 极致性能 |
-| **调试接口** | JSON | 可读、通用 |
-| **高频位置更新** | 自定义 | 最小开销 |
+如果你还没证明协议序列化是瓶颈，过早自定义协议通常收益不大。
 
 ---
 
-## 七、实战建议
+## 六、自定义协议真正值得投入的场景
 
-### 7.1 混合使用策略
+### 6.1 高频状态同步
 
-```
-实际项目中的混合策略：
+例如：
 
-┌─────────────────────────────────────────────────────────────┐
-│                   消息类型分类处理                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  高频消息 → 自定义二进制                                     │
-│  ├── 位置更新 (100ms/次)                                    │
-│  ├── 状态同步 (50ms/次)                                     │
-│  └── AOI 广播 (实时)                                        │
-│                                                             │
-│  中频消息 → Protobuf                                         │
-│  ├── 技能释放                                              │
-│  ├── 伤害结算                                              │
-│  └── 物品操作                                              │
-│                                                             │
-│  低频消息 → JSON                                            │
-│  ├── 登录认证                                              │
-│  ├── 配置加载                                              │
-│  └── GM 命令                                               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+- 位置
+- 朝向
+- 输入状态
+- 高频 AOI 更新
 
-### 7.2 版本兼容
+这类消息的特点是：
 
-```protobuf
-// Protobuf 向后兼容示例
+- 频率高
+- 字段固定
+- 对体积非常敏感
 
-syntax = "proto3";
+这时可以考虑专门做更轻量的二进制布局。
 
-message PlayerInfo {
-    uint64 player_id = 1;          // 不要删除已有字段
-    string username = 2;           // 保留字段序号
-    int32 level = 3;
+### 6.2 固定结构、极小消息
 
-    // V2 添加新字段
-    int32 vip_level = 4;           // 新字段不影响老版本
+如果一个消息永远只有几个固定字段，用完整的通用序列化框架反而可能有额外成本。
 
-    // V3 添加嵌套消息
-    message Equipment {
-        uint64 item_id = 1;
-        int32 slot = 2;
-    }
-    repeated Equipment equipments = 5;
+### 6.3 但仍然要注意边界
 
-    // V4 标记旧字段为废弃
-    int32 deprecated_field = 6 [deprecated = true];
+即使做自定义，也不建议把整个系统都拖进去。
 
-    // V5 添加新字段
-    string avatar_url = 7;
-}
-```
+更合理的方式通常是：
+
+- 主业务消息仍用成熟协议
+- 少量热点消息单独自定义
+
+这样收益和维护成本更平衡。
 
 ---
 
-## 八、总结
+## 七、协议演进比格式选型更重要
 
-### 协议对比总结
+长期项目里，真正把协议做死的，往往不是序列化方式，而是演进策略没设计好。
 
-| 维度 | JSON | Protobuf | 自定义 |
-|------|------|----------|--------|
-| **开发效率** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
-| **运行效率** | ⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| **可调试性** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
-| **兼容性** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+### 7.1 常见演进规则
 
-### 最佳实践
+- 新增字段尽量向后兼容
+- 不随意复用旧字段编号
+- 删除字段前先废弃，再清理
+- 服务端尽量容忍旧客户端缺少新字段
 
-```
-1. 默认选择 Protobuf
-   - 平衡性能和开发效率
-   - 良好的工具支持
-   - 自然的版本兼容
+### 7.2 最怕的不是“字段多”，而是“语义漂移”
 
-2. 特殊场景使用 JSON
-   - 配置文件
-   - 调试接口
-   - Web 兼容
+例如：
 
-3. 极致性能考虑自定义
-   - 高频位置更新
-   - 有足够开发资源
-   - 愿意承担维护成本
-```
+- 一个字段最开始表示“等级”
+- 后来偷偷改成“段位”
+
+这种问题比格式选择本身危险得多。
+
+### 7.3 所以协议文档必须稳定
+
+消息协议最好是：
+
+- 有统一定义源
+- 有版本管理
+- 有字段注释
+- 有生成流程
+
+否则很快会出现客户端和服务端各自理解不一致的问题。
+
+---
+
+## 八、调试能力必须被当成协议设计的一部分
+
+如果一个协议快，但线上根本没法快速看懂，那长期成本会很高。
+
+至少要考虑：
+
+- 是否能打印消息摘要
+- 是否能把二进制消息转成可读文本
+- 是否有抓包和回放工具
+- 是否能快速定位字段错位和版本不匹配
+
+这也是为什么很多项目即便主协议用 Protobuf，仍然会保留：
+
+- JSON 调试输出
+- 文本日志映射
+- 协议可视化工具
+
+---
+
+## 九、一个更实用的选择方式
+
+### 9.1 默认策略
+
+大多数情况下可以先这样做：
+
+- 统一消息头：自定义
+- 业务消息体：Protobuf
+- 配置和后台接口：JSON
+
+这是一个很常见、也很稳的组合。
+
+### 9.2 什么时候再引入自定义二进制
+
+满足以下条件时再考虑：
+
+- 某些消息是稳定热点
+- 已经确认序列化和带宽是主要瓶颈
+- 团队具备工具链和调试能力
+
+### 9.3 不要把“追求极致”当成默认路线
+
+很多团队最容易犯的错误是：
+
+- 一开始就想做最极致的自定义协议
+- 结果还没上线，协议工具链和兼容问题先把自己拖住
+
+更好的方式通常是：
+
+- 先用成熟协议跑通
+- 再针对真实热点局部优化
+
+---
+
+## 十、总结
+
+消息协议设计的核心，不是先选 JSON、Protobuf 还是自定义，而是先把边界、版本、调试和演进方式设计清楚。
+
+对大多数 MMO 项目来说，更稳妥的经验通常是：
+
+- 主业务通信优先 Protobuf
+- 配置和调试优先 JSON
+- 高频热点消息再考虑局部自定义
+
+如果没有先把协议演进和调试工具做好，再快的协议也很容易在长期维护里变成负担。
 
 ---
 
 ## 参考资料
 
-- [KBEngine GitHub - 消息定义](https://github.com/kbengine/kbengine/tree/master/kbe/src/server/messages)
-- [Protobuf 官方文档](https://developers.google.com/protocol-buffers)
-- [FlatBuffers 对比](https://google.github.io/flatbuffers/)
-- [MessagePack 规范](https://msgpack.org/index.html)
+- [Protobuf](https://protobuf.dev/)
+- [FlatBuffers](https://google.github.io/flatbuffers/)
+- [MessagePack](https://msgpack.org/)
+- [KBEngine GitHub - Messages](https://github.com/kbengine/kbengine/tree/master/kbe/src/server/messages)

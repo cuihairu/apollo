@@ -1,637 +1,360 @@
 # Q13: 什么是可靠 UDP？如何实现？
 
-## 问题分析
+## 核心结论
 
-本题考察对可靠 UDP 的理解：
-- 为什么需要可靠 UDP
-- 可靠 UDP 的实现原理
-- KBEngine 的可靠 UDP 实现
-- 与 TCP 的对比
+“可靠 UDP”不是一个固定协议名，而是一类思路：
 
----
+- 底层仍然用 UDP 发送数据报
+- 但在应用层自己补上部分可靠传输能力
 
-## 一、可靠 UDP 概述
+它的价值不在于“完全替代 TCP”，而在于：
 
-### 1.1 为什么需要可靠 UDP
+- 只为真正需要的消息补可靠性
+- 保留 UDP 更轻、更灵活的传输语义
+- 避免把所有消息都塞进 TCP 的统一可靠字节流里
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  TCP vs UDP 的困境                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  TCP 的问题：                                                │
-│  ├── HEAD-OF-LINE BLOCKING - 丢包阻塞后续数据               │
-│  ├── 拥塞控制保守 - 发送速率受限                            │
-│  ├── 连接建立开销 - 三次握手                                │
-│  └── 固定重传超时 - 延迟高                                  │
-│                                                             │
-│  UDP 的问题：                                                │
-│  ├── 不可靠 - 数据可能丢失                                  │
-│  ├── 无序 - 数据可能乱序                                    │
-│  ├── 无流量控制 - 可能淹没接收方                            │
-│  └── 无拥塞控制 - 可能导致网络拥塞                          │
-│                                                             │
-│  解决方案：可靠 UDP                                          │
-│  ├── 保留 UDP 的低延迟特性                                  │
-│  ├── 在应用层实现可靠性                                     │
-│  ├── 可根据场景定制策略                                     │
-│  └── 避免 TCP 的固有缺陷                                    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+所以真正关键的问题不是“能不能做可靠 UDP”，而是：
 
-### 1.2 可靠 UDP 的设计目标
-
-| 特性 | TCP | UDP | 可靠 UDP |
-|------|-----|-----|----------|
-| **延迟** | 高 | 最低 | 低 |
-| **可靠性** | 高 | 无 | 高 |
-| **顺序** | 保证 | 无 | 保证 |
-| **拥塞控制** | 内置 | 无 | 可选 |
-| **灵活性** | 低 | 高 | 高 |
+- 为什么要自己补可靠
+- 要补到什么程度
+- 哪些消息值得可靠
+- 哪些语义不能照搬 TCP
 
 ---
 
-## 二、可靠 UDP 实现原理
+## 一、为什么会需要可靠 UDP
 
-### 2.1 核心机制
+如果只看两种极端选择：
 
-```mermaid
-flowchart LR
-    subgraph ReliableUDP["可靠 UDP"]
-        A[序列号]
-        B[确认机制 ACK]
-        C[超时重传 RTO]
-        D[去重]
-        E[乱序重排]
-        F[流量控制]
-    end
+- TCP：可靠、有序，但语义比较重
+- UDP：轻量、灵活，但默认不可靠
 
-    A --> B --> C
-    D --> E
-    C --> F
-```
+那么很多实时系统会落在中间地带：
 
-### 2.2 数据包格式
+- 有些消息不能丢
+- 但又不想让所有消息都被 TCP 的队头阻塞和统一重传策略拖住
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  可靠 UDP 数据包格式                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  UDP 首部 (8 字节)                               │       │
-│  │  ┌────────┬────────┬──────┬──────┐              │       │
-│  │  │源端口  │目标端口│ 长度  │校验和 │              │       │
-│  │  └────────┴────────┴──────┴──────┘              │       │
-│  ├─────────────────────────────────────────────────┤       │
-│  │  可靠层 首部                                    │       │
-│  │  ┌──────────┬──────────┬──────────┬──────────┐ │       │
-│  │  │ 序列号    │ 确认号    │ 标志     │ 窗口     │ │       │
-│  │  │ (16bit)  │ (16bit)  │ (8bit)   │ (16bit)  │ │       │
-│  │  └──────────┴──────────┴──────────┴──────────┘ │       │
-│  ├─────────────────────────────────────────────────┤       │
-│  │  数据负载                                        │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  标志位：                                                  │
-│  ├── bit 0: SYN (同步)                                     │
-│  ├── bit 1: ACK (确认)                                     │
-│  ├── bit 2: FIN (结束)                                     │
-│  └── bit 3: NACK (负确认)                                  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+典型例子：
 
-### 2.3 状态机
+- 技能释放请求不应该轻易丢
+- 重要战斗事件最好可靠到达
+- 但高频位置状态不值得逐条补发
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  可靠 UDP 连接状态机                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│    ┌─────────┐                                             │
-│    │ CLOSED  │                                             │
-│    └────┬────┘                                             │
-│         │ 发送 SYN                                          │
-│         ▼                                                   │
-│    ┌─────────┐   收到 SYN/ACK   ┌─────────┐                │
-│    │ SYN_SENT │ ───────────────►│ ESTAB   │                │
-│    └─────────┘                  └────┬────┘                │
-│         ▲                              │                    │
-│         │    收到 SYN                 │ 发送 FIN            │
-│         └─────────────────────────────┼─────────────────┐  │
-│                                        ▼                 │  │
-│                                  ┌─────────┐             │  │
-│                                  │FIN_WAIT │             │  │
-│                                  └────┬────┘             │  │
-│                                       │ 收到 FIN/ACK      │  │
-│                                       ▼                  │  │
-│                                  ┌─────────┐             │  │
-│                                  │ CLOSED  │◄────────────┘  │
-│                                  └─────────┘                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+这时就会出现一个思路：
+
+在 UDP 上自己实现“选择性可靠”。
 
 ---
 
-## 三、核心机制实现
+## 二、可靠 UDP 解决的不是“全都可靠”，而是“按需可靠”
 
-### 3.1 序列号与确认
+这是最容易被说错的地方。
 
-```cpp
-// 可靠 UDP 实现
+可靠 UDP 的目标通常不是复刻一个完整 TCP，而是：
 
-class ReliableUDP {
-public:
-    // 发送窗口
-    struct SendWindow {
-        struct Slot {
-            Packet packet;
-            bool acked;
-            uint64_t sendTime;
-            int retries;
-        };
+- 对关键消息补 ACK 和重传
+- 对旧状态消息继续允许丢弃
+- 对顺序要求高的流做独立排序
+- 对不同消息类型给出不同传输语义
 
-        std::array<Slot, 256> slots;
-        uint16_t base;      // 窗口起始序列号
-        uint16_t next;      // 下一个待发送序列号
-        uint16_t size;      // 窗口大小
-    };
+也就是说，可靠 UDP 的价值往往来自“消息分级”。
 
-    // 接收窗口
-    struct RecvWindow {
-        struct Slot {
-            Packet packet;
-            bool received;
-        };
-
-        std::array<Slot, 256> slots;
-        uint16_t base;      // 期望接收序列号
-        uint16_t size;      // 窗口大小
-    };
-
-    // 发送数据
-    bool send(const void* data, size_t len) {
-        if (sendWindow_.next - sendWindow_.base >= sendWindow_.size) {
-            // 发送窗口已满
-            return false;
-        }
-
-        // 创建数据包
-        Packet packet;
-        packet.seq = sendWindow_.next;
-        packet.data.assign((char*)data, (char*)data + len);
-
-        // 存入发送窗口
-        auto& slot = sendWindow_.slots[packet.seq % 256];
-        slot.packet = packet;
-        slot.acked = false;
-        slot.sendTime = getCurrentTime();
-        slot.retries = 0;
-
-        // 发送
-        udpSocket_->sendTo(packet.data, destAddr_);
-
-        sendWindow_.next++;
-        return true;
-    }
-
-    // 接收数据
-    void onPacketReceived(const Packet& packet) {
-        uint16_t seq = packet.seq;
-
-        // 检查是否在接收窗口内
-        if (seq - recvWindow_.base < recvWindow_.size) {
-            auto& slot = recvWindow_.slots[seq % 256];
-            slot.packet = packet;
-            slot.received = true;
-
-            // 发送 ACK
-            sendAck(seq);
-
-            // 处理可交付的数据
-            deliverPackets();
-        }
-    }
-
-    // 处理 ACK
-    void onAckReceived(uint16_t ack) {
-        // 标记已确认
-        for (uint16_t seq = sendWindow_.base;
-             seq != ack;
-             seq = (seq + 1) & 0xFFFF) {
-            auto& slot = sendWindow_.slots[seq % 256];
-            slot.acked = true;
-        }
-
-        // 滑动窗口
-        while (sendWindow_.base != ack) {
-            auto& slot = sendWindow_.slots[sendWindow_.base % 256];
-            if (!slot.acked) break;
-            sendWindow_.base++;
-        }
-    }
-
-    // 交付已接收的数据
-    void deliverPackets() {
-        while (recvWindow_.base < recvWindow_.base + recvWindow_.size) {
-            auto& slot = recvWindow_.slots[recvWindow_.base % 256];
-            if (!slot.received) break;
-
-            // 交付给应用层
-            onDataReceived(slot.packet.data);
-
-            recvWindow_.base++;
-        }
-    }
-
-private:
-    UDPSocket* udpSocket_;
-    SendWindow sendWindow_;
-    RecvWindow recvWindow_;
-};
-```
-
-### 3.2 超时重传
-
-```cpp
-// 超时重传实现
-
-class RetransmissionManager {
-public:
-    // RTO (Retransmission Timeout) 计算
-    static constexpr uint64_t MIN_RTO = 100;   // 100ms
-    static constexpr uint64_t MAX_RTO = 3000;  // 3s
-    static constexpr float G = 0.125f;          // 增益因子
-
-    uint64_t srtt_ = 0;   // 平滑 RTT
-    uint64_t rttvar_ = 0; // RTT 变化量
-    uint64_t rto_ = MIN_RTO;
-
-    // 更新 RTT 估算
-    void updateRTT(uint64_t measuredRTT) {
-        if (srtt_ == 0) {
-            // 第一次测量
-            srtt_ = measuredRTT;
-            rttvar_ = measuredRTT / 2;
-        } else {
-            // 更新平滑 RTT
-            rttvar_ = (3 * rttvar_ + abs(measuredRTT - srtt_)) / 4;
-            srtt_ = (7 * srtt_ + measuredRTT) / 8;
-        }
-
-        // 计算 RTO
-        rto_ = std::clamp(srtt_ + 4 * rttvar_, MIN_RTO, MAX_RTO);
-    }
-
-    // 检查超时重传
-    void checkTimeouts(uint64_t currentTime) {
-        for (uint16_t seq = sendWindow_.base;
-             seq != sendWindow_.next;
-             seq = (seq + 1) & 0xFFFF) {
-            auto& slot = sendWindow_.slots[seq % 256];
-
-            if (slot.acked) continue;
-
-            if (currentTime - slot.sendTime >= rto_) {
-                // 超时，重传
-                if (slot.retries < MAX_RETRIES) {
-                    retransmit(slot);
-                    slot.retries++;
-                    slot.sendTime = currentTime;
-
-                    // 指数退避
-                    rto_ = std::min(rto_ * 2, MAX_RTO);
-                } else {
-                    // 超过最大重传次数，连接超时
-                    onTimeout();
-                    return;
-                }
-            }
-        }
-    }
-
-    void retransmit(SendWindow::Slot& slot) {
-        // 重传数据包
-        udpSocket_->sendTo(slot.packet.data, destAddr_);
-    }
-
-private:
-    static constexpr int MAX_RETRIES = 5;
-};
-```
-
-### 3.3 快速重传
-
-```cpp
-// 快速重传（类似 TCP）
-
-class FastRetransmit {
-public:
-    // 重复 ACK 计数
-    std::unordered_map<uint16_t, int> dupAckCount_;
-
-    // 处理 ACK
-    void onAck(uint16_t ack) {
-        if (ack == lastAck_) {
-            // 重复 ACK
-            dupAckCount_[ack]++;
-
-            // 3 次重复 ACK，立即重传
-            if (dupAckCount_[ack] >= 3) {
-                fastRetransmit(ack);
-                dupAckCount_.clear();
-            }
-        } else {
-            // 新 ACK
-            lastAck_ = ack;
-            dupAckCount_.clear();
-        }
-    }
-
-    // 快速重传
-    void fastRetransmit(uint16_t ack) {
-        // 重传从 ack 开始的未确认数据
-        for (uint16_t seq = ack;
-             seq != sendWindow_.next;
-             seq = (seq + 1) & 0xFFFF) {
-            auto& slot = sendWindow_.slots[seq % 256];
-            if (!slot.acked) {
-                retransmit(slot);
-                break;  // 只重传一个包
-            }
-        }
-    }
-
-private:
-    uint16_t lastAck_ = 0;
-};
-```
+如果你把所有消息都放进同一个可靠 UDP 通道，最终很可能只是重新发明了一个更难维护的 TCP。
 
 ---
 
-## 四、KBEngine 的可靠 UDP
+## 三、一个可靠 UDP 最基础要补哪些机制
 
-### 4.1 KBEngine 实现
+### 3.1 序列号
 
-根据 [KBEngine 源码](https://github.com/kbengine/kbengine)：
+要知道包的先后顺序，首先需要序列号。
 
-```cpp
-// KBEngine 可靠 UDP 实现
-// src/server/network/reliable_udp.h
+它的作用包括：
 
-class ReliableUDP : public Channel {
-public:
-    // 数据包标志
-    enum PacketFlags {
-        FLAG_HAS_RECV_PACKET = 1,    // 已接收包
-        FLAG_IS_SENDING = 2,         // 发送中
-        FLAG_HAS_SEND_PACKET = 4,    // 已发送包
-    };
+- 判断是否丢包
+- 判断是否乱序
+- 判断是否重复
 
-    // 发送数据包
-    bool send(Packet* pPacket) {
-        if (pPacket->isReliable()) {
-            // 可靠包需要处理
-            pPacket->seq = sequence_++;
+没有序列号，就谈不上可靠性控制。
 
-            // 添加到发送队列
-            sendQueue_.push(pPacket);
+### 3.2 确认机制
 
-            // 立即发送
-            pPacket->flags |= FLAG_IS_SENDING;
-            pPacket->sentTimes = 1;
-            pPacket->sentTime = getTime();
+发送方必须知道哪些包已经到达。
 
-            channel_->send(pPacket);
-        } else {
-            // 不可靠包直接发送
-            channel_->send(pPacket);
-        }
+常见方式：
 
-        return true;
-    }
+- ACK：确认收到
+- NACK：明确说明某些包没收到
 
-    // 处理 ACK
-    void processAck(uint16_t seq) {
-        // 从发送队列移除已确认的包
-        auto iter = sendQueue_.begin();
-        while (iter != sendQueue_.end()) {
-            if ((*iter)->seq == seq) {
-                delete *iter;
-                iter = sendQueue_.erase(iter);
-                break;
-            }
-            ++iter;
-        }
-    }
+ACK 是可靠 UDP 的核心反馈通道。
 
-    // 超时重传
-    void checkSendTimeOut() {
-        uint64_t now = getTime();
-        uint64_t timeout = resendTimeout_ * 1000;  // 微秒
+### 3.3 重传机制
 
-        for (auto* pPacket : sendQueue_) {
-            if (pPacket->flags & FLAG_IS_SENDING) {
-                if (now - pPacket->sentTime >= timeout) {
-                    // 超时重传
-                    if (pPacket->sentTimes < maxResendTimes_) {
-                        channel_->send(pPacket);
-                        pPacket->sentTimes++;
-                        pPacket->sentTime = now;
-                    } else {
-                        // 超过最大重传次数
-                        onPacketLoss(pPacket);
-                    }
-                }
-            }
-        }
-    }
+关键消息没到，就要决定是否重发。
 
-private:
-    std::list<Packet*> sendQueue_;
-    uint16_t sequence_ = 0;
-    uint32_t resendTimeout_ = 500;  // 500ms
-    uint32_t maxResendTimes_ = 5;
-};
-```
+但这里要非常注意：
 
-### 4.2 与 TCP 的对比
+- 不是所有消息都值得重传
+- 超过时效的消息重传没有意义
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              KBEngine 可靠 UDP vs TCP                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  KBEngine 可靠 UDP 优势：                                    │
-│  ├── 无连接建立延迟                                         │
-│  ├── 更灵活的重传策略                                       │
-│  ├── 可选择性地启用可靠性                                   │
-│  └── 避免 TCP 的 HOLE 问题                                  │
-│                                                             │
-│  KBEngine 默认使用 TCP：                                     │
-│  ├── 开发更简单                                             │
-│  ├── 调试更方便                                             │
-│  ├── 兼容性更好                                             │
-│  └── 对于大多数场景足够                                     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+所以可靠 UDP 的重传通常是“有条件重传”，不是“无脑重传”。
+
+### 3.4 去重
+
+一旦有重传，就一定可能重复到达。
+
+所以接收方必须能识别：
+
+- 这个包是第一次来
+- 还是之前已经处理过
+
+否则同一条技能、同一条交易事件可能被执行多次。
+
+### 3.5 乱序处理
+
+UDP 不保证顺序。
+
+所以如果某些消息流要求有序，就要自己决定：
+
+- 是缓存等待缺失包
+- 还是跳过旧包
+- 还是直接按最新状态覆盖
+
+这一步不能统一处理，必须按消息类型决定。
 
 ---
 
-## 五、高级特性
+## 四、可靠 UDP 最关键的不是“补机制”，而是“别补过头”
 
-### 5.1 选择性确认 (SACK)
+很多自研可靠 UDP 最大的问题不是功能不够，而是补得太像 TCP。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  SACK (Selective ACK)                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  场景：发送方发送 1-5 号包，其中 2、4 丢失                  │
-│                                                             │
-│  传统 ACK：                                                 │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  接收方: ACK 1                                   │       │
-│  │  接收方: ACK 1 (等待 2)                          │       │
-│  │  接收方: ACK 3 (暗示 2 丢失)                     │       │
-│  │  发送方: 重传 2                                   │       │
-│  │  接收方: ACK 4 (暗示 4 丢失)                     │       │
-│  │  发送方: 重传 4                                   │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-│  SACK：                                                     │
-│  ┌─────────────────────────────────────────────────┐       │
-│  │  接收方: ACK 1, SACK {1}                         │       │
-│  │  接收方: ACK 3, SACK {1, 3} (暗示 2 丢失)        │       │
-│  │  发送方: 重传 2, 4 (一次性重传所有丢失包)         │       │
-│  └─────────────────────────────────────────────────┘       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+### 4.1 典型过度设计
 
-### 5.2 FEC 前向纠错
+- 所有包都强制可靠
+- 所有包都强制有序
+- 所有丢包都必须等重传
+- 所有流共享一个阻塞窗口
 
-```cpp
-// FEC + 可靠 UDP 组合
+这样做的后果通常是：
 
-class FECReliableUDP {
-public:
-    // 编码窗口
-    struct FECWindow {
-        std::vector<Packet> dataPackets;
-        Packet fecPacket;
-        uint16_t baseSeq;
-    };
+- 失去 UDP 的灵活性
+- 重现 TCP 的阻塞问题
+- 实现复杂度更高
+- 结果却不一定更好
 
-    // 发送数据
-    void send(const std::vector<Packet>& packets) {
-        FECWindow window;
-        window.dataPackets = packets;
-        window.baseSeq = nextSeq_;
+### 4.2 更合理的做法
 
-        // 发送数据包
-        for (auto& packet : packets) {
-            packet.seq = nextSeq_++;
-            udpSocket_->send(packet);
-        }
+更成熟的可靠 UDP 通常会拆成多种消息语义：
 
-        // 计算 FEC 包
-        window.fecPacket = calculateFEC(packets);
-        window.fecPacket.seq = nextSeq_++;
-        window.fecPacket.isFEC = true;
+- 可靠事件流
+- 非可靠状态流
+- 可丢旧保新的状态快照流
 
-        // 发送 FEC 包
-        udpSocket_->send(window.fecPacket);
-
-        fecWindows_.push_back(window);
-    }
-
-    // 接收数据
-    void onPacketReceived(const Packet& packet) {
-        if (packet.isFEC) {
-            // FEC 包，存储备用
-            fecPackets_[packet.seq] = packet;
-        } else {
-            // 数据包
-            dataPackets_[packet.seq] = packet;
-
-            // 检查是否有 FEC 窗口可以恢复
-            checkFECRecovery();
-        }
-    }
-
-    // 检查 FEC 恢复
-    void checkFECRecovery() {
-        for (auto& window : fecWindows_) {
-            bool allReceived = true;
-            Packet* missingPacket = nullptr;
-
-            for (auto& packet : window.dataPackets) {
-                auto it = dataPackets_.find(packet.seq);
-                if (it == dataPackets_.end()) {
-                    allReceived = false;
-                    missingPacket = &packet;
-                    break;
-                }
-            }
-
-            // 如果只有一个包丢失，尝试恢复
-            if (!allReceived && missingPacket) {
-                auto fecIt = fecPackets_.find(window.fecPacket.seq);
-                if (fecIt != fecPackets_.end()) {
-                    recoverPacket(missingPacket, window, fecIt->second);
-                }
-            }
-        }
-    }
-
-private:
-    std::vector<FECWindow> fecWindows_;
-    std::unordered_map<uint16_t, Packet> dataPackets_;
-    std::unordered_map<uint16_t, Packet> fecPackets_;
-};
-```
+这样才能真正发挥它的价值。
 
 ---
 
-## 六、总结
+## 五、一个更实用的实现思路
 
-### 实现对比
+### 5.1 把消息先分成三类
 
-| 特性 | TCP | KCP | 自研可靠 UDP |
-|------|-----|-----|-------------|
-| **实现复杂度** | 低 | 中 | 高 |
-| **延迟** | 中 | 低 | 可定制 |
-| **可靠性** | 高 | 高 | 可控 |
-| **灵活性** | 低 | 中 | 高 |
-| **维护成本** | 低 | 中 | 高 |
+#### 第一类：可靠事件
 
-### 最佳实践
+例如：
 
-```
-1. 大多数情况使用 TCP
-   - KBEngine 默认选择
-   - 开发简单、调试方便
+- 技能释放
+- 伤害事件
+- 关键状态切换
+- 战斗中的重要控制事件
 
-2. 延迟敏感场景使用 KCP
-   - 实时战斗
-   - 状态同步
+特点：
 
-3. 特殊需求自研可靠 UDP
-   - 有专门的协议团队
-   - 需要深度定制
-   - 长期投入维护
-```
+- 不能随便丢
+- 重传有意义
+- 通常需要幂等处理
+
+#### 第二类：非可靠高频状态
+
+例如：
+
+- 位置
+- 朝向
+- 高频移动状态
+
+特点：
+
+- 旧消息不重要
+- 不值得重传
+- 只要最新状态尽快到达
+
+#### 第三类：半可靠状态
+
+例如：
+
+- 中频状态快照
+- 需要大体一致，但旧包价值会快速下降的状态
+
+这类消息可以：
+
+- 做有限次重传
+- 超时后直接放弃
+
+### 5.2 按消息类型选不同处理策略
+
+真正成熟的实现通常不是“一种可靠 UDP 规则处理所有消息”，而是：
+
+- 可靠事件通道：ACK + 重传 + 去重
+- 高频状态通道：无重传，按最新覆盖
+- 半可靠通道：有限重传，超时丢弃
+
+---
+
+## 六、可靠 UDP 与 TCP 最大的语义差异
+
+### 6.1 TCP 的默认语义
+
+TCP 默认帮你做的是：
+
+- 整条字节流可靠
+- 整条字节流有序
+- 后面的内容通常要等前面的内容先补齐
+
+### 6.2 可靠 UDP 更适合的语义
+
+可靠 UDP 更常见的目标是：
+
+- 某些消息可靠
+- 某些消息不可靠
+- 某些消息乱序可接受
+- 某些消息过期就作废
+
+这就是两者最大的差别。
+
+所以可靠 UDP 的优势不是“比 TCP 更可靠”，而是：
+
+它允许你把不同消息的可靠性语义拆开。
+
+---
+
+## 七、实现时最容易忽略的几个点
+
+### 7.1 幂等
+
+只要有重传，就要考虑重复执行。
+
+所以关键事件必须设计成：
+
+- 要么天然幂等
+- 要么带事件 ID 做去重
+
+否则“可靠”只会把错误放大。
+
+### 7.2 超时消息是否还值得重传
+
+有些消息 50ms 内有意义，200ms 后就没意义了。
+
+例如：
+
+- 过时的位置状态
+- 过时的动作表现
+
+这类消息即使丢了，也不应该补。
+
+### 7.3 发送窗口和拥塞
+
+如果你只补了 ACK 和重传，却没有任何限速和窗口控制，在差网络下只会：
+
+- 越丢越重发
+- 越重发越拥塞
+- 整体效果更差
+
+所以哪怕不做完整 TCP 拥塞控制，也至少要有：
+
+- 基本窗口
+- 基本节流
+- 基本超时退避
+
+### 7.4 观测能力
+
+自研可靠 UDP 如果没有可观测性，几乎不可维护。
+
+至少要能看到：
+
+- RTT
+- 丢包率
+- 重传率
+- 重复包率
+- 乱序率
+- 窗口占用
+
+不然线上出问题时只会看到“玩家说卡”，但不知道卡在哪层。
+
+---
+
+## 八、什么时候值得做可靠 UDP
+
+### 8.1 值得做的情况
+
+- 实时交互明显受 TCP 语义限制
+- 已明确需要区分可靠事件和非可靠状态
+- 团队有能力长期维护传输层逻辑
+- 项目确实需要弱网下更好的战斗体验
+
+### 8.2 不值得急着做的情况
+
+- 还没有先把消息分层
+- 当前瓶颈其实在业务线程、AOI、广播或序列化
+- 团队没有网络协议维护经验
+- 项目主体业务其实以可靠状态管理为主
+
+这种情况下，盲目上可靠 UDP 很容易把问题从一个地方搬到另一个地方。
+
+---
+
+## 九、和 KCP 的关系
+
+KCP 可以看成是一种很成熟的“可靠 UDP 思路实现”。
+
+它已经帮你补了很多基础能力：
+
+- 序列号
+- ACK
+- 重传
+- 窗口
+- RTT 估算
+
+所以很多项目真正的选择不是：
+
+- “要不要可靠 UDP”
+
+而是：
+
+- “自己造一套，还是直接用 KCP 这类成熟方案”
+
+多数情况下，如果只是需要一套可用的可靠 UDP 机制，优先复用成熟实现会更稳。
+
+---
+
+## 十、总结
+
+可靠 UDP 的本质，不是“把 UDP 改造成 TCP”，而是：
+
+- 保留 UDP 的灵活性
+- 只为需要的消息补可靠性
+- 避免让所有消息共享同一种重传和阻塞语义
+
+更稳妥的工程实践通常是：
+
+- 先把消息分层
+- 再决定哪些消息需要可靠 UDP
+- 最后再决定是自研还是直接使用成熟实现
+
+如果消息分层都还没做清楚，就直接讨论可靠 UDP 的实现细节，通常会把系统做得过重。
 
 ---
 
 ## 参考资料
 
-- [KBEngine GitHub - reliable_udp.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/network/reliable_udp.h)
-- [KCP 协议](https://github.com/skywind3000/kcp)
-- [TCP 拥塞控制](https://en.wikipedia.org/wiki/TCP_congestion_control)
-- [RFC 2018 - TCP Selective Acknowledgment Options](https://tools.ietf.org/html/rfc2018)
+- [KCP](https://github.com/skywind3000/kcp)
+- [KBEngine GitHub - reliable_udp](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/network/reliable_udp.h)
+- [Selective Acknowledgment](https://datatracker.ietf.org/doc/html/rfc2018)

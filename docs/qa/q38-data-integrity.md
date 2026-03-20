@@ -1,156 +1,150 @@
 # Q38: 如何防止数据被篡改？
 
-## 问题分析
+## 核心结论
 
-本题考察对数据安全的理解：
-- 数据加密存储
-- 数字签名验证
-- 防篡改机制
-- 审计日志
+防篡改不是只做加密，也不是只防外部攻击。真正需要同时防的是：
 
----
+- 客户端伪造或修改请求
+- 服务内部错误写入
+- 运维或脚本误操作
+- 存储层被直接改数据
 
-## 一、防篡改策略
+所以更有效的思路通常是多层防线：
 
-### 1.1 多层防护
+- 权威服务校验
+- 最小权限
+- 幂等与审计
+- 关键数据校验和对账
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    数据防篡改策略                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  L1: 数据库层                                               │
-│  ├── 字段加密存储                                         │
-│  ├── 触发器约束                                           │
-│  └── 事务日志                                             │
-│                                                             │
-│  L2: 应用层                                                 │
-│  ├── 参数校验                                             │
-│  ├── 业务规则验证                                         │
-│  └── 操作日志                                             │
-│                                                             │
-│  L3: 传输层                                                 │
-│  ├── TLS 加密通信                                         │
-│  ├── 消息签名                                             │
-│  └── 防重放机制                                           │
-│                                                             │
-│  L4: 审计层                                                 │
-│  ├── 操作日志记录                                         │
-│  ├── 关键操作审计                                         │
-│  └── 异常检测                                             │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+加密和签名只是其中一层。
 
----
+## 一、先区分“防泄露”和“防篡改”
 
-## 二、加密与签名
+这两个问题经常被混在一起。
 
-### 2.1 数据加密
+- 加密更偏防泄露
+- 校验、签名、审计、权限控制更偏防篡改
 
-```cpp
-// 敏感数据加密
+如果只把敏感字段加密存库，并不能阻止一条非法业务操作被合法写入。
 
-class DataEncryption {
-public:
-    // 加密敏感字段
-    std::string encrypt(const std::string& plain) {
-        // AES 加密
-        AES_KEY aes_key = getEncryptionKey();
+## 二、最重要的防线通常在应用层
 
-        std::string encrypted = aes_encrypt(plain, aes_key);
+在线游戏里，大多数高价值数据都不应该允许客户端直接给结果，只能给请求。
 
-        // Base64 编码
-        return base64_encode(encrypted);
-    }
+例如：
 
-    // 解密
-    std::string decrypt(const std::string& cipher) {
-        std::string decoded = base64_decode(cipher);
+- 客户端只能请求“使用道具”
+- 不能直接上传“我现在有 9999 金币”
 
-        AES_KEY aes_key = getEncryptionKey();
+这就是最基本的权威服务原则。
 
-        return aes_decrypt(decoded, aes_key);
-    }
+## 三、关键数据要有可追溯修改链路
 
-    // 计算哈希
-    std::string hash(const std::string& data) {
-        return sha256(data + getSalt());
-    }
+高价值数据至少应做到：
 
-private:
-    std::string getSalt() {
-        return "your-salt-here";
-    }
-};
-```
+- 谁改的
+- 什么时候改的
+- 因为什么业务改的
+- 改前改后是什么
 
-### 2.2 数字签名
+否则一旦出问题，就很难区分是：
 
-```cpp
-// 数字签名
+- 外挂伪造
+- 代码 bug
+- 运维误操作
+- 补偿脚本重复执行
 
-class DigitalSignature {
-public:
-    // 签名
-    std::string sign(const std::string& data) {
-        std::string hash = sha256(data);
-        return rsaSign(hash, privateKey_);
-    }
+## 四、签名和校验适合用在哪
 
-    // 验证
-    bool verify(const std::string& data, const std::string& signature) {
-        std::string hash = sha256(data);
-        return rsaVerify(hash, signature, publicKey_);
-    }
+### 1. 传输层或接口层签名
 
-private:
-    std::string privateKey_;
-    std::string publicKey_;
-};
-```
+适合：
 
----
+- 支付回调
+- GM 接口
+- 内部管理接口
+- 高价值外部请求
 
-## 三、审计日志
+它解决的是“请求来源是否可信、内容是否被改过”。
 
-### 3.1 操作审计
+### 2. 数据校验和
 
-```sql
--- 审计日志表
+适合：
 
-CREATE TABLE `audit_log` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `player_id` BIGINT UNSIGNED NOT NULL COMMENT '玩家ID',
-    `action` VARCHAR(64) NOT NULL COMMENT '操作类型',
-    `target_type` VARCHAR(32) NOT NULL COMMENT '目标类型',
-    `target_id` BIGINT UNSIGNED NOT NULL COMMENT '目标ID',
-    `old_value` JSON DEFAULT NULL COMMENT '变更前值',
-    `new_value` JSON DEFAULT NULL COMMENT '变更后值',
-    `ip` VARCHAR(64) DEFAULT NULL COMMENT '操作IP',
-    `action_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_player_id` (`player_id`),
-    KEY `idx_action_time` (`action_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='审计日志表';
-```
+- 配置文件
+- 离线包体
+- 某些存档块
 
----
+它更适合发现“内容被动过”，不直接等于“业务不会被非法改写”。
 
-## 四、最佳实践
+## 五、权限控制比加密更常见也更有效
 
-### 防篡改措施
+很多数据篡改事故并不是黑客直接进库，而是：
 
-| 措施 | 说明 | 复杂度 |
-|------|------|--------|
-| **字段加密** | 敏感字段加密存储 | 中 |
-| **数字签名** | 关键操作签名验证 | 高 |
-| **参数校验** | 前端严格校验 | 低 |
-| **操作审计** | 完整操作日志 | 中 |
-| **异常检测** | 行为分析预警 | 高 |
+- 后台权限过大
+- 脚本账号可写太多表
+- 服务账号共享
 
----
+所以防篡改很重要的一层是：
+
+- 最小权限账号
+- 分环境隔离
+- 审计后台操作
+- 高风险操作二次确认
+
+## 六、资产类数据要做对账和审计
+
+对货币、道具、交易、邮件附件这类数据，只靠线上校验不够。
+
+更稳妥的做法通常是：
+
+- 主状态
+- 变更流水
+- 周期对账
+- 异常报警
+
+这样即使发生错误，也能追查和补救。
+
+## 七、客户端和内部服务都要防
+
+不要只盯外挂。
+
+很多真实事故来自：
+
+- 内部接口未鉴权
+- 补偿任务重复执行
+- 灰度代码写错数据
+- 运营脚本误改主档
+
+所以防篡改必须把内部系统一起纳入威胁模型。
+
+## 八、工程上更稳妥的组合
+
+常见的多层防线包括：
+
+- 关键逻辑由服务端权威计算
+- 高价值接口做签名、鉴权和幂等
+- 数据库账号最小权限
+- 关键资产写入保留流水
+- 周期对账和异常检测
+- 高风险后台操作留审计日志
+
+这比单纯强调“字段加密”更有效。
+
+## 九、常见误区
+
+### 1. 数据库字段加密了就防篡改了
+
+不对。加密更多是防泄露，不阻止合法路径上的错误写入。
+
+### 2. 只防客户端就够了
+
+很多事故根源在服务内部或后台链路。
+
+### 3. 防篡改就是做哈希
+
+哈希只能帮助校验部分内容，不能替代权限、审计和权威计算。
 
 ## 参考资料
 
-- [OWASP 数据完整性](https://owasp.org/www-community/attacks/Data_Tampering/)
+- 各类在线游戏资产审计、后台最小权限与支付回调安全实践资料

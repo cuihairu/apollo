@@ -1,203 +1,116 @@
 # Q85: 如何防止封包伪造？
 
-## 问题分析
+## 核心结论
 
-本题考察对网络包伪造防护的理解：
-- 封包伪造原理
-- 消息认证
-- 序列号机制
+防止封包伪造的关键，不是把协议“藏起来”，而是让服务端对每条请求都做身份、时效、顺序和业务合法性校验。
+
+真正有效的防护通常包括：
+
+- 会话鉴权
+- 消息完整性保护
+- 重放和乱序控制
+- 服务端业务验证
+
+如果最后一层没有，前面即使做了签名和加密，也仍然可能被伪造出“合法但不该成立”的请求。
+
+## 一、封包伪造真正指什么
+
+它不是单纯抓包，而是攻击者自己构造或篡改消息，让服务端误以为请求合法。
+
+常见目标包括：
+
+- 非法调用未开放接口
+- 修改消息字段
+- 重放旧请求
+- 绕过客户端 UI 限制直接发业务包
+
+## 二、协议私有化本身不是安全边界
+
+自定义协议、二进制协议、混淆包头都能提高门槛，但不能作为核心防线。
+
+因为只要客户端能正常发包，协议迟早可能被逆向出来。
+
+真正的安全边界仍然在服务端校验。
+
+## 三、会话身份必须先成立
+
+服务端至少要知道：
+
+- 这条消息属于哪个会话
+- 这个会话是否仍然有效
+- 是否与当前连接绑定
+
+否则即使消息格式正确，也无法确认发送者身份。
+
+## 四、完整性和时效控制都要有
+
+常见做法包括：
+
+- 消息签名或 MAC
+- 时间戳
+- 序列号
+- nonce
+
+它们分别解决：
+
+- 内容是否被改
+- 消息是否过期
+- 是否重复发送
+
+但这些都只是“传输层合法性”，还不等于“业务上合法”。
+
+## 五、服务端业务验证才是真正决定结果的一层
+
+例如客户端发来：
+
+- 使用技能
+- 购买物品
+- 领取奖励
+
+服务端仍然必须校验：
+
+- 技能是否在冷却中
+- 购买条件是否满足
+- 奖励是否已领取过
+
+也就是说，客户端只能提交请求意图，不能提交最终结论。
+
+## 六、重放和伪造经常一起出现
+
+一条历史合法请求被重新发送，本质上也是一种伪造利用。
+
+所以封包伪造防护通常要和：
+
 - 重放攻击防护
+- 幂等设计
 
----
+一起看，而不是拆开孤立处理。
 
-## 一、防护策略
+## 七、工程上更稳妥的组合
 
-### 1.1 消息签名
+常见做法是：
 
-```cpp
-// 消息签名认证
+- 会话级鉴权
+- 消息级完整性保护
+- 序列号或 nonce 防重放
+- 服务端按业务规则再次校验
 
-class MessageAuthenticator {
-public:
-    // 添加签名到消息
-    void signMessage(Message& msg, const std::string& key) {
-        // 计算消息内容的 HMAC
-        std::string signature = calculateHMAC(msg.data, msg.size, key);
-        msg.signature = signature;
-    }
+这样即使协议被逆向，攻击者也很难直接伪造出有效高价值请求。
 
-    // 验证签名
-    bool verifyMessage(const Message& msg, const std::string& key) {
-        std::string expected = calculateHMAC(msg.data, msg.size, key);
-        return hmacCompare(msg.signature, expected);
-    }
+## 八、常见误区
 
-    // 处理客户端消息
-    bool handleClientMessage(Player* player, const Message& msg) {
-        // 1. 验证签名
-        std::string key = getPlayerKey(player->getId());
-        if (!verifyMessage(msg, key)) {
-            logSuspicious(player->getId(), "Invalid message signature");
-            return false;
-        }
+### 1. 自定义二进制协议就能防伪造
 
-        // 2. 检查时间戳
-        if (!validateTimestamp(msg.timestamp)) {
-            return false;
-        }
+不能。只能提高逆向门槛。
 
-        // 3. 处理消息
-        return processMessage(player, msg);
-    }
+### 2. 用 TLS 之后就不用做消息校验
 
-private:
-    std::string calculateHMAC(const void* data, size_t size,
-                               const std::string& key) {
-        unsigned char* digest;
-        unsigned int digest_len;
+TLS 保护通道，不替代业务合法性校验和幂等。
 
-        digest = HMAC(
-            EVP_sha256(),
-            (unsigned char*)key.data(), key.size(),
-            (unsigned char*)data, size,
-            nullptr, &digest_len
-        );
+### 3. 只要签名正确，请求就该执行
 
-        return std::string((char*)digest, digest_len);
-    }
+不对。签名只说明“这条消息没被篡改”，不说明“这条业务现在应该成立”。
 
-    bool hmacCompare(const std::string& a, const std::string& b) {
-        // 恒定时间比较，防止时序攻击
-        if (a.size() != b.size()) return false;
+## 参考资料
 
-        volatile int result = 0;
-        for (size_t i = 0; i < a.size(); ++i) {
-            result |= a[i] ^ b[i];
-        }
-
-        return result == 0;
-    }
-};
-```
-
-### 1.2 序列号机制
-
-```cpp
-// 序列号防重放
-
-class SequenceManager {
-public:
-    // 检查序列号
-    bool checkSequence(uint64_t playerId, uint64_t sequence) {
-        PlayerSeqInfo& info = playerSeqInfo_[playerId];
-
-        // 拒绝旧序列号
-        if (sequence <= info.lastSequence) {
-            if (sequence > info.lastSequence - 100) {
-                // 在合理范围内，可能是乱序
-                info.pendingSequences.insert(sequence);
-            } else {
-                // 太旧的序列号，可能是重放攻击
-                logSuspicious(playerId, "Old sequence number");
-                return false;
-            }
-        }
-
-        // 检查是否在待处理列表中
-        if (info.pendingSequences.count(sequence)) {
-            // 已处理过
-            return false;
-        }
-
-        // 更新序列号
-        if (sequence == info.lastSequence + 1) {
-            info.lastSequence = sequence;
-
-            // 处理待处理的序列号
-            while (info.pendingSequences.count(info.lastSequence + 1)) {
-                info.lastSequence++;
-                info.pendingSequences.erase(info.lastSequence);
-            }
-        }
-
-        return true;
-    }
-
-private:
-    struct PlayerSeqInfo {
-        uint64_t lastSequence = 0;
-        std::set<uint64_t> pendingSequences;  // 乱序消息
-    };
-
-    std::unordered_map<uint64_t, PlayerSeqInfo> playerSeqInfo_;
-};
-```
-
----
-
-## 二、加密传输
-
-### 2.1 消息加密
-
-```cpp
-// 加密消息传输
-
-class EncryptedProtocol {
-public:
-    // 加密消息
-    std::string encryptMessage(const Message& msg) {
-        // 序列化
-        std::string data = serialize(msg);
-
-        // AES 加密
-        std::string encrypted = aesEncrypt(data, sessionKey_);
-
-        // 添加 IV
-        std::string iv = generateIV();
-        std::string result = iv + encrypted;
-
-        return result;
-    }
-
-    // 解密消息
-    bool decryptMessage(const std::string& data, Message& msg) {
-        if (data.size() < AES_BLOCK_SIZE) {
-            return false;
-        }
-
-        // 提取 IV
-        std::string iv = data.substr(0, AES_BLOCK_SIZE);
-        std::string encrypted = data.substr(AES_BLOCK_SIZE);
-
-        // AES 解密
-        std::string decrypted = aesDecrypt(encrypted, iv, sessionKey_);
-
-        // 反序列化
-        return deserialize(decrypted, msg);
-    }
-
-private:
-    std::string sessionKey_;  // 会话密钥
-};
-```
-
----
-
-## 三、最佳实践
-
-### 3.1 防护层次
-
-```
-封包伪造防护 = 消息签名 + 序列号 + 加密 + 限流
-- 每个消息带签名
-- 序列号防重放
-- 关键数据加密
-- 速率限制
-```
-
----
-
-## 四、参考资料
-
-- [Network Security Best Practices](https://owasp.org/)
-- [HMAC Wikipedia](https://en.wikipedia.org/wiki/HMAC)
+- 会话鉴权、消息签名和业务幂等实践资料
