@@ -52,7 +52,6 @@ jobs:
         run: pnpm run docs:build
         env:
           NODE_ENV: production
-          VITE_USE_ROLLUP: 'true'
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
