@@ -199,6 +199,11 @@ export default defineUserConfig({
 
   // 构建配置
   bundler: viteBundler({
-    viteOptions: {},
+    viteOptions: {
+      build: {
+        // 使用 Rollup 而不是 Rolldown (Vite 8+)
+        rollupOptions: {},
+      },
+    },
   }),
 })

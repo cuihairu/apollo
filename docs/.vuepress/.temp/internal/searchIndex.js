@@ -9671,6 +9671,4595 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "Q10: 如何实现跨服功能（如跨服战场、跨服聊天）？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、跨服场景分析",
+        "slug": "一、跨服场景分析",
+        "link": "#一、跨服场景分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常见跨服功能",
+            "slug": "_1-1-常见跨服功能",
+            "link": "#_1-1-常见跨服功能",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 跨服需求分析",
+            "slug": "_1-2-跨服需求分析",
+            "link": "#_1-2-跨服需求分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、跨服架构设计",
+        "slug": "二、跨服架构设计",
+        "link": "#二、跨服架构设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 整体架构图",
+            "slug": "_2-1-整体架构图",
+            "link": "#_2-1-整体架构图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 通信方式",
+            "slug": "_2-2-通信方式",
+            "link": "#_2-2-通信方式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、具体功能实现",
+        "slug": "三、具体功能实现",
+        "link": "#三、具体功能实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 跨服聊天",
+            "slug": "_3-1-跨服聊天",
+            "link": "#_3-1-跨服聊天",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 跨服战场",
+            "slug": "_3-2-跨服战场",
+            "link": "#_3-2-跨服战场",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 跨服好友",
+            "slug": "_3-3-跨服好友",
+            "link": "#_3-3-跨服好友",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.4 跨服排行",
+            "slug": "_3-4-跨服排行",
+            "link": "#_3-4-跨服排行",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、数据一致性",
+        "slug": "四、数据一致性",
+        "link": "#四、数据一致性",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 分布式事务",
+            "slug": "_4-1-分布式事务",
+            "link": "#_4-1-分布式事务",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 补偿机制",
+            "slug": "_4-2-补偿机制",
+            "link": "#_4-2-补偿机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能优化",
+        "slug": "五、性能优化",
+        "link": "#五、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 批量处理",
+            "slug": "_5-1-批量处理",
+            "link": "#_5-1-批量处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 本地缓存",
+            "slug": "_5-2-本地缓存",
+            "link": "#_5-2-本地缓存",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "实现方案对比",
+            "slug": "实现方案对比",
+            "link": "#实现方案对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q10-cross-server.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q100: 如何进行服务器容量规划？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、容量规划概述",
+        "slug": "一、容量规划概述",
+        "link": "#一、容量规划概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 规划维度",
+            "slug": "_1-1-规划维度",
+            "link": "#_1-1-规划维度",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、性能基准测试",
+        "slug": "二、性能基准测试",
+        "link": "#二、性能基准测试",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine 性能指标",
+            "slug": "_2-1-kbengine-性能指标",
+            "link": "#_2-1-kbengine-性能指标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、容量计算模型",
+        "slug": "三、容量计算模型",
+        "link": "#三、容量计算模型",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 资源计算",
+            "slug": "_3-1-资源计算",
+            "link": "#_3-1-资源计算",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、扩展策略",
+        "slug": "四、扩展策略",
+        "link": "#四、扩展策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 水平扩展",
+            "slug": "_4-1-水平扩展",
+            "link": "#_4-1-水平扩展",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、容量监控",
+        "slug": "五、容量监控",
+        "link": "#五、容量监控",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 实时监控",
+            "slug": "_5-1-实时监控",
+            "link": "#_5-1-实时监控",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、容量规划表",
+        "slug": "六、容量规划表",
+        "link": "#六、容量规划表",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 不同规模配置",
+            "slug": "_6-1-不同规模配置",
+            "link": "#_6-1-不同规模配置",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 容量规划建议",
+            "slug": "_7-1-容量规划建议",
+            "link": "#_7-1-容量规划建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "容量规划核心",
+            "slug": "容量规划核心",
+            "link": "#容量规划核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q100-capacity-planning.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q101: 为什么要嵌入脚本语言？Lua vs Python 如何选择？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、脚本语言优势",
+        "slug": "一、脚本语言优势",
+        "link": "#一、脚本语言优势",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么使用脚本",
+            "slug": "_1-1-为什么使用脚本",
+            "link": "#_1-1-为什么使用脚本",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Lua vs Python 对比",
+        "slug": "二、lua-vs-python-对比",
+        "link": "#二、lua-vs-python-对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 特性对比",
+            "slug": "_2-1-特性对比",
+            "link": "#_2-1-特性对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 性能对比",
+            "slug": "_2-2-性能对比",
+            "link": "#_2-2-性能对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Lua 在游戏中",
+        "slug": "三、lua-在游戏中",
+        "link": "#三、lua-在游戏中",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Lua 特性",
+            "slug": "_3-1-lua-特性",
+            "link": "#_3-1-lua-特性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 Lua C 绑定",
+            "slug": "_3-2-lua-c-绑定",
+            "link": "#_3-2-lua-c-绑定",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Python 在游戏中",
+        "slug": "四、python-在游戏中",
+        "link": "#四、python-在游戏中",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine Python 集成",
+            "slug": "_4-1-kbengine-python-集成",
+            "link": "#_4-1-kbengine-python-集成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Python C 扩展",
+            "slug": "_4-2-python-c-扩展",
+            "link": "#_4-2-python-c-扩展",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、选择建议",
+        "slug": "五、选择建议",
+        "link": "#五、选择建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 选择 Lua 的情况",
+            "slug": "_5-1-选择-lua-的情况",
+            "link": "#_5-1-选择-lua-的情况",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 选择 Python 的情况",
+            "slug": "_5-2-选择-python-的情况",
+            "link": "#_5-2-选择-python-的情况",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、KBEngine 脚本架构",
+        "slug": "六、kbengine-脚本架构",
+        "link": "#六、kbengine-脚本架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 实体定义",
+            "slug": "_6-1-实体定义",
+            "link": "#_6-1-实体定义",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 脚本语言选择建议",
+            "slug": "_7-1-脚本语言选择建议",
+            "link": "#_7-1-脚本语言选择建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "脚本语言选择核心",
+            "slug": "脚本语言选择核心",
+            "link": "#脚本语言选择核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q101-script-language.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q102: C++ 如何调用 Lua？Lua 如何调用 C++？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、Lua C API 基础",
+        "slug": "一、lua-c-api-基础",
+        "link": "#一、lua-c-api-基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 栈交互模型",
+            "slug": "_1-1-栈交互模型",
+            "link": "#_1-1-栈交互模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、C++ 调用 Lua",
+        "slug": "二、c-调用-lua",
+        "link": "#二、c-调用-lua",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 基础调用",
+            "slug": "_2-1-基础调用",
+            "link": "#_2-1-基础调用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Lua 调用 C++",
+        "slug": "三、lua-调用-c",
+        "link": "#三、lua-调用-c",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 C 函数注册",
+            "slug": "_3-1-c-函数注册",
+            "link": "#_3-1-c-函数注册",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、高级绑定",
+        "slug": "四、高级绑定",
+        "link": "#四、高级绑定",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 LuaBridge 示例",
+            "slug": "_4-1-luabridge-示例",
+            "link": "#_4-1-luabridge-示例",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Sol 示例",
+            "slug": "_4-2-sol-示例",
+            "link": "#_4-2-sol-示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、Userdata 封装",
+        "slug": "五、userdata-封装",
+        "link": "#五、userdata-封装",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Full userdata",
+            "slug": "_5-1-full-userdata",
+            "link": "#_5-1-full-userdata",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 绑定建议",
+            "slug": "_6-1-绑定建议",
+            "link": "#_6-1-绑定建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "C++/Lua 互调核心",
+            "slug": "c-lua-互调核心",
+            "link": "#c-lua-互调核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q102-cpp-lua-binding.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q103: 如何实现脚本热更新？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、热更新原理",
+        "slug": "一、热更新原理",
+        "link": "#一、热更新原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 热更类型",
+            "slug": "_1-1-热更类型",
+            "link": "#_1-1-热更类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Python 热更新",
+        "slug": "二、python-热更新",
+        "link": "#二、python-热更新",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 importlib.reload",
+            "slug": "_2-1-importlib-reload",
+            "link": "#_2-1-importlib-reload",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 带状态保持的热更新",
+            "slug": "_2-2-带状态保持的热更新",
+            "link": "#_2-2-带状态保持的热更新",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Lua 热更新",
+        "slug": "三、lua-热更新",
+        "link": "#三、lua-热更新",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Lua 模块重载",
+            "slug": "_3-1-lua-模块重载",
+            "link": "#_3-1-lua-模块重载",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 脚本热更新",
+        "slug": "四、kbengine-脚本热更新",
+        "link": "#四、kbengine-脚本热更新",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 热更机制",
+            "slug": "_4-1-kbengine-热更机制",
+            "link": "#_4-1-kbengine-热更机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、热更新策略",
+        "slug": "五、热更新策略",
+        "link": "#五、热更新策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 渐进式热更新",
+            "slug": "_5-1-渐进式热更新",
+            "link": "#_5-1-渐进式热更新",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 热更新建议",
+            "slug": "_6-1-热更新建议",
+            "link": "#_6-1-热更新建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "脚本热更新核心",
+            "slug": "脚本热更新核心",
+            "link": "#脚本热更新核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q103-script-hot-reload.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q104: 如何限制脚本的执行时间？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、执行超时问题",
+        "slug": "一、执行超时问题",
+        "link": "#一、执行超时问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么需要限制",
+            "slug": "_1-1-为什么需要限制",
+            "link": "#_1-1-为什么需要限制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Python 超时控制",
+        "slug": "二、python-超时控制",
+        "link": "#二、python-超时控制",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 信号超时",
+            "slug": "_2-1-信号超时",
+            "link": "#_2-1-信号超时",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 线程超时",
+            "slug": "_2-2-线程超时",
+            "link": "#_2-2-线程超时",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 多进程隔离",
+            "slug": "_2-3-多进程隔离",
+            "link": "#_2-3-多进程隔离",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Lua 超时控制",
+        "slug": "三、lua-超时控制",
+        "link": "#三、lua-超时控制",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 钩子超时",
+            "slug": "_3-1-钩子超时",
+            "link": "#_3-1-钩子超时",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 Lua 线程隔离",
+            "slug": "_3-2-lua-线程隔离",
+            "link": "#_3-2-lua-线程隔离",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、沙箱隔离",
+        "slug": "四、沙箱隔离",
+        "link": "#四、沙箱隔离",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Python 沙箱",
+            "slug": "_4-1-python-沙箱",
+            "link": "#_4-1-python-沙箱",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 执行控制",
+        "slug": "五、kbengine-执行控制",
+        "link": "#五、kbengine-执行控制",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 机制",
+            "slug": "_5-1-kbengine-机制",
+            "link": "#_5-1-kbengine-机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 超时控制建议",
+            "slug": "_6-1-超时控制建议",
+            "link": "#_6-1-超时控制建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "脚本超时控制核心",
+            "slug": "脚本超时控制核心",
+            "link": "#脚本超时控制核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q104-script-timeout.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q105: 如何调试脚本？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、调试方法概述",
+        "slug": "一、调试方法概述",
+        "link": "#一、调试方法概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 调试技术",
+            "slug": "_1-1-调试技术",
+            "link": "#_1-1-调试技术",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Python 调试",
+        "slug": "二、python-调试",
+        "link": "#二、python-调试",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 pdb 基础",
+            "slug": "_2-1-pdb-基础",
+            "link": "#_2-1-pdb-基础",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 pdb 高级用法",
+            "slug": "_2-2-pdb-高级用法",
+            "link": "#_2-2-pdb-高级用法",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 远程调试",
+            "slug": "_2-3-远程调试",
+            "link": "#_2-3-远程调试",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Lua 调试",
+        "slug": "三、lua-调试",
+        "link": "#三、lua-调试",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Lua 调试库",
+            "slug": "_3-1-lua-调试库",
+            "link": "#_3-1-lua-调试库",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 调试",
+        "slug": "四、kbengine-调试",
+        "link": "#四、kbengine-调试",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 内置调试",
+            "slug": "_4-1-kbengine-内置调试",
+            "link": "#_4-1-kbengine-内置调试",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能分析",
+        "slug": "五、性能分析",
+        "link": "#五、性能分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 cProfile",
+            "slug": "_5-1-cprofile",
+            "link": "#_5-1-cprofile",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、调试工具推荐",
+        "slug": "六、调试工具推荐",
+        "link": "#六、调试工具推荐",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 工具对比",
+            "slug": "_6-1-工具对比",
+            "link": "#_6-1-工具对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 调试建议",
+            "slug": "_7-1-调试建议",
+            "link": "#_7-1-调试建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "脚本调试核心",
+            "slug": "脚本调试核心",
+            "link": "#脚本调试核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q105-script-debug.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q106: 你遇到过最难的技术问题是什么？如何解决的？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、内存泄漏问题",
+        "slug": "一、内存泄漏问题",
+        "link": "#一、内存泄漏问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 问题描述",
+            "slug": "_1-1-问题描述",
+            "link": "#_1-1-问题描述",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 排查过程",
+            "slug": "_1-2-排查过程",
+            "link": "#_1-2-排查过程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、死锁问题",
+        "slug": "二、死锁问题",
+        "link": "#二、死锁问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 问题描述",
+            "slug": "_2-1-问题描述",
+            "link": "#_2-1-问题描述",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 解决方案",
+            "slug": "_2-2-解决方案",
+            "link": "#_2-2-解决方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、网络同步问题",
+        "slug": "三、网络同步问题",
+        "link": "#三、网络同步问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 问题描述",
+            "slug": "_3-1-问题描述",
+            "link": "#_3-1-问题描述",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 解决方案",
+            "slug": "_3-2-解决方案",
+            "link": "#_3-2-解决方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、总结",
+        "slug": "四、总结",
+        "link": "#四、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 问题解决方法论",
+            "slug": "_4-1-问题解决方法论",
+            "link": "#_4-1-问题解决方法论",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q106-toughest-problem.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q107: 线上出过什么严重事故？如何处理的？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、事故案例库",
+        "slug": "一、事故案例库",
+        "link": "#一、事故案例库",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常见事故类型",
+            "slug": "_1-1-常见事故类型",
+            "link": "#_1-1-常见事故类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、事故处理流程",
+        "slug": "二、事故处理流程",
+        "link": "#二、事故处理流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 应急响应",
+            "slug": "_2-1-应急响应",
+            "link": "#_2-1-应急响应",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 事故分级",
+            "slug": "_2-2-事故分级",
+            "link": "#_2-2-事故分级",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、案例研究：数据库误删",
+        "slug": "三、案例研究-数据库误删",
+        "link": "#三、案例研究-数据库误删",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 事故描述",
+            "slug": "_3-1-事故描述",
+            "link": "#_3-1-事故描述",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 应急处理",
+            "slug": "_3-2-应急处理",
+            "link": "#_3-2-应急处理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、案例研究：刷物品漏洞",
+        "slug": "四、案例研究-刷物品漏洞",
+        "link": "#四、案例研究-刷物品漏洞",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 事故描述",
+            "slug": "_4-1-事故描述",
+            "link": "#_4-1-事故描述",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 漏洞修复",
+            "slug": "_4-2-漏洞修复",
+            "link": "#_4-2-漏洞修复",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 数据回滚",
+            "slug": "_4-3-数据回滚",
+            "link": "#_4-3-数据回滚",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、事后分析",
+        "slug": "五、事后分析",
+        "link": "#五、事后分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 根因分析",
+            "slug": "_5-1-根因分析",
+            "link": "#_5-1-根因分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 改进措施",
+            "slug": "_5-2-改进措施",
+            "link": "#_5-2-改进措施",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 事故处理建议",
+            "slug": "_6-1-事故处理建议",
+            "link": "#_6-1-事故处理建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "生产事故处理核心",
+            "slug": "生产事故处理核心",
+            "link": "#生产事故处理核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q107-production-incident.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q108: 从 0 到 1 搭建一个 MMO 服务器，你的思路是什么？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、需求分析",
+        "slug": "一、需求分析",
+        "link": "#一、需求分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心需求",
+            "slug": "_1-1-核心需求",
+            "link": "#_1-1-核心需求",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、技术选型",
+        "slug": "二、技术选型",
+        "link": "#二、技术选型",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 技术栈",
+            "slug": "_2-1-技术栈",
+            "link": "#_2-1-技术栈",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 架构决策",
+            "slug": "_2-2-架构决策",
+            "link": "#_2-2-架构决策",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、架构设计",
+        "slug": "三、架构设计",
+        "link": "#三、架构设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 系统架构",
+            "slug": "_3-1-系统架构",
+            "link": "#_3-1-系统架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 组件职责",
+            "slug": "_3-2-组件职责",
+            "link": "#_3-2-组件职责",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、实施路线",
+        "slug": "四、实施路线",
+        "link": "#四、实施路线",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 分阶段计划",
+            "slug": "_4-1-分阶段计划",
+            "link": "#_4-1-分阶段计划",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 详细计划",
+            "slug": "_4-2-详细计划",
+            "link": "#_4-2-详细计划",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、关键设计",
+        "slug": "五、关键设计",
+        "link": "#五、关键设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 消息协议",
+            "slug": "_5-1-消息协议",
+            "link": "#_5-1-消息协议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 数据模型",
+            "slug": "_5-2-数据模型",
+            "link": "#_5-2-数据模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、核心代码框架",
+        "slug": "六、核心代码框架",
+        "link": "#六、核心代码框架",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 Actor 实现",
+            "slug": "_6-1-actor-实现",
+            "link": "#_6-1-actor-实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "从 0 到 1 核心要点",
+            "slug": "从-0-到-1-核心要点",
+            "link": "#从-0-到-1-核心要点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q108-mmo-from-scratch.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q109: 如何评估服务器承载能力？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、承载指标",
+        "slug": "一、承载指标",
+        "link": "#一、承载指标",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 关键指标",
+            "slug": "_1-1-关键指标",
+            "link": "#_1-1-关键指标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、基准测试",
+        "slug": "二、基准测试",
+        "link": "#二、基准测试",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 单机压测",
+            "slug": "_2-1-单机压测",
+            "link": "#_2-1-单机压测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、瓶颈分析",
+        "slug": "二、瓶颈分析",
+        "link": "#二、瓶颈分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 系统瓶颈",
+            "slug": "_2-1-系统瓶颈",
+            "link": "#_2-1-系统瓶颈",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、承载计算模型",
+        "slug": "三、承载计算模型",
+        "link": "#三、承载计算模型",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 理论计算",
+            "slug": "_3-1-理论计算",
+            "link": "#_3-1-理论计算",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、扩展评估",
+        "slug": "四、扩展评估",
+        "link": "#四、扩展评估",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 水平扩展",
+            "slug": "_4-1-水平扩展",
+            "link": "#_4-1-水平扩展",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、实际案例",
+        "slug": "五、实际案例",
+        "link": "#五、实际案例",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 承载",
+            "slug": "_5-1-kbengine-承载",
+            "link": "#_5-1-kbengine-承载",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 评估建议",
+            "slug": "_6-1-评估建议",
+            "link": "#_6-1-评估建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "承载评估核心",
+            "slug": "承载评估核心",
+            "link": "#承载评估核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q109-capacity-assessment.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q11: TCP vs UDP vs KCP，MMO 中各自的使用场景是什么？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、协议基础",
+        "slug": "一、协议基础",
+        "link": "#一、协议基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 三层协议模型",
+            "slug": "_1-1-三层协议模型",
+            "link": "#_1-1-三层协议模型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 协议特性对比",
+            "slug": "_1-2-协议特性对比",
+            "link": "#_1-2-协议特性对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、TCP 协议详解",
+        "slug": "二、tcp-协议详解",
+        "link": "#二、tcp-协议详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 TCP 特点",
+            "slug": "_2-1-tcp-特点",
+            "link": "#_2-1-tcp-特点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 TCP 的优缺点",
+            "slug": "_2-2-tcp-的优缺点",
+            "link": "#_2-2-tcp-的优缺点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 TCP 在 MMO 中的应用",
+            "slug": "_2-3-tcp-在-mmo-中的应用",
+            "link": "#_2-3-tcp-在-mmo-中的应用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、UDP 协议详解",
+        "slug": "三、udp-协议详解",
+        "link": "#三、udp-协议详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 UDP 特点",
+            "slug": "_3-1-udp-特点",
+            "link": "#_3-1-udp-特点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 UDP 的优缺点",
+            "slug": "_3-2-udp-的优缺点",
+            "link": "#_3-2-udp-的优缺点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 UDP 在 MMO 中的应用",
+            "slug": "_3-3-udp-在-mmo-中的应用",
+            "link": "#_3-3-udp-在-mmo-中的应用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KCP 协议详解",
+        "slug": "四、kcp-协议详解",
+        "link": "#四、kcp-协议详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KCP 简介",
+            "slug": "_4-1-kcp-简介",
+            "link": "#_4-1-kcp-简介",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KCP 工作原理",
+            "slug": "_4-2-kcp-工作原理",
+            "link": "#_4-2-kcp-工作原理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 KCP 参数配置",
+            "slug": "_4-3-kcp-参数配置",
+            "link": "#_4-3-kcp-参数配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.4 KCP 在 MMO 中的应用",
+            "slug": "_4-4-kcp-在-mmo-中的应用",
+            "link": "#_4-4-kcp-在-mmo-中的应用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 的协议选择",
+        "slug": "五、kbengine-的协议选择",
+        "link": "#五、kbengine-的协议选择",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 为什么选择 TCP",
+            "slug": "_5-1-kbengine-为什么选择-tcp",
+            "link": "#_5-1-kbengine-为什么选择-tcp",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 KBEngine 的 TCP 优化",
+            "slug": "_5-2-kbengine-的-tcp-优化",
+            "link": "#_5-2-kbengine-的-tcp-优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 KBEngine 的可靠 UDP 实现",
+            "slug": "_5-3-kbengine-的可靠-udp-实现",
+            "link": "#_5-3-kbengine-的可靠-udp-实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、协议选择策略",
+        "slug": "六、协议选择策略",
+        "link": "#六、协议选择策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 决策树",
+            "slug": "_6-1-决策树",
+            "link": "#_6-1-决策树",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 场景对照表",
+            "slug": "_6-2-场景对照表",
+            "link": "#_6-2-场景对照表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.3 混合协议架构",
+            "slug": "_6-3-混合协议架构",
+            "link": "#_6-3-混合协议架构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、性能对比",
+        "slug": "七、性能对比",
+        "link": "#七、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 延迟对比",
+            "slug": "_7-1-延迟对比",
+            "link": "#_7-1-延迟对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 带宽对比",
+            "slug": "_7-2-带宽对比",
+            "link": "#_7-2-带宽对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、实现建议",
+        "slug": "八、实现建议",
+        "link": "#八、实现建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "8.1 TCP 优化建议",
+            "slug": "_8-1-tcp-优化建议",
+            "link": "#_8-1-tcp-优化建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "8.2 KCP 使用建议",
+            "slug": "_8-2-kcp-使用建议",
+            "link": "#_8-2-kcp-使用建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "8.3 混合协议实现",
+            "slug": "_8-3-混合协议实现",
+            "link": "#_8-3-混合协议实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "九、总结",
+        "slug": "九、总结",
+        "link": "#九、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "协议选择总结",
+            "slug": "协议选择总结",
+            "link": "#协议选择总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q11-transport-protocol.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q110: 你认为 MMORPG 服务器最难的部分是什么？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、技术难点",
+        "slug": "一、技术难点",
+        "link": "#一、技术难点",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心难点",
+            "slug": "_1-1-核心难点",
+            "link": "#_1-1-核心难点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、状态一致性",
+        "slug": "二、状态一致性",
+        "link": "#二、状态一致性",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 同步难题",
+            "slug": "_2-1-同步难题",
+            "link": "#_2-1-同步难题",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、分布式挑战",
+        "slug": "三、分布式挑战",
+        "link": "#三、分布式挑战",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 跨服场景",
+            "slug": "_3-1-跨服场景",
+            "link": "#_3-1-跨服场景",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、性能与扩展",
+        "slug": "四、性能与扩展",
+        "link": "#四、性能与扩展",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 承载瓶颈",
+            "slug": "_4-1-承载瓶颈",
+            "link": "#_4-1-承载瓶颈",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、运维挑战",
+        "slug": "五、运维挑战",
+        "link": "#五、运维挑战",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 运维难点",
+            "slug": "_5-1-运维难点",
+            "link": "#_5-1-运维难点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、业务挑战",
+        "slug": "六、业务挑战",
+        "link": "#六、业务挑战",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 游戏设计",
+            "slug": "_6-1-游戏设计",
+            "link": "#_6-1-游戏设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、综合评估",
+        "slug": "七、综合评估",
+        "link": "#七、综合评估",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 难度排行",
+            "slug": "_7-1-难度排行",
+            "link": "#_7-1-难度排行",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心观点",
+            "slug": "核心观点",
+            "link": "#核心观点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q110-hardest-part.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q111: 如何与客户端同学协作？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、协作模式",
+        "slug": "一、协作模式",
+        "link": "#一、协作模式",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 协作流程",
+            "slug": "_1-1-协作流程",
+            "link": "#_1-1-协作流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、协议设计",
+        "slug": "二、协议设计",
+        "link": "#二、协议设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Protobuf 定义",
+            "slug": "_2-1-protobuf-定义",
+            "link": "#_2-1-protobuf-定义",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 接口文档",
+            "slug": "_2-2-接口文档",
+            "link": "#_2-2-接口文档",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "响应 (Server -> Client)",
+            "slug": "响应-server-client",
+            "link": "#响应-server-client",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "错误码",
+            "slug": "错误码",
+            "link": "#错误码",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "注意事项",
+            "slug": "注意事项",
+            "link": "#注意事项",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、问题排查",
+        "slug": "四、问题排查",
+        "link": "#四、问题排查",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 常见问题",
+            "slug": "_4-1-常见问题",
+            "link": "#_4-1-常见问题",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 协作建议",
+            "slug": "_5-1-协作建议",
+            "link": "#_5-1-协作建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "协作核心",
+            "slug": "协作核心",
+            "link": "#协作核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q111-client-collab.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q112: 如何与策划同学沟通技术方案？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、沟通原则",
+        "slug": "一、沟通原则",
+        "link": "#一、沟通原则",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 沟通要点",
+            "slug": "_1-1-沟通要点",
+            "link": "#_1-1-沟通要点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、需求分析",
+        "slug": "二、需求分析",
+        "link": "#二、需求分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 需求理解框架",
+            "slug": "_2-1-需求理解框架",
+            "link": "#_2-1-需求理解框架",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、方案沟通",
+        "slug": "三、方案沟通",
+        "link": "#三、方案沟通",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 方案展示",
+            "slug": "_3-1-方案展示",
+            "link": "#_3-1-方案展示",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、常见场景",
+        "slug": "四、常见场景",
+        "link": "#四、常见场景",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 场景处理",
+            "slug": "_4-1-场景处理",
+            "link": "#_4-1-场景处理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、沟通技巧",
+        "slug": "五、沟通技巧",
+        "link": "#五、沟通技巧",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 有效沟通",
+            "slug": "_5-1-有效沟通",
+            "link": "#_5-1-有效沟通",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、协作流程",
+        "slug": "六、协作流程",
+        "link": "#六、协作流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 标准流程",
+            "slug": "_6-1-标准流程",
+            "link": "#_6-1-标准流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 协作建议",
+            "slug": "_7-1-协作建议",
+            "link": "#_7-1-协作建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "与策划沟通核心",
+            "slug": "与策划沟通核心",
+            "link": "#与策划沟通核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q112-designer-comm.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q113: 如何平衡代码质量和开发速度？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、质量与速度的权衡",
+        "slug": "一、质量与速度的权衡",
+        "link": "#一、质量与速度的权衡",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 权衡模型",
+            "slug": "_1-1-权衡模型",
+            "link": "#_1-1-权衡模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、质量标准",
+        "slug": "二、质量标准",
+        "link": "#二、质量标准",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 质量层次",
+            "slug": "_2-1-质量层次",
+            "link": "#_2-1-质量层次",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、开发速度优化",
+        "slug": "三、开发速度优化",
+        "link": "#三、开发速度优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 加速策略",
+            "slug": "_3-1-加速策略",
+            "link": "#_3-1-加速策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、决策框架",
+        "slug": "四、决策框架",
+        "link": "#四、决策框架",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 决策模型",
+            "slug": "_4-1-决策模型",
+            "link": "#_4-1-决策模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 实用建议",
+            "slug": "_5-1-实用建议",
+            "link": "#_5-1-实用建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 技术债务管理",
+            "slug": "_5-2-技术债务管理",
+            "link": "#_5-2-技术债务管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、质量保障",
+        "slug": "六、质量保障",
+        "link": "#六、质量保障",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 自动化保障",
+            "slug": "_6-1-自动化保障",
+            "link": "#_6-1-自动化保障",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "平衡核心",
+            "slug": "平衡核心",
+            "link": "#平衡核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q113-quality-vs-speed.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q114: 你对哪些开源游戏服务器框架有了解？各有什么特点？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、主流框架概览",
+        "slug": "一、主流框架概览",
+        "link": "#一、主流框架概览",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 框架分类",
+            "slug": "_1-1-框架分类",
+            "link": "#_1-1-框架分类",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine",
+        "slug": "二、kbengine",
+        "link": "#二、kbengine",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 架构特点",
+            "slug": "_2-1-架构特点",
+            "link": "#_2-1-架构特点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Skynet",
+        "slug": "三、skynet",
+        "link": "#三、skynet",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 架构特点",
+            "slug": "_3-1-架构特点",
+            "link": "#_3-1-架构特点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Pomelo",
+        "slug": "四、pomelo",
+        "link": "#四、pomelo",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 架构特点",
+            "slug": "_4-1-架构特点",
+            "link": "#_4-1-架构特点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、Go 框架",
+        "slug": "五、go-框架",
+        "link": "#五、go-框架",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Leaf",
+            "slug": "_5-1-leaf",
+            "link": "#_5-1-leaf",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 Go-World",
+            "slug": "_5-2-go-world",
+            "link": "#_5-2-go-world",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、框架对比",
+        "slug": "六、框架对比",
+        "link": "#六、框架对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 对比表",
+            "slug": "_6-1-对比表",
+            "link": "#_6-1-对比表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 选择建议",
+            "slug": "_6-2-选择建议",
+            "link": "#_6-2-选择建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、其他框架",
+        "slug": "七、其他框架",
+        "link": "#七、其他框架",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 列表",
+            "slug": "_7-1-列表",
+            "link": "#_7-1-列表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "框架选择核心",
+            "slug": "框架选择核心",
+            "link": "#框架选择核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q114-open-source-frameworks.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q115: 如果让你重新设计，你会如何改进当前框架？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、现状分析",
+        "slug": "一、现状分析",
+        "link": "#一、现状分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 KBEngine 限制",
+            "slug": "_1-1-kbengine-限制",
+            "link": "#_1-1-kbengine-限制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、改进方向",
+        "slug": "二、改进方向",
+        "link": "#二、改进方向",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 架构改进",
+            "slug": "_2-1-架构改进",
+            "link": "#_2-1-架构改进",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、性能改进",
+        "slug": "三、性能改进",
+        "link": "#三、性能改进",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 性能优化",
+            "slug": "_3-1-性能优化",
+            "link": "#_3-1-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、现代技术栈",
+        "slug": "四、现代技术栈",
+        "link": "#四、现代技术栈",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 推荐技术",
+            "slug": "_4-1-推荐技术",
+            "link": "#_4-1-推荐技术",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、云原生设计",
+        "slug": "五、云原生设计",
+        "link": "#五、云原生设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 云原生架构",
+            "slug": "_5-1-云原生架构",
+            "link": "#_5-1-云原生架构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、监控和可观测性",
+        "slug": "六、监控和可观测性",
+        "link": "#六、监控和可观测性",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 可观测性",
+            "slug": "_6-1-可观测性",
+            "link": "#_6-1-可观测性",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、改进路线图",
+        "slug": "七、改进路线图",
+        "link": "#七、改进路线图",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 分阶段改进",
+            "slug": "_7-1-分阶段改进",
+            "link": "#_7-1-分阶段改进",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "改进核心",
+            "slug": "改进核心",
+            "link": "#改进核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q115-framework-redesign.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "C++ 设计模式在 KBEngine 中的实践",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、KBEngine 核心设计模式",
+        "slug": "一、kbengine-核心设计模式",
+        "link": "#一、kbengine-核心设计模式",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 设计模式概览",
+            "slug": "_1-1-设计模式概览",
+            "link": "#_1-1-设计模式概览",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、单例模式 (Singleton)",
+        "slug": "二、单例模式-singleton",
+        "link": "#二、单例模式-singleton",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine 应用",
+            "slug": "_2-1-kbengine-应用",
+            "link": "#_2-1-kbengine-应用",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 为什么要用单例？",
+            "slug": "_2-2-为什么要用单例",
+            "link": "#_2-2-为什么要用单例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、工厂模式 (Factory)",
+        "slug": "三、工厂模式-factory",
+        "link": "#三、工厂模式-factory",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 实体工厂",
+            "slug": "_3-1-kbengine-实体工厂",
+            "link": "#_3-1-kbengine-实体工厂",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 为什么要用工厂？",
+            "slug": "_3-2-为什么要用工厂",
+            "link": "#_3-2-为什么要用工厂",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、观察者模式 (Observer)",
+        "slug": "四、观察者模式-observer",
+        "link": "#四、观察者模式-observer",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Watcher 系统",
+            "slug": "_4-1-watcher-系统",
+            "link": "#_4-1-watcher-系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 为什么要用观察者？",
+            "slug": "_4-2-为什么要用观察者",
+            "link": "#_4-2-为什么要用观察者",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、代理模式 (Proxy)",
+        "slug": "五、代理模式-proxy",
+        "link": "#五、代理模式-proxy",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Ghost/Shadow 机制",
+            "slug": "_5-1-ghost-shadow-机制",
+            "link": "#_5-1-ghost-shadow-机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 Ghost/Shadow 设计图",
+            "slug": "_5-2-ghost-shadow-设计图",
+            "link": "#_5-2-ghost-shadow-设计图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 为什么要用代理？",
+            "slug": "_5-3-为什么要用代理",
+            "link": "#_5-3-为什么要用代理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、命令模式 (Command)",
+        "slug": "六、命令模式-command",
+        "link": "#六、命令模式-command",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 消息处理",
+            "slug": "_6-1-消息处理",
+            "link": "#_6-1-消息处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 为什么要用命令模式？",
+            "slug": "_6-2-为什么要用命令模式",
+            "link": "#_6-2-为什么要用命令模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、对象池模式 (Object Pool)",
+        "slug": "七、对象池模式-object-pool",
+        "link": "#七、对象池模式-object-pool",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 KBEngine 内存管理",
+            "slug": "_7-1-kbengine-内存管理",
+            "link": "#_7-1-kbengine-内存管理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 为什么要用对象池？",
+            "slug": "_7-2-为什么要用对象池",
+            "link": "#_7-2-为什么要用对象池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、桥接模式 (Bridge)",
+        "slug": "八、桥接模式-bridge",
+        "link": "#八、桥接模式-bridge",
+        "children": [
+          {
+            "level": 3,
+            "title": "8.1 网络抽象层",
+            "slug": "_8-1-网络抽象层",
+            "link": "#_8-1-网络抽象层",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "8.2 为什么要用桥接？",
+            "slug": "_8-2-为什么要用桥接",
+            "link": "#_8-2-为什么要用桥接",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "九、模板方法模式 (Template Method)",
+        "slug": "九、模板方法模式-template-method",
+        "link": "#九、模板方法模式-template-method",
+        "children": [
+          {
+            "level": 3,
+            "title": "9.1 实体生命周期",
+            "slug": "_9-1-实体生命周期",
+            "link": "#_9-1-实体生命周期",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "9.2 为什么要用模板方法？",
+            "slug": "_9-2-为什么要用模板方法",
+            "link": "#_9-2-为什么要用模板方法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十、策略模式 (Strategy)",
+        "slug": "十、策略模式-strategy",
+        "link": "#十、策略模式-strategy",
+        "children": [
+          {
+            "level": 3,
+            "title": "10.1 负载均衡策略",
+            "slug": "_10-1-负载均衡策略",
+            "link": "#_10-1-负载均衡策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "10.2 为什么要用策略模式？",
+            "slug": "_10-2-为什么要用策略模式",
+            "link": "#_10-2-为什么要用策略模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十一、责任链模式 (Chain of Responsibility)",
+        "slug": "十一、责任链模式-chain-of-responsibility",
+        "link": "#十一、责任链模式-chain-of-responsibility",
+        "children": [
+          {
+            "level": 3,
+            "title": "11.1 消息路由",
+            "slug": "_11-1-消息路由",
+            "link": "#_11-1-消息路由",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "11.2 为什么要用责任链？",
+            "slug": "_11-2-为什么要用责任链",
+            "link": "#_11-2-为什么要用责任链",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十二、组合模式 (Composite)",
+        "slug": "十二、组合模式-composite",
+        "link": "#十二、组合模式-composite",
+        "children": [
+          {
+            "level": 3,
+            "title": "12.1 空间管理",
+            "slug": "_12-1-空间管理",
+            "link": "#_12-1-空间管理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "12.2 为什么要用组合模式？",
+            "slug": "_12-2-为什么要用组合模式",
+            "link": "#_12-2-为什么要用组合模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十三、设计权衡",
+        "slug": "十三、设计权衡",
+        "link": "#十三、设计权衡",
+        "children": [
+          {
+            "level": 3,
+            "title": "13.1 KBEngine 设计哲学",
+            "slug": "_13-1-kbengine-设计哲学",
+            "link": "#_13-1-kbengine-设计哲学",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "13.2 适用场景分析",
+            "slug": "_13-2-适用场景分析",
+            "link": "#_13-2-适用场景分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十四、总结",
+        "slug": "十四、总结",
+        "link": "#十四、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "KBEngine 设计原则",
+            "slug": "kbengine-设计原则",
+            "link": "#kbengine-设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "学习建议",
+            "slug": "学习建议",
+            "link": "#学习建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q116-cpp-design-patterns-in-kbengine.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q12: 如何处理网络抖动和丢包？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、网络问题概述",
+        "slug": "一、网络问题概述",
+        "link": "#一、网络问题概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 网络问题分类",
+            "slug": "_1-1-网络问题分类",
+            "link": "#_1-1-网络问题分类",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 问题影响",
+            "slug": "_1-2-问题影响",
+            "link": "#_1-2-问题影响",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、抖动处理",
+        "slug": "二、抖动处理",
+        "link": "#二、抖动处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 抖动缓冲 (Jitter Buffer)",
+            "slug": "_2-1-抖动缓冲-jitter-buffer",
+            "link": "#_2-1-抖动缓冲-jitter-buffer",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 自适应抖动缓冲",
+            "slug": "_2-2-自适应抖动缓冲",
+            "link": "#_2-2-自适应抖动缓冲",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 动态延迟补偿",
+            "slug": "_2-3-动态延迟补偿",
+            "link": "#_2-3-动态延迟补偿",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、丢包处理",
+        "slug": "三、丢包处理",
+        "link": "#三、丢包处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 丢包检测",
+            "slug": "_3-1-丢包检测",
+            "link": "#_3-1-丢包检测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 重传机制",
+            "slug": "_3-2-重传机制",
+            "link": "#_3-2-重传机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 FEC 前向纠错",
+            "slug": "_3-3-fec-前向纠错",
+            "link": "#_3-3-fec-前向纠错",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、客户端补偿",
+        "slug": "四、客户端补偿",
+        "link": "#四、客户端补偿",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 位置插值",
+            "slug": "_4-1-位置插值",
+            "link": "#_4-1-位置插值",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 速度外推",
+            "slug": "_4-2-速度外推",
+            "link": "#_4-2-速度外推",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、服务端处理",
+        "slug": "五、服务端处理",
+        "link": "#五、服务端处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 的可靠性机制",
+            "slug": "_5-1-kbengine-的可靠性机制",
+            "link": "#_5-1-kbengine-的可靠性机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 拥塞控制",
+            "slug": "_5-2-拥塞控制",
+            "link": "#_5-2-拥塞控制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、综合处理策略",
+        "slug": "六、综合处理策略",
+        "link": "#六、综合处理策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 分层处理",
+            "slug": "_6-1-分层处理",
+            "link": "#_6-1-分层处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 自适应策略",
+            "slug": "_6-2-自适应策略",
+            "link": "#_6-2-自适应策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "处理策略总结",
+            "slug": "处理策略总结",
+            "link": "#处理策略总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q12-network-jitter.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q13: 什么是可靠 UDP？如何实现？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、可靠 UDP 概述",
+        "slug": "一、可靠-udp-概述",
+        "link": "#一、可靠-udp-概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么需要可靠 UDP",
+            "slug": "_1-1-为什么需要可靠-udp",
+            "link": "#_1-1-为什么需要可靠-udp",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 可靠 UDP 的设计目标",
+            "slug": "_1-2-可靠-udp-的设计目标",
+            "link": "#_1-2-可靠-udp-的设计目标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、可靠 UDP 实现原理",
+        "slug": "二、可靠-udp-实现原理",
+        "link": "#二、可靠-udp-实现原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 核心机制",
+            "slug": "_2-1-核心机制",
+            "link": "#_2-1-核心机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据包格式",
+            "slug": "_2-2-数据包格式",
+            "link": "#_2-2-数据包格式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 状态机",
+            "slug": "_2-3-状态机",
+            "link": "#_2-3-状态机",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、核心机制实现",
+        "slug": "三、核心机制实现",
+        "link": "#三、核心机制实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 序列号与确认",
+            "slug": "_3-1-序列号与确认",
+            "link": "#_3-1-序列号与确认",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 超时重传",
+            "slug": "_3-2-超时重传",
+            "link": "#_3-2-超时重传",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 快速重传",
+            "slug": "_3-3-快速重传",
+            "link": "#_3-3-快速重传",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 的可靠 UDP",
+        "slug": "四、kbengine-的可靠-udp",
+        "link": "#四、kbengine-的可靠-udp",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 实现",
+            "slug": "_4-1-kbengine-实现",
+            "link": "#_4-1-kbengine-实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 与 TCP 的对比",
+            "slug": "_4-2-与-tcp-的对比",
+            "link": "#_4-2-与-tcp-的对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、高级特性",
+        "slug": "五、高级特性",
+        "link": "#五、高级特性",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 选择性确认 (SACK)",
+            "slug": "_5-1-选择性确认-sack",
+            "link": "#_5-1-选择性确认-sack",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 FEC 前向纠错",
+            "slug": "_5-2-fec-前向纠错",
+            "link": "#_5-2-fec-前向纠错",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "实现对比",
+            "slug": "实现对比",
+            "link": "#实现对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q13-reliable-udp.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q14: 如何设计消息协议？Protobuf vs JSON vs 自定义协议？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、消息协议需求",
+        "slug": "一、消息协议需求",
+        "link": "#一、消息协议需求",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心需求",
+            "slug": "_1-1-核心需求",
+            "link": "#_1-1-核心需求",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 协议对比概览",
+            "slug": "_1-2-协议对比概览",
+            "link": "#_1-2-协议对比概览",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、JSON 协议",
+        "slug": "二、json-协议",
+        "link": "#二、json-协议",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 JSON 示例",
+            "slug": "_2-1-json-示例",
+            "link": "#_2-1-json-示例",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 JSON 优缺点",
+            "slug": "_2-2-json-优缺点",
+            "link": "#_2-2-json-优缺点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 性能测试",
+            "slug": "_2-3-性能测试",
+            "link": "#_2-3-性能测试",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Protobuf 协议",
+        "slug": "三、protobuf-协议",
+        "link": "#三、protobuf-协议",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Protobuf 示例",
+            "slug": "_3-1-protobuf-示例",
+            "link": "#_3-1-protobuf-示例",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 Protobuf 编码原理",
+            "slug": "_3-2-protobuf-编码原理",
+            "link": "#_3-2-protobuf-编码原理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 Protobuf 优缺点",
+            "slug": "_3-3-protobuf-优缺点",
+            "link": "#_3-3-protobuf-优缺点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 消息协议",
+        "slug": "四、kbengine-消息协议",
+        "link": "#四、kbengine-消息协议",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 协议格式",
+            "slug": "_4-1-kbengine-协议格式",
+            "link": "#_4-1-kbengine-协议格式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 源码实现",
+            "slug": "_4-2-kbengine-源码实现",
+            "link": "#_4-2-kbengine-源码实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 KBEngine 参数序列化",
+            "slug": "_4-3-kbengine-参数序列化",
+            "link": "#_4-3-kbengine-参数序列化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、自定义协议设计",
+        "slug": "五、自定义协议设计",
+        "link": "#五、自定义协议设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 混合协议设计",
+            "slug": "_5-1-混合协议设计",
+            "link": "#_5-1-混合协议设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 协议头设计",
+            "slug": "_5-2-协议头设计",
+            "link": "#_5-2-协议头设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 消息编解码器",
+            "slug": "_5-3-消息编解码器",
+            "link": "#_5-3-消息编解码器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、协议选择策略",
+        "slug": "六、协议选择策略",
+        "link": "#六、协议选择策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 决策树",
+            "slug": "_6-1-决策树",
+            "link": "#_6-1-决策树",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 场景推荐",
+            "slug": "_6-2-场景推荐",
+            "link": "#_6-2-场景推荐",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、实战建议",
+        "slug": "七、实战建议",
+        "link": "#七、实战建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 混合使用策略",
+            "slug": "_7-1-混合使用策略",
+            "link": "#_7-1-混合使用策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 版本兼容",
+            "slug": "_7-2-版本兼容",
+            "link": "#_7-2-版本兼容",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "协议对比总结",
+            "slug": "协议对比总结",
+            "link": "#协议对比总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q14-message-protocol.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q15: 如何实现消息压缩？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、压缩算法",
+        "slug": "一、压缩算法",
+        "link": "#一、压缩算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常用压缩算法",
+            "slug": "_1-1-常用压缩算法",
+            "link": "#_1-1-常用压缩算法",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 压缩率对比",
+            "slug": "_1-2-压缩率对比",
+            "link": "#_1-2-压缩率对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、压缩策略",
+        "slug": "二、压缩策略",
+        "link": "#二、压缩策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 压缩时机",
+            "slug": "_2-1-压缩时机",
+            "link": "#_2-1-压缩时机",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 渐戏场景分析",
+            "slug": "_2-2-渐戏场景分析",
+            "link": "#_2-2-渐戏场景分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、实现方案",
+        "slug": "三、实现方案",
+        "link": "#三、实现方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 压缩器接口",
+            "slug": "_3-1-压缩器接口",
+            "link": "#_3-1-压缩器接口",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 消息封装",
+            "slug": "_3-2-消息封装",
+            "link": "#_3-2-消息封装",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 集成到网络层",
+            "slug": "_3-3-集成到网络层",
+            "link": "#_3-3-集成到网络层",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、优化技巧",
+        "slug": "四、优化技巧",
+        "link": "#四、优化技巧",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 字典压缩",
+            "slug": "_4-1-字典压缩",
+            "link": "#_4-1-字典压缩",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 增量压缩",
+            "slug": "_4-2-增量压缩",
+            "link": "#_4-2-增量压缩",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能对比",
+        "slug": "五、性能对比",
+        "link": "#五、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 压缩效果测试",
+            "slug": "_5-1-压缩效果测试",
+            "link": "#_5-1-压缩效果测试",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能建议",
+            "slug": "_5-2-性能建议",
+            "link": "#_5-2-性能建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、KBEngine 支持",
+        "slug": "六、kbengine-支持",
+        "link": "#六、kbengine-支持",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 KBEngine 压缩配置",
+            "slug": "_6-1-kbengine-压缩配置",
+            "link": "#_6-1-kbengine-压缩配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 KBEngine 压缩实现",
+            "slug": "_6-2-kbengine-压缩实现",
+            "link": "#_6-2-kbengine-压缩实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 压缩决策树",
+            "slug": "_7-1-压缩决策树",
+            "link": "#_7-1-压缩决策树",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 监控指标",
+            "slug": "_7-2-监控指标",
+            "link": "#_7-2-监控指标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "压缩方案选择",
+            "slug": "压缩方案选择",
+            "link": "#压缩方案选择",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q15-message-compression.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q16: 什么是同步问题？客户端和服务端的状态如何同步？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、同步问题本质",
+        "slug": "一、同步问题本质",
+        "link": "#一、同步问题本质",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么需要同步",
+            "slug": "_1-1-为什么需要同步",
+            "link": "#_1-1-为什么需要同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 同步问题的类型",
+            "slug": "_1-2-同步问题的类型",
+            "link": "#_1-2-同步问题的类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、同步策略对比",
+        "slug": "二、同步策略对比",
+        "link": "#二、同步策略对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 状态同步 vs 帧同步",
+            "slug": "_2-1-状态同步-vs-帧同步",
+            "link": "#_2-1-状态同步-vs-帧同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 同步策略对比表",
+            "slug": "_2-2-同步策略对比表",
+            "link": "#_2-2-同步策略对比表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 状态同步机制",
+        "slug": "三、kbengine-状态同步机制",
+        "link": "#三、kbengine-状态同步机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Real/Ghost/Shadow 机制",
+            "slug": "_3-1-real-ghost-shadow-机制",
+            "link": "#_3-1-real-ghost-shadow-机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 同步流程",
+            "slug": "_3-2-kbengine-同步流程",
+            "link": "#_3-2-kbengine-同步流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 Witness 机制",
+            "slug": "_3-3-witness-机制",
+            "link": "#_3-3-witness-机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、同步优化技术",
+        "slug": "四、同步优化技术",
+        "link": "#四、同步优化技术",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 优先级同步",
+            "slug": "_4-1-优先级同步",
+            "link": "#_4-1-优先级同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 增量同步",
+            "slug": "_4-2-增量同步",
+            "link": "#_4-2-增量同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 区域同步（AOI 优化）",
+            "slug": "_4-3-区域同步-aoi-优化",
+            "link": "#_4-3-区域同步-aoi-优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、位置同步详解",
+        "slug": "五、位置同步详解",
+        "link": "#五、位置同步详解",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 位置同步策略",
+            "slug": "_5-1-位置同步策略",
+            "link": "#_5-1-位置同步策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 位置平滑插值",
+            "slug": "_5-2-位置平滑插值",
+            "link": "#_5-2-位置平滑插值",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、状态同步最佳实践",
+        "slug": "六、状态同步最佳实践",
+        "link": "#六、状态同步最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 同步设计原则",
+            "slug": "_6-1-同步设计原则",
+            "link": "#_6-1-同步设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 同步频率建议",
+            "slug": "_6-2-同步频率建议",
+            "link": "#_6-2-同步频率建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "同步方案选择",
+            "slug": "同步方案选择",
+            "link": "#同步方案选择",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 同步机制总结",
+            "slug": "kbengine-同步机制总结",
+            "link": "#kbengine-同步机制总结",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q16-state-sync.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q16: 什么是同步问题？客户端和服务端的状态如何同步？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、状态同步基础",
+        "slug": "一、状态同步基础",
+        "link": "#一、状态同步基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么需要同步",
+            "slug": "_1-1-为什么需要同步",
+            "link": "#_1-1-为什么需要同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 同步方式",
+            "slug": "_1-2-同步方式",
+            "link": "#_1-2-同步方式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、状态同步算法",
+        "slug": "二、状态同步算法",
+        "link": "#二、状态同步算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 快照同步",
+            "slug": "_2-1-快照同步",
+            "link": "#_2-1-快照同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 增量同步",
+            "slug": "_2-2-增量同步",
+            "link": "#_2-2-增量同步",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、延迟补偿",
+        "slug": "三、延迟补偿",
+        "link": "#三、延迟补偿",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 客户端预测",
+            "slug": "_3-1-客户端预测",
+            "link": "#_3-1-客户端预测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 延迟补偿实现",
+            "slug": "_3-2-延迟补偿实现",
+            "link": "#_3-2-延迟补偿实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 状态同步",
+        "slug": "四、kbengine-状态同步",
+        "link": "#四、kbengine-状态同步",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Entity 同步机制",
+            "slug": "_4-1-entity-同步机制",
+            "link": "#_4-1-entity-同步机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Ghost 同步",
+            "slug": "_4-2-ghost-同步",
+            "link": "#_4-2-ghost-同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 校正机制",
+            "slug": "_4-3-校正机制",
+            "link": "#_4-3-校正机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、同步优化",
+        "slug": "五、同步优化",
+        "link": "#五、同步优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 优先级同步",
+            "slug": "_5-1-优先级同步",
+            "link": "#_5-1-优先级同步",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 批量同步",
+            "slug": "_5-2-批量同步",
+            "link": "#_5-2-批量同步",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、特殊场景处理",
+        "slug": "六、特殊场景处理",
+        "link": "#六、特殊场景处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 延迟隐藏",
+            "slug": "_6-1-延迟隐藏",
+            "link": "#_6-1-延迟隐藏",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 快照插值",
+            "slug": "_6-2-快照插值",
+            "link": "#_6-2-快照插值",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "状态同步方案对比",
+            "slug": "状态同步方案对比",
+            "link": "#状态同步方案对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q17-latency-compensation.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q18: 什么是 Ghost/Shadow 机制？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、Ghost/Shadow 机制概述",
+        "slug": "一、ghost-shadow-机制概述",
+        "link": "#一、ghost-shadow-机制概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 基本概念",
+            "slug": "_1-1-基本概念",
+            "link": "#_1-1-基本概念",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 为什么需要 Ghost/Shadow",
+            "slug": "_1-2-为什么需要-ghost-shadow",
+            "link": "#_1-2-为什么需要-ghost-shadow",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine Real/Ghost/Shadow 实现",
+        "slug": "二、kbengine-real-ghost-shadow-实现",
+        "link": "#二、kbengine-real-ghost-shadow-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 架构总览",
+            "slug": "_2-1-架构总览",
+            "link": "#_2-1-架构总览",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 KBEngine 源码分析",
+            "slug": "_2-2-kbengine-源码分析",
+            "link": "#_2-2-kbengine-源码分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 Ghost 同步机制",
+            "slug": "_2-3-ghost-同步机制",
+            "link": "#_2-3-ghost-同步机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.4 Witness 机制",
+            "slug": "_2-4-witness-机制",
+            "link": "#_2-4-witness-机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、BigWorld Ghost 机制",
+        "slug": "三、bigworld-ghost-机制",
+        "link": "#三、bigworld-ghost-机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 BigWorld 架构",
+            "slug": "_3-1-bigworld-架构",
+            "link": "#_3-1-bigworld-架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 BigWorld Ghost 同步流程",
+            "slug": "_3-2-bigworld-ghost-同步流程",
+            "link": "#_3-2-bigworld-ghost-同步流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Real/Ghost 转换",
+        "slug": "四、real-ghost-转换",
+        "link": "#四、real-ghost-转换",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 跨 CellApp 迁移",
+            "slug": "_4-1-跨-cellapp-迁移",
+            "link": "#_4-1-跨-cellapp-迁移",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 迁移代码示例",
+            "slug": "_4-2-迁移代码示例",
+            "link": "#_4-2-迁移代码示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、Shadow Entity（客户端）",
+        "slug": "五、shadow-entity-客户端",
+        "link": "#五、shadow-entity-客户端",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Shadow 与 Ghost 的关系",
+            "slug": "_5-1-shadow-与-ghost-的关系",
+            "link": "#_5-1-shadow-与-ghost-的关系",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 Shadow 更新流程",
+            "slug": "_5-2-shadow-更新流程",
+            "link": "#_5-2-shadow-更新流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 Ghost/Shadow 设计原则",
+            "slug": "_6-1-ghost-shadow-设计原则",
+            "link": "#_6-1-ghost-shadow-设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 常见问题与解决方案",
+            "slug": "_6-2-常见问题与解决方案",
+            "link": "#_6-2-常见问题与解决方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "Real/Ghost/Shadow 机制总结",
+            "slug": "real-ghost-shadow-机制总结",
+            "link": "#real-ghost-shadow-机制总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "同步路径",
+            "slug": "同步路径",
+            "link": "#同步路径",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q18-ghost-mechanism.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q19: 如何防止消息重放攻击？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、重放攻击原理",
+        "slug": "一、重放攻击原理",
+        "link": "#一、重放攻击原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是重放攻击",
+            "slug": "_1-1-什么是重放攻击",
+            "link": "#_1-1-什么是重放攻击",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 常见重放攻击场景",
+            "slug": "_1-2-常见重放攻击场景",
+            "link": "#_1-2-常见重放攻击场景",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、防重放机制",
+        "slug": "二、防重放机制",
+        "link": "#二、防重放机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 消息序列号",
+            "slug": "_2-1-消息序列号",
+            "link": "#_2-1-消息序列号",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 序列号实现",
+            "slug": "_2-2-序列号实现",
+            "link": "#_2-2-序列号实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 时间戳机制",
+            "slug": "_2-3-时间戳机制",
+            "link": "#_2-3-时间戳机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.4 Nonce 机制",
+            "slug": "_2-4-nonce-机制",
+            "link": "#_2-4-nonce-机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、综合防重放方案",
+        "slug": "三、综合防重放方案",
+        "link": "#三、综合防重放方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 组合机制",
+            "slug": "_3-1-组合机制",
+            "link": "#_3-1-组合机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 完整实现",
+            "slug": "_3-2-完整实现",
+            "link": "#_3-2-完整实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 安全措施",
+        "slug": "四、kbengine-安全措施",
+        "link": "#四、kbengine-安全措施",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 消息加密",
+            "slug": "_4-1-kbengine-消息加密",
+            "link": "#_4-1-kbengine-消息加密",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 登录安全",
+            "slug": "_4-2-kbengine-登录安全",
+            "link": "#_4-2-kbengine-登录安全",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、特殊场景处理",
+        "slug": "五、特殊场景处理",
+        "link": "#五、特殊场景处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 关键操作幂等性",
+            "slug": "_5-1-关键操作幂等性",
+            "link": "#_5-1-关键操作幂等性",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 防重放设计原则",
+            "slug": "_6-1-防重放设计原则",
+            "link": "#_6-1-防重放设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 不同场景的策略",
+            "slug": "_6-2-不同场景的策略",
+            "link": "#_6-2-不同场景的策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "防重放技术对比",
+            "slug": "防重放技术对比",
+            "link": "#防重放技术对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 安全机制",
+            "slug": "kbengine-安全机制",
+            "link": "#kbengine-安全机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q19-replay-attack.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Q2: BigWorld 架构中的 CellApp 和 BaseApp 分别负责什么？为什么这样分离？",
     "headers": [
       {
@@ -9798,6 +14387,1271 @@ export const SEARCH_INDEX = [
       }
     ],
     "path": "/qa/q2-bigworld-cell-base.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q20: 长连接如何保持心跳？断线重连如何设计？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、心跳机制基础",
+        "slug": "一、心跳机制基础",
+        "link": "#一、心跳机制基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么需要心跳",
+            "slug": "_1-1-为什么需要心跳",
+            "link": "#_1-1-为什么需要心跳",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 心跳类型",
+            "slug": "_1-2-心跳类型",
+            "link": "#_1-2-心跳类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、心跳实现",
+        "slug": "二、心跳实现",
+        "link": "#二、心跳实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 客户端心跳",
+            "slug": "_2-1-客户端心跳",
+            "link": "#_2-1-客户端心跳",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 服务器心跳处理",
+            "slug": "_2-2-服务器心跳处理",
+            "link": "#_2-2-服务器心跳处理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、断线重连设计",
+        "slug": "三、断线重连设计",
+        "link": "#三、断线重连设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 重连策略",
+            "slug": "_3-1-重连策略",
+            "link": "#_3-1-重连策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 重连实现",
+            "slug": "_3-2-重连实现",
+            "link": "#_3-2-重连实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 心跳机制",
+        "slug": "四、kbengine-心跳机制",
+        "link": "#四、kbengine-心跳机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 超时配置",
+            "slug": "_4-1-kbengine-超时配置",
+            "link": "#_4-1-kbengine-超时配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 源码分析",
+            "slug": "_4-2-kbengine-源码分析",
+            "link": "#_4-2-kbengine-源码分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 KBEngine 客户端重连",
+            "slug": "_4-3-kbengine-客户端重连",
+            "link": "#_4-3-kbengine-客户端重连",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 心跳参数配置",
+            "slug": "_5-1-心跳参数配置",
+            "link": "#_5-1-心跳参数配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 断线处理流程",
+            "slug": "_5-2-断线处理流程",
+            "link": "#_5-2-断线处理流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 状态恢复设计",
+            "slug": "_5-3-状态恢复设计",
+            "link": "#_5-3-状态恢复设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "心跳重连方案对比",
+            "slug": "心跳重连方案对比",
+            "link": "#心跳重连方案对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 心跳机制",
+            "slug": "kbengine-心跳机制",
+            "link": "#kbengine-心跳机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q20-heartbeat-reconnect.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q21: WebSocket 在 MMO 中有什么应用场景？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、WebSocket 协议基础",
+        "slug": "一、websocket-协议基础",
+        "link": "#一、websocket-协议基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 WebSocket 简介",
+            "slug": "_1-1-websocket-简介",
+            "link": "#_1-1-websocket-简介",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 WebSocket 帧格式",
+            "slug": "_1-2-websocket-帧格式",
+            "link": "#_1-2-websocket-帧格式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、WebSocket vs 其他协议",
+        "slug": "二、websocket-vs-其他协议",
+        "link": "#二、websocket-vs-其他协议",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 协议对比",
+            "slug": "_2-1-协议对比",
+            "link": "#_2-1-协议对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 协议对比表",
+            "slug": "_2-2-协议对比表",
+            "link": "#_2-2-协议对比表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、WebSocket 在 MMO 中的应用",
+        "slug": "三、websocket-在-mmo-中的应用",
+        "link": "#三、websocket-在-mmo-中的应用",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 应用场景",
+            "slug": "_3-1-应用场景",
+            "link": "#_3-1-应用场景",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 混合架构设计",
+            "slug": "_3-2-混合架构设计",
+            "link": "#_3-2-混合架构设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、WebSocket 服务器实现",
+        "slug": "四、websocket-服务器实现",
+        "link": "#四、websocket-服务器实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 基础 WebSocket 服务器",
+            "slug": "_4-1-基础-websocket-服务器",
+            "link": "#_4-1-基础-websocket-服务器",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 聊天服务器实现",
+            "slug": "_4-2-聊天服务器实现",
+            "link": "#_4-2-聊天服务器实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine WebSocket 集成",
+        "slug": "五、kbengine-websocket-集成",
+        "link": "#五、kbengine-websocket-集成",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 WebSocket 网关设计",
+            "slug": "_5-1-websocket-网关设计",
+            "link": "#_5-1-websocket-网关设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 与 KBEngine 集成",
+            "slug": "_5-2-与-kbengine-集成",
+            "link": "#_5-2-与-kbengine-集成",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 WebSocket 性能优化",
+            "slug": "_6-1-websocket-性能优化",
+            "link": "#_6-1-websocket-性能优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 安全考虑",
+            "slug": "_6-2-安全考虑",
+            "link": "#_6-2-安全考虑",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "WebSocket 应用场景总结",
+            "slug": "websocket-应用场景总结",
+            "link": "#websocket-应用场景总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "架构选择建议",
+            "slug": "架构选择建议",
+            "link": "#架构选择建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q21-websocket-mmo.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q22: 如何处理网络消息的乱序问题？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、消息乱序问题",
+        "slug": "一、消息乱序问题",
+        "link": "#一、消息乱序问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么会乱序",
+            "slug": "_1-1-为什么会乱序",
+            "link": "#_1-1-为什么会乱序",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 乱序的影响",
+            "slug": "_1-2-乱序的影响",
+            "link": "#_1-2-乱序的影响",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、序列号机制",
+        "slug": "二、序列号机制",
+        "link": "#二、序列号机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 序列号设计",
+            "slug": "_2-1-序列号设计",
+            "link": "#_2-1-序列号设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 序列号实现",
+            "slug": "_2-2-序列号实现",
+            "link": "#_2-2-序列号实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、消息重排序",
+        "slug": "三、消息重排序",
+        "link": "#三、消息重排序",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 排序缓冲区",
+            "slug": "_3-1-排序缓冲区",
+            "link": "#_3-1-排序缓冲区",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 排序缓冲区实现",
+            "slug": "_3-2-排序缓冲区实现",
+            "link": "#_3-2-排序缓冲区实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 消息处理",
+        "slug": "四、kbengine-消息处理",
+        "link": "#四、kbengine-消息处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine Bundle 机制",
+            "slug": "_4-1-kbengine-bundle-机制",
+            "link": "#_4-1-kbengine-bundle-机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 可靠消息",
+            "slug": "_4-2-kbengine-可靠消息",
+            "link": "#_4-2-kbengine-可靠消息",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、高级处理策略",
+        "slug": "五、高级处理策略",
+        "link": "#五、高级处理策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 分通道处理",
+            "slug": "_5-1-分通道处理",
+            "link": "#_5-1-分通道处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 分通道实现",
+            "slug": "_5-2-分通道实现",
+            "link": "#_5-2-分通道实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 时间戳排序",
+            "slug": "_5-3-时间戳排序",
+            "link": "#_5-3-时间戳排序",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 处理策略选择",
+            "slug": "_6-1-处理策略选择",
+            "link": "#_6-1-处理策略选择",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 性能考虑",
+            "slug": "_6-2-性能考虑",
+            "link": "#_6-2-性能考虑",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "消息乱序解决方案对比",
+            "slug": "消息乱序解决方案对比",
+            "link": "#消息乱序解决方案对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 消息处理机制",
+            "slug": "kbengine-消息处理机制",
+            "link": "#kbengine-消息处理机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q22-out-of-order.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q23: 如何实现 RPC 调用？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、RPC 基础概念",
+        "slug": "一、rpc-基础概念",
+        "link": "#一、rpc-基础概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是 RPC",
+            "slug": "_1-1-什么是-rpc",
+            "link": "#_1-1-什么是-rpc",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 RPC 核心组件",
+            "slug": "_1-2-rpc-核心组件",
+            "link": "#_1-2-rpc-核心组件",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 的 EntityCall",
+        "slug": "二、kbengine-的-entitycall",
+        "link": "#二、kbengine-的-entitycall",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 EntityCall 架构",
+            "slug": "_2-1-entitycall-架构",
+            "link": "#_2-1-entitycall-架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 EntityCall 源码实现",
+            "slug": "_2-2-entitycall-源码实现",
+            "link": "#_2-2-entitycall-源码实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 EntityCall 消息格式",
+            "slug": "_2-3-entitycall-消息格式",
+            "link": "#_2-3-entitycall-消息格式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、RPC 实现方式",
+        "slug": "三、rpc-实现方式",
+        "link": "#三、rpc-实现方式",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 同步 RPC",
+            "slug": "_3-1-同步-rpc",
+            "link": "#_3-1-同步-rpc",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 异步 RPC",
+            "slug": "_3-2-异步-rpc",
+            "link": "#_3-2-异步-rpc",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 使用示例",
+            "slug": "_3-3-使用示例",
+            "link": "#_3-3-使用示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、常见 RPC 框架",
+        "slug": "四、常见-rpc-框架",
+        "link": "#四、常见-rpc-框架",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 框架对比",
+            "slug": "_4-1-框架对比",
+            "link": "#_4-1-框架对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 gRPC 示例",
+            "slug": "_4-2-grpc-示例",
+            "link": "#_4-2-grpc-示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 超时处理",
+            "slug": "_5-1-超时处理",
+            "link": "#_5-1-超时处理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 重试机制",
+            "slug": "_5-2-重试机制",
+            "link": "#_5-2-重试机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "RPC 实现选择",
+            "slug": "rpc-实现选择",
+            "link": "#rpc-实现选择",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q23-rpc-implementation.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q24: 如何设计广播机制？如何优化大规模广播？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、广播场景分析",
+        "slug": "一、广播场景分析",
+        "link": "#一、广播场景分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 广播类型",
+            "slug": "_1-1-广播类型",
+            "link": "#_1-1-广播类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 广播挑战",
+            "slug": "_1-2-广播挑战",
+            "link": "#_1-2-广播挑战",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、广播优化策略",
+        "slug": "二、广播优化策略",
+        "link": "#二、广播优化策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 AOI 限制广播",
+            "slug": "_2-1-aoi-限制广播",
+            "link": "#_2-1-aoi-限制广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 广播去重",
+            "slug": "_2-2-广播去重",
+            "link": "#_2-2-广播去重",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 批量打包",
+            "slug": "_2-3-批量打包",
+            "link": "#_2-3-批量打包",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 广播机制",
+        "slug": "三、kbengine-广播机制",
+        "link": "#三、kbengine-广播机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Witness 广播",
+            "slug": "_3-1-witness-广播",
+            "link": "#_3-1-witness-广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 优化技术",
+            "slug": "_3-2-kbengine-优化技术",
+            "link": "#_3-2-kbengine-优化技术",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、高级优化技术",
+        "slug": "四、高级优化技术",
+        "link": "#四、高级优化技术",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 层次化广播",
+            "slug": "_4-1-层次化广播",
+            "link": "#_4-1-层次化广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 空间分区优化",
+            "slug": "_4-2-空间分区优化",
+            "link": "#_4-2-空间分区优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 兴趣管理优化",
+            "slug": "_4-3-兴趣管理优化",
+            "link": "#_4-3-兴趣管理优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能优化",
+        "slug": "五、性能优化",
+        "link": "#五、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 零拷贝广播",
+            "slug": "_5-1-零拷贝广播",
+            "link": "#_5-1-零拷贝广播",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 多线程广播",
+            "slug": "_5-2-多线程广播",
+            "link": "#_5-2-多线程广播",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "优化技术总结",
+            "slug": "优化技术总结",
+            "link": "#优化技术总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q24-broadcast-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q25: 连接数上限由什么决定？如何突破 C10K 问题？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、C10K 问题",
+        "slug": "一、c10k-问题",
+        "link": "#一、c10k-问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是 C10K",
+            "slug": "_1-1-什么是-c10k",
+            "link": "#_1-1-什么是-c10k",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 传统模型的局限",
+            "slug": "_1-2-传统模型的局限",
+            "link": "#_1-2-传统模型的局限",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、系统限制因素",
+        "slug": "二、系统限制因素",
+        "link": "#二、系统限制因素",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 限制因素分析",
+            "slug": "_2-1-限制因素分析",
+            "link": "#_2-1-限制因素分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 系统参数调优",
+            "slug": "_2-2-系统参数调优",
+            "link": "#_2-2-系统参数调优",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、IO 多路复用技术",
+        "slug": "三、io-多路复用技术",
+        "link": "#三、io-多路复用技术",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 技术对比",
+            "slug": "_3-1-技术对比",
+            "link": "#_3-1-技术对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 epoll 实现示例",
+            "slug": "_3-2-epoll-实现示例",
+            "link": "#_3-2-epoll-实现示例",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 边缘触发 vs 水平触发",
+            "slug": "_3-3-边缘触发-vs-水平触发",
+            "link": "#_3-3-边缘触发-vs-水平触发",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 的高并发实现",
+        "slug": "四、kbengine-的高并发实现",
+        "link": "#四、kbengine-的高并发实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Poller 机制",
+            "slug": "_4-1-poller-机制",
+            "link": "#_4-1-poller-机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Channel 管理",
+            "slug": "_4-2-channel-管理",
+            "link": "#_4-2-channel-管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能优化技巧",
+        "slug": "五、性能优化技巧",
+        "link": "#五、性能优化技巧",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 连接复用",
+            "slug": "_5-1-连接复用",
+            "link": "#_5-1-连接复用",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 零拷贝技术",
+            "slug": "_5-2-零拷贝技术",
+            "link": "#_5-2-零拷贝技术",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 内存池优化",
+            "slug": "_5-3-内存池优化",
+            "link": "#_5-3-内存池优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、实战配置",
+        "slug": "六、实战配置",
+        "link": "#六、实战配置",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 生产环境配置",
+            "slug": "_6-1-生产环境配置",
+            "link": "#_6-1-生产环境配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 监控连接数",
+            "slug": "_6-2-监控连接数",
+            "link": "#_6-2-监控连接数",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "连接数限制总结",
+            "slug": "连接数限制总结",
+            "link": "#连接数限制总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "C10K 解决方案",
+            "slug": "c10k-解决方案",
+            "link": "#c10k-解决方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q25-c10k-problem.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q26: 玩家数据什么时候存数据库？全量保存 vs 增量保存？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、保存时机",
+        "slug": "一、保存时机",
+        "link": "#一、保存时机",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 触发条件",
+            "slug": "_1-1-触发条件",
+            "link": "#_1-1-触发条件",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 保存时机对比",
+            "slug": "_1-2-保存时机对比",
+            "link": "#_1-2-保存时机对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、全量 vs 增量",
+        "slug": "二、全量-vs-增量",
+        "link": "#二、全量-vs-增量",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 全量保存",
+            "slug": "_2-1-全量保存",
+            "link": "#_2-1-全量保存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 增量保存",
+            "slug": "_2-2-增量保存",
+            "link": "#_2-2-增量保存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 对比总结",
+            "slug": "_2-3-对比总结",
+            "link": "#_2-3-对比总结",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 的数据保存",
+        "slug": "三、kbengine-的数据保存",
+        "link": "#三、kbengine-的数据保存",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 自动保存机制",
+            "slug": "_3-1-自动保存机制",
+            "link": "#_3-1-自动保存机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 BaseApp 保存实现",
+            "slug": "_3-2-baseapp-保存实现",
+            "link": "#_3-2-baseapp-保存实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 脏标记机制",
+            "slug": "_3-3-脏标记机制",
+            "link": "#_3-3-脏标记机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、保存策略设计",
+        "slug": "四、保存策略设计",
+        "link": "#四、保存策略设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 分级保存策略",
+            "slug": "_4-1-分级保存策略",
+            "link": "#_4-1-分级保存策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 混合保存实现",
+            "slug": "_4-2-混合保存实现",
+            "link": "#_4-2-混合保存实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、数据一致性",
+        "slug": "五、数据一致性",
+        "link": "#五、数据一致性",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 事务保证",
+            "slug": "_5-1-事务保证",
+            "link": "#_5-1-事务保证",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 备份机制",
+            "slug": "_5-2-备份机制",
+            "link": "#_5-2-备份机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、性能优化",
+        "slug": "六、性能优化",
+        "link": "#六、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 批量保存",
+            "slug": "_6-1-批量保存",
+            "link": "#_6-1-批量保存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 异步保存",
+            "slug": "_6-2-异步保存",
+            "link": "#_6-2-异步保存",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 推荐策略",
+            "slug": "_7-1-推荐策略",
+            "link": "#_7-1-推荐策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 KBEngine 配置建议",
+            "slug": "_7-2-kbengine-配置建议",
+            "link": "#_7-2-kbengine-配置建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "保存策略总结",
+            "slug": "保存策略总结",
+            "link": "#保存策略总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q26-data-persistence.html",
     "pathLocale": "/",
     "extraFields": []
   },
@@ -10079,6 +15933,182 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "Q27: 如何设计数据库表结构？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、MMO 数据库设计原则",
+        "slug": "一、mmo-数据库设计原则",
+        "link": "#一、mmo-数据库设计原则",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 设计原则",
+            "slug": "_1-1-设计原则",
+            "link": "#_1-1-设计原则",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、玩家数据表设计",
+        "slug": "二、玩家数据表设计",
+        "link": "#二、玩家数据表设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 核心玩家表",
+            "slug": "_2-1-核心玩家表",
+            "link": "#_2-1-核心玩家表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 背包物品表",
+            "slug": "_2-2-背包物品表",
+            "link": "#_2-2-背包物品表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、游戏数据表设计",
+        "slug": "三、游戏数据表设计",
+        "link": "#三、游戏数据表设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 社交系统表",
+            "slug": "_3-1-社交系统表",
+            "link": "#_3-1-社交系统表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 任务系统表",
+            "slug": "_3-2-任务系统表",
+            "link": "#_3-2-任务系统表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 战斗数据表",
+            "slug": "_3-3-战斗数据表",
+            "link": "#_3-3-战斗数据表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 数据库结构",
+        "slug": "四、kbengine-数据库结构",
+        "link": "#四、kbengine-数据库结构",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 表结构",
+            "slug": "_4-1-kbengine-表结构",
+            "link": "#_4-1-kbengine-表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 数据持久化",
+            "slug": "_4-2-kbengine-数据持久化",
+            "link": "#_4-2-kbengine-数据持久化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、分表策略",
+        "slug": "五、分表策略",
+        "link": "#五、分表策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 玩家数据分表",
+            "slug": "_5-1-玩家数据分表",
+            "link": "#_5-1-玩家数据分表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 分表实现",
+            "slug": "_5-2-分表实现",
+            "link": "#_5-2-分表实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 数据库设计建议",
+            "slug": "_6-1-数据库设计建议",
+            "link": "#_6-1-数据库设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 表设计检查清单",
+            "slug": "_6-2-表设计检查清单",
+            "link": "#_6-2-表设计检查清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "数据库设计要点",
+            "slug": "数据库设计要点",
+            "link": "#数据库设计要点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 数据库特点",
+            "slug": "kbengine-数据库特点",
+            "link": "#kbengine-数据库特点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q27-database-schema.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Q27: Real、Ghost、Shadow Entity 之间如何转换？如何高效同步？",
     "headers": [
       {
@@ -10279,6 +16309,189 @@ export const SEARCH_INDEX = [
       }
     ],
     "path": "/qa/q27-entity-ghost-shadow-relationship.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q28: 如何解决数据一致性问题？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、数据一致性问题",
+        "slug": "一、数据一致性问题",
+        "link": "#一、数据一致性问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 一致性问题分类",
+            "slug": "_1-1-一致性问题分类",
+            "link": "#_1-1-一致性问题分类",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 CAP 定理",
+            "slug": "_1-2-cap-定理",
+            "link": "#_1-2-cap-定理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、事务处理",
+        "slug": "二、事务处理",
+        "link": "#二、事务处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 ACID 特性",
+            "slug": "_2-1-acid-特性",
+            "link": "#_2-1-acid-特性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 事务隔离级别",
+            "slug": "_2-2-事务隔离级别",
+            "link": "#_2-2-事务隔离级别",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 事务实现",
+            "slug": "_2-3-事务实现",
+            "link": "#_2-3-事务实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、分布式事务",
+        "slug": "三、分布式事务",
+        "link": "#三、分布式事务",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 两阶段提交 (2PC)",
+            "slug": "_3-1-两阶段提交-2pc",
+            "link": "#_3-1-两阶段提交-2pc",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 TCC 事务",
+            "slug": "_2-2-tcc-事务",
+            "link": "#_2-2-tcc-事务",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最终一致性",
+        "slug": "四、最终一致性",
+        "link": "#四、最终一致性",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 BASE 理论",
+            "slug": "_4-1-base-理论",
+            "link": "#_4-1-base-理论",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 最终一致性实现",
+            "slug": "_4-2-最终一致性实现",
+            "link": "#_4-2-最终一致性实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 数据一致性",
+        "slug": "五、kbengine-数据一致性",
+        "link": "#五、kbengine-数据一致性",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 存档机制",
+            "slug": "_5-1-kbengine-存档机制",
+            "link": "#_5-1-kbengine-存档机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 KBEngine 数据备份",
+            "slug": "_5-2-kbengine-数据备份",
+            "link": "#_5-2-kbengine-数据备份",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 一致性策略选择",
+            "slug": "_6-1-一致性策略选择",
+            "link": "#_6-1-一致性策略选择",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 异步处理模式",
+            "slug": "_6-2-异步处理模式",
+            "link": "#_6-2-异步处理模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "一致性方案对比",
+            "slug": "一致性方案对比",
+            "link": "#一致性方案对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 一致性保证",
+            "slug": "kbengine-一致性保证",
+            "link": "#kbengine-一致性保证",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q28-data-consistency.html",
     "pathLocale": "/",
     "extraFields": []
   },
@@ -10713,6 +16926,181 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "Q29: Redis 在 MMO 中有哪些应用场景？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、Redis 基础",
+        "slug": "一、redis-基础",
+        "link": "#一、redis-基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 Redis 特性",
+            "slug": "_1-1-redis-特性",
+            "link": "#_1-1-redis-特性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 数据类型与用途",
+            "slug": "_1-2-数据类型与用途",
+            "link": "#_1-2-数据类型与用途",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、MMO 应用场景",
+        "slug": "二、mmo-应用场景",
+        "link": "#二、mmo-应用场景",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 排行榜系统",
+            "slug": "_2-1-排行榜系统",
+            "link": "#_2-1-排行榜系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 在线玩家管理",
+            "slug": "_2-2-在线玩家管理",
+            "link": "#_2-2-在线玩家管理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 分布式锁",
+            "slug": "_2-3-分布式锁",
+            "link": "#_2-3-分布式锁",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.4 限流和防刷",
+            "slug": "_2-4-限流和防刷",
+            "link": "#_2-4-限流和防刷",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 与 Redis",
+        "slug": "三、kbengine-与-redis",
+        "link": "#三、kbengine-与-redis",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 集成方案",
+            "slug": "_3-1-集成方案",
+            "link": "#_3-1-集成方案",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 缓存策略",
+            "slug": "_3-2-缓存策略",
+            "link": "#_3-2-缓存策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、高级应用",
+        "slug": "四、高级应用",
+        "link": "#四、高级应用",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 HyperLogLog 统计",
+            "slug": "_4-1-hyperloglog-统计",
+            "link": "#_4-1-hyperloglog-统计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Pub/Sub 消息",
+            "slug": "_4-2-pub-sub-消息",
+            "link": "#_4-2-pub-sub-消息",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 数据结构选择",
+            "slug": "_5-1-数据结构选择",
+            "link": "#_5-1-数据结构选择",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 注意事项",
+            "slug": "_5-3-注意事项",
+            "link": "#_5-3-注意事项",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "Redis 应用场景总结",
+            "slug": "redis-应用场景总结",
+            "link": "#redis-应用场景总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q29-redis-in-mmo.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Q3: 什么是 AOI（Area of Interest）？有哪些实现方式？各有什么优缺点？",
     "headers": [
       {
@@ -11136,6 +17524,351 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "Q30: 如何设计排行榜系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、排行榜需求分析",
+        "slug": "一、排行榜需求分析",
+        "link": "#一、排行榜需求分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 业务场景",
+            "slug": "_1-1-业务场景",
+            "link": "#_1-1-业务场景",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 性能要求",
+            "slug": "_1-2-性能要求",
+            "link": "#_1-2-性能要求",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Redis 排行榜实现",
+        "slug": "二、redis-排行榜实现",
+        "link": "#二、redis-排行榜实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Redis Sorted Set",
+            "slug": "_2-1-redis-sorted-set",
+            "link": "#_2-1-redis-sorted-set",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 Redis 排行榜实现",
+            "slug": "_2-2-redis-排行榜实现",
+            "link": "#_2-2-redis-排行榜实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、高性能排行榜设计",
+        "slug": "三、高性能排行榜设计",
+        "link": "#三、高性能排行榜设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 分层缓存架构",
+            "slug": "_3-1-分层缓存架构",
+            "link": "#_3-1-分层缓存架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 本地缓存实现",
+            "slug": "_3-2-本地缓存实现",
+            "link": "#_3-2-本地缓存实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、数据库持久化",
+        "slug": "四、数据库持久化",
+        "link": "#四、数据库持久化",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 排行榜数据表",
+            "slug": "_4-1-排行榜数据表",
+            "link": "#_4-1-排行榜数据表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 定时持久化",
+            "slug": "_4-2-定时持久化",
+            "link": "#_4-2-定时持久化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、分布式排行榜",
+        "slug": "五、分布式排行榜",
+        "link": "#五、分布式排行榜",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 跨服排行榜",
+            "slug": "_5-1-跨服排行榜",
+            "link": "#_5-1-跨服排行榜",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 跨服排行榜实现",
+            "slug": "_5-2-跨服排行榜实现",
+            "link": "#_5-2-跨服排行榜实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 排行榜优化建议",
+            "slug": "_6-1-排行榜优化建议",
+            "link": "#_6-1-排行榜优化建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 常见问题处理",
+            "slug": "_6-2-常见问题处理",
+            "link": "#_6-2-常见问题处理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "排行榜方案总结",
+            "slug": "排行榜方案总结",
+            "link": "#排行榜方案总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Redis 排行榜命令",
+            "slug": "redis-排行榜命令",
+            "link": "#redis-排行榜命令",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q30-leaderboard-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q31: 如何设计好友系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、好友系统需求",
+        "slug": "一、好友系统需求",
+        "link": "#一、好友系统需求",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心功能",
+            "slug": "_1-1-核心功能",
+            "link": "#_1-1-核心功能",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 业务规则",
+            "slug": "_1-2-业务规则",
+            "link": "#_1-2-业务规则",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据库表设计",
+            "slug": "_2-1-数据库表设计",
+            "link": "#_2-1-数据库表设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 Redis 数据结构",
+            "slug": "_2-2-redis-数据结构",
+            "link": "#_2-2-redis-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、好友系统实现",
+        "slug": "三、好友系统实现",
+        "link": "#三、好友系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 好友管理",
+            "slug": "_3-1-好友管理",
+            "link": "#_3-1-好友管理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 黑名单管理",
+            "slug": "_3-2-黑名单管理",
+            "link": "#_3-2-黑名单管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、好友推荐算法",
+        "slug": "四、好友推荐算法",
+        "link": "#四、好友推荐算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 推荐策略",
+            "slug": "_4-1-推荐策略",
+            "link": "#_4-1-推荐策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 推荐实现",
+            "slug": "_4-2-推荐实现",
+            "link": "#_4-2-推荐实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、在线状态管理",
+        "slug": "五、在线状态管理",
+        "link": "#五、在线状态管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 在线状态实现",
+            "slug": "_5-1-在线状态实现",
+            "link": "#_5-1-在线状态实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 好友系统设计建议",
+            "slug": "_6-1-好友系统设计建议",
+            "link": "#_6-1-好友系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 常见问题处理",
+            "slug": "_6-2-常见问题处理",
+            "link": "#_6-2-常见问题处理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "好友系统功能总结",
+            "slug": "好友系统功能总结",
+            "link": "#好友系统功能总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Redis 数据结构总结",
+            "slug": "redis-数据结构总结",
+            "link": "#redis-数据结构总结",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q31-friend-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Q31: KBEngine 如何高效广播？如何保证消息不重复？",
     "headers": [
       {
@@ -11347,6 +18080,9547 @@ export const SEARCH_INDEX = [
     "extraFields": []
   },
   {
+    "title": "Q32: KBEngine CellApp 同机/跨机如何通信？有什么证据？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、核心网络组件（源码证据）",
+        "slug": "一、核心网络组件-源码证据",
+        "link": "#一、核心网络组件-源码证据",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. Channel（通道）",
+            "slug": "_1-channel-通道",
+            "link": "#_1-channel-通道",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. EndPoint（端点）",
+            "slug": "_2-endpoint-端点",
+            "link": "#_2-endpoint-端点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. Poller（轮询器）",
+            "slug": "_3-poller-轮询器",
+            "link": "#_3-poller-轮询器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、同机通信机制",
+        "slug": "二、同机通信机制",
+        "link": "#二、同机通信机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "同机组件通信架构",
+            "slug": "同机组件通信架构",
+            "link": "#同机组件通信架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "同机通信证据",
+            "slug": "同机通信证据",
+            "link": "#同机通信证据",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、跨机通信机制",
+        "slug": "三、跨机通信机制",
+        "link": "#三、跨机通信机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "跨机组件通信架构",
+            "slug": "跨机组件通信架构",
+            "link": "#跨机组件通信架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "跨机通信证据",
+            "slug": "跨机通信证据",
+            "link": "#跨机通信证据",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Channel 连接建立流程",
+        "slug": "四、channel-连接建立流程",
+        "link": "#四、channel-连接建立流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "连接建立序列图",
+            "slug": "连接建立序列图",
+            "link": "#连接建立序列图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "源码证据：连接管理",
+            "slug": "源码证据-连接管理",
+            "link": "#源码证据-连接管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、消息发送机制",
+        "slug": "五、消息发送机制",
+        "link": "#五、消息发送机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "Bundle 和 Packet",
+            "slug": "bundle-和-packet",
+            "link": "#bundle-和-packet",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "消息处理流程",
+            "slug": "消息处理流程",
+            "link": "#消息处理流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、同机 vs 跨机对比",
+        "slug": "六、同机-vs-跨机对比",
+        "link": "#六、同机-vs-跨机对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "通信方式对比",
+            "slug": "通信方式对比",
+            "link": "#通信方式对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "源码证据：无区别设计",
+            "slug": "源码证据-无区别设计",
+            "link": "#源码证据-无区别设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、关键证据总结",
+        "slug": "七、关键证据总结",
+        "link": "#七、关键证据总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "源码证据汇总",
+            "slug": "源码证据汇总",
+            "link": "#源码证据汇总",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "核心结论",
+            "slug": "核心结论",
+            "link": "#核心结论",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、参考资料",
+        "slug": "八、参考资料",
+        "link": "#八、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q32-kbengine-cellapp-communication.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q32: 如何设计邮件系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、邮件系统需求",
+        "slug": "一、邮件系统需求",
+        "link": "#一、邮件系统需求",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心功能",
+            "slug": "_1-1-核心功能",
+            "link": "#_1-1-核心功能",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 业务规则",
+            "slug": "_1-2-业务规则",
+            "link": "#_1-2-业务规则",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据库表",
+            "slug": "_2-1-数据库表",
+            "link": "#_2-1-数据库表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 Redis 数据结构",
+            "slug": "_2-2-redis-数据结构",
+            "link": "#_2-2-redis-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、邮件系统实现",
+        "slug": "三、邮件系统实现",
+        "link": "#三、邮件系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 邮件服务",
+            "slug": "_3-1-邮件服务",
+            "link": "#_3-1-邮件服务",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 邮件系统优化",
+            "slug": "_4-1-邮件系统优化",
+            "link": "#_4-1-邮件系统优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "邮件系统功能总结",
+            "slug": "邮件系统功能总结",
+            "link": "#邮件系统功能总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "数据存储策略",
+            "slug": "数据存储策略",
+            "link": "#数据存储策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q32-mail-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q33: 如何处理热点数据？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、热点数据问题",
+        "slug": "一、热点数据问题",
+        "link": "#一、热点数据问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是热点数据",
+            "slug": "_1-1-什么是热点数据",
+            "link": "#_1-1-什么是热点数据",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 热点数据分类",
+            "slug": "_1-2-热点数据分类",
+            "link": "#_1-2-热点数据分类",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、缓存策略",
+        "slug": "二、缓存策略",
+        "link": "#二、缓存策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 多级缓存",
+            "slug": "_2-1-多级缓存",
+            "link": "#_2-1-多级缓存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 Cache-Aside 模式",
+            "slug": "_2-2-cache-aside-模式",
+            "link": "#_2-2-cache-aside-模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、数据分片",
+        "slug": "三、数据分片",
+        "link": "#三、数据分片",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 分片策略",
+            "slug": "_3-1-分片策略",
+            "link": "#_3-1-分片策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、缓存更新策略",
+        "slug": "四、缓存更新策略",
+        "link": "#四、缓存更新策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 更新策略对比",
+            "slug": "_4-1-更新策略对比",
+            "link": "#_4-1-更新策略对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "热点数据处理方案",
+            "slug": "热点数据处理方案",
+            "link": "#热点数据处理方案",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q33-hot-data.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q33: KBEngine 为何不做极致性能优化？如果要做该如何改进？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、KBEngine 的实际性能表现",
+        "slug": "一、kbengine-的实际性能表现",
+        "link": "#一、kbengine-的实际性能表现",
+        "children": [
+          {
+            "level": 3,
+            "title": "性能基线",
+            "slug": "性能基线",
+            "link": "#性能基线",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "性能瓶颈分析",
+            "slug": "性能瓶颈分析",
+            "link": "#性能瓶颈分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 不做极致优化的原因",
+        "slug": "二、kbengine-不做极致优化的原因",
+        "link": "#二、kbengine-不做极致优化的原因",
+        "children": [
+          {
+            "level": 3,
+            "title": "原因 1：目标用户群",
+            "slug": "原因-1-目标用户群",
+            "link": "#原因-1-目标用户群",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "原因 2：优化收益递减",
+            "slug": "原因-2-优化收益递减",
+            "link": "#原因-2-优化收益递减",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "原因 3：可移植性",
+            "slug": "原因-3-可移植性",
+            "link": "#原因-3-可移植性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "原因 4：问题场景",
+            "slug": "原因-4-问题场景",
+            "link": "#原因-4-问题场景",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 的实际优化点",
+        "slug": "三、kbengine-的实际优化点",
+        "link": "#三、kbengine-的实际优化点",
+        "children": [
+          {
+            "level": 3,
+            "title": "已经做的优化",
+            "slug": "已经做的优化",
+            "link": "#已经做的优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "没有做的优化",
+            "slug": "没有做的优化",
+            "link": "#没有做的优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、如果做极致优化",
+        "slug": "四、如果做极致优化",
+        "link": "#四、如果做极致优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "优化 1：同机共享内存",
+            "slug": "优化-1-同机共享内存",
+            "link": "#优化-1-同机共享内存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "优化 2：零拷贝序列化",
+            "slug": "优化-2-零拷贝序列化",
+            "link": "#优化-2-零拷贝序列化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "优化 3：多线程分区",
+            "slug": "优化-3-多线程分区",
+            "link": "#优化-3-多线程分区",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "优化 4：用户态网络栈",
+            "slug": "优化-4-用户态网络栈",
+            "link": "#优化-4-用户态网络栈",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、优化建议：实际问题优先",
+        "slug": "五、优化建议-实际问题优先",
+        "link": "#五、优化建议-实际问题优先",
+        "children": [
+          {
+            "level": 3,
+            "title": "问题诊断优先",
+            "slug": "问题诊断优先",
+            "link": "#问题诊断优先",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "优化优先级",
+            "slug": "优化优先级",
+            "link": "#优化优先级",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、实际优化案例",
+        "slug": "六、实际优化案例",
+        "link": "#六、实际优化案例",
+        "children": [
+          {
+            "level": 3,
+            "title": "案例：同机通信优化",
+            "slug": "案例-同机通信优化",
+            "link": "#案例-同机通信优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "案例：广播优化",
+            "slug": "案例-广播优化",
+            "link": "#案例-广播优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、何时需要极致优化",
+        "slug": "七、何时需要极致优化",
+        "link": "#七、何时需要极致优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "判断标准",
+            "slug": "判断标准",
+            "link": "#判断标准",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "渐进式优化路径",
+            "slug": "渐进式优化路径",
+            "link": "#渐进式优化路径",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "KBEngine 的设计哲学",
+            "slug": "kbengine-的设计哲学",
+            "link": "#kbengine-的设计哲学",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "性能优化建议",
+            "slug": "性能优化建议",
+            "link": "#性能优化建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "参考资料",
+            "slug": "参考资料",
+            "link": "#参考资料",
+            "children": []
+          }
+        ]
+      }
+    ],
+    "path": "/qa/q33-kbengine-performance-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q34: 数据库连接池如何设计？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、连接池原理",
+        "slug": "一、连接池原理",
+        "link": "#一、连接池原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 为什么需要连接池",
+            "slug": "_1-1-为什么需要连接池",
+            "link": "#_1-1-为什么需要连接池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、连接池实现",
+        "slug": "二、连接池实现",
+        "link": "#二、连接池实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 基础连接池",
+            "slug": "_2-1-基础连接池",
+            "link": "#_2-1-基础连接池",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 RAII 连接管理",
+            "slug": "_2-2-raii-连接管理",
+            "link": "#_2-2-raii-连接管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、连接池配置",
+        "slug": "三、连接池配置",
+        "link": "#三、连接池配置",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 参数说明",
+            "slug": "_3-1-参数说明",
+            "link": "#_3-1-参数说明",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 连接池",
+            "slug": "_3-2-kbengine-连接池",
+            "link": "#_3-2-kbengine-连接池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 连接池最佳实践",
+            "slug": "_4-1-连接池最佳实践",
+            "link": "#_4-1-连接池最佳实践",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 连接泄漏预防",
+            "slug": "_4-2-连接泄漏预防",
+            "link": "#_4-2-连接泄漏预防",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "连接池关键参数",
+            "slug": "连接池关键参数",
+            "link": "#连接池关键参数",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q34-connection-pool.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q35: 如何实现数据库分片？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、分片策略",
+        "slug": "一、分片策略",
+        "link": "#一、分片策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 分片类型对比",
+            "slug": "_1-1-分片类型对比",
+            "link": "#_1-1-分片类型对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 分片算法",
+            "slug": "_1-2-分片算法",
+            "link": "#_1-2-分片算法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、分片实现",
+        "slug": "二、分片实现",
+        "link": "#二、分片实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 分片管理器",
+            "slug": "_2-1-分片管理器",
+            "link": "#_2-1-分片管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、最佳实践",
+        "slug": "三、最佳实践",
+        "link": "#三、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 分片设计建议",
+            "slug": "_3-1-分片设计建议",
+            "link": "#_3-1-分片设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 分片迁移",
+            "slug": "_3-2-分片迁移",
+            "link": "#_3-2-分片迁移",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、总结",
+        "slug": "四、总结",
+        "link": "#四、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "分片方案选择",
+            "slug": "分片方案选择",
+            "link": "#分片方案选择",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q35-database-sharding.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q36: 如何处理数据库事务？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、事务基础",
+        "slug": "一、事务基础",
+        "link": "#一、事务基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 ACID 特性",
+            "slug": "_1-1-acid-特性",
+            "link": "#_1-1-acid-特性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 隔离级别",
+            "slug": "_1-2-隔离级别",
+            "link": "#_1-2-隔离级别",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.3 事务实现",
+            "slug": "_1-3-事务实现",
+            "link": "#_1-3-事务实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、死锁处理",
+        "slug": "二、死锁处理",
+        "link": "#二、死锁处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 死锁检测",
+            "slug": "_2-1-死锁检测",
+            "link": "#_2-1-死锁检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、最佳实践",
+        "slug": "三、最佳实践",
+        "link": "#三、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "事务使用建议",
+            "slug": "事务使用建议",
+            "link": "#事务使用建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q36-database-transaction.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q37: 如何实现数据的缓存淘汰策略？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、淘汰算法",
+        "slug": "一、淘汰算法",
+        "link": "#一、淘汰算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 LRU 实现",
+            "slug": "_1-1-lru-实现",
+            "link": "#_1-1-lru-实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 LFU 实现",
+            "slug": "_1-2-lfu-实现",
+            "link": "#_1-2-lfu-实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Redis 淘汰策略",
+        "slug": "二、redis-淘汰策略",
+        "link": "#二、redis-淘汰策略",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "三、最佳实践",
+        "slug": "三、最佳实践",
+        "link": "#三、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "缓存淘汰建议",
+            "slug": "缓存淘汰建议",
+            "link": "#缓存淘汰建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q37-cache-eviction.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q38: 如何防止数据被篡改？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、防篡改策略",
+        "slug": "一、防篡改策略",
+        "link": "#一、防篡改策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 多层防护",
+            "slug": "_1-1-多层防护",
+            "link": "#_1-1-多层防护",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、加密与签名",
+        "slug": "二、加密与签名",
+        "link": "#二、加密与签名",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据加密",
+            "slug": "_2-1-数据加密",
+            "link": "#_2-1-数据加密",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数字签名",
+            "slug": "_2-2-数字签名",
+            "link": "#_2-2-数字签名",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、审计日志",
+        "slug": "三、审计日志",
+        "link": "#三、审计日志",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 操作审计",
+            "slug": "_3-1-操作审计",
+            "link": "#_3-1-操作审计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "防篡改措施",
+            "slug": "防篡改措施",
+            "link": "#防篡改措施",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q38-data-integrity.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q39: 如何设计战斗系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、战斗系统架构",
+        "slug": "一、战斗系统架构",
+        "link": "#一、战斗系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 战斗系统组成",
+            "slug": "_1-1-战斗系统组成",
+            "link": "#_1-1-战斗系统组成",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、伤害计算",
+        "slug": "二、伤害计算",
+        "link": "#二、伤害计算",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 基础伤害公式",
+            "slug": "_2-1-基础伤害公式",
+            "link": "#_2-1-基础伤害公式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 伤害计算实现",
+            "slug": "_2-2-伤害计算实现",
+            "link": "#_2-2-伤害计算实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、技能系统",
+        "slug": "三、技能系统",
+        "link": "#三、技能系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "3. 技能释放流程",
+            "slug": "_3-技能释放流程",
+            "link": "#_3-技能释放流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、战斗同步",
+        "slug": "四、战斗同步",
+        "link": "#四、战斗同步",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 延迟补偿",
+            "slug": "_4-1-延迟补偿",
+            "link": "#_4-1-延迟补偿",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 战斗系统设计建议",
+            "slug": "_5-1-战斗系统设计建议",
+            "link": "#_5-1-战斗系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 常见问题",
+            "slug": "_5-2-常见问题",
+            "link": "#_5-2-常见问题",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "战斗系统核心",
+            "slug": "战斗系统核心",
+            "link": "#战斗系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q39-combat-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q4: 如何实现大地图的无缝切换？如何处理跨服务器的玩家移动？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、大地图无缝切换的概念",
+        "slug": "一、大地图无缝切换的概念",
+        "link": "#一、大地图无缝切换的概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "什么是无缝切换",
+            "slug": "什么是无缝切换",
+            "link": "#什么是无缝切换",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "技术挑战",
+            "slug": "技术挑战",
+            "link": "#技术挑战",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、空间划分策略",
+        "slug": "二、空间划分策略",
+        "link": "#二、空间划分策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "单一大地图 vs 多地图",
+            "slug": "单一大地图-vs-多地图",
+            "link": "#单一大地图-vs-多地图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "CellApp 空间划分方案",
+            "slug": "cellapp-空间划分方案",
+            "link": "#cellapp-空间划分方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、跨 CellApp 玩家移动流程",
+        "slug": "三、跨-cellapp-玩家移动流程",
+        "link": "#三、跨-cellapp-玩家移动流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心机制",
+            "slug": "核心机制",
+            "link": "#核心机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "边界检测算法",
+            "slug": "边界检测算法",
+            "link": "#边界检测算法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Entity 迁移机制",
+        "slug": "四、entity-迁移机制",
+        "link": "#四、entity-迁移机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "迁移触发条件",
+            "slug": "迁移触发条件",
+            "link": "#迁移触发条件",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Entity 迁移详细流程",
+            "slug": "entity-迁移详细流程",
+            "link": "#entity-迁移详细流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "迁移过程中的状态处理",
+            "slug": "迁移过程中的状态处理",
+            "link": "#迁移过程中的状态处理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、客户端无感知优化",
+        "slug": "五、客户端无感知优化",
+        "link": "#五、客户端无感知优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 边界预加载",
+            "slug": "_1-边界预加载",
+            "link": "#_1-边界预加载",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 双向缓冲",
+            "slug": "_2-双向缓冲",
+            "link": "#_2-双向缓冲",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 预测补偿",
+            "slug": "_3-预测补偿",
+            "link": "#_3-预测补偿",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、Ghost 机制在边界的作用",
+        "slug": "六、ghost-机制在边界的作用",
+        "link": "#六、ghost-机制在边界的作用",
+        "children": [
+          {
+            "level": 3,
+            "title": "Ghost 的作用",
+            "slug": "ghost-的作用",
+            "link": "#ghost-的作用",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "Ghost 的创建和销毁",
+            "slug": "ghost-的创建和销毁",
+            "link": "#ghost-的创建和销毁",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、不同场景的实现",
+        "slug": "七、不同场景的实现",
+        "link": "#七、不同场景的实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "场景 1：同一 Space 内跨 CellApp",
+            "slug": "场景-1-同一-space-内跨-cellapp",
+            "link": "#场景-1-同一-space-内跨-cellapp",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "场景 2：不同 Space 之间（传送）",
+            "slug": "场景-2-不同-space-之间-传送",
+            "link": "#场景-2-不同-space-之间-传送",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、技术难点与解决方案",
+        "slug": "八、技术难点与解决方案",
+        "link": "#八、技术难点与解决方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "难点 1：迁移期间的消息一致性",
+            "slug": "难点-1-迁移期间的消息一致性",
+            "link": "#难点-1-迁移期间的消息一致性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "难点 2：客户端卡顿优化",
+            "slug": "难点-2-客户端卡顿优化",
+            "link": "#难点-2-客户端卡顿优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "难点 3：边界回弹问题",
+            "slug": "难点-3-边界回弹问题",
+            "link": "#难点-3-边界回弹问题",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "九、完整的跨边界移动示例",
+        "slug": "九、完整的跨边界移动示例",
+        "link": "#九、完整的跨边界移动示例",
+        "children": [
+          {
+            "level": 3,
+            "title": "完整代码流程",
+            "slug": "完整代码流程",
+            "link": "#完整代码流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十、性能优化",
+        "slug": "十、性能优化",
+        "link": "#十、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "优化 1：批量迁移",
+            "slug": "优化-1-批量迁移",
+            "link": "#优化-1-批量迁移",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "优化 2：边界缓存",
+            "slug": "优化-2-边界缓存",
+            "link": "#优化-2-边界缓存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "优化 3：异步迁移",
+            "slug": "优化-3-异步迁移",
+            "link": "#优化-3-异步迁移",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十一、参考资料",
+        "slug": "十一、参考资料",
+        "link": "#十一、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q4-seamless-world.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q40: ECS 架构是什么？在游戏中有什么优势？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、ECS 基础概念",
+        "slug": "一、ecs-基础概念",
+        "link": "#一、ecs-基础概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 三大核心元素",
+            "slug": "_1-1-三大核心元素",
+            "link": "#_1-1-三大核心元素",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 与 OOP 对比",
+            "slug": "_1-2-与-oop-对比",
+            "link": "#_1-2-与-oop-对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、ECS 详细设计",
+        "slug": "二、ecs-详细设计",
+        "link": "#二、ecs-详细设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Component 设计",
+            "slug": "_2-1-component-设计",
+            "link": "#_2-1-component-设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 System 设计",
+            "slug": "_2-2-system-设计",
+            "link": "#_2-2-system-设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 Entity Manager",
+            "slug": "_2-3-entity-manager",
+            "link": "#_2-3-entity-manager",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、ECS 优势分析",
+        "slug": "三、ecs-优势分析",
+        "link": "#三、ecs-优势分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 性能优势",
+            "slug": "_3-1-性能优势",
+            "link": "#_3-1-性能优势",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 设计优势",
+            "slug": "_3-2-设计优势",
+            "link": "#_3-2-设计优势",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Unity DOTS 实现",
+        "slug": "四、unity-dots-实现",
+        "link": "#四、unity-dots-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Unity DOTS 架构",
+            "slug": "_4-1-unity-dots-架构",
+            "link": "#_4-1-unity-dots-架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Unity DOTS 示例",
+            "slug": "_4-2-unity-dots-示例",
+            "link": "#_4-2-unity-dots-示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、游戏服务器中的 ECS",
+        "slug": "五、游戏服务器中的-ecs",
+        "link": "#五、游戏服务器中的-ecs",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 MMO 服务器 ECS 设计",
+            "slug": "_5-1-mmo-服务器-ecs-设计",
+            "link": "#_5-1-mmo-服务器-ecs-设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 网络同步 System",
+            "slug": "_5-2-网络同步-system",
+            "link": "#_5-2-网络同步-system",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 设计原则",
+            "slug": "_6-1-设计原则",
+            "link": "#_6-1-设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 常见陷阱",
+            "slug": "_6-2-常见陷阱",
+            "link": "#_6-2-常见陷阱",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "ECS vs OOP 总结",
+            "slug": "ecs-vs-oop-总结",
+            "link": "#ecs-vs-oop-总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "何时使用 ECS",
+            "slug": "何时使用-ecs",
+            "link": "#何时使用-ecs",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q40-ecs-architecture.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q41: 如何设计技能系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、技能系统核心",
+        "slug": "一、技能系统核心",
+        "link": "#一、技能系统核心",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心要素",
+            "slug": "_1-1-核心要素",
+            "link": "#_1-1-核心要素",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据驱动设计",
+        "slug": "二、数据驱动设计",
+        "link": "#二、数据驱动设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 技能配置表",
+            "slug": "_2-1-技能配置表",
+            "link": "#_2-1-技能配置表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据结构设计",
+            "slug": "_2-2-数据结构设计",
+            "link": "#_2-2-数据结构设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、技能释放流程",
+        "slug": "三、技能释放流程",
+        "link": "#三、技能释放流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 释放流程图",
+            "slug": "_3-1-释放流程图",
+            "link": "#_3-1-释放流程图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 验证逻辑",
+            "slug": "_3-2-验证逻辑",
+            "link": "#_3-2-验证逻辑",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、技能效果实现",
+        "slug": "四、技能效果实现",
+        "link": "#四、技能效果实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 效果系统",
+            "slug": "_4-1-效果系统",
+            "link": "#_4-1-效果系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 目标选择",
+            "slug": "_4-2-目标选择",
+            "link": "#_4-2-目标选择",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 技能实现",
+        "slug": "五、kbengine-技能实现",
+        "link": "#五、kbengine-技能实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 技能定义",
+            "slug": "_5-1-kbengine-技能定义",
+            "link": "#_5-1-kbengine-技能定义",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 KBEngine 技能效果",
+            "slug": "_5-2-kbengine-技能效果",
+            "link": "#_5-2-kbengine-技能效果",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、性能优化",
+        "slug": "六、性能优化",
+        "link": "#六、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 技能缓存",
+            "slug": "_6-1-技能缓存",
+            "link": "#_6-1-技能缓存",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 效果池化",
+            "slug": "_6-2-效果池化",
+            "link": "#_6-2-效果池化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "技能系统设计要点",
+            "slug": "技能系统设计要点",
+            "link": "#技能系统设计要点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q41-skill-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q42: 如何设计 Buff/Debuff 系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、Buff/Debuff 概述",
+        "slug": "一、buff-debuff-概述",
+        "link": "#一、buff-debuff-概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 定义",
+            "slug": "_1-1-定义",
+            "link": "#_1-1-定义",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Buff 模板",
+            "slug": "_2-1-buff-模板",
+            "link": "#_2-1-buff-模板",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 玩家 Buff 记录",
+            "slug": "_2-2-玩家-buff-记录",
+            "link": "#_2-2-玩家-buff-记录",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Buff 系统实现",
+        "slug": "三、buff-系统实现",
+        "link": "#三、buff-系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Buff 管理",
+            "slug": "_3-1-buff-管理",
+            "link": "#_3-1-buff-管理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 效果叠加规则",
+            "slug": "_3-2-效果叠加规则",
+            "link": "#_3-2-效果叠加规则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 效果计算实现",
+            "slug": "_3-3-效果计算实现",
+            "link": "#_3-3-效果计算实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、时间管理",
+        "slug": "四、时间管理",
+        "link": "#四、时间管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Buff 时间管理",
+            "slug": "_4-1-buff-时间管理",
+            "link": "#_4-1-buff-时间管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Buff/Debuff 设计建议",
+            "slug": "_5-1-buff-debuff-设计建议",
+            "link": "#_5-1-buff-debuff-设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "Buff/Debuff 系统核心",
+            "slug": "buff-debuff-系统核心",
+            "link": "#buff-debuff-系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q42-buff-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q43: 如何设计属性系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、属性系统架构",
+        "slug": "一、属性系统架构",
+        "link": "#一、属性系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 属性系统组成",
+            "slug": "_1-1-属性系统组成",
+            "link": "#_1-1-属性系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 KBEngine 属性定义",
+            "slug": "_1-2-kbengine-属性定义",
+            "link": "#_1-2-kbengine-属性定义",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、属性分类",
+        "slug": "二、属性分类",
+        "link": "#二、属性分类",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 属性类型划分",
+            "slug": "_2-1-属性类型划分",
+            "link": "#_2-1-属性类型划分",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 属性加成来源",
+            "slug": "_2-2-属性加成来源",
+            "link": "#_2-2-属性加成来源",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、属性系统实现",
+        "slug": "三、属性系统实现",
+        "link": "#三、属性系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 属性管理器",
+            "slug": "_3-1-属性管理器",
+            "link": "#_3-1-属性管理器",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 属性同步",
+            "slug": "_3-2-kbengine-属性同步",
+            "link": "#_3-2-kbengine-属性同步",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、属性计算",
+        "slug": "四、属性计算",
+        "link": "#四、属性计算",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 百分比加成 vs 固定加成",
+            "slug": "_4-1-百分比加成-vs-固定加成",
+            "link": "#_4-1-百分比加成-vs-固定加成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 加成优先级",
+            "slug": "_4-2-加成优先级",
+            "link": "#_4-2-加成优先级",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 属性系统设计建议",
+            "slug": "_5-1-属性系统设计建议",
+            "link": "#_5-1-属性系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "属性系统核心",
+            "slug": "属性系统核心",
+            "link": "#属性系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q43-attribute-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q44: 如何设计背包系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、背包系统架构",
+        "slug": "一、背包系统架构",
+        "link": "#一、背包系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 背包系统组成",
+            "slug": "_1-1-背包系统组成",
+            "link": "#_1-1-背包系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 KBEngine 物品定义",
+            "slug": "_1-2-kbengine-物品定义",
+            "link": "#_1-2-kbengine-物品定义",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 背包表结构",
+            "slug": "_2-1-背包表结构",
+            "link": "#_2-1-背包表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 物品类型定义",
+            "slug": "_2-2-物品类型定义",
+            "link": "#_2-2-物品类型定义",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、背包系统实现",
+        "slug": "三、背包系统实现",
+        "link": "#三、背包系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 背包管理器",
+            "slug": "_3-1-背包管理器",
+            "link": "#_3-1-背包管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 背包系统",
+        "slug": "四、kbengine-背包系统",
+        "link": "#四、kbengine-背包系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 物品管理",
+            "slug": "_4-1-kbengine-物品管理",
+            "link": "#_4-1-kbengine-物品管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 背包系统设计建议",
+            "slug": "_5-1-背包系统设计建议",
+            "link": "#_5-1-背包系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "背包系统核心",
+            "slug": "背包系统核心",
+            "link": "#背包系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q44-inventory-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q45: 如何设计交易系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、交易系统架构",
+        "slug": "一、交易系统架构",
+        "link": "#一、交易系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 交易类型",
+            "slug": "_1-1-交易类型",
+            "link": "#_1-1-交易类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 交易状态机",
+            "slug": "_1-2-交易状态机",
+            "link": "#_1-2-交易状态机",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、面对面交易实现",
+        "slug": "二、面对面交易实现",
+        "link": "#二、面对面交易实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 交易数据结构",
+            "slug": "_2-1-交易数据结构",
+            "link": "#_2-1-交易数据结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 交易管理器",
+            "slug": "_2-2-交易管理器",
+            "link": "#_2-2-交易管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、交易安全",
+        "slug": "三、交易安全",
+        "link": "#三、交易安全",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 防作弊措施",
+            "slug": "_3-1-防作弊措施",
+            "link": "#_3-1-防作弊措施",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 交易日志",
+            "slug": "_3-2-交易日志",
+            "link": "#_3-2-交易日志",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 交易实现",
+        "slug": "四、kbengine-交易实现",
+        "link": "#四、kbengine-交易实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 交易示例",
+            "slug": "_4-1-kbengine-交易示例",
+            "link": "#_4-1-kbengine-交易示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 交易系统设计建议",
+            "slug": "_5-1-交易系统设计建议",
+            "link": "#_5-1-交易系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 防刷物品",
+            "slug": "_5-2-防刷物品",
+            "link": "#_5-2-防刷物品",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "交易系统核心",
+            "slug": "交易系统核心",
+            "link": "#交易系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q45-trading-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q46: 如何设计拍卖行？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、拍卖行系统架构",
+        "slug": "一、拍卖行系统架构",
+        "link": "#一、拍卖行系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 拍卖类型",
+            "slug": "_1-2-拍卖类型",
+            "link": "#_1-2-拍卖类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 拍卖行表结构",
+            "slug": "_2-1-拍卖行表结构",
+            "link": "#_2-1-拍卖行表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据结构",
+            "slug": "_2-2-数据结构",
+            "link": "#_2-2-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、拍卖行系统实现",
+        "slug": "三、拍卖行系统实现",
+        "link": "#三、拍卖行系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 拍卖行管理器",
+            "slug": "_3-1-拍卖行管理器",
+            "link": "#_3-1-拍卖行管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Redis 缓存优化",
+        "slug": "四、redis-缓存优化",
+        "link": "#四、redis-缓存优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 拍卖行缓存",
+            "slug": "_4-1-拍卖行缓存",
+            "link": "#_4-1-拍卖行缓存",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 拍卖行设计建议",
+            "slug": "_5-1-拍卖行设计建议",
+            "link": "#_5-1-拍卖行设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "拍卖行系统核心",
+            "slug": "拍卖行系统核心",
+            "link": "#拍卖行系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q46-auction-house.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q47: 如何设计公会系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、公会系统架构",
+        "slug": "一、公会系统架构",
+        "link": "#一、公会系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 公会职位体系",
+            "slug": "_1-2-公会职位体系",
+            "link": "#_1-2-公会职位体系",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据库表结构",
+            "slug": "_2-1-数据库表结构",
+            "link": "#_2-1-数据库表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据结构",
+            "slug": "_2-2-数据结构",
+            "link": "#_2-2-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、公会系统实现",
+        "slug": "三、公会系统实现",
+        "link": "#三、公会系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 公会管理器",
+            "slug": "_3-1-公会管理器",
+            "link": "#_3-1-公会管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、公会福利系统",
+        "slug": "四、公会福利系统",
+        "link": "#四、公会福利系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 公会等级福利",
+            "slug": "_4-1-公会等级福利",
+            "link": "#_4-1-公会等级福利",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 公会系统设计建议",
+            "slug": "_5-1-公会系统设计建议",
+            "link": "#_5-1-公会系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "公会系统核心",
+            "slug": "公会系统核心",
+            "link": "#公会系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q47-guild-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q48: 如何设计任务系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、任务系统架构",
+        "slug": "一、任务系统架构",
+        "link": "#一、任务系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 任务数据关系",
+            "slug": "_1-2-任务数据关系",
+            "link": "#_1-2-任务数据关系",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据库表结构",
+            "slug": "_2-1-数据库表结构",
+            "link": "#_2-1-数据库表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据结构",
+            "slug": "_2-2-数据结构",
+            "link": "#_2-2-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、任务系统实现",
+        "slug": "三、任务系统实现",
+        "link": "#三、任务系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 任务管理器",
+            "slug": "_3-1-任务管理器",
+            "link": "#_3-1-任务管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 任务系统设计建议",
+            "slug": "_4-1-任务系统设计建议",
+            "link": "#_4-1-任务系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 性能优化",
+            "slug": "_4-2-性能优化",
+            "link": "#_4-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "任务系统核心",
+            "slug": "任务系统核心",
+            "link": "#任务系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q48-quest-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q49: 如何设计副本系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、副本系统架构",
+        "slug": "一、副本系统架构",
+        "link": "#一、副本系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 副本类型",
+            "slug": "_1-1-副本类型",
+            "link": "#_1-1-副本类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 副本生命周期",
+            "slug": "_1-2-副本生命周期",
+            "link": "#_1-2-副本生命周期",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据库表结构",
+            "slug": "_2-1-数据库表结构",
+            "link": "#_2-1-数据库表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据结构",
+            "slug": "_2-2-数据结构",
+            "link": "#_2-2-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、副本系统实现",
+        "slug": "三、副本系统实现",
+        "link": "#三、副本系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 副本管理器",
+            "slug": "_3-1-副本管理器",
+            "link": "#_3-1-副本管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、组队副本匹配",
+        "slug": "四、组队副本匹配",
+        "link": "#四、组队副本匹配",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 匹配系统",
+            "slug": "_4-1-匹配系统",
+            "link": "#_4-1-匹配系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 副本系统设计建议",
+            "slug": "_5-1-副本系统设计建议",
+            "link": "#_5-1-副本系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "副本系统核心",
+            "slug": "副本系统核心",
+            "link": "#副本系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q49-instance-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q5: 服务端如何设计才能支持动态扩容？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、动态扩容的核心概念",
+        "slug": "一、动态扩容的核心概念",
+        "link": "#一、动态扩容的核心概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "什么是动态扩容",
+            "slug": "什么是动态扩容",
+            "link": "#什么是动态扩容",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "扩容的两种类型",
+            "slug": "扩容的两种类型",
+            "link": "#扩容的两种类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 的动态扩容架构",
+        "slug": "二、kbengine-的动态扩容架构",
+        "link": "#二、kbengine-的动态扩容架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "官方设计理念",
+            "slug": "官方设计理念",
+            "link": "#官方设计理念",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "源码证据：CellAppMgr 的负载均衡",
+            "slug": "源码证据-cellappmgr-的负载均衡",
+            "link": "#源码证据-cellappmgr-的负载均衡",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、BigWorld 的动态负载均衡算法",
+        "slug": "三、bigworld-的动态负载均衡算法",
+        "link": "#三、bigworld-的动态负载均衡算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心算法：动态区域分割 + 动态边界调整",
+            "slug": "核心算法-动态区域分割-动态边界调整",
+            "link": "#核心算法-动态区域分割-动态边界调整",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "源码证据：BSP 树分割",
+            "slug": "源码证据-bsp-树分割",
+            "link": "#源码证据-bsp-树分割",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、动态扩容的关键设计",
+        "slug": "四、动态扩容的关键设计",
+        "link": "#四、动态扩容的关键设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "1. 服务无状态化",
+            "slug": "_1-服务无状态化",
+            "link": "#_1-服务无状态化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "KBEngine 的状态分离设计",
+            "slug": "kbengine-的状态分离设计",
+            "link": "#kbengine-的状态分离设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2. 服务发现机制",
+            "slug": "_2-服务发现机制",
+            "link": "#_2-服务发现机制",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "源码证据：KBEngine 服务发现",
+            "slug": "源码证据-kbengine-服务发现",
+            "link": "#源码证据-kbengine-服务发现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3. 负载均衡策略",
+            "slug": "_3-负载均衡策略",
+            "link": "#_3-负载均衡策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "策略 1：最小负载优先",
+            "slug": "策略-1-最小负载优先",
+            "link": "#策略-1-最小负载优先",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "策略 2：加权轮询",
+            "slug": "策略-2-加权轮询",
+            "link": "#策略-2-加权轮询",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "策略 3：一致性哈希",
+            "slug": "策略-3-一致性哈希",
+            "link": "#策略-3-一致性哈希",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、动态扩容的实现步骤",
+        "slug": "五、动态扩容的实现步骤",
+        "link": "#五、动态扩容的实现步骤",
+        "children": [
+          {
+            "level": 3,
+            "title": "步骤 1：监控负载",
+            "slug": "步骤-1-监控负载",
+            "link": "#步骤-1-监控负载",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "步骤 2：触发扩容",
+            "slug": "步骤-2-触发扩容",
+            "link": "#步骤-2-触发扩容",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "步骤 3：执行扩容",
+            "slug": "步骤-3-执行扩容",
+            "link": "#步骤-3-执行扩容",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、Entity 迁移机制",
+        "slug": "六、entity-迁移机制",
+        "link": "#六、entity-迁移机制",
+        "children": [
+          {
+            "level": 3,
+            "title": "迁移流程",
+            "slug": "迁移流程",
+            "link": "#迁移流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "代码实现",
+            "slug": "代码实现",
+            "link": "#代码实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、动态扩容的挑战与解决方案",
+        "slug": "七、动态扩容的挑战与解决方案",
+        "link": "#七、动态扩容的挑战与解决方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "挑战 1：状态一致性",
+            "slug": "挑战-1-状态一致性",
+            "link": "#挑战-1-状态一致性",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "挑战 2：热点数据",
+            "slug": "挑战-2-热点数据",
+            "link": "#挑战-2-热点数据",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "挑战 3：数据库瓶颈",
+            "slug": "挑战-3-数据库瓶颈",
+            "link": "#挑战-3-数据库瓶颈",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、实际部署架构",
+        "slug": "八、实际部署架构",
+        "link": "#八、实际部署架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "推荐架构：三层分离",
+            "slug": "推荐架构-三层分离",
+            "link": "#推荐架构-三层分离",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "九、性能监控与自动扩容",
+        "slug": "九、性能监控与自动扩容",
+        "link": "#九、性能监控与自动扩容",
+        "children": [
+          {
+            "level": 3,
+            "title": "监控指标",
+            "slug": "监控指标",
+            "link": "#监控指标",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "自动扩容脚本",
+            "slug": "自动扩容脚本",
+            "link": "#自动扩容脚本",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "十、总结",
+        "slug": "十、总结",
+        "link": "#十、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "KBEngine 动态扩容的核心设计",
+            "slug": "kbengine-动态扩容的核心设计",
+            "link": "#kbengine-动态扩容的核心设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "参考资料",
+            "slug": "参考资料",
+            "link": "#参考资料",
+            "children": []
+          }
+        ]
+      }
+    ],
+    "path": "/qa/q5-dynamic-scaling.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q50: 如何设计匹配系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、匹配系统架构",
+        "slug": "一、匹配系统架构",
+        "link": "#一、匹配系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 匹配算法",
+            "slug": "_1-2-匹配算法",
+            "link": "#_1-2-匹配算法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据模型设计",
+        "slug": "二、数据模型设计",
+        "link": "#二、数据模型设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据库表结构",
+            "slug": "_2-1-数据库表结构",
+            "link": "#_2-1-数据库表结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 数据结构",
+            "slug": "_2-2-数据结构",
+            "link": "#_2-2-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、匹配系统实现",
+        "slug": "三、匹配系统实现",
+        "link": "#三、匹配系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 匹配管理器",
+            "slug": "_3-1-匹配管理器",
+            "link": "#_3-1-匹配管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、跨服匹配",
+        "slug": "四、跨服匹配",
+        "link": "#四、跨服匹配",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 跨服匹配架构",
+            "slug": "_4-1-跨服匹配架构",
+            "link": "#_4-1-跨服匹配架构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 匹配系统设计建议",
+            "slug": "_5-1-匹配系统设计建议",
+            "link": "#_5-1-匹配系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "匹配系统核心",
+            "slug": "匹配系统核心",
+            "link": "#匹配系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q50-matchmaking.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q51: 如何设计 AI 系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、AI 系统架构",
+        "slug": "一、ai-系统架构",
+        "link": "#一、ai-系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 AI 类型",
+            "slug": "_1-2-ai-类型",
+            "link": "#_1-2-ai-类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、状态机 AI",
+        "slug": "二、状态机-ai",
+        "link": "#二、状态机-ai",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 有限状态机",
+            "slug": "_2-1-有限状态机",
+            "link": "#_2-1-有限状态机",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、行为树 AI",
+        "slug": "三、行为树-ai",
+        "link": "#三、行为树-ai",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 行为树节点",
+            "slug": "_3-1-行为树节点",
+            "link": "#_3-1-行为树节点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine AI 实现",
+        "slug": "四、kbengine-ai-实现",
+        "link": "#四、kbengine-ai-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 怪物 AI",
+            "slug": "_4-1-kbengine-怪物-ai",
+            "link": "#_4-1-kbengine-怪物-ai",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 AI 系统设计建议",
+            "slug": "_5-1-ai-系统设计建议",
+            "link": "#_5-1-ai-系统设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "AI 系统核心",
+            "slug": "ai-系统核心",
+            "link": "#ai-系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q51-ai-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q52: 如何设计寻路系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、寻路算法",
+        "slug": "一、寻路算法",
+        "link": "#一、寻路算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常用寻路算法",
+            "slug": "_1-1-常用寻路算法",
+            "link": "#_1-1-常用寻路算法",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 A* 算法实现",
+            "slug": "_1-2-a-算法实现",
+            "link": "#_1-2-a-算法实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、导航网格",
+        "slug": "二、导航网格",
+        "link": "#二、导航网格",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 NavMesh 设计",
+            "slug": "_2-1-navmesh-设计",
+            "link": "#_2-1-navmesh-设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 NavMesh 数据结构",
+            "slug": "_2-2-navmesh-数据结构",
+            "link": "#_2-2-navmesh-数据结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、动态障碍处理",
+        "slug": "三、动态障碍处理",
+        "link": "#三、动态障碍处理",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 局部避障",
+            "slug": "_3-1-局部避障",
+            "link": "#_3-1-局部避障",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、性能优化",
+        "slug": "四、性能优化",
+        "link": "#四、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 优化策略",
+            "slug": "_4-1-优化策略",
+            "link": "#_4-1-优化策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 寻路系统设计建议",
+            "slug": "_5-1-寻路系统设计建议",
+            "link": "#_5-1-寻路系统设计建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "寻路系统核心",
+            "slug": "寻路系统核心",
+            "link": "#寻路系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q52-pathfinding.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q53: 如何设计场景管理？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、场景管理架构",
+        "slug": "一、场景管理架构",
+        "link": "#一、场景管理架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 场景类型",
+            "slug": "_1-2-场景类型",
+            "link": "#_1-2-场景类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、场景管理实现",
+        "slug": "二、场景管理实现",
+        "link": "#二、场景管理实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 场景管理器",
+            "slug": "_2-1-场景管理器",
+            "link": "#_2-1-场景管理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、场景切换",
+        "slug": "三、场景切换",
+        "link": "#三、场景切换",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 切换流程",
+            "slug": "_3-1-切换流程",
+            "link": "#_3-1-切换流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 场景切换实现",
+            "slug": "_3-2-场景切换实现",
+            "link": "#_3-2-场景切换实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 场景管理",
+        "slug": "四、kbengine-场景管理",
+        "link": "#四、kbengine-场景管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine Space 管理",
+            "slug": "_4-1-kbengine-space-管理",
+            "link": "#_4-1-kbengine-space-管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 场景管理设计建议",
+            "slug": "_5-1-场景管理设计建议",
+            "link": "#_5-1-场景管理设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能优化",
+            "slug": "_5-2-性能优化",
+            "link": "#_5-2-性能优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "场景管理核心",
+            "slug": "场景管理核心",
+            "link": "#场景管理核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q53-scene-management.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q54: 如何处理多人同时抢怪/抢资源？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、怪物归属系统",
+        "slug": "一、怪物归属系统",
+        "link": "#一、怪物归属系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 归属规则",
+            "slug": "_1-1-归属规则",
+            "link": "#_1-1-归属规则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 归属标识",
+            "slug": "_1-2-归属标识",
+            "link": "#_1-2-归属标识",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、怪物归属实现",
+        "slug": "二、怪物归属实现",
+        "link": "#二、怪物归属实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 归属系统",
+            "slug": "_2-1-归属系统",
+            "link": "#_2-1-归属系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、掉落分配系统",
+        "slug": "三、掉落分配系统",
+        "link": "#三、掉落分配系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 分配模式",
+            "slug": "_3-1-分配模式",
+            "link": "#_3-1-分配模式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 掉落实现",
+            "slug": "_3-2-掉落实现",
+            "link": "#_3-2-掉落实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、资源节点",
+        "slug": "四、资源节点",
+        "link": "#四、资源节点",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 采集点锁定",
+            "slug": "_4-1-采集点锁定",
+            "link": "#_4-1-采集点锁定",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 防抢怪设计建议",
+            "slug": "_5-1-防抢怪设计建议",
+            "link": "#_5-1-防抢怪设计建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "资源竞争处理核心",
+            "slug": "资源竞争处理核心",
+            "link": "#资源竞争处理核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q54-loot-contention.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q55: 如何设计伤害计算？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、伤害计算公式",
+        "slug": "一、伤害计算公式",
+        "link": "#一、伤害计算公式",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 基础伤害公式",
+            "slug": "_1-1-基础伤害公式",
+            "link": "#_1-1-基础伤害公式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 伤害计算流程",
+            "slug": "_1-2-伤害计算流程",
+            "link": "#_1-2-伤害计算流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、伤害计算实现",
+        "slug": "二、伤害计算实现",
+        "link": "#二、伤害计算实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 完整伤害计算器",
+            "slug": "_2-1-完整伤害计算器",
+            "link": "#_2-1-完整伤害计算器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、暴击与闪避",
+        "slug": "三、暴击与闪避",
+        "link": "#三、暴击与闪避",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 暴击系统",
+            "slug": "_3-1-暴击系统",
+            "link": "#_3-1-暴击系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 闪避系统",
+            "slug": "_3-2-闪避系统",
+            "link": "#_3-2-闪避系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、伤害类型",
+        "slug": "四、伤害类型",
+        "link": "#四、伤害类型",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 伤害分类",
+            "slug": "_4-1-伤害分类",
+            "link": "#_4-1-伤害分类",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 伤害设计建议",
+            "slug": "_5-1-伤害设计建议",
+            "link": "#_5-1-伤害设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 数值平衡",
+            "slug": "_5-2-数值平衡",
+            "link": "#_5-2-数值平衡",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "伤害计算核心",
+            "slug": "伤害计算核心",
+            "link": "#伤害计算核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q55-damage-calculation.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q56: 如何进行性能分析？有哪些工具？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、性能分析基础",
+        "slug": "一、性能分析基础",
+        "link": "#一、性能分析基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 性能指标",
+            "slug": "_1-1-性能指标",
+            "link": "#_1-1-性能指标",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 性能分析流程",
+            "slug": "_1-2-性能分析流程",
+            "link": "#_1-2-性能分析流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、CPU 性能分析",
+        "slug": "二、cpu-性能分析",
+        "link": "#二、cpu-性能分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 perf 工具",
+            "slug": "_2-1-perf-工具",
+            "link": "#_2-1-perf-工具",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 火焰图解读",
+            "slug": "_2-2-火焰图解读",
+            "link": "#_2-2-火焰图解读",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 perf 使用示例",
+            "slug": "_2-3-perf-使用示例",
+            "link": "#_2-3-perf-使用示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、内存分析",
+        "slug": "三、内存分析",
+        "link": "#三、内存分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 valgrind 工具",
+            "slug": "_3-1-valgrind-工具",
+            "link": "#_3-1-valgrind-工具",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 AddressSanitizer",
+            "slug": "_3-2-addresssanitizer",
+            "link": "#_3-2-addresssanitizer",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 内存池分析",
+            "slug": "_3-3-内存池分析",
+            "link": "#_3-3-内存池分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、网络分析",
+        "slug": "四、网络分析",
+        "link": "#四、网络分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 tcpdump/Wireshark",
+            "slug": "_4-1-tcpdump-wireshark",
+            "link": "#_4-1-tcpdump-wireshark",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 netstat/ss",
+            "slug": "_4-2-netstat-ss",
+            "link": "#_4-2-netstat-ss",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 性能分析",
+        "slug": "五、kbengine-性能分析",
+        "link": "#五、kbengine-性能分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 内置分析",
+            "slug": "_5-1-kbengine-内置分析",
+            "link": "#_5-1-kbengine-内置分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 KBEngine 性能配置",
+            "slug": "_5-2-kbengine-性能配置",
+            "link": "#_5-2-kbengine-性能配置",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、性能优化工具链",
+        "slug": "六、性能优化工具链",
+        "link": "#六、性能优化工具链",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 完整工具链",
+            "slug": "_6-1-完整工具链",
+            "link": "#_6-1-完整工具链",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 Prometheus + Grafana",
+            "slug": "_6-2-prometheus-grafana",
+            "link": "#_6-2-prometheus-grafana",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 性能分析流程",
+            "slug": "_7-1-性能分析流程",
+            "link": "#_7-1-性能分析流程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 常用命令速查",
+            "slug": "_7-2-常用命令速查",
+            "link": "#_7-2-常用命令速查",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "工具选择指南",
+            "slug": "工具选择指南",
+            "link": "#工具选择指南",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "性能分析检查清单",
+            "slug": "性能分析检查清单",
+            "link": "#性能分析检查清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q56-profiling-tools.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q57: 如何优化内存使用？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、内存优化策略",
+        "slug": "一、内存优化策略",
+        "link": "#一、内存优化策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 优化层次",
+            "slug": "_1-1-优化层次",
+            "link": "#_1-1-优化层次",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 内存占用分类",
+            "slug": "_1-2-内存占用分类",
+            "link": "#_1-2-内存占用分类",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、内存优化技术",
+        "slug": "二、内存优化技术",
+        "link": "#二、内存优化技术",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 内存池实现",
+            "slug": "_2-1-内存池实现",
+            "link": "#_2-1-内存池实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 区域分配器 (Arena Allocator)",
+            "slug": "_2-2-区域分配器-arena-allocator",
+            "link": "#_2-2-区域分配器-arena-allocator",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 字符串驻留",
+            "slug": "_2-3-字符串驻留",
+            "link": "#_2-3-字符串驻留",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 内存管理",
+        "slug": "三、kbengine-内存管理",
+        "link": "#三、kbengine-内存管理",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 对象池",
+            "slug": "_3-1-kbengine-对象池",
+            "link": "#_3-1-kbengine-对象池",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 内存分配器",
+            "slug": "_3-2-kbengine-内存分配器",
+            "link": "#_3-2-kbengine-内存分配器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、内存泄漏检测",
+        "slug": "四、内存泄漏检测",
+        "link": "#四、内存泄漏检测",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 引用计数追踪",
+            "slug": "_4-1-引用计数追踪",
+            "link": "#_4-1-引用计数追踪",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 内存统计",
+            "slug": "_4-2-内存统计",
+            "link": "#_4-2-内存统计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、优化对比",
+        "slug": "五、优化对比",
+        "link": "#五、优化对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 内存分配方式对比",
+            "slug": "_5-1-内存分配方式对比",
+            "link": "#_5-1-内存分配方式对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 容器选择对比",
+            "slug": "_5-2-容器选择对比",
+            "link": "#_5-2-容器选择对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 内存优化建议",
+            "slug": "_6-1-内存优化建议",
+            "link": "#_6-1-内存优化建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 KBEngine 内存优化技巧",
+            "slug": "_6-2-kbengine-内存优化技巧",
+            "link": "#_6-2-kbengine-内存优化技巧",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "内存优化核心",
+            "slug": "内存优化核心",
+            "link": "#内存优化核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q57-memory-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q58: 对象池是什么？如何设计？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、对象池基础",
+        "slug": "一、对象池基础",
+        "link": "#一、对象池基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是对象池",
+            "slug": "_1-1-什么是对象池",
+            "link": "#_1-1-什么是对象池",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 对象池适用场景",
+            "slug": "_1-2-对象池适用场景",
+            "link": "#_1-2-对象池适用场景",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、对象池设计",
+        "slug": "二、对象池设计",
+        "link": "#二、对象池设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 基础对象池",
+            "slug": "_2-1-基础对象池",
+            "link": "#_2-1-基础对象池",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 线程安全对象池",
+            "slug": "_2-2-线程安全对象池",
+            "link": "#_2-2-线程安全对象池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 对象池",
+        "slug": "三、kbengine-对象池",
+        "link": "#三、kbengine-对象池",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 对象池实现",
+            "slug": "_3-1-kbengine-对象池实现",
+            "link": "#_3-1-kbengine-对象池实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 内置对象池",
+            "slug": "_3-2-kbengine-内置对象池",
+            "link": "#_3-2-kbengine-内置对象池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、高级对象池设计",
+        "slug": "四、高级对象池设计",
+        "link": "#四、高级对象池设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 分层对象池",
+            "slug": "_4-1-分层对象池",
+            "link": "#_4-1-分层对象池",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 自适应对象池",
+            "slug": "_4-2-自适应对象池",
+            "link": "#_4-2-自适应对象池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能对比",
+        "slug": "五、性能对比",
+        "link": "#五、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 性能测试",
+            "slug": "_5-1-性能测试",
+            "link": "#_5-1-性能测试",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 内存对比",
+            "slug": "_5-2-内存对比",
+            "link": "#_5-2-内存对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 设计原则",
+            "slug": "_6-1-设计原则",
+            "link": "#_6-1-设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 使用注意事项",
+            "slug": "_6-2-使用注意事项",
+            "link": "#_6-2-使用注意事项",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "对象池优势总结",
+            "slug": "对象池优势总结",
+            "link": "#对象池优势总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q58-object-pool.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q59: 如何减少锁竞争？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、锁竞争问题",
+        "slug": "一、锁竞争问题",
+        "link": "#一、锁竞争问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 锁竞争的危害",
+            "slug": "_1-1-锁竞争的危害",
+            "link": "#_1-1-锁竞争的危害",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 锁竞争检测",
+            "slug": "_1-2-锁竞争检测",
+            "link": "#_1-2-锁竞争检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、减少锁竞争的方法",
+        "slug": "二、减少锁竞争的方法",
+        "link": "#二、减少锁竞争的方法",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 减少锁的范围",
+            "slug": "_2-1-减少锁的范围",
+            "link": "#_2-1-减少锁的范围",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 读写锁",
+            "slug": "_2-2-读写锁",
+            "link": "#_2-2-读写锁",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、无锁编程",
+        "slug": "三、无锁编程",
+        "link": "#三、无锁编程",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 原子操作",
+            "slug": "_3-1-原子操作",
+            "link": "#_3-1-原子操作",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 无锁队列",
+            "slug": "_3-2-无锁队列",
+            "link": "#_3-2-无锁队列",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 RCU (Read-Copy-Update)",
+            "slug": "_3-3-rcu-read-copy-update",
+            "link": "#_3-3-rcu-read-copy-update",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Actor 模型",
+        "slug": "四、actor-模型",
+        "link": "#四、actor-模型",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Actor 模型原理",
+            "slug": "_4-1-actor-模型原理",
+            "link": "#_4-1-actor-模型原理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 Actor 实现",
+            "slug": "_4-2-actor-实现",
+            "link": "#_4-2-actor-实现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 Actor 线程池",
+            "slug": "_4-3-actor-线程池",
+            "link": "#_4-3-actor-线程池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 并发设计",
+        "slug": "五、kbengine-并发设计",
+        "link": "#五、kbengine-并发设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 单线程模型",
+            "slug": "_5-1-kbengine-单线程模型",
+            "link": "#_5-1-kbengine-单线程模型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 KBEngine 多线程扩展",
+            "slug": "_5-2-kbengine-多线程扩展",
+            "link": "#_5-2-kbengine-多线程扩展",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 并发设计原则",
+            "slug": "_6-1-并发设计原则",
+            "link": "#_6-1-并发设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 工具推荐",
+            "slug": "_6-2-工具推荐",
+            "link": "#_6-2-工具推荐",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "锁优化技术总结",
+            "slug": "锁优化技术总结",
+            "link": "#锁优化技术总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "最佳实践",
+            "slug": "最佳实践",
+            "link": "#最佳实践",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q59-reduce-lock-contention.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q6: 单服架构 vs 分布式架构，如何选择？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、架构定义",
+        "slug": "一、架构定义",
+        "link": "#一、架构定义",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 单服架构（Single-Server Architecture）",
+            "slug": "_1-1-单服架构-single-server-architecture",
+            "link": "#_1-1-单服架构-single-server-architecture",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 分布式架构（Distributed Architecture）",
+            "slug": "_1-2-分布式架构-distributed-architecture",
+            "link": "#_1-2-分布式架构-distributed-architecture",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 的分布式架构",
+        "slug": "二、kbengine-的分布式架构",
+        "link": "#二、kbengine-的分布式架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 架构图",
+            "slug": "_2-1-架构图",
+            "link": "#_2-1-架构图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 组件职责对比",
+            "slug": "_2-2-组件职责对比",
+            "link": "#_2-2-组件职责对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 完整通信流程",
+            "slug": "_2-3-完整通信流程",
+            "link": "#_2-3-完整通信流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、架构对比分析",
+        "slug": "三、架构对比分析",
+        "link": "#三、架构对比分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 对比表格",
+            "slug": "_3-1-对比表格",
+            "link": "#_3-1-对比表格",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 性能对比",
+            "slug": "_3-2-性能对比",
+            "link": "#_3-2-性能对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、选择标准",
+        "slug": "四、选择标准",
+        "link": "#四、选择标准",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 决策树",
+            "slug": "_4-1-决策树",
+            "link": "#_4-1-决策树",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 详细选择标准",
+            "slug": "_4-2-详细选择标准",
+            "link": "#_4-2-详细选择标准",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 的设计权衡",
+        "slug": "五、kbengine-的设计权衡",
+        "link": "#五、kbengine-的设计权衡",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 为什么选择分布式？",
+            "slug": "_5-1-为什么选择分布式",
+            "link": "#_5-1-为什么选择分布式",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 分布式的代价",
+            "slug": "_5-2-分布式的代价",
+            "link": "#_5-2-分布式的代价",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、混合架构方案",
+        "slug": "六、混合架构方案",
+        "link": "#六、混合架构方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 渐进式架构",
+            "slug": "_6-1-渐进式架构",
+            "link": "#_6-1-渐进式架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 业务分离架构",
+            "slug": "_6-2-业务分离架构",
+            "link": "#_6-2-业务分离架构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、实战建议",
+        "slug": "七、实战建议",
+        "link": "#七、实战建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 小团队建议",
+            "slug": "_7-1-小团队建议",
+            "link": "#_7-1-小团队建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 架构迁移建议",
+            "slug": "_7-2-架构迁移建议",
+            "link": "#_7-2-架构迁移建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.3 KBEngine 使用建议",
+            "slug": "_7-3-kbengine-使用建议",
+            "link": "#_7-3-kbengine-使用建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心观点",
+            "slug": "核心观点",
+            "link": "#核心观点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "决策检查清单",
+            "slug": "决策检查清单",
+            "link": "#决策检查清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q6-single-vs-distributed.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q60: 如何设计定时器系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、定时器系统架构",
+        "slug": "一、定时器系统架构",
+        "link": "#一、定时器系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 定时器类型",
+            "slug": "_1-2-定时器类型",
+            "link": "#_1-2-定时器类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、时间轮算法",
+        "slug": "二、时间轮算法",
+        "link": "#二、时间轮算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 时间轮原理",
+            "slug": "_2-1-时间轮原理",
+            "link": "#_2-1-时间轮原理",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 分层时间轮实现",
+            "slug": "_2-2-分层时间轮实现",
+            "link": "#_2-2-分层时间轮实现",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、最小堆实现",
+        "slug": "三、最小堆实现",
+        "link": "#三、最小堆实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 最小堆定时器",
+            "slug": "_3-1-最小堆定时器",
+            "link": "#_3-1-最小堆定时器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 定时器",
+        "slug": "四、kbengine-定时器",
+        "link": "#四、kbengine-定时器",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine Python 定时器",
+            "slug": "_4-1-kbengine-python-定时器",
+            "link": "#_4-1-kbengine-python-定时器",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine C++ 定时器",
+            "slug": "_4-2-kbengine-c-定时器",
+            "link": "#_4-2-kbengine-c-定时器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能对比",
+        "slug": "五、性能对比",
+        "link": "#五、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 定时器实现对比",
+            "slug": "_5-1-定时器实现对比",
+            "link": "#_5-1-定时器实现对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 定时器选择",
+            "slug": "_5-2-定时器选择",
+            "link": "#_5-2-定时器选择",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 定时器设计建议",
+            "slug": "_6-1-定时器设计建议",
+            "link": "#_6-1-定时器设计建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 KBEngine 定时器技巧",
+            "slug": "_6-2-kbengine-定时器技巧",
+            "link": "#_6-2-kbengine-定时器技巧",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "定时器系统核心",
+            "slug": "定时器系统核心",
+            "link": "#定时器系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q60-timer-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q61: 如何优化日志系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、日志系统架构",
+        "slug": "一、日志系统架构",
+        "link": "#一、日志系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 日志级别",
+            "slug": "_1-2-日志级别",
+            "link": "#_1-2-日志级别",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、异步日志实现",
+        "slug": "二、异步日志实现",
+        "link": "#二、异步日志实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 环形缓冲区",
+            "slug": "_2-1-环形缓冲区",
+            "link": "#_2-1-环形缓冲区",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 异步日志器",
+            "slug": "_2-2-异步日志器",
+            "link": "#_2-2-异步日志器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、日志格式优化",
+        "slug": "三、日志格式优化",
+        "link": "#三、日志格式优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 高效格式化",
+            "slug": "_3-1-高效格式化",
+            "link": "#_3-1-高效格式化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 类型安全格式化",
+            "slug": "_3-2-类型安全格式化",
+            "link": "#_3-2-类型安全格式化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 日志系统",
+        "slug": "四、kbengine-日志系统",
+        "link": "#四、kbengine-日志系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 日志宏",
+            "slug": "_4-1-kbengine-日志宏",
+            "link": "#_4-1-kbengine-日志宏",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine Python 日志",
+            "slug": "_4-2-kbengine-python-日志",
+            "link": "#_4-2-kbengine-python-日志",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能优化",
+        "slug": "五、性能优化",
+        "link": "#五、性能优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 优化策略对比",
+            "slug": "_5-1-优化策略对比",
+            "link": "#_5-1-优化策略对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能对比",
+            "slug": "_5-2-性能对比",
+            "link": "#_5-2-性能对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 日志优化建议",
+            "slug": "_6-1-日志优化建议",
+            "link": "#_6-1-日志优化建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 KBEngine 日志技巧",
+            "slug": "_6-2-kbengine-日志技巧",
+            "link": "#_6-2-kbengine-日志技巧",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "日志优化核心",
+            "slug": "日志优化核心",
+            "link": "#日志优化核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q61-log-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q62: 如何进行压力测试？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、压力测试概述",
+        "slug": "一、压力测试概述",
+        "link": "#一、压力测试概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 测试类型",
+            "slug": "_1-1-测试类型",
+            "link": "#_1-1-测试类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 测试流程",
+            "slug": "_1-2-测试流程",
+            "link": "#_1-2-测试流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、测试工具",
+        "slug": "二、测试工具",
+        "link": "#二、测试工具",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 常用工具对比",
+            "slug": "_2-1-常用工具对比",
+            "link": "#_2-1-常用工具对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 自定义压测客户端",
+            "slug": "_2-2-自定义压测客户端",
+            "link": "#_2-2-自定义压测客户端",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 压测实践",
+        "slug": "三、kbengine-压测实践",
+        "link": "#三、kbengine-压测实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 自带压测工具",
+            "slug": "_3-1-kbengine-自带压测工具",
+            "link": "#_3-1-kbengine-自带压测工具",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 压测场景设计",
+            "slug": "_3-2-压测场景设计",
+            "link": "#_3-2-压测场景设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、性能监控",
+        "slug": "四、性能监控",
+        "link": "#四、性能监控",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 监控指标",
+            "slug": "_4-1-监控指标",
+            "link": "#_4-1-监控指标",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 监控系统",
+            "slug": "_4-2-监控系统",
+            "link": "#_4-2-监控系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、瓶颈分析",
+        "slug": "五、瓶颈分析",
+        "link": "#五、瓶颈分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 常见瓶颈",
+            "slug": "_5-1-常见瓶颈",
+            "link": "#_5-1-常见瓶颈",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 性能分析工具",
+            "slug": "_5-2-性能分析工具",
+            "link": "#_5-2-性能分析工具",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 压测建议",
+            "slug": "_6-1-压测建议",
+            "link": "#_6-1-压测建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 KBEngine 压测技巧",
+            "slug": "_6-2-kbengine-压测技巧",
+            "link": "#_6-2-kbengine-压测技巧",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "压力测试核心",
+            "slug": "压力测试核心",
+            "link": "#压力测试核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q62-stress-testing.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q63: 如何优化数据库查询？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、查询优化基础",
+        "slug": "一、查询优化基础",
+        "link": "#一、查询优化基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 索引类型",
+            "slug": "_1-1-索引类型",
+            "link": "#_1-1-索引类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 查询优化示例",
+            "slug": "_1-2-查询优化示例",
+            "link": "#_1-2-查询优化示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 数据库设计",
+        "slug": "二、kbengine-数据库设计",
+        "link": "#二、kbengine-数据库设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 玩家表结构",
+            "slug": "_2-1-玩家表结构",
+            "link": "#_2-1-玩家表结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、多级缓存",
+        "slug": "三、多级缓存",
+        "link": "#三、多级缓存",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q63-database-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q64: 如何优化网络带宽？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、带宽优化策略",
+        "slug": "一、带宽优化策略",
+        "link": "#一、带宽优化策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 优化层次",
+            "slug": "_1-1-优化层次",
+            "link": "#_1-1-优化层次",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 带宽占用分析",
+            "slug": "_1-2-带宽占用分析",
+            "link": "#_1-2-带宽占用分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、消息优化",
+        "slug": "二、消息优化",
+        "link": "#二、消息优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 位置同步优化",
+            "slug": "_2-1-位置同步优化",
+            "link": "#_2-1-位置同步优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 属性同步优化",
+            "slug": "_2-2-属性同步优化",
+            "link": "#_2-2-属性同步优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 消息优化",
+        "slug": "三、kbengine-消息优化",
+        "link": "#三、kbengine-消息优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 消息定义",
+            "slug": "_3-1-kbengine-消息定义",
+            "link": "#_3-1-kbengine-消息定义",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 KBEngine 远程方法调用优化",
+            "slug": "_3-2-kbengine-远程方法调用优化",
+            "link": "#_3-2-kbengine-远程方法调用优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、压缩算法",
+        "slug": "四、压缩算法",
+        "link": "#四、压缩算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 压缩算法对比",
+            "slug": "_4-1-压缩算法对比",
+            "link": "#_4-1-压缩算法对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 自适应压缩",
+            "slug": "_4-2-自适应压缩",
+            "link": "#_4-2-自适应压缩",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、优化效果",
+        "slug": "五、优化效果",
+        "link": "#五、优化效果",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 优化前后对比",
+            "slug": "_5-1-优化前后对比",
+            "link": "#_5-1-优化前后对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 带宽估算",
+            "slug": "_5-2-带宽估算",
+            "link": "#_5-2-带宽估算",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q64-bandwidth-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q65: 如何减少 CPU 缓存未命中？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、CPU 缓存基础",
+        "slug": "一、cpu-缓存基础",
+        "link": "#一、cpu-缓存基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 缓存层次结构",
+            "slug": "_1-1-缓存层次结构",
+            "link": "#_1-1-缓存层次结构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 缓存行 (Cache Line)",
+            "slug": "_1-2-缓存行-cache-line",
+            "link": "#_1-2-缓存行-cache-line",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、优化技术",
+        "slug": "二、优化技术",
+        "link": "#二、优化技术",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 数据布局优化",
+            "slug": "_2-1-数据布局优化",
+            "link": "#_2-1-数据布局优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 避免伪共享",
+            "slug": "_2-2-避免伪共享",
+            "link": "#_2-2-避免伪共享",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 数据局部性",
+            "slug": "_2-3-数据局部性",
+            "link": "#_2-3-数据局部性",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、游戏引擎优化",
+        "slug": "三、游戏引擎优化",
+        "link": "#三、游戏引擎优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 实体数据布局",
+            "slug": "_3-1-实体数据布局",
+            "link": "#_3-1-实体数据布局",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 热数据和冷数据分离",
+            "slug": "_3-2-热数据和冷数据分离",
+            "link": "#_3-2-热数据和冷数据分离",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、预取优化",
+        "slug": "四、预取优化",
+        "link": "#四、预取优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 软件预取",
+            "slug": "_4-1-软件预取",
+            "link": "#_4-1-软件预取",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、优化效果",
+        "slug": "五、优化效果",
+        "link": "#五、优化效果",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 优化对比",
+            "slug": "_5-1-优化对比",
+            "link": "#_5-1-优化对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 缓存命中率",
+            "slug": "_5-2-缓存命中率",
+            "link": "#_5-2-缓存命中率",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q65-cache-miss.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q66: SIMD 在游戏中有哪些应用？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、SIMD 基础",
+        "slug": "一、simd-基础",
+        "link": "#一、simd-基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 SIMD 概念",
+            "slug": "_1-1-simd-概念",
+            "link": "#_1-1-simd-概念",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 SIMD 指令集",
+            "slug": "_1-2-simd-指令集",
+            "link": "#_1-2-simd-指令集",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、游戏应用场景",
+        "slug": "二、游戏应用场景",
+        "link": "#二、游戏应用场景",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 向量运算",
+            "slug": "_2-1-向量运算",
+            "link": "#_2-1-向量运算",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 矩阵运算",
+            "slug": "_2-2-矩阵运算",
+            "link": "#_2-2-矩阵运算",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 物理计算",
+            "slug": "_2-3-物理计算",
+            "link": "#_2-3-物理计算",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.4 粒子系统",
+            "slug": "_2-4-粒子系统",
+            "link": "#_2-4-粒子系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、跨平台 SIMD",
+        "slug": "三、跨平台-simd",
+        "link": "#三、跨平台-simd",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 抽象层设计",
+            "slug": "_3-1-抽象层设计",
+            "link": "#_3-1-抽象层设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 使用库",
+            "slug": "_3-2-使用库",
+            "link": "#_3-2-使用库",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、性能对比",
+        "slug": "四、性能对比",
+        "link": "#四、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 优化效果",
+            "slug": "_4-1-优化效果",
+            "link": "#_4-1-优化效果",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 性能分析",
+            "slug": "_4-2-性能分析",
+            "link": "#_4-2-性能分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q66-simd-gaming.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q67: 如何进行热点代码优化？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、性能分析",
+        "slug": "一、性能分析",
+        "link": "#一、性能分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 分析工具",
+            "slug": "_1-1-分析工具",
+            "link": "#_1-1-分析工具",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 使用 perf",
+            "slug": "_1-2-使用-perf",
+            "link": "#_1-2-使用-perf",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、热点识别",
+        "slug": "二、热点识别",
+        "link": "#二、热点识别",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 常见热点区域",
+            "slug": "_2-1-常见热点区域",
+            "link": "#_2-1-常见热点区域",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 火焰图分析",
+            "slug": "_2-2-火焰图分析",
+            "link": "#_2-2-火焰图分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、优化策略",
+        "slug": "三、优化策略",
+        "link": "#三、优化策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 消息序列化优化",
+            "slug": "_3-1-消息序列化优化",
+            "link": "#_3-1-消息序列化优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 AOI 优化",
+            "slug": "_3-2-aoi-优化",
+            "link": "#_3-2-aoi-优化",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 字符串优化",
+            "slug": "_3-3-字符串优化",
+            "link": "#_3-3-字符串优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、优化验证",
+        "slug": "四、优化验证",
+        "link": "#四、优化验证",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 基准测试",
+            "slug": "_4-1-基准测试",
+            "link": "#_4-1-基准测试",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 性能对比",
+            "slug": "_4-2-性能对比",
+            "link": "#_4-2-性能对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 热点优化",
+        "slug": "五、kbengine-热点优化",
+        "link": "#五、kbengine-热点优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 常见热点",
+            "slug": "_5-1-kbengine-常见热点",
+            "link": "#_5-1-kbengine-常见热点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q67-hotspot-optimization.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q68: 如何设计内存监控？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、内存监控系统",
+        "slug": "一、内存监控系统",
+        "link": "#一、内存监控系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统架构",
+            "slug": "_1-1-系统架构",
+            "link": "#_1-1-系统架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 监控指标",
+            "slug": "_1-2-监控指标",
+            "link": "#_1-2-监控指标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、内存追踪实现",
+        "slug": "二、内存追踪实现",
+        "link": "#二、内存追踪实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 分配追踪器",
+            "slug": "_2-1-分配追踪器",
+            "link": "#_2-1-分配追踪器",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 堆采样器",
+            "slug": "_2-2-堆采样器",
+            "link": "#_2-2-堆采样器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、泄漏检测",
+        "slug": "三、泄漏检测",
+        "link": "#三、泄漏检测",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 智能指针追踪",
+            "slug": "_3-1-智能指针追踪",
+            "link": "#_3-1-智能指针追踪",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、报警系统",
+        "slug": "四、报警系统",
+        "link": "#四、报警系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 阈值报警",
+            "slug": "_4-1-阈值报警",
+            "link": "#_4-1-阈值报警",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、可视化",
+        "slug": "五、可视化",
+        "link": "#五、可视化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 内存火焰图",
+            "slug": "_5-1-内存火焰图",
+            "link": "#_5-1-内存火焰图",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q68-memory-monitoring.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q69: 单服承载 5000 人需要考虑哪些问题？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、5000 CCU 挑战",
+        "slug": "一、5000-ccu-挑战",
+        "link": "#一、5000-ccu-挑战",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 资源需求估算",
+            "slug": "_1-1-资源需求估算",
+            "link": "#_1-1-资源需求估算",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 性能瓶颈",
+            "slug": "_1-2-性能瓶颈",
+            "link": "#_1-2-性能瓶颈",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、网络优化",
+        "slug": "二、网络优化",
+        "link": "#二、网络优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 C10K 解决方案",
+            "slug": "_2-1-c10k-解决方案",
+            "link": "#_2-1-c10k-解决方案",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 广播优化",
+            "slug": "_2-2-广播优化",
+            "link": "#_2-2-广播优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、CPU 优化",
+        "slug": "三、cpu-优化",
+        "link": "#三、cpu-优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 多线程架构",
+            "slug": "_3-1-多线程架构",
+            "link": "#_3-1-多线程架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 无锁队列",
+            "slug": "_3-2-无锁队列",
+            "link": "#_3-2-无锁队列",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、内存优化",
+        "slug": "四、内存优化",
+        "link": "#四、内存优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 对象池",
+            "slug": "_4-1-对象池",
+            "link": "#_4-1-对象池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 5000 人优化",
+        "slug": "五、kbengine-5000-人优化",
+        "link": "#五、kbengine-5000-人优化",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 配置优化",
+            "slug": "_5-1-kbengine-配置优化",
+            "link": "#_5-1-kbengine-配置优化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、监控与调优",
+        "slug": "六、监控与调优",
+        "link": "#六、监控与调优",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 关键指标",
+            "slug": "_6-1-关键指标",
+            "link": "#_6-1-关键指标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "承载 5000 人要点",
+            "slug": "承载-5000-人要点",
+            "link": "#承载-5000-人要点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q69-5000-ccu.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q7: 进程内架构 vs 多进程架构，各有什么优劣？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、架构定义",
+        "slug": "一、架构定义",
+        "link": "#一、架构定义",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 进程内架构（Single-Process Multi-Thread）",
+            "slug": "_1-1-进程内架构-single-process-multi-thread",
+            "link": "#_1-1-进程内架构-single-process-multi-thread",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 多进程架构（Multi-Process）",
+            "slug": "_1-2-多进程架构-multi-process",
+            "link": "#_1-2-多进程架构-multi-process",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 的多进程设计",
+        "slug": "二、kbengine-的多进程设计",
+        "link": "#二、kbengine-的多进程设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 进程架构图",
+            "slug": "_2-1-进程架构图",
+            "link": "#_2-1-进程架构图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 各进程的线程模型",
+            "slug": "_2-2-各进程的线程模型",
+            "link": "#_2-2-各进程的线程模型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 进程间通信方式",
+            "slug": "_2-3-进程间通信方式",
+            "link": "#_2-3-进程间通信方式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、对比分析",
+        "slug": "三、对比分析",
+        "link": "#三、对比分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 详细对比表",
+            "slug": "_3-1-详细对比表",
+            "link": "#_3-1-详细对比表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 性能对比",
+            "slug": "_3-2-性能对比",
+            "link": "#_3-2-性能对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 故障场景对比",
+            "slug": "_3-3-故障场景对比",
+            "link": "#_3-3-故障场景对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 为什么选择多进程？",
+        "slug": "四、kbengine-为什么选择多进程",
+        "link": "#四、kbengine-为什么选择多进程",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 设计理念",
+            "slug": "_4-1-设计理念",
+            "link": "#_4-1-设计理念",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 多进程的优势",
+            "slug": "_4-2-多进程的优势",
+            "link": "#_4-2-多进程的优势",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 多进程的代价",
+            "slug": "_4-3-多进程的代价",
+            "link": "#_4-3-多进程的代价",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、选择建议",
+        "slug": "五、选择建议",
+        "link": "#五、选择建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 决策流程图",
+            "slug": "_5-1-决策流程图",
+            "link": "#_5-1-决策流程图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 场景建议表",
+            "slug": "_5-2-场景建议表",
+            "link": "#_5-2-场景建议表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.3 团队能力匹配",
+            "slug": "_5-3-团队能力匹配",
+            "link": "#_5-3-团队能力匹配",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、混合架构方案",
+        "slug": "六、混合架构方案",
+        "link": "#六、混合架构方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 渐进式架构演进",
+            "slug": "_6-1-渐进式架构演进",
+            "link": "#_6-1-渐进式架构演进",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 功能模块分离建议",
+            "slug": "_6-2-功能模块分离建议",
+            "link": "#_6-2-功能模块分离建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、实战建议",
+        "slug": "七、实战建议",
+        "link": "#七、实战建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 小团队建议",
+            "slug": "_7-1-小团队建议",
+            "link": "#_7-1-小团队建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 中等团队建议",
+            "slug": "_7-2-中等团队建议",
+            "link": "#_7-2-中等团队建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.3 大团队建议",
+            "slug": "_7-3-大团队建议",
+            "link": "#_7-3-大团队建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心观点",
+            "slug": "核心观点",
+            "link": "#核心观点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "决策清单",
+            "slug": "决策清单",
+            "link": "#决策清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q7-process-architecture.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q70: 如何设计高性能的消息队列？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、消息队列架构",
+        "slug": "一、消息队列架构",
+        "link": "#一、消息队列架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 队列类型",
+            "slug": "_1-1-队列类型",
+            "link": "#_1-1-队列类型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 设计考虑",
+            "slug": "_1-2-设计考虑",
+            "link": "#_1-2-设计考虑",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、无锁队列实现",
+        "slug": "二、无锁队列实现",
+        "link": "#二、无锁队列实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 单生产者单消费者 (SPSC)",
+            "slug": "_2-1-单生产者单消费者-spsc",
+            "link": "#_2-1-单生产者单消费者-spsc",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 多生产者多消费者 (MPMC)",
+            "slug": "_2-2-多生产者多消费者-mpmc",
+            "link": "#_2-2-多生产者多消费者-mpmc",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、批量队列",
+        "slug": "三、批量队列",
+        "link": "#三、批量队列",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 批量处理队列",
+            "slug": "_3-1-批量处理队列",
+            "link": "#_3-1-批量处理队列",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、优先级队列",
+        "slug": "四、优先级队列",
+        "link": "#四、优先级队列",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 基于堆的优先级队列",
+            "slug": "_4-1-基于堆的优先级队列",
+            "link": "#_4-1-基于堆的优先级队列",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、游戏消息队列",
+        "slug": "五、游戏消息队列",
+        "link": "#五、游戏消息队列",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 风格消息队列",
+            "slug": "_5-1-kbengine-风格消息队列",
+            "link": "#_5-1-kbengine-风格消息队列",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、性能对比",
+        "slug": "六、性能对比",
+        "link": "#六、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 队列实现对比",
+            "slug": "_6-1-队列实现对比",
+            "link": "#_6-1-队列实现对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 使用建议",
+            "slug": "_6-2-使用建议",
+            "link": "#_6-2-使用建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q70-message-queue.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q71: 多线程 vs 多进程，如何选择？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、基本概念",
+        "slug": "一、基本概念",
+        "link": "#一、基本概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 对比表",
+            "slug": "_1-1-对比表",
+            "link": "#_1-1-对比表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 详细对比",
+            "slug": "_1-2-详细对比",
+            "link": "#_1-2-详细对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、多线程架构",
+        "slug": "二、多线程架构",
+        "link": "#二、多线程架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 典型多线程服务器",
+            "slug": "_2-1-典型多线程服务器",
+            "link": "#_2-1-典型多线程服务器",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 KBEngine 多线程设计",
+            "slug": "_2-2-kbengine-多线程设计",
+            "link": "#_2-2-kbengine-多线程设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、多进程架构",
+        "slug": "三、多进程架构",
+        "link": "#三、多进程架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 经典多进程服务器",
+            "slug": "_3-1-经典多进程服务器",
+            "link": "#_3-1-经典多进程服务器",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 进程间通信",
+            "slug": "_3-2-进程间通信",
+            "link": "#_3-2-进程间通信",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 架构选择",
+        "slug": "四、kbengine-架构选择",
+        "link": "#四、kbengine-架构选择",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 的多进程架构",
+            "slug": "_4-1-kbengine-的多进程架构",
+            "link": "#_4-1-kbengine-的多进程架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 选择原因",
+            "slug": "_4-2-kbengine-选择原因",
+            "link": "#_4-2-kbengine-选择原因",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、选择决策",
+        "slug": "五、选择决策",
+        "link": "#五、选择决策",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 决策树",
+            "slug": "_5-1-决策树",
+            "link": "#_5-1-决策树",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 场景推荐",
+            "slug": "_5-2-场景推荐",
+            "link": "#_5-2-场景推荐",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、混合架构",
+        "slug": "六、混合架构",
+        "link": "#六、混合架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 KBEngine 风格混合",
+            "slug": "_6-1-kbengine-风格混合",
+            "link": "#_6-1-kbengine-风格混合",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "选择准则",
+            "slug": "选择准则",
+            "link": "#选择准则",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q71-thread-vs-process.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q72: 如何避免死锁？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、死锁基础",
+        "slug": "一、死锁基础",
+        "link": "#一、死锁基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 死锁四个必要条件",
+            "slug": "_1-1-死锁四个必要条件",
+            "link": "#_1-1-死锁四个必要条件",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 死锁示例",
+            "slug": "_1-2-死锁示例",
+            "link": "#_1-2-死锁示例",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、死锁预防",
+        "slug": "二、死锁预防",
+        "link": "#二、死锁预防",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 锁顺序约定",
+            "slug": "_2-1-锁顺序约定",
+            "link": "#_2-1-锁顺序约定",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 std::lock (同时锁定)",
+            "slug": "_2-2-std-lock-同时锁定",
+            "link": "#_2-2-std-lock-同时锁定",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 try_lock 超时",
+            "slug": "_2-3-try-lock-超时",
+            "link": "#_2-3-try-lock-超时",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.4 锁层次结构",
+            "slug": "_2-4-锁层次结构",
+            "link": "#_2-4-锁层次结构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、死锁检测",
+        "slug": "三、死锁检测",
+        "link": "#三、死锁检测",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 超时检测",
+            "slug": "_3-1-超时检测",
+            "link": "#_3-1-超时检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 死锁避免",
+        "slug": "四、kbengine-死锁避免",
+        "link": "#四、kbengine-死锁避免",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine Actor 模型",
+            "slug": "_4-1-kbengine-actor-模型",
+            "link": "#_4-1-kbengine-actor-模型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 KBEngine 锁使用规范",
+            "slug": "_4-2-kbengine-锁使用规范",
+            "link": "#_4-2-kbengine-锁使用规范",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 避免死锁准则",
+            "slug": "_5-1-避免死锁准则",
+            "link": "#_5-1-避免死锁准则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 代码审查检查清单",
+            "slug": "_5-2-代码审查检查清单",
+            "link": "#_5-2-代码审查检查清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "死锁预防核心",
+            "slug": "死锁预防核心",
+            "link": "#死锁预防核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q72-avoid-deadlock.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q73: Actor 模型是什么？有什么优势？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、Actor 模型基础",
+        "slug": "一、actor-模型基础",
+        "link": "#一、actor-模型基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 核心概念",
+            "slug": "_1-1-核心概念",
+            "link": "#_1-1-核心概念",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 Actor 消息",
+            "slug": "_1-2-actor-消息",
+            "link": "#_1-2-actor-消息",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Actor 实现",
+        "slug": "二、actor-实现",
+        "link": "#二、actor-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Actor 基础类",
+            "slug": "_2-1-actor-基础类",
+            "link": "#_2-1-actor-基础类",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 Actor 系统",
+            "slug": "_2-2-actor-系统",
+            "link": "#_2-2-actor-系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Actor 模式 vs 多线程",
+        "slug": "三、actor-模式-vs-多线程",
+        "link": "#三、actor-模式-vs-多线程",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 对比分析",
+            "slug": "_3-1-对比分析",
+            "link": "#_3-1-对比分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 性能对比",
+            "slug": "_3-2-性能对比",
+            "link": "#_3-2-性能对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、游戏服务器中的 Actor 应用",
+        "slug": "四、游戏服务器中的-actor-应用",
+        "link": "#四、游戏服务器中的-actor-应用",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 实体作为 Actor",
+            "slug": "_4-1-实体作为-actor",
+            "link": "#_4-1-实体作为-actor",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 系统作为 Actor",
+            "slug": "_4-2-系统作为-actor",
+            "link": "#_4-2-系统作为-actor",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、分布式 Actor",
+        "slug": "五、分布式-actor",
+        "link": "#五、分布式-actor",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 跨节点 Actor",
+            "slug": "_5-1-跨节点-actor",
+            "link": "#_5-1-跨节点-actor",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 Actor 注册",
+            "slug": "_5-2-actor-注册",
+            "link": "#_5-2-actor-注册",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 Actor 设计原则",
+            "slug": "_6-1-actor-设计原则",
+            "link": "#_6-1-actor-设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 常见陷阱",
+            "slug": "_6-2-常见陷阱",
+            "link": "#_6-2-常见陷阱",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "Actor 模型总结",
+            "slug": "actor-模型总结",
+            "link": "#actor-模型总结",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "何时使用 Actor",
+            "slug": "何时使用-actor",
+            "link": "#何时使用-actor",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q73-actor-model.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q74: 如何设计无锁数据结构？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、无锁基础",
+        "slug": "一、无锁基础",
+        "link": "#一、无锁基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 原子操作",
+            "slug": "_1-1-原子操作",
+            "link": "#_1-1-原子操作",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 CAS 原理",
+            "slug": "_1-2-cas-原理",
+            "link": "#_1-2-cas-原理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、ABA 问题",
+        "slug": "二、aba-问题",
+        "link": "#二、aba-问题",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 ABA 问题说明",
+            "slug": "_2-1-aba-问题说明",
+            "link": "#_2-1-aba-问题说明",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 解决方案: 版本号",
+            "slug": "_2-2-解决方案-版本号",
+            "link": "#_2-2-解决方案-版本号",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、无锁队列",
+        "slug": "三、无锁队列",
+        "link": "#三、无锁队列",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 MPMC 无锁队列",
+            "slug": "_3-1-mpmc-无锁队列",
+            "link": "#_3-1-mpmc-无锁队列",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、Hazard Pointer",
+        "slug": "四、hazard-pointer",
+        "link": "#四、hazard-pointer",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 内存回收方案",
+            "slug": "_4-1-内存回收方案",
+            "link": "#_4-1-内存回收方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、无锁数据结构应用",
+        "slug": "五、无锁数据结构应用",
+        "link": "#五、无锁数据结构应用",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 游戏服务器应用",
+            "slug": "_5-1-游戏服务器应用",
+            "link": "#_5-1-游戏服务器应用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、KBEngine 无锁实践",
+        "slug": "六、kbengine-无锁实践",
+        "link": "#六、kbengine-无锁实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 KBEngine 中的无锁使用",
+            "slug": "_6-1-kbengine-中的无锁使用",
+            "link": "#_6-1-kbengine-中的无锁使用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "无锁编程要点",
+            "slug": "无锁编程要点",
+            "link": "#无锁编程要点",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q74-lock-free.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q75: 线程池如何设计？任务如何调度？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、线程池架构",
+        "slug": "一、线程池架构",
+        "link": "#一、线程池架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 基本组成",
+            "slug": "_1-1-基本组成",
+            "link": "#_1-1-基本组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 任务类型",
+            "slug": "_1-2-任务类型",
+            "link": "#_1-2-任务类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、线程池实现",
+        "slug": "二、线程池实现",
+        "link": "#二、线程池实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 基础线程池",
+            "slug": "_2-1-基础线程池",
+            "link": "#_2-1-基础线程池",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 优先级线程池",
+            "slug": "_2-2-优先级线程池",
+            "link": "#_2-2-优先级线程池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、任务调度",
+        "slug": "三、任务调度",
+        "link": "#三、任务调度",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 工作窃取 (Work Stealing)",
+            "slug": "_3-1-工作窃取-work-stealing",
+            "link": "#_3-1-工作窃取-work-stealing",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 动态线程池",
+            "slug": "_3-2-动态线程池",
+            "link": "#_3-2-动态线程池",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 线程池",
+        "slug": "四、kbengine-线程池",
+        "link": "#四、kbengine-线程池",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 线程模型",
+            "slug": "_4-1-kbengine-线程模型",
+            "link": "#_4-1-kbengine-线程模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 线程池配置",
+            "slug": "_5-1-线程池配置",
+            "link": "#_5-1-线程池配置",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 使用建议",
+            "slug": "_5-2-使用建议",
+            "link": "#_5-2-使用建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q75-thread-pool.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q76: 如何实现异步 IO？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、IO 模型对比",
+        "slug": "一、io-模型对比",
+        "link": "#一、io-模型对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 五种 IO 模型",
+            "slug": "_1-1-五种-io-模型",
+            "link": "#_1-1-五种-io-模型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 同步 vs 异步",
+            "slug": "_1-2-同步-vs-异步",
+            "link": "#_1-2-同步-vs-异步",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Reactor 模式",
+        "slug": "二、reactor-模式",
+        "link": "#二、reactor-模式",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Reactor 架构",
+            "slug": "_2-1-reactor-架构",
+            "link": "#_2-1-reactor-架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 事件分发器",
+            "slug": "_2-2-事件分发器",
+            "link": "#_2-2-事件分发器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Proactor 模式",
+        "slug": "三、proactor-模式",
+        "link": "#三、proactor-模式",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Proactor 架构",
+            "slug": "_3-1-proactor-架构",
+            "link": "#_3-1-proactor-架构",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、协程实现",
+        "slug": "四、协程实现",
+        "link": "#四、协程实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 用户态协程",
+            "slug": "_4-1-用户态协程",
+            "link": "#_4-1-用户态协程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 C++20 协程",
+            "slug": "_4-2-c-20-协程",
+            "link": "#_4-2-c-20-协程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 异步 IO",
+        "slug": "五、kbengine-异步-io",
+        "link": "#五、kbengine-异步-io",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 网络模型",
+            "slug": "_5-1-kbengine-网络模型",
+            "link": "#_5-1-kbengine-网络模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "异步 IO 选择",
+            "slug": "异步-io-选择",
+            "link": "#异步-io-选择",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q76-async-io.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q77: IOCP vs Epoll 有什么区别？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、基本概念",
+        "slug": "一、基本概念",
+        "link": "#一、基本概念",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 功能对比",
+            "slug": "_1-1-功能对比",
+            "link": "#_1-1-功能对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 详细对比",
+            "slug": "_1-2-详细对比",
+            "link": "#_1-2-详细对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、IOCP 实现",
+        "slug": "二、iocp-实现",
+        "link": "#二、iocp-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 IOCP 基础",
+            "slug": "_2-1-iocp-基础",
+            "link": "#_2-1-iocp-基础",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、Epoll 实现",
+        "slug": "三、epoll-实现",
+        "link": "#三、epoll-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Epoll 基础",
+            "slug": "_3-1-epoll-基础",
+            "link": "#_3-1-epoll-基础",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 Epoll ET 模式",
+            "slug": "_3-2-epoll-et-模式",
+            "link": "#_3-2-epoll-et-模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、跨平台方案",
+        "slug": "四、跨平台方案",
+        "link": "#四、跨平台方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 抽象层设计",
+            "slug": "_4-1-抽象层设计",
+            "link": "#_4-1-抽象层设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 使用 libuv",
+            "slug": "_4-2-使用-libuv",
+            "link": "#_4-2-使用-libuv",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、性能对比",
+        "slug": "五、性能对比",
+        "link": "#五、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 性能特点",
+            "slug": "_5-1-性能特点",
+            "link": "#_5-1-性能特点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 吞吐量对比",
+            "slug": "_5-2-吞吐量对比",
+            "link": "#_5-2-吞吐量对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 选择建议",
+            "slug": "_6-1-选择建议",
+            "link": "#_6-1-选择建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q77-iocp-epoll.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q78: 如何处理竞态条件？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、竞态条件基础",
+        "slug": "一、竞态条件基础",
+        "link": "#一、竞态条件基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 定义",
+            "slug": "_1-1-定义",
+            "link": "#_1-1-定义",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 常见类型",
+            "slug": "_1-2-常见类型",
+            "link": "#_1-2-常见类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、竞态条件示例",
+        "slug": "二、竞态条件示例",
+        "link": "#二、竞态条件示例",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 检查-时-竞争",
+            "slug": "_2-1-检查-时-竞争",
+            "link": "#_2-1-检查-时-竞争",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 延迟初始化竞争",
+            "slug": "_2-2-延迟初始化竞争",
+            "link": "#_2-2-延迟初始化竞争",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 迭代器失效",
+            "slug": "_2-3-迭代器失效",
+            "link": "#_2-3-迭代器失效",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、检测工具",
+        "slug": "三、检测工具",
+        "link": "#三、检测工具",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 ThreadSanitizer",
+            "slug": "_3-1-threadsanitizer",
+            "link": "#_3-1-threadsanitizer",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 静态分析",
+            "slug": "_3-2-静态分析",
+            "link": "#_3-2-静态分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、防护策略",
+        "slug": "四、防护策略",
+        "link": "#四、防护策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 互斥锁",
+            "slug": "_4-1-互斥锁",
+            "link": "#_4-1-互斥锁",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 原子操作",
+            "slug": "_4-2-原子操作",
+            "link": "#_4-2-原子操作",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 读写锁",
+            "slug": "_4-3-读写锁",
+            "link": "#_4-3-读写锁",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.4 线程局部存储",
+            "slug": "_4-4-线程局部存储",
+            "link": "#_4-4-线程局部存储",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 避免竞态",
+        "slug": "五、kbengine-避免竞态",
+        "link": "#五、kbengine-避免竞态",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 单线程模型",
+            "slug": "_5-1-单线程模型",
+            "link": "#_5-1-单线程模型",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 Actor 模型",
+            "slug": "_5-2-actor-模型",
+            "link": "#_5-2-actor-模型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 避免竞态建议",
+            "slug": "_6-1-避免竞态建议",
+            "link": "#_6-1-避免竞态建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 编码检查清单",
+            "slug": "_6-2-编码检查清单",
+            "link": "#_6-2-编码检查清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "竞态条件防护",
+            "slug": "竞态条件防护",
+            "link": "#竞态条件防护",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q78-race-condition.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q79: 如何设计线程安全的容器？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、设计策略",
+        "slug": "一、设计策略",
+        "link": "#一、设计策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 策略对比",
+            "slug": "_1-1-策略对比",
+            "link": "#_1-1-策略对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 API 设计",
+            "slug": "_1-2-api-设计",
+            "link": "#_1-2-api-设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、粗粒度锁容器",
+        "slug": "二、粗粒度锁容器",
+        "link": "#二、粗粒度锁容器",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 线程安全队列",
+            "slug": "_2-1-线程安全队列",
+            "link": "#_2-1-线程安全队列",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 线程安全哈希表",
+            "slug": "_2-2-线程安全哈希表",
+            "link": "#_2-2-线程安全哈希表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、细粒度锁容器",
+        "slug": "三、细粒度锁容器",
+        "link": "#三、细粒度锁容器",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 分段哈希表",
+            "slug": "_3-1-分段哈希表",
+            "link": "#_3-1-分段哈希表",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 并发链表",
+            "slug": "_3-2-并发链表",
+            "link": "#_3-2-并发链表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、读写分离容器",
+        "slug": "四、读写分离容器",
+        "link": "#四、读写分离容器",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Copy-on-Write",
+            "slug": "_4-1-copy-on-write",
+            "link": "#_4-1-copy-on-write",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 读写锁哈希表",
+            "slug": "_4-2-读写锁哈希表",
+            "link": "#_4-2-读写锁哈希表",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、无锁容器",
+        "slug": "五、无锁容器",
+        "link": "#五、无锁容器",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 无锁栈",
+            "slug": "_5-1-无锁栈",
+            "link": "#_5-1-无锁栈",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、性能对比",
+        "slug": "六、性能对比",
+        "link": "#六、性能对比",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 容器实现对比",
+            "slug": "_6-1-容器实现对比",
+            "link": "#_6-1-容器实现对比",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 使用建议",
+            "slug": "_6-2-使用建议",
+            "link": "#_6-2-使用建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、KBEngine 容器设计",
+        "slug": "七、kbengine-容器设计",
+        "link": "#七、kbengine-容器设计",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 KBEngine 线程安全策略",
+            "slug": "_7-1-kbengine-线程安全策略",
+            "link": "#_7-1-kbengine-线程安全策略",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "线程安全容器设计",
+            "slug": "线程安全容器设计",
+            "link": "#线程安全容器设计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q79-thread-safe-container.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q8: 如何设计才能避免单点故障？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、单点故障概述",
+        "slug": "一、单点故障概述",
+        "link": "#一、单点故障概述",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是单点故障",
+            "slug": "_1-1-什么是单点故障",
+            "link": "#_1-1-什么是单点故障",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 常见的单点故障",
+            "slug": "_1-2-常见的单点故障",
+            "link": "#_1-2-常见的单点故障",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 中的单点分析",
+        "slug": "二、kbengine-中的单点分析",
+        "link": "#二、kbengine-中的单点分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine 架构中的单点",
+            "slug": "_2-1-kbengine-架构中的单点",
+            "link": "#_2-1-kbengine-架构中的单点",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 各组件单点分析",
+            "slug": "_2-2-各组件单点分析",
+            "link": "#_2-2-各组件单点分析",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 KBEngine 的容错机制",
+            "slug": "_2-3-kbengine-的容错机制",
+            "link": "#_2-3-kbengine-的容错机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、消除单点故障的方法",
+        "slug": "三、消除单点故障的方法",
+        "link": "#三、消除单点故障的方法",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 冗余设计",
+            "slug": "_3-1-冗余设计",
+            "link": "#_3-1-冗余设计",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 负载均衡",
+            "slug": "_3-2-负载均衡",
+            "link": "#_3-2-负载均衡",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 故障检测与自动恢复",
+            "slug": "_3-3-故障检测与自动恢复",
+            "link": "#_3-3-故障检测与自动恢复",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 单点消除方案",
+        "slug": "四、kbengine-单点消除方案",
+        "link": "#四、kbengine-单点消除方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 BaseappMgr 消除方案",
+            "slug": "_4-1-baseappmgr-消除方案",
+            "link": "#_4-1-baseappmgr-消除方案",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 DBMgr 消除方案",
+            "slug": "_4-2-dbmgr-消除方案",
+            "link": "#_4-2-dbmgr-消除方案",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.3 Database 消除方案",
+            "slug": "_4-3-database-消除方案",
+            "link": "#_4-3-database-消除方案",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、完整的高可用架构",
+        "slug": "五、完整的高可用架构",
+        "link": "#五、完整的高可用架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 理想的高可用架构",
+            "slug": "_5-1-理想的高可用架构",
+            "link": "#_5-1-理想的高可用架构",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 容错能力对比",
+            "slug": "_5-2-容错能力对比",
+            "link": "#_5-2-容错能力对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、实现方案",
+        "slug": "六、实现方案",
+        "link": "#六、实现方案",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 Heartbeat 心跳检测",
+            "slug": "_6-1-heartbeat-心跳检测",
+            "link": "#_6-1-heartbeat-心跳检测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 服务发现",
+            "slug": "_6-2-服务发现",
+            "link": "#_6-2-服务发现",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.3 自动故障切换",
+            "slug": "_6-3-自动故障切换",
+            "link": "#_6-3-自动故障切换",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、实战建议",
+        "slug": "七、实战建议",
+        "link": "#七、实战建议",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 渐进式高可用方案",
+            "slug": "_7-1-渐进式高可用方案",
+            "link": "#_7-1-渐进式高可用方案",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.2 成本与收益",
+            "slug": "_7-2-成本与收益",
+            "link": "#_7-2-成本与收益",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "7.3 KBEngine 部署建议",
+            "slug": "_7-3-kbengine-部署建议",
+            "link": "#_7-3-kbengine-部署建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "核心原则",
+            "slug": "核心原则",
+            "link": "#核心原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "检查清单",
+            "slug": "检查清单",
+            "link": "#检查清单",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q8-avoid-spof.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q80: 协程在游戏服务器中的应用场景？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、协程基础",
+        "slug": "一、协程基础",
+        "link": "#一、协程基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 什么是协程",
+            "slug": "_1-1-什么是协程",
+            "link": "#_1-1-什么是协程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 协程类型",
+            "slug": "_1-2-协程类型",
+            "link": "#_1-2-协程类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、协程实现",
+        "slug": "二、协程实现",
+        "link": "#二、协程实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 Python 协程",
+            "slug": "_2-1-python-协程",
+            "link": "#_2-1-python-协程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 C++20 协程",
+            "slug": "_2-2-c-20-协程",
+            "link": "#_2-2-c-20-协程",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 Lua 协程",
+            "slug": "_2-3-lua-协程",
+            "link": "#_2-3-lua-协程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、游戏服务器应用",
+        "slug": "三、游戏服务器应用",
+        "link": "#三、游戏服务器应用",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 技能系统",
+            "slug": "_3-1-技能系统",
+            "link": "#_3-1-技能系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 任务系统",
+            "slug": "_3-2-任务系统",
+            "link": "#_3-2-任务系统",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.3 剧情系统",
+            "slug": "_3-3-剧情系统",
+            "link": "#_3-3-剧情系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、协程 vs 回调",
+        "slug": "四、协程-vs-回调",
+        "link": "#四、协程-vs-回调",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 代码对比",
+            "slug": "_4-1-代码对比",
+            "link": "#_4-1-代码对比",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、协程调度器",
+        "slug": "五、协程调度器",
+        "link": "#五、协程调度器",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 游戏协程调度器",
+            "slug": "_5-1-游戏协程调度器",
+            "link": "#_5-1-游戏协程调度器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 协程使用建议",
+            "slug": "_6-1-协程使用建议",
+            "link": "#_6-1-协程使用建议",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 注意事项",
+            "slug": "_6-2-注意事项",
+            "link": "#_6-2-注意事项",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "协程在游戏服务器中的应用",
+            "slug": "协程在游戏服务器中的应用",
+            "link": "#协程在游戏服务器中的应用",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q80-coroutine.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q81: 如何防止外挂？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、外挂类型",
+        "slug": "一、外挂类型",
+        "link": "#一、外挂类型",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常见外挂分类",
+            "slug": "_1-1-常见外挂分类",
+            "link": "#_1-1-常见外挂分类",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、服务端验证",
+        "slug": "二、服务端验证",
+        "link": "#二、服务端验证",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 权威服务端",
+            "slug": "_2-1-权威服务端",
+            "link": "#_2-1-权威服务端",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 状态校验",
+            "slug": "_2-2-状态校验",
+            "link": "#_2-2-状态校验",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、客户端检测",
+        "slug": "三、客户端检测",
+        "link": "#三、客户端检测",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 反调试检测",
+            "slug": "_3-1-反调试检测",
+            "link": "#_3-1-反调试检测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 进程检测",
+            "slug": "_3-2-进程检测",
+            "link": "#_3-2-进程检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、行为分析",
+        "slug": "四、行为分析",
+        "link": "#四、行为分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 异常行为检测",
+            "slug": "_4-1-异常行为检测",
+            "link": "#_4-1-异常行为检测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 统计异常检测",
+            "slug": "_4-2-统计异常检测",
+            "link": "#_4-2-统计异常检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine 安全实践",
+        "slug": "五、kbengine-安全实践",
+        "link": "#五、kbengine-安全实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 安全机制",
+            "slug": "_5-1-kbengine-安全机制",
+            "link": "#_5-1-kbengine-安全机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 安全设计原则",
+            "slug": "_6-1-安全设计原则",
+            "link": "#_6-1-安全设计原则",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "6.2 防护层次",
+            "slug": "_6-2-防护层次",
+            "link": "#_6-2-防护层次",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "外挂防护核心",
+            "slug": "外挂防护核心",
+            "link": "#外挂防护核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q81-anti-cheat.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q82: 如何防止刷物品？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、刷物品手法",
+        "slug": "一、刷物品手法",
+        "link": "#一、刷物品手法",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常见手法",
+            "slug": "_1-1-常见手法",
+            "link": "#_1-1-常见手法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、交易验证",
+        "slug": "二、交易验证",
+        "link": "#二、交易验证",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 原子交易",
+            "slug": "_2-1-原子交易",
+            "link": "#_2-1-原子交易",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 物品锁定",
+            "slug": "_2-2-物品锁定",
+            "link": "#_2-2-物品锁定",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、数据库一致性",
+        "slug": "三、数据库一致性",
+        "link": "#三、数据库一致性",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 事务操作",
+            "slug": "_3-1-事务操作",
+            "link": "#_3-1-事务操作",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、审计日志",
+        "slug": "四、审计日志",
+        "link": "#四、审计日志",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 完整日志",
+            "slug": "_4-1-完整日志",
+            "link": "#_4-1-完整日志",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、防刷策略",
+        "slug": "五、防刷策略",
+        "link": "#五、防刷策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 速率限制",
+            "slug": "_5-1-速率限制",
+            "link": "#_5-1-速率限制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、KBEngine 防刷",
+        "slug": "六、kbengine-防刷",
+        "link": "#六、kbengine-防刷",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 KBEngine 物品管理",
+            "slug": "_6-1-kbengine-物品管理",
+            "link": "#_6-1-kbengine-物品管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "防刷物品核心",
+            "slug": "防刷物品核心",
+            "link": "#防刷物品核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q82-item-duping.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q83: 如何防止加速挂？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、加速挂原理",
+        "slug": "一、加速挂原理",
+        "link": "#一、加速挂原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 工作原理",
+            "slug": "_1-1-工作原理",
+            "link": "#_1-1-工作原理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、服务端检测",
+        "slug": "二、服务端检测",
+        "link": "#二、服务端检测",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 时间戳验证",
+            "slug": "_2-1-时间戳验证",
+            "link": "#_2-1-时间戳验证",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 位置验证",
+            "slug": "_2-2-位置验证",
+            "link": "#_2-2-位置验证",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、客户端检测",
+        "slug": "三、客户端检测",
+        "link": "#三、客户端检测",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 时间函数检测",
+            "slug": "_3-1-时间函数检测",
+            "link": "#_3-1-时间函数检测",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 进程/模块检测",
+            "slug": "_3-2-进程-模块检测",
+            "link": "#_3-2-进程-模块检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、KBEngine 防加速",
+        "slug": "四、kbengine-防加速",
+        "link": "#四、kbengine-防加速",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 KBEngine 时间管理",
+            "slug": "_4-1-kbengine-时间管理",
+            "link": "#_4-1-kbengine-时间管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 防护策略",
+            "slug": "_5-1-防护策略",
+            "link": "#_5-1-防护策略",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "5.2 综合检测",
+            "slug": "_5-2-综合检测",
+            "link": "#_5-2-综合检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "防加速挂核心",
+            "slug": "防加速挂核心",
+            "link": "#防加速挂核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q83-speed-hack.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q84: 如何防止内存修改？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、内存修改原理",
+        "slug": "一、内存修改原理",
+        "link": "#一、内存修改原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常见手法",
+            "slug": "_1-1-常见手法",
+            "link": "#_1-1-常见手法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、数据保护",
+        "slug": "二、数据保护",
+        "link": "#二、数据保护",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 服务端权威",
+            "slug": "_2-1-服务端权威",
+            "link": "#_2-1-服务端权威",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 关键数据加密",
+            "slug": "_2-2-关键数据加密",
+            "link": "#_2-2-关键数据加密",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、完整性检查",
+        "slug": "三、完整性检查",
+        "link": "#三、完整性检查",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 内存校验",
+            "slug": "_3-1-内存校验",
+            "link": "#_3-1-内存校验",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "3.2 代码校验",
+            "slug": "_3-2-代码校验",
+            "link": "#_3-2-代码校验",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、混淆与保护",
+        "slug": "四、混淆与保护",
+        "link": "#四、混淆与保护",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 代码混淆",
+            "slug": "_4-1-代码混淆",
+            "link": "#_4-1-代码混淆",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 字符串加密",
+            "slug": "_4-2-字符串加密",
+            "link": "#_4-2-字符串加密",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、反调试",
+        "slug": "五、反调试",
+        "link": "#五、反调试",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 调试检测",
+            "slug": "_5-1-调试检测",
+            "link": "#_5-1-调试检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、KBEngine 防护",
+        "slug": "六、kbengine-防护",
+        "link": "#六、kbengine-防护",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 KBEngine 数据保护",
+            "slug": "_6-1-kbengine-数据保护",
+            "link": "#_6-1-kbengine-数据保护",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "防内存修改核心",
+            "slug": "防内存修改核心",
+            "link": "#防内存修改核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q84-memory-hack.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q85: 如何防止封包伪造？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、防护策略",
+        "slug": "一、防护策略",
+        "link": "#一、防护策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 消息签名",
+            "slug": "_1-1-消息签名",
+            "link": "#_1-1-消息签名",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 序列号机制",
+            "slug": "_1-2-序列号机制",
+            "link": "#_1-2-序列号机制",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、加密传输",
+        "slug": "二、加密传输",
+        "link": "#二、加密传输",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 消息加密",
+            "slug": "_2-1-消息加密",
+            "link": "#_2-1-消息加密",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、最佳实践",
+        "slug": "三、最佳实践",
+        "link": "#三、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 防护层次",
+            "slug": "_3-1-防护层次",
+            "link": "#_3-1-防护层次",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、参考资料",
+        "slug": "四、参考资料",
+        "link": "#四、参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q85-packet-forgery.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q86: 如何设计权限系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、RBAC 模型",
+        "slug": "一、rbac-模型",
+        "link": "#一、rbac-模型",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 基本概念",
+            "slug": "_1-1-基本概念",
+            "link": "#_1-1-基本概念",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、权限实现",
+        "slug": "二、权限实现",
+        "link": "#二、权限实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 权限定义",
+            "slug": "_2-1-权限定义",
+            "link": "#_2-1-权限定义",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 命令权限",
+            "slug": "_2-2-命令权限",
+            "link": "#_2-2-命令权限",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 权限",
+        "slug": "三、kbengine-权限",
+        "link": "#三、kbengine-权限",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 权限系统",
+            "slug": "_3-1-kbengine-权限系统",
+            "link": "#_3-1-kbengine-权限系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、总结",
+        "slug": "四、总结",
+        "link": "#四、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "权限系统核心",
+            "slug": "权限系统核心",
+            "link": "#权限系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q86-permission-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q87: 敏感数据如何加密传输？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、加密基础",
+        "slug": "一、加密基础",
+        "link": "#一、加密基础",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 加密层次",
+            "slug": "_1-1-加密层次",
+            "link": "#_1-1-加密层次",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、TLS 实现",
+        "slug": "二、tls-实现",
+        "link": "#二、tls-实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 TLS 握手",
+            "slug": "_2-1-tls-握手",
+            "link": "#_2-1-tls-握手",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、游戏协议加密",
+        "slug": "三、游戏协议加密",
+        "link": "#三、游戏协议加密",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 自定义加密",
+            "slug": "_3-1-自定义加密",
+            "link": "#_3-1-自定义加密",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 加密建议",
+            "slug": "_4-1-加密建议",
+            "link": "#_4-1-加密建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "加密传输核心",
+            "slug": "加密传输核心",
+            "link": "#加密传输核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q87-encryption.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q88: 如何防止 SQL 注入？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、SQL 注入原理",
+        "slug": "一、sql-注入原理",
+        "link": "#一、sql-注入原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 常见手法",
+            "slug": "_1-1-常见手法",
+            "link": "#_1-1-常见手法",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、防护方法",
+        "slug": "二、防护方法",
+        "link": "#二、防护方法",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 参数化查询",
+            "slug": "_2-1-参数化查询",
+            "link": "#_2-1-参数化查询",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 ORM 使用",
+            "slug": "_2-2-orm-使用",
+            "link": "#_2-2-orm-使用",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.3 输入验证",
+            "slug": "_2-3-输入验证",
+            "link": "#_2-3-输入验证",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、总结",
+        "slug": "三、总结",
+        "link": "#三、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "SQL 注入防护",
+            "slug": "sql-注入防护",
+            "link": "#sql-注入防护",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q88-sql-injection.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q89: 如何设计限流和防刷机制？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、限流算法",
+        "slug": "一、限流算法",
+        "link": "#一、限流算法",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 令牌桶",
+            "slug": "_1-1-令牌桶",
+            "link": "#_1-1-令牌桶",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、应用场景",
+        "slug": "二、应用场景",
+        "link": "#二、应用场景",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 多级限流",
+            "slug": "_2-1-多级限流",
+            "link": "#_2-1-多级限流",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、总结",
+        "slug": "三、总结",
+        "link": "#三、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "限流防刷核心",
+            "slug": "限流防刷核心",
+            "link": "#限流防刷核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q89-rate-limiting.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
     "title": "Q9: CellAppMgr 如果宕机了怎么办？有哪些解决方案？",
     "headers": [
       {
@@ -11437,6 +27711,1273 @@ export const SEARCH_INDEX = [
       }
     ],
     "path": "/qa/q9-cellappmgr-failure.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q90: 如何应对 DDoS 攻击？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、DDoS 类型",
+        "slug": "一、ddos-类型",
+        "link": "#一、ddos-类型",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 攻击分类",
+            "slug": "_1-1-攻击分类",
+            "link": "#_1-1-攻击分类",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、防护策略",
+        "slug": "二、防护策略",
+        "link": "#二、防护策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 多层防护",
+            "slug": "_2-1-多层防护",
+            "link": "#_2-1-多层防护",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、游戏服务器防护",
+        "slug": "三、游戏服务器防护",
+        "link": "#三、游戏服务器防护",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 登录保护",
+            "slug": "_3-1-登录保护",
+            "link": "#_3-1-登录保护",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、最佳实践",
+        "slug": "四、最佳实践",
+        "link": "#四、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 防护层次",
+            "slug": "_4-1-防护层次",
+            "link": "#_4-1-防护层次",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、总结",
+        "slug": "五、总结",
+        "link": "#五、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "DDoS 防护核心",
+            "slug": "ddos-防护核心",
+            "link": "#ddos-防护核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q90-ddos-protection.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q91: 如何监控服务器状态？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、监控指标",
+        "slug": "一、监控指标",
+        "link": "#一、监控指标",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统指标",
+            "slug": "_1-1-系统指标",
+            "link": "#_1-1-系统指标",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 监控",
+        "slug": "二、kbengine-监控",
+        "link": "#二、kbengine-监控",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine Watcher 系统",
+            "slug": "_2-1-kbengine-watcher-系统",
+            "link": "#_2-1-kbengine-watcher-系统",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、监控工具",
+        "slug": "三、监控工具",
+        "link": "#三、监控工具",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Prometheus 集成",
+            "slug": "_3-1-prometheus-集成",
+            "link": "#_3-1-prometheus-集成",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、告警系统",
+        "slug": "四、告警系统",
+        "link": "#四、告警系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 告警规则",
+            "slug": "_4-1-告警规则",
+            "link": "#_4-1-告警规则",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、实时监控面板",
+        "slug": "五、实时监控面板",
+        "link": "#五、实时监控面板",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Web 监控面板",
+            "slug": "_5-1-web-监控面板",
+            "link": "#_5-1-web-监控面板",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、日志分析",
+        "slug": "六、日志分析",
+        "link": "#六、日志分析",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 日志监控",
+            "slug": "_6-1-日志监控",
+            "link": "#_6-1-日志监控",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、最佳实践",
+        "slug": "七、最佳实践",
+        "link": "#七、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "7.1 监控建议",
+            "slug": "_7-1-监控建议",
+            "link": "#_7-1-监控建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "八、总结",
+        "slug": "八、总结",
+        "link": "#八、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "服务器监控核心",
+            "slug": "服务器监控核心",
+            "link": "#服务器监控核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q91-server-monitoring.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q92: 如何设计日志系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、日志系统架构",
+        "slug": "一、日志系统架构",
+        "link": "#一、日志系统架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "1.2 日志级别",
+            "slug": "_1-2-日志级别",
+            "link": "#_1-2-日志级别",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 日志系统",
+        "slug": "二、kbengine-日志系统",
+        "link": "#二、kbengine-日志系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine 日志宏",
+            "slug": "_2-1-kbengine-日志宏",
+            "link": "#_2-1-kbengine-日志宏",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 KBEngine 日志配置",
+            "slug": "_2-2-kbengine-日志配置",
+            "link": "#_2-2-kbengine-日志配置",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、结构化日志",
+        "slug": "三、结构化日志",
+        "link": "#三、结构化日志",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 JSON 格式日志",
+            "slug": "_3-1-json-格式日志",
+            "link": "#_3-1-json-格式日志",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、日志收集",
+        "slug": "四、日志收集",
+        "link": "#四、日志收集",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 Filebeat 收集",
+            "slug": "_4-1-filebeat-收集",
+            "link": "#_4-1-filebeat-收集",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、日志检索",
+        "slug": "五、日志检索",
+        "link": "#五、日志检索",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 Kibana 查询",
+            "slug": "_5-1-kibana-查询",
+            "link": "#_5-1-kibana-查询",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 日志设计建议",
+            "slug": "_6-1-日志设计建议",
+            "link": "#_6-1-日志设计建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "日志系统核心",
+            "slug": "日志系统核心",
+            "link": "#日志系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q92-log-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q93: 如何快速定位线上问题？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、问题分类",
+        "slug": "一、问题分类",
+        "link": "#一、问题分类",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 问题类型",
+            "slug": "_1-1-问题类型",
+            "link": "#_1-1-问题类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、排查流程",
+        "slug": "二、排查流程",
+        "link": "#二、排查流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 问题定位流程图",
+            "slug": "_2-1-问题定位流程图",
+            "link": "#_2-1-问题定位流程图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 排查脚本",
+            "slug": "_2-2-排查脚本",
+            "link": "#_2-2-排查脚本",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、KBEngine 调试",
+        "slug": "三、kbengine-调试",
+        "link": "#三、kbengine-调试",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 KBEngine 调试工具",
+            "slug": "_3-1-kbengine-调试工具",
+            "link": "#_3-1-kbengine-调试工具",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、常用工具",
+        "slug": "四、常用工具",
+        "link": "#四、常用工具",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 GDB 附加",
+            "slug": "_4-1-gdb-附加",
+            "link": "#_4-1-gdb-附加",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "4.2 CoreDump 分析",
+            "slug": "_4-2-coredump-分析",
+            "link": "#_4-2-coredump-分析",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、快速定位技巧",
+        "slug": "五、快速定位技巧",
+        "link": "#五、快速定位技巧",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 常见问题快速定位",
+            "slug": "_5-1-常见问题快速定位",
+            "link": "#_5-1-常见问题快速定位",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 定位建议",
+            "slug": "_6-1-定位建议",
+            "link": "#_6-1-定位建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "问题定位核心",
+            "slug": "问题定位核心",
+            "link": "#问题定位核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q93-troubleshooting.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q94: 如何实现热更新？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、热更新原理",
+        "slug": "一、热更新原理",
+        "link": "#一、热更新原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 热更新类型",
+            "slug": "_1-1-热更新类型",
+            "link": "#_1-1-热更新类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、Python 脚本热更新",
+        "slug": "二、python-脚本热更新",
+        "link": "#二、python-脚本热更新",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine 脚本热更新",
+            "slug": "_2-1-kbengine-脚本热更新",
+            "link": "#_2-1-kbengine-脚本热更新",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、状态保持",
+        "slug": "三、状态保持",
+        "link": "#三、状态保持",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 状态序列化",
+            "slug": "_3-1-状态序列化",
+            "link": "#_3-1-状态序列化",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、C++ 模块热加载",
+        "slug": "四、c-模块热加载",
+        "link": "#四、c-模块热加载",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 动态库加载",
+            "slug": "_4-1-动态库加载",
+            "link": "#_4-1-动态库加载",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 热更新建议",
+            "slug": "_5-1-热更新建议",
+            "link": "#_5-1-热更新建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "热更新核心",
+            "slug": "热更新核心",
+            "link": "#热更新核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q94-hot-reload.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q95: 如何实现灰度发布？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、灰度发布策略",
+        "slug": "一、灰度发布策略",
+        "link": "#一、灰度发布策略",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 发布模式",
+            "slug": "_1-1-发布模式",
+            "link": "#_1-1-发布模式",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、灰度实现",
+        "slug": "二、灰度实现",
+        "link": "#二、灰度实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 流量分配器",
+            "slug": "_2-1-流量分配器",
+            "link": "#_2-1-流量分配器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、游戏服务器灰度",
+        "slug": "三、游戏服务器灰度",
+        "link": "#三、游戏服务器灰度",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 服务器灰度",
+            "slug": "_3-1-服务器灰度",
+            "link": "#_3-1-服务器灰度",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、自动化发布",
+        "slug": "四、自动化发布",
+        "link": "#四、自动化发布",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 CI/CD 集成",
+            "slug": "_4-1-ci-cd-集成",
+            "link": "#_4-1-ci-cd-集成",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、最佳实践",
+        "slug": "五、最佳实践",
+        "link": "#五、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 灰度发布建议",
+            "slug": "_5-1-灰度发布建议",
+            "link": "#_5-1-灰度发布建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、总结",
+        "slug": "六、总结",
+        "link": "#六、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "灰度发布核心",
+            "slug": "灰度发布核心",
+            "link": "#灰度发布核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q95-canary-deployment.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q96: 如何管理服务器配置？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、配置管理架构",
+        "slug": "一、配置管理架构",
+        "link": "#一、配置管理架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 配置层次",
+            "slug": "_1-1-配置层次",
+            "link": "#_1-1-配置层次",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、KBEngine 配置系统",
+        "slug": "二、kbengine-配置系统",
+        "link": "#二、kbengine-配置系统",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 KBEngine 配置文件",
+            "slug": "_2-1-kbengine-配置文件",
+            "link": "#_2-1-kbengine-配置文件",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 KBEngine 配置读取",
+            "slug": "_2-2-kbengine-配置读取",
+            "link": "#_2-2-kbengine-配置读取",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、配置热加载",
+        "slug": "三、配置热加载",
+        "link": "#三、配置热加载",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 动态配置更新",
+            "slug": "_3-1-动态配置更新",
+            "link": "#_3-1-动态配置更新",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、环境隔离",
+        "slug": "四、环境隔离",
+        "link": "#四、环境隔离",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 多环境配置",
+            "slug": "_4-1-多环境配置",
+            "link": "#_4-1-多环境配置",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、配置验证",
+        "slug": "五、配置验证",
+        "link": "#五、配置验证",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 配置校验",
+            "slug": "_5-1-配置校验",
+            "link": "#_5-1-配置校验",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 配置管理建议",
+            "slug": "_6-1-配置管理建议",
+            "link": "#_6-1-配置管理建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "配置管理核心",
+            "slug": "配置管理核心",
+            "link": "#配置管理核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q96-config-management.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q97: 如何实现优雅关机？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、优雅关机原理",
+        "slug": "一、优雅关机原理",
+        "link": "#一、优雅关机原理",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 关机类型",
+            "slug": "_1-1-关机类型",
+            "link": "#_1-1-关机类型",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、关机流程",
+        "slug": "二、关机流程",
+        "link": "#二、关机流程",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 关机流程图",
+            "slug": "_2-1-关机流程图",
+            "link": "#_2-1-关机流程图",
+            "children": []
+          },
+          {
+            "level": 3,
+            "title": "2.2 KBEngine 关机流程",
+            "slug": "_2-2-kbengine-关机流程",
+            "link": "#_2-2-kbengine-关机流程",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、数据保存保证",
+        "slug": "三、数据保存保证",
+        "link": "#三、数据保存保证",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 实体保存",
+            "slug": "_3-1-实体保存",
+            "link": "#_3-1-实体保存",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、连接清理",
+        "slug": "四、连接清理",
+        "link": "#四、连接清理",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 连接关闭",
+            "slug": "_4-1-连接关闭",
+            "link": "#_4-1-连接关闭",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、维护模式",
+        "slug": "五、维护模式",
+        "link": "#五、维护模式",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 延迟关机",
+            "slug": "_5-1-延迟关机",
+            "link": "#_5-1-延迟关机",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 优雅关机建议",
+            "slug": "_6-1-优雅关机建议",
+            "link": "#_6-1-优雅关机建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "优雅关机核心",
+            "slug": "优雅关机核心",
+            "link": "#优雅关机核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q97-graceful-shutdown.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q98: 如何实现 GM 命令系统？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、GM 命令架构",
+        "slug": "一、gm-命令架构",
+        "link": "#一、gm-命令架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 系统组成",
+            "slug": "_1-1-系统组成",
+            "link": "#_1-1-系统组成",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、命令系统实现",
+        "slug": "二、命令系统实现",
+        "link": "#二、命令系统实现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 命令处理器",
+            "slug": "_2-1-命令处理器",
+            "link": "#_2-1-命令处理器",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、远程命令",
+        "slug": "三、远程命令",
+        "link": "#三、远程命令",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 Telnet/HTTP 接口",
+            "slug": "_3-1-telnet-http-接口",
+            "link": "#_3-1-telnet-http-接口",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、审计日志",
+        "slug": "四、审计日志",
+        "link": "#四、审计日志",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 命令审计",
+            "slug": "_4-1-命令审计",
+            "link": "#_4-1-命令审计",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、KBEngine Console",
+        "slug": "五、kbengine-console",
+        "link": "#五、kbengine-console",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 KBEngine 内置控制台",
+            "slug": "_5-1-kbengine-内置控制台",
+            "link": "#_5-1-kbengine-内置控制台",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 GM 命令建议",
+            "slug": "_6-1-gm-命令建议",
+            "link": "#_6-1-gm-命令建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "GM 命令系统核心",
+            "slug": "gm-命令系统核心",
+            "link": "#gm-命令系统核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q98-gm-command-system.html",
+    "pathLocale": "/",
+    "extraFields": []
+  },
+  {
+    "title": "Q99: 如何管理服务器集群？",
+    "headers": [
+      {
+        "level": 2,
+        "title": "问题分析",
+        "slug": "问题分析",
+        "link": "#问题分析",
+        "children": []
+      },
+      {
+        "level": 2,
+        "title": "一、集群架构",
+        "slug": "一、集群架构",
+        "link": "#一、集群架构",
+        "children": [
+          {
+            "level": 3,
+            "title": "1.1 KBEngine 集群拓扑",
+            "slug": "_1-1-kbengine-集群拓扑",
+            "link": "#_1-1-kbengine-集群拓扑",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "二、服务发现",
+        "slug": "二、服务发现",
+        "link": "#二、服务发现",
+        "children": [
+          {
+            "level": 3,
+            "title": "2.1 组件注册",
+            "slug": "_2-1-组件注册",
+            "link": "#_2-1-组件注册",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "三、负载均衡",
+        "slug": "三、负载均衡",
+        "link": "#三、负载均衡",
+        "children": [
+          {
+            "level": 3,
+            "title": "3.1 BaseApp 负载均衡",
+            "slug": "_3-1-baseapp-负载均衡",
+            "link": "#_3-1-baseapp-负载均衡",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "四、故障转移",
+        "slug": "四、故障转移",
+        "link": "#四、故障转移",
+        "children": [
+          {
+            "level": 3,
+            "title": "4.1 组件故障检测",
+            "slug": "_4-1-组件故障检测",
+            "link": "#_4-1-组件故障检测",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "五、集群配置",
+        "slug": "五、集群配置",
+        "link": "#五、集群配置",
+        "children": [
+          {
+            "level": 3,
+            "title": "5.1 集群配置管理",
+            "slug": "_5-1-集群配置管理",
+            "link": "#_5-1-集群配置管理",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "六、最佳实践",
+        "slug": "六、最佳实践",
+        "link": "#六、最佳实践",
+        "children": [
+          {
+            "level": 3,
+            "title": "6.1 集群管理建议",
+            "slug": "_6-1-集群管理建议",
+            "link": "#_6-1-集群管理建议",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "七、总结",
+        "slug": "七、总结",
+        "link": "#七、总结",
+        "children": [
+          {
+            "level": 3,
+            "title": "集群管理核心",
+            "slug": "集群管理核心",
+            "link": "#集群管理核心",
+            "children": []
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "title": "参考资料",
+        "slug": "参考资料",
+        "link": "#参考资料",
+        "children": []
+      }
+    ],
+    "path": "/qa/q99-cluster-management.html",
     "pathLocale": "/",
     "extraFields": []
   },
@@ -11577,16 +29118,3 @@ export const SEARCH_INDEX = [
     "extraFields": []
   }
 ]
-
-if (import.meta.webpackHot) {
-  import.meta.webpackHot.accept()
-  if (__VUE_HMR_RUNTIME__.updateSearchIndex) {
-    __VUE_HMR_RUNTIME__.updateSearchIndex(searchIndex)
-  }
-}
-
-if (import.meta.hot) {
-  import.meta.hot.accept(({ searchIndex }) => {
-    __VUE_HMR_RUNTIME__.updateSearchIndex(searchIndex)
-  })
-}
