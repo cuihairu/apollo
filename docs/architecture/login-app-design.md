@@ -52,7 +52,7 @@ tag:
 
 - [login_server.hpp](/C:/Users/cui/Workspaces/apollo/apps/login-app/include/login/login_server.hpp)
   - `Authenticator` 负责账号密码校验
-  - `GatewayAllocator` 负责挑选网关
+  - `GatewayAllocator` 当前负责挑选网关
   - `SessionManager` 负责创建和验证 `sessionId`
 - [login_server.cpp](/C:/Users/cui/Workspaces/apollo/apps/login-app/src/login_server.cpp)
   - 登录成功后直接创建 `sessionId`
@@ -63,7 +63,7 @@ tag:
 这说明当前 `LoginApp` 同时承担了三类事情：
 
 - 认证入口
-- 网关分配
+- 入口分配
 - 短期会话中心
 
 其中前两类可以保留一部分，但第三类应该逐步退出。
@@ -373,9 +373,9 @@ LoginTicket
 - 登录成功后改为调用 `BaseApp`
 - 由 `BaseApp` 返回登录接入结果
 
-### 第三步：把网关分配从“login 本地决策”改成“base 确认”
+### 第三步：把入口分配从“login 本地决策”改成“base 确认”
 
-- `LoginApp` 可以给候选 gateway 建议
+- `LoginApp` 可以给候选入口建议
 - 但最终绑定结果由 `BaseApp` 确认
 
 ## 十三、近期最小可交付版本

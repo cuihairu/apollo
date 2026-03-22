@@ -158,16 +158,25 @@ Apollo 更推荐：
 
 这样不会让 login 或 gateway 各自处理一半。
 
-### 阶段 3：分配网关
+### 阶段 3：分配接入入口
+
+在 `Standard MMO` 模式下：
 
 1. `BaseApp` 根据负载选择 `Gateway`
 2. 生成 `SessionBinding`
 3. 将 `sessionId/playerId/gatewayId` 记录进 `PlayerAnchor`
 4. 返回客户端可连接的网关地址
 
+在 `Distributed World` 模式下：
+
+1. `BaseApp` 直接暴露 `Proxy` 接入点
+2. 生成 `ClientBinding`
+3. 将 `sessionId/playerId/baseAppId` 记录进 `PlayerAnchor`
+4. 返回客户端可连接的 `BaseApp` 地址
+
 这一步说明：
 
-- `gateway` 是由锚点层分配的
+- 接入入口由锚点层确认
 - 而不是 login 或客户端自己决定
 
 ### 阶段 4：建立公网连接

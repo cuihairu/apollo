@@ -20,6 +20,18 @@ Apollo 现在更合理的理解方式，不是旧的“按模块目录罗列层�
 - 一层可选的 BigWorld 分布式增强能力
 - 最后才是进程和部署拓扑
 
+如果只看 MMO 主线，Apollo 当前应固定为两种 topology：
+
+- `Standard MMO`
+  - `Client -> Login -> Gateway -> BaseApp(PlayerAnchor) -> WorldApp`
+- `Distributed World`
+  - `Client -> Login -> BaseApp(Proxy + PlayerAnchor) -> CellApp`
+
+这里也要明确：
+
+- `BaseApp` 不是数据库服务
+- `GatewayApp` 不是分布式世界默认必选核心
+
 按新思路，Apollo 更推荐采用 10 层分层：
 
 ```
@@ -207,9 +219,8 @@ L1 <- L2 <- L3 <- L4 <- L5 <- L6 <- L7 <- L8 <- L9 <- L10
 
 语义上需要继续校正的是：
 
-- 当前 `apps/base-app` 的实现偏数据服务
-- 目标语义应演进为玩家锚点宿主
-- 当前 `apps/cell-app` 更像 world runtime 原型
+- `BaseApp` 的目标语义应稳定为玩家锚点宿主，而不是持久化进程
+- `cell-app` 当前更接近 world runtime 原型，后续应按两种 topology 分化为 `WorldApp` 或真正的 `CellApp`
 - `DBMgr / PersistenceService` 应单独理解为持久化执行层
 
 更完整的分层说明见：
@@ -261,6 +272,11 @@ L1 <- L2 <- L3 <- L4 <- L5 <- L6 <- L7 <- L8 <- L9 <- L10
 - [Gateway 会话设计](./gateway-session-design.md)
 - [Gateway 接入 Facade 设计](./gateway-ingress-facade-design.md)
 - [Topology 对比与登录分发设计](./topology-comparison-and-login-flow-design.md)
+- [MMO 组件装配目录](./mmo-component-assembly-catalog.md)
+- [MMO 模块落地清单](./mmo-module-rollout-plan.md)
+- [Standard MMO 任务清单](./standard-mmo-task-checklist.md)
+- [Distributed World 任务清单](./distributed-world-task-checklist.md)
+- [MMO 代码任务对照表](./mmo-code-task-mapping.md)
 - [LoginApp 收口设计](./login-app-design.md)
 - [World 进入与切图设计](./world-entry-transfer-design.md)
 - [Distributed Space 设计](./distributed-space-design.md)
