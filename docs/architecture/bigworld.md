@@ -36,7 +36,7 @@ tag:
 ┌─────────┐            ┌─────────────────────────┐
 │  Gate   │            │      CellApp (单元格)   │
 ├─────────┤            ├─────────────────────────┤
-│  Logic  │            │      BaseApp (数据库)   │
+│  Logic  │            │ BaseApp (玩家锚点/Proxy)│
 ├─────────┤            ├─────────────────────────┤
 │  DB     │            │     LoginApp (登录)     │
 └─────────┘            │     ChatApp (聊天)      │
@@ -129,7 +129,7 @@ struct EntityID {
 | **无缝切换** | 需要切换场景 | 真正的无缝世界 |
 | **实体管理** | 集中式 | 分布式 + Ghost模式 |
 | **位置同步** | AOI九宫格 | CellApps间协商 |
-| **数据持久化** | 定时保存 | BaseApp 专用服务 |
+| **数据持久化** | 定时保存 | 由 DBMgr/持久化层承接，BaseApp 协调 |
 
 ---
 
@@ -161,24 +161,25 @@ void CellApp::handoverEntity(Entity* e, Position newPos) {
 }
 ```
 
-### 2. BaseApp - 数据库服务器
+### 2. BaseApp - 玩家锚点与 Proxy 宿主
 
 ```cpp
 class BaseApp {
-    // 专门处理数据库操作
-    DatabaseConnection db;
+    // 持有玩家长期在线归属
+    AnchorManager anchors;
 
-    // 异步加载数据
-    Future<PlayerData> loadPlayer(uint64_t playerId);
+    // 管理 Proxy / Session 绑定
+    Proxy* bindClient(SessionID sessionId, PlayerID playerId);
 
-    // 定时保存
-    void savePlayer(PlayerData& data);
+    // 协调玩家进入 world/cell
+    void assignWorld(PlayerID playerId, WorldAddress target);
 
-    // 不处理游戏逻辑，只做数据CRUD
+    // 持久化通过 DBMgr / PersistenceService 完成
+    void flushPlayer(PlayerID playerId);
 };
 ```
 
-**设计理念：数据库IO与应用逻辑分离**
+**设计理念：玩家长期归属与空间实时权威分离**
 
 ### 3. LoginApp - 登录服务器
 
@@ -488,4 +489,10 @@ namespace BigWorld {  // 全局命名空间兼容
 
 **BigWorld 的本质**：用**空间换时间**，通过**水平扩展**和**区域隔离**，实现超大规模无缝世界的MMO服务器。
 
-在 Apollo 中，BigWorld 模块作为**兼容层**，允许现有 BigWorld 代码平滑迁移到新的模块化架构。
+补充说明：
+
+- `BaseApp` 不是数据库服务器
+- 真正的数据持久化角色更接近 `DBMgr`
+- `BaseApp` 更接近 `PlayerAnchor + Proxy Host`
+
+Apollo 当前仓库里的 `apps/base-app` 只是一个偏数据服务原型，不能把它当成 BigWorld / KBEngine 语义里的真正 `BaseApp`。

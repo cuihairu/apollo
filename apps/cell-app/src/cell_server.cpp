@@ -1,10 +1,58 @@
 #include "cell/cell_server.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
+#include "apollo/game/world/map_instance_manager.hpp"
+#include "apollo/game/world/world_session_manager.hpp"
+#include "apollo/runtime/world_host.hpp"
+#include <algorithm>
 #include <iostream>
 #include <cmath>
+#include <stdexcept>
 
 namespace cell {
+
+namespace protocol = apollo::protocol;
+
+namespace {
+
+class CellWorldService final : public apollo::runtime::IWorldService {
+public:
+    CellWorldService(
+        EntityManager& entity_manager,
+        apollo::game::world::MapInstanceManager& map_instance_manager,
+        CellConfig config)
+        : entity_manager_(entity_manager)
+        , map_instance_manager_(map_instance_manager)
+        , config_(std::move(config)) {
+    }
+
+    std::string_view service_name() const override {
+        return "CellWorldService";
+    }
+
+    bool initialize() override {
+        tick_count_ = 0;
+        return true;
+    }
+
+    void tick(const apollo::runtime::WorldTickContext& context) override {
+        tick_count_ = context.tick_index;
+        entity_manager_.update(static_cast<float>(context.delta_seconds));
+        map_instance_manager_.update(static_cast<float>(context.delta_seconds));
+    }
+
+    void shutdown() override {
+        tick_count_ = 0;
+    }
+
+private:
+    EntityManager& entity_manager_;
+    apollo::game::world::MapInstanceManager& map_instance_manager_;
+    CellConfig config_;
+    std::uint64_t tick_count_ = 0;
+};
+
+} // namespace
 
 //==============================================================================
 // AOIManager 实现
@@ -227,7 +275,13 @@ void EntityManager::update(float dt) {
 CellServer::CellServer(const CellConfig& config)
     : config_(config)
     , entityManager_(std::make_unique<EntityManager>(config))
-    , aoiManager_(std::make_unique<AOIManager>(config)) {
+    , aoiManager_(std::make_unique<AOIManager>(config))
+    , mapInstanceManager_(std::make_shared<apollo::game::world::MapInstanceManager>())
+    , worldSessionManager_(std::make_shared<apollo::game::world::WorldSessionManager>())
+    , worldHost_(std::make_shared<apollo::runtime::WorldHost>(
+          static_cast<std::uint32_t>(1000 / std::max(config.tickRateMs, 1)))) {
+    worldHost_->add_world_service(
+        std::make_shared<CellWorldService>(*entityManager_, *mapInstanceManager_, config_));
 }
 
 CellServer::~CellServer() {
@@ -267,7 +321,7 @@ void CellServer::start() {
 
             default:
                 protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR_MESSAGE);
                 err.message = "Unknown message type";
                 return protocol::MessageCodec::encode(err, header.sessionId);
         }
@@ -275,10 +329,18 @@ void CellServer::start() {
 
     server_->start();
 
-    // 启动游戏循环线程
-    gameThread_ = std::thread(&CellServer::gameLoop, this);
+    ensureDefaultMapInstance();
+
+    if (!worldHost_->start()) {
+        server_->stop();
+        server_.reset();
+        throw std::runtime_error("failed to start WorldHost");
+    }
 
     running_ = true;
+
+    // 启动游戏循环线程
+    gameThread_ = std::thread(&CellServer::gameLoop, this);
 
     std::cout << "Cell server listening on " << config_.host << ":" << config_.port << std::endl;
     std::cout << "Space: " << config_.spaceName << " (" << config_.spaceWidth
@@ -287,11 +349,18 @@ void CellServer::start() {
 
 void CellServer::stop() {
     running_ = false;
-    server_.stop();
-    server_.reset();
 
     if (gameThread_.joinable()) {
         gameThread_.join();
+    }
+
+    if (worldHost_) {
+        worldHost_->stop();
+    }
+
+    if (server_) {
+        server_->stop();
+        server_.reset();
     }
 }
 
@@ -308,8 +377,14 @@ std::vector<uint8_t> CellServer::handleCellCreateEntity(const std::vector<uint8_
     );
 
     if (entity) {
-        entity->setPosition(msg.position);
+        entity->setPosition(Position{msg.position.x, msg.position.y, msg.position.z});
         aoiManager_->enter(entity);
+
+        if (msg.entityType == protocol::EntityType::PLAYER) {
+            const auto session_id = header.sessionId != 0 ? header.sessionId : msg.entityId;
+            const auto player_id = static_cast<protocol::PlayerID>(msg.entityId);
+            attachPlayerWorldSession(session_id, player_id, msg.entityId);
+        }
     }
 
     // 返回确认（简化）
@@ -326,6 +401,7 @@ std::vector<uint8_t> CellServer::handleCellDestroyEntity(const std::vector<uint8
     if (entity) {
         aoiManager_->leave(entity);
     }
+    detachPlayerWorldSession(header.sessionId, msg.entityId);
     entityManager_->destroyEntity(msg.entityId);
 
     return {};  // 空响应表示成功
@@ -339,7 +415,7 @@ std::vector<uint8_t> CellServer::handleCellEntityMove(const std::vector<uint8_t>
 
     auto* entity = entityManager_->getEntity(msg.entityId);
     if (entity) {
-        aoiManager_->move(entity, msg.newPos);
+        aoiManager_->move(entity, Position{msg.newPos.x, msg.newPos.y, msg.newPos.z});
 
         // 广播移动消息给视野内玩家
         broadcastToViewers(entity, request);
@@ -350,9 +426,20 @@ std::vector<uint8_t> CellServer::handleCellEntityMove(const std::vector<uint8_t>
 
 std::vector<uint8_t> CellServer::handleCellCrossBorder(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
-    // 处理跨边界逻辑
+    std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
+    auto msg = protocol::MessageCodec::decodeBody<protocol::CellCrossBorder>(bodyData);
 
-    // 简化：直接返回
+    auto session = worldSessionManager_->find_by_player(msg.entityId);
+    if (session) {
+        worldSessionManager_->transfer_session(
+            session->session_id(),
+            worldId_,
+            defaultMapInstanceId_,
+            msg.toSpace,
+            false);
+        worldSessionManager_->complete_transfer(session->session_id());
+    }
+
     return {};
 }
 
@@ -398,25 +485,25 @@ std::vector<uint8_t> CellServer::handlePing(const std::vector<uint8_t>& request)
 }
 
 void CellServer::gameLoop() {
-    const int tickRateMs = config_.tickRateMs;
-
     while (running_) {
         auto startTime = std::chrono::steady_clock::now();
 
-        // 更新所有实体
-        float dt = tickRateMs / 1000.0f;
-        entityManager_->update(dt);
+        worldHost_->tick();
 
-        // 计算下一帧时间
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime
         ).count();
 
-        int sleepMs = tickRateMs - static_cast<int>(elapsed);
+        const auto interval = tickInterval();
+        const auto sleepMs = static_cast<int>(interval.count() - elapsed);
         if (sleepMs > 0) {
             std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
         }
     }
+}
+
+std::chrono::milliseconds CellServer::tickInterval() const {
+    return std::chrono::milliseconds(std::max(config_.tickRateMs, 1));
 }
 
 void CellServer::broadcastToViewers(Entity* entity, const std::vector<uint8_t>& message) {
@@ -429,6 +516,50 @@ void CellServer::broadcastToViewers(Entity* entity, const std::vector<uint8_t>& 
             (void)viewer;  // 避免未使用警告
             // 实际实现需要查找玩家对应的 Gateway 连接
         }
+    }
+}
+
+void CellServer::ensureDefaultMapInstance() {
+    if (mapInstanceManager_->find_instance(defaultMapInstanceId_)) {
+        return;
+    }
+
+    mapInstanceManager_->create_instance(
+        defaultMapInstanceId_,
+        config_.spaceName.empty() ? std::string("default-world") : config_.spaceName);
+}
+
+void CellServer::attachPlayerWorldSession(
+    protocol::SessionID session_id,
+    protocol::PlayerID player_id,
+    EntityID entity_id) {
+    ensureDefaultMapInstance();
+
+    auto session = worldSessionManager_->find_session(session_id);
+    if (!session) {
+        session = worldSessionManager_->create_session(session_id, player_id);
+    }
+
+    session->assign_world(worldId_);
+    session->assign_map_instance(defaultMapInstanceId_);
+    session->assign_space(defaultMapInstanceId_);
+    session->bind_avatar(apollo::game::core::EntityId(entity_id));
+    session->set_route_version(session->route_version() + 1);
+    session->set_state(apollo::game::world::WorldSessionState::Entering);
+    session->resume();
+}
+
+void CellServer::detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id) {
+    if (session_id != 0) {
+        worldSessionManager_->suspend_session(session_id);
+        worldSessionManager_->close_session(session_id);
+        return;
+    }
+
+    auto session = worldSessionManager_->find_by_player(entity_id);
+    if (session) {
+        worldSessionManager_->suspend_session(session->session_id());
+        worldSessionManager_->close_session(session->session_id());
     }
 }
 

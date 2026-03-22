@@ -57,17 +57,17 @@ tag:
          │ 游戏逻辑消息                  │ 聊天消息
          ▼                              ▼
 ┌──────────────────────────┐  ┌──────────────────────────┐
-│    BaseApp (数据库服务器)  │  │    ChatApp (聊天服务器)   │
+│ BaseApp (玩家锚点/Proxy宿主)│  │    ChatApp (聊天服务器)   │
 │  ┌───────────┐            │  │  ┌───────────┐           │
-│  │ 数据库连接池 │           │  │  │ 频道管理   │           │
-│  │ ORM映射    │            │  │  │ 消息广播   │           │
-│  │ 缓存管理   │            │  │  │ 敏感词过滤 │           │
-│  │ 异步加载   │            │  │  │ 历史记录   │           │
+│  │ PlayerAnchor│          │  │  │ 频道管理   │           │
+│  │ Proxy/Session│         │  │  │ 消息广播   │           │
+│  │ World路由    │         │  │  │ 敏感词过滤 │           │
+│  │ 重连恢复     │         │  │  │ 历史记录   │           │
 │  └───────────┘            │  │  └───────────┘           │
-│  职责: 玩家数据CRUD、缓存  │  │  职责: 聊天频道、广播    │
+│  职责: 玩家归属、会话锚点  │  │  职责: 聊天频道、广播    │
 └────────┬─────────────────┘  └──────────────────────────┘
          │
-         │ 分配/加载实体
+         │ 分配玩家进入世界 / 协调持久化
          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        CellApp 游戏逻辑服务器集群                            │
@@ -98,9 +98,9 @@ tag:
 
 | 进程 | 缩写 | 核心职责 | 通信对象 |
 |------|------|----------|----------|
-| **LoginApp** | 登录服务器 | 认证、网关分配 | Client, BaseApp |
+| **LoginApp** | 登录服务器 | 认证、入口分配 | Client, BaseApp |
 | **GatewayApp** | 网关服务器 | 连接管理、消息路由 | Client, CellApp, ChatApp, BaseApp |
-| **BaseApp** | 数据库服务器 | 数据CRUD、缓存 | GatewayApp, CellApp, Database |
+| **BaseApp** | 玩家锚点宿主 | Proxy、会话归属、world 分配 | LoginApp, GatewayApp, CellApp, DBMgr |
 | **CellApp** | 游戏逻辑服务器 | 游戏逻辑、AOI、战斗 | GatewayApp, 其他CellApp |
 | **ChatApp** | 聊天服务器 | 聊天频道、广播 | GatewayApp |
 
@@ -112,8 +112,8 @@ tag:
 
 ```
                     ┌─────────────┐
-                    │   Database  │
-                    │  (MySQL)    │
+                    │    DBMgr    │
+                    │(MySQL/Redis)│
                     └──────┬──────┘
                            │
                     ┌──────▼──────┐        ┌─────────────┐
@@ -164,7 +164,7 @@ Client                    LoginApp                BaseApp                Gateway
   │                          │ 3. 验证账号密码        │                       │                       │
   │                          ├──────────────────────►│                       │                       │
   │                          │                       │                       │                       │
-  │                          │ 4. 返回玩家数据        │                       │                       │
+  │                          │ 4. 激活玩家锚点        │                       │                       │
   │                          │◄──────────────────────┤                       │                       │
   │                          │                       │                       │                       │
   │                          │ 5. 查找最优Gateway    │                       │                       │
@@ -185,16 +185,13 @@ Client                    LoginApp                BaseApp                Gateway
   │ 10. 进入游戏请求(令牌)    │                       │                       │                       │
   ├─────────────────────────────────────────────────────────────────────────►│                       │
   │                          │                       │                       │                       │
-  │                          │ 11. 验证令牌           │                       │                       │
+  │                          │ 11. 校验票据并绑定 Proxy│                      │                       │
   │                          ├──────────────────────►│                       │                       │
   │                          │                       │                       │                       │
-  │                          │ 12. 加载完整玩家数据   │                       │                       │
-  │                          │◄──────────────────────┤                       │                       │
-  │                          │                       │                       │                       │
-  │                          │ 13. 分配目标CellApp   │                       │                       │
+  │                          │ 12. 分配目标CellApp   │                       │                       │
   │                          ├──────────────────────────────────────────────────────────────────────►│
   │                          │                       │                       │                       │
-  │                          │ 14. 创建玩家实体       │                       │                       │
+  │                          │ 13. 创建玩家实体       │                       │                       │
   │                          │◄──────────────────────────────────────────────────────────────────────┤
   │                          │                       │                       │                       │
   │ 15. 返回登录成功          │                       │                       │                       │
@@ -244,14 +241,14 @@ class GatewayApp {
             return Response::Error("无效的会话令牌");
         }
 
-        // 2. 从BaseApp加载完整玩家数据
-        auto playerData = baseApp_->loadPlayerData(session->playerId);
-        if (!playerData) {
-            return Response::Error("加载玩家数据失败");
+        // 2. 向 BaseApp 校验票据并获取玩家路由
+        auto route = baseApp_->activatePlayer(session->playerId, req.token);
+        if (!route) {
+            return Response::Error("激活玩家失败");
         }
 
-        // 3. 根据玩家位置分配CellApp
-        auto cellApp = cellAppManager_->assignByPosition(playerData->lastPosition);
+        // 3. 根据 BaseApp 返回的 world 路由进入目标 CellApp
+        auto cellApp = cellAppManager_->resolve(route->worldShard);
 
         // 4. 在CellApp中创建玩家实体
         auto entity = cellApp_->createPlayerEntity(*playerData);
@@ -617,11 +614,11 @@ Client                    GatewayApp                CellApp                BaseA
   │                          │                       │                       │
   │                          │                       │ 5. 销毁玩家实体       │
   │                          │                       │                       │
-  │                          │ 6. 保存玩家数据        │                       │
+  │                          │ 6. 通知 BaseApp 执行收尾│                      │
   │                          ├──────────────────────────────────────────────►│
   │                          │                       │                       │
-  │                          │                       │                       │ 7. 写入数据库
-  │                          │                       │                       │   更新Redis缓存
+  │                          │                       │                       │ 7. 协调持久化到 DBMgr
+  │                          │                       │                       │   更新缓存/持久化状态
   │                          │                       │                       │
   │                          │ 8. 保存完成            │                       │
   │                          │◄──────────────────────────────────────────────┤
@@ -768,9 +765,9 @@ class CellApp {
        │ 数据存入               │ 返回Gateway地址          │                           │
        ▼ Database              ▼                         ▼                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                        BaseApp (数据管理)                                           │
+│                 BaseApp (玩家锚点 / Proxy / 长期在线归属)                           │
 │  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐        │
-│  │ 创建账号   │  │ 验证登录   │  │ 加载数据   │  │ 定时保存   │  │ 最终保存   │        │
+│  │ 激活玩家   │  │ 绑定会话   │  │ world分配  │  │ 重连恢复   │  │ 持久化协调  │        │
 │  └───────────┘  └───────────┘  └───────────┘  └───────────┘  └───────────┘        │
 └─────────────────────────────────────────────────────────────────────────────────────┘
        │                        │                         │                           │
@@ -814,16 +811,28 @@ class CellApp {
 
 | 场景 | 涉及进程 | 协作方式 |
 |------|----------|----------|
-| **登录** | Client → LoginApp → GatewayApp → BaseApp → CellApp | 链式转发 |
+| **登录** | Client → LoginApp → GatewayApp → BaseApp → CellApp | 入口认证 + 玩家激活 |
 | **移动** | Client → GatewayApp → CellApp | 直接路由 |
 | **战斗** | Client → GatewayApp → CellApp ↔ CellApp | 直接路由 + 跨App同步 |
 | **聊天** | Client → GatewayApp → ChatApp | 直接路由 |
-| **下线** | GatewayApp → CellApp → BaseApp | 并行保存 |
+| **下线** | GatewayApp → CellApp → BaseApp | 会话回收 + 持久化协调 |
 
 ### 关键设计要点
 
 1. **GatewayApp是无状态的** - 可以水平扩展，负载均衡器随意分配
 2. **CellApp按空间分割** - 玩家根据位置自动路由到对应CellApp
-3. **BaseApp专注数据** - 异步处理数据库IO，不阻塞游戏逻辑
+3. **BaseApp专注玩家归属** - 长期在线状态、Proxy、会话与 world 路由都应在这一层
 4. **ChatApp独立服务** - 聊天流量不影响游戏逻辑性能
 5. **掉线保护机制** - 给予玩家重连窗口，提升体验
+
+## 修正说明
+
+这篇文档早期把 `BaseApp` 写成了数据库服务器，这个说法不准确。
+
+更准确的语义应该是：
+
+- `BaseApp`：玩家锚点、Proxy、长期在线归属宿主
+- `DBMgr` 或持久化服务：数据库访问与持久化执行者
+- `CellApp`：空间内实时权威节点
+
+Apollo 当前仓库里的 `apps/base-app` 只是偏数据服务原型，不能把它直接等同于 BigWorld / KBEngine 语义里的 `BaseApp`。

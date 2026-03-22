@@ -370,6 +370,62 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
+	    add_executable(base_anchor_tests
+	        test_base_anchor.cpp
+	        ../apps/base-app/src/base_server.cpp
+	        ../apps/base-app/src/database_service.cpp
+	    )
+	    target_include_directories(base_anchor_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	    )
+	    target_link_libraries(base_anchor_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::game_session
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+
+	    add_executable(gateway_route_tests
+	        test_gateway_route.cpp
+	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/include/gateway/session_manager.cpp
+            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
+            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	    )
+	    target_include_directories(gateway_route_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	    )
+	    target_link_libraries(gateway_route_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::runtime
+	        apollo::net_tcp
+	        apollo::net_protocol
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(gateway_route_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME GatewayRouteTests COMMAND gateway_route_tests)
+
+	    add_executable(protocol_bootstrap_tests test_protocol_bootstrap.cpp)
+	    target_link_libraries(protocol_bootstrap_tests PRIVATE
+	        apollo
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(protocol_bootstrap_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME ProtocolBootstrapTests COMMAND protocol_bootstrap_tests)
+
 	    # Data module tests
 	    add_executable(data_tests test_data.cpp)
 	    target_link_libraries(data_tests PRIVATE apollo apollo::base apollo::core apollo::runtime apollo::data_cache apollo::data_orm)
@@ -499,6 +555,78 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(runtime_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
+
+	    # Session/World skeleton tests
+	    add_executable(session_world_tests test_session_world.cpp)
+	    target_link_libraries(session_world_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::runtime
+	        apollo::game_core
+	        apollo::game_session
+	        apollo::game_world
+	    )
+	    if(WIN32)
+	        target_link_libraries(session_world_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME SessionWorldTests COMMAND session_world_tests)
+
+	    add_executable(base_anchor_tests
+	        test_base_anchor.cpp
+	        ../apps/base-app/src/base_server.cpp
+	        ../apps/base-app/src/database_service.cpp
+	    )
+	    target_include_directories(base_anchor_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	    )
+	    target_link_libraries(base_anchor_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::game_session
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+
+	    add_executable(gateway_route_tests
+	        test_gateway_route.cpp
+	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/include/gateway/session_manager.cpp
+            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
+            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	    )
+	    target_include_directories(gateway_route_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	    )
+	    target_link_libraries(gateway_route_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::runtime
+	        apollo::net_tcp
+	        apollo::net_protocol
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(gateway_route_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME GatewayRouteTests COMMAND gateway_route_tests)
+
+	    add_executable(protocol_bootstrap_tests test_protocol_bootstrap.cpp)
+	    target_link_libraries(protocol_bootstrap_tests PRIVATE
+	        apollo
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(protocol_bootstrap_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME ProtocolBootstrapTests COMMAND protocol_bootstrap_tests)
 
 	    # Data module tests
 	    add_executable(data_tests test_data.cpp)

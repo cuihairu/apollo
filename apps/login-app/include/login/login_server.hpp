@@ -2,12 +2,17 @@
 
 #include "login/config.hpp"
 #include "apollo/protocol/socket.hpp"
+#include <atomic>
 #include <memory>
-#include <unordered_map>
 #include <mutex>
 #include <set>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace login {
+
+namespace protocol = apollo::protocol;
 
 using PlayerID = uint64_t;
 using SessionID = uint64_t;
@@ -55,6 +60,8 @@ private:
 
     // 初始化测试用户
     void initTestUsers();
+
+    int64_t getCurrentTimeMs() const;
 };
 
 // 网关分配器
@@ -78,6 +85,8 @@ private:
         int64_t lastUpdateMs;
     };
     std::vector<GatewayInfo> gateways_;
+
+    int64_t getCurrentTimeMs() const;
 };
 
 // 会话管理器
@@ -86,10 +95,11 @@ public:
     explicit SessionManager(const LoginConfig& config);
 
     // 创建会话
-    SessionID createSession(PlayerID playerId, const std::string& gatewayUrl);
+    SessionID createSession(PlayerID playerId, const std::string& gatewayUrl, std::string& outLoginTicket);
 
     // 验证会话
-    bool validateSession(SessionID sessionId, PlayerID& outPlayerId, std::string& outGatewayUrl);
+    bool validateSession(SessionID sessionId, const std::string& loginTicket,
+                         PlayerID& outPlayerId, std::string& outGatewayUrl);
 
     // 移除会话
     void removeSession(SessionID sessionId);
@@ -105,12 +115,17 @@ private:
         SessionID sessionId;
         PlayerID playerId;
         std::string gatewayUrl;
+        std::string loginTicket;
         int64_t createdAtMs;
         int64_t lastAccessMs;
     };
     std::unordered_map<SessionID, SessionInfo> sessions_;
+    std::unordered_map<std::string, SessionID> tickets_;
 
     std::atomic<uint64_t> nextSessionId_{1};
+
+    int64_t getCurrentTimeMs() const;
+    std::string generateLoginTicket(PlayerID playerId, SessionID sessionId) const;
 };
 
 // LoginApp 服务器
@@ -138,10 +153,16 @@ private:
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
 
+    bool preparePlayerOnline(PlayerID playerId, SessionID sessionId,
+                             const std::string& gatewayUrl, std::string& errorMessage);
+    static bool parseGatewayEndpoint(const std::string& gatewayUrl,
+                                     std::string& outHost, uint16_t& outPort);
+
     LoginConfig config_;
     std::unique_ptr<Authenticator> authenticator_;
     std::unique_ptr<GatewayAllocator> gatewayAllocator_;
     std::unique_ptr<SessionManager> sessionManager_;
+    std::unique_ptr<protocol::RpcClient> baseAppClient_;
 
     std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};

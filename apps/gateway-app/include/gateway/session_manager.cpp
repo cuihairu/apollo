@@ -7,12 +7,17 @@ SessionManager::SessionManager() {
     // 初始化
 }
 
-SessionID SessionManager::createSession(const std::string& clientIP, uint16_t clientPort) {
+SessionID SessionManager::createSession(
+    const std::string& clientIP,
+    uint16_t clientPort,
+    ConnectionID connectionId
+) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     SessionID sessionId = nextSessionId_++;
 
     auto session = std::make_shared<ClientConnection>();
+    session->connectionId = connectionId;
     session->sessionId = sessionId;
     session->playerId = 0;
     session->clientIP = clientIP;
@@ -46,7 +51,16 @@ void SessionManager::bindPlayer(SessionID sessionId, PlayerID playerId) {
     auto it = sessions_.find(sessionId);
     if (it != sessions_.end()) {
         it->second->playerId = playerId;
-        it->second->state = SessionState::IN_GAME;
+        it->second->state = SessionState::AUTHENTICATED;
+    }
+}
+
+void SessionManager::bindConnection(SessionID sessionId, ConnectionID connectionId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = sessions_.find(sessionId);
+    if (it != sessions_.end()) {
+        it->second->connectionId = connectionId;
     }
 }
 
@@ -68,13 +82,48 @@ void SessionManager::updateHeartbeat(SessionID sessionId) {
     }
 }
 
-void SessionManager::assignCellApp(SessionID sessionId, const std::string& cellAppUrl) {
+void SessionManager::assignRoute(SessionID sessionId, const RouteSnapshot& routeSnapshot) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     auto it = sessions_.find(sessionId);
     if (it != sessions_.end()) {
-        it->second->assignedCellApp = cellAppUrl;
+        it->second->routeSnapshot = routeSnapshot;
+        if (routeSnapshot.isAssigned()) {
+            it->second->state = SessionState::IN_GAME;
+        }
     }
+}
+
+void SessionManager::clearRoute(SessionID sessionId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = sessions_.find(sessionId);
+    if (it != sessions_.end()) {
+        it->second->routeSnapshot = {};
+        if (it->second->playerId != 0) {
+            it->second->state = SessionState::AUTHENTICATED;
+        }
+    }
+}
+
+std::shared_ptr<ClientConnection> SessionManager::bindPlayerAndRoute(
+    SessionID sessionId,
+    PlayerID playerId,
+    const RouteSnapshot& routeSnapshot
+) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = sessions_.find(sessionId);
+    if (it == sessions_.end()) {
+        return nullptr;
+    }
+
+    it->second->playerId = playerId;
+    it->second->routeSnapshot = routeSnapshot;
+    it->second->state = routeSnapshot.isAssigned()
+        ? SessionState::IN_GAME
+        : SessionState::AUTHENTICATED;
+    return it->second;
 }
 
 std::vector<std::shared_ptr<ClientConnection>> SessionManager::getAllSessions() {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gateway/ingress/client_ingress_server.hpp"
+
 #include <cstdint>
 #include <string>
 #include <memory>
@@ -13,6 +15,19 @@ namespace gateway {
 using SessionID = uint64_t;
 using PlayerID = uint64_t;
 
+struct RouteSnapshot {
+    uint32_t worldId = 0;
+    uint64_t mapId = 0;
+    uint64_t instanceId = 0;
+    uint64_t spaceId = 0;
+    uint64_t routeVersion = 0;
+    std::string worldServerUrl;
+
+    [[nodiscard]] bool isAssigned() const {
+        return !worldServerUrl.empty() || worldId != 0 || instanceId != 0 || spaceId != 0;
+    }
+};
+
 // 会话状态
 enum class SessionState {
     CONNECTING,     // 连接中
@@ -24,6 +39,7 @@ enum class SessionState {
 
 // 客户端连接信息
 struct ClientConnection {
+    ConnectionID connectionId{0};
     SessionID sessionId;
     PlayerID playerId;
     std::string clientIP;
@@ -31,8 +47,7 @@ struct ClientConnection {
     SessionState state;
     int64_t lastHeartbeatMs;
 
-    // 后端服务分配
-    std::string assignedCellApp;  // 分配的 CellApp 地址
+    RouteSnapshot routeSnapshot;
 };
 
 // 会话管理器
@@ -42,7 +57,7 @@ public:
     ~SessionManager() = default;
 
     // 创建新会话
-    SessionID createSession(const std::string& clientIP, uint16_t clientPort);
+    SessionID createSession(const std::string& clientIP, uint16_t clientPort, ConnectionID connectionId = 0);
 
     // 获取会话
     std::shared_ptr<ClientConnection> getSession(SessionID sessionId);
@@ -52,6 +67,7 @@ public:
 
     // 绑定玩家
     void bindPlayer(SessionID sessionId, PlayerID playerId);
+    void bindConnection(SessionID sessionId, ConnectionID connectionId);
 
     // 设置会话状态
     void setState(SessionID sessionId, SessionState state);
@@ -59,8 +75,13 @@ public:
     // 更新心跳
     void updateHeartbeat(SessionID sessionId);
 
-    // 分配 CellApp
-    void assignCellApp(SessionID sessionId, const std::string& cellAppUrl);
+    void assignRoute(SessionID sessionId, const RouteSnapshot& routeSnapshot);
+    void clearRoute(SessionID sessionId);
+    std::shared_ptr<ClientConnection> bindPlayerAndRoute(
+        SessionID sessionId,
+        PlayerID playerId,
+        const RouteSnapshot& routeSnapshot
+    );
 
     // 获取所有会话
     std::vector<std::shared_ptr<ClientConnection>> getAllSessions();
