@@ -97,7 +97,27 @@
 
 而不是完整 MMORPG 后端。
 
-### 2.5 Unreal 世界实例承载
+### 2.5 Unity 自研网络同步层
+
+如果团队不想直接依赖 Photon，而是想自己掌控更多上层逻辑，可以考虑：
+
+- `Mirror`
+- `FishNet`
+
+其中：
+
+- `Mirror` 更常见、更轻量
+- `FishNet` 在 observer system 和 scene visibility 上更灵活
+
+它们适合：
+
+- Unity MMO-like 原型
+- 自建服务端与同步层
+- 需要自己掌控可见性规则
+
+但不适合被误当成完整后端平台。
+
+### 2.6 Unreal 世界实例承载
 
 最推荐：
 
@@ -111,7 +131,7 @@
 
 前提是团队本来就准备把大量逻辑留在 Unreal 侧。
 
-### 2.6 游戏服编排和扩缩容
+### 2.7 游戏服编排和扩缩容
 
 最推荐：
 
@@ -128,6 +148,19 @@
 
 - `Agones` 不是游戏框架
 - 它只解决承载和生命周期管理
+
+### 2.8 分布式世界平台参考
+
+如果你想研究超大世界、多 worker 协同和分布式权威，可以参考：
+
+- `SpatialOS`
+
+但当前更适合作为：
+
+- 架构参考
+- server meshing 样板
+
+而不是多数团队的默认落地首选。
 
 ## 3. 更适合“参考和吸收”的框架
 
@@ -205,6 +238,7 @@
 - 首选 `Nakama`
 - 如果技术栈偏 TS，可选 `Colyseus`
 - 如果核心是 Unity 实时战斗，可选 `Photon`
+- 如果 Unity 团队想自己做更多上层逻辑，可选 `Mirror` 或 `FishNet`
 
 ### 5.4 Unreal MMO
 
@@ -212,7 +246,15 @@
 
 - `OWS + Unreal Dedicated Server`
 
-### 5.5 需要大规模云原生编排
+### 5.5 轻 MMO / 虚拟世界 / AoI 社区服
+
+建议：
+
+- `SmartFoxServer`
+
+它比普通房间服更适合地图型在线世界，因为有明确的 `MMORoom + AoI` 抽象。
+
+### 5.6 需要大规模云原生编排
 
 建议：
 
@@ -225,8 +267,9 @@
 - 世界模型：`KBEngine`
 - 模块治理：`AzerothCore`
 - 在线基础设施：`Nakama`
-- 实时同步抽象：`Photon`、`Colyseus`
+- 实时同步抽象：`Photon`、`Colyseus`、`SmartFoxServer`、`Mirror`、`FishNet`
 - 生产编排：`Agones`
+- 分布式世界参考：`SpatialOS`
 
 也就是说：
 
@@ -242,9 +285,12 @@
 - 现代在线后端：`Nakama`
 - 房间同步框架：`Colyseus`
 - Unity 实时副本服：`Photon`
+- Unity 自研网络层：`Mirror`、`FishNet`
+- 轻 MMO / 虚拟世界平台：`SmartFoxServer`
 - Unreal 实例世界编排：`OWS`
 - 云原生游戏服编排：`Agones`
 - MMO 世界引擎研究样板：`KBEngine`
+- 分布式世界研究样板：`SpatialOS`
 
 一句话总结：
 

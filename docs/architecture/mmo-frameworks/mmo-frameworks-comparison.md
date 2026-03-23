@@ -9,8 +9,9 @@
 
 - KBEngine、Ryzom Core：更接近 MMO 世界引擎
 - TrinityCore、AzerothCore：更接近 MMORPG 内容服核心
-- Nakama、Photon、Colyseus：更接近现代多人实时后端
-- OWS、Agones：更接近承载与编排层
+- Nakama、Photon、Colyseus、SmartFoxServer：更接近现代多人实时后端
+- Mirror、FishNet：更接近网络同步层
+- OWS、Agones、SpatialOS：更接近承载与编排层或分布式世界平台
 
 ## 2. 核心对照表
 
@@ -23,8 +24,12 @@
 | Nakama | 现代多人后端 | 弱到中，房间化 | 弱于 MMO schema | authoritative match | 存储 API | Go/TS/Lua runtime | 在线基础设施完整 | 无完整大世界模型 |
 | Photon | 实时网络框架 | 弱到中，session/world 需自建 | 中，网络对象级 | authority + interest management | 自建为主 | Unity 生态扩展 | 同步与 interest management | 非完整 MMO core |
 | Colyseus | 房间型实时框架 | 弱，房间化 | 中，Schema | patch-based sync | 自建为主 | Node/TS | 轻量 state sync | 生产级 MMO 世界层不足 |
+| SmartFoxServer | 多人服务器平台 | 中，MMORoom/AoI | 中 | AoI + MMORoom | 自建为主 | Extension | MMO 房间与虚拟世界支持成熟 | 非完整世界引擎 |
+| Mirror | Unity 网络层 | 弱 | 中，网络对象级 | interest management | 自建 | Unity 组件式扩展 | 轻量且易接入 | 不是 backend |
+| FishNet | Unity 网络层 | 弱 | 中，observer/scene visibility | observer system | 自建 | Unity 组件式扩展 | 可见性控制灵活 | 不是 backend |
 | OWS | 世界编排层 | 中，区域/实例编排 | 弱 | 依赖 Unreal server | API + DB | 微服务扩展 | Unreal 世界实例管理 | 不是完整逻辑框架 |
 | Agones | 编排层 | 无 | 无 | 无 | 无 | K8s CRD | dedicated server orchestration | 不提供游戏逻辑 |
+| SpatialOS | 分布式世界平台 | 强，distributed simulation | 中 | worker 协同同步 | 平台侧能力有限 | 平台扩展 | server meshing / distributed authority | 落地成本高 |
 
 ## 3. 从 MMO 核心问题看差异
 
@@ -46,6 +51,9 @@
 - Nakama
 - Photon
 - Colyseus
+- SmartFoxServer
+- Mirror
+- FishNet
 - Agones
 
 ### 3.2 谁最关注“内容系统”
@@ -75,11 +83,14 @@
 - Nakama
 - Photon
 - Colyseus
+- SmartFoxServer
 
 中等：
 
 - KBEngine
 - Ryzom Core
+- Mirror
+- FishNet
 
 ### 3.4 谁最关注“生产部署和承载”
 
@@ -87,10 +98,12 @@
 
 - Agones
 - OWS
+- SpatialOS
 
 中等：
 
 - Nakama
+- SmartFoxServer
 
 ## 4. 各框架最鲜明的特色
 
@@ -127,6 +140,19 @@
 
 - schema patch sync 极其轻量
 
+### SmartFoxServer
+
+- `MMORoom + AoI`
+- 很早就把 MMO 房间模型做成正式能力
+
+### Mirror
+
+- Interest Management 是正式一等能力
+
+### FishNet
+
+- Observer System 和 Scene Visibility 很灵活
+
 ### OWS
 
 - Unreal dedicated server 动态拉起和区域承载
@@ -134,6 +160,11 @@
 ### Agones
 
 - Fleet / Allocation / Autoscaling
+
+### SpatialOS
+
+- distributed simulation
+- server meshing / distributed authority 思路
 
 ## 5. 如果只看 Apollo 最该学什么
 
@@ -171,6 +202,9 @@
 - Nakama
 - Photon
 - Colyseus
+- SmartFoxServer
+- Mirror
+- FishNet
 
 应吸收：
 
@@ -184,6 +218,7 @@
 
 - Agones
 - OWS
+- SpatialOS
 
 应吸收：
 
