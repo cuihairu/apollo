@@ -40,8 +40,11 @@
 | O3DE Multiplayer | 3 | 4 | 1 | 4 | 2 | 引擎级多人框架 |
 | PlayFab MPS | 1 | 2 | 4 | 3 | 4 | 商业托管平台 |
 | Beamable | 1 | 3 | 4 | 4 | 4 | LiveOps 与微服务平台 |
+| AccelByte | 1 | 2 | 4 | 4 | 4 | 商业游戏平台与 DS 管理 |
+| Unity Gaming Services | 1 | 3 | 3 | 3 | 4 | Unity 官方服务套件 |
 | Open World Server | 3 | 2 | 3 | 3 | 4 | Unreal 编排层 |
 | Agones | 1 | 1 | 1 | 2 | 5 | 编排层，不是逻辑框架 |
+| Hathora | 1 | 2 | 1 | 2 | 4 | 低延迟 multiplayer hosting |
 | SpatialOS | 5 | 4 | 2 | 3 | 4 | 分布式世界思路强，现实落地门槛高 |
 
 ## 3. 维度解读
@@ -92,6 +95,8 @@
 - Nakama
 - PlayFab MPS
 - Beamable
+- AccelByte
+- Unity Gaming Services
 
 ### 3.4 扩展能力
 
@@ -109,6 +114,7 @@
 - FishNet
 - O3DE Multiplayer
 - Beamable
+- AccelByte
 
 ### 3.5 运维承载
 
@@ -126,6 +132,9 @@
 - Ryzom Core
 - PlayFab MPS
 - Beamable
+- AccelByte
+- Unity Gaming Services
+- Hathora
 
 ## 4. 如何使用这张表
 
@@ -161,6 +170,10 @@
 - Agones
 - OWS
 - Nakama
+- PlayFab MPS
+- AccelByte
+- Unity Gaming Services
+- Hathora
 
 ## 5. 结论
 
