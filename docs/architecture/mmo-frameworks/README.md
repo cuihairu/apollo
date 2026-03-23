@@ -17,10 +17,15 @@
 - [Ryzom Core 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/ryzom-core-analysis.md)
 - [Photon 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/photon-analysis.md)
 - [Colyseus 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/colyseus-analysis.md)
+- [SmartFoxServer 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/smartfoxserver-analysis.md)
+- [Mirror 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/mirror-analysis.md)
+- [FishNet 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/fishnet-analysis.md)
+- [SpatialOS 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/spatialos-analysis.md)
 - [Open World Server 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/open-world-server-analysis.md)
 - [Agones 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/agones-analysis.md)
 - [框架采用建议](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/framework-adoption-guide.md)
 - [MMO 框架总对照](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/mmo-frameworks-comparison.md)
+- [MMO 框架五维评分](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/mmo-frameworks-scorecard.md)
 
 ## 分类说明
 
@@ -45,6 +50,9 @@
 - Nakama
 - Photon
 - Colyseus
+- SmartFoxServer
+- Mirror
+- FishNet
 
 这类产品擅长实时会话、匹配、权威房间、状态同步，但通常不直接提供完整无缝大世界 MMO 内核。
 
@@ -52,6 +60,7 @@
 
 - Open World Server
 - Agones
+- SpatialOS
 
 这类产品更偏运行时编排、实例分配、扩缩容，不等于完整 MMO 游戏框架。
 
