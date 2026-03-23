@@ -20,6 +20,9 @@
 - [SmartFoxServer 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/smartfoxserver-analysis.md)
 - [Mirror 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/mirror-analysis.md)
 - [FishNet 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/fishnet-analysis.md)
+- [O3DE Multiplayer 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/o3de-analysis.md)
+- [PlayFab Multiplayer Servers 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/playfab-analysis.md)
+- [Beamable 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/beamable-analysis.md)
 - [SpatialOS 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/spatialos-analysis.md)
 - [Open World Server 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/open-world-server-analysis.md)
 - [Agones 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/agones-analysis.md)
@@ -51,8 +54,11 @@
 - Photon
 - Colyseus
 - SmartFoxServer
+- PlayFab Multiplayer Servers
+- Beamable
 - Mirror
 - FishNet
+- O3DE Multiplayer
 
 这类产品擅长实时会话、匹配、权威房间、状态同步，但通常不直接提供完整无缝大世界 MMO 内核。
 

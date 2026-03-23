@@ -37,6 +37,9 @@
 | SmartFoxServer | 3 | 4 | 2 | 4 | 3 | MMORoom + AoI 很有特点 |
 | Mirror | 1 | 4 | 1 | 3 | 2 | Unity 网络层 |
 | FishNet | 1 | 4 | 1 | 4 | 2 | Observer System 更灵活 |
+| O3DE Multiplayer | 3 | 4 | 1 | 4 | 2 | 引擎级多人框架 |
+| PlayFab MPS | 1 | 2 | 4 | 3 | 4 | 商业托管平台 |
+| Beamable | 1 | 3 | 4 | 4 | 4 | LiveOps 与微服务平台 |
 | Open World Server | 3 | 2 | 3 | 3 | 4 | Unreal 编排层 |
 | Agones | 1 | 1 | 1 | 2 | 5 | 编排层，不是逻辑框架 |
 | SpatialOS | 5 | 4 | 2 | 3 | 4 | 分布式世界思路强，现实落地门槛高 |
@@ -72,6 +75,7 @@
 - Colyseus
 - SmartFoxServer
 - Nakama
+- O3DE Multiplayer
 
 ### 3.3 持久化
 
@@ -86,6 +90,8 @@
 - TrinityCore
 - AzerothCore
 - Nakama
+- PlayFab MPS
+- Beamable
 
 ### 3.4 扩展能力
 
@@ -101,6 +107,8 @@
 - SmartFoxServer
 - Colyseus
 - FishNet
+- O3DE Multiplayer
+- Beamable
 
 ### 3.5 运维承载
 
@@ -116,6 +124,8 @@
 - Open World Server
 - SpatialOS
 - Ryzom Core
+- PlayFab MPS
+- Beamable
 
 ## 4. 如何使用这张表
 
@@ -135,6 +145,7 @@
 - Nakama
 - Colyseus
 - SmartFoxServer
+- O3DE Multiplayer
 
 ### 想做长期可维护内容服
 

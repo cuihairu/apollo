@@ -9,9 +9,9 @@
 
 - KBEngine、Ryzom Core：更接近 MMO 世界引擎
 - TrinityCore、AzerothCore：更接近 MMORPG 内容服核心
-- Nakama、Photon、Colyseus、SmartFoxServer：更接近现代多人实时后端
-- Mirror、FishNet：更接近网络同步层
-- OWS、Agones、SpatialOS：更接近承载与编排层或分布式世界平台
+- Nakama、Photon、Colyseus、SmartFoxServer、Beamable：更接近现代多人实时后端或游戏服务平台
+- Mirror、FishNet、O3DE Multiplayer：更接近网络同步层或引擎级多人框架
+- OWS、Agones、SpatialOS、PlayFab MPS：更接近承载与编排层或分布式世界平台
 
 ## 2. 核心对照表
 
@@ -27,6 +27,9 @@
 | SmartFoxServer | 多人服务器平台 | 中，MMORoom/AoI | 中 | AoI + MMORoom | 自建为主 | Extension | MMO 房间与虚拟世界支持成熟 | 非完整世界引擎 |
 | Mirror | Unity 网络层 | 弱 | 中，网络对象级 | interest management | 自建 | Unity 组件式扩展 | 轻量且易接入 | 不是 backend |
 | FishNet | Unity 网络层 | 弱 | 中，observer/scene visibility | observer system | 自建 | Unity 组件式扩展 | 可见性控制灵活 | 不是 backend |
+| O3DE Multiplayer | 引擎级多人框架 | 中，实体/组件世界 | 中 | network properties + RPC | 自建 | 引擎级扩展 | 开源引擎内多人能力 | 不是后端平台 |
+| PlayFab MPS | 托管多人平台 | 弱 | 弱到中 | 自建 server 决定 | 平台托管 | 平台生态扩展 | 商业托管和配套生态 | 不是世界引擎 |
+| Beamable | 游戏服务平台 | 弱 | 弱到中 | relay / 服务逻辑结合 | 平台服务 | microservices | LiveOps + 后端平台化 | 不适合大世界内核 |
 | OWS | 世界编排层 | 中，区域/实例编排 | 弱 | 依赖 Unreal server | API + DB | 微服务扩展 | Unreal 世界实例管理 | 不是完整逻辑框架 |
 | Agones | 编排层 | 无 | 无 | 无 | 无 | K8s CRD | dedicated server orchestration | 不提供游戏逻辑 |
 | SpatialOS | 分布式世界平台 | 强，distributed simulation | 中 | worker 协同同步 | 平台侧能力有限 | 平台扩展 | server meshing / distributed authority | 落地成本高 |
@@ -54,6 +57,7 @@
 - SmartFoxServer
 - Mirror
 - FishNet
+- O3DE Multiplayer
 - Agones
 
 ### 3.2 谁最关注“内容系统”
@@ -84,6 +88,7 @@
 - Photon
 - Colyseus
 - SmartFoxServer
+- O3DE Multiplayer
 
 中等：
 
@@ -91,6 +96,7 @@
 - Ryzom Core
 - Mirror
 - FishNet
+- Beamable
 
 ### 3.4 谁最关注“生产部署和承载”
 
@@ -99,11 +105,13 @@
 - Agones
 - OWS
 - SpatialOS
+- PlayFab MPS
 
 中等：
 
 - Nakama
 - SmartFoxServer
+- Beamable
 
 ## 4. 各框架最鲜明的特色
 
@@ -152,6 +160,18 @@
 ### FishNet
 
 - Observer System 和 Scene Visibility 很灵活
+
+### O3DE Multiplayer
+
+- entity/component 网络复制与引擎统一
+
+### PlayFab MPS
+
+- 商业托管 multiplayer server
+
+### Beamable
+
+- LiveOps + 微服务后端平台
 
 ### OWS
 
@@ -205,6 +225,8 @@
 - SmartFoxServer
 - Mirror
 - FishNet
+- O3DE Multiplayer
+- Beamable
 
 应吸收：
 
@@ -219,6 +241,7 @@
 - Agones
 - OWS
 - SpatialOS
+- PlayFab MPS
 
 应吸收：
 
@@ -233,14 +256,14 @@
 
 - 用 KBEngine / Ryzom Core 补世界模型
 - 用 AzerothCore 补模块治理
-- 用 Nakama / Photon / Colyseus 补现代实时抽象
-- 用 Agones / OWS 补生产承载与编排
+- 用 Nakama / Photon / Colyseus / Beamable 补现代实时与平台抽象
+- 用 Agones / OWS / PlayFab MPS 补生产承载与编排
 
 换句话说：
 
 - KBEngine 解决“世界怎么活”
 - TrinityCore / AzerothCore 解决“内容怎么堆”
-- Nakama / Photon / Colyseus 解决“实时怎么跑”
-- OWS / Agones 解决“服务怎么养”
+- Nakama / Photon / Colyseus / Beamable 解决“实时怎么跑”
+- OWS / Agones / PlayFab MPS 解决“服务怎么养”
 
 对 Apollo 最有价值的不是选一个站队，而是明确每层要解决的问题，再按层吸收。

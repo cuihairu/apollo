@@ -117,7 +117,33 @@
 
 但不适合被误当成完整后端平台。
 
-### 2.6 Unreal 世界实例承载
+### 2.6 引擎级多人框架
+
+如果你本来就在引擎内部做很多底层能力，可以评估：
+
+- `O3DE Multiplayer`
+
+它更像：
+
+- 引擎级网络复制和 RPC 框架
+
+而不是现成游戏后端平台。
+
+### 2.7 商业托管多人平台
+
+可以评估：
+
+- `PlayFab Multiplayer Servers`
+- `Beamable`
+
+区别是：
+
+- `PlayFab MPS` 更偏托管 dedicated server 和平台生态
+- `Beamable` 更偏 LiveOps、微服务和游戏后台平台化
+
+它们都适合商业在线项目，但都不等于大世界 MMO 内核。
+
+### 2.8 Unreal 世界实例承载
 
 最推荐：
 
@@ -131,7 +157,7 @@
 
 前提是团队本来就准备把大量逻辑留在 Unreal 侧。
 
-### 2.7 游戏服编排和扩缩容
+### 2.9 游戏服编排和扩缩容
 
 最推荐：
 
@@ -149,7 +175,7 @@
 - `Agones` 不是游戏框架
 - 它只解决承载和生命周期管理
 
-### 2.8 分布式世界平台参考
+### 2.10 分布式世界平台参考
 
 如果你想研究超大世界、多 worker 协同和分布式权威，可以参考：
 
@@ -239,6 +265,7 @@
 - 如果技术栈偏 TS，可选 `Colyseus`
 - 如果核心是 Unity 实时战斗，可选 `Photon`
 - 如果 Unity 团队想自己做更多上层逻辑，可选 `Mirror` 或 `FishNet`
+- 如果更看重商业平台能力，可评估 `Beamable` 或 `PlayFab`
 
 ### 5.4 Unreal MMO
 
@@ -267,7 +294,8 @@
 - 世界模型：`KBEngine`
 - 模块治理：`AzerothCore`
 - 在线基础设施：`Nakama`
-- 实时同步抽象：`Photon`、`Colyseus`、`SmartFoxServer`、`Mirror`、`FishNet`
+- 实时同步抽象：`Photon`、`Colyseus`、`SmartFoxServer`、`Mirror`、`FishNet`、`O3DE Multiplayer`
+- 商业平台能力：`PlayFab`、`Beamable`
 - 生产编排：`Agones`
 - 分布式世界参考：`SpatialOS`
 
@@ -286,6 +314,8 @@
 - 房间同步框架：`Colyseus`
 - Unity 实时副本服：`Photon`
 - Unity 自研网络层：`Mirror`、`FishNet`
+- 引擎级多人框架：`O3DE Multiplayer`
+- 商业在线平台：`PlayFab MPS`、`Beamable`
 - 轻 MMO / 虚拟世界平台：`SmartFoxServer`
 - Unreal 实例世界编排：`OWS`
 - 云原生游戏服编排：`Agones`
@@ -296,4 +326,4 @@
 
 - 最适合直接落地的是 `AzerothCore`、`Nakama`、`Colyseus`、`Agones`
 - 最适合做大世界架构参考的是 `KBEngine`、`Ryzom Core`
-- 最适合做战斗 / 房间 / 承载层补充的是 `Photon`、`OWS`
+- 最适合做战斗 / 房间 / 承载层补充的是 `Photon`、`OWS`、`PlayFab`、`Beamable`
