@@ -19,6 +19,7 @@
 - [Colyseus 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/colyseus-analysis.md)
 - [Open World Server 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/open-world-server-analysis.md)
 - [Agones 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/agones-analysis.md)
+- [框架采用建议](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/framework-adoption-guide.md)
 - [MMO 框架总对照](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/mmo-frameworks-comparison.md)
 
 ## 分类说明
