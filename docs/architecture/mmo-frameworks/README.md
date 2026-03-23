@@ -26,6 +26,9 @@
 - [AccelByte 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/accelbyte-analysis.md)
 - [Hathora 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/hathora-analysis.md)
 - [Unity Gaming Services 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/unity-gaming-services-analysis.md)
+- [AWS GameLift 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/gamelift-analysis.md)
+- [Edgegap 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/edgegap-analysis.md)
+- [Pragma 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/pragma-analysis.md)
 - [SpatialOS 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/spatialos-analysis.md)
 - [Open World Server 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/open-world-server-analysis.md)
 - [Agones 架构分析](C:/Users/cui/Workspaces/apollo/docs/architecture/mmo-frameworks/agones-analysis.md)
@@ -61,6 +64,7 @@
 - Beamable
 - AccelByte
 - Unity Gaming Services
+- Pragma
 - Mirror
 - FishNet
 - O3DE Multiplayer
@@ -73,6 +77,8 @@
 - Agones
 - SpatialOS
 - Hathora
+- AWS GameLift
+- Edgegap
 
 这类产品更偏运行时编排、实例分配、扩缩容，不等于完整 MMO 游戏框架。
 

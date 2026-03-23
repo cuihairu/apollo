@@ -9,9 +9,9 @@
 
 - KBEngine、Ryzom Core：更接近 MMO 世界引擎
 - TrinityCore、AzerothCore：更接近 MMORPG 内容服核心
-- Nakama、Photon、Colyseus、SmartFoxServer、Beamable、AccelByte、Unity Gaming Services：更接近现代多人实时后端或游戏服务平台
+- Nakama、Photon、Colyseus、SmartFoxServer、Beamable、AccelByte、Unity Gaming Services、Pragma：更接近现代多人实时后端或游戏服务平台
 - Mirror、FishNet、O3DE Multiplayer：更接近网络同步层或引擎级多人框架
-- OWS、Agones、SpatialOS、PlayFab MPS、Hathora：更接近承载与编排层或分布式世界平台
+- OWS、Agones、SpatialOS、PlayFab MPS、Hathora、AWS GameLift、Edgegap：更接近承载与编排层或分布式世界平台
 
 ## 2. 核心对照表
 
@@ -32,9 +32,12 @@
 | Beamable | 游戏服务平台 | 弱 | 弱到中 | relay / 服务逻辑结合 | 平台服务 | microservices | LiveOps + 后端平台化 | 不适合大世界内核 |
 | AccelByte | 游戏后端平台 | 弱 | 弱到中 | 会话/DS 协同 | 平台服务 | 平台模块 | DS 管理与平台结合 | 非世界引擎 |
 | Unity Gaming Services | Unity 在线服务套件 | 弱 | 弱到中 | Lobby/Relay/Matchmaker 组合 | 平台服务 | Unity 官方生态 | Unity 接入现实 | 非 MMO 世界框架 |
+| Pragma | 商业游戏后端平台 | 弱 | 弱到中 | 业务后端为主 | 平台服务 | 平台产品能力 | 后端平台化 | 非世界引擎 |
 | OWS | 世界编排层 | 中，区域/实例编排 | 弱 | 依赖 Unreal server | API + DB | 微服务扩展 | Unreal 世界实例管理 | 不是完整逻辑框架 |
 | Agones | 编排层 | 无 | 无 | 无 | 无 | K8s CRD | dedicated server orchestration | 不提供游戏逻辑 |
 | Hathora | 托管 multiplayer hosting | 弱 | 弱 | 自建 server 决定 | 托管承载 | 平台接入 | 低延迟实时会话托管 | 非完整平台 |
+| AWS GameLift | 托管 dedicated server 平台 | 弱 | 弱 | session-based hosting | 托管承载 | 云平台能力 | 商业托管成熟 | 非世界引擎 |
+| Edgegap | edge orchestration 平台 | 弱 | 弱 | edge-hosted session | 托管承载 | 平台接入 | 低延迟 edge 部署 | 非完整平台 |
 | SpatialOS | 分布式世界平台 | 强，distributed simulation | 中 | worker 协同同步 | 平台侧能力有限 | 平台扩展 | server meshing / distributed authority | 落地成本高 |
 
 ## 3. 从 MMO 核心问题看差异

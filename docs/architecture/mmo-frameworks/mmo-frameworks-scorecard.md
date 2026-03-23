@@ -42,6 +42,9 @@
 | Beamable | 1 | 3 | 4 | 4 | 4 | LiveOps 与微服务平台 |
 | AccelByte | 1 | 2 | 4 | 4 | 4 | 商业游戏平台与 DS 管理 |
 | Unity Gaming Services | 1 | 3 | 3 | 3 | 4 | Unity 官方服务套件 |
+| AWS GameLift | 1 | 2 | 2 | 3 | 5 | 云托管 dedicated server |
+| Edgegap | 1 | 2 | 1 | 2 | 5 | edge orchestration / hosting |
+| Pragma | 1 | 2 | 4 | 4 | 4 | 商业 backend stack |
 | Open World Server | 3 | 2 | 3 | 3 | 4 | Unreal 编排层 |
 | Agones | 1 | 1 | 1 | 2 | 5 | 编排层，不是逻辑框架 |
 | Hathora | 1 | 2 | 1 | 2 | 4 | 低延迟 multiplayer hosting |
@@ -97,6 +100,7 @@
 - Beamable
 - AccelByte
 - Unity Gaming Services
+- Pragma
 
 ### 3.4 扩展能力
 
@@ -115,6 +119,7 @@
 - O3DE Multiplayer
 - Beamable
 - AccelByte
+- Pragma
 
 ### 3.5 运维承载
 
@@ -135,6 +140,9 @@
 - AccelByte
 - Unity Gaming Services
 - Hathora
+- AWS GameLift
+- Edgegap
+- Pragma
 
 ## 4. 如何使用这张表
 
@@ -174,6 +182,8 @@
 - AccelByte
 - Unity Gaming Services
 - Hathora
+- AWS GameLift
+- Edgegap
 
 ## 5. 结论
 

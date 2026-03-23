@@ -146,6 +146,9 @@
 - `AccelByte` 更偏 dedicated server 管理和商业游戏平台
 - `Unity Gaming Services` 更偏 Unity 官方生态服务组合
 - `Hathora` 更偏低延迟多人 hosting
+- `AWS GameLift` 更偏云上 session-based dedicated server 托管
+- `Edgegap` 更偏 edge orchestration 和低延迟部署
+- `Pragma` 更偏商业化 backend stack
 
 它们都适合商业在线项目，但都不等于大世界 MMO 内核。
 
@@ -273,6 +276,7 @@
 - 如果 Unity 团队想自己做更多上层逻辑，可选 `Mirror` 或 `FishNet`
 - 如果更看重商业平台能力，可评估 `Beamable` 或 `PlayFab`
 - 如果是 Unity 官方服务路线，可评估 `Unity Gaming Services`
+- 如果更看重云托管和 edge 部署，可评估 `AWS GameLift` 或 `Edgegap`
 
 ### 5.4 Unreal MMO
 
@@ -302,7 +306,7 @@
 - 模块治理：`AzerothCore`
 - 在线基础设施：`Nakama`
 - 实时同步抽象：`Photon`、`Colyseus`、`SmartFoxServer`、`Mirror`、`FishNet`、`O3DE Multiplayer`
-- 商业平台能力：`PlayFab`、`Beamable`、`AccelByte`、`UGS`、`Hathora`
+- 商业平台能力：`PlayFab`、`Beamable`、`AccelByte`、`UGS`、`Hathora`、`GameLift`、`Edgegap`、`Pragma`
 - 生产编排：`Agones`
 - 分布式世界参考：`SpatialOS`
 
@@ -323,7 +327,8 @@
 - Unity 自研网络层：`Mirror`、`FishNet`
 - 引擎级多人框架：`O3DE Multiplayer`
 - 商业在线平台：`PlayFab MPS`、`Beamable`、`AccelByte`、`Unity Gaming Services`
-- 轻量 hosting 平台：`Hathora`
+- 轻量 hosting 平台：`Hathora`、`AWS GameLift`、`Edgegap`
+- 商业 backend stack：`Pragma`
 - 轻 MMO / 虚拟世界平台：`SmartFoxServer`
 - Unreal 实例世界编排：`OWS`
 - 云原生游戏服编排：`Agones`
@@ -334,4 +339,4 @@
 
 - 最适合直接落地的是 `AzerothCore`、`Nakama`、`Colyseus`、`Agones`
 - 最适合做大世界架构参考的是 `KBEngine`、`Ryzom Core`
-- 最适合做战斗 / 房间 / 承载层补充的是 `Photon`、`OWS`、`PlayFab`、`Beamable`、`AccelByte`、`UGS`、`Hathora`
+- 最适合做战斗 / 房间 / 承载层补充的是 `Photon`、`OWS`、`PlayFab`、`Beamable`、`AccelByte`、`UGS`、`Hathora`、`GameLift`、`Edgegap`、`Pragma`
