@@ -10,6 +10,16 @@
 
 namespace Apollo {
 
+enum class LifecyclePhase : int {
+    Bootstrap = -2000,
+    Infrastructure = -1000,
+    Config = -500,
+    Data = 0,
+    CoreService = 500,
+    Business = 1000,
+    Gateway = 2000
+};
+
 enum class ComponentState {
     UNINITIALIZED,
     INITIALIZING,
@@ -38,6 +48,9 @@ public:
     virtual void setState(ComponentState state) = 0;
     virtual bool dependsOn(const std::string& componentName) const = 0;
     virtual const std::vector<std::string>& getDependencies() const = 0;
+    virtual int getPhase() const {
+        return static_cast<int>(LifecyclePhase::CoreService);
+    }
 };
 
 using ComponentPtr = std::shared_ptr<IComponent>;

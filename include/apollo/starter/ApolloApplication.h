@@ -3,6 +3,7 @@
 #include "Starter.h"
 #include "StarterRegistry.h"
 #include "ConditionContext.h"
+#include "apollo/framework/ioc/ApplicationContext.h"
 #include <memory>
 #include <vector>
 #include <string>
@@ -150,6 +151,10 @@ public:
      */
     const std::vector<std::shared_ptr<ApolloStarter>>& getActiveStarters() const {
         return activeStarters_;
+    }
+
+    Apollo::ApplicationContext& getApplicationContext() {
+        return Apollo::ApplicationContext::getInstance();
     }
 
     ApolloApplication(const ApolloApplication&) = delete;

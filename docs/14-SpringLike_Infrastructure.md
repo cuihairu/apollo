@@ -59,4 +59,9 @@
 5. **管理端点/Actuator**：简易 HTTP/gRPC 服务，输出健康/指标。
 6. **日志 & 监控**：落地 spdlog + Prometheus 指标，提供统一封装。
 
+## 5. 详细设计入口
+
+- `ApplicationContext 2.0` 详细运行时设计见 `docs/34-ApplicationContext_2.0_Design.md`。
+- `docs/06` 更偏生命周期概念草案；`docs/34` 作为后续编码与模块拆分的主参考。
+
 完成上述基础设施后，后续再评估 DI/ORM 等更复杂能力。这样既能满足“所有进程共享”的需求，也兼顾实现代价。***

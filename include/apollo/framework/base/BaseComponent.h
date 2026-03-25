@@ -10,8 +10,11 @@ namespace Apollo {
 
 class BaseComponent : public IComponent {
 public:
-    BaseComponent(const std::string& name)
-        : name_(name), state_(ComponentState::UNINITIALIZED) {
+    BaseComponent(const std::string& name,
+                  LifecyclePhase phase = LifecyclePhase::CoreService)
+        : name_(name),
+          phase_(static_cast<int>(phase)),
+          state_(ComponentState::UNINITIALIZED) {
         guid_ = generateGuid();
     }
 
@@ -59,10 +62,10 @@ public:
             return false;
         }
 
+        const bool wasStarted = (state_ == ComponentState::STARTED);
         state_ = ComponentState::DESTROYING;
-
-        if (state_ == ComponentState::STARTED) {
-            stop();
+        if (wasStarted) {
+            onStop();
         }
 
         bool result = onDestroy();
@@ -100,6 +103,10 @@ public:
         return dependencies_;
     }
 
+    int getPhase() const override {
+        return phase_;
+    }
+
 protected:
     template<typename T>
     std::shared_ptr<T> getComponent() {
@@ -113,6 +120,10 @@ protected:
 
     void addDependency(const std::string& componentName) {
         dependencies_.push_back(componentName);
+    }
+
+    void setPhase(LifecyclePhase phase) {
+        phase_ = static_cast<int>(phase);
     }
 
 private:
@@ -134,6 +145,7 @@ private:
 
     std::string name_;
     std::string guid_;
+    std::atomic<int> phase_;
     std::atomic<ComponentState> state_;
     std::vector<std::string> dependencies_;
     mutable std::mutex stateMutex_;

@@ -34,6 +34,10 @@ namespace fruit {
 #include <vector>
 #include <memory>
 
+namespace Apollo {
+class ApplicationContext;
+}
+
 namespace Apollo::Starter {
 
 /**
@@ -122,6 +126,16 @@ public:
     virtual bool matches(const struct ConditionContext& ctx) {
         (void)ctx;
         return true;  // 默认启用
+    }
+
+    /**
+     * @brief 向 ApplicationContext 注册 BeanDefinition/Bean
+     *
+     * 新的启动模型优先使用该入口完成运行时装配。
+     * 默认实现为空，以兼容现有仅使用 onInitialize/onStart 的 Starter。
+     */
+    virtual void registerBeans(Apollo::ApplicationContext& context) {
+        (void)context;
     }
 
     /**
