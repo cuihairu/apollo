@@ -3,6 +3,8 @@ add_library(apollo_core_config STATIC
     src/config_value.cpp
     src/config_manager.cpp
     ../src/config/config_registry.cpp
+    ../../../src/framework/ioc/ConfigManager.cpp
+    ../../../src/utils/io/FileWatcher.cpp
 )
 add_library(apollo::core_config ALIAS apollo_core_config)
 

@@ -29,8 +29,12 @@ add_subdirectory(net)
 # See: https://github.com/actor-framework/actor-framework
 
 # Level 7: Game (depends on core)
-# Note: Game module has compilation issues, temporarily disabled
+# Examples still depend on the legacy AOI/attribute APIs that are implemented here,
+# so force-enable the game module whenever examples are requested.
 option(APOLLO_BUILD_GAME_MODULE "Build game framework module" OFF)
+if(APOLLO_BUILD_EXAMPLES AND NOT APOLLO_BUILD_GAME_MODULE)
+    set(APOLLO_BUILD_GAME_MODULE ON CACHE BOOL "Build game framework module" FORCE)
+endif()
 if(APOLLO_BUILD_GAME_MODULE)
     add_subdirectory(game)
 endif()
@@ -44,6 +48,31 @@ endif()
 
 # Level 9: Starter (assembly layer)
 add_subdirectory(starter)
+
+# Legacy compatibility sources required by the examples and older public headers.
+add_library(apollo_legacy_compat STATIC
+    ../src/utils/logging/logger.cpp
+    ../src/utils/threading/thread_pool.cpp
+)
+add_library(apollo::legacy_compat ALIAS apollo_legacy_compat)
+
+target_include_directories(apollo_legacy_compat
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+        $<INSTALL_INTERFACE:include>
+)
+
+target_link_libraries(apollo_legacy_compat
+    PUBLIC
+        apollo::base
+)
+
+target_compile_features(apollo_legacy_compat PUBLIC cxx_std_20)
+
+if(MSVC)
+    target_compile_options(apollo_legacy_compat PUBLIC /utf-8)
+    target_compile_definitions(apollo_legacy_compat PUBLIC _CRT_SECURE_NO_WARNINGS)
+endif()
 
 # Apollo aggregated library (for backward compatibility)
 #
@@ -59,6 +88,7 @@ if(NOT TARGET apollo)
         apollo::base
         apollo::core
         apollo::runtime
+        apollo::legacy_compat
         apollo::data_cache
         apollo::data_orm
         apollo::net_tcp

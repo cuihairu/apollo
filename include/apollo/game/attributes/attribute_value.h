@@ -80,9 +80,9 @@ public:
     AttributeContainer(const AttributeContainer&) = delete;
     AttributeContainer& operator=(const AttributeContainer&) = delete;
 
-    // 允许移动
-    AttributeContainer(AttributeContainer&&) = default;
-    AttributeContainer& operator=(AttributeContainer&&) = default;
+    // mutex makes this type non-movable; state stays behind shared_ptr ownership.
+    AttributeContainer(AttributeContainer&&) = delete;
+    AttributeContainer& operator=(AttributeContainer&&) = delete;
 
     /// 获取对象ID
     uint64_t objectId() const { return objectId_; }

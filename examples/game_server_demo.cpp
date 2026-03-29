@@ -499,8 +499,10 @@ public:
             std::cout << "[" << name_ << "] Player " << it->second.name
                       << " (ID:" << playerId << ") left game" << std::endl;
 
-            // 通知周围玩家
-            notifyEntityLeave(playerId);
+            // 通知周围玩家：playerId 从他们的视野中离开
+            for (uint64_t otherId : it->second.visibleEntities) {
+                notifyEntityLeave(otherId, playerId);
+            }
 
             players_.erase(it);
         }
