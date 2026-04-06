@@ -10,112 +10,93 @@ prev: /api/README.md
 
 ```cpp
 namespace apollo::runtime {
+enum class StopReason {
+    Completed = 0,
+    ConsoleRequested,
+    SignalRequested,
+    StartupFailed,
+};
+
+class IHostedService : public apollo::core::IApplicationLifecycle {
+public:
+    virtual std::string_view service_name() const = 0;
+    virtual bool start() = 0;
+    virtual void stop() = 0;
+    virtual bool is_running() const = 0;
+    virtual void tick() {}
+};
+
 class ApplicationHost {
 public:
-    ApplicationHost();
-    ~ApplicationHost();
+    using ShutdownHook = std::function<void(StopReason)>;
 
-    // 注册应用
-    template<typename T, typename... Args>
-    void registerApplication(Args&&... args);
+    void add_service(std::shared_ptr<IHostedService> service);
+    void add_shutdown_hook(ShutdownHook hook);
+    void set_console_source(std::unique_ptr<IConsoleEventSource> console_source);
+    void set_signal_source(std::unique_ptr<ISignalSource> signal_source);
+    void request_stop(StopReason reason);
 
-    // 运行
+    bool start();
     int run();
-
-    // 停止
+    int run_once();
     void stop();
 
-    // 是否运行中
+    apollo::core::ApplicationPhase phase() const;
+    StopReason stop_reason() const;
     bool is_running() const;
-
-    // 添加关闭钩子
-    void addShutdownHook(std::function<void()> hook);
 };
 }
 ```
 
-**线程安全**: ⚠️ stop() 可以在任何线程调用
+`request_stop()` 设计为可从非宿主线程投递停止请求。
 
 ---
 
-## apollo::runtime::Console
+## apollo::runtime::ServiceHost
 
 ```cpp
 namespace apollo::runtime {
-class Console {
+class ServiceHost {
 public:
-    static Console& instance();
+    void add_service(std::shared_ptr<IHostedService> service);
+    void add_shutdown_hook(ApplicationHost::ShutdownHook hook);
+    void set_console_source(std::unique_ptr<IConsoleEventSource> console_source);
+    void set_signal_source(std::unique_ptr<ISignalSource> signal_source);
 
-    // 启动控制台监听
-    void start();
-
-    // 停止控制台监听
+    bool start();
+    int run();
+    int run_once();
+    void request_stop(StopReason reason);
     void stop();
-
-    // 添加命令
-    void addCommand(const std::string& name, std::function<void()> handler);
-
-    // 移除命令
-    void removeCommand(const std::string& name);
 };
 }
 ```
-
-**线程安全**: ✅
 
 ---
 
-## apollo::runtime::Signal
+## apollo::runtime::QueueConsoleEventSource
 
 ```cpp
 namespace apollo::runtime {
-class Signal {
+class QueueConsoleEventSource : public IConsoleEventSource {
 public:
-    static Signal& instance();
-
-    // 注册信号处理器
-    void on(int signal, std::function<void()> handler);
-
-    // 忽略信号
-    void ignore(int signal);
-
-    // 默认处理
-    void default_(int signal);
+    void push_command(std::string command);
+    bool poll(ConsoleEvent& event) override;
 };
 }
 ```
-
-**线程安全**: ⚠️ 信号处理器在信号处理线程执行
 
 ---
 
-## apollo::runtime::HealthCheck
+## apollo::runtime::ProcessSignalSource
 
 ```cpp
 namespace apollo::runtime {
-class HealthCheck {
+class ProcessSignalSource : public ISignalSource {
 public:
-    static HealthCheck& instance();
-
-    // 添加检查项
-    void add(const std::string& name, std::function<HealthStatus()> checker);
-
-    // 移除检查项
-    void remove(const std::string& name);
-
-    // 检查所有
-    HealthStatus check();
-
-    // 获取状态
-    HealthStatus getStatus(const std::string& name) const;
-};
-
-enum class HealthStatus {
-    HEALTHY,
-    DEGRADED,
-    UNHEALTHY
+    ProcessSignalSource();
+    explicit ProcessSignalSource(std::initializer_list<int> signals);
+    bool poll(SignalEvent& event) override;
 };
 }
 ```
-
-**线程安全**: ✅

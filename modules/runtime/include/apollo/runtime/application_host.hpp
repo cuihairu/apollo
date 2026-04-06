@@ -2,8 +2,9 @@
 
 #include "apollo/core/application_lifecycle.hpp"
 
-#include <memory>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -63,6 +64,7 @@ public:
     void request_stop(StopReason reason);
 
     bool start();
+    int run();
     int run_once();
     void stop();
 
@@ -71,6 +73,8 @@ public:
     bool is_running() const { return running_; }
 
 private:
+    bool consume_stop_request(StopReason& reason);
+    void stop_started_services(std::size_t started_count);
     void transition_to(apollo::core::ApplicationPhase next);
     void run_shutdown_hooks();
     void notify_boot();
@@ -86,58 +90,10 @@ private:
     apollo::core::ApplicationPhase phase_ = apollo::core::ApplicationPhase::Boot;
     StopReason stop_reason_ = StopReason::Completed;
     bool running_ = false;
-};
-
-class ServiceHost {
-public:
-    ServiceHost() = default;
-
-    void add_service(std::shared_ptr<IHostedService> service) {
-        application_host_.add_service(std::move(service));
-    }
-
-    void add_shutdown_hook(ApplicationHost::ShutdownHook hook) {
-        application_host_.add_shutdown_hook(std::move(hook));
-    }
-
-    void set_console_source(std::unique_ptr<IConsoleEventSource> console_source) {
-        application_host_.set_console_source(std::move(console_source));
-    }
-
-    void set_signal_source(std::unique_ptr<ISignalSource> signal_source) {
-        application_host_.set_signal_source(std::move(signal_source));
-    }
-
-    bool start() {
-        return application_host_.start();
-    }
-
-    int run_once() {
-        return application_host_.run_once();
-    }
-
-    void request_stop(StopReason reason) {
-        application_host_.request_stop(reason);
-    }
-
-    void stop() {
-        application_host_.stop();
-    }
-
-    apollo::core::ApplicationPhase phase() const {
-        return application_host_.phase();
-    }
-
-    StopReason stop_reason() const {
-        return application_host_.stop_reason();
-    }
-
-    bool is_running() const {
-        return application_host_.is_running();
-    }
-
-private:
-    ApplicationHost application_host_;
+    bool shutdown_hooks_ran_ = false;
+    std::mutex stop_mutex_;
+    bool stop_requested_ = false;
+    StopReason requested_stop_reason_ = StopReason::Completed;
 };
 
 } // namespace apollo::runtime

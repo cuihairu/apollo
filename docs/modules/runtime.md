@@ -11,119 +11,87 @@ tag:
 
 # Runtime 模块
 
-Runtime 模块提供宿主运行时，管理应用程序的生命周期。
+Runtime 模块提供宿主运行时，负责服务生命周期、停止请求、控制台事件和进程信号处理。
 
 ## ApplicationHost
 
-应用程序宿主，管理应用的启动和关闭。
+应用程序宿主，管理一组 `IHostedService` 的生命周期。
 
 ```cpp
 #include <apollo/runtime/application_host.hpp>
+#include <apollo/runtime/console_event_source.hpp>
 
-using namespace apollo::runtime;
-
-// 定义应用
-class GameServer : public core::Application {
+class GameServerService final : public apollo::runtime::IHostedService {
 public:
-    void start() override {
-        LOG_INFO("GameServer", "启动中...");
-        // 初始化逻辑
+    std::string_view service_name() const override {
+        return "game_server";
+    }
+
+    bool start() override {
+        running_ = true;
+        return true;
     }
 
     void stop() override {
-        LOG_INFO("GameServer", "关闭中...");
-        // 清理逻辑
+        running_ = false;
     }
+
+    bool is_running() const override {
+        return running_;
+    }
+
+private:
+    bool running_ = false;
 };
 
 int main() {
-    ApplicationHost host;
+    apollo::runtime::ApplicationHost host;
+    host.add_service(std::make_shared<GameServerService>());
 
-    // 注册应用
-    host.registerApplication<GameServer>();
+    auto console = std::make_unique<apollo::runtime::QueueConsoleEventSource>();
+    console->push_command("quit");
+    host.set_console_source(std::move(console));
 
-    // 添加关闭钩子
-    host.addShutdownHook([]() {
-        LOG_INFO("Host", "关闭钩子执行");
+    host.add_shutdown_hook([](apollo::runtime::StopReason reason) {
+        (void)reason;
     });
 
-    // 运行
     return host.run();
 }
 ```
 
 ## ServiceHost
 
-服务宿主，支持多个服务并行运行。
+`ServiceHost` 是 `ApplicationHost` 的服务侧包装，接口保持一致，便于 app 入口直接表达“这是一个服务宿主”。
 
 ```cpp
-#include <apollo/runtime/application_host.hpp>
+#include <apollo/runtime/service_host.hpp>
 
 int main() {
-    ApplicationHost host;
-
-    // 注册多个服务
-    host.registerApplication<NetworkService>();
-    host.registerApplication<DatabaseService>();
-    host.registerApplication<GameService>();
-
+    apollo::runtime::ServiceHost host;
+    host.add_service(std::make_shared<GameServerService>());
     return host.run();
 }
 ```
 
-## 控制台输入
+## 控制台事件源
 
 ```cpp
-#include <apollo/runtime/console.hpp>
+#include <apollo/runtime/console_event_source.hpp>
 
-// 启动控制台监听
-Console::instance().start();
-
-// 添加命令处理器
-Console::instance().addCommand("help", []() {
-    std::cout << "可用命令:" << std::endl;
-    std::cout << "  help - 显示帮助" << std::endl;
-    std::cout << "  stop - 停止服务器" << std::endl;
-});
-
-Console::instance().addCommand("stop", [&host]() {
-    host.stop();
-});
+apollo::runtime::QueueConsoleEventSource console;
+console.push_command("quit");
 ```
 
 ## 信号处理
 
 ```cpp
-#include <apollo/runtime/signal.hpp>
+#include <apollo/runtime/signal_source.hpp>
 
-// 注册信号处理器
-Signal::instance().on(SIGINT, [&host]() {
-    LOG_INFO("Signal", "收到 SIGINT，准备关闭");
-    host.stop();
-});
-
-Signal::instance().on(SIGTERM, [&host]() {
-    LOG_INFO("Signal", "收到 SIGTERM，准备关闭");
-    host.stop();
-});
+apollo::runtime::ProcessSignalSource signals{SIGINT, SIGTERM};
 ```
 
-## 健康检查
-
-```cpp
-#include <apollo/runtime/health_check.hpp>
-
-// 注册健康检查
-HealthCheck::instance().add("database", []() {
-    return database->ping() ? HealthStatus::HEALTHY : HealthStatus::UNHEALTHY;
-});
-
-// 检查状态
-auto status = HealthCheck::instance().check();
-if (status == HealthStatus::HEALTHY) {
-    LOG_INFO("Health", "系统健康");
-}
-```
+`ApplicationHost::request_stop()` 可由其他线程调用，停止会在当前或下一次 `run_once()` 中收敛，并触发 shutdown hooks。
 
 ## 依赖
 

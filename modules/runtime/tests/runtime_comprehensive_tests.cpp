@@ -10,6 +10,8 @@
  */
 
 #include "apollo/runtime/application_host.hpp"
+#include "apollo/runtime/console_event_source.hpp"
+#include "apollo/runtime/service_host.hpp"
 
 #include <iostream>
 #include <string>
@@ -391,13 +393,15 @@ TEST(host_shutdown_hooks) {
 
     bool hook1_called = false;
     bool hook2_called = false;
+    bool hook1_reason_ok = false;
 
     host.add_shutdown_hook([&](apollo::runtime::StopReason reason) {
         hook1_called = true;
-        ASSERT_EQ(reason, apollo::runtime::StopReason::Completed);
+        hook1_reason_ok = (reason == apollo::runtime::StopReason::Completed);
     });
 
     host.add_shutdown_hook([&](apollo::runtime::StopReason reason) {
+        (void)reason;
         hook2_called = true;
     });
 
@@ -410,6 +414,7 @@ TEST(host_shutdown_hooks) {
 
     ASSERT_TRUE(hook1_called);
     ASSERT_TRUE(hook2_called);
+    ASSERT_TRUE(hook1_reason_ok);
 
     return true;
 }
@@ -454,13 +459,17 @@ TEST(host_shutdown_hooks_order) {
 TEST(host_service_start_failure) {
     apollo::runtime::ApplicationHost host;
 
+    auto started_service = std::make_shared<MockService>();
     auto failing_service = std::make_shared<FailingService>();
+    host.add_service(started_service);
     host.add_service(failing_service);
 
     ASSERT_FALSE(host.start());
 
     ASSERT_EQ(host.phase(), apollo::core::ApplicationPhase::Stopped);
     ASSERT_EQ(host.stop_reason(), apollo::runtime::StopReason::StartupFailed);
+    ASSERT_FALSE(started_service->running_);
+    ASSERT_TRUE(started_service->stop_called);
 
     return true;
 }
@@ -676,6 +685,23 @@ TEST(service_host_shutdown_hooks) {
     return true;
 }
 
+TEST(service_host_run) {
+    apollo::runtime::ServiceHost host;
+
+    auto console = std::make_unique<apollo::runtime::QueueConsoleEventSource>();
+    console->push_command("quit");
+
+    auto service = std::make_shared<MockService>();
+    host.add_service(service);
+    host.set_console_source(std::move(console));
+
+    ASSERT_EQ(host.run(), 0);
+    ASSERT_EQ(host.phase(), apollo::core::ApplicationPhase::Stopped);
+    ASSERT_EQ(host.stop_reason(), apollo::runtime::StopReason::ConsoleRequested);
+
+    return true;
+}
+
 // ============================================================================
 // Phase Transition Tests
 // ============================================================================
@@ -810,6 +836,7 @@ TEST(host_double_start) {
     // Starting again should be handled
     // Depending on implementation, might return false or be no-op
     bool result = host.start();
+    ASSERT_TRUE(result);
 
     host.request_stop(apollo::runtime::StopReason::Completed);
     host.run_once();
@@ -908,6 +935,7 @@ int main(int argc, char* argv[]) {
     RUN_TEST(service_host_delegates_to_application_host);
     RUN_TEST(service_host_console_signal_sources);
     RUN_TEST(service_host_shutdown_hooks);
+    RUN_TEST(service_host_run);
 
     // Phase Transition Tests
     std::cout << "\n--- Phase Transition Tests ---" << std::endl;

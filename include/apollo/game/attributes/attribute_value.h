@@ -6,6 +6,9 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace apollo {
@@ -210,8 +213,28 @@ public:
      */
     void setChangeListener(AttributeChangeCallback callback) {
         std::lock_guard<std::mutex> lock(mutex_);
-        changeListener_ = std::move(callback);
+        changeListeners_.clear();
+        if (callback) {
+            changeListeners_.push_back({nextListenerId_++, std::move(callback)});
+        }
     }
+
+    /**
+     * @brief 添加属性变更监听器
+     * @return 监听器ID，可用于后续移除
+     */
+    uint64_t addChangeListener(AttributeChangeCallback callback);
+
+    /**
+     * @brief 移除属性变更监听器
+     * @return 是否移除成功
+     */
+    bool removeChangeListener(uint64_t listenerId);
+
+    /**
+     * @brief 获取所有属性的快照
+     */
+    std::unordered_map<uint32_t, ComVal> getAllValues() const;
 
 private:
     void notifyChange(uint32_t attrId, const ComVal& oldValue, const ComVal& newValue, bool fromServer);
@@ -219,7 +242,8 @@ private:
     uint64_t objectId_;
     std::unordered_map<uint32_t, AttributeValue> attributes_;
     mutable std::mutex mutex_;
-    AttributeChangeCallback changeListener_;
+    std::vector<std::pair<uint64_t, AttributeChangeCallback>> changeListeners_;
+    uint64_t nextListenerId_ = 1;
 };
 
 /**

@@ -1,4 +1,7 @@
 #include "apollo/runtime/application_host.hpp"
+#include "apollo/runtime/console_event_source.hpp"
+#include "apollo/runtime/service_host.hpp"
+#include "apollo/runtime/signal_source.hpp"
 
 #include <iostream>
 #include <memory>
@@ -140,6 +143,53 @@ bool test_service_host_wrapper() {
     return host.phase() == apollo::core::ApplicationPhase::Stopped;
 }
 
+bool test_queue_console_event_source() {
+    apollo::runtime::QueueConsoleEventSource source;
+    source.push_command("quit");
+
+    apollo::runtime::ConsoleEvent event;
+    if (!source.poll(event)) {
+        return false;
+    }
+
+    return event.command == "quit" && !source.poll(event);
+}
+
+bool test_startup_failure_stops_started_services() {
+    struct FailingService final : apollo::runtime::IHostedService {
+        std::string_view service_name() const override { return "failing"; }
+        bool start() override { return false; }
+        void stop() override {}
+        bool is_running() const override { return false; }
+    };
+
+    auto started = std::make_shared<RecordingService>();
+    auto failing = std::make_shared<FailingService>();
+    apollo::runtime::ApplicationHost host;
+    host.add_service(started);
+    host.add_service(failing);
+
+    if (host.start()) {
+        return false;
+    }
+
+    return host.phase() == apollo::core::ApplicationPhase::Stopped &&
+           host.stop_reason() == apollo::runtime::StopReason::StartupFailed &&
+           !started->running &&
+           started->events == std::vector<std::string>({"boot", "config", "init", "start", "stop", "service_stop"});
+}
+
+bool test_application_host_run() {
+    auto service = std::make_shared<RecordingService>();
+    apollo::runtime::ApplicationHost host;
+    host.add_service(service);
+    host.set_console_source(std::make_unique<OneShotConsoleSource>());
+
+    return host.run() == 0 &&
+           host.phase() == apollo::core::ApplicationPhase::Stopped &&
+           host.stop_reason() == apollo::runtime::StopReason::ConsoleRequested;
+}
+
 } // namespace
 
 int main() {
@@ -147,7 +197,10 @@ int main() {
         test_application_host_console_stop() &&
         test_application_host_tick() &&
         test_application_host_signal_and_shutdown_hook() &&
-        test_service_host_wrapper();
+        test_service_host_wrapper() &&
+        test_queue_console_event_source() &&
+        test_startup_failure_stops_started_services() &&
+        test_application_host_run();
 
     if (!ok) {
         std::cerr << "apollo_runtime_tests failed" << std::endl;

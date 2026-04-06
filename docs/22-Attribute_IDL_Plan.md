@@ -7,6 +7,7 @@
 2. **多端同步**：生成 C++ 头文件、Lua 表、Protobuf ID、数据库字段、BI 字典。
 3. **可扩展性**：新增属性/消息可在配置中追加，不影响旧数据。
 4. **元数据**：记录属性的标记（同步、持久化、广播）、默认值、描述。
+5. **运行时一致性**：属性定义不仅生成 ID，还要直接驱动服务端同步策略，避免“文档一套、代码一套”。
 
 ## 2. 属性定义方案
 
@@ -19,20 +20,36 @@
   | `Name` | 文本名称 |
   | `Category` | Basic/Combat/Element/Status... |
   | `Type` | int32/int64/float/bool/string |
-  | `Flags` | Bitmask（DB/Guild/Gate/AOI/Sync/Broadcast…） |
+  | `Audiences` | 同步目标（Owner/AOI/Team/Guild/Service/Persistence） |
+  | `Priority` | 同步优先级（Immediate/High/Normal/Low） |
+  | `Reliability` | 可靠性（Reliable/Unreliable） |
+  | `MinIntervalMs` | 最小同步间隔，用于抖动合并/限频 |
+  | `AllowDelta` | 是否允许增量同步 |
+  | `IncludeInFullSync` | 是否参与全量快照 |
+  | `Flags` | 兼容性标记（DB/Broadcast/BI/Deprecated…） |
   | `DefaultValue` | 默认值 |
   | `Description` | 注释 |
 
 ### 2.2 生成目标
 - `AttributeIds.h`（C++ 枚举 + 元数据结构）
+- `attribute_sync_meta.generated.h`（服务端同步规则表）
 - `Attribute.lua`（供服务器 Lua/脚本使用）
 - `attribute.proto`（proto 中定义 `enum AttributeId`）
 - `db_attribute_map.json`（BI/数据库用于映射列/字段）
 - 文档 (`Attribute.md`) 自动生成表格。
 
-### 2.3 工具链
+### 2.3 运行时同步模型
+- 属性容器只负责存值和触发变更事件，不再承担完整同步策略。
+- 服务端同步核心基于元数据驱动，按 `audience + priority + reliability` 拆分同步通道。
+- 每次本地属性变更生成递增 `version`，用于批次确认、重发和观测。
+- 增量同步默认采用合并策略：同一属性在一个窗口内只保留最新值。
+- `MinIntervalMs` 只约束重复发送，首次变更应立即下发。
+- 全量同步与增量同步使用同一份 schema 过滤，防止 owner/AOI/service 导出字段不一致。
+
+### 2.4 工具链
 - 步骤：Excel → Python/Go 工具解析 → 生成文件。
 - 校验：工具检查 ID 唯一、Flag 合法、类型匹配。
+- 同步校验：检查 `Audiences`、`Priority`、`Reliability`、`MinIntervalMs` 是否落在合法枚举范围。
 - 集成：在构建流程中自动执行（如 `cmake --build` 前执行脚本）。
 
 ## 3. 消息 ID / Proto
@@ -72,4 +89,4 @@
 
 ---
 
-通过该方案，属性和消息 ID 将不再散落在多份文档中，而由单一源头控制，减少维护成本并提高一致性。***
+通过该方案，属性和消息 ID 将不再散落在多份文档中，而由单一源头控制；同步规则也会随属性定义一起生成并进入运行时，减少维护成本并提高一致性。

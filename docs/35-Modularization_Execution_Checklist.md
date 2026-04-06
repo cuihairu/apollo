@@ -35,8 +35,8 @@
 
 - [x] 将 `GameServer` 重新定义为 runtime host，而不是框架总入口
 - [x] 新增 `ApplicationHost`
-- [ ] 新增 `ServiceHost`
-- [ ] 新增 signal / shutdown hook
+- [x] 新增 `ServiceHost`
+- [x] 新增 signal / shutdown hook
 - [x] 新增 console event loop 抽象边界
 
 ## Phase 5: Data 抽取
