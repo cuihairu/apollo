@@ -1,1 +1,0 @@
-export const siteData = JSON.parse("{\"base\":\"/apollo/\",\"lang\":\"en-US\",\"title\":\"Apollo 技术文档\",\"description\":\"高性能 MMORPG 服务器框架\",\"head\":[[\"link\",{\"rel\":\"icon\",\"type\":\"image/png\",\"href\":\"/apollo.png\"}]],\"locales\":{\"/\":{\"lang\":\"en-US\",\"title\":\"Apollo 技术文档\",\"description\":\"高性能 MMORPG 服务器框架\"}}}")

@@ -11,6 +11,17 @@ tag:
 
 # Apollo 架构概述
 
+## 当前定位
+
+Apollo 当前应被理解为一套面向在线游戏的渐进式服务端引擎，而不是只服务重型 MMORPG 或 BigWorld 模式的固定进程框架。
+
+近期优先目标是：
+
+- 轻量 MMO：分线、地图实例、副本、轻社交和常规运营系统。
+- 塔防 / 固定地图：波次、防守、建造、技能、怪物路径和局内状态同步。
+
+BigWorld 风格的分布式世界能力仍然保留，但它是后续增强层，不是默认起步形态。
+
 ## 整体架构
 
 Apollo 现在更合理的理解方式，不是旧的“按模块目录罗列层级”，而是：
@@ -20,17 +31,21 @@ Apollo 现在更合理的理解方式，不是旧的“按模块目录罗列层�
 - 一层可选的 BigWorld 分布式增强能力
 - 最后才是进程和部署拓扑
 
-如果只看 MMO 主线，Apollo 当前应固定为两种 topology：
+如果按目标游戏类型整理，Apollo 当前应固定为三种 Profile：
 
-- `Standard MMO`
+- `Tower Defense Compact`
+  - `Client -> Gateway -> CompactGameServer(Scene + AOI + Battle + Wave) -> Persistence`
+- `Lightweight MMO`
   - `Client -> Login -> Gateway -> BaseApp(PlayerAnchor) -> WorldApp`
-- `Distributed World`
+- `Distributed MMO`
   - `Client -> Login -> BaseApp(Proxy + PlayerAnchor) -> CellApp`
 
 这里也要明确：
 
 - `BaseApp` 不是数据库服务
 - `GatewayApp` 不是分布式世界默认必选核心
+- `CellApp` 不是轻量 MMO 和塔防默认需要的起步进程
+- `CompactGameServer` 是塔防和固定地图玩法的一等装配 Profile
 
 按新思路，Apollo 更推荐采用 10 层分层：
 
@@ -187,21 +202,52 @@ L1 <- L2 <- L3 <- L4 <- L5 <- L6 <- L7 <- L8 <- L9 <- L10
 - `L9` 是增强层，不反向污染 `L7`
 - `L10` 只做装配，不承载核心框架能力
 
-## 模式映射
+## Profile 映射
 
-### 普通 MMO 模式
+### Tower Defense Compact
 
 默认启用：
 
 - `L1-L8`
+- `L10` 中 Compact GameServer 对应的装配与部署拓扑
 
-按需最小启用：
+典型进程：
 
-- `L9`
+- `gateway-app`
+- `compact-game-app`
+- `persistence-app`
+- 可选 `platform-app`
 
-### BigWorld 模式
+重点：
 
-在 `L1-L8` 稳定后，再叠加：
+- Scene、AOI、Battle、Wave Runtime 同进程运行
+- 通过统一 Session、Protocol、Persistence 复用 Apollo 底座
+- 不启用 `Witness / Ghost / Authority Transfer`
+
+### Lightweight MMO
+
+默认启用：
+
+- `L1-L8`
+- `L10` 中 Standard MMO 对应的装配与部署拓扑
+
+典型进程：
+
+- `login-app`
+- `gateway-app`
+- `base-app`，目标语义是 `PlayerAnchor Host`
+- `world-app`，当前 `cell-app` 可先演进为这个语义
+- 可选 `persistence-app / platform-app`
+
+重点：
+
+- 有完整在线主链
+- 有 WorldHost、Zone、Instance、AOI 和 Battle
+- 不要求分布式空间切片
+
+### Distributed MMO / BigWorld
+
+在 `L1-L8` 和普通 MMO 主链稳定后，再叠加：
 
 - `L9`
 - `L10` 中对应的大世界部署拓扑

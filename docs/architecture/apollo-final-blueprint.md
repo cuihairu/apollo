@@ -30,6 +30,8 @@ Apollo 的最终目标，不是做一套只能服务单一 MMO 形态的框架�
 这套框架至少要同时满足：
 
 - 轻在线项目可以只启最小集合
+- 塔防和固定地图项目可以使用 Compact GameServer 低成本落地
+- 轻量 MMO 可以以 Standard MMO Profile 先上线
 - 普通 MMO 可以不依赖 BigWorld 能力直接落地
 - 连续大世界项目可以在稳定基础上叠加分布式空间能力
 - Lua 或 Python 脚本项目都能使用同一套业务抽象
@@ -155,9 +157,38 @@ Apollo 需要保留：
 
 ## 五、最终模式划分
 
-Apollo 最终需要显式支持两种主模式。
+Apollo 最终需要显式支持三种主 Profile。
 
-## 六、普通 MMO 模式
+## 六、Tower Defense Compact Profile
+
+塔防 / 固定地图模式启用：
+
+- `L1-L8`
+- `L10` 中 Compact GameServer 对应的装配与部署拓扑
+
+典型进程形态：
+
+- `gateway-app`
+- `compact-game-app`
+- `persistence-app`
+- 可选 `platform-app`
+
+这里的重点是：
+
+- 不需要 `CellApp / Partition / Witness / Ghost`
+- 不需要把每张固定地图拆成独立分布式世界
+- 需要稳定的 Scene Tick、Wave Runtime、Battle Runtime、快照和重连
+
+典型主链应当是：
+
+```text
+Client
+  -> GatewayApp(Session)
+  -> CompactGameServer(SceneInstance + WaveRuntime + BattleRuntime)
+  -> PersistenceService
+```
+
+## 七、Lightweight MMO / 普通 MMO Profile
 
 普通 MMO 模式启用：
 
@@ -190,7 +221,7 @@ Client
   -> WorldApp(WorldSession + AvatarEntity)
 ```
 
-## 七、BigWorld 模式
+## 八、BigWorld / Distributed MMO Profile
 
 BigWorld 模式是在普通 MMO 模式稳定后叠加：
 
@@ -212,7 +243,7 @@ BigWorld 模式是在普通 MMO 模式稳定后叠加：
 - 可见集与复制目标开始跨 partition 计算
 - 玩家和实体权威开始发生迁移
 
-## 八、最终对象模型
+## 九、最终对象模型
 
 Apollo 最终必须把几个对象明确拆开。
 
@@ -269,7 +300,7 @@ Apollo 最终必须把几个对象明确拆开。
 - 跨 partition 可见性和边界连续性
 - 迁移窗口过渡
 
-## 九、脚本层最终位置
+## 十、脚本层最终位置
 
 脚本层的最终定位必须非常明确：
 
@@ -300,7 +331,7 @@ Game Domain / Entity Hooks
 - 热路径移动积分
 - 大规模战斗批处理
 
-## 十、平台与运维的最终协同
+## 十一、平台与运维的最终协同
 
 Apollo 最终不能再把工具类和平台类能力散在各处。
 
@@ -328,7 +359,7 @@ Apollo 最终不能再把工具类和平台类能力散在各处。
 - 运维问题不再污染业务模块
 - 平台抽象不再绑死在单个 app 内部
 
-## 十一、按业务域的最终装配形态
+## 十二、按业务域的最终装配形态
 
 Apollo 最终应当支持按业务域做可组装装配。
 
@@ -349,16 +380,17 @@ Apollo 最终应当支持按业务域做可组装装配。
 - 先做成稳定组件
 - 再按项目规模和负载做进程装配
 
-## 十二、推荐的最终进程装配思路
+## 十三、推荐的最终进程装配思路
 
 Apollo 最终更合理的进程装配方式应该是“宿主 + 组件装配”，而不是“先定死一套巨大的进程全家桶”。
 
-### 小型轻在线
+### 小型轻在线 / 塔防 Compact
 
 - `gateway-app`
-- `service-app`
+- `compact-game-app` 或 `service-app`
+- 可选 `persistence-app`
 
-### 普通 MMO
+### 轻量 MMO / 普通 MMO
 
 - `login-app`
 - `gateway-app`
@@ -378,18 +410,19 @@ Apollo 最终更合理的进程装配方式应该是“宿主 + 组件装配”�
 - `app-manager`
 - 可选独立 `db/platform` 服务
 
-## 十三、优点
+## 十四、优点
 
 这套蓝图的主要优点是：
 
-- 普通 MMO 可以先落地，不被大世界复杂度绑架
+- 塔防和轻量 MMO 可以先落地，不被大世界复杂度绑架
+- Compact GameServer 给固定地图玩法保留低运维成本形态
 - BigWorld 能力可以后加，而不是先天压满
 - KBE 的核心经验被保留，但历史包袱没有被整体复制
 - 平台、运维、业务域、世界运行时边界清晰
 - 脚本层能稳定承接 Lua 或 Python 项目
 - 后续做工程化装配、配置、测试、监控都有明确落点
 
-## 十四、代价与风险
+## 十五、代价与风险
 
 这套方案也有明确代价。
 
@@ -417,7 +450,7 @@ Apollo 最终更合理的进程装配方式应该是“宿主 + 组件装配”�
 
 这套架构很快又会退化成结论堆砌。
 
-## 十五、为什么不选其他方案
+## 十六、为什么不选其他方案
 
 ### 1. 为什么不直接照搬 KBE
 
@@ -435,13 +468,14 @@ Apollo 最终更合理的进程装配方式应该是“宿主 + 组件装配”�
 
 因为这样会把底层内核持续污染成“大杂烩”，最终既不稳定也不可复用。
 
-## 十六、最终落地判断标准
+## 十七、最终落地判断标准
 
 如果 Apollo 最终演进正确，应当至少满足下面这些判断标准：
 
 ### 基础判断
 
 - 普通 MMO 模式可以独立运行
+- 塔防 Compact 模式可以独立运行
 - 世界主链、玩家主链、复制主链、观测主链都明确可落地
 - Lua 或 Python 任一后端能稳定挂载
 
@@ -451,7 +485,7 @@ Apollo 最终更合理的进程装配方式应该是“宿主 + 组件装配”�
 - 能按负载和模式切换不同拓扑
 - 能在不推翻前 8 层的情况下叠加大世界增强层
 
-## 十七、结论
+## 十八、结论
 
 Apollo 最终不应被定义成“某个固定 MMO 进程组合”，而应被定义成：
 
@@ -462,7 +496,7 @@ Apollo 最终不应被定义成“某个固定 MMO 进程组合”，而应被�
 
 这套蓝图的核心价值在于：
 
-- 普通 MMO 先可用
+- 塔防和轻量 MMO 先可用
 - 大世界能力后可扩
 - 参考 KBE，但不照搬 KBE
 - 保留对象模型，也保留热点系统的数据导向空间
@@ -470,6 +504,7 @@ Apollo 最终不应被定义成“某个固定 MMO 进程组合”，而应被�
 ## 相关阅读
 
 - [架构概述](./overview.md)
+- [轻量 MMO 与塔防适配判断](./lightweight-mmo-and-tower-defense-fit.md)
 - [进程语义重定义](./process-semantics-redefinition.md)
 - [进程重组与实施路线](./process-reorganization-and-rollout-plan.md)
 - [Apollo 分层设计](./apollo-layering-design.md)

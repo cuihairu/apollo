@@ -3,31 +3,23 @@
   "version": "1.0.0",
   "description": "Apollo 技术文档",
   "scripts": {
-    "docs:dev": "vuepress dev .",
-    "docs:build": "vuepress build .",
-    "docs:clean": "rm -rf .vuepress/.temp .vuepress/.cache"
+    "docs:dev": "vitepress dev . --host 0.0.0.0 --port 8080",
+    "docs:build": "vitepress build .",
+    "docs:preview": "vitepress preview . --host 0.0.0.0 --port 8080",
+    "docs:clean": "node -e \"const fs=require('fs');fs.rmSync('.vitepress/dist',{recursive:true,force:true});fs.rmSync('.vitepress/cache',{recursive:true,force:true});\""
   },
   "keywords": [
     "apollo",
-    "mmorpg",
+    "lightweight-mmo",
+    "tower-defense",
     "game-server",
     "documentation"
   ],
   "author": "Apollo Team",
   "license": "MIT",
   "devDependencies": {
-    "@vuepress/bundler-vite": "^2.0.0-rc.27",
-    "@vuepress/client": "^2.0.0-rc.27",
-    "@vuepress/cli": "^2.0.0-rc.27",
-    "@vuepress/plugin-git": "^2.0.0-rc.27",
-    "@vuepress/plugin-markdown-chart": "2.0.0-rc.109",
-    "@vuepress/plugin-medium-zoom": "^2.0.0-rc.27",
-    "@vuepress/plugin-search": "^2.0.0-rc.27",
-    "@vuepress/theme-default": "^2.0.0-rc.27",
     "mermaid": "^11.15.0",
-    "sass-embedded": "^1.98.0",
     "vue": "^3.5.30",
-    "vue-router": "^5.0.3",
-    "vuepress": "^2.0.0-rc.27"
+    "vitepress": "^1.6.4"
   }
 }

@@ -6,7 +6,7 @@ order: 1
 
 # 欢迎使用 Apollo
 
-Apollo 是一个高性能的 MMORPG 服务器框架。本指南将帮助你快速上手。
+Apollo 是一个面向轻量 MMO、塔防/固定地图玩法的 C++20 在线游戏服务端引擎。本指南将帮助你快速上手。
 
 ## 指南章节
 
@@ -21,5 +21,6 @@ Apollo 是一个高性能的 MMORPG 服务器框架。本指南将帮助你快�
 如果你已经熟悉 Apollo，可以直接查看：
 
 - [架构文档](/architecture/overview.md) - 深入了解架构设计
+- [架构适配判断](/architecture/lightweight-mmo-and-tower-defense-fit.md) - 判断轻量 MMO 或塔防项目该选哪种 Profile
 - [模块文档](/modules/) - 各模块详细说明
 - [API 参考](/api/) - 接口与类说明
