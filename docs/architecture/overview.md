@@ -318,6 +318,7 @@ L1 <- L2 <- L3 <- L4 <- L5 <- L6 <- L7 <- L8 <- L9 <- L10
 - [Gateway 会话设计](./gateway-session-design.md)
 - [Gateway 接入 Facade 设计](./gateway-ingress-facade-design.md)
 - [Topology 对比与登录分发设计](./topology-comparison-and-login-flow-design.md)
+- [MMO Topology 范围与组合设计](./mmo-topology-scope-and-composition-design.md)
 - [MMO 组件装配目录](./mmo-component-assembly-catalog.md)
 - [MMO 模块落地清单](./mmo-module-rollout-plan.md)
 - [Standard MMO 任务清单](./standard-mmo-task-checklist.md)

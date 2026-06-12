@@ -178,6 +178,8 @@ Client -> LoginApp -> GatewayApp -> BaseApp(PlayerAnchor) -> WorldApp
 ## 相关阅读
 
 - [MMO 模块落地清单](./mmo-module-rollout-plan.md)
+- [MMO Topology 范围与组合设计](./mmo-topology-scope-and-composition-design.md)
+- [MMO 组件装配目录](./mmo-component-assembly-catalog.md)
 - [玩家在线主链设计](./player-online-flow.md)
 - [LoginApp 收口设计](./login-app-design.md)
 - [Gateway 接入 Facade 设计](./gateway-ingress-facade-design.md)

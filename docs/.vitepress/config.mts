@@ -16,8 +16,10 @@ const architectureSidebar = [
   {
     text: '目标 Profile',
     items: [
+      { text: 'MMO Topology 范围与组合', link: '/architecture/mmo-topology-scope-and-composition-design' },
       { text: 'Shard / Zone / Instance / Match', link: '/architecture/shard-zone-instance-match-topology-design' },
       { text: 'Compact GameServer', link: '/30-Compact_GameServer_Design' },
+      { text: 'MMO 组件装配目录', link: '/architecture/mmo-component-assembly-catalog' },
       { text: 'Standard MMO 任务清单', link: '/architecture/standard-mmo-task-checklist' },
       { text: 'MMO 模块落地清单', link: '/architecture/mmo-module-rollout-plan' },
       { text: 'MMO 代码任务映射', link: '/architecture/mmo-code-task-mapping' },

@@ -14,8 +14,8 @@ hero:
       text: 架构适配判断
       link: /architecture/lightweight-mmo-and-tower-defense-fit
     - theme: alt
-      text: 快速开始
-      link: /guide/quick-start
+      text: Profile 装配目录
+      link: /architecture/mmo-component-assembly-catalog
 features:
   - title: 轻量 MMO 优先
     details: 以 Login、Gateway、PlayerAnchor、WorldHost、Persistence 的主链支撑分线、地图实例、副本和轻社交。
@@ -48,6 +48,8 @@ Apollo 不再只定义为一套重型 MMORPG 服务器框架，而是一套面�
 |------|------|
 | [轻量 MMO 与塔防适配判断](/architecture/lightweight-mmo-and-tower-defense-fit) | 判断这两类游戏是否适合 Apollo 当前架构 |
 | [架构概述](/architecture/overview) | 查看整理后的整体分层和 Profile |
+| [MMO Topology 范围与组合](/architecture/mmo-topology-scope-and-composition-design) | 判断 Profile、Topology、App、Component 如何组合 |
+| [MMO 组件装配目录](/architecture/mmo-component-assembly-catalog) | 查看各 Profile 的必选、可选、后置和关闭组件 |
 | [Compact GameServer](/30-Compact_GameServer_Design) | 塔防、固定地图、轻量玩法的精简服务端形态 |
 | [Shard / Zone / Instance / Match](/architecture/shard-zone-instance-match-topology-design) | 多游戏形态下的拓扑术语 |
 | [快速开始](/guide/quick-start) | 构建并运行第一个 Apollo 游戏服务器 |
@@ -62,7 +64,7 @@ Profile B: Lightweight MMO
 Client -> Login -> Gateway -> BaseApp(PlayerAnchor) -> WorldHost -> Persistence
 
 Profile C: Distributed MMO
-Client -> Login -> Gateway -> BaseApp -> Cell/World Partition -> AppMgr -> Persistence
+Client -> Login -> Gateway/Proxy -> BaseApp -> Cell/World Partition -> AppMgr -> Persistence
 ```
 
 Profile A 和 Profile B 是当前优先收敛方向。Profile C 只在明确需要连续大世界、空间切片和权威迁移时启用。

@@ -287,6 +287,8 @@ Apollo 这套架构可以支撑轻量 MMO 和塔防类游戏。
 ## 相关阅读
 
 - [架构概述](./overview.md)
+- [MMO Topology 范围与组合设计](./mmo-topology-scope-and-composition-design.md)
+- [MMO 组件装配目录](./mmo-component-assembly-catalog.md)
 - [Compact GameServer 设计方案](/30-Compact_GameServer_Design.md)
 - [Shard、Zone、Instance 与 Match Topology 设计](./shard-zone-instance-match-topology-design.md)
 - [Apollo 渐进式游戏框架理论设计](./apollo-progressive-game-framework.md)
