@@ -52,6 +52,9 @@ Apollo 不再只定义为一套重型 MMORPG 服务器框架，而是一套面�
 | [MMO 组件装配目录](/architecture/mmo-component-assembly-catalog) | 查看各 Profile 的必选、可选、后置和关闭组件 |
 | [Compact GameServer](/30-Compact_GameServer_Design) | 塔防、固定地图、轻量玩法的精简服务端形态 |
 | [Shard / Zone / Instance / Match](/architecture/shard-zone-instance-match-topology-design) | 多游戏形态下的拓扑术语 |
+| [BigWorld 架构深度解析](/architecture/bigworld) | BigWorld 兼容层与分布式世界增强入口 |
+| [BigWorld 进程架构与玩家生命周期](/architecture/bigworld-lifecycle) | 进程职责、登录、重连与下线链路 |
+| [Distributed World 实施](/architecture/distributed-world-topology-implementation-plan) | 分布式世界的落地桥接页 |
 | [快速开始](/guide/quick-start) | 构建并运行第一个 Apollo 游戏服务器 |
 
 ## 装配 Profile

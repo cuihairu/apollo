@@ -70,9 +70,9 @@ Authoritative Entity
 
 Apollo 当前已经有这些方向：
 
-- [witness-ghost-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/witness-ghost-design.md)
-- [entity-schema-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/entity-schema-design.md)
-- [space-partition-topology-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/space-partition-topology-design.md)
+- [Witness 与 Ghost 设计](./witness-ghost-design.md)
+- [EntitySchema 设计](./entity-schema-design.md)
+- [Space Partition 与 Topology 设计](./space-partition-topology-design.md)
 
 但还缺一条显式的发包主链。
 
@@ -277,7 +277,7 @@ ghost 只负责：
 
 ## 九、和 schema 的关系
 
-复制链路必须依赖 [entity-schema-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/entity-schema-design.md)。
+复制链路必须依赖 [EntitySchema 设计](./entity-schema-design.md)。
 
 ### 复制时真正要查的是 schema
 
@@ -307,7 +307,7 @@ schema 至少决定：
 
 不负责决定复制内容，只负责把最终结果送到客户端。
 
-这和 [base-cell-proxy-model.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/base-cell-proxy-model.md) 的分层是一致的。
+这和 [Base Cell Proxy 对象模型](./base-cell-proxy-model.md) 的分层是一致的。
 
 ## 十一、普通 MMO 模式怎么简化
 

@@ -144,5 +144,5 @@ target_link_libraries(my_app apollo::bigworld)
 
 ## 相关文档
 
-- [BigWorld 架构详解](/architecture/bigworld.md)
-- [BigWorld 生命周期](/architecture/bigworld-lifecycle.md)
+- [BigWorld 架构详解](/architecture/bigworld)
+- [BigWorld 生命周期](/architecture/bigworld-lifecycle)

@@ -135,4 +135,4 @@ private:
 
 - 了解 [核心概念](./concepts.md)
 - 查看 [模块系统](./module-system.md)
-- 阅读 [架构文档](/architecture/overview.md)
+- 阅读 [架构文档](/architecture/overview)

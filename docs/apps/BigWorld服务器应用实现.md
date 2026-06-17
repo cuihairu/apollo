@@ -740,7 +740,7 @@ cmake --build build
 
 ## 相关文档
 
-- [BigWorld架构深度解析](/architecture/bigworld.md)
-- [BigWorld进程架构与玩家生命周期](/architecture/bigworld-lifecycle.md)
-- [AOI九宫格系统详解](/architecture/aoi.md)
+- [BigWorld架构深度解析](/architecture/bigworld)
+- [BigWorld进程架构与玩家生命周期](/architecture/bigworld-lifecycle)
+- [AOI九宫格系统详解](/architecture/aoi)
 - [Protocol 模块 API](/modules/)

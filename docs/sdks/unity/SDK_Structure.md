@@ -2,37 +2,33 @@
 
 ## 概述
 
-`skds/` 目录存放各平台的客户端 SDK，与服务端框架保持协议和接口一致。
+当前仓库里，Unity SDK 代码位于 `sdks/unity/`，其它平台 SDK 工作区保留在 `skds/`。
+
+`docs/sdks/` 目录存放 SDK 文档，与服务端框架保持协议和接口一致。
 
 ## 目录结构
 
 ```
-skds/
-├── unity/                    # Unity SDK
-│   └── ApolloSDK/
-│       ├── ApolloClient.cs         # 主客户端
-│       ├── ApolloClientConfig.cs   # 配置
-│       ├── Network/               # 网络模块
-│       │   └── NetworkManager.cs
-│       ├── Session/               # 会话管理
-│       │   └── AuthManager.cs
-│       ├── Attributes/            # 属性系统
-│       │   ├── AttributeValue.cs
-│       │   ├── AttributeContainer.cs
-│       │   ├── AttributeSyncManager.cs
-│       │   └── ...
-│       ├── Messaging/             # 消息处理
-│       └── Utilities/             # 工具类
-│
-├── cocos/                   # Cocos Creator SDK
-│   └── ApolloSDK/
-│
-├── laya/                    # LayaBox SDK
-│   └── ApolloSDK/
-│   └── ApolloSDK/
-│
-└── web/                     # Web SDK (TODO)
+sdks/
+└── unity/                    # Unity SDK
     └── ApolloSDK/
+        ├── ApolloClient.cs         # 主客户端
+        ├── ApolloClientConfig.cs   # 配置
+        ├── Network/               # 网络模块
+        │   └── NetworkManager.cs
+        ├── Session/               # 会话管理
+        │   └── AuthManager.cs
+        ├── Attributes/            # 属性系统
+        │   ├── AttributeValue.cs
+        │   ├── AttributeContainer.cs
+        │   ├── AttributeSyncManager.cs
+        │   └── ...
+        ├── Messaging/             # 消息处理
+        └── Utilities/             # 工具类
+
+skds/
+├── cocos/                   # Cocos Creator SDK
+└── laya/                    # LayaBox SDK
 ```
 
 ## Unity SDK 模块说明

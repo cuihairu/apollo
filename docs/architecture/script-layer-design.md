@@ -89,7 +89,7 @@ Apollo Script Layer
 
 ### 3. KBE 的启发是“脚本桥接是主路径，不是边角插件”
 
-从 [kbe-source-analysis.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/kbe-source-analysis.md) 已经能看出来：
+从 [KBEngine 源码分析](./kbe-source-analysis.md) 已经能看出来：
 
 - KBE 把 Python 放在实体定义和业务逻辑主路径上
 - 不是“顺手做个脚本扩展”

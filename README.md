@@ -474,27 +474,17 @@ cd build && ctest -R BigWorldApiTests
 
 ```
 apollo/
-├── include/apollo/          # 头文件
-│   ├── framework/          # 核心框架
-│   ├── game/              # 游戏逻辑
-│   ├── network/           # 网络通信
-│   ├── storage/           # 存储层
-│   ├── utils/              # 工具类
-│   └── core/              # 核心定义
-├── src/                    # 实现文件
-│   ├── framework/
-│   ├── game/
-│   ├── network/
-│   ├── storage/
-│   └── utils/
+├── apps/                   # 可执行服务：login/gateway/base/cell/game-server
+├── modules/                # 模块化源码：base/core/data/game/net/runtime 等
+├── include/                # 公共头文件与兼容层头文件
+├── src/                    # 公共实现与兼容层实现
 ├── tests/                  # 测试代码
 ├── examples/               # 示例代码
-├── skds/                   # 客户端SDK
-│   ├── unity/              # Unity SDK
-│   ├── cocos/              # Cocos Creator SDK
-│   └── laya/               # LayaBox SDK
-├── docs/                   # 文档
-└── build/                  # 构建输出
+├── sdks/                   # Unity 客户端 SDK
+├── skds/                   # Cocos / Laya / 历史 SDK 工作区
+├── docs/                   # VitePress 文档站点
+├── cmake/                  # CMake 辅助脚本
+└── build*/                 # 构建输出
 ```
 
 详细目录说明见 [Directory Structure](docs/Directory_Structure.md)

@@ -100,7 +100,7 @@ Apollo 需要在现有 `Channel` 之上，补一层明确的实体远程调用�
 
 ### 3. 缺 schema 驱动的方法表
 
-Apollo 已经在 [entity-schema-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/entity-schema-design.md) 里定义了 `MethodSchema` 方向，但还没有把它落成“可执行的远程调用表”。
+Apollo 已经在 [EntitySchema 设计](./entity-schema-design.md) 里定义了 `MethodSchema` 方向，但还没有把它落成“可执行的远程调用表”。
 
 ## 四、推荐目标
 
@@ -281,7 +281,7 @@ InternalMessageEnvelope
 
 ## 八、和对象模型的关系
 
-这层要和 [base-cell-proxy-model.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/base-cell-proxy-model.md) 对齐。
+这层要和 [Base Cell Proxy 对象模型](./base-cell-proxy-model.md) 对齐。
 
 ### `PlayerAnchor`
 

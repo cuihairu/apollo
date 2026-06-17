@@ -40,6 +40,7 @@ const architectureSidebar = [
   {
     text: '可选大世界增强',
     items: [
+      { text: 'Distributed World 实施', link: '/architecture/distributed-world-topology-implementation-plan' },
       { text: 'Distributed Space', link: '/architecture/distributed-space-design' },
       { text: 'Space Partition', link: '/architecture/space-partition-topology-design' },
       { text: 'Witness 与 Ghost', link: '/architecture/witness-ghost-design' },
@@ -81,6 +82,7 @@ export default defineConfig({
       { text: '模块', link: '/modules/' },
       { text: '应用', link: '/apps/' },
       { text: 'API', link: '/api/' },
+      { text: 'SDK', link: '/sdks/' },
       { text: 'QA', link: '/QA' },
     ],
 
@@ -142,6 +144,17 @@ export default defineConfig({
             { text: 'Data', link: '/api/data' },
             { text: 'Net', link: '/api/net' },
             { text: 'Game', link: '/api/game' },
+          ],
+        },
+      ],
+
+      '/sdks/': [
+        {
+          text: 'SDK 文档',
+          items: [
+            { text: 'SDK 概览', link: '/sdks/' },
+            { text: 'Unity SDK 目录结构', link: '/sdks/unity/SDK_Structure' },
+            { text: 'Unity 属性同步 SDK', link: '/sdks/unity/Attribute_SDK' },
           ],
         },
       ],

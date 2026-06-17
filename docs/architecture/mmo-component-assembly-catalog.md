@@ -336,4 +336,4 @@ Apollo 后续不应再按“模块名补齐”推进，而应按 Profile 装配�
 - [Standard MMO 任务清单](./standard-mmo-task-checklist.md)
 - [Distributed World 任务清单](./distributed-world-task-checklist.md)
 - [MMO 代码任务对照表](./mmo-code-task-mapping.md)
-- [Compact GameServer 设计方案](/30-Compact_GameServer_Design.md)
+- [Compact GameServer 设计方案](/30-Compact_GameServer_Design)

@@ -168,7 +168,7 @@ Client Protocol
 - route version
 - source/target app
 
-这一层已经在 [remote-entity-call-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/remote-entity-call-design.md) 定义了方向。
+这一层已经在 [RemoteEntityCall 设计](./remote-entity-call-design.md) 定义了方向。
 
 #### `Replication Protocol`
 
@@ -179,7 +179,7 @@ Client Protocol
 - 离开视图
 - alias/detail level
 
-这一层已经在 [replication-pipeline-design.md](/C:/Users/cui/Workspaces/apollo/docs/architecture/replication-pipeline-design.md) 定义了方向。
+这一层已经在 [Replication Pipeline 设计](./replication-pipeline-design.md) 定义了方向。
 
 ### 2. 运行时与宿主底座
 
