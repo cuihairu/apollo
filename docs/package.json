@@ -18,7 +18,7 @@
   "author": "Apollo Team",
   "license": "MIT",
   "devDependencies": {
-    "mermaid": "^11.15.0",
+    "mermaid": "^11.16.1",
     "vue": "^3.5.30",
     "vitepress": "^1.6.4"
   }
