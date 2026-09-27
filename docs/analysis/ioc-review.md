@@ -2,6 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
+> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8。
 
 ---
 
@@ -186,7 +187,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 2. **禁止在 Lua 层重现字符串查找容器。** 旧 `ApplicationContext` 按字符串名查 bean 的模型若被 Lua 仿效（`apollo.find_service("db")`），P0-1 的全部问题会在脚本层原样复发且更难查（拼错只报运行时 nil）。暴露给脚本的应是**具名模块表**（`apollo.attr`、`apollo.db`），绑定即校验、缺失在启动期报错。
 3. **热替换时哪些"bean"重绑、哪些必须稳定：**
    - 可重绑（Lua 侧）：玩法逻辑模块、属性公式（docs/03 的 Formula 移到脚本层）、任务/AI 行为、掉落表等**数据驱动的值对象**——替换的是 Lua module table，C++ 对象不动。
-   - 必须稳定（C++ 侧）：网络会话池、DB 连接池、定时器轮、ECS World、AOI 网格、属性存储本体。C++ bean **不做运行期 unregister/re-register**（当前 `unregisterComponent`/`destroyComponents` 这类 API 在热更语境是危险品，随旧容器删除）。
+   - 必须稳定（C++ 侧）：网络会话池、DB 连接池、定时器轮（新建件，见 ssengine-reference.md §4.3——现状无定时器模块）、ECS World、AOI 网格、属性存储本体。C++ bean **不做运行期 unregister/re-register**（当前 `unregisterComponent`/`destroyComponents` 这类 API 在热更语境是危险品，随旧容器删除）。
    - 桥接物：脚本钩子注册表（如 `onAttrChanged` 回调表）由 C++ 持有 Lua ref，热替换时**原子换表、下一 tick 生效**，失败回滚旧表。
 4. **Spring 式动态性里对热更有用 / 有害的清单：**
    - 有用：配置外部化 + 来源优先级（ConfigEnvironment 的模型）→ 热更配置的载体；`@RefreshScope` 的"变更以事件通知"思想 → `reload(changedKeys)` 事件分发（注意现状旧 ConfigManager 热加载不通知 listener 的缺陷，P1-1）；Profile → dev/prod 脚本目录切换。
@@ -216,6 +217,75 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | 错误暴露 | 运行时（拼错名/nullptr） | 启动期 assert/初始化失败（可再前移到 build 期校验） |
 | 使用方 | examples/tests | **apps/game-server** |
 
+## 8. 跨文档一致性复核（2026-09-27 追加）
+
+### 8.1 范围与方法
+
+- 复核对象：`docs/design/attribute-sync.md`、`docs/design/scripting-lua.md`、`docs/design/net-abstraction.md`、`docs/design/sdk-contract.md`、`docs/analysis/ssengine-reference.md` 与本评审之间的全部互相引用与结论依赖；重点三点：core::di 与旧 IoC/Starter 栈的取舍口径、四套配置系统的收敛口径、README「IoC 容器」第一特性问题是否在设计文档层复发。
+- 本节引用的文档行号与源码路径/行号**均于本次复核时实读核对**（记录见 §8.5）。
+- 任务约束：本次复核只写本文件，其他文档的修订需求记录于此（§8.2 的"修订建议"），不直接改动。非交互说明：引用落点存在歧义时，以被引文档中该概念的定义处为准；六份文档随提交 a2ab6525，源码基线仍为 35a9c528（无源码变更）。
+
+### 8.2 发现的矛盾（M-1 … M-6）
+
+**M-1 异步 DB 模型："复用"（不存在的资产）vs"新建"——最值得警惕的一条。**
+- 位置：`attribute-sync.md:14`、`:274` 写"复用 apollo `modules/data` 的异步 DB 模型（见 ssengine-reference.md §4.1）"；而 `ssengine-reference.md:10`、`:65` 判定 modules/data 目前**只有同步 mock**（MemoryConnection/SimpleDataSource/SqlTemplate），异步命令模型是"最大缺口"、落地形态是**模块级新建**（§4.1）。
+- 实测：`modules/data/orm/src/` 现存 memory_connection.cpp / datasource.cpp / sql_template.cpp；全仓 rg `OnExecuteSql|DbCommand|AsyncDb` 无命中（仅 redis 相关文件命中 async 词汇）——异步 DB 模型确实不存在。
+- 为什么不合适：attribute-sync 把**不存在的资产当成既有设施引用**——与"README 宣称 IoC 容器而实际无人使用"（本评审执行摘要关键背景、P3 表）是同一类"文档宣称不实"，且发生在设计文档层。
+- 修订建议：attribute-sync 两处改为"按 ssengine-reference §4.1 **新建**异步 DB 模型（modules/data 内落地）"；`:274` 的悬空引用"复用 §异步 DB 模型"（不存在的节名）一并修正。
+
+**M-2 契约形态：yaml/idl vs TOML。**
+- 位置：`attribute-sync.md:331`（附录表"契约（**yaml/idl 形态**见 sdk-contract.md）"）vs `sdk-contract.md` §2.2/§2.3（契约 = **TOML** `attrs.toml`/`messages.toml`）。
+- 修订建议：attribute-sync 附录统一为 TOML（以 sdk-contract 为准）。
+
+**M-3 慢观察者对流控的影响口径：聚合拖慢 vs 隔离重置。**
+- 位置：`net-abstraction.md:125`（"flow control 聚合窗口｜多观察者下行聚合：**慢观察者拉低整批发送速率**（AOI 广播的 per-viewer 预算，attribute-sync §5）"）vs `attribute-sync.md` §3.3（ACK 超时 → **该 viewer 本人**降级重发、再超时 → 仅对其快照重置）与 §5.1（per-client token bucket，无聚合拖慢机制）。
+- 为什么是矛盾：attribute-sync 的模型是**慢观察者隔离**——慢客户端拖的是自己的 acked_seq，超时只重置它自己，其他观察者的速率与预算不受影响；net-abstraction 把 Aeron 的聚合 flow control 语义硬映射到 per-viewer 模型上，且把 attribute-sync §5 引为出处——出处不成立。
+- 修订建议：net-abstraction:125 改为"慢观察者触发**其本人**的 acked_seq 停滞 → 快照重置（attribute-sync §3.3），不拖慢他人；实体级聚合带宽上限如需要，作为 attribute-sync §5 的独立扩展项另行立项"。
+
+**M-4 tick 阶段编号错位。**
+- 位置：`scripting-lua.md:96`（"禁止在**阶段 3（simulate 之后）**以外的 tick 阶段改属性"）vs `attribute-sync.md:296-303`（阶段编号：simulate=1、recalc=2、aoidecay=3、collect=4、budget/flush=5、persist-batch=6）。
+- 说明：scripting-lua 自身 §5.1 时序图（simulate→recalc→钩子窗口→collect）与 attribute-sync 编号一致，执行摘要 `:12` 的"阶段 2/4 之间"也对——仅 `:96` 一处把"simulate（阶段 1）之后"误写为"阶段 3"。
+- 修订建议：scripting-lua:96 改为"禁止在 simulate 阶段（attribute-sync §10 阶段 1）之后的收集/发送阶段改属性…"。
+
+**M-5 术语漂移：`attr_schema_hash` / `attr_schema_version`（含悬空引用）。**
+- 位置：`attribute-sync.md:254` 定义 `attr_schema_hash`（登录握手，全文档唯一版本术语）；`scripting-lua.md:70` 使用 `attr_schema_version` 并标注"见 attribute-sync.md §7.2"——**§7.2 并无此概念**；`sdk-contract.md:114`、`:134` 同样使用 `attr_schema_version`；而概念本体在 `attribute-sync.md:58`（L1 行"进视野时**按模板版本**下发引用"）存在但未命名。
+- 为什么不合适：实为**两个不同概念**被一个词族混用——① 契约语义哈希（握手校验两端协议一致）；② L1 静态配置的模板版本（随实体快照/模板引用下发，供客户端选解码表）。混用后"握手 hash"承担不了"按版本选表"，"版本号"也替代不了"hash 防漏改"。
+- 修订建议：拆成两个词——握手一律 `attr_schema_hash`（算法定义在 sdk-contract §6，attribute-sync §7.2 补算法引用，见 M-5 伴随项 C-5）；实体携带的配置版本命名 `template_version`，补进 attribute-sync §2.1 L1 行与 §6 Spawn（CreateEntity 随 template_id 带上）；scripting-lua:70 与 sdk-contract:114 改引该定义并修正落点。
+
+**M-6 定时器轮"存在性"口径（轻，非矛盾，防误读）。**
+- 位置：本评审 §5（`:189`）把"定时器轮"列入"必须稳定（C++ 侧）"清单；`ssengine-reference.md:12`、`:98` 判定 apollo **目前没有**定时器模块、需按目标设计新建。
+- 判定：清单描述的是目标架构（热更完成后的稳定面），现状缺件——两文不冲突，但清单易被误读为现状存在。建议 §5 该行补注"（新建件，见 ssengine-reference §4.3）"。
+
+### 8.3 三个重点维度的复核结论（一致确认）
+
+1. **core::di 与旧 IoC/Starter 栈的取舍：四份设计文档与本评审完全同向，未发现矛盾。** scripting-lua §4.1（`:78-86`）把装配唯一锚定在 core::di（启动期注入具名模块表）；net-abstraction §8（交集表）明确"适配器经 core::di 启动期装配、链接期选择、不进旧字符串容器"；sdk-contract 不触及容器；attribute-sync `:36` 甚至把旧模式（`AttributeManager` 全局单例+全局锁查找）作为本评审 P0-1 批判对象引入对照。设计文档均未假设旧容器/旧 Starter/条件装配存在——"删旧留新"结论在设计层无反例。
+2. **四套配置系统的收敛口径：无冲突，但收敛目标自身带缺陷（见 C-1/C-2）。** 四份设计文档零处引用 `Apollo::ConfigManager`/`ConfigProperty`/`CONFIG_PROPERTY`；配置相关需求只有 scripting-lua §3.3（版本目录）与 attribute-sync §2.1 L1（模板版本），均与 P1-1"删旧、收敛 core::config"方向一致。但实测发现收敛目的地（core::config）存在与旧系统同款的"reload 不通知 listener"缺陷及内部双单例——P1-1 的收敛动作必须包含修复，否则设计文档的配置热更依赖落空（详见 §8.4）。
+3. **README「IoC 容器」第一特性问题：未在设计文档层复发为同类宣称，但出现了一例变体。** 无任何设计文档依赖 README 特性宣称；四份均自标"设计稿（评审中）"。但 M-1（把不存在的异步 DB 当既有资产引用）说明"文档宣称不实"模式已从 README 渗入设计文档——对策固化为 C-3。
+
+### 8.4 补充结论（对收敛路线与文档纪律的增量要求）
+
+- **C-1（收敛目标先自查——新 core::config 复刻了旧缺陷）**：实测 `include/apollo/core/config/config_manager.h:29`（ConfigChangeListener）/`:84`（reload）/`:162`（addListener）/`:242`（notifyListeners 接口）齐全，但实现里 `notifyListeners` **全模块零调用**（`modules/core/config/src/config_manager.cpp:691` 仅有定义处；rg 确认无调用点）——即 reload/loadFile 成功后**不触发任何 listener**，与本评审 P1-1 批判的旧 `ConfigManager.cpp:222-224`"热加载不通知"缺陷**同款**。同时 `FileWatcher.cpp` 被编入 apollo_core_config（`modules/core/config/CMakeLists.txt:7`）但模块内无任何引用（死接线）。→ **收敛动作（§6 阶段 2）必须追加**：loadFile/reload 成功路径调用 notifyListeners；FileWatcher → reload → notify 链路接通；否则 §5.4 的 `reload(changedKeys)` 事件分发与 scripting-lua §3.3 配置热更均无载体。
+- **C-2（core::config 内部先收敛）**：实测 apollo::core::config 内部存在**两个并存单例**——`ConfigManager`（`include/apollo/core/config/config_manager.h:41`）与 `ConfigRegistry`/`global_config()`（`modules/core/include/apollo/core/config/config_registry.hpp:41-49`，独立 `shared_mutex + unordered_map` 值存储）。"收敛为一套"的目的地自己就是两套；P1-1 落地时先合并（或明确弃用其一），否则四套收敛后仍剩两套。
+- **C-3（设计文档引用纪律）**：由 P3 README 行 + M-1 固化为规约——设计文档引用仓库资产必须标注已实读核对（文件:行）；引用"待建/规划"资产必须显式写"规划中（见 XX §）"，**禁用"复用/已有"等既有一词**。写入 §6 阶段 5 验收标准。
+- **C-4（版本化配置目录缺口）**：scripting-lua §3.3 的"分版本目录、新旧并存"与 attribute-sync §2.1 L1 的"模板版本下发"，要求 core::config 新增"版本目录加载 + template_version 解析"能力；实测 core::config 无任何 version 相关代码（rg 无命中）。→ 随收敛动作（阶段 2）立项，作为 P1 配置热更前置。
+- **C-5（hash 算法归属闭环）**：attribute-sync §7.2 只说 hash"由契约生成"，sdk-contract §6 定义为 `SHA-256(契约源+生成器版本)`——后者是前者的精化、不矛盾；随 M-5 修订在 attribute-sync §7.2 补一句"算法见 sdk-contract §6"。
+
+### 8.5 实读核对记录（本节引用的路径与行号）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| `README.md:21`「🏗️ IoC容器系统…」为核心特性第一条 | rg + sed（`:20` 标题、`:21` 首条） | 属实 |
+| `apps/game-server/src/main.cpp:96-99` core::di Builder | sed 90-105 | 属实（`:96` builder、`:97-98` add_singleton、`:99` build()；本评审 :96-102 引用范围覆盖） |
+| `modules/core/config/CMakeLists.txt:6`（旧 ioc ConfigManager.cpp 编入）、`:7`（FileWatcher.cpp） | cat | 属实 |
+| `include/apollo/core/config/config_manager.h:29/41/84/162/242` | rg | 属实 |
+| `modules/core/config/src/config_manager.cpp:691` notifyListeners 零调用 | rg 全模块仅定义处 | 属实（新发现 C-1） |
+| `modules/core/include/apollo/core/config/config_registry.hpp:41-49` 独立单例 | cat | 属实（新发现 C-2） |
+| `modules/data` 无异步 DB（orm/src/{memory_connection,datasource,sql_template}.cpp 为同步 mock；全仓 rg OnExecuteSql/DbCommand/AsyncDb 无命中） | find + rg | 属实（支撑 M-1） |
+| 全仓 `*.proto` 零命中 | find | 属实（net-abstraction §1 断言成立） |
+| `include/apollo/net/adapters/sdnet_adapter.h:8,12-80` 伪 SSCP | 读码复核 | 属实（net-abstraction §6 删除判定的事实基础） |
+| 文档互引行号：attribute-sync `:14/:58/:254/:274/:331`、scripting-lua `:12/:70/:96`、net-abstraction `:125`、sdk-contract `:13/:108/:114/:134`、ssengine-reference `:10/:65` | rg 逐条 | 属实（矛盾即当条所指） |
+| `docs/qa/q101-script-language.md` 存在 | ls | 属实（scripting-lua 引用成立） |
+
 ---
 
-*评审基线：main @ 35a9c528。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525。§8 复核基线：a2ab6525 工作区。所有行号对应该基线。*
