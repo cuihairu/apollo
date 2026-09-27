@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9。
+> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。
 
 ---
 
@@ -359,6 +359,71 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | `src/framework/ioc/ConfigManager.cpp:218-224` listener 循环属 setValue 路径；onFileChanged 仅 loadFromFile | sed | 属实（P1-1「哑热加载」） |
 | docs/34 `:80` / `:323` / `:332-335,406` / `:350` / `:415,419`；architecture `:19,103,128` | rg + sed | 属实（C-12） |
 
+## 10. 源码级核对第三轮（2026-09-27 追加）
+
+### 10.1 范围与方法
+
+- 四个候选区域：① §6 迁移路线各阶段对应的真实调用点；② P1-1 收敛清单与 FileWatcher 去留二选一；③ C-7 启动期类型化快照验收口径；④ P2-2 条件装配时序缺陷实证。普查外溢出的新线索一并收录（条件原语全灭、database 模块第二套静态注册脚手架、属性层双代实现与双树复制）。
+- 方法同前：先实读文件：行号再落笔（记录见 §10.4）。非交互说明：对「二选一」类决策（FileWatcher 去留），本轮给出判据与倾向、不替执行者拍板，倾向已注明（C-16）。
+
+### 10.2 新发现（C-13 … C-17）
+
+**C-13 属性层「双代同目录 + 双树同文件」——attribute-sync.md 现状审计的补正。**
+- `include/apollo/game/attributes/` **同一目录、同一命名空间**下有两个同名类 `AttributeContainer`：生成 A `attribute.hpp:12,52`（mutex + variant + `AttributeManager` 单例，attribute-sync.md §0.2 的批判对象）与生成 B `attribute_value.h:11-12,74`（getInt/ComVal 形态，另有 `AttributeContainerManager` `:230`）。同名同类名同命名空间——同二进制同时链接即 ODR 冲突，读者必然混淆。
+- 生成 B 的实现文件**双树复制且字节一致**：`src/apollo/game/attributes/attribute_value.cpp` 与 `modules/game/attributes/src/attribute_value.cpp` diff IDENTICAL（各 403 行）——与 `sdks/`/`skds/` 事故（sdk-contract.md §1）同类的源码版。且 `src/apollo/` 是一整棵平行遗留树（ipc/database/config/game…）。
+- 影响：attribute-sync.md §0.2 的现状批判只覆盖生成 A；「重建骨架」结论**加强**而非削弱，但 §0.2 应补记生成 B 与双树事实，删除清单扩大为「两代容器 + src/apollo 遗留树处置」。
+
+**C-14 条件原语普查：五种条件中三种是恒假死谓词，且全部五种零用户——P2-2 的实证要求在此闭合。**
+- `markClassAvailable`（`ConditionContext.h:120-122`）**全仓零调用** → `ConditionalOnClass`（`Conditional.h:67-73`）恒假。
+- 求值时序实证：`src/starter/ApolloApplication.cpp` 的执行顺序为 createConditionContext(`:258`) → getMatchingStarters(`:262`，`matches()` 在此执行，`StarterRegistry.h:105-113`) → markStarterEnabled(`:267-269`) → registerBeans(`:271-273`) → markBeanPresent(`:276-278`)。**matches 执行时三个 mark 集全部为空** → OnBean 与 **OnStarter** 同样恒假——原 P2-2 只判了 OnBean 时序缺陷，实测 OnStarter 同灭（同一时序缺陷的另一受害者）。
+- OnProperty 可用：properties 在 `:258` 已由 createConditionContext 灌入，先于 `:262` 求值。
+- 用户普查：五种条件原语在 src/examples/tests 中**零使用**（唯一的条件实现是 `tests/main_test.cpp:158` 自定义 `matches()` 覆盖）。
+- 修正：P2-2「保留 OnProperty」措辞不当——现实现无任何用户，随删随建等价，应为「**新建**约 30 行的 OnProperty + 注册期单趟过滤」。
+
+**C-15 第二套静态注册脚手架（database 模块，暂无用户）。**
+- `include/apollo/database/sql_template.h:272-284` `APOLLO_REGISTER_DATABASE` 宏：匿名命名空间静态对象在 main 之前调用 `DatabaseRegistry::registerFactory`——与 P2-1 批判的 `REGISTER_COMPONENT` 同构且是**独立复制的第二份**；`DatabaseRegistry::loadPlugins(pluginDir)`（`:266`）还预埋了运行时插件目录加载。宏内的本地 `struct AutoRegister`（`:277-283`）与 ioc 的 `AutoRegister<T>`（`ComponentRegistry.h:25-31`）无引用关系。
+- 全仓零用户（rg 仅宏定义处）。→ 不构成活体风险；§6 阶段 1 死代码清单应扩入该宏与 loadPlugins 的去留，且 P2-1 的规约（注册发生在 main 早期、显式 Builder）应写成**全仓约束**而非仅 ioc 栈约束。
+
+**C-16 FileWatcher 去留二选一：判据齐备，倾向保留并接线。**
+- 实测 `include/apollo/utils/config/FileWatcher.h`：Linux inotify（`:23`）、macOS 分支注释（`:19`）、`poll.h` 轮询兜底（`:17`）、专用线程 `watchLoop`（`:46,58`）+ `watchesMutex_`（`:60`）+ `pollInterval_`（`:61`）、API `addWatch(path, callback)`（`:36`）。**是真实现，不是空壳**——ssengine-reference.md:130「已有 inotify/poll 实现」引语属实。
+- 判定倾向：**保留并按 C-1 接线**（watch → reload → notify）。理由：配置热更（scripting-lua.md §3.3）与脚本 dev 热载（ssengine-reference.md §6）都以它为读取底座，重写无收益。接线时须改造两点：回调从 watcher 线程改为投递回主线程 tick 边界执行（对齐 scripting-lua.md §3.2 的线程分工）；消费者从旧 ConfigManager 迁至 core::config。倾向非决定，拍板留迁移阶段 2。
+
+**C-17 C-7 验收口径的前置事实核查：现状零违例，验收属预防性约束。**
+- game 模块（`include/apollo/game`、`modules/game`）**零配置读取**（rg getValue/APOLLO_CONFIG/ConfigManager 零命中——命中的 getInt 是属性容器自身接口，`attribute_value.h:142-143`）；game-server 对 config 仅启动期 set×2 / get×2（`main.cpp:68-70,122-123`）。
+- 警示先例在库：`ConfigProperty`（`ConfigProperty.h:22-25` set 写穿、`:31-35` 首读缓存永不刷新）正是「无刷新事件的类型化快照」半成品——C-7 验收要防的形态已有前车。
+- 验收口径落为三条：①绑定发生在启动期装配点；②`reload(changedKeys)` 事件驱动刷新（依赖 C-1 接线）；③高频读取零锁零解析（纯成员读）。现状无违例，违约风险集中在未来 game 玩法代码接入配置时。
+
+### 10.3 对既有结论的修正
+
+| 位置 | 原表述 | 修正 | 结论是否变化 |
+|---|---|---|---|
+| P2-2 | 「删除 OnClass/OnBean，保留 OnProperty」 | 实证升级：OnClass/OnBean/**OnStarter** 三者恒假（matches 时 mark 集全空，`:258-278` 顺序）；五种条件原语全部零用户 → OnProperty 为**新建**而非保留 | 删除范围扩大（OnStarter 提前入列），落地形态不变 |
+| attribute-sync §0.2（外部文档，记录待补） | 现状批判只覆盖 attribute.hpp 一代 | 补记生成 B（attribute_value.h/comval.h 同名类）与 src/apollo 双树复制（C-13） | 重建结论不变、删除清单扩大 |
+| §6 阶段 1 | 死代码清单：伪 fruit、getService stub、Fruit TODO、DependencyManager、lazyInit、AutoRegister | 逐项核实零消费方 ✓；清单扩入 database 模块 `APOLLO_REGISTER_DATABASE`/`loadPlugins` 去留（C-15） | 扩充 |
+| P1-3 影响面 | 「仅 examples/dependency_example.cpp 与 tests」 | 实测精确化：examples 1 个 + tests 3 个（dependency_test_simple / test_simple / main_test） | 不变 |
+| §6 阶段 5 | 「模块 manifest（docs/architecture 已规划）」 | `docs/architecture/starter-and-module-assembly-design.md:344`「十一、推荐 manifest 结构」属实 | 确认 |
+
+### 10.4 实读核对记录（第三轮）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| DependencyManager 消费方 = examples 1 + tests 3 | rg 全仓 | 属实（P1-3 精确化） |
+| `BeanDefinition.h:16` lazyInit 零代码消费（docs/07:123,672、docs/34:69 为文档层） | rg | 属实（P3 行） |
+| ioc `AutoRegister`（ComponentRegistry.h:25-31）零用户；sql_template.h:277-283 为 database 本地同名 struct | rg | 属实（§6 阶段 1；C-15） |
+| `Starter.h:67` dependsOn 唯一出现（声明处），全仓零读取 | rg | 属实（P2-3「声明了没人实现」升级为「连读取者都没有」） |
+| `unregisterComponent` 仅 tests/main_test.cpp 调用（8 处） | rg | 属实（§5.3「危险品」判定） |
+| `ConditionContext.h:120-122` markClassAvailable 零调用 | rg 全仓 | 属实（C-14 恒假判据） |
+| 求值顺序 `ApolloApplication.cpp:258→262→267-269→271-273→276-278`；`StarterRegistry.h:105-113` matches 求值点 | sed | 属实（C-14 实证） |
+| 条件原语用户 = 零（tests/main_test.cpp:158 Custom matches 唯一） | rg examples tests | 属实（C-14） |
+| `sql_template.h:266` loadPlugins、`:272-284` 注册宏，零用户 | rg + sed | 属实（C-15） |
+| `FileWatcher.h:17,19,23,36,46,58,60-61` inotify/poll/线程/mutex | rg + sed | 属实（C-16；ssengine-reference:130 引语核实） |
+| game 模块零配置读取；`attribute_value.h:142-143` 为属性接口非配置 | rg | 属实（C-17） |
+| `ConfigProperty.h:22-25,31-35` 写穿 + 首读缓存 | sed | 属实（C-17；round 1 P1-1 复核） |
+| 双 `AttributeContainer`：`attribute.hpp:12,52` vs `attribute_value.h:11-12,74,230` 同命名空间 | rg | 属实（C-13） |
+| `src/apollo/game/attributes/attribute_value.cpp` ≡ `modules/game/attributes/src/attribute_value.cpp`（403 行，diff IDENTICAL） | diff | 属实（C-13） |
+| `ApplicationContext.h:267-275` makeRuntimeInfo，`:270` autoStart 仅拷贝 | sed | 属实（P3 行复核） |
+| `docs/architecture:344` manifest 章节 | rg | 属实（§6 阶段 5） |
+
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 复核随 86be18d2。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e。所有行号对应该基线。*
