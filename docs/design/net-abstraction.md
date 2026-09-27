@@ -1,0 +1,177 @@
+# Apollo 网络层抽象设计（net-abstraction）
+
+> 状态：设计稿（评审中）。目标：给游戏逻辑一个"薄"的网络 API，把连接管理、编解码、重连、背压全部下沉；并回答"自研薄封装 vs 引入 Aeron"的边界问题。与 `docs/design/attribute-sync.md`（QoS 通道/预算）、`docs/design/scripting-lua.md`（脚本只见三件套）、`docs/analysis/ssengine-reference.md`（sdnet 老设计）互为引用。
+
+---
+
+## 执行摘要
+
+1. **游戏逻辑只看到四个动作**：`send / subscribe / state / close`——握手、帧定界、心跳、重连续传、水位、线程迁移全部下沉；回调固定落在 owning 场景线程（与 attribute-sync §10、scripting-lua §2 的单写者纪律同一条线）。现有 `include/apollo/net/session.h` 是"系统库形态"（`onRecv` 裸字节、返回已处理字节数，session.h:59），距"游戏可用"差一整个会话层。
+2. **删除 sdnet_adapter.h**：它在 apollo 仓库里**手写伪造了 SSCP 命名空间与 ISSBase/ISSConnection 接口**（`include/apollo/net/adapters/sdnet_adapter.h:12-80`，`#define APOLLO_USE_SDNET` 无任何链接真 SSEngine 的构建配置）——名为适配器实为空壳，与 ioc-review 里 fake-fruit 是同一类问题。sdnet 的真精华（DelaySend 跨线程投递、GetSendBufFree 水位、GATE 网关模式）以设计点形式收进本设计。
+3. **Aeron 结论：客户端连接不用，进程间总线候选引入。** Aeron 定位是 UDP 单播/多播与 IPC 的机器间消息传递（term buffer、offer/poll + BACK_PRESSURED、flow control + NAK、Archive 回放、Raft 集群），**不做海量 TCP/WS 玩家长连接**——客户端路径自研薄封装；进程间总线（gateway↔game↔world↔db-proxy）评估直接引入 Aeron，退路是自研队列但抄其语义。
+4. **背压是一等公民**：四级水位（ok/soft/hard/cut）+ `trySend` 显式返回码（ACCEPTED/BACK_PRESSURED/TRIMMED_LOW）——"不排队、不阻塞、把决策还给调用方"即 Aeron `offer()` 哲学；丢弃顺序由 attribute-sync §5 的优先级体系决定（低重要性/远距离先 trim）。
+5. **QoS 四通道**（movement 不可靠 / attributes 可靠 / events / control）跑在同一会话上，与属性同步的 token-bucket 预算形成两级独立控制："预算"决定该发多少，"水位"决定还能不能发——都在单写者线程决策，无锁。
+6. **NNG wrapper 与未来总线二选一**：`modules/protocol/nng_wrapper` 若进程间总线选 Aeron 则删除，避免两套进程间通信并存（与"四套配置系统"同构的重复问题，不再制造第三处）。
+
+---
+
+## 1. 现状盘点（读码结论）
+
+| 部件 | 位置 | 现状 | 判定 |
+|---|---|---|---|
+| Connection/Listener/EventLoop | `include/apollo/net/connection.h` `listener.h` `event_loop.h` | IO 抽象骨架，方向正确 | **保留为 L0 原型** |
+| Session | `include/apollo/net/session.h:37-128` | 回调式：`onRecv(data,len)` 裸字节 + 返回处理字节数；send 直通 Connection；心跳仅 get/set 时间戳，无实现 | 接口形态不对（裸 TCP 语义漏给上层）；**重设计为 L2** |
+| native_adapter | `include/apollo/net/adapters/native_adapter.h` | 自研 epoll 骨架 | 保留为 L0 唯一真实现 |
+| sdnet_adapter | `include/apollo/net/adapters/sdnet_adapter.h:8,12-80` | **伪 SSCP**：`#define APOLLO_USE_SDNET` 后手写 `namespace SSCP`、ISSBase/ISSConnection/版本结构/错误码——仓库无任何配置链接真 SSEngine | **删除**（见 §6） |
+| HTTP/WebSocket/RPC | `include/apollo/net/http/`、`websocket.h`、`rpc.h` | 外围能力雏形 | 与本设计正交，另行处理 |
+| protocol 模块 | `modules/protocol`（codec/messages/nng_wrapper/socket） | NNG 封装 + 自研消息编码；**全仓库无 .proto 文件** | codec 并入 L1；nng_wrapper 见 §6 决策 |
+| SSEngine sdnet | `/home/cui/workspaces/SSEngine`（对照） | `Send/DelaySend`（跨线程投递）、`GetSendBufFree`（水位可见）、`SetBufferSize`、GATE 变体 | 思想收编（§5.4） |
+
+核心判断：**apollo 不缺 IO 层零件，缺的是 L1/L2**——帧格式、会话语义（seq/ack/心跳/重连）、通道与背压。这三样是游戏网络层与"网络库"的分界线。
+
+## 2. 目标形态：游戏逻辑看到的 API
+
+```cpp
+// 游戏系统（ECS 场景系统、属性同步、Lua 绑定）只依赖这一个句柄
+class GameConnection {
+public:
+    // 唯一发送入口。返回码即背压决策（不排队、不阻塞）：
+    //   ACCEPTED        已入队
+    //   TRIMMED_LOW     入队，但同通道低优先级消息被丢弃腾位（结果统计上报）
+    //   BACK_PRESSURED  拒绝（hard/cut 水位），调用方自行降级（如跳过本次同步帧）
+    SendCode  send(MsgPtr msg, Channel ch, Priority p);
+
+    void      subscribe(MsgId id, MsgHandler h);   // 回调固定在 owning 场景线程
+    SessionState state() const;                    // Handshaking/Active/Resuming/Closed
+    void      close(std::string reason);
+    // 重连对上层唯一可见的痕迹：Resuming 成功后 resume 回调带 (missing_seq 范围)，
+    // 由上层决定补发（属性同步走 AttrSync 快照补发，见 attribute-sync §6）
+};
+```
+
+隐藏清单（对游戏逻辑不可见）：连接建立与握手、加密、帧定界与 CRC 校验、心跳保活、seq/ack 与重连续传、水位与 trim、跨线程迁移（send 可从任意线程调，内部入 MPSC 环）、Lua 侧更只看到 `apollo.net` 的三件套（scripting-lua.md §7）。
+
+## 3. 分层架构
+
+```
+L3  Logic Facade      GameConnection（§2）——游戏逻辑/Lua 唯一入口
+L2  Session           seq/ack、心跳、重连续传(resume token)、四通道队列、水位机
+L1  Framing/Codec     帧头(16B: magic+len+seq+crc32+ch/flags) + protobuf + zstd(>256B)
+L0  Transport         adapters: epoll/io_uring(native) | IOCP | Aeron | IPC | (测试: loopback)
+```
+
+### L1 帧格式
+
+对齐 sdpkg 的"定长头+校验"方向、修正其强度：`magic(2B) | header_len/ver(1B) | channel+flags(1B) | seq(4B) | len(4B) | reserved(2B) | crc32c(2B header 头校验)`，payload 校验 crc32c 随帧尾（或 len 字段 + 尾部 4B CRC）。变化点 vs sdpkg：加 **seq**（重连与乱序检测的基础）、CRC32C 替换 `(len^0xBBCC)&0x88AA`（ssengine-reference.md §4.5 判定：可预测、强度不足）。
+
+### L2 会话语义
+
+- **seq/ack**：每通道独立 seq；ack 压缩为累积确认 + 可选 bitmap（SACK 思想）随上行捎带。
+- **心跳**：L1 层 ping/pong 帧，Session 层维护 RTO；超时 → Closed(Timeout)，连接清理。
+- **重连续传**：断线时 Session 保存未 ack 的 reliable 队列 + resume token（TTL）；重连握手带 token，服务端比对 `acked_seq`——**与属性同步 ViewerState.acked_seq 是同一个模型的两个实例**（attribute-sync §3）；过期则全新会话，属性走 enter-view 快照，天然兜底。
+- **四通道队列**：每会话 4 条队列（§4），单写者（场景线程）入队、IO 线程 flush，MPSC 环（复用 `include/apollo/utils/loop_buffer.h`、`data_queue.h` 移植件）。
+
+### 线程模型
+
+```
+IO 线程（1-2 个）：epoll/io_uring 事件 → 读入 per-conn 缓冲 → L1 解帧/校验/解压
+                   → payload 按 (conn → entity) 投递到 owning 场景线程任务队列
+场景线程（单写者）：处理上行 → 改属性/状态（attribute-sync §10 六阶段）→ 产出下行
+                   → send() 入 MPSC 环（含水位判定，零锁）
+IO 线程 flush：按水位预算从环上取帧 writev
+```
+
+关键纪律：**回调只发生在场景线程**（游戏逻辑无锁的前提）；**IO 线程永不持游戏数据锁**（只搬运字节）；发送方向游戏线程是生产者、IO 线程是唯一消费者。
+
+## 4. QoS 通道与背压
+
+### 4.1 四通道（与 attribute-sync §5.3 对齐）
+
+| 通道 | 可靠性 | 顺序 | 典型负载 | 拥塞行为 |
+|---|---|---|---|---|
+| `movement` | 不可靠 | 无（带时间戳取最新） | 位置/朝向/速度 | **只发最新**：直接覆盖未发送的同实体旧帧 |
+| `attributes` | 可靠 | 有 | 属性 delta/快照 | 只允许 trim 低优先级实体批次（§5 优先级），不可跳号 |
+| `events` | 可靠 | 有 | AOI 进入/离开、战报、飘字 | 不丢，满了压水位 |
+| `control` | 可靠 | 有 | 握手/心跳/ack/resume | 绝不丢，独立小队列保证饿不死 |
+
+### 4.2 四级水位与行为表
+
+| 水位 | 判据（每通道发送环占用） | 行为 |
+|---|---|---|
+| ok | < 50% | 全量发送 |
+| soft | 50–75% | movement 启用"只发最新"；attributes 按 Priority::LOW 开始 trim |
+| hard | 75–95% | trySend 对 LOW/NORM 返回 TRIMMED_LOW/BACK_PRESSURED；触发慢路径：上报监控 + 属性预算自动降档（token bucket 补给率下调，attribute-sync §5） |
+| cut | ≥ 95% | 该会话 reliable 队列冻结新入队（控制帧除外）；持续 N 秒 → 断开（客户端自己会重连 + resume） |
+
+- **水位查询标准化**：`Watermark::query(conn, ch) -> level` 取代 sdnet `GetSendBufFree()` 的裸字节数——把老引擎"水位可见"思想收进类型化 API（ssengine-reference.md §3 判定）。
+- **两级控制正交**：attribute-sync 的 token bucket 决定"本 tick 该发多少字节"（节流），本层水位决定"还能不能入队"（背压）；前者是主动整形、后者是被动熔断，相遇在 hard 水位（预算降档）。
+
+## 5. Aeron 研究与取舍
+
+### 5.1 机制速览（源码/文档要点）
+
+- **模型**：Publication（发送端，可多活）↔ Subscription（接收端）；一条 Subscription 收到的每个发送端连接叫 Image，每 Image 一个 sessionId——多路复用与流隔离的原语。
+- **传输**：term buffer = 每流三段式环形日志缓冲（顺序写、索引页），单写者写、读取方扫描——**无锁的前提是"每 buffer 单写者"**，与 apollo 场景线程纪律同构。
+- **背压**：`offer()` 非阻塞，返回 BACK_PRESSURED/ADMIN_ACTION/封闭错误——不排队不阻塞，决策还给调用方；接收端 flow control（min/median 策略聚合多订阅者窗口）+ NAK 请求重传，reliable/unreliable 两种流模式。
+- **外围**：Media Driver 独立进程或内嵌（embeddedMediaDriver）；IPC 传输走共享内存（同机进程间零拷贝）；Archive 模块录制流可回放；Cluster 模式 Raft 复制状态机。Apache 2.0，C/C++ 客户端成熟。
+
+### 5.2 吸收什么（无论是否引入库）
+
+| Aeron 概念 | 进 apollo 的落点 |
+|---|---|
+| offer() 返回码哲学 | §2 `trySend` 三返回码——上层显式处理拥塞，禁止"默默排队等死" |
+| term buffer 单写者环形分段 | 发送环/接收环的数据结构蓝本（自研 MPSC 环直接按此设计） |
+| per-stream sessionId 隔离 | §4 四通道即 apollo 的流隔离粒度 |
+| flow control 聚合窗口 | 多观察者下行聚合：慢观察者拉低整批发送速率（AOI 广播的 per-viewer 预算，attribute-sync §5） |
+| IPC 共享内存传输 | 进程间同机通道候选（与 sdshmem 同框，ssengine-reference.md §4.4） |
+| Archive 回放 | P3：跨服消息审计/故障重放（可选） |
+
+### 5.3 结论：哪里用、哪里不用
+
+| 路径 | 决策 | 理由 |
+|---|---|---|
+| 客户端 ↔ 服务器（海量 TCP/WS 长连接，万级 conn） | **自研薄封装**（本设计 L0–L3） | Aeron 不做 TCP 长连接接入；media driver 每连接开销、UDP 玩家侧不可靠网络适配、运维复杂度全不匹配。玩家路径的问题是"每连接会话语义"，这正是 Aeron 刻意不做的层 |
+| 进程间总线（gateway↔game↔world↔db-proxy，机器间+同机） | **评估直接引入 Aeron**（P3 决策点），退路自研 | 定位完全吻合（UDP 单播/IPC、吞吐导向、背压/流控现成）；集群模式还顺带覆盖未来 BigWorld 化的进程间共识。引入成本：media driver 运维 + 团队学习；自研成本：term buffer/流控/NAK 全套——引库更便宜 |
+| 同机大块只读共享（空间快照/指标） | sdshmem 类方案，暂缓 | 见 ssengine-reference.md §4.4 |
+
+### 5.4 与 SSEngine sdnet 对照
+
+| sdnet | 本设计对应 | 关系 |
+|---|---|---|
+| `DelaySend`（跨线程投递） | 场景线程 → IO 线程 MPSC 环 | 同思想，环结构按 term buffer 蓝本现代化 |
+| `GetSendBufFree` | `Watermark::query` 四级水位 | 裸字节数 → 类型化决策 API |
+| `SetBufferSize` | 会话建立参数（内部） | 保留，对上层隐藏 |
+| GATE 变体 | gateway-app（apps/gateway-app 规划） | 方向一致；网关与本层的接口即 §2 API |
+| sdpkg 帧头 | L1 帧格式 | 加 seq + CRC32C（§3） |
+
+## 6. 决策清单（保留/删除/引入）
+
+| 对象 | 决策 | 依据 |
+|---|---|---|
+| Connection/Listener/EventLoop | **保留**为 L0 原型，接口收敛为"事件源 + writev + 水位" | 方向正确，缺的是上两层 |
+| `sdnet_adapter.h` | **删除** | 伪 SSCP（sdnet_adapter.h:12-80），从未链接真库，空壳代码；精华已提炼为设计点（§5.4） |
+| `session.h` 现接口 | **重设计**（不保留回调形态） | onRecv 裸字节把 TCP 语义漏给游戏逻辑，是本设计要消灭的头号泄漏点 |
+| `modules/protocol` codec/messages | **并入 L1**，codec 迁到 protobuf（与 attribute-sync §7、sdk-contract 同一契约源） | 全仓库无 .proto，手写编码无法支撑多端 SDK |
+| `nng_wrapper` | **二选一**：进程间总线若选 Aeron 则删除 | 两套进程间通信并存即重复；宁可晚定也不并存 |
+| 四级水位/四通道/resume | **新建**（L2） | apollo 完全没有；属性同步设计的直接依赖 |
+| Aeron | **P3 决策点**：进程间总线引入评估 | §5.3 |
+
+## 7. 分期落地
+
+- **P1**：L1 帧格式 + L2 会话基础（seq/ack/心跳/四级水位）+ native adapter 收敛为唯一 L0；GameConnection Facade 上线，属性同步 P1 依赖本层 attributes 通道。
+- **P2**：重连续传（resume token）+ movement 通道"只发最新" + 与属性预算的 hard 水位联动降档。
+- **P3**：进程间总线决策（Aeron 引入 or 自研）、网关模式（gateway-app 接入）、Archive 类消息审计。
+
+## 8. 与其余设计的交集
+
+| 关联设计 | 落点 |
+|---|---|
+| attribute-sync.md | 四通道即其 §5.3 QoS 分割；水位 hard 档触发其 token bucket 降档；resume 依赖其 ViewerState.acked_seq 模型；帧压缩同 §7（zstd>256B） |
+| scripting-lua.md | 脚本只见 send/subscribe/回调三件套；异步回调按 tick 边界 resume 协程；背压/重连对脚本不可见 |
+| sdk-contract.md | 契约文件是 L1 编码与各端 SDK 的同一来源；帧格式写入契约（各端插件据此实现帧定界） |
+| ssengine-reference.md | DelaySend/GetSendBufFree/GATE/sdpkg 四点收编（§5.4）；sdnet_adapter 反例（伪命名空间）与 fake-fruit 同类 |
+| ioc-review.md | 网络适配器注册走 core::di 启动期装配（编译期类型键），不进旧字符串容器；adapters 的存在形态=链接期选择，非运行期字符串切换 |
+
+---
+
+*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。*
