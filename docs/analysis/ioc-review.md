@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8。
+> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9。
 
 ---
 
@@ -286,6 +286,79 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | 文档互引行号：attribute-sync `:14/:58/:254/:274/:331`、scripting-lua `:12/:70/:96`、net-abstraction `:125`、sdk-contract `:13/:108/:114/:134`、ssengine-reference `:10/:65` | rg 逐条 | 属实（矛盾即当条所指） |
 | `docs/qa/q101-script-language.md` 存在 | ls | 属实（scripting-lua 引用成立） |
 
+## 9. 源码级核对第二轮（2026-09-27 追加，承接 C-1/C-2）
+
+### 9.1 范围与方法
+
+- 下一批线索：① 收敛目标 `apollo::core::config` 的生产消费方普查（承接 C-2 双单例）；② FileWatcher 全仓接线普查（承接 C-1 死接线）；③ 新 ConfigManager 的热路径形态（P1-1 批判是否延伸到收敛目标）；④ P1-2「HAVE_FRUIT 从未定义」断言复核；⑤ 旧栈影响面计数复核（P0-1「examples 6 个」）；⑥ 保留路径 `runtime::IHostedService/ServiceHost` 落点核实（P2-4/§4）；⑦ 承重断言抽查（探针构造/条件时序/autoEnabled/依赖排序注释/旧 ConfigManager stoi 路径）；⑧ 引用文档（docs/34、docs/architecture）引语逐条对文。
+- 方法不变：每条结论先实读文件：行号再落笔（核对记录见 §9.4）；源码零改动，本文件之外无写入。
+
+### 9.2 新发现（C-6 … C-12）
+
+**C-6 core::config 生产消费方普查（承接 C-2）：双单例实为「Registry 有用户没内容，Manager 有内容没用户」。**
+- `ConfigRegistry`（`global_config()`）：生产使用仅 `apps/game-server/src/main.cpp:68-70`（set `server.name`/`server.max_players` 两键）与 `:122-123`（读回打印）——自设自读的演示级用法。
+- `ConfigManager`（`instance()`）：**生产读者为零**。唯一生产写入者是旧 Starter：`src/starter/ApolloApplication.cpp:327-328` `loadFile(..., "starter" section)`——把文件喂进去之后没有任何生产代码读它。
+- `modules/runtime/src/application_host.cpp:1` 仅 include `config_registry.hpp`，全文件无任何 config 符号使用（`notify_config_loaded`，`:133-135`，是生命周期事件广播，与配置值无关）——未使用的 include。
+- 便捷宏 `APOLLO_CONFIG_INT/STR/BOOL/DOUBLE`（`modules/core/config/include/apollo/core/config/config_manager.hpp:12-18`）：生产零调用，仅 `tests/test_config.cpp`。
+- **收敛动作细化（更新 P1-1 建议）**：收敛为一套时保留 Registry 形态（game-server 已在用的那半），把 ConfigManager 的文件加载/多格式/listener 能力并入或独立为 Loader，删除宏层；否则 C-2 的双单例在收敛后仍会以「一空一满」形态存续。
+
+**C-7 新 ConfigManager 热路径形态：P1-1 的批判延伸到收敛目标本身。**
+- 每次 `get*` = `shared_lock`（`modules/core/config/src/config_manager.cpp:241-247` 的 `get()`）→ `configs_.find(section)` → `root.getByPath(key)`（`include/apollo/core/config/config_value.h:138-140`，children_ 树逐段路径解析）→ 字符串存储值每次调用 `std::stoll/std::stod` 现场解析（`config_value.h:61-75`，try/catch 吞异常返回默认值）。
+- 比旧系统好的三点：`shared_mutex`（读并发）、variant 单一存储（无 string+any 双缓存）、解析失败回退默认值而非抛异常。
+- 但形态仍是**每调用「锁 + 查找 + 解析」**——P1-1「每 tick 读一次战斗数值就是一次锁+解析」的批判同样适用于收敛目标。→ 收敛验收标准追加：高频读取走「启动期绑定类型化快照」（P1-1 建议原文），ConfigManager/Registry 只承担低频与运维读。
+
+**C-8 P1-2 断言修正：「HAVE_FRUIT 在构建里从未定义」不准确。**
+- 实测根 `CMakeLists.txt:336-345`：`HAVE_FRUIT=1` **是有条件定义的**——条件为硬编码路径 `${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/packages/fruit_x64-osx` 存在（注意 **x64-osx 三元组硬编码**，Linux/CI 上不存在该目录）；else 分支定义 `APOLLO_USE_BUILTIN_DI=1`（`:346-348`）。
+- 修正后表述：在本仓库实际构建平台（Linux/CI）上 HAVE_FRUIT **实际不会定义**，伪 fruit 分支照常编译；但在硬编码路径存在的机器（macOS 开发机）上会链接 `libfruit.a` 并整个跳过伪 fruit——**ODR 风险从「死代码」升级为「平台相关的条件编译」**。删除建议不变，且构建系统记一笔新缺陷：平台路径硬编码。
+- 附带核实：`ENABLE_FILEWATCHER` 选项默认 ON（`CMakeLists.txt:36`、`:348-352`）——FileWatcher 默认参与编译，但其唯一消费者见 C-9。
+
+**C-9 FileWatcher 全仓接线普查（承接 C-1）：唯一真实消费者是注定被删的旧 ConfigManager。**
+- 全仓消费者仅三处：`include/apollo/framework/ioc/ConfigManager.h` + `src/framework/ioc/ConfigManager.cpp`（旧配置管理器，`:222-224` 的 `onFileChanged → loadFromFile` 即 P1-1 批判的哑热加载）；`tests/CMakeLists.txt`；`modules/core/config/CMakeLists.txt:7`（编入 apollo_core_config 但模块内零引用，C-1 已记录）。
+- 头/实现分居：`include/apollo/utils/config/FileWatcher.h` vs `src/utils/io/FileWatcher.cpp`。
+- **结论**：P1-1 收敛完成后 FileWatcher 即整体死代码——收敛动作清单必须显式二选一：按 C-1 接线进新配置（watch → reload → notify，配置热更需要它），或随旧栈一并删除并在新配置里重新实现。
+
+**C-10 旧栈影响面计数修正：**
+- P0-1 影响面原文「examples 6 个、tests 若干」→ 实测（rg `BaseComponent|ConfigProperty|CONFIG_PROPERTY|framework/ioc|apollo/starter`）：examples **5 个**（all_features_demo / basic_example / config_example / dependency_example / starter_example）、tests **6 个**（component/config/context/dependency_test_simple、main_test、test_simple）+ tests/CMakeLists.txt。
+- 结论不变（生产调用方为零），计数修正。
+
+**C-11 保留路径落点核实：`runtime::IHostedService` 与 P2-4 建议完全对齐。**
+- `modules/runtime/include/apollo/runtime/application_host.hpp:40-47`：`IHostedService` = `service_name()/start()/stop()/is_running()/tick()` 五方法——与 P2-4「接口瘦身为 start/stop（或直接复用 IHostedService：service_name/start/stop/is_running/tick）」逐字吻合；`ServiceHost` 在 `:91`，`run_once()` 在 `:115-116`。
+- 结论：P2-4 的落地目标真实存在且已在 game-server 使用（main.cpp:105），保留建议可执行。
+
+**C-12 引用文档引语逐条对文（全部属实，含一处加固）：**
+- `docs/34-ApplicationContext_2.0_Design.md:80`「dependsOn 必须显式声明…禁止依赖『注册顺序』」（§3 约束块）——P2-1 引用属实。
+- `docs/34:415`「## 15. 风险与约束」存在，`:419`「调度器若进入高频游戏逻辑主循环，会和场景 Tick 职责冲突」——§4「docs/34 §15 自己已警告风险」引用属实；另有 `:323`（§10 内）「scheduleCron 只用于管理和运维任务，不进入高频业务 Tick」加固同一论点。
+- `docs/34:332-335`、`:406` /health /metrics /beans 三端点——§4 管理端点行属实；`docs/34:350`「## 12. 与 ApolloApplication 的衔接」——§6 阶段 5 的「按 docs/34 §12 演进」引用属实。
+- `docs/architecture/starter-and-module-assembly-design.md:19`（「像 Spring Boot 那样…不照搬 Java 那套运行时反射模型」）、`:103`（「Apollo 不该照搬 Spring Boot 的部分」）、`:128`（「C++ 版 Spring Boot 克隆」）——§1/§4 引用属实。
+
+### 9.3 对既有结论的修正汇总
+
+| 位置 | 原表述 | 修正 | 结论是否变化 |
+|---|---|---|---|
+| P1-2 影响面 | 「HAVE_FRUIT 在构建里从未定义」 | 有条件定义（硬编码 x64-osx 路径，CMakeLists.txt:336-345），Linux/CI 上实际不定义 | 不变（删除建议不变），风险定性升级（C-8） |
+| P0-1 影响面 | 「examples 6 个、tests 若干」 | examples 5 个、tests 6 个 | 不变（C-10） |
+| P1-1 细节 | 旧 getValue 双重加锁 + `:135` stoi 抛异常 | 复核属实（getValue(key,default)=`:66-71`，stoi=`:135`） | 不变，行号精确化 |
+| §4 core::di 行 | 「补两处：try_get assert、懒加载并发」 | 本轮未复触及，维持原判 | 不变 |
+| §4 EventBus/Scheduler 行 | 「docs/34 §15 自己已警告」 | 属实且 §10:323 加固 | 加固（C-12） |
+
+### 9.4 实读核对记录（第二轮）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| `apps/game-server/src/main.cpp:68-70,122-123` global_config 自设自读 | rg + sed | 属实（C-6） |
+| `src/starter/ApolloApplication.cpp:327-328` ConfigManager::instance().loadFile("starter")；`:351` sync；`:365` 旧 getAllKeys | rg | 属实（C-6，佐证 P1-1 缝合点） |
+| `modules/runtime/src/application_host.cpp:1,133-135` 仅 include 无使用 | rg | 属实（C-6） |
+| `modules/core/config/include/apollo/core/config/config_manager.hpp:12-18` APOLLO_CONFIG_* 宏；生产零调用 | rg + cat | 属实（C-6） |
+| `modules/core/config/src/config_manager.cpp:241-247` get() shared_lock+getByPath；`:251-293` get* 现场转换 | sed | 属实（C-7） |
+| `include/apollo/core/config/config_value.h:16`（variant 存储）、`:61-75`（stoll/stod per read）、`:138-140`（getByPath 声明） | sed | 属实（C-7） |
+| `CMakeLists.txt:336-348` FRUIT_ROOT 硬编码 x64-osx / HAVE_FRUIT=1 / else APOLLO_USE_BUILTIN_DI=1；`:36,348-352` ENABLE_FILEWATCHER ON | sed | 属实（C-8，修正 P1-2） |
+| FileWatcher 消费者=旧 ConfigManager 两文件 + tests/CMakeLists + core/config CMake | rg 全仓 | 属实（C-9） |
+| 旧栈 dependents：examples 5、tests 6 | rg 清单 | 属实（C-10，修正 P0-1 计数） |
+| `modules/runtime/include/apollo/runtime/application_host.hpp:40-47,91,115-116` | rg + sed | 属实（C-11） |
+| `ApplicationContext.h:36` 探针构造；`ApolloApplication.cpp:262 vs 271,276-278` 条件时序；`:401` autoEnabled 压过显式启用；`StarterRegistry.h:84-98` 注释与实现不符 | sed 逐条 | 属实（承重断言复核） |
+| `src/framework/ioc/ConfigManager.cpp:218-224` listener 循环属 setValue 路径；onFileChanged 仅 loadFromFile | sed | 属实（P1-1「哑热加载」） |
+| docs/34 `:80` / `:323` / `:332-335,406` / `:350` / `:415,419`；architecture `:19,103,128` | rg + sed | 属实（C-12） |
+
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525。§8 复核基线：a2ab6525 工作区。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 复核随 86be18d2。所有行号对应该基线。*
