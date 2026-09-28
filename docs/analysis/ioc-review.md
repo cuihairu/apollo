@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。
 
 ---
 
@@ -728,7 +728,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随 d691fac2。所有行号对应该基线；§15.6 的同步落地记录随本次提交。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随 d691fac2。所有行号对应该基线；§15.6 的同步落地记录随 263a3888。*
 
 ### 13. 源码级核对第四轮·续（2026-09-28 追加）：未覆盖的边界子系统与形态一致性（C-37…C-42）
 
@@ -1064,4 +1064,99 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随 d691fac2。所有行号对应该基线；§16 的三家框架行号对应各自工作副本当前态（BigWorld 14.4.1 官方包、skynet 工作副本、kbengine fork master 浅克隆）；§15.6 的同步落地记录随本次提交。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随 d691fac2。所有行号对应该基线；§16 的三家框架行号对应各自工作副本当前态（BigWorld 14.4.1 官方包、skynet 工作副本、kbengine fork master 浅克隆）；§15.6 的同步落地记录随 263a3888。*
+
+## 16.8 第八轮深化（2026-09-28 追加）：代码影响项的新模块归属与依赖方向（G-4 展宽，apps/ 运维形态为背景）
+
+> 任务口径：聚焦上轮遗留的 G-4 新模块归属——在 apps/ 运维形态下论证新增模块（filter 插件体系、继承生成器、config_manager 桩清理等代码影响项）的归属边界与依赖方向。本节为分析文字，无源码改动、不派发源码任务；门禁收窄为「只写本报告」，对既有设计文档的修订建议列入待同步清单 ⑦–⑪（16.8.5）。
+> 自行假设（非交互约定，A1–A3）：**A1** apps/ 五进程壳（base/cell/game/gateway/login-app）为骨架现状——apps/base-app 的 main 仍是手写组合根（全局指针 + signal 回调，main.cpp:3-25，本地头 base_server.hpp），未走 modules/runtime 的 application_host——成熟度不影响归属论证，论证对象是依赖方向与边界；**A2** G-1/G-2 的进程级设计（编队/备份容灾）不在本节展开（任务聚焦为「新增模块归属」）；**A3** modules/bigworld 与 include/apollo/bw 按 BigWorld.h 自述定性为「legacy 兼容/参考层」，其完成度未全面审查，定性仅用于归属判断。
+
+### 16.8.1 版图现状（实读普查，对应该报告写作时的工作副本 @ e6808a7c）
+
+- **apps/**：五壳已存在且有实现雏形——base-app（main.cpp + base_server + database_service）、cell-app（cell_server + config.hpp）、gateway-app（gateway_server + ingress 连接注册表）、login-app（login_server）、game-server（仅 main.cpp）。
+- **modules/**：base（include/src/tests 三件套——系统组件层，非早期纯头文件形态）、net（protocol/tcp/rpc 三子树 + rpc_legacy/message_codec/session_manager——C-29 四套网络树的成员）、protocol（socket/codec/messages/nng_wrapper——§15.2 退役清单内）、game（attributes/battle/session/core/world）、data（orm/redis/cache/core）、core（config/log/module_manifest）、runtime（application_host/world_host/signal_source——进程宿主层）、bigworld（见 A3）。
+- **include/apollo/**：net（session/connection 等 L0-L2 原型）与 network（messaging/rpc/transport）并存——四套网络树的另两处；bw（runtime.h/entity.h——bw 兼容层的接口面）。
+- **待落位新部件清单**（承接 §16.7 与各设计文档代码影响项）：① FrameFilter 插件体系（net-abstraction §5.5）；② 契约/表生成器含 entities.xml 继承展开（sdk-contract §3、xml-generation §4、16.7.2）；③ config_manager parseXml/parseLua 桩清理（xml-generation §7 P1，C-49 家族）；④ 定时器轮（G-4 本体，ssengine-reference §4.3 目标设计）；⑤ 运维观测通道（G-5 载体）。
+
+### 16.8.2 三家先例：同类部件放在哪（行号实证）
+
+| 部件 | BigWorld | KBEngine | skynet | 共同形态 |
+|---|---|---|---|---|
+| 帧管线 filter | **与通道同库**：packet_filter/stream_filter 在 lib/network（16.7.1）；udp_channel.hpp:27 前置声明、:81 构造注入 `PacketFilterPtr pFilter`、:139-140 成员存取——接口抽象、实例同库、**注入式装配** | 无 filter 层（TCP 通道裸用，16.2）——**反例**：每加一种封装都要改通道本体 | WS 帧定界做在服务组装层（lualib/http/websocket.lua）——其消息驱动范式的脚本域变体 | filter 与通道/帧代码同层、与消息语义分离 |
+| 定时器 | **最底层公共库**：lib/cstdmf/time_queue.hpp:60 TimeQueueBase、:74 TimeQueueT，自带单测（unit_test/test_time_queue.cpp） | lib/common/timer.h:101 TimersBase、:108 TimersT——同为公共库 | 核心线程无条件编队 monitor/timer/socket（skynet_start.c:209-211） | 定时器在框架公共层，不在任何具体 app |
+| 生成器/工具 | server/tools **独立二进制族**（bwmachined/bw_profile/message_logger/sync_db/snapshot_helper 等，目录实读）；entitydef 则运行期解析（lib/entitydef，C-50 无校验） | 配置转换器在**源码树外**：kbe/tools/xlsx2py/（ExcelTool.py 等 Python 族，Excel→运行期 py 配置）；kbe/src/server/tools/{bots,logger,kbcmd,…} 为独立工具进程 | —（无独立工具树；debug_console 为按需 Lua 服务） | 「源→运行期工件」转换器与运维工具一律独立二进制，不进运行期链接图 |
+| 观测通道 | 进程内建自省方法（witness.cpp:2470-2514 dumpAoI）+ 独立 logger 进程 + server/tools/{bw_profile,message_logger} | tools/logger 独立进程 | 核心内 monitor 线程版本号检测（skynet_monitor.c:31-45）+ 按需 debug_console 服务（telnet mem/stat/task/run） | **检测原语在核心/进程内，聚合呈现在外挂工具进程** |
+
+### 16.8.3 归属判定（逐项）与依赖方向
+
+**① FrameFilter 插件体系 → 收敛后的 modules/net（L1/L2 重建处），不进 modules/protocol。**
+- 归属理由：BW 先例 filter 与 udp_channel 同库、经构造注入（udp_channel.hpp:81/:139-140）——filter 接口与字节级插件（CRC/压缩/加密/WS 流插件）与 L0-L2 同属 net；modules/protocol 现树在 §15.2 退役清单内、重建后只承载**生成产物**（消息表/访问器）。filter 认字节不认消息，放 protocol 会倒转 protocol→net 的依赖箭头。
+- 依赖方向：`FrameFilter` 接口与内置插件定义于 net；protocol（生成 codec）经 L1 的 codec 槽位**注入**（对齐 BW pFilter 注入式构造）；apps/gateway-app 是**装配方**（挂哪条 filter 链——来自契约声明），不是实现方。filter 插件禁止 include 任何消息头/协议类型。
+- 自反约束（重要）：C-29 四套网络树并存（modules/net/{protocol,tcp,rpc}、modules/protocol、include/apollo/net、include/apollo/network，§12.1/§12.2）+ §15.2「禁止第五套网络栈」纪律——**filter 落地前必须先收敛四套**，否则 filter 链会成为第五处网络代码、自打纪律。本判定附带前置条件：filter 进的是收敛后的 modules/net，不是现存四套中任何一套的原样。
+
+**② 契约/表生成器（含 entities.xml 继承展开）→ sdks/gen/ 构建期工具，运行期依赖图之外。**
+- 归属理由：KBE 把配置转换器放源码树外（kbe/tools/xlsx2py，Python 工具族实读）——「源→工件」转换不与运行期代码混居；BW server/tools 全族同理。sdk-contract §3 已定 sdks/gen「C++ 单二进制、入 CI」；本节补的是**链接边界**：gen 不被任何运行期目标链接，产物（typed struct/loader/schema_hash 头）被 modules/protocol、tables 消费模块、sdks/* 链接——依赖箭头只在构建期经过 gen，运行期 include 图里没有 gen。一致性由 CI 双闸（xmllint + 产物 diff）粘合。
+- 继承展开（16.7.2：拓扑排序 + 环检测断言 + 父先入子覆盖 + provenance）全部落在 gen 内部，三个投影只见扁平结果——展开逻辑不进入任何运行期模块。
+- 与两家的差异（记录为有意的偏离）：BW/KBE 都选运行期解析 .def（lib/entitydef、entitydef.cpp:188-210），每启动付解析成本且无 schema 层（C-50）——apollo 把解析+校验前移 CI，代价是生成器成为一等仓库公民。
+
+**③ config_manager 桩清理 → modules/core/config 内部收缩（删桩 + 删路由），不新增模块、不回灌 XML。**
+- parseXml/parseLua 桩与 ConfigFormat::Xml/Lua 路由诚实化删除（C-49 家族，xml-generation §7 P1 已记）；XML 装载走生成 typed loader，loader 归属随 schema 域（契约产物→modules/protocol；tables 产物→消费该表的模块）。
+- **本节收紧一处既有表述**：xml-generation.md §1.1「接缝已留、实现缺席——本设计直接在接缝上立规矩」暗示在 ConfigFormat::Xml 路由上补实现；本节判定为**路由随桩一并删除**——若把 XML 树回灌 config_manager 的通用 ConfigNode，等于重建「运行期二次反射」，违反 xml-generation §4 产物 2 的禁令。修订列待同步 ⑦。
+- 依赖方向：modules/core/config 保持通用树职责（INI/JSON 外围配置）被各模块依赖；生成 loader 只依赖 pugixml + base，**不依赖 config**——两套装载路径并存但分层不同（外围配置 vs 热路径数据/契约），不做「统一入口」。
+
+**④ 定时器轮（G-4 本体）→ modules/base 新组件（数据结构 + 单测），驱动权在 game loop；不新建 modules/timer、不落 modules/bigworld。**
+- 三家先例一致（16.8.2 表）：BW TimeQueue 在最底层公共库 lib/cstdmf 且自带单测（time_queue.hpp:60/:74、unit_test/test_time_queue.cpp）；KBE Timers 在 lib/common（timer.h:101/:108）；skynet timer 是核心线程编队成员（skynet_start.c:209-211 无条件创建）。公共层承载定时器是三家共识。
+- apollo 落点辨析：modules/base 现为 include/src/tests 三件套（16.8.1 实读）——系统组件层的既定家，与 thread_pool/memory 同级；utils 收无状态原语（loop_buffer/data_queue/FileWatcher），时间轮带回调调度语义，不进 utils。**modules/bigworld 排除**：其自述为 legacy 兼容层（BigWorld.h:3-9「BigWorld API compatibility layer…New code should use apollo::bigworld」），timer.cpp:3-5 是转发桩（自认实现由 apollo::bw::Runtime 提供，runtime.h:14 `class Runtime`、:40 `addEntityTimer`）——参考件不是生产件的家；且兼容层自带实体运行时，与 modules/game 实体体系、attribute 三代容器（§12.2）构成又一层并行实体体系——**顺带发现（记为观察，不定罪，完成度未审见 A3）**：建议下轮审计把 bw/bigworld 兼容层列入未评审子系统清单（与 §15.2 已注 ipc 树并列）。
+- 驱动方向（G-4 已论证驱动范式，本节补归属维度）：base/timer 只提供 O(1) 数据结构与到期回调收集；**tick 驱动权在场景线程主循环固定阶段**——不学 skynet 独立 timer 线程（那是其消息驱动范式的配套，论证见 G-7 与 attribute-sync §10.1）。
+
+**⑤ 运维观测通道（G-5 载体）→ 两截归属：检测原语进模块，聚合工具进 apps/；依赖只许 apps→模块。**
+- 先例形态（16.8.2 表末行）：skynet monitor 版本号检测在核心线程（skynet_monitor.c:31-45）、debug_console 是按需启动的外挂服务；BW dumpAoI 是 cellapp 内建自省方法（witness.cpp:2470-2514）、message_logger/bw_profile 是 server/tools 独立二进制；KBE tools/logger 独立进程。
+- apollo 落点：检测原语（per-scene 心跳版本号、队列水位、实体计数、帧耗时）内嵌进 owning 模块与 net control 通道——**卡死时外挂工具自己也拿不到数据，所以原语必须在模块内**；聚合呈现（telnet REPL、在线执行、日志拉取）归 apps/（未来 admin 工具或 gateway-app 的 admin 面）。现有接缝已备：modules/runtime 的 application_host 已定义 ConsoleEvent/IConsoleEventSource（application_host.hpp:20/:28）——ops 工具的依赖面就是这个接口，模块侧零新增依赖。
+- 依赖方向铁律：apps→modules→include 单向；ops 工具只触 control/debug 接口面，禁止模块 include apps 头、禁止 ops 工具直连 filter 链或属性内存（一切经只读自省接口）。
+
+### 16.8.4 依赖方向总图（文字版）与落点判据
+
+```
+apps/{base,cell,game,gateway,login}-app   组合根：装配 + main（现状手写雏形，目标走 runtime host + core::di）
+  ↓
+modules/runtime（application_host / world_host / signal_source；console 事件源接口在此）
+  ↓
+modules/game ── modules/protocol（生成产物：消息表/访问器）
+  ↓                    ↓
+modules/net（L0-L2 + FrameFilter）   modules/data（异步 DB/连接池）
+  ↓                    ↓
+modules/core/{config,log}（通用树/日志）
+  ↓
+modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo/utils
+【图外】sdks/gen（构建期工具，运行期零链接）｜apps 运维工具（只触 control/debug 接口面）
+```
+
+新代码落点的三条判据（本节产出，后续轮次直接套用）：
+1. **它被谁链接**——运行期目标链接 → 进 modules 分层；只有 CI/开发者跑 → 进 sdks/gen 或工具树；
+2. **它认什么**——认字节 → net；认消息 → protocol（生成产物）；认实体 → game；认进程生命周期 → runtime/apps；
+3. **谁不得反向依赖它**——被它依赖的层禁止反向 include（含构建期工具：运行期代码禁止 include gen 产物之外的 gen 内部头）。
+
+### 16.8.5 待同步清单追加（门禁收窄为只写本报告，列为待办）
+
+- **⑦** xml-generation.md §1.1/§7：ConfigFormat::Xml/Lua 路由最终删除（非「接缝上立规矩」），XML 装载走生成 loader，config_manager 保持 INI/JSON 通用树（16.8.3-③）。
+- **⑧** net-abstraction.md §5.5/§6：filter 归属行——收敛后的 modules/net、注入式装配对齐 BW udp_channel.hpp:81/:139-140；四套收敛（C-29）为 filter 落地前置条件。
+- **⑨** sdk-contract.md §3 / xml-generation.md §4：生成器「运行期依赖图之外」边界行（先例 kbe/tools/xlsx2py、BW server/tools）。
+- **⑩** ssengine-reference.md §4.3：定时器轮归属行——modules/base 组件 + 单测（先例 BW lib/cstdmf 自带 test_time_queue），驱动权 game loop；modules/bigworld 的 addEntityTimer 定性参考件不入生产链。
+- **⑪** G-5 载体两截归属：net-abstraction.md（control 通道承载检测原语上行）+ 未来 apps/ 运维工具边界（依赖面 = runtime 的 ConsoleEvent/IConsoleEventSource 接口）；先例 skynet debug_console、BW server/tools。
+
+### 16.8.6 实读核对记录（本节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| apollo 版图：modules/*（base 含 include/src/tests）、apps/* 五壳、include/apollo/net 与 network 并存、modules/net 三子树、modules/runtime/application_host.hpp:13/:20/:28 | ls/find/head 主线直读 | 属实（16.8.1/16.8.3-⑤） |
+| BigWorld.h 兼容层自述（:3-9）+ bigworld/timer.cpp 转发桩（:3-5）+ bw/runtime.h:14/:40 | head/sed 直读 | 属实（16.8.3-④，A3） |
+| BW TimeQueue 在 lib/cstdmf（time_queue.hpp:60/:74/:31）+ 自带单测（unit_test/test_time_queue.cpp） | find + rg 直读 | 属实（16.8.3-④） |
+| BW filter 注入式装配（udp_channel.hpp:27/:81/:139-140） | rg 直读 | 属实（16.8.3-①） |
+| KBE Timers 在 lib/common（timer.h:101/:108） | rg 直读 | 属实（16.8.3-④） |
+| KBE xlsx2py 在源码树外 kbe/tools/（xlsx2py.py + ExcelTool.py/config.py/functions.py） | ls/head 直读 | 属实（16.8.3-②） |
+| skynet 核心线程无条件编队（skynet_start.c:209-211 monitor/timer/socket + worker weight 表） | sed 直读 | 属实（16.8.2） |
+| BW server/tools 独立工具族（bwmachined/bw_profile/message_logger/sync_db 等）；KBE kbe/src/server/tools/{bots,logger,kbcmd,…} | ls 直读 | 属实（16.8.2/16.8.3-⑤） |
+
+---
+
+*评审基线（源码）：main @ 35a9c528（无源码变更）；§16.8.1 版图普查对应写作时工作副本 @ e6808a7c（普查对象为目录结构与少量头文件，未引用 35a9c528 后漂移的实现行号）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随 d691fac2；§15.6 的同步落地记录随 263a3888（attribute-sync 深化随 e6808a7c）；§16.8 随本次提交。所有行号对应该基线；§16 的三家框架行号对应各自工作副本当前态（BigWorld 14.4.1 官方包、skynet 工作副本、kbengine fork master 浅克隆）。*
