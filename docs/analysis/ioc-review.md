@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。
 
 ---
 
@@ -728,7 +728,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随本次提交。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随本次提交。所有行号对应该基线。*
 
 ### 13. 源码级核对第四轮·续（2026-09-28 追加）：未覆盖的边界子系统与形态一致性（C-37…C-42）
 
@@ -858,4 +858,62 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随本次提交。所有行号对应该基线。*
+## 15. 评审后决策落盘（2026-09-28 追加）：网络自研定案与契约形态定案
+
+> 本节不是新一轮缺陷审计（无新 C 编号），而是对 §12/§14 评审所引发的架构决策的整理落盘。决策产生于评审对话；落点引用的行号均已在此前轮次实读核对（§12.4/§14.4），本节新增实测仅两处（见 15.7）。
+
+### 15.1 决策栈总表
+
+| 维度 | 决策 | 对既往表述的作用 |
+|---|---|---|
+| 脚本语言 | **Lua 固定**（数据不进脚本） | 确认 scripting-lua.md 全篇前提 |
+| 玩家路径传输 | **全自研**：B 栈为唯一 L0，按 net-abstraction §3 补 L1/L2 | 关闭 §12.3「B 栈定案」的悬置 |
+| 进程间总线 | **不引 Aeron**；P1–P2 仅线程间 MPSC 环（复用移植件）；跨进程自研总线 P3 按需新建 | 关闭 net-abstraction.md §5.3「P3 评估 Aeron」决策点 |
+| nng | **整体退役**（两棵 protocol 树 + 构建残留） | 关闭 net-abstraction.md §6「nng_wrapper 二选一」为「已定删」 |
+| 契约源 | **XML + XSD**（xs:key / xs:keyref / xs:enumeration） | **取代 §14.1 的自行假设**（保留 TOML + 补 schema 校验门禁）——本节即该假设的修正记录 |
+| 代码生成 | 契约 → C++/C#/TS + schema_hash，CI 双闸（XSD 校验 + 产物 diff） | 机制不变（sdk-contract.md §3/§6） |
+
+### 15.2 网络层定案：全自研，nng 退役
+
+- **形态四层**：L0 = B 栈（poll-Reactor/socket，modules/net/tcp 真实现）为唯一底座，演进路径 epoll/io_uring；L1 帧格式（magic + seq + CRC32C）进契约、生成器出各端编码；L2 会话（seq/ack/心跳/四级水位/resume）新建，不复用 A 栈裸字节回调（session.h:59 onRecv）；L3 GameConnection facade（send/subscribe/state/close）。
+- **nng 退役清单**（全部为已实读对象）：① modules/protocol 整树（栈 D：nng_wrapper + codec/messages）；② modules/net/protocol 整树（栈 C：channel.cpp:358-389 无 nng 全桩）；③ gateway-app 对 apollo_protocol 的无条件链接（gateway-app/CMakeLists.txt:24，C-30）——随树删自然消解，链接断裂无需再修；④ 根 CMakeLists.txt:281 谎报 FetchContent 的 message 与 nng find_package 块（C-37）；⑤ modules/net/protocol/CMakeLists.txt 硬编码 nng.lib 路径随树删。vcpkg.json 本无 nng——零依赖变化，纯减法。
+- **进程间通信简化**：P1–P2 单进程形态只需线程间投递——场景线程↔IO 线程 MPSC 环按 Aeron term buffer 的单写者蓝本自建，复用 `utils/loop_buffer.h`、`utils/data_queue.h` 移植件（net-abstraction.md §3 已有设计）；跨进程自研总线推迟到 P3 BigWorld 化，届时以现成 ipc 树（include/apollo/ipc 10 文件 3435 行 + src/apollo/ipc 8 文件 4378 行，默认 `APOLLO_ENABLE_IPC=OFF`，CMakeLists.txt:37）为**下轮审计对象**——先评后定演进或新建，避免再攒并存。
+- **纪律**：nng/Aeron 均不引入后，禁止出现第五套网络栈或第二套进程间通信——四套网络（C-29）、四套 Redis（C-45）是并存代价的既有实证。
+
+### 15.3 契约定案：XML + XSD（取代 §14.1 自行假设）
+
+- **决策**：契约源用 XML，XSD 做形式校验。
+- **红利实证锚点**（均指向已核实缺陷）：`xs:key` 唯一性 → C-35 的 attribute_id.h 分段冲突（PLAYER_START=301 落在 CREATURE 段 101-500 内）**无法入库**；`xs:keyref` → 派生属性 DAG 的悬垂引用（attribute-sync.md §2.4）提交前拦截；`xs:enumeration` → 可见域（SELF/TEAM/GUILD/AOI/WORLD）、所有权（BASE/CELL/RO_MIRROR）、通道名拼错即红。校验器零开发（xmllint/IDE/CI 现成）。
+- **成本与对策**：① 手写体验 → 紧凑属性风格（一属性一行元素，勿子元素嵌套）+ XSD 感知编辑器补全；② 解析依赖 → pugixml（vcpkg.json 需新增一项）。「TOML 解析器 ≤50 行」让位「XSD 校验器 ≤0 行」，交换划算。
+- **不变项**：线上协议仍二进制（XML 只是契约源）——生成器照常产 C++/C#/TS 编码器 + `schema_hash`（attribute-sync.md §7.2 握手不变）；生成器 CI 双闸不变；Lua 脚本可写白名单由契约生成（sdk-contract.md §5）。
+
+### 15.4 契约文件布局：分文件、单 schema、多投影（学 KBEngine「一端声明多端生成」，不学「一个文件管一切」）
+
+- **布局**：`sdks/contract/{apollo.xsd, attrs.xml, messages.xml, entities.xml, errors.xml, version}`，整目录统一版本 → schema_hash。attrs 与 messages 分文件的理由：变更节奏与评审者不同（策划高频改属性 vs 程序低频改协议），分文件使 diff 评审互不淹没。
+- **四投影取代「抽取」**：同一契约，生成器按消费方出——① 协议投影（id/类型/域标记/通道 → 三端 delta/快照编码器，**C-47 三套线格式归一到此**）；② 客户端 SDK 投影（强类型 AttrId 常量/容器/预测壳，**persist 字段对其不可见**）；③ 服务端投影（访问器/dirty 骨架/派生 DAG）；④ 存储投影（persist/column 提示 → 列式提升清单）。
+- **两段式存储**：契约只留 `persist`/`column` 一行方向性提示；真正的存储定义（表/索引/列提升/journal 策略）放服务端私有 `storage.xml`——不属于契约目录、不进 schema_hash、不触发客户端 SDK 重发。纯存储演化零协议版本事件——KBEngine 的反面教材（attribute-sync.md §8 五条：blob 化/仅 base 快照/无日志/无查询面）正是单一事实源锁死两个演化单元的结果。
+
+### 15.5 MyBatis「语句即数据」对比：storage.xml 采用 mapped statement 模式
+
+- **学**：① 语句声明化——id + SQL + 参数/结果映射进 XML，C++ 侧薄执行器（~300 行：启动解析 → 语句注册表 → 按名绑定执行）；② **按名绑定、驱动侧参数化、禁止字符串拼接**——C-44 实测缺陷（`Parameter::toString` 不转义 sql_template.cpp:75-76、`buildSql` 条件转义 :268-273、未知类型静默默认 MySQL :380-385）在「唯一绑定路径」下**结构性消失**；③ 启动期全量校验——语句 id 重复、缺列错参、类型不匹配 boot 即败（与 §0「能启动期报的错不留到运行期」同一条线）；④ write-behind 语句面收敛为三条（snapshot_upsert / journal_append / journal_replay_range）+ 列提升读写，审计/压测/慢查询归因有单一位置。
+- **不学**：动态 SQL（`<if>/<foreach>`，为任意业务查询组合设计；apollo 语句少而稳定，引入迷你语言解释器是负资产）；二级缓存/懒加载（破坏内存权威与 write-behind 单写者纪律）；注解 + XML 混用（保持单一 XML 源）；通用 ORM 映射框架（只做快照/journal/列提升三类语句）。
+- **XSD 跨文件协同**：storage.xsd 的 `xs:key` 保证 statement id 唯一；`xs:keyref` 把列提升引用锁回契约 attrs.xml 的 attr id（契约 `column="true"` 提示与存储侧实际提升强一致，改漏即启动前红）；参数类型枚举收敛到契约类型集（int64/string/bytes/…）。
+
+### 15.6 对既有结论的影响与待同步文档清单
+
+- **修正关系**：§14.1 契约方向的自行假设（TOML + schema 门禁）被 15.3 的用户决策（XML + XSD）**取代**；其余 C-1…C-49 不受影响。
+- **决策对缺陷清单的消解路径**：C-30（gateway 链接断裂）随 nng 退役消失；C-47（三套线格式/两套 ID 空间）随协议投影归一；C-44（转义/绑定缺陷簇）随语句声明化结构性消除；C-29/C-45 的「并存」由 15.2 纪律条阻断再生。
+- **待同步文档清单**（本轮受「只写本报告」约束，列为待办而非完成项）：① sdk-contract.md §2.2/§2.3——TOML → XML+XSD，含紧凑风格示例、pugixml 依赖、四投影与两段式存储；② net-abstraction.md §5.3/§6——Aeron 决策点关闭为「已定自研」、nng_wrapper 决策关闭为「已定删」；③ attribute-sync.md §7.1 的 protobuf 示例标注为「编码布局参考，契约源为 XML」；④ §12.3/§14 表内「TOML」字样随 ①② 联动修订。
+
+### 15.7 实读核对记录（本节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| utils/loop_buffer.h、utils/data_queue.h 存在（9260B/7660B） | ls | 已核（此前仅文档引用，本轮补实测） |
+| `APOLLO_ENABLE_IPC` 默认 OFF（CMakeLists.txt:37） | rg | 已核 |
+| ipc 树规模（include 10 文件 3435 行 / src 8 文件 4378 行） | find + wc（第六轮普查时实测） | 已核 |
+| 其余行号（B 栈规模、channel.cpp:358-389、gateway-app/CMakeLists.txt:24、:281、sql_template.cpp 各行、attribute_id.h 分段） | §12.4/§13/§14.4 已核行号，未改动 | 沿用 |
+
+---
+
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随本次提交。所有行号对应该基线。*
