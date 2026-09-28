@@ -634,4 +634,98 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§0 随 b99eb6a4。所有行号对应该基线。*
+## 12. 第五轮（2026-09-28 追加）：网络与网关 / 实体与属性（C-29 … C-36）
+
+### 12.1 范围与方法
+
+- ① **网络与网关**：四套网络树的会话收发路径、编解码与分发——gateway-app 全部 14 个源文件实读 + `modules/net/protocol`、`modules/net/tcp`、`modules/net/rpc`、`modules/protocol` 关键实现与全部 CMake 归属；② **实体与属性**：entity/组件模型/属性容器/ECS/战斗/anchor 生命周期（AOI 本体已见 C-27/C-28，不重复）。
+- 方法不变：先实读后落笔（记录见 §12.4）。非交互假设注明：受只读约束未执行构建——C-30 的链接失败为「target 引用 × 定义处」实读推演，未以链接器输出验证；一律在条目内标注。
+
+### 12.2 新发现（C-29 … C-36）
+
+**C-29 四套网络栈并存且无一套可用；网关数据路径是 Null 桩——「网络层」目前实际不存在。**
+
+| 栈 | 头文件 | 实现 | 状态 |
+|---|---|---|---|
+| A `include/apollo/net/`（19 头：Session/packet/session_manager/rpc/双 adapter） | session.h（onRecv 裸字节 ：59） | modules/net/rpc/src/（rpc_legacy 369 / session_manager 432 / message_codec 255 / native_adapter） | 编入 apollo_net_rpc；sdnet_adapter 伪 SSCP（P1-2 判删） |
+| B `include/apollo/network/`（6 头：transport/reactor/socket） | reactor.hpp（poll(2)，:13/:59） | modules/net/tcp/src/（socket 301 / reactor 140 / rpc 199） | **最接近可用的传输层**，编入 apollo_net_tcp |
+| C `modules/net/protocol/`（channel/endpoint） | channel.hpp | channel.cpp 389——**无 NNG 时 ：358-389 全 API `return false` 桩** | vcpkg.json 无 nng → 默认走桩 |
+| D `modules/protocol/`（nng_wrapper/codec/messages/socket） | socket.hpp（RpcClient/MessageCodec 所在） | nng_wrapper.cpp 仅 53 行且 APOLLO_USE_NNG 未定义时空 | **默认构建无任何 add_subdirectory 引入**（modules/CMakeLists.txt:25 注释） |
+
+- 网关（唯一消费者）的数据路径三处桩/空转：客户端入口是 `makeNullClientIngressServer()`（gateway_server.cpp:181；NullClientIngressServer::send 为空丢弃，client_ingress_server.cpp:17-20）；accept 线程空转自述「TCP accept and socket/session binding are not wired yet」（:356-362）；后端 Channel 走 C 栈桩（connect/send 恒 false）→ **客户端进不来、后端发不出**。
+- 容器使用判定：**零**——rg 全 modules/net、apps/gateway-app 无 `framework/ioc`/`ApplicationContext`/`core::di` 引用；网关为纯手写组合构造（:178-188 make_unique 链），符合 §0.7 思想但连 core::di 也未用。
+
+**C-30 gateway-app（唯一网络消费者）默认构建链接必败；根构建脚本谎报 FetchContent。**
+- apps/CMakeLists.txt:10-12 以 `TARGET apollo::net_protocol`（恒真，modules/net 无条件构建）为门放行 gateway-app，而 gateway-app/CMakeLists.txt:24 **无条件链接 `apollo_protocol`**——该 target 只在 modules/protocol/CMakeLists.txt 定义且无人 `add_subdirectory`（modules/CMakeLists.txt:25 注释）→ 按推演 `-lapollo_protocol` 找不到（同 C-26 断裂家族；未构建验证）。
+- 根 CMakeLists.txt:281 声称「protocol module will use FetchContent」——全脚本**无任何 FetchContent 调用**（rg 仅此一条 message）——日志式的「注释撒谎」在构建脚本再现。
+- 附带：modules/net/protocol/CMakeLists.txt 硬编码 `vcpkg/installed/x64-windows/lib/nng.lib` 探测路径——与 HAVE_FRUIT 的 x64-osx 硬编码（C-8）同一反模式再现。
+
+**C-31 网关会话/路由线程模型：锁护表不护字段 + check-then-assign 竞态 + 路由永久熔断与静默丢消息。**
+- SessionManager 每方法全局锁（session_manager.cpp 各方法 lock_guard），但锁只护 map：`getSession` 返回 shared_ptr 后，`playerId/state/routeSnapshot/lastHeartbeatMs` 在**锁外**被读写（gateway_server.cpp:400/:482/:507-529 vs bindPlayer/assignRoute/updateHeartbeat 持锁写同一字段）——字段级数据竞争，heartbeat 线程与 dispatch 线程并发命中。
+- `ensureRouteSnapshot`（:506-530）对同一 session「检查 isAssigned → fetch → assignRoute」无原子性（TOCTOU）；fetchRouteSnapshot（:532-563）在包处理线程做**阻塞 RPC**（condition_variable 等待）。
+- MessageRouter **全程无锁**：worldNodes_/load/available 多线程访问（:116-128/:157-171）；任一次 send 异常即 `available=false` 且**永无恢复路径**（:123-125）；路由 miss（url 不匹配）时消息**静默丢弃**（:116-127 无 else 分支）。
+- GatewayConnectionRegistry 同族：8 处每方法 lock_guard（gateway_connection_registry.cpp:10-107）。
+
+**C-32 编解码与分发：协议漂移 + 热路径双拷贝 + 手写消息白名单。**
+- 断线通知用裸字符串 key=value 协议（`encodeDisconnectMessage` :35-43 `"gateway_client_disconnect|sessionId=..."`），同文件其余路径却用 `apollo::protocol::MessageCodec`（:382-387）——同一进程两种线格式（sdk-contract.md「无单一事实源」缺陷的实例）。
+- 每包双拷贝：`onPacketReceived` span→vector（:319）+ dispatcher 内再 span→vector 仅为 parseHeader（client_packet_dispatcher.cpp:10）——热路径无谓分配。
+- 分发是手写 `MessageType` 枚举 switch 白名单（isWorldMessage，client_packet_dispatcher.cpp:14-52）——无契约生成，与 sdk-contract.md §1「全仓库无 .proto/.def/.toml」互证。
+- 信号处理器直接调 `stop()`（main.cpp:14-19 → :261-302：join 线程 + 关 socket + 锁）——非 async-signal-safe。
+
+**C-33 实体组件模型：字符串键 + 声明无定义 API + 生命周期钩子无配对。**
+- 组件表是 `unordered_map<std::string, ComponentPtr>` 字符串键（entity.hpp:82）；`get_component<T>()` **只有声明没有定义**（entity.hpp:78，全仓唯一命中）——使用即链接错误，纯死 API。
+- 钩子无配对：`add_component` 即 `on_attach`（entity.cpp:22-27），`on_spawn` 再对全部组件 `on_attach`（:6-11）——spawn 前添加的组件被 attach 两次；`on_despawn` detach 全部但**不清组件表**（:13-18）——生命周期状态与数据结构脱节。
+- 组件基类全仓第 4 套：`IEntityComponent`（entity.hpp:47-55）之外还有 framework `IComponent`（P2-4 胖接口）与 `apollo::battle::ecs::IComponent`（ecs.hpp:23-25）。
+
+**C-34 三套「ECS」并存且无一可用；532 行头文件零实现文件。**
+- `apollo::ecs`（include/apollo/game/battle/ecs/ecs.h，532 行，含 mutex/ComponentMask 类）——**全仓无任何 .cpp 实现**，唯一消费者 examples/ecs_demo.cpp，从未参与编译目标；
+- `apollo::battle::ecs`（同目录 ecs.hpp，295 行）——实现仅 18 行：World 只有 ctor/dtor，dtor 注释「系统会自动清理」（ecs.cpp:17-19）而所有权未定（shared_ptr 循环引用隐患）；ecs.h/ecs.hpp 同目录双扩展名 = log_manager.h/.hpp（C-25）同款；
+- `apollo::game::battle::BattleSystem`（26 行头 + 29 行 cpp）——`vector<EntityPtr>` + 线性 remove（battle_system.cpp:21-27）。
+- 三套互相不认（三个命名空间、三种 Component 基类、两种 ComponentMask）——第 7 组「新旧并存」。
+
+**C-35 属性系统三代容器 + 三套值表示 + 手写 ID 表——C-13 扩展定型。**
+- 值表示三套：① `std::variant` AttributeValue（attribute.hpp:14-18）；② `ComVal` 587 行手写 union **含 `void*` 槽位**（comval.h:11-24 ECVT_PTR，注释自认「对应服务端的 ComVal/uComVal」——SSEngine 时代移植件）；③ attribute_value.h 自有类型（C-13 已录）。
+- 容器三代：`apollo::AttributeContainer`（attribute.hpp:52，实现 attribute.cpp——**监听器回调持锁触发** ：26-34，与 C-18a/C-27.1 同族；`AddAttribute` 类型不匹配时**静默无操作仍返回成功** ：57-72，如 int64 属性 + int32 delta 被忽略）vs `apollo::game::AttributeContainer`（attribute_value.h:74，C-13）vs Entity 无属性设施可挂（C-33）。
+- `attribute_id.h` 512 行手写属性 ID 表（~300 遗留 ID）——sdk-contract.md §5「随契约生成退役」对象在此再次坐实。
+- 对 C-13 的修正：属性层不是「双代」而是「**三代容器 + 三套值表示**」（见 §12.3 修正行）。
+
+**C-36 实体/属性子系统容器使用为零——缺陷与容器形态的关联判定：非容器所致，而是容器同族反模式的文化扩散。**
+- 普查：rg 全 modules/game、modules/net、apps/gateway-app 对 `framework/ioc`/`ApplicationContext`/`core::di` **零引用**（exit 1）。两个子系统的缺陷没有一个是容器 API 造成的。
+- 但缺陷清单完整复刻容器四件套反模式：**字符串键**（组件表 entity.hpp:82、路由 url 匹配 :117）、**每调用全局锁**（SessionManager/Registry/AttributeContainer——C-7/C-31 同族）、**stub 脚手架**（Null ingress、accept 空转、Channel 桩、ECS 空壳、get_component 死 API）、**新旧并存**（四栈网络/三代属性/三套 ECS）——§0.4「容器思维的二次污染」在从未使用容器的子系统同样发生：**形态是文化问题，不是依赖问题**；只删容器不立纪律，反模式会在新代码再生（C-7、C-29…C-35 全部为新代码自产）。
+- 附带：modules/game/CMakeLists.txt:2-5 未构建 session 子模块（anchor/player_anchor/session_locator/world_assignment 仅 tests/CMakeLists.txt:560 等引用）——与 C-26 孤儿 TU 同族的「有码无构建」。
+
+### 12.3 汇总判定与对 §6 迁移路线的增量建议
+
+| 子系统 | 容器/DI 使用 | 缺陷与容器形态相关性 | §6 增量建议 |
+|---|---|---|---|
+| 网络四栈（C-29/C-30） | 零 | 非因果；文化同族（桩/并存/硬编码路径） | 阶段 1 删 sdnet_adapter + modules/protocol（顺带消除 C-30 断裂）；定案 B 栈（Reactor/socket）为唯一 L0；其余两栈按 net-abstraction §6 决策清单处置 |
+| 网关（C-31/C-32） | 零（手写组合，方向正确） | 非因果；每调用锁族 + 字符串路由 + 自身线程模型缺陷 | 作为 L1/L2 试验田**前**必须修 C-31（锁模型→单写者入队）与 C-32（协议统一到契约、消除热路径拷贝）——否则「试验田」会固化错误形态 |
+| 实体/属性（C-33…C-35） | 零 | 非因果；文化同族（字符串键/死 API/三代并存） | C-28「场景/AOI 收敛」扩为**「场景+实体+属性」三件套收敛专项**：实体组件键改类型化、三套值表示收敛为 attribute-sync.md §2 的 L1 静态配置单一事实源（三代容器与 512 行手写 ID 表随契约退役）、三套 ECS 二选一（保留 ecs.hpp 一套或按 attribute-sync 重写） |
+| 跨子系统结论（C-36） | — | 形态是文化问题 | §6 各阶段验收标准增补一条纪律断言：新模块禁止字符串键查找/每调用全局锁/stub 先行无实现清单——与 §8.4 文档纪律同构 |
+
+**修正行（并入既往结论）**：C-13（§10）「属性双代并存」→「三代容器 + 三套值表示 + 手写 ID 表」（C-35）；其余 C-1…C-28 未被本轮证伪。
+
+### 12.4 实读核对记录（第五轮）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| 四栈清单与规模（net 19 头 / network 6 头 / net/protocol / protocol；6640 行合计） | find + wc -l | 属实（C-29） |
+| gateway-app 14 文件全读（main/gateway_server 565/ingress×4/session_manager 175） | Read/cat | 属实（C-29/C-31/C-32） |
+| Null ingress（client_ingress_server.cpp:17-20 空发送）、accept 空转（gateway_server.cpp:356-362） | cat | 属实（C-29） |
+| channel.cpp 桩分支 :358-389（无 NNG 全 return false）；vcpkg.json 无 nng/drogon/spdlog | sed + cat | 属实（C-29/C-30） |
+| gateway-app 链接 apollo_protocol（:24）；target 定义于 modules/protocol/CMakeLists 且无人 add（modules/CMakeLists.txt:25 注释；apps/CMakeLists.txt:10-24） | rg + sed | 属实（C-30，推演标注） |
+| 根 CMakeLists.txt:281「will use FetchContent」无实调 | rg | 属实（C-30） |
+| modules/net/protocol CMake 硬编码 x64-windows nng.lib 路径 | cat | 属实（C-30 附带） |
+| SessionManager 锁范围 vs 字段锁外读写（session_manager.cpp / gateway_server.cpp:400,482,507-529） | cat + sed | 属实（C-31） |
+| MessageRouter 无锁/熔断/静默丢（:116-128,:157-171,:123-125） | Read | 属实（C-31） |
+| encodeDisconnectMessage :35-43；双拷贝 :319 + dispatcher:10；isWorldMessage :14-52；信号处理 main.cpp:14-19 | sed | 属实（C-32） |
+| entity.hpp:78 get_component 全仓唯一命中；add/spawn 双 attach（entity.cpp:6-11,22-27） | rg + cat | 属实（C-33） |
+| ecs.h 532 行零实现（消费者仅 examples/ecs_demo.cpp）；ecs.hpp 295 + ecs.cpp 18 行；BattleSystem 26+29 | wc + rg + cat | 属实（C-34） |
+| 值表示三套（attribute.hpp:14-18 / comval.h:11-24 / attribute_value.h）；容器三代；attribute.cpp:26-34 持锁回调、:57-72 静默无操作 | sed + cat | 属实（C-35） |
+| attribute_id.h 512 行 | wc | 属实（C-35） |
+| 容器使用普查 modules/net + modules/game + apps/gateway-app 零命中 | rg（exit 1） | 属实（C-36） |
+| modules/game/CMakeLists.txt:2-5 无 session；session 仅 tests 引用（tests/CMakeLists.txt:560） | sed + rg | 属实（C-36 附带） |
+
+---
+
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§0 随 b99eb6a4；§12 随本次提交。所有行号对应该基线。*
