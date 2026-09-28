@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16。
 
 ---
 
@@ -728,7 +728,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随本次提交。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随本次提交。所有行号对应该基线。*
 
 ### 13. 源码级核对第四轮·续（2026-09-28 追加）：未覆盖的边界子系统与形态一致性（C-37…C-42）
 
@@ -916,4 +916,106 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随本次提交。所有行号对应该基线。*
+## 16. 第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 源码对照——文档缺什么、什么不合理（C-50 … C-52、G-1 … G-7）
+
+### 16.1 范围与方法
+
+- 对象：① `/home/cui/workspaces/BigWorld`（官方 14.4.1 全源码，服务端在 programming/bigworld/{server,lib}）；② `/home/cui/workspaces/skynet`（本地源码）；③ KBEngine——本地未找到，按用户指示从其 GitHub fork（cuihairu/kbengine@master）浅克隆到 `/home/cui/workspaces/kbengine`：首次克隆 fetch-pack 早断失败（git 自动清理半成品），重试成功。该 fork 带用户侧 CMake/vcpkg/typing 现代化改动（KBENGINE_TYPING_TODO.md、vcpkg.json），本轮仅取其上游 KBEngine 机制，fork 改造本身不在评审范围。
+- 方法：BigWorld/skynet 由只读子代理做广度提取，主线对承重结论抽查复核（Account.def 样例原文、witness.cpp dumpAoI 块、prioritis 命中面）；KBEngine 主线直读。对照物 = docs/design 五份设计文档 + 本报告。
+- **自行假设注明**：BigWorld 正式实体 .def 资产包未随源码发布（game/res 仅 Python 库 config），实体样例取仓库内 examples（Account.def）；KBEngine 的 assets 为独立仓库未随 fork，样例取 kbe/res/sdk_templates。.def 语义以解析器源码为准。
+- 产出三类：**C-50…C-52**（文档论断与源码不符，什么不合理）；**G-1…G-7**（三家皆有而六份文档无落点的能力，缺什么）；**正面核对**（文档论断经源码检验成立——防「修正」矫枉过正）。
+
+### 16.2 三家机制要点（源码证据）
+
+**BigWorld 14.4.1（官方源码）**
+
+- **.def = XML**：解析走 BWResource::openSection（lib/entitydef/entity_description.cpp:184-190），XML 实现在 lib/resmgr/xml_section.hpp；样例 examples/client_integration/.../entity_defs/Account.def 全 XML（`<Properties>/<Type>/<Flags>/<Persistent>/<ClientMethods>/<BaseMethods>`）；`<Parent>` 解析期递归展开（entity_description.cpp:194-203）；持久化标记 `<Persistent>`（data_description.cpp:220）、`<Identifier>`（隐含 Indexed+Unique，:228-233）、`<Indexed>`（:238-250）、`<DatabaseLength>`（:314）。
+- **固定步长 game tick**：cellapp.cpp:806-808 `addTimer(1000000/updateHertz, TIMEOUT_GAME_TICK)`，:946-948 分派 handleGameTickTimeSlice；主循环 = 事件分发（server_app.cpp:240-242 processUntilBreak）——消息到达即处理、游戏逻辑按 tick 推进，两者并存；负载按 tick 三分统计（updateLoad，cellapp.cpp:1177-1190）。
+- **witness 同步**：客户端上报更新率（server_connection.cpp:2370-2373 updateFrequencyNotification）、per-client 字节预算（:2034 tickByte_/updateFrequency）；per-(viewer,entity) 优先级堆 + volatile/event 双序号（witness.cpp:2500-2514 dumpAoI 自述、:1254 pop_heap）；OWNED 实体直发最近位置（:850-865）。
+- **Mercury**：TCP/UDP 双通道抽象（channel.hpp:104 isTCP），进程间主打 UDP + 窗口重传（udp_channel.cpp:92-108 窗口 /:866 超窗即停 /:1052 起 重发驱动）+ Bundle 自动分片（udp_bundle.cpp:567）；加密/压缩/websocket 全部是 filter 插件（encryption_filter/message_filter/packet_filter/websocket_stream_filter）。
+- **存储/容灾**：Indexed/Persistent 属性成 MySQL 列（column_type.cpp:95-129），其余 blob 序列化（mappings/{blob,class,composite}_mapping.cpp）；热备 backup_sender.hpp:52-61 分帧发送 + 一致性哈希 backup_hash/backup_hash_chain + secondary db 任务族 + reviver 宕机接管；dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。
+- **进程编队**：bwmachined 本机守护 + machine_guard 协议 birth/death 通知/订阅/广播（machine_guard.hpp:496-497/:609-613/:882-883）；cellappmgr 负载平衡（cellappmgr.hpp:43/:192-194）。
+- 集中日志 logger_endpoint；内置类型注册表 data_types/*（每类型一个 DataType 子类）；无脚本热更路径。
+
+**KBEngine（cuihairu fork@master，取上游机制）**
+
+- **.def = XML**：entitydef.cpp:188-210 以 tinyxml2 先解析 entities.xml、再逐实体加载 `<名>.def`；DetailLevels（NEAR radius/hyst，:409-417）；样例 kbe/res/sdk_templates/.../Account.def 与 BigWorld 同构（`<Properties>/<ClientMethods>/<BaseMethods>/<CellMethods>`）——**两家同构血统，不是「自研语法」**。
+- **固定步长 tick**：gameUpdateHertz=10（kbengine_defaults.xml:5）；handleGameTick（cellapp.cpp:252-261，updateLoad 先行 + updatables_.update()）。
+- **存储**：复杂类型全落 BLOB（entity_table_mysql.cpp:699-723 ARRAY/FIXED_DICT/PYTHON、:754-758 ENTITYCALL/Component）；**Indexed 属性建真实 MySQL 索引**（:236-300，ALTER TABLE ADD INDEX :113）；**无 journal**（db_mysql 全树 journal/WAL/redo 零命中）；**Archiver 周期归档**（默认 300s，kbengine_defaults.xml:621）——实体随机序列、按「数量×idx/周期」每 tick 平滑摊写防写风暴（archiver.cpp:26-63）+ per-entity shouldAutoArchive；SQL 语句按表注册成映射表（EntitySqlStatementMapping，entity_sqlstatement_mapping.h:9-27，query/insert/update 三族）。
+- **进程**：server/machine 广播发现（machine.cpp:646-670 KBE_PORT_BROADCAST_DISCOVERY）；loginapp 独立登录进程（含 clientsdk_downloader——SDK 下发即登录链路一环）。
+- 网络：TCP 通道为主，UDP 组件并存（endpoint.cpp:321/:427 SOCK_DGRAM、udp_packet_receiver/listener_udp_receiver）。
+
+**skynet（本地源码）**
+
+- **纯消息驱动、无 tick**：线程编队 monitor+timer+socket+N worker（skynet_start.c:209-227）；每服务私有 mq（spinlock，skynet_mq.c:22）+ 全局队列，一次 dispatch 一条消息后重新入队（skynet_server.c:293-315）；worker 权重分频（skynet_start.c:213-217，dispatch `n >>= weight` skynet_server.c:316-318）；全局队列空则 cond_wait，由 timer/socket 线程唤醒（skynet_start.c:167-174）；过载阈值 MQ_OVERLOAD 1024（skynet_mq.c:19）。
+- **五层时间轮**：near 256 槽（TIME_NEAR_SHIFT 8）+ 4 层×64 槽（skynet_timer.c:17-21,40-41）；独立 timer 线程 ~2.5ms 一 tick（skynet_start.c:131-140）；到期即投 PTYPE_RESPONSE 消息（skynet_timer.c:134-143）——回调与普通消息同路。
+- **gate**：长度头 2B/4B 启动参数二选一（service_gate.c:352-363）；socket 线程独占 epoll、消息拷贝交接给服务（skynet_socket.c:48-59）；websocket 在 Lua 层（lualib/http/websocket.lua；netpack 2B 大端长度头 lua-netpack.c:191-241）——帧定界与消息体两层独立选配。
+- **sproto**：类型集仅 integer/string/boolean + 自定义类型/数组；无枚举/命名空间/**无版本与握手校验**（schema 演进全靠 tag 兼容纪律，test/sharemap.sp 样例）；编码 tag+delta 变长（sproto.c:224-227）。
+- **集群**：32 位 handle 高 8 位 harbor id（skynet_handle.c:33,111）；节点间 cluster 全 Lua（clusterd.lua:44,91-105，TCP socketchannel）；**harbor（C 服务 service_harbor.c）与 cluster（Lua 服务族）两代 IPC 并存于同一框架**。
+- **可观测性三板斧**：debug_console telnet（mem/stat/task/run 在线执行，debug_console.lua:147-174）；monitor 线程以版本号检测服务卡死（skynet_monitor.c:31-45，只报警不杀）；独立 logger 服务（service_logger.c:9-27）。
+
+### 16.3 什么不合理：文档论断与源码不符（C-50 … C-52）
+
+**C-50 sdk-contract.md §2.2 首行「自研 .def 语法（EOF 边界/宏/实体定义）」与两家源码不符——.def 全为 XML。**
+- BigWorld：entity_description.cpp:184-190 BWResource::openSection + Account.def 全 XML（16.2）；KBEngine：entitydef.cpp:188-210 tinyxml2 解析 entities.xml + 每实体 .def（16.2）。两家同构血统（KBEngine 标签体系沿用 BigWorld：Flags/Persistent/Indexed/Unique/DatabaseLength/Parent）。「EOF 边界/宏」无出处，疑与 MSVC linker .def 混淆（§13 已核实 tools/*.def 是链接器定义文件，非实体定义）。
+- 影响与修正：① sdk-contract.md 执行摘要第 3 条(a) 与 §2.2 对照表首行的理由栏需重写——.def 本就是 XML，则 §15.3 的 XML+XSD 决策与两家先例**同构**；红利论证从「语法差异」转为「XSD 校验（key/keyref/enumeration）是两家都没有的形式化层」（两家都只解析不校验：tinyxml2 无 schema 层，entitydef.cpp:193 直证；BigWorld XMLSection 亦无）——错拼标签静默缺省而非报错；② 归入 §15.6 待同步文档清单第 ⑤ 项。
+
+**C-51 attribute-sync.md §8.1 五条指控中第 2/4 条与 KBEngine 源码不符（第 1/3/5 条成立）。**
+- 第 1 条 blob 化：**成立**（ARRAY/FIXED_DICT/PYTHON 等 → FIELD_TYPE_BLOB，entity_table_mysql.cpp:699-758）。
+- 第 2 条「仅 base 持久化 + 快照式写……回档窗口不可控」：**表述失实**——有 Archiver 周期归档（默认 300s，kbengine_defaults.xml:621），随机序列平滑摊写 + shouldAutoArchive per-entity 控制（archiver.cpp:26-63）。「不可控」应修正为「**窗口默认粗（300s）且非脏驱动**——按实体归档、不感知属性 dirty」；后者才是真缺陷（其写负载平滑化机制反而是 write-behind 预算落库的同型参照）。
+- 第 3 条无 journal：**成立**（db_mysql 全树 journal/WAL/redo 零命中）。
+- 第 4 条「没有二级索引」：**失实**——`<Indexed>` 属性建真实索引（entity_table_mysql.cpp:236-300、ALTER TABLE ADD INDEX :113）。应修正为「仅显式 `<Indexed>` 属性有单列索引与点查；缺聚合/组合查询面」——批评方向（运营查询弱）不变，事实前提要改。
+- 第 5 条分库分表：维持（多 database interface 有；实体冷热/归档/跨服迁移无完整故事）。
+- 修正方法：§8.1 重写为「KBEngine 已做到 / 未做到」两列，批评力度不依赖失实前提；**不影响 §8.2 对策**（write-behind + 脏驱动 journal + 列提升仍是对「blob + 非脏驱动归档」的正确升级）。归入待同步清单第 ⑥ 项。
+
+**C-52 attribute-sync.md 附录速查表「持久化 | BigWorld: base+backup | KBEngine: MySQL 实体表（弱）」暗示两家行存储有代差——实际同构。**
+- BigWorld 非列属性同样 blob 化（db_storage_mysql/mappings/{blob,class,composite}_mapping.cpp；仅 Indexed/Persistent 成列，column_type.cpp:95-129）——与 KBEngine 完全同型；两家「列式提升」亦同构（`<Indexed>`/`<Identifier>` ≈ `<Indexed>`/`<Unique>` ≈ 本设计 §8.2 column:true）。
+- 真正的代差在**备份与接管链路**（BigWorld：backup hash 链/secondary db/reviver；KBEngine：无此层）——速查表该行应改写为「行存储两家同构（列+blob），BigWorld 强在备份容灾」，避免把容灾优势误记为存储格式优势。
+
+### 16.4 缺什么：三家皆有而六份文档无落点（G-1 … G-7）
+
+**G-1 进程编队与服务发现。** BigWorld bwmachined + machine_guard 生死广播（machine_guard.hpp:496-613/:882-883）、KBEngine machine 广播发现（machine.cpp:646-670）。apollo 六份文档把进程间通信推迟 P3（§15.2），但「进程如何被发现、如何感知彼此死亡」连设计占位都没有。落点：P3 前置一节，对照 machined 守护 + UDP 广播两种先例定形态（与 §15.2 自研纪律对齐）。
+
+**G-2 备份/容灾与宕机接管。** BigWorld：baseapp 热备分帧（backup_sender.hpp:52-61）、一致性哈希备份链（backup_hash/backup_hash_chain）、secondary db、reviver 接管、cellappmgr 崩溃后在幸存 CellApp 重建 cell。apollo 只有 attribute-sync §8 的「崩溃后数据不丢」（write-behind journal），**进程级高可用零设计**。落点：文档显式声明「单进程阶段无高可用」，P3 骨架列 backup-hash 链与 reviver 两个参照。
+
+**G-3 优雅停机序列。** 停机时 flush write-behind journal → 停收新连接 → drain 在途帧 → 落库 → 按依赖逆序停模块——六份文档零落点（KBEngine 实体销毁路径 onDestroyEntity→writeToDB，baseapp/entity.cpp:698-731，是停机落库的零件级参照；数据面即 §15.5 三语句）。落点：attribute-sync §10 六阶段后补「阶段 7：停机（逆序 drain）」或独立小节。
+
+**G-4 定时器轮。** skynet 五层时间轮 + 独立线程 2.5ms tick + 到期即消息（skynet_timer.c:17-21,40-41、skynet_start.c:131-140、skynet_timer.c:134-143）。apollo 无定时器模块（ssengine-reference §4.3 第一佐证，此处第二佐证 + 实现参照）。落点差异要写明：skynet 独立线程驱动、回调走消息队列——与其消息驱动范式同构；apollo 按单写者纪律应**挂在主循环固定阶段**（数据结构抄时间轮，驱动权留 game loop，回调在 owning thread 直接执行）。
+
+**G-5 监控/调试通道。** skynet 三板斧（debug_console 的 mem/stat/task/run、monitor 版本号卡死检测、独立 logger 服务，16.2）+ BigWorld 集中日志与 dumpAoI 式自省（witness.cpp:2470-2514）。apollo 文档只有 BI 分流（attribute-sync §8.2）与脚本错误审计（scripting-lua §6），**运行期自省通道为零**——线上「某场景线程是否卡死」「各场景实体数/帧耗时」无处可看。落点：admin 通道（net-abstraction control 通道）+ per-scene 心跳版本号（monitor 思想移植到场景线程，卡死即告警）+ telnet 式调试台（mem/stat/task 对应物），归未来 apps/ 运维工具。
+
+**G-6 实体契约继承。** BigWorld `<Parent>` 解析期递归展开（entity_description.cpp:194-203），KBEngine 同构（entities.xml + .def 血统相同）。apollo §15.4 entities.xml 未定义继承/组合——属性逐实体重复声明、改一处动 N 实体的风险。落点：entities.xsd 增继承（xs:extension 或生成期展开，**推荐生成期展开**——与两家解析期展开同构、错误信息更友好、生成器 CI 闸已有）。
+
+**G-7 调度范式论证缺失。** 三家两种范式并存：BigWorld/KBEngine 固定步长 tick（cellapp.cpp:806-808；kbengine_defaults.xml:5 gameUpdateHertz=10 + cellapp.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315 一条消息一 dispatch + 空队列 cond_wait skynet_start.c:167-174）。apollo 文档直接采用 tick（attribute-sync §10 六阶段、scripting-lua 指令预算按帧）但**从未论证为什么不选 skynet 式**。落点：一节简短论证——权威属性同步的 seq 语义、派生重算 DAG 的拓扑批处理、帧预算（token bucket/指令预算）都以确定性节拍边界为前提；skynet 范式适合无共享状态的服务编排，与「实体归属单写者线程」的权威模型错位——把 §0「思想与形态之分」应用到调度范式即得结论，写下来防止未来再议。
+
+### 16.5 正面核对与对既有决策的增量
+
+- **正面核对（防矫枉过正）**：① attribute-sync.md 对 BigWorld 带宽控制的概括（per-client 预算 + per-(viewer,entity) 优先级）与源码相符（server_connection.cpp:2034/:2370-2373、witness.cpp:2500-2514/:1254）——§3/§5 的 ChangeHistory/ViewerState/优先级设计与基准一致；② §15.5「语句即数据」获外部同构佐证：KBEngine EntitySqlStatementMapping 即 C++ 内建版 mapped statement（entity_sqlstatement_mapping.h:9-27），apollo 方案只是把声明层从 C++ 挪进 XML（外加两家都没有的 XSD 层，C-50 红利论证）；③ §15.2「禁止两套 IPC 并存」获 skynet 历史佐证（harbor 与 cluster 两代并存于同一框架）；④ tick 选型与两家 MMO 先例一致——选型无异常，缺的只是 G-7 的论证文字。
+- **对 §15.2 的增量**：Mercury 的 udp_channel 窗口重传 + Bundle 分片 + **filter 插件体系**（加密/压缩/websocket 全是帧管线插件）是 L1/L2 自研的直接蓝本；建议帧管线把加密/压缩设计为 filter 插件位而非硬编码——P2 会话层与 P3 自研总线共用此形态。
+- **对 §15.4 的增量**：entities.xml 增继承机制（G-6）；存储投影的 persist/column 提示与两家 `<Persistent>`/`<Indexed>` 语义同位，XSD keyref 已锁，无需改动。
+- **待同步文档清单追加**（§15.6 之 ⑤⑥）：⑤ sdk-contract.md 执行摘要第 3 条(a)/§2.2 首行 .def 表述修正（C-50）；⑥ attribute-sync.md §8.1 第 2/4 条重写 + 附录速查表持久化行改写（C-51/C-52）。
+
+### 16.6 实读核对记录（本节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| BigWorld .def=XML（entity_description.cpp:184-203）+ Account.def 样例 XML | 子代理提取 + 主线 sed 复核样例原文 | 属实（C-50） |
+| BigWorld tick（cellapp.cpp:806-808/:946-948/:1177-1190、server_app.cpp:240-242） | 子代理提取（行号原样引用） | 属实（G-7） |
+| witness 优先级堆 + volatile/event 双 seq（witness.cpp:2500-2514 dumpAoI 块） | 主线 sed 复核原文 | 属实（16.5-①） |
+| 客户端上报频率/字节预算（server_connection.cpp:2370-2373/:2034） | 子代理提取 | 属实（16.5-①） |
+| Mercury UDP 窗口重传/分片/filter 族（udp_channel.cpp:92-108/:866/:1052+、udp_bundle.cpp:567） | 子代理提取 | 属实（16.5 增量） |
+| BigWorld 列+blob 存储（column_type.cpp:95-129、mappings 三文件） | 子代理提取 | 属实（C-52） |
+| bwmachined/machine_guard/backup_sender/reviver/secondary_db/dbappmgr 各行号 | 子代理提取 | 属实（G-1/G-2） |
+| KBEngine .def=XML（entitydef.cpp:188-210/:409-417）+ Account.def 模板 | 主线 rg + sed 直读 | 属实（C-50） |
+| 复杂类型全 BLOB（entity_table_mysql.cpp:699-758）；Indexed→真实索引（:236-300/:113） | 主线 rg 直读 | 属实（C-51） |
+| 无 journal（db_mysql 全树 journal/WAL/redo） | rg（exit 1） | 属实（C-51） |
+| Archiver 周期归档 + 随机摊写（archiver.cpp 全文；kbengine_defaults.xml:621/:626） | 主线 cat 直读 | 属实（C-51） |
+| EntitySqlStatementMapping（entity_sqlstatement_mapping.h:9-27） | 主线 head 直读 | 属实（16.5-②） |
+| machine 广播发现（machine.cpp:646-670）；loginapp/clientsdk_downloader 存在 | 主线 rg + ls | 属实（G-1） |
+| KBEngine tick（gameUpdateHertz=10 kbengine_defaults.xml:5、cellapp.cpp:252-261） | 主线 rg + sed | 属实（G-7） |
+| skynet 各行号（调度/时间轮/gate/sproto/集群/监控，skynet_start.c/skynet_server.c/skynet_timer.c/skynet_mq.c/service_gate.c/skynet_socket.c/lua-netpack.c/sproto.c/skynet_handle.c/clusterd.lua/skynet_monitor.c/debug_console.lua/service_logger.c） | 子代理提取 | 属实（G-4/G-5/G-7/16.5-③） |
+| kbengine 克隆：首次 fetch-pack early EOF 失败（git 自动清理）、重试成功 | 后台任务输出 | 事件记录（16.1） |
+
+---
+
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随本次提交。所有行号对应该基线；§16 的三家框架行号对应各自工作副本当前态（BigWorld 14.4.1 官方包、skynet 工作副本、kbengine fork master 浅克隆）。*
