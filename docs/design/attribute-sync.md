@@ -11,7 +11,7 @@
 2. **核心数据结构只有两个**：每实体的 `ChangeHistory`（序号化变更环形日志，真相源）与每观察者的 `viewer progress`（对方已知到哪条）。delta = 两者差集；全量快照 = 历史重置。其余（AOI 进出、节流合并、优先级丢弃）都是在这两个结构上的策略。
 3. **属性四分层 + 双轴标记**：静态配置/持久状态/易失状态/派生计算四层分治；每属性带**所有权轴**（base 权威 / cell 空间权威，当前单进程实现为同一权威，标记保留）× **可见域轴**（SELF/TEAM/GUILD/AOI/WORLD）。
 4. **协议按"契约生成"而非手写**：属性 delta 包的字段语义写进 `docs/design/sdk-contract.md` 的单一契约（属性表 + 域标记），服务端 C++ 与 Unity/Cocos/Laya SDK 从同一契约生成——KBEngine 的精髓、修正其存储短板。
-5. **持久化独立于同步管线**：KBEngine 存储弱点的分析见 §8（实体表 + blob 化复杂类型 + 仅 base 持久化 + 无写后日志）；对策是"快照 + write-behind 日志 + 可查询字段列式提升 + BI 分流"，复用 apollo `modules/data` 的异步 DB 模型（见 ssengine-reference.md §4.1）。
+5. **持久化独立于同步管线**：KBEngine 存储弱点的分析见 §8（实体表 + blob 化复杂类型 + 非脏驱动周期归档 + 无写后日志；C-51 修正后表述）；对策是"快照 + write-behind 日志 + 可查询字段列式提升 + BI 分流"，复用 apollo `modules/data` 的异步 DB 模型（见 ssengine-reference.md §4.1）。
 6. **分三阶段落地**：P1 单进程 + AOI + history/delta/ACK（本阶段即可上线）；P2 复合类型 slice + 带宽预算 + 压缩；P3 跨进程 cell 镜像（协议位已在 P1 预留）。
 
 ---
@@ -222,7 +222,9 @@ priority(entity, viewer) = w1·importance(class)      // BOSS > 精英 > 玩家 
 
 ## 7. 协议形态
 
-### 7.1 消息定义（protobuf，字段级 delta）
+### 7.1 消息定义（protobuf 记法 = 编码布局参考；契约源为 XML+XSD，ioc-review §15.3）
+
+> 2026-09-28 同步标注：本节 protobuf 描述的是**线上编码布局**（varint/zigzag/打包策略），不是契约源——字段语义的唯一事实源是契约（attrs/messages.xml，sdk-contract §2.3），服务端与各端编码器由生成器产出（xml-generation.md §4）。记法保留因 protobuf 表达紧凑布局最直观。
 
 ```protobuf
 message AttrDelta {
@@ -261,10 +263,10 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 ### 8.1 KBEngine 为什么"太弱"（逐条）
 
-1. **实体表 + blob 化复杂类型**：FIXED_DICT/ARRAY 落库为字符串/blob——MySQL 能存不能查（无法 `WHERE bag->slot=...`），运维/运营查询全靠全量加载。
-2. **仅 base 持久化 + 快照式写**：属性脏了不即时落，靠 entity 销毁/迁移/定期写快照；崩溃恢复粒度粗，回档窗口不可控。
-3. **无写后日志（journal）**：没有"重放变更"能力，恢复=回到上次快照，中间的变更永久丢失。
-4. **查询能力 = 按 entityID 取整实体**：没有二级索引/聚合，排行榜、GM 查询、BI 全部自谋出路。
+1. **实体表 + blob 化复杂类型**：FIXED_DICT/ARRAY 落库为字符串/blob——MySQL 能存不能查（无法 `WHERE bag->slot=...`），运维/运营查询全靠全量加载。（C-51 复核成立）
+2. **仅 base 持久化 + 非脏驱动的周期归档**（C-51 修正，原文「快照式写/窗口不可控」失实）：有 Archiver 周期归档——默认 300s（kbengine_defaults.xml:621），实体队列随机序列平滑摊写（archiver.cpp:26-63，避免整批同时刷库）、逐实体 `shouldAutoArchive` 门控；**真正的弱点是不感知属性 dirty、按实体整体重写**——归档窗口默认粗（5 分钟）、崩档粒度 = 归档间隔，脏驱动细粒度持久化依旧是 apollo 差异点（write-behind journal）。
+3. **无写后日志（journal）**：没有"重放变更"能力，恢复=回到上次快照，中间的变更永久丢失。（C-51 复核成立）
+4. **查询能力 = 点查为主**（C-51 修正，原文「没有二级索引」失实）：`<Indexed>` 属性建**真实 MySQL 单列索引**（entity_table_mysql.cpp:236-300 索引同步 + :113 ALTER ADD INDEX）与按 DBID 点查；但无聚合/组合查询/查询面——排行榜、GM 复杂查询、BI 仍需自谋出路。
 5. **分库分表策略薄弱**：账号维度的哈希有了，实体冷热/归档/跨服迁移没有完整故事。
 
 ### 8.2 apollo 对策
@@ -328,13 +330,13 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 | 机制 | BigWorld | KBEngine | 本设计 |
 |---|---|---|---|
-| 属性声明 | .def + flags | .def + 代码生成 | 契约（yaml/idl 形态见 sdk-contract.md）+ 三端生成 |
+| 属性声明 | .def + flags | .def + 代码生成 | 契约（XML+XSD，见 sdk-contract.md §2.3）+ 三端生成 |
 | 增量依据 | per-client lastSeq + 历史 | per-entity 版本 | per-viewer acked_seq + ChangeHistory |
 | 可见性 | interest areas + ghost | AOI 简化 | AOI viewer set + 域投影 |
 | 带宽 | per-client 优先级预算 | 粗粒度配置 | token bucket + 实体优先级 + min_interval |
-| 持久化 | base + backup | MySQL 实体表（弱） | 快照 + write-behind 日志 + 列式提升 |
+| 持久化 | base + backup + 列提升（行存储与 KBEngine 同构：列 + blob——C-52） | MySQL 实体表（行存储两家同构；**弱在备份容灾**——无热备/接管链，归档非脏驱动：C-51） | 快照 + write-behind 日志 + 列式提升（差异点在 journal 与脏驱动，非行存储形态） |
 | 预测 | 移动预测 + reconcile | 客户端可选 | 移动预测 + 表现层预测 + 意图上行 |
 
 ---
 
-*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。*
+*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。2026-09-28 同步修订（③⑥）：§7.1 标注 protobuf 为编码布局参考（契约源 XML+XSD）、§8.1 第 2/4 条按 C-51 重写（KBEngine Archiver 周期归档与 Indexed 真实索引实证；KBEngine 行号对应 github.com/cuihairu/kbengine fork master 浅克隆工作副本）、附录持久化行按 C-52 改写；源证 ioc-review §16.3。*

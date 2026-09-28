@@ -6,9 +6,9 @@
 
 ## 执行摘要
 
-1. **契约文件是唯一事实源**：`sdks/contract/attrs.toml` + `messages.toml` 定义全部属性与消息（字段/类型/可见性/同步组/预测位/通道），**代码生成器**产出服务端访问器 + 各端 SDK 序列化与客户端属性模型 + 文档。现状是反的：`modules/protocol` 手写编码、全仓库（含 SDK）无任何 .proto/.def/.toml 契约、客户端手写 `MessageCodec.ts`/`ByteBuffer.ts`——协议每端维护一份、必然漂移。
+1. **契约文件是唯一事实源**：`sdks/contract/` 的 `attrs.xml` + `messages.xml`（XML + XSD，ioc-review §15.3/§15.4）定义全部属性与消息（字段/类型/可见性/同步组/预测位/通道），**代码生成器**产出服务端访问器 + 各端 SDK 序列化与客户端属性模型 + 文档（生成器内部设计见 `xml-generation.md`）。现状是反的：`modules/protocol` 手写编码、全仓库（含 SDK）无任何 .proto/.def/.toml 契约、客户端手写 `MessageCodec.ts`/`ByteBuffer.ts`——协议每端维护一份、必然漂移。
 2. **目录收敛为唯一的 `sdks/`**（拼写错误目录 `skds/` 合并回原名）。事实：`git log 38656f90 refactor: 重命名 sdk 目录为 skds`——一次 rename 引入了 typo，之后新工作（unity cocos laya 的 Network/Session/Messaging 层）落在 `skds/`，而旧 `sdks/` 残留另一套内容（unity 的 Attributes 体系），**两份互斥、互相不通**。结构对齐 KBEngine：`sdks/{contract,gen,unity,ue5,cocos,laya,cpp,docs}`。
-3. **学 KBEngine 的位置只有一处：契约驱动多端。** 但三处不学：(a) 不用 .def 原语法，用 TOML + 显式版本（策划可读、diff 友好、解析器 ≤50 行）；(b) 不做"一份通用序列化给所有端"，生成器按端定制造型（C# 事件、TS 模块、C++ 访问器是其各自惯用法）；(c) **存储不进契约**——KBEngine 的 .def 把属性形态与存储耦合（blob 化复杂类型、base-only 快照，见 attribute-sync §8 五条），契约只管线上协议形态。
+3. **学 KBEngine 的位置只有一处：契约驱动多端。** 但三处不学：(a) 不复刻 .def 的裸 XML 解析——**C-50 修正：.def 本就是 XML**（BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，ioc-review §16.3），真正的差异是两家都**只解析、无 schema 层**（错拼标签静默缺省）；apollo 用 XML + XSD 形式校验（ioc-review §15.3），策划可读、diff 友好、校验器零开发；(b) 不做"一份通用序列化给所有端"，生成器按端定制造型（C# 事件、TS 模块、C++ 访问器是其各自惯用法）；(c) **存储不进契约**——KBEngine 的 .def 把属性形态与存储耦合（blob 化复杂类型、base-only 快照，见 attribute-sync §8 五条），契约只管线上协议形态。
 4. **客户端 SDK ≠ 序列化层**：四层职责（Codec / Attribute client model / Entity·AOI 管理 / 事件与表现路由），其中第 2 层落地 attribute-sync §9 的预测矩阵（预测值/权威值双缓冲 + 校正），第 3 层落地 enter/dwell/leave 快照增量化应用。现状 `sdks/unity/ApolloSDK/Attributes/` 的 AttributeContainer/AttributeSyncManager 是第 2 层雏形，`skds/` 的 MessageCodec/MessageRouter 是第 1 层雏形——合并后按这四层重组。
 5. **兼容由 hash 驱动**：`attr_schema_hash` = 生成器对契约内容的哈希（非手工版本号，防漏改），连接建立即握手校验（attribute-sync §7.2），服务器同时支持 N/N-1 两个 hash；变更纪律：增字段兼容、改语义升版本、删除须双端同周期。
 6. **存储自由演化**：持久列/日志重放（attribute-sync §8 的对策）在服务端内部独立演进，不受契约冻结——加持久化字段不动契约，反之亦然。这就是"数据存储不弱"与"协议清晰"同时成立的分界。
@@ -36,42 +36,50 @@ KBEngine：`.def` 文件声明实体的属性与方法 → 生成器同时产出
 
 | KBEngine .def | apollo 契约 | 理由 |
 |---|---|---|
-| 自研 .def 语法（EOF 边界/宏/实体定义） | TOML（`attrs.toml` / `messages.toml`，顶层三张表见下） | 策划可读、diff 友好、解析器几十行；关键字无学习成本 |
+| 裸 XML 解析、无 schema 层（C-50：.def 本就是 XML，引证见执行摘要 3(a)） | XML + XSD（`attrs.xml` / `messages.xml`，紧凑一行一属性风格，见 §2.3） | 学的是两家同构血统；apollo 增量 = XSD 形式校验层（两家都没有） |
 | 属性/方法/存储耦合在一个文件 | 契约只管**线上协议形态**；存储模型在服务端内部（§7） | KBEngine 头号短板（attribute-sync §8） |
 | 一份通用客户端代码生成 | 按端定制生成（C#/TS/C++ 各自惯用法） | 端差异不是序列化差异，是事件与对象模型的差异 |
 | 无版本/hash | 文件带 `version`，生成器产 `schema_hash` | 兼容策略的数据基础（§6） |
 
-### 2.3 三张顶层表
+### 2.3 契约文件与紧凑风格（XML + XSD，2026-09-28 同步修订）
 
-```toml
-# attrs.toml —— 实体属性（对齐 attribute-sync §2 的同步属性收敛）
-[attr.hp]
-id = 1
-type = "int64"          # 类型收敛后仅剩：int64/固定位宽/int64 万分比/string/string[]/切片容器
-init = 1000
-scope = "BASE"          # 归属与可见性：BASE/CELL/RO_MIRROR × SELF/TEAM/GUILD/AOI/WORLD（attribute-sync §2.3）
-sync_group = "attributes"   # net-abstraction §4.1 通道
-persist = false         # 不冻结存储模型，仅表示"期望持久"提示（真持久列在服务端自行收敛）
-predict = "client_predicted,server_authoritative"  # attribute-sync §9 预测矩阵
+```xml
+<!-- attrs.xml —— 实体属性（apollo.xsd 校验；对齐 attribute-sync §2 的同步属性收敛） -->
+<attrs version="7">
+  <attr id="1" name="hp" type="int64" init="1000" scope="BASE" sync="attributes"
+        persist="false" predict="client_predicted,server_authoritative"/>
+  <!-- type:  int64/固定位宽/int64 万分比/string/string[]/切片容器
+       scope: BASE/CELL/RO_MIRROR × SELF/TEAM/GUILD/AOI/WORLD（xs:enumeration，attribute-sync §2.3）
+       sync:  通道名 movement/attributes/events/control（net-abstraction §4.1）
+       persist/column: 两段式存储的方向性提示（真定义在服务端 storage.xml，§7） -->
+</attrs>
 
-# messages.toml —— 消息/意图（方向 + 通道 + 负载）
-[[msg.move]]
-id = 10
-dir = "C2S"
-channel = "movement"
-fields = { x="f", y="f", z="f", yaw="f" }   # intent only，服务端定夺
-[[msg.attr_batch]]
-id = 11
-dir = "S2C"
-channel = "attributes"
-fields = { seq="u32", base_seq="u32", deltas="AttrDelta[]" }
+<!-- messages.xml —— 消息/意图（方向 + 通道 + 负载） -->
+<messages version="7">
+  <msg id="10" name="move" dir="C2S" channel="movement">   <!-- intent only，服务端定夺 -->
+    <field name="x" type="f32"/><field name="y" type="f32"/>
+    <field name="z" type="f32"/><field name="yaw" type="f32"/>
+  </msg>
+  <msg id="11" name="attr_batch" dir="S2C" channel="attributes">
+    <field name="seq" type="u32"/><field name="base_seq" type="u32"/>
+    <field name="deltas" type="AttrDelta[]"/>
+  </msg>
+</messages>
+
+<!-- entities.xml —— 实体清单与继承（ioc-review §16.7.2：单继承、生成期展开；xs:keyref 锁 parent 引用，环检测在生成器） -->
+<entities version="7">
+  <entity id="Monster"/>
+  <entity id="Avatar" parent="Monster"/>
+</entities>
 ```
+
+风格纪律（§15.3）：紧凑一行一属性元素，勿子元素嵌套；`xs:key` 锁 id 唯一（C-35 分段冲突无法入库）、`xs:keyref` 锁引用（派生 DAG/parent/列提升）、`xs:enumeration` 锁域/通道/所有权取值。
 
 ## 3. 目录结构与生成器
 
 ```
 sdks/
-├── contract/        # 契约源（唯一事实源）：attrs.toml、messages.toml、errors.toml
+├── contract/        # 契约源（唯一事实源）：apollo.xsd、attrs.xml、messages.xml、entities.xml、errors.xml、version（ioc-review §15.4 布局）
 ├── gen/             # 生成器（C++ 单二进制，入 CI；失败即阻断协议发版）
 ├── cpp/             # 生成产物 + 手工壳 → 以模块链入 modules/protocol
 ├── unity/           # U3D 插件（生成 + 手工运行时壳）
@@ -119,11 +127,11 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 
 > 契约回答"线上怎么传"，存储回答"服务端怎么落"——两者只在 `persist` 给一个方向性提示，永不绑定。派生属性/持久列/日志重放全部是服务端内部演化对象。
 
-具体：新增"需要存档的属性"只改服务端持久层（column promotion，attribute-sync §8.2），契约零改动——因为客户端不需要知道服务端存哪张表；同理契约加字段（如 UI 表现提示）不动存储。**协议与存储的演化周期互相解耦，是"学精髓"的最后一环。**
+具体：新增"需要存档的属性"只改服务端持久层（column promotion，attribute-sync §8.2），契约零改动——因为客户端不需要知道服务端存哪张表；同理契约加字段（如 UI 表现提示）不动存储。存储定义的具体形态 = 服务端私有 `storage.xml`（表/列提升/journal 语句，"语句即数据"的 MyBatis 形态，xml-generation.md §6；不在契约目录、不进 schema_hash——ioc-review §15.4/§15.5 两段式）。**协议与存储的演化周期互相解耦，是"学精髓"的最后一环。**
 
 ## 8. 分期
 
-- **P1**：目录收敛（`skds/` 内容并入 `sdks/`，删空壳保留正确拼写；git mv 记录）；契约 `attrs.toml`/`messages.toml` v1；生成器 v1（C++ + 文档 + hash）；Unity 端按四层重组（Codec 生成 + Attributes 层并入生成产物）。
+- **P1**：目录收敛（`skds/` 内容并入 `sdks/`，删空壳保留正确拼写；git mv 记录）；契约 v1（`apollo.xsd` + attrs/messages/entities/errors.xml，§15.4 布局）；生成器 v1（C++ + 文档 + hash，内部设计见 `xml-generation.md`）；Unity 端按四层重组（Codec 生成 + Attributes 层并入生成产物）。
 - **P2**：Cocos/Laya TS 生成；第 3 层（AOI 实体管理）生成壳；预测混合器 v1（movement 双缓冲）。
 - **P3**：UE5 插件；跨端事件协议评审；契约变更流水线接 CI 发版。
 
@@ -135,8 +143,9 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 | net-abstraction.md | 帧格式与四通道写进契约（各端插件据此实现帧定界与通道映射）；`modules/protocol` 手写代码退役 |
 | scripting-lua.md | 脚本白名单由契约生成（§5）；合同版本随实体下发（scripting-lua §3.3） |
 | ssengine-reference.md | 弱存储教训的出处（attribute-sync §8）；sdpkg 帧头方向对齐 net-abstraction §3 |
-| ioc-review.md | 无关联容器语义；作为"配置只有一份"纪律在跨端维度上的延伸 |
+| ioc-review.md | 无关联容器语义；作为"配置只有一份"纪律在跨端维度上的延伸；§15.3/15.4/15.5 契约决策源、C-50 .def 修正（§16.3） |
+| xml-generation.md | gen/ 生成器的内部设计（pugixml 解析、校验四层漏斗、产物五类、MyBatis 映射）；本设计的 gen/ 即其实现载体 |
 
 ---
 
-*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。*
+*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。*
