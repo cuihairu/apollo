@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11。
 
 ---
 
@@ -15,6 +15,91 @@
 5. **条件装配在 C++ 里半数无意义 + 求值时序缺陷（P2）**：`ConditionalOnClass` 用运行时字符串集合模拟链接期事实（`Conditional.h:67-80`）；`matches()` 先于 `registerBeans()` 求值，`ConditionalOnBean` 看不到任何 Starter 注册的 Bean（`ApolloApplication.cpp:261 vs 275-277`）。**建议：删除 OnClass/OnBean，保留 OnProperty（配置驱动开关）**，条件求值改为注册时单趟。
 
 **关键背景**：真正跑起来的 game-server（`apps/game-server/src/main.cpp`）用的已经是 `apollo::core::di`；旧 IoC/Starter 栈的全部生产代码调用方为零，只有 examples/tests 在用。**README 把"IoC 容器系统"列为第一核心特性，而实际服务器并不使用它**——迁移成本因此非常低，主要工作是"删"而不是"改"。
+
+---
+
+## 0. 核心论证：为什么 Spring 式运行时容器不适合游戏服务端（2026-09-28 追加，本报告删除建议的总依据）
+
+> 本节回答一个必须正面回答的问题：Spring 在 Web 后端是经过千锤百炼的成功范式，凭什么到 apollo 里就该删？结论先行：**要删的不是"依赖注入"思想，而是"Java 企业级运行时容器"形态**——六个维度逐条论证，每条落到 apollo 代码。
+
+### 0.1 结论矩阵
+
+| 维度 | Spring 形态的成立前提 | 游戏服务端的要求 | apollo 现状 | 判定 |
+|---|---|---|---|---|
+| 生命周期 | 容器全托管，对象短命、状态外置、可随时重建 | 长驻 game loop、帧驱动、确定性启动序 | 探针双构造（P0-2）、autoStart/lazyInit 死字段 | 模型错位，删容器生命周期 |
+| 绑定时机 | Java 反射/动态代理/运行时元数据兜底 | C++ 无此层；错误应编译期暴露 | 字符串键 + `dynamic_pointer_cast` 运行时炸 | 运行时模拟反射，删 |
+| 热路径 | 查找/代理开销相对请求周期可忽略 | 每 tick 硬延迟预算，热路径零查找零锁 | 每次查找 = 哈希 + 全局互斥 + 动态转换 | 硬伤，启动期定型 |
+| 启动/部署 | 几十秒装配几百 bean 是 Web 常态 | 快速拉起；动态性归脚本与配置层 | 双倍构造成本 + 运行期注册与 Lua 热更打架 | 反向价值，删运行期动态 |
+| 行业实践 | （Web 业界标准） | 主流引擎无运行时反射容器 | 伪 fruit/伪 @Conditional 孤例 | 佐证见 §0.6 |
+| 思想遗产 | 构造注入/分层启动/解耦 | 同样需要 | Starter 分层、core::di 已是正解 | **保留**（§0.7） |
+
+### 0.2 维度一：生命周期语义错位
+
+Spring bean 模型的隐含前提是 **"请求周期 + 无状态服务"**：对象默认 singleton、由容器全托管（实例化→注入→init→destroy），Web 线程池按请求并发调用它们；状态放在 DB/session 里，对象随时可丢弃重建。游戏服务端相反：**长驻 game loop、帧驱动、确定性预算**——60fps 即 16.6ms/帧、tick 周期固定，对象生命周期挂在世界/场景/实体上（enter-view 创建、leave-view 销毁、重连恢复），启动顺序必须逐 tick 可复现。
+
+apollo 的错位实证：
+
+- **探针构造（P0-2，`ApplicationContext.h:34-39`）**：Spring"容器托管生命周期"的第一步是容器**不构造对象就知道它的元数据**——Java 靠反射读注解，零构造成本。C++ 无反射，apollo 的实现退化成"把工厂真的执行一次、读 phase/dependencies、丢掉实例"——每个组件构造两遍，GUID/随机/连接类副作用直接翻倍。**生命周期托管的第一个机制，在移植中就变成了正确性 bug**——这不是实现手艺问题，是无反射语言里硬搬"容器先于对象知道一切"的必然结果。
+- **autoStart/lazyInit 双死字段（`BeanDefinition.h:15-16` 与 `:36`）**：Spring 的 lazy-init/SmartLifecycle 语义被抄进了结构体，但游戏侧没有任何读者（§10 复核：autoStart 唯一"读"是 `ApplicationContext.h:270` 的字段拷贝）。游戏要的启停语义是**确定性启动分层**（Starter phase）与**帧内 tick 序**，不是"首次 getBean 时才构造"。
+- **仓内已有的正确形态**：`IHostedService`（`modules/runtime/include/apollo/runtime/application_host.hpp:40-47`）——`start/stop/is_running/tick`，生命周期挂在**主循环**上（tick 是显式成员），不挂在容器上。C-11 已证它与被评审的 `IComponent` 胖接口形成正反对照。
+
+判定：生命周期语义错位不是调参问题，是模型错位。→ 删容器托管生命周期，保留显式分层启动（§6 阶段 4 Bootstrap 模板）。
+
+### 0.3 维度二：运行时模拟编译期能做的事（无反射语言里的必然变形）
+
+Spring 的全部"魔法"垫在 Java 运行时层：反射读注解、动态代理做 AOP、类路径扫描（@ComponentScan）、@Conditional 读运行时元数据。C++ 没有这一层，于是 apollo 的每一处模仿都变形了：
+
+| Spring 原型 | Java 里的成立方式 | apollo 的 C++ 模仿 | 变形结果 |
+|---|---|---|---|
+| BeanFactory 按名取 bean | 反射 + 字符串名，类型由泛型擦除兜底 | 字符串键 + `dynamic_pointer_cast`（`ApplicationContext.h:79-117`） | 拼错 key/类型不符**运行时才炸**（P0-1） |
+| @Component/@Qualifier 注解 | 注解处理器与反射读取 | 伪 `fruit::createComponent`（`Starter.h:93-94,115-116`） | 无处理器，只剩 squatting 壳（P1-2、C-20） |
+| @Conditional 条件装配 | 读**编译进 classpath 的字节码元数据**，编译期即成立 | `ConditionalOnClass` 用运行时字符串集合模拟（`Conditional.h:67-80`）；matches() 时序缺陷（`ApolloApplication.cpp:262-278`，C-14） | OnClass 模拟**链接期事实**注定又晚又错；OnBean/OnStarter 恒 false |
+| @ComponentScan | 类路径扫描 + 反射实例化 | 宏注册 + 静态初始化期 AutoRegister（P2-1；数据库层第二套见 C-15） | 初始化顺序不可控的脚手架 |
+
+"类存在与否"在 C++ 是**链接期事实**——用运行时字符串集合去回答它，既晚（到运行时才知道编译期就定的事）又错（时序上不可满足）。行业惯例与仓内正解一致：**编译期装配定型**——直接构造注入、CRTP/static registry、模板/类型键。`apollo::core::di`（`modules/core/include/apollo/core/di/application_context.hpp`，TypeKey 编译期类型键 + 构造期注入）就是这条路线，类型不匹配在编译期报错、依赖缺失在启动期报错、运行期零查找。
+
+游戏业文献早把这笔账算清：Robert Nystrom《Game Programming Patterns》Service Locator 章把 **compile-time binding** 列为运行时查找的头号替代——"Since the locator owns the service now and selects it at compile time... if the game compiles, we won't have to worry about the service being unavailable"（出处见 §0.6）。运行时查找在游戏语境里从来是需要辩护的让步，不是默认。
+
+### 0.4 维度三：热路径零容忍
+
+游戏逻辑服每帧/每 tick 有硬延迟预算，性能纪律是**热路径零查找、零锁、零间接层**（net-abstraction.md §3 的单写者线程模型把这写成设计红线）。
+
+- 旧容器每次查找 = **字符串哈希 + 全局互斥锁 + `dynamic_pointer_cast`**（`ApplicationContext.h:79-113`，全局单例一把锁）——哪怕每 tick 只查一次也是无谓成本；查 N 次即按帧线性付费。它没有任何"增值服务"可交换：Java 侧 AOP 代理换来事务/日志织入是笔买卖，C++ 侧没有代理机制，**只剩裸查找成本，零收益**。
+- 容器思维的二次污染更值得警惕：它训练调用方养成"每次用都查"的习惯。同构反模式已在新代码复现——`core::config` 每次 `get` 都 `shared_lock` + 路径解析 + 类型转换（`modules/core/config/src/config_manager.cpp:241-247`，数值型 `get*` 再加每调用转换 `:251-293`，C-7）。**容器/查找式 API 对调用方代码的塑造，比容器本身的删留更长效**。
+- 正确形态：启动期解析一次、持引用直调——指针在构造期交到你手里（core::di 的做法），运行期不再经过任何容器。这也是 §6 阶段 4 Bootstrap 把"装配"压缩到启动单趟的原因。
+
+### 0.5 维度四：启动与部署形态相反
+
+- **Web 侧**：应用服务器几十秒装配几百 bean 是部署常态，redeploy/reload 频繁，运行期容器的动态性（热部署、profile 切换、refresh scope）有真实业务价值——动态性是这个形态的**卖点**。
+- **游戏侧**：动态性的价值主张正好相反。游戏服要**快速拉起**（崩溃恢复、滚服开新、版本重启），C++ 对象层要**静态可预测**；真正的动态性在另外两层——配置热更（reload，C-19/C-22 的驱动机制）与 Lua 脚本热替换（scripting-lua.md §3.2：工作线程预编译 → tick 边界原子换表 → 回滚）。
+- apollo 实证：
+  - 探针双构造把启动期构造成本直接 ×2（`ApplicationContext.h:34-39`）；
+  - 条件装配的多趟启动扫描（`ApolloApplication.cpp:258-278`）增加启动复杂度，却因 C-14 时序缺陷**无一可用**——纯增熵；
+  - 运行期 register/unregister API 与 Lua 热更体系**打架**：scripting-lua.md §3.2 已把热替换边界定为脚本模块表，C++ 侧对象启动定型（§5 结论：运行期注册随删除）；scripting-lua.md §4.2 红线 1 明确禁止把旧字符串容器绑进 Lua。「哪些对象可热换、哪些必须稳定」在游戏运营里是**语义问题**（数值表可热更、战斗物理不可），按名字动态增删的容器只会模糊这条边界，不会支撑它。
+
+### 0.6 维度五：行业实践佐证（公开资料）
+
+1. **Unreal Engine（Epic 官方文档）**：引擎级"服务定位/依赖提供"由 **Subsystems** 承担——"automatically instanced classes with managed lifetimes"（自动实例化、生命周期受管），注册方式是**继承对应 C++ 基类**（`UGameInstanceSubsystem`/`UWorldSubsystem`/`ULocalPlayerSubsystem`…），实例随父对象（GameInstance/World/LocalPlayer）自动创建销毁。没有字符串注册表、没有运行时反射容器：**声明靠继承与链接，生命周期锚定游戏对象树**。apollo 对应形态：Starter 分层 + core::di 构造注入 + IHostedService tick。[Programming Subsystems in Unreal Engine — Epic Games Dev](https://dev.epicgames.com/documentation/unreal-engine/programming-subsystems-in-unreal-engine)
+2. **Unity DOTS / Entities（Unity 官方文档）**：数据导向栈把"运行时形态构建期烘定"推到极致——组件是 unmanaged `struct`、系统是 Burst 编译的 `ISystem`，创作态数据经 SubScene **baking**（构建期烘焙）变为运行态纯数据。[SubScenes and Baking — Unity Entities 手册](https://docs.unity3d.com/Packages/com.unity.entities@1.0/manual/conversion-subscenes.html)。主流商业引擎的演化方向与"运行时反射容器"背道而驰：**把一切都前移到编译期/构建期，运行期只剩数据和直接调用**。
+3. **《Game Programming Patterns》（Robert Nystrom，游戏业通用文献）Service Locator 章**：明确列出 compile-time binding 替代及其保证（"selects it at compile time... if the game compiles, we won't have to worry about the service being unavailable"），并指出运行时配置的代价（"Locating the service takes time"、未注册即失效——"Any code accessing the service presumes that some code somewhere has already registered it"）。后者正是 apollo P0-1 的运行时失效模式。[Service Locator · Decoupling Patterns](https://gameprogrammingpatterns.com/service-locator.html)
+
+范围界定（公允起见）：Java/Go 生态写网关、平台服、运营后台时 Spring 形态完全成立；本节论证范围是 **C++ 游戏逻辑服的帧驱动内核**——帧预算、确定性、无反射三条约束同时成立的地方。
+
+### 0.7 公允结论：思想保留，形态移除
+
+| Spring 遗产 | 判定 | apollo 落点 |
+|---|---|---|
+| 构造注入 / 依赖显式化 | **保留 ✓** | `apollo::core::di` 构造期注入（已是仓内正解，game-server 在用） |
+| 分层启动 / 装配序 | **保留 ✓** | Starter 分层思想（§4 肯定项）；§6 阶段 4 Bootstrap 模板 |
+| 模块化解耦、面向接口 | **保留 ✓** | modules/ 模块化 + 显式接口；依赖关系进构造签名而非字符串 |
+| 容器托管生命周期（init/destroy/lazy/autoStart） | **移除 ✗** | P0-2 删探针；P3 删 autoStart/lazyInit 死字段；生命周期归主循环（IHostedService.tick） |
+| 字符串注册 + 运行期按名查找 | **移除 ✗** | P0-1 整删（全局锁查找 + dynamic_pointer_cast，零生产调用方） |
+| 运行期 register/unregister | **移除 ✗** | §5 结论：随删除；动态性归 Lua 热更与配置 reload |
+| 运行时条件装配（OnClass/OnBean） | **移除 ✗** | P2-2 + C-14：恒 false 且模拟链接期事实；保留 OnProperty（配置驱动开关）改注册时单趟 |
+| 静态注册宏脚手架（AutoRegister/宏注册） | **移除 ✗** | P2-1 + C-15/C-20：初始化顺序不可控，零或内部消费方 |
+| AOP 式横切（代理/拦截器） | **不移植** | C++ 无代理层，横切用显式组合/模板策略（日志 sink、net adapter 均已此形态） |
+
+一句话收束：**删除的不是依赖注入，而是 Java 企业级运行时容器在 C++ 游戏服里的错位形态**；本报告所有"删除"级建议（P0/P1 与 §6 阶段 1-3）以本节为共同依据，所有"保留"级建议（Starter 分层、core::di、显式装配）同样以本节为背书。
 
 ---
 
