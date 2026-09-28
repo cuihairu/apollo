@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）。
 
 ---
 
@@ -569,6 +569,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | P3 表 autoStart 行 | BeanDefinition.h:15 单处死字段 | `:15` 与 `:36`（BeanRuntimeInfo）双处，唯一读者 `:270` 拷贝 | 扩一处 |
 | C-15 隐含口径 | DatabaseRegistry 随宏整体淘汰 | 注册侧死、消费侧活（sql_template.cpp:382 内部消费 create） | 只删注册脚手架 |
 | C-8 附带 | ENABLE_FILEWATCHER 默认 ON | 宏零读者，纯死开关 | 加重（装饰性选项） |
+| ssengine-reference.md:60/:101 与 §5 M-6 修正注 | 「现状无定时器模块」 | 普查范围为 modules/，src/apollo/core/timer 实有完整时间轮实现（C-23）；但该实现 broken 且零消费方（C-24） | 「按目标设计新建时间轮」结论不变，执行顺序补「先删 legacy 实现与其必败测试」 |
 
 ### 11.4 实读核对记录（第三轮·续）
 
@@ -587,6 +588,50 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | 双树复制 3 对均 diff IDENTICAL（attribute_value.cpp / sql_template.cpp / datasource.cpp） | diff | 属实（C-21） |
 | `ENABLE_FILEWATCHER` 源码零读者 | rg | 属实（C-21 附带） |
 
+### 11.5 第四轮（2026-09-28 追加）：未评审子系统——定时器 / 日志 / 场景与 AOI（C-23 … C-28）
+
+范围与方法：取 §1-§10 未覆盖的子系统（定时器、日志、场景/AOI/会话管理），方法不变：先实读后落笔（新增核对行见上表下方补充与本节引文）。非交互假设注明：受只读约束**未执行构建与 ctest**——C-26 的链接失败与 C-24e 的测试必败均为「符号调用点 × 编译归属 × 源码推演」结论，已在条目内标注推演性质，未以链接器/运行时输出验证。
+
+**C-23 遗留树存在完整定时器子系统——「现状无定时器模块」被证伪（修正见 §11.3）。**
+- 实物三件：`include/apollo/core/timer/timer.h`（TimerId/TimerCallback/ITimerCallback，:14-53）+ `timer_manager.h`（4 层 × 256 槽分层时间轮，:149-153）+ `src/apollo/core/timer/timer_manager.cpp`（363 行实现）。`timer.h:32` 自注「提供类似于 SSEngine ISSTimer 的接口风格」——模仿对象直书，与伪 fruit/伪 @Conditional 同属「Java/SSEngine 形态移植」家族。
+- 消费方普查：**零真实消费方**——`src/apollo/server/game_server.cpp:8` 仅 include（全文件无 setTimer/update 调用；TimerComponent `:347-362` 是 cout stub）；唯一使用者是 tests/test_timer.cpp。
+
+**C-24 TimerManager 实现三重断裂：>1 tick 定时器永不触发、无锁 unlock UB + 锁泄漏、跨线程数据竞争——注册在案的测试与实现直接矛盾。**
+- (a) **永不触发**：`calculatePosition`（:205-232）的层级判定取「首个移位后为 0 的层」——只有 ticks==0（interval ≤ resolution）落 level 0；ticks 1..255 全落 level 1 且 slot=ticks ∈ 1..255（:224-229）。而级联仅在 slotIndex==0 且该层索引为 0 时触发（:262-269），`cascadeTimer` 读的恰是索引 0 的槽（:320）——level ≥1 的 0 号槽永远为空 → **除 ≤1 tick 外的一切定时器永不触发**；且槽位不含当前 tickCount（相位错位），即便触发时刻也不准。
+- (b) **UB + 死锁**：`executeTimer`（:344-359）做 `mutex_.unlock()/lock()`，但 update→processTick→processSlot 全路径无人持锁（:146-169/:253-273/:275-313 无一处加锁）→ 对未持有互斥 unlock 是 UB；单线程推演：首个回调后锁停留 ：358 无人释放 → 后续 setTimer/killTimer/析构（:54-57）自死锁。
+- (c) **数据竞争**：update 路径无锁增删 `timers_`/`wheels_`（:287-309），与持锁的 setTimer/killTimer（:65/:124）并发即 UB——test_timer_thread_safety（test_timer.cpp:303）恰是多线程用例。
+- (d) 头注释宣称 O(1) 添加/删除（timer_manager.h:38-39）：`removeFromWheel` 实为全轮扫描（:239-251）。
+- (e) **测试矛盾**：tests/CMakeLists.txt:109/:115 注册 timer_tests/TimerTests 共 11 例，test_timer_once 断言「回调被调」（test_timer.cpp:85-89）——与 (a) 矛盾，**按源码推演必失败或挂起，从未在 CI 变绿**（推演结论，未运行验证）。
+- 阶段含义：定时器轮落地顺序改为「先删 legacy core::timer（连同必败测试）→ 按目标设计新建」。
+
+**C-25 日志子系统四套并存 + 同一 include 路径双头文件——「四套配置系统」在日志域完整重演，且多一层 ODR 陷阱。**
+- 四套实物：① 遗留 `apollo::utils::logging`（include/apollo/utils/logging/logger.hpp + src/utils/logging/logger.cpp:1-166，消费方仅 examples/all_features_demo.cpp）；② 顶层内建栈 `include/apollo/core/log/*.h`（log.h 链 9 头；logger.h/game_server.cpp:7/test_log.cpp 在用）；③ `modules/core/log` = apollo_core_log（spdlog 可用则仅编 log_manager.cpp，否则回落内建三件套——vcpkg.json 无 spdlog，实际走内建）；④ `modules/core/include/.../log_manager.hpp` 的**内存版 LogManager**（LogLevel{Debug,Info,Warn,Error} + LogEntry + write/snapshot/clear，实现 modules/core/src/log/log_manager.cpp）。
+- **ODR 陷阱**：同一路径 `apollo/core/log/log_manager.h` 存在两份不同类定义（顶层 ~190 行版 vs modules/core/log/include 106 行版——后者多 `write()` 无 APOLLO_LOG 宏）；同一路径 `apollo/core/log/log_manager.hpp` 也两份（内存版 vs 垫片版）——application_host.cpp:2、game-server main.cpp:8、core_tests.cpp:4 依 -I 顺序二选一；LogLevel 在同一命名空间双定义（顶层 log_level.h 含 Trace/All vs 内存版 Debug..Error）。
+- 阶段含义：P1-1 收敛清单从「配置四套」扩为「配置四套 + 日志四套」；方向同配置——core::log 单套化，删 ①，内存版（④）降级为测试专用或删除。
+
+**C-26 global_log_manager 孤儿编译单元：默认模块化构建下 game-server / apollo_runtime 链接必失败（构建期断裂，比 C-2 运行期双单例更硬）。**
+- 唯一定义在 `modules/core/src/log/log_manager.cpp:30-33`，**无任何 CMake 目标编译它**（rg 全部 CMakeLists 无 core/src/log 引用）；modules/core 的 apollo_core 只编 di/application_context.cpp + module_manifest.cpp。
+- 调用方在默认构建内：application_host.cpp:33/:58/:113（编入 apollo_runtime，modules/runtime/CMakeLists.txt:4-6）与 apps/game-server/src/main.cpp:71；apps 默认构建（根 CMakeLists.txt:32 APOLLO_BUILD_APPS ON、:466-467）→ 拉入 apollo_runtime 的可执行目标按推演 undefined reference。
+- 附带：根 CMakeLists.txt:96-99 遗留分支引用**不存在的四个源文件** `src/apollo/core/log/{logger,file_appender,console_appender,log_manager}.cpp`（src/apollo/core 实有 service_discovery.cpp/distributed_lock.cpp/timer/）——legacy layout（默认关，:50-402）无法 configure；同分支 ：102 是 timer_manager.cpp 的唯一编译归属。
+- 阶段含义：阶段 1 清单新增「日志孤儿 TU 二选一：把 log_manager.cpp 编入 apollo_core，或删内存版并迁移 application_host/game-server 日志调用」——这是当前默认配置的**可构建性**问题，优先级高于其余清理项。
+
+**C-27 AOI 实现（global apollo 命名空间版）六处缺陷——且它是 cell-app 在用的活代码。**
+- 消费方：apps/cell-app（cell_manager.hpp/cell_server.hpp/cell_server.cpp）、tests/test_game.cpp、examples ×2——与定时器不同，这是有真实消费方的活代码。头 `include/apollo/game/aoi/aoi.hpp:12/:103/:146`，实现 `modules/game/world/src/aoi.cpp`（256 行全文实读）。
+- 缺陷清单：
+  1. **监听器回调持双锁**：AOIManager::RemoveEntity（:196-207）持 manager 锁 → AOIGrid::RemoveEntity（:84-85）持 grid 锁 → `listener_->OnAOIEvent`（:95-102）在两把锁内执行——与 C-18a FileWatcher 同族。
+  2. **跨场景误报**：GetVisibleEntities 遍历所有场景网格取第一个非空结果（:209-221，注释自认「需要知道实体属于哪个场景」）。
+  3. **读路径改状态**：GetNearbyCells 对查询邻域逐格 GetOrCreateCell（:31-40；调用点 :121/:150）——每次查询 (2r+1)² 次查表/建格，空格子无人回收 → 无界增长。
+  4. **负坐标吞格**：`static_cast<int>(x/cellSize)`（:52-53/:63-64/:116-117/:145-146）向零截断——(-0.5) 与 (0.5) 同落 0 号格（应 floor）。
+  5. **SetListener 竞态 + 迟到格子失聪**：listener_ 锁外写（:224 先于 ：227）；后建网格（:184）不传播 listener → 新场景事件静默丢弃。
+  6. 恒真返回与装饰性统计：UpdateEntity 两路 return true（:58/:80）；GetStats TODO 全零（:242-254）。
+- 阶段含义：attribute-sync.md §6（enter/dwell/leave 快照）依赖 AOI 事件正确性——落地前必修 2/3/4 与 1；cell-app 是 game/bigworld 之外的第三个 AOI 消费形态，收敛口径须一并计入。
+
+**C-28 同模块两套场景模型互不相认 + 会话管理全局锁每调用——场景层收敛应为 §6 新增专项。**
+- modules/game/world 同时存在：`apollo::game::world::Scene/WorldSpace/MapInstance`（shared_ptr 实体表 + on_update 遍历，scene.hpp:12-29/scene.cpp——**无任何空间索引**）与 global `apollo::AOIGrid/AOIManager`（网格+互斥锁）——零整合，本仓第 5 组「新旧并存」（继旧/新容器、四套配置、双代属性、双层 database 之后）。
+- WorldSessionManager 每方法 lock_guard（world_session_manager.cpp:9-10/:17-19/:24-31…create/find/find_by_player/suspend/resume 全持锁）——会话查找是每消息级操作，与 C-7/C-27 同一热路径反模式族。
+- 附带：game 模块默认 OFF、被 examples 开关连带强开（modules/CMakeLists.txt:34-37 APOLLO_BUILD_GAME_MODULE），bigworld 默认 OFF（:46）——「README 宣称 vs 默认构建形态」问题从 IoC 扩展到 game 模块。
+- 阶段含义：attribute-sync §10 六阶段 / net-abstraction 场景线程落地前需定案：以 Scene 族为壳、AOI 族为空间索引一次性整合（或按 attribute-sync 的 AOI 设计重写），per-message 锁改 scene 线程单写者无锁模型——建议在 §6 阶段 2/3 之间插入「场景/AOI 收敛」专项。
+
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§0 随 b99eb6a4。所有行号对应该基线。*
