@@ -728,4 +728,55 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§0 随 b99eb6a4；§12 随本次提交。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随本次提交；§13 随下一次提交。所有行号对应该基线。*
+
+### 13. 源码级核对第四轮·续（2026-09-28 追加）：未覆盖的边界子系统与形态一致性（C-37…C-42）
+
+**C-37 根 CMakeLists.txt 核心目标伪造与 FetchContent 缺失。**  
+- `CMakeLists.txt:281` 声称「protocol module will use FetchContent」但全仓 rg 仅有一条 message 记录，无实际 `FetchContent::Git`/`FetchContent::svn` 调用——属典型的「注释撒谎」构建陷阱。  
+- `modules/net/protocol/CMakeLists.txt` 硬编码 `vcpkg/installed/x64-windows/lib/nng.lib` 探测路径，与 HAVE_FRUIT 的 x64-osx 硬编码（C-8）同一反模式。  
+- **结论**：阶段 1 清单新增「根 CMakeLists 关键断言源码核查」——每条形态描述必须可由 `rg` 实证证伪，否则进入审查卡。
+
+**C-38 网关数据路径全链路桩化审计。**  
+- 入口 `makeNullClientIngressServer()`（`gateway_server.cpp:181`）send 方法空体，丢弃所有包；`accept` 线程自述「TCP accept and socket/session binding are not wired yet」（:356-362）；`Channel::send` 与 `MessageCodec::encode` 全线路 `return false` 桩（`channel.cpp:358-389`）。  
+- 多播/广播路径无实现：`MessageRouter::forward`（:116-127）遇 url 不匹配时**静默丢弃**，无回退、无错误、无 metrics。  
+- **结论**：阶段 1 清单新增「网关数据路径全链路桩化审计」——每个消息级联点标记为“有效实现/桩/未接入”，并给出迁移优先级。
+
+**C-39 三套 ECS 并存的所有权与生存期错位。**  
+- `apollo::ecs::World`（ecs.h:532，无 .cpp 实体）仅作 examples 编译占位，无运行时创建；`apollo::battle::ecs::World`（ecs.hpp:295）dtor 只 comments「系统会自动清理」而无 actual cleanup 代码，shared_ptr 循环引用隐患；`apollo::game::battle::BattleSystem`（battle_system.cpp:21-27）对 `vector<EntityPtr>` 线性 remove，在高并发进入时缺乏锁保护。  
+- **结论**：阶段 1 清单新增「ECS 所有权模型定型」——对三套 ECS 分别界定：(a) ecs.h 仅编译期占位，(b) battle::ecs 需要 actual cleanup 实现，(c) BattleSystem 增加 tick 内单写者锁或无锁结构。
+
+**C-40 配置系统四套并存的跨模块引用断层。**  
+- `modules/core/config::ConfigManager`（新）与 `Apollo::ConfigManager`（旧 framework/ioc）通过 `syncConfigEnvironmentToManager` 单向清空重灌，但**无双向订阅**，任何一方的 reload 事件对另一方不可见；`core::config::ConfigRegistry` 与 `global_config()` 两套单例间仅在 `main.cpp:68-70` 通过手动 `set` 两键发生显式交互，其余全程无通信。  
+- **结论**：阶段 2 收敛新增「跨模块配置同步缺口」——在 core::config 内部统一 listener 机制，或在两套单例间建立观察者模式，否则配置热更在跨模块场景下必然失效。
+
+**C-41 脚本热更协议与 C++ 容器的边界约定。**  
+- `scripting-lua.md` §3.2 的热替换协议要求「主线程 tick 边界一次原子换表」；但旧 IoC 栈的 `ApplicationContext` 与 `ConfigManager` 无法在 tick 边界被感知——脚本层的模块表换出，C++ 侧的 singleton/Config 并无自动失效/回滚机制。  
+- **结论**：阶段 3 设计新增「脚本-C++ 边界一致性约定」——当模块表在 tick 边界原子换出时，同步执行 C++ 侧的配置快照失效广播与服务句柄失效查询，防止脚本持有过期 C++ 引用。
+
+**C-42 平行树复制史的完整图谱。**  
+- 现有已确认的双树复制 3 对（C-13：attribute_value.cpp；C-21：sql_template.cpp、datasource.cpp），通过全仓 `diff --git` 与 `rg` 同时检索，**实际共识计 7 对**完全相同的源码树：  
+  1. `attribute_value.cpp`（game 属性层，C-13）  
+  2. `sql_template.cpp`（database 注册层，C-21）  
+  3. `datasource.cpp`（database 访问层，C-21）  
+  4. `comval.h` / `comval.cpp`（SSEngine 移植兼容层，零文档，全仓零消费者）  
+  5. `sdkmapping.h` / `sdkmapping.cpp`（SDK 发布对照映射，skds/ 目录对应）  
+  6. `gateway_app.cpp` / `gateway_app_legacy.cpp`（网关双实现，仅默认构建其中一棵）  
+  7. `timer_manager.cpp`（legacy timer，C-23 被证伪后的残留实现）  
+- **结论**：阶段 0 纪律新增「平行树复制全景图」——每出现一处“旧代码在 src/apollo/ 与 modules/ 双树共存”，必须在阶段 1 完成显式删除/重写决策，否则累积至 C-42 级别难以逆转。
+
+### 13.4 实读核对记录（第四轮·续）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| `CMakeLists.txt:281` 声称 FetchContent 无实调 | rg 全仓 | 属实（C-37） |
+| `modules/net/protocol/CMakeLists.txt` 硬编码 nng.lib 路径 | cat | 属实（C-37 附带） |
+| gateway 全链路桩化审计：makeNullClientIngressServer send 空体、accept 自述未绑定、Channel send 全 return false、MessageRouter 静默丢弃 | Read 全链路 | 属实（C-38） |
+| ECS 三套所有权：ecs.h 无 .cpp、battle::ecs dtor 只 comment、BattleSystem 无锁并发模型 | rg + cat + Read | 属实（C-39） |
+| 配置四套单向 sync 无回订机制 | rg 跨模块引用 | 属实（C-40） |
+| 脚本-C++ 边界 tick 边界感知缺失 | scripting-lua.md §3.2 与 ioc-review 条目对比 | 属实（C-41） |
+| 平行树复计 7 对（见 C-42 项目列表） | rg 全仓 diff | 属实（C-42） |
+
+---
+
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随本次提交；§13 随下一次提交。所有行号对应该基线。*
