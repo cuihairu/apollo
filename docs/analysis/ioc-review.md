@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。
 
 ---
 
@@ -728,7 +728,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随本次提交。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随本次提交。所有行号对应该基线。*
 
 ### 13. 源码级核对第四轮·续（2026-09-28 追加）：未覆盖的边界子系统与形态一致性（C-37…C-42）
 
@@ -1016,6 +1016,50 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | skynet 各行号（调度/时间轮/gate/sproto/集群/监控，skynet_start.c/skynet_server.c/skynet_timer.c/skynet_mq.c/service_gate.c/skynet_socket.c/lua-netpack.c/sproto.c/skynet_handle.c/clusterd.lua/skynet_monitor.c/debug_console.lua/service_logger.c） | 子代理提取 | 属实（G-4/G-5/G-7/16.5-③） |
 | kbengine 克隆：首次 fetch-pack early EOF 失败（git 自动清理）、重试成功 | 后台任务输出 | 事件记录（16.1） |
 
+### 16.7 待同步清单深化（2026-09-28 追加）：Mercury filter 双族蓝本与 entities.xml 继承
+
+> 本小节把 §16.5「对既有决策的增量」中的两项从结论深化为落地形态：filter 插件体系（并入 §15.6 待同步清单 ② net-abstraction.md 的修订范围）、entities.xml 继承（并入 ① sdk-contract.md 的修订范围）。全部为设计深化，无源码改动；新增证据经补充实读（16.7.3）。
+
+#### 16.7.1 Mercury filter 双族 → apollo L1/L2 帧管线的蓝本
+
+**BigWorld 事实（补充实读）**：
+
+- **双族分离**：数据报族 `PacketFilter`（挂 UDP 通道）——`send(PacketSender&, addr, Packet*) -> Reason`（packet_filter.hpp:37）、`recv(PacketReceiver&, addr, …) -> Reason`（:48）、`maxSpareSize()`（:56，**过滤器向管线申报尾部预留量**，加密填充/zstd 上界不触发二次分配）；流族 `NetworkStream`（挂 TCP 通道）——`writeFrom(BinaryIStream&, bool shouldCork)`（stream_filter.hpp:46，cork=攒批立即刷的显式控制）、`readInto(BinaryOStream&)`（:55）。
+- **实例面**：加密（encryption_filter + encryption_stream_filter）、消息级（message_filter）、`websocket_stream_filter`——**WS 帧定界（升级握手/掩码/ping-pong）整体实现为 TCP 通道上的一个流过滤器**，Mercury 核心对 WS 一无所知。
+- 与 skynet 对照：帧定界（gate 2B/4B 长度头）与消息体（sproto）两层独立选配（16.2）——同一思想两家两个变体：BW 做成通道插件，skynet 做成服务组装件。
+
+**映射到 apollo（net-abstraction.md 修订时的落点）**：
+
+1. **L1 帧管线 = 有序 filter 链，不是硬编码 switch**。定界（magic/seq/CRC）之后接「解码阶段链」：解密 → 解压 → 分派；编码方向逆序。每阶段统一接口 `FrameFilter { encode(Frame&) -> Reason; decode(…) -> Reason; reserve() -> size_t }`——Reason 返回码与 Aeron offer/trySend 同一条「决策还给调用方」纪律（§15.2 已定）；`reserve()` 对应 BW maxSpareSize，帧缓冲一次分配。
+2. **两族都要**：movement 通道的不可靠演进路径（UDP）挂数据报族；TCP/WS 客户端会话挂流族——L0 传输类型决定族，L1 filter 实现（CRC/压缩）两族共用。
+3. **filter 栈由契约声明**：帧头 ver 字段选择 filter 组合，服务端按握手协商结果装配链——不出现运行期字符串注册（容器纪律的 L1 落点）。WS 接入 = 一个 stream filter，**不新开网络栈**——BW 用同一 Mercury 承载 WS 即为「禁止第五套网络栈」（§15.2）的先例佐证。
+4. **边界纪律**：filter 只做字节↔字节变换、不认识消息语义；seq/ack/水位/重传归 L2 通道核心——BW 的窗口重传在 udp_channel 而非 filter（16.2），同构。校验失败（CRC 坏/解密失败）返回 Reason 后断链或丢弃，不进 L2。
+
+#### 16.7.2 entities.xml 继承：语义取两家并集、机制取生成期展开
+
+**两家事实（补充实读）**：
+
+- BigWorld：`<Parent>` 在**自身标签解析之前**递归解析父 .def（entity_description.cpp:195-203）——父字段先入、子字段覆盖（如 `clientName_ = pSection->readString("ClientName", clientName_)` 以父解析值为缺省，:216 附近）。**无环检测**：rg `cycle|recursi|visited` 于 entity_description.cpp 零命中——循环 parent = 无界递归，官方引擎未设防。
+- KBEngine：`loadParentClass`（entitydef.cpp:890-903）读 `<Parent>` 节点 → 加载父 .def → 调 `loadDefInfo`（:913-916），而 loadDefInfo 自身又调 loadParentClass（:372）——**互递归、同样无深度守卫**；组件定义同构（:774-776）。
+
+**apollo entities.xml 继承设计（写入 sdk-contract.md 时的形态）**：
+
+1. **声明**：`<entity id="Avatar" parent="Monster">`，单继承（与两家一致；多继承的菱形问题不值得引入属性表）。
+2. **校验三层**：① XSD `xs:keyref`——parent 必须引用已声明 entity id，悬垂引用提交前红；② **环检测必须生成器自己写**——两家先例证明「解析期递归」在环上会崩（BW 连守卫都没有），生成器拓扑排序 + 明确报错是 CI 闸新增断言；③ 展开后 attr id 全局唯一 `xs:key` 校验照旧。
+3. **合并语义**：父先入、子覆盖（与 BW 递归序一致）；**禁止同名改型**（父声明 int64 子改 string = 生成错误，报错带出处链 `Avatar←Monster`）；每属性保留 provenance（来自哪个实体的声明），错误信息与 diff 可归因。
+4. **展开时机**：生成期扁平化，三个消费投影（协议/SDK/服务端）只见扁平结果；`schema_hash` 对**源文件 + 生成器版本**计算——展开确定性由版本锁定，父改动自动传播到全部子实体生成产物，CI 产物 diff 天然捕获「改父忘生成」。
+5. **不学**：BW 的 `<Interface>` 多接口分发（随 base/cell 语义而来，apollo P3 前无对应物）、任何运行期加属性路径——契约保持静态。
+
+#### 16.7.3 实读核对（本小节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| BW `<Parent>` 先于自身解析递归（entity_description.cpp:195-203）；无环守卫（rg cycle/recursi/visited 零命中） | sed + rg | 属实 |
+| BW ClientName 以父解析值为缺省（entity_description.cpp:216 附近 readString 带当前值） | sed | 属实 |
+| PacketFilter send/recv/maxSpareSize（packet_filter.hpp:37/:48/:56） | grep virtual | 属实 |
+| StreamFilter writeFrom(shouldCork)/readInto（stream_filter.hpp:46/:55）；filter 文件族清单（ls lib/network/*filter*） | grep + ls | 属实 |
+| KBEngine loadParentClass ↔ loadDefInfo 互递归（entitydef.cpp:890-916/:372）；组件同构（:774-776） | rg + sed | 属实 |
+
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随本次提交。所有行号对应该基线；§16 的三家框架行号对应各自工作副本当前态（BigWorld 14.4.1 官方包、skynet 工作副本、kbengine fork master 浅克隆）。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随 98d021d2；§15 随 b9bf5321；§16 随 047d0002；§16.7 随本次提交。所有行号对应该基线；§16 的三家框架行号对应各自工作副本当前态（BigWorld 14.4.1 官方包、skynet 工作副本、kbengine fork master 浅克隆）。*
