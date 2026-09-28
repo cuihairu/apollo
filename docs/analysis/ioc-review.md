@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14。
 
 ---
 
@@ -728,7 +728,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随本次提交；§13 随下一次提交。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随本次提交。所有行号对应该基线。*
 
 ### 13. 源码级核对第四轮·续（2026-09-28 追加）：未覆盖的边界子系统与形态一致性（C-37…C-42）
 
@@ -779,4 +779,83 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随本次提交；§13 随下一次提交。所有行号对应该基线。*
+## 14. 第六轮（2026-09-28 追加）：数据与持久化 / 多端 SDK 与契约（C-43 … C-49）
+
+### 14.1 范围与方法
+
+- ① **数据与持久化**：modules/data（core/orm/redis/cache 四子模块，23 文件 5562 行）+ 旧树 include/apollo/database、src/apollo/database、include/apollo/storage、src/apollo/storage（合计 ~11.4k 行）；② **多端 SDK 与契约现状**：sdks/（unity C# 属性层 ~3.0k 行）+ skds/（unity/cocos/laya C#/TS ~6.7k 行，剔除 node_modules）。
+- **自行假设注明（契约格式方向）**：按本轮指示，凡涉及契约格式的结论按「**保留 TOML 契约源 + 补一层形式化 schema 校验**（生成器内建校验规则 / JSON-Schema 级 CI 门禁）」方向推进——此为自行假设的评审基线，非仓库既成事实；sdk-contract.md §2 现文本（TOML + 生成器进 CI + schema_hash）与该方向相容，schema 校验层为其增量而非改向。
+- 方法不变：先实读后落笔（§14.4）。受只读约束未执行构建——configure 失败、UAF 链、SDK 编译失败等结论为源码推演，条目内标注。
+
+### 14.2 新发现（C-43 … C-49）
+
+**C-43 数据层三代并存；「模块化新树」是命名空间冒充——模块头文件声明的 API 没有任何实现。**
+- 三代：① 旧树 `src/apollo/database`（`apollo::database`，JDBC 风格 SqlTemplate/ConnectionPool）+ `include|src/apollo/storage`（db.h 族 + redis 族）；② modules/data 四子模块（`apollo::data::*`）；③ 两代分别被 legacy `apollo` 静态目标与模块目标编译（构建归属见 C-46）。
+- 冒充实据：modules/data/orm/src/sql_template.cpp 与 src/apollo/database/sql_template.cpp **byte-identical（diff 验证）**，实现的是 `apollo::database::` 命名空间（:55 include 旧头、:60-61 namespace），而模块自己的头 `apollo/data/orm/sql_template.hpp` 声明的 `apollo::data::orm::SqlTemplate` 的非模板 `query()/update()`（sql_template.hpp:16-17）**声明无定义**；模块 CMake（modules/data/orm/CMakeLists.txt:1-4）只编 memory_connection.cpp + sql_template.cpp（旧体），datasource.cpp/connection_pool.cpp 在模块树内**未被编译**。新命名空间唯一真实现 = MemoryConnection：**以精确 SQL 字符串为 key 的内存 mock**（memory_connection.cpp:44-55 `rows_by_sql_[sql]`）。
+- redis 同构：modules/data/redis/src/redis_client.cpp ≡ src/apollo/storage/redis/redis.cpp（diff identical，实现 `apollo::storage::redis`）；redis_client_impl.cpp 与旧树同名文件**已单侧分叉**（diff DIFFERS）；redis_template.cpp 1252 行实现的是 `apollo::net::` 命名空间（:19-20，「类似 Spring Data Redis」）且 hiredis 缺失时整体退化为 `APOLLO_REDIS_STUB`；redis_client_wrapper.cpp 与 redis_template_wrapper.cpp 是 **0 字节空文件**却被列入 apollo_data_redis 源列表（modules/data/redis/CMakeLists.txt:2-6）；redis_connection_pool.cpp 仅 14 行、类定义困在 .cpp 内的空壳（注释自认 "In production, this would manage a pool"）。
+
+**C-44 旧 SqlTemplate/ConnectionPool 缺陷簇（build 路径必现 UAF / 30 秒挂死）。**
+- `SqlTemplateBuilder::build()`（datasource.cpp:403-419）：局部 `shared_ptr<DataSource>` 在 return 时析构，而返回的 SqlTemplate 持有 PooledConnection，其 `pool_` 裸指针（:20-28）指向已析构的 ConnectionPool → **模板析构必现 use-after-free**（推演）；且 DbType 重载构造不设置 factory_（:98-104 `(void)type`，注释自认「简化处理」）→ getConnection 空转至 checkoutTimeoutMs（默认 **30 秒**，datasource.h:27）后返回 nullptr。
+- 维护线程先 sleep 30s 再查停止位（:274-276）→ `stop()` 的 join（:153-155）最长阻塞 30 秒；空闲清理无视 idleTimeoutMs（:287 TODO 自认）。
+- `getConnection`（:168-218）持池锁做 validateConnection → **ping() 网络往返在锁内**（:257-267），阻塞全部取/还连接。
+- SqlTemplate 本体（sql_template.cpp）：未知类型串**静默默认 MySQL**（:380-385）；字符串参数是否转义取决于 conn_ 是否存在（buildSql :268-273），`Parameter::toString` 完全不转义（:75-76）；列名伪造为 column_N（:299-305/:454-460）→ 按列名取值结构性失效；stoi/stoll/stod 无捕获（:128/:134/:140）；getTableNames/getColumnNames 为 TODO 空实现 → `tableExists` 恒 false（:539-553）。
+
+**C-45 真后端全部缺席；Redis 客户端四套并存；第三例机器特定硬编码路径。**
+- MySQL：db_mysql.cpp 全部 480 行在 `#ifdef APOLLO_USE_MYSQL_CONNECTOR` 内（:6-480），vcpkg.json 无任何 MySQL connector → **永不编译**（推演）。
+- Redis 四套：① apollo::storage::redis（redis-plus-plus 包装 + Mock，宏门）；② apollo::net::RedisTemplate（1252 行，hiredis-or-stub）；③ modules/data/redis 空壳 wrapper + 空 pool；④ modules/data/cache/redis_cache.cpp **裸 socket 手写 RESP 协议**（winsock/POSIX 头，redis_cache.cpp:10-25）。
+- modules/data/redis/CMakeLists.txt:23 硬编码 `C:/Users/cui/Workspaces/vcpkg/installed/x64-windows`——带个人用户名的机器特定路径（C-8 x64-osx、C-30 x64-windows 后第三例，C-37 亦录）。
+
+**C-46 数据层零生产消费者；「game-server」是 137 行演示脚本；数据访问构建归属断裂。**
+- 消费方普查：新 API 唯一非测试消费者 apps/game-server/src/main.cpp；旧 API 唯一消费者 tests + legacy 目标。
+- main.cpp 全文 137 行为 bootstrap 演示：一条 seed 的 mock 查询（:75-87）、IoC 装配演练（:96-102，**全 apps/ 唯一使用 core::di 的 app**）、单次 tick（:113-115）、打印退出——无主循环/网络/场景/实体。
+- 构建归属：旧树全部 .cpp 仅被 legacy `apollo` 静态目标（CMakeLists.txt:54，`APOLLO_ENABLE_MODULAR_LAYOUT=OFF` 才启用）编译，而该目标列出的源文件 **21 个在磁盘上不存在**（src/network/*×5、src/apollo/net/*×8、src/apollo/core/{log,config}/*×6、src/apollo/redis/redis_template.cpp、src/apollo/bw/runtime.cpp）→ 旧路径一旦启用 **configure 即失败**（推演）。即数据访问旧实现（含 C-44 全部代码）在任何配置下不可达，模块化目标编译的又是冒充体——**整个仓库没有任何一条真实 DB/Redis 路径可被执行**。
+- cache_manager.get_or_compute<T> 声明无定义（cache_manager.hpp:69-70，全仓唯一命中）——死模板第三例（get_component C-33、ecs.h C-34 同族）。
+
+**C-47 客户端 SDK 与服务端：线格式/消息 ID/载荷编码三重漂移；unity SDK 交付态无法编译。**
+- 帧头三套互不兼容：客户端 skds/cocos MessageCodec.ts:14-15（16B = magic 0x414F4C4F + len4 + msgId2 + seq4 + flags2，字节序随 `isLittleEndian()` 运行时判定，ByteBuffer.ts:76/:133）；服务端栈 A include/apollo/net/message_codec.h:24-38（**12B 无 magic、手写大端**）；栈 D modules/protocol messages.hpp:333-334（magic 0x42575452 "BWTR"）。即使网关接线完成，客户端与服务端也无法对话。
+- 消息 ID 两套不相交：客户端手写常量 MSG_LOGIN_REQ=1001 / MSG_HEARTBEAT=9999（cocos AuthManager.ts:12-15、HeartbeatManager.ts:10）vs 服务端 `MessageType` LOGIN_REQUEST=0x0001 / GATEWAY_HEARTBEAT=0x0012（messages.hpp:16-23）。
+- 载荷编码三套：客户端手写 BinaryWriter（AttributeSyncManager.cs:194-246、AttributeContainer.cs:411）、服务端手写 codec、设计目标 protobuf（attribute-sync.md §7.1）。
+- unity SDK 引用的 `MessageIds` 类型（NetworkManager.cs:204、AuthManager.cs:110）在 skds/ 与 sdks/ 全树**无定义**（grep class MessageIds 零命中）→ unity SDK 按交付态无法编译（推演）。
+
+**C-48 per-end 手写平行维护的源码实证（sdk-contract.md §1 论点坐实 + 文档数字修正）。**
+- cocos vs laya 的 ApolloClient.ts 299 vs 317 行近乎复制（diff 仅引擎 import/Handler 差异）——纯手工双维护；AuthManager 130(ts) vs 373(cs)、NetworkManager 321(ts) vs 417(cs)——各端行为已分叉。
+- 属性表两端手写：客户端 AttributeRegistry.cs（342 行，name↔ID 双字典 + Initialize 手工注册内置属性，:40-60）vs 服务端 attribute_id.h（512 行，C-35 分段冲突）——同一张表无人保证一致。
+- **文档数字修正**：attribute-sync.md §0 记同步雏形为「50ms 批处理队列」——源码实为 **100ms 默认 + 逐帧轮询**（AttributeSyncManager.cs:33 `_syncInterval = 0.1f`；:101 下限 10ms；:122 逐帧比对）。
+
+**C-49 汇总判定：数据/SDK 子系统容器使用为零——缺陷继续复刻容器反模式家族；契约格式按 14.1 自行假设落 §6 增量。**
+- 普查：rg `framework/ioc|ApplicationContext|core::di` 对 modules/data、sdks、skds **零命中**（exit 1）。缺陷没有一个是容器 API 造成的。
+- 家族复刻清单：**命名空间冒充**（模块目标编译旧命名空间体——「换名不换实」，字符串注册思维的变体）；**全局单例 + set 注入**（CacheManager::instance() + set_provider，cache_manager.cpp:5-12 = service locator）；**死模板 API**（三例）；**新旧并存**（SQL 三代 / Redis 四套 / 线格式三套）；**stub 先行**（空 wrapper、空 pool、宏门 MySQL、Redis stub、MessageIds 缺失）。
+- §6 增量建议：
+  - **数据层收敛专项**（阶段 1 清单）：删 modules/data/orm+redis 的冒充体与空壳（C-43），旧树随 legacy 目标整体退役（C-46 的 configure 断裂使「保留」失去意义）；唯一值得演进的路径 = 按 attribute-sync.md §8（快照 + write-behind）+ ssengine-reference.md §4.1（异步 DB Command）**按设计新建**，而非从三代残骸中挑一套修补。
+  - **SDK 收敛**（阶段 2，与 sdk-contract.md §3 合并推进）：生成器落地前，四套线格式与两端手写属性表（C-47/C-48）是协议漂移的现役火源；按自行假设的方向推进 = TOML 契约单一事实源化（attrs/messages/帧头/ID 空间全部入契约），schema 校验规则（类型/枚举/ID 唯一性/分段不重叠）作为生成器 CI 硬门禁，`schema_hash` 机制不变（attribute-sync.md §7.2）。
+  - **纪律断言**（承接 §12.3 表末行）：「声明无定义 API」列入验收红线——三例死模板 + MessageIds 缺失说明这是全仓性习惯而非个例。
+
+### 14.3 修正行（并入既往结论）
+- C-42「7 对完全相同源码树」→ 口径细化：modules/data 副本中 orm 两文件（sql_template.cpp/datasource.cpp）与 redis_client.cpp 确为 byte-identical，但 redis_client_impl.cpp **已单侧分叉**（同名 DIFFERS）——「平行树」不是静态快照而是正在发生的漂移过程，收敛优先级应据此上调。
+- attribute-sync.md §0 的「50ms」→ 100ms（C-48）。其余 C-1…C-42 未被本轮证伪。
+
+### 14.4 实读核对记录（第六轮）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| modules/data 四子模块 23 文件 5562 行；database/storage 旧树规模 | find + wc | 属实（C-43） |
+| orm 双树 byte-identical（sql_template.cpp/datasource.cpp）；redis_client.cpp ≡ redis.cpp；redis_client_impl.cpp DIFFERS | diff | 属实（C-43/14.3） |
+| sql_template.hpp:16-17 声明无定义；MemoryConnection 精确 SQL key（:44-55） | Read | 属实（C-43） |
+| orm CMake 只编两文件（CMakeLists.txt:1-4）；redis 空壳 wrapper×2、14 行 pool | cat + wc | 属实（C-43） |
+| build() UAF 链（datasource.cpp:403-419 + :20-28）；30s 超时（datasource.h:27） | Read | 属实（C-44，推演标注） |
+| 维护线程 sleep 先于停止检查（:274-276）；ping 持锁（:168-218/:257-267） | cat | 属实（C-44） |
+| 静默 MySQL/不转义/伪列名/stoi 族/tableExists 恒 false（sql_template.cpp 各行） | cat -n | 属实（C-44） |
+| db_mysql.cpp 全文件 #ifdef 内（:6-480）；vcpkg.json 无 connector | rg + cat | 属实（C-45，推演标注） |
+| redis_cache.cpp 裸 socket RESP（:10-25）；C:/Users/cui 硬编码（redis/CMakeLists.txt:23） | head + sed | 属实（C-45） |
+| game-server main 137 行演示（:75-87/:96-102/:113-115）；apps/ 唯一 core::di 消费者 | cat + rg | 属实（C-46） |
+| legacy apollo 目标 21 个缺失源文件（sed 40-128 + 逐文件存在性检查） | bash | 属实（C-46，推演标注） |
+| get_or_compute 全仓唯一命中 = 头文件自身（cache_manager.hpp:69-70） | rg | 属实（C-46） |
+| 客户端 16B magic 头（MessageCodec.ts:14-15）vs 栈 A 12B 大端（message_codec.h:24-38）vs 栈 D BWTR（messages.hpp:333-334） | cat -n | 属实（C-47） |
+| MSG_LOGIN_REQ=1001/9999（AuthManager.ts:12-15、HeartbeatManager.ts:10）vs 0x0001/0x0012（messages.hpp:16-23） | rg | 属实（C-47） |
+| MessageIds 类型全树无定义（NetworkManager.cs:204、AuthManager.cs:110 引用） | rg/grep | 属实（C-47，推演标注） |
+| cocos/laya ApolloClient diff；AuthManager/NetworkManager 规模；_syncInterval=0.1f（AttributeSyncManager.cs:33/:101/:122） | diff + wc + sed | 属实（C-48） |
+| 容器普查 modules/data + sdks + skds 零命中 | rg（exit 1） | 属实（C-49） |
+
+---
+
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f；§11 随 ec4649a7；§12 随 0b982a41；§13 随 9adb3f34；§14 随本次提交。所有行号对应该基线。*
