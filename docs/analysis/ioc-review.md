@@ -2,7 +2,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。
+> 复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11。
 
 ---
 
@@ -424,6 +424,84 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | `ApplicationContext.h:267-275` makeRuntimeInfo，`:270` autoStart 仅拷贝 | sed | 属实（P3 行复核） |
 | `docs/architecture:344` manifest 章节 | rg | 属实（§6 阶段 5） |
 
+## 11. 源码级核对第三轮·续（2026-09-28 追加）
+
+### 11.1 范围与方法
+
+- 上轮遗留两方向：① C-16 FileWatcher 去留的**阶段 2 改造点细化**（实读 FileWatcher.cpp 全文 + core::config 侧接线契约各挂点）；② §6 阶段 1 死代码清单（含 C-15 扩入项）**逐项消费方复核**。
+- 方法不变：先实读文件：行号再落笔（记录见 §11.4）。非交互假设注明：接线契约的监听语义按 core::config 既有 `ConfigListener` 结构（key 空 = 监听全部）为准；C-19 的三步细化属设计建议，拍板留阶段 2 执行时。
+
+### 11.2 新发现（C-18 … C-22）
+
+**C-18 FileWatcher 实为「死 inotify + mtime 轮询」——C-16 的定性修正（sdtimer 式文档/实现错位在本仓再现）。**
+- inotify 注册但**从不消费**：`addWatch` 初始化 `IN_NONBLOCK` 实例并 `inotify_add_watch`（`src/utils/io/FileWatcher.cpp:53-71`），但全文件无任何 inotify 事件 read/处理——`watchLoop`（`:136-141`）只做 `sleep(pollInterval) + checkForChanges()`；实际变更检测是**纯 mtime 轮询**（`checkForChanges` `:143-166` 逐 watch `stat` 比对 lastModified；`:168-184`）。`stop()` 里的 inotify 清理（`:109-119`）清理的是一个从未读过的 fd；头注释「For macOS, we don't have inotify」（`FileWatcher.h:19`）暗示 Linux 走 inotify 事件——实际不走。
+- 修正 C-16 与 ssengine-reference.md:130 的引语：「真 inotify + 专用线程」→「**专用线程 + mtime 轮询，附一套从未消费的 inotify 死代码**」——与 ssengine-reference §5 教训 1（sdtimer.h 宣称分层、实为 vector 扫描）同一模式在本仓复现。
+- 新增缺陷（即阶段 2 改造点的事实基础）：
+  - **a) 回调持锁执行**：`checkForChanges` 在 `watchesMutex_` 锁内直接调 `info.callback`（`FileWatcher.cpp:144,154-156,161-163`）——回调慢或重入 addWatch/removeWatch 即死锁；`stop()`（`:99-101`）的 join 会被卡死的回调拖住。
+  - **b) 回调在 watcher 线程执行**：C-16 改造点 (a) 的实锤——现行唯一消费者旧 `ConfigManager::onFileChanged`（`ConfigManager.cpp:222-224`）就在该线程直接 `loadFromFile`。
+  - **c) 秒级 mtime + 默认 1s 轮距**：`stat().st_mtime` 秒粒度（`:178-181`）+ `pollInterval_` 默认 1000ms（`:8`）→ 同秒内多次写可漏报、检测延迟最高 ~2s。
+  - d) `removeWatch` 只删 watches_ 不 `inotify_rm_watch`（`:77-79`）——inotify 本就死代码，随清理。
+  - e) 命名空间是旧 `Apollo::`（`FileWatcher.h:27`）——接入 core::config 需迁移或适配。
+
+**C-19 阶段 2 接线契约细化（FileWatcher → core::config → notifyListeners，三步替代 C-1/C-16 的粗粒度两条）。**
+- core::config 侧既有挂点（实读）：监听器存储 `struct ConfigListener { key; callback; }`（`include/apollo/core/config/config_manager.h:212-218`，key 空 = 监听全部，vector + `listenerMutex_`）；`notifyListeners(key, node)`（`:242` 声明；`config_manager.cpp:691` 定义、零调用——C-1）；`reload(section)`（`:84`；`config_manager.cpp:153-186`，hash 比对后 loadFile）；`setValue`（`config_manager.cpp:294-299`，**不通知**）。
+- 三步改造：
+  1. **通知点**：loadFile 成功路径按 key 比对旧/新 ConfigNode 子树，仅对变化 key 调 `notifyListeners(changedKey, newNode)`（同时覆盖 reload 与显式 loadFile 两个入口）；setValue 补同一通知（旧 ConfigEnvironment sync 经 setValue 写入的路径才能被感知——`ApolloApplication.cpp:351` 的缝合点才能在下层可观测）。
+  2. **线程边界**：FileWatcher 回调只做「事件入队」（MPSC/有锁环均可），主线程 tick 边界消费 → reload → notifyListeners——对齐 scripting-lua.md §3.2 的线程分工与 attribute-sync.md §10 单写者纪律，同时解除 C-18a 持锁回调。
+  3. **消费者迁移**：旧 ConfigManager 的 watcher 生命周期（`ConfigManager.cpp:183-203` raw new）随 P1-1 删除；FileWatcher 实例归属 core::config（或独立 FileWatchService 经 core::di 装配），命名空间随迁（C-18e）。
+- 倾向不变（保留改造而非重写）；若执行时改选重写，死 inotify 部分（`:53-71,109-119`）无保留价值。
+
+**C-20 §6 阶段 1 死代码清单逐项消费方复核——全部属实，三项细化。**
+
+| 清单项 | 消费方实测 | 判定 |
+|---|---|---|
+| 伪 fruit 命名空间（Starter.h:3-31） | `fruit::` 符号消费**全部位于 starter 栈自身**（Starter.h:93-94,115-116；ApolloApplication.h:124,191,201；ApolloApplication.cpp:291,410,417），零外部消费 | 删，零外部影响 |
+| `getService<T>` stub（ApolloApplication.h:128） | 全仓零调用（ipc 的 getServiceNames 系无关同名） | 删 |
+| `getInjector`（ApolloApplication.h:124）+ `injector_`（:201） | 零调用、仅声明 | 删 |
+| `combineStarterComponents`（:191 / ApolloApplication.cpp:410） | 零调用 | 删 |
+| Fruit TODO（ApolloApplication.cpp:291） | 注释内代码 | 删 |
+| DependencyManager / lazyInit / ioc AutoRegister | §10 已核（examples 1 + tests 3 / 零 / 零） | 删 |
+| **autoStart 细化** | **两处定义**：`BeanDefinition.h:15` 与 **`:36`（BeanRuntimeInfo 自己也有）**；唯一"读"是 `ApplicationContext.h:270` 的拷贝，无行为读者 | 双死字段，P3 行补 `:36` |
+| APOLLO_REGISTER_DATABASE 宏（sql_template.h:272-284） | 宏零用户（§10 已核） | 删宏 |
+| **loadPlugins 细化**（src/apollo/database/sql_template.cpp:353） | 零调用 | 删 |
+| **DatabaseRegistry 细化** | **非全死**：`SqlTemplate` 构造内部消费 `DatabaseRegistry::create(type)`（`src/apollo/database/sql_template.cpp:382`）——注册侧（registerFactory，仅死宏可喂）死、消费侧（create）活 | 只删注册侧脚手架；create 路径随 database 层收敛另行处置 |
+
+**C-21 双树复制清单再扩 + 平行 database 双层定型。**
+- 第三、四个字节级复制文件对：`src/apollo/database/sql_template.cpp` ≡ `modules/data/orm/src/sql_template.cpp`（diff IDENTICAL）、`src/apollo/database/datasource.cpp` ≡ `modules/data/orm/src/datasource.cpp`（diff IDENTICAL）——加 C-13 的 attribute_value.cpp，双树复制共 **3 对**。
+- 结构定性：`apollo::database`（`include/apollo/database` + `src/apollo/database`，含注册宏）与 `apollo::data::orm`（`modules/data/orm` 自带头文件 `sql_template.hpp`）是**平行两代 database 层**——与旧/新容器（§7）、双单例配置（C-2）同构的**第三组「新旧并存」**。→ §6 阶段 1 应增「双轨收敛」专项：src/apollo 遗留树中已被 modules/data 取代的 database 部分，与 C-13 的 game 属性双代一并处置。
+- 附带：`ENABLE_FILEWATCHER` 编译宏**零读者**（rg 全 src/include 无消费；CMakeLists.txt:348-352 定义处）——纯死构建开关，与 HAVE_FRUIT 条件（C-8）、hotReload 旋钮（C-22）同类。
+
+**C-22 core::config 内置热重载旋钮同样是死脚手架，与 FileWatcher 不得并存。**
+- `enableHotReload(bool, interval)`（`config_manager.h:172`；`config_manager.cpp:341-343`）+ `update()` 周期检查（`:347-368`，门控 `hotReloadEnabled_` 默认 false，`:221-223`）：**enableHotReload 全仓零调用**（rg 全 apps/modules/examples/tests 仅定义处；`.update()` 命中均为无关类）——内置热重载无人启用、无人驱动。
+- 阶段 2 决策约束：热重载驱动机制**二选一**——FileWatcher 事件驱动（C-19 方案，删除 update() 旋钮），或主循环驱动 update()（删除 FileWatcher 依赖）。两套机制不得同时保留（与 net-abstraction.md §6 对 nng_wrapper/Aeron 的「二选一不并存」同一纪律）。
+
+### 11.3 对既有结论的修正
+
+| 位置 | 原表述 | 修正 | 结论是否变化 |
+|---|---|---|---|
+| C-16（§10） | 「真 inotify + 专用线程实现，不是空壳」 | 专用线程 + mtime 轮询；inotify 为注册后从未消费的死代码（C-18） | 「保留改造」倾向不变，改造点细化为 C-19 三步 |
+| ssengine-reference.md:130（外部文档，记录待补） | 「已有 utils/config/FileWatcher.h inotify/poll 实现」 | 应为「线程 + mtime 轮询实现（inotify 死代码）」 | 引语修正 |
+| P3 表 autoStart 行 | BeanDefinition.h:15 单处死字段 | `:15` 与 `:36`（BeanRuntimeInfo）双处，唯一读者 `:270` 拷贝 | 扩一处 |
+| C-15 隐含口径 | DatabaseRegistry 随宏整体淘汰 | 注册侧死、消费侧活（sql_template.cpp:382 内部消费 create） | 只删注册脚手架 |
+| C-8 附带 | ENABLE_FILEWATCHER 默认 ON | 宏零读者，纯死开关 | 加重（装饰性选项） |
+
+### 11.4 实读核对记录（第三轮·续）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| `FileWatcher.cpp:53-71`（inotify 注册）、全文无 inotify read；`:136-141` 轮询循环；`:143-166` mtime 比对 + 锁内回调；`:168-184` stat 秒级 | Read 全文 | 属实（C-18） |
+| `FileWatcher.h:19`（macOS 注释）、`:27`（namespace Apollo）、`:36`（addWatch API） | cat 全文 | 属实（C-18e） |
+| `ConfigManager.cpp:222-224` onFileChanged → loadFromFile（watcher 线程直载） | sed | 属实（C-18b） |
+| `config_manager.h:212-218` ConfigListener（key 空=全部）；`:221-223` hotReload 字段；`:242` notifyListeners 声明 | sed | 属实（C-19/C-22） |
+| `config_manager.cpp:691` notifyListeners 定义且零调用；`:294-299` setValue 不通知；`:153-186` reload | sed + rg | 属实（C-1 复核 + C-19） |
+| `config_manager.cpp:341-343` enableHotReload、`:347-368` update() 门控；enableHotReload 全仓零外部调用 | sed + rg | 属实（C-22） |
+| `fruit::` 消费全部在 starter 栈自身（7 处引证行号） | rg 全仓 | 属实（C-20） |
+| getService/getInjector/combineStarterComponents 零调用 | rg | 属实（C-20） |
+| autoStart 双定义 `BeanDefinition.h:15,:36`；唯一读 `ApplicationContext.h:270` | rg | 属实（C-20 细化） |
+| `src/apollo/database/sql_template.cpp:382` DatabaseRegistry::create 内部消费；`:353` loadPlugins 零调用 | rg + sed | 属实（C-20 细化） |
+| 双树复制 3 对均 diff IDENTICAL（attribute_value.cpp / sql_template.cpp / datasource.cpp） | diff | 属实（C-21） |
+| `ENABLE_FILEWATCHER` 源码零读者 | rg | 属实（C-21 附带） |
+
 ---
 
-*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e。所有行号对应该基线。*
+*评审基线（源码）：main @ 35a9c528（无源码变更）。文档基线：六份文档随 a2ab6525；§8 随 86be18d2；§9 随 c99d9d9e；§10 随 7ce2849f。所有行号对应该基线。*
