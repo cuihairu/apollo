@@ -18,7 +18,8 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 
 ### 核心特性
 
-- 🏗️ **IoC容器系统** - 依赖注入和组件生命周期管理
+- 🏗️ **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）；明确不采用 Spring 式运行时容器（论证见 `docs/analysis/ioc-review.md` §0）
+- 📜 **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
 - 🌐 **高性能网络层** - 跨平台异步I/O（IOCP/Epoll）
 - 📦 **Protobuf消息系统** - 高效的序列化和RPC框架
 - 🔥 **ECS战斗系统** - 灵活的实体-组件-系统架构
@@ -30,7 +31,7 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 
 ## 🏛️ 架构设计
 
-### 系统架构概览
+### 系统架构概览（目标形态，按 docs/todo.md 批次落地）
 
 ```mermaid
 graph TB
@@ -67,13 +68,13 @@ graph TB
         end
 
         subgraph "消息队列"
-            MQ[Kafka/RabbitMQ]
+            MQ[Kafka<br/>可观测管道·规划]
         end
     end
 
     subgraph "监控层"
-        MON[监控系统<br/>Prometheus]
-        LOG[日志中心<br/>ELK Stack]
+        MON[监控系统<br/>Prometheus·规划]
+        LOG[日志链路<br/>LogAgent→Kafka→ClickHouse·规划]
     end
 
     C1 --> LB
@@ -122,7 +123,7 @@ graph LR
         R1[路由层<br/>Message Router]
     end
 
-    subgraph "业务层"
+    subgraph "业务服务（modules/ 模块原语）"
         A1[玩家管理]
         S1[场景管理]
         B1[战斗系统]
@@ -130,12 +131,16 @@ graph LR
         G1[公会系统]
     end
 
-    subgraph "基础服务层"
-        IOC[IoC容器]
-        LOG[日志服务]
-        CONF[配置管理]
-        CACHE[缓存服务]
-        DB[数据库服务]
+    subgraph "基础服务（modules/ 模块原语）"
+        LOG[日志]
+        CONF[配置]
+        CACHE[缓存]
+        DB[数据库]
+    end
+
+    subgraph "应用入口（apps/ main.cpp）"
+        ASM[ApplicationContextBuilder<br/>类型键 bean 图·拓扑序构造注入]
+        HOST[ApplicationHost<br/>IHostedService start/stop/tick]
     end
 
     T1 --> P1
@@ -146,19 +151,21 @@ graph LR
     R1 --> I1
     R1 --> G1
 
-    A1 --> IOC
-    S1 --> IOC
-    B1 --> IOC
-    I1 --> IOC
-    G1 --> IOC
+    A1 --> LOG
+    S1 --> CONF
+    B1 --> CACHE
+    I1 --> DB
+    G1 --> LOG
 
-    IOC --> LOG
-    IOC --> CONF
-    IOC --> CACHE
-    IOC --> DB
+    ASM -.构造注入.-> A1
+    ASM -.构造注入.-> S1
+    HOST ==start/stop/tick==> A1
+    HOST ==start/stop/tick==> S1
 ```
 
-### 分布式部署架构
+> 模块间依赖为**编译期构造注入**（实线 = 直接依赖，无运行时容器中介）；装配与生命周期托管只存在于应用入口 `apps/`（`ApplicationContextBuilder` 拓扑序建图、`ApplicationHost` 帧驱动托管），模块内部互不感知容器。明确不采用 Spring 式运行时容器——论证见 `docs/analysis/ioc-review.md` §0/§17。
+
+### 分布式部署架构（目标形态）
 
 ```mermaid
 graph TB
@@ -255,15 +262,14 @@ graph TB
 ### 技术栈
 
 - **编程语言**: C++20
-- **构建系统**: CMake
+- **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自实现跨平台网络层
-- **序列化**: Google Protobuf
-- **数据库**: MySQL (主存储), Redis (缓存)
-- **消息队列**: Kafka/RabbitMQ
-- **监控系统**: Prometheus + Grafana
-- **日志系统**: ELK Stack (Elasticsearch + Logstash + Kibana)
-- **容器化**: Docker + Kubernetes
-- **测试框架**: GTest
+- **序列化**: Google Protobuf；实体契约为 XML+XSD def 体系 + 独立生成器 `apollo_gen`（`sdks/contract`）
+- **数据库**: MySQL 8（主存储）+ Redis（缓存/会话）+ ClickHouse（分析，规划）；PostgreSQL 留缝（docs/36 决策 #17）
+- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自研消息总线（规划，`docs/design/net-abstraction.md`）
+- **监控系统**: Prometheus + Grafana（规划，批次8）
+- **日志系统**: 自研多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
+- **测试框架**: GTest + 零依赖断言式单测
 - **CI/CD**: GitHub Actions
 
 ## 🚀 快速开始
@@ -319,10 +325,11 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ## 📚 模块说明
 
-### Framework 核心框架
-- **IoC容器**: 管理组件生命周期和依赖注入
-- **组件系统**: 支持插件式开发
-- **配置管理**: 支持热更新和多种格式
+### Core 核心框架（modules/core · modules/runtime）
+- **依赖注入**: `apollo::core::di` 极简构造注入容器——类型键 bean 图、拓扑序装配、仅 Singleton/Prototype 两档作用域；明确不采用 Spring 式运行时容器（`docs/analysis/ioc-review.md` §0）
+- **应用生命周期**: `ApplicationHost` 帧驱动托管——`IHostedService` start/stop/tick + 六阶段状态机（Boot→…→Stopped）
+- **配置**: `apollo::core::config::ConfigRegistry` 键值注册表；热更规划走 tick 边界换 ConfigSnapshot（ioc-review §17.6）
+- *(legacy `Apollo::` IoC 框架仍在仓库中清退，见 ioc-review §6 删除式迁移)*
 
 ### Game 游戏逻辑
 - **AOI系统**: 九宫格空间索引，高效视野管理
@@ -355,38 +362,62 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ### 服务器基础框架
 
 ```cpp
-#include "apollo/framework/ioc/ApplicationContext.h"
-#include "apollo/server/GameServer.h"
+#include "apollo/core/di/application_context.hpp"
+#include "apollo/runtime/application_host.hpp"
+
+// 业务 bean：普通类，依赖走构造函数（无注解、无注册宏）
+struct GameClockService {
+    std::string name = "game_clock";
+};
+
+class LoginPipeline {
+public:
+    explicit LoginPipeline(GameClockService& clock) : clock_(clock) {}
+private:
+    GameClockService& clock_;
+};
+
+// 托管服务：实现 IHostedService，由 ApplicationHost 帧驱动
+class GameServerService : public apollo::runtime::IHostedService {
+public:
+    explicit GameServerService(apollo::core::di::ApplicationContext& ctx)
+        : clock_(ctx.get<GameClockService>()) {}
+
+    std::string_view service_name() const override { return "game_server"; }
+    bool start() override { return true; }
+    void stop() override {}
+    bool is_running() const override { return true; }
+    void tick() override { /* 每帧业务逻辑 */ }
+
+private:
+    GameClockService& clock_;
+};
 
 int main() {
-    // 初始化IoC容器
-    auto& context = apollo::ApplicationContext::getInstance();
-
-    // 注册组件
-    context.registerComponent<apollo::GameServer>("GameServer");
-    context.registerComponent<apollo::NetworkServer>("NetworkServer");
-    context.registerComponent<apollo::DatabaseManager>("DatabaseManager");
-
-    // 初始化所有组件
+    // 装配：bean 图 = 一串 add_singleton，依赖即模板参数
+    apollo::core::di::ApplicationContextBuilder builder;
+    builder.add_singleton<GameClockService>().name("game_clock");
+    builder.add_singleton<LoginPipeline, GameClockService>().name("login_pipeline");
+    auto context = builder.build();
     if (!context.initialize()) {
-        std::cerr << "Failed to initialize application" << std::endl;
-        return -1;
+        return 1;  // 拓扑序构造，失败即退出
     }
 
-    // 启动服务
-    if (!context.start()) {
-        std::cerr << "Failed to start application" << std::endl;
-        return -1;
+    // 托管：start → run_once 帧循环 → stop
+    apollo::runtime::ServiceHost host;
+    host.add_service(std::make_shared<GameServerService>(context));
+    if (!host.start()) {
+        return 1;
     }
-
-    // 运行主循环
-    context.run();
-
-    // 清理
-    context.destroy();
+    while (host.is_running()) {
+        host.run_once();
+    }
+    host.stop();
     return 0;
 }
 ```
+
+> 完整可运行版本见 `apps/game-server/src/main.cpp`。装配只发生在应用入口（apps/），模块内部互不感知容器。
 
 ### 使用AOI系统
 
@@ -480,7 +511,7 @@ apollo/
 ├── src/                    # 公共实现与兼容层实现
 ├── tests/                  # 测试代码
 ├── examples/               # 示例代码
-├── sdks/                   # Unity 客户端 SDK
+├── sdks/                   # Unity 客户端 SDK 与契约工具（contract 契约 + gen 生成器 + cpp 生成物）
 ├── skds/                   # Cocos / Laya / 历史 SDK 工作区
 ├── docs/                   # VitePress 文档站点
 ├── cmake/                  # CMake 辅助脚本
