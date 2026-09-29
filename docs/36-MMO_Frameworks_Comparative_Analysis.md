@@ -42,6 +42,7 @@
 | 16 | Battle 独立实例 + Replay/Inspector 适配缝 | 混合同步需求的通用解（见 §4 问 10）；BW 把战斗算在 cell 内、无独立实例 | 自创+借鉴 | 大型团战 offload 到短生命周期实例进程，故障域与 tick 率独立可调（25 §3.2/§3.3/§8），关键帧记录留确定性回放之缝（25 §6） |
 | 17 | MySQL 8.0 + Redis + ClickHouse；PostgreSQL 留缝、MongoDB 不留缝 | BW db_storage_mysql/db_storage_xml 双后端、KBE MySQL-only（`kbe/src/lib/db_mysql`） | 对照自定 | 两家都把 DB 抽象成可插后端（BW 实证），但 KBE 实际只有 MySQL 一条腿（目录实证）；Apollo 用 storage.xml「语句即数据」天然留出 SQL 方言缝（见 §4 问 11） |
 | 18 | 帧同步只留适配缝不做实现 | 各框架均无内建 lockstep（见 §4 问 10） | 暂缓 | MMORPG 上行 intent-only（服务端定夺）与 lockstep 确定性直接冲突；如需战斗帧同步，走 Battle 实例单独确定性运行时，不污染大世界协议（25 §3.3/§6） |
+| 19 | 编解码 **A+C 双轨、C 为主**：编译期生成（A）收窄给服务端 tick 热路径；descriptor.bin 反射池（C）为默认通道——客户端 SDK 走热更资源管线（AssetBundle/小游戏分包/CDN 版本目录，不随服务器发版）、服务端冷路径（GM/运维）、调试工具；apollo_gen 同一 def 源同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致 | BigWorld（.def→生成代码，零开销但改契约全端重编）与 KBEngine（.def 运行时解析+Variant，热路径查表且契约耦合五短板同族，ioc-review §16.2）的**真实分叉**——两条都不照抄，取 protobuf FileDescriptorSet 自描述中间态 | 对照自定（双轨分档） | 客户端更新链路（商店审核/玩家升级）比服务器重编译更难控——bin 当资源下发把最慢一环（端侧发版）与协议解耦；服务端热路径保留生成代码零开销，冷路径/端侧吃 2-5× 反射税换零重编跟进；.bin 仍是构建期定型产物（protoc 校验、运行期只读），不落「运行时解释」批判面（sdk-contract §10.6，2026-09-29 定案） |
 
 ---
 
