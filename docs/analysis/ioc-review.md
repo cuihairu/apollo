@@ -1259,13 +1259,16 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 
 ### 16.10.2 搁置项登记簿（2026-09-28 快照，随门禁变化滚动更新）
 
+> 2026-09-29 更新：⑦–⑪ 五项已全部按 §16.9 备妥文本粘贴落地（门禁放宽轮——设计文档写入获授权，源码仍冻结）；另补 G-1/G-2 新行。
+
 | 项 | 目标文档 | 状态 | 解除动作 |
 |---|---|---|---|
-| ⑦ config 桩/路由删除 | docs/design/xml-generation.md §1.1/§7 | **搁置**（docs/design 超门禁，文本已备） | 门禁放宽 → 按 §16.9.1 粘贴 |
-| ⑧ filter 归属/前置条件 | docs/design/net-abstraction.md §5.5/§6 | **搁置**（同上） | 门禁放宽 → 按 §16.9.2 粘贴 |
-| ⑨ 生成器链接边界 | docs/design/sdk-contract.md §3 + xml-generation.md §4 | **搁置**（同上） | 门禁放宽 → 按 §16.9.3 粘贴 |
-| ⑩ 定时器轮归属 | docs/analysis/ssengine-reference.md §4.3 | **已登记**（判定权威记录 = 本报告） | 门禁放宽 → 按 §16.9.4 粘贴（登记不撤销） |
-| ⑪ G-5 两截落位 | docs/design/net-abstraction.md §7 P3 | **搁置**（同上） | 门禁放宽 → 按 §16.9.5 粘贴 |
+| ⑦ config 桩/路由删除 | docs/design/xml-generation.md §1.1/§7 | **已落地**（2026-09-29 按 §16.9.1 粘贴：§1.1 表行第三格 + §7 P1 行内） | 已闭环 |
+| ⑧ filter 归属/前置条件 | docs/design/net-abstraction.md §5.5/§6 | **已落地**（2026-09-29 按 §16.9.2 粘贴：§5.5 bullet + §6 决策表 FrameFilter 行） | 已闭环 |
+| ⑨ 生成器链接边界 | docs/design/sdk-contract.md §3 + xml-generation.md §4 | **已落地**（2026-09-29 按 §16.9.3 粘贴：sdk-contract §3 链接边界段 + xml-generation §4 实现形态行尾） | 已闭环 |
+| ⑩ 定时器轮归属 | docs/analysis/ssengine-reference.md §4.3 | **已落地**（2026-09-29 按 §16.9.4 粘贴：§4.3「成本」bullet 后归属行；登记不撤销，16.10.1 仍为判定权威记录） | 已闭环 |
+| ⑪ G-5 两截落位 | docs/design/net-abstraction.md §7 P3 | **已落地**（2026-09-29 按 §16.9.5 粘贴：§7 P3 运维观测通道两截落位） | 已闭环 |
+| G-1/G-2 进程编队与备份容灾 P3 前置设计 | docs/design/net-abstraction.md §7「P3 前置设计」节 | **已落地**（2026-09-29 新写——§16.4 两项空白的补设计；attribute-sync §8.2 加范围声明行） | — |
 | 下轮审计候选：bw/bigworld 兼容层 | 本报告（未评审子系统清单） | **登记**（16.8.3-④ 观察；bw::Runtime 实体体系与 game 模块并行的风险面） | 新审计轮授权 |
 | 下轮审计候选：ipc 树 | 本报告（§15.2 已注：include/src 两树约 18 文件 7800+ 行，APOLLO_ENABLE_IPC=OFF） | **登记** | 新审计轮授权 |
 | 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案） | 代码阶段授权 |
