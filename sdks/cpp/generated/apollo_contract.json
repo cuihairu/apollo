@@ -1,6 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
   "schema_hash": "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633",
+  "client_hash": "477127c4430d000fbb42b24ec5c1205a449e58719e9840eabcfcdb76bba4e659",
+  "internal_hash": "01a8d5d13e0fd0116d30f8b04bcc7e7a772803f512bf408df29343fbaeb21479",
   "contract_version": 2,
   "aliases": [
     {

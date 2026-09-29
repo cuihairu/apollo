@@ -9,6 +9,11 @@ namespace apollo::contract::gen {
 
 inline constexpr uint16_t kContractVersion = 2;
 inline constexpr const char* kSchemaHash = "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633";
+// 双域 hash（sdk-contract §11.3 ②）：握手发 kClientHash（客户端包指纹，
+// internal-only 变更不推动它——握手稳定、客户端包不重发）；kInternalHash
+// 服务端部署期同批断言；全量身份（含 version）仍是 kSchemaHash。
+inline constexpr const char* kClientHash = "477127c4430d000fbb42b24ec5c1205a449e58719e9840eabcfcdb76bba4e659";
+inline constexpr const char* kInternalHash = "01a8d5d13e0fd0116d30f8b04bcc7e7a772803f512bf408df29343fbaeb21479";
 inline constexpr const char* kGeneratorVersion = "apollo-gen 0.2.0";
 
 // 同步可见域 8 位掩码（docs/05 §6.3）。SYNC_DB(0x04) 是存储语义，

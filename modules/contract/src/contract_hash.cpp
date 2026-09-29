@@ -31,6 +31,16 @@ constexpr uint32_t kK[64] = {
 
 inline uint32_t rotr(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
 
+/// 收尾 → 64 位十六进制（computeSchemaHash/computeDomainHash 共用）
+std::string finishHex(Sha256& h) {
+    auto digest = h.finish();
+    std::ostringstream os;
+    for (uint8_t b : digest) {
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+    }
+    return os.str();
+}
+
 }  // namespace
 
 Sha256::Sha256() : totalLen_(0), bufferLen_(0) {
@@ -144,12 +154,15 @@ std::string computeSchemaHash(const Contract& c, const std::string& generatorVer
     Sha256 h;
     h.update(canonicalBundle(c));
     h.update(generatorVersion);
-    auto digest = h.finish();
-    std::ostringstream os;
-    for (uint8_t b : digest) {
-        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
-    }
-    return os.str();
+    return finishHex(h);
+}
+
+std::string computeDomainHash(const Contract& c, const std::string& generatorVersion,
+                              MsgDomain domain) {
+    Sha256 h;
+    h.update(canonicalDomainBundle(c, domain));
+    h.update(generatorVersion);
+    return finishHex(h);
 }
 
 }  // namespace apollo::contract

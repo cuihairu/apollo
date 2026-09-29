@@ -79,6 +79,16 @@ static_assert(findMsg("heartbeat") >= 0 &&
                   acg::kMsgs[findMsg("heartbeat")].binding == acg::MsgBinding::Native,
               "control 通道框架族缺省 native 绑定");
 
+// 双域 hash（sdk-contract §11.3 ②）：握手对象 kClientHash 与服务端断言锚点
+// kInternalHash 都必须是 64 位十六进制，且与全量 kSchemaHash 三者互异——
+// 生成器漏算任一份在此层即红。
+static_assert(strLen(acg::kClientHash) == 64, "client_hash 应为 64 位十六进制串");
+static_assert(strLen(acg::kInternalHash) == 64, "internal_hash 应为 64 位十六进制串");
+static_assert(!eqStr(acg::kSchemaHash, acg::kClientHash) &&
+                  !eqStr(acg::kSchemaHash, acg::kInternalHash) &&
+                  !eqStr(acg::kClientHash, acg::kInternalHash),
+              "三个 hash 输入不同必互异（域标签行参与 bundle）");
+
 // 继承展开：Player 的祖先链 = Monster, Avatar（根在前）
 constexpr int findEntity(const char* name) {
     for (size_t i = 0; i < acg::kEntityCount; ++i) {

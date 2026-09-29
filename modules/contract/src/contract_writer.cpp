@@ -194,4 +194,31 @@ std::string canonicalBundle(const Contract& c) {
     return os.str();
 }
 
+std::string canonicalDomainBundle(const Contract& c, MsgDomain domain) {
+    // 只留该域内容：client 面 = client 域消息 + attrs + errors；internal 面 =
+    // internal 域消息 + entities。version 剥离（拷贝的 version 恒 0——各 write*
+    // 输出的 version="0" 对所有契约相同，不携带信息）。排序由各 write* 内部
+    // sortedXxx 兜底，无需在此排。
+    Contract filtered;
+    if (domain == MsgDomain::Client) {
+        filtered.aliases = c.aliases;
+        filtered.attrs = c.attrs;
+        filtered.errors = c.errors;
+    } else {
+        filtered.entities = c.entities;
+    }
+    for (const auto& m : c.msgs) {
+        if (m.domain == domain) filtered.msgs.push_back(m);
+    }
+
+    std::ostringstream os;
+    // 域标签行：两 bundle 语义不同输入不同，标签再显式隔一道（空 bundle 也不撞）
+    os << "domain:" << msgDomainToString(domain) << "\n";
+    os << writeAttrsXml(filtered) << "\n";
+    os << writeMessagesXml(filtered) << "\n";
+    os << writeEntitiesXml(filtered) << "\n";
+    os << writeErrorsXml(filtered) << "\n";
+    return os.str();
+}
+
 }  // namespace apollo::contract

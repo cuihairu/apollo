@@ -37,4 +37,11 @@ private:
 /// schema_hash = SHA-256(canonicalBundle(contract) + generatorVersion)。返回十六进制。
 std::string computeSchemaHash(const Contract& c, const std::string& generatorVersion);
 
+/// 双域 hash（sdk-contract §11.3 ②）= SHA-256(canonicalDomainBundle + generatorVersion)。
+/// 算法同上，输入按域过滤——internal-only 变更不改 client_hash（客户端握手稳定、
+/// 客户端包字节不变），client 域变更不改 internal_hash；握手用 client_hash，
+/// internal_hash 只做服务端部署期同批断言。
+std::string computeDomainHash(const Contract& c, const std::string& generatorVersion,
+                              MsgDomain domain);
+
 }  // namespace apollo::contract

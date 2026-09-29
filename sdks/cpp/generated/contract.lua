@@ -8,6 +8,10 @@ local M = {}
 
 M.version = 2
 M.schema_hash = "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633"
+-- 双域 hash（§11.3 ②）：握手比对 client_hash；internal_hash 供服务端
+-- 部署期同批断言（装载期闸消费，见 M.msgs 注释）。
+M.client_hash = "477127c4430d000fbb42b24ec5c1205a449e58719e9840eabcfcdb76bba4e659"
+M.internal_hash = "01a8d5d13e0fd0116d30f8b04bcc7e7a772803f512bf408df29343fbaeb21479"
 
 -- 属性表（id → 元数据；sync 为 token 数组，掩码语义在服务端收集侧）
 M.attrs = {

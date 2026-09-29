@@ -365,6 +365,85 @@ void testCrossDomainReferenceRejected() {
           "client→internal 引用应报跨域禁令，实际:\n" + r.report());
 }
 
+void testDomainHashes() {
+    // §11.3 ②：双域 hash——输入按域过滤，internal-only 变更不改 client_hash
+    // （握手稳定/客户端包字节不变），client 域变更不改 internal_hash。
+    // bundle 划分：client 面 = client 域消息 + attrs + errors；
+    // internal 面 = internal 域消息 + entities；手工 version 不进域 bundle
+    // （全量身份含 version 仍由 schema_hash 锚定）。
+    std::string shippedAttrs = readFileOrEmpty(std::string(APOLLO_CONTRACT_DIR) + "/attrs.xml");
+    ParseResult pa = parseAttrsXml(shippedAttrs, "attrs.xml");
+    CHECK(pa.errorCount() == 0, "域 hash 测试的 attrs 基线应零错误");
+
+    auto build = [&](const std::string& msgsXml, const std::string& entitiesXml) {
+        ParseResult r = parseMessagesXml(msgsXml, "messages.xml");
+        ParseResult re = parseEntitiesXml(entitiesXml, "entities.xml");
+        CHECK(re.errorCount() == 0, "entities 基线应零错误");
+        r.contract.aliases = pa.contract.aliases;
+        r.contract.attrs = pa.contract.attrs;
+        r.contract.errors = pa.contract.errors;
+        r.contract.entities = re.contract.entities;
+        r.contract = validateAndResolve(std::move(r.contract), r.issues);
+        CHECK(r.ok(), "域 hash 测试基线应零错误:\n" + r.report());
+        return r.contract;
+    };
+
+    const std::string msgsBase =
+        R"(<?xml version="1.0"?><messages version="2">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client"/>
+<msg id="900" name="zone_sync" dir="P2P" channel="events" domain="internal"/>
+</messages>)";
+    const std::string msgsMoreInternal =
+        R"(<?xml version="1.0"?><messages version="2">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client"/>
+<msg id="900" name="zone_sync" dir="P2P" channel="events" domain="internal"/>
+<msg id="901" name="rebalance" dir="P2P" channel="events" domain="internal"/>
+</messages>)";
+    const std::string msgsMoreClient =
+        R"(<?xml version="1.0"?><messages version="2">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client"/>
+<msg id="11" name="emote" dir="C2S" channel="events" domain="client"/>
+<msg id="900" name="zone_sync" dir="P2P" channel="events" domain="internal"/>
+</messages>)";
+    const std::string entitiesEmpty = R"(<?xml version="1.0"?><entities version="2"/>)";
+    const std::string entitiesOne =
+        R"(<?xml version="1.0"?><entities version="2"><entity id="Region"/></entities>)";
+
+    Contract c1 = build(msgsBase, entitiesEmpty);
+    Contract c2 = build(msgsMoreInternal, entitiesEmpty);  // +internal 消息
+    Contract c3 = build(msgsMoreClient, entitiesEmpty);    // +client 消息
+    Contract c4 = c1;                                      // attr 语义变更
+    c4.attrs[0].defaultValue = "2000";
+    Contract c5 = build(msgsBase, entitiesOne);            // +entity
+    Contract c6 = c1;                                      // 仅手工版本号
+    c6.version = 3;
+
+    const std::string ver = "apollo-gen 0.2.0";
+    auto ch = [&](const Contract& c) { return computeDomainHash(c, ver, MsgDomain::Client); };
+    auto ih = [&](const Contract& c) { return computeDomainHash(c, ver, MsgDomain::Internal); };
+
+    CHECK(ch(c1).size() == 64 && ih(c1).size() == 64, "域 hash 应为 64 位十六进制");
+    CHECK(ch(c1) != ih(c1), "client/internal bundle 输入不同，hash 必互异");
+
+    CHECK(ch(c2) == ch(c1), "internal-only 增消息不得改 client_hash（握手稳定）");
+    CHECK(ih(c2) != ih(c1), "internal 增消息必改 internal_hash");
+    CHECK(ch(c3) != ch(c1), "client 增消息必改 client_hash");
+    CHECK(ih(c3) == ih(c1), "client-only 增消息不得改 internal_hash");
+
+    CHECK(ch(c4) != ch(c1), "attr 语义变更必改 client_hash（attrs 进 client bundle）");
+    CHECK(ih(c4) == ih(c1), "attr 变更不得改 internal_hash");
+    CHECK(ch(c5) == ch(c1), "entity 变更不得改 client_hash（entities 进 internal bundle）");
+    CHECK(ih(c5) != ih(c1), "entity 变更必改 internal_hash");
+
+    CHECK(ch(c6) == ch(c1) && ih(c6) == ih(c1),
+          "手工 version 变更不得改域 hash（否则 internal-only 发版会推动客户端包）");
+    CHECK(computeSchemaHash(c6, ver) != computeSchemaHash(c1, ver),
+          "version 变更必改全量 schema_hash（记账仍有效）");
+
+    CHECK(ch(c1) != computeDomainHash(c1, "apollo-gen 0.3.0", MsgDomain::Client),
+          "生成器版本参与域 hash");
+}
+
 // ------------------------------------------------------------------ 继承矩阵
 
 void testInheritanceMatrix() {
@@ -589,6 +668,7 @@ int main() {
     testMsgDomainRules();
     testBindingDefaultByChannel();
     testCrossDomainReferenceRejected();
+    testDomainHashes();
     testInheritanceMatrix();
     testInheritanceCycleRejected();
     testInheritanceDanglingParentRejected();
