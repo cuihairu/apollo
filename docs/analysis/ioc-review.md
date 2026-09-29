@@ -1269,6 +1269,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | ⑩ 定时器轮归属 | docs/analysis/ssengine-reference.md §4.3 | **已落地**（2026-09-29 按 §16.9.4 粘贴：§4.3「成本」bullet 后归属行；登记不撤销，16.10.1 仍为判定权威记录） | 已闭环 |
 | ⑪ G-5 两截落位 | docs/design/net-abstraction.md §7 P3 | **已落地**（2026-09-29 按 §16.9.5 粘贴：§7 P3 运维观测通道两截落位） | 已闭环 |
 | G-1/G-2 进程编队与备份容灾 P3 前置设计 | docs/design/net-abstraction.md §7「P3 前置设计」节 | **已落地**（2026-09-29 新写——§16.4 两项空白的补设计；attribute-sync §8.2 加范围声明行） | — |
+| 废弃文档清理：Spring/IoC 设计 5 份（06-生命周期 / 07-Scope / 08-Spring 知识点 / 14-SpringLike / 34-ApplicationContext_2.0——§17 分析对象本体）+ 早期参考系列与被取代稿 32 份（英文抽取系列 00-31、01/02/04 中文早期稿、network-design/extraction-progress/caf_integration、根目录与 architecture/ 重复的 AOI/BigWorld 知识稿）+ 误提交的 docs/node_modules（39781 文件） | docs/ 根 | **已删除**（2026-09-29 用户决定；git 历史可溯——本报告 §17 等处的行级引用按各节基线钉死值读作历史记录，不因删档失效；ssengine §4.3 的 docs/34 §15 活引证已内联化） | — |
 | 下轮审计候选：bw/bigworld 兼容层 | 本报告（未评审子系统清单） | **登记**（16.8.3-④ 观察；bw::Runtime 实体体系与 game 模块并行的风险面） | 新审计轮授权 |
 | 下轮审计候选：ipc 树 | 本报告（§15.2 已注：include/src 两树约 18 文件 7800+ 行，APOLLO_ENABLE_IPC=OFF） | **登记** | 新审计轮授权 |
 | 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案） | 代码阶段授权 |

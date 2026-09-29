@@ -99,7 +99,7 @@
 
 - **老引擎现状**：头文件宣称分层，实现是 vector 扫描（`sdtimer.cpp:48-74`）——**它只是"能用"**。
 - **为什么 apollo 必须有**：game loop 的 buff 到期、技能 CD、AI 思考节拍、属性回血 tick、重连超时、DB 重试——全部是定时器；无定时器模块意味着这些将来会散落成各系统私有 `next_fire_time` 扫描。
-- **落地形态**：分层时间轮（如 5 层 × 64 槽，ms/10ms/100ms/1s/10s 粒度），O(1) 插入/取消；**驱动挂在主循环固定阶段**（不是独立线程——与 docs/34 §15"调度器不得进入高频 Tick 冲突"一致：调度器提供数据结构，驱动权在 game loop）；到期的回调分"主线程回调/工作线程回调"两类。SSEngine sdtimer 的"锁内收集、锁外执行"（`sdtimer.cpp:48-73`）细节正确，保留该语义。
+- **落地形态**：分层时间轮（如 5 层 × 64 槽，ms/10ms/100ms/1s/10s 粒度），O(1) 插入/取消；**驱动挂在主循环固定阶段**（不是独立线程——既定原则：调度器只提供数据结构、驱动权在 game loop、不进高频 tick〔原引 docs/34 §15，该文档已随 2026-09-29 Spring/IoC 废弃文档清理删除，git 历史可溯〕）；到期的回调分"主线程回调/工作线程回调"两类。SSEngine sdtimer 的"锁内收集、锁外执行"（`sdtimer.cpp:48-73`）细节正确，保留该语义。
 - **成本**：中（一个独立模块 + 单测）；与 Lua 热更的关联见 §6。
 - **归属（ioc-review §16.8.3-④）**：落 **modules/base 新组件（数据结构 + 单测）**——三家先例：BW TimeQueue 在最底层公共库 lib/cstdmf 且自带 unit_test（time_queue.hpp:60/:74、unit_test/test_time_queue.cpp）、KBEngine Timers 在 lib/common（timer.h:101/:108）、skynet 为核心线程编队（skynet_start.c:209-211）；模块只供 O(1) 结构与到期回调收集，驱动权按本节设计留在 game loop 固定阶段。**不落 modules/bigworld**——其为 legacy 兼容层（BigWorld.h:3-9），timer.cpp 是转发桩（:3-5，自认实现由 apollo::bw::Runtime 提供，runtime.h:40 addEntityTimer），仅作语义参考不入生产链。
 
