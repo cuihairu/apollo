@@ -21,7 +21,7 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 - 🏗️ **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）；明确不采用 Spring 式运行时容器（论证见 `docs/analysis/ioc-review.md` §0）
 - 📜 **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
 - 🌐 **高性能网络层** - 跨平台异步I/O（IOCP/Epoll）
-- 📦 **Protobuf消息系统** - 高效的序列化和RPC框架
+- 📦 **传输编解码（目标态）** - L1 帧格式 + protobuf + zstd 压缩（`docs/design/net-abstraction.md`）；当前处于契约系统第一批（def → `apollo_gen` 生成器），protobuf schema 由契约生成在后续批次——现网为手写编码，仓库自有 .proto 为零
 - 🔥 **ECS战斗系统** - 灵活的实体-组件-系统架构
 - 👁 **AOI九宫格系统** - 高效的视野管理
 - 💾 **数据存储层** - 数据库连接池和Redis缓存
@@ -119,7 +119,7 @@ graph TB
 graph LR
     subgraph "网络层"
         T1[传输层<br/>TCP/WebSocket/KCP]
-        P1[协议层<br/>Protobuf]
+        P1[协议层<br/>手写编码→目标 protobuf+zstd]
         R1[路由层<br/>Message Router]
     end
 
@@ -264,7 +264,7 @@ graph TB
 - **编程语言**: C++20
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自实现跨平台网络层
-- **序列化**: Google Protobuf；实体契约为 XML+XSD def 体系 + 独立生成器 `apollo_gen`（`sdks/contract`）
+- **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3）——**def 契约管语义**（属性/权限位/sync 掩码；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付）；**protobuf 管字节编码**（L1 帧格式 + zstd，schema 由契约生成，规划；`docs/design/net-abstraction.md`）。protobuf 现为依赖+测试，未上消息通路（仓库自有 .proto 为零，现网手写编码）
 - **数据库**: MySQL 8（主存储）+ Redis（缓存/会话）+ ClickHouse（分析，规划）；PostgreSQL 留缝（docs/36 决策 #17）
 - **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自研消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
@@ -339,7 +339,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ### Network 网络通信
 - **传输层**: Socket封装，支持TCP/WebSocket/KCP
-- **消息层**: Protobuf消息路由和处理
+- **消息层**: 消息路由和处理（现网手写编码；目标 protobuf+zstd，schema 由 def 契约生成，规划）
 - **RPC框架**: 远程过程调用框架
 
 ### Storage 存储层
