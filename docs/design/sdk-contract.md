@@ -552,8 +552,50 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 
 ### 11.5 落地批次
 
-随 P2 proto/bin 双后端同批（§8 已补行）：domain 属性与 id 分段进 XSD 是契约侧小改；按域过滤是 bin 投影的同一趟代码；双 hash 是 §10.6 schema_hash 两态一致的直接推广（client_hash 锚定 client 域 bin 字节，internal_hash 锚定服务端 .pb.cc 批次）。
+随 P2 proto/bin 双后端同批（§8 已补行）：domain 属性与 id 分段进 XSD 是契约侧小改；按域过滤是 bin 投影的同一趟代码；双 hash 是 §10.6 schema_hash 两态一致的直接推广（client_hash 锚定 client 域 bin 字节，internal_hash 锚定服务端 .pb.cc 批次）；客户端契约包（§11.6 三件套）是 bin 后端的同一趟产出。
+
+### 11.6 客户端契约包与 manifest：多文件交付的一致性闭环（2026-09-29 追加）
+
+对 §10.6 的补漏：descriptor.bin 只覆盖 wire 层——§10.6 已声明掩码/predict 不进 .bin，语义消费端走 JSON golden 与生成常量表。客户端实际还需要**语义侧小件**：predict 表（→ 预测混合器）、attr id→name（→ 调试/UI 绑定）、错误码表。「多个文件」是事实，不回避——解法不是多文件各自校验，而是**交付单元从文件升成包**：
+
+```
+dist/client/<client_hash>/          ← 目录名即版本指纹（CDN 版本目录按 hash 寻址，缓存友好）
+├── manifest.json                   # 包指纹：client_hash、生成器版本、逐文件 SHA-256 清单
+├── descriptor.bin                  # wire 层（protoc 标准产物，任何 protobuf 运行时直接吃）
+└── semantic.json                   # 语义侧小件：predict 表、attr id→name、错误码
+```
+
+apollo_gen 同批吐三件（与 .pb.cc 同一次跑）——manifest 把「同批性」从口头纪律变成**端侧可验的物证**。
+
+校验链（两层，全在加载期/握手期，不进运行期）：
+
+```
+拉包（热更管线）→ 读 manifest → 逐文件算 SHA-256 比对 → 任一不符【加载期红】
+               → manifest.client_hash 与服务端握手比对 → 不匹配【握手红（§5：拒绝+提示升级）】
+               → 全过 → bin 进 DescriptorPool + semantic.json 进 SDK 第 2 层
+```
+
+不一致路径逐条封堵：
+
+| 场景 | 挡在哪 |
+|---|---|
+| 新 bin + 旧 semantic.json（热更部分失败/CDN 缓存错配） | manifest 逐文件 hash——加载期红，非运行期数据错位 |
+| manifest 与文件不符（篡改/半包） | 同上，加载期红 |
+| 整包旧版本（bin+semantic+manifest 自洽） | **合法**——正是 N/N-1 窗口成员（§6 语义不变） |
+| 整包新、服务端旧 | 握手红（§5） |
+
+关键性质：**版本校验只有一个点——client_hash**（§11.3 ②的握手对象）。不存在「每文件一个版本号」的多点漂移面；文件间一致性是 manifest 的机械校验，加载器写一次、全端共用同一段逻辑。
+
+「合成单文件」三案否决：
+
+| 候选 | 否决理由 |
+|---|---|
+| 自定义容器 `[len][json][bin]` | 每端写剥壳器；丧失 C 路线核心优势——bin 是 protoc 标准产物，任何运行时直接 `ParseFromString` |
+| 语义塞进 .proto（custom option/enum） | 语义硬编进 wire 描述，扭曲 §10.0 两层模型；protoc 校验面管不了它 |
+| 单 blob 打包 | 无增量更新——semantic.json 很少变、bin 随消息变，分文件只重发变化的文件；manifest 是纯 JSON，与 AssetBundle/小游戏分包 manifest 惯例同构，零学习成本 |
+
+一句话：**多文件是真，但「不一致的可能」被 manifest 逐文件 hash + 单点 client_hash 在加载期/握手期全部闭环，不进运行期。**
 
 ---
 
-*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。*
+*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。同日续加 §11.6（客户端契约包与 manifest：bin 只覆盖 wire 层的补漏——语义小件第二文件是事实，交付单元升为包，manifest 逐文件 SHA-256 + 单点 client_hash 握手，不一致全闭环在加载期/握手期；单文件三案否决）。*
