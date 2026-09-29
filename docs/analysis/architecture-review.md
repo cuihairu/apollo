@@ -1,4 +1,6 @@
-# Apollo IoC/DI 设计评审（ioc-review）
+# Apollo 架构评审与审计链（architecture-review）
+
+> 更名记录（2026-09-29）：本报告原名 `ioc-review.md`（Apollo IoC/DI 设计评审）。起点是 IoC/DI 评审，后续扩展为全仓架构审计（§8–§17：C-1…C-52 缺陷登记、G-1…G-7 能力缺口、三框架对照、模块归属、决策落盘、DI 六域分析、§16.10.2 登记簿、附录 A 合规记录），故更名以名副其实。历史名称在 git 历史与 sdks/contract 注释（冻结纪律内，随下一代码批次同步）中仍可见。
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
@@ -774,7 +776,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | gateway 全链路桩化审计：makeNullClientIngressServer send 空体、accept 自述未绑定、Channel send 全 return false、MessageRouter 静默丢弃 | Read 全链路 | 属实（C-38） |
 | ECS 三套所有权：ecs.h 无 .cpp、battle::ecs dtor 只 comment、BattleSystem 无锁并发模型 | rg + cat + Read | 属实（C-39） |
 | 配置四套单向 sync 无回订机制 | rg 跨模块引用 | 属实（C-40） |
-| 脚本-C++ 边界 tick 边界感知缺失 | scripting-lua.md §3.2 与 ioc-review 条目对比 | 属实（C-41） |
+| 脚本-C++ 边界 tick 边界感知缺失 | scripting-lua.md §3.2 与 architecture-review 条目对比 | 属实（C-41） |
 | 平行树复计 7 对（见 C-42 项目列表） | rg 全仓 diff | 属实（C-42） |
 
 ---
@@ -1177,7 +1179,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 
 **替换 1**：
 
-> 接缝不补实现——路由随桩一并删除（ioc-review §16.8.3-③）：XML 装载只走本设计 §4 产物 2 的生成 typed loader，不回灌 config_manager 通用树
+> 接缝不补实现——路由随桩一并删除（architecture-review §16.8.3-③）：XML 装载只走本设计 §4 产物 2 的生成 typed loader，不回灌 config_manager 通用树
 
 **锚点 2**（§7 P1 句尾，原文）：
 
@@ -1185,7 +1187,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 
 **替换 2**：
 
-> + config_manager 的 parseXml/parseLua 桩与 ConfigFormat::Xml/Lua 路由**诚实化删除**（stub 家族清理，C-49 纪律；ioc-review §16.8.3-③：删除含路由本身、不补通用 XML 实现——config_manager 保持 INI/JSON 通用树职责，XML 装载只走本设计产物 2；改动点记录在案，随代码阶段执行）。
+> + config_manager 的 parseXml/parseLua 桩与 ConfigFormat::Xml/Lua 路由**诚实化删除**（stub 家族清理，C-49 纪律；architecture-review §16.8.3-③：删除含路由本身、不补通用 XML 实现——config_manager 保持 INI/JSON 通用树职责，XML 装载只走本设计产物 2；改动点记录在案，随代码阶段执行）。
 
 依据：16.8.3-③——「接缝上立规矩」与 xml-generation §4 产物 2 的「运行期二次反射」禁令存在张力，统一为删除路由、不补实现。
 
@@ -1194,13 +1196,13 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 **插入 1**（§5.5 末尾追加一条）：
 
 ```markdown
-- **归属与前置条件**（ioc-review §16.8.3-①）：FrameFilter 接口与内置插件落**收敛后的 modules/net**——先例：BW filter 与通道同库、构造注入（udp_channel.hpp:81/:139-140）；protocol（生成 codec）经 L1 codec 槽位注入，apps/gateway-app 只装配不实现。**前置条件 = C-29 四套网络树收敛**（§12.2、§15.2「禁止第五套」）——filter 不落现存四套中任何一套的原样，否则 filter 链即第五处网络代码。
+- **归属与前置条件**（architecture-review §16.8.3-①）：FrameFilter 接口与内置插件落**收敛后的 modules/net**——先例：BW filter 与通道同库、构造注入（udp_channel.hpp:81/:139-140）；protocol（生成 codec）经 L1 codec 槽位注入，apps/gateway-app 只装配不实现。**前置条件 = C-29 四套网络树收敛**（§12.2、§15.2「禁止第五套」）——filter 不落现存四套中任何一套的原样，否则 filter 链即第五处网络代码。
 ```
 
 **插入 2**（§6 决策清单表，Aeron 行后追加一行）：
 
 ```markdown
-| FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | ioc-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
+| FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | architecture-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
 ```
 
 ### 16.9.3 ⑨ → docs/design/sdk-contract.md §3 + docs/design/xml-generation.md §4（生成器链接边界，16.8.3-②）
@@ -1208,13 +1210,13 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 **插入 1**（sdk-contract §3「CI 强制」句后追加）：
 
 ```markdown
-链接边界（ioc-review §16.8.3-②）：gen 是**运行期依赖图之外**的构建期工具——不被任何运行期目标链接，产物被 modules/protocol、tables 消费模块与各 sdks/* 链接，运行期代码禁止 include gen 内部头。先例：KBEngine 配置转换器在源码树外（kbe/tools/xlsx2py）、BigWorld 工具族独立二进制（server/tools）。
+链接边界（architecture-review §16.8.3-②）：gen 是**运行期依赖图之外**的构建期工具——不被任何运行期目标链接，产物被 modules/protocol、tables 消费模块与各 sdks/* 链接，运行期代码禁止 include gen 内部头。先例：KBEngine 配置转换器在源码树外（kbe/tools/xlsx2py）、BigWorld 工具族独立二进制（server/tools）。
 ```
 
 **插入 2**（xml-generation §4「实现形态」bullet 句尾追加）：
 
 ```markdown
-链接边界（ioc-review §16.8.3-②）：gen 运行期零链接——产物被消费模块链接，生成器本体不进任何运行期目标（sdk-contract §3 同步此边界）。
+链接边界（architecture-review §16.8.3-②）：gen 运行期零链接——产物被消费模块链接，生成器本体不进任何运行期目标（sdk-contract §3 同步此边界）。
 ```
 
 ### 16.9.4 ⑩ → docs/analysis/ssengine-reference.md §4.3（定时器轮归属，16.8.3-④）
@@ -1222,7 +1224,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 **插入**（§4.3 末尾「成本」bullet 后追加）：
 
 ```markdown
-- **归属（ioc-review §16.8.3-④）**：落 **modules/base 新组件（数据结构 + 单测）**——三家先例：BW TimeQueue 在最底层公共库 lib/cstdmf 且自带 unit_test（time_queue.hpp:60/:74、unit_test/test_time_queue.cpp）、KBEngine Timers 在 lib/common（timer.h:101/:108）、skynet 为核心线程编队（skynet_start.c:209-211）；模块只供 O(1) 结构与到期回调收集，驱动权按本节设计留在 game loop 固定阶段。**不落 modules/bigworld**——其为 legacy 兼容层（BigWorld.h:3-9），timer.cpp 是转发桩（:3-5，自认实现由 apollo::bw::Runtime 提供，runtime.h:40 addEntityTimer），仅作语义参考不入生产链。
+- **归属（architecture-review §16.8.3-④）**：落 **modules/base 新组件（数据结构 + 单测）**——三家先例：BW TimeQueue 在最底层公共库 lib/cstdmf 且自带 unit_test（time_queue.hpp:60/:74、unit_test/test_time_queue.cpp）、KBEngine Timers 在 lib/common（timer.h:101/:108）、skynet 为核心线程编队（skynet_start.c:209-211）；模块只供 O(1) 结构与到期回调收集，驱动权按本节设计留在 game loop 固定阶段。**不落 modules/bigworld**——其为 legacy 兼容层（BigWorld.h:3-9），timer.cpp 是转发桩（:3-5，自认实现由 apollo::bw::Runtime 提供，runtime.h:40 addEntityTimer），仅作语义参考不入生产链。
 ```
 
 ### 16.9.5 ⑪ → docs/design/net-abstraction.md §7 P3（G-5 载体两截归属，16.8.3-⑤）
@@ -1234,7 +1236,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 **替换**：
 
 ```markdown
-- **P3**：进程间总线自研落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（ioc-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
+- **P3**：进程间总线自研落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（architecture-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
 ```
 
 ### 16.9.6 状态与核对
@@ -1270,6 +1272,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | ⑪ G-5 两截落位 | docs/design/net-abstraction.md §7 P3 | **已落地**（2026-09-29 按 §16.9.5 粘贴：§7 P3 运维观测通道两截落位） | 已闭环 |
 | G-1/G-2 进程编队与备份容灾 P3 前置设计 | docs/design/net-abstraction.md §7「P3 前置设计」节 | **已落地**（2026-09-29 新写——§16.4 两项空白的补设计；attribute-sync §8.2 加范围声明行） | — |
 | 废弃文档清理：Spring/IoC 设计 5 份（06-生命周期 / 07-Scope / 08-Spring 知识点 / 14-SpringLike / 34-ApplicationContext_2.0——§17 分析对象本体）+ 早期参考系列与被取代稿 32 份（英文抽取系列 00-31、01/02/04 中文早期稿、network-design/extraction-progress/caf_integration、根目录与 architecture/ 重复的 AOI/BigWorld 知识稿）+ 误提交的 docs/node_modules（39781 文件） | docs/ 根 | **已删除**（2026-09-29 用户决定；git 历史可溯——本报告 §17 等处的行级引用按各节基线钉死值读作历史记录，不因删档失效；ssengine §4.3 的 docs/34 §15 活引证已内联化） | — |
+| 本报告更名 ioc-review → architecture-review | docs/analysis/architecture-review.md（原 ioc-review.md） | **已落地**（2026-09-29 用户决定；全仓 9 文件 105 处引用同步 sed，标题与顶部加更名记录） | sdks/contract/{apollo.xsd,entities.xml} 注释内 2 处旧名随下一代码批次同步（契约文件冻结纪律——注释改动需过 golden/schema_hash 闸） |
 | 下轮审计候选：bw/bigworld 兼容层 | 本报告（未评审子系统清单） | **登记**（16.8.3-④ 观察；bw::Runtime 实体体系与 game 模块并行的风险面） | 新审计轮授权 |
 | 下轮审计候选：ipc 树 | 本报告（§15.2 已注：include/src 两树约 18 文件 7800+ 行，APOLLO_ENABLE_IPC=OFF） | **登记** | 新审计轮授权 |
 | 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案） | 代码阶段授权 |
@@ -1465,7 +1468,7 @@ shutdown()       逆 init_order_ 析构（:45-51）；析构函数兜底再调 s
 
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
-**约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/ioc-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
+**约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
 
 **事实记录（已发生，如实）**：会话前段携带的历史摘要中有旧授权语境（「继续推进、无需等待审核」），据此在本轮持续实施了 P2 反射后端代码批次并推送。实际发生的源码面改动：
 
@@ -1478,7 +1481,7 @@ shutdown()       逆 init_order_ 析构（:45-51）；析构函数兜底再调 s
 | 18152898 | 第五批：include 聚合（contract_parser hpp+cpp、apollo.xsd、test_contract、contract.yml） | **已推送 origin/main**（本会话） |
 | c349f850 | 第六批：装载期一致性闸文件面（modules/contract CMakeLists 三目标拆分 + contract_gate.{hpp,cpp} + test_contract_gate.cpp）——纠偏时为**未提交**工作树改动 | **未推送**；留档于本地分支 `backup-apollo-src` |
 
-另有随批设计文档改动（docs/design/sdk-contract.md、xml-generation.md 的「落地注记」段）——虽非源码，同样超出本轮「只许写 ioc-review.md」的边界，一并如实记录。
+另有随批设计文档改动（docs/design/sdk-contract.md、xml-generation.md 的「落地注记」段）——虽非源码，同样超出本轮「只许写 architecture-review.md」的边界，一并如实记录。
 
 **现场处置（纠偏指令 1)-3) 的执行情况）**：
 

@@ -1,14 +1,14 @@
 # Apollo 多端 SDK 契约设计（sdk-contract）
 
-> 状态：设计稿（评审中）。参照：KBEngine 的"单独 `sdks/` 目录 + 契约定义协议约定"精髓（学精髓不学形），并修正其短板（对数据的存储太弱——分析见 `docs/design/attribute-sync.md` §8）。本设计与 `attribute-sync.md`（属性模型/预测/attr_schema_hash）、`net-abstraction.md`（帧/通道）、`scripting-lua.md`（脚本白名单）、`ioc-review.md`（装配纪律）互为引用。
+> 状态：设计稿（评审中）。参照：KBEngine 的"单独 `sdks/` 目录 + 契约定义协议约定"精髓（学精髓不学形），并修正其短板（对数据的存储太弱——分析见 `docs/design/attribute-sync.md` §8）。本设计与 `attribute-sync.md`（属性模型/预测/attr_schema_hash）、`net-abstraction.md`（帧/通道）、`scripting-lua.md`（脚本白名单）、`architecture-review.md`（装配纪律）互为引用。
 
 ---
 
 ## 执行摘要
 
-1. **契约文件是唯一事实源**：`sdks/contract/` 的 `attrs.xml` + `messages.xml`（XML + XSD，ioc-review §15.3/§15.4）定义全部属性与消息（字段/类型/可见性/同步组/预测位/通道），**代码生成器**产出服务端访问器 + 各端 SDK 序列化与客户端属性模型 + 文档（生成器内部设计见 `xml-generation.md`）。现状是反的：`modules/protocol` 手写编码、全仓库（含 SDK）无任何 .proto/.def/.toml 契约、客户端手写 `MessageCodec.ts`/`ByteBuffer.ts`——协议每端维护一份、必然漂移。
+1. **契约文件是唯一事实源**：`sdks/contract/` 的 `attrs.xml` + `messages.xml`（XML + XSD，architecture-review §15.3/§15.4）定义全部属性与消息（字段/类型/可见性/同步组/预测位/通道），**代码生成器**产出服务端访问器 + 各端 SDK 序列化与客户端属性模型 + 文档（生成器内部设计见 `xml-generation.md`）。现状是反的：`modules/protocol` 手写编码、全仓库（含 SDK）无任何 .proto/.def/.toml 契约、客户端手写 `MessageCodec.ts`/`ByteBuffer.ts`——协议每端维护一份、必然漂移。
 2. **目录收敛为唯一的 `sdks/`**（拼写错误目录 `skds/` 合并回原名）。事实：`git log 38656f90 refactor: 重命名 sdk 目录为 skds`——一次 rename 引入了 typo，之后新工作（unity cocos laya 的 Network/Session/Messaging 层）落在 `skds/`，而旧 `sdks/` 残留另一套内容（unity 的 Attributes 体系），**两份互斥、互相不通**。结构对齐 KBEngine：`sdks/{contract,gen,unity,ue5,cocos,laya,cpp,docs}`。
-3. **学 KBEngine 的位置只有一处：契约驱动多端。** 但三处不学：(a) 不复刻 .def 的裸 XML 解析——**C-50 修正：.def 本就是 XML**（BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，ioc-review §16.3），真正的差异是两家都**只解析、无 schema 层**（错拼标签静默缺省）；apollo 用 XML + XSD 形式校验（ioc-review §15.3），策划可读、diff 友好、校验器零开发；(b) 不做"一份通用序列化给所有端"，生成器按端定制造型（C# 事件、TS 模块、C++ 访问器是其各自惯用法）；(c) **存储不进契约**——KBEngine 的 .def 把属性形态与存储耦合（blob 化复杂类型、base-only 快照，见 attribute-sync §8 五条），契约只管线上协议形态。
+3. **学 KBEngine 的位置只有一处：契约驱动多端。** 但三处不学：(a) 不复刻 .def 的裸 XML 解析——**C-50 修正：.def 本就是 XML**（BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，architecture-review §16.3），真正的差异是两家都**只解析、无 schema 层**（错拼标签静默缺省）；apollo 用 XML + XSD 形式校验（architecture-review §15.3），策划可读、diff 友好、校验器零开发；(b) 不做"一份通用序列化给所有端"，生成器按端定制造型（C# 事件、TS 模块、C++ 访问器是其各自惯用法）；(c) **存储不进契约**——KBEngine 的 .def 把属性形态与存储耦合（blob 化复杂类型、base-only 快照，见 attribute-sync §8 五条），契约只管线上协议形态。
 4. **客户端 SDK ≠ 序列化层**：四层职责（Codec / Attribute client model / Entity·AOI 管理 / 事件与表现路由），其中第 2 层落地 attribute-sync §9 的预测矩阵（预测值/权威值双缓冲 + 校正），第 3 层落地 enter/dwell/leave 快照增量化应用。现状 `sdks/unity/ApolloSDK/Attributes/` 的 AttributeContainer/AttributeSyncManager 是第 2 层雏形，`skds/` 的 MessageCodec/MessageRouter 是第 1 层雏形——合并后按这四层重组。
 5. **兼容由 hash 驱动**：`attr_schema_hash` = 生成器对契约内容的哈希（非手工版本号，防漏改），连接建立即握手校验（attribute-sync §7.2），服务器同时支持 N/N-1 两个 hash；变更纪律：增字段兼容、改语义升版本、删除须双端同周期。
 6. **存储自由演化**：持久列/日志重放（attribute-sync §8 的对策）在服务端内部独立演进，不受契约冻结——加持久化字段不动契约，反之亦然。这就是"数据存储不弱"与"协议清晰"同时成立的分界。
@@ -66,7 +66,7 @@ KBEngine：`.def` 文件声明实体的属性与方法 → 生成器同时产出
   </msg>
 </messages>
 
-<!-- entities.xml —— 实体清单与继承（ioc-review §16.7.2：单继承、生成期展开；xs:keyref 锁 parent 引用，环检测在生成器） -->
+<!-- entities.xml —— 实体清单与继承（architecture-review §16.7.2：单继承、生成期展开；xs:keyref 锁 parent 引用，环检测在生成器） -->
 <entities version="7">
   <entity id="Monster"/>
   <entity id="Avatar" parent="Monster"/>
@@ -79,7 +79,7 @@ KBEngine：`.def` 文件声明实体的属性与方法 → 生成器同时产出
 
 ```
 sdks/
-├── contract/        # 契约源（唯一事实源）：apollo.xsd、attrs.xml、messages.xml、entities.xml、errors.xml、version（ioc-review §15.4 布局）
+├── contract/        # 契约源（唯一事实源）：apollo.xsd、attrs.xml、messages.xml、entities.xml、errors.xml、version（architecture-review §15.4 布局）
 ├── gen/             # 生成器（C++ 单二进制，入 CI；失败即阻断协议发版）
 ├── cpp/             # 生成产物 + 手工壳 → 以模块链入 modules/protocol
 ├── unity/           # U3D 插件（生成 + 手工运行时壳）
@@ -91,7 +91,7 @@ sdks/
 
 生成器输入=契约文件，输出=5 类产物：① C++ 编码/访问器与校验（服务端 + cpp 端 SDK）② C#（Unity）③ TS（Cocos/Laya，同一模板两处实例化）④ 协议文档 ⑤ `schema_hash` 常量头。**CI 强制**：契约变更必须提交过生成产物（pip 式 diff 检查），防"改了契约忘了生成"。
 
-链接边界（ioc-review §16.8.3-②）：gen 是**运行期依赖图之外**的构建期工具——不被任何运行期目标链接，产物被 modules/protocol、tables 消费模块与各 sdks/* 链接，运行期代码禁止 include gen 内部头。先例：KBEngine 配置转换器在源码树外（kbe/tools/xlsx2py）、BigWorld 工具族独立二进制（server/tools）。
+链接边界（architecture-review §16.8.3-②）：gen 是**运行期依赖图之外**的构建期工具——不被任何运行期目标链接，产物被 modules/protocol、tables 消费模块与各 sdks/* 链接，运行期代码禁止 include gen 内部头。先例：KBEngine 配置转换器在源码树外（kbe/tools/xlsx2py）、BigWorld 工具族独立二进制（server/tools）。
 
 ## 4. 各端 SDK 的四层职责
 
@@ -129,7 +129,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 
 > 契约回答"线上怎么传"，存储回答"服务端怎么落"——两者只在 `persist` 给一个方向性提示，永不绑定。派生属性/持久列/日志重放全部是服务端内部演化对象。
 
-具体：新增"需要存档的属性"只改服务端持久层（column promotion，attribute-sync §8.2），契约零改动——因为客户端不需要知道服务端存哪张表；同理契约加字段（如 UI 表现提示）不动存储。存储定义的具体形态 = 服务端私有 `storage.xml`（表/列提升/journal 语句，"语句即数据"的 MyBatis 形态，xml-generation.md §6；不在契约目录、不进 schema_hash——ioc-review §15.4/§15.5 两段式）。**协议与存储的演化周期互相解耦，是"学精髓"的最后一环。**
+具体：新增"需要存档的属性"只改服务端持久层（column promotion，attribute-sync §8.2），契约零改动——因为客户端不需要知道服务端存哪张表；同理契约加字段（如 UI 表现提示）不动存储。存储定义的具体形态 = 服务端私有 `storage.xml`（表/列提升/journal 语句，"语句即数据"的 MyBatis 形态，xml-generation.md §6；不在契约目录、不进 schema_hash——architecture-review §15.4/§15.5 两段式）。**协议与存储的演化周期互相解耦，是"学精髓"的最后一环。**
 
 ## 8. 分期
 
@@ -145,14 +145,14 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 | net-abstraction.md | 帧格式与四通道写进契约（各端插件据此实现帧定界与通道映射）；`modules/protocol` 手写代码退役 |
 | scripting-lua.md | 脚本白名单由契约生成（§5）；合同版本随实体下发（scripting-lua §3.3） |
 | ssengine-reference.md | 弱存储教训的出处（attribute-sync §8）；sdpkg 帧头方向对齐 net-abstraction §3 |
-| ioc-review.md | 无关联容器语义；作为"配置只有一份"纪律在跨端维度上的延伸；§15.3/15.4/15.5 契约决策源、C-50 .def 修正（§16.3） |
+| architecture-review.md | 无关联容器语义；作为"配置只有一份"纪律在跨端维度上的延伸；§15.3/15.4/15.5 契约决策源、C-50 .def 修正（§16.3） |
 | xml-generation.md | gen/ 生成器的内部设计（pugixml 解析、校验四层漏斗、产物五类、MyBatis 映射）；本设计的 gen/ 即其实现载体 |
 
 ---
 
 ## 10. 契约 → protobuf 编码：两层模型与 proto 后端（2026-09-29 追加）
 
-> 定位：README/36 号文档把「def 管语义、protobuf 管字节」一句话带过（决策 #3），本节写透——两层模型、def→proto 映射规则、生成器 proto 后端、与差分同步的配合、zstd 边界，以及「编译期生成 / descriptor 反射池 / 运行时解释」三路线的正面权衡（§10.6）。分期落 P2（§8 已补行）；第一批契约（`sdks/contract` v1 @ a5334014）尚无 proto 产物，本节是其后端设计定稿。引用基线：attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、docs/05 §6.1/§6.3。
+> 定位：README/36 号文档把「def 管语义、protobuf 管字节」一句话带过（决策 #3），本节写透——两层模型、def→proto 映射规则、生成器 proto 后端、与差分同步的配合、zstd 边界，以及「编译期生成 / descriptor 反射池 / 运行时解释」三路线的正面权衡（§10.6）。分期落 P2（§8 已补行）；第一批契约（`sdks/contract` v1 @ a5334014）尚无 proto 产物，本节是其后端设计定稿。引用基线：attribute-sync §3/§5/§7、net-abstraction §3/§5.5、architecture-review §16.7.2、docs/05 §6.1/§6.3。
 
 ### 10.0 为什么 def 契约不排斥 protobuf——反而依赖它
 
@@ -188,7 +188,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 │  语义层（def 契约 = 唯一事实源）                                   │
 │  attrs.xml    属性：id/name/type/sync 掩码/predict/default        │
 │  messages.xml 消息：id/dir/channel/fields                        │
-│  entities.xml 实体：单继承（生成期拍平，ioc-review §16.7.2）       │
+│  entities.xml 实体：单继承（生成期拍平，architecture-review §16.7.2）       │
 │  errors.xml   错误码分区                                          │
 │  —— 决定：谁能看（掩码）/谁能写（predict）/何时发（IMMEDIATE/节流）  │
 └──────────────┬──────────────────────────────────────────────────┘
@@ -298,7 +298,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 
 #### 10.2.5 继承：拍平进投影，不进 proto（对齐 §16.7.2）
 
-entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（父先入、子覆盖、禁同名改型、带 provenance——ioc-review §16.7.2），**三个消费端只见扁平结果**（attribute-sync §7.3）。proto 层因此**没有继承概念**：属性流里实体只以 `entity_id + template_id` 出现，客户端按模板知道属性集。两个候选均否决：
+entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（父先入、子覆盖、禁同名改型、带 provenance——architecture-review §16.7.2），**三个消费端只见扁平结果**（attribute-sync §7.3）。proto 层因此**没有继承概念**：属性流里实体只以 `entity_id + template_id` 出现，客户端按模板知道属性集。两个候选均否决：
 
 | 候选 | 形态 | 判定 |
 |---|---|---|
@@ -448,7 +448,7 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
 - **① C++ `DescriptorPool` 描述符不可卸载**——热重载的正确形态是**换代**：新版本 bin 建新 pool，旧 pool 等存量消息生命周期结束后整体废弃；不做原地增删 descriptor（未定义行为）。
 - **② 反射比原生慢 2-5×**——分档不变：热路径编译期生成（A），冷路径/客户端/工具走 bin（C）。
 
-**既有决策链站的是「构建期定型」，不是「A 独占」**（非本节新立）：决策 #4 生成器独立二进制、不进运行期链接图、失败阻断发版；ioc-review §0 删 Spring 式运行时容器——运行时解释契约正是「运行时容器」在数据面的镜像；契约第一批已落 static_assert 编译期闸（modules/contract/tests/gen_compile_test.cpp 第③层）；决策 #11 的对照注记（UE 的 DOREPLIFETIME 是 C++ 宏、改协议必重编——apollo 把掩码声明从代码移进契约数据，改掩码 = 改 XML + 重新生成，不改手写代码；「运行时可配」指声明位置数据化，非运行期解释）。A 与 C 同属「构建期定型」家族——.bin 由 apollo_gen 构建期吐出、protoc 校验、运行期只读（加载后不解释源文件、不改结构），与 ioc-review §0「启动期定型、运行期只读」同一纪律，不落入「运行时容器」的批判面；A/B/C 三路线的分轨结论见本节末定案。
+**既有决策链站的是「构建期定型」，不是「A 独占」**（非本节新立）：决策 #4 生成器独立二进制、不进运行期链接图、失败阻断发版；architecture-review §0 删 Spring 式运行时容器——运行时解释契约正是「运行时容器」在数据面的镜像；契约第一批已落 static_assert 编译期闸（modules/contract/tests/gen_compile_test.cpp 第③层）；决策 #11 的对照注记（UE 的 DOREPLIFETIME 是 C++ 宏、改协议必重编——apollo 把掩码声明从代码移进契约数据，改掩码 = 改 XML + 重新生成，不改手写代码；「运行时可配」指声明位置数据化，非运行期解释）。A 与 C 同属「构建期定型」家族——.bin 由 apollo_gen 构建期吐出、protoc 校验、运行期只读（加载后不解释源文件、不改结构），与 architecture-review §0「启动期定型、运行期只读」同一纪律，不落入「运行时容器」的批判面；A/B/C 三路线的分轨结论见本节末定案。
 
 对「改契约要重编」的三点消解：
 
@@ -479,7 +479,7 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
 - **加载期一致性闸（严谨性来源从编译期改装载期）**：服务端启动/热更装载三件互检——bin 字节重算 ↔ internal_hash 锚定（protoc pin）；bin 消息集 ↔ contract.lua 路由表**逐条对齐**（bin 有而 Lua 无 handler = 启动红——KBE 是运行期才 miss，§11.1）；白名单 attr id ↔ contract.lua 存在性。manifest 机制同一套（§11.6）。与 KBE 运行时协商的本质区别：**构建期定型产物 + 装载期闸** vs 无事实源运行期自证。
 - **生成器形态**：apollo_gen 同批吐 `.proto`（golden，bin 的源）/ `descriptor.bin` / `contract.lua` / `semantic.json` / 端侧薄常量 / protoc/pbjs 端代码（§10.3 v3 段）；业务消息 `.pb.cc` 不默认产出（框架族内建代码除外）。schema_hash 机制不变（§6 算法对 canonicalBundle + .bin 字节锚定自验，两态一致）。
 - **定案理由**：演进链路里两个最慢环节（服务端 C++ 重编、端侧商店发版）**同时**与协议解耦；严谨性不依赖编译期——由「装载即全量校验」承接；热路径严谨与性能由框架族两分法保住。
-- **批次影响**：bin/lua 后端 + sol2 反射桥 + 校验闸 + 端代码包装**同批实现**（§8 P2 已改口径）；B 路线维持否决。与决策链相容：bin 构建期定型运行期只读（不落 ioc-review §0「运行时容器」批判面）；两层模型（§10.0）/分域四条（§11.3）/manifest（§11.6）全保留；决策 #12 加深——Lua 从业务脚本升格为契约语义的运行时载体（白名单仍由契约生成，载体明示为 contract.lua）。
+- **批次影响**：bin/lua 后端 + sol2 反射桥 + 校验闸 + 端代码包装**同批实现**（§8 P2 已改口径）；B 路线维持否决。与决策链相容：bin 构建期定型运行期只读（不落 architecture-review §0「运行时容器」批判面）；两层模型（§10.0）/分域四条（§11.3）/manifest（§11.6）全保留；决策 #12 加深——Lua 从业务脚本升格为契约语义的运行时载体（白名单仍由契约生成，载体明示为 contract.lua）。
 - **诚实代价（记入批次评审）**：sol2 反射桥的维护面（packed repeated/嵌套递归）；Lua handler 层无编译期类型（契约 golden 回放测试兜回归，与决策 #12 既有形态一致不恶化）；binding 两分边界需契约评审把好关；C++ 侧新增固定模块（descriptor 加载 + 反射编解码 + 校验闸）。
 
 #### 业务消息解码位置：C++ 桥 vs Lua 侧解（两案，装配选择非契约分叉；2026-09-29 补）
@@ -533,7 +533,7 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 
 ### 11.2 BigWorld 对照：同病异形（Mercury 消息表查证）
 
-- **声明层混布同型**：.def 按实体单文件混布 `<ClientMethods>`/`<BaseMethods>`/`<CellMethods>` 段（Account.def，ioc-review §16.2 已录）——客户端可见方法与服务端内部方法同文件同源。
+- **声明层混布同型**：.def 按实体单文件混布 `<ClientMethods>`/`<BaseMethods>`/`<CellMethods>` 段（Account.def，architecture-review §16.2 已录）——客户端可见方法与服务端内部方法同文件同源。
 - **ID 空间同为单表**：Mercury 每进程一张 `InterfaceMinder` 表，`add()` 以 `elements_.size()` 顺序自增分配 ID（`lib/network/interface_minder.cpp:38`）；表上限 255（`interface_minder.hpp:35` `interfaceElement(uint8 id)`）。客户端可调用的暴露方法经 `ExposedMethodMessageRange`（`lib/entitydef/method_description.hpp:31`）调 `addRange`（`interface_minder.cpp:53-70`，按剩余空间的 1/x 等分）在**同一张表**内占连续保留段。
 - **判读**：BW 比 KBE 前进一步——把暴露方法收敛为保留段，段内增删不推动表内其它消息的排布；但保留段本身按注册序在单表内划分，内部消息与暴露方法共享同一 ID 空间的病根同型（且 uint8 上限使空间更紧）。**两家同病：单一 ID 分配表不分受众。**
 
@@ -699,4 +699,4 @@ apollo_gen 同批吐三件（与 .pb.cc 同一次跑；有代码热更管线的�
 
 ---
 
-*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。同日续加 §11.6（客户端契约包与 manifest：bin 只覆盖 wire 层的补漏——语义小件第二文件是事实，交付单元升为包，manifest 逐文件 SHA-256 + 单点 client_hash 握手，不一致全闭环在加载期/握手期；单文件三案否决）。同日定案修正 v3（**反射为默认、代码为两端增强**，替代首版「A+C 双轨、C 为主」）：修正触发=端侧代码热更通道（HybridCLR/TS 脚本）使 A 发版代价消失 + 服务端零重编诉求使 .pb.cc 投影退役；核心=消息两分法（框架固定消息族 schema 不随契约变→内建强类型守热路径；业务消息→bin 反射+sol2 桥+contract.lua，服务端契约变更零重编）、客户端按热更能力分档（生成代码主通道、bin 兜底）、装载期一致性闸（bin↔internal_hash 锚定/bin↔Lua 路由逐条对齐/白名单存在性——严谨性从编译期改装载期承接）；§10.3 补 v3 后端与工具链分工（无自建 AST——pugixml DOM 即解析树、IR+薄 writer；前端零工具链、protoc CI 单点、contract.lua 为 IR 的 Lua 表 dump 无编译环节）；§10.7/§8 P2/§11.6 包结构（代码文件进 manifest）/docs/36 #19 行同步改口径。同日加 §12（契约工具链与工作流：端到端七步流程——编辑/生成/提交/PR 校验/发版打包/服务端装载/客户端拉包，每步责任人+工具+失败挡点，前端零工具链在流程上成立；CI/CD 四 job——golden_check/contract_pack（CI 即 manifest 签发者）/schema_hash_report/compat_window_check；VSCode 集成三层递进——零成本 XSD 关联（P1 已可用）/脚手架 tasks.json（P2 尾）/插件层（P3 按需，只调 apollo_gen 读产物、不做第二个契约解析实现））；§8 P2/P3 行同步。同日补 §10.6 附节（业务消息解码位置两案：案一 C++ 反射+sol2 桥**默认**——sol2 无动态绑定能力，桥为自写固定通用转换（descriptor 数据驱动循环）；案二字节透传+Lua 侧 lua-protobuf 备选——C++ 只帧路由 payload 透传；对照维度=解码位置/C++ 消息面可见性/自研代码/依赖/性能/一致性闸执行者；**契约零分叉**——binding 不编码解码位置（装配选择故意不进契约）、两案同源同批同 bin 格式、新增共用产物 contract_route 路由清单（§10.3 已补）；切换条件=确认 C++ 永不需要消息内容时换装配、契约与 golden 零改动）；docs/36 #19 理由列同步。同日补性能量化与混布（案二少一次中间表示=1.5-2× 常数因子——两次转换 vs 一次转换；25k 条/秒基准下两案各占帧预算 8%/4%，性能不构成决策依据，解码可 IO 池旁路两案同开放；装配粒度 per-进程——网关透传+Zone 解码混布，契约/route/golden 不变，「两案」为装配谱系两端；接入层过滤/调试/错误处理/测试四维精简补记）。同日 P2 第三批代码落地（§11.3 ② 双域 hash：computeDomainHash 算法同 §6 输入按域过滤——bundle 划分与 version 剥离如上文口径；§11.6 携带面纪律——semantic.json/client proto 去 schema_hash 与 contract_version 只带 client_hash，服务端五产物带全量+双域三 hash；internal-only 变更+version bump 后客户端包成员逐字节不变、服务端产物全变，本机实测通过；ctest 17/17、编译期三 hash 互异断言入 gen_compile_test）。同日第四批落 CI 工具链（§12.2：contract_pack——scripts/ci/contract_pack.sh 从已提交 golden 组双包（dist/client/<client_hash>/ + dist/server/<schema_hash>/），manifest 携带域 hash+生成器+protoc 版本+逐文件 SHA-256，protoc pin 29.3；schema_hash_report——读两 ref 已提交 golden 出三 hash/变更域/集合 diff，PR 评论幂等；workflow .github/workflows/contract.yml；包级不变性实测——internal-only 变更+version bump 后客户端包含 manifest 逐字节不变）。同日第五批落 include 聚合（§11.4 落地注记如上文：expandIncludes 目录级读取层 + XSD include 声明 + 分文件/单文件 hash 相等测试锁死；xsd_gate job 补闸一接线）。同日粘贴 ⑨（§3 链接边界段：gen 为构建期工具、运行期零链接、运行期代码禁 include gen 内部头——ioc-review §16.9.3）。*
+*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（architecture-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 architecture-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、architecture-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。同日续加 §11.6（客户端契约包与 manifest：bin 只覆盖 wire 层的补漏——语义小件第二文件是事实，交付单元升为包，manifest 逐文件 SHA-256 + 单点 client_hash 握手，不一致全闭环在加载期/握手期；单文件三案否决）。同日定案修正 v3（**反射为默认、代码为两端增强**，替代首版「A+C 双轨、C 为主」）：修正触发=端侧代码热更通道（HybridCLR/TS 脚本）使 A 发版代价消失 + 服务端零重编诉求使 .pb.cc 投影退役；核心=消息两分法（框架固定消息族 schema 不随契约变→内建强类型守热路径；业务消息→bin 反射+sol2 桥+contract.lua，服务端契约变更零重编）、客户端按热更能力分档（生成代码主通道、bin 兜底）、装载期一致性闸（bin↔internal_hash 锚定/bin↔Lua 路由逐条对齐/白名单存在性——严谨性从编译期改装载期承接）；§10.3 补 v3 后端与工具链分工（无自建 AST——pugixml DOM 即解析树、IR+薄 writer；前端零工具链、protoc CI 单点、contract.lua 为 IR 的 Lua 表 dump 无编译环节）；§10.7/§8 P2/§11.6 包结构（代码文件进 manifest）/docs/36 #19 行同步改口径。同日加 §12（契约工具链与工作流：端到端七步流程——编辑/生成/提交/PR 校验/发版打包/服务端装载/客户端拉包，每步责任人+工具+失败挡点，前端零工具链在流程上成立；CI/CD 四 job——golden_check/contract_pack（CI 即 manifest 签发者）/schema_hash_report/compat_window_check；VSCode 集成三层递进——零成本 XSD 关联（P1 已可用）/脚手架 tasks.json（P2 尾）/插件层（P3 按需，只调 apollo_gen 读产物、不做第二个契约解析实现））；§8 P2/P3 行同步。同日补 §10.6 附节（业务消息解码位置两案：案一 C++ 反射+sol2 桥**默认**——sol2 无动态绑定能力，桥为自写固定通用转换（descriptor 数据驱动循环）；案二字节透传+Lua 侧 lua-protobuf 备选——C++ 只帧路由 payload 透传；对照维度=解码位置/C++ 消息面可见性/自研代码/依赖/性能/一致性闸执行者；**契约零分叉**——binding 不编码解码位置（装配选择故意不进契约）、两案同源同批同 bin 格式、新增共用产物 contract_route 路由清单（§10.3 已补）；切换条件=确认 C++ 永不需要消息内容时换装配、契约与 golden 零改动）；docs/36 #19 理由列同步。同日补性能量化与混布（案二少一次中间表示=1.5-2× 常数因子——两次转换 vs 一次转换；25k 条/秒基准下两案各占帧预算 8%/4%，性能不构成决策依据，解码可 IO 池旁路两案同开放；装配粒度 per-进程——网关透传+Zone 解码混布，契约/route/golden 不变，「两案」为装配谱系两端；接入层过滤/调试/错误处理/测试四维精简补记）。同日 P2 第三批代码落地（§11.3 ② 双域 hash：computeDomainHash 算法同 §6 输入按域过滤——bundle 划分与 version 剥离如上文口径；§11.6 携带面纪律——semantic.json/client proto 去 schema_hash 与 contract_version 只带 client_hash，服务端五产物带全量+双域三 hash；internal-only 变更+version bump 后客户端包成员逐字节不变、服务端产物全变，本机实测通过；ctest 17/17、编译期三 hash 互异断言入 gen_compile_test）。同日第四批落 CI 工具链（§12.2：contract_pack——scripts/ci/contract_pack.sh 从已提交 golden 组双包（dist/client/<client_hash>/ + dist/server/<schema_hash>/），manifest 携带域 hash+生成器+protoc 版本+逐文件 SHA-256，protoc pin 29.3；schema_hash_report——读两 ref 已提交 golden 出三 hash/变更域/集合 diff，PR 评论幂等；workflow .github/workflows/contract.yml；包级不变性实测——internal-only 变更+version bump 后客户端包含 manifest 逐字节不变）。同日第五批落 include 聚合（§11.4 落地注记如上文：expandIncludes 目录级读取层 + XSD include 声明 + 分文件/单文件 hash 相等测试锁死；xsd_gate job 补闸一接线）。同日粘贴 ⑨（§3 链接边界段：gen 为构建期工具、运行期零链接、运行期代码禁 include gen 内部头——architecture-review §16.9.3）。*

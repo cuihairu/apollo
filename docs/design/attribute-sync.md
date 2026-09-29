@@ -1,7 +1,7 @@
 # Apollo 属性同步系统设计（attribute-sync）
 
 > 状态：设计稿（评审中）。目标：以 BigWorld 的完整模型为基准，为 apollo 设计 MMO 属性/状态的权威同步系统；对照对象包括 apollo 现有草稿（docs/03、`include/apollo/game/attributes`）、SSEngine（老引擎，无此层）、KBEngine（.def 契约 + 多端 SDK）、Aeron（仅传输层思想，见 net-abstraction.md）。
-> 关联：`docs/design/sdk-contract.md`（契约与多端 SDK）、`docs/design/scripting-lua.md`（属性钩子与公式热更）、`docs/design/net-abstraction.md`（QoS 通道与背压）、`docs/analysis/ioc-review.md`。
+> 关联：`docs/design/sdk-contract.md`（契约与多端 SDK）、`docs/design/scripting-lua.md`（属性钩子与公式热更）、`docs/design/net-abstraction.md`（QoS 通道与背压）、`docs/analysis/architecture-review.md`。
 
 ---
 
@@ -13,7 +13,7 @@
 4. **协议按"契约生成"而非手写**：属性 delta 包的字段语义写进 `docs/design/sdk-contract.md` 的单一契约（属性表 + 域标记），服务端 C++ 与 Unity/Cocos/Laya SDK 从同一契约生成——KBEngine 的精髓、修正其存储短板。
 5. **持久化独立于同步管线**：KBEngine 存储弱点的分析见 §8（实体表 + blob 化复杂类型 + 非脏驱动周期归档 + 无写后日志；C-51 修正后表述）；对策是"快照 + write-behind 日志 + 可查询字段列式提升 + BI 分流"，复用 apollo `modules/data` 的异步 DB 模型（见 ssengine-reference.md §4.1）。
 6. **分三阶段落地**：P1 单进程 + AOI + history/delta/ACK（本阶段即可上线）；P2 复合类型 slice + 带宽预算 + 压缩；P3 跨进程 cell 镜像（协议位已在 P1 预留）。
-7. **第七轮深化（2026-09-28，源证 ioc-review §16）**：§5.2 增 BigWorld witness 基准实证（per-viewer 双序号 + 优先级共生结构）；§7.3 增实体继承与属性契约的关系（生成期扁平展开）；§8.2 落库节拍取 KBEngine Archiver 平滑摊写为同型参照（脏驱动 + 均匀出队）；§10.1 补 tick-vs-消息驱动论证（G-7）、§10.2 补优雅停机序列（G-3）。
+7. **第七轮深化（2026-09-28，源证 architecture-review §16）**：§5.2 增 BigWorld witness 基准实证（per-viewer 双序号 + 优先级共生结构）；§7.3 增实体继承与属性契约的关系（生成期扁平展开）；§8.2 落库节拍取 KBEngine Archiver 平滑摊写为同型参照（脏驱动 + 均匀出队）；§10.1 补 tick-vs-消息驱动论证（G-7）、§10.2 补优雅停机序列（G-3）。
 
 ---
 
@@ -34,7 +34,7 @@
 ### 0.2 现有雏形的具体缺陷（读码结论）
 
 - `AttributeContainer`（`include/apollo/game/attributes/attribute.hpp:52-97`）：`std::mutex` 包住整个 map + **单一** `listener_`（一个实体只能挂一个回调，无法同时支撑"同步管线 + 脚本钩子 + BI"）；`AttributeValue = std::variant<...>`（六类型变体）在热路径上带来分支与体积成本，且与 `attribute_id.h` 的 `AttrValueType`（12 类型枚举）**重复定义了两套类型系统**。
-- `AttributeManager`（`:100-137`）：全局单例 + 全局锁 + `shared_ptr<AttributeContainer>` 按 objectId 查找——正是 ioc-review.md P0-1 批判的"每 tick 全局锁查找"模式。
+- `AttributeManager`（`:100-137`）：全局单例 + 全局锁 + `shared_ptr<AttributeContainer>` 按 objectId 查找——正是 architecture-review.md P0-1 批判的"每 tick 全局锁查找"模式。
 - `AttributeDef::syncToClient`（`:40`）是 bool——只回答"同步与否"，回答不了"同步给谁、以什么频率、允许谁写"。
 - `attribute_id.h` 的 ~300 个 ID 是旧项目属性表平移（ID 分段 1-12/101-500/301-700/3001+…），**分段间有重叠冲突**（PLAYER_START=301 落在 CREATURE 段 101-500 内部，CURRENT_STAGE=301 与 POISON_PERCENT=155 等共存于 CREATURE 区间）——契约化的第一件事就是重建 ID 空间。
 - docs/03 §4.1 的 `AttributeSyncManager`：独立同步线程 + `ThreadSafeQueue<SyncTask>`——把"广播"放到逻辑线程之外，意味着同一实体的属性顺序无法保证（写线程与同步线程无屏障），`excludeList` 挂在每个任务上（O(viewers) 拷贝）；`sequence` 是全局计数器而非 per-viewer，客户端无法据此判断缺了什么。
@@ -224,7 +224,7 @@ priority(entity, viewer) = w1·importance(class)      // BOSS > 精英 > 玩家 
 
 ## 7. 协议形态
 
-### 7.1 消息定义（protobuf 记法 = 编码布局参考；契约源为 XML+XSD，ioc-review §15.3）
+### 7.1 消息定义（protobuf 记法 = 编码布局参考；契约源为 XML+XSD，architecture-review §15.3）
 
 > 2026-09-28 同步标注：本节 protobuf 描述的是**线上编码布局**（varint/zigzag/打包策略），不是契约源——字段语义的唯一事实源是契约（attrs/messages.xml，sdk-contract §2.3），服务端与各端编码器由生成器产出（xml-generation.md §4）。记法保留因 protobuf 表达紧凑布局最直观。
 
@@ -261,7 +261,7 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 属性 ID、域标记、min_interval、slice 定义、派生依赖——**全部只写在契约里一份**（`docs/design/sdk-contract.md`），服务端生成 C++ 访问器，Unity/Cocos/Laya SDK 生成强类型 AttrId 常量与容器类。服务端 `attribute_id.h` 现状（手写 enum + 分段冲突）迁移为"契约生成 + 语义审校"。
 
-**与实体继承的关系**（sdk-contract.md §2.3 entities.xml / ioc-review §16.7.2）：attrs.xml 是**每实体扁平**的属性表（生成器在建期按 entities.xml 的 `parent` 单继承展开：父先入、子覆盖、禁同名改型、带 provenance）。属性契约只描述展开后的结果，继承语法不进入属性投影——三个消费端（协议/SDK/服务端）看到的属性集已经扁平，`attr_schema_hash` 对源文件 + 生成器版本计算，父实体改动自动传播到全部子实体产物。
+**与实体继承的关系**（sdk-contract.md §2.3 entities.xml / architecture-review §16.7.2）：attrs.xml 是**每实体扁平**的属性表（生成器在建期按 entities.xml 的 `parent` 单继承展开：父先入、子覆盖、禁同名改型、带 provenance）。属性契约只描述展开后的结果，继承语法不进入属性投影——三个消费端（协议/SDK/服务端）看到的属性集已经扁平，`attr_schema_hash` 对源文件 + 生成器版本计算，父实体改动自动传播到全部子实体产物。
 
 ## 8. 持久化（含 KBEngine 存储弱点分析）
 
@@ -275,7 +275,7 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 ### 8.2 apollo 对策
 
-> 范围声明（2026-09-29 补，ioc-review G-2）：本节只回答**数据不丢**（journal/快照/重放），不回答**进程不倒**——进程级高可用（热备/接管/迁移）为 P3 前置设计，见 net-abstraction.md §7「P3 前置设计」；单进程阶段显式无高可用，崩溃安全 = 本节机制 + 重启拉起。
+> 范围声明（2026-09-29 补，architecture-review G-2）：本节只回答**数据不丢**（journal/快照/重放），不回答**进程不倒**——进程级高可用（热备/接管/迁移）为 P3 前置设计，见 net-abstraction.md §7「P3 前置设计」；单进程阶段显式无高可用，崩溃安全 = 本节机制 + 重启拉起。
 
 - **写模型：快照 + write-behind 变更日志**。
   - L2 属性变更追加进 per-entity 的 `PersistJournal`（与 §3.1 的同步 history 分开：同步历史面向观察者可容量淘汰，持久日志面向 DB 不可丢）；
@@ -312,15 +312,15 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
   7. shutdown*      — 仅停机路径进入（§10.2）：flush journal → 停收新连接 → drain → 落库 → 逆序停模块
 ```
 
-### 10.1 为什么是固定步长 tick，不是消息驱动（2026-09-28 深化，ioc-review G-7）
+### 10.1 为什么是固定步长 tick，不是消息驱动（2026-09-28 深化，architecture-review G-7）
 
-三家范式对照（ioc-review §16.2）：BigWorld/KBEngine 固定步长 tick（BigWorld cellapp.cpp:806-808；KBEngine gameUpdateHertz=10，kbengine_defaults.xml:5 + cellapp.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315，一次 dispatch 一条消息，空队列 cond_wait）。本设计**选 tick**，论证写下来防未来再议：
+三家范式对照（architecture-review §16.2）：BigWorld/KBEngine 固定步长 tick（BigWorld cellapp.cpp:806-808；KBEngine gameUpdateHertz=10，kbengine_defaults.xml:5 + cellapp.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315，一次 dispatch 一条消息，空队列 cond_wait）。本设计**选 tick**，论证写下来防未来再议：
 
 1. **本设计的三个核心机制都以确定性节拍边界为前提**——`acked_seq`/`world_seq` 的序号推进与超时判定（§3.2/§3.3 "3 个广播 tick"）、派生 DAG 的拓扑批处理（recalc 阶段一次收敛整张图，§2.4）、token bucket 按 tick 领预算与突发上限（§5.1）。消息驱动下这三件事各自需要发明私有节拍，等于把 tick 散落进每个机制。
 2. **skynet 范式与权威实体模型错位**：skynet 适合**无共享状态的服务编排**（一条消息触发一个无副作用服务），其单写者边界是"服务"而非"实体"；apollo 的单写者边界是**实体归属的场景线程**，写语义（§3.1 全程无锁的前提）要求"一批变更在固定边界内可见、有序、可序号化"，这是 tick 的定义而不是消息的。
 3. **把 §0 的「思想与形态之分」用到调度范式**：skynet 的思想（服务轻量、消息驱动、过载可见）已分别吸收（服务≈场景、队列≈MPSC 环、MQ_OVERLOAD≈四级水位）；tick 与消息驱动是**形态**选择，由权威属性同步的本质决定，不是谁更现代的问题。BigWorld/KBEngine 两家 MMO 先例同选 tick（16.5-④），选型无异常。
 
-### 10.2 优雅停机序列（2026-09-28 深化，ioc-review G-3）
+### 10.2 优雅停机序列（2026-09-28 深化，architecture-review G-3）
 
 阶段 7 的展开（正常停机路径，崩溃路径不经过这里）：
 
@@ -331,7 +331,7 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
              复用 §8.2 三条语句，KBEngine 停机同型零件：onDestroyEntity → writeToDB，
              baseapp/entity.cpp:698-731）——带超时上限，超时告警并继续（日志完整性优先于停机速度）
          → ④ net 层 drain 在途帧 → 断开（客户端走重连，命中另一台/重启后的本机）
-         → ⑤ 模块按依赖逆序停止（ioc-review §0 生命周期纪律的停机镜像）
+         → ⑤ 模块按依赖逆序停止（architecture-review §0 生命周期纪律的停机镜像）
 ```
 
 - **单写者纪律**替代锁：实体归属其 scene/空间线程（将来多 cell = 实体静态归属线程，跨线程访问一律投递意图/消息）。`AttributeContainer` 现有的 mutex（`attribute.hpp:96`）与 `AttributeManager` 全局锁随重建废除。
@@ -369,4 +369,4 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 ---
 
-*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。2026-09-28 同步修订（③⑥）：§7.1 标注 protobuf 为编码布局参考（契约源 XML+XSD）、§8.1 第 2/4 条按 C-51 重写（KBEngine Archiver 周期归档与 Indexed 真实索引实证；KBEngine 行号对应 github.com/cuihairu/kbengine fork master 浅克隆工作副本）、附录持久化行按 C-52 改写；源证 ioc-review §16.3。同日深化（第七轮增量，随 263a3888 之后的本次提交）：§5.2 witness 实证、§7.3 继承交集、§8.2 摊写节拍、§10.1/§10.2（G-7/G-3），摘要 7；BigWorld 行号对应 14.4.1 官方包工作副本（programming/bigworld/server/cellapp/witness.cpp）。2026-09-29 补 §8.2 范围声明（「数据不丢」与「进程不倒」分界，ioc-review G-2 → net-abstraction §7「P3 前置设计」）。*
+*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。2026-09-28 同步修订（③⑥）：§7.1 标注 protobuf 为编码布局参考（契约源 XML+XSD）、§8.1 第 2/4 条按 C-51 重写（KBEngine Archiver 周期归档与 Indexed 真实索引实证；KBEngine 行号对应 github.com/cuihairu/kbengine fork master 浅克隆工作副本）、附录持久化行按 C-52 改写；源证 architecture-review §16.3。同日深化（第七轮增量，随 263a3888 之后的本次提交）：§5.2 witness 实证、§7.3 继承交集、§8.2 摊写节拍、§10.1/§10.2（G-7/G-3），摘要 7；BigWorld 行号对应 14.4.1 官方包工作副本（programming/bigworld/server/cellapp/witness.cpp）。2026-09-29 补 §8.2 范围声明（「数据不丢」与「进程不倒」分界，architecture-review G-2 → net-abstraction §7「P3 前置设计」）。*

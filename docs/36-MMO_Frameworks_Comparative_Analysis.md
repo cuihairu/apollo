@@ -7,7 +7,7 @@
 | 级别 | 含义 | 标注方式 |
 |---|---|---|
 | A | 本地源码实读（BigWorld 官方 14.4.1 包 `~/workspaces/BigWorld`、KBEngine 浅克隆 `~/workspaces/kbengine`、skynet `~/workspaces/skynet`） | `路径:行号` |
-| B | 本仓库文档（docs/00、04、05、17、25、BigWorld 深度解析、analysis/ioc-review、design/*） | `docs/… §…` |
+| B | 本仓库文档（docs/00、04、05、17、25、BigWorld 深度解析、analysis/architecture-review、design/*） | `docs/… §…` |
 | C | 官方网络文档/公告（归档仓库、厂商文档页） | Markdown 链接 |
 | D | 社区资料/招聘口径/论坛，可靠性较弱 | 文末加「（D）」或明示存疑 |
 
@@ -15,8 +15,8 @@
 1. 任务书中的 "NoahWolf" 解释为 **NoahGameFrame**（ketoo），无 "NoahWolf" 这一框架的公开记录（D）。
 2. "Space Engineers MSE" 在公开网络与本机均未查证到对应工程（疑为 MES——Modular Encounters Systems——模组框架的误记，或 Keen 内部代号）；本机 `~/workspaces/SSEngine` 经盘点为通用 C++ 支撑库（线程/内存池/DB 门面，MIT，见其 README.md），**不是** Space Engineers 引擎。Space Engineers 一节按「资料不足」处理，仅给出可查证的 1.187 Multiplayer Overhaul 公开材料。
 3. WoW 服务端细节暴雪从未官方公开，WoW 一节以 **TrinityCore/CMaNGOS 公开实现 + 社区文档**为近似依据（TrinityCore 源码未实读，全节 D 级偏多，逐处标注）。
-4. docs/17、docs/25 为早期设计稿，其中 Transport=NNG 的表述已被 ioc-review 的网络自建决策取代；本文引用两文档时只取其**结构设计**（编排/AOI/Battle 分层、Pipeline、回放），不引用其传输选型。
-5. KBEngine 行号基于浅克隆工作副本；BigWorld 行号基于官方 14.4.1 包；两者与 ioc-review §16 的已核证据一致。
+4. docs/17、docs/25 为早期设计稿，其中 Transport=NNG 的表述已被 architecture-review 的网络自建决策取代；本文引用两文档时只取其**结构设计**（编排/AOI/Battle 分层、Pipeline、回放），不引用其传输选型。
+5. KBEngine 行号基于浅克隆工作副本；BigWorld 行号基于官方 14.4.1 包；两者与 architecture-review §16 的已核证据一致。
 
 ---
 
@@ -25,8 +25,8 @@
 | # | Apollo 关键设计点 | 来源框架/理念 | 采纳/改造/否决 | 理由（落到对方具体做法） |
 |---|---|---|---|---|
 | 1 | 网络四层自建（L0 poll-Reactor / L1 帧定界 magic+seq+CRC32C / L2 会话 / L3 GameConnection） | BigWorld Mercury（`lib/network/udp_channel.hpp:81/:139-140` filter 栈）；skynet gate 的帧封装 | 改造 | Mercury 把 filter 做成可插栈的字节↔字节边界（加密/压缩/包调制），证明分层过滤在引擎内可行；但 Mercury 绑定 UDP+聚合包，Apollo 要 TCP/WebSocket 双族，故只取 filter 位置语义，帧格式自定（net-abstraction §3、§5.5） |
-| 2 | nng 退役，中间件只留语义蓝本 | skynet harbor→cluster 两代 IPC 更替（ioc-review §16 实证） | 否决第三方消息层 | skynet 自己都把 harbor 换成了 cluster，证明自研进程内消息总线的代际更替是常态；引入 nng 意味着把更替风险外包给一个社区项目，不如自持四层（net-abstraction 摘要 3/6 已闭） |
-| 3 | 契约 = XML+XSD（xs:key/keyref/enumeration），一行一属性紧凑风格 | KBEngine `.def`（一端声明、多端生成的精髓）；BigWorld `.def` 同构（`entity_description.cpp:184-190`，C-50） | 采纳+补强 | 两家的 .def 本就是 XML 但都**只解析、无 schema 层**，错拼标签静默缺省；Apollo 的增量恰好是 XSD 形式校验——策划可读、diff 友好、校验器零开发（sdk-contract §2，ioc-review §15.3） |
+| 2 | nng 退役，中间件只留语义蓝本 | skynet harbor→cluster 两代 IPC 更替（architecture-review §16 实证） | 否决第三方消息层 | skynet 自己都把 harbor 换成了 cluster，证明自研进程内消息总线的代际更替是常态；引入 nng 意味着把更替风险外包给一个社区项目，不如自持四层（net-abstraction 摘要 3/6 已闭） |
+| 3 | 契约 = XML+XSD（xs:key/keyref/enumeration），一行一属性紧凑风格 | KBEngine `.def`（一端声明、多端生成的精髓）；BigWorld `.def` 同构（`entity_description.cpp:184-190`，C-50） | 采纳+补强 | 两家的 .def 本就是 XML 但都**只解析、无 schema 层**，错拼标签静默缺省；Apollo 的增量恰好是 XSD 形式校验——策划可读、diff 友好、校验器零开发（sdk-contract §2，architecture-review §15.3） |
 | 4 | `sdks/{contract,gen,unity,cocos,laya,cpp}` 布局，生成器独立二进制 | KBEngine `sdks/` 目录 + `kbe/tools/xlsx2py` 在 src 之外的先例 | 采纳 | 生成器不进运行时链接图，失败即阻断发版而非带病上线（xml-generation §4） |
 | 5 | 契约与存储解耦（`storage.xml` 服务端私有，两段式） | **否决** KBEngine `.def` 属性/存储耦合 | 否决对方耦合 | KBE 把持久化绑进 .def 的直接后果：复杂类型 blob 化、只会 base 快照、无日志、无查询面（attribute-sync §8 五条短板）；Apollo 一条原则——契约答「线上怎么传」，存储答「怎么落」（sdk-contract §7） |
 | 6 | write-behind journal + 列提升（先日志后快照） | BW BaseApp 周期备份（`baseapp/backup_sender.cpp`、`write_to_db_reply.cpp`）；KBE Archiver 平滑刷库（`archiver.cpp:20-70`） | 改造 | KBE 的平滑算法（每 tick 取 `size*archiveIndex_/periodInTicks` 头部区段）被 Apollo 改写为「每 tick 取脏实体数/目标刷库 tick 数的头部区段」——脏实体突发时不再摊不平（attribute-sync §8.2 同步修订） |
@@ -53,7 +53,7 @@
 ### 2.1 BigWorld（官方 14.4.1，本地实读，A 级）
 
 - **进程拓扑**：bwmachined（守护，启停监控）→ loginapp（认证+分配）→ baseappmgr/cellappmgr（管理面）→ cellapp（空间逻辑）×N、baseapp（玩家代理+持久化）×N、dbapp 相关扩展（`programming/bigworld/server/{cellapp,baseapp,cellappmgr,baseappmgr,loginapp}` 目录清点；`server/tools/bwmachined`）。客户端先连 loginapp，被指派给 baseapp，baseapp 再把实体"投递"进 cell 空间。
-- **并发模型**：多进程为主，进程内单主线程 tick + TimeQueue 定时器（`lib/cstdmf/time_queue.hpp:60/:74`，自带单测 `test_time_queue.cpp`；ioc-review §16.2 引证）。跨进程全靠 Mercury 消息。
+- **并发模型**：多进程为主，进程内单主线程 tick + TimeQueue 定时器（`lib/cstdmf/time_queue.hpp:60/:74`，自带单测 `test_time_queue.cpp`；architecture-review §16.2 引证）。跨进程全靠 Mercury 消息。
 - **AOI**：cellapp 内 witness/实体缓存 + ghost 机制；AOI 更新方案可按实体类型配置（`cellapp/aoi_update_schemes.hpp:18/:58/:75`——`AoIUpdateScheme` 按距离调整更新密度）；观测者侧 dumpAoI 输出 volatile 129/130 + event 45/45 双序号（`cellapp/witness.cpp:2470-2516`）。
 - **同步/属性复制**：属性级 detail level 档位（`cellapp/entity_cache.hpp:89-90/:186`，`DetailLevel` 为 uint8 档号），距离越远档位越低、字段与频率随档位收缩；跨 cell 用 ghost 影子复制（`cellapp/buffered_ghost_message*.cpp/hpp` 全套文件）。
 - **脚本集成**：cell/base 实体逻辑 Python 内嵌（.def 声明暴露方法）。
@@ -70,18 +70,18 @@
 - **脚本集成**：cellapp/baseapp 内嵌 Python（.def 暴露的方法/属性）；Bot 工具（`tools/bots`）。
 - **扩展机制**：.def→多端 SDK 生成（C++/Unity/Cocos 等，本仓库 sdk-contract §2.1 已析）；`kbe/tools/xlsx2py` 策划表→py。
 - **典型生产规模**：中小团队手游/页游广泛使用，无可靠公开 CCU 数据（D）。
-- **失败教训**：① 存储是结构性短板——.def 耦合持久化导致 blob 化/无日志/无查询面（attribute-sync §8）；② machine UDP 广播发现在云网络环境失效（本仓库 13 号追溯行）；③ 项目维护节奏近年放缓，社区活跃度依赖中文圈（D）；④ **内外契约不分离**——`*_interface.h` 单文件混布三类受众消息（对客户端 `hello`/`loginBaseapp`/`onClientActiveTick` 带 EXPOSED 标记，`baseapp_interface.h:99-157`；对 dbmgr `onDbmgrInitCompleted` :90；对 cellapp `onMigrationCellappStart/End` :326-331），消息 ID 共享进程内单一自增分配表（`message_handler.cpp:139`，EXPOSED 只是导出标记非 ID 空间隔离，`baseapp_interface_macros.h:27-36`）——内部消息增删推动 ID 排布与客户端 SDK 重生成；`importClientMessages` 连接期动态下发消息表（`baseapp.cpp:4859→4891`），用运行时协商掩盖契约不分。BigWorld 同病异形：.def 单文件混 Client/Base 方法段（ioc-review §16.2），Mercury `InterfaceMinder::add` 按 `elements_.size()` 顺序分配、暴露方法经 `ExposedMethodMessageRange` 在同一张 0-254 表占保留段（`interface_minder.cpp:38/:53-70`、`method_description.hpp:31`）——单一 ID 分配表不分受众。Apollo 规避（sdk-contract §11）：单契约源 + msg `domain` 属性、msg id 按域分段独立排布、schema_hash 按域双份（client_hash 只覆盖 client 域——握手稳定、bin 不重发）、apollo_gen 按域投影（客户端 bin 只含 client 域）、XSD 跨域引用禁令；域分段逻辑为硬规则，物理组织（单文件/include 聚合）不设强制。
+- **失败教训**：① 存储是结构性短板——.def 耦合持久化导致 blob 化/无日志/无查询面（attribute-sync §8）；② machine UDP 广播发现在云网络环境失效（本仓库 13 号追溯行）；③ 项目维护节奏近年放缓，社区活跃度依赖中文圈（D）；④ **内外契约不分离**——`*_interface.h` 单文件混布三类受众消息（对客户端 `hello`/`loginBaseapp`/`onClientActiveTick` 带 EXPOSED 标记，`baseapp_interface.h:99-157`；对 dbmgr `onDbmgrInitCompleted` :90；对 cellapp `onMigrationCellappStart/End` :326-331），消息 ID 共享进程内单一自增分配表（`message_handler.cpp:139`，EXPOSED 只是导出标记非 ID 空间隔离，`baseapp_interface_macros.h:27-36`）——内部消息增删推动 ID 排布与客户端 SDK 重生成；`importClientMessages` 连接期动态下发消息表（`baseapp.cpp:4859→4891`），用运行时协商掩盖契约不分。BigWorld 同病异形：.def 单文件混 Client/Base 方法段（architecture-review §16.2），Mercury `InterfaceMinder::add` 按 `elements_.size()` 顺序分配、暴露方法经 `ExposedMethodMessageRange` 在同一张 0-254 表占保留段（`interface_minder.cpp:38/:53-70`、`method_description.hpp:31`）——单一 ID 分配表不分受众。Apollo 规避（sdk-contract §11）：单契约源 + msg `domain` 属性、msg id 按域分段独立排布、schema_hash 按域双份（client_hash 只覆盖 client 域——握手稳定、bin 不重发）、apollo_gen 按域投影（客户端 bin 只含 client 域）、XSD 跨域引用禁令；域分段逻辑为硬规则，物理组织（单文件/include 聚合）不设强制。
 
 ### 2.3 skynet（本地实读，A 级）
 
 - **进程拓扑**：**无预设游戏拓扑**——单进程内成百上千 service（actor），跨进程靠 gate/多 skynet 节点 + cluster 通信；游戏业务的 login/gate/scene 全是业务层 service 角色约定，非引擎概念。
-- **并发模型**：多 worker 线程从全局队列取 service 消息，**单 service 内严格串行**（`skynet-src/skynet_start.c:156-167`，`thread_worker` → `skynet_context_message_dispatch`）；无统一 tick，纯事件驱动；MQ 溢出（默认 1024）报错、monitor 监控死循环（ioc-review §16 实证）。
+- **并发模型**：多 worker 线程从全局队列取 service 消息，**单 service 内严格串行**（`skynet-src/skynet_start.c:156-167`，`thread_worker` → `skynet_context_message_dispatch`）；无统一 tick，纯事件驱动；MQ 溢出（默认 1024）报错、monitor 监控死循环（architecture-review §16 实证）。
 - **AOI**：引擎不内置；社区以 service 实现九宫格/十字链自建（如 sproto 生态项目，D）。
 - **同步/属性复制**：不内置；消息即一切（sproto/自定协议）。
 - **脚本集成**：Lua 一等公民，业务 service 全 Lua；云风著《Skynet 框架设计与实现》。
 - **扩展机制**：C 服务（.so）动态注册 + Lua 层封装；两代 IPC（harbor→cluster）证明其扩展路线是「自研而非引中间件」。
 - **典型生产规模**：简悦/灵犀互娱《陌陌争霸》《心动庄园》；陌陌 MMO 项目上线前咨询云风（[codingnow 博客](https://blog.codingnow.com)）；顺网科技年报披露 skynet 引擎游戏（[年报](https://vip.stock.finance.sina.com.cn)）；三七互娱等招聘要求 skynet（D 级口径，多个来源）（C/D）。
-- **失败教训**：① 起源即教训——原框架 Erlang 写、性能不达标，云风 2012-07 用 C/Lua 重写（[gameres 访谈](https://www.gameres.com/867001.html)）；② sproto 无内建版本字段，协议演进靠人工纪律（ioc-review §16 实证）；③ 无内置存储/日志管线，业务自建面大——是「框架」而非「引擎」的代价。
+- **失败教训**：① 起源即教训——原框架 Erlang 写、性能不达标，云风 2012-07 用 C/Lua 重写（[gameres 访谈](https://www.gameres.com/867001.html)）；② sproto 无内建版本字段，协议演进靠人工纪律（architecture-review §16 实证）；③ 无内置存储/日志管线，业务自建面大——是「框架」而非「引擎」的代价。
 
 ### 2.4 Pomelo（NetEase，网络资料，C 级）
 
@@ -200,7 +200,7 @@
 
 - **BigWorld/KBEngine**：.def XML→解析生成（BW `entity_description.cpp:184-190`、KBE `entitydef.cpp:188-210`，C-50：本就是 XML 但无 schema 层）；演进=改文件重启，无版本握手。
 - **Pomelo**：protobuf+route 字符串硬编码（C）；演进靠人工同步，无校验。
-- **skynet**：sproto 无内建版本字段（A 级实证，ioc-review §16）；社区惯例「加字段靠默认值兼容」。
+- **skynet**：sproto 无内建版本字段（A 级实证，architecture-review §16）；社区惯例「加字段靠默认值兼容」。
 - **UE**：编译期宏（DOREPLIFETIME/UHT 生成）——改协议必须重编译（C）。
 - **NGO**：运行时注册 NetworkVariable，无独立契约文件（C）。
 - **EQEmu/TC**：opcode 硬编码于源码表（D）。
@@ -219,9 +219,9 @@
 
 - **BigWorld**：日志做成引擎组件——独立 message_logger 进程聚合 + bw_profile 剖析工具（`server/tools/` 清点）——「BI 链路」的引擎内形态。
 - **KBEngine**：独立 logger 进程（`kbe/src/server/tools/logger`）+ guiconsole；日志级别进程内配置。
-- **skynet**：三板斧——logger service + debug_console + monitor（`skynet_start.c:209-211` 启动序列实证，ioc-review §16）。
+- **skynet**：三板斧——logger service + debug_console + monitor（`skynet_start.c:209-211` 启动序列实证，architecture-review §16）。
 - **Pomelo**：log4js 插件（C）；**EQEmu/TC**：logsys 分类文件/GM 命令日志（D）。
-- **Apollo 取舍**：不造日志轮子——业务事件经 LogAgent 出 Kafka，分析面 ClickHouse（00）；运行时运维指令走 ConsoleEvent/IConsoleEventSource 接口（ioc-review §16.8 两段式：原语在模块、聚合在 apps/）。学三家的「日志一等公民」定位，弃其自建存储——ClickHouse 的列存是 message_logger 时代不可能有的选项。
+- **Apollo 取舍**：不造日志轮子——业务事件经 LogAgent 出 Kafka，分析面 ClickHouse（00）；运行时运维指令走 ConsoleEvent/IConsoleEventSource 接口（architecture-review §16.8 两段式：原语在模块、聚合在 apps/）。学三家的「日志一等公民」定位，弃其自建存储——ClickHouse 的列存是 message_logger 时代不可能有的选项。
 
 ### 问 7：跨服操作的原子性
 
@@ -244,7 +244,7 @@
 - **KBEngine**：采纳 .def 契约生成精髓、sdks/ 布局、xlsx2py「生成器在 src 外」、Archiver 平滑刷库算法；否决 .def 存储耦合（五短板）、machine UDP 广播、Python 全功能脚本；改造平滑算法防突发、白名单收紧脚本面。
 - **skynet**：采纳 C/Lua 技术栈与单 service 串行的无锁全序、自研代际更替观（harbor→cluster）；否决「框架无预设拓扑」的完全自由——Apollo 保留九服务显式拓扑（00），因为运维与排障需要静态结构；补齐 skynet 缺失的存储/观测标准栈。
 - **Pomelo**：采纳多进程 frontend/backend 拆分思想（Gate/World 即其投影）；其归档教训直接支撑 Apollo 的「不绑单一语言运行时」——C++20 内核 + Lua 只做业务层，运行时生命期与 C++ 标准而非社区项目绑定。
-- **NoahGameFrame**：插件化方向被 Apollo 否决（无关联容器语义，ioc-review 装配纪律）；其 actor+属性事件驱动与 Apollo 的 ECS 事件流同向，仅作参照。
+- **NoahGameFrame**：插件化方向被 Apollo 否决（无关联容器语义，architecture-review 装配纪律）；其 actor+属性事件驱动与 Apollo 的 ECS 事件流同向，仅作参照。
 - **Unity NGO**：客户端同步件定位清晰——Apollo 的四端 SDK（sdk-contract §4）在客户端侧承接同类职责（属性容器+预测双缓冲），但服务器权威与契约同源是 NGO 不可能给的。
 - **UE Replication**：条件位/频率配额/dormancy 三件套被改造吸收（契约化 SYNC_*、50ms 差分、日志 journal 化即「落库休眠」的近似物）；Blueprint 不可热更的反面教材支撑 Lua 白名单热更路线。
 - **EQEmu**：zone 粒度多进程是 Apollo 场景实例化的远亲（每实例一进程、故障域清晰）；共享内存分发的运维脆弱性提醒 Apollo：跨进程共享状态必须走消息+journal，不做 segment 直读。
@@ -287,8 +287,8 @@
 4. **NoahGameFrame**：AOI/同步细节、生产案例无可靠公开数据（D 级）。
 5. **Pomelo 生产规模**：归档后无可靠生产 CCU 数据（D 级）。
 6. **WoT 单服 19 万 CCU**：公开报道吉尼斯口径（C/D），全网 1.1M 口径未找到一手来源，未采用。
-7. docs/17、docs/25 中的 NNG 表述已被 ioc-review 网络决策取代（口径声明见 §0 第 4 条）。
+7. docs/17、docs/25 中的 NNG 表述已被 architecture-review 网络决策取代（口径声明见 §0 第 4 条）。
 
 ---
 
-*基线：apollo main @ 30c4ca3a。本地证据：BigWorld 官方 14.4.1 包（`~/workspaces/BigWorld`）、KBEngine 浅克隆（`~/workspaces/kbengine`）、skynet（`~/workspaces/skynet`）、SSEngine（`~/workspaces/SSEngine`，盘点结论见 §0）。行号均为实读核对口径，与 docs/analysis/ioc-review.md §16 证据链一致。2026-09-29 初稿。*
+*基线：apollo main @ 30c4ca3a。本地证据：BigWorld 官方 14.4.1 包（`~/workspaces/BigWorld`）、KBEngine 浅克隆（`~/workspaces/kbengine`）、skynet（`~/workspaces/skynet`）、SSEngine（`~/workspaces/SSEngine`，盘点结论见 §0）。行号均为实读核对口径，与 docs/analysis/architecture-review.md §16 证据链一致。2026-09-29 初稿。*

@@ -1,14 +1,14 @@
 # Apollo Lua 脚本层设计（scripting-lua）
 
-> 状态：设计稿（评审中）。前瞻依据：仓库规划（docs/qa/q101-script-language.md 等）已把脚本语言方向定为 Lua。本设计与 `docs/analysis/ioc-review.md`（容器分工）、`docs/design/attribute-sync.md`（属性钩子/公式）、`docs/design/net-abstraction.md`（异步回主线程）、`docs/design/sdk-contract.md`（客户端契约）互为引用。
+> 状态：设计稿（评审中）。前瞻依据：仓库规划（docs/qa/q101-script-language.md 等）已把脚本语言方向定为 Lua。本设计与 `docs/analysis/architecture-review.md`（容器分工）、`docs/design/attribute-sync.md`（属性钩子/公式）、`docs/design/net-abstraction.md`（异步回主线程）、`docs/design/sdk-contract.md`（客户端契约）互为引用。
 
 ---
 
 ## 执行摘要
 
 1. **分工一句话：动态归 Lua，硬实时归 C++。** 玩法逻辑（任务/技能行为树/AI/公式/掉落）进 Lua 以换热更与策划自助；网络收发、属性存储/同步、AOI、ECS、持久化留在 C++。这条边界决定后面一切接口设计。
-2. **C++ 服务对 Lua 只开"启动期注入的具名模块表"**（`apollo.attr`/`apollo.db`/`apollo.scene`），绑定即校验、缺失在启动期报错——**禁止脚本按名字反查服务容器**（ioc-review.md P0-1 的字符串查找缺陷严禁在脚本层复制）。
-3. **热替换协议**：工作线程预加载+编译 → 主线程 tick 边界一次原子换表 → 失败回滚旧表；模块带版本与依赖声明，灰度先行（单个 scene 试跑）。没有运行期增删 C++ bean（C++ 侧运行期注册/unregister API 随 ioc-review 删除）。
+2. **C++ 服务对 Lua 只开"启动期注入的具名模块表"**（`apollo.attr`/`apollo.db`/`apollo.scene`），绑定即校验、缺失在启动期报错——**禁止脚本按名字反查服务容器**（architecture-review.md P0-1 的字符串查找缺陷严禁在脚本层复制）。
+3. **热替换协议**：工作线程预加载+编译 → 主线程 tick 边界一次原子换表 → 失败回滚旧表；模块带版本与依赖声明，灰度先行（单个 scene 试跑）。没有运行期增删 C++ bean（C++ 侧运行期注册/unregister API 随 architecture-review 删除）。
 4. **属性钩子只有一个接入点**：`onAttrChanged(entity, id, old, new)` 挂在属性管线的"重算后、广播前"阶段（attribute-sync.md §10 tick 阶段 2/4 之间），白名单位 + 指令预算防脚本拖垮广播；脚本对"最终可见值"只读，对白名单做最终修饰。
 5. **公式系统从 C++ 搬进 Lua 函数**：docs/03 的自研表达式编译方案废弃；派生属性公式 = Lua 函数 + 依赖图留在 C++（重算调度不依赖脚本引擎）。
 6. **沙盒**：无 io/os 表、指令数预算/帧、内存上限、每实体脚本时间片轮转；脚本异常隔离（错误 → 日志 + 实体行为回退），不崩进程。
@@ -83,7 +83,7 @@ modules/lua/
 ### 4.1 启动期注入（唯一通道)
 
 ```
-Server::start()（Bootstrap 阶段，见 ioc-review.md §6 阶段 4）
+Server::start()（Bootstrap 阶段，见 architecture-review.md §6 阶段 4）
   1. 容器（core::di）装配完成 —— 服务对象全部存在
   2. binding 注册表：显式列出暴露面（白名单制，不是自动反射全部服务）
      apollo.attr   → AttrServiceAPI（绑定函数 ≤ 10 个：get/set/emit/dirty/onChange/...）
@@ -98,7 +98,7 @@ Server::start()（Bootstrap 阶段，见 ioc-review.md §6 阶段 4）
 
 ### 4.2 禁止事项（明确列为代码评审红线）
 
-1. 禁止把 `ApplicationContext`（旧字符串容器）或任何"按名查服务"API 绑进 Lua（ioc-review.md P0-1）。
+1. 禁止把 `ApplicationContext`（旧字符串容器）或任何"按名查服务"API 绑进 Lua（architecture-review.md P0-1）。
 2. 禁止脚本直接调属性存储的写接口绕过白名单（§5 的钩子入口是唯一写途经）——否则权威、校验、审计三件事全部失效。
 3. 禁止脚本持有 C++ 实体裸指针跨 tick 保留（实体可能释放）——Lua 侧实体句柄 = 弱引用 + 有效性查询 `entity:alive()`，失效访问返回错误而非 UB。
 4. 禁止在阶段 3（simulate 之后）以外的 tick 阶段改属性（见 §5 钩子时序）——保持单写者纪律的时序可裁剪性。
@@ -151,7 +151,7 @@ collect 阶段（§3.2 的 delta/快照组装）
 
 | 关联设计 | 落点 |
 |---|---|
-| ioc-review.md | C++ 容器启动期装配一次、注入模块表；容器删除运行期注册后，热更只发生在脚本表层面，二者解耦且互不越界 |
+| architecture-review.md | C++ 容器启动期装配一次、注入模块表；容器删除运行期注册后，热更只发生在脚本表层面，二者解耦且互不越界 |
 | attribute-sync.md | 钩子窗口时序（§5.1）；公式钩子（§5.3）；配置版本随实体下发（§3.3 ↔ attr_schema_version） |
 | net-abstraction.md | 脚本发起的异步操作（DB 查询/跨服请求）经会话层完成回调按 tick 边界 resume 协程（§异步模型）；Lua 对网络只看到"发消息/订阅消息/回调"三件套，背压与重连对脚本不可见 |
 | sdk-contract.md | 属性/意图消息的契约同时约束脚本端（脚本写的字段必须是契约字段——白名单由契约 predict 位生成、载体为 contract.lua，§3.4）；业务消息 handler 按契约路由绑定（bin↔路由逐条对齐的装载期闸） |

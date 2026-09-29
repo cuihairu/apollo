@@ -18,7 +18,7 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 
 ### 核心特性
 
-- 🏗️ **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）；明确不采用 Spring 式运行时容器（论证见 `docs/analysis/ioc-review.md` §0）
+- 🏗️ **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）；明确不采用 Spring 式运行时容器（论证见 `docs/analysis/architecture-review.md` §0）
 - 📜 **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
 - 🌐 **高性能网络层** - 跨平台异步I/O（IOCP/Epoll）
 - 📦 **传输编解码（目标态）** - L1 帧格式 + protobuf descriptor（`descriptor.bin`，反射为默认）+ Lua 契约表（`contract.lua`）+ zstd 压缩（`docs/design/sdk-contract.md` §10-§12）——框架固定消息族内建强类型守热路径、业务消息反射进 Lua（服务端契约变更零重编）、有代码热更管线的客户端走生成代码（docs/36 决策 #19）；现网为手写编码，仓库自有 .proto 为零
@@ -163,7 +163,7 @@ graph LR
     HOST ==start/stop/tick==> S1
 ```
 
-> 模块间依赖为**编译期构造注入**（实线 = 直接依赖，无运行时容器中介）；装配与生命周期托管只存在于应用入口 `apps/`（`ApplicationContextBuilder` 拓扑序建图、`ApplicationHost` 帧驱动托管），模块内部互不感知容器。明确不采用 Spring 式运行时容器——论证见 `docs/analysis/ioc-review.md` §0/§17。
+> 模块间依赖为**编译期构造注入**（实线 = 直接依赖，无运行时容器中介）；装配与生命周期托管只存在于应用入口 `apps/`（`ApplicationContextBuilder` 拓扑序建图、`ApplicationHost` 帧驱动托管），模块内部互不感知容器。明确不采用 Spring 式运行时容器——论证见 `docs/analysis/architecture-review.md` §0/§17。
 
 ### 分布式部署架构（目标形态）
 
@@ -326,10 +326,10 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ## 📚 模块说明
 
 ### Core 核心框架（modules/core · modules/runtime）
-- **依赖注入**: `apollo::core::di` 极简构造注入容器——类型键 bean 图、拓扑序装配、仅 Singleton/Prototype 两档作用域；明确不采用 Spring 式运行时容器（`docs/analysis/ioc-review.md` §0）
+- **依赖注入**: `apollo::core::di` 极简构造注入容器——类型键 bean 图、拓扑序装配、仅 Singleton/Prototype 两档作用域；明确不采用 Spring 式运行时容器（`docs/analysis/architecture-review.md` §0）
 - **应用生命周期**: `ApplicationHost` 帧驱动托管——`IHostedService` start/stop/tick + 六阶段状态机（Boot→…→Stopped）
-- **配置**: `apollo::core::config::ConfigRegistry` 键值注册表；热更规划走 tick 边界换 ConfigSnapshot（ioc-review §17.6）
-- *(legacy `Apollo::` IoC 框架仍在仓库中清退，见 ioc-review §6 删除式迁移)*
+- **配置**: `apollo::core::config::ConfigRegistry` 键值注册表；热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6）
+- *(legacy `Apollo::` IoC 框架仍在仓库中清退，见 architecture-review §6 删除式迁移)*
 
 ### Game 游戏逻辑
 - **AOI系统**: 九宫格空间索引，高效视野管理

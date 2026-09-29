@@ -7,11 +7,11 @@
 ## 执行摘要
 
 1. **游戏逻辑只看到四个动作**：`send / subscribe / state / close`——握手、帧定界、心跳、重连续传、水位、线程迁移全部下沉；回调固定落在 owning 场景线程（与 attribute-sync §10、scripting-lua §2 的单写者纪律同一条线）。现有 `include/apollo/net/session.h` 是"系统库形态"（`onRecv` 裸字节、返回已处理字节数，session.h:59），距"游戏可用"差一整个会话层。
-2. **删除 sdnet_adapter.h**：它在 apollo 仓库里**手写伪造了 SSCP 命名空间与 ISSBase/ISSConnection 接口**（`include/apollo/net/adapters/sdnet_adapter.h:12-80`，`#define APOLLO_USE_SDNET` 无任何链接真 SSEngine 的构建配置）——名为适配器实为空壳，与 ioc-review 里 fake-fruit 是同一类问题。sdnet 的真精华（DelaySend 跨线程投递、GetSendBufFree 水位、GATE 网关模式）以设计点形式收进本设计。
-3. **Aeron 结论（已关闭，ioc-review §15.2）：客户端不用，进程间总线自研。** Aeron 定位是 UDP 单播/多播与 IPC 的机器间消息传递（term buffer、offer/poll + BACK_PRESSURED、flow control + NAK、Archive 回放、Raft 集群），**不做海量 TCP/WS 玩家长连接**——客户端路径自研薄封装；进程间总线也已定**自研**（§15.2：nng 退役、禁止第二套进程间通信并存），Aeron 降级为语义蓝本（§5.2 吸收清单照旧）。
+2. **删除 sdnet_adapter.h**：它在 apollo 仓库里**手写伪造了 SSCP 命名空间与 ISSBase/ISSConnection 接口**（`include/apollo/net/adapters/sdnet_adapter.h:12-80`，`#define APOLLO_USE_SDNET` 无任何链接真 SSEngine 的构建配置）——名为适配器实为空壳，与 architecture-review 里 fake-fruit 是同一类问题。sdnet 的真精华（DelaySend 跨线程投递、GetSendBufFree 水位、GATE 网关模式）以设计点形式收进本设计。
+3. **Aeron 结论（已关闭，architecture-review §15.2）：客户端不用，进程间总线自研。** Aeron 定位是 UDP 单播/多播与 IPC 的机器间消息传递（term buffer、offer/poll + BACK_PRESSURED、flow control + NAK、Archive 回放、Raft 集群），**不做海量 TCP/WS 玩家长连接**——客户端路径自研薄封装；进程间总线也已定**自研**（§15.2：nng 退役、禁止第二套进程间通信并存），Aeron 降级为语义蓝本（§5.2 吸收清单照旧）。
 4. **背压是一等公民**：四级水位（ok/soft/hard/cut）+ `trySend` 显式返回码（ACCEPTED/BACK_PRESSURED/TRIMMED_LOW）——"不排队、不阻塞、把决策还给调用方"即 Aeron `offer()` 哲学；丢弃顺序由 attribute-sync §5 的优先级体系决定（低重要性/远距离先 trim）。
 5. **QoS 四通道**（movement 不可靠 / attributes 可靠 / events / control）跑在同一会话上，与属性同步的 token-bucket 预算形成两级独立控制："预算"决定该发多少，"水位"决定还能不能发——都在单写者线程决策，无锁。
-6. **NNG wrapper 已定退役**（ioc-review §15.2 退役清单）：`modules/protocol/nng_wrapper` 随五项退役一并删除，避免两套进程间通信并存（与"四套配置系统"同构的重复问题，不再制造第三处）。
+6. **NNG wrapper 已定退役**（architecture-review §15.2 退役清单）：`modules/protocol/nng_wrapper` 随五项退役一并删除，避免两套进程间通信并存（与"四套配置系统"同构的重复问题，不再制造第三处）。
 7. **内部网络层按演进阶梯交付（§5.6，2026-09-29 增补）**：自研的意义 = 拥有**可持续优化的内核**（Mercury 同型——BigWorld 内部网络层演进二十年而非一次性交付）——M0 语义定型（P1 随本设计）/ M1 最小正确内核（P3）/ M2+ 持续优化（无截止，按需小批）；优化只发生在层内，消费方零感知。
 
 ---
@@ -132,7 +132,7 @@ IO 线程 flush：按水位预算从环上取帧 writev
 | 路径 | 决策 | 理由 |
 |---|---|---|
 | 客户端 ↔ 服务器（海量 TCP/WS 长连接，万级 conn） | **自研薄封装**（本设计 L0–L3） | Aeron 不做 TCP 长连接接入；media driver 每连接开销、UDP 玩家侧不可靠网络适配、运维复杂度全不匹配。玩家路径的问题是"每连接会话语义"，这正是 Aeron 刻意不做的层 |
-| 进程间总线（gateway↔game↔world↔db-proxy，机器间+同机） | **自研（已定，ioc-review §15.2）**，语义照 §5.2 抄（term buffer 单写者分段/流控聚合/NAK/offer 返回码） | nng 退役后禁止再引第二套进程间通信；自研蓝本现成——§5.2 吸收清单 + §5.5 Mercury filter 双族 + udp_channel 窗口重传 |
+| 进程间总线（gateway↔game↔world↔db-proxy，机器间+同机） | **自研（已定，architecture-review §15.2）**，语义照 §5.2 抄（term buffer 单写者分段/流控聚合/NAK/offer 返回码） | nng 退役后禁止再引第二套进程间通信；自研蓝本现成——§5.2 吸收清单 + §5.5 Mercury filter 双族 + udp_channel 窗口重传 |
 | 同机大块只读共享（空间快照/指标） | sdshmem 类方案，P3 随进程间总线同批定案（§6 决策行/§7 P3 已接线） | 见 ssengine-reference.md §4.4 |
 
 ### 5.4 与 SSEngine sdnet 对照
@@ -145,7 +145,7 @@ IO 线程 flush：按水位预算从环上取帧 writev
 | GATE 变体 | gateway-app（apps/gateway-app 规划） | 方向一致；网关与本层的接口即 §2 API |
 | sdpkg 帧头 | L1 帧格式 | 加 seq + CRC32C（§3） |
 
-### 5.5 Mercury filter 双族 → L1 帧管线蓝本（2026-09-28 增补，源证见 ioc-review §16.7.1）
+### 5.5 Mercury filter 双族 → L1 帧管线蓝本（2026-09-28 增补，源证见 architecture-review §16.7.1）
 
 BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，四点收编：
 
@@ -153,11 +153,11 @@ BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，
 - **WS 实证「禁止第五套网络栈」**：BigWorld 的 WebSocket 是 stream filter 而非独立栈（packet_filter/stream_filter 双族 + mutable_stack 可配）——apollo 的 WS 沿同一插件位，不新起传输层。
 - **filter 栈随契约声明**：帧头 `ver` 字段 + 契约 messages.xml 的通道声明（sdk-contract §2.3）→ 生成器产出 L1 装配代码，filter 顺序跨端一致由契约锁死，不跑运行期字符串配置。
 - **边界纪律**：filter 只做字节↔字节变换（压缩/加密/混淆）；seq/ack/重传窗口留在 L2 通道内核——BigWorld 的窗口重传在 udp_channel 而非 filter 里，这是"插件位"与"会话核心"的分界。
-- **归属与前置条件**（ioc-review §16.8.3-①）：FrameFilter 接口与内置插件落**收敛后的 modules/net**——先例：BW filter 与通道同库、构造注入（udp_channel.hpp:81/:139-140）；protocol（生成 codec）经 L1 codec 槽位注入，apps/gateway-app 只装配不实现。**前置条件 = C-29 四套网络树收敛**（ioc-review §12.2 四套盘点、§15.2「禁止第五套」纪律）——filter 不落现存四套中任何一套的原样，否则 filter 链即第五处网络代码。
+- **归属与前置条件**（architecture-review §16.8.3-①）：FrameFilter 接口与内置插件落**收敛后的 modules/net**——先例：BW filter 与通道同库、构造注入（udp_channel.hpp:81/:139-140）；protocol（生成 codec）经 L1 codec 槽位注入，apps/gateway-app 只装配不实现。**前置条件 = C-29 四套网络树收敛**（architecture-review §12.2 四套盘点、§15.2「禁止第五套」纪律）——filter 不落现存四套中任何一套的原样，否则 filter 链即第五处网络代码。
 
 ### 5.6 内部网络层的演进策略：先立内核、持续优化（2026-09-29 增补）
 
-BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次性交付的库——filter 双族（§5.5）、udp_channel 窗口重传等能力是多年逐步叠加的（源证 ioc-review §16.7.1），游戏层 API 在这期间保持稳定。apollo 的自研决定（§15.2）要学的正是这个形态：**自研 = 拥有可持续优化的内核**，不是「一次写完对标二十年」——引外部库反而把优化节奏交给别人。apollo 的内部网络层 = 本设计的 L0-L3（客户端/单进程路径）+ 进程间路径，**同一套语义、同一个层**（§2 四动作、SendCode 返回码、四通道、水位机、FrameFilter 槽位两路通用），差异只在传输与拓扑。演进阶梯：
+BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次性交付的库——filter 双族（§5.5）、udp_channel 窗口重传等能力是多年逐步叠加的（源证 architecture-review §16.7.1），游戏层 API 在这期间保持稳定。apollo 的自研决定（§15.2）要学的正是这个形态：**自研 = 拥有可持续优化的内核**，不是「一次写完对标二十年」——引外部库反而把优化节奏交给别人。apollo 的内部网络层 = 本设计的 L0-L3（客户端/单进程路径）+ 进程间路径，**同一套语义、同一个层**（§2 四动作、SendCode 返回码、四通道、水位机、FrameFilter 槽位两路通用），差异只在传输与拓扑。演进阶梯：
 
 | 阶段 | 交付 | 性能口径 |
 |---|---|---|
@@ -180,21 +180,21 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 | `sdnet_adapter.h` | **删除** | 伪 SSCP（sdnet_adapter.h:12-80），从未链接真库，空壳代码；精华已提炼为设计点（§5.4） |
 | `session.h` 现接口 | **重设计**（不保留回调形态） | onRecv 裸字节把 TCP 语义漏给游戏逻辑，是本设计要消灭的头号泄漏点 |
 | `modules/protocol` codec/messages | **并入 L1**，codec 迁到 protobuf（与 attribute-sync §7、sdk-contract 同一契约源） | 全仓库无 .proto，手写编码无法支撑多端 SDK |
-| `nng_wrapper` | **已定删**（ioc-review §15.2 退役清单五项之一） | 两套进程间通信并存即重复；决策已闭环 |
+| `nng_wrapper` | **已定删**（architecture-review §15.2 退役清单五项之一） | 两套进程间通信并存即重复；决策已闭环 |
 | 四级水位/四通道/resume | **新建**（L2） | apollo 完全没有；属性同步设计的直接依赖 |
-| Aeron | **已定不引入**；§5.2 语义吸收清单与 §5.5 filter 蓝本保留 | §5.3 已关闭为自研（ioc-review §15.2） |
-| FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | ioc-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
-| sdshmem 类同机共享内存通道 | **暂缓**（P3 随进程间总线同批定案；引设计不引代码——与 Aeron 同等处理） | 只承载**同机大块只读共享与点对点镜像流**（空间格子快照/监控指标/G-2 热备镜像流），**不做通用消息总线**（ioc-review §15.2 禁第二套 IPC 并存的边界照旧）；ssengine-reference §4.4 + Aeron IPC 同框（§5.2） |
+| Aeron | **已定不引入**；§5.2 语义吸收清单与 §5.5 filter 蓝本保留 | §5.3 已关闭为自研（architecture-review §15.2） |
+| FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | architecture-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
+| sdshmem 类同机共享内存通道 | **暂缓**（P3 随进程间总线同批定案；引设计不引代码——与 Aeron 同等处理） | 只承载**同机大块只读共享与点对点镜像流**（空间格子快照/监控指标/G-2 热备镜像流），**不做通用消息总线**（architecture-review §15.2 禁第二套 IPC 并存的边界照旧）；ssengine-reference §4.4 + Aeron IPC 同框（§5.2） |
 
 ## 7. 分期落地
 
 - **P1**：L1 帧格式 + L2 会话基础（seq/ack/心跳/四级水位）+ native adapter 收敛为唯一 L0；GameConnection Facade 上线，属性同步 P1 依赖本层 attributes 通道。
 - **P2**：重连续传（resume token）+ movement 通道"只发最新" + 与属性预算的 hard 水位联动降档。
-- **P3**：内部网络层 **M1 最小正确内核**上线（§5.6 演进阶梯——进程间段：帧定界 + contract_route 按 id 分发 + 背压水位 + 单播拓扑，正确性优先、不设性能指标；蓝本：§5.2 语义 + §5.5 Mercury filter 双族；同机段加评估 sdshmem 类共享内存通道——只承载大块只读共享与点对点镜像流（快照/指标/热备镜像），不做通用总线，§15.2 边界照旧，随内核同批定案，引设计不引代码：ssengine-reference §4.4、Aeron IPC 传输同框；窗口重传/流控聚合/bundle 聚合归 **M2+ 持续优化**，不占本里程碑）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（ioc-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
+- **P3**：内部网络层 **M1 最小正确内核**上线（§5.6 演进阶梯——进程间段：帧定界 + contract_route 按 id 分发 + 背压水位 + 单播拓扑，正确性优先、不设性能指标；蓝本：§5.2 语义 + §5.5 Mercury filter 双族；同机段加评估 sdshmem 类共享内存通道——只承载大块只读共享与点对点镜像流（快照/指标/热备镜像），不做通用总线，§15.2 边界照旧，随内核同批定案，引设计不引代码：ssengine-reference §4.4、Aeron IPC 传输同框；窗口重传/流控聚合/bundle 聚合归 **M2+ 持续优化**，不占本里程碑）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（architecture-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
 
-### P3 前置设计：进程编队与服务发现 / 备份容灾（2026-09-29 补，ioc-review §16.4 G-1/G-2）
+### P3 前置设计：进程编队与服务发现 / 备份容灾（2026-09-29 补，architecture-review §16.4 G-1/G-2）
 
-P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定下来，防止到时拍脑袋（原六份设计文档的空白，登记于 ioc-review §16.4）。
+P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定下来，防止到时拍脑袋（原六份设计文档的空白，登记于 architecture-review §16.4）。
 
 **现状声明（显式）**：apollo 单进程阶段**无进程级高可用**——崩溃安全 = write-behind journal 数据不丢（attribute-sync §8.2）+ 重启拉起；backup/接管/迁移为零起步。这是分期不是遗漏。
 
@@ -202,11 +202,11 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定�
 
 - 先例一 BigWorld：每机一个 bwmachined 守护进程，birth/death 通知经 machine_guard 协议订阅/广播（machine_guard.hpp:496-497/:609-613/:882-883）；cellappmgr/baseappmgr/dbappmgr 消费生死事件做编队决策，cellappmgr 兼负载平衡（cellappmgr.hpp:43/:192-194）。
 - 先例二 KBEngine：无守护进程，machine 以 UDP 广播应答发现（machine.cpp:646-670，KBE_PORT_BROADCAST_DISCOVERY）——更轻，但「机器死了谁来报」无解。
-- apollo 形态（P3 定稿口径）：两层并存——单机 machined 式守护（本机进程生死/拉起/崩溃上报）+ UDP 广播发现（跨机拓扑发现），分别取两先例长处；与 ioc-review §15.2 自研纪律对齐，不引 etcd/consul 类外部协调服务——游戏服进程拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益。控制面复用 §4.1 control 通道的进程间延伸：编队事件（进程加入/退出/机器死亡）作为 control 事件进各进程轮询源——不开新通道体系。
+- apollo 形态（P3 定稿口径）：两层并存——单机 machined 式守护（本机进程生死/拉起/崩溃上报）+ UDP 广播发现（跨机拓扑发现），分别取两先例长处；与 architecture-review §15.2 自研纪律对齐，不引 etcd/consul 类外部协调服务——游戏服进程拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益。控制面复用 §4.1 control 通道的进程间延伸：编队事件（进程加入/退出/机器死亡）作为 control 事件进各进程轮询源——不开新通道体系。
 
 **G-2 备份与宕机接管**（BigWorld 全套先例；apollo P3 骨架取两件）：
 
-- 先例件：baseapp 热备分帧发送（backup_sender.hpp:52-61）+ 一致性哈希备份链（backup_hash/backup_hash_chain——备机按链持续追主机实体状态流）+ reviver 协调接管（主机死亡后备机把镜像实体升级为权威；cellapp 死则 cellappmgr 在幸存 CellApp 重建 cell）+ secondary db 任务族 + dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。KBEngine 对照：无此层（ioc-review C-51/§16.4）——宕机靠实体最后一次归档，窗口 = 归档周期。
+- 先例件：baseapp 热备分帧发送（backup_sender.hpp:52-61）+ 一致性哈希备份链（backup_hash/backup_hash_chain——备机按链持续追主机实体状态流）+ reviver 协调接管（主机死亡后备机把镜像实体升级为权威；cellapp 死则 cellappmgr 在幸存 CellApp 重建 cell）+ secondary db 任务族 + dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。KBEngine 对照：无此层（architecture-review C-51/§16.4）——宕机靠实体最后一次归档，窗口 = 归档周期。
 - apollo P3 最小骨架：**backup-hash 链 + reviver 两件先行**；secondary db/动态扩缩容推迟到多 cell 稳定运行后。
 - **备份粒度对齐单写者纪律**：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。镜像流传输形态 P3 定：**同机部署候选 = sdshmem 类 shm SPSC 环**（主机单写 journal 追加、备机单读消费——正是 §6 决策表「点对点镜像流」的典型场景；ack 仍走 control 通道），跨机则随进程间总线。
 
@@ -218,9 +218,9 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定�
 | scripting-lua.md | 脚本只见 send/subscribe/回调三件套；异步回调按 tick 边界 resume 协程；背压/重连对脚本不可见 |
 | sdk-contract.md | 契约文件是 L1 编码与各端 SDK 的同一来源；帧格式写入契约（各端插件据此实现帧定界） |
 | ssengine-reference.md | DelaySend/GetSendBufFree/GATE/sdpkg 四点收编（§5.4）；sdnet_adapter 反例（伪命名空间）与 fake-fruit 同类 |
-| ioc-review.md | 网络适配器注册走 core::di 启动期装配（编译期类型键），不进旧字符串容器；adapters 的存在形态=链接期选择，非运行期字符串切换 |
+| architecture-review.md | 网络适配器注册走 core::di 启动期装配（编译期类型键），不进旧字符串容器；adapters 的存在形态=链接期选择，非运行期字符串切换 |
 | xml-generation.md | 帧头 ver → filter 栈声明（16.7.1）由契约生成器装配（用途④）；messages.xml 的通道 enumeration 由其四层漏斗第①层校验 |
 
 ---
 
-*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（ioc-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（ioc-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，ioc-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。*
+*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。*
