@@ -192,9 +192,9 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 - **P2**：重连续传（resume token）+ movement 通道"只发最新" + 与属性预算的 hard 水位联动降档。
 - **P3**：内部网络层 **M1 最小正确内核**上线（§5.6 演进阶梯——进程间段：帧定界 + contract_route 按 id 分发 + 背压水位 + 单播拓扑，正确性优先、不设性能指标；蓝本：§5.2 语义 + §5.5 Mercury filter 双族；同机段加评估 sdshmem 类共享内存通道——只承载大块只读共享与点对点镜像流（快照/指标/热备镜像），不做通用总线，§15.2 边界照旧，随内核同批定案，引设计不引代码：ssengine-reference §4.4、Aeron IPC 传输同框；窗口重传/流控聚合/bundle 聚合归 **M2+ 持续优化**，不占本里程碑）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（architecture-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
 
-### P3 前置设计：进程编队与服务发现 / 备份容灾（2026-09-29 补，architecture-review §16.4 G-1/G-2）
+### P3 前置设计：进程编队与服务发现 / 备份容灾 / 实体远程调用（2026-09-29 补，architecture-review §16.4 G-1/G-2 + RPC 接线）
 
-P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定下来，防止到时拍脑袋（原六份设计文档的空白，登记于 architecture-review §16.4）。
+P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来，防止到时拍脑袋（G-1/G-2 为原六份设计文档的空白，登记于 architecture-review §16.4；实体远程调用为既有 architecture/ 代设计的接线，同日补）。
 
 **现状声明（显式）**：apollo 单进程阶段**无进程级高可用**——崩溃安全 = write-behind journal 数据不丢（attribute-sync §8.2）+ 重启拉起；backup/接管/迁移为零起步。这是分期不是遗漏。
 
@@ -210,6 +210,15 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定�
 - apollo P3 最小骨架：**backup-hash 链 + reviver 两件先行**；secondary db/动态扩缩容推迟到多 cell 稳定运行后。
 - **备份粒度对齐单写者纪律**：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。镜像流传输形态 P3 定：**同机部署候选 = sdshmem 类 shm SPSC 环**（主机单写 journal 追加、备机单读消费——正是 §6 决策表「点对点镜像流」的典型场景；ack 仍走 control 通道），跨机则随进程间总线。
 
+**实体远程调用（RemoteEntityCall——BW EntityMailbox / KBE EntityCall 的对应物）**：
+
+- **语义层设计已存在，本设计只接底座**：`docs/architecture/remote-entity-call-design.md`（architecture/ 代）四件套——`RemoteEntityRef`（entity_id/entity_type/target_domain/authority_role/route_version/shard_key）、`RemoteMethodSchema`（method_alias/invoke_mode/arg_types/timeout_ms/idempotent）、`InternalMessageEnvelope`（trace_id/request_id/source/target_app/entity_id/method_alias/route_version/authority_epoch）、`RouteResolver`（宿主定位/route 版本校验/ghost 转发）+ 消息四分类（EntityMethodCall/RouteControl/LifecycleEvent/ReplicationCommand）——语义层以该文档为准，此处做三件接线与对齐：
+- **传输底座 = §5.6 M1 内核**（按 id 分发单播）：该文档所引 `Channel/Endpoint`（modules/net/protocol 旧形态）一律按本设计 L0-L3 口径读作 M1 内核接口；envelope 走 internal 域消息，不另起协议。
+- **术语对齐**（该文档写于 design 语料定稿前）：`target_domain` 的 Ghost ≈ attribute-sync §4.4 `RO_MIRROR`（远程只读镜像，调用转发权威侧）；World ≈ CELL 权威侧；Anchor/Proxy ≈ base 侧（登录/会话入口）——两套词汇指同一权威模型，落地统一为 attribute-sync §2.3 双轴标记（所有权轴 × 可见域轴）。
+- **invoke_mode 判定（对照两家刻意不做的事）**：BW/KBE 的实体调用均为**异步单向、无返回值**（结果用反向调用）——同步返回把网络 RTT 引进 tick，与 G-7 的确定性节拍论证冲突。apollo 口径：**OneWay 为默认**；RequestReply（request_id + future）只限低频控制面（跨进程 DB/GM/运维），永不进热路径；ReliableEvent 复用 events 通道语义。
+- **信封与契约合流**：`InternalMessageEnvelope` = sdk-contract §11 internal 域消息（id 900+）的统一信封——request_id/trace_id/route_version/authority_epoch 为信封标准字段，进契约由生成器产出（contract_route 清单扩展：method alias → internal 消息绑定），不手写第二份。
+- **先例病根规避**：方法 id 若走两家同病的单一分配表（§11.1 KBE message_handlers 单表、§11.2 BW InterfaceMinder 单表——内部演进推动客户端重发版），即重蹈覆辙；apollo 的方法 id 归契约 internal 域分段管辖，域分段四规则（sdk-contract §11.3）天然免疫。
+
 ## 8. 与其余设计的交集
 
 | 关联设计 | 落点 |
@@ -223,4 +232,4 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定�
 
 ---
 
-*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。*
+*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。同日增补（⑥）：§7 P3 前置设计补实体远程调用块（RemoteEntityCall——语义层引用 architecture/remote-entity-call-design.md 四件套，传输底座接 §5.6 M1，invoke_mode 定 OneWay 默认/RequestReply 只限控制面，信封合流 sdk-contract internal 域）。*

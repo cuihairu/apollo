@@ -167,6 +167,7 @@ ViewerState (per (client, entity))
 
 - `CELL` 标记属性在 cell 进程间由空间管理器转发（ghost：邻接 cell 的实体镜像）；镜像实体在本进程是 `RO_MIRROR`——属性管线无感（照常写镜像 + 打脏 + 服务本地观察者），只是写来源变成"远程广播"。
 - 协议位预留：delta 包携带 `authority_epoch`（权威纪元），镜像侧拒绝回写；迁移（实体过界）= 新 cell 建快照 + 旧 cell 发销毁，复用 §6 的进出机制。
+- 方法调用维度（跨进程 RPC / RemoteEntityCall）不在本设计范围——P3 前置接线见 net-abstraction §7「P3 前置设计」实体远程调用块；本节只管属性投影与镜像。
 
 ## 5. 优先级与节流
 
