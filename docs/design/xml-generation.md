@@ -9,7 +9,7 @@
 1. **现状：apollo 运行期 XML 消费为零**——全仓唯一 XML 引用是 config_manager.cpp 的 `parseXml` **恒 false 桩**（:564-570，注释自认「XML解析需要专门的库（如tinyxml2）」，与 parseLua 桩同类）；已实现解析器只有手写 INI/JSON 两套；vcpkg 无任何 XML 库。XML 的用途不是既有代码惯性，而是**本轮立规矩**：行业一致形态（BigWorld/KBEngine 全生态 XML 契约、MyBatis mapper XML）+ §15.3 已定决策。
 2. **用途白名单四个、禁区四个**。白名单：① 契约源（sdks/contract/*.xml + apollo.xsd）；② L1 数值配置表（config/tables/*.xml + tables.xsd）；③ storage.xml 存储语句（§15.5 已定，手写不生成）；④ 帧管线 filter 栈声明（随契约，net-abstraction 落点）。禁区：线上协议（恒二进制）、Lua 脚本域、关卡/几何大块数据（二进制 chunk）、日志。
 3. **生成源三选一，选定「XSD 预校验的 XML 实例」**：C++ 结构体反射（C++20 无稳定静态反射 + 真相反转为代码）与 Lua 表为源（丢 XSD 红利 + 脚本域数据域混淆）均否决——对照表见 §3。
-4. **产物五类**：强类型数据结构、typed loader（pugixml，错误带 file:line+xpath）、启动校验器、schema_hash 头、文档投影——C#/TS 投影属 sdk-contract 同一生成器不重复设计；storage.xml 手写不生成。
+4. **产物五类 + v3 契约反射后端**：强类型数据结构、typed loader（pugixml，错误带 file:line+xpath）、启动校验器、schema_hash 头、文档投影——契约源另按 sdk-contract §10.3 v3（2026-09-29）同批追加反射后端五产物（.proto/descriptor.bin/contract.lua/semantic.json/contract_route，P2，见 §4）；storage.xml 手写不生成。
 5. **校验四层漏斗**：xmllint XSD 门禁（CI）→ 生成器语义规则（XSD 表达不了的：ID 分段/环检测/跨表引用）→ 生成代码编译期（static_assert/constexpr）→ 启动 fail-fast（聚合报错，一次报全不遇错即停）。原则同 §0：能生成期报的不留编译期，能编译期报的不留启动期，能启动期报的不留运行期。
 6. **MyBatis 范式的取与舍**：取「XML 描述 + 语句/映射声明化 + 启动全量解析即败 + 重建式热更」；舍「运行期 ORM 一切」（会话/懒加载/二级缓存/动态 SQL/`${}` 拼接）。游戏服映射与不适配清单见 §6。
 
@@ -65,14 +65,15 @@
 
 ## 4. 生成器：输入/产物/实现
 
-- **实现形态**：C++ 单二进制 `sdks/gen/`（sdk-contract §3 已定，入 CI）；XML 解析用 **pugixml**（vcpkg 新增一项，§15.3 已定）；**XSD 校验不在生成器内做**——pugixml 无 XSD 能力，也不值得为此引 libxml2，CI 门禁前置 `xmllint --schema`（§15.3「校验器零开发」）。
+- **实现形态**：C++ 单二进制 `sdks/gen/`（sdk-contract §3 已定，入 CI）；XML 解析用 **pugixml**（vcpkg 新增一项，§15.3 已定）；**XSD 校验不在生成器内做**——pugixml 无 XSD 能力，也不值得为此引 libxml2，CI 门禁前置 `xmllint --schema`（§15.3「校验器零开发」）；**include 聚合在读取层自实现**（sdk-contract §11.4：pugixml 不内建 XInclude，读根文件递归展开引用为单一文档树，XSD 校验与 schema_hash 一律对聚合后整体——零新依赖）。
+- **契约反射后端（v3，sdk-contract §10.3/§10.6 定案，P2）**：契约源同批追加五类反射产物——`.proto`（golden，protoc 的源）→ protoc 出 `descriptor.bin`；`contract.lua`（IR 的 Lua 表 dump：attr 表/消息路由/白名单，服务端 require 即用）；`semantic.json`（客户端语义小件）；`contract_route`（C++ 帧路由清单：msg id→name/dir/domain/handler）；端侧代码包装（protoc `--csharp_out`/pbjs，CI 单点吐 golden 入库）。生成语义按 `binding="native|reflect"`（sdk-contract §10.6 v3 消息两分法）：native（框架固定消息族）进内建强类型代码，reflect 只进 bin/路由。实现口径：**无自建 AST**——pugixml DOM 即解析树（选 XML 的直接红利），核心资产是 IR（ContractModel）+ 四层漏斗，各产物皆「读 IR→渲染文本」薄 writer；业务消息 `.pb.cc` 不默认产出。
 - **产物（五类）**：
   1. **强类型数据结构**：contract → `enum class AttrId`/`enum class MsgId` + constexpr 默认值表（attribute-sync §2 的契约机器可读形态）；tables → 每表一个 struct（字段类型按 tables.xsd 类型集定标：int64 万分比/字符串/数组）。
   2. **typed loader**：pugixml DOM → struct 的生成装载函数；错误带 `file:line + xpath + 期望/实际`（pugixml 的 node.offset_debug 可得行号）——禁止通用 ConfigNode 树二次反射（热路径类型安全在编译期定型）。
   3. **启动校验器**：keyref/范围/跨表引用/派生 DAG 拓扑（16.7.2 的环检测落点）；**聚合报错**——收集全部错误一次输出（策划工具友好），非遇错即停。
   4. **schema_hash 头**：SHA-256(契约源+生成器版本)（sdk-contract §6 握手不变）。
   5. **文档投影**：协议文档/错误码表（sdk-contract §3 产物 ④）。
-- **明确不生成**：storage.xml（手写 + storage.xsd 校验，§15.5——语句是程序的知识不是生成的对象）；C#/TS SDK 投影（sdk-contract §3 同一生成器的既有排期，本文不重复）。
+- **明确不生成**：storage.xml（手写 + storage.xsd 校验，§15.5——语句是程序的知识不是生成的对象）；C#/TS SDK 投影细节（sdk-contract §10.3 v3 同一生成器排期——protoc/pbjs 现成工具吐代码，本文不重复）。
 - **CI 双闸**（sdk-contract §3 已定，此处给实现口径）：闸一 `xmllint --schema` 全量 XML；闸二生成产物 diff 检查（改契约忘生成 → 红）。生成器自查规则即 §5 第 ② 层。
 
 ## 5. 校验策略：四层漏斗
@@ -116,7 +117,7 @@ mapper XML 三件套：**语句声明化**（namespace + 语句 id + SQL，`#{}`
 ## 7. 分期
 
 - **P1**：契约生成器 v1（contract/*.xml → 产物 1-4 + 文档投影；CI 双闸 xmllint+diff 上线）+ tables 装载器 v1（tables.xsd + 生成 loader + 启动校验）+ config_manager 的 parseXml/parseLua 桩与 ConfigFormat::Xml/Lua 路由**诚实化删除**（stub 家族清理，C-49 纪律；改动点记录在案，随代码阶段执行）。
-- **P2**：配置表热更管线（FileWatcher → 全量重建 → tick 边界换表）+ 文档投影接 sdk-contract 排期（C#/TS 生成）+ 帧管线 filter 栈生成（net-abstraction P1 会话层联动）。
+- **P2**：配置表热更管线（FileWatcher → 全量重建 → tick 边界换表）+ **契约反射后端**（sdk-contract §10.3 v3：.proto/bin/contract.lua/semantic.json/contract_route 五产物 + binding 生成语义 + include 聚合展开）+ 文档投影接 sdk-contract 排期（端代码包装）+ 帧管线 filter 栈生成（net-abstraction P1 会话层联动）。
 - **P3**：storage 投影工具化（storage.xml 的启动校验器复用四层漏斗）+ 体积敏感表的二进制打包选项（生成期打包 + schema 版本，运行期零 XML 解析）。
 
 ## 8. 与其余设计的交集
@@ -132,4 +133,4 @@ mapper XML 三件套：**语句声明化**（namespace + 语句 id + SQL，`#{}`
 
 ---
 
-*基线：apollo main @ 047d0002（modules/core/config 读码；行业对照行号见 ioc-review §16.2/§16.7，其框架基线在各自行注明）。本设计与 ioc-review §16.7 随同一次提交落盘。*
+*基线：apollo main @ 047d0002（modules/core/config 读码；行业对照行号见 ioc-review §16.2/§16.7，其框架基线在各自行注明）。本设计与 ioc-review §16.7 随同一次提交落盘。2026-09-29 同步 sdk-contract v3 定案（§10.3/§10.6/§11.4：契约反射后端五产物、binding native|reflect 生成语义、include 聚合读取层展开）——执行摘要 4/§4/§7 P2 对应扩写。*

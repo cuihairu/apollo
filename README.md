@@ -21,7 +21,7 @@ Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的�
 - 🏗️ **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）；明确不采用 Spring 式运行时容器（论证见 `docs/analysis/ioc-review.md` §0）
 - 📜 **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
 - 🌐 **高性能网络层** - 跨平台异步I/O（IOCP/Epoll）
-- 📦 **传输编解码（目标态）** - L1 帧格式 + protobuf + zstd 压缩（`docs/design/net-abstraction.md`）；当前处于契约系统第一批（def → `apollo_gen` 生成器），protobuf schema 由契约生成在后续批次——现网为手写编码，仓库自有 .proto 为零
+- 📦 **传输编解码（目标态）** - L1 帧格式 + protobuf descriptor（`descriptor.bin`，反射为默认）+ Lua 契约表（`contract.lua`）+ zstd 压缩（`docs/design/sdk-contract.md` §10-§12）——框架固定消息族内建强类型守热路径、业务消息反射进 Lua（服务端契约变更零重编）、有代码热更管线的客户端走生成代码（docs/36 决策 #19）；现网为手写编码，仓库自有 .proto 为零
 - 🔥 **ECS战斗系统** - 灵活的实体-组件-系统架构
 - 👁 **AOI九宫格系统** - 高效的视野管理
 - 💾 **数据存储层** - 数据库连接池和Redis缓存
@@ -264,7 +264,7 @@ graph TB
 - **编程语言**: C++20
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自实现跨平台网络层
-- **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3）——**def 契约管语义**（属性/权限位/sync 掩码；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付）；**protobuf 管字节编码**（L1 帧格式 + zstd，schema 由契约生成，规划；`docs/design/net-abstraction.md`）。protobuf 现为依赖+测试，未上消息通路（仓库自有 .proto 为零，现网手写编码）
+- **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3/#19）——**def 契约管语义**（属性/权限位/sync 掩码/内外分域；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付；服务端载体为 contract.lua，业务 handler 与白名单数据化）；**protobuf 管字节编码**（反射为默认：descriptor.bin + 框架固定消息族内建强类型守热路径；有代码热更管线的客户端走生成代码、bin 兜底；L1 帧格式 + zstd，规划；`docs/design/sdk-contract.md`）。protobuf 现为依赖+测试，未上消息通路（仓库自有 .proto 为零，现网手写编码）
 - **数据库**: MySQL 8（主存储）+ Redis（缓存/会话）+ ClickHouse（分析，规划）；PostgreSQL 留缝（docs/36 决策 #17）
 - **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自研消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）

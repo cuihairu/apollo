@@ -12,6 +12,7 @@
 4. **属性钩子只有一个接入点**：`onAttrChanged(entity, id, old, new)` 挂在属性管线的"重算后、广播前"阶段（attribute-sync.md §10 tick 阶段 2/4 之间），白名单位 + 指令预算防脚本拖垮广播；脚本对"最终可见值"只读，对白名单做最终修饰。
 5. **公式系统从 C++ 搬进 Lua 函数**：docs/03 的自研表达式编译方案废弃；派生属性公式 = Lua 函数 + 依赖图留在 C++（重算调度不依赖脚本引擎）。
 6. **沙盒**：无 io/os 表、指令数预算/帧、内存上限、每实体脚本时间片轮转；脚本异常隔离（错误 → 日志 + 实体行为回退），不崩进程。
+7. **契约语义的运行时载体（sdk-contract §10.6 v3，2026-09-29 补）**：业务消息 handler 绑定与属性写白名单的数据来自 `contract.lua`（生成器同批吐的 Lua 契约表：attr 表/消息路由/白名单）——装载与热更走 §3.2 同一换表协议；服务端契约变更零 C++ 重编的业务面全在 Lua 侧承接（见 §3.4）。
 
 ---
 
@@ -69,6 +70,13 @@ modules/lua/
 
 - L1 静态配置（attribute-sync.md §2.1）分版本目录下发；新旧版本并存（旧客户端的场景继续用旧配置），**配置版本随实体快照一起发给客户端**（`attr_schema_version`，见 attribute-sync.md §7.2）——防止热更配置后新旧实体语义漂移。
 - 配置变更如需脚本配合（数值改版导致公式重写）由同一次补丁携带：先配置、后脚本，脚本版本高于配置版本才启用（版本偏序校验）。
+
+### 3.4 契约表装载（contract.lua，sdk-contract §10.6 v3，2026-09-29 补）
+
+- `contract.lua` 是 apollo_gen 从契约源同批吐的 Lua 表（attr 表/消息路由/写白名单——semantic.json 同内容的服务端双形态）：`require` 即用，无编译环节（可选 luac 预编译随 Lua 5.4 发行版自带）。装载与热更走 §3.2 同一换表协议：新表编译 → 冒烟（路由完整性校验：bin 里有而 Lua 无 handler 即拒换——sdk-contract §10.6 装载期一致性闸在脚本侧的执行点）→ tick 边界原子换。
+- **消息 handler 绑定**：上行业务消息经 C++ 帧路由按 `contract_route`（id→handler 名）分发到 Lua——handler 在模块表内注册，模块头注释声明 `handles: msg_a, msg_b`，加载器校验其与契约路由表一致，缺失启动红。
+- **写白名单数据化**：§4/§5 的 `ScriptWriteWhitelist` 位图从 contract.lua 构建（白名单仍由契约 `predict` 位生成——sdk-contract §5 机制不变，载体从生成常量变为契约表数据）；热换契约表时白名单随 tick 边界同换。
+- 版本偏序沿用 §3.3 同一规则：契约表版本 ≥ 消费它的脚本补丁版本才启用——契约加字段与使用该字段的 handler 补丁必须同批或先表后补。
 
 ## 4. C++ 服务暴露：接口形态与开销
 
@@ -146,9 +154,9 @@ collect 阶段（§3.2 的 delta/快照组装）
 | ioc-review.md | C++ 容器启动期装配一次、注入模块表；容器删除运行期注册后，热更只发生在脚本表层面，二者解耦且互不越界 |
 | attribute-sync.md | 钩子窗口时序（§5.1）；公式钩子（§5.3）；配置版本随实体下发（§3.3 ↔ attr_schema_version） |
 | net-abstraction.md | 脚本发起的异步操作（DB 查询/跨服请求）经会话层完成回调按 tick 边界 resume 协程（§异步模型）；Lua 对网络只看到"发消息/订阅消息/回调"三件套，背压与重连对脚本不可见 |
-| sdk-contract.md | 属性/意图消息的契约同时约束脚本端（脚本写的字段必须是契约字段——脚本白名单从契约生成） |
+| sdk-contract.md | 属性/意图消息的契约同时约束脚本端（脚本写的字段必须是契约字段——白名单由契约 predict 位生成、载体为 contract.lua，§3.4）；业务消息 handler 按契约路由绑定（bin↔路由逐条对齐的装载期闸） |
 | ssengine-reference.md | 异步 DB 模型与协程 resume 共用底座；定时器轮驱动脚本的 schedule（`apollo.timer.repeat`） |
 
 ---
 
-*基线：apollo main @ 35a9c528。*
+*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。*
