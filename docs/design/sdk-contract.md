@@ -132,7 +132,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 ## 8. 分期
 
 - **P1**：目录收敛（`skds/` 内容并入 `sdks/`，删空壳保留正确拼写；git mv 记录）；契约 v1（`apollo.xsd` + attrs/messages/entities/errors.xml，§15.4 布局）；生成器 v1（C++ + 文档 + hash，内部设计见 `xml-generation.md`）；Unity 端按四层重组（Codec 生成 + Attributes 层并入生成产物）。
-- **P2**：Cocos/Laya TS 生成；第 3 层（AOI 实体管理）生成壳；预测混合器 v1（movement 双缓冲）；**proto/bin 双后端**（§10：契约 → .proto golden → protoc 同批出 `.pb.cc`（服务端热路径，A 路线）+ `descriptor.bin`（默认通道：客户端热更资源管线/冷路径/工具，C 路线）——A+C 双轨定案见 §10.6，两后端同批实现）；**契约内外分域**（§11：domain 属性 + msg id 按域分段 + 双 hash + 按域过滤 + 跨域禁令，与 bin 投影同一机制）。
+- **P2**：Cocos/Laya TS 生成；第 3 层（AOI 实体管理）生成壳；预测混合器 v1（movement 双缓冲）；**反射通道与端侧代码包装**（§10.6 v3 定案：.proto golden → protoc 同批出 `descriptor.bin`（业务消息反射 + sol2 桥进 Lua）+ `contract.lua`（服务端语义）+ `semantic.json`（客户端语义）+ protoc/pbjs 端代码（有代码热更管线的端）——**反射为默认、代码为两端增强**，同批实现）；**契约内外分域**（§11：domain 属性 + msg id 按域分段 + 双 hash + 按域过滤 + 跨域禁令，与 bin 投影同一机制）。
 - **P3**：UE5 插件；跨端事件协议评审；契约变更流水线接 CI 发版。
 
 ## 9. 与其余设计的交集
@@ -337,6 +337,8 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
 - **schema_hash 覆盖 proto 层**：hash = SHA-256(canonicalBundle + generatorVersion)。proto 产物由同一 canonical bundle 决定 ⇒ **语义变化必然改变 proto golden ⇒ hash 必然变**，不存在「proto 变了 hash 没变」的缝隙；proto 后端引入本身也升 generatorVersion ⇒ hash 变 ⇒ 握手按 §6 双版本窗口（N/N-1）灰度。protoc 产物对齐不靠 hash、靠 CI pin（vcpkg manifest 锁 protobuf 版本，各端序列化层同一次 protoc 跑出）。
 - **各端 hash 常量四处同值**：C++ `kSchemaHash` / C# `SchemaHash` / TS `SCHEMA_HASH` / proto 文件头注释——单点生成，禁止手抄。
 
+**v3 后端扩展与工具链分工（2026-09-29 定案修正，定案见 §10.6 末）**：产物清单从「.pb.cc + .bin 双后端」修正为——`.proto`（golden，bin 的源）+ `descriptor.bin` + `contract.lua`（服务端 Lua 契约表）+ `semantic.json`（客户端语义小件）+ 端侧薄常量（AttrIds/错误码）+ protoc/pbjs 端代码（CI 单点吐、golden 入库）；业务消息的 `.pb.cc` 不再默认产出（框架固定消息族的内建代码除外——其 schema 不随契约变，见 §10.6 消息两分法）。生成器内部形态澄清：**无自建 AST**——pugixml DOM 即解析树（选 XML 而非自定义 DSL 的直接红利），自建核心是 IR（ContractModel + 四层校验），各产物是「读 IR → 渲染文本」的薄 writer（无优化 pass、无语义变换）；C# 消息类由 protoc `--csharp_out` 吐（现成生成器，非自研模板）。工具分发纪律：**前端零工具链**——本节「golden 入库、protoc 只在 CI」的既有纪律推广到全部产物，端插件只拉产物做导入（生成代码进工程、bin/semantic 进资源目录、登记 manifest），绝不做第二个契约解析实现（防 §1 批判的多端漂移借尸还魂）；改契约的动作天然发生在服务端仓库（apollo_gen 是 CMake 目标之一）；contract.lua 是 IR 的 Lua 表字面量 dump（数据非代码，无编译环节——可选 luac 预编译随 Lua 5.4 发行版自带）；本地快速迭代的预编译单二进制为可选进阶，非必需。
+
 ### 10.4 差分同步与 protobuf 的配合
 
 全链（服务端每广播 tick，attribute-sync §3.2/§10 六阶段中的 4-5 阶段）：
@@ -422,7 +424,7 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
 | 类型形态 | 强类型（struct/访问器，错用即编译错） | 弱类型（DynamicMessage 按名/号取字段，错用运行期才见） | 通用 Variant |
 | 失败面 | CI/编译即红，带病上不了线（决策 #4） | 加载期红；语义层校验不进 descriptor，仍靠生成侧闸兜住 | 启动晚失败 / 运行期数据错位 |
 
-**分档用法**（C 不做全量替换，按路径冷热分档；定案口径见本节末）：
+**分档用法**（首版口径；v3 修正见定案段——热路径改由框架固定消息族内建强类型承接，反射不进热路径）：
 
 - **热路径**（服务端 tick）：走 A——生成代码零开销；若某热路径不得已走 C，用 prototype clone（启动期 `factory.GetPrototype()` 缓存原型、消息构造走 `prototype->New()`）摊掉描述符查找，但仍要按 2-5× 编解码税做预算。
 - **冷路径与客户端**（GM 后台、调试器、内部工具、离线分析；客户端 SDK 全量）：纯反射够用——客户端解码的是**自己的**一条视图流（非服务端百万级实体遍历），2-5× 在端侧预算内；换来**零生成代码、零重编**的跟进速度。
@@ -465,17 +467,22 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
        「改协议结构要重编」从缺陷变成质量闸（编译期把错挡在上线前）。
 ```
 
-**定案（2026-09-29）：编解码路线 = A+C 双轨、C 为主。**
+**定案（2026-09-29，同日修正为 v3）：编解码路线 = 反射为默认、代码为两端增强。**
 
-- **A 编译期生成——收窄保留**：只用于**服务端 tick 热路径**（帧预算内零开销的核心消息：attr delta/movement/控制面；低频变更，重编成本由维护窗口吸收，消解阀②）。
-- **C descriptor.bin——默认通道**：客户端 SDK（Unity/Cocos/Laya 全量走 bin，经热更资源管线随版本目录下发，**不随服务器发版**）、服务端冷路径（GM/运维/离线工具）、调试工具。
-- **生成器形态**：apollo_gen 同一 def 源**同批吐 `.pb.cc/.pb.h` 与 `descriptor.bin`**（§10.3 产物⑤ 扩为 .proto + .bin 双输出）——schema_hash 两态一致：常量仍按 §6 算法对 canonicalBundle 计算（两产物同源同批），且因 protoc 版本 pin（§10.3）与 .bin 字节锚定等价，端侧可对 .bin 重算自验。
-- **定案理由**：客户端更新链路（商店审核/玩家升级）比服务器重编译**更难控**——bin 当资源下发，把演进链路里最慢的一环（端侧发版）与协议解耦；服务端重编可控（消解阀②），端侧发版不可控。
-- **批次影响**：生成器 proto 后端与 bin 后端**同批实现**（§8 P2 行已同步扩写）；B 路线维持否决。
+首版定案为「A+C 双轨、C 为主」（A 收窄服务端热路径、C 为客户端默认）。修正触发 = 两个新输入：① **端侧代码热更通道**（Unity HybridCLR 的 C# DLL 热更、Cocos/Laya 的 TS 脚本原生热更）使 A 的头号代价（商店发版）消失——编译期严谨与热更可兼得，C 全量包端不再必要；② **服务端零重编诉求**使业务消息的 .pb.cc 投影退役。v3 口径：
+
+- **关键补丁——消息分两类**：**框架固定消息族**（movement/attributes/control 通道：AttrDelta/AttrBatch/move/heartbeat…）schema **不随契约变**（契约变的是 attr_id 取值域/枚举校验，不是这几个 message 的形状）→ 强类型代码一次生成**内建进框架**，契约变更永不触发其重编；**业务消息**（events 等通道）schema 随契约变 → bin 反射。反射税只落在业务消息（单服 5000 CCU、人均秒级数条 ≈ 万条/秒，DynamicMessage µs 级解码，CPU 占比可忽略）；**热路径零反射**。边界进契约：messages.xml 加 `binding="native|reflect"`（默认按通道：movement/attributes/control=native，events=reflect）。
+- **服务端：契约变更零重编**。装载 descriptor.bin（全量）+ contract.lua（Lua 契约表：attr 表/消息路由/白名单——semantic 同内容双形态，require 即用）；业务消息 DynamicMessage ──sol2 桥（遍历 descriptor 字段搬运，固定框架代码一次写好，不随契约变）──► Lua 表 ──► Lua handler；属性容器表驱动（id → AttributeValue，从 contract.lua 构建）。契约变更 = 换 bin + 换 contract.lua + Lua 热更 handler，**C++ 不动**。DescriptorPool 换代式热更（本节注意点①：新 bin 新 pool，旧 pool 等存量消息生命周期结束整体废弃）。
+- **客户端：按代码热更能力分档**。有热更管线的端走**生成代码**（protoc `--csharp_out` → HybridCLR 热更程序集；TS 走 pbjs/ts-proto → 脚本热更）——编译期类型检查 + 热更兼得；**bin 为兜底通道**（UE5 P3/工具/GM/调试/新端快接/不接代码热更的团队）——零生成代码零编译，加载期以 semantic.json 校验引用完整性（业务引用的 attr id/字段名全部存在）挡大头。
+- **加载期一致性闸（严谨性来源从编译期改装载期）**：服务端启动/热更装载三件互检——bin 字节重算 ↔ internal_hash 锚定（protoc pin）；bin 消息集 ↔ contract.lua 路由表**逐条对齐**（bin 有而 Lua 无 handler = 启动红——KBE 是运行期才 miss，§11.1）；白名单 attr id ↔ contract.lua 存在性。manifest 机制同一套（§11.6）。与 KBE 运行时协商的本质区别：**构建期定型产物 + 装载期闸** vs 无事实源运行期自证。
+- **生成器形态**：apollo_gen 同批吐 `.proto`（golden，bin 的源）/ `descriptor.bin` / `contract.lua` / `semantic.json` / 端侧薄常量 / protoc/pbjs 端代码（§10.3 v3 段）；业务消息 `.pb.cc` 不默认产出（框架族内建代码除外）。schema_hash 机制不变（§6 算法对 canonicalBundle + .bin 字节锚定自验，两态一致）。
+- **定案理由**：演进链路里两个最慢环节（服务端 C++ 重编、端侧商店发版）**同时**与协议解耦；严谨性不依赖编译期——由「装载即全量校验」承接；热路径严谨与性能由框架族两分法保住。
+- **批次影响**：bin/lua 后端 + sol2 反射桥 + 校验闸 + 端代码包装**同批实现**（§8 P2 已改口径）；B 路线维持否决。与决策链相容：bin 构建期定型运行期只读（不落 ioc-review §0「运行时容器」批判面）；两层模型（§10.0）/分域四条（§11.3）/manifest（§11.6）全保留；决策 #12 加深——Lua 从业务脚本升格为契约语义的运行时载体（白名单仍由契约生成，载体明示为 contract.lua）。
+- **诚实代价（记入批次评审）**：sol2 反射桥的维护面（packed repeated/嵌套递归）；Lua handler 层无编译期类型（契约 golden 回放测试兜回归，与决策 #12 既有形态一致不恶化）；binding 两分边界需契约评审把好关；C++ 侧新增固定模块（descriptor 加载 + 反射编解码 + 校验闸）。
 
 ### 10.7 收束
 
-def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重要的投影之一；语义层（掩码/predict/继承/分段）不进 wire，wire 层（varint/zigzag/缺省零字节）不生语义；zstd 在帧层消 protobuf 消不掉的跨条目冗余**。多端一致由「单 golden + schema_hash + protoc pin」三点闭环；路线定案为 **A+C 双轨、C 为主**（§10.6：服务端热路径生成代码零开销，客户端/冷路径/工具走 descriptor.bin 资源管线——端侧发版与协议演进解耦）；业务动态性由通用容器字段 + configId + Lua 三扇门承接——协议结构层的稳定不再是对演进速度的牺牲，而是对「带病上线」的免疫。
+def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重要的投影之一；语义层（掩码/predict/继承/分段）不进 wire，wire 层（varint/zigzag/缺省零字节）不生语义；zstd 在帧层消 protobuf 消不掉的跨条目冗余**。多端一致由「单 golden + schema_hash + protoc pin + 装载期一致性闸」闭环；路线定案为**反射为默认、代码为两端增强**（§10.6 v3：框架固定消息族内建强类型守热路径——schema 不随契约变、永不因契约重编；业务消息 bin 反射经 sol2 桥进 Lua，服务端契约变更零重编；有代码热更管线的客户端走生成代码、bin 兜底——服务端重编与端侧发版两个最慢环节同时解耦，严谨性由装载期一致性闸承接）；业务动态性由通用容器字段 + configId + Lua 三扇门承接——协议结构层的稳定不再是对演进速度的牺牲，而是对「带病上线」的免疫。
 
 ---
 
@@ -562,10 +569,11 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 dist/client/<client_hash>/          ← 目录名即版本指纹（CDN 版本目录按 hash 寻址，缓存友好）
 ├── manifest.json                   # 包指纹：client_hash、生成器版本、逐文件 SHA-256 清单
 ├── descriptor.bin                  # wire 层（protoc 标准产物，任何 protobuf 运行时直接吃）
-└── semantic.json                   # 语义侧小件：predict 表、attr id→name、错误码
+├── semantic.json                   # 语义侧小件：predict 表、attr id→name、错误码
+└── (可选) 生成的 .cs/.ts           # 有代码热更管线的端（§10.6 v3）：protoc/pbjs 产物
 ```
 
-apollo_gen 同批吐三件（与 .pb.cc 同一次跑）——manifest 把「同批性」从口头纪律变成**端侧可验的物证**。
+apollo_gen 同批吐三件（与 .pb.cc 同一次跑；有代码热更管线的端加第四件：protoc/pbjs 生成的 .cs/.ts——**同进 manifest 清单**，「新代码旧 bin」混搭同被加载期逐文件 hash 挡住）——manifest 把「同批性」从口头纪律变成**端侧可验的物证**。服务端侧同构三件互检：bin + contract.lua + 白名单（§10.6 v3 加载期一致性闸）。
 
 校验链（两层，全在加载期/握手期，不进运行期）：
 
@@ -598,4 +606,4 @@ apollo_gen 同批吐三件（与 .pb.cc 同一次跑）——manifest 把「同�
 
 ---
 
-*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。同日续加 §11.6（客户端契约包与 manifest：bin 只覆盖 wire 层的补漏——语义小件第二文件是事实，交付单元升为包，manifest 逐文件 SHA-256 + 单点 client_hash 握手，不一致全闭环在加载期/握手期；单文件三案否决）。*
+*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。同日续加 §11.6（客户端契约包与 manifest：bin 只覆盖 wire 层的补漏——语义小件第二文件是事实，交付单元升为包，manifest 逐文件 SHA-256 + 单点 client_hash 握手，不一致全闭环在加载期/握手期；单文件三案否决）。同日定案修正 v3（**反射为默认、代码为两端增强**，替代首版「A+C 双轨、C 为主」）：修正触发=端侧代码热更通道（HybridCLR/TS 脚本）使 A 发版代价消失 + 服务端零重编诉求使 .pb.cc 投影退役；核心=消息两分法（框架固定消息族 schema 不随契约变→内建强类型守热路径；业务消息→bin 反射+sol2 桥+contract.lua，服务端契约变更零重编）、客户端按热更能力分档（生成代码主通道、bin 兜底）、装载期一致性闸（bin↔internal_hash 锚定/bin↔Lua 路由逐条对齐/白名单存在性——严谨性从编译期改装载期承接）；§10.3 补 v3 后端与工具链分工（无自建 AST——pugixml DOM 即解析树、IR+薄 writer；前端零工具链、protoc CI 单点、contract.lua 为 IR 的 Lua 表 dump 无编译环节）；§10.7/§8 P2/§11.6 包结构（代码文件进 manifest）/docs/36 #19 行同步改口径。*
