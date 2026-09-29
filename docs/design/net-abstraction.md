@@ -13,6 +13,7 @@
 5. **QoS 四通道**（movement 不可靠 / attributes 可靠 / events / control）跑在同一会话上，与属性同步的 token-bucket 预算形成两级独立控制："预算"决定该发多少，"水位"决定还能不能发——都在单写者线程决策，无锁。
 6. **NNG wrapper 已定退役**（architecture-review §15.2 退役清单）：`modules/protocol/nng_wrapper` 随五项退役一并删除，避免两套进程间通信并存（与"四套配置系统"同构的重复问题，不再制造第三处）。
 7. **内部网络层按演进阶梯交付（§5.6，2026-09-29 增补）**：自研的意义 = 拥有**可持续优化的内核**（Mercury 同型——BigWorld 内部网络层演进二十年而非一次性交付）——M0 语义定型（P1 随本设计）/ M1 最小正确内核（P3）/ M2+ 持续优化（无截止，按需小批）；优化只发生在层内，消费方零感知。
+8. **进程间连接设施对上层开放（§5.7，2026-09-29 补）**：`InterServerLink` = 进程间稳定连接的一等公民公开设施——连接器（Mercury TCPConnectionOpener 蓝本：非阻塞 connect + 超时 + errno 失败分类，机制不带重试）、统一重连管理（指数退避 + G-1 编队事件联动——收敛 BW LoggerEndpoint 各消费者自写重连的反面）、断连 in-flight 语义按 invoke_mode 分（OneWay 丢 / ReliableEvent 有界排队续传 / RequestReply 超时不复活）、对端重启以 authority_epoch 区分（≠ 断线重连）、per-Link 背压不 trim；跨服业务与框架内部（RemoteEntityCall/G-2 镜像流/collector push）消费**同一 API 族**——不开放裸 socket、不开放契约外消息（Mercury InterfaceMinder 单表病根不学）。
 
 ---
 
@@ -162,7 +163,7 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 | 阶段 | 交付 | 性能口径 |
 |---|---|---|
 | **M0 语义定型**（P1，随本设计落地） | 四动作 API、SendCode 三返回码、四通道、水位机、FrameFilter 槽位——在客户端/单进程路径落地即定型；进程间路径消费**同一套语义**，不开第二 API 面 | 无（接口层，定型的是语义不是实现） |
-| **M1 最小正确内核**（P3 首批） | 进程间段：帧定界 + contract_route 按 id 分发（sdk-contract §10.3）+ 背压水位 + 单播拓扑；同机段 shm 形态同批定（§6 决策行——进不进首版看同机部署有无） | **正确性优先，不设性能指标**——初期内部流量小，过早优化无对象 |
+| **M1 最小正确内核**（P3 首批） | 进程间段：帧定界 + contract_route 按 id 分发（sdk-contract §10.3）+ 背压水位 + 单播拓扑 + **连接设施 InterServerLink（§5.7——连接生命周期/重连/对上层开放）**；同机段 shm 形态同批定（§6 决策行——进不进首版看同机部署有无） | **正确性优先，不设性能指标**——初期内部流量小，过早优化无对象 |
 | **M2+ 持续优化**（无截止，按需小批） | 窗口重传（udp_channel 蓝本）、流控聚合（Aeron 蓝本 §5.2）、filter 插件族扩充（加密/审计）、bundle 延迟聚合（一 tick 攒包一次冲刷——attribute-sync §7.1「每客户端每 tick 至多一帧」即其同型，推广到进程间）、同机 shm 通道实现（sdshmem 候选，G-2 镜像流——形态 M1 定、实现可后置） | **每项先有基准再动手**，独立小批、可回退 |
 
 两条纪律保证「可持续」：
@@ -171,6 +172,56 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 - **每级有各自的验收对象**：M0 验收语义冻结（接口评审 + 契约入 sdk-contract）；M1 只验收正确性（分发不丢不重、背压可见、断连可检）；M2+ 每项优化以基准数据准入——同时防「为优化而优化」与「假装在演进」两种失败形态。
 
 与 §7 分期的对应：原「P3 总线落地」口径改为「**M1 上线**」；M2+ 不占分期里程碑——它们是内部网络层的**常态工作**，不是路线图节点。
+
+### 5.7 进程间连接设施（InterServerLink）：对上层开放的稳定连接（2026-09-29 增补）
+
+§5.6 M1 把进程间段定型为「框架内部总线」；但**上层业务同样需要这层**——跨服玩法、匹配、聊天、GM/运维工具、collector 推送，要的都是同几件事：稳定连接、断连感知、自动重连、背压。本节把它定型为一等公民公开设施。BigWorld 的形态即如此：全部服务器代码直用 Mercury，entity mailbox、备份流、工具进程共一套网络库（cellappmgr.cpp 单文件 Bundle/Channel 命中 25 行）——「对上层开放」不是给 apollo 加的便利，而是这层在原版里的本来形态。两件 Mercury 新实证为直接参照：TCPConnectionOpener（出站连接状态机）与 LoggerEndpoint（上层消费者自建稳定连接的样例兼反面教材）。
+
+**词汇：Link 一级，不再叠会话层**
+
+- `InterServerLink` = 一条物理承载（TCP 先行；同机 P3 可换 shm——§6 sdshmem 行照旧）上的连接生命周期管理：拨号/接受、握手鉴权、心跳与断连检测、重连、水位。QoS 不在连接上再分层——四通道语义（§4.1）按**消息级标记**复用（reliable/unreliable/control 归消息分类声明），一条 Link 一组水位。
+- 拨号/接受角色由 G-1 编队拓扑决定（配置态写死，不做运行期协商）；握手三元组 = **进程身份（G-1 组件 id）+ route_version + authority_epoch**——重连时 epoch 失配即判「对端已重启」，与断线重连是**两种事件**（前者要清状态重协商，后者只补传输）。
+
+**连接器（机制层）：Mercury TCPConnectionOpener 蓝本**
+
+- 形态：非阻塞 connect + POLLOUT 监听 + 一次性超时定时器（tcp_connection_opener.cpp:53/:99-101）；成功路径查 SO_ERROR 后把 endpoint 交给通道工厂并回调 `onTCPConnect(channel)`（:113-146）；失败按 errno 分类成类型化 Reason——ECONNREFUSED/ENETUNREACH → NO_SUCH_PORT、ETIMEDOUT → TIMER_EXPIRED（:186-231）。apollo 照抄此形态（失败分类与 SendCode 返回码同一哲学：类型化原因，不代掷猜测）。
+- **连接器不自带重试**（Mercury 同款——失败即回调，重试是策略不是机制）：重试归 Link 管理器，指数退避 + **编队事件联动**——G-1 死亡通知到达即停止对该进程重拨（死了的进程不拨），复活通知重启退避。
+- 反面教材是 BW 自己：LoggerEndpoint 的重连策略是消费者各写一份的硬编码（连续失败上限 3 次，logger_endpoint.cpp:672-703）——apollo 收敛为 Link 管理器统一一处，消费者只收事件不写策略。
+
+**断连期间的 in-flight 语义（按 invoke_mode 分）**
+
+| 消息模式 | 断连期间 | 重连后 |
+|---|---|---|
+| OneWay | 丢弃或排队，按消息 flags 声明（默认丢弃——跨服「尽力」语义） | — |
+| ReliableEvent | 排队（**有界**：上限 + 水位） | seq 续传（§3 L2 resume 的进程间版）；对端重启（epoch 失配）→ 清队 + 上层裁决 |
+| RequestReply | 挂起 future 照常走超时 | 重连不复活已超时请求（幂等性归 idempotent 字段——调用方声明） |
+
+- 有界排队的先例与教训同源：BW LoggerEndpoint 的 send 在断连/拥塞时入有界缓冲，超 maxBufferedSize 即丢弃并报错——**「断连排队」与「背压」是同一机制的两个名字，都必须有界**（无界排队 = 把背压推迟成内存炸弹）。
+- 三个事件回调对上层开放：`onLinkUp / onLinkDown(reason) / onPeerRestart(epoch_old→epoch_new)`——跨服业务在 onPeerRestart 里实现自己的会话恢复策略（重发查询/重协商），框架不代办。
+
+**背压语义（服务器间与客户端的分界）**
+
+- 四级水位（§4.2）照搬，但**服务器间不 trim**：客户端侧「低优先级可丢」是游戏体验权衡；内部消息每条的丢弃资格归**消息分类声明**——G-2 镜像流可声明丢旧帧（journal 位点兜底），RemoteEntityCall 默认不可丢。
+- offer 返回码哲学不变：BACK_PRESSURED 时调用方决策（排队上限/降频/断言），框架不代掷。
+- per-Link 水位独立：慢进程只拖累自己的 Link，不拖累别的进程对（Aeron per-image 隔离的进程间版，§5.2）。
+
+**对上层开放的形态与边界**
+
+- API 族 = §2 四动作的进程间实例（send/subscribe/state/close）+ 连接生命周期回调；**上层与框架内部消费同一设施**：跨服玩法/GM 工具/collector push（logging.md §5）与 RemoteEntityCall/route control/G-2 镜像流同源，无第二 API 面——M0「同一套语义、同一个层」在进程间域的兑现。
+- 获取连接 = **编队拓扑内的具名端点**（G-1 服务发现）；不开放任意地址拨号——跨进程目标必须可被编队枚举（运维可审计，防误连生产环境外目标）。
+- **不开放**：裸 socket（用户要的是稳定连接语义，不是 socket）；运行期字符串协议注册——上层自定义消息进契约 internal 域（sdk-contract §11，id 900+ 分段管辖），Mercury InterfaceMinder 单表病根（RemoteEntityCall 块已录）不学。
+
+**Mercury 对照与取舍**
+
+| Mercury | apollo 对应 | 取舍 |
+|---|---|---|
+| TCPConnectionOpener（连接状态机 + errno 失败分类） | Link 连接器 | **照抄机制**；重试留在外面（同 Mercury——机制与策略分离） |
+| LoggerEndpoint 重连（每消费者自写、上限硬编码 :672-703） | Link 管理器统一退避 + 编队事件联动 | **不学散装**——策略收敛一处，消费者只收事件 |
+| Channel TCP/UDP 双模 + 窗口重传 | Link + M2+ 窗口重传 | 窗口归 M2+（§5.6 演进阶梯） |
+| Bundle 攒批发送 | M2+ bundle 延迟聚合 | 同型（§5.6 已列） |
+| Interface/InterfaceMinder 命名方法表 | 契约 internal 域方法 id | **不学**（单表病根，§7 RemoteEntityCall 块） |
+| filter 双族 | §5.5 FrameFilter | 照旧 |
+| 服务器代码全员直用 Mercury | 上层与框架共用 InterServerLink | 本节定型点 |
 
 ## 6. 决策清单（保留/删除/引入）
 
@@ -210,10 +261,39 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 - apollo P3 最小骨架：**backup-hash 链 + reviver 两件先行**；secondary db/动态扩缩容推迟到多 cell 稳定运行后。
 - **备份粒度对齐单写者纪律**：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。镜像流传输形态 P3 定：**同机部署候选 = sdshmem 类 shm SPSC 环**（主机单写 journal 追加、备机单读消费——正是 §6 决策表「点对点镜像流」的典型场景；ack 仍走 control 通道），跨机则随进程间总线。
 
+**负载均衡与异常恢复（manager 域，2026-09-29 补）**：
+
+- **BW 先例（全套，本轮补证）**：
+  - 负载即观测：cellapp 每 tick 三分负载统计上报（cellapp.cpp:1177-1190，§16.2 已引）；baseappmgr `minAppLoad()` 全遍历取最轻（baseappmgr.cpp:588-599）——新 base 落点 = 最轻 baseapp；过载触发登录准入闸门（:947-954，LoginConditions）并把 (addr, load) 对上报 loginapp 做登录分流（:1117）。
+  - cell 侧再平衡：周期 `loadBalanceTimer_`/`overloadCheckTimer_`（cellappmgr.hpp:305/:307）+ `metaLoadBalance/loadBalance/updateRanges`（:233-236）+ cellapp 主动 `shouldOffload` 上行（:98）。
+  - **异常恢复是排他相位**：mgr 向 machined 注册死亡监听（cellappmgr.cpp:276-277 `MachineDaemon::registerDeathListener → handleCellAppDeath`——G-1 编队事件的消费端）；死亡/自身重启即 `startRecovery()`（:281/:1411，cellappmgr.hpp:230-231），**恢复期间拒绝新请求**（:1300 "Denying %s since in middle recovery"）——防恢复中拓扑再变。
+  - baseapp 接管：reviver **独立进程**（server/reviver/——component_reviver/reviver/reviver_config 三层）。
+- **apollo 设计（P3 最小骨架——取 BW 骨架，不取全家桶）**：
+  - **指标同源**：负载 = G-5 检测原语的聚合（帧耗时/实体数/队列水位，经 control 通道上报）——观测与调度消费**同一份数据**，不做第二套负载统计。
+  - **分配与准入**：新场景/新会话落点 = 最轻进程（minAppLoad 同型 + 水位硬约束）；过载 = 准入闸门（拒登/排队，BW LoginConditions 同型）——负载既是调度输入也是准入依据。
+  - **再平衡分层**：P3 只做「新负载往轻处走」+ 过载告警 + 手动搬迁工具；**自动 cell 迁移（BW meta balancing/shouldOffload 族）推迟 M2+**——迁移协议依赖实体搬迁与视图重建全套，不属于最小骨架。
+  - **异常恢复链（按死者角色分）**：检测 = machined 死亡事件（G-1）→ mgr 进入**恢复相位（排他——期间拒绝新场景/新进程加入，BW :1300 先例）**；base 死 = reviver 式接管（G-2 backup-hash 链 + journal 位点重放切权）；cell 死 = mgr 在幸存进程重建场景（权威源 = write-behind journal attribute-sync §8.2 + base 侧重放）；进程本身拉起归 machined（重启策略 = 编队配置，mgr 只消费事件不做进程管理）。
+  - **两层恢复独立成立**：进程级恢复（本节）与连接级恢复（§5.7 onLinkDown/自动重连）互不依赖——客户端重连走 §3 resume，进程重建走本节，谁先完成谁先服务。
+  - 「是否参考 BigWorld」：**是，且只能参考它**——三家仅 BW 有完整此层（KBE 无进程级容灾，architecture-review C-51/§16.4；skynet 单节点无编队）；明确不搬：动态 cell 迁移、secondary db、自动扩缩容（M2+ 按需评估）。
+
+**进程间信息共享与同步模型（2026-09-29 补）**：
+
+- 原则一句话：**每条信息有唯一 owner 进程，「共享」= 订阅 owner 的投影**——单写者纪律的进程间延伸。不存在「两个进程可写同一块内存」的通用共享（跨进程锁把死锁域扩大到 OS 级，且破坏所有权模型；§15.2「禁第二套 IPC」边界照旧）。
+- **四类通道**：
+
+| 信息形态 | 通道 | 同步机制 |
+|---|---|---|
+| 有 ownership 的动态状态（实体属性/会话/场景） | InterServerLink 消息（§5.7） | owner 广播 delta，消费者本地镜像 + seq/位点续传 |
+| 读多写少的远程镜像（ghost 视图 / G-2 热备） | RO_MIRROR 镜像流（attribute-sync §4.4 / 本节 G-2 backup-hash） | journal 位点 ack + authority_epoch 防回写 |
+| 同机只读大块（空间快照/监控指标/加载后的配置表） | sdshmem 类 shm（§5.3/§6 决策行——只承载大块只读，不做通用总线） | **换页发布**：新版本写新页 + 原子切指针，读侧永见完整版本（SSEngine sdshmem 先例，ssengine-reference §4.4） |
+| 全局仲裁态（编队拓扑/持久数据/日志） | **集中不共享**：machined+mgr（G-1）/ DB journal（attribute-sync §8.2）/ collector（logging.md） | 事件广播 + 落盘 |
+
+- **「同步」三层含义分清（防混用）**：① **传输同步**（seq/ack/续传）——连接层（§3/§5.7）的事；② **状态同步**（镜像位点/epoch）——owner-订阅模型的事（attribute-sync §3 ViewerState 推广到进程间）；③ **数据一致**（journal/落库）——持久层的事（attribute-sync §8.2）。三层各自独立成立、互不兜底——「消息到了」≠「镜像追平」≠「落库了」，每层各有自己的恢复路径（续传 / 快照重置 / journal 重放）。
+
 **实体远程调用（RemoteEntityCall——BW EntityMailbox / KBE EntityCall 的对应物）**：
 
 - **语义层设计已存在，本设计只接底座**：`docs/architecture/remote-entity-call-design.md`（architecture/ 代）四件套——`RemoteEntityRef`（entity_id/entity_type/target_domain/authority_role/route_version/shard_key）、`RemoteMethodSchema`（method_alias/invoke_mode/arg_types/timeout_ms/idempotent）、`InternalMessageEnvelope`（trace_id/request_id/source/target_app/entity_id/method_alias/route_version/authority_epoch）、`RouteResolver`（宿主定位/route 版本校验/ghost 转发）+ 消息四分类（EntityMethodCall/RouteControl/LifecycleEvent/ReplicationCommand）——语义层以该文档为准，此处做三件接线与对齐：
-- **传输底座 = §5.6 M1 内核**（按 id 分发单播）：该文档所引 `Channel/Endpoint`（modules/net/protocol 旧形态）一律按本设计 L0-L3 口径读作 M1 内核接口；envelope 走 internal 域消息，不另起协议。
+- **传输底座 = §5.6 M1 内核**（按 id 分发单播；连接级语义 = §5.7 InterServerLink——断连/重连/对端重启事件，invoke_mode 的断连处置即其 in-flight 语义表）：该文档所引 `Channel/Endpoint`（modules/net/protocol 旧形态）一律按本设计 L0-L3 口径读作 M1 内核接口；envelope 走 internal 域消息，不另起协议。
 - **术语对齐**（该文档写于 design 语料定稿前）：`target_domain` 的 Ghost ≈ attribute-sync §4.4 `RO_MIRROR`（远程只读镜像，调用转发权威侧）；World ≈ CELL 权威侧；Anchor/Proxy ≈ base 侧（登录/会话入口）——两套词汇指同一权威模型，落地统一为 attribute-sync §2.3 双轴标记（所有权轴 × 可见域轴）。
 - **invoke_mode 判定（对照两家刻意不做的事）**：BW/KBE 的实体调用均为**异步单向、无返回值**（结果用反向调用）——同步返回把网络 RTT 引进 tick，与 G-7 的确定性节拍论证冲突。apollo 口径：**OneWay 为默认**；RequestReply（request_id + future）只限低频控制面（跨进程 DB/GM/运维），永不进热路径；ReliableEvent 复用 events 通道语义。
 - **信封与契约合流**：`InternalMessageEnvelope` = sdk-contract §11 internal 域消息（id 900+）的统一信封——request_id/trace_id/route_version/authority_epoch 为信封标准字段，进契约由生成器产出（contract_route 清单扩展：method alias → internal 消息绑定），不手写第二份。
@@ -229,7 +309,8 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 | ssengine-reference.md | DelaySend/GetSendBufFree/GATE/sdpkg 四点收编（§5.4）；sdnet_adapter 反例（伪命名空间）与 fake-fruit 同类 |
 | architecture-review.md | 网络适配器注册走 core::di 启动期装配（编译期类型键），不进旧字符串容器；adapters 的存在形态=链接期选择，非运行期字符串切换 |
 | xml-generation.md | 帧头 ver → filter 栈声明（16.7.1）由契约生成器装配（用途④）；messages.xml 的通道 enumeration 由其四层漏斗第①层校验 |
+| logging.md | collector push = §5.7 InterServerLink 的上层消费者（进程间稳定连接，独立于客户端会话四通道）；Link 有界排队与「collector 挂 → 只写本地」降级语义同源（BW LoggerEndpoint 有界重连 + 有界缓冲先例） |
 
 ---
 
-*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。同日增补（⑥）：§7 P3 前置设计补实体远程调用块（RemoteEntityCall——语义层引用 architecture/remote-entity-call-design.md 四件套，传输底座接 §5.6 M1，invoke_mode 定 OneWay 默认/RequestReply 只限控制面，信封合流 sdk-contract internal 域）。*
+*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。同日增补（⑥）：§7 P3 前置设计补实体远程调用块（RemoteEntityCall——语义层引用 architecture/remote-entity-call-design.md 四件套，传输底座接 §5.6 M1，invoke_mode 定 OneWay 默认/RequestReply 只限控制面，信封合流 sdk-contract internal 域）。同日增补（⑦）：新增 §5.7「进程间连接设施（InterServerLink）」——对上层开放的稳定连接语义（连接器/统一重连/in-flight 分类/背压分界/公开面边界）；Mercury 两件新实证：TCPConnectionOpener（tcp_connection_opener.cpp:53/:99-101/:113-146/:186-231 全文实读）与 LoggerEndpoint（logger_endpoint.cpp:672-703 有界重连 + send 有界缓冲）；摘要 8、§5.6 M1 行、§7 传输底座行、§8 交集表（logging.md 行）联动。同日增补（⑧）：§7 P3 前置设计补两块——「负载均衡与异常恢复（manager 域）」（BW 补证：baseappmgr.cpp:588-599 最轻分配/:947-954 过载准入/:1117 负载分流、cellappmgr.hpp:98/:233-236/:305/:307 再平衡族、cellappmgr.cpp:276-277 machined 死亡监听/:281/:1411 startRecovery/:1300 恢复期拒新请求、server/reviver/ 独立进程；apollo 取骨架不取全家桶——自动 cell 迁移推迟 M2+）与「进程间信息共享与同步模型」（owner-订阅原则 + 四类通道表 + 同步三层含义分清）。*
