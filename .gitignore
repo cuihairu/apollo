@@ -63,3 +63,6 @@ vcpkg_installed/
 # LLVM coverage
 *.profraw
 *.profdata
+
+# docs site deps (never commit)
+docs/node_modules/

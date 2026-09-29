@@ -1,2 +1,0 @@
-import{t as e}from"../useActiveHeaderLinks-ES-jYG-f.js";import{defineClientConfig as t}from"vuepress/client";const n=__AHL_HEADER_LINK_SELECTOR__,r=__AHL_HEADER_ANCHOR_SELECTOR__,i=__AHL_DELAY__,a=__AHL_OFFSET__;var o=t({setup(){e({headerLinkSelector:n,headerAnchorSelector:r,delay:i,offset:a})}});export{o as default};
-//# sourceMappingURL=config.js.map
