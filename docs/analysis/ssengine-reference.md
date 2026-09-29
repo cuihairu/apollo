@@ -107,7 +107,7 @@
 
 - **老引擎设计**：`SDOpenShmem/SDCreateShmem` 统一 Windows mapping / POSIX shm。
 - **apollo 场景判断**：BigWorld 化（base-app/cell-app 分进程）后，**同机进程间**大块只读数据（空间格子快照、监控指标、发布/订阅热点）用 shm 有真实收益；但当前 apollo 单进程为主、跨进程通信协议未定型，现在引入是过早优化。
-- **建议**：列入 net-abstraction.md 的进程间通道候选项（与 Aeron 的 IPC 传输同框比较，`docs/design/net-abstraction.md` §Aeron），实现推迟到多进程落地阶段。
+- **建议**：列入 net-abstraction.md 的进程间通道候选项（与 Aeron 的 IPC 传输同框比较）——**已接线（2026-09-29）**：net-abstraction §6 决策表正式行 + §7 P3 随自研总线同批定案（引设计不引代码）；G-2 热备镜像流（同机 shm SPSC 环）为其点对点典型场景；实现推迟到多进程落地阶段。
 
 ### 4.5 其余（明确不引入）
 
