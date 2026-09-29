@@ -194,6 +194,7 @@ collect 阶段（§3.2 的 delta/快照组装）
 | sdk-contract.md | 属性/意图消息的契约同时约束脚本端（脚本写的字段必须是契约字段——白名单由契约 predict 位生成、载体为 contract.lua，§3.4）；业务消息 handler 按契约路由绑定（bin↔路由逐条对齐的装载期闸） |
 | ssengine-reference.md | 异步 DB 模型与协程 resume 共用底座；定时器轮驱动脚本的 schedule（`apollo.timer.repeat`） |
 | observability-watcher-and-runtime-introspection-design.md（architecture/ 代） | §7 状态面挂其 Watcher 树 `/script` 分支（Value/Collection=查询、Action=受控执行、AccessController 权限分级）；「metrics=趋势、watcher=现状」口径沿用；检测原语/聚合工具两截归属同 G-5 |
+| logging.md | §6 脚本错误审计与 §7.3 错误率计数经 BI 旁路在 collector 汇合（logging §5）；崩溃摘要的离线符号化依赖 §7.3 符号不剥离纪律 |
 
 ---
 
