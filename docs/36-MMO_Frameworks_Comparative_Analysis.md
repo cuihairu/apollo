@@ -70,7 +70,7 @@
 - **脚本集成**：cellapp/baseapp 内嵌 Python（.def 暴露的方法/属性）；Bot 工具（`tools/bots`）。
 - **扩展机制**：.def→多端 SDK 生成（C++/Unity/Cocos 等，本仓库 sdk-contract §2.1 已析）；`kbe/tools/xlsx2py` 策划表→py。
 - **典型生产规模**：中小团队手游/页游广泛使用，无可靠公开 CCU 数据（D）。
-- **失败教训**：① 存储是结构性短板——.def 耦合持久化导致 blob 化/无日志/无查询面（attribute-sync §8）；② machine UDP 广播发现在云网络环境失效（本仓库 13 号追溯行）；③ 项目维护节奏近年放缓，社区活跃度依赖中文圈（D）。
+- **失败教训**：① 存储是结构性短板——.def 耦合持久化导致 blob 化/无日志/无查询面（attribute-sync §8）；② machine UDP 广播发现在云网络环境失效（本仓库 13 号追溯行）；③ 项目维护节奏近年放缓，社区活跃度依赖中文圈（D）；④ **内外契约不分离**——`*_interface.h` 单文件混布三类受众消息（对客户端 `hello`/`loginBaseapp`/`onClientActiveTick` 带 EXPOSED 标记，`baseapp_interface.h:99-157`；对 dbmgr `onDbmgrInitCompleted` :90；对 cellapp `onMigrationCellappStart/End` :326-331），消息 ID 共享进程内单一自增分配表（`message_handler.cpp:139`，EXPOSED 只是导出标记非 ID 空间隔离，`baseapp_interface_macros.h:27-36`）——内部消息增删推动 ID 排布与客户端 SDK 重生成；`importClientMessages` 连接期动态下发消息表（`baseapp.cpp:4859→4891`），用运行时协商掩盖契约不分。BigWorld 同病异形：.def 单文件混 Client/Base 方法段（ioc-review §16.2），Mercury `InterfaceMinder::add` 按 `elements_.size()` 顺序分配、暴露方法经 `ExposedMethodMessageRange` 在同一张 0-254 表占保留段（`interface_minder.cpp:38/:53-70`、`method_description.hpp:31`）——单一 ID 分配表不分受众。Apollo 规避（sdk-contract §11）：单契约源 + msg `domain` 属性、msg id 按域分段独立排布、schema_hash 按域双份（client_hash 只覆盖 client 域——握手稳定、bin 不重发）、apollo_gen 按域投影（客户端 bin 只含 client 域）、XSD 跨域引用禁令；域分段逻辑为硬规则，物理组织（单文件/include 聚合）不设强制。
 
 ### 2.3 skynet（本地实读，A 级）
 

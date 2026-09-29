@@ -132,7 +132,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 ## 8. 分期
 
 - **P1**：目录收敛（`skds/` 内容并入 `sdks/`，删空壳保留正确拼写；git mv 记录）；契约 v1（`apollo.xsd` + attrs/messages/entities/errors.xml，§15.4 布局）；生成器 v1（C++ + 文档 + hash，内部设计见 `xml-generation.md`）；Unity 端按四层重组（Codec 生成 + Attributes 层并入生成产物）。
-- **P2**：Cocos/Laya TS 生成；第 3 层（AOI 实体管理）生成壳；预测混合器 v1（movement 双缓冲）；**proto/bin 双后端**（§10：契约 → .proto golden → protoc 同批出 `.pb.cc`（服务端热路径，A 路线）+ `descriptor.bin`（默认通道：客户端热更资源管线/冷路径/工具，C 路线）——A+C 双轨定案见 §10.6，两后端同批实现）。
+- **P2**：Cocos/Laya TS 生成；第 3 层（AOI 实体管理）生成壳；预测混合器 v1（movement 双缓冲）；**proto/bin 双后端**（§10：契约 → .proto golden → protoc 同批出 `.pb.cc`（服务端热路径，A 路线）+ `descriptor.bin`（默认通道：客户端热更资源管线/冷路径/工具，C 路线）——A+C 双轨定案见 §10.6，两后端同批实现）；**契约内外分域**（§11：domain 属性 + msg id 按域分段 + 双 hash + 按域过滤 + 跨域禁令，与 bin 投影同一机制）。
 - **P3**：UE5 插件；跨端事件协议评审；契约变更流水线接 CI 发版。
 
 ## 9. 与其余设计的交集
@@ -479,4 +479,81 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 
 ---
 
-*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。*
+## 11. 内外契约分域：KBE「内外契约不分离」缺陷登记与规避设计（2026-09-29 追加）
+
+> 缺陷来源：用户实测 KBE 代码发现（行号为本会话浅克隆工作副本实读核对）。规避设计定稿口径：**域 = 消息上的逻辑属性，不是物理文件**——契约物理组织不做强制，唯一硬规则是域分段逻辑（ID 分段 + 双 hash + 按域过滤 + 跨域禁令）必须成立，与物理组织正交。分域只作用于 messages（attrs 的 SELF/TEAM/GUILD/WORLD 是「客户端内」的可见域细分，不属本节的内外之分；服务端私有数据走 internal 消息或存储层）。
+
+### 11.1 缺陷登记：KBE 内外契约不分离（A 级实证）
+
+**同一文件混布三类受众的消息**——`kbe/src/server/baseapp/baseapp_interface.h`：
+
+| 受众 | 消息（行号） | 标记 |
+|---|---|---|
+| 对客户端 | `hello` :99-100、`loginBaseapp` :144-145、`logoutBaseapp` :150、`reloginBaseapp` :156-157、`onClientActiveTick` :112-113、`reqAccountBindEmail` :264、`reqAccountNewPassword` :289 | `BASEAPP_MESSAGE_EXPOSED` |
+| 对 dbmgr | `onDbmgrInitCompleted` :90 | 无标记（内部） |
+| 对 cellapp | `onMigrationCellappStart` :326、`onMigrationCellappEnd` :331 | 无标记（内部） |
+
+**EXPOSED 只是导出标记，不是命名空间隔离**——`baseapp_interface_macros.h:27-36`：`BASEAPP_MESSAGE_EXPOSED(NAME)` 展开为 `NETWORK_MESSAGE_EXPOSED(Baseapp, NAME)`，仅影响「是否允许客户端通道调用」的检查，不参与 ID 分配语义。
+
+**病根：消息 ID 共享单一分配表**——全部 handler（不分受众）经 `MessageHandlers::add`（`kbe/src/lib/network/message_handler.cpp:139`）注册进同一张表，`msgID_` 是单一自增计数器（`message_handler.h:116` `lastMsgID() {return msgID_ - 1;}`、`:133`）；`FixedMessages`（`fixed_messages.cpp`）可给个别消息钉死固定 id，但钉的是散点、非按受众分段。后果：**任何内部消息的增删都推动后续 ID 排布**——内部演进与客户端 SDK 重生成绑死，内外无法独立演进。文件混不混只是表象，**ID 空间不分为病根**。
+
+**运行时协商掩盖契约不分**：`importClientMessages`（`baseapp.cpp:4859`→`:4891`、`loginapp.cpp:1416`→`:1469`）——客户端连接后请求，服务端把整张消息表（名称/id/参数类型）经 `ClientInterface::onImportClientMessages`（`client_lib/client_interface.h:174`）动态下发，客户端运行时建表。消息表内容即契约，却不存在一份构建期事实源——每连接一次协商，「两端一致」靠运行期自证而非构建期锁定。
+
+### 11.2 BigWorld 对照：同病异形（Mercury 消息表查证）
+
+- **声明层混布同型**：.def 按实体单文件混布 `<ClientMethods>`/`<BaseMethods>`/`<CellMethods>` 段（Account.def，ioc-review §16.2 已录）——客户端可见方法与服务端内部方法同文件同源。
+- **ID 空间同为单表**：Mercury 每进程一张 `InterfaceMinder` 表，`add()` 以 `elements_.size()` 顺序自增分配 ID（`lib/network/interface_minder.cpp:38`）；表上限 255（`interface_minder.hpp:35` `interfaceElement(uint8 id)`）。客户端可调用的暴露方法经 `ExposedMethodMessageRange`（`lib/entitydef/method_description.hpp:31`）调 `addRange`（`interface_minder.cpp:53-70`，按剩余空间的 1/x 等分）在**同一张表**内占连续保留段。
+- **判读**：BW 比 KBE 前进一步——把暴露方法收敛为保留段，段内增删不推动表内其它消息的排布；但保留段本身按注册序在单表内划分，内部消息与暴露方法共享同一 ID 空间的病根同型（且 uint8 上限使空间更紧）。**两家同病：单一 ID 分配表不分受众。**
+
+### 11.3 规避设计：域分段逻辑（硬规则，与物理组织正交）
+
+四条规则全部落在生成器/XSD/hash 机制上，不依赖文件怎么拆：
+
+**① ID 空间按域分段。**messages 的 msg id 空间（独立于 attr id）划两段：client 域与 internal 域各占一段（示例：client 1-899 / internal 900+，段值落地时定、XSD 锁段边界——沿 attrs.xml id 分段同型纪律，docs/05 §6.1 先例）。**段内自由增删，互不推动对方排布**——对 KBE 单一分配表病根的直接反制。落地形态：msg 元素带 `domain="client|internal"` 属性（xs:enumeration），id 与 domain 的段约束进 XSD。
+
+**② schema_hash 按域算两份。**`client_hash` 只覆盖 client 域的 canonical bundle，`internal_hash` 只覆盖 internal 域（算法同 §6，输入按域过滤）。internal 变更不改 client_hash——**客户端握手稳定、bin 不重发**；握手用 client_hash（§6 的 N/N-1 窗口语义不变，对象收窄为 client 域），internal_hash 只做服务端部署期同批断言（同批重编同批起，无需灰度窗口）。
+
+**③ apollo_gen 按域过滤投影。**同一份契约源出两种产物面：客户端 bin（及 TS/C#）**只投影 client 域**，服务端 `.pb.cc` 全量——一个源文件两种产物，**单一事实源不破、diff 集中**（变更永远只看一处）。域过滤与 §10.6 定案的 bin 投影是同一机制，同批实现。
+
+**④ XSD 跨域引用禁令。**client 域消息的参数引用 internal-only 类型（含 internal 域消息/内部 struct）直接报错——域边界进校验器，不靠评审自觉；与 §2.3 的 xs:key/xs:keyref 纪律同层。
+
+演进节奏由此解耦（②③的直接推论）：internal 域变更 = 服务端同批重编部署；client 域变更 = 字段号兼容 + bin 热更（§10.6 定案的资源管线）——两类变更互不牵连。
+
+```
+            ┌─────────────────────────────────────────────┐
+            │ sdks/contract（单一事实源；物理组织任选，§11.4）   │
+            │ messages：msg 带 domain 属性 + id 按域分段        │
+            │   client 段 1–899       internal 段 900+         │
+            └────────────┬──────────────────┬────────────────┘
+                         │ apollo_gen 按域过滤（同一机制，两投影）
+          ┌──────────────▼───────────┐    ┌──▼──────────────────────┐
+          │ client_hash              │    │ internal_hash           │
+          │ = SHA-256(client 域       │    │ = SHA-256(internal 域    │
+          │   canonical bundle)      │    │   canonical bundle)     │
+          └──────────────┬───────────┘    └──┬──────────────────────┘
+                         ▼                   ▼
+          客户端 bin / TS / C#            服务端 .pb.cc（全量）
+          只含 client 域                  internal 变更 → 同批重编
+          internal 变更 → hash 不变        client 变更 → 字段号兼容
+          → 握手稳定、bin 不重发              + bin 热更（§10.6）
+```
+
+### 11.4 契约物理组织：三种形态的事实记录（不设强制）
+
+物理组织交给使用方决定。生成器格式层提供 **include 聚合**能力——pugixml 不内建 XInclude，展开在 apollo_gen 读取层自实现：读根文件、递归展开引用为零一棵文档树（零新依赖），供需要分文件的人用。XSD 校验与 schema_hash 一律对**聚合后整体**计算，物理分文件不影响 hash 稳定性。三种组织形态的事实：
+
+| 组织形态 | 事实 | 域分段逻辑（硬规则） |
+|---|---|---|
+| 单文件 + domain 属性 | 现契约 v1 即此形态（补 domain 属性即是）；diff 最集中；无展开层 | 成立——分段看 id+domain，不看文件 |
+| 多文件 + include 聚合 | client.xml / internal.xml（或按模块）各自维护，根文件引用聚合；消息量增长后可按评审域拆 diff | 成立——展开后即单树，hash/校验对聚合整体 |
+| 独立两契约 | client/internal 各一套 XML+XSD，无聚合根 | 各自成立，但**源分两处**——与「唯一事实源」前提（执行摘要 1、§1）冲突；跨域引用禁令与统一 diff 闸均按单源建设，采用它须先推翻该前提 |
+
+**唯一硬规则重申：域分段逻辑（ID 分段 + 双 hash + 按域过滤 + 跨域禁令）必须成立——它约束 ID 空间与产物面，不约束文件布局。**
+
+### 11.5 落地批次
+
+随 P2 proto/bin 双后端同批（§8 已补行）：domain 属性与 id 分段进 XSD 是契约侧小改；按域过滤是 bin 投影的同一趟代码；双 hash 是 §10.6 schema_hash 两态一致的直接推广（client_hash 锚定 client 域 bin 字节，internal_hash 锚定服务端 .pb.cc 批次）。
+
+---
+
+*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（ioc-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 ioc-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、ioc-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。*
