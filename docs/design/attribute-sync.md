@@ -275,6 +275,8 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 ### 8.2 apollo 对策
 
+> 范围声明（2026-09-29 补，ioc-review G-2）：本节只回答**数据不丢**（journal/快照/重放），不回答**进程不倒**——进程级高可用（热备/接管/迁移）为 P3 前置设计，见 net-abstraction.md §7「P3 前置设计」；单进程阶段显式无高可用，崩溃安全 = 本节机制 + 重启拉起。
+
 - **写模型：快照 + write-behind 变更日志**。
   - L2 属性变更追加进 per-entity 的 `PersistJournal`（与 §3.1 的同步 history 分开：同步历史面向观察者可容量淘汰，持久日志面向 DB 不可丢）；
   - DB 工作线程按预算批量落库（复用 §异步 DB 模型，见 ssengine-reference.md §4.1）；落库成功推进 `persisted_seq`；崩溃恢复 = 最近快照 + 重放日志（重放幂等：属性 set 语义天然幂等）；
@@ -367,4 +369,4 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 
 ---
 
-*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。2026-09-28 同步修订（③⑥）：§7.1 标注 protobuf 为编码布局参考（契约源 XML+XSD）、§8.1 第 2/4 条按 C-51 重写（KBEngine Archiver 周期归档与 Indexed 真实索引实证；KBEngine 行号对应 github.com/cuihairu/kbengine fork master 浅克隆工作副本）、附录持久化行按 C-52 改写；源证 ioc-review §16.3。同日深化（第七轮增量，随 263a3888 之后的本次提交）：§5.2 witness 实证、§7.3 继承交集、§8.2 摊写节拍、§10.1/§10.2（G-7/G-3），摘要 7；BigWorld 行号对应 14.4.1 官方包工作副本（programming/bigworld/server/cellapp/witness.cpp）。*
+*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。2026-09-28 同步修订（③⑥）：§7.1 标注 protobuf 为编码布局参考（契约源 XML+XSD）、§8.1 第 2/4 条按 C-51 重写（KBEngine Archiver 周期归档与 Indexed 真实索引实证；KBEngine 行号对应 github.com/cuihairu/kbengine fork master 浅克隆工作副本）、附录持久化行按 C-52 改写；源证 ioc-review §16.3。同日深化（第七轮增量，随 263a3888 之后的本次提交）：§5.2 witness 实证、§7.3 继承交集、§8.2 摊写节拍、§10.1/§10.2（G-7/G-3），摘要 7；BigWorld 行号对应 14.4.1 官方包工作副本（programming/bigworld/server/cellapp/witness.cpp）。2026-09-29 补 §8.2 范围声明（「数据不丢」与「进程不倒」分界，ioc-review G-2 → net-abstraction §7「P3 前置设计」）。*

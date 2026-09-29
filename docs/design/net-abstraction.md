@@ -152,6 +152,7 @@ BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，
 - **WS 实证「禁止第五套网络栈」**：BigWorld 的 WebSocket 是 stream filter 而非独立栈（packet_filter/stream_filter 双族 + mutable_stack 可配）——apollo 的 WS 沿同一插件位，不新起传输层。
 - **filter 栈随契约声明**：帧头 `ver` 字段 + 契约 messages.xml 的通道声明（sdk-contract §2.3）→ 生成器产出 L1 装配代码，filter 顺序跨端一致由契约锁死，不跑运行期字符串配置。
 - **边界纪律**：filter 只做字节↔字节变换（压缩/加密/混淆）；seq/ack/重传窗口留在 L2 通道内核——BigWorld 的窗口重传在 udp_channel 而非 filter 里，这是"插件位"与"会话核心"的分界。
+- **归属与前置条件**（ioc-review §16.8.3-①）：FrameFilter 接口与内置插件落**收敛后的 modules/net**——先例：BW filter 与通道同库、构造注入（udp_channel.hpp:81/:139-140）；protocol（生成 codec）经 L1 codec 槽位注入，apps/gateway-app 只装配不实现。**前置条件 = C-29 四套网络树收敛**（ioc-review §12.2 四套盘点、§15.2「禁止第五套」纪律）——filter 不落现存四套中任何一套的原样，否则 filter 链即第五处网络代码。
 
 ## 6. 决策清单（保留/删除/引入）
 
@@ -164,12 +165,31 @@ BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，
 | `nng_wrapper` | **已定删**（ioc-review §15.2 退役清单五项之一） | 两套进程间通信并存即重复；决策已闭环 |
 | 四级水位/四通道/resume | **新建**（L2） | apollo 完全没有；属性同步设计的直接依赖 |
 | Aeron | **已定不引入**；§5.2 语义吸收清单与 §5.5 filter 蓝本保留 | §5.3 已关闭为自研（ioc-review §15.2） |
+| FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | ioc-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
 
 ## 7. 分期落地
 
 - **P1**：L1 帧格式 + L2 会话基础（seq/ack/心跳/四级水位）+ native adapter 收敛为唯一 L0；GameConnection Facade 上线，属性同步 P1 依赖本层 attributes 通道。
 - **P2**：重连续传（resume token）+ movement 通道"只发最新" + 与属性预算的 hard 水位联动降档。
-- **P3**：进程间总线自研落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计。
+- **P3**：进程间总线自研落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（ioc-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
+
+### P3 前置设计：进程编队与服务发现 / 备份容灾（2026-09-29 补，ioc-review §16.4 G-1/G-2）
+
+P1-P2 单进程阶段本层零落地；此节先把 P3 的两个前置形态定下来，防止到时拍脑袋（原六份设计文档的空白，登记于 ioc-review §16.4）。
+
+**现状声明（显式）**：apollo 单进程阶段**无进程级高可用**——崩溃安全 = write-behind journal 数据不丢（attribute-sync §8.2）+ 重启拉起；backup/接管/迁移为零起步。这是分期不是遗漏。
+
+**G-1 进程编队与服务发现**（进程如何被发现、如何感知彼此死亡）：
+
+- 先例一 BigWorld：每机一个 bwmachined 守护进程，birth/death 通知经 machine_guard 协议订阅/广播（machine_guard.hpp:496-497/:609-613/:882-883）；cellappmgr/baseappmgr/dbappmgr 消费生死事件做编队决策，cellappmgr 兼负载平衡（cellappmgr.hpp:43/:192-194）。
+- 先例二 KBEngine：无守护进程，machine 以 UDP 广播应答发现（machine.cpp:646-670，KBE_PORT_BROADCAST_DISCOVERY）——更轻，但「机器死了谁来报」无解。
+- apollo 形态（P3 定稿口径）：两层并存——单机 machined 式守护（本机进程生死/拉起/崩溃上报）+ UDP 广播发现（跨机拓扑发现），分别取两先例长处；与 ioc-review §15.2 自研纪律对齐，不引 etcd/consul 类外部协调服务——游戏服进程拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益。控制面复用 §4.1 control 通道的进程间延伸：编队事件（进程加入/退出/机器死亡）作为 control 事件进各进程轮询源——不开新通道体系。
+
+**G-2 备份与宕机接管**（BigWorld 全套先例；apollo P3 骨架取两件）：
+
+- 先例件：baseapp 热备分帧发送（backup_sender.hpp:52-61）+ 一致性哈希备份链（backup_hash/backup_hash_chain——备机按链持续追主机实体状态流）+ reviver 协调接管（主机死亡后备机把镜像实体升级为权威；cellapp 死则 cellappmgr 在幸存 CellApp 重建 cell）+ secondary db 任务族 + dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。KBEngine 对照：无此层（ioc-review C-51/§16.4）——宕机靠实体最后一次归档，窗口 = 归档周期。
+- apollo P3 最小骨架：**backup-hash 链 + reviver 两件先行**；secondary db/动态扩缩容推迟到多 cell 稳定运行后。
+- **备份粒度对齐单写者纪律**：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。
 
 ## 8. 与其余设计的交集
 
@@ -184,4 +204,4 @@ BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，
 
 ---
 
-*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（ioc-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。*
+*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（ioc-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（ioc-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，ioc-review §16.4 空白的补设计）。*
