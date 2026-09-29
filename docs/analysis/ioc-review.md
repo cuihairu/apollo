@@ -1269,8 +1269,190 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | 下轮审计候选：bw/bigworld 兼容层 | 本报告（未评审子系统清单） | **登记**（16.8.3-④ 观察；bw::Runtime 实体体系与 game 模块并行的风险面） | 新审计轮授权 |
 | 下轮审计候选：ipc 树 | 本报告（§15.2 已注：include/src 两树约 18 文件 7800+ 行，APOLLO_ENABLE_IPC=OFF） | **登记** | 新审计轮授权 |
 | 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案） | 代码阶段授权 |
+| §17 DI/宿主域新登记 R-17a…R-17g（tags 死字段 / start 失败路径 / build NDEBUG / reload 接线 / core 测试接线+重写 / named 注入 / add_instance） | 本报告 §17.8（权威列表） | **登记**（2026-09-29 追加；源码冻结纪律同上） | 代码阶段授权（R-17e 建议随批次2；R-17d 随批次8 前） |
 
 ### 16.10.3 本轮状态
 
 - ⑩ 完成形态 = 审计链登记（16.10.1）；⑦⑧⑨⑪ 维持搁置 + 登记（16.10.2 表为唯一状态源，替代此前各节的分散状态描述）。
 - 本轮零源码改动、零新增源码引用；单提交 push（fetch --rebase 前置），无 tag、无 release。
+
+---
+
+## 17. IoC 容器与依赖注入设计：完整分析报告（2026-09-29 追加）
+
+> 任务口径：按规则仅允许写本报告——对 IoC 容器与依赖注入设计出完整分析，覆盖六域（模块结构 / 生命周期 / 作用域 / AOP 切点 / 配置绑定 / 测试策略），完成后仅提交本文件。本轮零源码改动；§17 全部行号为本会话逐文件实读核对（源码基线 main @ a5334014，写作时工作副本一致）。与 §0（Spring 式运行时容器不适配游戏服务端的核心论证）、§6（删除式迁移）、§16.8（模块归属与依赖方向）口径对齐；新发现按审计链惯例登记（§17.8，并在 16.10.2 登记簿补行）。
+
+### 17.0 结论速览
+
+| 域 | 现状判定 | 关键证据 | 动作 |
+|---|---|---|---|
+| ① 模块结构 | **双轨并存**：legacy `Apollo::ApplicationContext`（字符串键全局单例注册表）与 modular `apollo::core::di`（类型键 builder 图）。modular 方向正确：纯 std 依赖、装配收口 apps/ | application_context.hpp:3-15（include 仅自身两头 + std）；apps/game-server/src/main.cpp:96-115（唯一真实装配点） | 维持 §6 删除式迁移；legacy 只减不增 |
+| ② 生命周期 | **两层分立**：容器只管构造/析构（Kahn 正序建、逆序拆），运行期 FSM 归 `ApplicationHost`。分工正确 | application_context.cpp:27-35/:45-51；application_host.cpp:32-61/:96-115 | 修 start 失败路径缺陷（R-17b）；reload 回调接线（R-17d） |
+| ③ 作用域 | **仅 Singleton/Prototype 两档** + eager/lazy 轴，会话/场景级作用域**有意不设**（运行期数据结构不是 DI 作用域）。`tags` 为死字段 | application_context.hpp:19-22/:105-110；cpp:82-96（prototype 禁作依赖） | 删 tags（R-17a）；named 构造注入留决策项（R-17f） |
+| ④ AOP 切点 | **零运行时 AOP，且不需要**：构造期装饰器 + tick 边界 + 消息路径 filter（net 域）即全部切点 | application_host.hpp:47 + cpp:83-87；§16.9.2 FrameFilter 登记 | 无代码动作；本节为模式定稿 |
+| ⑤ 配置绑定 | **容器不碰配置**：bean 构造函数自取（或注入 `ConfigRegistry&`）；推荐 ConfigSnapshot 值对象模式。legacy 的自动热重载不搬 | config_registry.hpp:10-27；core_comprehensive_tests.cpp:750-761（注册表即依赖的意图样本） | 热更走 reload 广播 + tick 边界换快照（批次8 前，R-17d 一并） |
+| ⑥ 测试策略 | **最大意外**：modules/core 测试整块**未接线**（`BUILD_TESTING` 永假）且测试文件已腐（多站点无法编译）——DI 测试套件名为 15 实为零 | modules/core/CMakeLists.txt:34/:52-54 vs modules/contract/CMakeLists.txt:42；§17.7 腐化清单 | R-17e 接线 + 重写腐化用例，随批次2 顺带 |
+
+### 17.1 版图：两代容器并存（证据基线）
+
+**Modular 轨（keeper）**——`apollo::core::di` + `apollo::runtime`：
+
+| 文件 | 职责 | 关键行 |
+|---|---|---|
+| modules/core/include/apollo/core/di/type_key.hpp | `TypeKey = const void*`；`type_key_of<T>()` 取函数局部 `static int` 地址作类型身份（:7-13） | 跨 .so 边界每 DSO 各自实例化 → 键不相通；当前静态链接无害，未来动态模块需改显式注册（约束记录，非缺陷） |
+| modules/core/include/apollo/core/di/unique_bean.hpp | Prototype 归还权柄：move-only RAII，持 (impl_ptr, view_ptr, destroy) 三元组（:14-15），析构经 destroy 归还（:58-65） | view/impl 分离使多继承基类指针下移安全（cast 在注册时定型，:346-349） |
+| modules/core/include/apollo/core/di/application_context.hpp | BeanScope 两值（:19-22）；BeanDefinition（:51-62）；Builder + BeanBuilder 流式 API（:94-134）；context 查询族 | 见 §17.3/§17.4 分域引用 |
+| modules/core/src/di/application_context.cpp | build（:12-19）/ initialize（:21-37）/ shutdown（:39-52）/ build_index（:54-101）/ build_init_order（:103-169）/ ensure_singleton_created（:171-193） | 全文件 195 行，零线程原语 |
+| modules/core/include/apollo/core/application_lifecycle.hpp | ApplicationPhase 六态（:7-14）+ IApplicationLifecycle 六回调（:20-30） | reload 回调 :28 声明、全仓零调用方 |
+| modules/runtime/include/apollo/runtime/application_host.hpp + src/application_host.cpp | IHostedService（:40-48）、ApplicationHost、StopReason（:13-18）、console/signal 轮询源（:28-38）、ServiceHost 门面（:91-141） | §16.9.5 引用的 :20/:28 行号今日复核仍准 |
+
+**Legacy 轨（按 §6 只减不增）**——`Apollo::`，include/apollo/framework/ioc + src/starter：
+
+| 文件 | 职责 | 关键行 |
+|---|---|---|
+| include/apollo/framework/ioc/ApplicationContext.h | 字符串键注册表 + `getInstance()` 进程单例（:18-21）；registerComponent(name, factory) **注册即调 factory() 探针**读 phase/deps（:34-40，弃件实例的副作用与成本）；getComponent(name) 带 components_ 缓存 + runtimeInfo_ 阶段追踪（:79-107）；getComponent\<T\> = `T::getStaticName()` + `dynamic_pointer_cast`（:109-113） | initialize/start 失败回滚：:115-130/:132-147（rollbackStartedComponents :140） |
+| include/apollo/framework/ioc/LifecycleProcessor.h | Kahn + priority_queue，比较子 (phase 降序, name 降序)（:22-32）——**无显式依赖也可按 phase 排 heterogeneous 组件**；缺依赖 throw（:42-45）、环 throw（:81-83） | 与 modular 的差异见 §17.3 |
+| include/apollo/framework/ioc/ConfigManager.h + src/.../ConfigManager.cpp | values_(字符串) + typedValues_(std::any) 双缓存；per-key/global 变更监听（:100-103）；FileWatcher 自动热重载（:105-107，实现 :183） | 热重载语义的问题见 §17.6 |
+| src/starter/ApolloApplication.cpp | starter 自注册装配 + 配置源优先级（starter.file/env/builder :328-343）+ JSON 扁平化（:140-149/:208）；start 抛异常式失败（:217-234） | 框架驱动装配（应用被组合）——与 §16.8 方向相反 |
+
+**使用普查**：modular 容器生产装配点仅 apps/game-server/src/main.cpp:96-115（builder → initialize → ServiceHost → run_once）与 apps/cell-app 等同构入口；modules/ 内零 `ApplicationContextBuilder` 生产使用（仅测试文件，而测试未接线，见 §17.7）。legacy 容器仍经 `apollo` 聚合目标链入 ioc_tests（tests/CMakeLists.txt:3-6 显式编入 ConfigManager.cpp + FileWatcher.cpp，:24-47 注册 ComponentTest/ContextTest/ConfigTest/DependencyTest 四组）。
+
+### 17.2 域①：模块结构
+
+**依赖方向判定（与 §16.8 逐条对表）**：
+
+| §16.8 原则 | modular 轨现状 | 判定 |
+|---|---|---|
+| 原语在 modules/，装配在 apps/ | di 三头文件 + 一 cpp 全在 modules/core；唯一的 `build()+initialize()` 序列在 apps/game-server/src/main.cpp:99-102 | ✅ 教科书式符合 |
+| 模块间依赖单向、可裁剪 | apollo_core 的 di 部分依赖 = 空（application_context.hpp include 清单 ：3-15 仅 type_key/unique_bean + std）；ApplicationHost（modules/runtime）依赖 core 的 lifecycle/config/log 三个头（application_host.cpp:1-3） | ✅ 无反向、无跨层 |
+| 原语不带进程态 | TypeKey/UniqueBean/Builder 均无全局态；全局态只在两处且都属应用层惯例：`global_config()`（config_registry.cpp:69）与 `global_log_manager()` | ✅（ConfigRegistry 全局实例的取舍见 §17.6） |
+| 装配即代码、可 grep | bean 图 = main.cpp 里一串 add_singleton 链，依赖即模板参数包（`add_singleton<LoginPipeline, GameClockService>` main.cpp:98） | ✅ 无 XML/注解/注册器间接层 |
+
+**Legacy 轨的结构性问题**（判死刑的依据，非新发现，汇总自 §0-§6 并以行号落死）：进程级 `getInstance()` 单例（ApplicationContext.h:18-21）使测试无法隔离实例；字符串键 + `dynamic_pointer_cast`（:109-113）把类型错误推迟到运行期空指针；注册期 factory 探针（:34-40）在注册路径上就产生构造副作用；runtimeInfo_ 阶段追踪（:79-107）为内省维护了一个平行状态机——modular 轨用「编译期类型键 + assert」把同一组需求压到 195 行实现里。
+
+**双轨收敛建议**：维持 §6 删除式迁移不变——每迁走一个 legacy 组件就删一段（下一刀建议：ConfigManager 的 typedValues_/监听器面，因 ConfigRegistry 已全覆盖读路径）；ioc_tests 四组用例保留至 legacy 容器整体下线轮。
+
+### 17.3 域②：生命周期
+
+**两层分立**——容器生命周期（构造/析构）与应用生命周期（FSM）不重叠，判定为正确分工：bean 无 phase 概念，运行期阶段归 IHostedService。
+
+**(a) 容器级时序**（application_context.cpp）：
+
+```
+build()          build_index（:54-101：名字唯一 :67-73；prototype 禁作单例依赖 :82-96）
+                 build_init_order（:103-169：Kahn，边 = ctor_deps + depends_on :137-138；环检测 = 计数断言 :167）
+initialize()     eager 单例按拓扑序创建（:27-35），任一失败即 return false
+使用期           get/try_get 触发 lazy 单例按需创建（ensure_singleton_created :171-193）
+shutdown()       逆 init_order_ 析构（:45-51）；析构函数兜底再调 shutdown（:8-10）——失败被忽略时 RAII 仍回收
+```
+
+三个精度点（判读，均有行号支撑）：
+
+1. **initialize 先置位再创建**（:25 `initialized_ = true` 先于创建循环）——失败返回后已建 bean 不主动拆，靠析构逆序回收。对游戏服「启动失败 = 进程退出」的语义足够（main.cpp:100-102 直接 `return 1`），且失败后容器不被二次利用。与 legacy 的显式 rollbackStartedComponents（ApplicationContext.h:140）相比少了「停在半途还继续跑」的语义——**这是特性不是缺陷**：半启动的服务器本来就不该继续跑。
+2. **build() 对校验失败是 assert 而非返回值**（:14-17 计算后 assert，随后无条件 return ctx）。NDEBUG 下环图会静默产出缺顶点的 init_order_，eager 创建跳过环上 bean，直到运行期 lazy get 沿环递归爆栈。**登记 R-17c：release 构建需要显式失败通道**（改返回 `std::optional<ApplicationContext>` 或设 bad 标志）。
+3. **容器零锁**：ensure_singleton_created 无同步（:171-193）。单线程 boot 是设计契约而非疏漏——契约应落成注释或 debug 断言（归入 R-17c 一并）。
+
+**(b) 应用级 FSM**（application_host.cpp）：
+
+`start()`（:32-61）：Boot→ConfigLoaded→Initialized 三段 notify（每段广播全部 service 的对应回调，:127-143）→ 逐 service `start()`，任一失败：置 StartupFailed、Stopping/notify_stop/Stopped、返回 false（:45-53）→ 全过则 running_=true、Ready。`run_once()`（:63-94）：console 轮询 → signal 轮询 → 全 service tick（:83-87）→ running_ 变假即 stop()。`stop()`（:96-115）：逆序 service stop（:105-109）→ 逆序 shutdown hooks（:121-125）→ Stopped。
+
+**缺陷 R-17b**：start 失败路径（:45-53）**不逆序 stop 已启动成功的 service、不跑 shutdown hooks**——三服务中第三个 start 失败，前两个已 start 的服务只能靠 shared_ptr 析构（且 IHostedService 析构无 stop 契约）。现有测试 tests/test_runtime.cpp:361-386 只测「单服务失败」，未测「先成后败」序列，故未暴露。修复形态：失败路径改为跳转既有 stop() 程序（区别仅在 stop_reason_ 已是 StartupFailed）。
+
+**(c) reload 半途**：`on_application_reload`（application_lifecycle.hpp:28）全仓零调用方（modules/apps/src/include 四树 grep 证实）。声明先行的接口空转本身无害，但按审计链纪律登记 R-17d，与 §17.6 热更设计绑定处理——**不该有独立解法**。
+
+**(d) 与 legacy 对比存废**：LifecycleProcessor 的 (phase, name) 双键排序（LifecycleProcessor.h:22-29）允许组件不声明依赖也按 phase 分层启动——这套隐式分层是 legacy 依赖图「可跑但不可推理」的根源之一，modular 只认显式依赖边（ctor_deps/depends_on），确定性更强，**不继承**；legacy 的回滚语义（见 (a)-1）与 fail-fast 异常（ApolloApplication.cpp:226-227）在精神上已被 main.cpp 的 return-1 模式继承。
+
+### 17.4 域③：作用域
+
+**两档作用域 + 一条正交轴，共三种有效形态**：
+
+| 形态 | 注册 | 创建时机 | 归还 | 证据 |
+|---|---|---|---|---|
+| eager 单例（默认） | `add_singleton<I>()` | initialize() 拓扑序 | shutdown() 逆序 | hpp:214（scope==Singleton 即 eager 默认）；cpp:27-35 |
+| lazy 单例 | `add_singleton<I>().eager(false)` | 首次 get/作为依赖被拉起 | 同上 | hpp:112-115；cpp:171-193；di_eager_lazy 用例（core_comprehensive_tests.cpp:556-591，文件未接线见 §17.7） |
+| prototype | `add_prototype<I>()` | 仅 `create<T>()` 显式 | 调用方 UniqueBean RAII | hpp:226-231（强制 eager=false :229）；:309-332（create 断言 prototype :322-325）；unique_bean.hpp:38-65 |
+
+**结构性约束**：prototype 禁作单例构造依赖（cpp:82-96，build_index 即拒）——生命周期悖论在装配期而非运行期拦截，正确。多暴露 `as<Base>()`（hpp:117-123，static_assert is_base_of :119）+ `get_all<T>()`（:290-307）覆盖「同接口多实现」集合注入。
+
+**会话/场景作用域：有意不设（本报告最重要的负空间判定）**。Spring 的 request/session scope 是 Web 请求形状的产物；游戏服的 session/scene/entity 是**高频创建销毁的运行期数据**，归 owning system 的对象池/工厂管（BW cell 的实体内存、KBE 组件制同理——§16 对照已论证），不归 DI。若引入 session scope，每帧百万级实体进出会把容器变成分配器瓶颈 + 生命周期泥潭。替代模式已存在：session 工厂以单例注入、以方法参数传 per-session 态。
+
+**两个缺口**：
+
+- **`tags` 死字段（R-17a）**：唯一写点 BeanBuilder::tag（hpp:105-110），全仓零读点（无按 tag 查询的 API）；di_tags 用例（core_comprehensive_tests.cpp:537-554）也只是「打了 tag 不炸」。按 §6 删除导向：删字段、删 builder 方法、删用例——一次提交的事。
+- **named 构造注入缺口（R-17f，决策项暂缓）**：`get_named` 存在（hpp:259-288）但 ctor_deps 只能按类型注入（add_bean_definition :216 直接展开 `type_key_of<Deps>()...`）——同型双 bean 时依赖方无法指定要哪个，且裸 `get<T>()` 会撞歧义断言（:247-250）。当前规避：同型多实例一律 get_all + 集合消费（di_get_all :621-639 模式）。触发条件（出现首个「必须二选一注入」的真实场景）之前不值得加 API 复杂度。
+
+### 17.5 域④：AOP 切点
+
+**判定：零运行时 AOP 是终态而非缺失。** §0 已论证：无反射、无运行时代码生成的 C++ 里，Spring 式动态代理切面不存在实现路径；legacy 轨同样没有（IComponent 无拦截钩子）——不存在回归。横切关注点由四个**静态切点**承接：
+
+| 切点 | 机制 | 承载的横切关注 | 证据/先例 |
+|---|---|---|---|
+| 构造期装饰器（主切点） | 装配处包一层 decorator 类型再 add_singleton——编译期织入，零额外间接层 | 计时、指标、tracing 包裹业务服务 | 模式即 main.cpp:98 的依赖链插入点；测试可直接注入裸实现 |
+| tick 边界 | `IHostedService::tick()`（application_host.hpp:47）+ host 主循环（application_host.cpp:83-87）——每帧对所有 service 可见 | 帧级 watchdog、指标冲刷、超时检测 | tick 计数语义见 test_runtime.cpp:388-407 |
+| 控制/事件通道 | ConsoleEvent/SignalEvent 轮询（application_host.hpp:20-26/:28-38） | 运维注入、优雅停机 | G-5 两截归属已定（§16.8.3-⑤） |
+| 消息路径 filter | net 域 FrameFilter 体系（§16.9.2 插入 2 登记） | 网络侧拦截链（压缩/加密/审计） | 归 modules/net，与 DI 无涉——刻意不合并 |
+
+约束守则（防 AOP 需求回潮）：任何「想给所有 service 加 X」的冲动，先问三句——能否写成装饰器类型（→切点1）？是否每帧一次而非每调用一次（→切点2）？是否只在网上（→切点4）？三者皆否才开新机制讨论。
+
+### 17.6 域⑤：配置绑定
+
+**双配置系统与双容器一一镜像**：
+
+| 维度 | legacy ConfigManager | modular ConfigRegistry | 判定 |
+|---|---|---|---|
+| 存储 | values_(字符串) + typedValues_(std::any) 双缓存（ConfigManager.h:34-44） | 单一字符串 map（config_registry.hpp:24） | modular 对：类型化读取在 getter 出口做（:18-20 四个带默认值 getter），不维护平行缓存 |
+| 并发 | mutex_ 全锁 | shared_mutex 读写锁（:23） | 读多写少场景 directional 正确 |
+| 变更通知 | per-key + global 监听（:100-103） | 无 | 不搬：见下「热更」 |
+| 文件 | loadFromFile/JSON + **FileWatcher 自动热重载**（:105-107，实现 ConfigManager.cpp:183） | 纯 KV，零 IO | 不搬：文件监视属应用层职责 |
+| 全局访问 | getInstance()（:18-21） | `global_config()`（config_registry.cpp:69） | 两者都是全局单例——modular 的让步是「配置是进程级事实」；bean 测试仍可注入独立 ConfigRegistry& 实例（见下） |
+
+**绑定模式（定稿）**：容器对配置零感知——没有 config 注解、没有占位符解析。三种合法形态按优先级：
+
+1. **值注入（首选）**：装配处从 registry 取值、构造值对象（ConfigSnapshot）、以普通 bean 依赖注入。快照可整体替换 → 天然适配热更（对照 docs/18 §5.6 语句热更的 tick 边界纪律）。
+2. **注册表引用注入**：`add_singleton<S, ConfigRegistry>()` 让 bean 构造时自取（di_with_config_integration 用例的**意图**即此，core_comprehensive_tests.cpp:758-765 的 ConfiguredService 构造函数形态正确）。适合按 key 面较宽/动态的消费者。
+3. 装配处直接读值传参（main.cpp:68-70 先 set、服务再读的模式当前形态）——仅限应用入口自用，不进模块。
+
+**热更路径（目标态，随 R-17d 一并落）**：FileWatcher 在**应用层**（apps/，不进 modules）→ 组装新 ConfigSnapshot → 请求 host 广播 `on_application_reload(ApplicationReloadContext{reason})` → 各 service 在**下一 tick 边界**原子换快照指针。明确拒绝 legacy 的自动路径：ConfigManager 热重载直接改活值 + 立即回调监听器（ConfigManager.cpp:183 起），对游戏循环意味着「任意文件事件在任意指令间撕开配置状态」——tick 边界换快照把重载变成可推理的帧内事件。
+
+### 17.7 域⑥：测试策略（本轮最大意外）
+
+**实测发现：DI 测试套件名为 15 实为零。** 两层证据：
+
+1. **接线死区**：modules/core/CMakeLists.txt:34 的测试块守卫是 `if(BUILD_TESTING)`，而 BUILD_TESTING 只由 CTest 模块定义、全仓无 `include(CTest)` → 恒假。modules/contract/CMakeLists.txt:42 用的是正确守卫 `BUILD_TESTING OR APOLLO_BUILD_TESTS`（modules/protocol:61 用 APOLLO_BUILD_TESTS 亦活）。故 core_tests.cpp 与 core_comprehensive_tests.cpp 两个二进制从未构建——当前 17 项 ctest 全绿里**没有任何 DI 用例**（tests/ 下 CoreLifecycleTests/CoreConfigTests/RuntimeTests 是另一组文件，正常在跑）。
+2. **文件腐化**：即使接线，core_comprehensive_tests.cpp 也无法编译（本会话 g++ -fsyntax-only 实测，唯一化错误清单）：`ConfigRegistry::clear()` 已不存在（:66 等 9 处）；`ApplicationPhase::Running` 已更名（:54）；`set(key, int)` 重载歧义（:704/:754）；**值传参构造依赖不支持**——`add_singleton<EagerService>(&constructed)` 把裸指针当 Dep 类型（:572/:576/:660），现 API 只接受 bean 类型；di_with_config_integration 空依赖注册 `add_singleton<ConfiguredService>()` 对需要 `ConfigRegistry&` 的构造函数实例化出 `new ConfiguredService()`（:773 → application_context.hpp:338 报错）。附带发现 modules/core/config/include/.../config_value.hpp:7 自引用 using（`using ConfigValueType = ConfigValueType;`）——本身就是坏头文件，恰因消费者全死而无人察觉。
+
+（其中「值传参构造依赖不支持」一半是测试腐化、一半是真实 API 边界：现设计刻意只注入 bean 引用，非 bean 值走 §17.6 形态 1/3。重写用例时应改为经构造函数参数直接传 counter，不走 Deps 模板参。）
+
+**三层策略（定稿）**：
+
+| 层 | 对象 | 形态 | 现状 → 动作 |
+|---|---|---|---|
+| ① 无容器单测 | 业务 bean（构造注入的一切类） | 直接构造、直接断言——容器不出现 | 已是仓内主流（tests/ 各 plain-assert 组）；无需动作 |
+| ② 容器图测试 | builder/index/topo/scope 语义 | 每 TU 自建小图；覆盖清单：拓扑正序建/逆序拆、环拒绝、prototype-as-dep 拒绝、ambiguity 断言、eager/lazy、named/get_all | 15 用例在盘上全灭（上述）→ **R-17e：接线 + 重写**。建议守卫一行改 `BUILD_TESTING OR APOLLO_BUILD_TESTS` 对齐 modules/contract，再按错误清单逐条修（clear→局部用新 registry 实例；Running→Ready；EagerService 值参→构造函数直传；ConfiguredService→显式 `add_singleton<ConfiguredService, ConfigRegistry>` + 先注册 registry bean——顺带暴露 R-17g：builder 缺 `add_instance(既有对象)` 包装能力） |
+| ③ 装配冒烟 | apps/ 入口的端到端图 | main.cpp 的 run_once 序列即冒烟——game-server 退出码 + `login_pipeline_clock` 输出（main.cpp:133）证明图接线成功 | game-server 已是此形态；批次3/4 新入口沿用，无需新机制 |
+
+**legacy ioc_tests**（GTest 四组）在轨且绿——保留至 legacy 容器下线轮一并删（连同 tests/CMakeLists.txt:3-6 的源显编）。
+
+### 17.8 审计链对应与新登记
+
+**与既有结论的对应**：§0 论证 → 本报告全部「不做」判定的根（运行时容器/作用域膨胀/AOP/配置织入四不）；§6 删除式迁移 → tags 死字段（R-17a）即其教科书案例，legacy 各文件判死依据在 §17.1 落行号；§16.8 归属 → §17.2 逐条对表全数符合；§16.8.3-⑤/§16.9.5 所引 application_host.hpp:20/:28 行号复核未漂移。§16.10.2 登记簿已补行（见下）。
+
+**新登记清单（权威列表）**：
+
+| 编号 | 内容 | 证据 | 建议批次 |
+|---|---|---|---|
+| R-17a | 删 tags 死字段：BeanDefinition.tags + BeanBuilder::tag + di_tags 用例 | hpp:58/:105-110 零读点 | 随任一 DI 触碰提交顺带 |
+| R-17b | ApplicationHost::start 失败路径不逆序 stop 已启动服务、不跑 shutdown hooks；改走既有 stop() 程序 | application_host.cpp:45-53；test_runtime.cpp:361-386 未覆盖先成后败 | 代码阶段（建议批次2 前置小修） |
+| R-17c | build() 对 index/topo 失败仅 assert，NDEBUG 下静默产出残图（环 → lazy get 爆栈）；需显式失败通道 + 单线程契约落注释 | application_context.cpp:12-19/:167 | 代码阶段 |
+| R-17d | on_application_reload 零调用方；热更目标态 = 应用层 FileWatcher + tick 边界换 ConfigSnapshot（§17.6） | application_lifecycle.hpp:28 四树 grep 零命中 | 批次8（监控运维）前定稿 |
+| R-17e | modules/core 测试接线（守卫对齐 modules/contract）+ core_comprehensive_tests.cpp 腐化用例重写 + 坏头文件 config_value.hpp:7 处置 | modules/core/CMakeLists.txt:34 vs contract:42；§17.7 清单 | 建议随批次2 顺带 |
+| R-17f | named 构造注入缺口——留决策项，首个真实场景出现前不加 API | hpp:216/:247-250 | 暂缓（触发式） |
+| R-17g | builder 缺 add_instance（包装既有对象为 bean，如全局 ConfigRegistry 实例）——R-17e 重写时自然暴露 | §17.7 层② | 随 R-17e |
+
+**TypeKey 跨 DSO 约束**（记录非缺陷）：type_key.hpp:11 函数局部 static 使类型键按链接单元生效，静态链接下全局唯一；未来若拆动态库模块需改为显式符号导出的键注册。§17.1 表内已注。
+
+### 17.9 本轮状态与基线
+
+- 产出 = 本报告 §17（六域完整分析 + R-17a…R-17g 登记）+ §16.10.2 登记簿补行；零源码改动。
+- 全部行号本会话实读核对；源码基线 main @ a5334014；「文件腐化」结论附实测命令（g++ -std=c++20 -fsyntax-only，唯一化错误清单见 §17.7）。
+- 单提交；push 前 fetch + rebase；无 tag、无 release。
