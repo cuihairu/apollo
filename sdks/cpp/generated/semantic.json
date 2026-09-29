@@ -1,0 +1,156 @@
+{
+  "generator": "apollo-gen 0.2.0",
+  "schema_hash": "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633",
+  "contract_version": 2,
+  "messages": [
+    {
+      "id": 10,
+      "name": "move",
+      "dir": "C2S",
+      "channel": "movement",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "x",
+          "type": "float"
+        },
+        {
+          "name": "y",
+          "type": "float"
+        },
+        {
+          "name": "z",
+          "type": "float"
+        },
+        {
+          "name": "yaw",
+          "type": "float"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "attr_batch",
+      "dir": "S2C",
+      "channel": "attributes",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "seq",
+          "type": "int32"
+        },
+        {
+          "name": "base_seq",
+          "type": "int32"
+        },
+        {
+          "name": "deltas",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "error",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "code",
+          "type": "int32"
+        },
+        {
+          "name": "message",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "heartbeat",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "client_ms",
+          "type": "timestamp"
+        }
+      ]
+    }
+  ],
+  "predict": [
+    {
+      "id": 10,
+      "name": "move_speed",
+      "predict": [
+        "client_predicted",
+        "server_authoritative"
+      ]
+    }
+  ],
+  "attr_names": {
+    "1": "hp",
+    "2": "max_hp",
+    "3": "mp",
+    "4": "max_mp",
+    "5": "sp",
+    "10": "move_speed",
+    "20": "gold",
+    "100": "attack",
+    "101": "defense",
+    "102": "crit_rate",
+    "103": "hit_rate",
+    "300": "level",
+    "301": "exp",
+    "302": "skill_points",
+    "303": "reputation",
+    "600": "weapon_appearance",
+    "700": "guild_id",
+    "701": "team_id",
+    "702": "friend_count",
+    "800": "online",
+    "801": "in_combat",
+    "802": "dead",
+    "803": "stealth",
+    "804": "stunned"
+  },
+  "errors": [
+    {
+      "code": 0,
+      "name": "ok",
+      "desc": "成功"
+    },
+    {
+      "code": 1001,
+      "name": "bad_request",
+      "desc": "请求格式错误"
+    },
+    {
+      "code": 1002,
+      "name": "unauthorized",
+      "desc": "未授权"
+    },
+    {
+      "code": 1003,
+      "name": "rate_limited",
+      "desc": "限流"
+    },
+    {
+      "code": 1004,
+      "name": "schema_mismatch",
+      "desc": "契约 hash 不匹配（sdk-contract §6 握手）"
+    },
+    {
+      "code": 2001,
+      "name": "internal",
+      "desc": "内部错误"
+    },
+    {
+      "code": 2002,
+      "name": "db_busy",
+      "desc": "存储层忙"
+    }
+  ]
+}

@@ -48,6 +48,29 @@ const char* directionToString(Direction d) {
     return "?";
 }
 
+const char* msgDomainToString(MsgDomain d) {
+    switch (d) {
+        case MsgDomain::Client: return "client";
+        case MsgDomain::Internal: return "internal";
+    }
+    return "?";
+}
+
+const char* msgBindingToString(MsgBinding b) {
+    switch (b) {
+        case MsgBinding::Native: return "native";
+        case MsgBinding::Reflect: return "reflect";
+    }
+    return "?";
+}
+
+MsgBinding defaultBindingForChannel(const std::string& channel) {
+    // events 通道缺省 reflect（业务消息 → bin 反射 + Lua handler）；
+    // movement/attributes/control 缺省 native（框架固定消息族）。通道非法值
+    // 已在解析层报错，此处对未知通道退 native 不掩盖诊断。
+    return channel == "events" ? MsgBinding::Reflect : MsgBinding::Native;
+}
+
 uint8_t syncTokensToMask(const std::vector<std::string>& tokens) {
     uint8_t mask = kSyncNone;
     for (const auto& tok : tokens) {
@@ -91,7 +114,8 @@ bool operator==(const FieldDef& a, const FieldDef& b) {
 
 bool operator==(const MsgDef& a, const MsgDef& b) {
     return a.id == b.id && a.name == b.name && a.dir == b.dir && a.channel == b.channel &&
-           a.fields == b.fields && a.desc == b.desc;
+           a.domain == b.domain && a.binding == b.binding && a.fields == b.fields &&
+           a.desc == b.desc;
 }
 
 bool operator==(const EntityDef& a, const EntityDef& b) {

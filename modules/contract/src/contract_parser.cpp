@@ -316,7 +316,8 @@ void parseMessagesDoc(pugi::xml_node root, FileParse& fp, const std::string& fil
     const ElemSpec rootSpec{"messages", {{"version", true}}, {"msg"}};
     const ElemSpec msgSpec{
         "msg",
-        {{"id", true}, {"name", true}, {"dir", true}, {"channel", true}, {"desc", false}},
+        {{"id", true}, {"name", true}, {"dir", true}, {"channel", true}, {"domain", true},
+         {"binding", false}, {"desc", false}},
         {"field"}};
     const ElemSpec fieldSpec{"field", {{"name", true}, {"type", true}, {"desc", false}}, {}};
 
@@ -359,6 +360,29 @@ void parseMessagesDoc(pugi::xml_node root, FileParse& fp, const std::string& fil
             diag(fp.issues, file, line, path,
                  "channel 非法值 '" + def.channel +
                      "'（合法：movement attributes events control）");
+        }
+        // 域（sdk-contract §11.3：必填——单值声明，段约束在语义层）
+        std::string domain = attrValue(n, "domain").value_or("");
+        if (domain == "client") def.domain = MsgDomain::Client;
+        else if (domain == "internal") def.domain = MsgDomain::Internal;
+        else {
+            diag(fp.issues, file, line, path,
+                 "domain 非法值 '" + domain + "'（合法：client internal——内外分域必填，"
+                 "sdk-contract §11.3）");
+        }
+        // 绑定路线（§10.6 v3）：缺省按通道（movement/attributes/control=native，
+        // events=reflect）；显式声明可覆盖缺省（框架族例外评审把好关）
+        if (auto bd = attrValue(n, "binding")) {
+            if (*bd == "native") def.binding = MsgBinding::Native;
+            else if (*bd == "reflect") def.binding = MsgBinding::Reflect;
+            else {
+                diag(fp.issues, file, line, path,
+                     "binding 非法值 '" + *bd +
+                         "'（合法：native reflect；缺省按通道：movement/attributes/"
+                         "control=native，events=reflect）");
+            }
+        } else {
+            def.binding = defaultBindingForChannel(def.channel);
         }
         def.desc = attrValue(n, "desc").value_or("");
 
@@ -684,9 +708,11 @@ Contract validateAndResolve(Contract c, std::vector<Issue>& issues) {
         }
     }
 
-    // ---- 消息：id/name 唯一、字段类型解析 ----
+    // ---- 消息：id/name 唯一、域分段（§11.3 ①）、字段类型解析（含跨域禁令 ④）----
     std::set<uint16_t> seenMsgIds;
     std::set<std::string> seenMsgNames;
+    std::map<std::string, MsgDomain> msgDomainByName;
+    for (const auto& m : c.msgs) msgDomainByName.emplace(m.name, m.domain);
     for (auto& m : c.msgs) {
         std::string path = "/messages/msg[@name='" + m.name + "']";
         if (!seenMsgIds.insert(m.id).second) {
@@ -695,11 +721,31 @@ Contract validateAndResolve(Contract c, std::vector<Issue>& issues) {
         if (!seenMsgNames.insert(m.name).second) {
             diag(issues, m.sourceFile, 0, path, "重复 msg name '" + m.name + "'");
         }
+        const MsgSegment& seg =
+            kMsgSegments[m.domain == MsgDomain::Client ? 0 : 1];
+        if (m.id < seg.lo || m.id > seg.hi) {
+            diag(issues, m.sourceFile, 0, path,
+                 "msg id " + std::to_string(m.id) + " 超出 " + msgDomainToString(m.domain) +
+                     " 域分段（" + std::to_string(seg.lo) + "-" + std::to_string(seg.hi) +
+                     "；client/internal 段内自由增删、互不推动排布——sdk-contract §11.3，"
+                     "XSD 表达不了跨属性规则故落本层）");
+        }
         for (auto& f : m.fields) {
             auto it = typeTable.find(f.typeName);
             if (it == typeTable.end()) {
-                diag(issues, m.sourceFile, 0, path + "/field[@name='" + f.name + "']",
-                     "未知类型 '" + f.typeName + "'");
+                // 跨域引用禁令的先行形态（§11.3 ④）：嵌套消息类型 P2+ 才开放，
+                // 当前引用另一 msg 名即「未知类型」；client 域引用 internal 域消息
+                // 名给专属诊断——禁令先进校验器，不靠评审自觉。
+                auto ref = msgDomainByName.find(f.typeName);
+                if (ref != msgDomainByName.end() && ref->second == MsgDomain::Internal &&
+                    m.domain == MsgDomain::Client) {
+                    diag(issues, m.sourceFile, 0, path + "/field[@name='" + f.name + "']",
+                         "跨域引用禁令：client 域消息 '" + m.name + "' 不得引用 internal 域 '" +
+                             f.typeName + "'（sdk-contract §11.3 ④）");
+                } else {
+                    diag(issues, m.sourceFile, 0, path + "/field[@name='" + f.name + "']",
+                         "未知类型 '" + f.typeName + "'");
+                }
             } else {
                 f.type = it->second;
             }

@@ -68,6 +68,12 @@ ParseResult parseAttrsFull(const std::string& xml, const std::string& file = "at
     return r;
 }
 
+ParseResult parseMessagesFull(const std::string& xml, const std::string& file = "messages.xml") {
+    ParseResult r = parseMessagesXml(xml, file);
+    r.contract = validateAndResolve(std::move(r.contract), r.issues);
+    return r;
+}
+
 ParseResult parseEntitiesFull(const std::string& xml, const std::string& file = "entities.xml") {
     ParseResult r = parseEntitiesXml(xml, file);
     r.contract = validateAndResolve(std::move(r.contract), r.issues);
@@ -275,6 +281,90 @@ void testErrorCodeRanges() {
     CHECK(issuesContaining(r, "超出分区") > 0, "应提示错误码分区（docs/19 §4.3）");
 }
 
+// ------------------------------------------------------------ 分域与绑定
+
+void testMsgDomainRules() {
+    // domain 必填（§11.3：内外分域是硬规则，不许静默缺省）
+    ParseResult r = parseMessagesXml(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="10" name="move" dir="C2S" channel="movement"/>
+</messages>)",
+        "messages.xml");
+    CHECK(issuesContaining(r, "缺少必填属性 'domain'") > 0, "缺 domain 应报必填错误");
+
+    // 非法域值拒绝
+    r = parseMessagesXml(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="both"/>
+</messages>)",
+        "messages.xml");
+    CHECK(issuesContaining(r, "domain 非法值") > 0, "非法 domain 应报错");
+
+    // 非法绑定值拒绝
+    r = parseMessagesXml(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client" binding="hybrid"/>
+</messages>)",
+        "messages.xml");
+    CHECK(issuesContaining(r, "binding 非法值") > 0, "非法 binding 应报错");
+
+    // 域分段（§11.3 ①：client 1-899 / internal 900+）
+    r = parseMessagesFull(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="900" name="leak" dir="C2S" channel="control" domain="client"/>
+</messages>)");
+    CHECK(issuesContaining(r, "超出 client 域分段") > 0, "client 域 id 900+ 应报分段错误");
+
+    r = parseMessagesFull(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="100" name="inner" dir="P2P" channel="control" domain="internal"/>
+</messages>)");
+    CHECK(issuesContaining(r, "超出 internal 域分段") > 0, "internal 域 id <900 应报分段错误");
+
+    // 合法分域零报错（段内自由增删）
+    r = parseMessagesFull(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="899" name="edge_client" dir="S2C" channel="control" domain="client"/>
+<msg id="900" name="edge_internal" dir="P2P" channel="control" domain="internal"/>
+</messages>)");
+    CHECK(r.ok(), "分段边界值合法:\n" + r.report());
+}
+
+void testBindingDefaultByChannel() {
+    // 缺省按通道（§10.6 v3）：events=reflect，movement/attributes/control=native
+    ParseResult r = parseMessagesFull(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client"/>
+<msg id="100" name="chat" dir="C2S" channel="events" domain="client"/>
+<msg id="900" name="zone_sync" dir="P2P" channel="events" domain="internal"/>
+</messages>)");
+    CHECK(r.ok(), "合法消息误报:\n" + r.report());
+    CHECK(r.contract.msgs[0].binding == MsgBinding::Native, "movement 缺省 native");
+    CHECK(r.contract.msgs[1].binding == MsgBinding::Reflect, "events 缺省 reflect");
+    CHECK(r.contract.msgs[2].binding == MsgBinding::Reflect, "internal events 同样缺省 reflect");
+
+    // 显式声明可覆盖缺省（框架族例外走显式 binding，评审把好关）
+    r = parseMessagesFull(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="100" name="big_event" dir="C2S" channel="events" domain="client" binding="native"/>
+</messages>)");
+    CHECK(r.ok(), "显式 binding 覆盖应合法:\n" + r.report());
+    CHECK(r.contract.msgs[0].binding == MsgBinding::Native, "显式 native 覆盖 events 缺省");
+}
+
+void testCrossDomainReferenceRejected() {
+    // §11.3 ④：client 域消息引用 internal 域消息名 → 专属禁令诊断（非泛化未知类型）
+    ParseResult r = parseMessagesFull(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="900" name="session_blob" dir="P2P" channel="events" domain="internal"/>
+<msg id="100" name="invoke" dir="C2S" channel="events" domain="client">
+  <field name="payload" type="session_blob"/>
+</msg>
+</messages>)");
+    CHECK(issuesContaining(r, "跨域引用禁令") > 0,
+          "client→internal 引用应报跨域禁令，实际:\n" + r.report());
+}
+
 // ------------------------------------------------------------------ 继承矩阵
 
 void testInheritanceMatrix() {
@@ -352,6 +442,43 @@ void testRoundTripAndFixpoint() {
     CHECK(p4.ok() && p4.contract.attrs == p3.contract.attrs, "乱序样本往返应等价");
 }
 
+void testMessagesRoundTripAndFixpoint() {
+    // 单文件解析不带 attrs.xml 的别名表——先取随仓 aliases 注入再全量校验
+    // （heartbeat.client_ms 用了 alias timestamp；目录级解析天然无此问题）
+    std::string shippedAttrs = readFileOrEmpty(std::string(APOLLO_CONTRACT_DIR) + "/attrs.xml");
+    ParseResult pa = parseAttrsXml(shippedAttrs, "attrs.xml");
+    auto parseMsgsWithAliases = [&](const std::string& xml) {
+        ParseResult r = parseMessagesXml(xml, "messages.xml");
+        r.contract.aliases = pa.contract.aliases;
+        r.contract = validateAndResolve(std::move(r.contract), r.issues);
+        return r;
+    };
+
+    std::string shipped = readFileOrEmpty(std::string(APOLLO_CONTRACT_DIR) + "/messages.xml");
+    CHECK(!shipped.empty(), "随仓 messages.xml 应可读");
+    ParseResult p1 = parseMsgsWithAliases(shipped);
+    CHECK(p1.ok(), "随仓 messages.xml 必须零错误:\n" + p1.report());
+
+    std::string canonical = writeMessagesXml(p1.contract);
+    ParseResult p2 = parseMsgsWithAliases(canonical);
+    CHECK(p2.ok(), "规范输出必须可回读:\n" + p2.report());
+    CHECK(p2.contract.msgs == p1.contract.msgs, "往返后消息表应相等（含 domain/binding）");
+    // 不动点：write(parse(write(c))) == write(c)——binding 写解析后值的前提
+    CHECK(writeMessagesXml(p2.contract) == canonical, "规范序列化应为不动点");
+
+    // 显式 binding 输入与缺省 binding 输入规范形态一致（缺省展开后同型）
+    ParseResult p3 = parseMsgsWithAliases(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client" binding="native"/>
+</messages>)");
+    ParseResult p4 = parseMsgsWithAliases(
+        R"(<?xml version="1.0"?><messages version="1">
+<msg id="10" name="move" dir="C2S" channel="movement" domain="client"/>
+</messages>)");
+    CHECK(writeMessagesXml(p3.contract) == writeMessagesXml(p4.contract),
+          "缺省 binding 展开后规范形态应与显式声明一致");
+}
+
 void testSha256KnownVector() {
     CHECK(Sha256::hex("abc") ==
               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
@@ -392,10 +519,15 @@ void testShippedContractDirectory() {
     ParseResult r = parseContractDirectory(APOLLO_CONTRACT_DIR);
     if (!r.ok()) std::cerr << r.report();
     CHECK(r.ok(), "随仓契约目录必须零错误通过");
-    CHECK(r.contract.version == 1, "随仓 version 应为 1");
+    CHECK(r.contract.version == 2, "随仓 version 应为 2（v2 = 消息分域批）");
     CHECK(r.contract.attrs.size() >= 20, "随仓属性应 >= 20 条");
     CHECK(r.contract.msgs.size() == 4, "随仓消息应为 4 条");
     CHECK(r.contract.errors.size() >= 6, "随仓错误码应 >= 6 条");
+    for (const auto& m : r.contract.msgs) {
+        CHECK(m.domain == MsgDomain::Client, "随仓消息全为 client 域: " + m.name);
+        CHECK(m.binding == MsgBinding::Native,
+              "随仓四条全为框架固定消息族（native）: " + m.name);
+    }
     for (const auto& a : r.contract.attrs) {
         CHECK((a.syncMask & kSyncDbBanned) == 0,
               "任何属性都不得携带 SYNC_DB 位（决策 #5）: " + a.name);
@@ -454,10 +586,14 @@ int main() {
     testAliasRules();
     testPredictCombinations();
     testErrorCodeRanges();
+    testMsgDomainRules();
+    testBindingDefaultByChannel();
+    testCrossDomainReferenceRejected();
     testInheritanceMatrix();
     testInheritanceCycleRejected();
     testInheritanceDanglingParentRejected();
     testRoundTripAndFixpoint();
+    testMessagesRoundTripAndFixpoint();
     testSha256KnownVector();
     testSchemaHashStability();
     testShippedContractDirectory();

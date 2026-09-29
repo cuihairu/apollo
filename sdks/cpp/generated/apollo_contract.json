@@ -1,7 +1,7 @@
 {
-  "generator": "apollo-gen 0.1.0",
-  "schema_hash": "ff94ccccaf38a1eacb5e3d767dbd10aa52e1455b849ec1ecab9a93dfbeda49af",
-  "contract_version": 1,
+  "generator": "apollo-gen 0.2.0",
+  "schema_hash": "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633",
+  "contract_version": 2,
   "aliases": [
     {
       "name": "percent",
@@ -366,6 +366,8 @@
       "name": "move",
       "dir": "C2S",
       "channel": "movement",
+      "domain": "client",
+      "binding": "native",
       "fields": [
         {
           "name": "x",
@@ -399,6 +401,8 @@
       "name": "attr_batch",
       "dir": "S2C",
       "channel": "attributes",
+      "domain": "client",
+      "binding": "native",
       "fields": [
         {
           "name": "seq",
@@ -426,6 +430,8 @@
       "name": "error",
       "dir": "S2C",
       "channel": "control",
+      "domain": "client",
+      "binding": "native",
       "fields": [
         {
           "name": "code",
@@ -447,6 +453,8 @@
       "name": "heartbeat",
       "dir": "C2S",
       "channel": "control",
+      "domain": "client",
+      "binding": "native",
       "fields": [
         {
           "name": "client_ms",

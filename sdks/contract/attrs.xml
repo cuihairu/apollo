@@ -2,7 +2,7 @@
 <!-- attrs.xml — 实体属性契约（一行一属性紧凑风格，sdk-contract §2.3）。
      ID 分段遵 docs/05 §6.1；sync 掩码语义遵 docs/05 §6.3（SYNC_DB 留在 storage.xml）。
      注意：本文件禁止出现任何持久化语义（决策 #5）——落什么库由服务端私有 storage.xml 决定。 -->
-<attrs version="1">
+<attrs version="2">
   <alias name="percent" type="int64" desc="万分比（1 表示 0.01%）"/>
   <alias name="timestamp" type="int64" desc="Unix 毫秒"/>
 

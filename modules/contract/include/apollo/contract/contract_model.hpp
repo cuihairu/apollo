@@ -65,6 +65,16 @@ struct AttrDef {
 /// 消息方向
 enum class Direction : uint8_t { C2S = 0, S2C, P2P };
 
+/// 消息域（sdk-contract §11.3 内外分域：域 = 消息上的逻辑属性，非物理文件）。
+/// client 域对客户端可见（进客户端 bin/semantic 投影）；internal 域服务端私有。
+enum class MsgDomain : uint8_t { Client = 0, Internal };
+
+/// 消息绑定路线（sdk-contract §10.6 v3 消息两分法）：
+/// native = 框架固定消息族（schema 不随契约变，内建强类型代码守热路径）；
+/// reflect = 业务消息（bin 反射 + contract.lua 路由 → Lua handler）。
+/// 「反射在哪解」是装配选择，故意不进契约（§10.6 附节：两解码案零契约分叉）。
+enum class MsgBinding : uint8_t { Native = 0, Reflect };
+
 /// 消息字段（messages.xml <field>）
 struct FieldDef {
     std::string name;
@@ -79,6 +89,10 @@ struct MsgDef {
     std::string name;
     Direction dir = Direction::C2S;
     std::string channel;
+    MsgDomain domain = MsgDomain::Client;
+    /// 缺省按通道解析（§10.6 v3）：movement/attributes/control=native，events=reflect。
+    /// 解析层填充；规范序列化恒写出解析后的值（往返不动点的前提）。
+    MsgBinding binding = MsgBinding::Native;
     std::vector<FieldDef> fields;
     std::string desc;
     std::string sourceFile;
@@ -124,6 +138,21 @@ inline constexpr AttrSegment kAttrSegments[] = {
     {800, 899, "状态标记"},
 };
 
+/// 消息 ID 域分段（sdk-contract §11.3 ①）。原设计留白「段值落地时定」——
+/// 本批（P2 反射后端首批）定值：client 1-899（对齐 attr 分段上限的惯例）、
+/// internal 900+。段内自由增删，互不推动对方排布（对 KBE 单一分配表病根的反制）。
+/// id 与 domain 的段约束是跨属性规则，XSD 表达不了——落在生成器第 ② 层。
+struct MsgSegment {
+    uint16_t lo;
+    uint16_t hi;
+    const char* name;
+};
+
+inline constexpr MsgSegment kMsgSegments[] = {
+    {1,    899,   "client 域（对客户端可见）"},
+    {900,  65535, "internal 域（服务端私有）"},
+};
+
 /// 整份契约（四个文件 + version 的聚合模型）
 struct Contract {
     uint16_t version = 0;
@@ -138,6 +167,12 @@ struct Contract {
 const char* wireTypeToString(WireType t);
 bool parseWireType(const std::string& name, WireType& out);
 const char* directionToString(Direction d);
+const char* msgDomainToString(MsgDomain d);
+const char* msgBindingToString(MsgBinding b);
+
+/// binding 缺省值按通道（sdk-contract §10.6 v3）：movement/attributes/control →
+/// native（框架固定消息族），events → reflect（业务消息）。
+MsgBinding defaultBindingForChannel(const std::string& channel);
 
 /// 掩码 ↔ token 互转（canonical 顺序 APPR PROP SELF TEAM GUILD WORLD IMMEDIATE）
 uint8_t syncTokensToMask(const std::vector<std::string>& tokens);

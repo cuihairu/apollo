@@ -2,10 +2,22 @@
  * @file main.cpp
  * @brief apollo-gen —— 契约生成器（sdks/contract → sdks/cpp/generated）。
  *
- * 产物（本批 v1）：
- *   apollo_contract.h    —— C++ 头：AttrId/MsgId 枚举、sync 位常量、Attr/Msg/Entity
- *                           元数据 constexpr 表、schema_hash 常量（含 static_assert 闸）
- *   apollo_contract.json —— JSON 投影（Unity/Cocos 后续批的输入；nlohmann ordered）
+ * 产物（v2 批：+ 反射后端三产物，sdk-contract §10.3/§10.6 v3、§11 分域）：
+ *   apollo_contract.h     —— C++ 头：AttrId/MsgId 枚举、sync 位常量、Attr/Msg/Entity
+ *                            元数据 constexpr 表（Msg 含 domain/binding）、schema_hash
+ *   apollo_contract.json  —— JSON 全量投影（Unity/Cocos 后续批的输入；nlohmann ordered）
+ *   contract.lua          —— 服务端 Lua 契约表（attr 表/消息路由/写白名单——语义的
+ *                            Lua 形态，require 即用；scripting-lua §3.4 装载/热更载体）
+ *   semantic.json         —— 客户端语义小件（§11.6：client 域消息/predict 表/
+ *                            attr id→name/错误码——按域过滤投影 §11.3 ③）
+ *   contract_route.json   —— C++ 帧路由清单（§10.6 附节：msg id→name/dir/domain/
+ *                            binding/handler——id 分发、上行白名单、域过滤共用，
+ *                            两解码案共享、契约零分叉）
+ *
+ * 实现口径（xml-generation §4）：无自建 AST——IR（Contract）即核心资产，各产物皆
+ * 「读 IR → 渲染文本」薄 writer；contract.lua 是 IR 的 Lua 表字面量 dump（数据非代码）。
+ * Lua handler 名约定 = 消息名（reflect 绑定的业务消息才有 handler；框架族 native
+ * 由 C++ 内建处理不经 Lua）。
  *
  * 确定性纪律（diff 稳定测试的前提）：无时间戳、无随机序——元素按 id/name/code
  * 升序，属性顺序固定，生成器版本字符串显式写进文件头与 hash。
@@ -20,6 +32,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -34,7 +47,7 @@ using namespace apollo::contract;
 
 namespace {
 
-constexpr char kGeneratorVersion[] = "apollo-gen 0.1.0";
+constexpr char kGeneratorVersion[] = "apollo-gen 0.2.0";
 
 // ------------------------------------------------------------ 文本工具
 
@@ -116,6 +129,12 @@ std::string renderHeader(const Contract& c, const std::string& hash) {
 
     os << "enum class MsgDir : uint8_t { C2S = 0, S2C, P2P };\n\n";
 
+    os << "// 内外分域（sdk-contract §11.3）：client 1-899 / internal 900+（分段校验在生成器）。\n";
+    os << "enum class MsgDomain : uint8_t { Client = 0, Internal };\n\n";
+    os << "// 绑定路线（§10.6 v3）：native=框架固定消息族（内建强类型守热路径）；\n";
+    os << "// reflect=业务消息（bin 反射 + contract.lua 路由 → Lua handler）。\n";
+    os << "enum class MsgBinding : uint8_t { Native = 0, Reflect };\n\n";
+
     os << "enum class AttrId : uint16_t {\n";
     for (const auto& a : c.attrs) os << "    " << a.name << " = " << a.id << ",\n";
     os << "};\n\n";
@@ -151,14 +170,19 @@ std::string renderHeader(const Contract& c, const std::string& hash) {
     }
     os << "struct MsgMeta {\n";
     os << "    MsgId id;\n    const char* name;\n    MsgDir dir;\n    const char* channel;\n";
+    os << "    MsgDomain domain;\n    MsgBinding binding;\n";
     os << "    const MsgField* fields;\n    size_t fieldCount;\n    const char* desc;\n};\n";
     os << "inline constexpr MsgMeta kMsgs[] = {\n";
     for (const auto& m : c.msgs) {
         std::string dirLit = m.dir == Direction::C2S
                                  ? "MsgDir::C2S"
                                  : (m.dir == Direction::S2C ? "MsgDir::S2C" : "MsgDir::P2P");
+        std::string domainLit =
+            m.domain == MsgDomain::Client ? "MsgDomain::Client" : "MsgDomain::Internal";
+        std::string bindingLit =
+            m.binding == MsgBinding::Native ? "MsgBinding::Native" : "MsgBinding::Reflect";
         os << "    {MsgId::" << m.name << ", \"" << m.name << "\", " << dirLit << ", \""
-           << m.channel << "\", "
+           << m.channel << "\", " << domainLit << ", " << bindingLit << ", "
            << (m.fields.empty() ? "nullptr, 0" : ("kFields_" + m.name + ", sizeof(kFields_" +
                                                   m.name + ") / sizeof(kFields_" + m.name + "[0])"))
            << ", \"" << cEscape(m.desc) << "\"},\n";
@@ -253,6 +277,8 @@ std::string renderJson(const Contract& c, const std::string& hash) {
                                     {"name", m.name},
                                     {"dir", directionToString(m.dir)},
                                     {"channel", m.channel},
+                                    {"domain", msgDomainToString(m.domain)},
+                                    {"binding", msgBindingToString(m.binding)},
                                     {"fields", fields},
                                     {"desc", m.desc}});
     }
@@ -278,6 +304,189 @@ std::string renderJson(const Contract& c, const std::string& hash) {
     return j.dump(2) + "\n";
 }
 
+// -------------------------------------------------------- Lua 契约表产物
+
+std::string luaEscape(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    // Lua 5.4 \xXX 转义恰吃两位十六进制
+                    std::ostringstream os;
+                    os << "\\x" << std::hex << std::setw(2) << std::setfill('0')
+                       << static_cast<int>(static_cast<unsigned char>(c));
+                    out += os.str();
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
+}
+
+void luaStringArray(std::ostringstream& os, const std::vector<std::string>& toks) {
+    os << "{";
+    for (size_t i = 0; i < toks.size(); ++i) {
+        if (i) os << ", ";
+        os << '"' << luaEscape(toks[i]) << '"';
+    }
+    os << "}";
+}
+
+/// Lua 契约表（contract.lua）：IR 的 Lua 表字面量 dump——数据非代码，require 即用
+/// （sdk-contract §10.3 v3 / §10.6 v3；scripting-lua §3.4 装载与热更载体）。
+/// handler 名约定 = 消息名（仅 reflect 业务消息有 Lua handler）。
+std::string renderContractLua(const Contract& c, const std::string& hash) {
+    std::ostringstream os;
+    os << "-- Generated by " << kGeneratorVersion << " from sdks/contract — DO NOT EDIT.\n";
+    os << "-- schema_hash: " << hash << "\n";
+    os << "-- 契约表（sdk-contract §10.6 v3 / scripting-lua §3.4）：数据非代码，require 即用。\n";
+    os << "-- 装载与热更走 scripting-lua §3.2 换表协议；装载期一致性闸（bin 消息集 ↔\n";
+    os << "-- 本表路由逐条对齐、白名单存在性）在服务端启动侧执行。\n\n";
+    os << "local M = {}\n\n";
+    os << "M.version = " << c.version << "\n";
+    os << "M.schema_hash = \"" << hash << "\"\n\n";
+
+    os << "-- 属性表（id → 元数据；sync 为 token 数组，掩码语义在服务端收集侧）\n";
+    os << "M.attrs = {\n";
+    for (const auto& a : c.attrs) {
+        os << "  [" << a.id << "] = { name = \"" << luaEscape(a.name) << "\", type = \""
+           << luaEscape(a.typeName) << "\", sync = ";
+        luaStringArray(os, syncMaskToTokens(a.syncMask));
+        os << ", channel = \"" << luaEscape(a.channel) << "\", predict = ";
+        luaStringArray(os, a.predict);
+        if (!a.defaultValue.empty()) {
+            os << ", default = \"" << luaEscape(a.defaultValue) << "\"";
+        }
+        os << " },\n";
+    }
+    os << "}\n\n";
+
+    os << "-- 消息路由（id → 元数据）。handler 仅 reflect 业务消息有（约定 = 消息名，\n";
+    os << "-- Lua 模块头注释 handles: 声明与之对齐，缺失即启动红）；\n";
+    os << "-- native 框架族由 C++ 内建处理，不经 Lua。\n";
+    os << "M.msgs = {\n";
+    for (const auto& m : c.msgs) {
+        os << "  [" << m.id << "] = { name = \"" << luaEscape(m.name) << "\", dir = \""
+           << directionToString(m.dir) << "\", channel = \"" << luaEscape(m.channel)
+           << "\", domain = \"" << msgDomainToString(m.domain) << "\", binding = \""
+           << msgBindingToString(m.binding) << "\"";
+        if (m.binding == MsgBinding::Reflect) {
+            os << ", handler = \"" << luaEscape(m.name) << "\"";
+        }
+        os << ", fields = {\n";
+        for (const auto& f : m.fields) {
+            os << "    { name = \"" << luaEscape(f.name) << "\", type = \""
+               << luaEscape(f.typeName) << "\" },\n";
+        }
+        os << "  } },\n";
+    }
+    os << "}\n\n";
+
+    os << "-- 脚本写白名单（sdk-contract §5：predict 含 client_predicted 的属性——\n";
+    os << "-- 载体数据化，机制不变；运行时再与服务端配置交集）\n";
+    os << "M.write_whitelist = {";
+    bool firstWl = true;
+    for (const auto& a : c.attrs) {
+        bool clientPredicted =
+            std::find(a.predict.begin(), a.predict.end(), "client_predicted") != a.predict.end();
+        if (!clientPredicted) continue;
+        if (!firstWl) os << ", ";
+        os << '"' << luaEscape(a.name) << '"';
+        firstWl = false;
+    }
+    os << "}\n\n";
+
+    os << "-- 错误码（code → 元数据）\n";
+    os << "M.errors = {\n";
+    for (const auto& e : c.errors) {
+        os << "  [" << e.code << "] = { name = \"" << luaEscape(e.name) << "\", desc = \""
+           << luaEscape(e.desc) << "\" },\n";
+    }
+    os << "}\n\n";
+    os << "return M\n";
+    return os.str();
+}
+
+/// 客户端语义小件（semantic.json，§11.6）：predict 表 / attr id→name / 错误码 +
+/// client 域消息清单（§11.3 ③ 按域过滤投影——internal 域不进客户端产物面）。
+std::string renderSemanticJson(const Contract& c, const std::string& hash) {
+    ordered_json j;
+    j["generator"] = kGeneratorVersion;
+    j["schema_hash"] = hash;
+    j["contract_version"] = c.version;
+
+    ordered_json msgs = ordered_json::array();
+    for (const auto& m : c.msgs) {
+        if (m.domain != MsgDomain::Client) continue;
+        ordered_json fields = ordered_json::array();
+        for (const auto& f : m.fields) {
+            fields.push_back(ordered_json{{"name", f.name}, {"type", f.typeName}});
+        }
+        msgs.push_back(ordered_json{{"id", m.id},
+                                    {"name", m.name},
+                                    {"dir", directionToString(m.dir)},
+                                    {"channel", m.channel},
+                                    {"binding", msgBindingToString(m.binding)},
+                                    {"fields", fields}});
+    }
+    j["messages"] = msgs;
+
+    ordered_json predict = ordered_json::array();
+    for (const auto& a : c.attrs) {
+        if (a.predict.empty()) continue;
+        ordered_json toks = ordered_json::array();
+        for (const auto& t : a.predict) toks.push_back(t);
+        predict.push_back(ordered_json{{"id", a.id}, {"name", a.name}, {"predict", toks}});
+    }
+    j["predict"] = predict;
+
+    ordered_json names = ordered_json::object();
+    for (const auto& a : c.attrs) names[std::to_string(a.id)] = a.name;
+    j["attr_names"] = names;
+
+    ordered_json errors = ordered_json::array();
+    for (const auto& e : c.errors) {
+        errors.push_back(ordered_json{{"code", e.code}, {"name", e.name}, {"desc", e.desc}});
+    }
+    j["errors"] = errors;
+
+    return j.dump(2) + "\n";
+}
+
+/// C++ 帧路由清单（contract_route.json，§10.6 附节）：msg id → name/dir/channel/
+/// domain/binding/handler。全量（含 internal 域——域过滤是路由层查询，清单本身
+/// 服务端私有全量）；上行白名单 = routes 中 dir==C2S 且 domain==client。
+/// 两解码案（C++ 反射桥 / Lua 侧解）共用本清单——契约零分叉的产物面落点。
+std::string renderContractRoute(const Contract& c, const std::string& hash) {
+    ordered_json j;
+    j["generator"] = kGeneratorVersion;
+    j["schema_hash"] = hash;
+    j["contract_version"] = c.version;
+
+    ordered_json routes = ordered_json::array();
+    for (const auto& m : c.msgs) {
+        routes.push_back(ordered_json{{"id", m.id},
+                                      {"name", m.name},
+                                      {"dir", directionToString(m.dir)},
+                                      {"channel", m.channel},
+                                      {"domain", msgDomainToString(m.domain)},
+                                      {"binding", msgBindingToString(m.binding)},
+                                      {"handler", m.binding == MsgBinding::Reflect
+                                                      ? ordered_json(m.name)
+                                                      : ordered_json(nullptr)}});
+    }
+    j["routes"] = routes;
+
+    return j.dump(2) + "\n";
+}
+
 // ------------------------------------------------------------ 文件 IO
 
 bool writeFile(const fs::path& p, const std::string& content) {
@@ -298,12 +507,17 @@ std::string readFile(const fs::path& p) {
 }
 
 /// 与既有产物逐字节比对；不一致则给出首个分歧位置（CI 闸二）
-int checkAgainst(const fs::path& dir, const std::string& header, const std::string& json) {
+int checkAgainst(const fs::path& dir, const std::string& header, const std::string& json,
+                 const std::string& lua, const std::string& semantic, const std::string& route) {
     int failures = 0;
     struct Item {
         const char* name;
         const std::string& content;
-    } items[] = {{"apollo_contract.h", header}, {"apollo_contract.json", json}};
+    } items[] = {{"apollo_contract.h", header},
+                 {"apollo_contract.json", json},
+                 {"contract.lua", lua},
+                 {"semantic.json", semantic},
+                 {"contract_route.json", route}};
     for (const auto& it : items) {
         fs::path p = dir / it.name;
         std::string existing = readFile(p);
@@ -369,23 +583,32 @@ int main(int argc, char** argv) {
     const std::string hash = computeSchemaHash(r.contract, kGeneratorVersion);
     const std::string header = renderHeader(r.contract, hash);
     const std::string json = renderJson(r.contract, hash);
+    const std::string lua = renderContractLua(r.contract, hash);
+    const std::string semantic = renderSemanticJson(r.contract, hash);
+    const std::string route = renderContractRoute(r.contract, hash);
 
     if (toStdout) {
-        std::cout << header << "\n" << json;
+        std::cout << header << "\n" << json << "\n" << lua << "\n" << semantic << "\n" << route;
         return 0;
     }
     if (!checkDir.empty()) {
-        return checkAgainst(checkDir, header, json);
+        return checkAgainst(checkDir, header, json, lua, semantic, route);
     }
 
     fs::path out{outDir};
-    if (!writeFile(out / "apollo_contract.h", header)) {
-        std::cerr << "写出失败: " << (out / "apollo_contract.h") << "\n";
-        return 2;
-    }
-    if (!writeFile(out / "apollo_contract.json", json)) {
-        std::cerr << "写出失败: " << (out / "apollo_contract.json") << "\n";
-        return 2;
+    struct OutItem {
+        const char* name;
+        const std::string& content;
+    } outItems[] = {{"apollo_contract.h", header},
+                    {"apollo_contract.json", json},
+                    {"contract.lua", lua},
+                    {"semantic.json", semantic},
+                    {"contract_route.json", route}};
+    for (const auto& it : outItems) {
+        if (!writeFile(out / it.name, it.content)) {
+            std::cerr << "写出失败: " << (out / it.name) << "\n";
+            return 2;
+        }
     }
     std::cout << "apollo-gen: " << r.contract.attrs.size() << " attrs, "
               << r.contract.msgs.size() << " msgs, " << r.contract.entities.size()

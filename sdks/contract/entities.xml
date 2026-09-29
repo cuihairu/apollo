@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- entities.xml — 实体清单与单继承（生成期展开，ioc-review §16.7.2）。
      attr 集合不在本文件声明：实体默认携带全量 attrs 的可见子集，逐实体裁剪属后续批。 -->
-<entities version="1">
+<entities version="2">
   <entity id="Monster" desc="怪物基类"/>
   <entity id="NPC" parent="Monster" desc="NPC（继承怪物移动/战斗面）"/>
   <entity id="Avatar" parent="Monster" desc="玩家化身"/>

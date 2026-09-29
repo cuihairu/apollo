@@ -71,6 +71,27 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <!-- 内外分域（sdk-contract §11.3）：域 = 消息上的逻辑属性，非物理文件。
+       id 与 domain 的段约束（client 1-899 / internal 900+）是跨属性规则，
+       XSD 表达不了——落生成器第 ② 层语义校验（与 alias 引用存在性同一先例）。 -->
+  <xs:simpleType name="MsgDomain">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="client"/>
+      <xs:enumeration value="internal"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- 绑定路线（sdk-contract §10.6 v3 消息两分法）：native = 框架固定消息族
+       （内建强类型守热路径）；reflect = 业务消息（bin 反射 → Lua handler）。
+       缺省按通道：movement/attributes/control=native，events=reflect；
+       「反射在哪解」是装配选择，故意不进契约（两解码案零契约分叉）。 -->
+  <xs:simpleType name="MsgBinding">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="native"/>
+      <xs:enumeration value="reflect"/>
+    </xs:restriction>
+  </xs:simpleType>
+
   <xs:simpleType name="Identifier">
     <xs:restriction base="xs:string">
       <xs:pattern value="[a-z][a-z0-9_]*"/>
@@ -155,6 +176,8 @@
             <xs:attribute name="name" type="Identifier" use="required"/>
             <xs:attribute name="dir" type="Direction" use="required"/>
             <xs:attribute name="channel" type="Channel" use="required"/>
+            <xs:attribute name="domain" type="MsgDomain" use="required"/>
+            <xs:attribute name="binding" type="MsgBinding" use="optional"/>
             <xs:attribute name="desc" type="xs:string" use="optional"/>
           </xs:complexType>
         </xs:element>

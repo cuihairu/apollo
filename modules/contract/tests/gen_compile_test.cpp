@@ -62,6 +62,23 @@ static_assert(findAttr("weapon_appearance") >= 0 &&
 static_assert(static_cast<uint16_t>(acg::MsgId::move) == 10, "move id 应为 10");
 static_assert(static_cast<uint16_t>(acg::MsgId::attr_batch) == 11, "attr_batch id 应为 11");
 
+// 分域与绑定（sdk-contract §11.3 / §10.6 v3）：按 name 常量查找后锁住
+// domain/binding 的解析结果——框架固定消息族四条全为 client 域 native 绑定。
+constexpr int findMsg(const char* name) {
+    for (size_t i = 0; i < acg::kMsgCount; ++i) {
+        if (eqStr(acg::kMsgs[i].name, name)) return static_cast<int>(i);
+    }
+    return -1;
+}
+static_assert(findMsg("move") >= 0 && acg::kMsgs[findMsg("move")].domain == acg::MsgDomain::Client,
+              "move 应为 client 域");
+static_assert(findMsg("move") >= 0 &&
+                  acg::kMsgs[findMsg("move")].binding == acg::MsgBinding::Native,
+              "movement 通道框架族缺省 native 绑定");
+static_assert(findMsg("heartbeat") >= 0 &&
+                  acg::kMsgs[findMsg("heartbeat")].binding == acg::MsgBinding::Native,
+              "control 通道框架族缺省 native 绑定");
+
 // 继承展开：Player 的祖先链 = Monster, Avatar（根在前）
 constexpr int findEntity(const char* name) {
     for (size_t i = 0; i < acg::kEntityCount; ++i) {

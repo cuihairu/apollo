@@ -66,7 +66,7 @@
 ## 4. 生成器：输入/产物/实现
 
 - **实现形态**：C++ 单二进制 `sdks/gen/`（sdk-contract §3 已定，入 CI）；XML 解析用 **pugixml**（vcpkg 新增一项，§15.3 已定）；**XSD 校验不在生成器内做**——pugixml 无 XSD 能力，也不值得为此引 libxml2，CI 门禁前置 `xmllint --schema`（§15.3「校验器零开发」）；**include 聚合在读取层自实现**（sdk-contract §11.4：pugixml 不内建 XInclude，读根文件递归展开引用为单一文档树，XSD 校验与 schema_hash 一律对聚合后整体——零新依赖）。
-- **契约反射后端（v3，sdk-contract §10.3/§10.6 定案，P2）**：契约源同批追加五类反射产物——`.proto`（golden，protoc 的源）→ protoc 出 `descriptor.bin`；`contract.lua`（IR 的 Lua 表 dump：attr 表/消息路由/白名单，服务端 require 即用）；`semantic.json`（客户端语义小件）；`contract_route`（C++ 帧路由清单：msg id→name/dir/domain/handler）；端侧代码包装（protoc `--csharp_out`/pbjs，CI 单点吐 golden 入库）。生成语义按 `binding="native|reflect"`（sdk-contract §10.6 v3 消息两分法）：native（框架固定消息族）进内建强类型代码，reflect 只进 bin/路由。实现口径：**无自建 AST**——pugixml DOM 即解析树（选 XML 的直接红利），核心资产是 IR（ContractModel）+ 四层漏斗，各产物皆「读 IR→渲染文本」薄 writer；业务消息 `.pb.cc` 不默认产出。
+- **契约反射后端（v3，sdk-contract §10.3/§10.6 定案，P2）**：契约源同批追加五类反射产物——`.proto`（golden，protoc 的源）→ protoc 出 `descriptor.bin`；`contract.lua`（IR 的 Lua 表 dump：attr 表/消息路由/白名单，服务端 require 即用）；`semantic.json`（客户端语义小件）；`contract_route`（C++ 帧路由清单：msg id→name/dir/domain/handler）；端侧代码包装（protoc `--csharp_out`/pbjs，CI 单点吐 golden 入库）。生成语义按 `binding="native|reflect"`（sdk-contract §10.6 v3 消息两分法）：native（框架固定消息族）进内建强类型代码，reflect 只进 bin/路由。实现口径：**无自建 AST**——pugixml DOM 即解析树（选 XML 的直接红利），核心资产是 IR（ContractModel）+ 四层漏斗，各产物皆「读 IR→渲染文本」薄 writer；业务消息 `.pb.cc` 不默认产出。**首批已落地（2026-09-29，apollo-gen 0.2.0 + 契约 v2）**：messages `domain`（必填）/`binding`（缺省按通道）属性、域分段（client 1-899 / internal 900+，段值就此定值）与跨域引用禁令进解析器第 ② 层；`contract.lua`/`semantic.json`/`contract_route.json` 三产物随 .h/.json 同批吐出并进 golden 闸（Lua handler 名约定 = 消息名）；`.proto`→`descriptor.bin`、端代码包装与装载期一致性闸随后续批。
 - **产物（五类）**：
   1. **强类型数据结构**：contract → `enum class AttrId`/`enum class MsgId` + constexpr 默认值表（attribute-sync §2 的契约机器可读形态）；tables → 每表一个 struct（字段类型按 tables.xsd 类型集定标：int64 万分比/字符串/数组）。
   2. **typed loader**：pugixml DOM → struct 的生成装载函数；错误带 `file:line + xpath + 期望/实际`（pugixml 的 node.offset_debug 可得行号）——禁止通用 ConfigNode 树二次反射（热路径类型安全在编译期定型）。
@@ -117,7 +117,7 @@ mapper XML 三件套：**语句声明化**（namespace + 语句 id + SQL，`#{}`
 ## 7. 分期
 
 - **P1**：契约生成器 v1（contract/*.xml → 产物 1-4 + 文档投影；CI 双闸 xmllint+diff 上线）+ tables 装载器 v1（tables.xsd + 生成 loader + 启动校验）+ config_manager 的 parseXml/parseLua 桩与 ConfigFormat::Xml/Lua 路由**诚实化删除**（stub 家族清理，C-49 纪律；改动点记录在案，随代码阶段执行）。
-- **P2**：配置表热更管线（FileWatcher → 全量重建 → tick 边界换表）+ **契约反射后端**（sdk-contract §10.3 v3：.proto/bin/contract.lua/semantic.json/contract_route 五产物 + binding 生成语义 + include 聚合展开）+ 文档投影接 sdk-contract 排期（端代码包装）+ 帧管线 filter 栈生成（net-abstraction P1 会话层联动）。
+- **P2**：配置表热更管线（FileWatcher → 全量重建 → tick 边界换表）+ **契约反射后端**（sdk-contract §10.3 v3：.proto/bin/contract.lua/semantic.json/contract_route 五产物 + binding 生成语义 + include 聚合展开；**首批已交付**——domain/binding+域分段校验+contract.lua/semantic.json/contract_route.json，见 §4 落地注记）+ 文档投影接 sdk-contract 排期（端代码包装）+ 帧管线 filter 栈生成（net-abstraction P1 会话层联动）。
 - **P3**：storage 投影工具化（storage.xml 的启动校验器复用四层漏斗）+ 体积敏感表的二进制打包选项（生成期打包 + schema 版本，运行期零 XML 解析）。
 
 ## 8. 与其余设计的交集
@@ -133,4 +133,4 @@ mapper XML 三件套：**语句声明化**（namespace + 语句 id + SQL，`#{}`
 
 ---
 
-*基线：apollo main @ 047d0002（modules/core/config 读码；行业对照行号见 ioc-review §16.2/§16.7，其框架基线在各自行注明）。本设计与 ioc-review §16.7 随同一次提交落盘。2026-09-29 同步 sdk-contract v3 定案（§10.3/§10.6/§11.4：契约反射后端五产物、binding native|reflect 生成语义、include 聚合读取层展开）——执行摘要 4/§4/§7 P2 对应扩写。*
+*基线：apollo main @ 047d0002（modules/core/config 读码；行业对照行号见 ioc-review §16.2/§16.7，其框架基线在各自行注明）。本设计与 ioc-review §16.7 随同一次提交落盘。2026-09-29 同步 sdk-contract v3 定案（§10.3/§10.6/§11.4：契约反射后端五产物、binding native|reflect 生成语义、include 聚合读取层展开）——执行摘要 4/§4/§7 P2 对应扩写。同日 P2 反射后端首批代码落地（apollo-gen 0.2.0 + 契约 v2：messages domain/binding 属性、域分段 client 1-899/internal 900+ 定值、跨域引用禁令进解析器、contract.lua/semantic.json/contract_route.json 三产物进 golden 闸；luac/lua5.4 装载验证通过）——§4/§7 P2 加落地注记；.proto/descriptor.bin/端代码包装/装载期闸随后续批。*

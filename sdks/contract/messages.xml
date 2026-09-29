@@ -1,22 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- messages.xml — 消息/意图契约。dir=C2S 为 intent only（服务端定夺，docs/05 §6.4）。 -->
-<messages version="1">
-  <msg id="10" name="move" dir="C2S" channel="movement" desc="移动意图">
+<!-- messages.xml — 消息/意图契约。dir=C2S 为 intent only（服务端定夺，docs/05 §6.4）。
+     domain：内外分域必填（sdk-contract §11.3，client 1-899 / internal 900+ 分段）；
+     binding：缺省按通道（movement/attributes/control=native，events=reflect，
+     sdk-contract §10.6 v3）——本批四条全为框架固定消息族，走缺省 native。 -->
+<messages version="2">
+  <msg id="10" name="move" dir="C2S" channel="movement" domain="client" desc="移动意图">
     <field name="x" type="float"/>
     <field name="y" type="float"/>
     <field name="z" type="float"/>
     <field name="yaw" type="float"/>
   </msg>
-  <msg id="11" name="attr_batch" dir="S2C" channel="attributes" desc="属性批量差分（含快照，attribute-sync §10）">
+  <msg id="11" name="attr_batch" dir="S2C" channel="attributes" domain="client" desc="属性批量差分（含快照，attribute-sync §10）">
     <field name="seq" type="int32" desc="本连接已确认水位"/>
     <field name="base_seq" type="int32" desc="快照基线水位"/>
     <field name="deltas" type="bytes" desc="差分负载（AttrDelta 编码，随 attribute-sync §7 定型）"/>
   </msg>
-  <msg id="12" name="error" dir="S2C" channel="control" desc="错误下发">
+  <msg id="12" name="error" dir="S2C" channel="control" domain="client" desc="错误下发">
     <field name="code" type="int32" desc="errors.xml 错误码"/>
     <field name="message" type="string"/>
   </msg>
-  <msg id="13" name="heartbeat" dir="C2S" channel="control" desc="心跳">
+  <msg id="13" name="heartbeat" dir="C2S" channel="control" domain="client" desc="心跳">
     <field name="client_ms" type="timestamp" desc="客户端毫秒时钟"/>
   </msg>
 </messages>

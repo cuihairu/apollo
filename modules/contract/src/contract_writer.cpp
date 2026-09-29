@@ -136,8 +136,12 @@ std::string writeMessagesXml(const Contract& c) {
     os << "<messages version=\"" << c.version << "\">\n";
     for (const auto* mp : sortedMsgs(c)) {
         const auto& m = *mp;
+        // domain/binding 恒写出（binding 写解析后的值而非输入是否显式声明）——
+        // 输入侧 binding 缺省按通道展开，规范形态与输入排版无关（hash 稳定前提）。
         os << "  <msg id=\"" << m.id << "\" name=\"" << m.name << "\" dir=\""
-           << directionToString(m.dir) << "\" channel=\"" << m.channel << "\"";
+           << directionToString(m.dir) << "\" channel=\"" << m.channel << "\" domain=\""
+           << msgDomainToString(m.domain) << "\" binding=\"" << msgBindingToString(m.binding)
+           << "\"";
         optAttr(os, "desc", m.desc);
         os << ">\n";
         for (const auto& f : m.fields) {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- errors.xml — 错误码表（docs/19 §4.3：0 成功、1000-1999 客户端、2000+ 服务器）。 -->
-<errors version="1">
+<errors version="2">
   <error code="0" name="ok" desc="成功"/>
   <error code="1001" name="bad_request" desc="请求格式错误"/>
   <error code="1002" name="unauthorized" desc="未授权"/>
