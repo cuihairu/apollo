@@ -6,12 +6,13 @@
 message(STATUS "Apollo app scaffold enabled: apps/")
 
 # 检查依赖是否可用
-# Gateway app has been migrated to the modular net/protocol target.
-if(TARGET apollo::net_protocol)
+# Gateway app 的 ingress 头仍包含旧 modules/protocol 的 apollo/protocol/*.hpp
+# （迁移未完成），故除 net::protocol 外还需旧模块目标存在。
+if(TARGET apollo::net_protocol AND TARGET apollo_protocol)
     add_subdirectory(gateway-app)
     message(STATUS "Gateway app enabled (apollo::net_protocol found)")
 else()
-    message(STATUS "Gateway app disabled (apollo::net_protocol not found - NNG required)")
+    message(STATUS "Gateway app disabled (requires apollo::net_protocol and legacy apollo_protocol - enable modules/protocol)")
 endif()
 
 # Legacy protocol apps still depend on modules/protocol.

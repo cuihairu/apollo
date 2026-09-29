@@ -466,3 +466,10 @@ endif()
 if(APOLLO_BUILD_APPS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
     add_subdirectory(apps)
 endif()
+
+# SDK 契约生成器（独立二进制；不进运行时链接图——决策表 #4）。
+# 生成产物基线在 sdks/cpp/generated/，apollo_gen_golden_check 守「改契约忘再生成」。
+option(APOLLO_BUILD_CONTRACT_GEN "Build the SDK contract generator (sdks/gen)" ON)
+if(APOLLO_BUILD_CONTRACT_GEN AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sdks/gen/CMakeLists.txt")
+    add_subdirectory(sdks/gen)
+endif()

@@ -4,6 +4,7 @@
  */
 
 #include "apollo/net/http.h"
+#include <algorithm>
 #include <thread>
 #include <queue>
 #include <mutex>

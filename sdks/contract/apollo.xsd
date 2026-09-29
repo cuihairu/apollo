@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  apollo.xsd — Entity 契约源的形式规范（docs/36 决策追溯表 #3/#5；sdk-contract §2.3；xml-generation §4）
+
+  纪律：
+  1. 本 schema 不含任何通配符（xs:any / xs:anyAttribute）——错拼标签/属性必须报错，
+     不许静默缺省（对照 KBEngine .def「只解析、无 schema 层」的补强点，决策 #3）。
+  2. 存储语义（SYNC_DB / persist / column / table）在本 schema 中不存在——契约只答
+     「线上怎么传」，落库由服务端私有 storage.xml 回答（决策 #5，docs/18 §5）。
+  3. sync 为 xs:list：每个 token 独立枚举校验；SYNC_DB(0x04) 有意不在枚举内，
+     解析器同样拒绝该 token（双保险）。
+  4. 类型别名（alias）按实例声明，XSD 校验其 underlying 为基元；attr/msg field 对
+     alias 的引用存在性由生成器第 ② 层语义规则校验（XSD 表达不了跨元素动态引用）。
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+
+  <!-- ======================= 共享简单类型 ======================= -->
+
+  <xs:simpleType name="PrimitiveType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="bool"/>
+      <xs:enumeration value="int32"/>
+      <xs:enumeration value="int64"/>
+      <xs:enumeration value="float"/>
+      <xs:enumeration value="double"/>
+      <xs:enumeration value="string"/>
+      <xs:enumeration value="bytes"/>
+      <xs:enumeration value="string[]"/>
+      <xs:enumeration value="int64[]"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- 同步可见域 8 位掩码的 token 集（docs/05 §6.3:698-706）。
+       SYNC_DB(0x04) 为存储语义，留在 storage.xml —— 决策 #5。 -->
+  <xs:simpleType name="SyncFlag">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="APPR"/>       <!-- 0x01 外观变化 → AOI 广播 -->
+      <xs:enumeration value="PROP"/>       <!-- 0x02 属性变更 → AOI 广播 -->
+      <xs:enumeration value="SELF"/>       <!-- 0x08 只同步给自己 -->
+      <xs:enumeration value="TEAM"/>       <!-- 0x10 同步给队伍 -->
+      <xs:enumeration value="GUILD"/>      <!-- 0x20 同步给公会 -->
+      <xs:enumeration value="WORLD"/>      <!-- 0x40 全服广播 -->
+      <xs:enumeration value="IMMEDIATE"/>  <!-- 0x80 立即同步（跳过批量） -->
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- 通道（net-abstraction §4.1 四通道） -->
+  <xs:simpleType name="Channel">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="movement"/>
+      <xs:enumeration value="attributes"/>
+      <xs:enumeration value="events"/>
+      <xs:enumeration value="control"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- 预测权限位（attribute-sync §9 预测矩阵） -->
+  <xs:simpleType name="PredictFlag">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="none"/>
+      <xs:enumeration value="client_predicted"/>
+      <xs:enumeration value="server_authoritative"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Direction">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="C2S"/>
+      <xs:enumeration value="S2C"/>
+      <xs:enumeration value="P2P"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Identifier">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[a-z][a-z0-9_]*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- 实体类型名走 PascalCase（BigWorld/KBEngine entity type 惯例）。生成物中
+       实体名只作字符串字面量与数组后缀（kAncestors_Player），从不作裸枚举成员，
+       故不受 C++ 标识符小写惯例约束；attr/msg/error 名直接进枚举，仍用 Identifier。 -->
+  <xs:simpleType name="EntityName">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z][A-Za-z0-9_]*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- ======================= attrs.xml ======================= -->
+
+  <xs:element name="attrs">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="alias" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="name" type="Identifier" use="required"/>
+            <xs:attribute name="type" type="PrimitiveType" use="required"/>
+            <xs:attribute name="desc" type="xs:string"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="attr" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="xs:unsignedShort" use="required"/>
+            <xs:attribute name="name" type="Identifier" use="required"/>
+            <xs:attribute name="type" type="xs:string" use="required"/>
+            <xs:attribute name="sync" use="optional">
+              <xs:simpleType>
+                <xs:list itemType="SyncFlag"/>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="channel" type="Channel" use="optional"/>
+            <xs:attribute name="predict" use="optional">
+              <xs:simpleType>
+                <xs:list itemType="PredictFlag"/>
+              </xs:simpleType>
+            </xs:attribute>
+            <xs:attribute name="default" type="xs:string" use="optional"/>
+            <xs:attribute name="desc" type="xs:string" use="optional"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:unsignedShort" use="required"/>
+    </xs:complexType>
+    <xs:key name="AliasNameKey">
+      <xs:selector xpath="alias"/>
+      <xs:field xpath="@name"/>
+    </xs:key>
+    <xs:key name="AttrIdKey">
+      <xs:selector xpath="attr"/>
+      <xs:field xpath="@id"/>
+    </xs:key>
+    <xs:key name="AttrNameKey">
+      <xs:selector xpath="attr"/>
+      <xs:field xpath="@name"/>
+    </xs:key>
+  </xs:element>
+
+  <!-- ======================= messages.xml ======================= -->
+
+  <xs:element name="messages">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="msg" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="field" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:attribute name="name" type="Identifier" use="required"/>
+                  <xs:attribute name="type" type="xs:string" use="required"/>
+                  <xs:attribute name="desc" type="xs:string" use="optional"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:unsignedShort" use="required"/>
+            <xs:attribute name="name" type="Identifier" use="required"/>
+            <xs:attribute name="dir" type="Direction" use="required"/>
+            <xs:attribute name="channel" type="Channel" use="required"/>
+            <xs:attribute name="desc" type="xs:string" use="optional"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:unsignedShort" use="required"/>
+    </xs:complexType>
+    <xs:key name="MsgIdKey">
+      <xs:selector xpath="msg"/>
+      <xs:field xpath="@id"/>
+    </xs:key>
+    <xs:key name="MsgNameKey">
+      <xs:selector xpath="msg"/>
+      <xs:field xpath="@name"/>
+    </xs:key>
+  </xs:element>
+
+  <!-- ======================= entities.xml ======================= -->
+  <!-- 单继承：parent 为单值属性；xs:keyref 锁悬垂引用；环检测在生成器第 ② 层
+       （ioc-review §16.7.2：两家 .def 解析器都没做，必须自己写）。 -->
+
+  <xs:element name="entities">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="entity" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="id" type="EntityName" use="required"/>
+            <xs:attribute name="parent" type="EntityName" use="optional"/>
+            <xs:attribute name="desc" type="xs:string" use="optional"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:unsignedShort" use="required"/>
+    </xs:complexType>
+    <xs:key name="EntityIdKey">
+      <xs:selector xpath="entity"/>
+      <xs:field xpath="@id"/>
+    </xs:key>
+    <xs:keyref name="EntityParentRef" refer="EntityIdKey">
+      <xs:selector xpath="entity"/>
+      <xs:field xpath="@parent"/>
+    </xs:keyref>
+  </xs:element>
+
+  <!-- ======================= errors.xml ======================= -->
+
+  <xs:element name="errors">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="error" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="code" type="xs:int" use="required"/>
+            <xs:attribute name="name" type="Identifier" use="required"/>
+            <xs:attribute name="desc" type="xs:string" use="optional"/>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:unsignedShort" use="required"/>
+    </xs:complexType>
+    <xs:key name="ErrorCodeKey">
+      <xs:selector xpath="error"/>
+      <xs:field xpath="@code"/>
+    </xs:key>
+    <xs:key name="ErrorNameKey">
+      <xs:selector xpath="error"/>
+      <xs:field xpath="@name"/>
+    </xs:key>
+  </xs:element>
+
+</xs:schema>

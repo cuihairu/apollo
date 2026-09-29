@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- messages.xml — 消息/意图契约。dir=C2S 为 intent only（服务端定夺，docs/05 §6.4）。 -->
+<messages version="1">
+  <msg id="10" name="move" dir="C2S" channel="movement" desc="移动意图">
+    <field name="x" type="float"/>
+    <field name="y" type="float"/>
+    <field name="z" type="float"/>
+    <field name="yaw" type="float"/>
+  </msg>
+  <msg id="11" name="attr_batch" dir="S2C" channel="attributes" desc="属性批量差分（含快照，attribute-sync §10）">
+    <field name="seq" type="int32" desc="本连接已确认水位"/>
+    <field name="base_seq" type="int32" desc="快照基线水位"/>
+    <field name="deltas" type="bytes" desc="差分负载（AttrDelta 编码，随 attribute-sync §7 定型）"/>
+  </msg>
+  <msg id="12" name="error" dir="S2C" channel="control" desc="错误下发">
+    <field name="code" type="int32" desc="errors.xml 错误码"/>
+    <field name="message" type="string"/>
+  </msg>
+  <msg id="13" name="heartbeat" dir="C2S" channel="control" desc="心跳">
+    <field name="client_ms" type="timestamp" desc="客户端毫秒时钟"/>
+  </msg>
+</messages>

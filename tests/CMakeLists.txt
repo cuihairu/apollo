@@ -370,6 +370,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
+	    if(TARGET apollo::game_session)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
 	        ../apps/base-app/src/base_server.cpp
@@ -389,7 +390,11 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+	    endif()
 
+	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
+	    # （apps/ 同惯例），模块关闭时跳过而非 configure 即红。
+	    if(TARGET apollo_protocol)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
@@ -425,6 +430,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(protocol_bootstrap_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME ProtocolBootstrapTests COMMAND protocol_bootstrap_tests)
+	    endif()
 
 	    # Data module tests
 	    add_executable(data_tests test_data.cpp)
@@ -556,7 +562,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
-	    # Session/World skeleton tests
+	    # Session/World skeleton tests（依赖 game 模块目标——模块关闭时跳过，
+	    # 与 apps/ 的 if(TARGET …) 守卫同惯例；修复 main 上 CI configure 必红的问题）
+	    if(TARGET apollo::game_core)
 	    add_executable(session_world_tests test_session_world.cpp)
 	    target_link_libraries(session_world_tests PRIVATE
 	        apollo
@@ -571,7 +579,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(session_world_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME SessionWorldTests COMMAND session_world_tests)
+	    endif()
 
+	    if(TARGET apollo::game_session)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
 	        ../apps/base-app/src/base_server.cpp
@@ -591,7 +601,11 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+	    endif()
 
+	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
+	    # （apps/ 同惯例），模块关闭时跳过而非 configure 即红。
+	    if(TARGET apollo_protocol)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
@@ -627,6 +641,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(protocol_bootstrap_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME ProtocolBootstrapTests COMMAND protocol_bootstrap_tests)
+	    endif()
 
 	    # Data module tests
 	    add_executable(data_tests test_data.cpp)

@@ -1,0 +1,531 @@
+{
+  "generator": "apollo-gen 0.1.0",
+  "schema_hash": "ff94ccccaf38a1eacb5e3d767dbd10aa52e1455b849ec1ecab9a93dfbeda49af",
+  "contract_version": 1,
+  "aliases": [
+    {
+      "name": "percent",
+      "type": "int64",
+      "desc": "万分比（1 表示 0.01%）"
+    },
+    {
+      "name": "timestamp",
+      "type": "int64",
+      "desc": "Unix 毫秒"
+    }
+  ],
+  "attrs": [
+    {
+      "id": 1,
+      "name": "hp",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "1000",
+      "desc": "生命值"
+    },
+    {
+      "id": 2,
+      "name": "max_hp",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "1000",
+      "desc": "生命上限"
+    },
+    {
+      "id": 3,
+      "name": "mp",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "100",
+      "desc": "法力值"
+    },
+    {
+      "id": 4,
+      "name": "max_mp",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "100",
+      "desc": "法力上限"
+    },
+    {
+      "id": 5,
+      "name": "sp",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "SELF"
+      ],
+      "sync_mask": 8,
+      "channel": "attributes",
+      "predict": [],
+      "default": "100",
+      "desc": "体力"
+    },
+    {
+      "id": 10,
+      "name": "move_speed",
+      "type": "percent",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [
+        "client_predicted",
+        "server_authoritative"
+      ],
+      "default": "10000",
+      "desc": "移动速度（万分比，10000=100%）"
+    },
+    {
+      "id": 20,
+      "name": "gold",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "SELF"
+      ],
+      "sync_mask": 8,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "金币"
+    },
+    {
+      "id": 100,
+      "name": "attack",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "攻击力"
+    },
+    {
+      "id": 101,
+      "name": "defense",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "防御力"
+    },
+    {
+      "id": 102,
+      "name": "crit_rate",
+      "type": "percent",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "暴击率（万分比）"
+    },
+    {
+      "id": 103,
+      "name": "hit_rate",
+      "type": "percent",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "10000",
+      "desc": "命中率（万分比）"
+    },
+    {
+      "id": 300,
+      "name": "level",
+      "type": "int32",
+      "wire_type": "int32",
+      "sync": [
+        "PROP",
+        "TEAM",
+        "WORLD"
+      ],
+      "sync_mask": 82,
+      "channel": "attributes",
+      "predict": [],
+      "default": "1",
+      "desc": "等级"
+    },
+    {
+      "id": 301,
+      "name": "exp",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "SELF"
+      ],
+      "sync_mask": 8,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "经验"
+    },
+    {
+      "id": 302,
+      "name": "skill_points",
+      "type": "int32",
+      "wire_type": "int32",
+      "sync": [
+        "SELF"
+      ],
+      "sync_mask": 8,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "技能点"
+    },
+    {
+      "id": 303,
+      "name": "reputation",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "SELF"
+      ],
+      "sync_mask": 8,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "声望"
+    },
+    {
+      "id": 600,
+      "name": "weapon_appearance",
+      "type": "int32",
+      "wire_type": "int32",
+      "sync": [
+        "APPR",
+        "IMMEDIATE"
+      ],
+      "sync_mask": 129,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "武器外观"
+    },
+    {
+      "id": 700,
+      "name": "guild_id",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "公会 ID"
+    },
+    {
+      "id": 701,
+      "name": "team_id",
+      "type": "int64",
+      "wire_type": "int64",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "队伍 ID"
+    },
+    {
+      "id": 702,
+      "name": "friend_count",
+      "type": "int32",
+      "wire_type": "int32",
+      "sync": [
+        "SELF"
+      ],
+      "sync_mask": 8,
+      "channel": "attributes",
+      "predict": [],
+      "default": "0",
+      "desc": "好友数"
+    },
+    {
+      "id": 800,
+      "name": "online",
+      "type": "bool",
+      "wire_type": "bool",
+      "sync": [
+        "WORLD"
+      ],
+      "sync_mask": 64,
+      "channel": "attributes",
+      "predict": [],
+      "default": "true",
+      "desc": "在线"
+    },
+    {
+      "id": 801,
+      "name": "in_combat",
+      "type": "bool",
+      "wire_type": "bool",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "false",
+      "desc": "战斗中"
+    },
+    {
+      "id": 802,
+      "name": "dead",
+      "type": "bool",
+      "wire_type": "bool",
+      "sync": [
+        "PROP",
+        "IMMEDIATE"
+      ],
+      "sync_mask": 130,
+      "channel": "attributes",
+      "predict": [],
+      "default": "false",
+      "desc": "死亡"
+    },
+    {
+      "id": 803,
+      "name": "stealth",
+      "type": "bool",
+      "wire_type": "bool",
+      "sync": [
+        "PROP"
+      ],
+      "sync_mask": 2,
+      "channel": "attributes",
+      "predict": [],
+      "default": "false",
+      "desc": "隐身"
+    },
+    {
+      "id": 804,
+      "name": "stunned",
+      "type": "bool",
+      "wire_type": "bool",
+      "sync": [
+        "PROP",
+        "IMMEDIATE"
+      ],
+      "sync_mask": 130,
+      "channel": "attributes",
+      "predict": [],
+      "default": "false",
+      "desc": "眩晕"
+    }
+  ],
+  "messages": [
+    {
+      "id": 10,
+      "name": "move",
+      "dir": "C2S",
+      "channel": "movement",
+      "fields": [
+        {
+          "name": "x",
+          "type": "float",
+          "wire_type": "float",
+          "desc": ""
+        },
+        {
+          "name": "y",
+          "type": "float",
+          "wire_type": "float",
+          "desc": ""
+        },
+        {
+          "name": "z",
+          "type": "float",
+          "wire_type": "float",
+          "desc": ""
+        },
+        {
+          "name": "yaw",
+          "type": "float",
+          "wire_type": "float",
+          "desc": ""
+        }
+      ],
+      "desc": "移动意图"
+    },
+    {
+      "id": 11,
+      "name": "attr_batch",
+      "dir": "S2C",
+      "channel": "attributes",
+      "fields": [
+        {
+          "name": "seq",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "本连接已确认水位"
+        },
+        {
+          "name": "base_seq",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "快照基线水位"
+        },
+        {
+          "name": "deltas",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "差分负载（AttrDelta 编码，随 attribute-sync §7 定型）"
+        }
+      ],
+      "desc": "属性批量差分（含快照，attribute-sync §10）"
+    },
+    {
+      "id": 12,
+      "name": "error",
+      "dir": "S2C",
+      "channel": "control",
+      "fields": [
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "errors.xml 错误码"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "错误下发"
+    },
+    {
+      "id": 13,
+      "name": "heartbeat",
+      "dir": "C2S",
+      "channel": "control",
+      "fields": [
+        {
+          "name": "client_ms",
+          "type": "timestamp",
+          "wire_type": "int64",
+          "desc": "客户端毫秒时钟"
+        }
+      ],
+      "desc": "心跳"
+    }
+  ],
+  "entities": [
+    {
+      "name": "Avatar",
+      "parent": "Monster",
+      "ancestors": [
+        "Monster"
+      ],
+      "desc": "玩家化身"
+    },
+    {
+      "name": "Monster",
+      "parent": "",
+      "ancestors": [],
+      "desc": "怪物基类"
+    },
+    {
+      "name": "NPC",
+      "parent": "Monster",
+      "ancestors": [
+        "Monster"
+      ],
+      "desc": "NPC（继承怪物移动/战斗面）"
+    },
+    {
+      "name": "Player",
+      "parent": "Avatar",
+      "ancestors": [
+        "Monster",
+        "Avatar"
+      ],
+      "desc": "玩家（含社交面）"
+    }
+  ],
+  "errors": [
+    {
+      "code": 0,
+      "name": "ok",
+      "desc": "成功"
+    },
+    {
+      "code": 1001,
+      "name": "bad_request",
+      "desc": "请求格式错误"
+    },
+    {
+      "code": 1002,
+      "name": "unauthorized",
+      "desc": "未授权"
+    },
+    {
+      "code": 1003,
+      "name": "rate_limited",
+      "desc": "限流"
+    },
+    {
+      "code": 1004,
+      "name": "schema_mismatch",
+      "desc": "契约 hash 不匹配（sdk-contract §6 握手）"
+    },
+    {
+      "code": 2001,
+      "name": "internal",
+      "desc": "内部错误"
+    },
+    {
+      "code": 2002,
+      "name": "db_busy",
+      "desc": "存储层忙"
+    }
+  ]
+}

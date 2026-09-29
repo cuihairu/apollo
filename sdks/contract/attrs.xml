@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- attrs.xml — 实体属性契约（一行一属性紧凑风格，sdk-contract §2.3）。
+     ID 分段遵 docs/05 §6.1；sync 掩码语义遵 docs/05 §6.3（SYNC_DB 留在 storage.xml）。
+     注意：本文件禁止出现任何持久化语义（决策 #5）——落什么库由服务端私有 storage.xml 决定。 -->
+<attrs version="1">
+  <alias name="percent" type="int64" desc="万分比（1 表示 0.01%）"/>
+  <alias name="timestamp" type="int64" desc="Unix 毫秒"/>
+
+  <!-- 基础属性 1-99 -->
+  <attr id="1" name="hp" type="int64" sync="PROP" default="1000" desc="生命值"/>
+  <attr id="2" name="max_hp" type="int64" sync="PROP" default="1000" desc="生命上限"/>
+  <attr id="3" name="mp" type="int64" sync="PROP" default="100" desc="法力值"/>
+  <attr id="4" name="max_mp" type="int64" sync="PROP" default="100" desc="法力上限"/>
+  <attr id="5" name="sp" type="int64" sync="SELF" default="100" desc="体力"/>
+  <attr id="10" name="move_speed" type="percent" sync="PROP" predict="client_predicted server_authoritative" default="10000" desc="移动速度（万分比，10000=100%）"/>
+  <attr id="20" name="gold" type="int64" sync="SELF" default="0" desc="金币"/>
+
+  <!-- 战斗属性 100-199 -->
+  <attr id="100" name="attack" type="int64" sync="PROP" default="0" desc="攻击力"/>
+  <attr id="101" name="defense" type="int64" sync="PROP" default="0" desc="防御力"/>
+  <attr id="102" name="crit_rate" type="percent" sync="PROP" default="0" desc="暴击率（万分比）"/>
+  <attr id="103" name="hit_rate" type="percent" sync="PROP" default="10000" desc="命中率（万分比）"/>
+
+  <!-- 状态属性 300-399 -->
+  <attr id="300" name="level" type="int32" sync="PROP TEAM WORLD" default="1" desc="等级"/>
+  <attr id="301" name="exp" type="int64" sync="SELF" default="0" desc="经验"/>
+  <attr id="302" name="skill_points" type="int32" sync="SELF" default="0" desc="技能点"/>
+  <attr id="303" name="reputation" type="int64" sync="SELF" default="0" desc="声望"/>
+
+  <!-- 外观属性 600-699 -->
+  <attr id="600" name="weapon_appearance" type="int32" sync="APPR IMMEDIATE" default="0" desc="武器外观"/>
+
+  <!-- 社交属性 700-799 -->
+  <attr id="700" name="guild_id" type="int64" sync="PROP" default="0" desc="公会 ID"/>
+  <attr id="701" name="team_id" type="int64" sync="PROP" default="0" desc="队伍 ID"/>
+  <attr id="702" name="friend_count" type="int32" sync="SELF" default="0" desc="好友数"/>
+
+  <!-- 状态标记 800-899 -->
+  <attr id="800" name="online" type="bool" sync="WORLD" default="true" desc="在线"/>
+  <attr id="801" name="in_combat" type="bool" sync="PROP" default="false" desc="战斗中"/>
+  <attr id="802" name="dead" type="bool" sync="PROP IMMEDIATE" default="false" desc="死亡"/>
+  <attr id="803" name="stealth" type="bool" sync="PROP" default="false" desc="隐身"/>
+  <attr id="804" name="stunned" type="bool" sync="PROP IMMEDIATE" default="false" desc="眩晕"/>
+</attrs>

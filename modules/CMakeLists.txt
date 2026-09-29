@@ -8,6 +8,11 @@ message(STATUS "Apollo modular layout scaffold enabled: modules/")
 # Level 1: Base (no dependencies)
 add_subdirectory(base)
 
+# Level 1.5: Contract (self-contained leaf; links only pugixml).
+# 链接图纪律（docs/36 决策 #4）：本库只被 sdks/gen 与自身测试链接；运行时服务
+# 消费 sdks/cpp/generated 的生成产物，绝不链接解析器——生成器不进运行时链接图。
+add_subdirectory(contract)
+
 # Level 2: Core (depends on base)
 add_subdirectory(core)
 
