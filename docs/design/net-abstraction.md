@@ -14,6 +14,7 @@
 6. **NNG wrapper 已定退役**（architecture-review §15.2 退役清单）：`modules/protocol/nng_wrapper` 随五项退役一并删除，避免两套进程间通信并存（与"四套配置系统"同构的重复问题，不再制造第三处）。
 7. **内部网络层按演进阶梯交付（§5.6，2026-09-29 增补）**：自研的意义 = 拥有**可持续优化的内核**（Mercury 同型——BigWorld 内部网络层演进二十年而非一次性交付）——M0 语义定型（P1 随本设计）/ M1 最小正确内核（P3）/ M2+ 持续优化（无截止，按需小批）；优化只发生在层内，消费方零感知。
 8. **进程间连接设施对上层开放（§5.7，2026-09-29 补）**：`InterServerLink` = 进程间稳定连接的一等公民公开设施——连接器（Mercury TCPConnectionOpener 蓝本：非阻塞 connect + 超时 + errno 失败分类，机制不带重试）、统一重连管理（指数退避 + G-1 编队事件联动——收敛 BW LoggerEndpoint 各消费者自写重连的反面）、断连 in-flight 语义按 invoke_mode 分（OneWay 丢 / ReliableEvent 有界排队续传 / RequestReply 超时不复活）、对端重启以 authority_epoch 区分（≠ 断线重连）、per-Link 背压不 trim；跨服业务与框架内部（RemoteEntityCall/G-2 镜像流/collector push）消费**同一 API 族**——不开放裸 socket、不开放契约外消息（Mercury InterfaceMinder 单表病根不学）。
+9. **L0 传输模型两族分析落盘（§5.8，2026-09-29 补）**：就绪（reactor：epoll 基线）与完成（proactor：IOCP/io_uring）两族的接口/运行模式差异定形——L0 接口按「**发送环提交语义**」（post_send/on_send_complete/post_recv/on_recv）定形而非「事件源 + writev」：reactor 适配器内部翻译成「就绪 → 环取数 writev → 同步返回即完成」，completion 适配器直投 SQE/OVERLAPPED——两族通吃且水位机判据（环占用）零改动、取消语义统一 ABORTED。三框架先例全 reactor（本轮实读：BW select-only / KBE epoll+select / skynet epoll+kqueue），完成模型列 M2+ 基准准入；**IOCP 不进路线图**（服务器 Linux-only，`_WIN32` 分支仅为可编译性垫片）。仓内三处 L0 现状一并盘点：B 栈 poll（底座）、栈 A IOCP+epoll 骨架（epoll 建而事件循环未消费——C-18 死 inotify 同族）、ipc 树 IoMultiplexer 完成模型接口（vector 拷贝语义，不学）。
 
 ---
 
@@ -223,6 +224,56 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 | filter 双族 | §5.5 FrameFilter | 照旧 |
 | 服务器代码全员直用 Mercury | 上层与框架共用 InterServerLink | 本节定型点 |
 
+### 5.8 L0 传输模型：就绪（reactor）与完成（proactor）两族——接口与运行模式（2026-09-29 补）
+
+§3 分层图的 L0 行列了 epoll/io_uring/IOCP 槽位、§15.2 定 B 栈为唯一底座并写明演进路径——但「两族模型在**接口形状与运行模式**上差在哪、L0 接口如何同时承载两族」此前零分析（本节补）。不定形这层，将来换后端就是重写：IOCP 已成熟、io_uring 是 Linux 新方向，设计期必须把接口缝留对。
+
+**两族分野（接口层）**
+
+|  | Reactor（就绪通知） | Proactor（完成通知） |
+|---|---|---|
+| 系统调用族 | select/poll/epoll/kqueue | Windows IOCP、Linux io_uring（SQ/CQ） |
+| 语义 | 「fd 可读/可写了，你自己动手」 | 「把缓冲交给我，完成了通知你」 |
+| 回调签名 | `(fd, readable\|writable)` | `(bytes_transferred, error)` |
+| 缓冲所有权 | 应用持有；非阻塞短读短写自己循环 | **内核/队列持有直到完成**——完成前不得复用 |
+| 每次 IO 成本 | wait 批量摊销 + 每次读写一次 syscall | 提交/完成各一次进出队（io_uring 配 registered buffer 可零拷贝） |
+| 背压 | 不内置（自己叠水位） | **投递深度天然是背压**（SQE 深度 / 未完成 IO 数） |
+| 取消 | 无此问题（同步 read/write） | 必须定义（close 时在途操作：io_uring ASYNC_CANCEL / IOCP CancelIoEx） |
+
+io_uring 是两族超集（`IORING_OP_POLL_ADD` 可当纯就绪用、带缓冲读写走完成路径、provided buffer ring 收方向零拷贝）——但**收益只在完成路径上**：只拿它模拟 reactor 等于白引。
+
+**三框架先例：全是 reactor（本轮实读）**
+
+- BW Mercury：`EventPoller` 抽象基类（event_poller.hpp:95-137，doRegisterForRead/Write + processPendingEvents 纯虚）+ **仅 select 实现**（event_dispatcher.cpp:370 注释自述 select；lib/network 无第二 poller 文件）。
+- KBEngine：poller 抽象 + epoll/select 双后端（poller_epoll.cpp 140 行 / poller_select.cpp 256 行）。
+- skynet：socket 线程 SP_* 宏抽象（socket_epoll.h / socket_kqueue.h，:20 `epoll_create`）。
+- 结论：**MMO 主流二十年停在就绪家族**——瓶颈从来不在 syscall 密度而在每连接会话语义（seq/ack/水位/重连即 L1/L2，§1 核心判断）；完成模型是 Aeron/Seastar 类高吞吐消息层的战场。apollo 以 reactor 为基线不是落后，是与全部先例同型；完成模型列 M2+ 演进项（下文）。
+
+**apollo 仓现状：三处 L0 尝试（本轮实读；含 C-29 盘点边界外一处）**
+
+| 处 | 位置 | 模型 | 形态与问题 |
+|---|---|---|---|
+| B 栈（唯一进默认构建，§15.2 底座） | include/apollo/network/transport/reactor.hpp + modules/net/tcp/src/reactor.cpp | poll(2) reactor | AddSocket/ModifySocket/RemoveSocket + EventCallback(fd, events) + EventLoop 独立线程（reactor 接口形状正确）；reactor.cpp:57-59 POLLIN/POLLOUT/pollfd 类型别名缝、:92 `poll(fds, n, 1000)` 轮询等待；socketMutex_ 全表锁；Windows 分支缺（`#ifndef _WIN32` include poll.h） |
+| 栈 A | modules/net/rpc/src/adapters/native_adapter.cpp（1109 行） | IOCP + epoll 双后端骨架 | initialize 双宏分支（:778 CreateIoCompletionPort / :786 epoll_create1）+ PostQueuedCompletionStatus 退出通知；**但 ioThreadProc 实为全连接轮询**（:1027-1075 每 100ms 遍历 listeners/connectors/connections 全表调 handleRecv/handleSend——epoll fd 建了而事件循环没消费它，C-18 FileWatcher「死 inotify」同族）；IO 线程池 hardware_concurrency() 默认 4 |
+| ipc 树（默认 OFF，§15.2 已注下轮审计） | include/apollo/ipc/async_io.h（572 行） | **完成模型接口**（仓内唯一） | `IoMultiplexer`：postRead/postWrite/postAccept/postConnect + IoEvent{result, error, op} 完成回调 + runOnce；三后端探测宏（:12 IOCP / :16-18 `__has_include(<linux/io_uring.h>)`→URING / :21-25 EPOLL 兜底 / KQUEUE）；**AsyncOp 携 `std::vector<uint8_t> buffer` 值拷贝**——完成模型接口却用拷贝语义，零拷贝与背压物理基础都没做 |
+
+（栈 A「epoll 建而不用」与 ipc 树接口是 C-29 四栈盘点边界外的增量事实——ipc 树本就是登记在案的下轮审计对象；均记入 architecture-review 登记簿。）
+
+**L0 接口定形：发送环提交语义（两族通吃的关键）**
+
+- §6 现行收敛口径「事件源 + writev + 水位」是 **reactor 形状**。照此定接口，IOCP/io_uring 只能退化使用（每完成一次重新等可写再写——IOCP 上的经典反模式）。
+- 正确定形：L0 对上暴露**环提交**而非 socket：`post_send(环切片) / on_send_complete(n) / post_recv(缓冲) / on_recv(缓冲, n)`。reactor 适配器内部把它翻译成「epoll 就绪 → 从环取数据 writev → 同步返回即完成回调」；completion 适配器把切片直接投 SQE/OVERLAPPED。L2/线程模型（§3：场景线程单写者入环、IO 线程唯一消费者 flush）在两族下同一形状——**环即投递单元**，§5.2 term buffer 蓝本的深化。
+- **缓冲所有权规则**：完成模型下发送切片在完成前不得复用 → 环容量 = 最大在途字节上限 → §4.2 水位机判据在两族下同为「环占用」，零改动——这是背压建在环上而非 socket 上的直接红利。ipc 树 AsyncOp 的 vector 拷贝正是没想清这一步的接口形态（拷贝换来安全，丢掉零拷贝、背压物理基础与水位语义）——**不学**。
+- **取消语义统一口径**：close() 时在途操作照常完成但回调带 ABORTED（io_uring IORING_OP_ASYNC_CANCEL / IOCP CancelIoEx + ERROR_OPERATION_ABORTED 映射到同一 Reason），资源归还环，连接状态机不等在途——与 §5.7 断连 in-flight 语义表衔接。
+
+**运行模式（各后端）**
+
+- **epoll（M1 基线）**：poll→epoll 是 M1 内第一刀（B 栈 reactor.cpp:92 的 1000ms poll 轮询即替换对象）；每 IO 线程一个 epoll 实例（多线程共享单 fd 的 events 分发需归一，栈 A 现状要改）；level-trigger + 批量 writev 聚合；tick 交界 flush（§3 线程模型不变）。
+- **io_uring（M2+，按需）**：**每线程一个 ring**（SQ/CQ 无锁的前提是 ring 私有）；**不开 SQPOLL**（内核轮询线程与游戏服抢核，弊大于利）；每轮 submit+reap 批量；provided buffer ring 可选（收方向零拷贝）。**基准准入**（§5.6 纪律）：先以真实连接数/包型测 syscall 数与尾延迟对比 epoll，赢了才切——切换本身是层内替换（本节接口定形保证）。
+- **IOCP（不进路线图）**：服务器 = Linux 唯一部署目标；Windows 仅开发机——栈 A/native_adapter 的 `_WIN32` 分支保留为**可编译性垫片**（防开发机构建腐烂），不作性能承诺、不投入优化。同理 kqueue 不投入（macOS 开发机）。
+
+**与 §5.6 演进阶梯的衔接**：M1 = epoll（含 poll→epoll 首刀）；M2+ = io_uring 按需（基准准入）；IOCP/kqueue = 非目标（垫片级）。接口按本节「环提交语义」定形后，全部替换是层内替换、消费方零感知——§5.6「优化只发生在层内」纪律在 L0 的兑现点。
+
 ## 6. 决策清单（保留/删除/引入）
 
 | 对象 | 决策 | 依据 |
@@ -235,6 +286,7 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 | 四级水位/四通道/resume | **新建**（L2） | apollo 完全没有；属性同步设计的直接依赖 |
 | Aeron | **已定不引入**；§5.2 语义吸收清单与 §5.5 filter 蓝本保留 | §5.3 已关闭为自研（architecture-review §15.2） |
 | FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | architecture-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
+| L0 传输模型 | **reactor（epoll）为基线**；接口按「发送环提交语义」定形以兼容完成模型——io_uring M2+ 基准准入、IOCP/kqueue 不进路线图（垫片级） | §5.8（2026-09-29）：三框架先例全 reactor（BW event_poller.hpp:95-137 select-only、KBE poller_epoll.cpp、skynet socket_epoll.h:20）；ipc 树 async_io.h 为仓内既有完成模型接口（C-29 盘点外，随 ipc 审计轮处置） |
 | sdshmem 类同机共享内存通道 | **暂缓**（P3 随进程间总线同批定案；引设计不引代码——与 Aeron 同等处理） | 只承载**同机大块只读共享与点对点镜像流**（空间格子快照/监控指标/G-2 热备镜像流），**不做通用消息总线**（architecture-review §15.2 禁第二套 IPC 并存的边界照旧）；ssengine-reference §4.4 + Aeron IPC 同框（§5.2） |
 
 ## 7. 分期落地
@@ -313,4 +365,4 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 
 ---
 
-*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。同日增补（⑥）：§7 P3 前置设计补实体远程调用块（RemoteEntityCall——语义层引用 architecture/remote-entity-call-design.md 四件套，传输底座接 §5.6 M1，invoke_mode 定 OneWay 默认/RequestReply 只限控制面，信封合流 sdk-contract internal 域）。同日增补（⑦）：新增 §5.7「进程间连接设施（InterServerLink）」——对上层开放的稳定连接语义（连接器/统一重连/in-flight 分类/背压分界/公开面边界）；Mercury 两件新实证：TCPConnectionOpener（tcp_connection_opener.cpp:53/:99-101/:113-146/:186-231 全文实读）与 LoggerEndpoint（logger_endpoint.cpp:672-703 有界重连 + send 有界缓冲）；摘要 8、§5.6 M1 行、§7 传输底座行、§8 交集表（logging.md 行）联动。同日增补（⑧）：§7 P3 前置设计补两块——「负载均衡与异常恢复（manager 域）」（BW 补证：baseappmgr.cpp:588-599 最轻分配/:947-954 过载准入/:1117 负载分流、cellappmgr.hpp:98/:233-236/:305/:307 再平衡族、cellappmgr.cpp:276-277 machined 死亡监听/:281/:1411 startRecovery/:1300 恢复期拒新请求、server/reviver/ 独立进程；apollo 取骨架不取全家桶——自动 cell 迁移推迟 M2+）与「进程间信息共享与同步模型」（owner-订阅原则 + 四类通道表 + 同步三层含义分清）。*
+*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自研总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自研 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。同日增补（⑥）：§7 P3 前置设计补实体远程调用块（RemoteEntityCall——语义层引用 architecture/remote-entity-call-design.md 四件套，传输底座接 §5.6 M1，invoke_mode 定 OneWay 默认/RequestReply 只限控制面，信封合流 sdk-contract internal 域）。同日增补（⑦）：新增 §5.7「进程间连接设施（InterServerLink）」——对上层开放的稳定连接语义（连接器/统一重连/in-flight 分类/背压分界/公开面边界）；Mercury 两件新实证：TCPConnectionOpener（tcp_connection_opener.cpp:53/:99-101/:113-146/:186-231 全文实读）与 LoggerEndpoint（logger_endpoint.cpp:672-703 有界重连 + send 有界缓冲）；摘要 8、§5.6 M1 行、§7 传输底座行、§8 交集表（logging.md 行）联动。同日增补（⑧）：§7 P3 前置设计补两块——「负载均衡与异常恢复（manager 域）」（BW 补证：baseappmgr.cpp:588-599 最轻分配/:947-954 过载准入/:1117 负载分流、cellappmgr.hpp:98/:233-236/:305/:307 再平衡族、cellappmgr.cpp:276-277 machined 死亡监听/:281/:1411 startRecovery/:1300 恢复期拒新请求、server/reviver/ 独立进程；apollo 取骨架不取全家桶——自动 cell 迁移推迟 M2+）与「进程间信息共享与同步模型」（owner-订阅原则 + 四类通道表 + 同步三层含义分清）。同日增补（⑨）：新增 §5.8「L0 传输模型：就绪与完成两族」——reactor/proactor 接口分野表（缓冲所有权/背压/取消三差异）、三框架先例实读（BW event_poller.hpp:95-137 + event_dispatcher.cpp:370 select-only、KBE poller_epoll.cpp/poller_select.cpp、skynet socket_epoll.h:20）、apollo 三处 L0 现状（B 栈 include/apollo/network/transport/reactor.hpp + reactor.cpp:57-59/:92 poll 轮询、栈 A native_adapter.cpp:778/:786/:1027-1075 IOCP+epoll 建而事件循环未消费、ipc async_io.h:12-25/:201+ IoMultiplexer 完成模型三后端 + vector 拷贝）、发送环提交语义定形（两族通吃 + 水位判据不变 + 取消 ABORTED）、运行模式（epoll M1 首刀/io_uring M2+ 基准准入不开 SQPOLL/IOCP 不进路线图）；摘要 9、§6 决策表 L0 传输模型行联动。*
