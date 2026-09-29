@@ -1,0 +1,90 @@
+name: Contract Toolchain
+
+# sdk-contract §12.2 的两个 P2 job（golden 闸已由 ci.yml 的 ctest
+# apollo_gen_golden_check 覆盖，此处不重复）：
+#   contract_pack       —— main 合并：protoc 定型 → 组 dist 包 + manifest（CI 即
+#                          manifest 签发者，同批性的机器物证）
+#   schema_hash_report  —— PR：对 base/head 已提交 golden 出契约变更报告（动没动
+#                          客户端契约一眼可见），评论进 PR（幂等：改同一条）
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'sdks/contract/**'
+      - 'sdks/cpp/generated/**'
+      - 'sdks/gen/**'
+      - 'scripts/ci/**'
+      - '.github/workflows/contract.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'sdks/contract/**'
+      - 'sdks/cpp/generated/**'
+      - 'sdks/gen/**'
+      - 'scripts/ci/**'
+      - '.github/workflows/contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract_pack:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup protoc (pin)
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "29.3"  # pin：descriptor.bin 字节稳定性前提（sdk-contract §10.3 纪律）；升级 = 换包重签
+
+      - name: Assemble contract packs
+        run: scripts/ci/contract_pack.sh . dist
+
+      - name: Upload contract packs
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-pack
+          path: dist/
+          retention-days: 90
+          if-no-files-found: error
+
+  schema_hash_report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch compare refs
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.sha }}
+          git fetch origin ${{ github.event.pull_request.head.sha }}
+
+      - name: Generate report
+        run: |
+          scripts/ci/schema_hash_report.sh \
+            ${{ github.event.pull_request.base.sha }} \
+            ${{ github.event.pull_request.head.sha }} > report.md
+          cat report.md
+
+      - name: Post/update PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          pr="${{ github.event.pull_request.number }}"
+          cid=$(gh api "repos/$repo/issues/$pr/comments" \
+                --jq '[.[] | select(.user.login == "github-actions[bot]")] | last | .id // empty' || true)
+          if [ -n "$cid" ]; then
+            gh api -X PATCH "repos/$repo/issues/comments/$cid" -F body=@report.md
+          else
+            gh pr comment "$pr" --repo "$repo" --body-file report.md
+          fi
