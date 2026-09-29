@@ -50,7 +50,7 @@ public:
 };
 ```
 
-隐藏清单（对游戏逻辑不可见）：连接建立与握手、加密、帧定界与 CRC 校验、心跳保活、seq/ack 与重连续传、水位与 trim、跨线程迁移（send 可从任意线程调，内部入 MPSC 环）、Lua 侧更只看到 `apollo.net` 的三件套（scripting-lua.md §7）。
+隐藏清单（对游戏逻辑不可见）：连接建立与握手、加密、帧定界与 CRC 校验、心跳保活、seq/ack 与重连续传、水位与 trim、跨线程迁移（send 可从任意线程调，内部入 MPSC 环）、Lua 侧更只看到 `apollo.net` 的三件套（scripting-lua.md §8）。
 
 ## 3. 分层架构
 

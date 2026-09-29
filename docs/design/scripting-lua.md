@@ -13,6 +13,7 @@
 5. **公式系统从 C++ 搬进 Lua 函数**：docs/03 的自研表达式编译方案废弃；派生属性公式 = Lua 函数 + 依赖图留在 C++（重算调度不依赖脚本引擎）。
 6. **沙盒**：无 io/os 表、指令数预算/帧、内存上限、每实体脚本时间片轮转；脚本异常隔离（错误 → 日志 + 实体行为回退），不崩进程。
 7. **契约语义的运行时载体（sdk-contract §10.6 v3，2026-09-29 补）**：业务消息 handler 绑定与属性写白名单的数据来自 `contract.lua`（生成器同批吐的 Lua 契约表：attr 表/消息路由/白名单）——装载与热更走 §3.2 同一换表协议；服务端契约变更零 C++ 重编的业务面全在 Lua 侧承接（见 §3.4）。
+8. **在线调试与性能归因（§7，2026-09-29 补）**：attach 执行 = **admin 单入口 + control 通道转发 + tick 边界沙盒 eval**（KBE telnet / skynet debug_console 先例；权限分 Passive Query / Controlled Action）；Lua 状态面四清单（内存 GC / 协程 / 模块版本 / env 采样）挂 observability 树 `/script` 分支；性能归因 = 指令 hook 双职能（预算执法 + per-module 耗时统计）+ C++ 侧外采（perf/Tracy 类，不自建）；死循环检测 §6 已有（指令预算天然覆盖）；**不做断点式调试器**（单写者线程冻结 + tick 确定性破坏）。
 
 ---
 
@@ -147,7 +148,43 @@ collect 阶段（§3.2 的 delta/快照组装）
 - 调试面：错误审计通道（错误摘要带模块名+版本+数据快照）进 `docs/design/attribute-sync.md` 的 BI 旁路，独立于游戏通道，运维可查"热更升级后某模块错误率突增"。
 - 灰度联动：模块健康分（错误计数/预算超限率）驱动 §3.2 的回滚阈值。
 
-## 7. 与其余设计的交集
+## 7. 在线调试与性能归因：attach 执行 / Lua 状态内省 / profile（2026-09-29 增补）
+
+> 语义层以 `docs/architecture/observability-watcher-and-runtime-introspection-design.md`（architecture/ 代）为准——Watcher Tree、Passive Query vs Controlled Action 分级、AccessController；本节接脚本域三件事（attach 执行、Lua 状态面、性能归因）与一个立场（不做断点调试器）。通道与归属沿用 G-5 两截落位（net-abstraction §7 P3，architecture-review §16.8.3-⑤）：检测原语内嵌 ScriptHost（模块内），交互工具归 apps/ admin 面。
+
+### 7.1 attach 执行：admin 单入口 + tick 边界沙盒 eval
+
+- **先例**：KBE 每进程自带 telnet 服务，密码门禁 + 可配执行层（cellapp.cpp:292-293 `pTelnetServer_->start(telnet_passwd, telnet_deflayer, …)`），命令解码后进 Python 解释器**在线执行**（telnet_handler.cpp:801-812，`PyUnicode_DecodeUTF8(command)` 后 eval）；skynet debug_console 是一个 console 服务、`call` 任意服务在线执行 Lua（architecture-review §16.2，debug_console.lua:147-174）。
+- **apollo 取舍**：不学「每进程一个监听口」——收敛为**单 admin 入口**（认证/审计/权限分级只做一处）+ control 通道转发到目标进程/目标场景线程（skynet 形态）；单进程阶段 admin 入口即本机。认证后默认关、只绑内网（KBE passwd 先例）。
+- **执行语义（单写者纪律）**：调试命令投递进 owning 场景线程的任务队列，**下一 tick 的固定调试点**执行、结果回传——任何线程不直接摸 `lua_State`（§2 一线程一状态的推论；skynet 的 call 同构：console 投消息、目标服务在自己上下文执行）。
+- **eval 环境 = 独立 debug env**：§6 沙盒白名单的受限超集——只读查询 API + 少量受控动作（GC 步进、模块健康复位）；无业务写权限（不给 `apollo.db` 写路径）；结果大小上限 + 速率限制（防误操作打爆控制通道）；指令预算同样管辖 eval（超时打断并上报——tick 确定性优先于调试便利）。
+- **权限分级**（observability 文档口径）：状态查询 = Passive Query（认证后默认可用）；eval 执行 / GC 等动作 = Controlled Action（更高授权 + 审计日志——谁何时执行了什么，§6 错误审计通道的同型旁路）。
+
+### 7.2 Lua 状态面（查什么——四清单）
+
+| 面板 | 内容 | 出处/机制 |
+|---|---|---|
+| 内存与 GC | per-state 内存（`collectgarbage("count")`）、GC 步长/暂停参数、上限水位与超限事件 | §6 内存维度的读出口 |
+| 协程清单 | 每协程状态（running/suspended/normal/dead）、挂起计数、等待的 wake 条件、超龄协程（泄漏检测） | 协程式异步底座（§4.1 `apollo.db` 回调 resume / §8 net 交集） |
+| 模块与版本 | 已装载 chunk/模块表 + 每模块当前运行版本、历次热替换记录 | §3.2 热替换审计——「线上各模块跑的哪个版本」一查便知，版本漂移即热更事故定位 |
+| env 采样 | 指定模块 env 顶层值只读快照（深度/字节数受限） | §3.1 模块私有状态的受控视察 |
+
+- 语义层挂 observability 文档的 `/script` 路径分支：前三类 = Value/Collection 节点（Passive Query），eval = Action 节点（AccessController 管辖）；趋势类（错误率/预算超限率时间序列）归 MetricRegistry——「metrics=趋势、watcher=现状」口径照该文档。
+- **同型先例（KBE watcher）**：子系统各自 `initializeWatcher()` 把值挂进路径树（serverapp.cpp:165-177：Network/Resmgr/threadPool/WatchPool 各自挂），远程经网络通道 `queryWatcher` 查询（:181-198），GUI 消费端是外挂工具 guiconsole/WatcherWindow——「检测原语在进程内、聚合呈现在外挂工具」与 G-5 两截落位同构。
+
+### 7.3 性能归因（profile）：指令 hook 双职能 + C++ 侧外采
+
+- **Lua 侧：同一个 hook 双职能**。§6 的 `lua_sethook` COUNT hook 本来就在热路径必装（预算执法）——归因统计是它的第二职能：per-module/per-handler 指令计数与墙钟累计分桶，tick 末聚合进 §7.2 状态面与 MetricRegistry。「哪个模块的钩子吃掉了 §5.2 的预算」「哪个公式最热（§5.3）」直接可答。增量 = 计数器分桶，不新增热路径机制（hook 成本已付）。
+- **C++ 侧：不自建 profiler**。采样式外部工具（perf/Tracy 类）与单写者线程模型天然兼容——线程名即场景归因；模块义务只有两条：帧阶段标记（frame marker，对齐 attribute-sync §10 六阶段的采样区间）+ 符号不剥离。先例：BW bw_profile / KBE guiconsole 均为外挂工具进程（architecture-review §16.8.2 表——「聚合呈现在外挂工具」两家同型）。
+- **死循环检测 = 已有设计**（§6：指令预算天然覆盖，区别于超时信号方案、无需多线程 watchdog）——本节只补一件事：超标事件从「日志 + 实体回退」升级为同时进状态面告警（哪个模块/哪个 handler 触发、当帧指令数）。
+
+### 7.4 debug 能力边界（明确不做的，防未来再议）
+
+- **不做断点式调试器**：断点挂起 = 单写者线程**整场景冻结**（该线程上全部实体的 tick 停摆）+ tick 确定性破坏（G-7 论证的反面）——MMO 逻辑服的调试形态是「在线 eval + 状态内省 + 离线审计（§6）」三件，不是「停世界打断点」。KBE telnet / skynet debug_console 同样只有 eval 与查询，无断点调试器。
+- 预防式调试的另一半已在 §3.2：热替换前的工作线程冒烟（smoke 用例集 + 灰度 scene 试跑 + 健康分回滚）——新版本先在影子环境证明自己。
+- 分期：本节全部跟随 G-5 同批（net-abstraction §7 P3 两截落位）——检测原语随 owning 模块落地，admin 交互面归 apps/；dev 期临时手段 = 日志 + §6 错误审计 + §3.2 版本审计。
+
+## 8. 与其余设计的交集
 
 | 关联设计 | 落点 |
 |---|---|
@@ -156,7 +193,8 @@ collect 阶段（§3.2 的 delta/快照组装）
 | net-abstraction.md | 脚本发起的异步操作（DB 查询/跨服请求）经会话层完成回调按 tick 边界 resume 协程（§异步模型）；Lua 对网络只看到"发消息/订阅消息/回调"三件套，背压与重连对脚本不可见 |
 | sdk-contract.md | 属性/意图消息的契约同时约束脚本端（脚本写的字段必须是契约字段——白名单由契约 predict 位生成、载体为 contract.lua，§3.4）；业务消息 handler 按契约路由绑定（bin↔路由逐条对齐的装载期闸） |
 | ssengine-reference.md | 异步 DB 模型与协程 resume 共用底座；定时器轮驱动脚本的 schedule（`apollo.timer.repeat`） |
+| observability-watcher-and-runtime-introspection-design.md（architecture/ 代） | §7 状态面挂其 Watcher 树 `/script` 分支（Value/Collection=查询、Action=受控执行、AccessController 权限分级）；「metrics=趋势、watcher=现状」口径沿用；检测原语/聚合工具两截归属同 G-5 |
 
 ---
 
-*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。*
+*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。同日增补 §7「在线调试与性能归因」（attach 执行/Lua 状态内省/profile——语义层引用 architecture/observability-watcher-and-runtime-introspection-design.md；先例 KBE telnet 在线 eval（telnet_handler.cpp:801-812、cellapp.cpp:292-293）+ KBE watcher 路径树（serverapp.cpp:165-181，guiconsole 消费端）+ skynet debug_console；原 §7 交集表顺移 §8，net-abstraction §2 的外部引用同步）。*
