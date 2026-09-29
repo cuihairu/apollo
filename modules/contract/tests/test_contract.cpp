@@ -444,6 +444,105 @@ void testDomainHashes() {
           "生成器版本参与域 hash");
 }
 
+void testIncludeAggregation() {
+    // §11.4 include 聚合：读取层展开为零一棵文档树——XSD 校验与 schema_hash
+    // 一律对聚合后整体（物理分文件不影响 hash 稳定性）。关键性质：分文件目录
+    // 与单文件目录解析出的模型与 schema_hash 完全相等。
+    namespace fs = std::filesystem;
+    fs::path tmp = fs::temp_directory_path() / "apollo_contract_include";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+    auto write = [&](const std::string& name, const std::string& content) {
+        std::ofstream(tmp / name) << content;
+    };
+    auto writeBase = [&](const std::string& messagesXml) {
+        write("version", "2\n");
+        write("attrs.xml",
+              "<?xml version=\"1.0\"?><attrs version=\"2\">\n"
+              "<attr id=\"1\" name=\"hp\" type=\"int64\" sync=\"PROP\" default=\"1000\"/>\n"
+              "</attrs>\n");
+        write("messages.xml", messagesXml);
+        write("entities.xml", "<?xml version=\"1.0\"?><entities version=\"2\"/>");
+        write("errors.xml", "<?xml version=\"1.0\"?><errors version=\"2\"/>");
+    };
+    const std::string msgMove =
+        "<msg id=\"10\" name=\"move\" dir=\"C2S\" channel=\"movement\" domain=\"client\"/>";
+    const std::string msgZone =
+        "<msg id=\"900\" name=\"zone_sync\" dir=\"P2P\" channel=\"events\" "
+        "domain=\"internal\"/>";
+    const std::string hdr = "<?xml version=\"1.0\"?>";
+
+    // ---- 等价性：单文件 vs 分文件（hash 必须相等）----
+    writeBase(hdr + "<messages version=\"2\">\n" + msgMove + "\n" + msgZone + "\n</messages>\n");
+    ParseResult mono = parseContractDirectory(tmp.string());
+    CHECK(mono.ok(), "单文件基线应零错误:\n" + mono.report());
+
+    writeBase(hdr + "<messages version=\"2\">\n" + msgMove +
+              "\n<include href=\"messages_internal.xml\"/>\n</messages>\n");
+    write("messages_internal.xml", hdr + "<messages version=\"2\">\n" + msgZone + "\n</messages>\n");
+    ParseResult split = parseContractDirectory(tmp.string());
+    CHECK(split.ok(), "分文件应零错误:\n" + split.report());
+    CHECK(split.contract.msgs == mono.contract.msgs, "聚合后消息表应与单文件相等");
+    CHECK(computeSchemaHash(split.contract, "apollo-gen 0.2.0") ==
+              computeSchemaHash(mono.contract, "apollo-gen 0.2.0"),
+          "物理分文件不得改变 schema_hash（§11.4：hash 对聚合后整体）");
+
+    // 纯 include 根（分域组织的自然形态）也应等价
+    writeBase(hdr + "<messages version=\"2\">\n"
+              "<include href=\"messages_client.xml\"/>\n"
+              "<include href=\"messages_internal.xml\"/>\n</messages>\n");
+    write("messages_client.xml", hdr + "<messages version=\"2\">\n" + msgMove + "\n</messages>\n");
+    ParseResult byDomain = parseContractDirectory(tmp.string());
+    CHECK(byDomain.ok(), "纯 include 根应零错误:\n" + byDomain.report());
+    CHECK(byDomain.contract.msgs == mono.contract.msgs, "双分片聚合应与单文件相等");
+
+    // ---- 错误族 ----
+    auto expectDirError = [&](const std::string& needle) {
+        ParseResult r = parseContractDirectory(tmp.string());
+        CHECK(issuesContaining(r, needle) > 0,
+              "目录解析应报 \"" + needle + "\"，实际:\n" + r.report());
+    };
+    // 环
+    writeBase(hdr + "<messages version=\"2\">\n<include href=\"a.xml\"/>\n</messages>\n");
+    write("a.xml", hdr + "<messages version=\"2\">\n<include href=\"b.xml\"/>\n</messages>\n");
+    write("b.xml", hdr + "<messages version=\"2\">\n<include href=\"a.xml\"/>\n</messages>\n");
+    expectDirError("include 环");
+    // 缺文件
+    writeBase(hdr + "<messages version=\"2\">\n<include href=\"ghost.xml\"/>\n</messages>\n");
+    expectDirError("无法读取/解析 include 文件");
+    // 根元素不匹配
+    writeBase(hdr + "<messages version=\"2\">\n<include href=\"wrong_root.xml\"/>\n</messages>\n");
+    write("wrong_root.xml",
+          hdr + "<attrs version=\"2\">\n<attr id=\"1\" name=\"hp\" type=\"int64\"/>\n</attrs>\n");
+    expectDirError("include 根元素不匹配");
+    // version 不一致
+    writeBase(hdr + "<messages version=\"2\">\n<include href=\"v3.xml\"/>\n</messages>\n");
+    write("v3.xml", hdr + "<messages version=\"3\">\n" + msgZone + "\n</messages>\n");
+    expectDirError("include version 不一致");
+    // 深层 include 不展开（由 strictWalk 白名单拦）
+    writeBase(hdr + "<messages version=\"2\">\n" + msgMove +
+              "\n<include href=\"messages_internal.xml\"/>\n</messages>\n");
+    write("messages_internal.xml",
+          hdr + "<messages version=\"2\">\n" + msgZone +
+          "\n<msg id=\"11\" name=\"emote\" dir=\"C2S\" channel=\"events\" domain=\"client\">\n"
+          "<include href=\"messages_client.xml\"/>\n</msg>\n</messages>\n");
+    write("messages_client.xml", hdr + "<messages version=\"2\"/>\n");
+    expectDirError("未知元素");
+    // 重复 include：拼接两份 → 重复 key 由既有规则拦
+    writeBase(hdr + "<messages version=\"2\">\n<include href=\"dup.xml\"/>\n"
+              "<include href=\"dup.xml\"/>\n</messages>\n");
+    write("dup.xml", hdr + "<messages version=\"2\">\n" + msgZone + "\n</messages>\n");
+    expectDirError("重复 msg id");
+    // 缺 href
+    writeBase(hdr + "<messages version=\"2\">\n<include/>\n</messages>\n");
+    expectDirError("include 缺少必填属性 'href'");
+    // include 携带未知属性
+    writeBase(hdr + "<messages version=\"2\">\n<include href=\"dup.xml\" src=\"x\"/>\n</messages>\n");
+    expectDirError("include 未知属性");
+
+    fs::remove_all(tmp);
+}
+
 // ------------------------------------------------------------------ 继承矩阵
 
 void testInheritanceMatrix() {
@@ -669,6 +768,7 @@ int main() {
     testBindingDefaultByChannel();
     testCrossDomainReferenceRejected();
     testDomainHashes();
+    testIncludeAggregation();
     testInheritanceMatrix();
     testInheritanceCycleRejected();
     testInheritanceDanglingParentRejected();

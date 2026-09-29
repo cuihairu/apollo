@@ -48,6 +48,18 @@ struct ParseResult {
 /// 任一文件缺失或 version 非法均计入 issues。
 ParseResult parseContractDirectory(const std::string& dir);
 
+/// include 聚合（sdk-contract §11.4）：读根文件内容，递归展开根直接子级的
+/// <include href="…"/> 为单一文档树（pugixml 手工展开，非 XInclude——零新依赖）。
+/// XSD 校验与 schema_hash 一律对聚合后整体——物理分文件不影响 hash 稳定性。
+/// 规则：include 只认根直接子级（深层 include 由 strictWalk 白名单拦）；被引
+/// 文件根元素名与引用方一致且 version 相同；环/缺文件/根不匹配/version 不一致
+/// 均计入 issues；href 相对引用文件自身目录解析；重复 include 允许拼接
+/// （重复 key 由既有去重规则拦）。问题计入 issues，返回聚合后的 XML 全文
+/// （无 include 节点；无 include 时原文返回，行号诊断不受重排版影响）。
+/// 单文件 parseXxxXml 不做展开——include 是目录级读取层能力（无文件系统上下文）。
+std::string expandIncludes(const std::string& xml, const std::string& filePath,
+                           std::vector<Issue>& issues);
+
 /// 单文件解析（测试用；从内存 XML）。各函数只填充 Contract 对应部分。
 ParseResult parseAttrsXml(std::string_view xml, const std::string& fileName);
 ParseResult parseMessagesXml(std::string_view xml, const std::string& fileName);

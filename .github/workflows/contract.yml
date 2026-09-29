@@ -30,6 +30,26 @@ permissions:
   contents: read
 
 jobs:
+  xsd_gate:
+    # 闸一（sdk-contract §3/xml-generation §5）：xmllint --schema 全量契约 XML。
+    # 校验器零开发（标准 XML Schema 机制）；目录内任何 *.xml（含 include 分片）
+    # 一律过 apollo.xsd——分片自身是完整根元素，独立可验。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
+      - name: Validate contract XML against XSD
+        run: |
+          rc=0
+          for f in sdks/contract/*.xml; do
+            echo "== xmllint $f"
+            xmllint --noout --schema sdks/contract/apollo.xsd "$f" || rc=1
+          done
+          exit $rc
+
   contract_pack:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest

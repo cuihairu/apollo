@@ -112,6 +112,15 @@
   <xs:element name="attrs">
     <xs:complexType>
       <xs:sequence>
+        <!-- §11.4 include 聚合：apollo_gen 读取层自实现展开（非 XInclude，零新依赖）。
+             仅根直接子级；XSD 把位置锁在根子级开头（解析层不查元素顺序，容忍度
+             不低于本层）；被引文件根元素同名且 version 一致；XSD 校验与
+             schema_hash 对聚合后整体计算。 -->
+        <xs:element name="include" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="href" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
         <xs:element name="alias" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
             <xs:attribute name="name" type="Identifier" use="required"/>
@@ -119,7 +128,7 @@
             <xs:attribute name="desc" type="xs:string"/>
           </xs:complexType>
         </xs:element>
-        <xs:element name="attr" maxOccurs="unbounded">
+        <xs:element name="attr" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
             <xs:attribute name="id" type="xs:unsignedShort" use="required"/>
             <xs:attribute name="name" type="Identifier" use="required"/>
@@ -161,7 +170,16 @@
   <xs:element name="messages">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="msg" maxOccurs="unbounded">
+        <!-- §11.4 include 聚合：apollo_gen 读取层自实现展开（非 XInclude，零新依赖）。
+             仅根直接子级；XSD 把位置锁在根子级开头（解析层不查元素顺序，容忍度
+             不低于本层）；被引文件根元素同名且 version 一致；XSD 校验与
+             schema_hash 对聚合后整体计算。 -->
+        <xs:element name="include" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="href" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="msg" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
             <xs:sequence>
               <xs:element name="field" minOccurs="0" maxOccurs="unbounded">
@@ -201,7 +219,16 @@
   <xs:element name="entities">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="entity" maxOccurs="unbounded">
+        <!-- §11.4 include 聚合：apollo_gen 读取层自实现展开（非 XInclude，零新依赖）。
+             仅根直接子级；XSD 把位置锁在根子级开头（解析层不查元素顺序，容忍度
+             不低于本层）；被引文件根元素同名且 version 一致；XSD 校验与
+             schema_hash 对聚合后整体计算。 -->
+        <xs:element name="include" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="href" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="entity" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
             <xs:attribute name="id" type="EntityName" use="required"/>
             <xs:attribute name="parent" type="EntityName" use="optional"/>
@@ -226,7 +253,16 @@
   <xs:element name="errors">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="error" maxOccurs="unbounded">
+        <!-- §11.4 include 聚合：apollo_gen 读取层自实现展开（非 XInclude，零新依赖）。
+             仅根直接子级；XSD 把位置锁在根子级开头（解析层不查元素顺序，容忍度
+             不低于本层）；被引文件根元素同名且 version 一致；XSD 校验与
+             schema_hash 对聚合后整体计算。 -->
+        <xs:element name="include" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:attribute name="href" type="xs:string" use="required"/>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="error" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
             <xs:attribute name="code" type="xs:int" use="required"/>
             <xs:attribute name="name" type="Identifier" use="required"/>

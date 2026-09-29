@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -788,6 +790,125 @@ Contract validateAndResolve(Contract c, std::vector<Issue>& issues) {
     return c;
 }
 
+// ------------------------------------------------------------ include 聚合（§11.4）
+
+namespace {
+
+/// 就地展开 root 直接子级中的 <include href="…"/>：被引文件根元素的孩子拷贝到
+/// include 位置（深度优先——被引文件自身的 include 先展开）。include 只认根
+/// 直接子级；深层 <include> 不在此展开，由 strictWalk 白名单拦（与 XSD 口径
+/// 同向：XSD 把 include 锁在根子级开头，解析层对位置的容忍度不低于 XSD）。
+void expandInto(pugi::xml_node root, const char* rootName, const std::string& rootVersion,
+                const std::string& file, const std::string& buf, std::vector<Issue>& issues,
+                std::vector<std::string>& stack, bool& modified) {
+    for (pugi::xml_node child = root.first_child(); child;) {
+        pugi::xml_node next = child.next_sibling();  // 先取后删：drop 会销毁 child
+        if (child.type() != pugi::node_element || std::strcmp(child.name(), "include") != 0) {
+            child = next;
+            continue;
+        }
+
+        int line = lineOf(buf, child.offset_debug());
+        std::string here = "/" + std::string(rootName) + "/include";
+        for (pugi::xml_attribute a : child.attributes()) {
+            if (std::strcmp(a.name(), "href") != 0) {
+                diag(issues, file, line, here,
+                     std::string("include 未知属性 '") + a.name() + "'");
+            }
+        }
+        for (pugi::xml_node ic = child.first_child(); ic; ic = ic.next_sibling()) {
+            if (ic.type() == pugi::node_element) {
+                diag(issues, file, line, here, "include 不得携带子元素");
+                break;
+            }
+        }
+        std::string href = child.attribute("href").as_string();
+        auto drop = [&]() {
+            root.remove_child(child);
+            modified = true;
+        };
+        if (href.empty()) {
+            diag(issues, file, line, here, "include 缺少必填属性 'href'");
+            drop();
+            child = next;
+            continue;
+        }
+        std::filesystem::path target =
+            (std::filesystem::path(file).parent_path() / href).lexically_normal();
+        std::string targetStr = target.string();
+        if (std::find(stack.begin(), stack.end(), targetStr) != stack.end()) {
+            diag(issues, file, line, here, "include 环：" + targetStr);
+            drop();
+            child = next;
+            continue;
+        }
+        std::ifstream in{targetStr, std::ios::binary};
+        std::string content;
+        if (in) {
+            std::ostringstream ss;
+            ss << in.rdbuf();
+            content = ss.str();
+        }
+        pugi::xml_document frag;
+        bool parsed = false;
+        if (in) parsed = static_cast<bool>(frag.load_string(content.c_str()));
+        if (!parsed) {
+            diag(issues, file, line, here, "无法读取/解析 include 文件：" + targetStr);
+            drop();
+            child = next;
+            continue;
+        }
+        pugi::xml_node froot = frag.document_element();
+        if (!froot || std::strcmp(froot.name(), rootName) != 0) {
+            diag(issues, file, line, here,
+                 "include 根元素不匹配：期望 <" + std::string(rootName) + ">，实际 <" +
+                     (froot ? froot.name() : "(空)") + ">（" + targetStr + "）");
+            drop();
+            child = next;
+            continue;
+        }
+        std::string fver = froot.attribute("version").as_string();
+        if (fver != rootVersion) {
+            diag(issues, file, line, here,
+                 "include version 不一致：" + targetStr + " version=\"" + fver +
+                     "\"，引用方 version=\"" + rootVersion + "\"");
+            drop();
+            child = next;
+            continue;
+        }
+        stack.push_back(targetStr);
+        expandInto(froot, rootName, rootVersion, targetStr, content, issues, stack, modified);
+        stack.pop_back();
+        // 只搬元素孩子（注释/排版空白不进聚合树——语义载体只有元素）
+        for (pugi::xml_node fc = froot.first_child(); fc; fc = fc.next_sibling()) {
+            if (fc.type() != pugi::node_element) continue;
+            root.insert_copy_before(fc, child);
+        }
+        drop();
+        child = next;
+    }
+}
+
+}  // namespace
+
+std::string expandIncludes(const std::string& xml, const std::string& filePath,
+                           std::vector<Issue>& issues) {
+    pugi::xml_document doc;
+    pugi::xml_parse_result pr = doc.load_string(xml.c_str());
+    if (!pr) return xml;  // 结构错误交给后续 parseXxxXml 统一诊断（此处不重复报）
+    pugi::xml_node root = doc.document_element();
+    if (!root) return xml;
+    bool modified = false;
+    std::vector<std::string> stack{
+        std::filesystem::path(filePath).lexically_normal().string()};
+    expandInto(root, root.name(), root.attribute("version").as_string(), filePath, xml,
+              issues, stack, modified);
+    if (!modified) return xml;  // 无 include：原文返回——行号诊断不受重排版影响
+    std::ostringstream os;
+    doc.save(os, "  ", pugi::format_default, pugi::encoding_utf8);
+    return os.str();
+}
+
 ParseResult parseContractDirectory(const std::string& dir) {
     ParseResult r;
     r.contract.sourceDir = dir;
@@ -810,7 +931,8 @@ ParseResult parseContractDirectory(const std::string& dir) {
     }
 
     if (auto text = readFile("attrs.xml")) {
-        ParseResult p = parseAttrsXml(*text, dir + "/attrs.xml");
+        std::string expanded = expandIncludes(*text, dir + "/attrs.xml", r.issues);
+        ParseResult p = parseAttrsXml(expanded, dir + "/attrs.xml");
         r.issues.insert(r.issues.end(), p.issues.begin(), p.issues.end());
         c.aliases = std::move(p.contract.aliases);
         c.attrs = std::move(p.contract.attrs);
@@ -821,7 +943,8 @@ ParseResult parseContractDirectory(const std::string& dir) {
         }
     }
     if (auto text = readFile("messages.xml")) {
-        ParseResult p = parseMessagesXml(*text, dir + "/messages.xml");
+        std::string expanded = expandIncludes(*text, dir + "/messages.xml", r.issues);
+        ParseResult p = parseMessagesXml(expanded, dir + "/messages.xml");
         r.issues.insert(r.issues.end(), p.issues.begin(), p.issues.end());
         c.msgs = std::move(p.contract.msgs);
         if (p.contract.version != 0 && p.contract.version != c.version) {
@@ -830,7 +953,8 @@ ParseResult parseContractDirectory(const std::string& dir) {
         }
     }
     if (auto text = readFile("entities.xml")) {
-        ParseResult p = parseEntitiesXml(*text, dir + "/entities.xml");
+        std::string expanded = expandIncludes(*text, dir + "/entities.xml", r.issues);
+        ParseResult p = parseEntitiesXml(expanded, dir + "/entities.xml");
         r.issues.insert(r.issues.end(), p.issues.begin(), p.issues.end());
         c.entities = std::move(p.contract.entities);
         if (p.contract.version != 0 && p.contract.version != c.version) {
@@ -839,7 +963,8 @@ ParseResult parseContractDirectory(const std::string& dir) {
         }
     }
     if (auto text = readFile("errors.xml")) {
-        ParseResult p = parseErrorsXml(*text, dir + "/errors.xml");
+        std::string expanded = expandIncludes(*text, dir + "/errors.xml", r.issues);
+        ParseResult p = parseErrorsXml(expanded, dir + "/errors.xml");
         r.issues.insert(r.issues.end(), p.issues.begin(), p.issues.end());
         c.errors = std::move(p.contract.errors);
         if (p.contract.version != 0 && p.contract.version != c.version) {
