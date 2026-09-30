@@ -24,7 +24,7 @@ bigworld.md、bigworld-lifecycle.md、kbe-source-analysis.md、kbe-reference-pri
 | replication-pipeline-design.md | attribute-sync（三代属性容器/差分/水位） |
 | script-layer-design.md、lua-backend-design.md | scripting-lua（Lua 5.5 白名单、原生 C API） |
 | python-backend-design.md | 已否决（决策 #12——攻击面） |
-| gateway-session-design.md、gateway-ingress-facade-design.md、login-app-design.md | 未取代——**设计缺口 #13/#14 域**（登录链路/入站对接，design-gap-inventory） |
+| gateway-session-design.md、gateway-ingress-facade-design.md、login-app-design.md | 未取代——**设计缺口 #13/#14 域**（登录链路/入站对接，design-gap-inventory；会话目录面已由 #12 session-and-online-directory 承接，2026-09-30） |
 | player-anchor-design.md、base-app-evolution.md、world-host-design.md | cell/base 拆分族——已被决策 #9 否决（Zone 制，不拆两族进程） |
 | distributed-space-design.md、space-partition-topology-design.md、authority-transfer-design.md、app-manager-design.md | 无缝世界/实体迁移族——已被 #9 否决；接管语义现行 = net-abstraction §7 G-2/manager 域 |
 | shard-zone-instance-match-topology-design.md | 术语已被 concept-glossary 取代（副本 instance/Zone/scene 三粒度） |

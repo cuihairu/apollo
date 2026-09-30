@@ -103,11 +103,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据(存量实读,2026-09-30;行数与覆盖同日勘误回填,architecture-review §19.2 P-2)**:modules/net/http **已存在 5048 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648 + **websocket.cpp 1193 + 三公共头 1314**——登记时漏计后两项),namespace `apollo::net::http`,RestTemplate 是 Spring RestTemplate 风格(HttpMethod 枚举/HttpResponse/HttpEntity/RequestOptions{timeoutMs=30000, connectTimeoutMs=10000, verifyPeer, proxy});rest_client.cpp:13/#ifdef `APOLLO_HAS_CURL`、:16 `#define APOLLO_CURL_STUB 1`——**vcpkg.json 无 curl,默认构建全桩**(与 C-45 宏门 MySQL 同族);modules/net/CMakeLists.txt 另有 Drogon 备选分支(:81-91 http、:124-133 websocket)与 built-in 分支并存;**零生产消费方**(仅 examples/http_demo、tests/test_rest_template、docs/api/net.md);net-abstraction.md:29 现状盘点行将 HTTP/WebSocket 判为「与本设计正交,另行处理」——本行即「另行处理」的登记。**测试覆盖为零**:tests/test_rest_template.cpp 与 modules/net/tests/net_comprehensive_tests.cpp 均引用幻影 API、无法编译(分别被 APOLLO_BUILD_GTESTS=OFF 与 BUILD_TESTING 恒假挡住)——architecture-review §18 C-59。
 - **落点**:net-abstraction §5.10 三裁决——① **curl 进 vcpkg**,rest_client 转真实现(TLS 后端 OpenSSL,单一 crypto 源不破;APOLLO_CURL_STUB 删随代码批);② **Drogon 备选分支删除**(CMakeLists :81-91/:124-133——§15.2 禁并存对象;admin exporter 不需要 Drogon);③ 同步 API 禁场景线程直调(curl_multi 执行层**按新建计**——既有 event_loop.cpp 不构成执行层,见 architecture-review §19.1 勘误 P-1;scripting-lua §8 异步交接,回包不进当 tick 判定);边界 = 目标白名单(SSRF,与 §5.7 同纪律);代码面审计仍归下轮候选(§4.2)。
 
-### #12 会话与在线目录域——玩家所在线/所在 Zone/在线状态/顶号 — **OPEN**(2026-09-30 增补,用户对标 KBE/BW 点名)
+### #12 会话与在线目录域——玩家所在线/所在 Zone/在线状态/顶号 — **CLOSED**(docs/design/session-and-online-directory.md,2026-09-30 落盘)
 
 - **缺什么**:玩家在线状态的权威登记与查询面——谁在线、在哪条**线**(同 map 并行 scene 实例——「线」为中文 MMO 圈通称,KBE 引擎源码/配置无 line 一级概念,本轮实测 kbe/src + kbengine_defaults.xml 零命中,同图多 Space 实例即多线、由脚本层 Spaces 管理)、在哪个 Zone/哪个副本;**重复登录与顶号裁决**;掉线保活窗口;跨进程玩家寻址的**数据源**(architecture/remote-entity-call-design.md RouteResolver 四件套的「宿主定位」职责无数据来源);好友在线查询/GM 在线查询/全服广播寻址。
 - **证据(负空间+先例,2026-09-30 实测)**:design/ 九份 grep「顶号|重复登录|在线状态|online」零命中;KBE 侧引擎无在线目录(在线 = baseapp 实体在内存,分配归 baseappmgr;重复登录裁决在 assets 脚本层——assets 仓库本机无,sdk_templates spaces 目录仅 .gitignore 占位已核);BW 侧在线目录分散在 mgr(baseappmgr 持 base 分配表 + (addr,load) 上报 loginapp 分流,baseappmgr.cpp:588-599/:1117);apollo 已有机制件但无目录:manager 域最轻分配(net-abstraction §7)、sceneId 隔离(attribute-sync §4.3)、ServerID 分段(36号 #15)。
-- **落点**:建议随 G-1/G-2 同批补「会话与在线目录」前置设计——owner = manager 域;形态 = 编队事件 + Zone 上报会话增删的聚合目录(journal/事件广播,「全局仲裁态集中不共享」通道族 net-abstraction §7);查询面走 control 通道(观测/GM)与 RouteResolver(寻址)两个消费方。
+- **落点(2026-09-30 落盘)**:docs/design/session-and-online-directory.md——**manager 域进程内存权威**(不进 Redis 不落 DB 无 journal——「全局仲裁态集中不共享」落地件;顶号/准入单点串行);条目 = SessionBinding+WorldAssignment 的进程间扩展(account/entity/session/gateway/zone/world_assignment/state/anchor_epoch/deadline_tick——存量 modules/game/session 302 行定位为进程内锚点/上报源,唯一消费方 base-app);写路径 = 三事件源(Zone 增删/gateway 生死/manager 裁决)+ 周期对账快照重置;**顶号 = 新顶旧框架语义**(anchor_epoch 锚竞争裁决,resume=同会话恢复两事分开——KBE 脚本层自决的刻意加强);**掉线窗口与 resume token TTL 同源一值**(Suspended 态,计时依赖定时器轮组件 §23-④/C-80 同批);查询三消费方(RouteResolver 镜像+分段先验+epoch 兜底/GM 走 manager 集中/广播走镜像);崩溃恢复 = 全量重报重建(目录是索引非权威数据持有者);消息 = internal 域事件族(client 域零新增);P2 退化 = 进程内表,验收三指标(顶号并发零双权威/manager kill -9 收敛 <5s/镜像失配率);配套 glossary 四词条(线/在线目录/顶号/掉线保活窗口)。
 
 ### #13 登录链路整体设计 — **OPEN**(2026-09-30 增补)
 
@@ -175,7 +175,8 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B7 | scripting-lua GM 命令面增补 | #6 | 随 P3;**已完成**(§7.5 指令表/权限分级/审计存储) |
 | B8 | 36 号/deep-dive 历史表述修正 + Lua 版本策略再修订 + 裁决落档 | —(登记簿待办收尾,非缺口) | 登记簿 #15/#17 行、sol2 决策尾注与用户裁决项的收尾;**已完成**(2026-09-30——36 号 #12/#15/#17/#19/:166/:167/:243/:267 + deep-dive §12 标题;Lua 5.5.1 → 5.5 主线随 vcpkg(当前 5.5.x);origin 五笔/backup-apollo-src 裁决入 architecture-review 附录 A) |
 | B9 | 新建 battle-verification-service.md | #17 | 用户点名「战斗验证服务怎么设计」(glossary 词条展开);**已完成**(2026-09-30 立项即落盘,glossary 词条同步改「设计已立」) |
-| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED;#17 同日 B9 CLOSED** |
+| B10 | 新建 session-and-online-directory.md | #12 | 巡检令「todo 下一个高优先级设计批次」——#12 为 #13/#14/#15 依赖根;**已完成**(2026-09-30 落盘,glossary 四词条/net-abstraction §7§8/index/architecture-README 登记簿同步) |
+| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED;#17 同日 B9、#12 同日 B10 CLOSED——OPEN 仅余 #13-#16** |
 
 每批独立提交(analysis/design 拆分照旧),完成即 fetch --rebase + push(推送纪律)。
 

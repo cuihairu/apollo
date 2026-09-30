@@ -396,6 +396,7 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
   - **再平衡分层**：P3 只做「新负载往轻处走」+ 过载告警 + 手动搬迁工具；**自动 cell 迁移（BW meta balancing/shouldOffload 族）推迟 M2+**——迁移协议依赖实体搬迁与视图重建全套，不属于最小骨架。
   - **异常恢复链（按死者角色分）**：检测 = machined 死亡事件（G-1）→ mgr 进入**恢复相位（排他——期间拒绝新场景/新进程加入，BW :1300 先例）**；base 死 = reviver 式接管（G-2 backup-hash 链 + journal 位点重放切权）；cell 死 = mgr 在幸存进程重建场景（权威源 = write-behind journal attribute-sync §8.2 + base 侧重放）；进程本身拉起归 machined（重启策略 = 编队配置，mgr 只消费事件不做进程管理）。
   - **两层恢复独立成立**：进程级恢复（本节）与连接级恢复（§5.7 onLinkDown/自动重连）互不依赖——客户端重连走 §3 resume，进程重建走本节，谁先完成谁先服务。
+  - **会话与在线目录**（谁在线/在哪条线/顶号裁决/掉线保活窗口/RouteResolver 宿主定位供数）= manager 域的另一职责件——进程内存权威态（「全局仲裁态集中不共享」+「会话」两行通道的落地）、事件上报 + 周期对账、崩溃恢复 = 全量重报重建（同本节恢复相位）；全量设计见 `docs/design/session-and-online-directory.md`（design-gap-inventory #12，2026-09-30 落盘）。
   - 「是否参考 BigWorld」：**是，且只能参考它**——三家仅 BW 有完整此层（KBE 无进程级容灾，architecture-review C-51/§16.4；skynet 单节点无编队）；明确不搬：动态 cell 迁移、secondary db、自动扩缩容（M2+ 按需评估）。
 
 **进程间信息共享与同步模型（2026-09-29 补）**：
@@ -432,6 +433,7 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 | architecture-review.md | 网络适配器注册走 core::di 启动期装配（编译期类型键），不进旧字符串容器；adapters 的存在形态=链接期选择，非运行期字符串切换 |
 | xml-generation.md | 帧头 ver → filter 栈声明（16.7.1）由契约生成器装配（用途④）；messages.xml 的通道 enumeration 由其四层漏斗第①层校验 |
 | logging.md | collector push = §5.7 InterServerLink 的上层消费者（进程间稳定连接，独立于客户端会话四通道）；Link 有界排队与「collector 挂 → 只写本地」降级语义同源（BW LoggerEndpoint 有界重连 + 有界缓冲先例） |
+| session-and-online-directory.md | §7 共享模型四类通道表「会话」行与「全局仲裁态」行的落地件——在线目录 = manager 域集中权威 + InterServerLink 事件投影（RouteResolver 镜像供数）；§3 resume TTL = 掉线保活窗口同源值；§5.7 authority_epoch = 顶号竞争裁决兜底（anchor_epoch）；§5.9 login_token = 目录登记的入场前置 |
 
 ---
 
