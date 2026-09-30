@@ -484,6 +484,8 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
 
 #### 业务消息解码位置：C++ 桥 vs Lua 侧解（两案，装配选择非契约分叉；2026-09-29 补）
 
+> **2026-09-30 更新：sol2 弃用（上游维护停滞）**——本文「sol2 桥」一律读作「**C-API 搬运桥**」：桥本就是自写固定通用转换代码（下段澄清其非 sol2 能力），去 sol2 只是把「搬运进 Lua 表」的函数族从 sol2 模板换成原生 Lua C API（`lua_newtable`/`lua_pushinteger`/`lua_settable` 族），数量级与维护面反降。历史段落中的「sol2 桥」字样保留原文（v3 定案记录），执行以本注为准；scripting-lua §2 同批修订（**Lua 5.5.1 + 原生 C API 绑定定案**）。
+
 v3 把业务消息定为 bin 反射后，剩一个装配级选择：**反射解码发生在 C++ 还是 Lua**。先澄清一个命名误会：「sol2 桥」不是 sol2 的动态绑定能力——sol2 的 usertype 绑定是编译期模板（每字段写死），对运行时才知道结构的 DynamicMessage 无能为力；「桥」指**自写的一段固定通用转换代码**：遍历 descriptor 字段（`GetDescriptor()->field(i)`）、Reflection 取值（`GetInt64/GetString/…`）、sol2 搬运进 Lua 表，嵌套 message 递归、packed repeated 展开为 Lua 数组，反向（Lua 表 → DynamicMessage，供回复/广播）同构——几十行、全部消息通用、不随契约变。「动态绑定」的效果来自 descriptor 数据驱动的循环，不是任何库的现成机制。
 
 | | 案一：C++ 反射 + sol2 桥（**默认**） | 案二：字节透传 + Lua 侧 lua-protobuf |

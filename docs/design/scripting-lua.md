@@ -15,6 +15,7 @@
 7. **契约语义的运行时载体（sdk-contract §10.6 v3，2026-09-29 补）**：业务消息 handler 绑定与属性写白名单的数据来自 `contract.lua`（生成器同批吐的 Lua 契约表：attr 表/消息路由/白名单）——装载与热更走 §3.2 同一换表协议；服务端契约变更零 C++ 重编的业务面全在 Lua 侧承接（见 §3.4）。
 8. **在线调试与性能归因（§7，2026-09-29 补）**：attach 执行 = **admin 单入口 + control 通道转发 + tick 边界沙盒 eval**（KBE telnet / skynet debug_console 先例；权限分 Passive Query / Controlled Action）；Lua 状态面四清单（内存 GC / 协程 / 模块版本 / env 采样）挂 observability 树 `/script` 分支；性能归因 = 指令 hook 双职能（预算执法 + per-module 耗时统计）+ C++ 侧外采（perf/Tracy 类，不自建）；死循环检测 §6 已有（指令预算天然覆盖）；**不做断点式调试器**（单写者线程冻结 + tick 确定性破坏）。
 9. **异步任务模型与热更补强（§3.5/§8，2026-09-29 补）**：单写者线程下的异步封装 = **C++ 侧回调 + request_id 交接、Lua 侧协程**（§8.1 对比表定 future/promise 不引入——std::future 的 get 阻塞违 tick 纪律、JS Promise 的微任务语义由「协程 + tick 边界 resume」以更简形态获得；skynet.call 协程范式先例 skynet.lua:227）；三纪律 = resume 只在边界点 / resume 后 re-validate / 超时上界 + 协作式取消。热更补四件（§3.2）：current 版本指针持久化（防坏版本崩溃循环）、协程升级语义（旧协程跑完旧表）、灰度粒度 per 场景线程、模块私有状态零迁移纪律；§3.5 字节码缓存（构建期预编译 + manifest 三元组校验、Lua 版本头防错载）；§2 补 Lua 5.4 版本锁定（sol2 全支持；LuaJIT 仅实测瓶颈再评估）。
+10. **绑定层与版本定案（2026-09-30 修订）**：弃 sol2（上游维护停滞——重模板编译成本 + Lua 版本升级强耦合的双风险），**原生 Lua C API 薄绑定**（`luaL_Reg` 函数表 + userdata 包装，数百行——绑定面小是前提）；**Lua 5.5.1 直接定版**（不落 5.4 中间态；number = int64/double 语义不变，battle-determinism 确定性纪律不受影响）；sdk-contract「sol2 桥」同步更名「C-API 搬运桥」（其 §10.6 附节更新注——桥本就是自写代码，去 sol2 只换搬运函数族）。
 
 ---
 
@@ -33,8 +34,8 @@
 
 - **一逻辑线程一 `lua_State`**（复用 `modules/base/thread_pool` 无关，直接依附于 scene/空间线程）：状态隔离、无互锁、热点无 OS 无关开销；实体数据留在 C++，Lua 侧只是"逻辑引用"（userdata/lightuserdata wrapper），不复制实体状态。
 - **绑定层选型**：
-  - 首选 sol2（header-only、支持安全调用约定、错误传播清晰），若引入第三方受限则用 150 行手写 `lua_CFunction` 薄绑定（本设计的接口面很小，两种都够）。
-  - **Lua 版本锁定纪律（2026-09-29 补）**：sol2 支持 Lua 5.4（当前 5.x 稳定线）全特性——vcpkg 锁 5.4.x 单一版本，升级 = 显式批次：bytecode 格式头（§3.5）、sol2 兼容矩阵、integer/浮点语义三件事随 Lua 小版本一起动，禁止随依赖解析漂移。LuaJIT 备选受限（语言子集 5.1 系 + 部分 5.3 扩展、bytecode 与 PUC Lua 不通用）——默认 PUC Lua 5.4；LuaJIT 只在 §7.3 归因实测瓶颈落在 VM 时再评估（先测后换，同「不自建 profiler」纪律）。
+  - **原生 Lua C API 薄绑定（2026-09-30 定案：弃 sol2）**——上游维护停滞（2026-09-30 用户核查判定），重模板头文件编译成本高、且与 Lua 版本升级强耦合（第三方绑定库在新 Lua 版本上的适配永远是单点滞后）；apollo 的绑定面本来就小（§8 三件套 + `apollo.*` 注入表 + attr 访问器），手写 `luaL_Reg` 函数表 + userdata 包装 = 数百行可控，零第三方维护风险。sol2 的收益场景（大规模 class 模板绑定）在 apollo 不存在——「两种都够」的旧权衡在天平变险后定死为手写。
+  - **Lua 版本锁定纪律（2026-09-29 补，2026-09-30 修订：5.5.1）**：**锁 Lua 5.5.1**——首次嵌入即直接落 5.5 线，不落 5.4 中间态（无迁移包袱，且弃 sol2 后无绑定库兼容矩阵拖累版本选择）；vcpkg lua port 若滞后则 overlay port 自持（lua 源码构建成熟）。升级 = 显式批次：bytecode 格式头（§3.5）、C API 兼容面（自有绑定层——禁用 API 的编译器可见）、integer/浮点语义（number = int64/double，5.4→5.5 未变——battle-determinism §2 确定性纪律不受影响）随 Lua 小版本一起动，禁止随依赖解析漂移。LuaJIT 备选受限（语言子集 5.1 系 + 部分 5.3 扩展、bytecode 与 PUC Lua 不通用）——默认 PUC Lua；LuaJIT 只在 §7.3 归因实测瓶颈落在 VM 时再评估（先测后换，同「不自建 profiler」纪律）。
   - 不为"性能"做过度优化：跨边界调用频率上限是每帧每实体若干次意图调用，远低于 C++ 内部调用；真正高频路径（属性设置、移动）本来就不许过脚本。
 - 每个 `lua_State` 预加载：标准库白名单（`base/string/table/math/bit32`）+ `apollo.*` 模块 + 错误处理框架（禁 `os/io/debug`；`load` 禁**未校验 bytecode**——运行期收到的一切字节串按源码处理；预编译产物例外走 §3.5 专用装载路径：构建管线产出 + hash/版本头校验，不经 `load`）。
 
@@ -80,7 +81,7 @@ modules/lua/
 
 ### 3.4 契约表装载（contract.lua，sdk-contract §10.6 v3，2026-09-29 补）
 
-- `contract.lua` 是 apollo_gen 从契约源同批吐的 Lua 表（attr 表/消息路由/写白名单——semantic.json 同内容的服务端双形态）：`require` 即用，无编译环节（可选 luac 预编译随 Lua 5.4 发行版自带）。装载与热更走 §3.2 同一换表协议：新表编译 → 冒烟（路由完整性校验：bin 里有而 Lua 无 handler 即拒换——sdk-contract §10.6 装载期一致性闸在脚本侧的执行点）→ tick 边界原子换。
+- `contract.lua` 是 apollo_gen 从契约源同批吐的 Lua 表（attr 表/消息路由/写白名单——semantic.json 同内容的服务端双形态）：`require` 即用，无编译环节（可选 luac 预编译随 Lua 发行版自带）。装载与热更走 §3.2 同一换表协议：新表编译 → 冒烟（路由完整性校验：bin 里有而 Lua 无 handler 即拒换——sdk-contract §10.6 装载期一致性闸在脚本侧的执行点）→ tick 边界原子换。
 - **消息 handler 绑定**：上行业务消息经 C++ 帧路由按 `contract_route`（id→handler 名）分发到 Lua——handler 在模块表内注册，模块头注释声明 `handles: msg_a, msg_b`，加载器校验其与契约路由表一致，缺失启动红。
 - **写白名单数据化**：§4/§5 的 `ScriptWriteWhitelist` 位图从 contract.lua 构建（白名单仍由契约 `predict` 位生成——sdk-contract §5 机制不变，载体从生成常量变为契约表数据）；热换契约表时白名单随 tick 边界同换。
 - 版本偏序沿用 §3.3 同一规则：契约表版本 ≥ 消费它的脚本补丁版本才启用——契约加字段与使用该字段的 handler 补丁必须同批或先表后补。
@@ -246,4 +247,4 @@ L0 执行层（C++，IO/DB 线程池） hiredis 异步接口 / DB Command 队列
 
 ---
 
-*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。同日增补 §7「在线调试与性能归因」（attach 执行/Lua 状态内省/profile——语义层引用 architecture/observability-watcher-and-runtime-introspection-design.md；先例 KBE telnet 在线 eval（telnet_handler.cpp:801-812、cellapp.cpp:292-293）+ KBE watcher 路径树（serverapp.cpp:165-181，guiconsole 消费端）+ skynet debug_console；原 §7 交集表顺移 §8，net-abstraction §2 的外部引用同步）。同日再补（第二批）：§2 Lua 版本锁定纪律（sol2 + Lua 5.4，LuaJIT 门槛）与 bytecode 红线精确化（禁未校验来源、预编译产物走专用路径）；§3.2 热更四补（current 版本指针持久化/协程升级语义/灰度粒度 per 场景线程/模块私有状态零迁移）；新增 §3.5 字节码缓存（构建期预编译 + manifest 三元组 + 三条失效规则）；新增 §8「异步任务模型」（三模型对比定 C++ 回调+request_id、Lua 协程；先例 skynet lualib/skynet.lua:18-26/:227/:415；三纪律 re-validate/超时/协作式取消；ssengine-reference §4.1 与 InterServerLink §5.7 接线），原 §8 交集表顺移 §9（§7.2/§9 内部引用同步，§9 net 行的悬空「§异步模型」引用闭环）；摘要 9 联动。*
+*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。同日增补 §7「在线调试与性能归因」（attach 执行/Lua 状态内省/profile——语义层引用 architecture/observability-watcher-and-runtime-introspection-design.md；先例 KBE telnet 在线 eval（telnet_handler.cpp:801-812、cellapp.cpp:292-293）+ KBE watcher 路径树（serverapp.cpp:165-181，guiconsole 消费端）+ skynet debug_console；原 §7 交集表顺移 §8，net-abstraction §2 的外部引用同步）。同日再补（第二批）：§2 Lua 版本锁定纪律（sol2 + Lua 5.4，LuaJIT 门槛）与 bytecode 红线精确化（禁未校验来源、预编译产物走专用路径）；§3.2 热更四补（current 版本指针持久化/协程升级语义/灰度粒度 per 场景线程/模块私有状态零迁移）；新增 §3.5 字节码缓存（构建期预编译 + manifest 三元组 + 三条失效规则）；新增 §8「异步任务模型」（三模型对比定 C++ 回调+request_id、Lua 协程；先例 skynet lualib/skynet.lua:18-26/:227/:415；三纪律 re-validate/超时/协作式取消；ssengine-reference §4.1 与 InterServerLink §5.7 接线），原 §8 交集表顺移 §9（§7.2/§9 内部引用同步，§9 net 行的悬空「§异步模型」引用闭环）；摘要 9 联动。2026-09-30 修订（第三批）：§2 绑定层弃 sol2 定原生 Lua C API 薄绑定 + 版本锁 5.5.1（上游维护停滞判定，用户指令；绑定面小前提；§3.4 luac 表述去版本号）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 附节更新注、docs/todo 批次 6 同步；36 号 #12/#19 与 deep-dive §12 的 sol2/Lua 5.4 历史表述修正登记 design-gap-inventory §3（随下一 36 号批次）。*

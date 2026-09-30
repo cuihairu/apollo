@@ -33,7 +33,7 @@
 | 编译档 | `-ffp-contract=off`（禁 FMA 融合）、`-fno-fast-math`（禁重结合/近似）、SSE2 基线（x86-64 默认，禁 x87 80bit 路径）、**禁 `-march=native`**（构建产物必须跨机器统一——native 产物在不同 CPU 上走不同向量路径） | FMA/快数浮点是同源码跨编译设置漂移的头号源；native 构建让「同 binary」前提破裂。工具链档进 CMake preset（代码批登记） |
 | 不做定点/fixed64 | 判定不跨端，float 即确定 | 定点是 lockstep 手游为跨端一致/省带宽付出的开发成本（三角函数查表/精度管理），此处无对应收益——36 号 #18 缝口径的具体化 |
 | 混算 | 判定路径禁 double↔float 隐式转换（编译警告级 lint） | 隐式截断点漂移是排查地狱 |
-| Lua 侧 | Lua 5.4 number = double/int64（scripting-lua §2 版本锁定）；判定脚本**禁 math 三角/超越函数**（跨 libc 版本实现差异）——角度/距离工具由 C++ 侧定点角度 + 查表函数注入 `apollo.battle`；`string.format` 不进判定 | libc 的 sin/exp 不承诺位一致；C++ 查表是同 binary 数据 |
+| Lua 侧 | Lua 5.5 number = double/int64（scripting-lua §2 版本锁定，2026-09-30 改 5.5.1——number 语义不变）；判定脚本**禁 math 三角/超越函数**（跨 libc 版本实现差异）——角度/距离工具由 C++ 侧定点角度 + 查表函数注入 `apollo.battle`；`string.format` 不进判定 | libc 的 sin/exp 不承诺位一致；C++ 查表是同 binary 数据 |
 
 ## 3. 迭代序：稳定序源
 
