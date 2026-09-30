@@ -82,7 +82,7 @@ Apollo 是 C++ 框架，不适合做：
 
 也就是说，Apollo 更合理的路线不是：
 
-- “做一个 Spring Container”
+- “做一个重量级运行时容器”
 
 而是：
 

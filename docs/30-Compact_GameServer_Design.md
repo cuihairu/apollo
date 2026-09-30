@@ -1,6 +1,7 @@
 # Compact GameServer 设计方案（塔防/固定地图适配）
 
 > 目的：在通用 MMO 架构基础上，为塔防、绿色循环圈等固定地图、轻量玩法提供精简版 GameServer 形态，复用现有基础设施但减少服务拆分成本。
+> 术语定名（2026-09-30，docs/design/concept-glossary）：本文「Battle」实为**副本**（instance/dungeon，对应 KBE Space）——一个塔防房间 = 一个副本实例；跨引擎概念以术语表为准。
 
 ## 1. 场景与需求
 - 地图数有限（1~数十），每张地图玩家数较少（<200）。
@@ -11,7 +12,7 @@
 ## 2. 架构对比
 
 ```
-MMO 模式: Gate -> World -> Scene Orchestrator -> Zone + AOI + Battle
+MMO 模式: Gate -> World -> Scene Orchestrator -> Zone + AOI + 副本实例（历史名 Battle）
 Compact 模式: Gate -> Compact GameServer (Scene + AOI + Battle in one)
 ```
 
@@ -24,7 +25,7 @@ Compact GameServer 仍通过 Transport/Registry 与其他服务交互（DataProx
 | Scene Orchestrator | 独立服务 | 合并进 Compact GS 的 SceneManager，维护固定地图实例表 |
 | ZoneServer | 多实例/多进程 | 以线程或协程形式运行，按地图分线程；可配置一个进程内多个逻辑实例 |
 | AOI Service | 独立集群 | 使用内嵌 AOI 模块（与 Zone 同进程共享 AOIManager），仍可分 shard |
-| Battle Service | 可选独立 | 作为内部模块；大型战斗时可仍调用外部 Battle Service |
+| 副本实例（历史名 Battle Service） | 可选独立 | 塔防房间作为内部模块即可；大型玩法可仍调用外部副本实例进程 |
 | Transport | AOI/Zone 互通 | Compact 模式可禁用 AOI↔Zone Transport，保留与 Gate/DataProxy 的管道 |
 | WorldServer | 全局调度 | 若玩法简单，可由单个 Compact GS 管理/或保留轻量 World 处理账号/匹配 |
 
@@ -81,7 +82,7 @@ CompactGameServer
 - 支持平滑重启：Scene 状态可序列化（保存当前波次、敌人状态），重启后恢复。
 
 ## 10. Roadmap
-1. 实现 Compact GameServer 核心框架（SceneManager + AOI + Battle 内嵌）。
+1. 实现 Compact GameServer 核心框架（SceneManager + AOI + 副本内嵌）。
 2. 集成 NetCore/Transport/DataProxy/插件/配置等现有模块。
 3. 打通塔防玩法（波次、建塔、技能）示例，验证端到端流程。
 4. 监控和运维方案与主框架共享，补充塔防特有指标。

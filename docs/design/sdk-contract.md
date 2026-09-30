@@ -448,7 +448,7 @@ entities.xml 单继承链 `Monster ← Avatar ← Player` 在生成期展开（�
 - **① C++ `DescriptorPool` 描述符不可卸载**——热重载的正确形态是**换代**：新版本 bin 建新 pool，旧 pool 等存量消息生命周期结束后整体废弃；不做原地增删 descriptor（未定义行为）。
 - **② 反射比原生慢 2-5×**——分档不变：热路径编译期生成（A），冷路径/客户端/工具走 bin（C）。
 
-**既有决策链站的是「构建期定型」，不是「A 独占」**（非本节新立）：决策 #4 生成器独立二进制、不进运行期链接图、失败阻断发版；architecture-review §0 删 Spring 式运行时容器——运行时解释契约正是「运行时容器」在数据面的镜像；契约第一批已落 static_assert 编译期闸（modules/contract/tests/gen_compile_test.cpp 第③层）；决策 #11 的对照注记（UE 的 DOREPLIFETIME 是 C++ 宏、改协议必重编——apollo 把掩码声明从代码移进契约数据，改掩码 = 改 XML + 重新生成，不改手写代码；「运行时可配」指声明位置数据化，非运行期解释）。A 与 C 同属「构建期定型」家族——.bin 由 apollo_gen 构建期吐出、protoc 校验、运行期只读（加载后不解释源文件、不改结构），与 architecture-review §0「启动期定型、运行期只读」同一纪律，不落入「运行时容器」的批判面；A/B/C 三路线的分轨结论见本节末定案。
+**既有决策链站的是「构建期定型」，不是「A 独占」**（非本节新立）：决策 #4 生成器独立二进制、不进运行期链接图、失败阻断发版；architecture-review §0 否决运行时容器形态——运行时解释契约正是「运行时容器」在数据面的镜像；契约第一批已落 static_assert 编译期闸（modules/contract/tests/gen_compile_test.cpp 第③层）；决策 #11 的对照注记（UE 的 DOREPLIFETIME 是 C++ 宏、改协议必重编——apollo 把掩码声明从代码移进契约数据，改掩码 = 改 XML + 重新生成，不改手写代码；「运行时可配」指声明位置数据化，非运行期解释）。A 与 C 同属「构建期定型」家族——.bin 由 apollo_gen 构建期吐出、protoc 校验、运行期只读（加载后不解释源文件、不改结构），与 architecture-review §0「启动期定型、运行期只读」同一纪律，不落入「运行时容器」的批判面；A/B/C 三路线的分轨结论见本节末定案。
 
 对「改契约要重编」的三点消解：
 
