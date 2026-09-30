@@ -48,11 +48,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:「确定性/replay/lockstep/随机种子」design 六份仅 attribute-sync §10.1 tick 确定性一节(G-7 范畴,不覆盖浮点/迭代序/种子);lockstep 三仓负空间检索零命中(deep-dive §18)——回放无行业先例可抄,需自定;docs/25(战斗文档)已随 B 级清理删除,原承载的浮点/seed 讨论无权威载体。
 - **落点计划**:新建 docs/design/battle-determinism.md(36 号 #16/#18 的缝在此收口)。
 
-### #3 存储 DDL 生命周期 — OPEN(优先)
+### #3 存储 DDL 生命周期 — **CLOSED**(attribute-sync §8.3,2026-09-30 落盘)
 
 - **缺什么**:首次建表、随契约/存储演化的 ALTER(加列/加索引)、迁移的版本化与回滚边界、forward-only 还是允许 down-migration、禁 DROP 的数据安全线。
 - **证据**:storage.xml 只定了「语句即数据」的运行语句面(architecture-review §15.5 三语句:快照/journal/列提升)——**DDL 语句面零设计**;「CREATE TABLE/ALTER/migration」design 全零命中。先例:KBE entity_table_mysql.cpp:113 ALTER TABLE ADD INDEX(启动期自改表——无版本化,反面参照)、BW server/tools/sync_db(独立工具族,契约邻接)。
-- **落点计划**:attribute-sync §8.3(DDL 生命周期:版本化迁移目录 + 启动期 runner + forward-only + 禁 DROP)。
+- **落点**:attribute-sync §8.3——db/migrations 版本化目录 + schema_migrations 位点表(唯一真相源)+ forward-only 无 down + migration lint 禁破坏性语句(DROP/TRUNCATE/改语义 RENAME 拒载,加列必须 NULL-able/带默认值保 journal 重放兼容)+ 启动期 runner(fail-fast,执行期持锁,单进程文件锁/P3 编队锁)+ 大表 ALTER INPLACE/LOCK=NONE 声明 + 影子库预演归 apps/ db 工具;契约 column:true 变更只出 CI diff 提醒不自动产迁移;xml-generation §4「明确不生成」行同步交叉引用。
 
 ### #4 客户端通道安全语义 + 加密库选型 — OPEN(随 P3)
 
@@ -84,11 +84,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:下行有完整预算体系(attribute-sync §5 token bucket + net-abstraction §4.2 水位);**上行只有「intent only,服务端定夺」一句**(sdk-contract §2.3 msg 注释)——恶意客户端侧的限流与预算零设计。BW LoginConditions 准入闸门(net-abstraction §7)是登录时点,不管持续上行。
 - **落点计划**:net-abstraction 增补(§4 上行侧小节)。
 
-### #9 Redis 部署与运维细节 — OPEN(随 P3)
+### #9 Redis 部署与运维细节 — **CLOSED**(attribute-sync §8.4,2026-09-30 落盘)
 
 - **缺什么**:部署拓扑(单实例/哨兵/集群)、连接池参数、键空间设计与 TTL 纪律、与 attribute-sync §8.2 定位的边界(只做跨进程共享热数据)配套的容量与淘汰策略。
 - **证据**:attribute-sync:289 已定**定位**;部署/键空间/TTL 零展开。存量 redis 四套并存(C-45)是审计问题不是设计缺口,收敛方向已定(§15.2 纪律)。
-- **落点计划**:attribute-sync §8.3 随 #3 同批补一小节(或 §8.4)。
+- **落点**:attribute-sync §8.4——单实例起步/多机 Sentinel/Cluster 不进路线图(键空间规模论证);hiredis 统一客户端 + 连接池,同步面禁场景线程直调(走 scripting-lua §8 异步交接);键空间 `apollo:{域}:{世界}:{键}` 分层 + 每键 TTL 或显式永驻;Redis = 共享工作内存非真相源(整库丢失 = DB 重建 + 降级,不构成数据丢失事故);跨进程互斥不依赖 Redis 锁(权利判定归 G-1 mgr 单点定序,Redis 原子性只用于数据面)。
 
 ### #10 观测接出形态(Prometheus/日志外采/trace)— OPEN(随 P3;2026-09-30 增问)
 
@@ -132,7 +132,7 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 |---|---|---|---|
 | B1 | 本清单落盘 + 登记簿补行 | 元缺口 4.1/4.2 | 用户指令「落盘吧」 |
 | B2 | 新建 clock-and-time.md | #1 | 用户点名最先;**已完成**(b8ebed98 后续设计批) |
-| B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先 |
+| B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先;**已完成**(§8.3/§8.4 落盘 + xml-generation §4 交叉引用) |
 | B4 | 新建 battle-determinism.md | #2 | 随战斗玩法 |
 | B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3 |
 | B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3 |
