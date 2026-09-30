@@ -73,7 +73,7 @@
   3. **启动校验器**：keyref/范围/跨表引用/派生 DAG 拓扑（16.7.2 的环检测落点）；**聚合报错**——收集全部错误一次输出（策划工具友好），非遇错即停。
   4. **schema_hash 头**：SHA-256(契约源+生成器版本)（sdk-contract §6 握手不变）。
   5. **文档投影**：协议文档/错误码表（sdk-contract §3 产物 ④）。
-- **明确不生成**：storage.xml（手写 + storage.xsd 校验，§15.5——语句是程序的知识不是生成的对象）；C#/TS SDK 投影细节（sdk-contract §10.3 v3 同一生成器排期——protoc/pbjs 现成工具吐代码，本文不重复）。
+- **明确不生成**：storage.xml（手写 + storage.xsd 校验，§15.5——语句是程序的知识不是生成的对象）；**其结构演化面同域手写**——DDL 版本化迁移（db/migrations + 位点表 + forward-only + 禁破坏性语句）见 attribute-sync §8.3，生成器只出「契约 column:true 与库结构不一致」的 CI diff 提醒、不产迁移；C#/TS SDK 投影细节（sdk-contract §10.3 v3 同一生成器排期——protoc/pbjs 现成工具吐代码，本文不重复）。
 - **CI 双闸**（sdk-contract §3 已定，此处给实现口径）：闸一 `xmllint --schema` 全量 XML；闸二生成产物 diff 检查（改契约忘生成 → 红）。生成器自查规则即 §5 第 ② 层。两闸均已接线（2026-09-29）：闸一 = workflow `contract.yml` 的 `xsd_gate` job（目录内任何 *.xml 含 include 分片一律过 apollo.xsd——分片自身是完整根元素，独立可验）；闸二 = ctest `apollo_gen_golden_check`（七产物 byte-diff，随 ci.yml 矩阵跑）。
 - **include 聚合已落地（§11.4，同日第五批）**：`expandIncludes` 进目录级读取层——递归展开根直接子级 `<include href>` 为单一文档树（深度优先；环/缺文件/根元素不匹配/version 不一致/缺 href/未知属性/携带子元素各有专属诊断；深层 include 不展开由 strictWalk 白名单拦；重复 include 允许拼接、重复 key 由既有规则拦）。XSD 四根加 include 声明（位置锁根子级开头，主子元素放宽 minOccurs=0——纯 include 根合法）；**分文件目录与单文件目录解析出的模型与 schema_hash 完全相等**（测试锁死——物理分文件不影响 hash 稳定性）。单文件 parseXxxXml 不做展开（无文件系统上下文，include 是目录级读取层能力）。
 

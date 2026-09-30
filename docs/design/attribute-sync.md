@@ -288,6 +288,28 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 - **BI 分流**：docs/08 的 BI/TLog 走独立采集通道（属性变更事件在收集阶段旁路采样导出，§5 预算外），**不允许 BI 需求反过来污染属性表结构**（KBEngine blob 化的诱因正是"什么都想存下来查"）。
 - **Redis 层**：只做跨进程共享热数据（公会/排行榜/全局状态），**不做实体属性缓存**（双写一致性成本 > 收益，属性权威在进程内存 + DB）。
 
+### 8.3 DDL 生命周期：版本化迁移（2026-09-30 补，design-gap-inventory #3）
+
+storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / journal append / replay range + 列提升读写）；本节补**结构演化面**——表怎么建、列怎么加、迁移怎么管。两者同域：服务端私有，不进契约目录、不进 schema_hash（§15.4 两段式纪律照旧——纯存储演化零协议版本事件）。
+
+- **版本化迁移目录 + 位点表**：服务端私有 `db/migrations/`，每迁移一文件，命名 `NNN_描述.sql`（NNN 单调序号，001 起步）；**位点表 `schema_migrations`(version, checksum, applied_at) 是唯一真相源**——不用文件标记（多实例/容器环境下漂移，表不会）。
+- **首次建表 = migration 001**：全量建表 DDL。初始形态可由生成器从契约 `persist/column` 提示 + storage.xml 产出**建议稿**，但 DDL 永远人工评审后入库——数据安全线：生成器不直接碰 schema。
+- **forward-only，无 down-migration**：回滚 = 前滚（新迁移纠正旧迁移）。理由：MMO 数据是不可重建的玩家资产，down-migration 鼓励「回滚 schema 丢数据」的错觉；Flyway 同款取舍。**禁破坏性语句**（migration lint 内建，见则拒载）：DROP COLUMN / DROP TABLE / TRUNCATE / 改语义的 RENAME——列废弃 = 标记 deprecated + 停写（数据保留）；真删列 = 停机窗口人工 DBA 操作，不走迁移线。加列必须 NULL-able 或带默认值：迁移后的库要能重放迁移前的 journal（§8.2 恢复路径兼容）。
+- **启动期 runner**：进程启动（模块装配前）对比位点表与目录 → 未应用迁移**顺序**执行；任一失败 = 启动失败（fail-fast，与「能启动期报的错不留到运行期」同线）；MySQL DDL 隐式提交的局限下至少逐条中止 + 位点不推进（重启动从中断处续跑，已应用的不重放）。**执行期持锁**：单进程阶段本地文件锁；P3 多进程同库 = 编队锁（G-1 mgr 仲裁）——两进程同时迁移同一库是事故不是边界情况。
+- **大表 ALTER 纪律**：索引/加列显式声明 `ALGORITHM=INPLACE, LOCK=NONE`（MySQL 8）；预估行数与时长写进迁移文件头注释；影子库预演（`--dry-run` 对影子库先跑）归 apps/ 侧 db 工具——独立工具族形态参照 BW server/tools/sync_db。
+- **先例**：KBE entity_table_mysql.cpp:113 启动期 `ALTER TABLE ADD INDEX`——无版本化、每次启动都可能自改表、无位点记录（**反面参照**：不可审计不可重放，正是本节要消灭的形态）；BW sync_db 独立工具（形态参照）；Flyway/Liquibase 位点表模型（借形态不引依赖——MySQL 侧 runner 百行级，与 §15.5「校验器 ≤0 行」的取舍不同但同理：这套没有现成零成本件，值得自写）。
+- **与契约列提升的联动**：attrs.xml `column:true` 变更 → 生成器 CI 出 **diff 提醒**（「契约声明了列提升但库结构未见对应列」），不自动产迁移——DDL 的每一行过人眼。
+
+### 8.4 Redis 部署与键空间纪律（2026-09-30 补，design-gap-inventory #9）
+
+§8.2 末行已定**定位**（跨进程共享热数据，不做实体属性缓存、不做二级缓存）；本节补部署面，使定位可执行。
+
+- **拓扑**：单实例起步（P3 单机编队期）；多机编队引入 Sentinel（主从 + 故障转移）；**Cluster 模式不进路线图**——键空间规模（公会/排行/全局态）单实例内存远超需求，Cluster 的多键操作限制与 hash-tag 复杂度换不来对等收益（与 net-abstraction §5.3「不引外部协调服务」同一权衡族）。
+- **连接与线程**：modules/data 统一客户端 + 连接池（hiredis；C-45 四套收敛后的唯一实现）；**同步面禁场景线程直调**——Redis 网络往返同 SQL，一律走 scripting-lua §8 异步交接（L0 执行层 IO 线程池 + request_id 回场景线程）；命令超时 + PING 健康检查 + 每进程连接上限常量。
+- **键空间**：`apollo:{域}:{世界}:{键}` 前缀分层（`guild:{wid}:{gid}` / `rank:{wid}:{board}` / `global:{key}`）；**每键必须 TTL 或显式永驻理由**——无 TTL 的无界增长键 = 把 Redis 用成无 schema 的第二 DB，禁止（§15.2「禁第二套」纪律的数据面版）。
+- **一致性边界**：Redis 是**共享工作内存，不是真相源**——真相源 = owner 进程内存 + DB journal（§8.2）；Redis 整库丢失 = 从 DB 重建 + 短暂降级（排行重建/公会只读），**不构成数据丢失事故**（这也是「不做实体属性缓存」的推论）。**跨进程互斥不依赖 Redis 锁**——权利判定归 G-1 mgr 单点定序（编队事件）；Redis 原子性只用于数据面（INCR/ZADD/LUA 脚本），不用于所有权与仲裁。
+- **存量收敛**：C-45 四套 redis 客户端并存是审计问题，收敛纪律已定（architecture-review §15.2）；本节为目标态设计，收敛执行归代码批。
+
 ## 9. 客户端预测与服务端校验
 
 | 类别 | 属性/行为 | 规则 |
