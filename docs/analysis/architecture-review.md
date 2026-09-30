@@ -4,7 +4,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。§16.9（同日再追加）：⑦–⑪ 以「修订文本落盘」形式完成（门禁收窄为只写本报告——锚点原文 + 逐字替换文本备妥，粘贴即闭环）。§16.10（同日终轮）：⑩ 升级为审计链登记（判定权威记录 = 本报告），⑦⑧⑨⑪ 维持搁置并立登记簿（§16.10.2）。第九轮（2026-09-30 追加）：登记簿三候选面审计——http/websocket 面、ipc 树、bw 兼容层（C-53…C-66，含 net-abstraction §5.10 裁决 3 前提修正、登记簿行回填）与目录版图/分层设计整理见 §18。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。§16.9（同日再追加）：⑦–⑪ 以「修订文本落盘」形式完成（门禁收窄为只写本报告——锚点原文 + 逐字替换文本备妥，粘贴即闭环）。§16.10（同日终轮）：⑩ 升级为审计链登记（判定权威记录 = 本报告），⑦⑧⑨⑪ 维持搁置并立登记簿（§16.10.2）。第九轮（2026-09-30 追加）：登记簿三候选面审计——http/websocket 面、ipc 树、bw 兼容层（C-53…C-66，含 net-abstraction §5.10 裁决 3 前提修正、登记簿行回填）与目录版图/分层设计整理见 §18。勘误补丁与待回填清单（第十轮）见 §19；host-builder-and-di 设计对照审计（第十一轮，C-67…C-76）见 §20。
 
 ---
 
@@ -1292,6 +1292,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | 脚本绑定层弃 sol2 + Lua 5.5（随 vcpkg） | docs/design/scripting-lua.md §2（修订） | sol2 上游维护停滞（2026-09-30 用户核查判定）；重模板头文件编译成本 + 与 Lua 版本升级强耦合；apollo 绑定面小（§8 三件套 + `apollo.*` 注入），原生 lua_CFunction 薄绑定数百行可控 | **已落地**（2026-09-30——Lua 定 5.5 线不落 5.4 中间态（number = int64/double 语义不变）；**版本策略同日再修订（用户指令「跟着 vcpkg 走」）：锁 5.5 主线、补丁位随 vcpkg lua port（当前 5.5.x）——不 pin 补丁版、删 overlay port 自持兜底；小版本升级仍显式批次**（scripting-lua §2/摘要 10、battle-determinism §2、sdk-contract §10.6 注、docs/todo 批次 6 同步）；sdk-contract「sol2 桥」更名「C-API 搬运桥」（§10.6 附节更新注）；36 号 #12/#19/:166 与 deep-dive §12 表述修正已同日 B8 批落地） | — |
 | 下轮审计候选：modules/net/{http,websocket} | 本报告（**§18.2，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-53 规模修正 2541→**5048**（+websocket.cpp 1193 + 三头 1314）+ 杂交布局（新树 src/旧树头，与 C-43 互为镜像）+ 同 namespace 双套 API + 文件内第三套 = 「第五、六套手写网络栈」；C-54 APOLLO_HAS_CURL **三重锁死**（定义点根 :301 在 NOT-MODULAR 守卫内且 PRIVATE-on-apollo，而代码编入 apollo_net_http；vcpkg.json 无 curl）——任何现存配置全桩，APOLLO_CURL_STUB 装饰宏，C-45 第三例形态升级（定义点与编译目标错位）；C-55 死模板四例 + websocket Config 七死旋钮 + setRoute 空转/validateAccept 零调用；C-56 detach 捕 this UAF/每请求一线程/单 CURL 句柄无锁/timeoutMs=30000 默认阻塞——§5.10 裁决 3 代码面依据；C-57 event_loop.cpp = poll 单线程 Reactor、与 curl 零关系零接线——**§5.10 裁决 3「既有执行层」前提不存在**（修正，待同步）+ processTimers 持锁 fire / Reconnect ABBA 确定性死锁链；C-58 手写协议缺陷簇（RequestParser 记账头行偏一/三处裸 stoll/无 chunked/WS 无分片重组/`find("101")` 弱校验）；C-59 两套测试资产引用幻影 API **编不过、实际测试覆盖为零** + Drogon 半分支装上即断链（INTERFACE 化）+ legacy :73-76 四幻影源——三裁决获代码面互证，#11 行数/覆盖待同步） | 已闭环 |
 | §18 产出的设计文档待同步项 | docs/design/net-abstraction.md §5.10 裁决 3 措辞 + docs/analysis/design-gap-inventory.md #11 行 | **登记**（2026-09-30 §18 修正产出，两文档本轮门禁外只写本报告：① §5.10 裁决 3 所引「既有 event_loop.cpp IO 线程上的 curl_multi 多路复用」经审计**不存在**——event_loop.cpp 为纯 poll reactor、与 curl 零关系零接线（C-57），curl_multi 执行层落地按**新建**计（裁决方向不变：禁场景线程直调/异步交接）；② #11 所记 2541 行应改 5048，且 test_rest_template/net_comprehensive 两套测试引用幻影 API 编不过、实际测试覆盖为零，#11 三裁决（curl 进 vcpkg/Drogon 删/禁直调）获 C-53/C-54/C-56/C-59 代码面互证） | 门禁放宽后粘贴 |
+| docs/architecture/host-builder-and-di-design.md 设计对照审计（HostBuilder / DI 容器 / starter / profile / manifest / bootstrap 六面） | 本报告（**§20，2026-09-30 落地**） | **已落地**（第十一轮：C-67 核心对象族零实现（文档 §17 自述准确）；C-68 starter 双 INTERFACE 壳 + 幻影测试（三头不存在，R-17e/C-59 家族第三例）；C-69 manifest 三字段双胞胎退化、消费方 = main 打印；C-70 profile 与脚本后端注册 0 命中；C-71 bootstrap 无框架实体、装配序 = game-server 手工七步；C-72 五 app 两套装配血统（四 main 零 apollo:: 命中）；C-73 生命周期档位缺 HostScoped/Factory、WorldHost 绕开容器；C-74 build() 双 assert NDEBUG 静默 + 重复注册无检测；C-75 模块注册入口 0 命中、装配图谱仅 2 demo 节点；C-76 文档权威状态待裁（§4.1 待盘点桶，建议标参考件）） | C-76 状态裁决随 gap inventory §4.1 盘点批；代码面随门禁 |
 
 ### 16.10.3 本轮状态
 
@@ -1738,6 +1739,113 @@ logging §5.1 **三禁**（不直连 Kafka / 不引 OTel SDK / **不开 per-proc
 ---
 
 *评审基线（源码）：main @ 377092de（无源码变更）。勘误锚点行号为 2026-09-30 实读（net-abstraction 行 335/341/360、design-gap-inventory 行 103/104/123、README 行 21/166/329）。*
+
+---
+
+## 20. 第十一轮（2026-09-30 追加）：IoC 装配体系设计对照审计——以 host-builder-and-di-design.md 为基准（C-67 … C-76）
+
+> 任务口径：以 `docs/architecture/host-builder-and-di-design.md`（374 行）设计为基准，对照源码（只读）核查 HostBuilder、DI 容器、starter/profile/manifest/bootstrap 装配的实现现状与设计差异，逐条登记发现（编号 + 文件:行 + 证据 + 影响）。**假设声明（任务书要求）**：本报告「IoC」语义按**依赖注入/控制反转装配体系**理解（容器 + 构建器 + 生命周期托管 + 模块装配四件）——与基准文档 §3 自身口径一致（"不是做一个 Spring Container，而是 C++ 风格的显式宿主构建器"）；凡涉及 Java 反射式 IoC 的否定表述均为设计排除项而非审计对象。文件名沿革同前（任务书所称 ioc-review.md 即本报告，更名记录见 ：3）。门禁：只读源码，只写本报告；单笔提交；无 tag、无 release。源码基线 main @ f2d435ac。
+
+### 20.1 范围与方法
+
+- **基准文档**：host-builder-and-di-design.md（gap inventory §4.1「待盘点桶」~65 份成员之一——本轮即对其做 §4.1 流程所设想的"逐批消化"的第一份）。相关阅读三份（starter-and-module-assembly / module-manifest-and-registry / app-bootstrap-lifecycle）不在本轮基准内，仅在差异定位需要时作参照。
+- **对照面六件**：HostBuilder（§8/§14）、ServiceCollection/ServiceProvider（§9/§10）、生命周期模型（§11）、模块接入（§12）、构建顺序（§13）、starter/profile/manifest/bootstrap 关系（§15/§16）。
+- **方法**：关键字负空间检索（HostBuilder/ServiceCollection/ServiceProvider/ModuleRegistry/BootstrapContext/BuildResult/registerXxxServices/Profile/bootstrap，2026-09-30 实测）+ 承重文件实读（application_context.hpp/.cpp、application_host.hpp、world_host.hpp、module_manifest.hpp/.cpp、runtime_manifest.hpp、五 app main.cpp、starter 三份 CMakeLists + 测试头 30 行）。
+- **与 §17 的分工**：§17 审的是**容器本体六域现状**（R-17a…g 缺陷族）；本轮审的是**设计文档 ↔ 实现**的差异面——容器内部缺陷（死模板/named 注入/tags 死字段等）不重复登记，只引 §17 编号。
+
+### 20.2 设计-实现映射总表（速览）
+
+| 设计概念（基准文档节） | 实现现状 | 判定 |
+|---|---|---|
+| `HostBuilder`（§8，启动装配核心：建宿主/装配配置日志事件总线/加载模块注册/构建容器/推进生命周期） | **全仓 0 命中**；实际对应物 = game-server main 手工七步序列 | **未实现**（文档 §17 自述准确） |
+| `BootstrapContext` / `HostParts` / `BuildResult`（§8/§14） | 0 命中；`builder.build()` 只返回 ApplicationContext（application_context.cpp:12-20），宿主另行手工构造 | **未实现** |
+| `ServiceCollection`（§9，addSingleton\<T\>/addSingleton\<TInterface,TImpl\>/addFactory/addInstance） | 无独立物；最近似 = `ApplicationContextBuilder`（application_context.hpp:66）——注册 API 为 `add_singleton<Impl, Deps...>()` + `.name()`（:77/:95）；无 add_instance/add_factory、无接口键绑定 | **部分对应**（builder 确为注册期、显式、类型安全——设计三原则符合） |
+| `ServiceProvider`（§10，构建后只读容器） | 最近似 = `ApplicationContext`（:136，get\<T\>/create\<T\>）；注册/解析确为两类型两阶段 | **部分对应**（§10 三个动机中缺二，见 C-74） |
+| 生命周期 Singleton/HostScoped/Factory（§11） | `BeanScope` 仅 Singleton/Prototype 两档（application_context.hpp:19-22） | **缺 HostScoped 与 Factory**（C-73） |
+| 模块接入 `registerXxxServices`（§12） | 0 命中；唯一装配点 = game-server main 手工 add_singleton 两个 demo bean | **未实现**（C-75） |
+| 构建顺序七段 core→runtime→ops→platform→game→domain→distributed（§13/§14） | 无分层构建；`buildCore()/buildRuntime()/…` 对象模型 0 命中 | **未实现**（C-71/C-72） |
+| Manifest：告诉 builder 有哪些模块+依赖图（§15） | `ModuleManifest`/`RuntimeManifest` = {name, layer, description} 三字段静态描述符，无依赖图；唯一消费 = main 打印两行 | **退化**（C-69） |
+| Starter：默认选哪些模块（§15） | modules/starter = 两 INTERFACE 壳 + 一个编不过的测试 | **空壳**（C-68） |
+| Bootstrap：驱动 builder 分阶段构建（§15） | 0 框架实体（"bootstrap"命中 = 日志字符串 + 局部变量名） | **未实现**（C-71） |
+| Profile：builder 按 profile+冲突规则选脚本后端（§16） | 源码 0 命中；registerLuaScriptServices 0 命中 | **未实现**（C-70） |
+
+### 20.3 发现登记（C-67 … C-76）
+
+**C-67 设计核心对象族零实现——「设计有、实现无」的完整断链，非实现漂移。**
+- 证据：`HostBuilder`/`ServiceCollection`/`ServiceProvider`/`ModuleRegistry`/`BootstrapContext`/`BuildResult` 六符号源码全仓 0 命中（grep -rIl 排除 vcpkg_installed/build/docs，2026-09-30）。基准文档 §17 自述「Apollo 当前已经有一些 host 和 lifecycle 基础，但还没有正式的 HostBuilder/ServiceCollection/ServiceProvider」——**文档自述与实测一致，文档没有说谎**。
+- 影响：设计 §15 把 HostBuilder 定位为「starter/manifest/bootstrap 的执行中枢」——中枢不存在导致三个配套面各自塌陷（C-68/C-69/C-71）；这不是某处实现走样，而是整层未开工。设计 §17 给出的推进顺序（最小注册 API → runtime/ops/platform 接入 → main 变薄）目前只走到第 0 步（最小注册 API 已有 = ApplicationContextBuilder，但无任何模块接入）。
+
+**C-68 starter 模块 = 双 INTERFACE 壳 + 幻影测试（R-17e/C-59 家族第三例，starter 域）。**
+- 证据：`modules/starter/core/`、`modules/starter/net/` 目录**各只有一份 CMakeLists.txt**，零源码零头文件（ls 实测）；core/CMakeLists.txt:2 `add_library(apollo_starter_core INTERFACE)`、:5-10 include 目录指向**不存在的** `${CMAKE_CURRENT_SOURCE_DIR}/include`；net 同构（:2-24）。`modules/starter/tests/starter_comprehensive_tests.cpp:14-16` include `apollo/starter/core/module_registry.hpp`、`auto_config.hpp`、`net_starter.hpp`——**三个头全仓不存在**（find 零命中），测试无法编译；被 `if(BUILD_TESTING)`（starter/CMakeLists.txt:9，全仓恒假——§17.7/§18.7 两轮已证唯 contract:42 守卫正确）挡住。
+- 影响：设计 §15「Starter 告诉 builder 默认选哪些模块」零落地；「ModuleRegistry」唯一存在形式是编不过的测试里的用法（:113-199 十个 TEST 用例全悬空）。目录在、构建死——与 C-59/C-64 同判：**starter 域的实际资产为零**。
+
+**C-69 manifest 双胞胎退化：三字段描述符，无依赖图，消费方 = 打印。**
+- 证据：`ModuleManifest`（modules/core/include/apollo/core/module_manifest.hpp:8-13）= {name, layer, description} 三个 string_view；`RuntimeManifest`（modules/runtime/include/apollo/runtime/runtime_manifest.hpp:9-14）同构复制（第二实例）。全仓消费方 = apps/game-server/src/main.cpp:117-118 读出后 `std::cout` 打印，无任何决策参与。
+- 影响：设计 §15「Manifest 告诉 builder 有哪些模块、依赖图是什么」——依赖图零落地，模块清单零落地；现状 manifest 是**版本展示牌**不是装配输入。若按此模式推广（每模块一份三字段 cpp），将成为又一族同型复制。
+
+**C-70 profile 全仓零命中；脚本后端注册面零命中。**
+- 证据：`Profile` 在 modules/apps/include 源码 0 命中（排除 tests）；`registerLuaScriptServices`/`registerPythonScriptServices`/任何 `register*Services` 0 命中。
+- 影响：设计 §16「builder 负责根据 profile 和冲突规则选择脚本后端」无任何实现痕迹——profile 属于 starter/manifest/bootstrap 配套族中**离实现最远**的一面（另两面至少有壳/描述符）。注：scripting-lua §2 已定 Lua 单语言（36 号 #12），「多脚本后端按 profile 选择」这一设计前提本身已被后续决策收窄——见 C-76。
+
+**C-71 bootstrap 无框架实体；实际装配序 = game-server 手工七步。**
+- 证据：源码 "bootstrap" 命中仅两处——game-server main.cpp:74 日志字符串 `"bootstrap begin"`、base-app/src/database_service.cpp:40-44 局部变量名。game-server 实际装配序（main.cpp:68-110）：global_config → global_log_manager → MemoryConnection/SqlTemplate 数据 demo → IdPool/ThreadPool demo → `ApplicationContextBuilder`（:96-98）→ `ServiceHost`（:105-106）。设计 §13 的七段构建顺序、§14 的 `buildCore()/buildRuntime()/…` 对象模型无对应。
+- 影响：配置/日志先行（设计 §2.1 参考点）事实上成立，但靠 main 手写而非框架保证；「在正确阶段构建宿主和服务」的推进者不存在。唯一的生命周期基建 = `ApplicationPhase` 六阶段 + `IApplicationLifecycle`（application_lifecycle.hpp:7-14）——属 app-bootstrap-lifecycle-design.md 域的既有资产，非本基准文档产物。
+
+**C-72 五 app 装配不统一——设计 §8「所有 app 走统一构建路径」1/5 达成；「main 变薄」反向。**
+- 证据：仅 game-server 走 `ApplicationContextBuilder`+`ServiceHost`（main.cpp:96-110）；base-app（:58 `BaseServer server(config)`）、cell-app（:67）、gateway-app（:84）、login-app（:72）四 main 均**零 `apollo::` 命中**（实测 grep -c = 0）——各自 include 私有 `xxx/xxx_server.hpp` 手工构造，signal 处理自写。game-server main 130 行中约 60% 是演示代码（IdPool 分配、ThreadPool 算 7×6、SqlTemplate 查 seed 数据——:80-95），装配薄化未发生。
+- 影响：仓内并存**两条装配血统**（modular DI 线 vs 手写 server 线）；设计 §4「app main 可以明显变薄」在两条线上都未兑现。与 §6 删除式迁移的关系：四手写 app 不在 legacy `Apollo::` IoC 域内（它们是新一代手写），即「退役旧容器」与「统一新路径」是两个未闭环的独立任务。
+
+**C-73 生命周期档位缺二：无 HostScoped、无 Factory；WorldHost 绕开容器。**
+- 证据：`BeanScope` 仅 `Singleton`/`Prototype`（application_context.hpp:19-22）。设计 §11 三档中：`HostScoped`（world host / runtime ops host / script runtime host 的归属档）无对应——实际 `WorldHost` 是 `IHostedService` 挂 `ApplicationHost`（world_host.hpp:30），**不进容器**；`Factory`（domain creator/entity builder/repository builder）半覆盖——`create<T>()` 存在但仅限 Prototype 档（application_context.hpp:310-326）且 prototype 禁作依赖（§17 已审），设计设想的 `addFactory<T>()` 注册面不存在。
+- 影响：档位缺位把「进程级单例 vs 宿主生命周期对象」的界线留在Convention层（挂 host 而非入容器）——能用但设计与实现各说各话；后续按设计补 HostScoped 时需先裁决 WorldHost 是否入容器（本报告只登记不裁）。
+
+**C-74 Collection/Provider 分离的三动机校验缺二；既有校验走 assert——NDEBUG 下静默。**
+- 证据：设计 §10 列三动机：「启动校验、重复注册检查、依赖缺失检查」。实际：① 依赖图循环检测**有**（`build_init_order` + `assert(init_order_.size() == singleton_count && "Singleton dependency cycle detected")`，application_context.cpp:167）；② **重复注册检查无**（同类型/同名重复 add 无任何检测，application_context.hpp 全文无 duplicate/already 分支）；③ 启动校验半有——`initialize()` 返 bool 传播 eager singleton 构造失败（application_context.cpp:22-38），但 `build()` 的两项校验 `assert(index_ok)`/`assert(order_ok)`（:16/:18）在 NDEBUG（Release）构建下**静默跳过**，失败容器带病运行。
+- 影响：设计给分离安的"容易做校验"理由，当前只兑现了 assert 级（=Debug 专用）；Release 下装配错误（重复注册、环）不设防。§17 已登记的 start 失败路径（R-17b）同域，本条补 build() 侧。
+
+**C-75 模块注册入口缺位；唯一真实装配点是两个 demo bean。**
+- 证据：`registerRuntimeServices`/`registerWorldServices`/`registerPlatformRedisServices` 式入口 0 命中（设计 §12 的三个示例名逐一检索）。game-server 的 `add_singleton<GameClockService>()`/`add_singleton<LoginPipeline, GameClockService>()`（main.cpp:97-98）——两者均为 main 匿名空间演示壳（:14-25：GameClockService 只有 name 字段；gap inventory #1 已记其名存实亡）。
+- 影响：设计 §1 六问题中问题 2「模块如何注册服务和工厂」与问题 4「模块之间如何拿到依赖」**无任何模块级答案**——容器存在但无人接入，DI 图谱的最大宽度 = 2 个 demo 节点。
+
+**C-76 基准文档自身的权威状态未裁（文档面发现，非代码面）。**
+- 证据：host-builder-and-di-design.md 属 docs/architecture/ 70 份待盘点桶（gap inventory §4.1），与 docs/design 六份权威稿关系未定。其两项内容已被后续权威链**收窄或另定**：① §16 多脚本后端按 profile 选择——scripting-lua §2 已定 Lua 单语言（36 号 #12，Python 明确不做）；② HostBuilder 统一执行中枢的形态——§17 结论为「装配收口 apps/ main 手工序列 + di 容器」（application_context 是 keeper、legacy Apollo:: 退役），未采纳"再建一个 builder 中枢类型"的路线。
+- 影响：若不标注状态，后续批次可能按本文档补建 HostBuilder/HostScoped/多脚本后端选择，与 §17/§6/scripting-lua 已定路线**重复或冲突**。建议（登记，随 §4.1 盘点批裁决）：本文档标「参考件——容器/生命周期现状以 architecture-review §17 为准；HostBuilder/ServiceCollection 未实现且未排期」。
+
+### 20.4 正面符合面（设计方向与实现一致，非缺陷）
+
+1. **反 Spring 路线一致**（设计 §3）：实际 `apollo::core::di` = 类型键显式 builder 图、纯 std、无反射无注解（§17 判 keeper）——设计「C++ 风格显式宿主构建器」的路线与实现同向。
+2. **注册/解析两阶段分离事实上成立**（设计 §10 的形）：`ApplicationContextBuilder`（注册）与 `ApplicationContext`（解析）确为两类型，builder 不可解析、context 不可注册（application_context.hpp:66/:136）。
+3. **生命周期托管存在**（设计 §1 问题 5）：`ApplicationHost` + `IHostedService`（start/stop/tick）+ 六阶段 ApplicationPhase + shutdown hook + 逆序析构（application_context.cpp:40-52）——宿主骨架比设计文档写的还完整（文档成稿时或尚未有此件）。
+4. **文档自述诚实**（§17「还没有正式的」）：实测与自述一致，无漂移——这份文档的问题不是说过头，而是配套面（starter/manifest）先于它出现了空壳实现（C-68/C-69 的壳反而成了误导源）。
+
+### 20.5 与既有结论的交叉
+
+- §17（容器六域）：本轮不重复其容器内部缺陷（R-17a…g 维持）；C-74 与 R-17b（start 失败路径）互补为 build/start 两侧。
+- §6（删除式迁移）：legacy `Apollo::` IoC 退役与「四手写 app 统一到 modular 线」（C-72）是两个独立未闭环任务，后者此前未登记过——本条为新增登记面。
+- §15.2/§18（禁并存纪律）：starter 双 INTERFACE 壳 + 手写 server 线属"并存"的装配域变体，但均为空壳/演示级，不构成第五套网络栈式的成本面；按 C-68/C-72 登记即可，不升级纪律条款。
+- gap inventory §4.1：本节即"逐批消化"第一份的样板（证据驱动定状态）——C-76 给出建议档位。
+
+### 20.6 实读核对记录（本节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| HostBuilder/ServiceCollection/ServiceProvider/ModuleRegistry/BootstrapContext/BuildResult/register*Services/Profile 源码 0 命中 | grep -rIl（排除 vcpkg_installed/build/docs/tests）+ 计数 | 属实（C-67/C-70/C-75） |
+| application_context.hpp:19-22 BeanScope 两档；:66/:77/:80/:136/:166/:310-26 API 形态 | Read/grep | 属实（映射表/C-73） |
+| application_context.cpp:12-20 build() 双 assert；:22-38 initialize()；:40-52 逆序 shutdown；:167 cycle assert | sed | 属实（C-74） |
+| modules/starter/{core,net} 各仅 CMakeLists；include 目录指向不存在路径；测试 :14-16 三幻影头 | ls/find/sed | 属实（C-68） |
+| module_manifest.hpp:8-13 / runtime_manifest.hpp:9-14 三字段同构；消费方唯 main:117-118 | sed+grep | 属实（C-69） |
+| game-server main.cpp:68-110 手工七步装配；:14-25 demo 壳；:80-95 演示代码 | Read 全文 | 属实（C-71/C-72/C-75） |
+| base/cell/gateway/login 四 main `apollo::` 命中 0、各自手工构造 server（:58/:67/:84/:72） | grep -c + sed | 属实（C-72） |
+| world_host.hpp:30 WorldHost : IHostedService；application_lifecycle.hpp:7-14 六阶段 | sed | 属实（C-73/C-71） |
+
+### 20.7 登记簿补行与本轮状态
+
+- 16.10.2 补一行（host-builder-and-di 设计对照审计 → §20 已落地）；gap inventory §4.1 的状态回填属该文档，本轮门禁外（随 P-2 同批或盘点批处理）。
+- 本轮产出 = §20（映射总表 + C-67…C-76 + 正面符合面 + 交叉 + 核对记录）；**零源码改动**；只写本报告一份文件；单笔提交；push 前 fetch + rebase；无 tag、无 release。
+
+---
+
+*评审基线（源码）：main @ f2d435ac（无源码变更）。§20 行号 2026-09-30 实读（负空间检索命令与排除范围如 20.1/20.6 所列）；基准文档 = docs/architecture/host-builder-and-di-design.md（374 行全文实读）。*
 
 ---
 
