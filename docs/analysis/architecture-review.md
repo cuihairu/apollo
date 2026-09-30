@@ -1661,6 +1661,86 @@ shutdown()       逆 init_order_ 析构（:45-51）；析构函数兜底再调 s
 
 ---
 
+## 19. 勘误补丁与待回填清单（2026-09-30 追加，第十轮）
+
+> 任务口径：把两处待同步修正以**勘误补丁**形式写入本报告并附待回填清单，注明目标文件与粘贴位置，等门禁放宽时回填。门禁最严：**只写本报告这一份文件**，其他任何文档与源码零改动。文件名沿革同上（任务书所称 ioc-review.md 即本报告 architecture-review.md，更名记录见 ：3）。源码基线不变。轮中用户追加三项（README 删 Spring 提法、脚本看门狗/错误上报 SPI、webhook 默认实现）一并入册（§19.3/§19.5）。
+
+### 19.1 勘误 P-1：net-abstraction.md §5.10 裁决 3（措辞修正）
+
+**目标文件**：`docs/design/net-abstraction.md`
+**粘贴位置**：§5.10 裁决 3（行 341）为主；同节现存段（行 335）与 §6 决策表出站 HTTP 行（行 360）为联动处。
+
+**锚点原文（行 341，节选）**：
+> …一律走 scripting-lua §8 异步交接（执行层 = 既有 event_loop.cpp IO 线程上的 curl_multi 多路复用；完成回调带 request_id 回场景线程 tick 边界）；…
+
+**逐字替换文本**：
+> …一律走 scripting-lua §8 异步交接（执行层**按新建计** = IO 线程上的 curl_multi 多路复用——第十轮前审计（本报告 §18 C-57）实测既有 event_loop.cpp 为 poll(2) 单线程 reactor、与 curl 零关系零接线，**不构成"既有"执行层**；完成回调带 request_id 回场景线程 tick 边界）；…
+
+**理由**：C-57 的定性实读结论。裁决**方向不变**（同步 API 禁场景线程直调、异步走交接），改的是「已有可复用执行层」这一事实前提——影响**工作量口径**（新建而非复用），不影响决策本身。
+**联动**：行 335「2541 行已写」示例数字随 P-2 口径改 5048。
+
+### 19.2 勘误 P-2：design-gap-inventory.md #11（行数/覆盖修正）
+
+**目标文件**：`docs/analysis/design-gap-inventory.md`
+**粘贴位置**：#11 行内两处（行 103 证据段、行 104 落点段）+ §4.2（行 123）。四处替换：
+
+1. 行 103：`**已存在 2541 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648)` → `**已存在 5048 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648 + **websocket.cpp 1193 + 三公共头 1314**——登记时漏计后两项)`
+2. 行 103 句末追加：`**测试覆盖为零**：tests/test_rest_template.cpp 与 modules/net/tests/net_comprehensive_tests.cpp 均引用幻影 API、无法编译（分别被 APOLLO_BUILD_GTESTS=OFF 与 BUILD_TESTING 恒假挡住）——本报告 §18 C-59。`
+3. 行 104 落点 ③：`同步 API 禁场景线程直调(event_loop curl_multi + scripting-lua §8 异步交接…` → `同步 API 禁场景线程直调(curl_multi 执行层**按新建计**——既有 event_loop.cpp 不构成执行层，见 P-1 + scripting-lua §8 异步交接…`
+4. 行 123：`modules/net/http(2541 行` → `modules/net/http(5048 行`
+
+### 19.3 勘误 P-3：README.md 删除 Spring 提法（轮中用户追加）——**已落地（2026-09-30 本轮直接删除）**
+
+**用户口径（原话）**：「不是说了删除老的不合理的地方吗？为啥 README 中还在提 spring，没有必要特地的说吧，不好的地方就删」。
+
+**处置**：README.md 非源码冻结面（文档），用户明确指令本轮直接删除——三处已删，无需等门禁。**目标文件**：`README.md`；**已删位置**：行 21、行 166、行 329（三处尾注）：
+
+| 行 | 删除文本 |
+|---|---|
+| 21 | `；明确不采用 Spring 式运行时容器（论证见 \`docs/analysis/architecture-review.md\` §0）` |
+| 166 | `。明确不采用 Spring 式运行时容器——论证见 \`docs/analysis/architecture-review.md\` §0/§17` （句号保留） |
+| 329 | `；明确不采用 Spring 式运行时容器（\`docs/analysis/architecture-review.md\` §0）` |
+
+**理由**：README 是**对外门面**，「我们不是 X」的否定式表述把一个已否决的旧方案抬成对照项——读者本不知道、也不需要知道；正面陈述（`apollo::core::di` 编译期构造注入 + `ApplicationHost` 帧驱动托管）已自足。**不好的地方直接删**：门面只留正向事实；否决过程的论证留在 architecture-review §0/§17（审计文档里谈否决是合适的，README 里不是）。删除后三处仍指向 `docs/` 的其余链接不受影响，无需补链。
+
+### 19.4 待回填清单（门禁放宽后逐条粘贴即闭环）
+
+| # | 目标文件 | 粘贴位置（锚点） | 补丁内容 | 状态 |
+|---|---|---|---|---|
+| P-1 | docs/design/net-abstraction.md | §5.10 裁决 3（行 341）+ 现存段行 335 | 执行层「既有」→「按新建计」（§19.1） | **待回填** |
+| P-2 | docs/analysis/design-gap-inventory.md | #11 行 103/104 + §4.2 行 123 | 2541→5048 + 测试覆盖为零（§19.2） | **待回填** |
+| P-3 | README.md | 行 21/166/329 | 删 Spring 否定式尾注（§19.3） | **已回填（2026-09-30 本轮直接删除）** |
+| P-4 | docs/design/scripting-lua.md | §6/§7（看门狗邻位增节） | 看门狗对外通知契约 + 错误上报 SPI（§19.5.1） | 待设计 |
+| P-5 | docs/design/logging.md | §5.1（三禁旁） | webhook 默认接出定位·企业微信/钉钉/飞书/Slack（§19.5.2） | 待设计 |
+
+### 19.5 轮中新增登记（用户三问；本报告为唯一可写面）
+
+#### 19.5.1 脚本看门狗与错误上报接口（SPI）——主体已有设计，缺「对外通知契约」
+
+**已有**（scripting-lua §6/§7，非缺口）：看门狗本体 = **指令预算**（`lua_sethook` COUNT 两段：粗检每 10k 指令、精检超标）→ 超预算即**中止当前脚本调用 → 报错入日志 → 该实体回退默认行为**；且**有意不用超时信号/多线程 watchdog**（单写者线程 + tick 确定性优先，区别于「另起线程 kill」方案）；§7.2/§7.3 已把超标事件升级为状态面告警（哪个模块/哪个 handler、当帧指令数）+ 指令 hook 双职能（预算执法 + per-module 归因）。→ **「脚本执行超时报告」在引擎内部是已设计能力**。
+
+**缺口**（本轮登记，两条）：
+1. **通知契约（SPI）形态未定**——引擎 → 运维/业务的错误事件目前只到「日志 + 状态面」，没有脚本层**可实现的**上报钩子约定（谁注册、何时调、参数、失败怎么办）。
+2. 事件的**级别 / 幂等 / 去重 / 聚合**无设计（同一故障每 tick 触发会把任何下游打爆）。
+
+**建议方向**（登记为候选，落地随门禁）：**不要把 SPI 回调塞进热路径**。首选 = 错误事件走既有**结构化日志流**（logging §5.1）+ MetricRegistry 计数器，分发权交给 collector/exporter 侧（与 §19.5.2 同一出口）；若确需脚本层可编程钩子，用**冷路径单点**：每状态（非每实体）一个 `onScriptFault(module, handler, instr, tick, frame)` 注册位，**tick 边界**调用，**默认实现 = 写入错误事件流**，明令禁止在故障回调里做同步 IO/HTTP。
+
+#### 19.5.2 webhook 默认实现（企业微信/钉钉/飞书/Slack）——落点在 exporter 侧，不在游戏进程
+
+logging §5.1 **三禁**（不直连 Kafka / 不引 OTel SDK / **不开 per-process HTTP 端口**）与「游戏进程零新增端口」口径决定了：**webhook 出口不能长在游戏进程**。正确落点 = 观测接出的**单一点**（admin/exporter 进程或采集器侧）内置默认 sink：企业微信/钉钉/飞书/Slack 的机器人 webhook 本质是 **JSON 模板 + 一次 HTTP POST**，由 exporter 消费「错误/告警事件流」后按级别路由即可。
+- **给默认实现的价值**：运维零开发即得告警通道；天然满足「不引 per-process HTTP」（HTTP 客户端只在 exporter，正好复用 P-1/§5.10 的 curl 设施）；企业微信/钉钉/飞书的加签与限频（各自 20 条/分钟量级）集中在一处治理。
+- **不建议**：在 Lua 层直接给脚本开 HTTP webhook 能力——攻击面 + 违反三禁 + 同步 30s 超时违 tick 纪律（§5.10 裁决 3 同旨）。
+
+### 19.6 本轮状态
+
+- 产出 = §19（3 条勘误补丁 P-1/P-2/P-3 + 5 项待回填清单 + 2 项新增登记）；**零源码改动**；仅本报告一份文件；单笔提交；push 前 fetch + rebase；无 tag、无 release。
+
+---
+
+*评审基线（源码）：main @ 377092de（无源码变更）。勘误锚点行号为 2026-09-30 实读（net-abstraction 行 335/341/360、design-gap-inventory 行 103/104/123、README 行 21/166/329）。*
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
