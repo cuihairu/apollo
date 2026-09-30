@@ -17,6 +17,7 @@
 9. **异步任务模型与热更补强（§3.5/§8，2026-09-29 补）**：单写者线程下的异步封装 = **C++ 侧回调 + request_id 交接、Lua 侧协程**（§8.1 对比表定 future/promise 不引入——std::future 的 get 阻塞违 tick 纪律、JS Promise 的微任务语义由「协程 + tick 边界 resume」以更简形态获得；skynet.call 协程范式先例 skynet.lua:227）；三纪律 = resume 只在边界点 / resume 后 re-validate / 超时上界 + 协作式取消。热更补四件（§3.2）：current 版本指针持久化（防坏版本崩溃循环）、协程升级语义（旧协程跑完旧表）、灰度粒度 per 场景线程、模块私有状态零迁移纪律；§3.5 字节码缓存（构建期预编译 + manifest 三元组校验、Lua 版本头防错载）；§2 补 Lua 5.4 版本锁定（sol2 全支持；LuaJIT 仅实测瓶颈再评估）。
 10. **绑定层与版本定案（2026-09-30 修订，同日再修订版本策略）**：弃 sol2（上游维护停滞——重模板编译成本 + Lua 版本升级强耦合的双风险），**原生 Lua C API 薄绑定**（`luaL_Reg` 函数表 + userdata 包装，数百行——绑定面小是前提）；**Lua 5.5 线、版本随 vcpkg**（先定 5.5.1，同日再修订为「锁 5.5 主线、补丁位跟 vcpkg lua port，当前 5.5.x」——不自行 pin 补丁版、不做 overlay port 自持；小版本升级仍显式批次；不落 5.4 中间态；number = int64/double 语义不变，battle-determinism 确定性纪律不受影响）；sdk-contract「sol2 桥」同步更名「C-API 搬运桥」（其 §10.6 附节更新注——桥本就是自写代码，去 sol2 只换搬运函数族）。
 11. **GM/运营命令面（§7.5，2026-09-30 补）**：指令表注册表驱动（`gm_commands` 声明 + 参数 schema 校验——GM 面无 eval 权限）；写权限 = contract.lua `gm_write` 独立白名单（与 `predict` 分列，写走属性钩子同路不绕管线）；level 三级分级 + 高危双人复核（框架 AccessController 之上的业务粒度）；`gm_audit` 独立审计表（wall+tick 双写，拒绝也落）；GM 输入 = admin 会话 intent 流（battle-determinism 复算自动含）；管道与 attach 同路零新增。
+12. **故障通知契约（§6.1，2026-09-30 补）**：三级事件（WARN 软阈值去抖 / FAULT 中止+回退 / TRIP 熔断）→ 冷路径单点 `onScriptFault`（每状态一个 C++ 固定函数位，非虚无注册，O(1) 三件事：ERROR 旁路日志 + MetricRegistry 计数器 + 熔断状态机）；**引擎不提供脚本实现的故障 SPI**（看门狗不依赖被看护者 / 热路径回调违 tick 纪律 / pcall 自处理已是业务通道）；模块级熔断（3 次/1000 tick → 隔离 600 tick，半开翻倍，热更换版本自动清零）；ScriptFaultEvent 字段封闭、wall+tick 双写；对外分发（webhook 等）全在 exporter 侧（logging §5.2）——故障路径禁同步 IO/HTTP/跨进程调用。
 
 ---
 
@@ -164,6 +165,26 @@ collect 阶段（§3.2 的 delta/快照组装）
 - 调试面：错误审计通道（错误摘要带模块名+版本+数据快照）进 `docs/design/attribute-sync.md` 的 BI 旁路，独立于游戏通道，运维可查"热更升级后某模块错误率突增"。
 - 灰度联动：模块健康分（错误计数/预算超限率）驱动 §3.2 的回滚阈值。
 
+### 6.1 故障通知契约：三级事件、冷路径单点与模块熔断（2026-09-30 补，architecture-review §19.5.1 / P-4）
+
+§6 表内「报错入日志 → 实体回退」只定义了**引擎内部**处置；「引擎 → 运维/业务」的对外通知契约（事件长什么样、谁消费、脚本层有没有可编程钩子）此前零设计，本节定型。立场先行：
+
+**引擎不提供由脚本实现的故障 SPI（评审红线）**，三条理由：① 故障时刻脚本层是全场最不可信的组件——看门狗的回调不能依赖被看护者（预算超限的模块去执行 onFault，等于让病灶自己打报告）；② 热路径回调破坏 tick 预算与确定性（故障处置必须 O(1)，回调体内做什么无法约束）；③ 脚本自处理通道已存在——handler 用 pcall 自捕获是业务逻辑（自捕获即不触发 fault，语义现状已对），引擎契约不与它重叠。§19.5.1 的候选方向「冷路径单点」据此**落为只读出口**，不是脚本可实现的 SPI。
+
+- **三级事件**（同一出口，级别决定动作）：
+
+| 级别 | 触发 | 引擎内动作 | 对外 |
+|---|---|---|---|
+| WARN | 单次调用消耗 ≥ 预算 80% 且未超限 | 无（执行完毕） | 事件一条（去抖：同 (module,handler) 每 256 tick 至多一条） |
+| FAULT | 超预算 / 运行时错误 / 沙盒违例 | 中止 + 实体回退（§6 表既有语义） | 事件一条 + 计数器 +1 |
+| TRIP | 熔断触发/解除（见下） | 模块级隔离 | 事件一条（低频离散） |
+
+- **ScriptFaultEvent 字段（结构化，进 ERROR 旁路日志行）**：`ts_wall_ms + tick` 双写（clock-and-time §7 纪律）、`scene`（场景线程标识）、`entity_id`（有实体上下文时）、`module + version`（§3.1 头注释元信息——「哪个版本的哪个模块」直接可答）、`handler`、`kind`（budget_exceeded / runtime_error / sandbox_violation / circuit_tripped / circuit_recovered）、`consumed/budget`（指令数，§7.3 hook 双职能顺带产出）、`action`（warned / aborted_rolled_back / quarantined）。字段集**封闭**——下游（collector/exporter/webhook）按字段路由，不解析自由文本。
+- **出口 = 冷路径单点 `onScriptFault(const ScriptFaultEvent&)`**：每 `lua_State`（即每场景线程，§2）一个 C++ 侧固定函数位，非虚、无注册表、不可被脚本替换；默认实现三件事全部 O(1)：ERROR 旁路日志一行（logging §3.1——不进共享队列）、MetricRegistry 计数器自增（`script_fault_total{module,kind}` / `script_budget_warn_total{module}`）、熔断器状态机推进（下条）。**明令禁止**在故障路径做同步 IO/HTTP/跨进程调用——对外分发权在 collector/exporter 侧（logging §5.2 webhook 同一出口），引擎只产事件与计数器。
+- **熔断器（模块级，防「同一坏模块每 tick 烧一遍」）**：同 module 在滑动窗 W=1000 tick 内第 M=3 次 FAULT → 标记 `quarantined` 持续 Q=600 tick——隔离期内该模块 handler 调用直接短路（走实体回退默认行为，不再进入 Lua）；解除走**半开**：隔离期满放行一次，再 FAULT 则 Q 翻倍（封顶一次长冷却，具体上限随容量批校准）；**热更新自动清零**（§3.2 换表即新版本新账——修好的模块不需要等冷却，这是「热更即修复通道」的直接红利）。熔断状态进 §7.2 状态面（隔离名单/剩余 tick/历史），W/M/Q 为启动期配置非硬编码。
+- **幂等与聚合（对外不打爆的保证）**：引擎侧去抖只做 WARN 一级（上表）；FAULT 级靠**计数器语义**天然聚合——下游看到的是 `script_fault_total` 的速率而非逐条事件；TRIP 本身低频。告警阈值/静默窗口/限频是 exporter 侧规则（logging §5.2），不进引擎——引擎侧再配一套告警规则 = 两处真相。
+- **确定性与回放**：fault 的**处置**（中止/回退/熔断隔离）是世界线程 tick 内的确定性状态迁移，复算重放自动复现；fault **事件本身**不进录制输入流（引擎自产观测数据，不是世界输入）——battle-determinism §5 的输入序列不含它，回放正确性不依赖「告警是否发生过」。
+
 ## 7. 在线调试与性能归因：attach 执行 / Lua 状态内省 / profile（2026-09-29 增补）
 
 > 语义层以 `docs/architecture/observability-watcher-and-runtime-introspection-design.md`（architecture/ 代）为准——Watcher Tree、Passive Query vs Controlled Action 分级、AccessController；本节接脚本域三件事（attach 执行、Lua 状态面、性能归因）与一个立场（不做断点调试器）。通道与归属沿用 G-5 两截落位（net-abstraction §7 P3，architecture-review §16.8.3-⑤）：检测原语内嵌 ScriptHost（模块内），交互工具归 apps/ admin 面。
@@ -259,4 +280,4 @@ L0 执行层（C++，IO/DB 线程池） hiredis 异步接口 / DB Command 队列
 
 ---
 
-*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。同日增补 §7「在线调试与性能归因」（attach 执行/Lua 状态内省/profile——语义层引用 architecture/observability-watcher-and-runtime-introspection-design.md；先例 KBE telnet 在线 eval（telnet_handler.cpp:801-812、cellapp.cpp:292-293）+ KBE watcher 路径树（serverapp.cpp:165-181，guiconsole 消费端）+ skynet debug_console；原 §7 交集表顺移 §8，net-abstraction §2 的外部引用同步）。同日再补（第二批）：§2 Lua 版本锁定纪律（sol2 + Lua 5.4，LuaJIT 门槛）与 bytecode 红线精确化（禁未校验来源、预编译产物走专用路径）；§3.2 热更四补（current 版本指针持久化/协程升级语义/灰度粒度 per 场景线程/模块私有状态零迁移）；新增 §3.5 字节码缓存（构建期预编译 + manifest 三元组 + 三条失效规则）；新增 §8「异步任务模型」（三模型对比定 C++ 回调+request_id、Lua 协程；先例 skynet lualib/skynet.lua:18-26/:227/:415；三纪律 re-validate/超时/协作式取消；ssengine-reference §4.1 与 InterServerLink §5.7 接线），原 §8 交集表顺移 §9（§7.2/§9 内部引用同步，§9 net 行的悬空「§异步模型」引用闭环）；摘要 9 联动。2026-09-30 修订（第三批）：§2 绑定层弃 sol2 定原生 Lua C API 薄绑定 + 版本锁 5.5.1（上游维护停滞判定，用户指令；绑定面小前提；§3.4 luac 表述去版本号）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 附节更新注、docs/todo 批次 6 同步；36 号 #12/#19 与 deep-dive §12 的 sol2/Lua 5.4 历史表述修正登记 design-gap-inventory §3（随下一 36 号批次）。2026-09-30 增补（第四批）：§7.5 GM/运营命令面（design-gap-inventory #6——指令表/权限分级/审计存储三件；管道与 §7.1 attach 同路；gm_write 白名单与 predict 分列；gm_audit 独立审计表；GM 输入进 battle-determinism 复算）——摘要 11 联动。2026-09-30 再修订（第五批）：§2 版本策略从「锁 5.5.1」改「**5.5 主线随 vcpkg lua port（当前 5.5.x）**」——补丁位随依赖解析浮动（§3.5 版本头校验守尾）、小版本升级仍显式批次、删 overlay port 自持兜底（用户指令：版本跟着 vcpkg 走）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 注、docs/todo 批次 6 同步；同批执行 36 号 #12/#15/#17/#19 与 deep-dive §12 历史表述修正（design-gap-inventory §3 与登记簿回填）。*
+*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。同日增补 §7「在线调试与性能归因」（attach 执行/Lua 状态内省/profile——语义层引用 architecture/observability-watcher-and-runtime-introspection-design.md；先例 KBE telnet 在线 eval（telnet_handler.cpp:801-812、cellapp.cpp:292-293）+ KBE watcher 路径树（serverapp.cpp:165-181，guiconsole 消费端）+ skynet debug_console；原 §7 交集表顺移 §8，net-abstraction §2 的外部引用同步）。同日再补（第二批）：§2 Lua 版本锁定纪律（sol2 + Lua 5.4，LuaJIT 门槛）与 bytecode 红线精确化（禁未校验来源、预编译产物走专用路径）；§3.2 热更四补（current 版本指针持久化/协程升级语义/灰度粒度 per 场景线程/模块私有状态零迁移）；新增 §3.5 字节码缓存（构建期预编译 + manifest 三元组 + 三条失效规则）；新增 §8「异步任务模型」（三模型对比定 C++ 回调+request_id、Lua 协程；先例 skynet lualib/skynet.lua:18-26/:227/:415；三纪律 re-validate/超时/协作式取消；ssengine-reference §4.1 与 InterServerLink §5.7 接线），原 §8 交集表顺移 §9（§7.2/§9 内部引用同步，§9 net 行的悬空「§异步模型」引用闭环）；摘要 9 联动。2026-09-30 修订（第三批）：§2 绑定层弃 sol2 定原生 Lua C API 薄绑定 + 版本锁 5.5.1（上游维护停滞判定，用户指令；绑定面小前提；§3.4 luac 表述去版本号）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 附节更新注、docs/todo 批次 6 同步；36 号 #12/#19 与 deep-dive §12 的 sol2/Lua 5.4 历史表述修正登记 design-gap-inventory §3（随下一 36 号批次）。2026-09-30 增补（第四批）：§7.5 GM/运营命令面（design-gap-inventory #6——指令表/权限分级/审计存储三件；管道与 §7.1 attach 同路；gm_write 白名单与 predict 分列；gm_audit 独立审计表；GM 输入进 battle-determinism 复算）——摘要 11 联动。2026-09-30 再修订（第五批）：§2 版本策略从「锁 5.5.1」改「**5.5 主线随 vcpkg lua port（当前 5.5.x）**」——补丁位随依赖解析浮动（§3.5 版本头校验守尾）、小版本升级仍显式批次、删 overlay port 自持兜底（用户指令：版本跟着 vcpkg 走）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 注、docs/todo 批次 6 同步；同批执行 36 号 #12/#15/#17/#19 与 deep-dive §12 历史表述修正（design-gap-inventory §3 与登记簿回填）。2026-09-30 增补（第六批，architecture-review §19.4 P-4）：新增 §6.1「故障通知契约」（三级事件 WARN/FAULT/TRIP + 冷路径单点 onScriptFault + 模块熔断 + ScriptFaultEvent 字段封闭集 + 幂等聚合与确定性分界；明令不做脚本实现的故障 SPI——§19.5.1 候选方向的正式落盘）——摘要 12 联动；§7.2/§7.3 状态面与计数器被 §6.1 引用为其消费面。*

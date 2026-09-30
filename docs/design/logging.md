@@ -13,6 +13,7 @@
 5. **core dump 是最后防线**。RLIMIT_CORE=unlimited（main 早期 setrlimit）+ core_pattern 独立分区/管道 + 磁盘配额轮转 + **CI 验证**（测试进程主动 raise(SIGSEGV)，断言 crash 文件与 core 产出）——崩溃路径是被测路径，不是「出事才知道配错了」。
 6. **现状收敛**：C-25 四套日志并存（①utils::logging ②core/log 内建 ③modules/core/log ④内存版）+ 同路径双头文件 ODR 陷阱，收敛为 **modules/core/log 一套**；C-26 孤儿 TU（global_log_manager 无编译归属，默认构建链接必败推演）是第一刀。**自研薄层（数百行），不引 spdlog/log4cxx**——分级旁路与 signal-safe 崩溃面是自有语义，第三方日志库不替你保证（KBE 本地层引 log4cxx，debug_helper.cpp:978-980 条件编译可见，apollo 不走这条）。
 7. **降级链每级只依赖更原始的设施**：logger 线程死/队列满 → ERROR 旁路直写；文件系统失败/磁盘满 → stderr（重定向管道也能接）+ 停低级别保高级别；进程崩溃 → crash handler 四件套 + core；整机死 → 本地盘的日志与 core 由 machined 式守护上报死亡事件（G-1 接线）后运维拉取。
+8. **告警出口与 webhook 默认实现（§5.2，2026-09-30 补）**：双层——层 A 标准栈（Prometheus alerting rules + Alertmanager + 社区 adapter，仓库零代码）为生产推荐；层 B exporter 内置阈值 notifier 为小部署兜底（规则表驱动 + 四家机器人模板：企业微信/钉钉/飞书/Slack = JSON 模板 + 一次 POST，复用 net-abstraction §5.10 curl）。发送纪律六条：退避重试失败回写本地、静默窗聚合、全局速率上限、密钥 env、出站目标白名单（SSRF）、模板变量封闭集；**游戏进程永不直发**（三禁延伸，HTTP 客户端只在 exporter）。
 
 ---
 
@@ -110,6 +111,32 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 - **日志外采 = 结构化行 + 稳定目录 + 外挂 tail**：行格式定型为结构化键值（`ts=wall_ms level= proc= tick= cat= msg=` + kv 扩展段——键集稳定、引号规则进 P3 批）；目录即上节布局（`log/<app>-<instance>.log`）；轮转 rename 原子（外采器 inode 跟随语义）；filebeat/fluent-bit 类采集器 tail 上送 Kafka/ES——**Kafka 在采集器之后**，游戏进程不知其存在。collector（apps/logger）与外采 tail 的关系：collector 管进程间汇聚检索（内部），tail 管标准栈上送（外部）——两出口并行不互斥，本地文件同为真相源。
 - **trace 子集（借模型不引 SDK）**：字段 = trace_id/span_id + W3C traceparent 语义（含采样标志）；**生成在进程入口**（客户端会话首触点/跨进程消息首生成处，`InternalMessageEnvelope.trace_id` 已是信封标准字段——net-abstraction §7）；**span 界定 = 消息边界**（一条消息的处理跨度为一段，跨进程两 span 同 trace_id）；**头部采样极低率**（默认 1/10⁴，配置常量，入口进程决定）；采样命中的 span 以结构化行进日志流（随 tail 上送）——不引 OTLP exporter。用途限定：慢链路定位（「登录 800ms 慢在哪一跳」），不做全链路追踪系统。
 
+### 5.2 告警出口与 webhook 默认实现族（2026-09-30 补，architecture-review §19.5.2 / P-5）
+
+§5.1 定了「内部 → 标准栈」的**数据**接出（/metrics + tail + trace 子集）；本节补最后一跳：**告警判定与通知发送**落在哪里、默认给什么。
+
+**双层边界（先裁落点）**：
+
+- **层 A（标准栈，生产推荐）**：Prometheus scrape /metrics + alerting rules + **Alertmanager**——告警规则、静默、分组、路由是 Alertmanager 的本职，apollo 仓库零代码；企业微信/钉钉等接收器用社区 adapter（prometheus-webhook 族）承接，同样不进仓库。有标准栈的部署**不走层 B**。
+- **层 B（内置兜底，小部署可用）**：exporter（admin 进程）内自带**阈值 notifier**——无 Prometheus 的单机/开发部署零外部依赖即得告警。两层共用同一事件源（MetricRegistry 聚合值），不共用代码路径（层 B = 规则表 + 模板渲染 + 出站 POST，几十行量级）。
+
+**层 B 形态（本节主体）**：
+
+- **规则表驱动**：`{metric, op, window, threshold, period, silence_min, severity}`——如 `script_fault_total{module=*} rate 5min > 10 → severity=crit, silence 30min`。规则进配置非代码；scripting-lua §6.1 的三级计数器（`script_fault_total`/`script_budget_warn_total`）即典型输入。
+- **出站复用 net-abstraction §5.10 curl 设施**（HTTP 客户端只在 exporter 进程——三禁的自然延伸：**游戏进程永不直发 webhook**；Lua 层不开 HTTP 出站能力：攻击面 + 同步 30s 超时违 tick 纪律双否决）。
+- **四家默认模板**（机器人 webhook 本质 = JSON 模板 + 一次 POST；字段以各家开放平台现行文档为准，模板进配置非硬编码）：
+
+| 目标 | 出站与鉴权 | 消息体 | 备注 |
+|---|---|---|---|
+| 企业微信 | POST `…?key=<token>`（key 即凭证，无签名） | `{"msgtype":"markdown","markdown":{"content":…}}` | 机器人限频 20 条/min |
+| 钉钉 | `…?access_token=…&timestamp=&sign=`；sign = HMAC-SHA256(secret, `ts\n`+ts) base64 | `{"msgtype":"markdown","markdown":{"title":…,"text":…}}` | 加签机器人；限频 20 条/min |
+| 飞书 | POST webhook URL；自签机器人附 `timestamp + sign`（HMAC-SHA256 base64） | `{"msg_type":"text"/"interactive",…}` | 卡片消息可选 |
+| Slack | POST incoming webhook URL（URL 即凭证，无签名） | `{"text":…}` | — |
+
+- **发送纪律（评审红线级）**：① 重试指数退避 ≤3 次（5s/15s/60s），仍失败**回写本地日志**——告警不丢，回到 §1「本地文件是真相源」原则；② 同规则静默窗内聚合计数、窗末合并一条（防风暴）；③ 全局速率上限（默认 10 条/min，超限合并为 digest 一条——对接各家 20 条/min 限频留余量）；④ 密钥走配置/env（`APOLLO_WEBHOOK_*`），不进 git、不进日志；⑤ 出站目标进**白名单**（域名/网段进配置、运行期不可加——net-abstraction §5.10 SSRF 同纪律，exporter 也不开放任意拨号）；⑥ 模板变量 = 事件字段封闭集（§5.1 结构化行键集 + scripting-lua §6.1 ScriptFaultEvent 字段），不做自由表达式（防注入）。
+
+**与 §5.1 的关系**：三禁不动——webhook 是 exporter 进程的出站动作，不是游戏进程的新依赖；Kafka 仍在采集器之后（告警事件若要走 Kafka，由 tail 流承接，不经 notifier）；告警事件本身作为结构化行照常落本地日志（notifier 发送失败时它就是唯一留证）。
+
 ## 6. 现状收敛（C-25/C-26）与归属
 
 - **现状**（architecture-review §11.5，行号见彼处）：四套并存——①遗留 `apollo::utils::logging`（消费方仅 examples）②顶层 `include/apollo/core/log` 内建栈 ③`modules/core/log`（vcpkg 无 spdlog，实际回落内建）④内存版 LogManager；外加同路径双头文件 ODR 陷阱与 C-26 孤儿 TU（`modules/core/src/log/log_manager.cpp:30-33` 无任何目标编译，默认构建按推演链接失败）。
@@ -120,7 +147,7 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 ## 7. 分期
 
 - **P1（单进程就该有）**：四套收敛为 modules/core/log 一套（含 C-26 处置）→ 分级缓冲 + ERROR 旁路 + FATAL 同步落盘 → crash handler 四件套 + RLIMIT_CORE/core_pattern 运维配置 + CI 崩溃测试。验收：`raise(SIGSEGV)` 的测试进程留下「崩溃摘要文件 + core + 主日志最后一条 FATAL」三件全。
-- **P3（fleet）**：apps/logger collector + push 通道 + 断连降级 + BI 分流接线 + core 上传归档（与 G-1 machined 死亡上报同批）。
+- **P3（fleet）**：apps/logger collector + push 通道 + 断连降级 + BI 分流接线 + core 上传归档（与 G-1 machined 死亡上报同批）+ 告警 notifier（§5.2 层 B：规则表 + 四家 webhook 模板，随 exporter 同批）。
 
 ## 8. 与其余设计的交集
 
@@ -134,4 +161,4 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 
 ---
 
-*基线：apollo 现状引 architecture-review §11.5（C-25/C-26，源码基线 35a9c528 时实读）与 C-32（§12）；三家框架行号对应各自工作副本本轮实读（skynet skynet-src/skynet_start.c:287-291、service-src/service_logger.c:9-27；KBEngine kbe/src/lib/helper/debug_helper.{h,cpp}:217-218/:973-986/:1177-1180、kbe/src/lib/server/signal_handler.cpp:22-27/:112、kbe/src/server/tools/logger/；BigWorld lib/server/signal_processor.cpp:29-34、lib/cstdmf/callstack_linux.cpp:228）。2026-09-29 首次落盘（设计语料的日志空白——G-5 只接了观测通道，运行日志与崩溃取证此前零落点）。2026-09-30 增补 §5.1 外采边界（design-gap-inventory #10——三禁/单一 exporter/tail 采集/trace 子集；net-abstraction §7 P3 观测行与本节互引）。*
+*基线：apollo 现状引 architecture-review §11.5（C-25/C-26，源码基线 35a9c528 时实读）与 C-32（§12）；三家框架行号对应各自工作副本本轮实读（skynet skynet-src/skynet_start.c:287-291、service-src/service_logger.c:9-27；KBEngine kbe/src/lib/helper/debug_helper.{h,cpp}:217-218/:973-986/:1177-1180、kbe/src/lib/server/signal_handler.cpp:22-27/:112、kbe/src/server/tools/logger/；BigWorld lib/server/signal_processor.cpp:29-34、lib/cstdmf/callstack_linux.cpp:228）。2026-09-29 首次落盘（设计语料的日志空白——G-5 只接了观测通道，运行日志与崩溃取证此前零落点）。2026-09-30 增补 §5.1 外采边界（design-gap-inventory #10——三禁/单一 exporter/tail 采集/trace 子集；net-abstraction §7 P3 观测行与本节互引）。2026-09-30 增补 §5.2 告警出口与 webhook 默认实现族（architecture-review §19.4 P-5——双层边界（层 A Alertmanager 零代码/层 B exporter 内置 notifier）/规则表驱动/四家模板（企业微信/钉钉/飞书/Slack）/发送纪律六条；§19.5.2 候选方向的正式落盘）——摘要 8、§7 P3 行联动。*

@@ -100,8 +100,8 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 ### #11 出站 HTTP 客户端与第三方接出 — **CLOSED**(net-abstraction §5.10,2026-09-30 落盘)
 
 - **缺什么**:服务端出站 HTTP(第三方登录/支付/推送回调)的依赖收口与线程模型接线——同步 30s 超时 API 不得在场景线程直调(须走 scripting-lua §8 异步交接同型);Drogon 备选分支的收口(§15.2「禁止并存」纪律的对象)。
-- **证据(存量实读,2026-09-30)**:modules/net/http **已存在 2541 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648),namespace `apollo::net::http`,RestTemplate 是 Spring RestTemplate 风格(HttpMethod 枚举/HttpResponse/HttpEntity/RequestOptions{timeoutMs=30000, connectTimeoutMs=10000, verifyPeer, proxy});rest_client.cpp:13/#ifdef `APOLLO_HAS_CURL`、:16 `#define APOLLO_CURL_STUB 1`——**vcpkg.json 无 curl,默认构建全桩**(与 C-45 宏门 MySQL 同族);modules/net/CMakeLists.txt 另有 Drogon 备选分支(:81-91 http、:124-133 websocket)与 built-in 分支并存;**零生产消费方**(仅 examples/http_demo、tests/test_rest_template、docs/api/net.md);net-abstraction.md:29 现状盘点行将 HTTP/WebSocket 判为「与本设计正交,另行处理」——本行即「另行处理」的登记。
-- **落点**:net-abstraction §5.10 三裁决——① **curl 进 vcpkg**,rest_client 转真实现(TLS 后端 OpenSSL,单一 crypto 源不破;APOLLO_CURL_STUB 删随代码批);② **Drogon 备选分支删除**(CMakeLists :81-91/:124-133——§15.2 禁并存对象;admin exporter 不需要 Drogon);③ 同步 API 禁场景线程直调(event_loop curl_multi + scripting-lua §8 异步交接,回包不进当 tick 判定);边界 = 目标白名单(SSRF,与 §5.7 同纪律);代码面审计仍归下轮候选(§4.2)。
+- **证据(存量实读,2026-09-30;行数与覆盖同日勘误回填,architecture-review §19.2 P-2)**:modules/net/http **已存在 5048 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648 + **websocket.cpp 1193 + 三公共头 1314**——登记时漏计后两项),namespace `apollo::net::http`,RestTemplate 是 Spring RestTemplate 风格(HttpMethod 枚举/HttpResponse/HttpEntity/RequestOptions{timeoutMs=30000, connectTimeoutMs=10000, verifyPeer, proxy});rest_client.cpp:13/#ifdef `APOLLO_HAS_CURL`、:16 `#define APOLLO_CURL_STUB 1`——**vcpkg.json 无 curl,默认构建全桩**(与 C-45 宏门 MySQL 同族);modules/net/CMakeLists.txt 另有 Drogon 备选分支(:81-91 http、:124-133 websocket)与 built-in 分支并存;**零生产消费方**(仅 examples/http_demo、tests/test_rest_template、docs/api/net.md);net-abstraction.md:29 现状盘点行将 HTTP/WebSocket 判为「与本设计正交,另行处理」——本行即「另行处理」的登记。**测试覆盖为零**:tests/test_rest_template.cpp 与 modules/net/tests/net_comprehensive_tests.cpp 均引用幻影 API、无法编译(分别被 APOLLO_BUILD_GTESTS=OFF 与 BUILD_TESTING 恒假挡住)——architecture-review §18 C-59。
+- **落点**:net-abstraction §5.10 三裁决——① **curl 进 vcpkg**,rest_client 转真实现(TLS 后端 OpenSSL,单一 crypto 源不破;APOLLO_CURL_STUB 删随代码批);② **Drogon 备选分支删除**(CMakeLists :81-91/:124-133——§15.2 禁并存对象;admin exporter 不需要 Drogon);③ 同步 API 禁场景线程直调(curl_multi 执行层**按新建计**——既有 event_loop.cpp 不构成执行层,见 architecture-review §19.1 勘误 P-1;scripting-lua §8 异步交接,回包不进当 tick 判定);边界 = 目标白名单(SSRF,与 §5.7 同纪律);代码面审计仍归下轮候选(§4.2)。
 
 ## 3. 已登记推迟项(登记簿管辖,不重复立项)
 
@@ -120,7 +120,7 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 
 ### 4.2 新审计候选:modules/net/{http,websocket}
 
-16.8.1 版图普查与 C-29 四栈盘点(protocol/tcp/rpc + modules/protocol + include 双树)的**边界外存量**:modules/net/http(2541 行,证据见 #11)与 modules/net/websocket(built-in + Drogon 双分支)。二者与 §15.2「禁止第五套网络栈」纪律的关系未经审计——WebsocketFrameFilter 化(net-abstraction §5.5 判定:WS 是流 filter 不新起栈)意味着 built-in WS 栈的处置方向已有,但代码面审计未做。**已登记 architecture-review §16.10.2(本批补行)。**
+16.8.1 版图普查与 C-29 四栈盘点(protocol/tcp/rpc + modules/protocol + include 双树)的**边界外存量**:modules/net/http(5048 行,证据见 #11)与 modules/net/websocket(built-in + Drogon 双分支)。二者与 §15.2「禁止第五套网络栈」纪律的关系未经审计——WebsocketFrameFilter 化(net-abstraction §5.5 判定:WS 是流 filter 不新起栈)意味着 built-in WS 栈的处置方向已有,但代码面审计未做。**已登记 architecture-review §16.10.2(本批补行)。**
 
 ### 4.3 BI 边界声明(2026-09-30 增问的核实结论)
 
