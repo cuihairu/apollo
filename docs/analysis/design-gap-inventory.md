@@ -60,23 +60,23 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:sdk-contract.md:206 帧层图 `[加密 P3]` 方括号占位,全 design 无展开。加密库存量核实:openssl **已是 vcpkg.json 直接依赖**(:6,dependencies 第 1 项);websocket.cpp:38 用 `<openssl/sha.h>`(WS 握手);modules/net/CMakeLists.txt:135-160 built-in WebSocket 分支 `find_package(OpenSSL REQUIRED)`;contract_hash 刻意零加密库依赖(决策 #4 链接图最小化);libsodium 全仓零命中。**方向定调:OpenSSL 单一 crypto 源,不引第二套**——选型论证与用法纪律(算法分级/版本锁定/禁 MD5 等)待 P3 批落文。
 - **落点**:net-abstraction §5.9——加密 = FrameFilter 族 CryptoFilter(§5.5 槽位,压缩后位次);威胁模型裁域(防窃听/重放/劫持/MITM,**非目标 = 客户端逆向**——加密防网络第三方不防持客户端的玩家);握手序列(login_token 归 login-app/X25519+HKDF-SHA256/per-frame nonce 由 seq 派生/resume 重走 ECDH 前向保密);算法分级禁用表(MD5/SHA-1 新代码/RC4/DES/裸 ECB/无 MAC CBC 禁);**OpenSSL 单一 crypto 源定案**(EVP 接口/CRYPTO_memcmp/RAND_bytes 纪律,版本锁 3.x LTS);WSS 兜底 P3 随 gateway。
 
-### #5 容量模型与基准设施 — OPEN(随 P3)
+### #5 容量模型与基准设施 — **CLOSED**(docs/design/capacity-and-benchmark.md,2026-09-30 落盘)
 
 - **缺什么**:单进程 CCU/实体数/属性变更率/带宽的预算表(设计文档各处散落数值:5000 CCU、25k msg/s、movement <100B——无一处汇总与推导);基准 harness(契约回放/压测拓扑)归属与形态;「M2+ 每项先有基准再动手」(net-abstraction §5.6)的基准从哪来。
 - **证据**:「基准/benchmark/压测」design 零成文;attribute-sync §11 有度量验收表(单件级)无系统级容量模型。
-- **落点计划**:新建 docs/design/capacity-and-benchmark.md。
+- **落点**:docs/design/capacity-and-benchmark.md——顶层目标(5000 CCU/100 人同屏)+ 推导链四步;**口径统一**(主循环 10Hz = clock-and-time 定案,sdk-contract §10.6「20Hz」估算旧口径修正);帧预算表(100ms → 消息段 20/tick 六阶段 70/富余 10ms,初始分配基准校准);基准**三形态**(微基准 ctest / 场景基准 apps/bench 合成 intent 流·确定性 RNG 可复现 / 录制回放 = battle-determinism §5 同格式);M2+ 准入基准设施化(before/after + 显著性);系统级验收指标集九项(跳拍率/水位触发率/violation_score 断开率/帧分位等——clock-and-time §10 引用的「容量批 §5」即此)。
 
-### #6 GM/运营命令面 — OPEN(随 P3)
+### #6 GM/运营命令面 — **CLOSED**(scripting-lua §7.5,2026-09-30 落盘)
 
 - **缺什么**:玩法 GM 指令表(发道具/封禁/踢人/改属性——白名单与契约 predict 位的关系)、GM 角色权限分级(与 observability 文档 AccessController 的关系:框架侧已定 Passive/Controlled,玩法侧未接)、GM 命令审计存储(谁何时对谁执行了什么)。
 - **证据**:scripting-lua §7 在线调试是**框架侧**(eval/状态面);「GM」在设计文档中仅作为 admin 消息来源出现,指令语义面零设计。GM 校验在 scripting-lua §1 职责表有一行(GM 校验进 Lua),细则无。
-- **落点计划**:scripting-lua §7 增补 GM 命令面子节(或独立小节)。
+- **落点**:scripting-lua §7.5——管道零新增(与 §7.1 attach 同路:admin 单入口 → control 通道 → 场景线程 tick 边界);**指令表注册表驱动**(`gm_commands` 模块声明 + 参数 schema 校验,GM 面无 eval 权限);**gm_write 独立白名单**(contract.lua 内与 `predict` 分列,GM 写走属性钩子同路不绕管线);**level 三级 + 高危双人复核**(框架 AccessController 之上的业务粒度,BW/KBE 无此层——加强项);**gm_audit 独立审计表**(wall+tick 双写,拒绝也落,observability `/gm` 分支查询);GM 输入 = admin 会话 intent 流(battle-determinism 复算自动含);踢人/封禁执行位归 net close/login-app 风控。
 
-### #7 C++ 内存与对象池预算 — OPEN(随 P3)
+### #7 C++ 内存与对象池预算 — **CLOSED**(capacity-and-benchmark §4,2026-09-30 落盘)
 
 - **缺什么**:实体/属性容器/消息对象的对象池策略、每进程内存预算表、Lua 状态上限已有(scripting-lua §6)但 C++ 侧无对应物、jemalloc/tcmalloc 选型立场。
 - **证据**:「对象池/内存池/pmr」design 零命中;16.8.3 归属论证触及 modules/base(线程/内存/ID)但只定位置不定策略。
-- **落点计划**:并入 capacity-and-benchmark.md(#5 同批)。
+- **落点**:capacity-and-benchmark §4——每进程内存预算表(实体属性 ≤1.5GB/Lua 每状态 64MB 数值化/net 收发 640MB/journal ≤512MB,稳态 RSS ≤4GB + 告警熔断线);**对象池三类**(帧对象/属性收集缓冲/发送环切片——free-list 挂 owning 线程单写者无锁,池大小 = 容量参数启动期分配,耗尽走降级不现分配);**jemalloc/tcmalloc 不引入**(单写者+三类池已收敛分配热点,全局分配器替换 = 过早优化 + 第二行为面;列 M2+ 基准准入——分配占帧 >5% 才评估)。
 
 ### #8 上行 intent/消息限流参数面 — **CLOSED**(net-abstraction §4.3,2026-09-30 落盘)
 
@@ -135,9 +135,9 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先;**已完成**(§8.3/§8.4 落盘 + xml-generation §4 交叉引用) |
 | B4 | 新建 battle-determinism.md | #2 | 随战斗玩法;**已完成**(四约束+回放四元组落盘,36 号 #16/#18 收口) |
 | B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3;**已完成**(§4.3/§5.9/§5.10 + logging §5.1 落盘;同批收 scripting-lua 弃 sol2 改原生 C API 绑定 + Lua 5.5.1 决策——见 §3 与登记簿) |
-| B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3 |
-| B7 | scripting-lua GM 命令面增补 | #6 | 随 P3 |
-| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动 |
+| B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3;**已完成**(容量模型+帧预算表+内存对象池+基准三形态+指标集九项) |
+| B7 | scripting-lua GM 命令面增补 | #6 | 随 P3;**已完成**(§7.5 指令表/权限分级/审计存储) |
+| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED** |
 
 每批独立提交(analysis/design 拆分照旧),完成即 fetch --rebase + push(推送纪律)。
 
