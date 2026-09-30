@@ -36,11 +36,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 
 ## 2. 真空白清单(#1–#11)
 
-### #1 时间与时钟模型 — OPEN(优先)
+### #1 时间与时钟模型 — **CLOSED**(docs/design/clock-and-time.md,2026-09-30 落盘)
 
 - **缺什么**:三钟分工(steady 单调钟驱动 tick / 逻辑 tick 号 / wall 钟仅运维与持久化时间戳)、tick 号而非时间戳作为世界状态判定序、客户端校时只用于显示与回放对齐(不进判定)、跨进程时钟不互信(authority_epoch/route_version 已有,时间值本身的边界没有)。
-- **证据**:design 六份零「时钟/单调钟/steady_clock/校时」命中;`GameClockService` 名存实亡——apps/game-server/src/main.cpp:20 实为 `struct nService` 式演示壳(仅 `now()` 传给 LoginPipeline 打印),无任何时钟语义。深潜先例:BW/KBE 均 10Hz 固定 tick(mmo-mechanism-deep-dive §3),时钟作为独立主题两家也无成文设计——**apollo 补此件即超先例,不是抄先例**。
-- **落点计划**:新建 docs/design/clock-and-time.md。
+- **证据**:design 六份零「时钟/单调钟/steady_clock/校时」命中;`GameClockService` 名存实亡——apps/game-server/src/main.cpp:20 实为 `struct GameClockService { std::string name = "clock"; }` 纯演示壳(实测复核)。深潜先例:BW/KBE 均 10Hz 固定 tick(mmo-mechanism-deep-dive §8),时钟作为独立主题两家也无成文设计——**apollo 补此件即超先例,不是抄先例**。
+- **落点**:docs/design/clock-and-time.md——三钟分工决策表 + 三口诀红线(测时长只 steady/做判定只 tick/给人看只 wall)、TickSource 进程级单源/有界追赶(catch_up_max 2 拍,超则跳拍记 dropped_ticks)/三类合法暂停点、持久化 (tick, wall_ms) 双写、定时器轮 deadline=tick 号、跨进程比较只用 seq/位点/epoch、GameClockService 重写登记代码批。
 
 ### #2 战斗确定性与回放细则 — OPEN(随战斗玩法批次)
 
@@ -131,7 +131,7 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | 批 | 内容 | 缺口 | 依据 |
 |---|---|---|---|
 | B1 | 本清单落盘 + 登记簿补行 | 元缺口 4.1/4.2 | 用户指令「落盘吧」 |
-| B2 | 新建 clock-and-time.md | #1 | 用户点名最先 |
+| B2 | 新建 clock-and-time.md | #1 | 用户点名最先;**已完成**(b8ebed98 后续设计批) |
 | B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先 |
 | B4 | 新建 battle-determinism.md | #2 | 随战斗玩法 |
 | B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3 |
