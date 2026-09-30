@@ -12,7 +12,7 @@
 - 表内跨引擎行号为各仓工作副本实读记录（双轨口径同 deep-dive §0）；apollo 载体指针随设计文档滚动，以 `docs/design/*` 为准。
 
 **术语裁决记录（2026-09-30，用户指令）**
-1. **Battle → 副本定名**：docs/25「Battle Service」的真实语义是**副本**（instance/dungeon）而非「战斗」本身，对应 KBEngine `Space` 概念——后续文档一律写「**副本**」，「Battle 实例」作历史别名（引已删 docs/25 时 `git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯）。
+1. **Battle → 副本定名**（两则）：① docs/25「Battle Service」的真实语义是**副本**而非「战斗」——该名**作废**，后续文档一律写「**副本**」（英文/代码标识 = **instance**；别名 dungeon；塔防/竞技语境口语 = room）。② **「battle/战斗」一词保留给战斗逻辑域**（战斗验证/战斗结算——见「战斗验证服务」词条），不再用于任何空间/实例命名。对应 KBEngine `Space` 概念；已删 docs/25 按 `git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯。
 2. **不引注册中心**：不引入 etcd/consul 类外部注册中心；进程发现唯一口径 = **G-1 双层**（machined 守护 + UDP 广播，net-abstraction §7）。注册中心来源文档 docs/05 §2.3 随裁决整档删除（git 可溯），36 号 #13 行同步改写。
 3. **ghost 不做**（决策 #9，2026-09-29 登记）：跨 Zone 迁移走显式 handoff；远程可见走 RO_MIRROR 只读镜像。
 
@@ -25,8 +25,9 @@
 | 术语 | 一般含义 | 出现的引擎 | apollo 对应与立场（权威载体） |
 |---|---|---|---|
 | **场景**（Scene / Space） | 世界中一块有归属的逻辑单元（地图、分区、副本皆是）：实体容器、AOI 边界与地理数据的载体 | BW = `Space`（cellapp/space.hpp「represent a space」；cellappmgr/space.hpp「manage the different spaces」——**场景侧进程与管理进程各持 Space 定义**）；KBE = `Space`（cellapp/space.h `class Space : public Entity`——空间本身是实体；cellappmgr/space.h `spaceID_+Cells+geomappingPath`）；skynet 无世界单元概念 | **scene**——`AOIEntity::sceneId` 隔离副本与分段可见（attribute-sync §4.3），由场景线程承载（scripting-lua §2 单写者纪律） |
-| **副本**（Instance / Dungeon；历史名 Battle） | 一次玩法开启的**独立世界实例**：自带场景、规则与参战实体，生命周期随玩法起止——语义是「实例化的场景」，不是「战斗」 | KBE = `Space` 实例（space 即场景/副本的统一概念——用户 2026-09-30 指认）；BW = Space 实例（cellappmgr 按 space 分配 cellapp，**无独立进程**）；skynet 无 | **副本实例进程**（历史名 Battle Service，docs/25 已删 git 可溯）：ECS+五段管线+Lua、短生命周期、tick 20-50ms 可配、结果经 Result Dispatcher 单向落回（36号 #16「自创+借鉴」——三家无战斗独立进程，deep-dive §16 负空间）；小玩法可不 offload 留 Zone |
+| **副本**（英文定名 **instance**；别名 dungeon、room——历史错名「Battle」已废，见 §0 裁决 1） | 一次玩法开启的**独立世界实例**：自带场景、规则与参战实体，生命周期随玩法起止——语义是「实例化的场景」，不是「战斗」 | KBE = `Space` 实例（space 即场景/副本的统一概念——用户 2026-09-30 指认）；BW = Space 实例（cellappmgr 按 space 分配 cellapp，**无独立进程**）；skynet 无 | **副本实例**（instance，短生命周期、tick 20-50ms 可配、结果单向落回——36号 #16「自创+借鉴」，三家无独立进程，deep-dive §16 负空间）；塔防/竞技的「**房间（room）**」= 副本的口语形态，一个房间一个副本实例（docs/30）；小玩法可不 offload 留 Zone |
 | **Zone** | （apollo 特有词）场景实例粒度的**逻辑服进程**：承载 scene 与实体权威，刻意不拆 cell/base 两族进程 | 对照：BW/KBE = cellapp（空间侧）+ baseapp（会话侧）两族进程；EQEmu = zone 一进程；skynet = 单节点多 service | 36号 #9「场景实例粒度（Zone）而非无缝 cell」；网关透传/Zone 解码的装配分工（sdk-contract §10.6） |
+| **战斗验证服务**（battle verification / 影子复算） | 客户端权威战斗（帧同步/客户端演算）下，**服务端独立运行同一份战斗逻辑复算验证**——注册为服务、RPC 交互：输入流/战报上行、验证与结算结果下行，用于反作弊 | 行业通型但非引擎内建：JS 双端（客户端 JS + Node 验证服）、C# 双端（Unity + .NET，可热更）皆社区/自研实践；BW/KBE/skynet 无内建（均为状态同步、服务端权威，无需）——36号 §2 各节 | apollo **未立项**（登记 design-gap-inventory）：预留缝 = battle-determinism §5 复算 hash 链 + 回放四元组；若立项，语言面 = **Lua 双端共享**（客户端 xLua/服务端 scripting-lua，确定性子集 battle-determinism §2）——与 C#/JS 方案同型；命名纪律 = battle 词专属此域（§0 裁决 1-②） |
 | **无缝世界**（Seamless） | 大世界跨进程连续：实体在逻辑分区（cell）间自由漫游，边界对玩家不可见 | BW = 无缝世界（代价：ghost 双写/边界协商/跨进程调试不可单步——36号 #9 引已删 BigWorld架构深度解析 §五）；KBE = 同（ghost + entity migration） | **否决，采副本/分线制**（36号 #9）——5000+ CCU SLO 下场景实例的故障域与扩缩已够用 |
 
 ### 1.2 进程与编队

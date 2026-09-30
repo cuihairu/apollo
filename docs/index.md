@@ -4,70 +4,66 @@ title: Apollo
 titleTemplate: false
 hero:
   name: Apollo
-  text: 轻量在线游戏服务端引擎
-  tagline: 面向轻量 MMO 与塔防/固定地图玩法的 C++20 服务端底座，可按项目规模升级到普通 MMO 与 BigWorld 增强模式。
+  text: 场景实例制在线游戏服务端引擎
+  tagline: C++20 内核 + Lua 业务层——副本（instance）/Zone 粒度的 MMO 框架；塔防/房间制玩法一等公民（Compact 形态）。
   image:
     src: /apollo.png
     alt: Apollo
   actions:
     - theme: brand
-      text: 架构适配判断
-      link: /architecture/lightweight-mmo-and-tower-defense-fit
+      text: 术语表（新读者首站）
+      link: /design/concept-glossary
     - theme: alt
-      text: Profile 装配目录
-      link: /architecture/mmo-component-assembly-catalog
+      text: 塔防/Compact 形态
+      link: /30-Compact_GameServer_Design
 features:
-  - title: 轻量 MMO 优先
-    details: 以 Login、Gateway、PlayerAnchor、WorldHost、Persistence 的主链支撑分线、地图实例、副本和轻社交。
-  - title: 塔防可用
-    details: 通过 Compact GameServer 将 Scene、AOI、Battle、Wave Runtime 合并在一个低运维成本的游戏进程内。
-  - title: 渐进式装配
-    details: L1-L8 作为默认稳定层，L9 BigWorld 分布式世界能力只在连续大世界项目中启用。
-  - title: 模块化 C++20
-    details: Base、Core、Runtime、Net、Data、Game 等模块按能力拆分，避免业务域反向污染底层内核。
-  - title: 客户端协议稳定
-    details: 对外 Client Protocol、Session Protocol 与内部 Envelope、Replication Protocol 分离，便于版本演进。
-  - title: 工程治理内置
-    details: 配置、日志、生命周期、可观测性、测试策略和部署 Profile 统一纳入框架设计。
+  - title: 场景实例制（Zone/副本）
+    details: 场景实例粒度 Zone 承载实体权威，不拆 cell/base、不做 ghost 无缝世界；副本（instance）短生命周期独立可配，房间制玩法即副本形态。
+  - title: 网络四层自建
+    details: L0 epoll reactor → L1 帧（magic+seq+CRC32C）→ L2 会话（四通道 QoS/四级水位/resume 重连续传）→ L3 GameConnection；进程间 InterServerLink 稳定连接一族。
+  - title: 契约一源多端
+    details: XML+XSD 契约（attrs/messages/entities/errors）+ 生成器独立二进制；8 位可见域掩码、schema_hash 握手、按域分段 id——服务端契约变更零重编。
+  - title: Lua 5.5 白名单业务层
+    details: 原生 C API 绑定（版本随 vcpkg）；脚本可写面由契约生成；热更走换表协议（冒烟+回滚）；线程模型单写者、协程 tick 边界 resume。
+  - title: write-behind journal 持久化
+    details: 先追加日志后快照两段式；journal 同为 G-2 热备镜像流与崩溃恢复位点；storage.xml 语句即数据（MySQL 8 主存）。
+  - title: 集群 G-1/G-2（P3 前置已定）
+    details: 进程发现 = machined 守护 + UDP 广播双层（不引 etcd/consul）；热备 = backup-hash 链 + reviver；恢复相位排他；指标同源 G-5。
 ---
 
-## 当前定位
+## 当前定位与架构现状
 
-Apollo 不再只定义为一套重型 MMORPG 服务器框架，而是一套面向在线游戏的渐进式服务端引擎。
-
-默认目标是两类项目：
-
-- 轻量 MMO：分线世界、固定地图、多人在线、副本、社交和基础运营系统。
-- 塔防 / 固定地图：波次、防守、建造、技能、怪物路径和局内状态同步。
-
-连续大世界、跨 partition 权威迁移、Witness / Ghost 等 BigWorld 能力仍然保留，但它们是增强层，不是起步必选项。
-
-## 推荐阅读
-
-| 入口 | 说明 |
-|------|------|
-| [轻量 MMO 与塔防适配判断](/architecture/lightweight-mmo-and-tower-defense-fit) | 判断这两类游戏是否适合 Apollo 当前架构 |
-| [架构概述](/architecture/overview) | 查看整理后的整体分层和 Profile |
-| [MMO Topology 范围与组合](/architecture/mmo-topology-scope-and-composition-design) | 判断 Profile、Topology、App、Component 如何组合 |
-| [MMO 组件装配目录](/architecture/mmo-component-assembly-catalog) | 查看各 Profile 的必选、可选、后置和关闭组件 |
-| [Compact GameServer](/30-Compact_GameServer_Design) | 塔防、固定地图、轻量玩法的精简服务端形态 |
-| [Shard / Zone / Instance / Match](/architecture/shard-zone-instance-match-topology-design) | 多游戏形态下的拓扑术语 |
-| [BigWorld 架构深度解析](/architecture/bigworld) | BigWorld 兼容层与分布式世界增强入口 |
-| [BigWorld 进程架构与玩家生命周期](/architecture/bigworld-lifecycle) | 进程职责、登录、重连与下线链路 |
-| [Distributed World 实施](/architecture/distributed-world-topology-implementation-plan) | 分布式世界的落地桥接页 |
-| [快速开始](/guide/quick-start) | 构建并运行第一个 Apollo 游戏服务器 |
-
-## 装配 Profile
+**形态**：单进程起步（P1-P2），集群能力 P3 接入——分期是显式声明，不是遗漏。现行拓扑：
 
 ```text
-Profile A: Tower Defense Compact
-Client -> Gateway -> CompactGameServer(Scene + AOI + Battle + Wave) -> Persistence
-
-Profile B: Lightweight MMO
-Client -> Login -> Gateway -> BaseApp(PlayerAnchor) -> WorldHost -> Persistence
-
-Profile C: Distributed MMO
-Client -> Login -> Gateway/Proxy -> BaseApp -> Cell/World Partition -> AppMgr -> Persistence
+Client ── Gate（透传/解码装配分工）
+          └─ World / manager 域（最轻分配、准入闸门、恢复相位）
+              ├─ Zone ×N（场景实例粒度进程，单写者 tick 10Hz）
+              ├─ AOI 服务（网格+四叉树+shard，可独立扩缩；Compact 形态内嵌）
+              ├─ 副本实例（instance，可选独立进程；塔防房间 = 内嵌副本）
+              └─ db-app（storage.xml + write-behind journal）
+进程发现：machined 守护 + UDP 广播（G-1，不引注册中心）    热备：backup-hash 链 + reviver（G-2）
 ```
 
-Profile A 和 Profile B 是当前优先收敛方向。Profile C 只在明确需要连续大世界、空间切片和权威迁移时启用。
+**已定关键裁决**（全表见 36 号 §1 决策追溯表 #1-#19）：网络四层自建/nng 退役；契约 XML+XSD；副本制否决无缝世界（#9）；AOI 独立服务（#10）；Lua 白名单否决 Python（#12）；进程发现 machined+UDP 双层、不引 etcd/consul（#13，2026-09-30）；Lua 5.5 随 vcpkg、弃 sol2（#12 修订）；帧同步只留适配缝（#18）。
+
+**设计缺口排程**：design-gap-inventory #1-#11 已全部 CLOSED；**#12-#16 OPEN**（会话与在线目录/登录链路/入站第三方对接/Bots 压测/地图空间数据管线——2026-09-30 登记）。
+
+## 文档地图（权威分级）
+
+| 层 | 位置 | 内容 |
+|------|------|------|
+| **术语基座** | [design/concept-glossary](/design/concept-glossary) | 通用概念 × 出现引擎 × apollo 立场；三条术语裁决（副本 instance 定名/battle 词留给战斗验证域/不引注册中心）——**新概念先入表再落文档** |
+| **权威设计** | docs/design/（十份） | net-abstraction（网络四层+集群前置）、sdk-contract（契约）、attribute-sync（属性/同步/journal）、scripting-lua（Lua）、xml-generation（生成器）、logging、clock-and-time、battle-determinism（回放/复算）、capacity-and-benchmark、concept-glossary |
+| **对比分析** | docs/analysis/ | architecture-review（全仓审计+登记簿，判定权威）、mmo-mechanism-deep-dive（36 号 #1-#18 实现级取证）、design-gap-inventory（缺口账本）、ssengine-reference |
+| **框架对比** | [36-MMO_Frameworks_Comparative_Analysis](/36-MMO_Frameworks_Comparative_Analysis) | 十框架对比 + 决策追溯表 #1-#19（apollo 每项设计的出处与理由） |
+| **轻量形态** | [30-Compact_GameServer_Design](/30-Compact_GameServer_Design) | 塔防/固定地图精简形态（AOI 内嵌/副本内嵌/单机多线程） |
+| **批次计划** | [todo](/todo) | 批次 1-9（契约已交付；db-app/cell-appmgr/脚本/SDK/监控排程） |
+| **参考件区** | [architecture/README](/architecture/README) | 70+25 份全量状态表（A 实引 4 份/B 引擎分析/C 被取代稿/D 历史路线图）——**该目录不读作 apollo 现行设计** |
+| **QA 答疑** | docs/qa/（130 问）、[QA](/QA) | 面试级问答库（BW/KBE 机制分析结论，参考件） |
+
+其余目录（guide/、api/、modules/、apps/、sdks/、public/）为早期手册与模块说明，随对应代码批次重写；根目录编号文档（03/18/32-36）状态以各文档头部标注与 36 号口径为准。已删文档（00/04/05/17/25 等）git 历史可溯。
+
+## 快速上手（读者路线）
+
+1. [术语表](/design/concept-glossary) → 2. [36 号决策追溯表](/36-MMO_Frameworks_Comparative_Analysis)（为什么这样设计）→ 3. docs/design/ 六份核心（net-abstraction/sdk-contract/attribute-sync/scripting-lua/logging/clock-and-time）→ 4. [architecture-review §16.10.2 登记簿](/analysis/architecture-review)（什么还没做、等什么）→ 5. [todo](/todo)（批次排程）。

@@ -34,7 +34,7 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 | **BI 出口(2026-09-30 核实)** | attribute-sync §8.2(:288) | 属性变更事件收集阶段旁路采样导出,预算外;脚本错误审计(scripting-lua §6)与 collector(logging §5)汇合——**业务侧管道(数仓/报表/看板)不在 apollo 设计面,见 §4.3 边界声明** |
 | **Redis 层定位** | attribute-sync §8.2(:289) | 只做跨进程共享热数据,不做实体属性缓存、不做二级缓存(§15.5 同判);部署细节缺 = 本清单 #9 |
 
-## 2. 真空白清单(#1–#11)
+## 2. 真空白清单(#1–#16)
 
 ### #1 时间与时钟模型 — **CLOSED**(docs/design/clock-and-time.md,2026-09-30 落盘)
 
@@ -103,13 +103,43 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据(存量实读,2026-09-30;行数与覆盖同日勘误回填,architecture-review §19.2 P-2)**:modules/net/http **已存在 5048 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648 + **websocket.cpp 1193 + 三公共头 1314**——登记时漏计后两项),namespace `apollo::net::http`,RestTemplate 是 Spring RestTemplate 风格(HttpMethod 枚举/HttpResponse/HttpEntity/RequestOptions{timeoutMs=30000, connectTimeoutMs=10000, verifyPeer, proxy});rest_client.cpp:13/#ifdef `APOLLO_HAS_CURL`、:16 `#define APOLLO_CURL_STUB 1`——**vcpkg.json 无 curl,默认构建全桩**(与 C-45 宏门 MySQL 同族);modules/net/CMakeLists.txt 另有 Drogon 备选分支(:81-91 http、:124-133 websocket)与 built-in 分支并存;**零生产消费方**(仅 examples/http_demo、tests/test_rest_template、docs/api/net.md);net-abstraction.md:29 现状盘点行将 HTTP/WebSocket 判为「与本设计正交,另行处理」——本行即「另行处理」的登记。**测试覆盖为零**:tests/test_rest_template.cpp 与 modules/net/tests/net_comprehensive_tests.cpp 均引用幻影 API、无法编译(分别被 APOLLO_BUILD_GTESTS=OFF 与 BUILD_TESTING 恒假挡住)——architecture-review §18 C-59。
 - **落点**:net-abstraction §5.10 三裁决——① **curl 进 vcpkg**,rest_client 转真实现(TLS 后端 OpenSSL,单一 crypto 源不破;APOLLO_CURL_STUB 删随代码批);② **Drogon 备选分支删除**(CMakeLists :81-91/:124-133——§15.2 禁并存对象;admin exporter 不需要 Drogon);③ 同步 API 禁场景线程直调(curl_multi 执行层**按新建计**——既有 event_loop.cpp 不构成执行层,见 architecture-review §19.1 勘误 P-1;scripting-lua §8 异步交接,回包不进当 tick 判定);边界 = 目标白名单(SSRF,与 §5.7 同纪律);代码面审计仍归下轮候选(§4.2)。
 
+### #12 会话与在线目录域——玩家所在线/所在 Zone/在线状态/顶号 — **OPEN**(2026-09-30 增补,用户对标 KBE/BW 点名)
+
+- **缺什么**:玩家在线状态的权威登记与查询面——谁在线、在哪条**线**(同 map 并行 scene 实例——「线」为中文 MMO 圈通称,KBE 引擎源码/配置无 line 一级概念,本轮实测 kbe/src + kbengine_defaults.xml 零命中,同图多 Space 实例即多线、由脚本层 Spaces 管理)、在哪个 Zone/哪个副本;**重复登录与顶号裁决**;掉线保活窗口;跨进程玩家寻址的**数据源**(architecture/remote-entity-call-design.md RouteResolver 四件套的「宿主定位」职责无数据来源);好友在线查询/GM 在线查询/全服广播寻址。
+- **证据(负空间+先例,2026-09-30 实测)**:design/ 九份 grep「顶号|重复登录|在线状态|online」零命中;KBE 侧引擎无在线目录(在线 = baseapp 实体在内存,分配归 baseappmgr;重复登录裁决在 assets 脚本层——assets 仓库本机无,sdk_templates spaces 目录仅 .gitignore 占位已核);BW 侧在线目录分散在 mgr(baseappmgr 持 base 分配表 + (addr,load) 上报 loginapp 分流,baseappmgr.cpp:588-599/:1117);apollo 已有机制件但无目录:manager 域最轻分配(net-abstraction §7)、sceneId 隔离(attribute-sync §4.3)、ServerID 分段(36号 #15)。
+- **落点**:建议随 G-1/G-2 同批补「会话与在线目录」前置设计——owner = manager 域;形态 = 编队事件 + Zone 上报会话增删的聚合目录(journal/事件广播,「全局仲裁态集中不共享」通道族 net-abstraction §7);查询面走 control 通道(观测/GM)与 RouteResolver(寻址)两个消费方。
+
+### #13 登录链路整体设计 — **OPEN**(2026-09-30 增补)
+
+- **缺什么**:login-app 职责全链——账号鉴权、login_token 签发/校验/TTL/一次性(net-abstraction §5.9 只有一行)、选服/排队/准入(BW LoginConditions 先例已引但无登录链设计)、客户端 SDK 下发时机(KBE clientsdk_downloader 先例)、断线重连/顶号的会话裁决衔接(#12)。
+- **证据**:design/ 中 login 相关仅三处一句带过(§5.9 login_token、sdk-contract schema_hash 握手、§5.7 epoch);KBE loginapp + clientsdk_downloader.{h,cpp}(deep-dive §4 已核);BW loginapp 指派 baseapp(36号 §2.1)。
+- **落点**:P2-P3 设计批,依赖 #12(目录)与 G-1;拓扑入口 = gateway-app(sdk-contract §10.6 网关透传)。
+
+### #14 入站第三方对接面(interfaces 域) — **OPEN**(2026-09-30 增补)
+
+- **缺什么**:第三方账号绑定/充值回调/运营后台的**入站** HTTP 面——#11 只裁了出站;入站归哪个进程承载(gateway-app / 独立 admin-app)、鉴权、回调与游戏内实体投递的接线(异步、不进场景线程)。
+- **证据**:design/ grep「充值|回调入站|interfaces」零命中(2026-09-30);KBE interfaces 独立进程(kbe/src/server/tools/interfaces,deep-dive §4 目录清点);BW 由 db 层 billing 承接(lib/db_storage_mysql/mysql_billing_system.cpp,36号 问11 A 级)。
+- **落点**:随 #13 同批(§5.10 出站三裁决的镜像面;目标白名单/鉴权同纪律)。
+
+### #15 Bots/协议级压测客户端 — **OPEN**(2026-09-30 增补)
+
+- **缺什么**:模拟客户端**协议层**的机器人进程(多客户端并发接入、移动/技能/登录脚本化)——capacity-and-benchmark §5 三形态(微基准/合成 intent/录制回放)覆盖服务端机制面,无「真实四通道会话 + 握手 + 重连」的端到端压力形态。
+- **证据**:capacity-and-benchmark 全文无 bots;KBE tools/bots + BW server/tools/bots(deep-dive §4/§16 目录清点已核——两家都把 bots 当引擎一等工具进程)。
+- **落点**:capacity-and-benchmark §5 增第四形态(协议级 bots)或 apps/bench 扩展;与 #13 登录链互为验收对象,建议同批。
+
+### #16 地图与空间数据管线(导入/构建/加载) — **OPEN**(2026-09-30 增补,用户点名)
+
+- **缺什么**:地图资产从编辑器到运行时的**管线**——格式选型(地形/碰撞/导航网格/出生点/AOI 网格基准)、离线构建工具、运行时加载与 scene 配置映射(map_id→资源)、与 AOI 网格(AOI 服务)、NavMesh(todo 批次 5)、副本实例的接线。todo.md 批次 5 只有一行「Recast/Detour 接入评估」,管线本体零设计。
+- **证据(负空间+先例,2026-09-30 实测)**:design/ grep「navmesh|NavMesh|导航|寻路|地图」仅两处非设计性命中(concept-glossary 场景定义、xml-generation 列 KBE 产物);KBE 先例:cellapp/navigation 三件(navigate_handler.*、loadnavmesh_threadtasks.*——navmesh 线程任务加载)+ 地图资产在 assets 仓库 res/spaces/(本机无,sdk_templates 占位 .gitignore 已核);BW 先例:World Editor→chunk 体系 + `Space : GeometryMapper`(cellapp/space.hpp 本轮实读)+ cellappmgr space 的 geomappingPath(cellappmgr/space.h 本轮实读)——地图 = 几何映射目录配置,运行时按 chunk 加载。
+- **落点**:建议 P2 设计批——「烘焙在离线工具、运行时只读」与「生成器不进运行时」(36号 #4)同纪律;AOI 网格基准与 NavMesh 同源同批(同一份地图资产两个投影)。
+
 ## 3. 已登记推迟项(登记簿管辖,不重复立项)
 
 以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、sdks/contract 旧名同步(随下一代码批次)。**已完成项**:36 号 #12/#15/#17/#19 与 deep-dive §12 表述修正已于 2026-09-30 执行(B8 批——sol2/Lua 5.4 → 弃 sol2 + 5.5 主线随 vcpkg(当前 5.5.x,同日两度修订);#15 BW 分段 ID / #17 KBE MySQL-only 两处证伪改写,含对比表/问9总结/存储表联动)。**已裁决项(2026-09-30 用户:「都是历史记录」)**:origin 五笔源码提交(cb78d4b0…18152898)保留为历史记录、不回退;backup-apollo-src(c349f850)留档维持——不合并不删除;处置记录见 architecture-review 附录 A。
 
 ## 4. 结构性元缺口
 
-### 4.1 设计资产状态表 v1(docs/architecture/ 70 份与 design 六份的权威关系)
+### 4.1 设计资产状态表 v1(docs/architecture/ 70 份与 design 六份的权威关系) — **CLOSED**(2026-09-30 文档重整理批:docs/architecture/README.md 全量状态表落盘)
 
 - **问题**:docs/architecture/ 存量 70 份,与 docs/design 六份权威稿的关系无登记——哪份仍有效、哪份被取代、哪份是占位,靠各人记忆。跨文档引用一旦指向已废稿即产生漂移(C-3 文档纪律的盲区)。
 - **v1 口径(证据驱动,不做全量分类)**:以 design/analysis → architecture/ 的**实引关系**为锚点,分三档——
