@@ -54,11 +54,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:storage.xml 只定了「语句即数据」的运行语句面(architecture-review §15.5 三语句:快照/journal/列提升)——**DDL 语句面零设计**;「CREATE TABLE/ALTER/migration」design 全零命中。先例:KBE entity_table_mysql.cpp:113 ALTER TABLE ADD INDEX(启动期自改表——无版本化,反面参照)、BW server/tools/sync_db(独立工具族,契约邻接)。
 - **落点**:attribute-sync §8.3——db/migrations 版本化目录 + schema_migrations 位点表(唯一真相源)+ forward-only 无 down + migration lint 禁破坏性语句(DROP/TRUNCATE/改语义 RENAME 拒载,加列必须 NULL-able/带默认值保 journal 重放兼容)+ 启动期 runner(fail-fast,执行期持锁,单进程文件锁/P3 编队锁)+ 大表 ALTER INPLACE/LOCK=NONE 声明 + 影子库预演归 apps/ db 工具;契约 column:true 变更只出 CI diff 提醒不自动产迁移;xml-generation §4「明确不生成」行同步交叉引用。
 
-### #4 客户端通道安全语义 + 加密库选型 — OPEN(随 P3)
+### #4 客户端通道安全语义 + 加密库选型 — **CLOSED**(net-abstraction §5.9,2026-09-30 落盘)
 
 - **缺什么**:握手鉴权(证书/token 怎么发、与 login-app 的关系)、ECDH 密钥协商 + 对称加密算法(AES-GCM/ChaCha20-Poly1305)、seq 防重放、防 MITM/防重连劫持;**加密库选型**(2026-09-30 增问并入)。
 - **证据**:sdk-contract.md:206 帧层图 `[加密 P3]` 方括号占位,全 design 无展开。加密库存量核实:openssl **已是 vcpkg.json 直接依赖**(:6,dependencies 第 1 项);websocket.cpp:38 用 `<openssl/sha.h>`(WS 握手);modules/net/CMakeLists.txt:135-160 built-in WebSocket 分支 `find_package(OpenSSL REQUIRED)`;contract_hash 刻意零加密库依赖(决策 #4 链接图最小化);libsodium 全仓零命中。**方向定调:OpenSSL 单一 crypto 源,不引第二套**——选型论证与用法纪律(算法分级/版本锁定/禁 MD5 等)待 P3 批落文。
-- **落点计划**:net-abstraction 增补(客户端通道安全节,引用 login-app;filter 链位次已定——sdk-contract §10.5:压缩之后)。
+- **落点**:net-abstraction §5.9——加密 = FrameFilter 族 CryptoFilter(§5.5 槽位,压缩后位次);威胁模型裁域(防窃听/重放/劫持/MITM,**非目标 = 客户端逆向**——加密防网络第三方不防持客户端的玩家);握手序列(login_token 归 login-app/X25519+HKDF-SHA256/per-frame nonce 由 seq 派生/resume 重走 ECDH 前向保密);算法分级禁用表(MD5/SHA-1 新代码/RC4/DES/裸 ECB/无 MAC CBC 禁);**OpenSSL 单一 crypto 源定案**(EVP 接口/CRYPTO_memcmp/RAND_bytes 纪律,版本锁 3.x LTS);WSS 兜底 P3 随 gateway。
 
 ### #5 容量模型与基准设施 — OPEN(随 P3)
 
@@ -78,11 +78,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:「对象池/内存池/pmr」design 零命中;16.8.3 归属论证触及 modules/base(线程/内存/ID)但只定位置不定策略。
 - **落点计划**:并入 capacity-and-benchmark.md(#5 同批)。
 
-### #8 上行 intent/消息限流参数面 — OPEN(随 P3)
+### #8 上行 intent/消息限流参数面 — **CLOSED**(net-abstraction §4.3,2026-09-30 落盘)
 
 - **缺什么**:上行四通道(movement/attributes/events/control)各自的 per-session 速率上限、超限处置(丢弃/断开/警告)、与 schema 校验失败计数的联动、参数默认值表。
 - **证据**:下行有完整预算体系(attribute-sync §5 token bucket + net-abstraction §4.2 水位);**上行只有「intent only,服务端定夺」一句**(sdk-contract §2.3 msg 注释)——恶意客户端侧的限流与预算零设计。BW LoginConditions 准入闸门(net-abstraction §7)是登录时点,不管持续上行。
-- **落点计划**:net-abstraction 增补(§4 上行侧小节)。
+- **落点**:net-abstraction §4.3——IO 线程解帧后投递场景线程**前**判(超限帧不进场景线程,计数器零锁);四通道参数表(movement 60/attributes 120/events 30/control 20 msg/s,control 硬超限直接断;总 8KB/s + 64KB 突发桶);三级处置(soft 丢+计数/hard 丢+throttle_notice/abuse 断开+账号级风控供 login-app 准入闸门);**violation_score 单桶**(限流计数+schema 校验失败+attribute-sync §9 权威纠正同权——入口闸与语义闸共享出口)。
 
 ### #9 Redis 部署与运维细节 — **CLOSED**(attribute-sync §8.4,2026-09-30 落盘)
 
@@ -90,22 +90,22 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:attribute-sync:289 已定**定位**;部署/键空间/TTL 零展开。存量 redis 四套并存(C-45)是审计问题不是设计缺口,收敛方向已定(§15.2 纪律)。
 - **落点**:attribute-sync §8.4——单实例起步/多机 Sentinel/Cluster 不进路线图(键空间规模论证);hiredis 统一客户端 + 连接池,同步面禁场景线程直调(走 scripting-lua §8 异步交接);键空间 `apollo:{域}:{世界}:{键}` 分层 + 每键 TTL 或显式永驻;Redis = 共享工作内存非真相源(整库丢失 = DB 重建 + 降级,不构成数据丢失事故);跨进程互斥不依赖 Redis 锁(权利判定归 G-1 mgr 单点定序,Redis 原子性只用于数据面)。
 
-### #10 观测接出形态(Prometheus/日志外采/trace)— OPEN(随 P3;2026-09-30 增问)
+### #10 观测接出形态(Prometheus/日志外采/trace)— **CLOSED**(logging §5.1 + net-abstraction §7 P3 观测行引用,2026-09-30 落盘)
 
 - **缺什么**:三件事——① **Prometheus expose 落点**:36 号 #14 已定「外部标准栈」方向,但 exporter 形态未定;② **日志外采边界**:游戏进程不直连 Kafka/filebeat 类采集器的接口契约(结构化行格式 + 稳定目录 + 轮转纪律);③ **trace 子集**:采样策略、透传字段、汇聚点。
 - **证据**:prometheus/grafana/kafka/otel 全仓零命中(负空间实测);MetricRegistry/logging collector/G-5 两截已定**内部**形态,「内部→外部系统」的接出契约零设计。**trace 元缺口并轨于此**:trace_id 已是 InternalMessageEnvelope 信封标准字段(net-abstraction:351,remote-entity-call 四件套),但采样率/透传链(信封→日志行→collector)/跨度界定(消息边界为 span)无设计。
 - **方向定调(增问的答案,细节随 P3 批落文)**:游戏进程不直连 Kafka、不引 OTel SDK 全家桶(OTLP exporter 后台线程/每 span 分配与 tick 纪律冲突)、不开 per-process HTTP 端口——出口收敛为:① 单一 exporter(admin 进程,读 MetricRegistry/collector 聚合吐 /metrics,游戏进程零新增端口);② 日志 = 结构化行格式 + 稳定目录供外挂采集器(filebeat/fluent-bit)tail(collector 挂了只写本地已定,logging §5);③ trace 借数据模型子集(trace_id/span_id + W3C traceparent 语义),span 界定 = 消息边界,极低采样,汇聚走 collector,P3。
-- **落点计划**:net-abstraction §7 P3 行扩充或独立小节 + logging.md 增补。
+- **落点**:logging.md §5.1(+ net-abstraction §7 P3 观测行引用)——**三禁**(不直连 Kafka/不引 OTel SDK/不开 per-process HTTP 端口);单一 exporter = admin 吐 /metrics(消费 G-5 control 通道上行,不引 prometheus-cpp,文本自拼);日志 = 结构化键值行 + 稳定目录 + 外挂 tail(filebeat/fluent-bit 上送,**Kafka 在采集器后**);trace 子集 = trace_id/span_id + W3C traceparent 语义、span = 消息边界、入口生成(信封 trace_id 既有)、头部采样 1/10⁴、采样行进日志流;collector(内部汇聚)与 tail(标准栈上送)两出口并行不互斥。
 
-### #11 出站 HTTP 客户端与第三方接出 — OPEN(随 P3;2026-09-30 增问)
+### #11 出站 HTTP 客户端与第三方接出 — **CLOSED**(net-abstraction §5.10,2026-09-30 落盘)
 
 - **缺什么**:服务端出站 HTTP(第三方登录/支付/推送回调)的依赖收口与线程模型接线——同步 30s 超时 API 不得在场景线程直调(须走 scripting-lua §8 异步交接同型);Drogon 备选分支的收口(§15.2「禁止并存」纪律的对象)。
 - **证据(存量实读,2026-09-30)**:modules/net/http **已存在 2541 行**(rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648),namespace `apollo::net::http`,RestTemplate 是 Spring RestTemplate 风格(HttpMethod 枚举/HttpResponse/HttpEntity/RequestOptions{timeoutMs=30000, connectTimeoutMs=10000, verifyPeer, proxy});rest_client.cpp:13/#ifdef `APOLLO_HAS_CURL`、:16 `#define APOLLO_CURL_STUB 1`——**vcpkg.json 无 curl,默认构建全桩**(与 C-45 宏门 MySQL 同族);modules/net/CMakeLists.txt 另有 Drogon 备选分支(:81-91 http、:124-133 websocket)与 built-in 分支并存;**零生产消费方**(仅 examples/http_demo、tests/test_rest_template、docs/api/net.md);net-abstraction.md:29 现状盘点行将 HTTP/WebSocket 判为「与本设计正交,另行处理」——本行即「另行处理」的登记。
-- **落点计划**:net-abstraction 增补出站 HTTP 小节(依赖收口 = curl 进 vcpkg 或删桩、线程模型 = L0 执行层挂 §8.2 异步交接、Drogon 分支裁决);**modules/net/{http,websocket} 登记为下轮审计候选**(见 §4.2 与登记簿——C-29 四栈盘点与 16.8.1 版图普查均未覆盖此两树)。
+- **落点**:net-abstraction §5.10 三裁决——① **curl 进 vcpkg**,rest_client 转真实现(TLS 后端 OpenSSL,单一 crypto 源不破;APOLLO_CURL_STUB 删随代码批);② **Drogon 备选分支删除**(CMakeLists :81-91/:124-133——§15.2 禁并存对象;admin exporter 不需要 Drogon);③ 同步 API 禁场景线程直调(event_loop curl_multi + scripting-lua §8 异步交接,回包不进当 tick 判定);边界 = 目标白名单(SSRF,与 §5.7 同纪律);代码面审计仍归下轮候选(§4.2)。
 
 ## 3. 已登记推迟项(登记簿管辖,不重复立项)
 
-以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、36 号 #15/#17 表述修正、sdks/contract 旧名同步、origin 五笔源码提交回退与 backup-apollo-src(用户裁决项)。
+以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、36 号 #15/#17 表述修正、36 号 #12/#19 与 deep-dive §12 的 sol2/Lua 5.4 表述修正(2026-09-30 决策变更:弃 sol2 改原生 C API 绑定 + Lua 5.5.1——随下一 36 号批次)、sdks/contract 旧名同步、origin 五笔源码提交回退与 backup-apollo-src(用户裁决项)。
 
 ## 4. 结构性元缺口
 
@@ -134,7 +134,7 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B2 | 新建 clock-and-time.md | #1 | 用户点名最先;**已完成**(b8ebed98 后续设计批) |
 | B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先;**已完成**(§8.3/§8.4 落盘 + xml-generation §4 交叉引用) |
 | B4 | 新建 battle-determinism.md | #2 | 随战斗玩法;**已完成**(四约束+回放四元组落盘,36 号 #16/#18 收口) |
-| B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3 |
+| B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3;**已完成**(§4.3/§5.9/§5.10 + logging §5.1 落盘;同批收 scripting-lua 弃 sol2 改原生 C API 绑定 + Lua 5.5.1 决策——见 §3 与登记簿) |
 | B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3 |
 | B7 | scripting-lua GM 命令面增补 | #6 | 随 P3 |
 | 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动 |
