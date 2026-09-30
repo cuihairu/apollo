@@ -1298,6 +1298,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | 文档重整理批（架构已变后的文档面收敛） | docs/index.md（重写）+ docs/architecture/README.md（**新建**状态表）+ Spring 清除 7 文件 | **已落地**（2026-09-30 用户指令「现在把文档重新整理下，现在的架构设计都变了」「不要出现 spring 相关的东西了」：① index.md 重写——旧页仍述 L1-L9 分层/BaseApp-Cell 拆分/ghost 增强层（均与现行决策相反），新页 = 现行拓扑图 + 裁决摘要 + 权威分级文档地图（design/ 十份为权威、architecture/ 降参考件区）+ 读者路线；② architecture/README.md = §4.1 设计资产状态表 v1 全量落地（70+25 份四档：A 实引 4（remote-entity-call/observability-watcher/host-builder-and-di/starter-and-module-assembly）/B 引擎分析参考件（BW/KBE 稿 + mmo-frameworks 25 份）/C 被取代设计稿 28 份（逐文件→现行权威指针）/D 历史任务清单 22 份——只登记不删档，删除候选待用户裁决）；③ Spring 清除（用户此前 P-3 同口径扩展）：34 号 starter 定位、architecture 四稿参考来源节、starter-and-module-assembly 五处、host-builder-and-di:85、sdk-contract §10.6——活性文档面 grep 零命中（analysis/ 审计记录与 qa/ 分析件按历史口径保留）；④ docs/30 Battle→副本术语对齐（房间=副本实例）；gap-inventory §4.1 随之 CLOSED） | D 档/C 档删除候选待用户逐批裁决 |
 | 设计缺口 #12-#16 登记（对标 KBE/BW 增问产出） | docs/analysis/design-gap-inventory.md §2 | **已落地**（2026-09-30 用户对标提问「对比 kbengine bigworld 等专业 mmo 引擎还缺少什么」+点名「玩家所在线 line」「地图怎么导入」——五个新缺口 OPEN：#12 会话与在线目录域（玩家所在线/所在 Zone/在线状态/顶号/重复登录——KBE 引擎侧无 line 与在线目录（本轮实测零命中，线=同图多 Space 实例通称、裁决在 assets 脚本层）；BW 在线目录分散 mgr（baseappmgr.cpp:588-599/:1117）；apollo 机制件有目录无——RouteResolver 宿主定位缺数据源）/ #13 登录链路整体设计（login-app 全链，§5.9 仅 login_token 一行）/ #14 入站第三方对接面（interfaces 域——KBE tools/interfaces 先例，#11 出站的镜像）/ #15 Bots 协议级压测客户端（KBE/BW tools/bots 先例，capacity 三形态外第四形态）/ #16 地图与空间数据管线（KBE cellapp/navigation 三件 + assets res/spaces；BW World Editor→chunk + Space:GeometryMapper + geomappingPath 本轮实读；todo 批次 5 仅一行）——§2 标题 #1-#11 改 #1-#16） | 随 P2-P3 设计批逐项闭环 |
 | 战斗验证服务设计（concept-glossary 词条②展开，battle 词定名后首件落地） | docs/design/battle-verification-service.md（**新建**） | **已落地**（2026-09-30 用户点名「战斗验证服务怎么设计」：客户端权威战斗（36号 #18 缝兑现的 lockstep 小房间/客户端演算）的反作弊对账与权威结算件——§0 适用/不适用写死（判据一句：**判定在客户端才需要**，服务端权威不需要——BW/KBE/skynet 无内建同因，观战回放/物理层作弊各归既有边界）；形态 = G-1 VERIFIER 型独立服务 + InterServerLink + sdk-contract §11 internal 域三消息族（Submit/Result/Query 按 invoke_mode 三分，录制源=instance 不经客户端转手）；计算面 = **Lua 双端共享**（xLua/scripting-lua，一局一 lua_State，`combat_bundle_hash`+VM 版本线双锚、失配拒开局），确定性 = battle-determinism §2 四约束全量继承 + **跨端增量三件**（运算白名单/版本锚/漂移降级 WARN——跨端位一致为工程目标非硬承诺；对 §2「不做定点」口径的关系已写明：跨端档不靠定点、靠白名单+锚+降级三层）；两档强度（终局 hash 对照常开/逐 tick 复算按需，录制策略继承 §5）；**verdict 四值**（PASS/DRIFT/MISMATCH/INCONCLUSIVE）× **结算门两级**（硬门挂到结论/软门超时放行+事后审计）+ **权威结算由复算产出**（客户端申报仅对照，drop 子流重算即权威掉落）+ violation_score 单桶第四计数源（仅结构性 MISMATCH 计、DRIFT 不计防误伤）+ scripting-lua §6.1 三级事件同型移植 + attribute-sync :285 结算前 L3 snapshot 边界收口；部署 = 无状态 worker 池（machined 拉起+队列重投，无 G-2 热备）+ Compact 内嵌 verifier-kernel（M1 库产物）；M0-M5 全随代码批（M1 双跑自证/M4 与缺口 #15 bots 互为验收/M5 checkpoint 二分对接 P3 重放器）；glossary 词条改「设计已立」、gap-inventory #17 立项即 CLOSED（悬空引用修复）、index/README 文档地图十一份同步、battle-determinism §5/§9 互链补行） | M0-M5 随代码批 |
+| P2 反射后端批次实读复核（五笔推送 cb78d4b0…18152898 + backup 留档 c349f850） | 本报告（**§22，2026-09-30 落地**） | **已落地**（2026-09-30 第十三轮：① 五笔逐笔对照提交声明与 sdk-contract/xml-generation 落地注记——域分段定值 kMsgSegments（contract_model.hpp:150-153 + parser:726-734）/跨域禁令先行形态（parser:736-748）/canonical 恒写（writer:139-143）/三产物+双投影+双域 hash 全链实读一致；携带面分档端到端成立（semantic.json 与 client proto 只带 client_hash、服务端五产物三 hash——golden 逐文件核）；CI 三 job 与两脚本实读一致（manifest 携带面/protoc pin 29.3/幂等 bot 评论/单一取数源）；include 聚合七类诊断全对上（parser:793-892）+ XSD 四根 include 声明——**主体判定：实现与设计注记高度一致，无功能性缺陷**；② 偏差三条：C-77 xsd_gate glob 非递归 vs 注记「任何 *.xml」（潜伏，契约目录现平铺无害）、C-78 internal 域生产面零样本（四消息全 client/native——握手不变性实测系临时副本模拟，首 internal 消息族落地时生产复验，battle-verification M0 即现成候选）、C-79 sdk-contract.md:546「段约束进 XSD」短语与实现（生成器第②层，model.hpp:144 与 apollo.xsd:74-76 自注同口径）不一致——勘误候选；③ R-17a…g 七项零消化（五笔+backup 触碰面 29+4 文件与 DI 域零交集，逐项现状实读原样）；④ backup c349f850 只读评估：三目标拆分 + gate 三接口 + 三测试用例与 §10.6 v3/§11.6 文件面口径一致、决策 #4 链接图边界相容——**建议采纳**（裁决权用户）；⑤ 陈旧 build/（18 测试含 gate）佐证第六批曾本地构建、17/17 数目静态吻合、golden mtime 16:27 与零触碰互证；⑥ 附录 A 事实记录与本轮考据全部吻合） | C-77 随 CI 批；C-79 随 sdk-contract 批；C-78 挂 M0；backup 采纳待用户裁决 |
 
 ### 16.10.3 本轮状态
 
@@ -1989,6 +1990,125 @@ grep -rn -e registerRuntimeServices -e registerWorldServices -e registerPlatform
 ---
 
 *评审基线（源码）：main @ 97930c9a（无源码变更）。§21 新增实读：application_context.cpp:54-102/:73-102、application_context.hpp:95-135/:236-310、cell/base/gateway/login 四 server 实现文件；负空间检索命令与排除范围逐条内嵌（§20.6 口径）。*
+
+---
+
+## 22. 第十三轮（2026-09-30 追加）：P2 反射后端批次实读复核——五笔推送 + backup 留档（C-77 … C-79）
+
+### 22.1 范围与方法
+
+**对象**：① 已推送五笔 cb78d4b0（契约 domain/binding）/ 8d26d6c2（.proto 双投影）/ 04fc3009（双域 hash）/ 1c18b8c8（CI 两 job）/ 18152898（include 聚合）；② 本地分支 backup-apollo-src 第六批 c349f850（contract_gate——只读取证 `git show`，不 checkout、不合并、不动）。
+
+**门禁（本轮硬线，照附录 A 教训以本任务书为准，不沿用历史摘要授权）**：只写本报告一份文件；源码/CMake/CI/契约/golden/其他文档零改动；不派子代理；单笔提交；无 tag、无 release、无 force push；push 前 `git fetch origin main && git rebase origin/main`。
+
+**「对照 §16 登记」的口径假设（自行假设并注明）**：§16（第七轮三仓对照）本身无契约面登记行；按最合理口径取四源对照——§15.3/§15.4 契约定案（XML+XSD、分文件单 schema 多投影）、§16.10.2 登记簿相关行、附录 A 对六笔的事实记录、sdk-contract.md / xml-generation.md 的落地注记（五笔提交各自声称的落地条目）。
+
+**基线核实**：HEAD @ e7ba3f0d；五笔均 `merge-base --is-ancestor` ∈ main；五笔合并触碰面 29 文件（git diff --name-only cb78d4b0^..18152898 去重）；**18152898..HEAD 对 modules/contract、sdks、.github/workflows、scripts/ci 的 diff 为空**——contract 面代码态即第五批落点，本轮实读即终态实读。方法 = 静态实读 + git 考据；**未重建、未重跑 ctest**（源码冻结不引入新构建产物；陈旧 build/ 二进制不具代表性，见 §22.5）——提交信息中「17/17 全绿 / 本机 protoc 解码 / luac -p 装载」类一次性验证声明按注记采信，逐处标注。
+
+### 22.2 逐笔核对表（声明 → 实测证据 → 判定）
+
+**cb78d4b0 首批（domain/binding + contract.lua/semantic.json/contract_route.json）**
+
+| 声明 | 实测 | 判定 |
+|---|---|---|
+| msg 增 domain（必填）/binding（缺省按通道）；XSD 枚举同步 | messages.xml:9-27 四条均 `domain="client"`、binding 全缺省；apollo.xsd:77-95（MsgDomain/MsgBinding simpleType）、:197-198（domain required/binding optional）；defaultBindingForChannel 实现 contract_model.cpp:67-72（events→reflect 余 native） | 一致 |
+| 域分段定值 client 1-899 / internal 900+（原留白段值就此定值） | contract_model.hpp:145-153 `kMsgSegments`；contract_parser.cpp:726-734 段校验（诊断文案含段值与「XSD 表达不了跨属性规则故落本层」） | 一致（sdk-contract.md 正文残留不一致短语 → C-79） |
+| 跨域引用禁令先行形态 | contract_parser.cpp:736-748：client 域 field 引用 internal 域消息名给专属诊断；嵌套消息类型 P2+ 未开放故「先行」定语准确 | 一致 |
+| canonical 恒写解析后值（缺省展开与显式同型，hash 稳定前提） | contract_writer.cpp:139-143（binding 写解析后值） | 一致 |
+| 三产物薄 writer（无自建 AST）；semantic 按域过滤；route 全量含 internal；handler 仅 reflect | sdks/gen/src/main.cpp:360（renderContractLua）/ :442-460（renderSemanticJson，:449 非 client 域 continue）/ :486-506（renderRoute，注释明示全量含 internal 域）；handler 约定 :359-360/:401 | 一致 |
+| golden_check 扩为多产物 byte-diff | sdks/gen/CMakeLists.txt:27-30（add_test apollo_gen_golden_check）；main.cpp:622-654 checkAgainst 七项（后扩） | 一致 |
+| 测试：域必填/非法值/分段/缺省绑定/显式覆盖/跨域禁令 | test_contract.cpp:286（testMsgDomainRules）/:333（testBindingDefaultByChannel）/:355（testCrossDomainReferenceRejected）；gen_compile_test.cpp:66-87（domain/binding static_assert） | 一致 |
+| 「ctest 17/17」「luac/lua dofile 装载断言」 | 一次性声明采信；静态侧证：陈旧 build 测试清单 18 项剔除 backup 的 gate 即 17（§22.5） | 采信（注记级） |
+
+**8d26d6c2 第二批（.proto 双投影）**
+
+| 声明 | 实测 | 判定 |
+|---|---|---|
+| 同一渲染器两投影（全量 + client 域） | main.cpp:545-602 renderProto（clientOnly 过滤 :563/:573/:582） | 一致 |
+| 类型映射 §10.2.2：sint32/sint64 zigzag、alias 零特判、repeated | main.cpp:519-532 protoTypeName（default 分支 sint64——AttrDelta 单值桶注释） | 一致 |
+| MsgId 枚举 MSG_ID_NONE=0 占位 + MSG_ 前缀（包级兄弟作用域） | main.cpp:566-575；golden apollo_contract*.proto 头部同款注释实读 | 一致 |
+| 字段号 1..N 声明序；19000-19999 保留段禁用注 | main.cpp:586-593（fieldNo 递增）/ :554-556 | 一致 |
+| descriptor.bin 由 CI 单点 protoc 定型、不入库 | sdks/cpp/generated/ 仅七文件（无 .bin，ls 实测）；CI contract_pack job 内跑 protoc | 一致 |
+
+**04fc3009 第三批（双域 hash）**
+
+| 声明 | 实测 | 判定 |
+|---|---|---|
+| canonicalDomainBundle：client 面 = client 消息+attrs+errors；internal 面 = internal 消息+entities；version 剥离 | contract_writer.cpp:197-220（version 拷贝恒 0 注释；:216 domain 标签行防空 bundle 撞值） | 一致（与 sdk-contract.md:548 落地口径逐句同） |
+| computeDomainHash 算法同 §6、finishHex 共收尾 | contract_hash.cpp:160-165 + :34-35；contract_hash.hpp:40-44 | 一致 |
+| 携带面分档：客户端包成员只带 client_hash、去 schema_hash/version；服务端五产物三 hash | golden 逐文件：semantic.json 头仅 generator+client_hash；apollo_contract_client.proto:2 仅 client_hash；apollo_contract.h:1-12 / apollo_contract.json:2-5 / contract.lua:2-10 / contract_route.json:2-5 三 hash；apollo_contract.proto:2-3 schema+internal | 一致（端到端成立） |
+| testDomainHashes 九组不变量；三 hash 互异编译期断言 | test_contract.cpp:368-446 函数实存（九组计数按注记采信，未逐组清点）；gen_compile_test.cpp:85-88 | 一致/采信 |
+| 「internal-only 变更后客户端产物逐字节不变（client_hash 477127c4…）」 | 一次性实测采信；golden 内 client_hash 477127c4… 与注记同值（一致性侧证）；生产契约 internal 域零样本 → C-78 | 采信 + 偏差登记 |
+
+**1c18b8c8 第四批（CI 两 job）**
+
+| 声明 | 实测 | 判定 |
+|---|---|---|
+| contract_pack（main 合并）从已提交 golden 组双包不重建 | scripts/ci/contract_pack.sh 实读：五 golden 存在性预检（:28-31）；client_hash/generator 取自 semantic.json、schema/internal 取自 contract_route.json（单一取数源与携带面纪律一致）；hash 长度闸 64（:37-39）；manifest 不带 contract_version、带 protoc 版本与逐文件 SHA-256 | 一致 |
+| protoc pin 29.3 | .github/workflows/contract.yml（setup-protoc version "29.3" + 「升级=换包重签」注） | 一致 |
+| schema_hash_report（PR）：三 hash 对照/变更域判定/集合 diff/幂等评论 | scripts/ci/schema_hash_report.sh 实读：comm 对消息五列（id/name/domain/binding/dir——route golden 字段实存）与属性三列（id/name/type——.json .attrs[] 字段实存）；变更域四态文案；workflow 侧 PATCH 最后一条 bot 评论 | 一致 |
+| 「本机组包/descriptor 双解码/manifest 校验/报告三场景」 | 一次性声明采信 | 采信（注记级） |
+
+**18152898 第五批（include 聚合 + 闸一接线）**
+
+| 声明 | 实测 | 判定 |
+|---|---|---|
+| expandIncludes 目录级读取层、深度优先、非 XInclude 零依赖 | contract_parser.cpp:793-892；contract_parser.hpp:51-60（含「单文件不展开」「无 include 原文返回」口径） | 一致 |
+| 诊断族七类各带 file:line | parser.cpp:816（未知属性）/:821（携带子元素）/:831（缺 href）/:840（环——栈式）/:856（缺文件/不可解析）/:864（根元素不匹配）/:873（version 不一致）——七类全对上 | 一致 |
+| XSD 四根加 include 声明（位置锁根子级开头、href 必填）；主子元素放宽 minOccurs=0 | apollo.xsd:115-119（attrs）/:173-177/:222-226/:256-260 四处；主子元素 minOccurs="0"（如 :124 alias） | 一致 |
+| 分文件/单文件/纯 include 根三形态等价（hash 相等）测试锁死 | test_contract.cpp:447 testIncludeAggregation | 一致 |
+| xsd_gate job：目录内任何 *.xml（含分片）一律过 XSD | contract.yml xsd_gate job 实存，但 glob `sdks/contract/*.xml` **非递归**——分片若入子目录即漏验（当前契约目录平铺五文件，现时无害） | **偏差 → C-77** |
+
+**c349f850 backup 第六批（contract_gate——只读，不合并不动）**
+
+| 声明 | 实测（`git show c349f850:`） | 判定 |
+|---|---|---|
+| CMake 三目标拆分 core/parser/gate | backup CMakeLists:29-65（apollo_contract_core/apollo_contract/apollo_contract_gate 三 STATIC + ALIAS）；gate 测试 :99-100 | 一致 |
+| 装载期一致性闸文件面三接口 | contract_gate.hpp:44-62（checkClientPack/checkServerBundle/checkRouteSemanticAlignment）；contract_gate.cpp 201 行（manifest 逐文件 SHA-256 ↔ 字节 :49-67、hash 字段抽取 :69-72） | 一致 |
+| 设计口径对齐：只做文件面，bin↔Lua 逐条对齐留后续批；gate 进运行时链接图（决策 #4 相容——解析器仍不进） | hpp 头注 :8-20 自我边界声明，与 sdk-contract §10.6 v3/§11.6 一致 | 一致 |
+| 测试三用例 | test_contract_gate.cpp:107（testClientPack）/:150（testServerBundle）/:172（testRouteSemanticAlignment） | 一致 |
+
+### 22.3 偏差与缺陷登记（C-77 … C-79）
+
+| 编号 | 内容 | 证据 | 严重度与处置 |
+|---|---|---|---|
+| **C-77** | xsd_gate 校验 glob 非递归：job 注释称「目录内任何 *.xml（含 include 分片）一律过 apollo.xsd」，实现为 `sdks/contract/*.xml` 单层 glob——include 分片若按目录组织（如 sdks/contract/fragments/）则不进闸一 | contract.yml xsd_gate step；sdks/contract/ 实测平铺（apollo.xsd + 四 xml + version），现时零子目录 | 低（潜伏）。随下一 CI 批二选一：glob 改 `find sdks/contract -name '*.xml'`，或注记明约分片平铺。本轮只登记 |
+| **C-78** | **internal 域生产面零样本**：现行契约四消息全 client 域 native 绑定——域分段/internal_hash/跨域禁令的 internal 路径仅有测试构造样本（testMsgDomainRules/testCrossDomainReferenceRejected）；golden 的 internal_hash 对「domain 标签 + entities + 空 internal 消息集」计算。04fc3009 的握手不变性实测是对临时改动副本做的模拟，生产契约从未含 internal 消息 | messages.xml:9-27 全 client；contract_writer.cpp:203-214（internal 面 = entities + internal 消息） | 观测登记（非缺陷）。首个 internal 消息族落地时（battle-verification-service M0 的 BattleVerify* 三消息即现成候选）跑一次生产复验：internal-only 增消息 → client_hash 不变 + 客户端包逐字节不变 |
+| **C-79** | sdk-contract.md §11.3 ① 正文两处短语与实现不一致：「id 与 domain 的段约束进 XSD」「XSD 锁段边界」——实现落在生成器第 ② 层（XSD 1.0 表达不了跨属性规则），且该理由已写入代码与 XSD 注释，唯设计文档正文未同步 | sdk-contract.md:546 vs contract_model.hpp:144 注、apollo.xsd:74-76 自注、xml-generation.md §4 注（口径正确：「进解析器第 ② 层」） | 低（文字级勘误）。P 系列同型：随下一 sdk-contract 批改「段约束落生成器第 ② 层（XSD 表达不了跨属性规则）」并给「段值已定」补注。本轮门禁内只登记 |
+
+### 22.4 R-17a…R-17g 对照（本轮零消化，七项仍未动）
+
+五笔触碰面（29 文件：modules/contract + sdks + scripts/ci + .github + 两设计文档）与 backup 第六批（modules/contract 四文件）**均与 modules/core / modules/runtime DI 域零交集**——逐项实读现状核实：
+
+| 项 | 现状证据 | 判定 |
+|---|---|---|
+| R-17a tags 死字段 | application_context.hpp:58（`std::vector<std::string> tags`）/:107（BeanBuilder::tag）原样 | 仍未动 |
+| R-17b start 失败路径 | application_host.cpp:45-53 原样（仅相位迁移 + notify，不逆序 stop 已启动服务） | 仍未动 |
+| R-17c build() assert-only | application_context.cpp:15/:17/:69/:88/:93 assert 原样（NDEBUG 下静默） | 仍未动 |
+| R-17d on_application_reload | 全仓 .cpp 零调用方（仅头文件声明） | 仍未动 |
+| R-17e core 测试接线 | modules/core/CMakeLists.txt:34 `if(BUILD_TESTING)`（无 `OR APOLLO_BUILD_TESTS`）——与 modules/contract:42 守卫不对称原样 | 仍未动 |
+| R-17f named 构造注入 | 仍缺（原判「触发式暂缓」，未触发） | 仍未动（符合原判） |
+| R-17g add_instance | 仍缺（grep 零命中——原判「随 R-17e 重写暴露」） | 仍未动 |
+
+### 22.5 陈旧构建目录的佐证价值与基线声明
+
+- `build/` 为 git 忽略（status 不显），其 CTestTestfile.cmake 列 **18 项测试、含 `apollo_contract_gate_tests`**——系 2026-09-29 纠偏前工作树（含第六批 CMake 改动）配置的遗物，未被清理。两点价值：① 佐证 c349f850 内容曾在本地真实构建（非纸面资产——与 C-61 async_io「从未整体编译」形成对照）；② 18 − gate = 17，与五笔提交「ctest 17/17」数目静态吻合。本轮不重建不重跑（陈旧二进制不代表当前树；源码冻结下不引入新构建产物）。
+- golden 七文件 mtime 均为 09-29 16:27（第三批落点）——与「五笔之后 contract 面零触碰」互证。
+
+### 22.6 处置建议（登记不改；裁决权与执行面分离）
+
+1. **C-77/C-79**：均低危文字/配置级——C-79 随下一 sdk-contract 批粘贴式勘误（P 系列同型）；C-77 随下一 CI 批（glob 或注记二选一）。
+2. **C-78**：挂 battle-verification-service **M0 契约批**作验收件之一（internal 域首批生产样本 + 握手不变性生产复验）——设计稿 §1.2/§7 已有消息族字段源，天然衔接。
+3. **backup c349f850 评估**：内容与设计口径零冲突（三接口覆盖 §10.6 v3/§11.6 文件面、测试三用例齐、链接图边界与决策 #4 相容、CMake 拆分使 gate 可作运行时链接图成员）——**建议采纳**（采纳时三目标 CMake 拆分一并入；bin↔Lua 运行时对齐仍留后续批）。裁决权在用户（附录 A 既定：不合并不删除）。
+4. 附录 A 事实记录与本轮考据**全部吻合**（五笔推送状态、c349f850 留档分支、触碰面清单）——无需修正。
+
+### 22.7 登记簿补行与本轮状态
+
+§16.10.2 补一行（本节同批）。本轮产出 = §22（六笔逐笔核对 + C-77…C-79 + R-17 对照 + backup 评估）；**零源码改动**；只写本报告一份文件；**不派子代理**（全部分析主线完成）；单笔提交；push 前 `git fetch origin main && git rebase origin/main`；无 tag、无 release、无 force push。
+
+---
+
+*评审基线（源码）：main @ e7ba3f0d（本文件外零改动；contract 面代码态 = 18152898 落点——`git diff --stat 18152898..HEAD -- modules/contract sdks .github/workflows scripts/ci` 为空）。六笔提交逐笔 `git show`/工作副本实读取证，行号均 2026-09-30 本轮实测；backup 分支经 `git show c349f850:<path>` 只读取证。一次性验证声明（ctest 计数/protoc 解码/luac 装载/组包实测）按提交注记采信并在表内标注。*
 
 ---
 
