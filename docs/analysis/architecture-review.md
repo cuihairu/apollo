@@ -1286,7 +1286,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | 36 号表两处表述修正（深潜产出，A 级证伪） | docs/36-MMO_Frameworks_Comparative_Analysis.md #15/#17 行 | **已落地**（2026-09-30 B8 批，改写文案存档）：#15「BW 64 位分段唯一 ID」源码无对应物——BW 实为 EntityID=int32（basictypes.hpp:104）/DatabaseID=int64（:191）/UniqueID 128 位点分（unique_id.hpp:17-25），分段 64 位仅存于已删 B 级文档示意代码（git show 1e37073d^ 可溯），已改写为「Apollo 自创设计，参照仅 ID 内嵌来源信息的思想」（#15 行 + 问9 BigWorld 总结段联动）；#17「KBE MySQL-only」失准——kbe/src/lib/db_redis/ 为完整实体存储后端（entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis，实现 db_interface/entity_table.h 同一抽象基类），已改写为「BW=MySQL+XML、KBE=MySQL+Redis 双后端同构」（#17 行 + 对比表存储行 + 存储深潜表 KBEngine 行联动；redis 后端生产可用性未验证，深潜 §17 已如实标注） | 已闭环 |
 | 下轮审计候选：bw/bigworld 兼容层 | 本报告（**§18.4，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-64 三层断链——坏头（模块 BigWorld.h 实测 20 编译错）/不可编译测试（幻影 API 40 处）/实现 TU 排除在自己 target 外「实现只活在测试里」；C-65 实体并行超标（4 套实体+1 幻影+双 ECS+3 种 EntityId 拼法）且全局单例零锁——16.8.3-④ 属实且偏低估；C-66 BW 14.4.1 映射 10 项同构忠实、生产零消费，modules 树增量价值零行——裁量点仅剩根链保留为测试/参考桥或随模块树退役；option 行号修正 :46→:49） | 已闭环 |
 | 下轮审计候选：ipc 树 | 本报告（**§18.3，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-60 全景 7813 行与预记逐项吻合；双 Channel + 双 IServiceDiscovery = 第五处并行网络/IPC 坐实，Redis 侧依赖 C-45 旧树 RedisTemplate；C-61 async_io.cpp 1118 行**不在任何源列表 + ≥6 编译期错误——从未整体编译**，「仓内唯一 proactor 接口」成色修正为纸面资产（KQUEUE 第四后端区间 cpp :897-1115 补齐）；§5.8「不学」值拷贝的代码定位落实（IOCP :390-398 深拷贝/epoll :714-732 拷入 writeQueue）+ 回调持锁 ：837→:850-852；C-62 声明无实现簇（Channel::create 走到即链接错误/socket_transport.h 整文件死声明）；C-63 判定 = 历史遗留/原型岛屿——P3 新建为主，共享内存环 + 背压/令牌桶语义作参考件，对 utils/loop_buffer 等指定复用件零引用） | 已闭环 |
-| 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案） | 代码阶段授权 |
+| 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案）。**2026-09-30 §23 现状复核**：① 继承生成器**机制面已交付**（登记后 a5334014 落解析/环检测/祖先链 contract_parser.cpp:417/:540-584 + 产物元数据 gen main.cpp:205-222/:304-308 + golden kAncestors×6 + 三测试 :548/:572/:582），拍平主体（父先入子覆盖/禁同名改型/provenance）无契约载体——attrs.xml 零 entity、entities.xml 自注「逐实体裁剪属后续批」、而 attribute-sync §7.3 按已展开口吻陈述 → **C-81**；② config 桩**零变动**（桩 config_manager.cpp:564-578、路由 :115-132/:632-635 原样——删除面补测试触点 tests/test_core_config.cpp:36-37 枚举序断言）；③ FrameFilter **零变动**（代码面与契约声明面全仓为零，前置 C-29 四套收敛未动）；④ 定时器轮**未动工**（modules/base 无调度结构），存量五处在册（TimerManager/bw 堆/net event_loop/ipc async_io/test_timer），底账补第二套轮 include/apollo/algorithm/timing_wheel.h 527 行（五测试用例+技能 demo 消费、默认构建门 OFF——**C-80**）+ ssengine-reference §4.3:60 括注失实与 :104 归属行互斥（**C-82**） | 代码阶段授权；C-80 随定时器轮组件批、C-81 随 attribute-sync 批、C-82 随 ssengine 批、拍平主体随逐实体裁剪批（§23） |
 | §17 DI/宿主域新登记 R-17a…R-17g（tags 死字段 / start 失败路径 / build NDEBUG / reload 接线 / core 测试接线+重写 / named 注入 / add_instance） | 本报告 §17.8（权威列表） | **登记**（2026-09-29 追加；源码冻结纪律同上） | 代码阶段授权（R-17e 建议随批次2；R-17d 随批次8 前） |
 | 设计缺口清单（gap inventory） | docs/analysis/design-gap-inventory.md（**新建**） | 九份设计/评审文档全量负空间检索 + 存量实读（证据行号 2026-09-30 实测） | **已落地**（2026-09-30——「九份设计/评审文档之后还有哪些细节没有设计」的排程底账：§1 已覆盖防误报清单 16 行、§2 真空白 #1–#11（时钟/战斗确定性/DDL/通道安全+加密库/容量基准/GM 命令面/内存对象池/上行限流/Redis 细则/观测接出/出站 HTTP——各带证据与缺口判据三选一：负空间/存量冒充/方括号占位）、§3 已登记推迟项与登记簿的分界、§4 元缺口三项（architecture/ 70 份资产状态表 v1 证据驱动口径 + trace 并轨 #10 + BI 边界声明）、§5 批次计划 B2–B7；后续设计批逐项覆盖后回填状态列） | — |
 | 脚本绑定层弃 sol2 + Lua 5.5（随 vcpkg） | docs/design/scripting-lua.md §2（修订） | sol2 上游维护停滞（2026-09-30 用户核查判定）；重模板头文件编译成本 + 与 Lua 版本升级强耦合；apollo 绑定面小（§8 三件套 + `apollo.*` 注入），原生 lua_CFunction 薄绑定数百行可控 | **已落地**（2026-09-30——Lua 定 5.5 线不落 5.4 中间态（number = int64/double 语义不变）；**版本策略同日再修订（用户指令「跟着 vcpkg 走」）：锁 5.5 主线、补丁位随 vcpkg lua port（当前 5.5.x）——不 pin 补丁版、删 overlay port 自持兜底；小版本升级仍显式批次**（scripting-lua §2/摘要 10、battle-determinism §2、sdk-contract §10.6 注、docs/todo 批次 6 同步）；sdk-contract「sol2 桥」更名「C-API 搬运桥」（§10.6 附节更新注）；36 号 #12/#19/:166 与 deep-dive §12 表述修正已同日 B8 批落地） | — |
@@ -2109,6 +2109,89 @@ grep -rn -e registerRuntimeServices -e registerWorldServices -e registerPlatform
 ---
 
 *评审基线（源码）：main @ e7ba3f0d（本文件外零改动；contract 面代码态 = 18152898 落点——`git diff --stat 18152898..HEAD -- modules/contract sdks .github/workflows scripts/ci` 为空）。六笔提交逐笔 `git show`/工作副本实读取证，行号均 2026-09-30 本轮实测；backup 分支经 `git show c349f850:<path>` 只读取证。一次性验证声明（ctest 计数/protoc 解码/luac 装载/组包实测）按提交注记采信并在表内标注。*
+
+---
+
+## 23. 第十四轮（2026-09-30 追加）：登记簿「代码影响项」四件现状复核——config 桩 / FrameFilter / 继承生成器 / 定时器轮（C-80 … C-82）
+
+### 23.1 范围与方法
+
+**选目（按 §16.10.2 登记簿既定行序，读表推进）**：自上而下扫状态列——⑦–⑪、G-1/G-2 补设计、两批删档、本报告更名、RemoteEntityCall、在线调试、logging、InterServerLink、负载均衡、共享模型、L0、热更、异步、深潜、36 号修正、三行「下轮审计候选」（§18.2/§18.3/§18.4 已闭环）、§18 待同步（已闭环）、host-builder 审计（§20/§21）、注册中心、术语表、文档重整理、#12–#16、战斗验证、§22 复核——状态列均已落地/已闭环/已删除；**首个状态列为「登记」且未做过现状复核的行 =「代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件）」**，即本轮对象。其后「R-17a…R-17g」行已随 §22.4 逐项复核（零消化）。
+
+**口径假设（非交互，自行假设并注明）**：① 任务书所称 `docs/analysis/ioc-review.md` = 本文件 `docs/analysis/architecture-review.md`（2026-09-29 更名，文件顶部更名记录；**不新建旧名文件**）；② 该行解除动作为「代码阶段授权」——源码冻结门禁下「推进」= 只读现状复核（设计口径 ↔ 代码现状逐件对照、登记新发现、回填该行状态），不触碰授权效力、不实施任何删除/新建；③ 新缺陷编号续 **C-80**（已登记末号 C-79；本轮 grep 核实 C-80…C-82 未占用）；④ 任务书禁派子代理——全部检索与实读在主线完成。
+
+**方法**：每件三段——设计口径（登记行「目标文档」列指认段落实读）→ 代码现状（文件:行，2026-09-30 本轮实测）→ 与登记时点（2026-09-28 §16.8/§16.9 文本）比对判「已交付 / 部分交付 / 零变动」。负空间检索照 §20.6 口径（关键词全仓、排 .git/build/Testing，命中逐文件复看防路径假阳性）。**不构建、不重跑测试**（源码冻结；本轮无一次性验证声明需采信）。
+
+**门禁（本任务书硬线，附录 A 教训照办——以当轮任务书为准，不沿用历史摘要授权）**：只写本报告一份文件；源码/CMake/CI/契约/golden/其他文档零改动；不碰 git status 既有三项 untracked（BIGWORLD_AUDIT.md / Testing/Testing/ / ipc_audit_results.md）；单笔提交；无 tag、无 release、无 force push；push 前 `git fetch origin main && git rebase origin/main`。
+
+### 23.2 逐件核对表
+
+**① config 桩清理**（设计口径 = xml-generation §7 P1（:120）+ §1.1 表行（:25-27）「桩与 ConfigFormat::Xml/Lua 路由诚实化删除、路由随桩一并删除」，C-49 家族、§16.8.3-③）
+
+| 核对点 | 本轮实测（2026-09-30） | 判定 |
+|---|---|---|
+| parseXml / parseLua 桩体 | modules/core/config/src/config_manager.cpp:564-570 parseXml（`(void)content; (void)root;` + 注释「XML解析需要专门的库（如tinyxml2）/这里提供基本实现」+ `return false;`）、:572-578 parseLua 同构（「Lua table解析需要Lua解释器」）——与 xml-generation :25/:26 引注 :564-570/:572 逐行吻合 | **零变动**（桩原样在位） |
+| ConfigFormat::Xml/Lua 路由 | switch `case Xml` :115-116 / `case Lua` :118-119；Auto 探测 `trimmed[0]=='<'` → usedFormat=Xml → parseXml :130-132；detectFormat `.xml`→Xml :632-633、`.lua`→Lua :634-635（枚举定义 include/apollo/core/config/config_manager.h:18）——与 :27 引注 :115-116/:131-132/:632-633 吻合 | **零变动**（路由原样） |
+| 消费与测试触点（登记时未记） | parseXml/parseLua 全仓调用面（排 config_manager 自身与 build）仅本报告 :1105 引注命中——**零生产调用**；tests/test_config.cpp 对 Xml/Lua 零覆盖；**tests/test_core_config.cpp:36-37 断言 `ConfigFormat::Xml==3`、`Lua==4` 枚举序** | 状态补充——代码批删除面 = 桩 + 路由 + 该二断言（删枚举值即断链），随代码阶段授权执行 |
+
+**② FrameFilter 管线**（设计口径 = net-abstraction §5.5/§6 决策表行「新建于收敛后的 modules/net（四套收敛为前置条件）」+ §7；xml-generation :10 白名单④「帧管线 filter 栈声明（随契约）」）
+
+| 核对点 | 本轮实测 | 判定 |
+|---|---|---|
+| FrameFilter 接口/插件代码 | 全仓 `FrameFilter` 检索（排 .git/build/Testing）26 处**全部位于 docs/**（`grep -v "docs/"` 计 0），modules/、apps/、include/、src/ 零命中 | **零变动**（代码面为零，符合「等前置」预期） |
+| 契约侧 filter 栈声明 | sdks/contract/（四 xml + apollo.xsd）`filter`（-i）零命中 | 零变动（声明面亦为零） |
+| 前置条件 C-29 四套网络树 | 四套仍在（§12.2 盘点原样）；§18 另证 http/websocket 为第五、六套（C-53）——**前置未满足**，本轮零变动为预期态，非欠账 | 前置未动 |
+
+**③ 继承生成器**（设计口径 = sdk-contract §2.3/§8/§10.2.5、xml-generation §4、§16.7.2「单继承、生成期展开、父先入子覆盖、禁同名改型、provenance」）
+
+| 核对点 | 本轮实测 | 判定 |
+|---|---|---|
+| 解析侧（校验三层 + 祖先链） | contract_parser.cpp:417（entity spec = id/parent/desc）/:440-447（PascalCase + 自环拒绝）、:540 注「继承 DAG：parent 解析 + 环检测 + 祖先链展开（§16.7.2 生成期拍平的解析侧半步）」、:546-566（悬垂引用 + 环检测 + 诊断带出处链）、:573-574/:584（链赋值，根在前）；XSD 侧 keyref `EntityParentRef` apollo.xsd:245-248 | **已交付**——引入提交 a5334014（2026-09-29，登记行落档**之后**） |
+| 产物侧（拍平元数据出投影） | sdks/gen/src/main.cpp:205 注「继承在生成期拍平（§16.7.2）：ancestors 根在前」/:207-222（contract.h 实体表 + `kAncestors_*` 数组）、:304-308（apollo_contract.json entities 带 parent/ancestors）；golden apollo_contract.h:165-172（kAncestors 三数组 + 表项） | 已交付（元数据面） |
+| 测试与闸 | test_contract.cpp:548 `testInheritanceMatrix`（:552-568 三实体祖先链断言）、:572 `testInheritanceCycleRejected`（:575 A→B 环）、:582 `testInheritanceDanglingParentRejected`；gen_compile_test.cpp:102-103 `kAncestors` static_assert；golden byte-diff 闸随 apollo_gen_golden_check 覆盖 | 已交付（覆盖齐） |
+| **拍平主体：per-entity 属性集合并三要件** | attrs.xml **零 entity 字段**（`grep -ci entity` → 0——全局属性表）；entities.xml:2-3 自注「attr 集合不在本文件声明：实体默认携带全量 attrs 的可见子集，**逐实体裁剪属后续批**」；XSD entity 仅 id/parent/desc（apollo.xsd:231-236）——「父先入子覆盖 / 禁同名改型 / provenance」**无数据轴、无实现、无测试**；而 attribute-sync.md:265 按已展开口吻陈述「attrs.xml 是每实体扁平的属性表（生成器在建期按 parent 单继承展开…）」 | **部分交付 + 文档不同步 → C-81** |
+| 旧名同步（登记簿「本报告更名」行解除动作交叉核） | entities.xml:2、apollo.xsd:217 两处注释仍为「ioc-review §16.7.2」旧名 | 与登记簿一致（待下一代码批次同步，非本轮项） |
+
+**④ 定时器轮组件**（设计口径 = §16.8.3-④ + ssengine-reference §4.3 落地形态 :102/归属行 :104「modules/base 新组件、数据结构 + 单测、驱动权 game loop、排除 modules/bigworld」）
+
+| 核对点 | 本轮实测 | 判定 |
+|---|---|---|
+| 落点 modules/base | modules/base 仅 6 头 + id_pool.cpp（id_pool/memory/string/terminal/thread_pool/time）；time.hpp:77 `class Timer` 为秒表（:83 `start_(Clock::now())`）+ ScopeTimer/FpsCalculator——**无任何调度数据结构** | **零变动**（未动工——代码阶段授权未至，预期内） |
+| 仓内定时器存量（收敛对象清单） | ① legacy core TimerManager **4 层 × 256 槽分层轮**（timer_manager.h:149-153 常量/:157-166 轮数组、cpp 363 行——C-24 三重断裂，仅编在无法 configure 的 legacy 分支 root CMakeLists.txt:96-102；§11.5 已审）；② bw Runtime **优先队列堆** + timers map（modules/bigworld/src/runtime.cpp:41-42、:79 泵循环）+ 转发桩（modules/bigworld/src/timer.cpp 全文空体、bigworld/timer.hpp 内联转 `bw::BigWorld::addTimer`——16.10.1 已排除）；③ net event_loop `addTimer`/`processTimers`（event_loop.cpp:257/:320——C-57 已审）；④ ipc async_io `scheduleTimer`×4 后端（async_io.h:112/:157/:228/:288/:364——C-61 已审）；⑤ tests/test_timer.cpp 直测 TimerManager（:48/:74/:103/:131/:167——C-24 矛盾对） | 状态补充（五处存量各自在案，唯缺统合登记） |
+| **第二套时间轮实现（报告零提及）** | `include/apollo/algorithm/timing_wheel.h` **527 行分层时间轮**——头注引 Varghese & Lauck「Hashed and Hierarchical Timing Wheels」+ Linux Kernel + Kubernetes 借鉴（:1-16）；`TimingWheelConfig{tickMs=10, wheelSize=512, maxWheels=5}`（:42-44）；类 :147、`getNextExpiry` :429、`cascadeTasks` :453；消费方 = tests/test_data_structures.cpp 五用例（:173/:197/:221/:242/:418，:486-501 注册）+ examples/skill_system_demo.cpp:441-442（`cooldownWheel_`/`buffWheel_`）；构建门 = tests/CMakeLists.txt:235/:243 `data_structures_tests`（外层 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` :12–:692 内；根 CMakeLists.txt:31 该开关**默认 OFF**、:29 examples 默认 OFF——默认配置不编译，但**非孤儿**：有测试有示例） | **底账缺件 → C-80** |
+
+### 23.3 缺陷登记（C-80 … C-82）
+
+| 编号 | 内容 | 证据 | 严重度与处置 |
+|---|---|---|---|
+| **C-80** | 定时器轮收敛对象清单缺件——仓内实际存在**两套时间轮实现**（legacy core TimerManager 4×256 分层轮 + algorithm/timing_wheel 分层轮 527 行），本报告对时间轮的底账（§11.5 C-23/C-24、§16.10.1 归属行、登记簿本行）只含前者；「定时器轮组件」代码批若按现底账只收敛一处，第二套将成为漏网并存件（§15.2「禁止第五套」同族风险）。timing_wheel 非孤儿（五测试用例 + 技能 demo 两实例在册）但默认构建门关闭——既不在生产链也不在默认验证链 | include/apollo/algorithm/timing_wheel.h:1-16/:42-44/:147/:429/:453；tests/test_data_structures.cpp:173/:197/:221/:242/:418（:486-501 注册）；examples/skill_system_demo.cpp:441-442；tests/CMakeLists.txt:12/:235/:243（外层门 :12–:692）；根 CMakeLists.txt:31/:29（默认 OFF）；本报告 grep `timing_wheel\|TimingWheel` → 0（:598-767 仅 timer_manager） | 中低（底账完整性）。处置：代码阶段「定时器轮组件」批的收敛清单补此件——迁入 modules/base 复用或显式退役（留测试资产），与 C-24 残留（TimerManager 三重断裂 + legacy 分支不可 configure）同批裁决。本轮只登记 |
+| **C-81** | 继承拍平主体无契约载体，且 attribute-sync §7.3 陈述与现状不同步：§7.3 按已展开口吻写「attrs.xml 是每实体扁平的属性表（生成器在建期按 entities.xml 的 parent 单继承展开：父先入、子覆盖、禁同名改型、带 provenance）」——实测 attrs.xml 为**全局属性表**（`grep -ci entity` → 0）、entities.xml:2-3 自注「attr 集合不在本文件声明…逐实体裁剪属后续批」、XSD entity 仅 id/parent/desc；生成器侧只产出 parent/ancestors 链元数据——合并语义三要件（父先入子覆盖/禁同名改型/provenance）**无数据轴、无实现、无测试** | attribute-sync.md:265 vs sdks/contract/attrs.xml 全文、entities.xml:2-3、apollo.xsd:231-236、contract_parser.cpp:540/:584、sdks/gen/src/main.cpp:205/:304-308 | 低（文字级 + 分期标注，与 C-79 同型）。处置：随下一 attribute-sync 批把 §7.3 改为分期口径（「实体属性集裁剪批落地后生效——现状见 entities.xml 注」）；拍平主体本体归「逐实体裁剪」后续批（契约注释已宣示，非缺陷本体）。本轮只登记 |
+| **C-82** | ssengine-reference §4.3 定时器行括注失实且与同节归属行矛盾：:60 表行括注「（rg 全 modules 无 timer）」——实测 modules/ 内 timer 存量至少三处（modules/bigworld timer 族**自 2026-03-18 即在**：timer.hpp/timer.cpp/runtime.cpp:41-42 优先队列堆；modules/net/http/src/event_loop.cpp:257/:320；modules/base/tests 对 time.hpp Timer 的引用），且同文件 :104 归属行自述「timer.cpp 是转发桩」——同一节内两句互斥；括注在写作时点（基线 35a9c528，2026-09-28）即不成立 | ssengine-reference.md:60 vs :104；`git log --diff-filter=A -- modules/bigworld/src/{runtime,timer}.cpp` → 4cb65a77 2026-03-18；event_loop.cpp:257/:320 | 低（文字级）。结论「缺独立定时器组件、按目标设计新建」本身不受影响。处置：括注改写为「modules 树无独立定时器组件（bigworld 转发桩/net 自带定时器除外）」——随下一 ssengine 批。本轮只登记 |
+
+### 23.4 实读核对记录（本节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| FrameFilter 代码面为零 | `grep -rn FrameFilter`（排 .git/build/Testing）→ 26 行逐看路径全为 docs/（`grep -v "docs/"` 计 0） | 属实（防路径假阳性） |
+| config 桩与路由行号 | grep/sed config_manager.cpp（:115-119/:130-132/:564-578/:632-635）；parseXml/parseLua 全仓调用面（排 config_manager 自身与 build） | 与 xml-generation :25-27 引注吻合；调用面零 |
+| attrs.xml 零 entity | `grep -ci entity sdks/contract/attrs.xml` → 0 | 属实 |
+| 继承三测试函数 | `grep '^void test' test_contract.cpp` → :548 testInheritanceMatrix / :572 testInheritanceCycleRejected / :582 testInheritanceDanglingParentRejected | 属实 |
+| golden kAncestors | `grep -c kAncestors sdks/cpp/generated/apollo_contract.h` → 6（:165-172 三数组 + 三表项） | 属实 |
+| timing_wheel 消费面与构建门 | 全仓 grep → 头文件 + test_data_structures + skill_system_demo；tests/CMakeLists.txt:12 外层门、:235/:243 目标与 add_test、:692 endif 结构实读 | 属实（非孤儿、默认不编译） |
+| 报告对 timing_wheel 零提及 | `grep -c 'timing_wheel\|TimingWheel'` 本报告 → 0 | 属实 |
+| a5334014 引入继承 DAG | `git log -S "继承 DAG" / -S ancestors -- modules/contract/src/contract_parser.cpp` → 仅 a5334014（2026-09-29） | 属实（登记行 2026-09-28 落档之后） |
+| modules/bigworld timer 出生 | `git log --diff-filter=A -- modules/bigworld/src/{runtime,timer}.cpp` → 4cb65a77 2026-03-18 | 属实（C-82 括注写作时点即已存在） |
+| C-80…C-82 编号可用 | `grep 'C-80\|C-81\|C-82'` 本报告 → 0 | 未占用 |
+
+### 23.5 登记簿回填与本轮状态
+
+- **§16.10.2「代码影响项」行回填（同批编辑）**：状态列追加 2026-09-30 §23 现状复核四结论——① 继承生成器**机制面已交付**（登记后 a5334014 落解析/环检测/祖先链 + 产物元数据 + golden + 三测试），拍平主体无契约载体、归 entities.xml 自注「逐实体裁剪」后续批（**C-81**：attribute-sync §7.3 陈述不同步）；② config 桩**零变动**（桩 :564-578、路由 :115-132/:632-635 原样——删除面补两处测试触点 tests/test_core_config.cpp:36-37 枚举序断言）；③ FrameFilter **零变动**（代码面与契约声明面全仓为零，前置 C-29 四套收敛未动）；④ 定时器轮**未动工**（modules/base 无调度结构），底账补第二套轮实现 timing_wheel.h 527 行（**C-80**）+ ssengine §4.3:60 括注失实（**C-82**）。解除动作列维持「代码阶段授权」并补随批归属：C-80 随定时器组件批、C-81 随 attribute-sync 批、C-82 随 ssengine 批、拍平主体随逐实体裁剪批。
+- **行序扫描结论（假设注明）**：本轮回填后，登记簿未闭环行全部落在四类门后——**代码阶段授权**（本行、R-17a…g——后者已于 §22.4 复核）、**用户裁决**（backup 采纳、D/C 档删除候选）、**设计批**（#12–#16）、**代码批验收**（C-77/C-79 随批、C-78 挂 M0、battle-verification M0-M5、契约旧名同步——本轮交叉核实 entities.xml:2/apollo.xsd:217 两处 ioc-review 旧名仍在）；**不存在仍可只读推进的未评审登记行**——后续巡检以当轮任务书点名对象为准，新登记行出现时恢复行序推进。
+- **本轮状态**：产出 = §23（四件现状复核 + C-80…C-82）+ 登记簿行回填；**零源码改动**（唯一写入面 = 本文件）；三项既有 untracked 未触碰；不派子代理；单笔提交；push 前 `git fetch origin main && git rebase origin/main`；无 tag、无 release、无 force push。
+
+---
+
+*评审基线（源码）：main @ bef2288a（本文件外零改动；全部行号 2026-09-30 本轮实测；git 考据：a5334014 继承首批 2026-09-29、4cb65a77 modules/bigworld 出生 2026-03-18）。未构建、未重跑测试——构建门与测试覆盖均为静态实读。*
 
 ---
 
