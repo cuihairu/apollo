@@ -152,7 +152,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 
 ## 10. 契约 → protobuf 编码：两层模型与 proto 后端（2026-09-29 追加）
 
-> 定位：README/36 号文档把「def 管语义、protobuf 管字节」一句话带过（决策 #3），本节写透——两层模型、def→proto 映射规则、生成器 proto 后端、与差分同步的配合、zstd 边界，以及「编译期生成 / descriptor 反射池 / 运行时解释」三路线的正面权衡（§10.6）。分期落 P2（§8 已补行）；第一批契约（`sdks/contract` v1 @ a5334014）尚无 proto 产物，本节是其后端设计定稿。引用基线：attribute-sync §3/§5/§7、net-abstraction §3/§5.5、architecture-review §16.7.2、docs/05 §6.1/§6.3。
+> 定位：README/36 号文档把「def 管语义、protobuf 管字节」一句话带过（决策 #3），本节写透——两层模型、def→proto 映射规则、生成器 proto 后端、与差分同步的配合、zstd 边界，以及「编译期生成 / descriptor 反射池 / 运行时解释」三路线的正面权衡（§10.6）。分期落 P2（§8 已补行）；第一批契约（`sdks/contract` v1 @ a5334014）尚无 proto 产物，本节是其后端设计定稿。引用基线：attribute-sync §3/§5/§7、net-abstraction §3/§5.5、architecture-review §16.7.2、docs/05 §6.1/§6.3（docs/05 已于 2026-09-30 删除，git 可溯）。
 
 ### 10.0 为什么 def 契约不排斥 protobuf——反而依赖它
 
@@ -270,12 +270,12 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 
 #### 10.2.3 attr id 分段与 message 拆分的取舍
 
-现状分段（docs/05 §6.1，attrs.xml 注释同源）：1-99 基础 / 100-199 战斗 / 300-399 状态 / 600-699 外观 / 700-799 社交 / 800-899 标记。三个候选方案：
+现状分段（docs/05 §6.1——已删 git 可溯；attrs.xml 注释同源）：1-99 基础 / 100-199 战斗 / 300-399 状态 / 600-699 外观 / 700-799 社交 / 800-899 标记。三个候选方案：
 
 | 方案 | 形态 | 判定 |
 |---|---|---|
 | A 全属性单 message（逐属性 field，§10.2.1 强类型路径） | 生成一个 AttrSet | **P3 可选产物**（编辑器/调试工具 golden），非运行时通路 |
-| B 同段一 message（AttrsBasic_1_99 / AttrsCombat_100_199…） | 按段分组投影 | **否决**——把「段」编进 wire 词汇：docs/05 分段表调整（语义组织演化）会强制 schema 变更；段是给策划/评审的组织，不是编码组织 |
+| B 同段一 message（AttrsBasic_1_99 / AttrsCombat_100_199…） | 按段分组投影 | **否决**——把「段」编进 wire 词汇：docs/05（已删 git 可溯）分段表调整（语义组织演化）会强制 schema 变更；段是给策划/评审的组织，不是编码组织 |
 | C 分段完全不进 wire（差分/快照都走通用对） | 段只是契约注释 + 生成枚举的分区 | **主路径采纳**——wire 与分段表解耦，调段零 wire 变更 |
 
 #### 10.2.4 sync 掩码：不进 wire、不拆 message、不用 optional 表达可见性
@@ -543,7 +543,7 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 
 四条规则全部落在生成器/XSD/hash 机制上，不依赖文件怎么拆：
 
-**① ID 空间按域分段。**messages 的 msg id 空间（独立于 attr id）划两段：client 域与 internal 域各占一段（示例：client 1-899 / internal 900+，段值落地时定、XSD 锁段边界——沿 attrs.xml id 分段同型纪律，docs/05 §6.1 先例）。**段内自由增删，互不推动对方排布**——对 KBE 单一分配表病根的直接反制。落地形态：msg 元素带 `domain="client|internal"` 属性（xs:enumeration），id 与 domain 的段约束进 XSD。
+**① ID 空间按域分段。**messages 的 msg id 空间（独立于 attr id）划两段：client 域与 internal 域各占一段（示例：client 1-899 / internal 900+，段值落地时定、XSD 锁段边界——沿 attrs.xml id 分段同型纪律，docs/05 §6.1 先例——已删 git 可溯）。**段内自由增删，互不推动对方排布**——对 KBE 单一分配表病根的直接反制。落地形态：msg 元素带 `domain="client|internal"` 属性（xs:enumeration），id 与 domain 的段约束进 XSD。
 
 **② schema_hash 按域算两份。**`client_hash` 只覆盖 client 域的 canonical bundle，`internal_hash` 只覆盖 internal 域（算法同 §6，输入按域过滤）。internal 变更不改 client_hash——**客户端握手稳定、bin 不重发**；握手用 client_hash（§6 的 N/N-1 窗口语义不变，对象收窄为 client 域），internal_hash 只做服务端部署期同批断言（同批重编同批起，无需灰度窗口）。落地口径（P2 已实现）：client bundle = client 域消息 + attrs + errors（与客户端产物面内容一一对应）；internal bundle = internal 域消息 + entities；**手工 version 不进域 bundle**——version 随任何变更走，若入 bundle 则 internal-only 变更也推动 client_hash，握手稳定即失效（全量身份含 version 仍由 schema_hash 锚定）。配套携带面纪律见 §11.6。
 

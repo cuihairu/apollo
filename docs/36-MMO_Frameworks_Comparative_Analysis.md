@@ -1,6 +1,6 @@
 # 36. 常见 MMO 服务器框架对比分析（Apollo 视角）
 
-> 状态：分析文档（对比研究）。覆盖 BigWorld、KBEngine、skynet、Pomelo、NoahGameFrame、Unity Netcode、UE Replication、EQEmu、WoW 生态（TrinityCore/CMaNGOS 近似）、Space Engineers（资料不足标注）十个对象。每维度对照 Apollo 的设计选择（docs/00、docs/04、docs/05 与 docs/design/*），给出取舍理由。纯文档工作，零源码改动。
+> 状态：分析文档（对比研究）。覆盖 BigWorld、KBEngine、skynet、Pomelo、NoahGameFrame、Unity Netcode、UE Replication、EQEmu、WoW 生态（TrinityCore/CMaNGOS 近似）、Space Engineers（资料不足标注）十个对象。每维度对照 Apollo 的设计选择（docs/00、docs/04、docs/05——三者均已删、git 可溯，文中对其引用为历史引用；docs/design/*），给出取舍理由。纯文档工作，零源码改动。
 
 ## 0. 证据分级与口径
 
@@ -36,7 +36,7 @@
 | 10 | AOI 独立服务（网格+四叉树+shard，可独立扩缩） | 各家 cell 内 AOI（BW cellapp、KBE `cellapp/coordinate_node.*` 十字链）+ 独立服务化思想 | 改造 | KBE 十字链是「进程内、随实体移动 O(1) 增删邻居」的好结构，但它锁死在 cellapp 里；Apollo 把 AOI 计算从逻辑进程剥离成 shard 服务，Zone 卡顿不拖 AOI（17 §5.1/§5.4） |
 | 11 | 8 位 SYNC_* bitmask 可见域 + 50ms 批差分 | UE `COND_*` 条件位思想（[Conditional Property Replication](https://dev.epicgames.com/documentation/unreal-engine/conditional-property-replication?application_version=4.27)） | 改造 | UE 的条件位是 **C++ 宏**（编译期、改协议必须重编译）；Apollo 把条件做成契约字段 `sync=`（sdk-contract §2.3），8 位掩码批量差分（05 §6.3/§6.4），运行时可配、多端同源 |
 | 12 | Lua 白名单脚本（2026-09-30 两度修订：弃 sol2 改原生 C API 绑定；版本 = 5.5 主线随 vcpkg lua port，当前 5.5.x——scripting-lua §2） | skynet 的 C/Lua actor 生态；KBEngine cellapp 内嵌 Python | 改造 | KBE Python 全功能脚本的攻击面与热更失控风险大；skynet 证明 Lua 足以承载业务且可热更；Apollo 再收紧：脚本可写面由契约生成白名单（predict 位交集，sdk-contract §5） |
-| 13 | Consul/Etcd 服务注册 + 心跳 5s/30s | **否决** KBEngine machine UDP 广播发现（`kbe/src/server/machine`） | 否决对方机制 | UDP 广播只能发现同网段进程，跨机房/容器网络即失效；registry 心跳在 K8s/云环境是标配（05 §2.3） |
+| 13 | 进程发现 = **machined 式守护 + UDP 广播双层，不引 etcd/consul 注册中心**（2026-09-30 用户裁决改写，原行「Consul/Etcd 注册 + 心跳 5s/30s」已废） | BigWorld bwmachined 守护 + machine_guard 生死广播（machine_guard.hpp:496-497/:609-613）；KBEngine machine UDP 广播探测（`kbe/src/server/machine` machine.cpp:646-670）——双先例各取长处 | 改造（原「否决 UDP 广播」反转） | 拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益（net-abstraction §7 G-1）；KBE 广播跨网段失效由上游配置注释自认（kbengine_defaults.xml:814-833 `<addresses>` 手工 workaround，deep-dive §13）——故双层互补：跨机拉起/生死归单机守护，同网段拓扑发现归广播；原行口径来源 docs/05 §2.3（已删 git 可溯） |
 | 14 | Prometheus/Kafka/ClickHouse 可观测栈 | BW `server/tools/{message_logger,bw_profile,…}`；KBE `tools/logger` 独立进程；skynet monitor+debug_console+logger 三板斧（`skynet_start.c:209-211` 启动序列） | 改造 | 三家都把「日志/剖析是一等公民」做进了引擎自带组件，方向对、形态旧——自建轮子不接入生态；Apollo 只学定位不学实现，直接接外部标准栈（docs/00） |
 | 15 | ServerID 64 位（Region/Group/Type/Instance 分段） | **Apollo 自创设计**（2026-09-30 证伪修正：BW 源码无 64 位分段对应物——实为 EntityID=int32（basictypes.hpp:104）/DatabaseID=int64（:191）/UniqueID 128 位点分（unique_id.hpp:17-25）；「64 位分段」仅存于已删 B 级文档示意代码，git 1e37073d^ 可溯） | 自创（参照 ID 内嵌来源信息的思想） | 分段 ID 使实体可追溯来源进程；Apollo 按部署语义划段位（05 §2.2）——思想参照、机制自研 |
 | 16 | Battle 独立实例 + Replay/Inspector 适配缝 | 混合同步需求的通用解（见 §4 问 10）；BW 把战斗算在 cell 内、无独立实例 | 自创+借鉴 | 大型团战 offload 到短生命周期实例进程，故障域与 tick 率独立可调（25 §3.2/§3.3/§8），关键帧记录留确定性回放之缝（25 §6） |

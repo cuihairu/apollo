@@ -40,11 +40,11 @@
 
 ## 批次 4：base-appmgr 基础应用管理器（原「中优先级」）
 
-决策依据：#13（Consul/Etcd 注册 + 心跳，否决 UDP 广播发现）、#15（ServerID 分段）。
+决策依据：#13（**2026-09-30 裁决改写**：machined 守护 + UDP 广播双层发现、不引 etcd/consul——net-abstraction §7 G-1；原「Consul/Etcd 注册 + 心跳」口径随 docs/05 删除）、#15（ServerID 分段）。
 
-- [ ] BaseApp 实例管理 + 状态跟踪（心跳 5s/30s，docs/05 §2.3）
+- [ ] BaseApp 实例管理 + 状态跟踪（实例生死走 G-1 编队事件，net-abstraction §7；心跳/超时参数随 P3 定）
 - [ ] 新客户端连接分配（负载均衡）
-- [ ] 服务注册/发现接线（先 Consul 或 Etcd 二选一，写明取舍）
+- [ ] 服务发现接线（G-1 两层：machined 守护 + UDP 广播——net-abstraction §7 P3；不引 etcd/consul，先例见 deep-dive §13）
 
 ## 批次 5：AI 导航/寻路
 

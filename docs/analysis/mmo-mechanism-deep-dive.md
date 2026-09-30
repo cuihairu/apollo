@@ -263,7 +263,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 ---
 
-## §13 进程发现（对应 36 号 #13：Consul/Etcd 否决 UDP 广播）
+## §13 进程发现（对应 36 号 #13——2026-09-30 裁决改写：machined+UDP 双层、不引 etcd/consul；原「Consul/Etcd 否决 UDP 广播」口径已废，docs/05 §2.3 注册中心稿随裁决删除）
 
 **实现位置（A 级，本轮实测）**
 - KBE machine：`kbe/src/server/machine/machine.cpp:646-670` `findBroadcastInterface`——`bhandler.broadcast(KBE_PORT_BROADCAST_DISCOVERY)` 发广播探测 → `receive` 收应答 → 确认默认广播路由接口（逐行与 §16.6 记录一致）。
@@ -275,7 +275,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：externalTcpPorts_min 20099 / max 0（=自动）；`<addresses>` 默认空。
 
-**已知缺陷**：**广播在路由器/云网络失效由 KBE 自己的配置注释承认**（如上原文）——36 号 #13 否决该机制的论据从「36 号的推断」升级为「上游自认」。同网段限制为 UDP 广播的物理属性。
+**已知缺陷**：**广播在路由器/云网络失效由 KBE 自己的配置注释承认**（如上原文）；同网段限制为 UDP 广播的物理属性。（2026-09-30 裁决后读法：此缺陷不再作为「否决广播」的论据，而是 G-1 双层结构的**分工依据**——跨机拉起/生死上报归单机 machined 守护、同网段拓扑发现归广播；etcd/consul 类外部注册中心不引入，原 docs/05 §2.3 注册中心稿随裁决删除，git 可溯。）
 
 ---
 
@@ -306,7 +306,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **B 级引用（已删文档，git 可溯）**：`git show 1e37073d^:docs/BigWorld架构深度解析.md` 行 85-105 有 `struct EntityID { uint64 id; type(8位)|serverId(16位)|index(40位) }` 的分段示意——**该结构在 BW 源码中不存在**（rg 未检出对应物），系文档作者的示意性伪代码。
 
-**结论（修正 36 号 #15）**：36 号「BW 64 位唯一 ID（type|serverId|index 分段）」的追溯对象**源码无对应物**——应改写为「BW 实际标识体系 = EntityID(int32) / DatabaseID(int64) / UniqueID(128 位点分) / Mercury Address；**分段式 64 位 ServerID 是 Apollo 自创设计**（05 §2.2），无 BW 实现对应物；可援引的仅是『ID 内嵌来源信息便于追溯』的思想（DatabaseID 空间的 int64 容量与 UniqueID 的结构化分段是两个可参照的先例）」。Apollo 设计本身不受影响，**追溯表述需修正**。
+**结论（修正 36 号 #15）**：36 号「BW 64 位唯一 ID（type|serverId|index 分段）」的追溯对象**源码无对应物**——应改写为「BW 实际标识体系 = EntityID(int32) / DatabaseID(int64) / UniqueID(128 位点分) / Mercury Address；**分段式 64 位 ServerID 是 Apollo 自创设计**（05 §2.2——已删 git 可溯），无 BW 实现对应物；可援引的仅是『ID 内嵌来源信息便于追溯』的思想（DatabaseID 空间的 int64 容量与 UniqueID 的结构化分段是两个可参照的先例）」。Apollo 设计本身不受影响，**追溯表述需修正**。
 
 ---
 
@@ -355,6 +355,7 @@ rg -il "lockstep" ~/workspaces/skynet/{skynet-src,service-src,lualib,service} # 
 | 36 号 #15「分段 64 位」的 BW 源码对应物 | **证伪**（EntityID=int32） | §15 修正行 |
 | 36 号 #17「KBE MySQL-only」 | **证伪**（db_redis 实存） | §17 修正行 |
 | docs/17、docs/25、docs/BigWorld架构深度解析.md | 已删（1e37073d） | git show 可溯；36 号内引用现为历史引用 |
+| docs/05-MMORPG服务器架构设计方案-Codex审核版.md | 已删（2026-09-30 用户裁决：不引注册中心，删除其注册中心来源文档） | git 历史可溯；36 号/sdk-contract/deep-dive 内引用按历史引用读 |
 
 ---
 

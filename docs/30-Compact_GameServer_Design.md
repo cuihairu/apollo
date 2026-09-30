@@ -52,7 +52,7 @@ CompactGameServer
 ## 5. 线程与扩展
 
 - 推荐配置：单机多线程，按地图类型划分线程池。例如 4 核机器运行 4 个 Scene Thread，每个线程管理若干地图。
-- 支持多实例部署：每个 Compact GS 可负责一组地图；通过 Consul 注册 `map_range`，Gate/World 根据玩家地图路由到对应实例。
+- 支持多实例部署：每个 Compact GS 可负责一组地图；`map_range` 经 G-1 编队拓扑注册（machined 守护 + UDP 广播——net-abstraction §7；不引 Consul，2026-09-30 裁决），Gate/World 根据玩家地图路由到对应实例。
 - 若需要水平扩容（更多玩家/地图），可再部署多个 Compact GS 或升级为完整 Zone/AOI 分层。
 
 ## 6. 数据和配置
