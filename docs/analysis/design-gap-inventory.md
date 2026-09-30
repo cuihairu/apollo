@@ -105,7 +105,7 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 
 ## 3. 已登记推迟项(登记簿管辖,不重复立项)
 
-以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、36 号 #15/#17 表述修正、36 号 #12/#19 与 deep-dive §12 的 sol2/Lua 5.4 表述修正(2026-09-30 决策变更:弃 sol2 改原生 C API 绑定 + Lua 5.5.1——随下一 36 号批次)、sdks/contract 旧名同步、origin 五笔源码提交回退与 backup-apollo-src(用户裁决项)。
+以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、sdks/contract 旧名同步(随下一代码批次)。**已完成项**:36 号 #12/#15/#17/#19 与 deep-dive §12 表述修正已于 2026-09-30 执行(B8 批——sol2/Lua 5.4 → 弃 sol2 + 5.5 主线随 vcpkg(当前 5.5.x,同日两度修订);#15 BW 分段 ID / #17 KBE MySQL-only 两处证伪改写,含对比表/问9总结/存储表联动)。**已裁决项(2026-09-30 用户:「都是历史记录」)**:origin 五笔源码提交(cb78d4b0…18152898)保留为历史记录、不回退;backup-apollo-src(c349f850)留档维持——不合并不删除;处置记录见 architecture-review 附录 A。
 
 ## 4. 结构性元缺口
 
@@ -134,9 +134,10 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B2 | 新建 clock-and-time.md | #1 | 用户点名最先;**已完成**(b8ebed98 后续设计批) |
 | B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先;**已完成**(§8.3/§8.4 落盘 + xml-generation §4 交叉引用) |
 | B4 | 新建 battle-determinism.md | #2 | 随战斗玩法;**已完成**(四约束+回放四元组落盘,36 号 #16/#18 收口) |
-| B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3;**已完成**(§4.3/§5.9/§5.10 + logging §5.1 落盘;同批收 scripting-lua 弃 sol2 改原生 C API 绑定 + Lua 5.5.1 决策——见 §3 与登记簿) |
+| B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3;**已完成**(§4.3/§5.9/§5.10 + logging §5.1 落盘;同批收 scripting-lua 弃 sol2 改原生 C API 绑定 + Lua 5.5 决策(版本策略后改随 vcpkg)——见 §3 与登记簿) |
 | B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3;**已完成**(容量模型+帧预算表+内存对象池+基准三形态+指标集九项) |
 | B7 | scripting-lua GM 命令面增补 | #6 | 随 P3;**已完成**(§7.5 指令表/权限分级/审计存储) |
+| B8 | 36 号/deep-dive 历史表述修正 + Lua 版本策略再修订 + 裁决落档 | —(登记簿待办收尾,非缺口) | 登记簿 #15/#17 行、sol2 决策尾注与用户裁决项的收尾;**已完成**(2026-09-30——36 号 #12/#15/#17/#19/:166/:167/:243/:267 + deep-dive §12 标题;Lua 5.5.1 → 5.5 主线随 vcpkg(当前 5.5.x);origin 五笔/backup-apollo-src 裁决入 architecture-review 附录 A) |
 | 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED** |
 
 每批独立提交(analysis/design 拆分照旧),完成即 fetch --rebase + push(推送纪律)。

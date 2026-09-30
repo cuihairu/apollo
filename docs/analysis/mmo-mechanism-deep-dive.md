@@ -245,7 +245,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 ---
 
-## §12 脚本嵌入形态（对应 36 号 #12：Lua 5.4 + sol2 白名单）
+## §12 脚本嵌入形态（对应 36 号 #12：Lua 白名单脚本——2026-09-30 修订：弃 sol2 改原生 C API 绑定，版本 = 5.5 主线随 vcpkg lua port，当前 5.5.x）
 
 **实现位置（A 级，本轮实测）**
 - KBE Python 嵌入：`kbe/src/lib/pyscript/script.cpp:76`（`Py_InitializeFromConfig`）/`:229`（`Py_Initialize` 兼容路径）——**全功能 Python、无沙盒**；`:383` 引擎自身 `PyImport_ImportModule("os")`（取系统信息用）——os 模块直接可达脚本层。

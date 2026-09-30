@@ -35,14 +35,14 @@
 | 9 | 场景实例粒度（Zone）而非无缝 cell | **否决** BW 无缝世界 | 否决 | BW 自己承认的成本：ghost 双写、边界协商、跨进程调试不可单步（docs/BigWorld架构深度解析.md §五缺点 1-4）；Apollo 目标是副本/分线型 MMORPG（5000+ CCU SLO），场景实例的故障域与扩缩已经够用（docs/00、17 §3） |
 | 10 | AOI 独立服务（网格+四叉树+shard，可独立扩缩） | 各家 cell 内 AOI（BW cellapp、KBE `cellapp/coordinate_node.*` 十字链）+ 独立服务化思想 | 改造 | KBE 十字链是「进程内、随实体移动 O(1) 增删邻居」的好结构，但它锁死在 cellapp 里；Apollo 把 AOI 计算从逻辑进程剥离成 shard 服务，Zone 卡顿不拖 AOI（17 §5.1/§5.4） |
 | 11 | 8 位 SYNC_* bitmask 可见域 + 50ms 批差分 | UE `COND_*` 条件位思想（[Conditional Property Replication](https://dev.epicgames.com/documentation/unreal-engine/conditional-property-replication?application_version=4.27)） | 改造 | UE 的条件位是 **C++ 宏**（编译期、改协议必须重编译）；Apollo 把条件做成契约字段 `sync=`（sdk-contract §2.3），8 位掩码批量差分（05 §6.3/§6.4），运行时可配、多端同源 |
-| 12 | Lua 5.4 + sol2 白名单脚本 | skynet 的 C/Lua actor 生态；KBEngine cellapp 内嵌 Python | 改造 | KBE Python 全功能脚本的攻击面与热更失控风险大；skynet 证明 Lua 足以承载业务且可热更；Apollo 再收紧：脚本可写面由契约生成白名单（predict 位交集，sdk-contract §5） |
+| 12 | Lua 白名单脚本（2026-09-30 两度修订：弃 sol2 改原生 C API 绑定；版本 = 5.5 主线随 vcpkg lua port，当前 5.5.x——scripting-lua §2） | skynet 的 C/Lua actor 生态；KBEngine cellapp 内嵌 Python | 改造 | KBE Python 全功能脚本的攻击面与热更失控风险大；skynet 证明 Lua 足以承载业务且可热更；Apollo 再收紧：脚本可写面由契约生成白名单（predict 位交集，sdk-contract §5） |
 | 13 | Consul/Etcd 服务注册 + 心跳 5s/30s | **否决** KBEngine machine UDP 广播发现（`kbe/src/server/machine`） | 否决对方机制 | UDP 广播只能发现同网段进程，跨机房/容器网络即失效；registry 心跳在 K8s/云环境是标配（05 §2.3） |
 | 14 | Prometheus/Kafka/ClickHouse 可观测栈 | BW `server/tools/{message_logger,bw_profile,…}`；KBE `tools/logger` 独立进程；skynet monitor+debug_console+logger 三板斧（`skynet_start.c:209-211` 启动序列） | 改造 | 三家都把「日志/剖析是一等公民」做进了引擎自带组件，方向对、形态旧——自建轮子不接入生态；Apollo 只学定位不学实现，直接接外部标准栈（docs/00） |
-| 15 | ServerID 64 位（Region/Group/Type/Instance 分段） | BW 64 位唯一 ID（docs/BigWorld架构深度解析.md §二：type|serverId|index 分段） | 采纳+改段 | 分段 ID 使实体可追溯来源进程；Apollo 按部署语义重划段位（05 §2.2） |
+| 15 | ServerID 64 位（Region/Group/Type/Instance 分段） | **Apollo 自创设计**（2026-09-30 证伪修正：BW 源码无 64 位分段对应物——实为 EntityID=int32（basictypes.hpp:104）/DatabaseID=int64（:191）/UniqueID 128 位点分（unique_id.hpp:17-25）；「64 位分段」仅存于已删 B 级文档示意代码，git 1e37073d^ 可溯） | 自创（参照 ID 内嵌来源信息的思想） | 分段 ID 使实体可追溯来源进程；Apollo 按部署语义划段位（05 §2.2）——思想参照、机制自研 |
 | 16 | Battle 独立实例 + Replay/Inspector 适配缝 | 混合同步需求的通用解（见 §4 问 10）；BW 把战斗算在 cell 内、无独立实例 | 自创+借鉴 | 大型团战 offload 到短生命周期实例进程，故障域与 tick 率独立可调（25 §3.2/§3.3/§8），关键帧记录留确定性回放之缝（25 §6） |
-| 17 | MySQL 8.0 + Redis + ClickHouse；PostgreSQL 留缝、MongoDB 不留缝 | BW db_storage_mysql/db_storage_xml 双后端、KBE MySQL-only（`kbe/src/lib/db_mysql`） | 对照自定 | 两家都把 DB 抽象成可插后端（BW 实证），但 KBE 实际只有 MySQL 一条腿（目录实证）；Apollo 用 storage.xml「语句即数据」天然留出 SQL 方言缝（见 §4 问 11） |
+| 17 | MySQL 8.0 + Redis + ClickHouse；PostgreSQL 留缝、MongoDB 不留缝 | BW db_storage_mysql/db_storage_xml 双后端、KBE MySQL+Redis 双后端（2026-09-30 证伪修正：原「KBE MySQL-only」失准——kbe/src/lib/db_redis/ 为完整实体存储后端，entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis 实现 db_interface/entity_table.h 同一抽象基类；redis 生产可用性未验证，deep-dive §17） | 对照自定 | 两家都把 DB 抽象成可插后端且各有第二后端实证（BW=XML、KBE=Redis）——双后端同构；Apollo 用 storage.xml「语句即数据」天然留出 SQL 方言缝（见 §4 问 11） |
 | 18 | 帧同步只留适配缝不做实现 | 各框架均无内建 lockstep（见 §4 问 10） | 暂缓 | MMORPG 上行 intent-only（服务端定夺）与 lockstep 确定性直接冲突；如需战斗帧同步，走 Battle 实例单独确定性运行时，不污染大世界协议（25 §3.3/§6） |
-| 19 | 编解码**反射为默认、代码为两端增强（v3，2026-09-29 同日修正）**：框架固定消息族（AttrDelta/AttrBatch/movement/heartbeat 等，schema **不随契约变**）强类型代码一次生成内建框架、守服务端热路径；业务消息走 descriptor.bin 反射 → sol2 桥 → Lua handler（contract.lua 承载 attr 表/路由/白名单），**服务端契约变更零重编**；客户端按代码热更能力分档——有热更管线的端（Unity/HybridCLR、Cocos/Laya TS 脚本）走 protoc/pbjs 生成代码（编译期类型检查+热更兼得），bin 为兜底/工具/新端通道 | BW（生成代码零开销但改契约全端重编）与 KBE（生成代码编进包不能热更，拿 importClientMessages 运行时协商补演进——§2.2 ④ 登记的病）的**真实分叉**——都不照抄：取 protobuf FileDescriptorSet 自描述中间态 + 装载期一致性闸（bin↔hash 锚定、bin↔Lua 路由逐条对齐启动红），严谨性从编译期改装载期承接 | 对照自定（v3 反射默认） | 演进链路两个最慢环节（服务端 C++ 重编、端侧商店发版）**同时**与协议解耦；反射税只落低频业务消息（万条/秒 × µs 级解码，可忽略），消息两分法保热路径零反射；.bin/contract.lua/端代码皆构建期定型、运行期只读（不落「运行时解释」批判面）；单一契约源同批吐全部产物、manifest 逐文件 hash 挡混搭；业务消息反射的**解码位置为装配选择非契约分叉**（C++ 反射+sol2 桥默认 / 字节透传+Lua 侧 lua-protobuf 备选——两案同源同批同 bin，切换换装配零契约改动，sdk-contract §10.6 附节） |
+| 19 | 编解码**反射为默认、代码为两端增强（v3，2026-09-29 同日修正）**：框架固定消息族（AttrDelta/AttrBatch/movement/heartbeat 等，schema **不随契约变**）强类型代码一次生成内建框架、守服务端热路径；业务消息走 descriptor.bin 反射 → C-API 搬运桥（2026-09-30 更名：原「sol2 桥」，弃 sol2 后为原生 Lua C API——sdk-contract §10.6 附节更新注） → Lua handler（contract.lua 承载 attr 表/路由/白名单），**服务端契约变更零重编**；客户端按代码热更能力分档——有热更管线的端（Unity/HybridCLR、Cocos/Laya TS 脚本）走 protoc/pbjs 生成代码（编译期类型检查+热更兼得），bin 为兜底/工具/新端通道 | BW（生成代码零开销但改契约全端重编）与 KBE（生成代码编进包不能热更，拿 importClientMessages 运行时协商补演进——§2.2 ④ 登记的病）的**真实分叉**——都不照抄：取 protobuf FileDescriptorSet 自描述中间态 + 装载期一致性闸（bin↔hash 锚定、bin↔Lua 路由逐条对齐启动红），严谨性从编译期改装载期承接 | 对照自定（v3 反射默认） | 演进链路两个最慢环节（服务端 C++ 重编、端侧商店发版）**同时**与协议解耦；反射税只落低频业务消息（万条/秒 × µs 级解码，可忽略），消息两分法保热路径零反射；.bin/contract.lua/端代码皆构建期定型、运行期只读（不落「运行时解释」批判面）；单一契约源同批吐全部产物、manifest 逐文件 hash 挡混搭；业务消息反射的**解码位置为装配选择非契约分叉**（C++ 反射+C-API 搬运桥默认 / 字节透传+Lua 侧 lua-protobuf 备选——两案同源同批同 bin，切换换装配零契约改动，sdk-contract §10.6 附节） |
 
 ---
 
@@ -163,8 +163,8 @@
 | **进程拆分** | cellapp/baseapp/loginapp/machined | 同 BW 系谱+dbmgr | 无预设（service 约定） | connector/area/master | 多 server 插件进程 | 无（单进程） | 单 authoritative 进程 | world/zone/ucs/queryserv | authserver+worldserver | Gate/World/Orchestrator/Zone/AOI/Battle/DataProxy/Social/LogAgent（00） |
 | **AOI** | witness+ghost+detail 档 | 十字链 cellapp 内 | 不内置 | 不内置 | 有限公开资料 | 无（回调自建） | relevancy 距离球+优先级 | zone 边界即 AOI | grid/cell+视距（存疑） | 独立 AOI 服务：网格+四叉树+shard（17 §5） |
 | **状态同步** | 属性 filter/detail level/双序号 | .def flags+dirty 打包 | 不内置（消息自建） | 不内置（filter 链） | 有限公开资料 | NetworkVariable 权威 delta | COND_*+dormancy+频率配额 | 权威 spawn/移动包 | opcode 权威包（存疑） | 8 位 SYNC_*+50ms 批差分+acked_seq 水位（05 §6、attribute-sync §10） |
-| **脚本热更** | Python（cell/base） | Python+工具链 | Lua 一等公民+热更 | JS 本体 | 插件动态库 | C#（IL 热更社区方案） | Blueprint 不可热更 | Perl/Lua quest | C++/社区 Lua（存疑） | Lua 5.4+sol2 白名单（契约生成） |
-| **存储** | MySQL+XML 双后端（`db_storage_mysql/xml`） | MySQL-only（`lib/db_mysql`） | 无内置 | 社区 dao（MySQL/Redis） | 自带简单存储（D） | 不涉及 | 不涉及 | MySQL+共享内存 | MySQL（官方依赖） | MySQL8+Redis+ClickHouse，journal+快照两段式（00、attribute-sync §8） |
+| **脚本热更** | Python（cell/base） | Python+工具链 | Lua 一等公民+热更 | JS 本体 | 插件动态库 | C#（IL 热更社区方案） | Blueprint 不可热更 | Perl/Lua quest | C++/社区 Lua（存疑） | Lua 5.5.x（vcpkg）白名单（契约生成；原生 C API 绑定，2026-09-30 弃 sol2） |
+| **存储** | MySQL+XML 双后端（`db_storage_mysql/xml`） | MySQL+Redis 双后端（`lib/db_{mysql,redis}`——2026-09-30 修正，原「MySQL-only」失准） | 无内置 | 社区 dao（MySQL/Redis） | 自带简单存储（D） | 不涉及 | 不涉及 | MySQL+共享内存 | MySQL（官方依赖） | MySQL8+Redis+ClickHouse，journal+快照两段式（00、attribute-sync §8） |
 | **可观测性** | message_logger/bw_profile 工具链 | logger 独立进程 | monitor+debug_console+logger | log4js 插件（C） | 基础日志（D） | 引擎外自建 | 引擎外自建 | logsys（D） | GM 命令+日志（D） | LogAgent→Kafka→ClickHouse+运行时 ConsoleEvent（00） |
 | **社区/许可证** | 闭源被收购（4500 万美元，2012） | 开源 MIT，中文社区为主，节奏放缓 | MIT，云风+国内生态活跃 | **已归档**（2023-09） | MIT，趋缓 | Unity 官方维护（随 Unity 商业政策） | Epic 官方维护（5% 分成模式） | 开源社区（C/D） | GPL 系私服生态（D） | 自研（本仓库） |
 
@@ -240,7 +240,7 @@
 
 ### 问 9：每框架一段「Apollo 取舍结论」
 
-- **BigWorld**：采纳 Mercury filter 分层、detail level 分档、按观察者水位、64 位分段 ID、日志一等公民定位；否决无缝 cell 世界（ghost 成本）与「被大客户买断闭源」的商业模式教训（4500 万美元收购案）；改造 witness→acked_seq 水位、TimeQueue→主循环驱动。
+- **BigWorld**：采纳 Mercury filter 分层、detail level 分档、按观察者水位、日志一等公民定位，及「ID 内嵌来源信息」的思想（64 位分段本身为 Apollo 自创——#15 2026-09-30 证伪修正，BW 源码无对应物）；否决无缝 cell 世界（ghost 成本）与「被大客户买断闭源」的商业模式教训（4500 万美元收购案）；改造 witness→acked_seq 水位、TimeQueue→主循环驱动。
 - **KBEngine**：采纳 .def 契约生成精髓、sdks/ 布局、xlsx2py「生成器在 src 外」、Archiver 平滑刷库算法；否决 .def 存储耦合（五短板）、machine UDP 广播、Python 全功能脚本；改造平滑算法防突发、白名单收紧脚本面。
 - **skynet**：采纳 C/Lua 技术栈与单 service 串行的无锁全序、自研代际更替观（harbor→cluster）；否决「框架无预设拓扑」的完全自由——Apollo 保留九服务显式拓扑（00），因为运维与排障需要静态结构；补齐 skynet 缺失的存储/观测标准栈。
 - **Pomelo**：采纳多进程 frontend/backend 拆分思想（Gate/World 即其投影）；其归档教训直接支撑 Apollo 的「不绑单一语言运行时」——C++20 内核 + Lua 只做业务层，运行时生命期与 C++ 标准而非社区项目绑定。
@@ -264,7 +264,7 @@
 | 框架 | 官方 DB | 证据 | ORM/连接池/分表 | PG/Mongo/Redis 扩展现状 |
 |---|---|---|---|---|
 | BigWorld | **MySQL**（生产）+ **XML**（开发/小规模）+ baseapp 内嵌 SQLite | `lib/db_storage_mysql/mysql_database_creation.cpp`、`mysql_billing_system.cpp`；`lib/db_storage_xml/xml_database.cpp`；`baseapp/sqlite_database.cpp`（全部 A 级实证） | .def 驱动自动建表（entity_defs→表）；无内建连接池/分表（公开口径 C） | MySQL 为事实唯一生产路径；XML 后端即官方留的「缝」（文件级实证） |
-| KBEngine | **MySQL-only** | `kbe/src/lib/db_mysql` 目录+mysqlclient 库文件（A 级实证）；dbmgr 集中任务 `buffered_dbtasks.cpp` | .def 驱动建表；无 ORM 抽象（直写 SQL 封装）；无分表 | PG/Mongo 无官方支持（社区讨论，D）；Redis 未进官方（D） |
+| KBEngine | **MySQL+Redis 双后端**（2026-09-30 修正：原「MySQL-only」失准） | `kbe/src/lib/db_{mysql,redis}`（A 级实证；redis 后端 entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis 实现 db_interface/entity_table.h 同一抽象基类——生产可用性未验证，deep-dive §17）；dbmgr 集中任务 `buffered_dbtasks.cpp` | .def 驱动建表；无 ORM 抽象（直写 SQL 封装）；无分表 | PG/Mongo 无官方支持（社区讨论，D） |
 | skynet | **无内置** | 本地树 skynet-src/service 清点无 DB 组件（A 级） | 业务自选 MySQL/Redis 客户端（社区口径 D） | 全开放——没有「官方支持」概念 |
 | Pomelo | 无官方统一 ORM | 归档仓库文档（C）；Lord of Pomelo 示范 MySQL+Redis dao（D） | 社区 dao 层 | Redis 民间普遍（D） |
 | NoahFrame | 自带简单存储组件（细节公开资料有限，D） | — | — | — |
