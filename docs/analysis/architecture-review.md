@@ -4,7 +4,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。§16.9（同日再追加）：⑦–⑪ 以「修订文本落盘」形式完成（门禁收窄为只写本报告——锚点原文 + 逐字替换文本备妥，粘贴即闭环）。§16.10（同日终轮）：⑩ 升级为审计链登记（判定权威记录 = 本报告），⑦⑧⑨⑪ 维持搁置并立登记簿（§16.10.2）。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。§16.9（同日再追加）：⑦–⑪ 以「修订文本落盘」形式完成（门禁收窄为只写本报告——锚点原文 + 逐字替换文本备妥，粘贴即闭环）。§16.10（同日终轮）：⑩ 升级为审计链登记（判定权威记录 = 本报告），⑦⑧⑨⑪ 维持搁置并立登记簿（§16.10.2）。第九轮（2026-09-30 追加）：登记簿三候选面审计——http/websocket 面、ipc 树、bw 兼容层（C-53…C-66，含 net-abstraction §5.10 裁决 3 前提修正、登记簿行回填）与目录版图/分层设计整理见 §18。
 
 ---
 
@@ -1284,13 +1284,14 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | 异步任务模型（future/promise/协程选型） | docs/design/scripting-lua.md §8（**新建节**，原交集表顺移 §9） | **已落地**（2026-09-29——单写者线程下 Redis/DB/跨服异步的架构级封装：§8.1 三模型对比表定 **C++ 侧回调 + request_id 交接、Lua 侧协程**（std::future 无 then 且 get 阻塞违 tick 纪律、folly/asio future 框架复杂度不成比例、JS Promise 微任务语义 = 「协程 + tick 边界 resume」的同构实现不引入、C++20 协程不进引擎侧）；§8.2 三层封装（L0 执行层 IO/DB 线程池 + hiredis 异步、L1 交接层 request_id 消息进场景线程队列——交接物是消息不是 future、L2 脚本层 yield + 固定调试点 resume 呈同步观感）；§8.3 三纪律（resume 只在 tick 边界/resume 后 re-validate 实体 alive/超时上界 + 协作式取消——Lua 协程无法安全强杀）；先例 skynet 全协程原生（lualib/skynet.lua:18-26/:227 `coroutine_yield "SUSPEND"`/:415 wakeup）、BW/KBE 脚本侧已读范围内均为回调式生命周期方法；ssengine-reference §4.1 异步 DB Command 第一消费者与 InterServerLink RequestReply 接线；§9 net 行原「§异步模型」悬空引用闭环） | — |
 | MMO 机制实现深潜（36 号决策追溯表 #1–#18 逐行实现级对应） | docs/analysis/mmo-mechanism-deep-dive.md（**新建**） | **已落地**（2026-09-29——§1-§18 小节号即表行号；每行五要素（实现位置/数据结构与关键字段/状态机时序/配置默认值/已知缺陷）+ Apollo 对照；行号「本轮实测/§16.6 已核沿用」双轨标注，三仓基线 BigWorld 27446bab / KBE 0bc93d5 / skynet 4f76d75；lockstep 三仓负空间检索命令与零命中在 §18；文首声明 #19 契约域归属 sdk-contract §10.6、已删 B 级文档（docs/25、BigWorld架构深度解析、docs/17）按 `git show 1e37073d^:` 取回） | — |
 | 36 号表两处表述修正（深潜产出，A 级证伪） | docs/36-MMO_Frameworks_Comparative_Analysis.md #15/#17 行 | **已落地**（2026-09-30 B8 批，改写文案存档）：#15「BW 64 位分段唯一 ID」源码无对应物——BW 实为 EntityID=int32（basictypes.hpp:104）/DatabaseID=int64（:191）/UniqueID 128 位点分（unique_id.hpp:17-25），分段 64 位仅存于已删 B 级文档示意代码（git show 1e37073d^ 可溯），已改写为「Apollo 自创设计，参照仅 ID 内嵌来源信息的思想」（#15 行 + 问9 BigWorld 总结段联动）；#17「KBE MySQL-only」失准——kbe/src/lib/db_redis/ 为完整实体存储后端（entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis，实现 db_interface/entity_table.h 同一抽象基类），已改写为「BW=MySQL+XML、KBE=MySQL+Redis 双后端同构」（#17 行 + 对比表存储行 + 存储深潜表 KBEngine 行联动；redis 后端生产可用性未验证，深潜 §17 已如实标注） | 已闭环 |
-| 下轮审计候选：bw/bigworld 兼容层 | 本报告（未评审子系统清单） | **登记**（16.8.3-④ 观察；bw::Runtime 实体体系与 game 模块并行的风险面） | 新审计轮授权 |
-| 下轮审计候选：ipc 树 | 本报告（§15.2 已注：include/src 两树约 18 文件 7800+ 行，APOLLO_ENABLE_IPC=OFF） | **登记**；2026-09-29 增注：async_io.h（572 行）含 `IoMultiplexer` **完成模型接口**三后端（:12 IOCP/:16-18 io_uring 探测/:21-25 EPOLL 兜底/KQUEUE）——C-29 四栈盘点边界外的仓内唯一 proactor 接口，AsyncOp vector 值拷贝语义的处置口径见 net-abstraction §5.8（不学，随审计轮定去留） | 新审计轮授权 |
+| 下轮审计候选：bw/bigworld 兼容层 | 本报告（**§18.4，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-64 三层断链——坏头（模块 BigWorld.h 实测 20 编译错）/不可编译测试（幻影 API 40 处）/实现 TU 排除在自己 target 外「实现只活在测试里」；C-65 实体并行超标（4 套实体+1 幻影+双 ECS+3 种 EntityId 拼法）且全局单例零锁——16.8.3-④ 属实且偏低估；C-66 BW 14.4.1 映射 10 项同构忠实、生产零消费，modules 树增量价值零行——裁量点仅剩根链保留为测试/参考桥或随模块树退役；option 行号修正 :46→:49） | 已闭环 |
+| 下轮审计候选：ipc 树 | 本报告（**§18.3，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-60 全景 7813 行与预记逐项吻合；双 Channel + 双 IServiceDiscovery = 第五处并行网络/IPC 坐实，Redis 侧依赖 C-45 旧树 RedisTemplate；C-61 async_io.cpp 1118 行**不在任何源列表 + ≥6 编译期错误——从未整体编译**，「仓内唯一 proactor 接口」成色修正为纸面资产（KQUEUE 第四后端区间 cpp :897-1115 补齐）；§5.8「不学」值拷贝的代码定位落实（IOCP :390-398 深拷贝/epoll :714-732 拷入 writeQueue）+ 回调持锁 ：837→:850-852；C-62 声明无实现簇（Channel::create 走到即链接错误/socket_transport.h 整文件死声明）；C-63 判定 = 历史遗留/原型岛屿——P3 新建为主，共享内存环 + 背压/令牌桶语义作参考件，对 utils/loop_buffer 等指定复用件零引用） | 已闭环 |
 | 代码影响项（config 桩清理 / FrameFilter 管线 / 继承生成器 / 定时器轮组件） | 各设计文档分期（xml-generation §7、net-abstraction §7、sdk-contract §8、16.8.3-④） | **登记**（源码冻结纪律，改动点记录在案） | 代码阶段授权 |
 | §17 DI/宿主域新登记 R-17a…R-17g（tags 死字段 / start 失败路径 / build NDEBUG / reload 接线 / core 测试接线+重写 / named 注入 / add_instance） | 本报告 §17.8（权威列表） | **登记**（2026-09-29 追加；源码冻结纪律同上） | 代码阶段授权（R-17e 建议随批次2；R-17d 随批次8 前） |
 | 设计缺口清单（gap inventory） | docs/analysis/design-gap-inventory.md（**新建**） | 九份设计/评审文档全量负空间检索 + 存量实读（证据行号 2026-09-30 实测） | **已落地**（2026-09-30——「九份设计/评审文档之后还有哪些细节没有设计」的排程底账：§1 已覆盖防误报清单 16 行、§2 真空白 #1–#11（时钟/战斗确定性/DDL/通道安全+加密库/容量基准/GM 命令面/内存对象池/上行限流/Redis 细则/观测接出/出站 HTTP——各带证据与缺口判据三选一：负空间/存量冒充/方括号占位）、§3 已登记推迟项与登记簿的分界、§4 元缺口三项（architecture/ 70 份资产状态表 v1 证据驱动口径 + trace 并轨 #10 + BI 边界声明）、§5 批次计划 B2–B7；后续设计批逐项覆盖后回填状态列） | — |
 | 脚本绑定层弃 sol2 + Lua 5.5（随 vcpkg） | docs/design/scripting-lua.md §2（修订） | sol2 上游维护停滞（2026-09-30 用户核查判定）；重模板头文件编译成本 + 与 Lua 版本升级强耦合；apollo 绑定面小（§8 三件套 + `apollo.*` 注入），原生 lua_CFunction 薄绑定数百行可控 | **已落地**（2026-09-30——Lua 定 5.5 线不落 5.4 中间态（number = int64/double 语义不变）；**版本策略同日再修订（用户指令「跟着 vcpkg 走」）：锁 5.5 主线、补丁位随 vcpkg lua port（当前 5.5.x）——不 pin 补丁版、删 overlay port 自持兜底；小版本升级仍显式批次**（scripting-lua §2/摘要 10、battle-determinism §2、sdk-contract §10.6 注、docs/todo 批次 6 同步）；sdk-contract「sol2 桥」更名「C-API 搬运桥」（§10.6 附节更新注）；36 号 #12/#19/:166 与 deep-dive §12 表述修正已同日 B8 批落地） | — |
-| 下轮审计候选：modules/net/{http,websocket} | 本报告（未评审子系统清单，与 bw/bigworld、ipc 树并列） | C-29 四栈盘点与 16.8.1 版图普查的边界外存量（modules/net/CMakeLists.txt 两子树未覆盖）；http 树 2541 行（rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648），namespace apollo::net::http，RestTemplate 风格 API，rest_client.cpp:13 `#ifdef APOLLO_HAS_CURL`/:16 `APOLLO_CURL_STUB 1`——vcpkg.json 无 curl，**默认构建全桩**（C-45 宏门 MySQL 同族）；CMake 另有 Drogon 备选分支（:81-91 http/:124-133 websocket）与 built-in 分支并存（§15.2「禁止并存」纪律对象）；零生产消费方（仅 examples/http_demo、tests、docs/api/net.md）；websocket 处置方向已有（net-abstraction §5.5：WS 是流 filter 不新起栈）但代码面审计未做；设计面登记 = design-gap-inventory #11（出站 HTTP 收口 + 异步接线 + Drogon 裁决） | **登记**（2026-09-30） | 新审计轮授权 |
+| 下轮审计候选：modules/net/{http,websocket} | 本报告（**§18.2，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-53 规模修正 2541→**5048**（+websocket.cpp 1193 + 三头 1314）+ 杂交布局（新树 src/旧树头，与 C-43 互为镜像）+ 同 namespace 双套 API + 文件内第三套 = 「第五、六套手写网络栈」；C-54 APOLLO_HAS_CURL **三重锁死**（定义点根 :301 在 NOT-MODULAR 守卫内且 PRIVATE-on-apollo，而代码编入 apollo_net_http；vcpkg.json 无 curl）——任何现存配置全桩，APOLLO_CURL_STUB 装饰宏，C-45 第三例形态升级（定义点与编译目标错位）；C-55 死模板四例 + websocket Config 七死旋钮 + setRoute 空转/validateAccept 零调用；C-56 detach 捕 this UAF/每请求一线程/单 CURL 句柄无锁/timeoutMs=30000 默认阻塞——§5.10 裁决 3 代码面依据；C-57 event_loop.cpp = poll 单线程 Reactor、与 curl 零关系零接线——**§5.10 裁决 3「既有执行层」前提不存在**（修正，待同步）+ processTimers 持锁 fire / Reconnect ABBA 确定性死锁链；C-58 手写协议缺陷簇（RequestParser 记账头行偏一/三处裸 stoll/无 chunked/WS 无分片重组/`find("101")` 弱校验）；C-59 两套测试资产引用幻影 API **编不过、实际测试覆盖为零** + Drogon 半分支装上即断链（INTERFACE 化）+ legacy :73-76 四幻影源——三裁决获代码面互证，#11 行数/覆盖待同步） | 已闭环 |
+| §18 产出的设计文档待同步项 | docs/design/net-abstraction.md §5.10 裁决 3 措辞 + docs/analysis/design-gap-inventory.md #11 行 | **登记**（2026-09-30 §18 修正产出，两文档本轮门禁外只写本报告：① §5.10 裁决 3 所引「既有 event_loop.cpp IO 线程上的 curl_multi 多路复用」经审计**不存在**——event_loop.cpp 为纯 poll reactor、与 curl 零关系零接线（C-57），curl_multi 执行层落地按**新建**计（裁决方向不变：禁场景线程直调/异步交接）；② #11 所记 2541 行应改 5048，且 test_rest_template/net_comprehensive 两套测试引用幻影 API 编不过、实际测试覆盖为零，#11 三裁决（curl 进 vcpkg/Drogon 删/禁直调）获 C-53/C-54/C-56/C-59 代码面互证） | 门禁放宽后粘贴 |
 
 ### 16.10.3 本轮状态
 
@@ -1477,6 +1478,186 @@ shutdown()       逆 init_order_ 析构（:45-51）；析构函数兜底再调 s
 - 产出 = 本报告 §17（六域完整分析 + R-17a…R-17g 登记）+ §16.10.2 登记簿补行；零源码改动。
 - 全部行号本会话实读核对；源码基线 main @ a5334014；「文件腐化」结论附实测命令（g++ -std=c++20 -fsyntax-only，唯一化错误清单见 §17.7）。
 - 单提交；push 前 fetch + rebase；无 tag、无 release。
+
+---
+
+## 18. 第九轮（2026-09-30 追加）：登记簿三候选面审计——http/websocket 面、ipc 树、bw 兼容层 + 目录版图整理（C-53 … C-66）
+
+> 任务口径：续写「docs/analysis/ioc-review.md」的下一轮审计——该文件已于 2026-09-29 更名为 architecture-review.md（更名记录见 ：3），本节即其续写，文件名沿革在此说明。审计对象 = §16.10.2 登记簿登记的三个候选面（:1287 bw/bigworld 兼容层、:1288 ipc 树、:1293 modules/net/{http,websocket}）。轮中用户追加一项：「这个文件夹的目录设计也需要整理出来，并说明为什么这么放——这从某种程度上说明就是代码分层的设计」→ 落为 §18.5 目录版图小节。门禁不变：只写本报告、零源码改动；单笔提交；无 tag、无 release。源码基线 main @ 28a3d22e。
+
+### 18.1 范围与方法
+
+- 三个候选面各由一只只读子代理做广度提取（bw 面含 BigWorld 14.4.1 本机源码逐项对照）；主线对承重断言逐条抽查复核（宏门三重锁、Drogon 半分支、legacy 幻影源清单、event_loop 死锁链、bw target 源列表等——核对记录 §18.7）。ipc 树文件数/行数与登记簿 :1288 预记逐项吻合；http 面规模预记 2541 行被实测修正（C-53）。
+- 新发现 C-53 起（上轮封顶 C-52，共 14 条）；对既有结论的修正汇总见 §18.6；登记簿三行回填与待同步登记见 §18.8。
+
+### 18.2 面一：modules/net/{http,websocket}（C-53 … C-59）
+
+**C-53 面全景：规模 2541→5048 行修正；杂交布局（新树 src + 旧树头）；同命名空间双套 HTTP API + 文件内藏第三套——「第五、六套手写网络栈」判定。**
+- 规模实测：modules/net/http/src 三 cpp 2198 行（rest_client 734 + http 816 + event_loop 648）+ websocket/src/websocket.cpp **1193 行**（登记簿未计）；四头在旧树 include/apollo/net/{http.h 611、http/rest_client.h 343、websocket.h 377、event_loop.h 326} = 1657 行；**合计 5048**。登记簿 :1293 与 design-gap-inventory #11 所记 2541 = rest_client.h 343 + 三 cpp 2198——漏计 websocket.cpp 与三个头。
+- 杂交布局：两子树均只有 src/、无 include/（CMake 引用的 http/include、websocket/include 目录不存在，modules/net/CMakeLists.txt:102/:152）；头全部挂旧树 include/apollo/net。modules/net 内部两种形态并存——protocol 子树自带 include/apollo/net/protocol，http/websocket 挂旧树。与 C-43「命名空间冒充」（新树编旧体）互为镜像：这边是**新树用旧头**。EventLoop 属 namespace apollo::net 却物理编进 apollo_net_http——任何非 http 消费者要事件循环得链 HTTP 库。
+- 同命名空间双套 API（均 namespace apollo::net::http）：rest_client.h 的 RestTemplate 族（HttpMethod 七法/HttpResponse/RequestOptions{timeoutMs=30000…}）vs http.h 的 Method 九法/StatusCode 全表/大小写不敏感 Headers/Request/Response/RequestParser/Router——两套方法枚举、两套 Headers 实现；http.cpp 内部类再藏第三套 HttpServer（:444-558，头不暴露、无调用者、~115 行编译进库不可达）与 HttpClient（:564-770，裸 socket 手写 HTTP/1.1）。重名符号 httpGet 两版（rest_client.h:323 vs http.cpp:777——后者 `(void)url` 硬编码 localhost:80 "/" 且无 DNS（:340-356 TODO）→ 恒返 Connection failed）。
+- 家族判定：C-29 四栈 A-D 均不含本两子树；连同 ipc 树（C-60）手写网络/IPC 实现达六处——「四套网络栈」此后应读作「六处」；§15.2「禁止第五套网络栈」纪律拦的正是这种增量。
+
+**C-54 APOLLO_HAS_CURL 三重锁死：任何现存配置下 RestTemplate 全桩；APOLLO_CURL_STUB 装饰宏——C-45 宏门族第三例且形态升级（宏定义点与编译目标错位）。**
+- 三重锁（实测）：① 宏定义点在根 CMakeLists.txt:301 `target_compile_definitions(apollo PRIVATE APOLLO_HAS_CURL=1)`——PRIVATE 且给 target `apollo`，而 rest_client.cpp 编入 `apollo_net_http`（modules/net/CMakeLists.txt:93-97），宏传不到该 TU；② :301 位于 `if(NOT APOLLO_ENABLE_MODULAR_LAYOUT)`（:50 起）守卫内，默认 MODULAR=ON（:39）整段不执行；③ vcpkg.json 无 curl，find_package（:287）必败。→ 默认与现存一切配置下走桩分支（rest_client.cpp:309-313，statusCode=-1）。
+- 装饰宏：APOLLO_CURL_STUB（rest_client.cpp:16 定义）全仓零读取——C-21 ENABLE_FILEWATCHER 同族纯标记。
+- 桩文案指错开关：:311 提示「Compile with APOLLO_ENABLE_CURL=ON」——那是 CMake option 名（根 :285，默认已 ON）而非编译宏名，照做无效。
+- 成色：curl 分支 ~212 行永不编译；其余 ~485 行公共外壳（40+ 方法）默认编译但运行时全部走到桩返回；enableConnectionPool/setKeepAlive（:334-344）即使 curl 路径也是 `(void)` 空实现。同族旁证：APOLLO_HAS_YAML（:253）/APOLLO_HAS_HIREDIS（:309-319）同 PRIVATE-on-apollo 模式。
+
+**C-55 死声明/假 API/死旋钮簇（C-33/C-46 死模板家族第三批 + 多例变体）。**
+- 死模板四例：getForObject\<T\>/postForObject\<T\>（rest_client.h:193-198）、parseJson\<T\>/toJson\<T\>（:257-262）只声明无定义——实例化即链接错误（全家族：get_component C-33、get_or_compute C-46 之后第三批）。
+- 死旋钮：websocket.h:114-122 Config 七字段（maxMessageSize 16MB/maxFrameSize 64KB/handshakeTimeoutMs/autoPing/pingIntervalMs/pongTimeoutMs/enableCompression）——实现中零读取（rg 实测）：无消息上限、无握手超时、无自动 ping。event_loop.h:39 EDGE_TRIGGER 注「仅支持 EPOLL」而实现只有 poll——标志静默忽略。
+- 空转 API：websocket.cpp:877-887 路由命中后 `{ /* 这里简化处理 */ }` 从不调 handler——Server::setRoute 是无操作；Handshake::validateAccept（websocket.h:252-257）零调用——从不校验 Sec-WebSocket-Accept。
+- 死代码：http.cpp:444-558 HttpServer 整类不可达（见 C-53）；removeConnection（:544-549）零调用——connections_ 只增不减（连接泄漏）；rest_client.cpp:88-92 CallbackData 死结构、:10 `<mutex>` 零使用；http.h:274 Request::pathParams 死字段（Router 从不填充）。
+
+**C-56 线程模型缺陷簇：detach 捕 this UAF + 每请求一线程 + 单句柄无锁复用 + 30s 默认阻塞——net-abstraction §5.10 裁决 3 的代码面依据。**
+- 回调版异步 rest_client.cpp:520-531 `std::thread([this,...]).detach()` 捕获 this——RestTemplate 先亡即 UAF，且每请求一线程无上界；std::async 版（:500-518）假异步（future 析构阻塞语义未文档化）。
+- Impl 单 CURL 句柄无锁复用（:137-151/:171）——同实例跨线程并发即数据竞争。
+- 全同步族默认 timeoutMs=30000（rest_client.h:102）阻塞至超时；rest_client.cpp 全文零 event_loop/线程池接线（实测）——谁调阻塞谁，场景线程直调即卡 30s。§5.10 裁决 3（同步 API 禁场景线程直调、异步走交接）的事实前提即此形态。
+
+**C-57 event_loop.cpp 定性修正：poll 单线程 Reactor 而非 curl_multi 执行层——§5.10 裁决 3 引用的「既有执行层」不存在；processTimers 持锁 fire 确定性死锁链。**
+- 定性（全文实读）：648 行 = 自建 poll(2) 单线程 Reactor（自 pipe 唤醒 :63-72 + 每轮持锁全量重建 pollfd vector :108-136 + 定时器 vector + 任务队列 + thread_local 循环指针 + Heartbeat/Reconnect 两管理器）——全文零 curl 头/符号、与 RestTemplate 零接线。net-abstraction §5.10 裁决 3 写「执行层 = 既有 event_loop.cpp IO 线程上的 curl_multi 多路复用」——**该前提不存在**，curl_multi 化 = 新建非复用（修正行见 §18.6；设计文档本轮门禁外，已登记）。
+- 确定性死锁链（原文复核）：processTimers 持 timerMutex_ 期间 `timer->fire()`（event_loop.cpp:320-343）→ 回调内 addTimer/removeTimer（同锁）即自死锁；实链 = ReconnectManager::addReconnect 持 mutex_ 调 loop_->addPeriodicTimer（:579→:595，reconnect 锁→timer 锁）vs processTimers 持 timer 锁经 fire→onReconnectTimer（:621）→ mutex_（timer 锁→reconnect 锁）= **ABBA**；首个重连成功/达限即挂死循环线程。
+- 同族：HeartbeatManager 持自身 mutex_ 调 heartbeatCallback（:545-547）；websocket.cpp:807-812 broadcast 持 connsMutex_ 逐连接 send（慢消费者阻塞全服广播）；每次 receive 新建 FrameParser 含 new Impl（websocket.cpp:664，热路径分配族）。
+- 多路复用器全家福至此四个互不相认：B 栈 network/transport poll reactor + A 栈 native_adapter epoll 壳（epoll 建而未消费，§5.8 已录）+ 本件 poll reactor + ipc IoMultiplexer（proactor，C-61）。
+
+**C-58 手写协议解析缺陷簇（C-47 手写线格式族 +3 套实例，全部游离于契约/生成器体系外）。**
+- RequestParser（http.h:419-544）：bytesConsumed 记账头行偏一——请求行先 pop '\r' 后 +2 恰对（:435-437/:466），头行先 +2 后 pop（:473/:476-477）→ CRLF 下每头行多记 1，headerEnd/body 切片错位；:242/:306/:502 三处 std::stoll 无捕获（恶意 Content-Length 可令 detached 线程 std::terminate）；:58 fromString 未知方法静默回落 GET（C-44 静默 MySQL 同族）；Router::matchPath 仅前缀通配、:602 空 pattern back() UB；query 用 unordered_map 迭代序拼接（非确定序）。
+- 裸 socket 版（http.cpp:667-764）：无 chunked 支持（读至对端关闭）、:696 stoull 可抛。
+- WS 帧编解码（websocket.cpp:347-517）：无分片重组（Continuation 各帧独立成消息、final 硬编码 :685-689/:1143-1148）；无 RSV/控制帧 >125/close 状态码校验；parse 返回 static_cast\<int\>（:416）大帧 >2^31 截断为负当解析错误；握手单次 receive 即判（:864/:1030）TCP 分段即断连；客户端 `response.find("101")` 弱校验（:1043）；double close（:860/:900-901/:928 栈上 SimpleSocket 与连接对象共享 fd）；stop() 与 detached 线程 UAF 竞态（:796-801 vs :853-855）；无 DNS（:984-1003）；Server::start `(void)host` 恒绑 INADDR_ANY（:753/:767）；OpenSSL 硬依赖仅为 SHA-1 一函数（CMakeLists:136/:160）。
+
+**C-59 测试资产全幻影 + Drogon 装上即断链 + legacy 幻影源——「目录里有 tests」≠「测试存在」，两子树实际测试覆盖为零。**
+- tests/test_rest_template.cpp（449 行，注册于 tests/CMakeLists.txt:193）引用全仓不存在的 HttpRequest::get/post/build（:146/:155/:167）、RestTemplate("url") 构造、RestTemplateBuilder().baseUrl()——rest_client.h 零匹配（实测）→ 目标无法编译；被 APOLLO_BUILD_GTESTS=OFF（根 :31）挡住。
+- modules/net/tests/net_comprehensive_tests.cpp（743 行）include 六条不存在路径（:15-20 apollo/net/tcp/socket.hpp、tcp/reactor.hpp、tcp/net_common.hpp、http/http.hpp、websocket/websocket.hpp、rpc/message_codec.hpp——真实头是 apollo/net/http.h 等，include/apollo/net/http/ 下仅 rest_client.h，websocket/ 目录不存在）→ 无法编译；被 BUILD_TESTING 恒假（modules/net/CMakeLists.txt:204；全仓无 include(CTest)，唯 modules/contract:42 守卫正确——R-17e 同族）挡住。
+- Drogon 陷阱：modules/net/CMakeLists.txt:80-91（http）/:123-133（websocket）命中时两库变 INTERFACE、四 cpp 全不编译——而下游聚合库照链（modules/CMakeLists.txt:100-101）→ 装上 Drogon 即全符号无实现、全仓链接必败。该半分支不是备选是陷阱；vcpkg.json 无 drogon 恒走 built-in——§5.10 裁决 2「删除」的实证依据（删 = 删 if 半分支，零行为变化）。
+- legacy 幻影源：根 :73-76 引用 src/apollo/net/{http,websocket,event_loop,http/rest_client}.cpp——src/apollo 无 net 子树（实测 ls）；连同 C-46 的 21 个缺失文件——legacy apollo 目标源清单已烂，APOLLO_ENABLE_MODULAR_LAYOUT=OFF 无法 configure。
+- 消费方：生产零；examples 3 处默认 OFF。
+
+### 18.3 面二：ipc 树（C-60 … C-63）
+
+**C-60 ipc 树全景：7813 行「原型岛屿」；两套 Channel、两套 IServiceDiscovery 并存——第五处并行网络/IPC 代码坐实。**
+- 规模与登记簿 :1288 预记逐项吻合（include/apollo/ipc 10 文件 3435 行 + src/apollo/ipc 8 文件 4378 行；async_io.cpp 1118 最大）。namespace apollo::ipc 统一；与 modules/net/protocol 的另一个同名 Channel（channel.hpp:77，nng 版）零交叉引用——**并行两套 Channel 抽象**。第二套 IServiceDiscovery：include/apollo/core/service_discovery.h:99 vs ipc/service_discovery.h:125（连 ServiceDiscoveryConfig 也两份）——G-1 服务发现设计的存量竞合物。
+- 构建与消费：默认 APOLLO_ENABLE_IPC=OFF（根 :37）；ON 时 7 个 cpp 经 target_sources(apollo PRIVATE) 编入单体静态库（:135-148）——async_io.cpp 不在列表（C-61）；唯一代码消费者 tests/test_channel.cpp（871 行，tests/CMakeLists.txt:215-227 同门控）；容器使用零（rg 实测）。
+- 自带服务发现子系统（SQLite :18/Redis :18 双后端；Redis 侧依赖旧树 apollo::net::redis::RedisTemplate——C-45 四套 Redis 的又一消费面）——ipc 树不是单纯传输件，是「传输+发现+QoS」小框架。
+
+**C-61 async_io.cpp 从未作为整体编译：不在任何源列表 + ≥6 处编译期错误——「仓内唯一 proactor 接口」成色修正；AsyncOp 值拷贝实证（§5.8「不学」的代码定位）。**
+- 四后端实现全在 async_io.cpp：IOCP :57-401（345 行）/io_uring :408-599/epoll :606-890/kqueue :897-1115（登记簿 :1288 增注的三后端补第四后端区间）；工厂 :39-52 编译期宏四选一、无运行时切换。
+- 该 1118 行文件不在任何 CMake 源列表（:135-148 仅 7 cpp）——开关打开也不编译；且至少六处编译期错误：① AsyncOp::IoCallback 引用不存在的嵌套类型（IoCallback 实为命名空间级 async_io.h:67，被当嵌套用 21 处）；② :496 用未定义 SOCKET（非 Windows）；③ :306/:382 用 std::queue 未 include；④ :410 `RingDeleter::void operator()` 语法错误；⑤ :580-596 等用 pendingOp_/processedOp_ 而头声明 pendingOps_/processedOps_（名字漂移）；⑥ :613 eventfd/:787 timerfd_create 未 include 系统头——**从未通过整体编译，「四后端完成模型」是纸面资产**。
+- 值拷贝实证（§5.8「不学」的落点）：IOCP createOp 深拷贝（:390-398 `op->asyncOp = asyncOp; op->buffer = asyncOp.buffer;`，IocpOperation 双持有 ：170-178）；epoll postWrite 拷入 writeQueue（:714-732）；io_uring postWrite 直投调用方指针但回调未存储。
+- 接口形态混合：postRead/postWrite 完成语义 + registerFd/runOnce 就绪语义并存——非 §5.8 定形的发送环提交语义；epoll/kqueue 是在就绪通知上模拟完成语义。
+- 回调持锁：async_io.cpp:837 取 fdMutex_ → :850-852 锁内 callback(fd, EPOLLERR)——C-18a 族。
+
+**C-62 声明无实现簇（死模板家族的整树级变体）+ 桩 + 硬编码默认。**
+- Channel::create/createClient/createServer 仅声明（channel.h:359-361）而 ChannelBuilder::build 直接调用（channel.cpp:280-283）→ 走到即链接错误；ChannelBuilderEx::build `return nullptr; // TODO`（qos.cpp:505-508）；ServiceDiscoveryFactory::create 仅声明（service_discovery.h:219-228）；socket_transport.h **整文件 7 类纯声明**（285 行，无 cpp 无 include 者）；AsyncChannel 569 行声明（async_io.h:403-569）全仓无实现。
+- 桩：Redis 服务发现 JSON 反序列化返回空（redis_service_discovery.cpp:59-67/:93-98）；SQLite 侧 TODO 完整 JSON 解析；channel.h:544-606 整段注释掉的示例；shared_memory_channel.h:207-260 `#if 0` 块。
+- 硬编码默认地址族：./services.db、127.0.0.1:8080（channel.h:187-188）、localhost（qos.h:270）、127.0.0.1（service_endpoint_ex.h:184）。
+
+**C-63 真实现边界与演进判据：四块活体 + 全树零生产消费——「可演进的 P3 底座」判定不成立，§15.2「先评后定」落定为「新建为主、四块作参考件」。**
+- 真实现且自洽的四块：SharedMemoryRingBuffer（POSIX shm_open+mmap :84-105/Windows CreateFileMappingA :41-67，单写单读原子环）+ FlatBufferChannel 适配层；BackpressureManager/TokenBucket（channel.h:87 + qos.h:81/:176）；SQLite/Redis 服务发现主体——恰好是 test_channel.cpp 唯一覆盖的四块。
+- 对齐度：P1-P2 线程间投递指定复用 utils/loop_buffer.h/data_queue.h（§15.2）——ipc 树零引用；P3 总线接口已定形为发送环提交语义（§5.8）——本树 postRead/postWrite+IoEvent 是另一套且以拷贝换安全（C-61）；自带服务发现与 G-1 设计竞合（C-60）。
+- 三项判据（完整度：async_io 纸面、框架壳多断链 / 消费方：零生产 / 对齐度：零复用指定件）→ ipc 树 = 历史遗留/原型岛屿。可进 P3 参考篮的仅：共享内存环语义 + 背压/令牌桶语义（与 BW/loop_buffer 蓝本并列）。
+
+### 18.4 面三：bw/bigworld 兼容层（C-64 … C-66）
+
+**C-64 模块包装层整体不可用：坏头 + 不可编译测试 + 实现 TU 被排除在自己 target 外——三层断链；「实现只活在测试里」。**
+- 三层结构：apollo::bw（include/apollo/bw 4 头 169 行 + runtime.cpp 489 行 = 真实现层）/ apollo::bigworld（modules/bigworld 4 hpp = 100% 转发空壳层）/ 全局 BigWorld（两份门面）。
+- 断链一（坏头）：modules/bigworld/include/bigworld/BigWorld.h（56 行）实测 g++ -fsyntax-only **20 个错误**——BWBigWorld 别名引用未声明符号、EntityID 不存在（bw 侧拼写是 EntityId，entity.hpp:10/:12/:22）、Runtime::entity_exists 不存在、非静态成员当静态用（Runtime::update()，runtime.h:29）。根 include/bigworld/BigWorld.h（31 行版）可编译——**同路径双头**（C-25 族）+ -I 顺序决定取哪份（模块 CMakeLists:15-16 模块目录在前 → 模块构建取坏版）。宏碰撞：BW_NOW 双定义不同元数（runtime.hpp:18 vs BigWorld.h:53）。
+- 断链二（不可编译测试）：模块自带测试（685 行）引用幻影 API 40 处——不可能编译通过；因模块默认 OFF 从未暴露。
+- 断链三（链接归属）：apollo_bigworld target 只编 4 个壳 TU（CMakeLists:5-10，全为注释空壳）——唯一实现 TU runtime.cpp 不在源列表 → 任何消费者链接必 undefined reference；实现仅由 tests/CMakeLists.txt:8-10 就地编译（bigworld_api_tests 恒构建）。
+- 附带：根 :128 stale 引用已删文件 src/apollo/bw/runtime.cpp（NOT MODULAR 守卫内，默认不炸）；模块 CMake 链接 apollo::game_core + apollo::runtime（:20-24）但零符号使用——死重量。行号修正：模块 option 在 modules/CMakeLists.txt **:49**（16.8.1 引 :46 偏移）；默认 OFF 且无强制开启路径（对照 game 被 EXAMPLES 强开）。
+
+**C-65 实体体系并行性超标 + 全局单例零锁：16.8.3-④「又一层并行实体体系」观察属实且偏低估；零锁族与全锁族是同一纪律缺失的两极。**
+- 并行计数（实测）：**4 套 C++ 实体类 + 1 幻影 + 双 ECS**——bw::Entity（entity.h:13-46）/ game::core::Entity（强类型 EntityId）/ apollo::ecs（C-34 死件）/ apollo::battle::ecs / apollo::bigworld::Entity（幻影，C-64）；EntityId 三种拼法 + 一种不存在（bw::EntityId uint64 / game 强类型 / ecs uint64 / bigworld EntityID✗）；属性层另有双 AttributeContainer（C-35 三代已录）。
+- 反向缺陷（对照 C-7/C-31「每调用全局锁」族）：BigWorld::instance() 函数局部 static（runtime.cpp:433-436）+ entities_/factories_/timers_ **零锁**（runtime.h:69-73，rg 实测）——而配套测试是多线程用法（test_bigworld_api.cpp:23 thread/:70-75 atomic 计数）。
+- 定时器真实现（追到底）：timer.cpp 空壳 → timer.hpp:15 → BigWorld::addTimer（runtime.cpp:478-483）→ Runtime::addTimer（:317-349，priority_queue 堆 + steady_clock + 异常吞噬）——终点是真实现非二道桩；但 BW 生产级是 lib/cstdmf 时间轮（16.8.3-④ 先例），此处为裸 priority_queue——「忠实移植」不成立于定时器件。
+
+**C-66 BW API 映射忠实性 + 演进判据：根链是能跑的最小子集、modules 树增量价值为零行——退役/保留的裁量点在根链。**
+- 映射忠实（对照 BigWorld 14.4.1 本机源码逐项）：callback/cancelCallback、addTimer(initial,repeat,fn(id,userArg),userArg)、createEntity/entities()/time()/timeMs()、Entity::addTimer+onTimer(id,userArg)、生命周期钩子 onEnterWorld/onLeaveWorld/onDestroy——**10 项逐参数同构**；模块版 BigWorld.h 的 now/createSpace/initialize 等 BW 无对应（自创面，且引用幻影，C-64）。
+- 消费方：生产零；唯一真实消费者 tests/test_bigworld_api.cpp（513 行，经根版头）。
+- 演进判据（事实归纳，裁量留用户）：有保留价值的部分全部位于根链（根 BigWorld.h + include/apollo/bw 169 行 + runtime.cpp 489 行——零 TODO、异常安全、测试恒构建覆盖）；modules/bigworld 树（12 文件 1412 行）= 空壳 4 + 坏头 1 + 不可编译测试 1 + 再导出层——**增量价值零行**。16.8.3-④「参考件不是生产件的家」事实面全部核实并加重；裁量点仅剩：根链保留为测试/参考桥（BW API 语义对照活样本）还是随模块树一并退役。
+
+### 18.5 目录版图与分层设计整理（轮中用户追加：「目录怎么放、为什么这么放——某种程度上就是代码分层的设计」）
+
+#### 18.5.1 实测版图（2026-09-30，find/wc 实测）
+
+| 顶层 | 内容 | 规模（源码计） | 分层角色（目标语义） |
+|---|---|---|---|
+| apps/ | base-app、cell-app、game-server、gateway-app、login-app 五壳 | 30 文件 / 4590 行 | **组合根**：装配 + main（16.8.4 图顶） |
+| modules/ | base、bigworld、contract、core(+config/log)、data、game、net、protocol、runtime、starter 十模块 | 149 文件 / 31451 行 | **分层模块**（目标形态 = include/src/tests 三件套自足） |
+| include/apollo/ | 16 子树：algorithm/bw/config/core/database/framework/game/ipc/net/network/redis/serialization/server/starter/storage/utils | 122 文件 / 35375 行 | **legacy 单体接口树**（MODULAR_LAYOUT=OFF 时代的全局 include 面）——比 modules 全树还大 |
+| include/bigworld/ | BigWorld.h（31 行可编译版） | 1 文件 | legacy BW 门面（与 modules/bigworld 同路径双头） |
+| src/ | apollo、framework、starter、storage、utils 五子树；src/apollo 下 config/core/database/game/ipc/server/storage/utils 八子树（**无 net**） | 32 文件 / 13227 行 | **legacy 单体实现树**（与 modules 平行；源清单已烂，见违例表） |
+| sdks/ + skds/ | sdks = unity C# + contract/gen；skds = unity/cocos/laya 旧副本 | 11+18 文件 / 7553 行 | 客户端投影与契约（skds = 拼写事故改名前副本，sdk-contract §1） |
+| tests/ + examples/ | 全仓消费面 | 47/18235 + 29/10500 行 | 测试与示例（examples 默认 OFF、GTESTS OFF——多目标被挡） |
+| docs/ | design（权威稿）+ analysis（审计链）+ architecture（70 份待盘点，gap-inventory §4.1） | — | 文档两域分治 |
+| cmake/ + scripts/ | 4 个 .cmake.in；ci 两脚本（contract_pack/schema_hash_report） | — | 构建与 CI 面 |
+| build/ vcpkg_installed/ Testing/ | 工作目录（Testing/ untracked，**永不提交**） | — | 非源码 |
+
+#### 18.5.2 为什么这么放（意图层——目录即分层的物理体现）
+
+1. **apps → modules 单向**（16.8.4 总图）：组合根在 apps——谁被装配、装配什么，main.cpp 是唯一真相；模块不知道 app 存在。
+2. **模块自足三件套**：modules/\<m\>/{include,src,tests}——include 只暴露公共面、实现藏 src、测试贴身（base/contract/runtime 是仓内标准形态）。物理内聚 = 依赖边可 grep（16.8.3 判据之一「它被谁链接」）。
+3. **legacy 树冻结只减不增**：include/apollo + src 是单体时代残留；MODULAR=ON（默认）后其角色只剩「旧头挂靠点 + legacy apollo 目标源清单」——§6 阶段 3 整体退役对象。utils 移植件（loop_buffer/data_queue/FileWatcher）暂居旧树，随代码批迁 modules/base/utils。
+4. **tests/examples = 消费面**：从外往里消费（apps/modules 都可被其覆盖），自身不进依赖图。
+
+#### 18.5.3 实际放置的违例（每条对应一个已登记缺陷——目录错位不是美学问题，是缺陷的物理前兆）
+
+| 违例 | 实例 | 对应缺陷 |
+|---|---|---|
+| 杂交布局（新树 src + 旧树头） | modules/net/{http,websocket} 无 include、头挂 include/apollo/net; EventLoop（namespace apollo::net）物理在 http/src 编进 apollo_net_http; modules/net 内 protocol 自带 include 而 http/websocket 挂旧树——同一 modules/net 两种形态 | C-53（本轮）; 与 C-43（新树编旧体）互为镜像 |
+| 同路径双头 | include/bigworld/BigWorld.h vs modules/bigworld/include/bigworld/BigWorld.h（一好一坏，-I 顺序定生死）; apollo/core/log/log_manager.{h,hpp} 两版 | C-25、C-64（本轮） |
+| 双树复制 | 7 对 byte-identical（attribute_value/sql_template/datasource/…） | C-21/C-42 |
+| legacy 清单烂账 | legacy apollo 目标 21+4 幻影源（:73-76 src/apollo/net/*.cpp、:128 src/apollo/bw/runtime.cpp 均不存在）——MODULAR=OFF 无法 configure | C-46、C-59/C-64（本轮） |
+| 守卫漂移（目录在、构建死） | modules/*/tests 全灭（BUILD_TESTING 恒假，唯 contract 守卫正确）; net_comprehensive/test_rest_template/bw_comprehensive 三套编不过的测试躺在树里 | C-59/C-64（本轮）; R-17e 同族 |
+| 结构不齐 | modules/starter/{core,net} 无 include/src 标准; modules/bigworld 四壳 TU + 实现 TU 排除在 target 外 | C-64（本轮） |
+
+#### 18.5.4 目录设计规约（沉淀自本轮，后续新代码落位判据）
+
+1. 新模块必须三件套自足（对齐 base/contract/runtime）——头文件进 modules/\<m\>/include/apollo/\<m\>/，**禁止再挂旧树** include/apollo；
+2. include/apollo + src 定性冻结：只减不增，退役路径随 §6 阶段 3；
+3. 模块物理位置对应 16.8.4 层级（base 最底 → core/config/log → net/data 中层 → game/protocol 上层 → runtime 顶部 → apps 组合根）——跨层 include 即违例；
+4. 同名头只允许一处存在；发现同路径双头按 ODR 隐患立即处置；
+5. 测试守卫统一 `BUILD_TESTING OR APOLLO_BUILD_TESTS`（对齐 modules/contract:42），消灭「目录里有 tests、CI 里无此目标」；
+6. 落位三判据重申（16.8.4）：被谁链接 / 它认什么（字节→net、消息→protocol、实体→game、进程→runtime）/ 谁不得反向依赖。
+
+一句话：目录错位的每一处都已付出缺陷代价——物理布局是分层纪律的第一道（也是最便宜的一道）执行面。
+
+### 18.6 对既有结论的修正汇总
+
+| 位置 | 原表述 | 修正 | 结论变化 |
+|---|---|---|---|
+| 登记簿 :1293 / gap-inventory #11 | http 树 2541 行 | **5048 行**（+websocket.cpp 1193 + 三头 1314）; 且两套测试资产全编不过、实际测试覆盖为零 | 规模修正 + 成色修正; #11 三裁决获代码面互证，方向不变 |
+| net-abstraction §5.10 裁决 3 | 「执行层 = 既有 event_loop.cpp IO 线程上的 curl_multi 多路复用」 | event_loop.cpp 是 poll reactor、与 curl 零关系零接线——**curl_multi 执行层不存在，落地按新建计**（C-57） | 裁决方向不变（禁直调/异步交接），实现成本口径改「新建」; 措辞修订登记待同步 |
+| 16.8.3-④ | 「兼容层自带实体运行时，构成又一层并行实体体系」 | 属实且偏低估：第 4 套实体 + 幻影 + 双 ECS + 3 种 EntityId 拼法; 且模块层三重断链不可用（C-64/C-65） | 判定加重 |
+| 登记簿 :1288 增注 | IoMultiplexer 三后端 | 补第四后端 KQUEUE 实现区间（cpp :897-1115）; 且 async_io.cpp 不在任何源列表 + ≥6 编译期错误——从未整体编译（C-61） | 「仓内唯一 proactor 接口」成色修正 |
+| §15.2 / C-29 | 「四套网络栈」 | 连 http/websocket 面（第五、六套手写网络实现）与 ipc（第五处并行 IPC）——手写网络/IPC 代码共**六处** | 「禁止第五套」纪律对象扩容 |
+| 16.8.1 引 modules/CMakeLists.txt:46 | bigworld option :46 | 实为 **:49**（实测） | 行号修正 |
+| C-45 | 宏门两例（MySQL/…） | 第三例铁证 + 形态升级：宏定义点与编译目标错位（PRIVATE-on-apollo vs apollo_net_http TU） | 家族扩容 |
+| C-47 | 三套线格式 | + 手写 HTTP 解析两套（RequestParser/裸 socket 版）+ WS 帧编解码一套——均游离契约体系外 | 家族扩容 |
+
+### 18.7 实读核对记录（本节）
+
+| 引用 | 实测方式 | 结果 |
+|---|---|---|
+| rest_client.h/.cpp、http.h、event_loop.h、websocket.h 五文件全文实读（双 API/死模板四例/Config 七旋钮/detach UAF/RequestParser 记账/stoll/fromString/matchPath 等承重行号） | Read 全文 | 属实（C-53…C-58 主线面） |
+| 规模 5048 = 2198 + 1193 + 1657（四头逐个 wc） | wc -l | 属实（C-53） |
+| APOLLO_HAS_CURL 定义点 ：301 + 守卫 ：50 + option ：285/find_package ：287; APOLLO_HAS_YAML :253/HIREDIS :309-319 同模式 | sed | 属实（C-54） |
+| Drogon 半分支 ：80-91/:123-133; apollo_net_http 三源 ：93-97; OpenSSL REQUIRED :136/:160; BUILD_TESTING :204 | sed | 属实（C-59） |
+| test_rest_template 幻影 API（rest_client.h 零 HttpRequest/baseUrl 命中）; net_comprehensive 幻影 include ×6（include/apollo/net/http/ 仅 rest_client.h、websocket/ 目录不存在） | grep + ls | 属实（C-59） |
+| processTimers 持锁 fire :320-343; addReconnect 持锁调 addPeriodicTimer :579/:595; onReconnectTimer :621 | sed 原文 | 属实（C-57 死锁链 ABBA） |
+| 根 ：73-76 legacy src/apollo/net/*.cpp 四路径; :128 src/apollo/bw/runtime.cpp——均不存在 | sed + ls src/apollo | 属实（C-59/C-64） |
+| modules/bigworld/CMakeLists 只编 4 壳 TU（:5-10 全文）; entity.hpp 幻影 EntityID/entity_exists; -I 顺序 :15-16 | Read | 属实（C-64，bw 报告抽查） |
+| 目录版图（root 14 顶层、modules 两级、include/apollo 16 子树、src/apollo 八子树无 net、各树规模、cmake/scripts 清单） | find/ls/wc | 属实（18.5） |
+| 其余行号（websocket.cpp 协议缺陷、async_io 编译期错误清单、ipc 声明无实现簇、bw 映射表、BW 14.4.1 对照行号） | 子代理实测（含 g++ -fsyntax-only/rg/diff），主线抽查承重项如上 | 属实（沿用作答） |
+
+### 18.8 登记簿回填与本轮状态
+
+- 三候选面登记行（16.10.2 :1287/:1288/:1293）已随本节回填「已落地（§18）」；另补一行「§18 产出的设计文档待同步项」（net-abstraction §5.10 裁决 3 措辞 + gap-inventory #11 行数/测试覆盖补记——两文档本轮门禁外）。
+- 本轮产出 = §18（三面审计 C-53…C-66 + 目录版图 18.5）+ 登记簿回填；零源码改动；单笔提交；push 前 fetch + rebase；无 tag、无 release。
+
+---
+
+*评审基线（源码）：main @ 28a3d22e（无源码变更）。§18 行号 2026-09-30 实测（三只只读子代理广度提取 + 主线抽查复核，核对记录 §18.7）; bw 面 BigWorld 14.4.1 参照行号来自本机工作副本（27446bab，与 §16/深潜基线一致）。*
 
 ---
 
