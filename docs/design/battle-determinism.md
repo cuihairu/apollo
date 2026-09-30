@@ -1,6 +1,6 @@
 # Apollo 战斗确定性与回放（battle-determinism）
 
-> 状态：设计稿（评审中）。定位：战斗判定的**确定性四约束**（判定域/浮点/迭代序/随机数）与**回放格式**——36 号决策表 #16「战斗独立实例与回放」与 #18「帧同步只留缝」的确定性承载件；被删 docs/25（B 级清理，`git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯）的 §3.3 五段管线形态在此接续，其「支持回放/校验」一句展开成本文。与 `clock-and-time.md`（tick 号 = 回放时间轴）、`attribute-sync.md`（§9 预测与校验边界、§10 tick 六阶段）、`scripting-lua.md`（§4 沙盒/§6 指令预算/§8 异步交接）互为引用。缺口登记：design-gap-inventory #2。
+> 状态：设计稿（评审中）。定位：战斗判定的**确定性四约束**（判定域/浮点/迭代序/随机数）与**回放格式**——36 号决策表 #16「战斗独立实例与回放」与 #18「帧同步只留缝」的确定性承载件；被删 docs/25（B 级清理，`git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯）的 §3.3 五段管线形态在此接续，其「支持回放/校验」一句展开成本文。与 `clock-and-time.md`（tick 号 = 回放时间轴）、`attribute-sync.md`（§9 预测与校验边界、§10 tick 六阶段）、`scripting-lua.md`（§4 沙盒/§6 指令预算/§8 异步交接）、`battle-verification-service.md`（客户端权威战斗的验证与权威结算——§5 四元组/hash 链的跨端消费方）互为引用。缺口登记：design-gap-inventory #2。
 
 ---
 
@@ -75,6 +75,8 @@ state = pcg32_init( splitmix64( world_seed, tick, stream_id ) )   // 每 (tick, 
 
 **录制策略**：排位/带奖惩的关键战斗**常开**输入录制；普通战斗采样开（容量批 §5 定采样率）；movement intent 全录（重模拟需要移动轨迹）但高压缩（intent 本身小，<100B/条 net-abstraction 预算口径）。
 
+**客户端权威验证（跨端档，2026-09-30 补）**：客户端权威战斗（#18 缝兑现形态）下，本节四元组/hash 链被 battle-verification-service 消费——链在客户端算、只上行 checkpoint 摘要，verifier 复算对照并导出**权威结算**；跨端确定性增量（运算白名单/版本锚/漂移降级）与 `binary_id` 取值域差异（跨端档 = `combat_bundle_hash`+VM 版本线）见该稿 §2.2/§8。
+
 ## 6. Lua 侧确定性纪律（接 scripting-lua）
 
 - **注入替代全局**：rng（§4）/ 时钟（读 tick 参数，clock-and-time §2 口诀「做判定只用 tick」）经 `apollo.*` 模块表；沙盒环境已裁 `os.time`/`os.clock`/`math.random`（scripting-lua §4）——战斗脚本触达即启动期报错。
@@ -101,6 +103,7 @@ state = pcg32_init( splitmix64( world_seed, tick, stream_id ) )   // 每 (tick, 
 | attribute-sync | §9 预测边界（客户端不判定）= 确定性域收缩的前提；§10 六阶段 = 判定段宿主；§8.2 journal 位点 = 回放快照锚 |
 | scripting-lua | §4 沙盒禁令（os.time/math.random）；§6 指令预算截断确定性；§8 异步交接 re-validate（异步不进判定）；§3.2 版本指针 = 回放脚本版本锚 |
 | net-abstraction | 输入录制点 = 会话层 L1 解帧后（与 seq 同源）；broadcast 段非确定性归 net（trim/重发不影响世界态） |
+| battle-verification-service | 客户端权威战斗的验证消费方：§5 四元组/hash 链跨端档 + §2 四约束全量继承（跨端增量三件在该稿 §2.2）；其 M1/M5 与本件 P2/P3 咬合（离线重放器同工具族） |
 | architecture-review | 36 号 #16/#18 收口与 docs/25 悬空引用改指（登记簿注记）；C-34 ECS 收敛为本件前置（既有登记）；编译档浮点锁登记代码影响项 |
 
 ---

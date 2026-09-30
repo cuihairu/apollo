@@ -1,6 +1,6 @@
 # docs/architecture/ 文档状态表（参考件区）
 
-> 状态：**登记性 README（2026-09-30 文档重整理批）**——本目录 70 份 + mmo-frameworks/ 25 份与权威稿的关系对照。判定原则：**现行设计权威 = docs/design/ 十份（含 concept-glossary）**；本目录整体降为参考件/历史件，其中 4 份仍被权威稿实引（A 档）。**本表只登记状态、不删档**——删除候选需用户逐批裁决（此前两批删除：docs 根 B 级清理 37 份 + docs/05，均 git 可溯）。
+> 状态：**登记性 README（2026-09-30 文档重整理批）**——本目录 70 份 + mmo-frameworks/ 25 份与权威稿的关系对照。判定原则：**现行设计权威 = docs/design/ 十一份（含 concept-glossary）**；本目录整体降为参考件/历史件，其中 4 份仍被权威稿实引（A 档）。**本表只登记状态、不删档**——删除候选需用户逐批裁决（此前两批删除：docs 根 B 级清理 37 份 + docs/05，均 git 可溯）。
 > 判定依据：design-gap-inventory §4.1 v1 口径 + 2026-09-30 引用面清查（design/analysis → architecture/ 实引）；三档之外新增「已被取代的历史设计稿」「历史任务清单」两档以便逐档消化。
 
 ## A 档：仍被权威文档实引（4 份）
@@ -33,7 +33,7 @@ bigworld.md、bigworld-lifecycle.md、kbe-source-analysis.md、kbe-reference-pri
 | entity-lifecycle-and-state-machine-design.md | attribute-sync §10 六阶段 + ECS 域（随代码批次细化） |
 | interest-management-and-aoi-pipeline-design.md | 决策 #10（AOI 独立服务） |
 | navigation-movement-and-physics-boundary-design.md | **设计缺口 #16**（地图与空间数据管线）+ todo 批次 5 |
-| combat-runtime-and-ecs-boundary-design.md | battle-determinism + concept-glossary 副本/战斗验证词条 |
+| combat-runtime-and-ecs-boundary-design.md | battle-determinism + battle-verification-service + concept-glossary 副本/战斗验证词条 |
 | persistence-process-and-db-manager-design.md、persistence-repository-unitofwork-design.md | attribute-sync §8（journal/DDL）+ todo 批次 2（db-app/storage.xml） |
 | reliability-failover-and-recovery-design.md | net-abstraction §7 G-2（backup-hash 链/reviver/恢复相位） |
 | runtime-ops-host-design.md、platform-foundation-design.md、configuration-and-profile-design.md、capability-and-feature-flag-design.md、module-manifest-and-registry-design.md、module-reorganization-design.md、app-bootstrap-lifecycle-design.md | 装配/宿主族——现行权威 = architecture-review §17/§20/§21（HostBuilder/容器/starter/profile 全族零实现的审计结论 + di 显式装配路线）；实现随代码批次 |

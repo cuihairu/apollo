@@ -47,14 +47,14 @@ Client ── Gate（透传/解码装配分工）
 
 **已定关键裁决**（全表见 36 号 §1 决策追溯表 #1-#19）：网络四层自建/nng 退役；契约 XML+XSD；副本制否决无缝世界（#9）；AOI 独立服务（#10）；Lua 白名单否决 Python（#12）；进程发现 machined+UDP 双层、不引 etcd/consul（#13，2026-09-30）；Lua 5.5 随 vcpkg、弃 sol2（#12 修订）；帧同步只留适配缝（#18）。
 
-**设计缺口排程**：design-gap-inventory #1-#11 已全部 CLOSED；**#12-#16 OPEN**（会话与在线目录/登录链路/入站第三方对接/Bots 压测/地图空间数据管线——2026-09-30 登记）。
+**设计缺口排程**：design-gap-inventory #1-#11 已全部 CLOSED；**#12-#16 OPEN**（会话与在线目录/登录链路/入站第三方对接/Bots 压测/地图空间数据管线——2026-09-30 登记）；#17 战斗验证服务同日立项即 CLOSED（[battle-verification-service](/design/battle-verification-service) 落盘）。
 
 ## 文档地图（权威分级）
 
 | 层 | 位置 | 内容 |
 |------|------|------|
 | **术语基座** | [design/concept-glossary](/design/concept-glossary) | 通用概念 × 出现引擎 × apollo 立场；三条术语裁决（副本 instance 定名/battle 词留给战斗验证域/不引注册中心）——**新概念先入表再落文档** |
-| **权威设计** | docs/design/（十份） | net-abstraction（网络四层+集群前置）、sdk-contract（契约）、attribute-sync（属性/同步/journal）、scripting-lua（Lua）、xml-generation（生成器）、logging、clock-and-time、battle-determinism（回放/复算）、capacity-and-benchmark、concept-glossary |
+| **权威设计** | docs/design/（十一份） | net-abstraction（网络四层+集群前置）、sdk-contract（契约）、attribute-sync（属性/同步/journal）、scripting-lua（Lua）、xml-generation（生成器）、logging、clock-and-time、battle-determinism（回放/复算）、battle-verification-service（战斗验证/权威结算）、capacity-and-benchmark、concept-glossary |
 | **对比分析** | docs/analysis/ | architecture-review（全仓审计+登记簿，判定权威）、mmo-mechanism-deep-dive（36 号 #1-#18 实现级取证）、design-gap-inventory（缺口账本）、ssengine-reference |
 | **框架对比** | [36-MMO_Frameworks_Comparative_Analysis](/36-MMO_Frameworks_Comparative_Analysis) | 十框架对比 + 决策追溯表 #1-#19（apollo 每项设计的出处与理由） |
 | **轻量形态** | [30-Compact_GameServer_Design](/30-Compact_GameServer_Design) | 塔防/固定地图精简形态（AOI 内嵌/副本内嵌/单机多线程） |

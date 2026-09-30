@@ -34,7 +34,7 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 | **BI 出口(2026-09-30 核实)** | attribute-sync §8.2(:288) | 属性变更事件收集阶段旁路采样导出,预算外;脚本错误审计(scripting-lua §6)与 collector(logging §5)汇合——**业务侧管道(数仓/报表/看板)不在 apollo 设计面,见 §4.3 边界声明** |
 | **Redis 层定位** | attribute-sync §8.2(:289) | 只做跨进程共享热数据,不做实体属性缓存、不做二级缓存(§15.5 同判);部署细节缺 = 本清单 #9 |
 
-## 2. 真空白清单(#1–#16)
+## 2. 真空白清单(#1–#17)
 
 ### #1 时间与时钟模型 — **CLOSED**(docs/design/clock-and-time.md,2026-09-30 落盘)
 
@@ -133,6 +133,12 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据(负空间+先例,2026-09-30 实测)**:design/ grep「navmesh|NavMesh|导航|寻路|地图」仅两处非设计性命中(concept-glossary 场景定义、xml-generation 列 KBE 产物);KBE 先例:cellapp/navigation 三件(navigate_handler.*、loadnavmesh_threadtasks.*——navmesh 线程任务加载)+ 地图资产在 assets 仓库 res/spaces/(本机无,sdk_templates 占位 .gitignore 已核);BW 先例:World Editor→chunk 体系 + `Space : GeometryMapper`(cellapp/space.hpp 本轮实读)+ cellappmgr space 的 geomappingPath(cellappmgr/space.h 本轮实读)——地图 = 几何映射目录配置,运行时按 chunk 加载。
 - **落点**:建议 P2 设计批——「烘焙在离线工具、运行时只读」与「生成器不进运行时」(36号 #4)同纪律;AOI 网格基准与 NavMesh 同源同批(同一份地图资产两个投影)。
 
+### #17 战斗验证服务(客户端权威战斗的复算对账)— **CLOSED**(docs/design/battle-verification-service.md,2026-09-30 立项即落盘)
+
+- **缺什么**:客户端权威战斗(36号 #18 缝兑现的 lockstep 小房间/客户端演算)下的服务端复算验证服务——独立进程注册、RPC 提交/结果链、verdict 与权威结算、结算门/仲裁/风控接线。concept-glossary「战斗验证服务」词条原写「未立项」且无对应条目(悬空引用,本条即补)。
+- **证据**:battle-determinism §5 已有复算 hash 链与四元组,但其消费方「反作弊对账」仅一笔带过——服务形态/消息族/结算门/verdict 分级/部署容量零展开(2026-09-30 实读);BW/KBE/skynet 无内建(三家皆服务端权威无需——行业 JS/C# 双端自研通型,glossary 词条考证)。
+- **落点**:docs/design/battle-verification-service.md——§0 适用/不适用写死(判据一句:判定在客户端才需要)/G-1 VERIFIER 型 + sdk-contract §11 internal 域三消息族(invoke_mode 三分)/Lua 双端共享 + `combat_bundle_hash`+VM 版本线双锚/跨端增量三件(运算白名单、版本锚、漂移降级 WARN——对 §2「不做定点」口径的关系已写明)/verdict 四值 × 结算门两级/权威结算由复算产出/无状态 worker 池 + Compact 内嵌 verifier-kernel/M0-M5(M4 与 #15 bots 互为验收)。
+
 ## 3. 已登记推迟项(登记簿管辖,不重复立项)
 
 以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、sdks/contract 旧名同步(随下一代码批次)。**已完成项**:36 号 #12/#15/#17/#19 与 deep-dive §12 表述修正已于 2026-09-30 执行(B8 批——sol2/Lua 5.4 → 弃 sol2 + 5.5 主线随 vcpkg(当前 5.5.x,同日两度修订);#15 BW 分段 ID / #17 KBE MySQL-only 两处证伪改写,含对比表/问9总结/存储表联动)。**已裁决项(2026-09-30 用户:「都是历史记录」)**:origin 五笔源码提交(cb78d4b0…18152898)保留为历史记录、不回退;backup-apollo-src(c349f850)留档维持——不合并不删除;处置记录见 architecture-review 附录 A。
@@ -168,7 +174,8 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3;**已完成**(容量模型+帧预算表+内存对象池+基准三形态+指标集九项) |
 | B7 | scripting-lua GM 命令面增补 | #6 | 随 P3;**已完成**(§7.5 指令表/权限分级/审计存储) |
 | B8 | 36 号/deep-dive 历史表述修正 + Lua 版本策略再修订 + 裁决落档 | —(登记簿待办收尾,非缺口) | 登记簿 #15/#17 行、sol2 决策尾注与用户裁决项的收尾;**已完成**(2026-09-30——36 号 #12/#15/#17/#19/:166/:167/:243/:267 + deep-dive §12 标题;Lua 5.5.1 → 5.5 主线随 vcpkg(当前 5.5.x);origin 五笔/backup-apollo-src 裁决入 architecture-review 附录 A) |
-| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED** |
+| B9 | 新建 battle-verification-service.md | #17 | 用户点名「战斗验证服务怎么设计」(glossary 词条展开);**已完成**(2026-09-30 立项即落盘,glossary 词条同步改「设计已立」) |
+| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED;#17 同日 B9 CLOSED** |
 
 每批独立提交(analysis/design 拆分照旧),完成即 fetch --rebase + push(推送纪律)。
 
