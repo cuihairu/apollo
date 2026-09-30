@@ -42,11 +42,11 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:design 六份零「时钟/单调钟/steady_clock/校时」命中;`GameClockService` 名存实亡——apps/game-server/src/main.cpp:20 实为 `struct GameClockService { std::string name = "clock"; }` 纯演示壳(实测复核)。深潜先例:BW/KBE 均 10Hz 固定 tick(mmo-mechanism-deep-dive §8),时钟作为独立主题两家也无成文设计——**apollo 补此件即超先例,不是抄先例**。
 - **落点**:docs/design/clock-and-time.md——三钟分工决策表 + 三口诀红线(测时长只 steady/做判定只 tick/给人看只 wall)、TickSource 进程级单源/有界追赶(catch_up_max 2 拍,超则跳拍记 dropped_ticks)/三类合法暂停点、持久化 (tick, wall_ms) 双写、定时器轮 deadline=tick 号、跨进程比较只用 seq/位点/epoch、GameClockService 重写登记代码批。
 
-### #2 战斗确定性与回放细则 — OPEN(随战斗玩法批次)
+### #2 战斗确定性与回放细则 — **CLOSED**(docs/design/battle-determinism.md,2026-09-30 落盘)
 
 - **缺什么**:浮点跨端一致性策略(定点/fixed64/限 float 且禁双端差异运算)、容器迭代序确定性(同 tick 内实体/属性遍历序的稳定序源)、随机数(种子派生链/服务端权威流/客户端表现流分离)、回放 = seed + 有序输入序列的录制格式与重放验证。
 - **证据**:「确定性/replay/lockstep/随机种子」design 六份仅 attribute-sync §10.1 tick 确定性一节(G-7 范畴,不覆盖浮点/迭代序/种子);lockstep 三仓负空间检索零命中(deep-dive §18)——回放无行业先例可抄,需自定;docs/25(战斗文档)已随 B 级清理删除,原承载的浮点/seed 讨论无权威载体。
-- **落点计划**:新建 docs/design/battle-determinism.md(36 号 #16/#18 的缝在此收口)。
+- **落点**:docs/design/battle-determinism.md——**先裁域后定约束**(服务器权威 → 确定性问题收缩为「同 binary 同平台重放一致」,消费方 = 回放复算/跨进程卸载/AI 重算三同构);**四约束**:判定域唯一(场景线程 tick 边界,异步不进判定)/浮点纪律(IEEE754+编译档锁 `-ffp-contract=off`/`-fno-fast-math`/禁 `-march=native`,**不做定点**)/迭代序(模拟段不要求序,结算段按 target entity_id 全序)/随机数(`(world_seed, tick, stream_id)` 子流派生 PCG32,stream 分域 combat_roll/drop/ai_decision/proc,AI 重算不录制);**回放四元组**(binary_id/world_seed/快照位点/输入序列)+ 事件流滚动 hash 链对照,观战=事件流重演与复算=重模拟两形态分开;Lua 侧禁 pairs 结算/os.time/math.random(沙盒裁+注入);前置 = C-34 ECS 收敛;36 号 #16/#18 缝收口(§7),docs/25 NNG 引用按 §15.2 退役改接 InterServerLink。
 
 ### #3 存储 DDL 生命周期 — **CLOSED**(attribute-sync §8.3,2026-09-30 落盘)
 
@@ -133,7 +133,7 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B1 | 本清单落盘 + 登记簿补行 | 元缺口 4.1/4.2 | 用户指令「落盘吧」 |
 | B2 | 新建 clock-and-time.md | #1 | 用户点名最先;**已完成**(b8ebed98 后续设计批) |
 | B3 | attribute-sync §8.3 DDL(+§8.4 Redis 细则) | #3/#9 | 用户点名最先;**已完成**(§8.3/§8.4 落盘 + xml-generation §4 交叉引用) |
-| B4 | 新建 battle-determinism.md | #2 | 随战斗玩法 |
+| B4 | 新建 battle-determinism.md | #2 | 随战斗玩法;**已完成**(四约束+回放四元组落盘,36 号 #16/#18 收口) |
 | B5 | net-abstraction 增补:通道安全+加密库 / 观测接出 / 上行限流 / 出站 HTTP | #4/#10/#8/#11 | 随 P3 |
 | B6 | 新建 capacity-and-benchmark.md(含内存/对象池) | #5/#7 | 随 P3 |
 | B7 | scripting-lua GM 命令面增补 | #6 | 随 P3 |
