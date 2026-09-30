@@ -14,6 +14,8 @@ tag:
 
 # Host Builder 与 DI 设计
 
+> **状态（2026-09-30 裁决落档，C-76）**：**参考件**——容器/生命周期/装配的实现现状与现行结论以 `docs/analysis/architecture-review.md` §17/§21 为准（HostBuilder/ServiceCollection 未实现且未排期；容器全仓唯一消费方 = game-server demo——§20 十项对照）；本文 §16「多脚本后端按 profile 选择」已被 `docs/design/scripting-lua.md` §2（Lua 单语言，决策 #12）取代。状态表 = `docs/architecture/README.md` A 档。
+
 这篇文档解决的是 Apollo 装配体系继续往下落时，一个非常核心的问题：
 
 `starter、profile、manifest、bootstrap 都有了之后，模块和对象到底如何真正组起来。`

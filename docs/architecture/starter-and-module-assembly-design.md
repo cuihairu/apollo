@@ -14,6 +14,8 @@ tag:
 
 # Starter 与模块装配设计
 
+> **状态（2026-09-30，C-76 同型延伸）**：**参考件（装配思想历史源）**——starter/manifest 实现现状（双 INTERFACE 壳 + 幻影测试，C-68）与现行装配口径（显式注册装配单元、main 收口）以 `docs/analysis/architecture-review.md` §17/§21 为准；本文价值 = 「不做 Spring 克隆、显式 builder、轻注册」的正面表述源（§1/§4 引）。状态表 = `docs/architecture/README.md` A 档。
+
 这篇文档解决的是 Apollo 整体框架继续往下走时，一个必须明确的问题：
 
 `Apollo 应该如何做 C++ 风格的模块化装配，而不引入运行时反射模型。`

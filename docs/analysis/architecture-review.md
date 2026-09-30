@@ -1292,7 +1292,7 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 | 脚本绑定层弃 sol2 + Lua 5.5（随 vcpkg） | docs/design/scripting-lua.md §2（修订） | sol2 上游维护停滞（2026-09-30 用户核查判定）；重模板头文件编译成本 + 与 Lua 版本升级强耦合；apollo 绑定面小（§8 三件套 + `apollo.*` 注入），原生 lua_CFunction 薄绑定数百行可控 | **已落地**（2026-09-30——Lua 定 5.5 线不落 5.4 中间态（number = int64/double 语义不变）；**版本策略同日再修订（用户指令「跟着 vcpkg 走」）：锁 5.5 主线、补丁位随 vcpkg lua port（当前 5.5.x）——不 pin 补丁版、删 overlay port 自持兜底；小版本升级仍显式批次**（scripting-lua §2/摘要 10、battle-determinism §2、sdk-contract §10.6 注、docs/todo 批次 6 同步）；sdk-contract「sol2 桥」更名「C-API 搬运桥」（§10.6 附节更新注）；36 号 #12/#19/:166 与 deep-dive §12 表述修正已同日 B8 批落地） | — |
 | 下轮审计候选：modules/net/{http,websocket} | 本报告（**§18.2，2026-09-30 落地**） | **已落地**（2026-09-30 §18：C-53 规模修正 2541→**5048**（+websocket.cpp 1193 + 三头 1314）+ 杂交布局（新树 src/旧树头，与 C-43 互为镜像）+ 同 namespace 双套 API + 文件内第三套 = 「第五、六套手写网络栈」；C-54 APOLLO_HAS_CURL **三重锁死**（定义点根 :301 在 NOT-MODULAR 守卫内且 PRIVATE-on-apollo，而代码编入 apollo_net_http；vcpkg.json 无 curl）——任何现存配置全桩，APOLLO_CURL_STUB 装饰宏，C-45 第三例形态升级（定义点与编译目标错位）；C-55 死模板四例 + websocket Config 七死旋钮 + setRoute 空转/validateAccept 零调用；C-56 detach 捕 this UAF/每请求一线程/单 CURL 句柄无锁/timeoutMs=30000 默认阻塞——§5.10 裁决 3 代码面依据；C-57 event_loop.cpp = poll 单线程 Reactor、与 curl 零关系零接线——**§5.10 裁决 3「既有执行层」前提不存在**（修正，待同步）+ processTimers 持锁 fire / Reconnect ABBA 确定性死锁链；C-58 手写协议缺陷簇（RequestParser 记账头行偏一/三处裸 stoll/无 chunked/WS 无分片重组/`find("101")` 弱校验）；C-59 两套测试资产引用幻影 API **编不过、实际测试覆盖为零** + Drogon 半分支装上即断链（INTERFACE 化）+ legacy :73-76 四幻影源——三裁决获代码面互证，#11 行数/覆盖待同步） | 已闭环 |
 | §18 产出的设计文档待同步项 | docs/design/net-abstraction.md §5.10 裁决 3 措辞 + docs/analysis/design-gap-inventory.md #11 行 | **登记**（2026-09-30 §18 修正产出，两文档本轮门禁外只写本报告：① §5.10 裁决 3 所引「既有 event_loop.cpp IO 线程上的 curl_multi 多路复用」经审计**不存在**——event_loop.cpp 为纯 poll reactor、与 curl 零关系零接线（C-57），curl_multi 执行层落地按**新建**计（裁决方向不变：禁场景线程直调/异步交接）；② #11 所记 2541 行应改 5048，且 test_rest_template/net_comprehensive 两套测试引用幻影 API 编不过、实际测试覆盖为零，#11 三裁决（curl 进 vcpkg/Drogon 删/禁直调）获 C-53/C-54/C-56/C-59 代码面互证） | **已闭环（2026-09-30 设计批回填：P-1/P-2 四处+两处粘贴落地；同批 P-4/P-5 设计落盘 scripting-lua §6.1 / logging §5.2——§19.4 全表闭环）** |
-| docs/architecture/host-builder-and-di-design.md 设计对照审计（HostBuilder / DI 容器 / starter / profile / manifest / bootstrap 六面） | 本报告（**§20，2026-09-30 落地**） | **已落地**（第十一轮：C-67 核心对象族零实现（文档 §17 自述准确）；C-68 starter 双 INTERFACE 壳 + 幻影测试（三头不存在，R-17e/C-59 家族第三例）；C-69 manifest 三字段双胞胎退化、消费方 = main 打印；C-70 profile 与脚本后端注册 0 命中；C-71 bootstrap 无框架实体、装配序 = game-server 手工七步；C-72 五 app 两套装配血统（四 main 零 apollo:: 命中）；C-73 生命周期档位缺 HostScoped/Factory、WorldHost 绕开容器；C-74 build() 双 assert NDEBUG 静默 + 重复注册无检测；C-75 模块注册入口 0 命中、装配图谱仅 2 demo 节点；C-76 文档权威状态待裁（§4.1 待盘点桶，建议标参考件）；**已由 §21 正式化（2026-09-30 十二轮：C-72/C-73/C-74/C-75/C-76 逐条深化 + 两处修正——修正一 C-74 四类检测存在于 build_index :73-102/:167、缺陷实为 assert-only 消费；修正二 as<Base>() 即接口绑定、仍缺仅 addInstance/addFactory）**） | C-76 状态裁决随 gap inventory §4.1 盘点批；代码面随门禁 |
+| docs/architecture/host-builder-and-di-design.md 设计对照审计（HostBuilder / DI 容器 / starter / profile / manifest / bootstrap 六面） | 本报告（**§20，2026-09-30 落地**） | **已落地**（第十一轮：C-67 核心对象族零实现（文档 §17 自述准确）；C-68 starter 双 INTERFACE 壳 + 幻影测试（三头不存在，R-17e/C-59 家族第三例）；C-69 manifest 三字段双胞胎退化、消费方 = main 打印；C-70 profile 与脚本后端注册 0 命中；C-71 bootstrap 无框架实体、装配序 = game-server 手工七步；C-72 五 app 两套装配血统（四 main 零 apollo:: 命中）；C-73 生命周期档位缺 HostScoped/Factory、WorldHost 绕开容器；C-74 build() 双 assert NDEBUG 静默 + 重复注册无检测；C-75 模块注册入口 0 命中、装配图谱仅 2 demo 节点；C-76 文档权威状态待裁（§4.1 待盘点桶，建议标参考件）；**已由 §21 正式化（2026-09-30 十二轮：C-72/C-73/C-74/C-75/C-76 逐条深化 + 两处修正——修正一 C-74 四类检测存在于 build_index :73-102/:167、缺陷实为 assert-only 消费；修正二 as<Base>() 即接口绑定、仍缺仅 addInstance/addFactory）**） | **C-76 已裁决落档（2026-09-30 §24：参考件——README A 档行 + host-builder 文件头部状态注（§21.7 建议文案）+ starter 同型延伸头注）；C-67…C-75 维持代码阶段授权（§24.1 分拣——§21.3-21.6 处置列逐条「随代码批/只登记不裁」）** |
 | 注册中心裁决（不引 etcd/consul）与老文档删除 | docs/05-MMORPG服务器架构设计方案-Codex审核版.md（**已删**）+ 36 号 #13 行改写 + net-abstraction §7 G-1 裁决注 | **已落地**（2026-09-30 用户裁决「不要引入额外的注册中心，直接删除老的文档」：① `git rm` docs/05——其 §2.3 Registry（Redis/etcd 图、心跳 5s/30s、:1167 开放问题「etcd/Consul」）为注册中心口径唯一来源，整档删除、git 历史可溯；② 36 号 #13 行整行**反转改写**——原「Consul/Etcd 注册 + 否决 UDP 广播」废，改「machined 式守护 + UDP 广播双层（machine_guard.hpp:496-497/:609-613、machine.cpp:646-670）」，KBE 广播跨网段缺陷（kbengine_defaults.xml:814-833 自认）改读作 G-1 双层**分工依据**而非否决论据；③ 引用面同步——sdk-contract 4 处、deep-dive §13 标题+裁决后读法+§15 标记+删除登记表新行、todo 批次 4 三行、docs/30 :55 Consul→G-1、36号头部三文档已删注；④ net-abstraction §7 G-1 段追加「2026-09-30 用户裁决落档」注） | 已闭环 |
 | 通用概念术语表（概念整理供跨引擎对比与后续引用） | docs/design/concept-glossary.md（**新建**） | **已落地**（2026-09-30 用户指令「通用的概念整理一张术语表，出现在哪些引擎中、一般含义是什么」：词条 = 一般含义 × 出现的引擎 × apollo 对应与权威载体，五段分组（世界与实例 / 进程与编队 / 实体与同步 / 调用与连接 / 节拍与数据）+ §2 四组易混辨析（scene vs 副本 vs Zone 三粒度、ghost vs RO_MIRROR、服务发现 vs 注册中心、心跳两层次）；**Battle→副本定名**落首条词条（用户指认：Battle 实为副本语义、对应 KBE `class Space : public Entity`（cellapp/space.h 本轮实读）与 BW `Space`（cellapp/space.hpp「represent a space」/cellappmgr/space.hpp），KBE space 可脚本实体、apollo Zone = 场景实例粒度进程不拆 cell/base）；§0 记三条术语裁决（Battle→副本 / 不引注册中心 / ghost 不做）；§3 增补纪律 = 新概念先入表再落文档、已删文档只留 git 指针；**同日二轮修订（用户裁决）**：① 副本英文定名 **instance**（别名 dungeon/room）、「Battle」历史名**作废**——battle 一词保留给战斗逻辑域；② 新增「战斗验证服务」词条（battle verification/影子复算——客户端权威战斗下服务端同逻辑复算验证，行业 JS/C# 双端通型、BW/KBE/skynet 无内建；apollo 未立项，预留缝 = battle-determinism §5 复算 hash 链 + 回放四元组，语言面 Lua 双端共享）） | — |
 | 文档重整理批（架构已变后的文档面收敛） | docs/index.md（重写）+ docs/architecture/README.md（**新建**状态表）+ Spring 清除 7 文件 | **已落地**（2026-09-30 用户指令「现在把文档重新整理下，现在的架构设计都变了」「不要出现 spring 相关的东西了」：① index.md 重写——旧页仍述 L1-L9 分层/BaseApp-Cell 拆分/ghost 增强层（均与现行决策相反），新页 = 现行拓扑图 + 裁决摘要 + 权威分级文档地图（design/ 十份为权威、architecture/ 降参考件区）+ 读者路线；② architecture/README.md = §4.1 设计资产状态表 v1 全量落地（70+25 份四档：A 实引 4（remote-entity-call/observability-watcher/host-builder-and-di/starter-and-module-assembly）/B 引擎分析参考件（BW/KBE 稿 + mmo-frameworks 25 份）/C 被取代设计稿 28 份（逐文件→现行权威指针）/D 历史任务清单 22 份——只登记不删档，删除候选待用户裁决）；③ Spring 清除（用户此前 P-3 同口径扩展）：34 号 starter 定位、architecture 四稿参考来源节、starter-and-module-assembly 五处、host-builder-and-di:85、sdk-contract §10.6——活性文档面 grep 零命中（analysis/ 审计记录与 qa/ 分析件按历史口径保留）；④ docs/30 Battle→副本术语对齐（房间=副本实例）；gap-inventory §4.1 随之 CLOSED） | D 档/C 档删除候选待用户逐批裁决 |
@@ -2192,6 +2192,50 @@ grep -rn -e registerRuntimeServices -e registerWorldServices -e registerPlatform
 ---
 
 *评审基线（源码）：main @ bef2288a（本文件外零改动；全部行号 2026-09-30 本轮实测；git 考据：a5334014 继承首批 2026-09-29、4cb65a77 modules/bigworld 出生 2026-03-18）。未构建、未重跑测试——构建门与测试覆盖均为静态实读。*
+
+---
+
+## 24. 第十五轮（2026-09-30 追加）：C-7x 文档面收口——C-76 裁决落档（host-builder 头注 / starter 同型延伸 / README 回填）
+
+### 24.1 范围与方法
+
+**任务口径（用户令）**：「审计轮文档-代码差距收口（IoC 装配 §20/§21 的 C-7x 条目按登记簿顺序推进）」。
+
+**对象分拣**：C-7x = §20 十条（C-67…C-76）+ §21 五条正式化（C-72…C-76 深化）；:1290 R-17a…g 行已随 §22.4 复核（零消化），本轮不重复。
+
+**面分拣（文档-代码差距的落点判定）**：① **代码面**——§21.3（C-72「随代码批」）/§21.4（C-73「只登记不裁，裁决权在代码批」）/§21.5（C-74「处置建议登记，随门禁」）/§21.6（C-75「随代码批」）处置列逐条确认，C-67…C-71 同为 §20 审计记录、处置随代码阶段授权——**全部维持门后，本轮零触碰**；② **文档面**——唯一在册遗留 = C-76 裁决建议（§21.7）的两个落点：「状态回填进 gap inventory §4.1 表」已随文档重整理批（4299dd99 README A 档行）落地；「**文档头部署注一行**」未落地——本轮补齐；另登记簿 :1295 末列「C-76 状态裁决随 gap inventory §4.1 盘点批」措辞已陈旧（§4.1 同日 CLOSED），一并回填。
+
+**门禁（本轮任务书口径）**：未限单文件——文档面收口涉三份文档四处编辑 + 本报告 §24/登记簿；源码/CMake/CI/契约/golden 零改动；三项既有 untracked 不碰；不派子代理；单笔提交；**全绿（24.4 核对表）才 commit**；push 前 `git fetch origin main && git rebase origin/main`；无 tag/release/force push。
+
+### 24.2 收口动作（四处编辑）
+
+| # | 动作 | 落点 | 依据 |
+|---|---|---|---|
+| 1 | host-builder-and-di-design.md 头部状态注（H1 下 :17）：参考件 + 现状权威指针（§17/§21）+ HostBuilder/ServiceCollection 未实现未排期 + §16 多脚本后端已被 scripting-lua §2 取代 + 状态表指针 | docs/architecture/host-builder-and-di-design.md | §21.7 裁决建议文案四要点逐句落地 |
+| 2 | starter-and-module-assembly-design.md 头部状态注（:17）：参考件（装配思想历史源）+ C-68 现状 + 现行口径指针 + 价值定位（§1/§4 表述源） | docs/architecture/starter-and-module-assembly-design.md | §21.7 同型延伸（见 24.3） |
+| 3 | README A 档 host-builder 行回填：「C-76 状态裁决随 §4.1 盘点批——本表即其输入」→「裁决已落档（头部状态注 + §24 收口）」 | docs/architecture/README.md:12 | 与动作 1/4 互指闭环 |
+| 4 | 登记簿 :1295 末列回填：C-76 已裁决落档（三处）；C-67…C-75 维持代码阶段授权（本节分拣） | 本报告 §16.10.2 | 措辞陈旧修正 |
+
+### 24.3 同型延伸的边界说明（starter 头注为何在册外仍做）
+
+C-76 裁决对象仅 host-builder 一份（§20 审计基准文档）。starter-and-module-assembly-design.md 是 A 档第二份「内容已被后续权威收窄」件（Spring 提法清除批 1cd76a07 已改其表述、README 定位「装配思想历史源」）——但文件本体无状态标注，与 §21.7 负面对照①同型（「配套面空壳（starter/manifest）先于文档落地，读者会误以为体系已存在」，C-68）。同型延伸只加一行状态注、不改内容；不新开缺陷号（A 档行本身已是权威状态，头注是防误读的冗余闸）。**边界**：A 档另两份（remote-entity-call / observability）为语义层权威、内容未被取代，不加此类注。
+
+### 24.4 全绿核对与本轮状态
+
+| 核对 | 方式 | 结果 |
+|---|---|---|
+| 头注四要点与 §21.7 建议一致 | 逐句对照（现状权威指针/未实现未排期/唯一消费方 demo/§16 收窄） | 一致 |
+| 三处互指闭环 | grep 复看：头注「状态表 = README A 档」↔ README:12「头部状态注 + §24」↔ 登记簿 :1295「README A 档行 + 头注」 | 一致（:17/:17/:12 三处实测） |
+| 引用面存在性 | §17（:1310）/§21（:1858）/C-68（:1774）本报告内 grep | 属实 |
+| gap inventory §4.1 无需再动 | §4.1 已 CLOSED（README 即输出）；本批不新增 OPEN 项 | 确认 |
+| C-76 编号语义 | 裁决落地 ≠ 缺陷撤销——§20.3/§21.7 条目保留为审计记录，仅处置闭环 | 确认 |
+| 零源码面改动 | git status：仅四份 docs 文件 | （提交前终核） |
+
+- 本轮状态：产出 = §24 + 三份文档四处收口编辑；**零源码改动**；三项既有 untracked 未碰；不派子代理；单笔提交；push 前 fetch --rebase；无 tag/release/force push。
+
+---
+
+*评审基线（源码）：main @ 24c89270（本文件与三份文档外零改动；§24 引用行号 2026-09-30 本轮实测）。*
 
 ---
 

@@ -9,7 +9,7 @@
 |---|---|---|
 | remote-entity-call-design.md | net-abstraction §7、concept-glossary | **RemoteEntityCall 语义层权威**（传输底座已接 net-abstraction §5.6/§5.7——文档中 Channel/Endpoint 旧词按 M1 内核口径读） |
 | observability-watcher-and-runtime-introspection-design.md | scripting-lua §7 | **attach/watcher/profile 语义层权威** |
-| host-builder-and-di-design.md | architecture-review §20/§21（审计基准） | 参考件（C-76 状态裁决随 §4.1 盘点批——本表即其输入）；实现现状 = §20 十项对照 |
+| host-builder-and-di-design.md | architecture-review §20/§21（审计基准） | 参考件（**C-76 裁决已落档 2026-09-30**：文件头部状态注 + architecture-review §24 收口；原「随 §4.1 盘点批」输入即本表 A 档行）；实现现状 = §20 十项对照 |
 | starter-and-module-assembly-design.md | architecture-review §1/§4 | 装配思想历史源（现行口径 = architecture-review §17/§21 + 四 main 装配现状） |
 
 ## B 档：引擎源码分析参考件（读作「先例证据」，不读作「apollo 设计」）
