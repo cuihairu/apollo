@@ -69,6 +69,7 @@ export default defineConfig({
             { text: '核心概念', link: '/guide/concepts' },
             { text: '模块系统', link: '/guide/module-system' },
             { text: '配置', link: '/guide/configuration' },
+            { text: '架构总览', link: '/guide/architecture' },
           ],
         },
       ],
