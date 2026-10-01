@@ -2738,6 +2738,168 @@ C-93/C-94 建号前全仓 grep 零命中；BW/KBE 进程清单引注以 deep-div
 
 ---
 
+## 31. 第廿二轮（2026-10-01）：设计问答沉淀——进程编队、Zone/无缝辨析与塔防链路
+
+### 31.0 任务与落位
+
+用户四问逐轮澄清的沉淀（非审计轮，零新缺陷、无新 C 号）：① 「精简之后塔防是不是可以在 cellapp 中开 space 多人进入开打」——用户并先确认「还是保持精简吧」（对 §30.5 结论的追认，方向 = 清存量不改设计）；② 「为啥 base/cell 会合并——精简也不是你这样精简的吧」——对决策 #9 的正面质疑；③ 「目前的设计存在多个进程，每个进程的作用」；④ verifier 语言面（「不一定是 C++、更像多语言进程插件、这个进程不一定存在」）+ Zone 与 cellapp 的功能对比 + 怎么做无缝地图。结论全部以既有权威稿串接；用户复核后的两处修正、四点收紧与一个开放设计问题见 §31.8。本轮零新裁决、零新登记。
+
+### 31.1 P3 进程编队总表（八件）
+
+```text
+客户端 ──短连接──▶ login-app ──发 login_token(60s)──▶ 客户端
+客户端 ──长连接──▶ gateway ──透传──▶ Zone（副本/场景实例）
+                     │                    │
+                     │              write-behind journal ──▶ db
+                     │                    ▲
+   interfaces ──投递─┼────────────────────┤
+                     ▼                    ▼
+                  manager 域（准入仲裁 + 在线目录 + 落点/恢复）
+                     ▲
+   machined（守护/注册，拉起全编队）       verifier ⇄ Zone（战报复算）
+```
+
+| # | 进程 | 作用 | 权威稿 | 现状 |
+|---|---|---|---|---|
+| 1 | machined | 守护面：拉起/重启/心跳；UDP 双层注册 = 全编队服务发现（G-1） | net-abstraction §7 | 纯设计 |
+| 2 | login-app | 登录段：匿名 X25519 握手、账号鉴权（PBKDF2）、准入四连预裁、发 login_token、SDK 指针下发 | login-flow（B11） | 884 行存量（§25 错位待迁） |
+| 3 | gateway | 游戏连接段：连接终结、本地验 login_token（不触账号库）、CryptoFilter/L2、纯透传零反射、断线重连不换进程 | §30.1 五载体 | 1591 行存量（C-93） |
+| 4 | manager 域 | 管理单点：准入仲裁、在线目录（三事件源）、编队落点、恢复相位（reviver 并入）——BW/KBE 三 mgr 合一 | session-and-online-directory（#12）+ login-flow ③ | 纯设计 |
+| 5 | Zone（game-server 型） | 逻辑面：场景实例（副本/塔防房）、intent 处理、AOI 消费、属性同步源、服务端权威战斗、掉线 grace 锚 | 决策 #9 + glossary §2.1 | 137 行骨架（C-94） |
+| 6 | DataProxy/db 写路径 | 持久化：write-behind journal、存储协议与游戏协议分家、账号域批次 2 | attribute-sync §8.2 + login-flow ④ | data 树存量 + 设计 |
+| 7 | interfaces | 入站第三方：回调 HMAC 验签 + IP 白名单、两段式投递、渠道订单号幂等（KBE 同型，BW 无） | inbound-interfaces（B11 #14） | 纯设计 |
+| 8 | verifier | 客户端权威战斗的 Lua 双端复算对账 + 权威结算（详见 §31.6） | battle-verification（#17） | 纯设计 |
+
+读表要点：件 4 不是新发明（三 mgr 合一）；件 7/8 可选（无充值/服务端权威玩法部署数 = 0）；件 2/3 分离 = 两阶段连接（凭据只碰 login-app，gateway 只见 token）；**真正落码仅 2/3/5 且全是错位存量**（C-93/C-94/§25）——§30.5「设计层简洁、存量层欠账」的另一数法。P1-P2 Compact 不用八件（docs/30 :24-33 合并表：Orchestrator→SceneManager、Zone→线程/协程、AOI 内嵌、副本内部模块、只留 Gate/DataProxy 管道）。
+
+### 31.2 base/cell 合并的承接论证（对 #9 质疑的回应）
+
+**决策原文**（36 号 :35 追溯表 9 号行）：否决 BW 无缝世界，依据 = BW 自证成本（ghost 双写/边界协商/跨进程调试不可单步）+ 副本/分线 5000 CCU SLO 够用；:188 展开关键句——「**不拆 cell/base，改拆 Zone/DataProxy**。拆的理由 BW 已证明（IO 与逻辑分离、故障域分离），但 Apollo 的世界是实例制——Zone 就是一个场景进程，无跨进程空间边界，ghost 机制整块不需要；持久化独立成 DataProxy，存储协议与游戏协议彻底分家；跨 Zone 迁移 = 场景级 FSM，以『整场景』为迁移单位，不存在实体级边界协商」。
+
+**BW 拆 base/cell 的结构性理由 = 无缝世界**（36号 :186）：实体跨 cell 漫游需要跨进程不变的锚（proxy→baseapp）、cell 管空间计算、base 管玩家代理与 DB IO（DB IO 永不占 cell tick）。apollo 否决无缝后，锚的必要性消失，base 层职责逐条承接：
+
+| BW baseapp 职责 | apollo 承接 | 备注 |
+|---|---|---|
+| 客户端连接终结 | gateway（纯透传） | baseapp 兼实体，gateway 无 |
+| 持久化 IO | DataProxy / write-behind journal（sdk-contract §7 两段式分家） | 比 BW 更纯——存储协议独立 |
+| 跨 cell 稳定锚 | session 目录（#12） | 无缝否决后锚的作用域从世界缩到会话 |
+| 掉线保护期（restore） | session grace + resume token（#12） | 同左 |
+| 故障域分离 | Zone = 场景级故障域 + 实例化横向调度（17 §3.2） | BW 纵向拆 app，apollo 横向拆场景 |
+
+**诚实代价面**（质疑中站得住的部分，均为既有登记）：单场景全序瓶颈（36号 :238）——解法横向（场景实例化 + AOI 独立服务 #10）非纵向加回 base；EQ 式加载画面教训（:134）——副本制已知体验代价，#9 裁决时接受在案；不可逆点——产品改要无缝大世界则 base 层与 ghost 一族须整块重建（见 §31.4）。**精简判据不是进程越少越好，是每个被消职责有承接、每个被否机制标裁决号**——六职责四去处、ghost 挂 #9、AOI 挂 #10、数据面分家挂 §7，全部可溯。
+
+### 31.3 Zone vs cellapp 功能对比
+
+同类：都是「跑世界的机器格子」（glossary §2.1）——空间逻辑宿主、AOI 消费端、属性同步源、tick 驱动。
+
+| 维度 | cellapp（BW/KBE） | Zone（apollo） |
+|---|---|---|
+| 空间归属 | 一个 space 跨多 cellapp 分片（cellappmgr 按 chunk 分配） | 一个 scene/副本整块单进程，从不跨进程 |
+| 跨进程实体 | cell 实体 + ghost 影子 + `migrate()` + 迁移缓冲全家 | 无；跨 Zone = 场景级 FSM（TransferPlayer，Create→Recycle） |
+| 消息路径 | 客户端→baseapp→cellapp 两跳 | gateway 透传→Zone 一跳 |
+| AOI | 进程内十字链/witness（`coordinate_node` O(1) 临界更新） | 独立服务（#10 网格+四叉树+shard）或 Compact 内嵌 |
+| 扩缩维度 | 纵向：大世界切片 | 横向：场景实例 + Orchestrator（17 §3.2） |
+| 配套依赖 | 必须配 baseapp | 不带——连接归 gateway、IO 归 journal |
+
+一句话：**Zone = cellapp 剥掉 ghost/分片/迁移 + 剥掉对 baseapp 的依赖 + 场景级调度**；cellapp 的跨进程 machinery 全是「一个大世界跨多机」的产物，实例制下没有对应工作。
+
+### 31.4 无缝地图：裁决状态与推翻清单
+
+**当前裁决 = 不做**（#9 追溯表 :35）。若产品推翻 #9，机制清单（全部有 BW 实证，36号 :186/:239）：① 空间分片——大 world 切 chunk 跨 Zone 分配（cellappmgr 分配 space 同型）；② ghost 一族——影子双写 + 边界协商 + `buffered_ghost_message` 迁移窗口缓冲（BW `cellapp/` 全家）；③ **base 层回归**——实体跨进程漫游后连接终结不能跟实体走，proxy 锚 + 两跳消息；④ 机制叠加风险——apollo AOI 是独立服务（#10），与 ghost 叠加 = 进程内十字链 + 跨进程 ghost + 独立 AOI 三机制混用，比 BW 原生更复杂（BW 的 witness/ghost 是一套自洽设计）；⑤ 调试成本——跨进程不可单步（BW §五自认）。
+
+**33-BigWorld_Compatibility 非无缝后门**（本轮核实）：头文明写「a BigWorld-style C++ API **facade** built on top of Apollo, not a full engine/runtime」（KISS/YAGNI——只 API 表面熟悉便于逻辑移植），全文 grep 无缝/seamless/ghost/migrate 零命中，不提供无缝运行时。中间路线现状 = 场景级 FSM + 显式 handoff（glossary :32 换线语义）；行业「分线毫秒级切换的伪无缝」为推演非在册；EQ 式加载画面（:134）是 zone 切换反面教训，#9 裁决时**看见并接受**。
+
+### 31.5 塔防链路（Zone 内开副本多人开打）
+
+**术语对齐**：精简后无 cellapp（对应物 = Zone，决策 #9）；space 对应物 = scene/副本（instance）——「一个塔防房间 = 一个副本实例」（docs/30 :4 术语定名 + glossary §0 裁决 1）。
+
+```text
+登录 login-app → gateway 透传 → Zone 会话归属（#12 目录记所在线）
+                Zone（单进程，cell/base 已合一）
+                ├─ 副本实例 A（塔防房间）＝ 自带 scene + sceneId 隔离 + tick 20-50ms 可配
+                │    ├─ WaveManager（docs/30 :41）
+                │    └─ 波次/塔属性/敌人路径 ← Excel/Lua 配置（docs/30 :62）
+                └─ 副本实例 B …
+```
+
+- 多人进入 = 各自 session attach 同一副本实例；AOI 房间尺度退化为全员互见（`AOIEntity::sceneId` 隔离副本与分段可见，attribute-sync §4.3）；小玩法不 offload 留 Zone（glossary :28），大型玩法才拆独立副本进程（docs/30 :28）
+- 敌人路径 = 配置 waypoints，**不消费 #16 navmesh 管线**（那个 gap 服务大世界寻路）
+- **战斗判定两形态**（battle-verification §0 裁决句「判据只有一个：战斗判定在哪端」）：判定在服务端（Zone 跑塔/怪演算，客户端发建塔/放技能 intent）→ 零新增件，主路线 intent-only；判定在客户端（休闲典型演算）→ verifier（36号 #18 缝兑现件）。两种均设计在案
+- 差距交代（诚实）：game-server 137 行骨架、game 模块默认 OFF（C-94）、#15 Bots 未建——真开打是代码批的活，不是再改架构
+
+### 31.6 verifier 语言面三点澄清（用户判断全部与设计稿对位）
+
+| 用户判断 | 设计稿对位 |
+|---|---|
+| 不一定是 C++ 实现 | battle-verification :3「语言面 = Lua 双端共享同一份战斗逻辑（客户端 xLua / 服务端 scripting-lua），与 JS 双端（Node 验证服）/ C# 双端（Unity+.NET）同型」——进程壳是 C++ 沙盒宿主，**战斗内容是随客户端下发的同一份 Lua bundle**（`combat_bundle_hash` 锚定） |
+| 客户端战斗逻辑提取出来运行 | §2.1「同一份 bundle，两端跑」——客户端本地算 hash 链，verifier 从起始快照影子复算（非第二套实现） |
+| 这个进程不一定存在 | **两层不一定**：① §0 裁决句——服务端权威玩法（主路线）整个不需要本服务，进程不存在；② §5——Compact 单机形态内嵌 verifier-kernel 库，有验证无独立进程 |
+
+**「多语言进程插件」的边界**：接口面（internal 域三消息 Submit/Result/Query，sdk-contract §11）语言无关；**计算面必须双端同 runtime 家族**——换 JS 得换 Node 验证服、换 C# 得换 .NET；apollo 的锚 = `combat_bundle_hash` + VM 版本线双锚（§6），防「客户端逻辑改了、验证端还是旧的」漂移。准确读法：**随玩法可选的部署单元**（§31.1 件 8 部署数可为 0），非插件即插即用。
+
+### 31.7 门禁与零登记
+
+四轮问答沉淀 + 用户两轮复核追加（§31.8）——内容为既有权威稿串接与表述收紧，无新缺陷、**无新 C 号**（§31.8.5 为开放设计问题登记，非缺陷；§31.8.6 定位为新采纳决策）；文件面 = 本报告 + 根 README.md 首屏定位重写（标题/定位段/项目简介首段，用户 2026-10-01 提供英文文案，性质为文档）；零源码/CMake/CI/契约/golden 改动；三项受保护 untracked 未碰；不派子代理；单笔提交；push 前 fetch --rebase。
+
+### 31.8 用户复核修正、收紧与定位裁决（同轮追加）
+
+用户两轮复核消息沉淀——除 §31.8.6 定位变更为新采纳决策（README 随本批落地）外，全部为对既有设计的表述收紧与提炼，非新裁决。
+
+#### 31.8.1 两处表述修正
+
+- **Zone ≠ 简化版 cellapp**：准确句——Zone 与 cellapp 处于相同的「世界运行单元」抽象层（glossary §2.1 同类定位），Apollo **有意放弃**的是 cellapp 为「大世界跨进程连续空间」服务的整套 machinery（§31.3 全表）——不是功能缺失，是世界模型根本不要求这些能力（glossary :31 否决无缝的直接推论）。
+- **verifier 定义收紧** = 「可选的确定性战斗影子执行环境（optional deterministic shadow execution environment）」，非「战斗服务器」——对位 battle-verification §2.1（同 bundle 双端）/ §0（服务端权威玩法整个不需要）/ §5（Compact 内嵌 kernel）。双锚动机收紧为**验证语义版本化**：复算输入必须显式五元组 `(combat_bundle_hash, VM version, snapshot, input, seed)`；缺锚则客户端升级后（Client A′ vs Verifier A）出现的不是验证失败，而是**验证系统自身产生语义漂移**——设计稿既有机制即 §2.1「双端 hash 失配 = 拒开局」+ §6 bundle+VM 版本线双锚（锚在验证**前**拒载，非事后判 fail），用户提炼的是其语义动机。
+
+#### 31.8.2 scaling axis 双图与 Zone 定义收紧
+
+```text
+CellApp 路线：一个大世界 → 横向空间分片(chunk) → 跨进程实体(ghost/migration)
+  CCU → world size → spatial chunks → cell migration
+
+Apollo 路线：多个独立空间 → 分配到多个 Zone
+  CCU → instances → zones → machines
+```
+
+**Zone 定义（收紧）**：独立空间/场景实例的**权威模拟单元**——拥有 simulation / tick / entities / AOI consumer / attribute authority / battle authority / session binding / persistence intent；**没有** ghost / cross-cell migration / space chunk / proxy / cross-cell AOI。两者非父子（简化版）关系，是同一抽象层上两种世界模型的选择，已是不同 engine category（§31.8.6 分类学依据）。
+
+**AOI 计数澄清**：编队八件为**域清单**（守护/登录/接入/管理/逻辑/数据/入站/验证）；AOI 按 #10 独立服务、部署形态可变（docs/30 :24-33——MMO 模式独立集群 / Compact 模式内嵌 Zone 同进程）——不按进程计数，不膨胀成第九件。
+
+#### 31.8.3 权威分解（Ownership 八分 + AOI 服务）
+
+| 进程 | 权威域 | 权威稿 |
+|---|---|---|
+| login-app | credential / account admission | login-flow |
+| gateway | connection / session transport | sdk-contract §10.6、net-abstraction L2 |
+| manager 域 | placement / online ownership | session-and-online-directory（#12） |
+| Zone | world state | 决策 #9、attribute-sync |
+| DataProxy/journal | durable persistence | attribute-sync §8.2 |
+| verifier | verification authority（**非状态持有者**） | battle-verification |
+| interfaces | external event ingress | inbound-interfaces（#14） |
+| machined | process lifecycle authority（游戏域之外） | net-abstraction §7 G-1 |
+| AOI（服务非编队件） | spatial index | 决策 #10 |
+
+收束句（用户语，与在册一致）：**Apollo 不是重新实现一个简化 BigWorld**——借鉴 BW/KBE 已验证的世界服务器边界，主动删除 continuous-world 必需的 cell/ghost/migration/baseapp machinery，把核心模型收敛到「**Gateway + Manager + Zone + Journal**」的实例化世界；是架构取舍，不是功能不完整。
+
+#### 31.8.4 TransferPlayer = ownership handoff；无缝 = 新 profile
+
+- Apollo 跨 Zone：`Zone A →(TransferPlayer)→ Zone B` = **场景转移/所有权交接**（36号 :188 场景级 FSM，Create→Recycle）；BW/KBE 跨 cell：`migrate()` = **实体迁移**，要求 ghost/witness/buffer/migration state/cross-cell reference/proxy 整套同生——**两者不可混**。
+- 无缝地图不是「Zone 加 feature」，而是 **Instance World → Distributed Continuous World 的架构级跃迁**。若未来产品真需，应立为新架构 profile——**P3-Instance World / P4-Continuous World**，P4 挂 Spatial Partition / Ghost / Migration / Proxy / Cross-Zone AOI 五件（= §31.4 五条清单），**不偷偷往 Zone 塞**，防污染已收敛的实例模型；反例 = AOI 三空间语义叠加（Zone-local + AOI-service + Ghost-cross-zone）必成维护灾难。
+
+#### 31.8.5 开放设计问题（登记，不占 gap 号）：Zone 状态边界四象限
+
+玩家状态按权威归属四分——**Zone authoritative state**（在途，Zone crash 由 journal 恢复）/ **Account persistent state**（登录域）/ **Session state**（目录域）/ **cached projection**（只读投影）。现有覆盖：attribute-sync（L1/L2/L3 分层 + seq + §8.2 journal 位点）、login-flow ④（账号域 DB accounts + third_party_bindings）、#12（session 域）；**缺口** = 跨域状态分层总表（Position/HP/Inventory/Equipment/Quest/Buff/Currency 逐字段四象限归位）——它决定断线恢复、Zone crash recovery、顶号、跨 Zone transfer、Verifier replay 五条链能否统一为 `Command → Zone State Mutation → Journal → Persistence` 单链。待用户裁决是否立 design-gap（建号前全仓查重照旧）。
+
+#### 31.8.6 产品定位收紧：Instance-based Multiplayer Game Server Engine（新采纳，README 随批落地）
+
+用户裁决（2026-10-01）：**不再以「MMO Engine」为核心身份**——传统 MMO 五特征（Persistent World / Large-scale Concurrent / Continuous Shared Space / Long-lived State / Cross-region）中 Apollo 主动放弃「连续共享空间」等；定位改为「**An instance-based multiplayer game server engine**」（实例化多人在线游戏服务器引擎），MMO 降为 supported use case（保留措辞 = instance-oriented MMO architectures）。分类学依据即 §31.8.2 双图：Zone/Instance 路线与 CellApp/ghost 路线是不同 engine category；「叫 Apollo MMO Server」会引来「支持 WoW/EVE 式连续大世界吗」的预期错配——新定位让 Zone/AOI/Battle/Gateway/Session/Journal/Verifier 全部直接映射。
+
+- **落地面（本批）**：根 README.md 首屏重写——标题「Apollo MMORPG 服务器框架」→ 定位式标题、定位段替换（用户英文案 + 中文一句话）、项目简介首段「专为 MMORPG 设计」改写、**新增「✅ 适用场景 / Use Cases」段**（适合六行场景表 + 不适合 = 连续共享大世界并指向 continuous-world 引擎 + 一句话判据——与 battle-verification §0「适用/不适用」同型体例）；徽章/核心特性列表/架构概览图不动。
+- **术语校准**：中文讨论中的「Zone = Instance」按在册精确化——Zone 是进程/权威模拟单位（glossary §2.1「跑世界的机器格子」），instance 是其上的生命周期单位，一 Zone 可承载多个实例（docs/30 :25「一个进程内多个逻辑实例」）；用户英文案原句「Each Zone **owns** a complete scene or game instance」本身精确（own ≠ 等同）。
+- **候选后续批（本批不动）**：docs 站 vitepress description「轻量 MMO 与塔防游戏服务端引擎」与 nav 措辞同步评估；README 架构概览图服务层的聊天/匹配服务器行在册性待核（C-93 chat-app 死路为反面参照）。
+- P1/P2/P3 分档在新定位下的叙事（P1 单进程 / P2 房间制中型 / P3 集群支撑 MMO-by-instances）为定位草图，与在册 Compact（docs/30）及八件编队（§31.1）相容，不另立裁决。
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。

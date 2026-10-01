@@ -2,7 +2,9 @@
   <img src="docs/public/apollo.png" alt="Apollo Logo" height="80"/>
 </p>
 
-# Apollo MMORPG 服务器框架
+# Apollo
+
+**An instance-based multiplayer game server engine.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
@@ -10,11 +12,56 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
 
-> 一个高性能、模块化的MMORPG服务器开发框架
+> 实例化多人在线游戏服务器引擎 —— Instance-based Multiplayer Game Server Engine
 
 ## 📖 项目简介
 
-Apollo是一个专为大型多人在线角色扮演游戏（MMORPG）设计的服务器框架。它采用现代C++20开发，提供了完整的游戏服务器解决方案，包括网络通信、数据存储、游戏逻辑、战斗系统等核心模块。
+Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
+
+Apollo treats a **Zone** as an authoritative simulation unit. Each Zone owns a complete scene or game instance and can be created, scheduled, recovered, and recycled independently.
+
+```text
+Client
+   │
+Gateway
+   │
+   ▼
+Zone
+ ├── Scene / Instance
+ ├── AOI
+ ├── Session
+ ├── Authoritative Game Logic
+ └── Journal
+        │
+        ▼
+    DataProxy
+        │
+        ▼
+       DB
+```
+
+The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
+
+This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple Zones can be orchestrated across machines while preserving the same runtime model.
+
+中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是「由大量 Zone/实例组成」的 supported use case（instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
+
+## ✅ 适用场景 / Use Cases
+
+**适合**——自然世界的边界天然是「房间 / 场景 / 副本 / 比赛 / 实例」的游戏：
+
+| 场景 | 实例形态 |
+|------|----------|
+| 塔防、固定地图（绿色循环圈等） | Zone 内多房间，开局 `CreateInstance` |
+| 副本 / Dungeon / Roguelike | 一局一实例，用完回收 |
+| 竞技场 / Arena / 大逃杀 | Match 实例，赛毕销毁 |
+| 多人 PvE / 生存 / Co-op | 小队实例 |
+| 多人 PvP | 对局实例 |
+| MMO 分线与副本 | 线 = scene_id 实例，大量 Zone 横向编排 |
+
+**不适合**——**连续共享大世界**（persistent seamless world）：无缝地图、跨进程空间漫游、「一个 World 横向切成 CellApp」的部署模型。Apollo 有意不做 cell 分片 / ghost / 实体迁移（架构裁决 #9），这类需求请选 BigWorld / KBEngine 一类 continuous-world 引擎。
+
+> 一句话判据：**世界的自然边界是房间/场景/副本/比赛 → 适用；要求跨进程连续的大世界 → 不适用。**
 
 ### 核心特性
 
