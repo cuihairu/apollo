@@ -3021,7 +3021,7 @@ C-95 建号前全仓 grep 零命中。
 | 名 | **baseapp**（BW 原名，多实例叫 baseapp_1..baseapp_N，不造 shard 等新词） |
 | 血统 | BW/KBE baseapp 直系继承；其四角色中连接①归 gateway、DB 直写③归 journal/DataProxy、cell 代理不需要——baseapp 保留角色②（玩家常驻数据 + 大厅业务） |
 | 职责 | 承载玩家常驻数据：登录 load 进内存、内存为准、journal 异步回写；大厅业务（签到/背包/邮件/商城/排队元数据）；P1/P2 兼连接层与跑局 |
-| 对象模型 | **玩家（Player）常驻 baseapp，登录创建、登出销毁**；**Avatar（化身）** = 玩家进局后在局内的实体（位置/血量/战斗组件），进局创建、出局销毁，挂 Player 下——工业共识名（avatar 本义即「化身」），与 B 档 base-cell-proxy-model 的 AvatarEntity 对应（三层 Session / PlayerAnchor / AvatarEntity 同构） |
+| 对象模型 | **Avatar（玩家实体）常驻 baseapp：登录创建、登出销毁**；进局时**整体 Ownership Transfer** 到 Zone 的局里（权威随行），出局移交回 baseapp——不拆两半、不设第二对象；任意时刻单一权威、定位唯一：**大厅时在 baseapp，局中在 Zone** |
 | 形态 | P1/P2：baseapp ×1；P3：**baseapp ×N 按账号分片**（与 Zone ×N 同构的多实例，无单点） |
 | 崩溃半径 | baseapp_i 崩 = 1/N 玩家数据暂不可用，journal 恢复；BW 用备份链互保，本项目用 journal 重放（33.4 HA 等价性开放项不变） |
 | 接口 | gateway 转发大厅流量 → baseapp；开局/结算时与 Zone 间 ownership handoff；P3 与 gateway、allocator 的关系随控制面批细化 |
@@ -3032,14 +3032,13 @@ C-95 建号前全仓 grep 零命中。
 
 **缘起**：用户裁决「反复叫你把概念整理出来」「尽量用工业上已经形成共识的名字，不要再造名词」。本表一次收拢本报告全部概念，一词一位；此后文档与对话只用本表用词。
 
-**A. 玩家侧对象（四件，工业共识名）**
+**A. 玩家侧对象（三件，工业共识名）**
 
 | 定名 | 是什么 | BW/KBE 原词 | 仓库 B 档对应 | 状态 |
 |---|---|---|---|---|
 | Account（账号） | 注册账号，DB 一行，离线也在 | account | — | 通用词 |
 | Session（会话） | 在线状态：一条连接 + token | Proxy（会话锚半角色） | Proxy | 通用词 |
-| Player（玩家） | 常驻玩家对象：登录创建、登出销毁，住 baseapp，承载常驻数据 | BaseEntity | PlayerAnchor | 本批定名 |
-| Avatar（化身） | 玩家在局内的实体：位置/血量/战斗组件；进局创建、出局销毁，挂 Player 下 | cell entity | AvatarEntity | **用户裁决（2026-10-01）** |
+| Avatar（玩家实体） | 玩家的实体，**只有这一个词**：常驻 baseapp（登录创建、登出销毁），进局整体 Ownership Transfer 到 Zone，出局回来；大厅时在 baseapp、局中在 Zone，任意时刻单一权威单一定位 | BaseEntity（baseapp 侧）+ cell entity（局内侧）随移交合一 | AvatarEntity | **用户裁决（2026-10-01），一词制，Player 已废** |
 
 **B. 进程编队（工业共识名 / BW 原名，零新造）**
 
@@ -3065,7 +3064,7 @@ C-95 建号前全仓 grep 零命中。
 
 **D. 作废词清单（对话临时造名，即刻废止，文档与对话不再出现）**
 
-lobby、大厅进程、主进程、Global Server、Base Server、shard（作为进程名）、场景身体、玩家对象（→Player）——均由 baseapp / Player / Avatar 取代。造名过程与教训见 33.5。
+lobby、大厅进程、主进程、Global Server、Base Server、shard（作为进程名）、场景身体、Player（与 Avatar 二分是我再造的分层，用户裁决一词制后废弃）——均由 baseapp / Avatar 取代。造名过程与教训见 33.5。
 
 ### 33.7 门禁
 
