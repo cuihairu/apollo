@@ -2948,6 +2948,76 @@ C-95 建号前全仓 grep 零命中。
 
 ---
 
+## 33. 第廿四轮（2026-10-01）：BigWorld/KBEngine 逐进程老实盘点——功能对照与逐件拆解（含 §31 编队勘误与三档修正）
+
+**缘起**：用户连续追问「玩家对象在哪个进程」暴露 §31 八件编队的缺口（非对局态承载缺位），并指示「老实的分析人家的引擎，有哪些功能模块，一一对比，分析每个进程的功能，如何拆解」。本轮 = BW/KBE 进程级系统对照，作为编队修正的依据基线。**素材基线**：kbe-source-analysis.md（§八 BaseApp :515 / §九 CellApp :581 / §十 SpaceMemory :639 / §十一 Witness :685 / §十二 GhostManager :750 / §十三 CellAppMgr :804 / §十四 BaseAppMgr :866 / §十五 Machine :915 / §十六 Watcher :957 / §十七 主循环 :1018）+ base-cell-proxy-model.md（Proxy/PlayerAnchor/AvatarEntity 三层模型）+ witness-ghost-design.md + 决策 #9（36号 :186-188）。
+
+### 33.1 BW/KBE 进程全景（11 件）
+
+| # | 进程 | 核心职责（源码证据） | 仓库证据 |
+|---|---|---|---|
+| 1 | loginapp | 登录入口：收客户端登录连接、账号验证转发（→dbmgr）、成功后下发 baseapp 分配地址 | 仓库内无专节（BW 通用文献知识；kbe-source-analysis 仅进程篇覆盖 §八-§十七） |
+| 2 | baseapp | **三重角色**：①客户端连接终点（Proxy 会话锚：客户端地址/bundle/RTT/giveClientTo/kick）；②非空间实体宿主（BaseEntity 长期权威逻辑 + createEntityAnywhere/Remotely）；③备份与归档（DB 落盘链） | kbe-source-analysis §八 :515-560（proxy.h/baseapp.h 关键方法清单） |
+| 3 | baseappmgr | 玩家接入分配 + base 侧负载调度（findFreeBaseapp/updateBestBaseapp/sendAllocatedBaseappAddr/queryAppsLoads）；调度维度 = 会话数/entity 数/负载，非空间 | §十四 :866-913 |
+| 4 | cellapp | 空间权威节点：cell entity 生命周期、entity call、ghost property/volatile 更新、reqTeleportToCellApp、GhostManager、Updatable tick | §九 :581-637 |
+| 5 | cellappmgr | 空间拓扑管理（非薄注册中心）：findFreeCellapp/reqCreateCellEntityInNewSpace/reqRestoreSpaceInCell + 空间→cell 映射 + 负载视图（load/entity 数/space 集合） | §十三 :804-864 |
+| 6 | dbmgr | 全集群唯一 DB 访问点：实体↔MySQL 映射、账号验证、baseapp 备份归档落盘、离线实体创建（createEntityFromDB） | 仓库内无专节（BW 通用文献知识） |
+| 7 | machine | 每台机器一个守护：进程启停/杀、UDP 广播接口发现、组件 ID 注册——运维体系内建 | §十五 :915-955 |
+| 8 | logger | 集中消息日志收集进程 | 仓库内无专节（BW 通用文献知识） |
+| 9 | bots | 协议级压测机器人（模拟客户端登录/移动） | 仓库内无专节（设计缺口 #15 在册待建） |
+| 10 | servicemgr/serviceapp | 定时任务/第三方系统对接（BW 侧服务进程） | 仓库内无专节（BW 通用文献知识） |
+| 11 | watcher（库级，非进程） | 结构化观测树：路径型指标挂载（stats/components/spaces）+ 远程 query——「观测不是打日志+grep」 | §十六 :957-1016 |
+
+**跨进程机制四件**（引擎级，非进程）：① mailbox entity call（base/cell/client 三寻址）；② 备份链 HA（cellapp/baseapp primary/secondary）；③ 负载迁移（cell 间甩实体）+ teleport（base↔cell 实体迁移）；④ Witness/AOI 远程视野续订（§十一）。
+
+### 33.2 逐件拆解对照（BW 件 → 职责 → Apollo 去向 → 档位出场）
+
+| BW/KBE 件 | 拆出的职责 | Apollo 去向 | P1 | P2 | P3 |
+|---|---|---|---|---|---|
+| loginapp | 登录入口/验号 | login-app（存量 + B11 两稿） | 主进程内登录模块 | 主进程内 | **login-app** |
+| baseapp①连接 | Proxy 会话锚 | gateway（透传+验签；存量 1591 行，C-93 路由残留待清） | 主进程 | 主进程 | **gateway** ×N（无状态） |
+| baseapp②常驻实体 | BaseEntity 玩家长期权威（背包/邮件/商城/大厅业务） | **lobby（账号域常驻进程）**——§31 缺口本轮补齐 | 主进程 | 主进程（=baseapp 式） | **lobby** |
+| baseapp③DB | 备份归档落盘 | journal → DataProxy（异步，内存为准不直写） | 直写（连接池） | 直写 | **DataProxy-journal** |
+| baseappmgr | 接入分配/负载 | manager（准入+目录+落点+恢复 四合一） | — | — | **manager** |
+| cellapp | 空间权威 | **Zone**（每实例临时建 instance） | 主进程内房间 | **room 进程** | **Zone** ×N |
+| cellapp：witness/AOI | 远程视野续订 | AOI 九宫格（Zone 内组件，无跨进程订阅） | ✅ | ✅ | ✅ |
+| cellapp：ghost/volatile | 分布式空间双写 | **刻意不做**（裁决 #9：无 cell 分片即无 ghost） | ✗ | ✗ | ✗ |
+| cellapp：负载迁移/teleport | 实体跨进程迁移 | **刻意不做**（TransferPlayer = ownership handoff，搬所有权不搬对象） | ✗ | ✗（开局移交/回厅移交） | ✅ |
+| cellappmgr | 空间拓扑 | manager 落点裁决（无空间拓扑——instance 边界即进程边界） | — | 简化落点 | **manager** |
+| dbmgr | 唯一 DB 点/实体映射 | DataProxy + contract 契约（XML 契约替代 entitydef 映射声明） | — | — | **DataProxy** |
+| machine | 守护/发现/启停 | machined（G-1 注册；运维面可部分让位 systemd/k8s） | — | — | **machined** |
+| logger | 集中日志 | LogAgent→Kafka→ClickHouse（决策 #14，规划） | 文件 | 文件 | **管道** |
+| bots | 压测 | gap #15（在册待建） | ✗ | ✗ | P3 建 |
+| servicemgr | 定时/第三方 | interfaces（#14 入站对接面） | ✗ | ✗ | P3 建 |
+| watcher | 观测树 | observability-watcher（A 档在册设计） | 日志 | 日志 | **观测树** |
+| mailbox entity call | 三寻址远程调用 | 自研消息总线（规划，net-abstraction.md）+ TransferPlayer handoff | 进程内直调 | 进程间消息 | **总线** |
+| 备份链 HA | primary/secondary | journal 重放 + manager 恢复协调（**manager 自身 HA 开放问题在册**） | 单进程无 HA | 主进程单点 | **journal 重放** |
+
+### 33.3 §31 勘误与三档编队修正（本轮裁决产出）
+
+1. **勘误一（§31 拆解错误）**：§30.7/§31 口头与表格式拆解中「baseapp 非空间逻辑 → Zone」为**错置**——非空间的**对局内**逻辑（战斗属性）在 Zone 不假，但**常驻**玩家数据（背包/邮件/商城/大厅业务）无去处。§31 八件编队**缺第九件 lobby**（账号域常驻进程，baseapp 角色②的直系继承，剥离连接①与 DB 直写③两包袱）。玩家数据权威模型裁决：**登录 load 进内存 → 内存为准 → journal 异步回写 → 开局 ownership handoff 给 Zone → 结算 handoff 回**——任意时刻单一权威副本。
+2. **勘误二（编队未分档）**：§31 八件编队是 **P3 集群档全形态**，未标档位出场，导致以 P3 形态回答全部档位的问题。修正为三档出场表（33.2 末三列）：**P1 = baseapp 式单进程**（连接+常驻数据+房间四合一，loginapp/baseapp/cellapp 并一体）；P2 = 主进程（baseapp 式）+ room 进程；P3 = 九件全编队。用户判语「不如直接 baseapp」在 P1/P2 档**成立且已是裁决形态**；lobby/gateway/machined 等拆分仅在 P3 有独立收益。
+3. **承续不变**：无 ghost/迁移/无缝（#9）、Zone 定义八权威（§31.8）、TransferPlayer=ownership handoff——本轮不推翻任何既有裁决，只补缺件与分档。
+
+### 33.4 引擎级模块对照（进程之外）
+
+| BW/KBE 引擎模块 | Apollo 对应 | 状态 |
+|---|---|---|
+| entitydef（XML 定义实体/属性/方法，KBE 核心壁垒 §六） | contract 系统（XML+XSD + apollo_gen，契约/权限位/sync 掩码） | **已交付**（同构物，§27 对比在册） |
+| Python 脚本桥（§七 主路径） | Lua scripting（scripting-lua.md，规划） | 规划 |
+| Witness/Ghost/迁移（§十一/§十二） | 不做（#9）；AOI 内联 | 裁决放弃 |
+| Watcher 观测树（§十六） | observability-watcher（A 档） | 设计在册 |
+| 备份链（primary/secondary） | journal 重放 | 模型不同（事后重放 vs 实时备份），HA 语义等价性待验证（开放） |
+| Machine 运维内建（§十五） | machined + 外部 systemd/k8s | 设计在册（G-1） |
+
+### 33.5 门禁
+
+纯文档批：本报告 §33 一节；零源码/CMake/CI/契约/golden 改动；三项受保护 untracked 未碰；单笔提交；push 前 fetch --rebase。素材全部引仓库内 B 档（kbe-source-analysis/base-cell-proxy-model/witness-ghost-design/36号决策 #9），四件无专节进程（loginapp/dbmgr/logger/bots/servicemgr）明确标注「仓库内无专节，BW 通用文献知识」不冒充实测。
+
+
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
