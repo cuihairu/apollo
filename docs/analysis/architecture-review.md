@@ -2666,6 +2666,78 @@ C-87…C-89 建节前全仓 `grep -rn "C-87\|C-88\|C-89" docs/` 核实零占用�
 
 ---
 
+## 30. 第廿一轮（2026-10-01）：gateway 追问与当前架构简洁性对照（vs KBE/BW）（C-93、C-94）
+
+### 30.0 任务与落位说明
+
+用户三问：① §29 清理批删除 gateway-session-design / gateway-ingress-facade-design 后，「gateway 呢」——现行设计载体交代；② 当前架构全景分析；③ 与 KBE/BW 对照下的简洁性评估（用户立场：「架构还是保持简洁吧」）。只读分析轮，续写主报告 §30，不建新文件；基线 main @ 9c5de032，全部行号本轮实测。
+
+### 30.1 gateway 之问——设计载体与自创价值
+
+**现行权威载体五处**（两份过期稿的承接关系，§29.1 特别判定已登记）：
+
+| 载体 | 承接内容 |
+|---|---|
+| sdk-contract §10.6 :502 | 装配谱系定案：「网关进程用案二形态（纯透传、零反射设施）+ Zone 服用案一形态」——契约/golden/route 清单不变，各进程只差装不装反射数据面；:504 案一「接入层内容过滤」弹性点**未采**（透传不给内容级自由度） |
+| login-flow（B11） | 两阶段连接——游戏连接 client↔gateway、ClientHello 带 login_token、gateway 本地 HMAC 验签不触账号库、pending nonce 一次性核销；§8 存量迁移表列明 gateway-app 现行「准入 RPC 回问 login-app」→ 改本地验签 |
+| net-abstraction | L2 会话语义 + CryptoFilter——加解密/会话生命周期集中一层 |
+| session-and-online-directory（#12） | gateway 生死 = 目录三事件源之一；断线重连不换进程（resume token）、Zone 侧重 attach |
+| inbound-interfaces（B11 #14） | 职责分离裁决——第三方入站对接落独立 interfaces 进程，不进 gateway 故障域 |
+
+承接映射：gateway-session-design 的会话归属议题 → login-flow + session-and-online-directory；gateway-ingress-facade-design 的接入面议题 → sdk-contract §10.6 + login-flow。设计无缺口，gap 登记 #0-#16 无 gateway 项。
+
+**BW/KBE 无独立 gateway 进程**（进程清单权威行 deep-dive :315——BW `server/` = {baseapp, baseappmgr, cellapp, cellappmgr, dbapp, dbappmgr, loginapp, reviver, tools}、KBE `kbe/src/server/` = {baseapp, baseappmgr, cellapp, cellappmgr, dbmgr, loginapp, machine, tools}）：两家的客户端连接终结在 **baseapp**（连接面与实体面同宿，B 档 base-cell-proxy-model 在案）——baseapp 过载/重启/迁移即玩家掉线重连。apollo 的 gateway 是相对两家的**唯一进程面加法**，其简洁性论证：用**一个无实体、无业务逻辑、无权威状态的薄进程**（纯透传零反射）拆掉「连接 ⊗ 实体」一族耦合——Zone 扩缩容/故障切换对客户端透明（会话目录重 attach）、断线重连不换进程、加解密单层。这是结构性解耦不是复杂度净增；反面先例是 BW baseapp 双职责过载即掉线。「不给太高自由度」已兑现：零反射、不做内容级前置校验（:504 弹性点不采）、不入第三方入站（#14 裁决）。
+
+### 30.2 存量 gateway-app 实读（1591 行，15 件）
+
+结构：ingress 层四件（client_ingress_server 50+36 / client_packet_dispatcher 36+53 / session_admission_service 33+61 / gateway_connection_registry 57+147）+ 核心三件（gateway_server.hpp 127 + .cpp 565 / session_manager 106+175 / config 38）+ main 107。**透传形态成立**（ingress 收帧 → 会话查表 → 后端转发，无实体无游戏语义）。
+
+**路由面 BW 拓扑残留 → C-93**：MessageRouter 三路由 `forwardToWorld`（gateway_server.hpp:32，带 RouteSnapshot）/ `forwardToBaseApp`（:36）/ `forwardToChatApp`（:39；实现 .cpp:108/:131/:140，分发点 :395/:410/:415）；config.hpp:14-17 默认四后端地址 login/base/cell/chat。三问题：① `chat-app` 进程**全仓不存在**（apps/ 五件无此目录）——chatAppUrl 为死地址、forwardToChatApp 为死路由；② World/BaseApp 路由与决策 #9 Zone 制（cell/base 合一，无独立 World/BaseApp 进程）命名错位；③ cellAppUrl（:16）有地址无对应路由。与 login-flow 的验签错位 B11 迁移表已列不重复登记；本条登记的是**路由拓扑面**残留。
+
+### 30.3 当前架构全景
+
+**模块树开关面**（modules/CMakeLists）：默认构建 = base/core/runtime/data/net（:30 旧 modules/protocol 的 add_subdirectory 被注释禁用，:28-29 deprecated 注记让位 net/protocol）；`apollo::net_protocol` 由 net/protocol 产出（其 CMakeLists:2/:6），而旧 `apollo_protocol` **唯一**定义点在被禁用的 modules/protocol/CMakeLists:30——即默认构建图内不存在；game 模块 option 默认 OFF（:39）、仅 EXAMPLES 强制开（:40-42，根 CMakeLists:29 EXAMPLES 默认 OFF）；bigworld 兼容模块默认 OFF（:49）。
+
+**apps 五件四套血统**（C-72「四 main 零 apollo::」在案，本轮补构建面）：game-server 137 行 = Zone 现行形态（唯一 core::di 消费者）；base-app 798 行 / cell-app 654 行 = BW 形态实验存量（决策 #9 已否决 cell/base 拆分——apps/index.md:27-28 仍述 `LoginApp -> GatewayApp -> BaseApp(PlayerAnchor) -> WorldApp` 旧链）；login-app 884 行 = §25 已审烟囱；gateway-app 1591 行 = 方向一致但依赖退役 protocol 树（apps/CMakeLists:9-10 自注「迁移未完成」）。
+
+**默认构建零 app → C-94**：apps 四重条件门（:11 gateway 需 net_protocol AND apollo_protocol；:19 login/base 需 apollo_protocol；:28 cell 需 apollo_protocol AND game_core AND game_world；:36 game-server 需 game_core）与上段模块开关的合成效果——默认配置下五 app **全部 disabled**、apps/ 零可执行产出；四 BW 型 app 要启用必须手改 modules/CMakeLists 解注释已标 deprecated 的旧树；连 Zone 现行形态 game-server 也因 game 模块默认 OFF 不可构建。搁浅方向本身与退役路线一致，但**未在任何文档登记**（README/apps/index 无一处说明），读者会以为五 app 均可构建。
+
+**设计面编队（P3 权威稿）**：machined（G-1 守护/注册）+ manager 域（三 mgr 合一：准入/目录/编队/恢复）+ login-app + gateway + Zone（game-server 型，cell/base 合一）+ interfaces + verifier + db（write-behind journal）；P1-P2 = Compact 单进程（docs/30）。
+
+### 30.4 三家进程类型对照（BW/KBE 清单 = deep-dive :315 本轮 ls 实测；tools 细目 :101/:102）
+
+| 职责 | BW | KBE | apollo 设计（P3） | apollo 存量 apps |
+|---|---|---|---|---|
+| 登录 | loginapp | loginapp | login-app（B11 全规格） | login-app 884 行（§25 四点错位） |
+| 客户端连接/会话 | baseapp（与实体同宿） | baseapp（与实体同宿） | **gateway（纯透传，独立）** | gateway-app 1591 行（C-93 路由残留） |
+| 世界/空间运行时 | cellapp | cellapp | Zone = game-server 型（cell/base 合一，#9） | game-server 137 行（现行形态） |
+| 实体 base 侧 | baseapp（同进程双职责） | baseapp（同进程双职责） | 并入 Zone | base-app 798 行（BW 型存量） |
+| 进程管理 | cellappmgr+baseappmgr+dbappmgr 三件 | 同三件（dbmgr） | manager 域单点 | 无（P3） |
+| DB 接入 | dbapp 独立进程 | dbmgr 独立进程 | db + write-behind journal | base-app 内嵌 database_service（存量错位） |
+| 守护/拉起 | bwmachined（tools 位 :102） | machine | machined（G-1） | 无（P3） |
+| 入站第三方对接 | 无 | interfaces（tools 位 :101） | interfaces 独立进程（#14） | 无（P3） |
+| 故障接管 | reviver 独立进程 | 无 | reviver 语义进 manager（G-2） | 无 |
+| 压测客户端 | tools/bots | tools/bots | gap #15 OPEN（B12 待落） | 无 |
+
+### 30.5 简洁性评估（「保持简洁」的兑现面）
+
+**设计面的简化点（相对 BW/KBE）**：① 进程类型收敛——两家各 9-10 类 → apollo P3 七类（machined/manager/login/gateway/Zone/interfaces/verifier）、P1-P2 单进程；② 语义合并三刀——cell+base→Zone（去 ghost/border/负载迁移全套，BW 最复杂层）、三 mgr→manager 单域、backup+reviver→journal 位点 + manager 恢复相位（不设独立 reviver 进程，battle-verification §5「无 G-2 热备需求」同型逻辑）；③ gateway 为唯一加法（30.1 论证）；④ 模块树单一——一个 modules/ 树按装配产出不同进程（BW/KBE 同型：server/lib 共享 + 各 main），无双实现。
+
+**现存不简洁点（存量代码债，非设计债——待代码批收敛，本轮只登记不处置）**：① apps BW 型存量三件（base/cell/login）与 Zone 制错位 + gateway 路由面残留（C-93）+ 默认构建零 app 的搁浅未登记（C-94）；② 四 main 两套装配血统（C-72）；③ IoC 四树 17 件待删（§28 五步序）；④ 双 protocol 树（modules/protocol deprecated 未删，四 app 脐带）；⑤ apps/index.md 述 PlayerAnchor/WorldApp 旧链——docs 层面偏差，可随下批文档修正。
+
+**简洁红线路线确认**：禁第二套 IPC、禁第五套网络栈、四套配置收敛、IoC 清退、不引注册中心、Redis 只做共享热数据、单一 crypto 源（OpenSSL）——设计面全部守住；复杂度集中在存量 apps 与退役脐带，收敛路径已在 §28（IoC 五步序）与 B11 迁移表（gateway 验签改造）在案。结论：**当前架构的简洁性成立在设计层，欠账在存量层**——保持简洁的正确动作不是改设计，而是按既登记的删除序清存量。
+
+### 30.6 缺陷登记
+
+- **C-93**：gateway-app 路由面 BW 拓扑残留——三路由 forwardToWorld/forwardToBaseApp/forwardToChatApp（gateway_server.hpp:32/:36/:39）+ config.hpp:14-17 四后端地址；ChatApp 进程全仓不存在（chatAppUrl 死地址、死路由）、World/BaseApp 与决策 #9 Zone 制命名错位、cellAppUrl 有址无路由。
+- **C-94**：四 BW 型 app（gateway/login/base/cell）+ game-server 在默认构建全 disabled（apps/CMakeLists 四重门 × modules/protocol 禁用 × game 模块默认 OFF）——搁浅状态未在任何文档登记，apps/「五件可选构建」的文档叙述与实况不符。
+
+### 30.7 核对记录
+
+C-93/C-94 建号前全仓 grep 零命中；BW/KBE 进程清单引注以 deep-dive :315（A 级本轮 ls）为准——摘要初拟的「deep-dive :96-114 / 36号 :55/:66」经本轮复核**不成立**（前者为工具树节、后者为 SSEngine 对照表），已弃用；gateway 装配谱系引注 sdk-contract :502（:504 为弹性点段）。零源码/CMake/CI/契约/golden 改动；三项受保护 untracked 未碰；不派子代理；单笔提交；push 前 fetch --rebase。
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
