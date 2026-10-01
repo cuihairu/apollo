@@ -2,6 +2,7 @@
 
 #include "apollo/protocol/nng_wrapper.hpp"
 #include "apollo/protocol/codec.hpp"
+#include <thread>
 #include <string>
 #include <functional>
 #include <memory>

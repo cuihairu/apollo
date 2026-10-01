@@ -32,18 +32,8 @@ public:
     std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayer(PlayerID playerId);
     bool bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding);
     bool unbindSession(protocol::SessionID sessionId);
-    bool assignWorld(PlayerID playerId, const apollo::game::session::WorldAssignment& assignment);
-    bool clearWorldAssignment(PlayerID playerId);
     std::shared_ptr<apollo::game::session::PlayerAnchor> findAnchor(PlayerID playerId) const;
     std::optional<PlayerID> findPlayerBySession(protocol::SessionID sessionId) const;
-    std::optional<apollo::game::session::WorldAssignment> resolveWorldAssignment(
-        PlayerID playerId,
-        protocol::SessionID sessionId = 0
-    ) const;
-    std::optional<apollo::game::session::SessionBinding> resolveSessionBinding(
-        PlayerID playerId,
-        protocol::SessionID sessionId = 0
-    ) const;
 
 private:
     // 处理数据库加载请求
@@ -57,8 +47,9 @@ private:
 
     std::vector<uint8_t> handlePlayerActivateRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePlayerBindSessionRequest(const std::vector<uint8_t>& request);
-    std::vector<uint8_t> handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request);
-    std::vector<uint8_t> handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request);
+
+    // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
+    // 归 apps/baseappmgr（目录 + 调度面，BW BaseAppMgr 直系）。
 
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);

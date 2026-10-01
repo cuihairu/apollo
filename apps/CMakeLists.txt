@@ -16,12 +16,14 @@ else()
 endif()
 
 # Legacy protocol apps still depend on modules/protocol.
-if(TARGET apollo_protocol)
+# base-app/baseappmgr additionally link apollo::game_session (game module).
+if(TARGET apollo_protocol AND TARGET apollo::game_session)
     add_subdirectory(login-app)
     add_subdirectory(base-app)
-    message(STATUS "Legacy protocol apps enabled (apollo_protocol found)")
+    add_subdirectory(baseappmgr)
+    message(STATUS "Legacy protocol apps enabled (apollo_protocol + game_session found)")
 else()
-    message(STATUS "Legacy protocol apps disabled (legacy protocol module not enabled)")
+    message(STATUS "Legacy protocol apps disabled (requires legacy apollo_protocol AND APOLLO_BUILD_GAME_MODULE=ON)")
 endif()
 
 # Cell app 需要 legacy protocol 和 game 模块

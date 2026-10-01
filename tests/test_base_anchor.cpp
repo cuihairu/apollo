@@ -1,6 +1,5 @@
 #include "base/base_server.hpp"
 #include "apollo/game/session/player_anchor.hpp"
-#include "apollo/game/session/world_assignment.hpp"
 
 #include <iostream>
 
@@ -14,6 +13,9 @@ namespace {
         } \
     } while (0)
 
+// baseapp（数据面）锚点生命周期测试。
+// 落点裁决/目录查询（assignWorld/ResolveRoute 族）已拆至 apps/baseappmgr，
+// 见 test_baseappmgr.cpp。
 bool test_base_server_anchor_lifecycle() {
     std::cout << "Running: test_base_server_anchor_lifecycle..." << std::endl;
 
@@ -42,28 +44,6 @@ bool test_base_server_anchor_lifecycle() {
     const auto playerBySession = server.findPlayerBySession(9001);
     TEST_ASSERT(playerBySession.has_value(), "player resolved by session");
     TEST_ASSERT(*playerBySession == 1001, "resolved player id matches");
-
-    apollo::game::session::WorldAssignment assignment;
-    assignment.world_id = 3;
-    assignment.map_id = 100;
-    assignment.instance_id = 200;
-    assignment.space_id = 300;
-    assignment.route_version = 1;
-
-    TEST_ASSERT(server.assignWorld(1001, assignment), "world assignment applied");
-    TEST_ASSERT(anchor->world_assignment().world_id == 3, "world id stored");
-    TEST_ASSERT(anchor->world_assignment().instance_id == 200, "instance id stored");
-
-    const auto resolvedAssignment = server.resolveWorldAssignment(1001);
-    TEST_ASSERT(resolvedAssignment.has_value(), "world assignment resolved");
-    TEST_ASSERT(resolvedAssignment->route_version == 1, "route version resolved");
-
-    const auto resolvedBinding = server.resolveSessionBinding(1001, 9001);
-    TEST_ASSERT(resolvedBinding.has_value(), "session binding resolved");
-    TEST_ASSERT(resolvedBinding->gateway_addr == "gateway://127.0.0.1:8888", "gateway addr resolved");
-
-    TEST_ASSERT(server.clearWorldAssignment(1001), "world assignment cleared");
-    TEST_ASSERT(!anchor->world_assignment().is_assigned(), "assignment removed");
 
     TEST_ASSERT(server.unbindSession(9001), "session unbound");
     TEST_ASSERT(anchor->state() == apollo::game::session::AnchorState::Disconnected, "anchor disconnected after unbind");

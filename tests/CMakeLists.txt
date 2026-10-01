@@ -340,7 +340,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
-	    if(TARGET apollo::game_session)
+	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
 	        ../apps/base-app/src/base_server.cpp
@@ -360,6 +360,26 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+
+	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
+	    add_executable(baseappmgr_tests
+	        test_baseappmgr.cpp
+	        ../apps/baseappmgr/src/baseappmgr.cpp
+	    )
+	    target_include_directories(baseappmgr_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+	    )
+	    target_link_libraries(baseappmgr_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::game_session
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME BaseAppMgrTests COMMAND baseappmgr_tests)
 	    endif()
 
 	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
@@ -543,7 +563,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_test(NAME SessionWorldTests COMMAND session_world_tests)
 	    endif()
 
-	    if(TARGET apollo::game_session)
+	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
 	        ../apps/base-app/src/base_server.cpp
@@ -563,6 +583,26 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+
+	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
+	    add_executable(baseappmgr_tests
+	        test_baseappmgr.cpp
+	        ../apps/baseappmgr/src/baseappmgr.cpp
+	    )
+	    target_include_directories(baseappmgr_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+	    )
+	    target_link_libraries(baseappmgr_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::game_session
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
+	    endif()
+	    add_test(NAME BaseAppMgrTests COMMAND baseappmgr_tests)
 	    endif()
 
 	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫

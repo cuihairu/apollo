@@ -1,5 +1,7 @@
 #include "apollo/game/battle/battle_system.hpp"
 
+#include <algorithm>
+
 namespace apollo::game::battle {
 
 BattleSystem::BattleSystem() = default;

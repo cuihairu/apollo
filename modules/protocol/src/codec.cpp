@@ -240,5 +240,263 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, ErrorMessage& ms
     msg.message = j.value("message", "");
 }
 
+//==============================================================================
+// 数据库消息
+//==============================================================================
+
+std::vector<uint8_t> MessageCodec::encodeBody(const DbLoadRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["tableName"] = msg.tableName;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbLoadRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.tableName = j.value("tableName", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const DbLoadResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["jsonData"] = msg.jsonData;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbLoadResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.jsonData = j.value("jsonData", "");
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const DbSaveRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["tableName"] = msg.tableName;
+    j["jsonData"] = msg.jsonData;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbSaveRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.tableName = j.value("tableName", "");
+    msg.jsonData = j.value("jsonData", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const DbSaveResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbSaveResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const DbQueryRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["tableName"] = msg.tableName;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbQueryRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.tableName = j.value("tableName", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const DbQueryResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["jsonData"] = msg.jsonData;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbQueryResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.jsonData = j.value("jsonData", "");
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+//==============================================================================
+// 玩家生命周期与落点消息
+//==============================================================================
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerActivateRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerActivateRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerActivateResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["playerId"] = msg.playerId;
+    j["state"] = msg.state;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerActivateResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.state = j.value("state", "");
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerBindSessionRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["sessionId"] = msg.sessionId;
+    j["gatewayId"] = msg.gatewayId;
+    j["gatewayAddr"] = msg.gatewayAddr;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerBindSessionRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.sessionId = j.value("sessionId", SessionID(0));
+    msg.gatewayId = j.value("gatewayId", uint32_t(0));
+    msg.gatewayAddr = j.value("gatewayAddr", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerBindSessionResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerBindSessionResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["worldId"] = msg.worldId;
+    j["mapId"] = msg.mapId;
+    j["instanceId"] = msg.instanceId;
+    j["spaceId"] = msg.spaceId;
+    j["routeVersion"] = msg.routeVersion;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorldRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.worldId = j.value("worldId", uint32_t(0));
+    msg.mapId = j.value("mapId", uint64_t(0));
+    msg.instanceId = j.value("instanceId", uint64_t(0));
+    msg.spaceId = j.value("spaceId", uint64_t(0));
+    msg.routeVersion = j.value("routeVersion", uint64_t(0));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["routeVersion"] = msg.routeVersion;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorldResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.routeVersion = j.value("routeVersion", uint64_t(0));
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerResolveRouteRequest& msg) {
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["sessionId"] = msg.sessionId;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerResolveRouteRequest& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.sessionId = j.value("sessionId", SessionID(0));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PlayerResolveRouteResponse& msg) {
+    nlohmann::json j;
+    j["success"] = msg.success;
+    j["playerId"] = msg.playerId;
+    j["sessionId"] = msg.sessionId;
+    j["gatewayId"] = msg.gatewayId;
+    j["gatewayAddr"] = msg.gatewayAddr;
+    j["worldId"] = msg.worldId;
+    j["mapId"] = msg.mapId;
+    j["instanceId"] = msg.instanceId;
+    j["spaceId"] = msg.spaceId;
+    j["routeVersion"] = msg.routeVersion;
+    j["errorMessage"] = msg.errorMessage;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerResolveRouteResponse& msg) {
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.success = j.value("success", false);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.sessionId = j.value("sessionId", SessionID(0));
+    msg.gatewayId = j.value("gatewayId", uint32_t(0));
+    msg.gatewayAddr = j.value("gatewayAddr", "");
+    msg.worldId = j.value("worldId", uint32_t(0));
+    msg.mapId = j.value("mapId", uint64_t(0));
+    msg.instanceId = j.value("instanceId", uint64_t(0));
+    msg.spaceId = j.value("spaceId", uint64_t(0));
+    msg.routeVersion = j.value("routeVersion", uint64_t(0));
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
 } // namespace protocol
 } // namespace apollo

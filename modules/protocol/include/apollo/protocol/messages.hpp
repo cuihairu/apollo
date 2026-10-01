@@ -51,6 +51,16 @@ enum class MessageType : uint16_t {
     CHAT_MESSAGE            = 0x0050,
     CHAT_BROADCAST          = 0x0051,
 
+    // 玩家生命周期与落点（baseapp / baseappmgr）
+    PLAYER_ACTIVATE_REQUEST      = 0x0060,
+    PLAYER_ACTIVATE_RESPONSE     = 0x0061,
+    PLAYER_BIND_SESSION_REQUEST  = 0x0062,
+    PLAYER_BIND_SESSION_RESPONSE = 0x0063,
+    PLAYER_ASSIGN_WORLD_REQUEST  = 0x0064,
+    PLAYER_ASSIGN_WORLD_RESPONSE = 0x0065,
+    PLAYER_RESOLVE_ROUTE_REQUEST = 0x0066,
+    PLAYER_RESOLVE_ROUTE_RESPONSE = 0x0067,
+
     // 系统相关
     PING                    = 0x1000,
     PONG                    = 0x1001,
@@ -206,6 +216,98 @@ struct DbSaveResponse {
     static constexpr MessageType TYPE = MessageType::DB_SAVE_RESPONSE;
 };
 
+struct DbQueryRequest {
+    PlayerID playerId;
+    std::string tableName;
+
+    static constexpr MessageType TYPE = MessageType::DB_QUERY_REQUEST;
+};
+
+struct DbQueryResponse {
+    bool success;
+    std::string jsonData;
+    std::string errorMessage;
+
+    static constexpr MessageType TYPE = MessageType::DB_QUERY_RESPONSE;
+};
+
+//==============================================================================
+// 玩家生命周期与落点消息（baseapp 承载 Avatar 生命周期；baseappmgr 承载目录与落点）
+//==============================================================================
+
+struct PlayerActivateRequest {
+    PlayerID playerId;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_ACTIVATE_REQUEST;
+};
+
+struct PlayerActivateResponse {
+    bool success;
+    PlayerID playerId;
+    std::string state;      // AnchorState 字符串
+    std::string errorMessage;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_ACTIVATE_RESPONSE;
+};
+
+struct PlayerBindSessionRequest {
+    PlayerID playerId;
+    SessionID sessionId;
+    uint32_t gatewayId;
+    std::string gatewayAddr;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_BIND_SESSION_REQUEST;
+};
+
+struct PlayerBindSessionResponse {
+    bool success;
+    std::string errorMessage;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_BIND_SESSION_RESPONSE;
+};
+
+struct PlayerAssignWorldRequest {
+    PlayerID playerId;
+    uint32_t worldId;
+    uint64_t mapId;
+    uint64_t instanceId;
+    uint64_t spaceId;
+    uint64_t routeVersion;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_ASSIGN_WORLD_REQUEST;
+};
+
+struct PlayerAssignWorldResponse {
+    bool success;
+    uint64_t routeVersion;
+    std::string errorMessage;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_ASSIGN_WORLD_RESPONSE;
+};
+
+struct PlayerResolveRouteRequest {
+    PlayerID playerId;      // 0 时按 sessionId 反查
+    SessionID sessionId;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_RESOLVE_ROUTE_REQUEST;
+};
+
+struct PlayerResolveRouteResponse {
+    bool success;
+    PlayerID playerId;
+    SessionID sessionId;
+    uint32_t gatewayId;
+    std::string gatewayAddr;
+    uint32_t worldId;
+    uint64_t mapId;
+    uint64_t instanceId;
+    uint64_t spaceId;
+    uint64_t routeVersion;
+    std::string errorMessage;
+
+    static constexpr MessageType TYPE = MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE;
+};
+
 //==============================================================================
 // CellApp 消息
 //==============================================================================
@@ -359,6 +461,14 @@ inline const char* toString(MessageType type) {
         case MessageType::COMBAT_DAMAGE: return "COMBAT_DAMAGE";
         case MessageType::PING: return "PING";
         case MessageType::PONG: return "PONG";
+        case MessageType::PLAYER_ACTIVATE_REQUEST: return "PLAYER_ACTIVATE_REQUEST";
+        case MessageType::PLAYER_ACTIVATE_RESPONSE: return "PLAYER_ACTIVATE_RESPONSE";
+        case MessageType::PLAYER_BIND_SESSION_REQUEST: return "PLAYER_BIND_SESSION_REQUEST";
+        case MessageType::PLAYER_BIND_SESSION_RESPONSE: return "PLAYER_BIND_SESSION_RESPONSE";
+        case MessageType::PLAYER_ASSIGN_WORLD_REQUEST: return "PLAYER_ASSIGN_WORLD_REQUEST";
+        case MessageType::PLAYER_ASSIGN_WORLD_RESPONSE: return "PLAYER_ASSIGN_WORLD_RESPONSE";
+        case MessageType::PLAYER_RESOLVE_ROUTE_REQUEST: return "PLAYER_RESOLVE_ROUTE_REQUEST";
+        case MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE: return "PLAYER_RESOLVE_ROUTE_RESPONSE";
         default: return "UNKNOWN";
     }
 }

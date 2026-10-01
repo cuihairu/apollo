@@ -160,82 +160,12 @@ bool BaseServer::unbindSession(protocol::SessionID sessionId) {
     return true;
 }
 
-bool BaseServer::assignWorld(
-    PlayerID playerId,
-    const apollo::game::session::WorldAssignment& assignment
-) {
-    auto anchor = anchorManager_->find(playerId);
-    if (!anchor) {
-        return false;
-    }
-
-    anchor->assign_world(assignment);
-    if (assignment.is_assigned()) {
-        anchor->set_state(apollo::game::session::AnchorState::Online);
-    }
-    return true;
-}
-
-bool BaseServer::clearWorldAssignment(PlayerID playerId) {
-    auto anchor = anchorManager_->find(playerId);
-    if (!anchor) {
-        return false;
-    }
-
-    anchor->clear_world_assignment();
-    return true;
-}
-
 std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::findAnchor(PlayerID playerId) const {
     return anchorManager_->find(playerId);
 }
 
 std::optional<PlayerID> BaseServer::findPlayerBySession(protocol::SessionID sessionId) const {
     return sessionLocator_->find_player_by_session(sessionId);
-}
-
-std::optional<apollo::game::session::WorldAssignment> BaseServer::resolveWorldAssignment(
-    PlayerID playerId,
-    protocol::SessionID sessionId
-) const {
-    if (playerId == 0 && sessionId != 0) {
-        const auto resolved = sessionLocator_->find_player_by_session(sessionId);
-        if (!resolved.has_value()) {
-            return std::nullopt;
-        }
-        playerId = *resolved;
-    }
-
-    const auto anchor = anchorManager_->find(playerId);
-    if (!anchor) {
-        return std::nullopt;
-    }
-
-    const auto& assignment = anchor->world_assignment();
-    if (!assignment.is_assigned()) {
-        return std::nullopt;
-    }
-
-    return assignment;
-}
-
-std::optional<apollo::game::session::SessionBinding> BaseServer::resolveSessionBinding(
-    PlayerID playerId,
-    protocol::SessionID sessionId
-) const {
-    if (sessionId != 0) {
-        const auto binding = sessionLocator_->find_by_player(
-            playerId != 0 ? playerId : sessionLocator_->find_player_by_session(sessionId).value_or(0));
-        if (binding.has_value()) {
-            return binding;
-        }
-    }
-
-    if (playerId == 0) {
-        return std::nullopt;
-    }
-
-    return sessionLocator_->find_by_player(playerId);
 }
 
 void BaseServer::start() {
@@ -274,18 +204,15 @@ void BaseServer::start() {
             case protocol::MessageType::PLAYER_BIND_SESSION_REQUEST:
                 return handlePlayerBindSessionRequest(data);
 
-            case protocol::MessageType::PLAYER_ASSIGN_WORLD_REQUEST:
-                return handlePlayerAssignWorldRequest(data);
-
-            case protocol::MessageType::PLAYER_RESOLVE_ROUTE_REQUEST:
-                return handlePlayerResolveRouteRequest(data);
+            // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
+            // 归 apps/baseappmgr（目录 + 落点裁决），baseapp 不再受理。
 
             case protocol::MessageType::PING:
                 return handlePing(data);
 
             default:
                 protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR_MESSAGE);
+                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
                 err.message = "Unknown message type";
                 return protocol::MessageCodec::encode(err, header.sessionId);
         }
@@ -424,74 +351,6 @@ std::vector<uint8_t> BaseServer::handlePlayerBindSessionRequest(const std::vecto
     } else {
         response.errorMessage = "Failed to bind player session";
     }
-
-    return protocol::MessageCodec::encode(response, header.sessionId);
-}
-
-std::vector<uint8_t> BaseServer::handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request) {
-    auto header = protocol::MessageCodec::parseHeader(request);
-    std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
-
-    auto assignReq = protocol::MessageCodec::decodeBody<protocol::PlayerAssignWorldRequest>(bodyData);
-
-    protocol::PlayerAssignWorldResponse response;
-    response.success = false;
-    response.routeVersion = assignReq.routeVersion;
-
-    apollo::game::session::WorldAssignment assignment;
-    assignment.world_id = assignReq.worldId;
-    assignment.map_id = assignReq.mapId;
-    assignment.instance_id = assignReq.instanceId;
-    assignment.space_id = assignReq.spaceId;
-    assignment.route_version = assignReq.routeVersion;
-
-    if (assignWorld(assignReq.playerId, assignment)) {
-        response.success = true;
-    } else {
-        response.errorMessage = "Failed to assign player world";
-    }
-
-    return protocol::MessageCodec::encode(response, header.sessionId);
-}
-
-std::vector<uint8_t> BaseServer::handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request) {
-    auto header = protocol::MessageCodec::parseHeader(request);
-    std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
-
-    const auto resolveReq = protocol::MessageCodec::decodeBody<protocol::PlayerResolveRouteRequest>(bodyData);
-
-    protocol::PlayerResolveRouteResponse response;
-    response.success = false;
-    response.playerId = resolveReq.playerId;
-    response.sessionId = resolveReq.sessionId;
-
-    const auto resolvedPlayerId = resolveReq.playerId != 0
-        ? std::optional<PlayerID>(resolveReq.playerId)
-        : findPlayerBySession(resolveReq.sessionId);
-
-    if (!resolvedPlayerId.has_value()) {
-        response.errorMessage = "Player not found for route resolution";
-        return protocol::MessageCodec::encode(response, header.sessionId);
-    }
-
-    response.playerId = *resolvedPlayerId;
-
-    const auto binding = resolveSessionBinding(*resolvedPlayerId, resolveReq.sessionId);
-    const auto assignment = resolveWorldAssignment(*resolvedPlayerId, resolveReq.sessionId);
-    if (!binding.has_value() || !assignment.has_value()) {
-        response.errorMessage = "Player route is not ready";
-        return protocol::MessageCodec::encode(response, header.sessionId);
-    }
-
-    response.success = true;
-    response.sessionId = binding->session_id;
-    response.gatewayId = binding->gateway_id;
-    response.gatewayAddr = binding->gateway_addr;
-    response.worldId = assignment->world_id;
-    response.mapId = assignment->map_id;
-    response.instanceId = assignment->instance_id;
-    response.spaceId = assignment->space_id;
-    response.routeVersion = assignment->route_version;
 
     return protocol::MessageCodec::encode(response, header.sessionId);
 }

@@ -466,6 +466,13 @@ struct nng_socket;
 struct nng_aio;
 struct nng_msg;
 
+using nng_duration = int;
+
+// nng_flag 命名空间（stub 下无真实 nng.h，此处补齐调用方使用的标志位）
+namespace nng_flag {
+    enum : int { NNG_FLAG_ALLOC = 1, NNG_FLAG_NONBLOCK = 2 };
+}
+
 class NngError : public std::system_error {
 public:
     explicit NngError(int rv)
@@ -486,6 +493,55 @@ public:
     NngSocket() = default;
     void close() {}
     int get_id() const { return 0; }
+    nng_socket get() const { return socket_; }
+
+    // Socket 选项 setter（stub：全部降级为无操作）
+    void set_int(const char* name, int value) { (void)name; (void)value; }
+    void set_ms(const char* name, nng_duration value) { (void)name; (void)value; }
+    void set_bool(const char* name, bool value) { (void)name; (void)value; }
+
+    // 收发（stub：一律返回 ENOTSUP，网络功能不可用）
+    int send(const std::vector<uint8_t>& data) { (void)data; return NNG_ENOTSUP; }
+    int recv(std::vector<uint8_t>& out) { (void)out; return NNG_ENOTSUP; }
+
+private:
+    nng_socket socket_{};
+};
+
+// Dialer RAII 包装（stub）
+class NngDialer {
+public:
+    NngDialer() = default;
+    explicit NngDialer(nng_socket sock, const std::string& addr) { (void)sock; (void)addr; }
+    ~NngDialer() = default;
+
+    NngDialer(const NngDialer&) = delete;
+    NngDialer& operator=(const NngDialer&) = delete;
+    NngDialer(NngDialer&&) noexcept = default;
+    NngDialer& operator=(NngDialer&&) noexcept = default;
+
+    int get() const { return dialer_; }
+
+private:
+    int dialer_ = 0;
+};
+
+// Listener RAII 包装（stub）
+class NngListener {
+public:
+    NngListener() = default;
+    explicit NngListener(nng_socket sock, const std::string& addr) { (void)sock; (void)addr; }
+    ~NngListener() = default;
+
+    NngListener(const NngListener&) = delete;
+    NngListener& operator=(const NngListener&) = delete;
+    NngListener(NngListener&&) noexcept = default;
+    NngListener& operator=(NngListener&&) noexcept = default;
+
+    int get() const { return listener_; }
+
+private:
+    int listener_ = 0;
 };
 
 class NngAio {
@@ -526,6 +582,46 @@ public:
 
     std::vector<uint8_t> to_vector() const { return {}; }
 };
+
+//==============================================================================
+// 自由函数（stub：一律返回 ENOTSUP / 空数据，保持调用方类型自洽）
+//==============================================================================
+
+inline int nng_req0_open(nng_socket* s) { *s = nng_socket{}; return NNG_ENOTSUP; }
+inline int nng_rep0_open(nng_socket* s) { *s = nng_socket{}; return NNG_ENOTSUP; }
+inline int nng_pub0_open(nng_socket* s) { *s = nng_socket{}; return NNG_ENOTSUP; }
+inline int nng_sub0_open(nng_socket* s) { *s = nng_socket{}; return NNG_ENOTSUP; }
+inline int nng_pair0_open(nng_socket* s) { *s = nng_socket{}; return NNG_ENOTSUP; }
+
+// 注意：真实 nng_recv 为三参 (s, buf, &size, flags)；socket.cpp 现网调用为
+// 四参形态，stub 按调用方现状收窄（模块未启用，修复调用方属传输层重写批）。
+inline int nng_recv(nng_socket s, void* buf, size_t size, int flags) {
+    (void)s; (void)buf; (void)size; (void)flags;
+    return NNG_ENOTSUP;
+}
+
+inline int nng_recvmsg(nng_socket s, nng_msg** msg, int flags) {
+    (void)s; (void)msg; (void)flags;
+    return NNG_ENOTSUP;
+}
+
+inline int nng_socket_set(nng_socket s, const char* name, const void* val, size_t valsz) {
+    (void)s; (void)name; (void)val; (void)valsz;
+    return NNG_ENOTSUP;
+}
+
+inline int nng_dialer_set_ms(int dialer, const char* name, nng_duration ms) {
+    (void)dialer; (void)name; (void)ms;
+    return NNG_ENOTSUP;
+}
+
+inline void* nng_msg_body(nng_msg* msg) { (void)msg; return nullptr; }
+inline size_t nng_msg_len(nng_msg* msg) { (void)msg; return 0; }
+inline void nng_msg_free(nng_msg* msg) { (void)msg; }
+
+inline const char* nng_strerror(int err) {
+    return err == NNG_ENOTSUP ? "NNG not available (stub)" : "nng stub error";
+}
 
 #endif // APOLLO_USE_NNG
 

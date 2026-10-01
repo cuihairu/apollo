@@ -3070,7 +3070,54 @@ lobby、大厅进程、主进程、Global Server、Base Server、shard（作为�
 
 纯文档批：本报告 §33 一节；零源码/CMake/CI/契约/golden 改动；三项受保护 untracked 未碰；单笔提交；push 前 fetch --rebase。素材全部引仓库内 B 档（kbe-source-analysis/base-cell-proxy-model/witness-ghost-design/36号决策 #9），四件无专节进程（loginapp/dbmgr/logger/bots/servicemgr）明确标注「仓库内无专节，BW 通用文献知识」不冒充实测。
 
+---
 
+## 34. 第廿五轮（2026-10-01）：baseapp/baseappmgr 拆分执行批——base-app 越界职责归位 + legacy 断裂全量盘点
+
+**指令**：用户「那么拆 baseapp basemgr」。§33.5 已立户 baseapp、§33.6 总表已定 Manager（= baseappmgr+cellappmgr 合一，BW 原词）；本轮执行拆分：把 apps/base-app（baseapp 角色②存量）里混入的调度面职责拆出独立成件。命名按工业共识纪律用 BW 全名 **baseappmgr**（用户口述 basemgr 为其简称），不另造词。
+
+### 34.1 拆分边界（按 §33.6 概念表执行）
+
+| 原 base-app 内功能 | 域 | 去向 |
+|---|---|---|
+| activatePlayer / bindSession / unbindSession / findAnchor / findPlayerBySession | 数据面（Avatar 装载/会话绑定） | 留 baseapp |
+| handleDbLoad/Save/Query + DatabaseService + autoSaveLoop / finalizeSave | 数据面（落盘） | 留 baseapp |
+| handlePlayerActivateRequest / handlePlayerBindSessionRequest / handlePing | 数据面 RPC | 留 baseapp |
+| assignWorld / clearWorldAssignment | 调度面（落点裁决） | **拆出 → baseappmgr** |
+| resolveWorldAssignment / resolveSessionBinding | 调度面（目录查询） | **拆出 → baseappmgr** |
+| handlePlayerAssignWorldRequest / handlePlayerResolveRouteRequest | 调度面 RPC | **拆出 → baseappmgr** |
+
+关键裁决：拆分后 **WorldAssignment 的权威记录从 anchor 字段改归 baseappmgr 目录表**（`unordered_map<PlayerID, WorldAssignment>`），baseappmgr 不跨进程改 baseapp 的 anchor 内存——与「无一条跨进程改内存」红线一致。目录复用 `SessionLocator`（自带锁）双实例各表其意：baseapp 内为本地 Avatar 会话绑定，baseappmgr 内为全局目录。
+
+### 34.2 交付物
+
+- **新增 `apps/baseappmgr/`**（四件：CMakeLists + include/baseappmgr/baseappmgr.hpp + src/{baseappmgr,main}.cpp，端口默认 9003，linking 同 base-app 减 DB 依赖）；类 `baseappmgr::BaseAppMgr`（BigWorld BaseAppMgr 直系：目录 + 落点裁决 + 路由解析，不承载 Avatar 数据）
+- **base-app 收缩**：base_server.hpp/cpp 删六方法 + RPC switch 删两 case（留注释指向 baseappmgr）
+- **测试拆分**：test_base_anchor.cpp 保留 baseapp 域断言（assignWorld/ResolveRoute 族断言移出）；新增 tests/test_baseappmgr.cpp（目录裁决 + session 反查 + 路由解析 + 清理，纯内存不启网络）
+- **构建接线**：apps/CMakeLists 加 baseappmgr 子目录；tests/CMakeLists 两处加 baseappmgr_tests（与 base_anchor_tests 同守卫）
+
+### 34.3 legacy 断裂全量盘点（本轮实测暴露，全部为既有态）
+
+拆分验证试图打通 legacy tier 构建，暴露完整断裂链（逐层实测）：
+
+1. **modules/protocol 被注释禁用**（modules/CMakeLists.txt:30「has issues」）——apollo_protocol target 不存在 → base-app/login-app/baseappmgr 可执行与两个测试 target 从不在构建矩阵
+2. **modules/protocol 头文件自身编不过**：codec.hpp 缺 `<atomic>`、socket.hpp 缺 `<thread>`、nng_wrapper.hpp stub 分支缺 NngDialer/NngListener/NngSocket::get 等半壁江山——本轮已修（纯头文件级自包含缺陷 + stub 补全，全部加法）
+3. **modules/protocol 对 nng 1.11 API 全面不兼容**：nng_socket 已从 int 变 struct、nng_flag 已移除、socket.cpp:61 调用的四参 `nng_recv` 在 nng 1.x 不存在——该模块对着不存在的 API 写成，从未编译成功。vcpkg 装 nng 1.11 实测引爆后已回退（vcpkg.json 未动）；修复属传输层重写批，本批不做
+4. **base-app 引用不存在的消息契约**：PLAYER_ACTIVATE/BIND_SESSION/ASSIGN_WORLD/RESOLVE_ROUTE 八消息 + DbQueryResponse + Db 族 codec 重载在 messages.hpp/codec 中从未定义——本轮已补齐（枚举段 0x0060-0x0067 + 八结构体 + DbQuery 对 + codec 十四对 encode/decode json 实现 + toString 分支；base_server/baseappmgr 的 `MessageType::ERROR_MESSAGE` 错用改 `MessageType::ERROR`）
+5. **modules/game 未接 session 子目录**：modules/game/CMakeLists.txt 无 add_subdirectory(session) → apollo::game_session target 不存在 → BaseAnchorTests 守卫永不激活、从未跑过——本轮已接线
+6. **modules/game/battle battle_system.cpp 缺 `<algorithm>`**（std::remove_if）——本轮已修（一行）
+7. **apollo_game_server 链接断链**（GAME_MODULE=ON 时）：LogManager::clear/set_console_enabled/snapshot + SqlTemplate::ctor/query 五符号未定义——**未修**（非本批范围；game-server 可执行从未链接成功的既有态）
+
+### 34.4 验证与边界（如实）
+
+- **默认配置**（本批验收基线）：clean rebuild **118/118** + ctest **16/16** 全绿，主线零破坏
+- **GAME_MODULE=ON**：全库唯一失败 = apollo_game_server 既有链接断链（盘点 #7）；game 模块全部编过（session 接线生效、battle 修复生效）
+- **baseappmgr/base-app 源码验证**：七编译单元（baseappmgr.cpp/main.cpp/base_server.cpp/database_service.cpp/base-app main.cpp/test_baseappmgr.cpp/test_base_anchor.cpp）+ protocol 三源（codec/messages/nng_wrapper.cpp）全部 `-fsyntax-only` 通过——类型系统级验证；**可执行与测试运行时验证缺席**（依赖被禁用的 modules/protocol，属盘点 #1 既有态，非本批引入）
+- **apps/tests 门条件收紧**：legacy 门从 `TARGET apollo_protocol` 收紧为 `TARGET apollo_protocol AND TARGET apollo::game_session`（实测 apollo_protocol 开而 game 模块关时 base-app 链接 game_session 直接 configure 炸——既有地雷，本轮踩中后拆除）；tests 两处块同收紧
+
+### 34.5 门禁
+
+源码改动批（用户指令「拆 baseapp basemgr」授权范围）：新增 apps/baseappmgr 四件 + tests/test_baseappmgr.cpp；收缩 base-app 三件；protocol 头文件四件自包含修复 + codec/messages 契约补齐 + codec.cpp 实现；modules/game session 接线一行 + battle include 一行；apps/tests CMakeLists 门条件与接线。modules/CMakeLists protocol 注释保持原状（未解禁）；vcpkg.json 未动；BIGWORLD_AUDIT.md / ipc_audit_results.md / Testing/Testing/ 三项 untracked 未碰。默认配置 118/118 + 16/16 验收后单笔提交，push 前 fetch --rebase。
 
 ---
 

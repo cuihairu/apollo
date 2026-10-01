@@ -4,6 +4,7 @@
 #include "apollo/protocol/nng_wrapper.hpp"
 #include <vector>
 #include <string>
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <functional>
@@ -66,6 +67,20 @@ public:
     static std::vector<uint8_t> encodeBody(const Ping& msg);
     static std::vector<uint8_t> encodeBody(const Pong& msg);
     static std::vector<uint8_t> encodeBody(const ErrorMessage& msg);
+    static std::vector<uint8_t> encodeBody(const DbLoadRequest& msg);
+    static std::vector<uint8_t> encodeBody(const DbLoadResponse& msg);
+    static std::vector<uint8_t> encodeBody(const DbSaveRequest& msg);
+    static std::vector<uint8_t> encodeBody(const DbSaveResponse& msg);
+    static std::vector<uint8_t> encodeBody(const DbQueryRequest& msg);
+    static std::vector<uint8_t> encodeBody(const DbQueryResponse& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerActivateRequest& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerActivateResponse& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerBindSessionRequest& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerBindSessionResponse& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerAssignWorldRequest& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerAssignWorldResponse& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerResolveRouteRequest& msg);
+    static std::vector<uint8_t> encodeBody(const PlayerResolveRouteResponse& msg);
 
     //==========================================================================
     // 解码
@@ -118,6 +133,20 @@ public:
     static void decodeBody(const std::vector<uint8_t>& data, Ping& msg);
     static void decodeBody(const std::vector<uint8_t>& data, Pong& msg);
     static void decodeBody(const std::vector<uint8_t>& data, ErrorMessage& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, DbLoadRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, DbLoadResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, DbSaveRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, DbSaveResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, DbQueryRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, DbQueryResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerActivateRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerActivateResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerBindSessionRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerBindSessionResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorldRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorldResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerResolveRouteRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PlayerResolveRouteResponse& msg);
 
     //==========================================================================
     // 辅助
