@@ -2900,6 +2900,54 @@ Apollo 路线：多个独立空间 → 分配到多个 Zone
 
 ---
 
+## 32. 第廿三轮（2026-10-01）：旧 `Apollo::` IoC 容器删除执行批——五步序落地、提交断裂修复与基线复验（C-1/C-90/C-91 消解、C-95 立号）
+
+**授权与范围**：用户 2026-10-01 明示「授权删除，还有源码目录也重新设计下」。本批 = §28.6 五步序的执行收尾；范围 = §28 盘点的 17 件 IoC 树 + 扩展项（FileWatcher 双件、七件测试源、五件 examples 源，共 **32 件 git rm**）；**范围外** = 双 protocol 树与 apps BW 型存量（「删前要先定 gateway/login 新形态落谁」，待后续批）与源码目录重设计（授权第二半，独立批）。
+
+### 32.1 提交断裂事件（如实记录）
+
+删除批按 R1 纪律先拆接线后删源、构建验证已通过（默认配置 16/16、EXAMPLES=ON 三断判既有）后，一个工具调用被系统拒绝（"considered high risk"），随后工作区被回滚至干净——**已暂存的 32 件 git rm 进入用户提交 ce5f07e8（2026-10-01 11:17:06，author cuihairu，已推 origin/main），四处 CMake 拆线（未暂存编辑）全部丢失**。两点如实登记：
+
+1. **message 与 stat 矛盾**：ce5f07e8 message 末句称「零源码/CMake/CI/契约/golden 改动」，实际 stat = **32 files changed, 6114 deletions**（README 2 行 + examples 5 件 + include 16 件 + src 3 件 + tests 7 件）——message 文本沿用 §31 批模板，与实际内容不符。不猜测成因，仅记录事实；本笔 §32 与配套 CMake 修复即为其内容补正。
+2. **HEAD 断裂态 = R1 风险实锤**：ce5f07e8 删了源但四处接线仍在（tests/CMakeLists LEGACY 块与 ioc 双目标、core_config :6-7、examples 五 target、根 CMake 兜底三行）——任何人此后默认构建必断，恰为 §28 R1 所预警的「先删源后（只）提交删源」形态。
+
+### 32.2 本批修复明细（四处接线拆除，源删除已在 ce5f07e8）
+
+| 载体 | 拆除内容（行号为 ce5f07e8 版基线） |
+|---|---|
+| tests/CMakeLists.txt | ① `APOLLO_LEGACY_IOC_TEST_SOURCES` set 块（:3-6）；② GTest 分支 `ioc_tests` 目标整块（add_executable :24 至 DependencyTest add_test :47）；③ else 分支 `ioc_tests_simple` 五处（add_executable 块 :466-470、链接 :480、WIN32 ws2_32 :487、SimpleTests add_test :494）——净删 1189 字节，python 正则处理 tab/空格混合缩进，逐块 assert 防漏 |
+| modules/core/config/CMakeLists.txt | :6-7 两行 legacy 源（`src/framework/ioc/ConfigManager.cpp` + `src/utils/io/FileWatcher.cpp`）——C-90 脐带 |
+| examples/CMakeLists.txt | 五 target 块：ioc_example（basic_example.cpp）/config_example/dependency_example/all_features_demo（:1-11 连块）+ starter_example（:52-54 含注释） |
+| 根 CMakeLists.txt | 兜底分支（NOT MODULAR_LAYOUT）三行源（:56 ConfigManager.cpp、:59 ApolloApplication.cpp、:89 FileWatcher.cpp）+ :179 注释失实处修正（「仅影响实现（ConfigManager.cpp）」→「（配置解析）」） |
+
+全仓 CMake 残留验证：`grep ConfigManager.cpp|ApolloApplication.cpp|FileWatcher.cpp|ioc_tests|五 example 名|七测试源名 --include=CMakeLists.txt --include=*.cmake` 归零（根 :179 注释修正后零命中）。
+
+### 32.3 基线复验（修复后）
+
+- **默认配置**（vcpkg toolchain + Ninja，x64-linux）：configure 过（apps 门控行与 §30 C-94 记录一致——gateway/login/base/cell disabled、game-server enabled）；全量构建 **118/118 全绿**；`ctest` **16/16 全过**（SimpleTests 随 ioc_tests_simple 拆线消失，16 为删除后基线，与删除批验证一致）。构建日志 3 处 "error" 字样为 `Socket::GetErrorString` 函数名误命中（实为一处 strerror_r 既有警告，非本批引入）。
+- **过程注记**：复验首跑误入 EXAMPLES=ON 残留 cache（对照验证遗留开关）暴露 serializer_demo.cpp 断（详见 C-95）；清 cache 重配时 pugixml find_package 失败——依赖在用户全局 `/home/cui/vcpkg`（仓库内无 vcpkg/installed），按 README 标准命令补 `-DCMAKE_TOOLCHAIN_FILE=/home/cui/vcpkg/scripts/buildsystems/vcpkg.cmake` 后全绿。build 目录为产物，重建无损。
+
+### 32.4 C 号处置
+
+| 号 | 处置 |
+|---|---|
+| C-1（FileWatcher 死接线，§17 :354） | **消解**——FileWatcher.h/.cpp 随唯一消费者 ConfigManager 一并删除；§17 判定倾向「保留并接线新配置」被用户删除授权覆盖，不再复活，配置热更若需要在新 core::config 重新实现（R4 口径不变） |
+| C-90（ConfigManager.cpp 死编脐带，§28） | **消解**——core_config :6-7 拆线 + 源删除 |
+| C-91（IoC 测试面双症，§28） | **消解**——ioc_tests 目标（无前缀 include 必断）与五件 `_test_simple` 孤儿 + main_test/main_test_simple/test_simple 随批删除 |
+| **C-95（新立）** | examples 链路既有编译断——CI 恒 OFF（ci.yml `-DAPOLLO_BUILD_EXAMPLES=OFF`）掩盖，`-DAPOLLO_BUILD_EXAMPLES=ON` 即红：① battle_system.cpp:23 `remove_if` 缺 `<algorithm>`；② rpc_demo.cpp:259 `std::function` 缺 `<functional>`；③ session_demo.cpp 缺 `<mutex>`；④ **本轮新增证据** serializer_demo.cpp 多处断（:33/:65/:324-326/:340-370——缺 `<bitset>`/`<chrono>`/`<sstream>` 系 + BinaryReader 构造签名错配）。四件与删除批零因果（文件本批未触碰、被删头零引用）。**处置**：候选回填批（三行 `#include` 级修复 + serializer_demo 签名核对）；另 examples 五 target 删除后 README :127「./build/examples/all_features_demo」运行示例指向已删目标，随同批改 |
+
+C-95 建号前全仓 grep 零命中。
+
+### 32.5 README Base 模块节补写（既有遗漏，非删除所致）
+
+用户问「readme 里介绍 base 也没有了吗」——对照 `git show 9aff5626:README.md`：模块说明区（Core/Game/Network/Storage/Utils/Compatibility 六节）**从来没有 base 节**，属既有遗漏，非本会话任何批次删除。本批补：`## 📚 模块说明` 首位插入 Base 节（定位「纯基础设施，无任何框架语义，可被任何 C++ 项目独立使用」+ 组件六项 + 链 docs/modules/base.md）。组件按**实态**写（modules/base/include/apollo/base/ 实测：id_pool/memory/string/terminal/thread_pool/time 六件，src 仅 id_pool.cpp）——docs/modules/base.md 所列 ObjectPool 组件与实态出入（无对应头），该出入转登记：模块文档勘误候选，本批不动 docs。
+
+### 32.6 门禁
+
+源码改动仅限授权删除批收尾（四 CMake 拆线 + ce5f07e8 补正）+ README base 节 + 本报告 §32；无 CI/契约/golden 改动；三项受保护 untracked（BIGWORLD_AUDIT.md、Testing/Testing/、ipc_audit_results.md）未碰；无 tag/release/force push；单笔提交；push 前 fetch --rebase。遗留两批待用户指令节奏：源码目录重设计（授权第二半）、C-95 examples 修复批。
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。

@@ -146,6 +146,11 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ## 📚 模块说明
 
+### Base 基础设施（modules/base）
+- **定位**: 纯基础设施，无任何框架语义，可被任何 C++ 项目独立使用（不依赖 Apollo 其他模块）
+- **组件**: Time 时间工具、ThreadPool 线程池、IdPool ID 分配、String 字符串工具、Memory 内存工具、Terminal 终端工具
+- 详见 [Base 模块文档](docs/modules/base.md)
+
 ### Core 核心框架（modules/core · modules/runtime）
 - **依赖注入**: `apollo::core::di` 极简构造注入容器——类型键 bean 图、拓扑序装配、仅 Singleton/Prototype 两档作用域
 - **应用生命周期**: `ApplicationHost` 帧驱动托管——`IHostedService` start/stop/tick + 六阶段状态机（Boot→…→Stopped）

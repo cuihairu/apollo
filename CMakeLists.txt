@@ -52,12 +52,6 @@ if(NOT APOLLO_ENABLE_MODULAR_LAYOUT)
 
 # Apollo 核心库
 add_library(apollo STATIC
-    # Framework
-    src/framework/ioc/ConfigManager.cpp
-
-    # Starter (Spring-like auto-configuration)
-    src/starter/ApolloApplication.cpp
-
     # Game - migrated to modules/game/, use modular layout instead
 
     # Network
@@ -86,7 +80,6 @@ add_library(apollo STATIC
 
     # Utils
     src/utils/config/config_loader.cpp
-    src/utils/io/FileWatcher.cpp
     src/utils/logging/logger.cpp
     src/utils/threading/thread_pool.cpp
     src/apollo/utils/id_pool.cpp
@@ -176,7 +169,7 @@ target_include_directories(apollo PUBLIC
 # 说明：
 # - Protobuf 出现在 public headers 里（如 include/apollo/network/messaging/protobuf_message.hpp），
 #   因此必须以 PUBLIC 方式链接，确保下游目标获得 include/link 需求。
-# - nlohmann_json 仅影响实现（ConfigManager.cpp），找不到时回退到 bundled header。
+# - nlohmann_json 仅影响实现（配置解析），找不到时回退到 bundled header。
 
 # Protobuf (required)
 set(_apollo_protobuf_target "")

@@ -1,15 +1,3 @@
-add_executable(ioc_example basic_example.cpp)
-target_link_libraries(ioc_example PRIVATE apollo)
-
-add_executable(config_example config_example.cpp)
-target_link_libraries(config_example PRIVATE apollo)
-
-add_executable(dependency_example dependency_example.cpp)
-target_link_libraries(dependency_example PRIVATE apollo)
-
-add_executable(all_features_demo all_features_demo.cpp)
-target_link_libraries(all_features_demo PRIVATE apollo)
-
 # ========== ECS Demo ==========
 add_executable(ecs_demo ecs_demo.cpp)
 target_link_libraries(ecs_demo PRIVATE apollo)
@@ -48,10 +36,6 @@ target_link_libraries(netutil_demo PRIVATE apollo)
 # ========== Simple Server ==========
 add_executable(simple_server simple_server.cpp)
 target_link_libraries(simple_server PRIVATE apollo)
-
-# Starter 自动配置示例
-add_executable(starter_example starter_example.cpp)
-target_link_libraries(starter_example PRIVATE apollo)
 
 # ========== HTTP Demo ==========
 add_executable(http_demo http_demo.cpp)

@@ -1,10 +1,5 @@
 find_package(GTest QUIET)
 
-set(APOLLO_LEGACY_IOC_TEST_SOURCES
-    ../src/framework/ioc/ConfigManager.cpp
-    ../src/utils/io/FileWatcher.cpp
-)
-
 set(APOLLO_BIGWORLD_TEST_SOURCES
     ../modules/bigworld/src/runtime.cpp
 )
@@ -20,31 +15,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     endforeach()
 
     enable_testing()
-
-    add_executable(ioc_tests
-        main_test.cpp
-        ${APOLLO_LEGACY_IOC_TEST_SOURCES}
-    )
-
-    target_link_libraries(ioc_tests
-        PRIVATE
-        apollo
-        GTest::gtest
-        GTest::gtest_main
-    )
-
-    # 为测试添加网络库链接
-    if(WIN32)
-        target_link_libraries(ioc_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME AllTests COMMAND ioc_tests)
-
-    # Add individual tests for better reporting
-    add_test(NAME ComponentTest COMMAND ioc_tests --gtest_filter=ComponentTest.*)
-    add_test(NAME ContextTest COMMAND ioc_tests --gtest_filter=ContextTest.*)
-    add_test(NAME ConfigTest COMMAND ioc_tests --gtest_filter=ConfigTest.*)
-    add_test(NAME DependencyTest COMMAND ioc_tests --gtest_filter=DependencyTest.*)
 
     # Protobuf tests
     add_executable(protobuf_tests
@@ -463,11 +433,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	else()
 	    message(STATUS "GTest not found or APOLLO_BUILD_GTESTS=OFF, building simple tests")
 	
-	    # Simple test without GTest
-	    add_executable(ioc_tests_simple
-            test_simple.cpp
-            ${APOLLO_LEGACY_IOC_TEST_SOURCES}
-        )
 	    # Note:暂时禁用
     # add_executable(config_tests_simple test_config.cpp)
 	    # Note: OpenSSL header conflicts - disabled
@@ -477,21 +442,18 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
             ${APOLLO_BIGWORLD_TEST_SOURCES}
         )
 	
-	    target_link_libraries(ioc_tests_simple PRIVATE apollo)
 	    # target_link_libraries(config_tests_simple PRIVATE apollo)
 	    # target_link_libraries(crypto_tests PRIVATE apollo)
 	    target_link_libraries(bigworld_api_tests PRIVATE apollo)
 	
 	    # 为Windows添加网络库链接
 	    if(WIN32)
-	        target_link_libraries(ioc_tests_simple PRIVATE ws2_32)
 	        # target_link_libraries(config_tests_simple PRIVATE ws2_32)
 	        # target_link_libraries(crypto_tests PRIVATE ws2_32)
 	        target_link_libraries(bigworld_api_tests PRIVATE ws2_32)
 	    endif()
 
 	    enable_testing()
-	    add_test(NAME SimpleTests COMMAND ioc_tests_simple)
 	    # add_test(NAME ConfigTestsSimple COMMAND config_tests_simple)
 	    add_test(NAME BigWorldApiTests COMMAND bigworld_api_tests)
 
