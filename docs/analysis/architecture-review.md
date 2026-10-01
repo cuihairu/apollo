@@ -2974,9 +2974,9 @@ C-95 建号前全仓 grep 零命中。
 
 | BW/KBE 件 | 拆出的职责 | Apollo 去向 | P1 | P2 | P3 |
 |---|---|---|---|---|---|
-| loginapp | 登录入口/验号 | login-app（存量 + B11 两稿） | 主进程内登录模块 | 主进程内 | **login-app** |
-| baseapp①连接 | Proxy 会话锚 | gateway（透传+验签；存量 1591 行，C-93 路由残留待清） | 主进程 | 主进程 | **gateway** ×N（无状态） |
-| baseapp②常驻实体 | BaseEntity 玩家长期权威（背包/邮件/商城/大厅业务） | **主进程（baseapp 式）**——不设独立进程（用户裁决 2026-10-01 明确拒绝 lobby，见 33.3 勘误一） | 主进程 | 主进程 | 主进程（形态跨三档不变） |
+| loginapp | 登录入口/验号 | login-app（存量 + B11 两稿） | baseapp 内登录模块 | baseapp 内 | **login-app** |
+| baseapp①连接 | Proxy 会话锚 | gateway（透传+验签；存量 1591 行，C-93 路由残留待清） | baseapp 兼 | baseapp 兼 | **gateway** ×N（无状态） |
+| baseapp②常驻实体 | BaseEntity 玩家长期权威（背包/邮件/商城/大厅业务） | **baseapp**（BW 原名，用户命名裁决见 33.5） | **baseapp** | **baseapp** | **baseapp** ×N（按账号分片，多实例） |
 | baseapp③DB | 备份归档落盘 | journal → DataProxy（异步，内存为准不直写） | 直写（连接池） | 直写 | **DataProxy-journal** |
 | baseappmgr | 接入分配/负载 | manager（准入+目录+落点+恢复 四合一） | — | — | **manager** |
 | cellapp | 空间权威 | **Zone**（每实例临时建 instance） | 主进程内房间 | **room 进程** | **Zone** ×N |
@@ -2991,12 +2991,12 @@ C-95 建号前全仓 grep 零命中。
 | servicemgr | 定时/第三方 | interfaces（#14 入站对接面） | ✗ | ✗ | P3 建 |
 | watcher | 观测树 | observability-watcher（A 档在册设计） | 日志 | 日志 | **观测树** |
 | mailbox entity call | 三寻址远程调用 | 自研消息总线（规划，net-abstraction.md）+ TransferPlayer handoff | 进程内直调 | 进程间消息 | **总线** |
-| 备份链 HA | primary/secondary | journal 重放 + manager 恢复协调（**manager 自身 HA 开放问题在册**） | 单进程无 HA | 主进程单点 | **journal 重放** |
+| 备份链 HA | primary/secondary | journal 重放 + manager 恢复协调（**manager 自身 HA 开放问题在册**） | 单进程无 HA | baseapp 单点 | **journal 重放** |
 
 ### 33.3 §31 勘误与三档编队修正（本轮裁决产出）
 
-1. **勘误一（§31 拆解错误 + 编队修正）**：§30.7/§31 口头与表格式拆解中「baseapp 非空间逻辑 → Zone」为**错置**——非空间的**对局内**逻辑（战斗属性）在 Zone 不假，但**常驻**玩家数据（背包/邮件/商城/大厅业务）无去处。**修正（用户裁决 2026-10-01）**：常驻数据由 **baseapp 式主进程承载，跨三档形态一致**；**不设独立 lobby 进程**——会话讨论中曾提出「第九件 lobby」方案，用户明确拒绝，本报告不再作为候选登记。玩家数据权威模型裁决（保留）：**登录 load 进内存 → 内存为准 → journal 异步回写 → 开局 ownership handoff 给 Zone → 结算 handoff 回**——任意时刻单一权威副本；该模型与进程编队解耦，主进程与 Zone 均按此执行。
-2. **勘误二（编队未分档）**：§31 八件编队是 **P3 集群档全形态**，未标档位出场，导致以 P3 形态回答全部档位的问题。修正为三档出场表（33.2 末三列）：**P1 = baseapp 式单进程**（连接+常驻数据+房间四合一，loginapp/baseapp/cellapp 并一体）；P2 = 主进程（baseapp 式）+ room 进程；P3 = 主进程（baseapp 式，形态不变）+ gateway/manager/machined/DataProxy-journal 等独立件。用户判语「不如直接 baseapp」**成立且为全档位裁决形态**；gateway/machined 等拆分仅在 P3 有独立收益，常驻数据永不拆出主进程。
+1. **勘误一（§31 拆解错误 + 编队修正）**：§30.7/§31 口头与表格式拆解中「baseapp 非空间逻辑 → Zone」为**错置**——非空间的**对局内**逻辑（战斗属性）在 Zone 不假，但**常驻**玩家数据（背包/邮件/商城/大厅业务）无去处。**修正（用户裁决 2026-10-01，命名裁决见 33.6）**：常驻数据由 **baseapp 承载（BW 原名，正式立户）**；**不设独立 lobby 进程**——会话讨论中曾提出「第九件 lobby」方案，用户明确拒绝，本报告不再作为候选登记。玩家数据权威模型裁决（保留）：**登录 load 进内存 → 内存为准 → journal 异步回写 → 开局 ownership handoff 给 Zone → 结算 handoff 回**——任意时刻单一权威副本；该模型与进程编队解耦，baseapp 与 Zone 均按此执行。
+2. **勘误二（编队未分档）**：§31 八件编队是 **P3 集群档全形态**，未标档位出场，导致以 P3 形态回答全部档位的问题。修正为三档出场表（33.2 末三列）：**P1 = baseapp ×1**（连接+常驻数据+房间四合一，loginapp/baseapp/cellapp 并一体）；P2 = baseapp ×1 + Zone ×N；P3 = gateway ×N + **baseapp ×N（按账号分片）** + Zone ×N + 控制面 + journal。用户判语「不如直接 baseapp」**成立且为全档位裁决形态**；gateway/machined 等拆分仅在 P3 有独立收益，常驻数据永不拆出主进程。
 3. **承续不变**：无 ghost/迁移/无缝（#9）、Zone 定义八权威（§31.8）、TransferPlayer=ownership handoff——本轮不推翻任何既有裁决，只补缺件与分档。
 
 ### 33.4 引擎级模块对照（进程之外）
@@ -3010,7 +3010,64 @@ C-95 建号前全仓 grep 零命中。
 | 备份链（primary/secondary） | journal 重放 | 模型不同（事后重放 vs 实时备份），HA 语义等价性待验证（开放） |
 | Machine 运维内建（§十五） | machined + 外部 systemd/k8s | 设计在册（G-1） |
 
-### 33.5 门禁
+### 33.5 补遗：baseapp 立户（用户命名裁决 2026-10-01）+ 编队表补正
+
+**缘起**：本轮对话连续追问「玩家实体在哪个进程」暴露：§31 八件编队**缺承载玩家常驻数据的基底件**——编队八件全是「拆出来的件」，承载一切的基底从未立户。会话中该缺口被临时造名五次（lobby → 主进程 → Global Server → Base Server → shard），每次被用户识破「设计里没有这个名字」即再换名。**用户终裁：「就学 BW，就叫 baseapp」**——采用 BW 原名，血缘零距离，五个临时名全部作废（33.2/33.3 已同步统一替换）。
+
+**baseapp 正式定义**：
+
+| 项 | 定义 |
+|---|---|
+| 名 | **baseapp**（BW 原名，多实例叫 baseapp_1..baseapp_N，不造 shard 等新词） |
+| 血统 | BW/KBE baseapp 直系继承；其四角色中连接①归 gateway、DB 直写③归 journal/DataProxy、cell 代理不需要——baseapp 保留角色②（玩家常驻数据 + 大厅业务） |
+| 职责 | 承载玩家常驻数据：登录 load 进内存、内存为准、journal 异步回写；大厅业务（签到/背包/邮件/商城/排队元数据）；P1/P2 兼连接层与跑局 |
+| 对象模型 | **玩家（Player）常驻 baseapp，登录创建、登出销毁**；**Avatar（化身）** = 玩家进局后在局内的实体（位置/血量/战斗组件），进局创建、出局销毁，挂 Player 下——工业共识名（avatar 本义即「化身」），与 B 档 base-cell-proxy-model 的 AvatarEntity 对应（三层 Session / PlayerAnchor / AvatarEntity 同构） |
+| 形态 | P1/P2：baseapp ×1；P3：**baseapp ×N 按账号分片**（与 Zone ×N 同构的多实例，无单点） |
+| 崩溃半径 | baseapp_i 崩 = 1/N 玩家数据暂不可用，journal 恢复；BW 用备份链互保，本项目用 journal 重放（33.4 HA 等价性开放项不变） |
+| 接口 | gateway 转发大厅流量 → baseapp；开局/结算时与 Zone 间 ownership handoff；P3 与 gateway、allocator 的关系随控制面批细化 |
+
+**教训登记（流程级）**：设计缺口的正确处置 = 立户进编队表 + 走设计流程（职责/血统/接口/形态）+ 用户审；**不是对话中临时造名冒充既有设计**。本节即该流程的执行。对话中宣布过而未落档的「定稿」一律以文档为准。
+
+### 33.6 概念总表（终稿）
+
+**缘起**：用户裁决「反复叫你把概念整理出来」「尽量用工业上已经形成共识的名字，不要再造名词」。本表一次收拢本报告全部概念，一词一位；此后文档与对话只用本表用词。
+
+**A. 玩家侧对象（四件，工业共识名）**
+
+| 定名 | 是什么 | BW/KBE 原词 | 仓库 B 档对应 | 状态 |
+|---|---|---|---|---|
+| Account（账号） | 注册账号，DB 一行，离线也在 | account | — | 通用词 |
+| Session（会话） | 在线状态：一条连接 + token | Proxy（会话锚半角色） | Proxy | 通用词 |
+| Player（玩家） | 常驻玩家对象：登录创建、登出销毁，住 baseapp，承载常驻数据 | BaseEntity | PlayerAnchor | 本批定名 |
+| Avatar（化身） | 玩家在局内的实体：位置/血量/战斗组件；进局创建、出局销毁，挂 Player 下 | cell entity | AvatarEntity | **用户裁决（2026-10-01）** |
+
+**B. 进程编队（工业共识名 / BW 原名，零新造）**
+
+| 定名 | 职责 | BW 原词 | 立户状态 |
+|---|---|---|---|
+| baseapp | 玩家常驻数据 + 大厅业务；P1/P2 兼连接与跑局；P3 ×N 按账号分片 | baseapp | **用户裁决立户（33.5）** |
+| Zone | 跑局的权威模拟进程；一 Zone 多局 | cellapp（实例制简化） | §31 已立 |
+| Gateway | 连接终结/验签/转发；P1/P2 兼于 baseapp，P3 独立 ×N | （BW 无；现代 edge 通用名） | §31 已立 |
+| login-app | 登录入口 | loginapp | §31 已立（存量） |
+| Manager | 准入/目录/落点/恢复（= baseappmgr + cellappmgr 合一） | baseappmgr / cellappmgr | §31 已立 |
+| Journal / DataProxy | 异步落盘（内存为准 → journal → DB） | dbmgr | §31 已立 |
+| Machine Agent（machined） | 机器守护 | machine | §31 已立 |
+| interfaces / verifier | 第三方入站 / 影子验证（旁挂可选） | servicemgr / — | §31 已立（gap #14/#17） |
+
+**C. 机制概念**
+
+| 定名 | 是什么 | 状态 |
+|---|---|---|
+| Instance（局） | 一局游戏 = Zone 进程内存里的对象；开局创建、打完销毁；**一局的数据绝不跨进程** | §31 已立（中文正名「局」） |
+| Ownership Transfer（移交） | 玩家数据权威在 baseapp ⇄ Zone 间交接；搬所有权不搬内存对象 | §31 已立 |
+| Journal（落盘日志） | 内存为准、意图追加日志、异步回写 DB | §31 已立 |
+| Sharding（分片） | baseapp ×N 按账号分摊，与 Zone ×N 同构，无单点 | 33.5 随批 |
+
+**D. 作废词清单（对话临时造名，即刻废止，文档与对话不再出现）**
+
+lobby、大厅进程、主进程、Global Server、Base Server、shard（作为进程名）、场景身体、玩家对象（→Player）——均由 baseapp / Player / Avatar 取代。造名过程与教训见 33.5。
+
+### 33.7 门禁
 
 纯文档批：本报告 §33 一节；零源码/CMake/CI/契约/golden 改动；三项受保护 untracked 未碰；单笔提交；push 前 fetch --rebase。素材全部引仓库内 B 档（kbe-source-analysis/base-cell-proxy-model/witness-ghost-design/36号决策 #9），四件无专节进程（loginapp/dbmgr/logger/bots/servicemgr）明确标注「仓库内无专节，BW 通用文献知识」不冒充实测。
 
