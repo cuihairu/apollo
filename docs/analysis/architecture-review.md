@@ -2409,6 +2409,125 @@ C-76 裁决对象仅 host-builder 一份（§20 审计基准文档）。starter-
 
 ---
 
+## 27. 第十八轮（2026-10-01）：设计缺口 #15「Bots/协议级压测客户端」复审批次——#16 一并核对（C-87、C-88、C-89）
+
+> 落位说明：任务书原文指定「docs/analysis/ioc-review.md」——按 2026-10-01 纠偏令（ioc-review.md 2026-09-29 废止，b9512337 已删原件、内容归位 architecture-review.md），视为笔误，本轮直接续写主报告 §27，ioc-review.md 未创建（仓库核实无此文件）。方法沿第十六/十七轮三类取证：负空间复测 / 先例引注复核 / 存量实读。基线 main @ 913c98af（B11 设计批 #13/#14 已落盘——本轮负空间复测在 B11 之后，含 login-flow.md / inbound-interfaces.md 两份新稿）。
+
+### 27.1 缺口原文与依赖就位声明
+
+- **#15**（gap-inventory :124-128）：模拟客户端协议层机器人进程（多客户端并发接入、移动/技能/登录脚本化）——capacity §5 三形态覆盖服务端机制面，无「真实四通道会话 + 握手 + 重连」端到端压力形态。落点选项 = capacity §5 增第四形态 or apps/bench 扩展；与 #13 登录链互为验收对象。
+- **#16**（gap-inventory :130-134）：地图资产从编辑器到运行时的管线——格式选型（地形/碰撞/导航网格/出生点/AOI 网格基准）、离线构建工具、运行时加载与 scene 配置映射（map_id→资源）、与 AOI 网格 + NavMesh + 副本实例的接线。todo 批次 5 一行 Recast/Detour 接入评估。
+- **依赖就位声明（本轮关键变化）**：#13 登录链路设计 B11 已落盘（login-flow.md 2026-10-01）——§26-④「握手依赖 #13」从「OPEN 依赖」升格为「已就位待消费」：bots 复刻客户端握手族（LoginHello 匿名 X25519 + LoginAuth + ClientHello{login_token} + resume 重连）全规格在档（login-flow §2/§3/§7-3），#15 设计批可直依。#16 无前置依赖（与 #15 互不咬合，并行可立）。
+
+### 27.2 负空间复测
+
+**#15**（design/ 全量，2026-10-01 B11 后复测）：
+
+| 词 | 命中 | 性质 |
+|---|---|---|
+| `bots\|Bots\|压测客户端\|协议级` | design/ 六处 | **全指派/验收行，零设计实体** |
+| `bots\|Bots` @ capacity-and-benchmark.md | 零命中（grep -c = 0） | §5 三形态表确无第四形态 |
+
+六处逐行归类：① session-and-online-directory.md:3（互引「Bots 压测 #15 为下游消费方」——B10 落盘前置声明）；② 同文件 :134（「#15 Bots 验收对象：顶号风暴/断线重连压测」——#12 §9 验收建议）；③ 同文件 :148（交集表「#13/#14/#15 前置」——指派行）；④ battle-verification-service.md:142（M4 采样降级「与 #15 bots 互为验收：bots 模拟作弊客户端」——B9 落盘指派）；⑤ **login-flow.md:155（B11 新增）**——P3 分期「#15 Bots 互为验收（bots 登录脚本化走本链路——§26-④ 握手依赖兑现）」；⑥ **inbound-interfaces.md:121（B11 新增）**——P3「#15 Bots 回调风暴压测」。后两处为 B11 落盘新引入，均验收咬合指派行，不构成设计实体。**判定**：#15 负空间维持成立——capacity 全文零命中、设计稿新增命中全为指派行。
+
+**#16**（design/ 全量，2026-10-01 复测）：
+
+| 词族（gap :133 原五词） | 命中 | 性质 |
+|---|---|---|
+| `navmesh\|NavMesh\|导航\|寻路\|地图` | 两档 | 与 gap 声明一致——非设计性命中 |
+| （词族外）`map_id` | session-and-online-directory.md:45 | B10 引入字段名（WorldAssignment 四件套），词族外非设计性 |
+
+两档逐行：① concept-glossary.md:27/:32（场景词条「地图、分区、副本皆是」/ 线词条「同一地图的并行场景实例」——口语词，非设计）；② xml-generation.md:35（KBEngine 产物列举「navmesh 二进制」——KBE 引擎产物清单，非 apollo 设计）。**B10 后新增 map_id 字段名（session :45）**——gap :133 原词族未含 `map_id`，故不算过时（词族窄）；注记为 #16 落盘时 map_id 已是 WorldAssignment 字段、设计批须以该字段为运行时加载映射的承载点。**判定**：#16 负空间维持成立——原五词两档命中不变，无新设计性命中。
+
+### 27.3 先例引注复核
+
+**#15**（四引注，本轮 sed 对行）：
+
+| 引注 | 行 | 复核 |
+|---|---|---|
+| deep-dive :101 | KBE SDK 模板与下发 `sdk_templates/{client,server}` + clientsdk_downloader | ✓ 全中（§4 :96-114 节内） |
+| deep-dive :102 | KBE 运维工具进程 `tools/{bots, guiconsole, interfaces, kbcmd, logger}` | ✓ 全中 |
+| deep-dive :259 | 配置参数默认值段 bots 段样例 `kbemain` | ✓ 全中（§12 :248-265 节内） |
+| 36 号 :70 | Bot 工具 `tools/bots`（§2.2 节内） | ✓ 全中 |
+| capacity §5 :91/:113 | apps/bench M2+ 准入基准 / P2 场景基准 v1 | ✓ 对行全中 |
+
+**增补先例（本轮新证）**：KBE `sdk_templates/server/python_assets/start_bots.{bat,sh}`（本轮 find 实读）——bots 一等工具进程的**模板启动件**佐证（BW `server/tools/bots` / KBE `tools/bots` 两家皆引擎一等工具进程，KBE 另有模板启动脚本）。先例加权倾向「独立进程落点」（#15 设计批输入①）。
+
+**#16**（三引注，本轮 KBE/BW 工作副本直接实读复核——gap :133 声明「本轮实读」即 2026-09-30 gap 落盘轮的实读，本轮重核）：
+
+| 引注 | gap :133 原文 | 本轮复核 | 判定 |
+|---|---|---|---|
+| BW `Space : GeometryMapper` | cellapp/space.hpp 本轮实读 | `programming/bigworld/server/cellapp/space.hpp:49 class Space : public TimerHandler, public GeometryMapper` + :69 `// ---- GeometryMapper ----` | ✓ 属实 |
+| BW「cellappmgr space 的 geomappingPath」 | cellappmgr/space.h 本轮实读 | **错仓**——geomappingPath 实为 **KBE** `kbe/src/server/cellappmgr/space.h:20 updateGeomappingPath / :25 geomappingPath_ / :31 cells()`；BW server 树（`programming/bigworld/server/`）模糊词 `geomapping` 全树零命中；kbengine 内嵌 `BigWorld-Engine-14.4.1/` 全树零命中；concept-glossary :27 KBE 列引注正确（gap #16 与 glossary 矛盾——glossary 对、gap 错） | **C-87** |
+| KBE navigation 三件 | `cellapp/navigation 三件（navigate_handler.*、loadnavmesh_threadtasks.*——navmesh 线程任务加载）` | **路径/件数不实**——实测平铺 `kbe/src/server/cellapp/` 四件（`navigate_handler.{h,cpp}` + `loadnavmesh_threadtasks.{h,cpp}`），无 `navigation/` 子目录 | **C-88** |
+| KBE sdk_templates spaces 占位 | `sdk_templates 占位 .gitignore 已核` | ✓ 属实——`kbe/res/sdk_templates/server/python_assets/res/spaces/.gitignore` 在位（简称路径 sdk_templates → 实际 server/python_assets/res/spaces） | 通过 |
+
+### 27.4 存量实读
+
+**#15**：
+
+- `ls apps/` = 五件（base-app / cell-app / game-server / gateway-app / login-app）+ CMakeLists.txt——**无 bench/bots**（§26 结论维持）；
+- 全仓 `find . -iname "*bot*"`（排 build）零命中——**bots 进程零实体**；
+- capacity §5 :91 `apps/bench`（M2+ 准入基准、运维工具）+ :113 P2 场景基准 v1——**apps/bench 规划在实体零建**维持。
+
+**#16**：
+
+- `docs/todo.md` 批次 5（:49-53）实测**三行**：
+
+| 行 | 原文 |
+|---|---|
+| :51 | `Recast/Detour 接入评估（NavMesh 构建、地形数据工具）` |
+| :52 | `A* / 路径平滑；服务端 NPC 自动移动（挂 Zone 主循环，docs/17）` |
+| :53 | `寻路请求走线程池旁路（不占 20Hz 全序主线程——决策 #8）` |
+
+gap :132 原文「todo.md 批次 5 只有一行『Recast/Detour 接入评估』，管线本体零设计」——**「只有一行」不实**（实测三行），但**实质判断维持**（三行均运行时寻路相关，无地图资产管线/格式选型/离线构建/加载映射）→ **C-89**；附带发现 :52 引**已删 docs/17**（glossary §3「已删文档 docs/00/05/17/25… 一律按 git 历史可溯」——todo.md 在本轮白名单外，勘误候选登记不执行）；
+
+- 仓内地图资产/管线存量：`find . -iname "*navmesh*" -o -iname "*recast*" -o -iname "*detour*"`（排 build）零命中——**地图资产消费面零建**（无运行时 navmesh 加载件、无离线烘焙工具、无 scene 配置映射件）；AOI 服务网格基准在 AOI 服务设计（concept-glossary §1.1「AOI 独立服务 网格+四叉树+shard」登记、apps/ 无 aoi-app 实体——§26 已裁同族）。
+
+### 27.5 缺陷登记（C-87 / C-88 / C-89）
+
+| 编号 | 缺陷 | 证据行 | 实测 | 实质判断 |
+|---|---|---|---|---|
+| **C-87** | gap #16 证据行 BW 侧引注**错仓** | gap-inventory :133「BW 先例：…+ cellappmgr space 的 geomappingPath(cellappmgr/space.h 本轮实读)」 | geomappingPath 实为 KBE（cellappmgr/space.h:20/:25/:31）；BW server 树 + 内嵌 14.4.1 全树 geomapping 零命中；同句 GeometryMapper 引注属实（space.hpp:49） | #16 判定维持（BW 有 chunk 体系先例、KBE 有 geomappingPath 语义——错仓不抹杀先例存在，但证据行须勘误） |
+| **C-88** | gap #16 KBE navigation 件**路径/件数不实** | gap-inventory :133「cellapp/navigation 三件（navigate_handler.*、loadnavmesh_threadtasks.*——navmesh 线程任务加载）」 | 实测平铺 `kbe/src/server/cellapp/` 四件（navigate_handler.{h,cpp} + loadnavmesh_threadtasks.{h,cpp}），无 `navigation/` 子目录 | #16 判定维持（KBE 确有 navmesh 线程任务加载件——路径与件数勘误） |
+| **C-89** | gap #16 证据行 todo 批次 5「只有一行」**表述不实** | gap-inventory :132「todo.md 批次 5 只有一行『Recast/Detour 接入评估』」 | 实测三行（:51 Recast/Detour 评估 / :52 A*+NPC 移动 / :53 寻路线程池旁路） | #16 判定维持（三行均运行时寻路、无管线本体——实质判断不变）；附带 :52 引已删 docs/17（todo.md 白名单外勘误候选） |
+
+C-87…C-89 建节前全仓 `grep -rn "C-87\|C-88\|C-89" docs/` 核实零占用（2026-10-01 本轮实测）。三项均属「证据行引注与实测不符」勘误族（同 C-85 先例），**实质判断全部维持 OPEN**。
+
+### 27.6 实读核对记录
+
+- **负空间**（design/ 全量，2026-10-01 B11 后复测）：#15 词族六处命中逐文件复看（§27.2 表——全指派/验收行，B11 新增两处 login-flow:155 / inbound-interfaces:121）；capacity 全文 `grep -c bots` = 0；#16 原五词两档命中维持 + map_id 词族外注记。
+- **先例引注**：#15 四引注 deep-dive :101/:102/:259 + 36 号 :70 + capacity :91/:113 对行全中 + 增补 KBE start_bots 模板启动件；#16 三引注 BW GeometryMapper（cellapp/space.hpp:49/:69 实读）✓ / geomappingPath 错仓（C-87）✗ / KBE navigation 路径件数不实（C-88）✗ / sdk_templates spaces 占位 ✓（`kbe/res/sdk_templates/server/python_assets/res/spaces/.gitignore` 实读）。
+- **存量**：`ls apps/` 五件（无 bench/bots）；全仓 `find *bot*`（排 build）零命中；capacity §5 :91/:113 对行；todo 批次 5 :49-53 三行（C-89）；仓内 `find *navmesh*/*recast*/*detour*` 零命中；KBE 工作副本 `/home/cui/workspaces/kbengine/`（含内嵌 `BigWorld-Engine-14.4.1/`）+ BW 工作副本 `/home/cui/workspaces/BigWorld/`（programming/bigworld/server/）本轮直接实读。
+- **编号与章节**：`grep -c "^## 27\."` = 0、`grep -rn "C-87\|C-88\|C-89" docs/` = 0（建节前核实未占用）；「## 附录 A」唯一（1）锚定插入点。
+- **基线**：`git log origin/main -1` = 913c98af（B11 落盘后）；工作树仅三项受保护 untracked——未碰。
+
+### 27.7 复审结论与设计批输入
+
+1. **#15 判定维持成立（OPEN）**：capacity 全文零命中复测成立 + §5 三形态确无端到端会话形态 + 存量零实体（apps/bench 规划在 P2、bots 进程不存在）；先例四引注全中 + 增补 start_bots 模板启动件（独立进程倾向加权）。
+2. **#16 判定维持成立（OPEN）**：原五词负空间两档命中不变 + 仓内地图资产消费面零建 + 先例 GeometryMapper 实读属实；C-87/C-88/C-89 三处证据行勘误**实质判断全部维持**（地图管线零设计、两家先例存在性不受错仓影响）。
+3. **依赖就位（关键变化）**：#15 握手依赖 #13 **已就位**——B11 login-flow.md 落盘，LoginHello 匿名握手族 + ClientHello{login_token} + resume 重连全规格在档（§2/§3/§7-3），bots 复刻客户端握手有规格可依；§26-④「B11 内 #13 设计先行、#15 验收形态后定」从「待定」升格为「规格就位、待 B12 裁落点」。#16 无前置依赖（与 #15 互不咬合，并行可立）。
+4. **#15 设计批输入（三问，§26 立、本轮更新）**：
+   - ① **落点二选**：capacity §5 增第四形态行 vs 独立 apps/bots——本轮增补先例（KBE start_bots 模板 + 两家皆 tools/bots 独立工具进程）**倾向独立进程加权**；最终裁决留 B12；
+   - ② **握手依赖**：**已就位**（B11 login-flow §2 LoginHello 握手族 + §3 token + §7-3 掉线重连时序——bots 复刻客户端规格全在档，§26-④ 兑现）；
+   - ③ **形态复用**：与 battle-verification M4 作弊客户端（伪造/延迟/残交，:142 登记）共用 bot 引擎——一套进程两用，B12 裁裁决面（M4 与 #15 谁先落、引擎抽象的归属进程）。
+5. **#16 设计批输入（六问，本轮新立）**：
+   - ① **格式与产物选型**：地形/碰撞/导航网格/出生点/AOI 网格基准——一源多投影（同一地图资产烘焙多产物，gap :134 已立「AOI 网格基准与 NavMesh 同源同批——同一份地图资产两个投影」）vs 分立格式；设计批落具体格式（二进制紧凑 vs 中间格式）；
+   - ② **离线构建工具归属**：独立 tools/（BW World Editor→chunk 先例、KBE assets 仓库离线烘焙）vs 生成器扩展（36 号 #4「生成器不进运行时」纪律边界——地图烘焙工具是否同纪律；倾向独立 tools/ 同 BW/KBE）；
+   - ③ **运行时加载与映射**：map_id → 资源目录映射（BW geomappingPath 语义作先例重读——C-87 勘误后的正确用法：KBE 侧 geomappingPath 即 map_id→目录映射的 KBE 实例）、加载时机（scene/副本创建时）、与 AOI 服务网格基准的接线；**消费方 = #12 WorldAssignment 的 map_id 字段**（session :45，本轮注记）；
+   - ④ **todo 批次 5 收口**：三行（Recast/Detour/A*/NPC 移动/线程池旁路）并入 #16 设计管辖还是保留批次行——倾向 #16 设计批统辖运行时寻路面、todo 批次 5 退为代码批次行；:52 引已删 docs/17 一并勘误；
+   - ⑤ **Recast/Detour 引入边界**：引库 vs 引设计（Aeron/sdshmem 同等处理先例——引设计不引代码；Recast/Detour 同源 C++ 原生无移植问题，但依赖收口 vcpkg 纪律同 §5.10 curl）；
+   - ⑥ **BW chunk 体系取舍**：World Editor 编辑器生态不采（apollo 无编辑器线），采「烘焙目录 + 运行时按需加载」形态——BW `Space : GeometryMapper`（cellapp/space.hpp:49 实读）+ KBE geomappingPath 两先例合并读作 apollo map_id→资源映射的设计源。
+6. **批次归属建议**：**B12 = #15+#16 同批**（终批——gap OPEN 仅余此二，B11 后 #13/#14 已 CLOSED）；#15 与 #13（已 CLOSED）+ battle-verification M4 双向验收在案（:142/:155），#16 与 todo 批次 5 + AOI 服务（§1.1 登记件）接线。落盘后回填 gap #15/#16 CLOSED、§5 批次表 B12 行、登记簿 B12 行；#15/#16 保持 OPEN 至 B12 落盘。
+7. **回填候选（只登记不执行）**：C-85/C-86（§26 沿）+ C-87/C-88/C-89（本轮新增）——随 gap-inventory 下一更新批勘误证据行；todo :52 引已删 docs/17（todo.md 本轮白名单外——登记不执行）；gap #15/#16 状态行维持 OPEN，本轮零回填动作。
+8. **本轮状态**：只写本报告 §27 一份文件（任务书指定的 ioc-review.md 按 2026-10-01 纠偏令视为笔误——**该文件未创建**，核实仓库无此文件）；零源码改动；三项受保护 untracked 未碰；不派子代理；缺陷登记 C-87/C-88/C-89（建节前全仓核实未占用）；单笔提交，push 前 fetch --rebase；无 tag/release/force push。
+
+---
+
+*评审基线（源码与文档）：main @ 913c98af（= origin/main，B11 设计批 #13/#14 落盘后基线）。design/ 全量负空间复测（B11 后含 login-flow.md/inbound-interfaces.md）、deep-dive :101/:102/:259、36 号 :70、capacity-and-benchmark §5 :91/:113、KBE 工作副本 `/home/cui/workspaces/kbengine/`（cellappmgr/space.h:20-31、cellapp/navigate_handler.{h,cpp}+loadnavmesh_threadtasks.{h,cpp}、sdk_templates/server/python_assets/res/spaces/.gitignore + start_bots.{bat,sh}、内嵌 BigWorld-Engine-14.4.1/）、BW 工作副本 `/home/cui/workspaces/BigWorld/programming/bigworld/server/`（cellapp/space.hpp:49/:69、cellappmgr/space.hpp geomappingPath 零命中）、apps/ 清点、todo.md 批次 5 :49-53、仓内 find *navmesh*/*recast*/*detour*/*bot* 零命中均为 2026-10-01 本轮实测。*
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
