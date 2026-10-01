@@ -100,7 +100,7 @@ Apollo 需要在现有 `Channel` 之上，补一层明确的实体远程调用�
 
 ### 3. 缺 schema 驱动的方法表
 
-Apollo 已经在 [EntitySchema 设计](./entity-schema-design.md) 里定义了 `MethodSchema` 方向，但还没有把它落成“可执行的远程调用表”。
+Apollo 已经在 原 EntitySchema 设计（已删，git 可溯） 里定义了 `MethodSchema` 方向，但还没有把它落成“可执行的远程调用表”。
 
 ## 四、推荐目标
 
@@ -400,10 +400,5 @@ Apollo 下一步如果要继续参考 KBE，不能只看进程划分，更要补
 只有这层立住，后面的 `PlayerAnchor`、`Distributed Space`、`Ghost/Witness` 才不会继续靠业务代码硬拼。
 
 ## 相关阅读
-
-- [EntitySchema 设计](./entity-schema-design.md)
 - [Base Cell Proxy 对象模型](./base-cell-proxy-model.md)
-- [玩家在线主链设计](./player-online-flow.md)
-- [Distributed Space 设计](./distributed-space-design.md)
 - [Witness 与 Ghost 设计](./witness-ghost-design.md)
-- [Authority Transfer 设计](./authority-transfer-design.md)

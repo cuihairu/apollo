@@ -41,11 +41,6 @@ tag:
 
 ## 推荐阅读
 
-- [玩家在线主链设计](./player-online-flow.md)
-- [World 进入与切图设计](./world-entry-transfer-design.md)
-- [Gateway 会话设计](./gateway-session-design.md)
-- [PlayerAnchor 设计稿](./player-anchor-design.md)
-- [BaseApp 演进设计](./base-app-evolution.md)
 
 ## 旧版长文
 

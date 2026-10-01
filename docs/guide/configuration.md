@@ -132,4 +132,4 @@ if (!config.validate()) {
 
 ## 下一步
 
-查看 [架构文档](/architecture/overview) 了解更多。
+查看 [架构审计与现状](/analysis/architecture-review) 了解更多。

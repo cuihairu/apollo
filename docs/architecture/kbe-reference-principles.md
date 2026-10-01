@@ -456,7 +456,5 @@ Apollo 的正确路线不是否定 KBE，也不是神化 KBE。
 
 ## 相关阅读
 
-- [Apollo 分层设计](./apollo-layering-design.md)
 - [Base Cell Proxy 对象模型](./base-cell-proxy-model.md)
-- [统一脚本层设计](./script-layer-design.md)
 - [KBEngine 源码分析](./kbe-source-analysis.md)

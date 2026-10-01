@@ -155,7 +155,7 @@ battle-determinism §2 四约束（判定域唯一/浮点纪律/迭代序/随机
 | sdk-contract | §11 internal 域 id 900+ 三消息族（M0）；client 域零新增域（终局申报走既有 events 通道一条消息） |
 | concept-glossary | 「战斗验证服务」词条（本稿为其展开件）；命名纪律 §0 裁决 1-②（battle 词专属）与裁决 1-①（副本 instance 定名）双执行 |
 | capacity-and-benchmark | §5 复算吞吐/降级序并入；DRIFT 率/MISMATCH 率/门超时率进指标集（M4 落参数） |
-| architecture/combat-runtime-and-ecs-boundary-design.md | C 档参考件——其战斗运行时边界的历史讨论由本稿 + battle-determinism 承接（architecture/README C 档行指针） |
+| ~~architecture/combat-runtime-and-ecs-boundary-design.md~~ | 原 C 档参考件，**2026-10-01 已随过期设计清理删除（git 可溯）**——其战斗运行时边界的历史讨论由本稿 + battle-determinism 承接 |
 
 ---
 

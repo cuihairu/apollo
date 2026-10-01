@@ -372,5 +372,3 @@ Apollo 如果要真正落到“可装配框架”，`HostBuilder + 轻量 DI` �
 ## 相关阅读
 
 - [Starter 与模块装配设计](./starter-and-module-assembly-design.md)
-- [Module Manifest 与 Registry 设计](./module-manifest-and-registry-design.md)
-- [App Bootstrap 生命周期设计](./app-bootstrap-lifecycle-design.md)

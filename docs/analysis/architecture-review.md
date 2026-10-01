@@ -2640,6 +2640,32 @@ C-87…C-89 建节前全仓 `grep -rn "C-87\|C-88\|C-89" docs/` 核实零占用�
 
 ---
 
+## 29. 第廿轮（2026-10-01）：过期设计文档清理批（C/D 档 57 份 git rm）
+
+### 29.0 任务与裁决
+
+用户指令「把过期的设计清理」——即 docs/architecture/README.md（2026-09-30 状态表）:49 悬置裁决的执行：「删除候选（建议优先级：D 档 roadmap 族 → C 档装配族）待用户裁决后 git rm」。判定框架沿用该状态表四档，本轮清 C+D 两档**全量**（不按优先级分批——用户指令未限定批次）。
+
+### 29.1 执行面
+
+- **删除 57 份**（git rm，git 可溯）：C 档 35 份（已被 docs/design/ 取代的历史设计稿——entity-schema/replication-pipeline/script-layer/lua-backend/python-backend/gateway 三件/player-anchor 族/world-host/base-app-evolution/distributed-space 族四件/shard-zone/world-entry-transfer/domain-event/internal-service-client/entity-lifecycle/interest-management/navigation-movement/combat-runtime/persistence 两件/reliability-failover/runtime-ops-host/platform-foundation/configuration-and-profile/capability-and-feature-flag/module-manifest/module-reorganization/app-bootstrap-lifecycle/testing-and-verification/world-tick-scheduling）+ D 档 22 份（历史任务清单/路线图——apollo-* 七件/process-* 两件/technology-convergence 两件/distributed-world 两件/mmo-* 四件/standard-mmo/player-online-flow/topology-comparison/lightweight-mmo-and-tower-defense-fit/overview）。
+- **保留 13 份**：A 档 4 份（remote-entity-call / observability-watcher / host-builder-and-di / starter-and-module-assembly——仍被权威稿实引）+ B 档 9 件（bigworld / bigworld-lifecycle / kbe-source-analysis / kbe-reference-principles / kbengine-entitydef-analysis / base-cell-proxy-model / witness-ghost-design / aoi / aoi-broadcast——先例证据库）+ mmo-frameworks/ 子目录 25 份 + README.md。目录 70 份 → 13 份。
+- **特别判定**：状态表 C 档原注「未取代——#13/#14 域」的三份（gateway-session / gateway-ingress-facade / login-app-design）——B11 两份权威稿（login-flow.md / inbound-interfaces.md，2026-10-01 落盘）已构成取代关系，且其存量取证均来自源码实读而非这三份旧稿，本轮并入删除（判定依据更新，状态表原行未及回填——本轮 README 重写已收口）。
+
+### 29.2 引用面核查与处置（两轮核查）
+
+- **第一轮（.md/.cpp/.h/.lua 全域 grep）**：57 个文件名对 docs + README + todo + apps/modules/sdks/scripts/examples 全扫——真实引用六处：qa 五处（q1/q2/q6/q7/q9）为外链 URL 词面误命中（kbelab/gitbooks「overview」），零处置；活链接四处已改——guide/index.md:23-24（「架构文档」→ /analysis/architecture-review、「架构适配判断」→ /30-Compact_GameServer_Design——状态表 D 档注明的现行定位载体）、guide/configuration.md:135 与 guide/quick-start.md:138（同改 architecture-review）、apps/index.md:44-45（两行 MMO 拓扑死链，删行）。
+- **第二轮（.md grep 盲区补查——vitepress 配置与存活件内部）**：① docs/.vitepress/config.mts sidebar 硬编码被删件 **26 行** + nav 两行——architectureSidebar 五组重写为 A/B 档两组（Compact 定位行保留指 /30），nav「架构判断」删行、「架构」改指 /analysis/architecture-review（ignoreDeadLinks: true 使构建不炸但导航 404，故必清）；② 存活件文末「相关文档/相关阅读」死链 **29 处**（9 件：bigworld / bigworld-lifecycle / base-cell-proxy-model / witness-ghost / starter-and-module-assembly / observability-watcher / remote-entity-call / host-builder-and-di / kbe-reference-principles）——纯列表行 28 处删行、remote-entity-call-design.md:103 正文句内引用改纯文本注记「（已删，git 可溯）」。
+- **历史指针按 git 可溯纪律不动两处**：本报告 :1800（app-bootstrap-lifecycle-design 域引注——历史审计记录）；battle-verification-service.md §8 表 :158 改「已删 git 可溯」注记（现行权威稿活表）。
+- **登记载体**：docs/architecture/README.md 重写——A/B 档保留 + 2026-10-01 删除记录行（逐份「被谁取代」对照表指针 → git 历史中本文件 2026-09-30 版本）。
+- **终检**：全仓对 57 文件名的 `](./…)` 相对链接扫描零残留（存活件互链全部指向实存文件）。
+
+### 29.3 门禁与零登记
+
+纯 docs/ 操作（57 份 git rm + config.mts 导航清理 + 存活件死链清理 + 五处活链接改指 + README 重写）——**零源码/CMake/CI/契约/golden 改动**；三项受保护 untracked 未碰；无新 C 号（清理执行批，无缺陷发现；判定依据更新见 §29.1 特别判定，非登记对象）；单笔提交；push 前 fetch --rebase。
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。

@@ -41,6 +41,4 @@ Apollo 项目提供了一系列可装配的服务器应用程序，用于实现�
 - [BigWorld 服务器应用实现](BigWorld服务器应用实现.md) - 完整的实现细节和使用指南
 - [BigWorld 架构深度解析](/architecture/bigworld) - 架构设计概述
 - [BigWorld 进程架构与玩家生命周期](/architecture/bigworld-lifecycle) - 进程职责与生命周期
-- [MMO Topology 范围与组合设计](/architecture/mmo-topology-scope-and-composition-design) - 两种 MMO 主拓扑
-- [Distributed World Topology 实施设计](/architecture/distributed-world-topology-implementation-plan) - 分布式世界实施桥接
 - [AOI 九宫格系统详解](/architecture/aoi) - AOI 系统详解

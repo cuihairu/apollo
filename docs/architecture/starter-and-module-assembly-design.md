@@ -447,6 +447,3 @@ Apollo 如果继续往整体框架推进，最合理的装配路线就是：
 
 ## 相关阅读
 
-- [Apollo 分层设计](./apollo-layering-design.md)
-- [Apollo 渐进式游戏框架理论设计](./apollo-progressive-game-framework.md)
-- [统一脚本层设计](./script-layer-design.md)

@@ -412,8 +412,4 @@ Apollo 如果要真正进入 BigWorld 模式，`Witness` 和 `Ghost` 一定要�
 
 ## 相关阅读
 
-- [进程语义重定义](./process-semantics-redefinition.md)
-- [Distributed Space 设计](./distributed-space-design.md)
-- [AppMgr 设计](./app-manager-design.md)
-- [World 进入与切图设计](./world-entry-transfer-design.md)
 - [KBEngine 源码分析](./kbe-source-analysis.md)

@@ -20,7 +20,7 @@ Apollo 是一个面向轻量 MMO、塔防/固定地图玩法的 C++20 在线游�
 
 如果你已经熟悉 Apollo，可以直接查看：
 
-- [架构文档](/architecture/overview) - 深入了解架构设计
-- [架构适配判断](/architecture/lightweight-mmo-and-tower-defense-fit) - 判断轻量 MMO 或塔防项目该选哪种 Profile
+- [架构审计与现状](/analysis/architecture-review) - 深入了解架构设计与审计结论
+- [Compact 形态定位](/30-Compact_GameServer_Design) - 轻量 MMO 或塔防项目的形态与选型
 - [模块文档](/modules/) - 各模块详细说明
 - [API 参考](/api/) - 接口与类说明

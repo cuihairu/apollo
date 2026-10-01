@@ -374,9 +374,4 @@ Apollo 如果要真正吸收 KBE 的对象模型，最关键的一点不是名�
 
 ## 相关阅读
 
-- [进程语义重定义](./process-semantics-redefinition.md)
-- [PlayerAnchor 设计稿](./player-anchor-design.md)
-- [持久化进程与 DBMgr 设计](./persistence-process-and-db-manager-design.md)
-- [World 进入与切图设计](./world-entry-transfer-design.md)
 - [Witness 与 Ghost 设计](./witness-ghost-design.md)
-- [Authority Transfer 设计](./authority-transfer-design.md)

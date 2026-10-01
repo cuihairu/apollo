@@ -34,11 +34,7 @@ Apollo 已有 BigWorld 兼容层实现，见：
 ## 推荐阅读
 
 - [BigWorld 进程架构与玩家生命周期](./bigworld-lifecycle.md)
-- [玩家在线主链设计](./player-online-flow.md)
-- [World 进入与切图设计](./world-entry-transfer-design.md)
-- [Shard、Zone、Instance 与 Match Topology 设计](./shard-zone-instance-match-topology-design.md)
 - [Witness 与 Ghost 设计](./witness-ghost-design.md)
-- [AppMgr 设计](./app-manager-design.md)
 
 ## 旧版长文
 

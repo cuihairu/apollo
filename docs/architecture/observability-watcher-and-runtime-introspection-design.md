@@ -405,6 +405,3 @@ Apollo 的运行观测层不能只靠日志和指标拼起来。
 
 ## 相关阅读
 
-- [Runtime Ops Host 设计](./runtime-ops-host-design.md)
-- [Testing 与 Verification 策略](./testing-and-verification-strategy.md)
-- [App Bootstrap 生命周期设计](./app-bootstrap-lifecycle-design.md)
