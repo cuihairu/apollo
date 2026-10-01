@@ -434,6 +434,8 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 | xml-generation.md | 帧头 ver → filter 栈声明（16.7.1）由契约生成器装配（用途④）；messages.xml 的通道 enumeration 由其四层漏斗第①层校验 |
 | logging.md | collector push = §5.7 InterServerLink 的上层消费者（进程间稳定连接，独立于客户端会话四通道）；Link 有界排队与「collector 挂 → 只写本地」降级语义同源（BW LoggerEndpoint 有界重连 + 有界缓冲先例） |
 | session-and-online-directory.md | §7 共享模型四类通道表「会话」行与「全局仲裁态」行的落地件——在线目录 = manager 域集中权威 + InterServerLink 事件投影（RouteResolver 镜像供数）；§3 resume TTL = 掉线保活窗口同源值；§5.7 authority_epoch = 顶号竞争裁决兜底（anchor_epoch）；§5.9 login_token = 目录登记的入场前置 |
+| login-flow.md | §5.9 login_token 归属行（:313）与握手族的全链兑现——两阶段连接（登录连接匿名握手 info="apollo-login-v1" 域分离 + 游戏连接 ClientHello 带 token）；§5.9 :317 密钥三层的凭证面补全（三凭证辨析 concept-glossary §2.5）；§5.7 Admission RPC = RequestReply 低频控制面实例；§7 闸门/最轻分配/顶号预裁 = 登录准入处理序 |
+| inbound-interfaces.md | §5.10 出站三裁决的**镜像面**（curl 出站复用/渠道域进出站白名单/Drogon 删除裁决维持不复议）；§5.7 InterServerLink = 回调第二段投递通道（OneWay + per-Link 背压 + 具名端点）；§7 G-1 编队声明 interfaces 组件——独立进程承载入站 HTTP（缺口 #14，2026-10-01 落盘） |
 
 ---
 

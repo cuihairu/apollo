@@ -109,17 +109,17 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据(负空间+先例,2026-09-30 实测)**:design/ 九份 grep「顶号|重复登录|在线状态|online」零命中;KBE 侧引擎无在线目录(在线 = baseapp 实体在内存,分配归 baseappmgr;重复登录裁决在 assets 脚本层——assets 仓库本机无,sdk_templates spaces 目录仅 .gitignore 占位已核);BW 侧在线目录分散在 mgr(baseappmgr 持 base 分配表 + (addr,load) 上报 loginapp 分流,baseappmgr.cpp:588-599/:1117);apollo 已有机制件但无目录:manager 域最轻分配(net-abstraction §7)、sceneId 隔离(attribute-sync §4.3)、ServerID 分段(36号 #15)。
 - **落点(2026-09-30 落盘)**:docs/design/session-and-online-directory.md——**manager 域进程内存权威**(不进 Redis 不落 DB 无 journal——「全局仲裁态集中不共享」落地件;顶号/准入单点串行);条目 = SessionBinding+WorldAssignment 的进程间扩展(account/entity/session/gateway/zone/world_assignment/state/anchor_epoch/deadline_tick——存量 modules/game/session 302 行定位为进程内锚点/上报源,唯一消费方 base-app);写路径 = 三事件源(Zone 增删/gateway 生死/manager 裁决)+ 周期对账快照重置;**顶号 = 新顶旧框架语义**(anchor_epoch 锚竞争裁决,resume=同会话恢复两事分开——KBE 脚本层自决的刻意加强);**掉线窗口与 resume token TTL 同源一值**(Suspended 态,计时依赖定时器轮组件 §23-④/C-80 同批);查询三消费方(RouteResolver 镜像+分段先验+epoch 兜底/GM 走 manager 集中/广播走镜像);崩溃恢复 = 全量重报重建(目录是索引非权威数据持有者);消息 = internal 域事件族(client 域零新增);P2 退化 = 进程内表,验收三指标(顶号并发零双权威/manager kill -9 收敛 <5s/镜像失配率);配套 glossary 四词条(线/在线目录/顶号/掉线保活窗口)。
 
-### #13 登录链路整体设计 — **OPEN**(2026-09-30 增补)
+### #13 登录链路整体设计 — **CLOSED**(docs/design/login-flow.md,2026-10-01 落盘)
 
 - **缺什么**:login-app 职责全链——账号鉴权、login_token 签发/校验/TTL/一次性(net-abstraction §5.9 只有一行)、选服/排队/准入(BW LoginConditions 先例已引但无登录链设计)、客户端 SDK 下发时机(KBE clientsdk_downloader 先例)、断线重连/顶号的会话裁决衔接(#12)。
-- **证据**:design/ 中 login 相关仅三处一句带过(§5.9 login_token、sdk-contract schema_hash 握手、§5.7 epoch);KBE loginapp + clientsdk_downloader.{h,cpp}(deep-dive §4 已核);BW loginapp 指派 baseapp(36号 §2.1)。
-- **落点**:P2-P3 设计批,依赖 #12(目录)与 G-1;拓扑入口 = gateway-app(sdk-contract §10.6 网关透传)。
+- **证据**:design/ 中 login 相关仅三处一句带过(§5.9 login_token、sdk-contract schema_hash 握手、§5.7 epoch);KBE loginapp + clientsdk_downloader.{h,cpp}(deep-dive §4 已核);BW loginapp 指派 baseapp(36号 §2.1);存量 884 行烟囱四点错位(architecture-review §25 实读)。
+- **落点(2026-10-01 落盘)**:docs/design/login-flow.md——**两阶段连接**(登录连接 client↔login-app 独立进程短连接,LoginHello 匿名 X25519 握手 info="apollo-login-v1" 域分离、凭据 AEAD 内传;游戏连接 client↔gateway ClientHello 带 token——「拓扑入口 = gateway」指游戏会话面);**token = HMAC-SHA256 自包含**(payload 含 nonce/purpose,TTL 60s 建议;gateway 本地验签不触账号库;一次性核销 = manager 准入临界区 pending nonce 表,SessionUp 核销——与 #12 登记锚点同临界区零新增状态面);**鉴权归 login-app/准入选服顶号归 manager 单点**(AdmissionRequest RequestReply 四连:闸门→顶号预裁→最轻落点→pending);**账号域 = DB accounts+third_party_bindings**(批次 2 语句集,PBKDF2-HMAC-SHA256 OpenSSL 单源,P1 内存降级);排队 P3 组件 P1-P2 拒绝码;**SDK 下发 = 指针制**(client_hash+bundle_url,CI contract_pack 产物,不做文件服务);消息 = client 域登录四消息 + internal 域 Admission 族;存量迁移表 + P1-P3 分期(#15 Bots 互为验收)。
 
-### #14 入站第三方对接面(interfaces 域) — **OPEN**(2026-09-30 增补)
+### #14 入站第三方对接面(interfaces 域) — **CLOSED**(docs/design/inbound-interfaces.md,2026-10-01 落盘)
 
 - **缺什么**:第三方账号绑定/充值回调/运营后台的**入站** HTTP 面——#11 只裁了出站;入站归哪个进程承载(gateway-app / 独立 admin-app)、鉴权、回调与游戏内实体投递的接线(异步、不进场景线程)。
-- **证据**:design/ grep「充值|回调入站|interfaces」零命中(2026-09-30);KBE interfaces 独立进程(kbe/src/server/tools/interfaces,deep-dive §4 目录清点);BW 由 db 层 billing 承接(lib/db_storage_mysql/mysql_billing_system.cpp,36号 问11 A 级)。
-- **落点**:随 #13 同批(§5.10 出站三裁决的镜像面;目标白名单/鉴权同纪律)。
+- **证据**:design/ grep「充值|回调入站|interfaces」零命中(2026-09-30 复测 2026-10-01);KBE interfaces 独立进程(kbe/src/server/tools/interfaces,deep-dive §4 目录清点);BW 由 db 层 billing 承接(lib/db_storage_mysql/mysql_billing_system.cpp,36号 问11 A 级);存量 http.cpp:444 HttpServer 零生产消费方(architecture-review §26 实读)。
+- **落点(2026-10-01 落盘)**:docs/design/inbound-interfaces.md——**承载 = 独立 interfaces 进程**(三候选对比:拒 gateway 故障域/拒 manager 仲裁面,KBE 同型;P1-P2 单进程内嵌降级);实现件 = http.cpp:444 存量升格候选(**§4.2 审计门前置**,Drogon 不复议);**鉴权 = HMAC-SHA256 签名主 + IP 白名单辅,mTLS 不进路线图**(密钥表配置态 env 注入,logging §5.2 同纪律);**投递两段式**(先持久后处理——ledger 原文+业务表事务写;在线查 #12 目录定 Zone + internal 域 CallbackDelivered + tick 边界消费,离线登录时读库);**幂等键 = 渠道订单号**(DB 唯一约束+内存 LRU 双层;至少一次+幂等收敛,不承诺恰好一次);**账号绑定 = third_party_bindings 同表**(与 #13 同域,绑定五步时序);**入站限定三类白名单**(渠道回调/healthz/预留运维触发;后台 UI/报表/GM 明确不入,Lua 零 HTTP 入站能力);限流 per-route+全局+有界队列。
 
 ### #15 Bots/协议级压测客户端 — **OPEN**(2026-09-30 增补)
 
@@ -176,7 +176,8 @@ BI 相关的**服务器侧出口已覆盖**:attribute-sync §8.2 属性变更事
 | B8 | 36 号/deep-dive 历史表述修正 + Lua 版本策略再修订 + 裁决落档 | —(登记簿待办收尾,非缺口) | 登记簿 #15/#17 行、sol2 决策尾注与用户裁决项的收尾;**已完成**(2026-09-30——36 号 #12/#15/#17/#19/:166/:167/:243/:267 + deep-dive §12 标题;Lua 5.5.1 → 5.5 主线随 vcpkg(当前 5.5.x);origin 五笔/backup-apollo-src 裁决入 architecture-review 附录 A) |
 | B9 | 新建 battle-verification-service.md | #17 | 用户点名「战斗验证服务怎么设计」(glossary 词条展开);**已完成**(2026-09-30 立项即落盘,glossary 词条同步改「设计已立」) |
 | B10 | 新建 session-and-online-directory.md | #12 | 巡检令「todo 下一个高优先级设计批次」——#12 为 #13/#14/#15 依赖根;**已完成**(2026-09-30 落盘,glossary 四词条/net-abstraction §7§8/index/architecture-README 登记簿同步) |
-| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED;#17 同日 B9、#12 同日 B10 CLOSED——OPEN 仅余 #13-#16** |
+| B11 | 新建 login-flow.md + inbound-interfaces.md | #13/#14 | architecture-review §25/§26 复审批定档的 B11 设计批(#13+#14 同批、#15 互为验收;设计批输入 = §25 六问 + §26 五问);**已完成**(2026-10-01 落盘,glossary 两词条+§2.5 三凭证辨析/net-abstraction §8 交集两行/登记簿同步;#15/#16 保持 OPEN 不强关) |
+| 收尾 | 各批落盘后回填本表状态列;登记簿同步 | — | 滚动;**B2-B7 全批完成(2026-09-30),#1-#11 全部 CLOSED;#17 同日 B9、#12 同日 B10、#13/#14 同日 B11 CLOSED——OPEN 仅余 #15-#16** |
 
 每批独立提交(analysis/design 拆分照旧),完成即 fetch --rebase + push(推送纪律)。
 

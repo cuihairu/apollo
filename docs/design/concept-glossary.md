@@ -42,6 +42,8 @@
 | **恢复相位**（recovery） | 拓扑剧变期间的**排他窗口**：拒绝新请求直至收敛，防恢复中拓扑再变 | BW = cellappmgr `startRecovery()`（cellappmgr.cpp:281/:1411）+ 恢复期 `Denying…` 拒新（:1300）；KBE/skynet 无此层 | **manager 域排他恢复相位**：machined 死亡事件 → 拒新场景/新进程 → base 死走 reviver、cell 死在幸存进程重建（net-abstraction §7） |
 | **负载与准入**（load balancing / admission） | 落点选择（挑最轻）+ 过载保护（拒登/排队），一份指标两用 | BW = `minAppLoad()` 最轻分配（baseappmgr.cpp:588-599）+ LoginConditions 过载准入（:947-954）+ cell 再平衡族（cellappmgr.hpp:305/:307）；skynet = MQ 溢出告警（skynet_mq.c:19 MQ_OVERLOAD 1024） | **manager 域**：指标同源 G-5（观测与调度同一份数据）、新负载往轻处走 + 准入闸门；自动 cell 迁移推迟 M2+（net-abstraction §7） |
 | **在线目录**（online directory） | 谁在线、在哪条线/哪个进程的全局登记与查询——跨进程寻址与顶号裁决的数据底座 | BW = 分散在 mgr（baseappmgr 持 base 分配表 + (addr, load) 上报 loginapp 分流——baseappmgr.cpp:588-599/:1117）；KBE = **无**（在线 = baseapp 实体在内存，重复登录裁决在脚本层）；微服务业界 = 注册中心里的会话表（apollo 不引，见 §2.3） | **manager 域集中权威 + 事件投影镜像**（session-and-online-directory，2026-09-30 落盘）：进程内存权威态（不进 Redis 不落 DB 无 journal）、事件上报 + 周期对账、查询走镜像（RouteResolver/GM/广播三消费方）；「全局仲裁态集中不共享」通道族（net-abstraction §7）的落地件 |
+| **登录链**（login flow） | 从客户端启动到进入世界的完整链路：账号鉴权 → 选服/准入 → 入场凭证签发 → 游戏连接建立——流程横跨多进程，凭证与裁决点是设计核心 | BW = loginapp 独立进程（鉴权 + mgr 指派 baseapp，36号 §2.1）；KBE = loginapp 独立进程 + clientsdk_downloader SDK 下发（deep-dive §4）；skynet 无内建（业务自写） | **两阶段连接**（login-flow，2026-10-01 落盘，缺口 #13 CLOSED）：登录连接 client↔login-app 短连接（匿名握手 + AEAD 传凭据）；游戏连接 client↔gateway（ClientHello 带 login_token）——「拓扑入口 = gateway」指游戏会话面；token = HMAC-SHA256 自包含 + **manager 准入临界区一次性核销**（准入/选服/顶号预裁归 manager 单点）；鉴权/账号域归 login-app；三凭证辨析见 §2.5 |
+| **入站对接**（interfaces） | 外部第三方**主动进来**的 HTTP 面：渠道支付回调、账号绑定回调——承载进程、验签、幂等、向游戏内投递的接线（与出站 HTTP 是同渠道两方向） | KBE = `tools/server/interfaces` 独立进程（HTTP 收回调 → 查询/投递内部，deep-dive §4）；BW = 无独立对接进程（billing 记录直进 db 层 mysql_billing_system，36号 问11）；skynet 无 | **独立 interfaces 进程**（inbound-interfaces，2026-10-01 落盘，缺口 #14 CLOSED）：薄监听层（无模板/会话/静态文件——Drogon 裁决维持不复议）；鉴权 = HMAC 签名主 + IP 白名单辅（mTLS 不进路线图）；投递两段式（先持久后处理 + 查在线目录定 Zone，tick 边界消费）；幂等键 = 渠道订单号；入站限定三类白名单（回调/健康检查/预留运维——后台 UI/报表/GM 不入此面） |
 
 ### 1.3 实体与同步
 
@@ -94,6 +96,16 @@ ghost 服务于**无缝世界**：邻进程双向投影、双写、调用转发�
 ### 2.4 心跳的两个层次
 
 连接心跳（字节层：RTO/超时 → 断连重连 resume）与逻辑心跳（tick 层：版本号不变 = 卡死）不可混用——前者由传输/会话层处置（可杀连接），后者只报警不杀（skynet monitor 同型）。apollo 两层各有归属（§1.4 末行），检测与恢复也是两件事：G-5 只出信号，处置归 manager 恢复相位。
+
+### 2.5 login_token vs session_key vs resume token——三层凭证各管一段（2026-10-01，随 login-flow 落盘）
+
+| 凭证 | 域 | 管什么 | 签发/协商方 | 寿命 |
+|---|---|---|---|---|
+| **login_token** | 账号域 | 一次性**入场券**：证明「鉴权已过、准入已批」——gateway 本地验签、manager 临界区核销 | login-app 签发（HMAC-SHA256 自包含） | 短 TTL（60s 建议）+ 一次性（nonce 核销） |
+| **session_key** | 连接域 | **帧加密密钥**：ClientHello/ServerHello 握手协商出，喂给 CryptoFilter 加密全帧 | 每连接双方协商（X25519+HKDF，net-abstraction §5.9） | 每连接新——resume 重连也重走 ECDH，**不恢复旧密钥** |
+| **resume token** | 会话域 | **断线恢复凭证**：证明「我是刚才那条会话」——重连时恢复 L2 seq/队列状态 | 游戏连接建立时服务端发（L2） | TTL 与掉线保活窗口**同源一个值**（session-and-online-directory §4） |
+
+三层互不通用、互不派生（密钥层次 net-abstraction §5.9 :317 的凭证面）：偷到 resume token 的人造不出 session_key（要重走握手），持旧 session_key 重连不被接受（nonce 新鲜性），login_token 用第二次即拒（nonce 已核销）——每层的失守都封死在层内。
 
 ---
 
