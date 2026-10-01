@@ -2324,6 +2324,90 @@ C-76 裁决对象仅 host-builder 一份（§20 审计基准文档）。starter-
 
 ---
 
+## 26. 第十七轮（2026-10-01）：设计缺口 #14「入站第三方对接面」复审批次——#13 同批项与 #15 互为验收对象一并核对（C-85、C-86）
+
+> **落位说明**：本轮派发任务书指定写入 `ioc-review.md` 追加「第二轮」——按 2026-10-01 用户纠偏令（该文件名已于 2026-09-29 废止，前轮 57c508ca 已由 b9512337 归位本报告 §25 并删除原件），任务书文件名视为笔误，本轮直接续写主报告 §26（章节号顺延 §26 起）；`ioc-review.md` 不再创建。轮次序 = 第十七轮（§25 第十六轮之后）。
+
+### 26.1 范围与方法
+
+- **复审对象**：design-gap-inventory **#14**（:118-122，OPEN，2026-09-30 增补）为主，**#15**（:124-128，OPEN）一并核对（任务书：#14 为 #13 同批项、#15 与 #13 互为验收对象）——三行（缺什么/证据/落点）现状复核。**不写设计稿本身**（设计批是后续批次，本轮只出复审结论与设计批输入）。
+- **方法**沿第一轮（§25.1）三类取证，全部只读实测：① 缺口证据负空间复测（design/ 全量 grep）；② 先例引注复核（deep-dive / 36 号逐条对行）；③ 存量实读（apps/ 清点、modules/net/http 入站面、capacity/bench 面）。
+- **门禁**：只写本报告这一份文件；零源码改动；gap-inventory / 其他设计文档不改，回填候选只登记不执行；不派子代理；三项受保护 untracked（BIGWORLD_AUDIT.md / Testing/ / ipc_audit_results.md）不碰；单笔提交，push 前 fetch --rebase，无 tag/release/force push。
+
+### 26.2 #14 逐件核对表
+
+| # | 复审件 | gap #14 登记内容 | 2026-10-01 实测 | 结论 |
+|---|---|---|---|---|
+| 1 | 负空间三词 | 「design/ grep『充值\|回调入站\|interfaces』零命中（2026-09-30）」 | 三词复测**仍零命中**；「入站」新增两处**指派行**（session-and-online-directory :3 头注/:148 交集行——#12 落盘声明「#13/#14/#15 的前置」，非设计）；「第三方/支付/回调」命中全在出站或无关语境：net §5.10 :335「第三方登录验证/支付回调/推送」= **出站**需求列举、§5.9 :300「防网络第三方」威胁模型、第三方库语境（logging :14 / scripting-lua :39）——**入站面本体仍零设计** | 证据**仍成立** |
+| 2 | KBE interfaces 先例 | 「kbe/src/server/tools/interfaces（deep-dive §4 目录清点）」 | deep-dive :101（§4 节内 :96-114）：「KBE 运维工具进程：`kbe/src/server/tools/{bots, guiconsole, interfaces, kbcmd, logger}`」——一行同证 #14/#15 两缺口 | **成立** |
+| 3 | BW billing 先例 | 「BW 由 db 层 billing 承接（lib/db_storage_mysql/mysql_billing_system.cpp，36 号 问11 A 级）」 | 36 号 :262 问 11「数据库支持矩阵」:266 BW 行：`mysql_database_creation.cpp、mysql_billing_system.cpp`（全部 A 级实证）——BW 无独立入站进程、计费由 db 存储层承接 | **成立** |
+| 4 | 「#11 只裁了出站」 | gap :120 | net §5.10 全读（:333-343）：三裁决（curl 进 vcpkg / Drogon 分支删除 / 异步交接）+ :343 边界「出站方向与客户端四通道相反…目标白名单」——**无一处入站**；Drogon 删除（:340）亦出站双形态语境 | **成立**（入站确无裁决） |
+| 5 | 落点「随 #13 同批」 | gap :122 | §25（第一轮）结论 B11 = #13+#14 同批，一致；#12 :148「#13/#14/#15 的前置（登录链路/入站/Bots 均消费目录）」——依赖 #12 已 CLOSED 就位 | **成立**，批次可排 |
+| 6 | 缺口状态 | OPEN | 负空间成立 + 先例双证中 + 存量有代码无设计（HttpServer——§26.4；证据行未列 → C-86） | **维持 OPEN** |
+
+### 26.3 #15 一并核对表
+
+| # | 复审件 | gap #15 登记内容 | 2026-10-01 实测 | 结论 |
+|---|---|---|---|---|
+| 1 | 负空间 | 「capacity-and-benchmark 全文无 bots」 | `grep -i "bots\|机器人"` 该文件**零命中**；design/ 全量「Bots」命中三处全为指派行（session :134 依赖行「顶号风暴/断线重连压测互为验收」/:148 交集行、battle-verification :142 M4 互为验收）——验收关系登记，非设计 | **仍成立** |
+| 2 | 「§5 三形态…无真实四通道会话+握手+重连端到端」 | gap :126 | capacity §5 :86-92 实读：a 微基准（ctest）/ b 场景基准（apps/bench 合成 intent 流，:91 归属行「BW server/tools、KBE 同型」）/ c 录制回放（battle-determinism §5 同格式）——三形态皆**服务端机制面负载**，不经客户端协议握手/四通道 QoS/resume 重连；:113 P2 分期「场景基准 v1（apps/bench）」——设施规划在、**进程实体零建**（§26.4） | **成立**（缺口 = 第四形态 + 进程实体） |
+| 3 | 先例引注 | 「KBE tools/bots + BW server/tools/bots（deep-dive §4/**§16** 目录清点已核）」 | 路径本体**双证在 §4**：:101（KBE）/:102（BW `server/tools/{…bots}` 本轮 ls）；36 号 :70「Bot 工具（tools/bots）」补证。但 `grep -i bots` deep-dive 全文仅 :101/:102/:259——**§16（:313-320）零命中**，:259 属 §12（kbengine_defaults 的 bots 段样例） | 证据本体**成立**，**§16 引注不实** → C-85 |
+| 4 | 与 #13 互为验收 | gap :128「与 #13 登录链互为验收对象，建议同批」 | 成立：bots 登录脚本化必须走 #13 登录链（login_token + ClientHello 四通道握手 + resume 重连——§25 六问①②的验收载体）；#12 :134 已同源登记；另与 #17 M4 互为验收（battle-verification :142）在案 | **成立**——B11 验收面引入 #15 |
+| 5 | 缺口状态 | OPEN | 负空间成立 + 三形态确无端到端 + 存量零实体 | **维持 OPEN** |
+
+### 26.4 存量实读
+
+**入站 HTTP 面（#14）**：
+
+- **`modules/net/http/src/http.cpp:444` `class HttpServer`**——自写入站服务器实现（`Listener::create` :463 → `bind` :464 → `listen` :468 → `acceptThread_` :473）**零生产消费方**：全仓 grep `HttpServer` 仅 http.cpp 自身 + `examples/http_demo.cpp:21`（`basicHttpServer()`，:24 注释自认「HttpServer 是 http.cpp 中的内部类」）——消费面与 §5.10 对 rest_client「仅 examples/tests/docs」的判断同型。
+- **Drogon 分支现状**：modules/net/CMakeLists :23-30（`find_package(Drogon CONFIG QUIET)` → 未找到走 built-in）/:79「HTTP implementation - use Drogon if available」；§5.10 裁决 2（:340）已裁**删除**（双形态并存语境）。
+- **入站承载三候选全部未裁**：自写 HttpServer（内部类升格）/ Drogon（已裁删）/ 独立 admin-app 或 gateway 承载（apps/ 清点五件无 admin-app）——归 #14。
+- **边界澄清**：scripting-lua §7 admin = control 通道（非 HTTP）、logging §5.1 exporter = 出站吐 /metrics——运营后台与第三方回调的**入站 HTTP 接线零设计零消费**（与 gap :120「入站归哪个进程承载、鉴权、回调投递接线」三问全空互证）。
+
+**Bots 面（#15）**：
+
+- `ls apps/` 清点五件：base-app / cell-app / game-server / gateway-app / login-app——无 bench 无 bots；
+- 全仓 `find` 目录名含 bench/bots 零命中，tests/modules `*bench*`/`*bot*` 文件零命中——capacity :91/:113 规划的 apps/bench 与 gap #15 的 bots 进程**实体皆零建**（规划在文档、代码不存在，缺口判据 (a) 的进程面印证）。
+
+### 26.5 缺陷登记
+
+| 编号 | 内容 | 证据 | 严重度与处置 |
+|---|---|---|---|
+| C-85 | gap #15 证据行「deep-dive §4/**§16** 目录清点已核」——§16（战斗独立实例与回放节）实测**无 bots 命中**；正确出处 = §4 :101/:102（双框架 tools/bots 路径本体）+ §12 :259（defaults 样例）。证据本体成立，节号引注不实 | `grep -i bots docs/analysis/mmo-mechanism-deep-dive.md` = :101/:102/:259；§16 标题 :313 | 低（P 系列引注勘误型）。**回填候选**：gap #15 证据行改「deep-dive §4（:101/:102）」——随 gap-inventory 下一更新批，本轮不执行 |
+| C-86 | gap #14 证据行仅登记 design/ 负空间与两家先例，**未列存量入站面**——http.cpp:444 HttpServer 实现存在而零生产消费方（判据 (b) 存量冒充的直接补强：入站面「有代码无设计」）。虽已落在 §4.2 审计网（modules/net/{http,websocket} 下轮候选）内，#14 证据行未引 | http.cpp:444-473 实读；examples/http_demo.cpp:21-24；§4.2 登记行 | 低。**回填候选**：#14 证据行补「存量 HttpServer（http.cpp:444）零生产消费方」一句——随 gap 下一更新批，本轮不执行 |
+
+### 26.6 实读核对记录
+
+- **负空间**（design/ 全量，2026-10-01 复测）：`grep -rn 充值 docs/design/` = 零、`grep -rn 回调入站` = 零、`grep -rn -w interfaces` = 零；「入站/第三方/支付/Bots」命中逐文件复看（§26.2-1 / §26.3-1 两表已逐处归类——出站语境 / 指派行 / 无关库语境）。
+- **先例引注**：deep-dive :101/:102（§4 :96-114 节内）、:259（§12 :248-265 节内）、:313（§16 标题——核对 bots 零命中）；36 号 :70（§2.2 节内）、:262-:268（问 11）——逐条对行。
+- **存量**：`ls apps/` 五件；全仓 `find` bench/bots 目录与 `*bench*`/`*bot*` 文件（排 .git/build）零命中；`grep -rn HttpServer`（排 build/.git）= http.cpp 四行 + http_demo 三行；CMakeLists Drogon 面 :23-30/:79；capacity §5 :84-109 全读（三形态表 + 指标集）。
+- **编号与章节**：`grep -c "^## 26."` = 0、`grep -rn "C-85\|C-86" docs/` = 0（建节前核实未占用）；「## 附录 A」唯一（1）锚定插入点。
+- **基线**：`git log origin/main -1` = b9512337（归位件）；工作树仅三项受保护 untracked——未碰。
+
+### 26.7 复审结论与设计批输入
+
+1. **#14 判定维持成立（OPEN）**：三词负空间 2026-10-01 复测仍零命中 + 先例双证（deep-dive :101 KBE interfaces / 36 号 :266 BW billing）对行全中 + 「#11 只裁出站」实读确认（§5.10 无一处入站）+ 存量 HttpServer 有代码无设计（判据 a+b 组合）。
+2. **#15 判定维持成立（OPEN）**：capacity 全文零命中复测成立 + §5 三形态确无端到端会话形态 + 存量零实体（apps/bench 规划在 P2、进程不存在）。
+3. **批次归属复核一致**：**B11 = #13+#14 同批**（gap :122 + §25 结论不变）；**#15 与 #13 互为验收成立**（且 #12 :134/#17 M4 双向登记在案）——B11 验收面引入 #15（顶号风暴/断线重连/登录脚本化三场景）。依赖 #12 目录（:148 前置声明）已 CLOSED 就位。
+4. **#14 裁决问题清单（五问，给设计批）**：
+   - ① **入站承载**：自写 HttpServer（存量内部类升格）vs Drogon（§5.10:340 已裁删——若 #14 需框架级入站须复议该裁决的适用边界）vs 独立 admin-app / gateway 承载——与 apps/ 五件拓扑的关系；
+   - ② **入站鉴权**：第三方回调验签选型（HMAC 签名 / IP 来源白名单 / mTLS）——与 §5.9 客户端 token 体系分立；「目标白名单」（§5.10 出站纪律）的入站镜像 = 来源可枚举 + 签名可验；
+   - ③ **回调 → 游戏内投递**：异步、不进场景线程——scripting-lua §8 异步交接同型 + internal 域消息（sdk-contract §11）投递位点；充值到账类运营数据与实体状态的接线边界；
+   - ④ **账号域衔接**：第三方账号 ↔ apollo `account_id` 绑定 = #13 裁决问题③（鉴权源）的同一账号域；回调引发的在线态变化（封禁/顶号）走 #12 目录裁决；
+   - ⑤ **运营后台边界**：GM/观测走 control 通道（scripting-lua §7.5 / logging §5.1）不经 HTTP——限定「哪些后台功能真需 HTTP 入站」防范围膨胀。
+5. **#15 设计批输入（三问）**：
+   - ① **落点二选**：capacity §5 增第四形态行 vs 独立 apps/bots（BW `server/tools/bots`、KBE `tools/bots` 同型 = 两家皆引擎一等工具进程——倾向独立进程；gap :128 两选项的裁决点）；
+   - ② **握手依赖**：bots 必须走 #13 登录链（login_token + ClientHello 四通道握手 + resume 重连）——B11 内 #13 设计先行、#15 验收形态后定；
+   - ③ **形态复用**：与 battle-verification M4 作弊客户端（伪造/延迟/残交，:142 已登记）共用 bot 引擎，一套进程两用。
+6. **回填候选（只登记不执行）**：C-85（#15 证据行 §16→§4 引注勘误）、C-86（#14 证据行补存量 HttpServer）——随 gap-inventory 下一更新批；#14/#15 状态行维持 OPEN，本轮零回填动作。
+7. **本轮状态**：只写本报告 §26 一份文件（任务书指定的 ioc-review.md 按 2026-10-01 纠偏令视为笔误——**该文件未创建**）；零源码改动；三项受保护 untracked 未碰；不派子代理；缺陷登记 C-85/C-86（建节前全仓核实未占用）；单笔提交，push 前 fetch --rebase；无 tag/release/force push。
+
+---
+
+*评审基线（源码与文档）：main @ b9512337（= origin/main，本轮零基线移动）。design/ 全量负空间复测、deep-dive :101/:102/:259/:313、36 号 :70/:262-268、capacity-and-benchmark §5 :84-113、modules/net/http/src/http.cpp:444-473、examples/http_demo.cpp:21-24、apps/ 清点、CMakeLists Drogon 面 :23-30/:79 均为 2026-10-01 本轮实测。*
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
