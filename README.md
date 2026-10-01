@@ -150,7 +150,6 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **依赖注入**: `apollo::core::di` 极简构造注入容器——类型键 bean 图、拓扑序装配、仅 Singleton/Prototype 两档作用域
 - **应用生命周期**: `ApplicationHost` 帧驱动托管——`IHostedService` start/stop/tick + 六阶段状态机（Boot→…→Stopped）
 - **配置**: `apollo::core::config::ConfigRegistry` 键值注册表；热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6）
-- *(legacy `Apollo::` IoC 框架仍在仓库中清退，见 architecture-review §6 删除式迁移)*
 
 ### Game 游戏逻辑
 - **AOI系统**: 九宫格空间索引，高效视野管理
@@ -314,7 +313,6 @@ cd build && ctest -R BigWorldApiTests
 ```
 
 测试覆盖：
-- IoC容器测试
 - 网络通信测试
 - 数据库操作测试
 - Redis操作测试
