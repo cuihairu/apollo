@@ -2528,6 +2528,118 @@ C-87…C-89 建节前全仓 `grep -rn "C-87\|C-88\|C-89" docs/` 核实零占用�
 
 ---
 
+## 28. 第十九轮（2026-10-01）：IoC 专题审查——旧 `Apollo::` 容器清退现状盘点（C-90、C-91、C-92）
+
+### 28.0 落位说明
+
+任务书指定「新建 docs/analysis/ioc-review.md」——按 2026-10-01 纠偏令（该名 2026-09-29 废止，57c508ca/b9512337 已由归位批处置）视为笔误，本轮续写主报告 §28（第十九轮），ioc-review.md 未创建（仓库核实无此文件）。
+
+### 28.1 任务与方法
+
+- **审查对象**：README:332 清退注记（「*(legacy `Apollo::` IoC 框架仍在仓库中清退，见 architecture-review §6 删除式迁移)*」）与 §6 五阶段删除式迁移的执行现状——按任务书三问盘点：① 残留组件（逐条带文件与符号引用）② 引用面与测试面 ③ 清退进度评估 + 剩余删除步骤与风险建议。
+- **口径**：旧容器不以 "IoC" 命名——真身 = `namespace Apollo` 族四树（framework/ioc、framework/base、starter、utils/config + src 侧两件源）。全部结论以仓库实读为准（方法与 §25-§27 同：负空间检索 + 逐件实读 + 既有登记查重）；源码冻结，删除步骤只登记不执行。
+- **基线**：main @ e8c11eb1；全部行号本轮实测。
+
+### 28.2 残留组件清单（四树 17 件 ≈3130 行：头 15 件 2483 行 + 源 2 件 647 行）
+
+**表一：framework/ioc 八件（1189 行）**
+
+| 件 | 行 | 关键符号（行号） |
+|---|---|---|
+| ApplicationContext.h | 342 | `getInstance()` 单例 :18-21；`registerComponent(name, factory)` :23-45（构造探针读元数据 :34-39）；`getComponent<T>` 字符串键 + dynamic_pointer_cast :109-113；`initialize/start/stop/destroyComponents+rollback` :115-178；`BeanRuntimeInfo` :213-235；`syncToConfigManager` 挂钩 :237-253；全局 mutex :334 + 三张字符串键 unordered_map :335-337 |
+| BeanDefinition.h | 43 | `lazyInit` 死字段 :16（§6 阶段①点名件）；`BeanLifecycleStage` :21-29；第二个同名 `BeanRuntimeInfo` :31-41 |
+| ComponentRegistry.h | 33 | `REGISTER_COMPONENT` 宏 :6-14 / `DECLARE_COMPONENT` 宏 :16-21；`AutoRegister` 未用模板 :26-31 |
+| IComponent.h | 59 | `LifecyclePhase`（Bootstrap-2000…Gateway 2000）:13-21；`ComponentState` :23-33；`IComponent` :35-54 |
+| ConfigManager.h | 172 | `getInstance()` :18；`setValue/getValue` 模板字符串键 :29/:34/:47/:66；`addChangeListener/addGlobalChangeListener` :100/:102（remove 族 :101/:103）；`disableAutoReload` :106；`FileWatcher* fileWatcher_` :168 |
+| ConfigEnvironment.h | 227 | 配置环境包装（ApplicationContext :237-253 挂钩的消费端） |
+| DependencyManager.h | 224 | `getInstance()` 单例 :10-13；`addDependency` :15 / `getInitializationOrder` :27 / `getShutdownOrder` :31 / `hasCircularDependency` :40——字符串键拓扑排序全套 |
+| LifecycleProcessor.h | 89 | `sortBeanDefinitions` 静态（phase 优先级队列拓扑排序） |
+
+**表二：关联三树（8 件）**
+
+| 树/件 | 行 | 关键符号 |
+|---|---|---|
+| framework/base/BaseComponent.h | 154 | per-component 状态机 mutex :24-74；`getComponent<T>` 定位器 :111-114；`generateGuid`（random_device/mt19937）:130-144 |
+| starter/Starter.h | 211 | `#ifdef HAVE_FRUIT` include fruit :4；**无 HAVE_FRUIT 时伪 `namespace fruit` 空壳 :7-35**（fake-fruit 本体——§16 判定的 sdnet_adapter 伪 SSCP 同类）；`StarterOrder/StarterMetadata`；`ApolloStarter::getComponent` 返回 `fruit::PartialComponentVoid` |
+| starter/ApolloApplication.h | 206 | Builder 模式；`getInjector()` → `fruit::Injector<T>&` :124；`getService<T>` :128；`combineStarterComponents` :191；`unique_ptr<fruit::Injector<>> injector_` :201 |
+| starter/{Conditional, ConditionContext, StarterRegistry}.h | 266/164/201 | 条件装配三件（`matches(ConditionContext)` 等） |
+| utils/config/ConfigProperty.h | 92 | `ConfigProperty<T>` 赋值写穿 `ConfigManager::getInstance()->setValue` :22-24 |
+| src/framework/ioc/ConfigManager.cpp | 226 | `enableAutoReload` :183-194（new FileWatcher :186 + addWatch :189——§17.6「热重载直改活值」反面实证对行）；`removeGlobalChangeListener` 未实现仅注释 :170-181 |
+| src/starter/ApolloApplication.cpp | 421 | include framework/ioc 两头 :3-4；`ApplicationContext::getInstance()` :298；**`#ifdef HAVE_FRUIT` 块内 injector 构造被注释 = 死** :284-292（:291 即 §6 阶段①「Fruit TODO」实证） |
+
+结构注记：ApplicationContext 本体为**头文件内联实现**（src/framework/ioc/ 仅 ConfigManager.cpp 一件）——这正是 examples/tests 只需补编 ConfigManager.cpp + FileWatcher.cpp 两件即可跑通整个旧容器的原因，也是删除面比「八件头 + 一件源」直觉更小的原因（真源依赖仅两件）。
+
+### 28.3 引用面：生产零引用，三条构建脐带
+
+- **生产代码零引用**：`Apollo::` 全仓消费者（四树之外）仅两处——examples/starter_example.cpp、tests/main_test.cpp；apps/（base-app/cell-app/game-server/gateway-app/login-app 五件）、modules/、sdks/、scripts/ 全部零命中。新容器唯一生产消费者 = apps/game-server/src/main.cpp:7/:30/:59/:96（`apollo::core::di::ApplicationContext/Builder`）——与 §21 C-72「五 app 两套装配血统」判定相合（其余四 main 零容器）。
+- **脐带一（modules→legacy 唯一编译期通道）**：modules/core/config/CMakeLists.txt:6-7 把 `../../../src/framework/ioc/ConfigManager.cpp`（:6）+ `../../../src/utils/io/FileWatcher.cpp`（:7）编进 apollo_core_config STATIC（被 apollo_core :23 链接）——modules/ 树内**零调用点**（新 core::config 自持 config_manager.cpp，旧件纯重编译进默认链接图）。FileWatcher 侧死接线已登记 **C-1**（§17 :354）；ConfigManager.cpp 侧同型死编此前无号 → **C-90**（本轮补登）。
+- **脐带二（默认测试目标）**：tests/CMakeLists.txt else 分支（APOLLO_BUILD_GTESTS=OFF 即默认）:467-470 `ioc_tests_simple` = test_simple.cpp + `APOLLO_LEGACY_IOC_TEST_SOURCES`（:5-8 = 同两件 legacy 源），链 apollo（:480）注册 ctest（:494 SimpleTests）——**旧容器测试默认构建进图**。
+- **脐带三（非默认）**：examples 五件（all_features_demo/basic_example/config_example/dependency_example/starter_example——影响面 :408 已登记）+ 根 apollo STATIC（根 CMakeLists :54，源列表含 legacy 源，仅 `NOT APOLLO_ENABLE_MODULAR_LAYOUT` 非默认兜底分支，带 DEPRECATION）。默认构建门：APOLLO_BUILD_EXAMPLES=OFF / MODULAR_LAYOUT=ON——脐带三不进默认图。
+- **modules 聚合口径复核**：modules/CMakeLists.txt:88 `add_library(apollo INTERFACE)` 聚合 apollo::base/core/runtime/**legacy_compat**/…——legacy_compat（:58-62）仅编 src/utils/logging/logger.cpp + src/utils/thread_pool.cpp 两件，**非 IoC 域**（清退不涉及；但其 PUBLIC include 目录 `include/` 是 legacy 头对 modules/examples 的暴露通道，删除四树后此通道自然空置）。
+
+### 28.4 测试面：三档现状
+
+| 档 | 目标/件 | 现状 | 判定 |
+|---|---|---|---|
+| 默认构建 | `ioc_tests_simple` = test_simple.cpp（107 行，纯旧容器生命周期 + ConfigManager 演示）+ legacy 两源 | 默认配置构建并跑（ctest SimpleTests）；include 用带前缀路径（framework/ioc/…）**可编译** | 旧容器唯一活测试 |
+| GTest 分支（APOLLO_BUILD_GTESTS=OFF 默认挡） | `ioc_tests` = main_test.cpp（831 行，ComponentTest/ContextTest/ConfigTest/DependencyTest 四 filter）+ legacy 两源 :24-47 | main_test.cpp:2-6 五个 include 用**无前缀路径**（`apollo/BaseComponent.h` 等）——include/apollo/ 根目录零存在（本轮 find 实测）→ **编译必断** | 幻影测试族（C-59/C-68 之后）第四例 → **C-91** |
+| 孤儿件 | component/config/context/dependency/main `_test_simple.cpp` 五件（tests/ 实存） | CMakeLists 全文零接线（simple 分支唯一接线 = test_simple.cpp :468；config_tests_simple/crypto_tests 仅注释残迹 :472-474/:481-482/:495） | 五件全孤儿 → **C-91** 并项 |
+
+- README:496 测试覆盖列表首行「IoC容器测试」——清退后需同步回填（§28.6 步骤 1）。
+- 与既有登记的关系：:408/:490 记的是「谁引用 legacy 头」（影响面），本轮记的是**接线与可编译状态**（main_test 断链、五件零接线）——互补不重复。
+
+### 28.5 清退进度评估：§6 五阶段对照
+
+| §6 阶段 | 删除面 | 本轮实测 | 完成度 |
+|---|---|---|---|
+| ① 死代码清理 | 伪 fruit 命名空间 / getService stub / Fruit TODO / DependencyManager / lazyInit / AutoRegister | 全部在位：Starter.h:7-35、ApolloApplication.h:124/:128、ApolloApplication.cpp:291、DependencyManager.h 全件、BeanDefinition.h:16、ComponentRegistry.h:26-31 | **0** |
+| ② 配置收敛 | 删 Apollo::ConfigManager/ConfigProperty | 全部在位（ConfigManager.h/.cpp、ConfigEnvironment.h、ConfigProperty.h）+ 脐带一（C-1 已记 FileWatcher，C-90 补 ConfigManager.cpp） | **0** |
+| ③ 容器收敛 | 删 ApplicationContext/BaseComponent/注册宏；examples 重写 core::di；README 特性描述改实情 | 头件全在位；examples 五件未重写（仍消费旧容器）；README :329-331 已以新容器为主叙述 + :332 清退注记——**诚实标注，非错误** | **0**（README 注记面算半步） |
+| ④ Starter 收敛 | ApolloStarter 削成装配模板接口 | starter 五件 1048 行原样在位，injector 构造死注释如故 | **0** |
+| ⑤ 与 runtime 合流 | — | 未动工 | **0** |
+| （前置）使用侧迁移 | 生产代码迁 core::di | apps 零 legacy 引用、game-server 已用新容器、modules 零调用 | **≈完成** |
+
+**总评**：「迁移」实质完成、「删除」零进度——README:332「仍在仓库中清退」表述**准确**（清退指删除动作，尚未开始执行任何一刀）。风险不在运行时（生产零引用、无反射路径可达）而在**构建图**：三条脐带中脐带一（core_config :6-7）与脐带二（tests :5-8/:467-470）都在默认构建里，删除顺序错了默认配置直接断链。
+
+### 28.6 剩余删除步骤与风险建议（登记性，随代码批授权执行）
+
+**步骤序（依赖倒序——先拆接线、后删源，五步一批）**：
+
+1. **tests/CMakeLists.txt**：删 :5-8 `APOLLO_LEGACY_IOC_TEST_SOURCES` + `ioc_tests`（:24-47）+ `ioc_tests_simple`（:467-470/:480/:487/:494）+ 孤儿五件处置（删除或由新 core::di 测试取代）；README:496 测试清单同步。
+2. **modules/core/config/CMakeLists.txt**：删 :6-7 两行 legacy 源（C-1/C-90 脐带）——**必须先于源文件删除**（风险 R1）。
+3. **examples 五件**：按 §6 阶段③原案重写为 core::di 消费（或随批删除——APOLLO_BUILD_EXAMPLES=OFF 下无构建压力，但保留不重写 = 断头示例）。
+4. **删四树 17 件**：include/apollo/{framework/ioc 八件、framework/base/BaseComponent.h、starter 五件、utils/config/ConfigProperty.h} + src/{framework/ioc/ConfigManager.cpp、starter/ApolloApplication.cpp}；根 CMakeLists 非模块化兜底分支（:54 源列表）同步剔除 legacy 源。
+5. **README 回填**：:332 清退注记删行；:496 测试清单；:329-331 措辞复核（新容器叙述已就位，仅删注记即可）。
+
+**风险清单**：
+
+- **R1（脐带断链顺序）**：core_config :6 与 tests :5-8 都字面引用 `src/framework/ioc/ConfigManager.cpp`——先删源后改 CMake = 默认配置构建直接断；两处接线必须同批先拆（C-90 立号的直接理由）。
+- **R2（测试空窗误读）**：ioc_tests_simple 是旧容器唯一可跑测试，删除后旧域测试归零——预期终态，但批次应与新 core::di 测试接线（R-17c/R-17e，§22 已核零消化）同批兑现，避免「测试数下降」无上下文误读。
+- **R3（examples 唯一活消费者）**：starter_example.cpp 等 5 件不重写即删头 = APOLLO_BUILD_EXAMPLES=ON 配置断链——§6 阶段③「examples 重写」是删除的硬前置。
+- **R4（功能重叠不同号）**：新 core::config 自持 reload 链有 C-1 同款哑热更（notifyListeners 零调用）——删旧 ConfigManager 不消解新件缺陷，两事同批不同号，勿混。
+- **R5（无迁移负担项）**：starter 域生命周期语义（ApolloApplication/StarterRegistry）apps 现无人消费（game-server 直用 core::di + runtime 六阶段）——直接删即可，无兼容负担。
+
+### 28.7 缺陷登记
+
+| 编号 | 内容 | 证据 | 严重度与处置 |
+|---|---|---|---|
+| C-90 | modules/core/config 把 `src/framework/ioc/ConfigManager.cpp` **死编**进 apollo_core_config（:6）——modules/ 树零调用点，新 core::config 自持实现；与 C-1（:7 FileWatcher 死接线）构成脐带两件套。删除顺序风险本体（R1） | modules/core/config/CMakeLists.txt:6-7 + modules/ 树 `framework/ioc` grep 仅此一命中 + apollo_core 链接 :23（本轮实测） | 低（构建图卫生）。**处置**：随 §6 阶段②代码批拆行（先于源删除）；本轮只登记 |
+| C-91 | IoC 测试面双症：① `ioc_tests`（GTest 分支）main_test.cpp:2-6 五个无前缀 include（`apollo/BaseComponent.h` 等）在 include/apollo/ 根零存在 → 编译必断（幻影测试族第四例——C-59 rest_template/net_comprehensive、C-68 starter 三头之后）；② `_test_simple` 五件（component/config/context/dependency/main）零接线孤儿 | main_test.cpp:2-6 vs `ls include/apollo/*.h` 空；tests/CMakeLists 全文 grep 五件零命中（:408/:490 影响面登记互补）（本轮实测） | 低（测试资产腐烂）。**处置**：随 §28.6 步骤 1 同批处置（删目标 + 孤儿件裁决）；本轮只登记 |
+| C-92 | docs/design/inbound-interfaces.md:17 apps 枚举不实：「五件（base-app/bench/gateway-app/login-app/world-app）」——实测 base-app/cell-app/game-server/gateway-app/login-app；bench 与 world-app `git log --all -- apps/bench apps/world-app` 零提交 = **从未存在**（B11 落盘 913c98af 时写入） | `ls apps/` + git log 全历史（本轮实测） | 低（设计文档勘误型）。**回填候选**：随 gap-inventory 下一更新批或 inbound-interfaces 勘误批改 :17 一行；本轮禁改他件只登记 |
+
+（C-90/C-91/C-92 建节前全仓核实未占用——grep 零命中。）
+
+### 28.8 实读核对记录与尾注
+
+- **本轮全部只读取证**：四树 17 件逐件读（framework/ioc 八件 + BaseComponent.h + starter 五头 + ConfigProperty.h + src 两件全文/关键段）；引用面 grep（`Apollo::` / `framework/ioc` 全仓，apps/modules/sdks/scripts/tests/examples 分域）；测试面（tests/CMakeLists 全目标清单 + test_simple.cpp/main_test.cpp 内容 + include/apollo 根负空间）；构建门控（根 options + modules/CMakeLists 聚合 + core_config 脐带 + 根 apollo STATIC 兜底分支）；README :325-336/:486-500；既有登记查重（C-1 :354、影响面 :408/:490、C-59/C-68 族、§6/§7/§17 原文）；C-90/C-91/C-92 未占用核实。
+- **门禁**：只写本报告一份（§28 单节插入，登记簿与既有章节零改动）；零源码改动；三项受保护 untracked（BIGWORLD_AUDIT.md、Testing/Testing/、ipc_audit_results.md）未碰；不派子代理；单笔提交；无 tag/release/force push；push 前 fetch --rebase。
+
+---
+
+*评审基线（源码与文档）：main @ e8c11eb1（= origin/main，第十八轮 §27 落盘后基线）。四树 17 件行数与行号、tests/CMakeLists 目标清单（:5-8/:24-47/:463-494）、modules/core/config/CMakeLists.txt:6-7、modules/CMakeLists.txt:58-62/:88、include/apollo 根空目录、apps 五件清单与 bench/world-app 负历史、main_test.cpp:2-6 无前缀 include、README:325-336/:486-500、C-90/C-91/C-92 未占用——均 2026-10-01 本轮实测。*
+
+---
+
 ## 附录 A：2026-09-29 会话源码改动违规记录与现场处置（用户紧急纠偏后如实补记）
 
 **约束（用户 2026-09-29 紧急纠偏，本轮权威口径）**：本轮 apollo 工作为**只读分析**，唯一可写文件为 `docs/analysis/architecture-review.md`；任何源码/CMake/CI/契约/golden 改动均不允许；**严禁 push**、严禁 tag/release。
