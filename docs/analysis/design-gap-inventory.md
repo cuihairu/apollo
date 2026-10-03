@@ -139,6 +139,12 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 - **证据**:battle-determinism §5 已有复算 hash 链与四元组,但其消费方「反作弊对账」仅一笔带过——服务形态/消息族/结算门/verdict 分级/部署容量零展开(2026-09-30 实读);BW/KBE/skynet 无内建(三家皆服务端权威无需——行业 JS/C# 双端自研通型,glossary 词条考证)。
 - **落点**:docs/design/battle-verification-service.md——§0 适用/不适用写死(判据一句:判定在客户端才需要)/G-1 VERIFIER 型 + sdk-contract §11 internal 域三消息族(invoke_mode 三分)/Lua 双端共享 + `combat_bundle_hash`+VM 版本线双锚/跨端增量三件(运算白名单、版本锚、漂移降级 WARN——对 §2「不做定点」口径的关系已写明)/verdict 四值 × 结算门两级/权威结算由复算产出/无状态 worker 池 + Compact 内嵌 verifier-kernel/M0-M5(M4 与 #15 bots 互为验收)。
 
+### #18 玩家对象模型与 Cell 精简 — **CLOSED**(docs/design/player-object-model.md,2026-10-03 落盘)
+
+- **缺什么**:玩家对象的权威载体——登录后对象在哪(几个对象、归属哪个进程)、断线保留归谁、跨场景(进副本/换线)谁动谁不动;Cell 的精简边界(砍 ghost/迁移后还剩什么)。此前 #12 只管在线登记/顶号、不管对象迁移归属——对象模型零权威载体。
+- **证据**(用户 2026-10-03 指认,三处口径互斥实锤):base-cell-proxy-model(B 档参考件)「三层必须分层」vs concept-glossary Zone 词条「刻意不拆 cell/base 两族进程」vs login-flow「Zone 创建会话实体」;且 Zone 词条「场景实例粒度」与 §2.1「承载一个或多个 scene」自相抵触。
+- **落点**:player-object-model.md——§0 矛盾与裁决(用户裁决 **A:三层对象保留,设计重心=Cell 精简**;一句话收口「对象分层≠进程分层,三层同驻 Zone」)+ §1 三层职责表(Proxy/Session、Base/PlayerAnchor 驻 Home Zone 不动、Cell/Avatar 进 scene 生出 scene 死)+ §2 Cell 精简清单五条(砍 ghost/砍 cell 间迁移/witness 精简为 viewer set+三通道 seq/断线升 Base/战斗移动收敛 tick 边界)+ §3 换幕·断线·重连时序(易失态不带走、结果单向落回 Base)+ §4 三轴承载关系(scene=唯一空间单元/instance=生命周期别名/Zone=进程载体 1..N scene)+ §5 定位论证(无无缝仍是 MMO,WoW/FF14 反例)+ §6 七家进程模型对比表(BW/KBE/skynet/TrinityCore/Ryzom/EQEmu/apollo,两条谱系+杂交站位)+ §7 与 #12/#13/#17/battle-determinism/attribute-sync/36号咬合;glossary Zone 词条口径修正+新增「玩家对象模型」词条+无缝世界词条定位句,同日同步。
+
 ## 3. 已登记推迟项(登记簿管辖,不重复立项)
 
 以下属「已设计/已判定、等代码阶段」而非设计缺口,状态以 architecture-review §16.10.2 登记簿为准:R-17a…R-17g(DI 域七项)、config 桩清理/FrameFilter 管线/继承生成器/定时器轮组件(代码影响项)、ipc 树与 bw/bigworld 兼容层(下轮审计候选)、sdks/contract 旧名同步(随下一代码批次)。**已完成项**:36 号 #12/#15/#17/#19 与 deep-dive §12 表述修正已于 2026-09-30 执行(B8 批——sol2/Lua 5.4 → 弃 sol2 + 5.5 主线随 vcpkg(当前 5.5.x,同日两度修订);#15 BW 分段 ID / #17 KBE MySQL-only 两处证伪改写,含对比表/问9总结/存储表联动)。**已裁决项(2026-09-30 用户:「都是历史记录」)**:origin 五笔源码提交(cb78d4b0…18152898)保留为历史记录、不回退;backup-apollo-src(c349f850)留档维持——不合并不删除;处置记录见 architecture-review 附录 A。
