@@ -218,11 +218,11 @@ jobs:
       run: |
         cd build
         lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch
-        lcov --remove coverage.info '/usr/*' --output-file coverage.info
-        lcov --remove coverage.info '*/tests/*' --output-file coverage.info
-        lcov --remove coverage.info '*/examples/*' --output-file coverage.info
-        lcov --remove coverage.info '*/vcpkg_installed/*' --output-file coverage.info
-        lcov --remove coverage.info '*/_deps/*' --output-file coverage.info
+        lcov --remove coverage.info '/usr/*' --output-file coverage.info --ignore-errors unused
+        lcov --remove coverage.info '*/tests/*' --output-file coverage.info --ignore-errors unused
+        lcov --remove coverage.info '*/examples/*' --output-file coverage.info --ignore-errors unused
+        lcov --remove coverage.info '*/vcpkg_installed/*' --output-file coverage.info --ignore-errors unused
+        lcov --remove coverage.info '*/_deps/*' --output-file coverage.info --ignore-errors unused
         lcov --list coverage.info
         genhtml -o coverage-html coverage.info
 
