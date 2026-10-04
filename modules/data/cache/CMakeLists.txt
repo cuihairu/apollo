@@ -15,7 +15,6 @@ target_include_directories(apollo_data_cache
 target_link_libraries(apollo_data_cache
     PUBLIC
         apollo::core
-        apollo::data_redis
 )
 
 target_compile_features(apollo_data_cache PUBLIC cxx_std_20)

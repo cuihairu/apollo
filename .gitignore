@@ -67,6 +67,7 @@ vcpkg_installed/
 # docs site deps (never commit)
 docs/node_modules/
 Testing/
+base-app-data/
 BIGWORLD_AUDIT.md
 ipc_audit_results.md
 docs/.vitepress/dist/

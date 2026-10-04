@@ -98,30 +98,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
     add_test(NAME ConfigTests COMMAND config_tests)
 
-    # ========== Redis Tests ==========
-
-    add_executable(redis_tests test_redis_new.cpp)
-
-    target_link_libraries(redis_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(redis_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME RedisTests COMMAND redis_tests)
-
-    # ========== Database Tests ==========
-
-    add_executable(database_tests test_database.cpp)
-
-    target_link_libraries(database_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(database_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME DatabaseTests COMMAND database_tests)
-
     # ========== IdPool Tests ==========
 
     add_executable(id_pool_tests test_id_pool.cpp)
@@ -146,18 +122,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
     add_test(NAME UtilsTests COMMAND utils_tests)
 
-    # ========== SqlTemplate Tests (New) ==========
-
-    add_executable(sql_template_tests test_sql_template.cpp)
-
-    target_link_libraries(sql_template_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(sql_template_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME SqlTemplateTests COMMAND sql_template_tests)
-
     # ========== RestTemplate Tests (New) ==========
 
     add_executable(rest_template_tests test_rest_template.cpp)
@@ -169,18 +133,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     endif()
 
     add_test(NAME RestTemplateTests COMMAND rest_template_tests)
-
-    # ========== Integration Tests (New) ==========
-
-    add_executable(integration_tests test_integration.cpp)
-
-    target_link_libraries(integration_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(integration_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME IntegrationTests COMMAND integration_tests)
 
     if(APOLLO_ENABLE_IPC)
         # ========== Channel Tests (New) - Shared Memory + Backpressure ==========
@@ -768,6 +720,44 @@ if(MSVC)
     target_compile_options(player_directory_tests PRIVATE /utf-8)
 endif()
 add_test(NAME PlayerDirectoryTests COMMAND player_directory_tests)
+
+# ========== Persistence Tests (P1-4) ==========
+# Write-behind journal 骨架 + 最小真链路（写盘→重启→读回）。
+# 直编源惯例：不依赖 app 目标，三平台 Unit 门禁真实执行。
+add_executable(persist_journal_tests
+    test_persist_journal.cpp
+    ../modules/data/orm/src/persist_journal.cpp
+)
+target_include_directories(persist_journal_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/data/orm/include
+)
+if(WIN32)
+    target_compile_definitions(persist_journal_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(persist_journal_tests PRIVATE /utf-8)
+endif()
+add_test(NAME PersistJournalTests COMMAND persist_journal_tests)
+
+add_executable(persistence_chain_tests
+    test_persistence_chain.cpp
+    ../apps/base-app/src/database_service.cpp
+    ../modules/game/session/src/player_anchor.cpp
+)
+target_include_directories(persistence_chain_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+)
+target_link_libraries(persistence_chain_tests PRIVATE apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(persistence_chain_tests PRIVATE ws2_32)
+    target_compile_definitions(persistence_chain_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(persistence_chain_tests PRIVATE /utf-8)
+endif()
+add_test(NAME PersistenceChainTests COMMAND persistence_chain_tests)
 
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段

@@ -50,7 +50,8 @@ public:
     // 关闭
     void shutdown();
 
-    // 加载玩家数据
+    // 加载玩家数据（缓存 → 磁盘档案）；不存在返回 false——
+    // 不再凭空 bootstrap「player_+id」（P1-4 清账，建号走 createPlayer，账号域 P2）
     bool loadPlayer(PlayerID playerId, PlayerData& outData);
 
     // 保存玩家数据
@@ -78,6 +79,12 @@ private:
     class ConnectionPool;
     std::unique_ptr<ConnectionPool> pool_;
 
+    // 磁盘玩家档案路径（dataDir/player_<id>.json）
+    std::string playerPath(PlayerID playerId) const;
+
+    // 全量落盘（tmp + rename 原子替换）
+    bool writePlayerFile(const PlayerData& data);
+
     // 缓存
     std::unordered_map<PlayerID, PlayerData> cache_;
     std::mutex cacheMutex_;
@@ -96,11 +103,18 @@ public:
 // 保存队列管理器
 class SaveQueue {
 public:
+    // 落盘执行器（P1-4 真链路）：worker 出队后调用，返回落盘结果；
+    // 未设置时视为恒成功（空转兼容）
+    using Worker = std::function<bool(const PlayerData&)>;
+
     explicit SaveQueue(int workerThreads = 4);
     ~SaveQueue();
 
     // 添加保存任务
     void enqueue(const SaveTask& task);
+
+    // 设置落盘执行器（start 之前调用）
+    void set_worker(Worker worker);
 
     // 启动
     void start();
@@ -114,6 +128,7 @@ public:
 private:
     void workerLoop();
 
+    Worker worker_;
     std::vector<std::thread> workers_;
     std::queue<SaveTask> queue_;
     mutable std::mutex queueMutex_;

@@ -34,68 +34,6 @@ const char* toAnchorStateString(apollo::game::session::AnchorState state) {
 } // namespace
 
 //==============================================================================
-// PlayerData 实现
-//==============================================================================
-
-std::string PlayerData::toJson() const {
-    std::stringstream ss;
-    ss << "{"
-       << "\"playerId\":" << playerId << ","
-       << "\"username\":\"" << username << "\","
-       << "\"level\":" << level << ","
-       << "\"exp\":" << exp << ","
-       << "\"hp\":" << hp << ","
-       << "\"maxHp\":" << maxHp << ","
-       << "\"mp\":" << mp << ","
-       << "\"maxMp\":" << maxMp << ","
-       << "\"x\":" << x << ","
-       << "\"y\":" << y << ","
-       << "\"z\":" << z
-       << "}";
-    return ss.str();
-}
-
-PlayerData PlayerData::fromJson(const std::string& json) {
-    PlayerData data;
-    // 简化解析，实际应该用 nlohmann/json
-    // 这里只做基础实现
-    size_t pos = 0;
-
-    auto extractString = [&json, &pos](const std::string& key) -> std::string {
-        std::string search = "\"" + key + "\":\"";
-        size_t p = json.find(search, pos);
-        if (p == std::string::npos) return "";
-        p += search.length();
-        size_t end = json.find("\"", p);
-        if (end == std::string::npos) return "";
-        std::string result = json.substr(p, end - p);
-        pos = end + 1;
-        return result;
-    };
-
-    auto extractInt = [&json, &pos](const std::string& key) -> int {
-        std::string search = "\"" + key + "\":";
-        size_t p = json.find(search, pos);
-        if (p == std::string::npos) return 0;
-        p += search.length();
-        size_t end = json.find_first_of(",}", p);
-        if (end == std::string::npos) return 0;
-        pos = end + 1;
-        return std::stoi(json.substr(p, end - p));
-    };
-
-    data.username = extractString("username");
-    data.level = extractInt("level");
-    data.exp = extractInt("exp");
-    data.hp = extractInt("hp");
-    data.maxHp = extractInt("maxHp");
-    data.mp = extractInt("mp");
-    data.maxMp = extractInt("maxMp");
-
-    return data;
-}
-
-//==============================================================================
 // BaseServer 实现
 //==============================================================================
 
@@ -105,6 +43,11 @@ BaseServer::BaseServer(const BaseConfig& config)
     , saveQueue_(std::make_unique<SaveQueue>(config_.workerThreads))
     , anchorManager_(std::make_shared<apollo::game::session::AnchorManager>())
     , sessionLocator_(std::make_shared<apollo::game::session::SessionLocator>()) {
+    // P1-4 真链路：SaveQueue 出队 → DatabaseService 落盘（workerLoop
+    // 此前只 callback(true) 不写任何介质）
+    saveQueue_->set_worker([this](const PlayerData& data) {
+        return database_->savePlayer(data);
+    });
 }
 
 BaseServer::~BaseServer() {
@@ -417,9 +360,14 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
 
         SaveTask task;
         task.playerId = anchor->player_id();
-        // 占位载荷（P1 持久化接入前）：Anchor 不承载属性字段，走默认
-        // PlayerData；关键路径是 Saving 态 → SaveQueue → finalizeSave 回环。
-        task.data.playerId = anchor->player_id();
+        // 载荷以现档为基线（P1-4 落盘真做后，默认值载荷会清档）：
+        // 无档即跳过——不凭空造档案（bootstrap 恶龙已废）。
+        // Anchor 属性字段模型扩展后此处改为从 Anchor 收集（P2-4）。
+        if (!database_->loadPlayer(anchor->player_id(), task.data)) {
+            std::cout << "Flush skipped for player " << anchor->player_id()
+                      << " (no profile) (" << reason << ")" << std::endl;
+            continue;
+        }
         task.callback = [this, playerId = anchor->player_id()](bool success) {
             finalizeSave(playerId, success);
         };

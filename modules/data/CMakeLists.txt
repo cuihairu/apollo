@@ -1,7 +1,6 @@
 # Data module
 add_subdirectory(core)
 add_subdirectory(orm)
-add_subdirectory(redis)
 add_subdirectory(cache)
 
 if(BUILD_TESTING)

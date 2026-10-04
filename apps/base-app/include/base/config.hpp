@@ -27,6 +27,7 @@ struct BaseConfig {
     int cacheTimeoutMs = 60000;  // 1分钟
 
     // 保存配置
+    std::string dataDir = "base-app-data/players";  // 玩家档案落盘目录（P1-4）
     int autoSaveIntervalMs = 60000;  // 1分钟自动保存
     int saveTimeoutMs = 5000;
 

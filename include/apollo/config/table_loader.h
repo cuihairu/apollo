@@ -19,7 +19,7 @@ namespace config {
  * @brief 字段信息
  */
 struct FieldInfo {
-    std:: stringValue;
+    std::string stringValue;
     int32_t rowIndex = -1;
     int32_t columnIndex = -1;
 

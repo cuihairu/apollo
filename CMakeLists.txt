@@ -69,14 +69,8 @@ add_library(apollo STATIC
     src/apollo/net/event_loop.cpp
     src/apollo/net/http/rest_client.cpp
 
-    # Redis - 使用 modules/data/redis 中的 redis-plus-plus 实现
-    src/apollo/storage/redis/redis.cpp
-    src/apollo/storage/redis/redis_client_impl.cpp
-    src/apollo/redis/redis_template.cpp
-
-    # Storage
-    # (移除手写实现: src/storage/cache/redis.cpp - 使用 modules/data/redis 替代)
-    src/storage/database/connection_pool.cpp
+    # Redis/Storage - P1-4 持久化栈收敛：5 套平行实现删除（persistence.md §2），
+    # 保留 apollo::data::{core,orm} 一套（modules/data/）
 
     # Utils
     src/utils/config/config_loader.cpp
@@ -101,21 +95,8 @@ add_library(apollo STATIC
     # Core - Service Discovery
     src/apollo/core/service_discovery.cpp
 
-    # Core - Distributed Lock
-    src/apollo/core/distributed_lock.cpp
-
     # Server
     src/apollo/server/game_server.cpp
-
-    # Storage - Database
-    src/apollo/storage/database/db.cpp
-    src/apollo/storage/database/db_common.cpp
-    src/apollo/storage/database/db_mysql.cpp
-    src/apollo/storage/database/db_mock.cpp
-
-	    # Database - SqlTemplate
-	    src/apollo/database/sql_template.cpp
-	    src/apollo/database/datasource.cpp
 
 	    # BigWorld 兼容层（增量实现）
 	    src/apollo/bw/runtime.cpp

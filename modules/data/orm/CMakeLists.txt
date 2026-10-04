@@ -1,6 +1,6 @@
 add_library(apollo_data_orm STATIC
     src/memory_connection.cpp
-    src/sql_template.cpp
+    src/persist_journal.cpp
 )
 add_library(apollo::data_orm ALIAS apollo_data_orm)
 
