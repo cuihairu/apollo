@@ -14,7 +14,7 @@
 
 > 实例化多人在线游戏服务器引擎 —— Instance-based Multiplayer Game Server Engine
 
-## 📖 项目简介
+## 项目简介
 
 Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
 
@@ -46,7 +46,7 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是「由大量 Zone/实例组成」的 supported use case（instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
 
-## ✅ 适用场景 / Use Cases
+## 适用场景 / Use Cases
 
 **适合**——自然世界的边界天然是「房间 / 场景 / 副本 / 比赛 / 实例」的游戏：
 
@@ -65,18 +65,18 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 ### 核心特性
 
-- 🏗️ **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）
-- 📜 **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
-- 🌐 **高性能网络层** - 跨平台异步I/O（IOCP/Epoll）
-- 📦 **传输编解码（目标态）** - L1 帧格式 + protobuf descriptor（`descriptor.bin`，反射为默认）+ Lua 契约表（`contract.lua`）+ zstd 压缩（`docs/design/sdk-contract.md` §10-§12）——框架固定消息族内建强类型守热路径、业务消息反射进 Lua（服务端契约变更零重编）、有代码热更管线的客户端走生成代码（docs/36 决策 #19）；现网为手写编码，仓库自有 .proto 为零
-- 🔥 **战斗系统** - `BattleSystem` 场景内骨架已交付（实体集合 + tick 更新）；ECS 收敛与技能/Buff/状态机随 P2（未实现）
-- 👁 **AOI九宫格系统** - `SceneAoi` 单实现（Scene 独享、scene_id 隔离）+ `ViewerState` 逐观察者水位，Enter/Sync/Leave 事件面已交付
-- 💾 **数据存储层** - 玩家档案文件（tmp+rename 原子写）+ `PersistJournal` write-behind（write-ahead→定额 drain→快照压薄→崩溃 replay）；外部 DB/Redis 未接线
-- ⚡ **日志系统** - 多级别异步日志
-- 🔧 **工具类库** - 线程池、内存池、配置管理等
-- 🧩 **BigWorld兼容层** - BigWorld 风格 C++ API facade（见 `docs/33-BigWorld_Compatibility.md`）
+- **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）
+- **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
+- **异步网络层** - 跨平台异步I/O（IOCP/Epoll）
+- **传输编解码（目标态）** - L1 帧格式 + protobuf descriptor（`descriptor.bin`，反射为默认）+ Lua 契约表（`contract.lua`）+ zstd 压缩（`docs/design/sdk-contract.md` §10-§12）——框架固定消息族内建强类型守热路径、业务消息反射进 Lua（服务端契约变更零重编）、有代码热更管线的客户端走生成代码（docs/36 决策 #19）；现网为手写编码，仓库自有 .proto 为零
+- **战斗系统** - `BattleSystem` 场景内骨架已交付（实体集合 + tick 更新）；ECS 收敛与技能/Buff/状态机随 P2（未实现）
+- **AOI九宫格系统** - `SceneAoi` 单实现（Scene 独享、scene_id 隔离）+ `ViewerState` 逐观察者水位，Enter/Sync/Leave 事件面已交付
+- **数据存储层** - 玩家档案文件（tmp+rename 原子写）+ `PersistJournal` write-behind（write-ahead→定额 drain→快照压薄→崩溃 replay）；外部 DB/Redis 未接线
+- **日志系统** - 多级别异步日志
+- **工具类库** - 线程池、内存池、配置管理等
+- **BigWorld兼容层** - BigWorld 风格 C++ API facade（见 `docs/33-BigWorld_Compatibility.md`）
 
-## 🏛️ 架构设计
+## 架构设计
 
 > 完整架构图（系统架构概览 / 核心模块架构 / 分布式部署架构）已迁至文档站：[架构总览](docs/guide/architecture.md)。进程编队、权威分解与 Zone/无缝辨析见[架构审计报告](docs/analysis/architecture-review.md) §31。
 
@@ -84,16 +84,16 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 - **编程语言**: C++20
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
-- **网络库**: 自实现跨平台网络层
+- **网络库**: 自写跨平台网络层
 - **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3/#19）——**def 契约管语义**（属性/权限位/sync 掩码/内外分域；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付；服务端载体为 contract.lua，业务 handler 与白名单数据化）；**protobuf 管字节编码**（反射为默认：descriptor.bin + 框架固定消息族内建强类型守热路径；有代码热更管线的客户端走生成代码、bin 兜底；L1 帧格式 + zstd，规划；`docs/design/sdk-contract.md`）。protobuf 现为依赖+测试，未上消息通路（仓库自有 .proto 为零，现网手写编码）
 - **数据库**: 现状零外部存储依赖——玩家档案 = JSON 文件 + `PersistJournal` write-behind 日志（P1-4/P1-5 交付）；MySQL 8（主存储）/ Redis（缓存/会话）/ ClickHouse（分析）均为规划态未接线，PostgreSQL 留缝（docs/36 决策 #17）
-- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自行开发消息总线（规划，`docs/design/net-abstraction.md`）
+- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自写消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
-- **日志系统**: 自行开发多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
+- **日志系统**: 自写多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
 - **测试框架**: GTest + 零依赖断言式单测
 - **CI/CD**: GitHub Actions
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 
@@ -144,7 +144,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 # 打开 build\\Apollo.sln 进行编译
 ```
 
-## 📚 模块说明
+## 模块说明
 
 ### Base 基础设施（modules/base）
 - **定位**: 纯基础设施，无任何框架语义，可被任何 C++ 项目独立使用（不依赖 Apollo 其他模块）
@@ -174,15 +174,15 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ### Utils 工具库
 - **日志系统**: 多级别异步日志，文件/控制台输出
-- **线程池**: 高性能任务调度
-- **内存池**: 优化的内存管理
+- **线程池**: 任务调度
+- **内存池**: 内存管理
 - **配置系统**: JSON/XML/Lua配置支持
 
 ### Compatibility 兼容层
 - **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
 - **BigWorld API Tests**: `tests/test_bigworld_api.cpp` (CTest: `BigWorldApiTests`)
 
-## 🔧 使用示例
+## 使用示例
 
 ### 服务器基础框架
 
@@ -291,7 +291,7 @@ attributes->SetAttack(150);
 world->Update(deltaTime);
 ```
 
-## 📊 性能指标
+## 性能指标
 
 | 指标 | 目标值 | 说明 |
 |------|--------|------|
@@ -301,7 +301,7 @@ world->Update(deltaTime);
 | 网络吞吐 | 100MB/s | 峰值网络带宽 |
 | 数据库连接 | 1000+ | 最大连接池大小 |
 
-## 🧪 测试
+## 测试
 
 项目包含完整的单元测试和示例代码：
 
@@ -321,7 +321,7 @@ cd build && ctest -R BigWorldApiTests
 - 基础设施测试（日志/定时器/配置/线程池/序列化等）
 - BigWorld 兼容层 API 测试（`BigWorldApiTests`）
 
-## 📋 目录结构
+## 目录结构
 
 ```
 apollo/
@@ -340,17 +340,16 @@ apollo/
 
 详细目录说明见 [Directory Structure](docs/Directory_Structure.md)
 
-## 🔌 客户端SDK
+## 客户端SDK
 
 ### Unity SDK
 
-提供完整的Unity客户端SDK，支持：
+Unity SDK 部分模块已交付（模块状态详见 [SDK_Structure](docs/sdks/unity/SDK_Structure.md)）：
 
-- 网络通信管理
-- 消息序列化/反序列化
-- 自动重连机制
-- 资源热更新
-- 性能监控
+- 网络通信管理（NetworkManager，已有）
+- 登录认证（AuthManager，已有）
+- 属性同步（Attributes，开发中）
+- 消息序列化/反序列化（Messaging，计划中）
 
 ```csharp
 // Unity SDK使用示例
@@ -365,7 +364,7 @@ await client.ConnectAsync();
 await client.LoginAsync(loginRequest);
 ```
 
-## 🤝 贡献指南
+## 贡献指南
 
 欢迎贡献代码！请遵循以下步骤：
 
@@ -382,17 +381,21 @@ await client.LoginAsync(loginRequest);
 - 添加适当的注释
 - 编写单元测试
 
-## 📄 许可证
+## 许可证
 
 本项目采用 [MIT License](LICENSE) 许可证。
 
-## 🙏 致谢
+## 来源与致谢
 
-- 感谢所有贡献者的努力
-- 感谢开源社区的支持
-- 感谢所有用户的反馈和建议
+Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与术语参考了下列开源项目，引用处均标注来源：
 
-## 📞 联系方式
+- **BigWorld**：BigWorld 风格 C++ API facade（`docs/33-BigWorld_Compatibility.md`）；架构审计含 BigWorld / KBEngine / skynet 三框架源码对照（`docs/analysis/architecture-review.md` §16）
+- **KBEngine**：`docs/qa/` 多篇条目为其源码机制分析
+- **skynet**：观测通道等设计先例（`docs/analysis/architecture-review.md`）
+
+第三方依赖：[vcpkg](https://github.com/microsoft/vcpkg)（依赖管理）、[nlohmann/json](https://github.com/nlohmann/json)、[protobuf](https://github.com/protocolbuffers/protobuf)（现为依赖与测试，未上消息通路）、[GTest](https://github.com/google/googletest)、NNG（`modules/protocol` 现为桩形态，未启用真实传输）、[VitePress](https://vitepress.dev)（文档站）、GitHub Actions 与 Codecov（CI 与覆盖率）。
+
+## 联系方式
 
 - 项目主页: https://github.com/cuihairu/apollo
 - 问题反馈: [Issues](https://github.com/cuihairu/apollo/issues)
@@ -400,4 +403,4 @@ await client.LoginAsync(loginRequest);
 
 ---
 
-**Apollo - 构建你的MMORPG世界** 🎮
+**Apollo - 实例化多人在线游戏服务器引擎**

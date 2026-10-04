@@ -11,155 +11,110 @@ tag:
 
 # Data 模块
 
-Data 模块提供数据访问层，支持 MySQL、Redis 等多种数据存储。
+Data 模块提供数据访问层。2026-10-04 对账后的现状：三个子库——core（连接抽象）、
+orm（SQL 模板 + 内存连接 + write-behind 日志）、cache（进程内缓存）；外部数据库
+（MySQL/Redis）客户端未接线，P1-4 已删除五套存量实现（见 todo.md P1-4）。
 
-## ORM
+## core（apollo::data::core，头文件库）
 
-数据库 ORM 映射。
+连接与数据源抽象。
 
 ```cpp
-#include <apollo/data/orm/session.hpp>
-#include <apollo/data/orm/query.hpp>
+#include <apollo/data/core/connection.hpp>
+#include <apollo/data/core/data_source.hpp>
 
-using namespace apollo::data::orm;
-
-// 定义实体
-class Player : public Entity<Player> {
+namespace apollo::data::core {
+// QueryResult：ok / error / affected_rows / rows（unordered_map<string,string>）
+class IConnection {
 public:
-    PROPERTY(id, int64_t).primary().autoIncrement();
-    PROPERTY(name, std::string).notNull();
-    PROPERTY(level, int).defaultValue(1);
-    PROPERTY(exp, int64_t).defaultValue(0);
+    virtual ~IConnection() = default;
+    virtual bool connect() = 0;
+    virtual void disconnect() = 0;
+    virtual bool is_connected() const = 0;
+    virtual QueryResult execute_query(const std::string& sql) = 0;
+    virtual QueryResult execute_update(const std::string& sql) = 0;
 };
 
-// 使用 ORM
-auto session = SessionFactory::create("mysql://localhost:3306/apollo");
-
-// 插入
-Player player;
-player.name = "Player1";
-player.level = 10;
-session.insert(player);
-
-// 查询
-auto players = session.query<Player>()
-    .where("level > ?", 5)
-    .orderBy("exp DESC")
-    .limit(10)
-    .list();
-
-// 更新
-session.update<Player>()
-    .set("exp = exp + ?", 100)
-    .where("id = ?", player.id)
-    .execute();
-
-// 删除
-session.delete<Player>()
-    .where("level < ?", 10)
-    .execute();
-```
-
-## Redis
-
-Redis 客户端。
-
-```cpp
-#include <apollo/data/redis/client.hpp>
-
-using namespace apollo::data::redis;
-
-// 连接
-auto redis = RedisClient::create("tcp://127.0.0.1:6379");
-
-// 字符串操作
-redis->set("key", "value");
-auto value = redis->get("key");
-
-// 哈希操作
-redis->hset("player:12345", "level", "10");
-redis->hset("player:12345", "exp", "1000");
-auto level = redis->hget("player:12345", "level");
-
-// 列表操作
-redis->lpush("queue", "item1");
-redis->lpush("queue", "item2");
-auto item = redis->rpop("queue");
-
-// 集合操作
-redis->sadd("online_players", "12345");
-redis->sadd("online_players", "67890");
-auto members = redis->smembers("online_players");
-```
-
-## 连接池
-
-数据库连接池。
-
-```cpp
-#include <apollo/data/orm/connection_pool.hpp>
-
-// 配置连接池
-ConnectionPoolConfig config;
-config.host = "localhost";
-config.port = 3306;
-config.database = "apollo";
-config.username = "root";
-config.password = "123456";
-config.minConnections = 5;
-config.maxConnections = 20;
-
-// 创建连接池
-auto pool = ConnectionPool::create(config);
-
-// 获取连接
-auto conn = pool->getConnection();
-// 使用连接...
-// 连接自动归还到池中
-```
-
-## 缓存
-
-缓存抽象层。
-
-```cpp
-#include <apollo/data/cache/cache.hpp>
-
-using namespace apollo::data::cache;
-
-// 创建缓存
-auto cache = Cache::create("redis://localhost");
-
-// 设置缓存
-cache->put("player:12345", playerData, 3600);  // 1小时过期
-
-// 获取缓存
-auto data = cache->get("player:12345");
-if (!data) {
-    // 缓存未命中，从数据库加载
-    playerData = loadFromDatabase(12345);
-    cache->put("player:12345", playerData, 3600);
+class IDataSource {
+public:
+    virtual ConnectionPtr acquire() = 0;   // 连接工厂注入
+};
 }
+```
 
-// 删除缓存
-cache->remove("player:12345");
+## ORM（apollo::data_orm）
+
+SQL 模板执行 + 测试内存连接 + write-behind 日志。
+
+```cpp
+#include <apollo/data/orm/sql_template.hpp>
+
+// SqlTemplate：IDataSource 注入，query/update/带 mapper 的行映射
+apollo::data::orm::SqlTemplate sql(data_source);
+auto result = sql.query("SELECT id, name FROM player");
+auto players = sql.query<PlayerRow>("SELECT ...", [](const QueryRow& row) {
+    return PlayerRow{row};
+});
+```
+
+```cpp
+#include <apollo/data/orm/memory_connection.hpp>
+
+// MemoryConnection：IConnection 内存实现（测试用），seed_query 预置查询结果
+auto conn = std::make_shared<MemoryConnection>();
+conn->seed_query("SELECT 1", rows);
+```
+
+```cpp
+#include <apollo/data/orm/persist_journal.hpp>
+
+// PersistJournal（P1-4）：write-behind 日志
+// 行格式 seq|timestamp_ms|key|payload；快照压薄 tmp+rename 原子重写
+apollo::data::journal::PersistJournal journal(path);
+journal.open();
+journal.append("77", payload_json, timestamp_ms);  // write-ahead 落盘
+journal.drain(sink, /*max_entries=*/32);           // 定额出队 → 档案落盘
+journal.compact();                                 // 快照压薄
+journal.replay(sink);                              // 崩溃回放 + seq 续接
+```
+
+消费侧接线见 apps/base-app（保存路径 write-ahead + autoSaveLoop drain + 启动
+replay，P1-5 RecoveryCoordinator 编排）。
+
+## cache（apollo::data_cache）
+
+进程内缓存：`ICacheProvider` 抽象 + `PrimitiveCache`（map + TTL）+
+`CacheManager` 单例门面（provider 注入，get/set/remove/exists/get_or_compute）。
+
+```cpp
+#include <apollo/data/cache/cache_manager.hpp>
+#include <apollo/data/cache/primitive_cache.hpp>
+
+auto& cache = apollo::data::cache::CacheManager::instance();
+cache.set_provider(std::make_shared<PrimitiveCache>());
+cache.set("player:12345", serialized, 3600);
+std::string out;
+if (cache.get("player:12345", out)) { /* 命中 */ }
+cache.remove("player:12345");
 ```
 
 ## 依赖
 
 - apollo::core
-- apollo::base
 
 ## 链接
 
 ```cmake
-find_package(apollo-data-core REQUIRED)
-find_package(apollo-data-orm REQUIRED)
-find_package(apollo-data-redis REQUIRED)
-
 target_link_libraries(my_app
-    apollo::data_core
-    apollo::data_orm
-    apollo::data_redis
+    apollo::data_core      # INTERFACE（仅头）
+    apollo::data_orm       # sql_template / memory_connection / persist_journal
+    apollo::data_cache     # cache_manager / primitive_cache
 )
 ```
+
+## 未实现（规划态）
+
+- MySQL/Redis 真实连接器与连接池（P1-4 已删五套存量：`#ifdef` 四件、legacy
+  双拷贝、connection_pool 两份、redis 全族、DistributedLock）
+- 跨进程共享热数据层（Redis）——设计见 attribute-sync §8.4，引入随跨进程批次
+- 实体属性 ORM 映射（docs/api/data.md 旧稿的 Session/Query/Entity API 不存在）

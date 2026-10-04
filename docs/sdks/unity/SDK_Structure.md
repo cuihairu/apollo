@@ -35,13 +35,13 @@ skds/
 
 | 模块 | 功能 | 状态 |
 |------|------|------|
-| `ApolloClient.cs` | 主入口，连接、认证、心跳 | ✅ 已有 |
-| `ApolloClientConfig.cs` | 配置类 | ✅ 已有 |
-| `Network/NetworkManager.cs` | TCP/Socket 连接管理 | ✅ 已有 |
-| `Session/AuthManager.cs` | 登录认证 | ✅ 已有 |
-| `Attributes/` | 属性同步系统 | 🚧 开发中 |
-| `Messaging/` | Protobuf 消息路由 | 📋 计划中 |
-| `Utilities/` | 日志、定时器等 | 📋 计划中 |
+| `ApolloClient.cs` | 主入口，连接、认证、心跳 | 已有 |
+| `ApolloClientConfig.cs` | 配置类 | 已有 |
+| `Network/NetworkManager.cs` | TCP/Socket 连接管理 | 已有 |
+| `Session/AuthManager.cs` | 登录认证 | 已有 |
+| `Attributes/` | 属性同步系统 | 开发中 |
+| `Messaging/` | Protobuf 消息路由 | 计划中 |
+| `Utilities/` | 日志、定时器等 | 计划中 |
 
 ## 文档规范
 

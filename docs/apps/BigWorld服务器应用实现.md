@@ -413,7 +413,7 @@ class EntityManager {
 };
 ```
 
-2. **AOI 九宫格系统**
+2. **AOI 九宫格系统**（实现：`apollo::game::world::SceneAoi`，P1-3 收敛；示例为示意接口）
 ```cpp
 class AOIManager {
     void enter(Entity* entity);

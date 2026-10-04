@@ -6,200 +6,167 @@ prev: /api/README.md
 
 # Data API
 
-## apollo::data::orm::Session
+> 2026-10-04 对账：本页按 HEAD 实况重写。旧稿的 `orm::Session`/`Query`/
+> `Entity`/`ConnectionPool`/`redis::RedisClient`/`cache::Cache` 在仓库中不存在
+> （外部 DB/Redis 客户端未接线，P1-4 已删五套存量实现）。
+
+## apollo::data::core::IConnection
+
+```cpp
+namespace apollo::data::core {
+using QueryRow = std::unordered_map<std::string, std::string>;
+
+struct QueryResult {
+    bool ok = true;
+    std::string error;
+    uint64_t affected_rows = 0;
+    std::vector<QueryRow> rows;
+};
+
+class IConnection {
+public:
+    virtual ~IConnection() = default;
+    virtual bool connect() = 0;
+    virtual void disconnect() = 0;
+    virtual bool is_connected() const = 0;
+    virtual QueryResult execute_query(const std::string& sql) = 0;
+    virtual QueryResult execute_update(const std::string& sql) = 0;
+};
+}
+```
+
+---
+
+## apollo::data::core::IDataSource / SimpleDataSource
+
+```cpp
+namespace apollo::data::core {
+class IDataSource {
+public:
+    virtual ~IDataSource() = default;
+    virtual ConnectionPtr acquire() = 0;
+};
+
+using ConnectionFactory = std::function<ConnectionPtr()>;
+
+class SimpleDataSource final : public IDataSource {
+public:
+    explicit SimpleDataSource(ConnectionFactory factory);
+};
+}
+```
+
+---
+
+## apollo::data::orm::SqlTemplate
 
 ```cpp
 namespace apollo::data::orm {
-class Session {
+class SqlTemplate {
 public:
-    // 插入
+    explicit SqlTemplate(std::shared_ptr<apollo::data::core::IDataSource> data_source);
+
+    apollo::data::core::QueryResult query(const std::string& sql) const;
+    apollo::data::core::QueryResult update(const std::string& sql) const;
+
+    // 行映射：QueryRow → T
     template<typename T>
-    int64_t insert(const T& entity);
+    std::vector<T> query(const std::string& sql,
+                         const std::function<T(const QueryRow&)>& mapper) const;
 
-    // 更新
     template<typename T>
-    int update(const T& entity);
-
-    // 删除
-    template<typename T>
-    int delete_(const T& entity);
-
-    // 查询
-    template<typename T>
-    Query<T> query();
-
-    // 执行原生SQL
-    Result execute(const std::string& sql);
-
-    // 事务
-    Transaction beginTransaction();
+    std::optional<T> query_for_one(/* 同上 */);
 };
 }
 ```
 
-**线程安全**: ⚠️ 建议使用连接池
-
 ---
 
-## apollo::data::orm::Query
+## apollo::data::orm::MemoryConnection
+
+测试用内存连接（`IConnection` 实现），`seed_query` 预置查询结果。
 
 ```cpp
 namespace apollo::data::orm {
-template<typename T>
-class Query {
+class MemoryConnection final : public apollo::data::core::IConnection {
 public:
-    // WHERE 条件
-    Query& where(const std::string& condition);
-    template<typename... Args>
-    Query& where(const std::string& condition, Args&&... args);
+    bool connect() override;
+    void disconnect() override;
+    bool is_connected() const override;
+    apollo::data::core::QueryResult execute_query(const std::string& sql) override;
+    apollo::data::core::QueryResult execute_update(const std::string& sql) override;
 
-    // ORDER BY
-    Query& orderBy(const std::string& field);
-    Query& orderByDesc(const std::string& field);
-
-    // LIMIT
-    Query& limit(int count);
-    Query& offset(int count);
-
-    // 执行查询
-    std::vector<T> list();
-    T one();
-    int count();
+    // 预置查询结果（测试夹具）
+    void seed_query(std::string sql, std::vector<QueryRow> rows);
 };
 }
 ```
 
 ---
 
-## apollo::data::orm::Entity
+## apollo::data::journal::PersistJournal
+
+write-behind 日志（P1-4）：append（write-ahead 落盘）→ drain（定额出队，sink
+落档案）→ compact（快照压薄，tmp+rename 原子重写）→ replay（崩溃回放 + seq 续接）。
+行格式 `seq|timestamp_ms|key|payload`。
 
 ```cpp
-namespace apollo::data::orm {
-class Entity {
+namespace apollo::data::journal {
+struct JournalEntry {
+    std::uint64_t sequence = 0;
+    std::int64_t timestamp_ms = 0;
+    std::string key;      // 业务键（如玩家 id 十进制串）
+    std::string payload;  // 业务载荷（JSON 行）
+};
+
+class PersistJournal {
 public:
-    // 主键
-    int64_t id() const;
+    explicit PersistJournal(std::string journal_path);
 
-    // 表名
-    virtual std::string tableName() const = 0;
-
-    // 保存
-    void save();
-
-    // 删除
-    void remove();
-
-    // 刷新
-    void reload();
+    bool open();
+    bool append(std::string key, std::string payload, std::int64_t timestamp_ms);
+    std::size_t pending() const;                      // 待 drain 条数
+    std::size_t drain(const ApplySink& sink, std::size_t max_entries);
+    std::size_t replay(const ApplySink& sink);        // 返回回放条数
+    std::size_t compact();
+    std::uint64_t next_sequence() const;
 };
 }
 ```
 
----
-
-## apollo::data::orm::ConnectionPool
-
-```cpp
-namespace apollo::data::orm {
-class ConnectionPool {
-public:
-    static std::shared_ptr<ConnectionPool> create(const ConnectionPoolConfig& config);
-
-    // 获取连接
-    ConnectionPtr getConnection();
-
-    // 归还连接
-    void returnConnection(ConnectionPtr conn);
-
-    // 池信息
-    size_t activeCount() const;
-    size_t idleCount() const;
-};
-}
-```
-
-**线程安全**: ✅
+**线程安全**: 不安全（归宿主保存线程（base-app：autoSaveLoop drain + 关停收口））
 
 ---
 
-## apollo::data::redis::RedisClient
+## apollo::data::cache::CacheManager / PrimitiveCache
 
-```cpp
-namespace apollo::data::redis {
-class RedisClient {
-public:
-    static std::shared_ptr<RedisClient> create(const std::string& url);
-
-    // 字符串操作
-    void set(const std::string& key, const std::string& value);
-    void set(const std::string& key, const std::string& value, int ttl);
-    std::string get(const std::string& key);
-    bool del(const std::string& key);
-
-    // 哈希操作
-    void hset(const std::string& key, const std::string& field, const std::string& value);
-    std::string hget(const std::string& key, const std::string& field);
-    std::map<std::string, std::string> hgetall(const std::string& key);
-
-    // 列表操作
-    void lpush(const std::string& key, const std::string& value);
-    void rpush(const std::string& key, const std::string& value);
-    std::string lpop(const std::string& key);
-    std::string rpop(const std::string& key);
-    std::vector<std::string> lrange(const std::string& key, int start, int stop);
-
-    // 集合操作
-    void sadd(const std::string& key, const std::string& member);
-    bool sismember(const std::string& key, const std::string& member);
-    std::vector<std::string> smembers(const std::string& key);
-
-    // 过期时间
-    void expire(const std::string& key, int seconds);
-    int ttl(const std::string& key);
-
-    // 连接
-    void connect();
-    void disconnect();
-    bool isConnected() const;
-};
-}
-```
-
-**线程安全**: ⚠️ 建议使用连接池
-
----
-
-## apollo::data::cache::Cache
+进程内缓存：`ICacheProvider` 抽象（string 键值 + TTL），`PrimitiveCache` 为
+map + TTL 实现，`CacheManager` 单例门面（provider 注入）。
 
 ```cpp
 namespace apollo::data::cache {
-class Cache {
+class ICacheProvider {
 public:
-    static std::shared_ptr<Cache> create(const std::string& url);
+    virtual ~ICacheProvider() = default;
+    virtual bool get(const std::string& key, std::string& value) = 0;
+    virtual void set(const std::string& key, const std::string& value, int ttl_seconds) = 0;
+    virtual void remove(const std::string& key) = 0;
+    virtual bool exists(const std::string& key) = 0;
+};
 
-    // 设置
-    template<typename T>
-    void put(const std::string& key, const T& value);
-    template<typename T>
-    void put(const std::string& key, const T& value, int ttl);
-
-    // 获取
-    template<typename T>
-    std::optional<T> get(const std::string& key);
-
-    // 删除
-    bool remove(const std::string& key);
-
-    // 清空
-    void clear();
-
-    // 检查
+class CacheManager {
+public:
+    static CacheManager& instance();
+    void set_provider(std::shared_ptr<ICacheProvider> provider);
+    bool get(const std::string& key, std::string& value);
+    void set(const std::string& key, const std::string& value, int ttl_seconds = 0);
+    void remove(const std::string& key);
     bool exists(const std::string& key);
-
-    // 过期
-    void expire(const std::string& key, int ttl);
+    template <typename T>
+    T get_or_compute(const std::string& key, std::function<T()> compute, int ttl_seconds = 0);
 };
 }
 ```
 
-**线程安全**: ✅
+**未实现**：MySQL/Redis 真实连接器与连接池、跨进程共享热数据层（Redis）、
+实体属性 ORM 映射（旧稿 Session/Query/Entity API 从未存在）。

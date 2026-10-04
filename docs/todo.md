@@ -32,6 +32,7 @@
 - [x] **P1-4 持久化栈收敛+最小落盘**：五套→一套（删 42 文件：B1 #ifdef 四件/B2 legacy 双拷贝含 orm 树死源/B3 connection_pool 两份/C1-C4 redis 全族+modules/data/redis 整目录+空 wrapper×2/DistributedLock/遗留测试 6 件；SqlTemplate B4 死局核实已在 P0-5 头内 inline 修掉，顺销）；table_loader.h:22 语法修复；最小真链路（SaveQueue::set_worker 真落盘分支 + DatabaseService 文件档案 tmp+rename 原子写 + load 未命中即失败废「player_+id」bootstrap；fromJson/toJson 补 playerId/exp int64/x/y/z 对称；flushDirtyAnchors 以现档为基线防默认值清档）；PlayerData 序列化归位 database_service.cpp；新增 PersistJournal write-behind 骨架（append 定额 drain 快照压薄 崩溃 replay + seq 续接，orm 库）；新增 persist_journal_tests + persistence_chain_tests（直编源三平台执行，含出口判据④ 写盘→重启→读回）。
 - [x] **P1-5 Recovery**：三档清单入码（recovery_manifest()，lifecycle §3 矩阵六行：玩家长期态+instance 结算=必须持久化、scene/会话/拓扑=可重算、战斗中间态=可丢）；RecoveryCoordinator 启动序列 restore→admission→ready（异常/拒绝进 Failed 拒服务、状态机单向）；journal 消费侧接线 base-app（write-ahead append 于两保存路径 + autoSaveLoop 定额 drain 压档 + 关停收口；restart 时 journal replay 把位点压成档案）；restore_anchors 锚点重建置 Offline（档案在、会话无，登录再 Online）；recovery_tests 直编源 5 组（含崩溃回放端到端）。场景重开按可重算档由 P0-3 create_scene 路径承接，清单内标注；会话重连路径归 P1-6 resume 承接。base-app 目标受 apollo_protocol 门控（两树不编），base_server/database_service/main 三源 g++ -fsyntax-only 核验过。
 - [x] **P1-6 Reconnect/保活窗口**：世界侧（819cd25e）：契约 internal 906-908（golden check 过、client_hash 不变）+ WorldSession 挂机窗口 suspend_window/resume(token,now) 双键校验 + WorldSessionManager sweep_suspended 收口链 + Scene suspend_avatar/resume_avatar + reconnect_tests 直编 5 组。收尾批：gateway 断线纯文本→结构化 GatewayClientDisconnect（codec encode/decode 补齐）；modules/protocol 启用（nng 未装两树同走桩，vcpkg/CI 同形；模块 CMake 补 nlohmann_json 声明对齐根口径）→ gateway-app/login-app/base-app/baseappmgr 四 app 全量编译，gateway_route/protocol_bootstrap/base_anchor/baseappmgr 四套入 ctest：ON 树 30/30、OFF 树 27/27 全绿。历史欠账顺清：CellCrossBorder encode 缺失补齐；GatewayAssignRequest.loginTicket、LoginResponse.loginTicket、GatewayAssignResponse.errorMessage 三字段入结构体与 json codec（admission/login 链路真实依赖，契约不含此域、client_hash 不动）；MessageHeader SizeCheck 26→28 算术修正；base_anchor 测试改档案播种（P1-4 口径 load 不再凭空 bootstrap）。907/908 resume 消息消费面归 P3-2 gateway surface。
+- [x] **全量文档对账**（全局令，2026-10-04）：README/docs 全站 vs HEAD 真实现（P0+P1 现状）——引用已删文件的示例换实 API（`AOIManager`→`SceneAoi`；`ECSWorld`/`AttributeManager::set` 等旧稿 API 标注未实现或按真身重写；orm/redis 旧 API 删除）；能力矩阵三态标注（attribute-sync 可见性/持久化行、redis 热数据层、scripting-lua §8 异步层）；历史件加况标注（docs/03、docs/34）；七件套加执行状态注记（improvement-plan）；todo 本条随批勾选。站点页事实修正（quick-start/concepts/runtime/game/data API）已随「docs: 优化展示」域提交。
 
 ## P2 —— Battle / ECS / Social / Guild / Party（任务书 §38 三档）
 
@@ -60,7 +61,7 @@
 
 ## 遗留登记（已关 / 未列主线项，不扩写）
 
-- **旧 9 批次计划**（2026-09-29，docs/36 决策表依据）：批次 1 契约系统✅已交付；批次 2-4 重组件（db-app/cell-appmgr/base-appmgr）中与任务书重叠者已并入 P1-P4 对应批次；批次 5 AI 寻路（Recast/Detour）、批次 6 脚本（Lua）、批次 7 客户端 SDK 投影、批次 8 监控运维——审计后未列入轻量 MMO 主线，保持现状登记，主线稳定后评估。
+- **旧 9 批次计划**（2026-09-29，docs/36 决策表依据）：批次 1 契约系统已交付；批次 2-4 重组件（db-app/cell-appmgr/base-appmgr）中与任务书重叠者已并入 P1-P4 对应批次；批次 5 AI 寻路（Recast/Detour）、批次 6 脚本（Lua）、批次 7 客户端 SDK 投影、批次 8 监控运维——审计后未列入轻量 MMO 主线，保持现状登记，主线稳定后评估。
 - **审计遗留死件清账**（并入各阶段「先删后建」批内，不留新孤儿）：comval 手写 union、attribute_id 290 常量、LocalServiceDiscovery、queue 族继承件、IPC 旁支（improvement-plan §7.5）。
 - **契约差异清欠**（七件套各文档文末差异清单）：entities.xml `Player parent=Avatar` 冲突待 P2-3 修文；WorldSpace 词根随 P0-3 更名消账；base/baseappmgr 进程名随 P3-1；nng/modules·protocol 随 P1 收口前保持禁用。
 

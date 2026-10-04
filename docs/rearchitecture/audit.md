@@ -184,7 +184,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 | Persistence | test_data.cpp 20 测（内存连接/cache） | 真库零测；base-app DatabaseService 无测试 |
 | 网络 | test_net.cpp 76 测（header 级：包/校验和/HTTP/WS 头） | 真 socket 回环测试（test_network.cpp）在 GTest 分支 → CI 从不跑 |
 
-基础设施：断言主体是自行开发零依赖宏（TEST_ASSERT 约 30 个文件、再实现 TEST_CASE/INTEGRATION_TEST 注册器），真 GTest 仅 9 个文件；**无任何 sanitizer/valgrind 接线**（tests/README 声称的 -DSANITIZE_* 全仓无定义）；覆盖率 option 存在但 codecov.yml 忽略 tests/**；契约测试族（test_contract.cpp + xmllint XSD 闸 + golden check）是全仓接线最完整、CI 真跑的测试族。
+基础设施：断言主体是自写零依赖宏（TEST_ASSERT 约 30 个文件、再实现 TEST_CASE/INTEGRATION_TEST 注册器），真 GTest 仅 9 个文件；**无任何 sanitizer/valgrind 接线**（tests/README 声称的 -DSANITIZE_* 全仓无定义）；覆盖率 option 存在但 codecov.yml 忽略 tests/**；契约测试族（test_contract.cpp + xmllint XSD 闸 + golden check）是全仓接线最完整、CI 真跑的测试族。
 
 ---
 

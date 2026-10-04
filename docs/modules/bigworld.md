@@ -108,11 +108,11 @@ BigWorld::Runtime()->addTimer(100, []() {
 
 | BigWorld API | Apollo 兼容层 |
 |-------------|--------------|
-| `BigWorld::createEntity()` | ✅ 支持 |
-| `BigWorld::destroyEntity()` | ✅ 支持 |
-| `BigWorld::getEntity()` | ✅ 支持 |
-| `BigWorld::Runtime()` | ✅ 支持 |
-| `BigWorld::registerCallback()` | ✅ 支持 |
+| `BigWorld::createEntity()` | 支持 |
+| `BigWorld::destroyEntity()` | 支持 |
+| `BigWorld::getEntity()` | 支持 |
+| `BigWorld::Runtime()` | 支持 |
+| `BigWorld::registerCallback()` | 支持 |
 
 3. **重新编译**
 

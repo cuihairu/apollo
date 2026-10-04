@@ -23,12 +23,11 @@ order: 1
 
 ```cpp
 #include <apollo/base/time.hpp>
-#include <apollo/core/log.hpp>
-#include <apollo/net/tcp/server.hpp>
+#include <apollo/core/log/log_manager.hpp>
+#include <apollo/runtime/application_host.hpp>
 
 using apollo::base::Time;
-using apollo::core::LogManager;
-using apollo::net::tcp::Server;
+using apollo::runtime::ServiceHost;
 ```
 
 ## 错误处理
@@ -54,8 +53,8 @@ if (!result.ok()) {
 
 Apollo 的 API 线程安全性分为三级：
 
-- ✅ **线程安全** - 可以在多线程中安全调用
-- ⚠️ **条件安全** - 需要外部同步
-- ❌ **不安全** - 必须在同一线程调用
+- **安全** - 可以在多线程中安全调用
+- **条件安全** - 需要外部同步
+- **不安全** - 必须在同一线程调用
 
 文档中会标注每个 API 的线程安全级别。

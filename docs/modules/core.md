@@ -17,121 +17,106 @@ Core 模块提供框架内核，定义公共运行语义。
 
 ### 依赖注入 (DI)
 
+`apollo::core::di` 极简构造注入容器：类型键 bean 图、拓扑序装配、仅
+Singleton/Prototype 两档作用域。装配只发生在应用入口（apps/），无注解无注册宏。
+
 ```cpp
 #include <apollo/core/di/application_context.hpp>
 
-using namespace apollo::core;
-
-// 定义服务
+// 定义服务（普通类，依赖走构造函数）
 class DatabaseService {
 public:
     void connect() { /* ... */ }
 };
 
-// 注册服务
-auto& container = ApplicationContext::instance();
-container.registerSingleton<DatabaseService>();
+// 构建：builder 声明 bean，build 产出上下文，initialize 按拓扑序装配
+apollo::core::di::ApplicationContextBuilder builder;
+builder.add_singleton<DatabaseService>().name("database");
+auto context = builder.build();
+if (!context.initialize()) {
+    // 装配失败
+}
 
-// 解析服务
-auto db = container.resolve<DatabaseService>();
-db->connect();
+// 解析：get<T>() 取按类型键；get_named<T>("...") 按名取
+auto& db = context.get<DatabaseService>();
+db.connect();
 ```
 
 ### 配置 (Config)
 
+`apollo::core::config::ConfigRegistry` 键值注册表（string/int64/bool 三型）；
+热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6，未实现）。
+
 ```cpp
-#include <apollo/core/config.hpp>
+#include <apollo/core/config/config_registry.hpp>
 
-auto& config = ConfigManager::instance();
-config.load("config.json");
+apollo::core::config::ConfigRegistry config;
+config.set("server.port", 8888);
+config.set("server.host", std::string("0.0.0.0"));
 
-int port = config.get<int>("server.port");
+int64_t port = config.get_int64("server.port");
+std::string host = config.get_string("server.host");
+bool ok = config.has("server.port");
 ```
 
 ### 日志 (Log)
 
+`apollo::core::log`：`LogManager` 单例（`initialize(config)` / `getLogger(name)` /
+`createLogger(name, level)` / `flushAll`），宏面 `APOLLO_LOG_INFO/WARN/ERROR(msg)`
+与 `_F(fmt, ...)` 格式化变体（`include/apollo/core/log/log_manager.h`）。
+
 ```cpp
-#include <apollo/core/log.hpp>
+#include <apollo/core/log/log_manager.hpp>
 
-using namespace apollo::core;
+APOLLO_LOG_INFO("这是一条信息");
+APOLLO_LOG_WARN_F("端口 {} 已变更", 8888);
 
-// 基础使用
-LOG_INFO("MyLogger", "这是一条信息");
-LOG_WARN("MyLogger", "这是一条警告: {}", errorCode);
-LOG_ERROR("MyLogger", "错误: {}", error);
-
-// 配置日志
-LogManager::instance().configure({
-    .level = LogLevel::INFO,
-    .file = "logs/server.log",
-    .console = true
-});
+auto& mgr = LogManager::instance();
+mgr.initialize(LogManagerConfig::createCombined("logs/server.log", LogLevel::Info));
+auto logger = mgr.getLogger("MyLogger");
 ```
 
 ### 生命周期 (Lifecycle)
 
+`IApplicationLifecycle` 六钩子（宿主按相位回调）：`on_application_boot` /
+`on_application_config_loaded` / `on_application_initialized` /
+`on_application_ready` / `on_application_reload` / `on_application_stop`。
+`ApplicationHost` 的六阶段状态机（Boot→…→Stopped）见 runtime 模块。
+
 ```cpp
 #include <apollo/core/application_lifecycle.hpp>
 
-class MyApplication : public Application {
+class MyApplication : public apollo::core::IApplicationLifecycle {
 public:
-    void start() override {
-        LOG_INFO("App", "启动中...");
-        // 初始化逻辑
+    void on_application_ready() override {
+        APOLLO_LOG_INFO("应用就绪");
     }
-
-    void stop() override {
-        LOG_INFO("App", "关闭中...");
-        // 清理逻辑
+    void on_application_stop() override {
+        APOLLO_LOG_INFO("应用停止");
     }
-
-    State getState() const override {
-        return state_;
-    }
-
-private:
-    State state_ = State::STOPPED;
 };
 ```
 
 ### 事件 (Event)
 
-```cpp
-#include <apollo/core/event_bus.hpp>
-
-// 定义事件
-struct PlayerLoginEvent {
-    uint64_t playerId;
-    std::string playerName;
-};
-
-// 订阅事件
-EventBus::instance().subscribe<PlayerLoginEvent>([](const PlayerLoginEvent& e) {
-    LOG_INFO("Event", "玩家 {} 登录", e.playerName);
-});
-
-// 发布事件
-EventBus::instance().publish(PlayerLoginEvent{12345, "Player1"});
-```
+> **未实现**（2026-10-04 对账）：`apollo/core/event_bus.hpp` 不存在，仓库无
+> 通用 EventBus。现有事件面是专用的：PlayerDirectory 经 `EventSink` 上报
+> 在线目录事件（session_up/down/moved/kicked）、`SceneAoi::EventSink` 上报
+> AOI 三事件——新事件先入 glossary 再按域落接口，不做通用总线。
 
 ### 定时器 (Timer)
 
+`include/apollo/core/timer/timer_manager.h`：时间轮 `TimerManager`
+（`setTimer(intervalMs, callback)` / `killTimer` / `hasTimer`，TimerId 返回）。
+
 ```cpp
-#include <apollo/core/timer.hpp>
+#include <apollo/core/timer/timer_manager.h>
 
-// 一次性定时器
-Timer::setTimeout(1000, []() {
-    LOG_INFO("Timer", "1秒后执行");
+TimerManager timers;
+TimerId id = timers.setTimer(5000, []() {
+    APOLLO_LOG_INFO("每 5 秒（按时间轮刻度）");
 });
-
-// 周期定时器
-Timer::setInterval(5000, []() {
-    LOG_INFO("Timer", "每5秒执行");
-});
-
-// 取消定时器
-auto id = Timer::setTimeout(1000, callback);
-Timer::cancel(id);
+timers.killTimer(id);
 ```
 
 ## 依赖

@@ -1354,10 +1354,10 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 
 | §16.8 原则 | modular 轨现状 | 判定 |
 |---|---|---|
-| 原语在 modules/，装配在 apps/ | di 三头文件 + 一 cpp 全在 modules/core；唯一的 `build()+initialize()` 序列在 apps/game-server/src/main.cpp:99-102 | ✅ 教科书式符合 |
-| 模块间依赖单向、可裁剪 | apollo_core 的 di 部分依赖 = 空（application_context.hpp include 清单 ：3-15 仅 type_key/unique_bean + std）；ApplicationHost（modules/runtime）依赖 core 的 lifecycle/config/log 三个头（application_host.cpp:1-3） | ✅ 无反向、无跨层 |
-| 原语不带进程态 | TypeKey/UniqueBean/Builder 均无全局态；全局态只在两处且都属应用层惯例：`global_config()`（config_registry.cpp:69）与 `global_log_manager()` | ✅（ConfigRegistry 全局实例的取舍见 §17.6） |
-| 装配即代码、可 grep | bean 图 = main.cpp 里一串 add_singleton 链，依赖即模板参数包（`add_singleton<LoginPipeline, GameClockService>` main.cpp:98） | ✅ 无 XML/注解/注册器间接层 |
+| 原语在 modules/，装配在 apps/ | di 三头文件 + 一 cpp 全在 modules/core；唯一的 `build()+initialize()` 序列在 apps/game-server/src/main.cpp:99-102 | 教科书式符合 |
+| 模块间依赖单向、可裁剪 | apollo_core 的 di 部分依赖 = 空（application_context.hpp include 清单 ：3-15 仅 type_key/unique_bean + std）；ApplicationHost（modules/runtime）依赖 core 的 lifecycle/config/log 三个头（application_host.cpp:1-3） | 无反向、无跨层 |
+| 原语不带进程态 | TypeKey/UniqueBean/Builder 均无全局态；全局态只在两处且都属应用层惯例：`global_config()`（config_registry.cpp:69）与 `global_log_manager()` | 符合（ConfigRegistry 全局实例的取舍见 §17.6） |
+| 装配即代码、可 grep | bean 图 = main.cpp 里一串 add_singleton 链，依赖即模板参数包（`add_singleton<LoginPipeline, GameClockService>` main.cpp:98） | 无 XML/注解/注册器间接层 |
 
 **Legacy 轨的结构性问题**（判死刑的依据，非新发现，汇总自 §0-§6 并以行号落死）：进程级 `getInstance()` 单例（ApplicationContext.h:18-21）使测试无法隔离实例；字符串键 + `dynamic_pointer_cast`（:109-113）把类型错误推迟到运行期空指针；注册期 factory 探针（:34-40）在注册路径上就产生构造副作用；runtimeInfo_ 阶段追踪（:79-107）为内省维护了一个平行状态机——modular 轨用「编译期类型键 + assert」把同一组需求压到 195 行实现里。
 
@@ -2980,15 +2980,15 @@ C-95 建号前全仓 grep 零命中。
 | baseapp③DB | 备份归档落盘 | journal → DataProxy（异步，内存为准不直写） | 直写（连接池） | 直写 | **DataProxy-journal** |
 | baseappmgr | 接入分配/负载 | manager（准入+目录+落点+恢复 四合一） | — | — | **manager** |
 | cellapp | 空间权威 | **Zone**（每实例临时建 instance） | 主进程内房间 | **room 进程** | **Zone** ×N |
-| cellapp：witness/AOI | 远程视野续订 | AOI 九宫格（Zone 内组件，无跨进程订阅） | ✅ | ✅ | ✅ |
+| cellapp：witness/AOI | 远程视野续订 | AOI 九宫格（Zone 内组件，无跨进程订阅） | 是 | 是 | 是 |
 | cellapp：ghost/volatile | 分布式空间双写 | **刻意不做**（裁决 #9：无 cell 分片即无 ghost） | ✗ | ✗ | ✗ |
-| cellapp：负载迁移/teleport | 实体跨进程迁移 | **刻意不做**（TransferPlayer = ownership handoff，搬所有权不搬对象） | ✗ | ✗（开局移交/回厅移交） | ✅ |
+| cellapp：负载迁移/teleport | 实体跨进程迁移 | **刻意不做**（TransferPlayer = ownership handoff，搬所有权不搬对象） | 否 | 否（开局移交/回厅移交） | 是 |
 | cellappmgr | 空间拓扑 | manager 落点裁决（无空间拓扑——instance 边界即进程边界） | — | 简化落点 | **manager** |
 | dbmgr | 唯一 DB 点/实体映射 | DataProxy + contract 契约（XML 契约替代 entitydef 映射声明） | — | — | **DataProxy** |
 | machine | 守护/发现/启停 | machined（G-1 注册；运维面可部分让位 systemd/k8s） | — | — | **machined** |
 | logger | 集中日志 | LogAgent→Kafka→ClickHouse（决策 #14，规划） | 文件 | 文件 | **管道** |
-| bots | 压测 | gap #15（在册待建） | ✗ | ✗ | P3 建 |
-| servicemgr | 定时/第三方 | interfaces（#14 入站对接面） | ✗ | ✗ | P3 建 |
+| bots | 压测 | gap #15（在册待建） | 否 | 否 | P3 建 |
+| servicemgr | 定时/第三方 | interfaces（#14 入站对接面） | 否 | 否 | P3 建 |
 | watcher | 观测树 | observability-watcher（A 档在册设计） | 日志 | 日志 | **观测树** |
 | mailbox entity call | 三寻址远程调用 | 自行开发消息总线（规划，net-abstraction.md）+ TransferPlayer handoff | 进程内直调 | 进程间消息 | **总线** |
 | 备份链 HA | primary/secondary | journal 重放 + manager 恢复协调（**manager 自身 HA 开放问题在册**） | 单进程无 HA | baseapp 单点 | **journal 重放** |

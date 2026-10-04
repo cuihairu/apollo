@@ -24,7 +24,7 @@ Compact GameServer 仍通过 Transport/Registry 与其他服务交互（DataProx
 |------|----------|------------------|
 | Scene Orchestrator | 独立服务 | 合并进 Compact GS 的 SceneManager，维护固定地图实例表 |
 | ZoneServer | 多实例/多进程 | 以线程或协程形式运行，按地图分线程；可配置一个进程内多个逻辑实例 |
-| AOI Service | 独立集群 | 使用内嵌 AOI 模块（与 Zone 同进程共享 AOIManager），仍可分 shard |
+| AOI Service | 独立集群 | 使用内嵌 AOI 模块（与 Zone 同进程共享 `SceneAoi`——现行实现名，P1-3 收敛；下文 `AOIManager` 同指），仍可分 shard |
 | 副本实例（历史名 Battle Service） | 可选独立 | 塔防房间作为内部模块即可；大型玩法可仍调用外部副本实例进程 |
 | Transport | AOI/Zone 互通 | Compact 模式可禁用 AOI↔Zone Transport，保留与 Gate/DataProxy 的管道 |
 | WorldServer | 全局调度 | 若玩法简单，可由单个 Compact GS 管理/或保留轻量 World 处理账号/匹配 |
@@ -36,7 +36,7 @@ CompactGameServer
  ├─ NetEndpoint (与 Gate 通信)
  ├─ SceneManager
  │    └─ SceneInstance (固定地图)
- │         ├─ AOIManager (嵌入)
+ │         ├─ SceneAoi (嵌入，P1-3 实现名)
  │         ├─ BattleModule
  │         ├─ WaveManager (塔防特有)
  │         └─ ScriptEngine (Lua)
@@ -48,7 +48,7 @@ CompactGameServer
 
 - SceneManager 维护一张 `scene_config` 表（map_id、最大玩家、波次配置）。
 - 每个 SceneInstance 运行自己的 Tick，负责单位刷新、波次、建塔、Buff 等。
-- AOIManager 使用与独立 AOI 一致的数据结构，但不再跨进程；若未来需要扩展，可将 AOI 接口保留，切换到远程实现。
+- AOI（实现 `SceneAoi`）使用与独立 AOI 一致的数据结构，但不再跨进程；若未来需要扩展，可将 AOI 接口保留，切换到远程实现。
 
 ## 5. 线程与扩展
 

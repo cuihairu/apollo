@@ -25,10 +25,10 @@
 |---|---|---|---|
 | 属性声明 | .def 文件：类型 + 所有权标记 + 持久化 + 目录 | .def 同源简化 + 代码生成多端 SDK | `AttributeDef` 结构体/配置表（docs/03 §2）有雏形，**无所有权轴、无契约生成** |
 | 同步决策 | 属性标记决定去向（OWN_CLIENT/OTHER_CLIENT/CELL_PUBLIC…），按客户端 维护 lastSeq，**变更历史驱动 delta** | 同思路简化版，属性 ID + flags，客户端按 entity 收 delta | 每次变更即时生成 SyncTask 派发到后台线程；**无 per-viewer 进度、无历史、无 ACK** |
-| 可见性 | AOI/interest + ghost（跨 cell 镜像） | AOI 简化 + entity 创建/销毁消息 | `aoi.hpp` 有 AOIGrid/ENTER/LEAVE 事件，**但与属性系统未接线**（AOIEvent 无人消费成同步决策） |
+| 可见性 | AOI/interest + ghost（跨 cell 镜像） | AOI 简化 + entity 创建/销毁消息 | `SceneAoi` 事件面已交付（P1-3：Enter/Sync/Leave + `ViewerState` 逐观察者水位），**但与属性系统未接线**（事件无人消费成同步决策） |
 | 带宽控制 | per-client 预算 + 实体优先级（距离/重要度），预算不够时低优先级实体降频 | 有 per-client 选项，粒度粗 | **无**。50ms 固定批处理，快慢客户端同待遇 |
 | 复杂类型 | FIXED_DICT/ARRAY 按 slice 追踪脏 | 支持 nested，粒度到字段 | `BAG_DATA` 类 blob 属性只能整体重发 |
-| 持久化 | base 权威 + backup + 快照迁移 | MySQL 实体表，复杂类型 blob（**弱点**，§8） | docs/07/08 有设计，实现为同步 mock |
+| 持久化 | base 权威 + backup + 快照迁移 | MySQL 实体表，复杂类型 blob（**弱点**，§8） | 文件档案 + `PersistJournal` write-behind（P1-4/P1-5：原子写、定额 drain、崩溃 replay；MySQL 未接线） |
 | 客户端预测 | 移动预测 + 服务端 reconcile（cell 权威） | 同 | 无设计 |
 
 ### 0.2 现有雏形的具体缺陷（读码结论）
@@ -145,10 +145,10 @@ ViewerState (per (client, entity))
 
 ### 4.1 viewer set：与 AOI 的接线
 
-- `aoi.hpp` 的 `AOIGrid` 已经产出 ENTER/LEAVE/SYNC/UPDATE 事件与 `GetAOIEntities`——**属性系统是它的第一个正式消费者**：
-  - ENTER(entity A 进入 B 的 AOI)：为 (B, A) 建 `ViewerState`，A 向 B 发创建+快照；同时反向（AOI 是对称关系，按格子邻接自然对称，仍以事件为准）。
-  - LEAVE：发销毁消息，回收 ViewerState。
-  - UPDATE（跨格移动）：只更新 viewer set 的缓存归属，不触发协议。
+- `SceneAoi` 事件面已交付（P1-3 收敛后全仓唯一实现）：Enter/Sync/Leave 三事件 + `viewers_of`/`viewers_at` 查询，差集基准是 `ViewerState`（逐 observer 水位）——**属性系统是它的第一个正式消费者（待接线）**：
+  - Enter（entity A 进入 B 的 AOI）：为 (B, A) 建 `ViewerState`，A 向 B 发创建+快照；同时反向（AOI 是对称关系，按格子邻接自然对称，仍以事件为准）。
+  - Leave：发销毁消息，回收 ViewerState。
+  - Sync（跨格移动）：只更新 viewer set 的缓存归属，不触发协议。
 - 观察者计算每 tick 增量维护（AOI 事件的增量性），属性收集阶段**不做任何空间查询**——空间计算与同步收集解耦，各自 O(变更量)。
 - `SELF` 域不依赖 AOI：owner 对自己的 ViewerState 在登录即建立、离线才销毁。
 
@@ -160,8 +160,8 @@ ViewerState (per (client, entity))
 
 ### 4.3 特殊可见性规则（契约可表达）
 
-- 隐身/死亡：AOI flags（`aoi.hpp:39` 已有 flags 位）+ 属性域联动——隐身时对该实体的 viewer set 收缩，属性系统不特判（就是 viewer set 变了）。
-- 战争迷雾/分段可见（副本）：scene 隔离由 AOI 的 sceneId 保证（`AOIEntity::sceneId`），无需属性系统参与。
+- 隐身/死亡：AOI flags + 属性域联动——隐身时对该实体的 viewer set 收缩，属性系统不特判（就是 viewer set 变了）。**未实现**：flags 位随旧 `aoi.hpp` 删除（P1-3），`SceneAoi` 尚无 per-entity flags，随接线批次补。
+- 战争迷雾/分段可见（副本）：scene 隔离由 AOI 保证——已实现为结构性隔离（每个 `Scene` 独享一个 `SceneAoi` 实例，P1-3），无需属性系统参与。
 
 ### 4.4 跨进程预留（P3，BigWorld 化）
 
@@ -305,10 +305,10 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 §8.2 末行已定**定位**（跨进程共享热数据，不做实体属性缓存、不做二级缓存）；本节补部署面，使定位可执行。
 
 - **拓扑**：单实例起步（P3 单机编队期）；多机编队引入 Sentinel（主从 + 故障转移）；**Cluster 模式不进路线图**——键空间规模（公会/排行/全局态）单实例内存远超需求，Cluster 的多键操作限制与 hash-tag 复杂度换不来对等收益（与 net-abstraction §5.3「不引外部协调服务」同一权衡族）。
-- **连接与线程**：modules/data 统一客户端 + 连接池（hiredis；C-45 四套收敛后的唯一实现）；**同步面禁场景线程直调**——Redis 网络往返同 SQL，一律走 scripting-lua §8 异步交接（L0 执行层 IO 线程池 + request_id 回场景线程）；命令超时 + PING 健康检查 + 每进程连接上限常量。
+- **连接与线程**（目标态，**未实现**——P1-4 已删 redis 全族，Redis 客户端与连接池待跨进程批次重新引入）：modules/data 统一客户端 + 连接池；**同步面禁场景线程直调**——Redis 网络往返同 SQL，一律走 scripting-lua §8 异步交接（L0 执行层 IO 线程池 + request_id 回场景线程）；命令超时 + PING 健康检查 + 每进程连接上限常量。
 - **键空间**：`apollo:{域}:{世界}:{键}` 前缀分层（`guild:{wid}:{gid}` / `rank:{wid}:{board}` / `global:{key}`）；**每键必须 TTL 或显式永驻理由**——无 TTL 的无界增长键 = 把 Redis 用成无 schema 的第二 DB，禁止（§15.2「禁第二套」纪律的数据面版）。
 - **一致性边界**：Redis 是**共享工作内存，不是真相源**——真相源 = owner 进程内存 + DB journal（§8.2）；Redis 整库丢失 = 从 DB 重建 + 短暂降级（排行重建/公会只读），**不构成数据丢失事故**（这也是「不做实体属性缓存」的推论）。**跨进程互斥不依赖 Redis 锁**——权利判定归 G-1 mgr 单点定序（编队事件）；Redis 原子性只用于数据面（INCR/ZADD/LUA 脚本），不用于所有权与仲裁。
-- **存量收敛**：C-45 四套 redis 客户端并存是审计问题，收敛纪律已定（architecture-review §15.2）；本节为目标态设计，收敛执行归代码批。
+- **存量收敛**：C-45 四套 redis 客户端并存是审计问题，收敛纪律已定（architecture-review §15.2）；**已执行**（P1-4：五套存量连同 `modules/data/redis` 整树删除，共 42 文件）；本节仍为目标态设计。
 
 ## 9. 客户端预测与服务端校验
 
@@ -328,7 +328,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 主循环（每 tick，owning thread 串行）:
   1. simulate       — 业务/脚本写属性（只允许本阶段；set() 无锁，因为单写者）
   2. recalc         — 派生属性重算（依赖图拓扑序）
-  3. aoidecay       — AOI 增量事件 → viewer set 增删（已有 aoi.hpp 事件流）
+  3. aoidecay       — AOI 增量事件 → viewer set 增删（SceneAoi 事件流，P1-3 已交付）
   4. collect        — 按 (viewer, entity) 组装 delta/快照（读 history，无锁）
   5. budget/flush   — 预算装包 → net 抽象层发送（net-abstraction.md）
   6. persist-batch  — 持久日志批量交给 DB 工作线程（异步，回调排回下一 tick 阶段 1 前执行）

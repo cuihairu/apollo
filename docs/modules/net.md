@@ -11,7 +11,15 @@ tag:
 
 # Network 模块
 
-Network 模块提供网络通信能力，支持 TCP、HTTP、WebSocket 等协议。
+Network 模块提供网络通信能力。
+
+> **实现对照（2026-10-04 对账）**：本页样例为旧稿接口——`apollo::net::tcp`
+> （`net/tcp/*.hpp` 的 Server/Client）与内建 `http::Server` 类在仓库中不存在，
+> 只作沿革参考，接口以 [Network API](/api/net) 与头文件 `include/apollo/net/` 为准。
+> 现状真实面：`Listener`/`Connection`/`EventLoop`（TCP 监听与连接）、
+> `http`（Request/Response/RequestParser/Router 原语）、`websocket::Server`、
+> `RpcServer`，以及接入面协议 `modules/net/protocol`（endpoint/channel，nng 底座，
+> P1 收口前受 `apollo_protocol` 门控）。
 
 ## TCP Server
 
