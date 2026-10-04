@@ -66,7 +66,10 @@ jobs:
     - name: Install dependencies (Linux/macOS)
       if: matrix.os != 'windows-latest'
       run: |
-        ./vcpkg/vcpkg install --triplet=x64-${{ matrix.os == 'macos-latest' && 'osx' || 'linux' }}
+        # PORT-1（CI 修正二）：macos-latest 是 arm64 runner，x64-osx 三元组装
+        # 出 x86_64 静态库（pugixml/openssl/absl），链接 apollo_gen 时
+        # 「symbol(s) not found for architecture arm64」——按 runner 架构取三元组
+        ./vcpkg/vcpkg install --triplet=${{ matrix.os == 'macos-latest' && (runner.arch == 'ARM64' && 'arm64-osx' || 'x64-osx') || 'x64-linux' }}
       shell: bash
 
     - name: Install dependencies (Windows)
@@ -105,7 +108,7 @@ jobs:
         cmake -B ${{ github.workspace }}/build
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
-        -DVCPKG_TARGET_TRIPLET=x64-${{ matrix.os == 'windows-latest' && 'windows' || matrix.os == 'macos-latest' && 'osx' || 'linux' }}
+        -DVCPKG_TARGET_TRIPLET=${{ matrix.os == 'windows-latest' && 'x64-windows' || matrix.os == 'macos-latest' && (runner.arch == 'ARM64' && 'arm64-osx' || 'x64-osx') || 'x64-linux' }}
         -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_BUILD_EXAMPLES=OFF
