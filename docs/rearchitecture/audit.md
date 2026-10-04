@@ -155,7 +155,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 | A5 | Session/目录 | (a) modules/game/session（anchor/locator）(b) modules/game/world WorldSession（七态状态机）(c) apps 内两套 Session 域（gateway/login 各自） | (a) base-app+baseappmgr；(b) cell-app；(c) 各自为政；互通仅通过消息文本 |
 | A6 | 传输层 | (a) modules/net tcp/rpc + apollo_protocol（nng 桩）(b) legacy include/apollo/net + src/apollo/network（RepSocket 等）(c) apps 直接用 RepSocket/nng_wrapper 桩 | 默认构建下路径 (a)/(c) 是桩（connect false、else 空分支） |
 | A7 | 持久化 | (a) modules/data（cache/core/orm/redis）(b) legacy src/apollo/storage（db_mysql/db_mock/memory_connection）(c) base-app 的 DatabaseService+SaveQueue（内存假实现）——(a)(b) 中 9 个文件 0 编译 | 真实链路：仅 memory_connection（无文件落盘行为待核）+ 内存锚点 |
-| A8 | 配置 | (a) modules/core config_registry 的 ConfigRegistry（全局 KV，**活**）(b) legacy ConfigManager/ConfigNode（文件+热更+监听，**生产零消费**：parseXml/parseLua 恒 return false、notifyListeners 断头路、热更无调用方，getValue<T> 声明无定义）(c) 各 app 自带 config.hpp 手写字段（约 20 个死字段） | Config/Definition/Runtime State 混用（setValue 直写 configs_）；同一数据的两个互不感知入口 |
+| A8 | 配置 | (a) modules/core config_registry 的 ConfigRegistry（全局 KV，**活**）(b) legacy ConfigManager/ConfigNode（文件+热更+监听，**生产零消费**：parseXml/parseLua 恒 return false、notifyListeners 断头路、热更无调用方，`getValue<T>` 声明无定义）(c) 各 app 自带 config.hpp 手写字段（约 20 个死字段） | Config/Definition/Runtime State 混用（setValue 直写 configs_）；同一数据的两个互不感知入口 |
 | A9 | 日志 | (a) 旧内存版 log_manager.hpp/log_manager.cpp（四方法仅声明/死源码，无编译 target）(b) spdlog/内置版 log_manager.h（**活**，API 不同）(c) utils/logging 第三套 CamelCase——**三套并存 + ODR 违规**（LogManager 双定义同名类） | game-server 引用的 snapshot/clear/set_console_enabled 符号全图不存在（C-95）；无统一异步日志架构 |
 
 > 表内「零」指 grep 全仓无消费方（测试除外）。本表在 object-model.md / architecture.md 中展开为对象级所有权与依赖地图。
