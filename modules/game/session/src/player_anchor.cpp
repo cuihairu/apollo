@@ -44,10 +44,33 @@ void PlayerAnchor::clear_world_assignment() noexcept {
     world_assignment_ = {};
 }
 
+std::uint32_t PlayerAnchor::home_zone_id() const noexcept {
+    return home_zone_id_;
+}
+
+void PlayerAnchor::set_home_zone_id(std::uint32_t home_zone_id) noexcept {
+    if (home_zone_id_ == home_zone_id) {
+        return;
+    }
+    home_zone_id_ = home_zone_id;
+    mark_dirty("home_zone_id");
+}
+
+void PlayerAnchor::set_journal(JournalFn journal) {
+    journal_ = std::move(journal);
+}
+
+const PlayerAnchor::JournalFn& PlayerAnchor::journal() const noexcept {
+    return journal_;
+}
+
 void PlayerAnchor::mark_dirty(std::string_view reason) {
     dirty_ = true;
     if (!reason.empty()) {
         dirty_reasons_.emplace_back(reason);
+        if (journal_ != nullptr) {
+            journal_(*this, reason);
+        }
     }
 }
 

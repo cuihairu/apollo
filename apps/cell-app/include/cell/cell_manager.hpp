@@ -1,6 +1,8 @@
 #pragma once
 
 #include "cell/config.hpp"
+#include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>

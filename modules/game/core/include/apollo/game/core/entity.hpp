@@ -26,6 +26,37 @@ private:
     uint64_t id_;
 };
 
+// 玩家 ID 强分型（P0-2，object-model O-1/O-4）：
+// 与 EntityId 同构但互不隐式转换——杜绝「把实体 ID 当玩家 ID 传」一类
+// 编译器不可见的错误（cell_server.cpp 历史缺陷：find_by_player(entity_id)）。
+// 语义口径：PlayerId 标识长期玩家对象（PlayerAnchor 域）；EntityId 标识
+// 场景内实体（Scene/Avatar 域）。跨域传参必须显式转换。
+class PlayerId {
+public:
+    constexpr PlayerId() : id_(0) {}
+    constexpr explicit PlayerId(uint64_t id) : id_(id) {}
+
+    constexpr uint64_t value() const { return id_; }
+    constexpr bool is_valid() const { return id_ != 0; }
+    constexpr explicit operator bool() const { return is_valid(); }
+
+    constexpr bool operator==(const PlayerId& other) const { return id_ == other.id_; }
+    constexpr bool operator!=(const PlayerId& other) const { return id_ != other.id_; }
+    constexpr bool operator<(const PlayerId& other) const { return id_ < other.id_; }
+
+    static constexpr PlayerId invalid() { return PlayerId{}; }
+
+private:
+    uint64_t id_;
+};
+
+// PlayerId 作 unordered_map 键（如 WorldSessionManager::player_index_）所需的哈希
+struct PlayerIdHash {
+    std::size_t operator()(const PlayerId& id) const noexcept {
+        return std::hash<uint64_t>{}(id.value());
+    }
+};
+
 class IEntity {
 public:
     virtual ~IEntity() = default;
@@ -84,3 +115,13 @@ private:
 };
 
 } // namespace apollo::game::core
+
+// std::hash 特化（与类型族同处；标准容器可直接以 PlayerId 作键）
+namespace std {
+template <>
+struct hash<apollo::game::core::PlayerId> {
+    std::size_t operator()(const apollo::game::core::PlayerId& id) const noexcept {
+        return std::hash<uint64_t>{}(id.value());
+    }
+};
+} // namespace std

@@ -21,7 +21,10 @@ enum class WorldSessionState : std::uint8_t {
 class WorldSession {
 public:
     using SessionId = std::uint64_t;
-    using PlayerId = std::uint64_t;
+    // player 身份用 core::PlayerId 强分型（P0-2）：与 EntityId 互不隐式转换，
+    // 杜绝「实体 ID 当玩家 ID 传」（cell_server.cpp 历史缺陷）。SessionId 保留
+    // alias（连接域身份证，跨面仍以 raw 传参，与 gateway 会话面一致）。
+    using PlayerId = apollo::game::core::PlayerId;
 
     WorldSession(SessionId session_id, PlayerId player_id);
 
@@ -63,7 +66,7 @@ public:
 
 private:
     SessionId session_id_ = 0;
-    PlayerId player_id_ = 0;
+    PlayerId player_id_{};
     apollo::game::core::EntityId avatar_entity_id_{};    
     MapInstance::InstanceId map_instance_id_ = 0;
     std::uint32_t world_id_ = 0;

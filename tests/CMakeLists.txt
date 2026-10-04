@@ -707,4 +707,27 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    target_compile_definitions(world_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 	endif()
 	add_test(NAME WorldHostTests COMMAND world_host_tests)
+
+# ========== Avatar / Player Object Model Tests (P0-2) ==========
+# Avatar 三职责（移动/战斗/AOI 广播）+ Anchor 投影 + PlayerId 强分型
+# （直编源惯例同 game_tests；Avatar 依赖 PlayerAnchor 实现，故一并编入）
+add_executable(avatar_tests
+    test_avatar.cpp
+    ../modules/game/world/src/avatar.cpp
+    ../modules/game/session/src/player_anchor.cpp
+)
+target_include_directories(avatar_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(avatar_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(avatar_tests PRIVATE ws2_32)
+    target_compile_options(avatar_tests PRIVATE /utf-8)
+    target_compile_definitions(avatar_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+add_test(NAME AvatarTests COMMAND avatar_tests)
 	endif()

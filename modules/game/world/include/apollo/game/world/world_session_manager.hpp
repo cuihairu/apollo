@@ -30,7 +30,11 @@ public:
 private:
     mutable std::mutex mutex_;
     std::unordered_map<WorldSession::SessionId, SessionPtr> sessions_;
-    std::unordered_map<WorldSession::PlayerId, WorldSession::SessionId> player_index_;
+    // 玩家索引：键为强分型 PlayerId（P0-2）——索引语义明确「按玩家身份查会话」，
+    // 与按实体查（EntityId）在类型面上彻底分离
+    std::unordered_map<apollo::game::core::PlayerId, WorldSession::SessionId,
+                       apollo::game::core::PlayerIdHash>
+        player_index_;
 };
 
 } // namespace apollo::game::world

@@ -381,9 +381,15 @@ std::vector<uint8_t> CellServer::handleCellCreateEntity(const std::vector<uint8_
         aoiManager_->enter(entity);
 
         if (msg.entityType == protocol::EntityType::PLAYER) {
-            const auto session_id = header.sessionId != 0 ? header.sessionId : msg.entityId;
+            // P0-2：双 id 复用收敛。消息面（CellCreateEntity）尚无独立 player_id
+            // 字段——这是契约缺陷，P2-3 修文补字段；P0 代码侧先把身份显式化：
+            //   玩家身份 = 创建请求当下携带的唯一玩家号（现为 entity 号派生，
+            //   修文后替换为 msg.playerId）；实体身份独立强分型；
+            //   不再把 entity_id 兼任 session_id。
+            const auto session_id = header.sessionId;
             const auto player_id = static_cast<protocol::PlayerID>(msg.entityId);
-            attachPlayerWorldSession(session_id, player_id, msg.entityId);
+            attachPlayerWorldSession(session_id, player_id, msg.entityId,
+                                     {msg.position.x, msg.position.y, msg.position.z});
         }
     }
 
@@ -429,13 +435,24 @@ std::vector<uint8_t> CellServer::handleCellCrossBorder(const std::vector<uint8_t
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellCrossBorder>(bodyData);
 
-    auto session = worldSessionManager_->find_by_player(msg.entityId);
+    // P0-2：类型显式——先经 Avatar 容器由实体号反查玩家号，再按玩家查会话
+    // （旧代码直接把实体号当玩家号传 find_by_player，编译器不可见）
+    auto session = worldSessionManager_->find_session(header.sessionId);
+    if (!session) {
+        const auto caster_entity = apollo::game::core::EntityId(msg.entityId);
+        for (const auto& [player_id, avatar] : avatars_) {
+            if (avatar->entity_id() == caster_entity) {
+                session = worldSessionManager_->find_by_player(player_id);
+                break;
+            }
+        }
+    }
     if (session) {
         worldSessionManager_->transfer_session(
             session->session_id(),
             worldId_,
             defaultMapInstanceId_,
-            msg.toSpace,
+            defaultSpaceId_,
             false);
         worldSessionManager_->complete_transfer(session->session_id());
     }
@@ -531,36 +548,70 @@ void CellServer::ensureDefaultMapInstance() {
 
 void CellServer::attachPlayerWorldSession(
     protocol::SessionID session_id,
-    protocol::PlayerID player_id,
-    EntityID entity_id) {
+    protocol::PlayerID player_id_raw,
+    EntityID entity_id,
+    const Position& position) {
     ensureDefaultMapInstance();
+
+    // 强分型（P0-2）：玩家身份与实体身份在类型面上分离——旧代码 entity_id 直接
+    // 当 player_id 传（find_by_player/attach 三参同号），编译器不可见。
+    const auto player_id = apollo::game::core::PlayerId(player_id_raw);
+    const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
 
     auto session = worldSessionManager_->find_session(session_id);
     if (!session) {
         session = worldSessionManager_->create_session(session_id, player_id);
     }
 
+    // create Avatar by scene（P0-2 最小闭环：「进 scene 生」。
+    // P0-3 起由 instance.enter 接管创建与 scene 挂载。）
+    auto avatar = avatars_[player_id];
+    if (!avatar) {
+        avatar = std::make_shared<apollo::game::world::Avatar>(player_id, avatar_entity_id);
+        avatars_[player_id] = avatar;
+    }
+    avatar->set_position({position.x, position.y, position.z});
+    avatar->attach_scene(defaultMapInstanceId_);
+
     session->assign_world(worldId_);
     session->assign_map_instance(defaultMapInstanceId_);
-    session->assign_space(defaultMapInstanceId_);
-    session->bind_avatar(apollo::game::core::EntityId(entity_id));
+    // P0-2：space 与 instance 分离——space 承载 id 独立（旧代码以 map instance
+    // 号兼任 space 号）。P0-3 拆 SceneDescriptor 后由 scene 提供。
+    session->assign_space(defaultSpaceId_);
+    session->bind_avatar(avatar_entity_id);
     session->set_route_version(session->route_version() + 1);
     session->set_state(apollo::game::world::WorldSessionState::Entering);
     session->resume();
 }
 
 void CellServer::detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id) {
-    if (session_id != 0) {
-        worldSessionManager_->suspend_session(session_id);
-        worldSessionManager_->close_session(session_id);
+    auto session = worldSessionManager_->find_session(session_id);
+    if (!session) {
+        // 无会话 id 时按玩家身份反查（P0-2：类型显式——先经 Avatar 容器由
+        // 实体号定位玩家号，再按玩家查会话；不再把实体号当玩家号传）
+        const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
+        for (const auto& [player_id, avatar] : avatars_) {
+            if (avatar->entity_id() == avatar_entity_id) {
+                session = worldSessionManager_->find_by_player(player_id);
+                break;
+            }
+        }
+    }
+
+    if (!session) {
         return;
     }
 
-    auto session = worldSessionManager_->find_by_player(entity_id);
-    if (session) {
-        worldSessionManager_->suspend_session(session->session_id());
-        worldSessionManager_->close_session(session->session_id());
+    // 出 scene 死：Avatar 销毁（P0-3 迁入 scene 后由 instance.leave 接管）
+    const auto player_id = session->player_id();
+    auto avatar_it = avatars_.find(player_id);
+    if (avatar_it != avatars_.end()) {
+        avatar_it->second->begin_leave();
+        avatars_.erase(avatar_it);
     }
+
+    worldSessionManager_->suspend_session(session->session_id());
+    worldSessionManager_->close_session(session->session_id());
 }
 
 } // namespace cell
