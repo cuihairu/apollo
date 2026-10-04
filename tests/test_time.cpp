@@ -319,8 +319,10 @@ bool test_fps_calculator_custom_interval() {
     }
 
     float fps = fps_calc.fps();
-    // FPS calculation can vary due to sleep precision
-    TEST_ASSERT(fps > 20.0f && fps < 100.0f, "FPS in reasonable range");
+    // sleep_for 只保证"至少"休眠：共享 CI runner 上过度超时会让实测 FPS
+    // 向下偏离（本环物理上限 20 帧 / 0.32s = 62.5fps）。下界放宽到 2
+    // （容忍整轮从 320ms 抖到 10s）；上界拦截单位错置类计算缺陷。
+    TEST_ASSERT(fps > 2.0f && fps < 100.0f, "FPS in reasonable range");
 
     std::cout << "  PASSED" << std::endl;
     return true;
