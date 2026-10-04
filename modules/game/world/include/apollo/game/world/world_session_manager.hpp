@@ -20,7 +20,7 @@ public:
     SessionPtr resume_session(WorldSession::SessionId session_id);
     SessionPtr transfer_session(WorldSession::SessionId session_id,
                                 std::uint32_t target_world_id,
-                                MapInstance::InstanceId target_map_instance_id,
+                                Instance::InstanceId target_map_instance_id,
                                 std::uint64_t target_space_id,
                                 bool inbound = false);
     SessionPtr complete_transfer(WorldSession::SessionId session_id);

@@ -1,7 +1,7 @@
 #include "apollo/game/session/anchor_manager.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
-#include "apollo/game/world/map_instance_manager.hpp"
+#include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 
 #include <iostream>
@@ -64,7 +64,7 @@ bool test_world_session_manager_lifecycle() {
     std::cout << "Running: test_world_session_manager_lifecycle..." << std::endl;
 
     apollo::game::world::WorldSessionManager manager;
-    auto session = manager.create_session(3001, 4001);
+    auto session = manager.create_session(3001, apollo::game::core::PlayerId(4001));
 
     TEST_ASSERT(session != nullptr, "session created");
     session->assign_world(9);
@@ -74,7 +74,8 @@ bool test_world_session_manager_lifecycle() {
 
     TEST_ASSERT(manager.session_count() == 1, "session count");
     TEST_ASSERT(manager.find_session(3001) == session, "find by session");
-    TEST_ASSERT(manager.find_by_player(4001) == session, "find by player");
+    TEST_ASSERT(manager.find_by_player(apollo::game::core::PlayerId(4001)) == session,
+                "find by player");
     TEST_ASSERT(session->world_id() == 9, "world assigned");
     TEST_ASSERT(session->map_instance_id() == 12, "instance assigned");
     TEST_ASSERT(session->space_id() == 21, "space assigned");
@@ -104,21 +105,44 @@ bool test_world_session_manager_lifecycle() {
     return true;
 }
 
-bool test_map_instance_manager_create_and_update() {
-    std::cout << "Running: test_map_instance_manager_create_and_update..." << std::endl;
+bool test_world_create_scene_and_instance() {
+    std::cout << "Running: test_world_create_scene_and_instance..." << std::endl;
 
-    apollo::game::world::MapInstanceManager manager;
-    auto instance = manager.create_instance(5001, "test-map");
+    apollo::game::world::World world;
 
-    TEST_ASSERT(instance != nullptr, "instance created");
-    TEST_ASSERT(instance->id() == 5001, "instance id");
-    TEST_ASSERT(instance->map_name() == "test-map", "map name");
-    TEST_ASSERT(manager.instance_count() == 1, "instance count");
-    TEST_ASSERT(manager.find_instance(5001) == instance, "find instance");
+    apollo::game::world::SceneDescriptor descriptor;
+    descriptor.map_id = 1;
+    descriptor.map_name = "test-map";
+    descriptor.width = 100.0f;
+    descriptor.height = 100.0f;
 
-    manager.update(0.05f);
-    manager.destroy_instance(5001);
-    TEST_ASSERT(manager.instance_count() == 0, "instance removed");
+    auto* scene = world.create_scene(descriptor);
+    TEST_ASSERT(scene != nullptr, "scene created from descriptor");
+    TEST_ASSERT(scene->scene_id() != 0, "scene id assigned (non-sentinel)");
+    TEST_ASSERT(scene->get_name() == "test-map", "scene name from descriptor");
+    TEST_ASSERT(world.scene_count() == 1, "scene count");
+    TEST_ASSERT(world.find_scene(scene->scene_id()) == scene, "find scene");
+
+    // 无效 descriptor 拒绝建场
+    apollo::game::world::SceneDescriptor invalid;
+    TEST_ASSERT(world.create_scene(invalid) == nullptr, "invalid descriptor rejected");
+
+    auto instance = world.create_instance(scene->scene_id(), "test-run");
+    TEST_ASSERT(instance != nullptr, "instance created on scene");
+    TEST_ASSERT(instance->id() != 0, "instance id assigned");
+    TEST_ASSERT(instance->scene_id() == scene->scene_id(), "instance bound to scene");
+    TEST_ASSERT(world.instance_count() == 1, "instance count");
+    TEST_ASSERT(world.find_instance(instance->id()) == instance.get(), "find instance");
+
+    // 不存在的 scene 拒绝建实例
+    TEST_ASSERT(world.create_instance(99999) == nullptr, "instance on missing scene rejected");
+
+    // 全场 tick 推进 scene
+    world.tick(0.1);
+    TEST_ASSERT(scene->tick_count() == 1, "world tick advances scene");
+
+    world.destroy_scene(scene->scene_id());
+    TEST_ASSERT(world.scene_count() == 0, "scene destroyed");
 
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -142,7 +166,7 @@ int main() {
     run(test_anchor_manager_activate_and_find);
     run(test_session_locator_bind_and_unbind);
     run(test_world_session_manager_lifecycle);
-    run(test_map_instance_manager_create_and_update);
+    run(test_world_create_scene_and_instance);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

@@ -674,6 +674,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        # Game World
 	        ../modules/game/world/src/aoi.cpp
 	        ../modules/game/world/src/scene.cpp
+	        ../modules/game/world/src/scene_aoi.cpp
+	        ../modules/game/world/src/avatar.cpp
+	        ../modules/game/session/src/player_anchor.cpp
 	        # Game Attributes (using attribute.hpp, not attribute_value.h)
 	        ../modules/game/attributes/src/attribute.cpp
 	        # Game Battle ECS
@@ -683,6 +686,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ${CMAKE_SOURCE_DIR}/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/core/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/world/include
+	        ${CMAKE_SOURCE_DIR}/modules/game/session/include
 	    )
 	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core)
 	    if(WIN32)
@@ -730,4 +734,50 @@ if(WIN32)
     target_compile_definitions(avatar_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 add_test(NAME AvatarTests COMMAND avatar_tests)
+
+# ========== Scene Runtime Tests (P0-3) ==========
+# Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
+add_executable(scene_tests
+    test_scene.cpp
+    ../modules/game/core/src/entity.cpp
+    ../modules/game/world/src/scene.cpp
+    ../modules/game/world/src/scene_aoi.cpp
+    ../modules/game/world/src/avatar.cpp
+    ../modules/game/session/src/player_anchor.cpp
+)
+target_include_directories(scene_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(scene_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(scene_tests PRIVATE ws2_32)
+    target_compile_options(scene_tests PRIVATE /utf-8)
+    target_compile_definitions(scene_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+add_test(NAME SceneTests COMMAND scene_tests)
+
+# ========== Instance Eight-State Tests (P0-3) ==========
+# Instance 八态状态机 + 转换校验表 + enter 窗口 + 玩法节奏
+add_executable(instance_tests
+    test_instance.cpp
+    ../modules/game/world/src/instance.cpp
+)
+target_include_directories(instance_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(instance_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(instance_tests PRIVATE ws2_32)
+    target_compile_options(instance_tests PRIVATE /utf-8)
+    target_compile_definitions(instance_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+add_test(NAME InstanceTests COMMAND instance_tests)
 	endif()

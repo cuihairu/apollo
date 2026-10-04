@@ -59,7 +59,7 @@ WorldSessionManager::SessionPtr WorldSessionManager::resume_session(WorldSession
 WorldSessionManager::SessionPtr WorldSessionManager::transfer_session(
     WorldSession::SessionId session_id,
     std::uint32_t target_world_id,
-    MapInstance::InstanceId target_map_instance_id,
+    Instance::InstanceId target_map_instance_id,
     std::uint64_t target_space_id,
     bool inbound
 ) {

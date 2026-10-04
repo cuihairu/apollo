@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/world/map_instance.hpp"
+#include "apollo/game/world/instance.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -34,8 +34,8 @@ public:
     void bind_avatar(apollo::game::core::EntityId avatar_entity_id);
     apollo::game::core::EntityId avatar_entity_id() const;
 
-    void assign_map_instance(MapInstance::InstanceId map_instance_id);
-    MapInstance::InstanceId map_instance_id() const;
+    void assign_map_instance(Instance::InstanceId map_instance_id);
+    Instance::InstanceId map_instance_id() const;
 
     void assign_world(std::uint32_t world_id);
     std::uint32_t world_id() const;
@@ -52,14 +52,14 @@ public:
     void suspend();
     void resume();
     void begin_transfer(std::uint32_t target_world_id,
-                        MapInstance::InstanceId target_map_instance_id,
+                        Instance::InstanceId target_map_instance_id,
                         std::uint64_t target_space_id,
                         bool inbound = false);
     void complete_transfer();
     void begin_leave();
 
     std::uint32_t pending_world_id() const;
-    MapInstance::InstanceId pending_map_instance_id() const;
+    Instance::InstanceId pending_map_instance_id() const;
     std::uint64_t pending_space_id() const;
 
     static std::string_view to_string(WorldSessionState state);
@@ -68,13 +68,13 @@ private:
     SessionId session_id_ = 0;
     PlayerId player_id_{};
     apollo::game::core::EntityId avatar_entity_id_{};    
-    MapInstance::InstanceId map_instance_id_ = 0;
+    Instance::InstanceId map_instance_id_ = 0;
     std::uint32_t world_id_ = 0;
     std::uint64_t space_id_ = 0;
     WorldSessionState state_ = WorldSessionState::Entering;
     std::uint64_t route_version_ = 0;
     std::uint32_t pending_world_id_ = 0;
-    MapInstance::InstanceId pending_map_instance_id_ = 0;
+    Instance::InstanceId pending_map_instance_id_ = 0;
     std::uint64_t pending_space_id_ = 0;
 };
 

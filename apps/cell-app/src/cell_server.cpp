@@ -1,7 +1,7 @@
 #include "cell/cell_server.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
-#include "apollo/game/world/map_instance_manager.hpp"
+#include "apollo/game/world/instance.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
 #include <algorithm>
@@ -19,10 +19,10 @@ class CellWorldService final : public apollo::runtime::IWorldService {
 public:
     CellWorldService(
         EntityManager& entity_manager,
-        apollo::game::world::MapInstanceManager& map_instance_manager,
+        apollo::game::world::World& world,
         CellConfig config)
         : entity_manager_(entity_manager)
-        , map_instance_manager_(map_instance_manager)
+        , world_(world)
         , config_(std::move(config)) {
     }
 
@@ -38,7 +38,9 @@ public:
     void tick(const apollo::runtime::WorldTickContext& context) override {
         tick_count_ = context.tick_index;
         entity_manager_.update(static_cast<float>(context.delta_seconds));
-        map_instance_manager_.update(static_cast<float>(context.delta_seconds));
+        // P0-3：世界 tick = 逐 scene 六阶段（simulate/recalc/aoidecay/
+        // collect/budget+flush/persist-batch）
+        world_.tick(static_cast<double>(context.delta_seconds));
     }
 
     void shutdown() override {
@@ -47,7 +49,7 @@ public:
 
 private:
     EntityManager& entity_manager_;
-    apollo::game::world::MapInstanceManager& map_instance_manager_;
+    apollo::game::world::World& world_;
     CellConfig config_;
     std::uint64_t tick_count_ = 0;
 };
@@ -276,12 +278,12 @@ CellServer::CellServer(const CellConfig& config)
     : config_(config)
     , entityManager_(std::make_unique<EntityManager>(config))
     , aoiManager_(std::make_unique<AOIManager>(config))
-    , mapInstanceManager_(std::make_shared<apollo::game::world::MapInstanceManager>())
+    , world_(std::make_unique<apollo::game::world::World>())
     , worldSessionManager_(std::make_shared<apollo::game::world::WorldSessionManager>())
     , worldHost_(std::make_shared<apollo::runtime::WorldHost>(
           static_cast<std::uint32_t>(1000 / std::max(config.tickRateMs, 1)))) {
     worldHost_->add_world_service(
-        std::make_shared<CellWorldService>(*entityManager_, *mapInstanceManager_, config_));
+        std::make_shared<CellWorldService>(*entityManager_, *world_, config_));
 }
 
 CellServer::~CellServer() {
@@ -329,7 +331,7 @@ void CellServer::start() {
 
     server_->start();
 
-    ensureDefaultMapInstance();
+    ensureDefaultScene();
 
     if (!worldHost_->start()) {
         server_->stop();
@@ -435,15 +437,19 @@ std::vector<uint8_t> CellServer::handleCellCrossBorder(const std::vector<uint8_t
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellCrossBorder>(bodyData);
 
-    // P0-2：类型显式——先经 Avatar 容器由实体号反查玩家号，再按玩家查会话
-    // （旧代码直接把实体号当玩家号传 find_by_player，编译器不可见）
+    // P0-2/P0-3：类型显式——先经 Scene 的 Avatar 容器由实体号反查玩家号，
+    // 再按玩家查会话（旧代码直接把实体号当玩家号传，编译器不可见）
     auto session = worldSessionManager_->find_session(header.sessionId);
     if (!session) {
         const auto caster_entity = apollo::game::core::EntityId(msg.entityId);
-        for (const auto& [player_id, avatar] : avatars_) {
-            if (avatar->entity_id() == caster_entity) {
-                session = worldSessionManager_->find_by_player(player_id);
-                break;
+        auto* scene = world_->find_scene(defaultSceneId_);
+        if (scene != nullptr) {
+            for (const auto& player_id : scene->avatars()) {
+                const auto avatar = scene->get_avatar(player_id);
+                if (avatar && avatar->entity_id() == caster_entity) {
+                    session = worldSessionManager_->find_by_player(player_id);
+                    break;
+                }
             }
         }
     }
@@ -451,7 +457,7 @@ std::vector<uint8_t> CellServer::handleCellCrossBorder(const std::vector<uint8_t
         worldSessionManager_->transfer_session(
             session->session_id(),
             worldId_,
-            defaultMapInstanceId_,
+            defaultInstance_ ? defaultInstance_->id() : 0,
             defaultSpaceId_,
             false);
         worldSessionManager_->complete_transfer(session->session_id());
@@ -536,14 +542,33 @@ void CellServer::broadcastToViewers(Entity* entity, const std::vector<uint8_t>& 
     }
 }
 
-void CellServer::ensureDefaultMapInstance() {
-    if (mapInstanceManager_->find_instance(defaultMapInstanceId_)) {
+void CellServer::ensureDefaultScene() {
+    // P0-3：world.create_scene 路径（替代旧 ensureDefaultMapInstance 三层壳）。
+    // 最小闭环：1 scene（descriptor 绑定地图资产）+ 1 instance（八态推进至 Running）。
+    if (world_->find_scene(defaultSceneId_) != nullptr) {
         return;
     }
 
-    mapInstanceManager_->create_instance(
-        defaultMapInstanceId_,
-        config_.spaceName.empty() ? std::string("default-world") : config_.spaceName);
+    apollo::game::world::SceneDescriptor descriptor;
+    descriptor.map_id = 1;
+    descriptor.map_name =
+        config_.spaceName.empty() ? std::string("default-world") : config_.spaceName;
+    descriptor.width = config_.spaceWidth;
+    descriptor.height = config_.spaceHeight;
+    descriptor.grid_size = config_.gridSize;
+    descriptor.view_radius = config_.viewRadius;
+
+    auto* scene = world_->create_scene(descriptor);
+    if (scene == nullptr) {
+        throw std::runtime_error("failed to create default scene (invalid descriptor)");
+    }
+    defaultSceneId_ = scene->scene_id();
+
+    defaultInstance_ = world_->create_instance(defaultSceneId_, "default");
+    // 八态推进至 Running（Create→Initialize→Waiting→Running；逐态校验）
+    defaultInstance_->initialize();
+    defaultInstance_->ready();
+    defaultInstance_->start();
 }
 
 void CellServer::attachPlayerWorldSession(
@@ -551,7 +576,7 @@ void CellServer::attachPlayerWorldSession(
     protocol::PlayerID player_id_raw,
     EntityID entity_id,
     const Position& position) {
-    ensureDefaultMapInstance();
+    ensureDefaultScene();
 
     // 强分型（P0-2）：玩家身份与实体身份在类型面上分离——旧代码 entity_id 直接
     // 当 player_id 传（find_by_player/attach 三参同号），编译器不可见。
@@ -563,18 +588,20 @@ void CellServer::attachPlayerWorldSession(
         session = worldSessionManager_->create_session(session_id, player_id);
     }
 
-    // create Avatar by scene（P0-2 最小闭环：「进 scene 生」。
-    // P0-3 起由 instance.enter 接管创建与 scene 挂载。）
-    auto avatar = avatars_[player_id];
-    if (!avatar) {
-        avatar = std::make_shared<apollo::game::world::Avatar>(player_id, avatar_entity_id);
-        avatars_[player_id] = avatar;
+    auto* scene = world_->find_scene(defaultSceneId_);
+
+    // create Avatar + scene.enter / instance.enter（P0-3 任务书 §27 API 路径：
+    // Avatar 由 Scene 持有（进 scene 生/出 scene 死），玩法侧走 instance.enter）
+    auto avatar = std::make_shared<apollo::game::world::Avatar>(player_id, avatar_entity_id);
+    if (scene != nullptr) {
+        scene->enter(avatar, {position.x, position.y, position.z});
     }
-    avatar->set_position({position.x, position.y, position.z});
-    avatar->attach_scene(defaultMapInstanceId_);
+    if (defaultInstance_) {
+        defaultInstance_->enter(player_id);
+    }
 
     session->assign_world(worldId_);
-    session->assign_map_instance(defaultMapInstanceId_);
+    session->assign_map_instance(defaultInstance_ ? defaultInstance_->id() : 0);
     // P0-2：space 与 instance 分离——space 承载 id 独立（旧代码以 map instance
     // 号兼任 space 号）。P0-3 拆 SceneDescriptor 后由 scene 提供。
     session->assign_space(defaultSpaceId_);
@@ -587,13 +614,17 @@ void CellServer::attachPlayerWorldSession(
 void CellServer::detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id) {
     auto session = worldSessionManager_->find_session(session_id);
     if (!session) {
-        // 无会话 id 时按玩家身份反查（P0-2：类型显式——先经 Avatar 容器由
+        // 无会话 id 时按玩家身份反查（P0-2/P0-3：经 Scene 的 Avatar 容器由
         // 实体号定位玩家号，再按玩家查会话；不再把实体号当玩家号传）
         const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
-        for (const auto& [player_id, avatar] : avatars_) {
-            if (avatar->entity_id() == avatar_entity_id) {
-                session = worldSessionManager_->find_by_player(player_id);
-                break;
+        auto* scene = world_->find_scene(defaultSceneId_);
+        if (scene != nullptr) {
+            for (const auto& player_id : scene->avatars()) {
+                const auto avatar = scene->get_avatar(player_id);
+                if (avatar && avatar->entity_id() == avatar_entity_id) {
+                    session = worldSessionManager_->find_by_player(player_id);
+                    break;
+                }
             }
         }
     }
@@ -602,12 +633,15 @@ void CellServer::detachPlayerWorldSession(protocol::SessionID session_id, Entity
         return;
     }
 
-    // 出 scene 死：Avatar 销毁（P0-3 迁入 scene 后由 instance.leave 接管）
+    // 出 scene 死：Avatar 由 scene.leave 解除归属并出 AOI（对象随 shared_ptr
+    // 释放——scene 是唯一持有者，player-object-model §3「出 scene 死」）
     const auto player_id = session->player_id();
-    auto avatar_it = avatars_.find(player_id);
-    if (avatar_it != avatars_.end()) {
-        avatar_it->second->begin_leave();
-        avatars_.erase(avatar_it);
+    auto* scene = world_->find_scene(defaultSceneId_);
+    if (scene != nullptr) {
+        scene->leave(player_id);
+    }
+    if (defaultInstance_) {
+        defaultInstance_->leave(player_id);
     }
 
     worldSessionManager_->suspend_session(session->session_id());

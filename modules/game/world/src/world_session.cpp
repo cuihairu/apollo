@@ -23,11 +23,11 @@ apollo::game::core::EntityId WorldSession::avatar_entity_id() const {
     return avatar_entity_id_;
 }
 
-void WorldSession::assign_map_instance(MapInstance::InstanceId map_instance_id) {
+void WorldSession::assign_map_instance(Instance::InstanceId map_instance_id) {
     map_instance_id_ = map_instance_id;
 }
 
-MapInstance::InstanceId WorldSession::map_instance_id() const {
+Instance::InstanceId WorldSession::map_instance_id() const {
     return map_instance_id_;
 }
 
@@ -73,7 +73,7 @@ void WorldSession::resume() {
 
 void WorldSession::begin_transfer(
     std::uint32_t target_world_id,
-    MapInstance::InstanceId target_map_instance_id,
+    Instance::InstanceId target_map_instance_id,
     std::uint64_t target_space_id,
     bool inbound
 ) {
@@ -108,7 +108,7 @@ std::uint32_t WorldSession::pending_world_id() const {
     return pending_world_id_;
 }
 
-MapInstance::InstanceId WorldSession::pending_map_instance_id() const {
+Instance::InstanceId WorldSession::pending_map_instance_id() const {
     return pending_map_instance_id_;
 }
 
