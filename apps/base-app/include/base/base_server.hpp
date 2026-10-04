@@ -2,8 +2,10 @@
 
 #include "base/config.hpp"
 #include "base/database_service.hpp"
+#include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/game/session/anchor_manager.hpp"
 #include "apollo/game/session/player_directory.hpp"
+#include "apollo/game/session/recovery.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/protocol/socket.hpp"
 #include <cstddef>
@@ -70,6 +72,10 @@ private:
     // 关闭协议与自动保存共用。返回入队数量（占位实现，落库接 P1）。
     std::size_t flushDirtyAnchors(const char* reason);
 
+    // journal write-ahead 与消费侧（P1-5）
+    std::size_t appendJournal(const PlayerData& data);
+    std::size_t drainJournal();
+
     int64_t getCurrentTimeMs() const;
     std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayerAnchor(PlayerID playerId);
     void finalizeSave(PlayerID playerId, bool success);
@@ -77,6 +83,8 @@ private:
     BaseConfig config_;
     std::unique_ptr<DatabaseService> database_;
     std::unique_ptr<SaveQueue> saveQueue_;
+    std::unique_ptr<apollo::data::journal::PersistJournal> journal_;
+    std::unique_ptr<apollo::game::session::RecoveryCoordinator> recovery_;
     std::shared_ptr<apollo::game::session::AnchorManager> anchorManager_;
     std::shared_ptr<apollo::game::session::SessionLocator> sessionLocator_;
     apollo::game::session::PlayerDirectory::EventSink directoryEventSink_;

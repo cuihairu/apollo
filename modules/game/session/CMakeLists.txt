@@ -1,6 +1,7 @@
 # Game - Session module (PlayerAnchor, session routing, assignments)
 add_library(apollo_game_session STATIC
     src/anchor_manager.cpp
+    src/recovery.cpp
     src/player_anchor.cpp
     src/player_directory.cpp
     src/session_locator.cpp

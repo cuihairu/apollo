@@ -759,6 +759,32 @@ if(MSVC)
 endif()
 add_test(NAME PersistenceChainTests COMMAND persistence_chain_tests)
 
+# ========== Recovery Tests (P1-5) ==========
+# 三档清单 + restore→admission→ready + journal 消费侧（崩溃回放）。
+add_executable(recovery_tests
+    test_recovery.cpp
+    ../modules/game/session/src/recovery.cpp
+    ../modules/game/session/src/anchor_manager.cpp
+    ../modules/game/session/src/player_anchor.cpp
+    ../modules/data/orm/src/persist_journal.cpp
+    ../apps/base-app/src/database_service.cpp
+)
+target_include_directories(recovery_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/data/orm/include
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+)
+target_link_libraries(recovery_tests PRIVATE apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(recovery_tests PRIVATE ws2_32)
+    target_compile_definitions(recovery_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(recovery_tests PRIVATE /utf-8)
+endif()
+add_test(NAME RecoveryTests COMMAND recovery_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

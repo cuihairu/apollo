@@ -2,6 +2,7 @@
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -42,12 +43,37 @@ BaseServer::BaseServer(const BaseConfig& config)
     , database_(std::make_unique<DatabaseService>(config))
     , saveQueue_(std::make_unique<SaveQueue>(config_.workerThreads))
     , anchorManager_(std::make_shared<apollo::game::session::AnchorManager>())
-    , sessionLocator_(std::make_shared<apollo::game::session::SessionLocator>()) {
+    , sessionLocator_(std::make_shared<apollo::game::session::SessionLocator>())
+    , journal_(std::make_unique<apollo::data::journal::PersistJournal>(config_.journalPath)) {
     // P1-4 真链路：SaveQueue 出队 → DatabaseService 落盘（workerLoop
     // 此前只 callback(true) 不写任何介质）
     saveQueue_->set_worker([this](const PlayerData& data) {
         return database_->savePlayer(data);
     });
+}
+
+std::size_t BaseServer::appendJournal(const PlayerData& data) {
+    // write-ahead：先落 journal（恢复位点），再经 SaveQueue 异步落档
+    return journal_->append(std::to_string(data.playerId), data.toJson(),
+                            getCurrentTimeMs())
+               ? 1u
+               : 0u;
+}
+
+std::size_t BaseServer::drainJournal() {
+    // journal 消费侧（P1-5）：定额出队，把已落 journal 的载荷压到档案；
+    // 载荷为全量快照，重放幂等
+    return journal_->drain(
+        [this](const apollo::data::journal::JournalEntry& e) {
+            PlayerData data = PlayerData::fromJson(e.payload);
+            try {
+                data.playerId = static_cast<PlayerID>(std::stoull(e.key));
+            } catch (const std::exception&) {
+                return false;  // 脏条目保留，人工排查
+            }
+            return database_->savePlayer(data);
+        },
+        static_cast<std::size_t>(config_.journalDrainQuota));
 }
 
 BaseServer::~BaseServer() {
@@ -146,6 +172,48 @@ void BaseServer::start() {
         throw std::runtime_error("Failed to initialize database");
     }
 
+    // 启动序列 restore→admission→ready（P1-5，lifecycle §3）：journal
+    // replay 恢复未落档位点 → 准入检查（数据面可服务）→ Ready 才开 RPC
+    journal_->open();
+    recovery_ = std::make_unique<apollo::game::session::RecoveryCoordinator>(
+        "base-app",
+        [this]() -> std::size_t {
+            return journal_->replay([this](const apollo::data::journal::JournalEntry& e) {
+                PlayerData data = PlayerData::fromJson(e.payload);
+                try {
+                    data.playerId = static_cast<PlayerID>(std::stoull(e.key));
+                } catch (const std::exception&) {
+                    return false;
+                }
+                return database_->savePlayer(data);
+            });
+        },
+        [this]() {
+            // Anchor 恢复（档案在、会话无，Offline 待登录）+ 数据面准入
+            std::vector<PlayerID> ids;
+            std::error_code ec;
+            for (const auto& entry : std::filesystem::directory_iterator(config_.dataDir, ec)) {
+                const auto name = entry.path().filename().string();
+                if (name.rfind("player_", 0) == 0 && name.size() > 10 &&
+                    name.substr(name.size() - 5) == ".json") {
+                    try {
+                        ids.push_back(static_cast<PlayerID>(
+                            std::stoull(name.substr(7, name.size() - 12))));
+                    } catch (const std::exception&) {
+                    }
+                }
+            }
+            const auto restored =
+                apollo::game::session::restore_anchors(*anchorManager_, ids);
+            std::cout << "Anchor restore: " << restored << " anchors offline-resumed"
+                      << std::endl;
+            return !ec;
+        });
+    if (!recovery_->run() || !recovery_->ready()) {
+        throw std::runtime_error(std::string("Recovery failed at phase: ") +
+                                 apollo::game::session::to_string(recovery_->phase()));
+    }
+
     // 启动保存队列
     saveQueue_->start();
 
@@ -209,6 +277,7 @@ void BaseServer::stop() {
     // 真正落库接 P1 持久化）→ 保存队列 drain（SaveQueue::stop 后 worker
     // 清空余量）→ 数据库关闭。
     flushDirtyAnchors("shutdown_flush");
+    drainJournal();  // 恢复位点收口：已落档条目压出 journal
     saveQueue_->stop();
 
     if (autoSaveThread_.joinable()) {
@@ -258,6 +327,9 @@ std::vector<uint8_t> BaseServer::handleDbSaveRequest(const std::vector<uint8_t>&
         finalizeSave(playerId, success);
     };
     task.createdAtMs = getCurrentTimeMs();
+
+    // write-ahead（P1-5）：先落 journal 恢复位点，再异步落档
+    appendJournal(task.data);
 
     saveQueue_->enqueue(task);
 
@@ -348,6 +420,10 @@ void BaseServer::autoSaveLoop() {
         // 自动保存（P0-4「Saving 真做」）：把脏锚点送入保存队列（六态
         // Disconnected/Saving 由 flush 与回调维护），不再仅打印。
         flushDirtyAnchors("auto_save");
+
+        // journal 消费侧（P1-5）：定额出队压档（attribute-sync §8.2
+        // 每 tick 定比、有界队列）
+        drainJournal();
     }
 }
 
@@ -372,6 +448,9 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
             finalizeSave(playerId, success);
         };
         task.createdAtMs = getCurrentTimeMs();
+
+        // write-ahead（P1-5）：同 handleDbSaveRequest
+        appendJournal(task.data);
 
         anchor->set_state(apollo::game::session::AnchorState::Saving);
         saveQueue_->enqueue(task);
