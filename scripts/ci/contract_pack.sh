@@ -20,7 +20,13 @@ set -euo pipefail
 
 root=${1:?用法: contract_pack.sh <repo根> <dist输出目录>}
 dist=${2:?用法: contract_pack.sh <repo根> <dist输出目录>}
+# dist 定型为绝对路径（CI 传相对路径 dist）：protoc 的 descriptor_set_out
+# 在 (cd "$gen" && …) 子 shell 里解析——相对路径会落进 $gen 下不存在的
+# 目录，09-29 起 contract_pack 恒红的根因即此
+mkdir -p "$dist"
+dist=$(cd "$dist" && pwd)
 gen="$root/sdks/cpp/generated"
+gen=$(cd "$gen" && pwd)
 
 for f in semantic.json apollo_contract_client.proto apollo_contract.proto \
          contract.lua contract_route.json; do
