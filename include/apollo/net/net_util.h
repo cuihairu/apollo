@@ -250,7 +250,32 @@ public:
         return WSAIoctl(socket, SIO_KEEPALIVE_VALS, &ka, sizeof(ka),
             nullptr, 0, &bytesReturned, nullptr, nullptr) == 0;
 #else
-        // Linux
+#if defined(__APPLE__)
+        // macOS：无 TCP_KEEPIDLE，空闲时长等价常量为 TCP_KEEPALIVE；
+        // TCP_KEEPINTVL/TCP_KEEPCNT 自 macOS 10.9 起提供（仍以防旧 SDK 做守卫）。
+        // 保活语义不追求三平台完全一致（PORT-1 登记，可编译为底线）。
+        int keepIdle = idleSec;
+        if (setsockopt(socket, IPPROTO_TCP, TCP_KEEPALIVE,
+            reinterpret_cast<const char*>(&keepIdle), sizeof(keepIdle)) != 0) {
+            return false;
+        }
+#ifdef TCP_KEEPINTVL
+        int keepInterval = intervalSec;
+        if (setsockopt(socket, IPPROTO_TCP, TCP_KEEPINTVL,
+            reinterpret_cast<const char*>(&keepInterval), sizeof(keepInterval)) != 0) {
+            return false;
+        }
+#endif
+#ifdef TCP_KEEPCNT
+        int keepCount = count;
+        if (setsockopt(socket, IPPROTO_TCP, TCP_KEEPCNT,
+            reinterpret_cast<const char*>(&keepCount), sizeof(keepCount)) != 0) {
+            return false;
+        }
+#endif
+        return true;
+#else
+        // Linux：TCP_KEEPIDLE/TCP_KEEPINTVL/TCP_KEEPCNT 全量支持
         int keepIdle = idleSec;
         int keepInterval = intervalSec;
         int keepCount = count;
@@ -268,7 +293,8 @@ public:
             return false;
         }
         return true;
-#endif
+#endif // __APPLE__
+#endif // _WIN32
     }
 
     // 设置广播
