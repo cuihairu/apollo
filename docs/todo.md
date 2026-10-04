@@ -1,93 +1,72 @@
-# TODO 任务计划（批次化重排，2026-09-29）
+# TODO 任务计划（任务书 P0-P4 重排，2026-10-04）
 
-> 重排依据：docs/36-MMO_Frameworks_Comparative_Analysis.md §1 决策追溯表（#1-#18）。
-> 原则：每批一个可独立验收的垂直切片；批次内引用决策号（36 号表 #n）与设计文档；验收 = 测试绿 + 生成物基线比对。
-> 原组件/功能/SDK/脚本/监控/文档共 22 项全部入册，无删除——Python 绑定一项按决策 #12 降级为「不做，理由登记」。
+> 重排依据：`docs/rearchitecture/architecture-review-plan.md`（40 节任务书，用户 2026-10-04 定稿）+ 第一阶段审计七件套（`docs/rearchitecture/`：audit / architecture / object-model / lifecycle / concurrency / persistence / improvement-plan）。
+> 2026-09-29 旧 9 批次计划已随本次重排归档：已交付项入「已完成」，未列主线项入文末「遗留登记」，不扩写。
+> 术语纪律：术语服从 `docs/design/term-contract.md` v1.0；新词先入 glossary 再入契约。
 
-## 批次 1：Entity 契约系统 ✅ 已交付（2026-09-29）
+## 已完成（审计期 2026-10-04）
 
-决策依据：#3（XML+XSD 契约）、#4（生成器不进运行时链接图）、#5（契约↔存储解耦）、#11（8 位 SYNC_* 掩码）。
+- [x] 任务书入库（ce91a739）
+- [x] 第一阶段只读审计七件套落库推送（aac84a25，仅文档零代码改动）
+- [x] 用户审定，解冻进入代码阶段（2026-10-04）
 
-- [x] def 文件格式定稿：`sdks/contract/{attrs,messages,entities,errors}.xml`（一行一属性紧凑风格）+ `apollo.xsd`（xs:key/keyref/enumeration；错拼标签/属性报错，无静默缺省）
-- [x] def 解析器：`modules/contract`（strictWalk 白名单、predict 权限位、sync 掩码 7 合法位 + SYNC_DB 0x04 显式拒绝、别名类型、单继承 + DFS 环检测、attr id 分段校验）
-- [x] 生成器骨架：`sdks/gen/apollo_gen`（独立二进制）→ C++ 头 + JSON 投影（`sdks/cpp/generated/` 提交基线）
-- [x] 契约与存储解耦验证：契约文件零持久化字段（`persist/column/table` 词汇报错）；storage.xml 语句规范落 docs/18 §5（批次 2 实现）
-- [x] 测试：XSD/解析器错误用例（错拼/重复 key/非法枚举/分段/别名/继承矩阵/环）、解析往返 + 不动点、SHA-256 向量、schema_hash 格式无关性、生成物 golden check、constexpr 编译期闸
-- [ ] 遗留到批次 7：Unity/Cocos/JS 消费 JSON 投影（投影本身已产出）
+## P0 —— 对象所有权与核心模型重建（任务书 §38 首档；验收 §39 第 1-6 项）
 
-## 批次 2：db-app 数据库服务组件（原「高优先级」）
+> 目标：object-model.md §3 锚点表 + lifecycle.md 目标时序。出口判据五条：① GAME_MODULE=ON 面全开全仓零错误可编可链；② cell-app 单 scene 单玩家最小闭环（内存锚点+Avatar+enter 路径）；③ Scene 拥有实体/AOI 集合且行为与迁移前等价；④ 生命周期状态机全部可观察可校验；⑤ 四门禁本地全绿 + CI 跑通，Unit 含新增 avatar/scene/instance 单测。
 
-决策依据：#5（storage.xml 服务端私有）、#6（write-behind journal + 列提升，先日志后快照）、#17（MySQL 8.0 + Redis + ClickHouse；PG 留方言缝、Mongo 不留）。
+- [x] **P0-1 执行上下文基础**（concurrency C-4）：WorldHost 补编译 + 定帧抽象（tick 10Hz 口径核对收口）+ ThreadAffinity/SceneContext 标注。commit fd61ff7f。
+- [ ] **P0-2 玩家对象模型三件套**（object-model O-1/O-4）：Avatar 类新建（modules/game/scene，生命周期=进场景生/出场景死，持移动/战斗权威/AOI 广播三职责）；PlayerAnchor 补 Home Zone/route 语义字段 + journal 钩子 + home_zone_id；PlayerId/EntityId 强类型分型（cell_server.cpp:559 型错不可见修复）；space_id/instance_id 分离；cell_server attach 路径改 create Avatar by scene。
+- [ ] **P0-3 Scene/Instance 模型重建**（object-model O-2/O-3）：Scene 升级为运行时容器（entities_/AOI/enter-leave/tick 六阶段骨架）；拆 MapInstance→WorldSpace→Scene 三层空壳为「SceneDescriptor（Map 资产）+Scene（运行时）」，Instance=带八态状态机（Create→Initialize→Waiting→Running→Finishing→Rewarding→Draining→Destroyed）的 Scene 载体；`world.create_scene / scene.create_instance / instance.enter(player_id)` 变真实 API；world CMakeLists 补 6 源。
+- [ ] **P0-4 生命周期收口**（lifecycle 全量）：WorldSession Leaving 可观察、Closed 态校验、transfer 异步化+失败回滚；Anchor 六态与 SaveQueue 挂钩；应用关闭协议 stop→service 停→脏数据 flush（占位）→退出。
+- [ ] **P0-5 构建基座加固**（audit §1.3/§3）：6 未编译源挂 target（world 5 源 + world_host.cpp）、零 app 断链、门禁判据改以新模块为准；game-server 链接面修复。
+- [ ] **P0-6 双树收敛预备**（无争议删除）：LogManager ODR 消除（旧头四方法并入新实现 → 删旧头与死源、game-server 改调）；死单例第一批（BattleManager legacy 头；AOIManager 保留仅测试态）。
 
-- [ ] storage.xsd + storage.xml v1（docs/18 §5 语句规范落地：id+SQL 模板+param+resultMap，仅 `#{}` 参数化，禁 `${}`）
-- [ ] 启动全量解析 → prepared statement 池；任一语句坏 → 聚合报错启动即败；热更 = 全量重建再换
-- [ ] ResultMap 代码生成接线：storage.xml → row struct + 绑定代码（生成器不进运行时，决策 #4；禁运行时反射）；改契约/存储忘再生成 → CI 红
-- [ ] 数据库连接池（MySQL）+ 断线重连（docs/36 问 5 教训：KBE 无自动重连）
-- [ ] 异步存档接口：write-behind journal（先 journal_append 后快照，脏实体平滑刷库——决策 #6 改造 KBE Archiver 算法）
-- [ ] AccountDB / CharacterDB / WorldDB 语句集（Hybrid Schema：核心列 + blob，docs/18 §3）
-- [ ] 与 BaseApp/CellApp 的 RPC 通道（挂批次 4 的 appmgr 寻址）
-- [ ] 自动数据持久化（原功能项并入）：Entity 自动序列化、脏数据检测与同步（attribute-sync §8/§10 水位机制复用）、数据库自动备份策略（docs/18 §8）
+## P1 —— 换幕 / 目录 / AOI / 持久化 / 恢复 / 重连（任务书 §38 二档；验收 5、9、10）
 
-## 批次 3：cell-appmgr 空间应用管理器（原「高优先级」）
+> 单进程闭环优先，不增加进程。出口判据：① 两 scene 间换幕端到端；② 在线目录行为契约单测；③ AOI 双实现删除后测试覆盖等价；④ 玩家档案写盘→重启→读回（integration）；⑤ 断线→wait→重连→Avatar 重建。
 
-决策依据：#9（场景实例 Zone，否决无缝世界）、#10（AOI 独立服务）、#16（Battle 独立实例）、#15（ServerID 64 位分段）。
+- [ ] **P1-1 Scene Transfer/换幕**：prepare→detach→attach→state sync→resume 协议 + 失败回滚 + 断线处理；transfer 协议消息 + apollo_gen 重生成 + golden check。
+- [ ] **P1-2 PlayerDirectory/在线目录**：baseappmgr 目录语义（Anchor 挂 HomeZone、Session 挂 gateway）、顶号预裁、事件族（SessionUp/Down/Moved/Kicked）、30s 对账、anchor_epoch；消息面+事件面行为契约完整（跨进程镜像留 P3）。
+- [ ] **P1-3 AOI 收敛与接入 Scene**：两套合一（选中一支代持）+ ENTER/SYNC 事件分发 + ViewerState 骨架；修 GetOrCreateCell 范围查询副作用；Scene 拥有 AOI 实例、viewer set 驱动下发。
+- [ ] **P1-4 持久化栈收敛+最小落盘**：五套→一套（删 9 重复实现 + 4 #ifdef 死文件 + 2 空 wrapper）；SqlTemplate 补实现（B4 链接死局）、table_loader.h:22 语法修复、DistributedLock 死代码删除；最小真链路（Anchor dirty → SaveQueue 落盘 → load 校验；fromJson/toJson 对称）；write-behind journal 骨架 + 崩溃回放；「player_+id」bootstrap 恶龙清账。
+- [ ] **P1-5 Recovery**：「必须持久化/可重算/可丢」三档清单；进程重启回放 + 场景重开 + 会话重连三路径；启动序列 restore→admission→ready。
+- [ ] **P1-6 Reconnect/保活窗口**：gateway Session 对象 + resume_token（TTL 同源）+ Suspended 窗口定时器 + 重连恢复路径；消息（resume）；「纯文本 disconnect」消灭。
 
-- [ ] CellApp 实例管理 + 空间分区负载均衡 + 动态边界调整
-- [ ] Entity 跨 CellApp 迁移调度（ghost 不做——决策 #9 已否决；跨 Zone 迁移走显式 handoff）
-- [ ] 过载自动扩容（指标来自批次 8 采集面）
-- [ ] AOI 服务对接（网格+四叉树+shard，docs/17 §5）
-- [ ] Battle 实例生命周期挂接（短生命周期进程、独立 tick 率，docs/25 §3；帧同步只留适配缝——决策 #18）
+## P2 —— Battle / ECS / Social / Guild / Party（任务书 §38 三档）
 
-## 批次 4：base-appmgr 基础应用管理器（原「中优先级」）
+> 出口判据：① 塔防/副本 battle 单 scene tick 闭环（create→enter→battle→reward→leave）；② ECS 收敛无并行实现残留；③ 契约树全量 golden check；④ guild/party 最小 CRUD 单测。
 
-决策依据：#13（**2026-09-30 裁决改写**：machined 守护 + UDP 广播双层发现、不引 etcd/consul——net-abstraction §7 G-1；原「Consul/Etcd 注册 + 心跳」口径随 docs/05 删除）、#15（ServerID 分段）。
+- [ ] **P2-1 ECS 收敛**：五套→场景内一套（Player 不 ECS 化；Battle 按 Scene→BattleRuntime→ECS 形状挂接）；legacy ecs 死件删除（含不可编译幻影 include）。
+- [ ] **P2-2 Battle Runtime**：battle tick 接入 scene；battle 状态与 reward 单向落 Anchor；determinism 四约束（PCG32 子流/四元组 replay/hash 链）可测骨架。
+- [ ] **P2-3 契约系统修订**：entities.xml 继承链修文（Player 删除或并入 Avatar，走先 glossary 后 contract 流程）；P0-P1 新协议消息入库；全链路 golden check + compile 闸。
+- [ ] **P2-4 Social/Guild/Party**：Anchor 长期态字段模型扩展（Inventory/Equipment/Quest/Progress）+ Guild/Party 对象与协议。
 
-- [ ] BaseApp 实例管理 + 状态跟踪（实例生死走 G-1 编队事件，net-abstraction §7；心跳/超时参数随 P3 定）
-- [ ] 新客户端连接分配（负载均衡）
-- [ ] 服务发现接线（G-1 两层：machined 守护 + UDP 广播——net-abstraction §7 P3；不引 etcd/consul，先例见 deep-dive §13）
+## P3 —— Deployment / Performance / Observability / DevEx（任务书 §38 四档）
 
-## 批次 5：AI 导航/寻路
+> 出口判据：三模型基准可重复数字；单场景 1000 人广播在目标帧预算内。
 
-- [ ] Recast/Detour 接入评估（NavMesh 构建、地形数据工具）
-- [ ] A* / 路径平滑；服务端 NPC 自动移动（挂 Zone 主循环，docs/17）
-- [ ] 寻路请求走线程池旁路（不占 20Hz 全序主线程——决策 #8）
+- [ ] **P3-1 部署与进程形态**：manager 域目录跨进程化（machined + UDP 广播 G-1 骨架）；instance offload 进程形态；base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）；配置统一（ConfigManager 收口/删除）。
+- [ ] **P3-2 性能**：三模型 benchmark 桩（1×1000 / 10×100 / 100×10，benchmark.cpp 接线）；scene 级锁粒度；帧预算表实测化。
+- [ ] **P3-3 可观测性**：日志三套收口末批（P0-6 后 infra 统一）；metrics/tracing 最小集；VerifierApp/LoggerApp 立项。
+- [ ] **P3-4 DevEx**：CLI 脚手架（starter 补实或删除）；app 一键起停。
 
-## 批次 6：脚本系统
+## P4 —— Documentation / Examples / Benchmark / Tutorial（任务书 §38 五档 + §33/§34）
 
-决策依据：#12（Lua 白名单；否决 KBE 全功能 Python 的攻击面）。2026-09-30 修订：弃 sol2（上游维护停滞）——Lua 5.5 线随 vcpkg（当前 5.5.x，同日再修订）+ 原生 C API 绑定（scripting-lua §2）。
+- [ ] **P4-1 文档修订**：quick-start 引用实 API；apps 文档 9 项差异复核；tests/README 墓碑清理；README 第一屏按 §34 重构（Player/Scene/Instance/AOI/Battle/Persistence 六核心词 + 最小 example）；docs/architecture/overview.md（§35）；ADR-001..009（§36）。
+- [ ] **P4-2 最小可运行示例** = 任务书 §29 全链路（login→lobby→create instance→enter→spawn→AOI→battle→reward→leave）——P0-P2 完成后即全流程验证器。
+- [ ] **P4-3 Benchmark/Tutorial**：三模型基准复用 + 新手上路教程。
+- [ ] **P4-4 术语承接**：全仓 term-contract 零出现（禁用词扫描清零：Space / nng / Battle(space 义) / Player(玩家实体义) / baseapp 进程名）。
 
-- [ ] 脚本抽象层设计（Lua 单语言；抽象层只留宿主 API 边界，不做多语言运行时）
-- [ ] Lua 5.5.x（vcpkg）嵌入与原生 C API 绑定（2026-09-30 修订：弃 sol2；版本随 vcpkg port）；脚本可写面 = 契约生成白名单（predict 位交集，sdk-contract §5）
-- [ ] 脚本热更新机制（换表协议：全量构建再原子替换，对照 storage 池热更同构）
-- [ ] ~~Python 嵌入与绑定~~：不做——决策 #12 明确否决（攻击面 + 热更失控；理由登记留档）
+## 遗留登记（已关 / 未列主线项，不扩写）
 
-## 批次 7：客户端 SDK 投影
+- **旧 9 批次计划**（2026-09-29，docs/36 决策表依据）：批次 1 契约系统✅已交付；批次 2-4 重组件（db-app/cell-appmgr/base-appmgr）中与任务书重叠者已并入 P1-P4 对应批次；批次 5 AI 寻路（Recast/Detour）、批次 6 脚本（Lua）、批次 7 客户端 SDK 投影、批次 8 监控运维——审计后未列入轻量 MMO 主线，保持现状登记，主线稳定后评估。
+- **审计遗留死件清账**（并入各阶段「先删后建」批内，不留新孤儿）：comval 手写 union、attribute_id 290 常量、LocalServiceDiscovery、queue 族继承件、IPC 旁支（improvement-plan §7.5）。
+- **契约差异清欠**（七件套各文档文末差异清单）：entities.xml `Player parent=Avatar` 冲突待 P2-3 修文；WorldSpace 词根随 P0-3 更名消账；base/baseappmgr 进程名随 P3-1；nng/modules·protocol 随 P1 收口前保持禁用。
 
-决策依据：#4（sdks/ 布局）、#11（sync 掩码多端同源）。
+## 推进纪律（任务书 §37/§40 + improvement-plan §7）
 
-- [ ] Unity SDK（消费 apollo_contract.json：属性 id/掩码/消息 schema 代码生成）
-- [ ] Cocos2d-x SDK（同 JSON 投影）
-- [ ] JavaScript/WebSocket SDK（浏览器直连 L1 帧定界的 WS 子族）
-- [ ] UE4/UE5 SDK（COND_* 思想已在决策 #11 对照；投影同源）
-
-## 批次 8：监控与运维
-
-决策依据：#14（Prometheus/Kafka/ClickHouse，只学定位不学实现）、#13（注册心跳）。
-
-- [ ] 性能指标采集（tick 耗时/队列深度/AOI shard 负载 → Prometheus）
-- [ ] LogAgent → Kafka → ClickHouse TLog 流水（docs/18 §7）
-- [ ] Console 监控接口 + Web 监控界面（运行时 ConsoleEvent，docs/00）
-- [ ] 服务器状态可视化（含批次 2/3/4 组件的容量与迁移视图）
-
-## 批次 9：文档完善（持续）
-
-- [ ] 各组件详细设计文档（随批次 2-8 同步产出，不后置）
-- [ ] QA.md 答案编写
-- [ ] API 参考文档（契约生成物 + 宿主 API 面）
-- [ ] 部署运维文档（K8s/云环境，含回档演练，docs/18 §8）
-
-## 批次推进纪律
-
-1. 每批一个 PR/提交序列；全量测试绿才合入（既有测试不破）。
-2. 契约/存储定义文件改动必须同步再生成，golden check 红即阻断（CI 双闸）。
-3. 批次间依赖：2←1（契约 hash 进存档元数据）；3/4←2（存档 RPC）；6←1（白名单由契约生成）；7←1（JSON 投影）；8 最后收口但采集面随各批先行埋点。
+1. 每批（批次内小步）完成即重跑四门禁（Build / Unit / Integration / Examples），全绿才提交推送；CI 触发跑一轮。
+2. 小步提交推送：每批一个提交，中文信息，仅含本批文件；禁止一次性大规模重构；先删后建（收敛）与先建后删（立核）批次分开。
+3. 术语纪律：新对象/文件/字段名先查 term-contract；新词先入 glossary 再入契约。
+4. 批内文件范围以 improvement-plan.md 文件级清单为准，超范围改动即上报协调。
+5. 每批提交同步勾选本文档状态。
