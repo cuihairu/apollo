@@ -57,8 +57,12 @@ private:
     // 计算单帧间隔
     std::chrono::milliseconds tickInterval() const;
 
-    // 广播消息给视野内玩家
+    // 广播消息给视野内玩家（P1-3：viewer set 驱动——接收集合来自实体所在
+    // Scene 的 SceneAoi；网关下发面随 P3-2）
     void broadcastToViewers(Entity* entity, const std::vector<uint8_t>& message);
+
+    // 实体号 → 所在 Scene（Avatar 挂 scene 归属反查；无归属返回 nullptr）
+    apollo::game::world::Scene* find_scene_by_entity(EntityID entity_id);
 
     void ensureDefaultScene();
     void attachPlayerWorldSession(protocol::SessionID session_id, protocol::PlayerID player_id,
@@ -67,7 +71,6 @@ private:
 
     CellConfig config_;
     std::unique_ptr<EntityManager> entityManager_;
-    std::unique_ptr<AOIManager> aoiManager_;
     // Zone 世界容器（P0-3）：create_scene / create_instance / scene.enter 路径
     std::unique_ptr<apollo::game::world::World> world_;
     std::shared_ptr<apollo::game::world::WorldSessionManager> worldSessionManager_;

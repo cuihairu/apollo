@@ -15,6 +15,9 @@ namespace cell {
 
 namespace protocol = apollo::protocol;
 
+// P1-3：Scene 持有 AOI 后 cell 侧直接消费 SceneAoi（Vec3/查询面）
+using apollo::game::world::SceneAoi;
+
 namespace {
 
 class CellWorldService final : public apollo::runtime::IWorldService {
@@ -57,154 +60,6 @@ private:
 };
 
 } // namespace
-
-//==============================================================================
-// AOIManager 实现
-//==============================================================================
-
-AOIManager::AOIManager(const CellConfig& config)
-    : config_(config) {
-    gridWidthCount_ = static_cast<int>(std::ceil(config_.spaceWidth / config_.gridSize));
-    gridHeightCount_ = static_cast<int>(std::ceil(config_.spaceHeight / config_.gridSize));
-
-    grids_.resize(gridWidthCount_ * gridHeightCount_);
-}
-
-void AOIManager::enter(Entity* entity) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    int gridId = getGridId(entity->position());
-    entityGridMap_[entity->id()] = gridId;
-    grids_[gridId].entities.push_back(entity);
-
-    // 通知进入视野
-    updateView(entity);
-}
-
-void AOIManager::move(Entity* entity, const Position& newPos) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    int oldGridId = getGridId(entity->position());
-    int newGridId = getGridId(newPos);
-
-    // 更新位置
-    entity->setPosition(newPos);
-
-    if (oldGridId != newGridId) {
-        // 跨格子移动
-        auto& oldGrid = grids_[oldGridId];
-        oldGrid.entities.erase(
-            std::remove(oldGrid.entities.begin(), oldGrid.entities.end(), entity),
-            oldGrid.entities.end()
-        );
-
-        auto& newGrid = grids_[newGridId];
-        newGrid.entities.push_back(entity);
-
-        entityGridMap_[entity->id()] = newGridId;
-    }
-
-    // 更新视野
-    updateView(entity);
-}
-
-void AOIManager::leave(Entity* entity) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    auto it = entityGridMap_.find(entity->id());
-    if (it != entityGridMap_.end()) {
-        auto& grid = grids_[it->second];
-        grid.entities.erase(
-            std::remove(grid.entities.begin(), grid.entities.end(), entity),
-            grid.entities.end()
-        );
-        entityGridMap_.erase(it);
-    }
-
-    // 清理视野
-    viewMap_.erase(entity->id());
-
-    // 通知其他实体
-    for (auto& pair : viewMap_) {
-        auto& viewers = pair.second;
-        viewers.erase(
-            std::remove(viewers.begin(), viewers.end(), entity),
-            viewers.end()
-        );
-    }
-}
-
-std::vector<Entity*> AOIManager::getViewers(const Position& pos, float radius) {
-    std::vector<Entity*> result;
-
-    int centerX = getGridX(pos.x);
-    int centerY = getGridY(pos.y);
-
-    // 检查九宫格
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            int gx = centerX + dx;
-            int gy = centerY + dy;
-
-            if (gx < 0 || gx >= gridWidthCount_ || gy < 0 || gy >= gridHeightCount_) {
-                continue;
-            }
-
-            int gridId = gy * gridWidthCount_ + gx;
-            const auto& grid = grids_[gridId];
-
-            for (auto* entity : grid.entities) {
-                if (entity->position().distanceTo(pos) <= radius) {
-                    result.push_back(entity);
-                }
-            }
-        }
-    }
-
-    return result;
-}
-
-std::vector<Entity*> AOIManager::getViewers(Entity* entity) {
-    return getViewers(entity->position(), config_.viewRadius);
-}
-
-void AOIManager::updateView(Entity* entity) {
-    auto viewers = getViewers(entity);
-
-    // 检查新增的视野内实体
-    for (auto* other : viewers) {
-        auto& myViewers = viewMap_[entity->id()];
-        if (std::find(myViewers.begin(), myViewers.end(), other) == myViewers.end()) {
-            myViewers.push_back(other);
-            entity->onEnterView(other);
-        }
-
-        // 双向视野
-        auto& otherViewers = viewMap_[other->id()];
-        if (std::find(otherViewers.begin(), otherViewers.end(), entity) == otherViewers.end()) {
-            otherViewers.push_back(entity);
-            other->onEnterView(entity);
-        }
-    }
-}
-
-int AOIManager::getGridX(float x) const {
-    return static_cast<int>(std::floor(x / config_.gridSize));
-}
-
-int AOIManager::getGridY(float y) const {
-    return static_cast<int>(std::floor(y / config_.gridSize));
-}
-
-int AOIManager::getGridId(const Position& pos) const {
-    int gx = getGridX(pos.x);
-    int gy = getGridY(pos.y);
-
-    gx = std::max(0, std::min(gx, gridWidthCount_ - 1));
-    gy = std::max(0, std::min(gy, gridHeightCount_ - 1));
-
-    return gy * gridWidthCount_ + gx;
-}
 
 //==============================================================================
 // EntityManager 实现
@@ -279,7 +134,6 @@ void EntityManager::update(float dt) {
 CellServer::CellServer(const CellConfig& config)
     : config_(config)
     , entityManager_(std::make_unique<EntityManager>(config))
-    , aoiManager_(std::make_unique<AOIManager>(config))
     , world_(std::make_unique<apollo::game::world::World>())
     , worldSessionManager_(std::make_shared<apollo::game::world::WorldSessionManager>())
     , worldHost_(std::make_shared<apollo::runtime::WorldHost>(
@@ -382,7 +236,9 @@ std::vector<uint8_t> CellServer::handleCellCreateEntity(const std::vector<uint8_
 
     if (entity) {
         entity->setPosition(Position{msg.position.x, msg.position.y, msg.position.z});
-        aoiManager_->enter(entity);
+        // P1-3 AOI 收敛：cell 侧 AOIManager 退役——玩家实体经 attach 路径
+        // scene.enter 入 Scene 持有的 SceneAoi；非玩家实体仍为 EntityManager
+        // 内存对象（场景 AOI 只承载 Avatar/玩家实体，NPC AOI 随玩法批接入）
 
         if (msg.entityType == protocol::EntityType::PLAYER) {
             // P0-2：双 id 复用收敛。消息面（CellCreateEntity）尚无独立 player_id
@@ -407,10 +263,7 @@ std::vector<uint8_t> CellServer::handleCellDestroyEntity(const std::vector<uint8
 
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellDestroyEntity>(bodyData);
 
-    auto* entity = entityManager_->getEntity(msg.entityId);
-    if (entity) {
-        aoiManager_->leave(entity);
-    }
+    // P1-3：AOI 出列由 detach 路径 scene.leave 承担（Scene 持有 AOI）
     detachPlayerWorldSession(header.sessionId, msg.entityId);
     entityManager_->destroyEntity(msg.entityId);
 
@@ -425,9 +278,17 @@ std::vector<uint8_t> CellServer::handleCellEntityMove(const std::vector<uint8_t>
 
     auto* entity = entityManager_->getEntity(msg.entityId);
     if (entity) {
-        aoiManager_->move(entity, Position{msg.newPos.x, msg.newPos.y, msg.newPos.z});
+        entity->setPosition(Position{msg.newPos.x, msg.newPos.y, msg.newPos.z});
 
-        // 广播移动消息给视野内玩家
+        // P1-3 AOI 收敛：Scene 持有的 SceneAoi 随动（Avatar 实体视角）；
+        // 无场景归属的实体只更新自身位置
+        if (auto* scene = find_scene_by_entity(msg.entityId)) {
+            const auto entity_id = apollo::game::core::EntityId(msg.entityId);
+            scene->aoi().move(entity_id,
+                              SceneAoi::Vec3{msg.newPos.x, msg.newPos.y, msg.newPos.z});
+        }
+
+        // 广播移动消息给视野内玩家（viewer set 驱动，见 broadcastToViewers）
         broadcastToViewers(entity, request);
     }
 
@@ -560,16 +421,37 @@ std::chrono::milliseconds CellServer::tickInterval() const {
 }
 
 void CellServer::broadcastToViewers(Entity* entity, const std::vector<uint8_t>& message) {
-    auto viewers = aoiManager_->getViewers(entity);
+    // P1-3：viewer set 驱动（旧 aoiManager_->getViewers 九宫格查询退役）——
+    // 接收集合 = 实体所在 Scene 的 SceneAoi 视野查询（AOI 归 scene、scene_id
+    // 隔离）；网关下发面随 P3-2（当前阶段下发 = 可观察日志）
+    (void)message;
+    apollo::game::world::Scene* scene = find_scene_by_entity(entity->id());
+    if (scene == nullptr) {
+        return;
+    }
+    const auto viewers = scene->aoi().viewers_of(apollo::game::core::EntityId(entity->id()));
+    if (!viewers.empty()) {
+        std::cout << "broadcast: entity=" << entity->id() << " scene=" << scene->scene_id()
+                  << " viewers=" << viewers.size() << " bytes=" << message.size() << std::endl;
+    }
+}
 
-    // 简化处理：实际应该通过 Gateway 发送
-    for (auto* viewer : viewers) {
-        if (viewer->type() == EntityType::PLAYER) {
-            // 发送给玩家
-            (void)viewer;  // 避免未使用警告
-            // 实际实现需要查找玩家对应的 Gateway 连接
+apollo::game::world::Scene* CellServer::find_scene_by_entity(EntityID entity_id) {
+    // 玩家实体 → Avatar 实体号反查所在 Scene（P0-2 强分型；实体号唯一归属
+    // 一个 scene——Avatar 挂 scene 归属是唯一权威）
+    const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
+    for (apollo::game::world::Scene* scene : world_->scenes()) {
+        if (scene == nullptr) {
+            continue;
+        }
+        for (const auto& player_id : scene->avatars()) {
+            const auto avatar = scene->get_avatar(player_id);
+            if (avatar && avatar->entity_id() == avatar_entity_id) {
+                return scene;
+            }
         }
     }
+    return nullptr;
 }
 
 void CellServer::ensureDefaultScene() {

@@ -1,11 +1,11 @@
 # Game - World module (AOI, scene, avatar, world/instance runtime)
 add_library(apollo_game_world STATIC
-    src/aoi.cpp
     src/avatar.cpp
     src/instance.cpp
     src/scene.cpp
     src/scene_aoi.cpp
     src/scene_transfer.cpp
+    src/viewer_state.cpp
     src/world.cpp
     src/world_session.cpp
     src/world_session_manager.cpp

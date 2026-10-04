@@ -678,9 +678,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        # Game Core
 	        ../modules/game/core/src/entity.cpp
 	        # Game World
-	        ../modules/game/world/src/aoi.cpp
 	        ../modules/game/world/src/scene.cpp
 	        ../modules/game/world/src/scene_aoi.cpp
+	        ../modules/game/world/src/viewer_state.cpp
 	        ../modules/game/world/src/avatar.cpp
 	        ../modules/game/session/src/player_anchor.cpp
 	        # Game Attributes (using attribute.hpp, not attribute_value.h)
@@ -776,6 +776,7 @@ add_executable(scene_tests
     ../modules/game/core/src/entity.cpp
     ../modules/game/world/src/scene.cpp
     ../modules/game/world/src/scene_aoi.cpp
+    ../modules/game/world/src/viewer_state.cpp
     ../modules/game/world/src/avatar.cpp
     ../modules/game/session/src/player_anchor.cpp
 )

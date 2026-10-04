@@ -30,6 +30,10 @@ SceneAoi::SceneAoi(float width, float height, float grid_size, float view_radius
     grids_.resize(static_cast<std::size_t>(grid_cols_) * static_cast<std::size_t>(grid_rows_));
 }
 
+void SceneAoi::set_event_sink(EventSink sink) {
+    sink_ = std::move(sink);
+}
+
 void SceneAoi::enter(apollo::game::core::EntityId id, const Vec3& position) {
     if (!id.is_valid() || entity_grid_.count(id.value()) != 0) {
         return;
@@ -38,6 +42,22 @@ void SceneAoi::enter(apollo::game::core::EntityId id, const Vec3& position) {
     grids_[static_cast<std::size_t>(gid)].push_back(id);
     entity_grid_[id.value()] = gid;
     positions_[id.value()] = position;
+
+    // 事件分发（Enter/Sync/LEAVE 三面，见类注）：id 的初始视野铺底——
+    // 半径内既有实体逐个 Sync 给 id；对称地，各既有实体收 id 的 Enter。
+    // 水位先记账再分发（观察面 visible 与事件序列一致）。
+    viewer_state_.reset(id);
+    for (const auto other : viewers_at(position)) {
+        if (other == id) {
+            continue;
+        }
+        viewer_state_.add(id, other);
+        viewer_state_.add(other, id);
+        if (sink_) {
+            sink_(Event{Event::Kind::Sync, id, other});
+            sink_(Event{Event::Kind::Enter, other, id});
+        }
+    }
 }
 
 void SceneAoi::move(apollo::game::core::EntityId id, const Vec3& new_position) {
@@ -53,6 +73,65 @@ void SceneAoi::move(apollo::game::core::EntityId id, const Vec3& new_position) {
         it->second = new_gid;
     }
     positions_[id.value()] = new_position;
+
+    if (!viewer_state_.tracked(id)) {
+        return;  // 无水位（未经 enter 登记的条目）——纯网格维护
+    }
+
+    // 差集分发（半径对称：o ∈ 新邻居集 ⇔ id ∈ o 的新邻居集）
+    std::vector<apollo::game::core::EntityId> others;
+    for (const auto other : viewers_at(new_position)) {
+        if (other != id) {
+            others.push_back(other);
+        }
+    }
+
+    // observer=id 面：出视野 Leave → 新进 Enter → 仍在视野 Sync
+    const auto before = viewer_state_.visible_set(id);
+    for (const auto subject : before) {
+        if (std::find(others.begin(), others.end(), subject) == others.end()) {
+            viewer_state_.remove(id, subject);
+            if (sink_) {
+                sink_(Event{Event::Kind::Leave, id, subject});
+            }
+        }
+    }
+    for (const auto subject : others) {
+        if (!viewer_state_.visible(id, subject)) {
+            viewer_state_.add(id, subject);
+            if (sink_) {
+                sink_(Event{Event::Kind::Enter, id, subject});
+            }
+        } else if (sink_) {
+            sink_(Event{Event::Kind::Sync, id, subject});
+        }
+    }
+
+    // observer=other 面（对称）：受影响观察者 = 新邻居 ∪ 旧视野
+    // （旧视野里不在新邻居集的：id 已走出其半径 → Leave）
+    std::vector<apollo::game::core::EntityId> affected = others;
+    for (const auto subject : before) {
+        if (std::find(affected.begin(), affected.end(), subject) == affected.end()) {
+            affected.push_back(subject);
+        }
+    }
+    for (const auto observer : affected) {
+        const bool sees_id =
+            std::find(others.begin(), others.end(), observer) != others.end();
+        if (sees_id) {
+            if (viewer_state_.add(observer, id)) {
+                if (sink_) {
+                    sink_(Event{Event::Kind::Enter, observer, id});
+                }
+            } else if (sink_) {
+                sink_(Event{Event::Kind::Sync, observer, id});
+            }
+        } else if (viewer_state_.remove(observer, id)) {
+            if (sink_) {
+                sink_(Event{Event::Kind::Leave, observer, id});
+            }
+        }
+    }
 }
 
 void SceneAoi::leave(apollo::game::core::EntityId id) {
@@ -64,6 +143,22 @@ void SceneAoi::leave(apollo::game::core::EntityId id) {
     grid.erase(std::remove(grid.begin(), grid.end(), id), grid.end());
     entity_grid_.erase(it);
     positions_.erase(id.value());
+
+    // 事件分发：id 视野内的主体收 id 的 Leave（观察者侧），注销 id 自身
+    // 视野；再扫全局水位把 id 从一切观察者视野里摘除（各自收 Leave）。
+    if (sink_) {
+        for (const auto subject : viewer_state_.visible_set(id)) {
+            sink_(Event{Event::Kind::Leave, id, subject});
+        }
+    }
+    viewer_state_.drop(id);
+    if (sink_) {
+        for (const auto observer : viewer_state_.remove_everywhere(id)) {
+            sink_(Event{Event::Kind::Leave, observer, id});
+        }
+    } else {
+        (void)viewer_state_.remove_everywhere(id);
+    }
 }
 
 std::vector<apollo::game::core::EntityId> SceneAoi::viewers_of(

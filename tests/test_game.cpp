@@ -18,11 +18,14 @@
 
 #include "apollo/game/attributes/comval.h"
 #include "apollo/game/attributes/attribute.hpp"
-#include "apollo/game/aoi/aoi.hpp"
 #include "apollo/game/battle/ecs/ecs.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/world/scene.hpp"
+#include "apollo/game/world/scene_aoi.hpp"
+#include "apollo/game/world/viewer_state.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -39,11 +42,8 @@ using apollo::game::core::Entity;
 using apollo::game::core::IEntity;
 using apollo::game::core::IEntityComponent;
 using apollo::game::world::Scene;
-using apollo::Vector3;
-using apollo::AOIEntity;
-using apollo::AOIEventType;
-using apollo::AOIGrid;
-using apollo::AOIManager;
+using apollo::game::world::SceneAoi;
+using apollo::game::world::ViewerState;
 using apollo::battle::ecs::World;
 using apollo::battle::ecs::System;
 using apollo::battle::ecs::SystemManager;
@@ -290,140 +290,125 @@ bool test_attribute_container_change_listener() {
 //==============================================================================
 
 bool test_vector3_distance() {
-    Vector3 v1(0, 0, 0);
-    Vector3 v2(3, 4, 0);
+    // 等价迁移（P1-3，legacy aoi.hpp 删除）：Vector3.Distance → SceneAoi::Vec3
+    // + 局部距离（语义：3-4-5 三角形）
+    const SceneAoi::Vec3 v1{0, 0, 0};
+    const SceneAoi::Vec3 v2{3, 4, 0};
 
-    float dist = v1.Distance(v2);
+    const float dx = v2.x - v1.x;
+    const float dy = v2.y - v1.y;
+    const float dist = std::sqrt(dx * dx + dy * dy);
     TEST_ASSERT(std::abs(dist - 5.0f) < 0.001f, "Distance should be 5");
 
-    float distSq = v1.DistanceSquared(v2);
+    const float distSq = dx * dx + dy * dy;
     TEST_ASSERT(std::abs(distSq - 25.0f) < 0.001f, "Distance squared should be 25");
     return true;
 }
 
 bool test_aoi_entity_default() {
-    AOIEntity entity;
-    TEST_ASSERT(entity.entityId == 0, "Default entity ID should be 0");
-    TEST_ASSERT(entity.sceneId == 0, "Default scene ID should be 0");
-    TEST_ASSERT(entity.aoiRadius == 0, "Default radius should be 0");
+    // 等价迁移：AOIEntity 默认态 → SceneAoi 默认构造空态
+    SceneAoi aoi;
+    TEST_ASSERT(aoi.entity_count() == 0, "Default scene AOI should be empty");
+    TEST_ASSERT(!aoi.contains(EntityId(1)), "Default scene AOI should not contain entity");
+    TEST_ASSERT(aoi.viewers_of(EntityId(1)).empty(), "Default scene AOI query should be empty");
     return true;
 }
 
 bool test_aoi_grid_update_entity() {
-    AOIGrid grid(100.0f);
+    // 等价迁移：单实体入格无邻居 → SceneAoi 单实体 viewers_of 只含自身
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 10.0f);
+    aoi.enter(EntityId(1), {50, 0, 50});
 
-    AOIEntity entity(1, 100);
-    entity.position = Vector3(50, 0, 50);
-    entity.aoiRadius = 10;
-
-    bool success = grid.UpdateEntity(entity);
-    TEST_ASSERT(success, "Update entity should succeed");
-
-    auto entities = grid.GetAOIEntities(1);
-    TEST_ASSERT(entities.empty(), "Single entity should have no neighbors");
+    TEST_ASSERT(aoi.contains(EntityId(1)), "Enter should register entity");
+    auto entities = aoi.viewers_of(EntityId(1));
+    TEST_ASSERT(entities.size() == 1, "Single entity should have no neighbors");
+    TEST_ASSERT(entities[0] == EntityId(1), "Only itself in view (self included by query contract)");
     return true;
 }
 
 bool test_aoi_grid_two_entities() {
-    AOIGrid grid(100.0f);
+    // 等价迁移：两实体近距互见 → SceneAoi 半径内互见
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
+    aoi.enter(EntityId(1), {50, 0, 50});
+    aoi.enter(EntityId(2), {60, 0, 60});
 
-    AOIEntity entity1(1, 100);
-    entity1.position = Vector3(50, 0, 50);
-    entity1.aoiRadius = 20;
+    const auto entities1 = aoi.viewers_of(EntityId(1));
+    TEST_ASSERT(entities1.size() == 2, "Entity 1 should see entity 2 (and self)");
+    TEST_ASSERT(std::find(entities1.begin(), entities1.end(), EntityId(2)) != entities1.end(),
+                "Should be entity 2");
 
-    AOIEntity entity2(2, 100);
-    entity2.position = Vector3(60, 0, 60);
-    entity2.aoiRadius = 20;
-
-    grid.UpdateEntity(entity1);
-    grid.UpdateEntity(entity2);
-
-    auto entities1 = grid.GetAOIEntities(1);
-    TEST_ASSERT(entities1.size() == 1, "Entity 1 should see entity 2");
-    TEST_ASSERT(entities1[0] == 2, "Should be entity 2");
-
-    auto entities2 = grid.GetAOIEntities(2);
-    TEST_ASSERT(entities2.size() == 1, "Entity 2 should see entity 1");
+    const auto entities2 = aoi.viewers_of(EntityId(2));
+    TEST_ASSERT(std::find(entities2.begin(), entities2.end(), EntityId(1)) != entities2.end(),
+                "Entity 2 should see entity 1");
     return true;
 }
 
 bool test_aoi_grid_out_of_range() {
-    AOIGrid grid(100.0f);
+    // 等价迁移：远距不可见 → SceneAoi 半径外不进查询结果
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 10.0f);
+    aoi.enter(EntityId(1), {50, 0, 50});
+    aoi.enter(EntityId(2), {200, 0, 200});  // Far away
 
-    AOIEntity entity1(1, 100);
-    entity1.position = Vector3(50, 0, 50);
-    entity1.aoiRadius = 10;
-
-    AOIEntity entity2(2, 100);
-    entity2.position = Vector3(200, 0, 200); // Far away
-    entity2.aoiRadius = 10;
-
-    grid.UpdateEntity(entity1);
-    grid.UpdateEntity(entity2);
-
-    auto entities1 = grid.GetAOIEntities(1);
-    TEST_ASSERT(entities1.empty(), "Far entities should not be visible");
+    const auto entities1 = aoi.viewers_of(EntityId(1));
+    TEST_ASSERT(entities1.size() == 1, "Far entities should not be visible");
+    TEST_ASSERT(entities1[0] == EntityId(1), "Only self in view");
     return true;
 }
 
 bool test_aoi_grid_remove_entity() {
-    AOIGrid grid(100.0f);
+    // 等价迁移：移除后不可查 → SceneAoi leave 出集合
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
+    aoi.enter(EntityId(1), {50, 0, 50});
 
-    AOIEntity entity(1, 100);
-    entity.position = Vector3(50, 0, 50);
-
-    grid.UpdateEntity(entity);
-    bool removed = grid.RemoveEntity(1);
-    TEST_ASSERT(removed, "Remove should succeed");
-
-    auto entities = grid.GetAOIEntities(1);
-    TEST_ASSERT(entities.empty(), "Removed entity should not exist");
+    aoi.leave(EntityId(1));
+    TEST_ASSERT(!aoi.contains(EntityId(1)), "Leave should deregister entity");
+    TEST_ASSERT(aoi.viewers_of(EntityId(1)).empty(), "Removed entity should not exist");
+    TEST_ASSERT(aoi.entity_count() == 0, "Count should drop to zero");
     return true;
 }
 
 bool test_aoi_grid_range_query() {
-    AOIGrid grid(100.0f);
+    // 等价迁移：范围查询 → SceneAoi viewers_at
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
+    aoi.enter(EntityId(1), {50, 0, 50});
+    aoi.enter(EntityId(2), {55, 0, 55});
+    aoi.enter(EntityId(3), {200, 0, 200});
 
-    AOIEntity entity1(1, 100);
-    entity1.position = Vector3(50, 0, 50);
-
-    AOIEntity entity2(2, 100);
-    entity2.position = Vector3(55, 0, 55);
-
-    AOIEntity entity3(3, 100);
-    entity3.position = Vector3(200, 0, 200);
-
-    grid.UpdateEntity(entity1);
-    grid.UpdateEntity(entity2);
-    grid.UpdateEntity(entity3);
-
-    auto entities = grid.GetEntitiesInRange(Vector3(50, 0, 50), 20);
+    const auto entities = aoi.viewers_at({50, 0, 50});
     TEST_ASSERT(entities.size() >= 2, "Range query should find nearby entities");
     return true;
 }
 
 bool test_aoi_manager_singleton() {
-    auto& manager = AOIManager::Instance();
-    TEST_ASSERT(&manager == &AOIManager::Instance(), "Should return same instance");
+    // 等价升级（P1-3）：God 单例删除 → scene_id 隔离（每 Scene 独享实例，
+    // 互不串扰——旧单例靠 sceneId 分桶，隔离语义由 Scene 所有权天然承载）
+    SceneAoi aoi_a(1000.0f, 1000.0f, 100.0f, 20.0f);
+    SceneAoi aoi_b(1000.0f, 1000.0f, 100.0f, 20.0f);
+    aoi_a.enter(EntityId(1), {50, 0, 50});
+
+    TEST_ASSERT(aoi_a.contains(EntityId(1)), "Scene A sees its entity");
+    TEST_ASSERT(!aoi_b.contains(EntityId(1)), "Scene B must not see scene A's entity");
     return true;
 }
 
 bool test_aoi_manager_initialize() {
-    auto& manager = AOIManager::Instance();
-    bool success = manager.Initialize(50.0f);
-    TEST_ASSERT(success, "Initialize should succeed");
+    // 等价迁移：Initialize(cellSize) → 构造参数网格化（边界 clamp 可观察）
+    SceneAoi aoi(500.0f, 500.0f, 50.0f, 30.0f);
+    aoi.enter(EntityId(1), {10, 0, 10});
+    aoi.enter(EntityId(2), {490, 0, 490});
+    TEST_ASSERT(aoi.contains(EntityId(1)) && aoi.contains(EntityId(2)), "Configured grid holds edge entities");
+    TEST_ASSERT(aoi.viewers_of(EntityId(1)).size() == 1, "Edge entities far apart do not see each other");
     return true;
 }
 
 bool test_aoi_manager_update_entity() {
-    auto& manager = AOIManager::Instance();
-    manager.Initialize(100.0f);
+    // 等价迁移：UpdateEntity 移动语义 → SceneAoi move（跨格仍可查）
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 10.0f);
+    aoi.enter(EntityId(1), {50, 0, 50});
+    aoi.move(EntityId(1), {950, 0, 950});
 
-    AOIEntity entity(1, 100);
-    entity.position = Vector3(50, 0, 50);
-
-    bool success = manager.UpdateEntity(entity);
-    TEST_ASSERT(success, "Manager update should succeed");
+    TEST_ASSERT(aoi.contains(EntityId(1)), "Moved entity stays registered");
+    TEST_ASSERT(aoi.viewers_of(EntityId(1)).size() == 1, "Moved entity still queryable (self)");
     return true;
 }
 
@@ -623,9 +608,8 @@ struct TestInfo {
     bool (*func)();
 };
 
-int main(int argc, char* argv[]) {
-    // Initialize AOI manager
-    AOIManager::Instance().Initialize(100.0f);
+int main() {
+    // P1-3：AOIManager 单例退役——AOI 归 Scene 持有（SceneAoi），无全局初始化面
 
     std::vector<TestInfo> tests = {
         // ComVal Tests
@@ -651,7 +635,7 @@ int main(int argc, char* argv[]) {
         {"Attribute: Clear", test_attribute_container_clear},
         {"Attribute: Change Listener", test_attribute_container_change_listener},
 
-        // AOI Tests
+        // AOI Tests（P1-3 等价迁移：legacy aoi.hpp 删除，场景 1:1 迁 SceneAoi）
         {"AOI: Vector3 Distance", test_vector3_distance},
         {"AOI: Entity Default", test_aoi_entity_default},
         {"AOI: Grid Update Entity", test_aoi_grid_update_entity},
@@ -659,9 +643,9 @@ int main(int argc, char* argv[]) {
         {"AOI: Grid Out of Range", test_aoi_grid_out_of_range},
         {"AOI: Grid Remove Entity", test_aoi_grid_remove_entity},
         {"AOI: Grid Range Query", test_aoi_grid_range_query},
-        {"AOI: Manager Singleton", test_aoi_manager_singleton},
-        {"AOI: Manager Initialize", test_aoi_manager_initialize},
-        {"AOI: Manager Update Entity", test_aoi_manager_update_entity},
+        {"AOI: Scene Isolation", test_aoi_manager_singleton},
+        {"AOI: Configured Grid", test_aoi_manager_initialize},
+        {"AOI: Move Update", test_aoi_manager_update_entity},
 
         // ECS Tests
         {"ECS: World Create Entity", test_ecs_world_create_entity},

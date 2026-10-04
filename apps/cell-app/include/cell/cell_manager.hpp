@@ -93,46 +93,6 @@ private:
     int64_t exp_ = 0;
 };
 
-// AOI 管理器
-class AOIManager {
-public:
-    explicit AOIManager(const CellConfig& config);
-
-    // 实体进入
-    void enter(Entity* entity);
-
-    // 实体移动
-    void move(Entity* entity, const Position& newPos);
-
-    // 实体离开
-    void leave(Entity* entity);
-
-    // 获取视野内的实体
-    std::vector<Entity*> getViewers(const Position& pos, float radius);
-    std::vector<Entity*> getViewers(Entity* entity);
-
-    // 更新视野
-    void updateView(Entity* entity);
-
-private:
-    struct Grid {
-        std::vector<Entity*> entities;
-    };
-
-    int getGridX(float x) const;
-    int getGridY(float y) const;
-    int getGridId(const Position& pos) const;
-
-    CellConfig config_;
-    std::vector<Grid> grids_;
-    int gridWidthCount_ = 0;
-    int gridHeightCount_ = 0;
-
-    std::unordered_map<EntityID, size_t> entityGridMap_;
-    std::unordered_map<EntityID, std::vector<Entity*>> viewMap_;
-    std::mutex mutex_;
-};
-
 // 实体管理器
 class EntityManager {
 public:

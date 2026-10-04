@@ -69,3 +69,4 @@ docs/node_modules/
 Testing/
 BIGWORLD_AUDIT.md
 ipc_audit_results.md
+docs/.vitepress/dist/

@@ -10,9 +10,11 @@
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 #include "apollo/game/world/scene.hpp"
+#include "apollo/game/world/viewer_state.hpp"
 
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 #define TEST_ASSERT(cond, msg)                                                               \
     do {                                                                                     \
@@ -32,6 +34,7 @@ using apollo::game::world::Avatar;
 using apollo::game::world::Scene;
 using apollo::game::world::SceneAoi;
 using apollo::game::world::SceneTickPhase;
+using apollo::game::world::ViewerState;
 
 class CountingEntity final : public Entity {
 public:
@@ -163,6 +166,161 @@ bool test_scene_id_sentinel() {
     return true;
 }
 
+// ---- AOI 事件面（P1-3：Enter/Sync/Leave 分发 + ViewerState 水位）----
+
+// 事件收集 sink：按序记 (kind, observer, subject)
+struct AoiEventLog {
+    struct Row {
+        SceneAoi::Event::Kind kind;
+        std::uint64_t observer;
+        std::uint64_t subject;
+    };
+    std::vector<Row> rows;
+
+    void record(const SceneAoi::Event& e) {
+        rows.push_back({e.kind, e.observer.value(), e.subject.value()});
+    }
+    std::size_t count(SceneAoi::Event::Kind kind, std::uint64_t observer,
+                      std::uint64_t subject) const {
+        std::size_t n = 0;
+        for (const auto& r : rows) {
+            if (r.kind == kind && r.observer == observer && r.subject == subject) {
+                ++n;
+            }
+        }
+        return n;
+    }
+};
+
+bool test_scene_aoi_enter_events() {
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
+    AoiEventLog log;
+    aoi.set_event_sink([&log](const SceneAoi::Event& e) { log.record(e); });
+
+    aoi.enter(EntityId(1), {50, 0, 50});
+    TEST_ASSERT(log.rows.empty(), "首个实体无事件（无既有观察者）");
+
+    aoi.enter(EntityId(2), {60, 0, 60});
+    // 对称双面：1 收 2 的 Enter；2 收 1 的 Sync（初始视野铺底）
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 1, 2) == 1, "观察者 1 收 2 的 Enter");
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Sync, 2, 1) == 1, "观察者 2 收 1 的 Sync 铺底");
+    TEST_ASSERT(log.rows.size() == 2, "进场恰两事件");
+
+    // 离散进场（半径外）无事件
+    log.rows.clear();
+    aoi.enter(EntityId(3), {900, 0, 900});
+    TEST_ASSERT(log.rows.empty(), "半径外进场无事件");
+    return true;
+}
+
+bool test_scene_aoi_move_events() {
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
+    AoiEventLog log;
+    aoi.set_event_sink([&log](const SceneAoi::Event& e) { log.record(e); });
+
+    aoi.enter(EntityId(1), {100, 0, 100});
+    aoi.enter(EntityId(2), {110, 0, 110});
+    aoi.enter(EntityId(3), {500, 0, 500});
+    log.rows.clear();
+
+    // 2 从 1 身边走远（出 1 的视野），走到 3 身边（进 3 的视野）
+    aoi.move(EntityId(2), {510, 0, 510});
+    // 观察者 1：Leave(2)
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Leave, 1, 2) == 1, "1 视野内 2 离开 → Leave");
+    // 观察者 3：Enter(2)
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 3, 2) == 1, "3 视野内 2 进入 → Enter");
+    // 观察者 2：Leave(1) + Enter(3)
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Leave, 2, 1) == 1, "2 视野内 1 出视野");
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 2, 3) == 1, "2 视野内 3 进视野");
+    // 1 不应收到 3 相关事件（1、3 从未互见）
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 1, 3) == 0 &&
+                    log.count(SceneAoi::Event::Kind::Leave, 1, 3) == 0,
+                "1 与 3 无直接事件");
+
+    // 视野内移动 → Sync（双向位置更新），无 Enter/Leave（505 距 3 的
+    // (500,500) 约 7.1 < 半径 20；距 1 的 (100,100) 足够远）
+    log.rows.clear();
+    aoi.move(EntityId(2), {505, 0, 505});
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Sync, 2, 3) == 1, "仍在视野 → Sync");
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Sync, 3, 2) == 1, "对称 Sync");
+    for (const auto& r : log.rows) {
+        TEST_ASSERT(r.kind == SceneAoi::Event::Kind::Sync, "视野内移动只产 Sync");
+    }
+    return true;
+}
+
+bool test_scene_aoi_leave_events() {
+    SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
+    AoiEventLog log;
+    aoi.set_event_sink([&log](const SceneAoi::Event& e) { log.record(e); });
+
+    aoi.enter(EntityId(1), {100, 0, 100});
+    aoi.enter(EntityId(2), {110, 0, 110});
+    log.rows.clear();
+
+    aoi.leave(EntityId(2));
+    // 双向 Leave：1 收 2 的 Leave；2 收 1 的 Leave（自身视野注销）
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Leave, 1, 2) == 1, "观察者 1 收 Leave");
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Leave, 2, 1) == 1, "离开者视野注销收 Leave");
+    TEST_ASSERT(!aoi.contains(EntityId(2)), "集合移除");
+
+    // 水位干净：1 重新看见的人不含 2
+    log.rows.clear();
+    aoi.enter(EntityId(4), {105, 0, 105});
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 1, 4) == 1, "1 正常看见新人");
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 4, 2) == 0, "2 已离场不被看见");
+    return true;
+}
+
+bool test_scene_aoi_watermark_driven_by_viewer_state() {
+    // ViewerState 直测（契约 viewer set 逐 observer 水位）：add/remove 返回值
+    // 即 ENTER/LEAVE 事件判据；visible 为 SYNC 判据
+    ViewerState vs;
+    const EntityId a(1);
+    const EntityId b(2);
+
+    TEST_ASSERT(!vs.tracked(a), "未登记观察者");
+    vs.reset(a);
+    TEST_ASSERT(vs.tracked(a) && vs.visible_set(a).empty(), "登记后空视野");
+    TEST_ASSERT(!vs.visible(a, b), "空视野不可见");
+
+    TEST_ASSERT(vs.add(a, b), "首次记入 → ENTER");
+    TEST_ASSERT(!vs.add(a, b), "重复记入不产事件");
+    TEST_ASSERT(vs.visible(a, b), "记入后可见 → SYNC 基准");
+    TEST_ASSERT(!vs.remove(a, EntityId(99)), "移除未记入主体 → 无事件");
+    TEST_ASSERT(vs.remove(a, b), "移除已记入主体 → LEAVE");
+    TEST_ASSERT(!vs.remove(a, b), "重复移除无事件");
+    TEST_ASSERT(vs.tracked(a), "空视野仍在册（水位独立于视野内容）");
+
+    // remove_everywhere：主体离场时摘除全部观察者视野
+    vs.add(a, b);
+    vs.add(b, b);
+    const auto affected = vs.remove_everywhere(b);
+    TEST_ASSERT(affected.size() == 2, "两个观察者均受影响");
+    TEST_ASSERT(!vs.visible(a, b) && !vs.visible(b, b), "全局摘除后互不可见");
+    return true;
+}
+
+bool test_scene_enter_dispatches_aoi_events() {
+    // Scene 级接线：scene.enter/leave 走 AOI 事件面（P0-3 集合维护 + P1-3 分发）
+    Scene scene(8, "events");
+    AoiEventLog log;
+    scene.aoi().set_event_sink([&log](const SceneAoi::Event& e) { log.record(e); });
+
+    auto a1 = std::make_shared<Avatar>(PlayerId(1), EntityId(11), "A");
+    auto a2 = std::make_shared<Avatar>(PlayerId(2), EntityId(12), "B");
+    scene.enter(a1, {10, 0, 10});
+    scene.enter(a2, {15, 0, 15});
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Enter, 11, 12) == 1,
+                "scene.enter 触发 Avatar 实体间 Enter 事件");
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Sync, 12, 11) == 1, "铺底事件对称");
+
+    scene.leave(PlayerId(2));
+    TEST_ASSERT(log.count(SceneAoi::Event::Kind::Leave, 11, 12) == 1,
+                "scene.leave 触发 Leave 事件");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -178,6 +336,11 @@ int main() {
         {"scene_owns_aoi", test_scene_owns_aoi},
         {"scene_tick_six_phases", test_scene_tick_six_phases},
         {"scene_id_sentinel", test_scene_id_sentinel},
+        {"scene_aoi_enter_events", test_scene_aoi_enter_events},
+        {"scene_aoi_move_events", test_scene_aoi_move_events},
+        {"scene_aoi_leave_events", test_scene_aoi_leave_events},
+        {"scene_aoi_watermark_driven_by_viewer_state", test_scene_aoi_watermark_driven_by_viewer_state},
+        {"scene_enter_dispatches_aoi_events", test_scene_enter_dispatches_aoi_events},
     };
 
     for (const auto& c : cases) {
