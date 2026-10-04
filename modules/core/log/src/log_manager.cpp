@@ -5,6 +5,8 @@
 
 #include "apollo/core/log/log_manager.h"
 
+#include <iostream>
+
 // 检测是否使用 spdlog
 #ifdef SPDLOG_HEADER_ONLY
     #define APOLLO_USE_SPDLOG 1
@@ -179,6 +181,7 @@ std::shared_ptr<IAppender> LogManager::createFileAppender(const FileAppenderConf
 }
 
 void LogManager::write(LogLevel level, std::string logger, std::string message) {
+    record_entry(level, logger, message);
     auto spdlog_level = toSpdlogLevel(level);
     auto log = spdlog::get(logger);
     if (log) {
@@ -328,6 +331,7 @@ std::shared_ptr<IAppender> LogManager::createFileAppender(const FileAppenderConf
 }
 
 void LogManager::write(LogLevel level, std::string logger, std::string message) {
+    record_entry(level, logger, message);
     auto target = getLogger(logger);
     if (!target) {
         target = getDefaultLogger();
@@ -347,6 +351,35 @@ void LogManager::write(LogLevel level, std::string logger, std::string message) 
 namespace apollo {
 namespace core {
 namespace log {
+
+// ---- 收敛面（P0-6）：旧内存版四方法并入活实现 ----
+void LogManager::set_console_enabled(bool enabled) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    console_mirror_ = enabled;
+}
+
+void LogManager::clear() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    entry_ring_.clear();
+}
+
+std::vector<LogEntry> LogManager::snapshot() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return entry_ring_;
+}
+
+void LogManager::record_entry(LogLevel level, const std::string& logger,
+                              const std::string& message) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (console_mirror_) {
+        std::cout << "[" << toString(level) << "] " << logger << ": " << message
+                  << std::endl;
+    }
+    if (entry_ring_.size() >= kEntryRingCapacity) {
+        entry_ring_.erase(entry_ring_.begin());
+    }
+    entry_ring_.push_back(LogEntry{level, logger, message});
+}
 
 LogManager& global_log_manager() {
     return LogManager::instance();
