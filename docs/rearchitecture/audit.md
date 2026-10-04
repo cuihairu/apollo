@@ -97,7 +97,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 | `Mailbox / EntityCall / witness / ghost` | 无代码出现（设计阶段已清）；残留于设计文档对照段（允许） |
 | `nng` | modules/protocol（apollo_protocol 依赖）、modules/net 的 nng_wrapper/socket.cpp/channel.cpp 桩、legacy net 栈——**契约已禁 nng（退役，36号 #2），代码仍在依赖/残留**：见 architecture.md §网络 |
 | `registry`（不引入 etcd/consul） | 无外部依赖（仅命名指导） |
-| 「自研/遥遥领先」等 | 无 |
+| 「自行开发/遥遥领先」等 | 无 |
 
 ---
 
@@ -184,7 +184,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 | Persistence | test_data.cpp 20 测（内存连接/cache） | 真库零测；base-app DatabaseService 无测试 |
 | 网络 | test_net.cpp 76 测（header 级：包/校验和/HTTP/WS 头） | 真 socket 回环测试（test_network.cpp）在 GTest 分支 → CI 从不跑 |
 
-基础设施：断言主体是自研零依赖宏（TEST_ASSERT 约 30 个文件、再实现 TEST_CASE/INTEGRATION_TEST 注册器），真 GTest 仅 9 个文件；**无任何 sanitizer/valgrind 接线**（tests/README 声称的 -DSANITIZE_* 全仓无定义）；覆盖率 option 存在但 codecov.yml 忽略 tests/**；契约测试族（test_contract.cpp + xmllint XSD 闸 + golden check）是全仓接线最完整、CI 真跑的测试族。
+基础设施：断言主体是自行开发零依赖宏（TEST_ASSERT 约 30 个文件、再实现 TEST_CASE/INTEGRATION_TEST 注册器），真 GTest 仅 9 个文件；**无任何 sanitizer/valgrind 接线**（tests/README 声称的 -DSANITIZE_* 全仓无定义）；覆盖率 option 存在但 codecov.yml 忽略 tests/**；契约测试族（test_contract.cpp + xmllint XSD 闸 + golden check）是全仓接线最完整、CI 真跑的测试族。
 
 ---
 

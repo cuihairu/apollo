@@ -10,7 +10,7 @@
 2. **C++ 服务对 Lua 只开"启动期注入的具名模块表"**（`apollo.attr`/`apollo.db`/`apollo.scene`），绑定即校验、缺失在启动期报错——**禁止脚本按名字反查服务容器**（architecture-review.md P0-1 的字符串查找缺陷严禁在脚本层复制）。
 3. **热替换协议**：工作线程预加载+编译 → 主线程 tick 边界一次原子换表 → 失败回滚旧表；模块带版本与依赖声明，灰度先行（单个 scene 试跑）。没有运行期增删 C++ bean（C++ 侧运行期注册/unregister API 随 architecture-review 删除）。
 4. **属性钩子只有一个接入点**：`onAttrChanged(entity, id, old, new)` 挂在属性管线的"重算后、广播前"阶段（attribute-sync.md §10 tick 阶段 2/4 之间），白名单位 + 指令预算防脚本拖垮广播；脚本对"最终可见值"只读，对白名单做最终修饰。
-5. **公式系统从 C++ 搬进 Lua 函数**：docs/03 的自研表达式编译方案废弃；派生属性公式 = Lua 函数 + 依赖图留在 C++（重算调度不依赖脚本引擎）。
+5. **公式系统从 C++ 搬进 Lua 函数**：docs/03 的自行开发表达式编译方案废弃；派生属性公式 = Lua 函数 + 依赖图留在 C++（重算调度不依赖脚本引擎）。
 6. **沙盒**：无 io/os 表、指令数预算/帧、内存上限、每实体脚本时间片轮转；脚本异常隔离（错误 → 日志 + 实体行为回退），不崩进程。
 7. **契约语义的运行时载体（sdk-contract §10.6 v3，2026-09-29 补）**：业务消息 handler 绑定与属性写白名单的数据来自 `contract.lua`（生成器同批吐的 Lua 契约表：attr 表/消息路由/白名单）——装载与热更走 §3.2 同一换表协议；服务端契约变更零 C++ 重编的业务面全在 Lua 侧承接（见 §3.4）。
 8. **在线调试与性能归因（§7，2026-09-29 补）**：attach 执行 = **admin 单入口 + control 通道转发 + tick 边界沙盒 eval**（KBE telnet / skynet debug_console 先例；权限分 Passive Query / Controlled Action）；Lua 状态面四清单（内存 GC / 协程 / 模块版本 / env 采样）挂 observability 树 `/script` 分支；性能归因 = 指令 hook 双职能（预算执法 + per-module 耗时统计）+ C++ 侧外采（perf/Tracy 类，不自建）；死循环检测 §6 已有（指令预算天然覆盖）；**不做断点式调试器**（单写者线程冻结 + tick 确定性破坏）。

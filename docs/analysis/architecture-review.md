@@ -4,7 +4,7 @@
 
 > 分析性文档：只评审，不改动任何源码。评审对象为 `include/apollo/framework/ioc`、`include/apollo/starter`、`src/framework/ioc`、`src/starter` 及其全部调用方与设计文档（docs/03、06、08、14、34、architecture/starter-and-module-assembly-design）。
 > 结论立场：**逐项分析可取之处，不预设保留**——值得留的给出落地形态，不值得留的明确建议删除。
-> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自研与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。§16.9（同日再追加）：⑦–⑪ 以「修订文本落盘」形式完成（门禁收窄为只写本报告——锚点原文 + 逐字替换文本备妥，粘贴即闭环）。§16.10（同日终轮）：⑩ 升级为审计链登记（判定权威记录 = 本报告），⑦⑧⑨⑪ 维持搁置并立登记簿（§16.10.2）。第九轮（2026-09-30 追加）：登记簿三候选面审计——http/websocket 面、ipc 树、bw 兼容层（C-53…C-66，含 net-abstraction §5.10 裁决 3 前提修正、登记簿行回填）与目录版图/分层设计整理见 §18。勘误补丁与待回填清单（第十轮）见 §19；host-builder-and-di 设计对照审计（第十一轮，C-67…C-76）见 §20；其结论正式化（C-72/C-73/C-74/C-75/C-76 逐条深化 + 两处修正）见 §21。
+> 核心论证（2026-09-28）：为什么 Spring 式运行时容器不适合游戏服务端（生命周期/编译期/热路径/部署形态/行业佐证/思想与形态之分）见 §0——本报告删除建议的总依据。复核追加（2026-09-27）：docs/design 四份设计文档与本评审的交叉一致性复核见 §8；源码级核对第二轮（承接 C-1/C-2 的消费方普查与承重断言复核）见 §9；第三轮（迁移路线调用点/收敛清单/快照验收口径/条件装配实证）见 §10。复核追加（2026-09-28）：第三轮·续（C-16 FileWatcher 阶段 2 改造点细化 + §6 阶段 1 死代码清单逐项消费方复核）见 §11，其中 §11.5 为第四轮（未评审子系统：定时器/日志/场景与 AOI，C-23…C-28，含对「无定时器模块」结论的证伪修正）；第五轮（网络与网关 / 实体与属性，C-29…C-36，含四套网络栈盘点与网关数据路径 Null 桩、三代属性容器定型）见 §12；§13 为第四轮·续（边界子系统与形态一致性，C-37…C-42）；第六轮（数据与持久化 / 多端 SDK 与契约，C-43…C-49，含命名空间冒充模块、线格式三重漂移、数据层构建归属断裂）见 §14；§15 为评审后决策落盘（网络全自行开发与 nng 退役、契约 XML+XSD 取代第六轮自行假设、MyBatis 语句即数据对比与待同步文档清单）。第七轮（2026-09-28 追加）：BigWorld / KBEngine / skynet 三框架源码对照（文档论断修正 C-50…C-52、能力缺口 G-1…G-7、正面核对）见 §16；§16.7 为其中两项增量的深化（Mercury filter 双族 → L1/L2 蓝本、entities.xml 继承机制）。§15.6 待同步清单 ①–⑥ 已闭环（④ 判定不改写评审记录，落地记录见 §15.6）。第八轮（2026-09-28 追加）：上轮遗留 G-4 展宽为「新增模块归属」总问题——filter 插件体系/契约生成器/config 桩清理/定时器轮/运维观测通道在 apps/ 运维形态下的归属边界与依赖方向（三家框架同类部件位置实证），见 §16.8。§16.9（同日再追加）：⑦–⑪ 以「修订文本落盘」形式完成（门禁收窄为只写本报告——锚点原文 + 逐字替换文本备妥，粘贴即闭环）。§16.10（同日终轮）：⑩ 升级为审计链登记（判定权威记录 = 本报告），⑦⑧⑨⑪ 维持搁置并立登记簿（§16.10.2）。第九轮（2026-09-30 追加）：登记簿三候选面审计——http/websocket 面、ipc 树、bw 兼容层（C-53…C-66，含 net-abstraction §5.10 裁决 3 前提修正、登记簿行回填）与目录版图/分层设计整理见 §18。勘误补丁与待回填清单（第十轮）见 §19；host-builder-and-di 设计对照审计（第十一轮，C-67…C-76）见 §20；其结论正式化（C-72/C-73/C-74/C-75/C-76 逐条深化 + 两处修正）见 §21。
 
 ---
 
@@ -860,7 +860,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ---
 
-## 15. 评审后决策落盘（2026-09-28 追加）：网络自研定案与契约形态定案
+## 15. 评审后决策落盘（2026-09-28 追加）：网络自行开发定案与契约形态定案
 
 > 本节不是新一轮缺陷审计（无新 C 编号），而是对 §12/§14 评审所引发的架构决策的整理落盘。决策产生于评审对话；落点引用的行号均已在此前轮次实读核对（§12.4/§14.4），本节新增实测仅两处（见 15.7）。
 
@@ -869,17 +869,17 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 | 维度 | 决策 | 对既往表述的作用 |
 |---|---|---|
 | 脚本语言 | **Lua 固定**（数据不进脚本） | 确认 scripting-lua.md 全篇前提 |
-| 玩家路径传输 | **全自研**：B 栈为唯一 L0，按 net-abstraction §3 补 L1/L2 | 关闭 §12.3「B 栈定案」的悬置 |
-| 进程间总线 | **不引 Aeron**；P1–P2 仅线程间 MPSC 环（复用移植件）；跨进程自研总线 P3 按需新建 | 关闭 net-abstraction.md §5.3「P3 评估 Aeron」决策点 |
+| 玩家路径传输 | **全自行开发**：B 栈为唯一 L0，按 net-abstraction §3 补 L1/L2 | 关闭 §12.3「B 栈定案」的悬置 |
+| 进程间总线 | **不引 Aeron**；P1–P2 仅线程间 MPSC 环（复用移植件）；跨进程自行开发总线 P3 按需新建 | 关闭 net-abstraction.md §5.3「P3 评估 Aeron」决策点 |
 | nng | **整体退役**（两棵 protocol 树 + 构建残留） | 关闭 net-abstraction.md §6「nng_wrapper 二选一」为「已定删」 |
 | 契约源 | **XML + XSD**（xs:key / xs:keyref / xs:enumeration） | **取代 §14.1 的自行假设**（保留 TOML + 补 schema 校验门禁）——本节即该假设的修正记录 |
 | 代码生成 | 契约 → C++/C#/TS + schema_hash，CI 双闸（XSD 校验 + 产物 diff） | 机制不变（sdk-contract.md §3/§6） |
 
-### 15.2 网络层定案：全自研，nng 退役
+### 15.2 网络层定案：全自行开发，nng 退役
 
 - **形态四层**：L0 = B 栈（poll-Reactor/socket，modules/net/tcp 真实现）为唯一底座，演进路径 epoll/io_uring；L1 帧格式（magic + seq + CRC32C）进契约、生成器出各端编码；L2 会话（seq/ack/心跳/四级水位/resume）新建，不复用 A 栈裸字节回调（session.h:59 onRecv）；L3 GameConnection facade（send/subscribe/state/close）。
 - **nng 退役清单**（全部为已实读对象）：① modules/protocol 整树（栈 D：nng_wrapper + codec/messages）；② modules/net/protocol 整树（栈 C：channel.cpp:358-389 无 nng 全桩）；③ gateway-app 对 apollo_protocol 的无条件链接（gateway-app/CMakeLists.txt:24，C-30）——随树删自然消解，链接断裂无需再修；④ 根 CMakeLists.txt:281 谎报 FetchContent 的 message 与 nng find_package 块（C-37）；⑤ modules/net/protocol/CMakeLists.txt 硬编码 nng.lib 路径随树删。vcpkg.json 本无 nng——零依赖变化，纯减法。
-- **进程间通信简化**：P1–P2 单进程形态只需线程间投递——场景线程↔IO 线程 MPSC 环按 Aeron term buffer 的单写者蓝本自建，复用 `utils/loop_buffer.h`、`utils/data_queue.h` 移植件（net-abstraction.md §3 已有设计）；跨进程自研总线推迟到 P3 BigWorld 化，届时以现成 ipc 树（include/apollo/ipc 10 文件 3435 行 + src/apollo/ipc 8 文件 4378 行，默认 `APOLLO_ENABLE_IPC=OFF`，CMakeLists.txt:37）为**下轮审计对象**——先评后定演进或新建，避免再攒并存。
+- **进程间通信简化**：P1–P2 单进程形态只需线程间投递——场景线程↔IO 线程 MPSC 环按 Aeron term buffer 的单写者蓝本自建，复用 `utils/loop_buffer.h`、`utils/data_queue.h` 移植件（net-abstraction.md §3 已有设计）；跨进程自行开发总线推迟到 P3 BigWorld 化，届时以现成 ipc 树（include/apollo/ipc 10 文件 3435 行 + src/apollo/ipc 8 文件 4378 行，默认 `APOLLO_ENABLE_IPC=OFF`，CMakeLists.txt:37）为**下轮审计对象**——先评后定演进或新建，避免再攒并存。
 - **纪律**：nng/Aeron 均不引入后，禁止出现第五套网络栈或第二套进程间通信——四套网络（C-29）、四套 Redis（C-45）是并存代价的既有实证。
 
 ### 15.3 契约定案：XML + XSD（取代 §14.1 自行假设）
@@ -905,9 +905,9 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 - **修正关系**：§14.1 契约方向的自行假设（TOML + schema 门禁）被 15.3 的用户决策（XML + XSD）**取代**；其余 C-1…C-49 不受影响。
 - **决策对缺陷清单的消解路径**：C-30（gateway 链接断裂）随 nng 退役消失；C-47（三套线格式/两套 ID 空间）随协议投影归一；C-44（转义/绑定缺陷簇）随语句声明化结构性消除；C-29/C-45 的「并存」由 15.2 纪律条阻断再生。
-- **待同步文档清单**（本轮受「只写本报告」约束，列为待办而非完成项）：① sdk-contract.md §2.2/§2.3——TOML → XML+XSD，含紧凑风格示例、pugixml 依赖、四投影与两段式存储；② net-abstraction.md §5.3/§6——Aeron 决策点关闭为「已定自研」、nng_wrapper 决策关闭为「已定删」；③ attribute-sync.md §7.1 的 protobuf 示例标注为「编码布局参考，契约源为 XML」；④ §12.3/§14 表内「TOML」字样随 ①② 联动修订。
+- **待同步文档清单**（本轮受「只写本报告」约束，列为待办而非完成项）：① sdk-contract.md §2.2/§2.3——TOML → XML+XSD，含紧凑风格示例、pugixml 依赖、四投影与两段式存储；② net-abstraction.md §5.3/§6——Aeron 决策点关闭为「已定自行开发」、nng_wrapper 决策关闭为「已定删」；③ attribute-sync.md §7.1 的 protobuf 示例标注为「编码布局参考，契约源为 XML」；④ §12.3/§14 表内「TOML」字样随 ①② 联动修订。
 
-> **同步落地记录（2026-09-28，门禁放宽为「只写 docs/」后执行，随本次提交）**：①②③⑤⑥ 已全部落地——sdk-contract.md（摘要 1/3(a) 契约形态 TOML→XML+XSD、§2.2 对照表按 C-50 重写、§2.3 换紧凑 XML 示例并增 entities.xml 继承说明、§3 目录/§7 storage.xml 指针/§8 P1 措辞、交集表补 xml-generation.md）；net-abstraction.md（摘要 3/6、§5.3 行、§6 两行关闭为「已定自研/已定删」、§7 P3 措辞、新增 §5.5 Mercury filter 双族蓝本、交集表补 xml-generation.md）；attribute-sync.md（摘要 5、§7.1 标题与标注、§8.1 第 2/4 条按 C-51 重写并给 1/3 挂复核标记、附录速查表属性声明行与持久化行按 C-51/C-52 改写）。④ 经复核**不改写评审记录**：§12.3/§14 的 TOML 字样均位于「14.1 自行假设」标记的历史评审文本内，取代关系已由 §15.3 显式声明，事后改写会破坏审计链——以本条判定为 ④ 的闭环方式。
+> **同步落地记录（2026-09-28，门禁放宽为「只写 docs/」后执行，随本次提交）**：①②③⑤⑥ 已全部落地——sdk-contract.md（摘要 1/3(a) 契约形态 TOML→XML+XSD、§2.2 对照表按 C-50 重写、§2.3 换紧凑 XML 示例并增 entities.xml 继承说明、§3 目录/§7 storage.xml 指针/§8 P1 措辞、交集表补 xml-generation.md）；net-abstraction.md（摘要 3/6、§5.3 行、§6 两行关闭为「已定自行开发/已定删」、§7 P3 措辞、新增 §5.5 Mercury filter 双族蓝本、交集表补 xml-generation.md）；attribute-sync.md（摘要 5、§7.1 标题与标注、§8.1 第 2/4 条按 C-51 重写并给 1/3 挂复核标记、附录速查表属性声明行与持久化行按 C-51/C-52 改写）。④ 经复核**不改写评审记录**：§12.3/§14 的 TOML 字样均位于「14.1 自行假设」标记的历史评审文本内，取代关系已由 §15.3 显式声明，事后改写会破坏审计链——以本条判定为 ④ 的闭环方式。
 
 ### 15.7 实读核对记录（本节）
 
@@ -943,7 +943,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 **KBEngine（cuihairu fork@master，取上游机制）**
 
-- **.def = XML**：entitydef.cpp:188-210 以 tinyxml2 先解析 entities.xml、再逐实体加载 `<名>.def`；DetailLevels（NEAR radius/hyst，:409-417）；样例 kbe/res/sdk_templates/.../Account.def 与 BigWorld 同构（`<Properties>/<ClientMethods>/<BaseMethods>/<CellMethods>`）——**两家同构血统，不是「自研语法」**。
+- **.def = XML**：entitydef.cpp:188-210 以 tinyxml2 先解析 entities.xml、再逐实体加载 `<名>.def`；DetailLevels（NEAR radius/hyst，:409-417）；样例 kbe/res/sdk_templates/.../Account.def 与 BigWorld 同构（`<Properties>/<ClientMethods>/<BaseMethods>/<CellMethods>`）——**两家同构血统，不是「自行开发语法」**。
 - **固定步长 tick**：gameUpdateHertz=10（kbengine_defaults.xml:5）；handleGameTick（cellapp.cpp:252-261，updateLoad 先行 + updatables_.update()）。
 - **存储**：复杂类型全落 BLOB（entity_table_mysql.cpp:699-723 ARRAY/FIXED_DICT/PYTHON、:754-758 ENTITYCALL/Component）；**Indexed 属性建真实 MySQL 索引**（:236-300，ALTER TABLE ADD INDEX :113）；**无 journal**（db_mysql 全树 journal/WAL/redo 零命中）；**Archiver 周期归档**（默认 300s，kbengine_defaults.xml:621）——实体随机序列、按「数量×idx/周期」每 tick 平滑摊写防写风暴（archiver.cpp:26-63）+ per-entity shouldAutoArchive；SQL 语句按表注册成映射表（EntitySqlStatementMapping，entity_sqlstatement_mapping.h:9-27，query/insert/update 三族）。
 - **进程**：server/machine 广播发现（machine.cpp:646-670 KBE_PORT_BROADCAST_DISCOVERY）；loginapp 独立登录进程（含 clientsdk_downloader——SDK 下发即登录链路一环）。
@@ -960,7 +960,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ### 16.3 什么不合理：文档论断与源码不符（C-50 … C-52）
 
-**C-50 sdk-contract.md §2.2 首行「自研 .def 语法（EOF 边界/宏/实体定义）」与两家源码不符——.def 全为 XML。**
+**C-50 sdk-contract.md §2.2 首行「自行开发 .def 语法（EOF 边界/宏/实体定义）」与两家源码不符——.def 全为 XML。**
 - BigWorld：entity_description.cpp:184-190 BWResource::openSection + Account.def 全 XML（16.2）；KBEngine：entitydef.cpp:188-210 tinyxml2 解析 entities.xml + 每实体 .def（16.2）。两家同构血统（KBEngine 标签体系沿用 BigWorld：Flags/Persistent/Indexed/Unique/DatabaseLength/Parent）。「EOF 边界/宏」无出处，疑与 MSVC linker .def 混淆（§13 已核实 tools/*.def 是链接器定义文件，非实体定义）。
 - 影响与修正：① sdk-contract.md 执行摘要第 3 条(a) 与 §2.2 对照表首行的理由栏需重写——.def 本就是 XML，则 §15.3 的 XML+XSD 决策与两家先例**同构**；红利论证从「语法差异」转为「XSD 校验（key/keyref/enumeration）是两家都没有的形式化层」（两家都只解析不校验：tinyxml2 无 schema 层，entitydef.cpp:193 直证；BigWorld XMLSection 亦无）——错拼标签静默缺省而非报错；② 归入 §15.6 待同步文档清单第 ⑤ 项。
 
@@ -978,7 +978,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 ### 16.4 缺什么：三家皆有而六份文档无落点（G-1 … G-7）
 
-**G-1 进程编队与服务发现。** BigWorld bwmachined + machine_guard 生死广播（machine_guard.hpp:496-613/:882-883）、KBEngine machine 广播发现（machine.cpp:646-670）。apollo 六份文档把进程间通信推迟 P3（§15.2），但「进程如何被发现、如何感知彼此死亡」连设计占位都没有。落点：P3 前置一节，对照 machined 守护 + UDP 广播两种先例定形态（与 §15.2 自研纪律对齐）。
+**G-1 进程编队与服务发现。** BigWorld bwmachined + machine_guard 生死广播（machine_guard.hpp:496-613/:882-883）、KBEngine machine 广播发现（machine.cpp:646-670）。apollo 六份文档把进程间通信推迟 P3（§15.2），但「进程如何被发现、如何感知彼此死亡」连设计占位都没有。落点：P3 前置一节，对照 machined 守护 + UDP 广播两种先例定形态（与 §15.2 自行开发纪律对齐）。
 
 **G-2 备份/容灾与宕机接管。** BigWorld：baseapp 热备分帧（backup_sender.hpp:52-61）、一致性哈希备份链（backup_hash/backup_hash_chain）、secondary db、reviver 接管、cellappmgr 崩溃后在幸存 CellApp 重建 cell。apollo 只有 attribute-sync §8 的「崩溃后数据不丢」（write-behind journal），**进程级高可用零设计**。落点：文档显式声明「单进程阶段无高可用」，P3 骨架列 backup-hash 链与 reviver 两个参照。
 
@@ -995,7 +995,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 ### 16.5 正面核对与对既有决策的增量
 
 - **正面核对（防矫枉过正）**：① attribute-sync.md 对 BigWorld 带宽控制的概括（per-client 预算 + per-(viewer,entity) 优先级）与源码相符（server_connection.cpp:2034/:2370-2373、witness.cpp:2500-2514/:1254）——§3/§5 的 ChangeHistory/ViewerState/优先级设计与基准一致；② §15.5「语句即数据」获外部同构佐证：KBEngine EntitySqlStatementMapping 即 C++ 内建版 mapped statement（entity_sqlstatement_mapping.h:9-27），apollo 方案只是把声明层从 C++ 挪进 XML（外加两家都没有的 XSD 层，C-50 红利论证）；③ §15.2「禁止两套 IPC 并存」获 skynet 历史佐证（harbor 与 cluster 两代并存于同一框架）；④ tick 选型与两家 MMO 先例一致——选型无异常，缺的只是 G-7 的论证文字。
-- **对 §15.2 的增量**：Mercury 的 udp_channel 窗口重传 + Bundle 分片 + **filter 插件体系**（加密/压缩/websocket 全是帧管线插件）是 L1/L2 自研的直接蓝本；建议帧管线把加密/压缩设计为 filter 插件位而非硬编码——P2 会话层与 P3 自研总线共用此形态。
+- **对 §15.2 的增量**：Mercury 的 udp_channel 窗口重传 + Bundle 分片 + **filter 插件体系**（加密/压缩/websocket 全是帧管线插件）是 L1/L2 自行开发的直接蓝本；建议帧管线把加密/压缩设计为 filter 插件位而非硬编码——P2 会话层与 P3 自行开发总线共用此形态。
 - **对 §15.4 的增量**：entities.xml 增继承机制（G-6）；存储投影的 persist/column 提示与两家 `<Persistent>`/`<Indexed>` 语义同位，XSD keyref 已锁，无需改动。
 - **待同步文档清单追加**（§15.6 之 ⑤⑥）：⑤ sdk-contract.md 执行摘要第 3 条(a)/§2.2 首行 .def 表述修正（C-50）；⑥ attribute-sync.md §8.1 第 2/4 条重写 + 附录速查表持久化行改写（C-51/C-52）。
 
@@ -1231,12 +1231,12 @@ modules/base（线程/内存/ID/【时间轮←G-4 落点】） + include/apollo
 
 **锚点**（§7 P3 行，原文）：
 
-> - **P3**：进程间总线自研落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计。
+> - **P3**：进程间总线自行开发落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计。
 
 **替换**：
 
 ```markdown
-- **P3**：进程间总线自研落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（architecture-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
+- **P3**：进程间总线自行开发落地（蓝本：§5.2 语义 + §5.5 Mercury filter 双族 + udp_channel 式窗口重传）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（architecture-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。
 ```
 
 ### 16.9.6 状态与核对
@@ -2990,7 +2990,7 @@ C-95 建号前全仓 grep 零命中。
 | bots | 压测 | gap #15（在册待建） | ✗ | ✗ | P3 建 |
 | servicemgr | 定时/第三方 | interfaces（#14 入站对接面） | ✗ | ✗ | P3 建 |
 | watcher | 观测树 | observability-watcher（A 档在册设计） | 日志 | 日志 | **观测树** |
-| mailbox entity call | 三寻址远程调用 | 自研消息总线（规划，net-abstraction.md）+ TransferPlayer handoff | 进程内直调 | 进程间消息 | **总线** |
+| mailbox entity call | 三寻址远程调用 | 自行开发消息总线（规划，net-abstraction.md）+ TransferPlayer handoff | 进程内直调 | 进程间消息 | **总线** |
 | 备份链 HA | primary/secondary | journal 重放 + manager 恢复协调（**manager 自身 HA 开放问题在册**） | 单进程无 HA | baseapp 单点 | **journal 重放** |
 
 ### 33.3 §31 勘误与三档编队修正（本轮裁决产出）

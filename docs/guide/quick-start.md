@@ -10,6 +10,11 @@ next: /guide/concepts
 
 本教程将引导你创建第一个 Apollo 游戏服务器。
 
+> **状态注记（2026-10-04 全量对账）**：本页示例为教学骨架，部分引用尚非实 API——
+> 引用实 API 的完整重写随 P4-1 批次；下文已按 HEAD 实况标注：AOI 段已换成真实
+> `SceneAoi` 接口，TCP 段所引 `net/tcp/server.hpp` **未实现**（真实网络面见
+> `modules/net/protocol` 与 legacy `include/apollo/net/`）。
+
 ## 创建项目
 
 ### 1. 初始化项目结构
@@ -27,14 +32,14 @@ project(MyGameServer)
 
 find_package(apollo-runtime REQUIRED)
 find_package(apollo-core REQUIRED)
-find_package(apollo-game REQUIRED)
+find_package(apollo-game-world REQUIRED)
 
 add_executable(game-server src/main.cpp)
 
 target_link_libraries(game-server
     apollo::runtime
     apollo::core
-    apollo::game
+    apollo::game_world
 )
 ```
 
@@ -43,50 +48,62 @@ target_link_libraries(game-server
 ```cpp
 // src/main.cpp
 #include <apollo/runtime/application_host.hpp>
-#include <apollo/core/log.hpp>
-#include <apollo/game/world/aoi_manager.hpp>
+#include <apollo/core/log/log_manager.hpp>
+#include <apollo/game/world/scene_aoi.hpp>
 
-using namespace apollo;
+using apollo::game::core::EntityId;
+using apollo::game::world::SceneAoi;
 
-class GameServer : public core::Application {
+// 业务服务：实现 IHostedService（start/stop/tick 由宿主帧驱动）
+class GameServer : public apollo::runtime::IHostedService {
 public:
-    void start() override {
-        LOG_INFO("GameServer", "游戏服务器启动中...");
+    std::string_view service_name() const override { return "game-server"; }
 
-        // 初始化 AOI 系统
-        initAOI();
+    bool start() override {
+        APOLLO_LOG_INFO("[GameServer] 游戏服务器启动中...");
 
-        LOG_INFO("GameServer", "游戏服务器已启动");
+        // 1000x1000 世界、格子 100、视野半径 30（Scene 独享一个 SceneAoi）
+        aoi_ = std::make_unique<SceneAoi>(1000.0f, 1000.0f, 100.0f, 30.0f);
+
+        // 事件面：Enter / Sync / Leave（sink 缺省静默，由宿主注入）
+        aoi_->set_event_sink([](const SceneAoi::Event&) { /* 下发面见 P3-2 */ });
+
+        // 实体进入（只认 EntityId + 位置值，与实体类型解耦）
+        for (int i = 1; i <= 100; ++i) {
+            aoi_->enter(EntityId{static_cast<std::uint64_t>(i)},
+                        {static_cast<float>(i), 0.0f, 0.0f});
+        }
+
+        APOLLO_LOG_INFO("[GameServer] 游戏服务器已启动（AOI 100 实体）");
+        running_ = true;
+        return true;
     }
 
     void stop() override {
-        LOG_INFO("GameServer", "游戏服务器关闭中...");
+        APOLLO_LOG_INFO("[GameServer] 游戏服务器关闭中...");
+        running_ = false;
     }
+
+    bool is_running() const override { return running_; }
+    void tick() override { /* 定帧业务 */ }
 
 private:
-    void initAOI() {
-        // 创建 1000x1000 的游戏世界，格子大小 100
-        auto aoi = std::make_shared<game::AOIManager>(1000, 1000, 100);
-
-        // 添加一些实体
-        for (int i = 0; i < 100; ++i) {
-            auto entity = std::make_shared<game::Entity>();
-            entity->id = i;
-            entity->x = rand() % 1000;
-            entity->y = rand() % 1000;
-            aoi->enter(entity);
-        }
-
-        LOG_INFO("GameServer", "AOI 系统初始化完成，已添加 100 个实体");
-    }
-
-    std::shared_ptr<game::AOIManager> aoi_;
+    std::unique_ptr<SceneAoi> aoi_;
+    bool running_ = false;
 };
 
 int main() {
-    runtime::ApplicationHost host;
-    host.registerApplication<GameServer>();
-    return host.run();
+    apollo::runtime::ServiceHost host;
+    host.add_service(std::make_shared<GameServer>());
+    if (!host.start()) {
+        return 1;
+    }
+    // 帧循环（Ctrl+C 经 signal_source 走 request_stop 收口）
+    while (host.is_running()) {
+        host.run_once();
+    }
+    host.stop();
+    return 0;
 }
 ```
 
@@ -100,36 +117,12 @@ cmake --build build
 
 ## 添加网络通信
 
-### 创建 TCP 服务器
-
-```cpp
-#include <apollo/net/tcp/server.hpp>
-
-class GameServer : public core::Application {
-public:
-    void start() override {
-        // 创建 TCP 服务器
-        server_ = std::make_shared<net::tcp::Server>();
-        server_->setMessageHandler([this](auto conn, auto msg) {
-            onMessage(conn, msg);
-        });
-
-        // 启动服务器
-        server_->start("0.0.0.0", 8888);
-        LOG_INFO("GameServer", "TCP 服务器监听在 0.0.0.0:8888");
-    }
-
-private:
-    void onMessage(net::tcp::ConnectionPtr conn, const std::string& msg) {
-        LOG_INFO("Network", "收到消息: {}", msg);
-
-        // 回显消息
-        conn->send("Echo: " + msg);
-    }
-
-    std::shared_ptr<net::tcp::Server> server_;
-};
-```
+> **未实现**（2026-10-04 对账）：本节原示例引用的 `net/tcp/server.hpp`
+> （`net::tcp::Server` / `net::tcp::ConnectionPtr`）在仓库中不存在，随 P4-1
+> 按实 API 重写。现状真实网络面：
+> - `modules/net/protocol`（`apollo::net::protocol::endpoint/channel`，nng 底座，P1 收口前受 `apollo_protocol` 门控）；
+> - legacy `include/apollo/net/`（connection/listener/session/websocket/rpc 等头，随迁移批次逐步收敛）；
+> - 接入进程（login-app/gateway-app）的 REP/REQ 套接字封装在 `apollo/protocol/socket.hpp`。
 
 ## 下一步
 

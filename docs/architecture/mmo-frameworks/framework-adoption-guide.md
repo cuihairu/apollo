@@ -97,7 +97,7 @@
 
 而不是完整 MMORPG 后端。
 
-### 2.5 Unity 自研网络同步层
+### 2.5 Unity 自行开发网络同步层
 
 如果团队不想直接依赖 Photon，而是想自己掌控更多上层逻辑，可以考虑：
 
@@ -324,7 +324,7 @@
 - 现代在线后端：`Nakama`
 - 房间同步框架：`Colyseus`
 - Unity 实时副本服：`Photon`
-- Unity 自研网络层：`Mirror`、`FishNet`
+- Unity 自行开发网络层：`Mirror`、`FishNet`
 - 引擎级多人框架：`O3DE Multiplayer`
 - 商业在线平台：`PlayFab MPS`、`Beamable`、`AccelByte`、`Unity Gaming Services`
 - 轻量 hosting 平台：`Hathora`、`AWS GameLift`、`Edgegap`

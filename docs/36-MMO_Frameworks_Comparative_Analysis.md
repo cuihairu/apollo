@@ -25,7 +25,7 @@
 | # | Apollo 关键设计点 | 来源框架/理念 | 采纳/改造/否决 | 理由（落到对方具体做法） |
 |---|---|---|---|---|
 | 1 | 网络四层自建（L0 poll-Reactor / L1 帧定界 magic+seq+CRC32C / L2 会话 / L3 GameConnection） | BigWorld Mercury（`lib/network/udp_channel.hpp:81/:139-140` filter 栈）；skynet gate 的帧封装 | 改造 | Mercury 把 filter 做成可插栈的字节↔字节边界（加密/压缩/包调制），证明分层过滤在引擎内可行；但 Mercury 绑定 UDP+聚合包，Apollo 要 TCP/WebSocket 双族，故只取 filter 位置语义，帧格式自定（net-abstraction §3、§5.5） |
-| 2 | nng 退役，中间件只留语义蓝本 | skynet harbor→cluster 两代 IPC 更替（architecture-review §16 实证） | 否决第三方消息层 | skynet 自己都把 harbor 换成了 cluster，证明自研进程内消息总线的代际更替是常态；引入 nng 意味着把更替风险外包给一个社区项目，不如自持四层（net-abstraction 摘要 3/6 已闭） |
+| 2 | nng 退役，中间件只留语义蓝本 | skynet harbor→cluster 两代 IPC 更替（architecture-review §16 实证） | 否决第三方消息层 | skynet 自己都把 harbor 换成了 cluster，证明自行开发进程内消息总线的代际更替是常态；引入 nng 意味着把更替风险外包给一个社区项目，不如自持四层（net-abstraction 摘要 3/6 已闭） |
 | 3 | 契约 = XML+XSD（xs:key/keyref/enumeration），一行一属性紧凑风格 | KBEngine `.def`（一端声明、多端生成的精髓）；BigWorld `.def` 同构（`entity_description.cpp:184-190`，C-50） | 采纳+补强 | 两家的 .def 本就是 XML 但都**只解析、无 schema 层**，错拼标签静默缺省；Apollo 的增量恰好是 XSD 形式校验——策划可读、diff 友好、校验器零开发（sdk-contract §2，architecture-review §15.3） |
 | 4 | `sdks/{contract,gen,unity,cocos,laya,cpp}` 布局，生成器独立二进制 | KBEngine `sdks/` 目录 + `kbe/tools/xlsx2py` 在 src 之外的先例 | 采纳 | 生成器不进运行时链接图，失败即阻断发版而非带病上线（xml-generation §4） |
 | 5 | 契约与存储解耦（`storage.xml` 服务端私有，两段式） | **否决** KBEngine `.def` 属性/存储耦合 | 否决对方耦合 | KBE 把持久化绑进 .def 的直接后果：复杂类型 blob 化、只会 base 快照、无日志、无查询面（attribute-sync §8 五条短板）；Apollo 一条原则——契约答「线上怎么传」，存储答「怎么落」（sdk-contract §7） |
@@ -38,7 +38,7 @@
 | 12 | Lua 白名单脚本（2026-09-30 两度修订：弃 sol2 改原生 C API 绑定；版本 = 5.5 主线随 vcpkg lua port，当前 5.5.x——scripting-lua §2） | skynet 的 C/Lua actor 生态；KBEngine cellapp 内嵌 Python | 改造 | KBE Python 全功能脚本的攻击面与热更失控风险大；skynet 证明 Lua 足以承载业务且可热更；Apollo 再收紧：脚本可写面由契约生成白名单（predict 位交集，sdk-contract §5） |
 | 13 | 进程发现 = **machined 式守护 + UDP 广播双层，不引 etcd/consul 注册中心**（2026-09-30 用户裁决改写，原行「Consul/Etcd 注册 + 心跳 5s/30s」已废） | BigWorld bwmachined 守护 + machine_guard 生死广播（machine_guard.hpp:496-497/:609-613）；KBEngine machine UDP 广播探测（`kbe/src/server/machine` machine.cpp:646-670）——双先例各取长处 | 改造（原「否决 UDP 广播」反转） | 拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益（net-abstraction §7 G-1）；KBE 广播跨网段失效由上游配置注释自认（kbengine_defaults.xml:814-833 `<addresses>` 手工 workaround，deep-dive §13）——故双层互补：跨机拉起/生死归单机守护，同网段拓扑发现归广播；原行口径来源 docs/05 §2.3（已删 git 可溯） |
 | 14 | Prometheus/Kafka/ClickHouse 可观测栈 | BW `server/tools/{message_logger,bw_profile,…}`；KBE `tools/logger` 独立进程；skynet monitor+debug_console+logger 三板斧（`skynet_start.c:209-211` 启动序列） | 改造 | 三家都把「日志/剖析是一等公民」做进了引擎自带组件，方向对、形态旧——自建轮子不接入生态；Apollo 只学定位不学实现，直接接外部标准栈（docs/00） |
-| 15 | ServerID 64 位（Region/Group/Type/Instance 分段） | **Apollo 自创设计**（2026-09-30 证伪修正：BW 源码无 64 位分段对应物——实为 EntityID=int32（basictypes.hpp:104）/DatabaseID=int64（:191）/UniqueID 128 位点分（unique_id.hpp:17-25）；「64 位分段」仅存于已删 B 级文档示意代码，git 1e37073d^ 可溯） | 自创（参照 ID 内嵌来源信息的思想） | 分段 ID 使实体可追溯来源进程；Apollo 按部署语义划段位（05 §2.2）——思想参照、机制自研 |
+| 15 | ServerID 64 位（Region/Group/Type/Instance 分段） | **Apollo 自创设计**（2026-09-30 证伪修正：BW 源码无 64 位分段对应物——实为 EntityID=int32（basictypes.hpp:104）/DatabaseID=int64（:191）/UniqueID 128 位点分（unique_id.hpp:17-25）；「64 位分段」仅存于已删 B 级文档示意代码，git 1e37073d^ 可溯） | 自创（参照 ID 内嵌来源信息的思想） | 分段 ID 使实体可追溯来源进程；Apollo 按部署语义划段位（05 §2.2）——思想参照、机制自行开发 |
 | 16 | Battle 独立实例 + Replay/Inspector 适配缝 | 混合同步需求的通用解（见 §4 问 10）；BW 把战斗算在 cell 内、无独立实例 | 自创+借鉴 | 大型团战 offload 到短生命周期实例进程，故障域与 tick 率独立可调（25 §3.2/§3.3/§8），关键帧记录留确定性回放之缝（25 §6） |
 | 17 | MySQL 8.0 + Redis + ClickHouse；PostgreSQL 留缝、MongoDB 不留缝 | BW db_storage_mysql/db_storage_xml 双后端、KBE MySQL+Redis 双后端（2026-09-30 证伪修正：原「KBE MySQL-only」失准——kbe/src/lib/db_redis/ 为完整实体存储后端，entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis 实现 db_interface/entity_table.h 同一抽象基类；redis 生产可用性未验证，deep-dive §17） | 对照自定 | 两家都把 DB 抽象成可插后端且各有第二后端实证（BW=XML、KBE=Redis）——双后端同构；Apollo 用 storage.xml「语句即数据」天然留出 SQL 方言缝（见 §4 问 11） |
 | 18 | 帧同步只留适配缝不做实现 | 各框架均无内建 lockstep（见 §4 问 10） | 暂缓 | MMORPG 上行 intent-only（服务端定夺）与 lockstep 确定性直接冲突；如需战斗帧同步，走 Battle 实例单独确定性运行时，不污染大世界协议（25 §3.3/§6） |
@@ -79,7 +79,7 @@
 - **AOI**：引擎不内置；社区以 service 实现九宫格/十字链自建（如 sproto 生态项目，D）。
 - **同步/属性复制**：不内置；消息即一切（sproto/自定协议）。
 - **脚本集成**：Lua 一等公民，业务 service 全 Lua；云风著《Skynet 框架设计与实现》。
-- **扩展机制**：C 服务（.so）动态注册 + Lua 层封装；两代 IPC（harbor→cluster）证明其扩展路线是「自研而非引中间件」。
+- **扩展机制**：C 服务（.so）动态注册 + Lua 层封装；两代 IPC（harbor→cluster）证明其扩展路线是「自行开发而非引中间件」。
 - **典型生产规模**：简悦/灵犀互娱《陌陌争霸》《心动庄园》；陌陌 MMO 项目上线前咨询云风（[codingnow 博客](https://blog.codingnow.com)）；顺网科技年报披露 skynet 引擎游戏（[年报](https://vip.stock.finance.sina.com.cn)）；三七互娱等招聘要求 skynet（D 级口径，多个来源）（C/D）。
 - **失败教训**：① 起源即教训——原框架 Erlang 写、性能不达标，云风 2012-07 用 C/Lua 重写（[gameres 访谈](https://www.gameres.com/867001.html)）；② sproto 无内建版本字段，协议演进靠人工纪律（architecture-review §16 实证）；③ 无内置存储/日志管线，业务自建面大——是「框架」而非「引擎」的代价。
 
@@ -166,7 +166,7 @@
 | **脚本热更** | Python（cell/base） | Python+工具链 | Lua 一等公民+热更 | JS 本体 | 插件动态库 | C#（IL 热更社区方案） | Blueprint 不可热更 | Perl/Lua quest | C++/社区 Lua（存疑） | Lua 5.5.x（vcpkg）白名单（契约生成；原生 C API 绑定，2026-09-30 弃 sol2） |
 | **存储** | MySQL+XML 双后端（`db_storage_mysql/xml`） | MySQL+Redis 双后端（`lib/db_{mysql,redis}`——2026-09-30 修正，原「MySQL-only」失准） | 无内置 | 社区 dao（MySQL/Redis） | 自带简单存储（D） | 不涉及 | 不涉及 | MySQL+共享内存 | MySQL（官方依赖） | MySQL8+Redis+ClickHouse，journal+快照两段式（00、attribute-sync §8） |
 | **可观测性** | message_logger/bw_profile 工具链 | logger 独立进程 | monitor+debug_console+logger | log4js 插件（C） | 基础日志（D） | 引擎外自建 | 引擎外自建 | logsys（D） | GM 命令+日志（D） | LogAgent→Kafka→ClickHouse+运行时 ConsoleEvent（00） |
-| **社区/许可证** | 闭源被收购（4500 万美元，2012） | 开源 MIT，中文社区为主，节奏放缓 | MIT，云风+国内生态活跃 | **已归档**（2023-09） | MIT，趋缓 | Unity 官方维护（随 Unity 商业政策） | Epic 官方维护（5% 分成模式） | 开源社区（C/D） | GPL 系私服生态（D） | 自研（本仓库） |
+| **社区/许可证** | 闭源被收购（4500 万美元，2012） | 开源 MIT，中文社区为主，节奏放缓 | MIT，云风+国内生态活跃 | **已归档**（2023-09） | MIT，趋缓 | Unity 官方维护（随 Unity 商业政策） | Epic 官方维护（5% 分成模式） | 开源社区（C/D） | GPL 系私服生态（D） | 自行开发（本仓库） |
 
 ---
 
@@ -242,7 +242,7 @@
 
 - **BigWorld**：采纳 Mercury filter 分层、detail level 分档、按观察者水位、日志一等公民定位，及「ID 内嵌来源信息」的思想（64 位分段本身为 Apollo 自创——#15 2026-09-30 证伪修正，BW 源码无对应物）；否决无缝 cell 世界（ghost 成本）与「被大客户买断闭源」的商业模式教训（4500 万美元收购案）；改造 witness→acked_seq 水位、TimeQueue→主循环驱动。
 - **KBEngine**：采纳 .def 契约生成精髓、sdks/ 布局、xlsx2py「生成器在 src 外」、Archiver 平滑刷库算法；否决 .def 存储耦合（五短板）、machine UDP 广播、Python 全功能脚本；改造平滑算法防突发、白名单收紧脚本面。
-- **skynet**：采纳 C/Lua 技术栈与单 service 串行的无锁全序、自研代际更替观（harbor→cluster）；否决「框架无预设拓扑」的完全自由——Apollo 保留九服务显式拓扑（00），因为运维与排障需要静态结构；补齐 skynet 缺失的存储/观测标准栈。
+- **skynet**：采纳 C/Lua 技术栈与单 service 串行的无锁全序、自行开发代际更替观（harbor→cluster）；否决「框架无预设拓扑」的完全自由——Apollo 保留九服务显式拓扑（00），因为运维与排障需要静态结构；补齐 skynet 缺失的存储/观测标准栈。
 - **Pomelo**：采纳多进程 frontend/backend 拆分思想（Gate/World 即其投影）；其归档教训直接支撑 Apollo 的「不绑单一语言运行时」——C++20 内核 + Lua 只做业务层，运行时生命期与 C++ 标准而非社区项目绑定。
 - **NoahGameFrame**：插件化方向被 Apollo 否决（无关联容器语义，architecture-review 装配纪律）；其 actor+属性事件驱动与 Apollo 的 ECS 事件流同向，仅作参照。
 - **Unity NGO**：客户端同步件定位清晰——Apollo 的四端 SDK（sdk-contract §4）在客户端侧承接同类职责（属性容器+预测双缓冲），但服务器权威与契约同源是 NGO 不可能给的。

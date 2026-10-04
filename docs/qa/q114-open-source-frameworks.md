@@ -31,7 +31,7 @@
 │  └── Go-World - MMO                                        │
 │                                                             │
 │  Java 框架:                                                 │
-│  ├── Netty + 自研                                          │
+│  ├── Netty + 自行开发                                          │
 │  ├── Wild World Open                                      │
 │  └── Zoe - 多人游戏框架                                    │
 │                                                             │

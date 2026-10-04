@@ -10,7 +10,7 @@
 2. **他家名字不入户**：BW/KBE/skynet/UE 等的机制名（baseapp、cellapp、Space、Mailbox…）只作对照出现，引用时必须写成「BW 的 cellapp」形式；**不得作 apollo 代码标识或裸用**。
 3. **禁用名（§2）在文档与代码中零出现**——历史件与引用他家机制的对照段除外。
 4. **新术语流程**：先入 concept-glossary（含义辨析）→ 再入本契约（命名钉死）→ 才能进设计文档/代码。
-5. 对外产品文案另守 `~/workspaces/standards/产品文案用词规范.md`（禁「自研/遥遥领先」等——用户 2026-10-03 禁令），本契约管技术命名，不与混用。
+5. 对外产品文案另守 `~/workspaces/standards/产品文案用词规范.md`（禁「自行开发/遥遥领先」等——用户 2026-10-03 禁令），本契约管技术命名，不与混用。
 
 ## 1. 术语契约总表
 
@@ -49,7 +49,7 @@
 | 守护进程 | machined | `Machined` | 每机本地监工：拉起/重启/生死上报（G-1 左半） | BW = bwmachined；KBE = machine | — |
 | 对接进程 | interfaces | `InterfacesApp` | 第三方入站 HTTP 回调面 | KBE = `tools/server/interfaces` | — |
 | 日志收集进程 | logger | `LoggerApp` | 日志双出口（本地文件真相源+push） | BW/KBE = logger 工具 | — |
-| 战斗验证进程 | verifier | `VerifierApp` | 客户端权威战斗的服务端复算对账（gap #17） | 行业自研通型，三家无内建 | — |
+| 战斗验证进程 | verifier | `VerifierApp` | 客户端权威战斗的服务端复算对账（gap #17） | 行业自行开发通型，三家无内建 | — |
 | 服务发现 | service discovery | G-1 | 单机守护+UDP 广播双层 | BW/KBE = machined 同型 | 禁：注册中心 |
 | 注册中心 | registry | — | 外部强一致 KV（etcd/consul） | 微服务标配 | **不引入**（裁决 2）；KBE 语境同词异义（引擎内管理组件） |
 | 热备与接管 | backup / reviver | G-2 | backup-hash 链+reviver | BW = backup_sender+reviver；KBE 无 | — |
@@ -91,7 +91,7 @@
 
 | 中文名 | 英文名 | 代码标识 | 定义一句 | 其他引擎含义对照 | 禁用/别名 |
 |---|---|---|---|---|---|
-| 战斗验证服务 | battle verification | `VerifierApp` | 客户端权威战斗的服务端复算对账 | 行业 JS/C# 双端自研通型 | 「battle/战斗」一词**专属此域** |
+| 战斗验证服务 | battle verification | `VerifierApp` | 客户端权威战斗的服务端复算对账 | 行业 JS/C# 双端自行开发通型 | 「battle/战斗」一词**专属此域** |
 | 战斗 | battle | — | 战斗逻辑域（验证/结算） | — | 禁用于空间/实例命名（§2） |
 
 ## 2. 禁用名总表
@@ -111,7 +111,7 @@
 | **房间 / 线 / 分线**（作代码标识） | 口语 | — | `instance` / `scene_id` |
 | **场景实例粒度**（描述 Zone） | 歧义表述 | 与「承载 1..N scene」自相抵触（2026-10-03 修正） | 承载 1..N scene 的逻辑服进程 |
 | **迁移 / migration**（场景切换义） | 否决机制联想 | ghost 语义残留 | 换幕 / scene change |
-| **自研、遥遥领先**等 | 文案禁词（用户禁令） | 产品文案用词规范 | 基于 XX 构建 / 自写 / 封装 |
+| **自行开发、遥遥领先**等 | 文案禁词（用户禁令） | 产品文案用词规范 | 基于 XX 构建 / 自写 / 封装 |
 
 ## 3. 版本记录
 

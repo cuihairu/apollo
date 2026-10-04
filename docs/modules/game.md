@@ -11,205 +11,115 @@ tag:
 
 # Game 模块
 
-Game 模块提供游戏领域层功能，包括实体管理、AOI、战斗、属性等。
+Game 模块提供游戏领域层功能，分五个子库：core（实体基元）、world（场景/会话/Avatar）、
+session（锚点/在线目录/恢复）、attributes（属性）、battle（战斗骨架）。
 
-## Entity
+## Entity（apollo::game::core）
 
-游戏实体基类。
+游戏实体基类。`EntityId`/`PlayerId` 强分型互不隐式转换（P0-2：编译器拦住
+「把实体 ID 当玩家 ID 传」一类错误）；支持组件挂载。
 
 ```cpp
-#include <apollo/game/entity.hpp>
+#include <apollo/game/core/entity.hpp>
 
-using namespace apollo::game;
-
-class Player : public Entity {
-public:
-    Player(int64_t id) : Entity(id) {}
-
-    void update(float dt) override {
-        // 每帧更新
-    }
-
-private:
-    int level_ = 1;
-    int64_t exp_ = 0;
-};
+using apollo::game::core::EntityId;
+using apollo::game::core::Entity;
 
 // 创建实体
-auto player = std::make_shared<Player>(12345);
-player->setPosition({100, 200});
-player->setRotation({0, 0, 0});
-```
+Entity entity(EntityId{12345}, "Player");
 
-## 组件系统
-
-```cpp
-// 定义组件
-class HealthComponent : public Component {
-public:
-    PROPERTY(int, hp).defaultValue(100);
-    PROPERTY(int, maxHp).defaultValue(100);
-
-    void takeDamage(int damage) {
-        hp = std::max(0, hp - damage);
-    }
-
-    void heal(int amount) {
-        hp = std::min(maxHp, hp + amount);
-    }
-};
-
-class AttackComponent : public Component {
-public:
-    PROPERTY(int, attack).defaultValue(10);
-
-    int calculateDamage() {
-        return attack;
-    }
-};
-
-// 使用组件
-auto entity = std::make_shared<Entity>();
-entity->addComponent<HealthComponent>();
-entity->addComponent<AttackComponent>();
-
-// 获取组件
-auto health = entity->getComponent<HealthComponent>();
-health->takeDamage(20);
-```
-
-## AOI 系统
-
-```cpp
-#include <apollo/game/world/aoi_manager.hpp>
-
-// 创建 AOI 管理器
-auto aoi = std::make_shared<AOIManager>(1000, 1000, 100);
-
-// 实体进入
-auto entity = std::make_shared<Entity>(12345);
-aoi->enter(entity, {100, 100});
-
-// 移动
-aoi->move(entity, {200, 200});
-
-// 获取视野内的实体
-auto viewers = aoi->getViewers({100, 100}, 200);
-
-// 实体离开
-aoi->leave(entity);
-```
-
-## 战斗系统 (ECS)
-
-```cpp
-#include <apollo/game/battle/ecs.hpp>
-
-using namespace apollo::game::battle;
-
-// 定义组件
-struct Position {
-    float x, y;
-};
-
-struct Health {
-    int current;
-    int max;
-};
-
-struct Damage {
-    int value;
-};
-
-// 创建世界
-auto world = ECSWorld::create();
-
-// 创建实体
-auto entity = world->createEntity();
-entity->add<Position>(100, 200);
-entity->add<Health>(100, 100);
-
-// 创建系统
-class DamageSystem : public ECSSystem {
-public:
-    void update(ECSWorld* world, float dt) override {
-        world->each<Damage, Health>([](Entity* entity, Damage* dmg, Health* hp) {
-            hp->current -= dmg->value;
-            entity->remove<Damage>();
-        });
-    }
-};
-
-world->addSystem<DamageSystem>();
-
-// 游戏循环
-while (running) {
-    world->update(dt);
+// 组件挂载（IEntityComponent：get_type_name + on_attach/on_detach/on_update）
+entity.add_component<HealthComponent>();
+auto health = entity.get_component<HealthComponent>();
+if (health) {
+    health->take_damage(20);
 }
 ```
 
-## 属性系统
+## 组件系统（IEntityComponent）
+
+组件是挂在实体上的行为/数据单元，按类型名索引（`unordered_map<string, ComponentPtr>`）：
 
 ```cpp
-#include <apollo/game/attributes/attribute_manager.hpp>
+class HealthComponent : public apollo::game::core::IEntityComponent {
+public:
+    std::string get_type_name() const override { return "health"; }
+    void take_damage(int damage) { hp_ = std::max(0, hp_ - damage); }
 
-using namespace apollo::game;
+private:
+    int hp_ = 100;
+};
+```
 
-auto attrs = std::make_shared<AttributeManager>();
+## AOI 系统（SceneAoi）
 
-// 添加基础属性
-attrs->set(AttributeType::HP, 100);
-attrs->set(AttributeType::MP, 50);
-attrs->set(AttributeType::ATTACK, 10);
-attrs->set(AttributeType::DEFENSE, 5);
+全仓唯一 AOI 实现（P1-3 收敛后）：`apollo::game::world::SceneAoi`，Scene 独享、
+按 scene 隔离；`ViewerState` 记录逐观察者视野水位（Enter/Sync/Leave 差集基准）。
 
-// 添加加成
-attrs->addModifier(AttributeType::HP, AttributeModifier{
-    .type = ModifierType::ADD_PERCENT,
-    .value = 20  // +20%
+```cpp
+#include <apollo/game/world/scene_aoi.hpp>
+
+// 创建兴趣管理（宽、高、格子、视野半径）
+apollo::game::world::SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 200.0f);
+
+// 事件面（Enter / Sync / Leave；sink 缺省静默）
+aoi.set_event_sink([](const apollo::game::world::SceneAoi::Event& e) {
+    // e.observer / e.subject
 });
 
-// 计算最终值
-int finalHp = attrs->calculate(AttributeType::HP);  // 120
+// 实体进入 / 移动 / 离开
+aoi.enter(apollo::game::core::EntityId{1}, {100.0f, 0.0f, 100.0f});
+aoi.move(apollo::game::core::EntityId{1}, {200.0f, 0.0f, 100.0f});
+
+// 查询：位置点的视野 / 实体的观察者集
+auto nearby = aoi.viewers_at({100.0f, 0.0f, 100.0f});
+auto observers = aoi.viewers_of(apollo::game::core::EntityId{1});
+
+aoi.leave(apollo::game::core::EntityId{1});
 ```
+
+下发到网关的广播面留 P3-2；属性管线对 AOI 事件的消费未接线（attribute-sync §4.1）。
+
+## 战斗系统（BattleSystem，部分实现）
+
+`apollo::game::battle::BattleSystem` 现状为场景内骨架：实体集合登记 + tick 更新。
+
+```cpp
+#include <apollo/game/battle/battle_system.hpp>
+
+apollo::game::battle::BattleSystem battle;
+battle.add_entity(std::make_shared<apollo::game::core::Entity>(EntityId{1}));
+battle.update(0.1f);
+auto count = battle.get_entity_count();
+```
+
+ECS 多套收敛、技能/Buff/状态机、确定性四约束随 P2-1/P2-2（未实现）；
+旧稿里的 `ECSWorld`/`ECSSystem` API 在仓库中不存在。
+
+## 属性系统（attributes）
+
+`AttributeContainer`（按 objectId 承载属性值，Set/Get/Add + 变更监听）+
+`AttributeManager`（属性定义注册与容器生命周期，`RegisterAttribute`/
+`CreateContainer`/`LoadFromConfig`）。头文件在顶层 `include/apollo/game/attributes/`。
+
+```cpp
+#include <apollo/game/attributes/attribute.hpp>
+
+auto& manager = apollo::AttributeManager::Instance();
+manager.RegisterAttribute(def);                      // AttributeDef：id+类型+默认值
+auto container = manager.CreateContainer(objectId);  // 每实体一个容器
+container->SetAttribute(attributeId, value);         // AttributeValue
+AttributeValue out;
+container->GetAttribute(attributeId, out);
+container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报 */ });
+```
+
+逐 viewer 的 delta 同步管线未接线（契约 `attr_batch` 已入 messages.xml，管线随属性批次）。
 
 ## NPC AI
 
-```cpp
-#include <apollo/game/ai/ai_controller.hpp>
-
-class MonsterAI : public AIController {
-protected:
-    void onThink(float dt) override {
-        auto target = findTarget();
-        if (target) {
-            attack(target);
-        } else {
-            patrol();
-        }
-    }
-
-private:
-    EntityPtr findTarget() {
-        // 查找攻击范围内的玩家
-        auto entities = aoi_->getViewers(entity_->position(), 100);
-        for (auto& e : entities) {
-            if (e->type() == EntityType::PLAYER) {
-                return e;
-            }
-        }
-        return nullptr;
-    }
-
-    void attack(EntityPtr target) {
-        // 攻击逻辑
-    }
-
-    void patrol() {
-        // 巡逻逻辑
-    }
-};
-```
+> **未实现**（2026-10-04 对账）：`apollo/game/ai/ai_controller.hpp` 不存在，
+> 仓库无 AI/寻路模块（旧 9 批次计划的寻路批次未列入主线，见 todo.md 遗留登记）。
 
 ## 依赖
 
@@ -219,11 +129,11 @@ private:
 ## 链接
 
 ```cmake
-find_package(apollo-game-core REQUIRED)
-find_package(apollo-game-world REQUIRED)
-
 target_link_libraries(my_app
     apollo::game_core
     apollo::game_world
+    apollo::game_session
+    apollo::game_attributes
+    apollo::game_battle
 )
 ```

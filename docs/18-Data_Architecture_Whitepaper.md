@@ -161,7 +161,7 @@ FileWatcher/GM 触发 → 工作线程全量重解析 storage.xml + 全漏斗校
 
 ### 6.1 分片规则
 - 初期：账户维度（`char_id % N`）分片；`N` 根据容量预估。
-- 采用 ShardingSphere 或自研路由：DataProxy 维护配置，动态刷新。
+- 采用 ShardingSphere 或自行开发路由：DataProxy 维护配置，动态刷新。
 - 支持水平扩容：新增分片后，通过后台工具迁移数据（online re-sharding）。
 
 ### 6.2 索引与归档
@@ -191,7 +191,7 @@ timestamp | platform | server | player_id | event | delta | balance | reason | e
 - **容灾演练**：定期演练 DB 故障、缓存丢失、Kafka 延迟等场景。
 
 ## 9. 工具与流程
-- **Schema 管理**：使用 Flyway/Liquibase 或自研工具维护 SQL 版本。
+- **Schema 管理**：使用 Flyway/Liquibase 或自行开发工具维护 SQL 版本。
 - **数据校验**：定期比对 Redis vs MySQL，检查脏数据。
 - **数据导出**：提供玩家数据导出/导入工具（GM 调试、问题排查）。
 - **监控**：MySQL QPS/延迟、Redis 命中率、DataProxy 队列长度、Kafka backlog。

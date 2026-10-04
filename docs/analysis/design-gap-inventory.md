@@ -136,7 +136,7 @@ gap 分析中曾被怀疑、经实读核实**已有权威载体**的主题,列�
 ### #17 战斗验证服务(客户端权威战斗的复算对账)— **CLOSED**(docs/design/battle-verification-service.md,2026-09-30 立项即落盘)
 
 - **缺什么**:客户端权威战斗(36号 #18 缝兑现的 lockstep 小房间/客户端演算)下的服务端复算验证服务——独立进程注册、RPC 提交/结果链、verdict 与权威结算、结算门/仲裁/风控接线。concept-glossary「战斗验证服务」词条原写「未立项」且无对应条目(悬空引用,本条即补)。
-- **证据**:battle-determinism §5 已有复算 hash 链与四元组,但其消费方「反作弊对账」仅一笔带过——服务形态/消息族/结算门/verdict 分级/部署容量零展开(2026-09-30 实读);BW/KBE/skynet 无内建(三家皆服务端权威无需——行业 JS/C# 双端自研通型,glossary 词条考证)。
+- **证据**:battle-determinism §5 已有复算 hash 链与四元组,但其消费方「反作弊对账」仅一笔带过——服务形态/消息族/结算门/verdict 分级/部署容量零展开(2026-09-30 实读);BW/KBE/skynet 无内建(三家皆服务端权威无需——行业 JS/C# 双端自行开发通型,glossary 词条考证)。
 - **落点**:docs/design/battle-verification-service.md——§0 适用/不适用写死(判据一句:判定在客户端才需要)/G-1 VERIFIER 型 + sdk-contract §11 internal 域三消息族(invoke_mode 三分)/Lua 双端共享 + `combat_bundle_hash`+VM 版本线双锚/跨端增量三件(运算白名单、版本锚、漂移降级 WARN——对 §2「不做定点」口径的关系已写明)/verdict 四值 × 结算门两级/权威结算由复算产出/无状态 worker 池 + Compact 内嵌 verifier-kernel/M0-M5(M4 与 #15 bots 互为验收)。
 
 ### #18 玩家对象模型与 Cell 精简 — **CLOSED**(docs/design/player-object-model.md,2026-10-03 落盘)

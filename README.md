@@ -69,9 +69,9 @@ This makes Apollo a compact alternative for games where the natural world bounda
 - 📜 **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
 - 🌐 **高性能网络层** - 跨平台异步I/O（IOCP/Epoll）
 - 📦 **传输编解码（目标态）** - L1 帧格式 + protobuf descriptor（`descriptor.bin`，反射为默认）+ Lua 契约表（`contract.lua`）+ zstd 压缩（`docs/design/sdk-contract.md` §10-§12）——框架固定消息族内建强类型守热路径、业务消息反射进 Lua（服务端契约变更零重编）、有代码热更管线的客户端走生成代码（docs/36 决策 #19）；现网为手写编码，仓库自有 .proto 为零
-- 🔥 **ECS战斗系统** - 灵活的实体-组件-系统架构
-- 👁 **AOI九宫格系统** - 高效的视野管理
-- 💾 **数据存储层** - 数据库连接池和Redis缓存
+- 🔥 **战斗系统** - `BattleSystem` 场景内骨架已交付（实体集合 + tick 更新）；ECS 收敛与技能/Buff/状态机随 P2（未实现）
+- 👁 **AOI九宫格系统** - `SceneAoi` 单实现（Scene 独享、scene_id 隔离）+ `ViewerState` 逐观察者水位，Enter/Sync/Leave 事件面已交付
+- 💾 **数据存储层** - 玩家档案文件（tmp+rename 原子写）+ `PersistJournal` write-behind（write-ahead→定额 drain→快照压薄→崩溃 replay）；外部 DB/Redis 未接线
 - ⚡ **日志系统** - 多级别异步日志
 - 🔧 **工具类库** - 线程池、内存池、配置管理等
 - 🧩 **BigWorld兼容层** - BigWorld 风格 C++ API facade（见 `docs/33-BigWorld_Compatibility.md`）
@@ -86,10 +86,10 @@ This makes Apollo a compact alternative for games where the natural world bounda
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自实现跨平台网络层
 - **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3/#19）——**def 契约管语义**（属性/权限位/sync 掩码/内外分域；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付；服务端载体为 contract.lua，业务 handler 与白名单数据化）；**protobuf 管字节编码**（反射为默认：descriptor.bin + 框架固定消息族内建强类型守热路径；有代码热更管线的客户端走生成代码、bin 兜底；L1 帧格式 + zstd，规划；`docs/design/sdk-contract.md`）。protobuf 现为依赖+测试，未上消息通路（仓库自有 .proto 为零，现网手写编码）
-- **数据库**: MySQL 8（主存储）+ Redis（缓存/会话）+ ClickHouse（分析，规划）；PostgreSQL 留缝（docs/36 决策 #17）
-- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自研消息总线（规划，`docs/design/net-abstraction.md`）
+- **数据库**: 现状零外部存储依赖——玩家档案 = JSON 文件 + `PersistJournal` write-behind 日志（P1-4/P1-5 交付）；MySQL 8（主存储）/ Redis（缓存/会话）/ ClickHouse（分析）均为规划态未接线，PostgreSQL 留缝（docs/36 决策 #17）
+- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自行开发消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
-- **日志系统**: 自研多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
+- **日志系统**: 自行开发多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
 - **测试框架**: GTest + 零依赖断言式单测
 - **CI/CD**: GitHub Actions
 
@@ -100,8 +100,8 @@ This makes Apollo a compact alternative for games where the natural world bounda
 - C++20 或更高版本
 - CMake 3.16+
 - GCC 9+ / Clang 10+ / MSVC 2019+
-- MySQL 8.0+ (可选)
-- Redis 6.0+ (可选)
+
+> 现状构建与运行均零外部存储依赖（玩家档案为本地文件 + journal）；MySQL/Redis 运行时接线为规划态，无需预装。
 
 ### 编译项目
 
@@ -157,10 +157,10 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **配置**: `apollo::core::config::ConfigRegistry` 键值注册表；热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6）
 
 ### Game 游戏逻辑
-- **AOI系统**: 九宫格空间索引，高效视野管理
-- **战斗系统**: ECS架构，支持技能、Buff、状态机
-- **属性系统**: 灵活的属性计算和同步机制
-- **场景管理**: 多场景支持和场景迁移
+- **AOI系统**: `SceneAoi` 九宫格（Scene 持有、scene_id 隔离）+ `ViewerState` 逐观察者水位；Enter/Sync/Leave 事件分发已交付，网关下发面留 P3-2
+- **战斗系统**: `BattleSystem` 场景内骨架（实体集合 + tick 更新）；ECS 多套收敛与技能/Buff/状态机随 P2（未实现）
+- **属性系统**: `AttributeContainer`/`AttributeManager` 属性容器与定义注册；逐 viewer delta 同步管线未接线（契约 `attr_batch` 已入 messages.xml）
+- **场景管理**: 多场景支持 + 换幕（`scene_transfer`，prepare→detach→attach→resume + 失败回滚）
 
 ### Network 网络通信
 - **传输层**: Socket封装，支持TCP/WebSocket/KCP
@@ -168,9 +168,9 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **RPC框架**: 远程过程调用框架
 
 ### Storage 存储层
-- **数据库连接池**: MySQL连接管理和复用
-- **Redis客户端**: 完整的Redis命令支持
-- **序列化**: 多种数据序列化方案
+- **玩家档案**: JSON 文件档案（tmp+rename 原子写）+ `SaveQueue` 异步保存队列；加载未命中即失败（无默认档 bootstrap）
+- **Write-ahead journal**: `PersistJournal`——append 落盘 → 定额 drain → 快照压薄 → 崩溃 replay 续接（P1-4/P1-5）
+- **序列化**: 档案 toJson/fromJson 对称序列化；连接池/外部 DB/Redis 客户端为规划态（P1-4 已删五套存量实现）
 
 ### Utils 工具库
 - **日志系统**: 多级别异步日志，文件/控制台输出
@@ -247,25 +247,24 @@ int main() {
 ### 使用AOI系统
 
 ```cpp
-#include "apollo/game/aoi/AOIManager.h"
+#include "apollo/game/world/scene_aoi.hpp"
 
-// 初始化AOI管理器
-auto& aoi = apollo::AOIManager::Instance();
-aoi.Initialize(100.0f);  // 100米网格
+using apollo::game::core::EntityId;
+using apollo::game::world::SceneAoi;
 
-// 创建实体
-apollo::AOIEntity player(1001, 1);
-player.position = {100.0f, 0.0f, 100.0f};
-player.aoiRadius = 30.0f;
+// 九宫格兴趣管理：每个 Scene 独享一个实例（天然按 scene 隔离）
+SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 30.0f);  // 宽、高、格子、视野半径
 
-// 更新到AOI
-aoi.UpdateEntity(player);
+// 事件面：Enter / Sync / Leave（sink 缺省静默，由 Scene/宿主注入下发）
+aoi.set_event_sink([](const SceneAoi::Event& e) {
+    // e.kind / e.observer / e.subject —— viewer set 差集基准在 ViewerState
+});
 
-// 获取可见实体
-auto visible = aoi.GetVisibleEntities(1001);
-for (auto id : visible) {
-    std::cout << "Entity " << id << " is visible" << std::endl;
-}
+// 实体进入 / 移动 / 离开
+aoi.enter(EntityId{1001}, {100.0f, 0.0f, 100.0f});
+auto viewers = aoi.viewers_of(EntityId{1001});   // 视野内实体（含自身）
+aoi.move(EntityId{1001}, {120.0f, 0.0f, 100.0f});
+aoi.leave(EntityId{1001});
 ```
 
 ### 使用战斗系统
@@ -307,22 +306,19 @@ world->Update(deltaTime);
 项目包含完整的单元测试和示例代码：
 
 ```bash
-# 运行所有测试
+# 运行所有测试（全量清单见 tests/CMakeLists.txt）
 cd build && ctest
 
 # 仅运行 BigWorld 兼容层测试
 cd build && ctest -R BigWorldApiTests
-
-# 运行功能演示
-./examples/all_features_demo
 ```
 
 测试覆盖：
-- 网络通信测试
-- 数据库操作测试
-- Redis操作测试
-- AOI系统测试
-- 属性系统测试
+- 网络与协议测试（network/net/protocol/channel）
+- 数据与持久化测试（data、`PersistJournalTests`、`PersistenceChainTests`——文件档案 写盘→重启→读回）
+- 世界与生命周期测试（game/scene/instance/avatar/session_world/world_host）
+- 会话与恢复测试（`PlayerDirectoryTests`、`RecoveryTests`、`ReconnectTests`）
+- 基础设施测试（日志/定时器/配置/线程池/序列化等）
 - BigWorld 兼容层 API 测试（`BigWorldApiTests`）
 
 ## 📋 目录结构

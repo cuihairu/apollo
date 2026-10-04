@@ -10,18 +10,20 @@ next: /guide/module-system
 
 ## 应用 (Application)
 
-Application 是 Apollo 的基本运行单元，代表一个可启动/停止的服务。
+Application 是 Apollo 的基本运行单元，代表一个可启动/停止的服务。业务侧实现
+`IHostedService`（start/stop/tick），宿主 `ApplicationHost`/`ServiceHost` 帧驱动托管。
 
 ```cpp
-class MyApplication : public core::Application {
+class MyService : public apollo::runtime::IHostedService {
 public:
-    void start() override {
-        // 初始化逻辑
-    }
+    std::string_view service_name() const override { return "my-service"; }
+    bool start() override { running_ = true; return true; }
+    void stop() override { running_ = false; }
+    bool is_running() const override { return running_; }
+    void tick() override { /* 定帧业务 */ }
 
-    void stop() override {
-        // 清理逻辑
-    }
+private:
+    bool running_ = false;
 };
 ```
 
@@ -40,76 +42,78 @@ Apollo 采用模块化架构，每个模块提供特定的功能。
 
 ## 依赖注入 (DI)
 
-Apollo 提供 IoC 容器，支持依赖注入。
+Apollo 提供构造注入容器 `apollo::core::di`：类型键 bean 图、拓扑序装配、
+仅 Singleton/Prototype 两档作用域。装配只发生在应用入口（apps/）。
 
 ```cpp
-// 注册服务
-container().registerSingleton<DatabaseService>();
+#include <apollo/core/di/application_context.hpp>
 
-// 解析服务
-auto db = container().resolve<DatabaseService>();
+apollo::core::di::ApplicationContextBuilder builder;
+builder.add_singleton<GameClockService>().name("game_clock");
+builder.add_singleton<LoginPipeline, GameClockService>().name("login_pipeline");
+auto context = builder.build();
+if (!context.initialize()) {
+    return 1;
+}
 ```
 
 ## 配置 (Config)
 
-支持多种配置格式（JSON、YAML、TOML）。
+`apollo::core::config::ConfigRegistry` 键值注册表（string/int64/bool）；
+热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6，未实现）。
 
 ```cpp
-// 加载配置
-auto& config = core::ConfigManager::instance();
-config.load("config.json");
+#include <apollo/core/config/config_registry.hpp>
 
-// 读取配置
-int port = config.get<int>("server.port");
+apollo::core::config::ConfigRegistry config;
+config.set("server.port", 8888);
+int64_t port = config.get_int64("server.port");
 ```
 
 ## 日志 (Log)
 
-分级日志系统。
+分级日志（`apollo::core::log`，自行开发多级别；文件/控制台输出）。
 
 ```cpp
-LOG_INFO("LoggerName", "这是一条信息");
-LOG_WARN("LoggerName", "这是一条警告");
-LOG_ERROR("LoggerName", "这是一条错误");
+#include <apollo/core/log/log_manager.hpp>
+
+APOLLO_LOG_INFO("这是一条信息");
+APOLLO_LOG_WARN("这是一条警告");
+APOLLO_LOG_ERROR("这是一条错误");
 ```
 
 ## 实体 (Entity)
 
-游戏世界中的基本对象。
+游戏世界中的基本对象：`apollo::game::core::Entity`（`EntityId` 强分型，
+`PlayerId`/`EntityId` 互不隐式转换），支持组件挂载（`IEntityComponent`）。
 
 ```cpp
-auto entity = std::make_shared<game::Entity>();
-entity->id = 12345;
-entity->position = {100, 200};
+#include <apollo/game/core/entity.hpp>
+
+apollo::game::core::Entity entity(apollo::game::core::EntityId{12345}, "Player");
+entity.add_component<HealthComponent>();
+auto health = entity.get_component<HealthComponent>();
 ```
 
 ## AOI (Area of Interest)
 
-视野管理系统，用于高效查询附近的实体。
+视野管理：`apollo::game::world::SceneAoi` 九宫格（每个 Scene 独享一个实例，
+天然按 scene 隔离），`ViewerState` 记录逐观察者视野水位，Enter/Sync/Leave
+事件面经 sink 分发（下发网关面留 P3-2）。
 
 ```cpp
-// 创建 AOI 管理器
-auto aoi = std::make_shared<game::AOIManager>(1000, 1000, 100);
+#include <apollo/game/world/scene_aoi.hpp>
 
-// 实体进入世界
-aoi->enter(entity, {100, 100});
-
-// 查询视野内的实体
-auto viewers = aoi->getViewers({100, 100}, 200);
+apollo::game::world::SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 200.0f);
+aoi.enter(apollo::game::core::EntityId{1001}, {100.0f, 0.0f, 100.0f});
+auto viewers = aoi.viewers_at({100.0f, 0.0f, 100.0f});
 ```
 
 ## Actor 模型
 
-基于 Actor 的并发模型，每个 Actor 有独立的消息队列。
-
-```cpp
-class MyActor : public actor::Actor {
-protected:
-    void onMessage(const actor::Message& msg) override {
-        // 处理消息
-    }
-};
-```
+> **未实现**（2026-10-04 对账）：仓库无 Actor 代码。现网并发模型 = 定帧
+> 场景线程 + 单写者纪律（concurrency C-4：tick 归场景线程，IO 不持游戏
+> 数据锁）；「每 Actor 独立消息队列」的示例代码为旧稿残留，随 P4-1 清理。
 
 ## 下一步
 
