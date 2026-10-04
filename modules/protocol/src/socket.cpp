@@ -471,7 +471,8 @@ void PairSocket::send(const std::vector<uint8_t>&) {}
 void PairSocket::setMessageCallback(MessageCallback) {}
 void PairSocket::workerLoop() {}
 
-RpcClient::RpcClient(const std::string&, const SocketConfig&) {}
+RpcClient::RpcClient(const std::string&, const SocketConfig&)
+    : client_({}, {}) {}  // 桩分支：成员 ReqSocket 无默认构造，显式空参构造
 RpcClient::~RpcClient() = default;
 void RpcClient::connect() {}
 void RpcClient::disconnect() {}

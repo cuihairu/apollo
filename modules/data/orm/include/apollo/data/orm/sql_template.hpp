@@ -5,16 +5,41 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace apollo::data::orm {
 
 class SqlTemplate {
 public:
-    explicit SqlTemplate(std::shared_ptr<apollo::data::core::IDataSource> data_source);
+    // P0-5（C-95 链接断裂修复）：orm 树的 SqlTemplate 此前只有声明无定义
+    // （orm/src/sql_template.cpp 是 legacy apollo::database 树的实现），
+    // game-server 链接即断。头内 inline 补齐（经 IDataSource 取连接执行）。
+    explicit SqlTemplate(std::shared_ptr<apollo::data::core::IDataSource> data_source)
+        : data_source_(std::move(data_source)) {
+    }
 
-    apollo::data::core::QueryResult query(const std::string& sql) const;
-    apollo::data::core::QueryResult update(const std::string& sql) const;
+    apollo::data::core::QueryResult query(const std::string& sql) const {
+        if (!data_source_) {
+            return {};
+        }
+        auto connection = data_source_->acquire();
+        if (!connection) {
+            return {};
+        }
+        return connection->execute_query(sql);
+    }
+
+    apollo::data::core::QueryResult update(const std::string& sql) const {
+        if (!data_source_) {
+            return {};
+        }
+        auto connection = data_source_->acquire();
+        if (!connection) {
+            return {};
+        }
+        return connection->execute_update(sql);
+    }
 
     template <typename T>
     std::vector<T> query(const std::string& sql,

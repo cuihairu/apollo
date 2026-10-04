@@ -113,6 +113,21 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCreateEntity
     std::memcpy(&msg.position, ptr + offset, sizeof(Position));
 }
 
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellDestroyEntity& msg) {
+    const uint8_t* ptr = data.data();
+    size_t offset = 0;
+    std::memcpy(&msg.entityId, ptr + offset, sizeof(EntityID));
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCrossBorder& msg) {
+    const uint8_t* ptr = data.data();
+    size_t offset = 0;
+    std::memcpy(&msg.entityId, ptr + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.fromSpace, ptr + offset, sizeof(SpaceID)); offset += sizeof(SpaceID);
+    std::memcpy(&msg.toSpace, ptr + offset, sizeof(SpaceID)); offset += sizeof(SpaceID);
+    std::memcpy(&msg.position, ptr + offset, sizeof(Position));
+}
+
 std::vector<uint8_t> MessageCodec::encodeBody(const CellEntityMove& msg) {
     std::vector<uint8_t> result(sizeof(EntityID) + sizeof(Position) * 2);
     size_t offset = 0;

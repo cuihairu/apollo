@@ -126,7 +126,9 @@ public:
     static void decodeBody(const std::vector<uint8_t>& data, GatewayAssignRequest& msg);
     static void decodeBody(const std::vector<uint8_t>& data, GatewayAssignResponse& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CellCreateEntity& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, CellDestroyEntity& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CellEntityMove& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, CellCrossBorder& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CombatSkillCast& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CombatDamage& msg);
     static void decodeBody(const std::vector<uint8_t>& data, ChatMessage& msg);
