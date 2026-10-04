@@ -110,10 +110,12 @@ private:
     std::unique_ptr<ClientIngressServer> ingressServer_;
     std::unique_ptr<ClientPacketDispatcher> packetDispatcher_;
     std::unique_ptr<GatewayConnectionRegistry> connectionRegistry_;
-    std::unique_ptr<SessionAdmissionService> admissionService_;
-    std::unique_ptr<MessageRouter> messageRouter_;
+    // 声明序必须与构造初始化列表一致：admissionService_ 依赖 loginAppClient_.get()，
+    // 置于其后，否则读未构造成员（UB，macos Debug 实测爆：准入拿空指针误拒）。
     std::unique_ptr<apollo::protocol::RpcClient> baseAppRouteClient_;
     std::unique_ptr<apollo::protocol::RpcClient> loginAppClient_;
+    std::unique_ptr<SessionAdmissionService> admissionService_;
+    std::unique_ptr<MessageRouter> messageRouter_;
 
     // TCP 监听器 (简化版)
     int listenSocket_ = -1;
