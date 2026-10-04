@@ -101,6 +101,22 @@ WorldSessionManager::SessionPtr WorldSessionManager::complete_transfer(WorldSess
     return it->second;
 }
 
+WorldSessionManager::SessionPtr WorldSessionManager::suspend_transfer_session(
+    WorldSession::SessionId session_id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const auto it = sessions_.find(session_id);
+    if (it == sessions_.end()) {
+        return nullptr;
+    }
+
+    // 断线在转移中（P1-1，lifecycle §2.3 差距 ④）：进挂机窗口而非瞬时消亡
+    if (!it->second->suspend_from_transfer()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
 WorldSessionManager::SessionPtr WorldSessionManager::abort_transfer(WorldSession::SessionId session_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 

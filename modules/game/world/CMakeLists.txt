@@ -5,6 +5,7 @@ add_library(apollo_game_world STATIC
     src/instance.cpp
     src/scene.cpp
     src/scene_aoi.cpp
+    src/scene_transfer.cpp
     src/world.cpp
     src/world_session.cpp
     src/world_session_manager.cpp

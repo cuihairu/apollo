@@ -2,6 +2,8 @@
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/game/world/instance.hpp"
+#include "apollo/game/world/scene.hpp"
+#include "apollo/game/world/scene_transfer.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
 #include <algorithm>
@@ -437,30 +439,58 @@ std::vector<uint8_t> CellServer::handleCellCrossBorder(const std::vector<uint8_t
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellCrossBorder>(bodyData);
 
-    // P0-2/P0-3：类型显式——先经 Scene 的 Avatar 容器由实体号反查玩家号，
-    // 再按玩家查会话（旧代码直接把实体号当玩家号传，编译器不可见）
+    // P1-1 重写：走 scene_transfer 流程模块（prepare→begin→detach→attach→
+    // complete，六差距收口），替换旧「字段搬运 + 瞬时 complete」路径——
+    // 旧路径无准入、无对象投影、无回滚、目标不存在时静默同场搬运。
+    const auto route = spaceToScene_.find(static_cast<std::uint64_t>(msg.toSpace));
+    if (route == spaceToScene_.end()) {
+        // 目标 space 无路由（差距 ⑥ 显式驳回面；跨 cell 转移随 P3 部署面）
+        return {};
+    }
+
+    // 玩家身份定位：优先按会话；缺失时经 Scene 的 Avatar 容器由实体号
+    // 反查（P0-2 强分型，不再把实体号当玩家号传）
     auto session = worldSessionManager_->find_session(header.sessionId);
-    if (!session) {
+    apollo::game::core::PlayerId player_id{};
+    if (session) {
+        player_id = session->player_id();
+    } else {
         const auto caster_entity = apollo::game::core::EntityId(msg.entityId);
-        auto* scene = world_->find_scene(defaultSceneId_);
-        if (scene != nullptr) {
-            for (const auto& player_id : scene->avatars()) {
-                const auto avatar = scene->get_avatar(player_id);
+        for (apollo::game::world::Scene* scene : world_->scenes()) {
+            if (scene == nullptr) {
+                continue;
+            }
+            for (const auto& pid : scene->avatars()) {
+                const auto avatar = scene->get_avatar(pid);
                 if (avatar && avatar->entity_id() == caster_entity) {
-                    session = worldSessionManager_->find_by_player(player_id);
+                    player_id = pid;
                     break;
                 }
             }
+            if (player_id.is_valid()) {
+                break;
+            }
         }
     }
-    if (session) {
-        worldSessionManager_->transfer_session(
-            session->session_id(),
-            worldId_,
-            defaultInstance_ ? defaultInstance_->id() : 0,
-            defaultSpaceId_,
-            false);
-        worldSessionManager_->complete_transfer(session->session_id());
+    if (!player_id.is_valid()) {
+        return {};
+    }
+
+    apollo::game::world::SceneTransferRequest transfer;
+    transfer.player_id = player_id;
+    transfer.target_scene_id = route->second;
+    // 落点：跨边界请求携带的位置（契约口径——坐标易失态不带走，以
+    // 请求落点进场；服务端权威可改）
+    transfer.landing = SceneAoi::Vec3{msg.position.x, msg.position.y, msg.position.z};
+
+    const auto outcome =
+        apollo::game::world::execute_scene_transfer(*world_, *worldSessionManager_, transfer);
+    if (!outcome.ok()) {
+        // 驳回/回滚面：单进程阶段仅可观察日志；错误下发随网关面（P1-6）
+        std::cout << "scene transfer rejected: player=" << player_id.value()
+                  << " target_scene=" << transfer.target_scene_id << " result="
+                  << apollo::game::world::to_string(outcome.result)
+                  << " at_step=" << static_cast<int>(outcome.failed_at) << std::endl;
     }
 
     return {};
@@ -569,6 +599,9 @@ void CellServer::ensureDefaultScene() {
     defaultInstance_->initialize();
     defaultInstance_->ready();
     defaultInstance_->start();
+
+    // space → scene 路由登记（P1-1 换幕目标解析；多 scene 随 descriptor 扩充）
+    spaceToScene_[defaultSpaceId_] = defaultSceneId_;
 }
 
 void CellServer::attachPlayerWorldSession(

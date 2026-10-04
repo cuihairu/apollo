@@ -36,6 +36,8 @@ public:
     // 校验场景存在 + 实例 id 进程内唯一）
     InstancePtr create_instance(std::uint64_t scene_id, const std::string& name = {});
     Instance* find_instance(Instance::InstanceId instance_id);
+    // 场景 → 实例定位（换幕准入预检用；一 scene 至多挂一实例——P1 口径）
+    Instance* find_instance_by_scene(std::uint64_t scene_id);
     [[nodiscard]] std::size_t instance_count() const noexcept;
 
     // 全场 tick（WorldHost 服务侧调用；逐 scene 六阶段）

@@ -1,7 +1,7 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633",
-  "client_hash": "477127c4430d000fbb42b24ec5c1205a449e58719e9840eabcfcdb76bba4e659",
+  "schema_hash": "3d80c285781382658fb0c42b639d16a4212ff35eba3ac0302619ec0a771d3ebf",
+  "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
   "internal_hash": "01a8d5d13e0fd0116d30f8b04bcc7e7a772803f512bf408df29343fbaeb21479",
   "contract_version": 2,
   "aliases": [
@@ -466,6 +466,64 @@
         }
       ],
       "desc": "心跳"
+    },
+    {
+      "id": 14,
+      "name": "scene_transfer",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "target_scene_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标 scene 号"
+        },
+        {
+          "name": "x",
+          "type": "float",
+          "wire_type": "float",
+          "desc": "请求落点（易失态不带走，服务端权威可改）"
+        },
+        {
+          "name": "y",
+          "type": "float",
+          "wire_type": "float",
+          "desc": ""
+        },
+        {
+          "name": "z",
+          "type": "float",
+          "wire_type": "float",
+          "desc": ""
+        }
+      ],
+      "desc": "换幕意图（P1-1；服务端定夺——准入/驳回见 scene_transfer_result）"
+    },
+    {
+      "id": 15,
+      "name": "scene_transfer_result",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "0=成功；非 0 为驳回/失败原因（errors.xml 随批扩充）"
+        },
+        {
+          "name": "target_scene_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标 scene 号（成功=新场景，失败=原样回显）"
+        }
+      ],
+      "desc": "换幕结果（含驳回码，scene_transfer 面唯一下行）"
     }
   ],
   "entities": [

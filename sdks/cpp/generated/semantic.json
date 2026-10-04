@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "477127c4430d000fbb42b24ec5c1205a449e58719e9840eabcfcdb76bba4e659",
+  "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
   "messages": [
     {
       "id": 10,
@@ -75,6 +75,48 @@
         {
           "name": "client_ms",
           "type": "timestamp"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "scene_transfer",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "target_scene_id",
+          "type": "int64"
+        },
+        {
+          "name": "x",
+          "type": "float"
+        },
+        {
+          "name": "y",
+          "type": "float"
+        },
+        {
+          "name": "z",
+          "type": "float"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "scene_transfer_result",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "code",
+          "type": "int32"
+        },
+        {
+          "name": "target_scene_id",
+          "type": "int64"
         }
       ]
     }

@@ -60,6 +60,15 @@ Instance* World::find_instance(Instance::InstanceId instance_id) {
     return it != instances_.end() ? it->second.get() : nullptr;
 }
 
+Instance* World::find_instance_by_scene(std::uint64_t scene_id) {
+    for (const auto& [_, instance] : instances_) {
+        if (instance && instance->scene_id() == scene_id) {
+            return instance.get();
+        }
+    }
+    return nullptr;
+}
+
 std::size_t World::instance_count() const noexcept {
     return instances_.size();
 }

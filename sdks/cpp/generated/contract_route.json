@@ -1,7 +1,7 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "d7be8f9eca00cc3b726a1d163ed2f438d014d6828e16480d14c5e075ae3e5633",
-  "client_hash": "477127c4430d000fbb42b24ec5c1205a449e58719e9840eabcfcdb76bba4e659",
+  "schema_hash": "3d80c285781382658fb0c42b639d16a4212ff35eba3ac0302619ec0a771d3ebf",
+  "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
   "internal_hash": "01a8d5d13e0fd0116d30f8b04bcc7e7a772803f512bf408df29343fbaeb21479",
   "contract_version": 2,
   "routes": [
@@ -36,6 +36,24 @@
       "id": 13,
       "name": "heartbeat",
       "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 14,
+      "name": "scene_transfer",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 15,
+      "name": "scene_transfer_result",
+      "dir": "S2C",
       "channel": "control",
       "domain": "client",
       "binding": "native",

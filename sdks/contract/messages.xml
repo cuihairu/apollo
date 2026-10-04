@@ -22,4 +22,14 @@
   <msg id="13" name="heartbeat" dir="C2S" channel="control" domain="client" desc="心跳">
     <field name="client_ms" type="timestamp" desc="客户端毫秒时钟"/>
   </msg>
+  <msg id="14" name="scene_transfer" dir="C2S" channel="control" domain="client" desc="换幕意图（P1-1；服务端定夺——准入/驳回见 scene_transfer_result）">
+    <field name="target_scene_id" type="int64" desc="目标 scene 号"/>
+    <field name="x" type="float" desc="请求落点（易失态不带走，服务端权威可改）"/>
+    <field name="y" type="float"/>
+    <field name="z" type="float"/>
+  </msg>
+  <msg id="15" name="scene_transfer_result" dir="S2C" channel="control" domain="client" desc="换幕结果（含驳回码，scene_transfer 面唯一下行）">
+    <field name="code" type="int32" desc="0=成功；非 0 为驳回/失败原因（errors.xml 随批扩充）"/>
+    <field name="target_scene_id" type="int64" desc="目标 scene 号（成功=新场景，失败=原样回显）"/>
+  </msg>
 </messages>

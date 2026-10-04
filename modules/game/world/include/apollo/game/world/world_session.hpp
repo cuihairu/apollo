@@ -58,8 +58,16 @@ public:
                                       Instance::InstanceId target_map_instance_id,
                                       std::uint64_t target_space_id,
                                       bool inbound = false);  // 仅 Active
-    [[nodiscard]] bool complete_transfer();                   // 仅 TransferringOut/In
-    [[nodiscard]] bool abort_transfer();                      // 仅 TransferringOut/In：清 pending、回滚进转移动前态
+    // 断线发生在转移中（P1-1，lifecycle §2.3 差距 ④）：TransferringOut/In
+    // → Suspended 挂机窗口；pending 目标保留，重连后二选一收口——
+    // complete_transfer（继续落到目标）或 abort_transfer（回滚）。
+    [[nodiscard]] bool suspend_from_transfer();
+    // 转移收口守卫（P1-1 异步化）：TransferringOut/In 直呼，或断线挂机中
+    // 带 pending 转移（suspend_from_transfer 之后）也可收口；纯 Suspended
+    // （无 pending）仍拒绝。
+    [[nodiscard]] bool can_resolve_pending_transfer() const noexcept;
+    [[nodiscard]] bool complete_transfer();
+    [[nodiscard]] bool abort_transfer();                      // 清 pending、回滚进转移动前态
     [[nodiscard]] bool begin_leave();                         // Leaving/Closed 拒绝
 
     std::uint32_t pending_world_id() const;

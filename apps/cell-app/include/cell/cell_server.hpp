@@ -11,6 +11,7 @@
 #include <memory>
 #include <thread>
 #include <atomic>
+#include <unordered_map>
 
 namespace cell {
 
@@ -80,6 +81,9 @@ private:
     // 默认场景的 space 承载 id（P0-2 起与 instance id 分离，撤销旧「space=map
     // instance」复用；P0-3 由 SceneDescriptor/Scene 统一提供）
     std::uint64_t defaultSpaceId_ = 1;
+    // space → scene 路由（P1-1 换幕目标解析；单进程单 scene 一条目，
+    // 随 scene 增补）
+    std::unordered_map<std::uint64_t, std::uint64_t> spaceToScene_;
 
     std::thread gameThread_;
 };

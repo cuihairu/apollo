@@ -96,10 +96,24 @@ bool WorldSession::begin_transfer(
     return true;
 }
 
-bool WorldSession::complete_transfer() {
+bool WorldSession::suspend_from_transfer() {
     if (state_ != WorldSessionState::TransferringOut &&
         state_ != WorldSessionState::TransferringIn) {
-        return false;  // 仅转移中可确认（同步直呼不再吞状态）
+        return false;  // 仅转移中可断线挂起（普通断线走 suspend）
+    }
+    state_ = WorldSessionState::Suspended;  // pending 保留：重连后收口
+    return true;
+}
+
+bool WorldSession::can_resolve_pending_transfer() const noexcept {
+    return state_ == WorldSessionState::TransferringOut ||
+           state_ == WorldSessionState::TransferringIn ||
+           (state_ == WorldSessionState::Suspended && pending_world_id_ != 0);
+}
+
+bool WorldSession::complete_transfer() {
+    if (!can_resolve_pending_transfer()) {
+        return false;  // 仅转移中（含断线挂机带 pending）可确认
     }
     if (pending_world_id_ != 0) {
         world_id_ = pending_world_id_;
@@ -119,9 +133,8 @@ bool WorldSession::complete_transfer() {
 }
 
 bool WorldSession::abort_transfer() {
-    if (state_ != WorldSessionState::TransferringOut &&
-        state_ != WorldSessionState::TransferringIn) {
-        return false;  // 仅转移中可回滚
+    if (!can_resolve_pending_transfer()) {
+        return false;  // 仅转移中（含断线挂机带 pending）可回滚
     }
     pending_world_id_ = 0;
     pending_map_instance_id_ = 0;

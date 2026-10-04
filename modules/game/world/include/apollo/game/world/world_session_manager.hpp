@@ -24,8 +24,11 @@ public:
                                 std::uint64_t target_space_id,
                                 bool inbound = false);
     SessionPtr complete_transfer(WorldSession::SessionId session_id);
+    // 断线发生在转移中（P1-1）：TransferringOut/In → Suspended 挂机窗口，
+    // pending 保留（重连后 complete/abort 收口）；非转移中态返回 nullptr
+    SessionPtr suspend_transfer_session(WorldSession::SessionId session_id);
     // 失败回滚分支（P0-4）：目标不可达/对端拒绝时清 pending、回到转移前态；
-    // 非转移中态返回 nullptr
+    // 非转移中态（含无 pending 的纯挂机）返回 nullptr
     SessionPtr abort_transfer(WorldSession::SessionId session_id);
     // close 流程修正（P0-4）：close_session 只置 Leaving（会话仍驻留可查，
     // 可观察窗口）；finalize_session 校验 Leaving 后置 Closed 并摘除索引

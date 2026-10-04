@@ -699,12 +699,12 @@ void testShippedContractDirectory() {
     CHECK(r.ok(), "随仓契约目录必须零错误通过");
     CHECK(r.contract.version == 2, "随仓 version 应为 2（v2 = 消息分域批）");
     CHECK(r.contract.attrs.size() >= 20, "随仓属性应 >= 20 条");
-    CHECK(r.contract.msgs.size() == 4, "随仓消息应为 4 条");
+    CHECK(r.contract.msgs.size() == 6, "随仓消息应为 6 条（P1-1 增换幕面 scene_transfer/scene_transfer_result）");
     CHECK(r.contract.errors.size() >= 6, "随仓错误码应 >= 6 条");
     for (const auto& m : r.contract.msgs) {
         CHECK(m.domain == MsgDomain::Client, "随仓消息全为 client 域: " + m.name);
         CHECK(m.binding == MsgBinding::Native,
-              "随仓四条全为框架固定消息族（native）: " + m.name);
+              "随仓六条全为框架固定消息族（native）: " + m.name);
     }
     for (const auto& a : r.contract.attrs) {
         CHECK((a.syncMask & kSyncDbBanned) == 0,

@@ -447,13 +447,17 @@ if(APOLLO_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-if(APOLLO_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
-
 if(APOLLO_ENABLE_MODULAR_LAYOUT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/CMakeLists.txt")
     add_subdirectory(modules)
+endif()
+
+if(APOLLO_BUILD_TESTS)
+    enable_testing()
+    # 次序修正（P1-1）：tests 必须在 modules/apps 之后处理——tests/CMakeLists
+    # 以 if(TARGET apollo::game_core) 等为目标守卫，先于 modules 处理时守卫
+    # 恒假，session_world_tests / base_anchor_tests / baseappmgr_tests 全部
+    # 静默失联（P0-4 生命周期用例因此从未进过 Unit 门禁）
+    add_subdirectory(tests)
 endif()
 
 if(APOLLO_BUILD_APPS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
