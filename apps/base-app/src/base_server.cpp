@@ -235,6 +235,10 @@ void BaseServer::stop() {
     }
     server_.reset();
 
+    // 关闭协议（P0-4，lifecycle §2.6）：service 停 → 脏数据 flush（占位，
+    // 真正落库接 P1 持久化）→ 保存队列 drain（SaveQueue::stop 后 worker
+    // 清空余量）→ 数据库关闭。
+    flushDirtyAnchors("shutdown_flush");
     saveQueue_->stop();
 
     if (autoSaveThread_.joinable()) {
@@ -371,10 +375,36 @@ void BaseServer::autoSaveLoop() {
     while (running_) {
         std::this_thread::sleep_for(std::chrono::milliseconds(config_.autoSaveIntervalMs));
 
-        // 定期保存缓存的数据
-        // 这里简化处理
-        std::cout << "Auto-save triggered" << std::endl;
+        // 自动保存（P0-4「Saving 真做」）：把脏锚点送入保存队列（六态
+        // Disconnected/Saving 由 flush 与回调维护），不再仅打印。
+        flushDirtyAnchors("auto_save");
     }
+}
+
+std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
+    std::size_t flushed = 0;
+    for (auto& anchor : anchorManager_->snapshot()) {
+        if (!anchor || !anchor->needs_save()) {
+            continue;
+        }
+
+        SaveTask task;
+        task.playerId = anchor->player_id();
+        // 占位载荷（P1 持久化接入前）：Anchor 不承载属性字段，走默认
+        // PlayerData；关键路径是 Saving 态 → SaveQueue → finalizeSave 回环。
+        task.data.playerId = anchor->player_id();
+        task.callback = [this, playerId = anchor->player_id()](bool success) {
+            finalizeSave(playerId, success);
+        };
+        task.createdAtMs = getCurrentTimeMs();
+
+        anchor->set_state(apollo::game::session::AnchorState::Saving);
+        saveQueue_->enqueue(task);
+        ++flushed;
+        std::cout << "Flush queued for player " << anchor->player_id() << " (" << reason
+                  << ")" << std::endl;
+    }
+    return flushed;
 }
 
 int64_t BaseServer::getCurrentTimeMs() const {

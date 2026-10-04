@@ -5,6 +5,7 @@
 #include "apollo/game/session/anchor_manager.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/protocol/socket.hpp"
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -56,6 +57,10 @@ private:
 
     // 自动保存循环
     void autoSaveLoop();
+
+    // 脏锚点 flush（P0-4）：把 needs_save() 的锚点置 Saving 并入保存队列；
+    // 关闭协议与自动保存共用。返回入队数量（占位实现，落库接 P1）。
+    std::size_t flushDirtyAnchors(const char* reason);
 
     int64_t getCurrentTimeMs() const;
     std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayerAnchor(PlayerID playerId);

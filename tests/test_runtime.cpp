@@ -8,7 +8,9 @@
 #include "apollo/core/application_lifecycle.hpp"
 #include <iostream>
 #include <memory>
+#include <string>
 #include <string_view>
+#include <vector>
 
 using namespace apollo::runtime;
 
@@ -385,6 +387,43 @@ bool test_application_host_start_with_failing_service() {
     return true;
 }
 
+// P0-4（lifecycle 审计：例外安全缺口）：start 中途失败必须逆序回滚「已启动」
+// 的 service；失败项之后未尝试的 service 不被触碰。
+bool test_application_host_start_failure_rollback() {
+    std::cout << "Running: test_application_host_start_failure_rollback..." << std::endl;
+
+    class NeverStartService : public IHostedService {
+    public:
+        std::string_view service_name() const override { return "never-start"; }
+        bool start() override { return false; }
+        void stop() override { stop_calls++; }
+        bool is_running() const override { return false; }
+        int stop_calls = 0;
+    };
+
+    ApplicationHost host;
+    auto first = std::make_shared<TestHostedService>();
+    auto failing = std::make_shared<NeverStartService>();
+    auto never_attempted = std::make_shared<TestHostedService>();
+
+    host.add_service(first);
+    host.add_service(failing);
+    host.add_service(never_attempted);
+
+    const bool started = host.start();
+
+    TEST_ASSERT(!started, "Host start fails when a service fails");
+    TEST_ASSERT(host.stop_reason() == StopReason::StartupFailed, "Stop reason is StartupFailed");
+    TEST_ASSERT(host.phase() == apollo::core::ApplicationPhase::Stopped, "Phase is Stopped");
+    TEST_ASSERT(first->stopped, "Started service rolled back (stop called)");
+    TEST_ASSERT(failing->stop_calls == 0, "Failing service itself not stopped");
+    TEST_ASSERT(!never_attempted->started, "Service after failure never attempted");
+    TEST_ASSERT(!never_attempted->stopped, "Untouched service not stopped");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_application_host_run_once() {
     std::cout << "Running: test_application_host_run_once..." << std::endl;
 
@@ -713,6 +752,7 @@ int main() {
     run(test_application_host_add_null_service);
     run(test_application_host_start);
     run(test_application_host_start_with_failing_service);
+    run(test_application_host_start_failure_rollback);
     run(test_application_host_run_once);
     run(test_application_host_stop);
     run(test_application_host_request_stop);

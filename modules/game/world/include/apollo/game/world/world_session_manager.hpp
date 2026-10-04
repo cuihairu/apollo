@@ -24,7 +24,13 @@ public:
                                 std::uint64_t target_space_id,
                                 bool inbound = false);
     SessionPtr complete_transfer(WorldSession::SessionId session_id);
-    void close_session(WorldSession::SessionId session_id);
+    // 失败回滚分支（P0-4）：目标不可达/对端拒绝时清 pending、回到转移前态；
+    // 非转移中态返回 nullptr
+    SessionPtr abort_transfer(WorldSession::SessionId session_id);
+    // close 流程修正（P0-4）：close_session 只置 Leaving（会话仍驻留可查，
+    // 可观察窗口）；finalize_session 校验 Leaving 后置 Closed 并摘除索引
+    SessionPtr close_session(WorldSession::SessionId session_id);
+    SessionPtr finalize_session(WorldSession::SessionId session_id);
     [[nodiscard]] std::size_t session_count() const;
 
 private:

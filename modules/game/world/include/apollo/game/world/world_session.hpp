@@ -49,14 +49,18 @@ public:
     void set_route_version(std::uint64_t route_version);
     std::uint64_t route_version() const;
 
-    void suspend();
-    void resume();
-    void begin_transfer(std::uint32_t target_world_id,
-                        Instance::InstanceId target_map_instance_id,
-                        std::uint64_t target_space_id,
-                        bool inbound = false);
-    void complete_transfer();
-    void begin_leave();
+    // ---- 状态机守卫迁移（P0-4，lifecycle §2 审计收口）----
+    // 全部返回 false 表示「当前态不允许该迁移」且状态不变；Closed/Leaving
+    // 是受保护态：Closed 会话不可 resume/suspend/transfer。
+    [[nodiscard]] bool suspend();   // 仅 Active
+    [[nodiscard]] bool resume();    // 仅 Suspended
+    [[nodiscard]] bool begin_transfer(std::uint32_t target_world_id,
+                                      Instance::InstanceId target_map_instance_id,
+                                      std::uint64_t target_space_id,
+                                      bool inbound = false);  // 仅 Active
+    [[nodiscard]] bool complete_transfer();                   // 仅 TransferringOut/In
+    [[nodiscard]] bool abort_transfer();                      // 仅 TransferringOut/In：清 pending、回滚进转移动前态
+    [[nodiscard]] bool begin_leave();                         // Leaving/Closed 拒绝
 
     std::uint32_t pending_world_id() const;
     Instance::InstanceId pending_map_instance_id() const;
@@ -76,6 +80,7 @@ private:
     std::uint32_t pending_world_id_ = 0;
     Instance::InstanceId pending_map_instance_id_ = 0;
     std::uint64_t pending_space_id_ = 0;
+    WorldSessionState pre_transfer_state_ = WorldSessionState::Active;  // abort 回滚落点
 };
 
 } // namespace apollo::game::world

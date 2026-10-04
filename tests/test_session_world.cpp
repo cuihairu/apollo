@@ -30,6 +30,11 @@ bool test_anchor_manager_activate_and_find() {
     anchor->mark_dirty("load");
     TEST_ASSERT(anchor->needs_save(), "dirty tracked");
 
+    // snapshot（P0-4）：flush 遍历面
+    const auto snapshot = manager.snapshot();
+    TEST_ASSERT(snapshot.size() == 1, "snapshot size");
+    TEST_ASSERT(snapshot[0] == anchor, "snapshot carries anchor");
+
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -80,8 +85,14 @@ bool test_world_session_manager_lifecycle() {
     TEST_ASSERT(session->map_instance_id() == 12, "instance assigned");
     TEST_ASSERT(session->space_id() == 21, "space assigned");
 
+    // 态校验（P0-4）：非本态迁移拒绝且状态不变
+    TEST_ASSERT(manager.resume_session(3001) == nullptr, "resume on Active rejected");
+    TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Active,
+                "state unchanged after rejected resume");
+
     manager.suspend_session(3001);
     TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Suspended, "session suspended");
+    TEST_ASSERT(manager.suspend_session(3001) == nullptr, "double suspend rejected");
 
     manager.resume_session(3001);
     TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Active, "session resumed");
@@ -92,14 +103,39 @@ bool test_world_session_manager_lifecycle() {
     TEST_ASSERT(session->pending_map_instance_id() == 13, "pending instance assigned");
     TEST_ASSERT(session->pending_space_id() == 22, "pending space assigned");
 
+    // 失败回滚分支（P0-4）：清 pending、回到转移前态
+    TEST_ASSERT(manager.abort_transfer(3001) != nullptr, "abort accepted in transferring");
+    TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Active,
+                "state rolled back to Active");
+    TEST_ASSERT(session->pending_world_id() == 0 && session->pending_map_instance_id() == 0 &&
+                    session->pending_space_id() == 0,
+                "pending cleared on abort");
+    TEST_ASSERT(manager.abort_transfer(3001) == nullptr, "abort outside transferring rejected");
+
+    // 重发转移后确认：字段切换
+    TEST_ASSERT(manager.transfer_session(3001, 10, 13, 22, false) != nullptr, "re-transfer accepted");
     manager.complete_transfer(3001);
     TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Active, "session active after transfer");
     TEST_ASSERT(session->world_id() == 10, "world switched after transfer");
     TEST_ASSERT(session->map_instance_id() == 13, "instance switched after transfer");
     TEST_ASSERT(session->space_id() == 22, "space switched after transfer");
+    TEST_ASSERT(manager.complete_transfer(3001) == nullptr, "complete outside transferring rejected");
 
-    manager.close_session(3001);
+    // close 流程修正（P0-4）：Leaving 可观察窗口——会话仍驻留可查
+    TEST_ASSERT(manager.close_session(3001) != nullptr, "close accepted");
+    TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Leaving,
+                "Leaving observable");
+    TEST_ASSERT(manager.session_count() == 1, "session retained in Leaving");
+    TEST_ASSERT(manager.find_session(3001) == session, "findable in Leaving");
+    TEST_ASSERT(manager.close_session(3001) == nullptr, "double close rejected");
+    TEST_ASSERT(manager.resume_session(3001) == nullptr, "resume on Leaving rejected");
+
+    // 显式终结：Leaving → Closed 并摘除索引
+    TEST_ASSERT(manager.finalize_session(3001) != nullptr, "finalize accepted");
+    TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Closed, "Closed terminal");
     TEST_ASSERT(manager.session_count() == 0, "session removed");
+    TEST_ASSERT(manager.find_session(3001) == nullptr, "find after finalize misses");
+    TEST_ASSERT(manager.finalize_session(3001) == nullptr, "finalize on missing rejected");
 
     std::cout << "  PASSED" << std::endl;
     return true;

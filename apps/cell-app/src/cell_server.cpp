@@ -646,6 +646,9 @@ void CellServer::detachPlayerWorldSession(protocol::SessionID session_id, Entity
 
     worldSessionManager_->suspend_session(session->session_id());
     worldSessionManager_->close_session(session->session_id());
+    // close 两段式收尾（P0-4）：Leaving 可观察窗口后显式终结（Closed 终态、
+    // 摘除双索引）；cell 侧登出无延迟清理面，窗口内即 finalize。
+    worldSessionManager_->finalize_session(session->session_id());
 }
 
 } // namespace cell

@@ -63,27 +63,44 @@ std::uint64_t WorldSession::route_version() const {
     return route_version_;
 }
 
-void WorldSession::suspend() {
+bool WorldSession::suspend() {
+    if (state_ != WorldSessionState::Active) {
+        return false;  // 仅 Active 可挂起
+    }
     state_ = WorldSessionState::Suspended;
+    return true;
 }
 
-void WorldSession::resume() {
+bool WorldSession::resume() {
+    if (state_ != WorldSessionState::Suspended && state_ != WorldSessionState::Entering) {
+        return false;  // Suspended 恢复 / Entering 激活；Closed/Leaving 拒绝
+    }
     state_ = WorldSessionState::Active;
+    return true;
 }
 
-void WorldSession::begin_transfer(
+bool WorldSession::begin_transfer(
     std::uint32_t target_world_id,
     Instance::InstanceId target_map_instance_id,
     std::uint64_t target_space_id,
     bool inbound
 ) {
+    if (state_ != WorldSessionState::Active) {
+        return false;  // 准入：仅 Active 可发起转移
+    }
     pending_world_id_ = target_world_id;
     pending_map_instance_id_ = target_map_instance_id;
     pending_space_id_ = target_space_id;
+    pre_transfer_state_ = state_;
     state_ = inbound ? WorldSessionState::TransferringIn : WorldSessionState::TransferringOut;
+    return true;
 }
 
-void WorldSession::complete_transfer() {
+bool WorldSession::complete_transfer() {
+    if (state_ != WorldSessionState::TransferringOut &&
+        state_ != WorldSessionState::TransferringIn) {
+        return false;  // 仅转移中可确认（同步直呼不再吞状态）
+    }
     if (pending_world_id_ != 0) {
         world_id_ = pending_world_id_;
     }
@@ -98,10 +115,27 @@ void WorldSession::complete_transfer() {
     pending_map_instance_id_ = 0;
     pending_space_id_ = 0;
     state_ = WorldSessionState::Active;
+    return true;
 }
 
-void WorldSession::begin_leave() {
+bool WorldSession::abort_transfer() {
+    if (state_ != WorldSessionState::TransferringOut &&
+        state_ != WorldSessionState::TransferringIn) {
+        return false;  // 仅转移中可回滚
+    }
+    pending_world_id_ = 0;
+    pending_map_instance_id_ = 0;
+    pending_space_id_ = 0;
+    state_ = pre_transfer_state_;
+    return true;
+}
+
+bool WorldSession::begin_leave() {
+    if (state_ == WorldSessionState::Leaving || state_ == WorldSessionState::Closed) {
+        return false;  // 离场不重入、Closed 终态封死
+    }
     state_ = WorldSessionState::Leaving;
+    return true;
 }
 
 std::uint32_t WorldSession::pending_world_id() const {

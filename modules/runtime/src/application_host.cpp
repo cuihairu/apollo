@@ -2,6 +2,8 @@
 #include "apollo/core/log/log_manager.hpp"
 #include "apollo/runtime/application_host.hpp"
 
+#include <iterator>
+
 namespace apollo::runtime {
 
 void ApplicationHost::add_service(std::shared_ptr<IHostedService> service) {
@@ -42,9 +44,16 @@ bool ApplicationHost::start() {
     transition_to(apollo::core::ApplicationPhase::Initialized);
     notify_initialized();
 
-    for (const auto& service : services_) {
-        if (!service->start()) {
+    for (auto it = services_.begin(); it != services_.end(); ++it) {
+        if (!(*it)->start()) {
             stop_reason_ = StopReason::StartupFailed;
+            // 失败回滚（P0-4，lifecycle 审计：例外安全缺口）：逆序停掉所有
+            // 已启动的 service（失败项之前的），不留半启动态；未尝试的
+            // service 不触碰。stop 幂等契约由实现保证。
+            for (auto rollback = std::reverse_iterator(it); rollback != services_.rend();
+                 ++rollback) {
+                (*rollback)->stop();
+            }
             transition_to(apollo::core::ApplicationPhase::Stopping);
             notify_stop();
             transition_to(apollo::core::ApplicationPhase::Stopped);
@@ -102,10 +111,10 @@ void ApplicationHost::stop() {
     transition_to(apollo::core::ApplicationPhase::Stopping);
     notify_stop();
 
+    // is_running 检查语义修正（P0-4）：不再以 is_running() 跳过——自停或
+    // 半启动的 service 也要走一遍 stop（幂等契约），否则关闭 flush 会被跳过。
     for (auto it = services_.rbegin(); it != services_.rend(); ++it) {
-        if ((*it)->is_running()) {
-            (*it)->stop();
-        }
+        (*it)->stop();
     }
 
     run_shutdown_hooks();

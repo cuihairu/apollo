@@ -17,7 +17,7 @@
 - [x] **P0-1 执行上下文基础**（concurrency C-4）：WorldHost 补编译 + 定帧抽象（tick 10Hz 口径核对收口）+ ThreadAffinity/SceneContext 标注。commit fd61ff7f。
 - [x] **P0-2 玩家对象模型三件套**（object-model O-1/O-4）：Avatar 类新建（modules/game/scene，生命周期=进场景生/出场景死，持移动/战斗权威/AOI 广播三职责）；PlayerAnchor 补 Home Zone/route 语义字段 + journal 钩子 + home_zone_id；PlayerId/EntityId 强类型分型（cell_server.cpp:559 型错不可见修复）；space_id/instance_id 分离；cell_server attach 路径改 create Avatar by scene。
 - [x] **P0-3 Scene/Instance 模型重建**（object-model O-2/O-3）：Scene 升级为运行时容器（entities_/AOI/enter-leave/tick 六阶段骨架）；拆 MapInstance→WorldSpace→Scene 三层空壳为「SceneDescriptor（Map 资产）+Scene（运行时）」，Instance=带八态状态机（Create→Initialize→Waiting→Running→Finishing→Rewarding→Draining→Destroyed）的 Scene 载体；`world.create_scene / scene.create_instance / instance.enter(player_id)` 变真实 API；world CMakeLists 补 6 源。
-- [ ] **P0-4 生命周期收口**（lifecycle 全量）：WorldSession Leaving 可观察、Closed 态校验、transfer 异步化+失败回滚；Anchor 六态与 SaveQueue 挂钩；应用关闭协议 stop→service 停→脏数据 flush（占位）→退出。
+- [x] **P0-4 生命周期收口**（lifecycle 全量）：WorldSession Leaving 可观察、Closed 态校验、transfer 异步化+失败回滚；Anchor 六态与 SaveQueue 挂钩；应用关闭协议 stop→service 停→脏数据 flush（占位）→退出。
 - [ ] **P0-5 构建基座加固**（audit §1.3/§3）：6 未编译源挂 target（world 5 源 + world_host.cpp）、零 app 断链、门禁判据改以新模块为准；game-server 链接面修复。
 - [ ] **P0-6 双树收敛预备**（无争议删除）：LogManager ODR 消除（旧头四方法并入新实现 → 删旧头与死源、game-server 改调）；死单例第一批（BattleManager legacy 头；AOIManager 保留仅测试态）。
 

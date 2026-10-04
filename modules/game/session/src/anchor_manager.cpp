@@ -29,4 +29,16 @@ std::size_t AnchorManager::anchor_count() const {
     return anchors_.size();
 }
 
+std::vector<AnchorManager::AnchorPtr> AnchorManager::snapshot() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<AnchorPtr> result;
+    result.reserve(anchors_.size());
+    for (const auto& [id, anchor] : anchors_) {
+        (void)id;
+        result.push_back(anchor);
+    }
+    return result;
+}
+
 } // namespace apollo::game::session

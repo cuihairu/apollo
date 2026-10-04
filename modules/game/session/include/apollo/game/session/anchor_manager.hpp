@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace apollo::game::session {
 
@@ -17,6 +18,9 @@ public:
     AnchorPtr find(std::uint64_t player_id) const;
     void deactivate(std::uint64_t player_id);
     [[nodiscard]] std::size_t anchor_count() const;
+    // 快照（P0-4）：关闭 flush / 自动保存遍历脏锚点用；锁内拷贝指针，
+    // 遍历期间不持锁
+    [[nodiscard]] std::vector<AnchorPtr> snapshot() const;
 
 private:
     mutable std::mutex mutex_;
