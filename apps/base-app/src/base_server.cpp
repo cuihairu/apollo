@@ -126,6 +126,11 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::activatePlayer(
     return anchor;
 }
 
+void BaseServer::set_directory_event_sink(
+    apollo::game::session::PlayerDirectory::EventSink sink) {
+    directoryEventSink_ = std::move(sink);
+}
+
 bool BaseServer::bindSession(
     PlayerID playerId,
     const apollo::game::session::SessionBinding& binding
@@ -142,6 +147,19 @@ bool BaseServer::bindSession(
     anchor->bind_session(binding);
     anchor->set_state(apollo::game::session::AnchorState::Online);
     sessionLocator_->bind(playerId, binding);
+
+    // 目录事件源①（P1-2）：会话建立上报 SessionUp 同形事件（权威目录在
+    // manager 域；sink 缺省静默，跨进程总线上报随 P3）
+    if (directoryEventSink_) {
+        apollo::game::session::PlayerDirectory::Event event;
+        event.kind = apollo::game::session::PlayerDirectory::Event::Kind::SessionUp;
+        event.player_id = playerId;
+        event.binding = binding;
+        if (anchor->world_assignment().is_assigned()) {
+            event.assignment = anchor->world_assignment();
+        }
+        directoryEventSink_(event);
+    }
     return true;
 }
 
@@ -157,6 +175,15 @@ bool BaseServer::unbindSession(protocol::SessionID sessionId) {
     }
 
     sessionLocator_->unbind_session(sessionId);
+
+    // 目录事件源①（P1-2）：会话消亡上报 SessionDown 同形事件
+    if (directoryEventSink_) {
+        apollo::game::session::PlayerDirectory::Event event;
+        event.kind = apollo::game::session::PlayerDirectory::Event::Kind::SessionDown;
+        event.player_id = *playerId;
+        event.reason = apollo::game::session::PlayerDirectory::kReasonLogout;
+        directoryEventSink_(event);
+    }
     return true;
 }
 

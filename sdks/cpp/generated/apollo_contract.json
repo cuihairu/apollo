@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "3d80c285781382658fb0c42b639d16a4212ff35eba3ac0302619ec0a771d3ebf",
+  "schema_hash": "8c442dcbbabdb333c5794904d11f625612100c3f83ebb7ebfb81f8d747ba30f2",
   "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
-  "internal_hash": "01a8d5d13e0fd0116d30f8b04bcc7e7a772803f512bf408df29343fbaeb21479",
+  "internal_hash": "072e39758ef9694d10804ff80f578c5e236f1a6df55f27fcc039907048908059",
   "contract_version": 2,
   "aliases": [
     {
@@ -524,6 +524,234 @@
         }
       ],
       "desc": "换幕结果（含驳回码，scene_transfer 面唯一下行）"
+    },
+    {
+      "id": 900,
+      "name": "session_up",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "玩家身份（强分型 id 值域）"
+        },
+        {
+          "name": "entity_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "实体号（ServerID 分段，RouteResolver 先验分流）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "连接域会话号"
+        },
+        {
+          "name": "gateway_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "接入网关"
+        },
+        {
+          "name": "zone_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "宿主 Zone"
+        },
+        {
+          "name": "anchor_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "同账号第 N 次会话（幂等+竞争裁决键）"
+        },
+        {
+          "name": "world_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "落点四件套"
+        },
+        {
+          "name": "map_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "route_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "会话登记（Zone→manager；准入通过+Zone 接受后上报）"
+    },
+    {
+      "id": 901,
+      "name": "session_down",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "anchor_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "旧 epoch 迟到事件按失效丢弃（§2 幂等）"
+        },
+        {
+          "name": "reason",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "1=登出 2=窗口满（框架保留段）"
+        }
+      ],
+      "desc": "会话消亡（Zone→manager；登出/窗口满终结）"
+    },
+    {
+      "id": 902,
+      "name": "session_moved",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "anchor_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "world_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "map_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "route_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "落点迁移（Zone→manager；换幕/换 Zone handoff）"
+    },
+    {
+      "id": 903,
+      "name": "session_kicked",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "old_anchor_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "被顶条目 epoch（epoch 失效即拒，§3-③）"
+        },
+        {
+          "name": "reason",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "3=顶号（新顶旧）"
+        }
+      ],
+      "desc": "顶号踢除（manager→旧 Zone；销毁会话实体或转托管由业务定）"
+    },
+    {
+      "id": 904,
+      "name": "directory_snapshot_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "nonce",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "对账轮次号"
+        }
+      ],
+      "desc": "对账请求（manager→Zone；30s 周期，失配走全量对表）"
+    },
+    {
+      "id": 905,
+      "name": "directory_snapshot_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "nonce",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回显轮次号"
+        },
+        {
+          "name": "player_ids",
+          "type": "int64[]",
+          "wire_type": "int64[]",
+          "desc": "该 Zone 全量在线集"
+        }
+      ],
+      "desc": "对账应答（Zone→manager；全量在线集）"
     }
   ],
   "entities": [

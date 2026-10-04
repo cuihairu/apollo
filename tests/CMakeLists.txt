@@ -747,6 +747,28 @@ if(MSVC)
 endif()
 add_test(NAME AvatarTests COMMAND avatar_tests)
 
+# ========== PlayerDirectory Online Directory Behavior Contract Tests (P1-2) ==========
+# Direct-source compilation convention (same as avatar_tests): does not depend on the
+# GAME_MODULE target—unconditional registration in the CI matrix (GAME_MODULE=OFF) still executes.
+add_executable(player_directory_tests
+    test_player_directory.cpp
+    ../modules/game/session/src/player_directory.cpp
+)
+target_include_directories(player_directory_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(player_directory_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(player_directory_tests PRIVATE ws2_32)
+    target_compile_definitions(player_directory_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(player_directory_tests PRIVATE /utf-8)
+endif()
+add_test(NAME PlayerDirectoryTests COMMAND player_directory_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

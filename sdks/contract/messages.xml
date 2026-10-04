@@ -32,4 +32,46 @@
     <field name="code" type="int32" desc="0=成功；非 0 为驳回/失败原因（errors.xml 随批扩充）"/>
     <field name="target_scene_id" type="int64" desc="目标 scene 号（成功=新场景，失败=原样回显）"/>
   </msg>
+
+  <!-- 在线目录事件族（P1-2，session-and-online-directory §8：internal 域 900+；
+       单进程阶段为进程内事件面行为契约，跨进程镜像/总线留 P3） -->
+  <msg id="900" name="session_up" dir="P2P" channel="events" domain="internal" desc="会话登记（Zone→manager；准入通过+Zone 接受后上报）">
+    <field name="player_id" type="int64" desc="玩家身份（强分型 id 值域）"/>
+    <field name="entity_id" type="int64" desc="实体号（ServerID 分段，RouteResolver 先验分流）"/>
+    <field name="session_id" type="int64" desc="连接域会话号"/>
+    <field name="gateway_id" type="int32" desc="接入网关"/>
+    <field name="zone_id" type="int32" desc="宿主 Zone"/>
+    <field name="anchor_epoch" type="int64" desc="同账号第 N 次会话（幂等+竞争裁决键）"/>
+    <field name="world_id" type="int32" desc="落点四件套"/>
+    <field name="map_id" type="int64"/>
+    <field name="instance_id" type="int64"/>
+    <field name="space_id" type="int64"/>
+    <field name="route_version" type="int64"/>
+  </msg>
+  <msg id="901" name="session_down" dir="P2P" channel="events" domain="internal" desc="会话消亡（Zone→manager；登出/窗口满终结）">
+    <field name="player_id" type="int64"/>
+    <field name="anchor_epoch" type="int64" desc="旧 epoch 迟到事件按失效丢弃（§2 幂等）"/>
+    <field name="reason" type="int32" desc="1=登出 2=窗口满（框架保留段）"/>
+  </msg>
+  <msg id="902" name="session_moved" dir="P2P" channel="events" domain="internal" desc="落点迁移（Zone→manager；换幕/换 Zone handoff）">
+    <field name="player_id" type="int64"/>
+    <field name="anchor_epoch" type="int64"/>
+    <field name="world_id" type="int32"/>
+    <field name="map_id" type="int64"/>
+    <field name="instance_id" type="int64"/>
+    <field name="space_id" type="int64"/>
+    <field name="route_version" type="int64"/>
+  </msg>
+  <msg id="903" name="session_kicked" dir="P2P" channel="events" domain="internal" desc="顶号踢除（manager→旧 Zone；销毁会话实体或转托管由业务定）">
+    <field name="player_id" type="int64"/>
+    <field name="old_anchor_epoch" type="int64" desc="被顶条目 epoch（epoch 失效即拒，§3-③）"/>
+    <field name="reason" type="int32" desc="3=顶号（新顶旧）"/>
+  </msg>
+  <msg id="904" name="directory_snapshot_request" dir="P2P" channel="events" domain="internal" desc="对账请求（manager→Zone；30s 周期，失配走全量对表）">
+    <field name="nonce" type="int64" desc="对账轮次号"/>
+  </msg>
+  <msg id="905" name="directory_snapshot_reply" dir="P2P" channel="events" domain="internal" desc="对账应答（Zone→manager；全量在线集）">
+    <field name="nonce" type="int64" desc="回显轮次号"/>
+    <field name="player_ids" type="int64[]" desc="该 Zone 全量在线集"/>
+  </msg>
 </messages>

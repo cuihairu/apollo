@@ -3,6 +3,7 @@
 #include "base/config.hpp"
 #include "base/database_service.hpp"
 #include "apollo/game/session/anchor_manager.hpp"
+#include "apollo/game/session/player_directory.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/protocol/socket.hpp"
 #include <cstddef>
@@ -35,6 +36,13 @@ public:
     bool unbindSession(protocol::SessionID sessionId);
     std::shared_ptr<apollo::game::session::PlayerAnchor> findAnchor(PlayerID playerId) const;
     std::optional<PlayerID> findPlayerBySession(protocol::SessionID sessionId) const;
+
+    // 目录事件上报源（P1-2，session-and-online-directory §2 事件源①）：
+    // bind/unbind 产 SessionUp/SessionDown 同形事件，经 sink 上报 manager
+    // 域目录（权威表在 baseappmgr）；单进程阶段 sink 由宿主注入（默认
+    // 无 sink 静默），跨进程总线上报随 P3。
+    void set_directory_event_sink(
+        apollo::game::session::PlayerDirectory::EventSink sink);
 
 private:
     // 处理数据库加载请求
@@ -71,6 +79,7 @@ private:
     std::unique_ptr<SaveQueue> saveQueue_;
     std::shared_ptr<apollo::game::session::AnchorManager> anchorManager_;
     std::shared_ptr<apollo::game::session::SessionLocator> sessionLocator_;
+    apollo::game::session::PlayerDirectory::EventSink directoryEventSink_;
 
     std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};

@@ -699,12 +699,24 @@ void testShippedContractDirectory() {
     CHECK(r.ok(), "随仓契约目录必须零错误通过");
     CHECK(r.contract.version == 2, "随仓 version 应为 2（v2 = 消息分域批）");
     CHECK(r.contract.attrs.size() >= 20, "随仓属性应 >= 20 条");
-    CHECK(r.contract.msgs.size() == 6, "随仓消息应为 6 条（P1-1 增换幕面 scene_transfer/scene_transfer_result）");
+    CHECK(r.contract.msgs.size() == 12,
+          "随仓消息应为 12 条（P1-1 换幕 2 条 + P1-2 在线目录事件族 6 条）");
     CHECK(r.contract.errors.size() >= 6, "随仓错误码应 >= 6 条");
+    // 分域分段核验（§11.3）：client 1-899 全 client 域，internal 900+ 全
+    // internal 域；binding 按通道缺省（§10.6：control/movement/attributes=
+    // native，events=reflect）——client 面为框架固定消息族（native），P1-2
+    // 目录事件族走 events 通道（reflect，进程内事件面，P3 才上总线）
     for (const auto& m : r.contract.msgs) {
-        CHECK(m.domain == MsgDomain::Client, "随仓消息全为 client 域: " + m.name);
-        CHECK(m.binding == MsgBinding::Native,
-              "随仓六条全为框架固定消息族（native）: " + m.name);
+        const bool internal = m.id >= 900;
+        CHECK((m.domain == MsgDomain::Internal) == internal,
+              "消息分域与 id 分段必须一致（1-899 client / 900+ internal）: " + m.name);
+        if (internal) {
+            CHECK(m.binding == MsgBinding::Reflect && m.channel == "events",
+                  "internal 事件族走 events 通道（reflect 缺省）: " + m.name);
+        } else {
+            CHECK(m.binding == MsgBinding::Native,
+                  "client 面全为框架固定消息族（native）: " + m.name);
+        }
     }
     for (const auto& a : r.contract.attrs) {
         CHECK((a.syncMask & kSyncDbBanned) == 0,

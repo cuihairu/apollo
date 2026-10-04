@@ -27,7 +27,7 @@
 > 单进程闭环优先，不增加进程。出口判据：① 两 scene 间换幕端到端；② 在线目录行为契约单测；③ AOI 双实现删除后测试覆盖等价；④ 玩家档案写盘→重启→读回（integration）；⑤ 断线→wait→重连→Avatar 重建。
 
 - [x] **P1-1 Scene Transfer/换幕**：prepare→detach→attach→state sync→resume 协议 + 失败回滚 + 断线处理；transfer 协议消息 + apollo_gen 重生成 + golden check。
-- [ ] **P1-2 PlayerDirectory/在线目录**：baseappmgr 目录语义（Anchor 挂 HomeZone、Session 挂 gateway）、顶号预裁、事件族（SessionUp/Down/Moved/Kicked）、30s 对账、anchor_epoch；消息面+事件面行为契约完整（跨进程镜像留 P3）。
+- [x] **P1-2 PlayerDirectory/在线目录**：modules/game/session 新 PlayerDirectory（条目=SessionBinding+WorldAssignment+EntryState+anchor_epoch+deadline_tick+zone_id；顶号新顶旧+kReasonKickedByRelogin；Suspended 保活窗口+sweep 到期终结；resume (session_id, epoch) 双锚校验；reconcile/snapshot_reset 对账；SessionUp/Down/Moved/Kicked 事件族经 EventSink）；baseappmgr/base-app 接线（directory_ 权威表 + 事件 sink 日志；bind/unbind 产同形事件）；契约 internal 域事件族 900-905（session_up/down/moved/kicked + snapshot request/reply，dir=P2P，events 通道 reflect）+ apollo_gen 重生成 + golden check；行为契约单测 7 组（test_player_directory.cpp，直编源惯例三平台 Unit 门禁真实执行）。跨进程镜像留 P3。
 - [ ] **P1-3 AOI 收敛与接入 Scene**：两套合一（选中一支代持）+ ENTER/SYNC 事件分发 + ViewerState 骨架；修 GetOrCreateCell 范围查询副作用；Scene 拥有 AOI 实例、viewer set 驱动下发。
 - [ ] **P1-4 持久化栈收敛+最小落盘**：五套→一套（删 9 重复实现 + 4 #ifdef 死文件 + 2 空 wrapper）；SqlTemplate 补实现（B4 链接死局）、table_loader.h:22 语法修复、DistributedLock 死代码删除；最小真链路（Anchor dirty → SaveQueue 落盘 → load 校验；fromJson/toJson 对称）；write-behind journal 骨架 + 崩溃回放；「player_+id」bootstrap 恶龙清账。
 - [ ] **P1-5 Recovery**：「必须持久化/可重算/可丢」三档清单；进程重启回放 + 场景重开 + 会话重连三路径；启动序列 restore→admission→ready。

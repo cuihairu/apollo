@@ -10,6 +10,15 @@ namespace baseappmgr {
 BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
     : host_(std::move(host))
     , port_(port) {
+    // 目录事件面（P1-2）：单进程阶段事件落日志（可观察）；跨进程总线
+    // （InterServerLink 投影/镜像）留 P3。
+    directory_.set_event_sink([](const apollo::game::session::PlayerDirectory::Event& event) {
+        static const char* kKindNames[] = {"SessionUp", "SessionDown", "SessionMoved",
+                                           "SessionKicked"};
+        std::cout << "[directory] " << kKindNames[static_cast<int>(event.kind)]
+                  << " player=" << event.player_id << " epoch=" << event.anchor_epoch
+                  << " zone=" << event.zone_id << " reason=" << event.reason << std::endl;
+    });
 }
 
 BaseAppMgr::~BaseAppMgr() {
@@ -24,8 +33,13 @@ bool BaseAppMgr::assignWorld(
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(assignmentsMutex_);
-    assignments_[playerId] = assignment;
+    {
+        std::lock_guard<std::mutex> lock(assignmentsMutex_);
+        assignments_[playerId] = assignment;
+    }
+    // 目录事件面（P1-2）：落点迁移产 SessionMoved；玩家尚无条目时目录
+    // 无动作（SessionUp 由 bindSession 登记锚点承担）
+    directory_.moved(playerId, assignment);
     return true;
 }
 
@@ -39,6 +53,18 @@ bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::Ses
         return false;
     }
     sessionLocator_.bind(playerId, binding);
+
+    // 目录登记锚点（P1-2）：条目级真值 + SessionUp 事件；同账号已有条目
+    // 时目录内完成顶号（SessionKicked 事件面）
+    apollo::game::session::WorldAssignment assignment;
+    {
+        std::lock_guard<std::mutex> lock(assignmentsMutex_);
+        const auto it = assignments_.find(playerId);
+        if (it != assignments_.end()) {
+            assignment = it->second;
+        }
+    }
+    directory_.session_up(playerId, binding, assignment);
     return true;
 }
 
@@ -49,7 +75,12 @@ bool BaseAppMgr::unbindSession(protocol::SessionID sessionId) {
     }
     sessionLocator_.unbind_session(sessionId);
     sessionLocator_.unbind_player(*playerId);
+    directory_.session_down(*playerId);
     return true;
+}
+
+bool BaseAppMgr::reconcileDirectory(const std::vector<PlayerID>& reported_online) const {
+    return directory_.reconcile(reported_online);
 }
 
 std::optional<PlayerID> BaseAppMgr::findPlayerBySession(protocol::SessionID sessionId) const {

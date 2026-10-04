@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo/game/session/player_directory.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 #include "apollo/protocol/socket.hpp"
@@ -53,6 +54,16 @@ public:
         protocol::SessionID sessionId = 0
     ) const;
 
+    // ---- 在线目录（P1-2：目录语义升级——行为契约见 PlayerDirectory）----
+    // 条目级真值在 directory_；SessionLocator/assignments_ 保留为路由投影
+    // （ResolveRoute 消费面不变）。顶号预裁、事件族、对账、anchor_epoch
+    // 全部由目录承载；跨进程镜像留 P3。
+    const apollo::game::session::PlayerDirectory& directory() const { return directory_; }
+
+    // 对账（30s 周期，owner 驱动）：上报在线集与目录比对；失配走快照重置。
+    // 返回是否一致（P3 起由周期定时器驱动，单进程阶段由测试/运维触发）。
+    bool reconcileDirectory(const std::vector<PlayerID>& reported_online) const;
+
 private:
     std::vector<uint8_t> handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request);
@@ -67,9 +78,11 @@ private:
 
     // 目录：session→binding 双向映射复用 SessionLocator（自带锁）；
     // player→assignment 目录为本进程独有，独立互斥锁保护。
+    // P1-2：条目级真值升级为 PlayerDirectory（顶号/事件族/epoch/对账）。
     apollo::game::session::SessionLocator sessionLocator_;
     mutable std::mutex assignmentsMutex_;
     std::unordered_map<PlayerID, apollo::game::session::WorldAssignment> assignments_;
+    apollo::game::session::PlayerDirectory directory_;
 };
 
 } // namespace baseappmgr
