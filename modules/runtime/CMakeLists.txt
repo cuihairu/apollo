@@ -3,6 +3,7 @@ find_package(Drogon CONFIG QUIET)
 
 add_library(apollo_runtime STATIC
     src/application_host.cpp
+    src/world_host.cpp
     src/runtime_manifest.cpp
 )
 add_library(apollo::runtime ALIAS apollo_runtime)

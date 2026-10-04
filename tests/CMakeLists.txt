@@ -691,4 +691,20 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_compile_definitions(game_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 	    endif()
 	    add_test(NAME GameTests COMMAND game_tests)
+	# ========== World Host Tests (P0-1) ==========
+	# 定帧/追赶/跳拍语义（clock-and-time §3 口径）+ ThreadAffinity 执行上下文标注
+	add_executable(world_host_tests
+	    test_world_host.cpp
+	)
+	target_include_directories(world_host_tests PRIVATE
+	    ${CMAKE_SOURCE_DIR}/modules/core/include
+	    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+	)
+	target_link_libraries(world_host_tests PRIVATE apollo::runtime)
+	if(WIN32)
+	    target_link_libraries(world_host_tests PRIVATE ws2_32)
+	    target_compile_options(world_host_tests PRIVATE /utf-8)
+	    target_compile_definitions(world_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	endif()
+	add_test(NAME WorldHostTests COMMAND world_host_tests)
 	endif()
