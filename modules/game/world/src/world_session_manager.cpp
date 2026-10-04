@@ -47,6 +47,59 @@ WorldSessionManager::SessionPtr WorldSessionManager::suspend_session(WorldSessio
     return it->second;
 }
 
+WorldSessionManager::SessionPtr WorldSessionManager::suspend_session(
+    WorldSession::SessionId session_id, std::uint64_t now_tick, std::uint64_t window_ticks,
+    std::uint64_t resume_token) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const auto it = sessions_.find(session_id);
+    if (it == sessions_.end()) {
+        return nullptr;
+    }
+    if (!it->second->suspend_window(now_tick, window_ticks, resume_token)) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+WorldSessionManager::SessionPtr WorldSessionManager::resume_session(
+    WorldSession::SessionId session_id, std::uint64_t resume_token, std::uint64_t now_tick) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const auto it = sessions_.find(session_id);
+    if (it == sessions_.end()) {
+        return nullptr;
+    }
+    if (!it->second->resume(resume_token, now_tick)) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+std::vector<WorldSession::SessionId> WorldSessionManager::sweep_suspended(
+    std::uint64_t now_tick) {
+    std::vector<WorldSession::SessionId> expired;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& [session_id, session] : sessions_) {
+            if (session && session->state() == WorldSessionState::Suspended &&
+                session->resume_window_expired(now_tick)) {
+                expired.push_back(session_id);
+            }
+        }
+    }
+
+    // 窗口满终结走 P0-4 收口链：close（Leaving）→ finalize（Closed+摘除索引）
+    std::vector<WorldSession::SessionId> swept;
+    swept.reserve(expired.size());
+    for (const auto session_id : expired) {
+        if (close_session(session_id) && finalize_session(session_id)) {
+            swept.push_back(session_id);
+        }
+    }
+    return swept;
+}
+
 WorldSessionManager::SessionPtr WorldSessionManager::resume_session(WorldSession::SessionId session_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 

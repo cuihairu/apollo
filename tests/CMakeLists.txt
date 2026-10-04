@@ -785,6 +785,36 @@ if(MSVC)
 endif()
 add_test(NAME RecoveryTests COMMAND recovery_tests)
 
+# ========== Reconnect Tests (P1-6) ==========
+# 断线挂机窗口 + resume_token 双键校验 + 窗口满 sweep + Avatar 重建
+# （P1 出口判据⑤：断线→wait→重连→Avatar 重建）。
+add_executable(reconnect_tests
+    test_reconnect.cpp
+    ../modules/game/core/src/entity.cpp
+    ../modules/game/world/src/scene.cpp
+    ../modules/game/world/src/scene_aoi.cpp
+    ../modules/game/world/src/viewer_state.cpp
+    ../modules/game/world/src/avatar.cpp
+    ../modules/game/world/src/world_session.cpp
+    ../modules/game/world/src/world_session_manager.cpp
+    ../modules/game/session/src/player_anchor.cpp
+)
+target_include_directories(reconnect_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+)
+target_link_libraries(reconnect_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(reconnect_tests PRIVATE ws2_32)
+    target_compile_definitions(reconnect_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(reconnect_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ReconnectTests COMMAND reconnect_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

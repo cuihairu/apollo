@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "8c442dcbbabdb333c5794904d11f625612100c3f83ebb7ebfb81f8d747ba30f2",
+  "schema_hash": "f3a05a01a6ec8c4bee64e28a1d377854c679840bc5001b3a1ab21b5ab9c75028",
   "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
-  "internal_hash": "072e39758ef9694d10804ff80f578c5e236f1a6df55f27fcc039907048908059",
+  "internal_hash": "435d2c1d3602d899016386ff7ae549c0711a96f94e1adbe0817bcafa12300afa",
   "contract_version": 2,
   "routes": [
     {
@@ -112,6 +112,33 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "directory_snapshot_reply"
+    },
+    {
+      "id": 906,
+      "name": "gateway_client_disconnect",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "gateway_client_disconnect"
+    },
+    {
+      "id": 907,
+      "name": "session_resume_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "session_resume_request"
+    },
+    {
+      "id": 908,
+      "name": "session_resume_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "session_resume_reply"
     }
   ]
 }

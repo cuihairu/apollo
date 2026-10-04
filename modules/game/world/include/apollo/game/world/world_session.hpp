@@ -70,6 +70,20 @@ public:
     [[nodiscard]] bool abort_transfer();                      // 清 pending、回滚进转移动前态
     [[nodiscard]] bool begin_leave();                         // Leaving/Closed 拒绝
 
+    // ---- 断线挂机窗口（P1-6，lifecycle §2.4）----
+    // suspend() 的带窗形态：deadline = now + window（tick 域由调用方定，
+    // 世界侧不依赖真实时钟）；resume_token 与窗口同源 TTL——token 死即
+    // 窗口死，双键 (session_id, token) 校验（与目录 resume (session_id,
+    // anchor_epoch) 同形）。窗口 sweep 在 WorldSessionManager。
+    [[nodiscard]] bool suspend_window(std::uint64_t now_tick, std::uint64_t window_ticks,
+                                      std::uint64_t resume_token);
+    // 窗口内 resume：仅 Suspended 且 token 匹配且未过期
+    [[nodiscard]] bool resume(std::uint64_t resume_token, std::uint64_t now_tick);
+    // 窗口是否已满（sweep 判据；无窗口=deadline 0 永不满）
+    [[nodiscard]] bool resume_window_expired(std::uint64_t now_tick) const noexcept;
+    [[nodiscard]] std::uint64_t resume_token() const noexcept;
+    [[nodiscard]] std::uint64_t resume_deadline_tick() const noexcept;
+
     std::uint32_t pending_world_id() const;
     Instance::InstanceId pending_map_instance_id() const;
     std::uint64_t pending_space_id() const;
@@ -89,6 +103,8 @@ private:
     Instance::InstanceId pending_map_instance_id_ = 0;
     std::uint64_t pending_space_id_ = 0;
     WorldSessionState pre_transfer_state_ = WorldSessionState::Active;  // abort 回滚落点
+    std::uint64_t resume_deadline_tick_ = 0;  // 0 = 无窗口
+    std::uint64_t resume_token_ = 0;
 };
 
 } // namespace apollo::game::world

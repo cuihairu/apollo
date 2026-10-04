@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace apollo::game::world {
 
@@ -34,6 +35,18 @@ public:
     // 可观察窗口）；finalize_session 校验 Leaving 后置 Closed 并摘除索引
     SessionPtr close_session(WorldSession::SessionId session_id);
     SessionPtr finalize_session(WorldSession::SessionId session_id);
+
+    // ---- 断线挂机窗口（P1-6，lifecycle §2.4）----
+    // 窗口化挂机：resume_token 与窗口同源 TTL（deadline = now + window）
+    SessionPtr suspend_session(WorldSession::SessionId session_id, std::uint64_t now_tick,
+                               std::uint64_t window_ticks, std::uint64_t resume_token);
+    // 窗口内 resume：双键 (session_id, token) 校验 + 未过期
+    SessionPtr resume_session(WorldSession::SessionId session_id, std::uint64_t resume_token,
+                              std::uint64_t now_tick);
+    // sweep：窗口满的 Suspended 会话终结（close→finalize→摘除索引）；
+    // 返回被终结的 session_id（调用方据此移除场景内 Avatar）
+    std::vector<WorldSession::SessionId> sweep_suspended(std::uint64_t now_tick);
+
     [[nodiscard]] std::size_t session_count() const;
 
 private:

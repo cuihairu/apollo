@@ -79,6 +79,24 @@ bool Scene::enter(const AvatarPtr& avatar, const SceneAoi::Vec3& position) {
     return true;
 }
 
+bool Scene::suspend_avatar(apollo::game::core::PlayerId player_id) {
+    const auto avatar = get_avatar(player_id);
+    if (!avatar || avatar->state() != AvatarState::Active) {
+        return false;
+    }
+    avatar->suspend();
+    return true;
+}
+
+bool Scene::resume_avatar(apollo::game::core::PlayerId player_id) {
+    const auto avatar = get_avatar(player_id);
+    if (!avatar || avatar->state() != AvatarState::Suspended) {
+        return false;
+    }
+    avatar->resume();
+    return true;
+}
+
 bool Scene::leave(apollo::game::core::PlayerId player_id) {
     auto it = avatars_.find(player_id.value());
     if (it == avatars_.end()) {

@@ -699,8 +699,8 @@ void testShippedContractDirectory() {
     CHECK(r.ok(), "随仓契约目录必须零错误通过");
     CHECK(r.contract.version == 2, "随仓 version 应为 2（v2 = 消息分域批）");
     CHECK(r.contract.attrs.size() >= 20, "随仓属性应 >= 20 条");
-    CHECK(r.contract.msgs.size() == 12,
-          "随仓消息应为 12 条（P1-1 换幕 2 条 + P1-2 在线目录事件族 6 条）");
+    CHECK(r.contract.msgs.size() == 15,
+          "随仓消息应为 15 条（P1-1 换幕 2 + P1-2 目录事件族 6 + P1-6 重连/保活 3 + 框架 4）");
     CHECK(r.contract.errors.size() >= 6, "随仓错误码应 >= 6 条");
     // 分域分段核验（§11.3）：client 1-899 全 client 域，internal 900+ 全
     // internal 域；binding 按通道缺省（§10.6：control/movement/attributes=

@@ -74,4 +74,22 @@
     <field name="nonce" type="int64" desc="回显轮次号"/>
     <field name="player_ids" type="int64[]" desc="该 Zone 全量在线集"/>
   </msg>
+
+  <!-- 重连/保活窗口事件族（P1-6，lifecycle §2.4：internal 域 900+；
+       断线挂机窗口 + resume_token 同源 TTL；「纯文本 disconnect」消灭） -->
+  <msg id="906" name="gateway_client_disconnect" dir="P2P" channel="events" domain="internal" desc="客户端断线（gateway→Zone；替代历史纯文本断线通知）">
+    <field name="session_id" type="int64" desc="连接域会话号"/>
+    <field name="player_id" type="int64"/>
+    <field name="normal_close" type="int32" desc="1=正常退出 0=异常掉线"/>
+  </msg>
+  <msg id="907" name="session_resume_request" dir="P2P" channel="events" domain="internal" desc="重连恢复请求（gateway→Zone；窗口内 token 校验通过即恢复）">
+    <field name="session_id" type="int64"/>
+    <field name="player_id" type="int64"/>
+    <field name="resume_token" type="int64" desc="挂机时下发，TTL=窗口时长（同源）"/>
+  </msg>
+  <msg id="908" name="session_resume_reply" dir="P2P" channel="events" domain="internal" desc="重连恢复应答（Zone→gateway；拒绝即走完整重登，Avatar 重建）">
+    <field name="session_id" type="int64"/>
+    <field name="player_id" type="int64"/>
+    <field name="accepted" type="int32" desc="1=恢复 0=拒绝（token 死/窗口满/会话已终结）"/>
+  </msg>
 </messages>

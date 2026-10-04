@@ -76,7 +76,44 @@ bool WorldSession::resume() {
         return false;  // Suspended 恢复 / Entering 激活；Closed/Leaving 拒绝
     }
     state_ = WorldSessionState::Active;
+    resume_deadline_tick_ = 0;
+    resume_token_ = 0;
     return true;
+}
+
+bool WorldSession::suspend_window(std::uint64_t now_tick, std::uint64_t window_ticks,
+                                  std::uint64_t resume_token) {
+    if (!suspend()) {
+        return false;
+    }
+    resume_deadline_tick_ = now_tick + window_ticks;
+    resume_token_ = resume_token;
+    return true;
+}
+
+bool WorldSession::resume(std::uint64_t resume_token, std::uint64_t now_tick) {
+    if (state_ != WorldSessionState::Suspended) {
+        return false;
+    }
+    if (resume_token_ == 0 || resume_token != resume_token_) {
+        return false;  // token 死/不匹配（双键失配即拒）
+    }
+    if (resume_window_expired(now_tick)) {
+        return false;  // 窗口满（终结由 sweep 收口）
+    }
+    return resume();
+}
+
+bool WorldSession::resume_window_expired(std::uint64_t now_tick) const noexcept {
+    return resume_deadline_tick_ != 0 && now_tick > resume_deadline_tick_;
+}
+
+std::uint64_t WorldSession::resume_token() const noexcept {
+    return resume_token_;
+}
+
+std::uint64_t WorldSession::resume_deadline_tick() const noexcept {
+    return resume_deadline_tick_;
 }
 
 bool WorldSession::begin_transfer(
