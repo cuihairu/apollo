@@ -343,7 +343,7 @@ void LoginServer::start() {
 
             default:
                 protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR_MESSAGE);
+                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
                 err.message = "Unknown message type";
                 return protocol::MessageCodec::encode(err, header.sessionId);
         }

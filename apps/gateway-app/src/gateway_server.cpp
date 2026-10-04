@@ -1,4 +1,5 @@
 #include "gateway/gateway_server.hpp"
+#include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <iostream>
 #include <algorithm>
@@ -33,13 +34,11 @@ std::unique_ptr<netproto::Channel> connectBackendChannel(const std::string& url)
 }
 
 std::vector<uint8_t> encodeDisconnectMessage(SessionID sessionId, PlayerID playerId, bool normalClose) {
-    std::ostringstream stream;
-    stream << "gateway_client_disconnect"
-           << "|sessionId=" << sessionId
-           << "|playerId=" << playerId
-           << "|normalClose=" << (normalClose ? 1 : 0);
-    const auto payload = stream.str();
-    return std::vector<uint8_t>(payload.begin(), payload.end());
+    apollo::protocol::GatewayClientDisconnect message;
+    message.sessionId = sessionId;
+    message.playerId = playerId;
+    message.normalClose = normalClose;
+    return apollo::protocol::MessageCodec::encode(message);
 }
 
 bool sendPayload(netproto::Channel* channel, const std::vector<uint8_t>& message) {

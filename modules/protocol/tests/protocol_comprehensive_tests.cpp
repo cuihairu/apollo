@@ -24,7 +24,7 @@ TEST(NngWrapperTest, UrlCreation) {
 //==============================================================================
 
 TEST(MessageHeaderTest, SizeCheck) {
-    EXPECT_EQ(sizeof(MessageHeader), 26); // magic(4) + version(2) + type(2) + length(4) + sequence(8) + sessionId(8)
+    EXPECT_EQ(sizeof(MessageHeader), 28); // magic(4) + version(2) + type(2) + length(4) + sequence(8) + sessionId(8)
 }
 
 TEST(MessageHeaderTest, DefaultValues) {

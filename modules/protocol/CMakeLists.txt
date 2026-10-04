@@ -43,6 +43,12 @@ target_link_libraries(apollo_protocol
         apollo::base
 )
 
+# nlohmann/json（codec.cpp 实现依赖），与根 CMakeLists 同口径
+find_package(nlohmann_json CONFIG QUIET)
+if(nlohmann_json_FOUND)
+    target_link_libraries(apollo_protocol PRIVATE nlohmann_json::nlohmann_json)
+endif()
+
 # 链接 NNG
 if(TARGET nng::nng)
     target_link_libraries(apollo_protocol PUBLIC nng::nng)

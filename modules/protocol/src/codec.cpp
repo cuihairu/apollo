@@ -35,6 +35,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const LoginResponse& msg) {
     j["playerId"] = msg.playerId;
     j["gatewayHost"] = msg.gatewayHost;
     j["gatewayPort"] = msg.gatewayPort;
+    j["loginTicket"] = msg.loginTicket;
     j["errorMessage"] = msg.errorMessage;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
@@ -48,6 +49,7 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, LoginResponse& m
     msg.playerId = j.value("playerId", PlayerID(0));
     msg.gatewayHost = j.value("gatewayHost", "");
     msg.gatewayPort = j.value("gatewayPort", uint16_t(0));
+    msg.loginTicket = j.value("loginTicket", "");
     msg.errorMessage = j.value("errorMessage", "");
 }
 
@@ -56,19 +58,20 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, LoginResponse& m
 //==============================================================================
 
 std::vector<uint8_t> MessageCodec::encodeBody(const GatewayAssignRequest& msg) {
-    std::vector<uint8_t> result(sizeof(PlayerID) + sizeof(SessionID));
-    size_t offset = 0;
-    std::memcpy(result.data() + offset, &msg.playerId, sizeof(PlayerID)); offset += sizeof(PlayerID);
-    std::memcpy(result.data() + offset, &msg.sessionId, sizeof(SessionID));
-    return result;
+    nlohmann::json j;
+    j["playerId"] = msg.playerId;
+    j["sessionId"] = msg.sessionId;
+    j["loginTicket"] = msg.loginTicket;
+    std::string str = j.dump();
+    return std::vector<uint8_t>(str.begin(), str.end());
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, GatewayAssignRequest& msg) {
-    const uint8_t* ptr = data.data();
-    const uint8_t* end = data.data() + data.size();
-    if (ptr + sizeof(PlayerID) + sizeof(SessionID) > end) throw std::runtime_error("Invalid data size");
-    std::memcpy(&msg.playerId, ptr, sizeof(PlayerID)); ptr += sizeof(PlayerID);
-    std::memcpy(&msg.sessionId, ptr, sizeof(SessionID));
+    std::string str(data.begin(), data.end());
+    auto j = nlohmann::json::parse(str);
+    msg.playerId = j.value("playerId", PlayerID(0));
+    msg.sessionId = j.value("sessionId", SessionID(0));
+    msg.loginTicket = j.value("loginTicket", "");
 }
 
 std::vector<uint8_t> MessageCodec::encodeBody(const GatewayAssignResponse& msg) {
@@ -77,6 +80,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const GatewayAssignResponse& msg) 
     j["gatewayHost"] = msg.gatewayHost;
     j["gatewayPort"] = msg.gatewayPort;
     j["token"] = msg.token;
+    j["errorMessage"] = msg.errorMessage;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
 }
@@ -88,6 +92,29 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, GatewayAssignRes
     msg.gatewayHost = j.value("gatewayHost", "");
     msg.gatewayPort = j.value("gatewayPort", uint16_t(0));
     msg.token = j.value("token", "");
+    msg.errorMessage = j.value("errorMessage", "");
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const GatewayClientDisconnect& msg) {
+    std::vector<uint8_t> result(sizeof(SessionID) + sizeof(PlayerID) + sizeof(uint8_t));
+    size_t offset = 0;
+    std::memcpy(result.data() + offset, &msg.sessionId, sizeof(SessionID)); offset += sizeof(SessionID);
+    std::memcpy(result.data() + offset, &msg.playerId, sizeof(PlayerID)); offset += sizeof(PlayerID);
+    const uint8_t normalClose = msg.normalClose ? 1 : 0;
+    std::memcpy(result.data() + offset, &normalClose, sizeof(uint8_t));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, GatewayClientDisconnect& msg) {
+    constexpr size_t kBodySize = sizeof(SessionID) + sizeof(PlayerID) + sizeof(uint8_t);
+    const uint8_t* ptr = data.data();
+    const uint8_t* end = data.data() + data.size();
+    if (ptr + kBodySize > end) throw std::runtime_error("Invalid data size");
+    std::memcpy(&msg.sessionId, ptr, sizeof(SessionID)); ptr += sizeof(SessionID);
+    std::memcpy(&msg.playerId, ptr, sizeof(PlayerID)); ptr += sizeof(PlayerID);
+    uint8_t normalClose = 0;
+    std::memcpy(&normalClose, ptr, sizeof(uint8_t));
+    msg.normalClose = normalClose != 0;
 }
 
 //==============================================================================
@@ -126,6 +153,16 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCrossBorder&
     std::memcpy(&msg.fromSpace, ptr + offset, sizeof(SpaceID)); offset += sizeof(SpaceID);
     std::memcpy(&msg.toSpace, ptr + offset, sizeof(SpaceID)); offset += sizeof(SpaceID);
     std::memcpy(&msg.position, ptr + offset, sizeof(Position));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const CellCrossBorder& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID) + sizeof(SpaceID) * 2 + sizeof(Position));
+    size_t offset = 0;
+    std::memcpy(result.data() + offset, &msg.entityId, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.fromSpace, sizeof(SpaceID)); offset += sizeof(SpaceID);
+    std::memcpy(result.data() + offset, &msg.toSpace, sizeof(SpaceID)); offset += sizeof(SpaceID);
+    std::memcpy(result.data() + offset, &msg.position, sizeof(Position));
+    return result;
 }
 
 std::vector<uint8_t> MessageCodec::encodeBody(const CellEntityMove& msg) {

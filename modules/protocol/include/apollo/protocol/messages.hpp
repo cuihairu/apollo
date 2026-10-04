@@ -141,6 +141,7 @@ struct LoginResponse {
     PlayerID playerId;
     std::string gatewayHost;
     uint16_t gatewayPort;
+    std::string loginTicket;  // 客户端凭此向 gateway 换取准入
     std::string errorMessage;
 
     static constexpr MessageType TYPE = MessageType::LOGIN_RESPONSE;
@@ -153,6 +154,7 @@ struct LoginResponse {
 struct GatewayAssignRequest {
     PlayerID playerId;
     SessionID sessionId;
+    std::string loginTicket;  // 准入校验票据，随 RPC 上送 loginApp
 
     static constexpr MessageType TYPE = MessageType::GATEWAY_ASSIGN_REQUEST;
 };
@@ -162,6 +164,7 @@ struct GatewayAssignResponse {
     std::string gatewayHost;
     uint16_t gatewayPort;
     std::string token;
+    std::string errorMessage;
 
     static constexpr MessageType TYPE = MessageType::GATEWAY_ASSIGN_RESPONSE;
 };

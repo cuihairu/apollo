@@ -59,8 +59,10 @@ public:
     static std::vector<uint8_t> encodeBody(const LoginResponse& msg);
     static std::vector<uint8_t> encodeBody(const GatewayAssignRequest& msg);
     static std::vector<uint8_t> encodeBody(const GatewayAssignResponse& msg);
+    static std::vector<uint8_t> encodeBody(const GatewayClientDisconnect& msg);
     static std::vector<uint8_t> encodeBody(const CellCreateEntity& msg);
     static std::vector<uint8_t> encodeBody(const CellEntityMove& msg);
+    static std::vector<uint8_t> encodeBody(const CellCrossBorder& msg);
     static std::vector<uint8_t> encodeBody(const CombatSkillCast& msg);
     static std::vector<uint8_t> encodeBody(const CombatDamage& msg);
     static std::vector<uint8_t> encodeBody(const ChatMessage& msg);
@@ -125,6 +127,7 @@ public:
     static void decodeBody(const std::vector<uint8_t>& data, LoginResponse& msg);
     static void decodeBody(const std::vector<uint8_t>& data, GatewayAssignRequest& msg);
     static void decodeBody(const std::vector<uint8_t>& data, GatewayAssignResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, GatewayClientDisconnect& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CellCreateEntity& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CellDestroyEntity& msg);
     static void decodeBody(const std::vector<uint8_t>& data, CellEntityMove& msg);

@@ -1,6 +1,7 @@
 #include "base/base_server.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 
+#include <filesystem>
 #include <iostream>
 
 namespace {
@@ -22,6 +23,17 @@ bool test_base_server_anchor_lifecycle() {
     base::BaseConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
+    config.dataDir = "base_anchor_test_data";  // 隔离落盘目录
+    std::filesystem::create_directories(config.dataDir);
+
+    // P1-4 口径：loadPlayer 只读已存在档案，不再凭空 bootstrap——先播种档案
+    base::PlayerData seed;
+    seed.playerId = 1001;
+    seed.username = "anchor-test";
+    {
+        base::DatabaseService seeder(config);
+        TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
+    }
 
     base::BaseServer server(config);
 

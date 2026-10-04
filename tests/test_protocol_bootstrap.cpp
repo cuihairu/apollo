@@ -100,8 +100,8 @@ bool test_player_resolve_route_codec() {
     return true;
 }
 
-bool test_login_ticket_codec() {
-    std::cout << "Running: test_login_ticket_codec..." << std::endl;
+bool test_login_assign_codec() {
+    std::cout << "Running: test_login_assign_codec..." << std::endl;
 
     apollo::protocol::LoginResponse loginResponse;
     loginResponse.success = true;
@@ -118,6 +118,10 @@ bool test_login_ticket_codec() {
     const auto decodedLogin =
         apollo::protocol::MessageCodec::decodeBody<apollo::protocol::LoginResponse>(loginBody);
 
+    TEST_ASSERT(decodedLogin.success, "success decoded from login response");
+    TEST_ASSERT(decodedLogin.sessionId == 42, "session id decoded from login response");
+    TEST_ASSERT(decodedLogin.gatewayHost == "127.0.0.1", "gateway host decoded");
+    TEST_ASSERT(decodedLogin.gatewayPort == 8888, "gateway port decoded");
     TEST_ASSERT(decodedLogin.loginTicket == "ticket-abc123", "login ticket decoded from login response");
 
     apollo::protocol::GatewayAssignRequest assignRequest;
@@ -132,7 +136,37 @@ bool test_login_ticket_codec() {
     const auto decodedAssign =
         apollo::protocol::MessageCodec::decodeBody<apollo::protocol::GatewayAssignRequest>(assignBody);
 
+    TEST_ASSERT(decodedAssign.playerId == 1001, "player id decoded from gateway assign request");
+    TEST_ASSERT(decodedAssign.sessionId == 42, "session id decoded from gateway assign request");
     TEST_ASSERT(decodedAssign.loginTicket == "ticket-abc123", "login ticket decoded from gateway assign request");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_gateway_client_disconnect_codec() {
+    std::cout << "Running: test_gateway_client_disconnect_codec..." << std::endl;
+
+    apollo::protocol::GatewayClientDisconnect message;
+    message.sessionId = 9001;
+    message.playerId = 1001;
+    message.normalClose = false;
+
+    const auto data = apollo::protocol::MessageCodec::encode(message, 666);
+    const auto header = apollo::protocol::MessageCodec::parseHeader(data);
+
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::GATEWAY_CLIENT_DISCONNECT),
+        "message type encoded"
+    );
+    TEST_ASSERT(header.sessionId == 666, "session id encoded");
+
+    const auto body = std::vector<uint8_t>(data.begin() + sizeof(apollo::protocol::MessageHeader), data.end());
+    const auto decoded = apollo::protocol::MessageCodec::decodeBody<apollo::protocol::GatewayClientDisconnect>(body);
+
+    TEST_ASSERT(decoded.sessionId == 9001, "session id decoded");
+    TEST_ASSERT(decoded.playerId == 1001, "player id decoded");
+    TEST_ASSERT(decoded.normalClose == false, "normal close decoded");
 
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -156,7 +190,8 @@ int main() {
     run(test_player_assign_world_codec);
     run(test_cell_cross_border_codec);
     run(test_player_resolve_route_codec);
-    run(test_login_ticket_codec);
+    run(test_login_assign_codec);
+    run(test_gateway_client_disconnect_codec);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;
