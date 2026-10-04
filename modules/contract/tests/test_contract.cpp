@@ -747,7 +747,8 @@ void testContractDirectoryErrors() {
             << "<?xml version=\"1.0\"?><attrs version=\"9\"/>";
         ParseResult r = parseContractDirectory(tmp.string());
         CHECK(issuesContaining(r, "不一致") > 0, "文件间 version 不一致应报错");
-        ParseResult v = parseAttrsXml(readFileOrEmpty(tmp / "attrs.xml"), "attrs.xml");
+        ParseResult v = parseAttrsXml(readFileOrEmpty((tmp / "attrs.xml").string()),
+                                      "attrs.xml");
         CHECK(v.errorCount() == 0, "单文件 version=9 本身合法");
     }
     // version 文件坏值
