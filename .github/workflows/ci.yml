@@ -92,6 +92,14 @@ jobs:
       with:
         cmake-version: '3.20'
 
+    # PORT-1：windows 任务固定 MSVC 工具链——Ninja 生成器默认从 PATH 拾取
+    # MinGW g++（GNU 15.2），与仓库基线相悖：vcpkg x64-windows 三元组是
+    # MSVC ABI（MinGW 无法链接），/utf-8 亦是 MSVC 旗标。此步骤把 cl.exe
+    # 注入环境，CMake 在 windows 上稳定检出 MSVC。
+    - name: Setup MSVC (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: ilammy/msvc-dev-cmd@v1
+
     - name: Configure CMake
       run: >
         cmake -B ${{ github.workspace }}/build
