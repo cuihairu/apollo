@@ -5,6 +5,7 @@
  * 演示如何使用 Apollo RPC 系统进行服务间通信
  */
 
+#include <functional>
 #include <iostream>
 #include <thread>
 #include <chrono>

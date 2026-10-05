@@ -3,6 +3,8 @@
  * @brief 数据序列化工具使用示例
  */
 
+#include <bitset>
+#include <chrono>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -29,9 +31,9 @@ struct PlayerInfo {
         SERIALIZE_FIELD_STRING(name)
         SERIALIZE_FIELD(level)
         SERIALIZE_FIELD(exp)
-        writer.writeFloat(hp)
-        writer.writeDouble(mp)
-        writer.writeBool(vip)
+        writer.writeFloat(hp);
+        writer.writeDouble(mp);
+        writer.writeBool(vip);
     SERIALIZE_END()
 
     DESERIALIZE_BEGIN()
@@ -62,8 +64,6 @@ void example1_BasicTypes() {
     std::cout << "Written " << writer.size() << " bytes" << std::endl;
 
     // 读取
-    BinaryReader(writer.buffer(), writer.size());
-
     BinaryReader reader(writer.buffer());
 
     int32_t i32; uint32_t u32; int64_t i64;

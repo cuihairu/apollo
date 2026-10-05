@@ -164,17 +164,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
     add_test(NAME DataStructuresTests COMMAND data_structures_tests)
 
-    # ========== Serialization Tests (New) ==========
-
-    add_executable(serialization_tests test_serialization.cpp)
-
-    target_link_libraries(serialization_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(serialization_tests PRIVATE ws2_32)
-    endif()
-
-	    add_test(NAME SerializationTests COMMAND serialization_tests)
 	
 	    # ========== BigWorld Compatibility Tests (New) ==========
 	

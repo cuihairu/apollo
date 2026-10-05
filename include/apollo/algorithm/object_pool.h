@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -49,6 +50,15 @@ struct ObjectPoolConfig {
 };
 
 //==============================================================================
+// 空互斥锁（用于单线程版本）
+//==============================================================================
+
+struct EmptyMutex {
+    void lock() const noexcept {}
+    void unlock() const noexcept {}
+};
+
+//==============================================================================
 // 基础对象池
 //==============================================================================
 
@@ -65,6 +75,7 @@ template <
 class ObjectPool {
 public:
     using ValueType = T;
+    using size_type = std::size_t;
     using Pointer = std::unique_ptr<T, std::function<void(T*)>>;
 
     //==========================================================================
@@ -281,8 +292,6 @@ public:
     }
 
 private:
-    using size_type = size_t;
-
     //==========================================================================
     // 内部实现（不加锁）
     //==========================================================================
@@ -323,7 +332,6 @@ private:
             delete free_.top();
             free_.pop();
         }
-        free_.clear();
         allocCount_.store(0, std::memory_order_relaxed);
         freeCount_.store(0, std::memory_order_relaxed);
     }
@@ -367,22 +375,12 @@ private:
     ObjectPoolConfig config_;
     std::stack<T*> free_;
 
-    mutable std::conditional_t<ThreadSafe, std::mutex, struct EmptyMutex> mutex_;
+    mutable std::conditional_t<ThreadSafe, std::mutex, EmptyMutex> mutex_;
 
     std::atomic<size_type> allocCount_;
     std::atomic<size_type> freeCount_;
     std::atomic<size_type> hitCount_;
     std::atomic<size_type> missCount_;
-};
-
-//==============================================================================
-// 空互斥锁（用于单线程版本）
-//==============================================================================
-
-template<>
-struct ObjectPool<void, false>::EmptyMutex {
-    void lock() const noexcept {}
-    void unlock() const noexcept {}
 };
 
 //==============================================================================
@@ -520,7 +518,7 @@ private:
     Resetter resetter_;
     ObjectPoolConfig config_;
     std::stack<T*> free_;
-    mutable std::conditional_t<ThreadSafe, std::mutex, struct EmptyMutex> mutex_;
+    mutable std::conditional_t<ThreadSafe, std::mutex, EmptyMutex> mutex_;
     size_type allocCount_ = 0;
 };
 

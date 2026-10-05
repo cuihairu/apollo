@@ -350,6 +350,17 @@ inline uint64_t TimingWheel::add(int64_t delayMs, std::shared_ptr<ITimerTask> ta
     return taskId;
 }
 
+//==============================================================================
+// 辅助函数
+//==============================================================================
+
+namespace {
+    inline int64_t getCurrentTimeMs() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+}
+
 inline uint64_t TimingWheel::add(int64_t delayMs, std::function<void()> callback) {
     auto task = std::make_shared<TimerTask>(
         getCurrentTimeMs() + delayMs,
@@ -510,17 +521,6 @@ inline size_t TimingWheel::calculateSlot(size_t wheelIndex, int64_t delayMs) con
 
 inline uint64_t TimingWheel::generateTaskId() {
     return nextTaskId_.fetch_add(1, std::memory_order_relaxed);
-}
-
-//==============================================================================
-// 辅助函数
-//==============================================================================
-
-namespace {
-    inline int64_t getCurrentTimeMs() {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-    }
 }
 
 } // namespace utils

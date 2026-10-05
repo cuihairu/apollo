@@ -25,17 +25,9 @@ target_link_libraries(server_template PRIVATE apollo)
 add_executable(serializer_demo serializer_demo.cpp)
 target_link_libraries(serializer_demo PRIVATE apollo)
 
-# ========== Config Serialization Demo ==========
-add_executable(config_serialization_demo config_serialization_demo.cpp)
-target_link_libraries(config_serialization_demo PRIVATE apollo)
-
 # ========== Network Utility Demo ==========
 add_executable(netutil_demo netutil_demo.cpp)
 target_link_libraries(netutil_demo PRIVATE apollo)
-
-# ========== Simple Server ==========
-add_executable(simple_server simple_server.cpp)
-target_link_libraries(simple_server PRIVATE apollo)
 
 # ========== HTTP Demo ==========
 add_executable(http_demo http_demo.cpp)
@@ -52,15 +44,3 @@ target_link_libraries(event_loop_demo PRIVATE apollo)
 # ========== Skill System Demo ==========
 add_executable(skill_system_demo skill_system_demo.cpp)
 target_link_libraries(skill_system_demo PRIVATE apollo)
-
-# ========== Actor Demo ==========
-add_executable(actor_demo actor_demo.cpp)
-target_link_libraries(actor_demo PRIVATE apollo)
-
-# ========== Actor Advanced Demo ==========
-add_executable(actor_advanced_demo actor_advanced_demo.cpp)
-target_link_libraries(actor_advanced_demo PRIVATE apollo)
-
-# ========== Unified Serialization Demo ==========
-add_executable(serialization_demo serialization_demo.cpp)
-target_link_libraries(serialization_demo PRIVATE apollo)

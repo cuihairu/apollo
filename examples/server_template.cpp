@@ -5,6 +5,7 @@
  * 可直接使用或作为开发起点
  */
 
+#include <cmath>
 #include <iostream>
 #include <thread>
 #include <atomic>

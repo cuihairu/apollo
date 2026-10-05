@@ -560,7 +560,7 @@ private:
  */
 class SkillEventManager {
 public:
-    SkillEventManager() : eventPool_(16, 1000, 2, false, true) {}
+    SkillEventManager() : eventPool_(ObjectPoolConfig{16, 1000, 2, false, true}) {}
 
     /**
      * @brief 创建事件

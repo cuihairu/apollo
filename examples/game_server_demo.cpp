@@ -6,6 +6,8 @@
  * 包含：登录服务器、游戏服务器、网关服务器的完整流程
  */
 
+#include <cmath>
+#include <cstring>
 #include <iostream>
 #include <thread>
 #include <chrono>
