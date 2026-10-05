@@ -1,13 +1,7 @@
 #pragma once
 
-#include "cell/config.hpp"
-#include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <memory>
-#include <unordered_map>
-#include <mutex>
-#include <vector>
 
 namespace cell {
 
@@ -37,87 +31,9 @@ struct Position {
     }
 };
 
-// 实体基类
-class Entity {
-public:
-    Entity(EntityID id, EntityType type)
-        : id_(id), type_(type) {}
-
-    virtual ~Entity() = default;
-
-    EntityID id() const { return id_; }
-    EntityType type() const { return type_; }
-
-    const Position& position() const { return position_; }
-    void setPosition(const Position& pos) { position_ = pos; }
-
-    // 每帧更新
-    virtual void update(float dt) {}
-
-    // 进入视野回调
-    virtual void onEnterView(Entity* other) {}
-
-    // 离开视野回调
-    virtual void onLeaveView(Entity* other) {}
-
-protected:
-    EntityID id_;
-    EntityType type_;
-    Position position_;
-};
-
-// 玩家实体
-class PlayerEntity : public Entity {
-public:
-    explicit PlayerEntity(EntityID id)
-        : Entity(id, EntityType::PLAYER) {}
-
-    std::string name() const { return name_; }
-    void setName(const std::string& name) { name_ = name; }
-
-    int hp() const { return hp_; }
-    void setHp(int hp) { hp_ = hp; }
-
-    int level() const { return level_; }
-    void setLevel(int level) { level_ = level; }
-
-    void update(float dt) override {
-        // 处理玩家逻辑
-    }
-
-private:
-    std::string name_;
-    int hp_ = 100;
-    int maxHp_ = 100;
-    int level_ = 1;
-    int64_t exp_ = 0;
-};
-
-// 实体管理器
-class EntityManager {
-public:
-    explicit EntityManager(const CellConfig& config);
-
-    // 创建实体
-    Entity* createEntity(EntityID id, EntityType type);
-
-    // 销毁实体
-    void destroyEntity(EntityID id);
-
-    // 获取实体
-    Entity* getEntity(EntityID id);
-
-    // 获取所有实体
-    std::vector<Entity*> getAllEntities();
-
-    // 更新所有实体
-    void update(float dt);
-
-private:
-    CellConfig config_;
-    std::unordered_map<EntityID, std::unique_ptr<Entity>> entities_;
-    std::atomic<EntityID> nextEntityId_{1};
-    std::mutex mutex_;
-};
+// P2-1b：cell 侧 Entity/PlayerEntity/EntityManager 已删——实体集合归 Scene
+// （scene.hpp:33 既有裁决「承接 EntityManager 职责，行为等价迁移」）：
+// 玩家实体走 attach 路径入 avatars_，非玩家实体经 spawn_entity 入 entities_。
+// 本头仅保留消息面共用的枚举与位置类型。
 
 } // namespace cell

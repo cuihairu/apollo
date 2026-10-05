@@ -20,14 +20,23 @@ using apollo::game::world::SceneAoi;
 
 namespace {
 
+// P2-1b：契约枚举 → Scene 实体类型串（core::Entity 以字符串承载类型语义）
+const char* entity_type_name(protocol::EntityType type) {
+    switch (type) {
+        case protocol::EntityType::PLAYER:   return "PLAYER";
+        case protocol::EntityType::NPC:      return "NPC";
+        case protocol::EntityType::MONSTER:  return "MONSTER";
+        case protocol::EntityType::PET:      return "PET";
+        default:                             return "UNKNOWN";
+    }
+}
+
 class CellWorldService final : public apollo::runtime::IWorldService {
 public:
     CellWorldService(
-        EntityManager& entity_manager,
         apollo::game::world::World& world,
         CellConfig config)
-        : entity_manager_(entity_manager)
-        , world_(world)
+        : world_(world)
         , config_(std::move(config)) {
     }
 
@@ -42,7 +51,6 @@ public:
 
     void tick(const apollo::runtime::WorldTickContext& context) override {
         tick_count_ = context.tick_index;
-        entity_manager_.update(static_cast<float>(context.delta_seconds));
         // P0-3：世界 tick = 逐 scene 六阶段（simulate/recalc/aoidecay/
         // collect/budget+flush/persist-batch）
         world_.tick(static_cast<double>(context.delta_seconds));
@@ -53,7 +61,6 @@ public:
     }
 
 private:
-    EntityManager& entity_manager_;
     apollo::game::world::World& world_;
     CellConfig config_;
     std::uint64_t tick_count_ = 0;
@@ -62,84 +69,18 @@ private:
 } // namespace
 
 //==============================================================================
-// EntityManager 实现
-//==============================================================================
-
-EntityManager::EntityManager(const CellConfig& config)
-    : config_(config) {
-}
-
-Entity* EntityManager::createEntity(EntityID id, EntityType type) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    std::unique_ptr<Entity> entity;
-    switch (type) {
-        case EntityType::PLAYER:
-            entity = std::make_unique<PlayerEntity>(id);
-            break;
-        default:
-            entity = std::make_unique<Entity>(id, type);
-            break;
-    }
-
-    auto* ptr = entity.get();
-    entities_[id] = std::move(entity);
-
-    std::cout << "Created entity " << id << " (type: " << static_cast<int>(type) << ")" << std::endl;
-
-    return ptr;
-}
-
-void EntityManager::destroyEntity(EntityID id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    entities_.erase(id);
-    std::cout << "Destroyed entity " << id << std::endl;
-}
-
-Entity* EntityManager::getEntity(EntityID id) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    auto it = entities_.find(id);
-    if (it != entities_.end()) {
-        return it->second.get();
-    }
-    return nullptr;
-}
-
-std::vector<Entity*> EntityManager::getAllEntities() {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    std::vector<Entity*> result;
-    result.reserve(entities_.size());
-
-    for (auto& pair : entities_) {
-        result.push_back(pair.second.get());
-    }
-
-    return result;
-}
-
-void EntityManager::update(float dt) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    for (auto& pair : entities_) {
-        pair.second->update(dt);
-    }
-}
-
 //==============================================================================
 // CellServer 实现
 //==============================================================================
 
 CellServer::CellServer(const CellConfig& config)
     : config_(config)
-    , entityManager_(std::make_unique<EntityManager>(config))
     , world_(std::make_unique<apollo::game::world::World>())
     , worldSessionManager_(std::make_shared<apollo::game::world::WorldSessionManager>())
     , worldHost_(std::make_shared<apollo::runtime::WorldHost>(
           static_cast<std::uint32_t>(1000 / std::max(config.tickRateMs, 1)))) {
     worldHost_->add_world_service(
-        std::make_shared<CellWorldService>(*entityManager_, *world_, config_));
+        std::make_shared<CellWorldService>(*world_, config_));
 }
 
 CellServer::~CellServer() {
@@ -228,18 +169,13 @@ std::vector<uint8_t> CellServer::handleCellCreateEntity(const std::vector<uint8_
 
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellCreateEntity>(bodyData);
 
-    // 创建实体
-    auto* entity = entityManager_->createEntity(
-        msg.entityId,
-        static_cast<EntityType>(msg.entityType)
-    );
+    // P2-1b：实体集合归 Scene（EntityManager 删除）。玩家实体经 attach 路径
+    // 入 avatars_（AOI 随 scene.enter）；非玩家实体 spawn_entity 入 entities_，
+    // 随 Scene::tick 六阶段驱动 on_update。空间路由沿 spaceToScene_（跨境同款），
+    // 未知空间落默认 scene；位置承载随 NPC AOI 玩法批（现读方为零，不设存储）。
+    auto* scene = world_->find_scene(resolve_scene_id(msg.spaceId));
 
-    if (entity) {
-        entity->setPosition(Position{msg.position.x, msg.position.y, msg.position.z});
-        // P1-3 AOI 收敛：cell 侧 AOIManager 退役——玩家实体经 attach 路径
-        // scene.enter 入 Scene 持有的 SceneAoi；非玩家实体仍为 EntityManager
-        // 内存对象（场景 AOI 只承载 Avatar/玩家实体，NPC AOI 随玩法批接入）
-
+    if (scene) {
         if (msg.entityType == protocol::EntityType::PLAYER) {
             // P0-2：双 id 复用收敛。消息面（CellCreateEntity）尚无独立 player_id
             // 字段——这是契约缺陷，P2-3 修文补字段；P0 代码侧先把身份显式化：
@@ -250,6 +186,11 @@ std::vector<uint8_t> CellServer::handleCellCreateEntity(const std::vector<uint8_
             const auto player_id = static_cast<protocol::PlayerID>(msg.entityId);
             attachPlayerWorldSession(session_id, player_id, msg.entityId,
                                      {msg.position.x, msg.position.y, msg.position.z});
+        } else {
+            // P2-1b：非玩家实体入 Scene 实体集合（随 Scene::tick 驱动）
+            scene->spawn_entity(std::make_shared<apollo::game::core::Entity>(
+                apollo::game::core::EntityId(msg.entityId),
+                entity_type_name(msg.entityType)));
         }
     }
 
@@ -265,7 +206,10 @@ std::vector<uint8_t> CellServer::handleCellDestroyEntity(const std::vector<uint8
 
     // P1-3：AOI 出列由 detach 路径 scene.leave 承担（Scene 持有 AOI）
     detachPlayerWorldSession(header.sessionId, msg.entityId);
-    entityManager_->destroyEntity(msg.entityId);
+    // P2-1b：非玩家实体自 Scene 实体集合出列（玩家实体在 avatars_，由 detach 收口）
+    if (auto* scene = find_scene_by_entity(msg.entityId)) {
+        scene->despawn_entity(apollo::game::core::EntityId(msg.entityId));
+    }
 
     return {};  // 空响应表示成功
 }
@@ -276,20 +220,15 @@ std::vector<uint8_t> CellServer::handleCellEntityMove(const std::vector<uint8_t>
 
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellEntityMove>(bodyData);
 
-    auto* entity = entityManager_->getEntity(msg.entityId);
-    if (entity) {
-        entity->setPosition(Position{msg.newPos.x, msg.newPos.y, msg.newPos.z});
-
-        // P1-3 AOI 收敛：Scene 持有的 SceneAoi 随动（Avatar 实体视角）；
-        // 无场景归属的实体只更新自身位置
-        if (auto* scene = find_scene_by_entity(msg.entityId)) {
-            const auto entity_id = apollo::game::core::EntityId(msg.entityId);
-            scene->aoi().move(entity_id,
-                              SceneAoi::Vec3{msg.newPos.x, msg.newPos.y, msg.newPos.z});
-        }
+    // P1-3 AOI 收敛：Scene 持有的 SceneAoi 随动；P2-1b 起实体必属 Scene
+    //（含非玩家，见 handleCellCreateEntity），无场景归属即不存在
+    if (auto* scene = find_scene_by_entity(msg.entityId)) {
+        const auto entity_id = apollo::game::core::EntityId(msg.entityId);
+        scene->aoi().move(entity_id,
+                          SceneAoi::Vec3{msg.newPos.x, msg.newPos.y, msg.newPos.z});
 
         // 广播移动消息给视野内玩家（viewer set 驱动，见 broadcastToViewers）
-        broadcastToViewers(entity, request);
+        broadcastToViewers(msg.entityId, request);
     }
 
     return {};  // 空响应表示成功
@@ -363,11 +302,11 @@ std::vector<uint8_t> CellServer::handleCombatSkillCast(const std::vector<uint8_t
 
     auto msg = protocol::MessageCodec::decodeBody<protocol::CombatSkillCast>(bodyData);
 
-    // 处理技能逻辑
-    auto* caster = entityManager_->getEntity(msg.casterId);
-    auto* target = entityManager_->getEntity(msg.targetId);
+    // 处理技能逻辑（P2-1b：在场判定 = 实体归属某 Scene）
+    const bool caster_present = find_scene_by_entity(msg.casterId) != nullptr;
+    const bool target_present = find_scene_by_entity(msg.targetId) != nullptr;
 
-    if (caster && target) {
+    if (caster_present && target_present) {
         // 简化伤害计算
         protocol::CombatDamage damageMsg;
         damageMsg.targetId = msg.targetId;
@@ -377,7 +316,7 @@ std::vector<uint8_t> CellServer::handleCombatSkillCast(const std::vector<uint8_t
         auto damageData = protocol::MessageCodec::encode(damageMsg);
 
         // 广播伤害
-        broadcastToViewers(target, damageData);
+        broadcastToViewers(msg.targetId, damageData);
 
         std::cout << "Skill cast: " << msg.casterId << " -> " << msg.targetId
                   << " (skill: " << msg.skillId << ")" << std::endl;
@@ -420,29 +359,39 @@ std::chrono::milliseconds CellServer::tickInterval() const {
     return std::chrono::milliseconds(std::max(config_.tickRateMs, 1));
 }
 
-void CellServer::broadcastToViewers(Entity* entity, const std::vector<uint8_t>& message) {
+void CellServer::broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message) {
     // P1-3：viewer set 驱动（旧 aoiManager_->getViewers 九宫格查询退役）——
     // 接收集合 = 实体所在 Scene 的 SceneAoi 视野查询（AOI 归 scene、scene_id
     // 隔离）；网关下发面随 P3-2（当前阶段下发 = 可观察日志）
     (void)message;
-    apollo::game::world::Scene* scene = find_scene_by_entity(entity->id());
+    apollo::game::world::Scene* scene = find_scene_by_entity(entity_id);
     if (scene == nullptr) {
         return;
     }
-    const auto viewers = scene->aoi().viewers_of(apollo::game::core::EntityId(entity->id()));
+    const auto viewers = scene->aoi().viewers_of(apollo::game::core::EntityId(entity_id));
     if (!viewers.empty()) {
-        std::cout << "broadcast: entity=" << entity->id() << " scene=" << scene->scene_id()
+        std::cout << "broadcast: entity=" << entity_id << " scene=" << scene->scene_id()
                   << " viewers=" << viewers.size() << " bytes=" << message.size() << std::endl;
     }
 }
 
+std::uint64_t CellServer::resolve_scene_id(std::uint64_t space_id) const {
+    // 单进程单 scene 一条目（P1-1 口径）；未知空间回落默认 scene——
+    // 与 create 的旧「空间无关全落全局表」行为等价
+    const auto route = spaceToScene_.find(space_id);
+    return route != spaceToScene_.end() ? route->second : defaultSceneId_;
+}
+
 apollo::game::world::Scene* CellServer::find_scene_by_entity(EntityID entity_id) {
-    // 玩家实体 → Avatar 实体号反查所在 Scene（P0-2 强分型；实体号唯一归属
-    // 一个 scene——Avatar 挂 scene 归属是唯一权威）
+    // 玩家实体 → Avatar 实体号反查；非玩家实体 → Scene 实体集合直查
+    //（P0-2 强分型 + P2-1b 实体集合归 Scene；实体号唯一归属一个 scene）
     const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
     for (apollo::game::world::Scene* scene : world_->scenes()) {
         if (scene == nullptr) {
             continue;
+        }
+        if (scene->get_entity(avatar_entity_id) != nullptr) {
+            return scene;
         }
         for (const auto& player_id : scene->avatars()) {
             const auto avatar = scene->get_avatar(player_id);

@@ -38,7 +38,7 @@
 
 > 出口判据：① 塔防/副本 battle 单 scene tick 闭环（create→enter→battle→reward→leave）；② ECS 收敛无并行实现残留；③ 契约树全量 golden check；④ guild/party 最小 CRUD 单测。
 
-- [ ] **P2-1 ECS 收敛**：五套→场景内一套（Player 不 ECS 化；Battle 按 Scene→BattleRuntime→ECS 形状挂接）；legacy ecs 死件删除（含不可编译幻影 include）。
+- [x] **P2-1 ECS 收敛**：五套→场景内一套，adopt 支=modules/game/core Entity（Player 不 ECS 化不变；Battle 挂接留 P2-2）。a 批（2bbae2a3）：battle::ecs 全支删除（ecs.h/ecs.hpp/components.hpp+ecs.cpp+test_game 5 用例）+ legacy apollo::ecs（ecs.h）+ ecs_demo（唯一消费方随删；components.hpp 幻影 include 同批消账）。b 批（本批）：cell_manager.hpp 内 Entity/PlayerEntity/EntityManager 删除，实体集合归 Scene（scene.hpp:33 既有裁决「承接 EntityManager 职责，行为等价迁移」兑现）——玩家实体走 attach 路径入 avatars_（不变），非玩家实体 spawn_entity 入 entities_ 随 Scene::tick 驱动；spaceToScene_ 路由复用（未知空间落默认 scene，与旧「空间无关」行为等价）；写方为零的位置字段不再单设存储（NPC 位置承载随 NPC AOI 玩法批，登记在案）；broadcastToViewers 改按实体号；find_scene_by_entity 扩实体集合直查。CellWorldService 失去 EntityManager 依赖（update 由 world_.tick→scene->tick 承接，tick 链等价）。
 - [ ] **P2-2 Battle Runtime**：battle tick 接入 scene；battle 状态与 reward 单向落 Anchor；determinism 四约束（PCG32 子流/四元组 replay/hash 链）可测骨架。
 - [ ] **P2-3 契约系统修订**：entities.xml 继承链修文（Player 删除或并入 Avatar，走先 glossary 后 contract 流程）；P0-P1 新协议消息入库；全链路 golden check + compile 闸。
 - [ ] **P2-4 Social/Guild/Party**：Anchor 长期态字段模型扩展（Inventory/Equipment/Quest/Progress）+ Guild/Party 对象与协议。
