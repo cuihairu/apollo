@@ -1,5 +1,4 @@
 // Game Module Tests
-// Tests for: ComVal, AttributeContainer, AOI, ECS, Entity, Scene
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -18,7 +17,6 @@
 
 #include "apollo/game/attributes/comval.h"
 #include "apollo/game/attributes/attribute.hpp"
-#include "apollo/game/battle/ecs/ecs.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/scene_aoi.hpp"
@@ -44,12 +42,6 @@ using apollo::game::core::IEntityComponent;
 using apollo::game::world::Scene;
 using apollo::game::world::SceneAoi;
 using apollo::game::world::ViewerState;
-using apollo::battle::ecs::World;
-using apollo::battle::ecs::System;
-using apollo::battle::ecs::SystemManager;
-using apollo::battle::ecs::IComponent;
-// Type alias for ECS Entity to avoid conflict with game::core::Entity
-typedef apollo::battle::ecs::Entity EcsEntity;
 
 // Simple test framework
 #define TEST_ASSERT(cond, msg) \
@@ -413,79 +405,6 @@ bool test_aoi_manager_update_entity() {
 }
 
 //==============================================================================
-// ECS Tests
-//==============================================================================
-
-bool test_ecs_world_create_entity() {
-    World world;
-    EcsEntity* entity = world.CreateEntity();
-
-    TEST_ASSERT(entity != nullptr, "Entity should be created");
-    TEST_ASSERT(entity->id == 1, "First entity ID should be 1");
-
-    EcsEntity* entity2 = world.CreateEntity();
-    TEST_ASSERT(entity2->id == 2, "Second entity ID should be 2");
-    return true;
-}
-
-bool test_ecs_world_get_entity() {
-    World world;
-    EcsEntity* created = world.CreateEntity();
-    EcsEntity* retrieved = world.GetEntity(created->id);
-
-    TEST_ASSERT(retrieved != nullptr, "Should retrieve created entity");
-    TEST_ASSERT(retrieved->id == created->id, "Retrieved entity should have same ID");
-    return true;
-}
-
-bool test_ecs_world_destroy_entity() {
-    World world;
-    EcsEntity* entity = world.CreateEntity();
-    uint32_t id = entity->id;
-
-    world.DestroyEntity(id);
-    EcsEntity* retrieved = world.GetEntity(id);
-
-    TEST_ASSERT(retrieved == nullptr, "Destroyed entity should not exist");
-    return true;
-}
-
-bool test_ecs_entity_component() {
-    struct TestComponent : public IComponent {
-        int value = 0;
-        size_t GetTypeId() const override { return 0; }
-    };
-
-    World world;
-    EcsEntity* entity = world.CreateEntity();
-
-    // Note: Component typeId registration is template-based
-    // We can't fully test without the implementation file
-    TEST_ASSERT(entity != nullptr, "Entity should exist");
-    return true;
-}
-
-bool test_ecs_system_manager() {
-    SystemManager sysManager;
-
-    class TestSystem : public System {
-    public:
-        bool updated = false;
-        void Update(float deltaTime) override {
-            updated = true;
-        }
-    };
-
-    auto testSystem = std::make_shared<TestSystem>();
-    sysManager.AddSystem(testSystem);
-
-    sysManager.UpdateAll(0.016f);
-
-    TEST_ASSERT(testSystem->updated, "System should be updated");
-    return true;
-}
-
-//==============================================================================
 // EntityId Tests
 //==============================================================================
 
@@ -646,13 +565,6 @@ int main() {
         {"AOI: Scene Isolation", test_aoi_manager_singleton},
         {"AOI: Configured Grid", test_aoi_manager_initialize},
         {"AOI: Move Update", test_aoi_manager_update_entity},
-
-        // ECS Tests
-        {"ECS: World Create Entity", test_ecs_world_create_entity},
-        {"ECS: World Get Entity", test_ecs_world_get_entity},
-        {"ECS: World Destroy Entity", test_ecs_world_destroy_entity},
-        {"ECS: Entity Component", test_ecs_entity_component},
-        {"ECS: System Manager", test_ecs_system_manager},
 
         // EntityId Tests
         {"EntityId: Default", test_entity_id_default},

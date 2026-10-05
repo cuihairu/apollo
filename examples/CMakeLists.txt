@@ -1,7 +1,3 @@
-# ========== ECS Demo ==========
-add_executable(ecs_demo ecs_demo.cpp)
-target_link_libraries(ecs_demo PRIVATE apollo)
-
 # ========== RPC Demo ==========
 add_executable(rpc_demo rpc_demo.cpp)
 target_link_libraries(rpc_demo PRIVATE apollo)

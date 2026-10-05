@@ -626,8 +626,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../modules/game/session/src/player_anchor.cpp
 	        # Game Attributes (using attribute.hpp, not attribute_value.h)
 	        ../modules/game/attributes/src/attribute.cpp
-	        # Game Battle ECS
-	        ../modules/game/battle/src/ecs.cpp
 	    )
 	    target_include_directories(game_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/include

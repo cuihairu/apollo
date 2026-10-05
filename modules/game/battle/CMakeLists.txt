@@ -1,6 +1,5 @@
-# Game - Battle module (ECS)
+# Game - Battle module
 add_library(apollo_game_battle STATIC
-    src/ecs.cpp
     src/battle_system.cpp
 )
 add_library(apollo::game_battle ALIAS apollo_game_battle)
