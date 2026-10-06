@@ -1,7 +1,7 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "3652a284eb063fff7ca0d715927017619e9116ec97af705c160517f76788cf68",
-  "client_hash": "ecb0665505e34a843623ef8c14ad37f0a6aad979923afea0e4ad315742cc7200",
+  "schema_hash": "6b26c63a5412683e2f570548c9674d00ddc227e5b92bc2fe39f41d7b22bdcc2b",
+  "client_hash": "6558d947647bfecc1279f850abd49cb687236393b1e0416ff6abe7c4d84d1ead",
   "internal_hash": "5d9882d126bd269ace3243b5b867fc1f5fed39532724061c2b2effbdad0f98e9",
   "contract_version": 2,
   "routes": [
@@ -71,6 +71,96 @@
     {
       "id": 17,
       "name": "login_response",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 18,
+      "name": "guild_create",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 19,
+      "name": "guild_disband",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 20,
+      "name": "guild_join",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 21,
+      "name": "guild_leave",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 22,
+      "name": "guild_result",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 23,
+      "name": "party_create",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 24,
+      "name": "party_disband",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 25,
+      "name": "party_join",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 26,
+      "name": "party_leave",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 27,
+      "name": "party_result",
       "dir": "S2C",
       "channel": "control",
       "domain": "client",

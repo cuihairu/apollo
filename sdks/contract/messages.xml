@@ -183,4 +183,42 @@
     <field name="route_version" type="int64"/>
     <field name="error_message" type="string"/>
   </msg>
+
+  <!-- Guild/Party 族（P2-4：社交面归 Anchor 长期态，improvement-plan P2-4 消息面）。
+       C2S 意图 only（服务端定夺，docs/05 §6.4）——操作码经唯一 S2C 结果回带
+       （op：1=create 2=disband 3=join 4=leave）；两族各一条 result 收口，
+       错误码 errors.xml 随批扩充。承载：Guild 持久（manager 域）/Party 易失
+       （Zone 域），对象与最小 CRUD 在 modules/game/social（P2-4）。 -->
+  <msg id="18" name="guild_create" dir="C2S" channel="control" domain="client" desc="创建公会（意图）">
+    <field name="name" type="string" desc="公会名（manager 域唯一裁决）"/>
+  </msg>
+  <msg id="19" name="guild_disband" dir="C2S" channel="control" domain="client" desc="解散公会（意图；仅会长）">
+    <field name="guild_id" type="int64"/>
+  </msg>
+  <msg id="20" name="guild_join" dir="C2S" channel="control" domain="client" desc="加入公会（意图）">
+    <field name="guild_id" type="int64"/>
+  </msg>
+  <msg id="21" name="guild_leave" dir="C2S" channel="control" domain="client" desc="退出公会（意图）">
+    <field name="guild_id" type="int64" desc="目标公会（幂等校验用；会长须先转让或解散）"/>
+  </msg>
+  <msg id="22" name="guild_result" dir="S2C" channel="control" domain="client" desc="公会操作结果（四操作唯一应答面）">
+    <field name="op" type="int32" desc="1=create 2=disband 3=join 4=leave"/>
+    <field name="code" type="int32" desc="0=成功；非 0 为驳回原因（errors.xml）"/>
+    <field name="guild_id" type="int64" desc="操作关联公会（create 成功=新 id）"/>
+  </msg>
+  <msg id="23" name="party_create" dir="C2S" channel="control" domain="client" desc="创建队伍（意图；队伍无名，服务端分配 id）"/>
+  <msg id="24" name="party_disband" dir="C2S" channel="control" domain="client" desc="解散队伍（意图；仅队长）">
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="25" name="party_join" dir="C2S" channel="control" domain="client" desc="加入队伍（意图；满员拒绝）">
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="26" name="party_leave" dir="C2S" channel="control" domain="client" desc="退出队伍（意图；队长退队自动移交最早成员）">
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="27" name="party_result" dir="S2C" channel="control" domain="client" desc="队伍操作结果（四操作唯一应答面）">
+    <field name="op" type="int32" desc="1=create 2=disband 3=join 4=leave"/>
+    <field name="code" type="int32" desc="0=成功；非 0 为驳回原因（errors.xml）"/>
+    <field name="party_id" type="int64" desc="操作关联队伍（create 成功=新 id）"/>
+  </msg>
 </messages>

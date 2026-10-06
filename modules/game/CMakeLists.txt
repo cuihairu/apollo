@@ -3,6 +3,7 @@ add_subdirectory(core)
 add_subdirectory(session)
 add_subdirectory(world)
 add_subdirectory(battle)
+add_subdirectory(social)
 add_subdirectory(attributes)
 
 if(BUILD_TESTING)

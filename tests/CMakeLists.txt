@@ -500,6 +500,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::game_core
 	        apollo::game_session
 	        apollo::game_world
+	        apollo::game_battle
 	    )
 	    if(WIN32)
 	        target_link_libraries(session_world_tests PRIVATE ws2_32)
@@ -828,6 +829,26 @@ if(MSVC)
     target_compile_options(battle_runtime_tests PRIVATE /utf-8)
 endif()
 add_test(NAME BattleRuntimeTests COMMAND battle_runtime_tests)
+
+# ========== Social Tests (P2-4) ==========
+# Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
+add_executable(social_tests
+    test_social.cpp
+    ../modules/game/social/src/guild.cpp
+    ../modules/game/social/src/party.cpp
+)
+target_include_directories(social_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/social/include
+)
+target_link_libraries(social_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(social_tests PRIVATE ws2_32)
+    target_compile_definitions(social_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(social_tests PRIVATE /utf-8)
+endif()
+add_test(NAME SocialTests COMMAND social_tests)
 
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段

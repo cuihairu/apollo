@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "ecb0665505e34a843623ef8c14ad37f0a6aad979923afea0e4ad315742cc7200",
+  "client_hash": "6558d947647bfecc1279f850abd49cb687236393b1e0416ff6abe7c4d84d1ead",
   "messages": [
     {
       "id": 10,
@@ -179,6 +179,147 @@
         {
           "name": "error_message",
           "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "name": "guild_create",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "guild_disband",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "guild_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "guild_join",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "guild_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "guild_leave",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "guild_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "guild_result",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "op",
+          "type": "int32"
+        },
+        {
+          "name": "code",
+          "type": "int32"
+        },
+        {
+          "name": "guild_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "name": "party_create",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": []
+    },
+    {
+      "id": 24,
+      "name": "party_disband",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "party_join",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "party_leave",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "name": "party_result",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "op",
+          "type": "int32"
+        },
+        {
+          "name": "code",
+          "type": "int32"
+        },
+        {
+          "name": "party_id",
+          "type": "int64"
         }
       ]
     }

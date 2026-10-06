@@ -1,4 +1,6 @@
+#include "apollo/game/battle/battle_runtime.hpp"
 #include "apollo/game/session/anchor_manager.hpp"
+#include "apollo/game/session/anchor_reward_sink.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
@@ -439,6 +441,108 @@ bool test_transfer_disconnect_window() {
 
 } // namespace
 
+
+// ---- P2-4：Anchor 长期态字段模型 + 奖励单向落 Anchor 真实接线 ----
+
+bool test_anchor_longterm_state_fields() {
+    std::cout << "Running: test_anchor_longterm_state_fields..." << std::endl;
+    apollo::game::session::PlayerAnchor anchor(1001);
+
+    // Inventory：同 id 合并 / 不足整体拒绝
+    TEST_ASSERT(anchor.add_item(7001, 3), "入包");
+    TEST_ASSERT(anchor.add_item(7001, 2), "同 id 合并");
+    TEST_ASSERT(anchor.inventory().size() == 1 && anchor.inventory()[0].count == 5,
+                "合并计数");
+    TEST_ASSERT(!anchor.remove_item(7001, 6), "超扣整体拒绝");
+    TEST_ASSERT(anchor.remove_item(7001, 5), "足额扣减");
+    TEST_ASSERT(anchor.inventory().empty(), "清零即收格");
+    TEST_ASSERT(!anchor.add_item(0, 1) && !anchor.add_item(7001, 0), "非法入参拒绝");
+
+    // Equipment：固定槽位
+    TEST_ASSERT(anchor.equip(0, 8001), "装 0 号位");
+    TEST_ASSERT(anchor.equipment_at(0) == 8001, "槽位可查");
+    TEST_ASSERT(!anchor.equip(apollo::game::session::PlayerAnchor::kEquipSlotCount, 8002), "越界槽位拒绝");
+    TEST_ASSERT(!anchor.equip(1, 0), "空物品 id 拒绝");
+    TEST_ASSERT(anchor.unequip(0) && anchor.equipment_at(0) == 0, "卸下");
+    TEST_ASSERT(!anchor.unequip(0), "空槽卸下拒绝");
+
+    // Quest：进度写读
+    TEST_ASSERT(anchor.quest_progress(9001) == 0, "未接任务进度为 0");
+    anchor.set_quest_progress(9001, 7);
+    TEST_ASSERT(anchor.quest_progress(9001) == 7, "进度可查");
+    anchor.set_quest_progress(9001, 9);
+    TEST_ASSERT(anchor.quest_progress(9001) == 9, "进度覆盖写");
+
+    // Progress：通用成长键值
+    anchor.add_progress("exp", 100);
+    anchor.add_progress("exp", 50);
+    TEST_ASSERT(anchor.progress("exp") == 150, "累计");
+    anchor.add_progress("exp", 0);
+    TEST_ASSERT(anchor.progress("exp") == 150, "零增量无副作用");
+
+    // Social：公会归属
+    TEST_ASSERT(anchor.guild_id() == 0, "未入会");
+    anchor.set_guild_id(1);
+    TEST_ASSERT(anchor.guild_id() == 1, "归属可写");
+
+    // 长期态变更即脏：每域操作都应留痕
+    TEST_ASSERT(anchor.needs_save(), "长期态变更后需要保存");
+    bool saw_inventory = false, saw_progress = false, saw_guild = false;
+    for (const auto& r : anchor.dirty_reasons()) {
+        saw_inventory = saw_inventory || r == "inventory_add";
+        saw_progress = saw_progress || r == "progress_add";
+        saw_guild = saw_guild || r == "guild_change";
+    }
+    TEST_ASSERT(saw_inventory && saw_progress && saw_guild, "三域脏因留痕");
+    anchor.clear_dirty();
+    TEST_ASSERT(!anchor.needs_save(), "清理后复位");
+    return true;
+}
+
+bool test_anchor_reward_sink_wiring() {
+    std::cout << "Running: test_anchor_reward_sink_wiring..." << std::endl;
+    apollo::game::session::PlayerAnchor anchor(2001);
+    apollo::game::session::AnchorRewardSink sink(anchor);
+
+    // 奖励单向落 Anchor（P2-4 接线）：score 累计入 Progress「exp」
+    sink.on_reward(2001, 30);
+    sink.on_reward(2001, 12);
+    TEST_ASSERT(anchor.progress(apollo::game::session::AnchorRewardSink::kExpKey) == 42, "奖励累计入 exp");
+    TEST_ASSERT(anchor.needs_save(), "落账即脏（write-behind 面可见）");
+
+    // 单 Anchor 绑定：他人分账忽略；零分忽略
+    sink.on_reward(2999, 100);
+    sink.on_reward(2001, 0);
+    TEST_ASSERT(anchor.progress("exp") == 42, "越主/零分不落账");
+
+    // battle 只出不进：sink 侧无回写通道（编译面即证——IRewardSink 纯单向），
+    // 运行时证：经 BattleRuntime finish 结算，Anchor 收到账
+    apollo::game::session::PlayerAnchor winner(2001);
+    apollo::game::session::AnchorRewardSink winner_sink(winner);
+    apollo::game::battle::BattleRuntime battle(1, 777, &winner_sink);
+    TEST_ASSERT(battle.enter_player(2001), "参战");
+    TEST_ASSERT(battle.begin(), "开局");
+    // 确定性命中 tick：判定只依赖 (world_seed, tick, CombatRoll) 子流（约束④
+    // 无游标），测试用同源纯函数复算选出必命中的 tick 再驱动
+    std::uint32_t hit_tick = 0;
+    for (std::uint32_t t = 1; t <= 50; ++t) {
+        if (battle.substream(t, apollo::base::StreamId::CombatRoll).next_double() <
+            0.5) {
+            hit_tick = t;
+            break;
+        }
+    }
+    TEST_ASSERT(hit_tick > 0, "50 tick 内必存在命中窗口");
+    std::vector<apollo::game::battle::BattleInput> inputs = {
+        {hit_tick, 2001, 1}};
+    TEST_ASSERT(battle.tick(hit_tick, inputs), "命中推进");
+    TEST_ASSERT(battle.finish(), "散场");
+    TEST_ASSERT(battle.phase() == apollo::game::battle::BattlePhase::Finished, "五段走完");
+    TEST_ASSERT(winner.progress(apollo::game::session::AnchorRewardSink::kExpKey) > 0, "结算奖励落 Anchor");
+    TEST_ASSERT(winner.needs_save(), "战斗结算留脏");
+    return true;
+}
+
 int main() {
     std::cout << "=== Apollo Session/World Test Suite ===" << std::endl;
 
@@ -460,6 +564,8 @@ int main() {
     run(test_scene_transfer_prepare_rejections);
     run(test_scene_transfer_rollback_on_attach_failure);
     run(test_transfer_disconnect_window);
+    run(test_anchor_longterm_state_fields);
+    run(test_anchor_reward_sink_wiring);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;
