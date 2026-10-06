@@ -157,6 +157,7 @@
 ## 4. P3 —— Deployment / Performance / Observability / DevEx（任务书 §38 四档）
 
 - **P3-1 部署与进程形态**：manager 域目录跨进程化（G-1 服务发现骨架：machined 单机守护 + 广播，文档已立）；instance offload 进程形态（36号 #16）；配置统一（ConfigManager 收口/删除——config 系双轨 diff 见 audit A8；零配置文件落地）。
+  - **批 A/A2 已交付（2026-10-07，d36529c5 + 6a73cede）**：配置统一消账（audit A8 (b)(c)）。批 A：legacy ConfigManager/ConfigNode/ConfigValue 七件删除——旧实现头（parseXml/parseLua 恒 false、notifyListeners 断头路、热更无调用方、getValue<T> 声明无定义，生产零消费）+ modules/core/config 转发桥双头（using 别名 + APOLLO_CONFIG_* 宏）+ config_manager.cpp/config_value.cpp 两源 + 纯 legacy 测试 test_config.cpp；apollo_core_config 收口单源 config_registry.cpp，nlohmann_json/yaml-cpp optional 依赖块随 legacy 消亡；test_core_config.cpp 收口为 ConfigRegistry 单测 5 组（23 个 legacy 用例随之删除），tests/CMakeLists.txt 的 config_tests 目标与「暂时禁用」墓碑注释同批清除。批 A2：四 app config.hpp 零消费字段删 29 项（base 11/cell 4/gateway 7/login 3，逐字段 grep 全 app 源验证；dataDir/journalPath/autoSaveIntervalMs/journalDrainQuota 等 P1-4/P1-5 活字段与 dbHost/dbPort/dbName/maxConnections/sessionTimeoutMs/maxLoginAttempts/lockoutDurationMs/gatewayUrls 等在用字段全部保留），空段标题顺清。两树 33/33、Examples 31/31 全绿。
 - **P3-2 性能**：按 architecture.md §6 三模型（1×1000 / 10×100 / 100×10）建 benchmark 桩（benchmark.cpp 接线——当前未链接 apollo）；锁粒度 scene 级化（concurrency §3 目标模型）；帧预算表实测化（capacity-and-benchmark）。
 - **P3-3 可观测性**：日志三套收敛末批（P0-6 完成后 infra 统一）；metrics/tracing 最小集；VerifierApp（gap #17）与 LoggerApp 进程立项。
 - **P3-4 DevEx**：CLI 脚手架（starter 模块补实或删除——空壳现状见 runtime 报告 G 节）；app 一键起停。

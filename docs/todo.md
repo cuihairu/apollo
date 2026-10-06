@@ -47,7 +47,7 @@
 
 > 出口判据：三模型基准可重复数字；单场景 1000 人广播在目标帧预算内。
 
-- [ ] **P3-1 部署与进程形态**：manager 域目录跨进程化（machined + UDP 广播 G-1 骨架）；instance offload 进程形态；base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）；配置统一（ConfigManager 收口/删除）。
+- [ ] **P3-1 部署与进程形态**：manager 域目录跨进程化（machined + UDP 广播 G-1 骨架）；instance offload 进程形态；base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）；配置统一（ConfigManager 收口/删除）。批 A（d36529c5）/批 A2（6a73cede）已交付——配置统一消账（audit A8）：legacy ConfigManager/ConfigNode/ConfigValue 七件删除（旧实现头 + 转发桥双头 + 实现/值源两 cpp + 纯 legacy 测试；parseXml/parseLua 恒 false、热更断头路、生产零消费），apollo_core_config 收口单源 config_registry，json/yaml optional 依赖块随 legacy 消亡，test_core_config 收口为 ConfigRegistry 单测 5 组；四 app config.hpp 零消费字段删 29 项（逐字段 grep 全 app 源验证，dataDir/journalPath/autoSaveIntervalMs 等活字段保留）。
 - [ ] **P3-2 性能**：三模型 benchmark 桩（1×1000 / 10×100 / 100×10，benchmark.cpp 接线）；scene 级锁粒度；帧预算表实测化。
 - [ ] **P3-3 可观测性**：日志三套收口末批（P0-6 后 infra 统一）；metrics/tracing 最小集；VerifierApp/LoggerApp 立项。
 - [ ] **P3-4 DevEx**：CLI 脚手架（starter 补实或删除）；app 一键起停。
@@ -63,7 +63,7 @@
 
 - **旧 9 批次计划**（2026-09-29，docs/36 决策表依据）：批次 1 契约系统已交付；批次 2-4 重组件（db-app/cell-appmgr/base-appmgr）中与任务书重叠者已并入 P1-P4 对应批次；批次 5 AI 寻路（Recast/Detour）、批次 6 脚本（Lua）、批次 7 客户端 SDK 投影、批次 8 监控运维——审计后未列入轻量 MMO 主线，保持现状登记，主线稳定后评估。
 - **审计遗留死件清账**（并入各阶段「先删后建」批内，不留新孤儿）：comval 手写 union、attribute_id 290 常量、LocalServiceDiscovery、queue 族继承件、IPC 旁支（improvement-plan §7.5）。
-- **契约差异清欠**（七件套各文档文末差异清单）：entities.xml `Player parent=Avatar` 冲突待 P2-3 修文；WorldSpace 词根随 P0-3 更名消账；base/baseappmgr 进程名随 P3-1；nng/modules·protocol 随 P1 收口前保持禁用。
+- **契约差异清欠**（七件套各文档文末差异清单）：entities.xml `Player parent=Avatar` 冲突已随 P2-3 修文消账（Player 删除、Avatar 摘脱怪物族）；WorldSpace 词根随 P0-3 更名消账；base/baseappmgr 进程名随 P3-1；nng/modules·protocol：vcpkg nng 1.11 依赖与解禁尝试已归档（§34.3，git 可溯——nng_socket struct 化/nng_flag 移除/四参 nng_recv 消失，评估为传输层重写级断裂后回退），模块保持禁用，传输层重写（M1 自研内核）随 P3-2 批重估。
 
 ## 推进纪律（任务书 §37/§40 + improvement-plan §7）
 
