@@ -836,6 +836,24 @@ if(MSVC)
 endif()
 add_test(NAME SocialTests COMMAND social_tests)
 
+# ========== Discovery Tests (P3-1 批 B) ==========
+# G-1 编队服务发现库层：wire 报文编解码 + Beacon/Registry 行为（内存桩传输）
+add_executable(discovery_tests
+    test_discovery.cpp
+    ../modules/net/discovery/src/discovery.cpp
+)
+target_include_directories(discovery_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/net/discovery/include
+)
+if(WIN32)
+    target_link_libraries(discovery_tests PRIVATE ws2_32)
+    target_compile_definitions(discovery_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(discovery_tests PRIVATE /utf-8)
+endif()
+add_test(NAME DiscoveryTests COMMAND discovery_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

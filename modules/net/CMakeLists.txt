@@ -201,6 +201,10 @@ endif()
 # Protocol module (NNG wrapper with auto-negotiation)
 add_subdirectory(protocol)
 
+# Discovery module (G-1 编队服务发现库层——wire 报文 + Beacon/Registry，
+# socket 随进程壳批)
+add_subdirectory(discovery)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)
