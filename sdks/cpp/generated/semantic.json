@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
+  "client_hash": "ecb0665505e34a843623ef8c14ad37f0a6aad979923afea0e4ad315742cc7200",
   "messages": [
     {
       "id": 10,
@@ -117,6 +117,68 @@
         {
           "name": "target_scene_id",
           "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "login_request",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "username",
+          "type": "string"
+        },
+        {
+          "name": "password",
+          "type": "string"
+        },
+        {
+          "name": "client_version",
+          "type": "string"
+        },
+        {
+          "name": "timestamp",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "login_response",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool"
+        },
+        {
+          "name": "session_id",
+          "type": "int64"
+        },
+        {
+          "name": "player_id",
+          "type": "int64"
+        },
+        {
+          "name": "gateway_host",
+          "type": "string"
+        },
+        {
+          "name": "gateway_port",
+          "type": "int32"
+        },
+        {
+          "name": "login_ticket",
+          "type": "string"
+        },
+        {
+          "name": "error_message",
+          "type": "string"
         }
       ]
     }

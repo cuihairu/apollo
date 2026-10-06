@@ -89,19 +89,23 @@ static_assert(!eqStr(acg::kSchemaHash, acg::kClientHash) &&
                   !eqStr(acg::kClientHash, acg::kInternalHash),
               "三个 hash 输入不同必互异（域标签行参与 bundle）");
 
-// 继承展开：Player 的祖先链 = Monster, Avatar（根在前）
+// 继承展开不变量（P2-3 实体链修文：Player 已废删除、Avatar 摘脱怪物族为根、
+// Monster←NPC 单继承保留）
 constexpr int findEntity(const char* name) {
     for (size_t i = 0; i < acg::kEntityCount; ++i) {
         if (eqStr(acg::kEntities[i].name, name)) return static_cast<int>(i);
     }
     return -1;
 }
-static_assert(findEntity("Player") >= 0, "必须有 Player 实体");
-static_assert(acg::kEntities[findEntity("Player")].ancestorCount == 2,
-              "Player 祖先链应为两级");
-static_assert(eqStr(acg::kEntities[findEntity("Player")].ancestors[0], "Monster") &&
-                  eqStr(acg::kEntities[findEntity("Player")].ancestors[1], "Avatar"),
-              "Player 祖先链应为 [Monster, Avatar]");
+static_assert(findEntity("Player") < 0, "Player 已废（term-contract v1.0），不得复活");
+static_assert(findEntity("Monster") >= 0 && findEntity("NPC") >= 0 &&
+                  findEntity("Avatar") >= 0,
+              "场景实体族三实体齐备（Monster/NPC/Avatar）");
+static_assert(acg::kEntities[findEntity("NPC")].ancestorCount == 1 &&
+                  eqStr(acg::kEntities[findEntity("NPC")].ancestors[0], "Monster"),
+              "NPC 祖先链 = [Monster]（场景实体单继承保留）");
+static_assert(acg::kEntities[findEntity("Avatar")].ancestorCount == 0,
+              "Avatar 为根实体（玩家化身不入怪物族）");
 
 int main() {
     // 运行时零副作用：编译通过 + 断言成立即绿

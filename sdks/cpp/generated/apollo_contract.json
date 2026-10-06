@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "f3a05a01a6ec8c4bee64e28a1d377854c679840bc5001b3a1ab21b5ab9c75028",
-  "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
-  "internal_hash": "435d2c1d3602d899016386ff7ae549c0711a96f94e1adbe0817bcafa12300afa",
+  "schema_hash": "3652a284eb063fff7ca0d715927017619e9116ec97af705c160517f76788cf68",
+  "client_hash": "ecb0665505e34a843623ef8c14ad37f0a6aad979923afea0e4ad315742cc7200",
+  "internal_hash": "5d9882d126bd269ace3243b5b867fc1f5fed39532724061c2b2effbdad0f98e9",
   "contract_version": 2,
   "aliases": [
     {
@@ -526,6 +526,94 @@
       "desc": "换幕结果（含驳回码，scene_transfer 面唯一下行）"
     },
     {
+      "id": 16,
+      "name": "login_request",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "username",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        },
+        {
+          "name": "password",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "鉴权明文面随登录连接 CryptoFilter 槽位（net §5.5），契约层不加密"
+        },
+        {
+          "name": "client_version",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        },
+        {
+          "name": "timestamp",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "客户端毫秒时钟"
+        }
+      ],
+      "desc": "登录请求（login-app 鉴权）"
+    },
+    {
+      "id": 17,
+      "name": "login_response",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "连接域会话号"
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "玩家身份（强分型 id 值域）"
+        },
+        {
+          "name": "gateway_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        },
+        {
+          "name": "gateway_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "login_ticket",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "客户端凭此向 gateway 换取准入（P1-6 欠账字段入库）"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "登录应答（含网关落点与准入票据）"
+    },
+    {
       "id": 900,
       "name": "session_up",
       "dir": "P2P",
@@ -839,22 +927,376 @@
         }
       ],
       "desc": "重连恢复应答（Zone→gateway；拒绝即走完整重登，Avatar 重建）"
+    },
+    {
+      "id": 909,
+      "name": "gateway_assign_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "login_ticket",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "准入校验票据（login_response 下发的 ticket 原样上送核销）"
+        }
+      ],
+      "desc": "网关指派请求（gateway→login-app 随 RPC 上送）"
+    },
+    {
+      "id": 910,
+      "name": "gateway_assign_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "gateway_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        },
+        {
+          "name": "gateway_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "gateway 会话令牌"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "P1-6 欠账字段入库"
+        }
+      ],
+      "desc": "网关指派应答（login-app→gateway）"
+    },
+    {
+      "id": 911,
+      "name": "player_activate_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "玩家激活请求（base-app 装载 Anchor）"
+    },
+    {
+      "id": 912,
+      "name": "player_activate_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "AnchorState 字符串（六态可观察）"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "玩家激活应答（AnchorState 回带）"
+    },
+    {
+      "id": 913,
+      "name": "player_bind_session_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "gateway_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "gateway_addr",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "会话绑定请求（SessionBinding 写入）"
+    },
+    {
+      "id": 914,
+      "name": "player_bind_session_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "会话绑定应答"
+    },
+    {
+      "id": 915,
+      "name": "player_assign_world_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "world_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "map_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "route_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表）"
+    },
+    {
+      "id": 916,
+      "name": "player_assign_world_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "route_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "指派后路由版本"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "落点指派应答"
+    },
+    {
+      "id": 917,
+      "name": "player_resolve_route_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "路由解析请求（player_id 为 0 时按 session_id 反查）"
+    },
+    {
+      "id": 918,
+      "name": "player_resolve_route_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "success",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "gateway_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "gateway_addr",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        },
+        {
+          "name": "world_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": ""
+        },
+        {
+          "name": "map_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "route_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "路由解析应答（落点四件套+网关定位全量回带）"
     }
   ],
   "entities": [
     {
       "name": "Avatar",
-      "parent": "Monster",
-      "ancestors": [
-        "Monster"
-      ],
-      "desc": "玩家化身"
+      "parent": "",
+      "ancestors": [],
+      "desc": "场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 PlayerAnchor）"
     },
     {
       "name": "Monster",
       "parent": "",
       "ancestors": [],
-      "desc": "怪物基类"
+      "desc": "怪物基类（场景实体）"
     },
     {
       "name": "NPC",
@@ -862,16 +1304,7 @@
       "ancestors": [
         "Monster"
       ],
-      "desc": "NPC（继承怪物移动/战斗面）"
-    },
-    {
-      "name": "Player",
-      "parent": "Avatar",
-      "ancestors": [
-        "Monster",
-        "Avatar"
-      ],
-      "desc": "玩家（含社交面）"
+      "desc": "NPC（继承怪物移动/战斗面；场景实体）"
     }
   ],
   "errors": [

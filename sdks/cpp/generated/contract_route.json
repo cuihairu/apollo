@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "f3a05a01a6ec8c4bee64e28a1d377854c679840bc5001b3a1ab21b5ab9c75028",
-  "client_hash": "b6948b08e0d76dc1f8cfe05fa14ec5cdce9f62adad9c64af0f205fbe2997b733",
-  "internal_hash": "435d2c1d3602d899016386ff7ae549c0711a96f94e1adbe0817bcafa12300afa",
+  "schema_hash": "3652a284eb063fff7ca0d715927017619e9116ec97af705c160517f76788cf68",
+  "client_hash": "ecb0665505e34a843623ef8c14ad37f0a6aad979923afea0e4ad315742cc7200",
+  "internal_hash": "5d9882d126bd269ace3243b5b867fc1f5fed39532724061c2b2effbdad0f98e9",
   "contract_version": 2,
   "routes": [
     {
@@ -53,6 +53,24 @@
     {
       "id": 15,
       "name": "scene_transfer_result",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 16,
+      "name": "login_request",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "handler": null
+    },
+    {
+      "id": 17,
+      "name": "login_response",
       "dir": "S2C",
       "channel": "control",
       "domain": "client",
@@ -139,6 +157,96 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "session_resume_reply"
+    },
+    {
+      "id": 909,
+      "name": "gateway_assign_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "gateway_assign_request"
+    },
+    {
+      "id": 910,
+      "name": "gateway_assign_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "gateway_assign_response"
+    },
+    {
+      "id": 911,
+      "name": "player_activate_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_activate_request"
+    },
+    {
+      "id": 912,
+      "name": "player_activate_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_activate_response"
+    },
+    {
+      "id": 913,
+      "name": "player_bind_session_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_bind_session_request"
+    },
+    {
+      "id": 914,
+      "name": "player_bind_session_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_bind_session_response"
+    },
+    {
+      "id": 915,
+      "name": "player_assign_world_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_assign_world_request"
+    },
+    {
+      "id": 916,
+      "name": "player_assign_world_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_assign_world_response"
+    },
+    {
+      "id": 917,
+      "name": "player_resolve_route_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_resolve_route_request"
+    },
+    {
+      "id": 918,
+      "name": "player_resolve_route_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_resolve_route_response"
     }
   ]
 }

@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- entities.xml — 实体清单与单继承（生成期展开，ioc-review §16.7.2）。
-     attr 集合不在本文件声明：实体默认携带全量 attrs 的可见子集，逐实体裁剪属后续批。 -->
+     attr 集合不在本文件声明：实体默认携带全量 attrs 的可见子集，逐实体裁剪属后续批。
+
+     继承链修文（improvement-plan P2-3，object-model 差异清单 #2 消账）：
+     - 「Player」实体删除——契约裁决 Player 已废（term-contract v1.0：玩家长期
+       归属 = PlayerAnchor，场景空间对象 = Avatar，实体继承面无「Player」位）。
+     - Avatar 摘脱怪物族为根实体——玩家化身不是怪物子类；其移动/战斗/AOI 面
+       为场景化身自有职责（term-contract §1.2），不借怪物继承表达。
+     - Monster/NPC 保留单继承（NPC 继承怪物移动/战斗面），二者是场景实体
+       （P2-1 起实体集合归 Scene），命名不占玩家词。 -->
 <entities version="2">
-  <entity id="Monster" desc="怪物基类"/>
-  <entity id="NPC" parent="Monster" desc="NPC（继承怪物移动/战斗面）"/>
-  <entity id="Avatar" parent="Monster" desc="玩家化身"/>
-  <entity id="Player" parent="Avatar" desc="玩家（含社交面）"/>
+  <entity id="Monster" desc="怪物基类（场景实体）"/>
+  <entity id="NPC" parent="Monster" desc="NPC（继承怪物移动/战斗面；场景实体）"/>
+  <entity id="Avatar" desc="场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 PlayerAnchor）"/>
 </entities>

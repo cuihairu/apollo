@@ -33,6 +33,26 @@
     <field name="target_scene_id" type="int64" desc="目标 scene 号（成功=新场景，失败=原样回显）"/>
   </msg>
 
+  <!-- 登录族（login-flow §8 client 域新增；实现侧 modules/protocol 0x0001/0x0002
+       欠账入库，P1-6 收尾批「契约不含此域」三字段之一在此消账）。
+       过载拒绝码 busy+retry_after、排队 QueueNotice 归 P3（login-flow §8）；
+       LoginHello/LoginAuth 分步握手为设计稿演进面，实现未落地不入库。 -->
+  <msg id="16" name="login_request" dir="C2S" channel="control" domain="client" desc="登录请求（login-app 鉴权）">
+    <field name="username" type="string"/>
+    <field name="password" type="string" desc="鉴权明文面随登录连接 CryptoFilter 槽位（net §5.5），契约层不加密"/>
+    <field name="client_version" type="string"/>
+    <field name="timestamp" type="int64" desc="客户端毫秒时钟"/>
+  </msg>
+  <msg id="17" name="login_response" dir="S2C" channel="control" domain="client" desc="登录应答（含网关落点与准入票据）">
+    <field name="success" type="bool"/>
+    <field name="session_id" type="int64" desc="连接域会话号"/>
+    <field name="player_id" type="int64" desc="玩家身份（强分型 id 值域）"/>
+    <field name="gateway_host" type="string"/>
+    <field name="gateway_port" type="int32"/>
+    <field name="login_ticket" type="string" desc="客户端凭此向 gateway 换取准入（P1-6 欠账字段入库）"/>
+    <field name="error_message" type="string"/>
+  </msg>
+
   <!-- 在线目录事件族（P1-2，session-and-online-directory §8：internal 域 900+；
        单进程阶段为进程内事件面行为契约，跨进程镜像/总线留 P3） -->
   <msg id="900" name="session_up" dir="P2P" channel="events" domain="internal" desc="会话登记（Zone→manager；准入通过+Zone 接受后上报）">
@@ -91,5 +111,76 @@
     <field name="session_id" type="int64"/>
     <field name="player_id" type="int64"/>
     <field name="accepted" type="int32" desc="1=恢复 0=拒绝（token 死/窗口满/会话已终结）"/>
+  </msg>
+
+  <!-- 网关指派族（P1-6 收尾批欠账入库：loginTicket/errorMessage 三字段所在消息
+       面补齐；实现侧 modules/protocol 0x0010/0x0011）。
+       gateway_client_connect（0x0013）为 legacy 既有非 P0-P1 新增，不入库。 -->
+  <msg id="909" name="gateway_assign_request" dir="P2P" channel="events" domain="internal" desc="网关指派请求（gateway→login-app 随 RPC 上送）">
+    <field name="player_id" type="int64"/>
+    <field name="session_id" type="int64"/>
+    <field name="login_ticket" type="string" desc="准入校验票据（login_response 下发的 ticket 原样上送核销）"/>
+  </msg>
+  <msg id="910" name="gateway_assign_response" dir="P2P" channel="events" domain="internal" desc="网关指派应答（login-app→gateway）">
+    <field name="success" type="bool"/>
+    <field name="gateway_host" type="string"/>
+    <field name="gateway_port" type="int32"/>
+    <field name="token" type="string" desc="gateway 会话令牌"/>
+    <field name="error_message" type="string" desc="P1-6 欠账字段入库"/>
+  </msg>
+
+  <!-- 玩家生命周期族（P1-2 目录链路 + §34 baseapp/baseappmgr 拆分新增，
+       实现侧 modules/protocol 0x0060-0x0067 八消息入库；Anchor 六态的进程间
+       驱动面：activate 激活→bind_session 绑定→assign_world 落点→resolve_route
+       路由解析。目录权威表在 baseappmgr（§34 裁决），WorldAssignment 经此族
+       传递，不跨进程改 anchor 内存） -->
+  <msg id="911" name="player_activate_request" dir="P2P" channel="events" domain="internal" desc="玩家激活请求（base-app 装载 Anchor）">
+    <field name="player_id" type="int64"/>
+  </msg>
+  <msg id="912" name="player_activate_response" dir="P2P" channel="events" domain="internal" desc="玩家激活应答（AnchorState 回带）">
+    <field name="success" type="bool"/>
+    <field name="player_id" type="int64"/>
+    <field name="state" type="string" desc="AnchorState 字符串（六态可观察）"/>
+    <field name="error_message" type="string"/>
+  </msg>
+  <msg id="913" name="player_bind_session_request" dir="P2P" channel="events" domain="internal" desc="会话绑定请求（SessionBinding 写入）">
+    <field name="player_id" type="int64"/>
+    <field name="session_id" type="int64"/>
+    <field name="gateway_id" type="int32"/>
+    <field name="gateway_addr" type="string"/>
+  </msg>
+  <msg id="914" name="player_bind_session_response" dir="P2P" channel="events" domain="internal" desc="会话绑定应答">
+    <field name="success" type="bool"/>
+    <field name="error_message" type="string"/>
+  </msg>
+  <msg id="915" name="player_assign_world_request" dir="P2P" channel="events" domain="internal" desc="落点指派请求（WorldAssignment 写入，baseappmgr 目录表）">
+    <field name="player_id" type="int64"/>
+    <field name="world_id" type="int32"/>
+    <field name="map_id" type="int64"/>
+    <field name="instance_id" type="int64"/>
+    <field name="space_id" type="int64"/>
+    <field name="route_version" type="int64"/>
+  </msg>
+  <msg id="916" name="player_assign_world_response" dir="P2P" channel="events" domain="internal" desc="落点指派应答">
+    <field name="success" type="bool"/>
+    <field name="route_version" type="int64" desc="指派后路由版本"/>
+    <field name="error_message" type="string"/>
+  </msg>
+  <msg id="917" name="player_resolve_route_request" dir="P2P" channel="events" domain="internal" desc="路由解析请求（player_id 为 0 时按 session_id 反查）">
+    <field name="player_id" type="int64"/>
+    <field name="session_id" type="int64"/>
+  </msg>
+  <msg id="918" name="player_resolve_route_response" dir="P2P" channel="events" domain="internal" desc="路由解析应答（落点四件套+网关定位全量回带）">
+    <field name="success" type="bool"/>
+    <field name="player_id" type="int64"/>
+    <field name="session_id" type="int64"/>
+    <field name="gateway_id" type="int32"/>
+    <field name="gateway_addr" type="string"/>
+    <field name="world_id" type="int32"/>
+    <field name="map_id" type="int64"/>
+    <field name="instance_id" type="int64"/>
+    <field name="space_id" type="int64"/>
+    <field name="route_version" type="int64"/>
+    <field name="error_message" type="string"/>
   </msg>
 </messages>
