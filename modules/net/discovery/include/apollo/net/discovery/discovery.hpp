@@ -8,11 +8,12 @@
 //   - DiscoveryRegistry 目录侧：注册表 + 心跳 TTL 死亡判定 + 死亡事件队列
 //     （manager 域消费端接口——BW registerDeathListener 先例的骨架对应物）。
 //
-// 传输分界（骨架口径）：本层只定 wire 报文与两侧行为语义，不含 socket——
-// Beacon 经 BeaconTransport 接口发包（UDP 实现随进程壳批，测试注入内存桩），
-// Registry 以 on_packet 收字节（UDP 收包循环归守护进程壳）。报文单包定长、
-// 自带全量身份——无连接态、丢包由下一心跳自然补（最终一致，§7：拓扑小、
-// 变更低频，守护+广播够用）。
+// 传输分界：本文件只定 wire 报文与两侧行为语义，不含 socket——Beacon 经
+// BeaconTransport 接口发包（测试注入内存桩），Registry 以 on_packet 收字节。
+// UDP 传输库件（UdpBeaconTransport/UdpFeed）见 udp_transport.hpp（批 C 先行
+// 落库件，不涉进程命名）；守护进程壳 = 主循环接线 + 命名（术语拍板项）。
+// 报文单包定长、自带全量身份——无连接态、丢包由下一心跳自然补（最终一致，
+// §7：拓扑小、变更低频，守护+广播够用）。
 //
 // 并发纪律：Registry::on_packet/expire/members 与 Beacon 全部方法均要求调用
 // 方单线程驱动（目录侧 = 守护主循环；进程侧 = 编队事件轮询源）——与 control

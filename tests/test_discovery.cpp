@@ -1,14 +1,17 @@
-// 进程编队服务发现单测（P3-1 批 B，G-1 库层）。
+// 进程编队服务发现单测（P3-1 批 B 库层 + 批 C UDP 传输件）。
 //
-// 覆盖（骨架口径——内存桩传输，无 socket）：
+// 覆盖（骨架口径——批 B 内存桩传输零 flake；批 C loopback 集成）：
 //   1. WirePacket：编码→解码往返一致 + 偏移表（前 4 字节即 magic）；
 //   2. 报文校验：错 magic / 错 version / 未知 op / 零 component_id 整包丢；
 //   3. Registry：注册→members 可见；心跳/重复注册幂等刷新 last_seen；
 //   4. TTL 死亡：expire 超时移出 + drain_deaths 收到；
 //   5. 优雅注销：即时下线且不入死亡队列（与异常死亡语义分立）；
-//   6. Beacon：发包走 transport、is_valid 拒发、beat 自增 seq。
+//   6. Beacon：发包走 transport、is_valid 拒发、beat 自增 seq；
+//   7. UDP（批 C）：Feed 临时端口/幂等 open、loopback Beacon→Registry 全链、
+//      守卫面（未 open 拒发/非法端点拒发/空收非阻塞/超长报文静默丢）。
 
 #include "apollo/net/discovery/discovery.hpp"
+#include "apollo/net/discovery/udp_transport.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -16,6 +19,16 @@
 #include <iostream>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+#else
+    #include <arpa/inet.h>
+    #include <sys/socket.h>
+    #include <thread>
+    #include <unistd.h>
+#endif
 
 #define TEST_ASSERT(cond, msg)                                                               \
     do {                                                                                     \
@@ -261,6 +274,131 @@ bool test_registry_drops_invalid_identity() {
     return true;
 }
 
+// ---- 批 C：UDP 传输件（loopback 集成）----
+
+// 测试内直发任意长度报文（越出 BeaconTransport 32B 契约面，守卫面用例需要）
+bool raw_sendto(std::uint16_t port, const char* data, std::size_t len) {
+#ifdef _WIN32
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) {
+        return false;
+    }
+#else
+    int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s < 0) {
+        return false;
+    }
+#endif
+    sockaddr_in dst{};
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons(port);
+    dst.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    const bool ok = sendto(s, data, static_cast<int>(len), 0,
+                           reinterpret_cast<const sockaddr*>(&dst), sizeof(dst)) ==
+                    static_cast<int>(len);
+#ifdef _WIN32
+    closesocket(s);
+#else
+    ::close(s);
+#endif
+    return ok;
+}
+
+// 轮询取包（loopback 投递非即时——上限 2s 防调度抖动）
+bool poll_receive(UdpFeed& feed, std::uint8_t (&buf)[kWireSize]) {
+    for (int i = 0; i < 2000; ++i) {
+        if (feed.try_receive(buf)) {
+            return true;
+        }
+#ifdef _WIN32
+        Sleep(1);
+#else
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
+    }
+    return false;
+}
+
+bool test_udp_feed_lifecycle() {
+    UdpFeed feed;
+    TEST_ASSERT(feed.port() == 0 && !feed.is_open(), "未 open 端口 0");
+    TEST_ASSERT(feed.open(0, "127.0.0.1"), "临时端口 bind");
+    TEST_ASSERT(feed.is_open() && feed.port() != 0, "内核分配端口回读");
+    const auto bound = feed.port();
+    TEST_ASSERT(feed.open(0, "127.0.0.1"), "重复 open 幂等");
+    TEST_ASSERT(feed.port() == bound, "幂等不改端口");
+    feed.close();
+    TEST_ASSERT(!feed.is_open() && feed.port() == 0, "close 复位");
+
+    UdpFeed bad;
+    TEST_ASSERT(!bad.open(0, "no.a.hostname.here"), "主机名（非点分 IPv4）拒绝");
+    TEST_ASSERT(!bad.is_open(), "失败不残留句柄");
+    return true;
+}
+
+bool test_udp_loopback_beacon_to_registry() {
+    UdpFeed feed;
+    TEST_ASSERT(feed.open(0, "127.0.0.1"), "目录端 bind");
+
+    UdpBeaconTransport transport;
+    TEST_ASSERT(transport.open(), "信标端 open");
+    DiscoveryBeacon beacon(make_member(42, 4242), "127.0.0.1", feed.port(), transport, 1000);
+
+    TEST_ASSERT(beacon.register_self(), "注册包上 wire");
+    std::uint8_t buf[kWireSize];
+    DiscoveryRegistry reg(1000);
+    TEST_ASSERT(poll_receive(feed, buf), "loopback 收到注册包");
+    TEST_ASSERT(reg.on_packet(buf, 100), "喂 Registry");
+    TEST_ASSERT(reg.member_count() == 1 &&
+                    reg.members()[0].member.component_id == 42 &&
+                    reg.members()[0].member.service_port == 4242,
+                "成员身份经 UDP 往返还原");
+
+    TEST_ASSERT(beacon.beat(), "心跳上 wire");
+    TEST_ASSERT(poll_receive(feed, buf), "收到心跳包");
+    buf[6] = static_cast<std::uint8_t>(Op::Heartbeat);
+    TEST_ASSERT(reg.on_packet(buf, 1100), "心跳喂 Registry");
+    TEST_ASSERT(reg.members()[0].last_seen_ms == 1100, "last_seen 刷新");
+
+    TEST_ASSERT(beacon.deregister(), "注销上 wire");
+    TEST_ASSERT(poll_receive(feed, buf), "收到注销包");
+    buf[6] = static_cast<std::uint8_t>(Op::Deregister);
+    TEST_ASSERT(reg.on_packet(buf, 1200), "注销喂 Registry");
+    TEST_ASSERT(reg.member_count() == 0 && reg.drain_deaths().empty(),
+                "优雅下线且无死亡事件");
+    return true;
+}
+
+bool test_udp_send_guards_and_oversize() {
+    UdpFeed feed;
+    TEST_ASSERT(feed.open(0, "127.0.0.1"), "目录端 bind");
+
+    std::uint8_t buf[kWireSize];
+    TEST_ASSERT(!feed.try_receive(buf), "空收非阻塞即返");
+
+    UdpBeaconTransport closed_transport;
+    TEST_ASSERT(!closed_transport.send_to("127.0.0.1", feed.port(), buf),
+                "未 open 拒发");
+    TEST_ASSERT(closed_transport.open(), "open");
+    TEST_ASSERT(!closed_transport.send_to("no.a.hostname.here", feed.port(), buf),
+                "非法端点拒发");
+    TEST_ASSERT(!closed_transport.send_to("127.0.0.1", 0, buf), "零端口拒发");
+
+    // 超长报文（33B）静默丢，且不污染后续合法报文
+    char garbage[kWireSize + 1] = {};
+    TEST_ASSERT(raw_sendto(feed.port(), garbage, sizeof(garbage)), "超长报文已投递");
+    TEST_ASSERT(!feed.try_receive(buf), "超长报文丢弃");
+    TEST_ASSERT(!feed.try_receive(buf), "队列无残留");
+
+    WirePacket p;
+    p.component_id = 7;
+    p.encode_to(buf);
+    TEST_ASSERT(closed_transport.send_to("127.0.0.1", feed.port(), buf),
+                "合法报文照发");
+    TEST_ASSERT(poll_receive(feed, buf), "合法报文不受污染");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -278,6 +416,9 @@ int main() {
         {"graceful_deregister_bypasses_death_queue", test_graceful_deregister_bypasses_death_queue},
         {"beacon_sends_and_guards", test_beacon_sends_and_guards},
         {"registry_drops_invalid_identity", test_registry_drops_invalid_identity},
+        {"udp_feed_lifecycle", test_udp_feed_lifecycle},
+        {"udp_loopback_beacon_to_registry", test_udp_loopback_beacon_to_registry},
+        {"udp_send_guards_and_oversize", test_udp_send_guards_and_oversize},
     };
 
     for (const auto& c : cases) {

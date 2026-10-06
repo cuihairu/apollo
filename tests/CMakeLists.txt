@@ -836,11 +836,13 @@ if(MSVC)
 endif()
 add_test(NAME SocialTests COMMAND social_tests)
 
-# ========== Discovery Tests (P3-1 批 B) ==========
-# G-1 编队服务发现库层：wire 报文编解码 + Beacon/Registry 行为（内存桩传输）
+# ========== Discovery Tests (P3-1 批 B + 批 C) ==========
+# G-1 编队服务发现库层：wire 报文编解码 + Beacon/Registry 行为（内存桩）
+# + UDP 传输件 loopback 集成（批 C）
 add_executable(discovery_tests
     test_discovery.cpp
     ../modules/net/discovery/src/discovery.cpp
+    ../modules/net/discovery/src/udp_transport.cpp
 )
 target_include_directories(discovery_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/net/discovery/include
