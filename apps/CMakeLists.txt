@@ -5,6 +5,10 @@
 
 message(STATUS "Apollo app scaffold enabled: apps/")
 
+# Machined——G-1 单机守护（term-contract §1.3 定稿名）：编队目录面
+# （收包/喂钟/死亡事件落日志），仅依赖 net_discovery，无门控条件。
+add_subdirectory(machined)
+
 # 检查依赖是否可用
 # Gateway app 的 ingress 头仍包含旧 modules/protocol 的 apollo/protocol/*.hpp
 # （迁移未完成），故除 net::protocol 外还需旧模块目标存在。
