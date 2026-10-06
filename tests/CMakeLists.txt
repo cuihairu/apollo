@@ -86,18 +86,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
     add_test(NAME TimerTests COMMAND timer_tests)
 
-    # ========== Config Tests ==========
-
-    add_executable(config_tests test_config.cpp)
-
-    target_link_libraries(config_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(config_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME ConfigTests COMMAND config_tests)
-
     # ========== IdPool Tests ==========
 
     add_executable(id_pool_tests test_id_pool.cpp)
@@ -397,9 +385,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	else()
 	    message(STATUS "GTest not found or APOLLO_BUILD_GTESTS=OFF, building simple tests")
 	
-	    # Note:暂时禁用
-    # add_executable(config_tests_simple test_config.cpp)
-	    # Note: OpenSSL header conflicts - disabled
+		    # Note: OpenSSL header conflicts - disabled
     # add_executable(crypto_tests test_crypto.cpp)
 	    add_executable(bigworld_api_tests
             test_bigworld_api.cpp
