@@ -22,13 +22,6 @@ struct CellConfig {
     // Tick 配置
     int tickRateMs = 50;  // 20 ticks per second
 
-    // 性能配置
-    int maxEntities = 10000;
-    int workerThreads = 2;
-
-    // 日志配置
-    std::string logLevel = "info";
-    std::string logFile = "logs/cell.log";
 };
 
 } // namespace cell

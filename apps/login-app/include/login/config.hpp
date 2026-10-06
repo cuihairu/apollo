@@ -31,11 +31,7 @@ struct LoginConfig {
 
     // 会话配置
     int sessionTimeoutMs = 300000;   // 5分钟
-    std::string sessionSecret = "change-this-secret";
 
-    // 日志配置
-    std::string logLevel = "info";
-    std::string logFile = "logs/login.log";
 };
 
 } // namespace login
