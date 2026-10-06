@@ -1,7 +1,9 @@
 #pragma once
 
 // 进程编队服务发现骨架（G-1，net-abstraction §7 P3 前置设计；improvement-plan
-// P3-1 的库层——守护进程壳与进程命名属术语批，本层术语中立不涉新词）。
+// P3-1 的库层。守护进程代码标识 `Machined` 已是 term-contract v1.0 §1.3 定稿
+// 名——2026-10-07 勘误：批 B/C 曾记「machined 不入户 §0-2」系误读契约（§1.3
+// 明列守护进程行、§2 禁用表无 machined），进程壳无命名阻塞）。
 //
 // 两类形（BW bwmachined/machine_guard 先例，仅取骨架不取全家桶）：
 //   - DiscoveryBeacon   进程侧：注册 + 周期心跳 + 优雅注销的**报文产生端**；
@@ -10,8 +12,8 @@
 //
 // 传输分界：本文件只定 wire 报文与两侧行为语义，不含 socket——Beacon 经
 // BeaconTransport 接口发包（测试注入内存桩），Registry 以 on_packet 收字节。
-// UDP 传输库件（UdpBeaconTransport/UdpFeed）见 udp_transport.hpp（批 C 先行
-// 落库件，不涉进程命名）；守护进程壳 = 主循环接线 + 命名（术语拍板项）。
+// UDP 传输库件（UdpBeaconTransport/UdpFeed）见 udp_transport.hpp（批 C）；
+// 守护进程壳 = Machined 主循环接线。
 // 报文单包定长、自带全量身份——无连接态、丢包由下一心跳自然补（最终一致，
 // §7：拓扑小、变更低频，守护+广播够用）。
 //

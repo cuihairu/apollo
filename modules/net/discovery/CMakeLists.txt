@@ -1,6 +1,6 @@
 # Network - Discovery submodule（G-1 编队服务发现库层：wire 报文 + Beacon/
-# Registry 两侧行为语义 + UDP 传输库件；守护进程壳与命名归术语批——
-# machined 名不入户，term-contract §0-2）
+# Registry 两侧行为语义 + UDP 传输库件；守护进程壳 = Machined（term-contract
+# v1.0 §1.3 定稿名——2026-10-07 勘误：批 B 曾记「machined 不入户」系误读）
 add_library(apollo_net_discovery STATIC
     src/discovery.cpp
     src/udp_transport.cpp
