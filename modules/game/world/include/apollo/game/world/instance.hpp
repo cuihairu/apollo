@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo/game/battle/battle_runtime.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/world/avatar.hpp"
 
@@ -73,6 +74,14 @@ public:
     [[nodiscard]] std::size_t player_count() const noexcept;
     [[nodiscard]] const std::vector<apollo::game::core::PlayerId>& players() const noexcept;
 
+    // ---- 玩法负载挂接（P2-2，任务书 §16「Scene └─ BattleRuntime」持有树）----
+    // Instance 是玩法生命周期载体（八态），BattleRuntime 是其玩法负载（五段）；
+    // 一 Instance 至多一 battle。挂接窗口 = Create/Initialize/Waiting（开局装载；
+    // Running 起拒绝）。奖励经 battle 的 IRewardSink 单向落账，Instance 不经手。
+    bool attach_battle(std::unique_ptr<apollo::game::battle::BattleRuntime> battle);
+    [[nodiscard]] apollo::game::battle::BattleRuntime* battle() noexcept;
+    [[nodiscard]] const apollo::game::battle::BattleRuntime* battle() const noexcept;
+
     // ---- tick 计数（玩法节奏观察点；Running 态才累加）----
     void tick(double delta_seconds) noexcept;
     [[nodiscard]] std::uint64_t tick_count() const noexcept;
@@ -87,6 +96,7 @@ private:
     State state_ = State::Create;
     std::vector<apollo::game::core::PlayerId> players_;  // 保序（进场顺序可观察）
     std::unordered_set<std::uint64_t> player_index_;
+    std::unique_ptr<apollo::game::battle::BattleRuntime> battle_;
     std::uint64_t tick_count_ = 0;
     double elapsed_seconds_ = 0.0;
 };

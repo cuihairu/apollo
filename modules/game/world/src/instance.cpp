@@ -88,11 +88,23 @@ bool Instance::ready() {
 }
 
 bool Instance::start() {
+    // 挂了 battle 的 instance：start 前置校验参战者收集完成（battle.begin 需非空；
+    // 失败则 instance 状态不推进——八态与五段一致可观察）
+    if (battle_ && !battle_->begin()) {
+        return false;
+    }
     return transition_to(State::Running);
 }
 
 bool Instance::finish() {
-    return transition_to(State::Finishing);
+    if (!transition_to(State::Finishing)) {
+        return false;
+    }
+    // battle 结算五段尾（Battling→Rewarding→Finished；奖励经 sink 单向落账）
+    if (battle_ && battle_->phase() == apollo::game::battle::BattlePhase::Battling) {
+        battle_->finish();
+    }
+    return true;
 }
 
 bool Instance::settle() {
@@ -121,6 +133,17 @@ bool Instance::enter(apollo::game::core::PlayerId player_id) {
     }
     if (player_index_.count(player_id.value()) != 0) {
         return false;  // 重复进入拒绝
+    }
+    // battle 参战者收集同步（仅收集期 Created/Entering 转发；Battling 起进人
+    // 不参战——后进者观战，骨架口径）
+    if (battle_) {
+        const auto phase = battle_->phase();
+        if (phase == apollo::game::battle::BattlePhase::Created ||
+            phase == apollo::game::battle::BattlePhase::Entering) {
+            if (!battle_->enter_player(player_id.value())) {
+                return false;  // 参战侧拒绝（满员等）则准入整体拒绝
+            }
+        }
     }
     player_index_.insert(player_id.value());
     players_.push_back(player_id);
@@ -157,6 +180,11 @@ void Instance::tick(double delta_seconds) noexcept {
     }
     ++tick_count_;
     elapsed_seconds_ += delta_seconds;
+    // battle tick 接入（P2-2）：Running 态驱动玩法负载；tick_index 用累加后
+    // 的 tick_count_（严格递增，与 battle 复算口径一致）
+    if (battle_ && battle_->phase() == apollo::game::battle::BattlePhase::Battling) {
+        battle_->tick(static_cast<std::uint32_t>(tick_count_));
+    }
 }
 
 std::uint64_t Instance::tick_count() const noexcept {
@@ -165,6 +193,26 @@ std::uint64_t Instance::tick_count() const noexcept {
 
 double Instance::elapsed_seconds() const noexcept {
     return elapsed_seconds_;
+}
+
+bool Instance::attach_battle(std::unique_ptr<apollo::game::battle::BattleRuntime> battle) {
+    // 挂接窗口 = 开局装载三态；Running 起拒绝；一 instance 至多一 battle
+    if (state_ != State::Create && state_ != State::Initialize && state_ != State::Waiting) {
+        return false;
+    }
+    if (!battle || battle_) {
+        return false;
+    }
+    battle_ = std::move(battle);
+    return true;
+}
+
+apollo::game::battle::BattleRuntime* Instance::battle() noexcept {
+    return battle_.get();
+}
+
+const apollo::game::battle::BattleRuntime* Instance::battle() const noexcept {
+    return battle_.get();
 }
 
 } // namespace apollo::game::world

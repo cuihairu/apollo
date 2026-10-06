@@ -631,6 +631,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ${CMAKE_SOURCE_DIR}/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/core/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/world/include
+	        ${CMAKE_SOURCE_DIR}/modules/game/battle/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/session/include
 	    )
 	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core)
@@ -673,6 +674,7 @@ target_include_directories(avatar_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/include
 )
@@ -790,6 +792,7 @@ target_include_directories(reconnect_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
 )
 target_link_libraries(reconnect_tests PRIVATE apollo apollo::base apollo::core)
@@ -801,6 +804,30 @@ if(MSVC)
     target_compile_options(reconnect_tests PRIVATE /utf-8)
 endif()
 add_test(NAME ReconnectTests COMMAND reconnect_tests)
+
+# ========== Battle Runtime Tests (P2-2) ==========
+# battle-determinism 四约束可测骨架：PCG32 子流派生、生命周期状态机、
+# 迭代序归一、四元组复算回放、reward 单向落账、模拟段驱动
+# （直编源惯例同 reconnect_tests；battle 依赖 core Entity 实现）
+add_executable(battle_runtime_tests
+    test_battle_runtime.cpp
+    ../modules/game/battle/src/battle_runtime.cpp
+    ../modules/game/battle/src/battle_system.cpp
+    ../modules/game/core/src/entity.cpp
+)
+target_include_directories(battle_runtime_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+)
+target_link_libraries(battle_runtime_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(battle_runtime_tests PRIVATE ws2_32)
+    target_compile_definitions(battle_runtime_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(battle_runtime_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BattleRuntimeTests COMMAND battle_runtime_tests)
 
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
@@ -835,11 +862,15 @@ add_test(NAME SceneTests COMMAND scene_tests)
 add_executable(instance_tests
     test_instance.cpp
     ../modules/game/world/src/instance.cpp
+    ../modules/game/battle/src/battle_runtime.cpp
+    ../modules/game/battle/src/battle_system.cpp
+    ../modules/game/core/src/entity.cpp
 )
 target_include_directories(instance_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/include
 )
@@ -852,4 +883,23 @@ if(MSVC)
     target_compile_options(instance_tests PRIVATE /utf-8)
 endif()
 add_test(NAME InstanceTests COMMAND instance_tests)
+
+	# ========== RNG Substream Tests (P2-2, battle-determinism §4) ==========
+	# RNG 子流组件（modules/base 头件）：同三元组同序列/分域隔离/无游标/任意 tick 重放
+	add_executable(rng_substream_tests
+		test_rng_substream.cpp
+	)
+	target_include_directories(rng_substream_tests PRIVATE
+		${CMAKE_SOURCE_DIR}/modules/base/include
+		${CMAKE_SOURCE_DIR}/include
+	)
+	target_link_libraries(rng_substream_tests PRIVATE apollo apollo::base)
+	if(WIN32)
+		target_link_libraries(rng_substream_tests PRIVATE ws2_32)
+		target_compile_definitions(rng_substream_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	endif()
+	if(MSVC)
+		target_compile_options(rng_substream_tests PRIVATE /utf-8)
+	endif()
+	add_test(NAME RngSubstreamTests COMMAND rng_substream_tests)
 	endif()

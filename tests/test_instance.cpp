@@ -12,6 +12,9 @@
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #define TEST_ASSERT(cond, msg)                                                               \
     do {                                                                                     \
@@ -159,6 +162,111 @@ bool test_instance_invalid_player_rejected() {
     return true;
 }
 
+// ---- P2-2：instance×battle 挂接闭环（create→attach→enter→battle→reward）----
+
+// 内存奖励账本（IRewardSink 骨架实现；真 Anchor 落账随 P2-4）
+struct MemoryRewardSink : apollo::game::battle::IRewardSink {
+    std::vector<std::pair<std::uint64_t, std::int64_t>> payouts;
+
+    void on_reward(std::uint64_t player_id, std::int64_t score) override {
+        payouts.emplace_back(player_id, score);
+    }
+};
+
+bool test_instance_battle_hangup_window() {
+    Instance instance(6, 600, "run-6");
+    auto sink = std::make_unique<MemoryRewardSink>();
+    auto* sink_ptr = sink.get();
+    auto battle = std::make_unique<apollo::game::battle::BattleRuntime>(
+        601, 777, sink_ptr);
+
+    instance.initialize();
+    instance.ready();
+    TEST_ASSERT(instance.attach_battle(std::move(battle)), "Waiting 前挂接成功");
+    TEST_ASSERT(instance.battle() != nullptr, "挂接可观察");
+    TEST_ASSERT(!instance.attach_battle(
+        std::make_unique<apollo::game::battle::BattleRuntime>(602, 777)),
+        "重复挂接拒绝");
+
+    TEST_ASSERT(instance.enter(PlayerId{2001}), "准入（参战同步）");
+    TEST_ASSERT(instance.start(), "start 推进（battle begin 随行）");
+    TEST_ASSERT(instance.battle()->phase() ==
+                    apollo::game::battle::BattlePhase::Battling,
+                "battle 进入 Battling");
+
+    // Running 起挂接拒绝（开局装载窗口封死）
+    Instance running(7, 700, "run-7");
+    running.initialize();
+    running.ready();
+    TEST_ASSERT(running.start(), "无负载 instance 直接 start");
+    TEST_ASSERT(!running.attach_battle(
+        std::make_unique<apollo::game::battle::BattleRuntime>(701, 777)),
+        "Running 态挂接拒绝");
+
+    // start 前置校验：空参战者 battle.begin 失败 → instance start 失败不推进
+    Instance empty(8, 800, "run-8");
+    empty.initialize();
+    empty.ready();
+    TEST_ASSERT(empty.attach_battle(
+        std::make_unique<apollo::game::battle::BattleRuntime>(801, 777)),
+        "空场挂接成功");
+    TEST_ASSERT(!empty.start(), "无参战者 start 失败");
+    TEST_ASSERT(empty.state() == State::Waiting, "状态不推进（可观察可校验）");
+    return true;
+}
+
+bool test_instance_battle_tick_loop() {
+    Instance instance(9, 900, "run-9");
+    auto sink = std::make_unique<MemoryRewardSink>();
+    auto* sink_ptr = sink.get();
+
+    instance.initialize();
+    instance.ready();
+    TEST_ASSERT(instance.attach_battle(
+        std::make_unique<apollo::game::battle::BattleRuntime>(
+            901, 4242, sink_ptr)),
+        "挂接");
+    TEST_ASSERT(instance.enter(PlayerId{1001}), "玩家准入（参战同步）");
+    TEST_ASSERT(instance.battle()->players().size() == 1, "参战者收集");
+    TEST_ASSERT(instance.start(), "开局");
+
+    const auto seed_hash = instance.battle()->hash_chain();
+    for (int i = 0; i < 5; ++i) {
+        instance.tick(0.1);
+    }
+    TEST_ASSERT(instance.tick_count() == 5, "instance tick 计数");
+    TEST_ASSERT(instance.battle()->last_tick() == 5, "battle tick 随行");
+    // 骨架期 instance.tick 无输入通道（玩家意图协议面随 P2-3）——无事件 tick
+    // hash 链稳定不滚（事件级 hash 滚动由 battle_runtime_tests 覆盖）
+    TEST_ASSERT(instance.battle()->hash_chain() == seed_hash,
+                "无事件 tick hash 链稳定");
+
+    // 确定性复算（四元组口径：同 seed 同 tick 数同 hash）
+    Instance replay(10, 910, "run-10");
+    auto replay_sink = std::make_unique<MemoryRewardSink>();
+    replay.initialize();
+    replay.ready();
+    TEST_ASSERT(replay.attach_battle(
+        std::make_unique<apollo::game::battle::BattleRuntime>(
+            911, 4242, replay_sink.get())),
+        "复算挂接");
+    TEST_ASSERT(replay.enter(PlayerId{1001}), "复算准入");
+    TEST_ASSERT(replay.start(), "复算开局");
+    for (int i = 0; i < 5; ++i) {
+        replay.tick(0.1);
+    }
+    TEST_ASSERT(replay.battle()->hash_chain() == instance.battle()->hash_chain(),
+                "同四元组同 hash 链（复算回放判定）");
+
+    TEST_ASSERT(instance.finish(), "散场");
+    TEST_ASSERT(instance.battle()->phase() ==
+                    apollo::game::battle::BattlePhase::Finished,
+                "battle 五段走完");
+    TEST_ASSERT(sink_ptr->payouts.size() == 1, "奖励单向落账（sink 收到）");
+    TEST_ASSERT(sink_ptr->payouts[0].first == 1001, "落账 player_id 正确");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -174,6 +282,8 @@ int main() {
         {"instance_enter_windows", test_instance_enter_windows},
         {"instance_tick_only_when_running", test_instance_tick_only_when_running},
         {"instance_invalid_player_rejected", test_instance_invalid_player_rejected},
+        {"instance_battle_hangup_window", test_instance_battle_hangup_window},
+        {"instance_battle_tick_loop", test_instance_battle_tick_loop},
     };
 
     for (const auto& c : cases) {
