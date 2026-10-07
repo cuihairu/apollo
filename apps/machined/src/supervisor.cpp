@@ -218,7 +218,7 @@ bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
 }
 
 Supervisor::Supervisor(const std::vector<RosterEntry>&, int, std::uint32_t) {}
-void Supervisor::spawn_all(std::vector<SupervisorEvent>&) {}
+void Supervisor::spawn_all(std::uint64_t, std::vector<SupervisorEvent>&) {}
 void Supervisor::poll(std::uint64_t, std::vector<SupervisorEvent>&) {}
 void Supervisor::terminate_all() noexcept {}
 std::size_t Supervisor::alive_count() const noexcept { return 0; }

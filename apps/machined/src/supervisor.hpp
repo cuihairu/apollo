@@ -66,7 +66,7 @@ private:
         bool alive = false;
         int pid = -1;
         int restart_count = 0;
-        std::uint64_t respawn_at_ms = 0;  // 退避到期时刻（0 = 立即可重启）
+        std::uint64_t respawn_at_ms = 0;  // 退避到期时刻（0 = 未排程重试）
     };
 
     void spawn_one(Child& c, std::uint64_t now_ms,
