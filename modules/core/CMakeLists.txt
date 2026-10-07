@@ -1,6 +1,7 @@
 # Core module - framework kernel with common runtime semantics
 add_subdirectory(log)
 add_subdirectory(config)
+add_subdirectory(metrics)
 
 # Core library that aggregates all core functionality
 add_library(apollo_core STATIC
@@ -21,6 +22,7 @@ target_link_libraries(apollo_core
         apollo_base
         apollo_core_log
         apollo_core_config
+        apollo_core_metrics
 )
 
 target_compile_features(apollo_core PUBLIC cxx_std_20)

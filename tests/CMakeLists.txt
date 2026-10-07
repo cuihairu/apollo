@@ -836,6 +836,19 @@ if(MSVC)
 endif()
 add_test(NAME SocialTests COMMAND social_tests)
 
+# ========== Metrics Tests (P3-3 批 B) ==========
+# MetricRegistry 最小集：counter/gauge 原语 + 标签规范化 + 快照确定性
+# （经 apollo::core 传递 apollo_core_metrics，单 cpp）
+add_executable(metrics_tests test_metrics.cpp)
+target_link_libraries(metrics_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(metrics_tests PRIVATE ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(metrics_tests PRIVATE /utf-8)
+endif()
+add_test(NAME MetricsTests COMMAND metrics_tests)
+
 # ========== Discovery Tests (P3-1 批 B + 批 C) ==========
 # G-1 编队服务发现库层：wire 报文编解码 + Beacon/Registry 行为（内存桩）
 # + UDP 传输件 loopback 集成（批 C）
