@@ -89,13 +89,18 @@ Supervisor::Supervisor(const std::vector<RosterEntry>& roster, int restart_limit
     }
 }
 
-void Supervisor::spawn_one(Child& c, std::vector<SupervisorEvent>& out) {
+void Supervisor::spawn_one(Child& c, std::uint64_t now_ms,
+                           std::vector<SupervisorEvent>& out) {
     const pid_t pid = fork();
     if (pid < 0) {
         std::cerr << "[machined] fork failed for " << c.entry.name << ": "
                   << std::strerror(errno) << std::endl;
-        return;  // 拉起失败不进事件流（下一 poll 会重试——alive 仍 false 且
-                 // respawn_at 已过）
+        // 拉起失败不进事件流，按一个退避单位延迟重试（alive 仍
+        // false 且 respawn_at 已过——poll 重生路兜住）
+        if (c.respawn_at_ms == 0) {
+            c.respawn_at_ms = now_ms + backoff_base_ms_;
+        }
+        return;
     }
     if (pid == 0) {
         // 子进程：execvp 失败只能退出（127 惯例），由监督面按死亡处置
@@ -118,10 +123,11 @@ void Supervisor::spawn_one(Child& c, std::vector<SupervisorEvent>& out) {
     out.push_back(std::move(e));
 }
 
-void Supervisor::spawn_all(std::vector<SupervisorEvent>& out) {
+void Supervisor::spawn_all(std::uint64_t now_ms,
+                           std::vector<SupervisorEvent>& out) {
     for (auto& c : children_) {
         if (!c.alive) {
-            spawn_one(c, out);
+            spawn_one(c, now_ms, out);
         }
     }
 }
@@ -161,17 +167,20 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
         }
     }
 
-    // 退避到期重生
+    // 退避到期重生（rc>0 = 死亡重启路，发 Restarted 事件；rc=0 =
+    // fork 失败重试路，仅 spawn_one 的 Born 事件）
     for (auto& c : children_) {
-        if (!c.alive && c.restart_count > 0 && c.restart_count <= restart_limit_ &&
-            c.respawn_at_ms != 0 && now_ms >= c.respawn_at_ms) {
+        if (!c.alive && c.respawn_at_ms != 0 && now_ms >= c.respawn_at_ms) {
             c.respawn_at_ms = 0;
-            spawn_one(c, out);
-            SupervisorEvent r;
-            r.kind = SupervisorEvent::Kind::Restarted;
-            r.name = c.entry.name;
-            r.restart_count = c.restart_count;
-            out.push_back(std::move(r));
+            const int rc = c.restart_count;
+            spawn_one(c, now_ms, out);
+            if (rc > 0) {
+                SupervisorEvent r;
+                r.kind = SupervisorEvent::Kind::Restarted;
+                r.name = c.entry.name;
+                r.restart_count = rc;
+                out.push_back(std::move(r));
+            }
         }
     }
 }

@@ -49,7 +49,7 @@ public:
                         std::uint32_t backoff_base_ms = 1000);
 
     // 拉起全部花名册条目（append 事件到 out）。已有存活子进程时幂等跳过
-    void spawn_all(std::vector<SupervisorEvent>& out);
+    void spawn_all(std::uint64_t now_ms, std::vector<SupervisorEvent>& out);
 
     // 主循环收割：非阻塞轮询全部子进程；死亡即按策略重启（退避期不重启，
     // 到点自动重生）。调用方以 ~50ms 节拍喂入（与主循环同源）
@@ -69,7 +69,8 @@ private:
         std::uint64_t respawn_at_ms = 0;  // 退避到期时刻（0 = 立即可重启）
     };
 
-    void spawn_one(Child& c, std::vector<SupervisorEvent>& out);
+    void spawn_one(Child& c, std::uint64_t now_ms,
+                   std::vector<SupervisorEvent>& out);
 
     std::vector<Child> children_;
     int restart_limit_;

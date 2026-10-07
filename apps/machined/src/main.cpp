@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
     }
     machined::Supervisor supervisor(roster, 5, backoff_ms);
     std::vector<machined::SupervisorEvent> supervisor_events;
-    supervisor.spawn_all(supervisor_events);
+    supervisor.spawn_all(now_ms(), supervisor_events);
     log_supervisor_events(supervisor_events);
     supervisor_events.clear();
 
