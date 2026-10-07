@@ -10,15 +10,23 @@ namespace baseappmgr {
 BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
     : host_(std::move(host))
     , port_(port) {
-    // 目录事件面（P1-2）：单进程阶段事件落日志（可观察）；跨进程总线
-    // （InterServerLink 投影/镜像）留 P3。
-    directory_.set_event_sink([](const apollo::game::session::PlayerDirectory::Event& event) {
+    // 目录事件面（P1-2）：事件落日志（可观察）；P3-1 增量②起追加监听链
+    // （跨进程镜像 publisher 由进程壳经 set_directory_event_listener 接入）
+    directory_.set_event_sink([this](const apollo::game::session::PlayerDirectory::Event& event) {
         static const char* kKindNames[] = {"SessionUp", "SessionDown", "SessionMoved",
                                            "SessionKicked"};
         std::cout << "[directory] " << kKindNames[static_cast<int>(event.kind)]
                   << " player=" << event.player_id << " epoch=" << event.anchor_epoch
                   << " zone=" << event.zone_id << " reason=" << event.reason << std::endl;
+        if (directory_listener_) {
+            directory_listener_(event);
+        }
     });
+}
+
+void BaseAppMgr::set_directory_event_listener(
+    apollo::game::session::PlayerDirectory::EventSink listener) {
+    directory_listener_ = std::move(listener);
 }
 
 BaseAppMgr::~BaseAppMgr() {

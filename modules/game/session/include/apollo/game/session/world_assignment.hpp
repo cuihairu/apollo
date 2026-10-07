@@ -14,6 +14,9 @@ struct WorldAssignment {
     [[nodiscard]] bool is_assigned() const noexcept {
         return world_id != 0 || instance_id != 0 || space_id != 0;
     }
+
+    // 值语义比较（镜像 wire 往返断言/落点迁移测试复用）
+    [[nodiscard]] bool operator==(const WorldAssignment&) const noexcept = default;
 };
 
 } // namespace apollo::game::session

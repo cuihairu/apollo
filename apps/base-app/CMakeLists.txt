@@ -19,6 +19,7 @@ target_link_libraries(base-app
         apollo::data_orm
         apollo::data_cache
         apollo::game_session
+        apollo::net_discovery
         apollo_protocol
 )
 

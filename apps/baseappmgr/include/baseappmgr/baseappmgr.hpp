@@ -57,8 +57,13 @@ public:
     // ---- 在线目录（P1-2：目录语义升级——行为契约见 PlayerDirectory）----
     // 条目级真值在 directory_；SessionLocator/assignments_ 保留为路由投影
     // （ResolveRoute 消费面不变）。顶号预裁、事件族、对账、anchor_epoch
-    // 全部由目录承载；跨进程镜像留 P3。
+    // 全部由目录承载；跨进程镜像见 set_directory_event_listener。
     const apollo::game::session::PlayerDirectory& directory() const { return directory_; }
+
+    // 目录事件追加监听（P3-1 增量②：跨进程镜像 publisher 从进程壳链入；
+    // 默认日志面之后追加调用）。反复设置以最后注册者为准。
+    void set_directory_event_listener(
+        apollo::game::session::PlayerDirectory::EventSink listener);
 
     // 对账（30s 周期，owner 驱动）：上报在线集与目录比对；失配走快照重置。
     // 返回是否一致（P3 起由周期定时器驱动，单进程阶段由测试/运维触发）。
@@ -83,6 +88,7 @@ private:
     mutable std::mutex assignmentsMutex_;
     std::unordered_map<PlayerID, apollo::game::session::WorldAssignment> assignments_;
     apollo::game::session::PlayerDirectory directory_;
+    apollo::game::session::PlayerDirectory::EventSink directory_listener_;
 };
 
 } // namespace baseappmgr

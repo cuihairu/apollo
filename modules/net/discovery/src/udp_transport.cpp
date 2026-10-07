@@ -1,6 +1,7 @@
 #include "apollo/net/discovery/udp_transport.hpp"
 
 #include <cstring>
+#include <vector>
 
 #ifdef _WIN32
     #ifndef NOMINMAX
@@ -135,7 +136,13 @@ void UdpBeaconTransport::close() noexcept {
 
 bool UdpBeaconTransport::send_to(const std::string& host, std::uint16_t port,
                                  const std::uint8_t (&buf)[kWireSize]) {
-    if (!is_open() || port == 0) {
+    return send_bytes(host, port, buf, kWireSize);
+}
+
+bool UdpBeaconTransport::send_bytes(const std::string& host, std::uint16_t port,
+                                    const std::uint8_t* data, std::size_t len) {
+    if (!is_open() || port == 0 || data == nullptr || len == 0 ||
+        len > kMaxDatagramSize) {
         return false;
     }
     std::uint32_t net_addr = 0;
@@ -147,10 +154,10 @@ bool UdpBeaconTransport::send_to(const std::string& host, std::uint16_t port,
     dst.sin_port = htons(port);
     dst.sin_addr.s_addr = net_addr;
     const auto sent =
-        sendto(static_cast<sock_api_t>(handle_), reinterpret_cast<const char*>(buf),
-               static_cast<int>(kWireSize), 0,
+        sendto(static_cast<sock_api_t>(handle_), reinterpret_cast<const char*>(data),
+               static_cast<int>(len), 0,
                reinterpret_cast<const sockaddr*>(&dst), sizeof(dst));
-    return sent == static_cast<int>(kWireSize);
+    return sent == static_cast<int>(len);
 }
 
 bool UdpBeaconTransport::enable_broadcast() {
@@ -225,6 +232,43 @@ bool UdpFeed::try_receive(std::uint8_t (&buf)[kWireSize], std::string& sender_ho
         return false;  // EWOULDBLOCK / 长度不符 同路静默
     }
     std::memcpy(buf, tmp, kWireSize);
+    char ip[INET_ADDRSTRLEN] = {};
+    inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
+    sender_host = ip;
+    sender_port = ntohs(src.sin_port);
+    return true;
+}
+
+bool UdpFeed::try_receive(std::uint8_t* buf, std::size_t cap, std::size_t& len_out) {
+    std::string host;
+    std::uint16_t port = 0;
+    return try_receive(buf, cap, len_out, host, port);
+}
+
+bool UdpFeed::try_receive(std::uint8_t* buf, std::size_t cap, std::size_t& len_out,
+                          std::string& sender_host, std::uint16_t& sender_port) {
+    len_out = 0;
+    if (!is_open() || buf == nullptr || cap == 0) {
+        return false;
+    }
+    // 多读 1 字节侦测超长报文（≥cap 一律按疑似截断丢弃——调用方缓冲须大于
+    // 本方协议最大报文；超长静默丢不污染后续收包）
+    std::vector<std::uint8_t> tmp(cap + 1);
+    sockaddr_in src{};
+#ifdef _WIN32
+    int src_len = sizeof(src);
+#else
+    socklen_t src_len = sizeof(src);
+#endif
+    const auto n = recvfrom(static_cast<sock_api_t>(handle_),
+                            reinterpret_cast<char*>(tmp.data()),
+                            static_cast<int>(tmp.size()), 0,
+                            reinterpret_cast<sockaddr*>(&src), &src_len);
+    if (n <= 0 || static_cast<std::size_t>(n) > cap) {
+        return false;  // EWOULDBLOCK / 疑似截断 同路静默
+    }
+    std::memcpy(buf, tmp.data(), static_cast<std::size_t>(n));
+    len_out = static_cast<std::size_t>(n);
     char ip[INET_ADDRSTRLEN] = {};
     inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
     sender_host = ip;

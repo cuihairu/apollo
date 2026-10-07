@@ -883,6 +883,31 @@ if(MSVC)
 endif()
 add_test(NAME DiscoveryTests COMMAND discovery_tests)
 
+# ========== Directory Mirror Tests (P3-1 G-1 收尾批增量②) ==========
+# APD2 wire 编解码守卫 + Publisher 发布纪律 + Mirror seq/快照重组 +
+# 真目录端到端 + UDP loopback 全链（直编源惯例同 player_directory_tests；
+# loopback 复用 net/discovery UDP 传输件源）
+add_executable(directory_mirror_tests
+    test_directory_mirror.cpp
+    ../modules/game/session/src/player_directory.cpp
+    ../modules/game/session/src/directory_mirror.cpp
+    ../modules/net/discovery/src/udp_transport.cpp
+)
+target_include_directories(directory_mirror_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/net/discovery/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(directory_mirror_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(directory_mirror_tests PRIVATE ws2_32)
+    target_compile_definitions(directory_mirror_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(directory_mirror_tests PRIVATE /utf-8)
+endif()
+add_test(NAME DirectoryMirrorTests COMMAND directory_mirror_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

@@ -22,6 +22,10 @@
 
 namespace apollo::net::discovery {
 
+// 变长 datagram 单包上限（send_bytes/变长 try_receive 通用守卫；目录镜像面
+// 最大 snapshot part 远低于此）
+inline constexpr std::size_t kMaxDatagramSize = 16384;
+
 // Beacon 侧 UDP 传输（sendto 语义：无需 bind，内核分配临时源端口）
 class UdpBeaconTransport final : public BeaconTransport {
 public:
@@ -42,6 +46,11 @@ public:
     // BeaconTransport：发送一条 wire 报文；false = 未 open / 地址非法 / sendto 失败
     [[nodiscard]] bool send_to(const std::string& host, std::uint16_t port,
                                const std::uint8_t (&buf)[kWireSize]) override;
+
+    // 变长报文发送（G-1 收尾批增量②：目录镜像面 datagram——同 sendto 语义，
+    // 长度上限 kMaxDatagramSize）。false = 未 open / 地址非法 / 超限 / 失败
+    [[nodiscard]] bool send_bytes(const std::string& host, std::uint16_t port,
+                                  const std::uint8_t* data, std::size_t len);
 
     // 开启 SO_BROADCAST（广播发现层：Query 发往定向广播地址，如
     // 127.255.255.255 / 子网广播）。幂等；false = 未 open / setsockopt 失败
@@ -83,6 +92,18 @@ public:
     // 同上，并捕获发送方端点（发现层应答路由用：Advertise 回执到
     // Query.service_port@sender_host）
     [[nodiscard]] bool try_receive(std::uint8_t (&buf)[kWireSize],
+                                   std::string& sender_host,
+                                   std::uint16_t& sender_port);
+
+    // 变长报文收包（G-1 收尾批增量②：目录镜像面 datagram）。cap = 调用方
+    // 缓冲容量（须 > 本方协议最大报文——恰等 cap 的报文按疑似截断丢弃，
+    // 超长静默丢不污染后续）。命中时 len_out = 实际长度。
+    [[nodiscard]] bool try_receive(std::uint8_t* buf, std::size_t cap,
+                                   std::size_t& len_out);
+
+    // 同上，并捕获发送方端点
+    [[nodiscard]] bool try_receive(std::uint8_t* buf, std::size_t cap,
+                                   std::size_t& len_out,
                                    std::string& sender_host,
                                    std::uint16_t& sender_port);
 
