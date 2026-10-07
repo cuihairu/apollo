@@ -141,10 +141,20 @@ int main() {
 ### 4. 构建运行
 
 ```bash
-cmake -B build
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+  -DAPOLLO_BUILD_GAME_MODULE=ON
 cmake --build build
 ./build/game-server
 ```
+
+两个必带参数（缺一则构建失败）：
+
+- `CMAKE_TOOLCHAIN_FILE` 指向 vcpkg——依赖由仓库 `vcpkg.json` manifest 自动安装；
+  复用已有构建树的依赖可加 `-DVCPKG_INSTALLED_DIR=<仓库>/build/vcpkg_installed` 跳过重装。
+- `APOLLO_BUILD_GAME_MODULE=ON`——`apollo::game_world` 系模块缺省关闭，不带则 target 不存在。
+
+运行后可见宿主与服务日志（`ApplicationHost starting` → `[GameServer] 游戏服务器已启动（AOI 100 实体）` → `ApplicationHost ready`），Ctrl+C 经 `request_stop(SignalRequested)` 收口。
 
 ## 添加网络通信
 
