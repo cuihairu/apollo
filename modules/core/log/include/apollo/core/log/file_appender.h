@@ -183,6 +183,11 @@ private:
     bool parseFileInfo(const std::string& fileName, std::string& date, size_t& index) const;
 
     /**
+     * @brief 扫描既有轮转文件，返回指定日期下一个可用序号（max+1；无既有文件为 0）
+     */
+    size_t nextFileIndexForDate(const std::string& date) const;
+
+    /**
      * @brief 创建目录（如果不存在）
      */
     bool ensureDirectoryExists(const std::string& dir);

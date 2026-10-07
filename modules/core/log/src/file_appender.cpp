@@ -29,8 +29,13 @@ FileAppender::FileAppender(const FileAppenderConfig& config)
     // 确保目录存在
     ensureDirectoryExists(config_.directory);
 
+    // 启动续接：扫描既有轮转文件取 max 序号 +1——同日重启不再从 0 复写
+    // append 模式下的同序号旧文件（新旧日志交错缺陷，2026-10-07 实跑实证）
+    currentDate_ = getCurrentDate();
+    currentFileIndex_ = nextFileIndexForDate(currentDate_);
+
     // 生成初始文件路径并打开
-    std::string filePath = generateFilePath(getCurrentDate(), 0);
+    std::string filePath = generateFilePath(currentDate_, currentFileIndex_);
     openFile(filePath);
 }
 
@@ -99,7 +104,10 @@ void FileAppender::setConfig(const FileAppenderConfig& config) {
     config_ = config;
     ensureDirectoryExists(config_.directory);
     if (wasOpen) {
-        openFile(generateFilePath(getCurrentDate(), 0));
+        // 与构造同口径：换配置重开也续接序号，不覆写既有文件
+        currentDate_ = getCurrentDate();
+        currentFileIndex_ = nextFileIndexForDate(currentDate_);
+        openFile(generateFilePath(currentDate_, currentFileIndex_));
     }
 }
 
@@ -320,6 +328,59 @@ std::vector<std::string> FileAppender::getLogFiles() const {
     }
 
     return result;
+}
+
+size_t FileAppender::nextFileIndexForDate(const std::string& date) const {
+    size_t maxIndex = 0;
+    bool found = false;
+    // ByDate/ByBoth 文件名含日期段（parseFileInfo 可解）；BySize 仅裸序号
+    const bool dateInName = (config_.rotationMode == LogRotationMode::ByDate ||
+                             config_.rotationMode == LogRotationMode::ByBoth);
+    const std::string pattern = config_.baseName + "_";
+
+    try {
+        for (const auto& entry : fs::directory_iterator(config_.directory)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            const std::string fileName = entry.path().filename().string();
+            if (fileName.find(pattern) != 0) {
+                continue;
+            }
+
+            if (dateInName) {
+                std::string fileDate;
+                size_t fileIndex = 0;
+                if (parseFileInfo(fileName, fileDate, fileIndex) && fileDate == date) {
+                    found = true;
+                    maxIndex = std::max(maxIndex, fileIndex);
+                }
+            } else {
+                std::string rest = fileName.substr(pattern.size());
+                if (!config_.extension.empty()) {
+                    const std::string ext = "." + config_.extension;
+                    if (rest.size() < ext.size() ||
+                        rest.substr(rest.size() - ext.size()) != ext) {
+                        continue;
+                    }
+                    rest = rest.substr(0, rest.size() - ext.size());
+                }
+                if (!rest.empty() &&
+                    std::all_of(rest.begin(), rest.end(),
+                                [](unsigned char c) { return std::isdigit(c) != 0; })) {
+                    found = true;
+                    maxIndex = std::max(maxIndex,
+                                        static_cast<size_t>(std::stoull(rest)));
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error scanning log files for rotation index: " << e.what()
+                  << std::endl;
+        return 0;
+    }
+
+    return found ? maxIndex + 1 : 0;
 }
 
 bool FileAppender::parseFileInfo(const std::string& fileName, std::string& date, size_t& index) const {
