@@ -56,8 +56,8 @@ endif()
 add_subdirectory(starter)
 
 # Legacy compatibility sources required by the examples and older public headers.
+# （utils::logging 已随 P3-3 日志收口删除——examples 零消费，剩 threading 一件）
 add_library(apollo_legacy_compat STATIC
-    ../src/utils/logging/logger.cpp
     ../src/utils/threading/thread_pool.cpp
 )
 add_library(apollo::legacy_compat ALIAS apollo_legacy_compat)

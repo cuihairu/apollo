@@ -74,16 +74,12 @@ add_library(apollo STATIC
 
     # Utils
     src/utils/config/config_loader.cpp
-    src/utils/logging/logger.cpp
     src/utils/threading/thread_pool.cpp
     src/apollo/utils/id_pool.cpp
     src/apollo/utils/crypto.cpp
 
-    # Core - Log
-    src/apollo/core/log/logger.cpp
-    src/apollo/core/log/file_appender.cpp
-    src/apollo/core/log/console_appender.cpp
-    src/apollo/core/log/log_manager.cpp
+    # Core - Log（P3-3 收口：modules/core/log 单套，本 legacy 分支不再编旧栈——
+    # 源文件已随顶层 include/apollo/core/log 树一并删除）
 
     # Core - Timer
     src/apollo/core/timer/timer_manager.cpp

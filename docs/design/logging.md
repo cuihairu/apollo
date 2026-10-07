@@ -141,6 +141,7 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 
 - **现状**（architecture-review §11.5，行号见彼处）：四套并存——①遗留 `apollo::utils::logging`（消费方仅 examples）②顶层 `include/apollo/core/log` 内建栈 ③`modules/core/log`（vcpkg 无 spdlog，实际回落内建）④内存版 LogManager；外加同路径双头文件 ODR 陷阱与 C-26 孤儿 TU（`modules/core/src/log/log_manager.cpp:30-33` 无任何目标编译，默认构建按推演链接失败）。
 - **收敛方向**：**modules/core/log 单套**——删 ①，④降级为测试专用或删除；C-26 处置（编入或删）是第一刀。本设计的分级/旁路/crash 面在该模块内落地。
+- **收口交付**（2026-10-07，P3-3 批 A）：套 ① 删除（头树 include/apollo/utils/logging/ + 源 + legacy_compat CMake 行，零消费）；套 ② 顶层死树删除（291 行死版 log_manager.h 不迁，同名双头 ODR 陷阱消除；8 头 git mv 入 modules/core/log/include，.h/.hpp 同目录并存、零 include 串改动）；套 ③ 即收口单套（root/modules CMake 死源行清除）；套 ④ 已随 P0-6 先行删除。test_log.cpp 在活版 API 直接过 = 方法面兼容实证；门禁 ON/OFF 34/34、Examples 32/32。本设计的分级/旁路/crash 面仍未落地——见 §7 P1 余项。
 - **归属**（architecture-review §16.8.3 判据套用）：log API/缓冲/线程/分级/crash handler → **modules/core/log**（「被运行期链接 + 认进程留证语义」）；sigaltstack 装配点在 modules/base 线程封装（一处）；collector 进程 → **apps/**（「只有运维跑」；BW server/tools、KBE tools/logger 先例——16.8.2 表「聚合呈现在外挂工具」）；依赖方向铁律照旧 apps→modules 单向。
 - **与 G-5 的关系**：logger 是 skynet 三板斧之一（architecture-review §16.2/G-5 已引）；错误率/级别计数进 MetricRegistry（趋势），本设计的文件与条目是现状留证——「metrics=趋势、watcher/日志=现状」口径不变。
 
