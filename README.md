@@ -124,7 +124,7 @@ cmake -B build -G Ninja \
 cmake --build build --parallel
 
 # 运行示例
-./build/examples/all_features_demo
+./build/examples/session_demo
 ```
 
 ### Windows (Visual Studio)

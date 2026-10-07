@@ -52,9 +52,6 @@ if(APOLLO_BUILD_BIGWORLD_MODULE)
     add_subdirectory(bigworld)
 endif()
 
-# Level 9: Starter (assembly layer)
-add_subdirectory(starter)
-
 # Legacy compatibility sources required by the examples and older public headers.
 # （utils::logging 已随 P3-3 日志收口删除——examples 零消费，剩 threading 一件）
 add_library(apollo_legacy_compat STATIC
