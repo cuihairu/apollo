@@ -578,8 +578,9 @@ struct Drifter {
     float vz = 0.0f;
 };
 
-constexpr float kFrameDelta = 0.05f;  // 20Hz（clock-and-time 口径）
-constexpr double kFrameBudgetMs = 50.0;
+constexpr float kFrameDelta = 0.1f;  // 10Hz 主循环（clock-and-time §4 定案；
+                                     // 20Hz 是 movement 上报节拍，非主循环）
+constexpr double kFrameBudgetMs = 100.0;
 constexpr float kSpeed = 5.0f;  // 单位/秒
 constexpr int kWarmupFrames = 10;
 
@@ -708,8 +709,8 @@ void benchmarkThreeModels() {
     cout << "\n=== Three-Model Scene Benchmark (P3-2 A; arch §6) ===" << endl;
     cout << "负载：全体玩家匀速漂移（5 单位/s）+ AOI move 差集 + tick 六阶段"
          << "（单线程；预热 " << kWarmupFrames << " 帧不入统计）" << endl;
-    cout << "口径：桩 = 帧成本下界（无寻路/技能/跨景）；帧预算 50ms @ 20Hz"
-         << "——capacity-and-benchmark 实测锚点" << endl;
+    cout << "口径：桩 = 帧成本下界（无寻路/技能/跨景）；帧预算 100ms @ 10Hz"
+         << " 主循环（capacity-and-benchmark §2 实测锚点）" << endl;
 
     const ModelConfig models[] = {
         {"A(1x1000)", 1, 1000, 200, 1000.0f},
