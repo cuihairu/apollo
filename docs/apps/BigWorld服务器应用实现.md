@@ -120,18 +120,22 @@ Client -> LoginApp -> BaseApp(Proxy + PlayerAnchor) -> CellApp
 
 ## 通信协议
 
-### NNG (nanomsg-next-gen)
+### 进程间通信（现状与退役路线）
 
-选择 NNG 作为进程间通信协议的原因：
+> **现状注记（2026-10-07 对账）**：接入进程当前经 `modules/protocol`（REP/REQ
+> 套接字封装，`apollo/protocol/socket.hpp`）与 `modules/net/protocol`
+> （endpoint/channel 底座，收口前受 `apollo_protocol` 门控）通信。该底座为
+> **过渡形态**——退役路线已定（自持四层栈 + InterServerLink，net M1），本节
+> 特性表按过渡底座口径描述，M1 收口后随之更新。
 
 | 特性 | 说明 |
 |------|------|
-| **REQ/REP** | 请求-响应模式，用于 RPC 调用 |
-| **PUB/SUB** | 发布-订阅模式，用于广播和 AOI 同步 |
-| **PAIR** | 双向通信模式，用于 CellApp 间点对点通信 |
+| **REQ/REP** | 请求-响应模式，用于 RPC 调用（接入进程 login/gateway/baseappmgr 在用） |
 | **自动重连** | 内置连接断开自动重连 |
-| **高性能** | 零拷贝传输，低延迟 |
 | **跨平台** | 支持 Linux/Windows/macOS |
+
+PUB/SUB、PAIR 等其余模式当前无进程面消费者；进程间编队发现走 UDP 广播
+（`modules/net/discovery`，machined 编队目录），不依赖本底座。
 
 ### 消息格式
 
@@ -151,31 +155,52 @@ Client -> LoginApp -> BaseApp(Proxy + PlayerAnchor) -> CellApp
 
 ### 消息类型
 
+以下与 `modules/protocol/include/apollo/protocol/messages.hpp` 的
+`MessageType` 枚举逐项对齐（2026-10-07 对账）：
+
 ```cpp
 // 登录相关
 LOGIN_REQUEST           = 0x0001
 LOGIN_RESPONSE          = 0x0002
+LOGOUT_NOTIFY           = 0x0003
 
-// 入口相关
-ENTRY_ASSIGN_REQUEST    = 0x0010
-ENTRY_ASSIGN_RESPONSE   = 0x0011
-SESSION_HEARTBEAT       = 0x0012
+// 网关分配相关
+GATEWAY_ASSIGN_REQUEST    = 0x0010
+GATEWAY_ASSIGN_RESPONSE   = 0x0011
+GATEWAY_HEARTBEAT         = 0x0012
+GATEWAY_CLIENT_CONNECT    = 0x0013
+GATEWAY_CLIENT_DISCONNECT = 0x0014
 
 // 持久化相关
 DB_LOAD_REQUEST         = 0x0020
 DB_LOAD_RESPONSE        = 0x0021
 DB_SAVE_REQUEST         = 0x0022
 DB_SAVE_RESPONSE        = 0x0023
+DB_QUERY_REQUEST        = 0x0024
+DB_QUERY_RESPONSE       = 0x0025
 
-// CellApp 相关
+// Cell 相关
 CELL_CREATE_ENTITY      = 0x0030
+CELL_DESTROY_ENTITY     = 0x0031
+CELL_ENTITY_ENTER       = 0x0032
+CELL_ENTITY_LEAVE       = 0x0033
 CELL_ENTITY_MOVE        = 0x0034
+CELL_ENTITY_PROPERTY    = 0x0035
 CELL_CROSS_BORDER       = 0x0036
 
 // 战斗相关
 COMBAT_SKILL_CAST       = 0x0040
 COMBAT_DAMAGE           = 0x0041
+COMBAT_HEAL             = 0x0042
 COMBAT_DEATH            = 0x0043
+
+// 聊天相关
+CHAT_MESSAGE            = 0x0050
+CHAT_BROADCAST          = 0x0051
+
+// 玩家激活相关
+PLAYER_ACTIVATE_REQUEST  = 0x0060
+PLAYER_ACTIVATE_RESPONSE = 0x0061
 ```
 
 ---
@@ -232,12 +257,18 @@ int heartbeatCheckIntervalMs = 1000; // 服务端检查间隔
 apps/gateway-app/
 ├── CMakeLists.txt
 ├── include/gateway/
-│   ├── config.hpp          # 配置定义
-│   ├── session_manager.hpp # 会话管理器
-│   └── gateway_server.hpp  # 服务器主类
+│   ├── config.hpp              # 配置定义
+│   ├── session_manager.hpp     # 会话管理器
+│   ├── gateway_server.hpp      # 服务器主类
+│   └── ingress/                # 接入面（P1 收口）
+│       ├── client_ingress_server.hpp   # 客户端接入服务
+│       ├── client_packet_dispatcher.hpp# 客户端包分发
+│       ├── gateway_connection_registry.hpp # 连接注册表
+│       └── session_admission_service.hpp   # 会话准入服务
 └── src/
     ├── main.cpp
-    └── gateway_server.cpp
+    ├── gateway_server.cpp
+    └── ingress/
 ```
 
 ---
@@ -245,6 +276,9 @@ apps/gateway-app/
 ## LoginApp 登录服务器
 
 ### 职责
+
+> **示意接口注记**：本节代码块为职责示意（同 CellApp 段 AOIManager 先例），
+> 非仓库实符号；真实入口面见使用示例的命令行参数。
 
 1. **账号认证**
 ```cpp
@@ -312,15 +346,18 @@ Client                    LoginApp                BaseApp
 
 ### 使用示例
 
-```bash
-# 启动登录服务器
-./login-app --port 9001 --entry-mode gateway
-```
-
-如果是分布式世界模式，则更接近：
+实际命令行参数（`./login-app --help`，2026-10-07 对账）：
 
 ```bash
-./login-app --port 9001 --entry-mode baseapp-proxy
+# 启动登录服务器（--entry-mode 参数当前不存在，入口形态经
+# --gateway / --base-app 后端挂接体现）
+./login-app --port 9001
+
+# 普通 MMO 装配：挂接 Gateway 后端
+./login-app --port 9001 --gateway tcp://127.0.0.1:8888
+
+# 分布式世界装配：挂接 BaseApp 后端
+./login-app --port 9001 --base-app tcp://127.0.0.1:9002
 ```
 
 ---
@@ -386,8 +423,8 @@ struct PlayerData {
 ### 使用示例
 
 ```bash
-# 启动 BaseApp 玩家锚点宿主
-./base-app --port 9002
+# 启动 BaseApp 玩家锚点宿主（--db 指定数据库名）
+./base-app --port 9002 --db apollo
 ```
 
 ---
@@ -400,6 +437,11 @@ struct PlayerData {
 
 - `WorldApp`
 - 或单机版 world runtime
+
+> **现状注记（2026-10-07 对账）**：`WorldApp` 当前无独立进程目录；世界运行时
+> 以库件形态落在 `modules/game/world`（Scene/AOI/Instance），单机装配参考
+> `apps/game-server`（装配样例）。启动命令里的 world-app 示例同样以 cell-app
+> 现状为准。
 
 ### 职责
 
@@ -449,13 +491,60 @@ enum class EntityType : uint8_t {
 ### 使用示例
 
 ```bash
-# 启动游戏逻辑服务器
-./cell-app --port 9100 --size 2000 2000 --tick-rate 50
+# 启动游戏逻辑服务器（--space 指定 Space 名，缺省 main_world）
+./cell-app --port 9100 --space main_world --size 2000 2000 --tick-rate 50
 ```
 
 ---
 
+## BaseAppMgr 调度面
+
+> 目录：`apps/baseappmgr`（缺省端口 9003，`--port` 覆盖）。
+
+职责（调度面，BigWorld BaseAppMgr 直系）：
+
+- **目录**：player→SessionBinding / player→WorldAssignment 的全局目录
+- **落点裁决**：`assignWorld` / `clearWorldAssignment`
+- **路由解析**：ResolveRoute（供 gateway 问「玩家在哪个 world、经哪个 gateway」）
+
+边界：不承载玩家数据（Avatar 常驻数据归 base-app），不跨进程改任何进程内存——本进程只维护自己的目录表。
+
+```bash
+# 启动调度面
+./baseappmgr --port 9003
+```
+
+## Machined 守护进程
+
+> 目录：`apps/machined`（缺省编队端口 9600，`--port` 覆盖；`--interval` 心跳周期毫秒、`--backoff` 重启退避基数毫秒、`--roster` 编队花名册）。
+
+职责（编队 + 监督两面）：
+
+- **编队目录**：UDP 广播发现（Register/Heartbeat/Deregister + Query/Advertise 应答），成员表 TTL 超时判死、优雅注销直接下线
+- **监督面**：roster 花名册（`name | command args...`）启动期全量拉起；`waitpid(WNOHANG)` 非阻塞收割；线性退避自动重启（第 n 次延迟 n×backoff_ms），超限放弃并告警；SIGTERM/SIGINT 全子进程收割
+- 自身不入编队表（服务身份与成员身份分离）
+
+POSIX only（部署目标 Linux 服务器）；Windows 分支监督面空转告警、发现面照常。
+
+```bash
+# 启动守护进程（拉起 roster 并提供编队目录）
+./machined --port 9600 --roster fleet.roster
+```
+
+## game-server 装配样例
+
+> 目录：`apps/game-server`。**非拓扑成员**——单体装配参考样例。
+
+演示模块化装配全链：`module_manifest` + `RuntimeManifest` + `ServiceHost`/`IHostedService` + DI（`ApplicationContext`）+ `ConfigRegistry` + 数据源/ORM（`DataSource`/`MemoryConnection`/`SqlTemplate`）的接线方式。新服务进程以它为装配模板，按拓扑需要取舍服务集。
+
+---
+
 ## 部署方式
+
+> **现状注记（2026-10-07 对账）**：本节拓扑图为**目标形态**示意——`WorldApp`
+> 当前无独立进程目录（世界运行时在 `modules/game/world` 库件层，装配参考
+> `apps/game-server`）；Docker Compose 编排文件尚未入库。实际可敲的启动命令
+> 以「运行指南」节为准。
 
 ### 单机部署（普通 MMO）
 
@@ -636,11 +725,10 @@ services:
 ### 构建项目
 
 ```bash
-# 安装 vcpkg 依赖
-vcpkg install nng:x64-windows nng:x64-linux
-
-# 配置构建
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=[vcpkg]/scripts/buildsystems/vcpkg.cmake
+# 依赖经仓库 vcpkg.json manifest 自动安装（无需手工 vcpkg install）
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE=[vcpkg]/scripts/buildsystems/vcpkg.cmake \
+  -DAPOLLO_BUILD_GAME_MODULE=ON
 
 # 编译
 cmake --build build
@@ -650,31 +738,34 @@ cmake --build build
 
 #### 普通 MMO
 
+> `WorldApp` 无独立进程目录（见部署方式现状注记），世界运行时位以
+> cell-app 现状承担；编队可经 machined 一键拉起（scripts/dev_fleet.sh）。
+
 ```bash
 # 1. 启动 BaseApp (玩家锚点宿主)
-./build/base-app/base-app --port 9002
+./build/apps/base-app/base-app --port 9002
 
 # 2. 启动 LoginApp (登录服务)
-./build/login-app/login-app --port 9001
+./build/apps/login-app/login-app --port 9001
 
-# 3. 启动 WorldApp (世界运行时)
-./build/world-app/world-app --port 9100 --size 2000 2000
+# 3. 启动 CellApp (世界运行时位)
+./build/apps/cell-app/cell-app --port 9100 --size 2000 2000
 
 # 4. 启动 GatewayApp (边缘接入层)
-./build/gateway-app/gateway-app --port 8888
+./build/apps/gateway-app/gateway-app --port 8888
 ```
 
 #### 分布式世界
 
 ```bash
 # 1. 启动 BaseApp (PlayerAnchor + Proxy 宿主)
-./build/base-app/base-app --port 9002
+./build/apps/base-app/base-app --port 9002
 
 # 2. 启动 LoginApp (登录服务)
-./build/login-app/login-app --port 9001
+./build/apps/login-app/login-app --port 9001
 
 # 3. 启动 CellApp (游戏逻辑服务)
-./build/cell-app/cell-app --port 9100 --size 2000 2000
+./build/apps/cell-app/cell-app --port 9100 --size 2000 2000
 ```
 
 ### 启动顺序
