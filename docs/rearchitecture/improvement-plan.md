@@ -173,7 +173,7 @@
 
 ## 5. P4 —— Documentation / Examples / Benchmark / Tutorial（任务书 §38 五档 + §33/§34）
 
-- P4-1 文档修订：quick-start 引用实 API；apps 文档复核（9 项差异）；tests/README 墓碑清理（批 A 已交付 2026-10-07——308 行 Actor 墓碑重写为现状套件文档，ctest -N 实测 36 项为准的按域套件表 + 三树门禁口径 + 新增测试惯例；摸底发现：48 个 test_*.cpp 仅 33 个进门禁，15 个 legacy GTest 批随 APOLLO_BUILD_GTESTS=OFF 默认不编不跑）；README 第一屏按 §34 重构（Player/Scene/Instance/AOI/Battle/Persistence 六核心词 + 最小 example）；docs/architecture/overview.md（§35）；ADR-001..009 记录（§36：Player Runtime Authority / Scene as Runtime Boundary / Instance First-Class / Scene Transfer / AOI Ownership / Battle Runtime / Persistence Model / Recovery Model / Concurrency Ownership）。
+- P4-1 文档修订：quick-start 引用实 API（批 B 已交付 2026-10-07——教学示例实对账+实编译验证：add_subdirectory 真实消费形态替代虚构 find_package 导出、APOLLO_LOG()->info 替代虚构宏、Ctrl+C 真实收口写法、GAME_MODULE=ON+toolchain 两必带参数实测；独立工程实构建实运行验证）；apps 文档复核（9 项差异）；tests/README 墓碑清理（批 A 已交付 2026-10-07——308 行 Actor 墓碑重写为现状套件文档，ctest -N 实测 36 项为准的按域套件表 + 三树门禁口径 + 新增测试惯例；摸底发现：48 个 test_*.cpp 仅 33 个进门禁，15 个 legacy GTest 批随 APOLLO_BUILD_GTESTS=OFF 默认不编不跑）；README 第一屏按 §34 重构（Player/Scene/Instance/AOI/Battle/Persistence 六核心词 + 最小 example）；docs/architecture/overview.md（§35）；ADR-001..009 记录（§36：Player Runtime Authority / Scene as Runtime Boundary / Instance First-Class / Scene Transfer / AOI Ownership / Battle Runtime / Persistence Model / Recovery Model / Concurrency Ownership）。
 - P4-2 最小可运行示例 = 任务书 §29 全链路（login→lobby→create instance→enter→spawn→AOI→battle→reward→leave）（P0-P2 完成后此例即全流程验证器）。批 A 已交付（2026-10-07）——examples/full_loop_demo.cpp 进程内八步驱动六模块真件，36 断言门全过；跨进程接线归 G-1 收尾批与 net M1。
 - P4-3 Benchmark/Tutorial：三模型基准（P3-2 复用）+ 新手上路教程。
 - P4-4 术语承接：全仓核对 term-contract 零出现（禁用词扫描：Space/nng/Battle(space 义)/Player(玩家实体义)/baseapp 进程名迁移后清账）。
