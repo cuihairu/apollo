@@ -20,6 +20,27 @@
 
 ---
 
+## 1.1 后况勘误（2026-10-07 实测更新）
+
+本节为 §1 快照的后况增补——P0-3 之后的重构改变了线程拓扑，本文写作时的
+「一切业务都在主线程」已不成立：
+
+- cell-app 拆出 `gameThread_`（cell_server.cpp:142）跑 `worldHost_->tick()`；
+  消息 handler 由 `protocol::RepSocket` 的自持 worker 线程执行
+  （socket.cpp:124 workerLoop）——**handler 写 world（create/destroy/move/
+  cross-border transfer/combat）与 tick 读写 world 跨线程并发，Scene
+  （P1-3 后无锁单写者形态）与 World 树在此二线程之间无任何保护**——真
+  竞争（生产未触发仅因负载空洞，architecture §6.1「模型空洞」同一成因）。
+  WorldSessionManager 的 mutex 只保护会话表自身，不覆盖 world 树。
+- base-app：autoSaveThread_ + SaveQueue worker 线程实存（§1 表已录）；
+  AnchorManager/SessionLocator 的调用线程归属待 P3-2 批 B 地图收口。
+
+修复方向按 §3 目标模型（「其余线程经消息投递后修改」）——批 B 立项见
+docs/todo P3-2；方案分叉（队列化异步受理 / 队列化+同步等待 / 最小互斥
+回退）属 RPC 语义取舍，列拍板项。
+
+---
+
 ## 2. 锁盘点（现状实存清单）
 
 | 锁 | 保护什么 | 持有时长/风险 |
