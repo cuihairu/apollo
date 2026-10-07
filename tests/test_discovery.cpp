@@ -8,8 +8,11 @@
 //   5. 优雅注销：即时下线且不入死亡队列（与异常死亡语义分立）；
 //   6. Beacon：发包走 transport、is_valid 拒发、beat 自增 seq；
 //   7. UDP（批 C）：Feed 临时端口/幂等 open、loopback Beacon→Registry 全链、
-//      守卫面（未 open 拒发/非法端点拒发/空收非阻塞/超长报文静默丢）。
+//      守卫面（未 open 拒发/非法端点拒发/空收非阻塞/超长报文静默丢）；
+//   8. 发现层（批 E）：Query/Advertise wire 往返 + 成员面隔离、定向广播
+//      Query 可达、locator 两段原语 loopback 握手。
 
+#include "apollo/net/discovery/directory_locator.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
 
@@ -319,6 +322,22 @@ bool poll_receive(UdpFeed& feed, std::uint8_t (&buf)[kWireSize]) {
     return false;
 }
 
+// 同上，捕获发送方端点（发现层用例）
+bool poll_receive_with(UdpFeed& feed, std::uint8_t (&buf)[kWireSize],
+                       std::string& sender_host, std::uint16_t& sender_port) {
+    for (int i = 0; i < 2000; ++i) {
+        if (feed.try_receive(buf, sender_host, sender_port)) {
+            return true;
+        }
+#ifdef _WIN32
+        Sleep(1);
+#else
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
+    }
+    return false;
+}
+
 bool test_udp_feed_lifecycle() {
     UdpFeed feed;
     TEST_ASSERT(feed.port() == 0 && !feed.is_open(), "未 open 端口 0");
@@ -384,6 +403,12 @@ bool test_udp_send_guards_and_oversize() {
                 "非法端点拒发");
     TEST_ASSERT(!closed_transport.send_to("127.0.0.1", 0, buf), "零端口拒发");
 
+    // 广播开关：未 open 拒绝；open 后幂等置位
+    UdpBeaconTransport never_opened;
+    TEST_ASSERT(!never_opened.enable_broadcast(), "未 open 开广播拒绝");
+    TEST_ASSERT(closed_transport.enable_broadcast(), "open 后开广播");
+    TEST_ASSERT(closed_transport.enable_broadcast(), "重复开广播幂等");
+
     // 超长报文（33B）静默丢，且不污染后续合法报文
     char garbage[kWireSize + 1] = {};
     TEST_ASSERT(raw_sendto(feed.port(), garbage, sizeof(garbage)), "超长报文已投递");
@@ -396,6 +421,110 @@ bool test_udp_send_guards_and_oversize() {
     TEST_ASSERT(closed_transport.send_to("127.0.0.1", feed.port(), buf),
                 "合法报文照发");
     TEST_ASSERT(poll_receive(feed, buf), "合法报文不受污染");
+    return true;
+}
+
+// ---- 批 E：发现层（Query/Advertise + 广播引导）----
+
+bool test_discovery_plane_ops_wire_and_registry_isolation() {
+    // wire 往返：Query/Advertise 合法通过 decode
+    std::uint8_t buf[kWireSize];
+    {
+        WirePacket p;
+        p.op = Op::Query;
+        p.component_id = 55;
+        p.service_port = 4321;  // 回执端口语义
+        p.encode_to(buf);
+    }
+    WirePacket out;
+    TEST_ASSERT(WirePacket::decode_from(buf, out) && out.op == Op::Query &&
+                    out.service_port == 4321,
+                "Query wire 往返");
+
+    {
+        WirePacket p;
+        p.op = Op::Advertise;
+        p.component_id = kDirectoryComponentId;
+        p.service_port = 9600;
+        p.encode_to(buf);
+    }
+    TEST_ASSERT(WirePacket::decode_from(buf, out) && out.op == Op::Advertise &&
+                    out.component_id == kDirectoryComponentId,
+                "Advertise wire 往返");
+
+    // 成员面隔离：发现层 op 不入 Registry（machined 路由层分流）
+    DiscoveryRegistry reg(1000);
+    TEST_ASSERT(!reg.on_packet(buf, 0), "Advertise 拒入成员面");
+    TEST_ASSERT(reg.member_count() == 0, "无副作用");
+    buf[6] = static_cast<std::uint8_t>(Op::Query);
+    TEST_ASSERT(!reg.on_packet(buf, 0), "Query 拒入成员面");
+    TEST_ASSERT(reg.drain_deaths().empty(), "死亡队列无扰动");
+    return true;
+}
+
+bool test_udp_broadcast_query_reaches_directory() {
+    UdpFeed feed;
+    TEST_ASSERT(feed.open(0, "0.0.0.0"), "目录端 bind ANY（收广播前提）");
+
+    UdpBeaconTransport transport;
+    TEST_ASSERT(transport.open() && transport.enable_broadcast(), "广播发送端就绪");
+    TEST_ASSERT(DirectoryLocator::send_query(transport, "127.255.255.255",
+                                             feed.port(), 5432, make_member(66)),
+                "Query 广播发出");
+    std::uint8_t buf[kWireSize];
+    std::string sender_host;
+    std::uint16_t sender_port = 0;
+    TEST_ASSERT(poll_receive_with(feed, buf, sender_host, sender_port),
+                "广播被目录端收到");
+    WirePacket out;
+    TEST_ASSERT(WirePacket::decode_from(buf, out) && out.op == Op::Query &&
+                    out.service_port == 5432,
+                "Query 内容经广播还原（回执端口 5432）");
+    TEST_ASSERT(!sender_host.empty() && sender_port != 0, "发送方端点已捕获");
+    return true;
+}
+
+bool test_locator_handshake_loopback() {
+    UdpFeed directory_feed;
+    TEST_ASSERT(directory_feed.open(0, "0.0.0.0"), "目录端 bind");
+
+    // 请求方：广播 Query（回执端口 = 自己的临时 feed）
+    UdpFeed reply_feed;
+    TEST_ASSERT(reply_feed.open(0, "0.0.0.0"), "请求方回执 feed");
+    UdpBeaconTransport transport;
+    TEST_ASSERT(transport.open() && transport.enable_broadcast(), "请求方广播就绪");
+    TEST_ASSERT(DirectoryLocator::send_query(transport, "127.255.255.255",
+                                             directory_feed.port(),
+                                             reply_feed.port(), make_member(77)),
+                "Query 广播");
+
+    // 目录侧自演 machined：收 Query → Advertise 回执到回执端口
+    std::uint8_t buf[kWireSize];
+    std::string sender_host;
+    std::uint16_t sender_port = 0;
+    TEST_ASSERT(poll_receive_with(directory_feed, buf, sender_host, sender_port),
+                "目录端收到 Query");
+    WirePacket q;
+    TEST_ASSERT(WirePacket::decode_from(buf, q) && q.op == Op::Query, "op=Query");
+    UdpBeaconTransport reply_transport;
+    TEST_ASSERT(reply_transport.open(), "目录回执面 open");
+    {
+        WirePacket adv;
+        adv.op = Op::Advertise;
+        adv.component_id = kDirectoryComponentId;
+        adv.service_port = directory_feed.port();
+        std::uint8_t abuf[kWireSize];
+        adv.encode_to(abuf);
+        TEST_ASSERT(reply_transport.send_to(sender_host, q.service_port, abuf),
+                    "Advertise 回执发出");
+    }
+
+    // 请求方 collect_reply 收敛
+    DirectoryEndpoint ep;
+    TEST_ASSERT(DirectoryLocator::collect_reply(reply_feed, 2000, ep),
+                "collect_reply 命中");
+    TEST_ASSERT(ep.port == directory_feed.port(), "目录端口经 Advertise 还原");
+    TEST_ASSERT(ep.is_valid(), "端点有效");
     return true;
 }
 
@@ -419,6 +548,10 @@ int main() {
         {"udp_feed_lifecycle", test_udp_feed_lifecycle},
         {"udp_loopback_beacon_to_registry", test_udp_loopback_beacon_to_registry},
         {"udp_send_guards_and_oversize", test_udp_send_guards_and_oversize},
+        {"discovery_plane_ops_wire_and_registry_isolation",
+         test_discovery_plane_ops_wire_and_registry_isolation},
+        {"udp_broadcast_query_reaches_directory", test_udp_broadcast_query_reaches_directory},
+        {"locator_handshake_loopback", test_locator_handshake_loopback},
     };
 
     for (const auto& c : cases) {

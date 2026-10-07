@@ -43,6 +43,10 @@ public:
     [[nodiscard]] bool send_to(const std::string& host, std::uint16_t port,
                                const std::uint8_t (&buf)[kWireSize]) override;
 
+    // 开启 SO_BROADCAST（广播发现层：Query 发往定向广播地址，如
+    // 127.255.255.255 / 子网广播）。幂等；false = 未 open / setsockopt 失败
+    [[nodiscard]] bool enable_broadcast();
+
 private:
     static constexpr std::intptr_t kInvalidHandle = -1;
     std::intptr_t handle_ = kInvalidHandle;  // POSIX fd / Windows SOCKET（cpp 内转型）
@@ -75,6 +79,12 @@ public:
     // 非阻塞取一条报文：返回 false = 暂无数据（EWOULDBLOCK）或长度 ≠ 32B
     // （非本协议报文，静默丢——调用方勿区分，下一轮询再试）
     [[nodiscard]] bool try_receive(std::uint8_t (&buf)[kWireSize]);
+
+    // 同上，并捕获发送方端点（发现层应答路由用：Advertise 回执到
+    // Query.service_port@sender_host）
+    [[nodiscard]] bool try_receive(std::uint8_t (&buf)[kWireSize],
+                                   std::string& sender_host,
+                                   std::uint16_t& sender_port);
 
 private:
     static constexpr std::intptr_t kInvalidHandle = -1;

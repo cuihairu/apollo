@@ -153,6 +153,16 @@ bool UdpBeaconTransport::send_to(const std::string& host, std::uint16_t port,
     return sent == static_cast<int>(kWireSize);
 }
 
+bool UdpBeaconTransport::enable_broadcast() {
+    if (!is_open()) {
+        return false;
+    }
+    int enable = 1;
+    return setsockopt(static_cast<sock_api_t>(handle_), SOL_SOCKET, SO_BROADCAST,
+                      reinterpret_cast<const char*>(&enable),
+                      sizeof(enable)) == 0;
+}
+
 // ---- UdpFeed ----
 
 UdpFeed::~UdpFeed() {
@@ -190,17 +200,35 @@ void UdpFeed::close() noexcept {
 }
 
 bool UdpFeed::try_receive(std::uint8_t (&buf)[kWireSize]) {
+    std::string host;
+    std::uint16_t port = 0;
+    return try_receive(buf, host, port);
+}
+
+bool UdpFeed::try_receive(std::uint8_t (&buf)[kWireSize], std::string& sender_host,
+                          std::uint16_t& sender_port) {
     if (!is_open()) {
         return false;
     }
     // 多读 1 字节侦测超长报文（≠32B 一律丢——非本协议）
     std::uint8_t tmp[kWireSize + 1];
-    const auto n = recv(static_cast<sock_api_t>(handle_), reinterpret_cast<char*>(tmp),
-                        static_cast<int>(sizeof(tmp)), 0);
+    sockaddr_in src{};
+#ifdef _WIN32
+    int src_len = sizeof(src);
+#else
+    socklen_t src_len = sizeof(src);
+#endif
+    const auto n = recvfrom(static_cast<sock_api_t>(handle_),
+                            reinterpret_cast<char*>(tmp), static_cast<int>(sizeof(tmp)),
+                            0, reinterpret_cast<sockaddr*>(&src), &src_len);
     if (n != static_cast<int>(kWireSize)) {
         return false;  // EWOULDBLOCK / 长度不符 同路静默
     }
     std::memcpy(buf, tmp, kWireSize);
+    char ip[INET_ADDRSTRLEN] = {};
+    inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
+    sender_host = ip;
+    sender_port = ntohs(src.sin_port);
     return true;
 }
 

@@ -843,6 +843,7 @@ add_executable(discovery_tests
     test_discovery.cpp
     ../modules/net/discovery/src/discovery.cpp
     ../modules/net/discovery/src/udp_transport.cpp
+    ../modules/net/discovery/src/directory_locator.cpp
 )
 target_include_directories(discovery_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/net/discovery/include

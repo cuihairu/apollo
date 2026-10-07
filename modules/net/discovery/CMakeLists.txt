@@ -4,6 +4,7 @@
 add_library(apollo_net_discovery STATIC
     src/discovery.cpp
     src/udp_transport.cpp
+    src/directory_locator.cpp
 )
 add_library(apollo::net_discovery ALIAS apollo_net_discovery)
 

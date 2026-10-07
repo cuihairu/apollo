@@ -73,7 +73,9 @@ bool WirePacket::decode_from(const std::uint8_t (&buf)[kWireSize],
     const auto raw_op = buf[6];
     if (raw_op != static_cast<std::uint8_t>(Op::Register) &&
         raw_op != static_cast<std::uint8_t>(Op::Heartbeat) &&
-        raw_op != static_cast<std::uint8_t>(Op::Deregister)) {
+        raw_op != static_cast<std::uint8_t>(Op::Deregister) &&
+        raw_op != static_cast<std::uint8_t>(Op::Query) &&
+        raw_op != static_cast<std::uint8_t>(Op::Advertise)) {
         return false;  // 未知 op 丢
     }
     out.op = static_cast<Op>(raw_op);
@@ -146,6 +148,9 @@ bool DiscoveryRegistry::on_packet(const std::uint8_t (&buf)[kWireSize],
     m.seq = p.seq;
     if (!m.is_valid()) {
         return false;  // 零组件号非法（编队身份不变式）
+    }
+    if (p.op == Op::Query || p.op == Op::Advertise) {
+        return false;  // 发现层 op 不入成员面（machined 路由层分流应答）
     }
 
     auto it = std::find_if(entries_.begin(), entries_.end(),

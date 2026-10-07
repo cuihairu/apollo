@@ -39,7 +39,12 @@ enum class Op : std::uint8_t {
     Register = 1,   // 注册（重复注册 = 刷新，幂等）
     Heartbeat = 2,  // 心跳（未注册组件视作注册——首包丢失不挂起）
     Deregister = 3, // 优雅注销
+    Query = 4,      // 广播查询「谁是目录」（成员面之外——发现层，§7 UDP 广播）
+    Advertise = 5,  // 目录应答（unicast 回执端口；service_port = 目录收包端口）
 };
+
+// 目录保留组件号（Advertise 报文的 component_id；machined 自身不入编队表）
+inline constexpr std::uint64_t kDirectoryComponentId = 1;
 
 // 编队成员身份（G-1 组件三元组 + 心跳序号）
 struct MemberId {
@@ -132,7 +137,8 @@ public:
     explicit DiscoveryRegistry(std::uint32_t heartbeat_interval_ms = 1000);
 
     // 收包口：处理一条 wire 报文。now_ms 由调用方注入（目录钟）。
-    // 返回 false = 报文丢弃（magic/version 不符、身份非法或 op 未知）
+    // 返回 false = 报文丢弃（magic/version 不符、身份非法、op 未知，或 op 属
+    // 发现层 Query/Advertise——成员面与发现面分立，machined 路由层分流）
     [[nodiscard]] bool on_packet(const std::uint8_t (&buf)[kWireSize],
                                  std::uint64_t now_ms);
 
