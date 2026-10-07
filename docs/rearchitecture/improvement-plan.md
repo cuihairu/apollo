@@ -165,7 +165,7 @@
   - **批 E 已交付（2026-10-07）**：G-1 发现层 `Query/Advertise`（§7 UDP 广播发现的引导路径，KBE machine 广播应答先例的最小对应物）——①wire 增 op 4/5 + `kDirectoryComponentId=1`（machined 自身不入编队表）；Registry 成员面隔离（发现层 op 拒入，machined 路由层分流）；②`UdpBeaconTransport::enable_broadcast`（SO_BROADCAST，幂等）+ `UdpFeed::try_receive` 发送方端点捕获（recvfrom，Advertise 回执路由用）；③`DirectoryLocator`（`directory_locator.hpp/cpp`）：send_query（service_port 承载回执端口）/ collect_reply（等 Advertise，超时续等）/ locate（阻塞重试组合，真实进程启动期用）；④machined 发现应答：Query→Advertise 单播回执到 service_port@sender（独立 reply_transport，service_port=0 守卫）。测试 discovery_tests 增 3 组共 13 组（含 127.255.255.255 真广播到达 + 全握手 loopback）；真进程冒烟（Query→Advertise op=5/comp=1/端口还原）。门禁 ON/OFF 34/34、Examples 32/32 全绿。
 - **P3-2 性能**：按 architecture.md §6 三模型（1×1000 / 10×100 / 100×10）建 benchmark 桩（benchmark.cpp 接线 game world 真实路径，已链 apollo base/core）；锁粒度 scene 级化（concurrency §3 目标模型）；帧预算表实测化（capacity-and-benchmark）。
 - **P3-3 可观测性**：日志收敛末批（批 A 已交付，logging.md §6 收口交付注记）；metrics/tracing 最小集（批 B 已交付 MetricRegistry 最小集——modules/core/metrics 原语载体[counter/gauge+标签规范化+快照确定性出口]，顶层 513 行零消费孤儿 metrics.h 同批删除；owning 模块接线/control 通道上行/admin exporter 未做）；结构化行格式（批 C 已交付——六键固定序+引号规则+LogContext proc/tick 注入+FileAppender structuredOutput 开关默认关，契约源 structured.h 头注）；VerifierApp（gap #17）与 LoggerApp 进程立项。
-- **P3-4 DevEx**：CLI 脚手架（starter 模块补实或删除——空壳现状见 runtime 报告 G 节）；app 一键起停。
+- **P3-4 DevEx**：CLI 脚手架（starter 模块补实或删除——空壳现状见 runtime 报告 G 节；双 INTERFACE 零源码 + 死测试引用不存在头文件，两向取舍列拍板项）；app 一键起停（批 A 已交付——scripts/dev_fleet.sh 包装 machined 批 F 监督面：up 生成 roster 后台拉起/roster/status/down SIGTERM 收割；dev 端口布局 9001-9005；编队=生命周期半边，各 app 未接 DiscoveryBeacon 目录注册归 G-1 收尾批）。
 
 > P3 出口判据：三模型基准有可重复数字；单场景 1000 人广播在目标帧预算内（以文档预算表为准）。
 
