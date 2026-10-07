@@ -10,6 +10,31 @@ target_link_libraries(session_demo PRIVATE apollo)
 add_executable(game_server_demo game_server_demo.cpp)
 target_link_libraries(game_server_demo PRIVATE apollo)
 
+# ========== Full Loop Demo (P4-2) ==========
+# 任务书 §29 全链路进程内驱动（login→lobby→instance→enter→spawn→AOI→battle
+# →reward→leave）：直编 world/battle/session 真件，每步断言门=组合回归验证器。
+add_executable(full_loop_demo full_loop_demo.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/core/src/entity.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene_aoi.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/viewer_state.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/avatar.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/instance.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/src/battle_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/src/battle_system.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/session/src/anchor_manager.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/session/src/player_anchor.cpp
+)
+target_include_directories(full_loop_demo PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(full_loop_demo PRIVATE apollo apollo::base apollo::core)
+
 # ========== Benchmark ==========
 # 三模型场景基准（P3-2 批 A）：直编 game world 六源（scene_tests 同款惯例，
 # 不依赖 GAME_MODULE target——OFF 树照常构建），负载链 Scene/AOI/Avatar 真实路径。

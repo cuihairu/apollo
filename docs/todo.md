@@ -55,7 +55,7 @@
 ## P4 —— Documentation / Examples / Benchmark / Tutorial（任务书 §38 五档 + §33/§34）
 
 - [ ] **P4-1 文档修订**：quick-start 引用实 API；apps 文档 9 项差异复核；tests/README 墓碑清理；README 第一屏按 §34 重构（Player/Scene/Instance/AOI/Battle/Persistence 六核心词 + 最小 example）；docs/architecture/overview.md（§35）；ADR-001..009（§36）。
-- [ ] **P4-2 最小可运行示例** = 任务书 §29 全链路（login→lobby→create instance→enter→spawn→AOI→battle→reward→leave）——P0-P2 完成后即全流程验证器。
+- [ ] **P4-2 最小可运行示例** = 任务书 §29 全链路（**批 A 已交付（本批）**——examples/full_loop_demo.cpp 进程内八步驱动：login[AnchorManager::activate 幂等]→lobby+create instance[八态 Create→Waiting+Create 拒进面]→attach battle[Waiting 窗口+IRewardSink→Anchor 单向口]→enter[Instance::enter 收集期转发 battle 参战收集]→spawn+AOI[Scene enter/move 差集 Enter×1/Sync/Leave 双向事件]→battle[start 内部 begin 前置校验+Battling 起进人只观战+显式 tick×5 带 opcode=1+hash 链滚动]→reward[finish 结算 exp 落账+mark_dirty]→leave[八态尾四段+登出锚回收]；36 断言门全过=组合回归验证器；直编十源[world 六+battle 二+session 二，benchmark 同款惯例，OFF 树照常]；**骨架期口径发现**：tick_index 空间归 Instance::tick[内部驱动 battle.tick]，BattleInput 显式注入面在其外——两者不可混用抢拍，输入通道批接线归后；跨进程接线（网关/login 协议栈、G-1）不在本例归 G-1 收尾批与 net M1）。
 - [ ] **P4-3 Benchmark/Tutorial**：三模型基准复用 + 新手上路教程。
 - [ ] **P4-4 术语承接**：全仓 term-contract 零出现（禁用词扫描清零：Space / nng / Battle(space 义) / Player(玩家实体义) / baseapp 进程名）。
 
