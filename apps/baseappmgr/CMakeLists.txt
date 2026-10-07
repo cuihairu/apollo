@@ -16,6 +16,7 @@ target_link_libraries(baseappmgr
         apollo::base
         apollo::core
         apollo::game_session
+        apollo::net_discovery
         apollo_protocol
 )
 

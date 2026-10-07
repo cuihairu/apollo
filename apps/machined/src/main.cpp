@@ -1,13 +1,13 @@
-// Machined——G-1 单机守护：编队目录面 + 发现应答 + 监督面（P3-1 批 D/E/F）。
+// Machined——G-1 单机守护：编队目录面 + 发现应答 + 监督面 + 死亡事件跨进程
+// 上报（P3-1 批 D/E/F + G-1 收尾批增量①）。
 //
 // 职责：bind UDP → 非阻塞收包分流（成员面 op 喂 DiscoveryRegistry；发现面
 // Query 以 Advertise 回执到 Query.service_port@sender——目录被发现的引导路
-// 径，§7 UDP 广播发现）→ 周期 expire 喂钟 → 死亡事件（异常死亡）与成员
-// 增减落日志。单线程主循环、无内部线程——与 discovery 库「调用方单线程
-// 驱动」纪律同源。
-// 监督面（拉起/重启半边，批 F）已随批入库——本文件即含 roster 拉起/
-// 退避重启；死亡事件的跨进程上报（manager 域消费端）不在本批，
-// 随 G-1 收尾批。
+// 径，§7 UDP 广播发现；死亡面 DeathSubscribe 喂 DeathNotifier 订阅表）→
+// 周期 expire 喂钟 → 死亡事件（TTL 判死 + 监督面子进程死亡）合流转发：
+// 落日志 + DeathNotify 上报全部在册订阅者（manager 域消费端，§7「mgr 向
+// machined 注册死亡监听」）。单线程主循环、无内部线程——与 discovery 库
+// 「调用方单线程驱动」纪律同源。
 //
 // 端点：0.0.0.0:9600 缺省（--port N 覆盖）；心跳周期 --interval N（毫秒，
 // 缺省 1000，TTL = 3 × interval）。报文协议见 modules/net/discovery。
@@ -38,6 +38,18 @@ std::uint64_t now_ms() {
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch())
             .count());
+}
+
+const char* death_kind_name(apollo::net::discovery::DeathKind kind) {
+    switch (kind) {
+    case apollo::net::discovery::DeathKind::TtlExpired:
+        return "ttl_expired";
+    case apollo::net::discovery::DeathKind::ChildDied:
+        return "child_died";
+    case apollo::net::discovery::DeathKind::GaveUp:
+        return "gave_up";
+    }
+    return "unknown";
 }
 
 void log_supervisor_events(const std::vector<machined::SupervisorEvent>& events) {
@@ -107,6 +119,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     disco::DiscoveryRegistry registry(interval_ms);
+    disco::DeathNotifier death_notifier(reply_transport, interval_ms);
     std::cout << "[machined] listening on 0.0.0.0:" << feed.port()
               << " (interval=" << interval_ms << "ms, ttl=" << registry.ttl_ms()
               << "ms)" << std::endl;
@@ -132,6 +145,23 @@ int main(int argc, char** argv) {
 
         supervisor.poll(now, supervisor_events);
         log_supervisor_events(supervisor_events);
+        // 死亡事件合流（增量①）：监督面子进程死亡 → DeathNotify 上报
+        //（roster 声明 component_id 者上 wire，零 = 未入编队仅落日志）
+        for (const auto& e : supervisor_events) {
+            if (e.component_id == 0) {
+                continue;
+            }
+            if (e.kind == machined::SupervisorEvent::Kind::Died) {
+                disco::MemberId dead;
+                dead.component_id = e.component_id;
+                death_notifier.notify(dead, disco::DeathKind::ChildDied,
+                                      static_cast<std::uint32_t>(e.exit_code));
+            } else if (e.kind == machined::SupervisorEvent::Kind::GivenUp) {
+                disco::MemberId dead;
+                dead.component_id = e.component_id;
+                death_notifier.notify(dead, disco::DeathKind::GaveUp, 0);
+            }
+        }
         supervisor_events.clear();
 
         std::uint8_t buf[disco::kWireSize];
@@ -159,6 +189,16 @@ int main(int argc, char** argv) {
                 }
                 continue;
             }
+            if (p.op == disco::Op::DeathSubscribe) {
+                // 死亡面：订阅注册/刷新（幂等；通知回投 = sender:service_port）
+                if (death_notifier.on_subscribe(p.component_id, p.service_port,
+                                                sender_host, now)) {
+                    std::cout << "[machined] death subscriber component="
+                              << p.component_id << "@" << sender_host << ":"
+                              << p.service_port << std::endl;
+                }
+                continue;
+            }
             if (!registry.on_packet(buf, now)) {
                 std::cout << "[machined] dropped packet (op="
                           << static_cast<int>(p.op) << ")" << std::endl;
@@ -167,6 +207,7 @@ int main(int argc, char** argv) {
 
         if (now - last_expire_ms >= interval_ms) {  // 喂钟节奏 = 心跳周期
             registry.expire(now);
+            death_notifier.expire(now);
             last_expire_ms = now;
         }
 
@@ -174,6 +215,7 @@ int main(int argc, char** argv) {
             std::cout << "[machined] death component=" << death.component_id
                       << " zone=" << death.zone_id << " port=" << death.service_port
                       << std::endl;
+            death_notifier.notify(death, disco::DeathKind::TtlExpired, 0);
         }
         const std::size_t count = registry.member_count();
         if (count != last_count) {

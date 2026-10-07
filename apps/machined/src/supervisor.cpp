@@ -30,6 +30,16 @@ std::vector<std::string> split_args(const std::string& cmd) {
     return out;
 }
 
+// 两侧 trim（roster 列分隔值共用）
+std::string trim_copy(const std::string& s) {
+    const auto begin = s.find_first_not_of(" \t");
+    if (begin == std::string::npos) {
+        return {};
+    }
+    const auto end = s.find_last_not_of(" \t");
+    return s.substr(begin, end - begin + 1);
+}
+
 } // namespace
 
 bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
@@ -53,15 +63,19 @@ bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
             continue;  // 无 name|command 分隔的行跳过
         }
         RosterEntry e;
-        e.name = s.substr(0, bar);
-        // name 两侧 trim
-        const auto name_begin = e.name.find_first_not_of(" \t");
-        if (name_begin == std::string::npos) {
+        e.name = trim_copy(s.substr(0, bar));
+        if (e.name.empty()) {
             continue;  // 空名跳过
         }
-        const auto name_end = e.name.find_last_not_of(" \t");
-        e.name = e.name.substr(name_begin, name_end - name_begin + 1);
         e.command = s.substr(bar + 1);
+        // 可选第二列：component_id（G-1 死亡上报身份；缺省/非法 = 0 未入编队）
+        const auto cmd_bar = e.command.find('|');
+        if (cmd_bar != std::string::npos) {
+            const auto comp = trim_copy(e.command.substr(0, cmd_bar));
+            e.command = e.command.substr(cmd_bar + 1);
+            const unsigned long long parsed = std::strtoull(comp.c_str(), nullptr, 10);
+            e.component_id = parsed;  // 非数字串 strtoull 得 0 = 未入编队
+        }
         const auto cmd_begin = e.command.find_first_not_of(" \t");
         if (cmd_begin == std::string::npos) {
             continue;  // 空命令跳过
@@ -120,6 +134,7 @@ void Supervisor::spawn_one(Child& c, std::uint64_t now_ms,
     SupervisorEvent e;
     e.kind = SupervisorEvent::Kind::Born;
     e.name = c.entry.name;
+    e.component_id = c.entry.component_id;
     out.push_back(std::move(e));
 }
 
@@ -150,7 +165,11 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
         SupervisorEvent e;
         e.kind = SupervisorEvent::Kind::Died;
         e.name = it->entry.name;
-        e.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        e.component_id = it->entry.component_id;
+        // 退出码：正常退出取 WEXITSTATUS；信号终止取 128+signo（shell 惯例
+        // ——死亡上报 wire 面为 uint32，负值无出口）
+        e.exit_code = WIFEXITED(status) ? WEXITSTATUS(status)
+                                        : (WIFSIGNALED(status) ? 128 + WTERMSIG(status) : -1);
         out.push_back(e);
 
         // 重启裁决：未超限 → 线性退避到点重生；超限 → 放弃
@@ -162,6 +181,7 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
             SupervisorEvent g;
             g.kind = SupervisorEvent::Kind::GivenUp;
             g.name = it->entry.name;
+            g.component_id = it->entry.component_id;
             g.restart_count = it->restart_count;
             out.push_back(std::move(g));
         }
@@ -178,6 +198,7 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
                 SupervisorEvent r;
                 r.kind = SupervisorEvent::Kind::Restarted;
                 r.name = c.entry.name;
+                r.component_id = c.entry.component_id;
                 r.restart_count = rc;
                 out.push_back(std::move(r));
             }

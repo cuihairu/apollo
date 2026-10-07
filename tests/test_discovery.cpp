@@ -1,4 +1,4 @@
-// 进程编队服务发现单测（P3-1 批 B 库层 + 批 C UDP 传输件）。
+// 进程编队服务发现单测（P3-1 批 B 库层 + 批 C UDP 传输件 + G-1 收尾批增量①）。
 //
 // 覆盖（骨架口径——批 B 内存桩传输零 flake；批 C loopback 集成）：
 //   1. WirePacket：编码→解码往返一致 + 偏移表（前 4 字节即 magic）；
@@ -12,7 +12,11 @@
 //   8. 发现层（批 E）：Query/Advertise wire 往返 + 成员面隔离、定向广播
 //      Query 可达、locator 两段原语 loopback 握手（两组真广播用例带环境
 //      探测：定向广播 loopback 不可达——BSD 栈不保证 127.255.255.255
-//      回环，CI macOS runner 实测——打 SKIP 按过计，可达环境照跑真断言）。
+//      回环，CI macOS runner 实测——打 SKIP 按过计，可达环境照跑真断言）；
+//   9. 死亡面（G-1 收尾批增量①）：DeathSubscribe/DeathNotify wire 往返 +
+//      成员面隔离、DeathNotifier 订阅表（注册/刷新/过期/通知广播）、
+//      DeathListener 订阅发包、death_event_from 解码守卫、订阅→通知
+//      loopback 全链。
 
 #include "apollo/net/discovery/directory_locator.hpp"
 #include "apollo/net/discovery/discovery.hpp"
@@ -563,6 +567,227 @@ bool test_locator_handshake_loopback() {
     return true;
 }
 
+// ---- G-1 收尾批增量①：死亡事件跨进程上报 ----
+
+bool test_death_plane_wire() {
+    // DeathSubscribe wire 往返（component = 订阅者，service_port = 监听端口）
+    std::uint8_t buf[kWireSize];
+    {
+        WirePacket p;
+        p.op = Op::DeathSubscribe;
+        p.component_id = kManagerComponentId;
+        p.service_port = 9601;
+        p.encode_to(buf);
+    }
+    WirePacket out;
+    TEST_ASSERT(WirePacket::decode_from(buf, out) &&
+                    out.op == Op::DeathSubscribe &&
+                    out.component_id == kManagerComponentId &&
+                    out.service_port == 9601,
+                "DeathSubscribe wire 往返");
+
+    // DeathNotify wire 往返：reserved0 = kind，seq = exit_code
+    {
+        WirePacket p;
+        p.op = Op::DeathNotify;
+        p.component_id = 0xDEADull;
+        p.zone_id = 3;
+        p.service_port = 7000;
+        p.reserved0 = static_cast<std::uint8_t>(DeathKind::ChildDied);
+        p.seq = 1;  // exit_code
+        p.encode_to(buf);
+    }
+    DeathEvent death;
+    TEST_ASSERT(WirePacket::decode_from(buf, out) && out.op == Op::DeathNotify,
+                "DeathNotify 解码通过");
+    TEST_ASSERT(death_event_from(out, death), "DeathEvent 还原");
+    TEST_ASSERT(death.member.component_id == 0xDEADull && death.member.zone_id == 3 &&
+                    death.member.service_port == 7000 &&
+                    death.kind == DeathKind::ChildDied && death.exit_code == 1,
+                "DeathEvent 字段（身份/kind/exit_code）");
+
+    // 未知 op 依旧整包丢（新 op 不放宽未知 op 校验）
+    buf[6] = 8;
+    TEST_ASSERT(!WirePacket::decode_from(buf, out), "未知 op 8 仍丢");
+    return true;
+}
+
+bool test_registry_isolates_death_plane() {
+    DiscoveryRegistry reg(1000);
+    std::uint8_t buf[kWireSize];
+    WirePacket p;
+    p.op = Op::DeathSubscribe;
+    p.component_id = kManagerComponentId;
+    p.service_port = 9601;
+    p.encode_to(buf);
+    TEST_ASSERT(!reg.on_packet(buf, 0), "DeathSubscribe 拒入成员面");
+    buf[6] = static_cast<std::uint8_t>(Op::DeathNotify);
+    TEST_ASSERT(!reg.on_packet(buf, 0), "DeathNotify 拒入成员面");
+    TEST_ASSERT(reg.member_count() == 0, "成员面无副作用");
+    TEST_ASSERT(reg.drain_deaths().empty(), "死亡队列无扰动");
+    return true;
+}
+
+bool test_death_notifier_subscribers() {
+    CapturingTransport transport;
+    DeathNotifier notifier(transport, 1000);
+    TEST_ASSERT(notifier.ttl_ms() == 3000, "订阅者 TTL = 3 × 周期");
+    TEST_ASSERT(notifier.subscriber_count() == 0, "初始无订阅者");
+
+    // 守卫：零组件号 / 零端口拒绝
+    TEST_ASSERT(!notifier.on_subscribe(0, 9601, "127.0.0.1", 0), "零组件号拒");
+    TEST_ASSERT(!notifier.on_subscribe(2, 0, "127.0.0.1", 0), "零端口拒");
+    TEST_ASSERT(notifier.subscriber_count() == 0, "拒绝无副作用");
+
+    // 新订阅（true）+ 刷新（false，端点可迁移）
+    TEST_ASSERT(notifier.on_subscribe(kManagerComponentId, 9601, "127.0.0.1", 100),
+                "新订阅");
+    TEST_ASSERT(notifier.subscriber_count() == 1, "订阅入表");
+    TEST_ASSERT(!notifier.on_subscribe(kManagerComponentId, 9602, "127.0.0.1", 200),
+                "重复订阅 = 刷新");
+    TEST_ASSERT(notifier.subscriber_count() == 1, "刷新不新增条目");
+
+    // 订阅者过期（TTL 兜底——订阅者死亡停推）
+    notifier.expire(999999);
+    TEST_ASSERT(notifier.subscriber_count() == 0, "超期订阅者移出");
+
+    // 无订阅者 notify = true 且零发送
+    MemberId dead = make_member(42, 7000);
+    transport.send_count = 0;
+    TEST_ASSERT(notifier.notify(dead, DeathKind::TtlExpired, 0) && transport.send_count == 0,
+                "无订阅者 notify true 且零发送");
+
+    // 双订阅者通知广播：每端点一包，报文可还原 DeathEvent
+    TEST_ASSERT(notifier.on_subscribe(2, 9601, "127.0.0.1", 100), "订阅 A");
+    TEST_ASSERT(notifier.on_subscribe(3, 9602, "10.0.0.5", 150), "订阅 B");
+    transport.send_count = 0;
+    TEST_ASSERT(notifier.notify(dead, DeathKind::ChildDied, 129),
+                "通知广播发送成功");
+    TEST_ASSERT(transport.send_count == 2, "每订阅者一包");
+
+    DeathEvent death;
+    WirePacket out;
+    std::uint8_t buf[kWireSize];
+    std::memcpy(buf, transport.last_packet.data(), kWireSize);
+    TEST_ASSERT(WirePacket::decode_from(buf, out), "通知报文解码");
+    TEST_ASSERT(death_event_from(out, death) &&
+                    death.member.component_id == 42 &&
+                    death.kind == DeathKind::ChildDied && death.exit_code == 129,
+                "通知报文还原 DeathEvent（kind/exit_code）");
+
+    // 死者身份非法拒绝
+    TEST_ASSERT(!notifier.notify(MemberId{}, DeathKind::ChildDied, 0),
+                "零组件号死者拒发");
+    return true;
+}
+
+bool test_death_listener_subscribe_wire() {
+    CapturingTransport transport;
+    MemberId self;
+    self.component_id = kManagerComponentId;
+    self.service_port = 9601;
+    DeathListener listener(self, "127.0.0.1", 9600, transport);
+
+    TEST_ASSERT(listener.self().component_id == kManagerComponentId, "身份保留");
+    TEST_ASSERT(listener.subscribe(), "订阅发送成功");
+    TEST_ASSERT(transport.host == "127.0.0.1" && transport.port == 9600,
+                "发往目录端点");
+    WirePacket out;
+    std::uint8_t buf[kWireSize];
+    std::memcpy(buf, transport.last_packet.data(), kWireSize);
+    TEST_ASSERT(WirePacket::decode_from(buf, out) &&
+                    out.op == Op::DeathSubscribe &&
+                    out.component_id == kManagerComponentId &&
+                    out.service_port == 9601,
+                "订阅报文 wire 还原（op/component/监听端口）");
+
+    // 零组件号身份拒发
+    DeathListener bad(MemberId{}, "127.0.0.1", 9600, transport);
+    TEST_ASSERT(!bad.subscribe(), "零组件号拒发");
+    TEST_ASSERT(transport.send_count == 1, "拒发无副作用");
+    return true;
+}
+
+bool test_death_event_decode_guards() {
+    std::uint8_t buf[kWireSize];
+    DeathEvent death;
+
+    // 非死亡通知 op 拒绝
+    WirePacket p;
+    p.op = Op::Heartbeat;
+    p.component_id = 5;
+    p.encode_to(buf);
+    TEST_ASSERT(!death_event_from(p, death), "非 DeathNotify op 拒绝");
+
+    // 死者零组件号拒绝
+    p.op = Op::DeathNotify;
+    p.component_id = 0;
+    p.reserved0 = static_cast<std::uint8_t>(DeathKind::TtlExpired);
+    p.encode_to(buf);
+    TEST_ASSERT(!death_event_from(p, death), "零组件号死者拒绝");
+
+    // kind 越界拒绝
+    p.component_id = 5;
+    p.reserved0 = 99;
+    p.encode_to(buf);
+    TEST_ASSERT(!death_event_from(p, death), "kind 越界拒绝");
+
+    // GaveUp 合法通过（exit_code 0）
+    p.reserved0 = static_cast<std::uint8_t>(DeathKind::GaveUp);
+    p.seq = 0;
+    p.encode_to(buf);
+    TEST_ASSERT(death_event_from(p, death) && death.kind == DeathKind::GaveUp &&
+                    death.exit_code == 0 && death.is_valid(),
+                "GaveUp 合法通过");
+    return true;
+}
+
+bool test_udp_death_loopback() {
+    // machined 侧：订阅收包 feed + 通知回执面
+    UdpFeed notifier_feed;
+    TEST_ASSERT(notifier_feed.open(0, "127.0.0.1"), "machined 订阅面 bind");
+    UdpBeaconTransport notify_transport;
+    TEST_ASSERT(notify_transport.open(), "machined 通知面 open");
+    DeathNotifier notifier(notify_transport, 1000);
+
+    // manager 侧：死亡监听 feed（临时端口）+ 订阅发包
+    UdpFeed death_feed;
+    TEST_ASSERT(death_feed.open(0, "127.0.0.1"), "manager 监听 feed bind");
+    UdpBeaconTransport sub_transport;
+    TEST_ASSERT(sub_transport.open(), "manager 订阅面 open");
+    MemberId self;
+    self.component_id = kManagerComponentId;
+    self.service_port = death_feed.port();
+    DeathListener listener(self, "127.0.0.1", notifier_feed.port(), sub_transport);
+    TEST_ASSERT(listener.subscribe(), "订阅上 wire");
+
+    // machined 收订阅（捕获发送方端点）→ 注册
+    std::uint8_t buf[kWireSize];
+    std::string sender_host;
+    std::uint16_t sender_port = 0;
+    TEST_ASSERT(poll_receive_with(notifier_feed, buf, sender_host, sender_port),
+                "machined 收到订阅");
+    WirePacket p;
+    TEST_ASSERT(WirePacket::decode_from(buf, p) && p.op == Op::DeathSubscribe,
+                "订阅报文还原");
+    TEST_ASSERT(notifier.on_subscribe(p.component_id, p.service_port, sender_host, 100),
+                "订阅注册（新订阅者）");
+
+    // 通知广播 → manager feed 收包 → 解码
+    MemberId dead = make_member(42, 7000);
+    TEST_ASSERT(notifier.notify(dead, DeathKind::ChildDied, 129), "通知发出");
+    TEST_ASSERT(poll_receive_with(death_feed, buf, sender_host, sender_port),
+                "manager 收到死亡通知");
+    TEST_ASSERT(WirePacket::decode_from(buf, p) && p.op == Op::DeathNotify,
+                "通知报文还原");
+    DeathEvent death;
+    TEST_ASSERT(death_event_from(p, death) &&
+                    death.member.component_id == 42 &&
+                    death.kind == DeathKind::ChildDied && death.exit_code == 129,
+                "死亡事件跨 UDP 全链还原");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -587,6 +812,12 @@ int main() {
          test_discovery_plane_ops_wire_and_registry_isolation},
         {"udp_broadcast_query_reaches_directory", test_udp_broadcast_query_reaches_directory},
         {"locator_handshake_loopback", test_locator_handshake_loopback},
+        {"death_plane_wire", test_death_plane_wire},
+        {"registry_isolates_death_plane", test_registry_isolates_death_plane},
+        {"death_notifier_subscribers", test_death_notifier_subscribers},
+        {"death_listener_subscribe_wire", test_death_listener_subscribe_wire},
+        {"death_event_decode_guards", test_death_event_decode_guards},
+        {"udp_death_loopback", test_udp_death_loopback},
     };
 
     for (const auto& c : cases) {

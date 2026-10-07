@@ -75,7 +75,9 @@ bool WirePacket::decode_from(const std::uint8_t (&buf)[kWireSize],
         raw_op != static_cast<std::uint8_t>(Op::Heartbeat) &&
         raw_op != static_cast<std::uint8_t>(Op::Deregister) &&
         raw_op != static_cast<std::uint8_t>(Op::Query) &&
-        raw_op != static_cast<std::uint8_t>(Op::Advertise)) {
+        raw_op != static_cast<std::uint8_t>(Op::Advertise) &&
+        raw_op != static_cast<std::uint8_t>(Op::DeathSubscribe) &&
+        raw_op != static_cast<std::uint8_t>(Op::DeathNotify)) {
         return false;  // 未知 op 丢
     }
     out.op = static_cast<Op>(raw_op);
@@ -149,8 +151,9 @@ bool DiscoveryRegistry::on_packet(const std::uint8_t (&buf)[kWireSize],
     if (!m.is_valid()) {
         return false;  // 零组件号非法（编队身份不变式）
     }
-    if (p.op == Op::Query || p.op == Op::Advertise) {
-        return false;  // 发现层 op 不入成员面（machined 路由层分流应答）
+    if (p.op == Op::Query || p.op == Op::Advertise || p.op == Op::DeathSubscribe ||
+        p.op == Op::DeathNotify) {
+        return false;  // 发现层/死亡面 op 不入成员面（machined 路由层分流）
     }
 
     auto it = std::find_if(entries_.begin(), entries_.end(),
@@ -205,6 +208,126 @@ std::vector<MemberId> DiscoveryRegistry::drain_deaths() {
     auto out = std::move(deaths_);
     deaths_.clear();
     return out;
+}
+
+// ---- 死亡事件跨进程上报（增量①）----
+
+bool death_event_from(const WirePacket& packet, DeathEvent& out) {
+    if (packet.op != Op::DeathNotify) {
+        return false;
+    }
+    MemberId m;
+    m.component_id = packet.component_id;
+    m.zone_id = packet.zone_id;
+    m.service_port = packet.service_port;
+    m.seq = 0;
+    if (!m.is_valid()) {
+        return false;  // 死者零组件号非法（编队身份不变式）
+    }
+    const auto raw_kind = packet.reserved0;
+    if (raw_kind != static_cast<std::uint8_t>(DeathKind::TtlExpired) &&
+        raw_kind != static_cast<std::uint8_t>(DeathKind::ChildDied) &&
+        raw_kind != static_cast<std::uint8_t>(DeathKind::GaveUp)) {
+        return false;  // kind 越界整包丢
+    }
+    out.member = m;
+    out.kind = static_cast<DeathKind>(raw_kind);
+    out.exit_code = packet.seq;  // seq 字节复用：ChildDied 退出码
+    return true;
+}
+
+DeathNotifier::DeathNotifier(BeaconTransport& transport,
+                             std::uint32_t heartbeat_interval_ms)
+    : transport_(&transport)
+    , interval_ms_(heartbeat_interval_ms) {
+}
+
+bool DeathNotifier::on_subscribe(std::uint64_t component_id,
+                                 std::uint16_t service_port,
+                                 const std::string& host,
+                                 std::uint64_t now_ms) {
+    if (component_id == 0 || service_port == 0) {
+        return false;  // 身份/回投端点缺一即拒
+    }
+    auto it = std::find_if(subscribers_.begin(), subscribers_.end(),
+                           [&](const Subscriber& s) {
+                               return s.component_id == component_id;
+                           });
+    if (it != subscribers_.end()) {
+        it->host = host;  // 刷新：端点可迁移，last_seen 续期（幂等）
+        it->port = service_port;
+        it->last_seen_ms = now_ms;
+        return false;
+    }
+    subscribers_.push_back(Subscriber{component_id, host, service_port, now_ms});
+    return true;
+}
+
+void DeathNotifier::expire(std::uint64_t now_ms) {
+    const std::uint64_t ttl = ttl_ms();
+    subscribers_.erase(std::remove_if(subscribers_.begin(), subscribers_.end(),
+                                      [&](const Subscriber& s) {
+                                          return now_ms - s.last_seen_ms > ttl;
+                                      }),
+                       subscribers_.end());
+}
+
+bool DeathNotifier::notify(const MemberId& dead, DeathKind kind,
+                           std::uint32_t exit_code) {
+    if (subscribers_.empty()) {
+        return true;
+    }
+    if (!dead.is_valid()) {
+        return false;
+    }
+    WirePacket p;
+    p.op = Op::DeathNotify;
+    p.reserved0 = static_cast<std::uint8_t>(kind);
+    p.component_id = dead.component_id;
+    p.zone_id = dead.zone_id;
+    p.service_port = dead.service_port;
+    p.seq = exit_code;
+    std::uint8_t buf[kWireSize];
+    p.encode_to(buf);
+
+    bool any_sent = false;
+    for (const auto& s : subscribers_) {
+        if (transport_->send_to(s.host, s.port, buf)) {
+            any_sent = true;
+        }
+    }
+    return any_sent;
+}
+
+std::size_t DeathNotifier::subscriber_count() const noexcept {
+    return subscribers_.size();
+}
+
+std::uint32_t DeathNotifier::ttl_ms() const noexcept {
+    return interval_ms_ * DiscoveryRegistry::kDeathTtlFactor;
+}
+
+DeathListener::DeathListener(MemberId self, std::string directory_host,
+                             std::uint16_t directory_port,
+                             BeaconTransport& transport)
+    : self_(self)
+    , directory_host_(std::move(directory_host))
+    , directory_port_(directory_port)
+    , transport_(&transport) {
+}
+
+bool DeathListener::subscribe() {
+    if (!self_.is_valid() || transport_ == nullptr) {
+        return false;
+    }
+    WirePacket p;
+    p.op = Op::DeathSubscribe;
+    p.component_id = self_.component_id;
+    p.zone_id = self_.zone_id;
+    p.service_port = self_.service_port;  // 监听 feed 端口（通知回投端点）
+    std::uint8_t buf[kWireSize];
+    p.encode_to(buf);
+    return transport_->send_to(directory_host_, directory_port_, buf);
 }
 
 } // namespace apollo::net::discovery

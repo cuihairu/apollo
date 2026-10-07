@@ -3,14 +3,17 @@
 // Machined 监督面（P3-1 批 F——term-contract §1.3「拉起/重启」半边；§7 口径：
 // 进程本身拉起归 machined，重启策略 = 编队配置，mgr 只消费事件不做进程管理）。
 //
-// 最小闭环：roster 花名册（name | command args...）→ 启动期全量拉起 → 主循环
-// WNOHANG 收割死亡 → 按上限+线性退避自动重启（超限放弃并记录）。死亡/重生
-// 事件以行文本落日志（跨进程上报归 manager 域消费端，G-1 主体后续批）。
+// 最小闭环：roster 花名册（name | component_id | command args...）→ 启动期
+// 全量拉起 → 主循环 WNOHANG 收割死亡 → 按上限+线性退避自动重启（超限放弃
+// 并记录）。死亡/重生事件以行文本落日志；死亡事件跨进程上报（DeathNotify，
+// G-1 收尾批增量①）由主循环合流——component_id 非零者上 wire，零 = 未入
+// 编队仅落日志。
 //
 // 平台口径：POSIX only（fork/execvp/waitpid）——部署目标是 Linux 服务器；
 // Windows 下本文件编译为空转（roster 载入即告警放弃，进程发现面照常）。
-// roster 口径：每行 `name | command args...`，# 注释、空行跳过；不支持引号
-// 转义（骨架期，命令面从简）。
+// roster 口径：每行 `name | component_id | command args...`（component_id
+// 列可省 = 0 未入编队），# 注释、空行跳过；不支持引号转义（骨架期，命令
+// 面从简）。
 
 #include <cstdint>
 #include <string>
@@ -20,6 +23,7 @@ namespace machined {
 
 struct RosterEntry {
     std::string name;
+    std::uint64_t component_id = 0;   // 编队组件号（0 = 未入编队，死亡不上 wire）
     std::string command;              // 原始命令串（日志/重组用）
     std::vector<std::string> args;    // 空白切分后的 argv
 };
@@ -36,6 +40,7 @@ struct SupervisorEvent {
     };
     Kind kind;
     std::string name;
+    std::uint64_t component_id = 0;  // 编队组件号（roster 声明；0 = 未入编队）
     int exit_code = 0;        // Died：waitpid 状态转出的退出码
     int restart_count = 0;    // 已重启次数（Restarted/GivenUp 语义）
 };
