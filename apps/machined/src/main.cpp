@@ -1,4 +1,4 @@
-// Machined——G-1 单机守护：编队目录面 + 发现应答（P3-1 批 D + 批 E）。
+// Machined——G-1 单机守护：编队目录面 + 发现应答 + 监督面（P3-1 批 D/E/F）。
 //
 // 职责：bind UDP → 非阻塞收包分流（成员面 op 喂 DiscoveryRegistry；发现面
 // Query 以 Advertise 回执到 Query.service_port@sender——目录被发现的引导路
@@ -14,6 +14,7 @@
 #include "apollo/net/discovery/directory_locator.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
+#include "supervisor.hpp"
 
 #include <chrono>
 #include <csignal>
@@ -21,6 +22,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -37,18 +39,54 @@ std::uint64_t now_ms() {
             .count());
 }
 
+void log_supervisor_events(const std::vector<machined::SupervisorEvent>& events) {
+    for (const auto& e : events) {
+        switch (e.kind) {
+        case machined::SupervisorEvent::Kind::Born:
+            std::cout << "[machined] born " << e.name << std::endl;
+            break;
+        case machined::SupervisorEvent::Kind::Died:
+            std::cout << "[machined] child death " << e.name
+                      << " exit=" << e.exit_code << std::endl;
+            break;
+        case machined::SupervisorEvent::Kind::Restarted:
+            std::cout << "[machined] restart " << e.name
+                      << " (attempt " << e.restart_count << ")" << std::endl;
+            break;
+        case machined::SupervisorEvent::Kind::GivenUp:
+            std::cout << "[machined] give up " << e.name
+                      << " after " << e.restart_count << " restarts" << std::endl;
+            break;
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     std::uint16_t bind_port = 9600;
     std::uint32_t interval_ms = 1000;
-    for (int i = 1; i + 1 < argc; i += 2) {
+    std::string roster_path;
+    std::uint32_t backoff_ms = 1000;
+    for (int i = 1; i < argc; ++i) {
         const std::string flag = argv[i];
+        if (flag == "--roster" && i + 1 < argc) {
+            roster_path = argv[++i];
+            continue;
+        }
+        if (i + 1 >= argc) {
+            break;
+        }
         const int value = std::atoi(argv[i + 1]);
         if (flag == "--port" && value > 0 && value <= 65535) {
             bind_port = static_cast<std::uint16_t>(value);
+            ++i;
         } else if (flag == "--interval" && value > 0) {
             interval_ms = static_cast<std::uint32_t>(value);
+            ++i;
+        } else if (flag == "--backoff" && value > 0) {
+            backoff_ms = static_cast<std::uint32_t>(value);
+            ++i;
         }
     }
 
@@ -72,10 +110,28 @@ int main(int argc, char** argv) {
               << " (interval=" << interval_ms << "ms, ttl=" << registry.ttl_ms()
               << "ms)" << std::endl;
 
+    // 监督面（拉起/重启半边）：roster 花名册可选——缺省纯目录面
+    std::vector<machined::RosterEntry> roster;
+    if (!roster_path.empty()) {
+        if (!machined::load_roster(roster_path, roster)) {
+            std::cerr << "[machined] roster not readable: " << roster_path
+                      << std::endl;
+        }
+    }
+    machined::Supervisor supervisor(roster, 5, backoff_ms);
+    std::vector<machined::SupervisorEvent> supervisor_events;
+    supervisor.spawn_all(supervisor_events);
+    log_supervisor_events(supervisor_events);
+    supervisor_events.clear();
+
     std::uint64_t last_expire_ms = now_ms();
     std::size_t last_count = 0;
     while (g_run != 0) {
         const std::uint64_t now = now_ms();
+
+        supervisor.poll(now, supervisor_events);
+        log_supervisor_events(supervisor_events);
+        supervisor_events.clear();
 
         std::uint8_t buf[disco::kWireSize];
         std::string sender_host;
@@ -128,5 +184,6 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "[machined] shutting down" << std::endl;
+    supervisor.terminate_all();
     return 0;
 }
