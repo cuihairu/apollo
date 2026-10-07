@@ -17,6 +17,12 @@
 #include <mutex>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
+#include <memory>
+
+#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/world/scene.hpp"
+#include "apollo/game/world/scene_aoi.hpp"
 
 using namespace std;
 using namespace std::chrono;
@@ -523,10 +529,224 @@ void benchmarkLocks() {
 }
 
 //==============================================================================
+// 三模型场景基准（P3-2 批 A；rearchitecture/architecture.md §6 口径）
+//==============================================================================
+//
+// 模型 A：1 Scene / 1000 Players（大场景千人）
+// 模型 B：10 Scenes / 100 Players（单进程多景）
+// 模型 C：100 Scenes / 10 Players（副本制典型负载）
+//
+// 负载链（全部真实路径，单线程驱动——Scene 单写者纪律）：
+//   Avatar 匀速漂移 → SceneAoi::move（ViewerState 差集 → Enter/Sync/Leave
+//   事件计数 = 广播消息量）→ Scene::tick 六阶段（实体 on_update 真调用）。
+// 桩口径：移动 = 匀速直线 + 世界边界回绕，无寻路/技能/跨景——帧成本是
+// 下界，作 capacity-and-benchmark 帧预算表实测化的锚点数据。
+
+namespace {
+
+using apollo::game::core::EntityId;
+using apollo::game::core::PlayerId;
+using apollo::game::world::Avatar;
+using apollo::game::world::AvatarPtr;
+using apollo::game::world::Scene;
+using apollo::game::world::SceneAoi;
+
+struct ModelConfig {
+    const char* name;
+    int scenes;
+    int players_per_scene;
+    int frames;
+    float world_size;  // 单 scene 世界边长
+};
+
+struct ModelStats {
+    double enter_ms = 0.0;        // 进场总耗时（构造 + enter × N）
+    double frame_avg_ms = 0.0;    // 帧均值（含移动 + AOI 差集 + tick）
+    double frame_max_ms = 0.0;    // 帧峰值
+    double sync_per_frame = 0.0;  // Sync 事件/帧（广播消息量口径）
+    std::uint64_t enter_events = 0;
+    std::uint64_t leave_events = 0;
+};
+
+// 逐玩家状态：benchmark 侧驱动（直接持有 Avatar，免 Scene 查找回路）
+struct Drifter {
+    AvatarPtr avatar;
+    EntityId entity{0};
+    float x = 0.0f;
+    float z = 0.0f;
+    float vx = 0.0f;
+    float vz = 0.0f;
+};
+
+constexpr float kFrameDelta = 0.05f;  // 20Hz（clock-and-time 口径）
+constexpr double kFrameBudgetMs = 50.0;
+constexpr float kSpeed = 5.0f;  // 单位/秒
+constexpr int kWarmupFrames = 10;
+
+// 黄金比例散点：均匀不打格（同格堆叠会掩盖九宫格开销差异）
+float scatter(std::uint32_t i, float bound) {
+    const float g = (i % 2u == 0u) ? 0.6180339887f : 0.7548776662f;
+    return std::fmod(static_cast<float>(i) * g, 1.0f) * bound;
+}
+
+ModelStats run_model(const ModelConfig& cfg) {
+    ModelStats stats;
+    std::uint64_t sync_events = 0;
+    std::uint64_t enter_events = 0;
+    std::uint64_t leave_events = 0;
+
+    const auto t0 = high_resolution_clock::now();
+
+    // 构造：逐 scene 建容器 + AOI + sink，再逐玩家进场（散布落点）
+    std::vector<std::unique_ptr<Scene>> scenes;
+    std::vector<std::vector<Drifter>> per_scene(static_cast<std::size_t>(cfg.scenes));
+    scenes.reserve(static_cast<std::size_t>(cfg.scenes));
+
+    std::uint32_t uid = 0;
+    for (int s = 0; s < cfg.scenes; ++s) {
+        auto scene = std::make_unique<Scene>(
+            static_cast<std::uint64_t>(s + 1),
+            std::string(cfg.name) + "-s" + std::to_string(s));
+        scene->aoi() = SceneAoi(cfg.world_size, cfg.world_size, 25.0f, 20.0f);
+        scene->aoi().set_event_sink([&](const SceneAoi::Event& e) {
+            switch (e.kind) {
+            case SceneAoi::Event::Kind::Enter:
+                ++enter_events;
+                break;
+            case SceneAoi::Event::Kind::Sync:
+                ++sync_events;
+                break;
+            case SceneAoi::Event::Kind::Leave:
+                ++leave_events;
+                break;
+            }
+        });
+
+        auto& bucket = per_scene[static_cast<std::size_t>(s)];
+        bucket.reserve(static_cast<std::size_t>(cfg.players_per_scene));
+        for (int p = 0; p < cfg.players_per_scene; ++p) {
+            const auto id = static_cast<std::uint64_t>(uid);
+            Drifter d;
+            d.avatar = std::make_shared<Avatar>(PlayerId(id), EntityId(id),
+                                                "p" + std::to_string(id));
+            d.entity = EntityId(id);
+            d.x = scatter(uid, cfg.world_size);
+            d.z = scatter(uid * 7u + 13u, cfg.world_size);
+            const float heading = scatter(uid * 3u + 5u, 6.2831853f);
+            d.vx = std::cos(heading) * kSpeed;
+            d.vz = std::sin(heading) * kSpeed;
+            scene->enter(d.avatar, SceneAoi::Vec3{d.x, 0.0f, d.z});
+            bucket.push_back(std::move(d));
+            ++uid;
+        }
+        scenes.push_back(std::move(scene));
+    }
+
+    const auto t1 = high_resolution_clock::now();
+    stats.enter_ms = duration_cast<microseconds>(t1 - t0).count() / 1000.0;
+
+    // 帧循环：移动推进 + AOI 差集 + 六阶段 tick（预热帧不入统计）
+    const int measured = cfg.frames - kWarmupFrames;
+    double frame_total_ms = 0.0;
+    double frame_max_ms = 0.0;
+    std::uint64_t sync_at_warmup_end = 0;
+
+    for (int f = 0; f < cfg.frames; ++f) {
+        const auto ft0 = high_resolution_clock::now();
+
+        for (int s = 0; s < cfg.scenes; ++s) {
+            SceneAoi& aoi = scenes[static_cast<std::size_t>(s)]->aoi();
+            for (auto& d : per_scene[static_cast<std::size_t>(s)]) {
+                d.x += d.vx * kFrameDelta;
+                d.z += d.vz * kFrameDelta;
+                if (d.x >= cfg.world_size) d.x -= cfg.world_size;
+                if (d.x < 0.0f) d.x += cfg.world_size;
+                if (d.z >= cfg.world_size) d.z -= cfg.world_size;
+                if (d.z < 0.0f) d.z += cfg.world_size;
+                d.avatar->set_position({d.x, 0.0f, d.z});
+                aoi.move(d.entity, SceneAoi::Vec3{d.x, 0.0f, d.z});
+            }
+        }
+        for (auto& scene : scenes) {
+            scene->tick(kFrameDelta);
+        }
+
+        const auto ft1 = high_resolution_clock::now();
+        const double ms = duration_cast<microseconds>(ft1 - ft0).count() / 1000.0;
+        if (f == kWarmupFrames - 1) {
+            sync_at_warmup_end = sync_events;
+        } else if (f >= kWarmupFrames) {
+            frame_total_ms += ms;
+            if (ms > frame_max_ms) frame_max_ms = ms;
+        }
+    }
+
+    stats.frame_avg_ms = frame_total_ms / measured;
+    stats.frame_max_ms = frame_max_ms;
+    stats.sync_per_frame =
+        static_cast<double>(sync_events - sync_at_warmup_end) / measured;
+    stats.enter_events = enter_events;
+    stats.leave_events = leave_events;
+    return stats;
+}
+
+void printModelStats(const ModelConfig& cfg, const ModelStats& st) {
+    const double budget_pct = st.frame_avg_ms / kFrameBudgetMs * 100.0;
+    cout << left << setw(12) << cfg.name
+         << right << setw(11) << fixed << setprecision(1) << st.enter_ms
+         << setw(12) << setprecision(3) << st.frame_avg_ms
+         << setw(12) << setprecision(3) << st.frame_max_ms
+         << setw(11) << setprecision(1) << st.sync_per_frame
+         << setw(9) << st.enter_events
+         << setw(9) << st.leave_events
+         << setw(9) << setprecision(2) << budget_pct << "%" << endl;
+}
+
+}  // namespace
+
+void benchmarkThreeModels() {
+    cout << "\n=== Three-Model Scene Benchmark (P3-2 A; arch §6) ===" << endl;
+    cout << "负载：全体玩家匀速漂移（5 单位/s）+ AOI move 差集 + tick 六阶段"
+         << "（单线程；预热 " << kWarmupFrames << " 帧不入统计）" << endl;
+    cout << "口径：桩 = 帧成本下界（无寻路/技能/跨景）；帧预算 50ms @ 20Hz"
+         << "——capacity-and-benchmark 实测锚点" << endl;
+
+    const ModelConfig models[] = {
+        {"A(1x1000)", 1, 1000, 200, 1000.0f},
+        {"B(10x100)", 10, 100, 200, 100.0f},
+        {"C(100x10)", 100, 10, 200, 100.0f},
+    };
+
+    cout << left << setw(12) << "Model"
+         << right << setw(11) << "Enter ms"
+         << setw(12) << "Frame avg"
+         << setw(12) << "Frame max"
+         << setw(11) << "Sync/f"
+         << setw(9) << "EnterEv"
+         << setw(9) << "LeaveEv"
+         << setw(9) << "Budget" << endl;
+    cout << string(95, '-') << endl;
+
+    for (const auto& cfg : models) {
+        const ModelStats st = run_model(cfg);
+        printModelStats(cfg, st);
+    }
+}
+
+//==============================================================================
 // 主程序
 //==============================================================================
 
-int main() {
+int main(int argc, char** argv) {
+    // --models：只跑三模型场景段（微基准段全量约 10+ 分钟，选段供快速
+    // 验证与静时机复测）
+    const bool models_only =
+        (argc > 1 && std::string(argv[1]) == "--models");
+    if (models_only) {
+        benchmarkThreeModels();
+        return 0;
+    }
+
     cout << "========================================" << endl;
     cout << "=== Apollo Framework Benchmark ===" << endl;
     cout << "========================================" << endl;
@@ -551,6 +771,7 @@ int main() {
     benchmarkMessageProcessing();
     benchmarkMemoryPool();
     benchmarkLocks();
+    benchmarkThreeModels();
 
     cout << "\n========================================" << endl;
     cout << "=== Benchmark Complete ===" << endl;

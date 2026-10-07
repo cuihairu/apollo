@@ -11,7 +11,24 @@ add_executable(game_server_demo game_server_demo.cpp)
 target_link_libraries(game_server_demo PRIVATE apollo)
 
 # ========== Benchmark ==========
-add_executable(benchmark benchmark.cpp)
+# 三模型场景基准（P3-2 批 A）：直编 game world 六源（scene_tests 同款惯例，
+# 不依赖 GAME_MODULE target——OFF 树照常构建），负载链 Scene/AOI/Avatar 真实路径。
+add_executable(benchmark benchmark.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/core/src/entity.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene_aoi.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/viewer_state.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/world/src/avatar.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/session/src/player_anchor.cpp
+)
+target_include_directories(benchmark PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(benchmark PRIVATE apollo apollo::base apollo::core)
 
 # ========== Server Template ==========
 add_executable(server_template server_template.cpp)
