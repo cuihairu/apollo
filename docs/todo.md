@@ -54,7 +54,7 @@
 
 ## P4 —— Documentation / Examples / Benchmark / Tutorial（任务书 §38 五档 + §33/§34）
 
-- [ ] **P4-1 文档修订**：quick-start 引用实 API；apps 文档 9 项差异复核；tests/README 墓碑清理；README 第一屏按 §34 重构（Player/Scene/Instance/AOI/Battle/Persistence 六核心词 + 最小 example）；docs/architecture/overview.md（§35）；ADR-001..009（§36）。
+- [ ] **P4-1 文档修订**：quick-start 引用实 API；apps 文档 9 项差异复核；tests/README 墓碑清理（**已交付（本批）**——308 行 Actor 时代墓碑重写为现状套件文档：以 ctest -N 实测 36 项为准的按域套件表[contract 三件套注册于 modules/contract+sdks/gen] + 三树门禁口径[ON 36/36 / OFF 36/36 / Examples 34/34] + 五条新增测试惯例 + **摸底发现**：tests/ 48 个 test_*.cpp 仅 33 个注册进门禁，其余 15 个属 legacy GTest 批[APOLLO_BUILD_GTESTS=OFF 默认关，protobuf/buffer/network/log/timer/id_pool/utils/rest_template/data_structures/channel/crypto 系]不编不跑不计门禁）；README 第一屏按 §34 重构（Player/Scene/Instance/AOI/Battle/Persistence 六核心词 + 最小 example）；docs/architecture/overview.md（§35）；ADR-001..009（§36）。
 - [ ] **P4-2 最小可运行示例** = 任务书 §29 全链路（**批 A 已交付（本批）**——examples/full_loop_demo.cpp 进程内八步驱动：login[AnchorManager::activate 幂等]→lobby+create instance[八态 Create→Waiting+Create 拒进面]→attach battle[Waiting 窗口+IRewardSink→Anchor 单向口]→enter[Instance::enter 收集期转发 battle 参战收集]→spawn+AOI[Scene enter/move 差集 Enter×1/Sync/Leave 双向事件]→battle[start 内部 begin 前置校验+Battling 起进人只观战+显式 tick×5 带 opcode=1+hash 链滚动]→reward[finish 结算 exp 落账+mark_dirty]→leave[八态尾四段+登出锚回收]；36 断言门全过=组合回归验证器；直编十源[world 六+battle 二+session 二，benchmark 同款惯例，OFF 树照常]；**骨架期口径发现**：tick_index 空间归 Instance::tick[内部驱动 battle.tick]，BattleInput 显式注入面在其外——两者不可混用抢拍，输入通道批接线归后；跨进程接线（网关/login 协议栈、G-1）不在本例归 G-1 收尾批与 net M1）。
 - [ ] **P4-3 Benchmark/Tutorial**：三模型基准复用 + 新手上路教程。
 - [ ] **P4-4 术语承接**：全仓 term-contract 零出现（禁用词扫描清零：Space / nng / Battle(space 义) / Player(玩家实体义) / baseapp 进程名）。
