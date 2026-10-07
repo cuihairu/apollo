@@ -63,18 +63,30 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 > 一句话判据：**世界的自然边界是房间/场景/副本/比赛 → 适用；要求跨进程连续的大世界 → 不适用。**
 
+## 核心概念 / Core Concepts
+
+六个词读完 Apollo 的运行时模型（全部有实件，详见[文档站](docs/guide/concepts.md)）：
+
+| 概念 | 一句话 | 实件 |
+|------|--------|------|
+| **Player** | 玩家长期态——登录在场、跨副本持续的档案与锚点 | `PlayerAnchor`（modules/game/session） |
+| **Scene** | 空间运行时边界——AOI 所有权归场景 | `Scene` + `SceneAoi`（modules/game/world） |
+| **Instance** | 一局一实例的一等公民——八态生命周期（Create→…→Destroyed），用完回收 | `Instance`（modules/game/world） |
+| **AOI** | 兴趣管理——九宫格差集 + 逐观察者水位，Enter/Sync/Leave 事件 | `SceneAoi` + `ViewerState` |
+| **Battle** | 战斗域——确定性 tick 判定，结算单向落玩家长期态 | `BattleRuntime`（modules/game/battle） |
+| **Persistence** | 档案与日志——JSON 档案原子写 + write-behind 日志，零外部存储依赖 | `PersistJournal`（modules/data） |
+
 ### 核心特性
 
-- **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，+ `ApplicationHost` 帧驱动生命周期（`IHostedService` start/stop/tick）
-- **实体契约系统** - XML+XSD 契约（attrs/messages/entities/errors，错拼即报错）+ 独立生成器 `apollo_gen`，生成器不进运行时链接图（`sdks/contract`，docs/36 决策 #3/#4/#5）
-- **异步网络层** - 跨平台异步I/O（IOCP/Epoll）
-- **传输编解码（目标态）** - L1 帧格式 + protobuf descriptor（`descriptor.bin`，反射为默认）+ Lua 契约表（`contract.lua`）+ zstd 压缩（`docs/design/sdk-contract.md` §10-§12）——框架固定消息族内建强类型守热路径、业务消息反射进 Lua（服务端契约变更零重编）、有代码热更管线的客户端走生成代码（docs/36 决策 #19）；现网为手写编码，仓库自有 .proto 为零
-- **战斗系统** - `BattleSystem` 场景内骨架已交付（实体集合 + tick 更新）；ECS 收敛与技能/Buff/状态机随 P2（未实现）
-- **AOI九宫格系统** - `SceneAoi` 单实现（Scene 独享、scene_id 隔离）+ `ViewerState` 逐观察者水位，Enter/Sync/Leave 事件面已交付
-- **数据存储层** - 玩家档案文件（tmp+rename 原子写）+ `PersistJournal` write-behind（write-ahead→定额 drain→快照压薄→崩溃 replay）；外部 DB/Redis 未接线
-- **日志系统** - 多级别异步日志
-- **工具类库** - 线程池、内存池、配置管理等
-- **BigWorld兼容层** - BigWorld 风格 C++ API facade（见 `docs/33-BigWorld_Compatibility.md`）
+- **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，`ApplicationHost` 帧驱动生命周期
+- **实体契约系统** - XML+XSD 契约 + 独立生成器 `apollo_gen`，生成器不进运行时链接图
+- **异步网络层** - 跨平台异步 I/O（IOCP/Epoll）
+- **传输编解码（目标态）** - protobuf 反射为默认 + zstd（规划）；现网手写编码
+- **AOI 九宫格** - `SceneAoi` 单实现 + `ViewerState` 逐观察者水位，事件面已交付
+- **战斗系统** - `BattleSystem` 场景内骨架；ECS 收敛与技能/Buff 随 P2
+- **数据存储** - 玩家档案文件原子写 + `PersistJournal` write-behind；外部 DB/Redis 未接线
+- **可观测** - 多级别异步日志 + 结构化行格式 + `MetricRegistry`
+- **BigWorld 兼容层** - BigWorld 风格 C++ API facade（`docs/33-BigWorld_Compatibility.md`）
 
 ## 架构设计
 
@@ -125,6 +137,47 @@ cmake --build build --parallel
 
 # 运行示例
 ./build/examples/session_demo
+```
+
+### 最小示例
+
+约 40 行跑起一个宿主托管的游戏服务（完整可编译版见 [quick-start](docs/guide/quick-start.md)，已按实 API 验证）：
+
+```cpp
+#include <apollo/runtime/application_host.hpp>
+#include <apollo/game/world/scene_aoi.hpp>
+
+using apollo::game::world::SceneAoi;
+
+class GameServer : public apollo::runtime::IHostedService {
+public:
+    std::string_view service_name() const override { return "game-server"; }
+
+    bool start() override {
+        aoi_ = std::make_unique<SceneAoi>(1000.0f, 1000.0f, 100.0f, 30.0f);
+        aoi_->set_event_sink([](const SceneAoi::Event&) { /* 下发面 */ });
+        for (int i = 1; i <= 100; ++i) {
+            aoi_->enter(apollo::game::core::EntityId{static_cast<std::uint64_t>(i)},
+                        {static_cast<float>(i), 0.0f, 0.0f});
+        }
+        return true;
+    }
+
+    void stop() override {}
+    bool is_running() const override { return true; }
+    void tick() override { /* 定帧业务 */ }
+
+private:
+    std::unique_ptr<SceneAoi> aoi_;
+};
+
+int main() {
+    apollo::runtime::ServiceHost host;
+    host.add_service(std::make_shared<GameServer>());
+    if (!host.start()) return 1;
+    while (host.is_running()) host.run_once();
+    host.stop();
+}
 ```
 
 ### Windows (Visual Studio)
