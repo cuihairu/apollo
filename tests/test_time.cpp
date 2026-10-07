@@ -199,8 +199,11 @@ bool test_timer_elapsed_micros() {
 bool test_timer_reset() {
     std::cout << "Running: test_timer_reset..." << std::endl;
 
+    // 断言窗口 200ms→10ms（原 50→10ms）：只比较两端 sleep 后的读数，t2 与 t1
+    // 之间若被调度尖峰/NTP 跳变撑过基线即倒挂——CI macOS 高负载实红一次，
+    // 加宽基线把容限从 ~40ms 提到 ~190ms，代价 +150ms。
     Timer timer;
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     double t1 = timer.elapsed_millis();
 
     timer.reset();

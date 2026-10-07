@@ -197,8 +197,10 @@ jobs:
         -DVCPKG_INSTALLED_DIR=${{ github.workspace }}/vcpkg_installed
         -DAPOLLO_BUILD_TESTS=ON
         -DAPOLLO_ENABLE_COVERAGE=ON
-        -DCMAKE_CXX_FLAGS="--coverage -g -O0"
-        -DCMAKE_C_FLAGS="--coverage -g -O0"
+        # -fprofile-update=atomic：多线程测试并发写 gcov 计数器（否则 geninfo
+        # 报 Unexpected negative count 让 coverage job 红）
+        -DCMAKE_CXX_FLAGS="--coverage -g -O0 -fprofile-update=atomic"
+        -DCMAKE_C_FLAGS="--coverage -g -O0 -fprofile-update=atomic"
         -G "Ninja"
 
     - name: Build with Coverage
