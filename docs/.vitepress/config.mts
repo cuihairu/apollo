@@ -6,6 +6,7 @@ const architectureSidebar = [
   {
     text: '语义层与定位参考件（A 档）',
     items: [
+      { text: '架构总览', link: '/architecture/overview' },
       { text: 'Remote Entity Call 语义层', link: '/architecture/remote-entity-call-design' },
       { text: '观测与运行时内省', link: '/architecture/observability-watcher-and-runtime-introspection-design' },
       { text: 'Host Builder 与 DI', link: '/architecture/host-builder-and-di-design' },
