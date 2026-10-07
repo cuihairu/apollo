@@ -5,6 +5,7 @@
 
 #include "apollo/core/log/file_appender.h"
 #include "apollo/core/log/log_record.h"
+#include "apollo/core/log/structured.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -70,8 +71,8 @@ void FileAppender::append(const LogRecord& record) {
         return;
     }
 
-    // 格式化并写入
-    std::string message = format(record);
+    // 格式化并写入（structuredOutput：结构化行走 §5.1 外采契约，规则见 structured.h）
+    std::string message = config_.structuredOutput ? to_structured_line(record) : format(record);
     fileStream_ << message << std::endl;
     currentFileSize_ += message.length() + 1; // +1 for newline
 

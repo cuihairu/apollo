@@ -1,6 +1,8 @@
 # Core - Logging submodule (using spdlog)
+# structured.cpp 两分支均编（LogManager::initialize 的 processIdentity 钩子）
 add_library(apollo_core_log STATIC
     src/log_manager.cpp
+    src/structured.cpp
 )
 add_library(apollo::core_log ALIAS apollo_core_log)
 

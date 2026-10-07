@@ -4,6 +4,7 @@
  */
 
 #include "apollo/core/log/log_manager.h"
+#include "apollo/core/log/structured.h"
 
 #include <iostream>
 
@@ -53,6 +54,11 @@ LogManager& LogManager::instance() {
 }
 
 void LogManager::initialize(const LogManagerConfig& config) {
+    // 进程标识注入（§5.1 proc= 键；与 initialized_ 无关，可在停机重入时更新）
+    if (!config.processIdentity.empty()) {
+        LogContext::set_process(config.processIdentity);
+    }
+
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (initialized_) {
@@ -212,6 +218,11 @@ LogManager& LogManager::instance() {
 }
 
 void LogManager::initialize(const LogManagerConfig& config) {
+    // 进程标识注入（§5.1 proc= 键；与 initialized_ 无关，可在停机重入时更新）
+    if (!config.processIdentity.empty()) {
+        LogContext::set_process(config.processIdentity);
+    }
+
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (initialized_) {

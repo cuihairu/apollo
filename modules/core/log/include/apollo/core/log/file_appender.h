@@ -41,6 +41,9 @@ struct FileAppenderConfig {
     bool appendMode = true;                 ///< 追加模式而非覆盖
     LogRotationMode rotationMode = LogRotationMode::ByBoth; ///< 分割模式
     LogDateDivide dateDivide = LogDateDivide::Daily; ///< 日期分割类型
+    /// 结构化行输出（logging.md §5.1 外采契约，规则见 structured.h）。
+    /// 默认关：现有人读消费零破坏；apps/LoggerApp 接线批打开。
+    bool structuredOutput = false;
 
     static FileAppenderConfig daily() {
         FileAppenderConfig cfg;

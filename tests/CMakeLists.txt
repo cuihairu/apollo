@@ -849,6 +849,19 @@ if(MSVC)
 endif()
 add_test(NAME MetricsTests COMMAND metrics_tests)
 
+# ========== Log Structured Tests (P3-3 批 C) ==========
+# 结构化行格式（logging.md §5.1 外采契约：稳定键集 + 引号规则 + FileAppender
+# structuredOutput 开关 + logfmt 微解析可解析性）
+add_executable(log_structured_tests test_log_structured.cpp)
+target_link_libraries(log_structured_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(log_structured_tests PRIVATE ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(log_structured_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LogStructuredTests COMMAND log_structured_tests)
+
 # ========== Discovery Tests (P3-1 批 B + 批 C) ==========
 # G-1 编队服务发现库层：wire 报文编解码 + Beacon/Registry 行为（内存桩）
 # + UDP 传输件 loopback 集成（批 C）

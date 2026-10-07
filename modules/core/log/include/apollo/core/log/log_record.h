@@ -6,6 +6,8 @@
 #include <sstream>
 #include <iomanip>
 #include <thread>
+#include <utility>
+#include <vector>
 #include <source_location>
 
 namespace apollo {
@@ -53,6 +55,18 @@ public:
         file_ = file;
         line_ = line;
         function_ = func;
+    }
+
+    /**
+     * @brief 追加 kv 扩展段（结构化行尾段；键经清洗恒合法，规则见
+     * structured.h）
+     */
+    void setKv(const std::string& key, const std::string& value) {
+        kv_.emplace_back(key, value);
+    }
+
+    const std::vector<std::pair<std::string, std::string>>& getKv() const {
+        return kv_;
     }
 
     /**
@@ -126,6 +140,7 @@ private:
     int line_ = 0;
     std::string function_;
     std::chrono::system_clock::time_point timestamp_;
+    std::vector<std::pair<std::string, std::string>> kv_;
 
     static std::tm getLocalTime(const std::chrono::system_clock::time_point& tp) {
         time_t tt = std::chrono::system_clock::to_time_t(tp);

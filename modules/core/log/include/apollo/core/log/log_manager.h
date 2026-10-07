@@ -42,6 +42,9 @@ struct LogManagerConfig {
     bool fileEnabled = false;
     FileAppenderConfig fileConfig;
 
+    /// 进程标识（§5.1 结构化行 proc= 键，启动期注入一次；空 = 不设）
+    std::string processIdentity;
+
     static LogManagerConfig createDefault() {
         return LogManagerConfig{};
     }
