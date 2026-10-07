@@ -426,9 +426,7 @@ endif()
 
 if(APOLLO_ENABLE_MODULAR_LAYOUT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/CMakeLists.txt")
     add_subdirectory(modules)
-
-# Level 9: Starter (assembly layer)
-add_subdirectory(starter)
+endif()
 
 if(APOLLO_BUILD_TESTS)
     enable_testing()
