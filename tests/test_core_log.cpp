@@ -15,6 +15,8 @@
 #include <string_view>
 #include <fstream>
 #include <filesystem>
+#include <chrono>
+#include <thread>
 
 using namespace apollo::core::log;
 

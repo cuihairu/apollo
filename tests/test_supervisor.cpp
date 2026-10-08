@@ -9,9 +9,10 @@
 #include <string>
 #include <vector>
 
-#if !defined(_WIN32)
 #include <chrono>
 #include <thread>
+
+#if !defined(_WIN32)
 #include <unistd.h>
 #endif
 

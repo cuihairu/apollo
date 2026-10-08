@@ -27,6 +27,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -35,7 +36,6 @@
 #else
     #include <arpa/inet.h>
     #include <sys/socket.h>
-    #include <thread>
     #include <unistd.h>
 #endif
 
