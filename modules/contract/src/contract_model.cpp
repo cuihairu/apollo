@@ -120,7 +120,7 @@ bool operator==(const MsgDef& a, const MsgDef& b) {
 
 bool operator==(const EntityDef& a, const EntityDef& b) {
     return a.name == b.name && a.parent == b.parent && a.desc == b.desc &&
-           a.flattenedAttrs == b.flattenedAttrs;
+           a.ownAttrs == b.ownAttrs && a.flattenedAttrs == b.flattenedAttrs;
     // ancestors 由语义层推导，同样不进结构相等
 }
 

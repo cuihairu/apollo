@@ -66,10 +66,18 @@ KBEngine：`.def` 文件声明实体的属性与方法 → 生成器同时产出
   </msg>
 </messages>
 
-<!-- entities.xml —— 实体清单与继承（architecture-review §16.7.2：单继承、生成期展开；xs:keyref 锁 parent 引用，环检测在生成器） -->
+<!-- entities.xml —— 实体清单与继承（architecture-review §16.7.2：单继承、生成期展开；xs:keyref 锁 parent 引用，环检测在生成器）。
+     <attr name="…"/> 子元素声明本体属性集（G-6 展开批）：展开集 = 本体 ∪ 祖先链
+     并集；子重复声明祖先已带属性在解析层报错。属性名跨文件引用 XSD 单文档校验
+     锁不住——悬垂/重复裁决与环检测同在解析器语义层。 -->
 <entities version="7">
-  <entity id="Monster"/>
-  <entity id="Avatar" parent="Monster"/>
+  <entity id="Monster">
+    <attr name="hp"/>
+    <attr name="level"/>
+  </entity>
+  <entity id="Avatar" parent="Monster">
+    <attr name="gold"/>
+  </entity>
 </entities>
 ```
 

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- entities.xml — 实体清单与单继承（生成期展开，ioc-review §16.7.2）。
-     attr 集合不在本文件声明：实体默认携带全量 attrs 的可见子集，逐实体裁剪属后续批。
+     属性绑定面（G-6 展开批）：<attr name="…"/> 子元素声明本体属性集，
+     生成期沿继承链拍平（子集 = 本体 ∪ 祖先链；子不得重复声明祖先已带属性——
+     解析层报错）。绑定语义 = 该实体类型的属性持有面；当前绑定为起步集
+     （基础/战斗/社交演示面），逐实体裁剪细化随玩法批演进。
 
      继承链修文（improvement-plan P2-3，object-model 差异清单 #2 消账）：
      - 「Player」实体删除——契约裁决 Player 已废（term-contract v1.0：玩家长期
@@ -9,8 +12,35 @@
        为场景化身自有职责（term-contract §1.2），不借怪物继承表达。
      - Monster/NPC 保留单继承（NPC 继承怪物移动/战斗面），二者是场景实体
        （P2-1 起实体集合归 Scene），命名不占玩家词。 -->
-<entities version="2">
-  <entity id="Monster" desc="怪物基类（场景实体）"/>
-  <entity id="NPC" parent="Monster" desc="NPC（继承怪物移动/战斗面；场景实体）"/>
-  <entity id="Avatar" desc="场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 PlayerAnchor）"/>
+<entities version="3">
+  <entity id="Monster" desc="怪物基类（场景实体）">
+    <attr name="hp"/>
+    <attr name="max_hp"/>
+    <attr name="level"/>
+    <attr name="attack"/>
+    <attr name="defense"/>
+    <attr name="move_speed"/>
+    <attr name="in_combat"/>
+    <attr name="dead"/>
+    <attr name="stunned"/>
+  </entity>
+  <entity id="NPC" parent="Monster" desc="NPC（继承怪物移动/战斗面；场景实体——纯继承不另声明，展开集 = 怪物集）"/>
+  <entity id="Avatar" desc="场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 PlayerAnchor）">
+    <attr name="hp"/>
+    <attr name="max_hp"/>
+    <attr name="mp"/>
+    <attr name="max_mp"/>
+    <attr name="sp"/>
+    <attr name="move_speed"/>
+    <attr name="gold"/>
+    <attr name="level"/>
+    <attr name="exp"/>
+    <attr name="weapon_appearance"/>
+    <attr name="guild_id"/>
+    <attr name="team_id"/>
+    <attr name="online"/>
+    <attr name="in_combat"/>
+    <attr name="dead"/>
+    <attr name="stealth"/>
+  </entity>
 </entities>

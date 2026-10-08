@@ -103,8 +103,10 @@ struct EntityDef {
     std::string name;
     std::string parent;  ///< 空 = 根
     std::string desc;
-    /// 展开后的全量属性 id（含祖先链），解析器语义层填充，按 id 升序。
-    /// 本批为空：逐实体 attr 绑定属后续批（见 entities.xml 注释）。
+    /// 本体声明的属性名（<attr name="…"/> 子元素，声明序——G-6 展开批起契约文可绑属性）。
+    std::vector<std::string> ownAttrs;
+    /// 展开后的全量属性 id（含祖先链并集），解析器语义层填充，按 id 升序。
+    /// 子声明与祖先并集重复即报错（继承已自动带上）——展开集恒无重复。
     std::vector<uint16_t> flattenedAttrs;
     /// 生成期展开的祖先链（根在前，不含自身）——§16.7.2「继承在生成期拍平」。
     std::vector<std::string> ancestors;

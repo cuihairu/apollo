@@ -17,6 +17,7 @@
 #include "apollo/contract/contract_parser.hpp"
 #include "apollo/contract/contract_writer.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -588,6 +589,114 @@ void testInheritanceDanglingParentRejected() {
     CHECK(issuesContaining(r, "不存在") > 0, "应提示 parent 不存在");
 }
 
+// ------------------------------------------------------------ G-6 属性展开
+
+/// 实体 + 属性合并解析（目录级口径的单文件测试形态：属性引用裁决需要 attrs 表）
+ParseResult parseEntitiesWithAttrs(const std::string& entitiesXml,
+                                   const std::string& attrsXml) {
+    ParseResult ra = parseAttrsXml(attrsXml, "attrs.xml");
+    ParseResult r = parseEntitiesXml(entitiesXml, "entities.xml");
+    r.contract.aliases = std::move(ra.contract.aliases);
+    r.contract.attrs = std::move(ra.contract.attrs);
+    r.contract = validateAndResolve(std::move(r.contract), r.issues);
+    return r;
+}
+
+void testEntityAttrExpansion() {
+    ParseResult r = parseEntitiesWithAttrs(
+        R"(<?xml version="1.0"?><entities version="1">
+<entity id="Monster"><attr name="level"/><attr name="hp"/></entity>
+<entity id="NPC" parent="Monster"><attr name="gold"/></entity>
+<entity id="Avatar"><attr name="hp"/></entity>
+</entities>)",
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="1" name="hp" type="int64" sync="PROP"/>
+<attr id="20" name="gold" type="int64" sync="SELF"/>
+<attr id="300" name="level" type="int32" sync="PROP"/>
+</attrs>)");
+    CHECK(r.ok(), "合法属性绑定误报:\n" + r.report());
+    const auto& es = r.contract.entities;
+    auto find = [&](const std::string& n) -> const EntityDef* {
+        for (const auto& e : es)
+            if (e.name == n) return &e;
+        return nullptr;
+    };
+    // 本体声明保留声明序；展开集按 id 升序（声明序乱序输入不进展开序）
+    const EntityDef* m = find("Monster");
+    CHECK(m->ownAttrs.size() == 2 && m->ownAttrs[0] == "level" && m->ownAttrs[1] == "hp",
+          "Monster 本体声明保留声明序");
+    CHECK(m->flattenedAttrs.size() == 2 && m->flattenedAttrs[0] == 1 &&
+              m->flattenedAttrs[1] == 300,
+          "根实体展开集 = 本体集（按 id 升序）");
+    const EntityDef* npc = find("NPC");
+    CHECK(npc->ownAttrs.size() == 1 && npc->ownAttrs[0] == "gold", "NPC 本体声明");
+    CHECK(npc->flattenedAttrs.size() == 3 && npc->flattenedAttrs[0] == 1 &&
+              npc->flattenedAttrs[1] == 20 && npc->flattenedAttrs[2] == 300,
+          "NPC 展开集 = Monster 集 ∪ 本体（生成期拍平）");
+    CHECK(find("Avatar")->flattenedAttrs.size() == 1 &&
+              find("Avatar")->flattenedAttrs[0] == 1,
+          "无继承实体展开集 = 本体集");
+}
+
+void testEntityAttrDanglingRejected() {
+    const std::string attrs = R"(<?xml version="1.0"?><attrs version="1">
+<attr id="1" name="hp" type="int64" sync="PROP"/>
+</attrs>)";
+    ParseResult r = parseEntitiesWithAttrs(
+        R"(<?xml version="1.0"?><entities version="1">
+<entity id="A"><attr name="mana"/></entity>
+</entities>)", attrs);
+    CHECK(r.errorCount() > 0, "悬垂属性引用必须报错");
+    CHECK(issuesContaining(r, "不存在") > 0, "应提示属性名不存在");
+    // 单文件路径无属性表同样按悬空报错（带声明的实体必须合并属性表解析）
+    ParseResult solo = parseEntitiesFull(
+        R"(<?xml version="1.0"?><entities version="1">
+<entity id="A"><attr name="hp"/></entity>
+</entities>)");
+    CHECK(issuesContaining(solo, "不存在") > 0, "无属性表时属性引用应报悬垂");
+}
+
+void testEntityAttrRedeclareRejected() {
+    ParseResult r = parseEntitiesWithAttrs(
+        R"(<?xml version="1.0"?><entities version="1">
+<entity id="Monster"><attr name="hp"/></entity>
+<entity id="NPC" parent="Monster"><attr name="hp"/></entity>
+</entities>)",
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="1" name="hp" type="int64" sync="PROP"/>
+</attrs>)");
+    CHECK(r.errorCount() > 0, "子重复声明祖先属性必须报错");
+    CHECK(issuesContaining(r, "重复") > 0, "应点名重复声明");
+}
+
+void testEntityAttrDupOwnRejected() {
+    ParseResult r = parseEntitiesWithAttrs(
+        R"(<?xml version="1.0"?><entities version="1">
+<entity id="A"><attr name="hp"/><attr name="hp"/></entity>
+</entities>)",
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="1" name="hp" type="int64" sync="PROP"/>
+</attrs>)");
+    CHECK(r.errorCount() > 0, "本体内重复声明必须报错");
+    CHECK(issuesContaining(r, "重复声明") > 0, "应点名本体内重复");
+}
+
+void testEntitiesRoundTripAndFixpoint() {
+    std::string shippedAttrs = readFileOrEmpty(std::string(APOLLO_CONTRACT_DIR) + "/attrs.xml");
+    std::string shipped =
+        readFileOrEmpty(std::string(APOLLO_CONTRACT_DIR) + "/entities.xml");
+    CHECK(!shipped.empty(), "随仓 entities.xml 应可读");
+    ParseResult p1 = parseEntitiesWithAttrs(shipped, shippedAttrs);
+    CHECK(p1.ok(), "随仓 entities.xml 必须零错误:\n" + p1.report());
+
+    std::string canonical = writeEntitiesXml(p1.contract);
+    ParseResult p2 = parseEntitiesWithAttrs(canonical, shippedAttrs);
+    CHECK(p2.ok(), "规范输出必须可回读:\n" + p2.report());
+    CHECK(p2.contract.entities == p1.contract.entities,
+          "往返后实体表应相等（含 ownAttrs/flattenedAttrs）");
+    CHECK(writeEntitiesXml(p2.contract) == canonical, "规范序列化应为不动点");
+}
+
 // ------------------------------------------------------------ 往返与 hash
 
 void testRoundTripAndFixpoint() {
@@ -697,7 +806,7 @@ void testShippedContractDirectory() {
     ParseResult r = parseContractDirectory(APOLLO_CONTRACT_DIR);
     if (!r.ok()) std::cerr << r.report();
     CHECK(r.ok(), "随仓契约目录必须零错误通过");
-    CHECK(r.contract.version == 2, "随仓 version 应为 2（v2 = 消息分域批）");
+    CHECK(r.contract.version == 3, "随仓 version 应为 3（v3 = 实体属性展开批）");
     CHECK(r.contract.attrs.size() >= 20, "随仓属性应 >= 20 条");
     CHECK(r.contract.msgs.size() == 37,
           "随仓消息应为 37 条（框架 4 + P1-1 换幕 2 + P1-2 目录事件族 6 + "
@@ -730,6 +839,22 @@ void testShippedContractDirectory() {
                   a.name.find("storage") == std::string::npos,
               "属性名不得携带存储词汇: " + a.name);
     }
+    // G-6 展开面：展开集升序无重复；NPC 纯继承展开集 = Monster 集
+    const EntityDef* monsterDef = nullptr;
+    const EntityDef* npcDef = nullptr;
+    for (const auto& e : r.contract.entities) {
+        CHECK(std::is_sorted(e.flattenedAttrs.begin(), e.flattenedAttrs.end()),
+              "展开集必须按 id 升序: " + e.name);
+        CHECK(std::adjacent_find(e.flattenedAttrs.begin(), e.flattenedAttrs.end()) ==
+                  e.flattenedAttrs.end(),
+              "展开集不得有重复: " + e.name);
+        if (e.name == "Monster") monsterDef = &e;
+        if (e.name == "NPC") npcDef = &e;
+    }
+    CHECK(monsterDef != nullptr && npcDef != nullptr &&
+              npcDef->flattenedAttrs == monsterDef->flattenedAttrs &&
+              !npcDef->flattenedAttrs.empty(),
+          "NPC 纯继承：展开集恰为 Monster 集");
 }
 
 void testContractDirectoryErrors() {
@@ -787,6 +912,11 @@ int main() {
     testInheritanceMatrix();
     testInheritanceCycleRejected();
     testInheritanceDanglingParentRejected();
+    testEntityAttrExpansion();
+    testEntityAttrDanglingRejected();
+    testEntityAttrRedeclareRejected();
+    testEntityAttrDupOwnRejected();
+    testEntitiesRoundTripAndFixpoint();
     testRoundTripAndFixpoint();
     testMessagesRoundTripAndFixpoint();
     testSha256KnownVector();

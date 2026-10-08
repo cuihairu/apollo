@@ -414,7 +414,9 @@ void parseMessagesDoc(pugi::xml_node root, FileParse& fp, const std::string& fil
 
 void parseEntitiesDoc(pugi::xml_node root, FileParse& fp, const std::string& file) {
     const ElemSpec rootSpec{"entities", {{"version", true}}, {"entity"}};
-    const ElemSpec entitySpec{"entity", {{"id", true}, {"parent", false}, {"desc", false}}, {}};
+    const ElemSpec entitySpec{"entity", {{"id", true}, {"parent", false}, {"desc", false}},
+                              {"attr"}};
+    const ElemSpec entityAttrSpec{"attr", {{"name", true}}, {}};
 
     strictWalk(root, rootSpec, file, fp.buffer, "/entities", fp.issues);
     if (auto v = attrValue(root, "version")) {
@@ -445,6 +447,15 @@ void parseEntitiesDoc(pugi::xml_node root, FileParse& fp, const std::string& fil
         def.desc = attrValue(n, "desc").value_or("");
         if (def.parent == def.name && !def.name.empty()) {
             diag(fp.issues, file, line, path, "entity 不能以自身为 parent（自环）");
+        }
+        // 本体属性声明（G-6 生成期展开的输入面）：name 引用 attrs.xml 属性名，
+        // 悬垂/重复/与祖先重复的裁决在 resolveEntities 语义层（跨文件引用 XSD
+        // 单文档校验锁不住——与继承环检测同层）。
+        for (pugi::xml_node c : n.children()) {
+            if (c.type() != pugi::node_element || std::string(c.name()) != "attr") continue;
+            int cline = lineOf(fp.buffer, c.offset_debug());
+            strictWalk(c, entityAttrSpec, file, fp.buffer, path + "/attr", fp.issues);
+            def.ownAttrs.push_back(attrValue(c, "name").value_or(""));
         }
         fp.contract.entities.push_back(std::move(def));
     }
@@ -537,7 +548,9 @@ bool inAnySegment(uint16_t id) {
     return false;
 }
 
-/// 继承 DAG：parent 解析 + 环检测 + 祖先链展开（§16.7.2 生成期拍平的解析侧半步）
+/// 继承 DAG：parent 解析 + 环检测 + 祖先链展开 + 属性并集展开
+/// （§16.7.2 生成期拍平——G-6 展开批补属性面：子实体属性集 = 本体声明 ∪ 祖先链，
+/// 与 BW/KBE 解析期递归展开同构；子不得重复声明祖先已带属性——继承已自动带上）
 void resolveEntities(Contract& c, std::vector<Issue>& issues) {
     std::map<std::string, size_t> byName;
     for (size_t i = 0; i < c.entities.size(); ++i) {
@@ -548,12 +561,41 @@ void resolveEntities(Contract& c, std::vector<Issue>& issues) {
         }
     }
 
-    // DFS 三色标记环检测；visited 集合缓存祖先链（记忆化）
+    // 属性名 → id（引用面来自 attrs.xml——单文件解析路径无属性表时按悬空报错，
+    // 带属性声明的实体必须在目录级（或合并属性表后）解析）
+    std::map<std::string, uint16_t> attrIdByName;
+    for (const auto& a : c.attrs) attrIdByName.emplace(a.name, a.id);
+
+    // 本体声明裁决：悬垂引用 + 实体内重复
+    std::vector<std::set<uint16_t>> ownIds(c.entities.size());
+    for (size_t i = 0; i < c.entities.size(); ++i) {
+        const EntityDef& e = c.entities[i];
+        std::string path = "/entities/entity[@id='" + e.name + "']";
+        std::set<std::string> seenOwn;
+        for (const auto& an : e.ownAttrs) {
+            auto it = attrIdByName.find(an);
+            if (it == attrIdByName.end()) {
+                diag(issues, e.sourceFile, 0, path,
+                     "实体属性 '" + an + "' 不存在（引用 attrs.xml 未声明的属性名）");
+                continue;
+            }
+            if (!seenOwn.insert(an).second) {
+                diag(issues, e.sourceFile, 0, path,
+                     "实体属性 '" + an + "' 在本体内重复声明");
+                continue;
+            }
+            ownIds[i].insert(it->second);
+        }
+    }
+
+    // DFS 三色标记环检测；visited 集合缓存祖先链 + 祖先属性并集（记忆化）
     std::vector<int> state(c.entities.size(), 0);  // 0=未访 1=在栈 2=完成
     std::vector<std::vector<std::string>> chains(c.entities.size());
+    std::vector<std::vector<uint16_t>> flats(c.entities.size());
     std::function<bool(size_t)> visit = [&](size_t i) -> bool {
         state[i] = 1;
         const std::string& parent = c.entities[i].parent;
+        const std::vector<uint16_t>* parentFlat = nullptr;
         if (!parent.empty()) {
             auto it = byName.find(parent);
             if (it == byName.end()) {
@@ -572,8 +614,28 @@ void resolveEntities(Contract& c, std::vector<Issue>& issues) {
             if (it != byName.end() && state[it->second] == 2) {
                 chains[i] = chains[it->second];
                 chains[i].push_back(parent);
+                parentFlat = &flats[it->second];
             }
         }
+        // 子声明与祖先并集重复即报错（继承已自动带上——重声明只会制造漂移面）
+        if (parentFlat != nullptr) {
+            for (const auto& an : c.entities[i].ownAttrs) {
+                auto idIt = attrIdByName.find(an);
+                if (idIt == attrIdByName.end()) continue;  // 悬垂已在上面点名
+                if (std::find(parentFlat->begin(), parentFlat->end(), idIt->second) !=
+                    parentFlat->end()) {
+                    diag(issues, c.entities[i].sourceFile, 0,
+                         "/entities/entity[@id='" + c.entities[i].name + "']",
+                         "实体属性 '" + an + "' 与祖先 '" + parent + "' 已带属性重复"
+                         "（继承自动展开——删除子声明或换属性）");
+                }
+            }
+        }
+        // 展开并集：祖先并集 ∪ 本体，按 id 升序（ownIds 为 set，天然有序）
+        flats[i] = parentFlat ? *parentFlat : std::vector<uint16_t>{};
+        flats[i].insert(flats[i].end(), ownIds[i].begin(), ownIds[i].end());
+        std::sort(flats[i].begin(), flats[i].end());
+        flats[i].erase(std::unique(flats[i].begin(), flats[i].end()), flats[i].end());
         state[i] = 2;
         return true;
     };
@@ -582,6 +644,7 @@ void resolveEntities(Contract& c, std::vector<Issue>& issues) {
     }
     for (size_t i = 0; i < c.entities.size(); ++i) {
         c.entities[i].ancestors = chains[i];
+        c.entities[i].flattenedAttrs = flats[i];
     }
 }
 

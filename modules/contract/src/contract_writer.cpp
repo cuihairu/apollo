@@ -164,7 +164,15 @@ std::string writeEntitiesXml(const Contract& c) {
         os << "  <entity id=\"" << e.name << "\"";
         optAttr(os, "parent", e.parent);
         optAttr(os, "desc", e.desc);
-        os << "/>\n";
+        if (e.ownAttrs.empty()) {
+            os << "/>\n";
+            continue;
+        }
+        os << ">\n";
+        for (const auto& an : e.ownAttrs) {
+            os << "    <attr name=\"" << an << "\"/>\n";
+        }
+        os << "  </entity>\n";
     }
     os << "</entities>\n";
     return os.str();

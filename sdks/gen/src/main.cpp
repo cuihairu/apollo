@@ -44,6 +44,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -202,17 +203,31 @@ std::string renderHeader(const Contract& c, const std::string& hash,
     os << "};\n";
     os << "inline constexpr size_t kMsgCount = sizeof(kMsgs) / sizeof(kMsgs[0]);\n\n";
 
-    os << "// 继承在生成期拍平（§16.7.2）：ancestors 根在前。\n";
+    os << "// 继承在生成期拍平（§16.7.2）：ancestors 根在前；attrs = 本体声明 ∪\n";
+    os << "// 祖先链并集（G-6 展开批，按 attr id 升序无重复——子重声明在解析层拒绝）。\n";
     os << "struct EntityMeta {\n";
     os << "    const char* name;\n    const char* parent;\n";
-    os << "    const char* const* ancestors;\n    size_t ancestorCount;\n    const char* desc;\n";
+    os << "    const char* const* ancestors;\n    size_t ancestorCount;\n";
+    os << "    const AttrId* attrs;\n    size_t attrCount;\n    const char* desc;\n";
     os << "};\n";
+    std::map<uint16_t, std::string> attrNameById;
+    for (const auto& a : c.attrs) attrNameById.emplace(a.id, a.name);
     for (const auto& e : c.entities) {
         if (e.ancestors.empty()) continue;
         os << "inline constexpr const char* kAncestors_" << e.name << "[] = {";
         for (size_t i = 0; i < e.ancestors.size(); ++i) {
             if (i) os << ", ";
             os << "\"" << e.ancestors[i] << "\"";
+        }
+        os << "};\n";
+    }
+    for (const auto& e : c.entities) {
+        if (e.flattenedAttrs.empty()) continue;
+        os << "inline constexpr AttrId kEntityAttrs_" << e.name << "[] = {";
+        for (size_t i = 0; i < e.flattenedAttrs.size(); ++i) {
+            auto it = attrNameById.find(e.flattenedAttrs[i]);
+            if (i) os << ", ";
+            os << "AttrId::" << (it != attrNameById.end() ? it->second : "??");
         }
         os << "};\n";
     }
@@ -223,6 +238,11 @@ std::string renderHeader(const Contract& c, const std::string& hash,
                    ? "nullptr, 0"
                    : ("kAncestors_" + e.name + ", sizeof(kAncestors_" + e.name +
                       ") / sizeof(kAncestors_" + e.name + "[0])"))
+           << ", "
+           << (e.flattenedAttrs.empty()
+                   ? "nullptr, 0"
+                   : ("kEntityAttrs_" + e.name + ", sizeof(kEntityAttrs_" + e.name +
+                      ") / sizeof(kEntityAttrs_" + e.name + "[0])"))
            << ", \"" << cEscape(e.desc) << "\"},\n";
     }
     os << "};\n";
@@ -300,12 +320,26 @@ std::string renderJson(const Contract& c, const std::string& hash, const std::st
     j["messages"] = msgs;
 
     ordered_json entities = ordered_json::array();
+    std::map<uint16_t, std::string> attrNameById;
+    for (const auto& a : c.attrs) attrNameById.emplace(a.id, a.name);
     for (const auto& e : c.entities) {
         ordered_json ancestors = ordered_json::array();
         for (const auto& a : e.ancestors) ancestors.push_back(a);
+        ordered_json ownAttrs = ordered_json::array();
+        for (const auto& a : e.ownAttrs) ownAttrs.push_back(a);
+        // 展开面（含祖先链并集，按 id 升序）——服务端全量投影；客户端面按
+        // §11.3 ③ 域过滤不携带实体表（实体归 internal 域 bundle）。
+        ordered_json attrs = ordered_json::array();
+        for (const auto id : e.flattenedAttrs) {
+            auto it = attrNameById.find(id);
+            attrs.push_back(ordered_json{{"id", id},
+                                         {"name", it != attrNameById.end() ? it->second : ""}});
+        }
         entities.push_back(ordered_json{{"name", e.name},
                                         {"parent", e.parent},
                                         {"ancestors", ancestors},
+                                        {"own_attrs", ownAttrs},
+                                        {"attrs", attrs},
                                         {"desc", e.desc}});
     }
     j["entities"] = entities;
@@ -406,6 +440,22 @@ std::string renderContractLua(const Contract& c, const std::string& hash,
                << luaEscape(f.typeName) << "\" },\n";
         }
         os << "  } },\n";
+    }
+    os << "}\n\n";
+
+    os << "-- 实体表（name → 元数据；G-6 生成期展开：attrs = 本体 ∪ 祖先链并集，\n";
+    os << "-- 按 attr id 升序）。\n";
+    os << "M.entities = {\n";
+    for (const auto& e : c.entities) {
+        os << "  [\"" << luaEscape(e.name) << "\"] = { parent = \""
+           << luaEscape(e.parent) << "\", ancestors = ";
+        luaStringArray(os, e.ancestors);
+        os << ", attrs = {";
+        for (size_t i = 0; i < e.flattenedAttrs.size(); ++i) {
+            if (i) os << ", ";
+            os << e.flattenedAttrs[i];
+        }
+        os << "} },\n";
     }
     os << "}\n\n";
 

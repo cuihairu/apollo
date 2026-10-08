@@ -107,6 +107,47 @@ static_assert(acg::kEntities[findEntity("NPC")].ancestorCount == 1 &&
 static_assert(acg::kEntities[findEntity("Avatar")].ancestorCount == 0,
               "Avatar 为根实体（玩家化身不入怪物族）");
 
+// G-6 展开不变量（2026-10-09 展开批）：EntityMeta.attrs = 本体声明 ∪ 祖先链
+// 并集——按 attr id 严格升序（无重复，重声明在解析层拒绝）、全量落在属性表内。
+constexpr bool entityAttrsSorted(int idx) {
+    for (size_t k = 1; k < acg::kEntities[idx].attrCount; ++k) {
+        if (static_cast<uint16_t>(acg::kEntities[idx].attrs[k - 1]) >=
+            static_cast<uint16_t>(acg::kEntities[idx].attrs[k])) {
+            return false;
+        }
+    }
+    return true;
+}
+constexpr bool entityAttrsKnown(int idx) {
+    for (size_t k = 0; k < acg::kEntities[idx].attrCount; ++k) {
+        const uint16_t id = static_cast<uint16_t>(acg::kEntities[idx].attrs[k]);
+        bool found = false;
+        for (size_t i = 0; i < acg::kAttrCount; ++i) {
+            if (static_cast<uint16_t>(acg::kAttrs[i].id) == id) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+constexpr bool allEntityAttrsWellFormed() {
+    for (size_t i = 0; i < acg::kEntityCount; ++i) {
+        if (!entityAttrsSorted(static_cast<int>(i))) return false;
+        if (!entityAttrsKnown(static_cast<int>(i))) return false;
+    }
+    return true;
+}
+static_assert(allEntityAttrsWellFormed(),
+              "各实体展开集必须按 id 升序且全量落在属性表内");
+static_assert(acg::kEntities[findEntity("NPC")].attrCount > 0 &&
+                  acg::kEntities[findEntity("NPC")].attrCount ==
+                      acg::kEntities[findEntity("Monster")].attrCount,
+              "NPC 纯继承：展开集恰为 Monster 集（不另声明）");
+static_assert(acg::kEntities[findEntity("Avatar")].attrCount == 16,
+              "Avatar 起步绑定 16 属性（基础/战斗/社交演示面）");
+
 int main() {
     // 运行时零副作用：编译通过 + 断言成立即绿
     return 0;

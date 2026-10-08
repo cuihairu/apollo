@@ -230,6 +230,16 @@
         </xs:element>
         <xs:element name="entity" minOccurs="0" maxOccurs="unbounded">
           <xs:complexType>
+            <xs:sequence>
+              <!-- 本体属性声明（G-6 生成期展开输入面）：name 引用 attrs.xml 属性名。
+                   跨文件引用 XSD 单文档校验锁不住——悬垂/重复/与祖先重复的裁决
+                   在解析器语义层（与继承环检测同层）。 -->
+              <xs:element name="attr" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:attribute name="name" type="xs:string" use="required"/>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
             <xs:attribute name="id" type="EntityName" use="required"/>
             <xs:attribute name="parent" type="EntityName" use="optional"/>
             <xs:attribute name="desc" type="xs:string" use="optional"/>
