@@ -33,6 +33,15 @@ public:
     // 是否运行中
     bool isRunning() const { return running_; }
 
+    // 停机维护位（G-3，attribute-sync §10.2-①）：true = 停机中，受理面
+    // 一律维护中应答（不收新 intent）
+    bool is_shutting_down() const { return shuttingDown_.load(); }
+
+    // 受理面（start() 注册的 handler 即此件）：按消息类型分派。公开为
+    // 停机维护闸的直测入口——stub 传输树无真实 REP 面，socket round-trip
+    // 测不了受理语义
+    std::vector<uint8_t> dispatchRequest(const std::vector<uint8_t>& data);
+
     std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayer(PlayerID playerId);
     bool bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding);
     bool unbindSession(protocol::SessionID sessionId);
@@ -97,6 +106,7 @@ private:
 
     std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> shuttingDown_{false};  // 停机五阶段幂等闸 + 维护位（G-3）
 
     std::thread autoSaveThread_;
 };

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 
 namespace base {
 
@@ -166,6 +167,11 @@ std::optional<PlayerID> BaseServer::findPlayerBySession(protocol::SessionID sess
 
 void BaseServer::start() {
     if (running_) return;
+    // 停机位单向（G-3）：stop 后本实例不再服务——重启语义归进程重启，
+    // 防止复位后静默落入维护中受理
+    if (shuttingDown_) {
+        throw std::runtime_error("BaseServer cannot restart after stop (process restart instead)");
+    }
 
     // 初始化数据库
     if (!database_->initialize()) {
@@ -223,37 +229,7 @@ void BaseServer::start() {
     );
 
     server_->setRequestHandler([this](const std::vector<uint8_t>& data) -> std::vector<uint8_t> {
-        auto header = protocol::MessageCodec::parseHeader(data);
-        auto msgType = static_cast<protocol::MessageType>(header.type);
-
-        switch (msgType) {
-            case protocol::MessageType::DB_LOAD_REQUEST:
-                return handleDbLoadRequest(data);
-
-            case protocol::MessageType::DB_SAVE_REQUEST:
-                return handleDbSaveRequest(data);
-
-            case protocol::MessageType::DB_QUERY_REQUEST:
-                return handleDbQueryRequest(data);
-
-            case protocol::MessageType::PLAYER_ACTIVATE_REQUEST:
-                return handlePlayerActivateRequest(data);
-
-            case protocol::MessageType::PLAYER_BIND_SESSION_REQUEST:
-                return handlePlayerBindSessionRequest(data);
-
-            // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
-            // 归 apps/baseappmgr（目录 + 落点裁决），baseapp 不再受理。
-
-            case protocol::MessageType::PING:
-                return handlePing(data);
-
-            default:
-                protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
-                err.message = "Unknown message type";
-                return protocol::MessageCodec::encode(err, header.sessionId);
-        }
+        return dispatchRequest(data);
     });
 
     running_ = true;
@@ -267,24 +243,102 @@ void BaseServer::start() {
 }
 
 void BaseServer::stop() {
+    // 幂等闸（G-3）：信号处理器与析构可能先后各调一次——CAS 保证五阶段
+    // 只走一遍（此前二次调用会重复 flush 与 double database shutdown）
+    bool expected = false;
+    if (!shuttingDown_.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
+    // ① 停收新请求（§10.2-①）：维护位已立（dispatchRequest 回维护中），
+    // 关监听并等在途 handler 归还（RepSocket::stop = join worker——§10.2-④
+    // 的 net 断开与此同拍：stub 传输树无在途帧面）
     running_ = false;
     if (server_) {
         server_->stop();
     }
     server_.reset();
 
-    // 关闭协议（P0-4，lifecycle §2.6）：service 停 → 脏数据 flush（占位，
-    // 真正落库接 P1 持久化）→ 保存队列 drain（SaveQueue::stop 后 worker
-    // 清空余量）→ 数据库关闭。
-    flushDirtyAnchors("shutdown_flush");
-    drainJournal();  // 恢复位点收口：已落档条目压出 journal
-    saveQueue_->stop();
-
+    // ② 最后一轮变更进 journal（§10.2-②）：先停自动保存生产者（此前
+    // join 排在队列 drain 之后——生产者仍可能在 drain 后再入队的竞序），
+    // 再全量 flush 脏锚点（flush 先 journal 后入队，write-ahead 语义）
     if (autoSaveThread_.joinable()) {
         autoSaveThread_.join();
     }
+    flushDirtyAnchors("shutdown_flush");
 
+    // ③ 持久链追平（§10.2-③）：队列全量排空（SaveQueue::stop 的 worker
+    // 至队空方退）→ journal 循环 drain 至 pending==0，带超时上限——超时
+    // 告警并继续（日志完整性优先于停机速度：残留条目留待重启 replay，幂等）
+    saveQueue_->stop();
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(config_.shutdownFlushTimeoutMs);
+    while (journal_->pending() > 0) {
+        const std::size_t applied = drainJournal();
+        if (journal_->pending() == 0) {
+            break;
+        }
+        if (applied == 0) {
+            // 定额内零进展：sink 拒绝（脏条目）——超时判定后告警放行
+            if (std::chrono::steady_clock::now() >= deadline) {
+                std::cerr << "[shutdown] journal drain timeout, "
+                          << journal_->pending()
+                          << " entries left for restart replay" << std::endl;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    // ⑤ 模块按依赖逆序停（§10.2-⑤）：存储最内层最后关
     database_->shutdown();
+    std::cout << "Base server stopped (journal pending: " << journal_->pending()
+              << ")" << std::endl;
+}
+
+std::vector<uint8_t> BaseServer::dispatchRequest(const std::vector<uint8_t>& data) {
+    // 维护闸（G-3，§10.2-①）：停机中不再受理新请求——受理面统一回维护
+    // 中应答（与 Unknown message type 同族错误回包；stub 传输树无 control
+    // 通道面，维护中语义落在受理入口）
+    if (shuttingDown_) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Server is shutting down";
+        return protocol::MessageCodec::encode(
+            err, protocol::MessageCodec::parseHeader(data).sessionId);
+    }
+
+    auto header = protocol::MessageCodec::parseHeader(data);
+    auto msgType = static_cast<protocol::MessageType>(header.type);
+
+    switch (msgType) {
+        case protocol::MessageType::DB_LOAD_REQUEST:
+            return handleDbLoadRequest(data);
+
+        case protocol::MessageType::DB_SAVE_REQUEST:
+            return handleDbSaveRequest(data);
+
+        case protocol::MessageType::DB_QUERY_REQUEST:
+            return handleDbQueryRequest(data);
+
+        case protocol::MessageType::PLAYER_ACTIVATE_REQUEST:
+            return handlePlayerActivateRequest(data);
+
+        case protocol::MessageType::PLAYER_BIND_SESSION_REQUEST:
+            return handlePlayerBindSessionRequest(data);
+
+        // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
+        // 归 apps/baseappmgr（目录 + 落点裁决），baseapp 不再受理。
+
+        case protocol::MessageType::PING:
+            return handlePing(data);
+
+        default:
+            protocol::ErrorMessage err;
+            err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+            err.message = "Unknown message type";
+            return protocol::MessageCodec::encode(err, header.sessionId);
+    }
 }
 
 std::vector<uint8_t> BaseServer::handleDbLoadRequest(const std::vector<uint8_t>& request) {
@@ -415,7 +469,17 @@ std::vector<uint8_t> BaseServer::handlePing(const std::vector<uint8_t>& request)
 
 void BaseServer::autoSaveLoop() {
     while (running_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(config_.autoSaveIntervalMs));
+        // 分片睡等（G-3）：running_ 翻 false 最迟一个分片内可观察——停机
+        // join 不吃整个 autoSaveIntervalMs（§10.2 停机时延兜底；此前整段
+        // sleep 使 SIGTERM 停机最长挂一个保存周期）
+        int waited = 0;
+        while (running_ && waited < config_.autoSaveIntervalMs) {
+            const int slice = config_.autoSaveIntervalMs - waited < 50
+                                  ? config_.autoSaveIntervalMs - waited
+                                  : 50;
+            std::this_thread::sleep_for(std::chrono::milliseconds(slice));
+            waited += slice;
+        }
 
         // 自动保存（P0-4「Saving 真做」）：把脏锚点送入保存队列（六态
         // Disconnected/Saving 由 flush 与回调维护），不再仅打印。

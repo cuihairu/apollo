@@ -361,6 +361,8 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 - docs/03 的"独立同步线程"方案废弃：广播在逻辑线程内阶段化完成（collect/flush 是纯内存操作 + 非阻塞发送，耗时可控），跨线程只发生在 net 发送与 DB 落库两处、且都走无锁队列——顺序性由单写者天然保证。
 - 超时兜底：阶段 4/5 预算超时（如 >1.5ms）立即截断，剩余下 tick——广播延迟上限可控。
 
+> **2026-10-09 代码面已交付（G-3，apps/base-app）**：`BaseServer::stop()` 重写为五阶段——① `shuttingDown_` 原子位先立（受理面 `dispatchRequest` 统一回「Server is shutting down」维护中应答，会话号保留），关监听并 join 在途 handler（RepSocket 语义，兼为 ④ 的断开同拍）；② autoSaveThread_ 先 join 再全量 `flushDirtyAnchors`（生产者先停——修复此前 join 排在队列 drain 之后、drain 后仍可能再入队的竞序）；③ `SaveQueue::stop` 全量排空后 journal 循环 drain 至 `pending()==0`，超时上限 `shutdownFlushTimeoutMs`（缺省 5s）内零进展即告警放行——残留条目留待重启 replay（幂等），日志完整性优先于停机速度；⑤ 存储最内层最后关。幂等闸：CAS 保证信号处理器 + 析构双调用只走一遍（此前重复 flush/double shutdown）。配套：autoSaveLoop 睡眠改 50ms 分片（停机 join 不再吃整个保存周期——SIGTERM 停机从最长 60s 收到 ~1s）；`base_anchor_tests` 增维护闸 + journal 追平/档案可重读两组（受理面公开为 `dispatchRequest` 直测入口——stub 传输树无真实 REP 面）。真进程冒烟：SIGTERM → 维护位 → 五阶段 → exit 0（journal pending 0）。
+
 ## 11. 度量与验收
 
 | 指标 | 目标 |

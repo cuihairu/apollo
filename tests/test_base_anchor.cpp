@@ -1,5 +1,7 @@
 #include "base/base_server.hpp"
 #include "apollo/game/session/player_anchor.hpp"
+#include "apollo/data/orm/persist_journal.hpp"
+#include "apollo/protocol/messages.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -66,6 +68,106 @@ bool test_base_server_anchor_lifecycle() {
     return true;
 }
 
+// G-3 优雅停机（attribute-sync §10.2）：维护闸 + stop 幂等。stub 传输树
+// 无真实 REP 面——受理语义经公开的 dispatchRequest 直测。
+bool test_shutdown_maintenance_gate() {
+    std::cout << "Running: test_shutdown_maintenance_gate..." << std::endl;
+
+    base::BaseConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 10;
+    config.host = "127.0.0.1";
+    config.port = 39002;  // 高位端口：stub 树 start() 无传输面，nng 复活也避撞
+    config.dataDir = "base_anchor_test_gate_data/players";
+    config.journalPath = "base_anchor_test_gate_data/journal/persist.log";
+    config.shutdownFlushTimeoutMs = 2000;
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+
+    base::BaseServer server(config);
+    server.start();
+
+    apollo::protocol::Ping ping;
+    ping.timestamp = 42;
+    const auto request = apollo::protocol::MessageCodec::encode(ping, 7);
+
+    auto aliveHeader = apollo::protocol::MessageCodec::parseHeader(server.dispatchRequest(request));
+    TEST_ASSERT(aliveHeader.type == static_cast<uint16_t>(apollo::protocol::MessageType::PONG),
+                "alive server answers PING with PONG");
+
+    server.stop();
+    TEST_ASSERT(server.is_shutting_down(), "shutting-down flag set");
+    TEST_ASSERT(!server.isRunning(), "no longer running");
+
+    // §10.2-①：停机后新请求一律维护中应答（错误回包，会话号保留）
+    auto gateHeader = apollo::protocol::MessageCodec::parseHeader(server.dispatchRequest(request));
+    TEST_ASSERT(gateHeader.type == static_cast<uint16_t>(apollo::protocol::MessageType::ERROR),
+                "shut-down server answers ERROR (maintenance gate)");
+    TEST_ASSERT(gateHeader.sessionId == 7, "maintenance reply preserves session id");
+
+    server.stop();  // 幂等：二次 stop（信号 + 析构双调用路径）不重复关停
+    std::cout << "  PASSED" << std::endl;
+
+    std::filesystem::remove_all("base_anchor_test_gate_data");
+    return true;
+}
+
+// G-3 优雅停机：脏锚点最后一轮 flush + journal 追平（§10.2-②③）——
+// 干净停机后 journal 零回放、档案可重读。
+bool test_shutdown_flushes_journal_and_archive() {
+    std::cout << "Running: test_shutdown_flushes_journal_and_archive..." << std::endl;
+
+    base::BaseConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 10;
+    config.host = "127.0.0.1";
+    config.port = 39003;
+    config.dataDir = "base_anchor_test_stop_data/players";
+    config.journalPath = "base_anchor_test_stop_data/journal/persist.log";
+    config.shutdownFlushTimeoutMs = 2000;
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+
+    // P1-4 口径：先播种档案（load 不再凭空 bootstrap）
+    base::PlayerData seed;
+    seed.playerId = 1002;
+    seed.username = "shutdown-test";
+    {
+        base::DatabaseService seeder(config);
+        TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
+    }
+
+    base::BaseServer server(config);
+    server.start();
+
+    auto anchor = server.activatePlayer(1002);
+    TEST_ASSERT(anchor != nullptr, "anchor activated");
+    anchor->mark_dirty("shutdown_test");
+
+    server.stop();
+
+    // §10.2-③：journal 文件面追平——重开计 pending 必须为 0（干净停机零回放）
+    apollo::data::journal::PersistJournal journal(config.journalPath);
+    TEST_ASSERT(journal.open(), "journal reopened after shutdown");
+    TEST_ASSERT(journal.pending() == 0, "journal drained to empty on clean shutdown");
+
+    // §10.2-②：脏锚点 flush 的载荷已落档（fresh 实例无缓存，读的是盘）
+    {
+        base::DatabaseService reloader(config);
+        base::PlayerData loaded;
+        TEST_ASSERT(reloader.loadPlayer(1002, loaded), "archive readable after shutdown");
+        TEST_ASSERT(loaded.playerId == 1002, "archive player id preserved");
+        TEST_ASSERT(loaded.username == "shutdown-test", "archive content preserved");
+    }
+
+    std::cout << "  PASSED" << std::endl;
+
+    std::filesystem::remove_all("base_anchor_test_stop_data");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -82,6 +184,8 @@ int main() {
     };
 
     run(test_base_server_anchor_lifecycle);
+    run(test_shutdown_maintenance_gate);
+    run(test_shutdown_flushes_journal_and_archive);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

@@ -982,7 +982,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 **G-2 备份/容灾与宕机接管。** BigWorld：baseapp 热备分帧（backup_sender.hpp:52-61）、一致性哈希备份链（backup_hash/backup_hash_chain）、secondary db、reviver 接管、cellappmgr 崩溃后在幸存 CellApp 重建 cell。apollo 只有 attribute-sync §8 的「崩溃后数据不丢」（write-behind journal），**进程级高可用零设计**。落点：文档显式声明「单进程阶段无高可用」，P3 骨架列 backup-hash 链与 reviver 两个参照。
 
-**G-3 优雅停机序列。** 停机时 flush write-behind journal → 停收新连接 → drain 在途帧 → 落库 → 按依赖逆序停模块——六份文档零落点（KBEngine 实体销毁路径 onDestroyEntity→writeToDB，baseapp/entity.cpp:698-731，是停机落库的零件级参照；数据面即 §15.5 三语句）。落点：attribute-sync §10 六阶段后补「阶段 7：停机（逆序 drain）」或独立小节。
+**G-3 优雅停机序列。** 停机时 flush write-behind journal → 停收新连接 → drain 在途帧 → 落库 → 按依赖逆序停模块——六份文档零落点（KBEngine 实体销毁路径 onDestroyEntity→writeToDB，baseapp/entity.cpp:698-731，是停机落库的零件级参照；数据面即 §15.5 三语句）。落点：attribute-sync §10 六阶段后补「阶段 7：停机（逆序 drain）」或独立小节。**2026-10-09 代码面已交付**：attribute-sync §10.2 五阶段落 `BaseServer::stop()`（维护闸受理面回维护中 + CAS 幂等[信号/析构双调用] + 生产者先停的 flush 竞序修复 + journal drain 至 pending==0 带超时告警放行 + autoSaveLoop 分片睡等把 SIGTERM 停机从最长 60s 收到 ~1s），交付详情见 attribute-sync §10.2 交付注。
 
 **G-4 定时器轮。** skynet 五层时间轮 + 独立线程 2.5ms tick + 到期即消息（skynet_timer.c:17-21,40-41、skynet_start.c:131-140、skynet_timer.c:134-143）。apollo 无定时器模块（ssengine-reference §4.3 第一佐证，此处第二佐证 + 实现参照）。落点差异要写明：skynet 独立线程驱动、回调走消息队列——与其消息驱动范式同构；apollo 按单写者纪律应**挂在主循环固定阶段**（数据结构抄时间轮，驱动权留 game loop，回调在 owning thread 直接执行）。**2026-10-08 库件批已交付**：`modules/base/timer_wheel`（分层哈希轮——单写者无锁、喂钟驱动 `advance(now_ms)`、O(1) 侵入链调度/撤销、页界级联降层、超窗驻留顶层、补拍语义、周期绝对拍重排零漂移、代数防陈旧撤销、构造原点注入）+ `timer_wheel_tests` 12 组（含固定种子差分压力 vs 朴素参考模型）入三树门禁；消费方接线（主循环固定阶段挂轮）待首个真实消费批。
 
