@@ -14,7 +14,7 @@ tag:
 
 # Starter 与模块装配设计
 
-> **状态（2026-09-30，C-76 同型延伸）**：**参考件（装配思想历史源）**——starter/manifest 实现现状（双 INTERFACE 壳 + 幻影测试，C-68）与现行装配口径（显式注册装配单元、main 收口）以 `docs/analysis/architecture-review.md` §17/§21 为准；本文价值 = 「不做 Spring 克隆、显式 builder、轻注册」的正面表述源（§1/§4 引）。状态表 = `docs/architecture/README.md` A 档。
+> **状态（2026-09-30，C-76 同型延伸）**：**参考件（装配思想历史源）**——starter/manifest 实现现状（双 INTERFACE 壳 + 幻影测试，C-68）与现行装配口径（显式注册装配单元、main 收口）以 `docs/analysis/architecture-review.md` §17/§21 为准；本文价值 = 「不做 Spring 克隆、显式 builder、轻注册」的正面表述源（§1/§4 引）。状态表 = `docs/architecture/README.md` A 档。**更新（2026-10-08）**：`modules/starter` 磁盘空壳已整目录删除（C-68 消账，拍板=删除——补实即重建 §17 已否决的运行期 Starter 对象图/条件求值器且与 runtime ApplicationHost 重叠），本文自此仅存思想表述、无实现对应物；§14 引用清单同步。
 
 这篇文档解决的是 Apollo 整体框架继续往下走时，一个必须明确的问题：
 
@@ -419,7 +419,7 @@ capabilities:
 
 Apollo 当前已经有：
 
-- `modules/starter`
+- `modules/starter`（**2026-10-08 已删除**——C-68 空壳消账；装配口径 = 显式注册装配单元 + main 收口，宿主 = `runtime` ApplicationHost）
 - 多个 `apps/*`
 
 但还没有形成真正统一的 starter + bootstrap 体系。

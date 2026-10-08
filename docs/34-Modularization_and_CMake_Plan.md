@@ -130,6 +130,8 @@
 
 定位：装配层——C++ 显式注册的模块装配单元（编译期类型键，无运行时容器）。
 
+> **状态（2026-10-08）**：本节装配层未落地——`modules/starter` 空壳（双 INTERFACE 零源码 + 幻影测试，architecture-review C-68）已整目录删除（拍板=删除，补实即重建 §17 已否决的运行期 Starter 容器且与 runtime ApplicationHost 职责重叠）；现行装配口径 = 显式注册装配单元 + main 收口（architecture-review §17/§21/§24），装配思想表述见 `docs/architecture/starter-and-module-assembly-design.md`（参考件）。
+
 建议拆分：
 
 - `starter/core`
