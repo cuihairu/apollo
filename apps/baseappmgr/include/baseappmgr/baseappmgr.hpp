@@ -1,11 +1,13 @@
 #pragma once
 
+#include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/player_directory.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 #include "apollo/protocol/socket.hpp"
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -65,6 +67,16 @@ public:
     void set_directory_event_listener(
         apollo::game::session::PlayerDirectory::EventSink listener);
 
+    // 准入闸门（P3-1 增量③：恢复相位排他——拒新语义注入点）。gate 返回
+    // false 时 bindSession/assignWorld 拒绝（wire 应答 success=false）。
+    // 未设置恒放行。
+    void set_admission_gate(std::function<bool()> gate);
+
+    // 全量重报 intake 透传（P3-1 增量③：恢复相位各 Zone/gateway 全量重报
+    // → PlayerDirectory::intake_full_report，restore-not-kick 语义）
+    std::size_t intake_directory_full_report(
+        const std::vector<apollo::game::session::MirrorEntry>& sessions);
+
     // 对账（30s 周期，owner 驱动）：上报在线集与目录比对；失配走快照重置。
     // 返回是否一致（P3 起由周期定时器驱动，单进程阶段由测试/运维触发）。
     bool reconcileDirectory(const std::vector<PlayerID>& reported_online) const;
@@ -89,6 +101,7 @@ private:
     std::unordered_map<PlayerID, apollo::game::session::WorldAssignment> assignments_;
     apollo::game::session::PlayerDirectory directory_;
     apollo::game::session::PlayerDirectory::EventSink directory_listener_;
+    std::function<bool()> admission_gate_;
 };
 
 } // namespace baseappmgr

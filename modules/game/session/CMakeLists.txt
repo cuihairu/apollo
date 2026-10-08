@@ -5,6 +5,7 @@ add_library(apollo_game_session STATIC
     src/player_anchor.cpp
     src/player_directory.cpp
     src/directory_mirror.cpp
+    src/fleet_recovery.cpp
     src/session_locator.cpp
 )
 add_library(apollo::game_session ALIAS apollo_game_session)

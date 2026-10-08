@@ -908,6 +908,32 @@ if(MSVC)
 endif()
 add_test(NAME DirectoryMirrorTests COMMAND directory_mirror_tests)
 
+# ========== Fleet Recovery Tests (P3-1 G-1 收尾批增量③) ==========
+# FullReport wire（APD2 kind=4）+ Reporter 分片 + Coordinator 恢复相位收敛 +
+# PlayerDirectory intake（restore-not-kick）+ UDP loopback 全链（直编源惯例；
+# 准入闸门单测随 baseappmgr_tests）
+add_executable(fleet_recovery_tests
+    test_fleet_recovery.cpp
+    ../modules/game/session/src/player_directory.cpp
+    ../modules/game/session/src/directory_mirror.cpp
+    ../modules/game/session/src/fleet_recovery.cpp
+    ../modules/net/discovery/src/udp_transport.cpp
+)
+target_include_directories(fleet_recovery_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/net/discovery/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(fleet_recovery_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(fleet_recovery_tests PRIVATE ws2_32)
+    target_compile_definitions(fleet_recovery_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(fleet_recovery_tests PRIVATE /utf-8)
+endif()
+add_test(NAME FleetRecoveryTests COMMAND fleet_recovery_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

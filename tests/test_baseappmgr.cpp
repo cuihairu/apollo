@@ -69,6 +69,42 @@ bool test_baseappmgr_directory_and_route() {
     return true;
 }
 
+// 准入闸门（P3-1 增量③：恢复相位排他——gate 关闭期 bindSession/assignWorld
+// 拒新，开放后恢复；未设闸门恒放行）。
+bool test_baseappmgr_admission_gate() {
+    std::cout << "Running: test_baseappmgr_admission_gate..." << std::endl;
+
+    baseappmgr::BaseAppMgr mgr(0);
+
+    apollo::game::session::SessionBinding binding;
+    binding.session_id = 9101;
+    binding.gateway_id = 7;
+    apollo::game::session::WorldAssignment assignment;
+    assignment.world_id = 3;
+
+    // 无闸门：恒放行
+    TEST_ASSERT(mgr.bindSession(2001, binding), "no gate: bind admitted");
+    TEST_ASSERT(mgr.assignWorld(2001, assignment), "no gate: assign admitted");
+    TEST_ASSERT(mgr.unbindSession(9101), "cleanup bind");
+
+    bool open = false;
+    mgr.set_admission_gate([&open]() { return open; });
+
+    // 恢复相位排他：拒新
+    TEST_ASSERT(!mgr.bindSession(2002, binding), "closed gate: bind rejected");
+    TEST_ASSERT(!mgr.assignWorld(2002, assignment), "closed gate: assign rejected");
+    TEST_ASSERT(!mgr.findPlayerBySession(9101).has_value(),
+                "rejected bind left no locator entry");
+
+    // 收敛开放：恢复放行
+    open = true;
+    TEST_ASSERT(mgr.bindSession(2002, binding), "open gate: bind admitted");
+    TEST_ASSERT(mgr.assignWorld(2002, assignment), "open gate: assign admitted");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -85,6 +121,7 @@ int main() {
     };
 
     run(test_baseappmgr_directory_and_route);
+    run(test_baseappmgr_admission_gate);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

@@ -12,6 +12,12 @@
 
 namespace apollo::game::session {
 
+// 镜像/重报条目（跨进程投影面公共货币，G-1 收尾批增量②③；目录条目的
+// 定位面投影，无 gateway_addr——镜像是定位面不是连接面）。前置声明 +
+// 类后定义（成员签名可见性），防 player_directory ↔ directory_mirror
+// 循环包含。
+struct MirrorEntry;
+
 // PlayerDirectory（在线目录）——P1-2，session-and-online-directory 设计的
 // 单进程落地（§9 P2 形态：manager 域进程内表）。
 //
@@ -60,7 +66,6 @@ public:
 
     // 条目状态（§1 状态机列）
     enum class EntryState : std::uint8_t { Online = 0, Suspended, Leaving };
-
     struct Entry {
         SessionBinding binding;
         WorldAssignment assignment;
@@ -125,6 +130,13 @@ public:
     // 返回删除数。
     std::size_t snapshot_reset(const std::vector<std::uint64_t>& authoritative_online);
 
+    // 全量重报 intake（§6 恢复相位，G-1 收尾批增量③；restore-not-kick）：
+    // 报告方（Zone/gateway 进程）现存会话重建目录——已有条目保 epoch 只刷
+    // 绑定/定位列（顶号裁决键不因进程重启漂移），无条目 session_up 写入
+    // （新 epoch + SessionUp 事件面照常），**绝不出 Kicked**（恢复期无顶号）。
+    // 空 report 不清目录（intake 是增量重建不是重置）。返回 intake 条数。
+    std::size_t intake_full_report(const std::vector<MirrorEntry>& sessions);
+
     // ---- 查询面（§5 集中真相）----
 
     const Entry* find(std::uint64_t player_id) const;
@@ -138,6 +150,19 @@ private:
     std::unordered_map<std::uint64_t, Entry> entries_;
     std::uint64_t next_epoch_ = 1;           // 进程内单调；顶号/resume 竞争裁决键
     EventSink sink_;
+};
+
+// 镜像/重报条目定义（类后：引用 EntryState 完型）
+struct MirrorEntry {
+    std::uint64_t player_id = 0;
+    std::uint64_t anchor_epoch = 0;
+    std::uint64_t session_id = 0;
+    std::uint32_t gateway_id = 0;
+    std::uint32_t zone_id = 0;
+    PlayerDirectory::EntryState state = PlayerDirectory::EntryState::Online;
+    WorldAssignment assignment{};
+
+    [[nodiscard]] bool operator==(const MirrorEntry&) const noexcept = default;
 };
 
 } // namespace apollo::game::session

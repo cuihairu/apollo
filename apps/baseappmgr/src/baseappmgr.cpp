@@ -29,6 +29,15 @@ void BaseAppMgr::set_directory_event_listener(
     directory_listener_ = std::move(listener);
 }
 
+void BaseAppMgr::set_admission_gate(std::function<bool()> gate) {
+    admission_gate_ = std::move(gate);
+}
+
+std::size_t BaseAppMgr::intake_directory_full_report(
+    const std::vector<apollo::game::session::MirrorEntry>& sessions) {
+    return directory_.intake_full_report(sessions);
+}
+
 BaseAppMgr::~BaseAppMgr() {
     stop();
 }
@@ -38,6 +47,10 @@ bool BaseAppMgr::assignWorld(
     const apollo::game::session::WorldAssignment& assignment
 ) {
     if (playerId == 0) {
+        return false;
+    }
+    // 恢复相位排他（P3-1 增量③）：闸门关闭期拒新落点
+    if (admission_gate_ && !admission_gate_()) {
         return false;
     }
 
@@ -58,6 +71,10 @@ bool BaseAppMgr::clearWorldAssignment(PlayerID playerId) {
 
 bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding) {
     if (playerId == 0 || binding.session_id == 0) {
+        return false;
+    }
+    // 恢复相位排他（P3-1 增量③）：闸门关闭期拒新会话锚点
+    if (admission_gate_ && !admission_gate_()) {
         return false;
     }
     sessionLocator_.bind(playerId, binding);

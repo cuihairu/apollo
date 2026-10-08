@@ -46,6 +46,12 @@ public:
     void set_directory_event_sink(
         apollo::game::session::PlayerDirectory::EventSink sink);
 
+    // 锚点域快照出口（P3-1 增量③：恢复相位全量重报的供数面——进程壳
+    // 从 AnchorManager 快照收集现存会话发 FullReport）
+    std::shared_ptr<apollo::game::session::AnchorManager> anchor_manager() const {
+        return anchorManager_;
+    }
+
 private:
     // 处理数据库加载请求
     std::vector<uint8_t> handleDbLoadRequest(const std::vector<uint8_t>& request);

@@ -1,8 +1,10 @@
 #include "base/base_server.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
+#include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
 #include <iostream>
 #include <csignal>
+#include <cstdlib>
 #include <memory>
 
 using namespace base;
@@ -40,6 +42,11 @@ BaseConfig loadConfig(int argc, char* argv[]) {
                       << "  --mirror-port <port>       Directory mirror listen port; 0 disables mirror (default: 0)\n"
                       << "  --mirror-owner-host <ipv4> Directory owner host for snapshot requests (default: 127.0.0.1)\n"
                       << "  --mirror-owner-port <port> Directory owner port; 0 disables requests (default: 0)\n"
+                      << "  --report-to-host <ipv4>    Fleet recovery full-report target host (default: 127.0.0.1)\n"
+                      << "  --report-to-port <port>    Fleet recovery full-report target port; 0 disables (default: 0)\n"
+                      << "  --component-id <n>         This component's fleet id for full reports (required with --report-to-port)\n"
+                      << "  --zone-id <n>              This component's home zone id (default: 0)\n"
+                      << "  --report-interval-ms <ms>  Full report refresh period; 0 = startup only (default: 30000)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -94,6 +101,50 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 恢复相位全量重报面（G-1 收尾批增量③）：本进程现存会话（AnchorManager
+    // 快照）→ FullReport 分片发 manager——启动即报 + 周期刷新（幂等 intake）。
+    // --report-to-port 0 = 关闭；开着则 --component-id 必填（0 拒发）。
+    std::string report_to_host = "127.0.0.1";
+    uint16_t report_to_port = 0;
+    uint64_t component_id = 0;
+    uint32_t zone_id = 0;
+    uint32_t report_interval_ms = 30000;
+    for (int i = 1; i < argc; i++) {
+        const std::string arg = argv[i];
+        if (arg == "--report-to-host" && i + 1 < argc) {
+            report_to_host = argv[++i];
+        } else if (arg == "--report-to-port" && i + 1 < argc) {
+            report_to_port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--component-id" && i + 1 < argc) {
+            component_id = static_cast<uint64_t>(std::strtoull(argv[++i], nullptr, 10));
+        } else if (arg == "--zone-id" && i + 1 < argc) {
+            zone_id = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--report-interval-ms" && i + 1 < argc) {
+            report_interval_ms = static_cast<uint32_t>(std::atoi(argv[++i]));
+        }
+    }
+    disco::UdpBeaconTransport report_transport;
+    std::unique_ptr<session::FleetReporter> reporter;
+    if (report_to_port != 0) {
+        if (component_id == 0) {
+            std::cerr << "report-to-port set without --component-id; full report "
+                      << "disabled" << std::endl;
+        } else if (!report_transport.open()) {
+            std::cerr << "report transport open failed; full report disabled"
+                      << std::endl;
+        } else {
+            const std::string target_host = report_to_host;
+            const uint16_t target_port = report_to_port;
+            reporter = std::make_unique<session::FleetReporter>(
+                component_id, zone_id,
+                [target_host, target_port, &report_transport](
+                    const std::uint8_t* data, std::size_t len) {
+                    return report_transport.send_bytes(target_host, target_port,
+                                                       data, len);
+                });
+        }
+    }
+
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Listen: " << config.host << ":" << config.port << std::endl;
     std::cout << "  Database: " << config.dbHost << ":" << config.dbPort << "/" << config.dbName << std::endl;
@@ -104,6 +155,11 @@ int main(int argc, char* argv[]) {
                       << mirror_owner_port << ")";
         }
         std::cout << std::endl;
+    }
+    if (reporter) {
+        std::cout << "  Fleet report: component=" << component_id << " zone="
+                  << zone_id << " -> " << report_to_host << ":" << report_to_port
+                  << " (interval " << report_interval_ms << "ms)" << std::endl;
     }
 
     // 注册信号处理
@@ -119,6 +175,35 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
 
+        // 全量重报收集（增量③报告方供数面）：AnchorManager 快照 → 投影条目
+        //（epoch 列恒 0——裁决键归 manager，intake restore-not-kick）
+        const auto collect_sessions = [&server]() {
+            std::vector<session::MirrorEntry> sessions;
+            if (const auto anchors = server.anchor_manager()) {
+                sessions.reserve(anchors->anchor_count());
+                for (const auto& anchor : anchors->snapshot()) {
+                    if (!anchor || anchor->player_id() == 0) {
+                        continue;
+                    }
+                    session::MirrorEntry e;
+                    e.player_id = anchor->player_id();
+                    e.session_id = anchor->session_binding().session_id;
+                    e.gateway_id = anchor->session_binding().gateway_id;
+                    e.zone_id = anchor->home_zone_id();
+                    e.state = session::PlayerDirectory::EntryState::Online;
+                    e.assignment = anchor->world_assignment();
+                    sessions.push_back(e);
+                }
+            }
+            return sessions;
+        };
+        if (reporter) {
+            const auto sent = reporter->report_full(collect_sessions());
+            std::cout << "[report] startup full report sent: parts=" << sent
+                      << std::endl;
+        }
+
+        auto since_report = std::chrono::milliseconds(0);
         // 镜像状态去噪观测面：投影行数/seq/断档态/收包数变化才落一行日志
         std::size_t last_logged_size = static_cast<std::size_t>(-1);
         std::uint32_t last_logged_seq = 0;
@@ -128,6 +213,17 @@ int main(int argc, char* argv[]) {
         std::uint8_t mirror_buf[disco::kMaxDatagramSize];
         while (server.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            // 周期全量重报刷新（增量③：幂等 intake——manager 侧 restore-
+            // not-kick，重放无害；0 = 仅启动期一报）
+            if (reporter && report_interval_ms != 0) {
+                since_report += std::chrono::seconds(1);
+                if (since_report.count() >= report_interval_ms) {
+                    since_report = std::chrono::milliseconds(0);
+                    const auto sent = reporter->report_full(collect_sessions());
+                    std::cout << "[report] periodic full report sent: parts=" << sent
+                              << std::endl;
+                }
+            }
             if (!mirror) {
                 continue;
             }

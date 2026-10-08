@@ -187,6 +187,37 @@ std::size_t PlayerDirectory::snapshot_reset(
     return removed;
 }
 
+std::size_t PlayerDirectory::intake_full_report(
+    const std::vector<MirrorEntry>& sessions) {
+    // §6 恢复相位 intake（restore-not-kick）：报告方现存会话重建目录。
+    // 已有条目保 epoch 只刷绑定/定位列（事件面静默——epoch 未变、绑定列
+    // 刷新属对账修复不是变更）；无条目走 session_up 全事件面（新 epoch）。
+    std::size_t taken = 0;
+    for (const auto& reported : sessions) {
+        if (reported.player_id == 0) {
+            continue;  // 零号玩家条目非法（wire 守卫之外的双保险）
+        }
+        const auto it = entries_.find(reported.player_id);
+        if (it != entries_.end()) {
+            Entry& entry = it->second;
+            entry.binding.session_id = reported.session_id;
+            entry.binding.gateway_id = reported.gateway_id;
+            entry.assignment = reported.assignment;
+            entry.zone_id = reported.zone_id;
+            entry.state = EntryState::Online;
+            entry.deadline_tick = 0;
+            ++taken;
+            continue;
+        }
+        SessionBinding binding;
+        binding.session_id = reported.session_id;
+        binding.gateway_id = reported.gateway_id;
+        session_up(reported.player_id, binding, reported.assignment, reported.zone_id);
+        ++taken;
+    }
+    return taken;
+}
+
 const PlayerDirectory::Entry* PlayerDirectory::find(std::uint64_t player_id) const {
     const auto it = entries_.find(player_id);
     return it != entries_.end() ? &it->second : nullptr;

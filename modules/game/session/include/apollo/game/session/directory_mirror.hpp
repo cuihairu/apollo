@@ -57,18 +57,8 @@ enum class DirectoryWireKind : std::uint8_t {
     SnapshotReply = 3,
 };
 
-// 镜像条目（消费侧视图——目录条目的定位面投影，无 gateway_addr）
-struct MirrorEntry {
-    std::uint64_t player_id = 0;
-    std::uint64_t anchor_epoch = 0;
-    std::uint64_t session_id = 0;
-    std::uint32_t gateway_id = 0;
-    std::uint32_t zone_id = 0;
-    PlayerDirectory::EntryState state = PlayerDirectory::EntryState::Online;
-    WorldAssignment assignment{};
-
-    [[nodiscard]] bool operator==(const MirrorEntry&) const noexcept = default;
-};
+// 镜像条目 = MirrorEntry（定义在 player_directory.hpp——跨进程投影面公共
+// 货币，目录镜像与全量重报两平面共用）
 
 // ---- 编解码（返回 false = 载荷非法/越界，调用方整包丢）----
 

@@ -1,5 +1,6 @@
 #include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
+#include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
 #include <iostream>
@@ -45,12 +46,23 @@ uint16_t loadPort(int argc, char* argv[]) {
                       << "  --mirror-host <ipv4>       Directory mirror target host (default: 127.0.0.1)\n"
                       << "  --mirror-port <port>       Directory mirror target port; 0 disables mirror (default: 0)\n"
                       << "  --mirror-snapshot-ms <ms>  Full snapshot publish period (default: 10000)\n"
+                      << "  --recovery-port <port>     Fleet recovery FullReport intake port; 0 disables (default: 0)\n"
+                      << "  --recovery-expected <n>    Expected full-report senders (converge when all reported; default: 0)\n"
+                      << "  --recovery-timeout-ms <ms> Recovery phase timeout window (default: 5000)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
     }
 
     return port;
+}
+
+// 稳态钟（恢复相位超时判定用——与目录面 tick 无关，仅单调毫秒）
+std::uint64_t getSteadyNowMs() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
 }
 
 // 目录全量快照导出（P3-1 增量② owner 侧）：在线目录 Online 条目 → 镜像
@@ -146,6 +158,26 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 恢复相位跨进程 intake（G-1 收尾批增量③）：bind 收包口收各 Zone/
+    // gateway 全量重报（FullReport），恢复相位排他（拒新）直至收敛——
+    // 全部在册报告方已报或超时。--recovery-port 0 = 关闭。
+    uint16_t recovery_port = 0;
+    uint32_t recovery_expected = 0;
+    uint32_t recovery_timeout_ms = 5000;
+    for (int i = 1; i < argc; i++) {
+        const std::string arg = argv[i];
+        if (arg == "--recovery-port" && i + 1 < argc) {
+            recovery_port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--recovery-expected" && i + 1 < argc) {
+            recovery_expected = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--recovery-timeout-ms" && i + 1 < argc) {
+            recovery_timeout_ms = static_cast<uint32_t>(std::atoi(argv[++i]));
+        }
+    }
+    disco::UdpFeed recovery_feed;
+    std::unique_ptr<session::FleetRecoveryCoordinator> recovery;
+    // （协调器在 BaseAppMgr 构造后装配——intake 回调要落 mgr 目录）
+
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Listen: 0.0.0.0:" << port << std::endl;
     if (death_listener) {
@@ -157,6 +189,11 @@ int main(int argc, char* argv[]) {
         std::cout << "  Directory mirror: " << mirror_host << ":" << mirror_port
                   << " (snapshot every " << mirror_snapshot_ms << "ms)" << std::endl;
     }
+    if (recovery_port != 0) {
+        std::cout << "  Fleet recovery: intake 0.0.0.0:" << recovery_port
+                  << " (expected reporters " << recovery_expected
+                  << ", timeout " << recovery_timeout_ms << "ms)" << std::endl;
+    }
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
@@ -165,6 +202,28 @@ int main(int argc, char* argv[]) {
     try {
         BaseAppMgr mgr(port);
         g_mgr = &mgr;
+
+        // 恢复相位跨进程化（G-1 收尾批增量③）：进程启动 = machined 拉起
+        // 后的恢复序（§6 manager 行）——恢复相位排他（拒新），收各 Zone/
+        // gateway 全量重报，收敛（全报或超时）开放。
+        if (recovery_port != 0 && recovery_feed.open(recovery_port, "0.0.0.0")) {
+            recovery = std::make_unique<session::FleetRecoveryCoordinator>(
+                recovery_expected, recovery_timeout_ms,
+                [&mgr](std::uint64_t component_id, std::uint32_t zone_id,
+                       const std::vector<session::MirrorEntry>& sessions) {
+                    const auto taken = mgr.intake_directory_full_report(sessions);
+                    std::cout << "[recovery] full report from component=" << component_id
+                              << " zone=" << zone_id << " sessions=" << sessions.size()
+                              << " intake=" << taken << std::endl;
+                });
+            recovery->begin(getSteadyNowMs());
+            mgr.set_admission_gate([&recovery]() {
+                return recovery->admissible();
+            });
+            std::cout << "[recovery] 恢复相位排他（拒新）：等全量重报，在册报告方 "
+                      << recovery_expected << "，超时 " << recovery_timeout_ms
+                      << "ms" << std::endl;
+        }
 
         std::cout << "\nStarting BaseAppMgr..." << std::endl;
         mgr.start();
@@ -192,9 +251,37 @@ int main(int argc, char* argv[]) {
         std::cout << "BaseAppMgr is running. Press Ctrl+C to stop." << std::endl;
 
         auto since_snapshot = std::chrono::milliseconds(0);
+        std::uint8_t recovery_buf[disco::kMaxDatagramSize];
+        bool was_recovering = recovery && recovery->recovering();
         while (mgr.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             since_snapshot += std::chrono::seconds(1);
+
+            // 恢复相位轮询（增量③）：收 FullReport 分片 + 喂钟收敛判定
+            if (recovery) {
+                std::size_t rlen = 0;
+                while (recovery_feed.try_receive(recovery_buf, sizeof(recovery_buf),
+                                                 rlen)) {
+                    session::FleetReportPart part;
+                    if (session::decode_fleet_report(recovery_buf, rlen, part)) {
+                        (void)recovery->on_report_part(part);
+                    }
+                }
+                recovery->tick(getSteadyNowMs());
+                if (was_recovering && !recovery->recovering()) {
+                    was_recovering = false;
+                    std::cout << "[recovery] 收敛开放（准入恢复）：reported="
+                              << recovery->last_reported_count() << "/"
+                              << recovery_expected << std::endl;
+                    // 收敛即向镜像面发一轮全量（重建目录进投影，增量②面）
+                    if (mirror_publisher) {
+                        const auto entries = collect_mirror_entries(mgr);
+                        mirror_publisher->publish_snapshot(entries);
+                        std::cout << "[recovery] 重建目录快照已发镜像：entries="
+                                  << entries.size() << std::endl;
+                    }
+                }
+            }
 
             // 周期全量快照（增量②对账 healing 面：delta 丢失由快照收敛）
             if (mirror_publisher && since_snapshot.count() >= mirror_snapshot_ms) {
