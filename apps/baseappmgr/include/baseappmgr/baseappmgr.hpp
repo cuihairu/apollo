@@ -77,6 +77,20 @@ public:
     std::size_t intake_directory_full_report(
         const std::vector<apollo::game::session::MirrorEntry>& sessions);
 
+    // §6 死亡行窗口处置透传（G-1 收尾批遗留项：宿主进程死亡 → 目录批量
+    // 反查进保活窗口）。语义见 PlayerDirectory::mark_suspended_by_zone /
+    // mark_suspended_by_gateway（只动 Online、不产事件、反查键 0 拒绝）。
+    std::size_t suspend_zone_sessions(std::uint32_t zone_id,
+                                      std::uint64_t now_tick,
+                                      std::uint64_t window_ticks);
+    std::size_t suspend_gateway_sessions(std::uint32_t gateway_id,
+                                         std::uint64_t now_tick,
+                                         std::uint64_t window_ticks);
+
+    // 窗口满扫描透传（§4 tick 驱动）：到期 Suspended → 删条目 +
+    // SessionDown(kReasonWindowExpired)（事件链自动进镜像面）。返回终结数。
+    std::size_t sweep_suspended(std::uint64_t now_tick);
+
     // 对账（30s 周期，owner 驱动）：上报在线集与目录比对；失配走快照重置。
     // 返回是否一致（P3 起由周期定时器驱动，单进程阶段由测试/运维触发）。
     bool reconcileDirectory(const std::vector<PlayerID>& reported_online) const;

@@ -97,6 +97,22 @@ public:
                         std::uint64_t now_tick,
                         std::uint64_t window_ticks);
 
+    // 掉线保活窗口——批量反查处置（§6 Zone/gateway 死亡行；G-1 收尾批遗留
+    // 项落地）：宿主进程（Zone/gateway）死亡时按定位列反查，全部 Online 条目
+    // 一次性进 Suspended（deadline = now_tick + window_ticks）。口径：
+    //   - 只动 Online 条目（已 Suspended 不重置窗口——与条目级 mark_suspended
+    //     同语义；Leaving 不回窗口）；
+    //   - 不产事件（§4/§8：Suspended 迁移无事件族成员——窗口满 sweep 的
+    //     SessionDown / resume 的重报才是可见面）；
+    //   - 反查键 0 = 未声明（Zone 未分配 / 未入编队），拒绝批量处置返回 0。
+    // 返回迁移条数。
+    std::size_t mark_suspended_by_zone(std::uint32_t zone_id,
+                                       std::uint64_t now_tick,
+                                       std::uint64_t window_ticks);
+    std::size_t mark_suspended_by_gateway(std::uint32_t gateway_id,
+                                          std::uint64_t now_tick,
+                                          std::uint64_t window_ticks);
+
     // resume：Suspended → Online（§4 只改状态列）。校验 (session_id,
     // anchor_epoch) 双锚——旧会话/旧 epoch 的 resume 拒绝（§3-③ 竞态窗口）。
     bool resume(std::uint64_t player_id,

@@ -934,6 +934,25 @@ if(MSVC)
 endif()
 add_test(NAME FleetRecoveryTests COMMAND fleet_recovery_tests)
 
+# ========== Supervisor Roster Tests (P3-1 §6 死亡行窗口处置批) ==========
+# machined 监督面：roster zone 列解析（纯数字判据 + 两列/三列旧格式兼容）
+# + 监督事件 zone 透传（真 fork 子进程死亡收割）。Windows 下 supervisor.cpp
+# 是空转桩（POSIX only 口径），测试端同步空转跳过（直编源惯例）
+add_executable(supervisor_tests
+    test_supervisor.cpp
+    ../apps/machined/src/supervisor.cpp
+)
+target_include_directories(supervisor_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/machined/src
+)
+if(WIN32)
+    target_compile_definitions(supervisor_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(supervisor_tests PRIVATE /utf-8)
+endif()
+add_test(NAME SupervisorTests COMMAND supervisor_tests)
+
 # ========== Scene Runtime Tests (P0-3) ==========
 # Scene 运行时容器：实体集合 + 玩家进出 + AOI + tick 六阶段
 add_executable(scene_tests

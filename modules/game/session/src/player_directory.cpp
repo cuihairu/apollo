@@ -76,6 +76,42 @@ bool PlayerDirectory::mark_suspended(std::uint64_t player_id,
     return true;
 }
 
+std::size_t PlayerDirectory::mark_suspended_by_zone(std::uint32_t zone_id,
+                                                    std::uint64_t now_tick,
+                                                    std::uint64_t window_ticks) {
+    if (zone_id == 0) {
+        return 0;  // 未声明 Zone 不批量处置
+    }
+    std::size_t moved = 0;
+    for (auto& [player_id, entry] : entries_) {
+        (void)player_id;
+        if (entry.zone_id == zone_id && entry.state == EntryState::Online) {
+            entry.state = EntryState::Suspended;
+            entry.deadline_tick = now_tick + window_ticks;
+            ++moved;
+        }
+    }
+    return moved;
+}
+
+std::size_t PlayerDirectory::mark_suspended_by_gateway(std::uint32_t gateway_id,
+                                                       std::uint64_t now_tick,
+                                                       std::uint64_t window_ticks) {
+    if (gateway_id == 0) {
+        return 0;  // 未声明 gateway 不批量处置
+    }
+    std::size_t moved = 0;
+    for (auto& [player_id, entry] : entries_) {
+        (void)player_id;
+        if (entry.binding.gateway_id == gateway_id && entry.state == EntryState::Online) {
+            entry.state = EntryState::Suspended;
+            entry.deadline_tick = now_tick + window_ticks;
+            ++moved;
+        }
+    }
+    return moved;
+}
+
 bool PlayerDirectory::resume(std::uint64_t player_id,
                              std::uint64_t session_id,
                              std::uint64_t anchor_epoch) {

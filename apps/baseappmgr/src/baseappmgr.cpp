@@ -38,6 +38,22 @@ std::size_t BaseAppMgr::intake_directory_full_report(
     return directory_.intake_full_report(sessions);
 }
 
+std::size_t BaseAppMgr::suspend_zone_sessions(std::uint32_t zone_id,
+                                              std::uint64_t now_tick,
+                                              std::uint64_t window_ticks) {
+    return directory_.mark_suspended_by_zone(zone_id, now_tick, window_ticks);
+}
+
+std::size_t BaseAppMgr::suspend_gateway_sessions(std::uint32_t gateway_id,
+                                                 std::uint64_t now_tick,
+                                                 std::uint64_t window_ticks) {
+    return directory_.mark_suspended_by_gateway(gateway_id, now_tick, window_ticks);
+}
+
+std::size_t BaseAppMgr::sweep_suspended(std::uint64_t now_tick) {
+    return directory_.sweep(now_tick);
+}
+
 BaseAppMgr::~BaseAppMgr() {
     stop();
 }

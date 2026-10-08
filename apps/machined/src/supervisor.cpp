@@ -40,6 +40,21 @@ std::string trim_copy(const std::string& s) {
     return s.substr(begin, end - begin + 1);
 }
 
+// 纯数字判据（zone 列识别用）：非空且全为十进制数字。zone 列可省且命令
+// 面可能含 '|'（shell 管道），故第三字段非纯数字时原样归命令（两列旧格式
+// 兼容，见 supervisor.hpp roster 口径注）。
+bool is_all_digits(const std::string& s) {
+    if (s.empty()) {
+        return false;
+    }
+    for (const char c : s) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
@@ -75,6 +90,18 @@ bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
             e.command = e.command.substr(cmd_bar + 1);
             const unsigned long long parsed = std::strtoull(comp.c_str(), nullptr, 10);
             e.component_id = parsed;  // 非数字串 strtoull 得 0 = 未入编队
+
+            // 可选第三列：zone_id（§6 死亡行窗口处置身份；纯数字判据——
+            // 非纯数字 = 命令本身起始，原样保留两列旧格式兼容）
+            const auto zone_bar = e.command.find('|');
+            if (zone_bar != std::string::npos) {
+                const auto zone_field = trim_copy(e.command.substr(0, zone_bar));
+                if (is_all_digits(zone_field)) {
+                    e.zone_id =
+                        static_cast<std::uint32_t>(std::strtoul(zone_field.c_str(), nullptr, 10));
+                    e.command = e.command.substr(zone_bar + 1);
+                }
+            }
         }
         const auto cmd_begin = e.command.find_first_not_of(" \t");
         if (cmd_begin == std::string::npos) {
@@ -135,6 +162,7 @@ void Supervisor::spawn_one(Child& c, std::uint64_t now_ms,
     e.kind = SupervisorEvent::Kind::Born;
     e.name = c.entry.name;
     e.component_id = c.entry.component_id;
+    e.zone_id = c.entry.zone_id;
     out.push_back(std::move(e));
 }
 
@@ -166,6 +194,7 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
         e.kind = SupervisorEvent::Kind::Died;
         e.name = it->entry.name;
         e.component_id = it->entry.component_id;
+        e.zone_id = it->entry.zone_id;
         // 退出码：正常退出取 WEXITSTATUS；信号终止取 128+signo（shell 惯例
         // ——死亡上报 wire 面为 uint32，负值无出口）
         e.exit_code = WIFEXITED(status) ? WEXITSTATUS(status)
@@ -182,6 +211,7 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
             g.kind = SupervisorEvent::Kind::GivenUp;
             g.name = it->entry.name;
             g.component_id = it->entry.component_id;
+            g.zone_id = it->entry.zone_id;
             g.restart_count = it->restart_count;
             out.push_back(std::move(g));
         }
@@ -199,6 +229,7 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
                 r.kind = SupervisorEvent::Kind::Restarted;
                 r.name = c.entry.name;
                 r.component_id = c.entry.component_id;
+                r.zone_id = c.entry.zone_id;
                 r.restart_count = rc;
                 out.push_back(std::move(r));
             }

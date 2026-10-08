@@ -31,7 +31,7 @@ cmake -S . -B build-examples -DAPOLLO_BUILD_EXAMPLES=ON \
 | core 框架核 | CoreLifecycleTests / CoreLogTests / CoreConfigTests / LogStructuredTests / MetricsTests |
 | runtime 进程面 | RuntimeTests / BaseAnchorTests / BaseAppMgrTests |
 | net 网络件 | NetTests / ReconnectTests / GatewayRouteTests / ProtocolBootstrapTests |
-| game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SceneTests / InstanceTests / GameTests |
+| game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SupervisorTests / SceneTests / InstanceTests / GameTests |
 | battle 玩法 | BattleRuntimeTests / RngSubstreamTests |
 | social 社交 | SocialTests |
 | discovery 编队发现 | DiscoveryTests |

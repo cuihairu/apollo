@@ -46,6 +46,12 @@ SessionBinding makeBinding(std::uint64_t session_id) {
     return b;
 }
 
+SessionBinding makeBindingWithGateway(std::uint64_t session_id, std::uint32_t gateway_id) {
+    SessionBinding b = makeBinding(session_id);
+    b.gateway_id = gateway_id;
+    return b;
+}
+
 WorldAssignment makeAssignment(std::uint32_t world_id) {
     WorldAssignment a;
     a.world_id = world_id;
@@ -288,6 +294,76 @@ bool test_begin_leave_lifecycle() {
     return true;
 }
 
+// ---- §6 死亡行批量反查窗口处置（G-1 收尾批遗留项）----
+// 宿主进程死亡 → 按 zone / gateway 定位列反查，Online 条目批量进保活窗口；
+// 只动 Online、不产事件、反查键 0 拒绝；窗口满仍由既有 sweep 终结。
+bool test_zone_gateway_window_disposition() {
+    std::cout << "Running: test_zone_gateway_window_disposition..." << std::endl;
+
+    PlayerDirectory dir;
+    EventLog log;
+    dir.set_event_sink([&log](const PlayerDirectory::Event& e) { log.record(e); });
+
+    // 1001 zone2/gw7、1002 zone2/gw9、1003 zone3/gw7、1004 zone2/gw7(Leaving)
+    dir.session_up(1001, makeBinding(9001), makeAssignment(1), 2);
+    dir.session_up(1002, makeBindingWithGateway(9002, 9), makeAssignment(1), 2);
+    dir.session_up(1003, makeBinding(9003), makeAssignment(1), 3);
+    dir.session_up(1004, makeBinding(9004), makeAssignment(1), 2);
+    TEST_ASSERT(dir.begin_leave(1004), "1004 显式登出进 Leaving");
+    log.clear();
+
+    // 反查键 0 = 未声明，拒绝批量处置
+    TEST_ASSERT(dir.mark_suspended_by_zone(0, 100, 50) == 0, "zone=0 不批量处置");
+    TEST_ASSERT(dir.mark_suspended_by_gateway(0, 100, 50) == 0, "gateway=0 不批量处置");
+    TEST_ASSERT(log.rows.empty(), "拒绝路径无事件");
+
+    // Zone 行：zone2 的 Online 条目（1001/1002）批量进窗口；Leaving(1004)
+    // 不回窗口；zone3(1003) 不受牵连
+    TEST_ASSERT(dir.mark_suspended_by_zone(2, 100, 50) == 2, "zone2 批量处置 2 条");
+    TEST_ASSERT(dir.find(1001)->state == PlayerDirectory::EntryState::Suspended,
+                "1001 进窗口");
+    TEST_ASSERT(dir.find(1001)->deadline_tick == 150, "deadline = now + window");
+    TEST_ASSERT(dir.find(1002)->state == PlayerDirectory::EntryState::Suspended,
+                "1002 进窗口（zone 反查不问 gateway）");
+    TEST_ASSERT(dir.find(1003)->state == PlayerDirectory::EntryState::Online,
+                "zone3 条目不受牵连");
+    TEST_ASSERT(dir.find(1004)->state == PlayerDirectory::EntryState::Leaving,
+                "Leaving 不回窗口");
+    TEST_ASSERT(log.rows.empty(), "Suspended 迁移不产事件（§4/§8 口径）");
+
+    // 已 Suspended 不重置窗口（与条目级 mark_suspended 同语义）
+    TEST_ASSERT(dir.mark_suspended_by_zone(2, 130, 50) == 0, "已挂机条目不重复处置");
+    TEST_ASSERT(dir.find(1001)->deadline_tick == 150, "窗口不因重复处置漂移");
+
+    // gateway 行：gw7 的 Online 条目只剩 zone3 的 1003（1001 已挂机、1004
+    // Leaving 均跳过）
+    TEST_ASSERT(dir.mark_suspended_by_gateway(7, 100, 50) == 1, "gw7 批量处置 1 条");
+    TEST_ASSERT(dir.find(1003)->state == PlayerDirectory::EntryState::Suspended,
+                "1003 进窗口");
+    TEST_ASSERT(log.rows.empty(), "全程无事件");
+
+    // 窗口内恢复（§6 Zone 行「重建完成 SessionUp 重报」对应 resume 面）：
+    // resume 回 Online 且窗口清零，sweep 不再终结它
+    TEST_ASSERT(dir.resume(1001, 9001, 1), "窗口内 resume 成功");
+    TEST_ASSERT(dir.find(1001)->deadline_tick == 0, "resume 清窗口截止");
+
+    // 窗口满 sweep 终结（既有面）：未到期不终结，到期删条目 + Down(窗口满)
+    TEST_ASSERT(dir.sweep(149) == 0, "窗口内 sweep 无终结");
+    TEST_ASSERT(dir.sweep(150) == 2, "到期 sweep 终结 1002/1003");
+    TEST_ASSERT(dir.find(1002) == nullptr && dir.find(1003) == nullptr,
+                "到期条目已删");
+    TEST_ASSERT(dir.find(1001) != nullptr &&
+                    dir.find(1001)->state == PlayerDirectory::EntryState::Online,
+                "已恢复条目不受 sweep 牵连");
+    TEST_ASSERT(log.rows.size() == 2, "终结恰产 2 条事件");
+    for (const auto& row : log.rows) {
+        TEST_ASSERT(row.kind == PlayerDirectory::Event::Kind::SessionDown &&
+                        row.reason == PlayerDirectory::kReasonWindowExpired,
+                    "终结事件 = SessionDown(窗口满)");
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -305,6 +381,7 @@ int main() {
     run(test_relogin_kicks_old_session);
     run(test_session_down_removes_entry);
     run(test_suspend_window_and_sweep);
+    run(test_zone_gateway_window_disposition);
     run(test_resume_dual_anchor);
     run(test_reconcile_and_snapshot_reset);
     run(test_begin_leave_lifecycle);

@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <unordered_map>
 
 using baseappmgr::BaseAppMgr;
 
@@ -49,6 +50,8 @@ uint16_t loadPort(int argc, char* argv[]) {
                       << "  --recovery-port <port>     Fleet recovery FullReport intake port; 0 disables (default: 0)\n"
                       << "  --recovery-expected <n>    Expected full-report senders (converge when all reported; default: 0)\n"
                       << "  --recovery-timeout-ms <ms> Recovery phase timeout window (default: 5000)\n"
+                      << "  --suspend-window-ticks <n> Suspend window ticks for death-row disposition, tick = 1s loop beat (default: 30)\n"
+                      << "  --gateway-component <cid:gid> Death component -> gateway id mapping, repeatable (gateway-row disposition)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -178,6 +181,32 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<session::FleetRecoveryCoordinator> recovery;
     // （协调器在 BaseAppMgr 构造后装配——intake 回调要落 mgr 目录）
 
+    // §6 死亡行窗口处置面（G-1 收尾批遗留项）：掉线保活窗口 + gateway 组件
+    // 映射。窗口以主循环秒拍为 tick（clock-and-time 单调口径，缺省 30 =
+    // §4 建议值）；Zone 行反查键 = 死亡事件 zone_id（machined roster zone
+    // 列），gateway 行反查键 = CLI 声明的 component → gateway 映射（死亡
+    // wire 不带 gateway 身份，gateway-app 半成品——骨架期显式映射桥接）。
+    uint32_t suspend_window_ticks = 30;
+    std::unordered_map<uint64_t, uint32_t> gateway_by_component;
+    for (int i = 1; i < argc; i++) {
+        const std::string arg = argv[i];
+        if (arg == "--suspend-window-ticks" && i + 1 < argc) {
+            suspend_window_ticks = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--gateway-component" && i + 1 < argc) {
+            const std::string spec = argv[++i];
+            const auto colon = spec.find(':');
+            if (colon != std::string::npos) {
+                const uint64_t cid =
+                    std::strtoull(spec.substr(0, colon).c_str(), nullptr, 10);
+                const uint32_t gid =
+                    static_cast<uint32_t>(std::strtoul(spec.substr(colon + 1).c_str(), nullptr, 10));
+                if (cid != 0 && gid != 0) {
+                    gateway_by_component[cid] = gid;  // 0 值任一侧 = 未声明，不映射
+                }
+            }
+        }
+    }
+
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Listen: 0.0.0.0:" << port << std::endl;
     if (death_listener) {
@@ -194,6 +223,9 @@ int main(int argc, char* argv[]) {
                   << " (expected reporters " << recovery_expected
                   << ", timeout " << recovery_timeout_ms << "ms)" << std::endl;
     }
+    std::cout << "  Suspend window: " << suspend_window_ticks << " ticks"
+              << " (gateway mappings " << gateway_by_component.size() << ")"
+              << std::endl;
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
@@ -293,6 +325,16 @@ int main(int argc, char* argv[]) {
                           << mirror_publisher->seq() << std::endl;
             }
 
+            // 窗口满扫描（§4 tick 驱动，本批）：主循环 1s 秒拍喂钟，到期
+            // Suspended 删条目 + SessionDown(kReasonWindowExpired)——事件链
+            // 自动进镜像面。0 终结不打日志（空转是常态）。无条件跑——窗口
+            // 处置不依赖死亡订阅面在开。
+            if (const auto expired =
+                    mgr.sweep_suspended(getSteadyNowMs() / 1000);
+                expired > 0) {
+                std::cout << "[window] sweep expired=" << expired << std::endl;
+            }
+
             if (!death_listener) {
                 continue;
             }
@@ -322,6 +364,29 @@ int main(int argc, char* argv[]) {
                           << " port=" << death.member.service_port
                           << " kind=" << kind
                           << " exit=" << death.exit_code << std::endl;
+                // §6 死亡行窗口处置（本批）：Zone 行 = roster zone 列反查，
+                // gateway 行 = CLI 映射反查；Online 条目批量进保活窗口，
+                // 窗口满由主循环 sweep 终结（SessionDown 进镜像面）。
+                const std::uint64_t now_tick = getSteadyNowMs() / 1000;
+                if (death.member.zone_id != 0) {
+                    const auto suspended = mgr.suspend_zone_sessions(
+                        death.member.zone_id, now_tick, suspend_window_ticks);
+                    std::cout << "[window] zone death zone="
+                              << death.member.zone_id << " suspended=" << suspended
+                              << " (window " << suspend_window_ticks << " ticks)"
+                              << std::endl;
+                }
+                const auto gw = gateway_by_component.find(death.member.component_id);
+                if (gw != gateway_by_component.end() && gw->second != 0) {
+                    const auto suspended = mgr.suspend_gateway_sessions(
+                        gw->second, now_tick, suspend_window_ticks);
+                    std::cout << "[window] gateway death component="
+                              << death.member.component_id
+                              << " gateway=" << gw->second
+                              << " suspended=" << suspended
+                              << " (window " << suspend_window_ticks << " ticks)"
+                              << std::endl;
+                }
             }
         }
 

@@ -105,6 +105,62 @@ bool test_baseappmgr_admission_gate() {
     return true;
 }
 
+// §6 死亡行窗口处置透传（G-1 收尾批遗留项）：进程壳 → 目录批量反查 +
+// 窗口满扫描。供数走 intake（restore-not-kick 面，增量③）。
+bool test_baseappmgr_window_disposition_passthrough() {
+    std::cout << "Running: test_baseappmgr_window_disposition_passthrough..."
+              << std::endl;
+
+    baseappmgr::BaseAppMgr mgr(0);
+
+    namespace session = apollo::game::session;
+    std::vector<session::MirrorEntry> report;
+    for (const std::uint64_t pid : {3001ULL, 3002ULL, 3003ULL}) {
+        session::MirrorEntry e;
+        e.player_id = pid;
+        e.session_id = 9000 + pid;
+        e.gateway_id = 7;
+        e.zone_id = 2;
+        e.state = session::PlayerDirectory::EntryState::Online;
+        report.push_back(e);
+    }
+    {
+        session::MirrorEntry e;
+        e.player_id = 3004;
+        e.session_id = 9004;
+        e.gateway_id = 9;
+        e.zone_id = 3;
+        e.state = session::PlayerDirectory::EntryState::Online;
+        report.push_back(e);
+    }
+    TEST_ASSERT(mgr.intake_directory_full_report(report) == 4, "intake 4 条");
+    TEST_ASSERT(mgr.directory().size() == 4, "目录 4 条目");
+
+    // Zone 行反查：zone2 → 3 条进窗口；反查键 0 拒绝
+    TEST_ASSERT(mgr.suspend_zone_sessions(2, 100, 50) == 3, "zone2 挂起 3 条");
+    TEST_ASSERT(mgr.suspend_zone_sessions(0, 100, 50) == 0, "zone=0 不处置");
+    TEST_ASSERT(mgr.directory().find(3001)->state ==
+                    session::PlayerDirectory::EntryState::Suspended,
+                "3001 挂起");
+    TEST_ASSERT(mgr.directory().find(3004)->state ==
+                    session::PlayerDirectory::EntryState::Online,
+                "zone3 条目不受牵连");
+
+    // gateway 行反查：gw9 → 3004 进窗口
+    TEST_ASSERT(mgr.suspend_gateway_sessions(9, 100, 50) == 1, "gw9 挂起 1 条");
+    TEST_ASSERT(mgr.suspend_gateway_sessions(0, 100, 50) == 0, "gateway=0 不处置");
+
+    // 窗口满扫描：未到期无终结，到期 4 条全终结（resume 面 1001 例已在
+    // player_directory 契约单测覆盖）
+    TEST_ASSERT(mgr.sweep_suspended(149) == 0, "窗口内 sweep 无终结");
+    TEST_ASSERT(mgr.sweep_suspended(150) == 4, "到期 sweep 终结 4 条");
+    TEST_ASSERT(mgr.directory().size() == 0, "目录清空");
+    TEST_ASSERT(mgr.sweep_suspended(151) == 0, "空目录 sweep 幂等");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -122,6 +178,7 @@ int main() {
 
     run(test_baseappmgr_directory_and_route);
     run(test_baseappmgr_admission_gate);
+    run(test_baseappmgr_window_disposition_passthrough);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

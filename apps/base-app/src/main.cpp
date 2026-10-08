@@ -47,6 +47,7 @@ BaseConfig loadConfig(int argc, char* argv[]) {
                       << "  --component-id <n>         This component's fleet id for full reports (required with --report-to-port)\n"
                       << "  --zone-id <n>              This component's home zone id (default: 0)\n"
                       << "  --report-interval-ms <ms>  Full report refresh period; 0 = startup only (default: 30000)\n"
+                      << "  --demo-anchors <n>         Seed n smoke anchors (player 1..n, gateway=1, zone=--zone-id); smoke driver only\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -109,6 +110,7 @@ int main(int argc, char* argv[]) {
     uint64_t component_id = 0;
     uint32_t zone_id = 0;
     uint32_t report_interval_ms = 30000;
+    uint32_t demo_anchors = 0;
     for (int i = 1; i < argc; i++) {
         const std::string arg = argv[i];
         if (arg == "--report-to-host" && i + 1 < argc) {
@@ -121,6 +123,8 @@ int main(int argc, char* argv[]) {
             zone_id = static_cast<uint32_t>(std::atoi(argv[++i]));
         } else if (arg == "--report-interval-ms" && i + 1 < argc) {
             report_interval_ms = static_cast<uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--demo-anchors" && i + 1 < argc) {
+            demo_anchors = static_cast<uint32_t>(std::atoi(argv[++i]));
         }
     }
     disco::UdpBeaconTransport report_transport;
@@ -172,6 +176,26 @@ int main(int argc, char* argv[]) {
 
         std::cout << "\nStarting server..." << std::endl;
         server.start();
+
+        // 冒烟驱动面（§6 窗口处置批）：--demo-anchors N 造 N 个假想会话锚点
+        //（player 1..N，gateway=1，home_zone = --zone-id），全量重报/死亡行
+        // 窗口处置真进程链路方有非零条目可观察。骨架期驱动面——真实会话经
+        // 登录/gateway 流落锚后此开关即弃用。
+        if (demo_anchors > 0 && server.anchor_manager()) {
+            for (uint64_t i = 1; i <= demo_anchors; ++i) {
+                const auto anchor = server.anchor_manager()->activate(i);
+                if (!anchor) {
+                    continue;
+                }
+                session::SessionBinding binding;
+                binding.session_id = 1000 + i;
+                binding.gateway_id = 1;
+                anchor->bind_session(binding);
+                anchor->set_home_zone_id(zone_id);
+            }
+            std::cout << "[demo] seeded " << demo_anchors << " smoke anchors"
+                      << " (gateway=1, zone=" << zone_id << ")" << std::endl;
+        }
 
         std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
 

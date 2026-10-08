@@ -146,7 +146,8 @@ int main(int argc, char** argv) {
         supervisor.poll(now, supervisor_events);
         log_supervisor_events(supervisor_events);
         // 死亡事件合流（增量①）：监督面子进程死亡 → DeathNotify 上报
-        //（roster 声明 component_id 者上 wire，零 = 未入编队仅落日志）
+        //（roster 声明 component_id 者上 wire，零 = 未入编队仅落日志；
+        // zone 列同源携带——§6 死亡行窗口处置的反查键，manager 域消费）
         for (const auto& e : supervisor_events) {
             if (e.component_id == 0) {
                 continue;
@@ -154,11 +155,13 @@ int main(int argc, char** argv) {
             if (e.kind == machined::SupervisorEvent::Kind::Died) {
                 disco::MemberId dead;
                 dead.component_id = e.component_id;
+                dead.zone_id = e.zone_id;
                 death_notifier.notify(dead, disco::DeathKind::ChildDied,
                                       static_cast<std::uint32_t>(e.exit_code));
             } else if (e.kind == machined::SupervisorEvent::Kind::GivenUp) {
                 disco::MemberId dead;
                 dead.component_id = e.component_id;
+                dead.zone_id = e.zone_id;
                 death_notifier.notify(dead, disco::DeathKind::GaveUp, 0);
             }
         }

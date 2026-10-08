@@ -11,9 +11,12 @@
 //
 // 平台口径：POSIX only（fork/execvp/waitpid）——部署目标是 Linux 服务器；
 // Windows 下本文件编译为空转（roster 载入即告警放弃，进程发现面照常）。
-// roster 口径：每行 `name | component_id | command args...`（component_id
-// 列可省 = 0 未入编队），# 注释、空行跳过；不支持引号转义（骨架期，命令
-// 面从简）。
+// roster 口径：每行 `name | component_id | zone_id | command args...`
+// （component_id 列可省 = 0 未入编队；zone_id 列再可省 = 0 未分配 Zone——
+// 判据 = 第三字段纯数字才认作 zone 列，否则原样归命令，兼容两列旧格式），
+// # 注释、空行跳过；不支持引号转义（骨架期，命令面从简）。
+// zone 列消费面（§6 死亡行窗口处置）：死亡事件携带 zone_id，manager 域按
+// Zone 行反查进保活窗口（baseappmgr --suspend-window-ticks）。
 
 #include <cstdint>
 #include <string>
@@ -24,6 +27,7 @@ namespace machined {
 struct RosterEntry {
     std::string name;
     std::uint64_t component_id = 0;   // 编队组件号（0 = 未入编队，死亡不上 wire）
+    std::uint32_t zone_id = 0;        // 宿主 Zone（0 = 未分配；死亡上报携带）
     std::string command;              // 原始命令串（日志/重组用）
     std::vector<std::string> args;    // 空白切分后的 argv
 };
@@ -41,6 +45,7 @@ struct SupervisorEvent {
     Kind kind;
     std::string name;
     std::uint64_t component_id = 0;  // 编队组件号（roster 声明；0 = 未入编队）
+    std::uint32_t zone_id = 0;       // 宿主 Zone（roster 声明；0 = 未分配）
     int exit_code = 0;        // Died：waitpid 状态转出的退出码
     int restart_count = 0;    // 已重启次数（Restarted/GivenUp 语义）
 };
