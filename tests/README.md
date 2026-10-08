@@ -4,7 +4,7 @@
 
 统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（当前 36 项）。
 
-tests/ 下 48 个 `test_*.cpp` 中 33 个注册进门禁；其余 15 个属 legacy GTest 批（`APOLLO_BUILD_GTESTS=OFF` 默认关：protobuf / buffer / network / log / timer / id_pool / utils / rest_template / data_structures / channel / crypto / utils 系及配套 main），不编不跑、不计入门禁。
+tests/ 下 49 个 `test_*.cpp` 中 34 个注册进门禁；其余 15 个属 legacy GTest 批（`APOLLO_BUILD_GTESTS=OFF` 默认关：protobuf / buffer / network / log / timer / id_pool / utils / rest_template / data_structures / channel / crypto / utils 系及配套 main），不编不跑、不计入门禁。
 
 ## 门禁口径
 
@@ -27,7 +27,7 @@ cmake -S . -B build-examples -DAPOLLO_BUILD_EXAMPLES=ON \
 | 域 | 套件（CTest 名） |
 |---|---|
 | contract 契约生成（注册于 modules/contract、sdks/gen） | apollo_contract_tests / apollo_contract_gen_compile_test / apollo_gen_golden_check |
-| base 基础件 | MemoryTests / StringTests / TerminalTests / ThreadPoolTests / TimeTests |
+| base 基础件 | MemoryTests / StringTests / TerminalTests / ThreadPoolTests / TimeTests / TimerWheelTests |
 | core 框架核 | CoreLifecycleTests / CoreLogTests / CoreConfigTests / LogStructuredTests / MetricsTests |
 | runtime 进程面 | RuntimeTests / BaseAnchorTests / BaseAppMgrTests |
 | net 网络件 | NetTests / ReconnectTests / GatewayRouteTests / ProtocolBootstrapTests |

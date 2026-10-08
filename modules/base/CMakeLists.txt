@@ -9,9 +9,10 @@ target_include_directories(apollo_base
 
 target_compile_features(apollo_base INTERFACE cxx_std_20)
 
-# Header-only library, but we have one source file
+# Header-only library, but we have source files
 target_sources(apollo_base INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/id_pool.cpp>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/timer_wheel.cpp>
 )
 
 if(BUILD_TESTING)

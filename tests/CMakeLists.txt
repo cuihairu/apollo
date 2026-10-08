@@ -1026,4 +1026,25 @@ add_test(NAME InstanceTests COMMAND instance_tests)
 		target_compile_options(rng_substream_tests PRIVATE /utf-8)
 	endif()
 	add_test(NAME RngSubstreamTests COMMAND rng_substream_tests)
+
+# ========== Timer Wheel Tests (G-4 批) ==========
+# 分层时间轮（modules/base 组件，architecture-review §16.8-④ 落点）：
+# O(1) 调度/撤销 + 喂钟驱动 + 页界级联降层 + 回调重入 + 补拍语义 +
+# 代数防陈旧撤销（直编源惯例同 rng_substream_tests——经 apollo::base
+# INTERFACE 源传播编入 timer_wheel.cpp）
+add_executable(timer_wheel_tests
+    test_timer_wheel.cpp
+)
+target_include_directories(timer_wheel_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/base/include
+)
+target_link_libraries(timer_wheel_tests PRIVATE apollo apollo::base)
+if(WIN32)
+    target_link_libraries(timer_wheel_tests PRIVATE ws2_32)
+    target_compile_definitions(timer_wheel_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(timer_wheel_tests PRIVATE /utf-8)
+endif()
+add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
 	endif()

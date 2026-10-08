@@ -63,6 +63,7 @@
 
 - **旧 9 批次计划**（2026-09-29，docs/36 决策表依据）：批次 1 契约系统已交付；批次 2-4 重组件（db-app/cell-appmgr/base-appmgr）中与任务书重叠者已并入 P1-P4 对应批次；批次 5 AI 寻路（Recast/Detour）、批次 6 脚本（Lua）、批次 7 客户端 SDK 投影、批次 8 监控运维——审计后未列入轻量 MMO 主线，保持现状登记，主线稳定后评估。
 - **审计遗留死件清账**（并入各阶段「先删后建」批内，不留新孤儿）：comval 手写 union、attribute_id 290 常量、LocalServiceDiscovery、queue 族继承件、IPC 旁支（improvement-plan §7.5）。
+- **G 系列能力缺口**（architecture-review §16.4 登记簿，2026-10-08 用户令 G 系列实现批起记）：G-1 编队/发现全交付（P3-1 批记）；**G-4 定时器轮库件批已交付（2026-10-08）**——modules/base `timer_wheel.{hpp,cpp}` 分层哈希轮（单写者无锁/喂钟 `advance(now_ms)` 驱动/O(1) 侵入链调度撤销/页界级联降层/超窗驻留顶层/补拍语义/周期绝对拍重排零漂移/代数防陈旧撤销/构造原点注入；不学 skynet 独立 timer 线程——驱动权留 game loop 固定阶段），timer_wheel_tests 12 组（精确拍/同拍多触发/周期与自撤销/回调内跨撤销+调度/跨层级联+超窗驻留/时间倒退与空轮吸附/补拍突发/代数守卫/零延迟与大原点/自定义拍距/固定种子差分压力 vs 朴素参考模型）入三树门禁 ON 40/40·OFF 35/35·Examples 38/38；**消费方接线待首个真实消费批**——现役 tick 计数面（PlayerDirectory deadline=tick 号、baseappmgr 秒拍 sweep）为同型先例不回改；G-7 调度范式论证文字已落 attribute-sync §10.1；G-3 停机序列设计已落 attribute-sync §10.2（代码面随 P0-4 关闭协议占位）；G-5 检测原语已随 P3-3 批 B MetricRegistry 交付、admin 通道挂 net M1；G-6 契约文已用 parent 属性但生成器仅透传元数据不做生成期展开（展开批待立）；G-2 备份容灾/宕机接管零设计零代码（挂 P3+ 前置设计，参照 backup-hash 链与 reviver）。
 - **契约差异清欠**（七件套各文档文末差异清单）：entities.xml `Player parent=Avatar` 冲突已随 P2-3 修文消账（Player 删除、Avatar 摘脱怪物族）；WorldSpace 词根随 P0-3 更名消账；base/baseappmgr 进程名随 P3-1；nng/modules·protocol：vcpkg nng 1.11 依赖与解禁尝试已归档（§34.3，git 可溯——nng_socket struct 化/nng_flag 移除/四参 nng_recv 消失，评估为传输层重写级断裂后回退），模块保持禁用，传输层重写（M1 自研内核）随 P3-2 批重估。
 
 ## 推进纪律（任务书 §37/§40 + improvement-plan §7）

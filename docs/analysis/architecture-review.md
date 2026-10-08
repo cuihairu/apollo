@@ -984,7 +984,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 
 **G-3 优雅停机序列。** 停机时 flush write-behind journal → 停收新连接 → drain 在途帧 → 落库 → 按依赖逆序停模块——六份文档零落点（KBEngine 实体销毁路径 onDestroyEntity→writeToDB，baseapp/entity.cpp:698-731，是停机落库的零件级参照；数据面即 §15.5 三语句）。落点：attribute-sync §10 六阶段后补「阶段 7：停机（逆序 drain）」或独立小节。
 
-**G-4 定时器轮。** skynet 五层时间轮 + 独立线程 2.5ms tick + 到期即消息（skynet_timer.c:17-21,40-41、skynet_start.c:131-140、skynet_timer.c:134-143）。apollo 无定时器模块（ssengine-reference §4.3 第一佐证，此处第二佐证 + 实现参照）。落点差异要写明：skynet 独立线程驱动、回调走消息队列——与其消息驱动范式同构；apollo 按单写者纪律应**挂在主循环固定阶段**（数据结构抄时间轮，驱动权留 game loop，回调在 owning thread 直接执行）。
+**G-4 定时器轮。** skynet 五层时间轮 + 独立线程 2.5ms tick + 到期即消息（skynet_timer.c:17-21,40-41、skynet_start.c:131-140、skynet_timer.c:134-143）。apollo 无定时器模块（ssengine-reference §4.3 第一佐证，此处第二佐证 + 实现参照）。落点差异要写明：skynet 独立线程驱动、回调走消息队列——与其消息驱动范式同构；apollo 按单写者纪律应**挂在主循环固定阶段**（数据结构抄时间轮，驱动权留 game loop，回调在 owning thread 直接执行）。**2026-10-08 库件批已交付**：`modules/base/timer_wheel`（分层哈希轮——单写者无锁、喂钟驱动 `advance(now_ms)`、O(1) 侵入链调度/撤销、页界级联降层、超窗驻留顶层、补拍语义、周期绝对拍重排零漂移、代数防陈旧撤销、构造原点注入）+ `timer_wheel_tests` 12 组（含固定种子差分压力 vs 朴素参考模型）入三树门禁；消费方接线（主循环固定阶段挂轮）待首个真实消费批。
 
 **G-5 监控/调试通道。** skynet 三板斧（debug_console 的 mem/stat/task/run、monitor 版本号卡死检测、独立 logger 服务，16.2）+ BigWorld 集中日志与 dumpAoI 式自省（witness.cpp:2470-2514）。apollo 文档只有 BI 分流（attribute-sync §8.2）与脚本错误审计（scripting-lua §6），**运行期自省通道为零**——线上「某场景线程是否卡死」「各场景实体数/帧耗时」无处可看。落点：admin 通道（net-abstraction control 通道）+ per-scene 心跳版本号（monitor 思想移植到场景线程，卡死即告警）+ telnet 式调试台（mem/stat/task 对应物），归未来 apps/ 运维工具。
 
@@ -1106,7 +1106,7 @@ Starter 侧对应 `APOLLO_REGISTER_STARTER`（`StarterRegistry.h:186-199`，`__C
 - **本节收紧一处既有表述**：xml-generation.md §1.1「接缝已留、实现缺席——本设计直接在接缝上立规矩」暗示在 ConfigFormat::Xml 路由上补实现；本节判定为**路由随桩一并删除**——若把 XML 树回灌 config_manager 的通用 ConfigNode，等于重建「运行期二次反射」，违反 xml-generation §4 产物 2 的禁令。修订列待同步 ⑦。
 - 依赖方向：modules/core/config 保持通用树职责（INI/JSON 外围配置）被各模块依赖；生成 loader 只依赖 pugixml + base，**不依赖 config**——两套装载路径并存但分层不同（外围配置 vs 热路径数据/契约），不做「统一入口」。
 
-**④ 定时器轮（G-4 本体）→ modules/base 新组件（数据结构 + 单测），驱动权在 game loop；不新建 modules/timer、不落 modules/bigworld。**
+**④ 定时器轮（G-4 本体）→ modules/base 新组件（数据结构 + 单测），驱动权在 game loop；不新建 modules/timer、不落 modules/bigworld。**（**2026-10-08 库件批已交付**：`modules/base/timer_wheel.{hpp,cpp}` + 12 组单测入三树门禁——驱动权留 game loop 口径未破：无内部线程、喂钟注入、回调 owning thread 直接执行；接线待消费批。）
 - 三家先例一致（16.8.2 表）：BW TimeQueue 在最底层公共库 lib/cstdmf 且自带单测（time_queue.hpp:60/:74、unit_test/test_time_queue.cpp）；KBE Timers 在 lib/common（timer.h:101/:108）；skynet timer 是核心线程编队成员（skynet_start.c:209-211 无条件创建）。公共层承载定时器是三家共识。
 - apollo 落点辨析：modules/base 现为 include/src/tests 三件套（16.8.1 实读）——系统组件层的既定家，与 thread_pool/memory 同级；utils 收无状态原语（loop_buffer/data_queue/FileWatcher），时间轮带回调调度语义，不进 utils。**modules/bigworld 排除**：其自述为 legacy 兼容层（BigWorld.h:3-9「BigWorld API compatibility layer…New code should use apollo::bigworld」），timer.cpp:3-5 是转发桩（自认实现由 apollo::bw::Runtime 提供，runtime.h:14 `class Runtime`、:40 `addEntityTimer`）——参考件不是生产件的家；且兼容层自带实体运行时，与 modules/game 实体体系、attribute 三代容器（§12.2）构成又一层并行实体体系——**顺带发现（记为观察，不定罪，完成度未审见 A3）**：建议下轮审计把 bw/bigworld 兼容层列入未评审子系统清单（与 §15.2 已注 ipc 树并列）。
 - 驱动方向（G-4 已论证驱动范式，本节补归属维度）：base/timer 只提供 O(1) 数据结构与到期回调收集；**tick 驱动权在场景线程主循环固定阶段**——不学 skynet 独立 timer 线程（那是其消息驱动范式的配套，论证见 G-7 与 attribute-sync §10.1）。
