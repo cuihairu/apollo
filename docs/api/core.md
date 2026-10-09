@@ -6,8 +6,8 @@ prev: /api/README.md
 
 # Core API
 
-> 2026-10-10 对账：本页按 HEAD 实况重写（modules/core 八头 + log 树）。旧稿的
-> `apollo::core::Application`、`ConfigManager`、`EventBus`、`LOG_INFO(logger, ...)`
+> 2026-10-10 对账：本页按 HEAD 实况重写（modules/core 七头 + log 头树九件）。
+> 旧稿的 `apollo::core::Application`、`ConfigManager`、`EventBus`、`LOG_INFO(logger, ...)`
 > 宏在仓库中不存在；定时器轮属 base 模块（TimerWheel，G-4）。
 
 ## apollo::core::IApplicationLifecycle（application_lifecycle.hpp）
@@ -98,7 +98,7 @@ context.shutdown();
 
 ---
 
-## apollo::core::log（log/ 八头树）
+## apollo::core::log（log/ 头树九件）
 
 `LogManager` 单例（零配置自动初始化，`shutdown()` 显式收口）：
 

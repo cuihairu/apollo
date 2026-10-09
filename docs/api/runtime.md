@@ -6,7 +6,9 @@ prev: /api/README.md
 
 # Runtime API
 
-> 2026-10-10 对账：本页按 HEAD 实况重写（modules/runtime 七头）。旧稿的
+> 2026-10-10 对账：本页按 HEAD 实况重写（modules/runtime 七头：application_host/
+> console_event_source/crash_capture/runtime_manifest/service_host/signal_source/
+> world_host）。旧稿的
 > `Console`/`Signal`/`HealthCheck` 单例类在仓库中不存在——控制台与信号是
 > 注入式事件源接口（poll 模型），健康检查未实现（P3-3 立项）。
 
