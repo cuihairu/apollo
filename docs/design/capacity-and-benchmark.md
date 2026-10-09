@@ -136,6 +136,7 @@ benchmark kFrameDelta/预算常量随批 C 勘误为 10Hz/100ms。）
 | 水位 soft+ 触发率 | 稳态 <1% 会话·min（触发即负载异常信号） | net-abstraction §4.2（新增量化） |
 | violation_score 断开率 | 稳态 <0.01% 会话·min | net-abstraction §4.3（新增量化） |
 | 重连恢复 / 崩溃回档 | ≤1 RTT+快照(≤50KB) / ≤2s journal 零丢失 | attribute-sync §11 |
+| 进程恢复全链耗时 | kill -9 → 重报收敛 ≤3s / 镜像收敛 ≤3.5s（骨架两跑实测 1.3-1.8s / 2.3-2.8s，**满载噪声期上限口径**——load 75-90 机器共用期，空载当更优；主导项 = 重启退避 1s；RPO/RTO 目标值定档见 backup-revive 拍板点 4） | backup-revive §6 批 0 演练（scripts/drill_kill9.sh，2026-10-09，i9-10880H 本机编队） |
 | 帧耗时分位 | tick 段 p99 ≤70ms（§2 表合计），连续 3 帧 >80ms 过载告警 | clock-and-time §4（新增量化） |
 | 录制体积 / hash 链分歧率 | ≤5MB/关键战斗 / 复算分歧 = 0（版本内） | battle-determinism §5/§8（接入点） |
 | RSS | 稳态 ≤4GB，告警 6GB | §4（本表） |
