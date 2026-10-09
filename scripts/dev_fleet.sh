@@ -30,10 +30,14 @@ LOGFILE="$FLEET_DIR/machined.log"
 MACHINED="$BUILD_DIR/apps/machined/machined"
 
 # 编队清单：name | 二进制 相对构建根 | 额外参数（dev 端口见文件头布局）
+# gateway 显式补传三后端 URL（ADR-011 最小修复处方②）：config.hpp 缺省
+# BaseApp 9002（=gateway 自身端口）/ CellApp 9100 与 dev 布局错位，不传则
+# 错位缺省值直接生效。处方①（start 连接失败降级）与③（ChatApp 幽灵依赖
+# 摘除）属功能代码，不在文档/脚本批边界内，留待边界放行批。
 fleet_entries() {
     cat <<EOF
 login     | $BUILD_DIR/apps/login-app/login-app --port 9001
-gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002
+gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005
 baseappmgr| $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003
 base      | $BUILD_DIR/apps/base-app/base-app --port 9004
 cell      | $BUILD_DIR/apps/cell-app/cell-app --port 9005
