@@ -377,7 +377,7 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 - 先例二 KBEngine：无守护进程，machine 以 UDP 广播应答发现（machine.cpp:646-670，KBE_PORT_BROADCAST_DISCOVERY）——更轻，但「机器死了谁来报」无解。
 - apollo 形态（P3 定稿口径）：两层并存——单机 machined 式守护（本机进程生死/拉起/崩溃上报）+ UDP 广播发现（跨机拓扑发现），分别取两先例长处；与 architecture-review §15.2 自行开发纪律对齐，不引 etcd/consul 类外部协调服务——游戏服进程拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益（**2026-09-30 用户裁决落档：不引入额外注册中心——原 docs/05 §2.3 注册中心稿（Redis/etcd+心跳 5s/30s）已整档删除，36 号 #13 行同步改写，git 可溯**）。控制面复用 §4.1 control 通道的进程间延伸：编队事件（进程加入/退出/机器死亡）作为 control 事件进各进程轮询源——不开新通道体系。
 
-**G-2 备份与宕机接管**（BigWorld 全套先例；apollo P3 骨架取两件）：
+**G-2 备份与宕机接管**（BigWorld 全套先例；~~apollo P3 骨架取两件~~ → **拍板改写（ADR-010，2026-10-10）：案 A 先行 restart-only，本节骨架方案未立项**——下列先例件与候选形态留档，重开条件=生产数据提出亚秒 RTO/多机形态立项；现行接管口径见 backup-revive §4 三档）：
 
 - 先例件：baseapp 热备分帧发送（backup_sender.hpp:52-61）+ 一致性哈希备份链（backup_hash/backup_hash_chain——备机按链持续追主机实体状态流）+ reviver 协调接管（主机死亡后备机把镜像实体升级为权威；cellapp 死则 cellappmgr 在幸存 CellApp 重建 cell）+ secondary db 任务族 + dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。KBEngine 对照：无此层（architecture-review C-51/§16.4）——宕机靠实体最后一次归档，窗口 = 归档周期。
 - apollo P3 最小骨架：~~backup-hash 链 + reviver 两件先行~~ → **拍板改写（ADR-010，2026-10-10）：案 A 先行 restart-only——backup-hash 链不先行、reviver 不设、镜像流不建**；secondary db/动态扩缩容维持推迟到多 cell 稳定运行后。

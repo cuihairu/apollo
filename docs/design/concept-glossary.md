@@ -72,7 +72,7 @@
 |---|---|---|---|
 | **tick / 单写者** | 固定节拍、单线程全序推进世界——换来无锁与确定性 | BW = 定 tick 默认 10Hz（server_app_config.cpp:28 DEFAULT_GAME_UPDATE_HERTZ）；KBE = 定 tick 默认 10Hz（kbengine_defaults.xml:5 gameUpdateHertz）；skynet = 事件驱动无 tick（省空转但要自建节拍） | **场景线程单写者 + 主循环 10Hz**（clock-and-time/capacity 定案；docs/05 §3.3 与 36号 #8 的「20Hz」为旧口径） |
 | **意图上行**（intent-only） | 客户端只发「想做什么」，服务端校验并定夺 | 对照物 = lockstep（客户端输入进判定、帧同步）——三框架源码均无内建 lockstep（deep-dive §18 负空间） | sdk-contract §2.3「intent only, 服务端定夺」；lockstep 取舍 = 36号 #18（只留适配缝、不进大世界协议） |
-| **write-behind journal** | 状态变更先落追加日志、后刷快照，崩溃可重放 | BW = baseapp 周期备份（backup_sender 族，快照流无 journal）；KBE = Archiver 平滑刷库（archiver.cpp:20-70，按 tick 头部区段）；skynet 无 | attribute-sync §8.2——journal 同时是 G-2 备份镜像流与崩溃恢复位点（三用一位，不另起备份协议） |
+| **write-behind journal** | 状态变更先落追加日志、后刷快照，崩溃可重放 | BW = baseapp 周期备份（backup_sender 族，快照流无 journal）；KBE = Archiver 平滑刷库（archiver.cpp:20-70，按 tick 头部区段）；skynet 无 | attribute-sync §8.2——journal 用途：崩溃恢复位点 + 落库队列（「三用一位」之 G-2 备份镜像流**未立项**，ADR-010 镜像流不建；留档候选形态见 net-abstraction §7 G-2） |
 | **契约**（contract） | 一份声明（属性/消息/白名单）多端生成的单一真相源 | BW/KBE = `.def`（两家皆 XML 但**无 schema 层**，错拼标签静默缺省——entity_description.cpp:184-190 / entitydef.cpp:188-210）；UE = 编译期宏；EQEmu/TC = 源码 opcode 表 | XML + XSD 形式校验 + 生成器（sdk-contract §2、xml-generation）——生成器不进运行时链接图（36号 #4） |
 
 ---

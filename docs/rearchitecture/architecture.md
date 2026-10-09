@@ -97,6 +97,12 @@ Persistence：base-app DatabaseService（内存 unordered_map，load 造假数�
 | 服务发现 G-1（machined 双层） | 无 | 未落地 |
 | 热备 G-2（reviver） | 无 | 未落地 |
 
+> **后况勘误（2026-10-10）**：本表为审查期快照，其后多行已变——G-1 已交付
+> （P3-1 批 B-F+收尾批，machined+UDP 双层+监督+镜像+恢复相位）；**G-2 未立项**
+> （ADR-010：案 A 先行 restart-only，reviver 不设）；write-behind journal 已交付
+> （PersistJournal，P2 批）；PCG32 substreams/battle determinism 已交付（P2-2）。
+> 四通道/FrameFilter/InterServerLink 仍未落地（net M1，ADR-011 拍板挂账）。
+
 契约体系是**唯一设计-代码-测试闭环**；其余能力大多停留在「设计文档已承诺、代码以 stub/dead 存档」。
 
 ---
