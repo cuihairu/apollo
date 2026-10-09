@@ -101,6 +101,7 @@ export default defineConfig({
             { text: '容量与基准', link: '/design/capacity-and-benchmark' },
             { text: '备份容灾与宕机接管', link: '/design/backup-revive' },
             { text: '网关拓扑调研', link: '/design/gateway-topology-survey' },
+            { text: 'Cell 单写者收口', link: '/design/cell-single-writer' },
             { text: '入站第三方对接面', link: '/design/inbound-interfaces' },
             { text: '脚本系统（Lua）', link: '/design/scripting-lua' },
             { text: 'SDK 契约', link: '/design/sdk-contract' },
