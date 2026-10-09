@@ -93,7 +93,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 |---|---|
 | `Battle`（作为 space/实例名：历史错名，裁决 1） | legacy include/apollo/game/battle/ecs/battle_system.hpp 全套（BattleWorld/BattleManager/BattleSystem）；docs/25 语义实为副本 |
 | `cellapp / baseapp` | apps/base-app、apps/baseappmgr 进程名与 CMake target 名（注意：契约「他家进程名」禁用的语义指 apollo 不拆两族进程，进程名本身是历史遗留命名，已登记为待迁移项；代码内 class 未用 baseapp 命名） |
-| `Space` | world_space.cpp 的 WorldSpace 类名含 Space 词根——部分违反，登记（2026-10-07 勘误补充：**modules/protocol 消息族另有 `SpaceID`/`spaceId`/`fromSpace`/`toSpace` 与 `CellEntityMove`/`CellEntityProperty` 结构名**——BigWorld 兼容 wire 语义承载（33 号 facade 面，wire 格式不含名字），与 nng 底座同属 net M1/协议收敛批清除链，随拍板处理不代拍） |
+| `Space` | world_space.cpp 的 WorldSpace 类名含 Space 词根——部分违反，登记（2026-10-07 勘误补充：**modules/protocol 消息族另有 `SpaceID`/`spaceId`/`fromSpace`/`toSpace` 与 `CellEntityMove`/`CellEntityProperty` 结构名**——BigWorld 兼容 wire 语义承载（33 号 facade 面，wire 格式不含名字），与 nng 底座同属 net M1/协议收敛批清除链——M1 内容已拍板（ADR-011），代码清除随 M1 实现批落地） |
 | `Mailbox / EntityCall / witness / ghost` | 无代码出现（设计阶段已清）；残留于设计文档对照段（允许）。2026-10-07 复核：非豁免文档叙述（guide/apps/design 非对照段）残余为零——其余出现均为 KBE 源码行号引用、裁决记录引用或第三方库名字面事实陈述 |
 | `nng` | modules/protocol（apollo_protocol 依赖）、modules/net 的 nng_wrapper/socket.cpp/channel.cpp 桩、legacy net 栈——**契约已禁 nng（退役，36号 #2），代码仍在依赖/残留**：见 architecture.md §网络 |
 | `registry`（不引入 etcd/consul） | 无外部依赖（仅命名指导） |
