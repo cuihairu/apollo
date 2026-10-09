@@ -15,6 +15,7 @@ Apollo 是一个面向轻量 MMO、塔防/固定地图玩法的 C++20 在线游�
 - [核心概念](./concepts.md) - 了解 Apollo 的核心概念
 - [模块系统](./module-system.md) - 模块化架构详解
 - [配置](./configuration.md) - 配置管理详解
+- [工具脚本](./tooling.md) - scripts/ 运维与验收脚本一览
 
 ## 下一步
 

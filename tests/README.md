@@ -2,13 +2,13 @@
 
 ## 概述
 
-统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（当前 36 项）。
+统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（当前 40 项）。
 
-tests/ 下 49 个 `test_*.cpp` 中 34 个注册进门禁；其余 15 个属 legacy GTest 批（`APOLLO_BUILD_GTESTS=OFF` 默认关：protobuf / buffer / network / log / timer / id_pool / utils / rest_template / data_structures / channel / crypto / utils 系及配套 main），不编不跑、不计入门禁。
+tests/ 下 52 个 `test_*.cpp` 中 37 个注册进门禁；其余 15 个属 legacy GTest 批（`APOLLO_BUILD_GTESTS=OFF` 默认关：protobuf / buffer / network / log / timer / id_pool / utils / rest_template / data_structures / channel / crypto / utils 系及配套 main），不编不跑、不计入门禁。
 
 ## 门禁口径
 
-三树构建 + CTest 全绿（ON 树 36/36、OFF 树 36/36、Examples 树 34/34，数字随批增长，各批交付注记为凭）：
+三树构建 + CTest 全绿（ON 树 40/40、OFF 树 35/35、Examples 树 38/38，数字随批增长，各批交付注记为凭）：
 
 ```bash
 # 树 1/2：默认树 ON / OFF（GAME_MODULE 开关各验一遍，OFF 验完还原 ON）

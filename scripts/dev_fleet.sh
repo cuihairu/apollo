@@ -114,8 +114,27 @@ cmd_down() {
         echo "10s 未退，强杀 machined（子进程成孤儿，需手动清理）" >&2
         kill -KILL "$pid" 2>/dev/null || true
     fi
-    pgrep -P "$pid" 2>/dev/null | while read -r child; do
-        kill -KILL "$child" 2>/dev/null || true
+    # 孤儿兜底：machined 死后子进程重挂 init，pgrep -P 死 pid 恒空——按二进制名
+    # 精确清理（pgrep -x 进程名匹配，避 -f 误中外层 shell 命令行）。
+    # terminate_all 已发 SIGTERM：先共享 5s 宽限让慢关子进程自行退出，再 KILL 残留。
+    local -a names=()
+    while IFS='|' read -r name cmd; do
+        local bin
+        bin="$(echo "$cmd" | awk '{print $1}')"
+        [[ -z "$bin" ]] && continue
+        names+=("$(basename "$bin")")
+    done < <(fleet_entries)
+    local n i alive
+    for ((i = 0; i < 25; i++)); do
+        alive=0
+        for n in "${names[@]}"; do
+            pgrep -x "$n" >/dev/null 2>&1 && alive=1
+        done
+        (( alive )) || break
+        sleep 0.2
+    done
+    for n in "${names[@]}"; do
+        pkill -KILL -x "$n" 2>/dev/null || true
     done
     rm -f "$PIDFILE"
     echo "编队已停。"
