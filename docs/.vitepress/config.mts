@@ -79,6 +79,34 @@ export default defineConfig({
 
       '/architecture/': architectureSidebar,
 
+      '/design/': [
+        {
+          text: '设计件（docs/design）',
+          items: [
+            { text: '设计件总览', link: '/design/' },
+            { text: '术语契约', link: '/design/term-contract' },
+            { text: '概念词汇表', link: '/design/concept-glossary' },
+            { text: '玩家对象模型', link: '/design/player-object-model' },
+            { text: '属性系统与同步', link: '/design/attribute-sync' },
+            { text: '会话与在线目录', link: '/design/session-and-online-directory' },
+            { text: '登录流程', link: '/design/login-flow' },
+            { text: '战斗确定性', link: '/design/battle-determinism' },
+            { text: '战斗实例卸载', link: '/design/battle-instance-offload' },
+            { text: '战斗验证服务', link: '/design/battle-verification-service' },
+            { text: '网络抽象与传输内核', link: '/design/net-abstraction' },
+            { text: '日志系统', link: '/design/logging' },
+            { text: '崩溃采集', link: '/design/crash-capture' },
+            { text: '时钟与时间', link: '/design/clock-and-time' },
+            { text: '容量与基准', link: '/design/capacity-and-benchmark' },
+            { text: '网关拓扑调研', link: '/design/gateway-topology-survey' },
+            { text: '入站第三方对接面', link: '/design/inbound-interfaces' },
+            { text: '脚本系统（Lua）', link: '/design/scripting-lua' },
+            { text: 'SDK 契约', link: '/design/sdk-contract' },
+            { text: 'XML 契约生成', link: '/design/xml-generation' },
+          ],
+        },
+      ],
+
       '/modules/': [
         {
           text: '模块',
