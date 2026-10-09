@@ -1,7 +1,6 @@
 # Game - Attributes module
 add_library(apollo_game_attributes STATIC
     src/attribute.cpp
-    src/attribute_value.cpp
 )
 add_library(apollo::game_attributes ALIAS apollo_game_attributes)
 

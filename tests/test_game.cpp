@@ -15,7 +15,6 @@
         } \
     } while(0)
 
-#include "apollo/game/attributes/comval.h"
 #include "apollo/game/attributes/attribute.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/world/scene.hpp"
@@ -32,8 +31,6 @@
 
 using namespace apollo;
 // Be explicit about namespaces to avoid Entity class conflicts
-using apollo::game::ComVal;
-using apollo::game::EComValType;
 using apollo::AttributeContainer;  // From attribute.hpp (apollo namespace)
 using apollo::game::core::EntityId;
 using apollo::game::core::Entity;
@@ -51,154 +48,6 @@ using apollo::game::world::ViewerState;
             return false; \
         } \
     } while(0)
-
-//==============================================================================
-// ComVal Tests
-//==============================================================================
-
-bool test_comval_default_construct() {
-    ComVal v;
-    TEST_ASSERT(v.getType() == EComValType::ECVT_NULL, "Default should be NULL");
-    TEST_ASSERT(v.isNull(), "Should be null");
-    return true;
-}
-
-bool test_comval_bool_construct() {
-    ComVal v(true);
-    TEST_ASSERT(v.getType() == EComValType::ECVT_BOOL, "Type should be BOOL");
-    TEST_ASSERT(v.isBool(), "Should be bool type");
-    TEST_ASSERT(v.getBool() == true, "Value should be true");
-    return true;
-}
-
-bool test_comval_int_construct() {
-    ComVal v(42);
-    TEST_ASSERT(v.getType() == EComValType::ECVT_INT, "Type should be INT");
-    TEST_ASSERT(v.isInt32(), "Should be int32 type");
-    TEST_ASSERT(v.getInt() == 42, "Value should be 42");
-    return true;
-}
-
-bool test_comval_double_construct() {
-    ComVal v(3.14);
-    TEST_ASSERT(v.getType() == EComValType::ECVT_DOUBLE, "Type should be DOUBLE");
-    TEST_ASSERT(v.isDouble(), "Should be double type");
-    TEST_ASSERT(std::abs(v.getDouble() - 3.14) < 0.001, "Value should be 3.14");
-    return true;
-}
-
-bool test_comval_string_construct() {
-    ComVal v("hello");
-    TEST_ASSERT(v.getType() == EComValType::ECVT_STRING, "Type should be STRING");
-    TEST_ASSERT(v.isString(), "Should be string type");
-    TEST_ASSERT(std::string(v.getString()) == "hello", "Value should be 'hello'");
-    return true;
-}
-
-bool test_comval_copy_construct() {
-    ComVal v1(123);
-    ComVal v2(v1);
-    TEST_ASSERT(v2.getType() == v1.getType(), "Copy should have same type");
-    TEST_ASSERT(v2.getInt() == v1.getInt(), "Copy should have same value");
-    return true;
-}
-
-bool test_comval_assignment() {
-    ComVal v;
-    v = 456;
-    TEST_ASSERT(v.getInt() == 456, "Assignment should work");
-
-    v = std::string("test");
-    TEST_ASSERT(v.getStringStd() == "test", "String assignment should work");
-    return true;
-}
-
-/*
-// Windows macro issues prevent these tests from compiling
-// TODO: Fix macro conflicts and re-enable
-bool test_comval_comparison() {
-    ComVal v1(100);
-    ComVal v2(100);
-    ComVal v3(200);
-
-    bool eq = (v1 == v2);
-    TEST_ASSERT(eq, "Equal values should compare equal");
-
-    bool ne = (v1 != v3);
-    TEST_ASSERT(ne, "Different values should not be equal");
-
-    bool lt = (v1 < v3);
-    TEST_ASSERT(lt, "Less than should work");
-
-    return true;
-}
-
-bool test_comval_arithmetic() {
-    ComVal v1(10);
-    ComVal v2(5);
-
-    ComVal sum = v1 + v2;
-    TEST_ASSERT(sum.getInt() == 15, "Addition should work");
-
-    ComVal diff = v1 - v2;
-    TEST_ASSERT(diff.getInt() == 5, "Subtraction should work");
-
-    ComVal prod = v1 * v2;
-    TEST_ASSERT(prod.getInt() == 50, "Multiplication should work");
-
-    ComVal div = v1 / v2;
-    TEST_ASSERT(div.getInt() == 2, "Division should work");
-    return true;
-}
-
-bool test_comval_string_concat() {
-    ComVal v1("hello");
-    ComVal v2(" world");
-
-    ComVal result = v1 + v2;
-    TEST_ASSERT(result.getStringStd() == "hello world", "String concatenation should work");
-    return true;
-}
-*/
-
-bool test_comval_serialization() {
-    ComVal original(42);
-    char buffer[128];
-    int offset = 0;
-
-    TEST_ASSERT(original.saveToBuff(buffer, sizeof(buffer), offset), "Save should succeed");
-
-    offset = 0;
-    ComVal restored;
-    TEST_ASSERT(restored.fromBuff(buffer, sizeof(buffer), offset), "Load should succeed");
-    TEST_ASSERT(restored.getInt() == 42, "Restored value should match");
-
-    // Test string serialization
-    ComVal str("test");
-    offset = 0;
-    TEST_ASSERT(str.saveToBuff(buffer, sizeof(buffer), offset), "String save should succeed");
-
-    offset = 0;
-    ComVal restoredStr;
-    TEST_ASSERT(restoredStr.fromBuff(buffer, sizeof(buffer), offset), "String load should succeed");
-    TEST_ASSERT(restoredStr.getStringStd() == "test", "Restored string should match");
-    return true;
-}
-
-bool test_comval_to_string() {
-    ComVal v1(42);
-    TEST_ASSERT(v1.toString() == "42", "Int to string should work");
-
-    ComVal v2(true);
-    TEST_ASSERT(v2.toString() == "true", "Bool to string should work");
-
-    ComVal v3(3.14);
-    TEST_ASSERT(v3.toString().find("3.14") == 0, "Double to string should contain value");
-
-    ComVal v4("hello");
-    TEST_ASSERT(v4.toString() == "hello", "String to string should work");
-    return true;
-}
 
 //==============================================================================
 // AttributeContainer Tests
@@ -531,21 +380,6 @@ int main() {
     // P1-3：AOIManager 单例退役——AOI 归 Scene 持有（SceneAoi），无全局初始化面
 
     std::vector<TestInfo> tests = {
-        // ComVal Tests
-        {"ComVal: Default Construct", test_comval_default_construct},
-        {"ComVal: Bool Construct", test_comval_bool_construct},
-        {"ComVal: Int Construct", test_comval_int_construct},
-        {"ComVal: Double Construct", test_comval_double_construct},
-        {"ComVal: String Construct", test_comval_string_construct},
-        {"ComVal: Copy Construct", test_comval_copy_construct},
-        {"ComVal: Assignment", test_comval_assignment},
-        // Windows macro issues - disabled temporarily
-        // {"ComVal: Comparison", test_comval_comparison},
-        // {"ComVal: Arithmetic", test_comval_arithmetic},
-        // {"ComVal: String Concat", test_comval_string_concat},
-        {"ComVal: Serialization", test_comval_serialization},
-        {"ComVal: ToString", test_comval_to_string},
-
         // AttributeContainer Tests
         {"Attribute: Set/Get", test_attribute_container_set_get},
         {"Attribute: Get Default", test_attribute_container_get_default},
