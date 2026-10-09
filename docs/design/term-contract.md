@@ -22,7 +22,7 @@
 | 副本 | instance | `Instance` / `instance_id` | 一次玩法开启的场景实例：生命周期随玩法起止 | KBE = `Space` 实例；BW = Space 实例（无独立进程）；WoW = instance（副本本义） | 禁：**Battle（已废错名）**、dungeon/room 作代码标识 |
 | 房间 | room（口语） | —（不入代码） | 副本在塔防/竞技语境的口语 | — | 仅口语 |
 | 分线 | line（口语） | —（由 `scene_id` 承载） | 同一地图的并行场景实例 | KBE = 多 `Space` 实例；BW 无缝不分线 | 禁作一级概念/代码标识 |
-| Zone | Zone | `Zone` | 逻辑服进程：承载 1..N 个 scene，故障域与扩缩粒度 | EQEmu = zone 一进程；BW/KBE = cellapp+baseapp 两族 | 禁：cellapp/baseapp、场景实例粒度（旧表述已修正） |
+| Zone | Zone | `Zone`（现行代码 = base-app，改名批落地 ADR-014 → zone-app） | 逻辑服进程：承载 1..N 个 scene，故障域与扩缩粒度 | EQEmu = zone 一进程；BW/KBE = cellapp+baseapp 两族 | 禁：cellapp/baseapp、场景实例粒度（旧表述已修正） |
 | Home Zone | HomeZone | `home_zone_id` | Base 驻地：登录时分配，永不随场景切换迁移 | 无对应（BW baseapp 归属的进程版） | — |
 | 换幕 | scene change | — | Cell 销毁重建（进副本/换线/跨场景） | 无对应（BW/KBE 是 entity migration——被否决） | 禁：迁移/migration（handoff 另指显式交接，不混用） |
 | 无缝世界 | seamless | — | 跨进程连续大世界（边界不可见） | BW/KBE = ghost 双写 | apollo 否决（36号 #9） |
@@ -43,7 +43,7 @@
 | 中文名 | 英文名 | 代码标识 | 定义一句 | 其他引擎含义对照 | 禁用/别名 |
 |---|---|---|---|---|---|
 | 登录进程 | login-app | `LoginApp` | 账号鉴权、token 签发、契约包指针（短连接） | BW/KBE = loginapp | — |
-| 管理进程 | manager | `ManagerApp` | 准入/顶号预裁/落点/核销（单点串行） | BW = baseappmgr+cellappmgr；KBE = 双 mgr | 禁：mgr 缩写作标识 |
+| 管理进程 | manager | `ManagerApp`（现行代码 = baseappmgr，改名批落地 ADR-014 → manager） | 准入/顶号预裁/落点/核销（单点串行） | BW = baseappmgr+cellappmgr；KBE = 双 mgr | 禁：mgr 缩写作标识 |
 | 网关进程 | gateway-app | `GatewayApp` | token 验签、四通道会话、按 zone 透传 | KBE = baseapp 代理段；BW = 无独立 | — |
 | 副本进程 | instance process | — | 单 scene 单开进程的 offload 形态（36号 #16） | 三家无独立进程 | — |
 | 守护进程 | machined | `Machined` | 每机本地监工：拉起/重启/生死上报（G-1 左半） | BW = bwmachined；KBE = machine | — |
