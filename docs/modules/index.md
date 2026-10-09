@@ -15,10 +15,10 @@ Apollo 的模块拆分围绕一条原则：
 | [Base](/modules/base) | 时间、线程池、内存、字符串、ID 等基础设施 |
 | [Core](/modules/core) | 配置、日志、生命周期、DI、模块注册等框架内核 |
 | [Runtime](/modules/runtime) | ApplicationHost、WorldHost、ServiceHost 等宿主运行时 |
-| [Data](/modules/data) | 数据访问、缓存、Repository、连接抽象 |
+| [Data](/modules/data) | 连接抽象、SQL 模板、write-behind 日志、进程内缓存 |
 | [Net](/modules/net) | 传输、协议、消息编解码、会话通信 |
-| [Game](/modules/game) | 实体、AOI、战斗、属性、场景与世界逻辑 |
-| [BigWorld](/modules/bigworld) | Witness、Ghost、分布式空间等增强语义 |
+| [Game](/modules/game) | 实体、AOI、战斗、属性、会话目录与世界逻辑 |
+| [BigWorld](/modules/bigworld) | BigWorld API 兼容层（实体/回调/定时器薄迁移面） |
 
 推荐阅读顺序：
 

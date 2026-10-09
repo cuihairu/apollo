@@ -77,9 +77,9 @@ int64_t port = config.get_int64("server.port");
 ```cpp
 #include <apollo/core/log/log_manager.hpp>
 
-APOLLO_LOG_INFO("这是一条信息");
-APOLLO_LOG_WARN("这是一条警告");
-APOLLO_LOG_ERROR("这是一条错误");
+APOLLO_LOG()->info("这是一条信息");
+APOLLO_LOG()->warn("这是一条警告");
+APOLLO_LOG()->error("这是一条错误");
 ```
 
 ## 实体 (Entity)

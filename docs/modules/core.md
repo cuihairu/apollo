@@ -62,17 +62,23 @@ bool ok = config.has("server.port");
 ### 日志 (Log)
 
 `apollo::core::log`：`LogManager` 单例（`initialize(config)` / `getLogger(name)` /
-`createLogger(name, level)` / `flushAll`），宏面 `APOLLO_LOG_INFO/WARN/ERROR(msg)`
-与 `_F(fmt, ...)` 格式化变体（`include/apollo/core/log/log_manager.h`）。
+`createLogger(name, level)` / `removeLogger` / `hasLogger` / `flushAll` /
+`shutdown`），配置工厂 `LogManagerConfig::createDefault/createConsoleOnly/
+createCombined/createFileOnly`。**便捷宏只有两个**：`APOLLO_LOG()`（默认
+logger）与 `APOLLO_LOG_GET(name)`（具名 logger）——格式化走 logger 方法链；
+`APOLLO_LOG_INFO/LOG_WARN_F` 一类宏不存在（旧稿虚构，log.h 头部 doxygen
+示例同为陈旧注释）。
 
 ```cpp
 #include <apollo/core/log/log_manager.hpp>
 
-APOLLO_LOG_INFO("这是一条信息");
-APOLLO_LOG_WARN_F("端口 {} 已变更", 8888);
+APOLLO_LOG()->info("这是一条信息");
+APOLLO_LOG()->warn("端口 {} 已变更", 8888);
+APOLLO_LOG_GET("network")->error("timeout");
 
-auto& mgr = LogManager::instance();
-mgr.initialize(LogManagerConfig::createCombined("logs/server.log", LogLevel::Info));
+auto& mgr = apollo::core::log::LogManager::instance();
+mgr.initialize(apollo::core::log::LogManagerConfig::createCombined("logs/server.log",
+               apollo::core::log::LogLevel::Info));
 auto logger = mgr.getLogger("MyLogger");
 ```
 
@@ -89,10 +95,10 @@ auto logger = mgr.getLogger("MyLogger");
 class MyApplication : public apollo::core::IApplicationLifecycle {
 public:
     void on_application_ready() override {
-        APOLLO_LOG_INFO("应用就绪");
+        APOLLO_LOG()->info("应用就绪");
     }
     void on_application_stop() override {
-        APOLLO_LOG_INFO("应用停止");
+        APOLLO_LOG()->info("应用停止");
     }
 };
 ```
@@ -106,18 +112,11 @@ public:
 
 ### 定时器 (Timer)
 
-`include/apollo/core/timer/timer_manager.h`：时间轮 `TimerManager`
-（`setTimer(intervalMs, callback)` / `killTimer` / `hasTimer`，TimerId 返回）。
-
-```cpp
-#include <apollo/core/timer/timer_manager.h>
-
-TimerManager timers;
-TimerId id = timers.setTimer(5000, []() {
-    APOLLO_LOG_INFO("每 5 秒（按时间轮刻度）");
-});
-timers.killTimer(id);
-```
+时间轮在 base 模块：`apollo::base::TimerWheel`（G-4 库件，分层哈希、
+`advance(now_ms)` 喂钟驱动，见 [Base 模块](/modules/base)）——core 模块本体
+不含定时器。顶层遗留件 `include/apollo/core/timer/timer_manager.h`
+（`TimerManager::setTimer/killTimer`）仅被 legacy GTest 批引用，不入门禁，
+勿在新代码使用。
 
 ## 依赖
 

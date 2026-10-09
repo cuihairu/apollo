@@ -11,8 +11,9 @@ tag:
 
 # Game 模块
 
-Game 模块提供游戏领域层功能，分五个子库：core（实体基元）、world（场景/会话/Avatar）、
-session（锚点/在线目录/恢复）、attributes（属性）、battle（战斗骨架）。
+Game 模块提供游戏领域层功能，分六个子库：core（实体基元）、world（场景/会话/Avatar）、
+session（锚点/在线目录/恢复/编队恢复）、attributes（属性）、battle（战斗运行时）、
+social（组队/公会）。
 
 ## Entity（apollo::game::core）
 
@@ -80,21 +81,37 @@ aoi.leave(apollo::game::core::EntityId{1});
 
 下发到网关的广播面留 P3-2；属性管线对 AOI 事件的消费未接线（attribute-sync §4.1）。
 
-## 战斗系统（BattleSystem，部分实现）
+## 战斗系统（battle 子库）
 
-`apollo::game::battle::BattleSystem` 现状为场景内骨架：实体集合登记 + tick 更新。
+三层：`BattleSystem`（场景内实体集合登记 + tick 骨架）、`BattleRuntime`
+（确定性战斗域——BattlePhase 状态机、逻辑拍 + wall clock 双时间轴、RNG
+子流契约，battle-determinism 批交付）、`BattleReplay`（ReplayTuple 回放面）。
 
 ```cpp
 #include <apollo/game/battle/battle_system.hpp>
+#include <apollo/game/battle/battle_runtime.hpp>
 
 apollo::game::battle::BattleSystem battle;
 battle.add_entity(std::make_shared<apollo::game::core::Entity>(EntityId{1}));
 battle.update(0.1f);
-auto count = battle.get_entity_count();
 ```
 
-ECS 多套收敛、技能/Buff/状态机、确定性四约束随 P2-1/P2-2（未实现）；
+ECS 多套收敛、技能/Buff/状态机随 P2-1/P2-2（未实现）；
 旧稿里的 `ECSWorld`/`ECSSystem` API 在仓库中不存在。
+
+## 会话与目录（session 子库，G-1 交付面）
+
+锚点/在线目录/恢复/编队恢复九头：`AnchorManager`/`PlayerAnchor`（长期玩家态
+唯一写点）+ `AnchorRewardSink`（结算落账）+ `PlayerDirectory`（在线目录，
+epoch/suspend 窗口/重报收敛）+ `DirectoryPublisher`（"APD2" 目录镜像）+
+`FleetRecoveryCoordinator`（恢复相位跨进程化）+ `RecoveryCoordinator`
+（journal replay → Anchor restore → 准入闸）+ `SessionLocator`/
+`WorldAssignment`。API 明细见 [Game API](/api/game) 与
+session-and-online-directory 设计件。
+
+## 社交（social 子库）
+
+`Party` / `Guild` 组队与公会基础容器（跨服同步语义挂拍板链，未接线）。
 
 ## 属性系统（attributes）
 

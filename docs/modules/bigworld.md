@@ -11,129 +11,73 @@ tag:
 
 # BigWorld 模块
 
-BigWorld 模块提供 BigWorld API 兼容层，允许现有 BigWorld 代码平滑迁移。
+BigWorld 模块提供 BigWorld API 兼容层，允许现有 BigWorld 风格代码平滑迁移。
+> 2026-10-10 对账：本页按 HEAD 实况重写——兼容面 = `include/bigworld/BigWorld.h`
+> 头库，模块层 `modules/bigworld`（Entity/Runtime/Timer/Callback），底层
+> `apollo::bw::BigWorld`。旧稿的 `ICallback`/`registerCallback`/`SPACE_ID`
+> 双参 createEntity/`getEntity` 等在仓库中不存在。
 
 ## 概述
 
-BigWorld 兼容层将 BigWorld 风格的 API 映射到 Apollo 的模块化架构上：
-
 ```
-BigWorld API
-    ↓
-BigWorld 兼容层
-    ↓
-Apollo 模块 (game, net, data, ...)
+BigWorld 风格调用（namespace BigWorld，include/bigworld/BigWorld.h 头库）
+    ↓ 内联映射
+apollo::bw::BigWorld（modules/bigworld + include/apollo/bw/bigworld.h）
+    ↓ 消费
+Apollo 模块 (base 的 TimerWheel 驱动、game 的实体域等)
 ```
 
 ## 基本用法
 
-### 实体操作
-
 ```cpp
 #include <bigworld/BigWorld.h>
 
-// 创建实体
-BigWorld::EntityID id = BigWorld::createEntity(
-    BigWorld::SPACE_ID,  // 空间ID
-    "Player"            // 实体类型
-);
-
-// 获取实体
-BigWorld::IEntity* entity = BigWorld::getEntity(id);
-
-// 操作实体
-entity->position({100, 200, 0});
-entity->teleport({300, 400, 0});
-
-// 销毁实体
+// 实体：工厂注册 + 创建/获取/销毁（EntityId 路由）
+BigWorld::registerEntityFactory("Player", factory);
+auto entity = BigWorld::createEntity("Player");      // 单参：类型名
+auto found  = BigWorld::entity(id);                  // 按 EntityId 取
+auto all    = BigWorld::entities();
 BigWorld::destroyEntity(id);
+
+// 实体属性（apollo::bigworld::Entity：模板化键值面）
+entity->set("hp", 100);
+int hp = entity->get("hp", 0);
+
+// 回调与定时器（秒制延迟；TimerId 可撤销）
+auto cid = BigWorld::callback(0.5, []() { /* 一次性 */ });
+BigWorld::cancelCallback(cid);
+auto tid = BigWorld::addTimer(/*initial=*/1.0, /*repeat=*/0.1,
+                              [](BigWorld::TimerId, int32_t userArg) { /* 周期 */ },
+                              /*userArg=*/0);
+BigWorld::delTimer(tid);
+
+// 时间与帧推进
+double t = BigWorld::time();     // 秒
+uint64_t ms = BigWorld::timeMs();
+BigWorld::update();              // 驱动定时器帧
 ```
 
-### 回调系统
+## 迁移对照
 
-```cpp
-#include <bigworld/BigWorld.h>
+| 旧 BigWorld API | 现状 |
+|----------------|------|
+| `createEntity(SPACE_ID, "Type")` | `createEntity("Type")`（单参，无空间 ID 参） |
+| `getEntity(id)` | `entity(id)` |
+| `destroyEntity(id)` | 同名支持 |
+| `Runtime()->addTimer(ms, fn, repeat)` | `addTimer(initialSec, repeatSec, fn(TimerId, int32_t), userArg)`（秒制） |
+| `ICallback` / `registerCallback` | 不存在——一次性用 `callback(delay, fn)`，周期用 `addTimer` |
+| `Proxy` / `CellApp` 概念映射 | 进程面见[服务器应用](/apps/)；Witness/Ghost 分布式空间规划态 |
 
-// 定义回调
-class MyCallback : public BigWorld::ICallback {
-public:
-    void onEntityEnter(BigWorld::IEntity* entity) override {
-        LOG_INFO("BigWorld", "实体进入: {}", entity->id());
-    }
+## 不兼容的部分
 
-    void onEntityLeave(BigWorld::IEntity* entity) override {
-        LOG_INFO("BigWorld", "实体离开: {}", entity->id());
-    }
-
-    void onSpaceGeometryChanged(BigWorld::SpaceID spaceID) override {
-        LOG_INFO("BigWorld", "空间几何变化: {}", spaceID);
-    }
-};
-
-// 注册回调
-BigWorld::Runtime()->registerCallback(new MyCallback());
-```
-
-### 定时器
-
-```cpp
-#include <bigworld/BigWorld.h>
-
-// 一次性定时器
-BigWorld::Runtime()->addTimer(1000, []() {
-    LOG_INFO("BigWorld", "1秒后执行");
-});
-
-// 周期定时器
-BigWorld::Runtime()->addTimer(100, []() {
-    // 每100ms执行
-}, true);
-```
-
-## 迁移指南
-
-### 从 BigWorld 迁移
-
-1. **替换头文件**
-
-```cpp
-// 旧代码
-#include "BigWorld.h"
-
-// 新代码
-#include <bigworld/BigWorld.h>
-```
-
-2. **API 映射**
-
-| BigWorld API | Apollo 兼容层 |
-|-------------|--------------|
-| `BigWorld::createEntity()` | 支持 |
-| `BigWorld::destroyEntity()` | 支持 |
-| `BigWorld::getEntity()` | 支持 |
-| `BigWorld::Runtime()` | 支持 |
-| `BigWorld::registerCallback()` | 支持 |
-
-3. **重新编译**
-
-```cmake
-find_package(apollo-bigworld REQUIRED)
-target_link_libraries(my_app apollo::bigworld)
-```
-
-### 不兼容的部分
-
-以下功能需要适配：
-
-- BigWorld 的 `Proxy` 概念映射到 Apollo 的 `GatewayApp`
-- BigWorld 的 `CellApp` 概念映射到 Apollo 的 `CellApp` 进程
-- 自定义 Python 脚本需要迁移到 C++ 或使用脚本引擎
+- 实体无 `position()/teleport()` 等世界几何方法（空间几何未接线）
+- Witness/Ghost/分布式空间为规划态语义（对照 [架构参考](/architecture/bigworld)）
+- 自定义 Python 脚本需迁移到 C++（Lua 面见 scripting-lua 设计件，未入主线）
 
 ## 依赖
 
-- apollo::game
-- apollo::net
-- apollo::data
+- apollo::game_core（实体域消费）
+- apollo::runtime（宿主运行时）
 
 ## 链接
 
@@ -144,5 +88,6 @@ target_link_libraries(my_app apollo::bigworld)
 
 ## 相关文档
 
+- [BigWorld API](/api/bigworld) —— 兼容面 API 明细
 - [BigWorld 架构详解](/architecture/bigworld)
 - [BigWorld 生命周期](/architecture/bigworld-lifecycle)

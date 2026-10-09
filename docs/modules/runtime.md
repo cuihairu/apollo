@@ -32,14 +32,14 @@ public:
     std::string_view service_name() const override { return "game-server"; }
 
     bool start() override {
-        APOLLO_LOG_INFO("启动中...");
+        APOLLO_LOG()->info("启动中...");
         // 初始化逻辑
         running_ = true;
         return true;
     }
 
     void stop() override {
-        APOLLO_LOG_INFO("关闭中...");
+        APOLLO_LOG()->info("关闭中...");
         running_ = false;
     }
 
@@ -56,7 +56,7 @@ int main() {
 
     // 关闭钩子（入参 StopReason）
     host.add_shutdown_hook([](apollo::runtime::StopReason) {
-        APOLLO_LOG_INFO("关闭钩子执行");
+        APOLLO_LOG()->info("关闭钩子执行");
     });
 
     if (!host.start()) {

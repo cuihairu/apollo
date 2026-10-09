@@ -223,5 +223,46 @@ private:
 `defaultValue`/`minValue`/`maxValue`/`persistent`/`syncToClient`。
 `AttributeChangeEvent`：`objectId`/`attributeId`/`oldValue`/`newValue`。
 
-**未实现**：修饰符计算（addModifier/AttributeModifier）、逐 viewer delta
+---
+
+## 会话与目录（session 子库，G-1 交付面）
+
+`modules/game/session/` 九头——跨进程会话/编队 machinery（G-1 编队发现收尾批
++ P1-5 恢复），API 明细见各头与设计件：
+
+- `PlayerDirectory`——在线目录（epoch/suspend 窗口/镜像条目投影，重报收敛；
+  EventSink 上报 session_up/down/moved/kicked）。
+- `DirectoryPublisher`——目录跨进程镜像（"APD2" wire：Delta/SnapshotRequest/
+  SnapshotReply/FullReport，owner 侧快照发布）。
+- `FleetRecoveryCoordinator`——恢复相位跨进程化（Normal↔Recovering，收敛
+  开放准入）。
+- `RecoveryCoordinator`——进程内恢复编排（journal replay → Anchor restore →
+  准入闸，restore-not-kick）。
+- `AnchorManager`/`PlayerAnchor`——长期玩家态锚点（AnchorState 状态机、
+  唯一写点纪律）；`AnchorRewardSink`——battle 结算奖励 → Anchor 落账。
+- `SessionLocator`/`WorldAssignment`——会话定位与世界分配裁决。
+
+## 世界与副本（world 子库其余件）
+
+- `Scene`（SceneTickPhase 状态）——场景运行时边界（AOI 所有权、判定域）；
+  `SceneDescriptor`/`SceneTransferRequest`——场景描述与换幕四段。
+- `Instance`——副本一等公民（八态单向机 Create→…→Destroyed）。
+- `World`/`WorldSession`（WorldSessionState）/`WorldSessionManager`——世界
+  运行时与会话管理。
+- `Avatar`（AvatarState）——玩家化身态。
+
+## 战斗运行时（battle_runtime / battle_replay）
+
+- `BattleRuntime`（BattlePhase 状态机）——确定性战斗域（双时间轴：逻辑拍
+  + wall clock；RNG 子流 battle-determinism 契约）。
+- `BattleReplay`（ReplayTuple）——回放面（指令/种子/元信息三元组）。
+
+## 社交（social 子库）
+
+`Party` / `Guild`——组队与公会基础结构（组队面为会话型容器，无跨进程
+同步——跨服语义挂拍板链）。
+
+---
+
+**未实现**：属性修饰符计算（addModifier/AttributeModifier）、逐 viewer delta
 同步管线（契约 `attr_batch` 已入 messages.xml，管线未接线）。

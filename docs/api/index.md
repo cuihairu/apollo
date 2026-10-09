@@ -16,6 +16,7 @@ order: 1
 - [Network API](./net.md) - 网络通信 API
 - [Data API](./data.md) - 数据访问 API
 - [Game API](./game.md) - 游戏逻辑 API
+- [BigWorld API](./bigworld.md) - BigWorld 兼容层 API
 
 ## 命名空间
 
@@ -32,22 +33,31 @@ using apollo::runtime::ServiceHost;
 
 ## 错误处理
 
-Apollo 使用异常和错误码两种方式报告错误：
+Apollo 无统一异常基类（`apollo::Exception` 不存在），按域分三种惯例：
 
 ```cpp
-// 异常方式
+// 1) 异常：宿主/容器类在编程错误路径抛 std::runtime_error
+//    （如 ThreadPool 已 stop 后 submit）
 try {
-    auto result = someOperation();
-} catch (const apollo::Exception& e) {
-    LOG_ERROR("App", "错误: {}", e.what());
+    pool.submit(task);
+} catch (const std::runtime_error& e) {
+    APOLLO_LOG()->error("submit failed: {}", e.what());
 }
 
-// 错误码方式
-auto result = someOperation();
-if (!result.ok()) {
-    LOG_ERROR("App", "错误: {}", result.error());
+// 2) 哨兵返回值：池件耗尽返回 UINT32_MAX / nullptr
+uint32_t id = pool.allocate();
+if (id == UINT32_MAX) { /* 池耗尽 */ }
+
+// 3) 结果结构：数据层 QueryResult 携带 ok/error/affected_rows/rows
+auto result = conn->execute_query(sql);
+if (!result.ok) {
+    APOLLO_LOG()->error("query failed: {}", result.error);
 }
 ```
+
+日志宏只有 `APOLLO_LOG()`（默认 logger）与 `APOLLO_LOG_GET(name)`（具名
+logger）两个，格式化走 logger 方法链（`->info/warn/error(...)`）——
+`LOG_ERROR(logger, ...)` 一类宏不存在。
 
 ## 线程安全
 
