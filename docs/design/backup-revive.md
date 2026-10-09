@@ -1,6 +1,6 @@
 # 备份容灾与宕机接管设计（backup-revive）
 
-> 状态：**设计稿（前置设计，G-2 立项批，2026-10-09，拍板点全悬置）**。定位：进程级高可用面——权威进程死亡后「服务不倒」的候选拓扑、仲裁语义与接管时序；与 attribute-sync §8.2 的分界沿既有范围声明：journal 答「数据不丢」，本件答「进程不倒」。缺口登记：**G-2 备份/容灾与宕机接管**（architecture-review §16.4 遗留登记；net-abstraction §7「P3 前置设计」G-2 段为既有骨架口径，本件将其展开为可拍板的候选拓扑）。互引：net-abstraction（§7 G-2 段/§5.7 InterServerLink/§6 sdshmem 决策行）、attribute-sync（§8.2 范围声明/§10.2 停机序列/§11 验收表）、session-and-online-directory §6（恢复矩阵）、clock-and-time（§6 跨进程不互信/§7 双时间戳）、capacity-and-benchmark（§1 容量目标/§5 指标集）、crash-capture（取证互证面）、term-contract §1.3 + concept-glossary「热备与接管」词条、architecture-review（§16.2/§16.4/C-51/C-52/§30 简化三刀）、36 号（§0 证据分级/问 5/问 7）、battle-instance-offload §7（实例故障域独立拍板）。
+> 状态：**设计稿（前置设计，G-2 立项批，2026-10-09；六拍板点已拍板 2026-10-10——案 A 先行，见 §4 与 ADR-010）**。定位：进程级高可用面——权威进程死亡后「服务不倒」的候选拓扑、仲裁语义与接管时序；与 attribute-sync §8.2 的分界沿既有范围声明：journal 答「数据不丢」，本件答「进程不倒」。缺口登记：**G-2 备份/容灾与宕机接管**（architecture-review §16.4 遗留登记；net-abstraction §7「P3 前置设计」G-2 段为既有骨架口径，本件将其展开为可拍板的候选拓扑）。互引：net-abstraction（§7 G-2 段/§5.7 InterServerLink/§6 sdshmem 决策行）、attribute-sync（§8.2 范围声明/§10.2 停机序列/§11 验收表）、session-and-online-directory §6（恢复矩阵）、clock-and-time（§6 跨进程不互信/§7 双时间戳）、capacity-and-benchmark（§1 容量目标/§5 指标集）、crash-capture（取证互证面）、term-contract §1.3 + concept-glossary「热备与接管」词条、architecture-review（§16.2/§16.4/C-51/C-52/§30 简化三刀）、36 号（§0 证据分级/问 5/问 7）、battle-instance-offload §7（实例故障域独立拍板）。
 
 ---
 
@@ -114,16 +114,16 @@
 | 依赖成熟度 | 全部已交付 | InterServerLink M1 未落地 | 部署面未定 |
 | 与既有登记口径的关系 | 与「单进程阶段显式无高可用」直接相容 | 与 net-abstraction §7「backup-hash 链 + reviver 两件先行」同向展开 | 无既有登记，全新面 |
 
-## 4. 拍板点（全部悬置——不代拍、不设候选倾向、不标推荐）
+## 4. 拍板点（六项已拍板 2026-10-10——案 A 先行，standby 不立项；裁决全文见 ADR-010）
 
-以下六项为决策面枚举；裁决权在用户，拍板前不进任何实现批（批 0 验收链除外——其不预设任何拓扑结论）。
+以下六项原为决策面枚举（悬置期不代拍、不设候选倾向）；2026-10-10 巡检授权批按本件反证段 + 批 0 实测裁决，逐项结论：
 
-1. **部署形态与 standby 必要性**：5000 CCU 目标下编队是单机还是多机；多机形态下 standby 是否立项——案 A / 案 B / 案 C 三选一，或分期组合（如 A 先行、B/C 视生产运行数据另行立项）。本拍板同时确认或改写 net-abstraction §7「backup-hash 链 + reviver 两件先行」与 architecture-review §30「不设独立 reviver 进程」两处既有登记。
-2. **接管粒度 per 进程类型**：manager（已定：全量重报重建，session-and-online-directory §6）/ gateway（已定：目录窗口处置）/ Zone（本拍板：接管 or 冷重启——Zone 是当前唯一持 journal 权威态的进程类型）/ login-app / verifier（无状态 worker 池，battle-verification-service §5 既有口径）/ Battle 实例（battle-instance-offload §7 独立拍板）。是否统一一条接管语义，还是按进程类型分档（有状态接管 / 无状态重启 / 有状态但崩溃即作废三档）。
-3. **仲裁与 epoch 规则**：接权后 anchor_epoch 由谁推进（standby 接权自延 vs manager 重挂）——PlayerDirectory `next_epoch_` 现为 manager 进程内单调，接管语义必须与其互动方式显式定义；双主检测判据（authority_epoch 失配——net-abstraction §5.7 既有握手三元组 vs manager 串行仲裁独任，或两者叠加）；恢复相位与接管窗口的排他次序（接管进行中 manager 又死亡的复合故障处置）。
-4. **RPO/RTO 目标值**：崩溃回档 ≤2s journal 零丢失（attribute-sync §11 既有指标）是否升格为接管面 RPO 目标；易失态（L3）是否纳入接管面（不纳入 = 重连后位置回落盘态；纳入 = 镜像范围与带宽重估）；RTO 验收数字定档（秒级 vs 亚秒级）——数字决定案 A 是否足够。
-5. **镜像流传输形态**（若案 B/C 立项）：同机 shm SPSC 环（net-abstraction §6 sdshmem 决策行既有候选——主机单写 journal 追加、备机单读消费）vs 跨机 InterServerLink；ack 通道归 control 面是否维持（既有登记）；镜像流的消息分类声明（net-abstraction §5.7：服务器间不 trim、丢弃资格归消息分类——镜像流可声明丢旧帧、位点兜底，是否照此）。
-6. **先行试点与验收链**（若拍板 B/C）：先行试点进程类型选谁（候选：Zone——当前唯一持 journal 状态的权威进程；或 gateway——无权威态、面最薄）；kill -9 演练链（死亡→仲裁→切权→目录重报→客户端 resume）作为验收对象；双主注入演练（网络分区模拟）是否进门禁。
+1. **部署形态与 standby 必要性** → **案 A 先行（restart-only），standby 不立项**。单机编队下 standby 同机同死（§1.3 反证）；5000 CCU 单机目标下案 A 的 RTO 秒级/RPO 零已满足；案 B/C 不做分期预留，生产数据提出亚秒 RTO 需求时另行立项。net-abstraction §7「backup-hash 链 + reviver 两件先行」改写为「backup-hash 链不先行、reviver 不设」；architecture-review §30「不设独立 reviver 进程」确认维持。
+2. **接管粒度 per 进程类型** → **按进程类型分三档**（不统一单语义）：有状态重建档 = manager（全量重报，既有）+ Zone（冷重启 + journal replay + 重报收敛，批 0 已实测）；无状态重启档 = login-app / verifier（worker 池）；崩溃即作废档 = Battle 实例（ADR-012）。
+3. **仲裁与 epoch 规则** → **案 A 无双主，不新造仲裁协议**；epoch 沿用 directory_mirror 既有语义（单调递增 + 陈旧 epoch 拒收），manager 串行仲裁独任维持；恢复相位与接管窗口排他次序按 session-and-online-directory §6 既有矩阵。
+4. **RPO/RTO 目标值** → **RPO = 0**（journal write-ahead 零丢失，attribute-sync §11 既有指标升格）；**RTO = 重报收敛 ≤3s / 镜像收敛 ≤3.5s**（批 0 满载噪声期实测上限定档，空载更优；主导项 = 重启退避 1s）。易失态（L3）不纳入接管面（重连回落盘态，capacity §5 显式登记）。
+5. **镜像流传输形态** → **不建**。journal 跨进程消费改造不做（现状单进程 SaveQueue worker 维持）；同机 shm SPSC / InterServerLink 两候选形态留档，随未来 B/C 立项再裁。
+6. **先行试点与验收链** → **验收链 = 批 0 kill -9 演练链**（已交付，scripts/drill_kill9.sh）；双主注入演练不进门禁（案 A 无双主）。G-2 术语四词随本拍板定案：热备/接管词条标注「未立项（案 A 先行）」。
 
 ## 5. 术语提案（新词先入 glossary 再入契约——本件不改两档）
 

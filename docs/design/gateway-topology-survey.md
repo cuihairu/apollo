@@ -1,6 +1,6 @@
 # Gateway 必要性与前端连接层拓扑调研（gateway-topology-survey）
 
-> 状态：研究件（2026-10-08）。定位：回答「apollo 要不要独立 gateway-app（连接面进程）」——有/无两种拓扑的职责对照、九框架先例取舍、apollo 取路建议。**建议件不代拍**：gateway-app 的落地节奏与形态定案挂 net M1 拍板链（improvement-plan P3-4 批记），本件只供「要不要」的论据，「何时/怎么」不裁。证据分级沿用 docs/36 §0：A=本地源码/官方文档原文实读（本轮带路径行号或 URL），B=本仓文档，C=官方文档转述，D=社区存疑。与 docs/36 分工：36 号是十对象八面深挖（A 级本地源码实读），本件只取「前端连接层 vs 后端 RPC」一轴——五家复用 36 号已证事实并补本轮实读引注，Pitaya/Colyseus/Nakama/Orleans 四家为首采。
+> 状态：研究件（2026-10-08）。定位：回答「apollo 要不要独立 gateway-app（连接面进程）」——有/无两种拓扑的职责对照、九框架先例取舍、apollo 取路建议。**建议件不代拍**：gateway-app 的落地节奏与形态定案挂 net M1 拍板链（improvement-plan P3-4 批记），本件只供「要不要」的论据，「何时/怎么」不裁——「留」结论已生效（ADR-011，2026-10-10；落地节奏＝最小修复处方三步先行，ingress 归 P3-2 gateway surface）。证据分级沿用 docs/36 §0：A=本地源码/官方文档原文实读（本轮带路径行号或 URL），B=本仓文档，C=官方文档转述，D=社区存疑。与 docs/36 分工：36 号是十对象八面深挖（A 级本地源码实读），本件只取「前端连接层 vs 后端 RPC」一轴——五家复用 36 号已证事实并补本轮实读引注，Pitaya/Colyseus/Nakama/Orleans 四家为首采。
 
 ---
 
@@ -184,7 +184,7 @@ gRPC 类只出现在非热路径（Nakama 管理面、Pitaya 可选形态）—�
 - **与 Pomelo/Pitaya connector 的同形不同因**：拓扑形态相同（专职前端），理由不同——它们因 Node 单线程负载必拆，apollo 因场景单写者纪律与恢复语义拆。同形不同因意味着可学的是形态不是它们的实现动机。
 - **与 Orleans 的镜像**：Orleans 教「连接面薄到可以 co-host 就别拆」；apollo 的连接面不薄（全套会话层），所以拆。两条不矛盾，判据同一条：连接面是不是 thin。
 
-**拍板边界（不代拍）**：gateway-app 现状是半成品壳——rearchitecture/architecture.md:15（"骨架完整；客户端 ingress 未接线（NullClientIngressServer 空转）；sendToClient placeholder；resolveRoute 落点端口错配 9002 vs 9003"）+ improvement-plan.md:172 摸底三因批记（启动期全后端硬依赖/默认端口错位/ChatApp 幽灵依赖，挂 net M1 拍板链）。本件只供「要不要独立 gateway」的论据——结论「留」；「何时修、按最小修复处方还是等 net M1 直接接线」归拍板链，本件不裁。
+**拍板边界（已拍板 2026-10-10，见 ADR-011）**：gateway-app 现状是半成品壳——rearchitecture/architecture.md:15（"骨架完整；客户端 ingress 未接线（NullClientIngressServer 空转）；sendToClient placeholder；resolveRoute 落点端口错配 9002 vs 9003"）+ improvement-plan.md:172 摸底三因批记（启动期全后端硬依赖/默认端口错位/ChatApp 幽灵依赖）。本件只供「要不要独立 gateway」的论据——结论「留」已生效（net M1 拍板链 ADR-011 落定：本批只收口既有三因，ingress 接线归 P3-2 gateway surface 随 net M1）。
 
 ## 5. 与其余文档的交集
 

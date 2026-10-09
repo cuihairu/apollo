@@ -1,5 +1,5 @@
 ---
-title: 架构决策记录（ADR-001..009）
+title: 架构决策记录（ADR-001..014）
 icon: gavel
 order: 2
 category:
@@ -9,7 +9,7 @@ tag:
   - 决策记录
 ---
 
-# 架构决策记录（ADR-001..009）
+# 架构决策记录（ADR-001..014）
 
 > 目的（任务书 §36）：把已定且已落地的架构裁决写成可引用的记录，**防止未来架构继续失控**。每篇四段：状态 / 背景 / 决策 / 后果。「实件」列给出仓库锚点，改代码前先对 ADR。
 
@@ -120,6 +120,83 @@ tag:
 **决策**：模拟域单线程驱动——`Instance`/`BattleRuntime` 由单线程 tick 驱动、喂钟注入不起内部线程（discovery 同口径）；跨线程面收敛为最小集：日志 `LogContext`（proc 互斥 + tick 原子量）、`MetricRegistry` 持锁 find-or-create + owning 引用热路径免锁、machined 主循环 `waitpid(WNOHANG)` 非阻塞收割；服务宿主 `ApplicationHost` 帧驱动单线程 run_once。
 
 **后果**：模拟逻辑零锁零竞争（确定性成立的前提）；代价是吞吐上限 = 单线程 tick 容量，多核扩展走实例横向编排而非域内多线程。
+
+---
+
+## ADR-010 G-2 Topology: Restart-Only First（容灾拓扑：案 A 先行，standby 不立项）
+
+**状态：** 已拍板（2026-10-10 巡检授权批，六拍板点一并裁决；裁决依据 = backup-revive 反证段 + 批 0 实测）。
+
+**背景**：G-2 前置设计（backup-revive）给出三案（A 冷重启 / B 热备 standby / C 无 standby 双写）与六拍板点全悬置。反证段已录：单机编队下 standby 同机同死；5000 CCU 单机 8GB 目标下当代小/中部署主流即「进程管理器自动重启 + 持久化 + 客户端重连」（D 级行业通型）；热备的真实增量只有 RTO 秒级→亚秒级 + 易失态保留，代价是备机常驻 + 镜像流带宽 + 双主仲裁复杂度。批 0 kill -9 全链演练已交付（scripts/drill_kill9.sh，两跑断言全过）。
+
+**决策**：
+1. **案 A 先行（restart-only）**——machined 监督面退避重启 + PersistJournal 持久态 + 客户端重连；**standby 不立项**；案 B/C 不做分期预留，若生产运行数据提出亚秒 RTO 需求另行立项（届时依赖 net M1 InterServerLink）。
+2. **接管粒度按进程类型分三档**（不统一单语义）：有状态重建档 = manager（全量重报，既有）+ Zone（冷重启 + journal replay + 重报收敛，批 0 已实测）；无状态重启档 = login-app / verifier（worker 池重启即恢复）；崩溃即作废档 = Battle 实例（ADR-012）。
+3. **仲裁面：案 A 无双主，不新造仲裁协议**；epoch 沿用 directory_mirror 既有语义（单调递增 + 陈旧 epoch 拒收），manager 单点串行维持。
+4. **RPO/RTO 定档**：RPO = 0（journal write-ahead 零丢失，attribute-sync §11 既有指标升格）；RTO = 重报收敛 ≤3s / 镜像收敛 ≤3.5s（批 0 满载噪声期实测上限定档，空载更优）。
+5. **镜像流不建**：journal 跨进程消费改造不做（现状单进程 SaveQueue worker 维持）；同机 shm SPSC / InterServerLink 两候选形态留档随未来 B/C 立项再裁。
+6. **验收链 = 批 0 kill -9 演练链**（已交付）；双主注入演练不进门禁（案 A 无双主）。G-2 术语四词随本拍板定案：热备/接管词条标注「未立项（案 A 先行）」。
+
+**后果**：G-2 批 1-4（位点面/镜像流/接权仲裁/双写面）全部取消——案 A 的完整形态即批 0 终态，已交付；G-2 关闭（重开条件 = 生产数据提出亚秒 RTO / 多机形态立项）。代价：进程死亡期间服务中断秒级（非亚秒）、易失态丢失（重连回落盘态）——两项均在 capacity §5 指标集显式登记。
+
+---
+
+## ADR-011 net M1 Chain: Minimal Gateway Fix First（网关链：最小修复先行，拓扑调研结论生效）
+
+**状态：** 已拍板（2026-10-10 巡检授权批）。
+
+**背景**：gateway-app 现状半成品壳（摸底三因：启动期全后端硬依赖无重试 / 默认端口错位 BaseApp 9002=自身端口、CellApp 9100 错位 / ChatApp 幽灵依赖指向无进程端口；叠加 ingress 未接线）。「何时修、按最小修复处方还是等 net M1 直接接线」挂 net M1 拍板链；gateway-topology-survey 结论「留独立 gateway-app + 自研进程间总线」为建议件未生效。
+
+**决策**：
+1. **gateway-topology-survey「留独立 gateway-app」结论生效**（拓扑定案：连接面进程 + Zone 不见客户端 + 自研总线，不学 nats 中间件族）。
+2. **最小修复处方先行**（三步）：① `MessageRouter::start` 连接失败降级警告 + `available=false`（不再 throw→exit 1，复用转发面既有降级语义）② dev_fleet roster 补传三后端 URL（消端口错位）③ ChatApp 依赖摘除（仓库无 chat-app 进程）。
+3. **ingress 客户端接线不随本批**（真缺口在 ingress，归 P3-2 gateway surface 随 net M1 批）；协议收敛 / P4-4 代码层三簇按 M1 阶梯（§5.6：M1 最小正确内核 = 帧定界 + contract_route 分发 + 背压水位 + 单播拓扑 + InterServerLink）推进。
+
+**后果**：dev_fleet 编队不再 gateway crash-loop（exit=1 ×5 give-up 消除）；gateway 仍是无客户端入口的进程壳（预期态，非缺陷）——真正客户端面等 P3-2 + M1。三步均为启动语义与传参修正，不动转发面行为。
+
+---
+
+## ADR-012 Instance Offload: On-Demand Spawn, Stub-First, Crash-Invalidates（实例 offload 三拍板）
+
+**状态：** 已拍板（2026-10-10 巡检授权批；三拍板点全按 battle-instance-offload 既有候选倾向定案）。
+
+**背景**：battle-instance-offload 前置设计三拍板点悬置：生命周期协议（静态预池 vs 按需 spawn）、传输依赖序（M1 先行 vs 内存桩过渡）、崩溃裁决（作废 vs 关键帧重放恢复）。
+
+**决策**：
+1. **生命周期 = (b) 按需 spawn 请求协议**（需求方 → machined 控制面拉起，就绪后经目录可见；控制面复用 G-1 编队事件同型——Query/Advertise 先例的同向扩展；静态预池作为 (b) 就绪前的过渡形态允许）。
+2. **传输依赖序 = (b) 内存桩过渡**：offload 先以同机管道（pipe/shmem SPSC）落生命周期 + internal 域信封协议 + 故障处置骨架，M1 就绪后换底座（一次底座替换换设计风险与传输解耦）。
+3. **崩溃裁决 = (a) 崩溃即作废**：团战重开，玩家侧按错误面提示；(b) 关键帧重放恢复留缝（ReplayTuple 已是关键帧素材，协议面后补不预支）。
+
+**后果**：拍板后路径启动：协议消息契约批（internal 域，随实现入库）→ offload 骨架批 → M1 就绪换底座 → manager 域落点接入。Battle 实例故障域与 Zone 故障域独立（battle-instance-offload §7），ADR-010 三档粒度表的作废档由此承接。
+
+---
+
+## ADR-013 LoggerApp In, VerifierApp Deferred（日志进程立项，验证进程暂缓）
+
+**状态：** 已拍板（2026-10-10 巡检授权批）。
+
+**背景**：term-contract §1.3 定稿两进程名：日志收集进程 `LoggerApp`（日志双出口：本地文件真相源 + push）、战斗验证进程 `VerifierApp`（客户端权威战斗的服务端复算对账，gap #17）。logging 批 C 已交付结构化行格式（六键固定序 + FileAppender structuredOutput 开关默认关，apps 接线批打开）；VerifierApp 的复算引擎依赖 Lua 面（scripting-lua 未入主线）。
+
+**决策**：
+1. **LoggerApp 立项**：apps/LoggerApp 进程壳 + 各 app FileAppender structuredOutput 开关打开——本地文件真相源维持（人读/机读双出口），push 出口（上游 collector）留接口不实现（collector 面 M1 后）。
+2. **VerifierApp 暂缓**：复算引擎依赖 Lua 面未入主线，battle-verification-service §5 既有口径（无状态 worker 池、无 G-2 热备需求）维持为设计件；立项随 Lua/玩法批。
+
+**后果**：structured 行格式获得进程级消费面（批 C 遗留「apps 接线未做」消账）；VerifierApp 缺口（gap #17）保持登记状态。
+
+---
+
+## ADR-014 Process Rename: Manager and Zone（进程改名：baseappmgr→manager，base-app→zone-app）
+
+**状态：** 已拍板（2026-10-10 巡检授权批；定名依据 = term-contract v1.0 定稿，2026-10-03 用户审定）。
+
+**背景**：P3-1 遗留「base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）」。term-contract v1.0 已定稿：§1.1 Zone 行禁用名表「cellapp / baseapp → apollo 不拆两族进程 → `Zone`」；§1.3 管理进程行「manager / `ManagerApp`（BW 对照 = baseappmgr+cellappmgr）禁 mgr 缩写作标识」。命名先例：`Machined` 同为契约定稿名直接入户（P3-1 批 C 勘误）。
+
+**决策**：
+1. **baseappmgr → manager**：进程名 / 二进制 / roster 标识 / 日志身份改 `manager`（类名 BaseAppMgr 域代码随批内一致性整理，CTest 套件名不改语义——BaseAppMgrTests 保持既有名避免无谓断言改名）。
+2. **base-app → zone-app**：进程名 / 二进制 / roster 标识改 `zone-app`（Zone = 逻辑服进程定稿名；代码标识 `Zone` 不与进程名混淆）。cell-app 为世界运行时原型，名不动（其合并/去留随玩法批，不在本拍板）。
+3. 改名面 = apps 目录 + CMake target + dev_fleet/drill roster 与文档引用；纯进程身份变更，零行为变更（端口/参数/监督语义不动）。
+
+**后果**：术语契约定稿名全量入户，仓库内不再出现 baseappmgr/base-app 进程名（他家对照词仅存于文档证据引用）；改名批后 dev_fleet/drill 全链复验为验收面。
 
 ---
 
