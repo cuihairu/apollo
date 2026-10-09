@@ -61,7 +61,7 @@ main(argc, argv)
 
 ### 2.3 符号表管理
 
-- **build 留 -g**：`APOLLO_ENABLE_DEBUG_SYMBOLS`（ON/OFF/Examples 三树共用选项，默认 OFF）。开启后 Release 追加 `-g`（CMake 全局 flags 追加，不触碰优化档）；不开启时 CMake 默认不 strip，ELF symtab 仍含函数名——dump_syms 产函数级符号（无行号），验收/线上两档可用。
+- **build 留 -g**：`APOLLO_ENABLE_DEBUG_SYMBOLS`（ON/OFF/Examples 三树共用选项，默认 OFF）。开启后 Release 追加 `-g -gdwarf-4`（选项定义后、target 创建前接线——add_compile_options 目录域只影响其后 target，初版误置 legacy 死块内实为 no-op，符号化实跑批修正；不触碰优化档）；不开启时 CMake 默认不 strip，ELF symtab 仍含函数名——dump_syms 产函数级符号（无行号），验收/线上两档可用。**-gdwarf-4 钉档（2026-10-09 实跑实证）**：GCC 15.2 缺省 DWARF5 下 breakpad dump_syms 对含 crashpad/重模板头树的 CU 静默丢 FUNC/LINE（542 vs 1010 FUNC 记录、模块面零行号），DWARF4 全量解析（1010 FUNC + 74674 LINE）——符号化构建档随钉，DWARF5 退化构造型待 breakpad 侧跟进再评估。
 - **分离（部署面）**：`scripts/split_symbols.sh <binary>`——`objcopy --only-keep-debug` 产 `<binary>.debug`、`strip --strip-debug` 原地产发行件、`objcopy --add-gnu-debuglink` 关联（build-id 同源）；`.debug` 收进符号仓（运维面），发行件不含符号。
 - **还原管线**：`dump_syms <binary> > symbols/<name>/<build-id>/<name>.sym`（Breakpad 目录约定）→ `minidump_stackwalk --symbol-path symbols/ <dump>` → 帧级符号化栈（函数/文件/行，取决于 -g 档）。
 - **工具构建**：`scripts/build_crash_tools.sh`——shallow clone google/breakpad + `./configure && make`，产物 `dump_syms`/`minidump_stackwalk` 收 `tools/crash-bin/`（.gitignore）；**不入三树门禁**（验收/运维一次件；breakpad 客户端面零引入，只取 tools）。断网/构建失败 → 验收面显式报缺，不静默。
@@ -89,7 +89,7 @@ main(argc, argv)
 ## 4. 分期
 
 - **批①（2026-10-08）**：①设计件 + 本机 overlay vendoring 先行；②③④ 因外网中断（vcpkg-tool-gn 二进制下载不可达）暂停。
-- **批②③④（2026-10-09，网络恢复续批，todo P3-3 批记详）**：②vcpkg 接线（manifest 依赖 + overrides + overlay-ports 声明；install 全量构建实证）+ runtime helper（`init_crash_capture`：argv 自扫 / 缺省目录 / handler 三级定位 / 本地模式 / fail-open 桩）+ 全 app 接线（七 app main 最早段）+ handler 打包（POST_BUILD 复制+chmod——vcpkg tools 产物无执行位实证补；crashpad_FOUND/导入 target 目录域两坑，函数判定走 find_file CACHE）；③符号面（APOLLO_ENABLE_DEBUG_SYMBOLS 选项 + split_symbols.sh + build_crash_tools.sh[不入门禁]）+ --crash-test null 验收开关 + 启动 pending sweep（日志 + MetricRegistry 计数）。**验收链实测**：init 行 → 故意崩溃 exit=139 → dump 落 pending/ → 重启 pending=1 全链通；符号化段（minidump_stackwalk）按需构建实跑待符号构建批。
+- **批②③④（2026-10-09，网络恢复续批，todo P3-3 批记详）**：②vcpkg 接线（manifest 依赖 + overrides + overlay-ports 声明；install 全量构建实证）+ runtime helper（`init_crash_capture`：argv 自扫 / 缺省目录 / handler 三级定位 / 本地模式 / fail-open 桩）+ 全 app 接线（七 app main 最早段）+ handler 打包（POST_BUILD 复制+chmod——vcpkg tools 产物无执行位实证补；crashpad_FOUND/导入 target 目录域两坑，函数判定走 find_file CACHE）；③符号面（APOLLO_ENABLE_DEBUG_SYMBOLS 选项 + split_symbols.sh + build_crash_tools.sh[不入门禁]）+ --crash-test null 验收开关 + 启动 pending sweep（日志 + MetricRegistry 计数）。**验收链实测**：init 行 → 故意崩溃 exit=139 → dump 落 pending/ → 重启 pending=1 全链通。**符号化实跑（同日续）**：build_crash_tools.sh 实构建通过（dump_syms/minidump_stackwalk 落 tools/crash-bin/）→ dump_syms 产 .sym → minidump_stackwalk 栈回溯 `crash_test`[crash_capture.cpp:163 精确到行]/`main`[main.cpp:73]——build-id 三方互证（ELF note ≡ minidump CV record ≡ sym CODE_ID）；顺手修正选项接线 no-op bug（死块内实不生效——实跑暴露，接线前移+gdwarf-4 钉档见 §2.3）。§3 验收链 1-5 全过；步骤 6（machined 对照）随编队冒烟批。
 - **后续（不本批）**：上传面打开（数据外发审批 + 白名单端点，挂拍板）；dump 保留策略/清理面（Pending 滞留磁盘上限——量级小，先观察）；Windows CI 适配（port supports 可用，apollo Windows 仅开发机垫片，非目标）；attachments 附件流。
 
 ## 5. 与其余设计的交集
