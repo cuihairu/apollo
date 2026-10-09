@@ -25,3 +25,5 @@ target_compile_features(login-app PRIVATE cxx_std_20)
 if(WIN32)
     target_link_libraries(login-app PRIVATE ws2_32)
 endif()
+
+apollo_package_crash_handler(login-app)

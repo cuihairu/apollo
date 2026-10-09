@@ -1,3 +1,4 @@
+#include "apollo/runtime/crash_capture.hpp"
 #include "gateway/gateway_server.hpp"
 #include "gateway/config.hpp"
 #include <iostream>
@@ -55,6 +56,7 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    apollo::runtime::init_crash_capture(argc, argv, "gateway-app");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Gateway Server        " << std::endl;
     std::cout << "======================================" << std::endl;

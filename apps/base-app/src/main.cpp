@@ -2,6 +2,7 @@
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
+#include "apollo/runtime/crash_capture.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
@@ -57,9 +58,21 @@ BaseConfig loadConfig(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    // 崩溃采集面（crash-capture 批②）：最早段立采集，失败 fail-open 不阻断。
+    apollo::runtime::init_crash_capture(argc, argv, "base-app");
+
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Base Server           " << std::endl;
     std::cout << "======================================" << std::endl;
+
+    // 验收面故意崩溃开关（crash-capture 设计 §3 步骤 2；smoke driver 同
+    // --demo-anchors 先例——真实用途验证后即弃用注记）
+    for (int i = 1; i < argc; i++) {
+        if (std::string(argv[i]) == "--crash-test") {
+            const std::string kind = (i + 1 < argc) ? argv[i + 1] : "null";
+            apollo::runtime::crash_test(kind);
+        }
+    }
 
     auto config = loadConfig(argc, argv);
 

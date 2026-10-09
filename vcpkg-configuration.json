@@ -1,0 +1,5 @@
+{
+  "overlay-ports": [
+    "ports/vcpkg-overlays/crashpad"
+  ]
+}

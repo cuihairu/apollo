@@ -37,6 +37,9 @@ option(ENABLE_FILEWATCHER "Enable file watcher support" ON)
 option(APOLLO_ENABLE_IPC "Build IPC module" OFF)
 option(APOLLO_ENABLE_ACTOR "Build actor framework" OFF)
 option(APOLLO_ENABLE_MODULAR_LAYOUT "Enable modular CMake entrypoints under modules/" ON)
+# 崩溃采集符号面（crash-capture 批③，设计 §2.3）：Release 附加 -g——符号面
+# 不影响行为，三树体积/链接时长不动；部署分离走 scripts/split_symbols.sh
+option(APOLLO_ENABLE_DEBUG_SYMBOLS "Append -g in Release for crash symbolication" OFF)
 
 # 兼容旧选项
 if(BUILD_EXAMPLES)
@@ -334,6 +337,13 @@ if(APOLLO_ENABLE_COVERAGE)
     target_compile_options(apollo PRIVATE ${CMAKE_CXX_FLAGS_COVERAGE})
     target_link_libraries(apollo PRIVATE --coverage)
     message(STATUS "Code coverage enabled")
+endif()
+
+# 崩溃符号面（crash-capture 批③）：Release 附加 -g，不触碰优化档；
+# GCC/Clang only（MSVC 生成 pdb 自带符号，无需开关）。
+if(APOLLO_ENABLE_DEBUG_SYMBOLS AND NOT MSVC)
+    add_compile_options("$<$<CONFIG:Release>:-g>")
+    message(STATUS "Debug symbols enabled for Release (crash symbolication)")
 endif()
 
 # Clang-tidy 支持

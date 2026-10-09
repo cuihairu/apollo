@@ -1,3 +1,4 @@
+#include "apollo/runtime/crash_capture.hpp"
 #include "cell/cell_server.hpp"
 #include <iostream>
 #include <csignal>
@@ -47,6 +48,7 @@ CellConfig loadConfig(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    apollo::runtime::init_crash_capture(argc, argv, "cell-app");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Cell Server           " << std::endl;
     std::cout << "======================================" << std::endl;

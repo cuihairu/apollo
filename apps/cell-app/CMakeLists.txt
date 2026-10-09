@@ -45,3 +45,5 @@ target_compile_features(cell-app PRIVATE cxx_std_20)
 if(WIN32)
     target_link_libraries(cell-app PRIVATE ws2_32)
 endif()
+
+apollo_package_crash_handler(cell-app)

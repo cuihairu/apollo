@@ -11,6 +11,16 @@
     {
       "name": "readline",
       "platform": "linux"
+    },
+    {
+      "name": "crashpad",
+      "platform": "linux"
+    }
+  ],
+  "overrides": [
+    {
+      "name": "crashpad",
+      "version-date": "2026-07-02"
     }
   ],
   "builtin-baseline": "8f7641a3f5bb68d1d1b9f367039dcb08ac77671d"

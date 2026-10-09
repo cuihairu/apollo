@@ -11,9 +11,11 @@ add_executable(machined
 target_link_libraries(machined
     PRIVATE
         apollo::net_discovery
+        apollo::runtime
 )
 
 target_compile_features(machined PRIVATE cxx_std_20)
+apollo_package_crash_handler(machined)
 
 if(WIN32)
     target_link_libraries(machined PRIVATE ws2_32)

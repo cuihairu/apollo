@@ -16,6 +16,7 @@ target_link_libraries(base-app
     PRIVATE
         apollo::base
         apollo::core
+        apollo::runtime
         apollo::data_orm
         apollo::data_cache
         apollo::game_session
@@ -24,6 +25,7 @@ target_link_libraries(base-app
 )
 
 target_compile_features(base-app PRIVATE cxx_std_20)
+apollo_package_crash_handler(base-app)
 
 # Windows 特定设置
 if(WIN32)

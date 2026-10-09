@@ -15,12 +15,14 @@ target_link_libraries(baseappmgr
     PRIVATE
         apollo::base
         apollo::core
+        apollo::runtime
         apollo::game_session
         apollo::net_discovery
         apollo_protocol
 )
 
 target_compile_features(baseappmgr PRIVATE cxx_std_20)
+apollo_package_crash_handler(baseappmgr)
 
 # Windows 特定设置
 if(WIN32)

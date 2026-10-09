@@ -12,6 +12,7 @@
 // 端点：0.0.0.0:9600 缺省（--port N 覆盖）；心跳周期 --interval N（毫秒，
 // 缺省 1000，TTL = 3 × interval）。报文协议见 modules/net/discovery。
 
+#include "apollo/runtime/crash_capture.hpp"
 #include "apollo/net/discovery/directory_locator.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
@@ -77,6 +78,7 @@ void log_supervisor_events(const std::vector<machined::SupervisorEvent>& events)
 } // namespace
 
 int main(int argc, char** argv) {
+    apollo::runtime::init_crash_capture(argc, argv, "machined");
     std::uint16_t bind_port = 9600;
     std::uint32_t interval_ms = 1000;
     std::string roster_path;

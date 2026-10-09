@@ -1,3 +1,4 @@
+#include "apollo/runtime/crash_capture.hpp"
 #include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
@@ -93,6 +94,7 @@ std::vector<session::MirrorEntry> collect_mirror_entries(const BaseAppMgr& mgr) 
 }
 
 int main(int argc, char* argv[]) {
+    apollo::runtime::init_crash_capture(argc, argv, "baseappmgr");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo BaseAppMgr             " << std::endl;
     std::cout << "======================================" << std::endl;

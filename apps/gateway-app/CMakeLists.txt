@@ -33,3 +33,5 @@ target_compile_features(gateway-app PRIVATE cxx_std_20)
 if(WIN32)
     target_link_libraries(gateway-app PRIVATE ws2_32 mswsock)
 endif()
+
+apollo_package_crash_handler(gateway-app)

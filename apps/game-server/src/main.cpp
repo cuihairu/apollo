@@ -1,3 +1,4 @@
+#include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/module_manifest.hpp"
 #include "apollo/base/id_pool.hpp"
 #include "apollo/base/thread_pool.hpp"
@@ -64,7 +65,8 @@ private:
 
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    apollo::runtime::init_crash_capture(argc, argv, "game-server");
     auto& config = apollo::core::config::global_config();
     config.set("server.name", "apollo_game_server");
     config.set("server.max_players", static_cast<int64_t>(2000));

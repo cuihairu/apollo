@@ -1,6 +1,6 @@
 # 崩溃采集设计（crash-capture）
 
-> 状态：设计稿（随崩溃采集批落盘，2026-10-08）。**选型已钉（2026-10-08 用户拍板）：Google Crashpad，C++ 直集成**——Breakpad 只作历史对照，不引入其客户端。定位：进程级崩溃采集面——minidump 落盘、符号化还原、上传留位（默认关）。缺口登记：本件即崩溃采集批设计面（todo P3-3 批记）。互引：logging.md（观测三禁/外发白名单纪律）、net-abstraction §5.10（出站目标白名单——上传面同纪律）、capacity-and-benchmark §5（基准设施之外的第二类「运维证据」面）、improvement-plan P3-3（可观测性：崩溃报告=事后观测面）。
+> 状态：**已交付（批②③④ 2026-10-09 网络恢复续批；批①设计件 2026-10-08）**。**选型已钉（2026-10-08 用户拍板）：Google Crashpad，C++ 直集成**——Breakpad 只作历史对照，不引入其客户端。定位：进程级崩溃采集面——minidump 落盘、符号化还原、上传留位（默认关）。缺口登记：本件即崩溃采集批设计面（todo P3-3 批记）。互引：logging.md（观测三禁/外发白名单纪律）、net-abstraction §5.10（出站目标白名单——上传面同纪律）、capacity-and-benchmark §5（基准设施之外的第二类「运维证据」面）、improvement-plan P3-3（可观测性：崩溃报告=事后观测面）。
 
 ---
 
@@ -88,7 +88,8 @@ main(argc, argv)
 
 ## 4. 分期
 
-- **本批（2026-10-08）**：①设计件 → ②vcpkg overlay/manifest + runtime helper + 全 app 接线 + handler 打包 → ③符号工具脚本 + --crash-test 验收开关 + pending sweep 打通 + 验收链跑通（Linux 本机）。分批 commit（见批记）。**批内实况**：①设计件与本机 overlay vendoring 已先行；②③④ 因外网中断（vcpkg-tool-gn 二进制下载不可达）暂停，网络恢复后续批——设计不受影响，编译/装机实证随批②补记。
+- **批①（2026-10-08）**：①设计件 + 本机 overlay vendoring 先行；②③④ 因外网中断（vcpkg-tool-gn 二进制下载不可达）暂停。
+- **批②③④（2026-10-09，网络恢复续批，todo P3-3 批记详）**：②vcpkg 接线（manifest 依赖 + overrides + overlay-ports 声明；install 全量构建实证）+ runtime helper（`init_crash_capture`：argv 自扫 / 缺省目录 / handler 三级定位 / 本地模式 / fail-open 桩）+ 全 app 接线（七 app main 最早段）+ handler 打包（POST_BUILD 复制+chmod——vcpkg tools 产物无执行位实证补；crashpad_FOUND/导入 target 目录域两坑，函数判定走 find_file CACHE）；③符号面（APOLLO_ENABLE_DEBUG_SYMBOLS 选项 + split_symbols.sh + build_crash_tools.sh[不入门禁]）+ --crash-test null 验收开关 + 启动 pending sweep（日志 + MetricRegistry 计数）。**验收链实测**：init 行 → 故意崩溃 exit=139 → dump 落 pending/ → 重启 pending=1 全链通；符号化段（minidump_stackwalk）按需构建实跑待符号构建批。
 - **后续（不本批）**：上传面打开（数据外发审批 + 白名单端点，挂拍板）；dump 保留策略/清理面（Pending 滞留磁盘上限——量级小，先观察）；Windows CI 适配（port supports 可用，apollo Windows 仅开发机垫片，非目标）；attachments 附件流。
 
 ## 5. 与其余设计的交集
@@ -104,4 +105,4 @@ main(argc, argv)
 
 ---
 
-*基线：apollo main @ a63855ac。本机环境：GCC 15.2.0 / CMake 4.2.3 / vcpkg 工具 2026-07-27（编译实证被 2026-10-08 外网中断挡住——vcpkg-tool-gn 下载源不可达，恢复后随批②补验）；crashpad overlay 端口 version-date 2026-07-02（上游 chromium.googlesource crashpad @ efdc820b，vcpkg 端口自 vcpkg 2026-07-27 工具版 vendored）。Breakpad 工具链按需构建（google/breakpad master），产物不入门禁。上传面/外发默认关——数据外发纪律（logging 三禁/出站白名单）同族，打开归拍板/审批面。*
+*基线：apollo main @ a63855ac。本机环境：GCC 15.2.0 / CMake 4.2.3 / vcpkg 工具 2026-07-27（编译实证 2026-10-09 随批②补验完成——crashpad:x64-linux@2026-07-02 全量构建通过，产物四静态库+crashpad_handler+头树）；crashpad overlay 端口 version-date 2026-07-02（上游 chromium.googlesource crashpad @ efdc820b，vcpkg 端口自 vcpkg 2026-07-27 工具版 vendored）。Breakpad 工具链按需构建（google/breakpad master），产物不入门禁。上传面/外发默认关——数据外发纪律（logging 三禁/出站白名单）同族，打开归拍板/审批面。*

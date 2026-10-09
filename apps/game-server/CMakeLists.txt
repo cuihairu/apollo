@@ -9,3 +9,5 @@ target_link_libraries(apollo_game_server
 )
 
 target_compile_features(apollo_game_server PRIVATE cxx_std_20)
+
+apollo_package_crash_handler(apollo_game_server)
