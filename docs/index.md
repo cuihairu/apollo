@@ -28,7 +28,7 @@ features:
   - title: write-behind journal 持久化
     details: 先追加日志后快照两段式；journal 同为 G-2 热备镜像流与崩溃恢复位点；storage.xml 语句即数据（MySQL 8 主存）。
   - title: 集群 G-1/G-2（P3 前置已定）
-    details: 进程发现 = machined 守护 + UDP 广播双层（不引 etcd/consul）；热备 = backup-hash 链 + reviver；恢复相位排他；指标同源 G-5。
+    details: 进程发现 = machined 守护 + UDP 广播双层（不引 etcd/consul）；G-2 案 A 先行 restart-only（standby/reviver 未立项，ADR-010）；恢复相位排他；指标同源 G-5。
 ---
 
 ## 当前定位与架构现状
@@ -42,7 +42,7 @@ Client ── Gate（透传/解码装配分工）
               ├─ AOI 服务（网格+四叉树+shard，可独立扩缩；Compact 形态内嵌）
               ├─ 副本实例（instance，可选独立进程；塔防房间 = 内嵌副本）
               └─ db-app（storage.xml + write-behind journal）
-进程发现：machined 守护 + UDP 广播（G-1，不引注册中心）    热备：backup-hash 链 + reviver（G-2）
+进程发现：machined 守护 + UDP 广播（G-1，不引注册中心）    G-2：案 A 先行 restart-only（standby/reviver 未立项，ADR-010）
 ```
 
 **已定关键裁决**（全表见 36 号 §1 决策追溯表 #1-#19）：网络四层自建/nng 退役；契约 XML+XSD；副本制否决无缝世界（#9）；AOI 独立服务（#10）；Lua 白名单否决 Python（#12）；进程发现 machined+UDP 双层、不引 etcd/consul（#13，2026-09-30）；Lua 5.5 随 vcpkg、弃 sol2（#12 修订）；帧同步只留适配缝（#18）。

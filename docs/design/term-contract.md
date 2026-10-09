@@ -52,7 +52,7 @@
 | 战斗验证进程 | verifier | `VerifierApp` | 客户端权威战斗的服务端复算对账（gap #17） | 行业自行开发通型，三家无内建 | — |
 | 服务发现 | service discovery | G-1 | 单机守护+UDP 广播双层 | BW/KBE = machined 同型 | 禁：注册中心 |
 | 注册中心 | registry | — | 外部强一致 KV（etcd/consul） | 微服务标配 | **不引入**（裁决 2）；KBE 语境同词异义（引擎内管理组件） |
-| 热备与接管 | backup / reviver | G-2 | backup-hash 链+reviver | BW = backup_sender+reviver；KBE 无 | — |
+| 热备与接管 | backup / reviver | G-2（已关闭） | backup-hash 链+reviver——**未立项**（ADR-010：案 A 先行 restart-only，standby/reviver/镜像流均不立项；重开条件=生产数据提出亚秒 RTO/多机形态立项） | BW = backup_sender+reviver；KBE 无 | — |
 | 恢复相位 | recovery phase | — | 拓扑剧变期排他窗口：拒新至收敛 | BW = cellappmgr `startRecovery()` | — |
 | 在线目录 | online directory | `OnlineDirectory` | 谁在线/在哪的全局登记查询（manager 权威+镜像） | BW 分散 mgr；KBE 无 | — |
 | 顶号 | duplicate login | — | 新会话顶替旧会话（≠断线重连） | 行业通型 | — |

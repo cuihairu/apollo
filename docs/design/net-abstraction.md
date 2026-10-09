@@ -380,8 +380,8 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 **G-2 备份与宕机接管**（BigWorld 全套先例；apollo P3 骨架取两件）：
 
 - 先例件：baseapp 热备分帧发送（backup_sender.hpp:52-61）+ 一致性哈希备份链（backup_hash/backup_hash_chain——备机按链持续追主机实体状态流）+ reviver 协调接管（主机死亡后备机把镜像实体升级为权威；cellapp 死则 cellappmgr 在幸存 CellApp 重建 cell）+ secondary db 任务族 + dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。KBEngine 对照：无此层（architecture-review C-51/§16.4）——宕机靠实体最后一次归档，窗口 = 归档周期。
-- apollo P3 最小骨架：**backup-hash 链 + reviver 两件先行**；secondary db/动态扩缩容推迟到多 cell 稳定运行后。
-- **备份粒度对齐单写者纪律**：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。镜像流传输形态 P3 定：**同机部署候选 = sdshmem 类 shm SPSC 环**（主机单写 journal 追加、备机单读消费——正是 §6 决策表「点对点镜像流」的典型场景；ack 仍走 control 通道），跨机则随进程间总线。
+- apollo P3 最小骨架：~~backup-hash 链 + reviver 两件先行~~ → **拍板改写（ADR-010，2026-10-10）：案 A 先行 restart-only——backup-hash 链不先行、reviver 不设、镜像流不建**；secondary db/动态扩缩容维持推迟到多 cell 稳定运行后。
+- **备份粒度对齐单写者纪律**（留档候选形态，非现行口径）：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。镜像流传输形态候选：**同机部署候选 = sdshmem 类 shm SPSC 环**（主机单写 journal 追加、备机单读消费——正是 §6 决策表「点对点镜像流」的典型场景；ack 仍走 control 通道），跨机则随进程间总线。现行口径 = 三档接管（有状态重建/无状态重启/崩溃即作废），journal write-ahead 保 RPO=0，重启退避 + 重报收敛保 RTO 秒级（backup-revive §4/§6）。
 
 **负载均衡与异常恢复（manager 域，2026-09-29 补）**：
 
