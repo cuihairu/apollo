@@ -104,7 +104,7 @@ This makes Apollo a compact alternative for games where the natural world bounda
 - **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自写消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
 - **日志系统**: 自写多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
-- **测试框架**: GTest + 零依赖断言式单测
+- **测试框架**: 零依赖断言式单测（统一测试树，ctest 门禁）；legacy GTest 批默认关
 - **CI/CD**: GitHub Actions
 
 ## 快速开始

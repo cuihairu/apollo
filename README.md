@@ -104,7 +104,7 @@ Six terms that cover Apollo's runtime model (all backed by real components; see 
 - **Message queue**: Kafka for the observability pipeline (planned, decision #14); inter-service messaging uses a hand-written message bus (planned, `docs/design/net-abstraction.md`)
 - **Monitoring**: Prometheus + Grafana (planned, batch 8)
 - **Logging**: hand-written multi-level logging (`apollo::core::log`); target pipeline LogAgent→Kafka→ClickHouse (decision #14)
-- **Test framework**: GTest + zero-dependency assertion-style unit tests
+- **Test framework**: zero-dependency assertion-style unit tests (unified tree, gated by ctest); legacy GTest batch is off by default
 - **CI/CD**: GitHub Actions
 
 ## Quick Start
