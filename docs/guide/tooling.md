@@ -22,7 +22,7 @@ scripts/dev_fleet.sh roster  # 打印本次编队 roster（未构建的 app 标�
 - 构建树须 `GAME_MODULE=ON` 且全 app 已构建（`APOLLO_BUILD_DIR` 可调，默认 `<repo>/build`）。
 - 运行目录 `APOLLO_FLEET_DIR`（默认 `/tmp/apollo-fleet-<uid>`：roster + pidfile + 日志）。
 - dev 端口布局（脚本约定，无配置真相）：login 9001 / gateway 9002 / baseappmgr 9003 / base 9004 / cell 9005 / game（bootstrap 演示退出）。
-- 已知边界：gateway 启动期全后端硬依赖 + ingress 未接线，`exit=1` 属定性事实（根因三因与最小修复处方见 todo P3-4 批记，挂 net M1 拍板链，不在此展开）。**处方状态（2026-10-10）**：②roster 补传三后端 URL 已落地（5ccfc651，gateway 连接参数显式化），①降级警告/③ChatApp 摘除待功能批——`exit=1` 现状不变（ChatApp 幽灵依赖仍在，roster 无此进程可传）。
+- 已知边界：ingress 未接线（`acceptNewConnections` 仍是保活空循环），gateway 起得来但无客户端入口——「退出码」边界已消账。**处方状态（2026-10-10）**：三步全落地——②roster 补传三后端 URL（5ccfc651，gateway 连接参数显式化）、①start 连接失败降级警告+空件返回/③ChatApp 幽灵依赖四处摘除（d7f21831）；无后端 standalone 冒烟实证三后端降级警告全出、存活至超时（原 `exit=1` 不复现）；gateway 仍为无入口壳，ingress 接线挂 net M1 拍板链（根因三因与处方见 todo P3-4 批记）。
 - 实机走查（2026-10-10）：up → status → down 全链复验——born×6、game bootstrap 演示 exit=0、gateway exit=1 退避×5 give-up，与批 A 冒烟口径一致；**走查修一处缺陷**：down 的孤儿兜底原为 `pgrep -P <死 pid>`（machined 死后子进程重挂 init，恒空=死代码），login-app 慢关（~3-5s）会在「编队已停」后暂留孤儿——改为按 roster 二进制名 `pgrep -x`/`pkill -x` 精确清理（共享 5s 宽限后 KILL 残留），复验 down 返回即零孤儿。
 
 ## kill -9 全链演练：drill_kill9.sh
