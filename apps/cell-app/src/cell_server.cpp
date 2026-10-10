@@ -1,4 +1,5 @@
 #include "cell/cell_server.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/game/world/instance.hpp"
@@ -12,6 +13,13 @@
 #include <stdexcept>
 
 namespace cell {
+
+namespace {
+// 库面日志出口：cat=cell_server（§5.1 cat= 检索键；主程已接文件面）
+apollo::core::log::Logger& celllog() {
+    return *apollo::core::log::global_log_manager().createLogger("cell_server");
+}
+} // namespace
 
 namespace protocol = apollo::protocol;
 
@@ -119,9 +127,11 @@ void CellServer::start() {
     // 启动游戏循环线程
     gameThread_ = std::thread(&CellServer::gameLoop, this);
 
-    std::cout << "Cell server listening on " << config_.host << ":" << config_.port << std::endl;
-    std::cout << "Space: " << config_.spaceName << " (" << config_.spaceWidth
-              << "x" << config_.spaceHeight << ")" << std::endl;
+    celllog().info("Cell server listening on " + config_.host + ":"
+                + std::to_string(config_.port));
+    celllog().info("Space: " + config_.spaceName + " ("
+                + std::to_string(config_.spaceWidth) + "x"
+                + std::to_string(config_.spaceHeight) + ")");
 }
 
 void CellServer::stop() {
@@ -179,9 +189,9 @@ std::vector<uint8_t> CellServer::acceptRequest(const std::vector<uint8_t>& reque
             }
             if (result.high_watermark) {
                 // ADR-016 两级水位：越告警线提示一次，回落滞回后再报
-                std::cout << "acceptance queue high watermark: pending="
-                          << acceptanceQueue_.size() << "/" << acceptanceQueue_.cap()
-                          << std::endl;
+                celllog().warning("acceptance queue high watermark: pending="
+                               + std::to_string(acceptanceQueue_.size()) + "/"
+                               + std::to_string(acceptanceQueue_.cap()));
             }
             return {};  // ack-on-accept：变更类空 ack 逐字节同现状
         }
@@ -323,10 +333,11 @@ std::vector<uint8_t> CellServer::handleCellCrossBorder(const std::vector<uint8_t
         apollo::game::world::execute_scene_transfer(*world_, *worldSessionManager_, transfer);
     if (!outcome.ok()) {
         // 驳回/回滚面：单进程阶段仅可观察日志；错误下发随网关面（P1-6）
-        std::cout << "scene transfer rejected: player=" << player_id.value()
-                  << " target_scene=" << transfer.target_scene_id << " result="
-                  << apollo::game::world::to_string(outcome.result)
-                  << " at_step=" << static_cast<int>(outcome.failed_at) << std::endl;
+        celllog().warning("scene transfer rejected: player="
+                       + std::to_string(player_id.value()) + " target_scene="
+                       + std::to_string(transfer.target_scene_id) + " result="
+                       + std::string(apollo::game::world::to_string(outcome.result))
+                       + " at_step=" + std::to_string(static_cast<int>(outcome.failed_at)));
     }
 
     return {};
@@ -354,8 +365,9 @@ std::vector<uint8_t> CellServer::handleCombatSkillCast(const std::vector<uint8_t
         // 广播伤害
         broadcastToViewers(msg.targetId, damageData);
 
-        std::cout << "Skill cast: " << msg.casterId << " -> " << msg.targetId
-                  << " (skill: " << msg.skillId << ")" << std::endl;
+        celllog().info("Skill cast: " + std::to_string(msg.casterId) + " -> "
+                    + std::to_string(msg.targetId) + " (skill: "
+                    + std::to_string(msg.skillId) + ")");
     }
 
     return {};
@@ -442,8 +454,10 @@ void CellServer::broadcastToViewers(EntityID entity_id, const std::vector<uint8_
     }
     const auto viewers = scene->aoi().viewers_of(apollo::game::core::EntityId(entity_id));
     if (!viewers.empty()) {
-        std::cout << "broadcast: entity=" << entity_id << " scene=" << scene->scene_id()
-                  << " viewers=" << viewers.size() << " bytes=" << message.size() << std::endl;
+        celllog().info("broadcast: entity=" + std::to_string(entity_id) + " scene="
+                    + std::to_string(scene->scene_id()) + " viewers="
+                    + std::to_string(viewers.size()) + " bytes="
+                    + std::to_string(message.size()));
     }
 }
 

@@ -1,4 +1,5 @@
 #include "base/base_server.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
@@ -16,12 +17,27 @@ namespace disco = apollo::net::discovery;
 // 全局服务器指针
 static BaseServer* g_server = nullptr;
 
-// 信号处理
+// 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
     if (g_server) {
         std::cout << "\nReceived signal " << signal << ", shutting down..." << std::endl;
         g_server->stop();
     }
+}
+
+// 日志接线（ADR-013 L1+L2）：console 人读 + 本地结构化文件真相源并行；
+// push 出口留接口不实现（collector 面 M1 后，logging.md §5）。
+// 领域子日志（report/mirror/demo）= §5.1 cat= 检索键
+static apollo::core::log::LoggerPtr initLogging() {
+    auto& logs = apollo::core::log::global_log_manager();
+    apollo::core::log::LogManagerConfig config;
+    config.processIdentity = "base";
+    config.fileEnabled = true;
+    config.fileConfig.directory = "log";
+    config.fileConfig.baseName = "base";
+    config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
+    logs.initialize(config);
+    return logs.createLogger("base");
 }
 
 // 加载配置
@@ -58,12 +74,20 @@ BaseConfig loadConfig(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
+    // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
+    const auto logger = initLogging();
     // 崩溃采集面（crash-capture 批②）：最早段立采集，失败 fail-open 不阻断。
     apollo::runtime::init_crash_capture(argc, argv, "base-app");
 
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Base Server           " << std::endl;
     std::cout << "======================================" << std::endl;
+
+    auto& logs = apollo::core::log::global_log_manager();
+    const auto reportLog = logs.createLogger("report");
+    const auto mirrorLog = logs.createLogger("mirror");
+    const auto demoLog = logs.createLogger("demo");
 
     // 验收面故意崩溃开关（crash-capture 设计 §3 步骤 2；smoke driver 同
     // --demo-anchors 先例——真实用途验证后即弃用注记）
@@ -96,8 +120,9 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<session::DirectoryMirror> mirror;
     if (mirror_port != 0) {
         if (!mirror_feed.open(mirror_port, "0.0.0.0")) {
-            std::cerr << "mirror feed bind failed on port " << mirror_port
-                      << "; running without directory mirror" << std::endl;
+            logger->warning("mirror feed bind failed on port "
+                            + std::to_string(mirror_port)
+                            + "; running without directory mirror");
         } else {
             mirror = std::make_unique<session::DirectoryMirror>();
             if (mirror_owner_port != 0 && mirror_request_transport.open()) {
@@ -144,11 +169,10 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<session::FleetReporter> reporter;
     if (report_to_port != 0) {
         if (component_id == 0) {
-            std::cerr << "report-to-port set without --component-id; full report "
-                      << "disabled" << std::endl;
+            logger->warning(
+                "report-to-port set without --component-id; full report disabled");
         } else if (!report_transport.open()) {
-            std::cerr << "report transport open failed; full report disabled"
-                      << std::endl;
+            logger->warning("report transport open failed; full report disabled");
         } else {
             const std::string target_host = report_to_host;
             const uint16_t target_port = report_to_port;
@@ -162,21 +186,24 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::cout << "Configuration:" << std::endl;
-    std::cout << "  Listen: " << config.host << ":" << config.port << std::endl;
-    std::cout << "  Database: " << config.dbHost << ":" << config.dbPort << "/" << config.dbName << std::endl;
+    logger->info("Configuration:");
+    logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
+    logger->info("  Database: " + config.dbHost + ":" + std::to_string(config.dbPort)
+                 + "/" + config.dbName);
     if (mirror) {
-        std::cout << "  Directory mirror: listen 0.0.0.0:" << mirror_feed.port();
+        std::string line = "  Directory mirror: listen 0.0.0.0:"
+                           + std::to_string(mirror_feed.port());
         if (mirror_owner_port != 0) {
-            std::cout << " (snapshot requests to " << mirror_owner_host << ":"
-                      << mirror_owner_port << ")";
+            line += " (snapshot requests to " + mirror_owner_host + ":"
+                    + std::to_string(mirror_owner_port) + ")";
         }
-        std::cout << std::endl;
+        logger->info(line);
     }
     if (reporter) {
-        std::cout << "  Fleet report: component=" << component_id << " zone="
-                  << zone_id << " -> " << report_to_host << ":" << report_to_port
-                  << " (interval " << report_interval_ms << "ms)" << std::endl;
+        logger->info("  Fleet report: component=" + std::to_string(component_id)
+                     + " zone=" + std::to_string(zone_id) + " -> " + report_to_host
+                     + ":" + std::to_string(report_to_port) + " (interval "
+                     + std::to_string(report_interval_ms) + "ms)");
     }
 
     // 注册信号处理
@@ -187,7 +214,7 @@ int main(int argc, char* argv[]) {
         BaseServer server(config);
         g_server = &server;
 
-        std::cout << "\nStarting server..." << std::endl;
+        logger->info("Starting server...");
         server.start();
 
         // 冒烟驱动面（§6 窗口处置批）：--demo-anchors N 造 N 个假想会话锚点
@@ -206,11 +233,12 @@ int main(int argc, char* argv[]) {
                 anchor->bind_session(binding);
                 anchor->set_home_zone_id(zone_id);
             }
-            std::cout << "[demo] seeded " << demo_anchors << " smoke anchors"
-                      << " (gateway=1, zone=" << zone_id << ")" << std::endl;
+            demoLog->info("seeded " + std::to_string(demo_anchors)
+                          + " smoke anchors (gateway=1, zone=" + std::to_string(zone_id)
+                          + ")");
         }
 
-        std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
+        logger->info("Server is running. Press Ctrl+C to stop.");
 
         // 全量重报收集（增量③报告方供数面）：AnchorManager 快照 → 投影条目
         //（epoch 列恒 0——裁决键归 manager，intake restore-not-kick）
@@ -236,8 +264,7 @@ int main(int argc, char* argv[]) {
         };
         if (reporter) {
             const auto sent = reporter->report_full(collect_sessions());
-            std::cout << "[report] startup full report sent: parts=" << sent
-                      << std::endl;
+            reportLog->info("startup full report sent: parts=" + std::to_string(sent));
         }
 
         auto since_report = std::chrono::milliseconds(0);
@@ -257,8 +284,8 @@ int main(int argc, char* argv[]) {
                 if (since_report.count() >= report_interval_ms) {
                     since_report = std::chrono::milliseconds(0);
                     const auto sent = reporter->report_full(collect_sessions());
-                    std::cout << "[report] periodic full report sent: parts=" << sent
-                              << std::endl;
+                    reportLog->info("periodic full report sent: parts="
+                                    + std::to_string(sent));
                 }
             }
             if (!mirror) {
@@ -279,16 +306,17 @@ int main(int argc, char* argv[]) {
                 last_logged_seq = cur_seq;
                 last_logged_stale = cur_stale;
                 last_logged_rx = mirror_rx;
-                std::cout << "[mirror] rx=" << mirror_rx << " entries=" << cur_size
-                          << " seq=" << cur_seq
-                          << (cur_stale ? " STALE(等待快照)" : "") << std::endl;
+                mirrorLog->info("rx=" + std::to_string(mirror_rx)
+                                + " entries=" + std::to_string(cur_size) + " seq="
+                                + std::to_string(cur_seq)
+                                + (cur_stale ? " STALE(等待快照)" : ""));
             }
         }
 
-        std::cout << "Server stopped." << std::endl;
+        logger->info("Server stopped.");
 
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        logger->error(std::string("Error: ") + e.what());
         return 1;
     }
 

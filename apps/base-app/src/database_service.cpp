@@ -1,4 +1,5 @@
 #include "base/database_service.hpp"
+#include "apollo/core/log/log_manager.h"
 
 #include <chrono>
 #include <cstdio>
@@ -121,8 +122,10 @@ bool DatabaseService::initialize() {
     std::error_code ec;
     fs::create_directories(config_.dataDir, ec);
     if (ec) {
-        std::cerr << "DatabaseService: create data dir failed: " << config_.dataDir
-                  << " (" << ec.message() << ")" << std::endl;
+        apollo::core::log::global_log_manager()
+            .createLogger("database_service")
+            ->error(std::string("create data dir failed: ") + config_.dataDir
+                    + " (" + ec.message() + ")");
         return false;
     }
     return true;

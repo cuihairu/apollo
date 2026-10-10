@@ -1,5 +1,7 @@
 #include "supervisor.hpp"
 
+#include "apollo/core/log/log_manager.h"
+
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
@@ -18,6 +20,11 @@
 namespace machined {
 
 namespace {
+
+// 库面日志出口：走默认 logger（machined 主程已接文件面；测试面落 console）
+apollo::core::log::Logger& mlog() {
+    return *apollo::core::log::global_log_manager().getDefaultLogger();
+}
 
 // 空白切分（骨架口径：不支持引号转义）
 std::vector<std::string> split_args(const std::string& cmd) {
@@ -134,8 +141,8 @@ void Supervisor::spawn_one(Child& c, std::uint64_t now_ms,
                            std::vector<SupervisorEvent>& out) {
     const pid_t pid = fork();
     if (pid < 0) {
-        std::cerr << "[machined] fork failed for " << c.entry.name << ": "
-                  << std::strerror(errno) << std::endl;
+        mlog().error(std::string("fork failed for ") + c.entry.name + ": "
+                     + std::strerror(errno));
         // 拉起失败不进事件流，按一个退避单位延迟重试（alive 仍
         // false 且 respawn_at 已过——poll 重生路兜住）
         if (c.respawn_at_ms == 0) {
@@ -152,6 +159,8 @@ void Supervisor::spawn_one(Child& c, std::uint64_t now_ms,
         }
         argv.push_back(nullptr);
         execvp(argv[0], argv.data());
+        // fork 后 pre-exec 路径保持直写 stderr——logger 面带锁，fork 快照
+        // 可能停在他人持锁窗口，子进程触碰即死锁
         std::cerr << "[machined-child] exec failed: " << c.entry.command
                   << ": " << std::strerror(errno) << std::endl;
         std::_Exit(127);
@@ -264,8 +273,9 @@ namespace machined {
 bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
     (void)path;
     (void)out;
-    std::cerr << "[machined] supervisor not supported on this platform; "
-                 "roster ignored" << std::endl;
+    apollo::core::log::global_log_manager()
+        .getDefaultLogger()
+        ->error("supervisor not supported on this platform; roster ignored");
     return true;  // 空表语义：发现面照常
 }
 

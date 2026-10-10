@@ -1,4 +1,5 @@
 #include "apollo/runtime/crash_capture.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "gateway/gateway_server.hpp"
 #include "gateway/config.hpp"
 #include <iostream>
@@ -10,12 +11,26 @@ using namespace gateway;
 // 全局服务器指针
 static GatewayServer* g_server = nullptr;
 
-// 信号处理
+// 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
     if (g_server) {
         std::cout << "\nReceived signal " << signal << ", shutting down..." << std::endl;
         g_server->stop();
     }
+}
+
+// 日志接线（ADR-013 L1+L2）：console 人读 + 本地结构化文件真相源并行；
+// push 出口留接口不实现（collector 面 M1 后，logging.md §5）
+static apollo::core::log::LoggerPtr initLogging() {
+    auto& logs = apollo::core::log::global_log_manager();
+    apollo::core::log::LogManagerConfig config;
+    config.processIdentity = "gateway";
+    config.fileEnabled = true;
+    config.fileConfig.directory = "log";
+    config.fileConfig.baseName = "gateway";
+    config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
+    logs.initialize(config);
+    return logs.createLogger("gateway");
 }
 
 // 加载配置
@@ -56,6 +71,9 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
+    // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
+    // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
+    const auto logger = initLogging();
     apollo::runtime::init_crash_capture(argc, argv, "gateway-app");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Gateway Server        " << std::endl;
@@ -64,12 +82,12 @@ int main(int argc, char* argv[]) {
     // 加载配置
     auto config = loadConfig(argc, argv);
 
-    std::cout << "Configuration:" << std::endl;
-    std::cout << "  Listen: " << config.host << ":" << config.port << std::endl;
-    std::cout << "  Max connections: " << config.maxConnections << std::endl;
-    std::cout << "  LoginApp: " << config.loginAppUrl << std::endl;
-    std::cout << "  BaseApp: " << config.baseAppUrl << std::endl;
-    std::cout << "  CellApp: " << config.cellAppUrl << std::endl;
+    logger->info("Configuration:");
+    logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
+    logger->info("  Max connections: " + std::to_string(config.maxConnections));
+    logger->info("  LoginApp: " + config.loginAppUrl);
+    logger->info("  BaseApp: " + config.baseAppUrl);
+    logger->info("  CellApp: " + config.cellAppUrl);
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
@@ -87,20 +105,20 @@ int main(int argc, char* argv[]) {
         g_server = &server;
 
         // 启动服务器
-        std::cout << "\nStarting server..." << std::endl;
+        logger->info("Starting server...");
         server.start();
 
-        std::cout << "Server is running. Press Ctrl+C to stop." << std::endl;
+        logger->info("Server is running. Press Ctrl+C to stop.");
 
         // 主循环
         while (server.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
 
-        std::cout << "Server stopped." << std::endl;
+        logger->info("Server stopped.");
 
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        logger->error(std::string("Error: ") + e.what());
         return 1;
     }
 

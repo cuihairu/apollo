@@ -1,4 +1,5 @@
 #include "base/base_server.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include <chrono>
@@ -11,6 +12,11 @@
 namespace base {
 
 namespace {
+
+// 库面日志出口：cat=base_server（§5.1 cat= 检索键；主程已接文件面）
+apollo::core::log::Logger& blog() {
+    return *apollo::core::log::global_log_manager().createLogger("base_server");
+}
 
 const char* toAnchorStateString(apollo::game::session::AnchorState state) {
     using apollo::game::session::AnchorState;
@@ -211,8 +217,8 @@ void BaseServer::start() {
             }
             const auto restored =
                 apollo::game::session::restore_anchors(*anchorManager_, ids);
-            std::cout << "Anchor restore: " << restored << " anchors offline-resumed"
-                      << std::endl;
+            blog().info("Anchor restore: " + std::to_string(restored)
+                        + " anchors offline-resumed");
             return !ec;
         });
     if (!recovery_->run() || !recovery_->ready()) {
@@ -239,7 +245,8 @@ void BaseServer::start() {
     // 启动自动保存线程
     autoSaveThread_ = std::thread(&BaseServer::autoSaveLoop, this);
 
-    std::cout << "Base server listening on " << config_.host << ":" << config_.port << std::endl;
+    blog().info("Base server listening on " + config_.host + ":"
+                + std::to_string(config_.port));
 }
 
 void BaseServer::stop() {
@@ -281,9 +288,8 @@ void BaseServer::stop() {
         if (applied == 0) {
             // 定额内零进展：sink 拒绝（脏条目）——超时判定后告警放行
             if (std::chrono::steady_clock::now() >= deadline) {
-                std::cerr << "[shutdown] journal drain timeout, "
-                          << journal_->pending()
-                          << " entries left for restart replay" << std::endl;
+                blog().error("journal drain timeout, " + std::to_string(journal_->pending())
+                             + " entries left for restart replay");
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -292,8 +298,8 @@ void BaseServer::stop() {
 
     // ⑤ 模块按依赖逆序停（§10.2-⑤）：存储最内层最后关
     database_->shutdown();
-    std::cout << "Base server stopped (journal pending: " << journal_->pending()
-              << ")" << std::endl;
+    blog().info("Base server stopped (journal pending: "
+                + std::to_string(journal_->pending()) + ")");
 }
 
 std::vector<uint8_t> BaseServer::dispatchRequest(const std::vector<uint8_t>& data) {
@@ -356,7 +362,7 @@ std::vector<uint8_t> BaseServer::handleDbLoadRequest(const std::vector<uint8_t>&
         response.success = true;
         response.jsonData = data.toJson();
 
-        std::cout << "Loaded player " << loadReq.playerId << " data" << std::endl;
+        blog().info("Loaded player " + std::to_string(loadReq.playerId) + " data");
     } else {
         response.errorMessage = "Player not found";
     }
@@ -395,7 +401,7 @@ std::vector<uint8_t> BaseServer::handleDbSaveRequest(const std::vector<uint8_t>&
     // 简化处理：直接返回成功（实际应该等保存完成）
     response.success = true;
 
-    std::cout << "Queued save for player " << saveReq.playerId << std::endl;
+    blog().info("Queued save for player " + std::to_string(saveReq.playerId));
 
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
@@ -504,8 +510,8 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
         // 无档即跳过——不凭空造档案（bootstrap 恶龙已废）。
         // Anchor 属性字段模型扩展后此处改为从 Anchor 收集（P2-4）。
         if (!database_->loadPlayer(anchor->player_id(), task.data)) {
-            std::cout << "Flush skipped for player " << anchor->player_id()
-                      << " (no profile) (" << reason << ")" << std::endl;
+            blog().warning("Flush skipped for player " + std::to_string(anchor->player_id())
+                            + " (no profile) (" + reason + ")");
             continue;
         }
         task.callback = [this, playerId = anchor->player_id()](bool success) {
@@ -519,8 +525,8 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
         anchor->set_state(apollo::game::session::AnchorState::Saving);
         saveQueue_->enqueue(task);
         ++flushed;
-        std::cout << "Flush queued for player " << anchor->player_id() << " (" << reason
-                  << ")" << std::endl;
+        blog().info("Flush queued for player " + std::to_string(anchor->player_id())
+                    + " (" + reason + ")");
     }
     return flushed;
 }

@@ -18,6 +18,20 @@
 
 namespace {
 
+// 日志接线（ADR-013 L1+L2）：console 人读 + 本地结构化文件真相源并行；
+// push 出口留接口不实现（collector 面 M1 后，logging.md §5）
+apollo::core::log::LoggerPtr initLogging() {
+    auto& logs = apollo::core::log::global_log_manager();
+    apollo::core::log::LogManagerConfig config;
+    config.processIdentity = "game";
+    config.fileEnabled = true;
+    config.fileConfig.directory = "log";
+    config.fileConfig.baseName = "game";
+    config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
+    logs.initialize(config);
+    return logs.createLogger("game");
+}
+
 struct GameClockService {
     std::string name = "clock";
 };
@@ -66,6 +80,9 @@ private:
 } // namespace
 
 int main(int argc, char* argv[]) {
+    // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
+    // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
+    const auto logger = initLogging();
     apollo::runtime::init_crash_capture(argc, argv, "game-server");
     auto& config = apollo::core::config::global_config();
     config.set("server.name", "apollo_game_server");

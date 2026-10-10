@@ -1,4 +1,5 @@
 #include "baseappmgr/baseappmgr.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include <chrono>
@@ -15,9 +16,13 @@ BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
     directory_.set_event_sink([this](const apollo::game::session::PlayerDirectory::Event& event) {
         static const char* kKindNames[] = {"SessionUp", "SessionDown", "SessionMoved",
                                            "SessionKicked"};
-        std::cout << "[directory] " << kKindNames[static_cast<int>(event.kind)]
-                  << " player=" << event.player_id << " epoch=" << event.anchor_epoch
-                  << " zone=" << event.zone_id << " reason=" << event.reason << std::endl;
+        apollo::core::log::global_log_manager()
+            .createLogger("directory")
+            ->info(std::string(kKindNames[static_cast<int>(event.kind)])
+                   + " player=" + std::to_string(event.player_id) + " epoch="
+                   + std::to_string(event.anchor_epoch) + " zone="
+                   + std::to_string(event.zone_id) + " reason="
+                   + std::to_string(event.reason));
         if (directory_listener_) {
             directory_listener_(event);
         }
@@ -201,7 +206,9 @@ void BaseAppMgr::start() {
     running_ = true;
     server_->start();
 
-    std::cout << "BaseAppMgr listening on " << host_ << ":" << port_ << std::endl;
+    apollo::core::log::global_log_manager()
+        .createLogger("baseappmgr")
+        ->info("BaseAppMgr listening on " + host_ + ":" + std::to_string(port_));
 }
 
 void BaseAppMgr::stop() {

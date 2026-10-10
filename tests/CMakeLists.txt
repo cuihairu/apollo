@@ -945,6 +945,7 @@ add_executable(supervisor_tests
 target_include_directories(supervisor_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/machined/src
 )
+target_link_libraries(supervisor_tests PRIVATE apollo::core_log)
 if(WIN32)
     target_compile_definitions(supervisor_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()

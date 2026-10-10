@@ -1,4 +1,5 @@
 #include "gateway/gateway_server.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <iostream>
@@ -24,14 +25,19 @@ namespace netproto = apollo::net::protocol;
 
 namespace {
 
+// 库面日志出口：cat=gateway_server（§5.1 cat= 检索键；主程已接文件面）
+apollo::core::log::Logger& glog() {
+    return *apollo::core::log::global_log_manager().createLogger("gateway_server");
+}
+
 std::unique_ptr<netproto::Channel> connectBackendChannel(const std::string& url) {
     auto channel = std::make_unique<netproto::Channel>();
     std::error_code ec;
     if (!channel->connect(url, ec)) {
         // P3-4 处方①：启动期后端缺位降级——警告 + 空件返回，不再 throw。
         // （exit=1 根因之一：启动期对后端全量硬依赖，单后端缺位即整编队拉不起）
-        std::cerr << "gateway backend unreachable (degraded): " << url
-                  << " (" << ec.message() << ")" << std::endl;
+        glog().warning("gateway backend unreachable (degraded): " + url
+                       + " (" + ec.message() + ")");
         return nullptr;
     }
     return channel;
@@ -131,7 +137,7 @@ void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint
     (void)sessionId;
     if (baseAppClient_) {
         if (!sendPayload(baseAppClient_.get(), message)) {
-            std::cerr << "Failed to forward to BaseApp" << std::endl;
+            glog().error("Failed to forward to BaseApp");
         }
     }
 }
@@ -245,7 +251,8 @@ void GatewayServer::start() {
     // 启动心跳检查线程
     heartbeatThread_ = std::thread(&GatewayServer::heartbeatCheckLoop, this);
 
-    std::cout << "Gateway server listening on " << config_.host << ":" << config_.port << std::endl;
+    glog().info("Gateway server listening on " + config_.host + ":"
+                + std::to_string(config_.port));
 }
 
 void GatewayServer::stop() {
@@ -337,7 +344,8 @@ void GatewayServer::heartbeatCheckLoop() {
         auto timeoutSessions = sessionManager_->checkTimeouts(config_.sessionTimeoutMs);
 
         for (auto sessionId : timeoutSessions) {
-            std::cout << "Session " << sessionId << " timeout, disconnecting..." << std::endl;
+            glog().info("Session " + std::to_string(sessionId)
+                        + " timeout, disconnecting...");
             onClientDisconnect(sessionId, false);
         }
     }
@@ -360,7 +368,8 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         std::span<const std::uint8_t>(message.data(), message.size()));
 
     if (dispatch.kind == ClientPacketKind::Invalid) {
-        std::cerr << "Gateway dropped malformed client message for session " << sessionId << std::endl;
+        glog().warning("Gateway dropped malformed client message for session "
+                       + std::to_string(sessionId));
         return;
     }
 
@@ -382,21 +391,24 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
             // ChatApp 摘除（P3-4 处方③）：fleet 无 chat 进程，聊天包显式落地
             // 不再挂幽灵后端连接（chat 下游随聊天玩法批重建）
             if (sessionManager_->hasSession(sessionId)) {
-                std::cerr << "Gateway dropped chat message for session " << sessionId
-                          << " (chat backend not wired)" << std::endl;
+                glog().warning("Gateway dropped chat message for session "
+                               + std::to_string(sessionId)
+                               + " (chat backend not wired)");
             }
             return;
 
         case ClientPacketKind::World: {
             auto session = sessionManager_->getSession(sessionId);
             if (!session || session->playerId == 0) {
-                std::cerr << "Gateway rejected unauthenticated world message for session "
-                          << sessionId << std::endl;
+                glog().warning(
+                    "Gateway rejected unauthenticated world message for session "
+                    + std::to_string(sessionId));
                 return;
             }
             const auto routeSnapshot = ensureRouteSnapshot(sessionId);
             if (!routeSnapshot.isAssigned()) {
-                std::cerr << "Gateway cannot route world message for session " << sessionId << std::endl;
+                glog().error("Gateway cannot route world message for session "
+                             + std::to_string(sessionId));
                 return;
             }
             messageRouter_->forwardToWorld(sessionId, routeSnapshot, message);
@@ -465,8 +477,8 @@ void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {
     const auto clientAddress = endpoint.has_value() ? endpoint->address : session->clientIP;
     const auto clientPort = endpoint.has_value() ? endpoint->port : session->clientPort;
 
-    std::cout << "Client " << clientAddress << ":" << clientPort
-              << " disconnected (" << (normalClose ? "normal" : "timeout") << ")" << std::endl;
+    glog().info("Client " + clientAddress + ":" + std::to_string(clientPort)
+                + " disconnected (" + (normalClose ? "normal" : "timeout") + ")");
 
     // 通知后端服务
     auto data = encodeDisconnectMessage(sessionId, session->playerId, normalClose);
@@ -488,7 +500,8 @@ void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {
 void GatewayServer::sendToClient(SessionID sessionId, const std::vector<uint8_t>& message) {
     auto session = sessionManager_->getSession(sessionId);
     if (!session || session->connectionId == 0 || !ingressServer_) {
-        std::cout << "Gateway sendToClient placeholder for session " << sessionId << std::endl;
+        glog().info("Gateway sendToClient placeholder for session "
+                    + std::to_string(sessionId));
         return;
     }
 
@@ -507,16 +520,16 @@ RouteSnapshot GatewayServer::ensureRouteSnapshot(SessionID sessionId) {
 
     if (const auto resolved = fetchRouteSnapshot(sessionId); resolved.has_value()) {
         sessionManager_->assignRoute(sessionId, *resolved);
-        std::cout << "Gateway resolved route snapshot for session " << sessionId
-                  << ": " << routeLabel(*resolved) << std::endl;
+        glog().info("Gateway resolved route snapshot for session "
+                    + std::to_string(sessionId) + ": " + routeLabel(*resolved));
         return *resolved;
     }
 
     const auto routeSnapshot = messageRouter_->buildDefaultRoute();
     sessionManager_->assignRoute(sessionId, routeSnapshot);
 
-    std::cout << "Gateway assigned route snapshot for session " << sessionId
-              << ": " << routeLabel(routeSnapshot) << std::endl;
+    glog().info("Gateway assigned route snapshot for session "
+                + std::to_string(sessionId) + ": " + routeLabel(routeSnapshot));
 
     return routeSnapshot;
 }

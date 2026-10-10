@@ -1,4 +1,5 @@
 #include "login/login_server.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include <iostream>
@@ -361,7 +362,10 @@ void LoginServer::start() {
         }
     });
 
-    std::cout << "Login server listening on " << config_.host << ":" << config_.port << std::endl;
+    apollo::core::log::global_log_manager()
+        .createLogger("login_server")
+        ->info("Login server listening on " + config_.host + ":"
+               + std::to_string(config_.port));
 }
 
 void LoginServer::stop() {
@@ -423,13 +427,17 @@ std::vector<uint8_t> LoginServer::handleLoginRequest(const std::vector<uint8_t>&
         response.gatewayPort = gatewayPort;
         response.loginTicket = loginTicket;
 
-        std::cout << "Player " << loginReq.username << " (ID: " << playerId
-                  << ") logged in, session: " << response.sessionId
-                  << ", gateway: " << gatewayUrl << std::endl;
+        apollo::core::log::global_log_manager()
+            .createLogger("login_server")
+            ->info("Player " + loginReq.username + " (ID: " + std::to_string(playerId)
+                   + ") logged in, session: " + std::to_string(response.sessionId)
+                   + ", gateway: " + gatewayUrl);
     } else {
         response.errorMessage = errorMessage;
-        std::cout << "Failed login attempt for " << loginReq.username
-                  << ": " << errorMessage << std::endl;
+        apollo::core::log::global_log_manager()
+            .createLogger("login_server")
+            ->warning("Failed login attempt for " + loginReq.username + ": "
+                      + errorMessage);
     }
 
     return protocol::MessageCodec::encode(response, header.sessionId);
@@ -535,8 +543,10 @@ bool LoginServer::preparePlayerOnline(
         return true;
     } catch (const std::exception& ex) {
         // In stub transport mode, RPC may not return a payload yet. Keep login flow usable.
-        std::cerr << "Prepare player online degraded for player " << playerId
-                  << ": " << ex.what() << std::endl;
+        apollo::core::log::global_log_manager()
+            .createLogger("login_server")
+            ->warning("Prepare player online degraded for player "
+                      + std::to_string(playerId) + ": " + ex.what());
         return true;
     }
 }

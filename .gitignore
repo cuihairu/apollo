@@ -75,3 +75,6 @@ docs/.vitepress/dist/
 # crash capture (crash-capture 批②)：本地 dump 目录与按需构建的 breakpad 工具
 crashdumps/
 tools/crash-bin/
+
+# 本地日志目录（ADR-013 L1：各 app 运行时在 cwd 写 log/ 结构化文件）
+log/

@@ -10,6 +10,7 @@ add_executable(machined
 
 target_link_libraries(machined
     PRIVATE
+        apollo::core
         apollo::net_discovery
         apollo::runtime
 )

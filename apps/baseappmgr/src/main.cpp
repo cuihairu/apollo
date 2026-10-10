@@ -1,4 +1,5 @@
 #include "apollo/runtime/crash_capture.hpp"
+#include "apollo/core/log/log_manager.h"
 #include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
@@ -22,12 +23,27 @@ namespace session = apollo::game::session;
 // 全局服务器指针
 static BaseAppMgr* g_mgr = nullptr;
 
-// 信号处理
+// 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
     if (g_mgr) {
         std::cout << "\nReceived signal " << signal << ", shutting down..." << std::endl;
         g_mgr->stop();
     }
+}
+
+// 日志接线（ADR-013 L1+L2）：console 人读 + 本地结构化文件真相源并行；
+// push 出口留接口不实现（collector 面 M1 后，logging.md §5）。
+// 领域子日志（recovery/mirror/window/death）= §5.1 cat= 检索键
+static apollo::core::log::LoggerPtr initLogging() {
+    auto& logs = apollo::core::log::global_log_manager();
+    apollo::core::log::LogManagerConfig config;
+    config.processIdentity = "baseappmgr";
+    config.fileEnabled = true;
+    config.fileConfig.directory = "log";
+    config.fileConfig.baseName = "baseappmgr";
+    config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
+    logs.initialize(config);
+    return logs.createLogger("baseappmgr");
 }
 
 // 加载配置
@@ -94,10 +110,19 @@ std::vector<session::MirrorEntry> collect_mirror_entries(const BaseAppMgr& mgr) 
 }
 
 int main(int argc, char* argv[]) {
+    // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
+    // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
+    const auto logger = initLogging();
     apollo::runtime::init_crash_capture(argc, argv, "baseappmgr");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo BaseAppMgr             " << std::endl;
     std::cout << "======================================" << std::endl;
+
+    auto& logs = apollo::core::log::global_log_manager();
+    const auto recoveryLog = logs.createLogger("recovery");
+    const auto mirrorLog = logs.createLogger("mirror");
+    const auto windowLog = logs.createLogger("window");
+    const auto deathLog = logs.createLogger("death");
 
     auto port = loadPort(argc, argv);
 
@@ -119,8 +144,7 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<disco::DeathListener> death_listener;
     if (death_feed_on) {
         if (!death_feed.open(0, "0.0.0.0") || !death_transport.open()) {
-            std::cerr << "death feed open failed; running without death reporting"
-                      << std::endl;
+            logger->warning("death feed open failed; running without death reporting");
         } else {
             disco::MemberId self;
             self.component_id = disco::kManagerComponentId;
@@ -149,8 +173,9 @@ int main(int argc, char* argv[]) {
     std::unique_ptr<session::DirectoryPublisher> mirror_publisher;
     if (mirror_port != 0) {
         if (!mirror_transport.open()) {
-            std::cerr << "mirror transport open failed; running without directory "
-                      << "mirror publishing" << std::endl;
+            logger->warning(
+                "mirror transport open failed; running without directory "
+                "mirror publishing");
         } else {
             const std::string target_host = mirror_host;
             const uint16_t target_port = mirror_port;
@@ -209,25 +234,25 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::cout << "Configuration:" << std::endl;
-    std::cout << "  Listen: 0.0.0.0:" << port << std::endl;
+    logger->info("Configuration:");
+    logger->info("  Listen: 0.0.0.0:" + std::to_string(port));
     if (death_listener) {
-        std::cout << "  Death feed: machined " << machined_host << ":"
-                  << machined_port << " (listen port " << death_feed.port() << ")"
-                  << std::endl;
+        logger->info("  Death feed: machined " + machined_host + ":"
+                     + std::to_string(machined_port) + " (listen port "
+                     + std::to_string(death_feed.port()) + ")");
     }
     if (mirror_publisher) {
-        std::cout << "  Directory mirror: " << mirror_host << ":" << mirror_port
-                  << " (snapshot every " << mirror_snapshot_ms << "ms)" << std::endl;
+        logger->info("  Directory mirror: " + mirror_host + ":" + std::to_string(mirror_port)
+                     + " (snapshot every " + std::to_string(mirror_snapshot_ms) + "ms)");
     }
     if (recovery_port != 0) {
-        std::cout << "  Fleet recovery: intake 0.0.0.0:" << recovery_port
-                  << " (expected reporters " << recovery_expected
-                  << ", timeout " << recovery_timeout_ms << "ms)" << std::endl;
+        logger->info("  Fleet recovery: intake 0.0.0.0:" + std::to_string(recovery_port)
+                     + " (expected reporters " + std::to_string(recovery_expected)
+                     + ", timeout " + std::to_string(recovery_timeout_ms) + "ms)");
     }
-    std::cout << "  Suspend window: " << suspend_window_ticks << " ticks"
-              << " (gateway mappings " << gateway_by_component.size() << ")"
-              << std::endl;
+    logger->info("  Suspend window: " + std::to_string(suspend_window_ticks) + " ticks"
+                 + " (gateway mappings " + std::to_string(gateway_by_component.size())
+                 + ")");
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
@@ -243,28 +268,31 @@ int main(int argc, char* argv[]) {
         if (recovery_port != 0 && recovery_feed.open(recovery_port, "0.0.0.0")) {
             recovery = std::make_unique<session::FleetRecoveryCoordinator>(
                 recovery_expected, recovery_timeout_ms,
-                [&mgr](std::uint64_t component_id, std::uint32_t zone_id,
-                       const std::vector<session::MirrorEntry>& sessions) {
+                [&mgr, &recoveryLog](
+                    std::uint64_t component_id, std::uint32_t zone_id,
+                    const std::vector<session::MirrorEntry>& sessions) {
                     const auto taken = mgr.intake_directory_full_report(sessions);
-                    std::cout << "[recovery] full report from component=" << component_id
-                              << " zone=" << zone_id << " sessions=" << sessions.size()
-                              << " intake=" << taken << std::endl;
+                    recoveryLog->info("full report from component="
+                                      + std::to_string(component_id) + " zone="
+                                      + std::to_string(zone_id) + " sessions="
+                                      + std::to_string(sessions.size()) + " intake="
+                                      + std::to_string(taken));
                 });
             recovery->begin(getSteadyNowMs());
             mgr.set_admission_gate([&recovery]() {
                 return recovery->admissible();
             });
-            std::cout << "[recovery] 恢复相位排他（拒新）：等全量重报，在册报告方 "
-                      << recovery_expected << "，超时 " << recovery_timeout_ms
-                      << "ms" << std::endl;
+            recoveryLog->info("恢复相位排他（拒新）：等全量重报，在册报告方 "
+                              + std::to_string(recovery_expected) + "，超时 "
+                              + std::to_string(recovery_timeout_ms) + "ms");
         }
 
-        std::cout << "\nStarting BaseAppMgr..." << std::endl;
+        logger->info("Starting BaseAppMgr...");
         mgr.start();
 
         if (death_listener && death_listener->subscribe()) {
-            std::cout << "Death feed subscribed to machined " << machined_host
-                      << ":" << machined_port << std::endl;
+            logger->info("Death feed subscribed to machined " + machined_host
+                         + ":" + std::to_string(machined_port));
         }
 
         // 目录事件链入镜像 publisher（增量② owner 面：PlayerDirectory 事件
@@ -278,11 +306,11 @@ int main(int argc, char* argv[]) {
             // 启动即发一轮全量（晚加入镜像不用等首周期）
             const auto initial = collect_mirror_entries(mgr);
             mirror_publisher->publish_snapshot(initial);
-            std::cout << "Directory mirror: initial snapshot sent ("
-                      << initial.size() << " entries)" << std::endl;
+            mirrorLog->info("Directory mirror: initial snapshot sent ("
+                            + std::to_string(initial.size()) + " entries)");
         }
 
-        std::cout << "BaseAppMgr is running. Press Ctrl+C to stop." << std::endl;
+        logger->info("BaseAppMgr is running. Press Ctrl+C to stop.");
 
         auto since_snapshot = std::chrono::milliseconds(0);
         std::uint8_t recovery_buf[disco::kMaxDatagramSize];
@@ -304,15 +332,15 @@ int main(int argc, char* argv[]) {
                 recovery->tick(getSteadyNowMs());
                 if (was_recovering && !recovery->recovering()) {
                     was_recovering = false;
-                    std::cout << "[recovery] 收敛开放（准入恢复）：reported="
-                              << recovery->last_reported_count() << "/"
-                              << recovery_expected << std::endl;
+                    recoveryLog->info("收敛开放（准入恢复）：reported="
+                                      + std::to_string(recovery->last_reported_count())
+                                      + "/" + std::to_string(recovery_expected));
                     // 收敛即向镜像面发一轮全量（重建目录进投影，增量②面）
                     if (mirror_publisher) {
                         const auto entries = collect_mirror_entries(mgr);
                         mirror_publisher->publish_snapshot(entries);
-                        std::cout << "[recovery] 重建目录快照已发镜像：entries="
-                                  << entries.size() << std::endl;
+                        recoveryLog->info("重建目录快照已发镜像：entries="
+                                          + std::to_string(entries.size()));
                     }
                 }
             }
@@ -322,9 +350,10 @@ int main(int argc, char* argv[]) {
                 since_snapshot = std::chrono::milliseconds(0);
                 const auto entries = collect_mirror_entries(mgr);
                 const auto parts = mirror_publisher->publish_snapshot(entries);
-                std::cout << "[mirror] snapshot published: entries=" << entries.size()
-                          << " parts=" << parts << " seq="
-                          << mirror_publisher->seq() << std::endl;
+                mirrorLog->info("snapshot published: entries="
+                                + std::to_string(entries.size()) + " parts="
+                                + std::to_string(parts) + " seq="
+                                + std::to_string(mirror_publisher->seq()));
             }
 
             // 窗口满扫描（§4 tick 驱动，本批）：主循环 1s 秒拍喂钟，到期
@@ -334,7 +363,7 @@ int main(int argc, char* argv[]) {
             if (const auto expired =
                     mgr.sweep_suspended(getSteadyNowMs() / 1000);
                 expired > 0) {
-                std::cout << "[window] sweep expired=" << expired << std::endl;
+                windowLog->info("sweep expired=" + std::to_string(expired));
             }
 
             if (!death_listener) {
@@ -361,11 +390,12 @@ int main(int argc, char* argv[]) {
                 case disco::DeathKind::ChildDied: kind = "child_died"; break;
                 case disco::DeathKind::GaveUp: kind = "gave_up"; break;
                 }
-                std::cout << "[death] component=" << death.member.component_id
-                          << " zone=" << death.member.zone_id
-                          << " port=" << death.member.service_port
-                          << " kind=" << kind
-                          << " exit=" << death.exit_code << std::endl;
+                deathLog->warning("component="
+                                  + std::to_string(death.member.component_id)
+                                  + " zone=" + std::to_string(death.member.zone_id)
+                                  + " port=" + std::to_string(death.member.service_port)
+                                  + " kind=" + kind
+                                  + " exit=" + std::to_string(death.exit_code));
                 // §6 死亡行窗口处置（本批）：Zone 行 = roster zone 列反查，
                 // gateway 行 = CLI 映射反查；Online 条目批量进保活窗口，
                 // 窗口满由主循环 sweep 终结（SessionDown 进镜像面）。
@@ -373,29 +403,30 @@ int main(int argc, char* argv[]) {
                 if (death.member.zone_id != 0) {
                     const auto suspended = mgr.suspend_zone_sessions(
                         death.member.zone_id, now_tick, suspend_window_ticks);
-                    std::cout << "[window] zone death zone="
-                              << death.member.zone_id << " suspended=" << suspended
-                              << " (window " << suspend_window_ticks << " ticks)"
-                              << std::endl;
+                    windowLog->warning("zone death zone="
+                                       + std::to_string(death.member.zone_id)
+                                       + " suspended=" + std::to_string(suspended)
+                                       + " (window " + std::to_string(suspend_window_ticks)
+                                       + " ticks)");
                 }
                 const auto gw = gateway_by_component.find(death.member.component_id);
                 if (gw != gateway_by_component.end() && gw->second != 0) {
                     const auto suspended = mgr.suspend_gateway_sessions(
                         gw->second, now_tick, suspend_window_ticks);
-                    std::cout << "[window] gateway death component="
-                              << death.member.component_id
-                              << " gateway=" << gw->second
-                              << " suspended=" << suspended
-                              << " (window " << suspend_window_ticks << " ticks)"
-                              << std::endl;
+                    windowLog->warning("gateway death component="
+                                       + std::to_string(death.member.component_id)
+                                       + " gateway=" + std::to_string(gw->second)
+                                       + " suspended=" + std::to_string(suspended)
+                                       + " (window " + std::to_string(suspend_window_ticks)
+                                       + " ticks)");
                 }
             }
         }
 
-        std::cout << "BaseAppMgr stopped." << std::endl;
+        logger->info("BaseAppMgr stopped.");
 
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        logger->error(std::string("Error: ") + e.what());
         return 1;
     }
 
