@@ -1047,4 +1047,34 @@ if(MSVC)
     target_compile_options(timer_wheel_tests PRIVATE /utf-8)
 endif()
 add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
+
+# ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
+# cell 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ CellServer 受理点
+# 接线（维护闸/受理回执/Pong/tick 边界 drain/过载回错误包）。直编协议源惯例
+# 同 apps/cell-app（stub 传输，APOLLO_USE_NNG 未定义）。
+if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
+add_executable(cell_acceptance_tests
+    test_cell_acceptance.cpp
+    ../apps/cell-app/src/cell_server.cpp
+    ../modules/protocol/src/nng_wrapper.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+    ../modules/protocol/src/socket.cpp
+)
+target_include_directories(cell_acceptance_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+)
+target_link_libraries(cell_acceptance_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::runtime)
+if(WIN32)
+    target_link_libraries(cell_acceptance_tests PRIVATE ws2_32)
+    target_compile_definitions(cell_acceptance_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(cell_acceptance_tests PRIVATE /utf-8)
+endif()
+add_test(NAME CellAcceptanceTests COMMAND cell_acceptance_tests)
+endif()
 	endif()

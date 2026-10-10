@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cell/config.hpp"
+#include "cell/acceptance_queue.hpp"
 #include "cell/cell_manager.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/world.hpp"
@@ -32,6 +33,14 @@ public:
     // 是否运行中
     bool isRunning() const { return running_; }
 
+    // 受理点（ADR-017 决策 1）：RPC worker 线程调用——只解码分类 + 入队意图
+    // 信封，回执 ack-on-accept（变更类空 ack 逐字节同现状；过载回错误包）；
+    // PING 在受理点直接回 Pong（纯 wire echo，ADR-017 决策 3）。
+    std::vector<uint8_t> acceptRequest(const std::vector<uint8_t>& request);
+
+    // 待执行意图数（观测/测试面：tick 边界 drain 断言用）
+    std::size_t pendingIntentCount() const { return acceptanceQueue_.size(); }
+
 private:
     // 处理创建实体请求
     std::vector<uint8_t> handleCellCreateEntity(const std::vector<uint8_t>& request);
@@ -53,6 +62,13 @@ private:
 
     // 游戏循环
     void gameLoop();
+
+    // 意图执行（ADR-015(a)：gameThread_ tick 边界消费——复用既有 handler，
+    // 返回值丢弃（延时应答随 M1 升级批））
+    void executeIntent(const IntentEnvelope& intent);
+
+    // 受理队列清空到 tick 执行（ADR-016：tick 预算锚定；停机 G-3 尾扫一次）
+    void drainAcceptanceQueue();
 
     // 计算单帧间隔
     std::chrono::milliseconds tickInterval() const;
@@ -79,6 +95,10 @@ private:
 
     std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
+    // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前请新请求回
+    // 维护中错误包；停机先关闸再排空队列，G-3 镜像顺序）
+    AcceptanceQueue acceptanceQueue_;
+    std::atomic<bool> accepting_{false};
     std::uint32_t worldId_ = 1;
     std::uint64_t defaultSceneId_ = 0;
     apollo::game::world::InstancePtr defaultInstance_;

@@ -96,41 +96,19 @@ void CellServer::start() {
     );
 
     server_->setRequestHandler([this](const std::vector<uint8_t>& data) -> std::vector<uint8_t> {
-        auto header = protocol::MessageCodec::parseHeader(data);
-        auto msgType = static_cast<protocol::MessageType>(header.type);
-
-        switch (msgType) {
-            case protocol::MessageType::CELL_CREATE_ENTITY:
-                return handleCellCreateEntity(data);
-
-            case protocol::MessageType::CELL_DESTROY_ENTITY:
-                return handleCellDestroyEntity(data);
-
-            case protocol::MessageType::CELL_ENTITY_MOVE:
-                return handleCellEntityMove(data);
-
-            case protocol::MessageType::CELL_CROSS_BORDER:
-                return handleCellCrossBorder(data);
-
-            case protocol::MessageType::COMBAT_SKILL_CAST:
-                return handleCombatSkillCast(data);
-
-            case protocol::MessageType::PING:
-                return handlePing(data);
-
-            default:
-                protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
-                err.message = "Unknown message type";
-                return protocol::MessageCodec::encode(err, header.sessionId);
-        }
+        // ADR-017 决策 1：worker 侧只走受理点（解码分类 + 入队 + 受理点回执）
+        return acceptRequest(data);
     });
+
+    // 开闸先于 server_->start()：受理面就绪后 worker 才见得到入口
+    accepting_ = true;
 
     server_->start();
 
     ensureDefaultScene();
 
     if (!worldHost_->start()) {
+        accepting_ = false;
         server_->stop();
         server_.reset();
         throw std::runtime_error("failed to start WorldHost");
@@ -147,6 +125,9 @@ void CellServer::start() {
 }
 
 void CellServer::stop() {
+    // 停机 G-3 镜像顺序（ADR-016）：停受理 → 队列 drain → gameThread join →
+    // worldHost stop → server stop
+    accepting_ = false;
     running_ = false;
 
     if (gameThread_.joinable()) {
@@ -160,6 +141,61 @@ void CellServer::stop() {
     if (server_) {
         server_->stop();
         server_.reset();
+    }
+}
+
+std::vector<uint8_t> CellServer::acceptRequest(const std::vector<uint8_t>& request) {
+    // 受理点（ADR-017 决策 1，RPC worker 线程）：只解码分类 + 入队意图信封，
+    // 不做 world 读写。窄窗竞态（闸检查通过后即刻停机）下意图滞留队列不执行、
+    // 不回执——与拒收同型的「服务不可用」观察面，延时应答关联随 M1 升级批收口。
+    auto header = protocol::MessageCodec::parseHeader(request);
+    auto msgType = static_cast<protocol::MessageType>(header.type);
+
+    // 维护闸：未受理（start 前 / stop 后）一律回维护中错误包
+    if (!accepting_.load(std::memory_order_acquire)) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "server maintenance: not accepting requests";
+        return protocol::MessageCodec::encode(err, header.sessionId);
+    }
+
+    switch (msgType) {
+        case protocol::MessageType::CELL_CREATE_ENTITY:
+        case protocol::MessageType::CELL_DESTROY_ENTITY:
+        case protocol::MessageType::CELL_ENTITY_MOVE:
+        case protocol::MessageType::CELL_CROSS_BORDER:
+        case protocol::MessageType::COMBAT_SKILL_CAST: {
+            IntentEnvelope intent;
+            intent.type = msgType;
+            intent.frame = request;
+            intent.session_id = header.sessionId;
+            auto result = acceptanceQueue_.push(std::move(intent));
+            if (!result.accepted) {
+                // ADR-016：顶格拒收不丢旧不静默——受理点显式回执错误包
+                protocol::ErrorMessage err;
+                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+                err.message = "server overloaded: acceptance queue full";
+                return protocol::MessageCodec::encode(err, header.sessionId);
+            }
+            if (result.high_watermark) {
+                // ADR-016 两级水位：越告警线提示一次，回落滞回后再报
+                std::cout << "acceptance queue high watermark: pending="
+                          << acceptanceQueue_.size() << "/" << acceptanceQueue_.cap()
+                          << std::endl;
+            }
+            return {};  // ack-on-accept：变更类空 ack 逐字节同现状
+        }
+
+        case protocol::MessageType::PING:
+            // ADR-017 决策 3：Pong 在受理点回（纯 wire echo，无 world 访问）
+            return handlePing(request);
+
+        default: {
+            protocol::ErrorMessage err;
+            err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+            err.message = "Unknown message type";
+            return protocol::MessageCodec::encode(err, header.sessionId);
+        }
     }
 }
 
@@ -337,9 +373,42 @@ std::vector<uint8_t> CellServer::handlePing(const std::vector<uint8_t>& request)
     return protocol::MessageCodec::encode(pong, header.sessionId);
 }
 
+void CellServer::executeIntent(const IntentEnvelope& intent) {
+    // 执行面（ADR-015(a)）：gameThread_ tick 边界——复用既有 handler 全量
+    // 语义（解码+校验+world 变更+广播）；变更类返回值为空 ack，丢弃
+    switch (intent.type) {
+        case protocol::MessageType::CELL_CREATE_ENTITY:
+            (void)handleCellCreateEntity(intent.frame);
+            break;
+        case protocol::MessageType::CELL_DESTROY_ENTITY:
+            (void)handleCellDestroyEntity(intent.frame);
+            break;
+        case protocol::MessageType::CELL_ENTITY_MOVE:
+            (void)handleCellEntityMove(intent.frame);
+            break;
+        case protocol::MessageType::CELL_CROSS_BORDER:
+            (void)handleCellCrossBorder(intent.frame);
+            break;
+        case protocol::MessageType::COMBAT_SKILL_CAST:
+            (void)handleCombatSkillCast(intent.frame);
+            break;
+        default:
+            break;
+    }
+}
+
+void CellServer::drainAcceptanceQueue() {
+    while (auto intent = acceptanceQueue_.try_pop()) {
+        executeIntent(*intent);
+    }
+}
+
 void CellServer::gameLoop() {
     while (running_) {
         auto startTime = std::chrono::steady_clock::now();
+
+        // ADR-015(a)：意图消费在 tick 边界（world 变更只发生在此线程）
+        drainAcceptanceQueue();
 
         worldHost_->tick();
 
@@ -353,6 +422,9 @@ void CellServer::gameLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
         }
     }
+
+    // 停机 G-3 尾扫：关闸后残余意图一次性清空（此后不再有新受理）
+    drainAcceptanceQueue();
 }
 
 std::chrono::milliseconds CellServer::tickInterval() const {
