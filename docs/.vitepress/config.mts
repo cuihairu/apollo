@@ -96,6 +96,7 @@ export default defineConfig({
             { text: '战斗验证服务', link: '/design/battle-verification-service' },
             { text: '网络抽象与传输内核', link: '/design/net-abstraction' },
             { text: '日志系统', link: '/design/logging' },
+            { text: 'LoggerApp 立项前置设计', link: '/design/logger-app' },
             { text: '崩溃采集', link: '/design/crash-capture' },
             { text: '时钟与时间', link: '/design/clock-and-time' },
             { text: '容量与基准', link: '/design/capacity-and-benchmark' },

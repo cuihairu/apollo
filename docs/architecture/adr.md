@@ -187,6 +187,8 @@ tag:
 
 **后果**：structured 行格式获得进程级消费面（批 C 遗留「apps 接线未做」消账）；VerifierApp 缺口（gap #17）保持登记状态。
 
+**落地注记（2026-10-10）**：决策 1 的「开关打开」前置还有一层——apps 接线现状 = 零（七 app 全 `std::cout` 直写，log 模块零接入；唯一触点 game-server crash 可见化行），apps 先接 log 模块（L1）再翻开关（L2）；落地形态前置设计已立 docs/design/logger-app.md（v1 采集形态三岔 + 五拍板点，候选倾向 = tail 拉）。
+
 ---
 
 ## ADR-014 Process Rename: Manager and Zone（进程改名：baseappmgr→manager，base-app→zone-app）
