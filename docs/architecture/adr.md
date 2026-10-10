@@ -1,5 +1,5 @@
 ---
-title: 架构决策记录（ADR-001..014）
+title: 架构决策记录（ADR-001..015）
 icon: gavel
 order: 2
 category:
@@ -9,7 +9,7 @@ tag:
   - 决策记录
 ---
 
-# 架构决策记录（ADR-001..014）
+# 架构决策记录（ADR-001..015）
 
 > 目的（任务书 §36）：把已定且已落地的架构裁决写成可引用的记录，**防止未来架构继续失控**。每篇四段：状态 / 背景 / 决策 / 后果。「实件」列给出仓库锚点，改代码前先对 ADR。
 
@@ -203,6 +203,22 @@ tag:
 3. 改名面 = apps 目录 + CMake target + dev_fleet/drill roster 与文档引用；纯进程身份变更，零行为变更（端口/参数/监督语义不动）。
 
 **后果**：术语契约定稿名全量入户，仓库内不再出现 baseappmgr/base-app 进程名（他家对照词仅存于文档证据引用）；改名批后 dev_fleet/drill 全链复验为验收面。
+
+---
+
+## ADR-015 Cell Single-Writer: Async Queue Acceptance First（单写者主案：队列化异步受理）
+
+**状态：** 已拍板（2026-10-10 巡检续派 r2 授权，按 cell-single-writer 前置设计候选倾向裁定拍板①；②水位/③只读快路径/④Manager 归并/⑤停机时序仍悬置）。
+
+**背景**：P3-2 批 B 竞争实证——cell-app `gameThread_` tick 读写 World/Scene 图，`RepSocket` worker 线程 handler 直触 `world_`，二线程间零保护（cell-single-writer §1 A 级实读）。前置设计三岔：(a) 队列化异步受理 / (b) 队列化+同步等待 / (c) 最小互斥回退；候选倾向 (a)，(c) 以 tick 中途容器突变（迭代器失效 + battle-determinism 迭代序破坏）反证否决，(b) 队头阻塞（workerLoop 单线程 × tick 时长乘积越界即吞吐崩塌）。
+
+**决策**：
+
+1. **主案 = (a) 队列化异步受理**：RPC worker 只做解码+入队（意图信封），`gameThread_` 在 tick 边界消费、执行、发回应答。全部变更 tick 对齐（attribute-sync §10.1 G-7「固定边界内可见、有序、可序号化」）；应答延迟 ≤1 tick（10Hz 上界 100ms）；调用面已 `sendRequestAsync` 回调式，延迟增量无语义破坏；受理面即 net M1 接收端骨架（(b) 的同步面在 M1 下废弃重做）。
+2. **(b) 保留为 (a) 水位语义不足时的升级案**，(c) 维持否决。
+3. **拍板②-⑤维持悬置**（水位形态/只读快路径/Manager 归并/停机时序）——水位与过载的决策面另立前置设计（受理队列水位语义），供后续巡检裁。
+
+**后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）待文档/脚本边界放行；水位与过载批紧随其后（决策面设计随 ADR-015 落地）；Manager 归并复核批随拍板④；net M1 接收端接线只换传输底座（受理面=骨架直接复用）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
 
 ---
 

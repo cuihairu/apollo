@@ -40,7 +40,7 @@
 
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
-| [Cell 单写者收口](./cell-single-writer.md) | 前置设计（候选倾向已记，拍板点待裁） | RPC 受理与模拟线程的并发形态（P3-2 批 B） |
+| [Cell 单写者收口](./cell-single-writer.md) | 前置设计（拍板①已裁 ADR-015，②-⑤悬置） | RPC 受理与模拟线程的并发形态（P3-2 批 B） |
 | [入站第三方对接面](./inbound-interfaces.md) | 设计稿（评审中） | 渠道回调承载进程与鉴权/幂等 |
 | [脚本系统（Lua）](./scripting-lua.md) | 设计稿 | 双端共享战斗逻辑与热更纪律 |
 | [SDK 契约](./sdk-contract.md) | 活文档 | 客户端/服务端共享契约（contract.lua） |
