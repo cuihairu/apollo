@@ -130,7 +130,7 @@ Client -> LoginApp -> BaseApp(Proxy + PlayerAnchor) -> CellApp
 
 | 特性 | 说明 |
 |------|------|
-| **REQ/REP** | 请求-响应模式，用于 RPC 调用（接入进程 login/gateway/baseappmgr 在用） |
+| **REQ/REP** | 请求-响应模式，用于 RPC 调用（接入进程 login/gateway/manager 在用） |
 | **自动重连** | 内置连接断开自动重连 |
 | **跨平台** | 支持 Linux/Windows/macOS |
 
@@ -424,7 +424,7 @@ struct PlayerData {
 
 ```bash
 # 启动 BaseApp 玩家锚点宿主（--db 指定数据库名）
-./base-app --port 9002 --db apollo
+./zone-app --port 9002 --db apollo
 ```
 
 ---
@@ -497,9 +497,9 @@ enum class EntityType : uint8_t {
 
 ---
 
-## BaseAppMgr 调度面
+## Manager 调度面
 
-> 目录：`apps/baseappmgr`（缺省端口 9003，`--port` 覆盖）。
+> 目录：`apps/manager`（缺省端口 9003，`--port` 覆盖）。
 
 职责（调度面，BigWorld BaseAppMgr 直系）：
 
@@ -507,11 +507,11 @@ enum class EntityType : uint8_t {
 - **落点裁决**：`assignWorld` / `clearWorldAssignment`
 - **路由解析**：ResolveRoute（供 gateway 问「玩家在哪个 world、经哪个 gateway」）
 
-边界：不承载玩家数据（Avatar 常驻数据归 base-app），不跨进程改任何进程内存——本进程只维护自己的目录表。
+边界：不承载玩家数据（Avatar 常驻数据归 zone-app），不跨进程改任何进程内存——本进程只维护自己的目录表。
 
 ```bash
 # 启动调度面
-./baseappmgr --port 9003
+./manager --port 9003
 ```
 
 ## Machined 守护进程
@@ -743,7 +743,7 @@ cmake --build build
 
 ```bash
 # 1. 启动 BaseApp (玩家锚点宿主)
-./build/apps/base-app/base-app --port 9002
+./build/apps/zone-app/zone-app --port 9002
 
 # 2. 启动 LoginApp (登录服务)
 ./build/apps/login-app/login-app --port 9001
@@ -759,7 +759,7 @@ cmake --build build
 
 ```bash
 # 1. 启动 BaseApp (PlayerAnchor + Proxy 宿主)
-./build/apps/base-app/base-app --port 9002
+./build/apps/zone-app/zone-app --port 9002
 
 # 2. 启动 LoginApp (登录服务)
 ./build/apps/login-app/login-app --port 9001

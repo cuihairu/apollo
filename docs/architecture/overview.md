@@ -38,7 +38,7 @@ Entity / Battle 实体模拟与战斗判定（Avatar / BattleRuntime）
 
 ### Session —— 会话归属与路由
 
-「这个玩家现在在哪个 world、经哪个 gateway」的唯一裁决点。实件：`BaseAppMgr`（`apps/baseappmgr`）维护 player→SessionBinding / player→WorldAssignment 全局目录并做落点裁决（`assignWorld` / `clearWorldAssignment`）；gateway 侧 `session_manager` 维护接入会话与心跳。边界：目录与裁决，不承载玩家数据。
+「这个玩家现在在哪个 world、经哪个 gateway」的唯一裁决点。实件：`ManagerApp`（`apps/manager`）维护 player→SessionBinding / player→WorldAssignment 全局目录并做落点裁决（`assignWorld` / `clearWorldAssignment`）；gateway 侧 `session_manager` 维护接入会话与心跳。边界：目录与裁决，不承载玩家数据。
 
 ### Player —— 玩家长期态
 

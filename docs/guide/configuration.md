@@ -100,8 +100,8 @@ bool has = config.has("server.port");
 
 ### CLI 参数
 
-没有统一的命令行解析层，各 app 自管。base-app 的做法是入口处解析进 `BaseConfig` 结构
-（`apps/base-app/src/main.cpp`）：
+没有统一的命令行解析层，各 app 自管。zone-app 的做法是入口处解析进 `BaseConfig` 结构
+（`apps/zone-app/src/main.cpp`）：
 
 ```cpp
 BaseConfig loadConfig(int argc, char* argv[]) {

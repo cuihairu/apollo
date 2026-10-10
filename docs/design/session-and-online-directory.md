@@ -13,7 +13,7 @@
 5. **查询面三消费方**：① RouteResolver 宿主定位 = 目录 delta 的**进程内只读镜像**（各进程经 InterServerLink 订阅，seq 续传）+ ServerID 分段先验分流（entity_id 内嵌类型/实例段，36号 #15）+ route_version/authority_epoch 校验兜底（§5.7——镜像过期不致错误路由，调用失败走 re-resolve）；② GM/观测 = control 通道 admin 查 manager（集中真相）；③ 全服广播 = 本地镜像按 zone 分发。高频好友在线走镜像不查 manager。镜像一致性声明：**投影最终一致（秒级），裁决与权威读只在 manager**——读旧镜像的最坏后果 = 一次失败调用 + re-resolve，不破坏单写者。
 6. **崩溃恢复 = 全量重报重建**：manager 死 → machined 拉起（G-1）→ 恢复相位排他（manager 域，拒新直至收敛）→ 各 Zone/gateway 全量重报现存会话 → 收敛开放。目录是索引不是权威数据持有者（连接在 gateway、实体在 Zone），重建不丢服务；无 journal——5000 条全量重报 < 1s，重建成本低于 journal 维护成本。
 7. **消息面 = internal 域事件族**（sdk-contract §11 id 900+ 分段；**client 域零新增**——域纪律照旧）：`SessionUp/SessionDown/SessionMoved/SessionKicked` 事件族 + `DirectorySnapshotRequest/Reply` 对账族；信封 = InternalMessageEnvelope（net-abstraction §7），invoke_mode：事件 OneWay、对账快照 RequestReply（低频控制面，合规）。被顶客户端的 kicked 原因码进 errors.xml（随代码批，契约文件本轮冻结不动）。
-8. **现状衔接（存量不推翻）**：`modules/game/session`（六文件 302 行：PlayerAnchor 六态 + SessionBinding + WorldAssignment + AnchorManager + SessionLocator 双哈希）= **进程内锚点域已存在**，唯一消费方 base-app（base_server.cpp:131-167 bindSession/unbindSession/assignWorld）+ 直测 tests/test_base_anchor.cpp。定位：目录条目字段 = `SessionBinding + WorldAssignment` 的进程间扩展；SessionLocator::bind（session_locator.cpp:9-11 顶掉旧索引）是顶号的进程内雏形（无踢除通知面）；该域现挂 base-app（BW 形态存量 app，现行拓扑无 base 侧——docs/index）——目标落点 = Zone 会话面 + manager 目录面，迁移归代码批（登记，源码冻结不动）。
+8. **现状衔接（存量不推翻）**：`modules/game/session`（六文件 302 行：PlayerAnchor 六态 + SessionBinding + WorldAssignment + AnchorManager + SessionLocator 双哈希）= **进程内锚点域已存在**，唯一消费方 zone-app（base_server.cpp:131-167 bindSession/unbindSession/assignWorld）+ 直测 tests/test_base_anchor.cpp。定位：目录条目字段 = `SessionBinding + WorldAssignment` 的进程间扩展；SessionLocator::bind（session_locator.cpp:9-11 顶掉旧索引）是顶号的进程内雏形（无踢除通知面）；该域现挂 zone-app（BW 形态存量 app，现行拓扑无 base 侧——docs/index）——目标落点 = Zone 会话面 + manager 目录面，迁移归代码批（登记，源码冻结不动）。
 
 ## 0. 为什么是缺口（负空间与先例）
 
@@ -149,4 +149,4 @@
 
 ---
 
-*基线：apollo main @ 1e701d51（文档态；源码冻结未动）。存量实读（2026-09-30）：modules/game/session 六文件 302 行（player_anchor.hpp:12-30 AnchorState/SessionBinding、world_assignment.hpp:7-17、session_locator.cpp:5-66 含 :9-11 顶号雏形）+ apps/base-app/src/base_server.cpp:106-167（唯一消费方 bindSession/unbindSession/assignWorld）+ tests/test_base_anchor.cpp（100 行直测）；KBE/BW 先例证据 = gap #12 登记（baseappmgr.cpp:588-599/:1117、KBE 脚本层顶号/assets 不在本机已核）。设计裁决八条见执行摘要；窗口默认值与对账周期为初始建议，P3 容量批校准。*
+*基线：apollo main @ 1e701d51（文档态；源码冻结未动）。存量实读（2026-09-30）：modules/game/session 六文件 302 行（player_anchor.hpp:12-30 AnchorState/SessionBinding、world_assignment.hpp:7-17、session_locator.cpp:5-66 含 :9-11 顶号雏形）+ apps/zone-app/src/base_server.cpp:106-167（唯一消费方 bindSession/unbindSession/assignWorld）+ tests/test_base_anchor.cpp（100 行直测）；KBE/BW 先例证据 = gap #12 登记（baseappmgr.cpp:588-599/:1117、KBE 脚本层顶号/assets 不在本机已核）。设计裁决八条见执行摘要；窗口默认值与对账周期为初始建议，P3 容量批校准。*

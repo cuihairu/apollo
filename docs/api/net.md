@@ -132,7 +132,7 @@ public:
 ## modules/net/protocol（apollo::net::protocol）
 
 接入面协议原语（nng 底座，P1 收口前受 `apollo_protocol` 门控）：
-`endpoint.hpp`、`channel.hpp`——login-app/gateway-app/base-app 的 REP/REQ
+`endpoint.hpp`、`channel.hpp`——login-app/gateway-app/zone-app 的 REP/REQ
 套接字封装（`apollo/protocol/socket.hpp`）即由此而来。
 
 ---

@@ -78,7 +78,7 @@ journal.compact();                                 // 快照压薄
 journal.replay(sink);                              // 崩溃回放 + seq 续接
 ```
 
-消费侧接线见 apps/base-app（保存路径 write-ahead + autoSaveLoop drain + 启动
+消费侧接线见 apps/zone-app（保存路径 write-ahead + autoSaveLoop drain + 启动
 replay，P1-5 RecoveryCoordinator 编排）。
 
 ## cache（apollo::data_cache）

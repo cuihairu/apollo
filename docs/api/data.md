@@ -134,7 +134,7 @@ public:
 }
 ```
 
-**线程安全**: 不安全（归宿主保存线程（base-app：autoSaveLoop drain + 关停收口））
+**线程安全**: 不安全（归宿主保存线程（zone-app：autoSaveLoop drain + 关停收口））
 
 ---
 

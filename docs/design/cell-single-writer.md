@@ -11,7 +11,7 @@
 - 模拟写者：`gameThread_`（cell_server.cpp:142）→ `worldHost_->tick()` → `CellWorldService::tick` → `world_.tick(...)`（cell_server.cpp:56）——`Scene::tick` 遍历 `entities_`（scene.cpp:153，`std::unordered_map`）。
 - RPC 写者：`protocol::RepSocket` 自持 worker 线程（socket.cpp:124 `workerLoop`）回调 `setRequestHandler`（cell_server.cpp:98）→ `handleCellCreateEntity/handleCellDestroyEntity/handleCellEntityMove/handleCellCrossBorder/handleCombatSkillCast` 直触 `world_`——`find_scene`（:176）、`spawn_entity`（:191）、`despawn_entity`（:210-211）、`aoi().move`（:225-231）、`find_session`+`execute_scene_transfer`（:253-287）。二线程之间零保护。
 - 生产未触发仅因负载空洞（concurrency §1.1 已录）——竞争是结构性的，不是概率性的。
-- 调用线程归属图（二次摸底收口）：**WorldSessionManager** 全方法 mutex（world_session_manager.cpp:8-159）但只护会话表不护 world 树；**AnchorManager** 有 mutex（anchor_manager.hpp:26）跨 base-app 受理线 + autoSaveThread_（snapshot base_server.cpp:496）；**SessionLocator** 单线程（base-app 主线专用）。锁已就位的两件不是本件竞争面——但形态归属随拍板①统一（见 §5 拍板 4）。
+- 调用线程归属图（二次摸底收口）：**WorldSessionManager** 全方法 mutex（world_session_manager.cpp:8-159）但只护会话表不护 world 树；**AnchorManager** 有 mutex（anchor_manager.hpp:26）跨 zone-app 受理线 + autoSaveThread_（snapshot base_server.cpp:496）；**SessionLocator** 单线程（zone-app 主线专用）。锁已就位的两件不是本件竞争面——但形态归属随拍板①统一（见 §5 拍板 4）。
 - RPC 消费方现况：真进程消费 = gateway 转发路径（半成品壳，ADR-011 处方挂账）+ 协议单测；调用面已是 `sendRequestAsync` 回调式（socket.hpp:96-100）——**应答异步化不破坏调用方形态**。
 - 未来对接：net M1 接收端（InterServerLink，ADR-011）与 gateway ingress（P3-2）的接收面天然是「收包入队」形态——本拍板定义的受理面就是它们的进程内骨架。
 
@@ -63,7 +63,7 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 2. **队列水位与过载语义**——【已裁 2026-10-10 / ADR-016：水位**两级**（高水位告警 + 顶格拒收回过载错误包），不丢旧不静默；过载响应=回调错误码；数值=tick 预算锚定】决策面前置设计 docs/design/queue-watermark.md（水位形态三岔 + 过载响应 + 预算锚定）。
 3. **只读快路径**——【已裁 2026-10-10 / ADR-016：**不设快路径**】全量入队，受理面单形态；PING 延迟 1 tick 无害，多一条快路径就多一个并发形态要审。
 4. **Manager 三件归并处置**——【已裁 2026-10-10 / ADR-016：mutex **保留**】WorldSessionManager/AnchorManager 已是「跨线程最小集」形态，数据面小、竞争烈度低；迁移收益不抵改形风险；SessionLocator 不动；单写者收口只指 World/Scene 图。与二次摸底「锁必须保留除非持久化线改形」一致。
-5. **停机时序**——【已裁 2026-10-10 / ADR-016：G-3 五阶段 cell-app 镜像】停受理（断流回维护中，base-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
+5. **停机时序**——【已裁 2026-10-10 / ADR-016：G-3 五阶段 cell-app 镜像】停受理（断流回维护中，zone-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
 6. **应答接线（传输层卡点）**——【已裁 2026-10-10 / ADR-017：**ack-on-accept 现行 + 延时应答随 M1 升级；(iii) 阻塞适配否决**】卡点本体：ADR-015 (a) 要求「worker 只做解码+入队，gameThread_ 在 tick 边界消费、执行、**发回应答**」（延时应答），但现行传输 `RepSocket`（nng_rep0）`workerLoop` 严格 lockstep（`nng_recvmsg` → `handler_(data)` 同步返回 → `socket_.send(response)` → 下一轮 recv，socket.cpp:139-172/socket.hpp:119）——应答必须由 recv 同一线程同步产出，延时应答不可实现；且 :165 空应答跳发送（现行变更类回 `{}`）在真实 REP 下欠应答即卡死，全仓走桩分支（:431-488）正因如此。裁定要点：worker 解码+校验+入队（意图信封，ADR-016 水位两级闸）后**受理点立即回执**（变更类空 ack = 现行返回值逐字节同现状；过载回过载错误包）；gameThread_ tick 边界消费执行、结果不落应答；PING 的 Pong 受理点回（纯 wire echo 无 world 访问，非③禁令所指快路径）；延时应答（pending-reply 关联面 + gameThread_ 发送路径）随 M1 InterServerLink 升级，受理面骨架零废弃。(iii) 阻塞适配 = (b) 换皮，反证三条（队列深度恒 ≤1 水位机死码 / 吞吐塌至 tick 率 / 与 ADR-015 弃 (b) 原判冲突）——否决。三候选倾向分析（(i) 等 M1 / (ii) ack-on-accept / (iii) 阻塞适配）与倾向口径勘误（原「(i) 为正本」针对终局接线，ack-on-accept 是 (i) 的前置阶段非绕路）详见 ADR-017。
 
 ## 6. 拍板后路径
@@ -86,7 +86,7 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 - `modules/game/world/src/scene.cpp`：:43-56（spawn/despawn）、:153（tick 遍历 entities_）；`include/.../scene.hpp`：:85-87（unordered_map 容器）
 - `modules/game/world/src/world_session_manager.cpp`：:8-159（全方法 mutex）
 - `modules/game/session/include/apollo/game/session/anchor_manager.hpp`：:26（mutex）
-- `apps/base-app/src/base_server.cpp`：:231（setRequestHandler→dispatchRequest）、:299-340（维护闸同型）、:496（autoSaveThread_ snapshot）
+- `apps/zone-app/src/base_server.cpp`：:231（setRequestHandler→dispatchRequest）、:299-340（维护闸同型）、:496（autoSaveThread_ snapshot）
 - `docs/rearchitecture/concurrency.md` §1.1、`docs/design/attribute-sync.md` §10.1/§10.2、`docs/architecture/adr.md` ADR-009/ADR-011/ADR-012/ADR-015/ADR-016/ADR-017
 
 *基线：apollo main @ 8cab82d5。本件为前置设计——六拍板点全裁（ADR-015/ADR-016/ADR-017，2026-10-10）；受理面批已落地（2026-10-10，90d8ebb7）。*
