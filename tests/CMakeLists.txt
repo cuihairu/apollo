@@ -1079,3 +1079,26 @@ endif()
 add_test(NAME CellAcceptanceTests COMMAND cell_acceptance_tests)
 endif()
 	endif()
+
+# ========== Logger Retrieval Tests (ADR-013 批 L3) ==========
+# LoggerApp 检索面 v1：结构化行读侧（写侧契约镜像）、proc/level/ts/cat
+# 过滤、目录摄取全链（FileAppender structuredOutput → 落盘 → ingest）、
+# push 接缝空推（ADR-013 留接口不实现）。logger 目标无门控条件
+# （apollo::core + apollo::runtime 恒在，同 machined/supervisor_tests）。
+add_executable(logger_tests
+    test_logger_retrieval.cpp
+    ../apps/logger/src/logger_app.cpp
+    ../apps/logger/src/structured_line.cpp
+)
+target_include_directories(logger_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/logger/include
+)
+target_link_libraries(logger_tests PRIVATE apollo::core)
+if(WIN32)
+    target_link_libraries(logger_tests PRIVATE ws2_32)
+    target_compile_definitions(logger_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(logger_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LoggerRetrievalTests COMMAND logger_tests)

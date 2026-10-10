@@ -42,6 +42,7 @@ baseappmgr| $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003
 base      | $BUILD_DIR/apps/base-app/base-app --port 9004
 cell      | $BUILD_DIR/apps/cell-app/cell-app --port 9005
 game      | $BUILD_DIR/apps/game-server/apollo_game_server
+logger    | $BUILD_DIR/apps/logger/logger follow --dir log
 EOF
 }
 

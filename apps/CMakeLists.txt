@@ -9,6 +9,10 @@ message(STATUS "Apollo app scaffold enabled: apps/")
 # （收包/喂钟/死亡事件落日志），仅依赖 net_discovery，无门控条件。
 add_subdirectory(machined)
 
+# LoggerApp——日志收集进程壳（ADR-013 立项）：只读汇聚 CLI（scan/follow），
+# 依赖 apollo::core + apollo::runtime，无门控条件。
+add_subdirectory(logger)
+
 # 检查依赖是否可用
 # Gateway app 的 ingress 头仍包含旧 modules/protocol 的 apollo/protocol/*.hpp
 # （迁移未完成），故除 net::protocol 外还需旧模块目标存在。
