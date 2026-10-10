@@ -75,6 +75,7 @@
 | **write-behind journal** | 状态变更先落追加日志、后刷快照，崩溃可重放 | BW = baseapp 周期备份（backup_sender 族，快照流无 journal）；KBE = Archiver 平滑刷库（archiver.cpp:20-70，按 tick 头部区段）；skynet 无 | attribute-sync §8.2——journal 用途：崩溃恢复位点 + 落库队列（「三用一位」之 G-2 备份镜像流**未立项**，ADR-010 镜像流不建；留档候选形态见 net-abstraction §7 G-2） |
 | **契约**（contract） | 一份声明（属性/消息/白名单）多端生成的单一真相源 | BW/KBE = `.def`（两家皆 XML 但**无 schema 层**，错拼标签静默缺省——entity_description.cpp:184-190 / entitydef.cpp:188-210）；UE = 编译期宏；EQEmu/TC = 源码 opcode 表 | XML + XSD 形式校验 + 生成器（sdk-contract §2、xml-generation）——生成器不进运行时链接图（36号 #4） |
 | **受理应答形态**（ack-on-accept / 延时应答） | RPC 受理面两种回执接线：受理点立即回执 vs 消费执行后在发送侧回执 | BW/KBE/skynet 均随传输形态而定（REQ-REP 族锁步传输强制前者；队列化解耦传输可后者） | apollo 现行 = **ack-on-accept**（ADR-017：worker 受理点回执、gameThread_ tick 边界消费执行结果不落应答——nng_rep0 lockstep[socket.cpp:139-172]不支持延时应答）；**延时应答为 M1 升级项**（InterServerLink recv/send 解耦 + pending-reply 关联面），受理面骨架零废弃 |
+| **意图信封**（intent envelope） | 跨线程投递的「想做什么」最小载体：解码后的操作请求 + 关联键，由非权威线程入队、权威线程在固定边界独占消费执行 | BW/KBE 跨进程实体调用皆消息化（mailbox / remote call），无 RPC handler 直写世界态形态；skynet 消息驱动同型 | ADR-015 (a) 受理面载体——RepSocket worker 解码+校验后入队（有界队列 + ADR-016 两级水位），gameThread_ tick 边界独占消费；与 G-1 收包入队先例同构（死亡事件/镜像包/恢复重报） |
 
 ---
 
