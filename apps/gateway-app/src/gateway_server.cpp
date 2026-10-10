@@ -28,7 +28,11 @@ std::unique_ptr<netproto::Channel> connectBackendChannel(const std::string& url)
     auto channel = std::make_unique<netproto::Channel>();
     std::error_code ec;
     if (!channel->connect(url, ec)) {
-        throw std::runtime_error("Failed to connect backend channel: " + url);
+        // P3-4 处方①：启动期后端缺位降级——警告 + 空件返回，不再 throw。
+        // （exit=1 根因之一：启动期对后端全量硬依赖，单后端缺位即整编队拉不起）
+        std::cerr << "gateway backend unreachable (degraded): " << url
+                  << " (" << ec.message() << ")" << std::endl;
+        return nullptr;
     }
     return channel;
 }
@@ -76,20 +80,17 @@ MessageRouter::~MessageRouter() {
 void MessageRouter::start() {
     if (running_) return;
 
-    // 连接 LoginApp
+    // 后端缺位降级（处方①）：任一后端不可达不中断启动——login/base 悬空时
+    // 对应转发面落空；world 节点不可达则 available=false 出路由选择
+    // （ChatApp 连接已随处方③摘除，fleet 无 chat 进程）
     loginAppClient_ = connectBackendChannel(config_.loginAppUrl);
-
-    // 连接 BaseApp
     baseAppClient_ = connectBackendChannel(config_.baseAppUrl);
-
-    // 连接 ChatApp
-    chatAppClient_ = connectBackendChannel(config_.chatAppUrl);
 
     auto worldNode = std::make_unique<WorldNodeInfo>();
     worldNode->url = config_.cellAppUrl;
     worldNode->client = connectBackendChannel(worldNode->url);
     worldNode->load = 0;
-    worldNode->available = worldNode->client->isConnected();
+    worldNode->available = worldNode->client && worldNode->client->isConnected();
 
     worldNodes_.push_back(std::move(worldNode));
 
@@ -100,7 +101,6 @@ void MessageRouter::stop() {
     running_ = false;
     loginAppClient_.reset();
     baseAppClient_.reset();
-    chatAppClient_.reset();
     worldNodes_.clear();
 }
 
@@ -132,15 +132,6 @@ void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint
     if (baseAppClient_) {
         if (!sendPayload(baseAppClient_.get(), message)) {
             std::cerr << "Failed to forward to BaseApp" << std::endl;
-        }
-    }
-}
-
-void MessageRouter::forwardToChatApp(SessionID sessionId, const std::vector<uint8_t>& message) {
-    (void)sessionId;
-    if (chatAppClient_) {
-        if (!sendPayload(chatAppClient_.get(), message)) {
-            std::cerr << "Failed to forward to ChatApp" << std::endl;
         }
     }
 }
@@ -388,10 +379,12 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         }
 
         case ClientPacketKind::Chat:
-            if (!sessionManager_->hasSession(sessionId)) {
-                return;
+            // ChatApp 摘除（P3-4 处方③）：fleet 无 chat 进程，聊天包显式落地
+            // 不再挂幽灵后端连接（chat 下游随聊天玩法批重建）
+            if (sessionManager_->hasSession(sessionId)) {
+                std::cerr << "Gateway dropped chat message for session " << sessionId
+                          << " (chat backend not wired)" << std::endl;
             }
-            messageRouter_->forwardToChatApp(sessionId, message);
             return;
 
         case ClientPacketKind::World: {

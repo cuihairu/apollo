@@ -35,18 +35,14 @@ public:
     // 转发消息到 BaseApp
     void forwardToBaseApp(SessionID sessionId, const std::vector<uint8_t>& message);
 
-    // 转发消息到 ChatApp
-    void forwardToChatApp(SessionID sessionId, const std::vector<uint8_t>& message);
-
     RouteSnapshot buildDefaultRoute() const;
 
 private:
     GatewayConfig config_;
 
-    // 后端服务连接
+    // 后端服务连接（后端缺位时为空件——启动期降级，P3-4 处方①）
     std::unique_ptr<apollo::net::protocol::Channel> loginAppClient_;
     std::unique_ptr<apollo::net::protocol::Channel> baseAppClient_;
-    std::unique_ptr<apollo::net::protocol::Channel> chatAppClient_;
 
     // WorldHost 池
     struct WorldNodeInfo {

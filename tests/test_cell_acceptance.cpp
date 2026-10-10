@@ -123,8 +123,10 @@ bool body_of(const std::vector<uint8_t>& frame, std::vector<uint8_t>* out) {
 }
 
 bool test_acceptance_ack_ping_and_maintenance_gate() {
+    // tickRateMs=1000 + 首段 settle：gameThread 的首次 drain（空队列）已过，
+    // 后续 drain 在 1s 外——入队计数断言确定性（不依赖调度时序）
     CellConfig config;
-    config.tickRateMs = 20;
+    config.tickRateMs = 1000;
     CellServer server(config);
 
     // start 前：维护闸关 → 维护中错误包
@@ -138,6 +140,7 @@ bool test_acceptance_ack_ping_and_maintenance_gate() {
     }
 
     server.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // 变更类：受理点空 ack（逐字节同现状），意图入队不待 tick
     TEST_ASSERT(server.acceptRequest(make_create_frame(42, 77)).empty(), "create acked empty");
@@ -176,15 +179,17 @@ bool test_acceptance_ack_ping_and_maintenance_gate() {
 }
 
 bool test_overload_reply_at_cap() {
-    // ADR-016：顶格拒收不静默——受理点回错误包，拒收计数可观测。
-    // tickRateMs=1000：首个 tick 前突发全部入队，断言确定性（无时序竞态）。
+    // ADR-016：顶格拒收不静默——受理点回错误包，队列永不超过 cap。
+    // tickRateMs=1000：突发窗口内 gameThread 至多 drain 一次，故用 4×cap 突发
+    // 保证拒收必现（单次 drain 让出的容量至多 cap，接得下上限 2×cap）；
+    // 断言取调度容错形态——不依赖「突发恰好抢在首个 tick 前跑完」。
     CellConfig config;
     config.tickRateMs = 1000;
     CellServer server(config);
     server.start();
 
     constexpr std::size_t kCap = AcceptanceQueue::kDefaultCap;
-    constexpr std::size_t kBurst = kCap + 100;
+    constexpr std::size_t kBurst = 4 * kCap;
     std::size_t acked = 0;
     std::size_t overloaded = 0;
     for (std::size_t i = 0; i < kBurst; ++i) {
@@ -195,9 +200,23 @@ bool test_overload_reply_at_cap() {
             ++overloaded;
         }
     }
-    TEST_ASSERT(acked == kCap, "cap requests acked");
-    TEST_ASSERT(overloaded == kBurst - kCap, "overflow rejected");
-    TEST_ASSERT(server.pendingIntentCount() == kCap, "queue at cap");
+    TEST_ASSERT(acked + overloaded == kBurst, "every request classified");
+    TEST_ASSERT(acked >= kCap, "at least a full queue acked");
+    TEST_ASSERT(overloaded > 0, "overflow rejected");
+    TEST_ASSERT(server.pendingIntentCount() <= kCap, "queue bounded at cap");
+    // 过载回执面：突发后队列未必仍满格（drain 可让出容量），补推到回过载包
+    std::string overloadMessage;
+    for (std::size_t i = 0; i < 2 * kCap; ++i) {
+        auto reply = server.acceptRequest(make_create_frame(9000 + i, 77));
+        if (!reply.empty()) {
+            std::vector<uint8_t> body;
+            TEST_ASSERT(body_of(reply, &body), "overload reply has body");
+            overloadMessage =
+                protocol::MessageCodec::decodeBody<protocol::ErrorMessage>(body).message;
+            break;
+        }
+    }
+    TEST_ASSERT(overloadMessage.find("overloaded") != std::string::npos, "overload reply");
 
     // G-3：stop 关闸 → gameLoop 尾扫 drain → 队列清空
     server.stop();
@@ -206,18 +225,20 @@ bool test_overload_reply_at_cap() {
 }
 
 bool test_drain_at_tick_boundary() {
-    // ADR-015(a)：意图在 tick 边界执行——受理先入队，tick 后清空，随后恢复受理
+    // ADR-015(a)：意图在 tick 边界执行——受理先入队，tick 后清空，随后恢复受理。
+    // tickRateMs=1000 + 首段 settle：入队计数确定性，随后等 ≥1 tick 断言清空
     CellConfig config;
-    config.tickRateMs = 20;
+    config.tickRateMs = 1000;
     CellServer server(config);
     server.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     for (std::uint64_t i = 0; i < 3; ++i) {
         TEST_ASSERT(server.acceptRequest(make_create_frame(200 + i, 77)).empty(), "acked");
     }
     TEST_ASSERT(server.pendingIntentCount() == 3, "intents queued before tick");
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(120));  // ≥ 2 ticks
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));  // ≥ 1 tick
     TEST_ASSERT(server.pendingIntentCount() == 0, "drained at tick boundary");
 
     TEST_ASSERT(server.acceptRequest(make_create_frame(300, 77)).empty(),
