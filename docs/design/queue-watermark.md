@@ -1,6 +1,6 @@
 # 受理队列水位与过载前置设计（拍板②决策面）
 
-> 状态：**前置设计稿（2026-10-10，拍板点待裁、候选倾向已记）**。定位：cell-single-writer 拍板①已裁 ADR-015（(a) 队列化异步受理）后，拍板②「队列水位与过载语义」的决策面展开——钉水位形态三岔、钉过载响应、钉水位数值口径，不写实现细节。体裁仿 net-abstraction §7/battle-instance-offload/cell-single-writer。权威口径 = net-abstraction §4.2/§5.7（水位/背压母件）+ cell-single-writer §5 拍板②候选倾向（两级水位、不丢旧不静默）。
+> 状态：**前置设计稿（2026-10-10）；三拍板点已裁 2026-10-10（ADR-016：水位两级 / 过载回调错误码 / tick 预算锚定）**。定位：cell-single-writer 拍板①已裁 ADR-015（(a) 队列化异步受理）后，拍板②「队列水位与过载语义」的决策面展开——钉水位形态三岔、钉过载响应、钉水位数值口径，不写实现细节。体裁仿 net-abstraction §7/battle-instance-offload/cell-single-writer。权威口径 = net-abstraction §4.2/§5.7（水位/背压母件）+ cell-single-writer §5 拍板②候选倾向（两级水位、不丢旧不静默）。
 
 ---
 
@@ -62,11 +62,11 @@
 | 与 §5.7 口径距离 | 最近（服务器间不 trim 同型） | 远（客户端语义误植） | 违纪律（无界=炸弹） |
 | M1 接收端复用改动 | 零（水位语义同型） | 重做（分类面废弃） | 重做 |
 
-## 6. 拍板点（本件不代拍，候选倾向已记）
+## 6. 拍板点（已裁 2026-10-10 / ADR-016）
 
-1. **水位形态**：倾向 **(a) 两级**（告警线 + 顶格拒收）——(b) 客户端语义误植进程内、(c) 内存炸弹反证（§3/§5）。
-2. **过载响应**：倾向 **(A) 回调错误码**（零新协议、类型化原因）；(B) 契约新消息留 M1 批评估、(C) 静默反证（§4）。
-3. **水位数值口径**：倾向 **tick 预算锚定**——队列深度 × 单请求处理时长 ≤ tick 预算（100ms@10Hz）的比例起步，静态顶格先取保守值，benchmark 接入受理面后按 §2.1 三模型实测锚点同型校准。
+1. **水位形态**：**【已裁：(a) 两级】**（告警线 + 顶格拒收）——(b) 客户端语义误植进程内、(c) 内存炸弹反证（§3/§5）。
+2. **过载响应**：**【已裁：(A) 回调错误码】**（零新协议、类型化原因）；(B) 契约新消息留 M1 批评估、(C) 静默反证（§4）。
+3. **水位数值口径**：**【已裁：tick 预算锚定】**——队列深度 × 单请求处理时长 ≤ tick 预算（100ms@10Hz）的比例起步，静态顶格先取保守值，benchmark 接入受理面后按 §2.1 三模型实测锚点同型校准。
 
 ## 7. 拍板后路径
 
@@ -94,4 +94,4 @@
 - A 级（2026-10-10 本地实读/母件转述）：modules/protocol/include/apollo/protocol/socket.hpp:96-100（sendRequestAsync 回调式）、modules/protocol/src/socket.cpp:124（workerLoop 单线程）、docs/design/net-abstraction.md §4.2/§5.6/§5.7（四级水位/服务器间不 trim/offer 返回码/有界排队纪律）、docs/design/cell-single-writer.md §3(a)/§5 拍板②/§6、docs/design/clock-and-time.md §4、docs/design/capacity-and-benchmark.md §2.1、docs/design/session-and-online-directory.md §6
 - B 级（本仓文档）：docs/todo.md P3-2 批 B（拍板①已裁 ADR-015）
 
-*基线：apollo main @ 9c3ade3c。本件为前置设计——三拍板点悬置待裁，候选倾向仅记不代拍。*
+*基线：apollo main @ a348b7e1。本件为前置设计——三拍板点已裁（ADR-016，2026-10-10），候选倾向即裁定结果。*
