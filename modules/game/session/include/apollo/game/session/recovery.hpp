@@ -8,7 +8,7 @@
 //   - restore_anchors：落盘玩家按需重建锚点（恢复态 Offline——档案在、
 //     会话无；登录路径 activatePlayer 再转 Online）。
 //
-// journal 消费侧经 RestoreStep 注入（本模块不依赖 data 栈；base-app 以
+// journal 消费侧经 RestoreStep 注入（本模块不依赖 data 栈；zone-app 以
 // PersistJournal::replay 充当 restore_step）。
 
 #include <cstdint>

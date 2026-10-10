@@ -272,11 +272,11 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
-	        ../apps/base-app/src/base_server.cpp
-	        ../apps/base-app/src/database_service.cpp
+	        ../apps/zone-app/src/base_server.cpp
+	        ../apps/zone-app/src/database_service.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/zone-app/include
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
@@ -290,13 +290,13 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
 
-	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
+	    # manager（目录 + 落点裁决）——与 zone-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
-	        ../apps/baseappmgr/src/baseappmgr.cpp
+	        ../apps/manager/src/manager_app.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+	        ${CMAKE_SOURCE_DIR}/apps/manager/include
 	    )
 	    target_link_libraries(baseappmgr_tests PRIVATE
 	        apollo
@@ -497,11 +497,11 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
-	        ../apps/base-app/src/base_server.cpp
-	        ../apps/base-app/src/database_service.cpp
+	        ../apps/zone-app/src/base_server.cpp
+	        ../apps/zone-app/src/database_service.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/zone-app/include
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
@@ -515,13 +515,13 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
 
-	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
+	    # manager（目录 + 落点裁决）——与 zone-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
-	        ../apps/baseappmgr/src/baseappmgr.cpp
+	        ../apps/manager/src/manager_app.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+	        ${CMAKE_SOURCE_DIR}/apps/manager/include
 	    )
 	    target_link_libraries(baseappmgr_tests PRIVATE
 	        apollo
@@ -717,11 +717,11 @@ add_test(NAME PersistJournalTests COMMAND persist_journal_tests)
 
 add_executable(persistence_chain_tests
     test_persistence_chain.cpp
-    ../apps/base-app/src/database_service.cpp
+    ../apps/zone-app/src/database_service.cpp
     ../modules/game/session/src/player_anchor.cpp
 )
 target_include_directories(persistence_chain_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/zone-app/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
 )
@@ -743,13 +743,13 @@ add_executable(recovery_tests
     ../modules/game/session/src/anchor_manager.cpp
     ../modules/game/session/src/player_anchor.cpp
     ../modules/data/orm/src/persist_journal.cpp
-    ../apps/base-app/src/database_service.cpp
+    ../apps/zone-app/src/database_service.cpp
 )
 target_include_directories(recovery_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/data/orm/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/zone-app/include
 )
 target_link_libraries(recovery_tests PRIVATE apollo::base apollo::core)
 if(WIN32)

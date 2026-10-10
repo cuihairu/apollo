@@ -31,13 +31,13 @@ void signalHandler(int signal) {
 static apollo::core::log::LoggerPtr initLogging() {
     auto& logs = apollo::core::log::global_log_manager();
     apollo::core::log::LogManagerConfig config;
-    config.processIdentity = "base";
+    config.processIdentity = "zone-app";
     config.fileEnabled = true;
     config.fileConfig.directory = "log";
-    config.fileConfig.baseName = "base";
+    config.fileConfig.baseName = "zone-app";
     config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
     logs.initialize(config);
-    return logs.createLogger("base");
+    return logs.createLogger("zone-app");
 }
 
 // 加载配置
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
     const auto logger = initLogging();
     // 崩溃采集面（crash-capture 批②）：最早段立采集，失败 fail-open 不阻断。
-    apollo::runtime::init_crash_capture(argc, argv, "base-app");
+    apollo::runtime::init_crash_capture(argc, argv, "zone-app");
 
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Base Server           " << std::endl;

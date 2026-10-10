@@ -17,7 +17,7 @@ namespace {
     } while (0)
 
 // baseapp（数据面）锚点生命周期测试。
-// 落点裁决/目录查询（assignWorld/ResolveRoute 族）已拆至 apps/baseappmgr，
+// 落点裁决/目录查询（assignWorld/ResolveRoute 族）已拆至 apps/manager，
 // 见 test_baseappmgr.cpp。
 bool test_base_server_anchor_lifecycle() {
     std::cout << "Running: test_base_server_anchor_lifecycle..." << std::endl;

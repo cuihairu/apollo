@@ -168,7 +168,7 @@ bool test_crash_replay_recovers_profile() {
         journal.open();
 
         RecoveryCoordinator coordinator(
-            "base-app",
+            "zone-app",
             [&]() -> std::size_t {
                 return journal.replay([&](const apollo::data::journal::JournalEntry& e) {
                     base::PlayerData data = base::PlayerData::fromJson(e.payload);

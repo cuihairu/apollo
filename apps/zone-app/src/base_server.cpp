@@ -188,7 +188,7 @@ void BaseServer::start() {
     // replay 恢复未落档位点 → 准入检查（数据面可服务）→ Ready 才开 RPC
     journal_->open();
     recovery_ = std::make_unique<apollo::game::session::RecoveryCoordinator>(
-        "base-app",
+        "zone-app",
         [this]() -> std::size_t {
             return journal_->replay([this](const apollo::data::journal::JournalEntry& e) {
                 PlayerData data = PlayerData::fromJson(e.payload);
@@ -334,7 +334,7 @@ std::vector<uint8_t> BaseServer::dispatchRequest(const std::vector<uint8_t>& dat
             return handlePlayerBindSessionRequest(data);
 
         // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
-        // 归 apps/baseappmgr（目录 + 落点裁决），baseapp 不再受理。
+        // 归 apps/manager（目录 + 落点裁决），zone-app 不再受理。
 
         case protocol::MessageType::PING:
             return handlePing(data);

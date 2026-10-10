@@ -51,7 +51,7 @@ enum class MessageType : uint16_t {
     CHAT_MESSAGE            = 0x0050,
     CHAT_BROADCAST          = 0x0051,
 
-    // 玩家生命周期与落点（baseapp / baseappmgr）
+    // 玩家生命周期与落点（zone-app / manager）
     PLAYER_ACTIVATE_REQUEST      = 0x0060,
     PLAYER_ACTIVATE_RESPONSE     = 0x0061,
     PLAYER_BIND_SESSION_REQUEST  = 0x0062,
@@ -235,7 +235,7 @@ struct DbQueryResponse {
 };
 
 //==============================================================================
-// 玩家生命周期与落点消息（baseapp 承载 Avatar 生命周期；baseappmgr 承载目录与落点）
+// 玩家生命周期与落点消息（zone-app 承载 Avatar 生命周期；manager 承载目录与落点）
 //==============================================================================
 
 struct PlayerActivateRequest {

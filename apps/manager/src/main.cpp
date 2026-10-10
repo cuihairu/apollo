@@ -1,6 +1,6 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
-#include "baseappmgr/baseappmgr.hpp"
+#include "manager/manager_app.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/discovery.hpp"
@@ -15,13 +15,13 @@
 #include <chrono>
 #include <unordered_map>
 
-using baseappmgr::BaseAppMgr;
+using manager::ManagerApp;
 
 namespace disco = apollo::net::discovery;
 namespace session = apollo::game::session;
 
 // 全局服务器指针
-static BaseAppMgr* g_mgr = nullptr;
+static ManagerApp* g_mgr = nullptr;
 
 // 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
@@ -37,13 +37,13 @@ void signalHandler(int signal) {
 static apollo::core::log::LoggerPtr initLogging() {
     auto& logs = apollo::core::log::global_log_manager();
     apollo::core::log::LogManagerConfig config;
-    config.processIdentity = "baseappmgr";
+    config.processIdentity = "manager";
     config.fileEnabled = true;
     config.fileConfig.directory = "log";
-    config.fileConfig.baseName = "baseappmgr";
+    config.fileConfig.baseName = "manager";
     config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
     logs.initialize(config);
-    return logs.createLogger("baseappmgr");
+    return logs.createLogger("manager");
 }
 
 // 加载配置
@@ -87,7 +87,7 @@ std::uint64_t getSteadyNowMs() {
 
 // 目录全量快照导出（P3-1 增量② owner 侧）：在线目录 Online 条目 → 镜像
 // 投影条目（gateway_addr 不上 wire——镜像是定位面不是连接面）。
-std::vector<session::MirrorEntry> collect_mirror_entries(const BaseAppMgr& mgr) {
+std::vector<session::MirrorEntry> collect_mirror_entries(const ManagerApp& mgr) {
     std::vector<session::MirrorEntry> entries;
     const auto& directory = mgr.directory();
     entries.reserve(directory.size());
@@ -113,9 +113,9 @@ int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
     const auto logger = initLogging();
-    apollo::runtime::init_crash_capture(argc, argv, "baseappmgr");
+    apollo::runtime::init_crash_capture(argc, argv, "manager");
     std::cout << "======================================" << std::endl;
-    std::cout << "       Apollo BaseAppMgr             " << std::endl;
+    std::cout << "       Apollo ManagerApp             " << std::endl;
     std::cout << "======================================" << std::endl;
 
     auto& logs = apollo::core::log::global_log_manager();
@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
     }
     disco::UdpFeed recovery_feed;
     std::unique_ptr<session::FleetRecoveryCoordinator> recovery;
-    // （协调器在 BaseAppMgr 构造后装配——intake 回调要落 mgr 目录）
+    // （协调器在 ManagerApp 构造后装配——intake 回调要落 mgr 目录）
 
     // §6 死亡行窗口处置面（G-1 收尾批遗留项）：掉线保活窗口 + gateway 组件
     // 映射。窗口以主循环秒拍为 tick（clock-and-time 单调口径，缺省 30 =
@@ -259,7 +259,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     try {
-        BaseAppMgr mgr(port);
+        ManagerApp mgr(port);
         g_mgr = &mgr;
 
         // 恢复相位跨进程化（G-1 收尾批增量③）：进程启动 = machined 拉起
@@ -287,7 +287,7 @@ int main(int argc, char* argv[]) {
                               + std::to_string(recovery_timeout_ms) + "ms");
         }
 
-        logger->info("Starting BaseAppMgr...");
+        logger->info("Starting ManagerApp...");
         mgr.start();
 
         if (death_listener && death_listener->subscribe()) {
@@ -310,7 +310,7 @@ int main(int argc, char* argv[]) {
                             + std::to_string(initial.size()) + " entries)");
         }
 
-        logger->info("BaseAppMgr is running. Press Ctrl+C to stop.");
+        logger->info("ManagerApp is running. Press Ctrl+C to stop.");
 
         auto since_snapshot = std::chrono::milliseconds(0);
         std::uint8_t recovery_buf[disco::kMaxDatagramSize];
@@ -423,7 +423,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        logger->info("BaseAppMgr stopped.");
+        logger->info("ManagerApp stopped.");
 
     } catch (const std::exception& e) {
         logger->error(std::string("Error: ") + e.what());

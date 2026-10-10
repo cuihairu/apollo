@@ -1,4 +1,4 @@
-#include "baseappmgr/baseappmgr.hpp"
+#include "manager/manager_app.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -6,9 +6,9 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace baseappmgr {
+namespace manager {
 
-BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
+ManagerApp::ManagerApp(uint16_t port, std::string host)
     : host_(std::move(host))
     , port_(port) {
     // 目录事件面（P1-2）：事件落日志（可观察）；P3-1 增量②起追加监听链
@@ -29,41 +29,41 @@ BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
     });
 }
 
-void BaseAppMgr::set_directory_event_listener(
+void ManagerApp::set_directory_event_listener(
     apollo::game::session::PlayerDirectory::EventSink listener) {
     directory_listener_ = std::move(listener);
 }
 
-void BaseAppMgr::set_admission_gate(std::function<bool()> gate) {
+void ManagerApp::set_admission_gate(std::function<bool()> gate) {
     admission_gate_ = std::move(gate);
 }
 
-std::size_t BaseAppMgr::intake_directory_full_report(
+std::size_t ManagerApp::intake_directory_full_report(
     const std::vector<apollo::game::session::MirrorEntry>& sessions) {
     return directory_.intake_full_report(sessions);
 }
 
-std::size_t BaseAppMgr::suspend_zone_sessions(std::uint32_t zone_id,
+std::size_t ManagerApp::suspend_zone_sessions(std::uint32_t zone_id,
                                               std::uint64_t now_tick,
                                               std::uint64_t window_ticks) {
     return directory_.mark_suspended_by_zone(zone_id, now_tick, window_ticks);
 }
 
-std::size_t BaseAppMgr::suspend_gateway_sessions(std::uint32_t gateway_id,
+std::size_t ManagerApp::suspend_gateway_sessions(std::uint32_t gateway_id,
                                                  std::uint64_t now_tick,
                                                  std::uint64_t window_ticks) {
     return directory_.mark_suspended_by_gateway(gateway_id, now_tick, window_ticks);
 }
 
-std::size_t BaseAppMgr::sweep_suspended(std::uint64_t now_tick) {
+std::size_t ManagerApp::sweep_suspended(std::uint64_t now_tick) {
     return directory_.sweep(now_tick);
 }
 
-BaseAppMgr::~BaseAppMgr() {
+ManagerApp::~ManagerApp() {
     stop();
 }
 
-bool BaseAppMgr::assignWorld(
+bool ManagerApp::assignWorld(
     PlayerID playerId,
     const apollo::game::session::WorldAssignment& assignment
 ) {
@@ -85,12 +85,12 @@ bool BaseAppMgr::assignWorld(
     return true;
 }
 
-bool BaseAppMgr::clearWorldAssignment(PlayerID playerId) {
+bool ManagerApp::clearWorldAssignment(PlayerID playerId) {
     std::lock_guard<std::mutex> lock(assignmentsMutex_);
     return assignments_.erase(playerId) > 0;
 }
 
-bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding) {
+bool ManagerApp::bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding) {
     if (playerId == 0 || binding.session_id == 0) {
         return false;
     }
@@ -114,7 +114,7 @@ bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::Ses
     return true;
 }
 
-bool BaseAppMgr::unbindSession(protocol::SessionID sessionId) {
+bool ManagerApp::unbindSession(protocol::SessionID sessionId) {
     const auto playerId = sessionLocator_.find_player_by_session(sessionId);
     if (!playerId.has_value()) {
         return false;
@@ -125,15 +125,15 @@ bool BaseAppMgr::unbindSession(protocol::SessionID sessionId) {
     return true;
 }
 
-bool BaseAppMgr::reconcileDirectory(const std::vector<PlayerID>& reported_online) const {
+bool ManagerApp::reconcileDirectory(const std::vector<PlayerID>& reported_online) const {
     return directory_.reconcile(reported_online);
 }
 
-std::optional<PlayerID> BaseAppMgr::findPlayerBySession(protocol::SessionID sessionId) const {
+std::optional<PlayerID> ManagerApp::findPlayerBySession(protocol::SessionID sessionId) const {
     return sessionLocator_.find_player_by_session(sessionId);
 }
 
-std::optional<apollo::game::session::WorldAssignment> BaseAppMgr::resolveWorldAssignment(
+std::optional<apollo::game::session::WorldAssignment> ManagerApp::resolveWorldAssignment(
     PlayerID playerId,
     protocol::SessionID sessionId
 ) const {
@@ -153,7 +153,7 @@ std::optional<apollo::game::session::WorldAssignment> BaseAppMgr::resolveWorldAs
     return it->second;
 }
 
-std::optional<apollo::game::session::SessionBinding> BaseAppMgr::resolveSessionBinding(
+std::optional<apollo::game::session::SessionBinding> ManagerApp::resolveSessionBinding(
     PlayerID playerId,
     protocol::SessionID sessionId
 ) const {
@@ -174,7 +174,7 @@ std::optional<apollo::game::session::SessionBinding> BaseAppMgr::resolveSessionB
     return sessionLocator_.find_by_player(playerId);
 }
 
-void BaseAppMgr::start() {
+void ManagerApp::start() {
     if (running_) return;
 
     server_ = std::make_unique<protocol::RepSocket>(
@@ -207,11 +207,11 @@ void BaseAppMgr::start() {
     server_->start();
 
     apollo::core::log::global_log_manager()
-        .createLogger("baseappmgr")
-        ->info("BaseAppMgr listening on " + host_ + ":" + std::to_string(port_));
+        .createLogger("manager")
+        ->info("ManagerApp listening on " + host_ + ":" + std::to_string(port_));
 }
 
-void BaseAppMgr::stop() {
+void ManagerApp::stop() {
     running_ = false;
     if (server_) {
         server_->stop();
@@ -219,7 +219,7 @@ void BaseAppMgr::stop() {
     server_.reset();
 }
 
-std::vector<uint8_t> BaseAppMgr::handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> ManagerApp::handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -245,7 +245,7 @@ std::vector<uint8_t> BaseAppMgr::handlePlayerAssignWorldRequest(const std::vecto
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseAppMgr::handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> ManagerApp::handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -287,7 +287,7 @@ std::vector<uint8_t> BaseAppMgr::handlePlayerResolveRouteRequest(const std::vect
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseAppMgr::handlePing(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> ManagerApp::handlePing(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -299,10 +299,10 @@ std::vector<uint8_t> BaseAppMgr::handlePing(const std::vector<uint8_t>& request)
     return protocol::MessageCodec::encode(pong, header.sessionId);
 }
 
-int64_t BaseAppMgr::getCurrentTimeMs() const {
+int64_t ManagerApp::getCurrentTimeMs() const {
     auto now = std::chrono::steady_clock::now();
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 }
 
-} // namespace baseappmgr
+} // namespace manager

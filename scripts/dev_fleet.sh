@@ -13,7 +13,7 @@
 #   APOLLO_FLEET_DIR  运行目录（默认 /tmp/apollo-fleet-<uid>：roster + pid + 日志）
 #
 # dev 端口布局（仅本脚本约定的开发面，无配置真相——生产部署不由此起）：
-#   login 9001 / gateway 9002 / baseappmgr 9003 / base 9004 / cell 9005
+#   login 9001 / gateway 9002 / manager 9003 / zone-app 9004 / cell 9005
 #   （app 缺省端口以各自 config 为准，本脚本显式传参避免歧义）
 #
 # 边界：编队 = 生命周期半边（拉起/重启/收割）；各 app 尚未接 DiscoveryBeacon
@@ -38,8 +38,8 @@ fleet_entries() {
     cat <<EOF
 login     | $BUILD_DIR/apps/login-app/login-app --port 9001
 gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005
-baseappmgr| $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003
-base      | $BUILD_DIR/apps/base-app/base-app --port 9004
+manager   | $BUILD_DIR/apps/manager/manager --port 9003
+zone-app  | $BUILD_DIR/apps/zone-app/zone-app --port 9004
 cell      | $BUILD_DIR/apps/cell-app/cell-app --port 9005
 game      | $BUILD_DIR/apps/game-server/apollo_game_server
 logger    | $BUILD_DIR/apps/logger/logger follow --dir log

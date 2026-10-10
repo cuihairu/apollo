@@ -9,11 +9,11 @@
 #
 # 演练拓扑（独立端口段，不与 dev_fleet 9001-9005/9600 冲突）：
 #   machined --port 19600 --interval 500 --backoff 1000（编队监督 + 死亡通知）
-#   mgr  = baseappmgr --recovery-port 19602 --recovery-expected 1（恢复相位）
+#   mgr  = manager --recovery-port 19602 --recovery-expected 1（恢复相位）
 #                  --mirror-port 19601（目录镜像 owner）
-#   base = base-app --report-to-port 19602 --component-id 30 --zone-id 2
+#   zone = zone-app --report-to-port 19602 --component-id 30 --zone-id 2
 #                  --demo-anchors 3 --mirror-port 19601
-# 脚本 kill -9 base 后按行首 wall-clock 戳算各段耗时并断言收敛。
+# 脚本 kill -9 zone-app 后按行首 wall-clock 戳算各段耗时并断言收敛。
 # 如实边界：会话面为 --demo-anchors 冒烟种子，客户端 resume 段在目录级
 #（epoch/锚点恢复），真实客户端链路归拍板后批次。
 
@@ -25,8 +25,8 @@ DRILL_DIR="${APOLLO_DRILL_DIR:-/tmp/apollo-drill-kill9-$$}"
 mkdir -p "$DRILL_DIR"
 
 MACHINED="$BUILD_DIR/apps/machined/machined"
-MGR="$BUILD_DIR/apps/baseappmgr/baseappmgr"
-BASE="$BUILD_DIR/apps/base-app/base-app"
+MGR="$BUILD_DIR/apps/manager/manager"
+BASE="$BUILD_DIR/apps/zone-app/zone-app"
 
 PORT_DISCO=19600
 PORT_RECOVERY=19602
@@ -79,21 +79,21 @@ cleanup() {
         sleep 2
         pgrep -x machined >/dev/null 2>&1 && kill -KILL "$mpid" 2>/dev/null || true
     fi
-    pkill -KILL -x baseappmgr 2>/dev/null || true
-    pkill -KILL -x base-app 2>/dev/null || true
+    pkill -KILL -x manager 2>/dev/null || true
+    pkill -KILL -x zone-app 2>/dev/null || true
     echo "[drill] teardown end" >&2
 }
 trap cleanup EXIT
 
 # 残留进程护栏（同端口编队不互踩；-x 精确匹配进程名，不误伤外层 shell）
-pkill -KILL -x baseappmgr 2>/dev/null || true
-pkill -KILL -x base-app 2>/dev/null || true
+pkill -KILL -x manager 2>/dev/null || true
+pkill -KILL -x zone-app 2>/dev/null || true
 pkill -KILL -x machined 2>/dev/null || true
 sleep 0.5
 
 cat > "$ROSTER" <<EOF
 mgr  | 0 | 0 | $MGR --port $PORT_MGR --machined-port $PORT_DISCO --recovery-port $PORT_RECOVERY --recovery-expected 1 --mirror-port $PORT_MIRROR --mirror-snapshot-ms 500 --suspend-window-ticks 30
-base | 30 | 2 | $BASE --port $PORT_BASE --report-to-port $PORT_RECOVERY --component-id 30 --zone-id 2 --report-interval-ms 5000 --demo-anchors 3 --mirror-port $PORT_MIRROR --mirror-owner-port $PORT_MGR
+zone-app | 30 | 2 | $BASE --port $PORT_BASE --report-to-port $PORT_RECOVERY --component-id 30 --zone-id 2 --report-interval-ms 5000 --demo-anchors 3 --mirror-port $PORT_MIRROR --mirror-owner-port $PORT_MGR
 EOF
 
 : > "$LOG"
@@ -105,23 +105,23 @@ if ! wait_log "收敛开放" 1 20; then
     tail -30 "$LOG"; fail "initial recovery convergence not observed"; exit 1
 fi
 if ! wait_log "recovery ready" 1 20; then
-    tail -30 "$LOG"; fail "base-app recovery ready not observed"; exit 1
+    tail -30 "$LOG"; fail "zone-app recovery ready not observed"; exit 1
 fi
-ok "初始收敛：恢复相位开放 + base recovery ready"
+ok "初始收敛：恢复相位开放 + zone-app recovery ready"
 wait_log "seeded 3 smoke anchors" 1 10 || fail "demo anchors not seeded"
 
-BASE_PID=$(pgrep -x base-app | head -1)
-[[ -n "$BASE_PID" ]] || { fail "base pid not found"; exit 1; }
-ok "kill 前 baseline：base pid=$BASE_PID"
+BASE_PID=$(pgrep -x zone-app | head -1)
+[[ -n "$BASE_PID" ]] || { fail "zone-app pid not found"; exit 1; }
+ok "kill 前 baseline：zone-app pid=$BASE_PID"
 
 T0=$(date +%s.%N)
 kill -KILL "$BASE_PID"
 
 # —— 断言与分段取时 ——
-wait_log "child death base" 1 10 || fail "machined child death line missing"
-grep -q "child death base exit=137" "$LOG" || fail "exit code is not 137 (128+SIGKILL)"
-wait_log "restart base" 1 15 || fail "machined restart line missing"
-wait_log "recovery ready" 2 20 || fail "restarted base recovery ready not observed"
+wait_log "child death zone-app" 1 10 || fail "machined child death line missing"
+grep -q "child death zone-app exit=137" "$LOG" || fail "exit code is not 137 (128+SIGKILL)"
+wait_log "restart zone-app" 1 15 || fail "machined restart line missing"
+wait_log "recovery ready" 2 20 || fail "restarted zone-app recovery ready not observed"
 wait_log "[window] zone death" 1 10 || fail "zone death window disposition missing"
 
 T3=$(ts_of "recovery ready" 2)
@@ -134,7 +134,7 @@ wait_log_after() { # 等到 min_ts 后出现 pattern
     return 1
 }
 wait_log_after "full report from component=30" "$T3" 20 || \
-    fail "restarted base full report not received"
+    fail "restarted zone-app full report not received"
 
 T4=$(ts_after "full report from component=30" "$T3")
 LAST_INTAKE=$(grep "full report from component=30" "$LOG" | tail -1)
@@ -145,8 +145,8 @@ grep -q "entries=3 parts" "$LOG" || fail "directory mirror not re-converged (ent
 wait_log_after "sweep expired" "$T4" 1 && \
     echo "note: window sweep fired at convergence (窗口期内恢复未达)" || true
 
-T1=$(ts_of "child death base")
-T2=$(ts_of "restart base")
+T1=$(ts_of "child death zone-app")
+T2=$(ts_of "restart zone-app")
 # 镜像收敛：intake 之后首个 entries=3 快照（挂起窗口内恢复，entries 3→0→3）
 T5=$(grep "snapshot published" "$LOG" | awk -v t="$T4" '
     $1+0 > t+0 && /entries=3 parts/ { print $1; exit }')

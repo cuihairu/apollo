@@ -50,7 +50,7 @@ public:
 
     // 目录事件上报源（P1-2，session-and-online-directory §2 事件源①）：
     // bind/unbind 产 SessionUp/SessionDown 同形事件，经 sink 上报 manager
-    // 域目录（权威表在 baseappmgr）；单进程阶段 sink 由宿主注入（默认
+    // 域目录（权威表在 manager）；单进程阶段 sink 由宿主注入（默认
     // 无 sink 静默），跨进程总线上报随 P3。
     void set_directory_event_sink(
         apollo::game::session::PlayerDirectory::EventSink sink);
@@ -75,7 +75,7 @@ private:
     std::vector<uint8_t> handlePlayerBindSessionRequest(const std::vector<uint8_t>& request);
 
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
-    // 归 apps/baseappmgr（目录 + 调度面，BW BaseAppMgr 直系）。
+    // 归 apps/manager（目录 + 调度面，BW baseappmgr 直系）。
 
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);

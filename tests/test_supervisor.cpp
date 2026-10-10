@@ -64,7 +64,7 @@ bool test_roster_zone_column() {
     const auto path = write_temp_roster(
         "# comment line\n"
         "\n"
-        "base-app | 30 | 2 | /bin/sleep 30 --flag\n"
+        "zone-app | 30 | 2 | /bin/sleep 30 --flag\n"
         "fakegw | 41 | 0 | /bin/sleep 600\n"
         "zone-no-comp | | 3 | /bin/true\n");
     TEST_ASSERT(!path.empty(), "临时 roster 可写");
@@ -73,8 +73,8 @@ bool test_roster_zone_column() {
     TEST_ASSERT(machined::load_roster(path, roster), "roster 可读");
     TEST_ASSERT(roster.size() == 3, "注释/空行跳过，3 条目");
 
-    const auto* base_app = find_entry(roster, "base-app");
-    TEST_ASSERT(base_app != nullptr, "base-app 条目在");
+    const auto* base_app = find_entry(roster, "zone-app");
+    TEST_ASSERT(base_app != nullptr, "zone-app 条目在");
     TEST_ASSERT(base_app->component_id == 30, "component 列解析");
     TEST_ASSERT(base_app->zone_id == 2, "zone 列解析（§6 反查键）");
     TEST_ASSERT(base_app->command == "/bin/sleep 30 --flag", "命令列完整");

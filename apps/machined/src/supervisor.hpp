@@ -16,7 +16,7 @@
 // 判据 = 第三字段纯数字才认作 zone 列，否则原样归命令，兼容两列旧格式），
 // # 注释、空行跳过；不支持引号转义（骨架期，命令面从简）。
 // zone 列消费面（§6 死亡行窗口处置）：死亡事件携带 zone_id，manager 域按
-// Zone 行反查进保活窗口（baseappmgr --suspend-window-ticks）。
+// Zone 行反查进保活窗口（manager --suspend-window-ticks）。
 
 #include <cstdint>
 #include <string>

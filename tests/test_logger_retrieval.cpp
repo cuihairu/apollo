@@ -72,7 +72,7 @@ bool test_parse_round_trip_plain() {
 
 bool test_parse_round_trip_quoted_and_kv() {
     // 值含空白/=/引号/中文 → 写侧带引号 + 转义；kv 扩展段含 src
-    LogContext::set_process("baseappmgr");
+    LogContext::set_process("manager");
     LogContext::set_tick(0);
     LogRecord record(LogLevel::Warning,
                      "收敛开放：reported=2/3 (note a=\"q\" b=\\c)", "recovery");
@@ -83,7 +83,7 @@ bool test_parse_round_trip_quoted_and_kv() {
     StructuredLine parsed;
     TEST_ASSERT(parse_structured_line(line, &parsed), "quoted line parses");
     TEST_ASSERT(parsed.level == "WARN", "warn level");
-    TEST_ASSERT(parsed.proc == "baseappmgr", "proc");
+    TEST_ASSERT(parsed.proc == "manager", "proc");
     TEST_ASSERT(parsed.cat == "recovery", "cat");
     TEST_ASSERT(parsed.msg == "收敛开放：reported=2/3 (note a=\"q\" b=\\c)",
                 "msg escapes round trip");
