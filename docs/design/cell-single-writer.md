@@ -1,6 +1,6 @@
 # Cell 单写者收口（RPC 受理与模拟线程的并发形态）
 
-> 状态：**前置设计稿（2026-10-10）；五拍板点全裁（ADR-015 主案 (a) 队列化异步受理 + ADR-016 配套：②水位两级/③不设快路径/④Manager mutex 保留/⑤停机 G-3 镜像；ADR-015 的 (c) 维持否决、(b) 留升级案）**。定位：todo P3-2 批 B「cell-app 单写者收口先行」的决策面展开——钉竞争实证、钉方案三岔语义、钉拍板点，不写实现细节。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload。术语以 term-contract §1.3 为准（cell-app 原型名，ADR-014 不更名）；权威并发口径 = ADR-009 + attribute-sync §10.2 单写者纪律注记 + concurrency.md §1.1 后况勘误（本件为其「方案分叉列拍板项」的直接展开）。
+> 状态：**前置设计稿（2026-10-10）；五拍板点全裁（ADR-015 主案 (a) 队列化异步受理 + ADR-016 配套：②水位两级/③不设快路径/④Manager mutex 保留/⑤停机 G-3 镜像；ADR-015 的 (c) 维持否决、(b) 留升级案）；拍板⑥（应答接线）悬置——受理面批开工时发现 nng_rep0 传输 lockstep 与延时应答不相容，候选倾向已记待裁**。定位：todo P3-2 批 B「cell-app 单写者收口先行」的决策面展开——钉竞争实证、钉方案三岔语义、钉拍板点，不写实现细节。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload。术语以 term-contract §1.3 为准（cell-app 原型名，ADR-014 不更名）；权威并发口径 = ADR-009 + attribute-sync §10.2 单写者纪律注记 + concurrency.md §1.1 后况勘误（本件为其「方案分叉列拍板项」的直接展开）。
 
 ---
 
@@ -64,10 +64,15 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 3. **只读快路径**——【已裁 2026-10-10 / ADR-016：**不设快路径**】全量入队，受理面单形态；PING 延迟 1 tick 无害，多一条快路径就多一个并发形态要审。
 4. **Manager 三件归并处置**——【已裁 2026-10-10 / ADR-016：mutex **保留**】WorldSessionManager/AnchorManager 已是「跨线程最小集」形态，数据面小、竞争烈度低；迁移收益不抵改形风险；SessionLocator 不动；单写者收口只指 World/Scene 图。与二次摸底「锁必须保留除非持久化线改形」一致。
 5. **停机时序**——【已裁 2026-10-10 / ADR-016：G-3 五阶段 cell-app 镜像】停受理（断流回维护中，base-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
+6. **应答接线（传输层卡点）**——【悬置 2026-10-10，候选倾向已记，待裁】ADR-015 (a) 要求「worker 只做解码+入队，gameThread_ 在 tick 边界消费、执行、**发回应答**」——即延时应答。但现行传输 `RepSocket`（nng_rep0）的 `workerLoop` 严格 lockstep：`nng_recvmsg` → `handler_(data)` 同步返回 `std::vector<uint8_t>` → `socket_.send(response)` → 下一轮 recv（socket.cpp:139-172，socket.hpp:119）。worker 在 handler 返回前无法 recv 下一请求，应答字节必须由 recv 同一线程同步产出——**延时应答在当前传输上不可实现**。三候选倾向：
+   - **(i) 等 M1 传输**（InterServerLink，recv/send 解耦）——最净，对齐 ADR-015「受理面即 M1 接收端骨架」注记；但受理面批阻塞至 M1 落地。
+   - **(ii) ack-on-accept 适配**——worker 入队后立即回空 ack（=现行成功语义），gameThread_ tick 边界消费；变更类调用方拿即时成功 ack，但 PING 的 Pong 与一切未来结果承载应答丢失（无第二条发送路径，nng  socket 非线程安全并发 send）。
+   - **(iii) 阻塞适配（(b) 同步等待）**——worker 入队后 condvar 阻塞等 gameThread 产出应答再返回；保住应答语义，但队头阻塞——正是 ADR-015 弃 (b) 选 (a) 的理由。
+   - **倾向**：(i) 为正本（传输层根因，适配是绕路）；但受理面批若不等 M1，需 (ii)/(iii) 之一先行——**待裁**。
 
 ## 6. 拍板后路径
 
-受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app）→ 水位与过载批（对齐 §5.6 语义）→ Manager 归并复核批（若拍板 4 有改）→ net M1 接收端接线（受理面即骨架，M1 只换传输底座）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
+受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app）——**阻塞于拍板⑥**：现行 nng_rep0 传输严格 lockstep，延时应答不可实现；需拍板⑥裁定应答接线（等 M1 / ack-on-accept / 阻塞适配）后开工。水位与过载批（对齐 §5.6 语义）可与受理面批同批或紧随。Manager 归并复核批（若拍板 4 有改）→ net M1 接收端接线（受理面即骨架，M1 只换传输底座）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
 
 ## 7. 与其余设计的交集
 
@@ -81,7 +86,7 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 ## 8. 证据来源清单（A 级实读，2026-10-10）
 
 - `apps/cell-app/src/cell_server.cpp`：:56（tick 写者）、:98-127（handler 注册）、:142（gameThread_）、:176/:191/:210-211/:225-231/:253-287（worker 直触 world_）、:344（gameLoop tick）
-- `modules/protocol/include/apollo/protocol/socket.hpp`：:116-138（RepSocket）、:96-100（sendRequestAsync 回调式）；`src/socket.cpp`：:124/:139（workerThread_/workerLoop）
+- `modules/protocol/include/apollo/protocol/socket.hpp`：:116-138（RepSocket）、:96-100（sendRequestAsync 回调式）、:119（RequestHandler 同步返回 `std::vector<uint8_t>`）；`src/socket.cpp`：:124/:139（workerThread_/workerLoop）、:139-172（recv→handler→send 严格 lockstep）
 - `modules/game/world/src/scene.cpp`：:43-56（spawn/despawn）、:153（tick 遍历 entities_）；`include/.../scene.hpp`：:85-87（unordered_map 容器）
 - `modules/game/world/src/world_session_manager.cpp`：:8-159（全方法 mutex）
 - `modules/game/session/include/apollo/game/session/anchor_manager.hpp`：:26（mutex）
