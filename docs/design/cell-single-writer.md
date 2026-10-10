@@ -1,6 +1,6 @@
 # Cell 单写者收口（RPC 受理与模拟线程的并发形态）
 
-> 状态：**前置设计稿（2026-10-10）；五拍板点全裁（ADR-015 主案 (a) 队列化异步受理 + ADR-016 配套：②水位两级/③不设快路径/④Manager mutex 保留/⑤停机 G-3 镜像；ADR-015 的 (c) 维持否决、(b) 留升级案）；拍板⑥（应答接线）悬置——受理面批开工时发现 nng_rep0 传输 lockstep 与延时应答不相容，候选倾向已记待裁**。定位：todo P3-2 批 B「cell-app 单写者收口先行」的决策面展开——钉竞争实证、钉方案三岔语义、钉拍板点，不写实现细节。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload。术语以 term-contract §1.3 为准（cell-app 原型名，ADR-014 不更名）；权威并发口径 = ADR-009 + attribute-sync §10.2 单写者纪律注记 + concurrency.md §1.1 后况勘误（本件为其「方案分叉列拍板项」的直接展开）。
+> 状态：**前置设计稿（2026-10-10）；六拍板点全裁（ADR-015 主案 (a) 队列化异步受理 + ADR-016 配套：②水位两级/③不设快路径/④Manager mutex 保留/⑤停机 G-3 镜像 + ADR-017 应答接线：ack-on-accept 现行/延时应答随 M1/阻塞适配否决；ADR-015 的 (c) 维持否决、(b) 经拍板⑥ 彻底否决）**。定位：todo P3-2 批 B「cell-app 单写者收口先行」的决策面展开——钉竞争实证、钉方案三岔语义、钉拍板点，不写实现细节。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload。术语以 term-contract §1.3 为准（cell-app 原型名，ADR-014 不更名）；权威并发口径 = ADR-009 + attribute-sync §10.2 单写者纪律注记 + concurrency.md §1.1 后况勘误（本件为其「方案分叉列拍板项」的直接展开）。
 
 ---
 
@@ -59,20 +59,16 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 
 ## 5. 拍板点（本件不代拍，候选倾向已记）
 
-1. **主案三岔**——【已拍板 2026-10-10 / ADR-015：采 **(a) 队列化异步受理**】§10.2 纪律注记原文即 (a) 的直系口径；G-7 论证「固定边界内可见、有序、可序号化」= tick 边界受理；调用面已回调式，延迟增量无语义破坏；受理面即 M1 接收端骨架（(b) 的同步面在 M1 下废弃重做）。(b) 保留为 (a) 水位语义不足时的升级案，(c) 否决。
+1. **主案三岔**——【已拍板 2026-10-10 / ADR-015：采 **(a) 队列化异步受理**】§10.2 纪律注记原文即 (a) 的直系口径；G-7 论证「固定边界内可见、有序、可序号化」= tick 边界受理；调用面已回调式，延迟增量无语义破坏；受理面即 M1 接收端骨架（(b) 的同步面在 M1 下废弃重做）。(b) 保留为 (a) 水位语义不足时的升级案，(c) 否决。（(b) 升级案后经拍板⑥ 彻底否决，见 ADR-017 决策 2）
 2. **队列水位与过载语义**——【已裁 2026-10-10 / ADR-016：水位**两级**（高水位告警 + 顶格拒收回过载错误包），不丢旧不静默；过载响应=回调错误码；数值=tick 预算锚定】决策面前置设计 docs/design/queue-watermark.md（水位形态三岔 + 过载响应 + 预算锚定）。
 3. **只读快路径**——【已裁 2026-10-10 / ADR-016：**不设快路径**】全量入队，受理面单形态；PING 延迟 1 tick 无害，多一条快路径就多一个并发形态要审。
 4. **Manager 三件归并处置**——【已裁 2026-10-10 / ADR-016：mutex **保留**】WorldSessionManager/AnchorManager 已是「跨线程最小集」形态，数据面小、竞争烈度低；迁移收益不抵改形风险；SessionLocator 不动；单写者收口只指 World/Scene 图。与二次摸底「锁必须保留除非持久化线改形」一致。
 5. **停机时序**——【已裁 2026-10-10 / ADR-016：G-3 五阶段 cell-app 镜像】停受理（断流回维护中，base-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
-6. **应答接线（传输层卡点）**——【悬置 2026-10-10，候选倾向已记，待裁】ADR-015 (a) 要求「worker 只做解码+入队，gameThread_ 在 tick 边界消费、执行、**发回应答**」——即延时应答。但现行传输 `RepSocket`（nng_rep0）的 `workerLoop` 严格 lockstep：`nng_recvmsg` → `handler_(data)` 同步返回 `std::vector<uint8_t>` → `socket_.send(response)` → 下一轮 recv（socket.cpp:139-172，socket.hpp:119）。worker 在 handler 返回前无法 recv 下一请求，应答字节必须由 recv 同一线程同步产出——**延时应答在当前传输上不可实现**。三候选倾向：
-   - **(i) 等 M1 传输**（InterServerLink，recv/send 解耦）——最净，对齐 ADR-015「受理面即 M1 接收端骨架」注记；但受理面批阻塞至 M1 落地。
-   - **(ii) ack-on-accept 适配**——worker 入队后立即回空 ack（=现行成功语义），gameThread_ tick 边界消费；变更类调用方拿即时成功 ack，但 PING 的 Pong 与一切未来结果承载应答丢失（无第二条发送路径，nng  socket 非线程安全并发 send）。
-   - **(iii) 阻塞适配（(b) 同步等待）**——worker 入队后 condvar 阻塞等 gameThread 产出应答再返回；保住应答语义，但队头阻塞——正是 ADR-015 弃 (b) 选 (a) 的理由。
-   - **倾向**：(i) 为正本（传输层根因，适配是绕路）；但受理面批若不等 M1，需 (ii)/(iii) 之一先行——**待裁**。
+6. **应答接线（传输层卡点）**——【已裁 2026-10-10 / ADR-017：**ack-on-accept 现行 + 延时应答随 M1 升级；(iii) 阻塞适配否决**】卡点本体：ADR-015 (a) 要求「worker 只做解码+入队，gameThread_ 在 tick 边界消费、执行、**发回应答**」（延时应答），但现行传输 `RepSocket`（nng_rep0）`workerLoop` 严格 lockstep（`nng_recvmsg` → `handler_(data)` 同步返回 → `socket_.send(response)` → 下一轮 recv，socket.cpp:139-172/socket.hpp:119）——应答必须由 recv 同一线程同步产出，延时应答不可实现；且 :165 空应答跳发送（现行变更类回 `{}`）在真实 REP 下欠应答即卡死，全仓走桩分支（:431-488）正因如此。裁定要点：worker 解码+校验+入队（意图信封，ADR-016 水位两级闸）后**受理点立即回执**（变更类空 ack = 现行返回值逐字节同现状；过载回过载错误包）；gameThread_ tick 边界消费执行、结果不落应答；PING 的 Pong 受理点回（纯 wire echo 无 world 访问，非③禁令所指快路径）；延时应答（pending-reply 关联面 + gameThread_ 发送路径）随 M1 InterServerLink 升级，受理面骨架零废弃。(iii) 阻塞适配 = (b) 换皮，反证三条（队列深度恒 ≤1 水位机死码 / 吞吐塌至 tick 率 / 与 ADR-015 弃 (b) 原判冲突）——否决。三候选倾向分析（(i) 等 M1 / (ii) ack-on-accept / (iii) 阻塞适配）与倾向口径勘误（原「(i) 为正本」针对终局接线，ack-on-accept 是 (i) 的前置阶段非绕路）详见 ADR-017。
 
 ## 6. 拍板后路径
 
-受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app）——**阻塞于拍板⑥**：现行 nng_rep0 传输严格 lockstep，延时应答不可实现；需拍板⑥裁定应答接线（等 M1 / ack-on-accept / 阻塞适配）后开工。水位与过载批（对齐 §5.6 语义）可与受理面批同批或紧随。Manager 归并复核批（若拍板 4 有改）→ net M1 接收端接线（受理面即骨架，M1 只换传输底座）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
+受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app）——**设计闭环（六拍板点全裁），待文档/脚本边界放行后开工**；应答接线按 ADR-017（ack-on-accept 现行）。水位与过载批（对齐 §5.6 语义）与受理面批同批。Manager 归并复核批（若拍板 4 有改）→ net M1 接收端接线（受理面即骨架，M1 只换传输底座，新增延时应答升级增量：pending-reply 关联面 + gameThread_ 发送路径）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
 
 ## 7. 与其余设计的交集
 
@@ -91,4 +87,6 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 - `modules/game/world/src/world_session_manager.cpp`：:8-159（全方法 mutex）
 - `modules/game/session/include/apollo/game/session/anchor_manager.hpp`：:26（mutex）
 - `apps/base-app/src/base_server.cpp`：:231（setRequestHandler→dispatchRequest）、:299-340（维护闸同型）、:496（autoSaveThread_ snapshot）
-- `docs/rearchitecture/concurrency.md` §1.1、`docs/design/attribute-sync.md` §10.1/§10.2、`docs/architecture/adr.md` ADR-009/ADR-011/ADR-012
+- `docs/rearchitecture/concurrency.md` §1.1、`docs/design/attribute-sync.md` §10.1/§10.2、`docs/architecture/adr.md` ADR-009/ADR-011/ADR-012/ADR-015/ADR-016/ADR-017
+
+*基线：apollo main @ 8cab82d5。本件为前置设计——六拍板点全裁（ADR-015/ADR-016/ADR-017，2026-10-10）。*

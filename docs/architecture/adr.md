@@ -1,5 +1,5 @@
 ---
-title: 架构决策记录（ADR-001..016）
+title: 架构决策记录（ADR-001..017）
 icon: gavel
 order: 2
 category:
@@ -9,7 +9,7 @@ tag:
   - 决策记录
 ---
 
-# 架构决策记录（ADR-001..016）
+# 架构决策记录（ADR-001..017）
 
 > 目的（任务书 §36）：把已定且已落地的架构裁决写成可引用的记录，**防止未来架构继续失控**。每篇四段：状态 / 背景 / 决策 / 后果。「实件」列给出仓库锚点，改代码前先对 ADR。
 
@@ -121,7 +121,7 @@ tag:
 
 **后果**：模拟逻辑零锁零竞争（确定性成立的前提）；代价是吞吐上限 = 单线程 tick 容量，多核扩展走实例横向编排而非域内多线程。
 
-**后况勘误（2026-10-10）**：P0-3 后 cell-app 拆出 `gameThread_` 跑 worldHost tick，消息 handler 由 `RepSocket` 自持 worker 线程执行——handler 写 world 与 tick 读写 world 跨线程并发，越出本 ADR「跨线程最小集」（concurrency §1.1 后况勘误已记；生产未触发仅因负载空洞）。收口前置设计已立 docs/design/cell-single-writer.md（三岔对表 + 五拍板点，候选倾向=(a) 队列化异步受理，拍板①待裁）——本 ADR 骨架期口径维持，收口批落地后随批演进。
+**后况勘误（2026-10-10）**：P0-3 后 cell-app 拆出 `gameThread_` 跑 worldHost tick，消息 handler 由 `RepSocket` 自持 worker 线程执行——handler 写 world 与 tick 读写 world 跨线程并发，越出本 ADR「跨线程最小集」（concurrency §1.1 后况勘误已记；生产未触发仅因负载空洞）。收口前置设计已立 docs/design/cell-single-writer.md（三岔对表 + 六拍板点，候选倾向=(a) 队列化异步受理，拍板①待裁——同日全裁 ADR-015/016/017）——本 ADR 骨架期口径维持，收口批落地后随批演进。
 
 ---
 
@@ -215,10 +215,10 @@ tag:
 **决策**：
 
 1. **主案 = (a) 队列化异步受理**：RPC worker 只做解码+入队（意图信封），`gameThread_` 在 tick 边界消费、执行、发回应答。全部变更 tick 对齐（attribute-sync §10.1 G-7「固定边界内可见、有序、可序号化」）；应答延迟 ≤1 tick（10Hz 上界 100ms）；调用面已 `sendRequestAsync` 回调式，延迟增量无语义破坏；受理面即 net M1 接收端骨架（(b) 的同步面在 M1 下废弃重做）。
-2. **(b) 保留为 (a) 水位语义不足时的升级案**，(c) 维持否决。
+2. **(b) 保留为 (a) 水位语义不足时的升级案**，(c) 维持否决。**后况勘误（2026-10-10 / ADR-017）**：(b) 同步等待机制经拍板⑥彻底否决——水位语义不足的升级路径是水位调参/扩容而非同步等待；M1 延时应答正解覆盖 (b) 的应答即时性诉求。
 3. **拍板②-⑤维持悬置**（水位形态/只读快路径/Manager 归并/停机时序）——水位与过载的决策面另立前置设计（受理队列水位语义），供后续巡检裁。**已裁（2026-10-10 / ADR-016）**：②水位两级 + 过载回调错误码 + tick 预算锚定；③不设快路径；④Manager mutex 保留；⑤停机 G-3 镜像。
 
-**后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）待文档/脚本边界放行；水位与过载批紧随其后（决策面设计随 ADR-015 落地）；Manager 归并复核批随拍板④；net M1 接收端接线只换传输底座（受理面=骨架直接复用）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
+**后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）待文档/脚本边界放行；水位与过载批紧随其后（决策面设计随 ADR-015 落地）；Manager 归并复核批随拍板④；net M1 接收端接线只换传输底座（受理面=骨架直接复用）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。**后况勘误（2026-10-10 / ADR-017）**：受理面批应答面 = 受理点回执（ack-on-accept），pending reply 为 M1 升级增量（传输 lockstep 卡点与本 ADR 决策 1「发回应答」措辞的修正见 ADR-017）。
 
 ---
 
@@ -233,11 +233,37 @@ tag:
 1. **水位形态 = (a) 两级**（告警线 + 顶格拒收，不丢旧不静默）——(b) 四级全量是客户端体验语义误植进程内（受理面无消费者族分档需求）、(c) 无界排队 = 内存炸弹（net-abstraction §5.7 明文纪律），均不取。
 2. **过载响应 = (A) 回调错误码**（类型化 overload=queue-full，复用 §5.7「类型化原因不代掷猜测」哲学，零新协议）；(B) 契约 internal 域新消息留 M1 批评估（进程内一跳不需 wire 面，留缝不预支）；(C) 静默反证。
 3. **水位数值 = tick 预算锚定**——队列深度 × 单请求处理时长 ≤ tick 预算（100ms@10Hz，clock-and-time §4）的比例起步；静态顶格先取保守值，benchmark 接入受理面后按 capacity §2.1 三模型实测锚点同型校准。
-4. **③ 只读快路径不设**——全量入队单形态；PING/查询类延迟 1 tick 无害，多一条快路径即多一个并发形态要审。
+4. **③ 只读快路径不设**——全量入队单形态；PING/查询类延迟 1 tick 无害，多一条快路径即多一个并发形态要审。**后况勘误（2026-10-10 / ADR-017）**：PING 在 M1 前于受理点回 Pong（worker 侧纯 wire echo 无 world 访问面，非快路径）——现行传输 lockstep 下 Pong 入队则无发送路径可回；M1 延时应答落地后 Pong 随队列入队。
 5. **④ Manager 三件 mutex 保留**——WorldSessionManager/AnchorManager 已是「跨线程最小集」形态（数据面小、竞争烈度低），迁移收益不抵改形风险；SessionLocator 不动；单写者收口只指 World/Scene 图。
 6. **⑤ 停机时序 = G-3 五阶段的 cell-app 镜像**——停受理（断流回维护中，base-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
 
-**后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）落地即含③④⑤配套口径；水位数值的 benchmark 校准随受理面接入 capacity 锚点体系；M1 接收端接线只换传输底座（受理面=骨架直接复用）。
+**后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）落地即含③④⑤配套口径；水位数值的 benchmark 校准随受理面接入 capacity 锚点体系；M1 接收端接线只换传输底座（受理面=骨架直接复用）。**后况勘误（2026-10-10 / ADR-017）**：受理面批应答面 = 受理点回执（ack-on-accept，含 PING 受理点回 Pong 特例勘误见决策 4 注记），pending reply 为 M1 升级增量。
+
+---
+
+## ADR-017 Cell Acceptance Reply Wiring: Ack-on-Accept Now, Deferred Reply at M1（受理面应答接线：受理点回执先行，延时应答随 M1）
+
+**状态：** 已拍板（2026-10-10 巡检续派授权，按 cell-single-writer 拍板⑥ 候选倾向裁定——两阶段接线：ack-on-accept 现行 + 延时应答 M1 升级；(iii) 阻塞适配否决）。
+
+**背景**：受理面批（ADR-015 (a) 落地）开工摸底发现传输层卡点——(a) 要求「worker 只做解码+入队，gameThread_ 在 tick 边界消费、执行、**发回应答**」（延时应答），但现行传输不可实现：
+
+- `RepSocket::workerLoop`（socket.cpp:139-172，nng_rep0）严格 lockstep：`nng_recvmsg` → `handler_(data)` 同步返回应答字节（socket.hpp:119，RequestHandler = `std::function<std::vector<uint8_t>(const std::vector<uint8_t>&)>`）→ 发送 → 下一轮 recv。应答必须由 recv 同一线程同步产出，worker 在 handler 返回前无法收下一请求——延时应答不可实现。
+- **桩传输事实**：:165 `if (!response.empty())` 空应答跳发送——现行变更类 handler 回 `{}`，真实 nng_rep0 下 REP 状态机欠应答即卡死；全仓走桩分支（:431-488）正因如此（nng 依赖解禁评估为传输层重写级断裂后回退，模块保持禁用，M1 自研内核待落地——契约差异清欠 §34.3 / P1-6 批记）。
+- 消费面现状：真实消费方 = gateway 转发（单向 `sendPayload`，ADR-011 半成品壳）+ 协议单测 + liveness；变更类回 `{}`、PING 回 Pong，**无结果承载应答**存在。
+
+三候选倾向（cell-single-writer §5 拍板 6）：(i) 等 M1 传输 / (ii) ack-on-accept 适配 / (iii) 阻塞适配（(b) 同步等待换皮）。
+
+**决策**：
+
+1. **现行接线 = (ii) ack-on-accept**：worker 解码+校验+入队（意图信封，ADR-016 水位两级闸）后**受理点立即回执**；gameThread_ 在 tick 边界消费执行，结果不落应答（当前无结果承载调用方）。变更类回空 ack（= 现行 handler 返回值，桩传输下逐字节同现状）；过载回过载错误包（ADR-016 #2，闭环在受理点）。竞争收口与传输重写解耦——race 是 P3-2 批 B 修复对象，不等 M1。
+2. **(iii) 阻塞适配否决**：worker 入队后 condvar 阻塞等应答 = 方案 (b) 机制。反证三条：(a) 单请求在途 → 队列深度恒 ≤1，ADR-016 水位机（两级告警/顶格拒收）全队列死码；(b) RPC 吞吐塌至 tick 率（≤10/s）——ADR-015 §3(b)/§4 弃 (b) 的「队头阻塞×tick 时长」原判；(c) 与 ADR-015 已裁「采 (a) 弃 (b)」直接冲突。
+3. **PING 的 Pong 受理点回**（worker 侧纯 wire echo，不触 world_）——③「不设快路径」禁令指绕过队列触 world 的并发面，Pong echo 零 world 访问不构成第二并发形态；且 Pong 入队则 gameThread_ 无发送路径可回（:165 + lockstep 双重封锁）。对 ADR-016 #4「全量入队」的 Ping 特例勘误：M1 延时应答落地后 Pong 随队列入队。
+4. **延时应答（原 (a) 接线）随 M1 升级**：InterServerLink recv/send 解耦后加 pending-reply 关联面（header.sessionId 承载）与 gameThread_ 侧发送路径；受理面骨架（意图信封/队列/水位/tick 消费/单写者）零废弃——cell-single-writer §6「M1 只换传输底座」口径不变。ack-on-accept 不是 (i) 的替代终局，是 (i) 的前置阶段；真传输 REP 锁步要求每请求一非空应答帧，ack 帧型随 M1 契约批定义。
+5. **倾向口径勘误**：拍板⑥ 记录原倾向「(i) 为正本（传输层根因，适配是绕路）」针对**终局接线**——裁定保留 (i) 为 M1 时终局；「绕路」指责对 ack-on-accept 不成立：它收竞争、保 wire 语义、骨架复用 M1，是解耦而非绕路。
+
+**后果**：受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app 功能代码）设计闭环，待文档/脚本边界放行后开工（决策面全裁：ADR-015 主案 + ADR-016 配套 + 本 ADR 应答接线）；水位与过载批随受理面批同批；M1 接线批新增「延时应答升级」增量（pending-reply 关联面 + gameThread_ 发送路径），受理面零返工；gateway 转发/单测/liveness 消费面 wire 行为逐字节不变。其余 RepSocket 消费方（login-app/base-app/baseappmgr）同步应答语义不受影响，M1 升级路径全协议模块同型适用。
+
+**证据**：modules/protocol/src/socket.cpp:139-172（workerLoop lockstep）、:165（空应答跳发送）、:431-488（桩分支）、:101（nng_rep0_open）；modules/protocol/include/apollo/protocol/socket.hpp:119（RequestHandler 同步返回）；apps/cell-app/src/cell_server.cpp:166-330（handler 返回值：变更类 `{}`/PING Pong）；docs/design/cell-single-writer.md §3(a)/§5 拍板 6；todo.md P1-6 批记（nng 未装两树同走桩）、契约差异清欠 §34.3（nng 解禁评估回退、M1 随 P3-2 批重估）；ADR-015 §3(b)/§4（弃 (b) 队头阻塞原判）。
 
 ---
 
