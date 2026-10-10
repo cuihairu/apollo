@@ -121,6 +121,8 @@ tag:
 
 **后果**：模拟逻辑零锁零竞争（确定性成立的前提）；代价是吞吐上限 = 单线程 tick 容量，多核扩展走实例横向编排而非域内多线程。
 
+**后况勘误（2026-10-10）**：P0-3 后 cell-app 拆出 `gameThread_` 跑 worldHost tick，消息 handler 由 `RepSocket` 自持 worker 线程执行——handler 写 world 与 tick 读写 world 跨线程并发，越出本 ADR「跨线程最小集」（concurrency §1.1 后况勘误已记；生产未触发仅因负载空洞）。收口前置设计已立 docs/design/cell-single-writer.md（三岔对表 + 五拍板点，候选倾向=(a) 队列化异步受理，拍板①待裁）——本 ADR 骨架期口径维持，收口批落地后随批演进。
+
 ---
 
 ## ADR-010 G-2 Topology: Restart-Only First（容灾拓扑：案 A 先行，standby 不立项）
@@ -132,7 +134,7 @@ tag:
 **决策**：
 1. **案 A 先行（restart-only）**——machined 监督面退避重启 + PersistJournal 持久态 + 客户端重连；**standby 不立项**；案 B/C 不做分期预留，若生产运行数据提出亚秒 RTO 需求另行立项（届时依赖 net M1 InterServerLink）。
 2. **接管粒度按进程类型分三档**（不统一单语义）：有状态重建档 = manager（全量重报，既有）+ Zone（冷重启 + journal replay + 重报收敛，批 0 已实测）；无状态重启档 = login-app / verifier（worker 池重启即恢复）；崩溃即作废档 = Battle 实例（ADR-012）。
-3. **仲裁面：案 A 无双主，不新造仲裁协议**；epoch 沿用 directory_mirror 既有语义（单调递增 + 陈旧 epoch 拒收），manager 单点串行维持。
+3. **仲裁面：案 A 无双主，不新造仲裁协议**；epoch 沿用目录面既有语义（单调递增 + 陈旧 epoch 拒收——守卫实存目录面核心 player_directory.cpp:117-124 §3-③ 竞态窗口守卫：`next_epoch_` 自增发号 + resume 按 token 与 epoch 双锚拒旧，directory_mirror 层仅承载 wire 序列化），manager 单点串行维持。
 4. **RPO/RTO 定档**：RPO = 0（journal write-ahead 零丢失，attribute-sync §11 既有指标升格）；RTO = 重报收敛 ≤3s / 镜像收敛 ≤3.5s（批 0 满载噪声期实测上限定档，空载更优）。
 5. **镜像流不建**：journal 跨进程消费改造不做（现状单进程 SaveQueue worker 维持）；同机 shm SPSC / InterServerLink 两候选形态留档随未来 B/C 立项再裁。
 6. **验收链 = 批 0 kill -9 演练链**（已交付）；双主注入演练不进门禁（案 A 无双主）。G-2 术语四词随本拍板定案：热备/接管词条标注「未立项（案 A 先行）」。
@@ -152,7 +154,9 @@ tag:
 2. **最小修复处方先行**（三步）：① `MessageRouter::start` 连接失败降级警告 + `available=false`（不再 throw→exit 1，复用转发面既有降级语义）② dev_fleet roster 补传三后端 URL（消端口错位）③ ChatApp 依赖摘除（仓库无 chat-app 进程）。
 3. **ingress 客户端接线不随本批**（真缺口在 ingress，归 P3-2 gateway surface 随 net M1 批）；协议收敛 / P4-4 代码层三簇按 M1 阶梯（§5.6：M1 最小正确内核 = 帧定界 + contract_route 分发 + 背压水位 + 单播拓扑 + InterServerLink）推进。
 
-**后果**：dev_fleet 编队不再 gateway crash-loop（exit=1 ×5 give-up 消除）；gateway 仍是无客户端入口的进程壳（预期态，非缺陷）——真正客户端面等 P3-2 + M1。三步均为启动语义与传参修正，不动转发面行为。
+**后果**：三步齐后 dev_fleet 编队不再 gateway crash-loop（exit=1 ×5 give-up 消除）；gateway 仍是无客户端入口的进程壳（预期态，非缺陷）——真正客户端面等 P3-2 + M1。三步均为启动语义与传参修正，不动转发面行为。
+
+**实施状态（2026-10-10 勘误）**：三步尚未齐——② 已落地（dev_fleet roster 补传三后端 URL，commit 5ccfc651）；①③ 待功能代码批（`connectBackendChannel` 连接失败仍 throw——apps/gateway-app/src/gateway_server.cpp:27-34，`MessageRouter::start` 仍连接 ChatApp——gateway_server.cpp:86），crash-loop 消除以①③落地为条件；此前的 dev_fleet 冒烟 gateway exit=1×5 give-up 属预期现状非回归。
 
 ---
 
