@@ -68,7 +68,7 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 
 ## 6. 拍板后路径
 
-受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app）——**设计闭环（六拍板点全裁），待文档/脚本边界放行后开工**；应答接线按 ADR-017（ack-on-accept 现行）。水位与过载批（对齐 §5.6 语义）与受理面批同批。Manager 归并复核批（若拍板 4 有改）→ net M1 接收端接线（受理面即骨架，M1 只换传输底座，新增延时应答升级增量：pending-reply 关联面 + gameThread_ 发送路径）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
+受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app）——**已交付（2026-10-10，90d8ebb7）**：意图信封 + AcceptanceQueue（有界 FIFO + 两级水位 + 顶格拒收）+ 受理点回执（ack-on-accept）+ tick 边界 drain + 停机 G-3 尾扫，cell_acceptance_tests 六组全绿；应答接线按 ADR-017（ack-on-accept 现行）。水位与过载批（对齐 §5.6 语义）随受理面批同批落地。Manager 归并复核批（若拍板 4 有改）→ net M1 接收端接线（受理面即骨架，M1 只换传输底座，新增延时应答升级增量：pending-reply 关联面 + gameThread_ 发送路径）。battle-instance-offload 的 spawn 请求协议控制面复用同一受理形态（ADR-012）。
 
 ## 7. 与其余设计的交集
 
@@ -89,4 +89,4 @@ worker 入队后阻塞（condvar/future）等 gameThread 处理完，取结果�
 - `apps/base-app/src/base_server.cpp`：:231（setRequestHandler→dispatchRequest）、:299-340（维护闸同型）、:496（autoSaveThread_ snapshot）
 - `docs/rearchitecture/concurrency.md` §1.1、`docs/design/attribute-sync.md` §10.1/§10.2、`docs/architecture/adr.md` ADR-009/ADR-011/ADR-012/ADR-015/ADR-016/ADR-017
 
-*基线：apollo main @ 8cab82d5。本件为前置设计——六拍板点全裁（ADR-015/ADR-016/ADR-017，2026-10-10）。*
+*基线：apollo main @ 8cab82d5。本件为前置设计——六拍板点全裁（ADR-015/ADR-016/ADR-017，2026-10-10）；受理面批已落地（2026-10-10，90d8ebb7）。*
