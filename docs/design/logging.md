@@ -96,12 +96,12 @@ logger 线程（1 个）：批量出环 → 格式化 → 本地文件；（P3�
 
 ## 5. 集中收集进程（apps/logger，P3）与 BI 分界
 
-> 2026-10-10：ADR-013 立项切分的落地前置设计已立 [logger-app](./logger-app.md)——apps 接线零实况（七 app 全 std::cout）A 级实读 + v1 采集形态三岔 + 五拍板点（候选倾向 = tail 拉 v1）。
+> 2026-10-10：ADR-013 立项切分的落地前置设计已立 [logger-app](./logger-app.md)，且 **L1+L2+L3 已交付**（七 app 双出口接线 + 开关打开 + logger 壳 scan/follow + push 接缝留位；批记见 ADR-013 落地注记）。v1 采集形态 = tail 拉定案。L4（push 通道 + 断连降级）挂 M1。
 
 - **形态**：独立收集进程（apps/logger），各进程 logger 线程双出口——本地文件（真相源）+ push collector（经 net-abstraction §5.7 InterServerLink——对上层开放的进程间稳定连接设施；BW logger_endpoint / KBE logger 组件 / skynet logger 服务同型）。**不占游戏会话四通道**（net-abstraction §4.1 的 movement/attributes/events/control 是客户端会话面；InterServerLink 是进程间域，天然分离）。
 - **collector 职责**：汇聚归档、按进程/级别/时间检索、磁盘滚动；BI 分流在 collector 侧接（attribute-sync §8.2 的 BI 旁路——业务进程不必同时喂两套出口，脚本错误审计 scripting-lua §6 与运行日志在此汇合）。
 - **失败语义**：collector 挂 → 各进程只写本地（断连检测 + 缓冲上限 + 重连），零业务影响、零进程退出——**收集永远不构成进程的运行依赖**。
-- **每进程文件布局**：`log/<app>-<instance>.log`（主日志）+ `log/crash-<pid>-<time>.log`（崩溃摘要）+ core 分区目录；实例号区分同机多进程（用户要求：每个进程有自己的日志）。
+- **每进程文件布局**：`log/<app>-<instance>.log`（主日志）+ `log/crash-<pid>-<time>.log`（崩溃摘要）+ core 分区目录；实例号区分同机多进程（用户要求：每个进程有自己的日志）。**落地偏差记（2026-10-10，L1+L2）**：实际布局走 FileAppender 自有 scheme `log/<proc>_<日期>[_<序号>].log`（baseName=processIdentity、ByDate 滚动 + 重启序号续接、maxFiles 清理）——与设计口径 `<app>-<instance>.log` 的差异 = 分隔符与实例号形式（序号续接 vs 实例号声明）；单一职责归 FileAppender（logger-app.md 拍板点 4），布局语义等价（每进程每机独立文件集），口径不改设计件、以本注记对齐现实。crash 摘要走 crashdumps/ 目录（crash-capture 批②），非本布局面。
 
 ### 5.1 外采边界：单一 exporter、tail 采集与 trace 子集（2026-09-30 补，design-gap-inventory #10）
 
