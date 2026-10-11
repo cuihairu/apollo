@@ -74,9 +74,15 @@ v1 终态：logger 进程入编队；各 app 双出口第一步 = 本地结构�
           + follow（编队聚合）+ push 接缝 IPushSink/NullPushSink（不实现）；
           验收全过 = logger_tests 9 组入门禁 + dev_fleet roster logger 行
           + 编队冒烟（7 成员、聚合 103 行、scan 12 文件全解析）
-批 L4     ⏳ M1 后：push 通道（InterServerLink，接缝已留）+ 断连降级
-          （logging.md §5 全形态）；更后 BI 分流（attribute-sync §8.2）
-          与告警 notifier（§5.2 层 B）同批
+批 L4     ✅ 已交付（2026-10-12，8d8a1dc0→d8499672）：push 通道 + 断连降级
+          全形态——内核 passive fan-out + 契约 930 logger_line_push +
+          LogPushClient[有界队列 4096 顶格丢新、kReliable 重连恰一次补投、
+          停排留队] + PushAppender/LogManagerConfig.pushSink + logger serve
+          [passive "apps" 收 930 原行归档、逐行冲刷] + 七 app
+          APOLLO_LOG_PUSH_ADDR 一线接线（未设=关 v1 不变）+ dev_fleet
+          serve 化；断连降级活体演练[collector+gateway 同杀 → machined
+          重生 collector → 补投全到档]；BI 分流（attribute-sync §8.2）与
+          告警 notifier（§5.2 层 B）仍后续批
 ```
 
 ## 7. 交集

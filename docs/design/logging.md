@@ -97,6 +97,8 @@ logger 线程（1 个）：批量出环 → 格式化 → 本地文件；（P3�
 ## 5. 集中收集进程（apps/logger，P3）与 BI 分界
 
 > 2026-10-10：ADR-013 立项切分的落地前置设计已立 [logger-app](./logger-app.md)，且 **L1+L2+L3 已交付**（七 app 双出口接线 + 开关打开 + logger 壳 scan/follow + push 接缝留位；批记见 ADR-013 落地注记）。v1 采集形态 = tail 拉定案。L4（push 通道 + 断连降级）挂 M1。
+>
+> 2026-10-12：**L4 已交付**（push 通道 + 断连降级全形态；批记见 [logger-app](./logger-app.md) §6 / todo P3-3）——发端 LogPushClient[有界队列 4096 顶格丢新、kReliable 重连恰一次补投、停排留队] × 收端 logger serve[passive fan-out 收 930、原行归档逐行冲刷] × 接线 APOLLO_LOG_PUSH_ADDR[未设=关，v1 语义不变]。§5 三禁全守：单向无回执、收集不构成运行依赖、本地文件恒真相源；编队活体演练（SIGKILL collector+gateway → machined 重生 → 补投全到档）落地实证。
 
 - **形态**：独立收集进程（apps/logger），各进程 logger 线程双出口——本地文件（真相源）+ push collector（经 net-abstraction §5.7 InterServerLink——对上层开放的进程间稳定连接设施；BW logger_endpoint / KBE logger 组件 / skynet logger 服务同型）。**不占游戏会话四通道**（net-abstraction §4.1 的 movement/attributes/events/control 是客户端会话面；InterServerLink 是进程间域，天然分离）。
 - **collector 职责**：汇聚归档、按进程/级别/时间检索、磁盘滚动；BI 分流在 collector 侧接（attribute-sync §8.2 的 BI 旁路——业务进程不必同时喂两套出口，脚本错误审计 scripting-lua §6 与运行日志在此汇合）。
