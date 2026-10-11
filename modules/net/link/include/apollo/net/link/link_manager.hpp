@@ -13,6 +13,13 @@
 // 编队联动（G-1）：死亡通知 → 该端点停拨 + 取消在途连接器；复活通知 →
 // 复位退避 + 立即重拨（死了的进程不拨，复活即抢跑）。
 //
+// passive fan-out（L4 collector 首个 1:N）：passive 端点 accept 出的每条
+// 传输独立成链——握手前入 staging，握手完按对端自报名（Hello）迁入 peers
+// （同名 = 对端重连替换旧链）。1:1 场景（cell 收 gateway）是 peers 恒一条
+// 的特例，端点名 = 期望对端名时 link()/事件面与 fan-out 前逐字节同值。
+// 消费者经 set_peer_listener 在新 peer 上线时装配分发（路由表/白名单/
+// handler 挂到各 peer 链路——链路对象地址此后稳定）。
+//
 // 零内部线程：pump(now_ms) 一拍驱动全部端点（连接器/监听器/链路共用节拍）。
 
 #include "apollo/net/link/interserver_link.hpp"
@@ -62,7 +69,8 @@ public:
     // 装配期显形，不进运行期）；active 首拨在首个 pump 拍。
     bool add_endpoint(const EndpointConfig& endpoint);
 
-    // 管理器事件面（对上层开放，§5.7 三回调的具名端点投影）。
+    // 管理器事件面（对上层开放，§5.7 三回调的具名端点投影）。active 端点
+    // name = 端点名；passive fan-out 后 name = 对端自报名（1:1 同名同值）。
     void on_up(std::function<void(const std::string& name)> fn) { up_fn_ = std::move(fn); }
     void on_down(std::function<void(const std::string& name, LinkDownReason reason)> fn) {
         down_fn_ = std::move(fn);
@@ -73,6 +81,13 @@ public:
         restart_fn_ = std::move(fn);
     }
 
+    // 新 peer 上线装配位（passive fan-out 消费面）：管理器泵线程在 peer 链
+    // kUp 后、置入 peers 前回调——消费者在此挂路由表/白名单/handler。链路
+    // 对象地址自此稳定（同名替换 = 旧对象析构、新对象新回调）。
+    void set_peer_listener(std::function<void(InterServerLink& peer)> fn) {
+        peer_fn_ = std::move(fn);
+    }
+
     // 编队事件（G-1 联动）。now_ms 显式入参——事件时点归调用方，管理器
     // 不自取时钟（与 pump 注入同纪律）。
     void notify_fleet_down(const std::string& name, std::uint64_t now_ms);
@@ -81,16 +96,24 @@ public:
     // 宿主泵：全部端点一拍（拨号状态机 / accept / 链路 pump）。
     void pump(std::uint64_t now_ms);
 
+    // 链路查取：active 端点名 → 本端链路；passive → 该对端链路（按对端
+    // 自报名直查，单 peer 时端点名兜底——1:1 场景二者同值，与 fan-out 前
+    // 语义连续）。未上线返回 nullptr。
     InterServerLink* link(const std::string& name);
     std::uint16_t endpoint_port(const std::string& name) const;  // passive 实占端口
 
-    // 观测面：拨号尝试计数（退避测试与运维可见性共用一口）。
+    // 观测面：拨号尝试计数（退避测试与运维可见性共用一口）；passive 端点
+    // 在册对端数与握手期失败数（魔数/版本失配/握手超时——装配级故障显形）。
     std::uint64_t dial_attempts(const std::string& name) const;
+    std::size_t peer_count(const std::string& endpoint) const;
+    std::uint64_t handshake_failures(const std::string& endpoint) const;
 
 private:
     struct Managed {
         EndpointConfig config;
-        InterServerLink link;
+        LinkConfig link_config;  // 链路装配参数（self/route_version/epoch 共用）
+        // active 面单链路（passive 的链路族群在 staging/peers）
+        std::unique_ptr<InterServerLink> link;
         // active 面
         TcpConnector connector;
         bool dialing = false;          // connector 在途
@@ -98,15 +121,20 @@ private:
         std::uint64_t next_dial_ms = 0;  // 0 = 立即可拨
         std::uint32_t consecutive_failures = 0;
         std::uint64_t attempts = 0;
-        // passive 面
+        // passive fan-out 面：握手前 staging，握手完按对端名迁入 peers
+        std::vector<std::unique_ptr<InterServerLink>> staging;
+        std::unordered_map<std::string, std::unique_ptr<InterServerLink>> peers;
         TcpListener listener;
+        std::uint64_t handshake_failures = 0;
         // 编队
         bool fleet_up = true;
         Managed(const EndpointConfig& cfg, const LinkManagerConfig& mc);
     };
 
     void wire_sink(Managed& m);
+    void wire_peer_sink(InterServerLink& peer);
     void pump_active(Managed& m, std::uint64_t now_ms);
+    void pump_passive(Managed& m, std::uint64_t now_ms);
     void schedule_backoff(Managed& m, std::uint64_t now_ms);
 
     LinkManagerConfig config_;
@@ -116,6 +144,7 @@ private:
     std::function<void(const std::string&)> up_fn_;
     std::function<void(const std::string&, LinkDownReason)> down_fn_;
     std::function<void(const std::string&, std::uint64_t, std::uint64_t)> restart_fn_;
+    std::function<void(InterServerLink&)> peer_fn_;  // 新 peer 上线装配位（fan-out）
 };
 
 }  // namespace apollo::net::link

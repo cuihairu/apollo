@@ -287,6 +287,14 @@
     <field name="message" type="string" desc="可读详情（可空）"/>
   </msg>
 
+  <!-- Logger push 族（L4：logging.md §5 collector 形态——各进程 logger 面→
+       collector 单向推送；断连降级=有界队列+重连补投，本地文件恒为真相源，
+       收集永不构成运行依赖）。单向无回执：日志不构成关键路径，可靠语义由
+       link Reliable 类 + 发端有界队列承担。 -->
+  <msg id="930" name="logger_line_push" dir="P2P" channel="events" domain="internal" desc="logger 结构化行推送（各进程→collector；一行一帧，行内 proc= 键自识进程）">
+    <field name="line" type="string" desc="结构化行原文（六键 logfmt，structured.h 契约）"/>
+  </msg>
+
   <!-- Guild/Party 族（P2-4：社交面归 Anchor 长期态，improvement-plan P2-4 消息面）。
        C2S 意图 only（服务端定夺，docs/05 §6.4）——操作码经唯一 S2C 结果回带
        （op：1=create 2=disband 3=join 4=leave）；两族各一条 result 收口，

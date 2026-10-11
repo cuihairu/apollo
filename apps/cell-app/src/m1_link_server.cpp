@@ -168,9 +168,11 @@ public:
             return false;
         }
 
-        // 链路对象随 add_endpoint 即存在且跨重连稳定——handler/表/白名单
-        // 装配一次，重连不复装。
-        install_dispatching(*manager_->link(ep.name));
+        // handler/表/白名单随新 peer 上线装配（fan-out 面：链路对象在
+        // peer_listener 回调后地址稳定，重连 = 同名新链重新过此装配）。
+        manager_->set_peer_listener([this](link::InterServerLink& peer) {
+            install_dispatching(peer);
+        });
 
         started_.store(true, std::memory_order_release);
         return true;

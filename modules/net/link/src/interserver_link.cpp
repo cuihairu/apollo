@@ -267,6 +267,9 @@ void InterServerLink::handle_hello(const std::uint8_t* body, std::size_t size) {
         return;
     }
 
+    // 对端自报名（握手三元组第一元；重连重握手覆盖——对端身份以最新为准）。
+    peer_name_.assign(reinterpret_cast<const char*>(body) + 24, name_len);
+
     if (peer_epoch_seen_ && epoch != peer_epoch_) {
         // 对端重启（§5.7：epoch 失配 ≠ 断线重连）：清可靠队列（老一代永不再
         // ack），重置收端去重水位（新一代 seq 从头计），事件交上层裁决。

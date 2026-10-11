@@ -170,21 +170,24 @@ public:
         ep.role = link::EndpointRole::kPassive;
         added_ = manager_->add_endpoint(ep);
         if (added_) {
-            auto* gw = manager_->link(ep.name);
-            auto& dispatcher = gw->dispatcher();
-            if (route_ok_) {
-                dispatcher.set_route_table(&table_);
-            }
-            dispatcher.allow_domain("internal");
-            for (const std::uint16_t id :
-                 {id_of(MsgId::cell_create_entity), id_of(MsgId::cell_destroy_entity),
-                  id_of(MsgId::cell_entity_move), id_of(MsgId::cell_cross_border),
-                  id_of(MsgId::cell_skill_cast)}) {
-                dispatcher.set_handler(id, [this, id](std::uint16_t, const std::uint8_t* data,
+            // 分发装配随 peer 上线（fan-out 面：链路对象回调后地址稳定）
+            manager_->set_peer_listener([this](link::InterServerLink& peer) {
+                auto& dispatcher = peer.dispatcher();
+                if (route_ok_) {
+                    dispatcher.set_route_table(&table_);
+                }
+                dispatcher.allow_domain("internal");
+                for (const std::uint16_t id :
+                     {id_of(MsgId::cell_create_entity), id_of(MsgId::cell_destroy_entity),
+                      id_of(MsgId::cell_entity_move), id_of(MsgId::cell_cross_border),
+                      id_of(MsgId::cell_skill_cast)}) {
+                    dispatcher.set_handler(id,
+                                           [this, id](std::uint16_t, const std::uint8_t* data,
                                                       std::size_t size) {
-                    record(id, data, size);
-                });
-            }
+                                               record(id, data, size);
+                                           });
+                }
+            });
         }
     }
 
@@ -435,9 +438,11 @@ bool test_egress_timeout_sweep() {
     const auto frames = five_family_frames();
     TEST_ASSERT(egress->forwardIntent(9, frames[0]), "first accepted");
     TEST_ASSERT(egress->forwardIntent(9, frames[1]), "second accepted");
-    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->sentIntents() == 2; }, 5000),
-                "two sent");
-    TEST_ASSERT(cell.ack_all() == 0, "no acks (sweep target)");
+    // 送达面等真到达（链路未连时 reliable 也会受理入队，pred 只看 sent
+    // 会在无连接时假绿——迟到应答用例需要真实在册 peer 回投）
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 2; }, 5000),
+                "two delivered");
+    TEST_ASSERT(cell.count() == 2, "two at cell");
 
     // 时钟快进越过清扫线：pending 回收 + 计数
     egress->pump(now_ms() + 400);

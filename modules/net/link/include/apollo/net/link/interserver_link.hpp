@@ -122,6 +122,9 @@ public:
 
     LinkState state() const { return state_; }
     std::uint64_t peer_epoch() const { return peer_epoch_; }
+    // 对端自报名（Hello 携带的组件名；空 = 握手未毕）。1:N 接收端据它
+    // 归档/路由（LinkManager passive fan-out 按此键）。
+    const std::string& peer_name() const { return peer_name_; }
     const LinkConfig& config() const { return config_; }
 
     // 观测面（§5.6 M1 验收：背压可见、断连可检）。
@@ -191,6 +194,7 @@ private:
     // 握手 / 对端身份。
     std::uint64_t peer_epoch_ = 0;
     bool peer_epoch_seen_ = false;  // 本实例是否收到过 Hello（重启判定基准）
+    std::string peer_name_;         // 对端自报名（Hello；空 = 握手未毕）
 
     // 收端去重 / ack 面（keyed by 对端 epoch；epoch 变即重置）。
     std::uint64_t rx_epoch_ = 0;

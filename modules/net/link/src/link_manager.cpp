@@ -7,13 +7,15 @@
 namespace apollo::net::link {
 
 LinkManager::Managed::Managed(const EndpointConfig& cfg, const LinkManagerConfig& mc)
-    : config(cfg), link([&] {
-          LinkConfig lc;
-          lc.self_name = mc.self_name;
-          lc.route_version = mc.route_version;
-          lc.authority_epoch = mc.authority_epoch;
-          return lc;
-      }()) {}
+    : config(cfg) {
+    link_config.self_name = mc.self_name;
+    link_config.route_version = mc.route_version;
+    link_config.authority_epoch = mc.authority_epoch;
+    // active 角色链路在此；passive 的链路族群由 pump 按对端各建（fan-out）。
+    if (cfg.role == EndpointRole::kActive) {
+        link = std::make_unique<InterServerLink>(link_config);
+    }
+}
 
 LinkManager::LinkManager(LinkManagerConfig config) : config_(std::move(config)) {}
 
@@ -34,6 +36,9 @@ bool LinkManager::add_endpoint(const EndpointConfig& endpoint) {
 }
 
 void LinkManager::wire_sink(Managed& m) {
+    if (!m.link) {
+        return;  // passive 端点无本端链路（fan-out 面），事件走 wire_peer_sink
+    }
     LinkEventSink sink;
     const std::string name = m.config.name;
     sink.on_up = [this, name]() {
@@ -54,7 +59,31 @@ void LinkManager::wire_sink(Managed& m) {
             restart_fn_(name, old_epoch, new_epoch);
         }
     };
-    m.link.set_sink(std::move(sink));
+    m.link->set_sink(std::move(sink));
+}
+
+// peer 链事件（fan-out 面）：上线装配位挂在链路 on_up——handle_hello 置
+// kUp 后，同一次 pump 的读批可能紧跟对端补投的业务帧，装配必须在分发前
+// 就位（迁移拍再装就晚了）；断连即以对端自报名出账（握手期坏链无名字，
+// 不出账，走 handshake_failures 计数）。
+void LinkManager::wire_peer_sink(InterServerLink& peer) {
+    LinkEventSink sink;
+    sink.on_up = [this, &peer]() {
+        if (peer_fn_) {
+            peer_fn_(peer);
+        }
+    };
+    sink.on_down = [this, &peer](LinkDownReason reason) {
+        if (down_fn_ && !peer.peer_name().empty()) {
+            down_fn_(peer.peer_name(), reason);
+        }
+    };
+    sink.on_peer_restart = [this, &peer](std::uint64_t old_epoch, std::uint64_t new_epoch) {
+        if (restart_fn_ && !peer.peer_name().empty()) {
+            restart_fn_(peer.peer_name(), old_epoch, new_epoch);
+        }
+    };
+    peer.set_sink(std::move(sink));
 }
 
 void LinkManager::notify_fleet_down(const std::string& name, std::uint64_t /*now_ms*/) {
@@ -90,14 +119,53 @@ void LinkManager::pump(std::uint64_t now_ms) {
                 pump_active(m, now_ms);
                 break;
             case EndpointRole::kPassive: {
-                // accept 出的新传输直接接管（对端重拨场景：attach 内部完成
-                // 旧连接收尾——同 epoch 保可靠队列，新连接重握手）。
+                // accept 出的每条传输独立成链（fan-out；对端重拨 = 同名新链
+                // 替换旧链，语义见 pump_passive）。
                 while (auto transport = m.listener.accept()) {
-                    m.link.attach(std::move(transport), now_ms);
+                    auto peer = std::make_unique<InterServerLink>(m.link_config);
+                    wire_peer_sink(*peer);
+                    peer->attach(std::move(transport), now_ms);
+                    m.staging.push_back(std::move(peer));
                 }
-                m.link.pump(now_ms);
+                pump_passive(m, now_ms);
                 break;
             }
+        }
+    }
+}
+
+void LinkManager::pump_passive(Managed& m, std::uint64_t now_ms) {
+    // staging 推进：握手完迁入 peers（消费者装配分发在迁移前——链路对象
+    // 地址自此稳定）；握手期断连 = 装配级故障计数（魔数/版本失配/握手超时）。
+    for (auto it = m.staging.begin(); it != m.staging.end();) {
+        auto& peer = *it;
+        if (!peer->pump(now_ms)) {
+            ++m.handshake_failures;
+            it = m.staging.erase(it);
+            continue;
+        }
+        if (peer->state() == LinkState::kUp) {
+            const std::string name = peer->peer_name();
+            if (m.peers.erase(name) != 0 && down_fn_) {
+                // 同名替换：旧链退役出账（对端重拨竞速或配置重名——旧链上
+                // 未确认 reliable 不再续传，上层按断连对待）。
+                down_fn_(name, LinkDownReason::kLocalClose);
+            }
+            if (up_fn_) {
+                up_fn_(name);  // 装配（peer_fn_）已在链路 on_up 当拍完成
+            }
+            m.peers.emplace(name, std::move(peer));
+            it = m.staging.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // 已上线 peers：断连即移除（down 事件已由链路 sink 出账）。
+    for (auto it = m.peers.begin(); it != m.peers.end();) {
+        if (it->second->pump(now_ms)) {
+            ++it;
+        } else {
+            it = m.peers.erase(it);
         }
     }
 }
@@ -112,7 +180,7 @@ void LinkManager::pump_active(Managed& m, std::uint64_t now_ms) {
     if (m.dialing) {
         const auto r = m.connector.pump(now_ms);
         if (r == TcpConnector::PumpResult::kConnected) {
-            m.link.attach(m.connector.take_transport(), now_ms);
+            m.link->attach(m.connector.take_transport(), now_ms);
             m.dialing = false;
             m.consecutive_failures = 0;  // 连上即复位退避
         } else if (r == TcpConnector::PumpResult::kFailed) {
@@ -126,9 +194,9 @@ void LinkManager::pump_active(Managed& m, std::uint64_t now_ms) {
     }
 
     const bool link_live =
-        m.link.state() == LinkState::kUp || m.link.state() == LinkState::kHandshaking;
+        m.link->state() == LinkState::kUp || m.link->state() == LinkState::kHandshaking;
     if (m.dialing || link_live) {
-        m.link.pump(now_ms);
+        m.link->pump(now_ms);
         return;
     }
 
@@ -158,8 +226,29 @@ void LinkManager::schedule_backoff(Managed& m, std::uint64_t now_ms) {
 }
 
 InterServerLink* LinkManager::link(const std::string& name) {
+    // 端点名命中的：active → 本端链路；passive → 单 peer 兜底（1:1 场景
+    // 端点名 = 对端名；多 peer 端点名歧义拒答）。
     auto it = by_name_.find(name);
-    return it == by_name_.end() ? nullptr : &it->second->link;
+    if (it != by_name_.end()) {
+        Managed& m = *it->second;
+        if (m.config.role == EndpointRole::kActive) {
+            return m.link.get();
+        }
+        if (m.peers.size() == 1) {
+            return m.peers.begin()->second.get();
+        }
+        return nullptr;
+    }
+    // 对端自报名直查（fan-out 面：peer 名不是端点名，逐 passive 端点找）。
+    for (auto& ep : endpoints_) {
+        if (ep->config.role != EndpointRole::kPassive) {
+            continue;
+        }
+        if (auto p = ep->peers.find(name); p != ep->peers.end()) {
+            return p->second.get();
+        }
+    }
+    return nullptr;
 }
 
 std::uint16_t LinkManager::endpoint_port(const std::string& name) const {
@@ -170,6 +259,16 @@ std::uint16_t LinkManager::endpoint_port(const std::string& name) const {
 std::uint64_t LinkManager::dial_attempts(const std::string& name) const {
     auto it = by_name_.find(name);
     return it == by_name_.end() ? 0 : it->second->attempts;
+}
+
+std::size_t LinkManager::peer_count(const std::string& endpoint) const {
+    auto it = by_name_.find(endpoint);
+    return it == by_name_.end() ? 0 : it->second->peers.size();
+}
+
+std::uint64_t LinkManager::handshake_failures(const std::string& endpoint) const {
+    auto it = by_name_.find(endpoint);
+    return it == by_name_.end() ? 0 : it->second->handshake_failures;
 }
 
 }  // namespace apollo::net::link

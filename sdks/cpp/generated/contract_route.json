@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "2e65a01d05eff2f2066a9d414fd11109addf34f80c220ec054acb2046fa73e18",
+  "schema_hash": "7217a157485a421e252ef9d7bcea7bb0976a2e5e1fda72d63e6c55d5bd00c626",
   "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "662587994b488c53dbdaa1994c3c6f78fff3b57d78516b16f929c5a6a181493a",
+  "internal_hash": "a850709a7a22b83f8e186307f86e108d419fafe28319880ff3afb63760855a76",
   "contract_version": 3,
   "routes": [
     {
@@ -436,6 +436,15 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "cell_intent_ack"
+    },
+    {
+      "id": 930,
+      "name": "logger_line_push",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "logger_line_push"
     }
   ]
 }

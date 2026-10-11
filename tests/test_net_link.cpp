@@ -1074,14 +1074,17 @@ bool test_manager_pair_e2e() {
     TEST_ASSERT(mgr_a.add_endpoint(aa), "active endpoint added");
 
     InterServerLink* la = mgr_a.link("game");
-    InterServerLink* lb = mgr_b.link("auth");
-    TEST_ASSERT(la != nullptr && lb != nullptr, "links exposed");
-    la->dispatcher().set_route_table(&table);
-    lb->dispatcher().set_route_table(&table);
-    la->dispatcher().allow_domain("internal");
-    lb->dispatcher().allow_domain("internal");
+    InterServerLink* lb = nullptr;  // passive fan-out：上线时由 listener 缀取
+    TEST_ASSERT(la != nullptr, "active link exposed");
     RxLog rx, rx_a;
-    lb->dispatcher().set_handler(901, rx.handler());
+    mgr_b.set_peer_listener([&](InterServerLink& peer) {
+        peer.dispatcher().set_route_table(&table);
+        peer.dispatcher().allow_domain("internal");
+        peer.dispatcher().set_handler(901, rx.handler());
+        lb = &peer;
+    });
+    la->dispatcher().set_route_table(&table);
+    la->dispatcher().allow_domain("internal");
     la->dispatcher().set_handler(901, rx_a.handler());
 
     // 泵到握手完成（TCP 拨号 + accept + hello 交换，数百拍预算）。
@@ -1090,12 +1093,14 @@ bool test_manager_pair_e2e() {
         t += 5;
         mgr_a.pump(t);
         mgr_b.pump(t);
-        if (la->state() == LinkState::kUp && lb->state() == LinkState::kUp) {
+        if (la->state() == LinkState::kUp && lb != nullptr) {
             break;
         }
     }
-    TEST_ASSERT(la->state() == LinkState::kUp && lb->state() == LinkState::kUp,
+    TEST_ASSERT(la->state() == LinkState::kUp && lb != nullptr && lb->state() == LinkState::kUp,
                 "managed pair up");
+    TEST_ASSERT(lb->peer_name() == "auth", "peer self name recorded");
+    TEST_ASSERT(mgr_b.peer_count("auth") == 1, "peer in register");
     TEST_ASSERT(a_ups == 1 && b_ups == 1, "manager events fired");
 
     // 双向 reliable 各一帧 + 双向 ack 出队。
@@ -1118,6 +1123,149 @@ bool test_manager_pair_e2e() {
     TEST_ASSERT(rx.got[0] == "901:a" && rx_a.got[0] == "901:b", "payloads swapped true");
     TEST_ASSERT(la->stats().reliable_acked == 1 && lb->stats().reliable_acked == 1,
                 "both acks round trip");
+    return true;
+}
+
+bool test_manager_fanout_two_peers() {
+    // passive fan-out（L4 collector 形态）：一个 passive 端点收两个 active
+    // 对端（不同自报名）——各自成链、独立分发（按对端归账）；其一重拨 =
+    // 同名替换旧链（listener 复挂、down 出账）；握手期坏链 = staging 丢弃
+    // + handshake_failures 计数显形。端点名 ≠ 对端名的解析差异一并覆盖。
+    RouteTable table = make_dispatch_table();
+
+    LinkManagerConfig mp;
+    mp.self_name = "collector";
+    mp.route_version = 7;
+    LinkManager mpassive(mp);
+
+    LinkManagerConfig ma = mp;
+    ma.self_name = "app_a";
+    LinkManagerConfig mb = mp;
+    mb.self_name = "app_b";
+    LinkManager m_a(ma), m_b(mb);
+
+    EndpointConfig pp;
+    pp.name = "apps";  // 本端监听键（≠ 对端自报名，解析面按对端名直查）
+    pp.host = "127.0.0.1";
+    pp.role = EndpointRole::kPassive;
+    TEST_ASSERT(mpassive.add_endpoint(pp), "passive endpoint bound");
+
+    EndpointConfig pa;
+    pa.name = "collector";
+    pa.host = "127.0.0.1";
+    pa.port = mpassive.endpoint_port("apps");
+    TEST_ASSERT(pa.port != 0, "ephemeral port observed");
+    TEST_ASSERT(m_a.add_endpoint(pa), "app_a endpoint added");
+    TEST_ASSERT(m_b.add_endpoint(pa), "app_b endpoint added");
+
+    std::vector<std::string> up_names;
+    std::vector<std::string> down_names;
+    InterServerLink* p_a = nullptr;
+    InterServerLink* p_b = nullptr;
+    int a_installs = 0;  // 重连替换计数（指针同一性不可判新旧——堆址可复用）
+    RxLog rx_a, rx_b;
+    mpassive.on_up([&](const std::string& n) { up_names.push_back(n); });
+    mpassive.on_down([&](const std::string& n, LinkDownReason) { down_names.push_back(n); });
+    mpassive.set_peer_listener([&](InterServerLink& peer) {
+        peer.dispatcher().set_route_table(&table);
+        peer.dispatcher().allow_domain("internal");
+        RxLog& sink = (peer.peer_name() == "app_a") ? rx_a : rx_b;
+        peer.dispatcher().set_handler(901, sink.handler());
+        if (peer.peer_name() == "app_a") {
+            p_a = &peer;
+            ++a_installs;
+        } else {
+            p_b = &peer;
+        }
+    });
+
+    std::uint64_t t = 1000;
+    for (int i = 0; i < 500; ++i) {
+        t += 5;
+        m_a.pump(t);
+        m_b.pump(t);
+        mpassive.pump(t);
+        if (p_a != nullptr && p_b != nullptr) {
+            break;
+        }
+    }
+    TEST_ASSERT(p_a != nullptr && p_b != nullptr, "both peers staged in");
+    TEST_ASSERT(p_a->peer_name() == "app_a" && p_b->peer_name() == "app_b",
+                "peer self names recorded");
+    TEST_ASSERT(up_names.size() == 2, "two up events by peer name");
+    TEST_ASSERT(mpassive.peer_count("apps") == 2, "two peers in register");
+    TEST_ASSERT(mpassive.link("app_a") == p_a && mpassive.link("app_b") == p_b,
+                "peer-name link resolution");
+    TEST_ASSERT(mpassive.link("apps") == nullptr,
+                "endpoint name ambiguous at fan-out > 1");
+    TEST_ASSERT(m_a.link("collector") != nullptr, "active side resolution unchanged");
+
+    // 双向独立分发：各自 reliable 一帧，按对端归账。
+    TEST_ASSERT(m_a.link("collector")
+                        ->send(901, std::vector<std::uint8_t>{'a'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "app_a send");
+    TEST_ASSERT(m_b.link("collector")
+                        ->send(901, std::vector<std::uint8_t>{'b'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "app_b send");
+    for (int i = 0; i < 200; ++i) {
+        t += 5;
+        m_a.pump(t);
+        m_b.pump(t);
+        mpassive.pump(t);
+        if (rx_a.got.size() == 1 && rx_b.got.size() == 1) {
+            break;
+        }
+    }
+    TEST_ASSERT(rx_a.got.size() == 1 && rx_a.got[0] == "901:a", "app_a delivered to own log");
+    TEST_ASSERT(rx_b.got.size() == 1 && rx_b.got[0] == "901:b", "app_b delivered to own log");
+
+    // 重拨替换：A 端主动断——passive 侧 down 出账，重连后新链重过装配。
+    m_a.link("collector")->close();
+    for (int i = 0; i < 800; ++i) {
+        t += 5;
+        m_a.pump(t);
+        m_b.pump(t);
+        mpassive.pump(t);
+        if (a_installs >= 2 && p_a != nullptr && p_a->state() == LinkState::kUp) {
+            break;
+        }
+    }
+    TEST_ASSERT(a_installs == 2, "replacement link installed");
+    TEST_ASSERT(p_a != nullptr && p_a->state() == LinkState::kUp, "reconnected peer up");
+    TEST_ASSERT(mpassive.peer_count("apps") == 2, "register back to two");
+    TEST_ASSERT(down_names.size() == 1 && down_names[0] == "app_a",
+                "retired link down by peer name");
+    TEST_ASSERT(up_names.size() == 3, "reconnect re-fired listener path");
+
+    // 握手期坏链：合法帧壳 + 载荷尾校验破坏 → fatal（协议级，非重同步可
+    // 容）→ staging 丢弃 + 计数显形（不出 up/down 账）。
+    const std::size_t downs_before = down_names.size();
+    {
+        TcpConnector junk;
+        TEST_ASSERT(junk.start("127.0.0.1", mpassive.endpoint_port("apps"), 3000, t),
+                    "junk connect started");
+        TcpConnector::PumpResult r = TcpConnector::PumpResult::kInProgress;
+        for (int i = 0; i < 100 && r == TcpConnector::PumpResult::kInProgress; ++i) {
+            r = junk.pump(t + static_cast<std::uint64_t>(i) * 10);
+        }
+        TEST_ASSERT(r == TcpConnector::PumpResult::kConnected, "junk connected");
+        auto transport = junk.take_transport();
+        std::vector<std::uint8_t> bad_frame;
+        append_frame(bad_frame, 1, 0, std::vector<std::uint8_t>{'x'});
+        bad_frame.back() ^= 0xFF;  // 尾校验破坏 → fatal
+        TEST_ASSERT(transport->write(bad_frame.data(), bad_frame.size()) ==
+                        static_cast<int>(bad_frame.size()),
+                    "corrupt frame written");
+        for (int i = 0; i < 50 && mpassive.handshake_failures("apps") == 0; ++i) {
+            t += 5;
+            mpassive.pump(t);
+        }
+    }
+    TEST_ASSERT(mpassive.handshake_failures("apps") == 1, "handshake failure counted");
+    TEST_ASSERT(down_names.size() == downs_before, "staging drop stays out of down log");
+    TEST_ASSERT(mpassive.peer_count("apps") == 2, "register untouched by staging drop");
     return true;
 }
 
@@ -1164,6 +1312,7 @@ int main() {
         {"manager_backoff_schedule", test_manager_backoff_schedule},
         {"manager_fleet_gate", test_manager_fleet_gate},
         {"manager_pair_e2e", test_manager_pair_e2e},
+        {"manager_fanout_two_peers", test_manager_fanout_two_peers},
 #endif
     };
     int failed = 0;
