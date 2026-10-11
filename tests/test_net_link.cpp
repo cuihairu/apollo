@@ -19,12 +19,14 @@
 #include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/net/link/watermark.hpp"
 
+#include <chrono>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #define TEST_ASSERT(cond, msg)                                                           \
@@ -811,6 +813,7 @@ bool test_tcp_raw_echo() {
     std::uint8_t buf[16] = {};
     int n = 0;
     for (int i = 0; i < 100 && n == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         n = server->read(buf, sizeof buf);
     }
     TEST_ASSERT(n == 4 && std::memcmp(buf, "ping", 4) == 0, "server reads payload");
@@ -818,6 +821,7 @@ bool test_tcp_raw_echo() {
     TEST_ASSERT(server->write(payload.data(), payload.size()) == 4, "server write");
     n = 0;
     for (int i = 0; i < 100 && n == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         n = client->read(buf, sizeof buf);
     }
     TEST_ASSERT(n == 4 && std::memcmp(buf, "ping", 4) == 0, "client reads echo");
@@ -826,6 +830,7 @@ bool test_tcp_raw_echo() {
     server->close();
     n = 0;
     for (int i = 0; i < 100 && n == 0; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         n = client->read(buf, sizeof buf);
     }
     TEST_ASSERT(n == -1, "peer close surfaces as EOF");
