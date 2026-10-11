@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "132a03c831fc18630207e5fb22272df7f97275c0abf85b32b22f75955f44a874",
-  "client_hash": "6558d947647bfecc1279f850abd49cb687236393b1e0416ff6abe7c4d84d1ead",
-  "internal_hash": "c7b4dac8bdfa7b782f910ec2c4b5f452c1f47bcf9566d8dd4caca83d4658eaff",
+  "schema_hash": "2e65a01d05eff2f2066a9d414fd11109addf34f80c220ec054acb2046fa73e18",
+  "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
+  "internal_hash": "662587994b488c53dbdaa1994c3c6f78fff3b57d78516b16f929c5a6a181493a",
   "contract_version": 3,
   "routes": [
     {
@@ -382,6 +382,60 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "battle_result"
+    },
+    {
+      "id": 924,
+      "name": "cell_create_entity",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_create_entity"
+    },
+    {
+      "id": 925,
+      "name": "cell_destroy_entity",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_destroy_entity"
+    },
+    {
+      "id": 926,
+      "name": "cell_entity_move",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_entity_move"
+    },
+    {
+      "id": 927,
+      "name": "cell_cross_border",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_cross_border"
+    },
+    {
+      "id": 928,
+      "name": "cell_skill_cast",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_skill_cast"
+    },
+    {
+      "id": 929,
+      "name": "cell_intent_ack",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_intent_ack"
     }
   ]
 }

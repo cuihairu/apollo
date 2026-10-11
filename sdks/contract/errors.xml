@@ -8,4 +8,5 @@
   <error code="1004" name="schema_mismatch" desc="契约 hash 不匹配（sdk-contract §6 握手）"/>
   <error code="2001" name="internal" desc="内部错误"/>
   <error code="2002" name="db_busy" desc="存储层忙"/>
+  <error code="2101" name="cell_backpressure" desc="cell 受理队列顶格拒收（ADR-015 两级水位，cap 满回错误包）"/>
 </errors>

@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "6558d947647bfecc1279f850abd49cb687236393b1e0416ff6abe7c4d84d1ead",
+  "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
   "messages": [
     {
       "id": 10,
@@ -395,6 +395,11 @@
       "code": 2002,
       "name": "db_busy",
       "desc": "存储层忙"
+    },
+    {
+      "code": 2101,
+      "name": "cell_backpressure",
+      "desc": "cell 受理队列顶格拒收（ADR-015 两级水位，cap 满回错误包）"
     }
   ]
 }

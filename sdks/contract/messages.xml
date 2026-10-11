@@ -225,6 +225,68 @@
     <field name="scores" type="int64[]" desc="on_reward(player_id, score) 载荷（IRewardSink 语义）"/>
   </msg>
 
+  <!-- Cell 意图族（P3-2 M1 上层接线批：gateway/Zone→cell-app 受理面上行。
+       承载=InterServerLink 帧载荷（net-abstraction §5.7 契约路由，id 归
+       internal 域，不开放契约外消息）；字段与 legacy Cell*/Combat* 结构
+       平铺镜像（契约无嵌套 struct，Position 展开三 float）。关联纪律=
+       ADR-017 延时应答：request_id 意图号 + session_id 源会话号随意图
+       上行，回执 cell_intent_ack 按 request_id 关联（帧 seq 属链路重发
+       面，不可承载业务关联）。 -->
+  <msg id="924" name="cell_create_entity" dir="P2P" channel="events" domain="internal" desc="cell 建实体意图（Zone→cell-app 受理面）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="entity_id" type="int64"/>
+    <field name="entity_type" type="int32"/>
+    <field name="space_id" type="int64"/>
+    <field name="pos_x" type="float"/>
+    <field name="pos_y" type="float"/>
+    <field name="pos_z" type="float"/>
+  </msg>
+  <msg id="925" name="cell_destroy_entity" dir="P2P" channel="events" domain="internal" desc="cell 销实体意图（Zone→cell-app 受理面）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="entity_id" type="int64"/>
+  </msg>
+  <msg id="926" name="cell_entity_move" dir="P2P" channel="events" domain="internal" desc="cell 移动意图（Zone→cell-app 受理面）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="entity_id" type="int64"/>
+    <field name="old_pos_x" type="float"/>
+    <field name="old_pos_y" type="float"/>
+    <field name="old_pos_z" type="float"/>
+    <field name="new_pos_x" type="float"/>
+    <field name="new_pos_y" type="float"/>
+    <field name="new_pos_z" type="float"/>
+  </msg>
+  <msg id="927" name="cell_cross_border" dir="P2P" channel="events" domain="internal" desc="cell 跨界意图（Zone→cell-app 受理面）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="entity_id" type="int64"/>
+    <field name="from_space" type="int64"/>
+    <field name="to_space" type="int64"/>
+    <field name="pos_x" type="float"/>
+    <field name="pos_y" type="float"/>
+    <field name="pos_z" type="float"/>
+  </msg>
+  <msg id="928" name="cell_skill_cast" dir="P2P" channel="events" domain="internal" desc="cell 技能意图（Zone→cell-app 受理面）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="caster_id" type="int64"/>
+    <field name="target_id" type="int64"/>
+    <field name="skill_id" type="int32"/>
+    <field name="caster_pos_x" type="float"/>
+    <field name="caster_pos_y" type="float"/>
+    <field name="caster_pos_z" type="float"/>
+    <field name="target_pos_x" type="float"/>
+    <field name="target_pos_y" type="float"/>
+    <field name="target_pos_z" type="float"/>
+  </msg>
+  <msg id="929" name="cell_intent_ack" dir="P2P" channel="events" domain="internal" desc="cell 意图受理回执（cell-app→来源；ADR-017 延时应答：gameThread_ 消费后回带，替代受理点空 ack）">
+    <field name="request_id" type="int64" desc="对应意图的意图号"/>
+    <field name="code" type="int32" desc="0=成功；非 0 为驳回原因（errors.xml）"/>
+    <field name="message" type="string" desc="可读详情（可空）"/>
+  </msg>
+
   <!-- Guild/Party 族（P2-4：社交面归 Anchor 长期态，improvement-plan P2-4 消息面）。
        C2S 意图 only（服务端定夺，docs/05 §6.4）——操作码经唯一 S2C 结果回带
        （op：1=create 2=disband 3=join 4=leave）；两族各一条 result 收口，
