@@ -1,6 +1,7 @@
-// Cell 受理面批测试（P3-2 批 B / ADR-015(a)/016/017）：
-//   受理队列单元面（FIFO/顶格拒收/两级水位滞回）+ CellServer 受理点接线
-//   （维护闸/受理回执/Pong wire echo/tick 边界 drain/过载回错误包）。
+// Cell 受理面批测试（P3-2 批 B / ADR-015(a)/016/017；2b-iii 迁 M1 受理缝）：
+//   受理队列单元面（FIFO/顶格拒收/两级水位滞回）+ CellServer submitIntent
+//   受理判定（维护闸/tick 边界 drain/顶格拒收）。wire 回执面（2101/2001/延
+//   时 929）归 cell_m1_link_tests（真 M1 链路断言），此处只断受理判定。
 // 直编惯例同 scene_tests（无 GTest，plain-assert + main 汇总）；
 // 协议源直编同 apps/cell-app（stub 传输，APOLLO_USE_NNG 未定义）。
 #include "cell/acceptance_queue.hpp"
@@ -113,73 +114,59 @@ std::vector<uint8_t> make_create_frame(std::uint64_t entity_id, protocol::Sessio
     return protocol::MessageCodec::encode(msg, session_id);
 }
 
-bool body_of(const std::vector<uint8_t>& frame, std::vector<uint8_t>* out) {
-    if (frame.size() < sizeof(protocol::MessageHeader)) {
-        return false;
-    }
-    out->assign(frame.begin() + static_cast<std::ptrdiff_t>(sizeof(protocol::MessageHeader)),
-                frame.end());
-    return true;
+cell::IntentEnvelope make_create_intent(std::uint64_t entity_id,
+                                        protocol::SessionID session_id) {
+    cell::IntentEnvelope intent;
+    intent.type = protocol::MessageType::CELL_CREATE_ENTITY;
+    intent.frame = make_create_frame(entity_id, session_id);
+    intent.session_id = session_id;
+    return intent;
 }
 
-bool test_acceptance_ack_ping_and_maintenance_gate() {
+cell::IntentEnvelope make_move_intent(std::uint64_t entity_id,
+                                      protocol::SessionID session_id) {
+    protocol::CellEntityMove msg;
+    msg.entityId = entity_id;
+    msg.newPos.x = 4.0f;
+    msg.newPos.y = 5.0f;
+    msg.newPos.z = 6.0f;
+    cell::IntentEnvelope intent;
+    intent.type = protocol::MessageType::CELL_ENTITY_MOVE;
+    intent.frame = protocol::MessageCodec::encode(msg, session_id);
+    intent.session_id = session_id;
+    return intent;
+}
+
+bool test_acceptance_gate_and_queue() {
     // tickRateMs=1000 + 首段 settle：gameThread 的首次 drain（空队列）已过，
     // 后续 drain 在 1s 外——入队计数断言确定性（不依赖调度时序）
     CellConfig config;
     config.tickRateMs = 1000;
     CellServer server(config);
 
-    // start 前：维护闸关 → 维护中错误包
-    auto gateReply = server.acceptRequest(make_create_frame(1, 77));
-    TEST_ASSERT(!gateReply.empty(), "pre-start request answered at gate");
-    {
-        std::vector<uint8_t> body;
-        TEST_ASSERT(body_of(gateReply, &body), "gate reply has body");
-        auto err = protocol::MessageCodec::decodeBody<protocol::ErrorMessage>(body);
-        TEST_ASSERT(err.message.find("maintenance") != std::string::npos, "maintenance reply");
-    }
+    // start 前：维护闸关 → 拒收
+    TEST_ASSERT(!server.submitIntent(make_create_intent(1, 77)), "pre-start gated");
 
     server.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    // 变更类：受理点空 ack（逐字节同现状），意图入队不待 tick
-    TEST_ASSERT(server.acceptRequest(make_create_frame(42, 77)).empty(), "create acked empty");
+    // 受理成功不入队应答（延时应答随执行，ADR-017），意图入队不待 tick
+    TEST_ASSERT(server.submitIntent(make_create_intent(42, 77)), "create accepted");
     TEST_ASSERT(server.pendingIntentCount() == 1, "intent queued");
 
-    // 变更类第二型：move 同样空 ack（CellDestroyEntity 无 encode overload，
-    // codec 只解不编——wire 生成方在网关，测试面用可编码的 move 型）
-    protocol::CellEntityMove moveMsg;
-    moveMsg.entityId = 42;
-    moveMsg.newPos.x = 4.0f;
-    moveMsg.newPos.y = 5.0f;
-    moveMsg.newPos.z = 6.0f;
-    TEST_ASSERT(
-        server.acceptRequest(protocol::MessageCodec::encode(moveMsg, 77)).empty(),
-        "move acked empty");
-
-    // PING：受理点回 Pong（wire echo），不入队
-    protocol::Ping ping;
-    ping.timestamp = 12345;
-    auto pongReply = server.acceptRequest(protocol::MessageCodec::encode(ping, 77));
-    TEST_ASSERT(!pongReply.empty(), "ping answered at acceptance");
-    {
-        std::vector<uint8_t> body;
-        TEST_ASSERT(body_of(pongReply, &body), "pong reply has body");
-        auto pong = protocol::MessageCodec::decodeBody<protocol::Pong>(body);
-        TEST_ASSERT(pong.timestamp == 12345, "pong echoes timestamp");
-    }
-    TEST_ASSERT(server.pendingIntentCount() == 2, "ping not queued");
+    // 变更类第二型：move 同受理
+    TEST_ASSERT(server.submitIntent(make_move_intent(42, 77)), "move accepted");
+    TEST_ASSERT(server.pendingIntentCount() == 2, "second intent queued");
 
     server.stop();
 
     // stop 后：维护闸关
-    auto stoppedReply = server.acceptRequest(make_create_frame(43, 77));
-    TEST_ASSERT(!stoppedReply.empty(), "post-stop request answered at gate");
+    TEST_ASSERT(!server.submitIntent(make_create_intent(43, 77)), "post-stop gated");
     return true;
 }
 
-bool test_overload_reply_at_cap() {
-    // ADR-016：顶格拒收不静默——受理点回错误包，队列永不超过 cap。
+bool test_overload_rejects_at_cap() {
+    // ADR-016：顶格拒收不丢旧——队列永不超过 cap，拒收计数显形。
     // tickRateMs=1000：突发窗口内 gameThread 至多 drain 一次，故用 4×cap 突发
     // 保证拒收必现（单次 drain 让出的容量至多 cap，接得下上限 2×cap）；
     // 断言取调度容错形态——不依赖「突发恰好抢在首个 tick 前跑完」。
@@ -190,33 +177,19 @@ bool test_overload_reply_at_cap() {
 
     constexpr std::size_t kCap = AcceptanceQueue::kDefaultCap;
     constexpr std::size_t kBurst = 4 * kCap;
-    std::size_t acked = 0;
-    std::size_t overloaded = 0;
+    std::size_t accepted = 0;
+    std::size_t rejected = 0;
     for (std::size_t i = 0; i < kBurst; ++i) {
-        auto reply = server.acceptRequest(make_create_frame(1000 + i, 77));
-        if (reply.empty()) {
-            ++acked;
+        if (server.submitIntent(make_create_intent(1000 + i, 77))) {
+            ++accepted;
         } else {
-            ++overloaded;
+            ++rejected;
         }
     }
-    TEST_ASSERT(acked + overloaded == kBurst, "every request classified");
-    TEST_ASSERT(acked >= kCap, "at least a full queue acked");
-    TEST_ASSERT(overloaded > 0, "overflow rejected");
+    TEST_ASSERT(accepted + rejected == kBurst, "every intent classified");
+    TEST_ASSERT(accepted >= kCap, "at least a full queue accepted");
+    TEST_ASSERT(rejected > 0, "overflow rejected");
     TEST_ASSERT(server.pendingIntentCount() <= kCap, "queue bounded at cap");
-    // 过载回执面：突发后队列未必仍满格（drain 可让出容量），补推到回过载包
-    std::string overloadMessage;
-    for (std::size_t i = 0; i < 2 * kCap; ++i) {
-        auto reply = server.acceptRequest(make_create_frame(9000 + i, 77));
-        if (!reply.empty()) {
-            std::vector<uint8_t> body;
-            TEST_ASSERT(body_of(reply, &body), "overload reply has body");
-            overloadMessage =
-                protocol::MessageCodec::decodeBody<protocol::ErrorMessage>(body).message;
-            break;
-        }
-    }
-    TEST_ASSERT(overloadMessage.find("overloaded") != std::string::npos, "overload reply");
 
     // G-3：stop 关闸 → gameLoop 尾扫 drain → 队列清空
     server.stop();
@@ -234,14 +207,14 @@ bool test_drain_at_tick_boundary() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     for (std::uint64_t i = 0; i < 3; ++i) {
-        TEST_ASSERT(server.acceptRequest(make_create_frame(200 + i, 77)).empty(), "acked");
+        TEST_ASSERT(server.submitIntent(make_create_intent(200 + i, 77)), "accepted");
     }
     TEST_ASSERT(server.pendingIntentCount() == 3, "intents queued before tick");
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1200));  // ≥ 1 tick
     TEST_ASSERT(server.pendingIntentCount() == 0, "drained at tick boundary");
 
-    TEST_ASSERT(server.acceptRequest(make_create_frame(300, 77)).empty(),
+    TEST_ASSERT(server.submitIntent(make_create_intent(300, 77)),
                 "accepts again after drain");
     server.stop();
     return true;
@@ -258,8 +231,8 @@ int main() {
         {"queue_fifo_order_and_drain", test_queue_fifo_order_and_drain},
         {"queue_cap_rejects_new_keeps_old", test_queue_cap_rejects_new_keeps_old},
         {"queue_high_watermark_hysteresis", test_queue_high_watermark_hysteresis},
-        {"acceptance_ack_ping_and_maintenance_gate", test_acceptance_ack_ping_and_maintenance_gate},
-        {"overload_reply_at_cap", test_overload_reply_at_cap},
+        {"acceptance_gate_and_queue", test_acceptance_gate_and_queue},
+        {"overload_rejects_at_cap", test_overload_rejects_at_cap},
         {"drain_at_tick_boundary", test_drain_at_tick_boundary},
     };
     for (const auto& c : cases) {

@@ -98,23 +98,14 @@ CellServer::~CellServer() {
 void CellServer::start() {
     if (running_) return;
 
-    // 创建 RPC 服务器
-    server_ = std::make_unique<protocol::RepSocket>(
-        protocol::make_tcp_url(config_.host, config_.port)
-    );
-
-    server_->setRequestHandler([this](const std::vector<uint8_t>& data) -> std::vector<uint8_t> {
-        // ADR-017 决策 1：worker 侧只走受理点（解码分类 + 入队 + 受理点回执）
-        return acceptRequest(data);
-    });
-
-    // net M1 接收端（2b-ii）：InterServerLink passive 端点装配（监听在
-    // start 内 bind/listen，bind 失败同契约显形）
+    // net M1 接收端（2b-ii，2b-iii 起 cell 唯一受理入口——legacy RepSocket
+    // 已退役）：InterServerLink passive 端点装配（监听在 start 内 bind/listen，
+    // bind 失败同契约显形）
     m1Link_ = makeM1LinkServer(
         M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson},
         [this](IntentEnvelope intent) { onM1Intent(std::move(intent)); });
 
-    // 开闸先于 server_->start()：受理面就绪后 worker 才见得到入口
+    // 开闸先于 m1Link_->start()：受理面就绪后网关才见得到入口
     accepting_ = true;
 
     if (!m1Link_->start()) {
@@ -123,14 +114,10 @@ void CellServer::start() {
         throw std::runtime_error("failed to start cell M1 link endpoint (route table load or bind failed)");
     }
 
-    server_->start();
-
     ensureDefaultScene();
 
     if (!worldHost_->start()) {
         accepting_ = false;
-        server_->stop();
-        server_.reset();
         m1Link_->stop();
         m1Link_.reset();
         throw std::runtime_error("failed to start WorldHost");
@@ -141,8 +128,6 @@ void CellServer::start() {
     // 启动游戏循环线程
     gameThread_ = std::thread(&CellServer::gameLoop, this);
 
-    celllog().info("Cell server listening on " + config_.host + ":"
-                + std::to_string(config_.port));
     celllog().info("Cell M1 link listening on " + config_.host + ":"
                 + std::to_string(m1Link_->listenPort()));
     celllog().info("Space: " + config_.spaceName + " ("
@@ -152,8 +137,8 @@ void CellServer::start() {
 
 void CellServer::stop() {
     // 停机 G-3 镜像顺序（ADR-016）：停受理 → 队列 drain → gameThread join →
-    // M1 端点停 → worldHost stop → server stop（尾扫 drain 的延时应答仍要
-    // 有发送面，M1 端点停在其后）
+    // M1 端点停 → worldHost stop（尾扫 drain 的延时应答仍要有发送面，M1
+    // 端点停在其后）
     accepting_ = false;
     running_ = false;
 
@@ -169,91 +154,44 @@ void CellServer::stop() {
     if (worldHost_) {
         worldHost_->stop();
     }
-
-    if (server_) {
-        server_->stop();
-        server_.reset();
-    }
 }
 
-std::vector<uint8_t> CellServer::acceptRequest(const std::vector<uint8_t>& request) {
-    // 受理点（ADR-017 决策 1，RPC worker 线程）：只解码分类 + 入队意图信封，
-    // 不做 world 读写。窄窗竞态（闸检查通过后即刻停机）下意图滞留队列不执行、
-    // 不回执——与拒收同型的「服务不可用」观察面，延时应答关联随 M1 升级批收口。
-    auto header = protocol::MessageCodec::parseHeader(request);
-    auto msgType = static_cast<protocol::MessageType>(header.type);
-
-    // 维护闸：未受理（start 前 / stop 后）一律回维护中错误包
+bool CellServer::submitIntent(IntentEnvelope intent) {
+    // 受理点判定（ADR-017 决策 1，M1 面与测试共用）：只入队意图信封，
+    // 不做 world 读写；回执纪律见 onM1Intent。
     if (!accepting_.load(std::memory_order_acquire)) {
-        protocol::ErrorMessage err;
-        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
-        err.message = "server maintenance: not accepting requests";
-        return protocol::MessageCodec::encode(err, header.sessionId);
+        return false;
     }
-
-    switch (msgType) {
-        case protocol::MessageType::CELL_CREATE_ENTITY:
-        case protocol::MessageType::CELL_DESTROY_ENTITY:
-        case protocol::MessageType::CELL_ENTITY_MOVE:
-        case protocol::MessageType::CELL_CROSS_BORDER:
-        case protocol::MessageType::COMBAT_SKILL_CAST: {
-            IntentEnvelope intent;
-            intent.type = msgType;
-            intent.frame = request;
-            intent.session_id = header.sessionId;
-            auto result = acceptanceQueue_.push(std::move(intent));
-            if (!result.accepted) {
-                // ADR-016：顶格拒收不丢旧不静默——受理点显式回执错误包
-                protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
-                err.message = "server overloaded: acceptance queue full";
-                return protocol::MessageCodec::encode(err, header.sessionId);
-            }
-            if (result.high_watermark) {
-                // ADR-016 两级水位：越告警线提示一次，回落滞回后再报
-                celllog().warning("acceptance queue high watermark: pending="
-                               + std::to_string(acceptanceQueue_.size()) + "/"
-                               + std::to_string(acceptanceQueue_.cap()));
-            }
-            return {};  // ack-on-accept：变更类空 ack 逐字节同现状
-        }
-
-        case protocol::MessageType::PING:
-            // ADR-017 决策 3：Pong 在受理点回（纯 wire echo，无 world 访问）
-            return handlePing(request);
-
-        default: {
-            protocol::ErrorMessage err;
-            err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
-            err.message = "Unknown message type";
-            return protocol::MessageCodec::encode(err, header.sessionId);
-        }
-    }
-}
-
-void CellServer::onM1Intent(IntentEnvelope intent) {
-    // M1 受理点（2b-ii，泵线程 = gameThread_）：与 acceptRequest 同闸同队列，
-    // 执行面共用（ADR-015(a) 骨架零废弃）。延时应答（ADR-017 升级）：受理
-    // 成功不回包，回执随 executeIntent 消费后按 request_id 回带；即时回执面
-    // 只剩两类永不入队的拒收。窄窗竞态（闸检查通过后即刻停机）在此回 2001，
-    // 与 legacy 面「拒收同型观察面」同批收口。
-    const auto request_id = intent.request_id;
-    if (!accepting_.load(std::memory_order_acquire)) {
-        sendM1Ack(request_id, kIntentAckInternal, "server maintenance: not accepting requests");
-        return;
-    }
-
     auto result = acceptanceQueue_.push(std::move(intent));
     if (!result.accepted) {
-        // ADR-016：顶格拒收不丢旧不静默——M1 面回契约错误码 2101
-        sendM1Ack(request_id, kIntentAckBackpressure, "server overloaded: acceptance queue full");
-        return;
+        return false;  // ADR-016：顶格拒收不丢旧，M1 面回 2101
     }
     if (result.high_watermark) {
         // ADR-016 两级水位：越告警线提示一次，回落滞回后再报
-        celllog().warning("acceptance queue high watermark (m1): pending="
+        celllog().warning("acceptance queue high watermark: pending="
                        + std::to_string(acceptanceQueue_.size()) + "/"
                        + std::to_string(acceptanceQueue_.cap()));
+    }
+    return true;
+}
+
+void CellServer::onM1Intent(IntentEnvelope intent) {
+    // M1 受理点（2b-ii，泵线程 = gameThread_）：submitIntent 判定 + 拒收即时
+    // 回执。延时应答（ADR-017）：受理成功不回包，回执随 executeIntent 消费后
+    // 按 request_id 回带；即时回执面只剩两类永不入队的拒收。
+    const auto request_id = intent.request_id;
+    if (submitIntent(std::move(intent))) {
+        return;
+    }
+    if (accepting_.load(std::memory_order_acquire)) {
+        // ADR-016：顶格拒收不丢旧不静默——M1 面回契约错误码 2101
+        sendM1Ack(request_id, kIntentAckBackpressure,
+                  "server overloaded: acceptance queue full");
+    } else {
+        // 维护闸：start 前 / stop 后一律回 2001（窄窗竞态下受理判定与闸状态
+        // 间取回执时点状态，与拒收同型观察面）
+        sendM1Ack(request_id, kIntentAckInternal,
+                  "server maintenance: not accepting requests");
     }
 }
 
@@ -428,18 +366,6 @@ std::vector<uint8_t> CellServer::handleCombatSkillCast(const std::vector<uint8_t
     }
 
     return {};
-}
-
-std::vector<uint8_t> CellServer::handlePing(const std::vector<uint8_t>& request) {
-    auto header = protocol::MessageCodec::parseHeader(request);
-    std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
-
-    auto ping = protocol::MessageCodec::decodeBody<protocol::Ping>(bodyData);
-
-    protocol::Pong pong;
-    pong.timestamp = ping.timestamp;
-
-    return protocol::MessageCodec::encode(pong, header.sessionId);
 }
 
 void CellServer::executeIntent(const IntentEnvelope& intent) {

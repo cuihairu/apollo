@@ -29,7 +29,7 @@ inline constexpr std::int32_t kIntentAckBackpressure = 2101;    // cell_backpres
 
 struct M1LinkConfig {
     std::string host = "0.0.0.0";
-    std::uint16_t port = 9101;  // legacy RepSocket 占 9100 不动
+    std::uint16_t port = 9101;
     // 契约路由表 JSON（生成物）：表是 Dispatcher 白名单事实源，schema_hash
     // 是握手 route_version 事实源。空路径 = 装配失败（start false）。
     std::string route_json;

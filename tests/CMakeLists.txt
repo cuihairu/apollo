@@ -1213,10 +1213,8 @@ add_executable(cell_acceptance_tests
     test_cell_acceptance.cpp
     ../apps/cell-app/src/cell_server.cpp
     ../apps/cell-app/src/m1_link_server.cpp
-    ../modules/protocol/src/nng_wrapper.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
-    ../modules/protocol/src/socket.cpp
 )
 target_include_directories(cell_acceptance_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
@@ -1249,10 +1247,8 @@ add_executable(cell_m1_link_tests
     test_cell_m1_link.cpp
     ../apps/cell-app/src/cell_server.cpp
     ../apps/cell-app/src/m1_link_server.cpp
-    ../modules/protocol/src/nng_wrapper.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
-    ../modules/protocol/src/socket.cpp
 )
 target_include_directories(cell_m1_link_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
@@ -1294,10 +1290,8 @@ add_executable(gateway_m1_egress_tests
     ../apps/gateway-app/src/ingress/session_admission_service.cpp
     ../apps/cell-app/src/cell_server.cpp
     ../apps/cell-app/src/m1_link_server.cpp
-    ../modules/protocol/src/nng_wrapper.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
-    ../modules/protocol/src/socket.cpp
 )
 target_include_directories(gateway_m1_egress_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/gateway-app/include

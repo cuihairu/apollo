@@ -14,10 +14,9 @@ namespace cell {
 struct CellConfig {
     // 监听配置
     std::string host = "0.0.0.0";
-    uint16_t port = 9100;
 
-    // net M1 接收端（M1 上层接线批 2b-ii）：InterServerLink passive 端点，
-    // 网关经它投递 cell 意图（924-928）；legacy RepSocket 占 9100 不动。
+    // net M1 接收端（M1 上层接线批 2b-ii；2b-iii 起 cell 唯一受理入口）：
+    // InterServerLink passive 端点，网关经它投递 cell 意图（924-928）
     uint16_t m1Port = 9101;
     std::string m1RouteJson = APOLLO_CELL_CONTRACT_ROUTE_JSON;
 

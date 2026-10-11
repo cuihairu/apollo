@@ -548,7 +548,6 @@ bool test_gateway_cell_e2e() {
     // 真 cell：M1 接收端（被动）+ 受理队列 + tick 执行 + 延时应答
     cell::CellConfig cellCfg;
     cellCfg.host = "127.0.0.1";
-    cellCfg.port = 0;
     cellCfg.tickRateMs = 20;
     cellCfg.m1Port = 0;
     cellCfg.m1RouteJson = kRouteJson;

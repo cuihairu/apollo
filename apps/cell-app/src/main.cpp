@@ -38,8 +38,8 @@ CellConfig loadConfig(int argc, char* argv[]) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
-        if (arg == "--port" && i + 1 < argc) {
-            config.port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        if (arg == "--m1-port" && i + 1 < argc) {
+            config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
         } else if (arg == "--size" && i + 2 < argc) {
@@ -50,7 +50,7 @@ CellConfig loadConfig(int argc, char* argv[]) {
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
-                      << "  --port <port>              Listen port (default: 9100)\n"
+                      << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"
@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
     auto config = loadConfig(argc, argv);
 
     logger->info("Configuration:");
-    logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
+    logger->info("  M1 link: " + config.host + ":" + std::to_string(config.m1Port));
     logger->info("  Space: " + config.spaceName + " (" + std::to_string(config.spaceWidth)
                  + "x" + std::to_string(config.spaceHeight) + ")");
     logger->info("  Tick rate: " + std::to_string(config.tickRateMs) + "ms ("

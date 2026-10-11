@@ -53,6 +53,10 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.baseAppUrl = argv[++i];
         } else if (arg == "--cell-app" && i + 1 < argc) {
             config.cellAppUrl = argv[++i];
+        } else if (arg == "--cell-m1-host" && i + 1 < argc) {
+            config.cellM1Host = argv[++i];
+        } else if (arg == "--cell-m1-port" && i + 1 < argc) {
+            config.cellM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -61,7 +65,9 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --max-connections <num>     Max connections (default: 10000)\n"
                       << "  --login-app <url>          LoginApp URL\n"
                       << "  --base-app <url>           BaseApp URL\n"
-                      << "  --cell-app <url>           CellApp URL\n"
+                      << "  --cell-app <url>           CellApp URL (route label)\n"
+                      << "  --cell-m1-host <host>      Cell M1 link host (default: 127.0.0.1)\n"
+                      << "  --cell-m1-port <port>      Cell M1 link port (default: 9101)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }

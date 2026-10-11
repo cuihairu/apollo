@@ -7,7 +7,6 @@
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
-#include "apollo/protocol/socket.hpp"
 #include "apollo/runtime/world_host.hpp"
 #include <chrono>
 #include <memory>
@@ -34,10 +33,10 @@ public:
     // 是否运行中
     bool isRunning() const { return running_; }
 
-    // 受理点（ADR-017 决策 1）：RPC worker 线程调用——只解码分类 + 入队意图
-    // 信封，回执 ack-on-accept（变更类空 ack 逐字节同现状；过载回错误包）；
-    // PING 在受理点直接回 Pong（纯 wire echo，ADR-017 决策 3）。
-    std::vector<uint8_t> acceptRequest(const std::vector<uint8_t>& request);
+    // 受理点判定（M1 面与测试共用）：维护闸闭 / 顶格拒收 = false（M1 面
+    // 据此回 2001/2101 即时应答；受理成功不回包，延时应答随 executeIntent
+    // 消费后按 request_id 回带，ADR-017）
+    bool submitIntent(IntentEnvelope intent);
 
     // 待执行意图数（观测/测试面：tick 边界 drain 断言用）
     std::size_t pendingIntentCount() const { return acceptanceQueue_.size(); }
@@ -62,9 +61,6 @@ private:
     // 处理战斗请求
     std::vector<uint8_t> handleCombatSkillCast(const std::vector<uint8_t>& request);
 
-    // 处理心跳
-    std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
-
     // 游戏循环
     void gameLoop();
 
@@ -75,9 +71,9 @@ private:
     // 受理队列清空到 tick 执行（ADR-016：tick 预算锚定；停机 G-3 尾扫一次）
     void drainAcceptanceQueue();
 
-    // M1 意图受理点（2b-ii：泵线程 = gameThread_ 内同步调用）：与 acceptRequest
-    // 同闸同队列；延时应答纪律——受理成功不回包，回执随 executeIntent 消费后
-    // 按 request_id 回带；即时回执面只剩顶格拒收（2101）与维护闸（2001）。
+    // M1 意图受理点（2b-ii：泵线程 = gameThread_ 内同步调用）：submitIntent
+    // 判定 + 拒收即时回执（顶格 2101 / 维护闸 2001）；受理成功不回包，回执随
+    // executeIntent 消费后按 request_id 回带（ADR-017 延时应答）。
     void onM1Intent(IntentEnvelope intent);
 
     // M1 延时应答出口（929 cell_intent_ack）；request_id = 0（legacy 路径）
@@ -107,11 +103,10 @@ private:
     std::shared_ptr<apollo::game::world::WorldSessionManager> worldSessionManager_;
     std::shared_ptr<apollo::runtime::WorldHost> worldHost_;
 
-    std::unique_ptr<protocol::RepSocket> server_;
     std::unique_ptr<M1LinkServer> m1Link_;
     std::atomic<bool> running_{false};
-    // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前请新请求回
-    // 维护中错误包；停机先关闸再排空队列，G-3 镜像顺序）
+    // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前拒新意图；
+    // 停机先关闸再排空队列，G-3 镜像顺序）
     AcceptanceQueue acceptanceQueue_;
     std::atomic<bool> accepting_{false};
     std::uint32_t worldId_ = 1;
