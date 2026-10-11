@@ -57,12 +57,25 @@ public:
         return static_cast<int>(size);
     }
 
-    void close() override { closed_ = true; }
+    void close() override {
+        closed_ = true;
+        unlink();  // 对端 peer_ 一并摘除：本端对象随 transport_.reset() 析构后，
+                   // 对端不得再经 peer_ 触碰已释放内存（macOS CI 实测踩中 UAF）
+    }
     bool closed() const override { return closed_; }
+
+    ~LoopbackEndpoint() override { unlink(); }
 
 private:
     friend std::pair<std::unique_ptr<LoopbackEndpoint>, std::unique_ptr<LoopbackEndpoint>>
     make_loopback_pair();
+
+    void unlink() {
+        if (peer_ != nullptr) {
+            peer_->peer_ = nullptr;
+            peer_ = nullptr;
+        }
+    }
 
     std::deque<std::uint8_t> rx_;
     LoopbackEndpoint* peer_ = nullptr;
