@@ -256,9 +256,10 @@ bool TcpListener::start(const std::string& host, std::uint16_t port) {
     ::sockaddr_storage ss{};
     ::socklen_t slen = sizeof ss;
     if (::getsockname(fd_, reinterpret_cast<::sockaddr*>(&ss), &slen) == 0) {
+        // ntohs 在 Darwin 是宏（展开含类型转换），不能加 :: 前缀。
         port_ = ss.ss_family == AF_INET
-                    ? ::ntohs(reinterpret_cast<::sockaddr_in*>(&ss)->sin_port)
-                    : ::ntohs(reinterpret_cast<::sockaddr_in6*>(&ss)->sin6_port);
+                    ? ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)
+                    : ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port);
     }
     return true;
 }
