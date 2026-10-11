@@ -42,7 +42,11 @@ std::uint64_t route_version_from_hash(const std::string& hash_hex) {
         v = (v << 4) | static_cast<std::uint64_t>(d);
         ++taken;
     }
-    // taken=0（空/非 hex）时移位量 = 64 = UB（x86 掩码取模侥幸为 0，ARM 不然）。
+    // taken=0（空/非 hex）时移位量 = 64 = UB（x86 掩码取模侥幸为 0，ARM 不然），
+    // 直接返回 0；taken≥1 时移位量 ≤60 安全。
+    if (taken == 0) {
+        return 0;
+    }
     if (taken < 16) {
         v <<= 4 * (16 - taken);
     }
