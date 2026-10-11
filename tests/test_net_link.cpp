@@ -15,6 +15,7 @@
 #include "apollo/net/link/interserver_link.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
+#include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/net/link/watermark.hpp"
 
 #include <cstring>
@@ -780,6 +781,171 @@ bool test_link_droppable_cleared_on_down() {
     return true;
 }
 
+// ---- 增量 5：TCP 底座（TcpTransport / TcpConnector / TcpListener）----
+
+#if !defined(_WIN32)
+
+bool test_tcp_raw_echo() {
+    TcpListener listener;
+    TEST_ASSERT(listener.start("127.0.0.1", 0), "listener binds ephemeral port");
+    TEST_ASSERT(listener.port() != 0, "bound port observed");
+
+    TcpConnector connector;
+    TEST_ASSERT(connector.start("127.0.0.1", listener.port(), 3000, 1000), "connect started");
+    TcpConnector::PumpResult r = TcpConnector::PumpResult::kInProgress;
+    for (int i = 0; i < 100 && r == TcpConnector::PumpResult::kInProgress; ++i) {
+        r = connector.pump(1000 + static_cast<std::uint64_t>(i) * 10);
+    }
+    TEST_ASSERT(r == TcpConnector::PumpResult::kConnected, "loopback connects");
+    auto client = connector.take_transport();
+    TEST_ASSERT(client != nullptr, "transport handed out");
+    TEST_ASSERT(connector.state() == ConnectState::kIdle, "connector released fd");
+
+    auto server = listener.accept();
+    TEST_ASSERT(server != nullptr, "accept yields transport");
+
+    const std::vector<std::uint8_t> payload = {'p', 'i', 'n', 'g'};
+    TEST_ASSERT(client->write(payload.data(), payload.size()) ==
+                static_cast<int>(payload.size()), "client write");
+    std::uint8_t buf[16] = {};
+    int n = 0;
+    for (int i = 0; i < 100 && n == 0; ++i) {
+        n = server->read(buf, sizeof buf);
+    }
+    TEST_ASSERT(n == 4 && std::memcmp(buf, "ping", 4) == 0, "server reads payload");
+
+    TEST_ASSERT(server->write(payload.data(), payload.size()) == 4, "server write");
+    n = 0;
+    for (int i = 0; i < 100 && n == 0; ++i) {
+        n = client->read(buf, sizeof buf);
+    }
+    TEST_ASSERT(n == 4 && std::memcmp(buf, "ping", 4) == 0, "client reads echo");
+
+    // EOF 语义：对端 close 后读侧见 -1。
+    server->close();
+    n = 0;
+    for (int i = 0; i < 100 && n == 0; ++i) {
+        n = client->read(buf, sizeof buf);
+    }
+    TEST_ASSERT(n == -1, "peer close surfaces as EOF");
+    return true;
+}
+
+bool test_tcp_connector_refused() {
+    // 占一个端口再关掉：本机无人监听的端口（端口重用窗口内）。
+    std::uint16_t dead_port = 0;
+    {
+        TcpListener probe;
+        TEST_ASSERT(probe.start("127.0.0.1", 0), "probe binds");
+        dead_port = probe.port();
+    }
+    TcpConnector connector;
+    TEST_ASSERT(connector.start("127.0.0.1", dead_port, 3000, 1000), "connect started");
+    TcpConnector::PumpResult r = TcpConnector::PumpResult::kInProgress;
+    for (int i = 0; i < 100 && r == TcpConnector::PumpResult::kInProgress; ++i) {
+        r = connector.pump(1000 + static_cast<std::uint64_t>(i) * 10);
+    }
+    TEST_ASSERT(r == TcpConnector::PumpResult::kFailed, "refused connection fails");
+    TEST_ASSERT(connector.failure() == ConnectFailure::kNoSuchPort, "refused -> no such port");
+    TEST_ASSERT(connector.take_transport() == nullptr, "no transport on failure");
+    return true;
+}
+
+bool test_tcp_connector_timeout() {
+    // RFC1918 非路由地址：SYN 无响应，触发一次性超时（沙箱直接不可达时
+    // 退化为立即 kNoSuchPort——同样收口为类型化失败，两态都算通过）。
+    TcpConnector connector;
+    TEST_ASSERT(connector.start("10.255.255.1", 81, 100, 1000), "connect started");
+    TcpConnector::PumpResult r = TcpConnector::PumpResult::kInProgress;
+    for (int i = 0; i < 100 && r == TcpConnector::PumpResult::kInProgress; ++i) {
+        r = connector.pump(1000 + static_cast<std::uint64_t>(i) * 10);
+    }
+    TEST_ASSERT(r == TcpConnector::PumpResult::kFailed, "unreachable target fails");
+    TEST_ASSERT(connector.failure() == ConnectFailure::kTimedOut ||
+                    connector.failure() == ConnectFailure::kNoSuchPort,
+                "typed failure reason");
+    return true;
+}
+
+bool test_tcp_connector_bad_host() {
+    TcpConnector connector;
+    // 空主机名：getaddrinfo 按契约必败——不依赖解析器行为（沙箱 fake-ip
+    // 通配解析会把任意假域名映射到 198.18.0.0/15，域名类负例不可测）。
+    TEST_ASSERT(!connector.start("", 80, 1000, 1000),
+                "unresolvable host fails at start");
+    TEST_ASSERT(connector.state() == ConnectState::kFailed, "state failed");
+    TEST_ASSERT(connector.failure() == ConnectFailure::kSystemError, "dns -> system error");
+    TEST_ASSERT(connector.pump(2000) == TcpConnector::PumpResult::kFailed, "stays failed");
+    return true;
+}
+
+bool test_tcp_link_pair_e2e() {
+    // 全链路：listener + connector 产出 TCP 传输 → InterServerLink 握手 →
+    // 可靠业务帧恰一次（真实 socket，非 loopback 缝）。
+    RouteTable table = make_dispatch_table();
+    TcpListener listener;
+    TEST_ASSERT(listener.start("127.0.0.1", 0), "listener up");
+
+    InterServerLink b(make_link_config("game", 7));
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    RxLog rx;
+    b.dispatcher().set_handler(901, rx.handler());
+
+    InterServerLink a(make_link_config("auth", 7));
+    a.dispatcher().set_route_table(&table);
+
+    TcpConnector connector;
+    TEST_ASSERT(connector.start("127.0.0.1", listener.port(), 3000, 1000), "connect started");
+    // 交替泵：连接器、监听器、两侧链路共用一个宿主泵节拍。
+    for (int i = 0; i < 200 && a.state() == LinkState::kIdle; ++i) {
+        const std::uint64_t t = 1000 + static_cast<std::uint64_t>(i) * 5;
+        connector.pump(t);
+        if (auto t_a = connector.take_transport()) {
+            a.attach(std::move(t_a), t);
+        }
+    }
+    for (int i = 0; i < 200 && b.state() == LinkState::kIdle; ++i) {
+        const std::uint64_t t = 1500 + static_cast<std::uint64_t>(i) * 5;
+        if (auto t_b = listener.accept()) {
+            b.attach(std::move(t_b), t);
+        }
+    }
+    for (int i = 0; i < 200 && (a.state() != LinkState::kUp || b.state() != LinkState::kUp); ++i) {
+        const std::uint64_t t = 2000 + static_cast<std::uint64_t>(i) * 5;
+        a.pump(t);
+        b.pump(t);
+    }
+    TEST_ASSERT(a.state() == LinkState::kUp && b.state() == LinkState::kUp, "up over TCP");
+
+    // 正向一帧：恰一次到 B。
+    TEST_ASSERT(a.send(901, std::vector<std::uint8_t>{'t', 'c', 'p'}, SendClass::kReliable) ==
+                SendCode::kAccepted, "forward send accepted");
+    for (int i = 0; i < 200 && rx.got.empty(); ++i) {
+        const std::uint64_t t = 2500 + static_cast<std::uint64_t>(i) * 5;
+        a.pump(t);
+        b.pump(t);
+    }
+    TEST_ASSERT(rx.got.size() == 1 && rx.got[0] == "901:tcp", "reliable frame delivered");
+
+    // 反向一帧 + 双向 ack 出队收尾。
+    TEST_ASSERT(b.send(901, std::vector<std::uint8_t>{'o', 'k'}, SendClass::kReliable) ==
+                SendCode::kAccepted, "reverse send accepted");
+    for (int i = 0; i < 50; ++i) {
+        const std::uint64_t t = 3000 + static_cast<std::uint64_t>(i) * 5;
+        a.pump(t);
+        b.pump(t);
+        if (b.stats().reliable_acked == 1) {
+            break;
+        }
+    }
+    TEST_ASSERT(b.stats().reliable_acked == 1, "reverse ack round trip");
+    TEST_ASSERT(a.stats().reliable_acked == 1, "forward ack round trip");
+    return true;
+}
+
+#endif  // !_WIN32
+
 }  // namespace
 
 int main() {
@@ -812,6 +978,13 @@ int main() {
         {"link_heartbeat_timeout", test_link_heartbeat_timeout},
         {"link_route_version_mismatch", test_link_route_version_mismatch},
         {"link_droppable_cleared_on_down", test_link_droppable_cleared_on_down},
+#if !defined(_WIN32)
+        {"tcp_raw_echo", test_tcp_raw_echo},
+        {"tcp_connector_refused", test_tcp_connector_refused},
+        {"tcp_connector_timeout", test_tcp_connector_timeout},
+        {"tcp_connector_bad_host", test_tcp_connector_bad_host},
+        {"tcp_link_pair_e2e", test_tcp_link_pair_e2e},
+#endif
     };
     int failed = 0;
     for (const auto& c : cases) {
