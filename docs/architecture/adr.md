@@ -193,6 +193,8 @@ tag:
 
 **批记（2026-10-10，同日三批连续交付）**：L1+L2（`7ad64938`）——七 app main 全接 log 模块（initLogging：processIdentity + fileEnabled + structuredOutput，console 保人读；先于 init_crash_capture——write() 惰性默认初始化仅 console，顺序颠倒会顶掉文件面配置）、app 库面运行行全量转 logger（领域子日志 recovery/mirror/window/death = §5.1 cat= 检索键；信号路径与 fork pre-exec 路径保持直写 console/stderr——logger 面带锁，信号上下文与 fork 快照持锁窗口不进）；kill -9 演练全链断言回归绿（消息正文子串契约全保）。L3（logger 壳）——apps/logger + 二进制 `logger` + 类 `LoggerApp`（term-contract §1.3）；读侧解析（写侧 structured.cpp 镜像：引号/转义还原、六键齐备判定）+ 检索子命令 `scan`（proc/level/ts/cat 过滤，stdout 查询面/stderr 汇总分离）+ `follow` 跟随（编队聚合面，增量读 + 半行驻留）+ push 接缝 `IPushSink`/`NullPushSink`（留接口不实现，M1 后换 InterServerLink）；logger_tests 9 组入门禁（42/42）；dev_fleet roster 增 logger 行（follow，无端口——三禁），编队冒烟 7 成员全绿（machined.log 结构化聚合行 103 条、scan 实检索 12 文件全解析）。L4（push 通道 + 断连降级）挂 M1。归档/滚动沿用 FileAppender 既有，logger 只读。
 
+**批记（2026-10-12，L4 交付）**：L4（`8d8a1dc0`/`6dd9445f`/`b8111f2a`/`d8499672`）——push 通道 + 断连降级全形态（logging.md §5 collector 落地）：内核 LinkManager passive fan-out（staging→peers 按对端自报名迁入、同名重连替换、装配挂 on_up 当拍）+ 契约 930 logger_line_push + 发送面 modules/net/logpush LogPushClient（内部泵线程单写者、有界队列 4096 顶格丢新、kReliable 重连恰一次补投、停排留队）+ PushAppender/LogManagerConfig.pushSink 接线 + logger serve 子命令（passive "apps" 收 930 原行归档、逐行冲刷——ofstream 缓冲 + kill -9 吞数据实证后修复）+ 七 app APOLLO_LOG_PUSH_ADDR 一线接线（未设=关，v1 单出口不变）+ dev_fleet logger 行转 serve。断连降级编队活体演练：SIGKILL collector+gateway 同杀 → machined 死亡/重生行落断连窗 → 队列缓冲 → collector 重生重拨补投全数到档（delta=20）——决策 1 的「push 出口留接口」就此消账，IPushSink 检索面不变。详批记见 todo P3-3 / logger-app §6。
+
 ---
 
 ## ADR-014 Process Rename: Manager and Zone（进程改名：baseappmgr→manager，base-app→zone-app）
