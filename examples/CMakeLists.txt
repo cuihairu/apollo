@@ -45,12 +45,16 @@ add_executable(benchmark benchmark.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/viewer_state.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/avatar.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/session/src/player_anchor.cpp
+    ${CMAKE_SOURCE_DIR}/modules/protocol/src/codec.cpp
 )
 target_include_directories(benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    # 受理面段（P3-2 批 D）：协议 codec + cell 受理队列头（header-only）
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
     ${CMAKE_SOURCE_DIR}/include
 )
 target_link_libraries(benchmark PRIVATE apollo apollo::base apollo::core)

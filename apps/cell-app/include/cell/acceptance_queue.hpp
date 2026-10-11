@@ -24,11 +24,16 @@ struct IntentEnvelope {
 };
 
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。
-// 数值口径 = tick 预算锚定（ADR-016 #3）：静态保守起步值，benchmark 接入
-// 受理面后按 capacity §2.1 三模型实测锚点同型校准。
+// 数值口径 = tick 预算锚定（ADR-016 #3）+ 实测校准（2026-10-11，P3-2 批 D，
+// examples/benchmark --acceptance 三跑 min，负载噪声期下界口径）：
+// 受理+执行队列侧合计 ~0.1µs/意图（min），cap 顶格 1024 条全程 drain
+// ≈0.10ms < 消息段预算 20ms（余量 ~194×）——drain 侧远非约束，容量侧才是
+// 受限维度（全容量 5000 CCU 稳态 ≈2500 意图/拍 = 244% cap，饱和即拒收
+// 路径的设计消费面）。数值保持起步值。
 class AcceptanceQueue {
 public:
-    // 静态起步：cap 1024 × 单意图处理 ≤~50µs 量级 ≈ 50ms < 100ms@10Hz 预算
+    // cap 1024：单场景档（100 人 ≈50 意图/拍）~20× 余量、大场景档（1000 人
+    // ≈500 意图/拍）~2× 余量；告警线 768 = 75%，水位滞回留回落空间
     static constexpr std::size_t kDefaultCap = 1024;
     static constexpr std::size_t kDefaultHighWatermark = 768;
 
