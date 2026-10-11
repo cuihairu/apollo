@@ -10,6 +10,7 @@ add_library(apollo_net_link STATIC
     src/watermark.cpp
     src/interserver_link.cpp
     src/tcp_transport.cpp
+    src/link_manager.cpp
 )
 add_library(apollo::net_link ALIAS apollo_net_link)
 

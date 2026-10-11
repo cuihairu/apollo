@@ -13,6 +13,7 @@
 #include "apollo/net/link/dispatcher.hpp"
 #include "apollo/net/link/frame.hpp"
 #include "apollo/net/link/interserver_link.hpp"
+#include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
 #include "apollo/net/link/tcp_transport.hpp"
@@ -944,6 +945,163 @@ bool test_tcp_link_pair_e2e() {
     return true;
 }
 
+// ---- 增量 5：Link 管理器（具名端点 / 指数退避 / 编队事件联动）----
+
+bool test_manager_backoff_schedule() {
+    std::uint16_t dead_port = 0;
+    {
+        TcpListener probe;
+        TEST_ASSERT(probe.start("127.0.0.1", 0), "probe binds");
+        dead_port = probe.port();
+    }
+    LinkManagerConfig mc;
+    mc.self_name = "auth";
+    mc.backoff_initial_ms = 100;
+    mc.backoff_max_ms = 400;
+    LinkManager mgr(mc);
+    EndpointConfig ep;
+    ep.name = "game";
+    ep.host = "127.0.0.1";
+    ep.port = dead_port;
+    TEST_ASSERT(mgr.add_endpoint(ep), "endpoint added");
+
+    // 拨号失败退避序列：间隔 initial×2^n 封顶（100/200/400/400…）。
+    // 观测口 = 拨号时刻（10ms 步进泵，误差 ≤ 步长 + 拒连落定时延）。
+    std::uint64_t t = 1000;
+    mgr.pump(t);  // attempt 1
+    TEST_ASSERT(mgr.dial_attempts("game") == 1, "first dial");
+    std::vector<std::uint64_t> at{t};
+    while (at.size() < 4 && t < 20000) {
+        mgr.pump(t += 10);
+        if (mgr.dial_attempts("game") == at.size() + 1) {
+            at.push_back(t);
+        }
+    }
+    TEST_ASSERT(at.size() == 4, "four attempts recorded");
+    TEST_ASSERT(at[1] - at[0] >= 100, "gap1 >= initial backoff");
+    TEST_ASSERT(at[2] - at[1] >= 200, "gap2 >= doubled");
+    TEST_ASSERT(at[3] - at[2] >= 400, "gap3 >= capped");
+    TEST_ASSERT(at[3] - at[2] <= 500, "cap holds (no unbounded growth)");
+    return true;
+}
+
+bool test_manager_fleet_gate() {
+    std::uint16_t dead_port = 0;
+    {
+        TcpListener probe;
+        TEST_ASSERT(probe.start("127.0.0.1", 0), "probe binds");
+        dead_port = probe.port();
+    }
+    LinkManagerConfig mc;
+    mc.self_name = "auth";
+    mc.backoff_initial_ms = 1000;  // 退避窗口大于整个停拨观测段——闸外无次因
+    mc.backoff_max_ms = 2000;
+    LinkManager mgr(mc);
+    EndpointConfig ep;
+    ep.name = "game";
+    ep.host = "127.0.0.1";
+    ep.port = dead_port;
+    mgr.add_endpoint(ep);
+
+    std::uint64_t t = 1000;
+    mgr.pump(t);
+    for (int i = 0; i < 30; ++i) {
+        mgr.pump(t += 10);  // attempt 1 失败落定（回环即时拒连）
+    }
+    TEST_ASSERT(mgr.dial_attempts("game") == 1, "attempted once");
+
+    // 死亡通知：越过原退避时点的时距里不拨（死了的进程不拨）。
+    mgr.notify_fleet_down("game", t);
+    for (int i = 0; i < 40; ++i) {
+        mgr.pump(t += 100);
+    }
+    TEST_ASSERT(mgr.dial_attempts("game") == 1, "no dial while fleet down");
+
+    // 复活通知：退避复位 + 立即重拨。
+    mgr.notify_fleet_up("game", t);
+    mgr.pump(t + 1);
+    TEST_ASSERT(mgr.dial_attempts("game") == 2, "immediate dial on fleet up");
+    return true;
+}
+
+bool test_manager_pair_e2e() {
+    // 双管理器对拨：passive("game") 监听，active("auth") 拨号——真实 TCP
+    // 全链路握手 + 双向 reliable，事件面齐全。
+    RouteTable table = make_dispatch_table();
+    LinkManagerConfig mca;
+    mca.self_name = "auth";
+    mca.route_version = 7;
+    mca.backoff_initial_ms = 50;
+    mca.backoff_max_ms = 200;
+    LinkManagerConfig mcb = mca;
+    mcb.self_name = "game";
+    LinkManager mgr_a(mca), mgr_b(mcb);
+
+    int a_ups = 0, b_ups = 0;
+    mgr_a.on_up([&](const std::string&) { ++a_ups; });
+    mgr_b.on_up([&](const std::string&) { ++b_ups; });
+
+    EndpointConfig pa;
+    pa.name = "auth";  // passive 侧登记对端名（监听套接字用）
+    pa.host = "127.0.0.1";
+    pa.role = EndpointRole::kPassive;
+    TEST_ASSERT(mgr_b.add_endpoint(pa), "passive endpoint bound");
+
+    EndpointConfig aa;
+    aa.name = "game";
+    aa.host = "127.0.0.1";
+    aa.port = mgr_b.endpoint_port("auth");
+    TEST_ASSERT(aa.port != 0, "ephemeral port observed");
+    TEST_ASSERT(mgr_a.add_endpoint(aa), "active endpoint added");
+
+    InterServerLink* la = mgr_a.link("game");
+    InterServerLink* lb = mgr_b.link("auth");
+    TEST_ASSERT(la != nullptr && lb != nullptr, "links exposed");
+    la->dispatcher().set_route_table(&table);
+    lb->dispatcher().set_route_table(&table);
+    la->dispatcher().allow_domain("internal");
+    lb->dispatcher().allow_domain("internal");
+    RxLog rx, rx_a;
+    lb->dispatcher().set_handler(901, rx.handler());
+    la->dispatcher().set_handler(901, rx_a.handler());
+
+    // 泵到握手完成（TCP 拨号 + accept + hello 交换，数百拍预算）。
+    std::uint64_t t = 1000;
+    for (int i = 0; i < 500; ++i) {
+        t += 5;
+        mgr_a.pump(t);
+        mgr_b.pump(t);
+        if (la->state() == LinkState::kUp && lb->state() == LinkState::kUp) {
+            break;
+        }
+    }
+    TEST_ASSERT(la->state() == LinkState::kUp && lb->state() == LinkState::kUp,
+                "managed pair up");
+    TEST_ASSERT(a_ups == 1 && b_ups == 1, "manager events fired");
+
+    // 双向 reliable 各一帧 + 双向 ack 出队。
+    TEST_ASSERT(la->send(901, std::vector<std::uint8_t>{'a'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "a send");
+    TEST_ASSERT(lb->send(901, std::vector<std::uint8_t>{'b'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "b send");
+    for (int i = 0; i < 200; ++i) {
+        t += 5;
+        mgr_a.pump(t);
+        mgr_b.pump(t);
+        if (rx.got.size() == 1 && rx_a.got.size() == 1 &&
+            la->stats().reliable_acked == 1 && lb->stats().reliable_acked == 1) {
+            break;
+        }
+    }
+    TEST_ASSERT(rx.got.size() == 1 && rx_a.got.size() == 1, "both directions delivered");
+    TEST_ASSERT(rx.got[0] == "901:a" && rx_a.got[0] == "901:b", "payloads swapped true");
+    TEST_ASSERT(la->stats().reliable_acked == 1 && lb->stats().reliable_acked == 1,
+                "both acks round trip");
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -984,6 +1142,9 @@ int main() {
         {"tcp_connector_timeout", test_tcp_connector_timeout},
         {"tcp_connector_bad_host", test_tcp_connector_bad_host},
         {"tcp_link_pair_e2e", test_tcp_link_pair_e2e},
+        {"manager_backoff_schedule", test_manager_backoff_schedule},
+        {"manager_fleet_gate", test_manager_fleet_gate},
+        {"manager_pair_e2e", test_manager_pair_e2e},
 #endif
     };
     int failed = 0;
