@@ -847,6 +847,26 @@ if(MSVC)
 endif()
 add_test(NAME BattleOffloadTests COMMAND battle_offload_tests)
 
+# ========== Link Tests (net M1 内核) ==========
+# 帧定界 + 契约路由分发 + 背压水位 + 单播拓扑 + InterServerLink
+# （net-abstraction §5.6 M1；正确性优先。纯 std 内核直编，TCP 用例
+# 走 localhost 实socket；组件自身零 apollo 依赖，测试 target 不链 apollo）
+add_executable(link_tests
+    test_net_link.cpp
+    ../modules/net/link/src/frame.cpp
+)
+target_include_directories(link_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/net/link/include
+)
+if(WIN32)
+    target_link_libraries(link_tests PRIVATE ws2_32)
+    target_compile_definitions(link_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(link_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LinkTests COMMAND link_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests

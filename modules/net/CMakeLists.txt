@@ -205,6 +205,10 @@ add_subdirectory(protocol)
 # socket 随进程壳批)
 add_subdirectory(discovery)
 
+# Link module (net M1 内核——帧定界/契约路由分发/背压水位/单播拓扑/
+# InterServerLink，net-abstraction §5.6；纯 std，泵由宿主驱动)
+add_subdirectory(link)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)
