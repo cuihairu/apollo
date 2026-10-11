@@ -209,6 +209,10 @@ add_subdirectory(discovery)
 # InterServerLink，net-abstraction §5.6；纯 std，泵由宿主驱动)
 add_subdirectory(link)
 
+# Contract wire codec（M1 上层接线批：按生成头 MsgMeta 驱动的契约载荷
+# 编解码，业务帧载荷 = u16 id + 载荷信封的按型解释层）
+add_subdirectory(contract_wire)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)

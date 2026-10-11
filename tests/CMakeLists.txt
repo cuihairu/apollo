@@ -928,6 +928,17 @@ add_executable(link_tests
     test_net_link.cpp
 )
 target_link_libraries(link_tests PRIVATE apollo_net_link)
+
+# 契约 wire codec 测试（golden：随仓契约全量消息 round-trip + 截断/布局负例）
+add_executable(net_wire_tests
+    test_net_wire.cpp
+)
+target_link_libraries(net_wire_tests PRIVATE apollo::net_contract_wire)
+if(MSVC)
+    target_compile_options(net_wire_tests PRIVATE /utf-8)
+endif()
+add_test(NAME NetWireTests COMMAND net_wire_tests)
+
 target_compile_definitions(link_tests PRIVATE
     APOLLO_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
