@@ -870,13 +870,27 @@ bool test_tcp_connector_timeout() {
 
 bool test_tcp_connector_bad_host() {
     TcpConnector connector;
-    // 空主机名：getaddrinfo 按契约必败——不依赖解析器行为（沙箱 fake-ip
-    // 通配解析会把任意假域名映射到 198.18.0.0/15，域名类负例不可测）。
-    TEST_ASSERT(!connector.start("", 80, 1000, 1000),
-                "unresolvable host fails at start");
-    TEST_ASSERT(connector.state() == ConnectState::kFailed, "state failed");
-    TEST_ASSERT(connector.failure() == ConnectFailure::kSystemError, "dns -> system error");
-    TEST_ASSERT(connector.pump(2000) == TcpConnector::PumpResult::kFailed, "stays failed");
+    // 坏主机名负例不依赖解析器行为：沙箱 fake-ip 通配解析任意假域名；
+    // Darwin 把空主机名当本机名解析成功。所以只验「解析不出可用目标 →
+    // 类型化失败，不崩溃不悬挂」：glibc 在 start 同步显形（EAI_NONAME），
+    // Darwin 在 connect 异步显形（解析到本机 → 拒连）。
+    if (connector.start("", 80, 1000, 1000)) {
+        TcpConnector::PumpResult r = TcpConnector::PumpResult::kInProgress;
+        for (int i = 0; i < 300 && r == TcpConnector::PumpResult::kInProgress; ++i) {
+            r = connector.pump(1000 + static_cast<std::uint64_t>(i) * 10);
+        }
+        TEST_ASSERT(r == TcpConnector::PumpResult::kFailed, "bad host fails async");
+        TEST_ASSERT(connector.failure() == ConnectFailure::kSystemError ||
+                        connector.failure() == ConnectFailure::kNoSuchPort ||
+                        connector.failure() == ConnectFailure::kTimedOut,
+                    "typed failure");
+    } else {
+        TEST_ASSERT(connector.state() == ConnectState::kFailed, "state failed");
+        TEST_ASSERT(connector.failure() == ConnectFailure::kSystemError,
+                    "dns -> system error");
+        TEST_ASSERT(connector.pump(2000) == TcpConnector::PumpResult::kFailed,
+                    "stays failed");
+    }
     return true;
 }
 
