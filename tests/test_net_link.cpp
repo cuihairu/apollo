@@ -10,10 +10,15 @@
 //   6. len 超上限 → fatal；
 //   7. 头校验护 len：改 len 字节必被 hcrc 拦下（重同步而非误读）。
 
+#include "apollo/net/link/dispatcher.hpp"
 #include "apollo/net/link/frame.hpp"
+#include "apollo/net/link/route_json.hpp"
+#include "apollo/net/link/route_table.hpp"
 
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -176,6 +181,134 @@ bool test_oversize_len_fatal() {
     return true;
 }
 
+// ---- 增量 2：契约路由表 + 按 id 分发 ----
+
+using namespace apollo::net::link;
+
+RouteEntry make_entry(std::uint16_t id, const char* domain) {
+    RouteEntry e;
+    e.id = id;
+    e.name = "msg_" + std::to_string(id);
+    e.dir = "P2P";
+    e.channel = "events";
+    e.domain = domain;
+    e.binding = "native";
+    return e;
+}
+
+bool test_route_table_basics() {
+    RouteTable t;
+    TEST_ASSERT(t.add(make_entry(10, "client")), "add 10");
+    TEST_ASSERT(t.add(make_entry(900, "internal")), "add 900");
+    TEST_ASSERT(!t.add(make_entry(10, "client")), "dup id rejected");
+    TEST_ASSERT(t.size() == 2, "table size");
+
+    const RouteEntry* e10 = t.find(10);
+    TEST_ASSERT(e10 != nullptr && e10->domain == "client", "find 10");
+    const RouteEntry* e900 = t.find(900);
+    TEST_ASSERT(e900 != nullptr && e900->domain == "internal", "find 900");
+    TEST_ASSERT(t.find(999) == nullptr, "miss returns null");
+    return true;
+}
+
+bool test_route_version_from_hash() {
+    const std::string h1 = "132a03c831fc18630207e5fb22272df7f97275c0abf85b32b22f75955f44a874";
+    const std::string h2 = "c7b4dac8bdfa7b782f910ec2c4b5f452c1f47bcf9566d8dd4caca83d4658eaff";
+    const std::uint64_t v1 = route_version_from_hash(h1);
+    const std::uint64_t v2 = route_version_from_hash(h2);
+    TEST_ASSERT(v1 == route_version_from_hash(h1), "deterministic");
+    TEST_ASSERT(v1 != v2, "different hashes differ");
+    // 首 16 hex = 132a03c831fc1863 → 大端 u64。
+    TEST_ASSERT(v1 == 0x132a03c831fc1863ull, "big-endian prefix value");
+    TEST_ASSERT(route_version_from_hash("") == 0, "empty hash safe");
+    TEST_ASSERT(route_version_from_hash("zzzz") == 0, "non-hex safe");
+    return true;
+}
+
+bool test_dispatcher_gates() {
+    RouteTable t;
+    t.add(make_entry(900, "internal"));
+    t.add(make_entry(901, "internal"));
+    t.add(make_entry(10, "client"));
+
+    Dispatcher d;
+    d.set_route_table(&t);
+
+    std::uint16_t got_id = 0;
+    std::size_t got_size = 100;
+    int hits = 0;
+    d.set_handler(900, [&](std::uint16_t id, const std::uint8_t* data, std::size_t size) {
+        got_id = id;
+        got_size = size;
+        ++hits;
+    });
+
+    // 无白名单 = 机制默认开放：命中。
+    const std::uint8_t body[] = {1, 2, 3};
+    TEST_ASSERT(d.dispatch(900, body, sizeof(body)) == DispatchResult::kDispatched,
+                "dispatch hit without filter");
+    TEST_ASSERT(hits == 1 && got_id == 900 && got_size == 3, "handler args");
+
+    // 域白名单收口后：internal 过闸，client 拒。
+    d.allow_domain("internal");
+    TEST_ASSERT(d.dispatch(900, nullptr, 0) == DispatchResult::kDispatched, "internal passes");
+    TEST_ASSERT(d.dispatch(10, nullptr, 0) == DispatchResult::kDomainForbidden,
+                "client forbidden");
+    TEST_ASSERT(d.dispatch(777, nullptr, 0) == DispatchResult::kUnknownId, "unknown id");
+    TEST_ASSERT(d.dispatch(901, nullptr, 0) == DispatchResult::kNoHandler, "table hit no handler");
+
+    const auto& st = d.stats();
+    TEST_ASSERT(st.dispatched == 2 && st.domain_forbidden == 1 && st.unknown_id == 1 &&
+                    st.no_handler == 1,
+                "stats counted");
+    return true;
+}
+
+bool test_dispatcher_no_table_rejects() {
+    Dispatcher d;
+    TEST_ASSERT(d.dispatch(1, nullptr, 0) == DispatchResult::kUnknownId,
+                "no table = reject, not crash");
+    return true;
+}
+
+bool test_load_golden_route_json() {
+#ifndef APOLLO_CONTRACT_ROUTE_JSON
+    TEST_ASSERT(false, "golden path not defined");
+#else
+    std::ifstream in(APOLLO_CONTRACT_ROUTE_JSON);
+    TEST_ASSERT(in.good(), "golden route file opens");
+    std::stringstream ss;
+    ss << in.rdbuf();
+    const std::string text = ss.str();
+    TEST_ASSERT(!text.empty(), "golden route file non-empty");
+
+    RouteTable t;
+    TEST_ASSERT(load_route_table_json(text, t), "golden parses");
+    TEST_ASSERT(t.size() >= 20, "route count sane");
+    TEST_ASSERT(!t.schema_hash().empty() && t.schema_hash().size() == 64, "schema hash present");
+    TEST_ASSERT(!t.internal_hash().empty(), "internal hash present");
+
+    // 契约锚点：internal 域 900 session_up 在表（P1-2 目录事件族）。
+    const RouteEntry* e = t.find(900);
+    TEST_ASSERT(e != nullptr && e->name == "session_up" && e->domain == "internal",
+                "session_up internal anchored");
+    // client 域锚点：10 move。
+    const RouteEntry* m = t.find(10);
+    TEST_ASSERT(m != nullptr && m->name == "move" && m->domain == "client", "move client anchored");
+
+    // 坏结构整表拒。
+    RouteTable bad;
+    TEST_ASSERT(!load_route_table_json("{\"routes\": []}", bad), "empty routes rejected");
+    TEST_ASSERT(!load_route_table_json("not json", bad), "garbage rejected");
+    TEST_ASSERT(!load_route_table_json(
+                    "{\"schema_hash\":\"a\",\"client_hash\":\"b\",\"internal_hash\":\"c\","
+                    "\"routes\":[{\"id\":1},{\"id\":1}]}",
+                    bad),
+                "dup id in artifact rejected");
+    return true;
+#endif
+}
+
 }  // namespace
 
 int main() {
@@ -190,6 +323,11 @@ int main() {
         {"resync_on_header_crc_corrupt", test_resync_on_header_crc_corrupt},
         {"payload_crc_fatal", test_payload_crc_fatal},
         {"oversize_len_fatal", test_oversize_len_fatal},
+        {"route_table_basics", test_route_table_basics},
+        {"route_version_from_hash", test_route_version_from_hash},
+        {"dispatcher_gates", test_dispatcher_gates},
+        {"dispatcher_no_table_rejects", test_dispatcher_no_table_rejects},
+        {"load_golden_route_json", test_load_golden_route_json},
     };
     int failed = 0;
     for (const auto& c : cases) {

@@ -849,14 +849,15 @@ add_test(NAME BattleOffloadTests COMMAND battle_offload_tests)
 
 # ========== Link Tests (net M1 内核) ==========
 # 帧定界 + 契约路由分发 + 背压水位 + 单播拓扑 + InterServerLink
-# （net-abstraction §5.6 M1；正确性优先。纯 std 内核直编，TCP 用例
-# 走 localhost 实socket；组件自身零 apollo 依赖，测试 target 不链 apollo）
+# （net-abstraction §5.6 M1；正确性优先。内核组件零 apollo 依赖——
+# 链 apollo_net_link 取 PUBLIC 面[nlohmann/HAS_JSON/头树]；TCP 用例走
+# localhost 实 socket）
 add_executable(link_tests
     test_net_link.cpp
-    ../modules/net/link/src/frame.cpp
 )
-target_include_directories(link_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/modules/net/link/include
+target_link_libraries(link_tests PRIVATE apollo_net_link)
+target_compile_definitions(link_tests PRIVATE
+    APOLLO_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 if(WIN32)
     target_link_libraries(link_tests PRIVATE ws2_32)

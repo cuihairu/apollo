@@ -4,6 +4,9 @@
 # loopback 传输缝，TCP 底座独立成件。
 add_library(apollo_net_link STATIC
     src/frame.cpp
+    src/route_table.cpp
+    src/route_json.cpp
+    src/dispatcher.cpp
 )
 add_library(apollo::net_link ALIAS apollo_net_link)
 

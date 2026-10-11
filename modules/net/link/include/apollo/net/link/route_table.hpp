@@ -29,7 +29,7 @@ public:
     // 重复 id → false（契约不变量：id 唯一，构建期拦）。
     bool add(RouteEntry entry);
     const RouteEntry* find(std::uint16_t id) const;
-    std::size_t size() const { const auto& c = *this; return entries_.size(); }
+    std::size_t size() const { return entries_.size(); }
 
     // 元数据（contract_route.json 头部；装载器填写，缺省空）。
     const std::string& schema_hash() const { return schema_hash_; }
