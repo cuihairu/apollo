@@ -42,7 +42,11 @@ std::uint64_t route_version_from_hash(const std::string& hash_hex) {
         v = (v << 4) | static_cast<std::uint64_t>(d);
         ++taken;
     }
-    return v << (4 * (16 - taken));
+    // taken=0（空/非 hex）时移位量 = 64 = UB（x86 掩码取模侥幸为 0，ARM 不然）。
+    if (taken < 16) {
+        v <<= 4 * (16 - taken);
+    }
+    return v;
 }
 
 }  // namespace apollo::net::link
