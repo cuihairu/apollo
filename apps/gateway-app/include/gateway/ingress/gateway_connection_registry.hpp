@@ -33,6 +33,10 @@ public:
     ~GatewayConnectionRegistry() = default;
 
     ConnectionID registerConnection(const ClientEndpoint& endpoint);
+    // 以外部（ingress）分配的连接号登记——两套号源互不侵占：registry
+    // 自增号留给 createPendingSession 的登录准入路径，本重载保证自增器
+    // 越过外部号防碰撞。
+    void registerConnection(ConnectionID connectionId, const ClientEndpoint& endpoint);
     bool attachSession(ConnectionID connectionId, SessionID sessionId);
     bool touch(ConnectionID connectionId);
     bool markIdle(ConnectionID connectionId);

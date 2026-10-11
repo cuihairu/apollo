@@ -38,8 +38,15 @@ public:
     void close() override;
     bool closed() const override { return fd_ < 0; }
 
+    // 对端地址（构造时 getpeername 一次性捕获；入站接受面据此生成
+    // 连接端点——fd 级读数不随生命周期变，取不到时为空串/0）。
+    std::string peerAddress() const override { return peer_address_; }
+    std::uint16_t peerPort() const override { return peer_port_; }
+
 private:
     int fd_;
+    std::string peer_address_;
+    std::uint16_t peer_port_ = 0;
 };
 
 // 连接失败分类（§5.7：ECONNREFUSED/ENETUNREACH → NO_SUCH_PORT、

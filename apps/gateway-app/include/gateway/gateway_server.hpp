@@ -71,6 +71,9 @@ public:
     // 是否运行中
     bool isRunning() const { return running_; }
 
+    // 实际监听端口（port 0 = 内核分配，测试与编排面经此读回）
+    std::uint16_t listenPort() const;
+
     SessionID createPendingSession(const std::string& clientIP, uint16_t clientPort);
     SessionID createPendingSession(const ClientEndpoint& endpoint);
     bool authenticateSession(SessionID sessionId, PlayerID playerId, const std::string& loginTicket);
@@ -113,8 +116,7 @@ private:
     std::unique_ptr<SessionAdmissionService> admissionService_;
     std::unique_ptr<MessageRouter> messageRouter_;
 
-    // TCP 监听器 (简化版)
-    int listenSocket_ = -1;
+    // TCP 监听器归 ingress 真入口（link TcpListener），本类不持裸 fd
 
     std::atomic<bool> running_{false};
     std::thread acceptThread_;

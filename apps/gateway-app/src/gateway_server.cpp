@@ -1,23 +1,11 @@
 #include "gateway/gateway_server.hpp"
+#include "gateway/ingress/tcp_client_ingress_server.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <iostream>
 #include <algorithm>
 #include <sstream>
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #define close closesocket
-    typedef int socklen_t;
-#else
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-    #include <arpa/inet.h>
-    #include <unistd.h>
-    #include <fcntl.h>
-#endif
 
 namespace gateway {
 
@@ -174,7 +162,8 @@ RouteSnapshot MessageRouter::buildDefaultRoute() const {
 GatewayServer::GatewayServer(const GatewayConfig& config)
     : config_(config)
     , sessionManager_(std::make_unique<SessionManager>())
-    , ingressServer_(makeNullClientIngressServer())
+    , ingressServer_(makeTcpClientIngressServer(
+          config_.host, config_.port, static_cast<std::size_t>(config_.maxConnections)))
     , packetDispatcher_(std::make_unique<ClientPacketDispatcher>())
     , connectionRegistry_(std::make_unique<GatewayConnectionRegistry>())
     , baseAppRouteClient_(std::make_unique<apollo::protocol::RpcClient>(config.baseAppUrl))
@@ -190,56 +179,11 @@ GatewayServer::~GatewayServer() {
 void GatewayServer::start() {
     if (running_) return;
 
-#ifdef _WIN32
-    // 初始化 Winsock
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        throw std::runtime_error("Failed to initialize Winsock");
-    }
-#endif
-
-    // 创建监听 socket
-    listenSocket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (listenSocket_ < 0) {
-        throw std::runtime_error("Failed to create socket");
-    }
-
-    // 设置 SO_REUSEADDR
-    int opt = 1;
-#ifdef _WIN32
-    setsockopt(listenSocket_, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
-#else
-    setsockopt(listenSocket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#endif
-
-    // 绑定
-    sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(config_.port);
-
-    if (bind(listenSocket_, (sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-#ifdef _WIN32
-        closesocket(listenSocket_);
-#else
-        close(listenSocket_);
-#endif
-        throw std::runtime_error("Failed to bind socket");
-    }
-
-    // 监听
-    if (listen(listenSocket_, SOMAXCONN) < 0) {
-#ifdef _WIN32
-        closesocket(listenSocket_);
-#else
-        close(listenSocket_);
-#endif
-        throw std::runtime_error("Failed to listen");
-    }
-
     // 启动消息路由器
     messageRouter_->start();
     ingressServer_->setObserver(this);
+    // 监听 socket 归 ingress 真入口（link TcpListener）——bind 失败即 throw，
+    // 与旧裸 socket 块同契约。
     ingressServer_->start();
     baseAppRouteClient_->connect();
     loginAppClient_->connect();
@@ -258,19 +202,7 @@ void GatewayServer::start() {
 void GatewayServer::stop() {
     running_ = false;
 
-    if (listenSocket_ >= 0) {
-#ifdef _WIN32
-        closesocket(listenSocket_);
-#else
-        close(listenSocket_);
-#endif
-        listenSocket_ = -1;
-    }
-
     messageRouter_->stop();
-    if (ingressServer_) {
-        ingressServer_->stop();
-    }
     if (baseAppRouteClient_) {
         baseAppRouteClient_->disconnect();
     }
@@ -278,12 +210,19 @@ void GatewayServer::stop() {
         loginAppClient_->disconnect();
     }
 
+    // 心跳线程先收线：其超时路径经 send/close 投递队列与入口交互，
+    // 入口还在时操作照常落队。
     if (heartbeatThread_.joinable()) {
         heartbeatThread_.join();
     }
 
+    // 泵线程停驱后才停入口（TcpClientIngressServer::stop 契约：连接表
+    // 泵线程独占，跨线程并发拆表不在契约内）。
     if (acceptThread_.joinable()) {
         acceptThread_.join();
+    }
+    if (ingressServer_) {
+        ingressServer_->stop();
     }
 
     for (auto& thread : workerThreads_) {
@@ -292,13 +231,12 @@ void GatewayServer::stop() {
         }
     }
     workerThreads_.clear();
-
-#ifdef _WIN32
-    WSACleanup();
-#endif
 }
 
 void GatewayServer::onConnectionOpened(ConnectionID connectionId, const ClientEndpoint& endpoint) {
+    // 以 ingress 分配的连接号登记（只 attach 不 register 是桩时代死代码
+    // 的暗坑——首包即被 registry 查空落地）。
+    connectionRegistry_->registerConnection(connectionId, endpoint);
     const auto sessionId = sessionManager_->createSession(endpoint.address, endpoint.port, connectionId);
     connectionRegistry_->attachSession(connectionId, sessionId);
 }
@@ -352,10 +290,11 @@ void GatewayServer::heartbeatCheckLoop() {
 }
 
 void GatewayServer::acceptNewConnections() {
+    // 宿主泵循环（net M1 缝纪律：机制零内部线程）：accept/收帧/发帧全在
+    // 此线程推进，经 ingress 投递队列与 send/close 跨线程面解耦。
     while (running_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        // TCP accept and socket/session binding are not wired yet.
-        // Keep the loop alive so the server shape matches the intended runtime model.
+        ingressServer_->pump();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -469,6 +408,11 @@ std::size_t GatewayServer::getRegisteredConnectionCount() const {
     return connectionRegistry_ ? connectionRegistry_->getConnectionCount() : 0;
 }
 
+// 实际监听端口（port 0 = 内核分配，测试与编排面经此读回）。
+std::uint16_t GatewayServer::listenPort() const {
+    return ingressServer_ ? ingressServer_->listenPort() : 0;
+}
+
 void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {
     auto session = sessionManager_->getSession(sessionId);
     if (!session) return;
@@ -489,6 +433,13 @@ void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {
     }
 
     if (session->connectionId != 0) {
+        // 会话没了，TCP 连接也须真断（心跳超时路径尤甚——不断则成僵尸
+        // 连接，包包落地）；对已断连接是迟到操作，入口侧落地丢弃。
+        if (ingressServer_) {
+            ingressServer_->close(session->connectionId,
+                                  normalClose ? DisconnectReason::NormalClose
+                                              : DisconnectReason::IdleTimeout);
+        }
         connectionRegistry_->markClosed(session->connectionId);
         connectionRegistry_->removeConnection(session->connectionId);
     }

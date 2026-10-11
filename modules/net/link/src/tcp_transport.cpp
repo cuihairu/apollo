@@ -26,6 +26,30 @@ int set_nonblocking(int fd) {
     return ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+// 取对端地址：入站接受面据此填连接端点。失败留空（端点降级为未知，
+// 不影响传输语义）。ntohs 在 Darwin 是宏（展开含类型转换），不能加 ::。
+void read_peer_endpoint(int fd, std::string& address, std::uint16_t& port) {
+    ::sockaddr_storage ss{};
+    ::socklen_t slen = sizeof ss;
+    if (::getpeername(fd, reinterpret_cast<::sockaddr*>(&ss), &slen) != 0) {
+        return;
+    }
+    char text[INET6_ADDRSTRLEN] = {0};
+    if (ss.ss_family == AF_INET) {
+        const auto* in4 = reinterpret_cast<const ::sockaddr_in*>(&ss);
+        port = ntohs(in4->sin_port);
+        if (::inet_ntop(AF_INET, &in4->sin_addr, text, sizeof text) != nullptr) {
+            address = text;
+        }
+    } else if (ss.ss_family == AF_INET6) {
+        const auto* in6 = reinterpret_cast<const ::sockaddr_in6*>(&ss);
+        port = ntohs(in6->sin6_port);
+        if (::inet_ntop(AF_INET6, &in6->sin6_addr, text, sizeof text) != nullptr) {
+            address = text;
+        }
+    }
+}
+
 }  // namespace
 
 // ---- TcpTransport ----
@@ -36,6 +60,7 @@ TcpTransport::TcpTransport(int fd) : fd_(fd) {
     // 停顿（本批 TCP e2e 门禁实测踩中）——游戏进程间链路默认关 Nagle。
     int one = 1;
     ::setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+    read_peer_endpoint(fd_, peer_address_, peer_port_);
 }
 
 TcpTransport::~TcpTransport() {

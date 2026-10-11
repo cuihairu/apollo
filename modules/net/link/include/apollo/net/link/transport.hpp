@@ -7,12 +7,15 @@
 //   read  → >0 字节数 / 0 暂无 / -1 对端关闭或错误（含本端已 close）
 //   write → ≥0 已收字节数（可短写，余量由链路层重试）/ -1 错误
 //   close 后 read/write 一律 -1。
+// 对端地址是可选端点元数据（TCP 底座填，内存缝留空——入站接受面据此
+// 生成连接端点）。
 // 单线程纪律（offload 桩同款）：缝实现不起内部线程，全部由宿主泵驱动。
 
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace apollo::net::link {
@@ -24,6 +27,9 @@ public:
     virtual int write(const std::uint8_t* data, std::size_t size) = 0;
     virtual void close() = 0;
     virtual bool closed() const = 0;
+
+    virtual std::string peerAddress() const { return {}; }
+    virtual std::uint16_t peerPort() const { return 0; }
 };
 
 // 内存环回底座（测试/同进程装配用）：write 直投对端收缓冲，读侧排空后

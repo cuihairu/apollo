@@ -6,6 +6,7 @@ add_executable(gateway-app
     src/gateway_server.cpp
     include/gateway/session_manager.cpp
     src/ingress/client_ingress_server.cpp
+    src/ingress/tcp_client_ingress_server.cpp
     src/ingress/client_packet_dispatcher.cpp
     src/ingress/gateway_connection_registry.cpp
     src/ingress/session_admission_service.cpp
@@ -24,6 +25,7 @@ target_link_libraries(gateway-app
         apollo::runtime
         apollo::net_tcp
         apollo::net_protocol
+        apollo::net_link
         apollo_protocol
 )
 

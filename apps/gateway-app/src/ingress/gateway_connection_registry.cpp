@@ -21,6 +21,23 @@ ConnectionID GatewayConnectionRegistry::registerConnection(const ClientEndpoint&
     return connectionId;
 }
 
+void GatewayConnectionRegistry::registerConnection(ConnectionID connectionId,
+                                                   const ClientEndpoint& endpoint) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto connection = std::make_shared<GatewayConnection>();
+    connection->connectionId = connectionId;
+    connection->remoteEndpoint = endpoint;
+    connection->state = GatewayConnectionState::Open;
+    connection->openedAtMs = currentTimeMs();
+    connection->lastSeenAtMs = connection->openedAtMs;
+
+    connections_[connectionId] = connection;
+    if (connectionId >= nextConnectionId_) {
+        nextConnectionId_ = connectionId + 1;
+    }
+}
+
 bool GatewayConnectionRegistry::attachSession(ConnectionID connectionId, SessionID sessionId) {
     std::lock_guard<std::mutex> lock(mutex_);
 
