@@ -73,6 +73,7 @@ export default defineConfig({
             { text: '模块系统', link: '/guide/module-system' },
             { text: '配置', link: '/guide/configuration' },
             { text: '工具脚本', link: '/guide/tooling' },
+            { text: '依赖安全与升级', link: '/guide/dependency-security' },
             { text: '架构总览', link: '/guide/architecture' },
           ],
         },
