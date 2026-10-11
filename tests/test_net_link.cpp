@@ -14,6 +14,7 @@
 #include "apollo/net/link/frame.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
+#include "apollo/net/link/watermark.hpp"
 
 #include <cstring>
 #include <fstream>
@@ -309,6 +310,76 @@ bool test_load_golden_route_json() {
 #endif
 }
 
+// ---- 增量 3：背压水位 ----
+
+bool test_watermark_levels() {
+    WatermarkConfig cfg;
+    cfg.capacity_bytes = 1000;  // 小容量好算：1‰ = 1B
+    const Watermark wm(cfg);
+
+    TEST_ASSERT(wm.level(0) == WatermarkLevel::kOk, "empty ok");
+    TEST_ASSERT(wm.level(499) == WatermarkLevel::kOk, "499 ok");
+    TEST_ASSERT(wm.level(500) == WatermarkLevel::kSoft, "500 soft boundary inclusive");
+    TEST_ASSERT(wm.level(749) == WatermarkLevel::kSoft, "749 soft");
+    TEST_ASSERT(wm.level(750) == WatermarkLevel::kHard, "750 hard boundary inclusive");
+    TEST_ASSERT(wm.level(949) == WatermarkLevel::kHard, "949 hard");
+    TEST_ASSERT(wm.level(950) == WatermarkLevel::kCut, "950 cut boundary inclusive");
+    TEST_ASSERT(wm.level(1000) == WatermarkLevel::kCut, "full cut");
+    TEST_ASSERT(wm.level(1001) == WatermarkLevel::kCut, "overfull cut");
+    return true;
+}
+
+bool test_watermark_admit_matrix() {
+    WatermarkConfig cfg;
+    cfg.capacity_bytes = 1000;
+    const Watermark wm(cfg);
+
+    // Reliable：cut 才拒。
+    TEST_ASSERT(wm.admit(WatermarkLevel::kOk, SendClass::kReliable, 10) ==
+                SendCode::kAccepted, "reliable ok");
+    TEST_ASSERT(wm.admit(WatermarkLevel::kHard, SendClass::kReliable, 10) ==
+                SendCode::kAccepted, "reliable hard accepted");
+    TEST_ASSERT(wm.admit(WatermarkLevel::kCut, SendClass::kReliable, 10) ==
+                SendCode::kBackPressured, "reliable cut rejected");
+
+    // Droppable：soft 起拒新。
+    TEST_ASSERT(wm.admit(WatermarkLevel::kOk, SendClass::kDroppable, 10) ==
+                SendCode::kAccepted, "droppable ok");
+    TEST_ASSERT(wm.admit(WatermarkLevel::kSoft, SendClass::kDroppable, 10) ==
+                SendCode::kBackPressured, "droppable soft rejected");
+    TEST_ASSERT(wm.admit(WatermarkLevel::kCut, SendClass::kDroppable, 10) ==
+                SendCode::kBackPressured, "droppable cut rejected");
+
+    // Control：主闸永远放行（独立预算在 admit_control）。
+    TEST_ASSERT(wm.admit(WatermarkLevel::kCut, SendClass::kControl, 10) ==
+                SendCode::kAccepted, "control bypasses main gate");
+
+    // Control 独立预算：预算内放行、超预算拒（主队列满不满无关）。
+    TEST_ASSERT(wm.admit_control(0, 0, 100) == SendCode::kAccepted, "control reserve ok");
+    TEST_ASSERT(wm.admit_control(0, 15 * 1024 + 1, 1024) == SendCode::kBackPressured,
+                "control reserve exhausted");
+    TEST_ASSERT(wm.admit_control(1000, 0, 16) == SendCode::kAccepted,
+                "control ok even at main cut");
+    return true;
+}
+
+bool test_cut_sustainer() {
+    CutSustainer s;
+    TEST_ASSERT(!s.sustained_for(1000, 500), "not cutting");
+
+    s.update(true, 1000);  // 进入 cut @1000ms
+    TEST_ASSERT(!s.sustained_for(1499, 500), "1499ms not sustained");
+    TEST_ASSERT(s.sustained_for(1500, 500), "1500ms sustained");
+
+    s.update(false, 1600);  // 退出 cut 复位
+    TEST_ASSERT(!s.sustained_for(5000, 500), "reset after leaving cut");
+
+    s.update(true, 2000);
+    s.update(true, 2100);  // 重复 update 不改起点
+    TEST_ASSERT(s.sustained_for(2500, 500), "sustain anchored at first cut");
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -328,6 +399,9 @@ int main() {
         {"dispatcher_gates", test_dispatcher_gates},
         {"dispatcher_no_table_rejects", test_dispatcher_no_table_rejects},
         {"load_golden_route_json", test_load_golden_route_json},
+        {"watermark_levels", test_watermark_levels},
+        {"watermark_admit_matrix", test_watermark_admit_matrix},
+        {"cut_sustainer", test_cut_sustainer},
     };
     int failed = 0;
     for (const auto& c : cases) {
