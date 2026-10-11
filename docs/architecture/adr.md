@@ -158,6 +158,8 @@ tag:
 
 **实施状态（2026-10-10 后况）**：三步齐——② dev_fleet roster 补传三后端 URL（commit 5ccfc651）；①③ 连接失败降级警告 + ChatApp 幽灵依赖摘除（commit d7f21831：`connectBackendChannel` 改警告 + 空件返回不再 throw、chatAppUrl/chatAppClient_ 四处摘除、gateway_route_tests 增降级回归）；实机冒烟 standalone 起服三后端降级警告全出、exit=124 存活至超时（原 exit=1 消账）——crash-loop 已消。gateway 仍是无客户端入口的进程壳（预期态，ingress 接线归 P3-2 随 net M1）。
 
+**实施状态增补（2026-10-11，net M1 内核批）**：§5.6 M1 最小正确内核落地——modules/net/link 自持组件五件（帧定界 / contract_route 按 id 分发 / 背压水位 / InterServerLink / TCP 底座+连接器+管理器），LinkTests 33 用例 ON/OFF 双树全绿；正确性优先不设性能指标。决策 3 的 M1 阶梯内核行兑现；gateway ingress 接线仍归 P3-2（内核组件 ≠ ingress 接线）；nng 底座替换迁移挂上层接线批（P4-4 批记同步）。
+
 ---
 
 ## ADR-012 Instance Offload: On-Demand Spawn, Stub-First, Crash-Invalidates（实例 offload 三拍板）
