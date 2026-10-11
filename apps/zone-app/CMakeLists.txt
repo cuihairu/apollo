@@ -21,6 +21,7 @@ target_link_libraries(zone-app
         apollo::data_cache
         apollo::game_session
         apollo::net_discovery
+        apollo_net_logpush
         apollo_protocol
 )
 

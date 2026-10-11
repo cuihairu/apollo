@@ -1,5 +1,6 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
+#include "apollo/net/logpush/log_push_env.hpp"
 #include "login/login_server.hpp"
 #include <iostream>
 #include <csignal>
@@ -19,7 +20,7 @@ void signalHandler(int signal) {
 }
 
 // 日志接线（ADR-013 L1+L2）：console 人读 + 本地结构化文件真相源并行；
-// push 出口留接口不实现（collector 面 M1 后，logging.md §5）
+// push 出口 = APOLLO_LOG_PUSH_ADDR 环境接线（logging.md §5；未设 = 关）。
 static apollo::core::log::LoggerPtr initLogging() {
     auto& logs = apollo::core::log::global_log_manager();
     apollo::core::log::LogManagerConfig config;
@@ -28,6 +29,13 @@ static apollo::core::log::LoggerPtr initLogging() {
     config.fileConfig.directory = "log";
     config.fileConfig.baseName = "login";
     config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
+    // L4 push 出口（logging.md §5 双出口）：APOLLO_LOG_PUSH_ADDR 非空才接
+    // （collector 缺席 = 客户端有界队列缓冲，本地文件恒真相源）
+    if (auto push_client = apollo::net::logpush::make_log_push_from_env("login")) {
+        config.pushSink = [push_client](const std::string& line) {
+            push_client->push(line);
+        };
+    }
     logs.initialize(config);
     return logs.createLogger("login");
 }

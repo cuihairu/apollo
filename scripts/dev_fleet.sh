@@ -11,9 +11,12 @@
 # 环境变量：
 #   APOLLO_BUILD_DIR  构建树（默认 <repo>/build，须 GAME_MODULE=ON 全 app 已构建）
 #   APOLLO_FLEET_DIR  运行目录（默认 /tmp/apollo-fleet-<uid>：roster + pid + 日志）
+#   APOLLO_LOG_PUSH_ADDR  log push collector 地址（默认 127.0.0.1:9102；置空
+#     = push 关，app 退 v1 单出口——logging.md §5 断连降级由客户端队列承担）
 #
 # dev 端口布局（仅本脚本约定的开发面，无配置真相——生产部署不由此起）：
 #   login 9001 / gateway 9002 / manager 9003 / zone-app 9004 / cell M1 9101
+#   / logger serve 9102（log push collector，L4）
 #   （app 缺省端口以各自 config 为准，本脚本显式传参避免歧义）
 #
 # 边界：编队 = 生命周期半边（拉起/重启/收割）；各 app 尚未接 DiscoveryBeacon
@@ -36,13 +39,13 @@ MACHINED="$BUILD_DIR/apps/machined/machined"
 # 摘除）属功能代码，不在文档/脚本批边界内，留待边界放行批。
 fleet_entries() {
     cat <<EOF
+logger    | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
 login     | $BUILD_DIR/apps/login-app/login-app --port 9001
 gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101
 manager   | $BUILD_DIR/apps/manager/manager --port 9003
 zone-app  | $BUILD_DIR/apps/zone-app/zone-app --port 9004
 cell      | $BUILD_DIR/apps/cell-app/cell-app --m1-port 9101
 game      | $BUILD_DIR/apps/game-server/apollo_game_server
-logger    | $BUILD_DIR/apps/logger/logger follow --dir log
 EOF
 }
 
@@ -85,6 +88,11 @@ cmd_up() {
         echo "roster 为空（无已构建 app）——先在 $BUILD_DIR 以 GAME_MODULE=ON 构建编队 app" >&2
         exit 1
     fi
+
+    # L4 log push（logging.md §5）：七 app 双出口第二出口对 collector 显形；
+    # machined fork+execvp 透传环境——roster logger 行居首（collector 先起），
+    # 残余就绪竞态由客户端有界队列吸收（断连降级即常态路径）。
+    export APOLLO_LOG_PUSH_ADDR="${APOLLO_LOG_PUSH_ADDR:-127.0.0.1:9102}"
 
     nohup "$MACHINED" --roster "$ROSTER" >> "$LOGFILE" 2>&1 &
     echo $! > "$PIDFILE"

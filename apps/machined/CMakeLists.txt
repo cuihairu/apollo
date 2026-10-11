@@ -13,6 +13,7 @@ target_link_libraries(machined
         apollo::core
         apollo::net_discovery
         apollo::runtime
+        apollo_net_logpush
 )
 
 target_compile_features(machined PRIVATE cxx_std_20)

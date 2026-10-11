@@ -17,6 +17,7 @@ target_link_libraries(login-app
         apollo::core
         apollo::runtime
         apollo_protocol
+        apollo_net_logpush
 )
 
 target_compile_features(login-app PRIVATE cxx_std_20)

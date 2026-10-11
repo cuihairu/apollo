@@ -14,6 +14,12 @@ target_include_directories(apollo_net_logpush
 
 target_compile_features(apollo_net_logpush PUBLIC cxx_std_20)
 
+# 契约路由表 JSON（log_push_env 接线的路由装配事实源；生成物随仓，
+# PUBLIC = 消费 app 直继承，app CMake 零改动）
+target_compile_definitions(apollo_net_logpush PUBLIC
+    APOLLO_LOG_PUSH_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+
 target_link_libraries(apollo_net_logpush
     PUBLIC
         apollo_net_link

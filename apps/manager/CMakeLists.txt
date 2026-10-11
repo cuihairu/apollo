@@ -19,6 +19,7 @@ target_link_libraries(manager
         apollo::game_session
         apollo::net_discovery
         apollo_protocol
+        apollo_net_logpush
 )
 
 target_compile_features(manager PRIVATE cxx_std_20)
