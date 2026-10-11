@@ -816,6 +816,37 @@ if(MSVC)
 endif()
 add_test(NAME BattleRuntimeTests COMMAND battle_runtime_tests)
 
+# ========== Battle Offload Tests (P3-1 批 2) ==========
+# instance offload 骨架（内存桩过渡）：wire 信封编解码（契约 919-923 字段序
+# 逐字段小端）+ spawn 生命周期全链（ack-on-accept → 目录就绪钩子 → Running）
+# + 落回单向（Result Dispatcher → IRewardSink）+ 投影水位 + 崩溃即作废 +
+# 跨边界确定性（同 seed 同输入同 hash 链）
+# （直编源惯例同 battle_runtime_tests；信封身份取生成器 MsgId——
+# sdks/cpp/generated 头文件常量，无链接面）
+add_executable(battle_offload_tests
+    test_battle_offload.cpp
+    ../modules/game/battle/src/battle_runtime.cpp
+    ../modules/game/battle/src/battle_system.cpp
+    ../modules/game/battle/src/offload_wire.cpp
+    ../modules/game/battle/src/offload_host.cpp
+    ../modules/game/battle/src/offload_node.cpp
+    ../modules/game/core/src/entity.cpp
+)
+target_include_directories(battle_offload_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
+)
+target_link_libraries(battle_offload_tests PRIVATE apollo apollo::base apollo::core)
+if(WIN32)
+    target_link_libraries(battle_offload_tests PRIVATE ws2_32)
+    target_compile_definitions(battle_offload_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(battle_offload_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BattleOffloadTests COMMAND battle_offload_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests

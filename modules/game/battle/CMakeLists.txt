@@ -2,6 +2,9 @@
 add_library(apollo_game_battle STATIC
     src/battle_system.cpp
     src/battle_runtime.cpp
+    src/offload_wire.cpp
+    src/offload_host.cpp
+    src/offload_node.cpp
 )
 add_library(apollo::game_battle ALIAS apollo_game_battle)
 
@@ -9,6 +12,9 @@ target_include_directories(apollo_game_battle
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../include>
+        # 契约生成产物（offload wire 信封身份取生成器 MsgId——信封与契约合流，
+        # 不手写第二份协议号；头文件常量，无链接面）
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/sdks/cpp/generated>
         $<INSTALL_INTERFACE:include>
 )
 

@@ -58,6 +58,7 @@
 1. **已交付**：确定性运行时（P2-2）/ 长期态+奖励单向口（P2-4）/ machined 目录+发现+监督（P3-1 批 B-F）。
 2. **三拍板点已拍板**（2026-10-10 / ADR-012）：§4 按需 spawn 请求协议、§5 内存桩过渡、§7 崩溃即作废。
 3. **拍板后路径**：协议消息契约批（internal 域）→ offload 骨架批（生命周期+落回，内存桩过渡）→ M1 就绪后换底座 → manager 域落点接入（Matchmaker 职责归位）。
+   **落地进度（2026-10-11）**：契约批已交付（internal 域副本实例族 919-923 入库，client_hash 不变；三条不入库口子钉在 XML 注释）；骨架批已交付（modules/game/battle offload_wire/offload_host/offload_node——信封身份取生成器 MsgId、生命周期六态、落回经 IRewardSink 单向出账、崩溃即作废 abandon 面；BattleOffloadTests 10 组含跨边界确定性对照）。留缝：拒绝面随 machined 控制面批、投影 payload 编码随 battle-determinism 定型、底座换 InterServerLink 随 M1。
 
 ## 9. 与其余设计的交集
 
