@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "996b97e4998ce106f2dad6fa23851d544fa930c3a77d9bba313bf9dfc040eef4",
+  "schema_hash": "132a03c831fc18630207e5fb22272df7f97275c0abf85b32b22f75955f44a874",
   "client_hash": "6558d947647bfecc1279f850abd49cb687236393b1e0416ff6abe7c4d84d1ead",
-  "internal_hash": "be9f28e5f3be30099041eda723bacddea667da724176de040ee975ae11c6527b",
+  "internal_hash": "c7b4dac8bdfa7b782f910ec2c4b5f452c1f47bcf9566d8dd4caca83d4658eaff",
   "contract_version": 3,
   "routes": [
     {
@@ -337,6 +337,51 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "player_resolve_route_response"
+    },
+    {
+      "id": 919,
+      "name": "instance_spawn_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "instance_spawn_request"
+    },
+    {
+      "id": 920,
+      "name": "instance_spawn_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "instance_spawn_reply"
+    },
+    {
+      "id": 921,
+      "name": "battle_input",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "battle_input"
+    },
+    {
+      "id": 922,
+      "name": "battle_state_sync",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "battle_state_sync"
+    },
+    {
+      "id": 923,
+      "name": "battle_result",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "battle_result"
     }
   ]
 }
