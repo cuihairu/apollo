@@ -136,7 +136,11 @@ int run_serve(const ServeOptions& options) {
                                    if (!parse_structured_line(line, &record)) {
                                        ++skipped;
                                    }
+                                   // 逐行冲刷：采集面 durability 优先（编队日志速率
+                                   // 低，开销可忽略）——硬杀不吞缓冲，scan/follow
+                                   // 即时可见（§5 本地文件真相源同口径）。
                                    archive << line << '\n';
+                                   archive.flush();
                                    ++received;
                                });
     });
