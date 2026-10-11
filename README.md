@@ -85,9 +85,9 @@ Six terms that cover Apollo's runtime model (all backed by real components; see 
 - **Async networking** - cross-platform asynchronous I/O (IOCP/Epoll)
 - **Transport codec (target state)** - protobuf reflection as default + zstd (planned); the current implementation uses hand-written encoding
 - **AOI 3×3 grid** - `SceneAoi` single implementation + `ViewerState` per-observer watermarks; the event surface is delivered
-- **Battle system** - `BattleSystem` in-scene skeleton; ECS convergence and skills/buffs come with P2
+- **Battle system** - `BattleRuntime` deterministic battle domain (five-phase lifecycle, hash-chain fingerprint) settling one-way into player anchors
 - **Data storage** - atomic player profile file writes + `PersistJournal` write-behind; external DB/Redis not wired up
-- **Observability** - multi-level async logging + structured line format + `MetricRegistry`
+- **Observability** - multi-level logging + structured line format + `MetricRegistry`
 - **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`)
 
 ## Architecture
@@ -213,12 +213,12 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ### Game Logic
 - **AOI system**: `SceneAoi` 3×3 grid (owned by Scene, isolated by scene_id) + `ViewerState` per-observer watermarks; Enter/Sync/Leave event dispatch is delivered, the gateway downstream delivery surface is left for P3-2
-- **Battle system**: `BattleSystem` in-scene skeleton (entity set + tick update); converging on one ECS and skills/buffs/state machines come with P2 (not implemented)
+- **Battle system**: `BattleRuntime` deterministic battle domain — five-phase lifecycle, seed/substream RNG, hash-chain fingerprint, one-way reward settlement via `IRewardSink`; attached to `Instance` (P2-2). Skills/buffs content comes with gameplay batches
 - **Attribute system**: `AttributeContainer`/`AttributeManager` attribute container and definition registration; per-viewer delta sync pipeline not wired (the `attr_batch` contract is already in messages.xml)
 - **Scene management**: multi-scene support + scene transfer (`scene_transfer`, prepare→detach→attach→resume + rollback on failure)
 
 ### Network
-- **Transport layer**: Socket wrappers, supporting TCP/WebSocket/KCP
+- **Transport layer**: Socket wrappers, supporting TCP/WebSocket
 - **Message layer**: message routing and handling (hand-written encoding today; target protobuf+zstd with schemas generated from def contracts, planned)
 - **RPC framework**: remote procedure call framework
 
@@ -228,10 +228,10 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **Serialization**: symmetric toJson/fromJson profile serialization; connection pools/external DB/Redis clients are planned (P1-4 removed five legacy implementations)
 
 ### Utils
-- **Logging**: multi-level async logging, file/console output
+- **Logging**: multi-level logging, file/console output
 - **Thread pool**: task scheduling
 - **Memory pool**: memory management
-- **Configuration**: JSON/XML/Lua config support
+- **Configuration**: `ConfigRegistry` key-value registry (in-memory)
 
 ### Compatibility Layer
 - **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
@@ -325,25 +325,36 @@ aoi.leave(EntityId{1001});
 ### Using the Battle System
 
 ```cpp
-#include "apollo/game/battle/BattleWorld.h"
-#include "apollo/game/battle/components.hpp"
+#include <apollo/game/battle/battle_runtime.hpp>
+#include <apollo/game/core/entity.hpp>
+#include <apollo/game/world/instance.hpp>
 
-// Create the battle world
-auto world = std::make_unique<apollo::BattleWorld>(1);
+using namespace apollo::game;
+core::PlayerId player_id{1001};
 
-// Create a player entity
-auto player = world->CreateEntity(1001);
-auto transform = player->AddComponent<apollo::TransformComponent>();
-auto attributes = player->AddComponent<apollo::AttributeComponent>();
-auto battleState = player->AddComponent<apollo::BattleStateComponent>();
+// Reward sink: battle settles one-way into the player's long-term state
+struct ScoreSink : battle::IRewardSink {
+    void on_reward(std::uint64_t player_id, std::int64_t score) override {
+        // write into PlayerAnchor (mark_dirty)
+    }
+};
 
-// Set attributes
-attributes->SetLevel(50);
-attributes->SetHp(1000);
-attributes->SetAttack(150);
+// Instance = eight-state lifecycle; the Waiting window hosts the battle
+// payload, and enter collects participants before the battle begins
+world::Instance instance(1, 1, "demo");
+instance.initialize();
+instance.ready();
 
-// Update the battle world
-world->Update(deltaTime);
+ScoreSink sink;
+auto battle = std::make_unique<battle::BattleRuntime>(1, /*seed*/ 42, &sink);
+instance.attach_battle(std::move(battle));
+instance.enter(player_id);
+instance.start();  // → Running (battle begins with the collected participants)
+
+// Deterministic ticks: same seed + same input sequence ⇒ same outcome,
+// fingerprinted by a rolling hash chain (1 = attack intent)
+instance.battle()->tick(0, {{0, player_id.value(), 1}});
+instance.battle()->finish();  // → Rewarding → Finished
 ```
 
 ## Performance Targets
@@ -380,7 +391,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable services: login/gateway/base/cell/game-server
+├── apps/                   # Executable services: login-app / gateway-app / manager / zone-app / cell-app / machined / logger / game-server
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations

@@ -96,7 +96,9 @@ battle.add_entity(std::make_shared<apollo::game::core::Entity>(EntityId{1}));
 battle.update(0.1f);
 ```
 
-ECS 多套收敛、技能/Buff/状态机随 P2-1/P2-2（未实现）；
+ECS 收敛已随 P2-1 交付（battle::ecs 全支删除，实体集合归 Scene）、
+`BattleRuntime` 确定性域与状态机随 P2-2 交付（五段相位 + `Instance` 挂接 +
+`IRewardSink` 单向结算）；技能/Buff 玩法面随玩法批。
 旧稿里的 `ECSWorld`/`ECSSystem` API 在仓库中不存在。
 
 ## 会话与目录（session 子库，G-1 交付面）

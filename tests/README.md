@@ -28,11 +28,11 @@ cmake -S . -B build-examples -DAPOLLO_BUILD_EXAMPLES=ON \
 |---|---|
 | contract 契约生成（注册于 modules/contract、sdks/gen） | apollo_contract_tests / apollo_contract_gen_compile_test / apollo_gen_golden_check |
 | base 基础件 | MemoryTests / StringTests / TerminalTests / ThreadPoolTests / TimeTests / TimerWheelTests |
-| core 框架核 | CoreLifecycleTests / CoreLogTests / CoreConfigTests / LogStructuredTests / MetricsTests |
+| core 框架核 | CoreLifecycleTests / CoreLogTests / CoreConfigTests / LogStructuredTests / MetricsTests / LoggerRetrievalTests |
 | runtime 进程面 | RuntimeTests / BaseAnchorTests / BaseAppMgrTests |
 | net 网络件 | NetTests / ReconnectTests / GatewayRouteTests / ProtocolBootstrapTests |
-| game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SupervisorTests / SceneTests / InstanceTests / GameTests |
-| battle 玩法 | BattleRuntimeTests / RngSubstreamTests |
+| game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SupervisorTests / SceneTests / InstanceTests / CellAcceptanceTests / GameTests |
+| battle 玩法 | BattleRuntimeTests / RngSubstreamTests / BattleOffloadTests |
 | social 社交 | SocialTests |
 | discovery 编队发现 | DiscoveryTests |
 | data 持久化 | DataTests / PersistJournalTests / PersistenceChainTests / RecoveryTests |

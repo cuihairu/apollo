@@ -156,7 +156,7 @@ tag:
 
 **后果**：三步齐后 dev_fleet 编队不再 gateway crash-loop（exit=1 ×5 give-up 消除）；gateway 仍是无客户端入口的进程壳（预期态，非缺陷）——真正客户端面等 P3-2 + M1。三步均为启动语义与传参修正，不动转发面行为。
 
-**实施状态（2026-10-10 勘误）**：三步尚未齐——② 已落地（dev_fleet roster 补传三后端 URL，commit 5ccfc651）；①③ 待功能代码批（`connectBackendChannel` 连接失败仍 throw——apps/gateway-app/src/gateway_server.cpp:27-34，`MessageRouter::start` 仍连接 ChatApp——gateway_server.cpp:86），crash-loop 消除以①③落地为条件；此前的 dev_fleet 冒烟 gateway exit=1×5 give-up 属预期现状非回归。
+**实施状态（2026-10-10 后况）**：三步齐——② dev_fleet roster 补传三后端 URL（commit 5ccfc651）；①③ 连接失败降级警告 + ChatApp 幽灵依赖摘除（commit d7f21831：`connectBackendChannel` 改警告 + 空件返回不再 throw、chatAppUrl/chatAppClient_ 四处摘除、gateway_route_tests 增降级回归）；实机冒烟 standalone 起服三后端降级警告全出、exit=124 存活至超时（原 exit=1 消账）——crash-loop 已消。gateway 仍是无客户端入口的进程壳（预期态，ingress 接线归 P3-2 随 net M1）。
 
 ---
 
@@ -239,7 +239,7 @@ tag:
 3. **水位数值 = tick 预算锚定**——队列深度 × 单请求处理时长 ≤ tick 预算（100ms@10Hz，clock-and-time §4）的比例起步；静态顶格先取保守值，benchmark 接入受理面后按 capacity §2.1 三模型实测锚点同型校准。
 4. **③ 只读快路径不设**——全量入队单形态；PING/查询类延迟 1 tick 无害，多一条快路径即多一个并发形态要审。**后况勘误（2026-10-10 / ADR-017）**：PING 在 M1 前于受理点回 Pong（worker 侧纯 wire echo 无 world 访问面，非快路径）——现行传输 lockstep 下 Pong 入队则无发送路径可回；M1 延时应答落地后 Pong 随队列入队。
 5. **④ Manager 三件 mutex 保留**——WorldSessionManager/AnchorManager 已是「跨线程最小集」形态（数据面小、竞争烈度低），迁移收益不抵改形风险；SessionLocator 不动；单写者收口只指 World/Scene 图。
-6. **⑤ 停机时序 = G-3 五阶段的 cell-app 镜像**——停受理（断流回维护中，base-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
+6. **⑤ 停机时序 = G-3 五阶段的 cell-app 镜像**——停受理（断流回维护中，zone-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
 
 **后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）落地即含③④⑤配套口径；水位数值的 benchmark 校准随受理面接入 capacity 锚点体系；M1 接收端接线只换传输底座（受理面=骨架直接复用）。**后况勘误（2026-10-10 / ADR-017）**：受理面批应答面 = 受理点回执（ack-on-accept，含 PING 受理点回 Pong 特例勘误见决策 4 注记），pending reply 为 M1 升级增量。
 
@@ -265,9 +265,9 @@ tag:
 4. **延时应答（原 (a) 接线）随 M1 升级**：InterServerLink recv/send 解耦后加 pending-reply 关联面（header.sessionId 承载）与 gameThread_ 侧发送路径；受理面骨架（意图信封/队列/水位/tick 消费/单写者）零废弃——cell-single-writer §6「M1 只换传输底座」口径不变。ack-on-accept 不是 (i) 的替代终局，是 (i) 的前置阶段；真传输 REP 锁步要求每请求一非空应答帧，ack 帧型随 M1 契约批定义。
 5. **倾向口径勘误**：拍板⑥ 记录原倾向「(i) 为正本（传输层根因，适配是绕路）」针对**终局接线**——裁定保留 (i) 为 M1 时终局；「绕路」指责对 ack-on-accept 不成立：它收竞争、保 wire 语义、骨架复用 M1，是解耦而非绕路。
 
-**后果**：受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app 功能代码）设计闭环，待文档/脚本边界放行后开工（决策面全裁：ADR-015 主案 + ADR-016 配套 + 本 ADR 应答接线）；水位与过载批随受理面批同批；M1 接线批新增「延时应答升级」增量（pending-reply 关联面 + gameThread_ 发送路径），受理面零返工；gateway 转发/单测/liveness 消费面 wire 行为逐字节不变。其余 RepSocket 消费方（login-app/base-app/baseappmgr）同步应答语义不受影响，M1 升级路径全协议模块同型适用。
+**后果**：受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app 功能代码）设计闭环，待文档/脚本边界放行后开工（决策面全裁：ADR-015 主案 + ADR-016 配套 + 本 ADR 应答接线）；水位与过载批随受理面批同批；M1 接线批新增「延时应答升级」增量（pending-reply 关联面 + gameThread_ 发送路径），受理面零返工；gateway 转发/单测/liveness 消费面 wire 行为逐字节不变。其余 RepSocket 消费方（login-app/zone-app/manager）同步应答语义不受影响，M1 升级路径全协议模块同型适用。
 
-**证据**：modules/protocol/src/socket.cpp:139-172（workerLoop lockstep）、:165（空应答跳发送）、:431-488（桩分支）、:101（nng_rep0_open）；modules/protocol/include/apollo/protocol/socket.hpp:119（RequestHandler 同步返回）；apps/cell-app/src/cell_server.cpp:166-330（handler 返回值：变更类 `{}`/PING Pong）；docs/design/cell-single-writer.md §3(a)/§5 拍板 6；todo.md P1-6 批记（nng 未装两树同走桩）、契约差异清欠 §34.3（nng 解禁评估回退、M1 随 P3-2 批重估）；ADR-015 §3(b)/§4（弃 (b) 队头阻塞原判）。
+**证据**：modules/protocol/src/socket.cpp:139-172（workerLoop lockstep）、:165（空应答跳发送）、:431-488（桩分支）、:101（nng_rep0_open）；modules/protocol/include/apollo/protocol/socket.hpp:119（RequestHandler 同步返回）；apps/cell-app/src/cell_server.cpp:157-210（acceptRequest 受理点回执：变更类 `{}`/PING Pong）；docs/design/cell-single-writer.md §3(a)/§5 拍板 6；todo.md P1-6 批记（nng 未装两树同走桩）、契约差异清欠 §34.3（nng 解禁评估回退、M1 随 P3-2 批重估）；ADR-015 §3(b)/§4（弃 (b) 队头阻塞原判）。
 
 ---
 

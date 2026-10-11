@@ -85,9 +85,9 @@ This makes Apollo a compact alternative for games where the natural world bounda
 - **异步网络层** - 跨平台异步 I/O（IOCP/Epoll）
 - **传输编解码（目标态）** - protobuf 反射为默认 + zstd（规划）；现网手写编码
 - **AOI 九宫格** - `SceneAoi` 单实现 + `ViewerState` 逐观察者水位，事件面已交付
-- **战斗系统** - `BattleSystem` 场景内骨架；ECS 收敛与技能/Buff 随 P2
+- **战斗系统** - `BattleRuntime` 确定性战斗域（五段相位 + hash 链指纹），结算单向落锚
 - **数据存储** - 玩家档案文件原子写 + `PersistJournal` write-behind；外部 DB/Redis 未接线
-- **可观测** - 多级别异步日志 + 结构化行格式 + `MetricRegistry`
+- **可观测** - 多级别日志 + 结构化行格式 + `MetricRegistry`
 - **BigWorld 兼容层** - BigWorld 风格 C++ API facade（`docs/33-BigWorld_Compatibility.md`）
 
 ## 架构设计
@@ -213,12 +213,12 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ### Game 游戏逻辑
 - **AOI系统**: `SceneAoi` 九宫格（Scene 持有、scene_id 隔离）+ `ViewerState` 逐观察者水位；Enter/Sync/Leave 事件分发已交付，网关下发面留 P3-2
-- **战斗系统**: `BattleSystem` 场景内骨架（实体集合 + tick 更新）；ECS 多套收敛与技能/Buff/状态机随 P2（未实现）
+- **战斗系统**: `BattleRuntime` 确定性战斗域——五段相位、seed 子流随机、hash 链指纹、经 `IRewardSink` 单向落账；挂接 `Instance`（P2-2 交付）。技能/Buff 玩法面随玩法批
 - **属性系统**: `AttributeContainer`/`AttributeManager` 属性容器与定义注册；逐 viewer delta 同步管线未接线（契约 `attr_batch` 已入 messages.xml）
 - **场景管理**: 多场景支持 + 换幕（`scene_transfer`，prepare→detach→attach→resume + 失败回滚）
 
 ### Network 网络通信
-- **传输层**: Socket封装，支持TCP/WebSocket/KCP
+- **传输层**: Socket封装，支持TCP/WebSocket
 - **消息层**: 消息路由和处理（现网手写编码；目标 protobuf+zstd，schema 由 def 契约生成，规划）
 - **RPC框架**: 远程过程调用框架
 
@@ -228,10 +228,10 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **序列化**: 档案 toJson/fromJson 对称序列化；连接池/外部 DB/Redis 客户端为规划态（P1-4 已删五套存量实现）
 
 ### Utils 工具库
-- **日志系统**: 多级别异步日志，文件/控制台输出
+- **日志系统**: 多级别日志，文件/控制台输出
 - **线程池**: 任务调度
 - **内存池**: 内存管理
-- **配置系统**: JSON/XML/Lua配置支持
+- **配置系统**: `ConfigRegistry` 键值注册表（内存）
 
 ### Compatibility 兼容层
 - **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
@@ -325,25 +325,34 @@ aoi.leave(EntityId{1001});
 ### 使用战斗系统
 
 ```cpp
-#include "apollo/game/battle/BattleWorld.h"
-#include "apollo/game/battle/components.hpp"
+#include <apollo/game/battle/battle_runtime.hpp>
+#include <apollo/game/core/entity.hpp>
+#include <apollo/game/world/instance.hpp>
 
-// 创建战斗世界
-auto world = std::make_unique<apollo::BattleWorld>(1);
+using namespace apollo::game;
+core::PlayerId player_id{1001};
 
-// 创建玩家实体
-auto player = world->CreateEntity(1001);
-auto transform = player->AddComponent<apollo::TransformComponent>();
-auto attributes = player->AddComponent<apollo::AttributeComponent>();
-auto battleState = player->AddComponent<apollo::BattleStateComponent>();
+// 奖励单向落账口：战斗结算只出不进，写入玩家长期态
+struct ScoreSink : battle::IRewardSink {
+    void on_reward(std::uint64_t player_id, std::int64_t score) override {
+        // 写入 PlayerAnchor（mark_dirty）
+    }
+};
 
-// 设置属性
-attributes->SetLevel(50);
-attributes->SetHp(1000);
-attributes->SetAttack(150);
+// Instance = 八态生命周期；Waiting 窗口挂接玩法负载，enter 收集参战者
+world::Instance instance(1, 1, "demo");
+instance.initialize();
+instance.ready();
 
-// 更新战斗世界
-world->Update(deltaTime);
+ScoreSink sink;
+auto battle = std::make_unique<battle::BattleRuntime>(1, /*seed*/ 42, &sink);
+instance.attach_battle(std::move(battle));
+instance.enter(player_id);
+instance.start();  // → Running（参战者收集完成，战斗开局）
+
+// 确定性 tick：同 seed + 同输入序列 ⇒ 同战果（hash 链滚动指纹；1 = 攻击意图）
+instance.battle()->tick(0, {{0, player_id.value(), 1}});
+instance.battle()->finish();  // → Rewarding → Finished
 ```
 
 ## 性能指标
@@ -380,7 +389,7 @@ cd build && ctest -R BigWorldApiTests
 
 ```
 apollo/
-├── apps/                   # 可执行服务：login/gateway/base/cell/game-server
+├── apps/                   # 可执行服务：login-app / gateway-app / manager / zone-app / cell-app / machined / logger / game-server
 ├── modules/                # 模块化源码：base/core/data/game/net/runtime 等
 ├── include/                # 公共头文件与兼容层头文件
 ├── src/                    # 公共实现与兼容层实现
