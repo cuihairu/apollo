@@ -1,10 +1,13 @@
-// LoggerApp 实现：检索面 v1（scan/follow）+ 目录摄取 + 过滤。
+// LoggerApp 实现：检索面 v1（scan/follow）+ collector 受理面（serve，L4）
+// + 目录摄取 + 过滤。
 
 #include "logger/logger_app.hpp"
+#include "logger/serve.hpp"
 
 #include <chrono>
 #include <algorithm>
 #include <csignal>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -23,7 +26,7 @@ void on_signal(int) {
 }
 
 const char* kUsage =
-    "Usage: logger [scan|follow] [options]\n"
+    "Usage: logger [scan|follow|serve] [options]\n"
     "Options:\n"
     "  --dir <path>       Log directory (default: log)\n"
     "  --proc <name>      Filter by proc key\n"
@@ -32,6 +35,11 @@ const char* kUsage =
     "  --since <ms>       Only lines at or after epoch ms\n"
     "  --until <ms>       Only lines at or before epoch ms\n"
     "  --interval <ms>    Follow poll interval (default: 500)\n"
+    "Serve options (collector receive face, L4):\n"
+    "  --host <addr>      M1 listen host (default: 0.0.0.0)\n"
+    "  --port <port>      M1 listen port (default: 9102)\n"
+    "  --archive-dir <p>  Pushed lines archive dir (default: log/pushed)\n"
+    "  --route-json <p>   Contract route json (default: build-time path)\n"
     "  --help, -h         Show this help\n";
 
 } // namespace
@@ -103,10 +111,11 @@ int LoggerApp::run(int argc, char* argv[]) {
     RetrievalFilter filter;
     std::uint32_t interval_ms = 500;
     bool help = false;
+    ServeOptions serve_options;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
-        if (arg == "scan" || arg == "follow") {
+        if (arg == "scan" || arg == "follow" || arg == "serve") {
             subcommand = arg;
         } else if (arg == "--dir" && i + 1 < argc) {
             dir = argv[++i];
@@ -130,6 +139,15 @@ int LoggerApp::run(int argc, char* argv[]) {
             if (interval_ms == 0) {
                 interval_ms = 500;
             }
+        } else if (arg == "--host" && i + 1 < argc) {
+            serve_options.host = argv[++i];
+        } else if (arg == "--port" && i + 1 < argc) {
+            serve_options.port = static_cast<std::uint16_t>(
+                std::strtoul(argv[++i], nullptr, 10));
+        } else if (arg == "--archive-dir" && i + 1 < argc) {
+            serve_options.archive_dir = argv[++i];
+        } else if (arg == "--route-json" && i + 1 < argc) {
+            serve_options.route_json = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             help = true;
         }
@@ -142,6 +160,9 @@ int LoggerApp::run(int argc, char* argv[]) {
     try {
         if (subcommand == "follow") {
             return run_follow(dir, filter, interval_ms);
+        }
+        if (subcommand == "serve") {
+            return run_serve(serve_options);
         }
         return run_scan(dir, filter);
     } catch (const std::exception& e) {

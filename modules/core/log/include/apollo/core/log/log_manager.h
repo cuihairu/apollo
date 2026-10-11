@@ -6,6 +6,7 @@
 #include "apollo/core/log/file_appender.h"
 #include "apollo/core/log/console_appender.h"
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -44,6 +45,12 @@ struct LogManagerConfig {
 
     /// 进程标识（§5.1 结构化行 proc= 键，启动期注入一次；空 = 不设）
     std::string processIdentity;
+
+    /// push 出口（L4：logging.md §5 双出口第二出口）。非空 = 默认 logger
+    /// 挂 PushAppender，每条结构化行回调一次；传输适配器（链路客户端）
+    /// 注入，断连降级语义归适配器。空 = 关（v1 语义）。仅 builtin 分支
+    /// 生效（spdlog 分支未接，环境无 spdlog）。
+    std::function<void(const std::string&)> pushSink;
 
     static LogManagerConfig createDefault() {
         return LogManagerConfig{};

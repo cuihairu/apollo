@@ -207,6 +207,7 @@ void LogManager::write(LogLevel level, std::string logger, std::string message) 
 #include "apollo/core/log/logger.hpp"
 #include "apollo/core/log/console_appender.h"
 #include "apollo/core/log/file_appender.h"
+#include "apollo/core/log/push_appender.h"
 
 namespace apollo {
 namespace core {
@@ -238,6 +239,11 @@ void LogManager::initialize(const LogManagerConfig& config) {
     }
     if (config.fileEnabled) {
         defaultLogger->addAppender(createFileAppender(config.fileConfig));
+    }
+    if (config.pushSink) {
+        // push 出口（L4）：后建 logger 经 createLogger 复制默认 appender 链，
+        // 推面随之全覆盖
+        defaultLogger->addAppender(std::make_shared<PushAppender>(config.pushSink));
     }
 
     loggers_.clear();

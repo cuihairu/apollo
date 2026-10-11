@@ -213,6 +213,10 @@ add_subdirectory(link)
 # 编解码，业务帧载荷 = u16 id + 载荷信封的按型解释层）
 add_subdirectory(contract_wire)
 
+# Log push client（L4：logging.md §5 双出口发送面——link active 端点 +
+# 契约 930 + 有界队列断连降级；collector = apps/logger serve）
+add_subdirectory(logpush)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)

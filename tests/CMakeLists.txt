@@ -1326,12 +1326,17 @@ endif()
 add_executable(logger_tests
     test_logger_retrieval.cpp
     ../apps/logger/src/logger_app.cpp
+    ../apps/logger/src/logger_serve.cpp
     ../apps/logger/src/structured_line.cpp
 )
 target_include_directories(logger_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/logger/include
 )
-target_link_libraries(logger_tests PRIVATE apollo::core)
+# 契约路由表 JSON（serve 受理面装配事实源；生成物随仓）
+target_compile_definitions(logger_tests PRIVATE
+    APOLLO_LOGGER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(logger_tests PRIVATE apollo::core apollo_net_link apollo::net_contract_wire)
 if(WIN32)
     target_link_libraries(logger_tests PRIVATE ws2_32)
     target_compile_definitions(logger_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1340,3 +1345,28 @@ if(MSVC)
     target_compile_options(logger_tests PRIVATE /utf-8)
 endif()
 add_test(NAME LoggerRetrievalTests COMMAND logger_tests)
+
+# ========== Log Push Tests (L4 push 通道) ==========
+# LogPushClient 发送面（有界队列断连降级 + 重连补投）× collector 受集面
+# round-trip；PushAppender/LogManagerConfig.pushSink 接线面。Windows 只跑
+# appender 面（link TCP 底座 POSIX only，同 link_tests 口径）。
+add_executable(logpush_tests
+    test_log_push.cpp
+)
+target_link_libraries(logpush_tests PRIVATE
+    apollo_net_logpush
+    apollo_net_link
+    apollo::net_contract_wire
+    apollo::core
+)
+target_compile_definitions(logpush_tests PRIVATE
+    APOLLO_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+if(WIN32)
+    target_link_libraries(logpush_tests PRIVATE ws2_32)
+    target_compile_definitions(logpush_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(logpush_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LogPushTests COMMAND logpush_tests)
