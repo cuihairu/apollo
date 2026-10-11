@@ -3,12 +3,23 @@
 #include <string>
 #include <cstdint>
 
+// 契约路由表 JSON 的构建期默认路径（CMake 注入生成物路径；裸编时为空 =
+// M1 端点装配失败显形，不带隐式回退）。
+#ifndef APOLLO_CELL_CONTRACT_ROUTE_JSON
+#define APOLLO_CELL_CONTRACT_ROUTE_JSON ""
+#endif
+
 namespace cell {
 
 struct CellConfig {
     // 监听配置
     std::string host = "0.0.0.0";
     uint16_t port = 9100;
+
+    // net M1 接收端（M1 上层接线批 2b-ii）：InterServerLink passive 端点，
+    // 网关经它投递 cell 意图（924-928）；legacy RepSocket 占 9100 不动。
+    uint16_t m1Port = 9101;
+    std::string m1RouteJson = APOLLO_CELL_CONTRACT_ROUTE_JSON;
 
     // 空间配置
     std::string spaceName = "main_world";

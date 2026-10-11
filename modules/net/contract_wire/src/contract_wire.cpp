@@ -249,19 +249,33 @@ bool decode_envelope(const std::uint8_t* data, std::size_t size, std::uint16_t& 
         return false;
     }
     msg_id = static_cast<std::uint16_t>(data[0]) | static_cast<std::uint16_t>(data[1] << 8);
+    const bool ok = decode_payload(msg_id, data + 2, size - 2, fields);
+    if (!ok) {
+        fields.clear();
+    }
+    return ok;
+}
+
+bool decode_payload(std::uint16_t msg_id, const std::uint8_t* data, std::size_t size,
+                    std::vector<FieldValue>& fields) {
+    fields.clear();
     const auto* meta = find_msg(msg_id);
     if (meta == nullptr) {
         return false;
     }
     fields.resize(meta->fieldCount);
-    std::size_t off = 2;
+    std::size_t off = 0;
     for (std::size_t i = 0; i < meta->fieldCount; ++i) {
         if (!decode_field(meta->fields[i].type, data, size, off, fields[i])) {
             fields.clear();
             return false;
         }
     }
-    return off == size;
+    if (off != size) {
+        fields.clear();
+        return false;
+    }
+    return true;
 }
 
 }  // namespace apollo::net::wire

@@ -61,6 +61,7 @@ public:
     static std::vector<uint8_t> encodeBody(const GatewayAssignResponse& msg);
     static std::vector<uint8_t> encodeBody(const GatewayClientDisconnect& msg);
     static std::vector<uint8_t> encodeBody(const CellCreateEntity& msg);
+    static std::vector<uint8_t> encodeBody(const CellDestroyEntity& msg);
     static std::vector<uint8_t> encodeBody(const CellEntityMove& msg);
     static std::vector<uint8_t> encodeBody(const CellCrossBorder& msg);
     static std::vector<uint8_t> encodeBody(const CombatSkillCast& msg);

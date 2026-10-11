@@ -14,6 +14,7 @@ set(CELLAPP_PROTOCOL_SOURCES
 add_executable(cell-app
     src/main.cpp
     src/cell_server.cpp
+    src/m1_link_server.cpp
     ${CELLAPP_PROTOCOL_SOURCES}
 )
 
@@ -26,12 +27,19 @@ target_include_directories(cell-app
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/runtime/include
 )
 
+# 契约路由表 JSON（M1 接收端装配事实源；生成物随仓）
+target_compile_definitions(cell-app PRIVATE
+    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+
 target_link_libraries(cell-app
     PRIVATE
         apollo::base
         apollo::core
         apollo::game_core
         apollo::game_world
+        apollo::net_link
+        apollo::net_contract_wire
         apollo::runtime
 )
 

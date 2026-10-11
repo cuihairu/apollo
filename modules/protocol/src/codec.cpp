@@ -131,6 +131,12 @@ std::vector<uint8_t> MessageCodec::encodeBody(const CellCreateEntity& msg) {
     return result;
 }
 
+std::vector<uint8_t> MessageCodec::encodeBody(const CellDestroyEntity& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID));
+    std::memcpy(result.data(), &msg.entityId, sizeof(EntityID));
+    return result;
+}
+
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCreateEntity& msg) {
     const uint8_t* ptr = data.data();
     size_t offset = 0;

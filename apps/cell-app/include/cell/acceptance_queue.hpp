@@ -14,13 +14,17 @@ namespace cell {
 
 namespace protocol = apollo::protocol;
 
-// ADR-015(a)/ADR-017：意图信封——RPC worker 解码后的「想做什么」最小载体。
+// ADR-015(a)/ADR-017：意图信封——受理面解码后的「想做什么」最小载体。
 // 承载原始帧（MessageHeader + body）：执行侧（gameThread_）复用既有 handler
-// 解析路径，头部二次解析 O(1)；sessionId 在头内，延时应答关联键 M1 升级批启用。
+// 解析路径，头部二次解析 O(1)。
+// 来源双路：legacy RPC worker（request_id = 0，ack-on-accept 现状不变）与
+// M1 链路（M1 上层接线批 2b-ii，request_id = 契约上行关联键，延时应答
+// 929 cell_intent_ack 按它回带；0 不作关联键）。
 struct IntentEnvelope {
     protocol::MessageType type{};
     std::vector<uint8_t> frame;
     protocol::SessionID session_id{};
+    std::uint64_t request_id = 0;  // M1 延时应答关联键；0 = legacy / 无应答
 };
 
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。

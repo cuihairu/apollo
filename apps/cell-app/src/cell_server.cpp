@@ -108,8 +108,20 @@ void CellServer::start() {
         return acceptRequest(data);
     });
 
+    // net M1 接收端（2b-ii）：InterServerLink passive 端点装配（监听在
+    // start 内 bind/listen，bind 失败同契约显形）
+    m1Link_ = makeM1LinkServer(
+        M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson},
+        [this](IntentEnvelope intent) { onM1Intent(std::move(intent)); });
+
     // 开闸先于 server_->start()：受理面就绪后 worker 才见得到入口
     accepting_ = true;
+
+    if (!m1Link_->start()) {
+        accepting_ = false;
+        m1Link_.reset();
+        throw std::runtime_error("failed to start cell M1 link endpoint (route table load or bind failed)");
+    }
 
     server_->start();
 
@@ -119,6 +131,8 @@ void CellServer::start() {
         accepting_ = false;
         server_->stop();
         server_.reset();
+        m1Link_->stop();
+        m1Link_.reset();
         throw std::runtime_error("failed to start WorldHost");
     }
 
@@ -129,6 +143,8 @@ void CellServer::start() {
 
     celllog().info("Cell server listening on " + config_.host + ":"
                 + std::to_string(config_.port));
+    celllog().info("Cell M1 link listening on " + config_.host + ":"
+                + std::to_string(m1Link_->listenPort()));
     celllog().info("Space: " + config_.spaceName + " ("
                 + std::to_string(config_.spaceWidth) + "x"
                 + std::to_string(config_.spaceHeight) + ")");
@@ -136,12 +152,18 @@ void CellServer::start() {
 
 void CellServer::stop() {
     // 停机 G-3 镜像顺序（ADR-016）：停受理 → 队列 drain → gameThread join →
-    // worldHost stop → server stop
+    // M1 端点停 → worldHost stop → server stop（尾扫 drain 的延时应答仍要
+    // 有发送面，M1 端点停在其后）
     accepting_ = false;
     running_ = false;
 
     if (gameThread_.joinable()) {
         gameThread_.join();
+    }
+
+    if (m1Link_) {
+        m1Link_->stop();
+        m1Link_.reset();
     }
 
     if (worldHost_) {
@@ -206,6 +228,41 @@ std::vector<uint8_t> CellServer::acceptRequest(const std::vector<uint8_t>& reque
             err.message = "Unknown message type";
             return protocol::MessageCodec::encode(err, header.sessionId);
         }
+    }
+}
+
+void CellServer::onM1Intent(IntentEnvelope intent) {
+    // M1 受理点（2b-ii，泵线程 = gameThread_）：与 acceptRequest 同闸同队列，
+    // 执行面共用（ADR-015(a) 骨架零废弃）。延时应答（ADR-017 升级）：受理
+    // 成功不回包，回执随 executeIntent 消费后按 request_id 回带；即时回执面
+    // 只剩两类永不入队的拒收。窄窗竞态（闸检查通过后即刻停机）在此回 2001，
+    // 与 legacy 面「拒收同型观察面」同批收口。
+    const auto request_id = intent.request_id;
+    if (!accepting_.load(std::memory_order_acquire)) {
+        sendM1Ack(request_id, kIntentAckInternal, "server maintenance: not accepting requests");
+        return;
+    }
+
+    auto result = acceptanceQueue_.push(std::move(intent));
+    if (!result.accepted) {
+        // ADR-016：顶格拒收不丢旧不静默——M1 面回契约错误码 2101
+        sendM1Ack(request_id, kIntentAckBackpressure, "server overloaded: acceptance queue full");
+        return;
+    }
+    if (result.high_watermark) {
+        // ADR-016 两级水位：越告警线提示一次，回落滞回后再报
+        celllog().warning("acceptance queue high watermark (m1): pending="
+                       + std::to_string(acceptanceQueue_.size()) + "/"
+                       + std::to_string(acceptanceQueue_.cap()));
+    }
+}
+
+void CellServer::sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message) {
+    if (request_id == 0) {
+        return;  // legacy 路径（ack-on-accept）无应答关联键
+    }
+    if (m1Link_) {
+        m1Link_->sendIntentAck(request_id, code, message);
     }
 }
 
@@ -407,6 +464,11 @@ void CellServer::executeIntent(const IntentEnvelope& intent) {
         default:
             break;
     }
+
+    // ADR-017 延时应答（M1 升级落地）：意图被消费后按 request_id 回执
+    //（code 0 = 已消费；业务驳回语义仍在 handler 面内，不下沉回执码）；
+    // legacy 路径（request_id = 0）在此静默，ack-on-accept 现状不变。
+    sendM1Ack(intent.request_id, kIntentAckOk, "");
 }
 
 void CellServer::drainAcceptanceQueue() {
@@ -418,6 +480,13 @@ void CellServer::drainAcceptanceQueue() {
 void CellServer::gameLoop() {
     while (running_) {
         auto startTime = std::chrono::steady_clock::now();
+
+        // net M1 接收面一拍（2b-ii）：链路泵与受理队列入队同线程（单写者
+        // 纪律，ADR-015(a)）；回执发送在后续拍的泵内上线
+        if (m1Link_) {
+            m1Link_->pump(std::chrono::duration_cast<std::chrono::milliseconds>(
+                startTime.time_since_epoch()).count());
+        }
 
         // ADR-015(a)：意图消费在 tick 边界（world 变更只发生在此线程）
         drainAcceptanceQueue();

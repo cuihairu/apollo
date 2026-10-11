@@ -1192,6 +1192,7 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
 add_executable(cell_acceptance_tests
     test_cell_acceptance.cpp
     ../apps/cell-app/src/cell_server.cpp
+    ../apps/cell-app/src/m1_link_server.cpp
     ../modules/protocol/src/nng_wrapper.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1202,8 +1203,12 @@ target_include_directories(cell_acceptance_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
 )
+target_compile_definitions(cell_acceptance_tests PRIVATE
+    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
 target_link_libraries(cell_acceptance_tests PRIVATE
-    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::runtime)
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::runtime
+    apollo::net_link apollo::net_contract_wire)
 if(WIN32)
     target_link_libraries(cell_acceptance_tests PRIVATE ws2_32)
     target_compile_definitions(cell_acceptance_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1212,6 +1217,42 @@ if(MSVC)
     target_compile_options(cell_acceptance_tests PRIVATE /utf-8)
 endif()
 add_test(NAME CellAcceptanceTests COMMAND cell_acceptance_tests)
+endif()
+
+# ========== Cell M1 Link Tests (M1 上层接线批 2b-ii) ==========
+# cell M1 接收端：契约意图族 924-928 经 InterServerLink 真 TCP 上行 → 契约
+# wire 解包 → legacy 帧镜像 → 受理队列 → tick 边界执行 → 延时应答 929
+# （request_id 关联，code 0/2101）；字段级非法/域越权/未知 id 拒收面。
+# 直编协议源惯例同 cell_acceptance_tests；客户端端 = 裸 LinkManager。
+if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
+add_executable(cell_m1_link_tests
+    test_cell_m1_link.cpp
+    ../apps/cell-app/src/cell_server.cpp
+    ../apps/cell-app/src/m1_link_server.cpp
+    ../modules/protocol/src/nng_wrapper.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+    ../modules/protocol/src/socket.cpp
+)
+target_include_directories(cell_m1_link_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+)
+target_compile_definitions(cell_m1_link_tests PRIVATE
+    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(cell_m1_link_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world
+    apollo::runtime apollo::net_link apollo::net_contract_wire)
+if(WIN32)
+    target_link_libraries(cell_m1_link_tests PRIVATE ws2_32)
+    target_compile_definitions(cell_m1_link_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(cell_m1_link_tests PRIVATE /utf-8)
+endif()
+add_test(NAME CellM1LinkTests COMMAND cell_m1_link_tests)
 endif()
 	endif()
 

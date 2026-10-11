@@ -2,6 +2,7 @@
 
 #include "cell/config.hpp"
 #include "cell/acceptance_queue.hpp"
+#include "cell/m1_link_server.hpp"
 #include "cell/cell_manager.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/world.hpp"
@@ -41,6 +42,10 @@ public:
     // 待执行意图数（观测/测试面：tick 边界 drain 断言用）
     std::size_t pendingIntentCount() const { return acceptanceQueue_.size(); }
 
+    // M1 链路接收端（M1 上层接线批 2b-ii）：InterServerLink passive 端点，
+    // 网关经它投递 cell 意图（924-928 契约族）；listenPort 查实占端口。
+    M1LinkServer& m1Link() { return *m1Link_; }
+
 private:
     // 处理创建实体请求
     std::vector<uint8_t> handleCellCreateEntity(const std::vector<uint8_t>& request);
@@ -70,6 +75,15 @@ private:
     // 受理队列清空到 tick 执行（ADR-016：tick 预算锚定；停机 G-3 尾扫一次）
     void drainAcceptanceQueue();
 
+    // M1 意图受理点（2b-ii：泵线程 = gameThread_ 内同步调用）：与 acceptRequest
+    // 同闸同队列；延时应答纪律——受理成功不回包，回执随 executeIntent 消费后
+    // 按 request_id 回带；即时回执面只剩顶格拒收（2101）与维护闸（2001）。
+    void onM1Intent(IntentEnvelope intent);
+
+    // M1 延时应答出口（929 cell_intent_ack）；request_id = 0（legacy 路径）
+    // 不作关联键，静默。
+    void sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message);
+
     // 计算单帧间隔
     std::chrono::milliseconds tickInterval() const;
 
@@ -94,6 +108,7 @@ private:
     std::shared_ptr<apollo::runtime::WorldHost> worldHost_;
 
     std::unique_ptr<protocol::RepSocket> server_;
+    std::unique_ptr<M1LinkServer> m1Link_;
     std::atomic<bool> running_{false};
     // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前请新请求回
     // 维护中错误包；停机先关闸再排空队列，G-3 镜像顺序）

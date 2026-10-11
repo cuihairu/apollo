@@ -47,7 +47,14 @@ const apollo::contract::gen::MsgMeta* find_msg(std::uint16_t msg_id);
 bool encode_payload(std::uint16_t msg_id, const std::vector<FieldValue>& fields,
                     std::vector<std::uint8_t>& out);
 
-// u16 LE id + 载荷（InterServerLink 业务帧载荷信封）。
+// 载荷解码（id 已剥出后的部分；归一于 Dispatcher Handler 的入参视图）。
+// false = id 不在契约 / 字段级非法 / 尾部余字节。
+bool decode_payload(std::uint16_t msg_id, const std::uint8_t* data, std::size_t size,
+                    std::vector<FieldValue>& fields);
+
+// u16 LE id + 载荷（业务帧载荷信封的线形视图，与 decode_envelope 对偶）。
+// 注意：InterServerLink::send(msg_id, payload, …) 自封此信封——传裸载荷，
+// 勿把本函数产物再喂给 send（双信封 = 对端剥一层后仍见 id 前缀）。
 std::vector<std::uint8_t> append_envelope(std::uint16_t msg_id,
                                           const std::vector<std::uint8_t>& payload);
 
