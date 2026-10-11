@@ -1261,6 +1261,7 @@ bool test_manager_fanout_two_peers() {
         for (int i = 0; i < 50 && mpassive.handshake_failures("apps") == 0; ++i) {
             t += 5;
             mpassive.pump(t);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));  // 裸自旋在 macOS 上快过 accept 队列交付
         }
     }
     TEST_ASSERT(mpassive.handshake_failures("apps") == 1, "handshake failure counted");
