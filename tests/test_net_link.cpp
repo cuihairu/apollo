@@ -12,6 +12,7 @@
 
 #include "apollo/net/link/dispatcher.hpp"
 #include "apollo/net/link/frame.hpp"
+#include "apollo/net/link/interserver_link.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
 #include "apollo/net/link/watermark.hpp"
@@ -19,6 +20,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -380,6 +382,404 @@ bool test_cut_sustainer() {
     return true;
 }
 
+// ---- 增量 4：InterServerLink（握手 / 分发 / 可靠重发 / 背压 / 断连可检）----
+
+using LinkClock = std::uint64_t;  // 单调毫秒（注入）
+
+struct SinkRecorder {
+    int ups = 0;
+    int downs = 0;
+    LinkDownReason last_reason = LinkDownReason::kLocalClose;
+    int restarts = 0;
+    std::uint64_t restart_old = 0;
+    std::uint64_t restart_new = 0;
+
+    LinkEventSink sink() {
+        LinkEventSink s;
+        s.on_up = [this] { ++ups; };
+        s.on_down = [this](LinkDownReason r) {
+            ++downs;
+            last_reason = r;
+        };
+        s.on_peer_restart = [this](std::uint64_t o, std::uint64_t n) {
+            ++restarts;
+            restart_old = o;
+            restart_new = n;
+        };
+        return s;
+    }
+};
+
+struct RxLog {
+    std::vector<std::string> got;
+
+    Dispatcher::Handler handler() {
+        return [this](std::uint16_t id, const std::uint8_t* data, std::size_t size) {
+            got.emplace_back(std::to_string(id) + ":" +
+                             std::string(reinterpret_cast<const char*>(data), size));
+        };
+    }
+};
+
+LinkConfig make_link_config(const char* name, std::uint64_t route_version,
+                            std::uint64_t epoch = 1) {
+    LinkConfig c;
+    c.self_name = name;
+    c.route_version = route_version;
+    c.authority_epoch = epoch;
+    return c;
+}
+
+RouteTable make_dispatch_table() {
+    RouteTable t;
+    t.add({901, "test.echo", "P2P", "control", "internal", "native"});
+    t.add({5, "test.pos", "C2S", "movement", "client", "native"});
+    return t;
+}
+
+// 泵四拍：一拍送出、一拍处理回执、一拍收 ack，冗余一拍兜底。
+void pump_rounds(InterServerLink& a, InterServerLink& b, LinkClock now) {
+    for (int i = 0; i < 4; ++i) {
+        const LinkClock t = now + static_cast<LinkClock>(i);
+        a.pump(t);
+        b.pump(t);
+    }
+}
+
+bool up_both(InterServerLink& a, InterServerLink& b, LinkClock now) {
+    pump_rounds(a, b, now);
+    return a.state() == LinkState::kUp && b.state() == LinkState::kUp;
+}
+
+std::vector<std::uint8_t> tagged_payload(std::uint32_t index) {
+    std::vector<std::uint8_t> p(12, 0xAB);
+    for (int i = 0; i < 4; ++i) {
+        p[i] = static_cast<std::uint8_t>((index >> (8 * i)) & 0xFF);
+    }
+    return p;
+}
+
+bool test_link_handshake_dispatch() {
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 0x1122334455667788ull));
+    InterServerLink b(make_link_config("game", 0x1122334455667788ull));
+    SinkRecorder sa, sb;
+    a.set_sink(sa.sink());
+    b.set_sink(sb.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    RxLog rx;
+    b.dispatcher().set_handler(901, rx.handler());
+
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "handshake completes both sides");
+    TEST_ASSERT(sa.ups == 1 && sb.ups == 1, "on_up fired once each");
+    TEST_ASSERT(a.peer_epoch() == 1 && b.peer_epoch() == 1, "epoch exchanged");
+
+    const std::vector<std::uint8_t> body = {'h', 'i'};
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted,
+                "reliable send accepted");
+    pump_rounds(a, b, 2000);
+    TEST_ASSERT(rx.got.size() == 1 && rx.got[0] == "901:hi", "dispatched once with body");
+    TEST_ASSERT(b.stats().dispatched == 1, "dispatch mirror counted");
+    TEST_ASSERT(a.stats().reliable_acked == 1 && a.reliable_pending() == 0,
+                "ack round trip drained queue");
+
+    // 域闸（§11.3）：client 域 id 未过 internal 白名单 → 拒收计数、不投 handler，
+    // 但 reliable 语义照常回执（链路层送达与路由拒收是两件事）。
+    TEST_ASSERT(a.send(5, body, SendClass::kReliable) == SendCode::kAccepted,
+                "client-id send accepted");
+    pump_rounds(a, b, 3000);
+    TEST_ASSERT(rx.got.size() == 1, "forbidden domain not delivered");
+    TEST_ASSERT(b.stats().dispatch_rejected == 1, "domain forbidden counted");
+    TEST_ASSERT(a.stats().reliable_acked == 2, "rejected frame still acked");
+    return true;
+}
+
+bool test_link_burst_no_loss_no_dup() {
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 7));
+    InterServerLink b(make_link_config("game", 7));
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    RxLog rx;
+    b.dispatcher().set_handler(901, rx.handler());
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "up");
+
+    constexpr int kCount = 200;
+    for (std::uint32_t i = 0; i < kCount; ++i) {
+        TEST_ASSERT(a.send(901, tagged_payload(i), SendClass::kReliable) == SendCode::kAccepted,
+                    "burst send accepted");
+    }
+    pump_rounds(a, b, 2000);
+    TEST_ASSERT(rx.got.size() == kCount, "all frames delivered");
+    TEST_ASSERT(std::set<std::string>(rx.got.begin(), rx.got.end()).size() == kCount,
+                "no duplicates");
+    TEST_ASSERT(b.stats().dup_dropped == 0, "no dup on clean link");
+    TEST_ASSERT(a.stats().reliable_acked == kCount, "all acked");
+    TEST_ASSERT(a.reliable_pending() == 0 && a.queued_bytes() == 0, "queues empty");
+    return true;
+}
+
+bool test_link_disconnect_detect() {
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 7));
+    InterServerLink b(make_link_config("game", 7));
+    SinkRecorder sa, sb;
+    a.set_sink(sa.sink());
+    b.set_sink(sb.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "up");
+
+    b.close();
+    TEST_ASSERT(sb.downs == 1, "closer sees down immediately");
+    TEST_ASSERT(sb.last_reason == LinkDownReason::kLocalClose, "closer sees local close");
+    TEST_ASSERT(sa.downs == 0, "a not notified before pumping");
+    TEST_ASSERT(!a.pump(1200), "a pump reports down after peer close");
+    TEST_ASSERT(sa.downs == 1 && sa.last_reason == LinkDownReason::kPeerClosed,
+                "peer close detected");
+    TEST_ASSERT(a.state() == LinkState::kDown, "state down");
+
+    // 断连期间的发送语义（§5.7）：Droppable 即拒，Reliable 照常入队待重发。
+    const std::vector<std::uint8_t> body = {'x'};
+    TEST_ASSERT(a.send(901, body, SendClass::kDroppable) == SendCode::kBackPressured,
+                "droppable rejected while down");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted,
+                "reliable queued while down");
+    TEST_ASSERT(a.reliable_pending() == 1, "reliable pending for redelivery");
+    return true;
+}
+
+bool test_link_redelivery_exactly_once() {
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 7));
+    InterServerLink b(make_link_config("game", 7));
+    SinkRecorder sa, sb;
+    a.set_sink(sa.sink());
+    b.set_sink(sb.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    RxLog rx;
+    b.dispatcher().set_handler(901, rx.handler());
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "up");
+
+    // m1 已送达 B 但 ack 在途中死于断连：A 侧保持未确认。
+    const std::vector<std::uint8_t> body = {'m', '1'};
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "m1 accepted");
+    TEST_ASSERT(a.pump(2000), "flush m1");
+    TEST_ASSERT(b.pump(2001), "b consumes m1");
+    TEST_ASSERT(rx.got.size() == 1, "m1 dispatched");
+    a.close();  // A 不读 ack 即断——ack 随旧传输湮灭
+    TEST_ASSERT(a.reliable_pending() == 1, "m1 still unacked");
+
+    // 同 epoch 重连（Link 对象不换）：A 重发未确认帧，B 按去重水位判重。
+    auto [ep2_a, ep2_b] = make_loopback_pair();
+    a.attach(std::move(ep2_a), 3000);
+    b.attach(std::move(ep2_b), 3000);
+    pump_rounds(a, b, 3100);
+    TEST_ASSERT(a.state() == LinkState::kUp && b.state() == LinkState::kUp, "reconnected");
+    TEST_ASSERT(sa.restarts == 0 && sb.restarts == 0, "same epoch is not a restart");
+    TEST_ASSERT(rx.got.size() == 1, "redelivered frame not dispatched twice");
+    TEST_ASSERT(b.stats().dup_dropped == 1, "dup detected once");
+    TEST_ASSERT(a.stats().reliable_acked == 1 && a.reliable_pending() == 0,
+                "m1 exactly once end to end");
+    return true;
+}
+
+bool test_link_peer_restart_epoch() {
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 7));
+    auto b = std::make_unique<InterServerLink>(make_link_config("game", 7, 1));
+    SinkRecorder sa;
+    a.set_sink(sa.sink());
+    a.dispatcher().set_route_table(&table);
+    b->dispatcher().set_route_table(&table);
+    b->dispatcher().allow_domain("internal");
+    RxLog rx;
+    b->dispatcher().set_handler(901, rx.handler());
+    a.attach(std::move(ep_a), 1000);
+    b->attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, *b, 1100), "up");
+    const std::vector<std::uint8_t> body = {'m', '1'};
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "m1 accepted");
+    pump_rounds(a, *b, 2000);
+    TEST_ASSERT(rx.got.size() == 1, "m1 dispatched");
+
+    // 对端重启：进程换代（epoch 2），Link 对象重建。A 断连期间排队的
+    // reliable 在重启检出时清队（§5.7：老一代永不再 ack，上层裁决重发）。
+    b->close();
+    TEST_ASSERT(a.pump(3000) == false, "a sees peer close");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted,
+                "m2 queued while down");
+    TEST_ASSERT(a.reliable_pending() == 1, "m2 pending");
+
+    auto [ep2_a, ep2_b] = make_loopback_pair();
+    auto b2 = std::make_unique<InterServerLink>(make_link_config("game", 7, 2));
+    RxLog rx2;
+    b2->dispatcher().set_route_table(&table);
+    b2->dispatcher().allow_domain("internal");
+    b2->dispatcher().set_handler(901, rx2.handler());
+    a.attach(std::move(ep2_a), 4000);
+    b2->attach(std::move(ep2_b), 4000);
+    pump_rounds(a, *b2, 4100);
+    TEST_ASSERT(a.state() == LinkState::kUp, "a back up");
+    TEST_ASSERT(sa.restarts == 1, "peer restart event fired");
+    TEST_ASSERT(sa.restart_old == 1 && sa.restart_new == 2, "epoch pair reported");
+    TEST_ASSERT(a.stats().reliable_cleared == 1 && a.reliable_pending() == 0,
+                "stale generation queue cleared");
+    TEST_ASSERT(rx2.got.empty(), "cleared frame never reached new generation");
+
+    // 新一代去重水位已重置：新帧按序正常恰一次。
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "m3 accepted");
+    pump_rounds(a, *b2, 5000);
+    TEST_ASSERT(rx2.got.size() == 1, "m3 delivered once to new generation");
+    TEST_ASSERT(b2->stats().dup_dropped == 0, "no false dup after restart");
+    return true;
+}
+
+bool test_link_send_gates() {
+    LinkConfig c = make_link_config("auth", 7);
+    c.watermark.capacity_bytes = 1000;  // soft 500 / hard 750 / cut 950（千分比缺省）
+    InterServerLink a(c);
+    const std::vector<std::uint8_t> body(300, 'z');
+
+    // 断连（kIdle）：Droppable 即拒；Reliable 入队（in-flight 表语义）。
+    TEST_ASSERT(a.send(901, body, SendClass::kDroppable) == SendCode::kBackPressured,
+                "droppable rejected while idle");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "r1 accepted");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "r2 accepted");
+    TEST_ASSERT(a.queued_bytes() == 644, "two frames on queue");
+    TEST_ASSERT(a.send(901, body, SendClass::kDroppable) == SendCode::kBackPressured,
+                "droppable rejected at soft");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted,
+                "reliable accepted at soft");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kBackPressured,
+                "reliable frozen at cut");
+    TEST_ASSERT(a.stats().send_rejected == 3, "rejections counted");
+
+    // 连上并腾空后闸门复位。
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink b(make_link_config("game", 7));
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    a.dispatcher().set_route_table(&table);
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    pump_rounds(a, b, 1100);
+    TEST_ASSERT(a.stats().reliable_acked == 3, "queued frames delivered and acked");
+    TEST_ASSERT(a.queued_bytes() == 0, "queue drained");
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted,
+                "gate reopens after drain");
+    return true;
+}
+
+bool test_link_cut_sustained_down() {
+    LinkConfig c = make_link_config("auth", 7);
+    c.watermark.capacity_bytes = 1000;
+    c.cut_close_ms = 5000;
+    c.heartbeat_timeout_ms = 60000;  // 隔离心跳，单测 cut 断连
+    InterServerLink a(c);
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink b(make_link_config("game", 7));
+    SinkRecorder sa;
+    a.set_sink(sa.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "up");
+
+    // 灌到 cut 并停泵对端（ack 永不到来）：占用持续 ≥95%。
+    const std::vector<std::uint8_t> body(300, 'z');
+    for (int i = 0; i < 3; ++i) {
+        TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "fill");
+    }
+    TEST_ASSERT(a.pump(2000), "cut anchored");
+    TEST_ASSERT(sa.downs == 0, "cut alone is not down");
+    TEST_ASSERT(a.pump(4000), "sustained 2s alive");
+    TEST_ASSERT(a.pump(6999), "sustained 4.999s alive");
+    TEST_ASSERT(!a.pump(7000), "cut 5s -> down");
+    TEST_ASSERT(sa.last_reason == LinkDownReason::kBackpressureCut, "backpressure cut reason");
+    return true;
+}
+
+bool test_link_heartbeat_timeout() {
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 7));
+    InterServerLink b(make_link_config("game", 7));
+    SinkRecorder sa;
+    a.set_sink(sa.sink());
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "up");
+    TEST_ASSERT(a.pump(10000), "14s silent still alive");
+    TEST_ASSERT(!a.pump(20000), "silent past timeout -> down");
+    TEST_ASSERT(sa.last_reason == LinkDownReason::kHeartbeatTimeout, "heartbeat reason");
+    return true;
+}
+
+bool test_link_route_version_mismatch() {
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 0xAAAA000000000000ull));
+    InterServerLink b(make_link_config("game", 0xBBBB000000000000ull));
+    SinkRecorder sa, sb;
+    a.set_sink(sa.sink());
+    b.set_sink(sb.sink());
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    pump_rounds(a, b, 1100);
+    TEST_ASSERT(a.state() == LinkState::kDown && b.state() == LinkState::kDown,
+                "mismatch kills both");
+    // 失配由读到外来 Hello 的一侧检出；另一侧只见随之而来的对端关闭。
+    TEST_ASSERT(sb.last_reason == LinkDownReason::kRouteVersionMismatch, "reader detects");
+    TEST_ASSERT(sa.last_reason == LinkDownReason::kPeerClosed, "other side sees close");
+    return true;
+}
+
+bool test_link_droppable_cleared_on_down() {
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    InterServerLink a(make_link_config("auth", 7));
+    InterServerLink b(make_link_config("game", 7));
+    SinkRecorder sa;
+    a.set_sink(sa.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "up");
+
+    // 排队未刷的 droppable 在断连即弃（§5.7 OneWay 默认丢弃），计数可查。
+    const std::vector<std::uint8_t> body = {'d'};
+    for (int i = 0; i < 3; ++i) {
+        TEST_ASSERT(a.send(901, body, SendClass::kDroppable) == SendCode::kAccepted,
+                    "droppable queued");
+    }
+    a.close();
+    TEST_ASSERT(sa.last_reason == LinkDownReason::kLocalClose, "local close");
+    TEST_ASSERT(a.stats().droppable_dropped == 3, "queued droppable discarded on down");
+    TEST_ASSERT(a.queued_bytes() == 0, "droppable queue cleared");
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -402,6 +802,16 @@ int main() {
         {"watermark_levels", test_watermark_levels},
         {"watermark_admit_matrix", test_watermark_admit_matrix},
         {"cut_sustainer", test_cut_sustainer},
+        {"link_handshake_dispatch", test_link_handshake_dispatch},
+        {"link_burst_no_loss_no_dup", test_link_burst_no_loss_no_dup},
+        {"link_disconnect_detect", test_link_disconnect_detect},
+        {"link_redelivery_exactly_once", test_link_redelivery_exactly_once},
+        {"link_peer_restart_epoch", test_link_peer_restart_epoch},
+        {"link_send_gates", test_link_send_gates},
+        {"link_cut_sustained_down", test_link_cut_sustained_down},
+        {"link_heartbeat_timeout", test_link_heartbeat_timeout},
+        {"link_route_version_mismatch", test_link_route_version_mismatch},
+        {"link_droppable_cleared_on_down", test_link_droppable_cleared_on_down},
     };
     int failed = 0;
     for (const auto& c : cases) {

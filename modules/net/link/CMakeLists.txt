@@ -8,6 +8,7 @@ add_library(apollo_net_link STATIC
     src/route_json.cpp
     src/dispatcher.cpp
     src/watermark.cpp
+    src/interserver_link.cpp
 )
 add_library(apollo::net_link ALIAS apollo_net_link)
 

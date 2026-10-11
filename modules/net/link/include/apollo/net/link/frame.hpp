@@ -38,7 +38,8 @@ inline constexpr std::uint16_t kFrameMagic = 0x5041;  // 'A','P'
 inline constexpr std::uint8_t kFrameVersion = 1;
 inline constexpr std::size_t kFrameHeaderSize = 16;
 inline constexpr std::size_t kFrameTailSize = 4;
-inline constexpr std::uint32_t kFlagControl = 0x01;
+inline constexpr std::uint32_t kFlagControl = 0x01;  // 链路自身帧（Hello/Ack/Ping/Pong）
+inline constexpr std::uint32_t kFlagReliable = 0x02;  // 可靠业务帧：收端按 seq 去重 + 累积 ack
 
 // 载荷上限（进程间消息没有合法的超 1 MiB 单帧；超限按协议错误断连）。
 inline constexpr std::uint32_t kMaxPayload = 1024 * 1024;
