@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#if !defined(_WIN32)
+
 namespace apollo::net::link {
 
 LinkManager::Managed::Managed(const EndpointConfig& cfg, const LinkManagerConfig& mc)
@@ -171,3 +173,5 @@ std::uint64_t LinkManager::dial_attempts(const std::string& name) const {
 }
 
 }  // namespace apollo::net::link
+
+#endif  // !_WIN32
