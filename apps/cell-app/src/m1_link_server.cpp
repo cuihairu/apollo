@@ -24,7 +24,13 @@
 #include <sstream>
 #include <utility>
 
+#endif // !_WIN32
+
 namespace cell {
+
+#if !defined(_WIN32)
+
+
 
 namespace {
 

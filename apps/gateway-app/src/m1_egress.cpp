@@ -28,7 +28,13 @@
 #include <utility>
 #include <vector>
 
+#endif // !_WIN32
+
 namespace gateway {
+
+#if !defined(_WIN32)
+
+
 
 namespace {
 
