@@ -4,7 +4,6 @@
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <iostream>
-#include <algorithm>
 #include <sstream>
 
 namespace gateway {
@@ -75,27 +74,44 @@ void MessageRouter::start() {
     if (running_) return;
 
     // 后端缺位降级（处方①）：任一后端不可达不中断启动——login/base 悬空时
-    // 对应转发面落空；world 节点不可达则 available=false 出路由选择
-    // （ChatApp 连接已随处方③摘除，fleet 无 chat 进程）
+    // 对应转发面落空（ChatApp 连接已随处方③摘除，fleet 无 chat 进程）
     loginAppClient_ = connectBackendChannel(config_.loginAppUrl);
     baseAppClient_ = connectBackendChannel(config_.baseAppUrl);
 
-    auto worldNode = std::make_unique<WorldNodeInfo>();
-    worldNode->url = config_.cellAppUrl;
-    worldNode->client = connectBackendChannel(worldNode->url);
-    worldNode->load = 0;
-    worldNode->available = worldNode->client && worldNode->client->isConnected();
-
-    worldNodes_.push_back(std::move(worldNode));
+    // cell 面换装 M1 出口（2b-iii）：路由表缺位 = 出口降级（警告 + 空件，
+    // world 前递落地），起进程不拦——处方①同口径。cell 不在线不在此刻判断，
+    // active 端点自带退避重连。
+    M1EgressConfig egressConfig;
+    egressConfig.host = config_.cellM1Host;
+    egressConfig.port = config_.cellM1Port;
+    egressConfig.route_json = config_.cellM1RouteJson;
+    m1Egress_ = makeM1Egress(std::move(egressConfig));
+    if (!m1Egress_->start()) {
+        glog().warning("gateway cell M1 egress degraded: route table unavailable ("
+                       + config_.cellM1RouteJson + "), world forwarding disabled");
+        m1Egress_.reset();
+    }
 
     running_ = true;
 }
 
 void MessageRouter::stop() {
     running_ = false;
+    if (m1Egress_) {
+        m1Egress_->stop();
+        m1Egress_.reset();
+    }
     loginAppClient_.reset();
     baseAppClient_.reset();
-    worldNodes_.clear();
+}
+
+void MessageRouter::pump() {
+    if (!m1Egress_) {
+        return;
+    }
+    m1Egress_->pump(std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count());
 }
 
 void MessageRouter::forwardToWorld(
@@ -103,21 +119,16 @@ void MessageRouter::forwardToWorld(
     const RouteSnapshot& routeSnapshot,
     const std::vector<uint8_t>& message
 ) {
-    (void)sessionId;
-    const auto route = routeSnapshot.isAssigned() ? routeSnapshot : buildDefaultRoute();
-
-    for (auto& worldNode : worldNodes_) {
-        if (worldNode->url == route.worldServerUrl && worldNode->available) {
-            try {
-                if (!sendPayload(worldNode->client.get(), message)) {
-                    throw std::runtime_error("send failed");
-                }
-                worldNode->load++;
-            } catch (...) {
-                worldNode->available = false;
-            }
-            break;
-        }
+    (void)routeSnapshot;  // M1 单 cell 端点：路由快照仅存档，选择面随多 cell 批回归
+    if (!m1Egress_) {
+        glog().warning("Gateway dropped world message for session "
+                       + std::to_string(sessionId) + " (M1 egress degraded)");
+        return;
+    }
+    if (!m1Egress_->forwardIntent(sessionId, message)) {
+        // 不可前递（非五族意图——如断连通知，cell 感知面随契约后续批收口）
+        glog().info("Gateway dropped unforwardable world message for session "
+                    + std::to_string(sessionId));
     }
 }
 
@@ -137,21 +148,9 @@ RouteSnapshot MessageRouter::buildDefaultRoute() const {
     routeSnapshot.instanceId = 1;
     routeSnapshot.spaceId = 1;
     routeSnapshot.routeVersion = 1;
-
-    auto it = std::min_element(worldNodes_.begin(), worldNodes_.end(),
-        [](const auto& a, const auto& b) {
-            return a->load < b->load;
-        });
-
-    if (it != worldNodes_.end() && (*it)->available) {
-        routeSnapshot.worldServerUrl = (*it)->url;
-        return routeSnapshot;
-    }
-
-    if (!worldNodes_.empty()) {
-        routeSnapshot.worldServerUrl = worldNodes_[0]->url;
-    }
-
+    // 路由名目留存（路由解析面与快照消费方仍按 url 标认 world 落点）；
+    // M1 出口单端点直连，不据其选择——选择面随多 cell 批回归。
+    routeSnapshot.worldServerUrl = config_.cellAppUrl;
     return routeSnapshot;
 }
 
@@ -202,24 +201,26 @@ void GatewayServer::start() {
 void GatewayServer::stop() {
     running_ = false;
 
+    // 心跳线程先收线：其超时路径经 send/close 投递队列与入口交互，且
+    // onClientDisconnect 会触 forwardToWorld/forwardToBaseApp——路由器
+    // （M1 出口/后端通道）与入口都得等它停驱后再拆。
+    if (heartbeatThread_.joinable()) {
+        heartbeatThread_.join();
+    }
+
+    // 泵线程停驱后才拆路由器与入口（TcpClientIngressServer::stop 契约：
+    // 连接表泵线程独占，跨线程并发拆表不在契约内；M1 出口链路面同纪律，
+    // forwardToWorld 的调用方全在上述两线程内）。
+    if (acceptThread_.joinable()) {
+        acceptThread_.join();
+    }
+
     messageRouter_->stop();
     if (baseAppRouteClient_) {
         baseAppRouteClient_->disconnect();
     }
     if (loginAppClient_) {
         loginAppClient_->disconnect();
-    }
-
-    // 心跳线程先收线：其超时路径经 send/close 投递队列与入口交互，
-    // 入口还在时操作照常落队。
-    if (heartbeatThread_.joinable()) {
-        heartbeatThread_.join();
-    }
-
-    // 泵线程停驱后才停入口（TcpClientIngressServer::stop 契约：连接表
-    // 泵线程独占，跨线程并发拆表不在契约内）。
-    if (acceptThread_.joinable()) {
-        acceptThread_.join();
     }
     if (ingressServer_) {
         ingressServer_->stop();
@@ -290,10 +291,11 @@ void GatewayServer::heartbeatCheckLoop() {
 }
 
 void GatewayServer::acceptNewConnections() {
-    // 宿主泵循环（net M1 缝纪律：机制零内部线程）：accept/收帧/发帧全在
-    // 此线程推进，经 ingress 投递队列与 send/close 跨线程面解耦。
+    // 宿主泵循环（net M1 缝纪律：机制零内部线程）：accept/收帧/发帧/M1 出口
+    // 推进全在此线程过拍，经 ingress 投递队列与 send/close 跨线程面解耦。
     while (running_) {
         ingressServer_->pump();
+        messageRouter_->pump();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

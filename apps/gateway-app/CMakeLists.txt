@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 add_executable(gateway-app
     src/main.cpp
     src/gateway_server.cpp
+    src/m1_egress.cpp
     include/gateway/session_manager.cpp
     src/ingress/client_ingress_server.cpp
     src/ingress/tcp_client_ingress_server.cpp
@@ -18,6 +19,11 @@ target_include_directories(gateway-app
         ${CMAKE_CURRENT_SOURCE_DIR}/../gateway-app/include
 )
 
+# 契约路由表 JSON（M1 出口装配事实源；生成物随仓）
+target_compile_definitions(gateway-app PRIVATE
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+
 target_link_libraries(gateway-app
     PRIVATE
         apollo::base
@@ -26,6 +32,7 @@ target_link_libraries(gateway-app
         apollo::net_tcp
         apollo::net_protocol
         apollo::net_link
+        apollo::net_contract_wire
         apollo_protocol
 )
 

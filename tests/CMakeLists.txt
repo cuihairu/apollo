@@ -317,6 +317,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -327,6 +328,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    target_include_directories(gateway_route_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
 	    )
+	    target_compile_definitions(gateway_route_tests PRIVATE
+	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
 	    target_link_libraries(gateway_route_tests PRIVATE
 	        apollo
 	        apollo::base
@@ -335,6 +339,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo::net_contract_wire
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -347,6 +352,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -357,6 +363,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    target_include_directories(gateway_ingress_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
 	    )
+	    target_compile_definitions(gateway_ingress_tests PRIVATE
+	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
 	    target_link_libraries(gateway_ingress_tests PRIVATE
 	        apollo
 	        apollo::base
@@ -365,6 +374,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo::net_contract_wire
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -578,6 +588,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -588,6 +599,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    target_include_directories(gateway_route_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
 	    )
+	    target_compile_definitions(gateway_route_tests PRIVATE
+	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
 	    target_link_libraries(gateway_route_tests PRIVATE
 	        apollo
 	        apollo::base
@@ -596,6 +610,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo::net_contract_wire
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -608,6 +623,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -618,6 +634,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    target_include_directories(gateway_ingress_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
 	    )
+	    target_compile_definitions(gateway_ingress_tests PRIVATE
+	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
 	    target_link_libraries(gateway_ingress_tests PRIVATE
 	        apollo
 	        apollo::base
@@ -626,6 +645,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo::net_contract_wire
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -1253,6 +1273,54 @@ if(MSVC)
     target_compile_options(cell_m1_link_tests PRIVATE /utf-8)
 endif()
 add_test(NAME CellM1LinkTests COMMAND cell_m1_link_tests)
+endif()
+
+# ========== Gateway M1 Egress Tests (M1 上层接线批 2b-iii) ==========
+# gateway M1 出口：legacy 世界帧 → 契约 wire 前递（924-928，request_id 关联）
+# → 真 cell M1 接收端 → 延时应答 929 回流 → pending 关联回收/超时清扫；
+# 投递箱溢出/不可前递族（断连通知等）落地观察面；真客户端 socket → gateway
+# 入口 → cell M1 → 应答回流全链 e2e。gateway 与 cell 两侧直编（缝工厂两侧
+# 真实现），Windows 下 link TCP 底座不进 M1 批，用例本体空转。
+if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
+add_executable(gateway_m1_egress_tests
+    test_gateway_m1_egress.cpp
+    ../apps/gateway-app/src/gateway_server.cpp
+    ../apps/gateway-app/src/m1_egress.cpp
+    ../apps/gateway-app/include/gateway/session_manager.cpp
+    ../apps/gateway-app/src/ingress/client_ingress_server.cpp
+    ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway-app/src/ingress/session_admission_service.cpp
+    ../apps/cell-app/src/cell_server.cpp
+    ../apps/cell-app/src/m1_link_server.cpp
+    ../modules/protocol/src/nng_wrapper.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+    ../modules/protocol/src/socket.cpp
+)
+target_include_directories(gateway_m1_egress_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+)
+target_compile_definitions(gateway_m1_egress_tests PRIVATE
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(gateway_m1_egress_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world
+    apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
+    apollo::net_contract_wire apollo_protocol)
+if(WIN32)
+    target_link_libraries(gateway_m1_egress_tests PRIVATE ws2_32)
+    target_compile_definitions(gateway_m1_egress_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(gateway_m1_egress_tests PRIVATE /utf-8)
+endif()
+add_test(NAME GatewayM1EgressTests COMMAND gateway_m1_egress_tests)
 endif()
 	endif()
 

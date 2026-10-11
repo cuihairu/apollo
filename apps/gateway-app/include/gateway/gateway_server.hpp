@@ -5,6 +5,7 @@
 #include "gateway/ingress/client_packet_dispatcher.hpp"
 #include "gateway/ingress/gateway_connection_registry.hpp"
 #include "gateway/ingress/session_admission_service.hpp"
+#include "gateway/m1_egress.hpp"
 #include "gateway/session_manager.hpp"
 #include "apollo/net/protocol/channel.hpp"
 #include "apollo/protocol/socket.hpp"
@@ -28,7 +29,11 @@ public:
     // 停止路由器
     void stop();
 
-    // 转发消息到 CellApp
+    // 宿主泵一拍（M1 出口收发/应答回收推进；机制零内部线程——gateway
+    // 泵线程 acceptNewConnections 循环调用）
+    void pump();
+
+    // 转发消息到 CellApp（M1 出口：legacy 世界帧 → 契约 wire 前递）
     void forwardToWorld(SessionID sessionId, const RouteSnapshot& routeSnapshot,
                         const std::vector<uint8_t>& message);
 
@@ -37,6 +42,9 @@ public:
 
     RouteSnapshot buildDefaultRoute() const;
 
+    // M1 出口观测面（降级时为空）
+    M1Egress* egress() const { return m1Egress_.get(); }
+
 private:
     GatewayConfig config_;
 
@@ -44,14 +52,8 @@ private:
     std::unique_ptr<apollo::net::protocol::Channel> loginAppClient_;
     std::unique_ptr<apollo::net::protocol::Channel> baseAppClient_;
 
-    // WorldHost 池
-    struct WorldNodeInfo {
-        std::string url;
-        std::unique_ptr<apollo::net::protocol::Channel> client;
-        int load;  // 负载计数
-        std::atomic<bool> available;
-    };
-    std::vector<std::unique_ptr<WorldNodeInfo>> worldNodes_;
+    // cell 面（2b-iii：world nng 通道池退役，M1 出口单端点直连）
+    std::unique_ptr<M1Egress> m1Egress_;
 
     std::atomic<bool> running_{false};
 };
@@ -73,6 +75,9 @@ public:
 
     // 实际监听端口（port 0 = 内核分配，测试与编排面经此读回）
     std::uint16_t listenPort() const;
+
+    // 消息路由器观测面（测试与编排面经此读 M1 出口计数）
+    MessageRouter* messageRouter() const { return messageRouter_.get(); }
 
     SessionID createPendingSession(const std::string& clientIP, uint16_t clientPort);
     SessionID createPendingSession(const ClientEndpoint& endpoint);
