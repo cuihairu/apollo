@@ -183,7 +183,7 @@ tag:
 
 **状态：** 已拍板（2026-10-10 巡检授权批）。
 
-**背景**：term-contract §1.3 定稿两进程名：日志收集进程 `LoggerApp`（日志双出口：本地文件真相源 + push）、战斗验证进程 `VerifierApp`（客户端权威战斗的服务端复算对账，gap #17）。logging 批 C 已交付结构化行格式（六键固定序 + FileAppender structuredOutput 开关默认关，apps 接线批打开）；VerifierApp 的复算引擎依赖 Lua 面（scripting-lua 未入主线）。
+**背景**：定稿两进程名：日志收集进程 `LoggerApp`（日志双出口：本地文件真相源 + push）、战斗验证进程 `VerifierApp`（客户端权威战斗的服务端复算对账，gap #17）。logging 批 C 已交付结构化行格式（六键固定序 + FileAppender structuredOutput 开关默认关，apps 接线批打开）；VerifierApp 的复算引擎依赖 Lua 面（scripting-lua 未入主线）。
 
 **决策**：
 1. **LoggerApp 立项**：apps/LoggerApp 进程壳 + 各 app FileAppender structuredOutput 开关打开——本地文件真相源维持（人读/机读双出口），push 出口（上游 collector）留接口不实现（collector 面 M1 后）。
@@ -193,7 +193,7 @@ tag:
 
 **落地注记（2026-10-10）**：决策 1 的「开关打开」前置还有一层——apps 接线现状 = 零（七 app 全 `std::cout` 直写，log 模块零接入；唯一触点 game-server crash 可见化行），apps 先接 log 模块（L1）再翻开关（L2）；落地形态前置设计已立 docs/design/logger-app.md（v1 采集形态三岔 + 五拍板点，候选倾向 = tail 拉）。
 
-**批记（2026-10-10，同日三批连续交付）**：L1+L2（`7ad64938`）——七 app main 全接 log 模块（initLogging：processIdentity + fileEnabled + structuredOutput，console 保人读；先于 init_crash_capture——write() 惰性默认初始化仅 console，顺序颠倒会顶掉文件面配置）、app 库面运行行全量转 logger（领域子日志 recovery/mirror/window/death = §5.1 cat= 检索键；信号路径与 fork pre-exec 路径保持直写 console/stderr——logger 面带锁，信号上下文与 fork 快照持锁窗口不进）；kill -9 演练全链断言回归绿（消息正文子串契约全保）。L3（logger 壳）——apps/logger + 二进制 `logger` + 类 `LoggerApp`（term-contract §1.3）；读侧解析（写侧 structured.cpp 镜像：引号/转义还原、六键齐备判定）+ 检索子命令 `scan`（proc/level/ts/cat 过滤，stdout 查询面/stderr 汇总分离）+ `follow` 跟随（编队聚合面，增量读 + 半行驻留）+ push 接缝 `IPushSink`/`NullPushSink`（留接口不实现，M1 后换 InterServerLink）；logger_tests 9 组入门禁（42/42）；dev_fleet roster 增 logger 行（follow，无端口——三禁），编队冒烟 7 成员全绿（machined.log 结构化聚合行 103 条、scan 实检索 12 文件全解析）。L4（push 通道 + 断连降级）挂 M1。归档/滚动沿用 FileAppender 既有，logger 只读。
+**批记（2026-10-10，同日三批连续交付）**：L1+L2（`7ad64938`）——七 app main 全接 log 模块（initLogging：processIdentity + fileEnabled + structuredOutput，console 保人读；先于 init_crash_capture——write() 惰性默认初始化仅 console，顺序颠倒会顶掉文件面配置）、app 库面运行行全量转 logger（领域子日志 recovery/mirror/window/death = §5.1 cat= 检索键；信号路径与 fork pre-exec 路径保持直写 console/stderr——logger 面带锁，信号上下文与 fork 快照持锁窗口不进）；kill -9 演练全链断言回归绿（消息正文子串契约全保）。L3（logger 壳）——apps/logger + 二进制 `logger` + 类 `LoggerApp`；读侧解析（写侧 structured.cpp 镜像：引号/转义还原、六键齐备判定）+ 检索子命令 `scan`（proc/level/ts/cat 过滤，stdout 查询面/stderr 汇总分离）+ `follow` 跟随（编队聚合面，增量读 + 半行驻留）+ push 接缝 `IPushSink`/`NullPushSink`（留接口不实现，M1 后换 InterServerLink）；logger_tests 9 组入门禁（42/42）；dev_fleet roster 增 logger 行（follow，无端口——三禁），编队冒烟 7 成员全绿（machined.log 结构化聚合行 103 条、scan 实检索 12 文件全解析）。L4（push 通道 + 断连降级）挂 M1。归档/滚动沿用 FileAppender 既有，logger 只读。
 
 **批记（2026-10-12，L4 交付）**：L4（`8d8a1dc0`/`6dd9445f`/`b8111f2a`/`d8499672`）——push 通道 + 断连降级全形态（logging.md §5 collector 落地）：内核 LinkManager passive fan-out（staging→peers 按对端自报名迁入、同名重连替换、装配挂 on_up 当拍）+ 契约 930 logger_line_push + 发送面 modules/net/logpush LogPushClient（内部泵线程单写者、有界队列 4096 顶格丢新、kReliable 重连恰一次补投、停排留队）+ PushAppender/LogManagerConfig.pushSink 接线 + logger serve 子命令（passive "apps" 收 930 原行归档、逐行冲刷——ofstream 缓冲 + kill -9 吞数据实证后修复）+ 七 app APOLLO_LOG_PUSH_ADDR 一线接线（未设=关，v1 单出口不变）+ dev_fleet logger 行转 serve。断连降级编队活体演练：SIGKILL collector+gateway 同杀 → machined 死亡/重生行落断连窗 → 队列缓冲 → collector 重生重拨补投全数到档（delta=20）——决策 1 的「push 出口留接口」就此消账，IPushSink 检索面不变。详批记见 todo P3-3 / logger-app §6。
 
@@ -201,9 +201,9 @@ tag:
 
 ## ADR-014 Process Rename: Manager and Zone（进程改名：baseappmgr→manager，base-app→zone-app）
 
-**状态：** 已拍板并落地（2026-10-10 巡检授权批拍板；2026-10-11 落地 a5750eda。定名依据 = term-contract v1.0 定稿，2026-10-03 用户审定）。
+**状态：** 已拍板并落地（2026-10-10 巡检授权批拍板；2026-10-11 落地 a5750eda）。
 
-**背景**：P3-1 遗留「base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）」。term-contract v1.0 已定稿：§1.1 Zone 行禁用名表「cellapp / baseapp → apollo 不拆两族进程 → `Zone`」；§1.3 管理进程行「manager / `ManagerApp`（BW 对照 = baseappmgr+cellappmgr）禁 mgr 缩写作标识」。命名先例：`Machined` 同为契约定稿名直接入户（P3-1 批 C 勘误）。
+**背景**：P3-1 遗留「base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）」。**依据更正（2026-10-12）**：原引「禁 cellapp/baseapp 进程名」的命名契约系内部代拟、**未经用户审定**，该文件已删除；现口径 = **优先复用 BigWorld/KBE 既有概念、降低理解成本**（新词须给对照与理由）。进程名是否回改为 BW 词汇，另行拍板。
 
 **决策**：
 1. **baseappmgr → manager**：进程名 / 二进制 / roster 标识 / 日志身份改 `manager`（类名 BaseAppMgr 域代码随批内一致性整理，CTest 套件名不改语义——BaseAppMgrTests 保持既有名避免无谓断言改名）。
@@ -212,7 +212,7 @@ tag:
 
 **后果**：术语契约定稿名全量入户，仓库内不再出现 baseappmgr/base-app 进程名（他家对照词仅存于文档证据引用）；改名批后 dev_fleet/drill 全链复验为验收面。
 
-**落地（2026-10-11，a5750eda）**：apps/baseappmgr → apps/manager（二进制 manager、类 ManagerApp、命名空间 manager、日志身份与文件名 manager、crash db crashdumps/manager）；apps/base-app → apps/zone-app（二进制 zone-app、日志身份与文件名 zone-app、RecoveryCoordinator 标识 zone-app；内部 base/BaseServer 代码标识不动——决策 2「代码标识不与进程名混淆」）；CLI 参数面零改动（--base-app 后端挂接参数/端口/监督语义原样）；CTest 套件名 BaseAppMgrTests 保持（决策 1）；dev_fleet/drill roster 改新名、断言子串（child death zone-app / restart zone-app）随批更新；他家对照引用（BW baseappmgr.cpp:588-599 等）按本 ADR 豁免保留。验收 = 三树门禁全绿（ON 42/42、Examples 40/40、OFF 36/36）+ dev_fleet 冒烟（born manager/zone-app 落日志、log/manager_*.log 与 log/zone-app_*.log 结构化行 proc= 落新名、crashdumps/manager|zone-app 隔离）+ drill_kill9 全链断言全过（死亡检测 45ms → 退避重启 1.05s → recovery ready 1.07s → 全量重报 1.70s → 镜像收敛 2.71s）。文档面：现行事实件随批改新名（guides / api / overview / Directory_Structure / apps 实现文档 / term-contract 状态注 / 设计件现状衔接与零件表 / 交付注记路径——设计件引用行号经核未漂移，改名均为等长行替换）；历史时点件不改写（审计七件套 / analysis / qa / 他家对照件 / starter 参考件目标形态示例 / baseline footer 存量实读清单）——时点证据保留，本注记与 todo 批记为权威后况。
+**落地（2026-10-11，a5750eda）**：apps/baseappmgr → apps/manager（二进制 manager、类 ManagerApp、命名空间 manager、日志身份与文件名 manager、crash db crashdumps/manager）；apps/base-app → apps/zone-app（二进制 zone-app、日志身份与文件名 zone-app、RecoveryCoordinator 标识 zone-app；内部 base/BaseServer 代码标识不动——决策 2「代码标识不与进程名混淆」）；CLI 参数面零改动（--base-app 后端挂接参数/端口/监督语义原样）；CTest 套件名 BaseAppMgrTests 保持（决策 1）；dev_fleet/drill roster 改新名、断言子串（child death zone-app / restart zone-app）随批更新；他家对照引用（BW baseappmgr.cpp:588-599 等）按本 ADR 豁免保留。验收 = 三树门禁全绿（ON 42/42、Examples 40/40、OFF 36/36）+ dev_fleet 冒烟（born manager/zone-app 落日志、log/manager_*.log 与 log/zone-app_*.log 结构化行 proc= 落新名、crashdumps/manager|zone-app 隔离）+ drill_kill9 全链断言全过（死亡检测 45ms → 退避重启 1.05s → recovery ready 1.07s → 全量重报 1.70s → 镜像收敛 2.71s）。文档面：现行事实件随批改新名（guides / api / overview / Directory_Structure / apps 实现文档 / 设计件现状衔接与零件表 / 交付注记路径——设计件引用行号经核未漂移，改名均为等长行替换）；历史时点件不改写（审计七件套 / analysis / qa / 他家对照件 / starter 参考件目标形态示例 / baseline footer 存量实读清单）——时点证据保留，本注记与 todo 批记为权威后况。
 
 ---
 
@@ -280,5 +280,4 @@ tag:
 ## 相关文档
 
 - [架构总览](/architecture/overview)——七层下行数据流（ADR 的分层视角）
-- [术语命名契约](/design/term-contract)——命名的裁决记录
 - [架构审计与现状](/analysis/architecture-review)——审计全量证据

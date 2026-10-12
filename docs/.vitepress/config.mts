@@ -86,7 +86,6 @@ export default defineConfig({
           text: '设计件（docs/design）',
           items: [
             { text: '设计件总览', link: '/design/' },
-            { text: '术语契约', link: '/design/term-contract' },
             { text: '概念词汇表', link: '/design/concept-glossary' },
             { text: '玩家对象模型', link: '/design/player-object-model' },
             { text: '属性系统与同步', link: '/design/attribute-sync' },

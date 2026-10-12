@@ -74,4 +74,3 @@ Create → Initialize → Waiting → Running → Finishing → Rewarding → Dr
 - [AOI九宫格系统详解](/architecture/aoi)
 - [BigWorld 架构深度解析](/architecture/bigworld)
 - [BigWorld 进程架构与玩家生命周期](/architecture/bigworld-lifecycle)
-- [术语命名契约](/design/term-contract)

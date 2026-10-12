@@ -1,6 +1,6 @@
 # Battle Instance Offload 前置设计（副本进程形态）
 
-> 状态：**前置设计稿（2026-10-07）；三拍板点已拍板 2026-10-10（ADR-012：按需 spawn 请求协议 / 内存桩过渡 / 崩溃即作废）**。定位：36 号决策表 #16「Battle 独立实例 + Replay/Inspector 适配缝」的进程形态骨架——仿 net-abstraction §7「P3 前置设计」体裁：钉形态、钉依赖序、钉拍板点，不写实现细节。术语以 term-contract §1.3 为准（**副本进程** instance process：单 scene 单开进程的 offload 形态）。
+> 状态：**前置设计稿（2026-10-07）；三拍板点已拍板 2026-10-10（ADR-012：按需 spawn 请求协议 / 内存桩过渡 / 崩溃即作废）**。定位：36 号决策表 #16「Battle 独立实例 + Replay/Inspector 适配缝」的进程形态骨架——仿 net-abstraction §7「P3 前置设计」体裁：钉形态、钉依赖序、钉拍板点，不写实现细节。术语以本件为准（**副本进程** instance process：单 scene 单开进程的 offload 形态）。
 
 ---
 
@@ -8,7 +8,7 @@
 
 - 战斗运行时**在进程内**：P2-2 交付的 `BattleRuntime` 五段状态机经 `Instance::attach_battle` 挂接（world→battle 同进程链接），P2-4 `AnchorRewardSink` 同进程落账。**跨进程战斗为零**——这是分期不是遗漏。
 - 确定性前提**已交付**：battle-determinism 四约束（判定域/浮点/迭代序/随机子流）+ ReplayTuple/事件 hash 链（P2-2）——「跨机实例同 binary 即同确定域」（battle-determinism #16）已具备；实例卸载形态（Matchmaker/Instance Manager 骨架，docs/25 §3.1-3.2 可溯）归本批设计。
-- 跨进程传输**未落地**：M1 自研内核随 P3-2 批重估（todo 契约差异清欠行）；nng 已退役（term-contract §2）。
+- 跨进程传输**未落地**：M1 自研内核随 P3-2 批重估（todo 契约差异清欠行）；nng 已退役。
 
 ## 2. 目标形态（36 号 #16 口径）
 
@@ -66,4 +66,4 @@
 - battle-determinism.md：四约束与回放格式——确定性前提，本文 §6 全盘引用不重复定义。
 - battle-verification-service.md：VerifierApp 客户端权威对账——另一条战斗验证线，与 offload 正交（可共呼吸同一 hash 链）。
 - session-and-online-directory.md：会话/在线目录 = manager 域另一职责件，RouteResolver 宿主定位供落回路由。
-- term-contract §1.3：副本进程行（本设计的命名锚）。
+- 副本进程命名锚（本设计）。

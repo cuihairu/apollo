@@ -1,6 +1,6 @@
 # LoggerApp 立项前置设计（进程壳与结构化行接线的落地形态）
 
-> 状态：**已落地（2026-10-10，L1+L2+L3 三批同日交付；L4 挂 M1）**。定位：ADR-013「LoggerApp 立项」的落地形态展开——钉 apps 接线现状实证、钉 v1 采集形态三岔、钉批切分与拍板点。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload/cell-single-writer。术语以 term-contract §1.3 为准（日志收集进程 logger / 代码标识 `LoggerApp`）；权威口径 = ADR-013（立项切分：壳先行 + 开关打开 + push 留接口）+ logging.md §5（collector 形态母件）。批记见 ADR-013 落地注记（adr.md）。
+> 状态：**已落地（2026-10-10，L1+L2+L3 三批同日交付；L4 挂 M1）**。定位：ADR-013「LoggerApp 立项」的落地形态展开——钉 apps 接线现状实证、钉 v1 采集形态三岔、钉批切分与拍板点。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload/cell-single-writer。术语以本件为准（日志收集进程 logger / 代码标识 `LoggerApp`）；权威口径 = ADR-013（立项切分：壳先行 + 开关打开 + push 留接口）+ logging.md §5（collector 形态母件）。批记见 ADR-013 落地注记（adr.md）。
 
 ---
 
@@ -60,7 +60,7 @@ v1 终态：logger 进程入编队；各 app 双出口第一步 = 本地结构�
 2. **接线批切分 = L1+L2 合并一批**——立项批指令字面即为合并（apps 接 log 模块 + structuredOutput 开关打开一并交付）；行为面回归未发生（kill -9 演练全链断言绿，消息正文子串契约全保）。
 3. **检索面 v1 形态 = (a) logger 二进制子命令**——`logger scan`（一发检索）+ `logger follow`（跟随聚合，编队 roster 行消费面）；logger_tests 9 组入门禁，(b)/(c) 否决理由维持原记。
 4. **归档/滚动职责 = v1 logger 只读**——滚动沿用 FileAppender 既有（ByDate/BySize/ByBoth + maxFiles + 重启序号续接），logger 不接管。
-5. **目录/二进制名 = apps/logger + 二进制 logger + 类 `LoggerApp`**——term-contract §1.3 契约代码标识落类名，不随目录名变。
+5. **目录/二进制名 = apps/logger + 二进制 logger + 类 `LoggerApp`**——代码标识落类名，不随目录名变。
 
 ## 6. 拍板后路径
 
@@ -95,7 +95,7 @@ v1 终态：logger 进程入编队；各 app 双出口第一步 = 本地结构�
 | crash-capture | cat=crash 行 = 结构化检索首个消费先例；crashdumps pending 计数可见化 |
 | G-1 machined | roster 接入点；死亡上报同批口径（logging.md §7 P3 行） |
 | scripting-lua §6 / attribute-sync §8.2 | BI 旁路在 collector 汇合（L4 后） |
-| term-contract §1.3 | `LoggerApp` 词条（命名真相源） |
+| 既有命名 | `LoggerApp` 词条（命名真相源） |
 
 ## 8. 证据清单
 

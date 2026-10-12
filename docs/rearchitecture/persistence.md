@@ -1,7 +1,7 @@
 # Apollo 持久化审查（persistence）
 
 > 所属：第一阶段只读架构审查配套件之六。配套：audit.md（A7 平行栈总表）、architecture.md、object-model.md、lifecycle.md、improvement-plan.md。
-> 依据：任务书 §7（Memory Authority：在线玩家内存为权威，禁止 Gameplay→DB→Result 模式）、§19（Repository/Storage/Cache/Snapshot/Journal/Write-Behind；Save 时机/Shutdown Save/Crash Recovery/Player Logout/Instance Completion/Critical Transaction）、§20（Recovery：必须持久化/可重算/可丢三档）。术语按 term-contract v1.0；差异清单见文末。
+> 依据：任务书 §7（Memory Authority：在线玩家内存为权威，禁止 Gameplay→DB→Result 模式）、§19（Repository/Storage/Cache/Snapshot/Journal/Write-Behind；Save 时机/Shutdown Save/Crash Recovery/Player Logout/Instance Completion/Critical Transaction）、§20（Recovery：必须持久化/可重算/可丢三档）。术语按既有代码用词（优先复用 BigWorld/KBE 概念）；差异清单见文末。
 
 ---
 

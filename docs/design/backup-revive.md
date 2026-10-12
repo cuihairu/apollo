@@ -1,6 +1,6 @@
 # 备份容灾与宕机接管设计（backup-revive）
 
-> 状态：**设计稿（前置设计，G-2 立项批，2026-10-09；六拍板点已拍板 2026-10-10——案 A 先行，见 §4 与 ADR-010）**。定位：进程级高可用面——权威进程死亡后「服务不倒」的候选拓扑、仲裁语义与接管时序；与 attribute-sync §8.2 的分界沿既有范围声明：journal 答「数据不丢」，本件答「进程不倒」。缺口登记：**G-2 备份/容灾与宕机接管**（architecture-review §16.4 遗留登记；net-abstraction §7「P3 前置设计」G-2 段为既有骨架口径，本件将其展开为可拍板的候选拓扑）。互引：net-abstraction（§7 G-2 段/§5.7 InterServerLink/§6 sdshmem 决策行）、attribute-sync（§8.2 范围声明/§10.2 停机序列/§11 验收表）、session-and-online-directory §6（恢复矩阵）、clock-and-time（§6 跨进程不互信/§7 双时间戳）、capacity-and-benchmark（§1 容量目标/§5 指标集）、crash-capture（取证互证面）、term-contract §1.3 + concept-glossary「热备与接管」词条、architecture-review（§16.2/§16.4/C-51/C-52/§30 简化三刀）、36 号（§0 证据分级/问 5/问 7）、battle-instance-offload §7（实例故障域独立拍板）。
+> 状态：**设计稿（前置设计，G-2 立项批，2026-10-09；六拍板点已拍板 2026-10-10——案 A 先行，见 §4 与 ADR-010）**。定位：进程级高可用面——权威进程死亡后「服务不倒」的候选拓扑、仲裁语义与接管时序；与 attribute-sync §8.2 的分界沿既有范围声明：journal 答「数据不丢」，本件答「进程不倒」。缺口登记：**G-2 备份/容灾与宕机接管**（architecture-review §16.4 遗留登记；net-abstraction §7「P3 前置设计」G-2 段为既有骨架口径，本件将其展开为可拍板的候选拓扑）。互引：net-abstraction（§7 G-2 段/§5.7 InterServerLink/§6 sdshmem 决策行）、attribute-sync（§8.2 范围声明/§10.2 停机序列/§11 验收表）、session-and-online-directory §6（恢复矩阵）、clock-and-time（§6 跨进程不互信/§7 双时间戳）、capacity-and-benchmark（§1 容量目标/§5 指标集）、crash-capture（取证互证面）、concept-glossary「热备与接管」词条、architecture-review（§16.2/§16.4/C-51/C-52/§30 简化三刀）、36 号（§0 证据分级/问 5/问 7）、battle-instance-offload §7（实例故障域独立拍板）。
 
 ---
 
@@ -127,7 +127,7 @@
 
 ## 5. 术语提案（新词先入 glossary 再入契约——本件不改两档）
 
-term-contract §1.3 已有「热备与接管 backup / reviver（G-2）」「恢复相位 recovery phase」两行命名锚；本设计若立项，以下**细化名词**按契约 §0 规则 4 走流程（先 concept-glossary 辨析、再契约钉死，随立项批入库）：
+已有「热备与接管 backup / reviver（G-2）」「恢复相位 recovery phase」两行命名锚；本设计若立项，以下**细化名词**先入 concept-glossary 辨析后钉死（随立项批入库）：
 
 | 中文名（拟） | 英文名 | 代码标识（拟） | 定义一句 | 对照 | 禁用/别名 |
 |---|---|---|---|---|---|
@@ -136,7 +136,7 @@ term-contract §1.3 已有「热备与接管 backup / reviver（G-2）」「恢�
 | 备份位点 | backup position | `backup_position`（u64 = journal sequence） | 热备流上接权方已确认追平的 journal 序号——接管重放起点 | ViewerState.acked_seq 同模型（属性 seq 水位的进程间实例） | 禁：「位点」裸用作代码标识（叙述层沿用） |
 | 热备流 | backup stream | `BackupMirrorStream` | PersistJournal 的第二只读消费流（RO_MIRROR 形态，写只在 owner） | BW backup_sender 分帧流；net-abstraction §7「G-2 镜像流」既有口语的定名 | 禁：backup_sender（他家名）；「镜像流」裸用作代码标识 |
 
-- **外部度量词汇注记**：RPO（恢复点目标）/RTO（恢复时间目标）为行业通型度量缩写——文档叙述面使用，不入代码标识（term-contract §0 规则 2 管**机制名**入户，度量口径不属机制名，此为边界注记）。双主（split-brain / dual-primary）作失败模式描述词，同口径文档面使用。
+- **外部度量词汇注记**：RPO（恢复点目标）/RTO（恢复时间目标）为行业通型度量缩写——文档叙述面使用，不入代码标识（度量口径属文档叙述面用词，此为边界注记）。双主（split-brain / dual-primary）作失败模式描述词，同口径文档面使用。
 
 ## 6. 分期（拍板后路径）
 
@@ -162,7 +162,7 @@ term-contract §1.3 已有「热备与接管 backup / reviver（G-2）」「恢�
 | battle-determinism | §5 录制格式（若案 C 走 intent 重放线的格式来源——与 journal 重放分属两线：journal 重放持久变更，intent 重放推演判定序，不混用） |
 | battle-verification-service | §5 部署口径（无状态 worker 池无 G-2 热备需求——拍板 2 verifier 行既有依据） |
 | architecture-review | §16.4 G-2 登记（本件即该缺口立项设计面）；C-51/C-52（KBE 无此层/代差在备份链路的证据）；§30 简化三刀「backup+reviver → journal 位点 + manager 恢复相位」（既有登记，拍板 1/2 确认或改写） |
-| term-contract / concept-glossary | §1.3 热备与接管、恢复相位两行命名锚；§5 术语提案的入库前置（先 glossary 后契约） |
+| concept-glossary | 热备与接管、恢复相位两行命名锚；§5 术语提案的入库前置（先 glossary 辨析） |
 | scripts/dev_fleet.sh | 批 0 演练链的编队驱动（up/roster/status/down 既有面；crashdumps/ 与 fleet 日志目录共存惯例沿 crash-capture §2.2） |
 
 ---

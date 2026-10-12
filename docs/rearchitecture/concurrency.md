@@ -1,7 +1,7 @@
 # Apollo 并发模型（concurrency）
 
 > 所属：第一阶段只读架构审查配套件之五。配套：audit.md、architecture.md、object-model.md、lifecycle.md、persistence.md、improvement-plan.md。
-> 依据：任务书 §26（并发模型：谁可以修改 Player/Scene/Instance/Entity/Persistence，明确 Owner + 明确执行上下文）、§17（Tick/Scheduler）、§32（线程/锁复杂度）。术语按 term-contract v1.0；差异清单见文末。
+> 依据：任务书 §26（并发模型：谁可以修改 Player/Scene/Instance/Entity/Persistence，明确 Owner + 明确执行上下文）、§17（Tick/Scheduler）、§32（线程/锁复杂度）。术语按既有代码用词（优先复用 BigWorld/KBE 概念）；差异清单见文末。
 
 ---
 

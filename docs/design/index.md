@@ -2,13 +2,12 @@
 
 > 本目录 = apollo 的**系统设计件**（design docs）落点：每件对应一个能力域的设计/调研/裁决记录。
 > 状态口径：**已交付**（代码已落）/ **设计稿**（评审中或待批）/ **前置设计**（立项前调研件，拍板点在文内列明）。
-> 术语纪律服从 [term-contract](./term-contract.md)；新词先入 [concept-glossary](./concept-glossary.md) 再入契约。
+> 术语纪律：命名优先复用 BigWorld/KBE 既有概念；新词先入 [concept-glossary](./concept-glossary.md) 并给出对照与理由。
 
 ## 基础与模型
 
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
-| [术语契约](./term-contract.md) | v1.0 定稿 | 全仓命名裁决表（禁用词/定稿名/先例对照） |
 | [概念词汇表](./concept-glossary.md) | 活文档 | 新词登记处 |
 | [玩家对象模型](./player-object-model.md) | 已交付 | Anchor/Avatar/Scene/Instance 所有权与生命周期 |
 | [属性系统与同步](./attribute-sync.md) | 已交付（部分批待接线） | 长期态字段模型 + 可见性/同步域 |

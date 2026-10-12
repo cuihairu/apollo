@@ -1,7 +1,7 @@
 # Apollo 生命周期地图（lifecycle）
 
 > 所属：第一阶段只读架构审查配套件之四。配套：audit.md、architecture.md、object-model.md（对象归属）、concurrency.md（线程/锁）、persistence.md、improvement-plan.md。
-> 依据：任务书 §9（Instance 生命周期）、§11（Scene Transfer）、§18（Runtime/Application 生命周期、constructor 做太多/析构隐式释放/全局 singleton/跨模块隐式生命周期四检查）、§20（Recovery）。术语按 term-contract v1.0；差异清单见文末。
+> 依据：任务书 §9（Instance 生命周期）、§11（Scene Transfer）、§18（Runtime/Application 生命周期、constructor 做太多/析构隐式释放/全局 singleton/跨模块隐式生命周期四检查）、§20（Recovery）。术语按既有代码用词（优先复用 BigWorld/KBE 概念）；差异清单见文末。
 
 ---
 

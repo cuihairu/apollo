@@ -2,7 +2,7 @@
 
 > 所属：第一阶段（只读架构审查；本阶段未修改任何源代码/构建脚本/配置文件）。
 > 依据：docs/rearchitecture/architecture-review-plan.md（任务书，commit ce91a739，40 节，以下称「任务书」）。
-> 术语：docs/design/term-contract.md v1.0（用户审定，以下称「契约」）。契约未定名词条按既有代码用词。
+> 术语：按既有代码用词；命名优先复用 BigWorld/KBE 既有概念。
 > 范围：README、docs/、examples/、tests/、src/、include/、sdks/、modules/、apps/、build 系统与 CI。
 > 方法：代码与文档全部实读；存量审查件（仓库根 BIGWORLD_AUDIT.md、ipc_audit_results.md）仅作参考交叉验证，其结论未默认采信；本报告数据以 2026-10-04 工作区为准。
 > 配套文件：architecture.md（架构地图）/ object-model.md（对象所有权）/ lifecycle.md（生命周期地图）/ concurrency.md（并发模型）/ persistence.md（持久化）/ improvement-plan.md（改进计划）。本文档为总览与仓库层证据。
@@ -17,7 +17,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 
 对应到代码的两个事实基准：
 
-- **设计侧**已收敛：docs/design 下 12 份设计文档 + term-contract v1.0 已立；design-gap-inventory 15/17 项 CLOSED（仅 gap #15 Bots 与 #16 map pipeline OPEN）。
+- **设计侧**已收敛：docs/design 下 12 份设计文档已立；design-gap-inventory 15/17 项 CLOSED（仅 gap #15 Bots 与 #16 map pipeline OPEN）。
 - **代码侧**仍是「存量烟囱与新建模块并存」的双结构树（§5），且默认构建只编译基础库，**全部 6 个 app 默认零编译**（§3.3），大量「设计已声明、代码未落地」的缺口（见 §7 问题清单与各配套文档）。
 
 ### 1.2 代码规模统计（2026-10-04 实测，wc -l）
@@ -60,7 +60,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 
 ## 2. 术语契约对照与差异清单
 
-> 规则（协调者约束 + 任务书卷首）：本套文档一律按 term-contract v1.0 用词；凡代码/存量文档与契约冲突处，正文条目按契约修文，并在**各文档末尾**附「差异清单」逐条列出。
+> 规则（协调者约束 + 任务书卷首）：本套文档一律按既有代码用词；差异处正文条目按代码实读修文，并在**各文档末尾**附「差异清单」逐条列出。
 
 ### 2.1 「Player」一词的裁决余波（重要前置说明）
 
@@ -211,7 +211,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 
 > 各配套文档末尾按各自主题附局部清单；此处为跨文档总表。
 
-1. **`Player` 代码标识仍在 sdks/contract/entities.xml:8 与生成的 contract.lua/apollo_contract.h**（`<entity id="Player" parent="Avatar">`），继承链 Monste→NPC→Avatar→Player 四层；契约裁决玩家实体只有 Avatar 一个词（Player 已废）→ **契约文件与生成物需要按 new term-contract 修订（语义上等价的落点：Avatar 承载社交面/长期态归属 Anchor，`Player` 实体应并入 Avatar 或删除，由后续代码批次裁决，本阶段只登记）**。
+1. **`Player` 代码标识仍在 sdks/contract/entities.xml:8 与生成的 contract.lua/apollo_contract.h**（`<entity id="Player" parent="Avatar">`），继承链 Monste→NPC→Avatar→Player 四层；玩家实体以 Avatar 一词为准（Player 已废）→ **生成物与既有文档需要按 Avatar 单词口径修订（语义上等价的落点：Avatar 承载社交面/长期态归属 Anchor，`Player` 实体应并入 Avatar 或删除，由后续代码批次裁决，本阶段只登记）**。
 2. **`Battle`（space 义）残留**：include/apollo/game/battle/ecs/battle_system.hpp（BattleWorld/BattleManager 等全套）；契约禁用（裁决 1），且该文件本身零引用。
 3. **`nng` 未退役**：modules/protocol CMake/代码、modules/net 的 socket.cpp/channel.cpp/nng_wrapper.hpp 桩、legacy net 引用；契约 §2 禁「nng」（36号 #2 退役）——代码未跟随设计（net-abstraction.md G-1 自持四层未落实）。
 4. **process 命名 base-app/baseappmgr**：契约禁「baseapp/cellapp」作 apollo 进程名（Zone 替代）；现存两个 app 目录/CMake target 名与契约冲突，迁移后应更名（如 anchor-app/directory-app，具体由改进计划 P1/P3 定名并走新术语流程）。

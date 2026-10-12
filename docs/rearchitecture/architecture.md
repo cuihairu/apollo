@@ -1,7 +1,7 @@
 # Apollo 架构地图（architecture）
 
 > 所属：第一阶段只读架构审查配套件之二。配套：audit.md（仓库分析/构建/术语对照）、object-model.md（对象所有权）、lifecycle.md（生命周期）、concurrency.md（并发）、persistence.md（持久化）、improvement-plan.md（改进计划）。
-> 依据：任务书 §4（输出完整架构地图）、§22/§23（Service 边界/Manager 泛滥）、§27（API 易用性）、§31（性能分析）、§32（复杂度审查）。术语按 term-contract v1.0；差异清单见文末。
+> 依据：任务书 §4（输出完整架构地图）、§22/§23（Service 边界/Manager 泛滥）、§27（API 易用性）、§31（性能分析）、§32（复杂度审查）。术语按既有代码用词（优先复用 BigWorld/KBE 概念）；差异清单见文末。
 
 ---
 

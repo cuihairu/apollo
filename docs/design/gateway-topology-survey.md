@@ -23,9 +23,9 @@
 
 | 职责 | 有 gateway（apollo 现架构） | 直连 Zone（替代形态=KBE baseapp 型） |
 |---|---|---|
-| 连接保持/L2 会话（seq/ack/心跳/resume/水位，net-abstraction §3） | gateway 集中持有全套（term-contract.md:47「四通道会话」） | 每 Zone 进程自带全套——L2 与场景线程同进程（IO 线程/场景线程分离在进程内仍成立，但热点抢核） |
+| 连接保持/L2 会话（seq/ack/心跳/resume/水位，net-abstraction §3） | gateway 集中持有全套（既有口径「四通道会话」） | 每 Zone 进程自带全套——L2 与场景线程同进程（IO 线程/场景线程分离在进程内仍成立，但热点抢核） |
 | 认证 | token 本地验签（login-flow §3——gateway 持 K_login 验证密钥，不触账号库） | 每 Zone 持验证密钥；或 Zone 回问 manager（存量 gateway 的错位实现先例，login-flow §10 已判迁移） |
-| 路由 | 按 zone 透传（term-contract.md:47「按 zone 透传」；ResolveRoute 问 manager 定位） | 不需要跨进程路由——但玩家换 Zone（换幕跨进程/副本重开）= 客户端重连 + 全量握手 + 快照重传（attribute-sync §11 快照上限 50KB） |
+| 路由 | 按 zone 透传（既有口径「按 zone 透传」；ResolveRoute 问 manager 定位） | 不需要跨进程路由——但玩家换 Zone（换幕跨进程/副本重开）= 客户端重连 + 全量握手 + 快照重传（attribute-sync §11 快照上限 50KB） |
 | 分发/广播 | gateway 扇出下行 | Zone 直发（少一跳，同机部署下扇出成本更低） |
 | 加密/协议族 | CryptoFilter 主路径 + wss 兜底，收口一处（§5.9） | 每 Zone 双协议栈（TCP 自定义 + wss），或砍掉 wss 牺牲页端 |
 | 故障域——连接进程死 | gateway 死 → §6 gateway 行：该 gateway_id 反查全部条目转 Suspended（§4 窗口），客户端重连**任意** gateway 实例 resume | 等价物不存在——入口即权威进程，权威死=入口死 |
@@ -40,7 +40,7 @@
 
 - **连接规模与内存**：5000 CCU/进程（capacity §1）。有 gateway：gateway 集中 5000 条会话 ≈ 640MB net 环预算（§4 表）+ 专职 IO 线程——一个进程的容量份额。直连：摊到 N 个 Zone，每 Zone ~5000/N 条——单看数字直连更省「一个进程」。但 Zone 进程的部署粒度受场景负载驱动（B 模型 10 场景进程族），Zone 数量随玩法扩缩，客户端连接分布跟着玩法走——**洪峰容量的规划单位从「连接面」变成「玩法面」，login-app 洪峰（重连风暴，login-flow §9 容量项）无处隔离**。
 - **下行带宽**：全服出口 160MB/s 打满 ≈ 1Gbps（capacity §3）。有 gateway：zone→gateway 段与 gateway→client 段各摊一份，跨机部署时两段在不同 NIC 上；直连：一段。**这是直连的真实带宽优势**——但同机部署（编队常见形态）下 gateway↔zone 走 lo/本机 NIC，代价趋零；跨机部署时代价 = 每字节一次额外内网传输，内网带宽远大于公网出口，瓶颈段不变。
-- **事件放大**：B 模型 ~19543 广播事件/帧 ≈ 195k 事件/s（capacity §2.1）。这个量级的扇出面无论落在 gateway 还是 Zone 都是同一个 cost center（attribute-sync per-viewer 预算在 collect/flush 段已定），gateway 不放大也不缩小——透传不重组（term-contract.md:47）。
+- **事件放大**：B 模型 ~19543 广播事件/帧 ≈ 195k 事件/s（capacity §2.1）。这个量级的扇出面无论落在 gateway 还是 Zone 都是同一个 cost center（attribute-sync per-viewer 预算在 collect/flush 段已定），gateway 不放大也不缩小——透传不重组。
 - **恢复期落脚点**：§7 口径目录无 journal 易失索引重建 <1s@5000 条——但这是 manager 侧；Zone 重建（场景重开 + Anchor 从 journal/DB 重放）是秒级。窗口内 resume 握手需要一个活着应答的端点：有 gateway = gateway 应答（Suspended 条目 + 重挂排队）；直连 = 无端点可应答。**这一条不依赖任何性能假设，是结构性的。**
 - **场景线程纪律**：net-abstraction §3 的线程模型（IO 线程搬运字节、场景线程单写者）在两种拓扑下都成立；差异是抢核面——直连把 5000/N 条会话的加密/解帧/限流 CPU 放进 Zone 进程，与 simulate/recalc/collect（§2 帧预算表 ~55ms/100ms 已分配）共享 CPU 预算。当前桩口径下余量大（B 模型 5.9%），但余量的规划用途是玩法复杂化与多景并行（capacity §2.1 结论方向），不是会话层热点。
 
@@ -56,7 +56,7 @@
 
 ### 1.4 结论与角色收窄
 
-留 gateway-app，且角色按既有设计收窄——只做连接面三件：token 验签、四通道会话承载、按 zone 透传（term-contract.md:47）；不做准入（login-flow §1 已裁：准入归 manager、鉴权归 login-app）、不做业务逻辑、不做文件服务（契约包指针制，login-flow §6）。gateway 越薄，§1.1 对照表的直连派「少一跳」论据越有说服力时 gateway 越无害——薄透传的一跳是转发成本不是逻辑成本。
+留 gateway-app，且角色按既有设计收窄——只做连接面三件：token 验签、四通道会话承载、按 zone 透传；不做准入（login-flow §1 已裁：准入归 manager、鉴权归 login-app）、不做业务逻辑、不做文件服务（契约包指针制，login-flow §6）。gateway 越薄，§1.1 对照表的直连派「少一跳」论据越有说服力时 gateway 越无害——薄透传的一跳是转发成本不是逻辑成本。
 
 ## 2. 九框架对照：前端连接层 vs 后端 RPC
 
@@ -194,7 +194,7 @@ gRPC 类只出现在非热路径（Nakama 管理面、Pitaya 可选形态）—�
 | net-abstraction | §5.4 GATE 变体→gateway-app；§5.9 wss 兜底随 gateway-app 定案（理由 3）；§5.6 M1 进程间总线（后端互联裁决）；§5.7 InterServerLink=zone↔gateway 链路底座 |
 | login-flow | §1 两阶段连接/登录不经 gateway 反方案记录；§3 token 验签归 gateway（职责收窄）；§10 存量 session_admission_service RPC 回问错位 |
 | session-and-online-directory | §6 gateway 行/Zone 行——理由 1 的语义本体；§4 掉线窗口 |
-| term-contract | :47 网关进程行（token 验签、四通道会话、按 zone 透传）——职责收窄口径的既有定义 |
+| 既有网关口径 | token 验签、四通道会话、按 zone 透传——职责收窄的既有定义 |
 | object-model | :129 进程轴/对象轴（Session owner=gateway、PlayerAnchor 不迁移）——权威布局决定拓扑（§3 规律）的依据 |
 | capacity-and-benchmark | §1/§2.1/§3/§4 数字供数（5000 CCU/1Gbps/195k 事件/s/640MB 环预算） |
 | improvement-plan | P3-4 批记 gateway 摸底三因（现状半成品的出处）；P3-2 gateway surface（ingress 接线挂点） |
@@ -216,7 +216,7 @@ gRPC 类只出现在非热路径（Nakama 管理面、Pitaya 可选形态）—�
 - Nakama architecture：https://heroiclabs.com/docs/nakama/getting-started/architecture/
 - Orleans clients：https://learn.microsoft.com/en-us/dotnet/orleans/host/client ；GatewayOptions：https://learn.microsoft.com/en-us/dotnet/api/orleans.configuration.gatewayoptions 及其源码 GatewayOptions.cs（dotnet/orleans）
 
-**复用本仓（B 级）**：docs/36、net-abstraction、login-flow、session-and-online-directory、term-contract、object-model、capacity-and-benchmark、architecture-review §15.2/§25、improvement-plan P3-2/P3-4（引注见文内）。
+**复用本仓（B 级）**：docs/36、net-abstraction、login-flow、session-and-online-directory、object-model、capacity-and-benchmark、architecture-review §15.2/§25、improvement-plan P3-2/P3-4（引注见文内）。
 
 ---
 

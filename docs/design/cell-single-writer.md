@@ -1,6 +1,6 @@
 # Cell 单写者收口（RPC 受理与模拟线程的并发形态）
 
-> 状态：**前置设计稿（2026-10-10）；六拍板点全裁（ADR-015 主案 (a) 队列化异步受理 + ADR-016 配套：②水位两级/③不设快路径/④Manager mutex 保留/⑤停机 G-3 镜像 + ADR-017 应答接线：ack-on-accept 现行/延时应答随 M1/阻塞适配否决；ADR-015 的 (c) 维持否决、(b) 经拍板⑥ 彻底否决）**。定位：todo P3-2 批 B「cell-app 单写者收口先行」的决策面展开——钉竞争实证、钉方案三岔语义、钉拍板点，不写实现细节。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload。术语以 term-contract §1.3 为准（cell-app 原型名，ADR-014 不更名）；权威并发口径 = ADR-009 + attribute-sync §10.2 单写者纪律注记 + concurrency.md §1.1 后况勘误（本件为其「方案分叉列拍板项」的直接展开）。
+> 状态：**前置设计稿（2026-10-10）；六拍板点全裁（ADR-015 主案 (a) 队列化异步受理 + ADR-016 配套：②水位两级/③不设快路径/④Manager mutex 保留/⑤停机 G-3 镜像 + ADR-017 应答接线：ack-on-accept 现行/延时应答随 M1/阻塞适配否决；ADR-015 的 (c) 维持否决、(b) 经拍板⑥ 彻底否决）**。定位：todo P3-2 批 B「cell-app 单写者收口先行」的决策面展开——钉竞争实证、钉方案三岔语义、钉拍板点，不写实现细节。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload。术语以本件为准（cell-app 保持现名）；权威并发口径 = ADR-009 + attribute-sync §10.2 单写者纪律注记 + concurrency.md §1.1 后况勘误（本件为其「方案分叉列拍板项」的直接展开）。
 
 ---
 

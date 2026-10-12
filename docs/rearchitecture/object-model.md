@@ -1,7 +1,7 @@
 # Apollo 对象所有权模型（object-model）
 
 > 所属：第一阶段只读架构审查配套件之三。配套：audit.md（仓库层）、architecture.md（架构地图/依赖）、lifecycle.md（生命周期）、concurrency.md（并发）、persistence.md（持久化）、improvement-plan.md（改进计划）。
-> 依据：任务书 §5（对象所有权是本审查的重点）、§6（Player 一等对象）、§12（Player/Connection/Session 三者不混乱绑定）、§14（Entity 模型）、§15（ECS 审查）。术语按 term-contract v1.0；差异清单见文末。
+> 依据：任务书 §5（对象所有权是本审查的重点）、§6（Player 一等对象）、§12（Player/Connection/Session 三者不混乱绑定）、§14（Entity 模型）、§15（ECS 审查）。术语按既有代码用词（优先复用 BigWorld/KBE 概念）；差异清单见文末。
 
 ---
 
@@ -18,7 +18,7 @@
 
 另有两处命名空间混用的事实：`WorldSession` 的 player 键在验证路径用 **EntityId** 当 **PlayerId** 查（cell_server.cpp:559 `find_by_player(entity_id)`）；cell-app 把 map_instance_id 直接当 space_id 赋值（cell_server.cpp:544-545）。
 
-**对照契约三件套（term-contract §1.2）**：Session/Proxy（连接承载，gateway 面）→ **无 Proxy 类**，gateway 侧无会话对象（只有连接 socket）；PlayerAnchor/Base（长期归属，驻 Home Zone）→ 有类、无 Home Zone 概念（存在 base-app 进程无定位字段）；Avatar/Cell（场景化身，进 scene 生、出 scene 死）→ **无类**，最接近的 cell::PlayerEntity 无生命周期规则。
+**对照（长期态 / 场景化身两层）**：Session/Proxy（连接承载，gateway 面）→ **无 Proxy 类**，gateway 侧无会话对象（只有连接 socket）；PlayerAnchor/Base（长期归属，驻 Home Zone）→ 有类、无 Home Zone 概念（存在 base-app 进程无定位字段）；Avatar/Cell（场景化身，进 scene 生、出 scene 死）→ **无类**，最接近的 cell::PlayerEntity 无生命周期规则。
 
 ---
 

@@ -1,4 +1,4 @@
-> 来源：用户 2026-10-04 经 ChatGPT 整理的任务书（原链接 https://chatgpt.com/s/t_6ac1cd99d1a88191b7f1cbcdcc79c657 ）。任务以此为准；与 docs/design/term-contract.md 术语冲突处按契约修文对齐并列差异清单。
+> 来源：用户 2026-10-04 经 ChatGPT 整理的任务书（原链接 https://chatgpt.com/s/t_6ac1cd99d1a88191b7f1cbcdcc79c657 ）。任务以此为准；术语一律沿用 BigWorld/KBE 既有概念。
 
 Apollo 架构审查与改进计划
 
