@@ -4,17 +4,15 @@
  */
 
 #include "apollo/net/http/rest_client.h"
+#include <cstdint>
 #include <sstream>
 #include <iomanip>
 #include <cstring>
 #include <mutex>
 
-// 检查是否启用了 libcurl
-#ifdef APOLLO_HAS_CURL
-    #include <curl/curl.h>
-#else
-    #define APOLLO_CURL_STUB 1
-#endif
+// libcurl 为本目标强制依赖（net-abstraction §5.10 裁决①：curl 进 vcpkg，
+// APOLLO_CURL_STUB 桩路径删除——桩与真实现并存是负资产）
+#include <curl/curl.h>
 
 namespace apollo {
 namespace net {
@@ -23,8 +21,6 @@ namespace http {
 //==============================================================================
 // libcurl 初始化
 //==============================================================================
-
-#ifdef APOLLO_HAS_CURL
 
 namespace detail {
     struct CurlInitializer {
@@ -52,34 +48,132 @@ namespace detail {
         curl_easy_cleanup(curl);
         return result;
     }
-}
 
-#else
+    // ---- 出站目标白名单（net-abstraction §5.10 SSRF 面）----
+    // 条目三种形态：精确主机名 / 前导点后缀（子域）/ IPv4 网段 CIDR。
+    // 判定对象是 URL 字面 host——域名条目不覆盖经 DNS 解析出的 IP，
+    // 运行期不可追加（RestTemplateBuilder 构建期给定）。
 
-namespace detail {
-    // 简单的 URL 编码实现 (备用)
-    inline std::string urlEncode(const std::string& str) {
-        std::ostringstream encoded;
-        encoded.fill('0');
-        encoded << std::hex;
+    inline char toLowerAscii(char c) {
+        return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + ('a' - 'A')) : c;
+    }
 
-        for (char c : str) {
-            if (std::isalnum(static_cast<unsigned char>(c)) ||
-                c == '-' || c == '_' || c == '.' || c == '~') {
-                encoded << c;
-            } else {
-                encoded << std::uppercase;
-                encoded << '%' << std::setw(2) <<
-                    static_cast<int>(static_cast<unsigned char>(c));
-                encoded << std::nouppercase;
+    // scheme://[userinfo@]host[:port] 取 host（去端口、去 userinfo、小写）
+    inline std::string urlHost(const std::string& url) {
+        static const std::string kSchemeSep = "://";
+        const std::size_t scheme = url.find(kSchemeSep);
+        std::size_t begin = (scheme == std::string::npos) ? 0 : scheme + kSchemeSep.size();
+        std::size_t end = url.size();
+        for (std::size_t i = begin; i < url.size(); ++i) {
+            const char c = url[i];
+            if (c == '/' || c == '?' || c == '#') {
+                end = i;
+                break;
             }
         }
+        std::string authority = url.substr(begin, end - begin);
+        const std::size_t at = authority.rfind('@');
+        if (at != std::string::npos) {
+            authority = authority.substr(at + 1);
+        }
+        if (!authority.empty() && authority.front() == '[') {  // IPv6 字面量
+            const std::size_t close = authority.find(']');
+            if (close != std::string::npos) {
+                authority = authority.substr(0, close + 1);
+            }
+        } else {  // IPv4 / 域名：端口在第一个 ':' 后
+            const std::size_t colon = authority.find(':');
+            if (colon != std::string::npos) {
+                authority = authority.substr(0, colon);
+            }
+        }
+        for (char& c : authority) {
+            c = toLowerAscii(c);
+        }
+        return authority;
+    }
 
-        return encoded.str();
+    inline bool ipv4ToU32(const std::string& host, std::uint32_t& out) {
+        std::uint32_t value = 0;
+        std::size_t begin = 0;
+        for (int octet = 0; octet < 4; ++octet) {
+            const std::size_t dot = host.find('.', begin);
+            const std::size_t field_end = (dot == std::string::npos) ? host.size() : dot;
+            if (begin >= field_end || field_end - begin > 3) {
+                return false;
+            }
+            std::uint32_t n = 0;
+            for (std::size_t i = begin; i < field_end; ++i) {
+                const char c = host[i];
+                if (c < '0' || c > '9') {
+                    return false;
+                }
+                n = n * 10 + static_cast<std::uint32_t>(c - '0');
+                if (n > 255) {
+                    return false;
+                }
+            }
+            value = (value << 8) | n;
+            begin = (dot == std::string::npos) ? field_end : dot + 1;
+        }
+        out = value;
+        return begin == host.size();
+    }
+
+    // 条目与 host 匹配：精确 / 前导点后缀 / IPv4 CIDR 网段
+    inline bool hostMatchesEntry(const std::string& host, const std::string& entry) {
+        std::string normalized = entry;
+        for (char& c : normalized) {
+            c = toLowerAscii(c);
+        }
+        if (normalized.empty() || host.empty()) {
+            return false;
+        }
+        const std::size_t slash = normalized.find('/');
+        if (slash != std::string::npos) {
+            const std::string addr_part = normalized.substr(0, slash);
+            const std::string prefix_part = normalized.substr(slash + 1);
+            std::uint32_t prefix = 0;
+            for (const char c : prefix_part) {
+                if (c < '0' || c > '9') {
+                    return false;
+                }
+                prefix = prefix * 10 + static_cast<std::uint32_t>(c - '0');
+                if (prefix > 32) {
+                    return false;
+                }
+            }
+            std::uint32_t network = 0;
+            std::uint32_t address = 0;
+            if (!ipv4ToU32(addr_part, network) || !ipv4ToU32(host, address)) {
+                return false;
+            }
+            const std::uint32_t mask = (prefix == 0) ? 0u : (~0u << (32 - prefix));
+            return (network & mask) == (address & mask);
+        }
+        if (normalized.front() == '.') {
+            // 前导点 = 子域（自然带标签边界，"notexample.com" 不中 ".example.com"）
+            return host.size() >= normalized.size() &&
+                   host.compare(host.size() - normalized.size(), normalized.size(),
+                                normalized) == 0;
+        }
+        return host == normalized;
+    }
+
+    // 整表白名单判定：空表 = 全拒（§5.10「目标必须可枚举」）
+    inline bool hostAllowed(const std::string& url, const std::vector<std::string>& hosts) {
+        if (hosts.empty()) {
+            return false;
+        }
+        const std::string host = urlHost(url);
+        for (const auto& entry : hosts) {
+            if (hostMatchesEntry(host, entry)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
-
-#endif
 
 //==============================================================================
 // 回调数据结构
@@ -94,8 +188,6 @@ struct CallbackData {
 //==============================================================================
 // libcurl 回调函数
 //==============================================================================
-
-#ifdef APOLLO_HAS_CURL
 
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t totalSize = size * nmemb;
@@ -128,6 +220,15 @@ size_t HeaderCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     return totalSize;
 }
 
+// 重定向/每次连接前置面：跳转目标也须在白名单内（§5.10 SSRF 面的
+// 重定向兜底——FOLLOWLOCATION 的每一跳都过本守卫）。注意 clientp 在
+// 首位（curl_prereq_callback 原型，与 write/header 回调尾部序相反）。
+#if LIBCURL_VERSION_NUM >= 0x075500
+int prereqHostGuard(void* clientp, char* url, char*, int, int) {
+    const auto* hosts = static_cast<const std::vector<std::string>*>(clientp);
+    return detail::hostAllowed(url ? url : "", *hosts) ? CURL_PREREQFUNC_OK
+                                                       : CURL_PREREQFUNC_ABORT;
+}
 #endif
 
 //==============================================================================
@@ -137,17 +238,13 @@ size_t HeaderCallback(void* contents, size_t size, size_t nmemb, void* userp) {
 class RestTemplate::Impl {
 public:
     Impl() : curl_(nullptr) {
-#ifdef APOLLO_HAS_CURL
         curl_ = curl_easy_init();
-#endif
     }
 
     ~Impl() {
-#ifdef APOLLO_HAS_CURL
         if (curl_) {
             curl_easy_cleanup(curl_);
         }
-#endif
     }
 
     HttpResponse request(HttpMethod method, const std::string& url,
@@ -157,9 +254,15 @@ public:
         HttpResponse response;
         response.statusCode = -1;
 
-#ifdef APOLLO_HAS_CURL
         if (!curl_) {
             response.error = "CURL not initialized";
+            return response;
+        }
+
+        // 出站目标白名单（§5.10 SSRF 面）：连接前置判定，拒绝不发起拨号；
+        // 重定向跳转由 CURLOPT_PREREQFUNCTION 前置面兜同纪律（下方）
+        if (!detail::hostAllowed(url, allowedHosts_)) {
+            response.error = "destination not allowed by outbound whitelist";
             return response;
         }
 
@@ -209,6 +312,15 @@ public:
         // 重定向
         curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION, opts.followRedirects ? 1L : 0L);
         curl_easy_setopt(curl_, CURLOPT_MAXREDIRS, opts.maxRedirects);
+#if LIBCURL_VERSION_NUM >= 0x075500
+        curl_easy_setopt(curl_, CURLOPT_PREREQFUNCTION, prereqHostGuard);
+        curl_easy_setopt(curl_, CURLOPT_PREREQDATA, &allowedHosts_);
+#else
+        // 旧 curl 无前置面：白名单已配则禁跟随（跳转目标不可判 = 不跳）
+        if (!allowedHosts_.empty()) {
+            curl_easy_setopt(curl_, CURLOPT_FOLLOWLOCATION, 0L);
+        }
+#endif
 
         // SSL 验证
         curl_easy_setopt(curl_, CURLOPT_SSL_VERIFYPEER, opts.verifyPeer ? 1L : 0L);
@@ -306,12 +418,6 @@ public:
             response.statusCode = -1;
         }
 
-#else
-        // 没有 libcurl 时的存根实现
-        response.error = "libcurl not available. Compile with APOLLO_ENABLE_CURL=ON.";
-        response.statusCode = -1;
-#endif
-
         return response;
     }
 
@@ -366,16 +472,24 @@ private:
         }
     }
 
-#ifdef APOLLO_HAS_CURL
     CURL* curl_;
-#else
-    void* curl_ = nullptr;
-#endif
     RequestOptions defaultOptions_;
     HttpHeaders defaultHeaders_;
     std::string basicAuthUsername_;
     std::string basicAuthPassword_;
     std::string bearerToken_;
+    std::vector<std::string> allowedHosts_;  // 空 = 全拒（§5.10）；builder 构建期给定
+
+public:
+    // 白名单只在构建期给定（§5.10 运行期不可加）；本方法仅
+    // RestTemplateBuilder::build() 可达（friend 面）。
+    void applyWhitelist(std::vector<std::string> hosts) {
+        allowedHosts_ = std::move(hosts);
+    }
+
+    bool destinationAllowed(const std::string& url) const {
+        return detail::hostAllowed(url, allowedHosts_);
+    }
 };
 
 //==============================================================================
@@ -600,6 +714,15 @@ void RestTemplate::setKeepAlive(bool enable, int idleTimeoutMs) {
     impl_->setKeepAlive(enable, idleTimeoutMs);
 }
 
+// 出站目标白名单（§5.10：判定面公开可预检，配置面仅 builder）
+bool RestTemplate::destinationAllowed(const std::string& url) const {
+    return impl_->destinationAllowed(url);
+}
+
+void RestTemplate::applyWhitelist(std::vector<std::string> hosts) {
+    impl_->applyWhitelist(std::move(hosts));
+}
+
 // 工具方法
 std::string RestTemplate::encodeUrl(const std::string& url) {
     return detail::urlEncode(url);
@@ -695,8 +818,24 @@ RestTemplateBuilder& RestTemplateBuilder::keepAlive(bool enable, int idleTimeout
     return *this;
 }
 
+RestTemplateBuilder& RestTemplateBuilder::allowHost(const std::string& entry) {
+    config_.allowedHosts.push_back(entry);
+    return *this;
+}
+
+RestTemplateBuilder& RestTemplateBuilder::allowHosts(
+    const std::vector<std::string>& entries) {
+    for (const auto& entry : entries) {
+        config_.allowedHosts.push_back(entry);
+    }
+    return *this;
+}
+
 RestTemplate RestTemplateBuilder::build() const {
     RestTemplate client;
+
+    // 白名单先于其余配置（§5.10 SSRF 面：构建期封闭，运行期不可加）
+    client.applyWhitelist(config_.allowedHosts);
 
     // 应用配置
     client.setTimeout(config_.timeoutMs);

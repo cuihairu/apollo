@@ -1,4 +1,16 @@
 #pragma once
+//
+// 出站 HTTP 客户端（net-abstraction §5.10 裁决①④，2026-10-12 交付）：
+//   ① curl 进 vcpkg，rest_client 转真实现——APOLLO_CURL_STUB 桩路径删除；
+//   ④ 目标白名单（SSRF 面）：出站目标必须在构建期给定的白名单内
+//     （RestTemplateBuilder::allowHost/allowHosts，运行期不可追加），
+//     未配置 = 全拒——「脚本可发起的出站目标必须可枚举」。条目形态：
+//     精确主机名（api.example.com）/ 前导点后缀（.example.com = 其子域）/
+//     IPv4 网段 CIDR（10.0.0.0/8）。判定对象是 URL 字面 host（端口与
+//     userinfo 剥离、大小写归一）；重定向每一跳同守卫
+//     （CURLOPT_PREREQFUNCTION，跨白名单跳转即断）。
+//   （裁决③同步 API 禁场景线程直调：异步交接归 scripting-lua §8 批，
+//     本面同步语义与 SQL/Redis 同族；裁决② Drogon 备选分支已删除。）
 
 #include <string>
 #include <functional>
@@ -240,6 +252,13 @@ public:
     void setKeepAlive(bool enable, int idleTimeoutMs = 60000);
 
     //==========================================================================
+    // 出站目标白名单（§5.10：配置面在 RestTemplateBuilder，运行期不可加）
+    //==========================================================================
+
+    // URL 是否在白名单内（未配置 = 恒 false；测试与预检共用）
+    bool destinationAllowed(const std::string& url) const;
+
+    //==========================================================================
     // 工具方法
     //==========================================================================
 
@@ -264,6 +283,10 @@ public:
 private:
     class Impl;
     Impl* impl_;
+
+    // 白名单传递缝：仅 RestTemplateBuilder::build() 可达（§5.10 运行期不可加）
+    friend class RestTemplateBuilder;
+    void applyWhitelist(std::vector<std::string> hosts);
 };
 
 //==============================================================================
@@ -290,6 +313,12 @@ public:
     RestTemplateBuilder& connectionPool(size_t maxConnections);
     RestTemplateBuilder& keepAlive(bool enable, int idleTimeoutMs = 60000);
 
+    // 出站目标白名单条目追加（构建期封闭——build 后运行期不可加，§5.10）。
+    // 条目形态：精确主机名 / 前导点后缀（.example.com = 其子域）/
+    // IPv4 网段 CIDR。不配置 = 出站全拒。
+    RestTemplateBuilder& allowHost(const std::string& entry);
+    RestTemplateBuilder& allowHosts(const std::vector<std::string>& entries);
+
     // 构建
     RestTemplate build() const;
 
@@ -310,13 +339,15 @@ private:
         size_t maxConnections = 10;
         bool keepAlive = true;
         int keepAliveIdleTimeoutMs = 60000;
+        std::vector<std::string> allowedHosts;
     } config_;
 
     friend class RestTemplate;
 };
 
 //==============================================================================
-// 便捷全局函数
+// 便捷全局函数（§5.10 白名单立场注记：白名单未配置 = 出站全拒——本组
+// 快捷面恒拒；生产用法走 RestTemplateBuilder 配置目标后实例化）
 //==============================================================================
 
 // 快速 GET 请求

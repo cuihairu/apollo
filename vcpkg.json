@@ -6,6 +6,7 @@
     "openssl",
     "protobuf",
     "gtest",
+    "curl",
     "nlohmann-json",
     "pugixml",
     {

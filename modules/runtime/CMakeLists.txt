@@ -1,6 +1,4 @@
 # Runtime module
-find_package(Drogon CONFIG QUIET)
-
 # 崩溃采集面（crash-capture 批②，docs/design/crash-capture.md）：find_package
 # 失败（非 vcpkg/无 overlay 端口环境）→ no-op 桩（APOLLO_HAS_CRASHPAD=0），
 # 三树照常绿——采集面是增强不是依赖（fail-open 同族纪律）。
@@ -64,22 +62,8 @@ target_link_libraries(apollo_runtime
         apollo_core
 )
 
-# Link with Trantor (from Drogon) for Boost.Asio integration
-if(TARGET Drogon::Drogon)
-    # Trantor is part of Drogon, provides:
-    # - Async I/O (based on Boost.Asio)
-    # - Timers
-    # - Thread pools
-    # - Event loops
-    target_link_libraries(apollo_runtime
-        PUBLIC
-            Trantor::Trantor
-    )
-    target_compile_definitions(apollo_runtime PUBLIC APOLLO_USE_TRANTOR=1)
-    message(STATUS "Runtime module: using Trantor (Boost.Asio via Drogon)")
-else()
-    message(STATUS "Runtime module: using built-in implementation")
-endif()
+# Drogon/Trantor 备选分支已删除（net-abstraction §5.10 裁决②——§15.2
+# 禁并存；runtime 无一处源引用，纯 CMake 断链即净）
 
 target_compile_features(apollo_runtime PUBLIC cxx_std_20)
 

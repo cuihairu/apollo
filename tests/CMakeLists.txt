@@ -1469,6 +1469,30 @@ if(MSVC)
 endif()
 add_test(NAME LinkRpcTests COMMAND linkrpc_tests)
 
+# Rest curl outbound tests (net-abstraction §5.10 出站裁决批)
+# rest_client 真实现（curl 进 vcpkg、桩路径删除）× 出站目标白名单 SSRF
+# 面（缺省全拒/精确/前导点后缀/IPv4 CIDR）× 重定向守卫 × 环回真请求。
+# Windows 只跑纯白名单逻辑用例（link TCP 底座 POSIX only，同
+# metricspush_tests 口径）。
+find_package(CURL CONFIG REQUIRED)
+add_executable(rest_curl_tests
+    test_rest_curl.cpp
+    ../modules/net/http/src/rest_client.cpp
+)
+target_link_libraries(rest_curl_tests PRIVATE
+    CURL::libcurl
+    apollo_net_link
+    apollo::core
+)
+if(WIN32)
+    target_link_libraries(rest_curl_tests PRIVATE ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(rest_curl_tests PRIVATE /utf-8)
+    target_compile_definitions(rest_curl_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME RestCurlTests COMMAND rest_curl_tests)
+
 # trace 子集原语测试（P3-3 批 · 语义层：traceparent 往返/采样确定性/
 # 932 信封往返与 wire 层互证/span 缝发射面/并发 span id 唯一）
 add_executable(linktrace_tests
