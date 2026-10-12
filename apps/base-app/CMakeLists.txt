@@ -11,6 +11,7 @@ add_executable(base-app
 target_include_directories(base-app
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated  # 迁移族 MsgId（migration_wire 钉生成器）
 )
 
 target_link_libraries(base-app

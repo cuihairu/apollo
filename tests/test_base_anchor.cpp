@@ -1,4 +1,5 @@
 #include "base/base_server.hpp"
+#include "base/migration_wire.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -169,6 +170,176 @@ bool test_shutdown_flushes_journal_and_archive() {
     return true;
 }
 
+// ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步 zone 侧；
+// wire = 契约 933-938，migration_wire 全帧经 dispatchRequest 分流）----
+
+// 隔离数据目录护栏：预清残留
+struct MigrationDir {
+    std::string path;
+    explicit MigrationDir(std::string p) : path(std::move(p)) {
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+        std::filesystem::create_directories(path);
+    }
+    ~MigrationDir() {
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+    }
+};
+
+bool test_player_migration_faces() {
+    std::cout << "Running: test_player_migration_faces..." << std::endl;
+    namespace migration = base::migration;
+    namespace protocol = apollo::protocol;
+
+    MigrationDir oldDir("base_migration_old_data");
+    MigrationDir newDir("base_migration_new_data");
+
+    base::BaseConfig oldCfg;
+    oldCfg.workerThreads = 1;
+    oldCfg.dataDir = oldDir.path + "/players";
+    oldCfg.journalPath = oldDir.path + "/journal/persist.log";
+    std::filesystem::create_directories(oldCfg.dataDir);
+    std::filesystem::create_directories(oldDir.path + "/journal");
+
+    base::BaseConfig newCfg = oldCfg;
+    newCfg.dataDir = newDir.path + "/players";
+    newCfg.journalPath = newDir.path + "/journal/persist.log";
+    std::filesystem::create_directories(newCfg.dataDir);
+    std::filesystem::create_directories(newDir.path + "/journal");
+
+    // 老 zone：播种档案 + 激活锚点 + 会话（脏锚——freeze 要排其 journal 段）
+    {
+        base::PlayerData seed;
+        seed.playerId = 42;
+        seed.username = "migrate-me";
+        seed.level = 5;
+        seed.exp = 500;
+        seed.hp = 88;
+        base::DatabaseService seeder(oldCfg);
+        TEST_ASSERT(seeder.savePlayer(seed), "old side seed archive written");
+    }
+    base::BaseServer oldServer(oldCfg);
+    {
+        auto anchor = oldServer.activatePlayer(42);
+        TEST_ASSERT(anchor != nullptr, "old side anchor activated");
+        apollo::game::session::SessionBinding binding;
+        binding.session_id = 777;
+        binding.gateway_id = 3;
+        TEST_ASSERT(oldServer.bindSession(42, binding), "old side session bound");
+        anchor = oldServer.findAnchor(42);
+        anchor->set_home_zone_id(2);
+        TEST_ASSERT(anchor->needs_save(), "old side anchor dirty before freeze");
+    }
+
+    // ① 停写（933 → 934 accepted；Transferring + journal 段排平）
+    {
+        auto frame = migration::encodeFrame(migration::FreezeRequest{42, 1});
+        auto reply = oldServer.dispatchRequest(frame);
+        protocol::SessionID session = 0;
+        migration::FreezeReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session), "934 reply decodes");
+        TEST_ASSERT(out.accepted && out.player_id == 42 && out.request_id == 1,
+                    "freeze accepted with echo keys");
+        auto anchor = oldServer.findAnchor(42);
+        TEST_ASSERT(anchor->state()
+                        == apollo::game::session::AnchorState::Transferring,
+                    "anchor read-only after freeze");
+        TEST_ASSERT(!anchor->needs_save(), "journal segment drained (not dirty)");
+    }
+    // 未知玩家拒
+    {
+        auto frame = migration::encodeFrame(migration::FreezeRequest{999, 2});
+        auto reply = oldServer.dispatchRequest(frame);
+        protocol::SessionID session = 0;
+        migration::FreezeReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session) && !out.accepted,
+                    "freeze unknown player rejected");
+    }
+
+    // ② 快照（935 → 936；未冻结拒 + 冻结后字段齐）
+    {
+        auto frame = migration::encodeFrame(migration::SnapshotRequest{42, 3});
+        auto reply = oldServer.dispatchRequest(frame);
+        protocol::SessionID session = 0;
+        migration::SnapshotReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session), "936 reply decodes");
+        TEST_ASSERT(out.success, "snapshot ready after freeze");
+        TEST_ASSERT(out.profile_json.find("\"playerId\":42") != std::string::npos
+                        && out.profile_json.find("\"level\":5") != std::string::npos,
+                    "profile json carried as-is (ADR-007)");
+        TEST_ASSERT(out.session_id == 777 && out.gateway_id == 3
+                        && out.home_zone_id == 2,
+                    "anchor metadata carried");
+    }
+    {
+        // 未冻结玩家（43 无档案无锚）快照拒
+        auto frame = migration::encodeFrame(migration::SnapshotRequest{43, 4});
+        auto reply = oldServer.dispatchRequest(frame);
+        protocol::SessionID session = 0;
+        migration::SnapshotReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session) && !out.success,
+                    "snapshot of unfrozen player rejected");
+    }
+
+    // 新 zone：②' 快照落位 → ③ 接权（937 → 938 accepted）
+    base::BaseServer newServer(newCfg);
+    {
+        // 未落快照先要接权 = 拒（五步序 ②→③ 不可跳）
+        auto early = migration::encodeFrame(
+            migration::HandoffRequest{42, 5, 8, 777, 3});
+        auto reply = newServer.dispatchRequest(early);
+        protocol::SessionID session = 0;
+        migration::HandoffReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session) && !out.accepted,
+                    "handoff without stored snapshot rejected");
+
+        base::BaseServer::PlayerSnapshotData snap;
+        snap.success = true;
+        snap.profile_json = "{\"playerId\":42,\"username\":\"migrate-me\",\"level\":5,"
+                            "\"exp\":500,\"hp\":88,\"maxHp\":100,\"mp\":50,\"maxMp\":50,"
+                            "\"x\":1.5,\"y\":2.5,\"z\":3.5}";
+        snap.home_zone_id = 2;
+        newServer.storeMigrationSnapshot(42, snap);
+
+        auto frame = migration::encodeFrame(
+            migration::HandoffRequest{42, 6, 8, 777, 3});
+        reply = newServer.dispatchRequest(frame);
+        TEST_ASSERT(migration::decodeFrame(reply, out, session),
+                    "938 reply decodes");
+        TEST_ASSERT(out.accepted && out.player_id == 42 && out.request_id == 6,
+                    "handoff accepted (write authority moved)");
+
+        auto anchor = newServer.findAnchor(42);
+        TEST_ASSERT(anchor != nullptr
+                        && anchor->state() == apollo::game::session::AnchorState::Online,
+                    "new side anchor online");
+        TEST_ASSERT(anchor->session_binding().session_id == 777
+                        && anchor->session_binding().gateway_id == 3,
+                    "binding restored on new side");
+        TEST_ASSERT(anchor->home_zone_id() == 2, "home zone from snapshot");
+
+        // 档案真落新目录（loadPlayer 校验内容一致）
+        base::PlayerData migrated;
+        base::DatabaseService reader(newCfg);
+        TEST_ASSERT(reader.loadPlayer(42, migrated) && migrated.level == 5
+                        && migrated.username == "migrate-me",
+                    "profile landed on new side");
+    }
+
+    // 坏帧：非迁移 type / 截断 body → ErrorMessage（Unknown 同族惯例）
+    {
+        auto frame = migration::encodeFrame(migration::FreezeRequest{42, 7});
+        frame.resize(frame.size() - 4);  // 截 body
+        auto reply = oldServer.dispatchRequest(frame);
+        auto header = protocol::MessageCodec::parseHeader(reply);
+        TEST_ASSERT(header.type
+                        == static_cast<uint16_t>(protocol::MessageType::ERROR),
+                    "truncated freeze request answered with error frame");
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -187,6 +358,7 @@ int main() {
     run(test_base_server_anchor_lifecycle);
     run(test_shutdown_maintenance_gate);
     run(test_shutdown_flushes_journal_and_archive);
+    run(test_player_migration_faces);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

@@ -12,7 +12,9 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <thread>
+#include <unordered_map>
 #include <atomic>
 
 namespace base {
@@ -62,6 +64,39 @@ public:
         return anchorManager_;
     }
 
+    // ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步
+    // ①②③ zone 侧；wire = 契约 933-938，编解码见 base/migration_wire.hpp）----
+
+    // ① 停写（933 freeze）：锚点 journal 段同步排平（write-ahead 已入段 →
+    // 同步直写追平档案——低频迁移面 ms 级；保存队列路径照旧服务自动保存），
+    // 置 Transferring（只读态——后续 flush 跳过迁移中锚点）。未知玩家 false。
+    bool freezePlayer(PlayerID playerId);
+
+    // 迁移快照（936 snapshot 载荷；success=false 时仅 error_message 有义）
+    struct PlayerSnapshotData {
+        bool success = false;
+        std::string error_message;
+        std::string profile_json;
+        std::uint64_t session_id = 0;
+        std::uint32_t gateway_id = 0;
+        std::uint32_t home_zone_id = 0;
+    };
+
+    // ② 快照（935）：前置 = 已冻结（Transferring）——未冻结拒（防半写态
+    // 出快照）。读档案 JSON 原样 + 锚点元数据。
+    PlayerSnapshotData snapshotPlayer(PlayerID playerId);
+
+    // ②' 快照落位（新 zone 客户端侧收 936 后暂存——③ handoff 受理时取用；
+    // 覆盖语义 = 最后写入者胜；home_zone 随快照走，937 契约不带）
+    void storeMigrationSnapshot(PlayerID playerId, PlayerSnapshotData snapshot);
+
+    // ③ 接权（937 handoff → 938 reply）：档案落盘（原子写）+ 建锚（bind
+    // session + home zone）+ 置 Online。accepted = 新 epoch 已生效——此后
+    // 不可撤销（epoch 单调，旧 epoch 已被判陈旧）。
+    bool adoptPlayer(PlayerID playerId, const std::string& profileJson,
+                     std::uint64_t sessionId, std::uint32_t gatewayId,
+                     std::uint32_t homeZoneId);
+
 private:
     // 处理数据库加载请求
     std::vector<uint8_t> handleDbLoadRequest(const std::vector<uint8_t>& request);
@@ -74,6 +109,11 @@ private:
 
     std::vector<uint8_t> handlePlayerActivateRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePlayerBindSessionRequest(const std::vector<uint8_t>& request);
+
+    // 玩家迁移族受理（P0-2 路 2；分流见 dispatchRequest 933/935/937 case）
+    std::vector<uint8_t> handlePlayerFreezeRequest(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handlePlayerSnapshotRequest(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handlePlayerHandoffRequest(const std::vector<uint8_t>& request);
 
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
     // 归 apps/baseappmgr（目录 + 调度面，BW BaseAppMgr 直系）。
@@ -110,6 +150,9 @@ private:
 
     // M1 base 受理面（P4-4 批③；m1Port = 0 = 不装配）
     std::unique_ptr<M1BaseServer> m1Server_;
+
+    // 迁移快照暂存（P0-2 路 2 ②'：收 936 落、③ handoff 受理取用取走）
+    std::unordered_map<PlayerID, PlayerSnapshotData> migrationSnapshots_;
 
     std::thread autoSaveThread_;
 };

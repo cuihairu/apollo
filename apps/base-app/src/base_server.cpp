@@ -1,4 +1,5 @@
 #include "base/base_server.hpp"
+#include "base/migration_wire.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -8,6 +9,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 namespace base {
 
@@ -343,6 +345,18 @@ std::vector<uint8_t> BaseServer::dispatchRequest(const std::vector<uint8_t>& dat
         case protocol::MessageType::PLAYER_BIND_SESSION_REQUEST:
             return handlePlayerBindSessionRequest(data);
 
+        // 玩家迁移族（P0-2 路 2；933/935 老 zone 受理、937 新 zone 受理——
+        // 同一受理面两角色由编排决定。TYPE 钉生成器 MsgId（legacy 枚举不含
+        // internal 族），case 标签回投 enum）
+        case static_cast<protocol::MessageType>(migration::FreezeRequest::TYPE):
+            return handlePlayerFreezeRequest(data);
+
+        case static_cast<protocol::MessageType>(migration::SnapshotRequest::TYPE):
+            return handlePlayerSnapshotRequest(data);
+
+        case static_cast<protocol::MessageType>(migration::HandoffRequest::TYPE):
+            return handlePlayerHandoffRequest(data);
+
         // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
         // 归 apps/baseappmgr（目录 + 落点裁决），base-app 不再受理。
 
@@ -513,6 +527,11 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
         if (!anchor || !anchor->needs_save()) {
             continue;
         }
+        // 迁移中锚点跳过（P0-2 路 2 ① Transferring = 只读态）：写权已交
+        // 新进程，老进程不再落盘（无双写不变量，§9.2）
+        if (anchor->state() == apollo::game::session::AnchorState::Transferring) {
+            continue;
+        }
 
         SaveTask task;
         task.playerId = anchor->player_id();
@@ -539,6 +558,162 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
                     + " (" + reason + ")");
     }
     return flushed;
+}
+
+// ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步 zone 侧）----
+
+bool BaseServer::freezePlayer(PlayerID playerId) {
+    auto anchor = anchorManager_->find(playerId);
+    if (!anchor) {
+        return false;
+    }
+    // journal 段排平（write-ahead 已入段 → 同步直写追平档案：低频迁移面
+    // ms 级；保存队列路径照旧服务自动保存——此后此玩家只读，无双写）
+    if (anchor->needs_save()) {
+        PlayerData data;
+        if (database_->loadPlayer(playerId, data)) {
+            appendJournal(data);
+            database_->savePlayer(data);
+            anchor->clear_dirty();
+        }
+    }
+    anchor->set_state(apollo::game::session::AnchorState::Transferring);
+    blog().info("Player " + std::to_string(playerId) + " frozen for migration");
+    return true;
+}
+
+BaseServer::PlayerSnapshotData BaseServer::snapshotPlayer(PlayerID playerId) {
+    PlayerSnapshotData out;
+    // 前置 = 已冻结（Transferring）——未冻结拒（防半写态出快照，§9.2 ①→② 序）
+    auto anchor = anchorManager_->find(playerId);
+    if (!anchor
+        || anchor->state() != apollo::game::session::AnchorState::Transferring) {
+        out.error_message = "player not frozen";
+        return out;
+    }
+    PlayerData data;
+    if (!database_->loadPlayer(playerId, data)) {
+        out.error_message = "no profile";
+        return out;
+    }
+    out.success = true;
+    out.profile_json = data.toJson();
+    const auto& binding = anchor->session_binding();
+    out.session_id = binding.session_id;
+    out.gateway_id = binding.gateway_id;
+    out.home_zone_id = anchor->home_zone_id();
+    return out;
+}
+
+void BaseServer::storeMigrationSnapshot(PlayerID playerId, PlayerSnapshotData snapshot) {
+    migrationSnapshots_[playerId] = std::move(snapshot);
+}
+
+bool BaseServer::adoptPlayer(PlayerID playerId, const std::string& profileJson,
+                             std::uint64_t sessionId, std::uint32_t gatewayId,
+                             std::uint32_t homeZoneId) {
+    PlayerData data;
+    if (!profileJson.empty()) {
+        data = PlayerData::fromJson(profileJson);
+    }
+    data.playerId = playerId;  // 显式参为准（防御载荷漂移）
+    if (!database_->savePlayer(data)) {
+        return false;
+    }
+    auto anchor = anchorManager_->activate(playerId);
+    if (!anchor) {
+        return false;
+    }
+    apollo::game::session::SessionBinding binding;
+    binding.session_id = sessionId;
+    binding.gateway_id = gatewayId;
+    anchor->bind_session(binding);
+    anchor->set_home_zone_id(homeZoneId);
+    anchor->set_state(apollo::game::session::AnchorState::Online);
+    blog().info("Player " + std::to_string(playerId)
+                + " adopted with write authority");
+    return true;
+}
+
+// 迁移族 handler（933/935/937）：wire 面 = migration_wire 全帧；decode 失败
+// 回 ErrorMessage（Unknown message type 同族错误回包惯例）。
+std::vector<uint8_t> BaseServer::handlePlayerFreezeRequest(
+    const std::vector<uint8_t>& request) {
+    protocol::SessionID session = 0;
+    migration::FreezeRequest req;
+    if (!migration::decodeFrame(request, req, session)) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Bad player freeze request";
+        return protocol::MessageCodec::encode(
+            err, protocol::MessageCodec::parseHeader(request).sessionId);
+    }
+    const bool accepted = freezePlayer(req.player_id);
+    migration::FreezeReply reply;
+    reply.player_id = req.player_id;
+    reply.request_id = req.request_id;
+    reply.accepted = accepted;
+    if (!accepted) {
+        reply.error_message = "unknown player or no anchor";
+    }
+    return migration::encodeFrame(reply, session);
+}
+
+std::vector<uint8_t> BaseServer::handlePlayerSnapshotRequest(
+    const std::vector<uint8_t>& request) {
+    protocol::SessionID session = 0;
+    migration::SnapshotRequest req;
+    if (!migration::decodeFrame(request, req, session)) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Bad player snapshot request";
+        return protocol::MessageCodec::encode(
+            err, protocol::MessageCodec::parseHeader(request).sessionId);
+    }
+    const auto snap = snapshotPlayer(req.player_id);
+    migration::SnapshotReply reply;
+    reply.player_id = req.player_id;
+    reply.request_id = req.request_id;
+    reply.success = snap.success;
+    reply.error_message = snap.error_message;
+    reply.profile_json = snap.profile_json;
+    reply.session_id = snap.session_id;
+    reply.gateway_id = snap.gateway_id;
+    reply.home_zone_id = snap.home_zone_id;
+    return migration::encodeFrame(reply, session);
+}
+
+std::vector<uint8_t> BaseServer::handlePlayerHandoffRequest(
+    const std::vector<uint8_t>& request) {
+    protocol::SessionID session = 0;
+    migration::HandoffRequest req;
+    if (!migration::decodeFrame(request, req, session)) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Bad player handoff request";
+        return protocol::MessageCodec::encode(
+            err, protocol::MessageCodec::parseHeader(request).sessionId);
+    }
+    // 快照落位前置（②'）：无暂存 = 拒接权（五步序 ②→③ 不可跳）
+    const auto it = migrationSnapshots_.find(req.player_id);
+    migration::HandoffReply reply;
+    reply.player_id = req.player_id;
+    reply.request_id = req.request_id;
+    if (it == migrationSnapshots_.end()) {
+        reply.error_message = "no migration snapshot stored";
+        return migration::encodeFrame(reply, session);
+    }
+    const std::string profile = it->second.profile_json;
+    const auto homeZone = it->second.home_zone_id;
+    migrationSnapshots_.erase(it);
+    reply.accepted = adoptPlayer(req.player_id, profile, req.session_id,
+                                 req.gateway_id, homeZone);
+    if (!reply.accepted) {
+        reply.error_message = "adopt failed";
+    }
+    blog().info("Player " + std::to_string(req.player_id) + " handoff accepted (new epoch="
+                + std::to_string(req.new_epoch) + ")");
+    return migration::encodeFrame(reply, session);
 }
 
 int64_t BaseServer::getCurrentTimeMs() const {

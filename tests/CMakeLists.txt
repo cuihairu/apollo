@@ -278,6 +278,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
@@ -561,6 +562,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
