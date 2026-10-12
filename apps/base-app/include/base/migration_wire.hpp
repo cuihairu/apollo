@@ -27,6 +27,8 @@ static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_sn
 static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_snapshot_reply) == 936);
 static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_handoff_request) == 937);
 static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_handoff_reply) == 938);
+static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_migrate_request) == 942);
+static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_migrate_reply) == 943);
 
 // ---- 载荷结构（字段序 = 契约 933-938 字段序）----
 
@@ -79,6 +81,30 @@ struct HandoffReply {
     std::uint64_t request_id = 0;
     bool accepted = false;          // 1=接权（新 epoch 生效，此后不可撤销）
     std::string error_message;
+};
+
+// 编排族（ops/fleetctl → manager → 933/937 执行面；五步①③④串行）
+struct MigrateRequest {
+    static constexpr std::uint16_t TYPE = 942;
+    std::uint64_t request_id = 0;   // 编排关联键（调用方分配）
+    std::uint64_t player_id = 0;
+    std::string source_host;
+    std::uint32_t source_port = 0;
+    std::string target_host;
+    std::uint32_t target_port = 0;
+    std::uint32_t target_zone_id = 0;
+};
+
+struct MigrateReply {
+    static constexpr std::uint16_t TYPE = 943;
+    std::uint64_t request_id = 0;
+    std::uint64_t player_id = 0;
+    bool ok = false;                // 1=五步①③④全成（此后不可撤销）
+    std::uint64_t new_epoch = 0;    // ③ 交割值（= 旧 epoch+1）
+    std::string error_message;
+    std::int64_t freeze_ms = 0;
+    std::int64_t handoff_ms = 0;
+    std::int64_t total_ms = 0;
 };
 
 // 迁移快照（936 载荷的进程内形态；zone 侧三面共用——②读出/②'暂存/
@@ -175,6 +201,31 @@ inline std::vector<std::uint8_t> encodeBody(const HandoffReply& m) {
     put_u64(b, m.request_id);
     put_bool(b, m.accepted);
     put_str(b, m.error_message);
+    return b;
+}
+
+inline std::vector<std::uint8_t> encodeBody(const MigrateRequest& m) {
+    std::vector<std::uint8_t> b;
+    put_u64(b, m.request_id);
+    put_u64(b, m.player_id);
+    put_str(b, m.source_host);
+    put_u32(b, m.source_port);
+    put_str(b, m.target_host);
+    put_u32(b, m.target_port);
+    put_u32(b, m.target_zone_id);
+    return b;
+}
+
+inline std::vector<std::uint8_t> encodeBody(const MigrateReply& m) {
+    std::vector<std::uint8_t> b;
+    put_u64(b, m.request_id);
+    put_u64(b, m.player_id);
+    put_bool(b, m.ok);
+    put_u64(b, m.new_epoch);
+    put_str(b, m.error_message);
+    put_u64(b, static_cast<std::uint64_t>(m.freeze_ms));
+    put_u64(b, static_cast<std::uint64_t>(m.handoff_ms));
+    put_u64(b, static_cast<std::uint64_t>(m.total_ms));
     return b;
 }
 
@@ -294,6 +345,21 @@ inline bool decodeBody(BodyReader& r, HandoffRequest& m) {
 inline bool decodeBody(BodyReader& r, HandoffReply& m) {
     return r.u64(m.player_id) && r.u64(m.request_id) && r.boolean(m.accepted)
            && r.str(m.error_message);
+}
+
+inline bool decodeBody(BodyReader& r, MigrateRequest& m) {
+    return r.u64(m.request_id) && r.u64(m.player_id) && r.str(m.source_host)
+           && r.u32(m.source_port) && r.str(m.target_host) && r.u32(m.target_port)
+           && r.u32(m.target_zone_id);
+}
+
+inline bool decodeBody(BodyReader& r, MigrateReply& m) {
+    std::uint64_t timing = 0;
+    return r.u64(m.request_id) && r.u64(m.player_id) && r.boolean(m.ok)
+           && r.u64(m.new_epoch) && r.str(m.error_message)
+           && r.u64(timing) && (m.freeze_ms = static_cast<std::int64_t>(timing), true)
+           && r.u64(timing) && (m.handoff_ms = static_cast<std::int64_t>(timing), true)
+           && r.u64(timing) && (m.total_ms = static_cast<std::int64_t>(timing), true);
 }
 
 // 全帧解析（type 必须恰为 T::TYPE；帧长必须与 header.length 一致；

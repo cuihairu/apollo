@@ -212,6 +212,7 @@ bool test_baseappmgr_window_disposition_passthrough() {
 bool test_baseappmgr_migrate_player() {
     std::cout << "Running: test_baseappmgr_migrate_player..." << std::endl;
     namespace migration = base::migration;
+    namespace protocol = apollo::protocol;
     namespace session = apollo::game::session;
 
     // 隔离数据目录护栏
@@ -353,6 +354,31 @@ bool test_baseappmgr_migrate_player() {
     TEST_ASSERT(!mgr.migratePlayer(42, "127.0.0.1", srcM1,
                                    "127.0.0.1", dstM1, 0).ok,
                 "target zone 0 rejected");
+
+    // 编排命令入口（942→943 dispatch 路；fleetctl 同一帧形）：
+    // 未知玩家经 942 进 → 943 出（ok=false + error 透传，request_id 回显）；
+    // 坏帧（截 body）→ ErrorMessage 同族惯例
+    {
+        migration::MigrateRequest req{8801, 999, "127.0.0.1", srcM1,
+                                      "127.0.0.1", dstM1, 5};
+        auto reply = mgr.dispatchRequest(migration::encodeFrame(req));
+        migration::MigrateReply out;
+        protocol::SessionID session = 0;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session) && !out.ok
+                        && out.request_id == 8801 && out.player_id == 999
+                        && !out.error_message.empty(),
+                    "942 dispatch answers 943 rejection with echoed request id");
+    }
+    {
+        auto frame = migration::encodeFrame(migration::MigrateRequest{
+            8802, 42, "127.0.0.1", srcM1, "127.0.0.1", dstM1, 5});
+        frame.resize(frame.size() - 3);  // 截 body
+        auto reply = mgr.dispatchRequest(frame);
+        auto header = protocol::MessageCodec::parseHeader(reply);
+        TEST_ASSERT(header.type
+                        == static_cast<uint16_t>(protocol::MessageType::ERROR),
+                    "truncated migrate request answered with error frame");
+    }
 
     oldZone.stop();
     newZone.stop();

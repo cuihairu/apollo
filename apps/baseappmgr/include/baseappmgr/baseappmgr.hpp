@@ -153,6 +153,7 @@ public:
 private:
     std::vector<uint8_t> handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handlePlayerMigrateRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
 
     // 目录条目 → 镜像条目收集（§9.2 ④ 改指立即推的供数；main 壳同型）

@@ -352,6 +352,37 @@ bool test_player_migration_faces() {
                         && back.source_port == 19610,
                     "937 roundtrip carries source address");
     }
+
+    // 942/943 全字段 roundtrip（编排命令族：ops/fleetctl ↔ manager；耗时
+    // 三员 i64 按位经 u64 通道——负值不会出现在正常耗时，位型保真即可）
+    {
+        migration::MigrateRequest full{
+            7001, 42, "10.0.0.1", 19610, "10.0.0.2", 19611, 5};
+        auto frame = migration::encodeFrame(full);
+        protocol::SessionID session = 0;
+        migration::MigrateRequest back;
+        TEST_ASSERT(migration::decodeFrame(frame, back, session)
+                        && back.request_id == 7001 && back.player_id == 42
+                        && back.source_host == "10.0.0.1"
+                        && back.source_port == 19610
+                        && back.target_host == "10.0.0.2"
+                        && back.target_port == 19611
+                        && back.target_zone_id == 5,
+                    "942 roundtrip carries source/target addresses");
+    }
+    {
+        migration::MigrateReply full{
+            7001, 42, true, 9, "", 3, 21, 24};
+        auto frame = migration::encodeFrame(full);
+        protocol::SessionID session = 0;
+        migration::MigrateReply back;
+        TEST_ASSERT(migration::decodeFrame(frame, back, session)
+                        && back.request_id == 7001 && back.player_id == 42
+                        && back.ok && back.new_epoch == 9
+                        && back.error_message.empty() && back.freeze_ms == 3
+                        && back.handoff_ms == 21 && back.total_ms == 24,
+                    "943 roundtrip carries step timings");
+    }
     return true;
 }
 

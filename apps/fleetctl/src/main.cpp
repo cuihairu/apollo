@@ -1,13 +1,13 @@
 // fleetctl — 编队探针（P0-1 路1 演练量测面：backup-revive §8 验收的
 // 「更新期间新玩家可登录成功率」量测件）：对 baseappmgr M1 控制面发
-// AssignWorld / ResolveRoute，单行打印结果 + 按结果给退出码（drill 脚本
-// 断言面）。客户端装配 = login m1_base_client 同型：RouteTable + LinkManager
-// active 端点 + RpcClient 自泵线程——call 同步等待在主线程（禁泵线程
-// 纪律不变）。
+// AssignWorld / ResolveRoute / Migrate，单行打印结果 + 按结果给退出码
+// （drill 脚本断言面）。客户端装配 = login m1_base_client 同型：
+// RouteTable + LinkManager active 端点 + RpcClient 自泵线程——call 同步
+// 等待在主线程（禁泵线程纪律不变）。
 //
 // 三态可观测（演练断言的三种录取面）：
-//   exit 0 = ASSIGN_OK / RESOLVE_OK            （闸开：新玩家可进）
-//   exit 2 = ASSIGN_REJECTED（success=false）   （排空闸闭：拒新不拒链）
+//   exit 0 = ASSIGN_OK / RESOLVE_OK / MIGRATE_OK （闸开：新玩家可进/迁移成）
+//   exit 2 = *_REJECTED/*_FAILED（success=false）  （排空闸闭/迁移拒）
 //   exit 3 = UNREACHABLE（链不通/超时）          （进程更新中：拉起窗）
 // exit 1 = 用法/装配错误。
 
@@ -17,6 +17,7 @@
 #include "apollo/net/linkrpc/rpc_channel.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
+#include "base/migration_wire.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -41,6 +42,7 @@ namespace {
 // 冲突（m1_base_client 在 login 域内做别名同理）。
 namespace link = apollo::net::link;
 namespace protocol = apollo::protocol;
+namespace migration = base::migration;
 
 using namespace std::chrono_literals;
 constexpr auto kPumpTick = 10ms;    // 自泵拍（m1_base_client 同款）
@@ -50,7 +52,7 @@ constexpr auto kRpcTimeout = 3000ms;
 using Clock = std::chrono::steady_clock;
 
 struct Options {
-    std::string command;              // assign / resolve
+    std::string command;              // assign / resolve / migrate
     std::string host = "127.0.0.1";
     std::uint16_t port = 9105;        // dev 编队 baseappmgr M1 control（dev_fleet 布局）
     protocol::PlayerID player_id = 0;
@@ -59,6 +61,12 @@ struct Options {
     std::uint64_t instance_id = 0;
     std::uint64_t space_id = 0;
     std::uint64_t route_version = 1;
+    // migrate 面（P0-2 路 2 编排命令；源/目标 zone M1 地址 + 落点 zone）
+    std::string source_host = "127.0.0.1";
+    std::uint16_t source_port = 0;
+    std::string target_host = "127.0.0.1";
+    std::uint16_t target_port = 0;
+    std::uint32_t target_zone_id = 0;
 };
 
 void printUsage() {
@@ -67,6 +75,9 @@ void printUsage() {
               << "  fleetctl assign  [--host H] [--port P] --player N [--world W] [--map M]\n"
               << "                   [--instance I] [--space S] [--route-version V]\n"
               << "  fleetctl resolve [--host H] [--port P] --player N\n"
+              << "  fleetctl migrate [--host H] [--port P] --player N --source-port SP\n"
+              << "                   --target-port TP --target-zone Z\n"
+              << "                   [--source-host SH] [--target-host TH]\n"
               << "Exit codes: 0 admitted / 2 rejected / 3 unreachable / 1 usage or setup\n";
 }
 
@@ -76,12 +87,25 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         auto next = [&]() -> const char* {
             return (i + 1 < argc) ? argv[++i] : nullptr;
         };
-        if (arg == "assign" || arg == "resolve") {
+        if (arg == "assign" || arg == "resolve" || arg == "migrate") {
             opt.command = arg;
         } else if (arg == "--host") {
             if (const auto* v = next()) opt.host = v; else return false;
         } else if (arg == "--port") {
             if (const auto* v = next()) opt.port = static_cast<std::uint16_t>(std::atoi(v));
+            else return false;
+        } else if (arg == "--source-host") {
+            if (const auto* v = next()) opt.source_host = v; else return false;
+        } else if (arg == "--source-port") {
+            if (const auto* v = next()) opt.source_port = static_cast<std::uint16_t>(std::atoi(v));
+            else return false;
+        } else if (arg == "--target-host") {
+            if (const auto* v = next()) opt.target_host = v; else return false;
+        } else if (arg == "--target-port") {
+            if (const auto* v = next()) opt.target_port = static_cast<std::uint16_t>(std::atoi(v));
+            else return false;
+        } else if (arg == "--target-zone") {
+            if (const auto* v = next()) opt.target_zone_id = static_cast<std::uint32_t>(std::atoi(v));
             else return false;
         } else if (arg == "--player") {
             if (const auto* v = next()) opt.player_id = std::strtoull(v, nullptr, 10);
@@ -105,7 +129,13 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
             return false;
         }
     }
-    return !opt.command.empty() && opt.player_id != 0 && opt.port != 0;
+    if (opt.command.empty() || opt.player_id == 0 || opt.port == 0) {
+        return false;
+    }
+    if (opt.command == "migrate") {
+        return opt.source_port != 0 && opt.target_port != 0 && opt.target_zone_id != 0;
+    }
+    return true;
 }
 
 std::uint64_t now_ms() {
@@ -277,6 +307,46 @@ int runResolve(const Options& opt, ControlDial& dial) {
     return 2;
 }
 
+// 编排命令（P0-2 路 2 五步①③④ 入口；同步等 943——耗时字段即 §9.8 实测
+// 出数面）。REQ/REPLY wire 面 = migration 手写族（TYPE 钉生成器 MsgId）。
+int runMigrate(const Options& opt, ControlDial& dial) {
+    migration::MigrateRequest req;
+    req.player_id = opt.player_id;
+    req.source_host = opt.source_host;
+    req.source_port = opt.source_port;
+    req.target_host = opt.target_host;
+    req.target_port = opt.target_port;
+    req.target_zone_id = opt.target_zone_id;
+
+    const auto reply = dial.call(migration::encodeFrame(req));
+    if (!reply) {
+        std::cout << "MIGRATE_UNREACHABLE player=" << opt.player_id << std::endl;
+        return 3;
+    }
+    migration::MigrateReply res;
+    protocol::SessionID session = 0;
+    if (!migration::decodeFrame(*reply, res, session)) {
+        std::cout << "MIGRATE_UNREACHABLE player=" << opt.player_id
+                  << " (bad reply type "
+                  << protocol::MessageCodec::parseHeader(*reply).type << ")"
+                  << std::endl;
+        return 3;
+    }
+    if (res.ok) {
+        std::cout << "MIGRATE_OK player=" << res.player_id
+                  << " zone=" << opt.target_zone_id
+                  << " epoch=" << res.new_epoch
+                  << " freeze_ms=" << res.freeze_ms
+                  << " handoff_ms=" << res.handoff_ms
+                  << " total_ms=" << res.total_ms << std::endl;
+        return 0;
+    }
+    std::cout << "MIGRATE_FAILED player=" << res.player_id
+              << " error=" << res.error_message
+              << " total_ms=" << res.total_ms << std::endl;
+    return 2;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -297,7 +367,13 @@ int main(int argc, char* argv[]) {
         return 3;
     }
 
-    return opt.command == "assign" ? runAssign(opt, dial) : runResolve(opt, dial);
+    if (opt.command == "assign") {
+        return runAssign(opt, dial);
+    }
+    if (opt.command == "migrate") {
+        return runMigrate(opt, dial);
+    }
+    return runResolve(opt, dial);
 }
 
 #endif // !_WIN32

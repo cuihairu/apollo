@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "93f2e4a010d73b0d21b04e057014f23ad735bc8ac3d89640c715d99f09a32ab3",
+  "schema_hash": "a027b7be42839fd04752dffc42985d30da0b84c7ed07179d2f53ac2a4f619477",
   "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "e6b5f0c5a3c909f47c532afef0c060b69eac24aa1b4657992f25751b4216c5e2",
+  "internal_hash": "c598b2a74301b37989d3b9594c3b757263d4830c9ac861f2f767c98ae189e988",
   "contract_version": 3,
   "routes": [
     {
@@ -535,6 +535,24 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "rpc_response"
+    },
+    {
+      "id": 942,
+      "name": "player_migrate_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_migrate_request"
+    },
+    {
+      "id": 943,
+      "name": "player_migrate_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "player_migrate_reply"
     }
   ]
 }

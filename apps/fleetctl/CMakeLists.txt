@@ -6,6 +6,11 @@ add_executable(fleetctl
     src/main.cpp
 )
 
+# migrate 命令的 wire 面（base/migration_wire.hpp，header-only）
+target_include_directories(fleetctl PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+)
+
 target_link_libraries(fleetctl
     PRIVATE
         apollo::base

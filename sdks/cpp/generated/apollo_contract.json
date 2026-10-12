@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "93f2e4a010d73b0d21b04e057014f23ad735bc8ac3d89640c715d99f09a32ab3",
+  "schema_hash": "a027b7be42839fd04752dffc42985d30da0b84c7ed07179d2f53ac2a4f619477",
   "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "e6b5f0c5a3c909f47c532afef0c060b69eac24aa1b4657992f25751b4216c5e2",
+  "internal_hash": "c598b2a74301b37989d3b9594c3b757263d4830c9ac861f2f767c98ae189e988",
   "contract_version": 3,
   "aliases": [
     {
@@ -2378,6 +2378,118 @@
         }
       ],
       "desc": "link RPC 响应（同 corr_id 关联；无等待者即弃）"
+    },
+    {
+      "id": 942,
+      "name": "player_migrate_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "编排关联键（调用方分配，0 保留）"
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "source_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "老 zone 地址（933 拨入）"
+        },
+        {
+          "name": "source_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "老 zone M1 受理端口"
+        },
+        {
+          "name": "target_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "新 zone 地址（937 拨入）"
+        },
+        {
+          "name": "target_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "新 zone M1 受理端口"
+        },
+        {
+          "name": "target_zone_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "目录改指落点（0 = 拒）"
+        }
+      ],
+      "desc": "玩家迁移编排指令（ops/fleetctl→manager；五步①③④串行执行——①933 停写 ③937 交权（新 zone 现场拉 935/936）④目录改指+快照立即推；并发度缺省 1）"
+    },
+    {
+      "id": 943,
+      "name": "player_migrate_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "ok",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=迁移完成（epoch 已递增、目录已改指）"
+        },
+        {
+          "name": "new_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "③ 交割值（ok 有效；= 旧 epoch+1）"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        },
+        {
+          "name": "freeze_ms",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "① 停写步耗时（编排起点到 934 确认）"
+        },
+        {
+          "name": "handoff_ms",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "③ 交权步耗时（含新 zone 现场拉取）"
+        },
+        {
+          "name": "total_ms",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "①→④ 全程耗时（停写窗口口径，§9.3）"
+        }
+      ],
+      "desc": "玩家迁移编排回执（manager→ops；ok = 五步①③④全成——此后不可撤销；带分步耗时供演练对账）"
     }
   ],
   "entities": [

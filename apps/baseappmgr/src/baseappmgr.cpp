@@ -246,6 +246,11 @@ std::vector<uint8_t> BaseAppMgr::dispatchRequest(const std::vector<uint8_t>& dat
         case protocol::MessageType::PLAYER_RESOLVE_ROUTE_REQUEST:
             return handlePlayerResolveRouteRequest(data);
 
+        // 玩家迁移编排命令（P0-2 路 2；ops/fleetctl → manager 执行面。
+        // TYPE 钉生成器 MsgId（legacy 枚举不含 internal 族），case 标签回投）
+        case static_cast<protocol::MessageType>(migration::MigrateRequest::TYPE):
+            return handlePlayerMigrateRequest(data);
+
         case protocol::MessageType::PING:
             return handlePing(data);
 
@@ -335,6 +340,45 @@ std::vector<uint8_t> BaseAppMgr::handlePing(const std::vector<uint8_t>& request)
     pong.timestamp = ping.timestamp;
 
     return protocol::MessageCodec::encode(pong, header.sessionId);
+}
+
+// 编排命令入口（942→943；ops/fleetctl 同步等 943，耗时字段原样回带——
+// §9.8 单玩家切换耗时实测即此面出数）。解析失败回 ErrorMessage；migratePlayer
+// 的失败语义（含 ③ 后不可撤销）全在编排函数内，此层只转译。
+std::vector<uint8_t> BaseAppMgr::handlePlayerMigrateRequest(
+    const std::vector<uint8_t>& request) {
+    protocol::SessionID session = 0;
+    migration::MigrateRequest req;
+    if (!migration::decodeFrame(request, req, session)) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Bad player migrate request";
+        return protocol::MessageCodec::encode(
+            err, protocol::MessageCodec::parseHeader(request).sessionId);
+    }
+
+    const auto res = migratePlayer(req.player_id, req.source_host,
+                                   static_cast<std::uint16_t>(req.source_port),
+                                   req.target_host,
+                                   static_cast<std::uint16_t>(req.target_port),
+                                   req.target_zone_id);
+
+    migration::MigrateReply reply;
+    reply.request_id = req.request_id;
+    reply.player_id = req.player_id;
+    reply.ok = res.ok;
+    reply.new_epoch = res.new_epoch;
+    reply.error_message = res.error_message;
+    reply.freeze_ms = res.freeze_ms;
+    reply.handoff_ms = res.handoff_ms;
+    reply.total_ms = res.total_ms;
+    apollo::core::log::global_log_manager().createLogger("baseappmgr")
+        ->info("migrate player " + std::to_string(req.player_id)
+               + " -> zone " + std::to_string(req.target_zone_id)
+               + (res.ok ? std::string(" ok total_ms=") : std::string(" failed (")
+                  + res.error_message + ") total_ms=")
+               + std::to_string(res.total_ms));
+    return migration::encodeFrame(reply, session);
 }
 
 int64_t BaseAppMgr::getCurrentTimeMs() const {

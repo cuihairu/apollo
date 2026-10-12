@@ -375,6 +375,25 @@
     <field name="accepted" type="bool" desc="1=接权（新 epoch 生效）0=拒收（建锚失败）"/>
     <field name="error_message" type="string"/>
   </msg>
+  <msg id="942" name="player_migrate_request" dir="P2P" channel="events" domain="internal" desc="玩家迁移编排指令（ops/fleetctl→manager；五步①③④串行执行——①933 停写 ③937 交权（新 zone 现场拉 935/936）④目录改指+快照立即推；并发度缺省 1）">
+    <field name="request_id" type="int64" desc="编排关联键（调用方分配，0 保留）"/>
+    <field name="player_id" type="int64"/>
+    <field name="source_host" type="string" desc="老 zone 地址（933 拨入）"/>
+    <field name="source_port" type="int32" desc="老 zone M1 受理端口"/>
+    <field name="target_host" type="string" desc="新 zone 地址（937 拨入）"/>
+    <field name="target_port" type="int32" desc="新 zone M1 受理端口"/>
+    <field name="target_zone_id" type="int32" desc="目录改指落点（0 = 拒）"/>
+  </msg>
+  <msg id="943" name="player_migrate_reply" dir="P2P" channel="events" domain="internal" desc="玩家迁移编排回执（manager→ops；ok = 五步①③④全成——此后不可撤销；带分步耗时供演练对账）">
+    <field name="request_id" type="int64"/>
+    <field name="player_id" type="int64"/>
+    <field name="ok" type="bool" desc="1=迁移完成（epoch 已递增、目录已改指）"/>
+    <field name="new_epoch" type="int64" desc="③ 交割值（ok 有效；= 旧 epoch+1）"/>
+    <field name="error_message" type="string"/>
+    <field name="freeze_ms" type="int64" desc="① 停写步耗时（编排起点到 934 确认）"/>
+    <field name="handoff_ms" type="int64" desc="③ 交权步耗时（含新 zone 现场拉取）"/>
+    <field name="total_ms" type="int64" desc="①→④ 全程耗时（停写窗口口径，§9.3）"/>
+  </msg>
 
   <!-- Link RPC 族（P4-4 批⓪：nng 迁移关联原语——linkrpc 层只做请求/响应
        关联与等待，载荷不透明：body = MessageCodec 全帧字节（header+body），
