@@ -2,6 +2,7 @@
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
+#include <cstdint>
 #include <iostream>
 #include <chrono>
 #include <random>
@@ -354,6 +355,32 @@ void LoginServer::start() {
 
     server_->start();
 
+    // M1 准入受理面（P4-4 批①）：m1Port = 0 = 不装配（桩时代行为不变）；
+    // 装配失败降级（警告 + 不拦启动），nng 准入路径仍在。
+    if (config_.m1Port != 0) {
+        M1AdmissionConfig m1Config;
+        m1Config.host = config_.host;
+        m1Config.port = config_.m1Port;
+        m1Config.route_json = config_.m1RouteJson;
+        m1Admission_ = makeM1AdmissionServer(
+            std::move(m1Config), [this](const std::uint8_t* frame, std::size_t size) {
+                return handleGatewayAssignRequest(
+                    std::vector<std::uint8_t>(frame, frame + size));
+            });
+        if (m1Admission_->start()) {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->info("M1 admission listening on " + config_.host + ":"
+                       + std::to_string(m1Admission_->listenPort()));
+        } else {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->warning("M1 admission degraded: route table unavailable ("
+                          + config_.m1RouteJson + "), nng transport stays");
+            m1Admission_.reset();
+        }
+    }
+
     // 启动会话清理线程
     cleanupThread_ = std::thread([this]() {
         while (running_) {
@@ -370,6 +397,13 @@ void LoginServer::start() {
 
 void LoginServer::stop() {
     running_ = false;
+
+    // M1 准入面先收线（泵线程停驱 + 监听拆线；nng 路径照旧）。
+    if (m1Admission_) {
+        m1Admission_->stop();
+        m1Admission_.reset();
+    }
+
     if (server_) {
         server_->stop();
         server_.reset();

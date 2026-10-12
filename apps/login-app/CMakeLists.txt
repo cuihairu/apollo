@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 add_executable(login-app
     src/main.cpp
     src/login_server.cpp
+    src/m1_admission_server.cpp
 )
 
 target_include_directories(login-app
@@ -18,6 +19,12 @@ target_link_libraries(login-app
         apollo::runtime
         apollo_protocol
         apollo_net_logpush
+        apollo_net_link
+        apollo_net_linkrpc
+)
+
+target_compile_definitions(login-app PRIVATE
+    APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 
 target_compile_features(login-app PRIVATE cxx_std_20)

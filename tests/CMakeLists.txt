@@ -340,6 +340,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -375,6 +376,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -611,6 +613,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -646,6 +649,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
 	    if(WIN32)
@@ -1306,7 +1310,7 @@ target_compile_definitions(gateway_m1_egress_tests PRIVATE
 target_link_libraries(gateway_m1_egress_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo::net_contract_wire apollo_protocol)
+    apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
 if(WIN32)
     target_link_libraries(gateway_m1_egress_tests PRIVATE ws2_32)
     target_compile_definitions(gateway_m1_egress_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1392,3 +1396,36 @@ if(MSVC)
     target_compile_options(linkrpc_tests PRIVATE /utf-8)
 endif()
 add_test(NAME LinkRpcTests COMMAND linkrpc_tests)
+
+# ========== Login M1 Admission Tests (P4-4 批①) ==========
+# login 准入受理面 ↔ gateway 链路准入服务全链：真 codec 假会话规则收/拒
+# 两面 + 对端缺席降级容忍。缝工厂两侧真实现直编（gateway_m1_egress_tests
+# 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
+add_executable(login_m1_admission_tests
+    test_login_m1_admission.cpp
+    ../apps/login-app/src/m1_admission_server.cpp
+    ../apps/gateway-app/src/ingress/session_admission_service.cpp
+    ../apps/gateway-app/include/gateway/session_manager.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+)
+target_include_directories(login_m1_admission_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+)
+target_compile_definitions(login_m1_admission_tests PRIVATE
+    APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(login_m1_admission_tests PRIVATE
+    apollo::base apollo::core apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
+if(WIN32)
+    target_link_libraries(login_m1_admission_tests PRIVATE ws2_32)
+    target_compile_definitions(login_m1_admission_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(login_m1_admission_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LoginM1AdmissionTests COMMAND login_m1_admission_tests)

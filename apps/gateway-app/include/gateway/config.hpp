@@ -24,6 +24,11 @@ struct GatewayConfig {
     std::uint16_t cellM1Port = 9101;
     std::string cellM1RouteJson = APOLLO_GATEWAY_CONTRACT_ROUTE_JSON;
 
+    // Login M1 准入面（P4-4 批①）：active 端点拨 login 准入受理面；0 = 面
+    // 关（准入走 nng 桩传输，v1 行为不变）；路由表与 cell 出口共用契约表
+    std::string loginM1Host = "127.0.0.1";
+    std::uint16_t loginM1Port = 0;
+
     // 会话配置
     int sessionTimeoutMs = 30000;       // 30秒无心跳断开
 

@@ -158,6 +158,27 @@ RouteSnapshot MessageRouter::buildDefaultRoute() const {
 // GatewayServer 实现
 //==============================================================================
 
+namespace {
+
+// 准入传输选装（P4-4 批①）：loginM1Port 非零 = link M1 面（拨 login 准入
+// 受理面）；装配缺位降级（处方①）= 退 nng 桩传输，起进程不拦。
+std::unique_ptr<SessionAdmissionService> makeAdmissionService(
+    const GatewayConfig& config, apollo::protocol::RpcClient* loginAppClient) {
+    if (config.loginM1Port == 0) {
+        return makeDefaultSessionAdmissionService(loginAppClient);
+    }
+    auto linkService = makeLinkSessionAdmissionService(
+        config.loginM1Host, config.loginM1Port, config.cellM1RouteJson);
+    if (!linkService) {
+        glog().warning("gateway login M1 admission degraded: route table unavailable ("
+                       + config.cellM1RouteJson + "), falling back to stub transport");
+        return makeDefaultSessionAdmissionService(loginAppClient);
+    }
+    return linkService;
+}
+
+} // namespace
+
 GatewayServer::GatewayServer(const GatewayConfig& config)
     : config_(config)
     , sessionManager_(std::make_unique<SessionManager>())
@@ -167,7 +188,7 @@ GatewayServer::GatewayServer(const GatewayConfig& config)
     , connectionRegistry_(std::make_unique<GatewayConnectionRegistry>())
     , baseAppRouteClient_(std::make_unique<apollo::protocol::RpcClient>(config.baseAppUrl))
     , loginAppClient_(std::make_unique<apollo::protocol::RpcClient>(config.loginAppUrl))
-    , admissionService_(makeDefaultSessionAdmissionService(loginAppClient_.get()))
+    , admissionService_(makeAdmissionService(config, loginAppClient_.get()))
     , messageRouter_(std::make_unique<MessageRouter>(config)) {
 }
 
@@ -232,6 +253,11 @@ void GatewayServer::stop() {
         }
     }
     workerThreads_.clear();
+
+    // 准入面最后收口（全部调用线程已 join——in-flight admit 先于泵停驱）。
+    if (admissionService_) {
+        admissionService_->shutdown();
+    }
 }
 
 void GatewayServer::onConnectionOpened(ConnectionID connectionId, const ClientEndpoint& endpoint) {

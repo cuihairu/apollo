@@ -1,6 +1,7 @@
 #pragma once
 
 #include "login/config.hpp"
+#include "login/m1_admission_server.hpp"
 #include "apollo/protocol/socket.hpp"
 #include <atomic>
 #include <memory>
@@ -143,12 +144,13 @@ public:
     // 是否运行中
     bool isRunning() const { return running_; }
 
+    // 网关分配请求处理（M1 准入面 handler 直通——MessageCodec 全帧进出，
+    // 会话校验逻辑与 nng 路径零分叉）
+    std::vector<uint8_t> handleGatewayAssignRequest(const std::vector<uint8_t>& request);
+
 private:
     // 处理登录请求
     std::vector<uint8_t> handleLoginRequest(const std::vector<uint8_t>& request);
-
-    // 处理网关分配请求
-    std::vector<uint8_t> handleGatewayAssignRequest(const std::vector<uint8_t>& request);
 
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
@@ -168,6 +170,9 @@ private:
     std::atomic<bool> running_{false};
 
     std::thread cleanupThread_;
+
+    // M1 准入受理面（P4-4 批①；m1Port = 0 = 不装配）
+    std::unique_ptr<M1AdmissionServer> m1Admission_;
 };
 
 } // namespace login
