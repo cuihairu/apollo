@@ -55,17 +55,19 @@
   13=login 全身份可见）。
 - [x] **测试面**：tests/ 70 个 test_*.cpp（gated by ctest，零依赖断言式框架；GTest 批默认关）。
 
-## 二、部分实现（批次未收口，验收口径与期次随 docs/todo.md 批次）
+## 二、已收口批次归档（证据在册）与移交余件
 
-- [ ] **P3-2/P3-3/P3-4 已全部收口**（2026-10-13，并行会话 + 本轮）：P3-2 ①persist 段（fd46aaf9）、
-  P3-3 L1–L9（BI 分流 207f36a5、proc 存活+采样装配、trace 采样率编译期装配 0295e754，a3eec736 收口）、
-  P3-4（编队成员注册=本轮 0de62ea9 + ingress 接线/L8）。批次台账 28/28 全勾。
+- [x] **P3-2/P3-3/P3-4 已全部收口**（2026-10-13，并行会话 + 本轮）：P3-2 ①persist 段（fd46aaf9，
+  锚点回填 97b84a54）、P3-3 L1–L9（BI 分流 207f36a5、proc 存活+采样装配 6173e73c、trace 采样率
+  编译期装配 0295e754，a3eec736 收口声明）、P3-4（编队成员注册=本轮 0de62ea9 + 批记 a8044e5b；
+  ingress 接线 gateway_ingress_tests 9 例见彼会话批记）。批次台账 28/28 全勾（docs/todo.md 零 [ ]）。
+- [x] **P4-4 术语承接**：697c49d5 关闭（term-contract 整体删除、BigWorld 术语对齐、
+  glossary master registry ec21d9d3、ADR-014 撤销 b17b96cc 回改 BW 名）；本机复核
+  `APOLLO_USE_NNG|nng_` 代码 0 残余。glossary 与代码/文档的持续对账属常态维护，不再单列批次。
 - [ ] **移交余件**（P3-3 收口声明明记解除条件者，均具备动工条件）：①trace 四件套余件
   （RemoteEntityRef/RemoteMethodSchema/RouteResolver 与 RPC 链 trace——nng 底座已收口）；
   ②bare 924-928 双受理退役（消费面清零后）；③collector 归档滚动（单文件累加，L8 边界挂后续批）。
   验收：逐件按 logging.md/observability 对应节落门禁。期次：随编排。
-- [ ] **P4-4 术语承接**：已由 697c49d5 关闭（term-contract 整体删除、BigWorld 术语对齐、
-  glossary master registry ec21d9d3）——glossary 与代码/文档的持续对账属常态维护，不再单列。
 
 ## 三、只有设计（docs/design/ 有稿、无代码）
 
