@@ -225,6 +225,10 @@ add_subdirectory(metricspush)
 # corr_id 关联 + 同步等待桥；五处 nng 消费面的迁移底座）
 add_subdirectory(linkrpc)
 
+# trace 子集原语（P3-3 批：logging.md §5.1 W3C traceparent 上下文 + 头部
+# 采样 + span 结构化行发射 + 932 internal_envelope 编解码缝）
+add_subdirectory(linktrace)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)

@@ -1446,6 +1446,25 @@ if(MSVC)
 endif()
 add_test(NAME LinkRpcTests COMMAND linkrpc_tests)
 
+# trace 子集原语测试（P3-3 批 · 语义层：traceparent 往返/采样确定性/
+# 932 信封往返与 wire 层互证/span 缝发射面/并发 span id 唯一）
+add_executable(linktrace_tests
+    test_link_trace.cpp
+)
+target_link_libraries(linktrace_tests PRIVATE
+    apollo::net_linktrace
+    apollo::net_contract_wire
+    apollo::core
+)
+if(WIN32)
+    target_link_libraries(linktrace_tests PRIVATE ws2_32)
+    target_compile_definitions(linktrace_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(linktrace_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LinkTraceTests COMMAND linktrace_tests)
+
 # ========== Login M1 Admission Tests (P4-4 批①) ==========
 # login 准入受理面 ↔ gateway 链路准入服务全链：真 codec 假会话规则收/拒
 # 两面 + 对端缺席降级容忍。缝工厂两侧真实现直编（gateway_m1_egress_tests
