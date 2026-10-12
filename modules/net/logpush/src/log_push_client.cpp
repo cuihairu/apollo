@@ -139,7 +139,11 @@ std::size_t LogPushClient::queued() const {
 void LogPushClient::run() {
     while (running_.load(std::memory_order_acquire)) {
         auto* link = manager_ ? manager_->link("logger") : nullptr;
-        if (link != nullptr) {
+        // 只在 kUp 拍出队：link() 对 active 端点 peer up 前恒非空，且
+        // kIdle/kDown 也受理 Reliable（假绿）——无守卫时断连期批量帧会
+        // 被吞进死链路，队列不再是断连缓冲的权威（macOS CI 实证：
+        // disconnect_buffering queued() 断言竞态）。metrics 客户端同款守卫。
+        if (link != nullptr && link->state() == link::LinkState::kUp) {
             // 出队一批（上限一段，防大积压单拍独占泵线程）
             std::deque<std::string> batch;
             {
