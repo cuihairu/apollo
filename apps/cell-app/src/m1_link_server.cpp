@@ -11,6 +11,11 @@
 // 批定），此处把契约载荷翻译回 legacy MessageHeader 帧——执行侧
 //（handleCellCreateEntity 等）的解析路径零改动（受理面骨架零废弃，
 // ADR-017）；翻译面消失的条件 = 执行侧改读契约信封（nng 底座替换收口批）。
+//
+// 受理面纪律：上行恒 932 internal_envelope 信封（P3-3 移交余件②：bare
+// 924-928 双受理退役——消费面清零，gateway m1_egress 恒包信封，无其余发端）。
+// 裸五族帧不再登记 handler = dispatcher no_handler 静默丢弃（不受理/不
+// 回执/不断连/不计 handler 拒收）。
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -256,43 +261,15 @@ private:
         auto& dispatcher = link.dispatcher();
         dispatcher.set_route_table(route_table_.get());
         dispatcher.allow_domain("internal");  // §11.3 上行白名单：意图族入闸
-        for (const std::uint16_t id : {id_of(MsgId::cell_create_entity),
-                                       id_of(MsgId::cell_destroy_entity),
-                                       id_of(MsgId::cell_entity_move),
-                                       id_of(MsgId::cell_cross_border),
-                                       id_of(MsgId::cell_skill_cast)}) {
-            dispatcher.set_handler(id, [this](std::uint16_t msg_id, const std::uint8_t* data,
-                                              std::size_t size) {
-                handle_intent_frame(msg_id, data, size);
-            });
-        }
-        // 932 internal_envelope（trace 子集载体，P3-3 语义层批）：信封解包
-        // → 内层同路；bare 五族保留 = 双受理（bare 无 trace，既有收发面
-        // 零破坏）。
+        // 932 internal_envelope = 唯一上行受理面（P3-3 移交余件②：bare
+        // 924-928 双受理已退役——消费面清零，gateway m1_egress 恒包信封
+        // 5bdca27f，无其余发端）。裸五族帧不再登记 handler = dispatcher
+        // no_handler 静默丢弃：不受理、不回执、不断连、不计 handler 拒收。
         dispatcher.set_handler(
             id_of(MsgId::internal_envelope),
             [this](std::uint16_t msg_id, const std::uint8_t* data, std::size_t size) {
                 handle_envelope_frame(msg_id, data, size);
             });
-    }
-
-    void handle_intent_frame(std::uint16_t msg_id, const std::uint8_t* data, std::size_t size) {
-        std::vector<wire::FieldValue> fields;
-        // 字段级非法 = 拒收计数（dispatcher.hpp 口径：帧级 fatal 才断连）。
-        if (!wire::decode_payload(msg_id, data, size, fields)) {
-            ++rejected_;
-            return;
-        }
-        IntentEnvelope intent;
-        if (!build_legacy_intent(msg_id, fields, intent)) {
-            ++rejected_;
-            return;
-        }
-        intent.received_ms = trace::now_ms();
-        ++received_;
-        if (on_intent_) {
-            on_intent_(std::move(intent));
-        }
     }
 
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,

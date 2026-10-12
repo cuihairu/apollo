@@ -1,8 +1,10 @@
-// Cell M1 接收端批测试（M1 上层接线批 2b-ii）：
-// 契约意图族 924-928 真 TCP 上行（客户端 = 裸 LinkManager active 端点）→
+// Cell M1 接收端批测试（M1 上层接线批 2b-ii；bare 退役批改张）：
+// 契约意图族 924-928 真 TCP 上行（客户端 = 裸 LinkManager active 端点，
+// 恒走 932 internal_envelope 信封——bare 924-928 双受理已退役）→ 信封解包 →
 // 契约 wire 解包 → legacy 帧镜像 → 受理队列 → tick 边界执行 → 延时应答
 // 929（request_id 关联，code 0 = 已消费）；拒收面（字段级非法静默计数、
-// 域越权/未知 id 不致命不断连）与顶格拒收即时回执 2101。
+// 域越权/未知 id 不致命不断连、裸五族帧 = no_handler 静默丢弃）与顶格拒收
+// 即时回执 2101。
 // 无 GTest，plain-assert + main 汇总。
 #include "cell/cell_server.hpp"
 #include "apollo/net/link/link_manager.hpp"
@@ -174,6 +176,8 @@ bool pump_until(ClientEnd& client, const std::function<bool()>& cond, int timeou
     return cond();
 }
 
+// 裸帧发送（bare 退役批后仅退役探针用：正路上行恒走信封——见
+// send_wrapped_intent_fields；裸五族帧应被 no_handler 静默丢弃）。
 bool send_intent(ClientEnd& client, std::uint16_t id, std::vector<wire::FieldValue> fields) {
     std::vector<std::uint8_t> payload;
     if (!wire::encode_payload(id, fields, payload)) {
@@ -195,6 +199,25 @@ bool send_wrapped_intent(ClientEnd& client, const trace::EnvelopeFields& env) {
     return client.cell_link()->send(id_of(MsgId::internal_envelope), packed.data(),
                                     packed.size(), link::SendClass::kReliable)
         == link::SendCode::kAccepted;
+}
+
+// 信封上行的通用形（bare 退役批）：内层 id + 契约字段恒包 932——镜像
+// gateway m1_egress 发端语义（EnvelopeKind::EntityMethodCall + 内层 u16
+// LE id + 契约载荷）；未采样（sampled 缺省 false）= 零 span 发射干扰。
+bool send_wrapped_intent_fields(ClientEnd& client, std::uint16_t inner_id,
+                                std::uint64_t request_id,
+                                std::vector<wire::FieldValue> fields) {
+    trace::EnvelopeFields env{};
+    env.message_type = trace::EnvelopeKind::EntityMethodCall;
+    env.request_id = request_id;
+    env.source_app = "gateway";
+    env.target_app = "cell";
+    env.payload = wire::append_envelope(inner_id, [&] {
+        std::vector<std::uint8_t> p;
+        (void)wire::encode_payload(inner_id, fields, p);
+        return p;
+    }());
+    return send_wrapped_intent(client, env);
 }
 
 std::vector<wire::FieldValue> base_fields(std::uint64_t request_id, std::uint64_t session_id) {
@@ -277,7 +300,8 @@ bool test_intent_family_deferred_ack() {
             && s.server->m1Link().gatewayConnected();
     }, 10000), "handshake complete");
 
-    // 五族意图各一发（字段序 = 契约表序）；执行语义不崩溃 + 延时应答全量
+    // 五族意图各一发（恒走 932 信封，字段序 = 契约表序）；执行语义不崩溃 +
+    // 延时应答全量
     auto create = base_fields(1, 77);
     create.push_back(i64(1001));  // entity_id
     create.push_back(i64(1));     // entity_type PLAYER
@@ -285,11 +309,15 @@ bool test_intent_family_deferred_ack() {
     create.push_back(f32(1.0f));  // pos
     create.push_back(f32(2.0f));
     create.push_back(f32(3.0f));
-    TEST_ASSERT(send_intent(c, id_of(MsgId::cell_create_entity), create), "create sent");
+    TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_create_entity), 1,
+                                           std::move(create)),
+                "create sent");
 
     auto destroy = base_fields(2, 77);
     destroy.push_back(i64(1001));  // entity_id
-    TEST_ASSERT(send_intent(c, id_of(MsgId::cell_destroy_entity), destroy), "destroy sent");
+    TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_destroy_entity), 2,
+                                           std::move(destroy)),
+                "destroy sent");
 
     auto move = base_fields(3, 77);
     move.push_back(i64(999));      // entity_id（未知实体 = handler 内 no-op 不回错）
@@ -299,7 +327,9 @@ bool test_intent_family_deferred_ack() {
     move.push_back(f32(4.0f));     // new pos
     move.push_back(f32(5.0f));
     move.push_back(f32(6.0f));
-    TEST_ASSERT(send_intent(c, id_of(MsgId::cell_entity_move), move), "move sent");
+    TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_entity_move), 3,
+                                           std::move(move)),
+                "move sent");
 
     auto border = base_fields(4, 77);
     border.push_back(i64(999));    // entity_id
@@ -308,7 +338,9 @@ bool test_intent_family_deferred_ack() {
     border.push_back(f32(7.0f));   // pos
     border.push_back(f32(8.0f));
     border.push_back(f32(9.0f));
-    TEST_ASSERT(send_intent(c, id_of(MsgId::cell_cross_border), border), "border sent");
+    TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_cross_border), 4,
+                                           std::move(border)),
+                "border sent");
 
     auto skill = base_fields(5, 77);
     skill.push_back(i64(1001));    // caster_id
@@ -320,7 +352,9 @@ bool test_intent_family_deferred_ack() {
     skill.push_back(f32(4.0f));    // target pos
     skill.push_back(f32(5.0f));
     skill.push_back(f32(6.0f));
-    TEST_ASSERT(send_intent(c, id_of(MsgId::cell_skill_cast), skill), "skill sent");
+    TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_skill_cast), 5,
+                                           std::move(skill)),
+                "skill sent");
 
     // 延时应答：五意图逐一回 code 0（执行发生在 tick 边界，含下一拍上线）
     const bool all_acked = pump_until(c, [&] {
@@ -363,12 +397,16 @@ bool test_malformed_intent_rejected() {
             && s.server->m1Link().gatewayConnected();
     }, 10000), "handshake complete");
 
-    // id 924 但载荷截断（request_id 需 8B，只给 3B）→ 字段级解码失败
+    // 信封合法、内层 924 载荷截断（request_id 需 8B，只给 3B）→ 内层字段级
+    // 解码失败（bare 退役批：同一拒收语义自裸帧迁入信封内层）
+    trace::EnvelopeFields env{};
+    env.message_type = trace::EnvelopeKind::EntityMethodCall;
+    env.request_id = 70;
+    env.source_app = "gateway";
+    env.target_app = "cell";
     const std::vector<std::uint8_t> truncated{0x01, 0x02, 0x03};
-    TEST_ASSERT(c.cell_link()->send(id_of(MsgId::cell_create_entity), truncated,
-                                    link::SendClass::kReliable)
-                    == link::SendCode::kAccepted,
-                "truncated frame accepted at link level");
+    env.payload = wire::append_envelope(id_of(MsgId::cell_create_entity), truncated);
+    TEST_ASSERT(send_wrapped_intent(c, env), "truncated inner sent");
 
     // 无回执面（decode 失败即丢弃，不产生 929）；链路不因字段非法断
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(600);
@@ -380,6 +418,54 @@ bool test_malformed_intent_rejected() {
     TEST_ASSERT(s.server->m1Link().receivedIntents() == 0, "no intent delivered");
     TEST_ASSERT(s.server->m1Link().rejectedFrames() == 1, "one reject counted");
     TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link survives field error");
+
+    s.stop();
+    c.manager.reset();
+    g_acks = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- bare 924-928 双受理退役（P3-3 移交余件②） ----------
+//
+// 消费面清零证据：生产发端唯 gateway m1_egress，5bdca27f 起恒包 932 信封
+//（sdk/scripts/examples 零裸发端）。退役后裸五族帧 = dispatcher 无 handler
+// → no_handler 静默丢弃：不受理、不回执、不断连、不计 handler 拒收。
+
+bool test_bare_intent_family_retired() {
+    std::cout << "Running: test_bare_intent_family_retired..." << std::endl;
+    AckLog acks;
+    g_acks = &acks;
+
+    ServerEnd s;
+    TEST_ASSERT(s.start(50), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client endpoint added");
+    TEST_ASSERT(pump_until(c, [&] {
+        return c.cell_link()->state() == link::LinkState::kUp
+            && s.server->m1Link().gatewayConnected();
+    }, 10000), "handshake complete");
+
+    // 合法形裸 create（字段序 = 契约表序；双受理若回潮 = 本断言红）
+    auto create = base_fields(90, 77);
+    create.push_back(i64(1001));  // entity_id
+    create.push_back(i64(1));     // entity_type PLAYER
+    create.push_back(i64(1));     // space_id
+    create.push_back(f32(1.0f));
+    create.push_back(f32(2.0f));
+    create.push_back(f32(3.0f));
+    TEST_ASSERT(send_intent(c, id_of(MsgId::cell_create_entity), create),
+                "bare frame accepted at link level");
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(600);
+    while (std::chrono::steady_clock::now() < deadline) {
+        c.pump();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    TEST_ASSERT(acks.size() == 0, "no ack for bare frame");
+    TEST_ASSERT(s.server->m1Link().receivedIntents() == 0, "bare frame not delivered");
+    TEST_ASSERT(s.server->m1Link().rejectedFrames() == 0, "no-handler drop is router-level");
+    TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link survives bare frame");
 
     s.stop();
     c.manager.reset();
@@ -431,7 +517,8 @@ bool test_forbidden_and_unknown_ids_silent() {
 
 // ---------- 顶格拒收：单拍批量 > cap → 即时回执 2101 ----------
 
-// ---------- 932 internal_envelope 双受理（P3-3 语义层批 · trace 子集载体） ----------
+// ---------- 932 internal_envelope 唯一受理面（P3-3 语义层批 · trace 子集载体；
+// bare 退役批后即唯一上行形） ----------
 
 bool test_wrapped_envelope_intent() {
     std::cout << "Running: test_wrapped_envelope_intent..." << std::endl;
@@ -589,7 +676,7 @@ bool test_queue_full_backpressure_ack() {
     bool rejected = false;
     for (int round = 0; round < 4 && !rejected; ++round) {
         const auto base_req = static_cast<std::uint64_t>(100000 + round * 100000);
-        // 全量本地入队（ Reliable 队列 < 4MiB 水位），再单拍刷线
+        // 全量本地入队（Reliable 队列 < 4MiB 水位），再单拍刷线（恒走信封）
         for (int i = 0; i < kBurst; ++i) {
             auto f = base_fields(base_req + static_cast<std::uint64_t>(i),
                                  static_cast<std::uint64_t>(500 + i));
@@ -599,7 +686,9 @@ bool test_queue_full_backpressure_ack() {
             f.push_back(f32(0.0f));
             f.push_back(f32(0.0f));
             f.push_back(f32(0.0f));
-            TEST_ASSERT(send_intent(c, id_of(MsgId::cell_create_entity), f),
+            TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_create_entity),
+                                                   base_req + static_cast<std::uint64_t>(i),
+                                                   std::move(f)),
                         "burst intent enqueued");
         }
         c.pump();
@@ -640,6 +729,7 @@ int main() {
 #if !defined(_WIN32)
     if (!test_intent_family_deferred_ack()) ++failed;
     if (!test_malformed_intent_rejected()) ++failed;
+    if (!test_bare_intent_family_retired()) ++failed;
     if (!test_forbidden_and_unknown_ids_silent()) ++failed;
     if (!test_queue_full_backpressure_ack()) ++failed;
     if (!test_wrapped_envelope_intent()) ++failed;
