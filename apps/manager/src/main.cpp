@@ -21,6 +21,10 @@ using manager::ManagerApp;
 namespace disco = apollo::net::discovery;
 namespace session = apollo::game::session;
 
+#ifndef APOLLO_MANAGER_CONTRACT_ROUTE_JSON
+#define APOLLO_MANAGER_CONTRACT_ROUTE_JSON ""
+#endif
+
 // 全局服务器指针
 static ManagerApp* g_mgr = nullptr;
 
@@ -67,6 +71,7 @@ uint16_t loadPort(int argc, char* argv[]) {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  --port <port>              Listen port (default: 9003)\n"
+                      << "  --m1-port <port>           M1 control face listen port (0 = off, default: 0)\n"
                       << "  --machined-host <ipv4>     Machined host for death feed (default: 127.0.0.1)\n"
                       << "  --machined-port <port>     Machined port; 0 disables death feed (default: 9600)\n"
                       << "  --mirror-host <ipv4>       Directory mirror target host (default: 127.0.0.1)\n"
@@ -133,6 +138,14 @@ int main(int argc, char* argv[]) {
     const auto deathLog = logs.createLogger("death");
 
     auto port = loadPort(argc, argv);
+
+    // M1 控制面（P4-4 批④）：m1_port 0 = 面关（默认）
+    uint16_t m1_port = 0;
+    for (int i = 1; i < argc; i++) {
+        if (std::string(argv[i]) == "--m1-port" && i + 1 < argc) {
+            m1_port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        }
+    }
 
     // 死亡事件跨进程订阅面（G-1 收尾批增量①）：向 machined 注册死亡监听
     //（BW registerDeathListener 同型），主循环收 DeathNotify 落日志。
@@ -269,6 +282,7 @@ int main(int argc, char* argv[]) {
     try {
         ManagerApp mgr(port);
         g_mgr = &mgr;
+        mgr.set_m1_face(m1_port, APOLLO_MANAGER_CONTRACT_ROUTE_JSON);
 
         // 恢复相位跨进程化（G-1 收尾批增量③）：进程启动 = machined 拉起
         // 后的恢复序（§6 manager 行）——恢复相位排他（拒新），收各 Zone/

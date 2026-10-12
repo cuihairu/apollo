@@ -5,6 +5,7 @@ add_executable(gateway-app
     src/main.cpp
     src/gateway_server.cpp
     src/m1_egress.cpp
+    src/m1_route_client.cpp
     include/gateway/session_manager.cpp
     src/ingress/client_ingress_server.cpp
     src/ingress/tcp_client_ingress_server.cpp

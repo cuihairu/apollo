@@ -50,7 +50,7 @@ public:
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
-        ep.name = "zone";  // 对端 G-1 组件名（握手身份 = 其 Link self_name）
+        ep.name = config_.peer_name;  // 对端 G-1 组件名（握手身份 = 其 Link self_name）
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kActive;
@@ -103,13 +103,13 @@ public:
     }
 
     bool peerUp() const override {
-        auto* peer = const_cast<M1BaseClientImpl*>(this)->zone_peer();
+        auto* peer = const_cast<M1BaseClientImpl*>(this)->dialed_peer();
         return peer != nullptr && peer->state() == link::LinkState::kUp;
     }
 
 private:
-    link::InterServerLink* zone_peer() {
-        return manager_ ? manager_->link("zone") : nullptr;
+    link::InterServerLink* dialed_peer() {
+        return manager_ ? manager_->link(config_.peer_name) : nullptr;
     }
 
     bool load_route_table(link::RouteTable& table) {

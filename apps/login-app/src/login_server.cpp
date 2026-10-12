@@ -402,6 +402,28 @@ void LoginServer::start() {
         }
     }
 
+    // M1 manager 客户端面（P4-4 批④）：AssignWorld 落点裁决链路；装配
+    // 失败降级（警告 + 不拦启动），nng 桩路径仍在。
+    if (config_.m1ManagerPort != 0) {
+        M1BaseClientConfig mgrConfig;
+        mgrConfig.host = config_.m1ManagerHost;
+        mgrConfig.port = config_.m1ManagerPort;
+        mgrConfig.route_json = config_.m1RouteJson;
+        mgrConfig.peer_name = "manager";
+        m1ManagerClient_ = makeM1BaseClient(std::move(mgrConfig));
+        if (m1ManagerClient_) {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->info("M1 manager client dialing " + config_.m1ManagerHost + ":"
+                       + std::to_string(config_.m1ManagerPort));
+        } else {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->warning("M1 manager client degraded: route table unavailable ("
+                          + config_.m1RouteJson + "), nng transport stays");
+        }
+    }
+
     // 启动会话清理线程
     cleanupThread_ = std::thread([this]() {
         while (running_) {
@@ -425,11 +447,15 @@ void LoginServer::stop() {
         m1Admission_.reset();
     }
 
-    // M1 base 客户端面收线（in-flight call 由宿主泵线程先归还——本函数
-    // 只在宿主停驱后执行）。
+    // M1 base / manager 客户端面收线（in-flight call 由宿主泵线程先归还
+    // ——本函数只在宿主停驱后执行）。
     if (m1BaseClient_) {
         m1BaseClient_->stop();
         m1BaseClient_.reset();
+    }
+    if (m1ManagerClient_) {
+        m1ManagerClient_->stop();
+        m1ManagerClient_.reset();
     }
 
     if (server_) {
@@ -628,7 +654,7 @@ bool LoginServer::preparePlayerOnline(
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(
-                m1BaseClient_.get(), baseAppClient_.get(), assignReq, sessionId,
+                m1ManagerClient_.get(), baseAppClient_.get(), assignReq, sessionId,
                 protocol::MessageType::PLAYER_ASSIGN_WORLD_RESPONSE
             );
 

@@ -28,6 +28,11 @@ struct LoginConfig {
     uint16_t m1BasePort = 0;
     std::string m1BaseHost = "127.0.0.1";
 
+    // M1 manager 客户端面（P4-4 批④）：拨 manager 控制面（AssignWorld 落点
+    // 裁决）；0 = 面关（AssignWorld 留 nng 桩路径，catch 降级同缝）
+    uint16_t m1ManagerPort = 0;
+    std::string m1ManagerHost = "127.0.0.1";
+
     // 默认进入世界
     uint32_t initialWorldId = 1;
     uint64_t initialMapId = 1;

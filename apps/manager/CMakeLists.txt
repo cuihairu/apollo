@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 add_executable(manager
     src/main.cpp
     src/manager_app.cpp
+    src/m1_control_server.cpp
 )
 
 target_include_directories(manager
@@ -20,6 +21,12 @@ target_link_libraries(manager
         apollo::net_discovery
         apollo_protocol
         apollo_net_logpush
+        apollo_net_link
+        apollo_net_linkrpc
+)
+
+target_compile_definitions(manager PRIVATE
+    APOLLO_MANAGER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 
 target_compile_features(manager PRIVATE cxx_std_20)

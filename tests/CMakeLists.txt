@@ -297,6 +297,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
 	        ../apps/manager/src/manager_app.cpp
+	        ../apps/manager/src/m1_control_server.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/manager/include
@@ -307,6 +308,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::core
 	        apollo::game_session
 	        apollo_protocol
+	        apollo_net_link
+	        apollo_net_linkrpc
 	    )
 	    if(WIN32)
 	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
@@ -321,6 +324,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
+	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -357,6 +361,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_gateway_ingress.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
+	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -573,6 +578,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
 	        ../apps/manager/src/manager_app.cpp
+	        ../apps/manager/src/m1_control_server.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/manager/include
@@ -583,6 +589,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::core
 	        apollo::game_session
 	        apollo_protocol
+	        apollo_net_link
+	        apollo_net_linkrpc
 	    )
 	    if(WIN32)
 	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
@@ -597,6 +605,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
+	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -633,6 +642,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_gateway_ingress.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
+	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
             ../apps/gateway-app/src/ingress/client_ingress_server.cpp
             ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -1292,6 +1302,7 @@ add_executable(gateway_m1_egress_tests
     test_gateway_m1_egress.cpp
     ../apps/gateway-app/src/gateway_server.cpp
     ../apps/gateway-app/src/m1_egress.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp
     ../apps/gateway-app/include/gateway/session_manager.cpp
     ../apps/gateway-app/src/ingress/client_ingress_server.cpp
     ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
@@ -1464,3 +1475,39 @@ if(MSVC)
     target_compile_options(zone_m1_base_tests PRIVATE /utf-8)
 endif()
 add_test(NAME ZoneM1BaseTests COMMAND zone_m1_base_tests)
+
+# Manager M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
+# fan-out + 真 ManagerApp 分派面（AssignWorld/ResolveRoute 全真目录裁决）
+# + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本
+# 批，用例本体空转。
+if(TARGET apollo::game_session AND TARGET apollo_protocol)
+add_executable(manager_m1_control_tests
+    test_manager_m1_control.cpp
+    ../apps/manager/src/m1_control_server.cpp
+    ../apps/manager/src/manager_app.cpp
+    ../apps/login-app/src/m1_base_client.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp
+)
+target_include_directories(manager_m1_control_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/manager/include
+    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+)
+target_compile_definitions(manager_m1_control_tests PRIVATE
+    APOLLO_MANAGER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(manager_m1_control_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_session apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
+if(WIN32)
+    target_link_libraries(manager_m1_control_tests PRIVATE ws2_32)
+    target_compile_definitions(manager_m1_control_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(manager_m1_control_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ManagerM1ControlTests COMMAND manager_m1_control_tests)
+endif()

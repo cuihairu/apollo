@@ -5,6 +5,7 @@
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 #include "apollo/protocol/socket.hpp"
+#include "manager/m1_control_server.hpp"
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -87,6 +88,16 @@ public:
                                          std::uint64_t now_tick,
                                          std::uint64_t window_ticks);
 
+    // 受理面（start() 注册的 handler 即此件）：按消息类型分派。公开为
+    // M1 控制面 handler 直通（P4-4 批④）——会话语义与 nng REP 路径零分叉
+    std::vector<uint8_t> dispatchRequest(const std::vector<uint8_t>& data);
+
+    // M1 控制面装配（P4-4 批④；start 前调用。port 0 = 面关默认）
+    void set_m1_face(std::uint16_t port, std::string route_json) {
+        m1_port_ = port;
+        m1_route_json_ = std::move(route_json);
+    }
+
     // 窗口满扫描透传（§4 tick 驱动）：到期 Suspended → 删条目 +
     // SessionDown(kReasonWindowExpired)（事件链自动进镜像面）。返回终结数。
     std::size_t sweep_suspended(std::uint64_t now_tick);
@@ -106,6 +117,11 @@ private:
     uint16_t port_;
     std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
+
+    // M1 控制面（P4-4 批④；m1_port_ = 0 = 不装配）
+    std::uint16_t m1_port_ = 0;
+    std::string m1_route_json_;
+    std::unique_ptr<M1ControlServer> m1Server_;
 
     // 目录：session→binding 双向映射复用 SessionLocator（自带锁）；
     // player→assignment 目录为本进程独有，独立互斥锁保护。

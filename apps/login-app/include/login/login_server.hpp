@@ -177,6 +177,9 @@ private:
 
     // M1 base 客户端面（P4-4 批③；m1BasePort = 0 = 不装配，退 nng 桩路径）
     std::unique_ptr<M1BaseClient> m1BaseClient_;
+
+    // M1 manager 客户端面（P4-4 批④；m1ManagerPort = 0 = 不装配，同上）
+    std::unique_ptr<M1BaseClient> m1ManagerClient_;
 };
 
 } // namespace login

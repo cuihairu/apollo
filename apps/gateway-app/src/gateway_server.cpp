@@ -3,6 +3,7 @@
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
+#include <chrono>
 #include <iostream>
 #include <sstream>
 
@@ -32,6 +33,8 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
            << ", url=" << routeSnapshot.worldServerUrl;
     return stream.str();
 }
+
+constexpr std::uint32_t kM1RouteTimeoutMs = 500;  // 路由解析同步等待上限
 
 } // namespace
 
@@ -178,6 +181,23 @@ void GatewayServer::start() {
     baseAppRouteClient_->connect();
     loginAppClient_->connect();
 
+    // M1 路由解析客户端面（P4-4 批④）：managerM1Port 非零 = 拨 manager
+    // 控制面；装配失败降级（警告 + 不拦启动），nng 桩路径仍在。
+    if (config_.managerM1Port != 0) {
+        M1RouteClientConfig routeConfig;
+        routeConfig.host = config_.managerM1Host;
+        routeConfig.port = config_.managerM1Port;
+        routeConfig.route_json = config_.cellM1RouteJson;
+        m1RouteClient_ = makeM1RouteClient(std::move(routeConfig));
+        if (m1RouteClient_) {
+            glog().info("Gateway M1 route client dialing " + config_.managerM1Host
+                        + ":" + std::to_string(config_.managerM1Port));
+        } else {
+            glog().warning("gateway M1 route client degraded: route table unavailable ("
+                           + config_.cellM1RouteJson + "), nng transport stays");
+        }
+    }
+
     running_ = true;
 
     acceptThread_ = std::thread(&GatewayServer::acceptNewConnections, this);
@@ -207,6 +227,10 @@ void GatewayServer::stop() {
     }
 
     messageRouter_->stop();
+    if (m1RouteClient_) {
+        m1RouteClient_->stop();
+        m1RouteClient_.reset();
+    }
     if (baseAppRouteClient_) {
         baseAppRouteClient_->disconnect();
     }
@@ -485,7 +509,49 @@ RouteSnapshot GatewayServer::ensureRouteSnapshot(SessionID sessionId) {
 
 std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID sessionId) {
     auto session = sessionManager_->getSession(sessionId);
-    if (!session || !baseAppRouteClient_) {
+    if (!session) {
+        return std::nullopt;
+    }
+
+    // M1 面优先（P4-4 批④）：真 RPC 至 manager 控制面。传输缺席/信封残缺
+    // = 路由解析缺席（nullopt → buildDefaultRoute 兜底，桩时代同缝）。
+    if (m1RouteClient_) {
+        try {
+            apollo::protocol::PlayerResolveRouteRequest request;
+            request.playerId = session->playerId;
+            request.sessionId = sessionId;
+            const auto response = m1RouteClient_->call(
+                apollo::protocol::MessageCodec::encode(request, sessionId),
+                std::chrono::milliseconds(kM1RouteTimeoutMs));
+            if (response) {
+                const auto header = apollo::protocol::MessageCodec::parseHeader(*response);
+                if (static_cast<apollo::protocol::MessageType>(header.type) ==
+                    apollo::protocol::MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE) {
+                    apollo::protocol::PlayerResolveRouteResponse parsed;
+                    const std::vector<uint8_t> body(
+                        response->begin() + sizeof(apollo::protocol::MessageHeader),
+                        response->end());
+                    apollo::protocol::MessageCodec::decodeBody(body, parsed);
+                    if (parsed.success) {
+                        RouteSnapshot routeSnapshot;
+                        routeSnapshot.worldId = parsed.worldId;
+                        routeSnapshot.mapId = parsed.mapId;
+                        routeSnapshot.instanceId = parsed.instanceId;
+                        routeSnapshot.spaceId = parsed.spaceId;
+                        routeSnapshot.routeVersion = parsed.routeVersion;
+                        routeSnapshot.worldServerUrl = config_.cellAppUrl;
+                        return routeSnapshot;
+                    }
+                    return std::nullopt;  // success=false = 路由未备（legacy 同缝）
+                }
+                // 帧型错位 = 信封残缺 → 兜底
+            }
+        } catch (const std::exception&) {
+            // 响应体残缺 → 兜底
+        }
+    }
+
+    if (!baseAppRouteClient_) {
         return std::nullopt;
     }
 

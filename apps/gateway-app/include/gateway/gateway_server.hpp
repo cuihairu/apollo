@@ -6,6 +6,7 @@
 #include "gateway/ingress/gateway_connection_registry.hpp"
 #include "gateway/ingress/session_admission_service.hpp"
 #include "gateway/m1_egress.hpp"
+#include "gateway/m1_route_client.hpp"
 #include "gateway/session_manager.hpp"
 #include "apollo/net/protocol/channel.hpp"
 #include "apollo/protocol/socket.hpp"
@@ -117,6 +118,10 @@ private:
     std::unique_ptr<apollo::protocol::RpcClient> loginAppClient_;
     std::unique_ptr<SessionAdmissionService> admissionService_;
     std::unique_ptr<MessageRouter> messageRouter_;
+
+    // M1 路由解析客户端面（P4-4 批④；managerM1Port = 0 = 不装配，退 nng
+    // 桩路径；baseAppRouteClient_ 随批⑤收口）
+    std::unique_ptr<M1RouteClient> m1RouteClient_;
 
     // TCP 监听器归 ingress 真入口（link TcpListener），本类不持裸 fd
 

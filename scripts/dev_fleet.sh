@@ -16,7 +16,8 @@
 #
 # dev 端口布局（仅本脚本约定的开发面，无配置真相——生产部署不由此起）：
 #   login 9001 / gateway 9002 / manager 9003 / zone-app 9004 / cell M1 9101
-#   login M1 准入 9103 / zone M1 base 9104（P4-4 批①③：准入与 base RPC 链 M1 面）
+#   login M1 准入 9103 / zone M1 base 9104 / manager M1 control 9105
+#   （P4-4 批①③④：准入、base RPC 链与 manager 控制面 M1 面）
 #   / logger serve 9102（log push collector，L4）
 #   （app 缺省端口以各自 config 为准，本脚本显式传参避免歧义）
 #
@@ -41,9 +42,9 @@ MACHINED="$BUILD_DIR/apps/machined/machined"
 fleet_entries() {
     cat <<EOF
 logger    | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
-login     | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104
-gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101 --login-m1-port 9103
-manager   | $BUILD_DIR/apps/manager/manager --port 9003
+login     | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104 --manager-m1-port 9105
+gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101 --login-m1-port 9103 --manager-m1-port 9105
+manager   | $BUILD_DIR/apps/manager/manager --port 9003 --m1-port 9105
 zone-app  | $BUILD_DIR/apps/zone-app/zone-app --port 9004 --m1-port 9104
 cell      | $BUILD_DIR/apps/cell-app/cell-app --m1-port 9101
 game      | $BUILD_DIR/apps/game-server/apollo_game_server
