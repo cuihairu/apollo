@@ -250,18 +250,6 @@ if(OpenSSL_FOUND)
     message(STATUS "OpenSSL found: ${OPENSSL_VERSION}")
 endif()
 
-# NNG (nanomsg-next-gen) for inter-process communication
-find_package(nng CONFIG QUIET)
-if(NOT nng_FOUND)
-    message(STATUS "nng not found via CONFIG, trying regular find_package")
-    find_package(nng QUIET)
-endif()
-if(nng_FOUND)
-    message(STATUS "nng found")
-else()
-    message(STATUS "nng not found, protocol module will use FetchContent")
-endif()
-
 # libcurl (optional for RestTemplate)
 option(APOLLO_ENABLE_CURL "Enable libcurl support for RestTemplate" ON)
 if(APOLLO_ENABLE_CURL)

@@ -8,8 +8,6 @@
 #include "gateway/m1_egress.hpp"
 #include "gateway/m1_route_client.hpp"
 #include "gateway/session_manager.hpp"
-#include "apollo/net/protocol/channel.hpp"
-#include "apollo/protocol/socket.hpp"
 #include <memory>
 #include <optional>
 #include <thread>
@@ -112,15 +110,11 @@ private:
     std::unique_ptr<ClientIngressServer> ingressServer_;
     std::unique_ptr<ClientPacketDispatcher> packetDispatcher_;
     std::unique_ptr<GatewayConnectionRegistry> connectionRegistry_;
-    // 声明序必须与构造初始化列表一致：admissionService_ 依赖 loginAppClient_.get()，
-    // 置于其后，否则读未构造成员（UB，macos Debug 实测爆：准入拿空指针误拒）。
-    std::unique_ptr<apollo::protocol::RpcClient> baseAppRouteClient_;
-    std::unique_ptr<apollo::protocol::RpcClient> loginAppClient_;
     std::unique_ptr<SessionAdmissionService> admissionService_;
     std::unique_ptr<MessageRouter> messageRouter_;
 
-    // M1 路由解析客户端面（P4-4 批④；managerM1Port = 0 = 不装配，退 nng
-    // 桩路径；baseAppRouteClient_ 随批⑤收口）
+    // M1 路由解析客户端面（P4-4 批④；managerM1Port = 0 = 不装配，路由
+    // 解析缺席 → buildDefaultRoute 兜底）
     std::unique_ptr<M1RouteClient> m1RouteClient_;
 
     // TCP 监听器归 ingress 真入口（link TcpListener），本类不持裸 fd

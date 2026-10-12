@@ -1,6 +1,7 @@
 #include "base/base_server.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
+#include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 
 #include <filesystem>

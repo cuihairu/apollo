@@ -34,9 +34,8 @@ else()
     message(STATUS "Legacy protocol apps disabled (requires legacy apollo_protocol AND APOLLO_BUILD_GAME_MODULE=ON)")
 endif()
 
-# Cell app 以新模块为判据（P0-5，audit §1.3 app 门控链收口）：modules/protocol
-# 在 P1 收口前保持禁用（nng 1.11 未适配），cell-app 不再链 apollo_protocol，
-# 协议编解码面（无 nng 分支源）直接编入 app 目标（内存桩传输）。
+# Cell app 以新模块为判据（P0-5，audit §1.3 app 门控链收口）：cell-app 不链
+# apollo_protocol 库目标，协议编解码面直接编入 app 目标（直编习语沿袭）。
 if(TARGET apollo::game_core AND TARGET apollo::game_world)
     add_subdirectory(cell-app)
     message(STATUS "Cell-app enabled (game modules found)")

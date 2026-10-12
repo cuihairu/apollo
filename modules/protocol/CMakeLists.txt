@@ -1,29 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
 
-# 查找 NNG 依赖 - 通过 find_package (由 vcpkg toolchain 处理)
-find_package(nng CONFIG QUIET)
-
-if(nng_FOUND)
-    message(STATUS "NNG found via CONFIG")
-elseif(TARGET nng::nng)
-    message(STATUS "NNG target already exists")
-else()
-    message(STATUS "NNG not found, using stub implementation")
-endif()
-
-# 协议消息定义
+# 协议消息定义（P4-4 批⑤：nng 传输面退役，模块 = 编解码 + 编址 helper）
 set(PROTOCOL_HEADERS
-    include/apollo/protocol/nng_wrapper.hpp
     include/apollo/protocol/messages.hpp
     include/apollo/protocol/codec.hpp
-    include/apollo/protocol/socket.hpp
+    include/apollo/protocol/url.hpp
 )
 
 set(PROTOCOL_SOURCES
-    src/nng_wrapper.cpp
     src/messages.cpp
     src/codec.cpp
-    src/socket.cpp
 )
 
 # 创建协议库
@@ -47,15 +33,6 @@ target_link_libraries(apollo_protocol
 find_package(nlohmann_json CONFIG QUIET)
 if(nlohmann_json_FOUND)
     target_link_libraries(apollo_protocol PRIVATE nlohmann_json::nlohmann_json)
-endif()
-
-# 链接 NNG
-if(TARGET nng::nng)
-    target_link_libraries(apollo_protocol PUBLIC nng::nng)
-    target_compile_definitions(apollo_protocol PRIVATE APOLLO_USE_NNG=1)
-elseif(TARGET nng)
-    target_link_libraries(apollo_protocol PUBLIC nng)
-    target_compile_definitions(apollo_protocol PRIVATE APOLLO_USE_NNG=1)
 endif()
 
 target_compile_features(apollo_protocol PUBLIC cxx_std_20)

@@ -3,7 +3,6 @@
 // 契约 wire 解包 → legacy 帧镜像 → 受理队列 → tick 边界执行 → 延时应答
 // 929（request_id 关联，code 0 = 已消费）；拒收面（字段级非法静默计数、
 // 域越权/未知 id 不致命不断连）与顶格拒收即时回执 2101。
-// 直编协议源惯例同 cell_acceptance_tests（stub 传输，APOLLO_USE_NNG 未定义）；
 // 无 GTest，plain-assert + main 汇总。
 #include "cell/cell_server.hpp"
 #include "apollo/net/link/link_manager.hpp"

@@ -177,20 +177,11 @@ std::optional<apollo::game::session::SessionBinding> ManagerApp::resolveSessionB
 void ManagerApp::start() {
     if (running_) return;
 
-    server_ = std::make_unique<protocol::RepSocket>(
-        protocol::make_tcp_url(host_, port_)
-    );
-
-    server_->setRequestHandler([this](const std::vector<uint8_t>& data) -> std::vector<uint8_t> {
-        return dispatchRequest(data);
-    });
-
     running_ = true;
-    server_->start();
 
-    // M1 控制面（P4-4 批④）：m1_port_ 非零 = link M1 面并行受理
-    // （dispatchRequest 直通——裁决语义与 nng REP 路径零分叉）；装配失败
-    // 降级（警告 + 不拦启动），nng REP 路径仍在。
+    // M1 控制面（P4-4 批④）：m1_port_ 非零 = link M1 面（dispatchRequest
+    // 直通——nng REP 已随批⑤退役[桩传输死面]）；装配失败降级（警告 + 不拦
+    // 启动，控制面缺席）。
     if (m1_port_ != 0) {
         M1ControlServerConfig m1Config;
         m1Config.host = host_;
@@ -222,16 +213,11 @@ void ManagerApp::start() {
 void ManagerApp::stop() {
     running_ = false;
 
-    // M1 面先收线（泵线程停驱 + 监听拆线；nng REP 路径照旧）。
+    // M1 面先收线（泵线程停驱 + 监听拆线）。
     if (m1Server_) {
         m1Server_->stop();
         m1Server_.reset();
     }
-
-    if (server_) {
-        server_->stop();
-    }
-    server_.reset();
 }
 
 std::vector<uint8_t> ManagerApp::dispatchRequest(const std::vector<uint8_t>& data) {

@@ -8,7 +8,7 @@
 #include "apollo/game/session/player_directory.hpp"
 #include "apollo/game/session/recovery.hpp"
 #include "apollo/game/session/session_locator.hpp"
-#include "apollo/protocol/socket.hpp"
+#include "apollo/protocol/messages.hpp"
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -105,7 +105,6 @@ private:
     std::shared_ptr<apollo::game::session::SessionLocator> sessionLocator_;
     apollo::game::session::PlayerDirectory::EventSink directoryEventSink_;
 
-    std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
     std::atomic<bool> shuttingDown_{false};  // 停机五阶段幂等闸 + 维护位（G-3）
 

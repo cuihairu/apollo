@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
-#include "apollo/protocol/nng_wrapper.hpp"
+#include "apollo/protocol/url.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
-#include "apollo/protocol/socket.hpp"
 
 #include <thread>
 #include <chrono>
@@ -10,10 +9,10 @@
 using namespace apollo::protocol;
 
 //==============================================================================
-// NngWrapper 测试
+// Url helper 测试（P4-4 批⑤：nng 退役，编址 helper 转纯字符串面）
 //==============================================================================
 
-TEST(NngWrapperTest, UrlCreation) {
+TEST(UrlHelperTest, UrlCreation) {
     EXPECT_EQ(make_tcp_url("127.0.0.1", 8080), "tcp://127.0.0.1:8080");
     EXPECT_EQ(make_ipc_url("/tmp/test"), "ipc:///tmp/test");
     EXPECT_EQ(make_inproc_url("test"), "inproc://test");

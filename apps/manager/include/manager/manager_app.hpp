@@ -4,7 +4,7 @@
 #include "apollo/game/session/player_directory.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
-#include "apollo/protocol/socket.hpp"
+#include "apollo/protocol/messages.hpp"
 #include "manager/m1_control_server.hpp"
 #include <atomic>
 #include <cstdint>
@@ -89,7 +89,8 @@ public:
                                          std::uint64_t window_ticks);
 
     // 受理面（start() 注册的 handler 即此件）：按消息类型分派。公开为
-    // M1 控制面 handler 直通（P4-4 批④）——会话语义与 nng REP 路径零分叉
+    // M1 控制面 handler 直通（P4-4 批④）——nng REP 已随批⑤退役，本面
+    // = 唯一受理面
     std::vector<uint8_t> dispatchRequest(const std::vector<uint8_t>& data);
 
     // M1 控制面装配（P4-4 批④；start 前调用。port 0 = 面关默认）
@@ -115,7 +116,6 @@ private:
 
     std::string host_;
     uint16_t port_;
-    std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
 
     // M1 控制面（P4-4 批④；m1_port_ = 0 = 不装配）

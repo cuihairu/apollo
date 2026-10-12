@@ -19,48 +19,20 @@ namespace gateway {
 
 namespace {
 
-// 桩传输时代准入面（保留）：nng 桩 RpcClient 路径——非 M1 接线的本地
-// 构建面（loginM1Port = 0）继续走此实现。
+// 退化容忍面（P4-4 批⑤：nng 桩准入退役）：仅拒空票，非空票放行——桩
+// 时代同缝（桩传输恒 throw → catch 容忍），ingress 主线全接线前保持
+// admit 容忍（P3-2 收口）。
 class DefaultSessionAdmissionService final : public SessionAdmissionService {
 public:
-    explicit DefaultSessionAdmissionService(apollo::protocol::RpcClient* loginAppClient)
-        : loginAppClient_(loginAppClient) {
-    }
-
     AdmissionResult admit(const AdmissionRequest& request) override {
         if (request.loginTicket.empty()) {
             return {false, "login ticket is empty"};
         }
 
-        if (loginAppClient_ == nullptr) {
-            return {false, "login app client unavailable"};
-        }
-
-        try {
-            apollo::protocol::GatewayAssignRequest rpcRequest;
-            rpcRequest.playerId = request.playerId;
-            rpcRequest.sessionId = request.sessionId;
-            rpcRequest.loginTicket = request.loginTicket;
-
-            const auto response =
-                loginAppClient_->call<
-                    apollo::protocol::GatewayAssignRequest,
-                    apollo::protocol::GatewayAssignResponse>(rpcRequest, request.sessionId);
-
-            if (!response.success) {
-                return {false, "gateway admission rejected"};
-            }
-
-            return {true, {}};
-        } catch (const std::exception&) {
-            // Some local builds still run on transport stubs. Keep current behavior:
-            // non-empty tickets remain admissible until the ingress mainline is fully wired.
-            return {true, {}};
-        }
+        // Non-empty tickets remain admissible until the ingress mainline is
+        // fully wired (P3-2).
+        return {true, {}};
     }
-
-private:
-    apollo::protocol::RpcClient* loginAppClient_{nullptr};
 };
 
 // Link M1 准入面（P4-4 批①）：active 端点拨 login 准入受理面 + linkrpc
@@ -231,10 +203,8 @@ private:
 
 } // namespace
 
-std::unique_ptr<SessionAdmissionService> makeDefaultSessionAdmissionService(
-    apollo::protocol::RpcClient* loginAppClient
-) {
-    return std::make_unique<DefaultSessionAdmissionService>(loginAppClient);
+std::unique_ptr<SessionAdmissionService> makeDefaultSessionAdmissionService() {
+    return std::make_unique<DefaultSessionAdmissionService>();
 }
 
 std::unique_ptr<SessionAdmissionService> makeLinkSessionAdmissionService(

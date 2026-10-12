@@ -134,18 +134,17 @@ RouteSnapshot MessageRouter::buildDefaultRoute() const {
 namespace {
 
 // 准入传输选装（P4-4 批①）：loginM1Port 非零 = link M1 面（拨 login 准入
-// 受理面）；装配缺位降级（处方①）= 退 nng 桩传输，起进程不拦。
-std::unique_ptr<SessionAdmissionService> makeAdmissionService(
-    const GatewayConfig& config, apollo::protocol::RpcClient* loginAppClient) {
+// 受理面）；装配缺位降级（处方①）= 退化容忍面，起进程不拦。
+std::unique_ptr<SessionAdmissionService> makeAdmissionService(const GatewayConfig& config) {
     if (config.loginM1Port == 0) {
-        return makeDefaultSessionAdmissionService(loginAppClient);
+        return makeDefaultSessionAdmissionService();
     }
     auto linkService = makeLinkSessionAdmissionService(
         config.loginM1Host, config.loginM1Port, config.cellM1RouteJson);
     if (!linkService) {
         glog().warning("gateway login M1 admission degraded: route table unavailable ("
-                       + config.cellM1RouteJson + "), falling back to stub transport");
-        return makeDefaultSessionAdmissionService(loginAppClient);
+                       + config.cellM1RouteJson + "), admission degrades tolerant");
+        return makeDefaultSessionAdmissionService();
     }
     return linkService;
 }
@@ -159,9 +158,7 @@ GatewayServer::GatewayServer(const GatewayConfig& config)
           config_.host, config_.port, static_cast<std::size_t>(config_.maxConnections)))
     , packetDispatcher_(std::make_unique<ClientPacketDispatcher>())
     , connectionRegistry_(std::make_unique<GatewayConnectionRegistry>())
-    , baseAppRouteClient_(std::make_unique<apollo::protocol::RpcClient>(config.baseAppUrl))
-    , loginAppClient_(std::make_unique<apollo::protocol::RpcClient>(config.loginAppUrl))
-    , admissionService_(makeAdmissionService(config, loginAppClient_.get()))
+    , admissionService_(makeAdmissionService(config))
     , messageRouter_(std::make_unique<MessageRouter>(config)) {
 }
 
@@ -178,11 +175,9 @@ void GatewayServer::start() {
     // 监听 socket 归 ingress 真入口（link TcpListener）——bind 失败即 throw，
     // 与旧裸 socket 块同契约。
     ingressServer_->start();
-    baseAppRouteClient_->connect();
-    loginAppClient_->connect();
 
     // M1 路由解析客户端面（P4-4 批④）：managerM1Port 非零 = 拨 manager
-    // 控制面；装配失败降级（警告 + 不拦启动），nng 桩路径仍在。
+    // 控制面；装配失败降级（警告 + 不拦启动），路由解析缺席 → 默认路由兜底。
     if (config_.managerM1Port != 0) {
         M1RouteClientConfig routeConfig;
         routeConfig.host = config_.managerM1Host;
@@ -194,7 +189,7 @@ void GatewayServer::start() {
                         + ":" + std::to_string(config_.managerM1Port));
         } else {
             glog().warning("gateway M1 route client degraded: route table unavailable ("
-                           + config_.cellM1RouteJson + "), nng transport stays");
+                           + config_.cellM1RouteJson + "), default route stays");
         }
     }
 
@@ -230,12 +225,6 @@ void GatewayServer::stop() {
     if (m1RouteClient_) {
         m1RouteClient_->stop();
         m1RouteClient_.reset();
-    }
-    if (baseAppRouteClient_) {
-        baseAppRouteClient_->disconnect();
-    }
-    if (loginAppClient_) {
-        loginAppClient_->disconnect();
     }
     if (ingressServer_) {
         ingressServer_->stop();
@@ -513,8 +502,9 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
         return std::nullopt;
     }
 
-    // M1 面优先（P4-4 批④）：真 RPC 至 manager 控制面。传输缺席/信封残缺
-    // = 路由解析缺席（nullopt → buildDefaultRoute 兜底，桩时代同缝）。
+    // 路由解析 = manager 控制面 M1 RPC（P4-4 批④接线；批⑤桩路径退役）。
+    // 传输缺席/信封残缺 = 路由解析缺席（nullopt → buildDefaultRoute 兜底，
+    // 桩时代同缝）。
     if (m1RouteClient_) {
         try {
             apollo::protocol::PlayerResolveRouteRequest request;
@@ -542,7 +532,7 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         routeSnapshot.worldServerUrl = config_.cellAppUrl;
                         return routeSnapshot;
                     }
-                    return std::nullopt;  // success=false = 路由未备（legacy 同缝）
+                    return std::nullopt;  // success=false = 路由未备
                 }
                 // 帧型错位 = 信封残缺 → 兜底
             }
@@ -550,36 +540,7 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
             // 响应体残缺 → 兜底
         }
     }
-
-    if (!baseAppRouteClient_) {
-        return std::nullopt;
-    }
-
-    try {
-        apollo::protocol::PlayerResolveRouteRequest request;
-        request.playerId = session->playerId;
-        request.sessionId = sessionId;
-
-        const auto response =
-            baseAppRouteClient_->call<
-                apollo::protocol::PlayerResolveRouteRequest,
-                apollo::protocol::PlayerResolveRouteResponse>(request, sessionId);
-
-        if (!response.success) {
-            return std::nullopt;
-        }
-
-        RouteSnapshot routeSnapshot;
-        routeSnapshot.worldId = response.worldId;
-        routeSnapshot.mapId = response.mapId;
-        routeSnapshot.instanceId = response.instanceId;
-        routeSnapshot.spaceId = response.spaceId;
-        routeSnapshot.routeVersion = response.routeVersion;
-        routeSnapshot.worldServerUrl = config_.cellAppUrl;
-        return routeSnapshot;
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
+    return std::nullopt;
 }
 
 } // namespace gateway

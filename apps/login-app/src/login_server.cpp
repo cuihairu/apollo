@@ -310,8 +310,7 @@ LoginServer::LoginServer(const LoginConfig& config)
     : config_(config)
     , authenticator_(std::make_unique<Authenticator>(config))
     , gatewayAllocator_(std::make_unique<GatewayAllocator>(config))
-    , sessionManager_(std::make_unique<SessionManager>(config))
-    , baseAppClient_(std::make_unique<protocol::RpcClient>(config.baseAppUrl)) {
+    , sessionManager_(std::make_unique<SessionManager>(config)) {
 }
 
 LoginServer::~LoginServer() {
@@ -321,42 +320,12 @@ LoginServer::~LoginServer() {
 void LoginServer::start() {
     if (running_) return;
 
-    baseAppClient_->connect();
-
-    // 创建 RPC 服务器
-    server_ = std::make_unique<protocol::RepSocket>(
-        protocol::make_tcp_url(config_.host, config_.port)
-    );
-
-    server_->setRequestHandler([this](const std::vector<uint8_t>& data) -> std::vector<uint8_t> {
-        // 解析消息头
-        auto header = protocol::MessageCodec::parseHeader(data);
-        auto msgType = static_cast<protocol::MessageType>(header.type);
-
-        switch (msgType) {
-            case protocol::MessageType::LOGIN_REQUEST:
-                return handleLoginRequest(data);
-
-            case protocol::MessageType::GATEWAY_ASSIGN_REQUEST:
-                return handleGatewayAssignRequest(data);
-
-            case protocol::MessageType::PING:
-                return handlePing(data);
-
-            default:
-                protocol::ErrorMessage err;
-                err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
-                err.message = "Unknown message type";
-                return protocol::MessageCodec::encode(err, header.sessionId);
-        }
-    });
-
     running_ = true;
 
-    server_->start();
-
-    // M1 准入受理面（P4-4 批①）：m1Port = 0 = 不装配（桩时代行为不变）；
-    // 装配失败降级（警告 + 不拦启动），nng 准入路径仍在。
+    // M1 准入受理面（P4-4 批①）：m1Port = 0 = 不装配（非 M1 接线的本地
+    // 构建面）；装配失败降级（警告 + 不拦启动）。nng 准入 REP 已随批⑤退役
+    // （桩传输死面）——handleLoginRequest/handlePing 留作 P3-2 ingress
+    // 主线接线面。
     if (config_.m1Port != 0) {
         M1AdmissionConfig m1Config;
         m1Config.host = config_.host;
@@ -376,13 +345,13 @@ void LoginServer::start() {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
                 ->warning("M1 admission degraded: route table unavailable ("
-                          + config_.m1RouteJson + "), nng transport stays");
+                          + config_.m1RouteJson + "), admission face stays off");
             m1Admission_.reset();
         }
     }
 
-    // M1 base 客户端面（P4-4 批③）：m1BasePort = 0 = 不装配（桩时代行为
-    // 不变）；装配失败降级（警告 + 不拦启动），nng 桩路径仍在。
+    // M1 base 客户端面（P4-4 批③）：m1BasePort = 0 = 不装配（RPC 面缺席
+    // = 降级缝 throw）；装配失败降级（警告 + 不拦启动）。
     if (config_.m1BasePort != 0) {
         M1BaseClientConfig baseConfig;
         baseConfig.host = config_.m1BaseHost;
@@ -398,12 +367,12 @@ void LoginServer::start() {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
                 ->warning("M1 base client degraded: route table unavailable ("
-                          + config_.m1RouteJson + "), nng transport stays");
+                          + config_.m1RouteJson + "), base rpc degrades");
         }
     }
 
     // M1 manager 客户端面（P4-4 批④）：AssignWorld 落点裁决链路；装配
-    // 失败降级（警告 + 不拦启动），nng 桩路径仍在。
+    // 失败降级（警告 + 不拦启动），AssignWorld 缺席 = 降级缝 throw。
     if (config_.m1ManagerPort != 0) {
         M1BaseClientConfig mgrConfig;
         mgrConfig.host = config_.m1ManagerHost;
@@ -420,7 +389,7 @@ void LoginServer::start() {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
                 ->warning("M1 manager client degraded: route table unavailable ("
-                          + config_.m1RouteJson + "), nng transport stays");
+                          + config_.m1RouteJson + "), assign rpc degrades");
         }
     }
 
@@ -441,7 +410,7 @@ void LoginServer::start() {
 void LoginServer::stop() {
     running_ = false;
 
-    // M1 准入面先收线（泵线程停驱 + 监听拆线；nng 路径照旧）。
+    // M1 准入面先收线（泵线程停驱 + 监听拆线）。
     if (m1Admission_) {
         m1Admission_->stop();
         m1Admission_.reset();
@@ -458,17 +427,8 @@ void LoginServer::stop() {
         m1ManagerClient_.reset();
     }
 
-    if (server_) {
-        server_->stop();
-        server_.reset();
-    }
-
     if (cleanupThread_.joinable()) {
         cleanupThread_.join();
-    }
-
-    if (baseAppClient_) {
-        baseAppClient_->disconnect();
     }
 }
 
@@ -571,18 +531,17 @@ std::vector<uint8_t> LoginServer::handlePing(const std::vector<uint8_t>& request
 
 namespace {
 
-// P4-4 批③换装缝：M1 面优先（全帧进出 + corr 关联归 linkrpc），装配缺位
-// 退 nng 桩路径（批⑤收口）。失败一律 throw → preparePlayerOnline catch →
-// 降级缝（桩时代同位：传输缺席/信封残缺 ≠ 会话事实）；仅响应 success=false
-// 才真拒。
+// P4-4 批③换装缝（批⑤ nng 桩路径退役）：M1 面 = 唯一传输（全帧进出 +
+// corr 关联归 linkrpc）。面装配缺位/失败一律 throw → preparePlayerOnline
+// catch → 降级缝（桩时代同位：传输缺席/信封残缺 ≠ 会话事实）；仅响应
+// success=false 才真拒。
 constexpr std::uint32_t kM1BaseTimeoutMs = 500;  // 单调用同步等待上限
 
 template <typename Req, typename Resp>
-Resp callBaseRpc(M1BaseClient* m1, apollo::protocol::RpcClient* stub,
-                 const Req& request, SessionID sessionId,
+Resp callBaseRpc(M1BaseClient* m1, const Req& request, SessionID sessionId,
                  protocol::MessageType expect) {
     if (m1 == nullptr) {
-        return stub->call<Req, Resp>(request, sessionId);
+        throw std::runtime_error("base M1 rpc face not assembled");
     }
     const auto response = m1->call(protocol::MessageCodec::encode(request, sessionId),
                                    std::chrono::milliseconds(kM1BaseTimeoutMs));
@@ -614,7 +573,7 @@ bool LoginServer::preparePlayerOnline(
         activateReq.playerId = playerId;
         const auto activateResp =
             callBaseRpc<protocol::PlayerActivateRequest, protocol::PlayerActivateResponse>(
-                m1BaseClient_.get(), baseAppClient_.get(), activateReq, sessionId,
+                m1BaseClient_.get(), activateReq, sessionId,
                 protocol::MessageType::PLAYER_ACTIVATE_RESPONSE
             );
 
@@ -633,7 +592,7 @@ bool LoginServer::preparePlayerOnline(
 
         const auto bindResp =
             callBaseRpc<protocol::PlayerBindSessionRequest, protocol::PlayerBindSessionResponse>(
-                m1BaseClient_.get(), baseAppClient_.get(), bindReq, sessionId,
+                m1BaseClient_.get(), bindReq, sessionId,
                 protocol::MessageType::PLAYER_BIND_SESSION_RESPONSE
             );
 
@@ -654,7 +613,7 @@ bool LoginServer::preparePlayerOnline(
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(
-                m1ManagerClient_.get(), baseAppClient_.get(), assignReq, sessionId,
+                m1ManagerClient_.get(), assignReq, sessionId,
                 protocol::MessageType::PLAYER_ASSIGN_WORLD_RESPONSE
             );
 

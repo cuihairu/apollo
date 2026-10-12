@@ -3,7 +3,6 @@
 //   受理判定（维护闸/tick 边界 drain/顶格拒收）。wire 回执面（2101/2001/延
 //   时 929）归 cell_m1_link_tests（真 M1 链路断言），此处只断受理判定。
 // 直编惯例同 scene_tests（无 GTest，plain-assert + main 汇总）；
-// 协议源直编同 apps/cell-app（stub 传输，APOLLO_USE_NNG 未定义）。
 #include "cell/acceptance_queue.hpp"
 #include "cell/cell_server.hpp"
 #include "apollo/protocol/codec.hpp"

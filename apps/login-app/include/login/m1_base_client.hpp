@@ -11,7 +11,7 @@
 //
 // 机制面自带泵线程（10ms 拍）——preparePlayerOnline 是同步等待语义且其
 // 调用点在 login ingress 宿主泵线程上，自泵自等 = 死锁（批① 准入面同
-// 纪律）。port = 0 = 面关（进程壳不接线，nng 桩路径行为不变）；路由表
+// 纪律）。port = 0 = 面关（进程壳不接线，RPC 面缺席 = 调用方降级缝）；路由表
 // 缺位 = start false（装配错误显形，调用方降级）。
 
 #include <chrono>

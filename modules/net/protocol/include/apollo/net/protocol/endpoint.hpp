@@ -7,11 +7,20 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include "apollo/net/protocol/channel.hpp"
 
 namespace apollo {
 namespace net {
 namespace protocol {
+
+// 传输能力枚举（P4-4 批⑤：随 nng Channel 退役从 channel.hpp 迁入——
+// 发现面元数据词汇，与传输实现解耦）
+enum class Protocol {
+    Ipc,       // 共享内存 (本机最优)
+    Tcp,       // TCP (远程通用)
+    InProc,    // 进程内 (最快)
+    Ws,        // WebSocket
+    Auto       // 自动选择
+};
 
 /**
  * @brief Service endpoint information

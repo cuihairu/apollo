@@ -1,8 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
-# 协议编解码面（P0-5）：modules/protocol 保持禁用（nng 1.11 未适配），此处把
-# 其无 nng 依赖的编解码源直接编入 app 目标（socket/nng_wrapper 传输面已随
-# 2b-iii legacy RepSocket 退役摘除——cell 受理入口唯一 = M1 链路）。
+# 协议编解码面（P0-5）：编解码源直接编入 app 目标，不链 apollo_protocol 库
+# 目标（cell 受理入口唯一 = M1 链路）。
 set(CELLAPP_PROTOCOL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/src/messages.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/src/codec.cpp

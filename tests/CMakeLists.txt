@@ -1227,7 +1227,7 @@ add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
 # cell 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ CellServer 受理点
 # 接线（维护闸/受理回执/Pong/tick 边界 drain/过载回错误包）。直编协议源惯例
-# 同 apps/cell-app（stub 传输，APOLLO_USE_NNG 未定义）。
+# 同 apps/cell-app（协议源直编习语）。
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(cell_acceptance_tests
     test_cell_acceptance.cpp

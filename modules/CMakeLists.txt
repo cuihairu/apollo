@@ -25,9 +25,7 @@ add_subdirectory(data)
 # Level 5: Network (depends on runtime)
 add_subdirectory(net)
 
-# Level 5.5: Protocol (old NNG wrapper - deprecated, use net/protocol instead)
-# Note: nng not installed (see vcpkg.json) so the module builds its in-tree stub
-# (APOLLO_USE_NNG undefined); real-nng adaptation remains pending.
+# Level 5.5: Protocol (codec + url helpers; nng transport face removed in P4-4 batch 5)
 add_subdirectory(protocol)
 
 # Level 6: Actor - REMOVED

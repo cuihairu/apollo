@@ -229,22 +229,11 @@ void BaseServer::start() {
     // 启动保存队列
     saveQueue_->start();
 
-    // 创建 RPC 服务器
-    server_ = std::make_unique<protocol::RepSocket>(
-        protocol::make_tcp_url(config_.host, config_.port)
-    );
-
-    server_->setRequestHandler([this](const std::vector<uint8_t>& data) -> std::vector<uint8_t> {
-        return dispatchRequest(data);
-    });
-
     running_ = true;
 
-    server_->start();
-
-    // M1 base 受理面（P4-4 批③）：m1Port 非零 = link M1 面并行受理
-    // （dispatchRequest 直通——会话语义与 nng REP 路径零分叉）；装配失败
-    // 降级（警告 + 不拦启动），nng REP 路径仍在。
+    // M1 base 受理面（P4-4 批③）：m1Port 非零 = link M1 面（dispatchRequest
+    // 直通——nng REP 已随批⑤退役[桩传输死面]）；装配失败降级（警告 + 不拦
+    // 启动，RPC 面缺席）。
     if (config_.m1Port != 0) {
         M1BaseServerConfig m1Config;
         m1Config.host = config_.host;
@@ -259,7 +248,7 @@ void BaseServer::start() {
                         + std::to_string(m1Server_->listenPort()));
         } else {
             blog().warning("M1 base face degraded: route table unavailable ("
-                           + config_.m1RouteJson + "), nng transport stays");
+                           + config_.m1RouteJson + "), rpc face stays off");
             m1Server_.reset();
         }
     }
@@ -280,18 +269,12 @@ void BaseServer::stop() {
     }
 
     // ① 停收新请求（§10.2-①）：维护位已立（dispatchRequest 回维护中），
-    // 关监听并等在途 handler 归还（RepSocket::stop = join worker——§10.2-④
-    // 的 net 断开与此同拍：stub 传输树无在途帧面）。M1 面同拍收线（泵
-    // 线程停驱 + 监听拆线，nng REP 路径照旧）。
+    // M1 面收线（泵线程停驱 + 监听拆线；§10.2-④ 的 net 断开同拍语义）。
     running_ = false;
     if (m1Server_) {
         m1Server_->stop();
         m1Server_.reset();
     }
-    if (server_) {
-        server_->stop();
-    }
-    server_.reset();
 
     // ② 最后一轮变更进 journal（§10.2-②）：先停自动保存生产者（此前
     // join 排在队列 drain 之后——生产者仍可能在 drain 后再入队的竞序），

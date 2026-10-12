@@ -1,9 +1,9 @@
 #pragma once
 
+#include "apollo/protocol/messages.hpp"
 #include "login/config.hpp"
 #include "login/m1_admission_server.hpp"
 #include "login/m1_base_client.hpp"
-#include "apollo/protocol/socket.hpp"
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -146,7 +146,7 @@ public:
     bool isRunning() const { return running_; }
 
     // 网关分配请求处理（M1 准入面 handler 直通——MessageCodec 全帧进出，
-    // 会话校验逻辑与 nng 路径零分叉）
+    // 会话校验逻辑与 M1 面直通零分叉）
     std::vector<uint8_t> handleGatewayAssignRequest(const std::vector<uint8_t>& request);
 
 private:
@@ -165,9 +165,6 @@ private:
     std::unique_ptr<Authenticator> authenticator_;
     std::unique_ptr<GatewayAllocator> gatewayAllocator_;
     std::unique_ptr<SessionManager> sessionManager_;
-    std::unique_ptr<protocol::RpcClient> baseAppClient_;
-
-    std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
 
     std::thread cleanupThread_;
@@ -175,7 +172,8 @@ private:
     // M1 准入受理面（P4-4 批①；m1Port = 0 = 不装配）
     std::unique_ptr<M1AdmissionServer> m1Admission_;
 
-    // M1 base 客户端面（P4-4 批③；m1BasePort = 0 = 不装配，退 nng 桩路径）
+    // M1 base 客户端面（P4-4 批③；m1BasePort = 0 = 不装配，RPC 面缺席
+    // = 降级缝 throw）
     std::unique_ptr<M1BaseClient> m1BaseClient_;
 
     // M1 manager 客户端面（P4-4 批④；m1ManagerPort = 0 = 不装配，同上）

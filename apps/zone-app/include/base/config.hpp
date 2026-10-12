@@ -15,7 +15,7 @@ struct BaseConfig {
     uint16_t port = 9002;
 
     // M1 base 受理面（P4-4 批③）：linkrpc 被动端点，login base RPC 换装
-    // link M1 的受理侧；0 = 面关（nng REP 路径行为不变）
+    // link M1 的受理侧；0 = 面关（RPC 面缺席）
     uint16_t m1Port = 0;
     std::string m1RouteJson = APOLLO_ZONE_CONTRACT_ROUTE_JSON;
 

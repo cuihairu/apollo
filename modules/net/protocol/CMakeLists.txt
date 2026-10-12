@@ -1,6 +1,5 @@
-# Protocol module - NNG wrapper with auto-negotiation
+# Protocol module - service endpoint abstraction（P4-4 批⑤：nng Channel 退役）
 add_library(apollo_net_protocol STATIC
-    src/channel.cpp
     src/endpoint.cpp
 )
 add_library(apollo::net_protocol ALIAS apollo_net_protocol)
@@ -12,28 +11,10 @@ target_include_directories(apollo_net_protocol
         $<INSTALL_INTERFACE:include>
 )
 
-# Find NNG
-find_package(nng CONFIG QUIET)
-
-if(TARGET nng::nng)
-    target_link_libraries(apollo_net_protocol
-        PUBLIC
-            nng::nng
-            apollo::net_core
-    )
-    target_compile_definitions(apollo_net_protocol PRIVATE APOLLO_USE_NNG=1)
-    message(STATUS "apollo_net_protocol: using NNG")
-elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../../vcpkg/installed/x64-windows/lib/nng.lib")
-    # Fallback: direct vcpkg path
-    target_include_directories(apollo_net_protocol SYSTEM PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../vcpkg/installed/x64-windows/include")
-    target_link_libraries(apollo_net_protocol PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../vcpkg/installed/x64-windows/lib/nng.lib")
-    target_compile_definitions(apollo_net_protocol PRIVATE APOLLO_USE_NNG=1)
-    message(STATUS "apollo_net_protocol: using NNG (direct path)")
-else()
-    message(STATUS "NNG not found, apollo_net_protocol will use stub implementation")
-endif()
+target_link_libraries(apollo_net_protocol
+    PUBLIC
+        apollo::net_core
+)
 
 # Optional: Redis for service discovery
 find_package(redis++ CONFIG QUIET)

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/protocol/messages.hpp"
-#include "apollo/protocol/nng_wrapper.hpp"
+#include <stdexcept>
 #include <vector>
 #include <string>
 #include <atomic>
@@ -92,12 +92,12 @@ public:
     // 解析消息头
     static MessageHeader parseHeader(const std::vector<uint8_t>& data) {
         if (data.size() < sizeof(MessageHeader)) {
-            throw NngError(NNG_EINVAL);
+            throw std::runtime_error("message header truncated");
         }
         MessageHeader header;
         std::memcpy(&header, data.data(), sizeof(MessageHeader));
         if (header.magic != MessageHeader::MAGIC) {
-            throw NngError(NNG_EPROTO);
+            throw std::runtime_error("message header magic mismatch");
         }
         return header;
     }
@@ -105,12 +105,12 @@ public:
     // 解析消息头（指针）
     static MessageHeader parseHeader(const uint8_t* data, size_t size) {
         if (size < sizeof(MessageHeader)) {
-            throw NngError(NNG_EINVAL);
+            throw std::runtime_error("message header truncated");
         }
         MessageHeader header;
         std::memcpy(&header, data, sizeof(MessageHeader));
         if (header.magic != MessageHeader::MAGIC) {
-            throw NngError(NNG_EPROTO);
+            throw std::runtime_error("message header magic mismatch");
         }
         return header;
     }
@@ -178,14 +178,14 @@ private:
     // 字符串解码
     static std::string decodeString(const uint8_t*& ptr, const uint8_t* end) {
         if (ptr + sizeof(uint32_t) > end) {
-            throw NngError(NNG_EINVAL);
+            throw std::runtime_error("string length truncated");
         }
         uint32_t len;
         std::memcpy(&len, ptr, sizeof(uint32_t));
         ptr += sizeof(uint32_t);
 
         if (ptr + len > end) {
-            throw NngError(NNG_EINVAL);
+            throw std::runtime_error("string body truncated");
         }
 
         std::string result(ptr, ptr + len);

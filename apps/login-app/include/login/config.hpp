@@ -16,7 +16,7 @@ struct LoginConfig {
     uint16_t port = 9001;
 
     // M1 准入受理面（P4-4 批①）：linkrpc 被动端点，gateway 准入 RPC 换装
-    // link M1 的受理侧；0 = 面关（nng 桩时代行为不变）
+    // link M1 的受理侧；0 = 面关（非 M1 接线的本地构建面）
     uint16_t m1Port = 0;
     std::string m1RouteJson = APOLLO_LOGIN_CONTRACT_ROUTE_JSON;
 
@@ -24,12 +24,12 @@ struct LoginConfig {
     std::string baseAppUrl = "tcp://127.0.0.1:9002";
 
     // M1 base 客户端面（P4-4 批③）：拨 zone M1 受理面的链路侧；0 = 面关
-    // （preparePlayerOnline 退 nng 桩路径，行为不变）。路由表共用 m1RouteJson
+    // 0 = 不装配（RPC 面缺席 = 降级缝 throw）。路由表共用 m1RouteJson
     uint16_t m1BasePort = 0;
     std::string m1BaseHost = "127.0.0.1";
 
     // M1 manager 客户端面（P4-4 批④）：拨 manager 控制面（AssignWorld 落点
-    // 裁决）；0 = 面关（AssignWorld 留 nng 桩路径，catch 降级同缝）
+    // 裁决）；0 = 不装配（AssignWorld 缺席 = 降级缝 throw）
     uint16_t m1ManagerPort = 0;
     std::string m1ManagerHost = "127.0.0.1";
 
