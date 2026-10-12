@@ -141,6 +141,7 @@ ghost 服务于**无缝世界**：邻进程双向投影、双写、调用转发�
 | apps | 空间进程 | cell-app | 二进制 `cell-app`；roster 名 `cell`；类 `CellServer`（apps/cell-app/include/cell/cell_server.hpp:22）；namespace `cell` | BW/KBE = cellapp | 现用（世界运行时原型；去留随玩法批） | ADR-014 决策 2（原型名不动） |
 | apps | 游戏进程 | game-server | 二进制 `game-server`；roster 名 `game`；类 `GameServerService`（apps/game-server/src/main.cpp:52） | 两家均无 | 现用（原型） | 初始仓（4fe2b576 可溯） |
 | apps | 日志进程 | logger | 二进制 `logger`；roster 名 `logger`；类 `LoggerApp`（apps/logger/include/logger/logger_app.hpp）；namespace `logger` | BW = server logger 中心日志；KBE = logger 组件 | 现用 | logging 批 L3（24cc7ab6） |
+| apps | 指标出口进程 | admin | 二进制 `admin`；roster 名 `admin`；类 `AdminApp`（apps/admin/include/admin/admin_app.hpp:15）；namespace `apollo::admin`；serve 子命令 = metrics link 9106（被动收 931 快照）+ HTTP `GET /metrics` 9107 | 两家均无（指标聚合出口为观测面运维进程） | 现用 | metrics admin 通道批（08641684，2026-10-12） |
 | apps | 监督进程 | machined | 二进制 `machined`（非编队成员，每机一个）；类 `Supervisor`（apps/machined/src/supervisor.hpp）；目录面 UDP 9600 | BW = bwmachined；KBE = machine | 现用 | G-1 双层发现（2026-09-30 裁决 2：不引注册中心） |
 | modules | 基础库 | base | `apollo::base`（modules/base/include/apollo/base/，含 timer_wheel.hpp 等） | 两家均无 | 现用 | 初始仓 |
 | modules | 兼容层 | bigworld | `apollo::bigworld`（modules/bigworld/include/apollo/bigworld/entity.hpp，包 apollo::bw 实现面） | 模块本身即 BigWorld 兼容层 | 现用 | 初始仓 |
