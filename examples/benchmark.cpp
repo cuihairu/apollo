@@ -541,7 +541,12 @@ void benchmarkLocks() {
 //
 // 负载链（全部真实路径，单线程驱动——Scene 单写者纪律）：
 //   Avatar 匀速漂移 → SceneAoi::move（ViewerState 差集 → Enter/Sync/Leave
-//   事件计数 = 广播消息量）→ Scene::tick 六阶段（实体 on_update 真调用）。
+//   事件计数 = 广播消息量）→ Scene::tick 六阶段（实体 on_update 真调用）
+//   → flush 段（P3-2 ①全帧段实测化：逐事件编真实协议帧——Enter→
+//   CellCreateEntity / Sync→CellEntityMove / Leave→CellDestroyEntity，
+//   MessageCodec 全量编码 = 下发面装包成本，网络 socket 发送不计——
+//   网关下发面仍是桩（cell_server broadcastToViewers 只日志），本段
+//   量的是「collect+flush」两段的可测部分）。
 // 桩口径：移动 = 匀速直线 + 世界边界回绕，无寻路/技能/跨景——帧成本是
 // 下界，作 capacity-and-benchmark 帧预算表实测化的锚点数据。
 
@@ -564,11 +569,15 @@ struct ModelConfig {
 
 struct ModelStats {
     double enter_ms = 0.0;        // 进场总耗时（构造 + enter × N）
-    double frame_avg_ms = 0.0;    // 帧均值（含移动 + AOI 差集 + tick）
+    double frame_avg_ms = 0.0;    // 帧均值（scene 局部：移动 + AOI 差集 + tick）
     double frame_max_ms = 0.0;    // 帧峰值
     double sync_per_frame = 0.0;  // Sync 事件/帧（广播消息量口径）
     std::uint64_t enter_events = 0;
     std::uint64_t leave_events = 0;
+    // flush 段（全帧段实测化）：AOI 事件 → 协议帧编码（collect+flush 可测面）
+    double flush_avg_ms = 0.0;    // 编码段均值/帧
+    double msgs_per_frame = 0.0;  // 编码消息数/帧（= 事件面全量，不止 Sync）
+    double bytes_per_frame = 0.0; // 编码字节/帧（下行带宽口径）
 };
 
 // 逐玩家状态：benchmark 侧驱动（直接持有 Avatar，免 Scene 查找回路）
@@ -593,6 +602,35 @@ float scatter(std::uint32_t i, float bound) {
     return std::fmod(static_cast<float>(i) * g, 1.0f) * bound;
 }
 
+// AOI 事件 → 真实协议帧（flush 段：collect+flush 的可测面——编码装包；
+// 事件→帧型映射 = 广播下发面语义：观察者视野里主体出现/移动/消失）。
+// session_id 0 = 系统广播（非会话回执路径）。
+std::vector<std::uint8_t> encode_aoi_event(const SceneAoi::Event& e) {
+    switch (e.kind) {
+    case SceneAoi::Event::Kind::Enter: {
+        apollo::protocol::CellCreateEntity msg;
+        msg.entityId = static_cast<apollo::protocol::EntityID>(e.subject.value());
+        msg.entityType = apollo::protocol::EntityType::PLAYER;
+        msg.spaceId = 0;
+        msg.position = apollo::protocol::Position(0.0f, 0.0f, 0.0f);
+        return apollo::protocol::MessageCodec::encode(msg, /*sessionId*/ 0);
+    }
+    case SceneAoi::Event::Kind::Sync: {
+        apollo::protocol::CellEntityMove msg;
+        msg.entityId = static_cast<apollo::protocol::EntityID>(e.subject.value());
+        msg.oldPos = apollo::protocol::Position(0.0f, 0.0f, 0.0f);
+        msg.newPos = apollo::protocol::Position(0.0f, 0.0f, 0.0f);
+        return apollo::protocol::MessageCodec::encode(msg, /*sessionId*/ 0);
+    }
+    case SceneAoi::Event::Kind::Leave:
+    default: {
+        apollo::protocol::CellDestroyEntity msg;
+        msg.entityId = static_cast<apollo::protocol::EntityID>(e.subject.value());
+        return apollo::protocol::MessageCodec::encode(msg, /*sessionId*/ 0);
+    }
+    }
+}
+
 ModelStats run_model(const ModelConfig& cfg) {
     ModelStats stats;
     std::uint64_t sync_events = 0;
@@ -605,6 +643,11 @@ ModelStats run_model(const ModelConfig& cfg) {
     std::vector<std::unique_ptr<Scene>> scenes;
     std::vector<std::vector<Drifter>> per_scene(static_cast<std::size_t>(cfg.scenes));
     scenes.reserve(static_cast<std::size_t>(cfg.scenes));
+
+    // flush 段事件收集面：sink 计数 + 逐帧暂存（编码在 tick 后统一做，
+    // 计时段与 scene 局部段分离——全帧段实测化的分段口径）
+    std::vector<SceneAoi::Event> frame_events;
+    frame_events.reserve(16384);
 
     std::uint32_t uid = 0;
     for (int s = 0; s < cfg.scenes; ++s) {
@@ -624,6 +667,7 @@ ModelStats run_model(const ModelConfig& cfg) {
                 ++leave_events;
                 break;
             }
+            frame_events.push_back(e);
         });
 
         auto& bucket = per_scene[static_cast<std::size_t>(s)];
@@ -650,14 +694,19 @@ ModelStats run_model(const ModelConfig& cfg) {
     stats.enter_ms = duration_cast<microseconds>(t1 - t0).count() / 1000.0;
 
     // 帧循环：移动推进 + AOI 差集 + 六阶段 tick（预热帧不入统计）
+    // + flush 段（事件→协议帧编码，tick 后统一做——分段口径与 §2 预算表对齐）
     const int measured = cfg.frames - kWarmupFrames;
     double frame_total_ms = 0.0;
     double frame_max_ms = 0.0;
     std::uint64_t sync_at_warmup_end = 0;
+    double flush_total_ms = 0.0;
+    double flush_bytes_total = 0.0;
+    double flush_msgs_total = 0.0;
 
     for (int f = 0; f < cfg.frames; ++f) {
         const auto ft0 = high_resolution_clock::now();
 
+        frame_events.clear();
         for (int s = 0; s < cfg.scenes; ++s) {
             SceneAoi& aoi = scenes[static_cast<std::size_t>(s)]->aoi();
             for (auto& d : per_scene[static_cast<std::size_t>(s)]) {
@@ -677,11 +726,27 @@ ModelStats run_model(const ModelConfig& cfg) {
 
         const auto ft1 = high_resolution_clock::now();
         const double ms = duration_cast<microseconds>(ft1 - ft0).count() / 1000.0;
+
+        // flush 段：逐事件编真实协议帧（collect+flush 可测面；预热帧同跑
+        // 不入统计——编码路径同样需要预热）
+        std::size_t flush_bytes = 0;
+        const auto fs0 = high_resolution_clock::now();
+        for (const auto& ev : frame_events) {
+            const auto msg = encode_aoi_event(ev);
+            flush_bytes += msg.size();
+        }
+        const auto fs1 = high_resolution_clock::now();
+        const double flush_ms =
+            duration_cast<microseconds>(fs1 - fs0).count() / 1000.0;
+
         if (f == kWarmupFrames - 1) {
             sync_at_warmup_end = sync_events;
         } else if (f >= kWarmupFrames) {
             frame_total_ms += ms;
             if (ms > frame_max_ms) frame_max_ms = ms;
+            flush_total_ms += flush_ms;
+            flush_bytes_total += static_cast<double>(flush_bytes);
+            flush_msgs_total += static_cast<double>(frame_events.size());
         }
     }
 
@@ -691,11 +756,16 @@ ModelStats run_model(const ModelConfig& cfg) {
         static_cast<double>(sync_events - sync_at_warmup_end) / measured;
     stats.enter_events = enter_events;
     stats.leave_events = leave_events;
+    stats.flush_avg_ms = flush_total_ms / measured;
+    stats.msgs_per_frame = flush_msgs_total / measured;
+    stats.bytes_per_frame = flush_bytes_total / measured;
     return stats;
 }
 
 void printModelStats(const ModelConfig& cfg, const ModelStats& st) {
     const double budget_pct = st.frame_avg_ms / kFrameBudgetMs * 100.0;
+    const double total_ms = st.frame_avg_ms + st.flush_avg_ms;
+    const double total_pct = total_ms / kFrameBudgetMs * 100.0;
     cout << left << setw(12) << cfg.name
          << right << setw(11) << fixed << setprecision(1) << st.enter_ms
          << setw(12) << setprecision(3) << st.frame_avg_ms
@@ -703,17 +773,24 @@ void printModelStats(const ModelConfig& cfg, const ModelStats& st) {
          << setw(11) << setprecision(1) << st.sync_per_frame
          << setw(9) << st.enter_events
          << setw(9) << st.leave_events
-         << setw(9) << setprecision(2) << budget_pct << "%" << endl;
+         << setw(9) << setprecision(2) << budget_pct << "%"
+         << setw(10) << setprecision(3) << st.flush_avg_ms
+         << setw(10) << setprecision(0) << st.msgs_per_frame
+         << setw(10) << setprecision(1) << st.bytes_per_frame / 1024.0
+         << setw(10) << setprecision(3) << total_ms
+         << setw(9) << setprecision(2) << total_pct << "%" << endl;
 }
 
 }  // namespace
 
 void benchmarkThreeModels() {
-    cout << "\n=== Three-Model Scene Benchmark (P3-2 A; arch §6) ===" << endl;
+    cout << "\n=== Three-Model Scene Benchmark (P3-2 全帧段实测化) ===" << endl;
     cout << "负载：全体玩家匀速漂移（5 单位/s）+ AOI move 差集 + tick 六阶段"
-         << "（单线程；预热 " << kWarmupFrames << " 帧不入统计）" << endl;
-    cout << "口径：桩 = 帧成本下界（无寻路/技能/跨景）；帧预算 100ms @ 10Hz"
-         << " 主循环（capacity-and-benchmark §2 实测锚点）" << endl;
+         << " + flush 段（事件→协议帧编码）（单线程；预热 "
+         << kWarmupFrames << " 帧不入统计）" << endl;
+    cout << "口径：帧预算 100ms @ 10Hz 主循环（capacity-and-benchmark §2 锚点）；"
+         << "scene 局部 = 移动+AOI+tick，flush = collect+flush 编码段，"
+         << "total = 全帧（§2 预算表两段）" << endl;
 
     const ModelConfig models[] = {
         {"A(1x1000)", 1, 1000, 200, 1000.0f},
@@ -728,8 +805,13 @@ void benchmarkThreeModels() {
          << setw(11) << "Sync/f"
          << setw(9) << "EnterEv"
          << setw(9) << "LeaveEv"
-         << setw(9) << "Budget" << endl;
-    cout << string(95, '-') << endl;
+         << setw(9) << "Scene%"
+         << setw(10) << "Flush ms"
+         << setw(10) << "Msgs/f"
+         << setw(10) << "KB/f"
+         << setw(10) << "Total ms"
+         << setw(9) << "Total%" << endl;
+    cout << string(126, '-') << endl;
 
     for (const auto& cfg : models) {
         const ModelStats st = run_model(cfg);
