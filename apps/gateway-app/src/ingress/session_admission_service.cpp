@@ -219,10 +219,13 @@ private:
     std::string host_;
     std::uint16_t port_ = 0;
     std::string route_json_;
+#if !defined(_WIN32)
+    // link 传输底座 POSIX only（Windows 工厂 start false 退桩，成员同收守卫）
     std::unique_ptr<apollo::net::link::RouteTable> route_table_;
     std::unique_ptr<apollo::net::link::LinkManager> manager_;
-    std::unique_ptr<apollo::net::linkrpc::RpcClient> client_;
     std::thread pump_thread_;
+#endif
+    std::unique_ptr<apollo::net::linkrpc::RpcClient> client_;
     std::atomic<bool> running_{false};
 };
 
