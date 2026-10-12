@@ -1370,3 +1370,25 @@ if(MSVC)
     target_compile_options(logpush_tests PRIVATE /utf-8)
 endif()
 add_test(NAME LogPushTests COMMAND logpush_tests)
+
+# Link RPC 关联原语测试（P4-4 批⓪：关联信封 round-trip / 并发不串号 /
+# 超时摘表迟到弃 / 断连即败 / 坏信封拒收计数）
+add_executable(linkrpc_tests
+    test_link_rpc.cpp
+)
+target_link_libraries(linkrpc_tests PRIVATE
+    apollo::net_linkrpc
+    apollo_net_link
+    apollo::net_contract_wire
+)
+target_compile_definitions(linkrpc_tests PRIVATE
+    APOLLO_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+if(WIN32)
+    target_link_libraries(linkrpc_tests PRIVATE ws2_32)
+    target_compile_definitions(linkrpc_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(linkrpc_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LinkRpcTests COMMAND linkrpc_tests)

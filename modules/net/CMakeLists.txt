@@ -217,6 +217,10 @@ add_subdirectory(contract_wire)
 # 契约 930 + 有界队列断连降级；collector = apps/logger serve）
 add_subdirectory(logpush)
 
+# Link RPC 关联原语（P4-4 批⓪：nng 迁移底座——契约 940/941 关联信封 +
+# corr_id 关联 + 同步等待桥；五处 nng 消费面的迁移底座）
+add_subdirectory(linkrpc)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)

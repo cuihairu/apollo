@@ -295,6 +295,19 @@
     <field name="line" type="string" desc="结构化行原文（六键 logfmt，structured.h 契约）"/>
   </msg>
 
+  <!-- Link RPC 族（P4-4 批⓪：nng 迁移关联原语——linkrpc 层只做请求/响应
+       关联与等待，载荷不透明：body = MessageCodec 全帧字节（header+body），
+       业务语义仍归各进程 handler。可靠语义 kReliable（重连补投 + seq 去重）；
+       断连 = 同步失败（调用方降级），迟到响应 = 无等待者即弃。 -->
+  <msg id="940" name="rpc_request" dir="P2P" channel="events" domain="internal" desc="link RPC 请求（corr_id 关联响应；body 载荷不透明，本层不解释）">
+    <field name="corr_id" type="int64" desc="请求关联号（客户端单调分配，0 保留；响应原样回带）"/>
+    <field name="body" type="bytes" desc="请求载荷（MessageCodec 全帧，业务层自识消息型）"/>
+  </msg>
+  <msg id="941" name="rpc_response" dir="P2P" channel="events" domain="internal" desc="link RPC 响应（同 corr_id 关联；无等待者即弃）">
+    <field name="corr_id" type="int64" desc="回带请求关联号"/>
+    <field name="body" type="bytes" desc="响应载荷（MessageCodec 全帧；空 = handler 无产出）"/>
+  </msg>
+
   <!-- Guild/Party 族（P2-4：社交面归 Anchor 长期态，improvement-plan P2-4 消息面）。
        C2S 意图 only（服务端定夺，docs/05 §6.4）——操作码经唯一 S2C 结果回带
        （op：1=create 2=disband 3=join 4=leave）；两族各一条 result 收口，

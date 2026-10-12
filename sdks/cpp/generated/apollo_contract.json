@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "7217a157485a421e252ef9d7bcea7bb0976a2e5e1fda72d63e6c55d5bd00c626",
+  "schema_hash": "e98275190863ad801fc5d647b0d7ec61ac256f787d3a00ca3523e8d43b3d9027",
   "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "a850709a7a22b83f8e186307f86e108d419fafe28319880ff3afb63760855a76",
+  "internal_hash": "02ba325bbe52b297c3c022987e41a942635e847daedbb70470d4f96e04da7c55",
   "contract_version": 3,
   "aliases": [
     {
@@ -1998,6 +1998,52 @@
         }
       ],
       "desc": "logger 结构化行推送（各进程→collector；一行一帧，行内 proc= 键自识进程）"
+    },
+    {
+      "id": 940,
+      "name": "rpc_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "corr_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "请求关联号（客户端单调分配，0 保留；响应原样回带）"
+        },
+        {
+          "name": "body",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "请求载荷（MessageCodec 全帧，业务层自识消息型）"
+        }
+      ],
+      "desc": "link RPC 请求（corr_id 关联响应；body 载荷不透明，本层不解释）"
+    },
+    {
+      "id": 941,
+      "name": "rpc_response",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "corr_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带请求关联号"
+        },
+        {
+          "name": "body",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "响应载荷（MessageCodec 全帧；空 = handler 无产出）"
+        }
+      ],
+      "desc": "link RPC 响应（同 corr_id 关联；无等待者即弃）"
     }
   ],
   "entities": [
