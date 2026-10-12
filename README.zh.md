@@ -20,7 +20,7 @@
 
 Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
 
-Apollo treats a **baseapp** as an authoritative simulation unit. Each baseapp owns a complete scene or game instance and can be created, scheduled, recovered, and recycled independently.
+Apollo 把游戏进程拆成两个角色：**baseapp** 持有玩家权威状态（`PlayerAnchor`、存档 journal、会话绑定），**cellapp** 运行场景与游戏副本（实体、AOI、战斗）。每个实例可以独立创建、调度、恢复与回收。
 
 ```text
 Client
