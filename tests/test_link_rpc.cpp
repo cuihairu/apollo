@@ -64,6 +64,8 @@ bool load_table(link::RouteTable& table) {
     return link::load_route_table_json(buffer.str(), table);
 }
 
+#if !defined(_WIN32)
+
 // 全链路对端：listener + connector → InterServerLink 握手至 kUp（同
 // test_net_link 的 tcp pair 模式；轮询每拍 2ms 让步——macOS CI 口径）。
 struct LinkPair {
@@ -278,6 +280,33 @@ bool test_rpc_bad_envelope() {
     TEST_ASSERT(client.stats().responses == 0, "no response produced");
     return true;
 }
+
+#else // _WIN32
+
+// link TCP 底座不进 Windows（POSIX only）：全用例踩 TcpListener/Connector，
+// 用例本体空转（test_net_link 同门法）。
+bool test_rpc_roundtrip() {
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+}
+bool test_rpc_concurrent() {
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+}
+bool test_rpc_wait_then_late() {
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+}
+bool test_rpc_not_up() {
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+}
+bool test_rpc_bad_envelope() {
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+}
+
+#endif // !_WIN32
 
 } // namespace
 
