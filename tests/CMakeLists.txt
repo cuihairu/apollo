@@ -280,6 +280,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
+	    target_compile_definitions(base_anchor_tests PRIVATE
+	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
 	        apollo::base
@@ -563,6 +566,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    target_include_directories(base_anchor_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
+	    )
+	    target_compile_definitions(base_anchor_tests PRIVATE
+	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo

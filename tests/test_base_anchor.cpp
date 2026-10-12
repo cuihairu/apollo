@@ -4,6 +4,7 @@
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
+#include "apollo/net/link/tcp_transport.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -337,8 +338,136 @@ bool test_player_migration_faces() {
                         == static_cast<uint16_t>(protocol::MessageType::ERROR),
                     "truncated freeze request answered with error frame");
     }
+
+    // 937 全字段 roundtrip（source 双员——新 zone 自主拉取的拨入地址）
+    {
+        migration::HandoffRequest full{42, 8, 9, 777, 3, "127.0.0.1", 19610};
+        auto frame = migration::encodeFrame(full);
+        protocol::SessionID session = 0;
+        migration::HandoffRequest back;
+        TEST_ASSERT(migration::decodeFrame(frame, back, session)
+                        && back.player_id == 42 && back.request_id == 8
+                        && back.new_epoch == 9 && back.session_id == 777
+                        && back.gateway_id == 3 && back.source_host == "127.0.0.1"
+                        && back.source_port == 19610,
+                    "937 roundtrip carries source address");
+    }
     return true;
 }
+
+// 真链路 ②：937 带源地址 → 新 zone 现场拨老 zone 拉 936（五步② wire 落
+// 地：MigrationPuller active 拨 M1 passive，老的已先 flush 再发）。
+// Windows 桩树 M1 面缺席（start false）——护栏跳过（tcp 测试同款）。
+#if !defined(_WIN32)
+bool test_player_migration_pull_on_handoff() {
+    std::cout << "Running: test_player_migration_pull_on_handoff..." << std::endl;
+    namespace migration = base::migration;
+    namespace protocol = apollo::protocol;
+    namespace link = apollo::net::link;
+
+    // 空闲端口探针（拿完即关——重用窗口内 M1 面接手）
+    std::uint16_t m1Port = 0;
+    {
+        link::TcpListener probe;
+        TEST_ASSERT(probe.start("127.0.0.1", 0), "port probe binds ephemeral");
+        m1Port = probe.port();
+    }
+
+    MigrationDir oldDir("base_pull_old_data");
+    MigrationDir newDir("base_pull_new_data");
+
+    base::BaseConfig oldCfg;
+    oldCfg.workerThreads = 1;
+    oldCfg.autoSaveIntervalMs = 10;
+    oldCfg.host = "127.0.0.1";
+    oldCfg.port = 39106;  // 旧 REP 面已退役，占位端口（stub 树惯例高位段）
+    oldCfg.dataDir = oldDir.path + "/players";
+    oldCfg.journalPath = oldDir.path + "/journal/persist.log";
+    oldCfg.m1Port = m1Port;
+    oldCfg.m1RouteJson = APOLLO_BASEAPP_CONTRACT_ROUTE_JSON;
+    std::filesystem::create_directories(oldCfg.dataDir);
+    std::filesystem::create_directories(oldDir.path + "/journal");
+
+    // 老 zone：播种 + 激活（脏锚——② 先 flush 再发的供数）+ 起 M1 面
+    {
+        base::PlayerData seed;
+        seed.playerId = 42;
+        seed.username = "pulled-me";
+        seed.level = 7;
+        base::DatabaseService seeder(oldCfg);
+        TEST_ASSERT(seeder.savePlayer(seed), "old side seed archive written");
+    }
+    base::BaseServer oldServer(oldCfg);
+    oldServer.start();
+    TEST_ASSERT(oldServer.m1_listen_port() == m1Port, "m1 face on probed port");
+    {
+        auto anchor = oldServer.activatePlayer(42);
+        TEST_ASSERT(anchor != nullptr, "old side anchor activated");
+        apollo::game::session::SessionBinding binding;
+        binding.session_id = 777;
+        binding.gateway_id = 3;
+        TEST_ASSERT(oldServer.bindSession(42, binding), "old side session bound");
+        anchor = oldServer.findAnchor(42);
+        anchor->set_home_zone_id(2);
+        anchor->mark_dirty("pull_drill");
+    }
+    // ① 停写先行（五步序：编排面先 933 再 937——snapshot 前置 Transferring）
+    {
+        auto reply = oldServer.dispatchRequest(
+            migration::encodeFrame(migration::FreezeRequest{42, 1}));
+        protocol::SessionID session = 0;
+        migration::FreezeReply frozen;
+        TEST_ASSERT(migration::decodeFrame(reply, frozen, session) && frozen.accepted,
+                    "old side frozen before pull");
+    }
+
+    // 新 zone：不装 M1 面——937 带源地址，handler 现场拨老 zone 拉 936
+    base::BaseConfig newCfg = oldCfg;
+    newCfg.dataDir = newDir.path + "/players";
+    newCfg.journalPath = newDir.path + "/journal/persist.log";
+    newCfg.m1Port = 0;
+    std::filesystem::create_directories(newCfg.dataDir);
+    std::filesystem::create_directories(newDir.path + "/journal");
+    base::BaseServer newServer(newCfg);
+    {
+        migration::HandoffRequest req{42, 9, 8, 777, 3, "127.0.0.1", m1Port};
+        auto reply = newServer.dispatchRequest(migration::encodeFrame(req));
+        protocol::SessionID session = 0;
+        migration::HandoffReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session), "938 reply decodes");
+        TEST_ASSERT(out.accepted && out.player_id == 42 && out.request_id == 9,
+                    "handoff accepted after on-the-fly pull");
+
+        auto anchor = newServer.findAnchor(42);
+        TEST_ASSERT(anchor != nullptr
+                        && anchor->state() == apollo::game::session::AnchorState::Online,
+                    "new side anchor online");
+        TEST_ASSERT(anchor->session_binding().session_id == 777,
+                    "binding restored from pulled snapshot");
+        TEST_ASSERT(anchor->home_zone_id() == 2, "home zone from pulled snapshot");
+
+        base::PlayerData migrated;
+        base::DatabaseService reader(newCfg);
+        TEST_ASSERT(reader.loadPlayer(42, migrated) && migrated.level == 7
+                        && migrated.username == "pulled-me",
+                    "flushed profile landed on new side");
+    }
+
+    // 源不可达：937 指黑洞端口 → 拒且 accepted=false（信封不炸）
+    {
+        migration::HandoffRequest req{43, 10, 8, 0, 0, "127.0.0.1", 1};
+        auto reply = newServer.dispatchRequest(migration::encodeFrame(req));
+        protocol::SessionID session = 0;
+        migration::HandoffReply out;
+        TEST_ASSERT(migration::decodeFrame(reply, out, session) && !out.accepted,
+                    "unreachable source rejected in-band");
+    }
+
+    oldServer.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+#endif // !_WIN32
 
 } // namespace
 
@@ -359,6 +488,9 @@ int main() {
     run(test_shutdown_maintenance_gate);
     run(test_shutdown_flushes_journal_and_archive);
     run(test_player_migration_faces);
+#if !defined(_WIN32)
+    run(test_player_migration_pull_on_handoff);
+#endif
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

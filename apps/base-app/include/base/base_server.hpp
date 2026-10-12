@@ -3,6 +3,7 @@
 #include "base/config.hpp"
 #include "base/database_service.hpp"
 #include "base/m1_base_server.hpp"
+#include "base/migration_wire.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/game/session/anchor_manager.hpp"
 #include "apollo/game/session/player_directory.hpp"
@@ -40,6 +41,12 @@ public:
     // 一律维护中应答（不收新 intent）
     bool is_shutting_down() const { return shuttingDown_.load(); }
 
+    // M1 受理面实际监听端口（start() 后有效；未装配 = 0）——迁移 puller
+    // 的拨入地址供数（937.source_host/port）
+    std::uint16_t m1_listen_port() const {
+        return m1Server_ ? m1Server_->listenPort() : 0;
+    }
+
     // 受理面（start() 注册的 handler 即此件）：按消息类型分派。公开为
     // 停机维护闸的直测入口——stub 传输树无真实 REP 面，socket round-trip
     // 测不了受理语义
@@ -72,15 +79,9 @@ public:
     // 置 Transferring（只读态——后续 flush 跳过迁移中锚点）。未知玩家 false。
     bool freezePlayer(PlayerID playerId);
 
-    // 迁移快照（936 snapshot 载荷；success=false 时仅 error_message 有义）
-    struct PlayerSnapshotData {
-        bool success = false;
-        std::string error_message;
-        std::string profile_json;
-        std::uint64_t session_id = 0;
-        std::uint32_t gateway_id = 0;
-        std::uint32_t home_zone_id = 0;
-    };
+    // 迁移快照（936 snapshot 载荷；success=false 时仅 error_message 有义。
+    // 定义在 migration_wire.hpp——②读出/②'暂存/③接权与 puller 四面共用）
+    using PlayerSnapshotData = migration::SnapshotData;
 
     // ② 快照（935）：前置 = 已冻结（Transferring）——未冻结拒（防半写态
     // 出快照）。读档案 JSON 原样 + 锚点元数据。

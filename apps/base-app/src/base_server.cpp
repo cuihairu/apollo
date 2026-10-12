@@ -1,4 +1,5 @@
 #include "base/base_server.hpp"
+#include "base/migration_puller.hpp"
 #include "base/migration_wire.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
@@ -694,11 +695,34 @@ std::vector<uint8_t> BaseServer::handlePlayerHandoffRequest(
         return protocol::MessageCodec::encode(
             err, protocol::MessageCodec::parseHeader(request).sessionId);
     }
-    // 快照落位前置（②'）：无暂存 = 拒接权（五步序 ②→③ 不可跳）
-    const auto it = migrationSnapshots_.find(req.player_id);
+    // 快照落位前置（②'）：无暂存且 937 带源地址 = 现场拉取（五步②——
+    // 新 zone 向老 zone 拨 935，老的已先 flush 再发；同步 ms 级，迁移面
+    // 低频，批量异步化挂后续批）。源为空且无暂存 = 拒（②→③ 不可跳）。
+    auto it = migrationSnapshots_.find(req.player_id);
     migration::HandoffReply reply;
     reply.player_id = req.player_id;
     reply.request_id = req.request_id;
+    if (it == migrationSnapshots_.end() && !req.source_host.empty()
+            && req.source_port != 0) {
+        if (config_.m1RouteJson.empty()) {
+            reply.error_message = "no route table for migration pull";
+            return migration::encodeFrame(reply, session);
+        }
+        migration::MigrationPuller puller(config_.m1RouteJson, req.source_host,
+                                          static_cast<std::uint16_t>(req.source_port));
+        if (!puller.ready() || !puller.waitUp()) {
+            reply.error_message = "migration pull: source unreachable";
+            return migration::encodeFrame(reply, session);
+        }
+        auto pulled = puller.pull(req.player_id, req.request_id);
+        puller.shutdown();
+        if (!pulled.success) {
+            reply.error_message = "migration pull failed: " + pulled.error_message;
+            return migration::encodeFrame(reply, session);
+        }
+        storeMigrationSnapshot(req.player_id, std::move(pulled));
+        it = migrationSnapshots_.find(req.player_id);
+    }
     if (it == migrationSnapshots_.end()) {
         reply.error_message = "no migration snapshot stored";
         return migration::encodeFrame(reply, session);

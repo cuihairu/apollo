@@ -15,6 +15,10 @@
 #include <vector>
 
 namespace base {
+
+namespace protocol = apollo::protocol;  // 自足：任何包含顺序可用（重复
+                                        // 声明同名别名合法）
+
 namespace migration {
 
 static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_freeze_request) == 933);
@@ -65,6 +69,8 @@ struct HandoffRequest {
     std::uint64_t new_epoch = 0;    // manager 目录 advance 分配
     std::uint64_t session_id = 0;   // resume 双锚
     std::uint32_t gateway_id = 0;
+    std::string source_host;        // 源 zone（空 = 快照已由编排面预落）
+    std::uint32_t source_port = 0;
 };
 
 struct HandoffReply {
@@ -73,6 +79,17 @@ struct HandoffReply {
     std::uint64_t request_id = 0;
     bool accepted = false;          // 1=接权（新 epoch 生效，此后不可撤销）
     std::string error_message;
+};
+
+// 迁移快照（936 载荷的进程内形态；zone 侧三面共用——②读出/②'暂存/
+// ③接权。成功时 error_message 空）
+struct SnapshotData {
+    bool success = false;
+    std::string error_message;
+    std::string profile_json;       // 玩家档案 JSON（ADR-007 原样）
+    std::uint64_t session_id = 0;
+    std::uint32_t gateway_id = 0;
+    std::uint32_t home_zone_id = 0;
 };
 
 // ---- 写端（小端；put 族 offload_wire 同型）----
@@ -147,6 +164,8 @@ inline std::vector<std::uint8_t> encodeBody(const HandoffRequest& m) {
     put_u64(b, m.new_epoch);
     put_u64(b, m.session_id);
     put_u32(b, m.gateway_id);
+    put_str(b, m.source_host);
+    put_u32(b, m.source_port);
     return b;
 }
 
@@ -268,7 +287,8 @@ inline bool decodeBody(BodyReader& r, SnapshotReply& m) {
 
 inline bool decodeBody(BodyReader& r, HandoffRequest& m) {
     return r.u64(m.player_id) && r.u64(m.request_id) && r.u64(m.new_epoch)
-           && r.u64(m.session_id) && r.u32(m.gateway_id);
+           && r.u64(m.session_id) && r.u32(m.gateway_id) && r.str(m.source_host)
+           && r.u32(m.source_port);
 }
 
 inline bool decodeBody(BodyReader& r, HandoffReply& m) {

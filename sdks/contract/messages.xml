@@ -360,12 +360,14 @@
     <field name="gateway_id" type="int32" desc="会话 gateway（0 = 无会话）"/>
     <field name="home_zone_id" type="int32" desc="锚点 home zone（信息列）"/>
   </msg>
-  <msg id="937" name="player_handoff_request" dir="P2P" channel="events" domain="internal" desc="写权交接指令（manager→新 zone；带目录新分配 epoch）">
+  <msg id="937" name="player_handoff_request" dir="P2P" channel="events" domain="internal" desc="写权交接指令（manager→新 zone；带目录新分配 epoch 与源 zone 地址——新 zone 收到即向源发起 935 拉取，快照落位后才回 938）">
     <field name="player_id" type="int64"/>
     <field name="request_id" type="int64"/>
     <field name="new_epoch" type="int64" desc="新 epoch（manager 目录 advance 分配；旧 epoch 迟到回执按陈旧拒收）"/>
     <field name="session_id" type="int64" desc="会话号（resume 双锚）"/>
     <field name="gateway_id" type="int32"/>
+    <field name="source_host" type="string" desc="源 zone 地址（新 zone 向其发 935；空 = 快照已由编排面预落）"/>
+    <field name="source_port" type="int32" desc="源 zone M1 受理端口（0 = 同上）"/>
   </msg>
   <msg id="938" name="player_handoff_reply" dir="P2P" channel="events" domain="internal" desc="写权交接回执（新 zone→manager；accepted = 新 epoch 已生效，此后不可撤销）">
     <field name="player_id" type="int64"/>
