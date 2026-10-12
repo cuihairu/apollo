@@ -13,12 +13,15 @@
 #   APOLLO_FLEET_DIR  运行目录（默认 /tmp/apollo-fleet-<uid>：roster + pid + 日志）
 #   APOLLO_LOG_PUSH_ADDR  log push collector 地址（默认 127.0.0.1:9102；置空
 #     = push 关，app 退 v1 单出口——logging.md §5 断连降级由客户端队列承担）
+#   APOLLO_METRICS_PUSH_ADDR  metrics exporter 地址（默认 127.0.0.1:9106；置空
+#     = push 关——logging.md §5.1 采样流断连丢拍不积压，最新者胜）
 #
 # dev 端口布局（仅本脚本约定的开发面，无配置真相——生产部署不由此起）：
 #   login 9001 / gateway 9002 / baseappmgr 9003 / base-app 9004 / cell M1 9101
 #   login M1 准入 9103 / base M1 9104 / baseappmgr M1 control 9105
 #   （P4-4 批①③④：准入、base RPC 链与 baseappmgr 控制面 M1 面）
 #   / logger serve 9102（log push collector，L4）
+#   / admin serve 9106（metrics link，P3-3）+ 9107（HTTP GET /metrics）
 #   （app 缺省端口以各自 config 为准，本脚本显式传参避免歧义）
 #
 # 边界：编队 = 生命周期半边（拉起/重启/收割）；各 app 尚未接 DiscoveryBeacon
@@ -42,6 +45,7 @@ MACHINED="$BUILD_DIR/apps/machined/machined"
 fleet_entries() {
     cat <<EOF
 logger    | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
+admin     | $BUILD_DIR/apps/admin/admin serve
 login     | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104 --baseappmgr-m1-port 9105
 gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105
 baseappmgr| $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003 --m1-port 9105
@@ -96,6 +100,10 @@ cmd_up() {
     # 残余就绪竞态由客户端有界队列吸收（断连降级即常态路径）。
     export APOLLO_LOG_PUSH_ADDR="${APOLLO_LOG_PUSH_ADDR:-127.0.0.1:9102}"
 
+    # L4 metrics push（logging.md §5.1 采样流）：各进程 MetricRegistry 快照
+    # 对 admin exporter 显形（kDroppable 周期推，exporter 缺席 = 丢拍）。
+    export APOLLO_METRICS_PUSH_ADDR="${APOLLO_METRICS_PUSH_ADDR:-127.0.0.1:9106}"
+
     nohup "$MACHINED" --roster "$ROSTER" >> "$LOGFILE" 2>&1 &
     echo $! > "$PIDFILE"
     sleep 0.3
@@ -107,6 +115,7 @@ cmd_up() {
     fi
     echo "编队已起（machined pid $(cat "$PIDFILE")，$spawned 个编队成员）"
     echo "  目录面 UDP 0.0.0.0:9600；运行目录 $FLEET_DIR"
+    echo "  指标：curl -s localhost:9107/metrics"
     echo "  日志：tail -f $LOGFILE"
     echo "  停止：scripts/dev_fleet.sh down"
 }

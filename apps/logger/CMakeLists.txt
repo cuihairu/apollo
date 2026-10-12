@@ -28,6 +28,7 @@ target_link_libraries(logger
         apollo::runtime
         apollo_net_link
         apollo::net_contract_wire
+        apollo_net_metricspush
 )
 
 target_compile_features(logger PRIVATE cxx_std_20)

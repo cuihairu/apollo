@@ -6,6 +6,7 @@
 
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
+#include "apollo/net/metricspush/metrics_push_env.hpp"
 #include "logger/logger_app.hpp"
 
 int main(int argc, char* argv[]) {
@@ -17,6 +18,11 @@ int main(int argc, char* argv[]) {
     config.consoleEnabled = false;
     config.fileEnabled = false;
     logs.initialize(config);
+
+    // L4 指标 push 出口（logging.md §5.1）：liveness-only（空快照保 proc_up
+    // 存活面；本进程无业务指标）
+    auto metrics_push = apollo::net::metricspush::make_metrics_push_from_env("logger");
+    (void)metrics_push;
 
     apollo::runtime::init_crash_capture(argc, argv, "logger");
     return logger::LoggerApp().run(argc, argv);
