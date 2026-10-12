@@ -517,9 +517,15 @@ BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
         out.error_message = "directory moved rejected";
         return out;
     }
+    std::size_t pushed_parts = 0;
     if (snapshot_publisher_) {
-        snapshot_publisher_->publish_snapshot(collectMirrorEntries());
+        pushed_parts = snapshot_publisher_->publish_snapshot(collectMirrorEntries());
     }
+    apollo::core::log::global_log_manager().createLogger("baseappmgr")
+        ->info("directory rehome: player " + std::to_string(player_id)
+               + " -> zone " + std::to_string(target_zone_id)
+               + " epoch=" + std::to_string(newEpoch)
+               + " snapshot_parts=" + std::to_string(pushed_parts));
 
     out.new_epoch = newEpoch;
     out.new_zone_id = target_zone_id;
