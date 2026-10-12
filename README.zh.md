@@ -26,27 +26,22 @@ Apollo 把游戏进程拆成两个角色：**baseapp** 持有玩家权威状态�
 Client
    │
 Gateway
-   │
-   ▼
-baseapp
- ├── Scene / Instance
- ├── AOI
- ├── Session
- ├── Authoritative Game Logic
- └── Journal
-        │
-        ▼
-    DataProxy
-        │
-        ▼
-       DB
+   ├──► baseapp —— 玩家权威与调度单元
+   │       ├── Session
+   │       ├── PlayerAnchor（玩家长期状态）
+   │       └── Journal ──► DataProxy ──► DB
+   └──► cellapp —— 场景 / 副本运行时
+           ├── Scene / Instance（独立创建、调度、
+           │   恢复、回收）
+           ├── AOI
+           └── Battle（结算单向写入锚点）
 ```
 
 The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
 
-This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple baseapps can be orchestrated across machines while preserving the same runtime model.
+This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, baseapps and cellapps can be orchestrated across machines while preserving the same runtime model.
 
-中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是「由大量 baseapp/实例组成」的 supported use case（instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
+中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是 supported use case（「由大量实例组成」——场景实例跑在 cellapp、玩家权威在 baseapp 的 instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
 
 ## 适用场景 / Use Cases
 
@@ -54,12 +49,12 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 | 场景 | 实例形态 |
 |------|----------|
-| 塔防、固定地图（绿色循环圈等） | baseapp 内多房间，开局 `CreateInstance` |
+| 塔防、固定地图（绿色循环圈等） | cellapp 内多房间，开局 `CreateInstance` |
 | 副本 / Dungeon / Roguelike | 一局一实例，用完回收 |
 | 竞技场 / Arena / 大逃杀 | Match 实例，赛毕销毁 |
 | 多人 PvE / 生存 / Co-op | 小队实例 |
 | 多人 PvP | 对局实例 |
-| MMO 分线与副本 | 线 = scene_id 实例，大量 baseapp 横向编排 |
+| MMO 分线与副本 | 线 = scene_id 实例，大量 cellapp 实例横向编排 |
 
 **不适合**——**连续共享大世界**（persistent seamless world）：无缝地图、跨进程空间漫游、「一个 World 横向切成 CellApp」的部署模型。Apollo 有意不做 cell 分片 / ghost / 实体迁移（架构裁决 #9），这类需求请选 BigWorld / KBEngine 一类 continuous-world 引擎。
 

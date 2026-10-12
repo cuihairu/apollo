@@ -26,27 +26,22 @@ Apollo splits a game process into two roles: **baseapp** holds the authoritative
 Client
    │
 Gateway
-   │
-   ▼
-baseapp
- ├── Scene / Instance
- ├── AOI
- ├── Session
- ├── Authoritative Game Logic
- └── Journal
-        │
-        ▼
-    DataProxy
-        │
-        ▼
-       DB
+   ├──► baseapp — player authority & scheduling
+   │       ├── Session
+   │       ├── PlayerAnchor (long-term player state)
+   │       └── Journal ──► DataProxy ──► DB
+   └──► cellapp — scene / instance runtime
+           ├── Scene / Instance (created, scheduled,
+           │   recovered, recycled independently)
+           ├── AOI
+           └── Battle (settles one-way into anchors)
 ```
 
 The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
 
-This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple baseapps can be orchestrated across machines while preserving the same runtime model.
+This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, baseapps and cellapps can be orchestrated across machines while preserving the same runtime model.
 
-Positioning: **an instance-based multiplayer game server engine** — rooms/scenes/dungeons/matches are first-class citizens; MMO is a supported use case ("an MMO composed of many baseapps/instances", i.e. instance-oriented MMO architectures), not the core identity. The tech stack is modern C++20, with core modules covering networking, data storage, game logic, and the battle system.
+Positioning: **an instance-based multiplayer game server engine** — rooms/scenes/dungeons/matches are first-class citizens; MMO is a supported use case ("an MMO composed of many instances" — scene instances run in cellapps while baseapps hold player authority, i.e. instance-oriented MMO architectures), not the core identity. The tech stack is modern C++20, with core modules covering networking, data storage, game logic, and the battle system.
 
 ## Use Cases
 
@@ -54,12 +49,12 @@ Positioning: **an instance-based multiplayer game server engine** — rooms/scen
 
 | Scenario | Instance Form |
 |------|----------|
-| Tower defense, fixed maps (e.g. tower-defense circles) | Multiple rooms in one baseapp, `CreateInstance` on game start |
+| Tower defense, fixed maps (e.g. tower-defense circles) | Multiple rooms in one cellapp, `CreateInstance` on game start |
 | Dungeons / Roguelike | One instance per run, recycled when finished |
 | Arena / battle royale | Match instance, destroyed after the match |
 | Multiplayer PvE / survival / co-op | Squad instances |
 | Multiplayer PvP | Match instances |
-| MMO sharding (lines) and dungeons | A line = a scene_id instance, many baseapps orchestrated horizontally |
+| MMO sharding (lines) and dungeons | A line = a scene_id instance, many cellapp-hosted instances orchestrated horizontally |
 
 **Not a fit** — a **persistent seamless world**: seamless maps, cross-process spatial roaming, or a deployment model where "one World is split horizontally into CellApps". Apollo intentionally does not do cell partitioning / ghosts / entity migration (architecture decision #9); for such requirements, choose a continuous-world engine such as BigWorld / KBEngine.
 
