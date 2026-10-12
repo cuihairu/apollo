@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "9c4dcbff6dd5d0951abd1c41574b2fdd24130f8cf4ba0319e7acc69a88366fda",
+  "schema_hash": "880579c7a1f6c04f4516522fd6a884d3e88f09cbda899b6c57450793a663e40c",
   "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "9bf05883a3fe5e9c9f2a8601c37406597eda03a53c87a097351a15bd69009a63",
+  "internal_hash": "d9947c4adeb70761c78dde4ee870b18af1b677ae803e13e54fae4e8159864bd3",
   "contract_version": 3,
   "aliases": [
     {
@@ -2021,6 +2021,89 @@
         }
       ],
       "desc": "指标快照推送（各进程→admin exporter；body 为已渲染 exposition 文本，嵌 proc 标签）"
+    },
+    {
+      "id": 932,
+      "name": "internal_envelope",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "message_type",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "信封内型（四分类：1=EntityMethodCall 2=RouteControl 3=LifecycleEvent 4=ReplicationCommand；0=未分类）"
+        },
+        {
+          "name": "flags",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "信封旗标（bit0 = 采样命中 trace，W3C traceparent flags 语义）"
+        },
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "业务关联号（0=无；语义归内型——意图族 = 延时应答键）"
+        },
+        {
+          "name": "source_app",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "发起进程 processIdentity"
+        },
+        {
+          "name": "target_app",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "目标进程 processIdentity（空=不指名）"
+        },
+        {
+          "name": "entity_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标实体（0=非实体面）"
+        },
+        {
+          "name": "method_alias",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "方法别名（空=非方法面）"
+        },
+        {
+          "name": "route_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "路由版本（0=未带）"
+        },
+        {
+          "name": "authority_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "权威纪元（0=未带）"
+        },
+        {
+          "name": "trace_id",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "W3C trace-id（16B；空=未带 trace）"
+        },
+        {
+          "name": "parent_span_id",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "W3C parent span-id（8B；空=根 span）"
+        },
+        {
+          "name": "payload",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "载荷（u16 LE id + 契约载荷，内层自识）"
+        }
+      ],
+      "desc": "内部消息统一信封（trace 传播载体；payload = u16 id + 载荷全帧）"
     },
     {
       "id": 940,

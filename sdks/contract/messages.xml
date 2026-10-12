@@ -305,6 +305,30 @@
     <field name="body" type="string" desc="Prometheus exposition 文本（已嵌 proc 标签，exporter 直拼接）"/>
   </msg>
 
+  <!-- Internal 信封族（remote-entity-call 四件套语义层 · 信封首件）：trace 子集
+       载体（logging.md §5.1——trace_id/span_id + W3C traceparent 语义，生成在
+       进程入口，span 界定 = 消息边界，头部采样极低率默认 1/10⁴，采样命中的
+       span 以结构化行进日志流）。统一信封字段 = net-abstraction §7 内型清单
+       （message_type/trace_id/request_id/source_app/target_app/entity_id/
+       method_alias/route_version/authority_epoch/flags/payload）+
+       parent_span_id（发端 span——收端以之为本 span 的父，发端自身 span 记录
+       的父为空 = 根）。payload = u16 LE id + 契约载荷（append_envelope 线形，
+       rpc_request body 同约定，内层自识）。 -->
+  <msg id="932" name="internal_envelope" dir="P2P" channel="events" domain="internal" desc="内部消息统一信封（trace 传播载体；payload = u16 id + 载荷全帧）">
+    <field name="message_type" type="int32" desc="信封内型（四分类：1=EntityMethodCall 2=RouteControl 3=LifecycleEvent 4=ReplicationCommand；0=未分类）"/>
+    <field name="flags" type="int32" desc="信封旗标（bit0 = 采样命中 trace，W3C traceparent flags 语义）"/>
+    <field name="request_id" type="int64" desc="业务关联号（0=无；语义归内型——意图族 = 延时应答键）"/>
+    <field name="source_app" type="string" desc="发起进程 processIdentity"/>
+    <field name="target_app" type="string" desc="目标进程 processIdentity（空=不指名）"/>
+    <field name="entity_id" type="int64" desc="目标实体（0=非实体面）"/>
+    <field name="method_alias" type="string" desc="方法别名（空=非方法面）"/>
+    <field name="route_version" type="int64" desc="路由版本（0=未带）"/>
+    <field name="authority_epoch" type="int64" desc="权威纪元（0=未带）"/>
+    <field name="trace_id" type="bytes" desc="W3C trace-id（16B；空=未带 trace）"/>
+    <field name="parent_span_id" type="bytes" desc="W3C parent span-id（8B；空=根 span）"/>
+    <field name="payload" type="bytes" desc="载荷（u16 LE id + 契约载荷，内层自识）"/>
+  </msg>
+
   <!-- Link RPC 族（P4-4 批⓪：nng 迁移关联原语——linkrpc 层只做请求/响应
        关联与等待，载荷不透明：body = MessageCodec 全帧字节（header+body），
        业务语义仍归各进程 handler。可靠语义 kReliable（重连补投 + seq 去重）；
