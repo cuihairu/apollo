@@ -87,7 +87,9 @@ bool BiTap::open() {
     if (ec) {
         return false;
     }
-    out_.open(config_.dir + "/bi.log", std::ios::app);
+    // binary 打开（serve 归档面同款）：原文透传逐位，Windows 文本模式
+    // 不做 '\n'→"\r\n" 翻译
+    out_.open(config_.dir + "/bi.log", std::ios::app | std::ios::binary);
     enabled_ = static_cast<bool>(out_);
     return enabled_;
 }

@@ -9,6 +9,10 @@
 //   4. open 失败降级：dir 为常规文件 = open false，observe 无害；
 //   5. 解析面：cat 白名单逗号解析（空白段剥离/空段跳过）+ 采样率
 //      （未设/空/坏值/0 归 1）。
+//
+// Windows 口径（CI 实证两坑）：BiTap binary 打开无换行翻译（原文逐位
+// 含 Windows）；断言毕先出作用域析构关句柄，再 remove_all——句柄存活
+// 期删目录抛 filesystem_error（未捕获 = fastfail 0xc0000409）。
 
 #include "logger/bi_tap.hpp"
 
@@ -52,49 +56,53 @@ std::string slurp(const std::string& path) {
 
 bool test_filter_and_passthrough() {
     const std::string dir = make_tmp_dir();
-    apollo::logger::BiTapConfig cfg;
-    cfg.dir = dir;
-    cfg.cats = {"trace", "script_fault"};
-    apollo::logger::BiTap tap(cfg);
-    TEST_ASSERT(tap.open() && tap.enabled(), "开启成功");
+    {
+        apollo::logger::BiTapConfig cfg;
+        cfg.dir = dir;
+        cfg.cats = {"trace", "script_fault"};
+        apollo::logger::BiTap tap(cfg);
+        TEST_ASSERT(tap.open() && tap.enabled(), "开启成功");
 
-    const std::string l1 =
-        "ts=100 level=INFO proc=cell tick=1 cat=trace msg=span one kv=1";
-    const std::string l2 =
-        "ts=101 level=ERROR proc=cell tick=1 cat=script_fault msg=boom";
-    const std::string l3 =
-        "ts=102 level=INFO proc=cell tick=1 cat=other msg=noise";
-    tap.observe(l1, "trace");
-    tap.observe(l2, "script_fault");
-    tap.observe(l3, "other");
-    TEST_ASSERT(tap.exported() == 2, "白名单内两行导出");
-    TEST_ASSERT(slurp(dir + "/bi.log") == l1 + "\n" + l2 + "\n",
-                "原文透传逐位（含 kv 段）");
+        const std::string l1 =
+            "ts=100 level=INFO proc=cell tick=1 cat=trace msg=span one kv=1";
+        const std::string l2 =
+            "ts=101 level=ERROR proc=cell tick=1 cat=script_fault msg=boom";
+        const std::string l3 =
+            "ts=102 level=INFO proc=cell tick=1 cat=other msg=noise";
+        tap.observe(l1, "trace");
+        tap.observe(l2, "script_fault");
+        tap.observe(l3, "other");
+        TEST_ASSERT(tap.exported() == 2, "白名单内两行导出");
+        TEST_ASSERT(slurp(dir + "/bi.log") == l1 + "\n" + l2 + "\n",
+                    "原文透传逐位（含 kv 段）");
+    }  // tap 先析构关句柄——Windows 句柄存活期文件不可删
     fs::remove_all(dir);
     return true;
 }
 
 bool test_sample_denom() {
     const std::string dir = make_tmp_dir();
-    apollo::logger::BiTapConfig cfg;
-    cfg.dir = dir;
-    cfg.cats = {"trace"};
-    cfg.sample_rate_denom = 3;  // 每 3 条命中保 1
-    apollo::logger::BiTap tap(cfg);
-    TEST_ASSERT(tap.open(), "开启成功");
-    for (int i = 0; i < 5; ++i) {
-        tap.observe("ts=" + std::to_string(i) + " cat=trace msg=m" +
-                        std::to_string(i),
-                    "trace");
-    }
-    TEST_ASSERT(tap.exported() == 2, "5 中保 2（第 0/3 条）");
-    TEST_ASSERT(tap.sampled_out() == 3, "采样弃 3 计数");
-    const std::string body = slurp(dir + "/bi.log");
-    TEST_ASSERT(body.find("msg=m0") != std::string::npos &&
-                    body.find("msg=m3") != std::string::npos,
-                "确定性取模首条恒保");
-    TEST_ASSERT(body.find("msg=m1") == std::string::npos,
-                "弃样行不落盘");
+    {
+        apollo::logger::BiTapConfig cfg;
+        cfg.dir = dir;
+        cfg.cats = {"trace"};
+        cfg.sample_rate_denom = 3;  // 每 3 条命中保 1
+        apollo::logger::BiTap tap(cfg);
+        TEST_ASSERT(tap.open(), "开启成功");
+        for (int i = 0; i < 5; ++i) {
+            tap.observe("ts=" + std::to_string(i) + " cat=trace msg=m" +
+                            std::to_string(i),
+                        "trace");
+        }
+        TEST_ASSERT(tap.exported() == 2, "5 中保 2（第 0/3 条）");
+        TEST_ASSERT(tap.sampled_out() == 3, "采样弃 3 计数");
+        const std::string body = slurp(dir + "/bi.log");
+        TEST_ASSERT(body.find("msg=m0") != std::string::npos &&
+                        body.find("msg=m3") != std::string::npos,
+                    "确定性取模首条恒保");
+        TEST_ASSERT(body.find("msg=m1") == std::string::npos,
+                    "弃样行不落盘");
+    }  // 同上：句柄先释放再删目录
     fs::remove_all(dir);
     return true;
 }
