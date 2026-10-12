@@ -51,6 +51,18 @@ private:
     std::atomic<std::uint64_t> value_{0};
 };
 
+/// 绝对值原子 → Counter 推进（owning 接线：既有链路/egress 计数为进程期
+/// 只增原子，读出即绝对值——直接 increment 会重复计底数）。调用方持
+/// `last` 影子（上一拍读数），每拍推进增量：`counter_advance_to(c, last,
+/// now)`。now <= last（首拍 last=0 与只增原子不回退之外兜底）不动。
+inline void counter_advance_to(Counter& counter, std::uint64_t& last,
+                               std::uint64_t now) noexcept {
+    if (now > last) {
+        counter.increment(now - last);
+        last = now;
+    }
+}
+
 /// 可增减仪表（队列水位/实体计数/心跳版本号类瞬时值）
 class Gauge {
 public:

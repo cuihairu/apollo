@@ -158,6 +158,23 @@ bool test_global_instance_usable() {
     return true;
 }
 
+bool test_counter_advance_to_absolute() {
+    // 绝对值原子 → Counter 推进（owning 接线：链路/egress 只增原子读出
+    // 即绝对值，直 increment 会重复计底数）
+    MetricRegistry reg;
+    Counter& c = reg.counter("advance_test_total");
+    std::uint64_t last = 0;
+    apollo::core::metrics::counter_advance_to(c, last, 10);
+    TEST_ASSERT(c.load() == 10 && last == 10, "首拍 0→10 全额推进");
+    apollo::core::metrics::counter_advance_to(c, last, 15);
+    TEST_ASSERT(c.load() == 15 && last == 15, "次拍只推增量");
+    apollo::core::metrics::counter_advance_to(c, last, 15);
+    TEST_ASSERT(c.load() == 15, "同读数零推进");
+    apollo::core::metrics::counter_advance_to(c, last, 12);
+    TEST_ASSERT(c.load() == 15 && last == 15, "回退读数不推进（防御兜底）");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -177,6 +194,7 @@ int main() {
         {"counter_gauge_type_separation", test_counter_gauge_type_separation},
         {"snapshot_sorted_and_complete", test_snapshot_sorted_and_complete},
         {"global_instance_usable", test_global_instance_usable},
+        {"counter_advance_to_absolute", test_counter_advance_to_absolute},
     };
 
     for (const auto& c : cases) {

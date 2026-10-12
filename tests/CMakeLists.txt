@@ -1392,6 +1392,31 @@ if(MSVC)
 endif()
 add_test(NAME LogPushTests COMMAND logpush_tests)
 
+# Metrics Push Tests (P3-3 批：metrics admin 通道)
+# MetricsPushClient 发送面（kDroppable 无队列周期推，最新者胜）× hub 受集
+# 面 round-trip + render_exposition 文本面。Windows 只跑 render 面
+# （link TCP 底座 POSIX only，同 logpush_tests 口径）。
+add_executable(metricspush_tests
+    test_metrics_push.cpp
+)
+target_link_libraries(metricspush_tests PRIVATE
+    apollo_net_metricspush
+    apollo_net_link
+    apollo::net_contract_wire
+    apollo::core
+)
+target_compile_definitions(metricspush_tests PRIVATE
+    APOLLO_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+if(WIN32)
+    target_link_libraries(metricspush_tests PRIVATE ws2_32)
+    target_compile_definitions(metricspush_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(metricspush_tests PRIVATE /utf-8)
+endif()
+add_test(NAME MetricsPushTests COMMAND metricspush_tests)
+
 # Link RPC 关联原语测试（P4-4 批⓪：关联信封 round-trip / 并发不串号 /
 # 超时摘表迟到弃 / 断连即败 / 坏信封拒收计数）
 add_executable(linkrpc_tests
