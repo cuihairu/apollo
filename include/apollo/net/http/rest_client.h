@@ -258,6 +258,9 @@ public:
     // URL 是否在白名单内（未配置 = 恒 false；测试与预检共用）
     bool destinationAllowed(const std::string& url) const;
 
+    // URL 字面 host 提取（白名单装配面用；去 scheme/userinfo/端口、小写）
+    static std::string hostOf(const std::string& url);
+
     //==========================================================================
     // 工具方法
     //==========================================================================

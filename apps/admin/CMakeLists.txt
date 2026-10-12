@@ -9,6 +9,7 @@ add_executable(admin
     src/admin_app.cpp
     src/admin_serve.cpp
     src/alert_notifier.cpp
+    src/alert_webhook.cpp
     src/metrics_hub.cpp
     src/metrics_http.cpp
 )
@@ -28,8 +29,14 @@ target_link_libraries(admin
         apollo::core
         apollo::runtime
         apollo_net_link
+        apollo::net_http
         apollo::net_contract_wire
 )
+
+# webhook 出站面（logging.md §5.2 ④）：钉钉/飞书加签 HMAC-SHA256
+# （OpenSSL 单一 crypto 源，§5.9 同口径）
+find_package(OpenSSL REQUIRED)
+target_link_libraries(admin PRIVATE OpenSSL::Crypto)
 
 target_compile_features(admin PRIVATE cxx_std_20)
 apollo_package_crash_handler(admin)

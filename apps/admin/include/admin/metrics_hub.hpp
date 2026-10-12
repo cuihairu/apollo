@@ -16,7 +16,7 @@
 // HTTP 面调用——两向都持锁，锁粒度 = 一次摄入/一次渲染，不跨拍。
 // 平台无关（纯内存 + 字符串拼装），Windows 照常构建。
 //
-// 告警 notifier 独立面（alert_notifier.hpp，L7）：不经 hub——931 受理点直调；webhook 随 curl 出站批；
+// 告警 notifier 独立面（alert_notifier.hpp，L7）：不经 hub——931 受理点直调；webhook 出站面已交付（alert_webhook.hpp）；
 //   进程登记生命周期（陈旧不淘汰——proc_up=0 墓碑常驻即「进程已下线」
 //   的可观测面，运维靠重启清表）。
 

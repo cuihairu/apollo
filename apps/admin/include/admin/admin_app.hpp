@@ -5,7 +5,7 @@
 // 收 931 快照 → MetricsHub 聚合（last-wins + proc_up 陈旧判据）→ HTTP
 // /metrics 吐 Prometheus 文本。
 //
-// 告警 notifier 独立面（alert_notifier.hpp，L7）：不经 hub——931 受理点直调；webhook 随 curl 出站批；
+// 告警 notifier 独立面（alert_notifier.hpp，L7）：不经 hub——931 受理点直调；webhook 出站面已交付（alert_webhook.hpp）；
 // admin 自身指标反向暴露（v1 不做）。
 
 #include <cstdint>

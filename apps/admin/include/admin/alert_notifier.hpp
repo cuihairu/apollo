@@ -5,8 +5,8 @@
 // 分工：层 A（Alertmanager 标准栈）零代码不在此；层 B = 本面——规则表 +
 // 判定 + 静默聚合 + 速率上限 + 事件出站。出站 v1 = 注入 sink，缺省
 // cat=alert 结构化行落本地日志（§5.2「告警事件本身作为结构化行照常落
-// 本地日志」）；webhook POST + 四家模板挂 net-abstraction §5.10 curl
-// 出站批（curl 尚未进 vcpkg）。
+// 本地日志」）；webhook POST + 四家模板已随 §5.10 curl 出站批交付
+//（alert_webhook.hpp）。
 //
 // 发送纪律（§5.2 六条中本面覆盖四条）：
 //   ②同规则静默窗聚合：sustain_ms 跨拍持续超限才火（0 = 首拍即火）+
@@ -15,8 +15,9 @@
 //     重放；被弃火不更新静默窗——窗口翻转后可再火）；
 //   ⑤出站目标白名单：v1 无出站目标，sink 注入面即白名单边界（目标由
 //     装配方给定，运行期不可加）；
-//   ⑥模板变量封闭集：AlertEvent 字段固定，模板渲染面随 curl 批。
-//   （①退避重试 / ④密钥管理随 webhook 出站批。）
+//   ⑥模板变量封闭集：AlertEvent 字段固定，模板渲染面在 webhook 批
+//    （render_webhook_body，正文恒为 alert_log_line）。
+//   （①退避重试 / ④密钥管理已随 webhook 出站批交付。）
 //
 // 判定面：observe(proc, body, now) 逐 exposition 行提取 `<name> <value>`
 // 与规则匹配——`# TYPE` 注释行跳过；histogram 族整段（`# TYPE <name>

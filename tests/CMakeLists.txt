@@ -1493,6 +1493,34 @@ if(MSVC)
 endif()
 add_test(NAME RestCurlTests COMMAND rest_curl_tests)
 
+# Alert Webhook Tests (logging.md §5.2 批：告警 webhook 出站面)
+# 四家模板渲染/加签 URL/队列面（纯逻辑，Windows 同跑）× 环回真 POST
+# e2e × 重试退避 + fallback 回写 × stop 可中断。Windows 只跑纯逻辑
+# 用例（link TCP 底座 POSIX only，同 metricspush_tests 口径）。
+find_package(OpenSSL REQUIRED)
+add_executable(alert_webhook_tests
+    test_alert_webhook.cpp
+    ../apps/admin/src/alert_webhook.cpp
+    ../apps/admin/src/alert_notifier.cpp
+)
+target_include_directories(alert_webhook_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/admin/include
+)
+target_link_libraries(alert_webhook_tests PRIVATE
+    apollo::net_http
+    apollo_net_link
+    OpenSSL::Crypto
+    apollo::core
+)
+if(WIN32)
+    target_link_libraries(alert_webhook_tests PRIVATE ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(alert_webhook_tests PRIVATE /utf-8)
+    target_compile_definitions(alert_webhook_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME AlertWebhookTests COMMAND alert_webhook_tests)
+
 # trace 子集原语测试（P3-3 批 · 语义层：traceparent 往返/采样确定性/
 # 932 信封往返与 wire 层互证/span 缝发射面/并发 span id 唯一）
 add_executable(linktrace_tests

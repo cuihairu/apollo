@@ -723,6 +723,10 @@ void RestTemplate::applyWhitelist(std::vector<std::string> hosts) {
     impl_->applyWhitelist(std::move(hosts));
 }
 
+std::string RestTemplate::hostOf(const std::string& url) {
+    return detail::urlHost(url);
+}
+
 // 工具方法
 std::string RestTemplate::encodeUrl(const std::string& url) {
     return detail::urlEncode(url);

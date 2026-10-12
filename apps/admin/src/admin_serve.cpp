@@ -1,9 +1,11 @@
 #include "admin/serve.hpp"
 
 #include "admin/alert_notifier.hpp"
+#include "admin/alert_webhook.hpp"
 #include "admin/metrics_hub.hpp"
 #include "admin/metrics_http.hpp"
 
+#include "apollo/net/http/rest_client.h"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
@@ -16,6 +18,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <thread>
 #include <utility>
@@ -120,12 +123,28 @@ int run_serve(const ServeOptions& options) {
     }
 
     // 告警 notifier 最小面（§5.2 层 B 内核）：规则 = APOLLO_ALERT_RULES
-    // env（缺省空 = 不判定零开销）；出站 = 缺省 cat=alert 结构化行（本地
-    // 留证），webhook 随 curl 出站批。受理点直调 = serve 泵拍单写者。
+    // env（缺省空 = 不判定零开销）；出站缺省 cat=alert 结构化行（本地留
+    // 证）。webhook 出站面（§5.2 ①④⑤）：APOLLO_WEBHOOK_URL 装配即启用，
+    // 双出口——事件正文照常落本地行 + webhook 入队（worker 线程出站，
+    // serve 拍永不阻塞 HTTP）；密钥/env 不落日志。
     AlertNotifier notifier;
     notifier.set_rules(parse_alert_rules(std::getenv("APOLLO_ALERT_RULES")
                                              ? std::getenv("APOLLO_ALERT_RULES")
                                              : ""));
+
+    const AlertWebhookConfig webhook_config = parse_webhook_config();
+    std::unique_ptr<AlertWebhook> webhook;
+    if (!webhook_config.url.empty()) {
+        webhook = std::make_unique<AlertWebhook>(webhook_config);
+        webhook->start();
+        notifier.set_sink([&webhook](const AlertEvent& event) {
+            std::cerr << alert_log_line(event) << std::endl;  // 本地留证照常
+            webhook->send(event);
+        });
+        std::cerr << "alert webhook enabled (target host: "
+                  << apollo::net::http::RestTemplate::hostOf(webhook_config.url)
+                  << ")" << std::endl;  // 只记 host——④密钥/token 不进日志
+    }
 
     // 受理装配随 peer 上线（fan-in 面）；handler 只挂 931——快照原文入库
     //（proc/body 保真），聚合/渲染在出口面
