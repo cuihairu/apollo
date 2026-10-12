@@ -1,6 +1,7 @@
 #include "apollo/core/metrics/metric_registry.h"
 
 #include <algorithm>
+#include <cstddef>
 
 namespace apollo {
 namespace core {
@@ -60,10 +61,44 @@ Gauge& MetricRegistry::gauge(const std::string& name, Labels labels) {
     return ref;
 }
 
+Histogram& MetricRegistry::histogram(const std::string& name, Labels labels,
+                                     std::vector<double> bounds) {
+    const std::string key = canonical_key(name, labels);
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = histograms_.find(key);
+    if (it != histograms_.end()) {
+        return it->second->metric;
+    }
+    auto entry = std::make_unique<HistogramEntry>(name, std::move(labels),
+                                                  std::move(bounds));
+    Histogram& ref = entry->metric;
+    histograms_.emplace(key, std::move(entry));
+    return ref;
+}
+
 std::vector<MetricRegistry::Sample> MetricRegistry::snapshot() const {
     std::vector<Sample> samples;
     std::lock_guard<std::mutex> lock(mutex_);
     samples.reserve(counters_.size() + gauges_.size());
+    for (const auto& kv : histograms_) {
+        Sample s;
+        s.name = kv.second->name;
+        s.labels = kv.second->labels;
+        s.is_histogram = true;
+        const Histogram& h = kv.second->metric;
+        s.histogram_bounds = h.bounds();
+        const std::size_t n = s.histogram_bounds.size();
+        s.histogram_buckets.reserve(n + 1);
+        std::uint64_t cum = 0;
+        for (std::size_t i = 0; i < n; ++i) {
+            cum += h.bucket(i);
+            s.histogram_buckets.push_back(cum);
+        }
+        s.histogram_buckets.push_back(h.count());  // +Inf 尾桶 = 全量
+        s.histogram_sum = h.sum();
+        s.histogram_count = h.count();
+        samples.push_back(std::move(s));
+    }
     for (const auto& kv : counters_) {
         Sample s;
         s.name = kv.second->name;

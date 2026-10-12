@@ -83,10 +83,11 @@ private:
 };
 
 // MetricRegistry 快照 → Prometheus exposition 文本（自拼不引
-// prometheus-cpp，logging.md §5.1）。逐样本两行：`# TYPE <name>
-// counter|gauge` + `<name>{proc="<proc>",<标签...>} <值>`；同名相邻样本
-// TYPE 行只出一次（快照稳定排序保同名相邻）。标签值转义 \ " \n。
-// 值域 v1 整数（counter 无符号 / gauge 有符号；直方图缺位见注册表头注）。
+// prometheus-cpp，logging.md §5.1）。counter/gauge 逐样本两行：
+// `# TYPE <name> counter|gauge` + `<name>{proc="<proc>",<标签...>} <值>`；
+// histogram 样本展开一族：`# TYPE <name> histogram` + `<name>_bucket{
+// le="..."} 累计`（含 +Inf 尾档）+ `<name>_sum` + `<name>_count`。同名
+// 相邻样本 TYPE 行只出一次（快照稳定排序保同名相邻）。标签值转义 \ " \n。
 std::string render_exposition(
     const std::vector<apollo::core::metrics::MetricRegistry::Sample>& samples,
     const std::string& proc);

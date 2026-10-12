@@ -12,6 +12,7 @@
 #include <iostream>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 namespace cell {
 
@@ -457,7 +458,15 @@ std::chrono::milliseconds CellServer::tickInterval() const {
 
 void CellServer::record_metrics(std::int64_t elapsed_ms) {
     auto& registry = apollo::core::metrics::MetricRegistry::instance();
-    registry.gauge("cell_tick_frame_ms").store(elapsed_ms);
+    // 末拍瞬时值走 gauge（_last 后缀与同名直方图族分居——同族双 TYPE
+    // 相撞是出口面 scrape 错误）
+    registry.gauge("cell_tick_frame_ms_last").store(elapsed_ms);
+    // 帧耗时分布（P3-3 余项批）：桶位 ms 档覆盖亚毫秒抖动到秒级卡顿，
+    // 20ms = ADR-016 消息段预算锚点
+    static const std::vector<double> kFrameMsBuckets = {
+        0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 500, 1000};
+    registry.histogram("cell_tick_frame_ms", {}, kFrameMsBuckets)
+        .observe(static_cast<double>(elapsed_ms));
     registry.gauge("cell_queue_depth")
         .store(static_cast<std::int64_t>(acceptanceQueue_.size()));
     cellTicksTotal_.increment(1);

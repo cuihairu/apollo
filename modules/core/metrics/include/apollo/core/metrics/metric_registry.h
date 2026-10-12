@@ -13,9 +13,8 @@
 //     快照、Prometheus 文本格式自拼（不引 prometheus-cpp）。
 //
 // 边界（本批不做）：control 通道上行、admin exporter、owning 模块接线、
-// watcher 树/TraceBridge；histogram 缺位（帧耗时类原语待接线批定口径）；
-// 指标生命周期 = 进程期，不支持注销——注册返回的引用在注册表存续期恒稳定，
-// owning 模块应存引用、热路径免查找。
+// watcher 树/TraceBridge；指标生命周期 = 进程期，不支持注销——注册返回
+// 的引用在注册表存续期恒稳定，owning 模块应存引用、热路径免查找。
 //
 // 注意：同名同标签分别以 counter 与 gauge 注册属调用方错误（两表分居不
 // 裁决，快照两行并出，由出口侧发现）。
@@ -63,6 +62,56 @@ inline void counter_advance_to(Counter& counter, std::uint64_t& last,
     }
 }
 
+/// 帧耗时类直方图（Prometheus histogram 语义：bucket 计数 + sum/count，
+/// 归桶边界 le=小于等于；出口面展开 `_bucket{le=...}` 累计 + `_sum` +
+/// `_count`）。桶位口径由消费侧定（cell 帧耗时 = ms 档，20ms 对齐
+/// ADR-016 消息段预算锚点）；bounds 须严格递增——不验不纠，非递增归桶
+/// 静默错位，与同名跨类型注册同款调用方错误立场。尾桶 +Inf 隐含不录入
+/// bounds；桶存非累计（observe O(1) 热路径），累计在快照拼装。
+class Histogram {
+public:
+    explicit Histogram(std::vector<double> bounds)
+        : bounds_(std::move(bounds)), buckets_(bounds_.size() + 1) {}
+
+    void observe(double v) noexcept {
+        std::size_t idx = buckets_.size() - 1;  // 兜底落 +Inf 尾桶
+        for (std::size_t i = 0; i < bounds_.size(); ++i) {
+            if (v <= bounds_[i]) {
+                idx = i;
+                break;
+            }
+        }
+        buckets_[idx].fetch_add(1, std::memory_order_relaxed);
+        count_.fetch_add(1, std::memory_order_relaxed);
+        // atomic<double>::fetch_add 是 C++20 面（c++17 档不可恃），FP
+        // 累加走 CAS 环跨标准可用
+        double expected = sum_.load(std::memory_order_relaxed);
+        while (!sum_.compare_exchange_weak(expected, expected + v,
+                                           std::memory_order_relaxed)) {
+        }
+    }
+
+    /// 桶边界（不含 +Inf 尾桶；首建注册时定格）
+    const std::vector<double>& bounds() const noexcept { return bounds_; }
+
+    /// 单桶非累计计数（i ∈ [0, 桶数)；桶数 = bounds 数 + 1 尾桶）
+    std::uint64_t bucket(std::size_t i) const noexcept {
+        return buckets_[i].load(std::memory_order_relaxed);
+    }
+
+    std::uint64_t count() const noexcept {
+        return count_.load(std::memory_order_relaxed);
+    }
+
+    double sum() const noexcept { return sum_.load(std::memory_order_relaxed); }
+
+private:
+    std::vector<double> bounds_;
+    std::vector<std::atomic<std::uint64_t>> buckets_;  // 非累计单桶
+    std::atomic<std::uint64_t> count_{0};
+    std::atomic<double> sum_{0.0};
+};
+
 /// 可增减仪表（队列水位/实体计数/心跳版本号类瞬时值）
 class Gauge {
 public:
@@ -96,6 +145,11 @@ public:
     /// 查找或创建仪表。同上。
     Gauge& gauge(const std::string& name, Labels labels = {});
 
+    /// 查找或创建直方图（帧耗时类）。bounds 仅首建生效——重复查找返回
+    /// 既有实例（引用稳定性同 counter/gauge，调用方存引用入热路径）。
+    Histogram& histogram(const std::string& name, Labels labels,
+                         std::vector<double> bounds);
+
     /// 快照（exporter 聚合出口）：按 name + 标签规范序稳定排序，确定性输出。
     struct Sample {
         std::string name;
@@ -103,6 +157,13 @@ public:
         bool is_counter = false;
         std::uint64_t counter_value = 0;
         std::int64_t gauge_value = 0;
+        // 直方图三件（is_histogram 时有效）：bounds 不含 +Inf；buckets
+        // 为累计计数（升档，末元素=全量含尾桶）
+        bool is_histogram = false;
+        std::vector<double> histogram_bounds;
+        std::vector<std::uint64_t> histogram_buckets;
+        double histogram_sum = 0.0;
+        std::uint64_t histogram_count = 0;
     };
     std::vector<Sample> snapshot() const;
 
@@ -117,10 +178,19 @@ private:
         Labels labels;
         Gauge metric;
     };
+    // Histogram 不可移动（atomic 成员）——entry 就地构造
+    struct HistogramEntry {
+        HistogramEntry(const std::string& n, Labels l, std::vector<double> b)
+            : name(n), labels(std::move(l)), metric(std::move(b)) {}
+        std::string name;
+        Labels labels;
+        Histogram metric;
+    };
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::unique_ptr<CounterEntry>> counters_;
     std::unordered_map<std::string, std::unique_ptr<GaugeEntry>> gauges_;
+    std::unordered_map<std::string, std::unique_ptr<HistogramEntry>> histograms_;
 };
 
 } // namespace metrics

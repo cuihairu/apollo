@@ -14,6 +14,7 @@
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 
+#include <cstddef>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -205,8 +206,35 @@ std::string render_exposition(
         if (last_name == nullptr || *last_name != sample.name) {
             // TYPE 行同名只出一次（快照稳定排序保同名相邻）
             out << "# TYPE " << sample.name << ' '
-                << (sample.is_counter ? "counter" : "gauge") << '\n';
+                << (sample.is_counter
+                        ? "counter"
+                        : (sample.is_histogram ? "histogram" : "gauge"))
+                << '\n';
             last_name = &sample.name;
+        }
+        if (sample.is_histogram) {
+            // histogram 族：_bucket{le=...} 累计升档（末档 +Inf）+ _sum +
+            // _count（Prometheus 文本面）；le 值走流默认 double 格式
+            for (std::size_t i = 0; i < sample.histogram_bounds.size(); ++i) {
+                out << sample.name << "_bucket{proc=\"";
+                append_escaped(out, proc);
+                out << "\",le=\"" << sample.histogram_bounds[i] << "\"} "
+                    << sample.histogram_buckets[i] << '\n';
+            }
+            out << sample.name << "_bucket{proc=\"";
+            append_escaped(out, proc);
+            out << "\",le=\"+Inf\"} "
+                << (sample.histogram_buckets.empty()
+                        ? 0
+                        : sample.histogram_buckets.back())
+                << '\n';
+            out << sample.name << "_sum{proc=\"";
+            append_escaped(out, proc);
+            out << "\"} " << sample.histogram_sum << '\n';
+            out << sample.name << "_count{proc=\"";
+            append_escaped(out, proc);
+            out << "\"} " << sample.histogram_count << '\n';
+            continue;
         }
         out << sample.name << "{proc=\"";
         append_escaped(out, proc);

@@ -3,15 +3,17 @@
 // 覆盖（logging.md §5.1 上行管线 + 采样流语义分工，对比 LogPushTests）：
 //   1. render_exposition：counter/gauge 两型、TYPE 行同名只出一次、
 //      标签随行 + 转义（\ " \n）、proc 转义、空快照零输出；
-//   2. snapshot_e2e：hub（LinkManager passive + 931 收集）↔
+//   2. render_histogram：histogram 族展开（_bucket{le} 累计含 +Inf +
+//      _sum + _count）与混排 TYPE 各归其型；
+//   3. snapshot_e2e：hub（LinkManager passive + 931 收集）↔
 //      MetricsPushClient round-trip（proc/body 保真）；
-//   3. periodic_latest_wins：周期推（20ms 档）连发多拍，接收序与发送序
+//   4. periodic_latest_wins：周期推（20ms 档）连发多拍，接收序与发送序
 //      一致（TCP 序）且逐拍新快照（无队列不重放）；
-//   4. down_no_queue：对端缺席期零推面零丢计（kUp 守卫——与日志面
+//   5. down_no_queue：对端缺席期零推面零丢计（kUp 守卫——与日志面
 //      「缺席缓冲补投」相区分的采样流语义），对端上线后快照自然上行；
-//   5. hub_semantics：apps/admin MetricsHub 聚合面（last-wins 覆盖、
+//   6. hub_semantics：apps/admin MetricsHub 聚合面（last-wins 覆盖、
 //      逐 proc 名排序、proc_up 陈旧墓碑、体长上限拒收不覆盖）；
-//   6. http_metrics_endpoint：apps/admin MetricsHttp 出口面真端口往返
+//   7. http_metrics_endpoint：apps/admin MetricsHttp 出口面真端口往返
 //      （GET /metrics → 200 text/plain + 聚合文本、其余路径 404、
 //      应答完成连接表清空）。
 //
@@ -131,6 +133,46 @@ bool test_render_exposition() {
                     "# TYPE esc_total counter\n"
                     "esc_total{proc=\"p\\\"x\\\\y\\nz\",msg=\"a\\\"b\\\\c\\nd\"} 1\n",
                 "标签值与 proc 转义");
+    return true;
+}
+
+bool test_render_histogram() {
+    using Sample = apollo::core::metrics::MetricRegistry::Sample;
+
+    // histogram 族：TYPE 行 + _bucket 累计升档（含 +Inf）+ _sum + _count
+    std::vector<Sample> samples;
+    Sample h;
+    h.name = "cell_tick_frame_ms";
+    h.is_histogram = true;
+    h.histogram_bounds = {1.0, 20.0};
+    h.histogram_buckets = {3, 4, 5};  // le=1 / le=20 / +Inf（累计）
+    h.histogram_sum = 42.5;
+    h.histogram_count = 5;
+    samples.push_back(h);
+    const std::string text = metricspush::render_exposition(samples, "cell");
+    const std::string expected =
+        "# TYPE cell_tick_frame_ms histogram\n"
+        "cell_tick_frame_ms_bucket{proc=\"cell\",le=\"1\"} 3\n"
+        "cell_tick_frame_ms_bucket{proc=\"cell\",le=\"20\"} 4\n"
+        "cell_tick_frame_ms_bucket{proc=\"cell\",le=\"+Inf\"} 5\n"
+        "cell_tick_frame_ms_sum{proc=\"cell\"} 42.5\n"
+        "cell_tick_frame_ms_count{proc=\"cell\"} 5\n";
+    if (text != expected) {
+        std::cerr << "--- actual ---\n" << text << "--- expected ---\n"
+                  << expected << std::endl;
+    }
+    TEST_ASSERT(text == expected, "histogram exposition 逐位比对");
+
+    // 混排：histogram 后接 gauge，TYPE 行逐族各归其型
+    Sample g;
+    g.name = "entity_count";
+    g.gauge_value = 9;
+    samples.push_back(g);
+    const std::string mixed = metricspush::render_exposition(samples, "cell");
+    TEST_ASSERT(mixed.find("# TYPE cell_tick_frame_ms histogram\n") !=
+                    std::string::npos &&
+                mixed.find("# TYPE entity_count gauge\n") != std::string::npos,
+                "混排 TYPE 各归其型");
     return true;
 }
 
@@ -494,6 +536,9 @@ int main() {
     if (!test_render_exposition()) {
         return 1;
     }
+    if (!test_render_histogram()) {
+        return 1;
+    }
     std::cout << "MetricsPushTests: windows-scope cases passed" << std::endl;
     return 0;
 #else
@@ -502,6 +547,7 @@ int main() {
         bool (*fn)();
     } cases[] = {
         {"render_exposition", test_render_exposition},
+        {"render_histogram", test_render_histogram},
         {"snapshot_e2e", test_snapshot_e2e},
         {"periodic_latest_wins", test_periodic_latest_wins},
         {"down_no_queue", test_down_no_queue},

@@ -7,10 +7,13 @@
 //   4. 标签规范化：键序不影响同一性（{a,b} ≡ {b,a}）；
 //   5. 类型分居：同名 counter/gauge 互不串值；
 //   6. snapshot：值正确、稳定排序（确定性输出）、标签随行；
-//   7. 全局单例 instance() 可用且独立于局部实例。
+//   7. 全局单例 instance() 可用且独立于局部实例；
+//   8. Histogram：le 归桶（边界值归当档）、sum/count、累计升档快照、
+//      注册语义（同键同引用/bounds 首建生效/跨类型分居）、并发 observe。
 
 #include "apollo/core/metrics/metric_registry.h"
 
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <thread>
@@ -29,6 +32,7 @@ namespace {
 
 using apollo::core::metrics::Counter;
 using apollo::core::metrics::Gauge;
+using apollo::core::metrics::Histogram;
 using apollo::core::metrics::Labels;
 using apollo::core::metrics::MetricRegistry;
 
@@ -175,6 +179,90 @@ bool test_counter_advance_to_absolute() {
     return true;
 }
 
+bool test_histogram_bucket_placement() {
+    MetricRegistry reg;
+    Histogram& h = reg.histogram("frame_ms", {}, {1.0, 2.0, 5.0});
+    h.observe(0.5);  // → le=1
+    h.observe(1.0);  // 边界值归当档（le 语义 ≤）
+    h.observe(2.5);  // → le=5
+    h.observe(100);  // 越全档 → +Inf 尾桶
+    const auto snap = reg.snapshot();
+    TEST_ASSERT(snap.size() == 1 && snap[0].is_histogram, "直方图入快照");
+    const auto& s = snap[0];
+    TEST_ASSERT(s.histogram_bounds.size() == 3, "bounds 不含尾桶");
+    // 累计升档：le=1 → 2（0.5,1.0）；le=2 → 2；le=5 → 3；+Inf → 4
+    TEST_ASSERT(s.histogram_buckets == (std::vector<std::uint64_t>{2, 2, 3, 4}),
+                "累计升档（边界值归当档）");
+    TEST_ASSERT(s.histogram_count == 4, "count 全量");
+    TEST_ASSERT(s.histogram_buckets.back() == s.histogram_count,
+                "尾桶=全量（口径自洽）");
+    return true;
+}
+
+bool test_histogram_sum_count() {
+    MetricRegistry reg;
+    Histogram& h = reg.histogram("sum_ms", {}, {10.0});
+    h.observe(3.0);
+    h.observe(7.0);
+    h.observe(50.0);
+    const auto snap = reg.snapshot();
+    TEST_ASSERT(std::abs(snap[0].histogram_sum - 60.0) < 1e-9, "sum 全量");
+    TEST_ASSERT(snap[0].histogram_count == 3, "count 全量");
+    // 累计：le=10 → 2；+Inf → 3
+    TEST_ASSERT(snap[0].histogram_buckets == (std::vector<std::uint64_t>{2, 3}),
+                "累计两档");
+    return true;
+}
+
+bool test_histogram_registration_semantics() {
+    MetricRegistry reg;
+    Histogram& a = reg.histogram("h_ms", {{"op", "q"}}, {1.0, 2.0});
+    a.observe(0.5);
+    Histogram& b = reg.histogram("h_ms", {{"op", "q"}}, {5.0, 10.0, 20.0});
+    TEST_ASSERT(&a == &b, "同键同引用（引用稳定性）");
+    TEST_ASSERT(a.bounds().size() == 2, "bounds 首建生效（后报忽略）");
+    TEST_ASSERT(b.bucket(0) == 1, "重复查找不重置值");
+    // 跨类型分居（counter/gauge 同款立场）
+    reg.counter("h_ms").increment(2);
+    const auto snap = reg.snapshot();
+    TEST_ASSERT(snap.size() == 2, "histogram/counter 分居两行");
+    TEST_ASSERT(snap[0].is_counter && snap[0].counter_value == 2,
+                "counter 行独立");
+    TEST_ASSERT(snap[1].is_histogram && snap[1].histogram_count == 1,
+                "histogram 行独立");
+    return true;
+}
+
+bool test_histogram_concurrent_observe() {
+    MetricRegistry reg;
+    Histogram& h = reg.histogram("conc_ms", {}, {100.0});
+    constexpr int kThreads = 4;
+    constexpr std::uint64_t kPerThread = 50000;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([&h] {
+            for (std::uint64_t n = 0; n < kPerThread; ++n) {
+                h.observe(1.0);
+            }
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+    const auto snap = reg.snapshot();
+    TEST_ASSERT(snap[0].histogram_count == kThreads * kPerThread,
+                "并发 observe 无丢失");
+    // observe(1.0) 全落 le=100 档；FP 整值累加 sum 精确
+    TEST_ASSERT(snap[0].histogram_buckets ==
+                    (std::vector<std::uint64_t>{kThreads * kPerThread,
+                                                kThreads * kPerThread}),
+                "桶计数=count");
+    TEST_ASSERT(std::abs(snap[0].histogram_sum -
+                         static_cast<double>(kThreads * kPerThread)) < 1e-9,
+                "并发 sum 无丢失");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -195,6 +283,10 @@ int main() {
         {"snapshot_sorted_and_complete", test_snapshot_sorted_and_complete},
         {"global_instance_usable", test_global_instance_usable},
         {"counter_advance_to_absolute", test_counter_advance_to_absolute},
+        {"histogram_bucket_placement", test_histogram_bucket_placement},
+        {"histogram_sum_count", test_histogram_sum_count},
+        {"histogram_registration_semantics", test_histogram_registration_semantics},
+        {"histogram_concurrent_observe", test_histogram_concurrent_observe},
     };
 
     for (const auto& c : cases) {
