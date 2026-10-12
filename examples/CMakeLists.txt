@@ -38,6 +38,8 @@ target_link_libraries(full_loop_demo PRIVATE apollo apollo::base apollo::core)
 # ========== Benchmark ==========
 # 三模型场景基准（P3-2 批 A）：直编 game world 六源（scene_tests 同款惯例，
 # 不依赖 GAME_MODULE target——OFF 树照常构建），负载链 Scene/AOI/Avatar 真实路径。
+# persist 段（P3-2 全帧段实测化收口批）：直编 data/orm persist_journal 单源
+# （纯 std 依赖），journal write-ahead append + drain 实测面。
 add_executable(benchmark benchmark.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/core/src/entity.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene.cpp
@@ -46,12 +48,14 @@ add_executable(benchmark benchmark.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/avatar.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/session/src/player_anchor.cpp
     ${CMAKE_SOURCE_DIR}/modules/protocol/src/codec.cpp
+    ${CMAKE_SOURCE_DIR}/modules/data/orm/src/persist_journal.cpp
 )
 target_include_directories(benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/data/orm/include
     # 受理面段（P3-2 批 D）：协议 codec + cell 受理队列头（header-only；
     # trace 子集载体入信封后追 linktrace include，P3-3 语义层批）
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
