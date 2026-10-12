@@ -329,6 +329,51 @@
     <field name="payload" type="bytes" desc="载荷（u16 LE id + 契约载荷，内层自识）"/>
   </msg>
 
+  <!-- 玩家迁移族（P0-2 路 2 第一步，backup-revive §9.2 五步 ①②③ wire 面：
+       freeze=停写；snapshot=拉新（旧的先 flush 再发，ADR-007 档案 JSON 原样
+       携带，零外部存储）；handoff=交写权（manager 目录 advance 分配新 epoch，
+       旧 epoch 迟到回执按陈旧拒收=既有裁决）。④ 目录改指走既有 moved 面 +
+       改指立即推快照（不新增 wire），⑤ 放行/gateway 上行缓冲挂 gateway 批。
+       受理面 = zone M1 base 受理 handler 分流；handler 同步 flush（低频 +
+       单玩家档案量级 ms 级；批量/并行形态挂异步受理批）。 -->
+  <msg id="933" name="player_freeze_request" dir="P2P" channel="events" domain="internal" desc="玩家停写指令（manager→老 zone；该玩家停写进入只读并排其 journal 段）">
+    <field name="player_id" type="int64"/>
+    <field name="request_id" type="int64" desc="编排关联键（manager 单调分配，0 保留）"/>
+  </msg>
+  <msg id="934" name="player_freeze_reply" dir="P2P" channel="events" domain="internal" desc="玩家停写回执（老 zone→manager；accepted = 停写已生效且 journal 段已排）">
+    <field name="player_id" type="int64"/>
+    <field name="request_id" type="int64"/>
+    <field name="accepted" type="bool" desc="1=停写生效 0=拒绝（未知玩家/无锚点）"/>
+    <field name="error_message" type="string"/>
+  </msg>
+  <msg id="935" name="player_snapshot_request" dir="P2P" channel="events" domain="internal" desc="玩家快照拉取（新 zone→老 zone；前置 = 停写已生效）">
+    <field name="player_id" type="int64"/>
+    <field name="request_id" type="int64"/>
+  </msg>
+  <msg id="936" name="player_snapshot_reply" dir="P2P" channel="events" domain="internal" desc="玩家快照回执（老 zone→新 zone；旧的先 flush 再发——档案 JSON 原样 + 锚点元数据）">
+    <field name="player_id" type="int64"/>
+    <field name="request_id" type="int64"/>
+    <field name="success" type="bool" desc="1=快照就绪 0=拒绝（无档案）"/>
+    <field name="error_message" type="string"/>
+    <field name="profile_json" type="string" desc="玩家档案 JSON（ADR-007 原子写源样携带；空 = 失败）"/>
+    <field name="session_id" type="int64" desc="锚点会话号（新 zone 建 anchor；0 = 无会话）"/>
+    <field name="gateway_id" type="int32" desc="会话 gateway（0 = 无会话）"/>
+    <field name="home_zone_id" type="int32" desc="锚点 home zone（信息列）"/>
+  </msg>
+  <msg id="937" name="player_handoff_request" dir="P2P" channel="events" domain="internal" desc="写权交接指令（manager→新 zone；带目录新分配 epoch）">
+    <field name="player_id" type="int64"/>
+    <field name="request_id" type="int64"/>
+    <field name="new_epoch" type="int64" desc="新 epoch（manager 目录 advance 分配；旧 epoch 迟到回执按陈旧拒收）"/>
+    <field name="session_id" type="int64" desc="会话号（resume 双锚）"/>
+    <field name="gateway_id" type="int32"/>
+  </msg>
+  <msg id="938" name="player_handoff_reply" dir="P2P" channel="events" domain="internal" desc="写权交接回执（新 zone→manager；accepted = 新 epoch 已生效，此后不可撤销）">
+    <field name="player_id" type="int64"/>
+    <field name="request_id" type="int64"/>
+    <field name="accepted" type="bool" desc="1=接权（新 epoch 生效）0=拒收（建锚失败）"/>
+    <field name="error_message" type="string"/>
+  </msg>
+
   <!-- Link RPC 族（P4-4 批⓪：nng 迁移关联原语——linkrpc 层只做请求/响应
        关联与等待，载荷不透明：body = MessageCodec 全帧字节（header+body），
        业务语义仍归各进程 handler。可靠语义 kReliable（重连补投 + seq 去重）；
