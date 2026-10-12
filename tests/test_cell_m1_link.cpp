@@ -8,6 +8,7 @@
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/linktrace/envelope.hpp"
+#include "apollo/net/linktrace/span_emitter.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
@@ -479,6 +480,12 @@ bool test_wrapped_envelope_intent() {
                                             return p;
                                         }());
 
+    // span 收集器（cell span 发射面：采样命中 + trace 链关联）
+    std::vector<trace::SpanRecord> spans;
+    trace::set_span_sink([&spans](const trace::SpanRecord& record) {
+        spans.push_back(record);
+    });
+
     TEST_ASSERT(send_wrapped_intent(c, env), "wrapped intent sent");
 
     TEST_ASSERT(pump_until(c, [&] { return acks.has(60, 0); }, 15000),
@@ -487,6 +494,20 @@ bool test_wrapped_envelope_intent() {
     TEST_ASSERT(s.server->m1Link().receivedIntents() >= 1, "wrapped intent received");
     TEST_ASSERT(s.server->m1Link().rejectedFrames() == 0, "no rejects on wrapped intent");
     TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link still up");
+
+    // cell span：parent = 信封发端（gateway span id），trace_id 同链
+    bool cell_span = false;
+    for (const auto& record : spans) {
+        if (record.name == "cell_intent_execute") {
+            cell_span = true;
+            TEST_ASSERT(record.ctx.trace_id == env.trace.trace_id, "cell span same chain");
+            TEST_ASSERT(record.ctx.parent_span_id == env.trace.parent_span_id,
+                        "cell span chains under gateway span");
+            TEST_ASSERT(record.start_ms <= record.end_ms, "cell span timing ordered");
+        }
+    }
+    TEST_ASSERT(cell_span, "cell span emitted for sampled intent");
+    trace::set_span_sink(nullptr);
 
     s.stop();
     c.manager.reset();

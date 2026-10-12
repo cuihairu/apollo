@@ -16,6 +16,8 @@
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
+#include "apollo/net/linktrace/envelope.hpp"
+#include "apollo/net/linktrace/span_emitter.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
@@ -31,6 +33,7 @@
 #include <chrono>
 #include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -51,6 +54,7 @@
 namespace {
 
 namespace link = apollo::net::link;
+namespace trace = apollo::net::trace;
 namespace wire = apollo::net::wire;
 
 using apollo::contract::gen::MsgId;
@@ -144,12 +148,16 @@ private:
     int fd_ = -1;
 };
 
-// 桩 cell M1 接收端（裸 LinkManager，被动端点）：记录五族意图 + 按需回 929
+// 桩 cell M1 接收端（裸 LinkManager，被动端点）：记录五族意图 + 按需回 929。
+// 932 双受理（P3-3 语义层批）：信封解包 → 内层同族记录 + trace 携带面显形
+//（bare 记录 wrapped=false、trace 全零）。
 struct IntentRecord {
-    std::uint16_t contract_id{0};
+    std::uint16_t contract_id{0};  // 内层意图 id（932 解包后）
     std::uint64_t request_id{0};
     std::uint64_t session_id{0};
     std::vector<wire::FieldValue> fields;
+    bool wrapped{false};
+    trace::TraceContext trace{};
 };
 
 class FakeCell {
@@ -187,6 +195,11 @@ public:
                                                record(id, data, size);
                                            });
                 }
+                dispatcher.set_handler(id_of(MsgId::internal_envelope),
+                                       [this](std::uint16_t, const std::uint8_t* data,
+                                              std::size_t size) {
+                                           record_envelope(data, size);
+                                       });
             });
         }
     }
@@ -213,6 +226,28 @@ public:
                                         static_cast<std::uint64_t>(fields[0].integer),
                                         static_cast<std::uint64_t>(fields[1].integer),
                                         std::move(fields)});
+    }
+
+    void record_envelope(const std::uint8_t* data, std::size_t size) {
+        trace::EnvelopeFields env;
+        if (!trace::unpack_envelope(data, size, env)) {
+            return;
+        }
+        std::uint16_t inner_id = 0;
+        const std::uint8_t* body = nullptr;
+        std::size_t body_size = 0;
+        if (!trace::split_payload(env.payload, inner_id, body, body_size)) {
+            return;
+        }
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(inner_id, body, body_size, fields) || fields.size() < 2) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(mutex_);
+        records_.push_back(IntentRecord{inner_id,
+                                        static_cast<std::uint64_t>(fields[0].integer),
+                                        static_cast<std::uint64_t>(fields[1].integer),
+                                        std::move(fields), true, env.trace});
     }
 
     std::vector<IntentRecord> records() {
@@ -628,8 +663,78 @@ bool test_gateway_cell_e2e() {
 
 } // namespace
 
+// ---------- 932 信封 trace 传播（P3-3 语义层批） ----------
+
+bool test_egress_wrapped_trace() {
+    std::cout << "Running: test_egress_wrapped_trace..." << std::endl;
+
+    // span 收集器（采样命中面；rate=1 由 main setenv 保证全采）
+    std::mutex span_mutex;
+    std::vector<trace::SpanRecord> spans;
+    trace::set_span_sink([&](const trace::SpanRecord& record) {
+        std::lock_guard<std::mutex> lock(span_mutex);
+        spans.push_back(record);
+    });
+
+    FakeCell cell;
+    TEST_ASSERT(cell.healthy(), "fake cell assembled");
+
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = cell.listen_port();
+    cfg.route_json = kRouteJson;
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+
+    const auto frames = five_family_frames();
+    TEST_ASSERT(egress->forwardIntent(77, frames[0]), "create frame accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 1; }, 5000),
+                "wrapped intent reached fake cell");
+
+    const auto records = cell.records();
+    TEST_ASSERT(records.size() == 1, "one recorded");
+    TEST_ASSERT(records[0].wrapped, "arrived as internal envelope");
+    TEST_ASSERT(records[0].contract_id == id_of(MsgId::cell_create_entity), "inner family id");
+    TEST_ASSERT(records[0].request_id == 1, "request_id关联不变");
+    TEST_ASSERT(records[0].session_id == 77, "session passthrough");
+    TEST_ASSERT(records[0].trace.has_trace(), "trace id carried");
+    TEST_ASSERT(records[0].trace.sampled, "sampled flag propagated (rate=1)");
+
+    // gateway span（根，采样命中即发射）：span_id = 信封 parent 位（发端
+    // id），parent 全零，受理→发出计时有序
+    std::vector<trace::SpanRecord> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(span_mutex);
+        snapshot = spans;
+    }
+    bool gw_span = false;
+    for (const auto& s : snapshot) {
+        if (s.name == "gateway_intent_forward") {
+            gw_span = true;
+            TEST_ASSERT(s.span_id == records[0].trace.parent_span_id,
+                        "gateway span id is envelope parent");
+            bool parent_zero = true;
+            for (std::uint8_t b : s.ctx.parent_span_id) {
+                parent_zero = parent_zero && b == 0;
+            }
+            TEST_ASSERT(parent_zero, "gateway span is root");
+            TEST_ASSERT(s.start_ms <= s.end_ms, "span timing ordered");
+        }
+    }
+    TEST_ASSERT(gw_span, "gateway span emitted");
+
+    trace::set_span_sink(nullptr);
+    egress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 int main() {
     std::cout << "=== Apollo Gateway M1 Egress Test Suite ===" << std::endl;
+
+    // 头采样 dev 覆写（logging.md §5.1 APOLLO_TRACE_SAMPLE_RATE）：rate=1
+    // 全采——trace 传播断言确定性；head_sampler 首用即读
+    setenv("APOLLO_TRACE_SAMPLE_RATE", "1", 1);
 
     int failed = 0;
     if (!test_egress_forwards_five_families()) ++failed;
@@ -637,6 +742,7 @@ int main() {
     if (!test_egress_unforwardable_frames()) ++failed;
     if (!test_egress_inbox_overflow()) ++failed;
     if (!test_egress_route_table_missing()) ++failed;
+    if (!test_egress_wrapped_trace()) ++failed;
     if (!test_gateway_cell_e2e()) ++failed;
 
     if (failed == 0) {

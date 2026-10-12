@@ -1,5 +1,6 @@
 #include "cell/cell_server.hpp"
 #include "apollo/core/log/log_manager.h"
+#include "apollo/net/linktrace/span_emitter.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/game/world/instance.hpp"
@@ -389,6 +390,19 @@ void CellServer::executeIntent(const IntentEnvelope& intent) {
             break;
         default:
             break;
+    }
+
+    // trace 子集（P3-3 语义层批）：采样命中的意图发 cell span（受理→执行
+    // 完成全程；parent = 发端 gateway span id，随 932 信封上行）。未采样
+    // /bare 路径零开销跳过——emit_span 自守门，此处只备料。
+    if (intent.trace.has_trace() && intent.trace.sampled) {
+        trace::SpanRecord span;
+        span.name = "cell_intent_execute";
+        span.ctx = intent.trace;
+        span.span_id = trace::generate_span_id();
+        span.start_ms = intent.received_ms;
+        span.end_ms = trace::now_ms();
+        trace::emit_span(span);
     }
 
     // ADR-017 延时应答（M1 升级落地）：意图被消费后按 request_id 回执

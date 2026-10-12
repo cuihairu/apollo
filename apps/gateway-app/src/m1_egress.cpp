@@ -14,6 +14,9 @@
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
+#include "apollo/net/linktrace/envelope.hpp"
+#include "apollo/net/linktrace/span_emitter.hpp"
+#include "apollo/net/linktrace/trace_sampler.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
@@ -39,6 +42,7 @@ namespace gateway {
 namespace {
 
 namespace link = apollo::net::link;
+namespace trace = apollo::net::trace;
 namespace wire = apollo::net::wire;
 
 using apollo::contract::gen::MsgId;
@@ -50,6 +54,13 @@ constexpr std::uint16_t id_of(MsgId id) {
 // 库面日志出口：cat=gateway_m1_egress（§5.1 cat= 检索键）
 apollo::core::log::Logger& m1log() {
     return *apollo::core::log::global_log_manager().createLogger("gateway_m1_egress");
+}
+
+// 头部采样器（logging.md §5.1：入口进程裁决一次，下游不重采；rate =
+// APOLLO_TRACE_SAMPLE_RATE dev 覆写，缺省 1/10⁴ 常量口径）
+trace::HeadSampler& head_sampler() {
+    static trace::HeadSampler sampler{trace::sample_rate_from_env()};
+    return sampler;
 }
 
 // legacy 消息型 → 契约意图 id（五族白名单；0 = 不在 M1 前递面）。
@@ -66,10 +77,12 @@ std::uint16_t contract_id_for(apollo::protocol::MessageType type) {
 }
 
 // 投递箱项：受理线程入箱的原始世界帧（翻译延至泵拍，链路单写者）。
+// enqueued_ms = 入箱时刻（gateway span 计时起点——受理→发出全程）。
 struct InboxItem {
     std::uint64_t session_id;
     std::uint16_t contract_id;
     std::vector<std::uint8_t> frame;
+    std::uint64_t enqueued_ms = 0;
 };
 
 class M1EgressImpl final : public M1Egress {
@@ -154,7 +167,8 @@ public:
                 ++unforwardable_;  // 箱满落地：legacy 链路死观察面同型
                 return false;
             }
-            inbox_.push_back(InboxItem{session_id, contract_id, legacy_frame});
+            inbox_.push_back(
+                InboxItem{session_id, contract_id, legacy_frame, trace::now_ms()});
         }
         return true;
     }
@@ -324,6 +338,28 @@ private:
             return;
         }
 
+        // trace 子集（P3-3 语义层批）：意图恒走 932 internal_envelope——
+        // trace 字段恒带（ids 恒传播，未采样不发射 span 行）；头采样在本
+        // 进程（链根）裁决，下游按旗标传播不再重采。发端 span id 恒生成
+        // 进信封 parent 位——cell span 以此挂链（gateway span 记录仅采样
+        // 命中时发射）。
+        trace::HeadSampler& sampler = head_sampler();
+        trace::EnvelopeFields env;
+        env.message_type = trace::EnvelopeKind::EntityMethodCall;
+        env.request_id = request_id;
+        env.source_app = "gateway";
+        env.target_app = "cell";
+        env.trace.trace_id = trace::generate_trace_id();
+        env.trace.parent_span_id = trace::generate_span_id();
+        env.trace.sampled = sampler.should_sample();
+        env.payload = wire::append_envelope(item.contract_id, payload);
+
+        std::vector<std::uint8_t> packed;
+        if (!trace::pack_envelope(env, packed)) {
+            ++unforwardable_;  // 信封装配失败 = 契约面失配（正常不发生）
+            return;
+        }
+
         auto* link = gateway_link();
         if (link == nullptr) {
             ++dropped_;
@@ -331,14 +367,27 @@ private:
         }
         // Reliable：意图不可丢；链路断连期间入队，重连恰一次补投。
         //（InterServerLink::send 自封 u16 id 信封——传裸载荷，勿再包一层）
-        const auto code = link->send(item.contract_id, payload.data(), payload.size(),
-                                     link::SendClass::kReliable);
+        const auto code = link->send(id_of(MsgId::internal_envelope), packed.data(),
+                                     packed.size(), link::SendClass::kReliable);
         if (code != link::SendCode::kAccepted) {
             ++dropped_;  // 背压/拒收：legacy 链路死观察面同型，落地不重试
             return;
         }
         pending_.emplace(request_id, Pending{item.session_id, now_ms});
         ++sent_;
+
+        // gateway span（根；受理→发出，成对视图——落地意图无 cell 对侧
+        // 段，慢链路定位只看已前递面）
+        if (env.trace.sampled) {
+            trace::SpanRecord span;
+            span.name = "gateway_intent_forward";
+            span.ctx = env.trace;
+            span.ctx.parent_span_id = trace::SpanId{};  // 根
+            span.span_id = env.trace.parent_span_id;    // 发端 id 即本 span
+            span.start_ms = item.enqueued_ms;
+            span.end_ms = trace::now_ms();
+            trace::emit_span(span);
+        }
     }
 
     void handle_ack(const std::uint8_t* data, std::size_t size) {

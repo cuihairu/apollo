@@ -63,6 +63,19 @@ SpanId generate_span_id() {
     return id;
 }
 
+TraceId generate_trace_id() {
+    static std::atomic<std::uint64_t> counter{0};
+    const std::uint64_t mixed = splitmix64(span_seed() ^ splitmix64(
+        counter.fetch_add(1, std::memory_order_relaxed) ^ 0xD1B54A32D192ED03ull));
+    const std::uint64_t mixed2 = splitmix64(mixed ^ span_seed());
+    TraceId id{};
+    for (std::size_t i = 0; i < 8; ++i) {
+        id[i] = static_cast<std::uint8_t>((mixed >> (i * 8)) & 0xFF);
+        id[8 + i] = static_cast<std::uint8_t>((mixed2 >> (i * 8)) & 0xFF);
+    }
+    return id;
+}
+
 std::uint64_t now_ms() {
     return steady_ms();
 }

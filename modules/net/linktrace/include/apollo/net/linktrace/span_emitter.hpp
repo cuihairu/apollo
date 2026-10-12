@@ -24,6 +24,10 @@ namespace apollo::net::trace {
 // 计数经 splitmix64 混淆，线程安全）。
 SpanId generate_span_id();
 
+// trace id 生成（根进程入口逐消息新链——span 界定 = 消息边界，M1 前递面
+// 每意图独立链；与 span id 同混淆族，线程安全）。
+TraceId generate_trace_id();
+
 // 稳态毫秒（跨度计时的统一时钟口径——steady_clock since epoch，
 // 与 logpush/metricspush 同式）。
 std::uint64_t now_ms();

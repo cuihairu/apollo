@@ -347,6 +347,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo::net_linktrace
 	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
@@ -384,6 +385,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo::net_linktrace
 	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
@@ -628,6 +630,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo::net_linktrace
 	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
@@ -665,6 +668,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_protocol
 	        apollo::net_link
 	        apollo::net_contract_wire
+	        apollo::net_linktrace
 	        apollo_net_linkrpc
 	        apollo_protocol
 	    )
