@@ -81,7 +81,7 @@ private:
 
 class MetricsHttp {
 public:
-    MetricsHttp(MetricsHttpConfig, MetricsHub&) = default;
+    MetricsHttp(MetricsHttpConfig, MetricsHub&) {}  // 空件：非特异成员不可 = default（MSVC C2610）
 
     bool start() { return false; }
     void stop() {}
