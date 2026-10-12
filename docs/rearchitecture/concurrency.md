@@ -93,7 +93,7 @@ docs/todo P3-2；方案分叉（队列化异步受理 / 队列化+同步等待 /
 
 ```text
 明确的 Owner + 明确的执行上下文：
-  PlayerAnchor：Home Zone「主页线程」单写者（其余线程经消息投递后修改）
+  PlayerAnchor：Home baseapp「主页线程」单写者（其余线程经消息投递后修改）
   Scene/Instance/Entity/AOI：scene 线程（每 scene 一个执行上下文；tick 固定步长 10Hz 设计口径；
       当前 WorldHost 20Hz 默认值需与 clock-and-time 文档的 10Hz 对齐——见差异清单 5）
   Session/Connection：gateway 连接线程（单向下行缓冲）
@@ -107,7 +107,7 @@ docs/todo P3-2；方案分叉（队列化异步受理 / 队列化+同步等待 /
 
 | 层级 | 现状 | 目标 |
 |---|---|---|
-| World | WorldHost 20Hz 单循环（未编译） | Zone 世界钟（10Hz 设计口径；clock-and-time 三钟：steady tick / wall / now） |
+| World | WorldHost 20Hz 单循环（未编译） | baseapp 世界钟（10Hz 设计口径；clock-and-time 三钟：steady tick / wall / now） |
 | Scene | 无独立 tick（Scene::update 只是遍历空 entities_，随 MapInstanceManager::update 一起跑） | scene tick：simulate→recalc→aoidecay→collect→budget+flush→persist-batch（attribute-sync 六阶段） |
 | Instance | 无（与 scene 同一棵树） | 玩法 tick（等待/运行/结算阶段各自节奏） |
 | Battle | 无（两层空壳） | battle runtime 在 scene tick 内（或独立定频） |

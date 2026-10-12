@@ -12,7 +12,7 @@
 ## 2. 架构对比
 
 ```
-MMO 模式: Gate -> World -> Scene Orchestrator -> Zone + AOI + 副本实例（历史名 Battle）
+MMO 模式: Gate -> World -> Scene Orchestrator -> baseapp + AOI + 副本实例（历史名 Battle）
 Compact 模式: Gate -> Compact GameServer (Scene + AOI + Battle in one)
 ```
 
@@ -24,9 +24,9 @@ Compact GameServer 仍通过 Transport/Registry 与其他服务交互（DataProx
 |------|----------|------------------|
 | Scene Orchestrator | 独立服务 | 合并进 Compact GS 的 SceneManager，维护固定地图实例表 |
 | ZoneServer | 多实例/多进程 | 以线程或协程形式运行，按地图分线程；可配置一个进程内多个逻辑实例 |
-| AOI Service | 独立集群 | 使用内嵌 AOI 模块（与 Zone 同进程共享 `SceneAoi`——现行实现名，P1-3 收敛；下文 `AOIManager` 同指），仍可分 shard |
+| AOI Service | 独立集群 | 使用内嵌 AOI 模块（与 baseapp 同进程共享 `SceneAoi`——现行实现名，P1-3 收敛；下文 `AOIManager` 同指），仍可分 shard |
 | 副本实例（历史名 Battle Service） | 可选独立 | 塔防房间作为内部模块即可；大型玩法可仍调用外部副本实例进程 |
-| Transport | AOI/Zone 互通 | Compact 模式可禁用 AOI↔Zone Transport，保留与 Gate/DataProxy 的管道 |
+| Transport | AOI/baseapp 互通 | Compact 模式可禁用 AOI↔baseapp Transport，保留与 Gate/DataProxy 的管道 |
 | WorldServer | 全局调度 | 若玩法简单，可由单个 Compact GS 管理/或保留轻量 World 处理账号/匹配 |
 
 ## 4. Compact GameServer 结构
@@ -54,7 +54,7 @@ CompactGameServer
 
 - 推荐配置：单机多线程，按地图类型划分线程池。例如 4 核机器运行 4 个 Scene Thread，每个线程管理若干地图。
 - 支持多实例部署：每个 Compact GS 可负责一组地图；`map_range` 经 G-1 编队拓扑注册（machined 守护 + UDP 广播——net-abstraction §7；不引 Consul，2026-09-30 裁决），Gate/World 根据玩家地图路由到对应实例。
-- 若需要水平扩容（更多玩家/地图），可再部署多个 Compact GS 或升级为完整 Zone/AOI 分层。
+- 若需要水平扩容（更多玩家/地图），可再部署多个 Compact GS 或升级为完整 baseapp/AOI 分层。
 
 ## 6. 数据和配置
 
@@ -86,7 +86,7 @@ CompactGameServer
 2. 集成 NetCore/Transport/DataProxy/插件/配置等现有模块。
 3. 打通塔防玩法（波次、建塔、技能）示例，验证端到端流程。
 4. 监控和运维方案与主框架共享，补充塔防特有指标。
-5. 预留接口以便未来升级到完整 Zone/AOI 分层。
+5. 预留接口以便未来升级到完整 baseapp/AOI 分层。
 
 ---
 

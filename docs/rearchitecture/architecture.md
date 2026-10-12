@@ -12,10 +12,10 @@
 | 进程（代码） | 目录 | 设计目标角色（任务书/契约词） | 代码现状 |
 |---|---|---|---|
 | login-app | apps/login-app | 账号鉴权、token 签发（短连接） | 骨架完整；stub 传输模式下登录“永远成功”（`return true`）；sessionSecret 未用，ticket=时间 XOR 哈希 |
-| gateway-app | apps/gateway-app | token 验签、会话承载、按 Zone 透传 | 骨架完整；客户端 ingress 未接线（NullClientIngressServer 空转）；sendToClient placeholder；resolveRoute 落点端口错配 9002 vs 9003 |
-| base-app | apps/base-app | 锚点承载（PlayerAnchor 驻 Home Zone） | AnchorManager+SessionLocator 内存目录可用；activatePlayer/bindSession/unbindSession 有 handler；无 Home Zone 概念；DB 层假实现 |
-| baseappmgr | apps/baseappmgr | 在线目录与落点裁决（manager 域串行） | assignments_+SessionLocator 进程内目录 + PLAYER_ASSIGN_WORLD/PLAYER_RESOLVE_ROUTE handler——**现存质量最高的 app**；顶号预裁/核销/事件族未实现 |
-| cell-app | apps/cell-app | Zone/场景运行时（1..N scene） | 唯一接 WorldHost 的 app；EntityManager+cell::AOIManager+MapInstanceManager+WorldSessionManager；ensureDefaultMapInstance(id=1)；**game/world 5 个实现文件未编译 → 必链接失败（GAME_MODULE=ON 时）** |
+| gateway-app | apps/gateway-app | token 验签、会话承载、按 zone_hint 透传 | 骨架完整；客户端 ingress 未接线（NullClientIngressServer 空转）；sendToClient placeholder；resolveRoute 落点端口错配 9002 vs 9003 |
+| base-app | apps/base-app | 锚点承载（PlayerAnchor 驻 Home baseapp） | AnchorManager+SessionLocator 内存目录可用；activatePlayer/bindSession/unbindSession 有 handler；无 Home baseapp 概念；DB 层假实现 |
+| baseappmgr | apps/baseappmgr | 在线目录与落点裁决（baseappmgr 域串行） | assignments_+SessionLocator 进程内目录 + PLAYER_ASSIGN_WORLD/PLAYER_RESOLVE_ROUTE handler——**现存质量最高的 app**；顶号预裁/核销/事件族未实现 |
+| cell-app | apps/cell-app | baseapp/场景运行时（1..N scene） | 唯一接 WorldHost 的 app；EntityManager+cell::AOIManager+MapInstanceManager+WorldSessionManager；ensureDefaultMapInstance(id=1)；**game/world 5 个实现文件未编译 → 必链接失败（GAME_MODULE=ON 时）** |
 | game-server | apps/game-server | 全流程 demo 容器 | 137 行 demo：MemoryConnection+SqlTemplate+IdPool+ThreadPool+DI(login pipeline)+ServiceHost；无游戏循环；链接失败（C-95） |
 
 现状一句话：**6 个进程骨架齐备、消息协议齐备、数据模型齐备，但默认构建零个 app 被编译；三主线端到端各有断点**（见 §2.2）。
@@ -87,7 +87,7 @@ Persistence：base-app DatabaseService（内存 unordered_map，load 造假数�
 | FrameFilter/CryptoFilter | 无（frame 层仅 MessageCodec 12B 头） | 未落地 |
 | InterServerLink | 无（进程间走 legacy RepSocket/nng 桩） | 未落地 |
 | session_key/login_token/resume_token | ticket=时间 XOR 哈希；sessionKey/resumeToken 零实现 | 部分(伪)/未落地 |
-| OnlineDirectory（manager 权威+镜像） | baseappmgr 进程内 assignments_+SessionLocator | 雏形 |
+| OnlineDirectory（baseappmgr 权威+镜像） | baseappmgr 进程内 assignments_+SessionLocator | 雏形 |
 | 顶号/保活窗口/Suspended | WorldSession Suspended 态枚举；无定时器；SessionLocator::bind 顶号 | 枚举级 |
 | 属性同步 L1-L4/RO_MIRROR/viewer set | 两套属性容器均无网络管线；dirty 仅 API 层 | 未落地 |
 | write-behind journal（8.2） | 无；base-app SaveQueue 应用级 60s 空转 | 未落地 |
@@ -281,12 +281,12 @@ sdks/gen ──> pugixml（XML 解析、vcpkg）──> 生成 C++/JSON/proto/lu
 
 ## 9. 术语差异清单（architecture 级）## 9. 术语差异清单（architecture 级）
 
-1. **Zone 无代码标识**：原口径 Zone=逻辑服进程（承载 1..N scene）；代码中唯一接近者是 apps/cell-app（单词 scene 的进程雏形），命名不冲突但职责未达（cell-app 名是 BW 词根，原口径禁「cellapp」——见 audit.md §2.3 第 4 条，迁移时更名）。
-2. **Home Zone / PlayerAnchor 语义**：PlayerAnchor 有类无 Home Zone 定位（anchor 存 base-app 进程内 map，与 "登录时分配 Home Zone、永不迁移" 的设计没有对应字段/机制）；WorldAssignment 四个 id（world/map/instance/space）+ route_version 是「换幕」机制的字段级雏形，但 cell-app 把 map_instance_id 当 space_id 用（cell_server.cpp:544-545）——两层 ID 命名空间交叉混用，原口径的 scene 唯一空间单元口径与代码三层 ID 冲突（object-model.md §4 详表）。
+1. **baseapp 无独立代码标识**：设计口径 baseapp=逻辑服进程（承载 1..N scene）；代码中唯一接近者是 apps/cell-app（单词 scene 的进程雏形），命名不冲突但职责未达（cell-app 名是 BW 词根，原口径禁「cellapp」——见 audit.md §2.3 第 4 条，迁移时更名）。
+2. **Home baseapp / PlayerAnchor 语义**：PlayerAnchor 有类无 Home baseapp 定位（anchor 存 base-app 进程内 map，与 "登录时分配 Home baseapp、永不迁移" 的设计没有对应字段/机制）；WorldAssignment 四个 id（world/map/instance/space）+ route_version 是「换幕」机制的字段级雏形，但 cell-app 把 map_instance_id 当 space_id 用（cell_server.cpp:544-545）——两层 ID 命名空间交叉混用，原口径的 scene 唯一空间单元口径与代码三层 ID 冲突（object-model.md §4 详表）。
 3. **Avatar 无类**：最接近承担者 cell::PlayerEntity（cell_manager.hpp:42-93）+ world_session 的 avatar EntityId 字段；原口径词继承链关系（entities.xml Monster→NPC→Avatar→Player）在代码中无对应（无 Monster/NPC 类）。
 4. **instance 无状态机**：原口径 instance=副本玩法生命周期（Create→Initialize→Waiting→Running→Finishing→Rewarding→Draining→Destroyed，任务书 §9 建议统一）；代码 MapInstance 五操作无状态（object-model.md §5）。
 5. **Suspended 无窗口**：原口径 Suspended=掉线保活窗口；代码仅枚举值（lifecycle.md §3 详述）。
-6. **OnlineDirectory 无代码**：原口径 manager 权威+镜像；代码仅有 baseappmgr 进程内表（audit.md §2.2 第 8 行）。
+6. **OnlineDirectory 无代码**：原口径 baseappmgr 权威+镜像；代码仅有 baseappmgr 进程内表（audit.md §2.2 第 8 行）。
 7. **网络叙事面**：net-abstraction 设计（L0-L3/四通道/InterServerLink/FrameFilter）与代码（三套 MessageHeader、三套 RPC、两套 Session 规范）的差距即 §1.4；原口径词 RemoteEntityCall/InterServerLink 需在收口后出现，当前**无代码可对齐**（登记，不强行命名）。
 8. **「换幕」vs 代码 transfer**：world_session 的 begin_transfer/complete_transfer 字段搬运即「换幕」的即时同步版——正确方向（无跨进程税）但无状态投影（Base 长期态→新 Cell）与易失态丢弃规则（contract §1.2：L3 不落档）；见 lifecycle.md §4。
 9. **battle 可用语义**：原口径「battle 专属战斗验证域」；代码两层 battle 空壳名义上是「战斗系统」——与原口径语义（battle=战斗逻辑域，验证/结算）不冲突但皆为空壳，登记。

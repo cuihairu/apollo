@@ -35,7 +35,7 @@
 
 ### P0-2 玩家对象模型三件套落地（object-model O-1/O-4，任务书 §6）
 
-- PlayerAnchor：补 Home Zone/route 语义字段 + 脏数据出队（journal）钩子 + `home_zone_id`（contract 已定词）；现有六态保留（Transferring 态按契约语义确认可删则删）。
+- PlayerAnchor：补 Home baseapp/route 语义字段 + 脏数据出队（journal）钩子 + `home_zone_id`（contract 已定词）；现有六态保留（Transferring 态按契约语义确认可删则删）。
 - **Avatar 新建**（契约 §1.2）：`Avatar` 类（modules/game/world 或 scene 模块内），生命周期 = 进 scene 生/出 scene 死；持有移动权威/战斗权威/AOI 广播三职责（player-object-model §2 精简单）；状态从 Anchor 投影（属性/装备/长期 buff）。
 - 根除命名空间混用：PlayerId/EntityId 分型（强类型避免传错——cell_server.cpp:559 的 find_by_player(entity_id) 即编译器不可见错误）；space_id 与 instance_id 分离（cell_server.cpp:544-545 的复用撤销）。
 - **文件级变更**：
@@ -49,7 +49,7 @@
 
 - Scene 升级为运行时容器：拥有 entities_（承接 EntityManager 职责）、AOI（承接 AOIManager）、玩家进出 API（enter/leave）、tick 阶段（simulate/recalc/aoi/collect/persist 六阶段骨架，attribute-sync 口径）。
 - 拆除 MapInstance→WorldSpace→Scene 三层空壳 → **一层 SceneDescriptor（Map 资产引用）+ 一层 Scene（运行时）**；Instance 成为「带玩法八态生命周期（Create→Initialize→Waiting→Running→Finishing→Rewarding→Draining→Destroyed）的 Scene 载体」——任务书 §9 状态机逐态落字段与转换校验。
-- `world.create_scene / scene.create_instance / instance.enter(player_id)`（任务书 §27）成为真实 API：由 Zone 世界对象（新 `World`，或 WorldHost 扩展）暴露。
+- `world.create_scene / scene.create_instance / instance.enter(player_id)`（任务书 §27）成为真实 API：由 baseapp 世界对象（新 `World`，或 WorldHost 扩展）暴露。
 - **文件级变更**：
   - 删除/合并：map_instance.hpp/cpp、world_space.hpp/cpp（或改名为 scene_runtime 语义）；world_space 命名含契约禁词 Space——随合并更名
   - 新增：modules/game/world 下 scene_runtime.hpp/instance.hpp（八态状态机 + 校验表）
@@ -147,7 +147,7 @@
 
 ### P2-4 Social / Guild / Party（契约：社交面归 Anchor 长期态）
 
-- 玩家长期态字段模型扩展（Inventory/Equipment/Quest/Progress——object-model 差异清单 1 的字段面）+ Guild/Party 对象（manager 域或 Zone 域）与协议。
+- 玩家长期态字段模型扩展（Inventory/Equipment/Quest/Progress——object-model 差异清单 1 的字段面）+ Guild/Party 对象（baseappmgr 域或 baseapp 域）与协议。
 - **文件级变更**：新增 modules/game/social/*；Anchor 持久态扩展；消息面 + gen。
 
 > P2 出口判据：① 塔防/副本典型 battle 在 1 scene 内 tick 闭环（create→enter→battle→reward→leave，任务书 §30 半程）；② ECS 收敛后无并行实现残留；③ 契约树全量通过 golden check；④ guild/party 最小 CRUD 单测。
@@ -156,7 +156,7 @@
 
 ## 4. P3 —— Deployment / Performance / Observability / DevEx（任务书 §38 四档）
 
-- **P3-1 部署与进程形态**：manager 域目录跨进程化（**G-1 服务发现骨架全链已交付**——批 B 库层 7a017025 → 批 C UDP 传输件 0af3099b → 批 D Machined 壳 b59cb53a → 批 E 广播发现 1de58fa6；拉起/重启监督面已随批 F 交付；G-1 收尾批三增量全交付（2026-10-08，①死亡事件跨进程上报、②在线目录跨进程镜像、③恢复相位跨进程化，各见下批记）；§6 死亡行窗口处置遗留批已交付（roster zone 列 + tick 驱动 + manager 域消费端，见下批记））；instance offload 进程形态（36号 #16——前置设计已立 `docs/design/battle-instance-offload.md`：组件骨架/确定性承载/故障域 + 三拍板点[生命周期协议、传输依赖序、崩溃裁决]待裁）；配置统一（ConfigManager 收口/删除——config 系双轨 diff 见 audit A8；零配置文件落地——批 A/A2 已交付）。
+- **P3-1 部署与进程形态**：baseappmgr 域目录跨进程化（**G-1 服务发现骨架全链已交付**——批 B 库层 7a017025 → 批 C UDP 传输件 0af3099b → 批 D Machined 壳 b59cb53a → 批 E 广播发现 1de58fa6；拉起/重启监督面已随批 F 交付；G-1 收尾批三增量全交付（2026-10-08，①死亡事件跨进程上报、②在线目录跨进程镜像、③恢复相位跨进程化，各见下批记）；§6 死亡行窗口处置遗留批已交付（roster zone 列 + tick 驱动 + manager 域消费端，见下批记））；instance offload 进程形态（36号 #16——前置设计已立 `docs/design/battle-instance-offload.md`：组件骨架/确定性承载/故障域 + 三拍板点[生命周期协议、传输依赖序、崩溃裁决]待裁）；配置统一（ConfigManager 收口/删除——config 系双轨 diff 见 audit A8；零配置文件落地——批 A/A2 已交付）。
   - **批 A/A2 已交付（2026-10-07，d36529c5 + 6a73cede）**：配置统一消账（audit A8 (b)(c)）。批 A：legacy ConfigManager/ConfigNode/ConfigValue 七件删除——旧实现头（parseXml/parseLua 恒 false、notifyListeners 断头路、热更无调用方、`getValue<T>` 声明无定义，生产零消费）+ modules/core/config 转发桥双头（using 别名 + APOLLO_CONFIG_* 宏）+ config_manager.cpp/config_value.cpp 两源 + 纯 legacy 测试 test_config.cpp；apollo_core_config 收口单源 config_registry.cpp，nlohmann_json/yaml-cpp optional 依赖块随 legacy 消亡；test_core_config.cpp 收口为 ConfigRegistry 单测 5 组（23 个 legacy 用例随之删除），tests/CMakeLists.txt 的 config_tests 目标与「暂时禁用」墓碑注释同批清除。批 A2：四 app config.hpp 零消费字段删 29 项（base 11/cell 4/gateway 7/login 3，逐字段 grep 全 app 源验证；dataDir/journalPath/autoSaveIntervalMs/journalDrainQuota 等 P1-4/P1-5 活字段与 dbHost/dbPort/dbName/maxConnections/sessionTimeoutMs/maxLoginAttempts/lockoutDurationMs/gatewayUrls 等在用字段全部保留），空段标题顺清。两树 33/33、Examples 31/31 全绿。
   - **批 B 已交付（2026-10-07）**：G-1 服务发现库层骨架 `modules/net/discovery`（wire 报文 + Beacon/Registry 两侧行为语义，不含 socket）——①WirePacket 32B 定长（magic/version/op/组件三元身份/seq，偏移表逐字段小端编解码，encode 恒 memset 全包；校验面：错 magic/version/op/零 component_id 整包丢）；②DiscoveryBeacon：register_self/beat（seq 自增）/deregister，经 BeaconTransport 抽象注入发包（UDP 归进程壳批，测试内存桩捕获字节）；③DiscoveryRegistry：on_packet 注册/心跳幂等刷新 last_seen（端口可变更）、Deregister 即时下线不入死亡队列（主动与异常语义分立）、expire TTL=3×interval 超时死亡入队 + drain_deaths 消费；④单线程驱动、时间由调用方注入（骨架不起线程不依赖钟）。术语面勘误随批 C：`Machined` 定为代码标识。测试 discovery_tests 7 组；门禁 ON/OFF 34/34、Examples 32/32。
   - **批 C 已交付（2026-10-07）**：UDP 传输库件 `udp_transport.hpp/cpp`（对批 B 口径收窄——传输库件先行，进程壳批缩为守护主循环接线 + 命名拍板）：①UdpBeaconTransport：BeaconTransport 的 UDP 实现（无连接 sendto 每包带目的端点，幂等 open，点分 IPv4 字面量——主机名解析归部署配置层）；②UdpFeed：Registry 侧收包口（bind + SO_REUSEADDR 守护重启同端口 + 非阻塞 try_receive 供主循环轮询，bind_port=0 内核分配端口回读；≠32B 报文静默丢——多读 1 字节侦测超长）；③Winsock 生命周期随链接静态初始化（net/tcp net_common 同惯例），POSIX/Windows 双平台收口 sock_api_t 转型。测试 discovery_tests 增 3 组 loopback 集成共 10 组；门禁 ON/OFF 34/34、Examples 32/32 全绿。
@@ -221,7 +221,7 @@
 
 ## 8. 术语差异清单（improvement-plan 级）## 8. 术语差异清单（improvement-plan 级）
 
-1. **进程名迁移登记**：apps/base-app/baseappmgr 的 `base`/`baseappmgr` 命名原口径冲突（禁 cellapp/baseapp）——按原口径 §2 应在收口批次更名（**已定案（ADR-014，2026-10-10）：baseappmgr→manager（ManagerApp 原口径定稿名）、base-app→zone-app（Zone 定稿名），cell-app 原型名不动；零行为变更，CTest 套件名不变**）；落地归后续改名批，此前**不改名**（避免阶段 0 大爆炸）。
+1. **进程名迁移登记**：apps/base-app/baseappmgr 的 `base`/`baseappmgr` 命名原口径冲突（禁 cellapp/baseapp）——按原口径 §2 应在收口批次更名（**已定案（ADR-014，2026-10-10）：baseappmgr→manager（ManagerApp 原口径定稿名）、base-app→zone-app（Zone 定稿名），cell-app 原型名不动；零行为变更，CTest 套件名不变**）；落地归后续改名批，此前**不改名**（避免阶段 0 大爆炸）；**2026-10-12 撤销回改（用户令）：ADR-014 依据不成立，回改 BW 名 baseappmgr/base-app，文档叙述层 Zone/zone 进程→baseapp；详 ADR-014 撤销注记**。
 2. **WorldHost vs clock 文档 10Hz**：P0-1 对齐时以 clock-and-time 文档与原口径 §1.5（tick 词条）为准修正默认值 20Hz——若设计批次另有裁决（20Hz 为上线的实际帧率，文档待勘），以裁决为准并同步文档；登记为本计划执行时的第一项「设计口径核对」。
 3. **`Player` 作为叙述词**：本计划沿用任务书 §39 表格原文（"Player 是明确一等对象"等），其语义落点=Anchor+Avatar 二体（object-model.md 差异清单 1）；代码标识一律原口径词。
 

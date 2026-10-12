@@ -20,7 +20,7 @@
 
 Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
 
-Apollo treats a **Zone** as an authoritative simulation unit. Each Zone owns a complete scene or game instance and can be created, scheduled, recovered, and recycled independently.
+Apollo treats a **baseapp** as an authoritative simulation unit. Each baseapp owns a complete scene or game instance and can be created, scheduled, recovered, and recycled independently.
 
 ```text
 Client
@@ -28,7 +28,7 @@ Client
 Gateway
    │
    ▼
-Zone
+baseapp
  ├── Scene / Instance
  ├── AOI
  ├── Session
@@ -44,9 +44,9 @@ Zone
 
 The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
 
-This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple Zones can be orchestrated across machines while preserving the same runtime model.
+This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple baseapps can be orchestrated across machines while preserving the same runtime model.
 
-Positioning: **an instance-based multiplayer game server engine** — rooms/scenes/dungeons/matches are first-class citizens; MMO is a supported use case ("an MMO composed of many Zones/instances", i.e. instance-oriented MMO architectures), not the core identity. The tech stack is modern C++20, with core modules covering networking, data storage, game logic, and the battle system.
+Positioning: **an instance-based multiplayer game server engine** — rooms/scenes/dungeons/matches are first-class citizens; MMO is a supported use case ("an MMO composed of many baseapps/instances", i.e. instance-oriented MMO architectures), not the core identity. The tech stack is modern C++20, with core modules covering networking, data storage, game logic, and the battle system.
 
 ## Use Cases
 
@@ -54,12 +54,12 @@ Positioning: **an instance-based multiplayer game server engine** — rooms/scen
 
 | Scenario | Instance Form |
 |------|----------|
-| Tower defense, fixed maps (e.g. tower-defense circles) | Multiple rooms in one Zone, `CreateInstance` on game start |
+| Tower defense, fixed maps (e.g. tower-defense circles) | Multiple rooms in one baseapp, `CreateInstance` on game start |
 | Dungeons / Roguelike | One instance per run, recycled when finished |
 | Arena / battle royale | Match instance, destroyed after the match |
 | Multiplayer PvE / survival / co-op | Squad instances |
 | Multiplayer PvP | Match instances |
-| MMO sharding (lines) and dungeons | A line = a scene_id instance, many Zones orchestrated horizontally |
+| MMO sharding (lines) and dungeons | A line = a scene_id instance, many baseapps orchestrated horizontally |
 
 **Not a fit** — a **persistent seamless world**: seamless maps, cross-process spatial roaming, or a deployment model where "one World is split horizontally into CellApps". Apollo intentionally does not do cell partitioning / ghosts / entity migration (architecture decision #9); for such requirements, choose a continuous-world engine such as BigWorld / KBEngine.
 
@@ -391,7 +391,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable services: login-app / gateway-app / manager / zone-app / cell-app / machined / logger / game-server
+├── apps/                   # Executable services: login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations

@@ -1,4 +1,4 @@
-#include "manager/manager_app.hpp"
+#include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 
 #include <iostream>
@@ -13,12 +13,12 @@ namespace {
         } \
     } while (0)
 
-// manager（调度面）目录裁决与路由解析测试。
+// baseappmgr（调度面）目录裁决与路由解析测试。
 // 纯内存目录操作，不启动网络。
 bool test_baseappmgr_directory_and_route() {
     std::cout << "Running: test_baseappmgr_directory_and_route..." << std::endl;
 
-    manager::ManagerApp mgr(0); // 不 start()，只测目录方法
+    baseappmgr::BaseAppMgr mgr(0); // 不 start()，只测目录方法
 
     apollo::game::session::SessionBinding binding;
     binding.session_id = 9001;
@@ -74,7 +74,7 @@ bool test_baseappmgr_directory_and_route() {
 bool test_baseappmgr_admission_gate() {
     std::cout << "Running: test_baseappmgr_admission_gate..." << std::endl;
 
-    manager::ManagerApp mgr(0);
+    baseappmgr::BaseAppMgr mgr(0);
 
     apollo::game::session::SessionBinding binding;
     binding.session_id = 9101;
@@ -111,7 +111,7 @@ bool test_baseappmgr_window_disposition_passthrough() {
     std::cout << "Running: test_baseappmgr_window_disposition_passthrough..."
               << std::endl;
 
-    manager::ManagerApp mgr(0);
+    baseappmgr::BaseAppMgr mgr(0);
 
     namespace session = apollo::game::session;
     std::vector<session::MirrorEntry> report;

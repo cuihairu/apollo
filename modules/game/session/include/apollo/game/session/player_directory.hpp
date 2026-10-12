@@ -19,7 +19,7 @@ namespace apollo::game::session {
 struct MirrorEntry;
 
 // PlayerDirectory（在线目录）——P1-2，session-and-online-directory 设计的
-// 单进程落地（§9 P2 形态：manager 域进程内表）。
+// 单进程落地（§9 P2 形态：baseappmgr 域进程内表）。
 //
 // 行为契约（本类即契约，单测逐条断言）：
 //   - 数据模型（§1）：条目 = SessionBinding + WorldAssignment + state +

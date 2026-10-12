@@ -1,8 +1,8 @@
 // Zone M1 base 面 × login M1 base 客户端 e2e 测试（P4-4 批③：ZoneM1BaseTests）。
 //
 // 缝工厂两侧真实现直编（同 login_m1_admission_tests 惯例）：
-//   1. base_e2e：zone 受理面（真 codec 假 handler——Activate/Bind 应答、
-//      AssignWorld 回 Unknown 错误包[zone 真实分派语义，落点归 manager]）
+//   1. base_e2e：base-app 受理面（真 codec 假 handler——Activate/Bind 应答、
+//      AssignWorld 回 Unknown 错误包[base-app 真实分派语义，落点归 baseappmgr]）
 //      ↔ login base 客户端面全链 round-trip；
 //   2. base_unreachable：对端无监听 = 同步立即空返回 → 调用方降级缝
 //      （传输缺席 ≠ 会话事实，桩时代同缝）。
@@ -20,8 +20,8 @@
 #include <thread>
 #include <vector>
 
-#ifndef APOLLO_ZONE_CONTRACT_ROUTE_JSON
-#define APOLLO_ZONE_CONTRACT_ROUTE_JSON ""
+#ifndef APOLLO_BASEAPP_CONTRACT_ROUTE_JSON
+#define APOLLO_BASEAPP_CONTRACT_ROUTE_JSON ""
 #endif
 
 #ifndef APOLLO_LOGIN_CONTRACT_ROUTE_JSON
@@ -43,8 +43,8 @@ namespace {
 
 namespace protocol = apollo::protocol;
 
-// zone 真实分派同缝假 handler：Activate/Bind 应答（字段级回填）；
-// AssignWorld 与未知型 = Unknown message type 错误包（zone-app dispatchRequest
+// base-app 真实分派同缝假 handler：Activate/Bind 应答（字段级回填）；
+// AssignWorld 与未知型 = Unknown message type 错误包（base-app dispatchRequest
 // 注记「落点裁决归 apps/manager」——错误包回程即 login 缝 throw 降级的前提面）。
 std::vector<std::uint8_t> fake_base_handler(const std::uint8_t* frame, std::size_t size) {
     const std::vector<std::uint8_t> bytes(frame, frame + size);
@@ -110,7 +110,7 @@ bool test_base_e2e() {
     base::M1BaseServerConfig config;
     config.host = "127.0.0.1";
     config.port = 0;  // 内核分配，listenPort() 读回
-    config.route_json = APOLLO_ZONE_CONTRACT_ROUTE_JSON;
+    config.route_json = APOLLO_BASEAPP_CONTRACT_ROUTE_JSON;
     auto server = base::makeM1BaseServer(config, fake_base_handler);
     TEST_ASSERT(server->start(), "base face starts");
     TEST_ASSERT(server->listenPort() != 0, "ephemeral port observed");
@@ -123,7 +123,7 @@ bool test_base_e2e() {
     auto client = login::makeM1BaseClient(clientConfig);
     TEST_ASSERT(client != nullptr, "login base client starts");
 
-    TEST_ASSERT(wait_peer_up(*client), "client dials zone face");
+    TEST_ASSERT(wait_peer_up(*client), "client dials base face");
     // 握手收敛双向异步（client 先见 kUp，server 晚一拍）——等值轮而非单断言。
     for (int i = 0; i < 500 && !server->peerConnected(); ++i) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -187,7 +187,7 @@ bool test_base_e2e() {
         TEST_ASSERT(parsed.success, "bind accepted");
     }
 
-    // AssignWorld：zone 不受理（落点归 manager）→ Unknown 错误包回程。
+    // AssignWorld：base-app 不受理（落点归 baseappmgr）→ Unknown 错误包回程。
     // login 缝的帧型校验据此 throw → catch 降级（桩时代同缝，批④ 换面）。
     protocol::PlayerAssignWorldRequest assign;
     assign.playerId = 42;

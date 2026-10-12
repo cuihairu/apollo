@@ -133,8 +133,8 @@ tag:
 
 **决策**：
 1. **案 A 先行（restart-only）**——machined 监督面退避重启 + PersistJournal 持久态 + 客户端重连；**standby 不立项**；案 B/C 不做分期预留，若生产运行数据提出亚秒 RTO 需求另行立项（届时依赖 net M1 InterServerLink）。
-2. **接管粒度按进程类型分三档**（不统一单语义）：有状态重建档 = manager（全量重报，既有）+ Zone（冷重启 + journal replay + 重报收敛，批 0 已实测）；无状态重启档 = login-app / verifier（worker 池重启即恢复）；崩溃即作废档 = Battle 实例（ADR-012）。
-3. **仲裁面：案 A 无双主，不新造仲裁协议**；epoch 沿用目录面既有语义（单调递增 + 陈旧 epoch 拒收——守卫实存目录面核心 player_directory.cpp:117-124 §3-③ 竞态窗口守卫：`next_epoch_` 自增发号 + resume 按 token 与 epoch 双锚拒旧，directory_mirror 层仅承载 wire 序列化），manager 单点串行维持。
+2. **接管粒度按进程类型分三档**（不统一单语义）：有状态重建档 = baseappmgr（全量重报，既有）+ baseapp（冷重启 + journal replay + 重报收敛，批 0 已实测）；无状态重启档 = login-app / verifier（worker 池重启即恢复）；崩溃即作废档 = Battle 实例（ADR-012）。
+3. **仲裁面：案 A 无双主，不新造仲裁协议**；epoch 沿用目录面既有语义（单调递增 + 陈旧 epoch 拒收——守卫实存目录面核心 player_directory.cpp:117-124 §3-③ 竞态窗口守卫：`next_epoch_` 自增发号 + resume 按 token 与 epoch 双锚拒旧，directory_mirror 层仅承载 wire 序列化），baseappmgr 单点串行维持。
 4. **RPO/RTO 定档**：RPO = 0（journal write-ahead 零丢失，attribute-sync §11 既有指标升格）；RTO = 重报收敛 ≤3s / 镜像收敛 ≤3.5s（批 0 满载噪声期实测上限定档，空载更优）。
 5. **镜像流不建**：journal 跨进程消费改造不做（现状单进程 SaveQueue worker 维持）；同机 shm SPSC / InterServerLink 两候选形态留档随未来 B/C 立项再裁。
 6. **验收链 = 批 0 kill -9 演练链**（已交付）；双主注入演练不进门禁（案 A 无双主）。G-2 术语四词随本拍板定案：热备/接管词条标注「未立项（案 A 先行）」。
@@ -150,7 +150,7 @@ tag:
 **背景**：gateway-app 现状半成品壳（摸底三因：启动期全后端硬依赖无重试 / 默认端口错位 BaseApp 9002=自身端口、CellApp 9100 错位 / ChatApp 幽灵依赖指向无进程端口；叠加 ingress 未接线）。「何时修、按最小修复处方还是等 net M1 直接接线」挂 net M1 拍板链；gateway-topology-survey 结论「留独立 gateway-app + 自研进程间总线」为建议件未生效。
 
 **决策**：
-1. **gateway-topology-survey「留独立 gateway-app」结论生效**（拓扑定案：连接面进程 + Zone 不见客户端 + 自研总线，不学 nats 中间件族）。
+1. **gateway-topology-survey「留独立 gateway-app」结论生效**（拓扑定案：连接面进程 + baseapp 不见客户端 + 自研总线，不学 nats 中间件族）。
 2. **最小修复处方先行**（三步）：① `MessageRouter::start` 连接失败降级警告 + `available=false`（不再 throw→exit 1，复用转发面既有降级语义）② dev_fleet roster 补传三后端 URL（消端口错位）③ ChatApp 依赖摘除（仓库无 chat-app 进程）。
 3. **ingress 客户端接线不随本批**（真缺口在 ingress，归 P3-2 gateway surface 随 net M1 批）；协议收敛 / P4-4 代码层三簇按 M1 阶梯（§5.6：M1 最小正确内核 = 帧定界 + contract_route 分发 + 背压水位 + 单播拓扑 + InterServerLink）推进。
 
@@ -175,7 +175,7 @@ tag:
 2. **传输依赖序 = (b) 内存桩过渡**：offload 先以同机管道（pipe/shmem SPSC）落生命周期 + internal 域信封协议 + 故障处置骨架，M1 就绪后换底座（一次底座替换换设计风险与传输解耦）。
 3. **崩溃裁决 = (a) 崩溃即作废**：团战重开，玩家侧按错误面提示；(b) 关键帧重放恢复留缝（ReplayTuple 已是关键帧素材，协议面后补不预支）。
 
-**后果**：拍板后路径启动：协议消息契约批（internal 域，随实现入库）→ offload 骨架批 → M1 就绪换底座 → manager 域落点接入。Battle 实例故障域与 Zone 故障域独立（battle-instance-offload §7），ADR-010 三档粒度表的作废档由此承接。
+**后果**：拍板后路径启动：协议消息契约批（internal 域，随实现入库）→ offload 骨架批 → M1 就绪换底座 → baseappmgr 域落点接入。Battle 实例故障域与 baseapp 故障域独立（battle-instance-offload §7），ADR-010 三档粒度表的作废档由此承接。
 
 ---
 
@@ -201,7 +201,7 @@ tag:
 
 ## ADR-014 Process Rename: Manager and Zone（进程改名：baseappmgr→manager，base-app→zone-app）
 
-**状态：** 已拍板并落地（2026-10-10 巡检授权批拍板；2026-10-11 落地 a5750eda）。
+**状态：** 已撤销（2026-10-12 用户令）——2026-10-10 巡检授权批拍板、2026-10-11 落地 a5750eda，同日回改 BW 名。回改依据：撤销决策所依据的命名契约（「禁 cellapp/baseapp」）系内部代拟、未经用户审定且文件已删除，依据不成立；现行口径 = 优先复用 BigWorld 现成词。
 
 **背景**：P3-1 遗留「base/baseappmgr 进程名更名（走新术语流程定名，此前不变名）」。**依据更正（2026-10-12）**：原引「禁 cellapp/baseapp 进程名」的命名契约系内部代拟、**未经用户审定**，该文件已删除；现口径 = **优先复用 BigWorld/KBE 既有概念、降低理解成本**（新词须给对照与理由）。进程名是否回改为 BW 词汇，另行拍板。
 
@@ -213,6 +213,8 @@ tag:
 **后果**：改名批定稿名全量入户，仓库内不再出现 baseappmgr/base-app 进程名（他家对照词仅存于文档证据引用）；改名批后 dev_fleet/drill 全链复验为验收面。
 
 **落地（2026-10-11，a5750eda）**：apps/baseappmgr → apps/manager（二进制 manager、类 ManagerApp、命名空间 manager、日志身份与文件名 manager、crash db crashdumps/manager）；apps/base-app → apps/zone-app（二进制 zone-app、日志身份与文件名 zone-app、RecoveryCoordinator 标识 zone-app；内部 base/BaseServer 代码标识不动——决策 2「代码标识不与进程名混淆」）；CLI 参数面零改动（--base-app 后端挂接参数/端口/监督语义原样）；CTest 套件名 BaseAppMgrTests 保持（决策 1）；dev_fleet/drill roster 改新名、断言子串（child death zone-app / restart zone-app）随批更新；他家对照引用（BW baseappmgr.cpp:588-599 等）按本 ADR 豁免保留。验收 = 三树门禁全绿（ON 42/42、Examples 40/40、OFF 36/36）+ dev_fleet 冒烟（born manager/zone-app 落日志、log/manager_*.log 与 log/zone-app_*.log 结构化行 proc= 落新名、crashdumps/manager|zone-app 隔离）+ drill_kill9 全链断言全过（死亡检测 45ms → 退避重启 1.05s → recovery ready 1.07s → 全量重报 1.70s → 镜像收敛 2.71s）。文档面：现行事实件随批改新名（guides / api / overview / Directory_Structure / apps 实现文档 / 设计件现状衔接与零件表 / 交付注记路径——设计件引用行号经核未漂移，改名均为等长行替换）；历史时点件不改写（审计七件套 / analysis / qa / 他家对照件 / starter 参考件目标形态示例 / baseline footer 存量实读清单）——时点证据保留，本注记与 todo 批记为权威后况。
+
+**撤销（2026-10-12，用户令）**：两处进程名回改 BigWorld 现成词——apps/manager → **apps/baseappmgr**（二进制 baseappmgr、类 BaseAppMgr、命名空间 baseappmgr、日志身份与文件名 baseappmgr、crash db crashdumps/baseappmgr）；apps/zone-app → **apps/base-app**（二进制 base-app、日志身份与文件名 base、crash db crashdumps/base-app、RecoveryCoordinator 标识 base-app；内部 base/BaseServer 代码标识不动）。M1 链路 self_name/peer_name 与 CLI（--baseappmgr-m1-*）、CTest 套件名（BaseAppMgrM1ControlTests/BaseM1Tests）、dev_fleet/drill roster 与断言子串（child death base / restart base）随批回改。纯进程身份变更，零行为变更。文档叙述层同步回改：Zone/zone 进程 → baseapp（逻辑同 apps/base-app），进程义 manager → baseappmgr；代码标识符（zone_id、zone_hint、home_zone_id 等）与他家对照事实（EQEmu zone 进程制、SmartFoxServer Zone 等）不改。验收 = 三树门禁全绿 + dev_fleet 冒烟（born base/baseappmgr 落日志、crashdumps 隔离）+ drill_kill9 全链断言过。本 ADR 前文与历史时点件（审计七件套/analysis/qa/他家对照件）不改写，时点证据保留。
 
 ---
 
@@ -245,7 +247,7 @@ tag:
 3. **水位数值 = tick 预算锚定**——队列深度 × 单请求处理时长 ≤ tick 预算（100ms@10Hz，clock-and-time §4）的比例起步；静态顶格先取保守值，benchmark 接入受理面后按 capacity §2.1 三模型实测锚点同型校准。
 4. **③ 只读快路径不设**——全量入队单形态；PING/查询类延迟 1 tick 无害，多一条快路径即多一个并发形态要审。**后况勘误（2026-10-10 / ADR-017）**：PING 在 M1 前于受理点回 Pong（worker 侧纯 wire echo 无 world 访问面，非快路径）——现行传输 lockstep 下 Pong 入队则无发送路径可回；M1 延时应答落地后 Pong 随队列入队。
 5. **④ Manager 三件 mutex 保留**——WorldSessionManager/AnchorManager 已是「跨线程最小集」形态（数据面小、竞争烈度低），迁移收益不抵改形风险；SessionLocator 不动；单写者收口只指 World/Scene 图。
-6. **⑤ 停机时序 = G-3 五阶段的 cell-app 镜像**——停受理（断流回维护中，zone-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
+6. **⑤ 停机时序 = G-3 五阶段的 cell-app 镜像**——停受理（断流回维护中，base-app `dispatchRequest` 维护闸同型）→ 队列 drain → gameThread join → worldHost stop。
 
 **后果**：受理面批（意图信封 + 队列 + tick 消费 + pending reply，cell-app 功能代码）落地即含③④⑤配套口径；水位数值的 benchmark 校准随受理面接入 capacity 锚点体系；M1 接收端接线只换传输底座（受理面=骨架直接复用）。**后况勘误（2026-10-10 / ADR-017）**：受理面批应答面 = 受理点回执（ack-on-accept，含 PING 受理点回 Pong 特例勘误见决策 4 注记），pending reply 为 M1 升级增量。
 
@@ -271,7 +273,7 @@ tag:
 4. **延时应答（原 (a) 接线）随 M1 升级**：InterServerLink recv/send 解耦后加 pending-reply 关联面（header.sessionId 承载）与 gameThread_ 侧发送路径；受理面骨架（意图信封/队列/水位/tick 消费/单写者）零废弃——cell-single-writer §6「M1 只换传输底座」口径不变。ack-on-accept 不是 (i) 的替代终局，是 (i) 的前置阶段；真传输 REP 锁步要求每请求一非空应答帧，ack 帧型随 M1 契约批定义。
 5. **倾向口径勘误**：拍板⑥ 记录原倾向「(i) 为正本（传输层根因，适配是绕路）」针对**终局接线**——裁定保留 (i) 为 M1 时终局；「绕路」指责对 ack-on-accept 不成立：它收竞争、保 wire 语义、骨架复用 M1，是解耦而非绕路。
 
-**后果**：受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app 功能代码）设计闭环，待文档/脚本边界放行后开工（决策面全裁：ADR-015 主案 + ADR-016 配套 + 本 ADR 应答接线）；水位与过载批随受理面批同批；M1 接线批新增「延时应答升级」增量（pending-reply 关联面 + gameThread_ 发送路径），受理面零返工；gateway 转发/单测/liveness 消费面 wire 行为逐字节不变。其余 RepSocket 消费方（login-app/zone-app/manager）同步应答语义不受影响，M1 升级路径全协议模块同型适用。
+**后果**：受理面批（意图信封 + 队列 + tick 消费 + 受理点回执，cell-app 功能代码）设计闭环，待文档/脚本边界放行后开工（决策面全裁：ADR-015 主案 + ADR-016 配套 + 本 ADR 应答接线）；水位与过载批随受理面批同批；M1 接线批新增「延时应答升级」增量（pending-reply 关联面 + gameThread_ 发送路径），受理面零返工；gateway 转发/单测/liveness 消费面 wire 行为逐字节不变。其余 RepSocket 消费方（login-app/base-app/baseappmgr）同步应答语义不受影响，M1 升级路径全协议模块同型适用。
 
 **证据**：modules/protocol/src/socket.cpp:139-172（workerLoop lockstep）、:165（空应答跳发送）、:431-488（桩分支）、:101（nng_rep0_open）；modules/protocol/include/apollo/protocol/socket.hpp:119（RequestHandler 同步返回）；apps/cell-app/src/cell_server.cpp:157-210（acceptRequest 受理点回执：变更类 `{}`/PING Pong）；docs/design/cell-single-writer.md §3(a)/§5 拍板 6；todo.md P1-6 批记（nng 未装两树同走桩）、契约差异清欠 §34.3（nng 解禁评估回退、M1 随 P3-2 批重估）；ADR-015 §3(b)/§4（弃 (b) 队头阻塞原判）。
 

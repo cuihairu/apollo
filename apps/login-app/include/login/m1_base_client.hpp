@@ -6,7 +6,7 @@
 // active 端点拨对端 M1 受理面 + linkrpc RpcClient：请求/响应体 =
 // MessageCodec 全帧，业务语义（编解码/成败裁决）归调用方
 // （LoginServer::preparePlayerOnline），本面只管传输与关联。
-// peer_name 择对端：批③ = "zone"（base 链）；批④ = "manager"（AssignWorld
+// peer_name 择对端：批③ = "base"（base 链）；批④ = "baseappmgr"（AssignWorld
 // 落点裁决——AssignWorld 已拆出 zone，随 manager 控制面受理）。
 //
 // 机制面自带泵线程（10ms 拍）——preparePlayerOnline 是同步等待语义且其
@@ -27,7 +27,7 @@ struct M1BaseClientConfig {
     std::string host = "127.0.0.1";
     std::uint16_t port = 0;              // 0 = 面关
     std::string route_json;              // 契约路由表（缺位 = start false）
-    std::string peer_name = "zone";      // 拨入对端 G-1 组件名
+    std::string peer_name = "base";      // 拨入对端 G-1 组件名
 };
 
 class M1BaseClient {

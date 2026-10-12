@@ -34,7 +34,7 @@ namespace apollo::game::battle::offload {
 class InstanceOffloadNode : public apollo::game::battle::IRewardSink {
 public:
     // uplink：上行传输（实例→Zone 方向）；world_seed：种子注入点（跨机同
-    // binary 同确定域 §6；四元组复算的 seed 源随 manager 域接入定案）
+    // binary 同确定域 §6；四元组复算的 seed 源随 baseappmgr 域接入定案）
     explicit InstanceOffloadNode(IOffloadTransport& uplink,
                                  std::uint64_t world_seed = 0);
 

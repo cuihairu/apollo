@@ -8,7 +8,7 @@
 // 两类形（BW bwmachined/machine_guard 先例，仅取骨架不取全家桶）：
 //   - DiscoveryBeacon   进程侧：注册 + 周期心跳 + 优雅注销的**报文产生端**；
 //   - DiscoveryRegistry 目录侧：注册表 + 心跳 TTL 死亡判定 + 死亡事件队列
-//     （manager 域消费端接口——BW registerDeathListener 先例的骨架对应物）。
+//     （baseappmgr 域消费端接口——BW registerDeathListener 先例的骨架对应物）。
 //
 // 传输分界：本文件只定 wire 报文与两侧行为语义，不含 socket——Beacon 经
 // BeaconTransport 接口发包（测试注入内存桩），Registry 以 on_packet 收字节。
@@ -49,9 +49,9 @@ enum class Op : std::uint8_t {
 };
 
 // 保留组件号（machined 自身不入编队表）：1 = 目录（Advertise）、
-// 2 = manager（DeathSubscribe）
+// 2 = baseappmgr（DeathSubscribe）
 inline constexpr std::uint64_t kDirectoryComponentId = 1;
-inline constexpr std::uint64_t kManagerComponentId = 2;
+inline constexpr std::uint64_t kBaseAppMgrComponentId = 2;
 
 // 死亡类别（DeathNotify 的 reserved0 字节；seq 字节复用为 exit_code——
 // 监督面死亡带退出码，TTL 死亡无退出码恒 0）
@@ -81,7 +81,7 @@ struct MemberId {
 // 不 memcpy 结构体——防对齐/端序漂移。
 //
 // op 专属字段语义（G-1 收尾批：死亡事件跨进程上报）：
-//   - DeathSubscribe：component_id = 订阅者组件号（kManagerComponentId），
+//   - DeathSubscribe：component_id = 订阅者组件号（kBaseAppMgrComponentId），
 //     service_port = 订阅者死亡监听 feed 端口（通知回投端点 = 发送方地址 +
 //     此端口）；周期重发 = 刷新（幂等），超 TTL 未刷新即过期停推。
 //   - DeathNotify：component 三元 = 死者身份（component_id 必非零）；
@@ -249,7 +249,7 @@ private:
     std::vector<Subscriber> subscribers_;
 };
 
-// manager 域消费端：死亡监听注册端（DiscoveryBeacon 同型——身份 + 目录端点
+// baseappmgr 域消费端：死亡监听注册端（DiscoveryBeacon 同型——身份 + 目录端点
 // + 注入传输；subscribe() 发 DeathSubscribe，self.service_port 承载监听
 // feed 端口）。收包面归调用方（UdpFeed 轮询 + death_event_from 解码）。
 class DeathListener {

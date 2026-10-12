@@ -20,7 +20,7 @@
 
 Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
 
-Apollo treats a **Zone** as an authoritative simulation unit. Each Zone owns a complete scene or game instance and can be created, scheduled, recovered, and recycled independently.
+Apollo treats a **baseapp** as an authoritative simulation unit. Each baseapp owns a complete scene or game instance and can be created, scheduled, recovered, and recycled independently.
 
 ```text
 Client
@@ -28,7 +28,7 @@ Client
 Gateway
    │
    ▼
-Zone
+baseapp
  ├── Scene / Instance
  ├── AOI
  ├── Session
@@ -44,9 +44,9 @@ Zone
 
 The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
 
-This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple Zones can be orchestrated across machines while preserving the same runtime model.
+This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, multiple baseapps can be orchestrated across machines while preserving the same runtime model.
 
-中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是「由大量 Zone/实例组成」的 supported use case（instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
+中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是「由大量 baseapp/实例组成」的 supported use case（instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
 
 ## 适用场景 / Use Cases
 
@@ -54,12 +54,12 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 | 场景 | 实例形态 |
 |------|----------|
-| 塔防、固定地图（绿色循环圈等） | Zone 内多房间，开局 `CreateInstance` |
+| 塔防、固定地图（绿色循环圈等） | baseapp 内多房间，开局 `CreateInstance` |
 | 副本 / Dungeon / Roguelike | 一局一实例，用完回收 |
 | 竞技场 / Arena / 大逃杀 | Match 实例，赛毕销毁 |
 | 多人 PvE / 生存 / Co-op | 小队实例 |
 | 多人 PvP | 对局实例 |
-| MMO 分线与副本 | 线 = scene_id 实例，大量 Zone 横向编排 |
+| MMO 分线与副本 | 线 = scene_id 实例，大量 baseapp 横向编排 |
 
 **不适合**——**连续共享大世界**（persistent seamless world）：无缝地图、跨进程空间漫游、「一个 World 横向切成 CellApp」的部署模型。Apollo 有意不做 cell 分片 / ghost / 实体迁移（架构裁决 #9），这类需求请选 BigWorld / KBEngine 一类 continuous-world 引擎。
 
@@ -389,7 +389,7 @@ cd build && ctest -R BigWorldApiTests
 
 ```
 apollo/
-├── apps/                   # 可执行服务：login-app / gateway-app / manager / zone-app / cell-app / machined / logger / game-server
+├── apps/                   # 可执行服务：login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server
 ├── modules/                # 模块化源码：base/core/data/game/net/runtime 等
 ├── include/                # 公共头文件与兼容层头文件
 ├── src/                    # 公共实现与兼容层实现

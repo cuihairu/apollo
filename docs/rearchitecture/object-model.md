@@ -18,7 +18,7 @@
 
 另有两处命名空间混用的事实：`WorldSession` 的 player 键在验证路径用 **EntityId** 当 **PlayerId** 查（cell_server.cpp:559 `find_by_player(entity_id)`）；cell-app 把 map_instance_id 直接当 space_id 赋值（cell_server.cpp:544-545）。
 
-**对照（长期态 / 场景化身两层）**：Session/Proxy（连接承载，gateway 面）→ **无 Proxy 类**，gateway 侧无会话对象（只有连接 socket）；PlayerAnchor/Base（长期归属，驻 Home Zone）→ 有类、无 Home Zone 概念（存在 base-app 进程无定位字段）；Avatar/Cell（场景化身，进 scene 生、出 scene 死）→ **无类**，最接近的 cell::PlayerEntity 无生命周期规则。
+**对照（长期态 / 场景化身两层）**：Session/Proxy（连接承载，gateway 面）→ **无 Proxy 类**，gateway 侧无会话对象（只有连接 socket）；PlayerAnchor/Base（长期归属，驻 Home baseapp）→ 有类、无 Home baseapp 概念（存在 base-app 进程无定位字段）；Avatar/Cell（场景化身，进 scene 生、出 scene 死）→ **无类**，最接近的 cell::PlayerEntity 无生命周期规则。
 
 ---
 
@@ -30,18 +30,18 @@
 
 | 维度 | 现状 | 目标 |
 |---|---|---|
-| Owner | 无 World 对象（WorldHost 是服务宿主，不起世界之职） | world = Zone 内世界容器（create_scene/scene 管理） |
-| Created/Destroyed | 无 | 随 Zone 进程启停 |
-| Runtime Authority | 无 | Zone 内场景集合的单一权威 |
+| Owner | 无 World 对象（WorldHost 是服务宿主，不起世界之职） | world = baseapp 内世界容器（create_scene/scene 管理） |
+| Created/Destroyed | 无 | 随 baseapp 进程启停 |
+| Runtime Authority | 无 | baseapp 内场景集合的单一权威 |
 | Persistence | — | 无持久化（世界配置属 Definition 层） |
 | 结论 | **World 不是一等对象**：任务书 §27 目标 API 的第一段 `world.create_scene` 无法落代码 | — |
 
-### 2.2 PlayerAnchor（玩家锚 ≡ Base；契约：驻 Home Zone）
+### 2.2 PlayerAnchor（玩家锚 ≡ Base；契约：驻 Home baseapp）
 
 | 维度 | 现状 | 目标（契约） |
 |---|---|---|
-| Owner | AnchorManager（base-app 内，mutex+map） | Home Zone 持有（本进程内单一权威）——语义一致，缺「Home Zone 分配」机制 |
-| Created | base-app activatePlayer（DB 加载后 make_shared） | 登录落点阶段（login-flow 分配 Home Zone 时） |
+| Owner | AnchorManager（base-app 内，mutex+map） | Home baseapp 持有（本进程内单一权威）——语义一致，缺「Home baseapp 分配」机制 |
+| Created | base-app activatePlayer（DB 加载后 make_shared） | 登录落点阶段（login-flow 分配 Home baseapp 时） |
 | Destroyed | AnchorManager::deactivate（erase） | 登出存档完成后 |
 | Runtime Authority | **是**（内存 map 是唯一真相；DB 假实现） | 是（设计决策：在线玩家内存为权威） |
 | Persistence | 无钩子；dirty 标记存在但仅测试消费 needs_save；save 回路在 base-app SaveQueue（假） | dirty→write-behind journal（attribute-sync §8.2） |
@@ -49,7 +49,7 @@
 | Connection | SessionBinding（session_id/gateway_id/gateway_addr/bind_time_ms） | 同 |
 | Reconnect | 无窗口机制（Suspended 仅是另一个对象 WorldSession 的枚举） | 掉线保活窗口（Suspended 态）与 resume_token 同源 TTL |
 | Scene Transfer | 无（锚不参与换幕——正确！但无任何代码体现「换幕只动 Cell」） | 锚不动、Cell 换幕 |
-| 结论 | **玩家长期对象的方向是对的**（内存权威+绑定+位置字段齐备），但缺三件事：持久化回路、Home Zone 定位、保活窗口 | — |
+| 结论 | **玩家长期对象的方向是对的**（内存权威+绑定+位置字段齐备），但缺三件事：持久化回路、Home baseapp 定位、保活窗口 | — |
 
 ### 2.3 Avatar（场景化身 ≡ Cell）—— 不存在
 
@@ -79,7 +79,7 @@
 
 | 维度 | 现状 | 目标 |
 |---|---|---|
-| Owner | 无独立所有权：Scene 是 MapInstance 的值成员（MapInstance→WorldSpace→Scene 三层空壳） | 属 world 容器（Zone 内） |
+| Owner | 无独立所有权：Scene 是 MapInstance 的值成员（MapInstance→WorldSpace→Scene 三层空壳） | 属 world 容器（baseapp 内） |
 | Created | 仅 ensureDefaultMapInstance 硬编码 id=1 "default-world" | world.create_scene(...) |
 | Runtime Authority | Scene::update 遍历 entities_（永远是空的） | scene tick 阶段（simulate/recalc/aoi/collect/persist） |
 | 拥有 AOI | **否**（Scene 无 AOI 成员） | 是（scene_id 隔离） |
@@ -104,7 +104,7 @@
 | 关系 | **Connection = Session 混同**：gateway 无会话对象（裸 TCP 连接即一切）；两套 Session 域（apps 各自）与 game 层零耦合 | Connection→Session→PlayerAnchor 严格分层 |
 | Created | 连接接受即存在 | 鉴权通过创建 |
 | 断线 | 无（disconnect 以纯文本发后端、无 handler；无重连代码） | Session 可失可重挂（resume token） |
-| 顶号 | SessionLocator::bind 顶掉旧条目（进程内雏形） | 顶号预裁在 manager 域 |
+| 顶号 | SessionLocator::bind 顶掉旧条目（进程内雏形） | 顶号预裁在 baseappmgr 域 |
 | 结论 | 任务书 §12 命中：**Player 强绑定 Connection** 的现状不存在 Player，但绑定方向是错的（连接即一切） | — |
 
 ### 2.8 AOI
@@ -126,11 +126,11 @@
 > 契约 §1.2 + player-object-model §4 三轴收口 + 任务书 §5/§6/§10 的交集；本表即 improvement-plan P0 的验收骨架。
 
 ```text
-进程轴：  gateway-app（连接面） | Zone/逻辑服进程（1..N scene；Home Zone 驻 PlayerAnchor）
+进程轴：  gateway-app（连接面） | baseapp/逻辑服进程（1..N scene；Home baseapp 驻 PlayerAnchor）
 空间轴：  world ──1..N──> scene ──1..N──> instance（= scene 的玩法生命周期别名）
           scene 拥有：entities / AOI / tick 阶段 / 玩家进出
           instance 拥有：玩法八态生命周期 + scene（或引用）
-对象轴：  Connection（gateway）→ Session（可失可重挂）→ PlayerAnchor（Home Zone，不动）
+对象轴：  Connection（gateway）→ Session（可失可重挂）→ PlayerAnchor（Home baseapp，不动）
           │                                                            │
           └──────── 换幕：旧 scene 销毁 Avatar，新 scene 重建 Avatar（状态从 Anchor 投影，易失态重置）
 ```
@@ -138,10 +138,10 @@
 | 对象 | Owner | Runtime Authority | Thread | Persistence | Visibility | Transfer | Recovery |
 |---|---|---|---|---|---|---|---|
 | Account | 账号库（DB 侧） | 登录取用 | — | 是（建号/鉴权） | — | — | 鉴权重试 |
-| PlayerAnchor | Home Zone | Zone 内单线程（主页线程） | 单写者 | 在线内存权威 + write-behind | 无（不广播） | 不迁移 | 进程重启 → 从 DB 加载重建 |
+| PlayerAnchor | Home baseapp | baseapp 内单线程（主页线程） | 单写者 | 在线内存权威 + write-behind | 无（不广播） | 不迁移 | 进程重启 → 从 DB 加载重建 |
 | Avatar | 当前 scene | scene 线程 | scene 线程单写者 | L3 易失态不落档 | scene AOI 内广播 | 换幕销毁重建 | 断线窗口内重建 |
 | Session | gateway（逻辑挂 Anchor） | gateway 线程 | 连接线程 | 无 | — | resume 重挂 | resume_token |
-| Scene | world（Zone） | scene 线程 | 单写者 | 运行时态持久化归玩法结果单向落 Anchor | AOI 边界 | — | 崩溃重开实例 |
+| Scene | world（baseapp） | scene 线程 | 单写者 | 运行时态持久化归玩法结果单向落 Anchor | AOI 边界 | — | 崩溃重开实例 |
 | Instance | scene 派生 | scene 线程 | 同上 | 结果落 Anchor | — | — | abort/restore |
 | Entity | scene | scene 线程 | 同上 | 若需要随玩法 | AOI | 场景内仅 | 场景内重建 |
 | AOI | scene | scene 线程 | 同上 | 无 | 自身即兴趣分发表 | — | 重建 |

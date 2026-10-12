@@ -5,7 +5,7 @@
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 #include "apollo/protocol/messages.hpp"
-#include "manager/m1_control_server.hpp"
+#include "baseappmgr/m1_control_server.hpp"
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -16,12 +16,12 @@
 #include <unordered_map>
 #include <vector>
 
-namespace manager {
+namespace baseappmgr {
 
 namespace protocol = apollo::protocol;
 using PlayerID = protocol::PlayerID;
 
-// ManagerApp 服务器——目录 + 落点裁决（BigWorld baseappmgr 直系）。
+// BaseAppMgr 服务器——目录 + 落点裁决（BigWorld BaseAppMgr 直系）。
 //
 // 职责（调度面）：
 //   - Directory：player→SessionBinding / player→WorldAssignment 的全局目录
@@ -30,10 +30,10 @@ using PlayerID = protocol::PlayerID;
 //
 // 边界：不承载玩家数据（Avatar 常驻数据归 baseapp），不跨进程改任何进程内存——
 // 本进程只维护自己的目录表。
-class ManagerApp {
+class BaseAppMgr {
 public:
-    explicit ManagerApp(uint16_t port, std::string host = "0.0.0.0");
-    ~ManagerApp();
+    explicit BaseAppMgr(uint16_t port, std::string host = "0.0.0.0");
+    ~BaseAppMgr();
 
     void start();
     void stop();
@@ -134,4 +134,4 @@ private:
     std::function<bool()> admission_gate_;
 };
 
-} // namespace manager
+} // namespace baseappmgr

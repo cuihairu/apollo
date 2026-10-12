@@ -1,4 +1,4 @@
-#include "base/m1_base_server.hpp"
+#include "baseappmgr/m1_control_server.hpp"
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -12,26 +12,25 @@
 #include <thread>
 #include <utility>
 
-namespace base {
+namespace baseappmgr {
 
 #if !defined(_WIN32)
 
-// base 受理面真实现（POSIX）：InterServerLink passive 端点 + linkrpc
-// RpcServer（批① login 准入面同型）。泵线程单写者——受理/应答全在泵拍
-// （handler 链内），宿主（BaseServer）只管 start/stop 生命周期。
-// 命名空间开在平台分支外——Windows 桩分支同属 base（m1_egress 同款）。
+// 控制面真实现（POSIX）：InterServerLink passive 端点 + linkrpc RpcServer
+// （批① 准入面 / 批③ base 面同型，双拨入方 = peer_listener fan-out）。
+// 命名空间开在平台分支外——Windows 桩分支同属 baseappmgr（m1_egress 同款）。
 
 namespace {
 
 namespace link = apollo::net::link;
 
-class M1BaseServerImpl final : public M1BaseServer {
+class M1ControlServerImpl final : public M1ControlServer {
 public:
-    M1BaseServerImpl(M1BaseServerConfig config, Handler handler)
+    M1ControlServerImpl(M1ControlServerConfig config, Handler handler)
         : config_(std::move(config))
         , handler_(std::move(handler)) {}
 
-    ~M1BaseServerImpl() override {
+    ~M1ControlServerImpl() override {
         stop();
     }
 
@@ -46,12 +45,12 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "zone";
+        mc.self_name = "baseappmgr";
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
-        ep.name = "login";  // 拨入方 G-1 组件名（握手身份 = 其 Link self_name）
+        ep.name = "control";  // 端点名仅 listener 用——拨入者按自报名字入表
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kPassive;
@@ -61,7 +60,8 @@ public:
             return false;
         }
 
-        // 受理装配随 peer 上线（fan-out 面；重连 = 同名新链重新过此装配）。
+        // 受理装配随 peer 上线（fan-out 面；每拨入者一挂，重连 = 同名新链
+        // 重新过此装配）。login/gateway 两方各自握手身份入表。
         rpc_server_ = std::make_unique<apollo::net::linkrpc::RpcServer>();
         manager_->set_peer_listener([this](link::InterServerLink& peer) {
             peer.dispatcher().set_route_table(route_table_.get());
@@ -89,28 +89,20 @@ public:
         if (pump_thread_.joinable()) {
             pump_thread_.join();
         }
-        // 先摘泵线程再拆链路（RpcServer 的 handler 悬垂面随管理器析构一并
-        // 消失；宿主 stop 序保证在途 handler 先归还——dispatchRequest 维护
-        // 闸兜底迟到拍）。
         manager_.reset();
         rpc_server_.reset();
         route_table_.reset();
     }
 
     std::uint16_t listenPort() const override {
-        return manager_ ? manager_->endpoint_port("login") : 0;
+        return manager_ ? manager_->endpoint_port("control") : 0;
     }
 
-    bool peerConnected() const override {
-        auto* peer = const_cast<M1BaseServerImpl*>(this)->login_peer();
-        return peer != nullptr && peer->state() == link::LinkState::kUp;
+    std::size_t peerCount() const override {
+        return manager_ ? manager_->peer_count("control") : 0;
     }
 
 private:
-    link::InterServerLink* login_peer() {
-        return manager_ ? manager_->link("login") : nullptr;
-    }
-
     bool load_route_table(link::RouteTable& table) {
         if (config_.route_json.empty()) {
             return false;
@@ -136,7 +128,7 @@ private:
                 .count());
     }
 
-    M1BaseServerConfig config_;
+    M1ControlServerConfig config_;
     Handler handler_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
@@ -147,27 +139,27 @@ private:
 
 } // namespace
 
-std::unique_ptr<M1BaseServer> makeM1BaseServer(M1BaseServerConfig config,
-                                               M1BaseServer::Handler handler) {
-    return std::make_unique<M1BaseServerImpl>(std::move(config), std::move(handler));
+std::unique_ptr<M1ControlServer> makeM1ControlServer(M1ControlServerConfig config,
+                                                     M1ControlServer::Handler handler) {
+    return std::make_unique<M1ControlServerImpl>(std::move(config), std::move(handler));
 }
 
 #else // _WIN32
 
-std::unique_ptr<M1BaseServer> makeM1BaseServer(M1BaseServerConfig /*config*/,
-                                               M1BaseServer::Handler /*handler*/) {
+std::unique_ptr<M1ControlServer> makeM1ControlServer(M1ControlServerConfig /*config*/,
+                                                     M1ControlServer::Handler /*handler*/) {
     // link TCP 底座不进本批（POSIX only）：Windows 退 null 桩（start false
-    // = 面关，BaseServer 装配面无 #if）。
-    class NullBaseServer final : public M1BaseServer {
+    // = 面关，ManagerApp 装配面无 #if）。
+    class NullControlServer final : public M1ControlServer {
     public:
         bool start() override { return false; }
         void stop() override {}
         std::uint16_t listenPort() const override { return 0; }
-        bool peerConnected() const override { return false; }
+        std::size_t peerCount() const override { return 0; }
     };
-    return std::make_unique<NullBaseServer>();
+    return std::make_unique<NullControlServer>();
 }
 
 #endif // !_WIN32
 
-} // namespace base
+} // namespace baseappmgr

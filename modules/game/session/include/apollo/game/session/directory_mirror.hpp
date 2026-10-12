@@ -3,7 +3,7 @@
 // 在线目录跨进程镜像（G-1 收尾批增量②；session-and-online-directory §5/§7/§8
 // 的 G-1 平面骨架）。
 //
-// 设计口径（§7 进程间共享模型）：目录 = manager 域进程内存权威态，跨进程
+// 设计口径（§7 进程间共享模型）：目录 = baseappmgr 域进程内存权威态，跨进程
 // 可见性 = 「owner 广播 delta，消费者本地镜像 + seq 续传」——本文件给该
 // 模型的协议与两侧行为件，传输字节面注入（send 函数 / on_datagram 收包），
 // 不含 socket（UDP datagram 机制归 net/discovery，app 层接线）。

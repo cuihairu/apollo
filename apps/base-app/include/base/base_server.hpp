@@ -76,7 +76,7 @@ private:
     std::vector<uint8_t> handlePlayerBindSessionRequest(const std::vector<uint8_t>& request);
 
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
-    // 归 apps/manager（目录 + 调度面，BW baseappmgr 直系）。
+    // 归 apps/baseappmgr（目录 + 调度面，BW BaseAppMgr 直系）。
 
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);

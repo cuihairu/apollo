@@ -313,10 +313,10 @@ class MessagePool {
 };
 ```
 
-### 2. 区域广播（Zone Broadcast）
+### 2. 区域广播（Area Broadcast）
 ```cpp
 // 将地图划分为区域，区域内统一广播
-class BroadcastZone {
+class BroadcastArea {
     std::vector<Entity*> entities;
 
     void broadcast(const IMessage& msg) {
@@ -327,7 +327,7 @@ class BroadcastZone {
 };
 
 // 使用：相同区域的消息合并
-zone.broadcast(BatchMoveMsg{allMovesInThisZone});
+area.broadcast(BatchMoveMsg{allMovesInThisArea});
 ```
 
 ### 3. 层次化AOI（多级九宫格）

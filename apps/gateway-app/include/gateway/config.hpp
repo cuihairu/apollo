@@ -31,8 +31,8 @@ struct GatewayConfig {
 
     // Manager M1 控制面（P4-4 批④）：active 端点拨 manager 控制面
     // （ResolveRoute 路由解析）；0 = 面关（路由解析缺席 → 默认路由兜底）
-    std::string managerM1Host = "127.0.0.1";
-    std::uint16_t managerM1Port = 0;
+    std::string baseAppMgrM1Host = "127.0.0.1";
+    std::uint16_t baseAppMgrM1Port = 0;
 
     // 会话配置
     int sessionTimeoutMs = 30000;       // 30秒无心跳断开

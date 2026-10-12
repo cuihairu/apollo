@@ -1,20 +1,20 @@
 # Apollo 入站第三方对接面设计（inbound-interfaces）
 
-> 状态：设计稿（评审中）。定位：**外部世界主动进来的 HTTP 面**——渠道支付回调、第三方账号绑定回调、健康检查——的承载进程、鉴权、投递、幂等与面限定。缺口登记 design-gap-inventory #14（B11 批，2026-10-01 落盘）。互引：net-abstraction §5.10（出站 HTTP 三裁决——本设计是其镜像面：出站已裁、入站在此）、§5.7（InterServerLink——internal 域投递通道）、§7（manager 域/G-1）；login-flow（#13 同批——third_party_bindings 同表、channel 登录模式入口）；session-and-online-directory（#12——在线投递定位消费 #12 目录）；attribute-sync §8.2/§8.3（storage.xml 语句/DDL 纪律）；scripting-lua §8（异步交接同型）；logging §5.2（密钥 env 纪律同源）；sdk-contract §11.3（internal 域分段）；architecture-review §25/§26（存量实读与设计批输入五问）。
+> 状态：设计稿（评审中）。定位：**外部世界主动进来的 HTTP 面**——渠道支付回调、第三方账号绑定回调、健康检查——的承载进程、鉴权、投递、幂等与面限定。缺口登记 design-gap-inventory #14（B11 批，2026-10-01 落盘）。互引：net-abstraction §5.10（出站 HTTP 三裁决——本设计是其镜像面：出站已裁、入站在此）、§5.7（InterServerLink——internal 域投递通道）、§7（baseappmgr 域/G-1）；login-flow（#13 同批——third_party_bindings 同表、channel 登录模式入口）；session-and-online-directory（#12——在线投递定位消费 #12 目录）；attribute-sync §8.2/§8.3（storage.xml 语句/DDL 纪律）；scripting-lua §8（异步交接同型）；logging §5.2（密钥 env 纪律同源）；sdk-contract §11.3（internal 域分段）；architecture-review §25/§26（存量实读与设计批输入五问）。
 
 ---
 
 ## 执行摘要
 
-1. **承载 = 独立 interfaces 进程**（KBE `tools/server/interfaces` 同型命名同型职责）：专职入站 HTTP 对接面，编队配置态声明（G-1 组件），不与任何游戏进程共生。三候选（gateway / manager / 独立进程）对比裁决唯一胜出——**故障域与信任域双隔离**：回调洪峰打 interfaces 不打玩家流量（gateway）也不打仲裁面（manager）；公网暴露面收敛到一个无游戏态进程。BW 无此进程（billing 直进 dbutil 族）不构成反证——BW 的回调面由运营平台侧承接，apollo 自持。
+1. **承载 = 独立 interfaces 进程**（KBE `tools/server/interfaces` 同型命名同型职责）：专职入站 HTTP 对接面，编队配置态声明（G-1 组件），不与任何游戏进程共生。三候选（gateway / baseappmgr / 独立进程）对比裁决唯一胜出——**故障域与信任域双隔离**：回调洪峰打 interfaces 不打玩家流量（gateway）也不打仲裁面（baseappmgr）；公网暴露面收敛到一个无游戏态进程。BW 无此进程（billing 直进 dbutil 族）不构成反证——BW 的回调面由运营平台侧承接，apollo 自持。
 2. **实现件 = modules/net/http 存量 HttpServer 升格候选（审计门前置）**：http.cpp:444 `class HttpServer`（:463-473 bind/listen/acceptThread）现零生产消费方（仅 examples/http_demo.cpp:21 内部类自认）——§4.2 已列 modules/net/{http,websocket} 代码面审计候选，升格（真实现/测试资产/桩边界）以该审计门结论为前置；**Drogon 不复议**（§5.10 :340 删除裁决维持——web 框架双形态是「第五套网络栈」种子，入站对接是薄监听层不是 web 应用）。
 3. **鉴权 = HMAC-SHA256 签名主 + IP 白名单辅，mTLS 不进路线图**：每渠道一密钥（channel_id 维度），签名覆盖 method+path+timestamp+body（时间窗防重放，防信道抓包重发——与 login_token 一次性核销是两层不同防线：回调时间窗宽（分钟级，渠道重试语义）、登录 token 窄（60s 一次性））；密钥表 = 编队配置态（密钥 env 纪律与 logging §5.2 :126 同源——不落代码不落日志）；mTLS = 运维负担 > 收益（渠道侧证书管理不可控），列入「明确不做」。
-4. **投递 = 两段式（落库 → 定位投递），幂等键 = 渠道订单号**：第一段验签通过即写 DB（对账表 + 业务结果表）——「先持久后处理」是回调面的铁律（渠道按 HTTP 响应判成败，内存态丢失 = 渠道重试风暴）；第二段查 #12 目录定 Zone（在线 → internal 域消息 + tick 边界应用；离线 → 已在库，登录时消费）。DB 唯一约束（channel, order_id）+ 内存去重窗（近期 order_id LRU）双层幂等；**异步不进场景线程**——interfaces 投递走 InterServerLink，Zone 在 tick 边界消费（scripting-lua §8 同型纪律，回调永不直接进任何 tick 热路径）。
+4. **投递 = 两段式（落库 → 定位投递），幂等键 = 渠道订单号**：第一段验签通过即写 DB（对账表 + 业务结果表）——「先持久后处理」是回调面的铁律（渠道按 HTTP 响应判成败，内存态丢失 = 渠道重试风暴）；第二段查 #12 目录定 baseapp（在线 → internal 域消息 + tick 边界应用；离线 → 已在库，登录时消费）。DB 唯一约束（channel, order_id）+ 内存去重窗（近期 order_id LRU）双层幂等；**异步不进场景线程**——interfaces 投递走 InterServerLink，baseapp 在 tick 边界消费（scripting-lua §8 同型纪律，回调永不直接进任何 tick 热路径）。
 5. **入站面限定 = 三类白名单，其余一律拒绝**：①渠道回调（/callback/{channel} 族）②健康检查（/healthz）③预留运维触发（受 IP 白名单 + 管理鉴权双闸）。**明确不入**：后台 UI、报表、GM 操作（走 admin/control 通道——logging §5.1 exporter 同哲学：HTTP 面只做机器对机器薄层，人机界面不在此进程）；限流 = per-route + 全局 + 有界队列（§5.7 有界排队同源——无界排队 = 把背压推迟成内存炸弹）。
 
 ## 0. 现状与缺口
 
-- **存量（§26 实读）**：modules/net/http/http.cpp:444 `class HttpServer`（bind :463 / listen / acceptThread :463-473）——零生产消费方；examples/http_demo.cpp:21 内部类自认是全仓唯一引用。apps/ 五件（base-app/bench/gateway-app/login-app/world-app）无 interfaces 型进程。**承载三候选（gateway/manager/独立）此前零裁决、存量 HttpServer 未入证据列**（C-86）——本节即补裁。
+- **存量（§26 实读）**：modules/net/http/http.cpp:444 `class HttpServer`（bind :463 / listen / acceptThread :463-473）——零生产消费方；examples/http_demo.cpp:21 内部类自认是全仓唯一引用。apps/ 五件（base-app/bench/gateway-app/login-app/world-app）无 interfaces 型进程。**承载三候选（gateway/baseappmgr/独立）此前零裁决、存量 HttpServer 未入证据列**（C-86）——本节即补裁。
 - **出站已裁、入站空白**：net-abstraction §5.10（:333-343）三裁决全是**出站**方向（curl 收口/Drogon 删/异步交接）；入站 HTTP 除该节末句「入站面归 #14」外零设计。Drogon 双处删除（CMakeLists.txt:81-91 http、:124-133 websocket）已定——入站承载不得复活该分支。
 - **先例**：KBE = `tools/server/interfaces` 独立进程（HTTP 收渠道回调 → 查询/投递 KBEngine 内部，deep-dive :101）；BW = 无独立对接进程（billing 记录直进 dbutil/mysql_billing_system，36 号 :266 问11 A 级判定）——**两家共同点：对接面与游戏逻辑进程分离**；apollo 取 KBE 的独立进程形态 + 补 BW 没做透的投递语义。
 
@@ -23,7 +23,7 @@
 | 候选 | 裁决 | 理由 |
 |---|---|---|
 | **gateway-app 兼任** | 拒 | 玩家流量进程不背公网回调面：渠道回调洪峰/重试风暴与玩家会话共生死；gateway 的 L2 会话语义（seq/ack/四通道）对无会话 HTTP 回调是错配；凭据与渠道密钥进玩家面进程 = 敏感面扩大 |
-| **manager 域兼任** | 拒 | manager 是仲裁单点（#12 目录临界区/准入/恢复相位）——回调洪峰打仲裁面 = 外部流量可拖垮全局裁决；且 manager 零公网暴露是安全基线 |
+| **baseappmgr 域兼任** | 拒 | baseappmgr 是仲裁单点（#12 目录临界区/准入/恢复相位）——回调洪峰打仲裁面 = 外部流量可拖垮全局裁决；且 baseappmgr 零公网暴露是安全基线 |
 | **独立 interfaces 进程** | **采** | 故障域隔离（挂了只影响回调，渠道重试兜底）+ 信任域隔离（公网暴露面收敛到无游戏态进程）+ 容量域独立（限流/扩缩容不耦合游戏容量模型）+ KBE 二十年同型先例 |
 
 - 编队形态：G-1 组件 id `interfaces`，配置态声明实例数（渠道多了可横扩——无会话态，任意实例可处理任意回调，负载均衡归前置接入）；P1-P2 单进程形态内嵌于主进程（同 login-app 降级逻辑——进程内直调，零 RPC）。
@@ -67,14 +67,14 @@
 **第二段：投递（异步，出 handler 即返回）**
 
 ```
-在线判定：查 #12 目录（account → Zone 定位，#12 §5 RouteResolver 镜像同源数据）
-  ├─ 在线 → internal 域消息（CallbackDelivered{type, order_ref}）→ InterServerLink → 宿主 Zone
-  │         Zone 在 tick 边界消费（进当 tick 后续输入——battle-determinism §1 异步不进判定同律）
+在线判定：查 #12 目录（account → baseapp 定位，#12 §5 RouteResolver 镜像同源数据）
+  ├─ 在线 → internal 域消息（CallbackDelivered{type, order_ref}）→ InterServerLink → 宿主 baseapp
+  │         baseapp 在 tick 边界消费（进当 tick 后续输入——battle-determinism §1 异步不进判定同律）
   └─ 离线 → 终态已在库（第二段对离线者无事可做——登录时业务逻辑读库消费，见 login-flow §4 风控/消费位）
 ```
 
 - **两段之间无原子性承诺、有对账兜底**：第一段成功第二段丢失（进程死在中间）→ ledger 有记录 + 渠道对账文件核对（日终对账任务，运维触发路由候选）——回调面的可靠性模型是**至少一次 + 幂等收敛**，不是恰好一次（渠道协议本身至少一次，恰好一次在分布式两侧不可承诺）。
-- **internal 域新消息**（sdk-contract §11 分段 900+，随代码批）：`CallbackDelivered`（interfaces → Zone）+ 对账差异报告（运维查询面，P3）。RequestReply 只用于低频订单状态反查（interfaces ↔ db 路径）；投递本体 OneWay——**回调不因 Zone 慢而阻塞 interfaces**（per-Link 背压 §5.7，慢 Zone 拖累自己的 Link）。
+- **internal 域新消息**（sdk-contract §11 分段 900+，随代码批）：`CallbackDelivered`（interfaces → baseapp）+ 对账差异报告（运维查询面，P3）。RequestReply 只用于低频订单状态反查（interfaces ↔ db 路径）；投递本体 OneWay——**回调不因 baseapp 慢而阻塞 interfaces**（per-Link 背压 §5.7，慢 baseapp 拖累自己的 Link）。
 
 ## 5. 账号绑定域（与 #13 同域）
 
@@ -90,7 +90,7 @@
 ```
 
 - **解绑**：对称流程（出站发起 + 回调确认 + 软删标记——硬删破坏对账链）；绑定/解绑审计行进 ledger（同表原文留存纪律）。
-- **职责边界**：绑定**业务语义**（哪次活动送什么、绑定奖励）归 Zone 业务（Lua 层消费 CallbackDelivered）；绑定**协议与安全**（验签/幂等/落库）归本设计——与 #13 的「协议归设计、玩法归业务」同一条分界线。
+- **职责边界**：绑定**业务语义**（哪次活动送什么、绑定奖励）归 baseapp 业务（Lua 层消费 CallbackDelivered）；绑定**协议与安全**（验签/幂等/落库）归本设计——与 #13 的「协议归设计、玩法归业务」同一条分界线。
 
 ## 6. 入站面限定（白名单纪律）
 

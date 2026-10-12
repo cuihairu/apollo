@@ -7,7 +7,7 @@ prev: /guide/configuration
 
 # 架构总览
 
-> 目标形态全景（按 `docs/todo.md` 批次落地）。本页三张图为 README 迁入的架构图；进程编队（八件）、权威分解与 Zone/无缝辨析的现状设计见[架构审计报告](/analysis/architecture-review) §31，Compact 单进程形态见 [Compact GameServer 设计](/30-Compact_GameServer_Design)。
+> 目标形态全景（按 `docs/todo.md` 批次落地）。本页三张图为 README 迁入的架构图；进程编队（八件）、权威分解与 baseapp/无缝辨析的现状设计见[架构审计报告](/analysis/architecture-review) §31，Compact 单进程形态见 [Compact GameServer 设计](/30-Compact_GameServer_Design)。
 
 ## 系统架构概览（目标形态）
 

@@ -10,10 +10,10 @@
 
 留的四条理由（§1 逐条展开）：
 
-1. **连接稳定域与场景计算域分离**——Zone 重建（§7 重建口径）/换幕/迁移期间客户端 TCP 不断，session-and-online-directory §6 gateway 行的 resume 语义（token 绑 manager 域会话、不绑 gateway 实例、不绑 Zone）以「有一个不随 Zone 生死的连接终点」为物理前提；
-2. **公网面与风控单点**——token 验签、上行限流、violation_score、加密握手集中一处（login-flow §1 已裁 gateway 不触账号库、不做准入），Zone 进程走内网，公网暴露面收敛到一个专职进程；
-3. **协议族收口**——wss 兜底形态归 gateway（net-abstraction §5.9：TCP+CryptoFilter 主路径 / wss 浏览器兜底，「P3 随 gateway-app 定案」），Zone 只讲一种内部协议；
-4. **场景单写者纪律**——Zone 的帧预算不被会话层 IO 热点侵占（B 模型实测 scene 局部 5.90ms/100ms 帧，capacity-and-benchmark §2.1；多景并行化后占用上升，余量要留给场景面）。
+1. **连接稳定域与场景计算域分离**——baseapp 重建（§7 重建口径）/换幕/迁移期间客户端 TCP 不断，session-and-online-directory §6 gateway 行的 resume 语义（token 绑 baseappmgr 域会话、不绑 gateway 实例、不绑 baseapp）以「有一个不随 baseapp 生死的连接终点」为物理前提；
+2. **公网面与风控单点**——token 验签、上行限流、violation_score、加密握手集中一处（login-flow §1 已裁 gateway 不触账号库、不做准入），baseapp 进程走内网，公网暴露面收敛到一个专职进程；
+3. **协议族收口**——wss 兜底形态归 gateway（net-abstraction §5.9：TCP+CryptoFilter 主路径 / wss 浏览器兜底，「P3 随 gateway-app 定案」），baseapp 只讲一种内部协议；
+4. **场景单写者纪律**——baseapp 的帧预算不被会话层 IO 热点侵占（B 模型实测 scene 局部 5.90ms/100ms 帧，capacity-and-benchmark §2.1；多景并行化后占用上升，余量要留给场景面）。
 
 代价如实记（§1.3 反面证据一并记）：一次内部转发跳（同机零成本、跨机一次 NIC 往返）+ 每字节经 gateway 转发的带宽份额 + 一个专职进程的 net 环内存预算（capacity §4：每会话 64KB×2×5000 ≈ 640MB 量级）——换取的是上述四条。
 
@@ -21,28 +21,28 @@
 
 ### 1.1 有/无两种拓扑的职责对照
 
-| 职责 | 有 gateway（apollo 现架构） | 直连 Zone（替代形态=KBE baseapp 型） |
+| 职责 | 有 gateway（apollo 现架构） | 直连 baseapp（替代形态=KBE 直连 baseapp 型） |
 |---|---|---|
-| 连接保持/L2 会话（seq/ack/心跳/resume/水位，net-abstraction §3） | gateway 集中持有全套（既有口径「四通道会话」） | 每 Zone 进程自带全套——L2 与场景线程同进程（IO 线程/场景线程分离在进程内仍成立，但热点抢核） |
-| 认证 | token 本地验签（login-flow §3——gateway 持 K_login 验证密钥，不触账号库） | 每 Zone 持验证密钥；或 Zone 回问 manager（存量 gateway 的错位实现先例，login-flow §10 已判迁移） |
-| 路由 | 按 zone 透传（既有口径「按 zone 透传」；ResolveRoute 问 manager 定位） | 不需要跨进程路由——但玩家换 Zone（换幕跨进程/副本重开）= 客户端重连 + 全量握手 + 快照重传（attribute-sync §11 快照上限 50KB） |
-| 分发/广播 | gateway 扇出下行 | Zone 直发（少一跳，同机部署下扇出成本更低） |
-| 加密/协议族 | CryptoFilter 主路径 + wss 兜底，收口一处（§5.9） | 每 Zone 双协议栈（TCP 自定义 + wss），或砍掉 wss 牺牲页端 |
+| 连接保持/L2 会话（seq/ack/心跳/resume/水位，net-abstraction §3） | gateway 集中持有全套（既有口径「四通道会话」） | 每 baseapp 进程自带全套——L2 与场景线程同进程（IO 线程/场景线程分离在进程内仍成立，但热点抢核） |
+| 认证 | token 本地验签（login-flow §3——gateway 持 K_login 验证密钥，不触账号库） | 每 baseapp 持验证密钥；或 baseapp 回问 baseappmgr（存量 gateway 的错位实现先例，login-flow §10 已判迁移） |
+| 路由 | 按 zone_hint 透传（既有口径；ResolveRoute 问 baseappmgr 定位） | 不需要跨进程路由——但玩家换 baseapp（换幕跨进程/副本重开）= 客户端重连 + 全量握手 + 快照重传（attribute-sync §11 快照上限 50KB） |
+| 分发/广播 | gateway 扇出下行 | baseapp 直发（少一跳，同机部署下扇出成本更低） |
+| 加密/协议族 | CryptoFilter 主路径 + wss 兜底，收口一处（§5.9） | 每 baseapp 双协议栈（TCP 自定义 + wss），或砍掉 wss 牺牲页端 |
 | 故障域——连接进程死 | gateway 死 → §6 gateway 行：该 gateway_id 反查全部条目转 Suspended（§4 窗口），客户端重连**任意** gateway 实例 resume | 等价物不存在——入口即权威进程，权威死=入口死 |
-| 故障域——场景进程死 | Zone 死 → §6 Zone 行窗口处置，**客户端连接不断**（gateway 保持 TCP，Zone 重建后 Session 重挂 Anchor，object-model.md:129 对象轴） | Zone 死 = TCP 全断；重连风暴落 Zone 自己——而 §7 重建完成前 Zone 无法应答 resume 握手，窗口期客户端无处落脚 |
-| 扩缩容 | gateway 集群增减实例，客户端无感（resume 不绑实例） | Zone 增减 = 其上全部客户端重连 |
+| 故障域——场景进程死 | baseapp 死 → §6 baseapp 行窗口处置，**客户端连接不断**（gateway 保持 TCP，baseapp 重建后 Session 重挂 Anchor，object-model.md:129 对象轴） | baseapp 死 = TCP 全断；重连风暴落 baseapp 自己——而 §7 重建完成前 baseapp 无法应答 resume 握手，窗口期客户端无处落脚 |
+| 扩缩容 | gateway 集群增减实例，客户端无感（resume 不绑实例） | baseapp 增减 = 其上全部客户端重连 |
 
-对照表的核心差异一条：**直连拓扑里「入口进程」与「权威进程」是同一个，于是权威的每一次重建/迁移都变成连接事件**。有 gateway 拓扑把两件事拆开——这正是 §6 把死亡行按死者角色分两行（gateway 行/Zone 行）的前提；没有 gateway，§6 只剩一行且恢复语义退化为「客户端重连风暴 + 重连风暴本身压垮正在重建的 Zone」。
+对照表的核心差异一条：**直连拓扑里「入口进程」与「权威进程」是同一个，于是权威的每一次重建/迁移都变成连接事件**。有 gateway 拓扑把两件事拆开——这正是 §6 把死亡行按死者角色分两行（gateway 行/baseapp 行）的前提；没有 gateway，§6 只剩一行且恢复语义退化为「客户端重连风暴 + 重连风暴本身压垮正在重建的 baseapp」。
 
 ### 1.2 apollo 场景数据论证
 
 用 capacity-and-benchmark 既定口径的数字过一遍两种拓扑：
 
-- **连接规模与内存**：5000 CCU/进程（capacity §1）。有 gateway：gateway 集中 5000 条会话 ≈ 640MB net 环预算（§4 表）+ 专职 IO 线程——一个进程的容量份额。直连：摊到 N 个 Zone，每 Zone ~5000/N 条——单看数字直连更省「一个进程」。但 Zone 进程的部署粒度受场景负载驱动（B 模型 10 场景进程族），Zone 数量随玩法扩缩，客户端连接分布跟着玩法走——**洪峰容量的规划单位从「连接面」变成「玩法面」，login-app 洪峰（重连风暴，login-flow §9 容量项）无处隔离**。
-- **下行带宽**：全服出口 160MB/s 打满 ≈ 1Gbps（capacity §3）。有 gateway：zone→gateway 段与 gateway→client 段各摊一份，跨机部署时两段在不同 NIC 上；直连：一段。**这是直连的真实带宽优势**——但同机部署（编队常见形态）下 gateway↔zone 走 lo/本机 NIC，代价趋零；跨机部署时代价 = 每字节一次额外内网传输，内网带宽远大于公网出口，瓶颈段不变。
-- **事件放大**：B 模型 ~19543 广播事件/帧 ≈ 195k 事件/s（capacity §2.1）。这个量级的扇出面无论落在 gateway 还是 Zone 都是同一个 cost center（attribute-sync per-viewer 预算在 collect/flush 段已定），gateway 不放大也不缩小——透传不重组。
-- **恢复期落脚点**：§7 口径目录无 journal 易失索引重建 <1s@5000 条——但这是 manager 侧；Zone 重建（场景重开 + Anchor 从 journal/DB 重放）是秒级。窗口内 resume 握手需要一个活着应答的端点：有 gateway = gateway 应答（Suspended 条目 + 重挂排队）；直连 = 无端点可应答。**这一条不依赖任何性能假设，是结构性的。**
-- **场景线程纪律**：net-abstraction §3 的线程模型（IO 线程搬运字节、场景线程单写者）在两种拓扑下都成立；差异是抢核面——直连把 5000/N 条会话的加密/解帧/限流 CPU 放进 Zone 进程，与 simulate/recalc/collect（§2 帧预算表 ~55ms/100ms 已分配）共享 CPU 预算。当前桩口径下余量大（B 模型 5.9%），但余量的规划用途是玩法复杂化与多景并行（capacity §2.1 结论方向），不是会话层热点。
+- **连接规模与内存**：5000 CCU/进程（capacity §1）。有 gateway：gateway 集中 5000 条会话 ≈ 640MB net 环预算（§4 表）+ 专职 IO 线程——一个进程的容量份额。直连：摊到 N 个 baseapp，每 baseapp ~5000/N 条——单看数字直连更省「一个进程」。但 baseapp 进程的部署粒度受场景负载驱动（B 模型 10 场景进程族），baseapp 数量随玩法扩缩，客户端连接分布跟着玩法走——**洪峰容量的规划单位从「连接面」变成「玩法面」，login-app 洪峰（重连风暴，login-flow §9 容量项）无处隔离**。
+- **下行带宽**：全服出口 160MB/s 打满 ≈ 1Gbps（capacity §3）。有 gateway：baseapp→gateway 段与 gateway→client 段各摊一份，跨机部署时两段在不同 NIC 上；直连：一段。**这是直连的真实带宽优势**——但同机部署（编队常见形态）下 gateway↔baseapp 走 lo/本机 NIC，代价趋零；跨机部署时代价 = 每字节一次额外内网传输，内网带宽远大于公网出口，瓶颈段不变。
+- **事件放大**：B 模型 ~19543 广播事件/帧 ≈ 195k 事件/s（capacity §2.1）。这个量级的扇出面无论落在 gateway 还是 baseapp 都是同一个 cost center（attribute-sync per-viewer 预算在 collect/flush 段已定），gateway 不放大也不缩小——透传不重组。
+- **恢复期落脚点**：§7 口径目录无 journal 易失索引重建 <1s@5000 条——但这是 baseappmgr 侧；baseapp 重建（场景重开 + Anchor 从 journal/DB 重放）是秒级。窗口内 resume 握手需要一个活着应答的端点：有 gateway = gateway 应答（Suspended 条目 + 重挂排队）；直连 = 无端点可应答。**这一条不依赖任何性能假设，是结构性的。**
+- **场景线程纪律**：net-abstraction §3 的线程模型（IO 线程搬运字节、场景线程单写者）在两种拓扑下都成立；差异是抢核面——直连把 5000/N 条会话的加密/解帧/限流 CPU 放进 baseapp 进程，与 simulate/recalc/collect（§2 帧预算表 ~55ms/100ms 已分配）共享 CPU 预算。当前桩口径下余量大（B 模型 5.9%），但余量的规划用途是玩法复杂化与多景并行（capacity §2.1 结论方向），不是会话层热点。
 
 结论：**留**。四条结构性理由（§0）无一依赖性能数字；性能账上有得有失、跨机部署才有实质带宽代价，恢复期落脚点与故障域拆分是决定性权重。
 
@@ -50,13 +50,13 @@
 
 九框架里直连/一体派占多数（BW/KBE/TrinityCore/Nakama/Colyseus/Orleans，§2），先例数量本身是对称的证据，必须交代 apollo 为什么站在少数侧：
 
-- **BW/KBE 的 baseapp 是「入口+实体宿主」一体**——proxy 实体驻留 baseapp，客户端 channel 本来就落它，权威拆出去的 cellapp 从不见客户端。一体不是它们的妥协，是它们的本质形态。apollo 把实体权威拆给 Zone（场景单写者 + Home Zone 驻 PlayerAnchor，object-model.md:129）之后，入口与权威天然两件——**gateway 不是「额外加的进程」，是拆分的另一半**。
+- **BW/KBE 的 baseapp 是「入口+实体宿主」一体**——proxy 实体驻留 baseapp，客户端 channel 本来就落它，权威拆出去的 cellapp 从不见客户端。一体不是它们的妥协，是它们的本质形态。apollo 把实体权威拆给 baseapp（场景单写者 + Home baseapp 驻 PlayerAnchor，object-model.md:129）之后，入口与权威天然两件——**gateway 不是「额外加的进程」，是拆分的另一半**。
 - **Orleans 官方推荐 co-hosting 免网关**（learn 官方 client 页本轮实读：co-hosted client "doesn't need a separate gateway. This avoids a network hop and a serialization/deserialization round trip"）——但同一页给出成立前提："Client code is often very *thin* (e.g., translating incoming HTTP requests into grain calls)"。游戏客户端连接不是 thin 转发：L2 四通道 + resume + 水位 + 限流是全套有状态会话层，thin 论证不成立。Orleans 的外部客户端形态（frontend web 服务器做 "connector or conduit"）恰好说明：**连接面重的时候，它就要成为专职的东西**。
 - **skynet 证明「可以没有强制拓扑」**——gate 是可选服务，单节点可以完全不用。这是库与框架的定位差（skynet 给原语不给拓扑），不构成对 apollo 拓扑的反驳；apollo 的四档目标（轻在线/房间制/普通 MMO/BigWorld 增强态，kbe-reference-principles §2）要求拓扑有约定，不是要求每个档位都长一样。
 
 ### 1.4 结论与角色收窄
 
-留 gateway-app，且角色按既有设计收窄——只做连接面三件：token 验签、四通道会话承载、按 zone 透传；不做准入（login-flow §1 已裁：准入归 manager、鉴权归 login-app）、不做业务逻辑、不做文件服务（契约包指针制，login-flow §6）。gateway 越薄，§1.1 对照表的直连派「少一跳」论据越有说服力时 gateway 越无害——薄透传的一跳是转发成本不是逻辑成本。
+留 gateway-app，且角色按既有设计收窄——只做连接面三件：token 验签、四通道会话承载、按 zone_hint 透传；不做准入（login-flow §1 已裁：准入归 baseappmgr、鉴权归 login-app）、不做业务逻辑、不做文件服务（契约包指针制，login-flow §6）。gateway 越薄，§1.1 对照表的直连派「少一跳」论据越有说服力时 gateway 越无害——薄透传的一跳是转发成本不是逻辑成本。
 
 ## 2. 九框架对照：前端连接层 vs 后端 RPC
 
@@ -164,7 +164,7 @@
 
 （Orleans 跨②③：co-host 推荐=②，外部客户端多网关列表=①的弱化形态。）
 
-**规律一条**：前端形态与「权威拆没拆」强相关——BW/KBE 权威在 baseapp 所以入口在 baseapp；apollo 权威在 Zone（场景单写者）所以入口独立；Colyseus/Nakama 权威即进程所以没有第二进程可拆。**不是先例选了拓扑，是权威布局决定了拓扑**——这也是 §1.4 角色收窄论证的底部逻辑。
+**规律一条**：前端形态与「权威拆没拆」强相关——BW/KBE 权威在 baseapp 所以入口在 baseapp；apollo 权威在 baseapp（场景单写者）所以入口独立；Colyseus/Nakama 权威即进程所以没有第二进程可拆。**不是先例选了拓扑，是权威布局决定了拓扑**——这也是 §1.4 角色收窄论证的底部逻辑。
 
 **后端互联两族**：
 
@@ -177,9 +177,9 @@ gRPC 类只出现在非热路径（Nakama 管理面、Pitaya 可选形态）—�
 
 ## 4. apollo 取哪条路 + 理由（建议件，不代拍）
 
-**取：独立 gateway-app（连接面）+ Zone 不见客户端 + 自研进程间总线（net M1）+ login-app 独立登录短连接（login-flow 已裁）。**
+**取：独立 gateway-app（连接面）+ baseapp 不见客户端 + 自研进程间总线（net M1）+ login-app 独立登录短连接（login-flow 已裁）。**
 
-- **为什么是①拆分派而不是②一体派**：apollo 的权威布局已定（object-model.md:129 对象轴 Connection（gateway）→ Session（可失可重挂）→ PlayerAnchor（Home Zone，不动））——Session owner 就是 gateway，Anchor 迁移语义（不迁移）与换幕销毁重建都以「连接终点 ≠ 权威终点」为前提。跟着 §1.1 表走：§6 两行死亡语义、§4 窗口、resume 重挂，整套会话恢复设计在直连形态下无处安放。四档目标（轻在线/房间制/普通 MMO/BigWorld 增强态）里，轻在线/房间制档位可以 gateway/Zone 同机共置（同机一跳代价趋零，§1.2），不必为它们放弃普通 MMO 档的恢复语义。
+- **为什么是①拆分派而不是②一体派**：apollo 的权威布局已定（object-model.md:129 对象轴 Connection（gateway）→ Session（可失可重挂）→ PlayerAnchor（Home baseapp，不动））——Session owner 就是 gateway，Anchor 迁移语义（不迁移）与换幕销毁重建都以「连接终点 ≠ 权威终点」为前提。跟着 §1.1 表走：§6 两行死亡语义、§4 窗口、resume 重挂，整套会话恢复设计在直连形态下无处安放。四档目标（轻在线/房间制/普通 MMO/BigWorld 增强态）里，轻在线/房间制档位可以 gateway/baseapp 同机共置（同机一跳代价趋零，§1.2），不必为它们放弃普通 MMO 档的恢复语义。
 - **为什么后端不取中间件族**：§2.3 已析——语义错位（四通道/resume/水位仍要自长）+ 外部件运维面 + 热路径序列化税；apollo 的裁决链（§15.2 禁并存 + 2026-09-30 不引 etcd/consul + §5.6 M1 自研总线）与九框架主流（自研 RPC 六家）同侧。
 - **与 Pomelo/Pitaya connector 的同形不同因**：拓扑形态相同（专职前端），理由不同——它们因 Node 单线程负载必拆，apollo 因场景单写者纪律与恢复语义拆。同形不同因意味着可学的是形态不是它们的实现动机。
 - **与 Orleans 的镜像**：Orleans 教「连接面薄到可以 co-host 就别拆」；apollo 的连接面不薄（全套会话层），所以拆。两条不矛盾，判据同一条：连接面是不是 thin。
@@ -191,10 +191,10 @@ gRPC 类只出现在非热路径（Nakama 管理面、Pitaya 可选形态）—�
 | 关联文档 | 落点 |
 |---|---|
 | docs/36-MMO_Frameworks_Comparative_Analysis.md | 五家（BigWorld/KBEngine/skynet/Pomelo/WoW-TC）A/B/C 级证据的母本——本件复用其 §2.1/§2.2/§2.4/§2.9 已证事实；本件增量=前端连接轴 + Pitaya/Colyseus/Nakama/Orleans 四家首采 |
-| net-abstraction | §5.4 GATE 变体→gateway-app；§5.9 wss 兜底随 gateway-app 定案（理由 3）；§5.6 M1 进程间总线（后端互联裁决）；§5.7 InterServerLink=zone↔gateway 链路底座 |
+| net-abstraction | §5.4 GATE 变体→gateway-app；§5.9 wss 兜底随 gateway-app 定案（理由 3）；§5.6 M1 进程间总线（后端互联裁决）；§5.7 InterServerLink=baseapp↔gateway 链路底座 |
 | login-flow | §1 两阶段连接/登录不经 gateway 反方案记录；§3 token 验签归 gateway（职责收窄）；§10 存量 session_admission_service RPC 回问错位 |
-| session-and-online-directory | §6 gateway 行/Zone 行——理由 1 的语义本体；§4 掉线窗口 |
-| 既有网关口径 | token 验签、四通道会话、按 zone 透传——职责收窄的既有定义 |
+| session-and-online-directory | §6 gateway 行/baseapp 行——理由 1 的语义本体；§4 掉线窗口 |
+| 既有网关口径 | token 验签、四通道会话、按 zone_hint 透传——职责收窄的既有定义 |
 | object-model | :129 进程轴/对象轴（Session owner=gateway、PlayerAnchor 不迁移）——权威布局决定拓扑（§3 规律）的依据 |
 | capacity-and-benchmark | §1/§2.1/§3/§4 数字供数（5000 CCU/1Gbps/195k 事件/s/640MB 环预算） |
 | improvement-plan | P3-4 批记 gateway 摸底三因（现状半成品的出处）；P3-2 gateway surface（ingress 接线挂点） |

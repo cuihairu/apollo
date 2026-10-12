@@ -13,8 +13,8 @@ namespace apollo::game::social {
 // 锚点、背包/成长等长期状态」的社交延伸；object-model §2.9 审计：代码此前
 // 不存在，P2-4 骨架落地）。
 //
-// 所有权域：manager 域（跨 Zone 持久对象，随 improvement-plan P2-4「Guild/
-// Party 对象（manager 域或 Zone 域）」——公会存活与会者会话无关，归持久域；
+// 所有权域：baseappmgr 域（跨 Zone 持久对象，随 improvement-plan P2-4「Guild/
+// Party 对象（baseappmgr 域或 Zone 域）」——公会存活与会者会话无关，归持久域；
 // 进程形态落点随 P3）。成员以裸 player_id 记账（对齐 PlayerAnchor 风格），
 // 归属回写由调用方同步到 Anchor（anchor.set_guild_id）。
 class Guild {

@@ -272,12 +272,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
-	        ../apps/zone-app/src/base_server.cpp
-	        ../apps/zone-app/src/database_service.cpp
-	        ../apps/zone-app/src/m1_base_server.cpp
+	        ../apps/base-app/src/base_server.cpp
+	        ../apps/base-app/src/database_service.cpp
+	        ../apps/base-app/src/m1_base_server.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/zone-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
@@ -293,14 +293,14 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
 
-	    # manager（目录 + 落点裁决）——与 zone-app 同档（legacy protocol + game_session）
+	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
-	        ../apps/manager/src/manager_app.cpp
-	        ../apps/manager/src/m1_control_server.cpp
+	        ../apps/baseappmgr/src/baseappmgr.cpp
+	        ../apps/baseappmgr/src/m1_control_server.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/manager/include
+	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
 	    )
 	    target_link_libraries(baseappmgr_tests PRIVATE
 	        apollo
@@ -553,12 +553,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
-	        ../apps/zone-app/src/base_server.cpp
-	        ../apps/zone-app/src/database_service.cpp
-	        ../apps/zone-app/src/m1_base_server.cpp
+	        ../apps/base-app/src/base_server.cpp
+	        ../apps/base-app/src/database_service.cpp
+	        ../apps/base-app/src/m1_base_server.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/zone-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
 	    )
 	    target_link_libraries(base_anchor_tests PRIVATE
 	        apollo
@@ -574,14 +574,14 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
 
-	    # manager（目录 + 落点裁决）——与 zone-app 同档（legacy protocol + game_session）
+	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
-	        ../apps/manager/src/manager_app.cpp
-	        ../apps/manager/src/m1_control_server.cpp
+	        ../apps/baseappmgr/src/baseappmgr.cpp
+	        ../apps/baseappmgr/src/m1_control_server.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/manager/include
+	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
 	    )
 	    target_link_libraries(baseappmgr_tests PRIVATE
 	        apollo
@@ -829,11 +829,11 @@ add_test(NAME PersistJournalTests COMMAND persist_journal_tests)
 
 add_executable(persistence_chain_tests
     test_persistence_chain.cpp
-    ../apps/zone-app/src/database_service.cpp
+    ../apps/base-app/src/database_service.cpp
     ../modules/game/session/src/player_anchor.cpp
 )
 target_include_directories(persistence_chain_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/zone-app/include
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
 )
@@ -855,13 +855,13 @@ add_executable(recovery_tests
     ../modules/game/session/src/anchor_manager.cpp
     ../modules/game/session/src/player_anchor.cpp
     ../modules/data/orm/src/persist_journal.cpp
-    ../apps/zone-app/src/database_service.cpp
+    ../apps/base-app/src/database_service.cpp
 )
 target_include_directories(recovery_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/data/orm/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
-    ${CMAKE_SOURCE_DIR}/apps/zone-app/include
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
 )
 target_link_libraries(recovery_tests PRIVATE apollo::base apollo::core)
 if(WIN32)
@@ -1472,67 +1472,67 @@ if(MSVC)
 endif()
 add_test(NAME LoginM1AdmissionTests COMMAND login_m1_admission_tests)
 
-# Zone M1 base 面 × login base 客户端 e2e（P4-4 批③）：受理/应答/错误包
+# BaseApp M1 base 面 × login base 客户端 e2e（P4-4 批③）：受理/应答/错误包
 # 三路径 + 对端缺席降级。缝工厂两侧真实现直编（login_m1_admission_tests
 # 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
-add_executable(zone_m1_base_tests
-    test_zone_m1_base.cpp
-    ../apps/zone-app/src/m1_base_server.cpp
+add_executable(base_m1_tests
+    test_base_m1.cpp
+    ../apps/base-app/src/m1_base_server.cpp
     ../apps/login-app/src/m1_base_client.cpp
 )
-target_include_directories(zone_m1_base_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/zone-app/include
+target_include_directories(base_m1_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
     ${CMAKE_SOURCE_DIR}/apps/login-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
-target_compile_definitions(zone_m1_base_tests PRIVATE
-    APOLLO_ZONE_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+target_compile_definitions(base_m1_tests PRIVATE
+    APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
-target_link_libraries(zone_m1_base_tests PRIVATE
+target_link_libraries(base_m1_tests PRIVATE
     apollo::base apollo::core apollo::runtime
     apollo::net_link apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
 if(WIN32)
-    target_link_libraries(zone_m1_base_tests PRIVATE ws2_32)
-    target_compile_definitions(zone_m1_base_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(base_m1_tests PRIVATE ws2_32)
+    target_compile_definitions(base_m1_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 if(MSVC)
-    target_compile_options(zone_m1_base_tests PRIVATE /utf-8)
+    target_compile_options(base_m1_tests PRIVATE /utf-8)
 endif()
-add_test(NAME ZoneM1BaseTests COMMAND zone_m1_base_tests)
+add_test(NAME BaseM1Tests COMMAND base_m1_tests)
 
-# Manager M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
-# fan-out + 真 ManagerApp 分派面（AssignWorld/ResolveRoute 全真目录裁决）
+# BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
+# fan-out + 真 BaseAppMgr 分派面（AssignWorld/ResolveRoute 全真目录裁决）
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本
 # 批，用例本体空转。
 if(TARGET apollo::game_session AND TARGET apollo_protocol)
-add_executable(manager_m1_control_tests
-    test_manager_m1_control.cpp
-    ../apps/manager/src/m1_control_server.cpp
-    ../apps/manager/src/manager_app.cpp
+add_executable(baseappmgr_m1_control_tests
+    test_baseappmgr_m1_control.cpp
+    ../apps/baseappmgr/src/m1_control_server.cpp
+    ../apps/baseappmgr/src/baseappmgr.cpp
     ../apps/login-app/src/m1_base_client.cpp
     ../apps/gateway-app/src/m1_route_client.cpp
 )
-target_include_directories(manager_m1_control_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/manager/include
+target_include_directories(baseappmgr_m1_control_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
     ${CMAKE_SOURCE_DIR}/apps/login-app/include
     ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
-target_compile_definitions(manager_m1_control_tests PRIVATE
-    APOLLO_MANAGER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+target_compile_definitions(baseappmgr_m1_control_tests PRIVATE
+    APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
-target_link_libraries(manager_m1_control_tests PRIVATE
+target_link_libraries(baseappmgr_m1_control_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_session apollo::runtime
     apollo::net_link apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
 if(WIN32)
-    target_link_libraries(manager_m1_control_tests PRIVATE ws2_32)
-    target_compile_definitions(manager_m1_control_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(baseappmgr_m1_control_tests PRIVATE ws2_32)
+    target_compile_definitions(baseappmgr_m1_control_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 if(MSVC)
-    target_compile_options(manager_m1_control_tests PRIVATE /utf-8)
+    target_compile_options(baseappmgr_m1_control_tests PRIVATE /utf-8)
 endif()
-add_test(NAME ManagerM1ControlTests COMMAND manager_m1_control_tests)
+add_test(NAME BaseAppMgrM1ControlTests COMMAND baseappmgr_m1_control_tests)
 endif()

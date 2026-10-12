@@ -576,14 +576,14 @@ bool test_death_plane_wire() {
     {
         WirePacket p;
         p.op = Op::DeathSubscribe;
-        p.component_id = kManagerComponentId;
+        p.component_id = kBaseAppMgrComponentId;
         p.service_port = 9601;
         p.encode_to(buf);
     }
     WirePacket out;
     TEST_ASSERT(WirePacket::decode_from(buf, out) &&
                     out.op == Op::DeathSubscribe &&
-                    out.component_id == kManagerComponentId &&
+                    out.component_id == kBaseAppMgrComponentId &&
                     out.service_port == 9601,
                 "DeathSubscribe wire 往返");
 
@@ -618,7 +618,7 @@ bool test_registry_isolates_death_plane() {
     std::uint8_t buf[kWireSize];
     WirePacket p;
     p.op = Op::DeathSubscribe;
-    p.component_id = kManagerComponentId;
+    p.component_id = kBaseAppMgrComponentId;
     p.service_port = 9601;
     p.encode_to(buf);
     TEST_ASSERT(!reg.on_packet(buf, 0), "DeathSubscribe 拒入成员面");
@@ -641,10 +641,10 @@ bool test_death_notifier_subscribers() {
     TEST_ASSERT(notifier.subscriber_count() == 0, "拒绝无副作用");
 
     // 新订阅（true）+ 刷新（false，端点可迁移）
-    TEST_ASSERT(notifier.on_subscribe(kManagerComponentId, 9601, "127.0.0.1", 100),
+    TEST_ASSERT(notifier.on_subscribe(kBaseAppMgrComponentId, 9601, "127.0.0.1", 100),
                 "新订阅");
     TEST_ASSERT(notifier.subscriber_count() == 1, "订阅入表");
-    TEST_ASSERT(!notifier.on_subscribe(kManagerComponentId, 9602, "127.0.0.1", 200),
+    TEST_ASSERT(!notifier.on_subscribe(kBaseAppMgrComponentId, 9602, "127.0.0.1", 200),
                 "重复订阅 = 刷新");
     TEST_ASSERT(notifier.subscriber_count() == 1, "刷新不新增条目");
 
@@ -685,11 +685,11 @@ bool test_death_notifier_subscribers() {
 bool test_death_listener_subscribe_wire() {
     CapturingTransport transport;
     MemberId self;
-    self.component_id = kManagerComponentId;
+    self.component_id = kBaseAppMgrComponentId;
     self.service_port = 9601;
     DeathListener listener(self, "127.0.0.1", 9600, transport);
 
-    TEST_ASSERT(listener.self().component_id == kManagerComponentId, "身份保留");
+    TEST_ASSERT(listener.self().component_id == kBaseAppMgrComponentId, "身份保留");
     TEST_ASSERT(listener.subscribe(), "订阅发送成功");
     TEST_ASSERT(transport.host == "127.0.0.1" && transport.port == 9600,
                 "发往目录端点");
@@ -698,7 +698,7 @@ bool test_death_listener_subscribe_wire() {
     std::memcpy(buf, transport.last_packet.data(), kWireSize);
     TEST_ASSERT(WirePacket::decode_from(buf, out) &&
                     out.op == Op::DeathSubscribe &&
-                    out.component_id == kManagerComponentId &&
+                    out.component_id == kBaseAppMgrComponentId &&
                     out.service_port == 9601,
                 "订阅报文 wire 还原（op/component/监听端口）");
 
@@ -757,7 +757,7 @@ bool test_udp_death_loopback() {
     UdpBeaconTransport sub_transport;
     TEST_ASSERT(sub_transport.open(), "manager 订阅面 open");
     MemberId self;
-    self.component_id = kManagerComponentId;
+    self.component_id = kBaseAppMgrComponentId;
     self.service_port = death_feed.port();
     DeathListener listener(self, "127.0.0.1", notifier_feed.port(), sub_transport);
     TEST_ASSERT(listener.subscribe(), "订阅上 wire");

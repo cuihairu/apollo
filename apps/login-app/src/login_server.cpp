@@ -373,18 +373,18 @@ void LoginServer::start() {
 
     // M1 manager 客户端面（P4-4 批④）：AssignWorld 落点裁决链路；装配
     // 失败降级（警告 + 不拦启动），AssignWorld 缺席 = 降级缝 throw。
-    if (config_.m1ManagerPort != 0) {
+    if (config_.m1BaseAppMgrPort != 0) {
         M1BaseClientConfig mgrConfig;
-        mgrConfig.host = config_.m1ManagerHost;
-        mgrConfig.port = config_.m1ManagerPort;
+        mgrConfig.host = config_.m1BaseAppMgrHost;
+        mgrConfig.port = config_.m1BaseAppMgrPort;
         mgrConfig.route_json = config_.m1RouteJson;
-        mgrConfig.peer_name = "manager";
-        m1ManagerClient_ = makeM1BaseClient(std::move(mgrConfig));
-        if (m1ManagerClient_) {
+        mgrConfig.peer_name = "baseappmgr";
+        m1BaseAppMgrClient_ = makeM1BaseClient(std::move(mgrConfig));
+        if (m1BaseAppMgrClient_) {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
-                ->info("M1 manager client dialing " + config_.m1ManagerHost + ":"
-                       + std::to_string(config_.m1ManagerPort));
+                ->info("M1 BaseAppMgr client dialing " + config_.m1BaseAppMgrHost + ":"
+                       + std::to_string(config_.m1BaseAppMgrPort));
         } else {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
@@ -422,9 +422,9 @@ void LoginServer::stop() {
         m1BaseClient_->stop();
         m1BaseClient_.reset();
     }
-    if (m1ManagerClient_) {
-        m1ManagerClient_->stop();
-        m1ManagerClient_.reset();
+    if (m1BaseAppMgrClient_) {
+        m1BaseAppMgrClient_->stop();
+        m1BaseAppMgrClient_.reset();
     }
 
     if (cleanupThread_.joinable()) {
@@ -613,7 +613,7 @@ bool LoginServer::preparePlayerOnline(
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(
-                m1ManagerClient_.get(), assignReq, sessionId,
+                m1BaseAppMgrClient_.get(), assignReq, sessionId,
                 protocol::MessageType::PLAYER_ASSIGN_WORLD_RESPONSE
             );
 

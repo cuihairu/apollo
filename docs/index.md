@@ -5,7 +5,7 @@ titleTemplate: false
 hero:
   name: Apollo
   text: 场景实例制在线游戏服务端引擎
-  tagline: C++20 内核 + Lua 业务层——副本（instance）/Zone 粒度的 MMO 框架；塔防/房间制玩法一等公民（Compact 形态）。
+  tagline: C++20 内核 + Lua 业务层——副本（instance）/baseapp 粒度的 MMO 框架；塔防/房间制玩法一等公民（Compact 形态）。
   image:
     src: /apollo.png
     alt: Apollo
@@ -17,8 +17,8 @@ hero:
       text: 塔防/Compact 形态
       link: /30-Compact_GameServer_Design
 features:
-  - title: 场景实例制（Zone/副本）
-    details: 场景实例粒度 Zone 承载实体权威，不拆 cell/base、不做 ghost 无缝世界；副本（instance）短生命周期独立可配，房间制玩法即副本形态。
+  - title: 场景实例制（baseapp/副本）
+    details: 场景实例粒度 baseapp 承载实体权威，不拆 cell/base、不做 ghost 无缝世界；副本（instance）短生命周期独立可配，房间制玩法即副本形态。
   - title: 网络四层自建
     details: L0 epoll reactor → L1 帧（magic+seq+CRC32C）→ L2 会话（四通道 QoS/四级水位/resume 重连续传）→ L3 GameConnection；进程间 InterServerLink 稳定连接一族。
   - title: 契约一源多端
@@ -37,8 +37,8 @@ features:
 
 ```text
 Client ── Gate（透传/解码装配分工）
-          └─ World / manager 域（最轻分配、准入闸门、恢复相位）
-              ├─ Zone ×N（场景实例粒度进程，单写者 tick 10Hz）
+          └─ World / baseappmgr 域（最轻分配、准入闸门、恢复相位）
+              ├─ baseapp ×N（场景实例粒度进程，单写者 tick 10Hz）
               ├─ AOI 服务（网格+四叉树+shard，可独立扩缩；Compact 形态内嵌）
               ├─ 副本实例（instance，可选独立进程；塔防房间 = 内嵌副本）
               └─ db-app（storage.xml + write-behind journal）

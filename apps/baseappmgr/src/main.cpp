@@ -1,7 +1,7 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/logpush/log_push_env.hpp"
-#include "manager/manager_app.hpp"
+#include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/discovery.hpp"
@@ -16,17 +16,17 @@
 #include <chrono>
 #include <unordered_map>
 
-using manager::ManagerApp;
+using baseappmgr::BaseAppMgr;
 
 namespace disco = apollo::net::discovery;
 namespace session = apollo::game::session;
 
-#ifndef APOLLO_MANAGER_CONTRACT_ROUTE_JSON
-#define APOLLO_MANAGER_CONTRACT_ROUTE_JSON ""
+#ifndef APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON
+#define APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON ""
 #endif
 
 // 全局服务器指针
-static ManagerApp* g_mgr = nullptr;
+static BaseAppMgr* g_mgr = nullptr;
 
 // 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
@@ -42,20 +42,20 @@ void signalHandler(int signal) {
 static apollo::core::log::LoggerPtr initLogging() {
     auto& logs = apollo::core::log::global_log_manager();
     apollo::core::log::LogManagerConfig config;
-    config.processIdentity = "manager";
+    config.processIdentity = "baseappmgr";
     config.fileEnabled = true;
     config.fileConfig.directory = "log";
-    config.fileConfig.baseName = "manager";
+    config.fileConfig.baseName = "baseappmgr";
     config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
     // L4 push 出口（logging.md §5 双出口）：APOLLO_LOG_PUSH_ADDR 非空才接
     // （collector 缺席 = 客户端有界队列缓冲，本地文件恒真相源）
-    if (auto push_client = apollo::net::logpush::make_log_push_from_env("manager")) {
+    if (auto push_client = apollo::net::logpush::make_log_push_from_env("baseappmgr")) {
         config.pushSink = [push_client](const std::string& line) {
             push_client->push(line);
         };
     }
     logs.initialize(config);
-    return logs.createLogger("manager");
+    return logs.createLogger("baseappmgr");
 }
 
 // 加载配置
@@ -100,7 +100,7 @@ std::uint64_t getSteadyNowMs() {
 
 // 目录全量快照导出（P3-1 增量② owner 侧）：在线目录 Online 条目 → 镜像
 // 投影条目（gateway_addr 不上 wire——镜像是定位面不是连接面）。
-std::vector<session::MirrorEntry> collect_mirror_entries(const ManagerApp& mgr) {
+std::vector<session::MirrorEntry> collect_mirror_entries(const BaseAppMgr& mgr) {
     std::vector<session::MirrorEntry> entries;
     const auto& directory = mgr.directory();
     entries.reserve(directory.size());
@@ -126,9 +126,9 @@ int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
     const auto logger = initLogging();
-    apollo::runtime::init_crash_capture(argc, argv, "manager");
+    apollo::runtime::init_crash_capture(argc, argv, "baseappmgr");
     std::cout << "======================================" << std::endl;
-    std::cout << "       Apollo ManagerApp             " << std::endl;
+    std::cout << "       Apollo BaseAppMgr             " << std::endl;
     std::cout << "======================================" << std::endl;
 
     auto& logs = apollo::core::log::global_log_manager();
@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
             logger->warning("death feed open failed; running without death reporting");
         } else {
             disco::MemberId self;
-            self.component_id = disco::kManagerComponentId;
+            self.component_id = disco::kBaseAppMgrComponentId;
             self.service_port = death_feed.port();
             death_listener = std::make_unique<disco::DeathListener>(
                 self, machined_host, machined_port, death_transport);
@@ -227,7 +227,7 @@ int main(int argc, char* argv[]) {
     }
     disco::UdpFeed recovery_feed;
     std::unique_ptr<session::FleetRecoveryCoordinator> recovery;
-    // （协调器在 ManagerApp 构造后装配——intake 回调要落 mgr 目录）
+    // （协调器在 BaseAppMgr 构造后装配——intake 回调要落 mgr 目录）
 
     // §6 死亡行窗口处置面（G-1 收尾批遗留项）：掉线保活窗口 + gateway 组件
     // 映射。窗口以主循环秒拍为 tick（clock-and-time 单调口径，缺省 30 =
@@ -280,12 +280,12 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     try {
-        ManagerApp mgr(port);
+        BaseAppMgr mgr(port);
         g_mgr = &mgr;
-        mgr.set_m1_face(m1_port, APOLLO_MANAGER_CONTRACT_ROUTE_JSON);
+        mgr.set_m1_face(m1_port, APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON);
 
         // 恢复相位跨进程化（G-1 收尾批增量③）：进程启动 = machined 拉起
-        // 后的恢复序（§6 manager 行）——恢复相位排他（拒新），收各 Zone/
+        // 后的恢复序（§6 baseappmgr 行）——恢复相位排他（拒新），收各 Zone/
         // gateway 全量重报，收敛（全报或超时）开放。
         if (recovery_port != 0 && recovery_feed.open(recovery_port, "0.0.0.0")) {
             recovery = std::make_unique<session::FleetRecoveryCoordinator>(
@@ -309,7 +309,7 @@ int main(int argc, char* argv[]) {
                               + std::to_string(recovery_timeout_ms) + "ms");
         }
 
-        logger->info("Starting ManagerApp...");
+        logger->info("Starting BaseAppMgr...");
         mgr.start();
 
         if (death_listener && death_listener->subscribe()) {
@@ -332,7 +332,7 @@ int main(int argc, char* argv[]) {
                             + std::to_string(initial.size()) + " entries)");
         }
 
-        logger->info("ManagerApp is running. Press Ctrl+C to stop.");
+        logger->info("BaseAppMgr is running. Press Ctrl+C to stop.");
 
         auto since_snapshot = std::chrono::milliseconds(0);
         std::uint8_t recovery_buf[disco::kMaxDatagramSize];
@@ -445,7 +445,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        logger->info("ManagerApp stopped.");
+        logger->info("BaseAppMgr stopped.");
 
     } catch (const std::exception& e) {
         logger->error(std::string("Error: ") + e.what());
