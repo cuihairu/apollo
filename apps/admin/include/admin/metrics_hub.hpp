@@ -16,15 +16,18 @@
 // HTTP 面调用——两向都持锁，锁粒度 = 一次摄入/一次渲染，不跨拍。
 // 平台无关（纯内存 + 字符串拼装），Windows 照常构建。
 //
-// 告警 notifier 独立面（alert_notifier.hpp，L7）：不经 hub——931 受理点直调；webhook 出站面已交付（alert_webhook.hpp）；
-//   进程登记生命周期（陈旧不淘汰——proc_up=0 墓碑常驻即「进程已下线」
-//   的可观测面，运维靠重启清表）。
+// 告警 notifier 独立面（alert_notifier.hpp，L7）：931 受理点直调不经
+// hub；webhook 出站面已交付（alert_webhook.hpp）。proc 存活告警（L8）经
+// proc_states() 读出口面同源判据。进程登记生命周期（陈旧不淘汰——
+// proc_up=0 墓碑常驻即「进程已下线」的可观测面，运维靠重启清表）。
 
 #include <atomic>
 #include <cstdint>
 #include <map>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace apollo::admin {
 
@@ -44,6 +47,11 @@ public:
     // 渲染当前 /metrics 文本（每 scrape 现算）。apollo_proc_up TYPE 行只出
     // 一次；逐 proc 按名排序；陈旧 = 墓碑（样本行不出）。
     std::string render(std::uint64_t now_ms) const;
+
+    // 逐 proc 存活态（按名排序；up 判据与 render 出口面同源——proc_up 由
+    // 出口面合成不进推送体，告警面经此读同一判据）。时钟回拨按未陈旧。
+    std::vector<std::pair<std::string, bool>> proc_states(
+        std::uint64_t now_ms) const;
 
     // 观察面（验收/断言）
     std::size_t procs() const;

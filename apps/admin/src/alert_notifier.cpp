@@ -186,6 +186,37 @@ void AlertNotifier::try_fire(const AlertRule& rule, ProcState& state,
     std::cerr << alert_log_line(event) << std::endl;
 }
 
+// proc 存活告警（apollo_proc_up<1，L8）：up 态由 hub 出口面同源判据
+// （proc_states）逐拍喂入；独立账 liveness_（set_rules/observe 不碰），
+// 静默/速率上限与规则面共用 try_fire。
+AlertRule proc_up_rule() {
+    AlertRule rule;
+    rule.name = "apollo_proc_up";
+    rule.metric = "apollo_proc_up";
+    rule.threshold = 1.0;
+    rule.greater = false;  // < 1 = 出口面墓碑值（0）
+    rule.sustain_ms = 0;   // 持续窗在 hub 陈旧判据里，down 即可持续判
+    return rule;           // silence 取默认 60s
+}
+
+void AlertNotifier::observe_liveness(const std::string& proc, bool up,
+                                     std::uint64_t now_ms) {
+    ProcState& state = liveness_[proc];
+    if (up) {
+        // 恢复清零（不挂陈值）；fired_once/last_fire_ms 保留——静默窗
+        // 口径与规则面一致（恢复不清静默）
+        state.breach = false;
+        state.breach_start_ms = 0;
+        return;
+    }
+    if (!state.breach) {
+        state.breach = true;
+        state.breach_start_ms = now_ms;
+    }
+    // down 首拍即火（sustain=0），值恒 0 = 出口面墓碑口径
+    try_fire(proc_up_rule(), state, proc, 0.0, now_ms);
+}
+
 bool exposition_lookup(const std::string& body, const std::string& metric,
                        double& out) {
     std::size_t begin = 0;

@@ -10,7 +10,9 @@
 //   6. exposition 解析：带标签/裸样本/末样本胜/注释与 histogram 族跳过；
 //   7. env 规则面：解析、坏条目跳过；
 //   8. 缺席清态：度量缺席不挂陈值；
-//   9. 出站：sink 注入捕获、异常吞掉不外溢、缺省行文本逐位、缺省计数。
+//   9. 出站：sink 注入捕获、异常吞掉不外溢、缺省行文本逐位、缺省计数；
+//   10. proc 存活告警（L8）：内置规则首拍即火/恢复清零/静默重火/
+//       set_rules 不清存活账/proc 隔离/共用全局速率上限。
 //
 // 纯逻辑面（无平台依赖），Windows 同跑。
 
@@ -230,6 +232,63 @@ bool test_sink_and_default_line() {
     return true;
 }
 
+// ---- proc 存活告警（apollo_proc_up<1，L8）：内置规则 + hub 同源判据 ----
+
+bool test_liveness_builtin() {
+    AlertNotifier notifier;  // 空规则表——内置规则不受 env 规则面影响
+    TEST_ASSERT(notifier.rule_count() == 0, "内置规则不占规则表");
+    std::vector<AlertEvent> events;
+    notifier.set_sink([&](const AlertEvent& e) { events.push_back(e); });
+    notifier.observe_liveness("cell", true, 0);
+    TEST_ASSERT(notifier.fired() == 0, "up 不火");
+    notifier.observe_liveness("cell", false, 1000);
+    TEST_ASSERT(notifier.fired() == 1 && events.size() == 1, "down 首拍即火");
+    TEST_ASSERT(events[0].rule_name == "apollo_proc_up" &&
+                    events[0].metric == "apollo_proc_up" &&
+                    events[0].proc == "cell" && events[0].value == 0 &&
+                    events[0].threshold == 1 && !events[0].greater &&
+                    events[0].now_ms == 1000,
+                "事件字段 = 内置规则口径（墓碑值 0 < 1）");
+    // 持续 down：静默窗（默认 60s）内不重火，窗外按窗重火（持续告警）
+    notifier.observe_liveness("cell", false, 30000);
+    TEST_ASSERT(notifier.fired() == 1, "持续 down 静默窗内不重火");
+    notifier.observe_liveness("cell", false, 61000);
+    TEST_ASSERT(notifier.fired() == 2, "静默窗外再火");
+    // 内置规则与 env 规则共存：规则面照常判定，互不串
+    notifier.set_rules({rule_at("queue_depth", 10, true)});
+    notifier.observe("cell", "queue_depth 11\n", 61000);
+    TEST_ASSERT(notifier.fired() == 3, "规则面与存活告警共用出口");
+    return true;
+}
+
+bool test_liveness_recovery() {
+    AlertNotifier notifier;
+    notifier.observe_liveness("cell", false, 0);
+    TEST_ASSERT(notifier.fired() == 1, "down 首火");
+    notifier.observe_liveness("cell", true, 1000);   // 恢复清零
+    notifier.observe_liveness("cell", false, 2000);  // 静默窗内再 down
+    TEST_ASSERT(notifier.fired() == 1, "恢复后静默窗口径不变（不重火）");
+    // set_rules 只清规则账，不清存活账（两路状态互不串）
+    notifier.set_rules({rule_at("other", 1, true)});
+    notifier.observe_liveness("cell", false, 61000);
+    TEST_ASSERT(notifier.fired() == 2, "set_rules 后静默窗外再火");
+    // proc 隔离：逐 proc 独立记账
+    notifier.observe_liveness("gateway", false, 61000);
+    TEST_ASSERT(notifier.fired() == 3, "proc 独立记账");
+    return true;
+}
+
+bool test_liveness_rate_cap_shared() {
+    AlertNotifierConfig cfg;
+    cfg.max_per_window = 1;
+    AlertNotifier notifier(cfg);
+    notifier.observe_liveness("cell_a", false, 0);
+    notifier.observe_liveness("cell_b", false, 0);
+    TEST_ASSERT(notifier.fired() == 1 && notifier.dropped() == 1,
+                "存活告警与规则面共用全局速率上限");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -249,6 +308,9 @@ int main() {
         {"env_rules_parsing", test_env_rules_parsing},
         {"missing_metric_clears_state", test_missing_metric_clears_state},
         {"sink_and_default_line", test_sink_and_default_line},
+        {"liveness_builtin", test_liveness_builtin},
+        {"liveness_recovery", test_liveness_recovery},
+        {"liveness_rate_cap_shared", test_liveness_rate_cap_shared},
     };
 
     for (const auto& c : cases) {

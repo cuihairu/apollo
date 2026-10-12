@@ -1,6 +1,8 @@
 #include "admin/metrics_hub.hpp"
 
 #include <sstream>
+#include <utility>
+#include <vector>
 
 namespace apollo::admin {
 
@@ -59,6 +61,22 @@ std::string MetricsHub::render(std::uint64_t now_ms) const {
         }
     }
     return out.str();
+}
+
+std::vector<std::pair<std::string, bool>> MetricsHub::proc_states(
+    std::uint64_t now_ms) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::pair<std::string, bool>> states;
+    states.reserve(procs_.size());
+    for (const auto& kv : procs_) {
+        const ProcSnapshot& snap = kv.second;
+        // 与 render 同款：时钟回拨（宿主注入时钟换源）按未陈旧处理，不判死
+        const bool fresh = (snap.seen_ms > now_ms)
+                               ? true
+                               : (now_ms - snap.seen_ms <= config_.stale_ms);
+        states.emplace_back(kv.first, fresh);
+    }
+    return states;
 }
 
 std::size_t MetricsHub::procs() const {

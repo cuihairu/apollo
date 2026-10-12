@@ -23,10 +23,13 @@
 // 与规则匹配——`# TYPE` 注释行跳过；histogram 族整段（`# TYPE <name>
 // histogram` 起至下一 TYPE）不参与匹配；规则度量在本拍体缺席 = 该规则
 // 本拍无观察（状态清零不挂陈值）。状态按 rule × proc 独立记账，进程间
-// 互不串。proc 存活告警（apollo_proc_up<1）不在本面：proc_up 由
-// hub 出口面合成不进推送体——挂 hub 态判定，批记边界。
+// 互不串。proc 存活告警（apollo_proc_up<1）内置（observe_liveness）：
+// proc_up 由 hub 出口面合成不进推送体，up 态经 MetricsHub::proc_states
+// 同源判据逐拍喂入，独立记账（set_rules/observe 不碰它）；静默/速率
+// 上限与规则面共用同一套（try_fire）。
 //
-// 线程口径：observe 单写者（serve 循环泵拍内 931 受理点直调），不加锁。
+// 线程口径：observe/observe_liveness 单写者（serve 循环泵拍内 931 受理
+// 点与存活巡检直调），不加锁。
 
 #include <cstdint>
 #include <functional>
@@ -78,6 +81,13 @@ public:
     void observe(const std::string& proc, const std::string& body,
                  std::uint64_t now_ms);
 
+    /// proc 存活告警（apollo_proc_up<1，内置规则不占规则表）：up 态由
+    /// hub 出口面同源判据给定（MetricsHub::proc_states），serve 泵逐拍
+    /// 喂入。down 首拍即火（陈旧判据本身就是持续窗，sustain=0），恢复
+    /// 清零；持续 down 按静默窗重火；静默/速率上限与规则面共用。
+    void observe_liveness(const std::string& proc, bool up,
+                          std::uint64_t now_ms);
+
     std::uint64_t fired() const { return fired_; }
     std::uint64_t dropped() const { return dropped_; }
     std::size_t rule_count() const { return rules_.size(); }
@@ -99,6 +109,9 @@ private:
     Sink sink_;  // 空 = 缺省行出口
     // proc → 逐规则状态（下标对齐 rules_）；observe 单写者免锁
     std::unordered_map<std::string, std::vector<ProcState>> states_;
+    // proc 存活告警独立账（key = proc）——set_rules/observe 不碰它，
+    // 两路状态互不串
+    std::unordered_map<std::string, ProcState> liveness_;
     bool window_open_ = false;  // 速率窗已开（now_ms=0 与「未开」可辨）
     std::uint64_t window_start_ms_ = 0;
     std::uint32_t fired_in_window_ = 0;
@@ -115,6 +128,11 @@ bool exposition_lookup(const std::string& body, const std::string& metric,
 /// `;` 连接，op ∈ {>, <}（例 "gateway_sessions<1;cell_queue_depth>100"）。
 /// 规则名 = metric 名；sustain/silence 取默认。坏条目跳过不中断。
 std::vector<AlertRule> parse_alert_rules(const std::string& spec);
+
+/// proc 存活告警内置规则（observe_liveness 专用）：metric = hub 出口面
+/// 合成的存活 gauge 名；threshold 1 / less——出口面墓碑值 0 < 1 即 down；
+/// sustain=0（陈旧判据本身就是持续窗），silence 取默认 60s。
+AlertRule proc_up_rule();
 
 /// 缺省行出口文本（cat=alert 结构化行 msg 段；测试可逐位比对）
 std::string alert_log_line(const AlertEvent& event);

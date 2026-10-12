@@ -181,8 +181,15 @@ int run_serve(const ServeOptions& options) {
               << ", http on " << options.http_host << ":" << http.port()
               << std::endl;
     while (g_run != 0) {
-        manager.pump(now_ms());
-        http.pump(now_ms());
+        const auto t = now_ms();
+        manager.pump(t);
+        http.pump(t);
+        // proc 存活告警（apollo_proc_up<1，L8）：up 态挂 hub 出口面同源
+        // 判据（proc_up 由出口面合成不进推送体），逐拍取存活态喂内置
+        // 规则——静默/速率上限与规则面共用
+        for (const auto& [proc, up] : hub.proc_states(t)) {
+            notifier.observe_liveness(proc, up, t);
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     http.stop();
@@ -191,6 +198,8 @@ int run_serve(const ServeOptions& options) {
               << " rejected=" << rejected.load()
               << " procs=" << hub.procs()
               << " hub_rejected=" << hub.rejected()
+              << " alerts_fired=" << notifier.fired()
+              << " alerts_dropped=" << notifier.dropped()
               << " http_served=" << http.served()
               << " http_aborted=" << http.aborted() << std::endl;
     return 0;

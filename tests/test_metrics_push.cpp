@@ -12,7 +12,8 @@
 //   5. down_no_queue：对端缺席期零推面零丢计（kUp 守卫——与日志面
 //      「缺席缓冲补投」相区分的采样流语义），对端上线后快照自然上行；
 //   6. hub_semantics：apps/admin MetricsHub 聚合面（last-wins 覆盖、
-//      逐 proc 名排序、proc_up 陈旧墓碑、体长上限拒收不覆盖）；
+//      逐 proc 名排序、proc_up 陈旧墓碑、体长上限拒收不覆盖、proc_states
+//      存活态同判据出口）；
 //   7. http_metrics_endpoint：apps/admin MetricsHttp 出口面真端口往返
 //      （GET /metrics → 200 text/plain + 聚合文本、其余路径 404、
 //      应答完成连接表清空）。
@@ -385,6 +386,21 @@ bool test_hub_semantics() {
                 "stale samples dropped");
     TEST_ASSERT(stale.find("gateway-body") == std::string::npos,
                 "stale samples dropped");
+
+    // proc_states 存活态（告警面同判据出口——与 render 的 proc_up 同源）
+    const auto states = hub.proc_states(now_ms());
+    TEST_ASSERT(states.size() == 2, "proc_states covers registered procs");
+    TEST_ASSERT(states[0].first == "baseapp" && states[0].second,
+                "baseapp up (sorted by name)");
+    TEST_ASSERT(states[1].first == "gateway" && states[1].second,
+                "gateway up");
+    const auto stale_states = hub.proc_states(now_ms() + 30001);
+    TEST_ASSERT(stale_states.size() == 2 && !stale_states[0].second &&
+                    !stale_states[1].second,
+                "stale procs report down (registration kept)");
+    const admin::MetricsHub empty_hub;
+    TEST_ASSERT(empty_hub.proc_states(now_ms()).empty(),
+                "empty hub has no states");
 
     // 体长上限：超限拒收计数、不覆盖既有快照
     admin::MetricsHubConfig cfg;

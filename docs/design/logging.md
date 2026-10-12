@@ -122,7 +122,7 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 **双层边界（先裁落点）**：
 
 - **层 A（标准栈，生产推荐）**：Prometheus scrape /metrics + alerting rules + **Alertmanager**——告警规则、静默、分组、路由是 Alertmanager 的本职，apollo 仓库零代码；企业微信/钉钉等接收器用社区 adapter（prometheus-webhook 族）承接，同样不进仓库。有标准栈的部署**不走层 B**。
-- **层 B（内置兜底，小部署可用）**：exporter（admin 进程）内自带**阈值 notifier**——无 Prometheus 的单机/开发部署零外部依赖即得告警。两层共用同一事件源（MetricRegistry 聚合值），不共用代码路径（层 B = 规则表 + 模板渲染 + 出站 POST，几十行量级）。
+- **层 B（内置兜底，小部署可用）**：exporter（admin 进程）内自带**阈值 notifier**——无 Prometheus 的单机/开发部署零外部依赖即得告警。两层共用同一事件源（MetricRegistry 聚合值），不共用代码路径（层 B = 规则表 + 模板渲染 + 出站 POST，几十行量级）。**proc 存活告警（2026-10-13 补）为内置规则**（`apollo_proc_up < 1`，不占 env 规则表）：proc_up 由 hub 出口面合成不进推送体，存活态经 `MetricsHub::proc_states` 同一陈旧判据逐拍喂入 notifier——down 首拍即火（陈旧判据本身就是持续窗）、恢复清零、持续 down 按静默窗重火，静默/速率上限与规则面共用。
 
 **层 B 形态（本节主体）**：
 
