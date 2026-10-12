@@ -27,6 +27,13 @@ namespace http {
 // HTTP 方法枚举
 //==============================================================================
 
+// Windows SDK（winnt.h，经 winsock2.h 链）把 DELETE 定义为访问权限宏
+// (0x00010000L)，会改写本枚举成员名。仓库内无代码依赖该宏，定义点前就地
+// 移除；枚举成员名在声明处固化，之后再包含 windows.h 不受影响。
+#if defined(DELETE)
+#undef DELETE
+#endif
+
 enum class HttpMethod {
     GET,
     POST,
