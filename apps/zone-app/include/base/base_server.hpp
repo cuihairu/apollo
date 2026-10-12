@@ -2,6 +2,7 @@
 
 #include "base/config.hpp"
 #include "base/database_service.hpp"
+#include "base/m1_base_server.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/game/session/anchor_manager.hpp"
 #include "apollo/game/session/player_directory.hpp"
@@ -107,6 +108,9 @@ private:
     std::unique_ptr<protocol::RepSocket> server_;
     std::atomic<bool> running_{false};
     std::atomic<bool> shuttingDown_{false};  // 停机五阶段幂等闸 + 维护位（G-3）
+
+    // M1 base 受理面（P4-4 批③；m1Port = 0 = 不装配）
+    std::unique_ptr<M1BaseServer> m1Server_;
 
     std::thread autoSaveThread_;
 };

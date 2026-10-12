@@ -59,11 +59,14 @@ BaseConfig loadConfig(int argc, char* argv[]) {
             config.port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--db" && i + 1 < argc) {
             config.dbName = argv[++i];
+        } else if (arg == "--m1-port" && i + 1 < argc) {
+            config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  --port <port>              Listen port (default: 9002)\n"
                       << "  --db <name>                Database name\n"
+                      << "  --m1-port <port>           M1 base face listen port (0 = off, default: 0)\n"
                       << "  --mirror-port <port>       Directory mirror listen port; 0 disables mirror (default: 0)\n"
                       << "  --mirror-owner-host <ipv4> Directory owner host for snapshot requests (default: 127.0.0.1)\n"
                       << "  --mirror-owner-port <port> Directory owner port; 0 disables requests (default: 0)\n"

@@ -5,6 +5,7 @@ add_executable(login-app
     src/main.cpp
     src/login_server.cpp
     src/m1_admission_server.cpp
+    src/m1_base_client.cpp
 )
 
 target_include_directories(login-app

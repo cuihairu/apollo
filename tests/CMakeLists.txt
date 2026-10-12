@@ -274,6 +274,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_base_anchor.cpp
 	        ../apps/zone-app/src/base_server.cpp
 	        ../apps/zone-app/src/database_service.cpp
+	        ../apps/zone-app/src/m1_base_server.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/zone-app/include
@@ -284,6 +285,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::core
 	        apollo::game_session
 	        apollo_protocol
+	        apollo_net_link
+	        apollo_net_linkrpc
 	    )
 	    if(WIN32)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
@@ -547,6 +550,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_base_anchor.cpp
 	        ../apps/zone-app/src/base_server.cpp
 	        ../apps/zone-app/src/database_service.cpp
+	        ../apps/zone-app/src/m1_base_server.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/zone-app/include
@@ -557,6 +561,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::core
 	        apollo::game_session
 	        apollo_protocol
+	        apollo_net_link
+	        apollo_net_linkrpc
 	    )
 	    if(WIN32)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
@@ -1429,3 +1435,32 @@ if(MSVC)
     target_compile_options(login_m1_admission_tests PRIVATE /utf-8)
 endif()
 add_test(NAME LoginM1AdmissionTests COMMAND login_m1_admission_tests)
+
+# Zone M1 base 面 × login base 客户端 e2e（P4-4 批③）：受理/应答/错误包
+# 三路径 + 对端缺席降级。缝工厂两侧真实现直编（login_m1_admission_tests
+# 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
+add_executable(zone_m1_base_tests
+    test_zone_m1_base.cpp
+    ../apps/zone-app/src/m1_base_server.cpp
+    ../apps/login-app/src/m1_base_client.cpp
+)
+target_include_directories(zone_m1_base_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/zone-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+)
+target_compile_definitions(zone_m1_base_tests PRIVATE
+    APOLLO_ZONE_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(zone_m1_base_tests PRIVATE
+    apollo::base apollo::core apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
+if(WIN32)
+    target_link_libraries(zone_m1_base_tests PRIVATE ws2_32)
+    target_compile_definitions(zone_m1_base_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(zone_m1_base_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ZoneM1BaseTests COMMAND zone_m1_base_tests)

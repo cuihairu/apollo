@@ -5,6 +5,7 @@ add_executable(zone-app
     src/main.cpp
     src/base_server.cpp
     src/database_service.cpp
+    src/m1_base_server.cpp
 )
 
 target_include_directories(zone-app
@@ -22,7 +23,13 @@ target_link_libraries(zone-app
         apollo::game_session
         apollo::net_discovery
         apollo_net_logpush
+        apollo_net_link
+        apollo_net_linkrpc
         apollo_protocol
+)
+
+target_compile_definitions(zone-app PRIVATE
+    APOLLO_ZONE_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 
 target_compile_features(zone-app PRIVATE cxx_std_20)

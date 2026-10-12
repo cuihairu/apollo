@@ -381,6 +381,27 @@ void LoginServer::start() {
         }
     }
 
+    // M1 base 客户端面（P4-4 批③）：m1BasePort = 0 = 不装配（桩时代行为
+    // 不变）；装配失败降级（警告 + 不拦启动），nng 桩路径仍在。
+    if (config_.m1BasePort != 0) {
+        M1BaseClientConfig baseConfig;
+        baseConfig.host = config_.m1BaseHost;
+        baseConfig.port = config_.m1BasePort;
+        baseConfig.route_json = config_.m1RouteJson;
+        m1BaseClient_ = makeM1BaseClient(std::move(baseConfig));
+        if (m1BaseClient_) {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->info("M1 base client dialing " + config_.m1BaseHost + ":"
+                       + std::to_string(config_.m1BasePort));
+        } else {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->warning("M1 base client degraded: route table unavailable ("
+                          + config_.m1RouteJson + "), nng transport stays");
+        }
+    }
+
     // 启动会话清理线程
     cleanupThread_ = std::thread([this]() {
         while (running_) {
@@ -402,6 +423,13 @@ void LoginServer::stop() {
     if (m1Admission_) {
         m1Admission_->stop();
         m1Admission_.reset();
+    }
+
+    // M1 base 客户端面收线（in-flight call 由宿主泵线程先归还——本函数
+    // 只在宿主停驱后执行）。
+    if (m1BaseClient_) {
+        m1BaseClient_->stop();
+        m1BaseClient_.reset();
     }
 
     if (server_) {
@@ -515,6 +543,40 @@ std::vector<uint8_t> LoginServer::handlePing(const std::vector<uint8_t>& request
     return protocol::MessageCodec::encode(pong, header.sessionId);
 }
 
+namespace {
+
+// P4-4 批③换装缝：M1 面优先（全帧进出 + corr 关联归 linkrpc），装配缺位
+// 退 nng 桩路径（批⑤收口）。失败一律 throw → preparePlayerOnline catch →
+// 降级缝（桩时代同位：传输缺席/信封残缺 ≠ 会话事实）；仅响应 success=false
+// 才真拒。
+constexpr std::uint32_t kM1BaseTimeoutMs = 500;  // 单调用同步等待上限
+
+template <typename Req, typename Resp>
+Resp callBaseRpc(M1BaseClient* m1, apollo::protocol::RpcClient* stub,
+                 const Req& request, SessionID sessionId,
+                 protocol::MessageType expect) {
+    if (m1 == nullptr) {
+        return stub->call<Req, Resp>(request, sessionId);
+    }
+    const auto response = m1->call(protocol::MessageCodec::encode(request, sessionId),
+                                   std::chrono::milliseconds(kM1BaseTimeoutMs));
+    if (!response) {
+        throw std::runtime_error("base M1 rpc unreachable or timed out");
+    }
+    const auto header = protocol::MessageCodec::parseHeader(*response);
+    if (static_cast<protocol::MessageType>(header.type) != expect) {
+        throw std::runtime_error("base M1 rpc envelope mismatch");
+    }
+    const std::vector<std::uint8_t> body(response->begin() +
+                                             sizeof(protocol::MessageHeader),
+                                         response->end());
+    Resp parsed;
+    protocol::MessageCodec::decodeBody(body, parsed);
+    return parsed;
+}
+
+} // namespace
+
 bool LoginServer::preparePlayerOnline(
     PlayerID playerId,
     SessionID sessionId,
@@ -525,8 +587,9 @@ bool LoginServer::preparePlayerOnline(
         protocol::PlayerActivateRequest activateReq;
         activateReq.playerId = playerId;
         const auto activateResp =
-            baseAppClient_->call<protocol::PlayerActivateRequest, protocol::PlayerActivateResponse>(
-                activateReq, sessionId
+            callBaseRpc<protocol::PlayerActivateRequest, protocol::PlayerActivateResponse>(
+                m1BaseClient_.get(), baseAppClient_.get(), activateReq, sessionId,
+                protocol::MessageType::PLAYER_ACTIVATE_RESPONSE
             );
 
         if (!activateResp.success) {
@@ -543,8 +606,9 @@ bool LoginServer::preparePlayerOnline(
         bindReq.gatewayAddr = gatewayUrl;
 
         const auto bindResp =
-            baseAppClient_->call<protocol::PlayerBindSessionRequest, protocol::PlayerBindSessionResponse>(
-                bindReq, sessionId
+            callBaseRpc<protocol::PlayerBindSessionRequest, protocol::PlayerBindSessionResponse>(
+                m1BaseClient_.get(), baseAppClient_.get(), bindReq, sessionId,
+                protocol::MessageType::PLAYER_BIND_SESSION_RESPONSE
             );
 
         if (!bindResp.success) {
@@ -563,8 +627,9 @@ bool LoginServer::preparePlayerOnline(
         assignReq.routeVersion = 1;
 
         const auto assignResp =
-            baseAppClient_->call<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(
-                assignReq, sessionId
+            callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(
+                m1BaseClient_.get(), baseAppClient_.get(), assignReq, sessionId,
+                protocol::MessageType::PLAYER_ASSIGN_WORLD_RESPONSE
             );
 
         if (!assignResp.success) {
@@ -576,7 +641,8 @@ bool LoginServer::preparePlayerOnline(
 
         return true;
     } catch (const std::exception& ex) {
-        // In stub transport mode, RPC may not return a payload yet. Keep login flow usable.
+        // 传输缺席/信封残缺（M1 不可达、zone Unknown 错误包或桩时代）不放大
+        // 成拒绝——login 流程保持可用（降级缝与桩时代同位）。
         apollo::core::log::global_log_manager()
             .createLogger("login_server")
             ->warning("Prepare player online degraded for player "

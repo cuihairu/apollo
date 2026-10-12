@@ -242,6 +242,28 @@ void BaseServer::start() {
 
     server_->start();
 
+    // M1 base 受理面（P4-4 批③）：m1Port 非零 = link M1 面并行受理
+    // （dispatchRequest 直通——会话语义与 nng REP 路径零分叉）；装配失败
+    // 降级（警告 + 不拦启动），nng REP 路径仍在。
+    if (config_.m1Port != 0) {
+        M1BaseServerConfig m1Config;
+        m1Config.host = config_.host;
+        m1Config.port = config_.m1Port;
+        m1Config.route_json = config_.m1RouteJson;
+        m1Server_ = makeM1BaseServer(
+            std::move(m1Config), [this](const std::uint8_t* frame, std::size_t size) {
+                return dispatchRequest(std::vector<std::uint8_t>(frame, frame + size));
+            });
+        if (m1Server_->start()) {
+            blog().info("M1 base face listening on " + config_.host + ":"
+                        + std::to_string(m1Server_->listenPort()));
+        } else {
+            blog().warning("M1 base face degraded: route table unavailable ("
+                           + config_.m1RouteJson + "), nng transport stays");
+            m1Server_.reset();
+        }
+    }
+
     // 启动自动保存线程
     autoSaveThread_ = std::thread(&BaseServer::autoSaveLoop, this);
 
@@ -259,8 +281,13 @@ void BaseServer::stop() {
 
     // ① 停收新请求（§10.2-①）：维护位已立（dispatchRequest 回维护中），
     // 关监听并等在途 handler 归还（RepSocket::stop = join worker——§10.2-④
-    // 的 net 断开与此同拍：stub 传输树无在途帧面）
+    // 的 net 断开与此同拍：stub 传输树无在途帧面）。M1 面同拍收线（泵
+    // 线程停驱 + 监听拆线，nng REP 路径照旧）。
     running_ = false;
+    if (m1Server_) {
+        m1Server_->stop();
+        m1Server_.reset();
+    }
     if (server_) {
         server_->stop();
     }

@@ -23,6 +23,11 @@ struct LoginConfig {
     // 后端服务地址
     std::string baseAppUrl = "tcp://127.0.0.1:9002";
 
+    // M1 base 客户端面（P4-4 批③）：拨 zone M1 受理面的链路侧；0 = 面关
+    // （preparePlayerOnline 退 nng 桩路径，行为不变）。路由表共用 m1RouteJson
+    uint16_t m1BasePort = 0;
+    std::string m1BaseHost = "127.0.0.1";
+
     // 默认进入世界
     uint32_t initialWorldId = 1;
     uint64_t initialMapId = 1;

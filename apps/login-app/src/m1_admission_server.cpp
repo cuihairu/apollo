@@ -1,11 +1,5 @@
 #include "login/m1_admission_server.hpp"
 
-#if !defined(_WIN32)
-
-// 准入受理面真实现（POSIX）：InterServerLink passive 端点 + linkrpc
-// RpcServer。泵线程单写者——受理/应答全在泵拍（handler 链内），宿主
-// （LoginServer）只管 start/stop 生命周期。
-
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
@@ -19,6 +13,13 @@
 #include <utility>
 
 namespace login {
+
+#if !defined(_WIN32)
+
+// 准入受理面真实现（POSIX）：InterServerLink passive 端点 + linkrpc
+// RpcServer。泵线程单写者——受理/应答全在泵拍（handler 链内），宿主
+// （LoginServer）只管 start/stop 生命周期。
+// 命名空间开在平台分支外——Windows 桩分支同属 login（m1_egress 同款）。
 
 namespace {
 

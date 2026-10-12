@@ -57,6 +57,8 @@ LoginConfig loadConfig(int argc, char* argv[]) {
             config.gatewayUrls.push_back(argv[++i]);
         } else if (arg == "--m1-port" && i + 1 < argc) {
             config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--base-m1-port" && i + 1 < argc) {
+            config.m1BasePort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -65,6 +67,7 @@ LoginConfig loadConfig(int argc, char* argv[]) {
                       << "  --base-app <url>           BaseApp URL\n"
                       << "  --gateway <url>             Gateway URL (can be multiple)\n"
                       << "  --m1-port <port>           M1 admission listen port (0 = off, default: 0)\n"
+                      << "  --base-m1-port <port>      Zone M1 base dial port (0 = off, default: 0)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }

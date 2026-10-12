@@ -2,6 +2,7 @@
 
 #include "login/config.hpp"
 #include "login/m1_admission_server.hpp"
+#include "login/m1_base_client.hpp"
 #include "apollo/protocol/socket.hpp"
 #include <atomic>
 #include <memory>
@@ -173,6 +174,9 @@ private:
 
     // M1 准入受理面（P4-4 批①；m1Port = 0 = 不装配）
     std::unique_ptr<M1AdmissionServer> m1Admission_;
+
+    // M1 base 客户端面（P4-4 批③；m1BasePort = 0 = 不装配，退 nng 桩路径）
+    std::unique_ptr<M1BaseClient> m1BaseClient_;
 };
 
 } // namespace login
