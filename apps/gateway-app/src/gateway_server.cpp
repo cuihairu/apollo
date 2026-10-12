@@ -8,26 +8,11 @@
 
 namespace gateway {
 
-namespace netproto = apollo::net::protocol;
-
 namespace {
 
 // 库面日志出口：cat=gateway_server（§5.1 cat= 检索键；主程已接文件面）
 apollo::core::log::Logger& glog() {
     return *apollo::core::log::global_log_manager().createLogger("gateway_server");
-}
-
-std::unique_ptr<netproto::Channel> connectBackendChannel(const std::string& url) {
-    auto channel = std::make_unique<netproto::Channel>();
-    std::error_code ec;
-    if (!channel->connect(url, ec)) {
-        // P3-4 处方①：启动期后端缺位降级——警告 + 空件返回，不再 throw。
-        // （exit=1 根因之一：启动期对后端全量硬依赖，单后端缺位即整编队拉不起）
-        glog().warning("gateway backend unreachable (degraded): " + url
-                       + " (" + ec.message() + ")");
-        return nullptr;
-    }
-    return channel;
 }
 
 std::vector<uint8_t> encodeDisconnectMessage(SessionID sessionId, PlayerID playerId, bool normalClose) {
@@ -36,14 +21,6 @@ std::vector<uint8_t> encodeDisconnectMessage(SessionID sessionId, PlayerID playe
     message.playerId = playerId;
     message.normalClose = normalClose;
     return apollo::protocol::MessageCodec::encode(message);
-}
-
-bool sendPayload(netproto::Channel* channel, const std::vector<uint8_t>& message) {
-    if (channel == nullptr || !channel->isConnected()) {
-        return false;
-    }
-
-    return channel->send(netproto::Message(message));
 }
 
 std::string routeLabel(const RouteSnapshot& routeSnapshot) {
@@ -73,11 +50,6 @@ MessageRouter::~MessageRouter() {
 void MessageRouter::start() {
     if (running_) return;
 
-    // 后端缺位降级（处方①）：任一后端不可达不中断启动——login/base 悬空时
-    // 对应转发面落空（ChatApp 连接已随处方③摘除，fleet 无 chat 进程）
-    loginAppClient_ = connectBackendChannel(config_.loginAppUrl);
-    baseAppClient_ = connectBackendChannel(config_.baseAppUrl);
-
     // cell 面换装 M1 出口（2b-iii）：路由表缺位 = 出口降级（警告 + 空件，
     // world 前递落地），起进程不拦——处方①同口径。cell 不在线不在此刻判断，
     // active 端点自带退避重连。
@@ -101,8 +73,6 @@ void MessageRouter::stop() {
         m1Egress_->stop();
         m1Egress_.reset();
     }
-    loginAppClient_.reset();
-    baseAppClient_.reset();
 }
 
 void MessageRouter::pump() {
@@ -133,12 +103,12 @@ void MessageRouter::forwardToWorld(
 }
 
 void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint8_t>& message) {
-    (void)sessionId;
-    if (baseAppClient_) {
-        if (!sendPayload(baseAppClient_.get(), message)) {
-            glog().error("Failed to forward to BaseApp");
-        }
-    }
+    // nng 双 Channel 摘除（P4-4 批②，ADR-011 ChatApp 同款）：桩上死面，
+    // 从未有帧过线；base 面的真实路由 = zone M1 受理面（挂账 P4-4 ③，
+    // 随 login↔base 链整批立项）。落地面 = m1Egress degraded 同口径。
+    (void)message;
+    glog().info("Gateway dropped base message for session "
+                + std::to_string(sessionId) + " (no base forwarding face)");
 }
 
 RouteSnapshot MessageRouter::buildDefaultRoute() const {

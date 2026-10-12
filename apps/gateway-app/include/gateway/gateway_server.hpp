@@ -37,7 +37,8 @@ public:
     void forwardToWorld(SessionID sessionId, const RouteSnapshot& routeSnapshot,
                         const std::vector<uint8_t>& message);
 
-    // 转发消息到 BaseApp
+    // 转发消息到 BaseApp（nng 双 Channel 摘除，P4-4 批②：落地面 =
+    // m1Egress degraded 同口径；真实 base 面挂账 P4-4 ③ zone M1 受理面）
     void forwardToBaseApp(SessionID sessionId, const std::vector<uint8_t>& message);
 
     RouteSnapshot buildDefaultRoute() const;
@@ -47,10 +48,6 @@ public:
 
 private:
     GatewayConfig config_;
-
-    // 后端服务连接（后端缺位时为空件——启动期降级，P3-4 处方①）
-    std::unique_ptr<apollo::net::protocol::Channel> loginAppClient_;
-    std::unique_ptr<apollo::net::protocol::Channel> baseAppClient_;
 
     // cell 面（2b-iii：world nng 通道池退役，M1 出口单端点直连）
     std::unique_ptr<M1Egress> m1Egress_;
