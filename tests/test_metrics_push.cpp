@@ -8,7 +8,12 @@
 //   3. periodic_latest_wins：周期推（20ms 档）连发多拍，接收序与发送序
 //      一致（TCP 序）且逐拍新快照（无队列不重放）；
 //   4. down_no_queue：对端缺席期零推面零丢计（kUp 守卫——与日志面
-//      「缺席缓冲补投」相区分的采样流语义），对端上线后快照自然上行。
+//      「缺席缓冲补投」相区分的采样流语义），对端上线后快照自然上行；
+//   5. hub_semantics：apps/admin MetricsHub 聚合面（last-wins 覆盖、
+//      逐 proc 名排序、proc_up 陈旧墓碑、体长上限拒收不覆盖）；
+//   6. http_metrics_endpoint：apps/admin MetricsHttp 出口面真端口往返
+//      （GET /metrics → 200 text/plain + 聚合文本、其余路径 404、
+//      应答完成连接表清空）。
 //
 // Windows：link TCP 底座 POSIX only——只跑 render 面（纯字符串拼装）。
 
@@ -16,8 +21,12 @@
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/link/route_table.hpp"
+#include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
+
+#include "admin/metrics_hub.hpp"
+#include "admin/metrics_http.hpp"
 
 #include <chrono>
 #include <cstring>
@@ -48,6 +57,7 @@ namespace {
 namespace link = apollo::net::link;
 namespace wire = apollo::net::wire;
 namespace metricspush = apollo::net::metricspush;
+namespace admin = apollo::admin;
 
 using apollo::contract::gen::MsgId;
 
@@ -296,6 +306,185 @@ bool test_down_no_queue() {
     return true;
 }
 
+// ---- apps/admin 聚合面（MetricsHub）----
+
+bool test_hub_semantics() {
+    admin::MetricsHub hub;
+
+    // last-wins：同 proc 后到快照覆盖，先到的不再出现
+    hub.ingest("baseapp", "baseapp-body\n", now_ms());
+    hub.ingest("baseapp", "baseapp-body-v2\n", now_ms());
+    hub.ingest("gateway", "gateway-body\n", now_ms());
+    TEST_ASSERT(hub.procs() == 2, "two procs registered");
+    TEST_ASSERT(hub.ingested() == 3, "three snapshots ingested");
+
+    const std::string fresh = hub.render(now_ms());
+    TEST_ASSERT(fresh.rfind("# TYPE apollo_proc_up gauge\n", 0) == 0,
+                "proc_up TYPE line once at head");
+    TEST_ASSERT(fresh.find("apollo_proc_up{proc=\"baseapp\"} 1\nbaseapp-body-v2\n")
+                    != std::string::npos,
+                "baseapp fresh with last-wins body");
+    TEST_ASSERT(fresh.find("apollo_proc_up{proc=\"gateway\"} 1\ngateway-body\n")
+                    != std::string::npos,
+                "gateway fresh");
+    TEST_ASSERT(fresh.find("baseapp-body-v1") == std::string::npos,
+                "superseded body dropped");
+    TEST_ASSERT(fresh.find("apollo_proc_up{proc=\"baseapp\"}")
+                    < fresh.find("apollo_proc_up{proc=\"gateway\"}"),
+                "procs sorted by name");
+
+    // 陈旧翻转：超出判据后只出墓碑，样本行不再出
+    const std::string stale = hub.render(now_ms() + 30001);
+    TEST_ASSERT(stale.find("apollo_proc_up{proc=\"baseapp\"} 0\n") != std::string::npos,
+                "baseapp tombstoned");
+    TEST_ASSERT(stale.find("apollo_proc_up{proc=\"gateway\"} 0\n") != std::string::npos,
+                "gateway tombstoned");
+    TEST_ASSERT(stale.find("baseapp-body-v2") == std::string::npos,
+                "stale samples dropped");
+    TEST_ASSERT(stale.find("gateway-body") == std::string::npos,
+                "stale samples dropped");
+
+    // 体长上限：超限拒收计数、不覆盖既有快照
+    admin::MetricsHubConfig cfg;
+    cfg.max_body_bytes = 8;
+    admin::MetricsHub limited(cfg);
+    limited.ingest("cell", "ok\n", now_ms());
+    TEST_ASSERT(limited.ingested() == 1, "small body accepted");
+    limited.ingest("cell", "way too long body\n", now_ms());
+    TEST_ASSERT(limited.rejected() == 1, "oversized body rejected");
+    TEST_ASSERT(limited.ingested() == 1, "oversized not counted as ingested");
+    const std::string kept = limited.render(now_ms());
+    TEST_ASSERT(kept.find("ok\n") != std::string::npos, "previous snapshot kept");
+    TEST_ASSERT(kept.find("way too long") == std::string::npos,
+                "oversized body not stored");
+    limited.ingest("", "x\n", now_ms());
+    TEST_ASSERT(limited.rejected() == 2, "empty proc rejected");
+    return true;
+}
+
+// ---- apps/admin 出口面（MetricsHttp，真端口往返）----
+
+struct HttpReply {
+    bool connected = false;
+    std::string body;
+};
+
+// 拨号（宿主泵驱动）+ 全量写出 + 读到 EOF（服务端 Connection: close）
+HttpReply http_fetch(admin::MetricsHttp& http, std::uint16_t port,
+                     const std::string& request) {
+    HttpReply reply;
+    link::TcpConnector connector;
+    if (!connector.start("127.0.0.1", port, 3000, now_ms())) {
+        return reply;
+    }
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+    while (connector.state() == link::ConnectState::kConnecting) {
+        if (connector.pump(now_ms()) != link::TcpConnector::PumpResult::kInProgress) {
+            break;
+        }
+        if (std::chrono::steady_clock::now() > deadline) {
+            return reply;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    if (connector.state() != link::ConnectState::kConnected) {
+        return reply;
+    }
+    auto transport = connector.take_transport();
+    if (transport == nullptr) {
+        return reply;
+    }
+    reply.connected = true;
+
+    std::size_t sent = 0;
+    while (sent < request.size()) {
+        const int n = transport->write(
+            reinterpret_cast<const std::uint8_t*>(request.data()) + sent,
+            request.size() - sent);
+        if (n < 0) {
+            return reply;
+        }
+        if (n > 0) {
+            sent += static_cast<std::size_t>(n);
+        } else if (std::chrono::steady_clock::now() > deadline) {
+            return reply;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+
+    std::uint8_t buf[4096];
+    while (std::chrono::steady_clock::now() < deadline) {
+        http.pump(now_ms());
+        const int n = transport->read(buf, sizeof buf);
+        if (n < 0) {
+            break;  // 对端关闭（Connection: close 后 EOF）
+        }
+        if (n > 0) {
+            reply.body.append(reinterpret_cast<const char*>(buf),
+                              static_cast<std::size_t>(n));
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+    return reply;
+}
+
+bool test_http_metrics_endpoint() {
+    admin::MetricsHub hub;
+    hub.ingest("baseapp",
+               "# TYPE probe_total counter\n"
+               "probe_total{proc=\"baseapp\"} 7\n",
+               now_ms());
+
+    admin::MetricsHttpConfig cfg;
+    cfg.port = 0;
+    admin::MetricsHttp http(cfg, hub);
+    TEST_ASSERT(http.start(), "http bound");
+    const std::uint16_t port = http.port();
+    TEST_ASSERT(port != 0, "ephemeral port observed");
+
+    // GET /metrics → 200 text/plain + 聚合文本（proc_up 墓碑面 + 源端样本直拼接）
+    const HttpReply ok =
+        http_fetch(http, port, "GET /metrics HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+    TEST_ASSERT(ok.connected, "client connected");
+    TEST_ASSERT(ok.body.rfind("HTTP/1.1 200 OK\r\n", 0) == 0, "200 ok");
+    TEST_ASSERT(ok.body.find("Content-Type: text/plain; version=0.0.4\r\n")
+                    != std::string::npos,
+                "prometheus content type");
+    TEST_ASSERT(ok.body.find("Content-Length: ") != std::string::npos,
+                "content length present");
+    TEST_ASSERT(ok.body.find("# TYPE apollo_proc_up gauge\n") != std::string::npos,
+                "proc_up TYPE line");
+    TEST_ASSERT(ok.body.find("apollo_proc_up{proc=\"baseapp\"} 1\n")
+                    != std::string::npos,
+                "proc_up alive");
+    TEST_ASSERT(ok.body.find("# TYPE probe_total counter\n") != std::string::npos,
+                "source TYPE line");
+    TEST_ASSERT(ok.body.find("probe_total{proc=\"baseapp\"} 7\n")
+                    != std::string::npos,
+                "source sample verbatim");
+
+    // 其余路径 → 404（exporter 非通用 HTTP 面）
+    const HttpReply nf = http_fetch(http, port, "GET /nope HTTP/1.1\r\n\r\n");
+    TEST_ASSERT(nf.connected, "second client connected");
+    TEST_ASSERT(nf.body.rfind("HTTP/1.1 404 Not Found\r\n", 0) == 0,
+                "404 on other path");
+
+    // 应答完成后连接表清空、计数面正确
+    for (int i = 0; i < 5; ++i) {
+        http.pump(now_ms());
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    TEST_ASSERT(http.served() == 2, "two connections served");
+    TEST_ASSERT(http.connections() == 0, "connections drained");
+    TEST_ASSERT(http.aborted() == 0, "nothing aborted");
+    TEST_ASSERT(http.refused() == 0, "nothing refused");
+    http.stop();
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -316,6 +505,8 @@ int main() {
         {"snapshot_e2e", test_snapshot_e2e},
         {"periodic_latest_wins", test_periodic_latest_wins},
         {"down_no_queue", test_down_no_queue},
+        {"hub_semantics", test_hub_semantics},
+        {"http_metrics_endpoint", test_http_metrics_endpoint},
     };
     int failed = 0;
     for (const auto& c : cases) {

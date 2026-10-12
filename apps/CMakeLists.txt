@@ -13,6 +13,11 @@ add_subdirectory(machined)
 # 依赖 apollo::core + apollo::runtime，无门控条件。
 add_subdirectory(logger)
 
+# AdminApp——指标 exporter 进程壳（metrics admin 通道，logging.md §5.1
+# 单一 exporter）：serve 子命令 = link passive "metrics" + HTTP /metrics，
+# 与 logger 同为运维侧无门控进程。
+add_subdirectory(admin)
+
 # 检查依赖是否可用
 # Gateway app 的 ingress 头仍包含旧 modules/protocol 的 apollo/protocol/*.hpp
 # （迁移未完成），故除 net::protocol 外还需旧模块目标存在。

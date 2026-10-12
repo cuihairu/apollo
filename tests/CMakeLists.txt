@@ -1394,10 +1394,17 @@ add_test(NAME LogPushTests COMMAND logpush_tests)
 
 # Metrics Push Tests (P3-3 批：metrics admin 通道)
 # MetricsPushClient 发送面（kDroppable 无队列周期推，最新者胜）× hub 受集
-# 面 round-trip + render_exposition 文本面。Windows 只跑 render 面
-# （link TCP 底座 POSIX only，同 logpush_tests 口径）。
+# 面 round-trip + render_exposition 文本面 + apps/admin 聚合/HTTP 出口面
+# （MetricsHub last-wins/陈旧墓碑/体长上限；MetricsHttp 真端口 GET
+# /metrics 往返）。Windows 只跑 render 面（link TCP 底座 POSIX only，
+# 同 logpush_tests 口径）。
 add_executable(metricspush_tests
     test_metrics_push.cpp
+    ../apps/admin/src/metrics_hub.cpp
+    ../apps/admin/src/metrics_http.cpp
+)
+target_include_directories(metricspush_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/admin/include
 )
 target_link_libraries(metricspush_tests PRIVATE
     apollo_net_metricspush
