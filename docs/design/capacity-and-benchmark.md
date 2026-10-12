@@ -41,7 +41,7 @@
 | aoidecay（viewer set 增量） | ~5ms | 阶段 3 |
 | collect（delta/快照组装） | ~10ms | 阶段 4 |
 | flush（预算装包+发送） | ~10ms | 阶段 5 |
-| persist-batch（journal 交 DB 线程） | ~5ms | 阶段 6 |
+| persist-batch（journal 交 DB 线程） | ~5ms（实测锚点 §2.4：现骨架逐行开合 6–22µs/行，5ms 分配对应常驻句柄+批量摊写形态——机制缺口挂持久面批） | 阶段 6 |
 | 富余/长尾吸收 | ~10ms | 连续 N 拍 >80% 即过载信号（clock-and-time §4） |
 
 - 超支处理沿用既有机制：阶段 4/5 预算超时立即截断、剩余下 tick（attribute-sync §10）；整帧超支走有界追赶/跳拍（clock-and-time §4 catch_up_max=2）。
@@ -73,8 +73,8 @@
 - 事件量逐位确定（移动模式固定 → 差集序列确定）——基准可作回归信号
   （事件量漂移 = AOI/ViewerState 行为变化）。
 - 桩口径限制：无寻路/技能/跨景/网络发送面，帧成本为下界；§2 全帧段
-  实测化分批补——flush 段已补（§2.3，2026-10-13），persist-batch 段待
-  journal 序列化路径接入。
+  实测化分批补——flush 段已补
+  （§2.3，2026-10-13）、persist-batch 段已补（§2.4，2026-10-13）。
 - 批 B 收口（cell-app 单写者化，方案挂拍板）+ 多景并行线程化后按此
   锚点复测。
 
@@ -143,10 +143,46 @@ Leave→CellDestroyEntity，MessageCodec 全量编码，session_id 0 = 系统广
 - **口径边界（如实）**：全帧合计仍是下界——recalc/collect 组装/网络
   发送/持久化段未计；collect 组装（delta 结构构建）与编码的边界在本段
   里未分离（事件收集进 vector 的成本含在 scene 段，编码在 flush 段）；
-  persist-batch 段待 journal 序列化路径接入后补。
+  persist 段已补（§2.4，2026-10-13——现骨架逐行开合超预算，
+  机制缺口挂持久面批）。
 
 （事件收集面随本批进 benchmark：sink 计数 + 逐帧暂存 vector——编码在
 tick 后统一做，scene 局部段计时不含编码。）
+
+### 2.4 persist 段实测锚点（P3-2 ①全帧段实测化收口，2026-10-13）
+
+**口径**：§2 预算表 persist-batch 行（journal 交 DB 线程）的可测面——
+`examples/benchmark --models` 帧循环在 flush 段之后，逐实体 append 一条
+PersistJournal 行（write-ahead 落盘）+ 定额 drain（sink=移交计数，DB 线程
+序列化面不计）；单写者姿态下 append+drain 同线程连续，计时段与 scene/flush
+段分离。负载模型：脏实体口径 = 每帧每实体一行（~30B JSON 载荷代表 HP/exp
+类 L2 增量——移动本身是 L3 易失不落 journal，载荷是负载模型非语义声明），
+三模型每帧同为 1000 行。**介质 = 宿主 /tmp（tmpfs）**，落盘面含实盘 syscall；
+compact（快照压薄）是独立节拍不在此段；三跑 min（同 §2.1 纪律）；机器同 §2.1。
+
+| 模型 | Rows/帧 | persist 段(min) | 单行成本(min) | 6 跑区间 |
+|---|---|---|---|---|
+| A 大场景 | 1000 | 10.06ms | ~10.1µs | 10.1–18.8ms |
+| B 多景高密度 | 1000 | 6.13ms | ~6.1µs | 6.1–14.1ms |
+| C 副本制 | 1000 | 8.74ms | ~8.7µs | 8.7–13.8ms |
+
+**结论方向**：
+
+- **本段不是规模函数，是机制成本 × 行数**：三模型 Rows/帧同为 1000
+ （脏实体 = 全体口径），段成本同量；min 差异 6.1–10.1ms 是落盘面抖动
+  而非规模差异。
+- **现骨架常态超预算**：persist-batch 行分配 ~5ms；PersistJournal
+  （P1-4 骨架）append = 逐行 `ofstream` open+write+flush+close（耐久优先
+  姿态），千行/帧即 6–22µs/行 → min 已 6.1ms、典型 10–14ms，实测面常态
+  超支 1–3×（tmpfs 已属快介质，真实磁盘更差）。**机制缺口**：常驻句柄
+  （去 open/close）+ group commit（摊 flush）——挂 persist 持久面批
+  （P1-4 骨架演进），本批只立锚点不改骨架。
+- **口径边界（如实）**：append 可挂 SaveQueue worker 线程（骨架单写者注
+  记），则 game-thread 面仅入队移交、本段成本离帧——预算行 ~5ms 的分配
+  对应「常驻句柄 + 批量摊写」机制形态；DB 线程序列化与 compact 面不计；
+  文本行格式 encode_line + deque 入队本体开销占比小（drain 面微秒级）。
+- **回归信号**：Rows/帧 = 1000 逐位恒定（负载模型确定）；persist_ms 是
+  IO 面（宿主抖动），不作回归信号。
 
 ## 3. 消息与带宽预算（汇总既有 + 推导）
 
