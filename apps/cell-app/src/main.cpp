@@ -2,9 +2,13 @@
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/logpush/log_push_env.hpp"
 #include "apollo/net/metricspush/metrics_push_env.hpp"
+#include "apollo/net/discovery/discovery.hpp"
+#include "apollo/net/discovery/udp_transport.hpp"
 #include "cell/cell_server.hpp"
 #include <iostream>
 #include <csignal>
+#include <cstdint>
+#include <memory>
 
 using namespace cell;
 
@@ -71,6 +75,32 @@ CellConfig loadConfig(int argc, char* argv[]) {
     return config;
 }
 
+// 编队成员注册（P3-4 收尾批）：--machined-port 0 = 关（standalone 跑不依赖
+// 编队）；--component-id 0 = 未入编队（仅跑服务不注册）。身份 service_port
+// = M1 受理端口（消费方拨号键）。
+struct FleetOptions {
+    std::string machined_host = "127.0.0.1";
+    std::uint16_t machined_port = 0;
+    std::uint64_t component_id = 0;
+};
+
+static FleetOptions loadFleetOptions(int argc, char* argv[]) {
+    FleetOptions opts;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--machined-host" && i + 1 < argc) {
+            opts.machined_host = argv[++i];
+        } else if (arg == "--machined-port" && i + 1 < argc) {
+            opts.machined_port =
+                static_cast<std::uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--component-id" && i + 1 < argc) {
+            opts.component_id =
+                std::strtoull(argv[++i], nullptr, 10);
+        }
+    }
+    return opts;
+}
+
 int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
@@ -105,10 +135,53 @@ int main(int argc, char* argv[]) {
         logger->info("Starting server...");
         server.start();
 
+        // 编队成员注册（P3-4 收尾批）：machined 在位才上 wire；beat 交给
+        // 主循环秒拍，退出路径优雅注销（TTL 兜底覆盖注销包丢失）
+        const FleetOptions fleet = loadFleetOptions(argc, argv);
+        apollo::net::discovery::UdpBeaconTransport fleet_transport;
+        std::unique_ptr<apollo::net::discovery::FleetMember> fleet_member;
+        if (fleet.machined_port != 0) {
+            if (fleet.component_id == 0) {
+                logger->warning(
+                    "machined-port set without --component-id; fleet "
+                    "registration disabled");
+            } else if (fleet_transport.open()) {
+                apollo::net::discovery::MemberId self;
+                self.component_id = fleet.component_id;
+                self.service_port = config.m1Port;
+                fleet_member =
+                    std::make_unique<apollo::net::discovery::FleetMember>(
+                        self, fleet.machined_host, fleet.machined_port,
+                        fleet_transport);
+                logger->info("fleet member: component="
+                             + std::to_string(fleet.component_id)
+                             + " service_port=" + std::to_string(config.m1Port)
+                             + " -> machined " + fleet.machined_host + ":"
+                             + std::to_string(fleet.machined_port));
+            } else {
+                logger->warning(
+                    "fleet transport open failed; running without fleet "
+                    "registration");
+            }
+        }
+
+        auto fleet_now_ms = [] {
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                    .count());
+        };
+
         logger->info("Server is running. Press Ctrl+C to stop.");
 
         while (server.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (fleet_member) {
+                fleet_member->tick(fleet_now_ms());
+            }
+        }
+        if (fleet_member) {
+            fleet_member->stop();
         }
 
         logger->info("Server stopped.");

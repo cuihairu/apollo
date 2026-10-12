@@ -255,6 +255,15 @@ int main(int argc, char** argv) {
         const std::size_t count = registry.member_count();
         if (count != last_count) {
             logger->info("members=" + std::to_string(count));
+            // 成员身份随行（P3-4 收尾批：目录视图 = 真实拓扑；编队成员
+            // FleetMember 心跳注册，machined 侧据此可见）
+            for (const auto& entry : registry.members()) {
+                logger->info("  member component="
+                             + std::to_string(entry.member.component_id)
+                             + " zone=" + std::to_string(entry.member.zone_id)
+                             + " port="
+                             + std::to_string(entry.member.service_port));
+            }
             last_count = count;
         }
 

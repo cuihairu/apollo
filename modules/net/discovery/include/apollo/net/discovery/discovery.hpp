@@ -149,6 +149,41 @@ private:
     std::uint32_t seq_ = 0;
 };
 
+// ---- FleetMember：应用壳注册驱动（P3-4 收尾批）----
+//
+// DiscoveryBeacon 的应用壳驱动缝：把「上编队 + 周期心跳 + 停机注销」收敛为
+// tick()/stop() 两拍——进程主循环逐拍调 tick()，退出路径调 stop()。发送语义
+// 与 wire 契约对齐：首拍即心跳（Heartbeat 对未注册组件=注册——目录侧语义，
+// 首包丢失不挂起），此后距上次**成功**发送 ≥ interval_ms 才再发（应用拍快于
+// 目录心跳周期时不刷 wire；发送失败下拍即重试，不吞进节流窗）。stop() 幂等
+// 且终态（注销后 tick 不复活——退出路径不回环；注销发送失败可重调 stop 重试）。
+// 身份非法（零组件号）或目录端口零（单机跑、编队关）全部调用无副作用——
+// 误配置进程不上 wire 垃圾，standalone 跑不依赖编队。
+class FleetMember {
+public:
+    FleetMember(MemberId self, std::string directory_host,
+                std::uint16_t directory_port, BeaconTransport& transport,
+                std::uint32_t interval_ms = 1000);
+
+    // 主循环逐拍调用：首拍立发心跳，此后按 interval_ms 节流
+    void tick(std::uint64_t now_ms);
+
+    // 优雅注销（幂等；仅在发过至少一包后注销一次）
+    void stop();
+
+    // 是否在编队（已成功上过 wire 且未注销）
+    [[nodiscard]] bool registered() const noexcept { return on_wire_; }
+
+private:
+    DiscoveryBeacon beacon_;
+    std::uint16_t directory_port_ = 0;
+    std::uint32_t interval_ms_ = 1000;
+    std::uint64_t last_sent_ms_ = 0;
+    bool sent_once_ = false;
+    bool stopped_ = false;
+    bool on_wire_ = false;
+};
+
 // ---- DiscoveryRegistry：目录侧注册表 ----
 
 class DiscoveryRegistry {

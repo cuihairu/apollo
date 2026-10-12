@@ -195,6 +195,29 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 编队成员注册（P3-4 收尾批）：manager 自身亦入编队表（reserved 组件号
+    // 2）；service_port = M1 控制面（0 = 面关时回退 --port，消费方拨号键）。
+    // 与死亡订阅共用 --machined-host/--machined-port；port 0 = 两面全关。
+    disco::UdpBeaconTransport member_transport;
+    std::unique_ptr<disco::FleetMember> fleet_member;
+    if (machined_port != 0) {
+        if (member_transport.open()) {
+            disco::MemberId self;
+            self.component_id = disco::kBaseAppMgrComponentId;
+            self.service_port = m1_port != 0 ? m1_port : 9003;
+            fleet_member = std::make_unique<disco::FleetMember>(
+                self, machined_host, machined_port, member_transport);
+            logger->info("fleet member: component="
+                         + std::to_string(self.component_id) + " service_port="
+                         + std::to_string(self.service_port) + " -> machined "
+                         + machined_host + ":" + std::to_string(machined_port));
+        } else {
+            logger->warning(
+                "fleet transport open failed; running without fleet "
+                "registration");
+        }
+    }
+
     // 在线目录跨进程镜像 owner 面（G-1 收尾批增量②）：目录事件 → Delta
     // 广播 + 周期全量快照（失配 healing）。--mirror-port 0 = 关闭。
     std::string mirror_host = "127.0.0.1";
@@ -381,6 +404,12 @@ int main(int argc, char* argv[]) {
         bool was_recovering = recovery && recovery->recovering();
         while (mgr.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (fleet_member) {
+                fleet_member->tick(static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count()));
+            }
             since_snapshot += std::chrono::seconds(1);
 
             // 更新排空指令消费（§8 路1 / §9.1「停止分配新玩家」态）：信号位
@@ -507,6 +536,10 @@ int main(int argc, char* argv[]) {
                                        + " ticks)");
                 }
             }
+        }
+
+        if (fleet_member) {
+            fleet_member->stop();
         }
 
         logger->info("BaseAppMgr stopped.");

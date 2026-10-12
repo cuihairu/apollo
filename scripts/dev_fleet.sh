@@ -24,8 +24,15 @@
 #   / admin serve 9106（metrics link，P3-3）+ 9107（HTTP GET /metrics）
 #   （app 缺省端口以各自 config 为准，本脚本显式传参避免歧义）
 #
-# 边界：编队 = 生命周期半边（拉起/重启/收割）；各 app 尚未接 DiscoveryBeacon
-# （G-1 骨架期），machined 目录面看不到成员注册——P3-1 G-1 收尾批接线。
+# 边界：编队 = 生命周期半边（拉起/重启/收割）+ 成员注册半边（P3-4 收尾批）：
+# 服务五 app（login/gateway/baseappmgr/base/cell）经 FleetMember 向 machined
+# 心跳注册（--machined-port 9600 + 编队组件号），machined 目录面成员身份可见
+# （members=N 行 + member component= 明细）；logger/admin/game 不注册（辅助
+# 面与演示进程不入编队表）。
+#
+# 编队组件号（machined 保留：1=目录 2=baseappmgr；10 起分配服务 app——
+# 死亡上报与成员注册同源身份，roster 中列与 app --component-id 一致）：
+#   base=10 / cell=11 / gateway=12 / login=13
 
 set -euo pipefail
 
@@ -37,21 +44,22 @@ PIDFILE="$FLEET_DIR/machined.pid"
 LOGFILE="$FLEET_DIR/machined.log"
 MACHINED="$BUILD_DIR/apps/machined/machined"
 
-# 编队清单：name | 二进制 相对构建根 | 额外参数（dev 端口见文件头布局）
+# 编队清单：name | component_id | 命令（dev 端口见文件头布局；中列 = 编队
+# 组件号，machined 死亡上报 wire 身份——0 = 未入编队仅落日志）
 # gateway 显式补传三后端 URL（ADR-011 最小修复处方②）：config.hpp 缺省
 # BaseApp 9002（=gateway 自身端口）/ CellApp 9100 与 dev 布局错位，不传则
 # 错位缺省值直接生效。处方①（start 连接失败降级）与③（ChatApp 幽灵依赖
 # 摘除）属功能代码，不在文档/脚本批边界内，留待边界放行批。
 fleet_entries() {
     cat <<EOF
-logger    | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
-admin     | $BUILD_DIR/apps/admin/admin serve
-login     | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104 --baseappmgr-m1-port 9105
-gateway   | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105
-baseappmgr| $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003 --m1-port 9105
-base      | $BUILD_DIR/apps/base-app/base-app --port 9004 --m1-port 9104
-cell      | $BUILD_DIR/apps/cell-app/cell-app --m1-port 9101
-game      | $BUILD_DIR/apps/game-server/apollo_game_server
+logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
+admin     | 0 | $BUILD_DIR/apps/admin/admin serve
+login     | 13 | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 13
+gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 12
+baseappmgr| 2 | $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003 --m1-port 9105 --machined-port 9600
+base      | 10 | $BUILD_DIR/apps/base-app/base-app --port 9004 --m1-port 9104 --machined-port 9600 --component-id 10
+cell      | 11 | $BUILD_DIR/apps/cell-app/cell-app --m1-port 9101 --machined-port 9600 --component-id 11
+game      | 0 | $BUILD_DIR/apps/game-server/apollo_game_server
 EOF
 }
 
@@ -61,13 +69,13 @@ alive() {
 
 cmd_roster() {
     local missing=0
-    while IFS='|' read -r name cmd; do
+    while IFS='|' read -r name comp cmd; do
         local bin
         bin="$(echo "$cmd" | awk '{print $1}')"
         if [[ -x "$bin" ]]; then
-            echo "$name | $cmd"
+            echo "$name | $comp | $cmd"
         else
-            echo "# 跳过（未构建）：$name | $cmd" >&2
+            echo "# 跳过（未构建）：$name | $comp | $cmd" >&2
             missing=1
         fi
     done < <(fleet_entries)

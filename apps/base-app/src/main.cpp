@@ -224,6 +224,45 @@ int main(int argc, char* argv[]) {
                      + std::to_string(report_interval_ms) + "ms)");
     }
 
+    // 编队成员注册（P3-4 收尾批）：身份复用 --component-id/--zone-id（与
+    // 全量重报同一组件号口径）；service_port = M1 面（0 回退监听口，消费方
+    // 拨号键）。--machined-port 0 = 关。
+    std::string machined_host = "127.0.0.1";
+    uint16_t machined_port = 0;
+    for (int i = 1; i < argc; i++) {
+        const std::string arg = argv[i];
+        if (arg == "--machined-host" && i + 1 < argc) {
+            machined_host = argv[++i];
+        } else if (arg == "--machined-port" && i + 1 < argc) {
+            machined_port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        }
+    }
+    disco::UdpBeaconTransport fleet_transport;
+    std::unique_ptr<disco::FleetMember> fleet_member;
+    if (machined_port != 0) {
+        if (component_id == 0) {
+            logger->warning(
+                "machined-port set without --component-id; fleet registration "
+                "disabled");
+        } else if (fleet_transport.open()) {
+            disco::MemberId self;
+            self.component_id = component_id;
+            self.zone_id = zone_id;
+            self.service_port =
+                config.m1Port != 0 ? config.m1Port : config.port;
+            fleet_member = std::make_unique<disco::FleetMember>(
+                self, machined_host, machined_port, fleet_transport);
+            logger->info("  Fleet member: component="
+                         + std::to_string(component_id) + " service_port="
+                         + std::to_string(self.service_port) + " -> machined "
+                         + machined_host + ":" + std::to_string(machined_port));
+        } else {
+            logger->warning(
+                "fleet transport open failed; running without fleet "
+                "registration");
+        }
+    }
+
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
@@ -295,6 +334,12 @@ int main(int argc, char* argv[]) {
         std::uint8_t mirror_buf[disco::kMaxDatagramSize];
         while (server.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (fleet_member) {
+                fleet_member->tick(static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count()));
+            }
             // metrics admin 通道（检测原语接线）：锚点水位现算即弃
             apollo::core::metrics::MetricRegistry::instance()
                 .gauge("zone_anchors")
@@ -335,6 +380,10 @@ int main(int argc, char* argv[]) {
                                 + std::to_string(cur_seq)
                                 + (cur_stale ? " STALE(等待快照)" : ""));
             }
+        }
+
+        if (fleet_member) {
+            fleet_member->stop();
         }
 
         logger->info("Server stopped.");

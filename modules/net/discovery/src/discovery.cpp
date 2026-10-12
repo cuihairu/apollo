@@ -131,6 +131,42 @@ bool DiscoveryBeacon::send(Op op) {
     return transport_->send_to(directory_host_, directory_port_, buf);
 }
 
+// ---- FleetMember ----
+
+FleetMember::FleetMember(MemberId self, std::string directory_host,
+                         std::uint16_t directory_port,
+                         BeaconTransport& transport,
+                         std::uint32_t interval_ms)
+    : beacon_(self, std::move(directory_host), directory_port, transport,
+              interval_ms)
+    , directory_port_(directory_port)
+    , interval_ms_(interval_ms) {
+}
+
+void FleetMember::tick(std::uint64_t now_ms) {
+    if (stopped_ || !beacon_.self().is_valid() || directory_port_ == 0) {
+        return;
+    }
+    if (sent_once_ && now_ms - last_sent_ms_ < interval_ms_) {
+        return;
+    }
+    if (beacon_.beat()) {
+        sent_once_ = true;
+        on_wire_ = true;
+        last_sent_ms_ = now_ms;
+    }
+}
+
+void FleetMember::stop() {
+    if (stopped_ || !sent_once_) {
+        return;
+    }
+    if (beacon_.deregister()) {
+        on_wire_ = false;
+        stopped_ = true;
+    }
+}
+
 // ---- DiscoveryRegistry ----
 
 DiscoveryRegistry::DiscoveryRegistry(std::uint32_t heartbeat_interval_ms)

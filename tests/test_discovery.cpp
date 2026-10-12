@@ -16,7 +16,9 @@
 //   9. 死亡面（G-1 收尾批增量①）：DeathSubscribe/DeathNotify wire 往返 +
 //      成员面隔离、DeathNotifier 订阅表（注册/刷新/过期/通知广播）、
 //      DeathListener 订阅发包、death_event_from 解码守卫、订阅→通知
-//      loopback 全链。
+//      loopback 全链；
+//  10. 编队成员驱动（P3-4 收尾批）：FleetMember 首拍心跳即注册/interval 节流/
+//      stop 幂等注销/身份与端口守卫、loopback 全链。
 
 #include "apollo/net/discovery/directory_locator.hpp"
 #include "apollo/net/discovery/discovery.hpp"
@@ -789,6 +791,102 @@ bool test_udp_death_loopback() {
     return true;
 }
 
+// ---- P3-4 收尾批：编队成员驱动（应用壳注册缝）----
+
+// 应用壳驱动契约：首拍即心跳（Heartbeat 对未注册组件=注册，目录侧语义）、
+// 按 interval 节流、stop 优雅注销幂等、身份非法或目录端口零全静默。
+bool test_fleet_member_driver_lifecycle() {
+    CapturingTransport transport;
+
+    // 身份非法：tick/stop 全静默，不上 wire 垃圾
+    {
+        FleetMember bad(MemberId{}, "127.0.0.1", 9600, transport, 1000);
+        bad.tick(0);
+        bad.tick(5000);
+        bad.stop();
+        TEST_ASSERT(transport.send_count == 0, "零组件号身份全静默");
+        TEST_ASSERT(!bad.registered(), "未注册语义");
+    }
+
+    // 目录端口零（单机跑，编队关）：同全静默
+    {
+        FleetMember off(make_member(42, 9004), "127.0.0.1", 0, transport, 1000);
+        off.tick(0);
+        off.stop();
+        TEST_ASSERT(transport.send_count == 0, "端口零全静默");
+    }
+
+    // 正常生命周期：首拍心跳即注册 → interval 内节流 → 到拍再发 → stop 注销
+    {
+        FleetMember m(make_member(42, 9004), "127.0.0.1", 9600, transport, 1000);
+        TEST_ASSERT(!m.registered(), "构造后未上 wire");
+
+        // 桩存 vector，decode_from 收定长数组——拷栈解
+        auto last_op = [&](WirePacket& p) {
+            std::uint8_t raw[kWireSize];
+            std::memcpy(raw, transport.last_packet.data(), kWireSize);
+            return WirePacket::decode_from(raw, p);
+        };
+
+        m.tick(100);
+        TEST_ASSERT(transport.send_count == 1 && m.registered(), "首拍立发");
+        WirePacket p;
+        TEST_ASSERT(last_op(p) && p.op == Op::Heartbeat &&
+                        p.component_id == 42 && p.service_port == 9004,
+                    "首包=心跳（未注册视作注册）且身份随包");
+
+        m.tick(600);
+        TEST_ASSERT(transport.send_count == 1, "interval 内节流不发");
+
+        m.tick(1100);
+        TEST_ASSERT(transport.send_count == 2, "到拍再发");
+        TEST_ASSERT(last_op(p) && p.op == Op::Heartbeat, "后续包仍为心跳");
+
+        m.stop();
+        TEST_ASSERT(transport.send_count == 3 && !m.registered(), "stop 注销一次");
+        TEST_ASSERT(last_op(p) && p.op == Op::Deregister, "注销包上 wire");
+
+        m.stop();
+        m.tick(5000);
+        TEST_ASSERT(transport.send_count == 3, "stop 后终态：注销幂等、tick 不复活");
+    }
+    return true;
+}
+
+// loopback 全链：FleetMember 经真 UDP → Feed → Registry，心跳注册、刷新、
+// 优雅下线无死亡事件——应用壳将走的同一条路径。
+bool test_fleet_member_loopback() {
+    UdpFeed feed;
+    TEST_ASSERT(feed.open(0, "127.0.0.1"), "目录端 bind");
+
+    UdpBeaconTransport transport;
+    TEST_ASSERT(transport.open(), "信标端 open");
+    FleetMember m(make_member(43, 9101), "127.0.0.1", feed.port(), transport, 1000);
+
+    std::uint8_t buf[kWireSize];
+    DiscoveryRegistry reg(1000);
+
+    m.tick(100);
+    TEST_ASSERT(poll_receive(feed, buf), "loopback 收到首拍心跳");
+    TEST_ASSERT(reg.on_packet(buf, 100), "喂 Registry");
+    TEST_ASSERT(reg.member_count() == 1 &&
+                    reg.members()[0].member.component_id == 43 &&
+                    reg.members()[0].member.service_port == 9101,
+                "心跳包完成注册（成员身份还原）");
+
+    m.tick(1100);
+    TEST_ASSERT(poll_receive(feed, buf), "收到刷新心跳");
+    TEST_ASSERT(reg.on_packet(buf, 1100), "心跳喂 Registry");
+    TEST_ASSERT(reg.members()[0].last_seen_ms == 1100, "last_seen 刷新");
+
+    m.stop();
+    TEST_ASSERT(poll_receive(feed, buf), "收到注销包");
+    TEST_ASSERT(reg.on_packet(buf, 1200), "注销喂 Registry");
+    TEST_ASSERT(reg.member_count() == 0 && reg.drain_deaths().empty(),
+                "优雅下线且无死亡事件");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -819,6 +917,8 @@ int main() {
         {"death_listener_subscribe_wire", test_death_listener_subscribe_wire},
         {"death_event_decode_guards", test_death_event_decode_guards},
         {"udp_death_loopback", test_udp_death_loopback},
+        {"fleet_member_driver_lifecycle", test_fleet_member_driver_lifecycle},
+        {"fleet_member_loopback", test_fleet_member_loopback},
     };
 
     for (const auto& c : cases) {
