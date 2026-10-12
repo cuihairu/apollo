@@ -56,10 +56,16 @@ apollo::core::log::Logger& m1log() {
     return *apollo::core::log::global_log_manager().createLogger("gateway_m1_egress");
 }
 
-// 头部采样器（logging.md §5.1：入口进程裁决一次，下游不重采；rate =
-// APOLLO_TRACE_SAMPLE_RATE dev 覆写，缺省 1/10⁴ 常量口径）
+// 头部采样器（logging.md §5.1：入口进程裁决一次，下游不重采）。装配
+// 优先级：configure 期 -DAPOLLO_TRACE_SAMPLE_RATE=<N>（生产配置常量，
+// 编译期定死压过 env）> APOLLO_TRACE_SAMPLE_RATE env（dev 覆写）>
+// 缺省 1/10⁴ 常量
 trace::HeadSampler& head_sampler() {
+#if defined(APOLLO_TRACE_SAMPLE_RATE_CONST)
+    static trace::HeadSampler sampler{APOLLO_TRACE_SAMPLE_RATE_CONST};
+#else
     static trace::HeadSampler sampler{trace::sample_rate_from_env()};
+#endif
     return sampler;
 }
 
