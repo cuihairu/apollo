@@ -180,6 +180,7 @@ ghost 服务于**无缝世界**：邻进程双向投影、双写、调用转发�
 | 专有词 | 链路 RPC | LinkRpc（模块 modules/net/linkrpc/） | modules/net/linkrpc/ | BW = Mailbox（异步单向）；KBE = EntityCall | 现用 | linkrpc 底座批 |
 | 专有词 | 日志推 | LogPushClient | modules/net/logpush/include/apollo/net/logpush/log_push_client.hpp | 两家均无 | 现用 | L4 批（6dd9445f；d8499672 收口，2026-10-12） |
 | 专有词 | 指标推 | MetricsPushClient | modules/net/metricspush/include/apollo/net/metricspush/metrics_push_client.hpp | 两家均无 | 现用 | metrics 批（9af1a9a2，2026-10-12） |
+| 专有词 | trace 子集 | apollo::net::trace（模块 modules/net/linktrace/：TraceContext/HeadSampler/SpanRecord；契约载体 932 internal_envelope） | modules/net/linktrace/include/apollo/net/linktrace/ | 两家均无（W3C traceparent 语义借模型不引 SDK——span 结构化行进日志流，不引 OTLP exporter） | 现用 | P3-3 语义层批 L6（cef1b87e→4aade72b，2026-10-12） |
 | 专有词 | 发现 | apollo::net::discovery | modules/net/discovery/include/apollo/net/discovery/discovery.hpp | BW = bwmachined 生死广播；KBE = machine UDP 探测 | 现用 | G-1 双层（2026-09-30 裁决 2） |
 | 专有词 | 指标注册 | MetricRegistry | modules/core/metrics/metric_registry.h | 两家均无 | 现用 | P3-3 批 B（G-5 检测原语） |
 | 专有词 | 定时器轮 | TimerWheel | modules/base/include/apollo/base/timer_wheel.hpp | 两家均无 | 现用 | G-4 批（ed19a6eb，2026-10-08） |
