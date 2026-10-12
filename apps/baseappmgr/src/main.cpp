@@ -30,6 +30,16 @@ namespace session = apollo::game::session;
 // 全局服务器指针
 static BaseAppMgr* g_mgr = nullptr;
 
+// 更新排空指令位（backup-revive §8 路1 / §9.1 manager 行「停止分配新玩家」；
+// 骨架驱动面 = SIGUSR1 开 / SIGUSR2 关——真实控制 wire 触发面挂后续批，
+// --demo-anchors/--crash-test 同款先例）。信号上下文只置 sig_atomic_t 位，
+// 主循环秒拍消费（logger 面带锁，信号路径不进）。
+volatile std::sig_atomic_t g_drain_cmd = 0;  // 0 无 / 1 开排空 / -1 关排空
+
+void drainSignalHandler(int signal) {
+    g_drain_cmd = (signal == SIGUSR1) ? 1 : -1;
+}
+
 // 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
     if (g_mgr) {
@@ -84,6 +94,7 @@ uint16_t loadPort(int argc, char* argv[]) {
                       << "  --recovery-timeout-ms <ms> Recovery phase timeout window (default: 5000)\n"
                       << "  --suspend-window-ticks <n> Suspend window ticks for death-row disposition, tick = 1s loop beat (default: 30)\n"
                       << "  --gateway-component <cid:gid> Death component -> gateway id mapping, repeatable (gateway-row disposition)\n"
+                      << "  (SIGUSR1 opens the update drain gate, SIGUSR2 closes it; POSIX only)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -285,6 +296,12 @@ int main(int argc, char* argv[]) {
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
+#if !defined(_WIN32)
+    // 更新排空驱动面（SIGUSR1 开 / SIGUSR2 关；POSIX only——Windows 无
+    // 此二信号语义，排空闸留库面 set_drain 给测试与后续控制 wire 批）
+    std::signal(SIGUSR1, drainSignalHandler);
+    std::signal(SIGUSR2, drainSignalHandler);
+#endif
 
     try {
         BaseAppMgr mgr(port);
@@ -348,10 +365,27 @@ int main(int argc, char* argv[]) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             since_snapshot += std::chrono::seconds(1);
 
+            // 更新排空指令消费（§8 路1 / §9.1「停止分配新玩家」态）：信号位
+            // → 闸门置位/复位 + 日志留证（演练断言面）。置位期新落点/新会话
+            // 拒收（assignWorld/bindSession 共闸），查询/镜像/死亡处置照常。
+            if (g_drain_cmd != 0) {
+                const bool on = g_drain_cmd > 0;
+                g_drain_cmd = 0;
+                if (mgr.drain_active() != on) {
+                    mgr.set_drain(on);
+                    logger->warning(on ? "update drain ON: new assignments suspended"
+                                         " (route-1 update window)"
+                                       : "update drain OFF: assignments restored");
+                }
+            }
+
             // metrics admin 通道（检测原语接线）：目录条目水位现算即弃
             apollo::core::metrics::MetricRegistry::instance()
                 .gauge("manager_directory_entries")
                 .store(static_cast<std::int64_t>(mgr.directory().size()));
+            apollo::core::metrics::MetricRegistry::instance()
+                .gauge("manager_drain_active")
+                .store(mgr.drain_active() ? 1 : 0);
 
             // 恢复相位轮询（增量③）：收 FullReport 分片 + 喂钟收敛判定
             if (recovery) {

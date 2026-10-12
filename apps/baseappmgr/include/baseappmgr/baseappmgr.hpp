@@ -73,6 +73,15 @@ public:
     // 未设置恒放行。
     void set_admission_gate(std::function<bool()> gate);
 
+    // 更新排空闸（backup-revive §8 路1 缺口接线 / §9.1 manager 行「停止
+    // 分配新玩家」态）：置位期 bindSession/assignWorld 拒新——落点不再指
+    // 向进更新窗的编队（骨架编队单 zone，全局闸 = per-zone 闸）。与恢复
+    // 相位拒新共用闸门语义（§9.6 准入闸行），排空不挡查询/对账/镜像。
+    void set_drain(bool on);
+    [[nodiscard]] bool drain_active() const noexcept {
+        return drain_.load(std::memory_order_acquire);
+    }
+
     // 全量重报 intake 透传（P3-1 增量③：恢复相位各 Zone/gateway 全量重报
     // → PlayerDirectory::intake_full_report，restore-not-kick 语义）
     std::size_t intake_directory_full_report(
@@ -132,6 +141,7 @@ private:
     apollo::game::session::PlayerDirectory directory_;
     apollo::game::session::PlayerDirectory::EventSink directory_listener_;
     std::function<bool()> admission_gate_;
+    std::atomic<bool> drain_{false};  // 更新排空闸（§8 路1；主循环置位）
 };
 
 } // namespace baseappmgr

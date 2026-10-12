@@ -38,6 +38,10 @@ void BaseAppMgr::set_admission_gate(std::function<bool()> gate) {
     admission_gate_ = std::move(gate);
 }
 
+void BaseAppMgr::set_drain(bool on) {
+    drain_.store(on, std::memory_order_release);
+}
+
 std::size_t BaseAppMgr::intake_directory_full_report(
     const std::vector<apollo::game::session::MirrorEntry>& sessions) {
     return directory_.intake_full_report(sessions);
@@ -70,7 +74,11 @@ bool BaseAppMgr::assignWorld(
     if (playerId == 0) {
         return false;
     }
-    // 恢复相位排他（P3-1 增量③）：闸门关闭期拒新落点
+    // 恢复相位排他（P3-1 增量③）与更新排空（backup-revive §8 路1 缺口）
+    // 共闸：任一闭合期拒新落点——落点不再指给更新窗内的编队进程
+    if (drain_.load(std::memory_order_acquire)) {
+        return false;
+    }
     if (admission_gate_ && !admission_gate_()) {
         return false;
     }
@@ -94,7 +102,10 @@ bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::Ses
     if (playerId == 0 || binding.session_id == 0) {
         return false;
     }
-    // 恢复相位排他（P3-1 增量③）：闸门关闭期拒新会话锚点
+    // 恢复相位排他（P3-1 增量③）与更新排空（§8 路1 缺口）共闸
+    if (drain_.load(std::memory_order_acquire)) {
+        return false;
+    }
     if (admission_gate_ && !admission_gate_()) {
         return false;
     }

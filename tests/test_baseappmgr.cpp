@@ -105,6 +105,46 @@ bool test_baseappmgr_admission_gate() {
     return true;
 }
 
+// 更新排空闸（backup-revive §8 路1 缺口接线：排空指令 → WorldAssignment/
+// 落点指派跳过更新窗内的进程）：drain 置位期 bindSession/assignWorld 拒新，
+// 关闭后恢复；与恢复相位准入闸共用闸门语义（§9.6），排空不挡查询。
+bool test_baseappmgr_update_drain() {
+    std::cout << "Running: test_baseappmgr_update_drain..." << std::endl;
+
+    baseappmgr::BaseAppMgr mgr(0);
+
+    apollo::game::session::SessionBinding binding;
+    binding.session_id = 9201;
+    binding.gateway_id = 7;
+    apollo::game::session::WorldAssignment assignment;
+    assignment.world_id = 3;
+
+    // 排空前：恒放行
+    TEST_ASSERT(!mgr.drain_active(), "drain flag starts off");
+    TEST_ASSERT(mgr.bindSession(3001, binding), "before drain: bind admitted");
+    TEST_ASSERT(mgr.assignWorld(3001, assignment), "before drain: assign admitted");
+
+    // 排空置位：拒新落点/新绑定（更新窗内编队不接新玩家）
+    mgr.set_drain(true);
+    TEST_ASSERT(mgr.drain_active(), "drain flag on");
+    binding.session_id = 9202;
+    TEST_ASSERT(!mgr.bindSession(3002, binding), "drain on: bind rejected");
+    TEST_ASSERT(!mgr.assignWorld(3002, assignment), "drain on: assign rejected");
+    TEST_ASSERT(!mgr.findPlayerBySession(9202).has_value(),
+                "rejected bind left no locator entry");
+
+    // 排空关闭：恢复放行（已有条目不受排空影响）
+    mgr.set_drain(false);
+    TEST_ASSERT(!mgr.drain_active(), "drain flag off");
+    TEST_ASSERT(mgr.bindSession(3002, binding), "drain off: bind admitted");
+    TEST_ASSERT(mgr.assignWorld(3002, assignment), "drain off: assign admitted");
+    TEST_ASSERT(mgr.findPlayerBySession(9201).has_value(),
+                "existing session survives drain window");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // §6 死亡行窗口处置透传（G-1 收尾批遗留项）：进程壳 → 目录批量反查 +
 // 窗口满扫描。供数走 intake（restore-not-kick 面，增量③）。
 bool test_baseappmgr_window_disposition_passthrough() {
@@ -178,6 +218,7 @@ int main() {
 
     run(test_baseappmgr_directory_and_route);
     run(test_baseappmgr_admission_gate);
+    run(test_baseappmgr_update_drain);
     run(test_baseappmgr_window_disposition_passthrough);
 
     std::cout << "\n=== Summary ===" << std::endl;
