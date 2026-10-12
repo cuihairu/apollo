@@ -353,7 +353,7 @@ public:
                 curl_easy_setopt(curl_, CURLOPT_POSTFIELDS, requestBody.c_str());
                 curl_easy_setopt(curl_, CURLOPT_POSTFIELDSIZE, requestBody.size());
                 break;
-            case HttpMethod::DELETE:
+            case HttpMethod::DEL:
                 curl_easy_setopt(curl_, CURLOPT_CUSTOMREQUEST, "DELETE");
                 if (!requestBody.empty()) {
                     curl_easy_setopt(curl_, CURLOPT_POSTFIELDS, requestBody.c_str());
@@ -567,13 +567,13 @@ HttpResponse RestTemplate::put(const std::string& url, const HttpEntity& entity)
 }
 
 HttpResponse RestTemplate::delete_(const std::string& url) {
-    return impl_->request(HttpMethod::DELETE, url, nullptr, nullptr);
+    return impl_->request(HttpMethod::DEL, url, nullptr, nullptr);
 }
 
 HttpResponse RestTemplate::delete_(const std::string& url, const std::string& body) {
     HttpEntity entity;
     entity.body = body;
-    return impl_->request(HttpMethod::DELETE, url, &entity, nullptr);
+    return impl_->request(HttpMethod::DEL, url, &entity, nullptr);
 }
 
 HttpResponse RestTemplate::patch(const std::string& url, const std::string& body) {

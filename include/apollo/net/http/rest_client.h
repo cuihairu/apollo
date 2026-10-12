@@ -27,18 +27,14 @@ namespace http {
 // HTTP 方法枚举
 //==============================================================================
 
-// Windows SDK（winnt.h，经 winsock2.h 链）把 DELETE 定义为访问权限宏
-// (0x00010000L)，会改写本枚举成员名。仓库内无代码依赖该宏，定义点前就地
-// 移除；枚举成员名在声明处固化，之后再包含 windows.h 不受影响。
-#if defined(DELETE)
-#undef DELETE
-#endif
-
+// DELETE 成员不带 winnt.h 的 DELETE 宏名（Windows 经 winsock2.h 链定义
+// (0x00010000L)，预处理期会改写同名源码文本——含 windows.h 的任何包含
+// 顺序都炸）；wire 语义由 toString 保持 "DELETE" 字面。
 enum class HttpMethod {
     GET,
     POST,
     PUT,
-    DELETE,
+    DEL,
     PATCH,
     HEAD,
     OPTIONS
@@ -49,7 +45,7 @@ inline const char* toString(HttpMethod method) {
         case HttpMethod::GET: return "GET";
         case HttpMethod::POST: return "POST";
         case HttpMethod::PUT: return "PUT";
-        case HttpMethod::DELETE: return "DELETE";
+        case HttpMethod::DEL: return "DELETE";
         case HttpMethod::PATCH: return "PATCH";
         case HttpMethod::HEAD: return "HEAD";
         case HttpMethod::OPTIONS: return "OPTIONS";
