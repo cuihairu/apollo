@@ -295,6 +295,16 @@
     <field name="line" type="string" desc="结构化行原文（六键 logfmt，structured.h 契约）"/>
   </msg>
 
+  <!-- Metrics push 族（P3-3 批：metrics admin 通道——各进程 MetricRegistry 快照
+       →admin exporter 单向推送。与 logger 面分工：日志=事件流 kReliable 补投恰
+       一次；指标=采样流 kDroppable 无队列（快照整体自含，背压/断连丢本拍，下拍
+       新快照自然追赶，最新者胜）。body 为已渲染的 Prometheus exposition 文本
+       （源端渲染即嵌 proc 标签，exporter 零解析直拼接）。 -->
+  <msg id="931" name="metrics_snapshot" dir="P2P" channel="events" domain="internal" desc="指标快照推送（各进程→admin exporter；body 为已渲染 exposition 文本，嵌 proc 标签）">
+    <field name="proc" type="string" desc="进程标识（source 进程 processIdentity 串）"/>
+    <field name="body" type="string" desc="Prometheus exposition 文本（已嵌 proc 标签，exporter 直拼接）"/>
+  </msg>
+
   <!-- Link RPC 族（P4-4 批⓪：nng 迁移关联原语——linkrpc 层只做请求/响应
        关联与等待，载荷不透明：body = MessageCodec 全帧字节（header+body），
        业务语义仍归各进程 handler。可靠语义 kReliable（重连补投 + seq 去重）；
