@@ -243,6 +243,8 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 | filter 双族 | §5.5 FrameFilter | 照旧 |
 | 服务器代码全员直用 Mercury | 上层与框架共用 InterServerLink | 本节定型点 |
 
+> 2026-10-12（P4-4 批⓪）：**linkrpc 关联原语已交付**（modules/net/linkrpc，契约 940/941）——请求/响应关联 + 同步等待桥，载荷不透明（body = MessageCodec 全帧，业务语义归各进程 handler）。RPC 归宿按本节「不开放」行收口：上层自定义消息不走字符串协议，关联信封（corr_id + bytes）是唯一 M1 RPC 面；五处 nng 消费面（摸底批 P4-4）以此迁装，首例 gateway 准入已换装（login `--m1-port` / gateway `--login-m1-port`）。线程纪律：分发回调在宿主泵线程，同步等待禁泵线程自等自达——自带泵线程的缝（准入服务 / 后续 login↔base、manager 控制面同型）照此。
+
 ### 5.8 L0 传输模型：就绪（reactor）与完成（proactor）两族——接口与运行模式（2026-09-29 补）
 
 §3 分层图的 L0 行列了 epoll/io_uring/IOCP 槽位、§15.2 定 B 栈为唯一底座并写明演进路径——但「两族模型在**接口形状与运行模式**上差在哪、L0 接口如何同时承载两族」此前零分析（本节补）。不定形这层，将来换后端就是重写：IOCP 已成熟、io_uring 是 Linux 新方向，设计期必须把接口缝留对。

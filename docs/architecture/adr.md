@@ -160,6 +160,8 @@ tag:
 
 **实施状态增补（2026-10-11，net M1 内核批）**：§5.6 M1 最小正确内核落地——modules/net/link 自持组件五件（帧定界 / contract_route 按 id 分发 / 背压水位 / InterServerLink / TCP 底座+连接器+管理器），LinkTests 33 用例 ON/OFF 双树全绿；正确性优先不设性能指标。决策 3 的 M1 阶梯内核行兑现；gateway ingress 接线仍归 P3-2（内核组件 ≠ ingress 接线）；nng 底座替换迁移挂上层接线批（P4-4 批记同步）。
 
+**实施状态增补（2026-10-12，nng 迁移批⓪+①）**：五处 nng 消费面迁移动工——批⓪ linkrpc 关联原语（契约 940/941 关联信封 + corr_id 关联 + call_async/poll/wait 双态等待桥，载荷不透明 = MessageCodec 全帧，业务语义归各进程 handler；modules/net/rpc 为 legacy 旧栈不可用，新面归 modules/net/linkrpc）+ 批① gateway 准入换装 M1（login `--m1-port` 被动受理面 + gateway `--login-m1-port` 链路准入服务，双端自带泵线程——准入同步等待语义与宿主泵互斥；降级口径与桩时代同缝：传输不可达不放大成拒绝，仅 login success=false 才拒）。5ae86969 + ef69fccc；编队活体实证 9103 ESTAB（详 P4-4 批记）。准入服务同步签名不变——P3-2 ingress 主线接线时调用面零改动。
+
 ---
 
 ## ADR-012 Instance Offload: On-Demand Spawn, Stub-First, Crash-Invalidates（实例 offload 三拍板）
