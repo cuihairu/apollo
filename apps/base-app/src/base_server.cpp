@@ -568,6 +568,10 @@ bool BaseServer::freezePlayer(PlayerID playerId) {
     if (!anchor) {
         return false;
     }
+    // 只读态前置（§9.2 ①）：先 Transferring 再排段——autoSave 见只读态
+    // 即跳过（flushDirtyAnchors 守卫），排段期间无并发写；在途 SaveTask
+    // 的 finalize 不得覆盖只读态（finalizeSave 守卫）。
+    anchor->set_state(apollo::game::session::AnchorState::Transferring);
     // journal 段排平（write-ahead 已入段 → 同步直写追平档案：低频迁移面
     // ms 级；保存队列路径照旧服务自动保存——此后此玩家只读，无双写）
     if (anchor->needs_save()) {
@@ -578,7 +582,6 @@ bool BaseServer::freezePlayer(PlayerID playerId) {
             anchor->clear_dirty();
         }
     }
-    anchor->set_state(apollo::game::session::AnchorState::Transferring);
     blog().info("Player " + std::to_string(playerId) + " frozen for migration");
     return true;
 }
@@ -630,6 +633,7 @@ bool BaseServer::adoptPlayer(PlayerID playerId, const std::string& profileJson,
     binding.gateway_id = gatewayId;
     anchor->bind_session(binding);
     anchor->set_home_zone_id(homeZoneId);
+    anchor->clear_dirty();  // 档案已直写落盘——不脏（autoSave 不再碰）
     anchor->set_state(apollo::game::session::AnchorState::Online);
     blog().info("Player " + std::to_string(playerId)
                 + " adopted with write authority");
@@ -762,6 +766,19 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::activatePlayerA
 void BaseServer::finalizeSave(PlayerID playerId, bool success) {
     auto anchor = anchorManager_->find(playerId);
     if (!anchor) {
+        return;
+    }
+
+    // 态守卫（P0-2 路 2 ①）：SaveTask 在途期间锚可能已被迁移停写置
+    // Transferring（freeze 与 autoSave 的竞态窗口）——finalize 不得覆盖
+    // 只读态（推回 Online = 双写不变量破口）。仅 Saving 态回写结果态；
+    // 其它态只清/标脏，态留给持有者。
+    if (anchor->state() != apollo::game::session::AnchorState::Saving) {
+        if (success) {
+            anchor->clear_dirty();
+        } else {
+            anchor->mark_dirty("save_failed");
+        }
         return;
     }
 
