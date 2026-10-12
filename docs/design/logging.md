@@ -101,7 +101,7 @@ logger 线程（1 个）：批量出环 → 格式化 → 本地文件；（P3�
 > 2026-10-12：**L4 已交付**（push 通道 + 断连降级全形态；批记见 [logger-app](./logger-app.md) §6 / todo P3-3）——发端 LogPushClient[有界队列 4096 顶格丢新、kReliable 重连恰一次补投、停排留队] × 收端 logger serve[passive fan-out 收 930、原行归档逐行冲刷] × 接线 APOLLO_LOG_PUSH_ADDR[未设=关，v1 语义不变]。§5 三禁全守：单向无回执、收集不构成运行依赖、本地文件恒真相源；编队活体演练（SIGKILL collector+gateway → machined 重生 → 补投全到档）落地实证。
 
 - **形态**：独立收集进程（apps/logger），各进程 logger 线程双出口——本地文件（真相源）+ push collector（经 net-abstraction §5.7 InterServerLink——对上层开放的进程间稳定连接设施；BW logger_endpoint / KBE logger 组件 / skynet logger 服务同型）。**不占游戏会话四通道**（net-abstraction §4.1 的 movement/attributes/events/control 是客户端会话面；InterServerLink 是进程间域，天然分离）。
-- **collector 职责**：汇聚归档、按进程/级别/时间检索、磁盘滚动；BI 分流在 collector 侧接（attribute-sync §8.2 的 BI 旁路——业务进程不必同时喂两套出口，脚本错误审计 scripting-lua §6 与运行日志在此汇合）。
+- **collector 职责**：汇聚归档、按进程/级别/时间检索、磁盘滚动；BI 分流在 collector 侧接（attribute-sync §8.2 的 BI 旁路——业务进程不必同时喂两套出口，脚本错误审计 scripting-lua §6 与运行日志在此汇合）。**落地（2026-10-13，BI 分流 tap）**：收集阶段旁路采样导出——cat 白名单 + 确定性采样（每 N 条命中保 1）+ 行原文透传（BI 消费面自解析结构化行，采集器不做 TLog 字段翻译——翻译面随 TLog 事件族落地批）；env 装配 `APOLLO_LOGGER_BI_DIR`（未设=分流关）/`_BI_CATS`/`_BI_SAMPLE_RATE`；单文件 `<dir>/bi.log` 追加（外挂 tail 上送，Kafka 在采集器之后）；失败语义=预算外旁路（open 失败分流关不拦起机、写失败计数后永久关，归档主路不受影响）。
 - **失败语义**：collector 挂 → 各进程只写本地（断连检测 + 缓冲上限 + 重连），零业务影响、零进程退出——**收集永远不构成进程的运行依赖**。
 - **每进程文件布局**：`log/<app>-<instance>.log`（主日志）+ `log/crash-<pid>-<time>.log`（崩溃摘要）+ core 分区目录；实例号区分同机多进程（用户要求：每个进程有自己的日志）。**落地偏差记（2026-10-10，L1+L2）**：实际布局走 FileAppender 自有 scheme `log/<proc>_<日期>[_<序号>].log`（baseName=processIdentity、ByDate 滚动 + 重启序号续接、maxFiles 清理）——与设计口径 `<app>-<instance>.log` 的差异 = 分隔符与实例号形式（序号续接 vs 实例号声明）；单一职责归 FileAppender（logger-app.md 拍板点 4），布局语义等价（每进程每机独立文件集），口径不改设计件、以本注记对齐现实。crash 摘要走 crashdumps/ 目录（crash-capture 批②），非本布局面。
 
@@ -152,7 +152,7 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 ## 7. 分期
 
 - **P1（单进程就该有）**：四套收敛为 modules/core/log 一套（含 C-26 处置）→ 分级缓冲 + ERROR 旁路 + FATAL 同步落盘 → crash handler 四件套 + RLIMIT_CORE/core_pattern 运维配置 + CI 崩溃测试。验收：`raise(SIGSEGV)` 的测试进程留下「崩溃摘要文件 + core + 主日志最后一条 FATAL」三件全。
-- **P3（fleet）**：apps/logger collector + push 通道 + 断连降级 + BI 分流接线 + core 上传归档（与 G-1 machined 死亡上报同批）+ 告警 notifier（§5.2 层 B：规则表 + 四家 webhook 模板，随 exporter 同批）。
+- **P3（fleet）**：apps/logger collector + push 通道 + 断连降级 + BI 分流接线（**已落地（2026-10-13，BI 分流 tap，见 §5 collector 职责落地注记）**）+ core 上传归档（与 G-1 machined 死亡上报同批，未落地）+ 告警 notifier（§5.2 层 B：规则表 + 四家 webhook 模板，随 exporter 同批；**已落地（webhook 四家 2026-10-12 3fe6d499、proc 存活内置规则 2026-10-13，均见 §5.2 注记）**）。
 
 ## 8. 与其余设计的交集
 
