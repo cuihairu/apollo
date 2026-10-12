@@ -5,6 +5,7 @@
 #include "apollo/net/link/route_table.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
+#include "logger/bi_tap.hpp"
 #include "logger/structured_line.hpp"
 
 #include <atomic>
@@ -111,6 +112,16 @@ int run_serve(const ServeOptions& options) {
         return 1;
     }
 
+    // BI 分流 tap（logging.md §5 collector 职责——attribute-sync §8.2 的
+    // BI 旁路）：env 装配（缺省关）；预算外旁路——open 失败降级警告不拦
+    // 起机，写失败 tap 自关计数，归档主路不受影响。
+    apollo::logger::BiTapConfig bi_config = apollo::logger::bi_tap_config_from_env();
+    apollo::logger::BiTap bi_tap(bi_config);
+    if (!bi_config.dir.empty() && !bi_tap.open()) {
+        std::cerr << "logger serve: BI tap disabled (cannot open "
+                  << bi_config.dir << "/bi.log)" << std::endl;
+    }
+
     // 受理装配随 peer 上线（fan-out 面）；handler 只挂 930——行原文归档
     //（保真同 follow 透传），解析仅为记账（skipped = 非结构化行）。
     std::atomic<std::uint64_t> received{0};
@@ -133,7 +144,9 @@ int run_serve(const ServeOptions& options) {
                                    }
                                    const std::string line = std::move(fields[0].text);
                                    StructuredLine record;
-                                   if (!parse_structured_line(line, &record)) {
+                                   const bool structured =
+                                       parse_structured_line(line, &record);
+                                   if (!structured) {
                                        ++skipped;
                                    }
                                    // 逐行冲刷：采集面 durability 优先（编队日志速率
@@ -141,6 +154,11 @@ int run_serve(const ServeOptions& options) {
                                    // 即时可见（§5 本地文件真相源同口径）。
                                    archive << line << '\n';
                                    archive.flush();
+                                   if (structured) {
+                                       // BI 旁路在归档主路之后（预算外：
+                                       // 分流面任何状态不影响归档）
+                                       bi_tap.observe(line, record.cat);
+                                   }
                                    ++received;
                                });
     });
@@ -157,7 +175,10 @@ int run_serve(const ServeOptions& options) {
     archive.flush();
 
     std::cerr << "serve: received=" << received.load() << " rejected=" << rejected.load()
-              << " skipped=" << skipped.load() << std::endl;
+              << " skipped=" << skipped.load()
+              << " bi_exported=" << bi_tap.exported()
+              << " bi_sampled_out=" << bi_tap.sampled_out()
+              << " bi_failed=" << bi_tap.failed() << std::endl;
     return 0;
 }
 

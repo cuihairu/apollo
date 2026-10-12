@@ -1374,6 +1374,7 @@ endif()
 # （apollo::core + apollo::runtime 恒在，同 machined/supervisor_tests）。
 add_executable(logger_tests
     test_logger_retrieval.cpp
+    ../apps/logger/src/bi_tap.cpp
     ../apps/logger/src/logger_app.cpp
     ../apps/logger/src/logger_serve.cpp
     ../apps/logger/src/structured_line.cpp
@@ -1470,6 +1471,24 @@ if(MSVC)
     target_compile_options(alert_notifier_tests PRIVATE /utf-8)
 endif()
 add_test(NAME AlertNotifierTests COMMAND alert_notifier_tests)
+
+# BI 分流 tap 测试（P3-3 余项批：cat 白名单/确定性采样/原文透传/
+# 失败语义/解析面）——纯逻辑面，Windows 同跑
+add_executable(bi_tap_tests
+    test_bi_tap.cpp
+    ../apps/logger/src/bi_tap.cpp
+)
+target_include_directories(bi_tap_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/logger/include
+)
+target_link_libraries(bi_tap_tests PRIVATE apollo::core)
+if(WIN32)
+    target_link_libraries(bi_tap_tests PRIVATE ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(bi_tap_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BiTapTests COMMAND bi_tap_tests)
 
 # Link RPC 关联原语测试（P4-4 批⓪：关联信封 round-trip / 并发不串号 /
 # 超时摘表迟到弃 / 断连即败 / 坏信封拒收计数）

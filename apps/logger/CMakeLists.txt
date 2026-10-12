@@ -8,6 +8,7 @@ cmake_minimum_required(VERSION 3.20)
 add_executable(logger
     src/main.cpp
     src/logger_app.cpp
+    src/bi_tap.cpp
     src/logger_serve.cpp
     src/structured_line.cpp
 )
