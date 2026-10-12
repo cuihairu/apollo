@@ -8,14 +8,13 @@
 
 **apollo 留独立 gateway-app。** 后端互联不学 Pomelo/Pitaya 的消息中间件全 RPC（nats），照既定口径自行开发进程间总线（architecture-review §15.2「禁第二套 IPC」+ 2026-09-30 用户裁决不引 etcd/consul，net-abstraction §7 G-1 已落档）。
 
-留的四条理由（§1 逐条展开）：
+留的理由（收益口径 2026-10-12 收敛，只此一条）：
 
-1. **连接稳定域与场景计算域分离**——baseapp 重建（§7 重建口径）/换幕/迁移期间客户端 TCP 不断，session-and-online-directory §6 gateway 行的 resume 语义（token 绑 baseappmgr 域会话、不绑 gateway 实例、不绑 baseapp）以「有一个不随 baseapp 生死的连接终点」为物理前提；
-2. **公网面与风控单点**——token 验签、上行限流、violation_score、加密握手集中一处（login-flow §1 已裁 gateway 不触账号库、不做准入），baseapp 进程走内网，公网暴露面收敛到一个专职进程；
-3. **协议族收口**——wss 兜底形态归 gateway（net-abstraction §5.9：TCP+CryptoFilter 主路径 / wss 浏览器兜底，「P3 随 gateway-app 定案」），baseapp 只讲一种内部协议；
-4. **场景单写者纪律**——baseapp 的帧预算不被会话层 IO 热点侵占（B 模型实测 scene 局部 5.90ms/100ms 帧，capacity-and-benchmark §2.1；多景并行化后占用上升，余量要留给场景面）。
+1. **断线后能快速重连**（参考火龙果，用户 2026-10-12 口径）——baseapp 重建（§7 重建口径）/换幕/迁移期间客户端 TCP 不断，session-and-online-directory §6 gateway 行的 resume 语义（token 绑 baseappmgr 域会话、不绑 gateway 实例、不绑 baseapp）以「有一个不随 baseapp 生死的连接终点」为物理前提。
 
-代价如实记（§1.3 反面证据一并记）：一次内部转发跳（同机零成本、跨机一次 NIC 往返）+ 每字节经 gateway 转发的带宽份额 + 一个专职进程的 net 环内存预算（capacity §4：每会话 64KB×2×5000 ≈ 640MB 量级）——换取的是上述四条。
+其余结构面——公网面与风控单点（token 验签/限流/加密握手集中一处）、协议族收口（wss 兜底归 gateway）、场景单写者纪律（baseapp 帧预算不被会话 IO 侵占）——降为**拓扑结构对照事实**，在 §1.1 对照表与 §1.3 代价记中如实保留，不充当收益清单。
+
+代价如实记（§1.3 反面证据一并记）：一次内部转发跳（同机零成本、跨机一次 NIC 往返）+ 每字节经 gateway 转发的带宽份额 + 一个专职进程的 net 环内存预算（capacity §4：每会话 64KB×2×5000 ≈ 640MB 量级）——换取的是上述一条收益与结构对照面。
 
 ## 1. gateway 必要性验证
 

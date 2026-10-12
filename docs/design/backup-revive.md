@@ -165,6 +165,28 @@
 | concept-glossary | 热备与接管、恢复相位两行命名锚；§5 术语提案的入库前置（先 glossary 辨析） |
 | scripts/dev_fleet.sh | 批 0 演练链的编队驱动（up/roster/status/down 既有面；crashdumps/ 与 fleet 日志目录共存惯例沿 crash-capture §2.2） |
 
+## 8. 发版更新与玩家迁移（2026-10-12 增补）
+
+> 定位：把「发新版本」放到既有接管面（§2 既有件 + §6 分期 + ADR-010）上回答——玩家怎么从旧版本进程走到新版本进程。两条路：路 1 现状已具备，路 2 挂后续批。
+
+**路 1：等断线重连再更新（现状已具备，先做）**
+
+- 链路 = §6 批 0 既有面：旧版本进程停止（kill）→ machined 退避拉起（新版本二进制就位后重启即新版）→ 恢复相位排他拒新 → 各报告方全量重报收敛（drill 实测 2.71s）→ 锚点从 journal 重放 → 客户端断线重连回原进程。
+- 收益 = **断线后能快速重连**（参考火龙果，用户 2026-10-12 口径；不引伸其他收益）。
+- 缺口 = 更新期间 WorldAssignment（落点指派）要跳过正在更新的进程——否则重启窗口内新玩家会被指到将死的旧进程（machined 会兜住重启，但玩家多挨一次断线）。
+
+**路 2：新 baseapp 装好新版本，再把玩家切过去（不掉线/可灰度，挂后续批）**
+
+三件必做：
+
+1. **跨进程取数据**：新 baseapp 向旧 baseapp 拉玩家快照（旧的先 flush 再发）——保持 ADR-007 零外部存储（玩家档案 = JSON 原子写 + PersistJournal write-behind，不引 MySQL/Redis）。
+2. **写权交接**：用既有 anchor_epoch 递增裁决——新进程持新 epoch，旧进程迟到的回执按旧 epoch 拒绝（player_directory.hpp 注释即此语义；接管窗口排他防双写，§4 拍板 3 既有裁决）。
+3. **目录改指 + gateway 路由快照立即刷新**：PlayerDirectory 条目改指新 baseapp 后，gateway 的路由镜像要立即刷新——现行为事件 delta 即时推送 + baseappmgr 全量快照周期兜底（`--mirror-snapshot-ms` 默认 10000，apps/baseappmgr/src/main.cpp:182）；切换语义要求目录改指后快照立即下发，不等周期到点（触发面挂后续批定）。
+
+**验收（只此一条）**：玩家在切换中不掉线、数据不多不少。
+
+**结论**：先做路 1（能马上发版）；路 2 挂后续批，动工前改动清单先报用户。
+
 ---
 
 *基线：apollo main @ f4d56ac6。BW 证据 = 官方 14.4.1 包本地实读（2026-10-09 本轮补读 backup_sender.hpp/backup_hash.hpp/backup_hash_chain.hpp/baseapp.hpp/reviver 族文件清点；既有行号沿用 architecture-review §16.2/§16.6 已核记录）；分级口径沿 36 号 §0（A 本地源码实读 / B 本仓库文档 / C 官方文档 / D 社区资料——§1.3 行业通型行全节 D 级存疑标注）。既有件消费面以 2026-10-09 工作副本实读为准（apps/machined、apps/baseappmgr、modules/game/session 七件、modules/data/orm/persist_journal、apps/base-app base_server、modules/base/timer_wheel）。拍板点六项全部悬置——本件不代拍、不设候选倾向、不标推荐；拍板前仅批 0 可先行。*

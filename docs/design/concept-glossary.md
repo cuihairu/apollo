@@ -135,7 +135,7 @@ ghost 服务于**无缝世界**：邻进程双向投影、双写、调用转发�
 | 族 | 中文名 | 英文名 | 代码标识（实读，附路径） | BigWorld / KBEngine 对照 | 状态 | 来源 |
 |---|---|---|---|---|---|---|
 | apps | 登录进程 | login-app | 二进制 `login-app`；roster 名 `login`；类 `LoginServer`（apps/login-app/include/login/login_server.hpp:134）；namespace `login` | BW/KBE = loginapp | 现用 | ADR-014 撤销回改（b17b96cc，2026-10-12） |
-| apps | 网关 | gateway-app | 二进制 `gateway-app`；roster 名 `gateway`；类 `GatewayServer`（gateway_server.hpp:58）；namespace `gateway` | 两家均无（两家拓扑无独立网关进程） | 现用 | ADR-011（独立 gateway-app 留任；gateway-topology-survey 2026-10-08） |
+| apps | 网关 | gateway-app | 二进制 `gateway-app`；roster 名 `gateway`；类 `GatewayServer`（gateway_server.hpp:58）；namespace `gateway`；收益口径 = 断线后能快速重连（只此一条，参考火龙果——用户 2026-10-12 口径） | 两家均无（两家拓扑无独立网关进程） | 现用 | ADR-011（独立 gateway-app 留任；gateway-topology-survey 2026-10-08） |
 | apps | 管理进程 | baseappmgr | 二进制 `baseappmgr`；roster 名 `baseappmgr`；类 `BaseAppMgr`（apps/baseappmgr/include/baseappmgr/baseappmgr.hpp）；namespace `baseappmgr`；crash db `crashdumps/baseappmgr` | BW/KBE = baseappmgr | 现用 | BW 原词；a5750eda 曾改 manager、b17b96cc 回改（2026-10-12） |
 | apps | 逻辑服进程 | base-app | 二进制 `base-app`；roster 名 `base`；类 `BaseServer`（apps/base-app/include/base/base_server.hpp）；namespace `base`；日志身份 `base`；crash db `crashdumps/base-app` | BW/KBE = baseapp | 现用 | b17b96cc（2026-10-12；ADR-014 撤销注记） |
 | apps | 空间进程 | cell-app | 二进制 `cell-app`；roster 名 `cell`；类 `CellServer`（apps/cell-app/include/cell/cell_server.hpp:22）；namespace `cell` | BW/KBE = cellapp | 现用（世界运行时原型；去留随玩法批） | ADR-014 决策 2（原型名不动） |
