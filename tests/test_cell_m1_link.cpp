@@ -7,6 +7,7 @@
 #include "cell/cell_server.hpp"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
+#include "apollo/net/linktrace/envelope.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
@@ -39,6 +40,7 @@ int g_failures = 0;
     } while (0)
 
 namespace link = apollo::net::link;
+namespace trace = apollo::net::trace;
 namespace wire = apollo::net::wire;
 namespace protocol = apollo::protocol;
 
@@ -179,6 +181,18 @@ bool send_intent(ClientEnd& client, std::uint16_t id, std::vector<wire::FieldVal
     // InterServerLink::send 自封 u16 id 信封——传裸载荷，勿再包一层
     return client.cell_link()->send(id, payload.data(), payload.size(),
                                     link::SendClass::kReliable)
+        == link::SendCode::kAccepted;
+}
+
+// 932 internal_envelope 上行（trace 子集载体，P3-3 语义层批）：pack 产物 =
+// 字段载荷（u16 信封由 send 自封）。
+bool send_wrapped_intent(ClientEnd& client, const trace::EnvelopeFields& env) {
+    std::vector<std::uint8_t> packed;
+    if (!trace::pack_envelope(env, packed)) {
+        return false;
+    }
+    return client.cell_link()->send(id_of(MsgId::internal_envelope), packed.data(),
+                                    packed.size(), link::SendClass::kReliable)
         == link::SendCode::kAccepted;
 }
 
@@ -416,6 +430,121 @@ bool test_forbidden_and_unknown_ids_silent() {
 
 // ---------- 顶格拒收：单拍批量 > cap → 即时回执 2101 ----------
 
+// ---------- 932 internal_envelope 双受理（P3-3 语义层批 · trace 子集载体） ----------
+
+bool test_wrapped_envelope_intent() {
+    std::cout << "Running: test_wrapped_envelope_intent..." << std::endl;
+    AckLog acks;
+    g_acks = &acks;
+
+    ServerEnd s;
+    TEST_ASSERT(s.start(50), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client endpoint added");
+
+    TEST_ASSERT(pump_until(c, [&] {
+        return c.cell_link()->state() == link::LinkState::kUp
+            && s.server->m1Link().gatewayConnected();
+    }, 10000), "handshake complete");
+
+    // 信封全量形：trace 采样命中 + 内层 create entity（与 bare 同族字段序）
+    trace::EnvelopeFields env{};
+    env.message_type = trace::EnvelopeKind::EntityMethodCall;
+    env.request_id = 60;
+    env.source_app = "gateway#1";
+    env.target_app = "cell#1";
+    env.entity_id = 1001;
+    env.method_alias = "create";
+    env.route_version = 7;
+    env.authority_epoch = 3;
+    TEST_ASSERT(trace::from_hex("11223344556677889900aabbccddeeff", env.trace.trace_id.data(),
+                                16),
+                "trace id hex");
+    TEST_ASSERT(trace::from_hex("0102030405060708", env.trace.parent_span_id.data(), 8),
+                "parent span hex");
+    env.trace.sampled = true;
+
+    std::vector<wire::FieldValue> inner = base_fields(60, 88);
+    inner.push_back(i64(1001));  // entity_id
+    inner.push_back(i64(1));     // entity_type PLAYER
+    inner.push_back(i64(1));     // space_id
+    inner.push_back(f32(1.0f));
+    inner.push_back(f32(2.0f));
+    inner.push_back(f32(3.0f));
+    env.payload = wire::append_envelope(id_of(MsgId::cell_create_entity),
+                                        [&] {
+                                            std::vector<std::uint8_t> p;
+                                            (void)wire::encode_payload(
+                                                id_of(MsgId::cell_create_entity), inner, p);
+                                            return p;
+                                        }());
+
+    TEST_ASSERT(send_wrapped_intent(c, env), "wrapped intent sent");
+
+    TEST_ASSERT(pump_until(c, [&] { return acks.has(60, 0); }, 15000),
+                "wrapped intent acked");
+
+    TEST_ASSERT(s.server->m1Link().receivedIntents() >= 1, "wrapped intent received");
+    TEST_ASSERT(s.server->m1Link().rejectedFrames() == 0, "no rejects on wrapped intent");
+    TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link still up");
+
+    s.stop();
+    c.manager.reset();
+    g_acks = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_wrapped_non_intent_inner_rejected() {
+    std::cout << "Running: test_wrapped_non_intent_inner_rejected..." << std::endl;
+    AckLog acks;
+    g_acks = &acks;
+
+    ServerEnd s;
+    TEST_ASSERT(s.start(50), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client endpoint added");
+
+    TEST_ASSERT(pump_until(c, [&] {
+        return c.cell_link()->state() == link::LinkState::kUp
+            && s.server->m1Link().gatewayConnected();
+    }, 10000), "handshake complete");
+
+    // 内层 = 非意图族（931 metrics_snapshot）：信封形合法、内层不在本接收
+    // 面装配 → 拒收计数、无回执、不断连
+    trace::EnvelopeFields env{};
+    env.message_type = trace::EnvelopeKind::RouteControl;
+    env.request_id = 61;
+    env.source_app = "gateway#1";
+    const std::uint16_t inner_id = id_of(MsgId::metrics_snapshot);
+    env.payload = wire::append_envelope(inner_id, [&] {
+        std::vector<wire::FieldValue> f(2);
+        f[0].text = "gateway#1";
+        f[1].text = "x";
+        std::vector<std::uint8_t> p;
+        (void)wire::encode_payload(inner_id, f, p);
+        return p;
+    }());
+
+    const auto rejected_before = s.server->m1Link().rejectedFrames();
+    TEST_ASSERT(send_wrapped_intent(c, env), "wrapped non-intent sent");
+    TEST_ASSERT(pump_until(c, [&] {
+        return s.server->m1Link().rejectedFrames() > rejected_before;
+    }, 15000), "non-intent inner counted as reject");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    c.pump();
+    TEST_ASSERT(!acks.has(61, 0) && !acks.has(61, 1) && !acks.has(61, 2),
+                "no ack for rejected inner");
+    TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "reject is not fatal");
+
+    s.stop();
+    c.manager.reset();
+    g_acks = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_queue_full_backpressure_ack() {
     std::cout << "Running: test_queue_full_backpressure_ack..." << std::endl;
     AckLog acks;
@@ -492,6 +621,8 @@ int main() {
     if (!test_malformed_intent_rejected()) ++failed;
     if (!test_forbidden_and_unknown_ids_silent()) ++failed;
     if (!test_queue_full_backpressure_ack()) ++failed;
+    if (!test_wrapped_envelope_intent()) ++failed;
+    if (!test_wrapped_non_intent_inner_rejected()) ++failed;
 #endif
     if (failed == 0) {
         std::cout << "ALL CELL M1 LINK TESTS PASSED" << std::endl;

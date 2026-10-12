@@ -14,6 +14,8 @@
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
+#include "apollo/net/linktrace/envelope.hpp"
+#include "apollo/net/linktrace/span_emitter.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
@@ -35,6 +37,7 @@ namespace cell {
 namespace {
 
 namespace link = apollo::net::link;
+namespace trace = apollo::net::trace;
 namespace wire = apollo::net::wire;
 
 using apollo::contract::gen::MsgId;
@@ -263,6 +266,14 @@ private:
                 handle_intent_frame(msg_id, data, size);
             });
         }
+        // 932 internal_envelope（trace 子集载体，P3-3 语义层批）：信封解包
+        // → 内层同路；bare 五族保留 = 双受理（bare 无 trace，既有收发面
+        // 零破坏）。
+        dispatcher.set_handler(
+            id_of(MsgId::internal_envelope),
+            [this](std::uint16_t msg_id, const std::uint8_t* data, std::size_t size) {
+                handle_envelope_frame(msg_id, data, size);
+            });
     }
 
     void handle_intent_frame(std::uint16_t msg_id, const std::uint8_t* data, std::size_t size) {
@@ -277,6 +288,43 @@ private:
             ++rejected_;
             return;
         }
+        intent.received_ms = trace::now_ms();
+        ++received_;
+        if (on_intent_) {
+            on_intent_(std::move(intent));
+        }
+    }
+
+    void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
+                               std::size_t size) {
+        trace::EnvelopeFields env;
+        if (!trace::unpack_envelope(data, size, env)) {
+            ++rejected_;
+            return;
+        }
+        // 内层载荷自识（u16 LE id + 契约载荷）；非五族意图内层 = 拒收
+        // 计数——本接收面只装意图族（RouteControl 等内型归各自接线批）。
+        std::uint16_t inner_id = 0;
+        const std::uint8_t* body = nullptr;
+        std::size_t body_size = 0;
+        if (!trace::split_payload(env.payload, inner_id, body, body_size)) {
+            ++rejected_;
+            return;
+        }
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(inner_id, body, body_size, fields)) {
+            ++rejected_;
+            return;
+        }
+        IntentEnvelope intent;
+        if (!build_legacy_intent(inner_id, fields, intent)) {
+            ++rejected_;
+            return;
+        }
+        if (env.trace.has_trace()) {
+            intent.trace = env.trace;  // 旗标随信封传播，下游不再重采
+        }
+        intent.received_ms = trace::now_ms();
         ++received_;
         if (on_intent_) {
             on_intent_(std::move(intent));

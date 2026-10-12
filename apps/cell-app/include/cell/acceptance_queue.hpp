@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo/net/linktrace/trace_context.hpp"
 #include "apollo/protocol/messages.hpp"
 
 #include <atomic>
@@ -13,6 +14,7 @@
 namespace cell {
 
 namespace protocol = apollo::protocol;
+namespace trace = apollo::net::trace;
 
 // ADR-015(a)/ADR-017：意图信封——受理面解码后的「想做什么」最小载体。
 // 承载原始帧（MessageHeader + body）：执行侧（gameThread_）复用既有 handler
@@ -20,11 +22,15 @@ namespace protocol = apollo::protocol;
 // 来源双路：legacy RPC worker（request_id = 0，ack-on-accept 现状不变）与
 // M1 链路（M1 上层接线批 2b-ii，request_id = 契约上行关联键，延时应答
 // 929 cell_intent_ack 按它回带；0 不作关联键）。
+// trace 子集载体（P3-3 语义层批）：随 932 internal_envelope 上行（bare
+// 924-928 双受理路径无 trace——默认零值未采样，span 发射面零开销跳过）。
 struct IntentEnvelope {
     protocol::MessageType type{};
     std::vector<uint8_t> frame;
     protocol::SessionID session_id{};
     std::uint64_t request_id = 0;  // M1 延时应答关联键；0 = legacy / 无应答
+    trace::TraceContext trace{};   // trace_id + 发端 parent + 采样旗标
+    std::uint64_t received_ms = 0; // 受理时刻（cell span 计时起点）
 };
 
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。

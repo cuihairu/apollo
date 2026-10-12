@@ -1246,7 +1246,7 @@ target_compile_definitions(cell_acceptance_tests PRIVATE
 )
 target_link_libraries(cell_acceptance_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::runtime
-    apollo::net_link apollo::net_contract_wire)
+    apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
     target_link_libraries(cell_acceptance_tests PRIVATE ws2_32)
     target_compile_definitions(cell_acceptance_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1280,7 +1280,7 @@ target_compile_definitions(cell_m1_link_tests PRIVATE
 )
 target_link_libraries(cell_m1_link_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world
-    apollo::runtime apollo::net_link apollo::net_contract_wire)
+    apollo::runtime apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
     target_link_libraries(cell_m1_link_tests PRIVATE ws2_32)
     target_compile_definitions(cell_m1_link_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1327,7 +1327,7 @@ target_compile_definitions(gateway_m1_egress_tests PRIVATE
 target_link_libraries(gateway_m1_egress_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
+    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
 if(WIN32)
     target_link_libraries(gateway_m1_egress_tests PRIVATE ws2_32)
     target_compile_definitions(gateway_m1_egress_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)

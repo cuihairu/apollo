@@ -52,8 +52,10 @@ target_include_directories(benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
-    # 受理面段（P3-2 批 D）：协议 codec + cell 受理队列头（header-only）
+    # 受理面段（P3-2 批 D）：协议 codec + cell 受理队列头（header-only；
+    # trace 子集载体入信封后追 linktrace include，P3-3 语义层批）
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/net/linktrace/include
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
     ${CMAKE_SOURCE_DIR}/include
 )

@@ -37,6 +37,7 @@ target_link_libraries(cell-app
         apollo::game_world
         apollo::net_link
         apollo::net_contract_wire
+        apollo::net_linktrace
         apollo::net_logpush
         apollo_net_metricspush
         apollo::runtime
