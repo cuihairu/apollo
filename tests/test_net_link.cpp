@@ -917,24 +917,28 @@ bool test_tcp_link_pair_e2e() {
 
     TcpConnector connector;
     TEST_ASSERT(connector.start("127.0.0.1", listener.port(), 3000, 1000), "connect started");
-    // 交替泵：连接器、监听器、两侧链路共用一个宿主泵节拍。
+    // 交替泵：连接器、监听器、两侧链路共用一个宿主泵节拍。每拍 sleep ≥2ms
+    // ——裸自旋在 macOS CI 必 flake（内核交付需真实时间，重试循环纪律）。
     for (int i = 0; i < 200 && a.state() == LinkState::kIdle; ++i) {
         const std::uint64_t t = 1000 + static_cast<std::uint64_t>(i) * 5;
         connector.pump(t);
         if (auto t_a = connector.take_transport()) {
             a.attach(std::move(t_a), t);
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     for (int i = 0; i < 200 && b.state() == LinkState::kIdle; ++i) {
         const std::uint64_t t = 1500 + static_cast<std::uint64_t>(i) * 5;
         if (auto t_b = listener.accept()) {
             b.attach(std::move(t_b), t);
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     for (int i = 0; i < 200 && (a.state() != LinkState::kUp || b.state() != LinkState::kUp); ++i) {
         const std::uint64_t t = 2000 + static_cast<std::uint64_t>(i) * 5;
         a.pump(t);
         b.pump(t);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     TEST_ASSERT(a.state() == LinkState::kUp && b.state() == LinkState::kUp, "up over TCP");
 
@@ -945,6 +949,7 @@ bool test_tcp_link_pair_e2e() {
         const std::uint64_t t = 2500 + static_cast<std::uint64_t>(i) * 5;
         a.pump(t);
         b.pump(t);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     TEST_ASSERT(rx.got.size() == 1 && rx.got[0] == "901:tcp", "reliable frame delivered");
 
@@ -955,6 +960,7 @@ bool test_tcp_link_pair_e2e() {
         const std::uint64_t t = 3000 + static_cast<std::uint64_t>(i) * 5;
         a.pump(t);
         b.pump(t);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (b.stats().reliable_acked == 1) {
             break;
         }
