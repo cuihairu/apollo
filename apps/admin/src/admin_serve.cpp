@@ -1,5 +1,6 @@
 #include "admin/serve.hpp"
 
+#include "admin/alert_notifier.hpp"
 #include "admin/metrics_hub.hpp"
 #include "admin/metrics_http.hpp"
 
@@ -12,6 +13,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -117,6 +119,14 @@ int run_serve(const ServeOptions& options) {
         return 1;
     }
 
+    // 告警 notifier 最小面（§5.2 层 B 内核）：规则 = APOLLO_ALERT_RULES
+    // env（缺省空 = 不判定零开销）；出站 = 缺省 cat=alert 结构化行（本地
+    // 留证），webhook 随 curl 出站批。受理点直调 = serve 泵拍单写者。
+    AlertNotifier notifier;
+    notifier.set_rules(parse_alert_rules(std::getenv("APOLLO_ALERT_RULES")
+                                             ? std::getenv("APOLLO_ALERT_RULES")
+                                             : ""));
+
     // 受理装配随 peer 上线（fan-in 面）；handler 只挂 931——快照原文入库
     //（proc/body 保真），聚合/渲染在出口面
     std::atomic<std::uint64_t> received{0};
@@ -136,8 +146,10 @@ int run_serve(const ServeOptions& options) {
                                        ++rejected;
                                        return;
                                    }
+                                   const auto t = now_ms();
+                                   notifier.observe(fields[0].text, fields[1].text, t);
                                    hub.ingest(std::move(fields[0].text),
-                                               std::move(fields[1].text), now_ms());
+                                               std::move(fields[1].text), t);
                                    ++received;
                                });
     });

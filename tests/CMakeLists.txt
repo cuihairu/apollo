@@ -1428,6 +1428,25 @@ if(MSVC)
 endif()
 add_test(NAME MetricsPushTests COMMAND metricspush_tests)
 
+# Alert Notifier Tests (P3-3 余项批：告警 notifier 最小面)
+# 判定/静默/限速/出站纯逻辑面（§5.2 层 B 内核；webhook 随 curl 出站批）。
+# 纯逻辑无平台依赖，Windows 同跑。
+add_executable(alert_notifier_tests
+    test_alert_notifier.cpp
+    ../apps/admin/src/alert_notifier.cpp
+)
+target_include_directories(alert_notifier_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/admin/include
+)
+target_link_libraries(alert_notifier_tests PRIVATE apollo::core)
+if(WIN32)
+    target_link_libraries(alert_notifier_tests PRIVATE ws2_32)
+endif()
+if(MSVC)
+    target_compile_options(alert_notifier_tests PRIVATE /utf-8)
+endif()
+add_test(NAME AlertNotifierTests COMMAND alert_notifier_tests)
+
 # Link RPC 关联原语测试（P4-4 批⓪：关联信封 round-trip / 并发不串号 /
 # 超时摘表迟到弃 / 断连即败 / 坏信封拒收计数）
 add_executable(linkrpc_tests

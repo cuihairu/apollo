@@ -8,6 +8,7 @@ add_executable(admin
     src/main.cpp
     src/admin_app.cpp
     src/admin_serve.cpp
+    src/alert_notifier.cpp
     src/metrics_hub.cpp
     src/metrics_http.cpp
 )
