@@ -219,11 +219,11 @@
 
 ---
 
-## 8. 术语契约差异清单（improvement-plan 级）
+## 8. 术语差异清单（improvement-plan 级）## 8. 术语差异清单（improvement-plan 级）
 
-1. **进程名迁移登记**：apps/base-app/baseappmgr 的 `base`/`baseappmgr` 命名契约冲突（禁 cellapp/baseapp）——按契约 §2 应在收口批次更名（**已定案（ADR-014，2026-10-10）：baseappmgr→manager（ManagerApp 契约定稿名）、base-app→zone-app（Zone 定稿名），cell-app 原型名不动；零行为变更，CTest 套件名不变**）；落地归后续改名批，此前**不改名**（避免阶段 0 大爆炸）。
-2. **WorldHost vs clock 文档 10Hz**：P0-1 对齐时以 clock-and-time 文档与契约 §1.5（tick 词条）为准修正默认值 20Hz——若设计批次另有裁决（20Hz 为上线的实际帧率，文档待勘），以裁决为准并同步文档；登记为本计划执行时的第一项「设计口径核对」。
-3. **`Player` 作为叙述词**：本计划沿用任务书 §39 表格原文（"Player 是明确一等对象"等），其语义落点=Anchor+Avatar 二体（object-model.md 差异清单 1）；代码标识一律契约词。
+1. **进程名迁移登记**：apps/base-app/baseappmgr 的 `base`/`baseappmgr` 命名原口径冲突（禁 cellapp/baseapp）——按原口径 §2 应在收口批次更名（**已定案（ADR-014，2026-10-10）：baseappmgr→manager（ManagerApp 原口径定稿名）、base-app→zone-app（Zone 定稿名），cell-app 原型名不动；零行为变更，CTest 套件名不变**）；落地归后续改名批，此前**不改名**（避免阶段 0 大爆炸）。
+2. **WorldHost vs clock 文档 10Hz**：P0-1 对齐时以 clock-and-time 文档与原口径 §1.5（tick 词条）为准修正默认值 20Hz——若设计批次另有裁决（20Hz 为上线的实际帧率，文档待勘），以裁决为准并同步文档；登记为本计划执行时的第一项「设计口径核对」。
+3. **`Player` 作为叙述词**：本计划沿用任务书 §39 表格原文（"Player 是明确一等对象"等），其语义落点=Anchor+Avatar 二体（object-model.md 差异清单 1）；代码标识一律原口径词。
 
 ---
 

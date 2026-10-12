@@ -58,19 +58,19 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 
 ---
 
-## 2. 术语契约对照与差异清单
+## 2. 术语对照与差异清单
 
 > 规则（协调者约束 + 任务书卷首）：本套文档一律按既有代码用词；差异处正文条目按代码实读修文，并在**各文档末尾**附「差异清单」逐条列出。
 
 ### 2.1 「Player」一词的裁决余波（重要前置说明）
 
-契约 v1.0 用户裁决（docs/design/player-object-model.md 与 analysis 记录）：**玩家对象 = Account/Session/Avatar 三元组，「Player 已废」**——玩家实体只有 Avatar 一个词，Player 与 Avatar 的二分被视为再造分层而废止；Avatar = 场景化身/Cell，驻 scene 随 scene 生死；PlayerAnchor = Base，驻 Home Zone（登录时一次分配）。
+原口径 v1.0 用户裁决（docs/design/player-object-model.md 与 analysis 记录）：**玩家对象 = Account/Session/Avatar 三元组，「Player 已废」**——玩家实体只有 Avatar 一个词，Player 与 Avatar 的二分被视为再造分层而废止；Avatar = 场景化身/Cell，驻 scene 随 scene 生死；PlayerAnchor = Base，驻 Home Zone（登录时一次分配）。
 
-然而任务书 §2/§6/§39 全文以「Player 必须成为一等对象」为验收主线（Account→Player→Runtime Player；Player 拥有 Identity/Attributes/Inventory/Equipment/Quest/Progress/Social/Guild/Runtime State）。两者**不冲突但需修文对齐**：本套文档把任务书的「Player 一等对象」落地为契约的锚-化身二体模型——**契约的持久态承载 = PlayerAnchor（长期归属、内存权威、随登出落库）、任务的「Runtime Player」= Avatar（场景内空间权威）**；部分上下文（如 §6 的 Player 持久/runtime 状态分界线）"Player" 作为叙述性总称保留，代码标识一律用契约词。
+然而任务书 §2/§6/§39 全文以「Player 必须成为一等对象」为验收主线（Account→Player→Runtime Player；Player 拥有 Identity/Attributes/Inventory/Equipment/Quest/Progress/Social/Guild/Runtime State）。两者**不冲突但需修文对齐**：本套文档把任务书的「Player 一等对象」落地为原口径的锚-化身二体模型——**原口径的持久态承载 = PlayerAnchor（长期归属、内存权威、随登出落库）、任务的「Runtime Player」= Avatar（场景内空间权威）**；部分上下文（如 §6 的 Player 持久/runtime 状态分界线）"Player" 作为叙述性总称保留，代码标识一律用原口径词。
 
-### 2.2 契约词条与代码现状总对照（详情见各配套文档）
+### 2.2 原口径词条与代码现状总对照（详情见各配套文档）
 
-| 契约词（代码标识） | 代码现状 | 位置与证据 |
+| 原口径词（代码标识） | 代码现状 | 位置与证据 |
 |---|---|---|
 | `Scene`（场景，世界内逻辑单元） | 存在但被 MapInstance→WorldSpace→Scene 三层空壳包装；生产代码零实体、无 AOI、无玩家进出 | modules/game/world/src/scene.cpp、world_space.cpp、map_instance.cpp |
 | `Instance`（副本，玩法生命周期） | 只有 create/find/destroy/update 五操作注册表，无状态机、无玩法生命周期 | modules/game/world/map_instance_manager.hpp |
@@ -87,15 +87,15 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 | `FrameFilter`/四通道 | 无；net-abstraction 设计文档 L0-L3 在代码中无对应 | —（详见 architecture.md） |
 | `VerifierApp`/`LoggerApp`/`Machined`/`InterfacesApp` | 均无代码 | 设计文档 inbound-interfaces.md、battle-verification（gap #17） |
 
-### 2.3 契约禁用词在现存代码中的出现（违反零出现规则，须登记）
+### 2.3 退役词在现存代码中的出现（须登记）
 
 | 禁用词 | 出现位置 |
 |---|---|
 | `Battle`（作为 space/实例名：历史错名，裁决 1） | legacy include/apollo/game/battle/ecs/battle_system.hpp 全套（BattleWorld/BattleManager/BattleSystem）；docs/25 语义实为副本 |
-| `cellapp / baseapp` | apps/base-app、apps/baseappmgr 进程名与 CMake target 名（注意：契约「他家进程名」禁用的语义指 apollo 不拆两族进程，进程名本身是历史遗留命名，已登记为待迁移项；代码内 class 未用 baseapp 命名） |
+| `cellapp / baseapp` | apps/base-app、apps/baseappmgr 进程名与 CMake target 名（进程名系历史遗留命名，是否回改 BW 词汇待定；代码内 class 未用 baseapp 命名） |
 | `Space` | world_space.cpp 的 WorldSpace 类名含 Space 词根——部分违反，登记（2026-10-07 勘误补充：**modules/protocol 消息族另有 `SpaceID`/`spaceId`/`fromSpace`/`toSpace` 与 `CellEntityMove`/`CellEntityProperty` 结构名**——BigWorld 兼容 wire 语义承载（33 号 facade 面，wire 格式不含名字），与 nng 底座同属 net M1/协议收敛批清除链——M1 内容已拍板（ADR-011），代码清除随 M1 实现批落地） |
 | `Mailbox / EntityCall / witness / ghost` | 无代码出现（设计阶段已清）；残留于设计文档对照段（允许）。2026-10-07 复核：非豁免文档叙述（guide/apps/design 非对照段）残余为零——其余出现均为 KBE 源码行号引用、裁决记录引用或第三方库名字面事实陈述 |
-| `nng` | modules/protocol（apollo_protocol 依赖）、modules/net 的 nng_wrapper/socket.cpp/channel.cpp 桩、legacy net 栈——**契约已禁 nng（退役，36号 #2），代码仍在依赖/残留**：见 architecture.md §网络 |
+| `nng` | modules/protocol（apollo_protocol 依赖）、modules/net 的 nng_wrapper/socket.cpp/channel.cpp 桩、legacy net 栈——**原口径已禁 nng（退役，36号 #2），代码仍在依赖/残留**：见 architecture.md §网络 |
 | `registry`（不引入 etcd/consul） | 无外部依赖（仅命名指导） |
 | 「自行开发/遥遥领先」等 | 无 |
 
@@ -207,20 +207,20 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 
 ---
 
-## 8. 术语契约差异清单（audit 级汇总）
+## 8. 术语差异清单（audit 级汇总）
 
 > 各配套文档末尾按各自主题附局部清单；此处为跨文档总表。
 
 1. **`Player` 代码标识仍在 sdks/contract/entities.xml:8 与生成的 contract.lua/apollo_contract.h**（`<entity id="Player" parent="Avatar">`），继承链 Monste→NPC→Avatar→Player 四层；玩家实体以 Avatar 一词为准（Player 已废）→ **生成物与既有文档需要按 Avatar 单词口径修订（语义上等价的落点：Avatar 承载社交面/长期态归属 Anchor，`Player` 实体应并入 Avatar 或删除，由后续代码批次裁决，本阶段只登记）**。
-2. **`Battle`（space 义）残留**：include/apollo/game/battle/ecs/battle_system.hpp（BattleWorld/BattleManager 等全套）；契约禁用（裁决 1），且该文件本身零引用。
-3. **`nng` 未退役**：modules/protocol CMake/代码、modules/net 的 socket.cpp/channel.cpp/nng_wrapper.hpp 桩、legacy net 引用；契约 §2 禁「nng」（36号 #2 退役）——代码未跟随设计（net-abstraction.md G-1 自持四层未落实）。
-4. **process 命名 base-app/baseappmgr**：契约禁「baseapp/cellapp」作 apollo 进程名（Zone 替代）；现存两个 app 目录/CMake target 名与契约冲突，迁移后应更名（如 anchor-app/directory-app，具体由改进计划 P1/P3 定名并走新术语流程）。
-5. **WorldSpace 类名含「Space」词根**：契约禁 Space 裸用；world_space.hpp 的 `WorldSpace`（且设计称其为「每实例一个 Scene 的三层空壳」）建议随 Scene 模型统一时消解。
+2. **`Battle`（space 义）残留**：include/apollo/game/battle/ecs/battle_system.hpp（BattleWorld/BattleManager 等全套）；原口径禁用（裁决 1），且该文件本身零引用。
+3. **`nng` 未退役**：modules/protocol CMake/代码、modules/net 的 socket.cpp/channel.cpp/nng_wrapper.hpp 桩、legacy net 引用；原口径 §2 禁「nng」（36号 #2 退役）——代码未跟随设计（net-abstraction.md G-1 自持四层未落实）。
+4. **process 命名 base-app/baseappmgr**：原口径禁「baseapp/cellapp」作 apollo 进程名（Zone 替代）；现存两个 app 目录/CMake target 名与原口径冲突，迁移后应更名（如 anchor-app/directory-app，具体由改进计划 P1/P3 定名并走新术语流程）。
+5. **WorldSpace 类名含「Space」词根**：原口径禁 Space 裸用；world_space.hpp 的 `WorldSpace`（且设计称其为「每实例一个 Scene 的三层空壳」）建议随 Scene 模型统一时消解。
 6. **`line/room` 等**：无代码出现，合规。
-7. **设计文档中的旧词（docs/25 等）**：属历史件对照段，按契约规则 2 允许，但文档修订（P4）时统一。
-8. **`Instance` 代码标识 = MapInstance**：契约要求 `instance` 义（副本玩法生命周期）；现有 MapInstance 无状态机——不是命名错误而是**语义未达标**（object-model.md 详述），命名保留。
-9. **contract 体系（entities.xml）与 sdk-contract 文档的 client/internal 域划分**：文档已立（1-899/900+），XML 与生成器是否执行该划分需代码对照（见 architecture.md §契约，sdks/gen 侧数据由批内材料核证）。
-10. **"Player" 出现在本套文档叙述性文本中**（如“在线 Player 的内存对象是运行时权威”，任务书 §7 原句）：按契约规则，凡代码/概念标识一律写 PlayerAnchor/Avatar；叙述沿用任务书原句处用引号标注，不作代码标识。
+7. **设计文档中的旧词（docs/25 等）**：属历史件对照段，按原口径规则 2 允许，但文档修订（P4）时统一。
+8. **`Instance` 代码标识 = MapInstance**：原口径要求 `instance` 义（副本玩法生命周期）；现有 MapInstance 无状态机——不是命名错误而是**语义未达标**（object-model.md 详述），命名保留。
+9. **contract 体系（entities.xml）与 sdk-contract 文档的 client/internal 域划分**：文档已立（1-899/900+），XML 与生成器是否执行该划分需代码对照（见 architecture.md §原口径，sdks/gen 侧数据由批内材料核证）。
+10. **"Player" 出现在本套文档叙述性文本中**（如“在线 Player 的内存对象是运行时权威”，任务书 §7 原句）：按原口径规则，凡代码/概念标识一律写 PlayerAnchor/Avatar；叙述沿用任务书原句处用引号标注，不作代码标识。
 
 ---
 

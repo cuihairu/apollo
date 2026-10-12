@@ -210,7 +210,7 @@ tag:
 2. **base-app → zone-app**：进程名 / 二进制 / roster 标识改 `zone-app`（Zone = 逻辑服进程定稿名；代码标识 `Zone` 不与进程名混淆）。cell-app 为世界运行时原型，名不动（其合并/去留随玩法批，不在本拍板）。
 3. 改名面 = apps 目录 + CMake target + dev_fleet/drill roster 与文档引用；纯进程身份变更，零行为变更（端口/参数/监督语义不动）。
 
-**后果**：术语契约定稿名全量入户，仓库内不再出现 baseappmgr/base-app 进程名（他家对照词仅存于文档证据引用）；改名批后 dev_fleet/drill 全链复验为验收面。
+**后果**：改名批定稿名全量入户，仓库内不再出现 baseappmgr/base-app 进程名（他家对照词仅存于文档证据引用）；改名批后 dev_fleet/drill 全链复验为验收面。
 
 **落地（2026-10-11，a5750eda）**：apps/baseappmgr → apps/manager（二进制 manager、类 ManagerApp、命名空间 manager、日志身份与文件名 manager、crash db crashdumps/manager）；apps/base-app → apps/zone-app（二进制 zone-app、日志身份与文件名 zone-app、RecoveryCoordinator 标识 zone-app；内部 base/BaseServer 代码标识不动——决策 2「代码标识不与进程名混淆」）；CLI 参数面零改动（--base-app 后端挂接参数/端口/监督语义原样）；CTest 套件名 BaseAppMgrTests 保持（决策 1）；dev_fleet/drill roster 改新名、断言子串（child death zone-app / restart zone-app）随批更新；他家对照引用（BW baseappmgr.cpp:588-599 等）按本 ADR 豁免保留。验收 = 三树门禁全绿（ON 42/42、Examples 40/40、OFF 36/36）+ dev_fleet 冒烟（born manager/zone-app 落日志、log/manager_*.log 与 log/zone-app_*.log 结构化行 proc= 落新名、crashdumps/manager|zone-app 隔离）+ drill_kill9 全链断言全过（死亡检测 45ms → 退避重启 1.05s → recovery ready 1.07s → 全量重报 1.70s → 镜像收敛 2.71s）。文档面：现行事实件随批改新名（guides / api / overview / Directory_Structure / apps 实现文档 / 设计件现状衔接与零件表 / 交付注记路径——设计件引用行号经核未漂移，改名均为等长行替换）；历史时点件不改写（审计七件套 / analysis / qa / 他家对照件 / starter 参考件目标形态示例 / baseline footer 存量实读清单）——时点证据保留，本注记与 todo 批记为权威后况。
 

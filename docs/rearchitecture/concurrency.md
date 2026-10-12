@@ -132,12 +132,12 @@ docs/todo P3-2；方案分叉（队列化异步受理 / 队列化+同步等待 /
 
 ---
 
-## 6. 术语契约差异清单（concurrency 级）
+## 6. 术语差异清单（concurrency 级）## 6. 术语差异清单（concurrency 级）
 
-1. **「场景线程单写者」**：契约 §1.5 tick 词条（固定节拍全序推进，场景线程单写者 10Hz）。代码无场景线程概念（§4）、无 10Hz（WorldHost 默认 20Hz，world_host.hpp:17——clock-and-time 文档 10Hz 与代码默认值不一致，登记）；「单写者」现状事实为「主线程+锁」，语义符合但命名面不存在。差异登记。
-2. **tick 号（tick 序列）**：契约要求 tick 号全序唯一；WorldTickContext{tick_index, delta_seconds, now} 头文件有字段（恰是契约设计）但 WorldHost 未编译——实现侧待落地。登记。
+1. **「场景线程单写者」**：原口径 §1.5 tick 词条（固定节拍全序推进，场景线程单写者 10Hz）。代码无场景线程概念（§4）、无 10Hz（WorldHost 默认 20Hz，world_host.hpp:17——clock-and-time 文档 10Hz 与代码默认值不一致，登记）；「单写者」现状事实为「主线程+锁」，语义符合但命名面不存在。差异登记。
+2. **tick 号（tick 序列）**：原口径要求 tick 号全序唯一；WorldTickContext{tick_index, delta_seconds, now} 头文件有字段（恰是原口径设计）但 WorldHost 未编译——实现侧待落地。登记。
 3. **「锁数量」复杂度审查结论**（任务书 §32 口径）：现有锁 13+ 处对「单进程 1..N scene」目标规模是**过量**（目标模型锁数 ≈ 2：保存队列 + 目录镜像），P0 去锁化目标纳入 improvement-plan 收敛判据。
-4. 其余契约词（四通道 seq、acked_seq、ChangeHistory）本文件不涉及，见 architecture.md §1.5 差距表。
+4. 其余原口径词（四通道 seq、acked_seq、ChangeHistory）本文件不涉及，见 architecture.md §1.5 差距表。
 
 ---
 

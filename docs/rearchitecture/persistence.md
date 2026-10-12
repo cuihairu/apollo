@@ -103,13 +103,13 @@ Redis:  仅跨进程热数据（在线目录镜像/订阅推送），**不是实
 
 ---
 
-## 6. 术语契约差异清单（persistence 级）
+## 6. 术语差异清单（persistence 级）## 6. 术语差异清单（persistence 级）
 
-1. **`PersistJournal`（write-behind journal）**：契约 §1.5 先记日志后刷快照；代码零实现（grep journal/snapshot/redo/undo/WAL 在数据体系零命中；命中的只有 log_manager 的“日志快照”词汇）——**命名契约已在，实现缺失**。差异登记。
-2. **契约「Redis 仅作为跨进程热数据」**（attribute-sync 口径）：代码侧 Redis 全链关死，无偏离也无实现——登记为「无代码可对齐」。
-3. **`AnchorManager` 与存档**：契约 Anchor 断线驻留保状态、存档走 write-behind；代码 save 假实现——功能缺口登记（persistence §3.1）。
+1. **`PersistJournal`（write-behind journal）**：原口径 §1.5 先记日志后刷快照；代码零实现（grep journal/snapshot/redo/undo/WAL 在数据体系零命中；命中的只有 log_manager 的“日志快照”词汇）——**命名原口径已在，实现缺失**。差异登记。
+2. **原口径「Redis 仅作为跨进程热数据」**（attribute-sync 口径）：代码侧 Redis 全链关死，无偏离也无实现——登记为「无代码可对齐」。
+3. **`AnchorManager` 与存档**：原口径 Anchor 断线驻留保状态、存档走 write-behind；代码 save 假实现——功能缺口登记（persistence §3.1）。
 4. **MemoryConnection 的「静默空结果」**（未命中 SQL 返回 ok=true）：与任务书 §25 错误处理（Recoverable/Retryable/Fatal 明确）相悖；属 bug 面，登记于 improvement-plan P1-4。
-5. 其余（Repository/DAO 面）契约未定词，用代码词或工业化词（如 `Repository`），不与他家冲突。
+5. 其余（Repository/DAO 面）原口径未定词，用代码词或工业化词（如 `Repository`），不与他家冲突。
 
 ---
 

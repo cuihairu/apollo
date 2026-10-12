@@ -279,17 +279,17 @@ sdks/gen ──> pugixml（XML 解析、vcpkg）──> 生成 C++/JSON/proto/lu
 
 ---
 
-## 9. 术语契约差异清单（architecture 级）
+## 9. 术语差异清单（architecture 级）## 9. 术语差异清单（architecture 级）
 
-1. **Zone 无代码标识**：契约 Zone=逻辑服进程（承载 1..N scene）；代码中唯一接近者是 apps/cell-app（单词 scene 的进程雏形），命名不冲突但职责未达（cell-app 名是 BW 词根，契约禁「cellapp」——见 audit.md §2.3 第 4 条，迁移时更名）。
-2. **Home Zone / PlayerAnchor 语义**：PlayerAnchor 有类无 Home Zone 定位（anchor 存 base-app 进程内 map，与 "登录时分配 Home Zone、永不迁移" 的设计没有对应字段/机制）；WorldAssignment 四个 id（world/map/instance/space）+ route_version 是「换幕」机制的字段级雏形，但 cell-app 把 map_instance_id 当 space_id 用（cell_server.cpp:544-545）——两层 ID 命名空间交叉混用，契约的 scene 唯一空间单元口径与代码三层 ID 冲突（object-model.md §4 详表）。
-3. **Avatar 无类**：最接近承担者 cell::PlayerEntity（cell_manager.hpp:42-93）+ world_session 的 avatar EntityId 字段；契约词继承链关系（entities.xml Monster→NPC→Avatar→Player）在代码中无对应（无 Monster/NPC 类）。
-4. **instance 无状态机**：契约 instance=副本玩法生命周期（Create→Initialize→Waiting→Running→Finishing→Rewarding→Draining→Destroyed，任务书 §9 建议统一）；代码 MapInstance 五操作无状态（object-model.md §5）。
-5. **Suspended 无窗口**：契约 Suspended=掉线保活窗口；代码仅枚举值（lifecycle.md §3 详述）。
-6. **OnlineDirectory 无代码**：契约 manager 权威+镜像；代码仅有 baseappmgr 进程内表（audit.md §2.2 第 8 行）。
-7. **网络叙事面**：net-abstraction 设计（L0-L3/四通道/InterServerLink/FrameFilter）与代码（三套 MessageHeader、三套 RPC、两套 Session 规范）的差距即 §1.4；契约词 RemoteEntityCall/InterServerLink 需在收口后出现，当前**无代码可对齐**（登记，不强行命名）。
+1. **Zone 无代码标识**：原口径 Zone=逻辑服进程（承载 1..N scene）；代码中唯一接近者是 apps/cell-app（单词 scene 的进程雏形），命名不冲突但职责未达（cell-app 名是 BW 词根，原口径禁「cellapp」——见 audit.md §2.3 第 4 条，迁移时更名）。
+2. **Home Zone / PlayerAnchor 语义**：PlayerAnchor 有类无 Home Zone 定位（anchor 存 base-app 进程内 map，与 "登录时分配 Home Zone、永不迁移" 的设计没有对应字段/机制）；WorldAssignment 四个 id（world/map/instance/space）+ route_version 是「换幕」机制的字段级雏形，但 cell-app 把 map_instance_id 当 space_id 用（cell_server.cpp:544-545）——两层 ID 命名空间交叉混用，原口径的 scene 唯一空间单元口径与代码三层 ID 冲突（object-model.md §4 详表）。
+3. **Avatar 无类**：最接近承担者 cell::PlayerEntity（cell_manager.hpp:42-93）+ world_session 的 avatar EntityId 字段；原口径词继承链关系（entities.xml Monster→NPC→Avatar→Player）在代码中无对应（无 Monster/NPC 类）。
+4. **instance 无状态机**：原口径 instance=副本玩法生命周期（Create→Initialize→Waiting→Running→Finishing→Rewarding→Draining→Destroyed，任务书 §9 建议统一）；代码 MapInstance 五操作无状态（object-model.md §5）。
+5. **Suspended 无窗口**：原口径 Suspended=掉线保活窗口；代码仅枚举值（lifecycle.md §3 详述）。
+6. **OnlineDirectory 无代码**：原口径 manager 权威+镜像；代码仅有 baseappmgr 进程内表（audit.md §2.2 第 8 行）。
+7. **网络叙事面**：net-abstraction 设计（L0-L3/四通道/InterServerLink/FrameFilter）与代码（三套 MessageHeader、三套 RPC、两套 Session 规范）的差距即 §1.4；原口径词 RemoteEntityCall/InterServerLink 需在收口后出现，当前**无代码可对齐**（登记，不强行命名）。
 8. **「换幕」vs 代码 transfer**：world_session 的 begin_transfer/complete_transfer 字段搬运即「换幕」的即时同步版——正确方向（无跨进程税）但无状态投影（Base 长期态→新 Cell）与易失态丢弃规则（contract §1.2：L3 不落档）；见 lifecycle.md §4。
-9. **battle 可用语义**：契约「battle 专属战斗验证域」；代码两层 battle 空壳名义上是「战斗系统」——与契约语义（battle=战斗逻辑域，验证/结算）不冲突但皆为空壳，登记。
+9. **battle 可用语义**：原口径「battle 专属战斗验证域」；代码两层 battle 空壳名义上是「战斗系统」——与原口径语义（battle=战斗逻辑域，验证/结算）不冲突但皆为空壳，登记。
 
 ---
 

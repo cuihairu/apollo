@@ -123,13 +123,13 @@ cell-app CellServer::attachPlayerWorldSession（cell_server.cpp:532-550）：
 
 ---
 
-## 4. 术语契约差异清单（lifecycle 级）
+## 4. 术语差异清单（lifecycle 级）
 
-1. **Suspended 语义缺口**：契约 §1.3「掉线保活窗口 = Suspended 态，窗口与 resume token TTL 同源」；代码 world_session.hpp 有 Suspended 枚举但零定时器（world_session.cpp:74-101）——枚举不承载窗口。差异登记。
-2. **换幕 = transfer 字段搬运**：契约「换幕」= Cell 销毁重建（禁 migration 联想）；代码 begin_transfer/complete_transfer 是记录搬运且同步完成——方向对（无跨进程税）但无对象重建/状态投影（lifecycle §2.3 六差距）。差异登记。
-3. **Leaving/Transferring 不可观察态**：代码状态机声称 7 态，实际 2 态瞬时、1 态不可观察（close_session 立即置 Closed）；契约只需 Suspended 一词对应的**可观察窗口**。差异登记。
-4. **Anchor 六态的 Transferring/Saving**：契约 Anchor 永不迁移（Home Zone），代码 Transferring 态永不到达无妨；Saving 态无保存动作是**功能缺口**而非命名问题。登记。
-5. **「断线挂机 N 秒」**：player-object-model §3 的 Cell 挂机窗口在代码无任何对应实现（全仓 grep 无挂机/超时逻辑）——P1 实现项，命名随契约。
+1. **Suspended 语义缺口**：原口径 §1.3「掉线保活窗口 = Suspended 态，窗口与 resume token TTL 同源」；代码 world_session.hpp 有 Suspended 枚举但零定时器（world_session.cpp:74-101）——枚举不承载窗口。差异登记。
+2. **换幕 = transfer 字段搬运**：原口径「换幕」= Cell 销毁重建（禁 migration 联想）；代码 begin_transfer/complete_transfer 是记录搬运且同步完成——方向对（无跨进程税）但无对象重建/状态投影（lifecycle §2.3 六差距）。差异登记。
+3. **Leaving/Transferring 不可观察态**：代码状态机声称 7 态，实际 2 态瞬时、1 态不可观察（close_session 立即置 Closed）；原口径只需 Suspended 一词对应的**可观察窗口**。差异登记。
+4. **Anchor 六态的 Transferring/Saving**：原口径 Anchor 永不迁移（Home Zone），代码 Transferring 态永不到达无妨；Saving 态无保存动作是**功能缺口**而非命名问题。登记。
+5. **「断线挂机 N 秒」**：player-object-model §3 的 Cell 挂机窗口在代码无任何对应实现（全仓 grep 无挂机/超时逻辑）——P1 实现项，命名随原口径。
 
 ---
 

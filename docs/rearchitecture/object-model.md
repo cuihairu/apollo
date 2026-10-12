@@ -166,14 +166,14 @@
 
 ---
 
-## 5. 术语契约差异清单（object-model 级）
+## 5. 术语差异清单（object-model 级）## 5. 术语差异清单（object-model 级）
 
-1. **「Player」概念落点**：任务书 §6 要求 Player 拥有一等对象身份（Identity/Attributes/Inventory/Equipment/Quest/Progress/Social/Guild/Runtime State）；按契约修文为**承载者 = PlayerAnchor（持久态）+ Avatar（运行时态）**，Inventory/Equipment/Quest 等字段在代码**完全不存在**（base-app PlayerData 只有 playerId/username/level/exp/hp/maxHp/mp/maxMp/x/y/z 9 字段，database_service.hpp:22-39）——差异登记：任务书功能面（背包/装备/任务）在契约语义下归属 Anchor 持久态，P0 Player 模型重建时需补字段模型，不是代码命名问题。
-2. **entities.xml 四层继承链（Monster→NPC→Avatar→Player）与契约冲突**：契约裁决 Player 已废、Avatar 为唯一玩家空间对象；entities.xml:8 `<entity id="Player" parent="Avatar"/>` 必须按契约修文——本阶段登记，具体修订（删 Player 或并入 Avatar、NPC 是否继承怪物族）列入 P2 契约修订批次（需走「先 glossary 后 contract」新术语流程）。
-3. **WorldSession 命名**：契约 Session=连接承载（gateway 面）；代码 WorldSession 是「场景会话簿记」——职责与契约 Session 不同、命名冲突；随 P0 session 模型重建更名（建议 `SceneSession` 或并入 WorldAssignment 记录，见 improvement-plan P0-3）。
-4. **WorldSpace 命名含「Space」**（契约禁 Space 裸用）：随三层空壳消解散件更名。
-5. **MapInstance = Instance 的代码名**：保留（契约 `instance` 义），但语义必须从「注册表条目」升为「八态玩法生命周期」（O-3）。
-6. **cell::PlayerEntity**（PascalCase cell 前缀）是临时名，Avatar 落地时删除；不把 cell 前缀写入契约。
+1. **「Player」概念落点**：任务书 §6 要求 Player 拥有一等对象身份（Identity/Attributes/Inventory/Equipment/Quest/Progress/Social/Guild/Runtime State）；按原口径修文为**承载者 = PlayerAnchor（持久态）+ Avatar（运行时态）**，Inventory/Equipment/Quest 等字段在代码**完全不存在**（base-app PlayerData 只有 playerId/username/level/exp/hp/maxHp/mp/maxMp/x/y/z 9 字段，database_service.hpp:22-39）——差异登记：任务书功能面（背包/装备/任务）在原口径语义下归属 Anchor 持久态，P0 Player 模型重建时需补字段模型，不是代码命名问题。
+2. **entities.xml 四层继承链（Monster→NPC→Avatar→Player）与原口径冲突**：原口径裁决 Player 已废、Avatar 为唯一玩家空间对象；entities.xml:8 `<entity id="Player" parent="Avatar"/>` 必须按原口径修文——本阶段登记，具体修订（删 Player 或并入 Avatar、NPC 是否继承怪物族）列入 P2 原口径修订批次（需走「先 glossary 后 contract」新术语流程）。
+3. **WorldSession 命名**：原口径 Session=连接承载（gateway 面）；代码 WorldSession 是「场景会话簿记」——职责与原口径 Session 不同、命名冲突；随 P0 session 模型重建更名（建议 `SceneSession` 或并入 WorldAssignment 记录，见 improvement-plan P0-3）。
+4. **WorldSpace 命名含「Space」**（原口径禁 Space 裸用）：随三层空壳消解散件更名。
+5. **MapInstance = Instance 的代码名**：保留（原口径 `instance` 义），但语义必须从「注册表条目」升为「八态玩法生命周期」（O-3）。
+6. **cell::PlayerEntity**（PascalCase cell 前缀）是临时名，Avatar 落地时删除；不把 cell 前缀写入原口径。
 
 ---
 
