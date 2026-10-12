@@ -20,6 +20,7 @@ target_link_libraries(login-app
         apollo::runtime
         apollo_protocol
         apollo_net_logpush
+        apollo_net_metricspush
         apollo_net_link
         apollo_net_linkrpc
 )

@@ -1,6 +1,8 @@
 #include "base/base_server.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/logpush/log_push_env.hpp"
+#include "apollo/net/metricspush/metrics_push_env.hpp"
+#include "apollo/core/metrics/metric_registry.h"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
@@ -88,6 +90,11 @@ int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
     const auto logger = initLogging();
+    // L4 指标 push 出口（logging.md §5.1 采样流）：APOLLO_METRICS_PUSH_ADDR
+    // 环境接线（未设 = 关；exporter 缺席 = 丢拍不积压最新者胜）。句柄进程期
+    // 存活，注册表快照渲染在客户端泵线程自拉。
+    auto metrics_push = apollo::net::metricspush::make_metrics_push_from_env("base");
+    (void)metrics_push;
     // 崩溃采集面（crash-capture 批②）：最早段立采集，失败 fail-open 不阻断。
     apollo::runtime::init_crash_capture(argc, argv, "base-app");
 
@@ -288,6 +295,12 @@ int main(int argc, char* argv[]) {
         std::uint8_t mirror_buf[disco::kMaxDatagramSize];
         while (server.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            // metrics admin 通道（检测原语接线）：锚点水位现算即弃
+            apollo::core::metrics::MetricRegistry::instance()
+                .gauge("zone_anchors")
+                .store(static_cast<std::int64_t>(
+                    server.anchor_manager() ? server.anchor_manager()->anchor_count()
+                                            : 0));
             // 周期全量重报刷新（增量③：幂等 intake——manager 侧 restore-
             // not-kick，重放无害；0 = 仅启动期一报）
             if (reporter && report_interval_ms != 0) {

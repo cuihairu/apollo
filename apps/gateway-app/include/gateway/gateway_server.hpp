@@ -8,6 +8,7 @@
 #include "gateway/m1_egress.hpp"
 #include "gateway/m1_route_client.hpp"
 #include "gateway/session_manager.hpp"
+#include "apollo/core/metrics/metric_registry.h"
 #include <memory>
 #include <optional>
 #include <thread>
@@ -96,6 +97,11 @@ private:
     // 心跳检查线程
     void heartbeatCheckLoop();
 
+    // metrics admin 通道（泵拍源端渲染消费面）：gauge 会话/应答关联水位
+    //（pendingAcks 仅限宿主泵线程读——m1_egress 线程纪律）、counter 绝对值
+    // 增量推进（counter_advance_to）
+    void recordMetrics();
+
     // 处理客户端断开
     void onClientDisconnect(SessionID sessionId, bool normalClose);
 
@@ -123,6 +129,27 @@ private:
     std::thread acceptThread_;
     std::thread heartbeatThread_;
     std::vector<std::thread> workerThreads_;
+
+    // metrics admin 通道计数面（引用在注册表存续期恒稳定——注册表头注；
+    // last*_ 为绝对值→Counter 增量推进的影子读数，泵线程独占）
+    apollo::core::metrics::Counter& gatewayIntentsSentTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("gateway_intents_sent_total")};
+    apollo::core::metrics::Counter& gatewayIntentsAckedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("gateway_intents_acked_total")};
+    apollo::core::metrics::Counter& gatewayIntentsFailedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("gateway_intents_failed_total")};
+    apollo::core::metrics::Counter& gatewayIntentsTimedOutTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("gateway_intents_timed_out_total")};
+    apollo::core::metrics::Counter& gatewayIntentsUnforwardableTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("gateway_intents_unforwardable_total")};
+    apollo::core::metrics::Counter& gatewayIntentsDroppedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("gateway_intents_dropped_total")};
+    std::uint64_t lastIntentsSent_{0};
+    std::uint64_t lastIntentsAcked_{0};
+    std::uint64_t lastIntentsFailed_{0};
+    std::uint64_t lastIntentsTimedOut_{0};
+    std::uint64_t lastIntentsUnforwardable_{0};
+    std::uint64_t lastIntentsDropped_{0};
 };
 
 } // namespace gateway

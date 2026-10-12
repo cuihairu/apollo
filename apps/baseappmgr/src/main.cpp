@@ -1,6 +1,8 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/logpush/log_push_env.hpp"
+#include "apollo/net/metricspush/metrics_push_env.hpp"
+#include "apollo/core/metrics/metric_registry.h"
 #include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
@@ -126,6 +128,11 @@ int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
     const auto logger = initLogging();
+    // L4 指标 push 出口（logging.md §5.1 采样流）：APOLLO_METRICS_PUSH_ADDR
+    // 环境接线（未设 = 关；exporter 缺席 = 丢拍不积压最新者胜）。句柄进程期
+    // 存活，注册表快照渲染在客户端泵线程自拉。
+    auto metrics_push = apollo::net::metricspush::make_metrics_push_from_env("baseappmgr");
+    (void)metrics_push;
     apollo::runtime::init_crash_capture(argc, argv, "baseappmgr");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo BaseAppMgr             " << std::endl;
@@ -340,6 +347,11 @@ int main(int argc, char* argv[]) {
         while (mgr.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             since_snapshot += std::chrono::seconds(1);
+
+            // metrics admin 通道（检测原语接线）：目录条目水位现算即弃
+            apollo::core::metrics::MetricRegistry::instance()
+                .gauge("manager_directory_entries")
+                .store(static_cast<std::int64_t>(mgr.directory().size()));
 
             // 恢复相位轮询（增量③）：收 FullReport 分片 + 喂钟收敛判定
             if (recovery) {

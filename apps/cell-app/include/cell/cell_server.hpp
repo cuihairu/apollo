@@ -8,6 +8,7 @@
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
+#include "apollo/core/metrics/metric_registry.h"
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -97,6 +98,11 @@ private:
                                   EntityID entity_id, const Position& position);
     void detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id);
 
+    // metrics admin 通道（逐拍源端渲染消费面）：gauge 现算即弃、counter
+    // 绝对值增量推进（counter_advance_to）。场景标签动态生成，注册表查找
+    // 每拍 2×场景数次（10Hz 量级，检测面非热路径）。
+    void record_metrics(std::int64_t elapsed_ms);
+
     CellConfig config_;
     // Zone 世界容器（P0-3）：create_scene / create_instance / scene.enter 路径
     std::unique_ptr<apollo::game::world::World> world_;
@@ -118,6 +124,17 @@ private:
     // space → scene 路由（P1-1 换幕目标解析；单进程单 scene 一条目，
     // 随 scene 增补）
     std::unordered_map<std::uint64_t, std::uint64_t> spaceToScene_;
+
+    // metrics admin 通道计数面（引用在注册表存续期恒稳定——注册表头注；
+    // last_* 为绝对值→Counter 增量推进的影子读数，gameLoop 线程独占）
+    apollo::core::metrics::Counter& cellTicksTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("cell_ticks_total")};
+    apollo::core::metrics::Counter& cellIntentsReceivedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("cell_intents_received_total")};
+    apollo::core::metrics::Counter& cellFramesRejectedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("cell_frames_rejected_total")};
+    std::uint64_t lastIntentsReceived_{0};
+    std::uint64_t lastFramesRejected_{0};
 
     std::thread gameThread_;
 };

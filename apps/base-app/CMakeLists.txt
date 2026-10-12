@@ -23,6 +23,7 @@ target_link_libraries(base-app
         apollo::game_session
         apollo::net_discovery
         apollo_net_logpush
+        apollo_net_metricspush
         apollo_net_link
         apollo_net_linkrpc
         apollo_protocol

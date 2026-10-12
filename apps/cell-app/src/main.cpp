@@ -1,6 +1,7 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/logpush/log_push_env.hpp"
+#include "apollo/net/metricspush/metrics_push_env.hpp"
 #include "cell/cell_server.hpp"
 #include <iostream>
 #include <csignal>
@@ -74,6 +75,11 @@ int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
     const auto logger = initLogging();
+    // L4 指标 push 出口（logging.md §5.1 采样流）：APOLLO_METRICS_PUSH_ADDR
+    // 环境接线（未设 = 关；exporter 缺席 = 丢拍不积压最新者胜）。句柄进程期
+    // 存活，注册表快照渲染在客户端泵线程自拉。
+    auto metrics_push = apollo::net::metricspush::make_metrics_push_from_env("cell");
+    (void)metrics_push;
     apollo::runtime::init_crash_capture(argc, argv, "cell-app");
     std::cout << "======================================" << std::endl;
     std::cout << "       Apollo Cell Server           " << std::endl;

@@ -36,6 +36,7 @@ target_link_libraries(gateway-app
         apollo::net_contract_wire
         apollo_net_linkrpc
         apollo_net_logpush
+        apollo_net_metricspush
         apollo_protocol
 )
 

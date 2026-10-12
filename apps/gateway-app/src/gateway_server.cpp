@@ -305,7 +305,32 @@ void GatewayServer::acceptNewConnections() {
     while (running_) {
         ingressServer_->pump();
         messageRouter_->pump();
+        recordMetrics();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+void GatewayServer::recordMetrics() {
+    auto& registry = apollo::core::metrics::MetricRegistry::instance();
+    registry.gauge("gateway_sessions")
+        .store(static_cast<std::int64_t>(sessionManager_->getSessionCount()));
+    if (auto* egress = messageRouter_->egress(); egress != nullptr) {
+        // pending 关联账面仅限宿主泵线程读（m1_egress 线程纪律）——本拍合法
+        registry.gauge("gateway_pending_acks")
+            .store(static_cast<std::int64_t>(egress->pendingAcks()));
+        // 出口计数为进程期只增原子——增量推进（Prometheus rate() 消费面）
+        counter_advance_to(gatewayIntentsSentTotal_, lastIntentsSent_,
+                           egress->sentIntents());
+        counter_advance_to(gatewayIntentsAckedTotal_, lastIntentsAcked_,
+                           egress->ackedIntents());
+        counter_advance_to(gatewayIntentsFailedTotal_, lastIntentsFailed_,
+                           egress->failedAcks());
+        counter_advance_to(gatewayIntentsTimedOutTotal_, lastIntentsTimedOut_,
+                           egress->timedOutIntents());
+        counter_advance_to(gatewayIntentsUnforwardableTotal_, lastIntentsUnforwardable_,
+                           egress->unforwardableFrames());
+        counter_advance_to(gatewayIntentsDroppedTotal_, lastIntentsDropped_,
+                           egress->droppedSends());
     }
 }
 

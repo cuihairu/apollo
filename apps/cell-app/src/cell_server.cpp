@@ -423,6 +423,9 @@ void CellServer::gameLoop() {
             std::chrono::steady_clock::now() - startTime
         ).count();
 
+        // 检测原语接线（metrics admin 通道批）：逐拍快照的源端消费
+        record_metrics(elapsed);
+
         const auto interval = tickInterval();
         const auto sleepMs = static_cast<int>(interval.count() - elapsed);
         if (sleepMs > 0) {
@@ -436,6 +439,26 @@ void CellServer::gameLoop() {
 
 std::chrono::milliseconds CellServer::tickInterval() const {
     return std::chrono::milliseconds(std::max(config_.tickRateMs, 1));
+}
+
+void CellServer::record_metrics(std::int64_t elapsed_ms) {
+    auto& registry = apollo::core::metrics::MetricRegistry::instance();
+    registry.gauge("cell_tick_frame_ms").store(elapsed_ms);
+    registry.gauge("cell_queue_depth")
+        .store(static_cast<std::int64_t>(acceptanceQueue_.size()));
+    cellTicksTotal_.increment(1);
+    // M1 受理/拒收为进程期只增原子（m1_link_server 绝对值）——增量推进
+    counter_advance_to(cellIntentsReceivedTotal_, lastIntentsReceived_,
+                       m1Link_ ? m1Link_->receivedIntents() : 0);
+    counter_advance_to(cellFramesRejectedTotal_, lastFramesRejected_,
+                       m1Link_ ? m1Link_->rejectedFrames() : 0);
+    for (const auto* scene : world_->scenes()) {
+        const std::string scene_label = std::to_string(scene->scene_id());
+        registry.gauge("cell_entities", {{"scene", scene_label}})
+            .store(static_cast<std::int64_t>(scene->get_entity_count()));
+        registry.gauge("cell_scene_tick", {{"scene", scene_label}})
+            .store(static_cast<std::int64_t>(scene->tick_count()));
+    }
 }
 
 void CellServer::broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message) {
