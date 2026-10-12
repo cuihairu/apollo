@@ -1,6 +1,11 @@
 #include "baseappmgr/baseappmgr.hpp"
 #include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/session/directory_mirror.hpp"
+#include "base/base_server.hpp"
+#include "base/migration_wire.hpp"
+#include "apollo/net/link/tcp_transport.hpp"
 
+#include <filesystem>
 #include <iostream>
 
 namespace {
@@ -201,6 +206,161 @@ bool test_baseappmgr_window_disposition_passthrough() {
     return true;
 }
 
+// ---- 玩家迁移编排真链路（P0-2 路 2 ①③④；两 zone 真 M1 面 + mgr 编排）。
+// Windows 桩树 M1 面缺席——护栏跳过（base_anchor 真链路组同款）。
+#if !defined(_WIN32)
+bool test_baseappmgr_migrate_player() {
+    std::cout << "Running: test_baseappmgr_migrate_player..." << std::endl;
+    namespace migration = base::migration;
+    namespace session = apollo::game::session;
+
+    // 隔离数据目录护栏
+    struct Dir {
+        std::string path;
+        explicit Dir(std::string p) : path(std::move(p)) {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+            std::filesystem::create_directories(path);
+        }
+        ~Dir() {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    } oldDir("baseappmgr_mig_old_data"), newDir("baseappmgr_mig_new_data");
+
+    // 空闲端口探针（同存活取双端口，拿完即关）
+    std::uint16_t srcM1 = 0, dstM1 = 0;
+    {
+        apollo::net::link::TcpListener a, b;
+        TEST_ASSERT(a.start("127.0.0.1", 0) && b.start("127.0.0.1", 0),
+                    "port probes bind");
+        srcM1 = a.port();
+        dstM1 = b.port();
+    }
+
+    auto zoneCfg = [](const std::string& dir, std::uint16_t m1port) {
+        base::BaseConfig cfg;
+        cfg.workerThreads = 1;
+        cfg.autoSaveIntervalMs = 10;
+        cfg.host = "127.0.0.1";
+        cfg.port = 39107;  // 旧 REP 面已退役，占位端口
+        cfg.dataDir = dir + "/players";
+        cfg.journalPath = dir + "/journal/persist.log";
+        cfg.m1Port = m1port;
+        cfg.m1RouteJson = APOLLO_BASEAPP_CONTRACT_ROUTE_JSON;
+        std::filesystem::create_directories(cfg.dataDir);
+        std::filesystem::create_directories(dir + "/journal");
+        return cfg;
+    };
+
+    // 老 zone：播种 + 激活（脏锚——① freeze 排段后 ② 快照才 flush 到位）
+    base::BaseConfig oldCfg = zoneCfg(oldDir.path, srcM1);
+    {
+        base::PlayerData seed;
+        seed.playerId = 42;
+        seed.username = "orchestrated";
+        seed.level = 6;
+        base::DatabaseService seeder(oldCfg);
+        TEST_ASSERT(seeder.savePlayer(seed), "old zone seed written");
+    }
+    base::BaseServer oldZone(oldCfg);
+    oldZone.start();
+    TEST_ASSERT(oldZone.m1_listen_port() == srcM1, "old zone m1 face up");
+    {
+        auto anchor = oldZone.activatePlayer(42);
+        TEST_ASSERT(anchor != nullptr, "old zone anchor activated");
+        session::SessionBinding binding;
+        binding.session_id = 777;
+        binding.gateway_id = 3;
+        TEST_ASSERT(oldZone.bindSession(42, binding), "old zone session bound");
+        oldZone.findAnchor(42)->set_home_zone_id(2);
+        oldZone.findAnchor(42)->mark_dirty("migrate_drill");
+    }
+
+    // 新 zone：空载起（承接 937 + 现场拉 935/936）
+    base::BaseConfig newCfg = zoneCfg(newDir.path, dstM1);
+    base::BaseServer newZone(newCfg);
+    newZone.start();
+    TEST_ASSERT(newZone.m1_listen_port() == dstM1, "new zone m1 face up");
+
+    // mgr：条目（epoch=1, zone=0）+ 快照发布捕获桩（拨出面用域内同一份
+    // 契约路由表——set_m1_face 存的 route json）
+    baseappmgr::BaseAppMgr mgr(0);
+    mgr.set_m1_face(0, APOLLO_BASEAPP_CONTRACT_ROUTE_JSON);
+    std::atomic<int> snapshotCalls{0};
+    auto publisher = std::make_shared<session::DirectoryPublisher>(
+        [&snapshotCalls](const std::uint8_t*, std::size_t) {
+            ++snapshotCalls;
+            return true;
+        });
+    mgr.set_snapshot_publisher(publisher);
+    {
+        session::SessionBinding binding;
+        binding.session_id = 777;
+        binding.gateway_id = 3;
+        TEST_ASSERT(mgr.bindSession(42, binding), "mgr entry registered");
+        session::WorldAssignment assignment;
+        assignment.world_id = 1;
+        assignment.route_version = 1;
+        TEST_ASSERT(mgr.assignWorld(42, assignment), "mgr assignment set");
+    }
+    TEST_ASSERT(mgr.directory().find(42)->anchor_epoch == 1, "entry epoch 1");
+
+    // 编排：① 933 → ③ 937（新 zone 现场拉）→ ④ 改指 + 立即推
+    const auto res = mgr.migratePlayer(42, "127.0.0.1", srcM1,
+                                       "127.0.0.1", dstM1, 5);
+    TEST_ASSERT(res.ok, std::string("migration ok: ") + res.error_message);
+    TEST_ASSERT(res.new_epoch == 2, "epoch bumped old+1");
+    TEST_ASSERT(res.freeze_ms >= 0 && res.handoff_ms >= res.freeze_ms
+                    && res.total_ms >= res.handoff_ms,
+                "step timings monotonic");
+    TEST_ASSERT(snapshotCalls.load() >= 1, "snapshot pushed immediately (§9.2-4)");
+
+    // 老侧：Transferring 停留（⑤ 老进程摘除随排空退场——批记边界）
+    {
+        auto anchor = oldZone.findAnchor(42);
+        TEST_ASSERT(anchor != nullptr
+                        && anchor->state() == session::AnchorState::Transferring,
+                    "old side stays Transferring");
+        TEST_ASSERT(!anchor->needs_save(), "old side journal drained");
+    }
+    // 新侧：接权生效（Online + binding + home zone + 档案落盘）
+    {
+        auto anchor = newZone.findAnchor(42);
+        TEST_ASSERT(anchor != nullptr
+                        && anchor->state() == session::AnchorState::Online,
+                    "new side anchor online");
+        TEST_ASSERT(anchor->session_binding().session_id == 777
+                        && anchor->home_zone_id() == 2,
+                    "binding and home zone restored");
+        base::PlayerData migrated;
+        base::DatabaseService reader(newCfg);
+        TEST_ASSERT(reader.loadPlayer(42, migrated) && migrated.level == 6,
+                    "flushed profile landed");
+    }
+    // 目录：改指 + epoch 键推进（旧 epoch 回执拒已在 test_moved_epoch_bump
+    // 目录单测覆盖——mgr 无 resume 透传，双锚裁决在 zone 侧）
+    {
+        const auto* entry = mgr.directory().find(42);
+        TEST_ASSERT(entry != nullptr && entry->zone_id == 5
+                        && entry->anchor_epoch == 2,
+                    "directory rehomed with new epoch");
+    }
+    // 前置拒绝：未知玩家 / zone=0
+    TEST_ASSERT(!mgr.migratePlayer(999, "127.0.0.1", srcM1,
+                                   "127.0.0.1", dstM1, 5).ok,
+                "unknown player rejected");
+    TEST_ASSERT(!mgr.migratePlayer(42, "127.0.0.1", srcM1,
+                                   "127.0.0.1", dstM1, 0).ok,
+                "target zone 0 rejected");
+
+    oldZone.stop();
+    newZone.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+#endif // !_WIN32
+
 } // namespace
 
 int main() {
@@ -220,6 +380,9 @@ int main() {
     run(test_baseappmgr_admission_gate);
     run(test_baseappmgr_update_drain);
     run(test_baseappmgr_window_disposition_passthrough);
+#if !defined(_WIN32)
+    run(test_baseappmgr_migrate_player);
+#endif
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

@@ -10,6 +10,7 @@ add_executable(baseappmgr
 target_include_directories(baseappmgr
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/apps/base-app/include
 )
 
 target_link_libraries(baseappmgr

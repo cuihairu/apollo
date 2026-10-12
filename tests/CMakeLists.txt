@@ -302,9 +302,17 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_baseappmgr.cpp
 	        ../apps/baseappmgr/src/baseappmgr.cpp
 	        ../apps/baseappmgr/src/m1_control_server.cpp
+	        ../apps/base-app/src/base_server.cpp
+	        ../apps/base-app/src/database_service.cpp
+	        ../apps/base-app/src/m1_base_server.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
+	    )
+	    target_compile_definitions(baseappmgr_tests PRIVATE
+	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
 	    target_link_libraries(baseappmgr_tests PRIVATE
 	        apollo
@@ -589,9 +597,17 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_baseappmgr.cpp
 	        ../apps/baseappmgr/src/baseappmgr.cpp
 	        ../apps/baseappmgr/src/m1_control_server.cpp
+	        ../apps/base-app/src/base_server.cpp
+	        ../apps/base-app/src/database_service.cpp
+	        ../apps/base-app/src/m1_base_server.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
+	    )
+	    target_compile_definitions(baseappmgr_tests PRIVATE
+	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
 	    target_link_libraries(baseappmgr_tests PRIVATE
 	        apollo
@@ -1624,6 +1640,7 @@ add_executable(baseappmgr_m1_control_tests
 )
 target_include_directories(baseappmgr_m1_control_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
+    ${CMAKE_SOURCE_DIR}/apps/base-app/include
     ${CMAKE_SOURCE_DIR}/apps/login-app/include
     ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include

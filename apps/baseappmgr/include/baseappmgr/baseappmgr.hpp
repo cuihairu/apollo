@@ -114,6 +114,34 @@ public:
         m1_route_json_ = std::move(route_json);
     }
 
+    // ---- 玩家迁移编排（P0-2 路 2 五步，backup-revive §9.2）----
+    struct MigrationResult {
+        bool ok = false;
+        std::string error_message;      // 失败步（① 停写 / ③ 交写权 / ④ 改指）
+        std::uint64_t new_epoch = 0;    // ③ 交割值（ok 有效）
+        std::uint32_t new_zone_id = 0;  // ④ 改指落点（ok 有效）
+        int64_t freeze_ms = 0;
+        int64_t handoff_ms = 0;
+        int64_t total_ms = 0;
+    };
+
+    // ① 停写(933) → ③ 交写权(937 带源地址，新 zone 现场拉 935/936) →
+    // ④ 目录改指 + 立即推快照（§9.2 ④：不许等 10s 快照周期）。同步串行
+    // 调用（并发度缺省 1，§9.3；参数命名挂接线批）。⑤ 放行归 gateway
+    // 上行缓冲面（§9.9-2）。③ 之后不可撤销——③ 失败如实返回（老侧停留
+    // Transferring，§9.2「本轮跳过 + 升级人工介入」）。
+    MigrationResult migratePlayer(std::uint64_t player_id,
+                                  const std::string& source_host,
+                                  std::uint16_t source_port,
+                                  const std::string& target_host,
+                                  std::uint16_t target_port,
+                                  std::uint32_t target_zone_id);
+
+    // 目录快照发布口（§9.2 ④）：注入后 migratePlayer 改指后立即推全量；
+    // 未注入 = 由宿主主循环按周期推（快照周期兜底）。
+    void set_snapshot_publisher(
+        std::shared_ptr<apollo::game::session::DirectoryPublisher> publisher);
+
     // 窗口满扫描透传（§4 tick 驱动）：到期 Suspended → 删条目 +
     // SessionDown(kReasonWindowExpired)（事件链自动进镜像面）。返回终结数。
     std::size_t sweep_suspended(std::uint64_t now_tick);
@@ -126,6 +154,9 @@ private:
     std::vector<uint8_t> handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
+
+    // 目录条目 → 镜像条目收集（§9.2 ④ 改指立即推的供数；main 壳同型）
+    std::vector<apollo::game::session::MirrorEntry> collectMirrorEntries() const;
 
     int64_t getCurrentTimeMs() const;
 
@@ -148,6 +179,11 @@ private:
     apollo::game::session::PlayerDirectory::EventSink directory_listener_;
     std::function<bool()> admission_gate_;
     std::atomic<bool> drain_{false};  // 更新排空闸（§8 路1；主循环置位）
+
+    // 玩家迁移编排（§9.2）：快照发布口（④ 改指立即推）+ 编排 request_id
+    // 单调序列（①③ 关联键，进程内单调）
+    std::shared_ptr<apollo::game::session::DirectoryPublisher> snapshot_publisher_;
+    std::atomic<std::uint64_t> migrateSeq_{1};
 };
 
 } // namespace baseappmgr

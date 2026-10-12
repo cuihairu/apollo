@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
         }
     }
     disco::UdpBeaconTransport mirror_transport;
-    std::unique_ptr<session::DirectoryPublisher> mirror_publisher;
+    std::shared_ptr<session::DirectoryPublisher> mirror_publisher;
     if (mirror_port != 0) {
         if (!mirror_transport.open()) {
             logger->warning(
@@ -220,7 +220,7 @@ int main(int argc, char* argv[]) {
         } else {
             const std::string target_host = mirror_host;
             const uint16_t target_port = mirror_port;
-            mirror_publisher = std::make_unique<session::DirectoryPublisher>(
+            mirror_publisher = std::make_shared<session::DirectoryPublisher>(
                 [target_host, target_port, &mirror_transport](
                     const std::uint8_t* data, std::size_t len) {
                     return mirror_transport.send_bytes(target_host, target_port,
@@ -360,6 +360,8 @@ int main(int argc, char* argv[]) {
         // 目录事件链入镜像 publisher（增量② owner 面：PlayerDirectory 事件
         // → Delta wire；快照在主循环按周期发布）
         if (mirror_publisher) {
+            // §9.2 ④ 改指立即推：迁移编排完成后由 mgr 直接推全量快照
+            mgr.set_snapshot_publisher(mirror_publisher);
             mgr.set_directory_event_listener(
                 [&publisher = *mirror_publisher](
                     const apollo::game::session::PlayerDirectory::Event& event) {

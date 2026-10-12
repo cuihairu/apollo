@@ -1,4 +1,6 @@
 #include "baseappmgr/baseappmgr.hpp"
+#include "base/migration_wire.hpp"
+#include "base/zone_dial.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -7,6 +9,8 @@
 #include <stdexcept>
 
 namespace baseappmgr {
+
+namespace migration = base::migration;
 
 BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
     : host_(std::move(host))
@@ -337,6 +341,148 @@ int64_t BaseAppMgr::getCurrentTimeMs() const {
     auto now = std::chrono::steady_clock::now();
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+}
+
+// ---- 玩家迁移编排（P0-2 路 2 五步，backup-revive §9.2；五步严格按序——
+// 前一步未确认完成，后一步不许开始）----
+
+void BaseAppMgr::set_snapshot_publisher(
+    std::shared_ptr<apollo::game::session::DirectoryPublisher> publisher) {
+    snapshot_publisher_ = std::move(publisher);
+}
+
+std::vector<apollo::game::session::MirrorEntry> BaseAppMgr::collectMirrorEntries() const {
+    std::vector<apollo::game::session::MirrorEntry> entries;
+    entries.reserve(directory_.size());
+    for (const auto player_id : directory_.online_ids()) {
+        const auto* entry = directory_.find(player_id);
+        if (entry == nullptr) {
+            continue;
+        }
+        apollo::game::session::MirrorEntry me;
+        me.player_id = player_id;
+        me.anchor_epoch = entry->anchor_epoch;
+        me.session_id = entry->binding.session_id;
+        me.gateway_id = entry->binding.gateway_id;
+        me.zone_id = entry->zone_id;
+        me.state = entry->state;
+        me.assignment = entry->assignment;
+        entries.push_back(me);
+    }
+    return entries;
+}
+
+BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
+    std::uint64_t player_id,
+    const std::string& source_host, std::uint16_t source_port,
+    const std::string& target_host, std::uint16_t target_port,
+    std::uint32_t target_zone_id) {
+    MigrationResult out;
+    const auto t0 = std::chrono::steady_clock::now();
+    auto msSince = [&t0]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now() - t0).count();
+    };
+
+#if !APOLLO_NET_LINK_HAS_JSON
+    (void)player_id; (void)source_host; (void)source_port;
+    (void)target_host; (void)target_port; (void)target_zone_id;
+    out.error_message = "migration dial unavailable (no json)";
+    return out;
+#else
+    // 前置：目录条目在册 + 参数齐（zone 反查键 0 = 未声明，拒——同
+    // mark_suspended_by_zone 口径）
+    const auto* entry = directory_.find(player_id);
+    if (entry == nullptr) {
+        out.error_message = "unknown player in directory";
+        return out;
+    }
+    if (target_zone_id == 0) {
+        out.error_message = "target zone id required";
+        return out;
+    }
+    if (source_port == 0 || target_port == 0) {
+        out.error_message = "source/target m1 address required";
+        return out;
+    }
+    const std::uint64_t oldEpoch = entry->anchor_epoch;
+    const std::uint64_t sessionId = entry->binding.session_id;
+    const std::uint32_t gatewayId = entry->binding.gateway_id;
+    const auto assignment = entry->assignment;
+    const std::uint64_t requestId = migrateSeq_++;
+
+    // ① 停写（933 → 934 accepted）
+    {
+        migration::FreezeRequest req;
+        req.player_id = player_id;
+        req.request_id = requestId;
+        base::ZoneDial dial(m1_route_json_, "baseappmgr", "base",
+                            source_host, source_port);
+        auto reply = dial.ready() && dial.waitUp()
+                         ? dial.call(migration::encodeFrame(req))
+                         : std::nullopt;
+        if (!reply) {
+            out.error_message = "freeze: source unreachable or timeout";
+            return out;
+        }
+        migration::FreezeReply fr;
+        protocol::SessionID session = 0;
+        if (!migration::decodeFrame(*reply, fr, session) || !fr.accepted) {
+            out.error_message = "freeze rejected: "
+                + (fr.error_message.empty() ? std::string("undecodable reply")
+                                            : fr.error_message);
+            return out;
+        }
+    }
+    out.freeze_ms = msSince();
+
+    // ③ 交写权（937 → 938 accepted；epoch = 旧+1，§9.2 ③；带源地址——
+    // 新 zone 现场拉 935/936，快的已先 flush 再发）
+    const std::uint64_t newEpoch = oldEpoch + 1;
+    {
+        migration::HandoffRequest req;
+        req.player_id = player_id;
+        req.request_id = requestId;
+        req.new_epoch = newEpoch;
+        req.session_id = sessionId;
+        req.gateway_id = gatewayId;
+        req.source_host = source_host;
+        req.source_port = source_port;
+        base::ZoneDial dial(m1_route_json_, "baseappmgr", "base",
+                            target_host, target_port);
+        auto reply = dial.ready() && dial.waitUp()
+                         ? dial.call(migration::encodeFrame(req))
+                         : std::nullopt;
+        if (!reply) {
+            out.error_message = "handoff: target unreachable or timeout";
+            return out;
+        }
+        migration::HandoffReply hr;
+        protocol::SessionID session = 0;
+        if (!migration::decodeFrame(*reply, hr, session) || !hr.accepted) {
+            out.error_message = "handoff rejected: "
+                + (hr.error_message.empty() ? std::string("undecodable reply")
+                                            : hr.error_message);
+            return out;  // ③ 后不可撤销面——失败停留 Transferring（§9.2 人工介入）
+        }
+    }
+    out.handoff_ms = msSince();
+
+    // ④ 目录改指 + 立即推快照（§9.2 ④：不许等 10s 快照周期）
+    if (!directory_.moved(player_id, assignment, newEpoch, target_zone_id)) {
+        out.error_message = "directory moved rejected";
+        return out;
+    }
+    if (snapshot_publisher_) {
+        snapshot_publisher_->publish_snapshot(collectMirrorEntries());
+    }
+
+    out.new_epoch = newEpoch;
+    out.new_zone_id = target_zone_id;
+    out.ok = true;
+    out.total_ms = msSince();
+    return out;
+#endif
 }
 
 } // namespace baseappmgr
