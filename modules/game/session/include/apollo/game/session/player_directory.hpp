@@ -153,6 +153,24 @@ public:
     // 空 report 不清目录（intake 是增量重建不是重置）。返回 intake 条数。
     std::size_t intake_full_report(const std::vector<MirrorEntry>& sessions);
 
+    // ---- epoch 水位持久化（backup-revive §9.5 主案前置：next_epoch_ 内存
+    // 自增无恢复——baseappmgr 重启后归零，同账号第 N+1 次会话 epoch 可能
+    // 倒退，陈旧 epoch 拒收会误杀合法新会话）----
+
+    // attach 水位文件（进程启动装配一次，session_up 分配前调）：文件存在
+    // 即读回——next_epoch_ = max(文件值, 1)，重启续起不回退；随后落一次
+    // 当前水位建基线。未 attach 行为零变化（既有单测面全保）。
+    void attach_epoch_store(const std::string& path);
+
+    // 显式推高水位（路 2 交写权 / 外部恢复源用）：next_epoch_ =
+    // max(next_epoch_, floor_value) 并持久化；返回推后水位（单调不回退，
+    // 语义 = 下一个将分配的 epoch，与文件/attach 同口径）。
+    std::uint64_t advance_epoch_to(std::uint64_t floor_value);
+
+    // 最近一次水位写是否成功（false = 文件系统错；分配照常——可用性优先，
+    // 回退风险由恢复期 max 语义兜底，可观察面留给运维巡检）。
+    bool epoch_store_ok() const noexcept { return epoch_store_ok_; }
+
     // ---- 查询面（§5 集中真相）----
 
     const Entry* find(std::uint64_t player_id) const;
@@ -162,9 +180,14 @@ public:
 
 private:
     void emit(const Event& event);
+    // 水位落盘（tmp+rename 原子写，值 = 下一个将分配的 epoch）；未 attach
+    // 或路径不可写返回 false（分配照常）。
+    bool persist_epoch_floor();
 
     std::unordered_map<std::uint64_t, Entry> entries_;
     std::uint64_t next_epoch_ = 1;           // 进程内单调；顶号/resume 竞争裁决键
+    std::string epoch_store_path_;           // 水位文件（空 = 未 attach）
+    bool epoch_store_ok_ = true;             // 最近一次水位写结果
     EventSink sink_;
 };
 

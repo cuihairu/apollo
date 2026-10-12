@@ -8,8 +8,10 @@
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
-#include <iostream>
 #include <csignal>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -307,6 +309,20 @@ int main(int argc, char* argv[]) {
         BaseAppMgr mgr(port);
         g_mgr = &mgr;
         mgr.set_m1_face(m1_port, APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON);
+
+        // epoch 水位持久化（backup-revive §9.5 主案前置）：默认
+        // manager-data/directory-epoch（cwd 相对，与 base-app 存档目录同型
+        // 纪律）；attach 读回高水位 + 落基线。父目录缺失 = attach 静默
+        // 建不了基线（ok_ false 可查），不阻塞启动。
+        {
+            std::error_code ec;
+            std::filesystem::create_directories("manager-data", ec);
+            mgr.attach_epoch_store("manager-data/directory-epoch");
+            std::uint64_t resumed = 0;
+            if (std::ifstream in("manager-data/directory-epoch"); in) in >> resumed;
+            logger->info("epoch store attached (manager-data/directory-epoch, floor="
+                         + std::to_string(resumed) + ")");
+        }
 
         // 恢复相位跨进程化（G-1 收尾批增量③）：进程启动 = machined 拉起
         // 后的恢复序（§6 baseappmgr 行）——恢复相位排他（拒新），收各 Zone/

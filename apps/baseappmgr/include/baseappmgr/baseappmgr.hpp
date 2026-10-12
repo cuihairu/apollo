@@ -63,6 +63,12 @@ public:
     // 全部由目录承载；跨进程镜像见 set_directory_event_listener。
     const apollo::game::session::PlayerDirectory& directory() const { return directory_; }
 
+    // epoch 水位持久化透传（backup-revive §9.5 主案前置：进程壳装配期
+    // attach，重启续起不回退；语义见 PlayerDirectory 注释）。
+    void attach_epoch_store(const std::string& path) {
+        directory_.attach_epoch_store(path);
+    }
+
     // 目录事件追加监听（P3-1 增量②：跨进程镜像 publisher 从进程壳链入；
     // 默认日志面之后追加调用）。反复设置以最后注册者为准。
     void set_directory_event_listener(

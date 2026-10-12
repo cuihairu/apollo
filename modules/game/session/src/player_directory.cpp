@@ -1,6 +1,8 @@
 #include "apollo/game/session/player_directory.hpp"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 
 namespace apollo::game::session {
 
@@ -12,6 +14,51 @@ void PlayerDirectory::emit(const Event& event) {
     if (sink_) {
         sink_(event);
     }
+}
+
+void PlayerDirectory::attach_epoch_store(const std::string& path) {
+    epoch_store_path_ = path;
+    std::ifstream in(path);
+    if (in) {
+        // 恢复：取 max（文件值可能落后于本进程已推进的内存值——max 语义
+        // 保证单调不回退；空文件/坏值按 0 处理同样安全）
+        std::uint64_t resumed = 0;
+        if (in >> resumed) {
+            next_epoch_ = std::max(next_epoch_, resumed);
+        }
+    }
+    // 建基线（文件不存在时落当前水位；写失败不阻塞启动——ok_ 可查）
+    persist_epoch_floor();
+}
+
+std::uint64_t PlayerDirectory::advance_epoch_to(std::uint64_t floor_value) {
+    if (floor_value > next_epoch_) {
+        next_epoch_ = floor_value;
+        persist_epoch_floor();
+    }
+    return next_epoch_;
+}
+
+bool PlayerDirectory::persist_epoch_floor() {
+    if (epoch_store_path_.empty()) {
+        return false;
+    }
+    const std::string tmp = epoch_store_path_ + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::trunc);
+        if (!out || !(out << next_epoch_)) {
+            epoch_store_ok_ = false;
+            return false;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, epoch_store_path_, ec);
+    if (ec) {
+        epoch_store_ok_ = false;
+        return false;
+    }
+    epoch_store_ok_ = true;
+    return true;
 }
 
 std::uint64_t PlayerDirectory::session_up(std::uint64_t player_id,
@@ -31,6 +78,7 @@ std::uint64_t PlayerDirectory::session_up(std::uint64_t player_id,
     entry.assignment = assignment;
     entry.state = EntryState::Online;
     entry.anchor_epoch = next_epoch_++;
+    persist_epoch_floor();
     entry.zone_id = zone_id;
 
     entries_[player_id] = entry;

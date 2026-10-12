@@ -3,7 +3,10 @@
 // 门禁真实执行（CI 矩阵 GAME_MODULE=OFF，挂 game_session 目标的测试被跳过）。
 #include "apollo/game/session/player_directory.hpp"
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -364,6 +367,104 @@ bool test_zone_gateway_window_disposition() {
     return true;
 }
 
+// ---- epoch 水位持久化（backup-revive §9.5 主案前置：重启续起不回退）----
+
+// 临时水位文件护栏：构造建唯一路径，析构清残留
+struct TempEpochFile {
+    std::filesystem::path path;
+    TempEpochFile(const std::string& tag) {
+        std::random_device rng;
+        path = std::filesystem::temp_directory_path()
+               / ("apollo-epoch-" + tag + "-"
+                  + std::to_string(rng()) + std::to_string(rng()));
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+    }
+    ~TempEpochFile() {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+    }
+    std::string str() const { return path.string(); }
+};
+
+// attach 前分配 epoch 1..N → 同路径重建目录 → 下一次分配从 N+1 续起
+bool test_epoch_store_resume() {
+    std::cout << "Running: test_epoch_store_resume..." << std::endl;
+    TempEpochFile file("resume");
+
+    std::uint64_t last = 0;
+    {
+        PlayerDirectory dir;
+        dir.set_event_sink([&](const PlayerDirectory::Event& e) { last = e.anchor_epoch; });
+        dir.attach_epoch_store(file.str());
+        TEST_ASSERT(dir.epoch_store_ok(), "attach 落基线成功（父目录在）");
+        TEST_ASSERT(dir.session_up(1001, makeBinding(9001), makeAssignment(1)) == 1,
+                    "空文件基线：首登 epoch=1");
+        TEST_ASSERT(dir.session_up(1002, makeBinding(9002), makeAssignment(1)) == 2,
+                    "第二次分配 epoch=2");
+    }
+    {
+        PlayerDirectory dir;
+        dir.set_event_sink([&](const PlayerDirectory::Event& e) { last = e.anchor_epoch; });
+        dir.attach_epoch_store(file.str());
+        TEST_ASSERT(dir.session_up(1003, makeBinding(9003), makeAssignment(1)) == 3,
+                    "重启续起：下一次分配 epoch=3");
+    }
+    TEST_ASSERT(last == 3, "事件面带续起 epoch");
+    return true;
+}
+
+// 外部高水位恢复（max 语义不回退）+ 显式推高（路 2 交写权预留面）
+bool test_epoch_store_floor_and_advance() {
+    std::cout << "Running: test_epoch_store_floor_and_advance..." << std::endl;
+    TempEpochFile file("floor");
+    {
+        // 手工落基线（模拟外部写入的高基线；文件语义 = 下一个将分配值）
+        std::ofstream out(file.str());
+        out << 50;
+    }
+    PlayerDirectory dir;
+    dir.attach_epoch_store(file.str());
+    TEST_ASSERT(dir.session_up(1001, makeBinding(9001), makeAssignment(1)) == 50,
+                "文件基线 50（下一分配值）→ 首次分配 50（max 不回退）");
+
+    TEST_ASSERT(dir.advance_epoch_to(5) == 51, "推低于现值：不回退（返回=下一分配值 51）");
+    TEST_ASSERT(dir.advance_epoch_to(100) == 100, "推高：下一分配值=100");
+    TEST_ASSERT(dir.session_up(1002, makeBinding(9002), makeAssignment(1)) == 100,
+                "推高后下一次分配恰为 100");
+    TEST_ASSERT(dir.session_up(1003, makeBinding(9003), makeAssignment(1)) == 101,
+                "再下一次 101 单调");
+
+    // 推高持久化：重建目录后水位仍在 102 上（100/101 已分配）
+    PlayerDirectory dir2;
+    dir2.attach_epoch_store(file.str());
+    TEST_ASSERT(dir2.advance_epoch_to(0) == 102, "重建读回 102（advance(0) 只读不写）");
+    return true;
+}
+
+// 未 attach / 路径不可写：分配面零变化，失败可观察不阻塞
+bool test_epoch_store_absent_and_unwritable() {
+    std::cout << "Running: test_epoch_store_absent_and_unwritable..." << std::endl;
+    {
+        // 未 attach：既有行为零变化（现有单测全保）
+        PlayerDirectory dir;
+        TEST_ASSERT(dir.session_up(1001, makeBinding(9001), makeAssignment(1)) == 1,
+                    "未 attach：首登 epoch=1");
+        TEST_ASSERT(dir.epoch_store_ok(), "未 attach：ok 恒真（无写入尝试）");
+    }
+    {
+        // 父目录不存在：persist 失败可观察，分配照常（可用性优先）
+        PlayerDirectory dir;
+        dir.attach_epoch_store("/nonexistent-apollo-drill-xyz/epoch");
+        TEST_ASSERT(!dir.epoch_store_ok(), "不可写路径：ok 翻 false");
+        TEST_ASSERT(dir.session_up(1002, makeBinding(9002), makeAssignment(1)) == 1,
+                    "persist 失败不阻塞分配");
+        TEST_ASSERT(dir.session_up(1003, makeBinding(9003), makeAssignment(1)) == 2,
+                    "内存单调不受影响");
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -385,6 +486,9 @@ int main() {
     run(test_resume_dual_anchor);
     run(test_reconcile_and_snapshot_reset);
     run(test_begin_leave_lifecycle);
+    run(test_epoch_store_resume);
+    run(test_epoch_store_floor_and_advance);
+    run(test_epoch_store_absent_and_unwritable);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;
