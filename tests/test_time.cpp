@@ -163,7 +163,9 @@ bool test_timer_elapsed() {
 
     double elapsed = timer.elapsed();
     TEST_ASSERT(elapsed >= 0.05, "At least 50ms elapsed");
-    TEST_ASSERT(elapsed < 0.2, "Less than 200ms");
+    // 上界只防调度尖峰误报（macOS CI 实证 50ms sleep 可被推迟 >150ms，
+    // test_timer_reset 同族已加宽一次）——正确性面在下界
+    TEST_ASSERT(elapsed < 1.0, "Less than 1000ms");
 
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -177,7 +179,7 @@ bool test_timer_elapsed_millis() {
 
     double millis = timer.elapsed_millis();
     TEST_ASSERT(millis >= 50.0, "At least 50ms");
-    TEST_ASSERT(millis < 200.0, "Less than 200ms");
+    TEST_ASSERT(millis < 1000.0, "Less than 1000ms");  // 上界防调度尖峰（同上）
 
     std::cout << "  PASSED" << std::endl;
     return true;
