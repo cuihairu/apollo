@@ -126,7 +126,15 @@ public:
 
     // 落点迁移（换幕/换 Zone handoff）：更新 assignment + SessionMoved。
     // 仅 Online/Leaving 态可迁移；未知玩家 false。
-    bool moved(std::uint64_t player_id, const WorldAssignment& assignment);
+    // new_anchor_epoch 非 0 = 路 2 迁移交写权（backup-revive §9.2 ③）：
+    // 条目 epoch 键推进到新值（旧 epoch 迟到回执按失效拒——token 与 epoch
+    // 双锚既有裁决），SessionMoved 事件带新 epoch；水位随推（next = max
+    // (next, new+1)，后续 session_up 分配不回退）。0 = epoch 不动（同 zone
+    // 换幕既有语义）。
+    // new_zone_id 非 0 = 条目 zone 反查键同步改指（跨 zone 迁移必带——
+    // mark_suspended_by_zone 按它反查）；0 = zone 不动。
+    bool moved(std::uint64_t player_id, const WorldAssignment& assignment,
+               std::uint64_t new_anchor_epoch = 0, std::uint32_t new_zone_id = 0);
 
     // 显式登出中间态（§1 Leaving）：Online → Leaving；未知/非 Online false。
     bool begin_leave(std::uint64_t player_id);

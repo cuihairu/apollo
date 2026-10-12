@@ -465,6 +465,43 @@ bool test_epoch_store_absent_and_unwritable() {
     return true;
 }
 
+// ---- 路 2 交写权：moved 带 epoch 推进（backup-revive §9.2 ③④）----
+bool test_moved_epoch_bump() {
+    std::cout << "Running: test_moved_epoch_bump..." << std::endl;
+    EventLog log;
+    PlayerDirectory dir;
+    dir.set_event_sink([&log](const PlayerDirectory::Event& e) { log.record(e); });
+
+    const auto epoch = dir.session_up(1001, makeBinding(9001), makeAssignment(1), 3);
+    TEST_ASSERT(epoch == 1, "首登 epoch=1");
+    log.clear();
+
+    // ③ 交写权：moved 带新 epoch——条目键推进 + 事件带新 epoch + 水位随推
+    WorldAssignment dest = makeAssignment(2);
+    TEST_ASSERT(dir.moved(1001, dest, 41, 5), "迁移带新 epoch 受理");
+    auto* entry = dir.find(1001);
+    TEST_ASSERT(entry != nullptr && entry->anchor_epoch == 41, "条目 epoch 键推进");
+    TEST_ASSERT(entry->assignment.world_id == 2 && entry->zone_id == 5,
+                "assignment 与 zone 反查键改指新 zone");
+    TEST_ASSERT(log.rows.size() == 1 && log.rows[0].kind == PlayerDirectory::Event::Kind::SessionMoved
+                    && log.rows[0].anchor_epoch == 41,
+                "SessionMoved 事件带新 epoch");
+    TEST_ASSERT(dir.session_up(2002, makeBinding(9002), makeAssignment(1)) == 42,
+                "水位随推——后续分配不回退");
+
+    // 旧 epoch 迟到回执按失效拒（token 与 epoch 双锚既有裁决）
+    TEST_ASSERT(dir.mark_suspended(1001, 200, 50), "进保活窗口");
+    TEST_ASSERT(!dir.resume(1001, 9001, 1), "旧 epoch resume 拒绝");
+    TEST_ASSERT(dir.resume(1001, 9001, 41), "新 epoch resume 受理");
+
+    // 未知玩家 / 0 = epoch 不动（换幕既有语义零变化）
+    TEST_ASSERT(!dir.moved(424242, makeAssignment(3), 77), "未知玩家拒");
+    const auto before = dir.find(1001)->anchor_epoch;
+    TEST_ASSERT(dir.moved(1001, makeAssignment(3)), "缺省参受理（epoch 不动）");
+    TEST_ASSERT(dir.find(1001)->anchor_epoch == before, "缺省参 epoch 键不动");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -489,6 +526,7 @@ int main() {
     run(test_epoch_store_resume);
     run(test_epoch_store_floor_and_advance);
     run(test_epoch_store_absent_and_unwritable);
+    run(test_moved_epoch_bump);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

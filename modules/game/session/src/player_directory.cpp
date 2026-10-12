@@ -197,7 +197,9 @@ std::uint64_t PlayerDirectory::evict_for_relogin(std::uint64_t player_id,
     return old_epoch;
 }
 
-bool PlayerDirectory::moved(std::uint64_t player_id, const WorldAssignment& assignment) {
+bool PlayerDirectory::moved(std::uint64_t player_id, const WorldAssignment& assignment,
+                            std::uint64_t new_anchor_epoch,
+                            std::uint32_t new_zone_id) {
     const auto it = entries_.find(player_id);
     if (it == entries_.end() ||
         (it->second.state != EntryState::Online && it->second.state != EntryState::Leaving)) {
@@ -207,6 +209,13 @@ bool PlayerDirectory::moved(std::uint64_t player_id, const WorldAssignment& assi
     it->second.assignment = assignment;
     it->second.assignment.route_version =
         it->second.assignment.route_version != 0 ? it->second.assignment.route_version : 1;
+    if (new_anchor_epoch != 0) {
+        it->second.anchor_epoch = new_anchor_epoch;
+        advance_epoch_to(new_anchor_epoch + 1);
+    }
+    if (new_zone_id != 0) {
+        it->second.zone_id = new_zone_id;
+    }
 
     Event event;
     event.kind = Event::Kind::SessionMoved;
