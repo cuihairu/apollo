@@ -1727,6 +1727,7 @@ add_executable(attrsync_tests
     test_attr_sync.cpp
     test_attr_sync_manager.cpp
     test_attr_frame_codec.cpp
+    test_attr_ack_degrade.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync

@@ -48,13 +48,26 @@ public:
     // ---- ACK（§3.2 第 4 步）----
     void ack(std::uint64_t viewer, std::uint64_t entity_id, std::uint64_t seq);
 
+    // ---- ACK 超时降级（§3.3）----
+    // 配置 ACK 超时拍数（默认 3）
+    void set_ack_timeout_ticks(std::uint64_t ticks) { ack_timeout_ticks_ = ticks; }
+    // 查询 (viewer, entity) 是否处于降级态
+    [[nodiscard]] bool is_degraded(std::uint64_t viewer, std::uint64_t entity_id) const;
+
     // ---- 内部访问（测试用）----
     [[nodiscard]] const EntityAttrs& entity_attrs(std::uint64_t entity_id) const;
 
 private:
+    static std::uint64_t pair_key(std::uint64_t viewer, std::uint64_t entity_id) {
+        return (viewer << 32) | (entity_id & 0xFFFFFFFFull);
+    }
+
     std::unordered_map<std::uint64_t, EntityAttrs> entities_;
     // (viewer, entity) → ViewerAttrState 展平为单键
     std::unordered_map<std::uint64_t, ViewerAttrState> viewers_;
+    // (viewer, entity) → 自上次 ACK 起的 collect 拍数
+    std::unordered_map<std::uint64_t, std::uint64_t> silent_ticks_;
+    std::uint64_t ack_timeout_ticks_ = 3;
 };
 
 }  // namespace apollo::game::attrsync

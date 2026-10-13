@@ -94,6 +94,21 @@ std::vector<AttrSyncFrame> AttrSyncManager::collect(std::uint64_t viewer, std::u
     }
 
     DeltaBuilder builder;
+    auto key = pair_key(viewer, entity_id);
+
+    // ACK 超时降级（§3.3）：静默 >= 阈值 → 每拍快照重置，直到 ACK 到达解除
+    auto sit = silent_ticks_.find(key);
+    if (sit != silent_ticks_.end() && sit->second >= ack_timeout_ticks_) {
+        auto frame = builder.build(entity_id, eit->second.history(), vit->second);
+        frame.is_snapshot = true;  // 强制快照重置
+        frames.push_back(std::move(frame));
+        // 快照即推进（对方进度推到当前 seq）；静默计数保留——
+        // 降级态持续，ACK 到达才解除（自愈路径 §3.3）
+        vit->second.set_acked(entity_id, eit->second.history().world_seq());
+        eit->second.clear_dirty();
+        return frames;
+    }
+
     frames.push_back(builder.build(entity_id, eit->second.history(), vit->second));
 
     // delta 已组包：推进水位（发送成功≠确认，但本层以"已组包"推进；
@@ -103,7 +118,17 @@ std::vector<AttrSyncFrame> AttrSyncManager::collect(std::uint64_t viewer, std::u
         eit->second.clear_dirty();
     }
 
+    // 静默计数 +1（无论是否有变更，collect 即一拍）
+    silent_ticks_[key]++;
+
     return frames;
+}
+
+// ---- ACK 超时降级 ----
+
+bool AttrSyncManager::is_degraded(std::uint64_t viewer, std::uint64_t entity_id) const {
+    auto it = silent_ticks_.find(pair_key(viewer, entity_id));
+    return it != silent_ticks_.end() && it->second >= ack_timeout_ticks_;
 }
 
 // ---- ACK ----
@@ -113,6 +138,8 @@ void AttrSyncManager::ack(std::uint64_t viewer, std::uint64_t entity_id, std::ui
     if (vit != viewers_.end()) {
         vit->second.set_acked(entity_id, seq);
     }
+    // ACK 到达 → 静默计数清零
+    silent_ticks_[pair_key(viewer, entity_id)] = 0;
 }
 
 // ---- 内部访问 ----
