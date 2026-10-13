@@ -1720,4 +1720,24 @@ if(MSVC)
     target_compile_options(baseappmgr_m1_control_tests PRIVATE /utf-8)
 endif()
 add_test(NAME BaseAppMgrM1ControlTests COMMAND baseappmgr_m1_control_tests)
+
+# ========== Attribute Sync Delta Pipeline Tests ==========
+# ChangeHistory / ViewerAttrState / AttrDelta encoding / DeltaBuilder
+add_executable(attrsync_tests
+    test_attr_sync.cpp
+)
+target_link_libraries(attrsync_tests PRIVATE
+    apollo::game_attrsync
+    apollo::game_core
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(attrsync_tests PRIVATE ws2_32)
+    target_compile_definitions(attrsync_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(attrsync_tests PRIVATE /utf-8)
+endif()
+add_test(NAME AttrSyncTests COMMAND attrsync_tests)
 endif()
