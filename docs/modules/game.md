@@ -137,7 +137,7 @@ container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线核心层（attribute-sync §3.1/§3.2/§3.3/§7.1）：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），四批交付：
 
 | 件 | 职责 |
 |---|---|
@@ -145,25 +145,32 @@ per-viewer delta 管线核心层（attribute-sync §3.1/§3.2/§3.3/§7.1）：
 | `ViewerAttrState` | per-viewer `acked_seq` 水位（每 (viewer, entity) 二元组） |
 | `AttrDelta` | varint/zigzag 编码（attr_id + value + change_n） |
 | `DeltaBuilder` | delta 组装 + 快照切换判定 |
+| `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory |
+| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级 |
+| `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
 
 ```cpp
-#include <apollo/game/attrsync/change_history.hpp>
-#include <apollo/game/attrsync/viewer_attr_state.hpp>
-#include <apollo/game/attrsync/delta_builder.hpp>
+#include <apollo/game/attrsync/attr_sync_manager.hpp>
 
-apollo::game::attrsync::ChangeHistory hist(1024);
-hist.append(/*attr_id=*/1, /*value=*/100);  // seq=1
-hist.append(/*attr_id=*/2, /*value=*/200);  // seq=2
+apollo::game::attrsync::AttrSyncManager mgr;
+mgr.register_entity(/*entity_id=*/42);
+mgr.set_attribute(42, /*attr_id=*/1, /*value=*/100);
 
-apollo::game::attrsync::ViewerAttrState viewer;
-viewer.set_acked(/*entity_id=*/42, /*seq=*/1);  // viewer 已确认到 seq=1
+// AOI Enter → 建 ViewerState + 返回快照帧
+auto frames = mgr.on_viewer_enter_collect(/*viewer=*/100, 42);
 
-apollo::game::attrsync::DeltaBuilder builder;
-auto frame = builder.build(/*entity_id=*/42, hist, viewer);
-// frame.is_snapshot = false, frame.deltas 含 seq=2 的变更
+// Broadcast tick → 收集 per-viewer delta 帧
+auto delta = mgr.collect(100, 42);
+
+// ACK → 推进 acked_seq + 解除降级
+mgr.ack(100, 42, /*seq=*/delta[0].base_seq + delta[0].deltas.size());
+
+// ACK 超时降级：静默 ≥ 阈值拍 → 每拍快照重置
+mgr.set_ack_timeout_ticks(3);
+bool degraded = mgr.is_degraded(100, 42);
 ```
 
-**边界**：AOI 事件接线、客户端发送路径、ACK 回包、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。
+**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind、实际接线到 SceneAoi 事件流均为后续批次。
 
 ## NPC AI
 

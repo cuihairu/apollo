@@ -383,7 +383,9 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 ## 12.1 已落地实现（2026-10-13）
 
-`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层：
+`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级，共四批：
+
+### 批 1 — 核心层（`c7b6c3dc`）
 
 | 件 | 文件 | 状态 |
 |---|---|---|
@@ -394,22 +396,57 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **对应设计节**：§3.1（ChangeHistory/ViewerState 骨架）、§3.2（delta 收集）、§3.3（快照切换）、§7.1（AttrDelta 编码）。
 
-**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`。
-
-**测试**：`tests/test_attr_sync.cpp` — 17 用例（ChangeHistory 6 + ViewerAttrState 3 + AttrDelta 4 + DeltaBuilder 4），build 树 + sanitizer 树全绿。
-
-**commit**：`c7b6c3dc` — `feat: add attrsync delta pipeline core`
-
 **编码原语**：`AttrDelta::encode()/decode()` 走自写 varint/zigzag（零依赖），attr_id varint + value zigzag varint + change_n varint。
 
-**边界**（未实现，后续批）：
-- AOI 事件接线（§4.1，`SceneAoi::set_event_sink()` 仍无人消费）
+### 批 2 — 集成层 + AOI 接线（`b4449d9d`）
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `EntityAttrs` | `include/apollo/game/attrsync/entity_attrs.hpp` + `src/entity_attrs.cpp` | ✅ 已落地 |
+| `AttrSyncManager` | `include/apollo/game/attrsync/attr_sync_manager.hpp` + `src/attr_sync_manager.cpp` | ✅ 已落地 |
+
+**职责**：`EntityAttrs` = 每实体属性存储 + dirty 位 + ChangeHistory；`AttrSyncManager` = 实体注册、属性写路径、AOI Enter/Leave 事件接线、broadcast collect、ACK 推进。
+
+**对应设计节**：§3.1（EntityAttrs）、§3.2（broadcast tick）、§4.1（AOI 接线）。
+
+**测试**：`tests/test_attr_sync_manager.cpp` — 20 用例（EntityAttrs 7 + AttrSyncManager 13）。
+
+### 批 3 — 帧编解码（`0d0b6def`）
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `FrameCodec` | `include/apollo/game/attrsync/frame_codec.hpp` + `src/frame_codec.cpp` | ✅ 已落地 |
+
+**职责**：`AttrSyncFrame ↔ wire bytes`，编码布局 entity_id varint + base_seq varint + flags varint（bit0=is_snapshot）+ count varint + count × AttrDelta；批量编码 count + count × frame。解码校验 truncated / trailing garbage 返回 `nullopt`。
+
+**契约修复**：`AttrDelta::decode_into` 返回值从绝对偏移改为消耗字节数，消除 frame_codec 双重累加。
+
+**测试**：`tests/test_attr_frame_codec.cpp` — 10 用例。
+
+### 批 4 — ACK 超时降级（`2fcb80c2`）
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `AttrSyncManager` ACK 超时降级 | `src/attr_sync_manager.cpp`（增量） | ✅ 已落地 |
+
+**语义**：viewer 静默 ≥ 阈值拍（默认 3）→ 每拍强制快照重置（`collect` 内 `is_snapshot=true` + 推进 `acked_seq` + `clear_dirty`）；静默计数保留（不 erase），ACK 到达才清零解除降级。对应 §3.3「自愈路径」。
+
+**测试**：`tests/test_attr_ack_degrade.cpp` — 7 用例（含 ConfigurableThreshold / RecoverAfterAck / MultipleViewersIndependent）。
+
+### 模块构建与测试汇总
+
+**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；7 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / frame_codec）。
+
+**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）= 54 用例，build 树 + sanitizer 树全绿。
+
+### 边界（未实现，后续批）
+
 - 客户端发送路径（net-abstraction.md §1 GameConnection Facade 未建）
-- ACK 回包推进 `acked_seq`（§3.2 第 4 步）
 - 带宽预算 + 实体优先级 + min_interval（§5）
 - slice 复合类型（§2.2）
 - 持久化 write-behind（§8.2）
 - 快照负载组装（`AttrSyncFrame::is_snapshot=true` 时由调用方填快照，属性存储重建后才有数据源）
+- 实际接线到 SceneAoi 事件流（当前 API 已就绪，无人消费）
 
 ## 附录：三方机制速查对照
 

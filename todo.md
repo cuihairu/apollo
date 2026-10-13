@@ -5,9 +5,9 @@
 
 ## 待办（需求）
 
-- [ ] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（nng 底座已收口，具备动工条件）
+- [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8）
 - [ ] Lua 脚本：`docs/design/scripting-lua.md`——modules 全树无 lua/sol2，vcpkg 无条目（未排期）
-- [ ] 属性增量同步：`attribute-sync.md`——`attr_batch` 契约已在 messages.xml，per-viewer delta 管线未接（未排期）
+- [ ] 属性增量同步：管线核心四批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2，54 用例），余 SceneAoi 接线 / GameConnection Facade / 带宽预算 / slice / write-behind（未排期）
 - [ ] battle-verification-service：ADR-013 明示暂缓（随 Lua/玩法批）
 - [ ] 外部存储接线（MySQL/Redis/ClickHouse）：ADR-007 现行=文件+journal 零外部依赖（未排期）
 - [ ] Kafka 观测管道 + Prometheus/Grafana：架构决策 #14 计划，仓内零实现（未排期）

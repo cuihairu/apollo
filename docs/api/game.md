@@ -269,7 +269,7 @@ private:
 
 ## apollo::game::attrsync（属性增量同步）
 
-per-viewer delta 管线核心层（attribute-sync §3.1/§3.2/§3.3/§7.1）：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），四批交付：
 
 ```cpp
 namespace apollo::game::attrsync {
@@ -299,6 +299,7 @@ public:
     std::uint64_t acked_seq(std::uint64_t entity_id) const;
     void remove(std::uint64_t entity_id);
     std::size_t size() const noexcept;
+    bool tracked(std::uint64_t entity_id) const;  // 批 2 新增
 };
 
 // varint/zigzag 编码
@@ -308,6 +309,9 @@ struct AttrDelta {
     std::uint32_t change_n = 0;
     std::vector<std::uint8_t> encode() const;
     static std::optional<AttrDelta> decode(const std::vector<std::uint8_t>& data);
+    // 批 3 修复：decode_into 返回消耗字节数（非绝对偏移）
+    static std::optional<std::size_t> decode_into(const std::vector<std::uint8_t>& data,
+                                                   std::size_t offset, AttrDelta& out);
 };
 
 // delta 组装 + 快照切换
@@ -327,7 +331,46 @@ public:
     void set_delta_attr_threshold(std::uint32_t threshold);
 };
 
+// 批 2：每实体属性存储
+class EntityAttrs {
+public:
+    explicit EntityAttrs(std::uint64_t entity_id, std::size_t history_capacity = 1024);
+    void set(std::uint32_t attr_id, std::int64_t value);
+    std::int64_t get(std::uint32_t attr_id) const;
+    void set_all(const std::vector<std::pair<std::uint32_t, std::int64_t>>& attrs);
+    bool is_dirty(std::uint32_t attr_id) const;
+    void clear_dirty();
+    std::size_t dirty_count() const;
+    const ChangeHistory& history() const noexcept;
+    std::uint64_t entity_id() const noexcept;
+};
+
+// 批 2：管线集成层（AOI 接线 + broadcast collect + ACK）
+// 批 4：ACK 超时降级（silent_ticks + is_degraded）
+class AttrSyncManager {
+public:
+    void register_entity(std::uint64_t entity_id);
+    bool has_entity(std::uint64_t entity_id) const;
+    void set_attribute(std::uint64_t entity_id, std::uint32_t attr_id, std::int64_t value);
+    std::int64_t get_attribute(std::uint64_t entity_id, std::uint32_t attr_id) const;
+    void on_viewer_enter(std::uint64_t viewer, std::uint64_t entity_id);
+    std::vector<AttrSyncFrame> on_viewer_enter_collect(std::uint64_t viewer, std::uint64_t entity_id);
+    void on_viewer_leave(std::uint64_t viewer, std::uint64_t entity_id);
+    bool has_viewer(std::uint64_t viewer, std::uint64_t entity_id) const;
+    std::vector<AttrSyncFrame> collect(std::uint64_t viewer, std::uint64_t entity_id);
+    void ack(std::uint64_t viewer, std::uint64_t entity_id, std::uint64_t seq);
+    void set_ack_timeout_ticks(std::uint64_t ticks);  // 批 4
+    bool is_degraded(std::uint64_t viewer, std::uint64_t entity_id) const;  // 批 4
+    const EntityAttrs& entity_attrs(std::uint64_t entity_id) const;
+};
+
+// 批 3：帧编解码
+std::vector<std::uint8_t> encode_frame(const AttrSyncFrame& frame);
+std::optional<AttrSyncFrame> decode_frame(const std::vector<std::uint8_t>& data);
+std::vector<std::uint8_t> encode_batch(const std::vector<AttrSyncFrame>& frames);
+std::optional<std::vector<AttrSyncFrame>> decode_batch(const std::vector<std::uint8_t>& data);
+
 }  // namespace apollo::game::attrsync
 ```
 
-**边界**：AOI 事件接线、客户端发送路径、ACK 回包、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。
+**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind、实际接线到 SceneAoi 事件流均为后续批次。
