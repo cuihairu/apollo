@@ -5,13 +5,14 @@
 #include "apollo/net/link/route_table.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
+#include "logger/archive_writer.hpp"
 #include "logger/bi_tap.hpp"
 #include "logger/structured_line.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <csignal>
-#include <filesystem>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -30,8 +31,6 @@
 #ifndef APOLLO_LOGGER_CONTRACT_ROUTE_JSON
 #define APOLLO_LOGGER_CONTRACT_ROUTE_JSON ""
 #endif
-
-namespace fs = std::filesystem;
 
 namespace logger {
 
@@ -85,14 +84,16 @@ int run_serve(const ServeOptions& options) {
 #endif
     }
 
-    // 归档先于链路（受理面起得来、落不下盘 = 装配错误显形）
-    std::error_code ec;
-    fs::create_directories(options.archive_dir, ec);
-    std::ofstream archive(fs::path(options.archive_dir) / "collector.log",
-                          std::ios::app | std::ios::binary);
-    if (!archive) {
-        std::cerr << "logger serve: cannot open archive file in " << options.archive_dir
-                  << std::endl;
+    // 归档先于链路（受理面起得来、落不下盘 = 装配错误显形）。按日滚动 +
+    // 保留份数清理（logging.md §5 collector 职责「磁盘滚动」落地；滚动语义
+    // 沿用 FileAppender 既有——关旧开新当日本名不落 rename；保留数
+    // APOLLO_LOGGER_ARCHIVE_MAX_FILES 可调，缺省 30 份，<=0 不清）。
+    ArchiveWriter::Config archive_config;
+    archive_config.directory = options.archive_dir;
+    archive_config.max_files =
+        max_files_from_env(std::getenv("APOLLO_LOGGER_ARCHIVE_MAX_FILES"));
+    ArchiveWriter archive(archive_config);
+    if (!archive.open()) {
         return 1;
     }
 
@@ -152,8 +153,7 @@ int run_serve(const ServeOptions& options) {
                                    // 逐行冲刷：采集面 durability 优先（编队日志速率
                                    // 低，开销可忽略）——硬杀不吞缓冲，scan/follow
                                    // 即时可见（§5 本地文件真相源同口径）。
-                                   archive << line << '\n';
-                                   archive.flush();
+                                   archive.write_line(line);
                                    if (structured) {
                                        // BI 旁路在归档主路之后（预算外：
                                        // 分流面任何状态不影响归档）
@@ -167,7 +167,9 @@ int run_serve(const ServeOptions& options) {
     std::signal(SIGTERM, on_signal);
 
     std::cout << "logger serve: listening on " << options.host << ":" << manager.endpoint_port("apps")
-              << ", archive " << options.archive_dir << "/collector.log" << std::endl;
+              << ", archive " << options.archive_dir << "/collector_<date>.log"
+              << " (max_files="
+              << archive_config.max_files << ")" << std::endl;
     while (g_run != 0) {
         manager.pump(now_ms());
         std::this_thread::sleep_for(std::chrono::milliseconds(10));

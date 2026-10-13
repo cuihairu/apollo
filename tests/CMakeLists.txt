@@ -1374,6 +1374,7 @@ endif()
 # （apollo::core + apollo::runtime 恒在，同 machined/supervisor_tests）。
 add_executable(logger_tests
     test_logger_retrieval.cpp
+    ../apps/logger/src/archive_writer.cpp
     ../apps/logger/src/bi_tap.cpp
     ../apps/logger/src/logger_app.cpp
     ../apps/logger/src/logger_serve.cpp
@@ -1395,6 +1396,25 @@ if(MSVC)
     target_compile_options(logger_tests PRIVATE /utf-8)
 endif()
 add_test(NAME LoggerRetrievalTests COMMAND logger_tests)
+
+# ========== Archive Writer Tests (collector 归档滚动批，P3-3 移交余件③) ==========
+# ArchiveWriter 按日滚动 + 保留份数清理（logging.md §5 collector 职责
+# 「磁盘滚动」落地）：滚动语义沿用 FileAppender 既有（关旧开新当日本名，
+# 不落 rename），日期缝注假日期强制跨日。无门控条件（logger 目标同口径）。
+add_executable(archive_writer_tests
+    test_archive_writer.cpp
+    ../apps/logger/src/archive_writer.cpp
+)
+target_include_directories(archive_writer_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/logger/include
+)
+if(WIN32)
+    target_compile_definitions(archive_writer_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(archive_writer_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ArchiveWriterTests COMMAND archive_writer_tests)
 
 # ========== Log Push Tests (L4 push 通道) ==========
 # LogPushClient 发送面（有界队列断连降级 + 重连补投）× collector 受集面

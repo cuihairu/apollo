@@ -18,8 +18,10 @@ struct ServeOptions {
 };
 
 // 阻塞受理：M1 passive 端点收 930 结构化行 → 原行归档 <archive_dir>/
-// collector.log（保真同 follow 透传；行内 proc= 键自识进程）。SIGINT/
-// SIGTERM 退出，stderr 出受理汇总。返回进程退出码。
+// collector_<日期>.log（按日滚动 + 保留份数清理，ArchiveWriter——§5
+// collector「磁盘滚动」；保真同 follow 透传；行内 proc= 键自识进程；
+// 检索面按 *.log 目录序即时间序）。SIGINT/SIGTERM 退出，stderr 出受理
+// 汇总。返回进程退出码。
 int run_serve(const ServeOptions& options);
 
 } // namespace logger
