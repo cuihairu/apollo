@@ -1603,6 +1603,26 @@ if(MSVC)
 endif()
 add_test(NAME LinkTraceTests COMMAND linktrace_tests)
 
+# ========== RemoteEntityCall 四件套测试 ==========
+# RemoteEntityRef / RemoteMethodSchema / RouteResolver / RpcTrace
+add_executable(remoteentity_tests
+    test_remote_entity.cpp
+)
+target_link_libraries(remoteentity_tests PRIVATE
+    apollo::net_remoteentity
+    apollo::core
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(remoteentity_tests PRIVATE ws2_32)
+    target_compile_definitions(remoteentity_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(remoteentity_tests PRIVATE /utf-8)
+endif()
+add_test(NAME RemoteEntityTests COMMAND remoteentity_tests)
+
 # ========== Login M1 Admission Tests (P4-4 批①) ==========
 # login 准入受理面 ↔ gateway 链路准入服务全链：真 codec 假会话规则收/拒
 # 两面 + 对端缺席降级容忍。缝工厂两侧真实现直编（gateway_m1_egress_tests

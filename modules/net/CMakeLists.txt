@@ -197,6 +197,10 @@ add_subdirectory(linkrpc)
 # 采样 + span 结构化行发射 + 932 internal_envelope 编解码缝）
 add_subdirectory(linktrace)
 
+# RemoteEntityCall 四件套（余件批：RemoteEntityRef / RemoteMethodSchema /
+# RouteResolver / RpcTrace，设计见 remote-entity-call-design.md）
+add_subdirectory(remoteentity)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)
