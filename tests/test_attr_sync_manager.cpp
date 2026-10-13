@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "apollo/game/attrsync/entity_attrs.hpp"
+#include "apollo/game/attrsync/attr_domain.hpp"
 #include "apollo/game/attrsync/attr_sync_manager.hpp"
 
 using namespace apollo::game::attrsync;
@@ -227,4 +228,52 @@ TEST(AttrSyncManager, UnregisteredEntity) {
     // Should not crash
     mgr.set_attribute(99, 1, 100);
     EXPECT_FALSE(mgr.has_entity(99));
+}
+
+// ── 域投影（§2.2 机制层）─────────────────────────────────────────
+
+TEST(AttrSyncManager, CollectHidesSelfDomainFromOtherViewer) {
+    AttrSyncManager mgr;
+    mgr.register_entity(42);
+    mgr.set_attribute(42, 1, 100);
+    mgr.set_attribute(42, 9, 777);
+    mgr.set_attr_domain(42, 9, AttrDomain::kSelf);
+
+    // 其他 viewer 首见快照：SELF 域被裁剪
+    auto snap = mgr.on_viewer_enter_collect(999, 42);
+    ASSERT_EQ(snap.size(), 1u);
+    ASSERT_EQ(snap[0].deltas.size(), 1u);  // 只剩 attr 1
+    EXPECT_EQ(snap[0].deltas[0].attr_id, 1u);
+
+    // 首见后新变更同样裁剪：delta 只发 public
+    mgr.set_attribute(42, 2, 200);
+    mgr.set_attribute(42, 9, 888);
+    auto frames = mgr.collect(999, 42);
+    ASSERT_EQ(frames.size(), 1u);
+    ASSERT_EQ(frames[0].deltas.size(), 1u);
+    EXPECT_EQ(frames[0].deltas[0].attr_id, 2u);
+}
+
+TEST(AttrSyncManager, GroupGateControlsTeamVisibility) {
+    AttrSyncManager mgr;
+    mgr.register_entity(42);
+    mgr.set_attribute(42, 5, 500);
+    mgr.set_attr_domain(42, 5, AttrDomain::kTeam);
+    mgr.set_group_gate([](std::uint64_t viewer, std::uint64_t /*entity*/,
+                          AttrDomain domain) {
+        return domain == AttrDomain::kTeam && viewer == 888;  // 888 同队
+    });
+
+    mgr.on_viewer_enter_collect(999, 42);  // 非队友
+    mgr.on_viewer_enter_collect(888, 42);  // 同队
+
+    mgr.set_attribute(42, 5, 600);
+    auto f999 = mgr.collect(999, 42);
+    ASSERT_EQ(f999.size(), 1u);
+    EXPECT_TRUE(f999[0].deltas.empty());  // gate 拒 → 裁剪
+
+    auto f888 = mgr.collect(888, 42);
+    ASSERT_EQ(f888.size(), 1u);
+    ASSERT_EQ(f888[0].deltas.size(), 1u);
+    EXPECT_EQ(f888[0].deltas[0].value, 600);
 }

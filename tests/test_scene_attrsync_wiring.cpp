@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include "apollo/game/attrsync/attr_domain.hpp"
 #include "apollo/game/attrsync/attr_sync_manager.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/world/avatar.hpp"
@@ -206,4 +207,25 @@ TEST(SceneAttrSyncWiring, DeltaFlowsAfterFirstSight) {
     ASSERT_EQ(frames[0].deltas.size(), 1u);
     EXPECT_EQ(frames[0].deltas[0].attr_id, 2u);
     EXPECT_EQ(frames[0].deltas[0].value, 200);
+}
+
+// ── 域投影端到端（§2.2）────────────────────────────────────
+
+TEST(SceneAttrSyncWiring, FirstSightHidesSelfDomainFromOther) {
+    AttrSyncManager mgr;
+    Scene scene(1u, "s");
+    scene.attach_attrsync(mgr);
+
+    EXPECT_TRUE(scene.enter(make_avatar(1, kEntityA), {1.0f, 1.0f, 0.0f}));
+    mgr.set_attribute(kEntityA, 9, 777);
+    mgr.set_attr_domain(kEntityA, 9, AttrDomain::kSelf);
+    EXPECT_TRUE(scene.enter(make_avatar(2, kEntityB), {2.0f, 1.0f, 0.0f}));
+
+    auto frames = scene.drain_attrsync_frames();
+    // 事件序：Sync(B,A) → 帧(entity=A)；B 视角看不到 A 的 SELF 域属性
+    ASSERT_EQ(frames.size(), 2u);
+    EXPECT_EQ(frames[0].entity_id, kEntityA);
+    EXPECT_TRUE(frames[0].is_snapshot);
+    EXPECT_TRUE(frames[0].deltas.empty());  // 快照负载被域裁剪
+    EXPECT_EQ(frames[1].entity_id, kEntityB);
 }

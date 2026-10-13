@@ -326,10 +326,23 @@ struct AttrSyncFrame {
 class DeltaBuilder {
 public:
     // 快照路径：deltas 填全量当前值，base_seq 推到 world_seq（批 8）
-    AttrSyncFrame build(std::uint64_t entity_id,
+    // 两条路径都按 viewer 域裁剪（批 9，§2.2）
+    using GroupGate = std::function<bool(std::uint64_t viewer,
+                                         std::uint64_t entity, AttrDomain domain)>;
+    AttrSyncFrame build(std::uint64_t entity_id, std::uint64_t viewer_id,
                         const EntityAttrs& attrs,
                         const ViewerAttrState& viewer) const;
     void set_delta_attr_threshold(std::uint32_t threshold);
+    void set_group_gate(GroupGate gate);
+};
+
+// 批 9：属性可见域（§2.2）
+enum class AttrDomain : std::uint8_t {
+    kPublic = 0,  // AOI 域（默认）
+    kSelf,        // 仅 owner（viewer == entity）
+    kTeam,        // owner + 同队（经 group gate）
+    kGuild,       // 公会成员（经 group gate）
+    kWorld,       // 全服广播（机制层等同 public）
 };
 
 // 批 2：每实体属性存储
@@ -345,6 +358,9 @@ public:
     const ChangeHistory& history() const noexcept;
     // 全量当前值（快照负载组装用，批 8）
     const std::unordered_map<std::uint32_t, std::int64_t>& values() const noexcept;
+    // 批 9：属性可见域（未声明 = kPublic）
+    void set_domain(std::uint32_t attr_id, AttrDomain domain);
+    AttrDomain domain(std::uint32_t attr_id) const;
     std::uint64_t entity_id() const noexcept;
 };
 
@@ -369,6 +385,9 @@ public:
     void set_ack_timeout_ticks(std::uint64_t ticks);  // 批 4
     bool is_degraded(std::uint64_t viewer, std::uint64_t entity_id) const;  // 批 4
     const EntityAttrs& entity_attrs(std::uint64_t entity_id) const;
+    // 批 9：域投影（§2.2；未声明域 = kPublic）
+    void set_attr_domain(std::uint64_t entity_id, std::uint32_t attr_id, AttrDomain domain);
+    void set_group_gate(DeltaBuilder::GroupGate gate);  // 队/会域成员判定
     // 批 7：§8.2 写后日志入口（set_attribute 成功后触发）
     using ChangeSink = std::function<void(std::uint64_t entity_id,
                                           std::uint32_t attr_id,

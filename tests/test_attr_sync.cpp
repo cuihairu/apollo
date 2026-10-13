@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "apollo/game/attrsync/attr_domain.hpp"
 #include "apollo/game/attrsync/change_history.hpp"
 #include "apollo/game/attrsync/viewer_attr_state.hpp"
 #include "apollo/game/attrsync/attr_delta.hpp"
@@ -159,7 +160,7 @@ TEST(DeltaBuilder, BuildDeltaFromHistory) {
     viewer.set_acked(42, 1);  // viewer has seen seq=1
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     EXPECT_EQ(frame.entity_id, 42u);
     EXPECT_EQ(frame.base_seq, 1u);
@@ -175,7 +176,7 @@ TEST(DeltaBuilder, EmptyDeltaWhenCaughtUp) {
     viewer.set_acked(42, 1);  // viewer caught up
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     EXPECT_TRUE(frame.deltas.empty());
 }
@@ -192,7 +193,7 @@ TEST(DeltaBuilder, SnapshotWhenHistoryExhausted) {
     viewer.set_acked(42, 1);  // viewer stuck at seq=1, ring holds seq 3-5 only
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     // world_seq(5) - acked_seq(1) = 4 > capacity(3) → snapshot
     EXPECT_TRUE(frame.is_snapshot);
@@ -207,7 +208,7 @@ TEST(DeltaBuilder, SnapshotOnEnter) {
     // viewer at seq=0 (never seen this entity)
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     // First view should be snapshot
     EXPECT_TRUE(frame.is_snapshot);
@@ -225,7 +226,7 @@ TEST(DeltaBuilder, SnapshotCarriesAllValues) {
     // viewer 从未见过（acked=0，world_seq=3 > 0 → 快照路径）
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     EXPECT_TRUE(frame.is_snapshot);
     // 快照负载 = 全量当前值（无域裁剪，域投影留契约批）
@@ -255,7 +256,7 @@ TEST(DeltaBuilder, SnapshotAfterHistoryExhaustionCarriesValues) {
     viewer.set_acked(42, 1);  // 进度落后 → 历史覆盖不了 → 快照
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     EXPECT_TRUE(frame.is_snapshot);
     // 负载含全部当前值（含被挤出的 attr 1/2 的最新值）
@@ -279,7 +280,7 @@ TEST(DeltaBuilder, SnapshotLatestValueWins) {
     ViewerAttrState viewer;
 
     DeltaBuilder builder;
-    auto frame = builder.build(42, attrs, viewer);
+    auto frame = builder.build(42, 999, attrs, viewer);
 
     EXPECT_TRUE(frame.is_snapshot);
     ASSERT_EQ(frame.deltas.size(), 1u);
@@ -293,7 +294,7 @@ TEST(DeltaBuilder, SnapshotThenDelta) {
 
     ViewerAttrState viewer;  // acked=0 → 快照
     DeltaBuilder builder;
-    auto snap = builder.build(42, attrs, viewer);
+    auto snap = builder.build(42, 999, attrs, viewer);
     EXPECT_TRUE(snap.is_snapshot);
     ASSERT_EQ(snap.deltas.size(), 1u);
 
@@ -303,9 +304,149 @@ TEST(DeltaBuilder, SnapshotThenDelta) {
 
     // 后续变更走 delta
     attrs.set(2, 200);
-    auto delta = builder.build(42, attrs, viewer);
+    auto delta = builder.build(42, 999, attrs, viewer);
     EXPECT_FALSE(delta.is_snapshot);
     ASSERT_EQ(delta.deltas.size(), 1u);
     EXPECT_EQ(delta.deltas[0].attr_id, 2u);
     EXPECT_EQ(delta.deltas[0].value, 200);
+}
+
+// ── DeltaBuilder 域投影（§2.2）────────────────────────────────────
+
+TEST(DeltaBuilder, SelfDomainHiddenFromOtherViewer) {
+    EntityAttrs attrs(42);
+    attrs.set(9, 777);
+    attrs.set_domain(9, AttrDomain::kSelf);  // 仅 owner 可见
+
+    ViewerAttrState viewer;  // viewer 999 ≠ entity 42
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+
+    EXPECT_TRUE(frame.is_snapshot);
+    EXPECT_TRUE(frame.deltas.empty());  // 全部被域裁剪
+    EXPECT_EQ(frame.base_seq, attrs.history().world_seq());  // 进度照推
+}
+
+TEST(DeltaBuilder, SelfDomainVisibleToOwner) {
+    EntityAttrs attrs(42);
+    attrs.set(9, 777);
+    attrs.set_domain(9, AttrDomain::kSelf);
+
+    ViewerAttrState viewer;
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 42, attrs, viewer);  // owner 自见
+
+    EXPECT_TRUE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 1u);
+    EXPECT_EQ(frame.deltas[0].attr_id, 9u);
+    EXPECT_EQ(frame.deltas[0].value, 777);
+}
+
+TEST(DeltaBuilder, PublicDomainVisibleByDefault) {
+    // 未声明域 = kPublic：任何 tracked viewer 可见
+    EntityAttrs attrs(42);
+    attrs.set(1, 100);
+
+    ViewerAttrState viewer;
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+
+    EXPECT_TRUE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 1u);
+}
+
+TEST(DeltaBuilder, WorldDomainVisibleLikePublic) {
+    EntityAttrs attrs(42);
+    attrs.set(3, 300);
+    attrs.set_domain(3, AttrDomain::kWorld);
+
+    ViewerAttrState viewer;
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+
+    EXPECT_TRUE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 1u);
+    EXPECT_EQ(frame.deltas[0].value, 300);
+}
+
+TEST(DeltaBuilder, TeamDomainHiddenWithoutGate) {
+    EntityAttrs attrs(42);
+    attrs.set(5, 500);
+    attrs.set_domain(5, AttrDomain::kTeam);
+
+    ViewerAttrState viewer;
+    DeltaBuilder builder;  // 无 group gate → 队/会域默认不可见
+    auto frame = builder.build(42, 999, attrs, viewer);
+
+    EXPECT_TRUE(frame.is_snapshot);
+    EXPECT_TRUE(frame.deltas.empty());
+}
+
+TEST(DeltaBuilder, TeamDomainVisibleThroughGate) {
+    EntityAttrs attrs(42);
+    attrs.set(5, 500);
+    attrs.set_domain(5, AttrDomain::kTeam);
+
+    ViewerAttrState viewer;
+    DeltaBuilder builder;
+    builder.set_group_gate([](std::uint64_t /*viewer*/, std::uint64_t /*entity*/,
+                              AttrDomain domain) {
+        return domain == AttrDomain::kTeam;  // 判同队
+    });
+    auto frame = builder.build(42, 999, attrs, viewer);
+
+    EXPECT_TRUE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 1u);
+    EXPECT_EQ(frame.deltas[0].attr_id, 5u);
+    EXPECT_EQ(frame.deltas[0].value, 500);
+}
+
+TEST(DeltaBuilder, DeltaPathRespectsDomain) {
+    EntityAttrs attrs(42);
+    attrs.set(1, 100);
+
+    ViewerAttrState viewer;  // viewer 999
+    DeltaBuilder builder;
+    auto snap = builder.build(42, 999, attrs, viewer);
+    ASSERT_TRUE(snap.is_snapshot);
+    viewer.set_acked(42, attrs.history().world_seq());
+
+    attrs.set_domain(9, AttrDomain::kSelf);
+    attrs.set(2, 200);  // public
+    attrs.set(9, 777);  // self-only
+
+    auto delta = builder.build(42, 999, attrs, viewer);
+    EXPECT_FALSE(delta.is_snapshot);
+    ASSERT_EQ(delta.deltas.size(), 1u);  // 域裁剪后只剩 attr 2
+    EXPECT_EQ(delta.deltas[0].attr_id, 2u);
+
+    // owner 视角同一批变更 → 含 attr 9
+    ViewerAttrState owner;
+    owner.set_acked(42, snap.base_seq);
+    auto owner_delta = builder.build(42, 42, attrs, owner);
+    EXPECT_FALSE(owner_delta.is_snapshot);
+    ASSERT_EQ(owner_delta.deltas.size(), 2u);
+}
+
+TEST(DeltaBuilder, ExhaustedHistorySnapshotAlsoFiltered) {
+    EntityAttrs attrs(42, /*history_capacity=*/2);
+    attrs.set(1, 10);
+    attrs.set(9, 90);
+    attrs.set(2, 20);
+    attrs.set(3, 30);
+    attrs.set_domain(9, AttrDomain::kSelf);
+
+    ViewerAttrState viewer;  // acked=0 → 快照（历史同时覆盖不了）
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+
+    EXPECT_TRUE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 3u);  // attr 1/2/3，无 self 域 attr 9
+    std::sort(frame.deltas.begin(), frame.deltas.end(),
+              [](const AttrDelta& a, const AttrDelta& b) {
+                  return a.attr_id < b.attr_id;
+              });
+    EXPECT_EQ(frame.deltas[0].attr_id, 1u);
+    EXPECT_EQ(frame.deltas[1].attr_id, 2u);
+    EXPECT_EQ(frame.deltas[2].attr_id, 3u);
 }

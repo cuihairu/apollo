@@ -137,16 +137,17 @@ container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），七批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），九批交付：
 
 | 件 | 职责 |
 |---|---|
 | `ChangeHistory` | 序号化变更环形日志（每实体一份，容量默认 1024） |
 | `ViewerAttrState` | per-viewer `acked_seq` 水位（每 (viewer, entity) 二元组） |
 | `AttrDelta` | varint/zigzag 编码（attr_id + value + change_n） |
-| `DeltaBuilder` | delta 组装 + 快照切换判定；快照时 deltas 填全量当前值（批 8） |
-| `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory |
-| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级、peek（只读预检）、ChangeSink（§8.2 写后日志入口） |
+| `AttrDomain` | 属性可见域（批 9）：kPublic/kSelf/kTeam/kGuild/kWorld |
+| `DeltaBuilder` | delta 组装 + 快照切换判定；快照时 deltas 填全量当前值（批 8）；快照与 delta 双路径域裁剪（批 9） |
+| `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory + 域位表（批 9） |
+| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级、peek（只读预检）、ChangeSink（§8.2 写后日志入口）、域投影 set_attr_domain/set_group_gate（批 9） |
 | `AttrSyncScheduler` | §5 优先级与节流：token bucket + 优先级排序 + min_interval + 饥饿保护 |
 | `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
 | `Scene::attach_attrsync` | Scene ↔ AOI 事件接线（批 5）：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态 |

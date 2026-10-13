@@ -151,3 +151,25 @@ TEST(AttrAckDegrade, ConfigurableThreshold) {
     static_cast<void>(mgr.collect(100, 42));
     EXPECT_TRUE(mgr.is_degraded(100, 42));
 }
+
+TEST(AttrAckDegrade, DegradeSnapshotCarriesFullValues) {
+    AttrSyncManager mgr;
+    mgr.register_entity(42);
+    mgr.set_attribute(42, 1, 100);
+
+    mgr.on_viewer_enter_collect(100, 42);
+
+    // 静默到降级
+    for (int i = 0; i < 10; ++i) {
+        mgr.set_attribute(42, i + 10, i * 100);
+        static_cast<void>(mgr.collect(100, 42));
+    }
+    ASSERT_TRUE(mgr.is_degraded(100, 42));
+
+    // 降级帧 = 全量快照（含此前全部变更的最终值），而非 delta 子集
+    auto frames = mgr.collect(100, 42);
+    ASSERT_EQ(frames.size(), 1u);
+    EXPECT_TRUE(frames[0].is_snapshot);
+    EXPECT_EQ(frames[0].base_seq, mgr.entity_attrs(42).history().world_seq());
+    EXPECT_EQ(frames[0].deltas.size(), 11u);  // attr 1 + 10..19
+}

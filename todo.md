@@ -7,7 +7,7 @@
 
 - [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8，14 用例）
 - [ ] Lua 脚本：`docs/design/scripting-lua.md`——modules 全树无 lua/sol2，vcpkg 无条目（未排期）
-- [ ] 属性增量同步：管线核心八批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2 + SceneAoi 接线批 + §5 优先级与节流派 + §8.2 写后日志入口 + §3.3 快照负载组装，84 用例），余 GameConnection Facade / slice / 域投影（未排期）
+- [ ] 属性增量同步：管线核心九批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2 + SceneAoi 接线批 + §5 优先级与节流派 + §8.2 写后日志入口 + §3.3 快照负载组装 + §2.2 域投影机制层，96 用例），余 GameConnection Facade / slice（未排期）
 - [ ] battle-verification-service：ADR-013 明示暂缓（随 Lua/玩法批）
 - [ ] 外部存储接线（MySQL/Redis/ClickHouse）：ADR-007 现行=文件+journal 零外部依赖（未排期）
 - [ ] Kafka 观测管道 + Prometheus/Grafana：架构决策 #14 计划，仓内零实现（未排期）

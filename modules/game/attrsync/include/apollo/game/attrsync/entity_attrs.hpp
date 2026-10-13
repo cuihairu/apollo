@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "apollo/game/attrsync/attr_domain.hpp"
 #include "apollo/game/attrsync/change_history.hpp"
 
 namespace apollo::game::attrsync {
@@ -39,6 +40,13 @@ public:
         return values_;
     }
 
+    // 属性可见域（§2.2；未声明 = kPublic）
+    void set_domain(std::uint32_t attr_id, AttrDomain domain) { domains_[attr_id] = domain; }
+    [[nodiscard]] AttrDomain domain(std::uint32_t attr_id) const {
+        auto it = domains_.find(attr_id);
+        return (it != domains_.end()) ? it->second : AttrDomain::kPublic;
+    }
+
     // 实体 ID
     [[nodiscard]] std::uint64_t entity_id() const noexcept { return entity_id_; }
 
@@ -47,6 +55,7 @@ private:
     ChangeHistory history_;
     std::unordered_map<std::uint32_t, std::int64_t> values_;
     std::unordered_map<std::uint32_t, bool> dirty_;
+    std::unordered_map<std::uint32_t, AttrDomain> domains_;
 };
 
 }  // namespace apollo::game::attrsync

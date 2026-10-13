@@ -7,6 +7,7 @@
 namespace apollo::game::attrsync {
 
 AttrSyncFrame DeltaBuilder::build(std::uint64_t entity_id,
+                                   std::uint64_t viewer_id,
                                    const EntityAttrs& attrs,
                                    const ViewerAttrState& viewer) const {
     AttrSyncFrame frame;
@@ -27,14 +28,14 @@ AttrSyncFrame DeltaBuilder::build(std::uint64_t entity_id,
     // 2. 首次进入视野（acked_seq == 0 且 world_seq > 0）
     if (acked == 0) {
         frame.is_snapshot = true;
-        fill_snapshot(frame, attrs);
+        fill_snapshot(frame, viewer_id, entity_id, attrs);
         return frame;
     }
 
     // 3. 历史已覆盖不了对方进度（world_seq - acked > 容量）
     if (world_seq - acked > history.capacity()) {
         frame.is_snapshot = true;
-        fill_snapshot(frame, attrs);
+        fill_snapshot(frame, viewer_id, entity_id, attrs);
         return frame;
     }
 
@@ -49,10 +50,19 @@ AttrSyncFrame DeltaBuilder::build(std::uint64_t entity_id,
         change_counts[entry.attr_id]++;
     }
 
+    // 域裁剪（§2.2）：对该 viewer 不可见的 attr 剔除（阈值按裁剪后条数算）
+    for (auto it = last_values.begin(); it != last_values.end();) {
+        if (!visible(viewer_id, entity_id, it->first, attrs)) {
+            it = last_values.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     // 4. delta 属性数超过阈值 → 直接快照
     if (last_values.size() > delta_attr_threshold_) {
         frame.is_snapshot = true;
-        fill_snapshot(frame, attrs);
+        fill_snapshot(frame, viewer_id, entity_id, attrs);
         return frame;
     }
 
@@ -71,8 +81,9 @@ AttrSyncFrame DeltaBuilder::build(std::uint64_t entity_id,
     return frame;
 }
 
-void DeltaBuilder::fill_snapshot(AttrSyncFrame& frame, const EntityAttrs& attrs) const {
-    // 快照负载 = 全量当前值（§3.3；无域裁剪，域投影留契约批）
+void DeltaBuilder::fill_snapshot(AttrSyncFrame& frame, std::uint64_t viewer_id,
+                                 std::uint64_t entity_id, const EntityAttrs& attrs) const {
+    // 快照负载 = 全量当前值（§3.3；域裁剪后，域投影 §2.2）
     // base_seq = world_seq：快照即"把对方进度直接推到当前"
     frame.base_seq = attrs.history().world_seq();
     frame.deltas.clear();
@@ -80,11 +91,31 @@ void DeltaBuilder::fill_snapshot(AttrSyncFrame& frame, const EntityAttrs& attrs)
     // std::map 按 attr_id 升序（输出确定性）
     std::map<std::uint32_t, std::int64_t> ordered(attrs.values().begin(), attrs.values().end());
     for (const auto& [attr_id, value] : ordered) {
+        if (!visible(viewer_id, entity_id, attr_id, attrs)) {
+            continue;  // 域裁剪：对该观察者不可见
+        }
         AttrDelta delta;
         delta.attr_id = attr_id;
         delta.value = value;
         delta.change_n = 1;  // 快照条目无合并语义
         frame.deltas.push_back(delta);
+    }
+}
+
+bool DeltaBuilder::visible(std::uint64_t viewer_id, std::uint64_t entity_id,
+                           std::uint32_t attr_id, const EntityAttrs& attrs) const {
+    switch (attrs.domain(attr_id)) {
+    case AttrDomain::kSelf:
+        // 仅 owner 自身可见（§2.2 SELF：CASH、任务进度）
+        return viewer_id == entity_id;
+    case AttrDomain::kTeam:
+    case AttrDomain::kGuild:
+        // 队/会域经 group gate 判定（未设置 = 不可见，成员数据归宿主）
+        return group_gate_ != nullptr && group_gate_(viewer_id, entity_id, attrs.domain(attr_id));
+    case AttrDomain::kPublic:
+    case AttrDomain::kWorld:
+    default:
+        return true;
     }
 }
 

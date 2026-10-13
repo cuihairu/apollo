@@ -479,23 +479,39 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 | `DeltaBuilder::build` 签名改 `const EntityAttrs&` + `fill_snapshot` | `include/apollo/game/attrsync/delta_builder.hpp` + `src/delta_builder.cpp` | ✅ 已落地 |
 | `EntityAttrs::values()` 全量当前值访问器 | `include/apollo/game/attrsync/entity_attrs.hpp` | ✅ 已落地 |
 
-**职责**：快照帧不再只带标记——deltas 填全量当前值（`EntityAttrs::values()`，attr_id 升序，change_n=1），`base_seq` 推到 world_seq（快照即"把对方进度直接推到当前"）。三个快照路径（首见 acked=0 / 历史覆盖不了 / delta 超阈值）统一走 `fill_snapshot`。delta 路径同批改 attr_id 升序输出（确定性）。域裁剪留契约批（域投影 §2.2 后续）。
+**职责**：快照帧不再只带标记——deltas 填全量当前值（`EntityAttrs::values()`，attr_id 升序，change_n=1），`base_seq` 推到 world_seq（快照即"把对方进度直接推到当前"）。三个快照路径（首见 acked=0 / 历史覆盖不了 / delta 超阈值）统一走 `fill_snapshot`。delta 路径同批改 attr_id 升序输出（确定性）。域裁剪机制层见批 9。
 
 **对应设计节**：§3.3（快照切换）。
 
 **测试**：`tests/test_attr_sync.cpp` 增 4 用例（SnapshotCarriesAllValues / SnapshotAfterHistoryExhaustionCarriesValues / SnapshotLatestValueWins / SnapshotThenDelta），既有 4 个 DeltaBuilder 用例迁移到 EntityAttrs 入参；`tests/test_scene_attrsync_wiring.cpp` FirstSightFramesCarrySubjectIds 断言快照帧含全量值。build 树 + sanitizer 树 + OFF 树全绿。
 
+### 批 9 — §2.2 域投影机制层
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `AttrDomain` 枚举（kPublic/kSelf/kTeam/kGuild/kWorld） | `include/apollo/game/attrsync/attr_domain.hpp` | ✅ 已落地 |
+| `EntityAttrs::set_domain` / `domain`（域位表，未声明 = kPublic） | `include/apollo/game/attrsync/entity_attrs.hpp` | ✅ 已落地 |
+| `DeltaBuilder::build` 加 viewer_id + `visible` 域裁剪 + `set_group_gate` | `include/apollo/game/attrsync/delta_builder.hpp` + `src/delta_builder.cpp` | ✅ 已落地 |
+| `AttrSyncManager::set_attr_domain` / `set_group_gate` | `include/apollo/game/attrsync/attr_sync_manager.hpp` + `src/attr_sync_manager.cpp` | ✅ 已落地 |
+| 降级路径修正：水位归零走真快照（全量值 + 域裁剪），不再强制标记 delta 帧 | `src/attr_sync_manager.cpp` | ✅ 已落地 |
+
+**职责**：域决定"字段可见性"——同一实体对不同观察者投影不同，快照与 delta 都按域裁剪。机制层规则：kPublic/kWorld 恒可见；kSelf 仅 owner（viewer_id == entity_id）；kTeam/kGuild 经宿主注入的 group gate 判定（未设置 = 不可见）。裁剪在 delta 去重后、阈值判定前进行（阈值按裁剪后条数算）。契约批落地后域标记由契约声明生成（`docs/design/sdk-contract.md`），本批只交付机制。
+
+**对应设计节**：§2.2（域与可见性）、§3.3（快照切换）。
+
+**测试**：`tests/test_attr_sync.cpp` 增 8 用例（SelfDomainHiddenFromOtherViewer / SelfDomainVisibleToOwner / PublicDomainVisibleByDefault / WorldDomainVisibleLikePublic / TeamDomainHiddenWithoutGate / TeamDomainVisibleThroughGate / DeltaPathRespectsDomain / ExhaustedHistorySnapshotAlsoFiltered）；`tests/test_attr_sync_manager.cpp` 增 2 用例（CollectHidesSelfDomainFromOtherViewer / GroupGateControlsTeamVisibility）；`tests/test_scene_attrsync_wiring.cpp` 增 1 用例（FirstSightHidesSelfDomainFromOther）；`tests/test_attr_ack_degrade.cpp` 增 1 用例（DegradeSnapshotCarriesFullValues）。build 树 + sanitizer 树 + OFF 树全绿。
+
 ### 模块构建与测试汇总
 
 **模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；8 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / attr_sync_scheduler / frame_codec）。
 
-**测试**：`tests/test_attr_sync.cpp`（21）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）+ `tests/test_scene_attrsync_wiring.cpp`（9）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）= 84 用例，build 树 + sanitizer 树全绿。
+**测试**：`tests/test_attr_sync.cpp`（29）+ `tests/test_attr_sync_manager.cpp`（22）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（8）+ `tests/test_scene_attrsync_wiring.cpp`（10）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）= 96 用例，build 树 + sanitizer 树全绿。
 
 ### 边界（未实现，后续批）
 
 - 客户端发送路径（net-abstraction.md §1 GameConnection Facade 未建）
 - slice 复合类型（§2.2）
-- 域裁剪/域投影（快照负载已填全量值，按 viewer 域投影待契约批）
+- 域标记契约声明生成 + 队/会成员数据注入（机制层已落地，声明与成员面归契约批/宿主）
 
 ## 附录：三方机制速查对照
 

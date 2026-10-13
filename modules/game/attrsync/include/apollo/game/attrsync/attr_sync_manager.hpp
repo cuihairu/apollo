@@ -39,6 +39,12 @@ public:
     void set_change_sink(ChangeSink sink);
     void clear_change_sink() { change_sink_ = nullptr; }
 
+    // ---- 域投影（§2.2）----
+    // 属性可见域（未注册实体静默忽略；未声明 = kPublic）
+    void set_attr_domain(std::uint64_t entity_id, std::uint32_t attr_id, AttrDomain domain);
+    // 队/会域成员判定（未设置 = 该两域不可见）
+    void set_group_gate(DeltaBuilder::GroupGate gate);
+
     // ---- AOI 事件接线（§4.1）----
     // Viewer 进入实体视野：建 ViewerState（不组帧，快照由 collect 面出）
     void on_viewer_enter(std::uint64_t viewer, std::uint64_t entity_id);
@@ -80,6 +86,7 @@ private:
     std::unordered_map<std::uint64_t, std::uint64_t> silent_ticks_;
     std::uint64_t ack_timeout_ticks_ = 3;
     ChangeSink change_sink_;
+    DeltaBuilder::GroupGate group_gate_;
 };
 
 }  // namespace apollo::game::attrsync
