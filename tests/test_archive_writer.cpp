@@ -2,6 +2,8 @@
 // 按日滚动（关旧开新当日本名）、同日重启续写、保留份数清理（只清本名
 // <base>_*.log）、env 保留数解析。日期缝注假日期强制跨日，不待真钟。
 // 无 GTest，plain-assert + main 汇总。
+// Windows 句柄纪律：writer 内层作用域先析构（关句柄）再清目录——句柄
+// 存活期 remove_all 删锁定文件抛 filesystem_error，未捕获即 0xc0000409。
 #include "logger/archive_writer.hpp"
 
 #include <algorithm>
@@ -62,23 +64,26 @@ std::string temp_dir(const char* tag) {
 bool test_open_and_write() {
     std::cout << "Running: test_open_and_write..." << std::endl;
     const std::string dir = temp_dir("basic");
-    logger::ArchiveWriter writer({dir, "collector", 0});
-    writer.set_date_provider([] { return "20261013"; });
-    TEST_ASSERT(writer.open(), "open succeeded");
-    TEST_ASSERT(writer.current_path().find("collector_20261013.log") != std::string::npos,
-                "dated file name");
+    {
+        logger::ArchiveWriter writer({dir, "collector", 0});
+        writer.set_date_provider([] { return "20261013"; });
+        TEST_ASSERT(writer.open(), "open succeeded");
+        TEST_ASSERT(writer.current_path().find("collector_20261013.log") != std::string::npos,
+                    "dated file name");
 
-    writer.write_line("ts=1 level=INFO proc=gw msg=hello");
-    writer.write_line("ts=2 level=INFO proc=gw msg=world");
+        writer.write_line("ts=1 level=INFO proc=gw msg=hello");
+        writer.write_line("ts=2 level=INFO proc=gw msg=world");
 
-    // 逐行冲刷：无关闭即读得到（scan/follow 即时可见口径）
-    const std::string content = slurp(writer.current_path());
-    TEST_ASSERT(content == "ts=1 level=INFO proc=gw msg=hello\n"
-                           "ts=2 level=INFO proc=gw msg=world\n",
-                "lines flushed per write");
-    TEST_ASSERT(log_files(dir).size() == 1, "single dated file");
+        // 逐行冲刷：无关闭即读得到（scan/follow 即时可见口径）
+        const std::string content = slurp(writer.current_path());
+        TEST_ASSERT(content == "ts=1 level=INFO proc=gw msg=hello\n"
+                               "ts=2 level=INFO proc=gw msg=world\n",
+                    "lines flushed per write");
+        TEST_ASSERT(log_files(dir).size() == 1, "single dated file");
+    }  // 句柄先释放再删目录
 
-    fs::remove_all(dir);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -89,26 +94,29 @@ bool test_day_rollover() {
     std::cout << "Running: test_day_rollover..." << std::endl;
     const std::string dir = temp_dir("rollover");
     std::string today = "20261013";
-    logger::ArchiveWriter writer({dir, "collector", 0});
-    writer.set_date_provider([&today] { return today; });
-    TEST_ASSERT(writer.open(), "open succeeded");
-    writer.write_line("day one");
+    {
+        logger::ArchiveWriter writer({dir, "collector", 0});
+        writer.set_date_provider([&today] { return today; });
+        TEST_ASSERT(writer.open(), "open succeeded");
+        writer.write_line("day one");
 
-    today = "20261014";  // 跨日
-    writer.write_line("day two");
+        today = "20261014";  // 跨日
+        writer.write_line("day two");
 
-    const auto files = log_files(dir);
-    TEST_ASSERT(files.size() == 2, "two dated files after rollover");
-    TEST_ASSERT(files[0] == "collector_20261013.log" && files[1] == "collector_20261014.log",
-                "one file per day");
-    TEST_ASSERT(slurp((fs::path(dir) / files[0]).string()) == "day one\n",
-                "old file untouched");
-    TEST_ASSERT(slurp((fs::path(dir) / files[1]).string()) == "day two\n",
-                "new file has new line");
-    TEST_ASSERT(writer.current_path().find("20261014") != std::string::npos,
-                "current path advanced");
+        const auto files = log_files(dir);
+        TEST_ASSERT(files.size() == 2, "two dated files after rollover");
+        TEST_ASSERT(files[0] == "collector_20261013.log" && files[1] == "collector_20261014.log",
+                    "one file per day");
+        TEST_ASSERT(slurp((fs::path(dir) / files[0]).string()) == "day one\n",
+                    "old file untouched");
+        TEST_ASSERT(slurp((fs::path(dir) / files[1]).string()) == "day two\n",
+                    "new file has new line");
+        TEST_ASSERT(writer.current_path().find("20261014") != std::string::npos,
+                    "current path advanced");
+    }  // 句柄先释放再删目录
 
-    fs::remove_all(dir);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -147,27 +155,30 @@ bool test_max_files_cleanup() {
     std::cout << "Running: test_max_files_cleanup..." << std::endl;
     const std::string dir = temp_dir("cleanup");
     std::string today = "20261011";
-    logger::ArchiveWriter writer({dir, "collector", 2});
-    writer.set_date_provider([&today] { return today; });
-    TEST_ASSERT(writer.open(), "open day one");
+    {
+        logger::ArchiveWriter writer({dir, "collector", 2});
+        writer.set_date_provider([&today] { return today; });
+        TEST_ASSERT(writer.open(), "open day one");
 
-    // 他名文件（旧版归档名 + BI tap 名）必须原样
-    { std::ofstream legacy(fs::path(dir) / "collector.log"); legacy << "legacy\n"; }
-    { std::ofstream bi(fs::path(dir) / "bi.log"); bi << "bi\n"; }
+        // 他名文件（旧版归档名 + BI tap 名）必须原样
+        { std::ofstream legacy(fs::path(dir) / "collector.log"); legacy << "legacy\n"; }
+        { std::ofstream bi(fs::path(dir) / "bi.log"); bi << "bi\n"; }
 
-    for (const char* d : {"20261012", "20261013", "20261014"}) {
-        today = d;
-        writer.write_line("line " + today);
-    }
+        for (const char* d : {"20261012", "20261013", "20261014"}) {
+            today = d;
+            writer.write_line("line " + today);
+        }
 
-    const auto files = log_files(dir);
-    TEST_ASSERT(files.size() == 4, "2 kept + 2 foreign-name files");
-    TEST_ASSERT(files[0] == "bi.log" && files[1] == "collector.log",
-                "foreign-name files untouched");
-    TEST_ASSERT(files[2] == "collector_20261013.log" && files[3] == "collector_20261014.log",
-                "oldest two dated files removed");
+        const auto files = log_files(dir);
+        TEST_ASSERT(files.size() == 4, "2 kept + 2 foreign-name files");
+        TEST_ASSERT(files[0] == "bi.log" && files[1] == "collector.log",
+                    "foreign-name files untouched");
+        TEST_ASSERT(files[2] == "collector_20261013.log" && files[3] == "collector_20261014.log",
+                    "oldest two dated files removed");
+    }  // 句柄先释放再删目录
 
-    fs::remove_all(dir);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -178,16 +189,19 @@ bool test_no_cleanup_when_disabled() {
     std::cout << "Running: test_no_cleanup_when_disabled..." << std::endl;
     const std::string dir = temp_dir("noclean");
     std::string today = "20261012";
-    logger::ArchiveWriter writer({dir, "collector", 0});
-    writer.set_date_provider([&today] { return today; });
-    TEST_ASSERT(writer.open(), "open");
-    for (const char* d : {"20261013", "20261014", "20261015", "20261016"}) {
-        today = d;
-        writer.write_line("line " + today);
-    }
-    TEST_ASSERT(log_files(dir).size() == 5, "all five files kept");
+    {
+        logger::ArchiveWriter writer({dir, "collector", 0});
+        writer.set_date_provider([&today] { return today; });
+        TEST_ASSERT(writer.open(), "open");
+        for (const char* d : {"20261013", "20261014", "20261015", "20261016"}) {
+            today = d;
+            writer.write_line("line " + today);
+        }
+        TEST_ASSERT(log_files(dir).size() == 5, "all five files kept");
+    }  // 句柄先释放再删目录
 
-    fs::remove_all(dir);
+    std::error_code ec;
+    fs::remove_all(dir, ec);
     std::cout << "  PASSED" << std::endl;
     return true;
 }
