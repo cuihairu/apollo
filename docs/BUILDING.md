@@ -1,4 +1,4 @@
-# 构建 Apollo MMORPG 框架
+# 构建 Apollo 服务端
 
 ## 使用 vcpkg（推荐）
 
@@ -38,7 +38,7 @@ cmake --build build --config Release
 
 ```bash
 # 安装依赖
-sudo apt-get install nlohmann-json3-dev libprotobuf-dev protobuf-compiler libgtest-dev libfmt-dev
+sudo apt-get install nlohmann-json3-dev libprotobuf-dev protobuf-compiler libgtest-dev libssl-dev libcurl4-openssl-dev libpugixml-dev libreadline-dev
 
 # 构建
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -49,7 +49,7 @@ cmake --build build
 
 ```bash
 # 使用 Homebrew
-brew install nlohmann-json protobuf gtest fmt
+brew install nlohmann-json protobuf gtest openssl curl pugixml readline
 
 # 构建
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -60,7 +60,7 @@ cmake --build build
 
 ```bash
 # 使用 vcpkg（推荐）
-vcpkg install nlohmann-json protobuf gtest fmt:x64-windows
+vcpkg install nlohmann-json protobuf gtest openssl curl pugixml readline crashpad:x64-windows
 
 # 构建
 cmake -B build `
@@ -80,31 +80,20 @@ cmake --build build --config Release
 - `APOLLO_ENABLE_DOXYGEN=ON` - 生成 API 文档（需要 Doxygen）
 - `APOLLO_ENABLE_CLANG_TIDY=ON` - 启用 clang-tidy 静态分析
 
-### vcpkg Features
-vcpkg.json 定义了以下可选功能：
+### vcpkg 依赖
 
-```bash
-# 安装所有依赖（默认）
-vcpkg install --triplet=x64-linux
+vcpkg.json 清单模式自动安装以下依赖（无需手动 vcpkg install）：
 
-# 只安装基本依赖（不包括 Redis 和额外功能）
-vcpkg install --triplet=x64-linux --x-feature=basic
-
-# 安装包含所有功能的依赖
-vcpkg install --triplet=x64-linux --x-feature=full
-
-# 或者在 vcpkg.json 中指定要安装的 features：
-{
-  "dependencies": [
-    "apollo-mmorpg[tests,redis]"
-  ]
-}
-```
-
-可用的 features：
-- `tests` - 包含 gtest 和 gmock
-- `redis` - Redis 客户端支持
-- `protobuf` - Protocol Buffers 支持（包含 zlib）
+| 依赖 | 用途 |
+|------|------|
+| openssl | TLS/加密 |
+| protobuf | 序列化（golden .proto） |
+| gtest | 单元测试 |
+| curl | HTTP 客户端 |
+| nlohmann-json | JSON 解析 |
+| pugixml | XML 解析（契约） |
+| readline | 交互式命令行 |
+| crashpad | 崩溃采集 |
 
 ## 运行测试
 

@@ -24,7 +24,7 @@ BigWorld 风格调用（namespace BigWorld，include/bigworld/BigWorld.h 头库�
     ↓ 内联映射
 apollo::bw::BigWorld（modules/bigworld + include/apollo/bw/bigworld.h）
     ↓ 消费
-Apollo 模块 (base 的 TimerWheel 驱动、game 的实体域等)
+Apollo 模块 (bw 自实现堆定时器、game 的实体域等)
 ```
 
 ## 基本用法
@@ -39,9 +39,9 @@ auto found  = BigWorld::entity(id);                  // 按 EntityId 取
 auto all    = BigWorld::entities();
 BigWorld::destroyEntity(id);
 
-// 实体属性（apollo::bigworld::Entity：模板化键值面）
-entity->set("hp", 100);
-int hp = entity->get("hp", 0);
+// 实体属性：未接线（apollo::bigworld::Entity 无 set/get，属性面挂 attributes 模块）
+// entity->set("hp", 100);
+// int hp = entity->get("hp", 0);
 
 // 回调与定时器（秒制延迟；TimerId 可撤销）
 auto cid = BigWorld::callback(0.5, []() { /* 一次性 */ });
@@ -82,8 +82,9 @@ BigWorld::update();              // 驱动定时器帧
 ## 链接
 
 ```cmake
-find_package(apollo-bigworld REQUIRED)
+add_subdirectory(path/to/apollo)
 target_link_libraries(my_app apollo::bigworld)
+# 模块默认 OFF，需 APOLLO_BUILD_BIGWORLD=ON 开启
 ```
 
 ## 相关文档

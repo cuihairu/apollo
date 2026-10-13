@@ -131,9 +131,8 @@ public:
 
 ## modules/net/protocol（apollo::net::protocol）
 
-接入面协议原语（nng 底座，P1 收口前受 `apollo_protocol` 门控）：
-`endpoint.hpp`、`channel.hpp`——login-app/gateway-app/base-app 的 REP/REQ
-套接字封装（`apollo/protocol/socket.hpp`）即由此而来。
+服务发现元数据（现役）：`endpoint.{hpp,cpp}`——`Protocol` 枚举（Ipc/Tcp/InProc/Ws/Auto）+ `Endpoint` 结构（服务名/主机/端口），发现面词汇，与传输实现解耦。
+`channel.hpp` 与 `apollo/protocol/socket.hpp` 不存在（旧稿引用，随 nng Channel 退役删除，P4-4 批⑤ 9121ebc2）。
 
 ---
 

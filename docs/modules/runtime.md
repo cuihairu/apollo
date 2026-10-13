@@ -146,7 +146,8 @@ int main() {
 ## 健康检查
 
 > **未实现**（2026-10-04 对账）：`apollo/runtime/health_check.hpp` 不存在，
-> 仓库无健康检查设施；接口面立项随 P3-3（可观测：metrics/tracing 最小集）。
+> 仓库无健康检查设施；可观测最小集（metrics/tracing）已随 P3-3 收口（2026-10-13），
+> health_check 接口仍未立项。
 
 ## 依赖
 

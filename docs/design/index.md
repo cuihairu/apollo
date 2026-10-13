@@ -20,7 +20,7 @@
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
 | [战斗确定性](./battle-determinism.md) | 已交付 | 四约束 + 录制/回放/hash 链 |
-| [战斗实例卸载](./battle-instance-offload.md) | 前置设计 | offload 进程形态（三拍板点待裁） |
+| [战斗实例卸载](./battle-instance-offload.md) | 已交付（骨架） | offload 进程形态（三拍板点已裁 ADR-012） |
 | [战斗验证服务](./battle-verification-service.md) | 设计稿（评审中） | 客户端权威战斗复算对账（verifier） |
 
 ## 网络与运维
@@ -30,7 +30,7 @@
 | [网络抽象与传输内核](./net-abstraction.md) | 设计稿 | L0-L3 分层 + M1 自研内核（nng 替换路线） |
 | [网关拓扑调研](./gateway-topology-survey.md) | 调研件（「留」结论已生效，ADR-011） | 九框架对照 + 独立 gateway-app 论证 |
 | [日志系统](./logging.md) | 已交付（P3-3 批 A/B/C） | 单套收口 + 结构化行 + 三禁纪律 |
-| [LoggerApp 立项前置设计](./logger-app.md) | 前置设计（候选倾向已记，拍板点待裁） | 进程壳与结构化行接线的落地形态（ADR-013） |
+| [LoggerApp 立项前置设计](./logger-app.md) | 已交付（L1-L4，2026-10-10/12） | 进程壳与结构化行接线的落地形态（ADR-013） |
 | [崩溃采集](./crash-capture.md) | 已交付 | Crashpad out-of-process + 符号化管线 |
 | [容量与基准](./capacity-and-benchmark.md) | 已交付 | 5000 CCU 容量模型 + 三模型基准 |
 | [备份容灾与宕机接管](./backup-revive.md) | 已关闭（批 0 已交付，六拍板点已裁 ADR-010：案 A 先行） | 权威进程死亡后「服务不倒」候选拓扑（G-2） |

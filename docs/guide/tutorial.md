@@ -8,7 +8,7 @@ next: /guide/concepts
 
 # 上手教程
 
-从零到跑通一局完整对战：登录锚 → 建副本 → 挂战斗 → 进场 → AOI → 打完 → 结算 → 离场。全程进程内单线程，对应仓库里的可运行样例 `examples/full_loop_demo.cpp`（36 个断言门全过，本教程按它逐步拆解）。
+从零到跑通一局完整对战：登录锚 → 建副本 → 挂战斗 → 进场 → AOI → 打完 → 结算 → 离场。全程进程内单线程，对应仓库里的可运行样例 `examples/full_loop_demo.cpp`（32 个断言门全过，本教程按它逐步拆解）。
 
 > 前置：已按[快速开始](./quick-start)完成构建（三树门禁口径见[测试套件](/guide/quick-start)引用的仓库 `tests/README`）。
 

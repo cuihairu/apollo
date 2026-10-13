@@ -77,7 +77,7 @@ Six terms that cover Apollo's runtime model (all backed by real components; see 
 
 - **Minimalist constructor-injection DI** - `apollo::core::di`: type-keyed bean graph, topologically ordered assembly, `ApplicationHost` frame-driven lifecycle
 - **Entity contract system** - XML+XSD contracts + standalone generator `apollo_gen`; the generator is not in the runtime link graph
-- **Async networking** - cross-platform asynchronous I/O (IOCP/Epoll)
+- **Async networking** - non-blocking sockets + select()/epoll event loop (Windows polls via select(); no IOCP)
 - **Transport codec (target state)** - protobuf reflection as default + zstd (planned); the current implementation uses hand-written encoding
 - **AOI 3×3 grid** - `SceneAoi` single implementation + `ViewerState` per-observer watermarks; the event surface is delivered
 - **Battle system** - `BattleRuntime` deterministic battle domain (five-phase lifecycle, hash-chain fingerprint) settling one-way into player anchors
@@ -386,7 +386,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable services: login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server
+├── apps/                   # Executable services: login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server / admin / fleetctl
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations
@@ -454,7 +454,7 @@ Apollo is an original implementation of this repository, not a fork of any exist
 - **KBEngine**: several entries in `docs/qa/` analyze its source mechanisms
 - **skynet**: design precedents such as the observability channel (`docs/analysis/architecture-review.md`)
 
-Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependency management), [nlohmann/json](https://github.com/nlohmann/json), [protobuf](https://github.com/protocolbuffers/protobuf) (currently a dependency + tests, not on the message path), [GTest](https://github.com/google/googletest), NNG (`modules/protocol` is currently a stub, real transport not enabled), [VitePress](https://vitepress.dev) (docs site), GitHub Actions and Codecov (CI and coverage).
+Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependency management), [nlohmann/json](https://github.com/nlohmann/json), [protobuf](https://github.com/protocolbuffers/protobuf) (currently a dependency + tests, not on the message path), [GTest](https://github.com/google/googletest), OpenSSL, libcurl, pugixml, readline, crashpad, [VitePress](https://vitepress.dev) (docs site), GitHub Actions and Codecov (CI and coverage). The transport layer is self-built (`modules/net/link`), no nng.
 
 ## Contact
 

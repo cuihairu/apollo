@@ -36,14 +36,10 @@ cd C:/vcpkg
 ### 2. 安装依赖
 
 ```bash
-# Windows
-vcpkg install openssl:x64-windows protobuf:x64-windows gtest:x64-windows nlohmann-json:x64-windows
-
-# Linux
-vcpkg install openssl:x64-linux protobuf:x64-linux gtest:x64-linux nlohmann-json:x64-linux
-
-# macOS
-vcpkg install openssl:x64-osx protobuf:x64-osx gtest:x64-osx nlohmann-json:x64-osx
+# 仓库采用 vcpkg 清单模式（vcpkg.json），CMake configure 期自动安装全部依赖
+#（openssl / protobuf / gtest / curl / nlohmann-json / pugixml，Linux 另含 readline / crashpad），
+# 无需手工逐个安装：
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=<vcpkg-root>/scripts/buildsystems/vcpkg.cmake
 ```
 
 ### 3. 克隆 Apollo
@@ -82,7 +78,7 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 
 # 运行示例
-./build/bin/game-server
+./build/apps/game-server/apollo_game_server
 ```
 
 ## 目录结构
@@ -96,7 +92,8 @@ apollo/
 │   ├── runtime/      # 运行时模块
 │   ├── data/         # 数据访问模块
 │   ├── net/          # 网络模块
-│   ├── actor/        # Actor 模块
+│   ├── protocol/     # 协议模块
+│   ├── contract/     # 契约模块
 │   ├── game/         # 游戏模块
 │   └── bigworld/     # BigWorld 兼容层
 ├── include/          # 公共头文件

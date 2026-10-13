@@ -77,7 +77,7 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 - **极简构造注入 DI** - `apollo::core::di`：类型键 bean 图、拓扑序装配，`ApplicationHost` 帧驱动生命周期
 - **实体契约系统** - XML+XSD 契约 + 独立生成器 `apollo_gen`，生成器不进运行时链接图
-- **异步网络层** - 跨平台异步 I/O（IOCP/Epoll）
+- **异步网络层** - 非阻塞 socket + select()/epoll 事件循环（Windows 走 select()，不使用 IOCP）
 - **传输编解码（目标态）** - protobuf 反射为默认 + zstd（规划）；现网手写编码
 - **AOI 九宫格** - `SceneAoi` 单实现 + `ViewerState` 逐观察者水位，事件面已交付
 - **战斗系统** - `BattleRuntime` 确定性战斗域（五段相位 + hash 链指纹），结算单向落锚
@@ -94,7 +94,7 @@ This makes Apollo a compact alternative for games where the natural world bounda
 - **编程语言**: C++20
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自写跨平台网络层
-- **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3/#19）——**def 契约管语义**（属性/权限位/sync 掩码/内外分域；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付；服务端载体为 contract.lua，业务 handler 与白名单数据化）；**protobuf 管字节编码**（反射为默认：descriptor.bin + 框架固定消息族内建强类型守热路径；有代码热更管线的客户端走生成代码、bin 兜底；L1 帧格式 + zstd，规划；`docs/design/sdk-contract.md`）。protobuf 现为依赖+测试，未上消息通路（仓库自有 .proto 为零，现网手写编码）
+- **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3/#19）——**def 契约管语义**（属性/权限位/sync 掩码/内外分域；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付；服务端载体为 contract.lua，业务 handler 与白名单数据化）；**protobuf 管字节编码**（反射为默认：descriptor.bin + 框架固定消息族内建强类型守热路径；有代码热更管线的客户端走生成代码、bin 兜底；L1 帧格式 + zstd，规划；`docs/design/sdk-contract.md`）。protobuf 现为依赖+测试，未上消息通路（消息通路仍为手写 codec；golden .proto 已存在但未消费）
 - **数据库**: 现状零外部存储依赖——玩家档案 = JSON 文件 + `PersistJournal` write-behind 日志（P1-4/P1-5 交付）；MySQL 8（主存储）/ Redis（缓存/会话）/ ClickHouse（分析）均为规划态未接线，PostgreSQL 留缝（docs/36 决策 #17）
 - **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自写消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
@@ -384,7 +384,7 @@ cd build && ctest -R BigWorldApiTests
 
 ```
 apollo/
-├── apps/                   # 可执行服务：login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server
+├── apps/                   # 可执行服务：login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server / admin / fleetctl
 ├── modules/                # 模块化源码：base/core/data/game/net/runtime 等
 ├── include/                # 公共头文件与兼容层头文件
 ├── src/                    # 公共实现与兼容层实现
@@ -452,7 +452,7 @@ Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与�
 - **KBEngine**：`docs/qa/` 多篇条目为其源码机制分析
 - **skynet**：观测通道等设计先例（`docs/analysis/architecture-review.md`）
 
-第三方依赖：[vcpkg](https://github.com/microsoft/vcpkg)（依赖管理）、[nlohmann/json](https://github.com/nlohmann/json)、[protobuf](https://github.com/protocolbuffers/protobuf)（现为依赖与测试，未上消息通路）、[GTest](https://github.com/google/googletest)、NNG（`modules/protocol` 现为桩形态，未启用真实传输）、[VitePress](https://vitepress.dev)（文档站）、GitHub Actions 与 Codecov（CI 与覆盖率）。
+第三方依赖：[vcpkg](https://github.com/microsoft/vcpkg)（依赖管理）、[nlohmann/json](https://github.com/nlohmann/json)、[protobuf](https://github.com/protocolbuffers/protobuf)（现为依赖与测试，未上消息通路）、[GTest](https://github.com/google/googletest)、OpenSSL、libcurl、pugixml、readline、crashpad、[VitePress](https://vitepress.dev)（文档站）、GitHub Actions 与 Codecov（CI 与覆盖率）。传输层自持（`modules/net/link`），无 nng。
 
 ## 联系方式
 

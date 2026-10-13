@@ -17,9 +17,9 @@ Apollo 采用分层模块化架构，每个模块职责清晰，可以独立使�
 │                        Applications                              │
 └─────────────────────────────────────────────────────────────────┘
                                 ↓
-┌──────┬──────┬──────┬──────┬──────────┬──────────┬────────────┐
-│  net │ data │ game │ actor│ framework│  runtime │   core     │
-└──────┴──────┴──────┴──────┴──────────┴──────────┴────────────┘
+┌──────┬──────┬──────┬───────┬────────┬─────────┬─────────┬──────┐
+│  net │ data │ game │protocol│contract│bigworld │ runtime │ core │
+└──────┴──────┴──────┴───────┴────────┴─────────┴─────────┴──────┘
                                 ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Base                                      │
@@ -31,21 +31,19 @@ Apollo 采用分层模块化架构，每个模块职责清晰，可以独立使�
 ### CMakeLists.txt 配置
 
 ```cmake
-find_package(apollo-core REQUIRED)
-find_package(apollo-net REQUIRED)
+add_subdirectory(path/to/apollo)
 
 target_link_libraries(my_app
     apollo::core
-    apollo::net
+    apollo::net_core
 )
 ```
 
 ### 条件加载
 
 ```cmake
-if(ENABLE_GAME_MODULE)
-    find_package(apollo-game REQUIRED)
-    target_link_libraries(my_app apollo::game)
+if(APOLLO_BUILD_GAME_MODULE)
+    target_link_libraries(my_app apollo::game_world)
 endif()
 ```
 
@@ -57,7 +55,9 @@ endif()
 - 同层模块尽量避免相互依赖
 
 ```
-base ← core ← runtime ← net/data/game
+net ← runtime
+data ← core
+game ← core
 ```
 
 ## 自定义模块

@@ -154,5 +154,6 @@ target_link_libraries(my_app
     apollo::game_session
     apollo::game_attributes
     apollo::game_battle
+    apollo::game_social
 )
 ```

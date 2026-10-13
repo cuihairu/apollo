@@ -49,7 +49,7 @@ override 独立包动不到它——纸面修复，见下节。
   `import("./katex-F5DCXIFN.mjs")` 加载；全 dist 无一处 import 外部 katex 包。
   pnpm override 换独立 katex 包只改 lockfile，mermaid 实际执行的仍是内联的
   0.16.47——告警清了、漏洞代码照旧出货，纸面修复不取。
-- **缓解**：本站 13 个 ```` ```mermaid ```` 块无一处 `$$` 数学定界符；katex chunk
+- **缓解**：本站 23 个 ```` ```mermaid ```` 块无一处 `$$` 数学定界符；katex chunk
   仅在文本出现数学定界符时才动态加载（`hasKatex` 探测），实际渲染路径不触达。
 - **复核触发条件**（满足其一即重估）：
   1. mermaid 发布版本 changelog 写明内联 katex ≥0.18.2（或 dist 不再内联、改为

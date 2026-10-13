@@ -36,7 +36,7 @@ v1 终态：logger 进程入编队；各 app 双出口第一步 = 本地结构�
 
 ### (b) push 直连 v1——各 app logger 线程直推 collector
 
-需 InterServerLink（net-abstraction §5.7，M1 未落地；现役 nng 底座属换血对象）——**违 ADR-013「push 留接口不实现」，否**。
+需 InterServerLink（net-abstraction §5.7，M1 已于 2026-10-11 落地；现役传输 = link M1 底座）——**违 ADR-013「push 留接口不实现」，否**。
 
 ### (c) UDP 推（G-1 beacon 同型）
 

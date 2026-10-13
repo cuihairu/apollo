@@ -14,70 +14,8 @@ prev: /guide/module-system
 
 | 层 | 位置 | 能力 | 现状 |
 | --- | --- | --- | --- |
-| `ConfigManager`（legacy） | `modules/core/config/` | 文件加载、层级访问、监听、热重载轮询 | 已实现；仓库应用未接线，仅测试覆盖 |
-| `ConfigRegistry` | `modules/core` | 进程内键值表（string/int64/bool） | 已实现；无文件 I/O |
+| `ConfigRegistry` | `modules/core` | 进程内键值表（string/int64/bool） | 现役；无文件 I/O |
 | 应用自读 | `apps/*` | CLI 参数解析、策划表加载 | 各 app 自管，无统一入口 |
-
-## ConfigManager（文件配置）
-
-`apollo::core::config::ConfigManager` 单例（`include/apollo/core/config/config_manager.h`）。
-格式支持 INI、JSON、XML、Lua(table) 四种，按扩展名自动检测（`.ini`/`.cfg`/`.json`/`.xml`/`.lua`）。
-JSON 解析优先走 nlohmann_json（构建可用时），否则退回内置简化解析。
-配置按 section 隔离（默认 `"default"`），内部 `shared_mutex` 保护，读多写少场景线程安全。
-
-```cpp
-#include <apollo/core/config/config_manager.hpp>
-
-auto& config = apollo::core::config::ConfigManager::instance();
-
-// 加载（format 省略时按扩展名检测）
-config.loadFile("config.json");
-
-// 层级访问，键用点号分隔；getter 均带默认值参数
-int64_t port = config.getInt64("server.port", 8888);
-std::string host = config.getString("server.host", "0.0.0.0");
-bool verbose = config.getBool("log.verbose", false);
-std::vector<std::string> nodes = config.getArray("cluster.nodes");
-
-// 泛型版
-auto timeout = config.getValue<int>("server.timeout", 30);
-
-// 写入与回存
-config.setValue("server.port", static_cast<int64_t>(9999));
-config.saveFile("config.json");
-```
-
-### 变更监听
-
-```cpp
-size_t id = config.addListener("server.port", [](const std::string& key,
-                                                const apollo::core::config::ConfigNode& value) {
-    // 键传空串监听全部变更
-});
-config.removeListener(id);
-```
-
-### 热重载
-
-`enableHotReload(enable, checkIntervalMs)` 打开文件变化轮询，但检查发生在 `update()` 里——
-宿主必须周期性调用它（时间轮或主循环均可）。`reload(section)` 可手动强制重载。
-
-```cpp
-config.enableHotReload(true, 1000);
-
-// 主循环里：
-config.update();
-```
-
-仓库内的应用（apps/）目前没有接 `update()` 循环，热重载属于库能力、未在运行链路生效。
-游戏侧热更规划走 tick 边界换 `ConfigSnapshot`（architecture-review §17.6），未实现。
-
-### 便捷宏
-
-```cpp
-// 等价 ConfigManager::instance().getInt/getStr/getBool/getDouble
-int port = APOLLO_CONFIG_INT("server.port", 8888);
-```
 
 ## ConfigRegistry（进程内键值）
 
@@ -118,7 +56,7 @@ BaseConfig loadConfig(int argc, char* argv[]) {
 }
 ```
 
-统一收口列入 P3-1（配置统一，ConfigManager 收口或删除）。
+P3-1 已收口（配置统一，legacy `ConfigManager` 删除，`d36529c5`）；现役配置面 = `ConfigRegistry` + 应用自读。
 
 ### 策划表
 

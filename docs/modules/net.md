@@ -18,8 +18,7 @@ Network 模块提供网络通信能力。
 > 只作沿革参考，接口以 [Network API](/api/net) 与头文件 `include/apollo/net/` 为准。
 > 现状真实面：`Listener`/`Connection`/`EventLoop`（TCP 监听与连接）、
 > `http`（Request/Response/RequestParser/Router 原语）、`websocket::Server`、
-> `RpcServer`，以及接入面协议 `modules/net/protocol`（endpoint/channel，nng 底座，
-> P1 收口前受 `apollo_protocol` 门控）。
+> `RpcServer`，以及服务发现元数据 `modules/net/protocol`（`endpoint`）。
 
 ## TCP Server
 

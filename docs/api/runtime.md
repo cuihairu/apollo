@@ -129,7 +129,7 @@ CrashCaptureStatus init_crash_capture(int argc, char* const argv[],
 自扫 `--crash-dump-dir` / `--crash-handler-path`（其余参数原样透传）；缺省
 db = `crashdumps/<proc_name>/`，handler 三级定位（显式 → 可执行文件同级 →
 编译期缓存）。`enabled=false` 时进程照常继续——采集是增强不是依赖。
-全 app main 最早段接线（七 app）。
+全 app main 最早段接线（八 app）。
 
 ---
 

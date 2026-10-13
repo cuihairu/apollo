@@ -51,8 +51,8 @@ public:
         -> std::future<std::invoke_result_t<F, Args...>>;
         // 已 stop 再 submit 抛 std::runtime_error
 
-    size_t size() const;                    // 线程数
-    size_t tasks() const;                   // 排队任务数
+    size_t thread_count() const;            // 线程数
+    size_t pending_task_count() const;      // 排队任务数
     void wait_for_all();                    // 等待全部任务完成
     void stop();                            // 停止（未执行任务不再执行）
 };

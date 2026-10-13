@@ -5,7 +5,7 @@ titleTemplate: false
 hero:
   name: Apollo
   text: 场景实例制在线游戏服务端引擎
-  tagline: C++20 内核 + Lua 业务层——副本（instance）/baseapp 粒度的 MMO 框架；塔防/房间制玩法一等公民（Compact 形态）。
+  tagline: C++20 内核——副本（instance）/baseapp 粒度的 MMO 框架；塔防/房间制玩法一等公民（Compact 形态）。
   image:
     src: /apollo.png
     alt: Apollo
@@ -20,13 +20,13 @@ features:
   - title: 场景实例制（baseapp/副本）
     details: 场景实例粒度 baseapp 承载实体权威，不拆 cell/base、不做 ghost 无缝世界；副本（instance）短生命周期独立可配，房间制玩法即副本形态。
   - title: 网络四层自建
-    details: L0 epoll reactor → L1 帧（magic+seq+CRC32C）→ L2 会话（四通道 QoS/四级水位/resume 重连续传）→ L3 GameConnection；进程间 InterServerLink 稳定连接一族。
+    details: L0 poll reactor → L1 帧（magic+seq+CRC32C）→ L2 会话（四级水位；QoS/resume 未接线）→ L3 GameConnection（未接线）；进程间 InterServerLink 稳定连接一族。
   - title: 契约一源多端
     details: XML+XSD 契约（attrs/messages/entities/errors）+ 生成器独立二进制；8 位可见域掩码、schema_hash 握手、按域分段 id——服务端契约变更零重编。
-  - title: Lua 5.5 白名单业务层
-    details: 原生 C API 绑定（版本随 vcpkg）；脚本可写面由契约生成；热更走换表协议（冒烟+回滚）；线程模型单写者、协程 tick 边界 resume。
+  - title: Lua 业务层（规划态）
+    details: 设计稿评审中（scripting-lua）；原生 C API 绑定、热更走换表协议为设计目标，仓库无 Lua 依赖与绑定代码。
   - title: write-behind journal 持久化
-    details: 先追加日志后快照两段式；journal 同为 G-2 热备镜像流与崩溃恢复位点；storage.xml 语句即数据（MySQL 8 主存）。
+    details: 先追加日志后快照两段式；journal 为崩溃恢复位点（G-2 镜像流未建，ADR-010）；storage.xml/db-app 为规划态。
   - title: 集群 G-1/G-2（P3 前置已定）
     details: 进程发现 = machined 守护 + UDP 广播双层（不引 etcd/consul）；G-2 案 A 先行 restart-only（standby/reviver 未立项，ADR-010）；恢复相位排他；指标同源 G-5。
 ---
@@ -39,9 +39,9 @@ features:
 Client ── Gate（透传/解码装配分工）
           └─ World / baseappmgr 域（最轻分配、准入闸门、恢复相位）
               ├─ baseapp ×N（场景实例粒度进程，单写者 tick 10Hz）
-              ├─ AOI 服务（网格+四叉树+shard，可独立扩缩；Compact 形态内嵌）
+              ├─ SceneAoi（九宫格，内嵌于 cell-app；四叉树/shard 未接线）
               ├─ 副本实例（instance，可选独立进程；塔防房间 = 内嵌副本）
-              └─ db-app（storage.xml + write-behind journal）
+              └─ db-app（规划态，未接线）
 进程发现：machined 守护 + UDP 广播（G-1，不引注册中心）    G-2：案 A 先行 restart-only（standby/reviver 未立项，ADR-010）
 ```
 
@@ -60,7 +60,7 @@ Client ── Gate（透传/解码装配分工）
 | **轻量形态** | [30-Compact_GameServer_Design](/30-Compact_GameServer_Design) | 塔防/固定地图精简形态（AOI 内嵌/副本内嵌/单机多线程） |
 | **批次计划** | [todo](/todo) | 批次 1-9（契约已交付；db-app/cell-appmgr/脚本/SDK/监控排程） |
 | **参考件区** | [architecture/README](/architecture/README) | 70+25 份全量状态表（A 实引 4 份/B 引擎分析/C 被取代稿/D 历史路线图）——**该目录不读作 apollo 现行设计** |
-| **QA 答疑** | docs/qa/（130 问）、[QA](/QA) | 面试级问答库（BW/KBE 机制分析结论，参考件） |
+| **QA 答疑** | docs/qa/（117 问）、[QA](/QA) | 面试级问答库（BW/KBE 机制分析结论，参考件） |
 
 其余目录（guide/、api/、modules/、apps/、sdks/、public/）为早期手册与模块说明，随对应代码批次重写；根目录编号文档（03/18/32-36）状态以各文档头部标注与 36 号口径为准。已删文档（00/04/05/17/25 等）git 历史可溯。
 

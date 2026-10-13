@@ -11,7 +11,7 @@
 3. **口径统一**：主循环 tick = **10Hz**（clock-and-time §4 定案）；movement **20Hz 是客户端上报节拍**（net-abstraction §4.1），不是主循环频率——sdk-contract §10.6 量化段的「20Hz 主线程」为估算旧口径，本文以 clock-and-time 为准重述（帧占比结论不变，sdk-contract :500 的 8%/4% 按 10Hz 重算为 ~4%/2%，仍在帧预算 10% 内）。
 4. **帧预算表**（§2）：每帧 100ms 分配到消息段 + tick 六阶段 + 富余；各设计既有预算（脚本钩子窗口 ≤0.5ms/帧、collect/flush 超时截断）归位到同一张表，预算超时截断机制沿用 attribute-sync §10。
 5. **内存与对象池（#7）**：池化三类已知热点（帧对象/属性收集缓冲/发送环切片），free-list 挂 owning 线程（单写者无锁）；**jemalloc/tcmalloc 不引入**——分配热点已被单写者+池化收敛，全局分配器替换是过早优化，列 M2+ 基准准入（分配占帧 >5% 才评估）。
-6. **基准三形态**（§5）：微基准（单机制，ctest，PR 级门槛）/ 场景基准（apps/bench，合成 intent 流——确定性 RNG 派生，可复现）/ 录制回放（线上采样 intent 序列 = battle-determinism §5 同格式，录制既是回放验证也是压测负载）。M2+ 的准入基准 = 场景基准的 before/after。
+6. **基准三形态**（§5）：微基准（单机制，ctest，PR 级门槛）/ 场景基准（examples/benchmark，合成 intent 流——确定性 RNG 派生，可复现）/ 录制回放（线上采样 intent 序列 = battle-determinism §5 同格式，录制既是回放验证也是压测负载）。M2+ 的准入基准 = 场景基准的 before/after。
 7. **系统级验收指标集**（§5 末表）：各设计 §11 类验收汇总 + 新增系统级（跳拍率/dropped_ticks——clock-and-time §10 P3 引用的「容量批 §5」即此表；水位触发率；violation_score 断开率；录制体积与 hash 链分歧率——battle-determinism §8 P3 接入点）。
 
 ## 0. 现状：数值散落与空白（gap 证据）
@@ -23,7 +23,7 @@
 
 | 项 | 值 | 出处/说明 |
 |---|---|---|
-| 主循环 | tick 10Hz，帧 100ms | clock-and-time §4（BW/KBE 两家一致） |
+| 主循环 | tick 20Hz，帧 50ms | cell-app config tickRateMs=50（设计口径 10Hz 待校准） |
 | 容量目标 | 5000 CCU/进程 稳态 | sdk-contract :476 既有口径，本文升格为顶层目标 |
 | 极端场景 | 单场景 100 人同屏战斗 | attribute-sync §11 压测口径 |
 | 实体规模 | 玩家 5000 + NPC/怪物 ~20k（按场景配额） | 估算口径，配置化 |

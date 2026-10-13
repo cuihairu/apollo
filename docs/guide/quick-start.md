@@ -160,8 +160,8 @@ cmake --build build
 
 > **现状注记（2026-10-07 复核）**：`net/tcp/server.hpp`（`net::tcp::Server`）
 > 在仓库中不存在，本节暂无教学示例。现状真实网络面：
-> - `modules/net/protocol`（`apollo::net::protocol::endpoint/channel`，nng 底座，P1 收口前受 `apollo_protocol` 门控）；
-> - `modules/protocol`（`apollo/protocol/socket.hpp`——接入进程 login-app/gateway-app 的 REP/REQ 套接字封装）；
+> - `modules/net/protocol`（`apollo::net/protocol::endpoint`——服务发现元数据，nng Channel 已退役）；
+> - `modules/protocol`（`apollo/protocol/messages.hpp` + `codec.hpp`——契约消息与编解码）；
 > - legacy `include/apollo/net/`（connection/listener/session/websocket/rpc 等头，随迁移批次逐步收敛）；
 > - 跨进程最小链路归 net M1（P3-1 G-1 收尾批之后）。
 

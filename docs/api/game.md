@@ -245,7 +245,7 @@ private:
 ## 世界与副本（world 子库其余件）
 
 - `Scene`（SceneTickPhase 状态）——场景运行时边界（AOI 所有权、判定域）；
-  `SceneDescriptor`/`SceneTransferRequest`——场景描述与换幕四段。
+  `SceneDescriptor`/`SceneTransferRequest`——场景描述与换幕五步。
 - `Instance`——副本一等公民（八态单向机 Create→…→Destroyed）。
 - `World`/`WorldSession`（WorldSessionState）/`WorldSessionManager`——世界
   运行时与会话管理。
@@ -253,9 +253,8 @@ private:
 
 ## 战斗运行时（battle_runtime / battle_replay）
 
-- `BattleRuntime`（BattlePhase 状态机）——确定性战斗域（双时间轴：逻辑拍
-  + wall clock；RNG 子流 battle-determinism 契约）。
-- `BattleReplay`（ReplayTuple）——回放面（指令/种子/元信息三元组）。
+- `BattleRuntime`（BattlePhase 状态机）——确定性战斗域（仅逻辑拍轴，无 wall clock；RNG 子流 battle-determinism 契约）。
+- `BattleReplay`（ReplayTuple）——回放面（四元组：binary_id / world_seed / snapshot_pos / inputs；header + 自由函数，非类）。
 
 ## 社交（social 子库）
 

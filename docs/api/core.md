@@ -20,17 +20,17 @@ enum class ApplicationPhase {
     Boot, ConfigLoaded, Initialized, Ready, Stopping, Stopped,
 };
 
-struct ApplicationReloadContext { /* 热更上下文 */ };
+struct ApplicationReloadContext { std::string_view reason; };  // 热更原因
 
 class IApplicationLifecycle {
 public:
     virtual ~IApplicationLifecycle() = default;
-    virtual void on_application_boot() = 0;
-    virtual void on_application_config_loaded() = 0;
-    virtual void on_application_initialized() = 0;
-    virtual void on_application_ready() = 0;
-    virtual void on_application_reload(const ApplicationReloadContext&) = 0;
-    virtual void on_application_stop() = 0;
+    virtual void on_application_boot() {}
+    virtual void on_application_config_loaded() {}
+    virtual void on_application_initialized() {}
+    virtual void on_application_ready() {}
+    virtual void on_application_reload(const ApplicationReloadContext&) {}
+    virtual void on_application_stop() {}
 };
 }
 ```
@@ -86,7 +86,7 @@ builder.add_prototype<TransientService>();
 auto context = builder.build();
 if (!context.initialize()) { /* 装配失败（缺依赖/环） */ }
 
-auto& db   = context.get<IDatabase>();          // 取（缺 bean 抛错）
+auto& db   = context.get<IDatabase>();          // 取（缺 bean：debug assert 中止 / release UB）
 auto* opts = context.try_get<ConfigDep>();      // 取（可空）
 auto& nm   = context.get_named<IDatabase>("database");
 auto  all  = context.get_all<IDatabase>();      // 同类型多 bean
