@@ -383,7 +383,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 ## 12.1 已落地实现（2026-10-13）
 
-`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级，并向外接线到 SceneAoi 事件流，共五批：
+`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级 + SceneAoi 接线 + §5 优先级与节流，共六批：
 
 ### 批 1 — 核心层（`c7b6c3dc`）
 
@@ -447,16 +447,28 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **测试**：`tests/test_scene_attrsync_wiring.cpp` — 9 用例（AttachRegistersExistingEntities / SpawnAfterAttachRegisters / AvatarEnterBuildsMutualViewerStates / FirstSightFramesCarrySubjectIds / LeaveSceneRecyclesViewerStates / MoveWithinViewDoesNotResnapshot / MoveOutOfViewThenBackResnapshots / DetachStopsWiring / DeltaFlowsAfterFirstSight），build 树 + sanitizer 树全绿。
 
+### 批 6 — §5 优先级与节流
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `AttrSyncScheduler` | `include/apollo/game/attrsync/attr_sync_scheduler.hpp` + `src/attr_sync_scheduler.cpp` | ✅ 已落地 |
+| `AttrSyncManager::peek` | `src/attr_sync_manager.cpp` | ✅ 已落地 |
+
+**职责**：§5 优先级与节流调度——每 viewer token bucket（§5.1）、实体优先级排序（§5.2，importance × 1000 + dirty_count，distance/visible 待 scene 位置面接入）、min_interval 节流分级（§5.3）、饥饿保护（§5.2）。`peek` 为只读收集（不推进 acked、不清 dirty），供调度器预检编码量后决定装包——`collect` 的推进副作用仅在确认发送时发生。
+
+**对应设计节**：§5.1（带宽预算）、§5.2（实体优先级 + 饥饿保护）、§5.3（min_interval）。
+
+**测试**：`tests/test_attr_sync_scheduler.cpp` — 11 用例（TokenBucketRefillsPerTick / NoBudgetNoSend / NoChangesNoFrame / PriorityOrdersImportanceFirst / HigherDirtyCountBreaksTie / MinIntervalThrottlesLowFrequency / InstantBypassesMinInterval / StarvationForcesSend / LastWriteWinsMergesJitter / EmittedFrameCarriesDeltas / ScheduleTracksPerViewer），build 树 + sanitizer 树全绿。
+
 ### 模块构建与测试汇总
 
-**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；7 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / frame_codec）。
+**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；8 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / attr_sync_scheduler / frame_codec）。
 
-**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）+ `tests/test_scene_attrsync_wiring.cpp`（9）= 63 用例，build 树 + sanitizer 树全绿。
+**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）+ `tests/test_scene_attrsync_wiring.cpp`（9）+ `tests/test_attr_sync_scheduler.cpp`（11）= 74 用例，build 树 + sanitizer 树全绿。
 
 ### 边界（未实现，后续批）
 
 - 客户端发送路径（net-abstraction.md §1 GameConnection Facade 未建）
-- 带宽预算 + 实体优先级 + min_interval（§5）
 - slice 复合类型（§2.2）
 - 持久化 write-behind（§8.2）
 - 快照负载组装（`AttrSyncFrame::is_snapshot=true` 时由调用方填快照，属性存储重建后才有数据源）

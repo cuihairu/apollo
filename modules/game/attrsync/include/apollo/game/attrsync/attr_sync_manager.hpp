@@ -44,6 +44,8 @@ public:
     // ---- Broadcast tick 收集（§3.2）----
     // 返回 per-viewer delta 帧（空 = 无变更）
     [[nodiscard]] std::vector<AttrSyncFrame> collect(std::uint64_t viewer, std::uint64_t entity_id);
+    // 只读收集：不推进 acked_seq、不清 dirty（供调度器预检用）
+    [[nodiscard]] std::vector<AttrSyncFrame> peek(std::uint64_t viewer, std::uint64_t entity_id);
 
     // ---- ACK（§3.2 第 4 步）----
     void ack(std::uint64_t viewer, std::uint64_t entity_id, std::uint64_t seq);

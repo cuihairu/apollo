@@ -124,6 +124,23 @@ std::vector<AttrSyncFrame> AttrSyncManager::collect(std::uint64_t viewer, std::u
     return frames;
 }
 
+// ---- 只读收集（调度器预检用）----
+
+std::vector<AttrSyncFrame> AttrSyncManager::peek(std::uint64_t viewer, std::uint64_t entity_id) {
+    std::vector<AttrSyncFrame> frames;
+    auto eit = entities_.find(entity_id);
+    auto vit = viewers_.find(viewer);
+    if (eit == entities_.end() || vit == viewers_.end()) {
+        return frames;
+    }
+    if (!vit->second.tracked(entity_id)) {
+        return frames;
+    }
+    DeltaBuilder builder;
+    frames.push_back(builder.build(entity_id, eit->second.history(), vit->second));
+    return frames;
+}
+
 // ---- ACK 超时降级 ----
 
 bool AttrSyncManager::is_degraded(std::uint64_t viewer, std::uint64_t entity_id) const {

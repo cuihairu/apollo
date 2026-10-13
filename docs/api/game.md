@@ -269,7 +269,7 @@ private:
 
 ## apollo::game::attrsync（属性增量同步）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），五批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1），六批交付：
 
 ```cpp
 namespace apollo::game::attrsync {
@@ -370,6 +370,36 @@ std::optional<AttrSyncFrame> decode_frame(const std::vector<std::uint8_t>& data)
 std::vector<std::uint8_t> encode_batch(const std::vector<AttrSyncFrame>& frames);
 std::optional<std::vector<AttrSyncFrame>> decode_batch(const std::vector<std::uint8_t>& data);
 
+// 批 6：§5 优先级与节流调度
+class AttrSyncScheduler {
+public:
+    explicit AttrSyncScheduler(AttrSyncManager& mgr);
+
+    // §5.1 带宽预算：每拍字节上限（默认 3276 = 32KB/s @ 10Hz）
+    void set_bandwidth_budget(std::uint64_t bytes_per_tick);
+    // §5.2 实体重要性：0-255（契约字段 importance(class)）
+    void set_entity_importance(std::uint64_t entity_id, std::uint8_t importance);
+    // §5.3 min_interval：tick 数；0=INSTANT（不节流）
+    void set_min_interval(std::uint64_t entity_id, std::uint32_t min_interval);
+    // §5.2 饥饿保护：推迟超过此拍数强制发送（默认 100）
+    void set_max_defer_ticks(std::uint64_t ticks);
+
+    // 拍推进：递增当前拍号 + 重置每 viewer 预算
+    void advance_tick();
+
+    // 调度：给定 viewer 与可见实体集，返回本拍应下发的帧
+    // （按优先级排序，总编码量 ≤ 预算）
+    [[nodiscard]] std::vector<AttrSyncFrame> schedule(
+        std::uint64_t viewer, const std::vector<std::uint64_t>& visible);
+
+    [[nodiscard]] std::uint64_t current_tick() const noexcept;
+    [[nodiscard]] std::uint64_t budget_remaining(std::uint64_t viewer) const;
+};
+
+// 批 6：peek 只读收集（不推进 acked、不清 dirty）
+// 在 AttrSyncManager 上新增：
+//   std::vector<AttrSyncFrame> peek(viewer, entity_id);
+
 }  // namespace apollo::game::attrsync
 ```
 
@@ -399,4 +429,4 @@ public:
 
 ---
 
-**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。
+**边界**：客户端发送路径、slice 复合类型、持久化 write-behind 均为后续批次。

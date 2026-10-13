@@ -137,7 +137,7 @@ container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），五批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1），六批交付：
 
 | 件 | 职责 |
 |---|---|
@@ -146,7 +146,8 @@ per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），五�
 | `AttrDelta` | varint/zigzag 编码（attr_id + value + change_n） |
 | `DeltaBuilder` | delta 组装 + 快照切换判定 |
 | `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory |
-| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级 |
+| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级、peek（只读预检） |
+| `AttrSyncScheduler` | §5 优先级与节流：token bucket + 优先级排序 + min_interval + 饥饿保护 |
 | `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
 | `Scene::attach_attrsync` | Scene ↔ AOI 事件接线（批 5）：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态 |
 
@@ -183,7 +184,7 @@ auto frames = scene.drain_attrsync_frames();  // 取走首见期快照帧
 scene.detach_attrsync();
 ```
 
-**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。
+**边界**：客户端发送路径、slice 复合类型、持久化 write-behind 均为后续批次。
 
 ## NPC AI
 
