@@ -193,6 +193,28 @@ client.connect("127.0.0.1", 8888);
 auto response = client.call("PlayerService.getPlayerInfo", {{"id", 12345}});
 ```
 
+## M1 内核子模块（2026-10-12 起）
+
+net M1 内核已收敛为自研四层，以下为已交付的子模块：
+
+| 子库 | 职责 |
+|---|---|
+| `apollo::net_link` | 帧定界 / 契约路由分发 / 背压水位 / 单播拓扑 / InterServerLink |
+| `apollo::net_linktrace` | W3C traceparent 上下文 + span 结构化行发射 + 932 信封编解码 |
+| `apollo::net_linkrpc` | 契约 940/941 关联信封 + corr_id 关联 + call_async/poll/wait 桥 |
+| `apollo::net_remoteentity` | RemoteEntityRef / RemoteMethodSchema / RouteResolver / RpcTrace |
+| `apollo::net_contract_wire` | 契约 wire codec（按 MsgMeta 驱动的编解码） |
+
+```cmake
+target_link_libraries(my_app
+    apollo::net_link
+    apollo::net_linktrace
+    apollo::net_linkrpc
+    apollo::net_remoteentity
+    apollo::net_contract_wire
+)
+```
+
 ## 依赖
 
 - apollo::runtime

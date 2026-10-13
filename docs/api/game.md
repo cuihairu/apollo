@@ -263,5 +263,71 @@ private:
 
 ---
 
-**未实现**：属性修饰符计算（addModifier/AttributeModifier）、逐 viewer delta
-同步管线（契约 `attr_batch` 已入 messages.xml，管线未接线）。
+**未实现**：属性修饰符计算（addModifier/AttributeModifier）。
+
+---
+
+## apollo::game::attrsync（属性增量同步）
+
+per-viewer delta 管线核心层（attribute-sync §3.1/§3.2/§3.3/§7.1）：
+
+```cpp
+namespace apollo::game::attrsync {
+
+// 序号化变更环形日志（每实体一份）
+struct HistoryEntry {
+    std::uint64_t seq = 0;
+    std::uint32_t attr_id = 0;
+    std::int64_t value = 0;  // zigzag 编码后的值
+};
+
+class ChangeHistory {
+public:
+    explicit ChangeHistory(std::size_t capacity = 1024);
+    std::uint64_t append(std::uint32_t attr_id, std::int64_t value);
+    std::vector<HistoryEntry> entries_since(std::uint64_t since_seq) const;
+    std::uint64_t world_seq() const noexcept;
+    std::size_t capacity() const noexcept;
+    std::size_t size() const noexcept;
+    bool wrapped() const noexcept;
+};
+
+// per-viewer acked_seq 水位
+class ViewerAttrState {
+public:
+    void set_acked(std::uint64_t entity_id, std::uint64_t seq);
+    std::uint64_t acked_seq(std::uint64_t entity_id) const;
+    void remove(std::uint64_t entity_id);
+    std::size_t size() const noexcept;
+};
+
+// varint/zigzag 编码
+struct AttrDelta {
+    std::uint32_t attr_id = 0;
+    std::int64_t value = 0;
+    std::uint32_t change_n = 0;
+    std::vector<std::uint8_t> encode() const;
+    static std::optional<AttrDelta> decode(const std::vector<std::uint8_t>& data);
+};
+
+// delta 组装 + 快照切换
+struct AttrSyncFrame {
+    std::uint64_t entity_id = 0;
+    std::uint64_t base_seq = 0;
+    std::vector<AttrDelta> deltas;
+    bool is_snapshot = false;
+    std::uint32_t epoch = 0;
+};
+
+class DeltaBuilder {
+public:
+    AttrSyncFrame build(std::uint64_t entity_id,
+                        const ChangeHistory& history,
+                        const ViewerAttrState& viewer) const;
+    void set_delta_attr_threshold(std::uint32_t threshold);
+};
+
+}  // namespace apollo::game::attrsync
+```
+
+**边界**：AOI 事件接线、客户端发送路径、ACK 回包、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。

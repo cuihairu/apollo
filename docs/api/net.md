@@ -136,5 +136,17 @@ public:
 
 ---
 
+## net M1 内核子模块
+
+自研四层内核（2026-10-12 收敛），API 明细见各头文件：
+
+- `modules/net/link/`（`apollo::net_link`）——帧定界 / `Dispatcher` 契约路由 / `Watermark` 背压水位 / `InterServerLink` 单播拓扑（reliable seq 去重 + 累积 ack）。
+- `modules/net/linktrace/`（`apollo::net_linktrace`）——W3C traceparent 上下文 + span 结构化行发射 + 932 internal_envelope 编解码缝。
+- `modules/net/linkrpc/`（`apollo::net_linkrpc`）——契约 940/941 关联信封 + corr_id 关联 + `call_async`/`poll`/`wait` 桥。
+- `modules/net/remoteentity/`（`apollo::net_remoteentity`）——`RemoteEntityRef` / `RemoteMethodSchema` / `RouteResolver` / `RpcTrace`（remote-entity-call 四件套余件，2026-10-13 落地）。
+- `modules/net/contract_wire/`（`apollo::net_contract_wire`）——按生成头 MsgMeta 驱动的契约载荷编解码。
+
+---
+
 **未实现**：`apollo::net::tcp::Server/Client`（旧稿 API，从不存在）、
 内建 `http::Server/Client` 类；这些旧稿接口随 P4-1 按实 API 重写清理。

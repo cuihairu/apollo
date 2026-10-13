@@ -381,6 +381,36 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 - **P2（体验与带宽）**：slice 复合类型 → 带宽预算 + 实体优先级 → 节流分级 + zstd → 持久化 write-behind + 列式提升 → 客户端预测（移动）。
 - **P3（BigWorld 化）**：CELL/RO_MIRROR 镜像 + authority_epoch → 实体迁移 → ghost 广播后端（net-abstraction.md 的进程间通道落地时启用）。
 
+## 12.1 已落地实现（2026-10-13）
+
+`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层：
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `ChangeHistory` | `include/apollo/game/attrsync/change_history.hpp` + `src/change_history.cpp` | ✅ 已落地 |
+| `ViewerAttrState` | `include/apollo/game/attrsync/viewer_attr_state.hpp` + `src/viewer_attr_state.cpp` | ✅ 已落地 |
+| `AttrDelta` | `include/apollo/game/attrsync/attr_delta.hpp` + `src/attr_delta.cpp` | ✅ 已落地 |
+| `DeltaBuilder` | `include/apollo/game/attrsync/delta_builder.hpp` + `src/delta_builder.cpp` | ✅ 已落地 |
+
+**对应设计节**：§3.1（ChangeHistory/ViewerState 骨架）、§3.2（delta 收集）、§3.3（快照切换）、§7.1（AttrDelta 编码）。
+
+**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`。
+
+**测试**：`tests/test_attr_sync.cpp` — 17 用例（ChangeHistory 6 + ViewerAttrState 3 + AttrDelta 4 + DeltaBuilder 4），build 树 + sanitizer 树全绿。
+
+**commit**：`c7b6c3dc` — `feat: add attrsync delta pipeline core`
+
+**编码原语**：`AttrDelta::encode()/decode()` 走自写 varint/zigzag（零依赖），attr_id varint + value zigzag varint + change_n varint。
+
+**边界**（未实现，后续批）：
+- AOI 事件接线（§4.1，`SceneAoi::set_event_sink()` 仍无人消费）
+- 客户端发送路径（net-abstraction.md §1 GameConnection Facade 未建）
+- ACK 回包推进 `acked_seq`（§3.2 第 4 步）
+- 带宽预算 + 实体优先级 + min_interval（§5）
+- slice 复合类型（§2.2）
+- 持久化 write-behind（§8.2）
+- 快照负载组装（`AttrSyncFrame::is_snapshot=true` 时由调用方填快照，属性存储重建后才有数据源）
+
 ## 附录：三方机制速查对照
 
 | 机制 | BigWorld | KBEngine | 本设计 |

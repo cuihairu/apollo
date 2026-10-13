@@ -364,6 +364,28 @@ Apollo 现在不需要一口气做成 KBE 全量脚本式 `EntityCall`，但至�
 
 不要让方法名、参数格式继续散在业务代码里。
 
+## 十一、已落地实现（2026-10-13）
+
+`modules/net/remoteentity/` 子模块已交付四件套核心：
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `RemoteEntityRef` | `include/apollo/net/remote/entity_ref.hpp` | ✅ 已落地 |
+| `RemoteMethodSchema` | `include/apollo/net/remote/method_schema.hpp` | ✅ 已落地 |
+| `RouteResolver` | `include/apollo/net/remote/route_resolver.hpp` + `src/route_resolver.cpp` | ✅ 已落地 |
+| `RpcTrace` | `include/apollo/net/remote/rpc_trace.hpp` + `src/rpc_trace.cpp` | ✅ 已落地 |
+
+**模块构建**：`modules/net/remoteentity/CMakeLists.txt` — STATIC library + ALIAS `apollo::net_remoteentity`，链接 `apollo::net_linktrace` + `apollo::core`。
+
+**测试**：`tests/test_remote_entity.cpp` — 14 用例（RemoteEntityRef 2 + RemoteMethodSchema 2 + RouteResolver 5 + RpcTrace 5），build 树 + sanitizer 树全绿。
+
+**commit**：`49d3d3a8` — `feat: add remoteentity module with trace integration`
+
+**边界**：
+- `InternalMessageEnvelope` / `EntityCallEncoder` / `RemoteEntityCall` 高层未实现（设计§五/§九待后续批）
+- 跨进程 route 刷新协议（§七 route 过期处理）未实现
+- schema 驱动方法分发表（§十第四步）未实现
+
 ## 十一、和普通 MMO / BigWorld 两种模式的关系
 
 ### 普通 MMO 模式

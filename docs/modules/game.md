@@ -11,9 +11,9 @@ tag:
 
 # Game 模块
 
-Game 模块提供游戏领域层功能，分六个子库：core（实体基元）、world（场景/会话/Avatar）、
-session（锚点/在线目录/恢复/编队恢复）、attributes（属性）、battle（战斗运行时）、
-social（组队/公会）。
+Game 模块提供游戏领域层功能，分七个子库：core（实体基元）、world（场景/会话/Avatar）、
+session（锚点/在线目录/恢复/编队恢复）、attributes（属性）、attrsync（属性增量同步）、
+battle（战斗运行时）、social（组队/公会）。
 
 ## Entity（apollo::game::core）
 
@@ -133,7 +133,37 @@ container->GetAttribute(attributeId, out);
 container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报 */ });
 ```
 
-逐 viewer 的 delta 同步管线未接线（契约 `attr_batch` 已入 messages.xml，管线随属性批次）。
+逐 viewer 的 delta 同步管线核心层已落地（见下方 attrsync 子库）。
+
+## 属性增量同步（attrsync 子库）
+
+per-viewer delta 管线核心层（attribute-sync §3.1/§3.2/§3.3/§7.1）：
+
+| 件 | 职责 |
+|---|---|
+| `ChangeHistory` | 序号化变更环形日志（每实体一份，容量默认 1024） |
+| `ViewerAttrState` | per-viewer `acked_seq` 水位（每 (viewer, entity) 二元组） |
+| `AttrDelta` | varint/zigzag 编码（attr_id + value + change_n） |
+| `DeltaBuilder` | delta 组装 + 快照切换判定 |
+
+```cpp
+#include <apollo/game/attrsync/change_history.hpp>
+#include <apollo/game/attrsync/viewer_attr_state.hpp>
+#include <apollo/game/attrsync/delta_builder.hpp>
+
+apollo::game::attrsync::ChangeHistory hist(1024);
+hist.append(/*attr_id=*/1, /*value=*/100);  // seq=1
+hist.append(/*attr_id=*/2, /*value=*/200);  // seq=2
+
+apollo::game::attrsync::ViewerAttrState viewer;
+viewer.set_acked(/*entity_id=*/42, /*seq=*/1);  // viewer 已确认到 seq=1
+
+apollo::game::attrsync::DeltaBuilder builder;
+auto frame = builder.build(/*entity_id=*/42, hist, viewer);
+// frame.is_snapshot = false, frame.deltas 含 seq=2 的变更
+```
+
+**边界**：AOI 事件接线、客户端发送路径、ACK 回包、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。
 
 ## NPC AI
 
@@ -153,6 +183,7 @@ target_link_libraries(my_app
     apollo::game_world
     apollo::game_session
     apollo::game_attributes
+    apollo::game_attrsync
     apollo::game_battle
     apollo::game_social
 )
