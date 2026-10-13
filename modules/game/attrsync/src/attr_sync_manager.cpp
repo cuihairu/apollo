@@ -1,0 +1,124 @@
+#include "apollo/game/attrsync/attr_sync_manager.hpp"
+
+namespace apollo::game::attrsync {
+
+// ---- 实体注册 ----
+
+void AttrSyncManager::register_entity(std::uint64_t entity_id) {
+    entities_.try_emplace(entity_id, entity_id);
+}
+
+bool AttrSyncManager::has_entity(std::uint64_t entity_id) const {
+    return entities_.count(entity_id) > 0;
+}
+
+// ---- 属性写路径 ----
+
+void AttrSyncManager::set_attribute(std::uint64_t entity_id, std::uint32_t attr_id,
+                                     std::int64_t value) {
+    auto it = entities_.find(entity_id);
+    if (it == entities_.end()) {
+        return;  // 未注册实体静默忽略
+    }
+    it->second.set(attr_id, value);
+}
+
+std::int64_t AttrSyncManager::get_attribute(std::uint64_t entity_id, std::uint32_t attr_id) const {
+    auto it = entities_.find(entity_id);
+    return (it != entities_.end()) ? it->second.get(attr_id) : 0;
+}
+
+// ---- AOI 事件接线 ----
+
+void AttrSyncManager::on_viewer_enter(std::uint64_t viewer, std::uint64_t entity_id) {
+    auto eit = entities_.find(entity_id);
+    if (eit == entities_.end()) {
+        return;
+    }
+    viewers_[viewer].set_acked(entity_id, 0);
+    viewers_[viewer].set_acked(entity_id, eit->second.history().world_seq());
+    eit->second.clear_dirty();
+}
+
+std::vector<AttrSyncFrame> AttrSyncManager::on_viewer_enter_collect(std::uint64_t viewer,
+                                                                      std::uint64_t entity_id) {
+    std::vector<AttrSyncFrame> frames;
+    auto eit = entities_.find(entity_id);
+    if (eit == entities_.end()) {
+        return frames;
+    }
+
+    // 建 ViewerState（重进视野 = 清空重置，per §6 延迟回收由上层决定；此处直接重建）
+    viewers_[viewer].set_acked(entity_id, 0);
+
+    // 快照帧（DeltaBuilder 对 acked=0 返回 is_snapshot=true）
+    DeltaBuilder builder;
+    frames.push_back(builder.build(entity_id, eit->second.history(), viewers_[viewer]));
+
+    // 快照即推进：对方进度直接推到当前 seq（§3.3 快照语义）
+    viewers_[viewer].set_acked(entity_id, eit->second.history().world_seq());
+
+    // 清 dirty（快照已含全部当前值）
+    eit->second.clear_dirty();
+
+    return frames;
+}
+
+void AttrSyncManager::on_viewer_leave(std::uint64_t viewer, std::uint64_t entity_id) {
+    auto vit = viewers_.find(viewer);
+    if (vit != viewers_.end()) {
+        vit->second.remove(entity_id);
+    }
+}
+
+bool AttrSyncManager::has_viewer(std::uint64_t viewer, std::uint64_t entity_id) const {
+    auto vit = viewers_.find(viewer);
+    if (vit == viewers_.end()) {
+        return false;
+    }
+    // acked_ 里存在该实体即视为在视野（set_acked(0) 也算登记）
+    return vit->second.tracked(entity_id);
+}
+
+// ---- Broadcast tick 收集 ----
+
+std::vector<AttrSyncFrame> AttrSyncManager::collect(std::uint64_t viewer, std::uint64_t entity_id) {
+    std::vector<AttrSyncFrame> frames;
+    auto eit = entities_.find(entity_id);
+    auto vit = viewers_.find(viewer);
+    if (eit == entities_.end() || vit == viewers_.end()) {
+        return frames;
+    }
+    if (!vit->second.tracked(entity_id)) {
+        return frames;
+    }
+
+    DeltaBuilder builder;
+    frames.push_back(builder.build(entity_id, eit->second.history(), vit->second));
+
+    // delta 已组包：推进水位（发送成功≠确认，但本层以"已组包"推进；
+    // 丢包重发由上层可靠通道处理，快照切换是兜底）
+    if (!frames.back().is_snapshot && !frames.back().deltas.empty()) {
+        vit->second.set_acked(entity_id, frames.back().base_seq + frames.back().deltas.size());
+        eit->second.clear_dirty();
+    }
+
+    return frames;
+}
+
+// ---- ACK ----
+
+void AttrSyncManager::ack(std::uint64_t viewer, std::uint64_t entity_id, std::uint64_t seq) {
+    auto vit = viewers_.find(viewer);
+    if (vit != viewers_.end()) {
+        vit->second.set_acked(entity_id, seq);
+    }
+}
+
+// ---- 内部访问 ----
+
+const EntityAttrs& AttrSyncManager::entity_attrs(std::uint64_t entity_id) const {
+    return entities_.at(entity_id);
+}
+
+}  // namespace apollo::game::attrsync

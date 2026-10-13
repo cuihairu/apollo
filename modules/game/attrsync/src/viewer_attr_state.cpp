@@ -15,4 +15,8 @@ void ViewerAttrState::remove(std::uint64_t entity_id) {
     acked_.erase(entity_id);
 }
 
+bool ViewerAttrState::tracked(std::uint64_t entity_id) const {
+    return acked_.count(entity_id) > 0;
+}
+
 }  // namespace apollo::game::attrsync

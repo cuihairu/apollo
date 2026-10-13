@@ -1725,6 +1725,7 @@ add_test(NAME BaseAppMgrM1ControlTests COMMAND baseappmgr_m1_control_tests)
 # ChangeHistory / ViewerAttrState / AttrDelta encoding / DeltaBuilder
 add_executable(attrsync_tests
     test_attr_sync.cpp
+    test_attr_sync_manager.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync

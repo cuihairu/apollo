@@ -24,6 +24,9 @@ public:
     // 移除某实体的记录
     void remove(std::uint64_t entity_id);
 
+    // 该实体是否已登记（在册即视为在视野，set_acked(0) 也算登记）
+    [[nodiscard]] bool tracked(std::uint64_t entity_id) const;
+
     // 在册实体数
     [[nodiscard]] std::size_t size() const noexcept { return acked_.size(); }
 
