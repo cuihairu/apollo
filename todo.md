@@ -5,7 +5,7 @@
 
 ## 待办（需求）
 
-- [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8）
+- [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8，14 用例）
 - [ ] Lua 脚本：`docs/design/scripting-lua.md`——modules 全树无 lua/sol2，vcpkg 无条目（未排期）
 - [ ] 属性增量同步：管线核心四批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2，54 用例），余 SceneAoi 接线 / GameConnection Facade / 带宽预算 / slice / write-behind（未排期）
 - [ ] battle-verification-service：ADR-013 明示暂缓（随 Lua/玩法批）
