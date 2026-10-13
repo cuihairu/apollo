@@ -7,7 +7,7 @@
 
 - [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8，14 用例）
 - [ ] Lua 脚本：`docs/design/scripting-lua.md`——modules 全树无 lua/sol2，vcpkg 无条目（未排期）
-- [ ] 属性增量同步：管线核心四批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2，54 用例），余 SceneAoi 接线 / GameConnection Facade / 带宽预算 / slice / write-behind（未排期）
+- [ ] 属性增量同步：管线核心五批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2 + SceneAoi 接线批，63 用例），余 GameConnection Facade / 带宽预算 / slice / write-behind（未排期）
 - [ ] battle-verification-service：ADR-013 明示暂缓（随 Lua/玩法批）
 - [ ] 外部存储接线（MySQL/Redis/ClickHouse）：ADR-007 现行=文件+journal 零外部依赖（未排期）
 - [ ] Kafka 观测管道 + Prometheus/Grafana：架构决策 #14 计划，仓内零实现（未排期）
@@ -28,7 +28,7 @@
 - [x] 更新排空与演练工具：drain 闸 SIGUSR1/2（fa201213）+ fleetctl probe（8b155a04）+ route1 更新演练（33e577be）
 - [x] 性能基准：三模型 benchmark 桩 + 受理面实测 ~0.1µs/意图 + flush 段实测（934f5df2）
 - [x] DevEx：dev_fleet.sh 一键起停 + gateway ingress 接线 + 编队成员注册批 0de62ea9（21/21 绿）
-- [x] 测试面：tests/ 77 个 test_*.cpp（gated by ctest，ctest -N 44 项）
+- [x] 测试面：tests/ 78 个 test_*.cpp（gated by ctest，ctest -N 44 项）
 - [x] P3-2 / P3-3 / P3-4 全部收口：2026-10-13（批次台账 28/28 全勾）
 - [x] P4-4 术语承接：697c49d5（`APOLLO_USE_NNG|nng_` 代码 0 残余）
 - [x] 移交件② bare 924-928 双受理退役：9eac60d8

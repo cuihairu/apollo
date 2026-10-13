@@ -3,7 +3,9 @@
 #include "apollo/game/core/entity.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <string_view>
+#include <utility>
 
 namespace apollo::game::world {
 
@@ -43,6 +45,9 @@ std::uint64_t Scene::scene_id() const noexcept {
 void Scene::spawn_entity(EntityPtr entity) {
     if (entity && entity->get_id().is_valid()) {
         entities_[entity->get_id().value()] = entity;
+        if (attrsync_ != nullptr) {
+            attrsync_->register_entity(entity->get_id().value());
+        }
         entity->on_spawn();
     }
 }
@@ -72,9 +77,14 @@ bool Scene::enter(const AvatarPtr& avatar, const SceneAoi::Vec3& position) {
     avatars_[pid.value()] = avatar;
     avatar_order_.push_back(pid);
 
-    // 进 scene 生：挂 scene 归属 + 权威落点 + AOI 入列
+    // 进 scene 生：挂 scene 归属 + 权威落点 + AOI 入列。
+    // attrsync 注册先于 AOI 入列——首见事件（他方视角的本 avatar 快照）
+    // 要求 subject 已注册（attribute-sync §4.1）。
     avatar->attach_scene(scene_id_);
     avatar->set_position({position.x, position.y, position.z});
+    if (attrsync_ != nullptr) {
+        attrsync_->register_entity(avatar->entity_id().value());
+    }
     aoi_.enter(avatar->entity_id(), position);
     return true;
 }
@@ -138,6 +148,64 @@ SceneAoi& Scene::aoi() noexcept {
 
 const SceneAoi& Scene::aoi() const noexcept {
     return aoi_;
+}
+
+void Scene::attach_attrsync(apollo::game::attrsync::AttrSyncManager& mgr) {
+    attrsync_ = &mgr;
+
+    // 既有实体/avatar 补注册（后续 spawn/enter 即时注册）
+    for (const auto& [id, entity] : entities_) {
+        (void)entity;
+        mgr.register_entity(id);
+    }
+    for (const auto& pid : avatar_order_) {
+        mgr.register_entity(avatars_.at(pid.value())->entity_id().value());
+    }
+
+    aoi_.set_event_sink(
+        [this](const SceneAoi::Event& event) { on_aoi_event(event); });
+}
+
+void Scene::detach_attrsync() {
+    attrsync_ = nullptr;
+    attrsync_outbound_.clear();
+    aoi_.set_event_sink(nullptr);
+}
+
+bool Scene::attrsync_attached() const noexcept {
+    return attrsync_ != nullptr;
+}
+
+std::vector<apollo::game::attrsync::AttrSyncFrame> Scene::drain_attrsync_frames() {
+    auto out = std::move(attrsync_outbound_);
+    attrsync_outbound_.clear();
+    return out;
+}
+
+void Scene::on_aoi_event(const SceneAoi::Event& event) noexcept {
+    if (attrsync_ == nullptr) {
+        return;
+    }
+    const auto observer = event.observer.value();
+    const auto subject = event.subject.value();
+
+    switch (event.kind) {
+    case SceneAoi::Event::Kind::Enter:
+    case SceneAoi::Event::Kind::Sync:
+        // 首见（Enter 或进场铺底 Sync）→ 建 ViewerState + 快照帧；
+        // 既有视野的跨格 Sync 不触发协议（§4.1）。
+        if (!attrsync_->has_viewer(observer, subject)) {
+            auto frames = attrsync_->on_viewer_enter_collect(observer, subject);
+            attrsync_outbound_.insert(
+                attrsync_outbound_.end(),
+                std::make_move_iterator(frames.begin()),
+                std::make_move_iterator(frames.end()));
+        }
+        break;
+    case SceneAoi::Event::Kind::Leave:
+        attrsync_->on_viewer_leave(observer, subject);
+        break;
+    }
 }
 
 void Scene::update(float delta_time) {

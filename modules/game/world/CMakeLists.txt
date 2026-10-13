@@ -24,6 +24,7 @@ target_link_libraries(apollo_game_world
         apollo::game_core
         apollo::game_session
         apollo::game_battle
+        apollo::game_attrsync
 )
 
 target_compile_features(apollo_game_world PUBLIC cxx_std_20)

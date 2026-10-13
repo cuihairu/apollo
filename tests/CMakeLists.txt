@@ -750,6 +750,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../modules/game/world/src/scene_aoi.cpp
 	        ../modules/game/world/src/viewer_state.cpp
 	        ../modules/game/world/src/avatar.cpp
+	        # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
+	        ../modules/game/attrsync/src/change_history.cpp
+	        ../modules/game/attrsync/src/viewer_attr_state.cpp
+	        ../modules/game/attrsync/src/delta_builder.cpp
+	        ../modules/game/attrsync/src/entity_attrs.cpp
+	        ../modules/game/attrsync/src/attr_sync_manager.cpp
 	        ../modules/game/session/src/player_anchor.cpp
 	        # Game Attributes (using attribute.hpp, not attribute_value.h)
 	        ../modules/game/attributes/src/attribute.cpp
@@ -760,6 +766,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ${CMAKE_SOURCE_DIR}/modules/game/world/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/battle/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/session/include
+	        ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
 	    )
 	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core)
 	    if(WIN32)
@@ -913,6 +920,12 @@ add_executable(reconnect_tests
     ../modules/game/world/src/avatar.cpp
     ../modules/game/world/src/world_session.cpp
     ../modules/game/world/src/world_session_manager.cpp
+    # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
+    ../modules/game/attrsync/src/change_history.cpp
+    ../modules/game/attrsync/src/viewer_attr_state.cpp
+    ../modules/game/attrsync/src/delta_builder.cpp
+    ../modules/game/attrsync/src/entity_attrs.cpp
+    ../modules/game/attrsync/src/attr_sync_manager.cpp
     ../modules/game/session/src/player_anchor.cpp
 )
 target_include_directories(reconnect_tests PRIVATE
@@ -921,6 +934,7 @@ target_include_directories(reconnect_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
 )
 target_link_libraries(reconnect_tests PRIVATE apollo apollo::base apollo::core)
 if(WIN32)
@@ -1166,6 +1180,12 @@ add_executable(scene_tests
     ../modules/game/world/src/scene_aoi.cpp
     ../modules/game/world/src/viewer_state.cpp
     ../modules/game/world/src/avatar.cpp
+    # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
+    ../modules/game/attrsync/src/change_history.cpp
+    ../modules/game/attrsync/src/viewer_attr_state.cpp
+    ../modules/game/attrsync/src/delta_builder.cpp
+    ../modules/game/attrsync/src/entity_attrs.cpp
+    ../modules/game/attrsync/src/attr_sync_manager.cpp
     ../modules/game/session/src/player_anchor.cpp
 )
 target_include_directories(scene_tests PRIVATE
@@ -1173,6 +1193,7 @@ target_include_directories(scene_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
     ${CMAKE_SOURCE_DIR}/include
 )
 target_link_libraries(scene_tests PRIVATE apollo apollo::base apollo::core)
@@ -1723,15 +1744,18 @@ add_test(NAME BaseAppMgrM1ControlTests COMMAND baseappmgr_m1_control_tests)
 
 # ========== Attribute Sync Delta Pipeline Tests ==========
 # ChangeHistory / ViewerAttrState / AttrDelta encoding / DeltaBuilder
+# + Scene × AttrSyncManager AOI 事件接线（§4.1，2026-10-14 批）
 add_executable(attrsync_tests
     test_attr_sync.cpp
     test_attr_sync_manager.cpp
     test_attr_frame_codec.cpp
     test_attr_ack_degrade.cpp
+    test_scene_attrsync_wiring.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync
     apollo::game_core
+    apollo::game_world
     GTest::gtest
     GTest::gtest_main
 )

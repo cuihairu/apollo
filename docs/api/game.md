@@ -269,7 +269,7 @@ private:
 
 ## apollo::game::attrsync（属性增量同步）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），四批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），五批交付：
 
 ```cpp
 namespace apollo::game::attrsync {
@@ -373,4 +373,30 @@ std::optional<std::vector<AttrSyncFrame>> decode_batch(const std::vector<std::ui
 }  // namespace apollo::game::attrsync
 ```
 
-**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind、实际接线到 SceneAoi 事件流均为后续批次。
+### Scene × AttrSync 接线（批 5）
+
+AOI 事件消费者落在 `Scene`（attribute-sync §4.1）：
+
+```cpp
+namespace apollo::game::world {
+class Scene {
+public:
+    // attach：补注册既有实体/avatar + 接管 SceneAoi 事件 sink
+    void attach_attrsync(apollo::game::attrsync::AttrSyncManager& mgr);
+    // 清 sink + 断引用（attrsync_ = nullptr）
+    void detach_attrsync();
+    [[nodiscard]] bool attrsync_attached() const noexcept;
+    // 取走首见期累积的快照帧（此后重新累积）
+    [[nodiscard]] std::vector<apollo::game::attrsync::AttrSyncFrame>
+    drain_attrsync_frames();
+};
+}
+```
+
+**语义**：Enter/Sync 首见（manager 无该 (observer, subject) viewer 态）→ 建 `ViewerState` + 快照帧；视野内跨格 Sync 不触发协议；Leave → 回收 `ViewerState`。`enter()` 中 attrsync 注册先于 `aoi_.enter()`（新人自身快照帧要求 subject 已注册）。attach 后 `spawn_entity`/`enter` 即时注册 entity id。
+
+**线程安全**: 不安全（归场景线程单写者；sink 自捕获 this，Scene 不拷贝——World 以 unique_ptr 持有）
+
+---
+
+**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。

@@ -79,7 +79,7 @@ auto observers = aoi.viewers_of(apollo::game::core::EntityId{1});
 aoi.leave(apollo::game::core::EntityId{1});
 ```
 
-下发到网关的广播面留 P3-2；属性管线对 AOI 事件的消费未接线（attribute-sync §4.1）。
+下发到网关的广播面留 P3-2；属性管线对 AOI 事件的消费已接线（批 5，`Scene::attach_attrsync`）。
 
 ## 战斗系统（battle 子库）
 
@@ -133,11 +133,11 @@ container->GetAttribute(attributeId, out);
 container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报 */ });
 ```
 
-逐 viewer 的 delta 同步管线核心层已落地（见下方 attrsync 子库）。
+逐 viewer 的 delta 同步管线核心层 + Scene AOI 接线已落地（见下方 attrsync 子库）。
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），四批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），五批交付：
 
 | 件 | 职责 |
 |---|---|
@@ -148,6 +148,7 @@ per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§7.1），四�
 | `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory |
 | `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级 |
 | `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
+| `Scene::attach_attrsync` | Scene ↔ AOI 事件接线（批 5）：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态 |
 
 ```cpp
 #include <apollo/game/attrsync/attr_sync_manager.hpp>
@@ -170,7 +171,19 @@ mgr.set_ack_timeout_ticks(3);
 bool degraded = mgr.is_degraded(100, 42);
 ```
 
-**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind、实际接线到 SceneAoi 事件流均为后续批次。
+Scene 侧接线（批 5）：
+
+```cpp
+#include <apollo/game/world/scene.hpp>
+
+apollo::game::world::Scene scene("s1");
+scene.attach_attrsync(mgr);   // 接管 AOI 事件 sink + 补注册既有实体
+// ... spawn_entity / enter 即时注册 ...
+auto frames = scene.drain_attrsync_frames();  // 取走首见期快照帧
+scene.detach_attrsync();
+```
+
+**边界**：客户端发送路径、带宽预算/优先级、slice 复合类型、持久化 write-behind 均为后续批次。
 
 ## NPC AI
 

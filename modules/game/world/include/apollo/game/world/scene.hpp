@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo/game/attrsync/attr_sync_manager.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/scene_aoi.hpp"
@@ -70,6 +71,22 @@ public:
     [[nodiscard]] SceneAoi& aoi() noexcept;
     [[nodiscard]] const SceneAoi& aoi() const noexcept;
 
+    // ---- attrsync 接线（attribute-sync §4.1；2026-10-14 批）----
+    // attach：既有实体/avatar 补注册 + 接管 AOI 事件 sink——
+    //   Enter/Sync 首见（manager 无该 (observer, subject) viewer 态）→
+    //     建 ViewerState + 产出快照帧（标记语义，负载组装留后续批）；
+    //   视野内跨格 Sync → 不触发协议；
+    //   Leave → 回收 ViewerState。
+    // 快照帧经 drain_attrsync_frames 交宿主（发送面留 P3-2）。
+    // attach 后 spawn_entity/enter 即时注册 entity id；detach 清 sink。
+    // sink 自捕获 this——Scene 不拷贝（World 以 unique_ptr 持有）。
+    void attach_attrsync(apollo::game::attrsync::AttrSyncManager& mgr);
+    void detach_attrsync();
+    [[nodiscard]] bool attrsync_attached() const noexcept;
+    // 取走首见期累积的快照帧（此后重新累积）
+    [[nodiscard]] std::vector<apollo::game::attrsync::AttrSyncFrame>
+    drain_attrsync_frames();
+
     // ---- tick 六阶段 ----
     void update(float delta_time);        // 兼容旧调用（转发 tick）
     void tick(double delta_seconds) noexcept;
@@ -79,6 +96,7 @@ public:
 
 private:
     void run_phase(SceneTickPhase phase) noexcept;
+    void on_aoi_event(const SceneAoi::Event& event) noexcept;
 
     std::uint64_t scene_id_ = 0;
     std::string name_;
@@ -86,6 +104,8 @@ private:
     std::unordered_map<std::uint64_t, AvatarPtr> avatars_;  // key = PlayerId.value()
     std::vector<apollo::game::core::PlayerId> avatar_order_;  // 进场顺序可观察
     SceneAoi aoi_;
+    apollo::game::attrsync::AttrSyncManager* attrsync_ = nullptr;  // attach 期有效
+    std::vector<apollo::game::attrsync::AttrSyncFrame> attrsync_outbound_;
     std::uint64_t tick_count_ = 0;
     std::uint64_t phase_counts_[6] = {0, 0, 0, 0, 0, 0};
 };

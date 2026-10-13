@@ -25,7 +25,7 @@
 |---|---|---|---|
 | 属性声明 | .def 文件：类型 + 所有权标记 + 持久化 + 目录 | .def 同源简化 + 代码生成多端 SDK | `AttributeDef` 结构体/配置表（docs/03 §2）有雏形，**无所有权轴、无契约生成** |
 | 同步决策 | 属性标记决定去向（OWN_CLIENT/OTHER_CLIENT/CELL_PUBLIC…），按客户端 维护 lastSeq，**变更历史驱动 delta** | 同思路简化版，属性 ID + flags，客户端按 entity 收 delta | 每次变更即时生成 SyncTask 派发到后台线程；**无 per-viewer 进度、无历史、无 ACK** |
-| 可见性 | AOI/interest + ghost（跨 cell 镜像） | AOI 简化 + entity 创建/销毁消息 | `SceneAoi` 事件面已交付（P1-3：Enter/Sync/Leave + `ViewerState` 逐观察者水位），**但与属性系统未接线**（事件无人消费成同步决策） |
+| 可见性 | AOI/interest + ghost（跨 cell 镜像） | AOI 简化 + entity 创建/销毁消息 | `SceneAoi` 事件面已交付（P1-3：Enter/Sync/Leave + `ViewerState` 逐观察者水位），**已接线到属性系统**（批 5：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态） |
 | 带宽控制 | per-client 预算 + 实体优先级（距离/重要度），预算不够时低优先级实体降频 | 有 per-client 选项，粒度粗 | **无**。50ms 固定批处理，快慢客户端同待遇 |
 | 复杂类型 | FIXED_DICT/ARRAY 按 slice 追踪脏 | 支持 nested，粒度到字段 | `BAG_DATA` 类 blob 属性只能整体重发 |
 | 持久化 | base 权威 + backup + 快照迁移 | MySQL 实体表，复杂类型 blob（**弱点**，§8） | 文件档案 + `PersistJournal` write-behind（P1-4/P1-5：原子写、定额 drain、崩溃 replay；MySQL 未接线） |
@@ -145,7 +145,7 @@ ViewerState (per (client, entity))
 
 ### 4.1 viewer set：与 AOI 的接线
 
-- `SceneAoi` 事件面已交付（P1-3 收敛后全仓唯一实现）：Enter/Sync/Leave 三事件 + `viewers_of`/`viewers_at` 查询，差集基准是 `ViewerState`（逐 observer 水位）——**属性系统是它的第一个正式消费者（待接线）**：
+- `SceneAoi` 事件面已交付（P1-3 收敛后全仓唯一实现）：Enter/Sync/Leave 三事件 + `viewers_of`/`viewers_at` 查询，差集基准是 `ViewerState`（逐 observer 水位）——**属性系统是它的第一个正式消费者（已接线，批 5）**：
   - Enter（entity A 进入 B 的 AOI）：为 (B, A) 建 `ViewerState`，A 向 B 发创建+快照；同时反向（AOI 是对称关系，按格子邻接自然对称，仍以事件为准）。
   - Leave：发销毁消息，回收 ViewerState。
   - Sync（跨格移动）：只更新 viewer set 的缓存归属，不触发协议。
@@ -383,7 +383,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 ## 12.1 已落地实现（2026-10-13）
 
-`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级，共四批：
+`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级，并向外接线到 SceneAoi 事件流，共五批：
 
 ### 批 1 — 核心层（`c7b6c3dc`）
 
@@ -433,11 +433,25 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **测试**：`tests/test_attr_ack_degrade.cpp` — 7 用例（含 ConfigurableThreshold / RecoverAfterAck / MultipleViewersIndependent）。
 
+### 批 5 — SceneAoi 接线
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `Scene::attach_attrsync` / `detach_attrsync` / `attrsync_attached` / `drain_attrsync_frames` | `modules/game/world/include/apollo/game/world/scene.hpp` + `src/scene.cpp` | ✅ 已落地 |
+| AOI 事件消费 `Scene::on_aoi_event` | `src/scene.cpp` | ✅ 已落地 |
+| spawn/enter 注册钩子 | `src/scene.cpp`（`spawn_entity` / `enter` 内联注册） | ✅ 已落地 |
+
+**职责**：Scene 持有 `AttrSyncManager*`（attach 期有效），接管 `SceneAoi::EventSink`——Enter/Sync 首见（manager 无该 (observer, subject) viewer 态）→ 建 `ViewerState` + 产出快照帧；视野内跨格 Sync 不触发协议；Leave → 回收 `ViewerState`。`enter()` 中注册先于 `aoi_.enter()`（新人自身快照帧要求 subject 已注册）。快照帧经 `drain_attrsync_frames()` 交宿主。`apollo_game_world` 链接 `apollo::game_attrsync`。
+
+**对应设计节**：§4.1（viewer set 与 AOI 接线）。
+
+**测试**：`tests/test_scene_attrsync_wiring.cpp` — 9 用例（AttachRegistersExistingEntities / SpawnAfterAttachRegisters / AvatarEnterBuildsMutualViewerStates / FirstSightFramesCarrySubjectIds / LeaveSceneRecyclesViewerStates / MoveWithinViewDoesNotResnapshot / MoveOutOfViewThenBackResnapshots / DetachStopsWiring / DeltaFlowsAfterFirstSight），build 树 + sanitizer 树全绿。
+
 ### 模块构建与测试汇总
 
 **模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；7 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / frame_codec）。
 
-**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）= 54 用例，build 树 + sanitizer 树全绿。
+**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）+ `tests/test_scene_attrsync_wiring.cpp`（9）= 63 用例，build 树 + sanitizer 树全绿。
 
 ### 边界（未实现，后续批）
 
@@ -446,7 +460,6 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 - slice 复合类型（§2.2）
 - 持久化 write-behind（§8.2）
 - 快照负载组装（`AttrSyncFrame::is_snapshot=true` 时由调用方填快照，属性存储重建后才有数据源）
-- 实际接线到 SceneAoi 事件流（当前 API 已就绪，无人消费）
 
 ## 附录：三方机制速查对照
 
