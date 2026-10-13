@@ -62,6 +62,15 @@ PersistJournal::PersistJournal(std::string journal_path)
     : journal_path_(std::move(journal_path)) {
 }
 
+bool PersistJournal::ensure_handle() {
+    if (out_.is_open()) {
+        return true;
+    }
+    // binary 打开：行原文逐位，Windows 文本模式不做换行翻译
+    out_.open(journal_path_, std::ios::app | std::ios::binary);
+    return static_cast<bool>(out_);
+}
+
 bool PersistJournal::open() {
     if (opened_) {
         return true;
@@ -83,6 +92,8 @@ bool PersistJournal::open() {
     }
 
     opened_ = true;
+    // 句柄开不出不拦 open（replay-only 恢复面照常）；append 逐拍重试
+    ensure_handle();
     return true;
 }
 
@@ -97,14 +108,14 @@ bool PersistJournal::append(std::string key, std::string payload, std::int64_t t
     e.key = std::move(key);
     e.payload = std::move(payload);
 
-    // write-ahead：先落盘，再入内存队列
-    std::ofstream out(journal_path_, std::ios::app);
-    if (!out) {
+    // write-ahead：先落盘，再入内存队列（常驻句柄 + 逐行 flush 耐久口径不变）
+    if (!ensure_handle()) {
         return false;
     }
-    out << encode_line(e);
-    out.flush();
-    if (!out) {
+    out_ << encode_line(e);
+    out_.flush();
+    if (!out_) {
+        out_.close();  // 下拍 append 重开（自愈同旧逐行开语义）
         return false;
     }
 
@@ -159,9 +170,13 @@ std::size_t PersistJournal::replay(const ApplySink& sink) {
 }
 
 std::size_t PersistJournal::compact() {
+    // 先关句柄再重写：tmp+rename 换 inode（旧句柄续写=幽灵文件丢数据），
+    // Windows 更不许删打开中文件；重写后重开，开不出则下拍 append 重试
+    out_.close();
     if (!rewrite_file(journal_path_, pending_)) {
         return pending_.size();
     }
+    ensure_handle();
     return pending_.size();
 }
 

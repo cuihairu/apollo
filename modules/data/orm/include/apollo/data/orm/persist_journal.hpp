@@ -11,9 +11,16 @@
 //     应用过的行在 compact 时从文件压薄；
 //   - replay(sink)：从文件头回放全部（崩溃恢复），回放后 seq 续接；
 //   - 单写者假设：调用方保证串行（SaveQueue worker / 启动单线程）。
+//
+// 持久面批（2026-10-13）：append 走常驻句柄（P1-4 逐行开/关在帧预算表
+// 实测超预算 1-3×，capacity-and-benchmark §2.4）——逐行 flush 耐久口径
+// 不变；写失败关句柄、下拍 append 重开（自愈同旧逐行开语义）；compact
+// 的 tmp+rename 原子重写会换 inode（Windows 且不许删打开中文件），故
+// 压薄前先关句柄、重写后重开。
 
 #include <cstdint>
 #include <deque>
+#include <fstream>
 #include <functional>
 #include <string>
 
@@ -56,10 +63,14 @@ public:
     std::uint64_t next_sequence() const { return next_sequence_; }
 
 private:
+    // 常驻写句柄（app|binary）；关闭态 = 下拍 append 重开
+    bool ensure_handle();
+
     std::string journal_path_;
     std::deque<JournalEntry> pending_;
     std::uint64_t next_sequence_ = 1;
     bool opened_ = false;
+    std::ofstream out_;
 };
 
 } // namespace apollo::data::journal
