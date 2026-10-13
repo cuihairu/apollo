@@ -2,8 +2,7 @@
 //
 // 覆盖：
 //   - attach 后既有实体/avatar 注册面（attach 前 spawn / attach 后 spawn/enter）
-//   - AOI Enter/Sync 首见 → ViewerState 建 + 快照帧（标记语义：deltas 空，
-//     负载组装留后续批——DeltaBuilder §3.3 快照帧不带载荷）
+//   - AOI Enter/Sync 首见 → ViewerState 建 + 快照帧（deltas 已填全量当前值，批 8）
 //   - AOI Leave → ViewerState 回收
 //   - 视野内移动（Sync）不重复触发；出视野再进 → 重建 + 重新首见
 //   - detach 后 AOI 事件不再驱动 manager
@@ -107,9 +106,11 @@ TEST(SceneAttrSyncWiring, FirstSightFramesCarrySubjectIds) {
     // 事件序：Sync(B,A) → 帧(entity=A)；Enter(A,B) → 帧(entity=B)
     ASSERT_EQ(frames.size(), 2u);
     EXPECT_EQ(frames[0].entity_id, kEntityA);
-    // A 有属性 → 首见即快照标记（deltas 空：负载组装留后续批）
+    // A 有属性 → 首见快照帧：负载含全量当前值（§3.3 组装批落地）
     EXPECT_TRUE(frames[0].is_snapshot);
-    EXPECT_TRUE(frames[0].deltas.empty());
+    ASSERT_EQ(frames[0].deltas.size(), 1u);
+    EXPECT_EQ(frames[0].deltas[0].attr_id, 1u);
+    EXPECT_EQ(frames[0].deltas[0].value, 100);
     EXPECT_EQ(frames[1].entity_id, kEntityB);  // B 进场时无属性 → 空帧
     EXPECT_FALSE(frames[1].is_snapshot);
 }

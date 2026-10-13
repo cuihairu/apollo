@@ -62,7 +62,7 @@ std::vector<AttrSyncFrame> AttrSyncManager::on_viewer_enter_collect(std::uint64_
 
     // 快照帧（DeltaBuilder 对 acked=0 返回 is_snapshot=true）
     DeltaBuilder builder;
-    frames.push_back(builder.build(entity_id, eit->second.history(), viewers_[viewer]));
+    frames.push_back(builder.build(entity_id, eit->second, viewers_[viewer]));
 
     // 快照即推进：对方进度直接推到当前 seq（§3.3 快照语义）
     viewers_[viewer].set_acked(entity_id, eit->second.history().world_seq());
@@ -108,7 +108,7 @@ std::vector<AttrSyncFrame> AttrSyncManager::collect(std::uint64_t viewer, std::u
     // ACK 超时降级（§3.3）：静默 >= 阈值 → 每拍快照重置，直到 ACK 到达解除
     auto sit = silent_ticks_.find(key);
     if (sit != silent_ticks_.end() && sit->second >= ack_timeout_ticks_) {
-        auto frame = builder.build(entity_id, eit->second.history(), vit->second);
+        auto frame = builder.build(entity_id, eit->second, vit->second);
         frame.is_snapshot = true;  // 强制快照重置
         frames.push_back(std::move(frame));
         // 快照即推进（对方进度推到当前 seq）；静默计数保留——
@@ -118,7 +118,7 @@ std::vector<AttrSyncFrame> AttrSyncManager::collect(std::uint64_t viewer, std::u
         return frames;
     }
 
-    frames.push_back(builder.build(entity_id, eit->second.history(), vit->second));
+    frames.push_back(builder.build(entity_id, eit->second, vit->second));
 
     // delta 已组包：推进水位（发送成功≠确认，但本层以"已组包"推进；
     // 丢包重发由上层可靠通道处理，快照切换是兜底）
@@ -146,7 +146,7 @@ std::vector<AttrSyncFrame> AttrSyncManager::peek(std::uint64_t viewer, std::uint
         return frames;
     }
     DeltaBuilder builder;
-    frames.push_back(builder.build(entity_id, eit->second.history(), vit->second));
+    frames.push_back(builder.build(entity_id, eit->second, vit->second));
     return frames;
 }
 

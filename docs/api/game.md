@@ -325,8 +325,9 @@ struct AttrSyncFrame {
 
 class DeltaBuilder {
 public:
+    // 快照路径：deltas 填全量当前值，base_seq 推到 world_seq（批 8）
     AttrSyncFrame build(std::uint64_t entity_id,
-                        const ChangeHistory& history,
+                        const EntityAttrs& attrs,
                         const ViewerAttrState& viewer) const;
     void set_delta_attr_threshold(std::uint32_t threshold);
 };
@@ -342,6 +343,8 @@ public:
     void clear_dirty();
     std::size_t dirty_count() const;
     const ChangeHistory& history() const noexcept;
+    // 全量当前值（快照负载组装用，批 8）
+    const std::unordered_map<std::uint32_t, std::int64_t>& values() const noexcept;
     std::uint64_t entity_id() const noexcept;
 };
 

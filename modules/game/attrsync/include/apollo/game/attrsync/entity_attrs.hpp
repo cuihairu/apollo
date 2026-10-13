@@ -34,6 +34,11 @@ public:
     // 只读访问 history（DeltaBuilder 用）
     [[nodiscard]] const ChangeHistory& history() const noexcept { return history_; }
 
+    // 全量当前值（快照负载组装用，§3.3）
+    [[nodiscard]] const std::unordered_map<std::uint32_t, std::int64_t>& values() const noexcept {
+        return values_;
+    }
+
     // 实体 ID
     [[nodiscard]] std::uint64_t entity_id() const noexcept { return entity_id_; }
 

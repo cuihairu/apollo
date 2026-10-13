@@ -144,7 +144,7 @@ per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2
 | `ChangeHistory` | 序号化变更环形日志（每实体一份，容量默认 1024） |
 | `ViewerAttrState` | per-viewer `acked_seq` 水位（每 (viewer, entity) 二元组） |
 | `AttrDelta` | varint/zigzag 编码（attr_id + value + change_n） |
-| `DeltaBuilder` | delta 组装 + 快照切换判定 |
+| `DeltaBuilder` | delta 组装 + 快照切换判定；快照时 deltas 填全量当前值（批 8） |
 | `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory |
 | `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级、peek（只读预检）、ChangeSink（§8.2 写后日志入口） |
 | `AttrSyncScheduler` | §5 优先级与节流：token bucket + 优先级排序 + min_interval + 饥饿保护 |
