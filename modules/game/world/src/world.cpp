@@ -27,14 +27,15 @@ Scene* World::find_scene(std::uint64_t scene_id) {
 }
 
 void World::destroy_scene(std::uint64_t scene_id) {
-    scenes_.erase(scene_id);
-    // 从顺序表中摘除（按 id 定位指针）
+    // 先摘顺序表再删场：scenes_.erase 即析构 Scene，反向次序会在顺序表
+    // 里解引用悬垂指针比 scene_id（use-after-free，sanitizer 树实抓）
     for (auto order_it = scene_order_.begin(); order_it != scene_order_.end(); ++order_it) {
         if (*order_it && (*order_it)->scene_id() == scene_id) {
             scene_order_.erase(order_it);
             break;
         }
     }
+    scenes_.erase(scene_id);
 }
 
 std::size_t World::scene_count() const noexcept {

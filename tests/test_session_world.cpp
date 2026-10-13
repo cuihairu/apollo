@@ -183,8 +183,17 @@ bool test_world_create_scene_and_instance() {
     world.tick(0.1);
     TEST_ASSERT(scene->tick_count() == 1, "world tick advances scene");
 
-    world.destroy_scene(scene->scene_id());
+    const auto destroyed_id = scene->scene_id();
+    world.destroy_scene(destroyed_id);
     TEST_ASSERT(world.scene_count() == 0, "scene destroyed");
+    // 摘除后顺序表同步干净（destroy 次序错即悬垂指针 use-after-free，
+    // sanitizer 树实抓）——重建场后 tick 必须在干净顺序表上推进
+    TEST_ASSERT(world.scenes().empty(), "order list cleared with map");
+    auto* again = world.create_scene(descriptor);
+    TEST_ASSERT(again != nullptr, "re-create after destroy");
+    TEST_ASSERT(again->scene_id() != destroyed_id, "scene id not reused");
+    world.tick(0.1);
+    TEST_ASSERT(again->tick_count() == 1, "tick on fresh order list");
 
     std::cout << "  PASSED" << std::endl;
     return true;
