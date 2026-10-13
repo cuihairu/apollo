@@ -1726,6 +1726,7 @@ add_test(NAME BaseAppMgrM1ControlTests COMMAND baseappmgr_m1_control_tests)
 add_executable(attrsync_tests
     test_attr_sync.cpp
     test_attr_sync_manager.cpp
+    test_attr_frame_codec.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync

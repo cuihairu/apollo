@@ -6,6 +6,7 @@ add_library(apollo_game_attrsync STATIC
     src/delta_builder.cpp
     src/entity_attrs.cpp
     src/attr_sync_manager.cpp
+    src/frame_codec.cpp
 )
 add_library(apollo::game_attrsync ALIAS apollo_game_attrsync)
 

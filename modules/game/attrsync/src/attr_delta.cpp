@@ -73,6 +73,8 @@ std::optional<AttrDelta> AttrDelta::decode(const std::vector<std::uint8_t>& data
 std::optional<std::size_t> AttrDelta::decode_into(const std::vector<std::uint8_t>& data,
                                                     std::size_t offset,
                                                     AttrDelta& out) {
+    std::size_t start = offset;
+
     // attr_id
     auto attr_result = decode_varint(data, offset);
     if (!attr_result.has_value()) {
@@ -100,7 +102,7 @@ std::optional<std::size_t> AttrDelta::decode_into(const std::vector<std::uint8_t
     out.change_n = static_cast<std::uint32_t>(change_n);
     offset += change_len;
 
-    return offset;
+    return offset - start;
 }
 
 }  // namespace apollo::game::attrsync
