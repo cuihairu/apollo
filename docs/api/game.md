@@ -269,7 +269,7 @@ private:
 
 ## apollo::game::attrsync（属性增量同步）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1），六批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），七批交付：
 
 ```cpp
 namespace apollo::game::attrsync {
@@ -347,6 +347,8 @@ public:
 
 // 批 2：管线集成层（AOI 接线 + broadcast collect + ACK）
 // 批 4：ACK 超时降级（silent_ticks + is_degraded）
+// 批 6：peek 只读预检
+// 批 7：ChangeSink 写后日志入口
 class AttrSyncManager {
 public:
     void register_entity(std::uint64_t entity_id);
@@ -358,10 +360,18 @@ public:
     void on_viewer_leave(std::uint64_t viewer, std::uint64_t entity_id);
     bool has_viewer(std::uint64_t viewer, std::uint64_t entity_id) const;
     std::vector<AttrSyncFrame> collect(std::uint64_t viewer, std::uint64_t entity_id);
+    // 批 6：只读收集（不推进 acked、不清 dirty），供调度器预检
+    std::vector<AttrSyncFrame> peek(std::uint64_t viewer, std::uint64_t entity_id);
     void ack(std::uint64_t viewer, std::uint64_t entity_id, std::uint64_t seq);
     void set_ack_timeout_ticks(std::uint64_t ticks);  // 批 4
     bool is_degraded(std::uint64_t viewer, std::uint64_t entity_id) const;  // 批 4
     const EntityAttrs& entity_attrs(std::uint64_t entity_id) const;
+    // 批 7：§8.2 写后日志入口（set_attribute 成功后触发）
+    using ChangeSink = std::function<void(std::uint64_t entity_id,
+                                          std::uint32_t attr_id,
+                                          std::int64_t value)>;
+    void set_change_sink(ChangeSink sink);
+    void clear_change_sink();
 };
 
 // 批 3：帧编解码
@@ -429,4 +439,4 @@ public:
 
 ---
 
-**边界**：客户端发送路径、slice 复合类型、持久化 write-behind 均为后续批次。
+**边界**：客户端发送路径、slice 复合类型 均为后续批次。

@@ -383,7 +383,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 ## 12.1 已落地实现（2026-10-13）
 
-`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级 + SceneAoi 接线 + §5 优先级与节流，共六批：
+`modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级 + SceneAoi 接线 + §5 优先级与节流 + §8.2 写后日志入口，共七批：
 
 ### 批 1 — 核心层（`c7b6c3dc`）
 
@@ -460,17 +460,28 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **测试**：`tests/test_attr_sync_scheduler.cpp` — 11 用例（TokenBucketRefillsPerTick / NoBudgetNoSend / NoChangesNoFrame / PriorityOrdersImportanceFirst / HigherDirtyCountBreaksTie / MinIntervalThrottlesLowFrequency / InstantBypassesMinInterval / StarvationForcesSend / LastWriteWinsMergesJitter / EmittedFrameCarriesDeltas / ScheduleTracksPerViewer），build 树 + sanitizer 树全绿。
 
+### 批 7 — §8.2 写后日志入口
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| `AttrSyncManager::ChangeSink` / `set_change_sink` / `clear_change_sink` | `include/apollo/game/attrsync/attr_sync_manager.hpp` + `src/attr_sync_manager.cpp` | ✅ 已落地 |
+
+**职责**：§8.2 write-behind 管线的 attrsync 侧入口——每次 `set_attribute` 成功后触发 `ChangeSink(entity_id, attr_id, value)` 回调，供宿主接入 `PersistJournal`（`modules/data/orm`）。attrsync 不直链 data 层（依赖方向：宿主装配 journal sink）。
+
+**对应设计节**：§8.2（写模型：快照 + write-behind 变更日志）。
+
+**测试**：`tests/test_attr_sync_change_sink.cpp` — 6 用例（FiresOnSet / FiresPerEntity / FiresPerAttribute / NoSinkNoCrash / ClearStopsReporting / UnregisteredEntityNoFire），build 树 + sanitizer 树全绿。
+
 ### 模块构建与测试汇总
 
 **模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；8 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / attr_sync_scheduler / frame_codec）。
 
-**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）+ `tests/test_scene_attrsync_wiring.cpp`（9）+ `tests/test_attr_sync_scheduler.cpp`（11）= 74 用例，build 树 + sanitizer 树全绿。
+**测试**：`tests/test_attr_sync.cpp`（17）+ `tests/test_attr_sync_manager.cpp`（20）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（7）+ `tests/test_scene_attrsync_wiring.cpp`（9）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）= 80 用例，build 树 + sanitizer 树全绿。
 
 ### 边界（未实现，后续批）
 
 - 客户端发送路径（net-abstraction.md §1 GameConnection Facade 未建）
 - slice 复合类型（§2.2）
-- 持久化 write-behind（§8.2）
 - 快照负载组装（`AttrSyncFrame::is_snapshot=true` 时由调用方填快照，属性存储重建后才有数据源）
 
 ## 附录：三方机制速查对照

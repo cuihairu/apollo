@@ -13,6 +13,7 @@
 //
 
 #include <cstdint>
+#include <functional>
 #include <unordered_map>
 
 #include "apollo/game/attrsync/delta_builder.hpp"
@@ -29,6 +30,14 @@ public:
     // ---- 属性写路径 ----
     void set_attribute(std::uint64_t entity_id, std::uint32_t attr_id, std::int64_t value);
     [[nodiscard]] std::int64_t get_attribute(std::uint64_t entity_id, std::uint32_t attr_id) const;
+
+    // ---- §8.2 写后日志入口 ----
+    // 属性变更回调（每次 set_attribute 成功后触发），供宿主接入 PersistJournal
+    using ChangeSink = std::function<void(std::uint64_t entity_id,
+                                          std::uint32_t attr_id,
+                                          std::int64_t value)>;
+    void set_change_sink(ChangeSink sink);
+    void clear_change_sink() { change_sink_ = nullptr; }
 
     // ---- AOI 事件接线（§4.1）----
     // Viewer 进入实体视野：建 ViewerState（不组帧，快照由 collect 面出）
@@ -70,6 +79,7 @@ private:
     // (viewer, entity) → 自上次 ACK 起的 collect 拍数
     std::unordered_map<std::uint64_t, std::uint64_t> silent_ticks_;
     std::uint64_t ack_timeout_ticks_ = 3;
+    ChangeSink change_sink_;
 };
 
 }  // namespace apollo::game::attrsync

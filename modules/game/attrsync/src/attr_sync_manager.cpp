@@ -1,5 +1,7 @@
 #include "apollo/game/attrsync/attr_sync_manager.hpp"
 
+#include <utility>
+
 namespace apollo::game::attrsync {
 
 // ---- 实体注册 ----
@@ -21,6 +23,13 @@ void AttrSyncManager::set_attribute(std::uint64_t entity_id, std::uint32_t attr_
         return;  // 未注册实体静默忽略
     }
     it->second.set(attr_id, value);
+    if (change_sink_) {
+        change_sink_(entity_id, attr_id, value);
+    }
+}
+
+void AttrSyncManager::set_change_sink(ChangeSink sink) {
+    change_sink_ = std::move(sink);
 }
 
 std::int64_t AttrSyncManager::get_attribute(std::uint64_t entity_id, std::uint32_t attr_id) const {
