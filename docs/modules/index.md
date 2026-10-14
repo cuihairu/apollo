@@ -15,6 +15,7 @@ Apollo 的模块拆分围绕一条原则：
 | [Base](/modules/base) | 时间、线程池、内存、字符串、ID 等基础设施 |
 | [Core](/modules/core) | 配置、日志、生命周期、DI、模块注册等框架内核 |
 | [Runtime](/modules/runtime) | ApplicationHost、WorldHost、ServiceHost 等宿主运行时 |
+| [Script](/modules/script) | Lua 沙盒宿主（scripting-lua.md：白名单/预算/故障隔离/模块注入） |
 | [Data](/modules/data) | 连接抽象、SQL 模板、write-behind 日志、进程内缓存 |
 | [Net](/modules/net) | 传输、协议、消息编解码、会话通信 |
 | [Game](/modules/game) | 实体、AOI、战斗、属性、会话目录与世界逻辑 |

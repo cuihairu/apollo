@@ -1725,6 +1725,23 @@ if(MSVC)
 endif()
 add_test(NAME GameConnectionTests COMMAND gameconnection_tests)
 
+# ========== Script Runtime Tests (scripting-lua.md §2/§4/§6) ==========
+# Lua 沙盒宿主测试；无门控注册（script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(script_tests test_script_runtime.cpp)
+target_link_libraries(script_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(script_tests PRIVATE ws2_32)
+    target_compile_definitions(script_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(script_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ScriptTests COMMAND script_tests)
+
 # BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
 # fan-out + 真 BaseAppMgr 分派面（AssignWorld/ResolveRoute 全真目录裁决）
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本

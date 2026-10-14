@@ -16,6 +16,10 @@ add_subdirectory(contract)
 # Level 2: Core (depends on base)
 add_subdirectory(core)
 
+# Level 2.5: Script (scripting-lua.md——Lua 沙盒宿主；零 apollo 依赖，
+# 仅 vcpkg lua；故障事件注入式上抛，不直接耦合日志库)
+add_subdirectory(script)
+
 # Level 3: Runtime (depends on core)
 add_subdirectory(runtime)
 
