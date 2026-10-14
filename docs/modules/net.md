@@ -200,6 +200,7 @@ net M1 内核已收敛为自研四层，以下为已交付的子模块：
 | 子库 | 职责 |
 |---|---|
 | `apollo::net_link` | 帧定界 / 契约路由分发 / 背压水位 / 单播拓扑 / InterServerLink |
+| `apollo::net_gameconnection` | GameConnection L3 门面——游戏逻辑唯一入口（send/subscribe/state/close 映射 link 层） |
 | `apollo::net_linktrace` | W3C traceparent 上下文 + span 结构化行发射 + 932 信封编解码 |
 | `apollo::net_linkrpc` | 契约 940/941 关联信封 + corr_id 关联 + call_async/poll/wait 桥 |
 | `apollo::net_remoteentity` | RemoteEntityRef / RemoteMethodSchema / RouteResolver / RpcTrace |
@@ -208,12 +209,23 @@ net M1 内核已收敛为自研四层，以下为已交付的子模块：
 ```cmake
 target_link_libraries(my_app
     apollo::net_link
+    apollo::net_gameconnection
     apollo::net_linktrace
     apollo::net_linkrpc
     apollo::net_remoteentity
     apollo::net_contract_wire
 )
 ```
+
+### GameConnection 门面（L3）
+
+游戏逻辑到 link 层的唯一入口（net-abstraction.md §2/§3），纯适配层：
+
+- `send(msg_id, payload, Channel, Priority)` → link 层 SendClass 映射（kReliable/kDroppable），返回 `SendCode::kAccepted/kBackPressured`。
+- `subscribe(msg_id, handler)` / `set_route_table` / `allow_domain` → Dispatcher 透传。
+- `state()` → SessionState（kHandshaking/kActive/kClosed，映射 LinkState）。
+- `pump(now_ms)` / `attach(transport, now_ms)` / `close(reason)` → InterServerLink 透传。
+- 边界：L2 会话增量（四通道队列 / TRIMMED_LOW / Resuming / resume 回调 / 场景线程投递）留后续批；Priority 参数当前仅透传语义占位。
 
 ## 依赖
 

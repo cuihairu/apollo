@@ -201,6 +201,10 @@ add_subdirectory(linktrace)
 # RouteResolver / RpcTrace，设计见 remote-entity-call-design.md）
 add_subdirectory(remoteentity)
 
+# GameConnection 门面（net-abstraction.md §2/§3 L3——游戏逻辑唯一入口；
+# 纯适配层，L2 会话增量留后续批）
+add_subdirectory(gameconnection)
+
 if(BUILD_TESTING)
     find_package(GTest QUIET)
     if(GTest_FOUND)

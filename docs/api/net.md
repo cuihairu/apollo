@@ -141,6 +141,13 @@ public:
 自研四层内核（2026-10-12 收敛），API 明细见各头文件：
 
 - `modules/net/link/`（`apollo::net_link`）——帧定界 / `Dispatcher` 契约路由 / `Watermark` 背压水位 / `InterServerLink` 单播拓扑（reliable seq 去重 + 累积 ack）。
+- `modules/net/gameconnection/`（`apollo::net_gameconnection`）——`GameConnection` L3 门面（net-abstraction.md §2/§3），游戏逻辑唯一入口。
+  - `enum class Channel { kReliable, kDroppable }` / `Priority { kLow, kNormal, kHigh }` / `SessionState { kHandshaking, kActive, kClosed }` / `SendCode { kAccepted, kBackPressured }`。
+  - `send(u16 msg_id, payload, Channel, Priority) -> SendCode`（两个重载：`vector<u8>` / `const u8* + size`）。
+  - `subscribe(u16 msg_id, Handler)` / `set_route_table(const RouteTable*)` / `allow_domain(string)`。
+  - `state() -> SessionState` / `pump(now_ms) -> bool` / `attach(transport, now_ms)` / `close(reason)`。
+  - 内部持 `InterServerLink`；`link()` / `stats()` 直访 link 层。
+  - L2 会话增量（四通道队列 / `TRIMMED_LOW` / `Resuming` / resume 回调 / 场景线程投递）留后续批；`Priority` 当前仅语义占位。
 - `modules/net/linktrace/`（`apollo::net_linktrace`）——W3C traceparent 上下文 + span 结构化行发射 + 932 internal_envelope 编解码缝。
 - `modules/net/linkrpc/`（`apollo::net_linkrpc`）——契约 940/941 关联信封 + corr_id 关联 + `call_async`/`poll`/`wait` 桥。
 - `modules/net/remoteentity/`（`apollo::net_remoteentity`）——`RemoteEntityRef` / `RemoteMethodSchema` / `RouteResolver` / `RpcTrace`（remote-entity-call 四件套余件，2026-10-13 落地）。

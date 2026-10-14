@@ -1706,6 +1706,25 @@ if(MSVC)
 endif()
 add_test(NAME BaseM1Tests COMMAND base_m1_tests)
 
+# ========== GameConnection Facade Tests (net-abstraction.md §2/§3 L3) ==========
+# 纯 net 层测试（只依赖 apollo::net_gameconnection + apollo::net_link），
+# 无门控注册——OFF 树（GAME_MODULE=OFF）同样执行。
+add_executable(gameconnection_tests test_game_connection.cpp)
+target_link_libraries(gameconnection_tests PRIVATE
+    apollo::net_gameconnection
+    apollo::net_link
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(gameconnection_tests PRIVATE ws2_32)
+    target_compile_definitions(gameconnection_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(gameconnection_tests PRIVATE /utf-8)
+endif()
+add_test(NAME GameConnectionTests COMMAND gameconnection_tests)
+
 # BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
 # fan-out + 真 BaseAppMgr 分派面（AssignWorld/ResolveRoute 全真目录裁决）
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本
