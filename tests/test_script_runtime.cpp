@@ -502,18 +502,36 @@ TEST(ScriptRuntime, GeneratedContractLuaLoads) {
     ASSERT_FALSE(src.empty());  // 产物随仓提交（golden 纪律）
     ScriptRuntime rt(make_config());
     // 探针：包一层函数执行产物取回 M，先验形态再装载——routes 平表必备、
-    // write_whitelist 全整数（attr id）、version 为数。handler 面按 routes
-    // 逐条注册空函数（装载闸只验存在性；真实 handler 面随玩法 Lua 批）。
+    // write_whitelist 全整数（attr id）、version 为数。golden 是内容锚不是语义锚
+    // （改 writer 重吐提交后仍绿），故此处再锚语义：routes 与 M.msgs 的 reflect
+    // 条目双向对齐（sdk-contract §10.6 装载期闸的静态前提）、白名单 id 存在且
+    // predict 含 client_predicted（sdk-contract §5）。handler 面按 routes 逐条
+    // 注册空函数（装载闸只验存在性；真实 handler 面随玩法 Lua 批）。
     ASSERT_TRUE(rt.call_string("probe",
         "local M = (function()\n" + src + "\nend)()\n"
         "assert(type(M.routes) == 'table', 'routes must be a table')\n"
         "assert(type(M.version) == 'number', 'version must be a number')\n"
         "assert(type(M.write_whitelist) == 'table', 'whitelist must be a table')\n"
         "local ids, wl, stubs = {}, {}, {}\n"
-        "for id, _ in pairs(M.routes) do ids[#ids + 1] = id end\n"
+        "for id, h in pairs(M.routes) do\n"
+        "    local m = M.msgs[id]\n"
+        "    assert(m and m.binding == 'reflect', 'route must map to a reflect message')\n"
+        "    assert(m.name == h, 'route handler must be the message name')\n"
+        "    ids[#ids + 1] = id\n"
+        "end\n"
+        "for id, m in pairs(M.msgs) do\n"
+        "    if m.binding == 'reflect' then assert(M.routes[id], 'reflect message must have a route') end\n"
+        "end\n"
         "table.sort(ids)\n"
         "for _, v in ipairs(M.write_whitelist) do\n"
         "    assert(type(v) == 'number', 'whitelist entries must be attr ids')\n"
+        "    local a = M.attrs[v]\n"
+        "    assert(a, 'whitelist id must exist in attrs')\n"
+        "    local hit = false\n"
+        "    for _, p in ipairs(a.predict) do\n"
+        "        if p == 'client_predicted' then hit = true end\n"
+        "    end\n"
+        "    assert(hit, 'whitelist attr must be client_predicted')\n"
         "    wl[#wl + 1] = v\n"
         "end\n"
         "for _, h in pairs(M.routes) do stubs[#stubs + 1] = 'function ' .. h .. '() end' end\n"
