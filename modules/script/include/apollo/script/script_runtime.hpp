@@ -144,6 +144,22 @@ public:
     [[nodiscard]] bool is_quarantined(const std::string& module) const;
     [[nodiscard]] std::uint64_t quarantine_remaining(const std::string& module) const;
     [[nodiscard]] std::map<std::string, std::uint64_t> quarantined_modules() const;
+
+    // §3.4 契约表装载（contract.lua，apollo_gen 同批吐的服务端双形态）：
+    // 编译 → 结构校验（routes 必备）→ 路由完整性闸（bin 有 handler 而 Lua 无
+    // 即拒换）→ 原子换 _G["contract"] 与 C++ 数据面；任一步失败旧表不动。
+    bool load_contract(const std::string& source);
+    [[nodiscard]] std::uint64_t contract_version() const { return contract_version_; }
+    [[nodiscard]] const std::map<std::uint32_t, std::string>& contract_routes() const {
+        return contract_routes_;
+    }
+    // §3.4 写白名单数据化：直接喂 run_attr_hook_window（替代宿主自备白名单）。
+    [[nodiscard]] const std::vector<std::uint64_t>& contract_write_whitelist() const {
+        return contract_whitelist_;
+    }
+    // 契约路由分发：id → handler（全局函数或 module.func 点路径）。
+    // 未注册 id / handler 不可达 / 执行错误均返回 false。
+    bool call_route(std::uint32_t msg_id);
     std::size_t memory_used() const;
     const ScriptStats& stats() const { return stats_; }
 
@@ -163,6 +179,9 @@ private:
     ScriptFaultEvent::Kind classify(int rc, const std::string& msg) const;
     void breaker_on_fault(const std::string& module, bool probing);
     void breaker_on_success(const std::string& module);
+    // §3.4 handler 可达判定（全局名或一层 module.func 点路径）；找到则留
+    // 函数于栈顶（调用方负责弹出），未找到返回 false 且栈复原。
+    bool resolve_handler(const std::string& handler);
 
     ScriptConfig config_;
     lua_State* L_ = nullptr;
@@ -194,6 +213,11 @@ private:
         std::uint64_t quarantine_span = 0;       // 当前隔离跨度（翻倍基数）
     };
     std::map<std::string, ModuleBreaker> breakers_;
+
+    // §3.4 契约数据面（装载成功后与 _G["contract"] 同拍生效）。
+    std::map<std::uint32_t, std::string> contract_routes_;
+    std::vector<std::uint64_t> contract_whitelist_;
+    std::uint64_t contract_version_ = 0;
 };
 
 }  // namespace script

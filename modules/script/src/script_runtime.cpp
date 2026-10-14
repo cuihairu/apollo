@@ -437,6 +437,145 @@ std::map<std::string, std::uint64_t> ScriptRuntime::quarantined_modules() const 
     return out;
 }
 
+// ---- §3.4 契约表装载：编译 → 结构校验 → 路由完整性闸 → 原子提交 ----
+
+bool ScriptRuntime::resolve_handler(const std::string& handler) {
+    const std::size_t dot = handler.find('.');
+    if (dot == std::string::npos) {
+        lua_getglobal(L_, handler.c_str());
+        if (lua_isfunction(L_, -1)) {
+            return true;  // [func]
+        }
+        lua_pop(L_, 1);
+        return false;
+    }
+    const std::string mod = handler.substr(0, dot);
+    const std::string fn = handler.substr(dot + 1);
+    if (fn.empty() || fn.find('.') != std::string::npos) {
+        return false;  // 仅支持一层 module.func 点路径
+    }
+    lua_getglobal(L_, mod.c_str());
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        return false;
+    }
+    lua_getfield(L_, -1, fn.c_str());
+    if (lua_isfunction(L_, -1)) {
+        lua_remove(L_, -2);  // [func]
+        return true;
+    }
+    lua_pop(L_, 2);
+    return false;
+}
+
+bool ScriptRuntime::load_contract(const std::string& source) {
+    // 编译（mode "t"）+ 求值；任一步失败旧表/旧数据面不动（§3.4 同 §3.2 协议）。
+    if (luaL_loadbufferx(L_, source.data(), source.size(), "contract", "t") != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        fault(ScriptFaultEvent::Kind::kSyntax, "contract", msg);
+        return false;
+    }
+    if (lua_pcall(L_, 0, 1, 0) != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        fault(ScriptFaultEvent::Kind::kRuntime, "contract", msg);
+        return false;
+    }
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        fault(ScriptFaultEvent::Kind::kRuntime, "contract",
+              "contract did not return a table");
+        return false;
+    }
+    // routes 必备：msg_id → handler 名。
+    lua_getfield(L_, -1, "routes");  // [table, routes]
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 2);
+        fault(ScriptFaultEvent::Kind::kRuntime, "contract", "missing routes table");
+        return false;
+    }
+    std::map<std::uint32_t, std::string> routes;
+    lua_pushnil(L_);  // [table, routes, nil]
+    while (lua_next(L_, -2) != 0) {  // [table, routes, key, value]
+        const bool keyed = lua_isinteger(L_, -2) && lua_isstring(L_, -1);
+        std::string handler = keyed ? lua_tostring(L_, -1) : "";
+        bool ok = keyed && resolve_handler(handler);  // 完整性闸：Lua 无 handler 即拒换
+        if (ok) {
+            lua_pop(L_, 1);  // func
+            routes.emplace(static_cast<std::uint32_t>(lua_tointeger(L_, -2)),
+                           std::move(handler));
+        } else {
+            fault(ScriptFaultEvent::Kind::kRuntime, "contract",
+                  "route handler missing: " +
+                      (handler.empty() ? std::string("(malformed entry)") : handler));
+        }
+        lua_pop(L_, 1);  // value
+        if (!ok) {
+            lua_pop(L_, 3);  // key, routes, table
+            return false;
+        }
+    }
+    lua_pop(L_, 1);  // routes → [table]
+    // write_whitelist 可选：attr id 数组（§3.4 写白名单数据化）。
+    std::vector<std::uint64_t> whitelist;
+    lua_getfield(L_, -1, "write_whitelist");  // [table, wl]
+    if (!lua_isnil(L_, -1)) {
+        if (!lua_istable(L_, -1)) {
+            lua_pop(L_, 2);
+            fault(ScriptFaultEvent::Kind::kRuntime, "contract",
+                  "write_whitelist not a table");
+            return false;
+        }
+        const lua_Integer n = static_cast<lua_Integer>(lua_rawlen(L_, -1));
+        for (lua_Integer i = 1; i <= n; ++i) {
+            lua_geti(L_, -1, i);
+            if (lua_isinteger(L_, -1)) {
+                whitelist.push_back(static_cast<std::uint64_t>(lua_tointeger(L_, -1)));
+            }
+            lua_pop(L_, 1);
+        }
+    }
+    lua_pop(L_, 1);  // wl → [table]
+    // version 可选。
+    std::uint64_t version = 0;
+    lua_getfield(L_, -1, "version");
+    if (lua_isinteger(L_, -1)) {
+        version = static_cast<std::uint64_t>(lua_tointeger(L_, -1));
+    }
+    lua_pop(L_, 1);
+    // 全部通过 → 原子提交：表与 C++ 数据面同拍生效。
+    lua_setglobal(L_, "contract");  // []
+    contract_routes_ = std::move(routes);
+    contract_whitelist_ = std::move(whitelist);
+    contract_version_ = version;
+    return true;
+}
+
+bool ScriptRuntime::call_route(std::uint32_t msg_id) {
+    const auto it = contract_routes_.find(msg_id);
+    if (it == contract_routes_.end()) {
+        return false;
+    }
+    if (!resolve_handler(it->second)) {
+        // 契约装载后 handler 随热替换丢失（新版本未带）→ 拒调记 fault。
+        fault(ScriptFaultEvent::Kind::kRuntime, "contract",
+              "route handler missing: " + it->second);
+        return false;
+    }
+    ++stats_.calls;
+    used_instructions_ = 0;
+    const int rc = lua_pcall(L_, 0, 0, 0);
+    stats_.instructions += used_instructions_;
+    if (rc != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        fault(classify(rc, msg), it->second.c_str(), msg);
+        return false;
+    }
+    return true;
+}
+
 bool ScriptRuntime::call_string(const char* chunk, const std::string& source) {
     ++stats_.calls;
     used_instructions_ = 0;

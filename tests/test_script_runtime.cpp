@@ -395,3 +395,86 @@ TEST(ScriptRuntime, CallModuleMissingHandlerFaults) {
     EXPECT_FALSE(rt.call_module("m", "nope"));
     EXPECT_EQ(rt.stats().fault_runtime, 1u);
 }
+
+// ── 契约表装载（§3.4） ────────────────────────────────────
+
+namespace {
+// 契约依赖的 handler 面：全局 onChat + quest.onStart。
+const char* kContractEnv = R"(
+function onChat() routed_chat = true end
+quest = { onStart = function() routed_start = true end }
+)";
+}  // namespace
+
+TEST(ScriptRuntime, LoadContractStoresDataFace) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", kContractEnv));
+    EXPECT_TRUE(rt.load_contract(R"(
+return {
+    version = 3,
+    routes = { [1001] = 'onChat', [1002] = 'quest.onStart' },
+    write_whitelist = { 3, 7 },
+}
+)"));
+    EXPECT_EQ(rt.contract_version(), 3u);
+    const auto routes = rt.contract_routes();
+    ASSERT_EQ(routes.size(), 2u);
+    EXPECT_EQ(routes.at(1001), "onChat");
+    EXPECT_EQ(routes.at(1002), "quest.onStart");
+    EXPECT_EQ(rt.contract_write_whitelist(), (std::vector<std::uint64_t>{3, 7}));
+}
+
+TEST(ScriptRuntime, LoadContractRejectsMissingHandler) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", kContractEnv));
+    // bin 里有而 Lua 无 handler → 一致性闸拒换（sdk-contract §10.6）
+    EXPECT_FALSE(rt.load_contract("return { routes = { [1001] = 'no_such_fn' } }"));
+    EXPECT_EQ(rt.contract_version(), 0u);  // 旧数据面不动
+    EXPECT_TRUE(rt.contract_routes().empty());
+}
+
+TEST(ScriptRuntime, LoadContractRejectsBadStructure) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", kContractEnv));
+    EXPECT_FALSE(rt.load_contract("return 42"));                       // 非表
+    EXPECT_FALSE(rt.load_contract("return { write_whitelist = {1} }")); // 缺 routes
+    EXPECT_FALSE(rt.load_contract("return { routes = 'x' }"));          // routes 非表
+    EXPECT_FALSE(rt.load_contract("error('boom')"));                    // 编译/执行错误
+}
+
+TEST(ScriptRuntime, LoadContractAtomicKeepsOldOnReject) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", kContractEnv));
+    ASSERT_TRUE(rt.load_contract(
+        "return { version = 1, routes = { [1001] = 'onChat' }, write_whitelist = { 3 } }"));
+    EXPECT_FALSE(rt.load_contract("return { version = 2, routes = { [1001] = 'ghost' } }"));
+    EXPECT_EQ(rt.contract_version(), 1u);
+    ASSERT_EQ(rt.contract_routes().count(1001), 1u);
+    EXPECT_EQ(rt.contract_routes().at(1001), "onChat");
+    EXPECT_EQ(rt.contract_write_whitelist(), (std::vector<std::uint64_t>{3}));
+}
+
+TEST(ScriptRuntime, CallRouteDispatches) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", kContractEnv));
+    ASSERT_TRUE(rt.load_contract(
+        "return { version = 1, routes = { [1001] = 'onChat', [1002] = 'quest.onStart' } }"));
+    EXPECT_TRUE(rt.call_route(1001));
+    EXPECT_TRUE(rt.get_global_bool("routed_chat"));
+    EXPECT_TRUE(rt.call_route(1002));
+    EXPECT_TRUE(rt.get_global_bool("routed_start"));
+    EXPECT_FALSE(rt.call_route(9999));  // 未注册 id
+}
+
+TEST(ScriptRuntime, ContractWhitelistFeedsAttrHook) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", kContractEnv));
+    ASSERT_TRUE(rt.load_contract(
+        "return { version = 1, routes = {}, write_whitelist = { 3 } }"));
+    rt.call_string("hook", "function onAttrChanged(e, a, o, n) return n + 1 end");
+    ASSERT_TRUE(rt.set_attr_hook("onAttrChanged"));
+    auto changes = make_changes();  // attrs 3,3,7
+    rt.run_attr_hook_window(changes, rt.contract_write_whitelist(), 1000000);
+    EXPECT_EQ(changes[0].new_value, 21);  // 白名单内修订
+    EXPECT_EQ(changes[2].new_value, 2);   // 白名单外（7 ∉ {3}）原值
+}
