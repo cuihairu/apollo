@@ -122,6 +122,11 @@ public:
 
     LinkState state() const { return state_; }
     std::uint64_t peer_epoch() const { return peer_epoch_; }
+    // 对端已确认的本端发出最高 reliable seq（0 = 从未确认；同 epoch 内单调）。
+    std::uint32_t acked_seq() const { return acked_seq_; }
+    // 本端已分配的最高 reliable seq（0 = 未发过可靠帧）。与 acked_seq() 之差
+    // 即「已发出未确认」区间——L2 会话层据此报 missing_seq 范围。
+    std::uint32_t last_sent_seq() const { return next_seq_ - 1; }
     // 对端自报名（Hello 携带的组件名；空 = 握手未毕）。1:N 接收端据它
     // 归档/路由（LinkManager passive fan-out 按此键）。
     const std::string& peer_name() const { return peer_name_; }
@@ -201,6 +206,7 @@ private:
     std::uint32_t last_reliable_seq_ = 0;  // 已分发最高 reliable seq
     std::uint32_t ack_watermark_ = 0;      // 待回累积 ack
     bool ack_dirty_ = false;
+    std::uint32_t acked_seq_ = 0;         // 对端已确认的本端发出最高 seq
 
     // 心跳 / cut 计时。
     std::uint64_t last_rx_ms_ = 0;

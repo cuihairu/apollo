@@ -280,6 +280,7 @@ void InterServerLink::handle_hello(const std::uint8_t* body, std::size_t size) {
         sent_count_ = 0;
         last_reliable_seq_ = 0;
         ack_watermark_ = 0;
+        acked_seq_ = 0;
         ack_dirty_ = true;
         peer_epoch_ = epoch;
         rx_epoch_ = epoch;
@@ -305,7 +306,9 @@ void InterServerLink::handle_ack(const std::uint8_t* body, std::size_t size) {
         finish_down(LinkDownReason::kProtocolError);
         return;
     }
-    drain_acked(get32(body));
+    const std::uint32_t acked = get32(body);
+    acked_seq_ = std::max(acked_seq_, acked);
+    drain_acked(acked);
 }
 
 void InterServerLink::handle_business(const Frame& frame) {

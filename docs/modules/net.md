@@ -200,7 +200,7 @@ net M1 内核已收敛为自研四层，以下为已交付的子模块：
 | 子库 | 职责 |
 |---|---|
 | `apollo::net_link` | 帧定界 / 契约路由分发 / 背压水位 / 单播拓扑 / InterServerLink |
-| `apollo::net_gameconnection` | GameConnection L3 门面——游戏逻辑唯一入口（send/subscribe/state/close 映射 link 层） |
+| `apollo::net_gameconnection` | GameConnection L2 会话层 + L3 门面——四通道队列/水位 trim 分级/场景线程投递/Resuming + 游戏逻辑唯一入口 |
 | `apollo::net_linktrace` | W3C traceparent 上下文 + span 结构化行发射 + 932 信封编解码 |
 | `apollo::net_linkrpc` | 契约 940/941 关联信封 + corr_id 关联 + call_async/poll/wait 桥 |
 | `apollo::net_remoteentity` | RemoteEntityRef / RemoteMethodSchema / RouteResolver / RpcTrace |
@@ -217,15 +217,19 @@ target_link_libraries(my_app
 )
 ```
 
-### GameConnection 门面（L3）
+### GameConnection 门面（L2 会话层 + L3）
 
-游戏逻辑到 link 层的唯一入口（net-abstraction.md §2/§3），纯适配层：
+游戏逻辑到 link 层的唯一入口（net-abstraction.md §2/§3/§4），链路底座 = InterServerLink，其上加客户端会话面：
 
-- `send(msg_id, payload, Channel, Priority)` → link 层 SendClass 映射（kReliable/kDroppable），返回 `SendCode::kAccepted/kBackPressured`。
-- `subscribe(msg_id, handler)` / `set_route_table` / `allow_domain` → Dispatcher 透传。
-- `state()` → SessionState（kHandshaking/kActive/kClosed，映射 LinkState）。
-- `pump(now_ms)` / `attach(transport, now_ms)` / `close(reason)` → InterServerLink 透传。
-- 边界：L2 会话增量（四通道队列 / TRIMMED_LOW / Resuming / resume 回调 / 场景线程投递）留后续批；Priority 参数当前仅透传语义占位。
+- **四通道**（§4.1）：`Channel::kMovement`（不可靠，同 id 只发最新——队内覆盖 + 环满丢最旧，永不拒收）/ `kAttributes`（可靠有序，LOW 可 trim）/ `kEvents`（可靠有序，满即拒不丢）/ `kControl`（独立小预算，不受其它通道 cut 牵连）。映射 link SendClass：movement→kDroppable，其余→kReliable。
+- **三返回码**（§2）：`kAccepted` / `kTrimmedLow`（入队但同通道最旧 LOW 帧被丢弃腾位，`session_stats().trimmed_low_dropped` 计数）/ `kBackPressured`（拒收，调用方自行降级）。
+- **四级水位**（§4.2）：判据 = 各通道环字节占用 / 环容量（`SessionConfig` 逐通道容量，`channel_bytes(ch)` 可见）；ok 全量 → soft 起 attributes 可 trim LOW → hard 起 NORM 拒收（HIGH 放行）→ cut 冻结 reliable（control 豁免）。
+- **场景线程投递**（§3 线程模型）：`subscribe` 的 handler 不在 pump 线程执行——pump 只拷贝入投递队列（跨线程面，自持互斥，深度 `SessionConfig::inbound_queue_depth` 溢出丢最旧计数），owning 线程 `drain_inbound()` 执行。
+- **Resuming**（§2/§3）：同 epoch 重连且 `resume_ttl_ms` 窗口内 → 握手期与 resume 回调内 `state()==kResuming` → `on_resume(ResumeInfo{missing_seq 范围, resumed=true})` → kActive；TTL 过期 / 对端重启（epoch 变）/ 首连 = 全新会话不回调。missing 范围 = 断线时「对端已确认, 本端已发出」的 reliable seq 区间（链路同 epoch 重发保证传输恰一次；上层据范围决定快照补发，attribute-sync §6）。
+- **会话事件面**：`set_session_sink({on_active, on_resume, on_closed})`（与链路 sink 解耦，GameConnection 内收链路事件）；`session_stats()` 观测 trim/覆盖/投递丢弃/恢复计数。
+- `pump(now_ms)`：四通道环刷入链路（遇链路背压停留环下拍再刷）→ 读传输/入投递队列/心跳计时；`attach`/`close`/`set_route_table`/`allow_domain` 透传。
+- 过渡面注记：四通道环每次 pump 刷入链路队列（链路自身水位仍作传输背压兜底）；真 L2-on-L0（IO 线程直刷环）随客户端传输批收敛。
+- 测试：`tests/test_game_connection.cpp`（20 用例）。
 
 ## 依赖
 
