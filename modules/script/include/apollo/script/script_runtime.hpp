@@ -9,13 +9,13 @@
 //   - pcall 隔离（错误分类入 fault 事件，不崩进程，状态可继续）
 //   - 具名模块注入（§4.1 启动期注入唯一通道：register_module）
 //
-// 留后续批：契约表装载（§3.4）、字节码缓存（§3.5）、
-// 故障熔断状态机（§6.1）、attach 调试（§7）。
+// 留后续批：契约表装载（§3.4）、字节码缓存（§3.5）、attach 调试（§7）。
 
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <map>
 #include <string>
@@ -32,6 +32,12 @@ struct ScriptConfig {
     std::uint64_t instruction_budget = 100000;
     // 每状态内存上限（0 = 不限）。超限 → 拒绝新分配（Lua 转 memory error）。
     std::size_t memory_limit_bytes = 8u << 20;
+    // §6.1 模块熔断（W/M/Q 启动期配置非硬编码）：滑窗 W tick 内 M 次 FAULT
+    // → 隔离 Q tick；半开探针再 FAULT 隔离翻倍，封顶 max。
+    std::uint64_t breaker_window_ticks = 1000;
+    std::uint32_t breaker_fault_limit = 3;
+    std::uint64_t breaker_quarantine_ticks = 600;
+    std::uint64_t breaker_max_quarantine_ticks = 4800;
 };
 
 struct ScriptFaultEvent {
@@ -60,6 +66,7 @@ struct ScriptStats {
     std::uint64_t attr_hook_skipped_whitelist = 0; // §5.1 白名单外跳过
     std::uint64_t attr_hook_skipped_budget = 0;    // §5.2 预算耗尽跳过
     std::uint64_t attr_hook_faults = 0;            // §5.1 钩子错误（原值保持）
+    std::uint64_t circuit_rejects = 0;             // §6.1 隔离期短路拒调
 };
 
 // §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
@@ -126,6 +133,17 @@ public:
 
     // 每帧预算复位（§6 帧语义；per-call 预算下为幂等）。
     void reset_budget();
+
+    // §6.1 模块熔断：宿主每 tick 喂当前 tick（熔断窗与隔离期均以 tick 计）。
+    void set_tick(std::uint64_t tick) { tick_ = tick; }
+    // 模块 handler 调用（无参无返回，fault 归因到模块）：隔离期直接短路
+    // 返回 false（不进 Lua）；半开期满放行一次，探针成功销账、再 FAULT
+    // 隔离翻倍（封顶 max）；热更/回滚自动清零（新版本新账）。
+    bool call_module(const std::string& module, const char* func);
+    // §7.2 状态面子集：隔离名单与剩余 tick。
+    [[nodiscard]] bool is_quarantined(const std::string& module) const;
+    [[nodiscard]] std::uint64_t quarantine_remaining(const std::string& module) const;
+    [[nodiscard]] std::map<std::string, std::uint64_t> quarantined_modules() const;
     std::size_t memory_used() const;
     const ScriptStats& stats() const { return stats_; }
 
@@ -143,6 +161,8 @@ private:
     bool run_chunk(const char* chunk, const std::string& source);
     void fault(ScriptFaultEvent::Kind kind, const char* chunk, const std::string& msg);
     ScriptFaultEvent::Kind classify(int rc, const std::string& msg) const;
+    void breaker_on_fault(const std::string& module, bool probing);
+    void breaker_on_success(const std::string& module);
 
     ScriptConfig config_;
     lua_State* L_ = nullptr;
@@ -165,6 +185,15 @@ private:
     // §5.1 钩子 registry ref（随 lua_close 释放）+ §5.2 帧级已用预算。
     int hook_ref_ = LUA_NOREF;
     std::uint64_t frame_hook_used_ = 0;
+
+    // §6.1 模块熔断状态：滑窗 FAULT 时间戳 + 隔离期（宿主喂 tick）。
+    std::uint64_t tick_ = 0;
+    struct ModuleBreaker {
+        std::deque<std::uint64_t> fault_ticks;   // 窗内 FAULT tick（滑窗 W）
+        std::uint64_t quarantined_until = 0;     // 0 = 未隔离
+        std::uint64_t quarantine_span = 0;       // 当前隔离跨度（翻倍基数）
+    };
+    std::map<std::string, ModuleBreaker> breakers_;
 };
 
 }  // namespace script

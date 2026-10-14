@@ -290,3 +290,108 @@ TEST(ScriptRuntime, AttrHookAbsentFunctionSafe) {
     EXPECT_EQ(changes[0].new_value, 20);
     EXPECT_EQ(rt.stats().attr_hook_calls, 0u);
 }
+
+// ── 模块熔断（§6.1） ──────────────────────────────────────
+
+namespace {
+ScriptConfig breaker_config() {
+    ScriptConfig cfg = make_config();
+    cfg.breaker_window_ticks = 1000;      // W
+    cfg.breaker_fault_limit = 3;          // M
+    cfg.breaker_quarantine_ticks = 600;   // Q
+    return cfg;
+}
+
+const char* kBreakerModule = R"(
+local t = { version = 1 }
+t.boom = function() error('handler fault') end
+t.ok = function() worked = true end
+return t
+)";
+}  // namespace
+
+TEST(ScriptRuntime, BreakerTripsAfterThreeFaults) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_TRUE(rt.is_quarantined("m"));
+    EXPECT_EQ(rt.quarantine_remaining("m"), 600u);
+    // 隔离期短路：不再进 Lua（handler 副作用不发生）
+    EXPECT_FALSE(rt.call_module("m", "ok"));
+    EXPECT_FALSE(rt.get_global_bool("worked"));
+    EXPECT_EQ(rt.stats().circuit_rejects, 1u);
+}
+
+TEST(ScriptRuntime, BreakerWindowSlides) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    rt.call_module("m", "boom");
+    rt.call_module("m", "boom");
+    rt.set_tick(1001);  // 滑窗滑过：tick 0 的 FAULT 到期（0+W ≤ 1001）
+    rt.call_module("m", "boom");  // 总第 3 次，但窗内仅 1 次
+    EXPECT_FALSE(rt.is_quarantined("m"));
+}
+
+TEST(ScriptRuntime, BreakerHalfOpenRecovers) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    for (int i = 0; i < 3; ++i) {
+        rt.call_module("m", "boom");
+    }
+    ASSERT_TRUE(rt.is_quarantined("m"));
+    rt.set_tick(600);  // 隔离期满
+    EXPECT_FALSE(rt.is_quarantined("m"));
+    EXPECT_TRUE(rt.call_module("m", "ok"));  // 半开放行一次，探针成功
+    EXPECT_TRUE(rt.get_global_bool("worked"));
+    EXPECT_FALSE(rt.is_quarantined("m"));    // 销账解除
+}
+
+TEST(ScriptRuntime, BreakerHalfOpenFaultDoublesQuarantine) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    for (int i = 0; i < 3; ++i) {
+        rt.call_module("m", "boom");  // trip → until 600
+    }
+    rt.set_tick(600);
+    rt.call_module("m", "boom");  // 半开探针再 FAULT → span 翻倍
+    EXPECT_TRUE(rt.is_quarantined("m"));
+    EXPECT_EQ(rt.quarantine_remaining("m"), 1200u);
+}
+
+TEST(ScriptRuntime, BreakerHotSwapClears) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    for (int i = 0; i < 3; ++i) {
+        rt.call_module("m", "boom");
+    }
+    ASSERT_TRUE(rt.is_quarantined("m"));
+    EXPECT_TRUE(rt.swap_module({"m", 2, {}},
+                               "return { version = 2, ok = function() return true end }"));
+    EXPECT_FALSE(rt.is_quarantined("m"));    // 热更自动清零
+    EXPECT_TRUE(rt.call_module("m", "ok"));  // 新版本直接可用
+}
+
+TEST(ScriptRuntime, BreakerConfigurableLimit) {
+    ScriptConfig cfg = breaker_config();
+    cfg.breaker_fault_limit = 1;  // M=1：单次 FAULT 即熔断
+    ScriptRuntime rt(cfg);
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_TRUE(rt.is_quarantined("m"));
+}
+
+TEST(ScriptRuntime, CallModuleDispatches) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, "return { greet = function() greeted = 'hi' end }");
+    EXPECT_TRUE(rt.call_module("m", "greet"));
+    EXPECT_EQ(rt.get_global_string("greeted"), "hi");
+}
+
+TEST(ScriptRuntime, CallModuleMissingHandlerFaults) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, "return { version = 1 }");
+    EXPECT_FALSE(rt.call_module("m", "nope"));
+    EXPECT_EQ(rt.stats().fault_runtime, 1u);
+}

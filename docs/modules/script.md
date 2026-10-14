@@ -40,6 +40,7 @@ rt.get_global_bool("ready");
 - **具名模块注入**：`register_module(name, luaL_Reg*)` 走全局具名表（§4.1 白名单制，禁止脚本按名查服务容器）。
 - **模块热替换**（§3.2）：`swap_module(ModuleSpec{name, version, deps}, source)`——依赖校验 → 编译（mode "t"）→ 冒烟（新表带 `smoke()` 则须返回 true）→ 全过才原子换 `_G[name]`，任一步失败旧表不动；旧活跃表进冷冻区（仅留最近一份），`rollback_module` 恢复并丢弃坏版本；换表成功调新表 `onReload(old)` 钩子（失败不回滚，记 fault），广播 `ModuleReloaded` 经 `set_reload_listener`；`active_modules()` 为 §7.2 版本矩阵。模块私有状态零迁移纪律照 §3.2（状态在 C++ 权威侧）。
 - **属性钩子窗口**（§5.1/§5.2）：`set_attr_hook("onAttrChanged")` 注册全局钩子函数（签名 `(entity, attr, old, new)`，返回整数修订值，nil/非整数 = 不修饰）；`run_attr_hook_window(changes, whitelist, frame_budget)` 在重算后广播前逐条调用——白名单外跳过计数、帧预算耗尽剩余跳过（`reset_attr_frame()` 下一帧恢复）、钩子错误保持原值记 fault 且状态可继续；负载为 C++ 侧快照拷贝（`ScriptRuntime::AttrChange`，int64 对，无锁——同属 owning thread）；无钩子窗口零调用。
+- **模块熔断**（§6.1）：`call_module(module, func)` 模块 handler 调用（fault 归因到模块）；滑窗 W tick 内 M 次 FAULT → 隔离 Q tick（W/M/Q/max 启动期配置，默认 1000/3/600/4800）；隔离期调用直接短路返回 false 不进 Lua（`stats().circuit_rejects` 计数）；隔离期满半开放行一次，探针成功销账解除、再 FAULT 隔离跨度翻倍（封顶 max）；**热更新自动清零**（swap/rollback 成功即新版本新账）；宿主每 tick 喂 `set_tick(t)`；状态面子集 `is_quarantined`/`quarantine_remaining`/`quarantined_modules`（名单+剩余 tick）。
 - **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计/reload 成败/attr_hook 调用与跳过计数）、`memory_used()`、`reset_budget()`。
 
 ### 边界（留后续批）
@@ -47,9 +48,10 @@ rt.get_global_bool("ready");
 - 热替换工程面：工作线程预加载 + smoke 用例集（§3.2 Phase A）、current 版本指针持久化（防坏版本崩溃循环）、灰度 per 场景线程、协程升级语义宿主侧接线
 - 契约表装载（§3.4 contract.lua 一致性闸）、字节码缓存（§3.5 manifest 三元组）
 - 公式即钩子（§5.3）；属性同步管线接线（钩子窗口挂 recalc→collect 之间，注入式不依赖 script 模块）
-- 故障熔断状态机（§6.1 模块级 3 次/1000 tick）、attach 调试（§7）、GM 命令面（§7.5）
+- WARN 软阈值去抖事件（§6.1）、TRIP/RECOVER 事件发射与 ScriptFaultEvent 结构化字段扩展（ts_wall+tick 双写/scene/entity/module+version）、熔断状态持久化（防坏版本崩溃循环）
+- attach 调试（§7）、GM 命令面（§7.5）
 - `require`/package 面未打开（模块加载暂走宿主 `call_string` 面）
 
 ## 测试
 
-`tests/test_script_runtime.cpp`（22 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播；属性钩子修订值、白名单外跳过、错误保持原值、帧预算跳过与下一帧恢复、nil 不修饰、无钩子空窗口。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。
+`tests/test_script_runtime.cpp`（30 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播；属性钩子修订值、白名单外跳过、错误保持原值、帧预算跳过与下一帧恢复、nil 不修饰、无钩子空窗口；熔断三次触发、滑窗过期、半开恢复、半开翻倍、热更清零、M 可配置、call_module 分发、缺 handler 记 fault。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。

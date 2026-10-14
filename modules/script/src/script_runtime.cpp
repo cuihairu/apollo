@@ -196,6 +196,7 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
     }
     module_refs_[spec.name] = new_ref;
     module_versions_[spec.name] = spec.version;
+    breakers_.erase(spec.name);  // §6.1 热更新账：新版本新账，无需等冷却
     ++stats_.reload_success;
     if (reload_listener_) {
         reload_listener_(spec.name.c_str(), spec.version);
@@ -245,6 +246,7 @@ bool ScriptRuntime::rollback_module(const std::string& name) {
     module_refs_[name] = restored_ref;
     lua_setglobal(L_, name.c_str());
     module_versions_[name] = restored_version;
+    breakers_.erase(name);  // §6.1 回滚同热更：恢复版本即新账
     if (reload_listener_) {
         reload_listener_(name.c_str(), restored_version);  // §3.2 reload 伪事件
     }
@@ -332,6 +334,108 @@ void ScriptRuntime::run_attr_hook_window(std::vector<AttrChange>& changes,
 }
 
 void ScriptRuntime::reset_attr_frame() { frame_hook_used_ = 0; }
+
+// ---- §6.1 模块熔断：滑窗 W 计 FAULT → 隔离 Q，半开翻倍，热更新账 ----
+
+bool ScriptRuntime::call_module(const std::string& module, const char* func) {
+    auto bit = breakers_.find(module);
+    if (bit != breakers_.end() && bit->second.quarantined_until != 0 &&
+        tick_ < bit->second.quarantined_until) {
+        ++stats_.circuit_rejects;  // 隔离期短路，不进 Lua（实体回退默认行为）
+        return false;
+    }
+    // 走到这里 = 正常调用，或隔离期满的半开探针（成败定销账/翻倍）。
+    const bool probing = bit != breakers_.end() && bit->second.quarantined_until != 0;
+    ++stats_.calls;
+    used_instructions_ = 0;
+    bool ok = false;
+    lua_getglobal(L_, module.c_str());
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        fault(ScriptFaultEvent::Kind::kRuntime, module.c_str(), "module not a table");
+    } else {
+        lua_getfield(L_, -1, func);
+        if (!lua_isfunction(L_, -1)) {
+            lua_pop(L_, 2);
+            fault(ScriptFaultEvent::Kind::kRuntime, module.c_str(),
+                  "handler not a function");
+        } else {
+            lua_remove(L_, -2);  // 栈顶 handler（模块函数无 self）
+            const int rc = lua_pcall(L_, 0, 0, 0);
+            stats_.instructions += used_instructions_;
+            if (rc == LUA_OK) {
+                ok = true;
+            } else {
+                const std::string msg =
+                    lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+                lua_pop(L_, 1);
+                fault(classify(rc, msg), module.c_str(), msg);
+            }
+        }
+    }
+    if (ok) {
+        breaker_on_success(module);
+    } else {
+        breaker_on_fault(module, probing);
+    }
+    return ok;
+}
+
+void ScriptRuntime::breaker_on_fault(const std::string& module, bool probing) {
+    auto& br = breakers_[module];
+    if (probing) {
+        // §6.1 半开探针再 FAULT → 隔离跨度翻倍（封顶 max）。
+        br.quarantine_span = std::min(br.quarantine_span * 2,
+                                      config_.breaker_max_quarantine_ticks);
+        br.quarantined_until = tick_ + br.quarantine_span;
+        br.fault_ticks.clear();
+        return;
+    }
+    // 滑窗 W：窗外 FAULT 时间戳到期弹出。
+    while (!br.fault_ticks.empty() &&
+           br.fault_ticks.front() + config_.breaker_window_ticks <= tick_) {
+        br.fault_ticks.pop_front();
+    }
+    br.fault_ticks.push_back(tick_);
+    if (br.fault_ticks.size() >= config_.breaker_fault_limit) {
+        br.quarantine_span = config_.breaker_quarantine_ticks;
+        br.quarantined_until = tick_ + br.quarantine_span;
+        br.fault_ticks.clear();
+    }
+}
+
+void ScriptRuntime::breaker_on_success(const std::string& module) {
+    auto bit = breakers_.find(module);
+    if (bit != breakers_.end() && bit->second.quarantined_until != 0) {
+        breakers_.erase(bit);  // §6.1 半开探针成功 → 销账解除
+    }
+}
+
+bool ScriptRuntime::is_quarantined(const std::string& module) const {
+    auto bit = breakers_.find(module);
+    return bit != breakers_.end() && bit->second.quarantined_until != 0 &&
+           tick_ < bit->second.quarantined_until;
+}
+
+std::uint64_t ScriptRuntime::quarantine_remaining(const std::string& module) const {
+    auto bit = breakers_.find(module);
+    if (bit == breakers_.end() || bit->second.quarantined_until == 0) {
+        return 0;
+    }
+    return tick_ < bit->second.quarantined_until
+               ? bit->second.quarantined_until - tick_
+               : 0;
+}
+
+std::map<std::string, std::uint64_t> ScriptRuntime::quarantined_modules() const {
+    std::map<std::string, std::uint64_t> out;
+    for (const auto& [name, br] : breakers_) {
+        if (br.quarantined_until != 0 && tick_ < br.quarantined_until) {
+            out.emplace(name, br.quarantined_until - tick_);
+        }
+    }
+    return out;
+}
 
 bool ScriptRuntime::call_string(const char* chunk, const std::string& source) {
     ++stats_.calls;
