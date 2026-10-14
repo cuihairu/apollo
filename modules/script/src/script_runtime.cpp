@@ -301,6 +301,31 @@ void ScriptRuntime::register_module(const char* name, const luaL_Reg* funcs) {
 
 // ---- §3.2 热替换：编译 + 冒烟在影子栈完成，通过才原子换 _G[name] ----
 
+namespace {
+
+// §3.5 manifest 同口径（fnv1a64）：预备产物交接完整性校验用。
+std::uint64_t prepared_hash(const std::uint8_t* data, std::size_t size) {
+    std::uint64_t h = 1469598103934665603ULL;
+    for (std::size_t i = 0; i < size; ++i) {
+        h ^= static_cast<std::uint64_t>(data[i]);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+struct DumpSink {
+    std::vector<std::uint8_t> bytes;
+};
+
+int prepared_dump_writer(lua_State*, const void* data, std::size_t size, void* ud) {
+    auto* sink = static_cast<DumpSink*>(ud);
+    const auto* b = static_cast<const std::uint8_t*>(data);
+    sink->bytes.insert(sink->bytes.end(), b, b + size);
+    return 0;
+}
+
+}  // namespace
+
 bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& source) {
     const std::uint64_t prev_version = module_version(spec.name);  // 0 = 首次
     // 依赖校验（依赖图拓扑序由装载器保证，本层只查已装载）。
@@ -365,7 +390,12 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
     } else {
         lua_pop(L_, 1);
     }
-    // 走到此处栈顶 = 新表。registry ref（luaL_ref 自弹栈顶）+ 原子换表。
+    return finish_module_swap_(spec, prev_version);
+}
+
+bool ScriptRuntime::finish_module_swap_(const ModuleSpec& spec,
+                                        std::uint64_t prev_version) {
+    // 入参栈顶 = 已验证新表。registry ref（luaL_ref 自弹栈顶）+ 原子换表。
     lua_pushvalue(L_, -1);
     const int new_ref = luaL_ref(L_, LUA_REGISTRYINDEX);  // [新表]
     raw_setglobal(L_, spec.name.c_str());                 // []
@@ -408,6 +438,119 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
     }
     lua_pop(L_, 1);  // 新表
     return true;
+}
+
+PreparedModule ScriptRuntime::prepare_module(const ModuleSpec& spec,
+                                             const std::string& source) {
+    PreparedModule out;
+    out.name = spec.name;
+    out.version = spec.version;
+    out.deps = spec.deps;
+    if (!preparer_) {
+        preparer_ = std::make_unique<ScriptRuntime>(config_);
+    }
+    ScriptRuntime* p = preparer_.get();
+    // 依赖拓扑序（§3.1）：预备镜像内须已装齐——预备面只镜像经 prepare 的
+    // 模块，跨预备面 swap 的模块不在镜像内（控制面纪律，见 docs/modules/script.md）。
+    for (const auto& dep : spec.deps) {
+        if (!p->has_module(dep.c_str())) {
+            out.error = "missing dependency on preparer: " + dep;
+            return out;
+        }
+    }
+    // 编译 + 求值 + 冒烟：预备沙盒走完整换表协议（装表 → 预备镜像更新，供
+    // 后续依赖方的拓扑校验）。失败原因取自预备面审计环。
+    if (!p->swap_module(spec, source)) {
+        const std::deque<LuaReloadRecord>& history = p->reload_history();
+        out.error = history.empty() ? "prepare rejected"
+                                    : history.back().reason;
+        return out;
+    }
+    // dump 自家管线产物（strip=0 同 lua_precompile 口径）。预备面刚验过同一份
+    // 源，此步失败属内部错误。
+    if (luaL_loadbufferx(p->L_, source.data(), source.size(), spec.name.c_str(),
+                         "t") != LUA_OK) {
+        lua_pop(p->L_, 1);
+        out.error = "prepare recompile failed";
+        return out;
+    }
+    DumpSink sink;
+    const int drc = lua_dump(p->L_, prepared_dump_writer, &sink, 0);
+    lua_pop(p->L_, 1);  // chunk
+    if (drc != LUA_OK || sink.bytes.empty()) {
+        out.error = "bytecode dump failed";
+        return out;
+    }
+    out.bytecode = std::move(sink.bytes);
+    out.bytecode_hash =
+        prepared_hash(out.bytecode.data(), out.bytecode.size());
+    return out;
+}
+
+bool ScriptRuntime::commit_module(const PreparedModule& prepared) {
+    if (!prepared.ok()) {
+        return false;  // 预备面未通过：host 应先读 error
+    }
+    // 交接完整性：产物被调包/串位即拒（字节内容变化必然改 hash；Lua 自身
+    // 另校产物头签名——两关，任一不过即拒，不回退源码路径）。
+    const std::string tampered = "prepared bytecode tampered";
+    if (prepared.bytecode.empty() ||
+        prepared_hash(prepared.bytecode.data(), prepared.bytecode.size()) !=
+            prepared.bytecode_hash) {
+        ++stats_.reload_failed;
+        fault(ScriptFaultEvent::Kind::kRuntime, prepared.name.c_str(), tampered);
+        record_reload(prepared.name, module_version(prepared.name), prepared.version,
+                      false, tampered);
+        return false;
+    }
+    const ModuleSpec spec{prepared.name, prepared.version, prepared.deps};
+    const std::uint64_t prev_version = module_version(spec.name);
+    for (const auto& dep : spec.deps) {
+        if (module_refs_.find(dep) == module_refs_.end()) {
+            ++stats_.reload_failed;
+            fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(),
+                  "missing dependency: " + dep);
+            record_reload(spec.name, prev_version, spec.version, false,
+                          "missing dependency: " + dep);
+            return false;
+        }
+    }
+    // 装载预备产物（"b"：自家管线产物，不经沙盒 `load`；§3.5 缓存路径只服务
+    // 构建管线，预备产物不计 cache_hits/misses）。
+    if (luaL_loadbufferx(L_,
+                         reinterpret_cast<const char*>(prepared.bytecode.data()),
+                         prepared.bytecode.size(), spec.name.c_str(), "b") != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        ++stats_.reload_failed;
+        fault(ScriptFaultEvent::Kind::kSyntax, spec.name.c_str(), msg);
+        record_reload(spec.name, prev_version, spec.version, false, "bytecode load error: " + msg);
+        return false;
+    }
+    // 求值（失败 → 旧表不动）。
+    const int rc = lua_pcall(L_, 0, 1, 0);
+    stats_.instructions += used_instructions_;
+    used_instructions_ = 0;
+    if (rc != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        ++stats_.reload_failed;
+        fault(classify(rc, msg), spec.name.c_str(), msg);
+        record_reload(spec.name, prev_version, spec.version, false, "eval error: " + msg);
+        return false;
+    }
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        ++stats_.reload_failed;
+        fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(),
+              "module did not return a table");
+        record_reload(spec.name, prev_version, spec.version, false,
+                      "module did not return a table");
+        return false;
+    }
+    // 冒烟不重跑：预备面已验（重复自检把 Phase A 省下的成本搬回 Phase B，
+    // 还引入二次执行差异面）。
+    return finish_module_swap_(spec, prev_version);
 }
 
 bool ScriptRuntime::rollback_module(const std::string& name) {

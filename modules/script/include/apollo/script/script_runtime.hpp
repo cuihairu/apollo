@@ -202,6 +202,20 @@ struct LuaCoroutineInfo {
 using AsyncHandler = std::function<void(std::uint64_t request_id,
                                         const std::vector<LuaValue>& args)>;
 
+// §3.2 Phase A 产物：编译 + 求值 + 冒烟在独立预备沙盒完成（宿主自选线程——
+// 控制面串行调用），commit 在 owning 线程 tick 边界 O(1) 换表。
+struct PreparedModule {
+    std::string name;
+    std::uint64_t version = 0;
+    std::vector<std::string> deps;
+    // lua_dump 自家管线产物（strip=0，与 lua_precompile 口径一致）。commit 走
+    // "b" 装载（Lua 自校产物头签名）+ hash 交接完整性校验；不经沙盒 `load`。
+    std::vector<std::uint8_t> bytecode;
+    std::uint64_t bytecode_hash = 0;  // 防调包/产物串位（fnv1a64，同 §3.5 口径）
+    std::string error;                // 非空 = prepare 未通过（原因原文）
+    bool ok() const { return error.empty(); }
+};
+
 class ScriptRuntime {
 public:
     // §5.1 钩子负载：C++ 侧快照拷贝（int64 对），无锁——同属 owning thread。
@@ -229,6 +243,17 @@ public:
     bool swap_module(const ModuleSpec& spec, const std::string& source);
     // §3.2 Phase C：冷冻区换回活跃区（一次替换对应用一次回滚）。
     bool rollback_module(const std::string& name);
+
+    // §3.2 Phase A（工作线程预加载）：编译 + 求值 + 冒烟在独立预备沙盒跑完
+    // （owning 线程不付解析与自检成本——宿主把本方法投到 worker 线程，控制面
+    // 串行纪律：prepare/commit 不并发）。预备镜像按拓扑序累积：依赖模块须先
+    // 经 prepare 备齐（跨预备面 swap 的模块不在镜像内，报缺依赖）。
+    // 返回 !ok 携带原因原文（编译/求值/冒烟/缺依赖），不抛错。
+    PreparedModule prepare_module(const ModuleSpec& spec, const std::string& source);
+    // §3.2 Phase B（tick 边界，O(1)）：装载预备产物 → 求值 → 原子换表。
+    // 冒烟不重跑（预备面已验，重复自检把 Phase A 省下的钱花在 Phase B）；
+    // 依赖在位、换表原子性、冷冻区/熔断清账/onReload 与 swap_module 同路。
+    bool commit_module(const PreparedModule& prepared);
 
     bool has_module(const char* name) const;
     std::uint64_t module_version(const std::string& name) const;  // 无模块返回 0
@@ -377,6 +402,13 @@ private:
     // §3.4 handler 可达判定（全局名或一层 module.func 点路径）；找到则留
     // 函数于栈顶（调用方负责弹出），未找到返回 false 且栈复原。
     bool resolve_handler(const std::string& handler);
+    // §3.2 换表尾（栈顶 = 已验证新表）：registry ref + 原子换 _G + 冷冻区 +
+    // 熔断清账 + reload 审计 + 广播 + onReload 钩子。swap_module 与
+    // commit_module 共用（Phase B 的 O(1) 落点）。
+    bool finish_module_swap_(const ModuleSpec& spec, std::uint64_t prev_version);
+    // §3.2 Phase A 预备沙盒（懒建，同配置独立 lua_State）：模块表在预备镜像
+    // 内，供 prepare 的依赖拓扑校验。控制面串行调用，无内部互斥。
+    std::unique_ptr<ScriptRuntime> preparer_;
 
     // §6.1 持久化小端编码原语（仅本类内部使用）。
     static void put_u16(std::vector<std::uint8_t>& out, std::uint16_t v);

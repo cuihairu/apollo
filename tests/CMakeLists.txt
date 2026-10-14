@@ -1772,6 +1772,24 @@ if(MSVC)
 endif()
 add_test(NAME AsyncTests COMMAND async_tests)
 
+# ========== Script Phase A Hot Swap Tests (scripting-lua.md §3.2) ==========
+# 两段式热替换测试（prepare 工作线程预加载 + commit owning 面 O(1) 换表）；
+# 无门控注册（同 script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(phase_a_tests test_script_phase_a.cpp)
+target_link_libraries(phase_a_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(phase_a_tests PRIVATE ws2_32)
+    target_compile_definitions(phase_a_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(phase_a_tests PRIVATE /utf-8)
+endif()
+add_test(NAME PhaseATests COMMAND phase_a_tests)
+
 # ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
 # 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
 # script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。

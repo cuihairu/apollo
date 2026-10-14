@@ -75,6 +75,7 @@ modules/lua/
 - **协程升级语义**：换表时仍挂起的旧协程**继续在冷冻区旧表上执行至完成或超时**（异步协程本有超时上界，§8），新协程全部用新表——不做「热更中途改写运行中协程」（等价于断点式冻结，§7.4 同判）；旧协程持有的旧函数引用随完成自然消亡（与 §3.1 模块表 GC 回收同路）。
 - **灰度粒度 = per 场景线程**：一状态一线程（§2）使换表可按场景线程独立执行——admin 命令投递进各目标场景线程任务队列、各自下一 tick 边界换（§7.1 attach 同型）；灰度即「部分 scene 先换 + 健康分观察 + 全量推广」，全局版本矩阵在 §7.2 状态面可查。（Phase B 的「主线程」在多场景线程下读作「目标场景线程」。）
 - **模块私有状态零迁移纪律**：热更**不迁移**旧模块 upvalue 状态、也不提供 `onUpgrade(old_state)` 式迁移函数——需要跨版本保留的状态必须放 C++ 权威数据或 DB（§1「数据不进脚本」的推论）；模块 upvalue 只放可重建缓存/计数器。提供迁移设施 = 鼓励把权威数据搬进脚本，红线不开。
+- **实现状态注（2026-10-15）**：Phase A/B 已落地——`ScriptRuntime::prepare_module(spec, source)` 在**独立预备沙盒**（第二 ScriptRuntime 实例，懒建）内走完整换表协议（编译 → 求值 → 冒烟 → 装预备镜像），返回 `PreparedModule{name, version, deps, bytecode, bytecode_hash, error}`（产物 = `lua_dump` strip=0 自家字节码 + fnv1a64 hash，与 §3.5 `lua_precompile` 口径一致；**跨独立 lua_State 无法 xmove，故走进程内 bytecode 交接**，不经沙盒 `load`）；`commit_module(prepared)` 在 owning 线程 tick 边界执行 hash 完整性校验（空产物/调包拒载 + fault 入账）→ 装载（`"b"`，Lua 自校产物头签名）→ 求值 → 表校验 → `finish_module_swap_`（原子换表 + 冷冻区 + 熔断清账 + onReload，与 `swap_module` 共用尾）。**冒烟不重跑**（预备面已验——重复自检把 Phase A 省下的成本搬回 Phase B，还引入二次执行差异面）。**契约**：控制面串行调用 prepare/commit；预备镜像按拓扑序累积——依赖模块须先经 prepare 备齐（跨预备面 swap 的模块不在镜像内，报 `missing dependency on preparer`）；owning 面 commit 同样先查依赖在位。Phase A 的宿主线程选择归控制面（`apollo_script` 零 apollo 依赖，不引线程池）。
 
 ### 3.3 与配置热更的协同
 
