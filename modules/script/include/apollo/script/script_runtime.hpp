@@ -9,8 +9,8 @@
 //   - pcall 隔离（错误分类入 fault 事件，不崩进程，状态可继续）
 //   - 具名模块注入（§4.1 启动期注入唯一通道：register_module）
 //
-// 留后续批：热替换协议（§3.2）、属性钩子（§5）、契约表装载（§3.4）、
-// 字节码缓存（§3.5）、故障熔断状态机（§6.1）、attach 调试（§7）。
+// 留后续批：契约表装载（§3.4）、字节码缓存（§3.5）、
+// 故障熔断状态机（§6.1）、attach 调试（§7）。
 
 #pragma once
 
@@ -56,6 +56,10 @@ struct ScriptStats {
     std::uint64_t instructions = 0;   // 粗检近似（10k 步进累计）
     std::uint64_t reload_success = 0;  // §3.2 换表成功
     std::uint64_t reload_failed = 0;   // §3.2 换表拒载（编译/冒烟/依赖）
+    std::uint64_t attr_hook_calls = 0;             // §5.1 钩子调用
+    std::uint64_t attr_hook_skipped_whitelist = 0; // §5.1 白名单外跳过
+    std::uint64_t attr_hook_skipped_budget = 0;    // §5.2 预算耗尽跳过
+    std::uint64_t attr_hook_faults = 0;            // §5.1 钩子错误（原值保持）
 };
 
 // §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
@@ -67,6 +71,14 @@ struct ModuleSpec {
 
 class ScriptRuntime {
 public:
+    // §5.1 钩子负载：C++ 侧快照拷贝（int64 对），无锁——同属 owning thread。
+    struct AttrChange {
+        std::uint64_t entity;
+        std::uint64_t attr_id;
+        std::int64_t old_value;
+        std::int64_t new_value;
+    };
+
     explicit ScriptRuntime(ScriptConfig config = {});
     ~ScriptRuntime();
 
@@ -91,6 +103,17 @@ public:
 
     // ModuleReloaded 广播（脚本侧 onReload 钩子重注册订阅）。
     void set_reload_listener(std::function<void(const char*, std::uint64_t)> listener);
+
+    // §5.1 属性钩子：注册全局函数 onAttrChanged(entity, attr, old, new) →
+    // 整数（nil/非整数 = 不修饰）；全局名不存在返回 false，重挂换引用。
+    bool set_attr_hook(const char* global_name);
+    void clear_attr_hook();
+    // §5.1/§5.2 钩子窗口：白名单外跳过计数；帧预算耗尽剩余跳过
+    // （reset_attr_frame 下一帧恢复）；钩子错误保持原值记 fault，状态可继续。
+    void run_attr_hook_window(std::vector<AttrChange>& changes,
+                              const std::vector<std::uint64_t>& whitelist,
+                              std::uint64_t frame_instruction_budget);
+    void reset_attr_frame();
 
     // 编译 + 执行（pcall 隔离）。失败记 fault 并返回 false，状态可继续。
     bool call_string(const char* chunk, const std::string& source);
@@ -138,6 +161,10 @@ private:
     std::map<std::string, FrozenModule> module_frozen_;
     std::map<std::string, std::uint64_t> module_versions_;
     std::function<void(const char*, std::uint64_t)> reload_listener_;
+
+    // §5.1 钩子 registry ref（随 lua_close 释放）+ §5.2 帧级已用预算。
+    int hook_ref_ = LUA_NOREF;
+    std::uint64_t frame_hook_used_ = 0;
 };
 
 }  // namespace script

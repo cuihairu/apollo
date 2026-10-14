@@ -39,16 +39,17 @@ rt.get_global_bool("ready");
 - **故障隔离**：`call_*` 全走 `lua_pcall`，错误分类 `kSyntax`/`kRuntime`/`kMemoryLimit`/`kInstructionBudget` 入 `ScriptFaultEvent`（chunk 名 + 错误串），状态可继续。
 - **具名模块注入**：`register_module(name, luaL_Reg*)` 走全局具名表（§4.1 白名单制，禁止脚本按名查服务容器）。
 - **模块热替换**（§3.2）：`swap_module(ModuleSpec{name, version, deps}, source)`——依赖校验 → 编译（mode "t"）→ 冒烟（新表带 `smoke()` 则须返回 true）→ 全过才原子换 `_G[name]`，任一步失败旧表不动；旧活跃表进冷冻区（仅留最近一份），`rollback_module` 恢复并丢弃坏版本；换表成功调新表 `onReload(old)` 钩子（失败不回滚，记 fault），广播 `ModuleReloaded` 经 `set_reload_listener`；`active_modules()` 为 §7.2 版本矩阵。模块私有状态零迁移纪律照 §3.2（状态在 C++ 权威侧）。
-- **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计/reload 成败）、`memory_used()`、`reset_budget()`。
+- **属性钩子窗口**（§5.1/§5.2）：`set_attr_hook("onAttrChanged")` 注册全局钩子函数（签名 `(entity, attr, old, new)`，返回整数修订值，nil/非整数 = 不修饰）；`run_attr_hook_window(changes, whitelist, frame_budget)` 在重算后广播前逐条调用——白名单外跳过计数、帧预算耗尽剩余跳过（`reset_attr_frame()` 下一帧恢复）、钩子错误保持原值记 fault 且状态可继续；负载为 C++ 侧快照拷贝（`ScriptRuntime::AttrChange`，int64 对，无锁——同属 owning thread）；无钩子窗口零调用。
+- **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计/reload 成败/attr_hook 调用与跳过计数）、`memory_used()`、`reset_budget()`。
 
 ### 边界（留后续批）
 
 - 热替换工程面：工作线程预加载 + smoke 用例集（§3.2 Phase A）、current 版本指针持久化（防坏版本崩溃循环）、灰度 per 场景线程、协程升级语义宿主侧接线
 - 契约表装载（§3.4 contract.lua 一致性闸）、字节码缓存（§3.5 manifest 三元组）
-- 属性钩子 `onAttrChanged`（§5）、公式即钩子（§5.3）、帧级钩子预算执法（§5.2）
+- 公式即钩子（§5.3）；属性同步管线接线（钩子窗口挂 recalc→collect 之间，注入式不依赖 script 模块）
 - 故障熔断状态机（§6.1 模块级 3 次/1000 tick）、attach 调试（§7）、GM 命令面（§7.5）
 - `require`/package 面未打开（模块加载暂走宿主 `call_string` 面）
 
 ## 测试
 
-`tests/test_script_runtime.cpp`（16 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。
+`tests/test_script_runtime.cpp`（22 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播；属性钩子修订值、白名单外跳过、错误保持原值、帧预算跳过与下一帧恢复、nil 不修饰、无钩子空窗口。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。

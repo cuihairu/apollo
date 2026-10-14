@@ -2,6 +2,7 @@
 
 #include "apollo/script/script_runtime.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace apollo {
@@ -267,6 +268,70 @@ void ScriptRuntime::set_reload_listener(
     std::function<void(const char*, std::uint64_t)> listener) {
     reload_listener_ = std::move(listener);
 }
+
+// ---- §5.1/§5.2 属性钩子窗口：重算后广播前，同步修订值 ----
+
+bool ScriptRuntime::set_attr_hook(const char* global_name) {
+    lua_getglobal(L_, global_name);
+    if (!lua_isfunction(L_, -1)) {
+        lua_pop(L_, 1);
+        return false;
+    }
+    if (hook_ref_ != LUA_NOREF) {
+        luaL_unref(L_, LUA_REGISTRYINDEX, hook_ref_);  // 重挂换引用
+    }
+    hook_ref_ = luaL_ref(L_, LUA_REGISTRYINDEX);  // 自弹栈顶
+    return true;
+}
+
+void ScriptRuntime::clear_attr_hook() {
+    if (hook_ref_ != LUA_NOREF) {
+        luaL_unref(L_, LUA_REGISTRYINDEX, hook_ref_);
+        hook_ref_ = LUA_NOREF;
+    }
+}
+
+void ScriptRuntime::run_attr_hook_window(std::vector<AttrChange>& changes,
+                                         const std::vector<std::uint64_t>& whitelist,
+                                         std::uint64_t frame_instruction_budget) {
+    if (hook_ref_ == LUA_NOREF) {
+        return;  // §5.2 空载零调用（无钩子窗口零开销）
+    }
+    for (auto& ch : changes) {
+        if (std::find(whitelist.begin(), whitelist.end(), ch.attr_id) ==
+            whitelist.end()) {
+            ++stats_.attr_hook_skipped_whitelist;
+            continue;
+        }
+        if (frame_hook_used_ >= frame_instruction_budget) {
+            ++stats_.attr_hook_skipped_budget;  // §5.2 帧级预算：剩余跳过
+            continue;
+        }
+        lua_rawgeti(L_, LUA_REGISTRYINDEX, hook_ref_);
+        lua_pushinteger(L_, static_cast<lua_Integer>(ch.entity));
+        lua_pushinteger(L_, static_cast<lua_Integer>(ch.attr_id));
+        lua_pushinteger(L_, static_cast<lua_Integer>(ch.old_value));
+        lua_pushinteger(L_, static_cast<lua_Integer>(ch.new_value));
+        used_instructions_ = 0;
+        const int rc = lua_pcall(L_, 4, 1, 0);
+        frame_hook_used_ += used_instructions_;
+        used_instructions_ = 0;
+        if (rc != LUA_OK) {
+            const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+            lua_pop(L_, 1);
+            ++stats_.attr_hook_faults;
+            fault(classify(rc, msg), "onAttrChanged", msg);  // 原值保持
+            continue;
+        }
+        ++stats_.attr_hook_calls;
+        if (lua_isinteger(L_, -1)) {
+            ch.new_value = static_cast<std::int64_t>(lua_tointeger(L_, -1));
+        }
+        lua_pop(L_, 1);  // nil = 不修饰，丢弃
+    }
+}
+
+void ScriptRuntime::reset_attr_frame() { frame_hook_used_ = 0; }
 
 bool ScriptRuntime::call_string(const char* chunk, const std::string& source) {
     ++stats_.calls;

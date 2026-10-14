@@ -210,3 +210,83 @@ TEST(ScriptRuntime, ReloadListenerFires) {
     ASSERT_EQ(events.size(), 1u);
     EXPECT_EQ(events[0], "m:7");
 }
+
+// ── 属性钩子窗口（§5.1/§5.2） ─────────────────────────────
+
+namespace {
+std::vector<ScriptRuntime::AttrChange> make_changes() {
+    return {{100, 3, 10, 20}, {101, 3, 5, 6}, {102, 7, 1, 2}};
+}
+}  // namespace
+
+TEST(ScriptRuntime, AttrHookModifiesValue) {
+    ScriptRuntime rt(make_config());
+    rt.call_string("hook", R"(
+function onAttrChanged(entity, attr, old, new)
+    return new + 1
+end
+)");
+    ASSERT_TRUE(rt.set_attr_hook("onAttrChanged"));
+    auto changes = make_changes();
+    rt.run_attr_hook_window(changes, {3, 7}, 1000000);
+    EXPECT_EQ(changes[0].new_value, 21);
+    EXPECT_EQ(changes[1].new_value, 7);
+    EXPECT_EQ(changes[2].new_value, 3);
+}
+
+TEST(ScriptRuntime, AttrHookOutOfWhitelistSkipped) {
+    ScriptRuntime rt(make_config());
+    rt.call_string("hook", "function onAttrChanged(e, a, o, n) return n + 100 end");
+    ASSERT_TRUE(rt.set_attr_hook("onAttrChanged"));
+    auto changes = make_changes();
+    rt.run_attr_hook_window(changes, {7}, 1000000);  // 只有 attr 7 在白名单
+    EXPECT_EQ(changes[0].new_value, 20);  // 白名单外原值不动
+    EXPECT_EQ(changes[2].new_value, 102);
+    EXPECT_GE(rt.stats().attr_hook_skipped_whitelist, 2u);
+}
+
+TEST(ScriptRuntime, AttrHookErrorKeepsOriginal) {
+    ScriptRuntime rt(make_config());
+    rt.call_string("hook", "function onAttrChanged(e, a, o, n) error('bad formula') end");
+    ASSERT_TRUE(rt.set_attr_hook("onAttrChanged"));
+    auto changes = make_changes();
+    rt.run_attr_hook_window(changes, {3}, 1000000);
+    EXPECT_EQ(changes[0].new_value, 20);  // 错误 → 原值
+    EXPECT_EQ(changes[1].new_value, 6);
+    EXPECT_EQ(rt.stats().attr_hook_faults, 2u);  // 两个 attr 3 条目均出错
+    // 状态可继续
+    EXPECT_TRUE(rt.call_string("ok", "result = 1"));
+}
+
+TEST(ScriptRuntime, AttrHookBudgetSkipsRest) {
+    ScriptRuntime rt(make_config());
+    rt.call_string("hook", "function onAttrChanged(e, a, o, n) return n + 1 end");
+    ASSERT_TRUE(rt.set_attr_hook("onAttrChanged"));
+    auto changes = make_changes();
+    rt.run_attr_hook_window(changes, {3, 7}, 0);  // 预算 0 → 全部跳过
+    EXPECT_EQ(changes[0].new_value, 20);
+    EXPECT_EQ(rt.stats().attr_hook_skipped_budget, 3u);
+    // 下一帧恢复（§5.2）
+    rt.reset_attr_frame();
+    auto changes2 = make_changes();
+    rt.run_attr_hook_window(changes2, {3, 7}, 1000000);
+    EXPECT_EQ(changes2[0].new_value, 21);
+}
+
+TEST(ScriptRuntime, AttrHookNilReturnsOriginal) {
+    ScriptRuntime rt(make_config());
+    rt.call_string("hook", "function onAttrChanged(e, a, o, n) return nil end");
+    ASSERT_TRUE(rt.set_attr_hook("onAttrChanged"));
+    auto changes = make_changes();
+    rt.run_attr_hook_window(changes, {3}, 1000000);
+    EXPECT_EQ(changes[0].new_value, 20);  // nil 返回 = 不修饰
+}
+
+TEST(ScriptRuntime, AttrHookAbsentFunctionSafe) {
+    ScriptRuntime rt(make_config());
+    EXPECT_FALSE(rt.set_attr_hook("no_such_fn"));
+    auto changes = make_changes();
+    rt.run_attr_hook_window(changes, {3, 7}, 1000000);  // 无钩子 → 空窗口
+    EXPECT_EQ(changes[0].new_value, 20);
+    EXPECT_EQ(rt.stats().attr_hook_calls, 0u);
+}
