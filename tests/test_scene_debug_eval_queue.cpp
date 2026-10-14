@@ -77,6 +77,8 @@ TEST_F(SceneDebugQueueTest, ExecutesAtTickBoundaryReturnsByRequestId) {
 
 // ── 错误隔离 ────────────────────────────────────────────────
 
+// 失败面：ok=false 且 result = 错误原文（§7.1 契约——错误随 result 出参
+// 自然带出，宿主/945 按 ok 分流投影）。
 TEST_F(SceneDebugQueueTest, RuntimeFailureYieldsOkFalse) {
     attach();
 
@@ -87,7 +89,7 @@ TEST_F(SceneDebugQueueTest, RuntimeFailureYieldsOkFalse) {
     ASSERT_EQ(out.size(), 1u);
     EXPECT_EQ(out[0].id, 7u);
     EXPECT_FALSE(out[0].ok);
-    EXPECT_TRUE(out[0].result.empty());
+    EXPECT_NE(out[0].result.find("boom"), std::string::npos);  // 错误原文在 result
     EXPECT_EQ(rt.stats().debug_evals, 1u);  // 失败也计执行
     EXPECT_EQ(rt.stats().fault_runtime, 1u);
 
@@ -109,7 +111,7 @@ TEST_F(SceneDebugQueueTest, SyntaxErrorYieldsOkFalse) {
     const auto out = scene.drain_debug_eval_results();
     ASSERT_EQ(out.size(), 1u);
     EXPECT_FALSE(out[0].ok);
-    EXPECT_TRUE(out[0].result.empty());
+    EXPECT_FALSE(out[0].result.empty());  // 语法错原文在 result
     EXPECT_EQ(rt.stats().fault_syntax, 1u);
 }
 

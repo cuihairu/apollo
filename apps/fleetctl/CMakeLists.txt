@@ -6,9 +6,11 @@ add_executable(fleetctl
     src/main.cpp
 )
 
-# migrate 命令的 wire 面（base/migration_wire.hpp，header-only）
+# migrate 命令的 wire 面（base/migration_wire.hpp，header-only）+ eval 命令
+# 的契约 wire 面（944/945 裸帧编解码）
 target_include_directories(fleetctl PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/modules/net/contract_wire/include
 )
 
 target_link_libraries(fleetctl
@@ -18,6 +20,7 @@ target_link_libraries(fleetctl
         apollo_protocol
         apollo_net_link
         apollo_net_linkrpc
+        apollo::net_contract_wire
 )
 
 target_compile_definitions(fleetctl PRIVATE

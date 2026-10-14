@@ -797,6 +797,7 @@ bool ScriptRuntime::eval_debug(const std::string& source, std::string& result) {
     }
     if (config_.debug_eval_max_per_tick != 0 &&
         debug_eval_count_ >= config_.debug_eval_max_per_tick) {
+        result = "rate limited";  // 失败面 result = 错误原文（回执/审计消费）
         fault(ScriptFaultEvent::Kind::kRuntime, "debug_eval", "rate limited");
         return false;
     }
@@ -816,6 +817,7 @@ bool ScriptRuntime::eval_debug(const std::string& source, std::string& result) {
             const std::string msg =
                 lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
             lua_pop(L_, 1);
+            result = msg;  // 失败面 result = 错误原文
             fault(ScriptFaultEvent::Kind::kSyntax, "debug_eval", msg);
             return false;
         }
@@ -825,6 +827,7 @@ bool ScriptRuntime::eval_debug(const std::string& source, std::string& result) {
     if (rc != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
+        result = msg;  // 失败面 result = 错误原文
         fault(classify(rc, msg), "debug_eval", msg);
         return false;
     }

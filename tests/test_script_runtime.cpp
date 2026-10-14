@@ -596,6 +596,8 @@ TEST(ScriptRuntime, EvalDebugFaultIsolated) {
     std::string out;
     EXPECT_FALSE(rt.eval_debug("error('nope')", out));
     EXPECT_EQ(rt.stats().fault_runtime, 1u);
+    // 失败面 result = 错误原文（回执面消费；含 lua 报错原文）
+    EXPECT_NE(out.find("nope"), std::string::npos);
     // 状态可继续
     EXPECT_TRUE(rt.eval_debug("2 * 2", out));
     EXPECT_EQ(out, "4");
@@ -623,6 +625,7 @@ TEST(ScriptRuntime, EvalDebugRateLimitedPerTick) {
         EXPECT_TRUE(rt.eval_debug("1", out));  // 默认每 tick 上限 8
     }
     EXPECT_FALSE(rt.eval_debug("1", out));  // 第 9 次拒
+    EXPECT_EQ(out, "rate limited");  // 失败面 result = 错误原文
     rt.set_tick(1);  // 下一 tick 恢复
     EXPECT_TRUE(rt.eval_debug("1", out));
 }

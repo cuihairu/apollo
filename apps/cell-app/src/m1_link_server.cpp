@@ -146,9 +146,11 @@ bool build_legacy_intent(std::uint16_t msg_id, const std::vector<wire::FieldValu
 
 class M1LinkServerImpl final : public M1LinkServer {
 public:
-    M1LinkServerImpl(M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent)
+    M1LinkServerImpl(M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
+                     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval)
         : config_(std::move(config))
-        , on_intent_(std::move(on_intent)) {}
+        , on_intent_(std::move(on_intent))
+        , on_debug_eval_(std::move(on_debug_eval)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -217,6 +219,29 @@ public:
                          link::SendClass::kReliable);
     }
 
+    void sendEvalResult(const std::string& peer, std::uint64_t eval_id, bool ok,
+                        const std::string& result, const std::string& error) override {
+        if (!manager_ || eval_id == 0) {
+            return;  // 0 保留（回执关联键缺位即静默）
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return;  // 未知 peer = 尽力面（admin 超时面重发裁决）
+        }
+        std::vector<wire::FieldValue> fields(4);
+        fields[0].integer = static_cast<std::int64_t>(eval_id);
+        fields[1].integer = ok ? 1 : 0;
+        fields[2].text = result;
+        fields[3].text = error;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::debug_eval_result), fields, payload)) {
+            return;
+        }
+        // Reliable：回执不可丢（sendIntentAck 同型——断连排队，重连恰一次补投）。
+        (void)link->send(id_of(MsgId::debug_eval_result), payload.data(), payload.size(),
+                         link::SendClass::kReliable);
+    }
+
     std::uint16_t listenPort() const override {
         return manager_ ? manager_->endpoint_port("gateway") : 0;
     }
@@ -270,6 +295,30 @@ private:
             [this](std::uint16_t msg_id, const std::uint8_t* data, std::size_t size) {
                 handle_envelope_frame(msg_id, data, size);
             });
+        // 944 debug_eval_request 裸帧受理（§7.1 attach transport 契约面：
+        // admin 单入口上行——eval 非意图信封族，不走 932；回执 945 按
+        // eval_id 异步回传，发端 peer 自报名在此捕获——重连 = 同名新链
+        // 重新过本装配，回执按名查链路而非存链路指针）。
+        dispatcher.set_handler(
+            id_of(MsgId::debug_eval_request),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_debug_eval_frame(link.peer_name(), data, size);
+            });
+    }
+
+    void handle_debug_eval_frame(const std::string& peer, const std::uint8_t* data,
+                                 std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::debug_eval_request), data, size, fields)
+            || fields.size() != 3 || on_debug_eval_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        DebugEvalRequest req;
+        req.eval_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.scene_id = static_cast<std::uint64_t>(fields[1].integer);
+        req.source = fields[2].text;
+        on_debug_eval_(peer, req);
     }
 
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
@@ -310,6 +359,7 @@ private:
 
     M1LinkConfig config_;
     std::function<void(IntentEnvelope)> on_intent_;
+    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
     std::atomic<bool> started_{false};
@@ -320,14 +370,17 @@ private:
 } // namespace
 
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
-    M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent) {
-    return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent));
+    M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
+    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval) {
+    return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
+                                              std::move(on_debug_eval));
 }
 
 #else // _WIN32
 
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
-    M1LinkConfig /*config*/, std::function<void(IntentEnvelope)> /*on_intent*/) {
+    M1LinkConfig /*config*/, std::function<void(IntentEnvelope)> /*on_intent*/,
+    std::function<void(const std::string&, const DebugEvalRequest&)> /*on_debug_eval*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），CellServer 装配面无 #if。
     return std::make_unique<M1LinkServer>();

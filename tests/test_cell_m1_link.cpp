@@ -56,6 +56,8 @@ constexpr std::uint16_t id_of(MsgId id) {
     return static_cast<std::uint16_t>(id);
 }
 constexpr std::uint16_t kAckId = id_of(MsgId::cell_intent_ack);
+constexpr std::uint16_t kEvalRequestId = id_of(MsgId::debug_eval_request);
+constexpr std::uint16_t kEvalResultId = id_of(MsgId::debug_eval_result);
 
 const char* kRouteJson = APOLLO_CELL_CONTRACT_ROUTE_JSON;
 
@@ -110,6 +112,39 @@ struct AckLog {
 
 AckLog* g_acks = nullptr;
 
+// 945 eval 回执日志（scripting-lua §7.1 attach transport 契约面测试）。
+struct EvalReply {
+    std::uint64_t eval_id = 0;
+    bool ok = false;
+    std::string result;
+    std::string error;
+};
+struct EvalLog {
+    std::mutex mutex;
+    std::vector<EvalReply> replies;
+
+    void add(std::uint64_t eval_id, bool ok, std::string result, std::string error) {
+        std::lock_guard<std::mutex> lock(mutex);
+        replies.push_back({eval_id, ok, std::move(result), std::move(error)});
+    }
+    bool find(std::uint64_t eval_id, EvalReply& out) {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (const auto& r : replies) {
+            if (r.eval_id == eval_id) {
+                out = r;
+                return true;
+            }
+        }
+        return false;
+    }
+    std::size_t size() {
+        std::lock_guard<std::mutex> lock(mutex);
+        return replies.size();
+    }
+};
+
+EvalLog* g_evals = nullptr;
+
 // 客户端端（网关投影）：LinkManager active 端点拨入 cell M1 端口，同一路由
 // 表（同 schema_hash → 握手 route_version 一致）。
 struct ClientEnd {
@@ -153,6 +188,15 @@ struct ClientEnd {
                             static_cast<std::int32_t>(fields[1].integer), fields[2].text);
             }
         });
+        dispatcher.set_handler(kEvalResultId, [](std::uint16_t, const std::uint8_t* data,
+                                                 std::size_t size) {
+            std::vector<wire::FieldValue> fields;
+            if (wire::decode_payload(kEvalResultId, data, size, fields) && fields.size() == 4
+                && g_evals != nullptr) {
+                g_evals->add(static_cast<std::uint64_t>(fields[0].integer),
+                             fields[1].integer != 0, fields[2].text, fields[3].text);
+            }
+        });
         return true;
     }
 
@@ -185,6 +229,23 @@ bool send_intent(ClientEnd& client, std::uint16_t id, std::vector<wire::FieldVal
     }
     // InterServerLink::send 自封 u16 id 信封——传裸载荷，勿再包一层
     return client.cell_link()->send(id, payload.data(), payload.size(),
+                                    link::SendClass::kReliable)
+        == link::SendCode::kAccepted;
+}
+
+// 944 debug_eval_request 裸帧上行（§7.1 attach transport：eval 非意图族，
+// 不走 932 信封——cell 受理面恒裸帧登记）。
+bool send_debug_eval(ClientEnd& client, std::uint64_t eval_id, std::uint64_t scene_id,
+                     const std::string& source) {
+    std::vector<wire::FieldValue> f(3);
+    f[0].integer = static_cast<std::int64_t>(eval_id);
+    f[1].integer = static_cast<std::int64_t>(scene_id);
+    f[2].text = source;
+    std::vector<std::uint8_t> payload;
+    if (!wire::encode_payload(kEvalRequestId, f, payload)) {
+        return false;
+    }
+    return client.cell_link()->send(kEvalRequestId, payload.data(), payload.size(),
                                     link::SendClass::kReliable)
         == link::SendCode::kAccepted;
 }
@@ -719,6 +780,111 @@ bool test_queue_full_backpressure_ack() {
     return true;
 }
 
+// ---------- §7.1 attach transport（944/945 debug eval 契约面） ----------
+
+// 全链 e2e：944 裸帧上行 → cell 受理（默认 scene 定位 + enqueue）→ Scene
+// tick 首拍固定调试点执行 → 945 回执（eval_id 关联，ok/result/error 契约字序）。
+bool test_debug_eval_roundtrip() {
+    std::cout << "Running: test_debug_eval_roundtrip..." << std::endl;
+    EvalLog evals;
+    g_evals = &evals;
+    ServerEnd s;
+    TEST_ASSERT(s.start(10), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp;
+                }, 5000), "link up");
+
+    TEST_ASSERT(send_debug_eval(c, 77, 0, "1+1"), "eval request sent");
+    EvalReply r;
+    TEST_ASSERT(pump_until(c, [&] { return evals.find(77, r); }, 5000),
+                "eval reply arrived");
+    TEST_ASSERT(r.ok, "eval ok");
+    TEST_ASSERT(r.result == "2", "eval result value");
+    TEST_ASSERT(r.error.empty(), "no error field on success");
+
+    s.stop();
+    c.manager.reset();
+    g_evals = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 拒收面：未知 scene = 即时 ok=0 回执（错误原文非空）；eval_id 0 = 关联键
+// 缺位静默（0 保留——连回执都不给，与 sendM1Ack 的 request_id=0 同型）。
+bool test_debug_eval_reject_face() {
+    std::cout << "Running: test_debug_eval_reject_face..." << std::endl;
+    EvalLog evals;
+    g_evals = &evals;
+    ServerEnd s;
+    TEST_ASSERT(s.start(10), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp;
+                }, 5000), "link up");
+
+    // 未知 scene：即时 945 ok=0 + 错误原文
+    TEST_ASSERT(send_debug_eval(c, 78, 9999, "1"), "unknown scene request sent");
+    EvalReply r;
+    TEST_ASSERT(pump_until(c, [&] { return evals.find(78, r); }, 5000),
+                "reject reply arrived");
+    TEST_ASSERT(!r.ok, "unknown scene not ok");
+    TEST_ASSERT(!r.error.empty(), "reject carries error text");
+    TEST_ASSERT(r.result.empty(), "no result field on failure");
+
+    // eval_id 0：静默（若干拍后无任何回执）
+    TEST_ASSERT(send_debug_eval(c, 0, 0, "1"), "zero id request sent");
+    const auto before = evals.size();
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    pump_until(c, [] { return false; }, 50);  // 末拍收尾（谓词恒 false）
+    TEST_ASSERT(evals.size() == before, "zero eval_id stays silent");
+
+    s.stop();
+    c.manager.reset();
+    g_evals = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 失败面 + 宿主存活：运行错源 → ok=0 + lua 错误原文（eval_debug 失败面
+// result = 错误原文的契约投影）；失败后宿主继续服务（后续 eval 正常回执）。
+bool test_debug_eval_failure_surface() {
+    std::cout << "Running: test_debug_eval_failure_surface..." << std::endl;
+    EvalLog evals;
+    g_evals = &evals;
+    ServerEnd s;
+    TEST_ASSERT(s.start(10), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp;
+                }, 5000), "link up");
+
+    TEST_ASSERT(send_debug_eval(c, 79, 0, "error('boom')"), "failing request sent");
+    EvalReply bad;
+    TEST_ASSERT(pump_until(c, [&] { return evals.find(79, bad); }, 5000),
+                "failing eval reply arrived");
+    TEST_ASSERT(!bad.ok, "failing eval not ok");
+    TEST_ASSERT(bad.error.find("boom") != std::string::npos,
+                "error carries lua error text");
+
+    // 宿主仍服务（失败不打断：后续 eval 正常回执）
+    TEST_ASSERT(send_debug_eval(c, 80, 0, "'alive'"), "follow-up request sent");
+    EvalReply after;
+    TEST_ASSERT(pump_until(c, [&] { return evals.find(80, after); }, 5000),
+                "follow-up reply arrived");
+    TEST_ASSERT(after.ok && after.result == "alive", "host still serving");
+    TEST_ASSERT(s.server->isRunning(), "cell alive after eval failure");
+
+    s.stop();
+    c.manager.reset();
+    g_evals = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -734,6 +900,9 @@ int main() {
     if (!test_queue_full_backpressure_ack()) ++failed;
     if (!test_wrapped_envelope_intent()) ++failed;
     if (!test_wrapped_non_intent_inner_rejected()) ++failed;
+    if (!test_debug_eval_roundtrip()) ++failed;
+    if (!test_debug_eval_reject_face()) ++failed;
+    if (!test_debug_eval_failure_surface()) ++failed;
 #endif
     if (failed == 0) {
         std::cout << "ALL CELL M1 LINK TESTS PASSED" << std::endl;

@@ -225,6 +225,19 @@ void LinkManager::schedule_backoff(Managed& m, std::uint64_t now_ms) {
     m.next_dial_ms = now_ms + backoff;
 }
 
+InterServerLink* LinkManager::find_staging_peer(Managed& m, const std::string& name) {
+    // 握手完毕（kUp）但尚未迁入 peers 的链（读批竞速窗：HELLO 后同一读批
+    // 紧跟业务帧——分发发生在 staging 泵内，此时按名回执查 peers 落空，
+    // wire_peer_sink 注记）。链路对象地址随 unique_ptr 迁移不挪，返回语义
+    // 与已注册 peer 同；仍在握手（无名）的不算。
+    for (auto& s : m.staging) {
+        if (s->state() == LinkState::kUp && s->peer_name() == name) {
+            return s.get();
+        }
+    }
+    return nullptr;
+}
+
 InterServerLink* LinkManager::link(const std::string& name) {
     // 端点名命中的：active → 本端链路；passive → 单 peer 兜底（1:1 场景
     // 端点名 = 对端名；多 peer 端点名歧义拒答）。
@@ -237,6 +250,9 @@ InterServerLink* LinkManager::link(const std::string& name) {
         if (m.peers.size() == 1) {
             return m.peers.begin()->second.get();
         }
+        if (auto* s = find_staging_peer(m, name)) {
+            return s;  // 竞速窗兜底（1:1 场景读批同拍分发）
+        }
         return nullptr;
     }
     // 对端自报名直查（fan-out 面：peer 名不是端点名，逐 passive 端点找）。
@@ -246,6 +262,9 @@ InterServerLink* LinkManager::link(const std::string& name) {
         }
         if (auto p = ep->peers.find(name); p != ep->peers.end()) {
             return p->second.get();
+        }
+        if (auto* s = find_staging_peer(*ep, name)) {
+            return s;  // fan-out 同拍竞速窗兜底
         }
     }
     return nullptr;

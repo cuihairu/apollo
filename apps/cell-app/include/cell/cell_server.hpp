@@ -14,6 +14,7 @@
 #include <thread>
 #include <atomic>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace apollo::script {
 class ScriptRuntime;
@@ -94,6 +95,17 @@ private:
     // 不作关联键，静默。
     void sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message);
 
+    // 脚本调试 eval 受理（944，§7.1 attach transport；泵线程 = gameThread_）：
+    // 定位 scene（0 = 默认）→ 未挂宿主/排队失败即时回 945 拒收；受理成功挂
+    // 关联账（eval_id → 回传 peer），回执随 tick 窗口 drain 异步回 945。
+    void onM1DebugEval(const std::string& peer, const DebugEvalRequest& request);
+    // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
+    void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
+                         const std::string& result, const std::string& error);
+    // tick 窗口收账（gameLoop 每拍，worldHost tick 之后）：仅在有 M1 eval 在
+    // 途时 drain 对应 scene——直接 enqueue 面（测试/程序内消费者）不受挤占。
+    void drainDebugEvalResults();
+
     // 计算单帧间隔
     std::chrono::milliseconds tickInterval() const;
 
@@ -140,6 +152,11 @@ private:
     // space → scene 路由（P1-1 换幕目标解析；单进程单 scene 一条目，
     // 随 scene 增补）
     std::unordered_map<std::uint64_t, std::uint64_t> spaceToScene_;
+
+    // M1 eval 关联账（944 受理面；gameLoop 线程独占——受理与 drain 同泵线程）：
+    // eval_id → 回传 peer 自报名；scene_id → 在途 eval id 集（drain 圈定面）。
+    std::unordered_map<std::uint64_t, std::string> evalReplyPeers_;
+    std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
 
     // metrics admin 通道计数面（引用在注册表存续期恒稳定——注册表头注；
     // last_* 为绝对值→Counter 增量推进的影子读数，gameLoop 线程独占）

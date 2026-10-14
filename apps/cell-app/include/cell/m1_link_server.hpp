@@ -35,6 +35,15 @@ struct M1LinkConfig {
     std::string route_json;
 };
 
+// 脚本调试 eval 请求（契约 944，scripting-lua §7.1 attach transport）：admin
+// 单入口上行；scene_id 0 = 默认 scene。结果回执 945 按 eval_id 关联（tick
+// 边界执行，异步回传——非 rpc 同步面）。
+struct DebugEvalRequest {
+    std::uint64_t eval_id = 0;
+    std::uint64_t scene_id = 0;
+    std::string source;
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -58,6 +67,18 @@ public:
         (void)message;
     }
 
+    // eval 回执（945 debug_eval_result）：peer = 请求方自报名（fan-out 命名
+    // 查链路），eval_id 关联。kReliable（断连排队重连补投）；链路未连 = 排队
+    // 待补投，对端已消失 = 尽力面（admin 超时面重发裁决）。
+    virtual void sendEvalResult(const std::string& peer, std::uint64_t eval_id, bool ok,
+                                const std::string& result, const std::string& error) {
+        (void)peer;
+        (void)eval_id;
+        (void)ok;
+        (void)result;
+        (void)error;
+    }
+
     virtual std::uint16_t listenPort() const { return 0; }
     virtual bool gatewayConnected() const { return false; }
 
@@ -68,8 +89,10 @@ public:
 
 // 工厂：config.host:config.port 监听，契约路由表自 config.route_json 装载
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
-//（pump 线程 = 宿主泵线程内同步调用）。
-std::unique_ptr<M1LinkServer> makeM1LinkServer(M1LinkConfig config,
-                                               std::function<void(IntentEnvelope)> on_intent);
+//（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request 裸帧经
+// on_debug_eval 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
+std::unique_ptr<M1LinkServer> makeM1LinkServer(
+    M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
+    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {});
 
 } // namespace cell

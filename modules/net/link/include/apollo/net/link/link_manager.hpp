@@ -136,6 +136,8 @@ private:
     void pump_active(Managed& m, std::uint64_t now_ms);
     void pump_passive(Managed& m, std::uint64_t now_ms);
     void schedule_backoff(Managed& m, std::uint64_t now_ms);
+    // 竞速窗兜底：staging 里握手完毕（kUp）未迁册的同名链（link() 用）。
+    InterServerLink* find_staging_peer(Managed& m, const std::string& name);
 
     LinkManagerConfig config_;
     std::vector<std::unique_ptr<Managed>> endpoints_;  // 保序（泵次序确定）

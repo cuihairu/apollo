@@ -107,7 +107,10 @@ void CellServer::start() {
     // bind 失败同契约显形）
     m1Link_ = makeM1LinkServer(
         M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson},
-        [this](IntentEnvelope intent) { onM1Intent(std::move(intent)); });
+        [this](IntentEnvelope intent) { onM1Intent(std::move(intent)); },
+        [this](const std::string& peer, const DebugEvalRequest& request) {
+            onM1DebugEval(peer, request);
+        });
 
     // 开闸先于 m1Link_->start()：受理面就绪后网关才见得到入口
     accepting_ = true;
@@ -205,6 +208,79 @@ void CellServer::sendM1Ack(std::uint64_t request_id, std::int32_t code, const st
     }
     if (m1Link_) {
         m1Link_->sendIntentAck(request_id, code, message);
+    }
+}
+
+// M1 eval 在途关联账上限（host 级背压——防丢最旧语义下的无界挂账；
+// 对齐 Scene 队列深度的量级放大，超过即时回执拒收）。
+constexpr std::size_t kM1EvalBacklogMax = 64;
+
+void CellServer::onM1DebugEval(const std::string& peer, const DebugEvalRequest& request) {
+    // 944 受理（§7.1 attach transport；本回调在 gameThread_ 泵上下文）：
+    // 语法面已在 M1LinkServer 解码，此处只做定位与背压判定——失败即时回
+    // 945（不进 tick 窗口），成功挂账待 Scene tick 执行后回传。
+    if (request.eval_id == 0) {
+        return;  // 0 保留（admin 关联键缺位，拒收面都不给）
+    }
+    if (evalReplyPeers_.size() >= kM1EvalBacklogMax) {
+        sendM1EvalReply(peer, request.eval_id, false, "", "eval backlog full");
+        return;
+    }
+    const std::uint64_t scene_id =
+        request.scene_id != 0 ? request.scene_id : defaultSceneId_;
+    auto* scene = find_scene(scene_id);
+    if (scene == nullptr || !scene->script_attached()) {
+        sendM1EvalReply(peer, request.eval_id, false, "", "scene not attached");
+        return;
+    }
+    if (!scene->enqueue_debug_eval(request.eval_id, request.source)) {
+        // 队列满（有界 FIFO）或未挂——即时回执，admin 超时面裁决重发
+        sendM1EvalReply(peer, request.eval_id, false, "", "eval queue full");
+        return;
+    }
+    evalReplyPeers_[request.eval_id] = peer;
+    scenePendingEvals_[scene_id].insert(request.eval_id);
+}
+
+void CellServer::sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
+                                 const std::string& result, const std::string& error) {
+    if (m1Link_) {
+        m1Link_->sendEvalResult(peer, eval_id, ok, result, error);
+    }
+}
+
+void CellServer::drainDebugEvalResults() {
+    // tick 窗口收账：Scene::tick 的 §7.1 固定调试点已执行在途 eval，此处取
+    // 回传结果按 eval_id 回 945。仅在途才 drain（直接 enqueue 面不挤占）；
+    // 同拍丢最旧的结果无回执（有界 FIFO 语义——admin 超时面重发裁决）。
+    if (scenePendingEvals_.empty()) {
+        return;
+    }
+    for (auto it = scenePendingEvals_.begin(); it != scenePendingEvals_.end();) {
+        auto* scene = find_scene(it->first);
+        if (scene == nullptr) {
+            // scene 已不存在（销毁/停机路径）：挂账清空，无回执（尽力面）
+            for (auto eval_id : it->second) {
+                evalReplyPeers_.erase(eval_id);
+            }
+            it = scenePendingEvals_.erase(it);
+            continue;
+        }
+        for (auto& r : scene->drain_debug_eval_results()) {
+            const auto peer = evalReplyPeers_.find(r.id);
+            if (peer == evalReplyPeers_.end()) {
+                continue;  // 非本面投递的结果（直接 enqueue 面）——留过即弃
+            }
+            sendM1EvalReply(peer->second, r.id, r.ok, r.ok ? r.result : "",
+                            r.ok ? "" : r.result);
+            evalReplyPeers_.erase(peer);
+            it->second.erase(r.id);
+        }
+        if (it->second.empty()) {
+            it = scenePendingEvals_.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
@@ -455,6 +531,9 @@ void CellServer::gameLoop() {
         attach_script_to_scenes();
 
         worldHost_->tick();
+
+        // §7.1 eval 回执收账（tick 内固定调试点已执行在途 eval）
+        drainDebugEvalResults();
 
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime

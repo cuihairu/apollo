@@ -185,6 +185,7 @@ public:
     // §7.1 attach eval：admin 单入口投递，owning 线程 tick 边界由宿主择机调用。
     // 同一沙盒面（白名单/预算/内存上限全管辖）；表达式优先、语句回退；
     // 结果串截断（debug_eval_result_max）、同 tick 次数限流（防打爆控制通道）。
+    // 失败面 result = 错误原文（限流/语法/运行错——回执与审计消费）。
     bool eval_debug(const std::string& source, std::string& result);
     std::size_t memory_used() const;
     const ScriptStats& stats() const { return stats_; }

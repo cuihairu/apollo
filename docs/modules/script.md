@@ -44,7 +44,7 @@ rt.get_global_bool("ready");
 - **熔断状态持久化**（§6.1，防坏版本崩溃循环）：`export_breaker_state()`/`import_breaker_state(blob)`——隔离中条目（绝对 tick 折算剩余期）+ WARN 去抖账跨重启延续（防重启告警风暴）；小端 TLV（魔数+版本），格式不符（魔数/版本/截断/尾随字节）拒载且状态不动；宿主自管落盘（journal/状态文件）与重启注入。
 - **契约表装载**（§3.4）：`load_contract(source)`——contract.lua（apollo_gen 同批吐的服务端双形态）编译 → 结构校验（routes 表必备）→ 路由完整性闸（bin 有 handler 而 Lua 无即拒换，handler 为全局名或一层 `module.func` 点路径）→ 原子换 `_G["contract"]` 与 C++ 数据面（任一步失败旧表不动）；数据面 `contract_routes()`（msg_id → handler）、`contract_write_whitelist()`（§3.4 写白名单数据化，直接喂 `run_attr_hook_window`）、`contract_version()`；`call_route(msg_id)` 契约路由分发（未注册 id / handler 不可达 / 执行错误返回 false）。
 - **§6.1 事件面**：三级事件经 fault sink——WARN（单次消耗 ≥ 预算 × `warn_threshold_percent`（默认 80；0 = 关闭）且未超限，同 chunk 256 tick 去抖，不计 fault）、FAULT（既有分类计数）、TRIP/RECOVER（熔断触发/解除：半开销账、热更、回滚三路解除均发）；`ScriptFaultEvent` 结构化字段封闭集 `kind/chunk/message + ts_wall_ms/tick/consumed/budget`（引擎侧统一填充，下游按字段路由不解析文本）。
-- **attach eval**（§7.1）：`eval_debug(source, result)`——admin 单入口投递、owning 线程 tick 边界由宿主择机调用；同一沙盒面（白名单/指令预算/内存上限全管辖，死循环可打断）；表达式优先、语句回退（REPL 惯例）；结果串截断（`debug_eval_result_max`，默认 4KB）+ 同 tick 次数限流（`debug_eval_max_per_tick`，默认 8，0 = 不限）。宿主侧执行队列已随 Scene 批交付（`Scene::enqueue_debug_eval` → tick 首拍固定调试点 → 按 id 回传，跨线程投递自持互斥）；transport 见边界。
+- **attach eval**（§7.1）：`eval_debug(source, result)`——admin 单入口投递、owning 线程 tick 边界由宿主择机调用；同一沙盒面（白名单/指令预算/内存上限全管辖，死循环可打断）；表达式优先、语句回退（REPL 惯例）；结果串截断（`debug_eval_result_max`，默认 4KB）+ 同 tick 次数限流（`debug_eval_max_per_tick`，默认 8，0 = 不限）；**失败面 result = 错误原文**（限流/语法/运行错——与成功结果同一出参，故障隔离不炸会话）。宿主侧执行队列已随 Scene 批交付（`Scene::enqueue_debug_eval` → tick 首拍固定调试点 → 按 id 回传，跨线程投递自持互斥）。
 - **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计/reload 成败/attr_hook 调用与跳过计数/WARN 去抖计数/熔断拒调计数）、`memory_used()`、`reset_budget()`。
 
 ### 边界（留后续批）

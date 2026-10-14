@@ -765,8 +765,10 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ${CMAKE_SOURCE_DIR}/modules/game/battle/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/session/include
 	        ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
+	        # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
+	        ${CMAKE_SOURCE_DIR}/modules/script/include
 	    )
-	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core)
+	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core apollo::script)
 	    if(WIN32)
 	        target_link_libraries(game_tests PRIVATE ws2_32)
 	        target_compile_definitions(game_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -933,8 +935,10 @@ target_include_directories(reconnect_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
+    # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
+    ${CMAKE_SOURCE_DIR}/modules/script/include
 )
-target_link_libraries(reconnect_tests PRIVATE apollo apollo::base apollo::core)
+target_link_libraries(reconnect_tests PRIVATE apollo apollo::base apollo::core apollo::script)
 if(WIN32)
     target_link_libraries(reconnect_tests PRIVATE ws2_32)
     target_compile_definitions(reconnect_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1193,8 +1197,10 @@ target_include_directories(scene_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
     ${CMAKE_SOURCE_DIR}/include
+    # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
+    ${CMAKE_SOURCE_DIR}/modules/script/include
 )
-target_link_libraries(scene_tests PRIVATE apollo apollo::base apollo::core)
+target_link_libraries(scene_tests PRIVATE apollo apollo::base apollo::core apollo::script)
 if(WIN32)
     target_link_libraries(scene_tests PRIVATE ws2_32)
     target_compile_definitions(scene_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
