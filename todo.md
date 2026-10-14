@@ -7,7 +7,7 @@
 
 - [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8，14 用例）
 - [ ] Lua 脚本：`docs/design/scripting-lua.md`——沙盒宿主 + 热替换 + 属性钩子三批已交付（5.5.1 经 vcpkg override + 白名单库 + 指令预算 + 内存上限 + pcall 隔离 + 具名模块注入 + §3.2 原子换表/冒烟闸/冷冻区回滚/onReload + §5.1 属性钩子窗口与白名单 + §5.2 帧级预算执法，22 用例），余契约表/熔断/attach（后续批）
-- [ ] 属性增量同步：管线核心十批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2 + SceneAoi 接线批 + §5 优先级与节流派 + §8.2 写后日志入口 + §3.3 快照负载组装 + §2.2 域投影机制层 + GameConnection Facade L3 适配层，106 用例），余 slice（未排期）、Facade L2 会话增量（四通道队列/Resuming/场景线程投递）
+- [ ] 属性增量同步：管线核心十一批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2 + SceneAoi 接线批 + §5 优先级与节流派 + §8.2 写后日志入口 + §3.3 快照负载组装 + §2.2 域投影机制层 + GameConnection Facade L3 适配层 + scripting-lua §5.1 钩子窗口注入点（attrsync 侧），115 用例），余 slice（未排期）、宿主侧钩子接线（Scene tick + ScriptRuntime 适配桥）、Facade L2 会话增量（四通道队列/Resuming/场景线程投递）
 - [ ] battle-verification-service：ADR-013 明示暂缓（随 Lua/玩法批）
 - [ ] 外部存储接线（MySQL/Redis/ClickHouse）：ADR-007 现行=文件+journal 零外部依赖（未排期）
 - [ ] Kafka 观测管道 + Prometheus/Grafana：架构决策 #14 计划，仓内零实现（未排期）

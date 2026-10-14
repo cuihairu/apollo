@@ -22,6 +22,9 @@ void AttrSyncManager::set_attribute(std::uint64_t entity_id, std::uint32_t attr_
     if (it == entities_.end()) {
         return;  // 未注册实体静默忽略
     }
+    if (attr_hook_) {  // §5.2 空载零开销：无钩子不记录
+        record_pending(entity_id, attr_id, it->second.get(attr_id), value);
+    }
     it->second.set(attr_id, value);
     if (change_sink_) {
         change_sink_(entity_id, attr_id, value);
@@ -30,6 +33,48 @@ void AttrSyncManager::set_attribute(std::uint64_t entity_id, std::uint32_t attr_
 
 void AttrSyncManager::set_change_sink(ChangeSink sink) {
     change_sink_ = std::move(sink);
+}
+
+// ---- §5.1 属性钩子窗口 ----
+
+void AttrSyncManager::set_attr_hook(AttrHook hook) {
+    attr_hook_ = std::move(hook);
+}
+
+void AttrSyncManager::record_pending(std::uint64_t entity, std::uint32_t attr,
+                                     std::int64_t old_value, std::int64_t new_value) {
+    const std::uint64_t key = pending_key(entity, attr);
+    auto pit = pending_index_.find(key);
+    if (pit != pending_index_.end()) {
+        pending_order_[pit->second].new_value = new_value;  // 保留 first-old
+        return;
+    }
+    pending_index_.emplace(key, pending_order_.size());
+    pending_order_.push_back(HookChange{entity, attr, old_value, new_value});
+}
+
+void AttrSyncManager::apply_attr_hook() {
+    if (!attr_hook_ || pending_order_.empty()) {
+        return;
+    }
+    std::vector<HookChange> changes;
+    changes.swap(pending_order_);
+    pending_index_.clear();
+    attr_hook_(changes);
+    for (const auto& ch : changes) {
+        auto it = entities_.find(ch.entity);
+        if (it == entities_.end()) {
+            continue;
+        }
+        if (it->second.get(ch.attr_id) == ch.new_value) {
+            continue;  // 未修订：白名单外/预算跳过/错误保持原值/nil
+        }
+        // 修订走正规写路径（values + dirty + history + sink）；不重入窗集。
+        it->second.set(ch.attr_id, ch.new_value);
+        if (change_sink_) {
+            change_sink_(ch.entity, ch.attr_id, ch.new_value);
+        }
+    }
 }
 
 // ---- 域投影（§2.2）----

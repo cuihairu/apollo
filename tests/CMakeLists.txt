@@ -1789,6 +1789,7 @@ add_executable(attrsync_tests
     test_scene_attrsync_wiring.cpp
     test_attr_sync_scheduler.cpp
     test_attr_sync_change_sink.cpp
+    test_attr_sync_attr_hook.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync

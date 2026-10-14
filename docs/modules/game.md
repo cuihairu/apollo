@@ -137,7 +137,7 @@ container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），九批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），十批交付：
 
 | 件 | 职责 |
 |---|---|
@@ -147,7 +147,7 @@ per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2
 | `AttrDomain` | 属性可见域（批 9）：kPublic/kSelf/kTeam/kGuild/kWorld |
 | `DeltaBuilder` | delta 组装 + 快照切换判定；快照时 deltas 填全量当前值（批 8）；快照与 delta 双路径域裁剪（批 9） |
 | `EntityAttrs` | 每实体属性存储 + dirty 位 + ChangeHistory + 域位表（批 9） |
-| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级、peek（只读预检）、ChangeSink（§8.2 写后日志入口）、域投影 set_attr_domain/set_group_gate（批 9） |
+| `AttrSyncManager` | 实体注册、属性写路径、AOI Enter/Leave、broadcast collect、ACK、ACK 超时降级、peek（只读预检）、ChangeSink（§8.2 写后日志入口）、域投影 set_attr_domain/set_group_gate（批 9）、属性钩子窗口注入点（scripting-lua §5.1：set_attr_hook/apply_attr_hook，批 10） |
 | `AttrSyncScheduler` | §5 优先级与节流：token bucket + 优先级排序 + min_interval + 饥饿保护 |
 | `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
 | `Scene::attach_attrsync` | Scene ↔ AOI 事件接线（批 5）：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态 |
@@ -171,6 +171,14 @@ mgr.ack(100, 42, /*seq=*/delta[0].base_seq + delta[0].deltas.size());
 // ACK 超时降级：静默 ≥ 阈值拍 → 每拍快照重置
 mgr.set_ack_timeout_ticks(3);
 bool degraded = mgr.is_degraded(100, 42);
+
+// §5.1 属性钩子窗口（scripting-lua §5.1）：dirty 固定后、collect 前注入式修订。
+// 白名单/预算/错误隔离由宿主实现注入（如适配 ScriptRuntime::run_attr_hook_window）；
+// 修订值经正规写路径落存储+history，builder last-write-wins 收敛为单条最终值。
+mgr.set_attr_hook([](std::vector<apollo::game::attrsync::AttrSyncManager::HookChange>& changes) {
+    for (auto& c : changes) { /* 宿主窗口实现 */ }
+});
+mgr.apply_attr_hook();  // 每拍 collect 前调用；无钩子空载零开销；同 tick 幂等
 ```
 
 Scene 侧接线（批 5）：
@@ -185,7 +193,7 @@ auto frames = scene.drain_attrsync_frames();  // 取走首见期快照帧
 scene.detach_attrsync();
 ```
 
-**边界**：客户端发送路径、slice 复合类型 均为后续批次。
+**边界**：客户端发送路径、slice 复合类型、宿主侧接线（Scene tick → apply_attr_hook + ScriptRuntime 适配桥）均为后续批次。
 
 ## NPC AI
 

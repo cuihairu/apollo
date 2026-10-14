@@ -39,6 +39,29 @@ public:
     void set_change_sink(ChangeSink sink);
     void clear_change_sink() { change_sink_ = nullptr; }
 
+    // ---- §5.1 属性钩子窗口（scripting-lua §5.1：dirty 固定后、collect 前）----
+    // 注入式：attrsync 不依赖 script 模块——窗口实现（白名单/预算/错误隔离）
+    // 由宿主适配注入（ScriptRuntime::run_attr_hook_window）。
+    struct HookChange {
+        std::uint64_t entity;
+        std::uint32_t attr_id;
+        std::int64_t old_value;
+        std::int64_t new_value;
+    };
+    using AttrHook = std::function<void(std::vector<HookChange>&)>;
+
+    void set_attr_hook(AttrHook hook);
+    void clear_attr_hook() {
+        attr_hook_ = nullptr;
+        pending_order_.clear();
+        pending_index_.clear();
+    }
+
+    // 窗口执行：本 tick 写入集（每 (entity,attr) 去重 first-old/last-new）→ 调注入
+    // 钩子 → 修订值经正规写路径落存储+history+sink（不再进窗，防重入死循环）。
+    // 无钩子空载零开销；同 tick 幂等（变更集取走即空）。
+    void apply_attr_hook();
+
     // ---- 域投影（§2.2）----
     // 属性可见域（未注册实体静默忽略；未声明 = kPublic）
     void set_attr_domain(std::uint64_t entity_id, std::uint32_t attr_id, AttrDomain domain);
@@ -87,6 +110,16 @@ private:
     std::uint64_t ack_timeout_ticks_ = 3;
     ChangeSink change_sink_;
     DeltaBuilder::GroupGate group_gate_;
+
+    // §5.1 钩子窗口：注入实现 + 待处理变更集（写序保持 + (entity,attr) 去重索引）
+    AttrHook attr_hook_;
+    std::vector<HookChange> pending_order_;
+    std::unordered_map<std::uint64_t, std::size_t> pending_index_;
+    static std::uint64_t pending_key(std::uint64_t entity, std::uint32_t attr) {
+        return (entity << 32) | attr;
+    }
+    void record_pending(std::uint64_t entity, std::uint32_t attr,
+                        std::int64_t old_value, std::int64_t new_value);
 };
 
 }  // namespace apollo::game::attrsync
