@@ -964,9 +964,10 @@ void ScriptRuntime::send(ScriptFaultEvent&& e) {
 }
 
 void ScriptRuntime::warn_check(const char* chunk, std::uint64_t consumed) {
-    if (config_.instruction_budget == 0 ||
-        consumed * 5 < config_.instruction_budget * 4) {
-        return;  // < 80% 或不限预算：静默
+    const std::uint32_t pct = config_.warn_threshold_percent;
+    if (pct == 0 || config_.instruction_budget == 0 ||
+        consumed * 100 < config_.instruction_budget * pct) {
+        return;  // 阈值下/关闭/不限预算：静默
     }
     const auto it = warn_ticks_.find(chunk);
     // 存 tick+1（0 = 从未 WARN），tick 0 首警不被误判为已警。

@@ -41,6 +41,8 @@ struct ScriptConfig {
     // §7.1 attach eval：同 tick 次数上限（0 = 不限）与结果串大小上限。
     std::uint32_t debug_eval_max_per_tick = 8;
     std::size_t debug_eval_result_max = 4096;
+    // §6.1 WARN 软阈值（占预算百分比，默认 80；0 = 关闭 WARN）。
+    std::uint32_t warn_threshold_percent = 80;
 };
 
 struct ScriptFaultEvent {

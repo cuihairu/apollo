@@ -714,3 +714,45 @@ TEST(ScriptRuntime, BreakerImportRejectsBadBlob) {
     EXPECT_TRUE(rt.quarantined_modules().empty());
     EXPECT_TRUE(rt.is_quarantined("m") == false);
 }
+
+// ── WARN 阈值可配（§6.1） ─────────────────────────────────
+
+TEST(ScriptRuntime, WarnThresholdHigherSilences) {
+    ScriptConfig cfg = warn_config();
+    cfg.warn_threshold_percent = 90;  // spin 83% < 90%：静默
+    ScriptRuntime rt(cfg);
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}},
+                   "return { spin = function() for i = 1, 12000 do end end }");
+    EXPECT_TRUE(rt.call_module("m", "spin"));
+    EXPECT_TRUE(events.empty());
+    EXPECT_EQ(rt.stats().budget_warns, 0u);
+}
+
+TEST(ScriptRuntime, WarnThresholdLowerFires) {
+    ScriptConfig cfg = warn_config();
+    cfg.warn_threshold_percent = 50;  // spin 83% ≥ 50%：触发
+    ScriptRuntime rt(cfg);
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}},
+                   "return { spin = function() for i = 1, 12000 do end end }");
+    EXPECT_TRUE(rt.call_module("m", "spin"));
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0].kind, ScriptFaultEvent::Kind::kWarnBudget);
+    EXPECT_EQ(rt.stats().budget_warns, 1u);
+}
+
+TEST(ScriptRuntime, WarnThresholdZeroDisables) {
+    ScriptConfig cfg = warn_config();
+    cfg.warn_threshold_percent = 0;  // 0 = 关闭
+    ScriptRuntime rt(cfg);
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}},
+                   "return { spin = function() for i = 1, 12000 do end end }");
+    EXPECT_TRUE(rt.call_module("m", "spin"));
+    EXPECT_TRUE(events.empty());
+    EXPECT_EQ(rt.stats().budget_warns, 0u);
+}
