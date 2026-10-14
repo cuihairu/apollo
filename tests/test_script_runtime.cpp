@@ -626,3 +626,91 @@ TEST(ScriptRuntime, EvalDebugRateLimitedPerTick) {
     rt.set_tick(1);  // 下一 tick 恢复
     EXPECT_TRUE(rt.eval_debug("1", out));
 }
+
+// ── 熔断状态持久化（§6.1 防坏版本崩溃循环） ─────────────────
+
+TEST(ScriptRuntime, BreakerStateRoundtripRestoresQuarantine) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    rt.set_tick(5000);
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_FALSE(rt.call_module("m", "boom"));
+    EXPECT_TRUE(rt.is_quarantined("m"));
+
+    const auto blob = rt.export_breaker_state();
+    EXPECT_FALSE(blob.empty());
+
+    ScriptRuntime rt2(breaker_config());
+    rt2.set_tick(5000);
+    ASSERT_TRUE(rt2.import_breaker_state(blob));
+    // 隔离随状态恢复：重启后坏模块仍隔离（崩溃循环防护）
+    EXPECT_TRUE(rt2.is_quarantined("m"));
+    EXPECT_EQ(rt2.quarantine_remaining("m"), 600u);
+    EXPECT_FALSE(rt2.call_module("m", "ok"));  // 短路不进 Lua
+    EXPECT_FALSE(rt2.get_global_bool("worked"));
+    EXPECT_EQ(rt2.stats().circuit_rejects, 1u);
+}
+
+TEST(ScriptRuntime, BreakerQuarantineSurvivesTickAdvance) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    rt.set_tick(5000);
+    rt.call_module("m", "boom");
+    rt.call_module("m", "boom");
+    rt.call_module("m", "boom");
+    const auto blob = rt.export_breaker_state();
+
+    // 重启落在更晚 tick：剩余隔离期按绝对 tick 折算
+    ScriptRuntime rt2(breaker_config());
+    rt2.set_tick(5200);
+    ASSERT_TRUE(rt2.import_breaker_state(blob));
+    EXPECT_TRUE(rt2.is_quarantined("m"));
+    EXPECT_EQ(rt2.quarantine_remaining("m"), 400u);
+}
+
+TEST(ScriptRuntime, BreakerOnlyQuarantinedEntriesPersisted) {
+    ScriptRuntime rt(breaker_config());
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    rt.swap_module({"n", 1, {}}, kBreakerModule);
+    rt.call_module("m", "boom");  // 单次 fault，未达 M 不隔离
+    const auto blob = rt.export_breaker_state();
+
+    ScriptRuntime rt2(breaker_config());
+    ASSERT_TRUE(rt2.import_breaker_state(blob));
+    EXPECT_FALSE(rt2.is_quarantined("m"));
+    EXPECT_FALSE(rt2.is_quarantined("n"));
+}
+
+TEST(ScriptRuntime, WarnDebounceStampSurvivesRestart) {
+    ScriptRuntime rt(warn_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}},
+                   "return { spin = function() for i = 1, 12000 do end end }");
+    rt.call_module("m", "spin");  // WARN #1
+    ASSERT_EQ(events.size(), 1u);
+
+    const auto blob = rt.export_breaker_state();
+    ScriptRuntime rt2(warn_config());
+    std::vector<ScriptFaultEvent> events2;
+    rt2.set_fault_sink([&](const ScriptFaultEvent& e) { events2.push_back(e); });
+    rt2.set_tick(150);  // 距 stamp 不足 256
+    ASSERT_TRUE(rt2.import_breaker_state(blob));
+    rt2.swap_module({"m", 1, {}},
+                    "return { spin = function() for i = 1, 12000 do end end }");
+    rt2.call_module("m", "spin");
+    EXPECT_TRUE(events2.empty());  // 去抖窗口跨重启连续（防重启告警风暴）
+    EXPECT_EQ(rt2.stats().budget_warns, 0u);
+}
+
+TEST(ScriptRuntime, BreakerImportRejectsBadBlob) {
+    ScriptRuntime rt(breaker_config());
+    rt.set_tick(10);
+    EXPECT_FALSE(rt.import_breaker_state({}));                   // 空
+    EXPECT_FALSE(rt.import_breaker_state({'A', 'P', 'L', 'B', 9}));  // 版本未知
+    EXPECT_FALSE(rt.import_breaker_state({'X', 'P', 'L', 'B', 1}));  // 魔数不符
+    // 状态不受污染
+    EXPECT_TRUE(rt.quarantined_modules().empty());
+    EXPECT_TRUE(rt.is_quarantined("m") == false);
+}

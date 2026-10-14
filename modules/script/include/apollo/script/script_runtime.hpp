@@ -158,6 +158,12 @@ public:
     [[nodiscard]] std::uint64_t quarantine_remaining(const std::string& module) const;
     [[nodiscard]] std::map<std::string, std::uint64_t> quarantined_modules() const;
 
+    // §6.1 熔断/去抖状态持久化（防坏版本崩溃循环：重启后坏模块仍隔离、
+    // WARN 去抖窗口跨重启连续）。导出仅隔离中条目 + 去抖账；导入原子换面，
+    // 格式不符（魔数/版本/截断/尾随字节）返回 false 且状态不动。
+    [[nodiscard]] std::vector<std::uint8_t> export_breaker_state() const;
+    bool import_breaker_state(const std::vector<std::uint8_t>& blob);
+
     // §3.4 契约表装载（contract.lua，apollo_gen 同批吐的服务端双形态）：
     // 编译 → 结构校验（routes 必备）→ 路由完整性闸（bin 有 handler 而 Lua 无
     // 即拒换）→ 原子换 _G["contract"] 与 C++ 数据面；任一步失败旧表不动。
@@ -208,6 +214,12 @@ private:
     // §3.4 handler 可达判定（全局名或一层 module.func 点路径）；找到则留
     // 函数于栈顶（调用方负责弹出），未找到返回 false 且栈复原。
     bool resolve_handler(const std::string& handler);
+
+    // §6.1 持久化小端编码原语（仅本类内部使用）。
+    static void put_u16(std::vector<std::uint8_t>& out, std::uint16_t v);
+    static void put_u32(std::vector<std::uint8_t>& out, std::uint32_t v);
+    static void put_u64(std::vector<std::uint8_t>& out, std::uint64_t v);
+    static void put_str(std::vector<std::uint8_t>& out, const std::string& s);
 
     ScriptConfig config_;
     lua_State* L_ = nullptr;

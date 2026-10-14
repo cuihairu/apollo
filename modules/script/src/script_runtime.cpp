@@ -470,6 +470,183 @@ std::map<std::string, std::uint64_t> ScriptRuntime::quarantined_modules() const 
     return out;
 }
 
+// §6.1 熔断/去抖状态持久化：小端 TLV（魔数 APLB + 版本 + 隔离条目 + 去抖账）。
+// 只持久化隔离中条目（未隔离的滑窗计数器不跨重启延续）。
+namespace {
+constexpr std::uint8_t kStateMagic[4] = {'A', 'P', 'L', 'B'};
+constexpr std::uint8_t kStateVersion = 1;
+
+struct BlobReader {
+    const std::uint8_t* data;
+    std::size_t size;
+    std::size_t off = 0;
+
+    bool bytes(std::size_t k, const std::uint8_t** out) {
+        if (size < off + k) {
+            return false;  // 截断
+        }
+        *out = data + off;
+        off += k;
+        return true;
+    }
+    bool u8(std::uint8_t& v) {
+        const std::uint8_t* p = nullptr;
+        if (!bytes(1, &p)) {
+            return false;
+        }
+        v = p[0];
+        return true;
+    }
+    bool u16(std::uint16_t& v) {
+        const std::uint8_t* p = nullptr;
+        if (!bytes(2, &p)) {
+            return false;
+        }
+        v = static_cast<std::uint16_t>(p[0] | (static_cast<std::uint16_t>(p[1]) << 8));
+        return true;
+    }
+    bool u32(std::uint32_t& v) {
+        const std::uint8_t* p = nullptr;
+        if (!bytes(4, &p)) {
+            return false;
+        }
+        v = static_cast<std::uint32_t>(p[0]) | (static_cast<std::uint32_t>(p[1]) << 8) |
+            (static_cast<std::uint32_t>(p[2]) << 16) | (static_cast<std::uint32_t>(p[3]) << 24);
+        return true;
+    }
+    bool u64(std::uint64_t& v) {
+        const std::uint8_t* p = nullptr;
+        if (!bytes(8, &p)) {
+            return false;
+        }
+        std::uint64_t acc = 0;
+        for (int i = 0; i < 8; ++i) {
+            acc |= static_cast<std::uint64_t>(p[i]) << (8u * static_cast<std::size_t>(i));
+        }
+        v = acc;
+        return true;
+    }
+    bool str(std::string& s) {
+        std::uint16_t len = 0;
+        if (!u16(len)) {
+            return false;
+        }
+        const std::uint8_t* p = nullptr;
+        if (!bytes(len, &p)) {
+            return false;
+        }
+        s.assign(reinterpret_cast<const char*>(p), len);
+        return true;
+    }
+};
+}  // namespace
+
+void ScriptRuntime::put_u16(std::vector<std::uint8_t>& out, std::uint16_t v) {
+    out.push_back(static_cast<std::uint8_t>(v & 0xFF));
+    out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
+}
+
+void ScriptRuntime::put_u32(std::vector<std::uint8_t>& out, std::uint32_t v) {
+    out.push_back(static_cast<std::uint8_t>(v & 0xFF));
+    out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
+    out.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFF));
+    out.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFF));
+}
+
+void ScriptRuntime::put_u64(std::vector<std::uint8_t>& out, std::uint64_t v) {
+    for (int i = 0; i < 8; ++i) {
+        out.push_back(static_cast<std::uint8_t>((v >> (8u * static_cast<std::size_t>(i))) & 0xFF));
+    }
+}
+
+void ScriptRuntime::put_str(std::vector<std::uint8_t>& out, const std::string& s) {
+    if (s.size() > 0xFFFF) {
+        return;  // 编码位宽受限；模块名/路径名远小于此上限
+    }
+    put_u16(out, static_cast<std::uint16_t>(s.size()));
+    const auto* p = reinterpret_cast<const std::uint8_t*>(s.data());
+    out.insert(out.end(), p, p + s.size());
+}
+
+std::vector<std::uint8_t> ScriptRuntime::export_breaker_state() const {
+    std::vector<std::uint8_t> out;
+    for (std::size_t i = 0; i < 4; ++i) {
+        out.push_back(kStateMagic[i]);
+    }
+    out.push_back(kStateVersion);
+
+    std::uint32_t quarantined = 0;
+    for (const auto& [name, br] : breakers_) {
+        if (br.quarantined_until != 0) {
+            ++quarantined;
+        }
+    }
+    put_u32(out, quarantined);
+    for (const auto& [name, br] : breakers_) {
+        if (br.quarantined_until == 0) {
+            continue;
+        }
+        put_str(out, name);
+        put_u64(out, br.quarantined_until);
+        put_u64(out, br.quarantine_span);
+    }
+
+    put_u32(out, static_cast<std::uint32_t>(warn_ticks_.size()));
+    for (const auto& [chunk, stamp] : warn_ticks_) {
+        put_str(out, chunk);
+        put_u64(out, stamp);
+    }
+    return out;
+}
+
+bool ScriptRuntime::import_breaker_state(const std::vector<std::uint8_t>& blob) {
+    BlobReader r{blob.data(), blob.size()};
+    const std::uint8_t* magic = nullptr;
+    std::uint8_t version = 0;
+    if (!r.bytes(4, &magic) || magic[0] != kStateMagic[0] || magic[1] != kStateMagic[1] ||
+        magic[2] != kStateMagic[2] || magic[3] != kStateMagic[3] || !r.u8(version) ||
+        version != kStateVersion) {
+        return false;
+    }
+
+    std::map<std::string, ModuleBreaker> breakers;
+    std::uint32_t count = 0;
+    if (!r.u32(count)) {
+        return false;
+    }
+    for (std::uint32_t i = 0; i < count; ++i) {
+        std::string name;
+        std::uint64_t until = 0;
+        std::uint64_t span = 0;
+        if (!r.str(name) || !r.u64(until) || !r.u64(span)) {
+            return false;
+        }
+        breakers.emplace(std::move(name),
+                         ModuleBreaker{{}, until, span});
+    }
+
+    std::map<std::string, std::uint64_t> warns;
+    if (!r.u32(count)) {
+        return false;
+    }
+    for (std::uint32_t i = 0; i < count; ++i) {
+        std::string chunk;
+        std::uint64_t stamp = 0;
+        if (!r.str(chunk) || !r.u64(stamp)) {
+            return false;
+        }
+        warns.emplace(std::move(chunk), stamp);
+    }
+
+    if (r.off != r.size) {
+        return false;  // 尾随字节 = 格式不符（拒，防截断/拼接）
+    }
+
+    breakers_ = std::move(breakers);  // 原子换面：解析全过才生效
+    warn_ticks_ = std::move(warns);
+    return true;
+}
+
 // ---- §3.4 契约表装载：编译 → 结构校验 → 路由完整性闸 → 原子提交 ----
 
 bool ScriptRuntime::resolve_handler(const std::string& handler) {
