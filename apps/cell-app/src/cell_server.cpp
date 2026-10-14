@@ -8,8 +8,10 @@
 #include "apollo/game/world/scene_transfer.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
+#include "apollo/script/script_runtime.hpp"
 #include <algorithm>
 #include <iostream>
+#include <fstream>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
@@ -419,6 +421,23 @@ void CellServer::drainAcceptanceQueue() {
 }
 
 void CellServer::gameLoop() {
+    // 脚本宿主生命周期（scripting-lua §2 一状态一逻辑线程）：runtime 建/
+    // 用/析全在本线程。boot 源加载失败不停机（fault 走 runtime 事件面，
+    // cell 继续服务）。
+    script_ = std::make_unique<apollo::script::ScriptRuntime>();
+    if (!config_.scriptBootFile.empty()) {
+        std::ifstream boot(config_.scriptBootFile, std::ios::binary);
+        if (boot) {
+            std::string src((std::istreambuf_iterator<char>(boot)),
+                            std::istreambuf_iterator<char>());
+            if (!script_->call_string("cell_boot", src)) {
+                celllog().warning("script boot failed: " + config_.scriptBootFile);
+            }
+        } else {
+            celllog().warning("script boot file missing: " + config_.scriptBootFile);
+        }
+    }
+
     while (running_) {
         auto startTime = std::chrono::steady_clock::now();
 
@@ -431,6 +450,9 @@ void CellServer::gameLoop() {
 
         // ADR-015(a)：意图消费在 tick 边界（world 变更只发生在此线程）
         drainAcceptanceQueue();
+
+        // 脚本宿主接线：未挂的 scene 幂等补挂（新 scene 下一拍生效）
+        attach_script_to_scenes();
 
         worldHost_->tick();
 
@@ -450,6 +472,28 @@ void CellServer::gameLoop() {
 
     // 停机 G-3 尾扫：关闸后残余意图一次性清空（此后不再有新受理）
     drainAcceptanceQueue();
+
+    // 脚本宿主随 gameThread_ 退出而灭（scripting-lua §2）：先摘全部 scene
+    // 再析构 runtime，避免 scene 侧残悬引用。
+    for (auto* scene : world_->scenes()) {
+        scene->detach_script();
+    }
+    script_.reset();
+}
+
+void CellServer::attach_script_to_scenes() {
+    if (!script_) {
+        return;
+    }
+    for (auto* scene : world_->scenes()) {
+        if (!scene->script_attached()) {
+            scene->attach_script(*script_);
+        }
+    }
+}
+
+apollo::game::world::Scene* CellServer::find_scene(std::uint64_t scene_id) {
+    return world_ ? world_->find_scene(scene_id) : nullptr;
 }
 
 std::chrono::milliseconds CellServer::tickInterval() const {
@@ -599,7 +643,12 @@ void CellServer::attachPlayerWorldSession(
     session->bind_avatar(avatar_entity_id);
     session->set_route_version(session->route_version() + 1);
     session->set_state(apollo::game::world::WorldSessionState::Entering);
-    session->resume();
+    // Entering → Active（resume 唯一合法前态；Closed/Leaving 会拒绝——接线异常
+    // 的可观察面，不静默吞）
+    if (!session->resume()) {
+        celllog().warning("world session resume rejected for session "
+                    + std::to_string(session_id));
+    }
 }
 
 void CellServer::detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id) {

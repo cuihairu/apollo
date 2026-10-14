@@ -544,8 +544,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
-	    # Session/World skeleton tests（依赖 game 模块目标——模块关闭时跳过，
-	    # 与 apps/ 的 if(TARGET …) 守卫同惯例；修复 main 上 CI configure 必红的问题）
 	    if(TARGET apollo::game_core)
 	    add_executable(session_world_tests test_session_world.cpp)
 	    target_link_libraries(session_world_tests PRIVATE
@@ -1272,6 +1270,7 @@ if(MSVC)
     target_compile_options(timer_wheel_tests PRIVATE /utf-8)
 endif()
 add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
+	endif()
 
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
 # cell 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ CellServer 受理点
@@ -1289,12 +1288,13 @@ target_include_directories(cell_acceptance_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
 )
 target_compile_definitions(cell_acceptance_tests PRIVATE
     APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 target_link_libraries(cell_acceptance_tests PRIVATE
-    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::runtime
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script apollo::runtime
     apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
     target_link_libraries(cell_acceptance_tests PRIVATE ws2_32)
@@ -1323,12 +1323,13 @@ target_include_directories(cell_m1_link_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
 )
 target_compile_definitions(cell_m1_link_tests PRIVATE
     APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 target_link_libraries(cell_m1_link_tests PRIVATE
-    apollo apollo::base apollo::core apollo::game_core apollo::game_world
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
     target_link_libraries(cell_m1_link_tests PRIVATE ws2_32)
@@ -1368,13 +1369,14 @@ target_include_directories(gateway_m1_egress_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
 )
 target_compile_definitions(gateway_m1_egress_tests PRIVATE
     APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 target_link_libraries(gateway_m1_egress_tests PRIVATE
-    apollo apollo::base apollo::core apollo::game_core apollo::game_world
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
     apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
 if(WIN32)
@@ -1386,7 +1388,6 @@ if(MSVC)
 endif()
 add_test(NAME GatewayM1EgressTests COMMAND gateway_m1_egress_tests)
 endif()
-	endif()
 
 # ========== Logger Retrieval Tests (ADR-013 批 L3) ==========
 # LoggerApp 检索面 v1：结构化行读侧（写侧契约镜像）、proc/level/ts/cat
@@ -1829,4 +1830,40 @@ if(MSVC)
     target_compile_options(scene_script_tests PRIVATE /utf-8)
 endif()
 add_test(NAME SceneScriptTests COMMAND scene_script_tests)
+endif()
+
+# ========== Cell Script Host Tests (admin attach transport 批 A) ==========
+# cell 脚本宿主接线（scripting-lua §2 一状态一逻辑线程 + §5.1 Scene 桥）：
+# boot 源加载（成功执行 / 缺失不停机）+ 未挂 scene 幂等补挂（新 scene 下一拍
+# 生效）+ debug eval 队列在宿主 tick 窗口的回传。直编协议源习语同
+# cell_acceptance_tests；OFF 树无 game_core/game_world/runtime 故带目标门控。
+if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime
+   AND TARGET apollo::script)
+add_executable(cell_script_host_tests
+    test_cell_script_host.cpp
+    ../apps/cell-app/src/cell_server.cpp
+    ../apps/cell-app/src/m1_link_server.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+)
+target_include_directories(cell_script_host_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
+)
+target_compile_definitions(cell_script_host_tests PRIVATE
+    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(cell_script_host_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
+    apollo::runtime apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
+if(WIN32)
+    target_link_libraries(cell_script_host_tests PRIVATE ws2_32)
+    target_compile_definitions(cell_script_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(cell_script_host_tests PRIVATE /utf-8)
+endif()
+add_test(NAME CellScriptHostTests COMMAND cell_script_host_tests)
 endif()

@@ -22,6 +22,7 @@ target_include_directories(cell-app
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/runtime/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/script/include
 )
 
 # 契约路由表 JSON（M1 接收端装配事实源；生成物随仓）
@@ -35,6 +36,7 @@ target_link_libraries(cell-app
         apollo::core
         apollo::game_core
         apollo::game_world
+        apollo::script
         apollo::net_link
         apollo::net_contract_wire
         apollo::net_linktrace

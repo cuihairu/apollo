@@ -60,6 +60,8 @@ CellConfig loadConfig(int argc, char* argv[]) {
             config.spaceHeight = static_cast<float>(std::atof(argv[++i]));
         } else if (arg == "--tick-rate" && i + 1 < argc) {
             config.tickRateMs = std::atoi(argv[++i]);
+        } else if (arg == "--script-boot" && i + 1 < argc) {
+            config.scriptBootFile = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -67,6 +69,7 @@ CellConfig loadConfig(int argc, char* argv[]) {
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"
+                      << "  --script-boot <file>        Lua boot source file (default: none)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }

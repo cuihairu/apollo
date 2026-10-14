@@ -15,6 +15,10 @@
 #include <atomic>
 #include <unordered_map>
 
+namespace apollo::script {
+class ScriptRuntime;
+}
+
 namespace cell {
 
 namespace protocol = apollo::protocol;
@@ -46,6 +50,11 @@ public:
     // 网关经它投递 cell 意图（924-928 契约族）；listenPort 查实占端口。
     M1LinkServer& m1Link() { return *m1Link_; }
 
+    // scene 反查（gameLoop 线程内解析；测试面：eval 宿主接线定位投递目标用）。
+    // 注：ScriptRuntime 刻意不外露——scripting-lua §2 一状态一逻辑线程，其指针
+    // 只有 gameThread_ 可读；宿主对外的观察面是 Scene §7.1 debug eval 队列。
+    apollo::game::world::Scene* find_scene(std::uint64_t scene_id);
+
 private:
     // 处理创建实体请求
     std::vector<uint8_t> handleCellCreateEntity(const std::vector<uint8_t>& request);
@@ -71,6 +80,10 @@ private:
 
     // 受理队列清空到 tick 执行（ADR-016：tick 预算锚定；停机 G-3 尾扫一次）
     void drainAcceptanceQueue();
+
+    // 脚本宿主接线（scripting-lua §2/§5.1）：gameLoop 每拍幂等——未挂的
+    // scene 挂上 runtime（新 scene 下一拍自动挂；attach 幂等守卫在 Scene）。
+    void attach_script_to_scenes();
 
     // M1 意图受理点（2b-ii：泵线程 = gameThread_ 内同步调用）：submitIntent
     // 判定 + 拒收即时回执（顶格 2101 / 维护闸 2001）；受理成功不回包，回执随
@@ -110,6 +123,9 @@ private:
     std::shared_ptr<apollo::runtime::WorldHost> worldHost_;
 
     std::unique_ptr<M1LinkServer> m1Link_;
+    // 脚本宿主（scripting-lua §2 一状态一逻辑线程：随 gameThread_ 生灭，
+    // 建/用/析全在 gameLoop 线程）。
+    std::unique_ptr<apollo::script::ScriptRuntime> script_;
     std::atomic<bool> running_{false};
     // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前拒新意图；
     // 停机先关闸再排空队列，G-3 镜像顺序）
