@@ -11,6 +11,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace apollo::script {
+class ScriptRuntime;  // 前向声明（适配桥实现留 scene.cpp，头不拉 lua 面）
+}
+
 namespace apollo::game::world {
 
 using EntityPtr = std::shared_ptr<apollo::game::core::Entity>;
@@ -87,6 +91,19 @@ public:
     [[nodiscard]] std::vector<apollo::game::attrsync::AttrSyncFrame>
     drain_attrsync_frames();
 
+    // ---- ScriptRuntime 接线（scripting-lua §5.1 钩子窗口宿主侧）----
+    // attach：与 attrsync 共架适配桥——每 tick Recalc 尾、Collect 前，
+    // attrsync 写入集（HookChange）转 ScriptRuntime::AttrChange 快照跑
+    // 钩子窗口（白名单取契约表、帧预算归 Scene 配置），修订值写回走
+    // attrsync 正规写路径落存储 + history + sink。attach 次序无关。
+    // 指针仅存引用（attach 期有效；sink 捕获 this，Scene 不拷贝）。
+    void attach_script(apollo::script::ScriptRuntime& rt);
+    void detach_script();
+    [[nodiscard]] bool script_attached() const noexcept;
+    // §5.2 帧级钩子预算（默认 200k ≈ 0.5ms 量级，宿主按实测校准）。
+    void set_attr_hook_frame_budget(std::uint64_t budget) noexcept;
+    [[nodiscard]] std::uint64_t attr_hook_frame_budget() const noexcept;
+
     // ---- tick 六阶段 ----
     void update(float delta_time);        // 兼容旧调用（转发 tick）
     void tick(double delta_seconds) noexcept;
@@ -97,6 +114,8 @@ public:
 private:
     void run_phase(SceneTickPhase phase) noexcept;
     void on_aoi_event(const SceneAoi::Event& event) noexcept;
+    // attrsync 与 script 均在位时架桥（attach_script / attach_attrsync 入口）。
+    void install_attr_hook_bridge();
 
     std::uint64_t scene_id_ = 0;
     std::string name_;
@@ -106,6 +125,8 @@ private:
     SceneAoi aoi_;
     apollo::game::attrsync::AttrSyncManager* attrsync_ = nullptr;  // attach 期有效
     std::vector<apollo::game::attrsync::AttrSyncFrame> attrsync_outbound_;
+    apollo::script::ScriptRuntime* script_ = nullptr;  // attach 期有效
+    std::uint64_t attr_hook_frame_budget_ = 200000;    // §5.2 帧级钩子预算
     std::uint64_t tick_count_ = 0;
     std::uint64_t phase_counts_[6] = {0, 0, 0, 0, 0, 0};
 };

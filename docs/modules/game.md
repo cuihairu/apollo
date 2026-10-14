@@ -137,7 +137,7 @@ container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），十批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），十一批交付：
 
 | 件 | 职责 |
 |---|---|
@@ -151,6 +151,7 @@ per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2
 | `AttrSyncScheduler` | §5 优先级与节流：token bucket + 优先级排序 + min_interval + 饥饿保护 |
 | `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
 | `Scene::attach_attrsync` | Scene ↔ AOI 事件接线（批 5）：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态 |
+| `Scene::attach_script` | Scene × ScriptRuntime 适配桥（scripting-lua §5.1 宿主接线，批 11）：Recalc 尾 Collect 前跑钩子窗口，帧预算默认 200k 可调 |
 
 ```cpp
 #include <apollo/game/attrsync/attr_sync_manager.hpp>
@@ -193,7 +194,24 @@ auto frames = scene.drain_attrsync_frames();  // 取走首见期快照帧
 scene.detach_attrsync();
 ```
 
-**边界**：客户端发送路径、slice 复合类型、宿主侧接线（Scene tick → apply_attr_hook + ScriptRuntime 适配桥）均为后续批次。
+Scene × ScriptRuntime 适配桥（批 11，scripting-lua §5.1 宿主接线）：
+
+```cpp
+#include <apollo/script/script_runtime.hpp>
+
+apollo::script::ScriptRuntime rt(cfg);
+rt.set_attr_hook("onAttrChanged");   // 钩子函数注册（修订返回整数）
+rt.load_contract(contract_src);        // 白名单取契约表数据面（§3.4）
+
+scene.attach_script(rt);              // 与 attach_attrsync 共架桥（次序无关）
+scene.set_attr_hook_frame_budget(200000);  // §5.2 帧级预算（默认 200k ≈ 0.5ms）
+
+// tick 接线（Scene::tick 六阶段内）：
+//   set_tick 喂熔断/WARN 记账 → Recalc 尾 apply_attr_hook 跑窗口（白名单外跳过、
+//   帧预算耗尽剩余跳过、错误保持原值）→ Collect 出修订 delta → BudgetFlush 归还帧账
+```
+
+**边界**：客户端发送路径、slice 复合类型均为后续批次。
 
 ## NPC AI
 

@@ -25,6 +25,8 @@ target_link_libraries(apollo_game_world
         apollo::game_session
         apollo::game_battle
         apollo::game_attrsync
+    PRIVATE
+        apollo::script  # §5.1 适配桥（scene.cpp 内联转换；头仅前向声明）
 )
 
 target_compile_features(apollo_game_world PUBLIC cxx_std_20)

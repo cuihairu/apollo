@@ -1,6 +1,7 @@
 #include "apollo/game/world/scene.hpp"
 
 #include "apollo/game/core/entity.hpp"
+#include "apollo/script/script_runtime.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -164,6 +165,56 @@ void Scene::attach_attrsync(apollo::game::attrsync::AttrSyncManager& mgr) {
 
     aoi_.set_event_sink(
         [this](const SceneAoi::Event& event) { on_aoi_event(event); });
+
+    install_attr_hook_bridge();
+}
+
+void Scene::attach_script(apollo::script::ScriptRuntime& rt) {
+    script_ = &rt;
+    install_attr_hook_bridge();
+}
+
+void Scene::detach_script() {
+    script_ = nullptr;
+    if (attrsync_ != nullptr) {
+        attrsync_->clear_attr_hook();
+    }
+}
+
+bool Scene::script_attached() const noexcept {
+    return script_ != nullptr;
+}
+
+void Scene::set_attr_hook_frame_budget(std::uint64_t budget) noexcept {
+    attr_hook_frame_budget_ = budget;
+}
+
+std::uint64_t Scene::attr_hook_frame_budget() const noexcept {
+    return attr_hook_frame_budget_;
+}
+
+void Scene::install_attr_hook_bridge() {
+    if (attrsync_ == nullptr || script_ == nullptr) {
+        return;
+    }
+    // §5.1 适配桥：attrsync 注入缝（HookChange）↔ ScriptRuntime 钩子窗口
+    // （AttrChange 快照拷贝）。修订值写回 HookChange，由 attrsync 正规写
+    // 路径落账；白名单取契约表数据面，帧预算逐次取 Scene 配置。
+    auto* rt = script_;
+    auto* mgr = attrsync_;
+    mgr->set_attr_hook(
+        [rt, mgr, budget = &attr_hook_frame_budget_](
+            std::vector<apollo::game::attrsync::AttrSyncManager::HookChange>& changes) {
+            std::vector<apollo::script::ScriptRuntime::AttrChange> window;
+            window.reserve(changes.size());
+            for (const auto& ch : changes) {
+                window.push_back({ch.entity, ch.attr_id, ch.old_value, ch.new_value});
+            }
+            rt->run_attr_hook_window(window, rt->contract_write_whitelist(), *budget);
+            for (std::size_t i = 0; i < changes.size(); ++i) {
+                changes[i].new_value = window[i].new_value;
+            }
+        });
 }
 
 void Scene::detach_attrsync() {
@@ -217,15 +268,27 @@ void Scene::tick(double delta_seconds) noexcept {
     // 其余阶段计数占位（recalc/aoidecay/collect/budget+flush/persist-batch
     // 随 P1 持久化与属性管线接入）。
     ++tick_count_;
+    if (script_ != nullptr) {
+        script_->set_tick(tick_count_);  // §6.1 熔断/WARN 记账（tick 归宿主喂）
+    }
     run_phase(SceneTickPhase::Simulate);
     for (auto& [id, entity] : entities_) {
         (void)id;
         entity->on_update(static_cast<float>(delta_seconds));
     }
     run_phase(SceneTickPhase::Recalc);
+    // scripting-lua §5.1：钩子窗口——dirty 固定后、广播收集前执行。
+    // 无桥（script 未 attach）attrsync 侧空载零调用。
+    if (attrsync_ != nullptr) {
+        attrsync_->apply_attr_hook();
+    }
     run_phase(SceneTickPhase::AoiDecay);
     run_phase(SceneTickPhase::Collect);
     run_phase(SceneTickPhase::BudgetFlush);
+    // §5.2 帧级预算归还：下一帧恢复。
+    if (script_ != nullptr) {
+        script_->reset_attr_frame();
+    }
     run_phase(SceneTickPhase::PersistBatch);
 }
 

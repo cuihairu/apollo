@@ -1790,11 +1790,13 @@ add_executable(attrsync_tests
     test_attr_sync_scheduler.cpp
     test_attr_sync_change_sink.cpp
     test_attr_sync_attr_hook.cpp
+    test_scene_attr_hook_bridge.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync
     apollo::game_core
     apollo::game_world
+    apollo::script
     GTest::gtest
     GTest::gtest_main
 )
