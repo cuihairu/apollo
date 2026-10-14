@@ -408,6 +408,22 @@
     <field name="body" type="bytes" desc="响应载荷（MessageCodec 全帧；空 = handler 无产出）"/>
   </msg>
 
+  <!-- Debug eval 族（scripting-lua §7.1 attach transport 契约面）：admin 单入口
+       → 目标进程 M1 面 → owning 场景线程 tick 首拍固定调试点执行（Scene §7.1
+       执行队列：沙盒面/结果截断/同 tick 限流全管辖，错误不打断宿主）→ 结果按
+       eval_id 回传。scene_id = 目标场景（0 = 默认 scene）。 -->
+  <msg id="944" name="debug_eval_request" dir="P2P" channel="events" domain="internal" desc="脚本调试 eval 请求（admin→目标进程；场景线程 tick 边界执行）">
+    <field name="eval_id" type="int64" desc="关联键（admin 单调分配，0 保留；结果原样回带）"/>
+    <field name="scene_id" type="int64" desc="目标场景（0 = 默认 scene；未挂宿主拒收）"/>
+    <field name="source" type="string" desc="Lua 源（表达式优先、语句回退；同一沙盒面管辖）"/>
+  </msg>
+  <msg id="945" name="debug_eval_result" dir="P2P" channel="events" domain="internal" desc="脚本调试 eval 回执（目标进程→admin；eval_id 关联）">
+    <field name="eval_id" type="int64" desc="回带请求关联号"/>
+    <field name="ok" type="bool" desc="1=求值成功（result 为结果串）；0=失败（error_message 为错误原文）"/>
+    <field name="result" type="string" desc="求值结果串（截断上限随宿主 debug_eval_result_max；ok=0 时为空）"/>
+    <field name="error_message" type="string" desc="错误原文（限流/语法/运行错；ok=1 时为空）"/>
+  </msg>
+
   <!-- Guild/Party 族（P2-4：社交面归 Anchor 长期态，improvement-plan P2-4 消息面）。
        C2S 意图 only（服务端定夺，docs/05 §6.4）——操作码经唯一 S2C 结果回带
        （op：1=create 2=disband 3=join 4=leave）；两族各一条 result 收口，

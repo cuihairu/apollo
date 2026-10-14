@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "a027b7be42839fd04752dffc42985d30da0b84c7ed07179d2f53ac2a4f619477",
+  "schema_hash": "255d01212abd617c633c24ea5b72db4a28858cf26e11abfc2c57753e84e13090",
   "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "c598b2a74301b37989d3b9594c3b757263d4830c9ac861f2f767c98ae189e988",
+  "internal_hash": "043f0f07b3228a48c340749d81387efaf289545439245b336dfcf8042cd85ded",
   "contract_version": 3,
   "aliases": [
     {
@@ -2490,6 +2490,70 @@
         }
       ],
       "desc": "玩家迁移编排回执（manager→ops；ok = 五步①③④全成——此后不可撤销；带分步耗时供演练对账）"
+    },
+    {
+      "id": 944,
+      "name": "debug_eval_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "eval_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "关联键（admin 单调分配，0 保留；结果原样回带）"
+        },
+        {
+          "name": "scene_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标场景（0 = 默认 scene；未挂宿主拒收）"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "Lua 源（表达式优先、语句回退；同一沙盒面管辖）"
+        }
+      ],
+      "desc": "脚本调试 eval 请求（admin→目标进程；场景线程 tick 边界执行）"
+    },
+    {
+      "id": 945,
+      "name": "debug_eval_result",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "eval_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带请求关联号"
+        },
+        {
+          "name": "ok",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=求值成功（result 为结果串）；0=失败（error_message 为错误原文）"
+        },
+        {
+          "name": "result",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "求值结果串（截断上限随宿主 debug_eval_result_max；ok=0 时为空）"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "错误原文（限流/语法/运行错；ok=1 时为空）"
+        }
+      ],
+      "desc": "脚本调试 eval 回执（目标进程→admin；eval_id 关联）"
     }
   ],
   "entities": [
