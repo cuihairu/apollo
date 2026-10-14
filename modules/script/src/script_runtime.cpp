@@ -38,6 +38,24 @@ void raw_getfield(lua_State* L, int idx, const char* k) {
     lua_rawget(L, t);
 }
 
+// global raw 读/写：_ENV 可被脚本运行期挂 __index/__newindex（setmetatable
+// 在任何 call_string 里都能跑），宿主侧 global 访问一律 raw——恶意元表不再
+// 把错误抛出保护区（栈效果同 lua_getglobal/lua_setglobal，无元表时行为一致）。
+void raw_getglobal(lua_State* L, const char* name) {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);  // [globals]
+    lua_pushstring(L, name);
+    lua_rawget(L, -2);                                    // [globals, value]
+    lua_remove(L, -2);                                    // [value]
+}
+
+void raw_setglobal(lua_State* L, const char* name) {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);  // [value, globals]
+    lua_pushstring(L, name);                              // [value, globals, key]
+    lua_pushvalue(L, -3);                                 // [.., key, value]
+    lua_rawset(L, -3);                                    // [value, globals]
+    lua_pop(L, 2);                                        // [] —— 同 lua_setglobal 弹出值
+}
+
 // §7.2 只读取值：字符串拷贝、数值自格式化（不走 lua_tolstring——它会把
 // 栈上数值就地转字符串，破坏只读纪律）、其余只出类型名。不调用任何
 // Lua 函数、不触任何元方法。
@@ -149,7 +167,7 @@ int sandbox_load(lua_State* L) {
 
 void disable_global(lua_State* L, const char* name) {
     lua_pushnil(L);
-    lua_setglobal(L, name);
+    raw_setglobal(L, name);  // raw：_ENV 元表纪律全局统一
 }
 
 // §3.5 缓存产物读取（只读；运行期不写——产物归构建管线）。
@@ -194,7 +212,7 @@ ScriptRuntime::ScriptRuntime(ScriptConfig config) : config_(config) {
     disable_global(L_, "loadfile");
     disable_global(L_, "collectgarbage");
     lua_pushcfunction(L_, sandbox_load);
-    lua_setglobal(L_, "load");
+    raw_setglobal(L_, "load");
     // this 入 registry（hook 回调取用）。
     lua_pushlightuserdata(L_, const_cast<char*>(&kSelfKey));
     lua_pushlightuserdata(L_, static_cast<void*>(this));
@@ -221,7 +239,7 @@ void ScriptRuntime::set_fault_sink(std::function<void(const ScriptFaultEvent&)> 
 
 void ScriptRuntime::register_module(const char* name, const luaL_Reg* funcs) {
     luaL_newlib(L_, funcs);
-    lua_setglobal(L_, name);
+    raw_setglobal(L_, name);
 }
 
 // ---- §3.2 热替换：编译 + 冒烟在影子栈完成，通过才原子换 _G[name] ----
@@ -293,7 +311,7 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
     // 走到此处栈顶 = 新表。registry ref（luaL_ref 自弹栈顶）+ 原子换表。
     lua_pushvalue(L_, -1);
     const int new_ref = luaL_ref(L_, LUA_REGISTRYINDEX);  // [新表]
-    lua_setglobal(L_, spec.name.c_str());                 // []
+    raw_setglobal(L_, spec.name.c_str());                 // []
     // 旧活跃表 → 冷冻区（§3.2 冷冻区语义：rollback 依赖；只留最近一份）。
     const auto it = module_refs_.find(spec.name);
     if (it != module_refs_.end()) {
@@ -354,7 +372,7 @@ bool ScriptRuntime::rollback_module(const std::string& name) {
     }
     module_frozen_.erase(name);
     module_refs_[name] = restored_ref;
-    lua_setglobal(L_, name.c_str());
+    raw_setglobal(L_, name.c_str());
     const std::uint64_t from_version = module_version(name);
     module_versions_[name] = restored_version;
     breaker_clear(name, "rollback cleared quarantine");  // §6.1 回滚同热更：新账
@@ -419,7 +437,7 @@ LuaEnvSnapshot ScriptRuntime::env_snapshot(const char* module,
     }
     // 只读纪律：lua_next 裸遍历（不走 __pairs/__index），值经
     // read_plain_value 类型化取值（不走 lua_tolstring 就地转换、不调函数）。
-    lua_getglobal(L_, module);
+    raw_getglobal(L_, module);
     if (!lua_istable(L_, -1)) {
         lua_pop(L_, 1);
         return snap;  // 模块名不在全局面 = 未找到
@@ -444,7 +462,7 @@ LuaEnvSnapshot ScriptRuntime::env_snapshot(const char* module,
 // ---- §5.1/§5.2 属性钩子窗口：重算后广播前，同步修订值 ----
 
 bool ScriptRuntime::set_attr_hook(const char* global_name) {
-    lua_getglobal(L_, global_name);
+    raw_getglobal(L_, global_name);
     if (!lua_isfunction(L_, -1)) {
         lua_pop(L_, 1);
         return false;
@@ -519,12 +537,12 @@ bool ScriptRuntime::call_module(const std::string& module, const char* func) {
     ++stats_.calls;
     used_instructions_ = 0;
     bool ok = false;
-    lua_getglobal(L_, module.c_str());
+    raw_getglobal(L_, module.c_str());
     if (!lua_istable(L_, -1)) {
         lua_pop(L_, 1);
         fault(ScriptFaultEvent::Kind::kRuntime, module.c_str(), "module not a table");
     } else {
-        lua_getfield(L_, -1, func);
+        raw_getfield(L_, -1, func);
         if (!lua_isfunction(L_, -1)) {
             lua_pop(L_, 2);
             fault(ScriptFaultEvent::Kind::kRuntime, module.c_str(),
@@ -810,7 +828,7 @@ bool ScriptRuntime::import_breaker_state(const std::vector<std::uint8_t>& blob) 
 bool ScriptRuntime::resolve_handler(const std::string& handler) {
     const std::size_t dot = handler.find('.');
     if (dot == std::string::npos) {
-        lua_getglobal(L_, handler.c_str());
+        raw_getglobal(L_, handler.c_str());
         if (lua_isfunction(L_, -1)) {
             return true;  // [func]
         }
@@ -822,12 +840,12 @@ bool ScriptRuntime::resolve_handler(const std::string& handler) {
     if (fn.empty() || fn.find('.') != std::string::npos) {
         return false;  // 仅支持一层 module.func 点路径
     }
-    lua_getglobal(L_, mod.c_str());
+    raw_getglobal(L_, mod.c_str());
     if (!lua_istable(L_, -1)) {
         lua_pop(L_, 1);
         return false;
     }
-    lua_getfield(L_, -1, fn.c_str());
+    raw_getfield(L_, -1, fn.c_str());
     if (lua_isfunction(L_, -1)) {
         lua_remove(L_, -2);  // [func]
         return true;
@@ -915,7 +933,7 @@ bool ScriptRuntime::load_contract(const std::string& source) {
     }
     lua_pop(L_, 1);
     // 全部通过 → 原子提交：表与 C++ 数据面同拍生效。
-    lua_setglobal(L_, "contract");  // []
+    raw_setglobal(L_, "contract");  // []
     contract_routes_ = std::move(routes);
     contract_whitelist_ = std::move(whitelist);
     contract_version_ = version;
@@ -1020,7 +1038,7 @@ bool ScriptRuntime::call_string(const char* chunk, const std::string& source) {
 bool ScriptRuntime::call_global(const char* func) {
     ++stats_.calls;
     used_instructions_ = 0;
-    lua_getglobal(L_, func);
+    raw_getglobal(L_, func);
     if (!lua_isfunction(L_, -1)) {
         lua_pop(L_, 1);
         fault(ScriptFaultEvent::Kind::kRuntime, func, "not a function");
@@ -1116,11 +1134,11 @@ bool ScriptRuntime::run_chunk(const char* chunk, const std::string& source) {
 
 void ScriptRuntime::set_global_string(const char* name, const std::string& value) {
     lua_pushlstring(L_, value.data(), value.size());
-    lua_setglobal(L_, name);
+    raw_setglobal(L_, name);
 }
 
 std::string ScriptRuntime::get_global_string(const char* name) {
-    lua_getglobal(L_, name);
+    raw_getglobal(L_, name);
     size_t len = 0;
     const char* s = lua_tolstring(L_, -1, &len);  // 布尔转换失败返回空
     std::string out(s ? s : "", s ? len : 0u);
@@ -1129,7 +1147,7 @@ std::string ScriptRuntime::get_global_string(const char* name) {
 }
 
 bool ScriptRuntime::get_global_bool(const char* name) {
-    lua_getglobal(L_, name);
+    raw_getglobal(L_, name);
     const bool out = lua_isboolean(L_, -1) && lua_toboolean(L_, -1) != 0;
     lua_pop(L_, 1);
     return out;

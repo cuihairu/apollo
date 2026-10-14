@@ -240,3 +240,61 @@ return t
     EXPECT_EQ(routes.at(1001), "onChat");
     EXPECT_EQ(rt.contract_write_whitelist(), (std::vector<std::uint64_t>{3}));
 }
+
+// ── 宿主侧 global 访问 raw 纪律（_ENV 元表可被脚本运行期挂上） ──
+
+TEST(ScriptState, HostileEnvMetatableSurvivesHostPaths) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.swap_module({"m", 1, {}}, "return { f = function() end }"));
+    // _ENV 挂 __index/__newindex 恶意 error——此后宿主侧一切 global
+    // 访问（call_module/get_global_*/set_global_string/swap 提交）走 raw。
+    ASSERT_TRUE(rt.call_string("poison", R"(
+setmetatable(_ENV, {
+    __index = function() error("__index must not fire") end,
+    __newindex = function() error("__newindex must not fire") end,
+})
+)"));
+    EXPECT_TRUE(rt.call_module("m", "f"));                  // raw 查模块 + 查函数
+    EXPECT_FALSE(rt.call_module("m", "ghost"));             // 缺 handler 记 fault
+    EXPECT_FALSE(rt.call_global("nosuch"));
+    EXPECT_EQ(rt.get_global_string("x"), "");
+    EXPECT_FALSE(rt.get_global_bool("x"));
+    rt.set_global_string("x", "v");                         // raw 写不经 __newindex
+    EXPECT_EQ(rt.get_global_string("x"), "v");
+    EXPECT_TRUE(rt.swap_module({"m", 2, {}}, "return {}"));  // 换表提交 raw
+    EXPECT_TRUE(rt.env_snapshot("m", 4).found);             // 快照面 raw
+}
+
+TEST(ScriptState, HostileModuleMetatableSurvivesCallPath) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.swap_module({"m", 1, {}}, "return { f = function() end }"));
+    ASSERT_TRUE(rt.swap_module({"m", 2, {}}, "return { f = function() end }"));  // 冷冻区 = v1
+    // 装载后模块表被挂恶意元表（load 期探测管不到运行期改表）。
+    ASSERT_TRUE(rt.call_string("poison", R"(
+setmetatable(m, { __index = function() error("__index must not fire") end })
+)"));
+    EXPECT_TRUE(rt.call_module("m", "f"));       // 自带字段 raw 命中
+    EXPECT_FALSE(rt.call_module("m", "ghost"));  // 缺 handler 记 fault 不崩
+    // 契约路由完整性闸经 resolve_handler：hostile 模块缺函数 → 拒换不崩。
+    ASSERT_TRUE(rt.call_string("env", "function onChat() end"));
+    EXPECT_FALSE(rt.load_contract(
+        "return { routes = { [1001] = 'm.ghost' } }"));
+    EXPECT_TRUE(rt.rollback_module("m"));        // 回滚提交 raw
+    EXPECT_EQ(rt.module_version("m"), 1u);
+}
+
+TEST(ScriptState, HostPathsKeepStackBalanced) {
+    // raw_setglobal 栈语义回归：宿主写/读全局后栈零残留（残留值会污染
+    // eval 语句路径的结果面——sanitizer 树先行暴露）。
+    ScriptRuntime rt(make_config());
+    rt.set_global_string("a", "1");
+    rt.set_global_string("b", "2");
+    EXPECT_EQ(rt.get_global_string("a"), "1");
+    ASSERT_TRUE(rt.swap_module({"m", 1, {}}, "return {}"));
+    ASSERT_TRUE(rt.swap_module({"m", 2, {}}, "return {}"));
+    ASSERT_TRUE(rt.rollback_module("m"));
+    std::string out;
+    EXPECT_TRUE(rt.eval_debug("x = 5", out));
+    EXPECT_TRUE(out.empty());  // 语句路径无返回值（残留栈会使此断言红）
+    EXPECT_EQ(lua_gettop(rt.raw()), 0);
+}
