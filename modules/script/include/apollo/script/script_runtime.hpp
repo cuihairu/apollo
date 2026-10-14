@@ -46,10 +46,18 @@ struct ScriptFaultEvent {
         kRuntime,          // 运行时 error
         kMemoryLimit,      // 内存超限
         kInstructionBudget, // 指令预算超限
+        kWarnBudget,       // §6.1 WARN：单次消耗 ≥ 预算 80%（256 tick 去抖）
+        kCircuitTripped,   // §6.1 TRIP：模块隔离
+        kCircuitRecovered, // §6.1 隔离解除（半开销账/热更/回滚）
     };
     Kind kind;
-    std::string chunk;    // 来源名（chunkname）
+    std::string chunk;    // 来源名（chunkname / 模块名 / handler 名）
     std::string message;  // 错误串
+    // §6.1 结构化字段（封闭集；引擎侧统一填充，下游按字段路由不解析文本）。
+    std::uint64_t ts_wall_ms = 0;  // wall 双写（clock-and-time §7 纪律）
+    std::uint64_t tick = 0;        // 宿主 tick（set_tick 喂入）
+    std::uint64_t consumed = 0;    // 本次指令消耗（10k 步进量化）
+    std::uint64_t budget = 0;      // 配置预算（0 = 不限）
 };
 
 struct ScriptStats {
@@ -67,6 +75,7 @@ struct ScriptStats {
     std::uint64_t attr_hook_skipped_budget = 0;    // §5.2 预算耗尽跳过
     std::uint64_t attr_hook_faults = 0;            // §5.1 钩子错误（原值保持）
     std::uint64_t circuit_rejects = 0;             // §6.1 隔离期短路拒调
+    std::uint64_t budget_warns = 0;                // §6.1 WARN 去抖后事件数
 };
 
 // §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
@@ -179,6 +188,14 @@ private:
     ScriptFaultEvent::Kind classify(int rc, const std::string& msg) const;
     void breaker_on_fault(const std::string& module, bool probing);
     void breaker_on_success(const std::string& module);
+    // §6.1 热更/回滚清账（隔离中则先发 RECOVER 事件再抹状态）。
+    void breaker_clear(const std::string& module, const char* reason);
+
+    // 事件出口单点：填结构化字段（wall/tick/consumed/budget）后交 sink，
+    // 不动 fault 计数（fault() 与 WARN/TRIP 共用）。
+    void send(ScriptFaultEvent&& e);
+    // §6.1 WARN：单次消耗 ≥ 预算 80% 且未超限；同 chunk 256 tick 去抖。
+    void warn_check(const char* chunk, std::uint64_t consumed);
     // §3.4 handler 可达判定（全局名或一层 module.func 点路径）；找到则留
     // 函数于栈顶（调用方负责弹出），未找到返回 false 且栈复原。
     bool resolve_handler(const std::string& handler);
@@ -214,6 +231,8 @@ private:
     };
     std::map<std::string, ModuleBreaker> breakers_;
 
+    // §6.1 WARN 去抖账（chunk → 上次 WARN tick）。
+    std::map<std::string, std::uint64_t> warn_ticks_;
     // §3.4 契约数据面（装载成功后与 _G["contract"] 同拍生效）。
     std::map<std::uint32_t, std::string> contract_routes_;
     std::vector<std::uint64_t> contract_whitelist_;

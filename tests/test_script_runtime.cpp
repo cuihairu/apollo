@@ -478,3 +478,96 @@ TEST(ScriptRuntime, ContractWhitelistFeedsAttrHook) {
     EXPECT_EQ(changes[0].new_value, 21);  // 白名单内修订
     EXPECT_EQ(changes[2].new_value, 2);   // 白名单外（7 ∉ {3}）原值
 }
+
+// ── §6.1 事件面：WARN 去抖 + TRIP/RECOVER + 结构化字段 ────
+
+namespace {
+// 预算 12000：一拍 hook（10k 步进）即 ≥80%（9600），两拍（20k）必超限。
+// 空 for 循环每迭代 ≥1 条 VM 指令 → 12000 次迭代恰好落 [10k, 20k) 一拍区间。
+ScriptConfig warn_config() {
+    ScriptConfig cfg = make_config();
+    cfg.instruction_budget = 12000;
+    return cfg;
+}
+}  // namespace
+
+TEST(ScriptRuntime, WarnFiresAt80PercentBudget) {
+    ScriptRuntime rt(warn_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}},
+                   "return { spin = function() for i = 1, 12000 do end end }");
+    EXPECT_TRUE(rt.call_module("m", "spin"));  // 成功执行（未超限）
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0].kind, ScriptFaultEvent::Kind::kWarnBudget);
+    EXPECT_EQ(events[0].consumed, 10000u);
+    EXPECT_EQ(events[0].budget, 12000u);
+    EXPECT_EQ(rt.stats().budget_warns, 1u);
+    EXPECT_EQ(rt.stats().faults, 0u);  // WARN 不计 fault
+}
+
+TEST(ScriptRuntime, WarnDebouncedWithin256Ticks) {
+    ScriptRuntime rt(warn_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}},
+                   "return { spin = function() for i = 1, 12000 do end end }");
+    rt.call_module("m", "spin");
+    rt.call_module("m", "spin");
+    EXPECT_EQ(events.size(), 1u);  // 同 (module,handler) 256 tick 内去抖
+    rt.set_tick(256);
+    rt.call_module("m", "spin");
+    EXPECT_EQ(events.size(), 2u);
+}
+
+TEST(ScriptRuntime, WarnUnderThresholdSilent) {
+    ScriptRuntime rt(warn_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}}, "return { tiny = function() return 1 end }");
+    EXPECT_TRUE(rt.call_module("m", "tiny"));
+    EXPECT_TRUE(events.empty());
+    EXPECT_EQ(rt.stats().budget_warns, 0u);
+}
+
+TEST(ScriptRuntime, TripAndRecoverEventsFire) {
+    ScriptRuntime rt(breaker_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    for (int i = 0; i < 3; ++i) {
+        rt.call_module("m", "boom");
+    }
+    // 3 FAULT + 1 TRIP
+    ASSERT_EQ(events.size(), 4u);
+    EXPECT_EQ(events[3].kind, ScriptFaultEvent::Kind::kCircuitTripped);
+    rt.set_tick(600);
+    EXPECT_TRUE(rt.call_module("m", "ok"));  // 半开探针成功
+    ASSERT_EQ(events.size(), 5u);
+    EXPECT_EQ(events[4].kind, ScriptFaultEvent::Kind::kCircuitRecovered);
+}
+
+TEST(ScriptRuntime, HotSwapClearsEmitsRecover) {
+    ScriptRuntime rt(breaker_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.swap_module({"m", 1, {}}, kBreakerModule);
+    for (int i = 0; i < 3; ++i) {
+        rt.call_module("m", "boom");
+    }
+    rt.swap_module({"m", 2, {}}, "return { version = 2 }");
+    ASSERT_GE(events.size(), 4u);
+    EXPECT_EQ(events.back().kind, ScriptFaultEvent::Kind::kCircuitRecovered);
+}
+
+TEST(ScriptRuntime, FaultEventCarriesStructuredFields) {
+    ScriptRuntime rt(make_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    rt.set_tick(42);
+    rt.call_string("bad", "error('boom')");
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0].tick, 42u);
+    EXPECT_EQ(events[0].budget, 100000u);
+    EXPECT_GT(events[0].ts_wall_ms, 0u);
+}

@@ -3,6 +3,7 @@
 #include "apollo/script/script_runtime.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 
 namespace apollo {
@@ -12,6 +13,16 @@ namespace {
 
 // 指令 hook 粗检步进（§6：粗检每 10k 指令）。
 constexpr lua_Integer kHookStep = 10000;
+
+// §6.1 WARN 去抖窗（同 chunk 每 256 tick 至多一条）。
+constexpr std::uint64_t kWarnDebounceTicks = 256;
+
+std::uint64_t wall_now_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
+}
 
 // registry 存 this 的固定 key（静态地址唯一）。
 const char kSelfKey = 0;
@@ -196,7 +207,7 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
     }
     module_refs_[spec.name] = new_ref;
     module_versions_[spec.name] = spec.version;
-    breakers_.erase(spec.name);  // §6.1 热更新账：新版本新账，无需等冷却
+    breaker_clear(spec.name, "hot swap cleared quarantine");  // §6.1 热更新账
     ++stats_.reload_success;
     if (reload_listener_) {
         reload_listener_(spec.name.c_str(), spec.version);
@@ -246,7 +257,7 @@ bool ScriptRuntime::rollback_module(const std::string& name) {
     module_refs_[name] = restored_ref;
     lua_setglobal(L_, name.c_str());
     module_versions_[name] = restored_version;
-    breakers_.erase(name);  // §6.1 回滚同热更：恢复版本即新账
+    breaker_clear(name, "rollback cleared quarantine");  // §6.1 回滚同热更：新账
     if (reload_listener_) {
         reload_listener_(name.c_str(), restored_version);  // §3.2 reload 伪事件
     }
@@ -374,6 +385,7 @@ bool ScriptRuntime::call_module(const std::string& module, const char* func) {
         }
     }
     if (ok) {
+        warn_check(module.c_str(), used_instructions_);
         breaker_on_success(module);
     } else {
         breaker_on_fault(module, probing);
@@ -389,6 +401,9 @@ void ScriptRuntime::breaker_on_fault(const std::string& module, bool probing) {
                                       config_.breaker_max_quarantine_ticks);
         br.quarantined_until = tick_ + br.quarantine_span;
         br.fault_ticks.clear();
+        send(ScriptFaultEvent{ScriptFaultEvent::Kind::kCircuitTripped, module,
+                              "module re-quarantined (half-open fault) for " +
+                                  std::to_string(br.quarantine_span) + " ticks"});
         return;
     }
     // 滑窗 W：窗外 FAULT 时间戳到期弹出。
@@ -401,6 +416,9 @@ void ScriptRuntime::breaker_on_fault(const std::string& module, bool probing) {
         br.quarantine_span = config_.breaker_quarantine_ticks;
         br.quarantined_until = tick_ + br.quarantine_span;
         br.fault_ticks.clear();
+        send(ScriptFaultEvent{ScriptFaultEvent::Kind::kCircuitTripped, module,
+                              "module quarantined for " +
+                                  std::to_string(br.quarantine_span) + " ticks"});
     }
 }
 
@@ -408,7 +426,21 @@ void ScriptRuntime::breaker_on_success(const std::string& module) {
     auto bit = breakers_.find(module);
     if (bit != breakers_.end() && bit->second.quarantined_until != 0) {
         breakers_.erase(bit);  // §6.1 半开探针成功 → 销账解除
+        send(ScriptFaultEvent{ScriptFaultEvent::Kind::kCircuitRecovered, module,
+                              "half-open probe succeeded"});
     }
+}
+
+void ScriptRuntime::breaker_clear(const std::string& module, const char* reason) {
+    auto bit = breakers_.find(module);
+    if (bit == breakers_.end()) {
+        return;
+    }
+    if (bit->second.quarantined_until != 0) {
+        send(ScriptFaultEvent{ScriptFaultEvent::Kind::kCircuitRecovered, module,
+                              std::string(reason)});
+    }
+    breakers_.erase(bit);
 }
 
 bool ScriptRuntime::is_quarantined(const std::string& module) const {
@@ -573,6 +605,7 @@ bool ScriptRuntime::call_route(std::uint32_t msg_id) {
         fault(classify(rc, msg), it->second.c_str(), msg);
         return false;
     }
+    warn_check(it->second.c_str(), used_instructions_);
     return true;
 }
 
@@ -599,6 +632,7 @@ bool ScriptRuntime::call_global(const char* func) {
         fault(classify(rc, msg), func, msg);
         return false;
     }
+    warn_check(func, used_instructions_);
     return true;
 }
 
@@ -617,6 +651,7 @@ bool ScriptRuntime::run_chunk(const char* chunk, const std::string& source) {
         fault(classify(rc, msg), chunk, msg);
         return false;
     }
+    warn_check(chunk, used_instructions_);  // §6.1 WARN：≥80% 预算完成
     return true;
 }
 
@@ -671,10 +706,39 @@ void ScriptRuntime::fault(ScriptFaultEvent::Kind kind, const char* chunk,
         case ScriptFaultEvent::Kind::kInstructionBudget:
             ++stats_.fault_budget;
             break;
+        case ScriptFaultEvent::Kind::kWarnBudget:
+        case ScriptFaultEvent::Kind::kCircuitTripped:
+        case ScriptFaultEvent::Kind::kCircuitRecovered:
+            break;  // 非 fault 级（走 send 直出，不经本函数计数）
     }
+    send(ScriptFaultEvent{kind, chunk, msg});
+}
+
+void ScriptRuntime::send(ScriptFaultEvent&& e) {
+    e.ts_wall_ms = wall_now_ms();
+    e.tick = tick_;
+    e.consumed = used_instructions_;
+    e.budget = config_.instruction_budget;
     if (sink_) {
-        sink_(ScriptFaultEvent{kind, chunk, msg});
+        sink_(e);
     }
+}
+
+void ScriptRuntime::warn_check(const char* chunk, std::uint64_t consumed) {
+    if (config_.instruction_budget == 0 ||
+        consumed * 5 < config_.instruction_budget * 4) {
+        return;  // < 80% 或不限预算：静默
+    }
+    const auto it = warn_ticks_.find(chunk);
+    // 存 tick+1（0 = 从未 WARN），tick 0 首警不被误判为已警。
+    const std::uint64_t stamp = it != warn_ticks_.end() ? it->second : 0;
+    if (stamp != 0 && tick_ - (stamp - 1) < kWarnDebounceTicks) {
+        return;  // §6.1 去抖：同 chunk 256 tick 内至多一条
+    }
+    warn_ticks_[chunk] = tick_ + 1;
+    ++stats_.budget_warns;
+    send(ScriptFaultEvent{ScriptFaultEvent::Kind::kWarnBudget, chunk,
+                          "instruction budget near limit"});
 }
 
 // ---- alloc/hook 回调桥（friend 面最小化：单字段访问器） ----
