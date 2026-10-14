@@ -31,9 +31,11 @@ target_include_directories(full_loop_demo PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
+    # 直编 scene.cpp（Scene 脚本桥批起含 script_runtime.hpp）
+    ${CMAKE_SOURCE_DIR}/modules/script/include
     ${CMAKE_SOURCE_DIR}/include
 )
-target_link_libraries(full_loop_demo PRIVATE apollo apollo::base apollo::core)
+target_link_libraries(full_loop_demo PRIVATE apollo apollo::base apollo::core apollo::script)
 
 # ========== Benchmark ==========
 # 三模型场景基准（P3-2 批 A）：直编 game world 六源（scene_tests 同款惯例，
@@ -61,9 +63,11 @@ target_include_directories(benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/net/linktrace/include
     ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+    # 直编 scene.cpp（Scene 脚本桥批起含 script_runtime.hpp）
+    ${CMAKE_SOURCE_DIR}/modules/script/include
     ${CMAKE_SOURCE_DIR}/include
 )
-target_link_libraries(benchmark PRIVATE apollo apollo::base apollo::core)
+target_link_libraries(benchmark PRIVATE apollo apollo::base apollo::core apollo::script)
 
 # ========== Server Template ==========
 add_executable(server_template server_template.cpp)
