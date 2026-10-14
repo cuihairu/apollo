@@ -1754,6 +1754,24 @@ if(MSVC)
 endif()
 add_test(NAME ScriptTests COMMAND script_tests)
 
+# ========== Script Async Tests (scripting-lua.md §8 + §7.2) ==========
+# 异步底座测试（L1 交接 + L2 协程面 + 协程清单）；无门控注册（同
+# script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(async_tests test_script_async.cpp)
+target_link_libraries(async_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(async_tests PRIVATE ws2_32)
+    target_compile_definitions(async_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(async_tests PRIVATE /utf-8)
+endif()
+add_test(NAME AsyncTests COMMAND async_tests)
+
 # ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
 # 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
 # script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。

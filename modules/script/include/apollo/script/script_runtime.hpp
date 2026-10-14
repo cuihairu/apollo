@@ -21,6 +21,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,10 @@ struct ScriptConfig {
     std::size_t debug_eval_result_max = 4096;
     // §6.1 WARN 软阈值（占预算百分比，默认 80；0 = 关闭 WARN）。
     std::uint32_t warn_threshold_percent = 80;
+    // §8 异步：未显式给超时的服务默认超时（ms，0 = 不限时）；协程超龄阈值
+    // （tick 计，0 = 关闭泄漏检测——超龄即在协程清单标 leaked）。
+    std::uint64_t async_default_timeout_ms = 5000;
+    std::uint64_t async_leak_threshold_ticks = 0;
 };
 
 struct ScriptFaultEvent {
@@ -87,6 +92,13 @@ struct ScriptStats {
     std::uint64_t debug_evals = 0;                 // §7.1 attach eval 次数
     std::uint64_t cache_hits = 0;                  // §3.5 字节码缓存命中
     std::uint64_t cache_misses = 0;                // §3.5 缓存未命中（回退源码）
+    std::uint64_t async_requests = 0;              // §8 async.call 受理
+    std::uint64_t async_completed = 0;             // §8 正常完成 resume
+    std::uint64_t async_failed = 0;                // §8 服务侧失败终止
+    std::uint64_t async_timeouts = 0;              // §8 超时终止
+    std::uint64_t async_cancelled = 0;             // §8 协作式取消
+    std::uint64_t async_invalid = 0;               // §8 re-validate 失败终止
+    std::uint64_t async_late = 0;                  // §8 迟到/无主完成丢弃
 };
 
 // §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
@@ -144,6 +156,51 @@ struct OverBudgetRecord {
     std::uint64_t consumed = 0;
     std::uint64_t budget = 0;
 };
+
+// §8.2 异步交接物（消息不是 future——跨 yield 不持 lua_State 引用；类型化
+// 单值快照，实参与完成共用；DB 行集等富载荷由消费批在单值语义上自组）。
+struct LuaValue {
+    enum class Type { kNil, kBool, kInt, kDouble, kString };
+    Type type = Type::kNil;
+    bool b = false;
+    std::int64_t i = 0;
+    double d = 0;
+    std::string s;
+    static LuaValue nil() { return {}; }
+    static LuaValue of_bool(bool v) {
+        LuaValue x; x.type = Type::kBool; x.b = v; return x;
+    }
+    static LuaValue of_int(std::int64_t v) {
+        LuaValue x; x.type = Type::kInt; x.i = v; return x;
+    }
+    static LuaValue of_double(double v) {
+        LuaValue x; x.type = Type::kDouble; x.d = v; return x;
+    }
+    static LuaValue of_string(std::string v) {
+        LuaValue x; x.type = Type::kString; x.s = std::move(v); return x;
+    }
+};
+
+// §7.2 协程清单行（§8.2 协程登记表 = 数据源）：状态、挂起原因、在等请求、
+// 超龄（泄漏检测）。running/normal 为 resume 期间瞬态，owning 线程快照点
+// 不可见——清单呈现 suspended/ready 两态加终态懒清扫。
+struct LuaCoroutineInfo {
+    std::uint64_t handle = 0;
+    std::string status;                  // "suspended"（await/yield）/ "ready"
+    std::string suspend_reason;          // "await <service>" / "yield" / ""
+    std::string origin;                  // 归因键：module:func / coroutine.create|wrap
+    std::uint64_t born_tick = 0;
+    std::uint64_t age_ticks = 0;
+    std::uint64_t pending_request = 0;   // 0 = 无在等请求
+    std::uint64_t timeout_ms = 0;        // awaiting 时的超时配置
+    bool leaked = false;                 // 超龄（async_leak_threshold_ticks 命中）
+};
+
+// §8.2 L0 执行层服务注册点（Redis/DB/跨服随各自批次插入）：受理即返回
+// （真实 IO 归执行层独立线程/异步客户端），完成时（任意线程）调
+// complete_async/fail_async——不阻塞 owning 线程是 tick 红线。
+using AsyncHandler = std::function<void(std::uint64_t request_id,
+                                        const std::vector<LuaValue>& args)>;
 
 class ScriptRuntime {
 public:
@@ -260,6 +317,32 @@ public:
     // 结果串截断（debug_eval_result_max）、同 tick 次数限流（防打爆控制通道）。
     // 失败面 result = 错误原文（限流/语法/运行错——回执与审计消费）。
     bool eval_debug(const std::string& source, std::string& result);
+
+    // ---- §8 异步底座（L1 交接 + L2 协程面；L0 执行层 = 宿主注册服务） ----
+
+    // 服务注册（同名后注册覆盖）；timeout_ms = 0 用 config 默认。
+    void register_async_service(const char* name, AsyncHandler handler,
+                                std::uint64_t timeout_ms = 0);
+    // 业务 handler 以协程形态启动（§8.2 L2：脚本侧同步观感）；熔断隔离期
+    // 短路同 call_module。返回 false = 启动即错（模块/handler 缺失或首段
+    // 执行错误）；挂起（含 await）返回 true。
+    bool call_coroutine(const std::string& module, const char* func);
+    // 完成投递（任意线程可调；入队后由 drain_async 在 tick 边界统一 resume
+    // ——§8.2 交接物是消息不是 future）。fail_async = 服务侧失败。
+    void complete_async(std::uint64_t request_id, const LuaValue& value);
+    void fail_async(std::uint64_t request_id, std::string error);
+    // tick 边界调试点（宿主择机调用）：超时清点 + 完成投递（validator →
+    // resume）。IO/DB 线程永不碰 lua_State（§8.3 纪律 1）。
+    void drain_async();
+    // 协作式取消（§8.3 纪律 3）：pending 协程下一 drain 以取消错误终止；
+    // 运行中的不强杀，自然收尾后于下一挂起点生效。
+    void cancel_pending(const char* reason);
+    // resume 注入前 re-validate（§8.3 纪律 2；不设 = 恒通过，场景接线批挂
+    // 实体/会话/场景校验，失效即以错误终止不注入僵尸结果）。
+    void set_async_validator(std::function<bool(const LuaCoroutineInfo&)> validator);
+    // §7.2 协程清单（懒清扫终态条目；owning 线程 tick 边界调用）。
+    [[nodiscard]] std::vector<LuaCoroutineInfo> coroutine_snapshot();
+
     std::size_t memory_used() const;
     const ScriptStats& stats() const { return stats_; }
 
@@ -271,7 +354,7 @@ public:
     void acquire_bytes(std::size_t n);
     bool exceeds_limit(std::size_t delta) const;
     std::uint64_t& fault_memory_counter();
-    void tick_instructions(lua_Integer step);
+    void tick_instructions(lua_State* L, lua_Integer step);
 
 private:
     bool run_chunk(const char* chunk, const std::string& source);
@@ -306,6 +389,65 @@ private:
     // §7.3 调用边界入账（chunk、本次指令消耗、墙钟 us）。
     void profile_record(const char* chunk, std::uint64_t instructions,
                         std::uint64_t wall_us);
+
+    // ---- §8 异步底座内部 ----
+    // §8 服务表 + 协程登记表（owning 线程独占）。
+    struct AsyncService {
+        AsyncHandler handler;
+        std::uint64_t timeout_ms = 0;
+    };
+    struct CoroutineEntry {
+        lua_State* thread = nullptr;
+        int thread_ref = LUA_NOREF;      // registry anchor
+        std::string origin;
+        std::string module;              // 归属模块（熔断归因；脚本自建为空）
+        std::uint64_t born_tick = 0;
+        bool started = false;
+        bool awaiting = false;
+        std::uint64_t request_id = 0;
+        std::string reason;              // "await <service>"；空 = 裸 yield
+        std::uint64_t timeout_ms = 0;
+        std::uint64_t deadline_ms = 0;   // steady-ms（0 = 不限时）
+    };
+    enum class AsyncCause { kDone, kError, kTimeout, kCancelled, kInvalid };
+    struct AsyncCompletion {
+        std::uint64_t request_id = 0;
+        AsyncCause cause = AsyncCause::kDone;
+        std::string error;
+        LuaValue value;
+    };
+    using CoroutineMap = std::map<std::uint64_t, CoroutineEntry>;
+
+    // 协程登记（T 须在 L_ 栈顶；hook + registry anchor 防 GC 回收挂起协程）。
+    std::uint64_t register_coroutine_(lua_State* T, std::string origin,
+                                      std::string module);
+    // 登记表除名（unref + 线程反查表抹除），返回下一迭代位。
+    CoroutineMap::iterator drop_coroutine_(CoroutineMap::iterator it);
+    // 完成注入 resume（cont 消费 async_delivered_；终态除名）。
+    void resume_with_completion_(std::uint64_t handle, AsyncCompletion&& comp);
+    // resume 收尾三态（跑完除名 / 再挂起 / 错误终止）。injected_error =
+    // 宿主注入错误（超时/取消/失效）——fault 照发但不计模块熔断。
+    bool finalize_resume_(std::uint64_t handle, int rc, int nres,
+                          bool injected_error = false);
+    void install_async_surface_();
+
+    static int async_call_impl_(lua_State* L);        // apollo.async.call
+    static int async_cont_(lua_State* L, int status, lua_KContext ctx);
+    static int coroutine_create_impl_(lua_State* L);  // coroutine.create 替换（登记）
+    static int coroutine_wrap_impl_(lua_State* L);    // coroutine.wrap 替换（登记）
+    static int coroutine_wrap_resume_(lua_State* L);  // wrap 闭包
+    static int coroutine_resume_impl_(lua_State* L);  // coroutine.resume 替换（打点）
+
+    std::map<std::string, AsyncService> async_services_;
+    CoroutineMap coroutines_;
+    std::map<lua_State*, std::uint64_t> coroutine_by_thread_;
+    std::map<std::uint64_t, std::uint64_t> async_pending_;      // request_id → handle
+    std::map<std::uint64_t, AsyncCompletion> async_delivered_;  // resume 期间交接
+    std::deque<AsyncCompletion> completions_;                   // async_mtx_ 守护
+    mutable std::mutex async_mtx_;
+    std::function<bool(const LuaCoroutineInfo&)> async_validator_;
+    std::uint64_t next_coroutine_handle_ = 1;
+    std::uint64_t next_request_id_ = 1;
 
     ScriptConfig config_;
     lua_State* L_ = nullptr;

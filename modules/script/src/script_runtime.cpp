@@ -119,6 +119,48 @@ std::uint64_t steady_now_us() {
             .count());
 }
 
+// §8.3 超时清点墙钟（steady-ms）。
+std::uint64_t steady_now_ms() {
+    return steady_now_us() / 1000;
+}
+
+// §8.2 异步交接物取值（只读 API，不触元方法；数值/串分型，无就地转换——
+// 栈上必是字符串才走 tolstring）。
+LuaValue read_async_arg(lua_State* L, int idx) {
+    switch (lua_type(L, idx)) {
+        case LUA_TBOOLEAN:
+            return LuaValue::of_bool(lua_toboolean(L, idx) != 0);
+        case LUA_TNUMBER:
+            if (lua_isinteger(L, idx)) {
+                return LuaValue::of_int(
+                    static_cast<std::int64_t>(lua_tointeger(L, idx)));
+            }
+            return LuaValue::of_double(lua_tonumber(L, idx));
+        case LUA_TSTRING: {
+            std::size_t len = 0;
+            const char* s = lua_tolstring(L, idx, &len);
+            return LuaValue::of_string(std::string(s ? s : "", len));
+        }
+        default:
+            return LuaValue::nil();  // nil/table/function 等 → nil（单值语义）
+    }
+}
+
+// §8.2 完成注入（typed push）。
+void push_async_value(lua_State* L, const LuaValue& v) {
+    switch (v.type) {
+        case LuaValue::Type::kNil: lua_pushnil(L); break;
+        case LuaValue::Type::kBool: lua_pushboolean(L, v.b ? 1 : 0); break;
+        case LuaValue::Type::kInt:
+            lua_pushinteger(L, static_cast<lua_Integer>(v.i));
+            break;
+        case LuaValue::Type::kDouble: lua_pushnumber(L, v.d); break;
+        case LuaValue::Type::kString:
+            lua_pushlstring(L, v.s.data(), v.s.size());
+            break;
+    }
+}
+
 // registry 存 this 的固定 key（静态地址唯一）。
 const char kSelfKey = 0;
 
@@ -162,7 +204,7 @@ void script_hook(lua_State* L, lua_Debug* /*ar*/) {
     if (!self) {
         return;
     }
-    self->tick_instructions(kHookStep);
+    self->tick_instructions(L, kHookStep);
 }
 
 // base 库 load 替换（§2：运行期一切字节串按源码处理；mode "t" 拒二进制）。
@@ -236,6 +278,10 @@ ScriptRuntime::ScriptRuntime(ScriptConfig config) : config_(config) {
             bytecode_cache_dir_ = dir;
         }
     }
+
+    // §8 异步底座面：apollo.async 模块 + coroutine.create/wrap 登记（协程
+    // 登记表 = §7.2 协程清单数据源）。
+    install_async_surface_();
 }
 
 ScriptRuntime::~ScriptRuntime() {
@@ -1276,6 +1322,515 @@ void ScriptRuntime::warn_check(const char* chunk, std::uint64_t consumed) {
                           "instruction budget near limit"});
 }
 
+// ---- §8 异步底座（L1 交接 + L2 协程面） ----
+
+void ScriptRuntime::install_async_surface_() {
+    // coroutine.create/wrap/resume 替换：stdlib 原件不登记——脚本自建协程
+    // 必须进登记表（§7.2 清单 + 指令 hook），且首跑须打 started（终态懒清扫
+    // 判据），否则清单有盲区/永挂 ready。status/yield 沿用 stdlib（同一
+    // thread 对象，宿主只加登记）。stdlib 表无元表，raw set 亦安全。
+    raw_getglobal(L_, "coroutine");                  // [coro]
+    lua_pushstring(L_, "create");                    // [coro, "create"]
+    lua_pushcfunction(L_, coroutine_create_impl_);   // [coro, "create", fn]
+    lua_rawset(L_, -3);                              // coro.create = fn → [coro]
+    lua_pushstring(L_, "wrap");
+    lua_pushcfunction(L_, coroutine_wrap_impl_);
+    lua_rawset(L_, -3);                              // [coro]
+    lua_pushstring(L_, "resume");
+    lua_pushcfunction(L_, coroutine_resume_impl_);
+    lua_rawset(L_, -3);                              // [coro]
+    lua_pop(L_, 1);                                  // []
+
+    // apollo.async = { call = ... }（嵌套全局表；apollo 缺则先建——ctor 期
+    // 无脚本运行，raw 建/取即安全）。
+    lua_newtable(L_);                                // [async]
+    lua_pushcfunction(L_, async_call_impl_);
+    lua_setfield(L_, -2, "call");                    // [async]
+    raw_getglobal(L_, "apollo");                     // [async, apollo?]
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);                              // [async]
+        lua_newtable(L_);                            // [async, t]
+        raw_setglobal(L_, "apollo");                 // [async]
+        raw_getglobal(L_, "apollo");                 // [async, apollo]
+    }
+    lua_pushstring(L_, "async");                     // [async, apollo, "async"]
+    lua_pushvalue(L_, -3);                           // [.., "async", async]
+    lua_rawset(L_, -3);                              // apollo.async = async → [async, apollo]
+    lua_pop(L_, 2);
+}
+
+void ScriptRuntime::register_async_service(const char* name, AsyncHandler handler,
+                                           std::uint64_t timeout_ms) {
+    async_services_[name] = AsyncService{std::move(handler), timeout_ms};
+}
+
+void ScriptRuntime::set_async_validator(
+    std::function<bool(const LuaCoroutineInfo&)> validator) {
+    async_validator_ = std::move(validator);
+}
+
+std::uint64_t ScriptRuntime::register_coroutine_(lua_State* T, std::string origin,
+                                                 std::string module) {
+    // T 须在 L_ 栈顶：registry anchor（挂起协程不被 GC 回收），随后弹栈。
+    const int ref = luaL_ref(L_, LUA_REGISTRYINDEX);
+    const std::uint64_t handle = next_coroutine_handle_++;
+    CoroutineEntry e;
+    e.thread = T;
+    e.thread_ref = ref;
+    e.origin = std::move(origin);
+    e.module = std::move(module);
+    e.born_tick = tick_;
+    coroutines_.emplace(handle, std::move(e));
+    coroutine_by_thread_[T] = handle;
+    return handle;
+}
+
+std::map<std::uint64_t, ScriptRuntime::CoroutineEntry>::iterator
+ScriptRuntime::drop_coroutine_(CoroutineMap::iterator it) {
+    luaL_unref(L_, LUA_REGISTRYINDEX, it->second.thread_ref);
+    coroutine_by_thread_.erase(it->second.thread);
+    return coroutines_.erase(it);
+}
+
+bool ScriptRuntime::call_coroutine(const std::string& module, const char* func) {
+    auto bit = breakers_.find(module);
+    if (bit != breakers_.end() && bit->second.quarantined_until != 0 &&
+        tick_ < bit->second.quarantined_until) {
+        ++stats_.circuit_rejects;  // 隔离期短路，不进 Lua
+        return false;
+    }
+    ++stats_.calls;
+    used_instructions_ = 0;
+    raw_getglobal(L_, module.c_str());
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        fault(ScriptFaultEvent::Kind::kRuntime, module.c_str(), "module not a table");
+        return false;
+    }
+    raw_getfield(L_, -1, func);
+    if (!lua_isfunction(L_, -1)) {
+        lua_pop(L_, 2);
+        fault(ScriptFaultEvent::Kind::kRuntime, module.c_str(),
+              "handler not a function");
+        return false;
+    }
+    // [module, func] → 新协程线程承载（§8.2：跨 yield 业务以协程形态运行）
+    lua_newthread(L_);                            // [module, func, T]
+    lua_sethook(lua_tothread(L_, -1), script_hook, LUA_MASKCOUNT,
+                static_cast<int>(kHookStep));
+    lua_insert(L_, -2);                           // [module, T, func]
+    lua_State* T = lua_tothread(L_, -2);
+    lua_xmove(L_, T, 1);                          // func → T；L_: [module, T]
+    const std::uint64_t handle =
+        register_coroutine_(T, module + ":" + func, module);  // 弹 T → [module]
+    lua_pop(L_, 1);
+    auto& e = coroutines_[handle];
+    e.started = true;
+    const auto t0 = steady_now_us();
+    int nres = 0;
+    const int rc = lua_resume(T, L_, 0, &nres);
+    stats_.instructions += used_instructions_;
+    profile_record(e.origin.c_str(), used_instructions_, steady_now_us() - t0);
+    return finalize_resume_(handle, rc, nres);
+}
+
+bool ScriptRuntime::finalize_resume_(std::uint64_t handle, int rc, int nres,
+                                      bool injected_error) {
+    auto eit = coroutines_.find(handle);
+    if (eit == coroutines_.end()) {
+        return rc == LUA_OK;
+    }
+    CoroutineEntry& e = eit->second;
+    if (rc == LUA_OK) {
+        lua_settop(e.thread, 0);  // 结果已交付（wrap 由脚本取），栈面清零
+        if (!e.module.empty()) {
+            breaker_on_success(e.module);
+        }
+        warn_check(e.origin.c_str(), used_instructions_);
+        drop_coroutine_(eit);
+        return true;
+    }
+    if (rc == LUA_YIELD) {
+        if (!e.awaiting) {
+            e.reason = "yield";  // 裸 yield（脚本自管挂起）；await 已在 call impl 记因
+        }
+        return true;
+    }
+    // 执行错误：协程终止（§8.3 纪律 2——脚本侧 pcall 可捕获，此处走 §6 审计）。
+    const std::string msg = lua_tostring(e.thread, -1) ? lua_tostring(e.thread, -1) : "";
+    lua_settop(e.thread, 0);
+    fault(classify(rc, msg), e.origin.c_str(), msg);
+    // 注入错误（超时/取消/失效）是宿主发起的运营终态，不计模块熔断——
+    // 否则停机取消会把全部业务模块打进隔离；仅真实执行错误归因熔断。
+    if (!injected_error && !e.module.empty()) {
+        breaker_on_fault(e.module, false);
+    }
+    drop_coroutine_(eit);
+    return false;
+}
+
+void ScriptRuntime::resume_with_completion_(std::uint64_t handle,
+                                            AsyncCompletion&& comp) {
+    auto eit = coroutines_.find(handle);
+    if (eit == coroutines_.end()) {
+        return;
+    }
+    CoroutineEntry& e = eit->second;
+    e.awaiting = false;
+    e.request_id = 0;
+    e.reason.clear();
+    e.timeout_ms = 0;
+    e.deadline_ms = 0;
+    const bool injected = comp.cause != AsyncCause::kDone;
+    const std::uint64_t rid = comp.request_id;
+    async_delivered_[rid] = std::move(comp);
+    ++stats_.calls;
+    used_instructions_ = 0;
+    const auto t0 = steady_now_us();
+    int nres = 0;
+    const int rc = lua_resume(e.thread, L_, 0, &nres);
+    stats_.instructions += used_instructions_;
+    profile_record(e.origin.c_str(), used_instructions_, steady_now_us() - t0);
+    async_delivered_.erase(rid);  // cont 已消费；防御性清残留
+    finalize_resume_(handle, rc, nres, injected);
+}
+
+int ScriptRuntime::async_call_impl_(lua_State* L) {
+    lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    if (!self) {
+        return luaL_error(L, "async: runtime missing");
+    }
+    const char* svc = luaL_checkstring(L, 1);
+    if (L == self->L_) {
+        return luaL_error(L, "apollo.async.call outside coroutine");
+    }
+    auto sit = self->async_services_.find(svc);
+    if (sit == self->async_services_.end()) {
+        return luaL_error(L, "async service not registered: %s", svc);
+    }
+    auto tit = self->coroutine_by_thread_.find(L);
+    if (tit == self->coroutine_by_thread_.end()) {
+        return luaL_error(L, "async: untracked coroutine");
+    }
+    auto eit = self->coroutines_.find(tit->second);
+    if (eit == self->coroutines_.end()) {
+        return luaL_error(L, "async: untracked coroutine");
+    }
+    std::vector<LuaValue> args;
+    const int n = lua_gettop(L);
+    args.reserve(static_cast<std::size_t>(n > 1 ? n - 1 : 0));
+    for (int i = 2; i <= n; ++i) {
+        args.push_back(read_async_arg(L, i));
+    }
+    const std::uint64_t rid = self->next_request_id_++;
+    CoroutineEntry& e = eit->second;
+    const std::uint64_t timeout =
+        sit->second.timeout_ms != 0 ? sit->second.timeout_ms
+                                    : self->config_.async_default_timeout_ms;
+    e.awaiting = true;
+    e.request_id = rid;
+    e.reason = std::string("await ") + svc;
+    e.timeout_ms = timeout;
+    e.deadline_ms = timeout != 0 ? steady_now_ms() + timeout : 0;
+    self->async_pending_[rid] = tit->second;
+    ++self->stats_.async_requests;
+    {
+        // 受理即返回（L0 纪律：不阻塞 owning 线程）。实参 vector 作用域收在
+        // yield 之前——lua_yieldk 跳栈不走 C++ 析构，RAII 局部不得横跨挂起点。
+        std::vector<LuaValue> handler_args = std::move(args);
+        sit->second.handler(rid, handler_args);
+    }
+    return lua_yieldk(L, 0, static_cast<lua_KContext>(rid), async_cont_);
+}
+
+int ScriptRuntime::async_cont_(lua_State* L, int /*status*/, lua_KContext ctx) {
+    lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    if (!self) {
+        return luaL_error(L, "async: runtime missing");
+    }
+    const auto rid = static_cast<std::uint64_t>(ctx);
+    auto it = self->async_delivered_.find(rid);
+    if (it == self->async_delivered_.end()) {
+        lua_pushliteral(L, "async internal: completion missing");
+        return lua_error(L);
+    }
+    AsyncCompletion comp = std::move(it->second);
+    self->async_delivered_.erase(it);
+    if (comp.cause != AsyncCause::kDone) {
+        // 超时/取消/失败/失效 → 协程以错误终止（§8.3 纪律 2/3；脚本侧
+        // pcall 捕获，走 §6 错误审计）。错误串先复制进 Lua，再以 swap 释放
+        // 宿主侧副本——lua_error 跳栈不走 C++ 析构，且 string move-assign
+        // 对 SSO 右值不释放左值堆缓冲，必须显式换出。
+        lua_pushlstring(L, comp.error.data(), comp.error.size());
+        std::string().swap(comp.error);
+        return lua_error(L);
+    }
+    push_async_value(L, comp.value);
+    return 1;
+}
+
+int ScriptRuntime::coroutine_create_impl_(lua_State* L) {
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    if (!self) {
+        return luaL_error(L, "async: runtime missing");
+    }
+    lua_newthread(L);                              // [f, T]
+    lua_sethook(lua_tothread(L, -1), script_hook, LUA_MASKCOUNT,
+                static_cast<int>(kHookStep));
+    lua_insert(L, -2);                             // [T, f]
+    lua_State* T = lua_tothread(L, -2);
+    lua_xmove(L, T, 1);                            // f → T；L: [T]
+    const std::uint64_t handle = self->register_coroutine_(T, "coroutine.create", "");
+    lua_rawgeti(L, LUA_REGISTRYINDEX, self->coroutines_[handle].thread_ref);
+    return 1;
+}
+
+int ScriptRuntime::coroutine_wrap_impl_(lua_State* L) {
+    luaL_checktype(L, 1, LUA_TFUNCTION);
+    lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    if (!self) {
+        return luaL_error(L, "async: runtime missing");
+    }
+    lua_newthread(L);                              // [f, T]
+    lua_sethook(lua_tothread(L, -1), script_hook, LUA_MASKCOUNT,
+                static_cast<int>(kHookStep));
+    lua_insert(L, -2);                             // [T, f]
+    lua_State* T = lua_tothread(L, -2);
+    lua_xmove(L, T, 1);                            // f → T；L: [T]
+    const std::uint64_t handle =
+        self->register_coroutine_(T, "coroutine.wrap", "");  // 弹 T
+    lua_rawgeti(L, LUA_REGISTRYINDEX,
+                self->coroutines_[handle].thread_ref);   // 重压 T
+    lua_pushcclosure(L, coroutine_wrap_resume_, 1);  // T 作 upvalue
+    return 1;
+}
+
+int ScriptRuntime::coroutine_wrap_resume_(lua_State* L) {
+    lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    if (!self) {
+        return luaL_error(L, "async: runtime missing");
+    }
+    lua_State* T = lua_tothread(L, lua_upvalueindex(1));
+    auto tit = self->coroutine_by_thread_.find(T);
+    const std::uint64_t handle =
+        tit != self->coroutine_by_thread_.end() ? tit->second : 0;
+    // 指针直取（map 内串，函数期有效）：lua_error 跳栈不走 C++ 析构，
+    // 错误路径不得横跨堆串局部。
+    const char* origin = "coroutine.wrap";
+    if (handle != 0) {
+        auto eit = self->coroutines_.find(handle);
+        if (eit != self->coroutines_.end()) {
+            eit->second.started = true;  // 首跑打点（懒清扫判据）
+            origin = eit->second.origin.c_str();
+        }
+    }
+    const int n = lua_gettop(L);
+    lua_xmove(L, T, n);
+    ++self->stats_.calls;
+    self->used_instructions_ = 0;
+    const auto t0 = steady_now_us();
+    int nres = 0;
+    const int rc = lua_resume(T, L, n, &nres);
+    self->stats_.instructions += self->used_instructions_;
+    self->profile_record(origin, self->used_instructions_,
+                         steady_now_us() - t0);
+    if (rc == LUA_OK || rc == LUA_YIELD) {
+        if (rc == LUA_YIELD && handle != 0) {
+            auto eit = self->coroutines_.find(handle);
+            if (eit != self->coroutines_.end() && !eit->second.awaiting) {
+                eit->second.reason = "yield";  // 裸 yield 记因
+            }
+        }
+        lua_xmove(T, L, nres);
+        return nres;
+    }
+    // wrap 语义：错误抛给调用者（pcall 捕获面）；终态懒清扫归 snapshot。
+    lua_xmove(T, L, 1);
+    return lua_error(L);
+}
+
+int ScriptRuntime::coroutine_resume_impl_(lua_State* L) {
+    luaL_checktype(L, 1, LUA_TTHREAD);
+    lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
+    lua_gettable(L, LUA_REGISTRYINDEX);
+    auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    if (!self) {
+        return luaL_error(L, "async: runtime missing");
+    }
+    lua_State* T = lua_tothread(L, 1);
+    auto tit = self->coroutine_by_thread_.find(T);
+    const std::uint64_t handle =
+        tit != self->coroutine_by_thread_.end() ? tit->second : 0;
+    if (handle != 0) {
+        auto eit = self->coroutines_.find(handle);
+        if (eit != self->coroutines_.end()) {
+            eit->second.started = true;  // 首跑打点（懒清扫判据）
+        }
+    }
+    const int n = lua_gettop(L) - 1;               // 除 co 外全是实参
+    for (int i = 2; i <= n + 1; ++i) {             // [co, a1..an]
+        lua_pushvalue(L, i);
+        lua_xmove(L, T, 1);
+    }
+    ++self->stats_.calls;
+    self->used_instructions_ = 0;
+    const auto t0 = steady_now_us();
+    int nres = 0;
+    const int rc = lua_resume(T, L, n, &nres);
+    self->stats_.instructions += self->used_instructions_;
+    if (handle != 0) {
+        auto eit = self->coroutines_.find(handle);
+        if (eit != self->coroutines_.end()) {
+            self->profile_record(eit->second.origin.c_str(),
+                                 self->used_instructions_, steady_now_us() - t0);
+            if (rc == LUA_YIELD && !eit->second.awaiting) {
+                eit->second.reason = "yield";
+            }
+        }
+    }
+    if (rc == LUA_OK || rc == LUA_YIELD) {
+        lua_pushboolean(L, 1);                     // stdlib 语义：true + 结果
+        lua_xmove(T, L, nres);
+        return nres + 1;
+    }
+    lua_pushboolean(L, 0);                         // false + 错误对象
+    lua_xmove(T, L, 1);
+    return 2;
+}
+
+void ScriptRuntime::complete_async(std::uint64_t request_id, const LuaValue& value) {
+    std::lock_guard<std::mutex> guard(async_mtx_);
+    completions_.push_back(AsyncCompletion{request_id, AsyncCause::kDone, "", value});
+}
+
+void ScriptRuntime::fail_async(std::uint64_t request_id, std::string error) {
+    std::lock_guard<std::mutex> guard(async_mtx_);
+    completions_.push_back(
+        AsyncCompletion{request_id, AsyncCause::kError, std::move(error), {}});
+}
+
+void ScriptRuntime::cancel_pending(const char* reason) {
+    std::lock_guard<std::mutex> guard(async_mtx_);
+    for (auto& kv : coroutines_) {
+        if (kv.second.awaiting) {
+            completions_.push_back(AsyncCompletion{
+                kv.second.request_id, AsyncCause::kCancelled,
+                std::string("cancelled: ") + (reason ? reason : ""), {}});
+        }
+    }
+}
+
+void ScriptRuntime::drain_async() {
+    // 1) 超时清点（§8.3 纪律 3：超时先到 → 超时错误 resume，迟到结果丢弃+计数）。
+    const std::uint64_t now = steady_now_ms();
+    {
+        std::lock_guard<std::mutex> guard(async_mtx_);
+        for (auto& kv : coroutines_) {
+            CoroutineEntry& e = kv.second;
+            if (e.awaiting && e.deadline_ms != 0 && now >= e.deadline_ms) {
+                completions_.push_back(AsyncCompletion{
+                    e.request_id, AsyncCause::kTimeout, "timeout", {}});
+            }
+        }
+    }
+    // 2) 取走完成队列（含 cancel 合成的；complete_async 期间新到 → 下拍）。
+    std::deque<AsyncCompletion> queue;
+    {
+        std::lock_guard<std::mutex> guard(async_mtx_);
+        queue.swap(completions_);
+    }
+    // 3) 逐条投递：无主丢弃计数 → validator → resume。
+    while (!queue.empty()) {
+        AsyncCompletion comp = std::move(queue.front());
+        queue.pop_front();
+        auto pit = async_pending_.find(comp.request_id);
+        if (pit == async_pending_.end()) {
+            ++stats_.async_late;  // 迟到/重复/无主完成：丢弃 + 计数
+            continue;
+        }
+        const std::uint64_t handle = pit->second;
+        async_pending_.erase(pit);
+        auto eit = coroutines_.find(handle);
+        if (eit == coroutines_.end()) {
+            ++stats_.async_late;
+            continue;
+        }
+        CoroutineEntry& e = eit->second;
+        if (comp.cause == AsyncCause::kDone && async_validator_) {
+            LuaCoroutineInfo info;
+            info.handle = handle;
+            info.origin = e.origin;
+            info.suspend_reason = e.reason;
+            info.pending_request = e.request_id;
+            if (!async_validator_(info)) {
+                comp.cause = AsyncCause::kInvalid;
+                comp.error = "context invalid (re-validate failed)";
+            }
+        }
+        switch (comp.cause) {
+            case AsyncCause::kDone: ++stats_.async_completed; break;
+            case AsyncCause::kError: ++stats_.async_failed; break;
+            case AsyncCause::kTimeout: ++stats_.async_timeouts; break;
+            case AsyncCause::kCancelled: ++stats_.async_cancelled; break;
+            case AsyncCause::kInvalid: ++stats_.async_invalid; break;
+        }
+        resume_with_completion_(handle, std::move(comp));
+    }
+}
+
+std::vector<LuaCoroutineInfo> ScriptRuntime::coroutine_snapshot() {
+    std::vector<LuaCoroutineInfo> out;
+    for (auto it = coroutines_.begin(); it != coroutines_.end();) {
+        CoroutineEntry& e = it->second;
+        const int st = lua_status(e.thread);
+        // 懒清扫：已启动且非挂起且已结束（LUA_OK = 跑完；错误码 = 脚本侧
+        // resume 收尾失败）——清单只呈现活体。
+        if (e.started && !e.awaiting &&
+            (st == LUA_OK || (st != LUA_OK && st != LUA_YIELD))) {
+            it = drop_coroutine_(it);
+            continue;
+        }
+        LuaCoroutineInfo info;
+        info.handle = it->first;
+        info.origin = e.origin;
+        info.born_tick = e.born_tick;
+        info.age_ticks = tick_ - e.born_tick;
+        if (e.awaiting) {
+            info.status = "suspended";
+            info.suspend_reason = e.reason;
+            info.pending_request = e.request_id;
+            info.timeout_ms = e.timeout_ms;
+        } else if (!e.started) {
+            info.status = "ready";  // 已登记未首跑（脚本 create 后未 resume）
+        } else {
+            info.status = "suspended";
+            info.suspend_reason = e.reason.empty() ? "yield" : e.reason;
+        }
+        info.leaked = config_.async_leak_threshold_ticks != 0 &&
+                      info.age_ticks >= config_.async_leak_threshold_ticks;
+        out.push_back(std::move(info));
+        ++it;
+    }
+    return out;  // map 迭代 = handle 升序
+}
+
 // ---- alloc/hook 回调桥（friend 面最小化：单字段访问器） ----
 
 void ScriptRuntime::release_bytes(std::size_t n) { allocated_ -= n; }
@@ -1289,11 +1844,14 @@ bool ScriptRuntime::exceeds_limit(std::size_t delta) const {
 
 std::uint64_t& ScriptRuntime::fault_memory_counter() { return stats_.fault_memory; }
 
-void ScriptRuntime::tick_instructions(lua_Integer step) {
+void ScriptRuntime::tick_instructions(lua_State* L, lua_Integer step) {
+    // L = 触发 hook 的运行态（主 state 或协程线程）：超预算错误必须在
+    // 触发态上抛（resume 的保护上下文挂在协程线程；固定抛 L_ 会在协程
+    // 执行中命中无保护 longjmp → panic abort）。
     used_instructions_ += static_cast<std::uint64_t>(step);
     if (config_.instruction_budget != 0 &&
         used_instructions_ >= config_.instruction_budget) {
-        luaL_error(L_, "instruction budget exceeded");
+        luaL_error(L, "instruction budget exceeded");
     }
 }
 

@@ -238,6 +238,8 @@ collect 阶段（§3.2 的 delta/快照组装）
 > 业务逻辑收敛到场景线程单写者（§2 / attribute-sync §10）后，「一次 Redis 读 / DB 查询 / 跨服调用」不能再原地阻塞等待——等待即卡整个场景的 tick。本节定架构层的异步封装：**C++ 侧回调 + request_id 交接，Lua 侧协程**，两层各自取最优模型。（§9 交集表原引的「§异步模型」即本节，悬空引用就此闭环。）
 >
 > **实现状态（2026-10-04 对账）**：本节为目标态设计，L0 执行层未实现——P1-4 已删 redis 全族（含 hiredis 客户端），Redis 面待跨进程批次重新引入；DB 面现状为文件档案 + `PersistJournal`（无 SQL 执行层）；跨服 RequestReply 未接线。§8.2 表中「hiredis 异步接口 / DB Command 队列」按此口径读。
+>
+> **实现状态（2026-10-15 补：L1 交接层 + L2 脚本层已落地）**：`ScriptRuntime` 交付 §8.2 的 L1 交接原语与 L2 协程面——`register_async_service(name, handler, timeout_ms)` 为 L0 执行层的扩展点（宿主后续按批次插入 Redis/DB/跨服真实后端，受理即返回不阻塞 owning 线程）；`apollo.async.call(svc, ...)` 内部 yield 挂起（未知服务/主线程调用即 error 快速失败）；完成面 `complete_async`/`fail_async` 任意线程入队，`drain_async()` 在 tick 边界统一投递（交接物是消息不是 future，同线程也不 inline）；`cancel_pending(reason)` 协作式取消（下一 drain 以取消错误终止）；`set_async_validator` 即纪律 2 的 re-validate 钩子（失效以错误终止不注入僵尸结果）；三条纪律全数落地——resume 只在 drain 边界、注入错误（超时/取消/失效）fault 照发但不计模块熔断（运营终态归宿主）、超时上界 per 服务可配 + `async_default_timeout_ms` 全局默认。协程登记表 + `coroutine_snapshot()` 即 §7.2 协程清单（句柄/状态/挂起原因/在等请求/超时/出生 tick/超龄 leaked），脚本自建 `coroutine.create/wrap/resume` 同步替换进登记表（清单无盲区，指令 hook 与预算跨 yield 管辖）。§8.2 的 `apollo.async.all` 并发组合器与 L0 真实后端仍待各自批次。
 
 ### 8.1 三种模型对比（为什么这么选）
 
