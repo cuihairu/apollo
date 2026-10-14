@@ -176,6 +176,10 @@ void Scene::attach_script(apollo::script::ScriptRuntime& rt) {
 
 void Scene::detach_script() {
     script_ = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(debug_queue_mutex_);
+        debug_queue_.clear();  // 在队请求随 detach 丢弃（不执行）
+    }
     if (attrsync_ != nullptr) {
         attrsync_->clear_attr_hook();
     }
@@ -191,6 +195,53 @@ void Scene::set_attr_hook_frame_budget(std::uint64_t budget) noexcept {
 
 std::uint64_t Scene::attr_hook_frame_budget() const noexcept {
     return attr_hook_frame_budget_;
+}
+
+bool Scene::enqueue_debug_eval(std::uint64_t id, const std::string& source) {
+    if (script_ == nullptr) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(debug_queue_mutex_);
+    if (debug_queue_.size() >= debug_eval_queue_depth_) {
+        return false;  // 队列满拒收（打爆防护）
+    }
+    debug_queue_.push_back({id, source});
+    return true;
+}
+
+std::vector<Scene::DebugEvalResult> Scene::drain_debug_eval_results() {
+    std::vector<Scene::DebugEvalResult> out;
+    {
+        std::lock_guard<std::mutex> lock(debug_queue_mutex_);
+        out.assign(debug_results_.begin(), debug_results_.end());
+        debug_results_.clear();
+    }
+    return out;
+}
+
+void Scene::set_debug_eval_queue_depth(std::size_t depth) noexcept {
+    debug_eval_queue_depth_ = depth;
+}
+
+std::size_t Scene::debug_eval_queue_depth() const noexcept {
+    return debug_eval_queue_depth_;
+}
+
+void Scene::run_debug_eval_window() {
+    std::deque<DebugEvalRequest> pending;
+    {
+        std::lock_guard<std::mutex> lock(debug_queue_mutex_);
+        pending.swap(debug_queue_);
+    }
+    for (auto& req : pending) {
+        std::string result;
+        const bool ok = script_->eval_debug(req.source, result);
+        std::lock_guard<std::mutex> lock(debug_queue_mutex_);
+        if (debug_results_.size() >= debug_eval_queue_depth_) {
+            debug_results_.pop_front();  // 未取走的结果丢最旧（FIFO 有界）
+        }
+        debug_results_.push_back({req.id, ok, std::move(result)});
+    }
 }
 
 void Scene::install_attr_hook_bridge() {
@@ -270,6 +321,7 @@ void Scene::tick(double delta_seconds) noexcept {
     ++tick_count_;
     if (script_ != nullptr) {
         script_->set_tick(tick_count_);  // §6.1 熔断/WARN 记账（tick 归宿主喂）
+        run_debug_eval_window();         // §7.1 固定调试点（tick 首拍）
     }
     run_phase(SceneTickPhase::Simulate);
     for (auto& [id, entity] : entities_) {

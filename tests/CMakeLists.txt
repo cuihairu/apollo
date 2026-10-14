@@ -1790,13 +1790,11 @@ add_executable(attrsync_tests
     test_attr_sync_scheduler.cpp
     test_attr_sync_change_sink.cpp
     test_attr_sync_attr_hook.cpp
-    test_scene_attr_hook_bridge.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync
     apollo::game_core
     apollo::game_world
-    apollo::script
     GTest::gtest
     GTest::gtest_main
 )
@@ -1808,4 +1806,27 @@ if(MSVC)
     target_compile_options(attrsync_tests PRIVATE /utf-8)
 endif()
 add_test(NAME AttrSyncTests COMMAND attrsync_tests)
+
+# ========== Scene × Script Runtime Host Wiring Tests ==========
+# §5.1 属性钩子窗口适配桥 + §7.1 admin attach 执行队列（scripting-lua 宿主接线批）
+add_executable(scene_script_tests
+    test_scene_attr_hook_bridge.cpp
+    test_scene_debug_eval_queue.cpp
+)
+target_link_libraries(scene_script_tests PRIVATE
+    apollo::game_world
+    apollo::game_attrsync
+    apollo::game_core
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(scene_script_tests PRIVATE ws2_32)
+    target_compile_definitions(scene_script_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(scene_script_tests PRIVATE /utf-8)
+endif()
+add_test(NAME SceneScriptTests COMMAND scene_script_tests)
 endif()

@@ -137,7 +137,7 @@ container->SetChangeListener([](const AttributeChangeEvent& e) { /* 变更上报
 
 ## 属性增量同步（attrsync 子库）
 
-per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），十一批交付：
+per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2），十二批交付：
 
 | 件 | 职责 |
 |---|---|
@@ -151,7 +151,7 @@ per-viewer delta 管线（attribute-sync §3.1/§3.2/§3.3/§4.1/§5/§7.1/§8.2
 | `AttrSyncScheduler` | §5 优先级与节流：token bucket + 优先级排序 + min_interval + 饥饿保护 |
 | `FrameCodec` | `AttrSyncFrame ↔ wire bytes`（varint 编码 + 批量） |
 | `Scene::attach_attrsync` | Scene ↔ AOI 事件接线（批 5）：Enter/Sync 首见 → 快照帧，Leave → 回收 viewer 态 |
-| `Scene::attach_script` | Scene × ScriptRuntime 适配桥（scripting-lua §5.1 宿主接线，批 11）：Recalc 尾 Collect 前跑钩子窗口，帧预算默认 200k 可调 |
+| `Scene::attach_script` | Scene × ScriptRuntime 适配桥（scripting-lua §5.1 宿主接线，批 12）：Recalc 尾 Collect 前跑钩子窗口，帧预算默认 200k 可调 |
 
 ```cpp
 #include <apollo/game/attrsync/attr_sync_manager.hpp>
@@ -211,7 +211,18 @@ scene.set_attr_hook_frame_budget(200000);  // §5.2 帧级预算（默认 200k �
 //   帧预算耗尽剩余跳过、错误保持原值）→ Collect 出修订 delta → BudgetFlush 归还帧账
 ```
 
-**边界**：客户端发送路径、slice 复合类型均为后续批次。
+§7.1 admin attach 执行队列（scripting-lua §7.1 宿主接线批）：
+
+```cpp
+// 投递（任意线程，队列自持互斥——Scene 唯一跨线程面）
+scene.enqueue_debug_eval(/*id=*/9001, "counter");  // 队列满/未 attach 拒收 false
+// Scene::tick 首拍固定调试点执行（eval_debug 语义全管辖：预算/限流/截断），
+// 结果按 id 关联回传；未取走的结果按深度上限丢最旧
+for (const auto& r : scene.drain_debug_eval_results()) { /* 回传 transport */ }
+scene.set_debug_eval_queue_depth(8);  // 默认 8（与 eval 同 tick 限流对齐）
+```
+
+**边界**：客户端发送路径、slice 复合类型、attach transport（admin 单入口 + control 通道转发到目标进程）均为后续批次。
 
 ## NPC AI
 

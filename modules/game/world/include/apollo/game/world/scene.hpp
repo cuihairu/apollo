@@ -6,9 +6,12 @@
 #include "apollo/game/world/scene_aoi.hpp"
 
 #include <cstdint>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace apollo::script {
@@ -104,6 +107,25 @@ public:
     void set_attr_hook_frame_budget(std::uint64_t budget) noexcept;
     [[nodiscard]] std::uint64_t attr_hook_frame_budget() const noexcept;
 
+    // ---- §7.1 admin attach 执行队列（单写者纪律）----
+    // 投递面（任意线程，队列自持互斥——Scene 唯一跨线程面，同 WorldSessionManager
+    // 的跨线程惯例）：入队即返回；队列满或未 attach_script 时拒收返回 false。
+    // 执行面：Scene::tick 首拍固定调试点沙盒执行（eval_debug 语义全管辖——
+    // 预算/限流/结果截断），结果按 id 回传；未取走的结果按深度上限丢最旧。
+    struct DebugEvalRequest {
+        std::uint64_t id;    // transport 关联回传
+        std::string source;
+    };
+    struct DebugEvalResult {
+        std::uint64_t id;
+        bool ok = false;
+        std::string result;  // 结果串（截断归 ScriptRuntime 管辖）
+    };
+    bool enqueue_debug_eval(std::uint64_t id, const std::string& source);
+    std::vector<DebugEvalResult> drain_debug_eval_results();
+    void set_debug_eval_queue_depth(std::size_t depth) noexcept;
+    [[nodiscard]] std::size_t debug_eval_queue_depth() const noexcept;
+
     // ---- tick 六阶段 ----
     void update(float delta_time);        // 兼容旧调用（转发 tick）
     void tick(double delta_seconds) noexcept;
@@ -127,6 +149,13 @@ private:
     std::vector<apollo::game::attrsync::AttrSyncFrame> attrsync_outbound_;
     apollo::script::ScriptRuntime* script_ = nullptr;  // attach 期有效
     std::uint64_t attr_hook_frame_budget_ = 200000;    // §5.2 帧级钩子预算
+
+    // §7.1 attach 执行队列：唯一跨线程面（投递互斥锁 + 请求/结果双端）。
+    std::mutex debug_queue_mutex_;
+    std::deque<DebugEvalRequest> debug_queue_;
+    std::deque<DebugEvalResult> debug_results_;
+    std::size_t debug_eval_queue_depth_ = 8;  // 默认与 eval 同 tick 限流对齐
+    void run_debug_eval_window();             // tick 首拍固定调试点
     std::uint64_t tick_count_ = 0;
     std::uint64_t phase_counts_[6] = {0, 0, 0, 0, 0, 0};
 };
