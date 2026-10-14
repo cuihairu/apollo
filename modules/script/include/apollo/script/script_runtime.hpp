@@ -17,7 +17,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
+#include <vector>
 
 #include <lua.hpp>
 
@@ -51,7 +53,16 @@ struct ScriptStats {
     std::uint64_t fault_runtime = 0;
     std::uint64_t fault_memory = 0;
     std::uint64_t fault_budget = 0;
-    std::uint64_t instructions = 0;  // 粗检近似（10k 步进累计）
+    std::uint64_t instructions = 0;   // 粗检近似（10k 步进累计）
+    std::uint64_t reload_success = 0;  // §3.2 换表成功
+    std::uint64_t reload_failed = 0;   // §3.2 换表拒载（编译/冒烟/依赖）
+};
+
+// §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
+struct ModuleSpec {
+    std::string name;
+    std::uint64_t version = 0;
+    std::vector<std::string> deps;
 };
 
 class ScriptRuntime {
@@ -67,6 +78,19 @@ public:
 
     // §4.1 启动期注入：具名模块表挂到全局（白名单制，非自动反射）。
     void register_module(const char* name, const luaL_Reg* funcs);
+
+    // §3.2 热替换：模块源必须 return 一个表。编译 + 冒烟（smoke()）在影子栈
+    // 完成，全部通过才原子换 _G[name]（Phase B）；任何一步失败旧表不动。
+    bool swap_module(const ModuleSpec& spec, const std::string& source);
+    // §3.2 Phase C：冷冻区换回活跃区（一次替换对应用一次回滚）。
+    bool rollback_module(const std::string& name);
+
+    bool has_module(const char* name) const;
+    std::uint64_t module_version(const std::string& name) const;  // 无模块返回 0
+    std::map<std::string, std::uint64_t> active_modules() const;  // §7.2 版本矩阵
+
+    // ModuleReloaded 广播（脚本侧 onReload 钩子重注册订阅）。
+    void set_reload_listener(std::function<void(const char*, std::uint64_t)> listener);
 
     // 编译 + 执行（pcall 隔离）。失败记 fault 并返回 false，状态可继续。
     bool call_string(const char* chunk, const std::string& source);
@@ -103,6 +127,17 @@ private:
     ScriptStats stats_;
     std::size_t allocated_ = 0;
     std::uint64_t used_instructions_ = 0;
+
+    // §3.2 模块注册表：活跃表 + 冷冻区（旧活跃表，供 rollback；仅保留最近一份）。
+    // registry ref 由本类独占（不交给宿主），析构随 lua_close 一并释放。
+    std::map<std::string, int> module_refs_;
+    struct FrozenModule {
+        int ref;
+        std::uint64_t version;
+    };
+    std::map<std::string, FrozenModule> module_frozen_;
+    std::map<std::string, std::uint64_t> module_versions_;
+    std::function<void(const char*, std::uint64_t)> reload_listener_;
 };
 
 }  // namespace script

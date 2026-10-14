@@ -126,6 +126,148 @@ void ScriptRuntime::register_module(const char* name, const luaL_Reg* funcs) {
     lua_setglobal(L_, name);
 }
 
+// ---- §3.2 热替换：编译 + 冒烟在影子栈完成，通过才原子换 _G[name] ----
+
+bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& source) {
+    // 依赖校验（依赖图拓扑序由装载器保证，本层只查已装载）。
+    for (const auto& dep : spec.deps) {
+        if (module_refs_.find(dep) == module_refs_.end()) {
+            ++stats_.reload_failed;
+            return false;
+        }
+    }
+    // 编译（§3.5 红线：运行期字符串按源码处理，禁 bytecode）。
+    if (luaL_loadbufferx(L_, source.data(), source.size(), spec.name.c_str(), "t") != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        ++stats_.reload_failed;
+        fault(ScriptFaultEvent::Kind::kSyntax, spec.name.c_str(), msg);
+        return false;
+    }
+    // 求值（失败 → 旧表不动）。
+    const int rc = lua_pcall(L_, 0, 1, 0);
+    stats_.instructions += used_instructions_;
+    used_instructions_ = 0;
+    if (rc != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        ++stats_.reload_failed;
+        fault(classify(rc, msg), spec.name.c_str(), msg);
+        return false;
+    }
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        ++stats_.reload_failed;
+        fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(),
+              "module did not return a table");
+        return false;
+    }
+    // 冒烟闸：新表带 smoke() 则须返回 true（§3.2 Phase A 自检用例集）。
+    lua_getfield(L_, -1, "smoke");
+    if (lua_isfunction(L_, -1)) {
+        const int src = lua_pcall(L_, 0, 1, 0);
+        const bool passed = src == LUA_OK && lua_toboolean(L_, -1) != 0;
+        const std::string smsg =
+            src == LUA_OK ? "module smoke check failed"
+                          : (lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "smoke error");
+        lua_pop(L_, 1);  // 冒烟结果
+        if (!passed) {
+            lua_pop(L_, 1);  // 新表（未过闸，不进活跃引用）
+            ++stats_.reload_failed;
+            fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(), smsg);
+            return false;
+        }
+    } else {
+        lua_pop(L_, 1);
+    }
+    // 走到此处栈顶 = 新表。registry ref（luaL_ref 自弹栈顶）+ 原子换表。
+    lua_pushvalue(L_, -1);
+    const int new_ref = luaL_ref(L_, LUA_REGISTRYINDEX);  // [新表]
+    lua_setglobal(L_, spec.name.c_str());                 // []
+    // 旧活跃表 → 冷冻区（§3.2 冷冻区语义：rollback 依赖；只留最近一份）。
+    const auto it = module_refs_.find(spec.name);
+    if (it != module_refs_.end()) {
+        const auto fit = module_frozen_.find(spec.name);
+        if (fit != module_frozen_.end()) {
+            luaL_unref(L_, LUA_REGISTRYINDEX, fit->second.ref);
+        }
+        module_frozen_[spec.name] = FrozenModule{it->second, module_versions_[spec.name]};
+    }
+    module_refs_[spec.name] = new_ref;
+    module_versions_[spec.name] = spec.version;
+    ++stats_.reload_success;
+    if (reload_listener_) {
+        reload_listener_(spec.name.c_str(), spec.version);
+    }
+    // onReload 钩子（§3.2 Phase B 事件钩子：脚本侧重挂订阅）。失败不回滚
+    // （换表已原子完成，观察期由 Phase C 处理），记 fault。
+    lua_rawgeti(L_, LUA_REGISTRYINDEX, new_ref);
+    lua_getfield(L_, -1, "onReload");
+    if (lua_isfunction(L_, -1)) {
+        const auto fit = module_frozen_.find(spec.name);
+        if (fit != module_frozen_.end()) {
+            lua_rawgeti(L_, LUA_REGISTRYINDEX, fit->second.ref);
+        } else {
+            lua_pushnil(L_);
+        }
+        const int hrc = lua_pcall(L_, 1, 0, 0);
+        if (hrc != LUA_OK) {
+            const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+            lua_pop(L_, 1);
+            fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(), msg);
+        }
+    } else {
+        lua_pop(L_, 1);
+    }
+    lua_pop(L_, 1);  // 新表
+    return true;
+}
+
+bool ScriptRuntime::rollback_module(const std::string& name) {
+    const auto fit = module_frozen_.find(name);
+    if (fit == module_frozen_.end()) {
+        return false;
+    }
+    lua_rawgeti(L_, LUA_REGISTRYINDEX, fit->second.ref);
+    if (lua_isnil(L_, -1)) {
+        lua_pop(L_, 1);
+        return false;
+    }
+    // 回滚 = 撤销最近一次替换：坏版本表丢弃（unref 交 GC），冷冻区清空。
+    const int restored_ref = fit->second.ref;
+    const std::uint64_t restored_version = fit->second.version;
+    const auto it = module_refs_.find(name);
+    if (it != module_refs_.end()) {
+        luaL_unref(L_, LUA_REGISTRYINDEX, it->second);
+    }
+    module_frozen_.erase(name);
+    module_refs_[name] = restored_ref;
+    lua_setglobal(L_, name.c_str());
+    module_versions_[name] = restored_version;
+    if (reload_listener_) {
+        reload_listener_(name.c_str(), restored_version);  // §3.2 reload 伪事件
+    }
+    return true;
+}
+
+bool ScriptRuntime::has_module(const char* name) const {
+    return module_refs_.count(name) != 0;
+}
+
+std::uint64_t ScriptRuntime::module_version(const std::string& name) const {
+    const auto it = module_versions_.find(name);
+    return it != module_versions_.end() ? it->second : 0;
+}
+
+std::map<std::string, std::uint64_t> ScriptRuntime::active_modules() const {
+    return module_versions_;
+}
+
+void ScriptRuntime::set_reload_listener(
+    std::function<void(const char*, std::uint64_t)> listener) {
+    reload_listener_ = std::move(listener);
+}
+
 bool ScriptRuntime::call_string(const char* chunk, const std::string& source) {
     ++stats_.calls;
     used_instructions_ = 0;

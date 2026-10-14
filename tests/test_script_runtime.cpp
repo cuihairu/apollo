@@ -137,3 +137,76 @@ TEST(ScriptRuntime, RegisterModuleExposesApi) {
     EXPECT_TRUE(rt.call_string("t", "result = testapi.gettag()"));
     EXPECT_EQ(rt.get_global_string("result"), "42");
 }
+
+// ── 模块热替换（§3.2 原子性与回滚） ──────────────────────
+
+TEST(ScriptRuntime, SwapModuleAtomic) {
+    ScriptRuntime rt(make_config());
+    rt.swap_module({"quest", 41, {}}, "return { version = 41 }");
+    rt.swap_module({"quest", 42, {}}, "return { version = 42 }");
+    EXPECT_TRUE(rt.has_module("quest"));
+    EXPECT_TRUE(rt.call_string("t", "result = quest.version"));
+    EXPECT_EQ(rt.get_global_string("result"), "42");
+}
+
+TEST(ScriptRuntime, SwapModuleFailureKeepsOld) {
+    ScriptRuntime rt(make_config());
+    rt.swap_module({"quest", 41, {}}, "return { version = 41 }");
+    EXPECT_FALSE(rt.swap_module({"quest", 42, {}}, "error('broken patch')"));
+    // 旧表未被替换（冻结区语义：编译/冒烟失败不触活跃引用）
+    EXPECT_TRUE(rt.call_string("t", "result = quest.version"));
+    EXPECT_EQ(rt.get_global_string("result"), "41");
+}
+
+TEST(ScriptRuntime, SwapModuleRejectsMissingDeps) {
+    ScriptRuntime rt(make_config());
+    EXPECT_FALSE(rt.swap_module({"skill", 1, {"quest"}}, "return {}"));
+    EXPECT_FALSE(rt.has_module("skill"));
+    rt.swap_module({"quest", 1, {}}, "return { version = 1 }");
+    EXPECT_TRUE(rt.swap_module({"skill", 1, {"quest"}}, "return { version = 1 }"));
+}
+
+TEST(ScriptRuntime, SwapModuleSmokeGate) {
+    ScriptRuntime rt(make_config());
+    EXPECT_FALSE(rt.swap_module({"m", 1, {}}, "return { smoke = function() return false end }"));
+    EXPECT_FALSE(rt.has_module("m"));
+    EXPECT_TRUE(rt.swap_module({"m", 2, {}}, "return { smoke = function() return true end }"));
+    EXPECT_TRUE(rt.has_module("m"));
+}
+
+TEST(ScriptRuntime, SwapModuleCallsOnReload) {
+    ScriptRuntime rt(make_config());
+    rt.swap_module({"m", 1, {}}, "return { version = 1 }");
+    rt.swap_module({"m", 2, {}}, R"(
+        local t = { version = 2 }
+        t.onReload = function(old)
+            reloaded = (old ~= nil) and old.version or -1
+        end
+        return t
+    )");
+    rt.call_string("t", "result = reloaded");
+    EXPECT_EQ(rt.get_global_string("result"), "1");
+}
+
+TEST(ScriptRuntime, RollbackRestoresFrozen) {
+    ScriptRuntime rt(make_config());
+    rt.swap_module({"m", 1, {}}, "return { version = 1 }");
+    rt.swap_module({"m", 2, {}}, "return { version = 2 }");
+    EXPECT_TRUE(rt.rollback_module("m"));
+    EXPECT_TRUE(rt.call_string("t", "result = m.version"));
+    EXPECT_EQ(rt.get_global_string("result"), "1");
+    // 再回滚一次 → 冷冻区已空，失败
+    EXPECT_FALSE(rt.rollback_module("m"));
+}
+
+TEST(ScriptRuntime, ReloadListenerFires) {
+    ScriptRuntime rt(make_config());
+    std::vector<std::string> events;
+    rt.set_reload_listener([&](const char* name, std::uint64_t version) {
+        events.push_back(std::string(name) + ":" + std::to_string(version));
+    });
+    rt.swap_module({"m", 7, {}}, "return { version = 7 }");
+    EXPECT_EQ(rt.active_modules().size(), 1u);
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0], "m:7");
+}

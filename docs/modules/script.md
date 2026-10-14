@@ -38,15 +38,17 @@ rt.get_global_bool("ready");
 - **指令预算**：COUNT hook 粗检 10k 步进，超限 `lua_error` 中止当前调用（死循环天然覆盖）。
 - **故障隔离**：`call_*` 全走 `lua_pcall`，错误分类 `kSyntax`/`kRuntime`/`kMemoryLimit`/`kInstructionBudget` 入 `ScriptFaultEvent`（chunk 名 + 错误串），状态可继续。
 - **具名模块注入**：`register_module(name, luaL_Reg*)` 走全局具名表（§4.1 白名单制，禁止脚本按名查服务容器）。
-- **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计）、`memory_used()`、`reset_budget()`。
+- **模块热替换**（§3.2）：`swap_module(ModuleSpec{name, version, deps}, source)`——依赖校验 → 编译（mode "t"）→ 冒烟（新表带 `smoke()` 则须返回 true）→ 全过才原子换 `_G[name]`，任一步失败旧表不动；旧活跃表进冷冻区（仅留最近一份），`rollback_module` 恢复并丢弃坏版本；换表成功调新表 `onReload(old)` 钩子（失败不回滚，记 fault），广播 `ModuleReloaded` 经 `set_reload_listener`；`active_modules()` 为 §7.2 版本矩阵。模块私有状态零迁移纪律照 §3.2（状态在 C++ 权威侧）。
+- **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计/reload 成败）、`memory_used()`、`reset_budget()`。
 
 ### 边界（留后续批）
 
-- 热替换协议（§3.2 换表原子性/回滚/灰度）、契约表装载（§3.4）、字节码缓存（§3.5）
+- 热替换工程面：工作线程预加载 + smoke 用例集（§3.2 Phase A）、current 版本指针持久化（防坏版本崩溃循环）、灰度 per 场景线程、协程升级语义宿主侧接线
+- 契约表装载（§3.4 contract.lua 一致性闸）、字节码缓存（§3.5 manifest 三元组）
 - 属性钩子 `onAttrChanged`（§5）、公式即钩子（§5.3）、帧级钩子预算执法（§5.2）
 - 故障熔断状态机（§6.1 模块级 3 次/1000 tick）、attach 调试（§7）、GM 命令面（§7.5）
 - `require`/package 面未打开（模块加载暂走宿主 `call_string` 面）
 
 ## 测试
 
-`tests/test_script_runtime.cpp`（9 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。
+`tests/test_script_runtime.cpp`（16 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。
