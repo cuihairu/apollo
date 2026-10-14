@@ -96,6 +96,37 @@ struct ModuleSpec {
     std::vector<std::string> deps;
 };
 
+// §7.2 Lua 状态面只读快照（检测原语在进程内；聚合呈现面归 observability
+// 后续批）。owning 线程 tick 边界调用（同 §7.1 eval 窗口纪律）。
+struct LuaGcState {
+    std::size_t used_bytes = 0;   // 宿主 allocf 计数（上限执法真值）
+    std::size_t limit_bytes = 0;  // 0 = 不限
+    std::size_t lua_gc_kib = 0;   // GC 自视角（LUA_GCCOUNT）
+    std::size_t gc_pause = 0;     // 增量模式参数（LUA_GCPARAM 只读查询）
+    std::size_t gc_stepmul = 0;
+    std::size_t gc_stepsize = 0;
+    bool gc_is_running = false;
+};
+
+// 热替换审计记录（§7.2「线上各模块跑的哪个版本、怎么到的这个版本」；
+// 拒载也是事件——失败同样入账）。
+struct LuaReloadRecord {
+    std::string name;
+    std::uint64_t from_version = 0;  // 0 = 首次装载
+    std::uint64_t to_version = 0;
+    std::uint64_t tick = 0;          // 宿主喂入 tick（set_tick）
+    bool success = false;
+    std::string reason;              // 拒载原因（截断到 256 字符）；成功为空
+};
+
+// 模块 env 顶层值只读快照（深度 1，raw 遍历 + 类型化取值——不经元方法、
+// 不就地转换数值；超长值截断）。
+struct LuaEnvSnapshot {
+    bool found = false;              // 模块名不在全局面 = false
+    bool truncated = false;          // 条目数上限截断标志
+    std::vector<std::pair<std::string, std::string>> entries;
+};
+
 class ScriptRuntime {
 public:
     // §5.1 钩子负载：C++ 侧快照拷贝（int64 对），无锁——同属 owning thread。
@@ -130,6 +161,16 @@ public:
 
     // ModuleReloaded 广播（脚本侧 onReload 钩子重注册订阅）。
     void set_reload_listener(std::function<void(const char*, std::uint64_t)> listener);
+
+    // §7.2 状态面只读内省（owning 线程；不经 Lua 可调函数、不改写值）。
+    [[nodiscard]] LuaGcState gc_state() const;
+    // 热替换审计环（含拒载；上限 kReloadHistoryCap 条，超限丢最旧）。
+    [[nodiscard]] const std::deque<LuaReloadRecord>& reload_history() const {
+        return reload_history_;
+    }
+    // 模块 env 顶层值快照（max_entries = 条目上限，0 恒返回未找到）。
+    [[nodiscard]] LuaEnvSnapshot env_snapshot(const char* module,
+                                              std::size_t max_entries) const;
 
     // §5.1 属性钩子：注册全局函数 onAttrChanged(entity, attr, old, new) →
     // 整数（nil/非整数 = 不修饰）；全局名不存在返回 false，重挂换引用。
@@ -232,6 +273,9 @@ private:
     static void put_u32(std::vector<std::uint8_t>& out, std::uint32_t v);
     static void put_u64(std::vector<std::uint8_t>& out, std::uint64_t v);
     static void put_str(std::vector<std::uint8_t>& out, const std::string& s);
+    // §7.2 热替换审计入账（环形上限内丢最旧）。
+    void record_reload(const std::string& name, std::uint64_t from_version,
+                       std::uint64_t to_version, bool success, std::string reason);
 
     ScriptConfig config_;
     lua_State* L_ = nullptr;
@@ -254,6 +298,8 @@ private:
     std::map<std::string, FrozenModule> module_frozen_;
     std::map<std::string, std::uint64_t> module_versions_;
     std::function<void(const char*, std::uint64_t)> reload_listener_;
+    // §7.2 热替换审计环（swap 拒载/成功 + rollback；进程内即可查版本漂移）。
+    std::deque<LuaReloadRecord> reload_history_;
 
     // §5.1 钩子 registry ref（随 lua_close 释放）+ §5.2 帧级已用预算。
     int hook_ref_ = LUA_NOREF;

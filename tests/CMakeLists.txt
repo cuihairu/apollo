@@ -1773,6 +1773,24 @@ add_test(NAME BytecodeCacheToolSmoke
         -Dexe=$<TARGET_FILE:lua_precompile>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/lua_precompile_smoke.cmake)
 
+# ========== Lua State Introspection Tests (scripting-lua.md §7.2) ==========
+# 状态面只读内省（GC 面 + 热替换审计环 + env 快照）；无门控注册（同
+# script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(script_state_tests test_script_state.cpp)
+target_link_libraries(script_state_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(script_state_tests PRIVATE ws2_32)
+    target_compile_definitions(script_state_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(script_state_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ScriptStateTests COMMAND script_state_tests)
+
 # BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
 # fan-out + 真 BaseAppMgr 分派面（AssignWorld/ResolveRoute 全真目录裁决）
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本

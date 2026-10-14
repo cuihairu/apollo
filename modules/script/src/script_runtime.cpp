@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -21,6 +22,66 @@ constexpr lua_Integer kHookStep = 10000;
 
 // §6.1 WARN 去抖窗（同 chunk 每 256 tick 至多一条）。
 constexpr std::uint64_t kWarnDebounceTicks = 256;
+
+// §7.2 热替换审计环上限（超限丢最旧——防热更循环无界增长）。
+constexpr std::size_t kReloadHistoryCap = 64;
+
+// §7.2 env 快照单值字节上限（超长截断——顶层字符串可能是大块内容）。
+constexpr std::size_t kEnvValueCap = 512;
+
+// 装载路径结构探测 raw 读：模块/契约自带字段不经元表继承，裸 lua_getfield
+// 会在 __index error 时把错误抛出保护区（崩进程，违 §2 纪律）——同栈效果
+// 换 raw 读取，__index/__pairs/__tostring 恶意表全程不触元方法。
+void raw_getfield(lua_State* L, int idx, const char* k) {
+    const int t = lua_absindex(L, idx);
+    lua_pushstring(L, k);
+    lua_rawget(L, t);
+}
+
+// §7.2 只读取值：字符串拷贝、数值自格式化（不走 lua_tolstring——它会把
+// 栈上数值就地转字符串，破坏只读纪律）、其余只出类型名。不调用任何
+// Lua 函数、不触任何元方法。
+std::string read_plain_value(lua_State* L, int idx) {
+    auto clipped = [](std::string v) -> std::string {
+        if (v.size() > kEnvValueCap) {
+            v.resize(kEnvValueCap);
+            v += "...(truncated)";
+        }
+        return v;
+    };
+    switch (lua_type(L, idx)) {
+        case LUA_TNIL:
+            return "nil";
+        case LUA_TBOOLEAN:
+            return lua_toboolean(L, idx) ? "true" : "false";
+        case LUA_TNUMBER: {
+            char buf[64];
+            if (lua_isinteger(L, idx)) {
+                std::snprintf(buf, sizeof(buf), "%lld",
+                              static_cast<long long>(lua_tointeger(L, idx)));
+            } else {
+                std::snprintf(buf, sizeof(buf), "%.14g", lua_tonumber(L, idx));
+            }
+            return std::string(buf);
+        }
+        case LUA_TSTRING: {
+            std::size_t len = 0;
+            const char* s = lua_tolstring(L, idx, &len);  // 已是字符串，无转换
+            return clipped(std::string(s ? s : "", len));
+        }
+        default:
+            return std::string("<") + lua_typename(L, lua_type(L, idx)) + ">";
+    }
+}
+
+// §7.2 审计 reason 截断（编译错误原文可能很长，账面保可读性）。
+std::string clip_reason(std::string reason) {
+    if (reason.size() > 256) {
+        reason.resize(256);
+        reason += "...";
+    }
+    return reason;
+}
 
 std::uint64_t wall_now_ms() {
     return static_cast<std::uint64_t>(
@@ -166,10 +227,13 @@ void ScriptRuntime::register_module(const char* name, const luaL_Reg* funcs) {
 // ---- §3.2 热替换：编译 + 冒烟在影子栈完成，通过才原子换 _G[name] ----
 
 bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& source) {
+    const std::uint64_t prev_version = module_version(spec.name);  // 0 = 首次
     // 依赖校验（依赖图拓扑序由装载器保证，本层只查已装载）。
     for (const auto& dep : spec.deps) {
         if (module_refs_.find(dep) == module_refs_.end()) {
             ++stats_.reload_failed;
+            record_reload(spec.name, prev_version, spec.version, false,
+                          "missing dependency: " + dep);
             return false;
         }
     }
@@ -181,6 +245,8 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
         lua_pop(L_, 1);
         ++stats_.reload_failed;
         fault(ScriptFaultEvent::Kind::kSyntax, spec.name.c_str(), msg);
+        record_reload(spec.name, prev_version, spec.version, false,
+                      "compile error: " + msg);
         return false;
     }
     // 求值（失败 → 旧表不动）。
@@ -192,6 +258,8 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
         lua_pop(L_, 1);
         ++stats_.reload_failed;
         fault(classify(rc, msg), spec.name.c_str(), msg);
+        record_reload(spec.name, prev_version, spec.version, false,
+                      "eval error: " + msg);
         return false;
     }
     if (!lua_istable(L_, -1)) {
@@ -199,10 +267,12 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
         ++stats_.reload_failed;
         fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(),
               "module did not return a table");
+        record_reload(spec.name, prev_version, spec.version, false,
+                      "module did not return a table");
         return false;
     }
     // 冒烟闸：新表带 smoke() 则须返回 true（§3.2 Phase A 自检用例集）。
-    lua_getfield(L_, -1, "smoke");
+    raw_getfield(L_, -1, "smoke");
     if (lua_isfunction(L_, -1)) {
         const int src = lua_pcall(L_, 0, 1, 0);
         const bool passed = src == LUA_OK && lua_toboolean(L_, -1) != 0;
@@ -214,6 +284,7 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
             lua_pop(L_, 1);  // 新表（未过闸，不进活跃引用）
             ++stats_.reload_failed;
             fault(ScriptFaultEvent::Kind::kRuntime, spec.name.c_str(), smsg);
+            record_reload(spec.name, prev_version, spec.version, false, smsg);
             return false;
         }
     } else {
@@ -236,13 +307,14 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
     module_versions_[spec.name] = spec.version;
     breaker_clear(spec.name, "hot swap cleared quarantine");  // §6.1 热更新账
     ++stats_.reload_success;
+    record_reload(spec.name, prev_version, spec.version, true, "");
     if (reload_listener_) {
         reload_listener_(spec.name.c_str(), spec.version);
     }
     // onReload 钩子（§3.2 Phase B 事件钩子：脚本侧重挂订阅）。失败不回滚
     // （换表已原子完成，观察期由 Phase C 处理），记 fault。
     lua_rawgeti(L_, LUA_REGISTRYINDEX, new_ref);
-    lua_getfield(L_, -1, "onReload");
+    raw_getfield(L_, -1, "onReload");
     if (lua_isfunction(L_, -1)) {
         const auto fit = module_frozen_.find(spec.name);
         if (fit != module_frozen_.end()) {
@@ -283,8 +355,10 @@ bool ScriptRuntime::rollback_module(const std::string& name) {
     module_frozen_.erase(name);
     module_refs_[name] = restored_ref;
     lua_setglobal(L_, name.c_str());
+    const std::uint64_t from_version = module_version(name);
     module_versions_[name] = restored_version;
     breaker_clear(name, "rollback cleared quarantine");  // §6.1 回滚同热更：新账
+    record_reload(name, from_version, restored_version, true, "rollback");
     if (reload_listener_) {
         reload_listener_(name.c_str(), restored_version);  // §3.2 reload 伪事件
     }
@@ -307,6 +381,64 @@ std::map<std::string, std::uint64_t> ScriptRuntime::active_modules() const {
 void ScriptRuntime::set_reload_listener(
     std::function<void(const char*, std::uint64_t)> listener) {
     reload_listener_ = std::move(listener);
+}
+
+// ---- §7.2 Lua 状态面只读内省（owning 线程；不经 Lua 可调函数） ----
+
+void ScriptRuntime::record_reload(const std::string& name, std::uint64_t from_version,
+                                  std::uint64_t to_version, bool success,
+                                  std::string reason) {
+    if (reload_history_.size() == kReloadHistoryCap) {
+        reload_history_.pop_front();  // 环形上限：丢最旧
+    }
+    reload_history_.push_back(LuaReloadRecord{name, from_version, to_version, tick_,
+                                              success, clip_reason(std::move(reason))});
+}
+
+LuaGcState ScriptRuntime::gc_state() const {
+    LuaGcState s;
+    s.used_bytes = allocated_;                       // allocf 执法真值
+    s.limit_bytes = config_.memory_limit_bytes;
+    s.lua_gc_kib = static_cast<std::size_t>(lua_gc(L_, LUA_GCCOUNT));
+    // LUA_GCPARAM：value 传 -1 = 只读返回当前参数值（百分位标度）。
+    s.gc_pause =
+        static_cast<std::size_t>(lua_gc(L_, LUA_GCPARAM, LUA_GCPPAUSE, -1));
+    s.gc_stepmul =
+        static_cast<std::size_t>(lua_gc(L_, LUA_GCPARAM, LUA_GCPSTEPMUL, -1));
+    s.gc_stepsize =
+        static_cast<std::size_t>(lua_gc(L_, LUA_GCPARAM, LUA_GCPSTEPSIZE, -1));
+    s.gc_is_running = lua_gc(L_, LUA_GCISRUNNING) != 0;
+    return s;
+}
+
+LuaEnvSnapshot ScriptRuntime::env_snapshot(const char* module,
+                                           std::size_t max_entries) const {
+    LuaEnvSnapshot snap;
+    if (module == nullptr || *module == '\0' || max_entries == 0) {
+        return snap;  // found = false
+    }
+    // 只读纪律：lua_next 裸遍历（不走 __pairs/__index），值经
+    // read_plain_value 类型化取值（不走 lua_tolstring 就地转换、不调函数）。
+    lua_getglobal(L_, module);
+    if (!lua_istable(L_, -1)) {
+        lua_pop(L_, 1);
+        return snap;  // 模块名不在全局面 = 未找到
+    }
+    snap.found = true;
+    lua_pushnil(L_);
+    while (lua_next(L_, -2) != 0) {  // [module, key, value]
+        if (snap.entries.size() >= max_entries) {
+            snap.truncated = true;
+            lua_pop(L_, 2);  // key, value
+            break;
+        }
+        std::string k = read_plain_value(L_, -2);
+        std::string v = read_plain_value(L_, -1);
+        snap.entries.emplace_back(std::move(k), std::move(v));
+        lua_pop(L_, 1);  // value（key 留作 lua_next 续行）
+    }
+    lua_pop(L_, 1);  // module 表
+    return snap;
 }
 
 // ---- §5.1/§5.2 属性钩子窗口：重算后广播前，同步修订值 ----
@@ -727,7 +859,7 @@ bool ScriptRuntime::load_contract(const std::string& source) {
         return false;
     }
     // routes 必备：msg_id → handler 名。
-    lua_getfield(L_, -1, "routes");  // [table, routes]
+    raw_getfield(L_, -1, "routes");  // [table, routes]
     if (!lua_istable(L_, -1)) {
         lua_pop(L_, 2);
         fault(ScriptFaultEvent::Kind::kRuntime, "contract", "missing routes table");
@@ -757,7 +889,7 @@ bool ScriptRuntime::load_contract(const std::string& source) {
     lua_pop(L_, 1);  // routes → [table]
     // write_whitelist 可选：attr id 数组（§3.4 写白名单数据化）。
     std::vector<std::uint64_t> whitelist;
-    lua_getfield(L_, -1, "write_whitelist");  // [table, wl]
+    raw_getfield(L_, -1, "write_whitelist");  // [table, wl]
     if (!lua_isnil(L_, -1)) {
         if (!lua_istable(L_, -1)) {
             lua_pop(L_, 2);
@@ -767,7 +899,7 @@ bool ScriptRuntime::load_contract(const std::string& source) {
         }
         const lua_Integer n = static_cast<lua_Integer>(lua_rawlen(L_, -1));
         for (lua_Integer i = 1; i <= n; ++i) {
-            lua_geti(L_, -1, i);
+            lua_rawgeti(L_, -1, i);  // raw 数组读（lua_geti 亦走 __index）
             if (lua_isinteger(L_, -1)) {
                 whitelist.push_back(static_cast<std::uint64_t>(lua_tointeger(L_, -1)));
             }
@@ -777,7 +909,7 @@ bool ScriptRuntime::load_contract(const std::string& source) {
     lua_pop(L_, 1);  // wl → [table]
     // version 可选。
     std::uint64_t version = 0;
-    lua_getfield(L_, -1, "version");
+    raw_getfield(L_, -1, "version");
     if (lua_isinteger(L_, -1)) {
         version = static_cast<std::uint64_t>(lua_tointeger(L_, -1));
     }
