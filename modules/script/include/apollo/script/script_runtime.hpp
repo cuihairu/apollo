@@ -38,6 +38,9 @@ struct ScriptConfig {
     std::uint32_t breaker_fault_limit = 3;
     std::uint64_t breaker_quarantine_ticks = 600;
     std::uint64_t breaker_max_quarantine_ticks = 4800;
+    // §7.1 attach eval：同 tick 次数上限（0 = 不限）与结果串大小上限。
+    std::uint32_t debug_eval_max_per_tick = 8;
+    std::size_t debug_eval_result_max = 4096;
 };
 
 struct ScriptFaultEvent {
@@ -76,6 +79,7 @@ struct ScriptStats {
     std::uint64_t attr_hook_faults = 0;            // §5.1 钩子错误（原值保持）
     std::uint64_t circuit_rejects = 0;             // §6.1 隔离期短路拒调
     std::uint64_t budget_warns = 0;                // §6.1 WARN 去抖后事件数
+    std::uint64_t debug_evals = 0;                 // §7.1 attach eval 次数
 };
 
 // §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
@@ -169,6 +173,11 @@ public:
     // 契约路由分发：id → handler（全局函数或 module.func 点路径）。
     // 未注册 id / handler 不可达 / 执行错误均返回 false。
     bool call_route(std::uint32_t msg_id);
+
+    // §7.1 attach eval：admin 单入口投递，owning 线程 tick 边界由宿主择机调用。
+    // 同一沙盒面（白名单/预算/内存上限全管辖）；表达式优先、语句回退；
+    // 结果串截断（debug_eval_result_max）、同 tick 次数限流（防打爆控制通道）。
+    bool eval_debug(const std::string& source, std::string& result);
     std::size_t memory_used() const;
     const ScriptStats& stats() const { return stats_; }
 
@@ -233,6 +242,9 @@ private:
 
     // §6.1 WARN 去抖账（chunk → 上次 WARN tick）。
     std::map<std::string, std::uint64_t> warn_ticks_;
+    // §7.1 attach eval 同 tick 限流账。
+    std::uint64_t debug_eval_tick_ = 0;
+    std::uint32_t debug_eval_count_ = 0;
     // §3.4 契约数据面（装载成功后与 _G["contract"] 同拍生效）。
     std::map<std::uint32_t, std::string> contract_routes_;
     std::vector<std::uint64_t> contract_whitelist_;

@@ -43,6 +43,7 @@ rt.get_global_bool("ready");
 - **模块熔断**（§6.1）：`call_module(module, func)` 模块 handler 调用（fault 归因到模块）；滑窗 W tick 内 M 次 FAULT → 隔离 Q tick（W/M/Q/max 启动期配置，默认 1000/3/600/4800）；隔离期调用直接短路返回 false 不进 Lua（`stats().circuit_rejects` 计数）；隔离期满半开放行一次，探针成功销账解除、再 FAULT 隔离跨度翻倍（封顶 max）；**热更新自动清零**（swap/rollback 成功即新版本新账）；宿主每 tick 喂 `set_tick(t)`；状态面子集 `is_quarantined`/`quarantine_remaining`/`quarantined_modules`（名单+剩余 tick）。
 - **契约表装载**（§3.4）：`load_contract(source)`——contract.lua（apollo_gen 同批吐的服务端双形态）编译 → 结构校验（routes 表必备）→ 路由完整性闸（bin 有 handler 而 Lua 无即拒换，handler 为全局名或一层 `module.func` 点路径）→ 原子换 `_G["contract"]` 与 C++ 数据面（任一步失败旧表不动）；数据面 `contract_routes()`（msg_id → handler）、`contract_write_whitelist()`（§3.4 写白名单数据化，直接喂 `run_attr_hook_window`）、`contract_version()`；`call_route(msg_id)` 契约路由分发（未注册 id / handler 不可达 / 执行错误返回 false）。
 - **§6.1 事件面**：三级事件经 fault sink——WARN（单次消耗 ≥ 预算 80% 且未超限，同 chunk 256 tick 去抖，不计 fault）、FAULT（既有分类计数）、TRIP/RECOVER（熔断触发/解除：半开销账、热更、回滚三路解除均发）；`ScriptFaultEvent` 结构化字段封闭集 `kind/chunk/message + ts_wall_ms/tick/consumed/budget`（引擎侧统一填充，下游按字段路由不解析文本）。
+- **attach eval**（§7.1）：`eval_debug(source, result)`——admin 单入口投递、owning 线程 tick 边界由宿主择机调用；同一沙盒面（白名单/指令预算/内存上限全管辖，死循环可打断）；表达式优先、语句回退（REPL 惯例）；结果串截断（`debug_eval_result_max`，默认 4KB）+ 同 tick 次数限流（`debug_eval_max_per_tick`，默认 8，0 = 不限）。
 - **观测面**：`stats()`（调用/fault 分类计数/指令粗检累计/reload 成败/attr_hook 调用与跳过计数/WARN 去抖计数/熔断拒调计数）、`memory_used()`、`reset_budget()`。
 
 ### 边界（留后续批）
@@ -51,9 +52,9 @@ rt.get_global_bool("ready");
 - apollo_gen 吐 contract.lua 产物（当前 Lua 表形态手写，生成器接线随 protobuf 批）、版本偏序执法（契约版本 ≥ 脚本补丁版本）、字节码缓存（§3.5 manifest 三元组）
 - 公式即钩子（§5.3）
 - WARN 阈值可配（当前 80% 固定）、熔断状态持久化（防坏版本崩溃循环）、ScriptFaultEvent 宿主上下文字段（scene/entity_id/module+version——随场景接线批补）
-- attach 调试（§7）、GM 命令面（§7.5）
+- attach 执行通道（admin 单入口/control 转发/tick 任务队列投递——宿主接线批）、Lua 状态内省查询 API（§7.2 只读面）、GM 命令面（§7.5）
 - `require`/package 面未打开（模块加载暂走宿主 `call_string` 面）
 
 ## 测试
 
-`tests/test_script_runtime.cpp`（42 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播；属性钩子修订值、白名单外跳过、错误保持原值、帧预算跳过与下一帧恢复、nil 不修饰、无钩子空窗口；熔断三次触发、滑窗过期、半开恢复、半开翻倍、热更清零、M 可配置、call_module 分发、缺 handler 记 fault；契约装载数据面、缺 handler 拒换、坏结构拒载、失败保旧、契约路由分发、契约白名单喂钩子窗口；WARN 80% 触发、256 tick 去抖、阈值下静默、TRIP/RECOVER 事件、热更清账发 RECOVER、事件结构化字段。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。
+`tests/test_script_runtime.cpp`（48 用例）：白名单可用、沙盒缺省、二进制 chunk 拒绝、指令预算中断与状态恢复、预算 per-call 重充、内存上限、pcall 错误隔离、fault sink、具名模块注入；热替换原子换表、失败保旧、依赖拒载、冒烟闸、onReload 钩子、冷冻区回滚、reload 广播；属性钩子修订值、白名单外跳过、错误保持原值、帧预算跳过与下一帧恢复、nil 不修饰、无钩子空窗口；熔断三次触发、滑窗过期、半开恢复、半开翻倍、热更清零、M 可配置、call_module 分发、缺 handler 记 fault；契约装载数据面、缺 handler 拒换、坏结构拒载、失败保旧、契约路由分发、契约白名单喂钩子窗口；WARN 80% 触发、256 tick 去抖、阈值下静默、TRIP/RECOVER 事件、热更清账发 RECOVER、事件结构化字段；eval 表达式求值与语句执行、错误隔离、预算管辖、结果截断、同 tick 限流与次 tick 恢复。三树门禁（GAME_MODULE ON/OFF）+ sanitizer 全绿。

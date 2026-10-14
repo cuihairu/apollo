@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 
 namespace apollo {
 namespace script {
@@ -606,6 +607,67 @@ bool ScriptRuntime::call_route(std::uint32_t msg_id) {
         return false;
     }
     warn_check(it->second.c_str(), used_instructions_);
+    return true;
+}
+
+// ---- §7.1 attach eval：tick 边界沙盒执行，admin 通道面归宿主 ----
+
+bool ScriptRuntime::eval_debug(const std::string& source, std::string& result) {
+    // 同 tick 限流（防误操作打爆控制通道；0 = 不限）。
+    if (tick_ != debug_eval_tick_) {
+        debug_eval_tick_ = tick_;
+        debug_eval_count_ = 0;
+    }
+    if (config_.debug_eval_max_per_tick != 0 &&
+        debug_eval_count_ >= config_.debug_eval_max_per_tick) {
+        fault(ScriptFaultEvent::Kind::kRuntime, "debug_eval", "rate limited");
+        return false;
+    }
+    ++debug_eval_count_;
+    ++stats_.debug_evals;
+    // 表达式优先（REPL 惯例），编译失败回退语句执行。
+    ++stats_.calls;
+    used_instructions_ = 0;
+    int rc = LUA_ERRSYNTAX;
+    const std::string expr = "return " + source;
+    if (luaL_loadbufferx(L_, expr.data(), expr.size(), "debug_eval", "t") == LUA_OK) {
+        rc = lua_pcall(L_, 0, 1, 0);
+    } else {
+        lua_pop(L_, 1);  // 表达式编译错误 → 回退
+        if (luaL_loadbufferx(L_, source.data(), source.size(), "debug_eval", "t") !=
+            LUA_OK) {
+            const std::string msg =
+                lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+            lua_pop(L_, 1);
+            fault(ScriptFaultEvent::Kind::kSyntax, "debug_eval", msg);
+            return false;
+        }
+        rc = lua_pcall(L_, 0, 0, 0);
+    }
+    stats_.instructions += used_instructions_;
+    if (rc != LUA_OK) {
+        const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
+        lua_pop(L_, 1);
+        fault(classify(rc, msg), "debug_eval", msg);
+        return false;
+    }
+    // 结果序列化：表达式路径才有返回值（nil/无值 = 空串；不可转换给类型名）。
+    if (lua_gettop(L_) > 0 && !lua_isnil(L_, -1)) {
+        std::size_t len = 0;
+        const char* s = lua_tolstring(L_, -1, &len);
+        if (!s) {
+            s = lua_typename(L_, lua_type(L_, -1));
+            len = std::strlen(s);
+        }
+        result.assign(s, std::min(len, config_.debug_eval_result_max));
+        lua_pop(L_, 1);
+    } else {
+        result.clear();
+        if (lua_gettop(L_) > 0) {
+            lua_pop(L_, 1);  // 表达式路径的 nil
+        }
+    }
+    warn_check("debug_eval", used_instructions_);
     return true;
 }
 

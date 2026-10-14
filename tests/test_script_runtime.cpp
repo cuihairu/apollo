@@ -571,3 +571,58 @@ TEST(ScriptRuntime, FaultEventCarriesStructuredFields) {
     EXPECT_EQ(events[0].budget, 100000u);
     EXPECT_GT(events[0].ts_wall_ms, 0u);
 }
+
+// ── §7.1 attach eval（tick 边界沙盒执行；admin 通道面留宿主批） ──
+
+TEST(ScriptRuntime, EvalDebugReturnsExpression) {
+    ScriptRuntime rt(make_config());
+    std::string out;
+    EXPECT_TRUE(rt.eval_debug("1 + 2", out));
+    EXPECT_EQ(out, "3");
+    EXPECT_TRUE(rt.eval_debug("'w' .. 'orld'", out));
+    EXPECT_EQ(out, "world");
+}
+
+TEST(ScriptRuntime, EvalDebugExecutesStatement) {
+    ScriptRuntime rt(make_config());
+    std::string out;
+    EXPECT_TRUE(rt.eval_debug("dbg = 7", out));
+    EXPECT_TRUE(out.empty());  // 语句路径无返回值
+    EXPECT_EQ(rt.get_global_string("dbg"), "7");
+}
+
+TEST(ScriptRuntime, EvalDebugFaultIsolated) {
+    ScriptRuntime rt(make_config());
+    std::string out;
+    EXPECT_FALSE(rt.eval_debug("error('nope')", out));
+    EXPECT_EQ(rt.stats().fault_runtime, 1u);
+    // 状态可继续
+    EXPECT_TRUE(rt.eval_debug("2 * 2", out));
+    EXPECT_EQ(out, "4");
+}
+
+TEST(ScriptRuntime, EvalDebugBudgetGoverned) {
+    ScriptRuntime rt(make_config());
+    std::string out;
+    EXPECT_FALSE(rt.eval_debug("while true do end", out));  // 预算管辖 eval
+    EXPECT_EQ(rt.stats().fault_budget, 1u);
+    EXPECT_TRUE(rt.eval_debug("1", out));
+}
+
+TEST(ScriptRuntime, EvalDebugResultCapped) {
+    ScriptRuntime rt(make_config());
+    std::string out;
+    EXPECT_TRUE(rt.eval_debug("string.rep('x', 100000)", out));
+    EXPECT_EQ(out.size(), 4096u);  // 结果大小上限
+}
+
+TEST(ScriptRuntime, EvalDebugRateLimitedPerTick) {
+    ScriptRuntime rt(make_config());
+    std::string out;
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_TRUE(rt.eval_debug("1", out));  // 默认每 tick 上限 8
+    }
+    EXPECT_FALSE(rt.eval_debug("1", out));  // 第 9 次拒
+    rt.set_tick(1);  // 下一 tick 恢复
+    EXPECT_TRUE(rt.eval_debug("1", out));
+}
