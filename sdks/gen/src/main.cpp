@@ -443,6 +443,16 @@ std::string renderContractLua(const Contract& c, const std::string& hash,
     }
     os << "}\n\n";
 
+    os << "-- 路由平表（§3.4 装载面：id → handler 名，load_contract 必备表）。\n";
+    os << "-- 与 M.msgs 的 reflect 条目一一对应（handler 约定 = 消息名）；装载期\n";
+    os << "-- 一致性闸逐条对齐（bin 有而 Lua 无 handler 即拒换）。\n";
+    os << "M.routes = {\n";
+    for (const auto& m : c.msgs) {
+        if (m.binding != MsgBinding::Reflect) continue;
+        os << "  [" << m.id << "] = \"" << luaEscape(m.name) << "\",\n";
+    }
+    os << "}\n\n";
+
     os << "-- 实体表（name → 元数据；G-6 生成期展开：attrs = 本体 ∪ 祖先链并集，\n";
     os << "-- 按 attr id 升序）。\n";
     os << "M.entities = {\n";
@@ -459,8 +469,9 @@ std::string renderContractLua(const Contract& c, const std::string& hash,
     }
     os << "}\n\n";
 
-    os << "-- 脚本写白名单（sdk-contract §5：predict 含 client_predicted 的属性——\n";
-    os << "-- 载体数据化，机制不变；运行时再与服务端配置交集）\n";
+    os << "-- 脚本写白名单（sdk-contract §5：predict 含 client_predicted 的属性。\n";
+    os << "-- §3.4 数据化形态：attr id 数组（整数）——直接喂 run_attr_hook_window；\n";
+    os << "-- 名字经 M.attrs 反查，机制不变；运行时再与服务端配置交集）\n";
     os << "M.write_whitelist = {";
     bool firstWl = true;
     for (const auto& a : c.attrs) {
@@ -468,7 +479,7 @@ std::string renderContractLua(const Contract& c, const std::string& hash,
             std::find(a.predict.begin(), a.predict.end(), "client_predicted") != a.predict.end();
         if (!clientPredicted) continue;
         if (!firstWl) os << ", ";
-        os << '"' << luaEscape(a.name) << '"';
+        os << a.id;
         firstWl = false;
     }
     os << "}\n\n";

@@ -84,6 +84,7 @@ modules/lua/
 ### 3.4 契约表装载（contract.lua，sdk-contract §10.6 v3，2026-09-29 补）
 
 - `contract.lua` 是 apollo_gen 从契约源同批吐的 Lua 表（attr 表/消息路由/写白名单——semantic.json 同内容的服务端双形态）：`require` 即用，无编译环节（可选 luac 预编译随 Lua 发行版自带）。装载与热更走 §3.2 同一换表协议：新表编译 → 冒烟（路由完整性校验：bin 里有而 Lua 无 handler 即拒换——sdk-contract §10.6 装载期一致性闸在脚本侧的执行点）→ tick 边界原子换。
+- **装载面形态**（apollo_gen 同批保证，golden 入库；与 loader 消费面同形，防生成器吐装载不上的表）：`routes` 平表（reflect 条目 id → handler 名，与 `M.msgs` 的 reflect 条目一一对应、handler 约定 = 消息名）+ `write_whitelist` 整数 attr id 数组（`predict=client_predicted`；名字经 `M.attrs` 反查）+ `version`。`M.msgs`/`M.attrs` 等元数据表保留供内省，loader 只消费上述三项。
 - **消息 handler 绑定**：上行业务消息经 C++ 帧路由按 `contract_route`（id→handler 名）分发到 Lua——handler 在模块表内注册，模块头注释声明 `handles: msg_a, msg_b`，加载器校验其与契约路由表一致，缺失启动红。
 - **写白名单数据化**：§4/§5 的 `ScriptWriteWhitelist` 位图从 contract.lua 构建（白名单仍由契约 `predict` 位生成——sdk-contract §5 机制不变，载体从生成常量变为契约表数据）；热换契约表时白名单随 tick 边界同换。
 - 版本偏序沿用 §3.3 同一规则：契约表版本 ≥ 消费它的脚本补丁版本才启用——契约加字段与使用该字段的 handler 补丁必须同批或先表后补。

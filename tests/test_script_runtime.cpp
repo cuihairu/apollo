@@ -9,7 +9,11 @@
 //   - pcall 隔离（运行时错误不崩进程，计数入 fault）
 //   - 具名模块注入（§4.1 启动期注入唯一通道）
 
+#include <cstdint>
+#include <fstream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <lua.hpp>
@@ -477,6 +481,83 @@ TEST(ScriptRuntime, ContractWhitelistFeedsAttrHook) {
     rt.run_attr_hook_window(changes, rt.contract_write_whitelist(), 1000000);
     EXPECT_EQ(changes[0].new_value, 21);  // 白名单内修订
     EXPECT_EQ(changes[2].new_value, 2);   // 白名单外（7 ∉ {3}）原值
+}
+
+// ── 生成器产物装载面（§3.4 + sdk-contract §10.6） ─────────
+// contract.lua 由 apollo_gen 同批吐（golden 入库）；装载器消费的形态锚在
+// 本组集成用例——「改契约/改 writer 忘形态」即红。
+
+namespace {
+std::string read_generated_contract_lua() {
+    std::ifstream in{APOLLO_GENERATED_CONTRACT_LUA, std::ios::binary};
+    if (!in) return {};
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+}  // namespace
+
+TEST(ScriptRuntime, GeneratedContractLuaLoads) {
+    const std::string src = read_generated_contract_lua();
+    ASSERT_FALSE(src.empty());  // 产物随仓提交（golden 纪律）
+    ScriptRuntime rt(make_config());
+    // 探针：包一层函数执行产物取回 M，先验形态再装载——routes 平表必备、
+    // write_whitelist 全整数（attr id）、version 为数。handler 面按 routes
+    // 逐条注册空函数（装载闸只验存在性；真实 handler 面随玩法 Lua 批）。
+    ASSERT_TRUE(rt.call_string("probe",
+        "local M = (function()\n" + src + "\nend)()\n"
+        "assert(type(M.routes) == 'table', 'routes must be a table')\n"
+        "assert(type(M.version) == 'number', 'version must be a number')\n"
+        "assert(type(M.write_whitelist) == 'table', 'whitelist must be a table')\n"
+        "local ids, wl, stubs = {}, {}, {}\n"
+        "for id, _ in pairs(M.routes) do ids[#ids + 1] = id end\n"
+        "table.sort(ids)\n"
+        "for _, v in ipairs(M.write_whitelist) do\n"
+        "    assert(type(v) == 'number', 'whitelist entries must be attr ids')\n"
+        "    wl[#wl + 1] = v\n"
+        "end\n"
+        "for _, h in pairs(M.routes) do stubs[#stubs + 1] = 'function ' .. h .. '() end' end\n"
+        "table.sort(stubs)\n"
+        "__probe_n = tostring(#ids)\n"
+        "__probe_first = tostring(ids[1] or '')\n"
+        "__probe_version = tostring(M.version)\n"
+        "__probe_wl = table.concat(wl, ',')\n"
+        "__probe_stubs = table.concat(stubs, '\\n')\n"));
+    // 现存契约必有 ≥1 reflect 业务消息（routes 非空才轮到装载面语义）。
+    const std::string stubs = rt.get_global_string("__probe_stubs");
+    ASSERT_FALSE(stubs.empty());
+    ASSERT_TRUE(rt.call_string("stubs", stubs));
+    // 全装载路径：闸逐条过 → 数据面（routes/version/白名单 id）与探针同值。
+    ASSERT_TRUE(rt.load_contract(src));
+    const auto routes = rt.contract_routes();
+    EXPECT_EQ(routes.size(),
+              static_cast<size_t>(std::stoul(rt.get_global_string("__probe_n"))));
+    EXPECT_EQ(rt.contract_version(),
+              std::stoull(rt.get_global_string("__probe_version")));
+    std::vector<std::uint64_t> wl;
+    if (const std::string s = rt.get_global_string("__probe_wl"); !s.empty()) {
+        std::istringstream ss{s};
+        for (std::string tok; std::getline(ss, tok, ','); ) {
+            wl.push_back(std::stoull(tok));
+        }
+    }
+    EXPECT_EQ(rt.contract_write_whitelist(), wl);
+    EXPECT_TRUE(rt.call_route(static_cast<std::uint32_t>(
+        std::stoul(rt.get_global_string("__probe_first")))));
+}
+
+TEST(ScriptRuntime, GeneratedContractGateRejectsMissingHandler) {
+    // 无 handler 面直接装载 → 一致性闸拒载（bin 有而 Lua 无，sdk-contract
+    // §10.6）——生成器产物不是装载免检票。
+    const std::string src = read_generated_contract_lua();
+    ASSERT_FALSE(src.empty());
+    ScriptRuntime rt(make_config());
+    std::vector<ScriptFaultEvent> events;
+    rt.set_fault_sink([&](const ScriptFaultEvent& e) { events.push_back(e); });
+    EXPECT_FALSE(rt.load_contract(src));
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_NE(events[0].message.find("route handler missing:"), std::string::npos);
+    EXPECT_EQ(rt.stats().fault_runtime, 1u);
 }
 
 // ── §6.1 事件面：WARN 去抖 + TRIP/RECOVER + 结构化字段 ────

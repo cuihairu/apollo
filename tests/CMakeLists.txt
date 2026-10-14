@@ -1735,6 +1735,11 @@ add_test(NAME GameConnectionTests COMMAND gameconnection_tests)
 # ========== Script Runtime Tests (scripting-lua.md §2/§4/§6) ==========
 # Lua 沙盒宿主测试；无门控注册（script 模块零 apollo 依赖，OFF 树同样执行）。
 add_executable(script_tests test_script_runtime.cpp)
+# 生成器产物（contract.lua）装载面集成用例——随仓 golden 的绝对路径（四树
+# 同源：CMAKE_SOURCE_DIR 指仓库根，产物已提交不依赖构建期生成）。
+target_compile_definitions(script_tests PRIVATE
+    APOLLO_GENERATED_CONTRACT_LUA="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract.lua"
+)
 target_link_libraries(script_tests PRIVATE
     apollo::script
     GTest::gtest

@@ -423,6 +423,57 @@ M.msgs = {
   } },
 }
 
+-- 路由平表（§3.4 装载面：id → handler 名，load_contract 必备表）。
+-- 与 M.msgs 的 reflect 条目一一对应（handler 约定 = 消息名）；装载期
+-- 一致性闸逐条对齐（bin 有而 Lua 无 handler 即拒换）。
+M.routes = {
+  [900] = "session_up",
+  [901] = "session_down",
+  [902] = "session_moved",
+  [903] = "session_kicked",
+  [904] = "directory_snapshot_request",
+  [905] = "directory_snapshot_reply",
+  [906] = "gateway_client_disconnect",
+  [907] = "session_resume_request",
+  [908] = "session_resume_reply",
+  [909] = "gateway_assign_request",
+  [910] = "gateway_assign_response",
+  [911] = "player_activate_request",
+  [912] = "player_activate_response",
+  [913] = "player_bind_session_request",
+  [914] = "player_bind_session_response",
+  [915] = "player_assign_world_request",
+  [916] = "player_assign_world_response",
+  [917] = "player_resolve_route_request",
+  [918] = "player_resolve_route_response",
+  [919] = "instance_spawn_request",
+  [920] = "instance_spawn_reply",
+  [921] = "battle_input",
+  [922] = "battle_state_sync",
+  [923] = "battle_result",
+  [924] = "cell_create_entity",
+  [925] = "cell_destroy_entity",
+  [926] = "cell_entity_move",
+  [927] = "cell_cross_border",
+  [928] = "cell_skill_cast",
+  [929] = "cell_intent_ack",
+  [930] = "logger_line_push",
+  [931] = "metrics_snapshot",
+  [932] = "internal_envelope",
+  [933] = "player_freeze_request",
+  [934] = "player_freeze_reply",
+  [935] = "player_snapshot_request",
+  [936] = "player_snapshot_reply",
+  [937] = "player_handoff_request",
+  [938] = "player_handoff_reply",
+  [940] = "rpc_request",
+  [941] = "rpc_response",
+  [942] = "player_migrate_request",
+  [943] = "player_migrate_reply",
+  [944] = "debug_eval_request",
+  [945] = "debug_eval_result",
+}
+
 -- 实体表（name → 元数据；G-6 生成期展开：attrs = 本体 ∪ 祖先链并集，
 -- 按 attr id 升序）。
 M.entities = {
@@ -431,9 +482,10 @@ M.entities = {
   ["NPC"] = { parent = "Monster", ancestors = {"Monster"}, attrs = {1, 2, 10, 100, 101, 300, 801, 802, 804} },
 }
 
--- 脚本写白名单（sdk-contract §5：predict 含 client_predicted 的属性——
--- 载体数据化，机制不变；运行时再与服务端配置交集）
-M.write_whitelist = {"move_speed"}
+-- 脚本写白名单（sdk-contract §5：predict 含 client_predicted 的属性。
+-- §3.4 数据化形态：attr id 数组（整数）——直接喂 run_attr_hook_window；
+-- 名字经 M.attrs 反查，机制不变；运行时再与服务端配置交集）
+M.write_whitelist = {10}
 
 -- 错误码（code → 元数据）
 M.errors = {
