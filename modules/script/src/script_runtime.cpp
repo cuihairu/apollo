@@ -6,6 +6,10 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <memory>
+#include <sstream>
+#include <utility>
 
 namespace apollo {
 namespace script {
@@ -87,6 +91,19 @@ void disable_global(lua_State* L, const char* name) {
     lua_setglobal(L, name);
 }
 
+// §3.5 缓存产物读取（只读；运行期不写——产物归构建管线）。
+bool read_bytes_file(const std::string& path, std::vector<std::uint8_t>& out) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    const std::string& s = buffer.str();
+    out.assign(s.begin(), s.end());
+    return true;
+}
+
 // 标准库白名单（§2：base/string/table/math/bit32 → 5.5 线落点：
 // bit32 已并入语言内建，代之 utf8；coroutine 供 §8 协程异步模型）。
 struct LibEntry {
@@ -122,6 +139,13 @@ ScriptRuntime::ScriptRuntime(ScriptConfig config) : config_(config) {
     lua_pushlightuserdata(L_, static_cast<void*>(this));
     lua_settable(L_, LUA_REGISTRYINDEX);
     lua_sethook(L_, script_hook, LUA_MASKCOUNT, static_cast<int>(kHookStep));
+
+    // §3.5 字节码缓存（env 门控；空/未设 = 关，装载面恒走源码编译）
+    if (const char* dir = std::getenv(kBytecodeCacheEnv)) {
+        if (*dir != '\0') {
+            bytecode_cache_dir_ = dir;
+        }
+    }
 }
 
 ScriptRuntime::~ScriptRuntime() {
@@ -149,8 +173,10 @@ bool ScriptRuntime::swap_module(const ModuleSpec& spec, const std::string& sourc
             return false;
         }
     }
-    // 编译（§3.5 红线：运行期字符串按源码处理，禁 bytecode）。
-    if (luaL_loadbufferx(L_, source.data(), source.size(), spec.name.c_str(), "t") != LUA_OK) {
+    // 编译（§3.5 缓存面：manifest 校验过的自家产物走 "b"，其余回退源码 "t"；
+    // 红线不变——沙盒 `load` 对运行期字符串仍拒 bytecode）。
+    bool swap_from_cache = false;
+    if (load_source(spec.name.c_str(), source, swap_from_cache) != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
         ++stats_.reload_failed;
@@ -679,8 +705,10 @@ bool ScriptRuntime::resolve_handler(const std::string& handler) {
 }
 
 bool ScriptRuntime::load_contract(const std::string& source) {
-    // 编译（mode "t"）+ 求值；任一步失败旧表/旧数据面不动（§3.4 同 §3.2 协议）。
-    if (luaL_loadbufferx(L_, source.data(), source.size(), "contract", "t") != LUA_OK) {
+    // 编译（§3.5 缓存面同 swap_module）+ 求值；任一步失败旧表/旧数据面不动
+    // （§3.4 同 §3.2 协议）。
+    bool contract_from_cache = false;
+    if (load_source("contract", source, contract_from_cache) != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
         fault(ScriptFaultEvent::Kind::kSyntax, "contract", msg);
@@ -878,8 +906,65 @@ bool ScriptRuntime::call_global(const char* func) {
     return true;
 }
 
+// §3.5 缓存装载：manifest 三元组三重校验全过才走 "b" 分支。失效规则只有三条
+// （Lua 版本变 / 源变 / 装载器逻辑变）在构建期重跑管线；运行期任一校验
+// 不过（含产物缺失/损坏、清单未命中）= 回退源码编译，装载永不因缓存失败。
+int ScriptRuntime::load_source(const char* chunk, const std::string& source,
+                               bool& used_cache) {
+    // 未命中面统一回退：计 miss 后源码 "t" 编译（缓存关闭不计数——统计只
+    // 反映缓存面本身）。
+    auto fallback = [&]() -> int {
+        ++stats_.cache_misses;
+        return luaL_loadbufferx(L_, source.data(), source.size(), chunk, "t");
+    };
+    used_cache = false;
+    if (bytecode_cache_dir_.empty()) {
+        return luaL_loadbufferx(L_, source.data(), source.size(), chunk, "t");
+    }
+    if (!manifest_loaded_) {
+        manifest_ = std::make_unique<std::vector<ManifestEntry>>(
+            load_manifest(bytecode_cache_dir_ + "/manifest"));
+        manifest_loaded_ = true;
+    }
+    for (const auto& e : *manifest_) {
+        if (e.name != chunk) {
+            continue;
+        }
+        // 规则①源变：manifest 源 hash 与当前源不符 = 回退（管线应重跑）。
+        if (e.source_hash !=
+            fnv1a64(reinterpret_cast<const std::uint8_t*>(source.data()),
+                    source.size())) {
+            return fallback();
+        }
+        // 规则③版本变：格式签名（版本 + 尺寸集）不符 = 回退源码编译。
+        if (e.format_sig != bytecode_format_signature()) {
+            return fallback();
+        }
+        std::vector<std::uint8_t> bytes;
+        if (!read_bytes_file(bytecode_cache_dir_ + "/" + std::string(chunk) + ".luac",
+                             bytes)) {
+            return fallback();
+        }
+        // 产物损坏（整块 hash 不符）= 回退，不加载可疑字节码。
+        if (e.bytecode_hash != fnv1a64(bytes.data(), bytes.size())) {
+            return fallback();
+        }
+        const int rc = luaL_loadbufferx(L_, reinterpret_cast<const char*>(bytes.data()),
+                                        bytes.size(), chunk, "b");
+        if (rc != LUA_OK) {
+            lua_pop(L_, 1);
+            return fallback();
+        }
+        used_cache = true;
+        ++stats_.cache_hits;
+        return rc;
+    }
+    return fallback();  // 清单无该 chunk 条目（未预编译）
+}
+
 bool ScriptRuntime::run_chunk(const char* chunk, const std::string& source) {
-    if (luaL_loadbufferx(L_, source.data(), source.size(), chunk, "t") != LUA_OK) {
+    bool chunk_from_cache = false;
+    if (load_source(chunk, source, chunk_from_cache) != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
         fault(ScriptFaultEvent::Kind::kSyntax, chunk, msg);

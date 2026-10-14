@@ -1749,6 +1749,30 @@ if(MSVC)
 endif()
 add_test(NAME ScriptTests COMMAND script_tests)
 
+# ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
+# 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
+# script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(bytecode_cache_tests test_bytecode_cache.cpp)
+target_link_libraries(bytecode_cache_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(bytecode_cache_tests PRIVATE ws2_32)
+    target_compile_definitions(bytecode_cache_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(bytecode_cache_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BytecodeCacheTests COMMAND bytecode_cache_tests)
+
+# lua_precompile 工具冒烟：跑通 + manifest 行格式自洽（工具↔运行期契约最小闸）。
+add_test(NAME BytecodeCacheToolSmoke
+    COMMAND ${CMAKE_COMMAND}
+        -Dexe=$<TARGET_FILE:lua_precompile>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/lua_precompile_smoke.cmake)
+
 # BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
 # fan-out + 真 BaseAppMgr 分派面（AssignWorld/ResolveRoute 全真目录裁决）
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本

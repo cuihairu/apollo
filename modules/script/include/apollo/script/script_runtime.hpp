@@ -9,15 +9,18 @@
 //   - pcall 隔离（错误分类入 fault 事件，不崩进程，状态可继续）
 //   - 具名模块注入（§4.1 启动期注入唯一通道：register_module）
 //
-// 留后续批：契约表装载（§3.4）、字节码缓存（§3.5）、attach 调试（§7）。
+// 交付面：字节码缓存（§3.5 manifest 三元组校验，回退源码编译）、attach 调试（§7.1）。
 
 #pragma once
+
+#include "apollo/script/lua_bytecode_cache.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -82,6 +85,8 @@ struct ScriptStats {
     std::uint64_t circuit_rejects = 0;             // §6.1 隔离期短路拒调
     std::uint64_t budget_warns = 0;                // §6.1 WARN 去抖后事件数
     std::uint64_t debug_evals = 0;                 // §7.1 attach eval 次数
+    std::uint64_t cache_hits = 0;                  // §3.5 字节码缓存命中
+    std::uint64_t cache_misses = 0;                // §3.5 缓存未命中（回退源码）
 };
 
 // §3.1 模块 = Lua 源 + 头注释声明的元信息（name/version/deps）。
@@ -202,6 +207,10 @@ public:
 
 private:
     bool run_chunk(const char* chunk, const std::string& source);
+    // §3.5 缓存装载面：manifest 三元组（源 hash / bytecode hash / 格式签名）
+    // 全过才走 "b" 分支；任一不过（含文件缺失/损坏）回退源码 "t" 编译。
+    // 运行期只读——产物由构建管线（lua_precompile）独占写。
+    int load_source(const char* chunk, const std::string& source, bool& used_cache);
     void fault(ScriptFaultEvent::Kind kind, const char* chunk, const std::string& msg);
     ScriptFaultEvent::Kind classify(int rc, const std::string& msg) const;
     void breaker_on_fault(const std::string& module, bool probing);
@@ -228,6 +237,10 @@ private:
     lua_State* L_ = nullptr;
     std::function<void(const ScriptFaultEvent&)> sink_;
     ScriptStats stats_;
+    // §3.5 字节码缓存面（env 门控；owning 线程独占——装载与统计同线程）
+    std::string bytecode_cache_dir_;
+    bool manifest_loaded_ = false;
+    std::unique_ptr<std::vector<ManifestEntry>> manifest_;
     std::size_t allocated_ = 0;
     std::uint64_t used_instructions_ = 0;
 

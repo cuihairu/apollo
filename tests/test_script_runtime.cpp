@@ -51,8 +51,8 @@ result = os == nil and io == nil and debug == nil
 
 TEST(ScriptRuntime, LoadRejectsBytecode) {
     ScriptRuntime rt(make_config());
-    // 二进制 chunk 签名（\x1bLua）——load 只收文本（§2：一切字节串按源码处理，
-    // 预编译产物走 §3.5 专用装载路径，本批未实现）
+    // 二进制 chunk 签名（\x1bLua）——load 只收文本（§2：一切字节串按源码处理；
+    // 预编译产物走 §3.5 缓存装载面（manifest 三元组校验），不经 `load`）
     const std::string chunk = std::string("\x1bLua garbage-not-real-bytecode", 28);
     EXPECT_FALSE(rt.call_string("b", chunk));
     EXPECT_EQ(rt.stats().fault_syntax, 1u);
