@@ -29,6 +29,9 @@ constexpr std::size_t kReloadHistoryCap = 64;
 // §7.2 env 快照单值字节上限（超长截断——顶层字符串可能是大块内容）。
 constexpr std::size_t kEnvValueCap = 512;
 
+// §7.3 超标事件环上限（同 reload 审计环——防热更循环无界增长）。
+constexpr std::size_t kOverBudgetCap = 64;
+
 // 装载路径结构探测 raw 读：模块/契约自带字段不经元表继承，裸 lua_getfield
 // 会在 __index error 时把错误抛出保护区（崩进程，违 §2 纪律）——同栈效果
 // 换 raw 读取，__index/__pairs/__tostring 恶意表全程不触元方法。
@@ -105,6 +108,14 @@ std::uint64_t wall_now_ms() {
     return static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch())
+            .count());
+}
+
+// §7.3 归因墙钟（steady——单调，不受系统时间回拨影响；微秒粒度）。
+std::uint64_t steady_now_us() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
             .count());
 }
 
@@ -459,6 +470,30 @@ LuaEnvSnapshot ScriptRuntime::env_snapshot(const char* module,
     return snap;
 }
 
+// ---- §7.3 归因分桶：调用边界入账（hook 指令计数已付成本上分桶） ----
+
+void ScriptRuntime::profile_record(const char* chunk, std::uint64_t instructions,
+                                   std::uint64_t wall_us) {
+    auto& b = profile_[chunk];
+    b.chunk = chunk;
+    ++b.calls;
+    b.instructions += instructions;
+    b.wall_us += wall_us;
+}
+
+std::vector<ProfileBucket> ScriptRuntime::profile_snapshot() const {
+    std::vector<ProfileBucket> out;
+    out.reserve(profile_.size());
+    for (const auto& kv : profile_) {
+        out.push_back(kv.second);
+    }
+    return out;
+}
+
+void ScriptRuntime::profile_reset() {
+    profile_.clear();
+}
+
 // ---- §5.1/§5.2 属性钩子窗口：重算后广播前，同步修订值 ----
 
 bool ScriptRuntime::set_attr_hook(const char* global_name) {
@@ -471,6 +506,7 @@ bool ScriptRuntime::set_attr_hook(const char* global_name) {
         luaL_unref(L_, LUA_REGISTRYINDEX, hook_ref_);  // 重挂换引用
     }
     hook_ref_ = luaL_ref(L_, LUA_REGISTRYINDEX);  // 自弹栈顶
+    hook_name_ = global_name;                    // §7.3 归因键
     return true;
 }
 
@@ -503,8 +539,10 @@ void ScriptRuntime::run_attr_hook_window(std::vector<AttrChange>& changes,
         lua_pushinteger(L_, static_cast<lua_Integer>(ch.old_value));
         lua_pushinteger(L_, static_cast<lua_Integer>(ch.new_value));
         used_instructions_ = 0;
+        const auto t0 = steady_now_us();
         const int rc = lua_pcall(L_, 4, 1, 0);
         frame_hook_used_ += used_instructions_;
+        profile_record(hook_name_.c_str(), used_instructions_, steady_now_us() - t0);
         used_instructions_ = 0;
         if (rc != LUA_OK) {
             const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
@@ -549,8 +587,10 @@ bool ScriptRuntime::call_module(const std::string& module, const char* func) {
                   "handler not a function");
         } else {
             lua_remove(L_, -2);  // 栈顶 handler（模块函数无 self）
+            const auto t0 = steady_now_us();
             const int rc = lua_pcall(L_, 0, 0, 0);
             stats_.instructions += used_instructions_;
+            profile_record(module.c_str(), used_instructions_, steady_now_us() - t0);
             if (rc == LUA_OK) {
                 ok = true;
             } else {
@@ -953,8 +993,10 @@ bool ScriptRuntime::call_route(std::uint32_t msg_id) {
     }
     ++stats_.calls;
     used_instructions_ = 0;
+    const auto t0 = steady_now_us();
     const int rc = lua_pcall(L_, 0, 0, 0);
     stats_.instructions += used_instructions_;
+    profile_record(it->second.c_str(), used_instructions_, steady_now_us() - t0);
     if (rc != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
@@ -984,6 +1026,7 @@ bool ScriptRuntime::eval_debug(const std::string& source, std::string& result) {
     // 表达式优先（REPL 惯例），编译失败回退语句执行。
     ++stats_.calls;
     used_instructions_ = 0;
+    const auto t0 = steady_now_us();
     int rc = LUA_ERRSYNTAX;
     const std::string expr = "return " + source;
     if (luaL_loadbufferx(L_, expr.data(), expr.size(), "debug_eval", "t") == LUA_OK) {
@@ -1002,6 +1045,7 @@ bool ScriptRuntime::eval_debug(const std::string& source, std::string& result) {
         rc = lua_pcall(L_, 0, 0, 0);
     }
     stats_.instructions += used_instructions_;
+    profile_record("debug_eval", used_instructions_, steady_now_us() - t0);
     if (rc != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
@@ -1044,8 +1088,10 @@ bool ScriptRuntime::call_global(const char* func) {
         fault(ScriptFaultEvent::Kind::kRuntime, func, "not a function");
         return false;
     }
+    const auto t0 = steady_now_us();
     const int rc = lua_pcall(L_, 0, 0, 0);
     stats_.instructions += used_instructions_;
+    profile_record(func, used_instructions_, steady_now_us() - t0);
     if (rc != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
@@ -1120,8 +1166,10 @@ bool ScriptRuntime::run_chunk(const char* chunk, const std::string& source) {
         fault(ScriptFaultEvent::Kind::kSyntax, chunk, msg);
         return false;
     }
+    const auto t0 = steady_now_us();
     const int rc = lua_pcall(L_, 0, 0, 0);
     stats_.instructions += used_instructions_;
+    profile_record(chunk, used_instructions_, steady_now_us() - t0);
     if (rc != LUA_OK) {
         const std::string msg = lua_tostring(L_, -1) ? lua_tostring(L_, -1) : "";
         lua_pop(L_, 1);
@@ -1170,6 +1218,15 @@ ScriptFaultEvent::Kind ScriptRuntime::classify(int rc, const std::string& msg) c
 void ScriptRuntime::fault(ScriptFaultEvent::Kind kind, const char* chunk,
                           const std::string& msg) {
     ++stats_.faults;
+    if (kind == ScriptFaultEvent::Kind::kInstructionBudget) {
+        // §7.3 超标事件进状态面（哪个 chunk 触发、当次消耗；事件面同拍仍发）。
+        if (over_budget_history_.size() == kOverBudgetCap) {
+            over_budget_history_.pop_front();
+        }
+        over_budget_history_.push_back(
+            OverBudgetRecord{chunk, tick_, used_instructions_,
+                             config_.instruction_budget});
+    }
     switch (kind) {
         case ScriptFaultEvent::Kind::kSyntax:
             ++stats_.fault_syntax;

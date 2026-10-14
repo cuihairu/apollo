@@ -298,3 +298,102 @@ TEST(ScriptState, HostPathsKeepStackBalanced) {
     EXPECT_TRUE(out.empty());  // 语句路径无返回值（残留栈会使此断言红）
     EXPECT_EQ(lua_gettop(rt.raw()), 0);
 }
+
+// ── §7.3 profile 归因（调用边界分桶 + 超标事件状态面） ──
+
+namespace {
+const ProfileBucket* find_bucket(const std::vector<ProfileBucket>& snap,
+                                 const std::string& chunk) {
+    for (const auto& b : snap) {
+        if (b.chunk == chunk) {
+            return &b;
+        }
+    }
+    return nullptr;
+}
+}  // namespace
+
+TEST(ScriptState, ProfileCallStringBucket) {
+    ScriptRuntime rt(make_config());
+    EXPECT_TRUE(rt.call_string("hot", "for i = 1, 15000 do end"));  // 预算内过 10k 量化步
+    const auto snap = rt.profile_snapshot();
+    const auto* b = find_bucket(snap, "hot");
+    ASSERT_NE(b, nullptr);
+    EXPECT_EQ(b->calls, 1u);
+    EXPECT_GT(b->instructions, 0u);   // 粗检 10k 步进量化
+    EXPECT_GT(b->wall_us, 0u);        // 宿主侧 steady 掐表
+}
+
+TEST(ScriptState, ProfileCallModuleBucket) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.swap_module({"quest", 1, {}}, "return { onTick = function() end }"));
+    EXPECT_TRUE(rt.call_module("quest", "onTick"));
+    EXPECT_TRUE(rt.call_module("quest", "onTick"));
+    EXPECT_FALSE(rt.call_module("quest", "ghost"));  // 查找失败不执行不入账
+    const auto snap = rt.profile_snapshot();
+    const auto* b = find_bucket(snap, "quest");
+    ASSERT_NE(b, nullptr);
+    EXPECT_EQ(b->calls, 2u);
+}
+
+TEST(ScriptState, ProfileCallRouteBucket) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env",
+        "function onChat() end\n"
+        "quest = { onStart = function() end }\n"));
+    ASSERT_TRUE(rt.load_contract(
+        "return { routes = { [1001] = 'onChat', [1002] = 'quest.onStart' } }"));
+    EXPECT_TRUE(rt.call_route(1001));
+    EXPECT_TRUE(rt.call_route(1002));
+    const auto snap = rt.profile_snapshot();
+    EXPECT_EQ(find_bucket(snap, "onChat")->calls, 1u);          // 按 handler 名入账
+    EXPECT_EQ(find_bucket(snap, "quest.onStart")->calls, 1u);
+}
+
+TEST(ScriptState, ProfileAttrHookAndEvalBuckets) {
+    ScriptRuntime rt(make_config());
+    ASSERT_TRUE(rt.call_string("env", "function myHook() return nil end"));
+    ASSERT_TRUE(rt.set_attr_hook("myHook"));
+    std::vector<ScriptRuntime::AttrChange> changes{
+        {1, 7, 0, 1}, {2, 7, 0, 2}};
+    rt.run_attr_hook_window(changes, {7}, 1000000);
+    std::string out;
+    EXPECT_TRUE(rt.eval_debug("1 + 2", out));
+    const auto snap = rt.profile_snapshot();
+    EXPECT_EQ(find_bucket(snap, "myHook")->calls, 2u);       // 钩子按注册名入账
+    EXPECT_EQ(find_bucket(snap, "debug_eval")->calls, 1u);
+}
+
+TEST(ScriptState, ProfileOverBudgetRecorded) {
+    ScriptConfig cfg = make_config();
+    cfg.instruction_budget = 50000;
+    ScriptRuntime rt(cfg);
+    EXPECT_FALSE(rt.call_string("spin", "while true do end"));  // 预算中止
+    const auto& hist = rt.over_budget_history();
+    ASSERT_EQ(hist.size(), 1u);
+    EXPECT_EQ(hist[0].chunk, "spin");
+    EXPECT_GT(hist[0].consumed, 0u);              // 当次指令消耗
+    EXPECT_EQ(hist[0].budget, 50000u);
+}
+
+TEST(ScriptState, ProfileOverBudgetRingCap) {
+    ScriptConfig cfg = make_config();
+    cfg.instruction_budget = 50000;
+    ScriptRuntime rt(cfg);
+    for (int i = 0; i < 70; ++i) {
+        rt.set_tick(static_cast<std::uint64_t>(i));
+        EXPECT_FALSE(rt.call_string("spin", "while true do end"));
+    }
+    EXPECT_EQ(rt.over_budget_history().size(), 64u);
+    EXPECT_EQ(rt.over_budget_history().front().tick, 6u);  // 丢最旧
+}
+
+TEST(ScriptState, ProfileSnapshotCopyAndReset) {
+    ScriptRuntime rt(make_config());
+    rt.call_string("boot", "x = 1");
+    auto snap = rt.profile_snapshot();
+    ASSERT_EQ(snap.size(), 1u);
+    rt.profile_reset();
+    EXPECT_TRUE(rt.profile_snapshot().empty());
+    EXPECT_EQ(snap.size(), 1u);  // 快照是拷贝，reset 不追溯
+}

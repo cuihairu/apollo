@@ -127,6 +127,24 @@ struct LuaEnvSnapshot {
     std::vector<std::pair<std::string, std::string>> entries;
 };
 
+// §7.3 性能归因分桶（COUNT hook 双职能的第二职能：指令计数在 hook 已付
+// 成本上分桶，墙钟在宿主调用边界掐表——不新增热路径机制）。
+struct ProfileBucket {
+    std::string chunk;               // 归因键：chunk 名 / 模块名 / handler 点路径
+    std::uint64_t calls = 0;
+    std::uint64_t instructions = 0;  // 粗检近似（10k 步进量化，同 stats 口径）
+    std::uint64_t wall_us = 0;       // 宿主侧墙钟累计（steady，微秒）
+};
+
+// §7.3 超标事件状态面记录（死循环检测：指令预算中止——哪个 chunk、当次
+// 消耗、配置预算；事件面 ScriptFaultEvent 同拍仍发）。
+struct OverBudgetRecord {
+    std::string chunk;
+    std::uint64_t tick = 0;
+    std::uint64_t consumed = 0;
+    std::uint64_t budget = 0;
+};
+
 class ScriptRuntime {
 public:
     // §5.1 钩子负载：C++ 侧快照拷贝（int64 对），无锁——同属 owning thread。
@@ -171,6 +189,15 @@ public:
     // 模块 env 顶层值快照（max_entries = 条目上限，0 恒返回未找到）。
     [[nodiscard]] LuaEnvSnapshot env_snapshot(const char* module,
                                               std::size_t max_entries) const;
+
+    // §7.3 归因快照（拷贝返回，键序 = chunk 名字典序；owning 线程 tick
+    // 边界调用）。MetricRegistry/呈现面聚合归 observability 后续批。
+    [[nodiscard]] std::vector<ProfileBucket> profile_snapshot() const;
+    // §7.3 超标事件环（上限 64 条丢最旧）。
+    [[nodiscard]] const std::deque<OverBudgetRecord>& over_budget_history() const {
+        return over_budget_history_;
+    }
+    void profile_reset();
 
     // §5.1 属性钩子：注册全局函数 onAttrChanged(entity, attr, old, new) →
     // 整数（nil/非整数 = 不修饰）；全局名不存在返回 false，重挂换引用。
@@ -276,6 +303,9 @@ private:
     // §7.2 热替换审计入账（环形上限内丢最旧）。
     void record_reload(const std::string& name, std::uint64_t from_version,
                        std::uint64_t to_version, bool success, std::string reason);
+    // §7.3 调用边界入账（chunk、本次指令消耗、墙钟 us）。
+    void profile_record(const char* chunk, std::uint64_t instructions,
+                        std::uint64_t wall_us);
 
     ScriptConfig config_;
     lua_State* L_ = nullptr;
@@ -300,9 +330,13 @@ private:
     std::function<void(const char*, std::uint64_t)> reload_listener_;
     // §7.2 热替换审计环（swap 拒载/成功 + rollback；进程内即可查版本漂移）。
     std::deque<LuaReloadRecord> reload_history_;
+    // §7.3 归因分桶（owning 线程独占，无锁）+ 超标事件环。
+    std::map<std::string, ProfileBucket> profile_;
+    std::deque<OverBudgetRecord> over_budget_history_;
 
     // §5.1 钩子 registry ref（随 lua_close 释放）+ §5.2 帧级已用预算。
     int hook_ref_ = LUA_NOREF;
+    std::string hook_name_;  // §7.3 归因键（注册名，fault 面沿用 "onAttrChanged"）
     std::uint64_t frame_hook_used_ = 0;
 
     // §6.1 模块熔断状态：滑窗 FAULT 时间戳 + 隔离期（宿主喂 tick）。
