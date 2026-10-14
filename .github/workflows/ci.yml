@@ -3,8 +3,22 @@ name: CI Build and Test
 on:
   push:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '*.svg'
+      - '.editorconfig'
 
 jobs:
   build:
