@@ -55,7 +55,7 @@
 | 能力 | SSEngine | apollo 现状 | 判定 |
 |---|---|---|---|
 | 线程池 | `sdthreadpool`（min/max、手工终止语义） | `modules/base/thread_pool.hpp`（function+future，hardware_concurrency 默认） | **已有且更现代**；但缺"上限拒绝/队列上限"语义，可补 |
-| 锁/条件变量 | sdmutex/sdcondition/sdlock | std::mutex/condition_variable + `utils/lock.h` | 已有且更优，勿引入 |
+| 锁/条件变量 | sdmutex/sdcondition/sdlock | std::mutex/condition_variable（孤儿头 `utils/lock.h` 已删，2026-10-15） | std 原语已足，勿引入 |
 | 时间 | 双轨 DateTime + chrono | `modules/base/time.hpp`（chrono 正系） | 已有且更优 |
 | 定时器 | sdtimer（O(n) 扫描） | **无定时器模块**（rg 全 modules 无 timer） | **缺**：按目标设计（分层时间轮）新建，见 §4.3 |
 | 裸内存池 | 16 档 size-class 池 | `utils/memory_pool.h`（定长块池）+ `modules/base/memory.hpp`(ByteBuffer) | 已有；size-class 变长池思想可在网络缓冲场景复用 |
