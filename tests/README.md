@@ -2,13 +2,13 @@
 
 ## 概述
 
-统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（当前 44 项）。
+统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（本地 ON 树 53 项、CI 腿 64 项——两树注册集不完全重合，见「门禁口径」注记）。
 
-tests/ 下 56 个 `test_*.cpp` 中 38 个注册进门禁；其余 15 个属 legacy GTest 批（`APOLLO_BUILD_GTESTS=OFF` 默认关：protobuf / buffer / network / log / timer / id_pool / utils / rest_template / data_structures / channel / crypto / utils 系及配套 main），不编不跑、不计入门禁。
+tests/ 下 86 个 `test_*.cpp`，3 个未注册（`test_all_features.cpp` / `test_thread_pool_simple.cpp` / `test_timer_main.cpp`，后者为 0 字节会话语义遗留）。其余挂在 `tests/CMakeLists.txt` 的 92 条 `add_test` 上，**全部位于 :7 的外层 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` 门内（块延伸至文件末尾 :1945）**，其中 42 条另受嵌套守卫（`if(TARGET …)` 族、模块开关）支配——本地 ON 树最后一次 configure 仅生效 50 条，被静默跳过的 42 条含整个 game 域族（`avatar_tests` / `scene_tests` / `game_tests` 等二进制已在本地树编出，却未进入 CTestTestfile，ctest 无从感知）。初始导入脚手架批 8 个目标（data_structures / log / network / protobuf / rest_template / utils / id_pool / timer）已于 2026-10-15（305c4d6f）删除、接线同清；buffer_tests 与 channel_tests 现役保留。
 
 ## 门禁口径
 
-三树构建 + CTest 全绿（ON 树 44/44、OFF 树 38/38、Examples 树 42/42，数字随批增长，各批交付注记为凭；net M1 内核批起 LinkTests 入 net 域——ON/OFF 双树同数、Examples 同批记 42/42）：
+四树构建 + CTest 全绿（2026-10-16 实测：ON 树 53/53、OFF 树 51/51、Examples 树 51/51、san 树 51/51；数字随批增长，各批交付注记为凭）：
 
 ```bash
 # 树 1/2：默认树 ON / OFF（GAME_MODULE 开关各验一遍，OFF 验完还原 ON）
@@ -21,6 +21,10 @@ cmake -S . -B build -DAPOLLO_BUILD_GAME_MODULE=ON && cmake --build build -j
 cmake -S . -B build-examples -DAPOLLO_BUILD_EXAMPLES=ON \
   && cmake --build build-examples -j && ctest --test-dir build-examples
 ```
+
+san 树（树 4）为独立 sanitizer 配置（`/tmp` 下 ASan+UBSan + `-fno-sanitize-recover=all`），不在上面三条 configure 命令内。
+
+> **注册集分布注记（2026-10-16 实测）**：本地 ON 树 53 项与 CI 腿 64 项**不完全重合**——本地缺整个 game 域族（Avatar/Scene/Instance/PlayerDirectory/Social/Battle/WorldHost 等，即上面 42 条嵌套守卫未生效者），CI 腿含之；本地含 AttrSync/SceneScript/CellScriptHost/M1 族。单看一棵树全绿不足为凭，提交须本地树 + CI 收账双侧确认。CI windows Release 腿另有一例预存红（`ScriptAsync.CallOutsideCoroutineRejected` SEH 0xc0000005，065d1190 起，63/64 绿）——与基线一致的失败不作为回归判据。
 
 ## 套件分组（按域，实际注册面）
 
