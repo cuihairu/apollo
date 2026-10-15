@@ -2,6 +2,8 @@
 
 #include "apollo/script/script_runtime.hpp"
 
+#include "apollo/script/module_version_store.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -437,6 +439,8 @@ bool ScriptRuntime::finish_module_swap_(const ModuleSpec& spec,
         lua_pop(L_, 1);
     }
     lua_pop(L_, 1);  // 新表
+    // §3.2 current 版本指针回写（换表成功即「最新已知健康版本」；回滚同路）。
+    persist_current_version_(spec.name, spec.version);
     return true;
 }
 
@@ -447,7 +451,9 @@ PreparedModule ScriptRuntime::prepare_module(const ModuleSpec& spec,
     out.version = spec.version;
     out.deps = spec.deps;
     if (!preparer_) {
-        preparer_ = std::make_unique<ScriptRuntime>(config_);
+        ScriptConfig pc = config_;
+        pc.version_store_path.clear();  // 预备面不持久化（版本尚未激活）
+        preparer_ = std::make_unique<ScriptRuntime>(pc);
     }
     ScriptRuntime* p = preparer_.get();
     // 依赖拓扑序（§3.1）：预备镜像内须已装齐——预备面只镜像经 prepare 的
@@ -580,6 +586,9 @@ bool ScriptRuntime::rollback_module(const std::string& name) {
     if (reload_listener_) {
         reload_listener_(name.c_str(), restored_version);  // §3.2 reload 伪事件
     }
+    // §3.2 current 版本指针回写：回滚把「最新已知健康版本」改回上一版本——
+    // 崩溃循环防护的落点（回滚前崩溃会让重启重新装载已判坏版本）。
+    persist_current_version_(name, restored_version);
     return true;
 }
 
@@ -594,6 +603,40 @@ std::uint64_t ScriptRuntime::module_version(const std::string& name) const {
 
 std::map<std::string, std::uint64_t> ScriptRuntime::active_modules() const {
     return module_versions_;
+}
+
+// ---- §3.2 current 版本指针持久化（防坏版本崩溃循环） ----
+
+std::map<std::string, std::uint64_t> ScriptRuntime::current_version_manifest() const {
+    std::map<std::string, std::uint64_t> out;
+    if (config_.version_store_path.empty()) {
+        return out;  // 空路径 = 关闭
+    }
+    for (const auto& e : load_version_manifest(config_.version_store_path)) {
+        out[e.name] = e.version;  // 后行覆盖前行（重复条目取末次）
+    }
+    return out;
+}
+
+void ScriptRuntime::persist_current_version_(const std::string& name,
+                                            std::uint64_t version) {
+    if (config_.version_store_path.empty()) {
+        return;  // 空路径 = 关闭
+    }
+    // 整表读改写：保留其余模块的 current 指针（本清单跨模块共享，非单模块文件）。
+    std::vector<VersionEntry> entries;
+    bool found = false;
+    for (auto e : load_version_manifest(config_.version_store_path)) {
+        if (e.name == name) {
+            e.version = version;  // 同名覆盖（后写胜）
+            found = true;
+        }
+        entries.push_back(std::move(e));
+    }
+    if (!found) {
+        entries.push_back(VersionEntry{name, version});
+    }
+    write_version_manifest(config_.version_store_path, entries);
 }
 
 void ScriptRuntime::set_reload_listener(

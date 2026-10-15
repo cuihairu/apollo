@@ -51,6 +51,9 @@ struct ScriptConfig {
     // （tick 计，0 = 关闭泄漏检测——超龄即在协程清单标 leaked）。
     std::uint64_t async_default_timeout_ms = 5000;
     std::uint64_t async_leak_threshold_ticks = 0;
+    // §3.2 current 版本指针持久化路径（patch 目录版本清单；空 = 关闭，
+    // 换表/回滚不写盘）。控制面设入，宿主侧读写纪律见 module_version_store。
+    std::string version_store_path;
 };
 
 struct ScriptFaultEvent {
@@ -258,6 +261,9 @@ public:
     bool has_module(const char* name) const;
     std::uint64_t module_version(const std::string& name) const;  // 无模块返回 0
     std::map<std::string, std::uint64_t> active_modules() const;  // §7.2 版本矩阵
+    // §3.2 current 版本指针：读持久清单（换表/回滚写入的那份），供控制面重启
+    // 时装载「最新已知健康版本」。空路径 = 关闭（返回空表）。
+    std::map<std::string, std::uint64_t> current_version_manifest() const;
 
     // ModuleReloaded 广播（脚本侧 onReload 钩子重注册订阅）。
     void set_reload_listener(std::function<void(const char*, std::uint64_t)> listener);
@@ -406,6 +412,8 @@ private:
     // 熔断清账 + reload 审计 + 广播 + onReload 钩子。swap_module 与
     // commit_module 共用（Phase B 的 O(1) 落点）。
     bool finish_module_swap_(const ModuleSpec& spec, std::uint64_t prev_version);
+    // §3.2 current 版本指针回写（整表读改写 + 原子 rename；路径空 = 关闭）。
+    void persist_current_version_(const std::string& name, std::uint64_t version);
     // §3.2 Phase A 预备沙盒（懒建，同配置独立 lua_State）：模块表在预备镜像
     // 内，供 prepare 的依赖拓扑校验。控制面串行调用，无内部互斥。
     std::unique_ptr<ScriptRuntime> preparer_;

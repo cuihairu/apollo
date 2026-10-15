@@ -5,6 +5,7 @@ find_package(unofficial-lua CONFIG REQUIRED)
 add_library(apollo_script STATIC
     src/script_runtime.cpp
     src/lua_bytecode_cache.cpp
+    src/module_version_store.cpp
 )
 add_library(apollo::script ALIAS apollo_script)
 
