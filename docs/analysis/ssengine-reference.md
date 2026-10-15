@@ -8,7 +8,7 @@
 ## 执行摘要
 
 1. **最值得引入：异步 DB Command 模型**（`sddb.h:253-390`）：`OnExecuteSql`（DB 线程执行）→ `OnExecuted`（主线程 `Session::Run()` 回读）→ `Release` 的两段式异步，加 `GetGroupId()` 保序语义——这是 MMO"DB 线程 + 主线程完成回调"的标准解，apollo `modules/data` 目前只有同步 mock，此模型是第一优先参考。
-2. **第二：类型化对象池**（`sdobjectpool.h`）：placement-new + free-list + **锁策略作为模板参数**（`MT = CSDNonMutex`）；apollo 只有裸内存池（`utils/memory_pool.h`），缺按类型的池化。C++20 落地建议用 pmr/free-list 现代化重写，不搬宏。
+2. **第二：类型化对象池**（`sdobjectpool.h`）：placement-new + free-list + **锁策略作为模板参数**（`MT = CSDNonMutex`）；apollo 的裸内存池头（`utils/memory_pool.h`）已随孤儿头清理删除（2026-10-15，零消费者），缺按类型的池化。C++20 落地建议用 pmr/free-list 现代化重写，不搬宏。
 3. **第三：真·定时器轮**。sdtimer.h 头注释宣称"Linux 风格分层定时器"，`sdtimer.cpp:21-79` 实际是 **mutex + vector 全表扫描**——文档与实现不符是本仓库第一教训；apollo 目前**没有定时器模块**，游戏循环需要的是真分层时间轮（O(1) 插入/删除），按"目标设计"吸收而非按"现有实现"。
 4. **背压可见性值得学习**：sdnet 的 `GetSendBufFree()`（`sdnet.h:166-169`）与 `DelaySend`（跨线程投递）——把发送队列水位显式暴露给上层；apollo 网络抽象层（docs/design/net-abstraction.md）把这类能力收进统一接口，而不是像老引擎那样直接暴露线程与缓冲区细节。
 5. **属性/状态同步：SSEngine 没有**。它是纯系统层库（线程/内存/文件/网络管道），不含任何实体属性复制机制——apollo 的属性同步必须以 BigWorld/KBEngine 类模型为目标（见 `docs/design/attribute-sync.md`），老引擎能借的只有传输层零件（sdpkg 定长帧头+校验、loop_buffer 环形缓冲、data_queue 线程安全队列）。
@@ -58,7 +58,7 @@
 | 锁/条件变量 | sdmutex/sdcondition/sdlock | std::mutex/condition_variable（孤儿头 `utils/lock.h` 已删，2026-10-15） | std 原语已足，勿引入 |
 | 时间 | 双轨 DateTime + chrono | `modules/base/time.hpp`（chrono 正系） | 已有且更优 |
 | 定时器 | sdtimer（O(n) 扫描） | **无定时器模块**（rg 全 modules 无 timer） | **缺**：按目标设计（分层时间轮）新建，见 §4.3 |
-| 裸内存池 | 16 档 size-class 池 | `utils/memory_pool.h`（定长块池）+ `modules/base/memory.hpp`(ByteBuffer) | 已有；size-class 变长池思想可在网络缓冲场景复用 |
+| 裸内存池 | 16 档 size-class 池 | `utils/memory_pool.h`（定长块池，孤儿头已删 2026-10-15）+ `modules/base/memory.hpp`(ByteBuffer) | size-class 变长池思想可在网络缓冲场景复用 |
 | 类型化对象池 | sdobjectpool（placement-new + MT 模板参数） | **无按类型的对象池** | **缺**：§4.2 |
 | ID 池 | sdidpool | `modules/base/id_pool.hpp` / `utils/id_pool.h` | 已有（现代版） |
 | 跨线程队列/环形缓冲 | sddataqueue/sdloopbuffer | `include/apollo/utils/data_queue.h` / `loop_buffer.h` | 已有（即移植件） |
@@ -91,7 +91,7 @@
 ### 4.2 类型化对象池（价值 ★★★★）
 
 - **老引擎设计**：`CSDObjectPool<T, MT>`：free-list 分配裸内存 → placement-new 构造 → 显式析构归还；**锁策略模板参数**（单线程池传 `CSDNonMutex` 零开销）是全库最值得抄的一个设计决策。
-- **apollo 缺口**：`utils/memory_pool.h` 是裸字节池，无对象语义；热路径高频对象（封包、AOI 事件、属性 delta 批次、技能投射物）目前走全局 new/delete。
+- **apollo 缺口**：裸字节池头已随孤儿清理删除（2026-10-15），无对象语义；热路径高频对象（封包、AOI 事件、属性 delta 批次、技能投射物）目前走全局 new/delete。
 - **落地形态**：C++20 不需要老引擎的宏/重载把戏——`std::pmr::monotonic_buffer_resource`（帧作用域 arena）覆盖"每 tick 临时对象"；跨 tick 常驻对象用 `free-list + std::construct_at/destroy_at` 薄封装（~100 行），线程安全同样做成模板参数或 pmr memory_resource 注入。分配点对齐接 `docs/design/attribute-sync.md` 的 per-tick arena。
 - **成本**：低；先做 arena（收益最大、风险最小）。
 
