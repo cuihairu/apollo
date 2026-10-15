@@ -477,6 +477,12 @@ private:
     void install_async_surface_();
 
     static int async_call_impl_(lua_State* L);        // apollo.async.call
+    // 受理下沉（§8.2）：实参快照 + 记账 + handler 派发全部收在本 helper 帧，
+    // 正常返回后 entry 才 yield——luaL_error/lua_yieldk 的 longjmp 不横跨任何
+    // 持 RAII 局部的 C++ 帧（同文件错误路径纪律：C 入口帧只许平凡局部）。
+    std::uint64_t async_call_submit_(lua_State* L, const char* svc,
+                                     AsyncService& service, std::uint64_t handle,
+                                     CoroutineEntry& e);
     static int async_cont_(lua_State* L, int status, lua_KContext ctx);
     static int coroutine_create_impl_(lua_State* L);  // coroutine.create 替换（登记）
     static int coroutine_wrap_impl_(lua_State* L);    // coroutine.wrap 替换（登记）

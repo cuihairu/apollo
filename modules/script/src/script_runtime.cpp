@@ -1710,6 +1710,11 @@ void ScriptRuntime::resume_with_completion_(std::uint64_t handle,
 }
 
 int ScriptRuntime::async_call_impl_(lua_State* L) {
+    // 本函数是 luaL_error longjmp 的必经 C++ 帧——帧上只留平凡局部（指针/
+    // 迭代器），与同文件其余错误宿主（sandbox_load、coroutine_wrap_resume_
+    // 等）同一纪律；RAII 交接物全部下沉 submit_，其正常返回后方才 yield。
+    // MSVC 的 longjmp 走 SEH 展开咨询 C++ EH 状态机，vector/string 析构状态
+    // 与其共帧即崩（Windows Release 实测 0xc0000005）。
     lua_pushlightuserdata(L, const_cast<char*>(&kSelfKey));
     lua_gettable(L, LUA_REGISTRYINDEX);
     auto* self = static_cast<ScriptRuntime*>(lua_touserdata(L, -1));
@@ -1733,31 +1738,40 @@ int ScriptRuntime::async_call_impl_(lua_State* L) {
     if (eit == self->coroutines_.end()) {
         return luaL_error(L, "async: untracked coroutine");
     }
+    const std::uint64_t rid = self->async_call_submit_(
+        L, svc, sit->second, tit->second, eit->second);
+    return lua_yieldk(L, 0, static_cast<lua_KContext>(rid), async_cont_);
+}
+
+std::uint64_t ScriptRuntime::async_call_submit_(lua_State* L, const char* svc,
+                                                AsyncService& service,
+                                                std::uint64_t handle,
+                                                CoroutineEntry& e) {
     std::vector<LuaValue> args;
     const int n = lua_gettop(L);
     args.reserve(static_cast<std::size_t>(n > 1 ? n - 1 : 0));
     for (int i = 2; i <= n; ++i) {
         args.push_back(read_async_arg(L, i));
     }
-    const std::uint64_t rid = self->next_request_id_++;
-    CoroutineEntry& e = eit->second;
+    const std::uint64_t rid = next_request_id_++;
     const std::uint64_t timeout =
-        sit->second.timeout_ms != 0 ? sit->second.timeout_ms
-                                    : self->config_.async_default_timeout_ms;
+        service.timeout_ms != 0 ? service.timeout_ms
+                                : config_.async_default_timeout_ms;
     e.awaiting = true;
     e.request_id = rid;
     e.reason = std::string("await ") + svc;
     e.timeout_ms = timeout;
     e.deadline_ms = timeout != 0 ? steady_now_ms() + timeout : 0;
-    self->async_pending_[rid] = tit->second;
-    ++self->stats_.async_requests;
+    async_pending_[rid] = handle;
+    ++stats_.async_requests;
     {
-        // 受理即返回（L0 纪律：不阻塞 owning 线程）。实参 vector 作用域收在
-        // yield 之前——lua_yieldk 跳栈不走 C++ 析构，RAII 局部不得横跨挂起点。
+        // 受理即返回（L0 纪律：不阻塞 owning 线程）。本 helper 整体先于
+        // yield 正常返回——实参 vector 的析构随返回走常规 C++ 路径，挂起点
+        // （lua_yieldk 跳栈不走 C++ 析构）绝不横跨任何 RAII 帧。
         std::vector<LuaValue> handler_args = std::move(args);
-        sit->second.handler(rid, handler_args);
+        service.handler(rid, handler_args);
     }
-    return lua_yieldk(L, 0, static_cast<lua_KContext>(rid), async_cont_);
+    return rid;
 }
 
 int ScriptRuntime::async_cont_(lua_State* L, int /*status*/, lua_KContext ctx) {
