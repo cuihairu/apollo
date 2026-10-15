@@ -55,6 +55,8 @@ build-*/
 build-vcpkg/
 cmake-build-*/
 out/
+CMakeCache.txt
+CMakeFiles/
 
 # vcpkg
 vcpkg/
