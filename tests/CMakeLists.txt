@@ -440,24 +440,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
-	    if(TARGET apollo::game_core)
-	    add_executable(session_world_tests test_session_world.cpp)
-	    target_link_libraries(session_world_tests PRIVATE
-	        apollo
-	        apollo::base
-	        apollo::core
-	        apollo::runtime
-	        apollo::game_core
-	        apollo::game_session
-	        apollo::game_world
-	        apollo::game_battle
-	    )
-	    if(WIN32)
-	        target_link_libraries(session_world_tests PRIVATE ws2_32)
-	    endif()
-	    add_test(NAME SessionWorldTests COMMAND session_world_tests)
-	    endif()
-
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
@@ -633,64 +615,90 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    # add_test(NAME CryptoTests COMMAND crypto_tests)
 
-	    # ========== Game Module Tests (New) ==========
-	    # Game module tests include source files directly
-	    add_executable(game_tests
-	        test_game.cpp
-	        # Game Core
-	        ../modules/game/core/src/entity.cpp
-	        # Game World
-	        ../modules/game/world/src/scene.cpp
-	        ../modules/game/world/src/scene_aoi.cpp
-	        ../modules/game/world/src/viewer_state.cpp
-	        ../modules/game/world/src/avatar.cpp
-	        # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
-	        ../modules/game/attrsync/src/change_history.cpp
-	        ../modules/game/attrsync/src/viewer_attr_state.cpp
-	        ../modules/game/attrsync/src/delta_builder.cpp
-	        ../modules/game/attrsync/src/entity_attrs.cpp
-	        ../modules/game/attrsync/src/attr_sync_manager.cpp
-	        ../modules/game/session/src/player_anchor.cpp
-	        # Game Attributes (using attribute.hpp, not attribute_value.h)
-	        ../modules/game/attributes/src/attribute.cpp
-	    )
-	    target_include_directories(game_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/include
-	        ${CMAKE_SOURCE_DIR}/modules/game/core/include
-	        ${CMAKE_SOURCE_DIR}/modules/game/world/include
-	        ${CMAKE_SOURCE_DIR}/modules/game/battle/include
-	        ${CMAKE_SOURCE_DIR}/modules/game/session/include
-	        ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
-	        # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
-	        ${CMAKE_SOURCE_DIR}/modules/script/include
-	    )
-	    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core apollo::script)
-	    if(WIN32)
-	        target_link_libraries(game_tests PRIVATE ws2_32)
-	        target_compile_definitions(game_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
-	    endif()
-	    if(MSVC)
-	        target_compile_options(game_tests PRIVATE /utf-8)
-	    endif()
-	    add_test(NAME GameTests COMMAND game_tests)
-	# ========== World Host Tests (P0-1) ==========
-	# 定帧/追赶/跳拍语义（clock-and-time §3 口径）+ ThreadAffinity 执行上下文标注
-	add_executable(world_host_tests
-	    test_world_host.cpp
-	)
-	target_include_directories(world_host_tests PRIVATE
-	    ${CMAKE_SOURCE_DIR}/modules/core/include
-	    ${CMAKE_SOURCE_DIR}/modules/game/core/include
-	)
-	target_link_libraries(world_host_tests PRIVATE apollo::runtime)
-	if(WIN32)
-	    target_link_libraries(world_host_tests PRIVATE ws2_32)
-	    target_compile_definitions(world_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 	endif()
-	if(MSVC)
-	    target_compile_options(world_host_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME WorldHostTests COMMAND world_host_tests)
+
+# ========== TEST_ASSERT Suite Registration (moved from else() fallback, 2026-10-16) ==========
+# These 24 suites use the TEST_ASSERT harness (not GTest). They were misplaced in the
+# GTest-false else() branch, silently absent from the local gate when GTest is available.
+# Moved to top-level so they register regardless of GTest availability.
+
+    if(TARGET apollo::game_core)
+    add_executable(session_world_tests test_session_world.cpp)
+    target_link_libraries(session_world_tests PRIVATE
+        apollo
+        apollo::base
+        apollo::core
+        apollo::runtime
+        apollo::game_core
+        apollo::game_session
+        apollo::game_world
+        apollo::game_battle
+    )
+    if(WIN32)
+        target_link_libraries(session_world_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME SessionWorldTests COMMAND session_world_tests)
+    endif()
+
+    # ========== Game Module Tests (New) ==========
+    # Game module tests include source files directly
+    add_executable(game_tests
+        test_game.cpp
+        # Game Core
+        ../modules/game/core/src/entity.cpp
+        # Game World
+        ../modules/game/world/src/scene.cpp
+        ../modules/game/world/src/scene_aoi.cpp
+        ../modules/game/world/src/viewer_state.cpp
+        ../modules/game/world/src/avatar.cpp
+        # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
+        ../modules/game/attrsync/src/change_history.cpp
+        ../modules/game/attrsync/src/viewer_attr_state.cpp
+        ../modules/game/attrsync/src/delta_builder.cpp
+        ../modules/game/attrsync/src/entity_attrs.cpp
+        ../modules/game/attrsync/src/attr_sync_manager.cpp
+        ../modules/game/session/src/player_anchor.cpp
+        # Game Attributes (using attribute.hpp, not attribute_value.h)
+        ../modules/game/attributes/src/attribute.cpp
+    )
+    target_include_directories(game_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/modules/game/core/include
+        ${CMAKE_SOURCE_DIR}/modules/game/world/include
+        ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+        ${CMAKE_SOURCE_DIR}/modules/game/session/include
+        ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
+        # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
+        ${CMAKE_SOURCE_DIR}/modules/script/include
+    )
+    target_link_libraries(game_tests PRIVATE apollo apollo::base apollo::core apollo::script)
+    if(WIN32)
+        target_link_libraries(game_tests PRIVATE ws2_32)
+        target_compile_definitions(game_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    endif()
+    if(MSVC)
+        target_compile_options(game_tests PRIVATE /utf-8)
+    endif()
+    add_test(NAME GameTests COMMAND game_tests)
+
+# ========== World Host Tests (P0-1) ==========
+# 定帧/追赶/跳拍语义（clock-and-time §3 口径）+ ThreadAffinity 执行上下文标注
+add_executable(world_host_tests
+    test_world_host.cpp
+)
+target_include_directories(world_host_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/core/include
+)
+target_link_libraries(world_host_tests PRIVATE apollo::runtime)
+if(WIN32)
+    target_link_libraries(world_host_tests PRIVATE ws2_32)
+    target_compile_definitions(world_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(world_host_tests PRIVATE /utf-8)
+endif()
+add_test(NAME WorldHostTests COMMAND world_host_tests)
 
 # ========== Avatar / Player Object Model Tests (P0-2) ==========
 # Avatar 三职责（移动/战斗/AOI 广播）+ Anchor 投影 + PlayerId 强分型
@@ -1133,24 +1141,24 @@ if(MSVC)
 endif()
 add_test(NAME InstanceTests COMMAND instance_tests)
 
-	# ========== RNG Substream Tests (P2-2, battle-determinism §4) ==========
-	# RNG 子流组件（modules/base 头件）：同三元组同序列/分域隔离/无游标/任意 tick 重放
-	add_executable(rng_substream_tests
-		test_rng_substream.cpp
-	)
-	target_include_directories(rng_substream_tests PRIVATE
-		${CMAKE_SOURCE_DIR}/modules/base/include
-		${CMAKE_SOURCE_DIR}/include
-	)
-	target_link_libraries(rng_substream_tests PRIVATE apollo apollo::base)
-	if(WIN32)
-		target_link_libraries(rng_substream_tests PRIVATE ws2_32)
-		target_compile_definitions(rng_substream_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
-	endif()
-	if(MSVC)
-		target_compile_options(rng_substream_tests PRIVATE /utf-8)
-	endif()
-	add_test(NAME RngSubstreamTests COMMAND rng_substream_tests)
+# ========== RNG Substream Tests (P2-2, battle-determinism §4) ==========
+# RNG 子流组件（modules/base 头件）：同三元组同序列/分域隔离/无游标/任意 tick 重放
+add_executable(rng_substream_tests
+	test_rng_substream.cpp
+)
+target_include_directories(rng_substream_tests PRIVATE
+	${CMAKE_SOURCE_DIR}/modules/base/include
+	${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(rng_substream_tests PRIVATE apollo apollo::base)
+if(WIN32)
+	target_link_libraries(rng_substream_tests PRIVATE ws2_32)
+	target_compile_definitions(rng_substream_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+	target_compile_options(rng_substream_tests PRIVATE /utf-8)
+endif()
+add_test(NAME RngSubstreamTests COMMAND rng_substream_tests)
 
 # ========== Timer Wheel Tests (G-4 批) ==========
 # 分层时间轮（modules/base 组件，architecture-review §16.8-④ 落点）：
@@ -1172,7 +1180,7 @@ if(MSVC)
     target_compile_options(timer_wheel_tests PRIVATE /utf-8)
 endif()
 add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
-	endif()
+
 
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
 # cell 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ CellServer 受理点
