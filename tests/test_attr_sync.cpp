@@ -450,3 +450,218 @@ TEST(DeltaBuilder, ExhaustedHistorySnapshotAlsoFiltered) {
     EXPECT_EQ(frame.deltas[1].attr_id, 2u);
     EXPECT_EQ(frame.deltas[2].attr_id, 3u);
 }
+
+// ── slice 复合类型（attribute-sync §2.2 机制层；§3.4 保序例外） ─────────
+// 组合 id 纪律：slot 0 = 容器长度格（(0<<16)|base = base 本体），数据 slot
+// 1..max；线上 attr_id 高 16 位为 slot（§7.1）。声明面（slice_count/slice_
+// type）归契约批——本组只锚机制：粒度、校验、收缩终态、先扩容后写的线序。
+
+TEST(SliceContainer, LenWriteReadAndHistoryEntry) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 16);
+    ASSERT_TRUE(attrs.is_slice(7));
+    EXPECT_EQ(attrs.slice_max_slots(7), 16u);
+    EXPECT_EQ(attrs.slice_len(7), 0u);  // 声明未设长 = 0
+
+    attrs.set_slice_len(7, 3);
+    EXPECT_EQ(attrs.slice_len(7), 3u);
+    EXPECT_EQ(attrs.get(7), 3);  // 长度格 = base 本体（快照/读面自然携带）
+
+    // 长度变更是同步 op：入 history（组合 id = base，值 = 新长）
+    auto entries = attrs.history().entries_since(0);
+    ASSERT_EQ(entries.size(), 1u);
+    EXPECT_EQ(entries[0].attr_id, 7u);
+    EXPECT_EQ(entries[0].value, 3);
+}
+
+TEST(SliceContainer, LenAboveMaxRejected) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 4);
+    attrs.set_slice_len(7, 5);  // > max 拒绝
+    EXPECT_EQ(attrs.slice_len(7), 0u);
+    EXPECT_TRUE(attrs.history().entries_since(0).empty());
+}
+
+TEST(SliceContainer, DirectBaseWriteRejected) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 4);
+    attrs.set(7, 999);  // base 直写绕过收缩联动纪律 → 拒绝
+    EXPECT_EQ(attrs.get(7), 0);
+    EXPECT_TRUE(attrs.history().entries_since(0).empty());
+    EXPECT_EQ(attrs.dirty_count(), 0u);
+
+    attrs.set_slice_len(7, 1);  // 正门写入仍可用
+    EXPECT_EQ(attrs.get(7), 1);
+}
+
+TEST(SliceContainer, SlotGranularWriteAndDirty) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_slice_len(7, 2);
+    attrs.clear_dirty();
+
+    attrs.set_slot(7, 2, 42);
+    EXPECT_EQ(attrs.get_slot(7, 2), 42);
+    EXPECT_EQ(attrs.get_slot(7, 1), 0);  // 他格不动（slot 粒度同步单元）
+
+    // 组合 id 入 history：高 16 位 slot、低 16 位 base（§7.1 wire 形态）。
+    // set_slice_len 本身也入 history（长度 = 同步属性）——entries[0] 是
+    // 长度格（base 本体），entries[1] 才是 slot 写。
+    const std::uint32_t slot2 = EntityAttrs::slice_slot_id(7, 2);
+    auto entries = attrs.history().entries_since(0);
+    ASSERT_EQ(entries.size(), 2u);
+    EXPECT_EQ(entries[0].attr_id, 7u);
+    EXPECT_EQ(entries[0].value, 2);
+    EXPECT_EQ(entries[1].attr_id, slot2);
+    EXPECT_EQ(entries[1].value, 42);
+    EXPECT_TRUE(attrs.is_dirty(slot2));
+    EXPECT_FALSE(attrs.is_dirty(EntityAttrs::slice_slot_id(7, 1)));
+}
+
+TEST(SliceContainer, SlotWriteValidation) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_slice_len(7, 2);
+
+    attrs.set_slot(7, 3, 99);   // 越界（slot > len）拒绝
+    attrs.set_slot(7, 0, 99);   // slot 0 = 长度格，正门是 set_slice_len
+    attrs.set_slot(8, 1, 99);   // 未声明容器拒绝
+    EXPECT_EQ(attrs.get_slot(7, 3), 0);
+    EXPECT_EQ(attrs.get_slot(7, 0), 2);  // slot 0 读穿 = 长度格（set_slice_len 已设 2）
+    EXPECT_EQ(attrs.get_slot(8, 1), 0);
+    EXPECT_EQ(attrs.history().entries_since(0).size(), 1u);  // 只有 set_slice_len 那条
+}
+
+TEST(SliceContainer, ShrinkErasesDeadSlotValues) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_slice_len(7, 3);
+    attrs.set_slot(7, 1, 11);
+    attrs.set_slot(7, 2, 22);
+    attrs.set_slot(7, 3, 33);
+
+    attrs.set_slice_len(7, 1);  // 收缩即终态：越界格值擦除（快照面不携带死格）
+    EXPECT_EQ(attrs.get_slot(7, 2), 0);
+    EXPECT_EQ(attrs.get_slot(7, 3), 0);
+    EXPECT_EQ(attrs.values().count(EntityAttrs::slice_slot_id(7, 2)), 0u);
+    EXPECT_EQ(attrs.values().count(EntityAttrs::slice_slot_id(7, 3)), 0u);
+    EXPECT_EQ(attrs.values().count(EntityAttrs::slice_slot_id(7, 1)), 1u);
+}
+
+TEST(SliceContainer, CoordDecomposeAndDomainFallback) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 4);
+    attrs.set_domain(7, AttrDomain::kSelf);
+
+    const auto coord = attrs.slice_coord(EntityAttrs::slice_slot_id(7, 2));
+    ASSERT_TRUE(coord.has_value());
+    EXPECT_EQ(coord->base, 7u);
+    EXPECT_EQ(coord->slot, 2u);
+
+    // 长度格 = base 本体（slot 0）
+    const auto len_coord = attrs.slice_coord(7);
+    ASSERT_TRUE(len_coord.has_value());
+    EXPECT_EQ(len_coord->slot, 0u);
+
+    EXPECT_FALSE(attrs.slice_coord(EntityAttrs::slice_slot_id(9, 2)).has_value());
+    EXPECT_FALSE(attrs.slice_coord(9).has_value());
+
+    // slot 继承 base 域（§2.2 域按属性声明，slot 随 base）
+    EXPECT_EQ(attrs.domain(EntityAttrs::slice_slot_id(7, 2)), AttrDomain::kSelf);
+    EXPECT_EQ(attrs.domain(EntityAttrs::slice_slot_id(7, 0)), AttrDomain::kSelf);
+}
+
+// ── DeltaBuilder × slice：先扩容后写的线序 + 收缩死格过滤 ─────────
+
+TEST(DeltaBuilder, SliceDeltaLenBeforeSlots) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_slice_len(7, 3);   // seq1 长度
+    attrs.set_slot(7, 1, 11);    // seq2
+    attrs.set_slot(7, 2, 22);    // seq3
+
+    ViewerAttrState viewer;      // acked=0 → 快照路径
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+    ASSERT_TRUE(frame.is_snapshot);
+    // 快照序 = attr_id 升序 = [长度(base), slot1, slot2]（先扩容后写 slot）
+    ASSERT_EQ(frame.deltas.size(), 3u);
+    EXPECT_EQ(frame.deltas[0].attr_id, 7u);
+    EXPECT_EQ(frame.deltas[0].value, 3);
+    EXPECT_EQ(frame.deltas[1].attr_id, EntityAttrs::slice_slot_id(7, 1));
+    EXPECT_EQ(frame.deltas[1].value, 11);
+    EXPECT_EQ(frame.deltas[2].attr_id, EntityAttrs::slice_slot_id(7, 2));
+
+    // delta 路径同序（下一拍新增 slot 3 写）
+    attrs.set_slot(7, 3, 33);
+    viewer.set_acked(42, attrs.history().world_seq());
+    attrs.set_slice_len(7, 4);   // 先扩容
+    attrs.set_slot(7, 3, 33);    // 后写格
+    auto delta = builder.build(42, 999, attrs, viewer);
+    ASSERT_FALSE(delta.is_snapshot);
+    ASSERT_EQ(delta.deltas.size(), 2u);
+    EXPECT_EQ(delta.deltas[0].attr_id, 7u);                              // 长度先到
+    EXPECT_EQ(delta.deltas[0].value, 4);
+    EXPECT_EQ(delta.deltas[1].attr_id, EntityAttrs::slice_slot_id(7, 3));
+}
+
+TEST(DeltaBuilder, SliceDeltaShrinkDropsDeadSlotEntries) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_slice_len(7, 3);
+    attrs.set_slot(7, 1, 11);
+    ViewerAttrState viewer;
+    viewer.set_acked(42, attrs.history().world_seq());  // 前态已确认
+
+    // 同批：先写 slot 3（当时 len=3 合法），后收缩到 1 —— 收缩越过 = 死格，
+    // 下发面丢弃死格条目（否则客户端先收到长度 1 再收到越界格写）。
+    attrs.set_slot(7, 3, 33);
+    attrs.set_slice_len(7, 1);
+
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+    ASSERT_FALSE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 1u);
+    EXPECT_EQ(frame.deltas[0].attr_id, 7u);   // 只有长度终值
+    EXPECT_EQ(frame.deltas[0].value, 1);
+}
+
+TEST(DeltaBuilder, SliceDeltaPerSlotLastWriteWins) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_slice_len(7, 2);
+    ViewerAttrState viewer;
+    viewer.set_acked(42, attrs.history().world_seq());
+
+    attrs.set_slot(7, 2, 10);
+    attrs.set_slot(7, 2, 20);   // 同拍同格合并：last-write-wins + 计数
+
+    DeltaBuilder builder;
+    auto frame = builder.build(42, 999, attrs, viewer);
+    ASSERT_FALSE(frame.is_snapshot);
+    ASSERT_EQ(frame.deltas.size(), 1u);
+    EXPECT_EQ(frame.deltas[0].attr_id, EntityAttrs::slice_slot_id(7, 2));
+    EXPECT_EQ(frame.deltas[0].value, 20);
+    EXPECT_EQ(frame.deltas[0].change_n, 2u);
+}
+
+TEST(DeltaBuilder, SliceDomainHiddenFromOtherViewer) {
+    EntityAttrs attrs(42);
+    attrs.declare_slice(7, 8);
+    attrs.set_domain(7, AttrDomain::kSelf);  // slot 继承 base 域
+    attrs.set_slice_len(7, 2);
+    attrs.set_slot(7, 1, 11);
+
+    ViewerAttrState other;
+    ViewerAttrState owner;
+    owner.set_acked(42, 0);
+    DeltaBuilder builder;
+
+    auto for_other = builder.build(42, 999, attrs, other);
+    ASSERT_TRUE(for_other.is_snapshot);
+    EXPECT_TRUE(for_other.deltas.empty());  // 长度与 slot 全部随 base 域隐藏
+
+    auto for_owner = builder.build(42, 42, attrs, owner);
+    ASSERT_TRUE(for_owner.is_snapshot);
+    EXPECT_EQ(for_owner.deltas.size(), 2u);
+}

@@ -59,6 +59,27 @@ AttrSyncFrame DeltaBuilder::build(std::uint64_t entity_id,
         }
     }
 
+    // slice 保序例外（§3.4）：容器收缩即终态——同批内被新长度越过的死格
+    // 条目丢弃（否则客户端先收长度再收越界格写）。组合 id 升序输出天然
+    // 「长度（= base）先于 slot」——扩容向无需任何重排。
+    for (auto it = last_values.begin(); it != last_values.end();) {
+        const auto coord = attrs.slice_coord(it->first);
+        if (!coord || coord->slot == EntityAttrs::kSliceLenSlot) {
+            ++it;
+            continue;
+        }
+        const auto len_it = last_values.find(
+            EntityAttrs::slice_slot_id(coord->base, EntityAttrs::kSliceLenSlot));
+        const auto live_len = (len_it != last_values.end())
+            ? static_cast<std::uint16_t>(len_it->second)
+            : attrs.slice_len(coord->base);
+        if (coord->slot > live_len) {
+            it = last_values.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     // 4. delta 属性数超过阈值 → 直接快照
     if (last_values.size() > delta_attr_threshold_) {
         frame.is_snapshot = true;

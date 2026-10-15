@@ -501,17 +501,35 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **测试**：`tests/test_attr_sync.cpp` 增 8 用例（SelfDomainHiddenFromOtherViewer / SelfDomainVisibleToOwner / PublicDomainVisibleByDefault / WorldDomainVisibleLikePublic / TeamDomainHiddenWithoutGate / TeamDomainVisibleThroughGate / DeltaPathRespectsDomain / ExhaustedHistorySnapshotAlsoFiltered）；`tests/test_attr_sync_manager.cpp` 增 2 用例（CollectHidesSelfDomainFromOtherViewer / GroupGateControlsTeamVisibility）；`tests/test_scene_attrsync_wiring.cpp` 增 1 用例（FirstSightHidesSelfDomainFromOther）；`tests/test_attr_ack_degrade.cpp` 增 1 用例（DegradeSnapshotCarriesFullValues）。build 树 + sanitizer 树 + OFF 树全绿。
 
+### 批 10 — §2.2 slice 复合类型机制层（2026-10-15）
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| 组合 id 纪律：`(slot << 16) \| base`，slot 0 = 容器长度格（= base 本体），数据 slot 1..max_slots | `include/apollo/game/attrsync/entity_attrs.hpp` | ✅ 已落地 |
+| `declare_slice` / `is_slice` / `slice_max_slots`（机制层登记，不产生 history 条目） | `entity_attrs.hpp` | ✅ 已落地 |
+| `set_slice_len`（同步 op；收缩即终态——越界格值连脏标记一并擦除）；base 直写拒绝（长度正门唯一） | `entity_attrs.cpp` | ✅ 已落地 |
+| `set_slot` / `get_slot`（校验：已声明、slot ≥ 1 且 ≤ 当前长度） | `entity_attrs.cpp` | ✅ 已落地 |
+| `slice_coord` 组合 id 拆解 + `domain()` 组合 id 继承 base 域 | `entity_attrs.cpp` | ✅ 已落地 |
+| `DeltaBuilder` delta 路径死格过滤：同批内被新长度越过的 slot 条目丢弃（§3.4 保序例外） | `src/delta_builder.cpp` | ✅ 已落地 |
+
+**职责**：复合属性 = slice 容器，每 slot 独立同步单元（脏标记、序号、下发、ACK 水位、阈值与快照组装都以 slot 为粒度）。组合 id 直接走既有 values/dirty/history 面——per-slot last-write-wins 合并、per-viewer ACK、快照负载全部免费获得。attr_id 升序输出天然满足「先扩容后写 slot」（长度格 = base 排最前）；收缩向由 DeltaBuilder 死格过滤 + EntityAttrs 收缩擦除双半边保证终态一致。声明面（slice_count/slice_type 契约声明生成）归契约批，本批只交付机制（`declare_slice` 为机制层登记）。
+
+**对应设计节**：§2.2（slice 复合类型）、§3.4（收缩越过 = 死格保序例外）、§7.1（wire：attr_id 高 16 位为 slot）。
+
+**测试**：`tests/test_attr_sync.cpp` 增 11 用例（LenWriteReadAndHistoryEntry / LenAboveMaxRejected / DirectBaseWriteRejected / SlotGranularWriteAndDirty / SlotWriteValidation / ShrinkErasesDeadSlotValues / CoordDecomposeAndDomainFallback / SliceDeltaLenBeforeSlots / SliceDeltaShrinkDropsDeadSlotEntries / SliceDeltaPerSlotLastWriteWins / SliceDomainHiddenFromOtherViewer）。build 树 + sanitizer 树 + OFF 树 + examples 树全绿。
+
 ### 模块构建与测试汇总
 
 **模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；8 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / attr_sync_scheduler / frame_codec）。
 
-**测试**：`tests/test_attr_sync.cpp`（29）+ `tests/test_attr_sync_manager.cpp`（22）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（8）+ `tests/test_scene_attrsync_wiring.cpp`（10）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）= 96 用例，build 树 + sanitizer 树全绿。
+**测试**：`tests/test_attr_sync.cpp`（40）+ `tests/test_attr_sync_manager.cpp`（22）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（8）+ `tests/test_scene_attrsync_wiring.cpp`（10）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）= 107 用例，build 树 + sanitizer 树 + OFF 树 + examples 树全绿。
 
 ### 边界（未实现，后续批）
 
-- 客户端发送路径（net-abstraction.md §1 GameConnection Facade 未建）
-- slice 复合类型（§2.2）
 - 域标记契约声明生成 + 队/会成员数据注入（机制层已落地，声明与成员面归契约批/宿主）
+- slice 声明面（slice_count/slice_type 契约声明生成——机制层批 10 已落地，`declare_slice` 为机制层登记）
+- ~~客户端发送路径（GameConnection Facade 未建）~~（已随 Facade L2/L3 批交付：`tests/test_game_connection.cpp` 20 用例）
+- ~~slice 复合类型（§2.2）~~（机制层已随批 10 交付）
 
 ## 附录：三方机制速查对照
 
