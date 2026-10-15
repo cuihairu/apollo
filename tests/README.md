@@ -4,7 +4,7 @@
 
 统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（本地 ON 树 77 项、CI 腿 64 项——两树注册集不完全重合，见「门禁口径」注记）。
 
-tests/ 下 86 个 `test_*.cpp`，3 个未注册（`test_all_features.cpp` / `test_thread_pool_simple.cpp` / `test_timer_main.cpp`，后者为 0 字节会话语义遗留）。其余挂在 `tests/CMakeLists.txt` 的 92 条 `add_test` 上。历史上 24 个套件的注册曾落在 `else()` 兜底分支（`:7` 的 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` 为假时走的「simple tests」路径），本地 GTest 可用即整体跳过——2026-10-16 批已将这 24 个套件（game 域族 Avatar/Scene/Instance/PlayerDirectory/PersistJournal/PersistenceChain/Recovery/Reconnect/BattleRuntime/BattleOffload/RngSubstream/Social/Discovery/DirectoryMirror/FleetRecovery/Supervisor/WorldHost/Game/SessionWorld + NetWire/Link/Metrics/LogStructured/TimerWheel）移出分支到顶层无条件注册区，本地 ctest 现已含之（53→77）。初始导入脚手架批 8 个目标（data_structures / log / network / protobuf / rest_template / utils / id_pool / timer）已于 2026-10-15（305c4d6f）删除、接线同清。
+tests/ 下 87 个 `test_*.cpp`，3 个未注册（`test_all_features.cpp` / `test_thread_pool_simple.cpp` / `test_timer_main.cpp`，后者为 0 字节会话语义遗留）。其余挂在 `tests/CMakeLists.txt` 的 92 条 `add_test` 上。历史上 24 个套件的注册曾落在 `else()` 兜底分支（`:7` 的 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` 为假时走的「simple tests」路径），本地 GTest 可用即整体跳过——2026-10-16 批已将这 24 个套件（game 域族 Avatar/Scene/Instance/PlayerDirectory/PersistJournal/PersistenceChain/Recovery/Reconnect/BattleRuntime/BattleOffload/RngSubstream/Social/Discovery/DirectoryMirror/FleetRecovery/Supervisor/WorldHost/Game/SessionWorld + NetWire/Link/Metrics/LogStructured/TimerWheel）移出分支到顶层无条件注册区，本地 ctest 现已含之（53→77）。初始导入脚手架批 8 个目标（data_structures / log / network / protobuf / rest_template / utils / id_pool / timer）已于 2026-10-15（305c4d6f）删除、接线同清。
 
 ## 门禁口径
 

@@ -8,6 +8,7 @@ add_library(apollo_game_attrsync STATIC
     src/attr_sync_manager.cpp
     src/attr_sync_scheduler.cpp
     src/frame_codec.cpp
+    src/attr_domain_mapping.cpp
 )
 add_library(apollo::game_attrsync ALIAS apollo_game_attrsync)
 

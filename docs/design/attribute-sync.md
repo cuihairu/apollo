@@ -495,7 +495,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 | `AttrSyncManager::set_attr_domain` / `set_group_gate` | `include/apollo/game/attrsync/attr_sync_manager.hpp` + `src/attr_sync_manager.cpp` | ✅ 已落地 |
 | 降级路径修正：水位归零走真快照（全量值 + 域裁剪），不再强制标记 delta 帧 | `src/attr_sync_manager.cpp` | ✅ 已落地 |
 
-**职责**：域决定"字段可见性"——同一实体对不同观察者投影不同，快照与 delta 都按域裁剪。机制层规则：kPublic/kWorld 恒可见；kSelf 仅 owner（viewer_id == entity_id）；kTeam/kGuild 经宿主注入的 group gate 判定（未设置 = 不可见）。裁剪在 delta 去重后、阈值判定前进行（阈值按裁剪后条数算）。契约批落地后域标记由契约声明生成（`docs/design/sdk-contract.md`），本批只交付机制。
+**职责**：域决定"字段可见性"——同一实体对不同观察者投影不同，快照与 delta 都按域裁剪。机制层规则：kPublic/kWorld 恒可见；kSelf 仅 owner（viewer_id == entity_id）；kTeam/kGuild 经宿主注入的 group gate 判定（未设置 = 不可见）。裁剪在 delta 去重后、阈值判定前进行（阈值按裁剪后条数算）。本批只交付机制层裁剪；域标记的契约声明生成已随批 11 落地（映射原语 + 表应用 helper）。
 
 **对应设计节**：§2.2（域与可见性）、§3.3（快照切换）。
 
@@ -518,15 +518,37 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **测试**：`tests/test_attr_sync.cpp` 增 11 用例（LenWriteReadAndHistoryEntry / LenAboveMaxRejected / DirectBaseWriteRejected / SlotGranularWriteAndDirty / SlotWriteValidation / ShrinkErasesDeadSlotValues / CoordDecomposeAndDomainFallback / SliceDeltaLenBeforeSlots / SliceDeltaShrinkDropsDeadSlotEntries / SliceDeltaPerSlotLastWriteWins / SliceDomainHiddenFromOtherViewer）。build 树 + sanitizer 树 + OFF 树 + examples 树全绿。
 
+### 批 11 — §2.2 域标记契约声明生成（映射原语 + 表应用，2026-10-16）
+
+| 件 | 文件 | 状态 |
+|---|---|---|
+| 契约 sync 掩码位本地镜像（kSyncMaskAppr..kSyncMaskImmediate） | `include/apollo/game/attrsync/attr_domain_mapping.hpp` | ✅ 已落地 |
+| `domain_from_sync_mask`（最宽可见性胜出：WORLD > APPR/PROP > GUILD > TEAM > SELF） | `src/attr_domain_mapping.cpp` | ✅ 已落地 |
+| `is_group_scoped`（kTeam/kGuild 经 group gate；kSelf 走 owner 判定，不计组域） | `attr_domain_mapping.hpp` | ✅ 已落地 |
+| `ContractAttrEntry` + `apply_contract_domains`（契约表 → EntityAttrs 域标记；声明非变更，不产 history） | `attr_domain_mapping.{hpp,cpp}` | ✅ 已落地 |
+
+**已代决（FW1016D 授权，事后可推翻）**：
+
+1. **映射规则 = 最宽可见性胜出**，总序 WORLD > APPR/PROP > GUILD > TEAM > SELF；空掩码 → kPublic（与 `domain()` 未声明默认一致），IMMEDIATE 为时序位不参与域映射，DB 位（0x04）契约已禁用、即便出现也不贡献，TEAM|GUILD 平局 → kGuild（公会宽于队伍）。理由：契约掩码是可见范围的并集声明，而批 9 的裁剪口径按域二值判定（可见/不可见）——并集取最宽者是唯一单调且不失宽的选择（取窄 = 数据丢失，非最宽规则无法从单实体判定恢复）。kWorld 机制层等同 kPublic，映射到 kWorld 是为保留上游的全服路由意图（`attr_domain.hpp` 注释：路由差异归上游）。
+2. **消费形态 = 表驱动（契约=数据 / attrsync=机制 / 宿主=接线）**：映射 helper 与 `apply_contract_domains` 落在 attrsync（结果类型是本模块的 `AttrDomain`），掩码位本地镜像而不引 game_attrsync→contract 依赖边（契约面数据由宿主从生成物 `kAttrs` 抽注），镜像与生成物的漂移由 attrsync_tests 的 7 处 `static_assert` 编译期钉住。理由：机制层保持零契约耦合（批 9/10 的分工口径），生成物是本仓已检入的常量表、非运行期依赖边。
+
+**职责**：把契约声明的 sync 掩码翻成机制层域标记，宿主启动期为每个实体的 EntityAttrs 应用契约表（`apply_contract_domains`）；域裁剪本身仍在批 9 的 DeltaBuilder 路径。slice base 的域由 slot 组合 id 继承（`entity_attrs.hpp` `domain()`），故表里只需给 base 声明一次。声明非变更：不产 history 条目、不置 dirty；重复应用以末次为准。
+
+**对应设计节**：§2.2（域与可见性、slice 复合类型）；`docs/design/sdk-contract.md` §10.2.4（掩码不产生 proto 元素；工作样例 hp=PROP / level=PROP TEAM WORLD / gold=SELF）。
+
+**测试**：`tests/test_attr_domain_mapping.cpp` 新增 11 用例（SingleFlagMaps / EmptyMaskDefaultsPublic / TimingAndStorageBitsIgnored / WidestVisibilityWins / DomainIsDeterminedByHighestPriorityBit（256 掩码穷举：多比特掩码的域 == 其中最高优先级比特的域，规则退化为按位计数或末位胜出即红）/ GroupScopedPredicate / ContractTableMatchesDocWorkedExample（读生成物 `kAttrs` 实测 sync 值，并断言表内不出现禁用 DB 位）/ ApplyContractDomains / ApplyContractDomainsSliceInheritsBase / ApplyContractDomainsLastWins / ApplyContractDomainsEmptyTableIsNoop）+ 7 处 `static_assert` 钉镜像常量 == 生成物 canonical。build 树 77/77 + sanitizer 树 64/64 + examples 树 75/75 + GAME_MODULE 开关树 75/75 全绿。
+
+**未接线（后续批）**：宿主启动期 `apply_contract_domains` 注册点——当前仓内无 `EntityAttrs` / `set_domain` 的宿主消费者（机制层与测试之外零触达），待社交/玩法批落地成员数据注入与实体注册面时一并接。
+
 ### 模块构建与测试汇总
 
-**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；8 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / attr_sync_scheduler / frame_codec）。
+**模块构建**：`modules/game/attrsync/CMakeLists.txt` — STATIC library + ALIAS `apollo::game_attrsync`，链接 `apollo::game_core`；9 源文件（change_history / viewer_attr_state / attr_delta / delta_builder / entity_attrs / attr_sync_manager / attr_sync_scheduler / frame_codec / attr_domain_mapping）。
 
-**测试**：`tests/test_attr_sync.cpp`（40）+ `tests/test_attr_sync_manager.cpp`（22）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（8）+ `tests/test_scene_attrsync_wiring.cpp`（10）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）= 107 用例，build 树 + sanitizer 树 + OFF 树 + examples 树全绿。
+**测试**：`tests/test_attr_sync.cpp`（40）+ `tests/test_attr_sync_manager.cpp`（22）+ `tests/test_attr_frame_codec.cpp`（10）+ `tests/test_attr_ack_degrade.cpp`（8）+ `tests/test_scene_attrsync_wiring.cpp`（10）+ `tests/test_attr_sync_scheduler.cpp`（11）+ `tests/test_attr_sync_change_sink.cpp`（6）+ `tests/test_attr_sync_attr_hook.cpp`（9）+ `tests/test_attr_domain_mapping.cpp`（11）= 127 用例，build 树 + sanitizer 树 + OFF 树 + examples 树全绿。
 
 ### 边界（未实现，后续批）
 
-- 域标记契约声明生成 + 队/会成员数据注入（机制层已落地，声明与成员面归契约批/宿主）
+- 队/会成员数据注入（域标记映射已随批 11 落地；group gate 的成员判定数据归宿主/社交批）+ 宿主启动期 `apply_contract_domains` 注册点接线（当前 `EntityAttrs` 无宿主消费者）
 - slice 声明面（slice_count/slice_type 契约声明生成——**schema + 生成器已落地（2026-10-15）**：attrs.xml/XSD 可声明、解析校验（成对 + 元素类型可解析）、apollo_contract.h AttrMeta 与 apollo_contract.json 携带、contract.lua 按需携带；余消费接线——宿主/玩法批从契约表 `declare_slice`，机制层批 10 已落地）
 - ~~客户端发送路径（GameConnection Facade 未建）~~（已随 Facade L2/L3 批交付：`tests/test_game_connection.cpp` 20 用例）
 - ~~slice 复合类型（§2.2）~~（机制层已随批 10 交付）

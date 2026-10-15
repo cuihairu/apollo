@@ -1875,6 +1875,7 @@ add_executable(attrsync_tests
     test_attr_sync_scheduler.cpp
     test_attr_sync_change_sink.cpp
     test_attr_sync_attr_hook.cpp
+    test_attr_domain_mapping.cpp
 )
 target_link_libraries(attrsync_tests PRIVATE
     apollo::game_attrsync
@@ -1883,6 +1884,8 @@ target_link_libraries(attrsync_tests PRIVATE
     GTest::gtest
     GTest::gtest_main
 )
+# 契约 sync 掩码 → 域映射测试读生成物 canonical 位定义（attrsync 镜像常量的漂移钉）
+target_include_directories(attrsync_tests PRIVATE ${CMAKE_SOURCE_DIR}/sdks/cpp/generated)
 if(WIN32)
     target_link_libraries(attrsync_tests PRIVATE ws2_32)
     target_compile_definitions(attrsync_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
