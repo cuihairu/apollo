@@ -4,7 +4,7 @@
 
 统一测试树：单 cpp 直编惯例（`TEST_ASSERT` 宏 + `bool test_xxx` 用例 + `main` runner），`tests/CMakeLists.txt` 挂 CTest；契约测试三件套注册在 `modules/contract/` 与 `sdks/gen/`，与 tests/ 树共同构成 ctest 全集（本地 ON 树 53 项、CI 腿 64 项——两树注册集不完全重合，见「门禁口径」注记）。
 
-tests/ 下 86 个 `test_*.cpp`，3 个未注册（`test_all_features.cpp` / `test_thread_pool_simple.cpp` / `test_timer_main.cpp`，后者为 0 字节会话语义遗留）。其余挂在 `tests/CMakeLists.txt` 的 92 条 `add_test` 上，**全部位于 :7 的外层 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` 门内（块延伸至文件末尾 :1945）**，其中 42 条另受嵌套守卫（`if(TARGET …)` 族、模块开关）支配——本地 ON 树最后一次 configure 仅生效 50 条，被静默跳过的 42 条含整个 game 域族（`avatar_tests` / `scene_tests` / `game_tests` 等二进制已在本地树编出，却未进入 CTestTestfile，ctest 无从感知）。初始导入脚手架批 8 个目标（data_structures / log / network / protobuf / rest_template / utils / id_pool / timer）已于 2026-10-15（305c4d6f）删除、接线同清；buffer_tests 与 channel_tests 现役保留。
+tests/ 下 86 个 `test_*.cpp`，3 个未注册（`test_all_features.cpp` / `test_thread_pool_simple.cpp` / `test_timer_main.cpp`，后者为 0 字节会话语义遗留）。其余挂在 `tests/CMakeLists.txt` 的 92 条 `add_test` 上，其中** 26 个套件的注册落在 :351 的 `else()` 兜底分支**（`:7` 的 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` 为假、即 GTest 未找到或开关 OFF 时走的「simple tests」路径）。本地 GTest 可用且开关 ON，兜底分支整体跳过——含整个 game 域族（Avatar/Scene/Instance/PlayerDirectory/PersistJournal/PersistenceChain/Recovery/Reconnect/BattleRuntime/BattleOffload/RngSubstream/Social/Discovery/DirectoryMirror/FleetRecovery/Supervisor/WorldHost/Game/SessionWorld）与 NetWire/Link/Channel/Time/Metrics/LogStructured/Crypto/TimerWheel，本地 ctest 无从感知它们缺席（树内 `avatar_tests` / `scene_tests` / `game_tests` 二进制是更早配置的历史残留，不在当前 build.ninja 中）。初始导入脚手架批 8 个目标（data_structures / log / network / protobuf / rest_template / utils / id_pool / timer）已于 2026-10-15（305c4d6f）删除、接线同清。
 
 ## 门禁口径
 
@@ -24,7 +24,7 @@ cmake -S . -B build-examples -DAPOLLO_BUILD_EXAMPLES=ON \
 
 san 树（树 4）为独立 sanitizer 配置（`/tmp` 下 ASan+UBSan + `-fno-sanitize-recover=all`），不在上面三条 configure 命令内。
 
-> **注册集分布注记（2026-10-16 实测）**：本地 ON 树 53 项与 CI 腿 64 项**不完全重合**——本地缺整个 game 域族（Avatar/Scene/Instance/PlayerDirectory/Social/Battle/WorldHost 等，即上面 42 条嵌套守卫未生效者），CI 腿含之；本地含 AttrSync/SceneScript/CellScriptHost/M1 族。单看一棵树全绿不足为凭，提交须本地树 + CI 收账双侧确认。CI windows Release 腿另有一例预存红（`ScriptAsync.CallOutsideCoroutineRejected` SEH 0xc0000005，065d1190 起，63/64 绿）——与基线一致的失败不作为回归判据。
+> **注册集分布注记（2026-10-16 实测）**：本地 ON 树 53 项与 CI 腿 64 项**不完全重合**——本地缺上面 26 个套件（其注册在 `else()` 兜底分支内，GTest 可用即整体跳过），CI 腿含之（该 `if` 在 CI 为假，兜底分支生效）；本地另有 CI 未见的 AttrSync/SceneScript/CellScriptHost/M1 族。两树互补，单看一棵树全绿不足为凭，提交须本地树 + CI 收账双侧确认。兜底分支里那批套件用的是 TEST_ASSERT 惯例（不依赖 GTest），归入 `if(GTest_FOUND AND APOLLO_BUILD_GTESTS)` 的假分支属归档错位，应移出分支到顶层守卫区——**属待办，未处置**。CI windows Release 腿另有一例预存红（`ScriptAsync.CallOutsideCoroutineRejected` SEH 0xc0000005，065d1190 起，63/64 绿）——与基线一致的失败不作为回归判据；macos Debug 腿曾现 `LoginM1AdmissionTests` SEGFAULT 一例（63/64），重跑即绿，判为 flake。
 
 ## 套件分组（按域，实际注册面）
 
