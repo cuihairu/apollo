@@ -1807,6 +1807,23 @@ if(MSVC)
 endif()
 add_test(NAME VersionStoreTests COMMAND version_store_tests)
 
+# patch 目录读与 hash 校验测试（§3.2 Phase A 工程面）；无门控注册（同
+# version_store_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(patch_loader_tests test_script_patch_loader.cpp)
+target_link_libraries(patch_loader_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(patch_loader_tests PRIVATE ws2_32)
+    target_compile_definitions(patch_loader_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(patch_loader_tests PRIVATE /utf-8)
+endif()
+add_test(NAME PatchLoaderTests COMMAND patch_loader_tests)
+
 # ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
 # 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
 # script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
