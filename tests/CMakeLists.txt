@@ -1841,6 +1841,23 @@ if(MSVC)
 endif()
 add_test(NAME CanaryTests COMMAND canary_tests)
 
+# 灰度投递编排测试（§3.2 Phase A 工程面：多 runtime 分步投递 + Phase C 判定）；
+# 无门控注册（同 canary_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(rollout_tests test_script_rollout.cpp)
+target_link_libraries(rollout_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(rollout_tests PRIVATE ws2_32)
+    target_compile_definitions(rollout_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(rollout_tests PRIVATE /utf-8)
+endif()
+add_test(NAME RolloutTests COMMAND rollout_tests)
+
 # ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
 # 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
 # script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
