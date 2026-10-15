@@ -24,7 +24,7 @@ cmake -S . -B build-examples -DAPOLLO_BUILD_EXAMPLES=ON \
 
 san 树（树 4）为独立 sanitizer 配置（`/tmp` 下 ASan+UBSan + `-fno-sanitize-recover=all`），不在上面三条 configure 命令内。
 
-> **注册集分布注记（2026-10-16 修复后口径）**：历史上本地 ON 树 53 项与 CI 腿 64 项不完全重合——本地缺 24 个套件（其注册在 `else()` 兜底分支内，GTest 可用即整体跳过）。**2026-10-16 批已处置**：24 个 TEST_ASSERT 套件移出兜底分支到顶层无条件注册区，本地 ON 树升至 77 项、含全部 game 域族。本地仍有 CI 未见的 AttrSync/SceneScript/CellScriptHost/M1 族（CI 该 `if` 为假走兜底分支、无这些注册）；两树互补，单看一棵树全绿不足为凭，提交须本地树 + CI 收账双侧确认。CI windows Release 腿另有一例预存红（`ScriptAsync.CallOutsideCoroutineRejected` SEH 0xc0000005，065d1190 起，63/64 绿）——与基线一致的失败不作为回归判据；macos Debug 腿曾现 `LoginM1AdmissionTests` SEGFAULT 一例（63/64），重跑即绿，判为 flake。
+> **注册集分布注记（2026-10-16 修复后口径）**：历史上本地 ON 树 53 项与 CI 腿 64 项不完全重合——本地缺 24 个套件（其注册在 `else()` 兜底分支内，GTest 可用即整体跳过）。**2026-10-16 批已处置**：24 个 TEST_ASSERT 套件移出兜底分支到顶层无条件注册区，本地 ON 树升至 77 项、含全部 game 域族。本地仍有 CI 未见的 AttrSync/SceneScript/CellScriptHost/M1 族（CI 该 `if` 为假走兜底分支、无这些注册）；两树互补，单看一棵树全绿不足为凭，提交须本地树 + CI 收账双侧确认。CI windows Release 腿曾有预存红（`ScriptAsync.CallOutsideCoroutineRejected` SEH 0xc0000005，065d1190 起 63/64 绿）——94c6550c（luaL_error 跨 C++ 帧修复）后 run 38801233534 五腿 + coverage 全绿（64/64），预存红消除；macos Debug 腿曾现 `LoginM1AdmissionTests` SEGFAULT 一例（63/64），重跑即绿，判为 flake。
 
 ## 套件分组（按域，实际注册面）
 
