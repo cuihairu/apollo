@@ -89,6 +89,7 @@ modules/lua/
 - **消息 handler 绑定**：上行业务消息经 C++ 帧路由按 `contract_route`（id→handler 名）分发到 Lua——handler 在模块表内注册，模块头注释声明 `handles: msg_a, msg_b`，加载器校验其与契约路由表一致，缺失启动红。
 - **写白名单数据化**：§4/§5 的 `ScriptWriteWhitelist` 位图从 contract.lua 构建（白名单仍由契约 `predict` 位生成——sdk-contract §5 机制不变，载体从生成常量变为契约表数据）；热换契约表时白名单随 tick 边界同换。
 - 版本偏序沿用 §3.3 同一规则：契约表版本 ≥ 消费它的脚本补丁版本才启用——契约加字段与使用该字段的 handler 补丁必须同批或先表后补。
+- **宿主启动装载已落地（2026-10-15 补）**：cell `--script-handlers <file>` / `--script-contract <file>`——启动装载序 handler 面 → 契约 → boot 源（gameThread 首拍，§2 单写者；契约装载闸逐 route `resolve_handler`，handler 未先行在位即拒载；boot 源可读 `contract` 全局）。任一步失败仅告警不停机（同 boot 源纪律，fault 走 runtime 事件面）。契约路由 handler 面占位模块随仓（`apps/cell-app/scripts/contract_handlers.lua`，45 路由无操作占位——装载闸只验存在性，玩法批按消息语义填实体；apollo_gen 新增 reflect 消息须同步补行，`contract_handler_tests` 以 golden 契约 + 随仓 handler 模块全装载路径闸同步）。上行业务消息经 C++ 帧路由分发到 Lua handler 的 `call_route` 接线仍随玩法批。
 
 ### 3.5 字节码缓存与补丁形态（2026-09-29 补）
 

@@ -57,7 +57,7 @@ rt.get_global_bool("ready");
 
 - 热替换工程面：协程升级语义宿主侧接线（per 场景线程 admin 命令运输面随 admin/control 面批）
 - 版本偏序执法（契约版本 ≥ 脚本补丁版本）
-- 运行期消费接线：宿主启动装载（cell `--script-contract` / boot 调 `load_contract`）——契约装载后 handler 面须先行就位（现状零 Lua reflect handler 面，缺失即一致性闸拒载），随玩法 Lua 批
+- 运行期消费：上行业务消息经 C++ 帧路由按 `contract_route` 分发到 Lua handler（`call_route` 接线）——随玩法 Lua 批（宿主启动装载已落地：cell `--script-handlers`/`--script-contract` 启动序 handler 面 → 契约 → boot 源，handler 占位模块随仓 `apps/cell-app/scripts/contract_handlers.lua`，golden 契约同步闸 `contract_handler_tests`）
 - 公式即钩子（§5.3）
 - ScriptFaultEvent 宿主上下文字段（scene/entity_id/module+version——随场景接线批补）
 - attach transport（admin 单入口/control 通道转发到目标进程——admin/control 面批次）、GM 命令面（§7.5）
@@ -81,5 +81,7 @@ rt.get_global_bool("ready");
 `tests/test_script_canary.cpp`（6 用例，§3.2 Phase C 灰度观察期 canary）：健康模块窗满判 healthy（窗未满不判）、超阈提前判坏（不等窗满）、begin 前 fault 不入窗、他模块 fault 不归因、**灰度全回路**——v1 健康 → 换 v2（onTick 判坏）→ canary 判 unhealthy → 控制面驱动 rollback → 活跃版本回 1 且 handler 恢复；未 begin 不判满。四树门禁（build / sanitizer / OFF / examples）+ ASan/UBSan/LSan 全绿。
 
 `tests/test_script_rollout.cpp`（12 用例，§3.2 Phase A 工程面灰度 per 场景线程投递编排）：健康灰度窗满转推广（多目标全量到位）、判坏早失败转回滚（不等窗满）、依赖拓扑序投递（依赖先行）、预备失败零投递、非法参数拒载（在途/空集/空目标/空灰度/未知灰度键/重名模块）、空 runtime 拒载、集内任一模块判坏整集回滚、灰度面装载失败判坏、推广失败 per-target 记录（判好结论不改）、回滚回写持久 current 指针（重启读回旧版本）、patch 目录端到端（load_patch_directory → prepare → commit → 观察 → 推广）、相位外步骤空转。四树门禁（build / sanitizer / OFF / examples）+ ASan/UBSan/LSan 全绿。
+
+`tests/test_contract_handlers.cpp`（2 用例，§3.4 宿主启动装载·handler 面同步闸）：随仓 handler 占位模块（`apps/cell-app/scripts/contract_handlers.lua`）+ golden 契约（`sdks/cpp/generated/contract.lua`）全装载路径——apollo_gen 新增 reflect 消息而 handler 面没跟上即红；契约数据面（version/routes）装载后可读。cell 启动装载序用例在 `cell_script_host_tests`（4→7：启动序 handler 面→契约→boot 的落地可见性、缺 handler 闸拒载不停机、契约文件缺失继续服务）。四树门禁（build / sanitizer / OFF / examples）全绿。
 
 `tests/test_script_state.cpp`（21 用例）：GC 面宿主计数同源 `memory_used` + Lua 自视角与增量参数只读查询；reload 审计成功入账（首次 from=0）与 tick 溯源、五类拒载原因（缺依赖/编译/求值/非表/冒烟）与超长原因截断、rollback from/to 翻转、审计环上限 64 丢最旧；env 快照原始类型渲染（串/整数/浮点/布尔/整数键/table/function）、条目上限截断、模块缺席/零上限/空名/非表全局、元方法恶意表不触（`__pairs`/`__index`/`__tostring` error 表照常快照）、单值 512 字节截断；契约表 hostile `__index` 装载正常（装载路径 raw 探测）；hostile `_ENV` 元表全宿主路径存活（call_module/get_global/set_global/换表提交/快照面）、hostile 模块元表 call 路径与契约完整性闸、宿主路径栈平衡回归（`raw_setglobal` 弹值语义）；profile 分桶六入账点（call_string 指令与墙钟、call_module 查找失败不入账、call_route 按 handler 名、attr 钩子按注册名 + eval）、超标事件环入账与 64 上限丢最旧、快照拷贝语义与 reset。

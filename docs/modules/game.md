@@ -222,7 +222,7 @@ for (const auto& r : scene.drain_debug_eval_results()) { /* 回传 transport */ 
 scene.set_debug_eval_queue_depth(8);  // 默认 8（与 eval 同 tick 限流对齐）
 ```
 
-owning 宿主接线首批已落 cell-app（scripting-lua §2 一状态一逻辑线程）：`CellServer` gameThread 开头建 `ScriptRuntime`、`--script-boot <file>` 加载 boot 源（缺失/失败仅告警不停机，fault 走 runtime 事件面）、每拍幂等补挂未挂 scene（新 scene 下一拍生效）、停机尾扫摘挂全部 scene 后随线程析构；`find_scene(scene_id)` 为宿主对外的投递定位面（runtime 指针不外露）。admin 单入口 transport 已落（944/945 M1 裸帧族：cell 侧 dispatcher 受理——未挂/背压即时回 945 拒收，受理挂关联账待 tick 窗口 drain 异步回传；admin 侧 `fleetctl eval` 入口；`cell_m1_link_tests` eval 族 3 用例 + `cell_script_host_tests` 4 用例）。
+owning 宿主接线首批已落 cell-app（scripting-lua §2 一状态一逻辑线程）：`CellServer` gameThread 开头建 `ScriptRuntime`、`--script-boot <file>` 加载 boot 源（缺失/失败仅告警不停机，fault 走 runtime 事件面）。宿主启动装载序（scripting-lua §3.4）= `--script-handlers`（契约路由 handler 面）→ `--script-contract`（契约表，装载闸逐 route 验 handler 已在位）→ `--script-boot`（可读 `contract` 全局）；契约路由 handler 面占位模块随仓 `apps/cell-app/scripts/contract_handlers.lua`（45 路由，玩法批按语义填实体），golden 契约同步闸 `contract_handler_tests` 2 用例 + 启动装载 `cell_script_host_tests` 3 用例（含 boot 源先于契约落地断言、缺 handler 拒载、契约文件缺失继续服务）、每拍幂等补挂未挂 scene（新 scene 下一拍生效）、停机尾扫摘挂全部 scene 后随线程析构；`find_scene(scene_id)` 为宿主对外的投递定位面（runtime 指针不外露）。admin 单入口 transport 已落（944/945 M1 裸帧族：cell 侧 dispatcher 受理——未挂/背压即时回 945 拒收，受理挂关联账待 tick 窗口 drain 异步回传；admin 侧 `fleetctl eval` 入口；`cell_m1_link_tests` eval 族 3 用例 + `cell_script_host_tests` 7 用例）。
 
 **边界**：客户端发送路径、slice 复合类型、attach transport（admin 单入口 + control 通道转发到目标进程）均为后续批次。
 

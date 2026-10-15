@@ -62,6 +62,10 @@ CellConfig loadConfig(int argc, char* argv[]) {
             config.tickRateMs = std::atoi(argv[++i]);
         } else if (arg == "--script-boot" && i + 1 < argc) {
             config.scriptBootFile = argv[++i];
+        } else if (arg == "--script-handlers" && i + 1 < argc) {
+            config.scriptHandersFile = argv[++i];
+        } else if (arg == "--script-contract" && i + 1 < argc) {
+            config.scriptContractFile = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -70,6 +74,8 @@ CellConfig loadConfig(int argc, char* argv[]) {
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"
                       << "  --script-boot <file>        Lua boot source file (default: none)\n"
+                      << "  --script-handlers <file>    Lua contract handler module, loaded first (default: none)\n"
+                      << "  --script-contract <file>    Lua contract table, loaded after handlers (default: none)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }

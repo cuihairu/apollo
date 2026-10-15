@@ -77,10 +77,12 @@ struct ServerEnd {
     }
 };
 
-// 临时 boot 源（binary 模式 + 先关句柄再删——Windows 落盘两坑纪律）。
+// 临时脚本源（binary 模式 + 先关句柄再删——Windows 落盘两坑纪律）。
 struct BootFile {
     std::string path;
-    explicit BootFile(const std::string& source) : path("cell_script_host_boot.lua") {
+    BootFile(const std::string& source,
+             const char* name = "cell_script_host_boot.lua")
+        : path(name) {
         std::ofstream out(path, std::ios::binary);
         out << source;
     }
@@ -214,6 +216,100 @@ bool test_eval_error_keeps_host_alive() {
     return true;
 }
 
+// ---------- 宿主启动装载（§3.4）：handler 面 → 契约 → boot 源 ----------
+
+bool test_contract_loads_at_boot_with_handlers() {
+    std::cout << "Running: test_contract_loads_at_boot_with_handlers..." << std::endl;
+    // 启动序断言一体三用：boot 源能读 contract 全局 = 契约先于 boot 落地；
+    // 契约能过装载闸 = handler 面先于契约落地（routes 引用的全局须已在位）。
+    BootFile handlers("alpha_probe = function() end\n"
+                      "beta_probe = function() end\n",
+                      "cell_script_host_handlers.lua");
+    BootFile contract(
+        "return {\n"
+        "  routes = {\n"
+        "    [42001] = 'alpha_probe',\n"
+        "    [42002] = 'beta_probe',\n"
+        "  },\n"
+        "  write_whitelist = {},\n"
+        "  version = 7,\n"
+        "}\n",
+        "cell_script_host_contract.lua");
+    BootFile boot("boot_seen_contract = tostring(contract and contract.version)\n");
+
+    ServerEnd s;
+    s.config.scriptHandersFile = handlers.path;
+    s.config.scriptContractFile = contract.path;
+    s.config.scriptBootFile = boot.path;
+    TEST_ASSERT(s.start(10), "server started");
+
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+                "scene attached");
+
+    apollo::game::world::Scene::DebugEvalResult r{};
+    TEST_ASSERT(eval_and_await(*s.server, 21, "boot_seen_contract", r),
+                "boot source ran");
+    TEST_ASSERT(r.ok && r.result == "7", "contract loaded before boot source");
+
+    apollo::game::world::Scene::DebugEvalResult route{};
+    TEST_ASSERT(eval_and_await(*s.server, 22, "tostring(contract.routes[42001])", route),
+                "route readable through eval");
+    TEST_ASSERT(route.ok && route.result == "alpha_probe", "routes data face live");
+
+    s.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- 装载闸：缺 handler 拒载 + cell 不停机 ----------
+
+bool test_contract_gate_rejects_missing_handler() {
+    std::cout << "Running: test_contract_gate_rejects_missing_handler..." << std::endl;
+    // routes 引用未定义 handler → 闸拒载（原子提交不发生）→ contract 全局
+    // 不存在；cell 照常服务（同 boot 源纪律）。
+    BootFile contract(
+        "return { routes = { [42003] = 'gamma_probe' }, version = 1 }\n",
+        "cell_script_host_contract_bad.lua");
+
+    ServerEnd s;
+    s.config.scriptContractFile = contract.path;
+    TEST_ASSERT(s.start(10), "server started");
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+                "scene still attached after contract rejection");
+
+    apollo::game::world::Scene::DebugEvalResult r{};
+    TEST_ASSERT(eval_and_await(*s.server, 23, "tostring(contract)", r),
+                "eval served after contract rejection");
+    TEST_ASSERT(r.ok && r.result == "nil", "rejected contract not committed");
+
+    TEST_ASSERT(s.server->isRunning(), "cell alive after contract rejection");
+    s.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- 契约文件缺失：warn + 继续 ----------
+
+bool test_missing_contract_file_keeps_cell_alive() {
+    std::cout << "Running: test_missing_contract_file_keeps_cell_alive..." << std::endl;
+
+    ServerEnd s;
+    s.config.scriptContractFile = "cell_script_host_no_such_contract.lua";
+    TEST_ASSERT(s.start(10), "server started with missing contract file");
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+                "scene attached after missing contract file");
+
+    apollo::game::world::Scene::DebugEvalResult r{};
+    TEST_ASSERT(eval_and_await(*s.server, 24, "tostring(contract)", r),
+                "eval served after missing contract file");
+    TEST_ASSERT(r.ok && r.result == "nil", "no contract global");
+    TEST_ASSERT(s.server->isRunning(), "cell alive after missing contract file");
+
+    s.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -222,6 +318,9 @@ int main() {
     if (!test_missing_boot_file_keeps_cell_alive()) ++failed;
     if (!test_eval_reaches_scene_tick_window()) ++failed;
     if (!test_eval_error_keeps_host_alive()) ++failed;
+    if (!test_contract_loads_at_boot_with_handlers()) ++failed;
+    if (!test_contract_gate_rejects_missing_handler()) ++failed;
+    if (!test_missing_contract_file_keeps_cell_alive()) ++failed;
     if (failed == 0) {
         std::cout << "ALL CELL SCRIPT HOST TESTS PASSED" << std::endl;
         return 0;

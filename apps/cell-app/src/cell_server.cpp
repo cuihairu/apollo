@@ -13,6 +13,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -22,6 +23,17 @@ namespace {
 // 库面日志出口：cat=cell_server（§5.1 cat= 检索键；主程已接文件面）
 apollo::core::log::Logger& celllog() {
     return *apollo::core::log::global_log_manager().createLogger("cell_server");
+}
+
+// 读整个 Lua 源文件（binary 模式——Windows CRLF 落盘纪律）；缺文件返回
+// std::nullopt。仅启动装载序调用（gameThread 首拍，§2 一状态一逻辑线程）。
+std::optional<std::string> read_script_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return std::nullopt;
+    }
+    return std::string((std::istreambuf_iterator<char>(in)),
+                       std::istreambuf_iterator<char>());
 }
 } // namespace
 
@@ -501,16 +513,32 @@ void CellServer::gameLoop() {
     // 用/析全在本线程。boot 源加载失败不停机（fault 走 runtime 事件面，
     // cell 继续服务）。
     script_ = std::make_unique<apollo::script::ScriptRuntime>();
+    // 启动装载序（scripting-lua §3.4）：handler 面 → 契约 → boot 源。契约
+    // 装载闸逐 route resolve_handler——handler 未先行在位即拒载；boot 源
+    // 可读 contract 全局。任一步失败只发 warning，cell 继续服务（同 boot
+    // 源纪律；fault 走 runtime 事件面）。
+    if (!config_.scriptHandersFile.empty()) {
+        const std::optional<std::string> handlers = read_script_file(config_.scriptHandersFile);
+        if (!handlers) {
+            celllog().warning("script handlers file missing: " + config_.scriptHandersFile);
+        } else if (!script_->call_string("cell_handlers", *handlers)) {
+            celllog().warning("script handlers load failed: " + config_.scriptHandersFile);
+        }
+    }
+    if (!config_.scriptContractFile.empty()) {
+        const std::optional<std::string> contract = read_script_file(config_.scriptContractFile);
+        if (!contract) {
+            celllog().warning("script contract file missing: " + config_.scriptContractFile);
+        } else if (!script_->load_contract(*contract)) {
+            celllog().warning("script contract load failed: " + config_.scriptContractFile);
+        }
+    }
     if (!config_.scriptBootFile.empty()) {
-        std::ifstream boot(config_.scriptBootFile, std::ios::binary);
-        if (boot) {
-            std::string src((std::istreambuf_iterator<char>(boot)),
-                            std::istreambuf_iterator<char>());
-            if (!script_->call_string("cell_boot", src)) {
-                celllog().warning("script boot failed: " + config_.scriptBootFile);
-            }
-        } else {
+        const std::optional<std::string> boot = read_script_file(config_.scriptBootFile);
+        if (!boot) {
             celllog().warning("script boot file missing: " + config_.scriptBootFile);
+        } else if (!script_->call_string("cell_boot", *boot)) {
+            celllog().warning("script boot failed: " + config_.scriptBootFile);
         }
     }
 

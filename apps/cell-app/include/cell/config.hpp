@@ -32,8 +32,12 @@ struct CellConfig {
     // Tick 配置
     int tickRateMs = 50;  // 20 ticks per second
 
-    // 脚本宿主（scripting-lua §2/§5.1）：boot 源文件路径（空 = 不加载）。
-    // 加载失败不停机（fault 走 runtime 事件面，cell 继续服务）。
+    // 脚本宿主（scripting-lua §2/§5.1）：启动装载序 = handler 面 → 契约 →
+    // boot 源（契约装载闸要求 handler 先行在位，boot 源可读 contract 全局）。
+    // 各文件路径空 = 不加载；任一步加载/装载失败不停机（fault 走 runtime
+    // 事件面，cell 继续服务）。
+    std::string scriptHandersFile;
+    std::string scriptContractFile;
     std::string scriptBootFile;
 
 };

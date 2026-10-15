@@ -1858,6 +1858,29 @@ if(MSVC)
 endif()
 add_test(NAME RolloutTests COMMAND rollout_tests)
 
+# 宿主启动装载·handler 面同步闸（§3.4 玩法 Lua 批第一片）：shipped handler
+# 占位模块必须满足 golden 契约装载闸——apollo_gen 新增 reflect 消息而
+# handler 面没跟上时此测红。无门控注册（apollo::script 零 apollo 依赖，
+# OFF 树同样执行）。
+add_executable(contract_handler_tests test_contract_handlers.cpp)
+target_compile_definitions(contract_handler_tests PRIVATE
+    APOLLO_CELL_CONTRACT_HANDLERS_LUA="${CMAKE_SOURCE_DIR}/apps/cell-app/scripts/contract_handlers.lua"
+    APOLLO_GENERATED_CONTRACT_LUA="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract.lua"
+)
+target_link_libraries(contract_handler_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(contract_handler_tests PRIVATE ws2_32)
+    target_compile_definitions(contract_handler_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(contract_handler_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ContractHandlerTests COMMAND contract_handler_tests)
+
 # ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
 # 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
 # script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。

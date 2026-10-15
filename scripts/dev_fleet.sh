@@ -58,7 +58,7 @@ login     | 13 | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 
 gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --cell-app tcp://127.0.0.1:9005 --cell-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 12
 baseappmgr| 2 | $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003 --m1-port 9105 --machined-port 9600
 base      | 10 | $BUILD_DIR/apps/base-app/base-app --port 9004 --m1-port 9104 --machined-port 9600 --component-id 10
-cell      | 11 | $BUILD_DIR/apps/cell-app/cell-app --m1-port 9101 --machined-port 9600 --component-id 11
+cell      | 11 | $BUILD_DIR/apps/cell-app/cell-app --m1-port 9101 --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/cell-app/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 game      | 0 | $BUILD_DIR/apps/game-server/apollo_game_server
 EOF
 }
