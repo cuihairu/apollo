@@ -34,6 +34,11 @@ constexpr std::size_t kEnvValueCap = 512;
 // §7.3 超标事件环上限（同 reload 审计环——防热更循环无界增长）。
 constexpr std::size_t kOverBudgetCap = 64;
 
+// §3.2 Phase C canary 观察流水保留上限（per module）。canary 窗 N 是控制面
+// 参数（默认 100 tick）——8192 覆盖「每 tick 一 fault」的极端窗至约 8k tick；
+// 超长按最旧截断，保证流水不随 fault 速率无界增长。
+constexpr std::size_t kModuleFaultLogCap = 8192;
+
 // 装载路径结构探测 raw 读：模块/契约自带字段不经元表继承，裸 lua_getfield
 // 会在 __index error 时把错误抛出保护区（崩进程，违 §2 纪律）——同栈效果
 // 换 raw 读取，__index/__pairs/__tostring 恶意表全程不触元方法。
@@ -843,6 +848,13 @@ bool ScriptRuntime::call_module(const std::string& module, const char* func) {
 }
 
 void ScriptRuntime::breaker_on_fault(const std::string& module, bool probing) {
+    // §3.2 Phase C：模块级 fault 先入观察流水（canary 面消费；独立于熔断
+    // 滑窗——不随后续 breaker 清账，窗口语义归观察方）。封顶截断最旧。
+    auto& log = module_fault_log_[module];
+    log.push_back(tick_);
+    while (log.size() > kModuleFaultLogCap) {
+        log.pop_front();
+    }
     auto& br = breakers_[module];
     if (probing) {
         // §6.1 半开探针再 FAULT → 隔离跨度翻倍（封顶 max）。
@@ -890,6 +902,22 @@ void ScriptRuntime::breaker_clear(const std::string& module, const char* reason)
                               std::string(reason)});
     }
     breakers_.erase(bit);
+}
+
+// §3.2 Phase C canary 观察面：观察流水内自 since_tick 起的模块归因 fault 数。
+std::uint64_t ScriptRuntime::module_faults_since(const std::string& module,
+                                                 std::uint64_t since_tick) const {
+    auto it = module_fault_log_.find(module);
+    if (it == module_fault_log_.end()) {
+        return 0;
+    }
+    std::uint64_t n = 0;
+    for (const std::uint64_t t : it->second) {
+        if (t >= since_tick) {
+            ++n;
+        }
+    }
+    return n;
 }
 
 bool ScriptRuntime::is_quarantined(const std::string& module) const {

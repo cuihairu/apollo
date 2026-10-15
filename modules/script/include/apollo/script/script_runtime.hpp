@@ -312,6 +312,11 @@ public:
 
     // §6.1 模块熔断：宿主每 tick 喂当前 tick（熔断窗与隔离期均以 tick 计）。
     void set_tick(std::uint64_t tick) { tick_ = tick; }
+    [[nodiscard]] std::uint64_t current_tick() const { return tick_; }
+    // §3.2 Phase C canary 观察面：该模块自 since_tick 起的归因 fault 次数
+    // （call_module 路径入账；与熔断滑窗独立——canary 窗 N 是控制面参数）。
+    [[nodiscard]] std::uint64_t module_faults_since(const std::string& module,
+                                                    std::uint64_t since_tick) const;
     // 模块 handler 调用（无参无返回，fault 归因到模块）：隔离期直接短路
     // 返回 false（不进 Lua）；半开期满放行一次，探针成功销账、再 FAULT
     // 隔离翻倍（封顶 max）；热更/回滚自动清零（新版本新账）。
@@ -529,6 +534,10 @@ private:
         std::uint64_t quarantine_span = 0;       // 当前隔离跨度（翻倍基数）
     };
     std::map<std::string, ModuleBreaker> breakers_;
+
+    // §3.2 Phase C canary 观察：per-module fault tick 流水（call_module 归因
+    // 入账；保留窗覆盖任意控制面 canary 窗——按 tick 剪枝，不随熔断清账）。
+    std::map<std::string, std::deque<std::uint64_t>> module_fault_log_;
 
     // §6.1 WARN 去抖账（chunk → 上次 WARN tick）。
     std::map<std::string, std::uint64_t> warn_ticks_;

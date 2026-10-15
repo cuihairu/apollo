@@ -1824,6 +1824,23 @@ if(MSVC)
 endif()
 add_test(NAME PatchLoaderTests COMMAND patch_loader_tests)
 
+# Phase C 灰度观察期 canary 测试（§3.2 防坏版本灰度回路）；无门控注册（同
+# patch_loader_tests——script 模块零 apollo 依赖，OFF 树同样执行）。
+add_executable(canary_tests test_script_canary.cpp)
+target_link_libraries(canary_tests PRIVATE
+    apollo::script
+    GTest::gtest
+    GTest::gtest_main
+)
+if(WIN32)
+    target_link_libraries(canary_tests PRIVATE ws2_32)
+    target_compile_definitions(canary_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(canary_tests PRIVATE /utf-8)
+endif()
+add_test(NAME CanaryTests COMMAND canary_tests)
+
 # ========== Lua Bytecode Cache Tests (scripting-lua.md §3.5) ==========
 # 缓存面测试（manifest 三元组校验 + 回退源码编译）；无门控注册（同
 # script_tests——script 模块零 apollo 依赖，OFF 树同样执行）。

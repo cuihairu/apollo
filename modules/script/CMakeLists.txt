@@ -7,6 +7,7 @@ add_library(apollo_script STATIC
     src/lua_bytecode_cache.cpp
     src/module_version_store.cpp
     src/patch_loader.cpp
+    src/module_canary.cpp
 )
 add_library(apollo::script ALIAS apollo_script)
 
