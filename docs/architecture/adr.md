@@ -97,6 +97,8 @@ tag:
 
 **后果**：开发/CI 环境无需任何存储服务即可全链跑通；代价是单机容量与查询能力受限于文件形态，外部 DB 接线批次须保 replay 语义对等。
 
+**代决注记（2026-10-16，巡检推进单 FW1016D）**：外部存储接线（MySQL/Redis/ClickHouse）经巡检代决维持不立项——本 ADR 依据仍成立（存储语义定型前接外部 DB 是负资产、拉高「跑起来」门槛），仓内仍无生产部署与容量需求信号（同 ADR-010 G-2 关闭的事实基座）；解锁触发 = 生产部署立项或用户点名清单。巡检不自主立项外部存储依赖。
+
 ---
 
 ## ADR-008 Recovery Model（恢复模型）
@@ -198,6 +200,8 @@ tag:
 **批记（2026-10-10，同日三批连续交付）**：L1+L2（`7ad64938`）——七 app main 全接 log 模块（initLogging：processIdentity + fileEnabled + structuredOutput，console 保人读；先于 init_crash_capture——write() 惰性默认初始化仅 console，顺序颠倒会顶掉文件面配置）、app 库面运行行全量转 logger（领域子日志 recovery/mirror/window/death = §5.1 cat= 检索键；信号路径与 fork pre-exec 路径保持直写 console/stderr——logger 面带锁，信号上下文与 fork 快照持锁窗口不进）；kill -9 演练全链断言回归绿（消息正文子串契约全保）。L3（logger 壳）——apps/logger + 二进制 `logger` + 类 `LoggerApp`；读侧解析（写侧 structured.cpp 镜像：引号/转义还原、六键齐备判定）+ 检索子命令 `scan`（proc/level/ts/cat 过滤，stdout 查询面/stderr 汇总分离）+ `follow` 跟随（编队聚合面，增量读 + 半行驻留）+ push 接缝 `IPushSink`/`NullPushSink`（留接口不实现，M1 后换 InterServerLink）；logger_tests 9 组入门禁（42/42）；dev_fleet roster 增 logger 行（follow，无端口——三禁），编队冒烟 7 成员全绿（machined.log 结构化聚合行 103 条、scan 实检索 12 文件全解析）。L4（push 通道 + 断连降级）挂 M1。归档/滚动沿用 FileAppender 既有，logger 只读。
 
 **批记（2026-10-12，L4 交付）**：L4（`8d8a1dc0`/`6dd9445f`/`b8111f2a`/`d8499672`）——push 通道 + 断连降级全形态（logging.md §5 collector 落地）：内核 LinkManager passive fan-out（staging→peers 按对端自报名迁入、同名重连替换、装配挂 on_up 当拍）+ 契约 930 logger_line_push + 发送面 modules/net/logpush LogPushClient（内部泵线程单写者、有界队列 4096 顶格丢新、kReliable 重连恰一次补投、停排留队）+ PushAppender/LogManagerConfig.pushSink 接线 + logger serve 子命令（passive "apps" 收 930 原行归档、逐行冲刷——ofstream 缓冲 + kill -9 吞数据实证后修复）+ 七 app APOLLO_LOG_PUSH_ADDR 一线接线（未设=关，v1 单出口不变）+ dev_fleet logger 行转 serve。断连降级编队活体演练：SIGKILL collector+gateway 同杀 → machined 死亡/重生行落断连窗 → 队列缓冲 → collector 重生重拨补投全数到档（delta=20）——决策 1 的「push 出口留接口」就此消账，IPushSink 检索面不变。详批记见 todo P3-3 / logger-app §6。
+
+**代决注记（2026-10-16，巡检推进单 FW1016D）**：决策 2 的暂缓原依据「复算引擎依赖 Lua 面未入主线」已过时（Lua 运行时底座十三批 2026-10-15 起在主线），但「随玩法批」维持——经巡检代决不提前立项：主线零玩法内容可复算（无技能/效果 authoring），BattleRuntime 确定性已由 battle_runtime/rng_substream 测试覆盖，早立项只会得到复算既有确定性测试面的空壳 worker 池；解锁触发 = 玩法批立项。
 
 ---
 
