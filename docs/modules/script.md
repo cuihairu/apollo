@@ -54,7 +54,7 @@ rt.get_global_bool("ready");
 
 ### 边界（留后续批）
 
-- 热替换工程面：current 版本指针持久化（防坏版本崩溃循环）、灰度 per 场景线程、协程升级语义宿主侧接线
+- 热替换工程面：灰度 per 场景线程、协程升级语义宿主侧接线、patch 目录读与 hash 校验控制面
 - 版本偏序执法（契约版本 ≥ 脚本补丁版本）
 - 运行期消费接线：宿主启动装载（cell `--script-contract` / boot 调 `load_contract`）——契约装载后 handler 面须先行就位（现状零 Lua reflect handler 面，缺失即一致性闸拒载），随玩法 Lua 批
 - 公式即钩子（§5.3）
