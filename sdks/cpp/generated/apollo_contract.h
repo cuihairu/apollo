@@ -142,32 +142,34 @@ struct AttrMeta {
     const char* predict;
     const char* defaultValue;
     const char* desc;
+    uint16_t sliceCount;   ///< >0 = slice 容器 base（attribute-sync §2.2）
+    const char* sliceType;  ///< slot 元素类型名（非容器 = ""）
 };
 inline constexpr AttrMeta kAttrs[] = {
-    {AttrId::hp, "hp", WireType::Int64, 0x02, "attributes", "", "1000", "生命值"},
-    {AttrId::max_hp, "max_hp", WireType::Int64, 0x02, "attributes", "", "1000", "生命上限"},
-    {AttrId::mp, "mp", WireType::Int64, 0x02, "attributes", "", "100", "法力值"},
-    {AttrId::max_mp, "max_mp", WireType::Int64, 0x02, "attributes", "", "100", "法力上限"},
-    {AttrId::sp, "sp", WireType::Int64, 0x08, "attributes", "", "100", "体力"},
-    {AttrId::move_speed, "move_speed", WireType::Int64, 0x02, "attributes", "client_predicted server_authoritative", "10000", "移动速度（万分比，10000=100%）"},
-    {AttrId::gold, "gold", WireType::Int64, 0x08, "attributes", "", "0", "金币"},
-    {AttrId::attack, "attack", WireType::Int64, 0x02, "attributes", "", "0", "攻击力"},
-    {AttrId::defense, "defense", WireType::Int64, 0x02, "attributes", "", "0", "防御力"},
-    {AttrId::crit_rate, "crit_rate", WireType::Int64, 0x02, "attributes", "", "0", "暴击率（万分比）"},
-    {AttrId::hit_rate, "hit_rate", WireType::Int64, 0x02, "attributes", "", "10000", "命中率（万分比）"},
-    {AttrId::level, "level", WireType::Int32, 0x52, "attributes", "", "1", "等级"},
-    {AttrId::exp, "exp", WireType::Int64, 0x08, "attributes", "", "0", "经验"},
-    {AttrId::skill_points, "skill_points", WireType::Int32, 0x08, "attributes", "", "0", "技能点"},
-    {AttrId::reputation, "reputation", WireType::Int64, 0x08, "attributes", "", "0", "声望"},
-    {AttrId::weapon_appearance, "weapon_appearance", WireType::Int32, 0x81, "attributes", "", "0", "武器外观"},
-    {AttrId::guild_id, "guild_id", WireType::Int64, 0x02, "attributes", "", "0", "公会 ID"},
-    {AttrId::team_id, "team_id", WireType::Int64, 0x02, "attributes", "", "0", "队伍 ID"},
-    {AttrId::friend_count, "friend_count", WireType::Int32, 0x08, "attributes", "", "0", "好友数"},
-    {AttrId::online, "online", WireType::Bool, 0x40, "attributes", "", "true", "在线"},
-    {AttrId::in_combat, "in_combat", WireType::Bool, 0x02, "attributes", "", "false", "战斗中"},
-    {AttrId::dead, "dead", WireType::Bool, 0x82, "attributes", "", "false", "死亡"},
-    {AttrId::stealth, "stealth", WireType::Bool, 0x02, "attributes", "", "false", "隐身"},
-    {AttrId::stunned, "stunned", WireType::Bool, 0x82, "attributes", "", "false", "眩晕"},
+    {AttrId::hp, "hp", WireType::Int64, 0x02, "attributes", "", "1000", "生命值", 0, ""},
+    {AttrId::max_hp, "max_hp", WireType::Int64, 0x02, "attributes", "", "1000", "生命上限", 0, ""},
+    {AttrId::mp, "mp", WireType::Int64, 0x02, "attributes", "", "100", "法力值", 0, ""},
+    {AttrId::max_mp, "max_mp", WireType::Int64, 0x02, "attributes", "", "100", "法力上限", 0, ""},
+    {AttrId::sp, "sp", WireType::Int64, 0x08, "attributes", "", "100", "体力", 0, ""},
+    {AttrId::move_speed, "move_speed", WireType::Int64, 0x02, "attributes", "client_predicted server_authoritative", "10000", "移动速度（万分比，10000=100%）", 0, ""},
+    {AttrId::gold, "gold", WireType::Int64, 0x08, "attributes", "", "0", "金币", 0, ""},
+    {AttrId::attack, "attack", WireType::Int64, 0x02, "attributes", "", "0", "攻击力", 0, ""},
+    {AttrId::defense, "defense", WireType::Int64, 0x02, "attributes", "", "0", "防御力", 0, ""},
+    {AttrId::crit_rate, "crit_rate", WireType::Int64, 0x02, "attributes", "", "0", "暴击率（万分比）", 0, ""},
+    {AttrId::hit_rate, "hit_rate", WireType::Int64, 0x02, "attributes", "", "10000", "命中率（万分比）", 0, ""},
+    {AttrId::level, "level", WireType::Int32, 0x52, "attributes", "", "1", "等级", 0, ""},
+    {AttrId::exp, "exp", WireType::Int64, 0x08, "attributes", "", "0", "经验", 0, ""},
+    {AttrId::skill_points, "skill_points", WireType::Int32, 0x08, "attributes", "", "0", "技能点", 0, ""},
+    {AttrId::reputation, "reputation", WireType::Int64, 0x08, "attributes", "", "0", "声望", 0, ""},
+    {AttrId::weapon_appearance, "weapon_appearance", WireType::Int32, 0x81, "attributes", "", "0", "武器外观", 0, ""},
+    {AttrId::guild_id, "guild_id", WireType::Int64, 0x02, "attributes", "", "0", "公会 ID", 0, ""},
+    {AttrId::team_id, "team_id", WireType::Int64, 0x02, "attributes", "", "0", "队伍 ID", 0, ""},
+    {AttrId::friend_count, "friend_count", WireType::Int32, 0x08, "attributes", "", "0", "好友数", 0, ""},
+    {AttrId::online, "online", WireType::Bool, 0x40, "attributes", "", "true", "在线", 0, ""},
+    {AttrId::in_combat, "in_combat", WireType::Bool, 0x02, "attributes", "", "false", "战斗中", 0, ""},
+    {AttrId::dead, "dead", WireType::Bool, 0x82, "attributes", "", "false", "死亡", 0, ""},
+    {AttrId::stealth, "stealth", WireType::Bool, 0x02, "attributes", "", "false", "隐身", 0, ""},
+    {AttrId::stunned, "stunned", WireType::Bool, 0x82, "attributes", "", "false", "眩晕", 0, ""},
 };
 inline constexpr size_t kAttrCount = sizeof(kAttrs) / sizeof(kAttrs[0]);
 

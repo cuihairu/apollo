@@ -44,6 +44,9 @@ static_assert(findAttr("hp") >= 0, "必须有 hp 属性");
 static_assert(static_cast<uint16_t>(acg::kAttrs[findAttr("hp")].id) == 1, "hp 的 id 应为 1");
 static_assert((acg::kAttrs[findAttr("hp")].sync & acg::kSyncProp) != 0,
               "hp 应带 PROP 同步位");
+static_assert(acg::kAttrs[findAttr("hp")].sliceCount == 0 &&
+                  acg::kAttrs[findAttr("hp")].sliceType[0] == '\0',
+              "非容器属性 slice 声明面应为缺省（0 与空串——attribute-sync §2.2）");
 static_assert((acg::kAttrs[findAttr("hp")].sync & acg::kSyncDbBanned) == 0,
               "生成物不得含 SYNC_DB 位（决策 #5：存储语义在 storage.xml）");
 static_assert(findAttr("move_speed") >= 0 &&

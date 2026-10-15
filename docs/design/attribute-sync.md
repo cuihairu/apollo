@@ -527,7 +527,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 ### 边界（未实现，后续批）
 
 - 域标记契约声明生成 + 队/会成员数据注入（机制层已落地，声明与成员面归契约批/宿主）
-- slice 声明面（slice_count/slice_type 契约声明生成——机制层批 10 已落地，`declare_slice` 为机制层登记）
+- slice 声明面（slice_count/slice_type 契约声明生成——**schema + 生成器已落地（2026-10-15）**：attrs.xml/XSD 可声明、解析校验（成对 + 元素类型可解析）、apollo_contract.h AttrMeta 与 apollo_contract.json 携带、contract.lua 按需携带；余消费接线——宿主/玩法批从契约表 `declare_slice`，机制层批 10 已落地）
 - ~~客户端发送路径（GameConnection Facade 未建）~~（已随 Facade L2/L3 批交付：`tests/test_game_connection.cpp` 20 用例）
 - ~~slice 复合类型（§2.2）~~（机制层已随批 10 交付）
 

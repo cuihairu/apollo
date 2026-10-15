@@ -159,14 +159,17 @@ std::string renderHeader(const Contract& c, const std::string& hash,
     os << "struct AttrMeta {\n";
     os << "    AttrId id;\n    const char* name;\n    WireType type;\n    uint8_t sync;\n";
     os << "    const char* channel;\n    const char* predict;\n    const char* defaultValue;\n";
-    os << "    const char* desc;\n};\n";
+    os << "    const char* desc;\n";
+    os << "    uint16_t sliceCount;   ///< >0 = slice 容器 base（attribute-sync §2.2）\n";
+    os << "    const char* sliceType;  ///< slot 元素类型名（非容器 = \"\"）\n};\n";
     os << "inline constexpr AttrMeta kAttrs[] = {\n";
     for (const auto& a : c.attrs) {
         os << "    {AttrId::" << a.name << ", \"" << a.name << "\", " << wtLiteral(a.type)
            << ", 0x" << std::hex << std::setw(2) << std::setfill('0')
            << static_cast<int>(a.syncMask) << std::dec << ", \"" << a.channel << "\", \""
            << cEscape(joinTokens(a.predict)) << "\", \"" << cEscape(a.defaultValue)
-           << "\", \"" << cEscape(a.desc) << "\"},\n";
+           << "\", \"" << cEscape(a.desc) << "\", " << a.sliceCount << ", \""
+           << cEscape(a.sliceType) << "\"},\n";
     }
     os << "};\n";
     os << "inline constexpr size_t kAttrCount = sizeof(kAttrs) / sizeof(kAttrs[0]);\n\n";
@@ -294,6 +297,8 @@ std::string renderJson(const Contract& c, const std::string& hash, const std::st
             {"channel", a.channel},
             {"predict", predict},
             {"default", a.defaultValue.empty() ? ordered_json(nullptr) : ordered_json(a.defaultValue)},
+            {"slice_count", a.sliceCount},
+            {"slice_type", a.sliceType.empty() ? ordered_json(nullptr) : ordered_json(a.sliceType)},
             {"desc", a.desc},
         });
     }
@@ -417,6 +422,10 @@ std::string renderContractLua(const Contract& c, const std::string& hash,
         luaStringArray(os, a.predict);
         if (!a.defaultValue.empty()) {
             os << ", default = \"" << luaEscape(a.defaultValue) << "\"";
+        }
+        if (a.sliceCount != 0) {
+            os << ", slice_count = " << a.sliceCount << ", slice_type = \""
+               << luaEscape(a.sliceType) << "\"";
         }
         os << " },\n";
     }

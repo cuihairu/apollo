@@ -228,7 +228,8 @@ void parseAttrsDoc(pugi::xml_node root, FileParse& fp, const std::string& file) 
     const ElemSpec attrSpec{
         "attr",
         {{"id", true}, {"name", true}, {"type", true}, {"sync", false}, {"channel", false},
-         {"predict", false}, {"default", false}, {"desc", false}},
+         {"predict", false}, {"default", false}, {"desc", false},
+         {"slice_count", false}, {"slice_type", false}},
         {}};
 
     strictWalk(root, rootSpec, file, fp.buffer, "/attrs", fp.issues);
@@ -309,6 +310,18 @@ void parseAttrsDoc(pugi::xml_node root, FileParse& fp, const std::string& file) 
             }
             def.defaultValue = attrValue(n, "default").value_or("");
             def.desc = attrValue(n, "desc").value_or("");
+            // slice 容器声明面（attribute-sync §2.2 批 10）：显式 0 拒绝——0 = 非容器
+            // 与省略不可区分，语义校验按成对声明判
+            if (auto sc = attrValue(n, "slice_count")) {
+                uint16_t v = 0;
+                if (!parseUint16(*sc, v) || v == 0) {
+                    diag(fp.issues, file, line, path,
+                         "slice_count 必须 >= 1（非容器省略该属性即可）: '" + *sc + "'");
+                } else {
+                    def.sliceCount = v;
+                }
+            }
+            def.sliceType = attrValue(n, "slice_type").value_or("");
             fp.contract.attrs.push_back(std::move(def));
         }
     }
@@ -758,6 +771,14 @@ Contract validateAndResolve(Contract c, std::vector<Issue>& issues) {
                 diag(issues, a.sourceFile, 0, path,
                      "default '" + a.defaultValue + "' 与类型 '" + a.typeName + "' 不符");
             }
+        }
+        // slice 容器声明面：成对声明 + 元素类型可解析（容器 type = 长度格语义，
+        // 元素类型独立声明——attribute-sync §2.2）
+        if ((a.sliceCount != 0) != !a.sliceType.empty()) {
+            diag(issues, a.sourceFile, 0, path, "slice_count 与 slice_type 必须成对声明");
+        } else if (a.sliceCount != 0 && typeTable.find(a.sliceType) == typeTable.end()) {
+            diag(issues, a.sourceFile, 0, path,
+                 "slice_type 必须是基元或已声明别名: '" + a.sliceType + "'");
         }
         bool hasNone = false, hasOther = false;
         for (const auto& tok : a.predict) {

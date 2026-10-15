@@ -139,6 +139,11 @@
               </xs:simpleType>
             </xs:attribute>
             <xs:attribute name="channel" type="Channel" use="optional"/>
+            <!-- slice 容器声明面（attribute-sync §2.2 批 10 点名）：sliceCount > 0 =
+                 base 为容器（type = 长度格语义），slot 空间 = (slot<<16)|id，slot 1..N；
+                 两属性必须成对声明、元素类型须可解析——语义校验在生成器。 -->
+            <xs:attribute name="slice_count" type="xs:unsignedShort" use="optional"/>
+            <xs:attribute name="slice_type" type="xs:string" use="optional"/>
             <xs:attribute name="predict" use="optional">
               <xs:simpleType>
                 <xs:list itemType="PredictFlag"/>

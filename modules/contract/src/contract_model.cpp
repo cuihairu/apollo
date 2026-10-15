@@ -104,7 +104,8 @@ bool operator==(const TypeAlias& a, const TypeAlias& b) {
 bool operator==(const AttrDef& a, const AttrDef& b) {
     return a.id == b.id && a.name == b.name && a.typeName == b.typeName &&
            a.type == b.type && a.syncMask == b.syncMask && a.channel == b.channel &&
-           a.predict == b.predict && a.defaultValue == b.defaultValue && a.desc == b.desc;
+           a.predict == b.predict && a.defaultValue == b.defaultValue && a.desc == b.desc &&
+           a.sliceCount == b.sliceCount && a.sliceType == b.sliceType;
     // sourceFile 不参与语义相等（同一文件名下往返）
 }
 

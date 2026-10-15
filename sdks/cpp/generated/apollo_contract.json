@@ -29,6 +29,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "1000",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "生命值"
     },
     {
@@ -43,6 +45,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "1000",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "生命上限"
     },
     {
@@ -57,6 +61,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "100",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "法力值"
     },
     {
@@ -71,6 +77,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "100",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "法力上限"
     },
     {
@@ -85,6 +93,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "100",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "体力"
     },
     {
@@ -102,6 +112,8 @@
         "server_authoritative"
       ],
       "default": "10000",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "移动速度（万分比，10000=100%）"
     },
     {
@@ -116,6 +128,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "金币"
     },
     {
@@ -130,6 +144,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "攻击力"
     },
     {
@@ -144,6 +160,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "防御力"
     },
     {
@@ -158,6 +176,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "暴击率（万分比）"
     },
     {
@@ -172,6 +192,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "10000",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "命中率（万分比）"
     },
     {
@@ -188,6 +210,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "1",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "等级"
     },
     {
@@ -202,6 +226,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "经验"
     },
     {
@@ -216,6 +242,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "技能点"
     },
     {
@@ -230,6 +258,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "声望"
     },
     {
@@ -245,6 +275,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "武器外观"
     },
     {
@@ -259,6 +291,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "公会 ID"
     },
     {
@@ -273,6 +307,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "队伍 ID"
     },
     {
@@ -287,6 +323,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "0",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "好友数"
     },
     {
@@ -301,6 +339,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "true",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "在线"
     },
     {
@@ -315,6 +355,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "false",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "战斗中"
     },
     {
@@ -330,6 +372,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "false",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "死亡"
     },
     {
@@ -344,6 +388,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "false",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "隐身"
     },
     {
@@ -359,6 +405,8 @@
       "channel": "attributes",
       "predict": [],
       "default": "false",
+      "slice_count": 0,
+      "slice_type": null,
       "desc": "眩晕"
     }
   ],

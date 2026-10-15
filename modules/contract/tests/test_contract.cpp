@@ -282,6 +282,51 @@ void testErrorCodeRanges() {
     CHECK(issuesContaining(r, "超出分区") > 0, "应提示错误码分区（docs/19 §4.3）");
 }
 
+// ------------------------------------------------------------ slice 容器声明面（attribute-sync §2.2 批 10 点名）----
+
+void testSliceDeclaration() {
+    ParseResult ok = parseAttrsFull(
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="7" name="bag_slots" type="int32" slice_count="16" slice_type="int64"/>
+</attrs>)");
+    CHECK(ok.ok(), "合法 slice 声明误报:\n" + ok.report());
+    CHECK(ok.contract.attrs.size() == 1, "应解析出 1 条属性");
+    CHECK(ok.contract.attrs[0].sliceCount == 16, "slice_count 应解析为 16");
+    CHECK(ok.contract.attrs[0].sliceType == "int64", "slice_type 应解析为元素类型名");
+    CHECK(ok.contract.attrs[0].type == WireType::Int32, "容器 type = 长度格语义，独立于元素类型");
+
+    // 往返保真：XML 规范输出须回吐两字段（不动点断言依赖）
+    std::string canonical = writeAttrsXml(ok.contract);
+    ParseResult rt = parseAttrsFull(canonical);
+    CHECK(rt.ok(), "slice 声明规范输出必须可回读:\n" + rt.report());
+    CHECK(rt.contract.attrs == ok.contract.attrs, "slice 声明往返后属性表应相等");
+    CHECK(writeAttrsXml(rt.contract) == canonical, "slice 声明规范序列化应为不动点");
+
+    // 成对性：只给一半即报错
+    expectSemanticError(
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="7" name="bag_slots" type="int32" slice_count="16"/>
+</attrs>)",
+        "slice_count 与 slice_type 必须成对声明");
+    expectSemanticError(
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="7" name="bag_slots" type="int32" slice_type="int64"/>
+</attrs>)",
+        "slice_count 与 slice_type 必须成对声明");
+
+    // 下界与类型可解析性
+    expectSemanticError(
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="7" name="bag_slots" type="int32" slice_count="0" slice_type="int64"/>
+</attrs>)",
+        "slice_count 必须 >= 1");
+    expectSemanticError(
+        R"(<?xml version="1.0"?><attrs version="1">
+<attr id="7" name="bag_slots" type="int32" slice_count="4" slice_type="nonsense"/>
+</attrs>)",
+        "slice_type 必须是基元或已声明别名");
+}
+
 // ------------------------------------------------------------ 分域与绑定
 
 void testMsgDomainRules() {
@@ -906,6 +951,7 @@ int main() {
     testDefaultValueTypeCheck();
     testAliasRules();
     testPredictCombinations();
+    testSliceDeclaration();
     testErrorCodeRanges();
     testMsgDomainRules();
     testBindingDefaultByChannel();

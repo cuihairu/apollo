@@ -124,6 +124,8 @@ std::string writeAttrsXml(const Contract& c) {
         }
         optAttr(os, "default", a.defaultValue);
         optAttr(os, "desc", a.desc);
+        if (a.sliceCount != 0) os << " slice_count=\"" << a.sliceCount << "\"";
+        if (!a.sliceType.empty()) os << " slice_type=\"" << a.sliceType << "\"";
         os << "/>\n";
     }
     os << "</attrs>\n";

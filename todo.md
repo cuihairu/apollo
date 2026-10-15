@@ -34,6 +34,7 @@
 - [x] 更新排空与演练工具：drain 闸 SIGUSR1/2（fa201213）+ fleetctl probe（8b155a04）+ route1 更新演练（33e577be）
 - [x] 性能基准：三模型 benchmark 桩 + 受理面实测 ~0.1µs/意图 + flush 段实测（934f5df2）
 - [x] DevEx：dev_fleet.sh 一键起停 + gateway ingress 接线 + 编队成员注册批 0de62ea9（21/21 绿）
+- [x] 契约 slice 声明面（attribute-sync 批 10 余项）：attrs.xml/XSD 新增 slice_count/slice_type 成对声明 + 解析校验（成对性、≥1、元素类型可解析）+ apollo_contract.h AttrMeta/apollo_contract.json/contract.lua 产物携带 + 编译期 static_assert；随仓契约零 slice 内容（玩法 authoring 归玩法批），golden 重吐一致性绿
 - [x] 测试面：tests/ 80 个 test_*.cpp（gated by ctest，ctest -N 44 项）
 - [x] P3-2 / P3-3 / P3-4 全部收口：2026-10-13（批次台账 28/28 全勾）
 - [x] P4-4 术语承接：697c49d5（`APOLLO_USE_NNG|nng_` 代码 0 残余）

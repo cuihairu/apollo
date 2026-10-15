@@ -59,6 +59,11 @@ struct AttrDef {
     std::vector<std::string> predict;  ///< 预测权限位 token 集
     std::string defaultValue;
     std::string desc;
+    /// slice 容器声明面（attribute-sync §2.2 批 10 点名）：sliceCount > 0 = 该属性
+    /// 为容器 base（base 本体 = 长度格语义，slot 0）；slot 空间 = (slot << 16) | id，
+    /// 数据 slot 1..sliceCount（组合 id 纪律 attribute-sync §7.1）。
+    uint16_t sliceCount = 0;
+    std::string sliceType;  ///< slot 元素类型名（基元或别名），空 = 非容器
     std::string sourceFile;  ///< 诊断用
 };
 
