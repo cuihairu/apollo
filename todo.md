@@ -12,7 +12,13 @@
 - [ ] 外部存储接线（MySQL/Redis/ClickHouse）：ADR-007 现行=文件+journal 零外部依赖（未排期）
 - [ ] Kafka 观测管道 + Prometheus/Grafana：架构决策 #14 计划，仓内零实现（未排期）
 - [ ] protobuf+zstd 消息路径：protobuf 现为依赖+测试不在消息路径，zstd 未入 vcpkg.json（未排期）
-- [ ] G-2 热备仲裁面：ADR-010 已裁「案 A 先行、standby 不立项」（有裁决搁置）
+- [ ] G-2 热备仲裁面：ADR-010 已裁「案 A 先行、standby 不立项」（有裁决搁置；R1015F 已代决维持关闭，无反裁不重开）
+
+## 代决记录
+
+- **2026-10-15（R1015F 已代决）初始导入脚手架测试目标 8 个删除**：data_structures / log / network / protobuf / rest_template / utils / id_pool / timer 测的是已删 API（`apollo/net/protobuf_message.hpp`、`HttpHeader`、`utils::Random` 函数式调用形态等），无改写对象；CMake/CTest 接线同批清除（buffer_tests 绿，保留），四树构建 + ctest 全绿。遗留注记：`include/apollo/utils/lock.h` 与 `thread_pool.h` 唯一消费者即已删 test_utils.cpp，已成孤儿头（头删除属后续批，不在本代决范围）。
+- **2026-10-15（R1015F 已代决）覆盖率不硬造**：两份 todo 均无覆盖率条目，维持不动；如需补覆盖率由用户明示范围。
+- **2026-10-15（R1015F 已代决）G-2 维持硬关闭**：ADR-010 案 A 先行、standby 不立项、批 1-4 取消维持；无 ADR 反裁或生产数据触发不重开（决策记录见 `docs/architecture/adr.md` ADR-010 代决注记）。
 
 ## 已完成（证据）
 

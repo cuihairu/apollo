@@ -16,25 +16,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
     enable_testing()
 
-    # Protobuf tests
-    add_executable(protobuf_tests
-        test_protobuf.cpp
-        test_protobuf_main.cpp
-    )
-
-    target_link_libraries(protobuf_tests
-        PRIVATE
-        apollo
-        GTest::gtest
-    )
-
-    # 为Protobuf测试添加网络库链接
-    if(WIN32)
-        target_link_libraries(protobuf_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME ProtobufTests COMMAND protobuf_tests)
-
     # ========== Network Tests ==========
 
     # Buffer tests
@@ -47,80 +28,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     endif()
 
     add_test(NAME BufferTests COMMAND buffer_tests)
-
-    # Network integration tests
-    add_executable(network_tests
-        test_network.cpp
-        test_network_main.cpp
-    )
-
-    target_link_libraries(network_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(network_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME NetworkTests COMMAND network_tests)
-
-    # ========== Log Tests ==========
-
-    add_executable(log_tests test_log.cpp)
-
-    target_link_libraries(log_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(log_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME LogTests COMMAND log_tests)
-
-    # ========== Timer Tests ==========
-
-    add_executable(timer_tests test_timer.cpp)
-
-    target_link_libraries(timer_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(timer_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME TimerTests COMMAND timer_tests)
-
-    # ========== IdPool Tests ==========
-
-    add_executable(id_pool_tests test_id_pool.cpp)
-
-    target_link_libraries(id_pool_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(id_pool_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME IdPoolTests COMMAND id_pool_tests)
-
-    # ========== Utils Tests ==========
-
-    add_executable(utils_tests test_utils.cpp)
-
-    target_link_libraries(utils_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(utils_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME UtilsTests COMMAND utils_tests)
-
-    # ========== RestTemplate Tests (New) ==========
-
-    add_executable(rest_template_tests test_rest_template.cpp)
-
-    target_link_libraries(rest_template_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(rest_template_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME RestTemplateTests COMMAND rest_template_tests)
 
     if(APOLLO_ENABLE_IPC)
         # ========== Channel Tests (New) - Shared Memory + Backpressure ==========
@@ -140,19 +47,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # REMOVED: Actor module removed in favor of CAF (C++ Actor Framework)
     # See: https://github.com/actor-framework/actor-framework
 
-    # ========== Data Structures Tests (New) ==========
 
-    add_executable(data_structures_tests test_data_structures.cpp)
 
-    target_link_libraries(data_structures_tests PRIVATE apollo)
-
-    if(WIN32)
-        target_link_libraries(data_structures_tests PRIVATE ws2_32)
-    endif()
-
-    add_test(NAME DataStructuresTests COMMAND data_structures_tests)
-
-	
 	    # ========== BigWorld Compatibility Tests (New) ==========
 	
 	    add_executable(bigworld_api_tests
