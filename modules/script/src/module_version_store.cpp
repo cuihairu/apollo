@@ -37,6 +37,16 @@ bool parse_version_hex(const std::string& s, std::uint64_t& out) {
     return true;
 }
 
+// rename 覆盖已存在目标在部分 Windows CRT 上返回非零（不替换）；先删目标再 rename。
+// tmp 已写完才删——目标位置永不出现半截文件，旧清单在 rename 成功前保持完整。
+bool place_atomic_(const std::string& tmp, const std::string& path) {
+    if (std::rename(tmp.c_str(), path.c_str()) == 0) {
+        return true;  // 目标不存在，或 CRT 支持替换
+    }
+    (void)std::remove(path.c_str());
+    return std::rename(tmp.c_str(), path.c_str()) == 0;
+}
+
 }  // namespace
 
 bool parse_version_line(const std::string& line, VersionEntry& out) {
@@ -100,7 +110,7 @@ bool write_version_manifest(const std::string& path,
             return false;
         }
     }
-    return std::rename(tmp.c_str(), path.c_str()) == 0;
+    return place_atomic_(tmp, path);
 }
 
 }  // namespace apollo::script

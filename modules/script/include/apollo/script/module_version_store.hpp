@@ -12,6 +12,8 @@
 // name = 模块名；version = 当前（最新已知健康）版本号。
 //
 // 写入纪律：整表读改写 + 临时文件 rename 原子替换（防写一半崩溃留半截清单）。
+// 部分 Windows CRT 的 rename 不替换已存在目标（二次写返回非零）——回退先删
+// 目标再 rename（tmp 已写完才删，目标位置不出现半截文件）。
 // 写时机只有两处——换表成功（finish_module_swap_）与回滚成功
 // （rollback_module）；prepare 不写（版本尚未激活）。
 
