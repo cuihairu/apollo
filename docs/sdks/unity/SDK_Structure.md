@@ -1,3 +1,5 @@
+[English](SDK_Structure.en.md) | [中文](SDK_Structure.md)
+
 # Apollo SDK 目录结构
 
 ## 概述
