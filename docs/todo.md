@@ -1,3 +1,5 @@
+[English](todo.en.md) | [中文](todo.md)
+
 # TODO 任务计划（任务书 P0-P4 重排，2026-10-04）
 
 > 重排依据：`docs/rearchitecture/architecture-review-plan.md`（40 节任务书）+ 第一阶段审计七件套。

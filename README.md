@@ -115,18 +115,6 @@ Six terms that cover Apollo's runtime model (all backed by real components; see 
 ### Build
 
 ```bash
-
-## 本地测试口径
-
-CI 与本地开发按改动面三路分流——改一行文档不该全量编译。
-
-1. **文档改动**（`*.md`、`docs/**`、图片）：不编译。主 CI workflow 的
-   `paths-ignore` 已跳过这些路径。
-2. **代码改动**：只跑改动子集，不全量。
-   - `ctest -R '<改动测试>' -C Debug`
-3. **全量**（`ctest --output-on-failure -C Debug`）：仅以下情形触发——CMakeLists.txt、
-   `.github/**`、Docker/Compose 配置、发布前。
-
 # Clone the project
 git clone https://github.com/cuihairu/apollo.git
 cd apollo
@@ -147,6 +135,18 @@ cmake --build build --parallel
 # Run the example
 ./build/examples/session_demo
 ```
+
+### Local Testing Triage
+
+CI and local development split by change surface in three ways — editing one line of
+documentation should not trigger a full compile.
+
+1. **Documentation changes** (`*.md`, `docs/**`, images): no compile. The main CI workflow's
+   `paths-ignore` already skips these paths.
+2. **Code changes**: run only the changed subset, never the full suite.
+   - `ctest -R '<changed-test>' -C Debug`
+3. **Full suite** (`ctest --output-on-failure -C Debug`): triggered only by changes to
+   `CMakeLists.txt`, `.github/**`, Docker/Compose configuration, or before a release.
 
 ### Minimal Example
 

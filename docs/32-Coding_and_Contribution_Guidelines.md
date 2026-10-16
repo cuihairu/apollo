@@ -1,3 +1,5 @@
+[English](32-Coding_and_Contribution_Guidelines.en.md) | [中文](32-Coding_and_Contribution_Guidelines.md)
+
 # Coding & Contribution Guidelines
 
 > 目的：为 Apollo MMORPG 服务器项目制定统一的编码规范、代码审核流程、分支策略与提交要求，确保多人协作时保持高质量与一致性。

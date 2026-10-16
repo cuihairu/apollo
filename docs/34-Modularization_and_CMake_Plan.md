@@ -1,3 +1,5 @@
+[English](34-Modularization_and_CMake_Plan.en.md) | [中文](34-Modularization_and_CMake_Plan.md)
+
 # Apollo 模块化与 CMake 拆分落地方案
 
 > **历史件标注（2026-10-04 对账）**：本文是早期模块化方案，其中 `data/redis` 拆分方向已被 P1-4 收敛否决（redis 全族与 `modules/data/redis` 整树删除，五套存量收敛为一套），目录现状以 `modules/` 实仓为准；其余拆分思路仍作沿革参考。

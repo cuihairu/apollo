@@ -1,3 +1,5 @@
+[English](36-MMO_Frameworks_Comparative_Analysis.en.md) | [中文](36-MMO_Frameworks_Comparative_Analysis.md)
+
 # 36. 常见 MMO 服务器框架对比分析（Apollo 视角）
 
 > 状态：分析文档（对比研究）。覆盖 BigWorld、KBEngine、skynet、Pomelo、NoahGameFrame、Unity Netcode、UE Replication、EQEmu、WoW 生态（TrinityCore/CMaNGOS 近似）、Space Engineers（资料不足标注）十个对象。每维度对照 Apollo 的设计选择（docs/00、docs/04、docs/05——三者均已删、git 可溯，文中对其引用为历史引用；docs/design/*），给出取舍理由。纯文档工作，零源码改动。

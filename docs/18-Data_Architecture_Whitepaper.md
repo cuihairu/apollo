@@ -1,3 +1,5 @@
+[English](18-Data_Architecture_Whitepaper.en.md) | [中文](18-Data_Architecture_Whitepaper.md)
+
 # 数据架构白皮书
 
 > 目的：统一 Apollo MMO 的玩家数据、运营 BI、缓存策略、TLog 方案，解决现有文档中“Blob VS 拆表”冲突，为 DataProxy 和数据库设计提供权威参考。

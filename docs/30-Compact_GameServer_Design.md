@@ -1,3 +1,5 @@
+[English](30-Compact_GameServer_Design.en.md) | [中文](30-Compact_GameServer_Design.md)
+
 # Compact GameServer 设计方案（塔防/固定地图适配）
 
 > 目的：在通用 MMO 架构基础上，为塔防、绿色循环圈等固定地图、轻量玩法提供精简版 GameServer 形态，复用现有基础设施但减少服务拆分成本。

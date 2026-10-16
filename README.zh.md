@@ -136,6 +136,17 @@ cmake --build build --parallel
 ./build/examples/session_demo
 ```
 
+### 本地测试口径
+
+CI 与本地开发按改动面三路分流——改一行文档不该全量编译。
+
+1. **文档改动**（`*.md`、`docs/**`、图片）：不编译。主 CI workflow 的
+   `paths-ignore` 已跳过这些路径。
+2. **代码改动**：只跑改动子集，不全量。
+   - `ctest -R '<改动测试>' -C Debug`
+3. **全量**（`ctest --output-on-failure -C Debug`）：仅以下情形触发——CMakeLists.txt、
+   `.github/**`、Docker/Compose 配置、发布前。
+
 ### 最小示例
 
 约 40 行跑起一个宿主托管的游戏服务（完整可编译版见 [quick-start](docs/guide/quick-start.md)，已按实 API 验证）：

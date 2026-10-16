@@ -31,6 +31,8 @@ features:
     details: 进程发现 = machined 守护 + UDP 广播双层（不引 etcd/consul）；G-2 案 A 先行 restart-only（standby/reviver 未立项，ADR-010）；恢复相位排他；指标同源 G-5。
 ---
 
+[English](index.en.md) | [中文](index.md)
+
 ## 当前定位与架构现状
 
 **形态**：单进程起步（P1-P2），集群能力 P3 接入——分期是显式声明，不是遗漏。现行拓扑：

@@ -1,3 +1,5 @@
+[English](BUILDING.en.md) | [中文](BUILDING.md)
+
 # 构建 Apollo 服务端
 
 ## 使用 vcpkg（推荐）

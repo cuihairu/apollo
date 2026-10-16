@@ -1,3 +1,5 @@
+[English](QA.en.md) | [中文](QA.md)
+
 # MMORPG 架构 QA
 
 > 本文档是 MMORPG 服务器架构相关问题的索引目录，每个问题都有独立的详细解答文档。

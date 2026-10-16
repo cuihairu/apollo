@@ -1,3 +1,5 @@
+[English](33-BigWorld_Compatibility.md) | [中文](33-BigWorld_Compatibility.zh.md)
+
 # BigWorld Compatibility Layer (Apollo)
 
 Status: **Incremental**. This is a BigWorld-style C++ API facade built on top of Apollo, not a full BigWorld engine/runtime.
