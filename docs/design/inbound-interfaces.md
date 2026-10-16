@@ -1,3 +1,5 @@
+[English](inbound-interfaces.en.md) | [中文](inbound-interfaces.md)
+
 # Apollo 入站第三方对接面设计（inbound-interfaces）
 
 > 状态：设计稿（评审中）。定位：**外部世界主动进来的 HTTP 面**——渠道支付回调、第三方账号绑定回调、健康检查——的承载进程、鉴权、投递、幂等与面限定。缺口登记 design-gap-inventory #14（B11 批，2026-10-01 落盘）。互引：net-abstraction §5.10（出站 HTTP 三裁决——本设计是其镜像面：出站已裁、入站在此）、§5.7（InterServerLink——internal 域投递通道）、§7（baseappmgr 域/G-1）；login-flow（#13 同批——third_party_bindings 同表、channel 登录模式入口）；session-and-online-directory（#12——在线投递定位消费 #12 目录）；attribute-sync §8.2/§8.3（storage.xml 语句/DDL 纪律）；scripting-lua §8（异步交接同型）；logging §5.2（密钥 env 纪律同源）；sdk-contract §11.3（internal 域分段）；architecture-review §25/§26（存量实读与设计批输入五问）。

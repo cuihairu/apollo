@@ -1,3 +1,5 @@
+[English](net-abstraction.en.md) | [中文](net-abstraction.md)
+
 # Apollo 网络层抽象设计（net-abstraction）
 
 > 状态：设计稿（评审中）。目标：给游戏逻辑一个"薄"的网络 API，把连接管理、编解码、重连、背压全部下沉；并回答"自行开发薄封装 vs 引入 Aeron"的边界问题。与 `docs/design/attribute-sync.md`（QoS 通道/预算）、`docs/design/scripting-lua.md`（脚本只见三件套）、`docs/analysis/ssengine-reference.md`（sdnet 老设计）互为引用。

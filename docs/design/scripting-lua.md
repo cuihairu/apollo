@@ -1,3 +1,5 @@
+[English](scripting-lua.en.md) | [中文](scripting-lua.md)
+
 # Apollo Lua 脚本层设计（scripting-lua）
 
 > 状态：设计稿（评审中）。前瞻依据：仓库规划（docs/qa/q101-script-language.md 等）已把脚本语言方向定为 Lua。本设计与 `docs/analysis/architecture-review.md`（容器分工）、`docs/design/attribute-sync.md`（属性钩子/公式）、`docs/design/net-abstraction.md`（异步回主线程）、`docs/design/sdk-contract.md`（客户端契约）互为引用。

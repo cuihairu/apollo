@@ -1,3 +1,5 @@
+[English](session-and-online-directory.en.md) | [中文](session-and-online-directory.md)
+
 # Apollo 会话与在线目录（session-and-online-directory）
 
 > 状态：设计稿（评审中）。定位：**玩家在线状态的权威登记与查询面**——谁在线、在哪条线/哪个 baseapp/哪个副本、重复登录与顶号裁决、掉线保活窗口、跨进程玩家寻址的数据源（RouteResolver「宿主定位」职责的供数方）。缺口登记 design-gap-inventory #12（2026-09-30 立项同日落盘）。互引：net-abstraction §7（G-1 编队/baseappmgr 域/共享模型四类通道表）、§3（L2 resume）、§5.7（InterServerLink/authority_epoch）、§5.9（login_token）、attribute-sync §8.2（Redis 边界）、sdk-contract §11（internal 域）、scripting-lua §7.5（GM 查询面）、clock-and-time（窗口计时）、capacity-and-benchmark（容量与对账预算）；登录链路全貌（#13）、入站对接（#14）、Bots 压测（#15）为下游消费方。

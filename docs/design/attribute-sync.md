@@ -1,3 +1,5 @@
+[English](attribute-sync.en.md) | [中文](attribute-sync.md)
+
 # Apollo 属性同步系统设计（attribute-sync）
 
 > 状态：设计稿（评审中）。目标：以 BigWorld 的完整模型为基准，为 apollo 设计 MMO 属性/状态的权威同步系统；对照对象包括 apollo 现有草稿（docs/03、`include/apollo/game/attributes`）、SSEngine（老引擎，无此层）、KBEngine（.def 契约 + 多端 SDK）、Aeron（仅传输层思想，见 net-abstraction.md）。

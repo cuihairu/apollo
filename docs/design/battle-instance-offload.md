@@ -1,3 +1,5 @@
+[English](battle-instance-offload.en.md) | [中文](battle-instance-offload.md)
+
 # Battle Instance Offload 前置设计（副本进程形态）
 
 > 状态：**前置设计稿（2026-10-07）；三拍板点已拍板 2026-10-10（ADR-012：按需 spawn 请求协议 / 内存桩过渡 / 崩溃即作废）**。定位：36 号决策表 #16「Battle 独立实例 + Replay/Inspector 适配缝」的进程形态骨架——仿 net-abstraction §7「P3 前置设计」体裁：钉形态、钉依赖序、钉拍板点，不写实现细节。术语以本件为准（**副本进程** instance process：单 scene 单开进程的 offload 形态）。

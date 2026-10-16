@@ -1,3 +1,5 @@
+[English](queue-watermark.en.md) | [中文](queue-watermark.md)
+
 # 受理队列水位与过载前置设计（拍板②决策面）
 
 > 状态：**前置设计稿（2026-10-10）；三拍板点已裁 2026-10-10（ADR-016：水位两级 / 过载回调错误码 / tick 预算锚定）**。定位：cell-single-writer 拍板①已裁 ADR-015（(a) 队列化异步受理）后，拍板②「队列水位与过载语义」的决策面展开——钉水位形态三岔、钉过载响应、钉水位数值口径，不写实现细节。体裁仿 net-abstraction §7/battle-instance-offload/cell-single-writer。权威口径 = net-abstraction §4.2/§5.7（水位/背压母件）+ cell-single-writer §5 拍板②候选倾向（两级水位、不丢旧不静默）。

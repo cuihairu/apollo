@@ -1,3 +1,5 @@
+[English](sdk-contract.en.md) | [中文](sdk-contract.md)
+
 # Apollo 多端 SDK 契约设计（sdk-contract）
 
 > 状态：设计稿（评审中）。参照：KBEngine 的"单独 `sdks/` 目录 + 契约定义协议约定"精髓（学精髓不学形），并修正其短板（对数据的存储太弱——分析见 `docs/design/attribute-sync.md` §8）。本设计与 `attribute-sync.md`（属性模型/预测/attr_schema_hash）、`net-abstraction.md`（帧/通道）、`scripting-lua.md`（脚本白名单）、`architecture-review.md`（装配纪律）互为引用。

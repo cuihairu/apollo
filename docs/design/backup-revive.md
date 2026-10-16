@@ -1,3 +1,5 @@
+[English](backup-revive.en.md) | [中文](backup-revive.md)
+
 # 备份容灾与宕机接管设计（backup-revive）
 
 > 状态：**设计稿（前置设计，G-2 立项批，2026-10-09；六拍板点已拍板 2026-10-10——案 A 先行，见 §4 与 ADR-010）**。定位：进程级高可用面——权威进程死亡后「服务不倒」的候选拓扑、仲裁语义与接管时序；与 attribute-sync §8.2 的分界沿既有范围声明：journal 答「数据不丢」，本件答「进程不倒」。缺口登记：**G-2 备份/容灾与宕机接管**（architecture-review §16.4 遗留登记；net-abstraction §7「P3 前置设计」G-2 段为既有骨架口径，本件将其展开为可拍板的候选拓扑）。互引：net-abstraction（§7 G-2 段/§5.7 InterServerLink/§6 sdshmem 决策行）、attribute-sync（§8.2 范围声明/§10.2 停机序列/§11 验收表）、session-and-online-directory §6（恢复矩阵）、clock-and-time（§6 跨进程不互信/§7 双时间戳）、capacity-and-benchmark（§1 容量目标/§5 指标集）、crash-capture（取证互证面）、concept-glossary「热备与接管」词条、architecture-review（§16.2/§16.4/C-51/C-52/§30 简化三刀）、36 号（§0 证据分级/问 5/问 7）、battle-instance-offload §7（实例故障域独立拍板）。

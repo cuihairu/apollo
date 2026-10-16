@@ -1,3 +1,5 @@
+[English](crash-capture.en.md) | [中文](crash-capture.md)
+
 # 崩溃采集设计（crash-capture）
 
 > 状态：**已交付（批②③④ 2026-10-09 网络恢复续批；批①设计件 2026-10-08）**。**选型已钉（2026-10-08 用户拍板）：Google Crashpad，C++ 直集成**——Breakpad 只作历史对照，不引入其客户端。定位：进程级崩溃采集面——minidump 落盘、符号化还原、上传留位（默认关）。缺口登记：本件即崩溃采集批设计面（todo P3-3 批记）。互引：logging.md（观测三禁/外发白名单纪律）、net-abstraction §5.10（出站目标白名单——上传面同纪律）、capacity-and-benchmark §5（基准设施之外的第二类「运维证据」面）、improvement-plan P3-3（可观测性：崩溃报告=事后观测面）。

@@ -1,3 +1,5 @@
+[English](capacity-and-benchmark.en.md) | [中文](capacity-and-benchmark.md)
+
 # Apollo 容量模型与基准设施（capacity-and-benchmark）
 
 > 状态：设计稿（评审中）。定位：把散落在六份设计里的容量数值（5000 CCU / 25k msg/s / movement <100B / 32KB/s token bucket……）集中为**单进程容量预算表并给出推导链**；回答「net-abstraction §5.6『M2+ 每项先有基准再动手』的基准从哪来」；补 C++ 侧内存与对象池预算（Lua 侧上限已有 scripting-lua §6，C++ 侧此前零对应物）。缺口登记：design-gap-inventory #5（容量模型/基准设施）+ #7（内存对象池，同批）。与 `clock-and-time.md`（tick 10Hz 口径/跳拍率指标）、`attribute-sync.md`（§5 带宽/§10 六阶段/§11 验收表）、`net-abstraction.md`（§4 水位/§4.3 上行限流/§5.6 演进阶梯）、`scripting-lua.md`（§5.2 钩子预算/§6 沙盒上限）、`sdk-contract.md`（§10.6 性能量化）、`battle-determinism.md`（§5 录制格式——基准负载复用）互为引用。

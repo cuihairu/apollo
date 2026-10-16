@@ -1,3 +1,5 @@
+[English](gateway-topology-survey.en.md) | [中文](gateway-topology-survey.md)
+
 # Gateway 必要性与前端连接层拓扑调研（gateway-topology-survey）
 
 > 状态：研究件（2026-10-08）。定位：回答「apollo 要不要独立 gateway-app（连接面进程）」——有/无两种拓扑的职责对照、九框架先例取舍、apollo 取路建议。**建议件不代拍**：gateway-app 的落地节奏与形态定案挂 net M1 拍板链（improvement-plan P3-4 批记），本件只供「要不要」的论据，「何时/怎么」不裁——「留」结论已生效（ADR-011，2026-10-10；落地节奏＝最小修复处方三步先行，ingress 归 P3-2 gateway surface）。证据分级沿用 docs/36 §0：A=本地源码/官方文档原文实读（本轮带路径行号或 URL），B=本仓文档，C=官方文档转述，D=社区存疑。与 docs/36 分工：36 号是十对象八面深挖（A 级本地源码实读），本件只取「前端连接层 vs 后端 RPC」一轴——五家复用 36 号已证事实并补本轮实读引注，Pitaya/Colyseus/Nakama/Orleans 四家为首采。

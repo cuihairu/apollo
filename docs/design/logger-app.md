@@ -1,3 +1,5 @@
+[English](logger-app.en.md) | [中文](logger-app.md)
+
 # LoggerApp 立项前置设计（进程壳与结构化行接线的落地形态）
 
 > 状态：**已落地（2026-10-10，L1+L2+L3 三批同日交付；L4 挂 M1）**。定位：ADR-013「LoggerApp 立项」的落地形态展开——钉 apps 接线现状实证、钉 v1 采集形态三岔、钉批切分与拍板点。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload/cell-single-writer。术语以本件为准（日志收集进程 logger / 代码标识 `LoggerApp`）；权威口径 = ADR-013（立项切分：壳先行 + 开关打开 + push 留接口）+ logging.md §5（collector 形态母件）。批记见 ADR-013 落地注记（adr.md）。

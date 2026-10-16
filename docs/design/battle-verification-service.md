@@ -1,3 +1,5 @@
+[English](battle-verification-service.en.md) | [中文](battle-verification-service.md)
+
 # Apollo 战斗验证服务（battle-verification-service）
 
 > 状态：设计稿（评审中；实现 M0-M5 全部随代码批——源码冻结纪律）。定位：**客户端权威战斗的反作弊对账与权威结算件**——独立服务注册进 G-1，RPC 交互：上行输入流/战报（battle-determinism §5 四元组 + 客户端 hash 申报），下行验证与结算结果（verdict + 权威结算载荷）。语言面 = **Lua 双端共享同一份战斗逻辑**（客户端 xLua / 服务端 scripting-lua）——与业界 JS 双端（Node 验证服）/ C# 双端（Unity + .NET）同型，concept-glossary「战斗验证服务」词条的展开件。与 `battle-determinism.md`（§2 四约束全量继承、§5 录制/链复用）、`scripting-lua.md`（§6.1 三级事件形态移植、§2/§4 沙盒纪律）、`attribute-sync.md`（§8.2 :285 结算前 snapshot、§9 预测边界）、`net-abstraction.md`（§7 G-1、§5.7 InterServerLink、§4.3 violation_score）、`sdk-contract.md`（§11 internal 域）互为引用。缺口登记：design-gap-inventory #17（立项即设计落盘）。

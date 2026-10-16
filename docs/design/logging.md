@@ -1,3 +1,5 @@
+[English](logging.en.md) | [中文](logging.md)
+
 # Apollo 运行日志与崩溃取证设计（logging）
 
 > 状态：设计稿（评审中）。目标：回答「关键错误信息如何在一切正常 / 日志系统自身故障 / 进程崩溃三种状态下都留存」——每进程本地日志（**真相源**）、集中收集进程（**优化**）、崩溃取证链（**最后防线**）。关联：`docs/analysis/architecture-review.md`（C-25/C-26 日志现状审计、G-5 观测通道、C-32 信号处理反面教材）、`net-abstraction.md`（G-5 两截落位）、`scripting-lua.md`（§6 脚本错误审计分界）、`attribute-sync.md`（§8.2 BI 分流、§10.2 停机序）。

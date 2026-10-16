@@ -1,3 +1,5 @@
+[English](player-object-model.en.md) | [中文](player-object-model.md)
+
 # Apollo 玩家对象模型与 Cell 精简（player-object-model）
 
 > 状态：设计稿（评审中，2026-10-03 讨论定稿口径，待用户审核）。定位：**玩家对象的分层与归属**——登录后玩家对象在哪、断线保留归谁、跨场景（进副本/换线）谁动谁不动；并给出 **Cell 的精简边界**（砍什么/留什么）。缺口登记 design-gap-inventory #18（2026-10-03 用户指认「玩家登录之后就在 BaseApp 又在 Zone」前后矛盾后补立）。互引：concept-glossary §2.1（scene/副本/baseapp 粒度）；session-and-online-directory（#12 登记锚点/顶号/掉线保活窗口）；login-flow（#13 落点链）；battle-determinism（tick 边界确定性）；attribute-sync（§4.4 RO_MIRROR、L3 易失态）；36号 #9（否决无缝）；base-cell-proxy-model.md（B 档参考件——KBE 三层机制证据源，非本设计）。

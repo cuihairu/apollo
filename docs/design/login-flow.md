@@ -1,3 +1,5 @@
+[English](login-flow.en.md) | [中文](login-flow.md)
+
 # Apollo 登录链路整体设计（login-flow）
 
 > 状态：设计稿（评审中）。定位：**从客户端启动到进入世界的完整登录链**——账号鉴权、login_token 签发/验签/核销、选服/排队/准入、契约包下发时机、与在线目录的登记衔接。缺口登记 design-gap-inventory #13（B11 批，2026-10-01 落盘）。互引：net-abstraction §5.9（login_token/握手族）、§7（G-1/baseappmgr 准入）、§5.7（InterServerLink）；session-and-online-directory（#12——登记锚点/顶号/窗口，本设计的直接下游）；sdk-contract §11（消息域）/§11.6（契约包）；attribute-sync §8.2（storage.xml 账号表）；scripting-lua §7.5（GM 踢人执行位）；inbound-interfaces（#14 同批——账号绑定同域）；capacity-and-benchmark（洪峰容量）；architecture-review §25（存量实读）/§26（设计批输入六问）。

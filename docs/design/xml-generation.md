@@ -1,3 +1,5 @@
+[English](xml-generation.en.md) | [中文](xml-generation.md)
+
 # Apollo XML 生成与数据装载设计（xml-generation）
 
 > 状态：设计稿（评审中）。定位：回答「框架里 XML 用在哪、从 XML 生成什么、怎么校验、怎么热更」——把 architecture-review §15.3/§15.4/§15.5 的三个 XML 决策（契约源 XML+XSD、分文件布局、storage 语句即数据）落成一条统一的生成与装载管线。与 `sdk-contract.md`（四投影与 gen/ 目录）、`attribute-sync.md`（L1 静态配置装载）、`scripting-lua.md`（热替换协议）、`net-abstraction.md`（帧 ver→filter 栈声明）、`docs/analysis/architecture-review.md` §16（行业 XML 对照）互为引用。

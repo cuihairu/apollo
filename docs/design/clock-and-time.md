@@ -1,3 +1,5 @@
+[English](clock-and-time.en.md) | [中文](clock-and-time.md)
+
 # Apollo 时间与时钟模型（clock-and-time）
 
 > 状态：设计稿（评审中）。目标：定形「时间」在 apollo 里的三种形态与各自禁入区——单调钟只做测量、tick 号只做判定序、wall 钟只做人类可读；并回答 tick 调度（固定步长/追赶/暂停）、客户端校时边界、跨进程时钟不互信、定时器的时间接口。与 `docs/design/attribute-sync.md`（§10 六阶段/§5.1 预算/§8.2 摊写——全部以本文件的 tick 号为刻度；§10.1 已论证「为什么是 tick 不是消息驱动」G-7，本文不重复）、`docs/analysis/ssengine-reference.md` §4.3（定时器轮）、`docs/analysis/mmo-mechanism-deep-dive.md` §8（定 tick 与线程编队三家先例）互为引用。缺口登记：design-gap-inventory #1。
