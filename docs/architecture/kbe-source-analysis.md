@@ -12,7 +12,12 @@ tag:
   - MMO
 ---
 
+English: not yet translated | [中文](kbe-source-analysis.md)
+
 # KBEngine 源码分析
+
+> **暂无英文译版 / No English translation yet.** 本文是 1400+ 行源码分析长文，整篇翻译只会产出劣质占位稿，故此处仅标注语言状态，正文仅中文。
+> **No English translation yet.** This is a 1400+ line source-analysis document; a full English version now would be a low-quality placeholder, so only the language status is marked here. Chinese only.
 
 这篇文档基于本地源码目录 `C:\Users\cui\Workspaces\kbengine` 整理，目标不是做概念介绍，而是回答两个更实际的问题：
 
