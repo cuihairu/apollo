@@ -42,8 +42,3 @@ Only if edge-access governance is to be layered on top is a separate `GatewayApp
 7. Persistence closure
 
 ## Recommended Reading
-
-
-## Old Long-Form Version
-
-- [BigWorld Process Architecture and Player Lifecycle (old version)](../BigWorld进程架构与玩家生命周期.md)

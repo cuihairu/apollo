@@ -37,7 +37,3 @@ Apollo 已有 BigWorld 兼容层实现，见：
 
 - [BigWorld 进程架构与玩家生命周期](./bigworld-lifecycle.md)
 - [Witness 与 Ghost 设计](./witness-ghost-design.md)
-
-## 旧版长文
-
-- [BigWorld 架构深度解析（旧版）](../BigWorld架构深度解析.md)

@@ -37,7 +37,3 @@ Apollo already has a BigWorld compatibility layer implementation, see:
 
 - [BigWorld Process Architecture and Player Lifecycle](./bigworld-lifecycle.en.md)
 - [Witness and Ghost Design](./witness-ghost-design.en.md)
-
-## Old Long-Form Version
-
-- [BigWorld Architecture Deep Dive (old version)](../BigWorld架构深度解析.md)
