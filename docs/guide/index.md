@@ -4,6 +4,8 @@ icon: book
 order: 1
 ---
 
+[English](index.en.md) | [中文](index.md)
+
 # 欢迎使用 Apollo
 
 Apollo 是一个面向轻量 MMO、塔防/固定地图玩法的 C++20 在线游戏服务端引擎。本指南将帮助你快速上手。

@@ -4,6 +4,8 @@ icon: terminal
 order: 7
 ---
 
+[English](tooling.en.md) | [中文](tooling.md)
+
 # 工具脚本（scripts/）
 
 仓库自带的运维/验收脚本一览。设计依据与交付注记见各归属设计件（崩溃采集 / 备份容灾 / 容量基准）。

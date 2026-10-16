@@ -4,6 +4,8 @@ icon: shield
 order: 8
 ---
 
+[English](dependency-security.en.md) | [中文](dependency-security.md)
+
 # 依赖安全与升级（dependabot 台账）
 
 docs 站点工具链的 dependabot 告警台账：逐条登记处置结果（fixed / blocked），

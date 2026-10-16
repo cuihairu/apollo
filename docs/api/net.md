@@ -4,6 +4,8 @@ icon: network
 prev: /api/README.md
 ---
 
+[English](net.en.md) | [中文](net.md)
+
 # Network API
 
 > 2026-10-04 对账：本页按 HEAD 实况重写。旧稿的 `apollo::net::tcp::Server/

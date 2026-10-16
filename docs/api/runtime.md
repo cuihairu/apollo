@@ -4,6 +4,8 @@ icon: play
 prev: /api/README.md
 ---
 
+[English](runtime.en.md) | [中文](runtime.md)
+
 # Runtime API
 
 > 2026-10-10 对账：本页按 HEAD 实况重写（modules/runtime 七头：application_host/

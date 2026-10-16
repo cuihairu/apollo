@@ -4,6 +4,8 @@ icon: code
 order: 1
 ---
 
+[English](index.en.md) | [中文](index.md)
+
 # API 参考
 
 本节包含 Apollo 的 API 参考文档。

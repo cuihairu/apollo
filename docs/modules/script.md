@@ -2,6 +2,8 @@
 title: Script 模块
 ---
 
+[English](script.en.md) | [中文](script.md)
+
 # Script 模块
 
 Lua 沙盒宿主（`apollo::script`），设计见 [scripting-lua.md](/design/scripting-lua)。动态归 Lua、硬实时归 C++；本模块只承载运行时底座，玩法逻辑面在后续批。

@@ -9,6 +9,8 @@ tag:
   - 运行时
 ---
 
+[English](runtime.en.md) | [中文](runtime.md)
+
 # Runtime 模块
 
 Runtime 模块提供宿主运行时，管理应用程序的生命周期。

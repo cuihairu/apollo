@@ -5,6 +5,8 @@ order: 6
 prev: /guide/module-system
 ---
 
+[English](configuration.en.md) | [中文](configuration.md)
+
 # 配置
 
 > 2026-10-04 对账：本页按 HEAD 实况重写。旧稿的 `load()`/`loadFromEnv()`/`get<T>()`/`onChange()`/`setOverrideStrategy()`/`parseArgs()`/`defineSchema()`/`validate()` 均不存在；

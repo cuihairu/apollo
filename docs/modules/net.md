@@ -9,6 +9,8 @@ tag:
   - 网络
 ---
 
+[English](net.en.md) | [中文](net.md)
+
 # Network 模块
 
 Network 模块提供网络通信能力。

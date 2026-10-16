@@ -9,6 +9,8 @@ tag:
   - 兼容层
 ---
 
+[English](bigworld.en.md) | [中文](bigworld.md)
+
 # BigWorld 模块
 
 BigWorld 模块提供 BigWorld API 兼容层，允许现有 BigWorld 风格代码平滑迁移。

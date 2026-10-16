@@ -11,6 +11,8 @@ tag:
   - NNG
 ---
 
+[English](BigWorld服务器应用实现.en.md) | [中文](BigWorld服务器应用实现.md)
+
 # BigWorld 服务器应用实现
 
 本文档描述 Apollo 中与 MMO / 分布式世界相关的服务器应用装配方式。

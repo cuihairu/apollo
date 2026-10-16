@@ -6,6 +6,8 @@ prev: /guide/quick-start
 next: /guide/module-system
 ---
 
+[English](concepts.en.md) | [中文](concepts.md)
+
 # 核心概念
 
 ## 应用 (Application)

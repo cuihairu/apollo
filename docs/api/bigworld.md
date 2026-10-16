@@ -4,6 +4,8 @@ icon: bigworld
 prev: /api/README.md
 ---
 
+[English](bigworld.en.md) | [中文](bigworld.md)
+
 # BigWorld API
 
 > 2026-10-10 对账：本页按 HEAD 实况重写（兼容面 = `include/bigworld/BigWorld.h`

@@ -10,6 +10,8 @@ tag:
   - 应用
 ---
 
+[English](index.en.md) | [中文](index.md)
+
 # 服务器应用
 
 Apollo 项目提供了一系列可装配的服务器应用程序，用于实现两种 MMO 主拓扑：

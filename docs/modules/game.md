@@ -9,6 +9,8 @@ tag:
   - 游戏
 ---
 
+[English](game.en.md) | [中文](game.md)
+
 # Game 模块
 
 Game 模块提供游戏领域层功能，分七个子库：core（实体基元）、world（场景/会话/Avatar）、

@@ -4,6 +4,8 @@ icon: game
 prev: /api/README.md
 ---
 
+[English](game.en.md) | [中文](game.md)
+
 # Game API
 
 > 2026-10-04 对账：本页按 HEAD 实况重写。P1-3 后全仓唯一 AOI 实现为
