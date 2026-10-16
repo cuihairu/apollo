@@ -1,3 +1,5 @@
+[English](q20-heartbeat-reconnect.en.md) | [中文](q20-heartbeat-reconnect.md)
+
 # Q20: 长连接如何保持心跳？断线重连如何设计？
 
 ## 核心结论

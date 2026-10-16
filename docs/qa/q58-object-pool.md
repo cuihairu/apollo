@@ -1,3 +1,5 @@
+[English](q58-object-pool.en.md) | [中文](q58-object-pool.md)
+
 # Q58: 对象池是什么？如何设计？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q112-designer-comm.en.md) | [中文](q112-designer-comm.md)
+
 # Q112: 如何与策划同学沟通技术方案？
 
 ## 问题分析

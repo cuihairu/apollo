@@ -1,3 +1,5 @@
+[English](q18-ghost-mechanism.en.md) | [中文](q18-ghost-mechanism.md)
+
 # Q18: 什么是 Ghost / Shadow 机制？
 
 ## 核心结论

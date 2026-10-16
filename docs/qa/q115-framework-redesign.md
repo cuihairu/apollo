@@ -1,3 +1,5 @@
+[English](q115-framework-redesign.en.md) | [中文](q115-framework-redesign.md)
+
 # Q115: 如果让你重新设计，你会如何改进当前框架？
 
 ## 问题分析

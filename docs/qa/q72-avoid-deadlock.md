@@ -1,3 +1,5 @@
+[English](q72-avoid-deadlock.en.md) | [中文](q72-avoid-deadlock.md)
+
 # Q72: 如何避免死锁？
 
 ## 核心结论

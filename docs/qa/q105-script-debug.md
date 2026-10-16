@@ -1,3 +1,5 @@
+[English](q105-script-debug.en.md) | [中文](q105-script-debug.md)
+
 # Q105: 如何调试脚本？
 
 ## 问题分析

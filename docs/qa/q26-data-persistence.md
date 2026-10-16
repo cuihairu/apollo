@@ -1,3 +1,5 @@
+[English](q26-data-persistence.en.md) | [中文](q26-data-persistence.md)
+
 # Q26: 玩家数据什么时候存数据库？全量保存 vs 增量保存？
 
 ## 核心结论

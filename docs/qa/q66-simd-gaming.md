@@ -1,3 +1,5 @@
+[English](q66-simd-gaming.en.md) | [中文](q66-simd-gaming.md)
+
 # Q66: SIMD 在游戏中有哪些应用？
 
 ## 核心结论

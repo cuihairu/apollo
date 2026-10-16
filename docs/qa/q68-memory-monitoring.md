@@ -1,3 +1,5 @@
+[English](q68-memory-monitoring.en.md) | [中文](q68-memory-monitoring.md)
+
 # Q68: 如何设计内存监控？
 
 ## 核心结论

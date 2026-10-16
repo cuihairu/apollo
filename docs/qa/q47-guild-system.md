@@ -1,3 +1,5 @@
+[English](q47-guild-system.en.md) | [中文](q47-guild-system.md)
+
 # Q47: 如何设计公会系统？
 
 ## 核心结论

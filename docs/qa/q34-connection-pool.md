@@ -1,3 +1,5 @@
+[English](q34-connection-pool.en.md) | [中文](q34-connection-pool.md)
+
 # Q34: 数据库连接池如何设计？
 
 ## 核心结论

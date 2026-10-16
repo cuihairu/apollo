@@ -1,3 +1,5 @@
+[English](q108-mmo-from-scratch.en.md) | [中文](q108-mmo-from-scratch.md)
+
 # Q108: 从 0 到 1 搭建一个 MMO 服务器，你的思路是什么？
 
 ## 问题分析

@@ -1,3 +1,5 @@
+[English](q19-replay-attack.en.md) | [中文](q19-replay-attack.md)
+
 # Q19: 如何防止消息重放攻击？
 
 ## 核心结论

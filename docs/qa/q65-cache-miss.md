@@ -1,3 +1,5 @@
+[English](q65-cache-miss.en.md) | [中文](q65-cache-miss.md)
+
 # Q65: 如何减少 CPU 缓存未命中？
 
 ## 核心结论

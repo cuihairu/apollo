@@ -1,3 +1,5 @@
+[English](q32-mail-system.en.md) | [中文](q32-mail-system.md)
+
 # Q32: 如何设计邮件系统？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q51-ai-system.en.md) | [中文](q51-ai-system.md)
+
 # Q51: 如何设计 AI 系统？
 
 ## 核心结论

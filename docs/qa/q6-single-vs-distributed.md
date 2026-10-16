@@ -1,3 +1,5 @@
+[English](q6-single-vs-distributed.en.md) | [中文](q6-single-vs-distributed.md)
+
 # Q6: 单服架构 vs 分布式架构，如何选择？
 
 ## 核心结论

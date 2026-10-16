@@ -1,3 +1,5 @@
+[English](q53-scene-management.en.md) | [中文](q53-scene-management.md)
+
 # Q53: 如何设计场景管理？
 
 ## 核心结论

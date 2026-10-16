@@ -1,3 +1,5 @@
+[English](q44-inventory-system.en.md) | [中文](q44-inventory-system.md)
+
 # Q44: 如何设计背包系统？
 
 ## 核心结论

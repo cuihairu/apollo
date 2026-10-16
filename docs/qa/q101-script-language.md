@@ -1,3 +1,5 @@
+[English](q101-script-language.en.md) | [中文](q101-script-language.md)
+
 # Q101: 为什么要嵌入脚本语言？Lua vs Python 如何选择？
 
 ## 问题分析

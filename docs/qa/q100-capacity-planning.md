@@ -1,3 +1,5 @@
+[English](q100-capacity-planning.en.md) | [中文](q100-capacity-planning.md)
+
 # Q100: 如何进行服务器容量规划？
 
 ## 问题分析

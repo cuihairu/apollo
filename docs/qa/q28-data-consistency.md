@@ -1,3 +1,5 @@
+[English](q28-data-consistency.en.md) | [中文](q28-data-consistency.md)
+
 # Q28: 如何解决数据一致性问题？
 
 ## 核心结论

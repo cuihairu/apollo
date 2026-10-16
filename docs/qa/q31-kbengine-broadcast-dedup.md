@@ -1,3 +1,5 @@
+[English](q31-kbengine-broadcast-dedup.en.md) | [中文](q31-kbengine-broadcast-dedup.md)
+
 # Q31: KBEngine 如何高效广播？如何保证消息不重复？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q28-kbengine-registry-actor-transport.en.md) | [中文](q28-kbengine-registry-actor-transport.md)
+
 # Q28: KBEngine 是否存在注册中心？CellApp 如何部署和通信？Actor 模型适用吗？
 
 ## 核心结论

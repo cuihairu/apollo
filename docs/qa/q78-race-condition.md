@@ -1,3 +1,5 @@
+[English](q78-race-condition.en.md) | [中文](q78-race-condition.md)
+
 # Q78: 如何处理竞态条件？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q80-coroutine.en.md) | [中文](q80-coroutine.md)
+
 # Q80: 协程在游戏服务器中的应用场景？
 
 ## 核心结论

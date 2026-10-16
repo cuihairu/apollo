@@ -1,3 +1,5 @@
+[English](q23-rpc-implementation.en.md) | [中文](q23-rpc-implementation.md)
+
 # Q23: 如何实现 RPC 调用？
 
 ## 核心结论

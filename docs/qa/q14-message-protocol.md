@@ -1,3 +1,5 @@
+[English](q14-message-protocol.en.md) | [中文](q14-message-protocol.md)
+
 # Q14: 如何设计消息协议？Protobuf vs JSON vs 自定义协议？
 
 ## 核心结论

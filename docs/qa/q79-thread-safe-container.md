@@ -1,3 +1,5 @@
+[English](q79-thread-safe-container.en.md) | [中文](q79-thread-safe-container.md)
+
 # Q79: 如何设计线程安全的容器？
 
 ## 核心结论

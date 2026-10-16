@@ -1,3 +1,5 @@
+[English](q87-encryption.en.md) | [中文](q87-encryption.md)
+
 # Q87: 敏感数据如何加密传输？
 
 ## 核心结论

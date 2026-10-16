@@ -1,3 +1,5 @@
+[English](q46-auction-house.en.md) | [中文](q46-auction-house.md)
+
 # Q46: 如何设计拍卖行？
 
 ## 核心结论

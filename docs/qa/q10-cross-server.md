@@ -1,3 +1,5 @@
+[English](q10-cross-server.en.md) | [中文](q10-cross-server.md)
+
 # Q10: 如何实现跨服功能（如跨服战场、跨服聊天）？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q54-loot-contention.en.md) | [中文](q54-loot-contention.md)
+
 # Q54: 如何处理多人同时抢怪/抢资源？
 
 ## 核心结论

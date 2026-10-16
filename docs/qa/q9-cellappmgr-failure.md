@@ -1,3 +1,5 @@
+[English](q9-cellappmgr-failure.en.md) | [中文](q9-cellappmgr-failure.md)
+
 # Q9: CellAppMgr 如果宕机了怎么办？有哪些解决方案？
 
 ## 核心结论

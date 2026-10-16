@@ -1,3 +1,5 @@
+[English](q81-anti-cheat.en.md) | [中文](q81-anti-cheat.md)
+
 # Q81: 如何防止外挂？
 
 ## 核心结论

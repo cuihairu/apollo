@@ -1,3 +1,5 @@
+[English](q98-gm-command-system.en.md) | [中文](q98-gm-command-system.md)
+
 # Q98: 如何实现 GM 命令系统？
 
 ## 问题分析

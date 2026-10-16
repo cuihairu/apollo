@@ -1,3 +1,5 @@
+[English](q15-message-compression.en.md) | [中文](q15-message-compression.md)
+
 # Q15: 如何实现消息压缩？
 
 ## 核心结论

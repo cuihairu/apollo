@@ -1,3 +1,5 @@
+[English](q5-dynamic-scaling.en.md) | [中文](q5-dynamic-scaling.md)
+
 # Q5: 服务端如何设计才能支持动态扩容？
 
 ## 问题分析

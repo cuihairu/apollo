@@ -1,3 +1,5 @@
+[English](q93-troubleshooting.en.md) | [中文](q93-troubleshooting.md)
+
 # Q93: 如何快速定位线上问题？
 
 ## 问题分析

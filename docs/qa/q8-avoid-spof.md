@@ -1,3 +1,5 @@
+[English](q8-avoid-spof.en.md) | [中文](q8-avoid-spof.md)
+
 # Q8: 如何设计才能避免单点故障？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q60-timer-system.en.md) | [中文](q60-timer-system.md)
+
 # Q60: 如何设计定时器系统？
 
 ## 核心结论

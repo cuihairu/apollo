@@ -1,3 +1,5 @@
+[English](q99-cluster-management.en.md) | [中文](q99-cluster-management.md)
+
 # Q99: 如何管理服务器集群？
 
 ## 问题分析

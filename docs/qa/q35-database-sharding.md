@@ -1,3 +1,5 @@
+[English](q35-database-sharding.en.md) | [中文](q35-database-sharding.md)
+
 # Q35: 如何实现数据库分片？
 
 ## 核心结论

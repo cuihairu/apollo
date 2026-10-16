@@ -1,3 +1,5 @@
+[English](q55-damage-calculation.en.md) | [中文](q55-damage-calculation.md)
+
 # Q55: 如何设计伤害计算？
 
 ## 核心结论

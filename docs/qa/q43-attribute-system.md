@@ -1,3 +1,5 @@
+[English](q43-attribute-system.en.md) | [中文](q43-attribute-system.md)
+
 # Q43: 如何设计属性系统？
 
 ## 核心结论

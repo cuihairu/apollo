@@ -1,3 +1,5 @@
+[English](q39-combat-system.en.md) | [中文](q39-combat-system.md)
+
 # Q39: 如何设计战斗系统？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q88-sql-injection.en.md) | [中文](q88-sql-injection.md)
+
 # Q88: 如何防止 SQL 注入？
 
 ## 核心结论

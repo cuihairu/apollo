@@ -1,3 +1,5 @@
+[English](q40-ecs-architecture.en.md) | [中文](q40-ecs-architecture.md)
+
 # Q40: ECS 架构是什么？在游戏中有什么优势？
 
 ## 核心结论

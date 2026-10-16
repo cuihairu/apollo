@@ -1,3 +1,5 @@
+[English](q85-packet-forgery.en.md) | [中文](q85-packet-forgery.md)
+
 # Q85: 如何防止封包伪造？
 
 ## 核心结论

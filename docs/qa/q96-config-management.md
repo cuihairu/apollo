@@ -1,3 +1,5 @@
+[English](q96-config-management.en.md) | [中文](q96-config-management.md)
+
 # Q96: 如何管理服务器配置？
 
 ## 问题分析

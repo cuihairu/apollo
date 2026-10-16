@@ -1,3 +1,5 @@
+[English](q103-script-hot-reload.en.md) | [中文](q103-script-hot-reload.md)
+
 # Q103: 如何实现脚本热更新？
 
 ## 问题分析

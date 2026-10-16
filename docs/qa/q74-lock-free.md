@@ -1,3 +1,5 @@
+[English](q74-lock-free.en.md) | [中文](q74-lock-free.md)
+
 # Q74: 如何设计无锁数据结构？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q32-kbengine-cellapp-communication.en.md) | [中文](q32-kbengine-cellapp-communication.md)
+
 # Q32: KBEngine CellApp 同机/跨机如何通信？有什么证据？
 
 ## 核心结论

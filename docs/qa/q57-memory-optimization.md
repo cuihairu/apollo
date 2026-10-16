@@ -1,3 +1,5 @@
+[English](q57-memory-optimization.en.md) | [中文](q57-memory-optimization.md)
+
 # Q57: 如何优化内存使用？
 
 ## 核心结论

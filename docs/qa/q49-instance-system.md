@@ -1,3 +1,5 @@
+[English](q49-instance-system.en.md) | [中文](q49-instance-system.md)
+
 # Q49: 如何设计副本系统？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q36-database-transaction.en.md) | [中文](q36-database-transaction.md)
+
 # Q36: 如何处理数据库事务？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q12-network-jitter.en.md) | [中文](q12-network-jitter.md)
+
 # Q12: 如何处理网络抖动和丢包？
 
 ## 核心结论

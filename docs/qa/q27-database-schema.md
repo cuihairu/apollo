@@ -1,3 +1,5 @@
+[English](q27-database-schema.en.md) | [中文](q27-database-schema.md)
+
 # Q27: 如何设计数据库表结构？
 
 ## 核心结论

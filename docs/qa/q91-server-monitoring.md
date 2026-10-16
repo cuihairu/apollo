@@ -1,3 +1,5 @@
+[English](q91-server-monitoring.en.md) | [中文](q91-server-monitoring.md)
+
 # Q91: 如何监控服务器状态？
 
 ## 问题分析

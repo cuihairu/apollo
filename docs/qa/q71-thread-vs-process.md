@@ -1,3 +1,5 @@
+[English](q71-thread-vs-process.en.md) | [中文](q71-thread-vs-process.md)
+
 # Q71: 多线程 vs 多进程，如何选择？
 
 ## 核心结论

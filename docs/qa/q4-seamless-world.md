@@ -1,3 +1,5 @@
+[English](q4-seamless-world.en.md) | [中文](q4-seamless-world.md)
+
 # Q4: 如何实现大地图的无缝切换？如何处理跨服务器的玩家移动？
 
 ## 问题分析

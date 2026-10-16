@@ -1,3 +1,5 @@
+[English](q25-c10k-problem.en.md) | [中文](q25-c10k-problem.md)
+
 # Q25: 连接数上限由什么决定？如何突破 C10K 问题？
 
 ## 核心结论

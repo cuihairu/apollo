@@ -1,3 +1,5 @@
+[English](q7-process-architecture.en.md) | [中文](q7-process-architecture.md)
+
 # Q7: 进程内架构 vs 多进程架构，各有什么优劣？
 
 ## 核心结论

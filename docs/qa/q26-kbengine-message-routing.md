@@ -1,3 +1,5 @@
+[English](q26-kbengine-message-routing.en.md) | [中文](q26-kbengine-message-routing.md)
+
 # Q26: KBEngine 消息路由机制：Gateway、Proxy、CellApp 之间如何高效转发？
 
 ## 核心结论

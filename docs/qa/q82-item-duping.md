@@ -1,3 +1,5 @@
+[English](q82-item-duping.en.md) | [中文](q82-item-duping.md)
+
 # Q82: 如何防止刷物品？
 
 ## 核心结论

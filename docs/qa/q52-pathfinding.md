@@ -1,3 +1,5 @@
+[English](q52-pathfinding.en.md) | [中文](q52-pathfinding.md)
+
 # Q52: 如何设计寻路系统？
 
 ## 核心结论

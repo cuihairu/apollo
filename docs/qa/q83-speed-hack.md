@@ -1,3 +1,5 @@
+[English](q83-speed-hack.en.md) | [中文](q83-speed-hack.md)
+
 # Q83: 如何防止加速挂？
 
 ## 核心结论

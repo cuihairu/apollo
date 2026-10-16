@@ -1,3 +1,5 @@
+[English](q30-kbengine-space-concept.en.md) | [中文](q30-kbengine-space-concept.md)
+
 # Q30: KBEngine 的 Space 是什么？与物理空间划分有什么区别？
 
 ## 核心结论

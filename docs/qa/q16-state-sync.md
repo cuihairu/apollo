@@ -1,3 +1,5 @@
+[English](q16-state-sync.en.md) | [中文](q16-state-sync.md)
+
 # Q16: 什么是同步问题？客户端和服务端的状态如何同步？
 
 ## 核心结论

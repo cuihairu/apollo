@@ -1,3 +1,5 @@
+[English](q2-bigworld-cell-base.en.md) | [中文](q2-bigworld-cell-base.md)
+
 # Q2: BigWorld 架构中的 CellApp 和 BaseApp 分别负责什么？为什么这样分离？
 
 ## 问题分析

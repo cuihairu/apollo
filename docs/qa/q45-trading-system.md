@@ -1,3 +1,5 @@
+[English](q45-trading-system.en.md) | [中文](q45-trading-system.md)
+
 # Q45: 如何设计交易系统？
 
 ## 核心结论

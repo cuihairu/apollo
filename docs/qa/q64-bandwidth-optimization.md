@@ -1,3 +1,5 @@
+[English](q64-bandwidth-optimization.en.md) | [中文](q64-bandwidth-optimization.md)
+
 # Q64: 如何优化网络带宽？
 
 ## 核心结论

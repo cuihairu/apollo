@@ -1,3 +1,5 @@
+[English](q97-graceful-shutdown.en.md) | [中文](q97-graceful-shutdown.md)
+
 # Q97: 如何实现优雅关机？
 
 ## 问题分析

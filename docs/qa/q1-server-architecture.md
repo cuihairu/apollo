@@ -1,3 +1,5 @@
+[English](q1-server-architecture.en.md) | [中文](q1-server-architecture.md)
+
 # Q1: 请画出你熟悉的 MMORPG 服务器架构图，说明各组件的职责和通信方式
 
 ## 问题分析

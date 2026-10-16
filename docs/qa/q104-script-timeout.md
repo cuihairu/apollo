@@ -1,3 +1,5 @@
+[English](q104-script-timeout.en.md) | [中文](q104-script-timeout.md)
+
 # Q104: 如何限制脚本的执行时间？
 
 ## 问题分析

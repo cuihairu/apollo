@@ -1,3 +1,5 @@
+[English](q41-skill-system.en.md) | [中文](q41-skill-system.md)
+
 # Q41: 如何设计技能系统？
 
 ## 核心结论

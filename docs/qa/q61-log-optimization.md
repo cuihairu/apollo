@@ -1,3 +1,5 @@
+[English](q61-log-optimization.en.md) | [中文](q61-log-optimization.md)
+
 # Q61: 如何优化日志系统？
 
 ## 核心结论

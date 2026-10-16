@@ -1,3 +1,5 @@
+[English](q29-cellapp-communication-space-discovery.en.md) | [中文](q29-cellapp-communication-space-discovery.md)
+
 # Q29: KBEngine CellApp 之间如何通信？如何发现自己的空间位置？
 
 ## 核心结论

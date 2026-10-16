@@ -1,3 +1,5 @@
+[English](q42-buff-system.en.md) | [中文](q42-buff-system.md)
+
 # Q42: 如何设计 Buff/Debuff 系统？
 
 ## 核心结论

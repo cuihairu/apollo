@@ -1,3 +1,5 @@
+[English](q3-aoi-implementation.en.md) | [中文](q3-aoi-implementation.md)
+
 # Q3: 什么是 AOI（Area of Interest）？有哪些实现方式？各有什么优缺点？
 
 ## 问题分析

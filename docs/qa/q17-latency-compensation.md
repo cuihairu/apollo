@@ -1,3 +1,5 @@
+[English](q17-latency-compensation.en.md) | [中文](q17-latency-compensation.md)
+
 # Q17: 什么是延迟补偿？应该补什么，不应该补什么？
 
 ## 核心结论

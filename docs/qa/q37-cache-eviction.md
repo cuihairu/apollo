@@ -1,3 +1,5 @@
+[English](q37-cache-eviction.en.md) | [中文](q37-cache-eviction.md)
+
 # Q37: 如何实现数据的缓存淘汰策略？
 
 ## 核心结论

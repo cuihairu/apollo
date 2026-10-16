@@ -1,3 +1,5 @@
+[English](q63-database-optimization.en.md) | [中文](q63-database-optimization.md)
+
 # Q63: 如何优化数据库查询？
 
 ## 核心结论

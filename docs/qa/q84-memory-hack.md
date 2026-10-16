@@ -1,3 +1,5 @@
+[English](q84-memory-hack.en.md) | [中文](q84-memory-hack.md)
+
 # Q84: 如何防止内存修改？
 
 ## 核心结论

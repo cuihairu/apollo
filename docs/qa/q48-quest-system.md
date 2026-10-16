@@ -1,3 +1,5 @@
+[English](q48-quest-system.en.md) | [中文](q48-quest-system.md)
+
 # Q48: 如何设计任务系统？
 
 ## 核心结论

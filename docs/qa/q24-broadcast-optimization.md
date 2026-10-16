@@ -1,3 +1,5 @@
+[English](q24-broadcast-optimization.en.md) | [中文](q24-broadcast-optimization.md)
+
 # Q24: 如何设计广播机制？如何优化大规模广播？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q33-hot-data.en.md) | [中文](q33-hot-data.md)
+
 # Q33: 如何处理热点数据？
 
 ## 核心结论

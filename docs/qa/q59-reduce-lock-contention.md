@@ -1,3 +1,5 @@
+[English](q59-reduce-lock-contention.en.md) | [中文](q59-reduce-lock-contention.md)
+
 # Q59: 如何减少锁竞争？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q21-websocket-mmo.en.md) | [中文](q21-websocket-mmo.md)
+
 # Q21: WebSocket 在 MMO 中有什么应用场景？
 
 ## 核心结论

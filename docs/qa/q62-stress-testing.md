@@ -1,3 +1,5 @@
+[English](q62-stress-testing.en.md) | [中文](q62-stress-testing.md)
+
 # Q62: 如何进行压力测试？
 
 ## 核心结论

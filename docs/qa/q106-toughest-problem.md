@@ -1,3 +1,5 @@
+[English](q106-toughest-problem.en.md) | [中文](q106-toughest-problem.md)
+
 # Q106: 你遇到过最难的技术问题是什么？如何解决的？
 
 ## 问题分析

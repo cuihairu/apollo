@@ -1,3 +1,5 @@
+[English](q30-leaderboard-system.en.md) | [中文](q30-leaderboard-system.md)
+
 # Q30: 如何设计排行榜系统？
 
 ## 核心结论

@@ -1,3 +1,5 @@
+[English](q113-quality-vs-speed.en.md) | [中文](q113-quality-vs-speed.md)
+
 # Q113: 如何平衡代码质量和开发速度？
 
 ## 问题分析

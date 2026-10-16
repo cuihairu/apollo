@@ -1,3 +1,5 @@
+[English](q86-permission-system.en.md) | [中文](q86-permission-system.md)
+
 # Q86: 如何设计权限系统？
 
 ## 核心结论

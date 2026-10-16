@@ -1,3 +1,5 @@
+[English](q70-message-queue.en.md) | [中文](q70-message-queue.md)
+
 # Q70: 如何设计高性能的消息队列？
 
 ## 核心结论

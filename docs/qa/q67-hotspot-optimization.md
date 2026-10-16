@@ -1,3 +1,5 @@
+[English](q67-hotspot-optimization.en.md) | [中文](q67-hotspot-optimization.md)
+
 # Q67: 如何进行热点代码优化？
 
 ## 核心结论

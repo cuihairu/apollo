@@ -1,3 +1,5 @@
+[English](q95-canary-deployment.en.md) | [中文](q95-canary-deployment.md)
+
 # Q95: 如何实现灰度发布？
 
 ## 问题分析

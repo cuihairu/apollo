@@ -1,3 +1,5 @@
+[English](q92-log-system.en.md) | [中文](q92-log-system.md)
+
 # Q92: 如何设计日志系统？
 
 ## 问题分析

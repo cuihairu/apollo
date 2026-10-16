@@ -1,3 +1,5 @@
+[English](q56-profiling-tools.en.md) | [中文](q56-profiling-tools.md)
+
 # Q56: 如何进行性能分析？有哪些工具？
 
 ## 核心结论

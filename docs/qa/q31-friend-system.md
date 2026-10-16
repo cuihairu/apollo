@@ -1,3 +1,5 @@
+[English](q31-friend-system.en.md) | [中文](q31-friend-system.md)
+
 # Q31: 如何设计好友系统？
 
 ## 核心结论

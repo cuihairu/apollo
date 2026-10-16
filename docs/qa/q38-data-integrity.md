@@ -1,3 +1,5 @@
+[English](q38-data-integrity.en.md) | [中文](q38-data-integrity.md)
+
 # Q38: 如何防止数据被篡改？
 
 ## 核心结论

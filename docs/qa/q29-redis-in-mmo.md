@@ -1,3 +1,5 @@
+[English](q29-redis-in-mmo.en.md) | [中文](q29-redis-in-mmo.md)
+
 # Q29: Redis 在 MMO 中有哪些应用场景？
 
 ## 核心结论

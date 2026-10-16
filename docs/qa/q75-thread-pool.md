@@ -1,3 +1,5 @@
+[English](q75-thread-pool.en.md) | [中文](q75-thread-pool.md)
+
 # Q75: 线程池如何设计？任务如何调度？
 
 ## 核心结论

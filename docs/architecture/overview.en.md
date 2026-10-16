@@ -29,7 +29,7 @@ Scene           the spatial runtime boundary (Scene + AOI)
   ↓
 Instance        the instance lifecycle (eight-state machine)
   ↓
-Entity / Battle  entity simulation and battle rulings (Avatar / BattleRuntime)
+Entity / Battle entity simulation and battle rulings (Avatar / BattleRuntime)
 ```
 
 ## Responsibilities of Each Layer

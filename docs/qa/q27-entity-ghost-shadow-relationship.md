@@ -1,3 +1,5 @@
+[English](q27-entity-ghost-shadow-relationship.en.md) | [中文](q27-entity-ghost-shadow-relationship.md)
+
 # Q27: Real、Ghost、Shadow Entity 之间如何转换？如何高效同步？
 
 ## 核心结论

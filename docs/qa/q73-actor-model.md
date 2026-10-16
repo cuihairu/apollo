@@ -1,3 +1,5 @@
+[English](q73-actor-model.en.md) | [中文](q73-actor-model.md)
+
 # Q73: Actor 模型是什么？有什么优势？
 
 ## 核心结论

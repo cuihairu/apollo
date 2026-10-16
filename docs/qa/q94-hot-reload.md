@@ -1,3 +1,5 @@
+[English](q94-hot-reload.en.md) | [中文](q94-hot-reload.md)
+
 # Q94: 如何实现热更新？
 
 ## 问题分析
