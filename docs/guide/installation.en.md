@@ -105,4 +105,4 @@ apollo/
 
 ## Next steps
 
-Once installed, continue with [Quick Start](./quick-start.md).
+Once installed, continue with [Quick Start](./quick-start.en.md).

@@ -102,4 +102,4 @@ add_library(apollo::mymodule ALIAS apollo_mymodule)
 
 ## Next steps
 
-Learn about the [Configuration system](./configuration.md).
+Learn about the [Configuration system](./configuration.en.md).

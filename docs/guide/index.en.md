@@ -12,12 +12,12 @@ Apollo is a C++20 online game server engine for lightweight MMO and tower-defens
 
 ## Guide chapters
 
-- [Installation](./installation.md) - Environment setup and dependency installation
-- [Quick Start](./quick-start.md) - Your first Apollo program
-- [Core Concepts](./concepts.md) - Understand Apollo's core concepts
-- [Module System](./module-system.md) - Modular architecture in detail
-- [Configuration](./configuration.md) - Configuration management in detail
-- [Tooling Scripts](./tooling.md) - Overview of the ops and acceptance scripts in scripts/
+- [Installation](./installation.en.md) - Environment setup and dependency installation
+- [Quick Start](./quick-start.en.md) - Your first Apollo program
+- [Core Concepts](./concepts.en.md) - Understand Apollo's core concepts
+- [Module System](./module-system.en.md) - Modular architecture in detail
+- [Configuration](./configuration.en.md) - Configuration management in detail
+- [Tooling Scripts](./tooling.en.md) - Overview of the ops and acceptance scripts in scripts/
 
 ## Next steps
 

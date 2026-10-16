@@ -169,6 +169,6 @@ Once running you will see the host and service logs (`ApplicationHost starting` 
 
 ## Next steps
 
-- Learn the [Core Concepts](./concepts.md)
-- Check the [Module System](./module-system.md)
+- Learn the [Core Concepts](./concepts.en.md)
+- Check the [Module System](./module-system.en.md)
 - Read the [Architecture Review & Current State](/analysis/architecture-review)

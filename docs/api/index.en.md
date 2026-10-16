@@ -16,7 +16,7 @@ This section contains the API reference documentation for Apollo.
 - [Core API](./core.en.md) - core framework API
 - [Runtime API](./runtime.en.md) - runtime API
 - [Network API](./net.en.md) - network communication API
-- [Data API](./data.md) - data access API
+- [Data API](./data.en.md) - data access API
 - [Game API](./game.en.md) - game logic API
 - [BigWorld API](./bigworld.en.md) - BigWorld compatibility layer API
 
