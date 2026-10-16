@@ -1,3 +1,5 @@
+[English](architecture.en.md) | [中文](architecture.md)
+
 # Apollo 架构地图（architecture）
 
 > 所属：第一阶段只读架构审查配套件之二。配套：audit.md（仓库分析/构建/术语对照）、object-model.md（对象所有权）、lifecycle.md（生命周期）、concurrency.md（并发）、persistence.md（持久化）、improvement-plan.md（改进计划）。

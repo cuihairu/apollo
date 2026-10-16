@@ -1,3 +1,5 @@
+[English](mmo-mechanism-deep-dive.en.md) | [中文](mmo-mechanism-deep-dive.md)
+
 # MMO 机制实现深潜——36 号决策追溯表 #1–#18 的实现级对应（mmo-mechanism-deep-dive）
 
 > 状态：分析文档（实现级取证）。任务口径：对 `docs/36-MMO_Frameworks_Comparative_Analysis.md` §1 决策追溯表的 18 项逐行给出**机制实现细节**——每机制给真实实现位置（本机三仓路径 + 行号实测引用；本机没有的标上游文档出处）、数据结构与关键字段、状态机时序、配置参数默认值、已知缺陷；**#1–#18 每行可点到本文具体小节**（小节号 = 行号，§1↔#1 … §18↔#18）。查不到的如实标注，禁止编造行号。

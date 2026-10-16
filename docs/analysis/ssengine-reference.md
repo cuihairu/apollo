@@ -1,3 +1,5 @@
+[English](ssengine-reference.en.md) | [中文](ssengine-reference.md)
+
 # SSEngine 老引擎参考（ssengine-reference）
 
 > 分析对象：`/home/cui/workspaces/SSEngine`——旧引擎二进制反推的 C++17 系统层（线程同步/定时器/内存池/对象池/文件 IO/共享内存/线程池/DB facade/日志/网络封装）。本仓库自带逆向分析产物（FINAL_ANALYSIS_REPORT.md、IMPLEMENTATION_ROADMAP.md、QUICK_REFERENCE.md 等）与 `include/ssengine/` + `src/` 全部源码。

@@ -1,4 +1,9 @@
+English: not yet translated | [中文](architecture-review.md)
+
 # Apollo 架构评审与审计链（architecture-review）
+
+> **暂无英文译版 / No English translation yet.** 本文是 3150+ 行架构评审长文，整篇翻译只会产出劣质占位稿，故此处仅标注语言状态，正文仅中文。
+> **No English translation yet.** This is a 3150+ line architecture-review document; a full English version now would be a low-quality placeholder, so only the language status is marked here. Chinese only.
 
 > 更名记录（2026-09-29）：本报告原名 `ioc-review.md`（Apollo IoC/DI 设计评审）。起点是 IoC/DI 评审，后续扩展为全仓架构审计（§8–§17：C-1…C-52 缺陷登记、G-1…G-7 能力缺口、三框架对照、模块归属、决策落盘、DI 六域分析、§16.10.2 登记簿、附录 A 合规记录），故更名以名副其实。历史名称在 git 历史与 sdks/contract 注释（冻结纪律内，随下一代码批次同步）中仍可见。
 

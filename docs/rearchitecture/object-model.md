@@ -1,3 +1,5 @@
+[English](object-model.en.md) | [中文](object-model.md)
+
 # Apollo 对象所有权模型（object-model）
 
 > 所属：第一阶段只读架构审查配套件之三。配套：audit.md（仓库层）、architecture.md（架构地图/依赖）、lifecycle.md（生命周期）、concurrency.md（并发）、persistence.md（持久化）、improvement-plan.md（改进计划）。

@@ -1,3 +1,5 @@
+[English](design-gap-inventory.en.md) | [中文](design-gap-inventory.md)
+
 # Apollo 设计缺口清单(design-gap-inventory)
 
 > 状态:登记性文档(滚动更新,状态列随设计批回落填)。定位:回答「六份设计文档(attribute-sync / logging / net-abstraction / scripting-lua / sdk-contract / xml-generation)+ docs/analysis 评审链(architecture-review / ssengine-reference / mmo-mechanism-deep-dive)之后,**还有哪些细节没有设计**」——本清单是后续设计批次的排程索引与防重漏底账。口径日期 2026-09-30;每条缺口带现状证据(负空间检索或存量实读,行号为本会话实测),§1 先列已覆盖项防误报。与 architecture-review §16.10.2 登记簿互为引用:本文件管「设计面缺什么」,登记簿管「审计链登记了什么」。

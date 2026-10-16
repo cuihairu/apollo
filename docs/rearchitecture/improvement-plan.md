@@ -1,3 +1,5 @@
+[English](improvement-plan.en.md) | [中文](improvement-plan.md)
+
 # Apollo 改进计划（improvement-plan）
 
 > 所属：第一阶段只读架构审查配套件之七（收口）。配套：audit.md（仓库层证据）、architecture.md（架构地图）、object-model.md（对象归属）、lifecycle.md（生命周期）、concurrency.md（并发）、persistence.md（持久化）。

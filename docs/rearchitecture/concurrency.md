@@ -1,3 +1,5 @@
+[English](concurrency.en.md) | [中文](concurrency.md)
+
 # Apollo 并发模型（concurrency）
 
 > 所属：第一阶段只读架构审查配套件之五。配套：audit.md、architecture.md、object-model.md、lifecycle.md、persistence.md、improvement-plan.md。

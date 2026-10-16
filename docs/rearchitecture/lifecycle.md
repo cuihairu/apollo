@@ -1,3 +1,5 @@
+[English](lifecycle.en.md) | [中文](lifecycle.md)
+
 # Apollo 生命周期地图（lifecycle）
 
 > 所属：第一阶段只读架构审查配套件之四。配套：audit.md、architecture.md、object-model.md（对象归属）、concurrency.md（线程/锁）、persistence.md、improvement-plan.md。

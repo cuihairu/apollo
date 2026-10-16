@@ -1,6 +1,11 @@
+English: not yet translated | [中文](architecture-review-plan.md)
+
 > 来源：用户 2026-10-04 经 ChatGPT 整理的任务书（原链接 https://chatgpt.com/s/t_6ac1cd99d1a88191b7f1cbcdcc79c657 ）。任务以此为准；术语一律沿用 BigWorld/KBE 既有概念。
 
 Apollo 架构审查与改进计划
+
+> **暂无英文译版 / No English translation yet.** 本文是 1565+ 行任务书长文，整篇翻译只会产出劣质占位稿，故此处仅标注语言状态，正文仅中文。
+> **No English translation yet.** This is a 1565+ line task-brief document; a full English version now would be a low-quality placeholder, so only the language status is marked here. Chinese only.
 
 ## 1. 项目重新定位
 
