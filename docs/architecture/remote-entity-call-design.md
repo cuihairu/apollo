@@ -12,6 +12,8 @@ tag:
   - RPC
 ---
 
+[English](remote-entity-call-design.en.md) | [中文](remote-entity-call-design.md)
+
 # RemoteEntityCall 设计
 
 这篇文档解决的是 Apollo 后续做多进程 world、玩家锚点、跨节点实体协作时，一个绕不过去的问题：

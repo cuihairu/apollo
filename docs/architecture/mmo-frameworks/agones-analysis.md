@@ -1,3 +1,5 @@
+[English](agones-analysis.en.md) | [中文](agones-analysis.md)
+
 # Agones 架构分析
 
 ## 1. 定位

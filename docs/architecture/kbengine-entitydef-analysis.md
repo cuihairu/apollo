@@ -1,3 +1,5 @@
+[English](kbengine-entitydef-analysis.en.md) | [中文](kbengine-entitydef-analysis.md)
+
 # KBEngine EntityDef 与属性自动化分析
 
 ## 1. 结论

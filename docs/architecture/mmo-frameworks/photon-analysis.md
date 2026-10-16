@@ -1,3 +1,5 @@
+[English](photon-analysis.en.md) | [中文](photon-analysis.md)
+
 # Photon 架构分析
 
 ## 1. 定位

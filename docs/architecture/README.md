@@ -1,3 +1,5 @@
+[English](README.en.md) | [中文](README.md)
+
 # docs/architecture/ 文档状态表（参考件区）
 
 > 状态：**登记性 README（2026-09-30 落盘，2026-10-01 清理批重写）**。判定原则不变：**现行设计权威 = docs/design/ 十一份（含 concept-glossary）**；本目录整体为参考件/历史件。

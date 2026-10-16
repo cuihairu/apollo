@@ -1,3 +1,5 @@
+[English](framework-adoption-guide.en.md) | [中文](framework-adoption-guide.md)
+
 # MMO 框架采用建议
 
 ## 1. 结论先行

@@ -12,6 +12,8 @@ tag:
   - Replication
 ---
 
+[English](witness-ghost-design.en.md) | [中文](witness-ghost-design.md)
+
 # Witness 与 Ghost 设计
 
 这篇文档是 Apollo 进入 BigWorld 模式后，最关键的一篇运行时专题。

@@ -12,6 +12,8 @@ tag:
   - 设计原则
 ---
 
+[English](kbe-reference-principles.en.md) | [中文](kbe-reference-principles.md)
+
 # KBE 参考原则与 ECS 兼容取舍
 
 这篇文档不是讲某一个具体模块，而是给 Apollo 后续所有架构设计定一个总原则：

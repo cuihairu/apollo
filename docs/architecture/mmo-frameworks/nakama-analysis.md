@@ -1,3 +1,5 @@
+[English](nakama-analysis.en.md) | [中文](nakama-analysis.md)
+
 # Nakama 架构分析
 
 ## 1. 定位

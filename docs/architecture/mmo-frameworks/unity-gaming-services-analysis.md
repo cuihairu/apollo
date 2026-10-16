@@ -1,3 +1,5 @@
+[English](unity-gaming-services-analysis.en.md) | [中文](unity-gaming-services-analysis.md)
+
 # Unity Gaming Services 架构分析
 
 ## 1. 定位

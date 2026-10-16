@@ -1,3 +1,5 @@
+[English](playfab-analysis.en.md) | [中文](playfab-analysis.md)
+
 # PlayFab Multiplayer Servers 架构分析
 
 ## 1. 定位

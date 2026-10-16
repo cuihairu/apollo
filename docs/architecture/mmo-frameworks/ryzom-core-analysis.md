@@ -1,3 +1,5 @@
+[English](ryzom-core-analysis.en.md) | [中文](ryzom-core-analysis.md)
+
 # Ryzom Core 架构分析
 
 ## 1. 定位

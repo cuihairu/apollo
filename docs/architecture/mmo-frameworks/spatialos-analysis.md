@@ -1,3 +1,5 @@
+[English](spatialos-analysis.en.md) | [中文](spatialos-analysis.md)
+
 # SpatialOS 架构分析
 
 ## 1. 定位

@@ -12,6 +12,8 @@ tag:
   - Introspection
 ---
 
+[English](observability-watcher-and-runtime-introspection-design.en.md) | [中文](observability-watcher-and-runtime-introspection-design.md)
+
 # Observability、Watcher 与 Runtime Introspection 设计
 
 这篇文档解决的是 Apollo 整体框架继续往运行治理闭环推进时，一个必须尽早定下来的问题：
