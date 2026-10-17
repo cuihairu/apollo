@@ -206,6 +206,7 @@ public:
         link::LinkManagerConfig mc;
         mc.self_name = "fleetctl";  // 拨入者按自报名入对端表（fan-out 命名）
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
+        mc.compat_route_versions = link::compat_route_versions_from_env();
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
@@ -484,7 +485,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    ControlDial dial(APOLLO_FLEETCTL_CONTRACT_ROUTE_JSON, opt.peer, opt.host, opt.port);
+    // 契约代次可注入（APOLLO_FLEETCTL_ROUTE_JSON）：滚动发布演练以旧代
+    // 路由表拨新代服务面（兼容窗验收；sdk-contract §6）。缺省仍用编译期
+    // 契约（与全端点同源）。
+    const char* route_override = std::getenv("APOLLO_FLEETCTL_ROUTE_JSON");
+    ControlDial dial(route_override && *route_override != 0
+                         ? route_override
+                         : APOLLO_FLEETCTL_CONTRACT_ROUTE_JSON,
+                     opt.peer, opt.host, opt.port);
     if (!dial.ready()) {
         std::cerr << "fleetctl: control face setup failed (route table missing)"
                   << std::endl;
