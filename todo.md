@@ -38,7 +38,7 @@
 
 ## P3：玩家迁移与会话恢复
 
-- [ ] 将目录镜像、死亡订阅、全量重报与恢复协调接入 Login / World 当前入口，并迁移进程演练脚本；不能用底层原语测试替代当前进程链路验收。
+- [x] 将目录镜像、死亡订阅、全量重报与恢复协调接入 Login / World 当前入口，并迁移进程演练脚本；不能用底层原语测试替代当前进程链路验收。（f8d88f81 Login 承接 baseappmgr 三面——镜像 owner（目录事件 → Delta + 周期快照，snapshot published 日志面）、恢复 intake（FullReport 收包 + FleetRecoveryCoordinator 收敛裁决 + 准入闸排他）、machined 死亡订阅（zone/gateway 行窗口处置 + 窗口满 sweep）；2376f9a0 World 承接 base-app 报告方——锚点快照 → FullReport 启动即报 + 周期刷新，fleet 组件号同源一进程一身份；c116f73b 真实进程链验收 FleetRehomeChainTests：真 LoginServer + 真 WorldApp + machined 替身全 UDP 回环——恢复排他期门闸拒 → 启动重报收敛放行、锚点重报 intake 落目录、镜像消费侧投影（真 Delta/快照 wire）、死亡通知 zone 反查 Suspended、窗口满 sweep 条目终结 + SessionDown 达镜像、非 zone 行不越界；14285c37 drill_kill9 迁 login-app/world-app 实测全链断言过（死亡检测 0.02s/重启 1.0s/重报 intake 1.9s/镜像重发 2.9s），migration/update 演练挂待迁注记归各自账面条目；门禁 build-examples/build-off 双树 79/79、san 树 78/78 全绿。）
 - [x] 明确跨服场景设计预留：区服归属与 World 运行位置分开，复用 Scene/Instance，定义准入、单权威交接、结算与返回规则；暂不启用跨服部署。
 - [ ] 跨服需求启用时，扩展契约中的原区服、World 进程代次、玩家权威代次、准入凭证与返回位置；区服身份不得直接复用 home_zone_id。
 - [ ] 跨服需求启用时，接通区服分组、跨服 World 容量分配、两区服同场景准入、幂等结算和返回原区服；覆盖原 World 不可用、安全回退、掉线及提交结果不明的恢复。
