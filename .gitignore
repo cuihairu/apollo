@@ -83,3 +83,8 @@ log/
 
 # clangd 索引（本地工具产物，可再生——2026-10-15 误提交 274 个 .idx 后补墙）
 .cache/
+
+# 2026-10-17: 依赖目录，禁止任何操作（含 git mv / glob 展开）
+node_modules/
+**/node_modules/
+.pnpm-store/
