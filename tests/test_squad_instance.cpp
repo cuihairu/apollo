@@ -135,6 +135,44 @@ bool test_squad_launch_rejections() {
     return true;
 }
 
+bool test_squad_drain_gate() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    make_party(parties, 2, 200, 201, 202);
+    SquadInstanceService service(parties, &world, /*local_world_id=*/7);
+    service.register_world(7, 4);
+
+    auto r = service.launch(basic_request(1));
+    TEST_ASSERT(r.error == LaunchError::Ok, "pre-drain launch accepted");
+    TEST_ASSERT(service.used_capacity(7) == 1, "slot consumed pre-drain");
+
+    // 闸闭合：新分配拒（Draining），既有副本不受影响
+    service.set_drain(true);
+    TEST_ASSERT(service.draining(), "gate closed");
+    TEST_ASSERT(service.launch(basic_request(2, 200)).error == LaunchError::Draining,
+                "launch rejected while draining");
+    TEST_ASSERT(service.used_capacity(7) == 1, "no new slot while draining");
+    TEST_ASSERT(service.enter(1, kLeader)
+                    == SquadInstanceService::EnterError::Ok,
+                "existing instance enter ok");
+    TEST_ASSERT(service.enter(1, kMemberB)
+                    == SquadInstanceService::EnterError::Ok,
+                "existing instance enter ok");
+    TEST_ASSERT(service.enter(1, kMemberC)
+                    == SquadInstanceService::EnterError::Ok,
+                "existing instance enter ok");
+    TEST_ASSERT(service.start_gameplay(1, kLeader)
+                    == SquadInstanceService::EnterError::Ok,
+                "existing instance start ok");
+
+    // 等待面：副本收尾（abort 取消线）→ 绑定/容量归还
+    TEST_ASSERT(service.abort(1), "abort closes existing instance");
+    TEST_ASSERT(service.active_count() == 0, "binding reclaimed");
+    TEST_ASSERT(service.used_capacity(7) == 0, "capacity returned");
+    return true;
+}
+
 bool test_squad_launch_busy_member() {
     PartyManager parties;
     World world;
@@ -1315,6 +1353,7 @@ int main() {
     const std::vector<Case> cases = {
         {"squad_launch_happy_path", test_squad_launch_happy_path},
         {"squad_launch_rejections", test_squad_launch_rejections},
+        {"squad_drain_gate", test_squad_drain_gate},
         {"squad_launch_busy_member", test_squad_launch_busy_member},
         {"squad_launch_capacity_and_recycle", test_squad_launch_capacity_and_recycle},
         {"squad_launch_selects_world_with_capacity", test_squad_launch_selects_world_with_capacity},

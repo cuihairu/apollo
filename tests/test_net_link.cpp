@@ -1459,6 +1459,93 @@ bool test_manager_fanout_two_peers() {
     return true;
 }
 
+bool test_manager_fanout_same_endpoint_name() {
+    // 端点名与对端自报名同链路名（world M1 面：端点 "gateway"，对端
+    // gateway + fleetctl 同拨）：link("gateway") 须按名精确消歧回 gateway
+    // 链，不得因多 peer 落「端点名歧义拒答」吞掉全部按名回执（P4 排空批
+    // 回归——world 929/939 回执经此路径）。
+    RouteTable table = make_dispatch_table();
+
+    LinkManagerConfig mp;
+    mp.self_name = "world";
+    mp.route_version = 7;
+    LinkManager mpassive(mp);
+
+    LinkManagerConfig ma = mp;
+    ma.self_name = "gateway";
+    LinkManagerConfig mb = mp;
+    mb.self_name = "fleetctl";
+    LinkManager m_gw(ma), m_ops(mb);
+
+    EndpointConfig pp;
+    pp.name = "gateway";  // 端点名 = 其一対端自报名（world M1 面形态）
+    pp.host = "127.0.0.1";
+    pp.role = EndpointRole::kPassive;
+    TEST_ASSERT(mpassive.add_endpoint(pp), "passive endpoint bound");
+
+    EndpointConfig pa;
+    pa.name = "world";
+    pa.host = "127.0.0.1";
+    pa.port = mpassive.endpoint_port("gateway");
+    TEST_ASSERT(pa.port != 0, "ephemeral port observed");
+    TEST_ASSERT(m_gw.add_endpoint(pa), "gateway endpoint added");
+    TEST_ASSERT(m_ops.add_endpoint(pa), "fleetctl endpoint added");
+
+    InterServerLink* p_gw = nullptr;
+    InterServerLink* p_ops = nullptr;
+    RxLog rx_gw;
+    // gateway 侧分发面（active 端点链路自己的 dispatcher——world→gateway
+    // 回执的收面；route 表 + 白名单 + 901 收账）
+    {
+        auto& d = m_gw.link("world")->dispatcher();
+        d.set_route_table(&table);
+        d.allow_domain("internal");
+        d.set_handler(901, rx_gw.handler());
+    }
+    mpassive.set_peer_listener([&](InterServerLink& peer) {
+        peer.dispatcher().set_route_table(&table);
+        peer.dispatcher().allow_domain("internal");
+        if (peer.peer_name() == "gateway") {
+            p_gw = &peer;
+        } else {
+            p_ops = &peer;
+        }
+    });
+
+    std::uint64_t t = 1000;
+    for (int i = 0; i < 500; ++i) {
+        t += 5;
+        m_gw.pump(t);
+        m_ops.pump(t);
+        mpassive.pump(t);
+        if (p_gw != nullptr && p_ops != nullptr) {
+            break;
+        }
+    }
+    TEST_ASSERT(p_gw != nullptr && p_ops != nullptr, "both peers staged in");
+    TEST_ASSERT(mpassive.link("gateway") == p_gw,
+                "endpoint-name lookup disambiguated by handshake name");
+    TEST_ASSERT(mpassive.link("fleetctl") == p_ops, "peer-name lookup hits directly");
+
+    // 按端点名回执路径真打通：world→gateway reliable 一帧送达 gateway 链。
+    TEST_ASSERT(mpassive.link("gateway")
+                        ->send(901, std::vector<std::uint8_t>{'g'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "gateway-direction send accepted");
+    for (int i = 0; i < 200; ++i) {
+        t += 5;
+        m_gw.pump(t);
+        m_ops.pump(t);
+        mpassive.pump(t);
+        if (rx_gw.got.size() == 1) {
+            break;
+        }
+    }
+    TEST_ASSERT(rx_gw.got.size() == 1 && rx_gw.got[0] == "901:g",
+                "reply reached the gateway link (not dropped as ambiguous)");
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -1506,6 +1593,7 @@ int main() {
         {"manager_fleet_gate", test_manager_fleet_gate},
         {"manager_pair_e2e", test_manager_pair_e2e},
         {"manager_fanout_two_peers", test_manager_fanout_two_peers},
+        {"manager_fanout_same_endpoint_name", test_manager_fanout_same_endpoint_name},
         {"manager_compat_window", test_manager_compat_window},
 #endif
     };
