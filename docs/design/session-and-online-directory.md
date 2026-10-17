@@ -10,7 +10,7 @@
 - 在线路由数据回答“玩家在哪个 Gateway、World 和 Instance”，用于消息转发和跨服迁移。
 - `Login` 验证账号并签发登录凭证，不负责承载活动对局。
 
-在线路由是数据职责，不预设一个独立 `Manager` 进程。路由表的具体所有者、存储方式和高可用协议，需在实现集群接线前确定；不得从旧的 `baseappmgr` 原型推导为目标拓扑。
+在线目录由 Login 托管的 `OnlineDirectory` 持有，负责会话位置、落点与迁移编排；Gateway 保存路由缓存。目录不保存玩家游戏档案，长期资料由 World 内 `PlayerStore` 持有。当前目录及投影在内存中，权威代次水位写入文件；完整路由持久化与恢复需要单独验收。
 
 ## 路由记录
 
@@ -37,4 +37,4 @@ Gateway 依据在线路由转发消息。多 Gateway 可承载不同客户端连
 
 ## 实现状态
 
-仓库有 `SessionLocator`、`PlayerDirectory`、`WorldAssignment` 和 `baseappmgr` 原型代码。这些是现有实现部件，不等于目标模型已经确定了目录进程或存储方案。实际跨进程消息路由、Gateway 接管和端到端迁移仍需按本文目标验收。
+`LoginServer` 托管 `OnlineDirectory`，`WorldApp` 托管 `PlayerStore`；两者复用 `SessionLocator`、`PlayerDirectory` 和 `WorldAssignment`。登录激活、会话绑定、目录查询及停机档案读取已有真实 TCP 集成测试。多 World 分配、Gateway 接管和完整端到端迁移仍需按本文目标验收。

@@ -14,16 +14,16 @@ Apollo's target model uses familiar responsibility names: `Login`, `Gateway`, `W
 
 | Current executable | Current role | Relation to target model |
 |---|---|---|
-| `login-app` | Login service prototype | Corresponds to `Login` |
+| `login-app` | Authentication, online directory, and placement control | Hosts `OnlineDirectory`; does not persist player gameplay profiles |
 | `gateway-app` | Client ingress and message-routing prototype | Corresponds to `Gateway` |
-| `world-app` | Scene/match runtime prototype using the target World name | World, Scene, and the Instance state machine exist; group creation, completion, and resource cleanup are not integrated end to end |
-| `base-app` | Player state, session, and persistence prototype | These responsibilities still need to converge on the instance model; this is not a required standalone target process |
-| `baseappmgr` | Player directory and placement prototype | The target architecture does not require a standalone process with this name |
+| `world-app` | Simulation runtime and player profile host | Hosts `PlayerStore` and reuses World, Scene, and Instance; complete instance orchestration remains pending |
 | `machined` | Local process-supervision prototype | Optional for deployment; carries no game business logic |
 | `game-server` | Single-process assembly example | Demonstrates module assembly, not a complete production topology |
 | `logger`, `admin`, `fleetctl` | Operations and management prototypes | Outside the instance gameplay model |
 
-The current `base-app` owns PlayerAnchor and persistence responsibilities; `baseappmgr` contains directory and placement prototypes. These existing responsibilities need an explicit consolidation plan and tests. Renaming the game-logic process does not move persistent writes into Login or add another target process. Persistent player data and the single authoritative in-match entity have distinct responsibilities.
+`apps/common` is a shared application library, not another process. World hosts `player_store::PlayerStore`, which owns PlayerAnchor, local profiles, SaveQueue, and PersistJournal. Login hosts `online_directory::OnlineDirectory`, which owns online routing, placement projections, and migration coordination. Gateway holds client connections and caches routing. Each hosted service has its own link endpoint and follows its application lifecycle.
+
+`HostedServicesTests` validates activation, session binding, Gateway directory lookup, missing-profile rejection, and profile reads after shutdown over real TCP. Multi-World placement, migration recovery, and complete instance settlement still require the acceptance work in `todo.md`.
 
 An instance is one match; a `World` process hosts instances, and one process may host many instances. Each player has one authoritative runtime object during a match. Cross-server play transfers its authority and updates Gateway routing; it does not create a second authoritative object that can run concurrently.
 

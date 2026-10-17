@@ -412,4 +412,4 @@ but cannot run stably over the long term.
 
 ## Related Reading
 
-- [KBEngine Source Analysis](/architecture/kbe-source-analysis)
+- [KBEngine Source Analysis](/en/architecture/kbe-source-analysis)

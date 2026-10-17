@@ -42,9 +42,15 @@
 - Proto files are split by field number ranges; comments include both Chinese and English descriptions.
 
 ## 3. Documentation Requirements
+
 - Every module must have a design document (Markdown) kept up to date.
 - If a PR modifies protocol/configuration, the documentation and generated files must be updated in sync.
 - Keep README/CHANGELOG current, recording important changes.
+- Use VitePress built-in internationalization: Chinese is the default at `docs/<path>.md`; English uses `docs/en/<path>.md`. Keep matching relative page paths.
+- Configure language, navigation, and theme labels through `locales.root` / `locales.en` in `docs/.vitepress/config.mts`. Local search translations belong in shared `themeConfig.search.options.locales`.
+- Use one prose language per page. Do not concatenate translations or use `.zh.md` / `.en.md` suffixes for site languages. Preserve API identifiers and real external-engine names.
+- Keep page links, home actions, and previous/next navigation in the current locale. Explicitly label intentional cross-language references.
+- Run `python3 scripts/ci/docs_i18n_check.py` before a production VitePress build. Respect workspace dependency-directory restrictions; use an external isolated directory for local builds.
 
 ## 4. Testing and Quality Gates
 - Commits must pass CI's UT/format checks.
@@ -83,4 +89,4 @@
 
 ---
 
-This guideline provides developers with a unified collaboration standard and should be continuously refined as the team practices evolve.***
+This guideline provides developers with a unified collaboration standard and should be continuously refined as the team practices evolve.

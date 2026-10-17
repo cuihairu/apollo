@@ -134,32 +134,9 @@ Examples:
 - Attribute, Skill, Buff, the Damage pipeline go to `game/battle`
 - Chat, Guild, Team go to `game/social`
 
-### `starter`
+### Application assembly
 
-Positioning: the assembly layer — C++ explicitly-registered module assembly units (compile-time type keys, no runtime container).
-
-> **Status (2026-10-08)**: this assembly layer was never landed — the `modules/starter`
-> shell (double INTERFACE with zero source + phantom tests, architecture-review C-68) was
-> removed as a whole directory (ruling = delete; filling it in would rebuild the
-> runtime Starter container that §17 already rejected, and it overlaps the runtime
-> ApplicationHost duties); the current assembly convention = explicitly-registered
-> assembly units + main closure (architecture-review §17/§21/§24). The assembly idea as
-> expressed lives in `docs/architecture/starter-and-module-assembly-design.md` (reference).
-
-Suggested split:
-
-- `starter/core`
-- `starter/net`
-- `starter/mysql`
-- `starter/redis`
-- `starter/game-server`
-
-Responsibilities:
-
-- Evaluating conditions
-- Registering modules
-- Injecting default configuration
-- Composing the host runtime
+Applications explicitly compose CMake modules and existing runtime hosts. Shared application services live in apps/common. No separate runtime assembly container is required. See [module assembly](./architecture/starter-and-module-assembly-design.md).
 
 ### `apps`
 
@@ -167,10 +144,10 @@ Positioning: the final executable programs.
 
 Suggested directories:
 
-- `apps/gateway-server`
-- `apps/login-server`
+- `apps/gateway-app`
+- `apps/login-app`
 - `apps/game-server`
-- `apps/chat-server`
+- `apps/world-app`
 
 Responsibilities:
 

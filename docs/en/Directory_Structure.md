@@ -28,8 +28,7 @@ This document describes the actual directory layout of the current repository.
 |------|------|
 | `login-app/` | Login entry point |
 | `gateway-app/` | Edge access layer |
-| `baseappmgr/` | Fleet scheduling and recovery/directory mirroring |
-| `base-app/` | Player anchor host |
+| `common/` | Hosted player data and online-directory services |
 | `world-app/` | World runtime prototype |
 | `game-server/` | Compatibility or demo game service |
 | `machined/` | Process supervision (roster spawn/backoff restart/death reporting) |

@@ -9,7 +9,7 @@ This model does not depend on spatial partitioning, Cell/ghost projections, or c
 
 Gateway can support availability through multiple instances and rolling deployment, but it does not migrate connections by itself. A World can roll by stopping new instance assignments, waiting for active instances to finish, and then exiting. This does not preserve active matches across versions or guarantee uninterrupted existing TCP connections.
 
-This is the target model. Executables such as `base-app`, `world-app`, and `baseappmgr` are current prototype names; see [Server Application Status](../apps/index.md). They must not be read as the target topology. BigWorld/KBEngine terms appear only in engine comparison material to explain those external implementations.
+The business executables are `login-app`, `gateway-app`, and `world-app`. World hosts player persistence; Login hosts online routing and placement control. See [Server Application Status](../apps/index.md) for wiring and acceptance boundaries. BigWorld/KBEngine terms appear only in engine comparison material to explain those external implementations.
 
 ## Temporary instance lifecycle
 

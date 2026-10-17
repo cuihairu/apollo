@@ -501,11 +501,11 @@ class LogMonitor:
 
 | Practice | Description |
 |------|------|
-| **Layered monitoring** (分层监控) | System/process/business three layers (系统/进程/业务三层) |
-| **Visualization** (可视化) | Charts showing trends (图表展示趋势) |
-| **Real-time alerting** (实时告警) | Discover problems in time (及时发现问题) |
-| **Log analysis** (日志分析) | Deep-dive into problems (深入分析问题) |
-| **Capacity planning** (容量规划) | Forecast based on data (基于数据做预测) |
+| **Layered monitoring** | System/process/business three layers |
+| **Visualization** | Charts showing trends |
+| **Real-time alerting** | Discover problems in time |
+| **Log analysis** | Deep-dive into problems |
+| **Capacity planning** | Forecast based on data |
 
 ---
 

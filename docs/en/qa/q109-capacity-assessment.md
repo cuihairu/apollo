@@ -421,12 +421,12 @@ KBEngine 实测承载 (参考) (KBEngine measured capacity (reference)):
 
 | Practice | Description |
 |------|------|
-| **基准测试 (Benchmark testing)** | 建立性能基准 (establish a performance baseline) |
-| **逐步加压 (Gradual load increase)** | 递增测试并发 (increase test concurrency progressively) |
-| **监控指标 (Monitor metrics)** | 全面监控资源 (comprehensively monitor resources) |
-| **预留余量 (Reserve headroom)** | 预留 20-30% (reserve 20-30%) |
-| **复现场景 (Reproduce scenarios)** | 模拟真实玩法 (simulate real gameplay) |
-| **长期观察 (Long-term observation)** | 稳定性测试 (stability testing) |
+| **Benchmark testing** | establish a performance baseline |
+| **Gradual load increase** | increase test concurrency progressively |
+| **Monitor metrics** | comprehensively monitor resources |
+| **Reserve headroom** | reserve 20-30% |
+| **Reproduce scenarios** | simulate real gameplay |
+| **Long-term observation** | stability testing |
 
 ---
 

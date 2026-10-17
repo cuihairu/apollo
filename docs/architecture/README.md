@@ -14,4 +14,4 @@ Apollo 的目标术语只有：
 | `World` | 承载副本并运行权威对局逻辑的进程。 |
 | `Instance` | 一场对局及其临时状态。 |
 
-仓库中的 `login-app`、`gateway-app`、`world-app`、`base-app` 和 `baseappmgr` 是当前原型程序名；应用实现与目标职责的映射见[服务器应用](../apps/index.md)。
+业务进程为 `login-app`、`gateway-app`、`world-app`；玩家资料与持久化服务由 World 托管，在线目录与落点控制由 Login 托管。具体实现与验收边界见[服务器应用](../apps/index.md)。

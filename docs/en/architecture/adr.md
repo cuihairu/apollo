@@ -56,7 +56,7 @@ logger supports local structured-log queries and M1 collection; applications can
 
 ## ADR-014：Process naming and gameplay objects
 
-World is the sole game-logic process role; its executable is world-app, entry type WorldApp, and namespace world_app. Login and Gateway retain their responsibilities. Instance is a temporary gameplay instance; Scene is the internal simulation unit. Migrate existing base-app/baseappmgr capabilities by authority and routing responsibilities; renaming alone does not complete consolidation. External references retain actual upstream identifiers and source paths.
+World is the sole game-logic process role; executable world-app, entry WorldApp, namespace world_app. World hosts PlayerStore for data and persistence; Login hosts OnlineDirectory for routing, placement, and migration coordination. Scene is the simulation unit; Instance is the temporary gameplay lifecycle. External-engine source names remain unchanged.
 
 ## ADR-015：Asynchronous intent admission
 

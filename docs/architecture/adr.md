@@ -56,7 +56,7 @@ logger 已提供本地结构化日志检索与 M1 收集入口，业务进程可
 
 ## ADR-014：进程命名与实例对象
 
-游戏逻辑进程唯一职责名为 World；程序 world-app，入口 WorldApp，代码命名空间 world_app。Login 和 Gateway 继续承担各自职责。Instance 是临时玩法副本，Scene 是内部模拟单元。已有 base-app/baseappmgr 能力需按数据权威与路由职责迁移，不能仅靠改名宣布收敛完成。第三方引擎资料保持真实上游名称和源码路径。
+游戏逻辑进程唯一职责名为 World；程序 world-app，入口 WorldApp，代码命名空间 world_app。Login 和 Gateway 继续承担各自职责。Instance 是临时玩法副本，Scene 是内部模拟单元。玩家资料与持久化由 World 内 PlayerStore 托管；在线目录、落点和迁移编排由 Login 内 OnlineDirectory 托管。第三方引擎资料保持真实上游名称和源码路径。
 
 ## ADR-015：异步意图受理
 

@@ -1,7 +1,7 @@
 ---
 title: Data API
 icon: database
-prev: /api/README.md
+prev: /en/api/index.md
 ---
 
 # Data API
@@ -137,7 +137,7 @@ public:
 }
 ```
 
-**Thread safety**: unsafe (belongs to the host save thread — base-app:
+**Thread safety**: unsafe (belongs to the host save thread — World PlayerStore:
 autoSaveLoop drain + shutdown close-out)
 
 ---

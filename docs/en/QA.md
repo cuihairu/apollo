@@ -175,7 +175,7 @@
 | 113 | How do you balance code quality and development speed? | Done | [q113-quality-vs-speed.md](qa/q113-quality-vs-speed.md) |
 | 114 | Which open-source game server frameworks are you familiar with? What are the features of each? | Done | [q114-open-source-frameworks.md](qa/q114-open-source-frameworks.md) |
 | 115 | If you were to redesign it, how would you improve the current framework? | Done | [q115-framework-redesign.md](qa/q115-framework-redesign.md) |
-| 116 | What C++ design pattern practices exist in KBEngine? Why designed this way? | Done | [q116-cpp-design-patterns-in-kbengine.md](/qa/q116-cpp-design-patterns-in-kbengine) |
+| 116 | What C++ design pattern practices exist in KBEngine? Why designed this way? | Done | [q116-cpp-design-patterns-in-kbengine.md](/en/qa/q116-cpp-design-patterns-in-kbengine) |
 
 ---
 

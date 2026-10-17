@@ -10,7 +10,7 @@ This document defines session and player-location data for the instance-based ar
 - Online routing answers “which Gateway, World, and Instance currently host this player,” for forwarding and cross-server transfer.
 - `Login` authenticates accounts and issues credentials; it does not host active matches.
 
-Online routing is a data responsibility; it does not imply a standalone `Manager` process. The route-table owner, storage, and high-availability protocol must be decided before cluster wiring. The old `baseappmgr` prototype does not determine the target topology.
+Login hosts `OnlineDirectory` for session locations, placement, and migration coordination. Gateway caches routes. World hosts `PlayerStore` for persistent gameplay profiles. Directory projections are currently in memory with file-backed authority epoch floors; full routing persistence and recovery require separate acceptance.
 
 ## Route record
 
@@ -37,4 +37,4 @@ Gateway forwards messages using online routing. Multiple Gateways can serve diff
 
 ## Implementation status
 
-The repository contains prototype code for `SessionLocator`, `PlayerDirectory`, `WorldAssignment`, and `baseappmgr`. These are implementation components; they do not mean the target model has selected a directory process or storage design. Cross-process message routing, Gateway takeover, and end-to-end transfer still need validation against this target.
+`LoginServer` hosts `OnlineDirectory`; `WorldApp` hosts `PlayerStore`. Real TCP integration tests cover profile activation, session binding, Gateway route lookup, and profile reads after shutdown. Multi-World placement, session takeover, and complete authority migration require further acceptance.

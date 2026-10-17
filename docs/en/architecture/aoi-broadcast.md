@@ -13,14 +13,6 @@ tag:
 
 # AOI Broadcast and Message Deduplication
 
-## Contents
-- [Broadcast types](#1-broadcast-types)
-- [Message deduplication strategies](#2-message-deduplication-strategies)
-- [High-performance optimization techniques](#4-high-performance-optimization-techniques)
-- [Message format optimization](#5-message-format-optimization)
-
----
-
 ## The Core Problem
 
 When an entity moves, **all players in its view** must be notified of the entity's state change.

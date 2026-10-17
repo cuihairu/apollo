@@ -28,8 +28,7 @@
 |------|------|
 | `login-app/` | 登录入口 |
 | `gateway-app/` | 边缘接入层 |
-| `baseappmgr/` | 编队调度与恢复/目录镜像 |
-| `base-app/` | 玩家锚点宿主 |
+| `common/` | 供 World / Login 托管的玩家资料与在线目录服务 |
 | `world-app/` | World 原型运行时 |
 | `game-server/` | 兼容或演示型游戏服务 |
 | `machined/` | 进程监督（roster 拉起/退避重启/死亡上报） |

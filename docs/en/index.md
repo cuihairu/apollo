@@ -12,10 +12,10 @@ hero:
   actions:
     - theme: brand
       text: Architecture Overview
-      link: /guide/architecture
+      link: /en/guide/architecture
     - theme: alt
       text: Concepts and Names
-      link: /design/concept-glossary
+      link: /en/design/concept-glossary
 features:
   - title: Instances and matches
     details: One Instance is one gameplay session. A World process can host multiple Instances and reclaims temporary state when matches end.

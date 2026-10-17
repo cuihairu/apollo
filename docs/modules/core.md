@@ -42,10 +42,10 @@ auto& db = context.get<DatabaseService>();
 db.connect();
 ```
 
-### 配置 (Config)
+### 配置
 
 `apollo::core::config::ConfigRegistry` 键值注册表（string/int64/bool 三型）；
-热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6，未实现）。
+tick 边界的配置快照替换尚未接通，见[配置说明](../guide/configuration.md)。
 
 ```cpp
 #include <apollo/core/config/config_registry.hpp>
@@ -59,7 +59,7 @@ std::string host = config.get_string("server.host");
 bool ok = config.has("server.port");
 ```
 
-### 日志 (Log)
+### 日志
 
 `apollo::core::log`：`LogManager` 单例（`initialize(config)` / `getLogger(name)` /
 `createLogger(name, level)` / `removeLogger` / `hasLogger` / `flushAll` /
@@ -82,7 +82,7 @@ mgr.initialize(apollo::core::log::LogManagerConfig::createCombined("logs/server.
 auto logger = mgr.getLogger("MyLogger");
 ```
 
-### 生命周期 (Lifecycle)
+### 生命周期
 
 `IApplicationLifecycle` 六钩子（宿主按相位回调）：`on_application_boot` /
 `on_application_config_loaded` / `on_application_initialized` /
@@ -103,7 +103,7 @@ public:
 };
 ```
 
-### 事件 (Event)
+### 事件
 
 > **未实现**（2026-10-04 对账）：`apollo/core/event_bus.hpp` 不存在，仓库无
 > 通用 EventBus。现有事件面是专用的：PlayerDirectory 经 `EventSink` 上报

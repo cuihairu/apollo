@@ -2,8 +2,8 @@
 title: Module System
 icon: puzzle
 order: 5
-prev: /guide/concepts
-next: /guide/configuration
+prev: /en/guide/concepts
+next: /en/guide/configuration
 ---
 
 # Module System

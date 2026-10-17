@@ -8,7 +8,7 @@ next: /guide/module-system
 
 # 核心概念
 
-## 应用 (Application)
+## 应用
 
 Application 是 Apollo 的基本运行单元，代表一个可启动/停止的服务。业务侧实现
 `IHostedService`（start/stop/tick），宿主 `ApplicationHost`/`ServiceHost` 帧驱动托管。
@@ -27,7 +27,7 @@ private:
 };
 ```
 
-## 模块 (Module)
+## 模块
 
 Apollo 采用模块化架构，每个模块提供特定的功能。
 
@@ -57,10 +57,10 @@ if (!context.initialize()) {
 }
 ```
 
-## 配置 (Config)
+## 配置
 
 `apollo::core::config::ConfigRegistry` 键值注册表（string/int64/bool）；
-热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6，未实现）。
+tick 边界的配置快照替换尚未接通，见[配置说明](../guide/configuration.md)。
 
 ```cpp
 #include <apollo/core/config/config_registry.hpp>
@@ -70,7 +70,7 @@ config.set("server.port", 8888);
 int64_t port = config.get_int64("server.port");
 ```
 
-## 日志 (Log)
+## 日志
 
 分级日志（`apollo::core::log`，自行开发多级别；文件/控制台输出）。
 
@@ -82,7 +82,7 @@ APOLLO_LOG()->warning("这是一条警告");
 APOLLO_LOG()->error("这是一条错误");
 ```
 
-## 实体 (Entity)
+## 实体
 
 游戏世界中的基本对象：`apollo::game::core::Entity`（`EntityId` 强分型，
 `PlayerId`/`EntityId` 互不隐式转换），支持组件挂载（`IEntityComponent`）。

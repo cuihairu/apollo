@@ -1,7 +1,7 @@
 ---
 title: BigWorld API
 icon: bigworld
-prev: /api/README.md
+prev: /en/api/index.md
 ---
 
 # BigWorld API

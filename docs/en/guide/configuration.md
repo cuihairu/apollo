@@ -2,26 +2,16 @@
 title: Configuration
 icon: settings
 order: 6
-prev: /guide/module-system
+prev: /en/guide/module-system
 ---
 
 # Configuration
 
-> 2026-10-04 reconciliation: this page was rewritten against the actual state of HEAD. The old draft's `load()`/`loadFromEnv()`/`get<T>()`/`onChange()`/`setOverrideStrategy()`/`parseArgs()`/`defineSchema()`/`validate()` do not exist;
-> YAML/TOML is not supported. Environment-variable overrides, unified command-line parsing, and schema validation are all unimplemented.
+Apollo currently uses an in-process `ConfigRegistry` and application-specific configuration structures. There is no unified configuration-file loader, environment override precedence, or command-line parser.
 
-Configuration is split into three layers, each with its own role:
+## In-process configuration
 
-| Layer | Location | Capability | Status |
-| --- | --- | --- | --- |
-| `ConfigRegistry` | `modules/core` | In-process key-value table (string/int64/bool) | Active; no file I/O |
-| App self-read | `apps/*` | CLI argument parsing, design-table loading | Managed per app; no unified entry point |
-
-## ConfigRegistry (in-process key-value)
-
-`apollo::core::config::ConfigRegistry` (`modules/core`) is the thinner in-process registry:
-`set` / `get_string` / `get_int64` / `get_bool` / `has`; no file I/O, no events.
-Suited for registering in-code defaults in one place.
+`apollo::core::config::ConfigRegistry` exposes `set`, `get_string`, `get_int64`, `get_bool`, and `has`. It is a key/value registry; it does not read files, validate schemas, or publish changes.
 
 ```cpp
 #include <apollo/core/config/config_registry.hpp>
@@ -29,46 +19,34 @@ Suited for registering in-code defaults in one place.
 apollo::core::config::ConfigRegistry config;
 config.set("server.port", 8888);
 config.set("server.host", std::string("0.0.0.0"));
-
-int64_t port = config.get_int64("server.port");
-bool has = config.has("server.port");
+const auto port = config.get_int64("server.port");
 ```
 
-## App self-read
+## Application configuration
 
-### CLI arguments
+| Application | Configuration | Responsibility |
+|---|---|---|
+| Login | `login::LoginConfig` | Authentication, Gateway allocation, World profile access, and online directory |
+| Gateway | `gateway::GatewayConfig` | Client listener, admission, directory queries, and World forwarding |
+| World | `world_app::WorldAppConfig` | Simulation, scripts, player profiles, and persistence |
 
-There is no unified command-line parsing layer; each app manages its own. base-app's approach is to parse into a `BaseConfig` struct at the entry point
-(`apps/base-app/src/main.cpp`):
+Each entry point parses its own CLI; consult that executable's `--help`. Library defaults used by tests can differ from services enabled by an executable entry point. Port 0 in a library configuration does not establish the executable's deployment port.
 
-```cpp
-BaseConfig loadConfig(int argc, char* argv[]) {
-    BaseConfig config;
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg == "--port" && i + 1 < argc) {
-            config.port = static_cast<uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--db" && i + 1 < argc) {
-            config.dbName = argv[++i];
-        }
-    }
-    return config;
-}
+```bash
+world-app --world-id 1 --m1-port 9101 --player-store-m1-port 9104 \
+  --data-dir data/world-1/players --journal data/world-1/journal/persist.log
+login-app --m1-port 9103 --world-store-m1-port 9104 --directory-port 9105 \
+  --directory-epochs data/login/epochs.json --gateway tcp://127.0.0.1:9002
+gateway-app --port 9002 --world-m1-port 9101 \
+  --login-m1-port 9103 --directory-m1-port 9105
 ```
 
-P3-1 has been closed out (configuration unified, legacy `ConfigManager` deleted, `d36529c5`); the active configuration surface = `ConfigRegistry` + app self-read.
+World derives separate profile and journal directories from `worldId`. Separate Worlds must not write the same local storage. Login stores directory authority epoch floors, not gameplay profiles. Its authenticator still uses prototype test accounts; a successful login also requires the corresponding profile in World. These commands are not a production account-provisioning or authentication solution.
 
-### Design tables
+Cross-server grouping, admission, and return policies are a [reserved design](../design/cross-server-scenes.md), without enabled deployment configuration.
 
-`include/apollo/config/table_loader.h`: the `TableLoader` base class loads `*|*`-delimited text tables
-(line 1 description, line 2 field names, data rows from line 3); subclasses override `onRowRead()` to consume row by row.
+## Data tables and boundaries
 
-## Not-implemented list
+`TableLoader` in `include/apollo/config/table_loader.h` reads `*|*`-separated tables: description row, field-name row, then data rows. Subclasses consume rows through `onRowRead()`.
 
-The following capabilities appeared in the old draft but do not exist in the repository; start separate items as needed:
-
-- Environment-variable overrides and priority strategies (EnvFirst and the like)
-- Unified command-line parsing (`--server.port=8888` style)
-- Schema definition and validation
-- YAML/TOML formats (CMake detects yaml-cpp, but the parser is not wired in)
-- `ConfigSnapshot` hot reload for the game hot path (planned in architecture-review §17.6)
+Unified CLI parsing, configuration schema validation, YAML/TOML loading, and gameplay configuration snapshot replacement are not wired. Database fields in a configuration structure do not establish a live MySQL or Redis persistence path. See the [architecture overview](./architecture.md) for update and drain boundaries.

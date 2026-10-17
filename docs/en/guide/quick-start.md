@@ -2,8 +2,8 @@
 title: Quick Start
 icon: rocket
 order: 3
-prev: /guide/installation
-next: /guide/concepts
+prev: /en/guide/installation
+next: /en/guide/concepts
 ---
 
 # Quick Start

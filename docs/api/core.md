@@ -1,7 +1,7 @@
 ---
 title: Core API
 icon: core
-prev: /api/README.md
+prev: /api/index.md
 ---
 
 # Core API
@@ -63,7 +63,7 @@ ConfigRegistry& global_config();   // 进程级实例
 }
 ```
 
-热更规划走 tick 边界换 ConfigSnapshot（architecture-review §17.6，未实现）。
+tick 边界的配置快照替换尚未接通，见[配置说明](../guide/configuration.md)。
 **线程安全**: 安全（shared_mutex）
 
 ---

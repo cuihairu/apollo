@@ -10,7 +10,7 @@
 
 1. **最值得引入：异步 DB Command 模型**（`sddb.h:253-390`）：`OnExecuteSql`（DB 线程执行）→ `OnExecuted`（主线程 `Session::Run()` 回读）→ `Release` 的两段式异步，加 `GetGroupId()` 保序语义——这是 MMO"DB 线程 + 主线程完成回调"的标准解，apollo `modules/data` 目前只有同步 mock，此模型是第一优先参考。
 2. **第二：类型化对象池**（`sdobjectpool.h`）：placement-new + free-list + **锁策略作为模板参数**（`MT = CSDNonMutex`）；apollo 的裸内存池头（`utils/memory_pool.h`）已随孤儿头清理删除（2026-10-15，零消费者），缺按类型的池化。C++20 落地建议用 pmr/free-list 现代化重写，不搬宏。
-3. **第三：真·定时器轮**。sdtimer.h 头注释宣称"Linux 风格分层定时器"，`sdtimer.cpp:21-79` 实际是 **mutex + vector 全表扫描**——文档与实现不符是本仓库第一教训；apollo 目前**没有定时器模块**，游戏循环需要的是真分层时间轮（O(1) 插入/删除），按"目标设计"吸收而非按"现有实现"。
+3. **定时器设计**：SSEngine 实现为 vector 扫描，与头文件描述不符。Apollo 已有 modules/base 的 TimerWheel；复用已有实现，另行验证宿主驱动，不再建立第二套定时器子系统。
 4. **背压可见性值得学习**：sdnet 的 `GetSendBufFree()`（`sdnet.h:166-169`）与 `DelaySend`（跨线程投递）——把发送队列水位显式暴露给上层；apollo 网络抽象层（docs/design/net-abstraction.md）把这类能力收进统一接口，而不是像老引擎那样直接暴露线程与缓冲区细节。
 5. **属性/状态同步：SSEngine 没有**。它是纯系统层库（线程/内存/文件/网络管道），不含任何实体属性复制机制——apollo 的属性同步必须以 BigWorld/KBEngine 类模型为目标（见 `docs/design/attribute-sync.md`），老引擎能借的只有传输层零件（sdpkg 定长帧头+校验、loop_buffer 环形缓冲、data_queue 线程安全队列）。
 6. **教训清单**（反推过程暴露）：同一仓库两份分析结论互相矛盾（"100% 完成/生产就绪" vs "20 个核心模块无实现、覆盖率 59.7%"）；头文件注释撒谎（分层定时器）；`volatile BOOL` 做线程标志（`sdthreadpool.h:140-141`）；"remember to lock" 注释式线程安全（`sdmemorypool.h:29-41`）；裸指针 + `Release()` 手工生命周期（`sddb.h:138`）。**引思想、引设计，不引代码。**
@@ -96,19 +96,13 @@
 - **落地形态**：C++20 不需要老引擎的宏/重载把戏——`std::pmr::monotonic_buffer_resource`（帧作用域 arena）覆盖"每 tick 临时对象"；跨 tick 常驻对象用 `free-list + std::construct_at/destroy_at` 薄封装（~100 行），线程安全同样做成模板参数或 pmr memory_resource 注入。分配点对齐接 `docs/design/attribute-sync.md` 的 per-tick arena。
 - **成本**：低；先做 arena（收益最大、风险最小）。
 
-### 4.3 分层定时器轮——按目标设计引入（价值 ★★★★）
+### 4.3 定时器归属
 
-- **老引擎现状**：头文件宣称分层，实现是 vector 扫描（`sdtimer.cpp:48-74`）——**它只是"能用"**。
-- **为什么 apollo 必须有**：game loop 的 buff 到期、技能 CD、AI 思考节拍、属性回血 tick、重连超时、DB 重试——全部是定时器；无定时器模块意味着这些将来会散落成各系统私有 `next_fire_time` 扫描。
-- **落地形态**：分层时间轮（如 5 层 × 64 槽，ms/10ms/100ms/1s/10s 粒度），O(1) 插入/取消；**驱动挂在主循环固定阶段**（不是独立线程——既定原则：调度器只提供数据结构、驱动权在 game loop、不进高频 tick〔原引 docs/34 §15，该文档已随 2026-09-29 Spring/IoC 废弃文档清理删除，git 历史可溯〕）；到期的回调分"主线程回调/工作线程回调"两类。SSEngine sdtimer 的"锁内收集、锁外执行"（`sdtimer.cpp:48-73`）细节正确，保留该语义。
-- **成本**：中（一个独立模块 + 单测）；与 Lua 热更的关联见 §6。
-- **归属（architecture-review §16.8.3-④）**：落 **modules/base 新组件（数据结构 + 单测）**——三家先例：BW TimeQueue 在最底层公共库 lib/cstdmf 且自带 unit_test（time_queue.hpp:60/:74、unit_test/test_time_queue.cpp）、KBEngine Timers 在 lib/common（timer.h:101/:108）、skynet 为核心线程编队（skynet_start.c:209-211）；模块只供 O(1) 结构与到期回调收集，驱动权按本节设计留在 game loop 固定阶段。**不落 modules/bigworld**——其为 legacy 兼容层（BigWorld.h:3-9），timer.cpp 是转发桩（:3-5，自认实现由 apollo::bw::Runtime 提供，runtime.h:40 addEntityTimer），仅作语义参考不入生产链。
+复用 `apollo::base::TimerWheel` 和已有测试。调度器提供数据结构，所属循环负责推进时钟和执行回调。取消、对象生命周期和回调预算需要宿主接线。SSEngine 的扫描实现只作对照，不替换已有时间轮。
 
-### 4.4 共享内存 IPC（价值 ★★，暂缓）
+### 4.4 共享内存 IPC：暂缓
 
-- **老引擎设计**：`SDOpenShmem/SDCreateShmem` 统一 Windows mapping / POSIX shm。
-- **apollo 场景判断**：BigWorld 化（base-app/world-app 分进程）后，**同机进程间**大块只读数据（空间格子快照、监控指标、发布/订阅热点）用 shm 有真实收益；但当前 apollo 单进程为主、跨进程通信协议未定型，现在引入是过早优化。
-- **建议**：列入 net-abstraction.md 的进程间通道候选项（与 Aeron 的 IPC 传输同框比较）——**已接线（2026-09-29）**：net-abstraction §6 决策表正式行 + §7 P3 随自行开发总线同批定案（引设计不引代码）；G-2 热备镜像流（同机 shm SPSC 环）为其点对点典型场景；实现推迟到多进程落地阶段。
+当前进程间通信使用 M1。共享内存只在同机数据传输有测量需求时考虑，不改变 World / Scene / Instance 所有权，也不建立另一套协议事实源。它不提供跨服权威交接或热备保证。
 
 ### 4.5 其余（明确不引入）
 
@@ -122,7 +116,7 @@
 
 1. **文档与实现脱节是常态**：sdtimer.h 的"分层定时器"注释 vs vector 扫描实现；FINAL_ANALYSIS_REPORT 的"100% 生产就绪" vs ROADMAP 的"20 模块无实现"。→ apollo 的约束：模块 README 必须声明"已实现/部分/规划"三态，CI 里跑能力清单断言（文档也是代码）。
 2. **`volatile BOOL` 做线程标志**（`sdthreadpool.h:140-141`）：C++ 中 volatile 无同步语义，属 UB 边缘。→ 新代码一律 `std::atomic`。
-3. **注释式线程安全**（"remember to lock"，`sdmemorypool.h:29-41`）：把正确性责任转嫁给每个调用点，规模一大必漏。→ 线程策略进类型（sdobjectpool 的 MT 模板参数是对的）或文档化为"单线程类型"并在调试模式加断言。
+3. **定时器设计**：SSEngine 实现为 vector 扫描，与头文件描述不符。Apollo 已有 modules/base 的 TimerWheel；复用已有实现，另行验证宿主驱动，不再建立第二套定时器子系统。
 4. **裸指针 + `Release()` 手工生命周期**（ISSDBRecordSet/ISSDBSession/ISSBase AddRef/QueryRef）：COM 风格在无 GC 语言里把每个返回值都变成泄漏点。→ unique_ptr/shared_ptr 边界清晰化。
 5. **Windows 中心 API 面向迁移的代价**：`SSAPI/CHAR/BOOL/匈牙利命名` 与手工平台宏——反推重建时这些正是最难对齐的部分。→ apollo 坚持标准库优先、平台差异关进 adapter（net-abstraction.md 的分层动机之一）。
 6. **定长头+校验是老而正确的**（sdpkg 的 mark+len 结构方向正确，算法强度不足）：apollo 的帧格式设计可以站在它肩膀上加序号与 CRC。
@@ -135,4 +129,4 @@
 
 ---
 
-*阅读基线：SSEngine @ 工作副本（反推重建仓库）；apollo main @ 35a9c528。2026-09-29 补 §4.3 归属行（architecture-review §16.9.4/§16.10.1 粘贴）。*
+*外部源码基线：SSEngine 反推重建工作副本。Apollo 实现状态以当前源码与任务清单为准。*

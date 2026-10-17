@@ -610,12 +610,12 @@ class FailoverManager:
 
 | Practice | Description |
 |------|------|
-| **高可用 (High availability)** | 关键组件多实例 (multiple instances for key components) |
-| **故障检测 (Failure detection)** | 定期心跳检查 (periodic heartbeat checks) |
-| **自动转移 (Automatic failover)** | 故障自动迁移 (automatic migration on failure) |
-| **负载均衡 (Load balancing)** | 合理的负载分配 (sensible load distribution) |
-| **监控告警 (Monitoring and alerting)** | 及时发现问题 (detect problems in time) |
-| **容量规划 (Capacity planning)** | 预留扩展空间 (reserve scaling headroom) |
+| **High availability** | multiple instances for key components |
+| **Failure detection** | periodic heartbeat checks |
+| **Automatic failover** | automatic migration on failure |
+| **Load balancing** | sensible load distribution |
+| **Monitoring and alerting** | detect problems in time |
+| **Capacity planning** | reserve scaling headroom |
 
 ---
 

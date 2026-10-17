@@ -1,7 +1,7 @@
 ---
 title: Runtime API
 icon: play
-prev: /api/README.md
+prev: /en/api/index.md
 ---
 
 # Runtime API

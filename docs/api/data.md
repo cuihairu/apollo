@@ -1,7 +1,7 @@
 ---
 title: Data API
 icon: database
-prev: /api/README.md
+prev: /api/index.md
 ---
 
 # Data API
@@ -134,7 +134,7 @@ public:
 }
 ```
 
-**线程安全**: 不安全（归宿主保存线程（base-app：autoSaveLoop drain + 关停收口））
+**线程安全**: 不安全（归宿主保存线程（World PlayerStore：autoSaveLoop drain + 关停收口））
 
 ---
 

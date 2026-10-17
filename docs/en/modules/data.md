@@ -80,7 +80,7 @@ journal.compact();                                 // 快照压薄
 journal.replay(sink);                              // 崩溃回放 + seq 续接
 ```
 
-For the consumer-side wiring see apps/base-app (save path write-ahead + autoSaveLoop drain +
+For the consumer-side wiring see apps/common/src/player_store.cpp (save path write-ahead + autoSaveLoop drain +
 startup replay, orchestrated by the P1-5 RecoveryCoordinator).
 
 ## cache（apollo::data_cache）

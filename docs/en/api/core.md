@@ -1,7 +1,7 @@
 ---
 title: Core API
 icon: core
-prev: /api/README.md
+prev: /en/api/index.md
 ---
 
 # Core API

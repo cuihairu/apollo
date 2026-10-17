@@ -27,6 +27,8 @@ Reuse `Create → Initialize → Waiting → Running → Finishing → Rewarding
 
 Persistent player data uses persistence modules; the current Scene in World authoritatively advances the player's match entity. Cross-World transfer requires source freeze, export, target confirmation, route switching, and source cleanup. Only one entity can accept player input and authoritative writes at a time. Validate existing in-process SceneTransfer separately from cross-process takeover.
 
+Cross-server scenes are an explicit reserved requirement. Keep home-server affiliation separate from World runtime location; players from multiple servers may share a Scene. Temporary cross-server activities reuse Instance. See [Cross-server scene design](design/cross-server-scenes.md) for admission, transfer, settlement, and return rules.
+
 ## Updates
 
 Protocol updates regenerate XML/XSD contract artifacts; version compatibility and rolling release validation remain incomplete. Code-only updates preserve the protocol: Lua provides preparation, tick-boundary commit, observation, and rollback; C++ uses process replacement.

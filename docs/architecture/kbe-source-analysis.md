@@ -14,8 +14,6 @@ tag:
 
 # KBEngine 源码分析
 
-> **暂无英文译版 / No English translation yet.** 本文是 1400+ 行源码分析长文，整篇翻译只会产出劣质占位稿，故此处仅标注语言状态，正文仅中文。
-> **No English translation yet.** This is a 1400+ line source-analysis document; a full English version now would be a low-quality placeholder, so only the language status is marked here. Chinese only.
 
 这篇文档基于本地源码目录 `C:\Users\cui\Workspaces\kbengine` 整理，目标不是做概念介绍，而是回答两个更实际的问题：
 
@@ -143,20 +141,6 @@ KBEngine 不是纯 C++ 引擎，脚本资源是运行时的一等输入。
 
 这点对 Apollo 非常重要。Apollo 现在如果每个 app 都自己拼配置、网络、生命周期、信号、服务发现，后面一定会散。
 
-### 对 Apollo 的直接启发
-
-Apollo 应该尽快形成统一的进程启动骨架，至少收敛以下能力：
-
-- 配置装载
-- 日志初始化
-- 网络监听
-- Service Discovery 注册
-- 健康检查与退出流程
-- 脚本/模块初始化
-- 统一 `AppHost<T>` 或 `ProcessMain<T>`
-
-否则 `gateway-app`、`login-app`、未来的 `baseapp/cellapp` 很容易各自长出一套宿主。
-
 ## 四、公共服务端骨架：`ServerApp` 和 `EntityApp`
 
 真正把各个进程统一起来的，不是 `main.cpp`，而是这两个类：
@@ -248,25 +232,6 @@ Apollo 应该尽快形成统一的进程启动骨架，至少收敛以下能力�
 
 所以 KBEngine 不是所有逻辑都靠消息驱动，它有明确的 tick 驱动核心。
 
-### 对 Apollo 的直接启发
-
-Apollo 最应该补的一层不是具体业务模块，而是：
-
-- `ServerApp` 对应的统一进程基类
-- `EntityApp` 对应的统一实体宿主
-
-建议 Apollo 至少形成下面两层抽象：
-
-- `ProcessHost`
-- `WorldHost<EntityT>`
-
-其中 `WorldHost` 要承接：
-
-- 实体容器
-- 游戏 tick
-- 跨进程实体定位
-- 脚本或配置驱动的实体定义装载
-
 ## 五、网络运行时：KBE 的消息模型为什么长期可维护
 
 网络核心入口：
@@ -341,25 +306,6 @@ KBEngine 并不是用一套通用字符串路由做 RPC，而是有显式的消�
 
 - 可读性一般
 - 扩展时需要改接口定义和宏
-
-### 对 Apollo 的直接启发
-
-Apollo 现在如果想做 MMO 风格分布式实体，不建议只靠通用 RPC 框架。
-
-至少要补三层能力：
-
-1. 内部连接语义
-2. 聚合发送单元
-3. 显式消息声明层
-
-Apollo 可以不照搬 KBE 的宏，但至少需要：
-
-- `InternalChannel`
-- `MessageEnvelope / MessageBundle`
-- `MessageRegistry`
-- `ComponentMessageCodec`
-
-否则跨进程实体通信会长期停留在“能通就行”的阶段，很难演进成稳定运行时。
 
 ## 六、`entitydef` 是 KBEngine 最核心的壁垒
 
@@ -457,21 +403,6 @@ Apollo 可以不照搬 KBE 的宏，但至少需要：
 
 它不是为了数据导向批处理，也不是为了高频系统遍历。
 
-### 对 Apollo 的直接启发
-
-Apollo 如果想走 KBE/BigWorld 路线，最该补的不是 API facade，而是统一的实体定义层。
-
-建议补出下面这些结构：
-
-- `EntitySchema`
-- `PropertySchema`
-- `MethodSchema`
-- `ReplicationSchema`
-- `PersistenceSchema`
-- `RemoteEntityRef`
-
-Apollo 现在如果协议、实体字段、持久化字段、脚本接口分散在不同地方，后面一定会漂。
-
 ## 七、脚本桥接是主路径，不是插件
 
 关键目录：
@@ -502,18 +433,6 @@ KBEngine 的业务对象不是“C++ 里创建完了，再顺便给 Python 一�
 - Python 提供业务实体的脚本定义和行为扩展
 
 这就是为什么实体定义、脚本模块、远程方法、属性同步会绑在一起。
-
-### 对 Apollo 的启发
-
-Apollo 不一定要接 Python，但必须尽早决定：
-
-- 业务对象定义到底由什么驱动
-- 是纯 C++ 静态类型
-- 还是 DSL / 脚本 / 数据定义驱动
-
-这个问题不能拖。
-
-因为一旦跨进程实体、属性同步、存储映射都长出来后，再回头统一定义系统，代价会非常高。
 
 ## 八、BaseApp：它不是数据库层，而是玩家会话锚点
 
@@ -570,16 +489,6 @@ KBEngine 明确把这些概念拆开：
 - `Proxy`: 会话与客户端承载
 - `BaseEntity`: 玩家长期权威逻辑
 - `CellEntity`: 空间内实时权威逻辑
-
-### 对 Apollo 的启发
-
-Apollo 当前如果要补 BigWorld/KBE 风格能力，必须尽快明确三种对象：
-
-- `Session/Proxy`
-- `BaseEntity`
-- `CellEntity`
-
-不要让网关 session 直接等于逻辑实体，也不要让场景实体直接绑定 socket。
 
 ## 九、CellApp：它不是逻辑服，而是空间权威节点
 
@@ -683,7 +592,7 @@ Apollo 当前如果要补 BigWorld/KBE 风格能力，必须尽快明确三种�
 
 KBE 的 Space 不是“地图 ID”，而是一个实际参与运行时调度的对象。
 
-这对 Apollo 很关键。Apollo 后面如果做跨服场景，不应该把 `spaceId` 只当一个数据库字段，而是要有真正的 `WorldSpace` 运行时对象。
+对 Apollo 的对应边界是既有 Scene：跨服场景仍由 Scene 持有实体、AOI 与 tick，不能因参考 SpaceMemory 再引入同义运行时对象。
 
 ## 十一、`Witness`：客户端看到的世界不是直接从实体表里扫出来的
 
@@ -737,19 +646,6 @@ KBE 没有直接把 view 集合做成 `Entity*` 列表，而是有显式的 `Ent
 
 这通常意味着它需要在“实体存在”“别名 ID”“同步状态”“延迟移除”之间做更多管理。
 
-### 对 Apollo 的启发
-
-Apollo 现在如果只把 AOI 理解成“附近玩家查询算法”，是不够的。
-
-需要明确拆成四层：
-
-- `CoordinateSystem`
-- `Trigger`
-- `Witness/ViewContext`
-- `Replication`
-
-这才是 KBE 真正的做法。
-
 ## 十二、`GhostManager`：分布式空间里最容易被忽视但最关键的设计
 
 关键文件：
@@ -787,22 +683,6 @@ KBE 假设实体可能：
 - 在迁移窗口里还需要 route
 
 这才是真正意义上的分布式世界。
-
-### 对 Apollo 的启发
-
-Apollo 如果想做连续大世界，不能只做：
-
-- 区域划分
-- 玩家跨区迁移
-
-还要补：
-
-- `GhostReplica`
-- `MigrationRoute`
-- `EntityAuthorityTransfer`
-- `CrossCellMessageForwarding`
-
-否则看起来像 BigWorld，实际上只能做到“切片地图 + 硬切换”。
 
 ## 十三、CellAppMgr：它管理的不是进程列表，而是空间拓扑
 
@@ -854,18 +734,6 @@ Apollo 如果想做连续大世界，不能只做：
 
 这说明 KBE 的空间系统不是只在 Cell 本地存在，管理层也持有一份空间拓扑视图。
 
-### 对 Apollo 的启发
-
-Apollo 后面如果要做 `CellAppMgr`，不要做成“只记录 cellapp 心跳”的薄注册中心。
-
-它应该至少管理：
-
-- 空间元数据
-- 空间到 cell 的映射
-- cell 负载
-- 跨 cell 迁移协调
-- 空间可视化/调试接口
-
 ## 十四、BaseAppMgr：它管的是玩家入口和非空间负载
 
 关键文件：
@@ -906,15 +774,6 @@ Apollo 后面如果要做 `CellAppMgr`，不要做成“只记录 cellapp 心跳
 - entity 数
 - 负载
 
-### 对 Apollo 的启发
-
-Apollo 后续如果要做 `BaseAppMgr`，建议它主要管两类东西：
-
-- 登录/会话路由
-- Base 实例负载与分配
-
-不要把 Base 和 Cell 用同一种调度维度去看待。
-
 ## 十五、Machine：KBE 从一开始就把运维体系内建了
 
 关键文件：
@@ -945,17 +804,6 @@ Apollo 后续如果要做 `BaseAppMgr`，建议它主要管两类东西：
 现代系统当然可以把这些工作交给 k8s、nomad 或 systemd，但 KBE 这个设计提醒了一点：
 
 `运维面不是额外的，它也是架构的一部分`
-
-### 对 Apollo 的启发
-
-Apollo 不一定需要复刻 `machine`，但必须尽早明确：
-
-- 组件如何被发现
-- 进程如何被观测
-- 负载如何被汇总
-- 调试接口如何暴露
-
-如果这些全部留到后期，前面的分布式架构会很难真正跑稳。
 
 ## 十六、Watcher：KBE 不是只有日志，它有结构化观测树
 
@@ -1001,23 +849,6 @@ Apollo 不一定需要复刻 `machine`，但必须尽早明确：
 
 这是一套很完整的自省体系。
 
-### 对 Apollo 的启发
-
-Apollo 应该尽快补一个统一观测树，而不是只依赖日志。
-
-建议最少有：
-
-- `watcher` 风格的路径型指标树
-- HTTP / RPC 查询接口
-- 统一挂载点，比如 `stats/*`、`components/*`、`spaces/*`
-
-这类系统对 MMO 服务端非常重要，因为你经常需要在线看：
-
-- 当前空间负载
-- 当前实体数
-- 某个 app 的 tick load
-- 某类消息吞吐
-
 ## 十七、KBE 的主循环本质上是什么
 
 把 `ServerApp`、`EntityApp`、`NetworkInterface`、`Watcher`、各进程组件放到一起看，KBE 的运行模型可以概括成：
@@ -1035,355 +866,15 @@ Apollo 应该尽快补一个统一观测树，而不是只依赖日志。
 
 `实时世界宿主`
 
-## 十八、Apollo 应该优先借鉴什么
+## 十八、Apollo 的采用边界
 
-### 第一优先级：统一宿主与运行时
+Apollo 采用 Login、Gateway、World 三项业务进程职责。World 内的 Scene 拥有模拟状态，Instance 承载临时玩法生命周期；World 还托管玩家资料与持久化，Login 托管在线目录、落点与迁移编排。
 
-先补：
+借鉴 KBE 的共同宿主、契约元数据、网络分层、可见性和结构化观测，不照搬 Base/Cell 分布式空间拓扑。当前架构不提供 Ghost、无缝地图或另一种 BigWorld 运行模式，不能由本篇外部源码分析推导新的 Apollo 进程角色。
 
-- `ProcessHost`
-- `WorldHost`
-- 统一初始化阶段
-- 统一事件循环与 timer
+跨服场景是明确的设计预留：原区服归属与运行位置分开，多区服玩家可进入同一 Scene，临时副本继续使用 Instance。跨 World 必须显式冻结、准备目标、条件提交权威、更新路由并清理源对象；跨服不意味着同时运行两份玩家对象。
 
-这是所有后续能力的基础。
-
-### 第二优先级：实体定义与远程引用
-
-先补：
-
-- `EntitySchema`
-- `RemoteEntityRef`
-- `MethodSchema`
-- `ReplicationSchema`
-
-否则 Apollo 的分布式实体最终会沦为一堆 ad-hoc 消息。
-
-### 第三优先级：Base / Cell 分权
-
-先明确：
-
-- 会话锚点归谁
-- 空间权威归谁
-- 登录路由归谁
-
-不要先写一堆功能，再想怎么拆。
-
-### 第四优先级：AOI 不只做查询算法
-
-至少要形成：
-
-- `CoordinateSystem`
-- `Witness`
-- `ViewTrigger`
-- `Replication`
-
-### 第五优先级：观测与管理面
-
-补：
-
-- watcher tree
-- component registry
-- load query
-- space query
-
-## 十九、哪些地方不建议直接照搬
-
-### 1. 宏和老式接口声明
-
-KBE 的消息接口和脚本绑定大量依赖宏，这在当年很常见，但 Apollo 没必要原样复制。
-
-可以保留思想，换成更现代的注册方式。
-
-### 2. 过重的全局单例依赖
-
-KBE 里全局单例很多，工程上可用，但会增加测试和替换成本。
-
-Apollo 可以保留统一宿主，但尽量通过上下文对象或 service locator 控制依赖边界。
-
-### 3. Python 强绑定
-
-Apollo 不一定要走 Python 主路径，但必须从一开始就决定实体定义来源。
-
-不照搬 Python 不代表可以不解决“统一定义系统”问题。
-
-## 二十、不是所有 MMO 都需要 BigWorld/KBE 这一整套
-
-这里有一个很容易被误解的点：
-
-`KBEngine 是一种 MMO 服务器架构，但不是 MMO 的唯一架构。`
-
-更准确地说，KBEngine 是针对 BigWorld 这一类“分布式连续大世界”问题的答案，而不是所有 MMO 的标准答案。
-
-### 1. 普通 MMO 也可以完全不需要 `CellApp`
-
-如果游戏满足下面这些特征，通常不需要完整的 BigWorld/KBE 架构：
-
-- 地图是分线、分副本、分副本
-- 切场景时允许 loading
-- 一个地图实例绑定一个逻辑进程就够
-- 玩家数量压力主要在连接和业务逻辑，不在连续空间扩容
-- 不追求跨区无缝迁移
-
-这类项目更接近常见的“普通 MMO”或“实例型 MMO”。
-
-这时一个更常见的架构就足够：
-
-- `Login`
-- `Gateway`
-- `Game/World`
-- `DB/Cache`
-- 若干独立业务服，例如聊天、公会、匹配
-
-这种架构也完全可以支撑 MMORPG。
-
-### 2. BigWorld/KBE 额外解决的是哪些问题
-
-只有当你明确需要处理下面这些问题时，`CellApp` 才开始变得有必要：
-
-- 超大连续世界
-- 世界按空间切片后仍然无缝移动
-- 一个地图热点区域需要独立扩容
-- 实体跨进程迁移后仍然保持连续观察关系
-- 空间边界附近需要 ghost 和 witness 协作
-- 场景权威不再固定在单一地图进程
-
-也就是说，BigWorld/KBE 解决的不是“有没有 MMO 逻辑”，而是：
-
-`MMO 逻辑在分布式空间里怎么维持权威与连续性`
-
-### 3. 可以把 KBE 架构看成普通 MMO 架构的增强层
-
-从工程视角看，更合理的理解方式是：
-
-- 普通 MMO 架构是基础层
-- BigWorld/KBE 架构是空间分布式增强层
-
-它不是非此即彼，而是逐步增强。
-
-## 二十一、如果不启动 `CellApp`，会退化成什么
-
-这是一个很现实的问题。
-
-如果 Apollo 将来吸收 KBE 思想，但不启动 `CellApp / CellAppMgr`，那么整个系统可以自然退化成更普通的 MMO 形态。
-
-### 1. 可保留的部分
-
-即使没有 `CellApp`，下面这些能力依然有价值：
-
-- `LoginApp` 或登录入口
-- `Gateway` 或连接接入层
-- `BaseApp` 风格的玩家会话锚点
-- 统一实体定义系统
-- 统一远程调用/消息系统
-- 统一 watcher / registry / 运维接口
-
-这部分能力并不依赖分布式空间。
-
-### 2. 可以暂时不用的部分
-
-如果没有连续大世界需求，下面这些能力可以先不启用：
-
-- `CellApp`
-- `CellAppMgr`
-- `GhostManager`
-- `Witness`
-- 跨 Cell 迁移
-- 空间切片负载均衡
-
-### 3. 退化后的实际形态
-
-这时系统更像：
-
-- `LoginApp`
-- `GatewayApp`
-- `BaseApp` 或 `WorldApp`
-- `DBMgr`
-
-其中：
-
-- `BaseApp` 既承接玩家会话，也承接地图/实例逻辑
-- 一个实例或地图可以由一个逻辑进程独立管理
-- 场景切换通过普通切图或实例迁移完成
-
-这其实就是非常典型的 MMO 服务器架构。
-
-### 4. 这种退化不是“阉割版”，而是合理分层
-
-很多项目并不是“做不到 BigWorld”，而是根本不需要承担 BigWorld 那种复杂度。
-
-如果地图切换允许加载、单地图实例可以固定绑定单进程，那么直接上 `CellApp + Ghost + Witness + 分布式空间` 往往是过度设计。
-
-## 二十二、Apollo 更适合做成可裁剪架构，而不是默认全量 BigWorld 化
-
-这也是 Apollo 现在最现实的方向。
-
-不应该一开始就假设所有项目都必须启动：
-
-- `BaseApp`
-- `CellApp`
-- `BaseAppMgr`
-- `CellAppMgr`
-- `Machine`
-
-更好的做法是把它拆成可选层。
-
-### 第一层：普通 MMO 基础层
-
-这一层默认启用，解决大多数项目的核心问题：
-
-- `Login`
-- `Gateway`
-- `World/Game`
-- `DB/Cache`
-- 统一配置、日志、生命周期
-- 统一实体定义和消息系统
-
-这层就已经足够支撑大部分 MMORPG。
-
-### 第二层：会话与逻辑分权层
-
-如果项目需要更强的玩家锚点语义，可以再引入：
-
-- `BaseApp`
-- `BaseAppMgr`
-
-这时先解决：
-
-- 玩家会话锚点
-- 登录后路由
-- 非空间逻辑归属
-- 玩家跨地图或跨实例的长期状态归属
-
-但仍然不必引入 `CellApp`。
-
-### 第三层：分布式空间层
-
-只有在明确需要连续大世界时，再引入：
-
-- `CellApp`
-- `CellAppMgr`
-- `Ghost`
-- `Witness`
-- 空间分片
-- 跨 Cell 迁移
-
-这时 Apollo 才真正进入 BigWorld/KBE 风格。
-
-### 这三层的好处
-
-这样设计后：
-
-- 小中型 MMO 可以只用第一层
-- 需要更强玩家归属语义的项目用到第二层
-- 真正的大世界项目再用第三层
-
-这比“一上来全量 BigWorld 化”更稳，也更符合 Apollo 现在的成熟度。
-
-## 二十三、一个更适合 Apollo 的落地路线
-
-如果 Apollo 参考 KBE，我建议按下面顺序落：
-
-### 阶段 1：统一宿主
-
-- 抽象 `AppMain<T>`
-- 抽象 `ServerHost`
-- 抽象 `WorldHost`
-
-### 阶段 2：统一实体定义
-
-- 增加 `EntitySchema`
-- 增加 schema 驱动的属性/方法描述
-- 增加远程引用 `EntityRef`
-
-### 阶段 3：Base / Cell 模型成型
-
-- `BaseService`
-- `CellService`
-- `BaseAppMgr`
-- `CellAppMgr`
-
-### 阶段 4：空间系统
-
-- `WorldSpace`
-- `SpacePartition`
-- `Witness`
-- `GhostReplica`
-
-### 阶段 5：运维体系
-
-- `Watcher`
-- `ComponentRegistry`
-- `SpaceView`
-- `LoadReport`
-
-这样 Apollo 就是在吸收 KBE 的结构，而不是只做 BigWorld 风格 API 外壳。
-
-## 二十四、Apollo 可以怎样定义“普通 MMO 模式”和“BigWorld 模式”
-
-为了避免后续架构混乱，Apollo 最好在概念上就明确两种运行模式。
-
-### 1. 普通 MMO 模式
-
-建议默认模式就是这个。
-
-特点：
-
-- 不启用 `CellApp`
-- 地图实例绑定单逻辑服
-- 切图允许中断或切实例
-- 无需 ghost / witness / 跨 cell 迁移
-
-适用：
-
-- 大多数 MMORPG
-- 副本型或分线型世界
-- 中小规模开放世界
-
-### 2. BigWorld 模式
-
-特点：
-
-- 启用 `BaseApp + CellApp`
-- 启用 `BaseAppMgr + CellAppMgr`
-- 启用 distributed space 相关运行时
-- 启用 witness / ghost / teleport / authority transfer
-
-适用：
-
-- 连续无缝大世界
-- 热点区域需要独立水平扩容
-- 跨区迁移不可接受 loading
-
-### 3. 两种模式应该共享什么
-
-两种模式最好共享同一套底层：
-
-- 宿主框架
-- 消息系统
-- 实体定义系统
-- 日志和配置
-- watcher / registry
-
-这样 Apollo 才不会分叉成两套完全不同的代码库。
-
-## 二十五、结论
-
-KBEngine 真正厉害的地方，不是它把 MMO 服务拆成了很多进程，而是它把下面这些东西做成了同一套系统：
-
-- 统一宿主
-- 统一网络语义
-- 统一实体定义
-- 统一空间权威模型
-- 统一观测与管理面
-
-Apollo 现在要参考它，最值得抄的是这种“系统化收口”的能力。
-
-最不值得抄的是表层接口形式。
-
-如果只学它的进程名，Apollo 会得到一套名字很像 KBE 的工程。
-
-如果学到它的运行时骨架、实体元数据、空间权威和运维体系，Apollo 才会真正长出 KBE/BigWorld 这一类架构的核心能力。
+实现状态与验收以[服务器应用](../apps/index.md)、[当前架构决策](./adr.md)和[跨服场景设计](../design/cross-server-scenes.md)为准。本文只说明外部引擎的机制，不维护另一份迁移路线或任务清单。
 
 ## 参考入口
 

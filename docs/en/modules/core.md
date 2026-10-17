@@ -46,7 +46,7 @@ db.connect();
 ### Configuration (Config)
 
 `apollo::core::config::ConfigRegistry`, a key-value registry (string/int64/bool); hot reload
-is planned to swap a ConfigSnapshot at tick boundaries (architecture-review §17.6, not implemented).
+Configuration snapshot replacement at tick boundaries is not integrated; see [configuration](../guide/configuration.md).
 
 ```cpp
 #include <apollo/core/config/config_registry.hpp>

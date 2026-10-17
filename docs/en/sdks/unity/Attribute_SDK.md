@@ -13,24 +13,24 @@ Provides an attribute sync SDK for Unity clients, corresponding to the server-si
 
 ```
 sdks/unity/ApolloSDK/Attributes/
-├── AttributeValue.cs       # 属性值类型（对应服务端 ComVal）
+├── AttributeValue.cs       # 属性值类型（对应Server ComVal）
 ├── AttributeDefinition.cs  # 属性定义
-├── AttributeRegistry.cs    # 属性注册表
-├── AttributeContainer.cs   # 属性容器（对应服务端 ProperValue）
-├── AttributeSyncManager.cs # 属性同步管理器
-├── ComputedAttribute.cs    # 计算属性支持
-├── AttributeEvents.cs      # 属性变更事件
-└── AttributeExtensions.cs  # 扩展方法
+├── AttributeRegistry.cs    # attribute registry
+├── AttributeContainer.cs   # attribute container（对应Server ProperValue）
+├── AttributeSyncManager.cs # attribute synchronization manager
+├── ComputedAttribute.cs    # computed attribute support
+├── AttributeEvents.cs      # attribute change events
+└── AttributeExtensions.cs  # extension methods
 ```
 
 ## Server-Side Mapping
 
-| 服务端 | 客户端 |
+| Server | Client |
 |--------|--------|
 | `BaseClass/ComVal.h` - uComVal | `AttributeValue.cs` |
-| `Adapter/CppLua/ObjProperty_enum.h` - 属性ID定义 | `AttributeDefinition.cs` |
+| `Adapter/CppLua/ObjProperty_enum.h` - attribute ID definitions | `AttributeDefinition.cs` |
 | `Game/GlobeObj.h` - ProperValue | `AttributeContainer.cs` |
-| `protocol/PacketBuilders.cpp` - 同步逻辑 | `AttributeSyncManager.cs` |
+| `protocol/PacketBuilders.cpp` - synchronization logic | `AttributeSyncManager.cs` |
 
 ## Attribute ID Ranges
 
@@ -99,7 +99,7 @@ ATTR_ItemId = 8063,
 // 1. 初始化属性系统
 AttributeRegistry.Instance.Initialize();
 
-// 2. 创建属性容器
+// 2. 创建attribute container
 var container = new AttributeContainer(playerId);
 
 // 3. 设置属性
@@ -116,32 +116,32 @@ container.OnAttributeChanged += (evt) => {
     Debug.Log($"属性 {evt.AttributeId} 从 {evt.OldValue} 变为 {evt.NewValue}");
 };
 
-// 6. 同步到服务端
+// 6. 同步到Server
 byte[] deltaData = AttributeSyncManager.Instance.BuildDeltaPacket(container);
 NetworkManager.Send(deltaData);
 
-// 7. 应用服务端更新
+// 7. 应用Server更新
 AttributeSyncManager.Instance.ApplyServerUpdate(receivedData, container);
 ```
 
 ## Development Tasks
 
 ### Phase 1: Base Types
-- [x] AttributeValue.cs - 属性值包装结构体
-- [ ] AttributeDefinition.cs - 属性定义类
+- [x] AttributeValue.cs - attribute value wrapper
+- [ ] AttributeDefinition.cs - attribute definitions
 
 ### Phase 2: Registry and Container
-- [ ] AttributeRegistry.cs - 属性注册表
-- [ ] AttributeContainer.cs - 属性容器
+- [ ] AttributeRegistry.cs - attribute registry
+- [ ] AttributeContainer.cs - attribute container
 
 ### Phase 3: Sync System
-- [ ] AttributeSyncManager.cs - 属性同步管理器
+- [ ] AttributeSyncManager.cs - attribute synchronization manager
 
 ### Phase 4: Computed Attributes
-- [ ] ComputedAttribute.cs - 计算属性支持
+- [ ] ComputedAttribute.cs - computed attribute support
 
 ### Phase 5: Event System
-- [ ] AttributeEvents.cs - 属性变更事件
+- [ ] AttributeEvents.cs - attribute change events
 
 ### Phase 6: Extensions and Utilities
-- [ ] AttributeExtensions.cs - 扩展方法
+- [ ] AttributeExtensions.cs - extension methods

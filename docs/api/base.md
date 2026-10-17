@@ -1,7 +1,7 @@
 ---
 title: Base API
 icon: cube
-prev: /api/README.md
+prev: /api/index.md
 ---
 
 # Base API

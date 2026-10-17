@@ -9,7 +9,7 @@ Apollo 面向轻量副本制多人游戏。目标运行链路是 `Client → Gat
 
 Gateway 可配合多实例和滚动部署提升服务可用性，但自身不提供连接迁移。World 允许通过停止分配新副本、等待现有副本结束后退出，进行滚动更新；这不等于活动对局跨版本无损迁移，也不保证现存 TCP 连接不断开。
 
-以上是目标模型。仓库中 `base-app`、`world-app`、`baseappmgr` 等程序是当前原型实现名称，详见[服务器应用现状](../apps/index.md)；不得将这些遗留名称解释为目标拓扑。BigWorld/KBEngine 术语仅在引擎对照资料中用于解释外部实现。
+业务程序为 `login-app`、`gateway-app`、`world-app`；World 托管玩家资料与持久化，Login 托管在线目录与落点控制。实际接线和待验收边界详见[服务器应用现状](../apps/index.md)。BigWorld/KBEngine 术语仅在引擎对照资料中用于解释外部实现。
 
 ## 临时副本生命周期
 

@@ -451,12 +451,12 @@ flowchart TD
 
 | Stage | Method |
 |------|------|
-| Discovery (发现) | Monitoring alerts, log analysis (监控告警、日志分析) |
-| Reproduction (复现) | Minimized scenarios, stress testing (最小化场景、压力测试) |
-| Localization (定位) | gdb/valgrind/pdb |
-| Solution (方案) | Comparing multiple solutions (多方案对比) |
-| Verification (验证) | Unit tests, regression tests (单元测试、回归测试) |
-| Summary (总结) | Documentation, sharing (文档、分享) |
+| Discovery | Monitoring alerts, log analysis |
+| Reproduction | Minimized scenarios, stress testing |
+| Localization | gdb/valgrind/pdb |
+| Solution | Comparing multiple solutions |
+| Verification | Unit tests, regression tests |
+| Summary | Documentation, sharing |
 
 ---
 

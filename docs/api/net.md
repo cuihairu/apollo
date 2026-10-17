@@ -1,7 +1,7 @@
 ---
 title: Network API
 icon: network
-prev: /api/README.md
+prev: /api/index.md
 ---
 
 # Network API

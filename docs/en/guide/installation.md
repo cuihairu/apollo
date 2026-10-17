@@ -2,8 +2,8 @@
 title: Installation
 icon: download
 order: 2
-prev: /guide/
-next: /guide/quick-start
+prev: /en/guide/
+next: /en/guide/quick-start
 ---
 
 # Install Apollo

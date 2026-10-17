@@ -324,11 +324,11 @@ private:
 
 | Practice | Description |
 |------|------|
-| **状态保持 (State preservation)** | 热更后保持状态 (preserve state after hot update) |
-| **版本兼容 (Version compatibility)** | 新版本兼容旧状态 (new versions compatible with old state) |
-| **灰度发布 (Canary release)** | 先部分服务器热更 (hot update some servers first) |
-| **回滚机制 (Rollback mechanism)** | 热更失败可回滚 (hot update can be rolled back on failure) |
-| **日志记录 (Logging)** | 记录热更操作 (record hot update operations) |
+| **State preservation** | preserve state after hot update |
+| **Version compatibility** | new versions compatible with old state |
+| **Canary release** | hot update some servers first |
+| **Rollback mechanism** | hot update can be rolled back on failure |
+| **Logging** | record hot update operations |
 
 ---
 

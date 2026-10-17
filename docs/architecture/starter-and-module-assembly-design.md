@@ -1,411 +1,49 @@
 ---
-title: Starter 与模块装配设计
-icon: plug
-order: 13
-category:
-  - 架构
-  - Apollo
-tag:
-  - Apollo
-  - Starter
-  - 装配
-  - MonoRepo
+title: 应用模块装配
 ---
 
-# Starter 与模块装配设计
+# 应用模块装配
 
-> **状态（2026-09-30，C-76 同型延伸）**：**参考件（装配思想历史源）**——starter/manifest 实现现状（双 INTERFACE 壳 + 幻影测试，C-68）与现行装配口径（显式注册装配单元、main 收口）以 `docs/analysis/architecture-review.md` §17/§21 为准；本文价值 = 「不做 Spring 克隆、显式 builder、轻注册」的正面表述源（§1/§4 引）。状态表 = `docs/architecture/README.md` A 档。**更新（2026-10-08）**：`modules/starter` 磁盘空壳已整目录删除（C-68 消账，拍板=删除——补实即重建 §17 已否决的运行期 Starter 对象图/条件求值器且与 runtime ApplicationHost 重叠），本文自此仅存思想表述、无实现对应物；§14 引用清单同步。
+应用入口显式选择模块、构造依赖并接入宿主。不为装配新增业务进程，也不引入未实现的运行期 Starter 容器。
 
-这篇文档解决的是 Apollo 整体框架继续往下走时，一个必须明确的问题：
+## 装配与部署
 
-`Apollo 应该如何做 C++ 风格的模块化装配，而不引入运行时反射模型。`
+CMake target 决定构建和链接依赖；应用配置决定本次启动启用什么；宿主负责已经注册的服务生命周期。三者不能互相代替。
 
-这里先把结论说清楚：
+| 业务程序 | 应用内服务 | 边界 |
+|---|---|---|
+| Login | 认证、OnlineDirectory、准入链路 | 不持有玩家游戏档案 |
+| Gateway | 客户端连接、准入客户端、目录查询、World 出口 | 不推进玩法模拟 |
+| World | WorldHost、World/Scene/Instance、PlayerStore、Lua | 持有当前模拟与玩家资料写权 |
 
-- Apollo 适合采用 starter 组合装配的思想
-- 但不做运行时自动扫描和隐式注入
+`apps/common` 提供 PlayerStore 和 OnlineDirectory 的共享实现，编译为 `apollo_app_services`，不生成额外业务程序。运维工具和 machined 按部署需要独立运行。
 
-更合理的路线是：
+## 模块依赖
 
-- `mono-repo + 多模块 + starter 装配 + profile 配置 + 显式注册`
+应用通过既有 CMake target 链接模块。组件依赖应在构建和启动期显式可见，不在消息处理时按字符串动态搜索实现，也不通过运行期扫描来决定进程拓扑。
 
-## 一、先说结论
+需要构造注入时使用 `ApplicationContextBuilder`；需要生命周期管理时使用 ApplicationHost / ServiceHost 或 WorldHost。是否使用依赖注入不改变服务的唯一所有者。当前应用仍有显式构造与停止逻辑，不能写成全部已迁入容器。
 
-Apollo 的装配层建议采用下面这套模型：
+## 启动与停止
 
-```text
-Module
-    -> Starter
-    -> Profile
-    -> App Bootstrap
-    -> Topology
-```
+1. 校验应用配置及契约产物。
+2. 初始化日志、崩溃采集和应用所需设施。
+3. 构造所属服务及其依赖，启动监听与执行线程。
+4. 按服务就绪状态开放准入。
+5. 停止时关闭新准入、排空工作并释放业务状态，再逆序关闭依赖。
 
-也就是说：
+以上是装配规则；各入口的就绪闸、排空期限和异常补偿必须分别实现和验证。CMake 链接成功不代表网络端点就绪，也不代表启动失败能完整恢复。
 
-- `Module` 负责提供能力
-- `Starter` 负责组合能力
-- `Profile` 负责选择默认装配方案
-- `App Bootstrap` 负责启动进程
-- `Topology` 负责决定最终部署形态
+## Lua 与热更新
 
-这比“每个 app 手写一堆初始化代码”更稳，也比“搞一套重反射自动装配”更适合 C++。
+当前脚本后端使用 Lua C API 和 ScriptRuntime。补丁只在所属逻辑边界提交，不运行期增删 C++ 服务。代码更新和协议更新分开验收。
 
-## 二、为什么 Apollo 适合这种思路
+## 跨服预留
 
-### 1. Apollo 本身就是渐进式框架
+普通与跨服场景复用同一 World 程序及 Scene/Instance 类型。以后可按部署配置选择承载跨服活动的 World 池，不能据此引入新的进程角色或同义对象。参见[跨服场景设计](../design/cross-server-scenes.md)。
 
-你现在已经明确 Apollo 不是一套固定形态的 MMO 框架，而是：
+## 关联文档
 
-- 轻在线项目可用
-- 普通 MMO 可用
-- BigWorld 模式可增量升级
-
-这种目标天然要求：
-
-- 能按项目类型装配
-
-### 2. Apollo 已经不再是单一 world server
-
-Apollo 后面会逐步包含：
-
-- runtime
-- ops
-- platform
-- script
-- world
-- session
-- battle
-- social
-- activity
-- distributed world
-
-如果没有统一装配模型，最终会变成：
-
-- 每个 app 都手写一份“我需要哪些模块”
-
-这会很快失控。
-
-### 3. C++ 更适合显式装配
-
-和 Java 不同，C++ 不擅长：
-
-- 大量运行时扫描
-- 大量反射注入
-- 大量隐式装配
-
-但它非常适合：
-
-- 显式依赖
-- 编译期注册
-- manifest
-- factory
-- starter 组合
-
-## 三、Apollo 不该照搬运行时容器的部分
-
-这点需要先说死。
-
-### 不建议照搬的
-
-- 包扫描
-- 反射式自动发现
-- 重度运行时注入
-- 每个组件都可独立动态热插拔
-
-### 建议吸收的
-
-- starter
-- profile
-- auto-config 思想
-- 约定优于配置
-- 默认装配 + 显式覆盖
-
-Apollo 应该做的是：
-
-- `C++ 风格的显式装配框架`
-
-而不是：
-
-- `重量级运行时容器克隆`
-
-## 四、核心概念
-
-## 五、`Module`
-
-`Module` 是最小能力单元。
-
-它表示：
-
-- 某个明确职责的代码模块
-
-例如：
-
-- `base`
-- `core`
-- `runtime`
-- `runtime.ops`
-- `platform.redis`
-- `platform.sql`
-- `game.session`
-- `game.world`
-- `game.battle`
-- `script.lua`
-- `script.python`
-
-### `Module` 应具备的元信息
-
-```text
-ModuleManifest
-    name
-    version
-    dependencies
-    optional_dependencies
-    capabilities
-    default_config
-```
-
-### `Module` 的职责边界
-
-- 提供能力
-- 不负责最终装配
-- 不直接决定部署拓扑
-
-## 六、`Starter`
-
-`Starter` 不是能力模块，而是装配模板。
-
-它负责：
-
-- 选择一组模块
-- 提供默认配置
-- 约定模块组合方式
-
-例如可以有：
-
-- `starter-core`
-- `starter-gateway`
-- `starter-login`
-- `starter-world`
-- `starter-mmo`
-- `starter-bigworld`
-
-### `Starter` 的价值
-
-它解决的是：
-
-- 使用者不需要每次从零拼装所有模块
-
-### 例子
-
-`starter-mmo` 可以默认装配：
-
-- `runtime`
-- `runtime.ops`
-- `platform.redis`
-- `platform.sql`
-- `game.session`
-- `game.world`
-- `game.battle`
-- `script.lua` 或 `script.python`
-
-### `Starter` 不该做什么
-
-- 不直接写业务逻辑
-- 不直接承载 app 状态
-
-## 七、`Profile`
-
-`Profile` 是运行配置维度的装配方案。
-
-它回答的不是“有哪些模块”，而是：
-
-- 这些模块在什么模式下启用
-
-例如：
-
-- `dev`
-- `test`
-- `prod`
-- `single-world`
-- `mmo`
-- `bigworld`
-
-### `Profile` 负责什么
-
-- 打开或关闭某些模块
-- 选择脚本后端
-- 选择存储后端
-- 选择运维开关
-- 选择分布式能力开关
-
-### 例子
-
-```yaml
-profile: mmo
-
-script:
-  backend: lua
-
-distributed_world:
-  enabled: false
-
-ops:
-  otel: true
-  console: true
-```
-
-## 八、`App Bootstrap`
-
-这是每个可执行程序真正的启动入口。
-
-它负责：
-
-- 读取 profile
-- 加载 starter
-- 解析 module manifest
-- 组装依赖图
-- 启动宿主
-
-### 推荐结构
-
-```text
-AppBootstrap
-    ├── ConfigLoader
-    ├── StarterResolver
-    ├── ModuleRegistry
-    ├── DependencyGraph
-    └── HostBuilder
-```
-
-### 关键点
-
-Apollo 最终 app 不应该再各自手写一堆初始化顺序，而应该收口到统一 bootstrap。
-
-## 部署拓扑
-
-目标进程职责为 Login、Gateway 和 World。`world-app` 承载现有 World/Scene/Instance 模块；Instance 按小队请求创建，完成玩法与结算后销毁。当前 base-app 与 baseappmgr 是待收敛原型，不能据此推导额外目标拓扑。模块装配方式不改变这些职责。
-
-## 十、推荐装配流程
-
-建议 Apollo 的标准装配流程是：
-
-1. 选择 `app`
-2. 加载 `profile`
-3. 解析 `starter`
-4. 展开 `module dependencies`
-5. 构建 `host builder`
-6. 初始化 `runtime host`
-7. 初始化 `ops host`
-8. 初始化 `platform foundation`
-9. 初始化 `game foundation`
-10. 初始化 `domain components`
-
-如果启用 BigWorld，再继续：
-
-11. 初始化 `distributed world extension`
-
-## 十一、推荐 manifest 结构
-
-建议后续模块至少拥有下面这类 manifest：
-
-```yaml
-name: game.world
-version: 0.1.0
-dependencies:
-  - runtime
-  - runtime.ops
-  - game.foundation
-optional_dependencies:
-  - script.lua
-  - script.python
-capabilities:
-  - world_host
-  - map_instance
-  - aoi
-```
-
-### 为什么 manifest 必须显式
-
-因为 Apollo 未来模块会越来越多。
-
-如果没有显式 manifest，starter 最终会退化成：
-
-- 一堆手工 if/else
-
-## 十二、推荐 starter 分类
-
-### 基础 starter
-
-- `starter-core`
-- `starter-runtime`
-- `starter-ops`
-- `starter-platform`
-
-### 游戏 starter
-
-- `starter-session`
-- `starter-world`
-- `starter-battle`
-- `starter-social`
-
-### 形态 starter
-
-- `starter-online`
-- `starter-mmo`
-- `starter-bigworld`
-
-### 后端 starter
-
-- `starter-script-lua`
-- `starter-script-python`
-- `starter-platform-redis`
-- `starter-platform-sql`
-
-## 十三、和脚本后端的关系
-
-这层也应该和统一脚本层设计对齐。
-
-### 原则
-
-- 一个项目通常只选择一种主业务脚本后端
-
-所以 starter 层应支持：
-
-- `starter-script-lua`
-- `starter-script-python`
-
-但不建议默认同时启用。
-
-## 十四、和当前 Apollo 仓库的关系
-
-Apollo 当前已经有：
-
-- `modules/starter`（**2026-10-08 已删除**——C-68 空壳消账；装配口径 = 显式注册装配单元 + main 收口，宿主 = `runtime` ApplicationHost）
-- 多个 `apps/*`
-
-但还没有形成真正统一的 starter + bootstrap 体系。
-
-当前更像：
-
-- 原型 app 自己装自己
-
-下一步更合理的是：
-
-- 把 app 退化成薄装配壳
-- 把 starter 和 bootstrap 升级成正式装配层
-
-## 十五、结论
-
-Apollo 如果继续往整体框架推进，最合理的装配路线就是：
-
-- 一个 mono-repo
-- 多个清晰模块
-- starter 负责组合模块
-- profile 负责选择模式
-- bootstrap 负责统一启动
-
-这就是最适合 C++ 的显式装配落地版。
-
-## 相关阅读
-
+- [宿主与依赖注入](./host-builder-and-di-design.md)
+- [服务器应用](../apps/index.md)
+- [当前架构决策](./adr.md)

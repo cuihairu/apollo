@@ -3,8 +3,6 @@
 
 # C++ 设计模式在 KBEngine 中的实践
 
-> **暂无英文译版 / No English translation yet.** 本文是 1300+ 行长文，整篇翻译只会产出劣质占位稿，故此处仅标注语言状态，正文仅中文。
-> **No English translation yet.** This is a 1300+ line document; a full English version now would be a low-quality placeholder, so only the language status is marked here. Chinese only.
 
 ## 问题分析
 

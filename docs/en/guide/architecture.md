@@ -2,7 +2,7 @@
 title: Architecture Overview
 icon: layers
 order: 7
-prev: /guide/configuration
+prev: /en/guide/configuration
 ---
 
 # Architecture Overview
@@ -39,7 +39,7 @@ Gateway provides connections and routing; it does not by itself provide zero-dow
 
 ## Repository status
 
-The diagram describes the target conceptual model, not the current deployment topology. The repository still contains prototype executables such as `login-app`, `gateway-app`, `base-app`, `world-app`, `baseappmgr`, and `machined`. `world-app` now uses the target responsibility name, though the prototype still lacks a complete multi-Instance lifecycle. See [Server Applications](../apps/index.md) for current implementation status. BigWorld/KBEngine terms are retained only as references in [compatibility and engine comparison documentation](/33-BigWorld_Compatibility).
+Business executables are `login-app`, `gateway-app`, and `world-app`, with optional `machined` supervision. World hosts PlayerStore for persistent profiles; Login hosts OnlineDirectory for routing and placement. Complete multi-Instance application orchestration remains pending. See [Server Applications](../apps/index.md) for implementation status.
 
 ## Temporary instance lifecycle
 

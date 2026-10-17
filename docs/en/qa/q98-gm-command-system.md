@@ -595,12 +595,12 @@ def onInit(isReload):
 
 | Practice | Description |
 |------|------|
-| **Tiered permissions** (权限分级) | At least 4 permission levels (至少 4 级权限) |
-| **Audit logging** (审计日志) | Record all GM operations (记录所有 GM 操作) |
-| **Secure authentication** (安全认证) | Password / two-factor authentication (密码/双因素认证) |
-| **Command restrictions** (命令限制) | Use cautiously in production (生产环境谨慎使用) |
-| **Sensitive commands** (敏感命令) | Secondary confirmation (二次确认) |
-| **Remote access** (远程访问) | Restrict to IP allowlists (限制 IP 白名单) |
+| **Tiered permissions** | At least 4 permission levels |
+| **Audit logging** | Record all GM operations |
+| **Secure authentication** | Password / two-factor authentication |
+| **Command restrictions** | Use cautiously in production |
+| **Sensitive commands** | Secondary confirmation |
+| **Remote access** | Restrict to IP allowlists |
 
 ---
 

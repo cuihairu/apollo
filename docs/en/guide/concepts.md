@@ -2,8 +2,8 @@
 title: Core Concepts
 icon: lightbulb
 order: 4
-prev: /guide/quick-start
-next: /guide/module-system
+prev: /en/guide/quick-start
+next: /en/guide/module-system
 ---
 
 # Core Concepts
@@ -58,7 +58,7 @@ if (!context.initialize()) {
 ## Config
 
 `apollo::core::config::ConfigRegistry` is a key-value registry (string/int64/bool);
-hot reload is planned as a tick-boundary ConfigSnapshot swap (architecture-review §17.6, not implemented).
+Configuration snapshot replacement at tick boundaries is not integrated; see [configuration](../guide/configuration.md).
 
 ```cpp
 #include <apollo/core/config/config_registry.hpp>

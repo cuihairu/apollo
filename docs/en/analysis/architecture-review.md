@@ -6,7 +6,7 @@ The target runtime path is `Client → Login / Gateway → World → Instance`. 
 
 ## Current implementation boundary
 
-The repository contains prototypes, not a complete production deployment: `login-app`, `gateway-app`, `world-app`, `base-app`, `baseappmgr`, and `machined`. `world-app` is named for its target role, but currently starts a default Scene/Instance and has an existing Instance state machine but has not integrated group-triggered creation, admission, settlement, and resource cleanup. See [Server Applications](../apps/index.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md) for verified status and remaining work.
+The repository contains prototypes, not a complete production deployment: `login-app`, `gateway-app`, `world-app`, and optional `machined` supervision. World hosts PlayerStore for data and persistence; Login hosts OnlineDirectory for routing and placement. `world-app` currently starts a default Scene/Instance and has an existing Instance state machine but has not integrated group-triggered creation, admission, settlement, and resource cleanup. See [Server Applications](../apps/index.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md) for verified status and remaining work.
 
 Gateway does not automatically provide no-downtime updates. Multiple Gateway instances can keep new connections available while an old instance drains existing sockets. Cross-process TCP handoff, session recovery without another login, and uninterrupted active Instances each require separate mechanisms and validation.
 

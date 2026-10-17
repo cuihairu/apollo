@@ -39,7 +39,7 @@ Gateway 负责连接和路由，不会自动提供不停机更新。World 滚动
 
 ## 代码现状
 
-上图是目标概念模型，不是当前部署拓扑。仓库仍有 `login-app`、`gateway-app`、`base-app`、`world-app`、`baseappmgr`、`machined` 等历史原型程序；`world-app` 是已迁移到目标职责名称的原型程序，目前仍未实现完整的多 Instance 生命周期。各程序的实际代码状态见[服务器应用](../apps/index.md)。BigWorld/KBEngine 术语只在[兼容层和引擎对照文档](../33-BigWorld_Compatibility.md)中作为参考。
+上图描述目标概念模型。当前业务程序为 `login-app`、`gateway-app`、`world-app`，`machined` 提供可选的进程监督；World 托管玩家资料与持久化，Login 托管在线目录与落点控制。完整的多 Instance 应用生命周期仍待接通。各程序的实际代码状态见[服务器应用](../apps/index.md)。BigWorld/KBEngine 术语只在[兼容层和引擎对照文档](../33-BigWorld_Compatibility.md)中作为参考。
 
 ## 临时副本生命周期
 

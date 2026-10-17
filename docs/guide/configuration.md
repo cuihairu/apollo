@@ -7,21 +7,11 @@ prev: /guide/module-system
 
 # 配置
 
-> 2026-10-04 对账：本页按 HEAD 实况重写。旧稿的 `load()`/`loadFromEnv()`/`get<T>()`/`onChange()`/`setOverrideStrategy()`/`parseArgs()`/`defineSchema()`/`validate()` 均不存在；
-> YAML/TOML 不支持。环境变量覆盖、命令行统一解析、schema 校验均未实现。
+Apollo 当前使用进程内 `ConfigRegistry` 和各应用自己的配置结构。没有统一的配置文件、环境变量覆盖优先级或命令行解析层。
 
-配置分三层，各有分工：
+## 进程内配置
 
-| 层 | 位置 | 能力 | 现状 |
-| --- | --- | --- | --- |
-| `ConfigRegistry` | `modules/core` | 进程内键值表（string/int64/bool） | 现役；无文件 I/O |
-| 应用自读 | `apps/*` | CLI 参数解析、策划表加载 | 各 app 自管，无统一入口 |
-
-## ConfigRegistry（进程内键值）
-
-`apollo::core::config::ConfigRegistry`（`modules/core`）是更薄的进程内注册表：
-`set` / `get_string` / `get_int64` / `get_bool` / `has`，不做文件 I/O、不发事件。
-适合代码内默认值集中登记。
+`apollo::core::config::ConfigRegistry` 提供 `set`、`get_string`、`get_int64`、`get_bool` 和 `has`。它是键值注册表，不负责文件读取、校验或变更通知。
 
 ```cpp
 #include <apollo/core/config/config_registry.hpp>
@@ -29,46 +19,34 @@ prev: /guide/module-system
 apollo::core::config::ConfigRegistry config;
 config.set("server.port", 8888);
 config.set("server.host", std::string("0.0.0.0"));
-
-int64_t port = config.get_int64("server.port");
-bool has = config.has("server.port");
+const auto port = config.get_int64("server.port");
 ```
 
-## 应用自读
+## 应用配置
 
-### CLI 参数
+| 应用 | 配置结构 | 职责 |
+|---|---|---|
+| Login | `login::LoginConfig` | 认证、Gateway 分配、World 玩家资料链路和在线目录 |
+| Gateway | `gateway::GatewayConfig` | 客户端监听、准入链路、在线目录查询和 World 消息链路 |
+| World | `world_app::WorldAppConfig` | 模拟、脚本、玩家档案与持久化 |
 
-没有统一的命令行解析层，各 app 自管。base-app 的做法是入口处解析进 `BaseConfig` 结构
-（`apps/base-app/src/main.cpp`）：
+每个入口自行解析 CLI；以对应程序的 `--help` 为准。配置结构中的测试默认值与程序入口启用的服务默认值可能不同，不能把库配置的端口 0 当成应用入口的部署端口。
 
-```cpp
-BaseConfig loadConfig(int argc, char* argv[]) {
-    BaseConfig config;
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg == "--port" && i + 1 < argc) {
-            config.port = static_cast<uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--db" && i + 1 < argc) {
-            config.dbName = argv[++i];
-        }
-    }
-    return config;
-}
+```bash
+world-app --world-id 1 --m1-port 9101 --player-store-m1-port 9104 \
+  --data-dir data/world-1/players --journal data/world-1/journal/persist.log
+login-app --m1-port 9103 --world-store-m1-port 9104 --directory-port 9105 \
+  --directory-epochs data/login/epochs.json --gateway tcp://127.0.0.1:9002
+gateway-app --port 9002 --world-m1-port 9101 \
+  --login-m1-port 9103 --directory-m1-port 9105
 ```
 
-P3-1 已收口（配置统一，legacy `ConfigManager` 删除，`d36529c5`）；现役配置面 = `ConfigRegistry` + 应用自读。
+World 默认按 `worldId` 分开档案和 journal 目录，避免不同 World 共写同一个本地存储。Login 仅保存目录权威代次水位，不承载玩家游戏档案。当前认证器仍是测试账号原型；成功登录还要求 World 中已有对应玩家档案，不能把这组命令当成生产建号和鉴权方案。
 
-### 策划表
+跨服场景的区服分组、准入和返回策略是[设计预留](../design/cross-server-scenes.md)，尚未提供可启用的部署配置。
 
-`include/apollo/config/table_loader.h`：`TableLoader` 基类加载 `*|*` 分隔的文本表格
-（第 1 行描述、第 2 行字段名、第 3 行起数据行），子类重写 `onRowRead()` 逐行消费。
+## 策划表与能力边界
 
-## 未实现清单
+`include/apollo/config/table_loader.h` 中的 `TableLoader` 加载 `*|*` 分隔的文本表格：第一行描述、第二行字段名、第三行起为数据。子类通过 `onRowRead()` 消费数据。
 
-以下能力在旧稿出现过、仓库中不存在，按需另行立项：
-
-- 环境变量覆盖与优先级策略（EnvFirst 之类）
-- 统一命令行解析（`--server.port=8888` 风格）
-- schema 定义与校验
-- YAML/TOML 格式（CMake 探测 yaml-cpp，但解析器未接线）
-- 游戏热路径的 `ConfigSnapshot` 热更（规划见 architecture-review §17.6）
+统一 CLI、配置 schema 校验、YAML/TOML 解析和游戏配置快照热替换尚未接通。配置结构里存在数据库字段，也不表示 MySQL 或 Redis 已进入业务保存路径。热更新能力及排空边界见[架构总览](./architecture.md)。

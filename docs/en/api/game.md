@@ -1,7 +1,7 @@
 ---
 title: Game API
 icon: game
-prev: /api/README.md
+prev: /en/api/index.md
 ---
 
 # Game API

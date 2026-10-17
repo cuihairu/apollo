@@ -14,4 +14,4 @@ Apollo's target terms are:
 | `World` | A process that hosts instances and runs authoritative match logic. |
 | `Instance` | One match and its temporary state. |
 
-`login-app`, `gateway-app`, `world-app`, `base-app`, and `baseappmgr` are current prototype executable names. See [server applications](../apps/index.md) for their mapping to target responsibilities.
+The business executables are `login-app`, `gateway-app`, and `world-app`. World hosts player data and persistence; Login hosts the directory and placement control. See [server applications](../apps/index.md) for implementation and acceptance boundaries.

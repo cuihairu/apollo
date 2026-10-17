@@ -2,8 +2,8 @@
 title: Tutorial
 icon: map
 order: 4
-prev: /guide/quick-start
-next: /guide/concepts
+prev: /en/guide/quick-start
+next: /en/guide/concepts
 ---
 
 # Tutorial

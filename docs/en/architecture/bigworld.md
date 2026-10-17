@@ -29,7 +29,7 @@ Apollo's BigWorld compatibility module provides a familiar C++ API facade; it do
 
 Apollo already has a BigWorld compatibility layer implementation, see:
 
-- [BigWorld Compatibility Layer](/33-BigWorld_Compatibility)
+- [BigWorld Compatibility Layer](/en/33-BigWorld_Compatibility)
 
 ## Recommended Reading
 
