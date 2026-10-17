@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
+#include <filesystem>
 
 namespace login {
 
@@ -320,20 +321,41 @@ LoginServer::~LoginServer() {
 void LoginServer::start() {
     if (running_) return;
 
+    if (config_.directoryEnabled) {
+        directory_ = std::make_unique<online_directory::OnlineDirectory>(0, config_.host);
+        if (!config_.directoryEpochPath.empty()) {
+            const auto parent = std::filesystem::path(config_.directoryEpochPath).parent_path();
+            if (!parent.empty()) std::filesystem::create_directories(parent);
+            directory_->attach_epoch_store(config_.directoryEpochPath);
+            if (!directory_->directory().epoch_store_ok()) {
+                directory_.reset();
+                throw std::runtime_error("Login directory epoch storage is unavailable");
+            }
+        }
+        directory_->set_m1_face(config_.directoryPort, config_.m1RouteJson);
+        directory_->start();
+        if (directory_->listenPort() == 0) {
+            directory_->stop();
+            directory_.reset();
+            throw std::runtime_error("Login online directory failed to listen");
+        }
+        config_.m1OnlineDirectoryPort = directory_->listenPort();
+        config_.m1OnlineDirectoryHost = config_.host == "0.0.0.0" ? "127.0.0.1" : config_.host;
+    }
     running_ = true;
 
     // M1 准入受理面（P4-4 批①）：m1Port = 0 = 不装配（非 M1 接线的本地
     // 构建面）；装配失败降级（警告 + 不拦启动）。nng 准入 REP 已随批⑤退役
     // （桩传输死面）——handleLoginRequest/handlePing 留作 P3-2 ingress
     // 主线接线面。
-    if (config_.m1Port != 0) {
+    if (config_.m1Enabled || config_.m1Port != 0) {
         M1AdmissionConfig m1Config;
         m1Config.host = config_.host;
         m1Config.port = config_.m1Port;
         m1Config.route_json = config_.m1RouteJson;
         m1Admission_ = makeM1AdmissionServer(
             std::move(m1Config), [this](const std::uint8_t* frame, std::size_t size) {
-                return handleGatewayAssignRequest(
+                return dispatchRequest(
                     std::vector<std::uint8_t>(frame, frame + size));
             });
         if (m1Admission_->start()) {
@@ -350,19 +372,19 @@ void LoginServer::start() {
         }
     }
 
-    // M1 base 客户端面（P4-4 批③）：m1BasePort = 0 = 不装配（RPC 面缺席
+    // M1 base 客户端面（P4-4 批③）：worldStoreM1Port = 0 = 不装配（RPC 面缺席
     // = 降级缝 throw）；装配失败降级（警告 + 不拦启动）。
-    if (config_.m1BasePort != 0) {
+    if (config_.worldStoreM1Port != 0) {
         M1BaseClientConfig baseConfig;
-        baseConfig.host = config_.m1BaseHost;
-        baseConfig.port = config_.m1BasePort;
+        baseConfig.host = config_.worldStoreM1Host;
+        baseConfig.port = config_.worldStoreM1Port;
         baseConfig.route_json = config_.m1RouteJson;
-        m1BaseClient_ = makeM1BaseClient(std::move(baseConfig));
-        if (m1BaseClient_) {
+        worldStoreClient_ = makeM1BaseClient(std::move(baseConfig));
+        if (worldStoreClient_) {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
-                ->info("M1 base client dialing " + config_.m1BaseHost + ":"
-                       + std::to_string(config_.m1BasePort));
+                ->info("M1 base client dialing " + config_.worldStoreM1Host + ":"
+                       + std::to_string(config_.worldStoreM1Port));
         } else {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
@@ -373,18 +395,18 @@ void LoginServer::start() {
 
     // M1 manager 客户端面（P4-4 批④）：AssignWorld 落点裁决链路；装配
     // 失败降级（警告 + 不拦启动），AssignWorld 缺席 = 降级缝 throw。
-    if (config_.m1BaseAppMgrPort != 0) {
+    if (!directory_ && config_.m1OnlineDirectoryPort != 0) {
         M1BaseClientConfig mgrConfig;
-        mgrConfig.host = config_.m1BaseAppMgrHost;
-        mgrConfig.port = config_.m1BaseAppMgrPort;
+        mgrConfig.host = config_.m1OnlineDirectoryHost;
+        mgrConfig.port = config_.m1OnlineDirectoryPort;
         mgrConfig.route_json = config_.m1RouteJson;
-        mgrConfig.peer_name = "baseappmgr";
-        m1BaseAppMgrClient_ = makeM1BaseClient(std::move(mgrConfig));
-        if (m1BaseAppMgrClient_) {
+        mgrConfig.peer_name = "login";
+        m1OnlineDirectoryClient_ = makeM1BaseClient(std::move(mgrConfig));
+        if (m1OnlineDirectoryClient_) {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
-                ->info("M1 BaseAppMgr client dialing " + config_.m1BaseAppMgrHost + ":"
-                       + std::to_string(config_.m1BaseAppMgrPort));
+                ->info("M1 OnlineDirectory client dialing " + config_.m1OnlineDirectoryHost + ":"
+                       + std::to_string(config_.m1OnlineDirectoryPort));
         } else {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")
@@ -395,9 +417,11 @@ void LoginServer::start() {
 
     // 启动会话清理线程
     cleanupThread_ = std::thread([this]() {
-        while (running_) {
-            std::this_thread::sleep_for(std::chrono::seconds(60));
+        std::unique_lock<std::mutex> lock(cleanupMutex_);
+        while (!cleanupWake_.wait_for(lock, std::chrono::seconds(60), [this] { return !running_.load(); })) {
+            lock.unlock();
             sessionManager_->cleanupExpiredSessions();
+            lock.lock();
         }
     });
 
@@ -409,6 +433,7 @@ void LoginServer::start() {
 
 void LoginServer::stop() {
     running_ = false;
+    cleanupWake_.notify_all();
 
     // M1 准入面先收线（泵线程停驱 + 监听拆线）。
     if (m1Admission_) {
@@ -418,17 +443,42 @@ void LoginServer::stop() {
 
     // M1 base / manager 客户端面收线（in-flight call 由宿主泵线程先归还
     // ——本函数只在宿主停驱后执行）。
-    if (m1BaseClient_) {
-        m1BaseClient_->stop();
-        m1BaseClient_.reset();
+    if (worldStoreClient_) {
+        worldStoreClient_->stop();
+        worldStoreClient_.reset();
     }
-    if (m1BaseAppMgrClient_) {
-        m1BaseAppMgrClient_->stop();
-        m1BaseAppMgrClient_.reset();
+    if (m1OnlineDirectoryClient_) {
+        m1OnlineDirectoryClient_->stop();
+        m1OnlineDirectoryClient_.reset();
     }
 
     if (cleanupThread_.joinable()) {
         cleanupThread_.join();
+    }
+    if (directory_) {
+        directory_->stop();
+        directory_.reset();
+    }
+}
+
+std::vector<std::uint8_t> LoginServer::dispatchRequest(const std::vector<std::uint8_t>& request) {
+    if (request.size() < sizeof(protocol::MessageHeader)) return {};
+    try {
+    const auto header = protocol::MessageCodec::parseHeader(request);
+    switch (static_cast<protocol::MessageType>(header.type)) {
+    case protocol::MessageType::LOGIN_REQUEST: return handleLoginRequest(request);
+    case protocol::MessageType::GATEWAY_ASSIGN_REQUEST: return handleGatewayAssignRequest(request);
+    case protocol::MessageType::PING: return handlePing(request);
+    default: {
+        protocol::ErrorMessage error;
+        error.message = "Unsupported Login request";
+        return protocol::MessageCodec::encode(error, header.sessionId);
+    }
+    }
+    } catch (const std::exception&) {
+        protocol::ErrorMessage error;
+        error.message = "Malformed Login request";
+        return protocol::MessageCodec::encode(error, 0);
     }
 }
 
@@ -573,7 +623,7 @@ bool LoginServer::preparePlayerOnline(
         activateReq.playerId = playerId;
         const auto activateResp =
             callBaseRpc<protocol::PlayerActivateRequest, protocol::PlayerActivateResponse>(
-                m1BaseClient_.get(), activateReq, sessionId,
+                worldStoreClient_.get(), activateReq, sessionId,
                 protocol::MessageType::PLAYER_ACTIVATE_RESPONSE
             );
 
@@ -592,7 +642,7 @@ bool LoginServer::preparePlayerOnline(
 
         const auto bindResp =
             callBaseRpc<protocol::PlayerBindSessionRequest, protocol::PlayerBindSessionResponse>(
-                m1BaseClient_.get(), bindReq, sessionId,
+                worldStoreClient_.get(), bindReq, sessionId,
                 protocol::MessageType::PLAYER_BIND_SESSION_RESPONSE
             );
 
@@ -601,6 +651,24 @@ bool LoginServer::preparePlayerOnline(
                 ? "BaseApp rejected session binding"
                 : bindResp.errorMessage;
             return false;
+        }
+
+        if (directory_) {
+            apollo::game::session::SessionBinding binding;
+            binding.session_id = sessionId;
+            binding.gateway_id = bindReq.gatewayId;
+            binding.gateway_addr = gatewayUrl;
+            apollo::game::session::WorldAssignment assignment;
+            assignment.world_id = config_.initialWorldId;
+            assignment.map_id = config_.initialMapId;
+            assignment.instance_id = config_.initialInstanceId;
+            assignment.space_id = config_.initialSpaceId;
+            assignment.route_version = 1;
+            if (!directory_->bindSession(playerId, binding) || !directory_->assignWorld(playerId, assignment)) {
+                errorMessage = "Login directory rejected admission";
+                return false;
+            }
+            return true;
         }
 
         protocol::PlayerAssignWorldRequest assignReq;
@@ -613,7 +681,7 @@ bool LoginServer::preparePlayerOnline(
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(
-                m1BaseAppMgrClient_.get(), assignReq, sessionId,
+                m1OnlineDirectoryClient_.get(), assignReq, sessionId,
                 protocol::MessageType::PLAYER_ASSIGN_WORLD_RESPONSE
             );
 
@@ -626,13 +694,13 @@ bool LoginServer::preparePlayerOnline(
 
         return true;
     } catch (const std::exception& ex) {
-        // 传输缺席/信封残缺（M1 不可达、zone Unknown 错误包或桩时代）不放大
-        // 成拒绝——login 流程保持可用（降级缝与桩时代同位）。
+        // 未取得玩家数据和路由权威确认时，禁止签发可用的登录票据。
         apollo::core::log::global_log_manager()
             .createLogger("login_server")
-            ->warning("Prepare player online degraded for player "
+            ->warning("Player admission failed for player "
                       + std::to_string(playerId) + ": " + ex.what());
-        return true;
+        errorMessage = std::string("Player data or routing unavailable: ") + ex.what();
+        return false;
     }
 }
 

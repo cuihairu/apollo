@@ -90,8 +90,8 @@ bool wait_real_rpc(gateway::SessionAdmissionService& service) {
     // 拒绝 = 真 RPC round-trip 已通（降级容忍面对假票也收）——以首个
     // 「假票被拒」为链路就绪哨（拨号+握手+重拨退避的收敛预算）。
     for (int i = 0; i < 1000; ++i) {
-        const auto r = service.admit({7, 9, "t-probe"});
-        if (!r.accepted) {
+        const auto r = service.admit({7, 9, "t-ok"});
+        if (r.accepted) {
             return true;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -144,8 +144,8 @@ bool test_admission_unreachable() {
 
     // 对端缺席：call_async 非 kUp 即败 → 降级容忍（不在面内等 500ms）。
     const auto r = service->admit({7, 9, "t-any"});
-    TEST_ASSERT(r.accepted, "unreachable transport degrades to tolerate");
-    TEST_ASSERT(r.rejectReason.empty(), "no reject reason on degrade path");
+    TEST_ASSERT(!r.accepted, "unreachable transport rejects admission");
+    TEST_ASSERT(r.rejectReason == "login service unavailable", "unavailability reported");
 
     service->shutdown();
     return true;

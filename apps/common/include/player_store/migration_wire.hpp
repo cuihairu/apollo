@@ -4,7 +4,7 @@
 // 侧受理）：契约 933-938 六条的编解码。id 钉生成器 MsgId（offload_wire
 // 纪律——不手写第二份协议号）；全帧 = MessageCodec 头 + 小端 body（读端
 // 严格定长截取：越界即拒、尾部余字节即拒）。M1 base 受理 handler 按帧型
-// 分流（933/935/937 → BaseServer 迁移面；其余 dispatchRequest 直通）。
+// 分流（933/935/937 → PlayerStore 迁移面；其余 dispatchRequest 直通）。
 // header-only 直编习语（app 域件，不进 game_session 模块）。
 
 #include "apollo/protocol/codec.hpp"
@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace base {
+namespace player_store {
 
 namespace protocol = apollo::protocol;  // 自足：任何包含顺序可用（重复
                                         // 声明同名别名合法）
@@ -385,4 +385,4 @@ bool decodeFrame(const std::vector<std::uint8_t>& frame, T& out,
 }
 
 } // namespace migration
-} // namespace base
+} // namespace player_store

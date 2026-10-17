@@ -62,8 +62,7 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.maxConnections = std::atoi(argv[++i]);
         } else if (arg == "--login-app" && i + 1 < argc) {
             config.loginAppUrl = argv[++i];
-        } else if (arg == "--base-app" && i + 1 < argc) {
-            config.baseAppUrl = argv[++i];
+
         } else if (arg == "--world" && i + 1 < argc) {
             config.worldUrl = argv[++i];
         } else if (arg == "--world-m1-host" && i + 1 < argc) {
@@ -74,10 +73,10 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.loginM1Host = argv[++i];
         } else if (arg == "--login-m1-port" && i + 1 < argc) {
             config.loginM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--baseappmgr-m1-host" && i + 1 < argc) {
-            config.baseAppMgrM1Host = argv[++i];
-        } else if (arg == "--baseappmgr-m1-port" && i + 1 < argc) {
-            config.baseAppMgrM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--directory-m1-host" && i + 1 < argc) {
+            config.directoryM1Host = argv[++i];
+        } else if (arg == "--directory-m1-port" && i + 1 < argc) {
+            config.directoryM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -85,14 +84,13 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --host <host>              Listen address (default: 0.0.0.0)\n"
                       << "  --max-connections <num>     Max connections (default: 10000)\n"
                       << "  --login-app <url>          LoginApp URL\n"
-                      << "  --base-app <url>           BaseApp URL\n"
                       << "  --world <url>           WorldApp URL (route label)\n"
                       << "  --world-m1-host <host>      WorldApp M1 link host (default: 127.0.0.1)\n"
                       << "  --world-m1-port <port>      WorldApp M1 link port (default: 9101)\n"
                       << "  --login-m1-host <host>     Login M1 admission host (default: 127.0.0.1)\n"
                       << "  --login-m1-port <port>     Login M1 admission port (0 = stub transport, default: 0)\n"
-                      << "  --baseappmgr-m1-host <host>   BaseAppMgr M1 control host (default: 127.0.0.1)\n"
-                      << "  --baseappmgr-m1-port <port>   BaseAppMgr M1 control port (0 = stub transport, default: 0)\n"
+                      << "  --directory-m1-host <host>   OnlineDirectory M1 control host (default: 127.0.0.1)\n"
+                      << "  --directory-m1-port <port>   OnlineDirectory M1 control port (0 = stub transport, default: 0)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -146,7 +144,6 @@ int main(int argc, char* argv[]) {
     logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
     logger->info("  Max connections: " + std::to_string(config.maxConnections));
     logger->info("  LoginApp: " + config.loginAppUrl);
-    logger->info("  BaseApp: " + config.baseAppUrl);
     logger->info("  WorldApp: " + config.worldUrl);
 
     // 注册信号处理

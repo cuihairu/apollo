@@ -32,6 +32,7 @@ target_compile_definitions(world-app PRIVATE
 
 target_link_libraries(world-app
     PRIVATE
+        apollo_app_services
         apollo::base
         apollo::core
         apollo::game_core

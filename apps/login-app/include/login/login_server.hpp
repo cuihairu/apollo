@@ -4,6 +4,8 @@
 #include "login/config.hpp"
 #include "login/m1_admission_server.hpp"
 #include "login/m1_base_client.hpp"
+#include "online_directory/online_directory.hpp"
+#include <condition_variable>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -144,6 +146,9 @@ public:
 
     // 是否运行中
     bool isRunning() const { return running_; }
+    online_directory::OnlineDirectory* onlineDirectory() noexcept { return directory_.get(); }
+    std::uint16_t admissionPort() const { return m1Admission_ ? m1Admission_->listenPort() : 0; }
+    std::vector<std::uint8_t> dispatchRequest(const std::vector<std::uint8_t>& request);
 
     // 网关分配请求处理（M1 准入面 handler 直通——MessageCodec 全帧进出，
     // 会话校验逻辑与 M1 面直通零分叉）
@@ -162,6 +167,9 @@ private:
                                      std::string& outHost, uint16_t& outPort);
 
     LoginConfig config_;
+    std::unique_ptr<online_directory::OnlineDirectory> directory_;
+    std::mutex cleanupMutex_;
+    std::condition_variable cleanupWake_;
     std::unique_ptr<Authenticator> authenticator_;
     std::unique_ptr<GatewayAllocator> gatewayAllocator_;
     std::unique_ptr<SessionManager> sessionManager_;
@@ -172,12 +180,12 @@ private:
     // M1 准入受理面（P4-4 批①；m1Port = 0 = 不装配）
     std::unique_ptr<M1AdmissionServer> m1Admission_;
 
-    // M1 base 客户端面（P4-4 批③；m1BasePort = 0 = 不装配，RPC 面缺席
+    // M1 base 客户端面（P4-4 批③；worldStoreM1Port = 0 = 不装配，RPC 面缺席
     // = 降级缝 throw）
-    std::unique_ptr<M1BaseClient> m1BaseClient_;
+    std::unique_ptr<M1BaseClient> worldStoreClient_;
 
-    // M1 manager 客户端面（P4-4 批④；m1BaseAppMgrPort = 0 = 不装配，同上）
-    std::unique_ptr<M1BaseClient> m1BaseAppMgrClient_;
+    // M1 manager 客户端面（P4-4 批④；m1OnlineDirectoryPort = 0 = 不装配，同上）
+    std::unique_ptr<M1BaseClient> m1OnlineDirectoryClient_;
 };
 
 } // namespace login

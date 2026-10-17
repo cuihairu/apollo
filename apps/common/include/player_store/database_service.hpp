@@ -1,6 +1,6 @@
 #pragma once
 
-#include "base/config.hpp"
+#include "player_store/config.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace base {
+namespace player_store {
 
 using PlayerID = uint64_t;
 
@@ -41,7 +41,7 @@ struct PlayerData {
 // 数据库服务接口
 class DatabaseService {
 public:
-    explicit DatabaseService(const BaseConfig& config);
+    explicit DatabaseService(const PlayerStoreConfig& config);
     ~DatabaseService();
 
     // 初始化
@@ -73,7 +73,7 @@ public:
     void saveBatch(const std::vector<PlayerData>& players);
 
 private:
-    BaseConfig config_;
+    PlayerStoreConfig config_;
 
     // 连接池
     class ConnectionPool;
@@ -136,4 +136,4 @@ private:
     std::atomic<bool> running_{false};
 };
 
-} // namespace base
+} // namespace player_store

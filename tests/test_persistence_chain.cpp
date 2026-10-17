@@ -9,7 +9,7 @@
 //   5. worker 失败 → callback(false) 真结果上报。
 
 #include "apollo/game/session/player_anchor.hpp"
-#include "base/database_service.hpp"
+#include "player_store/database_service.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -41,15 +41,15 @@ std::string make_tmp_dir(const char* tag) {
     return dir.string();
 }
 
-base::BaseConfig make_config(const std::string& dir) {
-    base::BaseConfig config;
+player_store::PlayerStoreConfig make_config(const std::string& dir) {
+    player_store::PlayerStoreConfig config;
     config.dataDir = dir;
     return config;
 }
 
 bool test_write_reload_roundtrip() {
     const auto dir = make_tmp_dir("roundtrip");
-    base::PlayerData created;
+    player_store::PlayerData created;
     created.playerId = 1001;
     created.username = "alice";
     created.level = 42;
@@ -63,14 +63,14 @@ bool test_write_reload_roundtrip() {
     created.z = 40.125f;
 
     {
-        base::DatabaseService db(make_config(dir));
+        player_store::DatabaseService db(make_config(dir));
         TEST_ASSERT(db.initialize(), "initialize 建目录");
         TEST_ASSERT(db.createPlayer(created), "createPlayer 落盘");
     }  // 析构 = 「重启」
 
-    base::DatabaseService revived(make_config(dir));
+    player_store::DatabaseService revived(make_config(dir));
     TEST_ASSERT(revived.initialize(), "重启后 initialize");
-    base::PlayerData loaded;
+    player_store::PlayerData loaded;
     TEST_ASSERT(revived.loadPlayer(1001, loaded), "重启后读回");
     TEST_ASSERT(loaded.username == "alice" && loaded.level == 42, "字段一致");
     TEST_ASSERT(loaded.exp == 9876543210LL, "int64 exp 无截断");
@@ -84,10 +84,10 @@ bool test_write_reload_roundtrip() {
 
 bool test_load_miss_no_bootstrap() {
     const auto dir = make_tmp_dir("nobootstrap");
-    base::DatabaseService db(make_config(dir));
+    player_store::DatabaseService db(make_config(dir));
     TEST_ASSERT(db.initialize(), "initialize");
 
-    base::PlayerData out;
+    player_store::PlayerData out;
     TEST_ASSERT(!db.loadPlayer(424242, out), "未建号 load 失败");
     TEST_ASSERT(out.username != "player_424242", "不从空气长档案（bootstrap 恶龙已废）");
 
@@ -97,7 +97,7 @@ bool test_load_miss_no_bootstrap() {
 }
 
 bool test_json_symmetry() {
-    base::PlayerData in;
+    player_store::PlayerData in;
     in.playerId = 7;
     in.username = "bob";
     in.level = 9;
@@ -110,7 +110,7 @@ bool test_json_symmetry() {
     in.y = 100.0f;
     in.z = -7.75f;
 
-    const auto out = base::PlayerData::fromJson(in.toJson());
+    const auto out = player_store::PlayerData::fromJson(in.toJson());
     TEST_ASSERT(out.playerId == 7, "playerId 对称");
     TEST_ASSERT(out.username == "bob", "username 对称");
     TEST_ASSERT(out.level == 9 && out.hp == 1 && out.maxHp == 2 && out.mp == 3 &&
@@ -124,11 +124,11 @@ bool test_json_symmetry() {
 bool test_anchor_dirty_save_chain() {
     const auto dir = make_tmp_dir("chain");
     const std::string cfg_dir = dir;
-    base::DatabaseService db(make_config(dir));
+    player_store::DatabaseService db(make_config(dir));
     TEST_ASSERT(db.initialize(), "initialize");
 
     // 建号 + 现档
-    base::PlayerData profile;
+    player_store::PlayerData profile;
     profile.playerId = 55;
     profile.username = "carol";
     profile.level = 7;
@@ -139,10 +139,10 @@ bool test_anchor_dirty_save_chain() {
     anchor.mark_dirty("test_flush");
     TEST_ASSERT(anchor.needs_save(), "dirty 可观察");
 
-    base::SaveQueue queue(1);
+    player_store::SaveQueue queue(1);
     std::atomic<bool> called{false};
     std::atomic<bool> ok{false};
-    base::SaveTask task;
+    player_store::SaveTask task;
     task.playerId = 55;
     TEST_ASSERT(db.loadPlayer(55, task.data), "以现档为基线载荷");
     task.callback = [&](bool success) {
@@ -150,7 +150,7 @@ bool test_anchor_dirty_save_chain() {
         called = true;
         anchor.clear_dirty();
     };
-    queue.set_worker([&db](const base::PlayerData& data) { return db.savePlayer(data); });
+    queue.set_worker([&db](const player_store::PlayerData& data) { return db.savePlayer(data); });
     queue.start();
     queue.enqueue(task);
 
@@ -165,9 +165,9 @@ bool test_anchor_dirty_save_chain() {
     TEST_ASSERT(!anchor.needs_save(), "回调里 clear_dirty");
 
     // 重启读回验证链路末端
-    base::DatabaseService revived(make_config(cfg_dir));
+    player_store::DatabaseService revived(make_config(cfg_dir));
     revived.initialize();
-    base::PlayerData loaded;
+    player_store::PlayerData loaded;
     TEST_ASSERT(revived.loadPlayer(55, loaded) && loaded.level == 7, "链路末端读回");
 
     std::error_code ec;
@@ -177,15 +177,15 @@ bool test_anchor_dirty_save_chain() {
 
 bool test_worker_failure_reports_false() {
     const auto dir = make_tmp_dir("fail");
-    base::DatabaseService db(make_config(dir));
+    player_store::DatabaseService db(make_config(dir));
     db.initialize();
 
-    base::SaveQueue queue(1);
-    queue.set_worker([](const base::PlayerData&) { return false; });
+    player_store::SaveQueue queue(1);
+    queue.set_worker([](const player_store::PlayerData&) { return false; });
 
     std::atomic<bool> called{false};
     std::atomic<bool> ok{true};
-    base::SaveTask task;
+    player_store::SaveTask task;
     task.playerId = 1;
     task.callback = [&](bool success) {
         ok = success;

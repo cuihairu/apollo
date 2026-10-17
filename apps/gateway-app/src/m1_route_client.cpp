@@ -49,7 +49,7 @@ public:
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
-        ep.name = "baseappmgr";  // 对端 G-1 组件名（握手身份 = 其 Link self_name）
+        ep.name = "login";  // 对端 G-1 组件名（握手身份 = 其 Link self_name）
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kActive;
@@ -108,7 +108,7 @@ public:
 
 private:
     link::InterServerLink* manager_peer() {
-        return manager_ ? manager_->link("baseappmgr") : nullptr;
+        return manager_ ? manager_->link("login") : nullptr;
     }
 
     bool load_route_table(link::RouteTable& table) {

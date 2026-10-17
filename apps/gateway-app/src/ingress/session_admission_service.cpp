@@ -123,7 +123,7 @@ public:
             return {false, "login ticket is empty"};
         }
         if (client_ == nullptr) {
-            return {true, {}};  // 面未起（Windows/装配降级）= 桩时代容忍同缝
+            return {false, "login service unavailable"};
         }
 
         apollo::protocol::GatewayAssignRequest rpc_request;
@@ -137,14 +137,17 @@ public:
         const auto response =
             client_->call(frame, std::chrono::milliseconds(kTimeoutMs));
         if (!response) {
-            // 传输不可达/超时 = 准入面缺席，非会话事实——降级容忍。
-            return {true, {}};
+            // 无权威确认不准入。
+            return {false, "login service unavailable"};
         }
 
+        if (response->size() < sizeof(apollo::protocol::MessageHeader)) {
+            return {false, "invalid login response"};
+        }
         const auto header = apollo::protocol::MessageCodec::parseHeader(*response);
         if (static_cast<apollo::protocol::MessageType>(header.type) !=
             apollo::protocol::MessageType::GATEWAY_ASSIGN_RESPONSE) {
-            return {true, {}};  // 响应帧型错位 = 信封残缺，同缝降级
+            return {false, "invalid login response"};
         }
         try {
             apollo::protocol::GatewayAssignResponse parsed;
@@ -156,7 +159,7 @@ public:
             }
             return {true, {}};
         } catch (const std::exception&) {
-            return {true, {}};  // 响应体残缺 = 同缝降级（不放大成拒绝）
+            return {false, "invalid login response"};
         }
     }
 

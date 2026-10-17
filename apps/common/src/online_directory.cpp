@@ -1,6 +1,6 @@
-#include "baseappmgr/baseappmgr.hpp"
-#include "base/migration_wire.hpp"
-#include "base/zone_dial.hpp"
+#include "online_directory/online_directory.hpp"
+#include "player_store/migration_wire.hpp"
+#include "player_store/store_dial.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -8,11 +8,11 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace baseappmgr {
+namespace online_directory {
 
-namespace migration = base::migration;
+namespace migration = player_store::migration;
 
-BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
+OnlineDirectory::OnlineDirectory(uint16_t port, std::string host)
     : host_(std::move(host))
     , port_(port) {
     // 目录事件面（P1-2）：事件落日志（可观察）；P3-1 增量②起追加监听链
@@ -33,45 +33,45 @@ BaseAppMgr::BaseAppMgr(uint16_t port, std::string host)
     });
 }
 
-void BaseAppMgr::set_directory_event_listener(
+void OnlineDirectory::set_directory_event_listener(
     apollo::game::session::PlayerDirectory::EventSink listener) {
     directory_listener_ = std::move(listener);
 }
 
-void BaseAppMgr::set_admission_gate(std::function<bool()> gate) {
+void OnlineDirectory::set_admission_gate(std::function<bool()> gate) {
     admission_gate_ = std::move(gate);
 }
 
-void BaseAppMgr::set_drain(bool on) {
+void OnlineDirectory::set_drain(bool on) {
     drain_.store(on, std::memory_order_release);
 }
 
-std::size_t BaseAppMgr::intake_directory_full_report(
+std::size_t OnlineDirectory::intake_directory_full_report(
     const std::vector<apollo::game::session::MirrorEntry>& sessions) {
     return directory_.intake_full_report(sessions);
 }
 
-std::size_t BaseAppMgr::suspend_zone_sessions(std::uint32_t zone_id,
+std::size_t OnlineDirectory::suspend_zone_sessions(std::uint32_t zone_id,
                                               std::uint64_t now_tick,
                                               std::uint64_t window_ticks) {
     return directory_.mark_suspended_by_zone(zone_id, now_tick, window_ticks);
 }
 
-std::size_t BaseAppMgr::suspend_gateway_sessions(std::uint32_t gateway_id,
+std::size_t OnlineDirectory::suspend_gateway_sessions(std::uint32_t gateway_id,
                                                  std::uint64_t now_tick,
                                                  std::uint64_t window_ticks) {
     return directory_.mark_suspended_by_gateway(gateway_id, now_tick, window_ticks);
 }
 
-std::size_t BaseAppMgr::sweep_suspended(std::uint64_t now_tick) {
+std::size_t OnlineDirectory::sweep_suspended(std::uint64_t now_tick) {
     return directory_.sweep(now_tick);
 }
 
-BaseAppMgr::~BaseAppMgr() {
+OnlineDirectory::~OnlineDirectory() {
     stop();
 }
 
-bool BaseAppMgr::assignWorld(
+bool OnlineDirectory::assignWorld(
     PlayerID playerId,
     const apollo::game::session::WorldAssignment& assignment
 ) {
@@ -97,12 +97,12 @@ bool BaseAppMgr::assignWorld(
     return true;
 }
 
-bool BaseAppMgr::clearWorldAssignment(PlayerID playerId) {
+bool OnlineDirectory::clearWorldAssignment(PlayerID playerId) {
     std::lock_guard<std::mutex> lock(assignmentsMutex_);
     return assignments_.erase(playerId) > 0;
 }
 
-bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding) {
+bool OnlineDirectory::bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding) {
     if (playerId == 0 || binding.session_id == 0) {
         return false;
     }
@@ -129,7 +129,7 @@ bool BaseAppMgr::bindSession(PlayerID playerId, const apollo::game::session::Ses
     return true;
 }
 
-bool BaseAppMgr::unbindSession(protocol::SessionID sessionId) {
+bool OnlineDirectory::unbindSession(protocol::SessionID sessionId) {
     const auto playerId = sessionLocator_.find_player_by_session(sessionId);
     if (!playerId.has_value()) {
         return false;
@@ -140,15 +140,15 @@ bool BaseAppMgr::unbindSession(protocol::SessionID sessionId) {
     return true;
 }
 
-bool BaseAppMgr::reconcileDirectory(const std::vector<PlayerID>& reported_online) const {
+bool OnlineDirectory::reconcileDirectory(const std::vector<PlayerID>& reported_online) const {
     return directory_.reconcile(reported_online);
 }
 
-std::optional<PlayerID> BaseAppMgr::findPlayerBySession(protocol::SessionID sessionId) const {
+std::optional<PlayerID> OnlineDirectory::findPlayerBySession(protocol::SessionID sessionId) const {
     return sessionLocator_.find_player_by_session(sessionId);
 }
 
-std::optional<apollo::game::session::WorldAssignment> BaseAppMgr::resolveWorldAssignment(
+std::optional<apollo::game::session::WorldAssignment> OnlineDirectory::resolveWorldAssignment(
     PlayerID playerId,
     protocol::SessionID sessionId
 ) const {
@@ -168,7 +168,7 @@ std::optional<apollo::game::session::WorldAssignment> BaseAppMgr::resolveWorldAs
     return it->second;
 }
 
-std::optional<apollo::game::session::SessionBinding> BaseAppMgr::resolveSessionBinding(
+std::optional<apollo::game::session::SessionBinding> OnlineDirectory::resolveSessionBinding(
     PlayerID playerId,
     protocol::SessionID sessionId
 ) const {
@@ -189,7 +189,7 @@ std::optional<apollo::game::session::SessionBinding> BaseAppMgr::resolveSessionB
     return sessionLocator_.find_by_player(playerId);
 }
 
-void BaseAppMgr::start() {
+void OnlineDirectory::start() {
     if (running_) return;
 
     running_ = true;
@@ -197,7 +197,7 @@ void BaseAppMgr::start() {
     // M1 控制面（P4-4 批④）：m1_port_ 非零 = link M1 面（dispatchRequest
     // 直通——nng REP 已随批⑤退役[桩传输死面]）；装配失败降级（警告 + 不拦
     // 启动，控制面缺席）。
-    if (m1_port_ != 0) {
+    if (m1_enabled_) {
         M1ControlServerConfig m1Config;
         m1Config.host = host_;
         m1Config.port = m1_port_;
@@ -208,12 +208,12 @@ void BaseAppMgr::start() {
             });
         if (m1Server_->start()) {
             apollo::core::log::global_log_manager()
-                .createLogger("baseappmgr")
+                .createLogger("login")
                 ->info("M1 control face listening on " + host_ + ":"
                        + std::to_string(m1Server_->listenPort()));
         } else {
             apollo::core::log::global_log_manager()
-                .createLogger("baseappmgr")
+                .createLogger("login")
                 ->warning("M1 control face degraded: route table unavailable ("
                           + m1_route_json_ + "), nng transport stays");
             m1Server_.reset();
@@ -221,11 +221,11 @@ void BaseAppMgr::start() {
     }
 
     apollo::core::log::global_log_manager()
-        .createLogger("baseappmgr")
-        ->info("BaseAppMgr listening on " + host_ + ":" + std::to_string(port_));
+        .createLogger("login")
+        ->info("OnlineDirectory listening on " + host_ + ":" + std::to_string(port_));
 }
 
-void BaseAppMgr::stop() {
+void OnlineDirectory::stop() {
     running_ = false;
 
     // M1 面先收线（泵线程停驱 + 监听拆线）。
@@ -235,7 +235,7 @@ void BaseAppMgr::stop() {
     }
 }
 
-std::vector<uint8_t> BaseAppMgr::dispatchRequest(const std::vector<uint8_t>& data) {
+std::vector<uint8_t> OnlineDirectory::dispatchRequest(const std::vector<uint8_t>& data) {
     auto header = protocol::MessageCodec::parseHeader(data);
     auto msgType = static_cast<protocol::MessageType>(header.type);
 
@@ -262,7 +262,7 @@ std::vector<uint8_t> BaseAppMgr::dispatchRequest(const std::vector<uint8_t>& dat
     }
 }
 
-std::vector<uint8_t> BaseAppMgr::handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> OnlineDirectory::handlePlayerAssignWorldRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -288,7 +288,7 @@ std::vector<uint8_t> BaseAppMgr::handlePlayerAssignWorldRequest(const std::vecto
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseAppMgr::handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> OnlineDirectory::handlePlayerResolveRouteRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -330,7 +330,7 @@ std::vector<uint8_t> BaseAppMgr::handlePlayerResolveRouteRequest(const std::vect
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseAppMgr::handlePing(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> OnlineDirectory::handlePing(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -345,7 +345,7 @@ std::vector<uint8_t> BaseAppMgr::handlePing(const std::vector<uint8_t>& request)
 // 编排命令入口（942→943；ops/fleetctl 同步等 943，耗时字段原样回带——
 // §9.8 单玩家切换耗时实测即此面出数）。解析失败回 ErrorMessage；migratePlayer
 // 的失败语义（含 ③ 后不可撤销）全在编排函数内，此层只转译。
-std::vector<uint8_t> BaseAppMgr::handlePlayerMigrateRequest(
+std::vector<uint8_t> OnlineDirectory::handlePlayerMigrateRequest(
     const std::vector<uint8_t>& request) {
     protocol::SessionID session = 0;
     migration::MigrateRequest req;
@@ -372,7 +372,7 @@ std::vector<uint8_t> BaseAppMgr::handlePlayerMigrateRequest(
     reply.freeze_ms = res.freeze_ms;
     reply.handoff_ms = res.handoff_ms;
     reply.total_ms = res.total_ms;
-    apollo::core::log::global_log_manager().createLogger("baseappmgr")
+    apollo::core::log::global_log_manager().createLogger("login")
         ->info("migrate player " + std::to_string(req.player_id)
                + " -> zone " + std::to_string(req.target_zone_id)
                + (res.ok ? std::string(" ok total_ms=") : std::string(" failed (")
@@ -381,7 +381,7 @@ std::vector<uint8_t> BaseAppMgr::handlePlayerMigrateRequest(
     return migration::encodeFrame(reply, session);
 }
 
-int64_t BaseAppMgr::getCurrentTimeMs() const {
+int64_t OnlineDirectory::getCurrentTimeMs() const {
     auto now = std::chrono::steady_clock::now();
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
@@ -390,12 +390,12 @@ int64_t BaseAppMgr::getCurrentTimeMs() const {
 // ---- 玩家迁移编排（P0-2 路 2 五步，backup-revive §9.2；五步严格按序——
 // 前一步未确认完成，后一步不许开始）----
 
-void BaseAppMgr::set_snapshot_publisher(
+void OnlineDirectory::set_snapshot_publisher(
     std::shared_ptr<apollo::game::session::DirectoryPublisher> publisher) {
     snapshot_publisher_ = std::move(publisher);
 }
 
-std::vector<apollo::game::session::MirrorEntry> BaseAppMgr::collectMirrorEntries() const {
+std::vector<apollo::game::session::MirrorEntry> OnlineDirectory::collectMirrorEntries() const {
     std::vector<apollo::game::session::MirrorEntry> entries;
     entries.reserve(directory_.size());
     for (const auto player_id : directory_.online_ids()) {
@@ -416,7 +416,7 @@ std::vector<apollo::game::session::MirrorEntry> BaseAppMgr::collectMirrorEntries
     return entries;
 }
 
-BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
+OnlineDirectory::MigrationResult OnlineDirectory::migratePlayer(
     std::uint64_t player_id,
     const std::string& source_host, std::uint16_t source_port,
     const std::string& target_host, std::uint16_t target_port,
@@ -460,7 +460,7 @@ BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
         migration::FreezeRequest req;
         req.player_id = player_id;
         req.request_id = requestId;
-        base::ZoneDial dial(m1_route_json_, "baseappmgr", "base",
+        player_store::StoreDial dial(m1_route_json_, "login", "world",
                             source_host, source_port);
         auto reply = dial.ready() && dial.waitUp()
                          ? dial.call(migration::encodeFrame(req))
@@ -492,7 +492,7 @@ BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
         req.gateway_id = gatewayId;
         req.source_host = source_host;
         req.source_port = source_port;
-        base::ZoneDial dial(m1_route_json_, "baseappmgr", "base",
+        player_store::StoreDial dial(m1_route_json_, "login", "world",
                             target_host, target_port);
         auto reply = dial.ready() && dial.waitUp()
                          ? dial.call(migration::encodeFrame(req))
@@ -521,7 +521,7 @@ BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
     if (snapshot_publisher_) {
         pushed_parts = snapshot_publisher_->publish_snapshot(collectMirrorEntries());
     }
-    apollo::core::log::global_log_manager().createLogger("baseappmgr")
+    apollo::core::log::global_log_manager().createLogger("login")
         ->info("directory rehome: player " + std::to_string(player_id)
                + " -> zone " + std::to_string(target_zone_id)
                + " epoch=" + std::to_string(newEpoch)
@@ -535,4 +535,4 @@ BaseAppMgr::MigrationResult BaseAppMgr::migratePlayer(
 #endif
 }
 
-} // namespace baseappmgr
+} // namespace online_directory

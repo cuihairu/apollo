@@ -1,8 +1,8 @@
-#include "baseappmgr/baseappmgr.hpp"
+#include "online_directory/online_directory.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
-#include "base/base_server.hpp"
-#include "base/migration_wire.hpp"
+#include "player_store/player_store.hpp"
+#include "player_store/migration_wire.hpp"
 #include "apollo/net/link/tcp_transport.hpp"
 
 #include <filesystem>
@@ -23,7 +23,7 @@ namespace {
 bool test_baseappmgr_directory_and_route() {
     std::cout << "Running: test_baseappmgr_directory_and_route..." << std::endl;
 
-    baseappmgr::BaseAppMgr mgr(0); // 不 start()，只测目录方法
+    online_directory::OnlineDirectory mgr(0); // 不 start()，只测目录方法
 
     apollo::game::session::SessionBinding binding;
     binding.session_id = 9001;
@@ -79,7 +79,7 @@ bool test_baseappmgr_directory_and_route() {
 bool test_baseappmgr_admission_gate() {
     std::cout << "Running: test_baseappmgr_admission_gate..." << std::endl;
 
-    baseappmgr::BaseAppMgr mgr(0);
+    online_directory::OnlineDirectory mgr(0);
 
     apollo::game::session::SessionBinding binding;
     binding.session_id = 9101;
@@ -116,7 +116,7 @@ bool test_baseappmgr_admission_gate() {
 bool test_baseappmgr_update_drain() {
     std::cout << "Running: test_baseappmgr_update_drain..." << std::endl;
 
-    baseappmgr::BaseAppMgr mgr(0);
+    online_directory::OnlineDirectory mgr(0);
 
     apollo::game::session::SessionBinding binding;
     binding.session_id = 9201;
@@ -156,7 +156,7 @@ bool test_baseappmgr_window_disposition_passthrough() {
     std::cout << "Running: test_baseappmgr_window_disposition_passthrough..."
               << std::endl;
 
-    baseappmgr::BaseAppMgr mgr(0);
+    online_directory::OnlineDirectory mgr(0);
 
     namespace session = apollo::game::session;
     std::vector<session::MirrorEntry> report;
@@ -211,7 +211,7 @@ bool test_baseappmgr_window_disposition_passthrough() {
 #if !defined(_WIN32)
 bool test_baseappmgr_migrate_player() {
     std::cout << "Running: test_baseappmgr_migrate_player..." << std::endl;
-    namespace migration = base::migration;
+    namespace migration = player_store::migration;
     namespace protocol = apollo::protocol;
     namespace session = apollo::game::session;
 
@@ -240,7 +240,7 @@ bool test_baseappmgr_migrate_player() {
     }
 
     auto zoneCfg = [](const std::string& dir, std::uint16_t m1port) {
-        base::BaseConfig cfg;
+        player_store::PlayerStoreConfig cfg;
         cfg.workerThreads = 1;
         cfg.autoSaveIntervalMs = 10;
         cfg.host = "127.0.0.1";
@@ -255,16 +255,16 @@ bool test_baseappmgr_migrate_player() {
     };
 
     // 老 zone：播种 + 激活（脏锚——① freeze 排段后 ② 快照才 flush 到位）
-    base::BaseConfig oldCfg = zoneCfg(oldDir.path, srcM1);
+    player_store::PlayerStoreConfig oldCfg = zoneCfg(oldDir.path, srcM1);
     {
-        base::PlayerData seed;
+        player_store::PlayerData seed;
         seed.playerId = 42;
         seed.username = "orchestrated";
         seed.level = 6;
-        base::DatabaseService seeder(oldCfg);
+        player_store::DatabaseService seeder(oldCfg);
         TEST_ASSERT(seeder.savePlayer(seed), "old zone seed written");
     }
-    base::BaseServer oldZone(oldCfg);
+    player_store::PlayerStore oldZone(oldCfg);
     oldZone.start();
     TEST_ASSERT(oldZone.m1_listen_port() == srcM1, "old zone m1 face up");
     {
@@ -279,14 +279,14 @@ bool test_baseappmgr_migrate_player() {
     }
 
     // 新 zone：空载起（承接 937 + 现场拉 935/936）
-    base::BaseConfig newCfg = zoneCfg(newDir.path, dstM1);
-    base::BaseServer newZone(newCfg);
+    player_store::PlayerStoreConfig newCfg = zoneCfg(newDir.path, dstM1);
+    player_store::PlayerStore newZone(newCfg);
     newZone.start();
     TEST_ASSERT(newZone.m1_listen_port() == dstM1, "new zone m1 face up");
 
     // mgr：条目（epoch=1, zone=0）+ 快照发布捕获桩（拨出面用域内同一份
     // 契约路由表——set_m1_face 存的 route json）
-    baseappmgr::BaseAppMgr mgr(0);
+    online_directory::OnlineDirectory mgr(0);
     mgr.set_m1_face(0, APOLLO_BASEAPP_CONTRACT_ROUTE_JSON);
     std::atomic<int> snapshotCalls{0};
     auto publisher = std::make_shared<session::DirectoryPublisher>(
@@ -334,8 +334,8 @@ bool test_baseappmgr_migrate_player() {
         TEST_ASSERT(anchor->session_binding().session_id == 777
                         && anchor->home_zone_id() == 2,
                     "binding and home zone restored");
-        base::PlayerData migrated;
-        base::DatabaseService reader(newCfg);
+        player_store::PlayerData migrated;
+        player_store::DatabaseService reader(newCfg);
         TEST_ASSERT(reader.loadPlayer(42, migrated) && migrated.level == 6,
                     "flushed profile landed");
     }
@@ -390,7 +390,7 @@ bool test_baseappmgr_migrate_player() {
 } // namespace
 
 int main() {
-    std::cout << "=== Apollo BaseAppMgr Test Suite ===" << std::endl;
+    std::cout << "=== Apollo OnlineDirectory Test Suite ===" << std::endl;
 
     int total = 0;
     int passed = 0;

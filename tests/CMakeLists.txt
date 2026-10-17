@@ -168,12 +168,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
-	        ../apps/base-app/src/base_server.cpp
-	        ../apps/base-app/src/database_service.cpp
-	        ../apps/base-app/src/m1_base_server.cpp
+	        ../apps/common/src/player_store.cpp
+	        ../apps/common/src/database_service.cpp
+	        ../apps/common/src/player_store_m1.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
 	    target_compile_definitions(base_anchor_tests PRIVATE
@@ -196,15 +196,15 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
-	        ../apps/baseappmgr/src/baseappmgr.cpp
-	        ../apps/baseappmgr/src/m1_control_server.cpp
-	        ../apps/base-app/src/base_server.cpp
-	        ../apps/base-app/src/database_service.cpp
-	        ../apps/base-app/src/m1_base_server.cpp
+	        ../apps/common/src/online_directory.cpp
+	        ../apps/common/src/directory_m1.cpp
+	        ../apps/common/src/player_store.cpp
+	        ../apps/common/src/database_service.cpp
+	        ../apps/common/src/player_store_m1.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
-	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/common/include
+	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
 	    target_compile_definitions(baseappmgr_tests PRIVATE
@@ -222,7 +222,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(WIN32)
 	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
 	    endif()
-	    add_test(NAME BaseAppMgrTests COMMAND baseappmgr_tests)
+	    add_test(NAME OnlineDirectoryTests COMMAND baseappmgr_tests)
 	    endif()
 
 	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
@@ -443,12 +443,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_anchor_tests
 	        test_base_anchor.cpp
-	        ../apps/base-app/src/base_server.cpp
-	        ../apps/base-app/src/database_service.cpp
-	        ../apps/base-app/src/m1_base_server.cpp
+	        ../apps/common/src/player_store.cpp
+	        ../apps/common/src/database_service.cpp
+	        ../apps/common/src/player_store_m1.cpp
 	    )
 	    target_include_directories(base_anchor_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
 	    target_compile_definitions(base_anchor_tests PRIVATE
@@ -471,15 +471,15 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
 	        test_baseappmgr.cpp
-	        ../apps/baseappmgr/src/baseappmgr.cpp
-	        ../apps/baseappmgr/src/m1_control_server.cpp
-	        ../apps/base-app/src/base_server.cpp
-	        ../apps/base-app/src/database_service.cpp
-	        ../apps/base-app/src/m1_base_server.cpp
+	        ../apps/common/src/online_directory.cpp
+	        ../apps/common/src/directory_m1.cpp
+	        ../apps/common/src/player_store.cpp
+	        ../apps/common/src/database_service.cpp
+	        ../apps/common/src/player_store_m1.cpp
 	    )
 	    target_include_directories(baseappmgr_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
-	        ${CMAKE_SOURCE_DIR}/apps/base-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/common/include
+	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
 	    target_compile_definitions(baseappmgr_tests PRIVATE
@@ -497,7 +497,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(WIN32)
 	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
 	    endif()
-	    add_test(NAME BaseAppMgrTests COMMAND baseappmgr_tests)
+	    add_test(NAME OnlineDirectoryTests COMMAND baseappmgr_tests)
 	    endif()
 
 	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
@@ -768,11 +768,11 @@ add_test(NAME PersistJournalTests COMMAND persist_journal_tests)
 
 add_executable(persistence_chain_tests
     test_persistence_chain.cpp
-    ../apps/base-app/src/database_service.cpp
+    ../apps/common/src/database_service.cpp
     ../modules/game/session/src/player_anchor.cpp
 )
 target_include_directories(persistence_chain_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
 )
@@ -794,13 +794,13 @@ add_executable(recovery_tests
     ../modules/game/session/src/anchor_manager.cpp
     ../modules/game/session/src/player_anchor.cpp
     ../modules/data/orm/src/persist_journal.cpp
-    ../apps/base-app/src/database_service.cpp
+    ../apps/common/src/database_service.cpp
 )
 target_include_directories(recovery_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/data/orm/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
 )
 target_link_libraries(recovery_tests PRIVATE apollo::base apollo::core)
 if(WIN32)
@@ -1593,11 +1593,11 @@ add_test(NAME LoginM1AdmissionTests COMMAND login_m1_admission_tests)
 # 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
 add_executable(base_m1_tests
     test_base_m1.cpp
-    ../apps/base-app/src/m1_base_server.cpp
+    ../apps/common/src/player_store_m1.cpp
     ../apps/login-app/src/m1_base_client.cpp
 )
 target_include_directories(base_m1_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/apps/login-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
@@ -1827,21 +1827,21 @@ if(MSVC)
 endif()
 add_test(NAME ScriptStateTests COMMAND script_state_tests)
 
-# BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
-# fan-out + 真 BaseAppMgr 分派面（AssignWorld/ResolveRoute 全真目录裁决）
+# OnlineDirectory M1 控制面 × login/gateway 客户端面 e2e（P4-4 批④）：双拨入方
+# fan-out + 真 OnlineDirectory 分派面（AssignWorld/ResolveRoute 全真目录裁决）
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本
 # 批，用例本体空转。
 if(TARGET apollo::game_session AND TARGET apollo_protocol)
 add_executable(baseappmgr_m1_control_tests
     test_baseappmgr_m1_control.cpp
-    ../apps/baseappmgr/src/m1_control_server.cpp
-    ../apps/baseappmgr/src/baseappmgr.cpp
+    ../apps/common/src/directory_m1.cpp
+    ../apps/common/src/online_directory.cpp
     ../apps/login-app/src/m1_base_client.cpp
     ../apps/gateway-app/src/m1_route_client.cpp
 )
 target_include_directories(baseappmgr_m1_control_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/baseappmgr/include
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/apps/login-app/include
     ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
@@ -1861,7 +1861,7 @@ endif()
 if(MSVC)
     target_compile_options(baseappmgr_m1_control_tests PRIVATE /utf-8)
 endif()
-add_test(NAME BaseAppMgrM1ControlTests COMMAND baseappmgr_m1_control_tests)
+add_test(NAME OnlineDirectoryM1ControlTests COMMAND baseappmgr_m1_control_tests)
 
 # ========== Attribute Sync Delta Pipeline Tests ==========
 # ChangeHistory / ViewerAttrState / AttrDelta encoding / DeltaBuilder
@@ -1953,4 +1953,31 @@ if(MSVC)
     target_compile_options(world_app_script_host_tests PRIVATE /utf-8)
 endif()
 add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
+endif()
+
+# Runtime sources host shared services even when executable apps are disabled.
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
+    if(TARGET ${apollo_hosted_target})
+        target_link_libraries(${apollo_hosted_target} PRIVATE apollo_app_services)
+    endif()
+endforeach()
+
+if(TARGET apollo::game_world AND TARGET apollo_app_services)
+add_executable(hosted_services_tests
+    test_hosted_services.cpp
+    ../apps/world-app/src/world_app.cpp
+    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/login-app/src/login_server.cpp
+    ../apps/login-app/src/m1_admission_server.cpp
+    ../apps/login-app/src/m1_base_client.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp)
+target_include_directories(hosted_services_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include)
+target_compile_definitions(hosted_services_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+target_link_libraries(hosted_services_tests PRIVATE apollo_app_services
+    apollo::game_world apollo::script apollo::net_linktrace)
+add_test(NAME HostedServicesTests COMMAND hosted_services_tests)
 endif()

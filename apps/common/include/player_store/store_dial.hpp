@@ -3,11 +3,11 @@
 // Zone 间一次性拨号会话（P0-2 路 2：933 停写 / 935 快照 / 937 交权的拨出
 // 底座）。fleetctl ControlDial 同型：RouteTable + LinkManager active 端点
 // + RpcClient 自泵线程——call 同步等待在调用线程（禁泵线程纪律不变）。
-// 对端受理面 = M1BaseServer（passive self_name "base"，握手只验
+// 对端受理面 = PlayerStoreLinkServer（passive self_name "base"，握手只验
 // route_version——拨入者按自报名入对端 peer 表，RpcServer 随新链装配）。
 // header-only 直编习语（app 域件，不进 game_session 模块）。
 
-#include "base/migration_wire.hpp"
+#include "player_store/migration_wire.hpp"
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -25,16 +25,16 @@
 
 #if APOLLO_NET_LINK_HAS_JSON
 
-namespace base {
+namespace player_store {
 
 namespace link = apollo::net::link;
 
-class ZoneDial {
+class StoreDial {
 public:
     // route_json = 契约路由表路径（与受理面同一份——域内 route_version
     // 一致才握得上）。self_name = 拨入者自报（对端按它入 peer 表）。
     // peer_name = 对端 G-1 组件名（zone 受理面 = "base"）。
-    ZoneDial(const std::string& route_json, const std::string& self_name,
+    StoreDial(const std::string& route_json, const std::string& self_name,
              const std::string& peer_name, const std::string& host,
              std::uint16_t port)
         : peer_name_(peer_name) {
@@ -77,10 +77,10 @@ public:
         });
     }
 
-    ~ZoneDial() { shutdown(); }
+    ~StoreDial() { shutdown(); }
 
-    ZoneDial(const ZoneDial&) = delete;
-    ZoneDial& operator=(const ZoneDial&) = delete;
+    StoreDial(const StoreDial&) = delete;
+    StoreDial& operator=(const StoreDial&) = delete;
 
     bool ready() const { return manager_ != nullptr; }
 
@@ -136,6 +136,6 @@ private:
     std::atomic<bool> running_{false};
 };
 
-} // namespace base
+} // namespace player_store
 
 #endif // APOLLO_NET_LINK_HAS_JSON

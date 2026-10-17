@@ -51,7 +51,7 @@ enum class Op : std::uint8_t {
 // 保留组件号（machined 自身不入编队表）：1 = 目录（Advertise）、
 // 2 = baseappmgr（DeathSubscribe）
 inline constexpr std::uint64_t kDirectoryComponentId = 1;
-inline constexpr std::uint64_t kBaseAppMgrComponentId = 2;
+inline constexpr std::uint64_t kLoginDirectoryComponentId = 2;
 
 // 死亡类别（DeathNotify 的 reserved0 字节；seq 字节复用为 exit_code——
 // 监督面死亡带退出码，TTL 死亡无退出码恒 0）
@@ -81,7 +81,7 @@ struct MemberId {
 // 不 memcpy 结构体——防对齐/端序漂移。
 //
 // op 专属字段语义（G-1 收尾批：死亡事件跨进程上报）：
-//   - DeathSubscribe：component_id = 订阅者组件号（kBaseAppMgrComponentId），
+//   - DeathSubscribe：component_id = 订阅者组件号（kLoginDirectoryComponentId），
 //     service_port = 订阅者死亡监听 feed 端口（通知回投端点 = 发送方地址 +
 //     此端口）；周期重发 = 刷新（幂等），超 TTL 未刷新即过期停推。
 //   - DeathNotify：component 三元 = 死者身份（component_id 必非零）；

@@ -119,7 +119,7 @@ private:
     std::unique_ptr<SessionAdmissionService> admissionService_;
     std::unique_ptr<MessageRouter> messageRouter_;
 
-    // M1 路由解析客户端面（P4-4 批④；baseAppMgrM1Port = 0 = 不装配，路由
+    // M1 路由解析客户端面（P4-4 批④；directoryM1Port = 0 = 不装配，路由
     // 解析缺席 → buildDefaultRoute 兜底）
     std::unique_ptr<M1RouteClient> m1RouteClient_;
 

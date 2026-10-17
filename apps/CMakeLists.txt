@@ -32,8 +32,6 @@ endif()
 # base-app/baseappmgr additionally link apollo::game_session (game module).
 if(TARGET apollo_protocol AND TARGET apollo::game_session)
     add_subdirectory(login-app)
-    add_subdirectory(base-app)
-    add_subdirectory(baseappmgr)
     add_subdirectory(fleetctl)
     message(STATUS "Legacy protocol apps enabled (apollo_protocol + game_session found)")
 else()

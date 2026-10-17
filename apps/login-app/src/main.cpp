@@ -48,34 +48,48 @@ static apollo::core::log::LoggerPtr initLogging() {
 // 加载配置
 LoginConfig loadConfig(int argc, char* argv[]) {
     LoginConfig config;
+    config.directoryEnabled = true;
+    config.directoryPort = 9105;
+    config.directoryEpochPath = "data/login/epochs.json";
+    config.worldStoreM1Port = 9104;
+    config.m1Port = 9103;
+    bool gatewaysConfigured = false;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
-        if (arg == "--port" && i + 1 < argc) {
+        if (arg == "--directory-port" && i + 1 < argc) {
+            config.directoryPort = static_cast<std::uint16_t>(std::stoul(argv[++i]));
+        } else if (arg == "--directory-epochs" && i + 1 < argc) {
+            config.directoryEpochPath = argv[++i];
+        } else if (arg == "--port" && i + 1 < argc) {
             config.port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--host" && i + 1 < argc) {
             config.host = argv[++i];
-        } else if (arg == "--base-app" && i + 1 < argc) {
-            config.baseAppUrl = argv[++i];
+
         } else if (arg == "--gateway" && i + 1 < argc) {
+            if (!gatewaysConfigured) {
+                config.gatewayUrls.clear();
+                gatewaysConfigured = true;
+            }
             config.gatewayUrls.push_back(argv[++i]);
         } else if (arg == "--m1-port" && i + 1 < argc) {
             config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--base-m1-port" && i + 1 < argc) {
-            config.m1BasePort = static_cast<uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--baseappmgr-m1-port" && i + 1 < argc) {
-            config.m1BaseAppMgrPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--world-store-m1-port" && i + 1 < argc) {
+            config.worldStoreM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--directory-client-port" && i + 1 < argc) {
+            config.m1OnlineDirectoryPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
+                      << "  --directory-port <port>    Hosted directory port (default: 9105)\n"
+                      << "  --directory-epochs <path>  Directory epoch storage\n"
                       << "  --port <port>              Listen port (default: 9001)\n"
                       << "  --host <host>              Listen address (default: 0.0.0.0)\n"
-                      << "  --base-app <url>           BaseApp URL\n"
                       << "  --gateway <url>             Gateway URL (can be multiple)\n"
                       << "  --m1-port <port>           M1 admission listen port (0 = off, default: 0)\n"
-                      << "  --base-m1-port <port>      BaseApp M1 dial port (0 = off, default: 0)\n"
-                      << "  --baseappmgr-m1-port <port>   BaseAppMgr M1 control dial port (0 = off, default: 0)\n"
+                      << "  --world-store-m1-port <port>  World player data endpoint (default: 9104)\n"
+                      << "  --directory-client-port <port>   OnlineDirectory M1 control dial port (0 = off, default: 0)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -125,7 +139,6 @@ int main(int argc, char* argv[]) {
 
     logger->info("Configuration:");
     logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
-    logger->info("  BaseApp: " + config.baseAppUrl);
     logger->info("  Gateways: " + std::to_string(config.gatewayUrls.size()));
 
     // 注册信号处理

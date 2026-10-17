@@ -1,21 +1,21 @@
 #pragma once
 
 // 迁移快照拉取客户端（P0-2 路 2 五步②：新 zone → 老 zone，契约 935/936）。
-// 拨号底座 = ZoneDial（同目录）——本件只承载 935/936 请求应答语义。
+// 拨号底座 = StoreDial（同目录）——本件只承载 935/936 请求应答语义。
 
-#include "base/migration_wire.hpp"
-#include "base/zone_dial.hpp"
+#include "player_store/migration_wire.hpp"
+#include "player_store/store_dial.hpp"
 
 #if APOLLO_NET_LINK_HAS_JSON
 
-namespace base {
+namespace player_store {
 namespace migration {
 
 class MigrationPuller {
 public:
     MigrationPuller(const std::string& route_json, const std::string& host,
                     std::uint16_t port)
-        : dial_(route_json, "base-migration", "base", host, port) {}
+        : dial_(route_json, "base-migration", "world", host, port) {}
 
     bool ready() const { return dial_.ready(); }
     bool waitUp() const { return dial_.waitUp(); }
@@ -52,10 +52,10 @@ public:
     }
 
 private:
-    ZoneDial dial_;
+    StoreDial dial_;
 };
 
 } // namespace migration
-} // namespace base
+} // namespace player_store
 
 #endif // APOLLO_NET_LINK_HAS_JSON

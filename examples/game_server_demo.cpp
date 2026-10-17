@@ -237,12 +237,12 @@ private:
 // 服务器基类
 //==============================================================================
 
-class BaseServer {
+class PlayerStore {
 public:
-    BaseServer(const std::string& name, uint16_t port)
+    PlayerStore(const std::string& name, uint16_t port)
         : name_(name), port_(port), running_(false) {}
 
-    virtual ~BaseServer() = default;
+    virtual ~PlayerStore() = default;
 
     bool start() {
         if (running_) return false;
@@ -250,7 +250,7 @@ public:
         std::cout << "[" << name_ << "] Starting on port " << port_ << "..." << std::endl;
 
         running_ = true;
-        thread_ = std::thread(&BaseServer::run, this);
+        thread_ = std::thread(&PlayerStore::run, this);
 
         onServerStart();
         return true;
@@ -285,7 +285,7 @@ protected:
 // 登录服务器
 //==============================================================================
 
-class LoginServer : public BaseServer {
+class LoginServer : public PlayerStore {
 public:
     struct LoginEvent {
         uint64_t sessionId;
@@ -293,7 +293,7 @@ public:
     };
 
     LoginServer(uint16_t port = 7001)
-        : BaseServer("LoginServer", port) {}
+        : PlayerStore("LoginServer", port) {}
 
     // 处理登录请求
     void handleLogin(uint64_t sessionId, const LoginRequest& req) {
@@ -342,7 +342,7 @@ protected:
 // 网关服务器
 //==============================================================================
 
-class GatewayServer : public BaseServer {
+class GatewayServer : public PlayerStore {
 public:
     struct ClientSession {
         uint64_t sessionId;
@@ -352,7 +352,7 @@ public:
     };
 
     GatewayServer(uint16_t port = 7002)
-        : BaseServer("GatewayServer", port), nextSessionId_(1) {}
+        : PlayerStore("GatewayServer", port), nextSessionId_(1) {}
 
     // 客户端连接
     uint64_t onClientConnect(const std::string& addr) {
@@ -449,7 +449,7 @@ private:
 // 游戏服务器
 //==============================================================================
 
-class GameServer : public BaseServer {
+class GameServer : public PlayerStore {
 public:
     struct OnlinePlayer {
         uint64_t playerId;
@@ -463,7 +463,7 @@ public:
     };
 
     GameServer(uint16_t port = 7003)
-        : BaseServer("GameServer", port) {}
+        : PlayerStore("GameServer", port) {}
 
     // 玩家进入游戏
     void onPlayerEnter(uint64_t playerId) {

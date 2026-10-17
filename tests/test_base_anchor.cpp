@@ -1,5 +1,5 @@
-#include "base/base_server.hpp"
-#include "base/migration_wire.hpp"
+#include "player_store/player_store.hpp"
+#include "player_store/migration_wire.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -25,22 +25,22 @@ namespace {
 bool test_base_server_anchor_lifecycle() {
     std::cout << "Running: test_base_server_anchor_lifecycle..." << std::endl;
 
-    base::BaseConfig config;
+    player_store::PlayerStoreConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
     config.dataDir = "base_anchor_test_data";  // 隔离落盘目录
     std::filesystem::create_directories(config.dataDir);
 
     // P1-4 口径：loadPlayer 只读已存在档案，不再凭空 bootstrap——先播种档案
-    base::PlayerData seed;
+    player_store::PlayerData seed;
     seed.playerId = 1001;
     seed.username = "anchor-test";
     {
-        base::DatabaseService seeder(config);
+        player_store::DatabaseService seeder(config);
         TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
     }
 
-    base::BaseServer server(config);
+    player_store::PlayerStore server(config);
 
     auto anchor = server.activatePlayer(1001);
     TEST_ASSERT(anchor != nullptr, "anchor activated");
@@ -76,7 +76,7 @@ bool test_base_server_anchor_lifecycle() {
 bool test_shutdown_maintenance_gate() {
     std::cout << "Running: test_shutdown_maintenance_gate..." << std::endl;
 
-    base::BaseConfig config;
+    player_store::PlayerStoreConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
     config.host = "127.0.0.1";
@@ -88,7 +88,7 @@ bool test_shutdown_maintenance_gate() {
     std::filesystem::create_directories(
         config.journalPath.substr(0, config.journalPath.find_last_of('/')));
 
-    base::BaseServer server(config);
+    player_store::PlayerStore server(config);
     server.start();
 
     apollo::protocol::Ping ping;
@@ -121,7 +121,7 @@ bool test_shutdown_maintenance_gate() {
 bool test_shutdown_flushes_journal_and_archive() {
     std::cout << "Running: test_shutdown_flushes_journal_and_archive..." << std::endl;
 
-    base::BaseConfig config;
+    player_store::PlayerStoreConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
     config.host = "127.0.0.1";
@@ -134,15 +134,15 @@ bool test_shutdown_flushes_journal_and_archive() {
         config.journalPath.substr(0, config.journalPath.find_last_of('/')));
 
     // P1-4 口径：先播种档案（load 不再凭空 bootstrap）
-    base::PlayerData seed;
+    player_store::PlayerData seed;
     seed.playerId = 1002;
     seed.username = "shutdown-test";
     {
-        base::DatabaseService seeder(config);
+        player_store::DatabaseService seeder(config);
         TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
     }
 
-    base::BaseServer server(config);
+    player_store::PlayerStore server(config);
     server.start();
 
     auto anchor = server.activatePlayer(1002);
@@ -158,8 +158,8 @@ bool test_shutdown_flushes_journal_and_archive() {
 
     // §10.2-②：脏锚点 flush 的载荷已落档（fresh 实例无缓存，读的是盘）
     {
-        base::DatabaseService reloader(config);
-        base::PlayerData loaded;
+        player_store::DatabaseService reloader(config);
+        player_store::PlayerData loaded;
         TEST_ASSERT(reloader.loadPlayer(1002, loaded), "archive readable after shutdown");
         TEST_ASSERT(loaded.playerId == 1002, "archive player id preserved");
         TEST_ASSERT(loaded.username == "shutdown-test", "archive content preserved");
@@ -190,20 +190,20 @@ struct MigrationDir {
 
 bool test_player_migration_faces() {
     std::cout << "Running: test_player_migration_faces..." << std::endl;
-    namespace migration = base::migration;
+    namespace migration = player_store::migration;
     namespace protocol = apollo::protocol;
 
     MigrationDir oldDir("base_migration_old_data");
     MigrationDir newDir("base_migration_new_data");
 
-    base::BaseConfig oldCfg;
+    player_store::PlayerStoreConfig oldCfg;
     oldCfg.workerThreads = 1;
     oldCfg.dataDir = oldDir.path + "/players";
     oldCfg.journalPath = oldDir.path + "/journal/persist.log";
     std::filesystem::create_directories(oldCfg.dataDir);
     std::filesystem::create_directories(oldDir.path + "/journal");
 
-    base::BaseConfig newCfg = oldCfg;
+    player_store::PlayerStoreConfig newCfg = oldCfg;
     newCfg.dataDir = newDir.path + "/players";
     newCfg.journalPath = newDir.path + "/journal/persist.log";
     std::filesystem::create_directories(newCfg.dataDir);
@@ -211,16 +211,16 @@ bool test_player_migration_faces() {
 
     // 老 zone：播种档案 + 激活锚点 + 会话（脏锚——freeze 要排其 journal 段）
     {
-        base::PlayerData seed;
+        player_store::PlayerData seed;
         seed.playerId = 42;
         seed.username = "migrate-me";
         seed.level = 5;
         seed.exp = 500;
         seed.hp = 88;
-        base::DatabaseService seeder(oldCfg);
+        player_store::DatabaseService seeder(oldCfg);
         TEST_ASSERT(seeder.savePlayer(seed), "old side seed archive written");
     }
-    base::BaseServer oldServer(oldCfg);
+    player_store::PlayerStore oldServer(oldCfg);
     {
         auto anchor = oldServer.activatePlayer(42);
         TEST_ASSERT(anchor != nullptr, "old side anchor activated");
@@ -284,7 +284,7 @@ bool test_player_migration_faces() {
     }
 
     // 新 zone：②' 快照落位 → ③ 接权（937 → 938 accepted）
-    base::BaseServer newServer(newCfg);
+    player_store::PlayerStore newServer(newCfg);
     {
         // 未落快照先要接权 = 拒（五步序 ②→③ 不可跳）
         auto early = migration::encodeFrame(
@@ -295,7 +295,7 @@ bool test_player_migration_faces() {
         TEST_ASSERT(migration::decodeFrame(reply, out, session) && !out.accepted,
                     "handoff without stored snapshot rejected");
 
-        base::BaseServer::PlayerSnapshotData snap;
+        player_store::PlayerStore::PlayerSnapshotData snap;
         snap.success = true;
         snap.profile_json = "{\"playerId\":42,\"username\":\"migrate-me\",\"level\":5,"
                             "\"exp\":500,\"hp\":88,\"maxHp\":100,\"mp\":50,\"maxMp\":50,"
@@ -321,8 +321,8 @@ bool test_player_migration_faces() {
         TEST_ASSERT(anchor->home_zone_id() == 2, "home zone from snapshot");
 
         // 档案真落新目录（loadPlayer 校验内容一致）
-        base::PlayerData migrated;
-        base::DatabaseService reader(newCfg);
+        player_store::PlayerData migrated;
+        player_store::DatabaseService reader(newCfg);
         TEST_ASSERT(reader.loadPlayer(42, migrated) && migrated.level == 5
                         && migrated.username == "migrate-me",
                     "profile landed on new side");
@@ -392,7 +392,7 @@ bool test_player_migration_faces() {
 #if !defined(_WIN32)
 bool test_player_migration_pull_on_handoff() {
     std::cout << "Running: test_player_migration_pull_on_handoff..." << std::endl;
-    namespace migration = base::migration;
+    namespace migration = player_store::migration;
     namespace protocol = apollo::protocol;
     namespace link = apollo::net::link;
 
@@ -407,7 +407,7 @@ bool test_player_migration_pull_on_handoff() {
     MigrationDir oldDir("base_pull_old_data");
     MigrationDir newDir("base_pull_new_data");
 
-    base::BaseConfig oldCfg;
+    player_store::PlayerStoreConfig oldCfg;
     oldCfg.workerThreads = 1;
     oldCfg.autoSaveIntervalMs = 10;
     oldCfg.host = "127.0.0.1";
@@ -421,14 +421,14 @@ bool test_player_migration_pull_on_handoff() {
 
     // 老 zone：播种 + 激活（脏锚——② 先 flush 再发的供数）+ 起 M1 面
     {
-        base::PlayerData seed;
+        player_store::PlayerData seed;
         seed.playerId = 42;
         seed.username = "pulled-me";
         seed.level = 7;
-        base::DatabaseService seeder(oldCfg);
+        player_store::DatabaseService seeder(oldCfg);
         TEST_ASSERT(seeder.savePlayer(seed), "old side seed archive written");
     }
-    base::BaseServer oldServer(oldCfg);
+    player_store::PlayerStore oldServer(oldCfg);
     oldServer.start();
     TEST_ASSERT(oldServer.m1_listen_port() == m1Port, "m1 face on probed port");
     {
@@ -453,13 +453,13 @@ bool test_player_migration_pull_on_handoff() {
     }
 
     // 新 zone：不装 M1 面——937 带源地址，handler 现场拨老 zone 拉 936
-    base::BaseConfig newCfg = oldCfg;
+    player_store::PlayerStoreConfig newCfg = oldCfg;
     newCfg.dataDir = newDir.path + "/players";
     newCfg.journalPath = newDir.path + "/journal/persist.log";
     newCfg.m1Port = 0;
     std::filesystem::create_directories(newCfg.dataDir);
     std::filesystem::create_directories(newDir.path + "/journal");
-    base::BaseServer newServer(newCfg);
+    player_store::PlayerStore newServer(newCfg);
     {
         migration::HandoffRequest req{42, 9, 8, 777, 3, "127.0.0.1", m1Port};
         auto reply = newServer.dispatchRequest(migration::encodeFrame(req));
@@ -477,8 +477,8 @@ bool test_player_migration_pull_on_handoff() {
                     "binding restored from pulled snapshot");
         TEST_ASSERT(anchor->home_zone_id() == 2, "home zone from pulled snapshot");
 
-        base::PlayerData migrated;
-        base::DatabaseService reader(newCfg);
+        player_store::PlayerData migrated;
+        player_store::DatabaseService reader(newCfg);
         TEST_ASSERT(reader.loadPlayer(42, migrated) && migrated.level == 7
                         && migrated.username == "pulled-me",
                     "flushed profile landed on new side");

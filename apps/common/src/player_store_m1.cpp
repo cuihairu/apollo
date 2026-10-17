@@ -1,4 +1,4 @@
-#include "base/m1_base_server.hpp"
+#include "player_store/m1_server.hpp"
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -12,26 +12,26 @@
 #include <thread>
 #include <utility>
 
-namespace base {
+namespace player_store {
 
 #if !defined(_WIN32)
 
 // base 受理面真实现（POSIX）：InterServerLink passive 端点 + linkrpc
 // RpcServer（批① login 准入面同型）。泵线程单写者——受理/应答全在泵拍
-// （handler 链内），宿主（BaseServer）只管 start/stop 生命周期。
+// （handler 链内），宿主（PlayerStore）只管 start/stop 生命周期。
 // 命名空间开在平台分支外——Windows 桩分支同属 base（m1_egress 同款）。
 
 namespace {
 
 namespace link = apollo::net::link;
 
-class M1BaseServerImpl final : public M1BaseServer {
+class PlayerStoreLinkServerImpl final : public PlayerStoreLinkServer {
 public:
-    M1BaseServerImpl(M1BaseServerConfig config, Handler handler)
+    PlayerStoreLinkServerImpl(PlayerStoreLinkServerConfig config, Handler handler)
         : config_(std::move(config))
         , handler_(std::move(handler)) {}
 
-    ~M1BaseServerImpl() override {
+    ~PlayerStoreLinkServerImpl() override {
         stop();
     }
 
@@ -46,7 +46,7 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "base";
+        mc.self_name = "world";
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         manager_ = std::make_unique<link::LinkManager>(mc);
 
@@ -102,7 +102,7 @@ public:
     }
 
     bool peerConnected() const override {
-        auto* peer = const_cast<M1BaseServerImpl*>(this)->login_peer();
+        auto* peer = const_cast<PlayerStoreLinkServerImpl*>(this)->login_peer();
         return peer != nullptr && peer->state() == link::LinkState::kUp;
     }
 
@@ -136,7 +136,7 @@ private:
                 .count());
     }
 
-    M1BaseServerConfig config_;
+    PlayerStoreLinkServerConfig config_;
     Handler handler_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
@@ -147,27 +147,27 @@ private:
 
 } // namespace
 
-std::unique_ptr<M1BaseServer> makeM1BaseServer(M1BaseServerConfig config,
-                                               M1BaseServer::Handler handler) {
-    return std::make_unique<M1BaseServerImpl>(std::move(config), std::move(handler));
+std::unique_ptr<PlayerStoreLinkServer> makePlayerStoreLinkServer(PlayerStoreLinkServerConfig config,
+                                               PlayerStoreLinkServer::Handler handler) {
+    return std::make_unique<PlayerStoreLinkServerImpl>(std::move(config), std::move(handler));
 }
 
 #else // _WIN32
 
-std::unique_ptr<M1BaseServer> makeM1BaseServer(M1BaseServerConfig /*config*/,
-                                               M1BaseServer::Handler /*handler*/) {
+std::unique_ptr<PlayerStoreLinkServer> makePlayerStoreLinkServer(PlayerStoreLinkServerConfig /*config*/,
+                                               PlayerStoreLinkServer::Handler /*handler*/) {
     // link TCP 底座不进本批（POSIX only）：Windows 退 null 桩（start false
-    // = 面关，BaseServer 装配面无 #if）。
-    class NullBaseServer final : public M1BaseServer {
+    // = 面关，PlayerStore 装配面无 #if）。
+    class NullPlayerStore final : public PlayerStoreLinkServer {
     public:
         bool start() override { return false; }
         void stop() override {}
         std::uint16_t listenPort() const override { return 0; }
         bool peerConnected() const override { return false; }
     };
-    return std::make_unique<NullBaseServer>();
+    return std::make_unique<NullPlayerStore>();
 }
 
 #endif // !_WIN32
 
-} // namespace base
+} // namespace player_store

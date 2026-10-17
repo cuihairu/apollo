@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "player_store/config.hpp"
 #include <cstdint>
 
 // 契约路由表 JSON 的构建期默认路径（CMake 注入生成物路径；裸编时为空 =
@@ -12,6 +13,9 @@
 namespace world_app {
 
 struct WorldAppConfig {
+    std::uint32_t worldId = 1;
+    bool playerStoreEnabled = false;
+    player_store::PlayerStoreConfig playerStore;
     // 监听配置
     std::string host = "0.0.0.0";
 

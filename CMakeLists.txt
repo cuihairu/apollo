@@ -427,6 +427,10 @@ if(APOLLO_ENABLE_MODULAR_LAYOUT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/
     add_subdirectory(modules)
 endif()
 
+if(TARGET apollo_protocol AND TARGET apollo::game_session)
+    add_subdirectory(apps/common)
+endif()
+
 if(APOLLO_BUILD_TESTS)
     enable_testing()
     # 次序修正（P1-1）：tests 必须在 modules/apps 之后处理——tests/CMakeLists

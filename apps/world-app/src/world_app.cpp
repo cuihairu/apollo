@@ -103,6 +103,7 @@ WorldApp::WorldApp(const WorldAppConfig& config)
     , worldSessionManager_(std::make_shared<apollo::game::world::WorldSessionManager>())
     , worldHost_(std::make_shared<apollo::runtime::WorldHost>(
           static_cast<std::uint32_t>(1000 / std::max(config.tickRateMs, 1)))) {
+    worldId_ = config.worldId;
     worldHost_->add_world_service(
         std::make_shared<WorldAppService>(*world_, config_));
 }
@@ -113,6 +114,16 @@ WorldApp::~WorldApp() {
 
 void WorldApp::start() {
     if (running_) return;
+
+    if (config_.playerStoreEnabled) {
+        auto storage_config = config_.playerStore;
+        storage_config.m1RouteJson = config_.m1RouteJson;
+        playerStore_ = std::make_unique<player_store::PlayerStore>(storage_config);
+        playerStore_->start();
+        if ((storage_config.m1Enabled || storage_config.m1Port != 0) && playerStore_->m1_listen_port() == 0) {
+            throw std::runtime_error("World player store failed to listen");
+        }
+    }
 
     // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket
     // 已退役）：InterServerLink passive 端点装配（监听在 start 内 bind/listen，
@@ -172,6 +183,10 @@ void WorldApp::stop() {
 
     if (worldHost_) {
         worldHost_->stop();
+    }
+    if (playerStore_) {
+        playerStore_->stop();
+        playerStore_.reset();
     }
 }
 

@@ -8,7 +8,7 @@
 //      （传输缺席 ≠ 会话事实，桩时代同缝）。
 // Windows 下 link TCP 底座不进本批，用例本体空转。
 
-#include "base/m1_base_server.hpp"
+#include "player_store/m1_server.hpp"
 #include "login/m1_base_client.hpp"
 #include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -107,11 +107,11 @@ std::optional<std::vector<std::uint8_t>> call_frame(
 
 bool test_base_e2e() {
 #if !defined(_WIN32)
-    base::M1BaseServerConfig config;
+    player_store::PlayerStoreLinkServerConfig config;
     config.host = "127.0.0.1";
     config.port = 0;  // 内核分配，listenPort() 读回
     config.route_json = APOLLO_BASEAPP_CONTRACT_ROUTE_JSON;
-    auto server = base::makeM1BaseServer(config, fake_base_handler);
+    auto server = player_store::makePlayerStoreLinkServer(config, fake_base_handler);
     TEST_ASSERT(server->start(), "base face starts");
     TEST_ASSERT(server->listenPort() != 0, "ephemeral port observed");
     TEST_ASSERT(!server->peerConnected(), "no peer before dial");

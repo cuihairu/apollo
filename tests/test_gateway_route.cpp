@@ -160,7 +160,6 @@ bool test_router_degrades_when_backends_unreachable() {
     // P3-4 处方①③回归：后端全缺位不 throw——gateway 起得来（exit=0），缺位面降级
     gateway::GatewayConfig config;
     config.loginAppUrl = "tcp://127.0.0.1:1";
-    config.baseAppUrl = "tcp://127.0.0.1:1";
     config.worldUrl = "tcp://127.0.0.1:1";
 
     gateway::MessageRouter router(config);

@@ -176,17 +176,17 @@ void GatewayServer::start() {
     // 与旧裸 socket 块同契约。
     ingressServer_->start();
 
-    // M1 路由解析客户端面（P4-4 批④）：baseAppMgrM1Port 非零 = 拨 manager
+    // M1 路由解析客户端面（P4-4 批④）：directoryM1Port 非零 = 拨 manager
     // 控制面；装配失败降级（警告 + 不拦启动），路由解析缺席 → 默认路由兜底。
-    if (config_.baseAppMgrM1Port != 0) {
+    if (config_.directoryM1Port != 0) {
         M1RouteClientConfig routeConfig;
-        routeConfig.host = config_.baseAppMgrM1Host;
-        routeConfig.port = config_.baseAppMgrM1Port;
+        routeConfig.host = config_.directoryM1Host;
+        routeConfig.port = config_.directoryM1Port;
         routeConfig.route_json = config_.worldM1RouteJson;
         m1RouteClient_ = makeM1RouteClient(std::move(routeConfig));
         if (m1RouteClient_) {
-            glog().info("Gateway M1 route client dialing " + config_.baseAppMgrM1Host
-                        + ":" + std::to_string(config_.baseAppMgrM1Port));
+            glog().info("Gateway M1 route client dialing " + config_.directoryM1Host
+                        + ":" + std::to_string(config_.directoryM1Port));
         } else {
             glog().warning("gateway M1 route client degraded: route table unavailable ("
                            + config_.worldM1RouteJson + "), default route stays");

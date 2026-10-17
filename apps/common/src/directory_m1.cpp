@@ -1,4 +1,4 @@
-#include "baseappmgr/m1_control_server.hpp"
+#include "online_directory/m1_server.hpp"
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -12,7 +12,7 @@
 #include <thread>
 #include <utility>
 
-namespace baseappmgr {
+namespace online_directory {
 
 #if !defined(_WIN32)
 
@@ -45,7 +45,7 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "baseappmgr";
+        mc.self_name = "login";
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         manager_ = std::make_unique<link::LinkManager>(mc);
 
@@ -162,4 +162,4 @@ std::unique_ptr<M1ControlServer> makeM1ControlServer(M1ControlServerConfig /*con
 
 #endif // !_WIN32
 
-} // namespace baseappmgr
+} // namespace online_directory

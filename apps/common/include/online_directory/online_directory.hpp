@@ -5,7 +5,7 @@
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/session/world_assignment.hpp"
 #include "apollo/protocol/messages.hpp"
-#include "baseappmgr/m1_control_server.hpp"
+#include "online_directory/m1_server.hpp"
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -16,12 +16,12 @@
 #include <unordered_map>
 #include <vector>
 
-namespace baseappmgr {
+namespace online_directory {
 
 namespace protocol = apollo::protocol;
 using PlayerID = protocol::PlayerID;
 
-// BaseAppMgr 服务器——目录 + 落点裁决（BigWorld BaseAppMgr 直系）。
+// OnlineDirectory 服务器——目录 + 落点裁决（BigWorld OnlineDirectory 直系）。
 //
 // 职责（调度面）：
 //   - Directory：player→SessionBinding / player→WorldAssignment 的全局目录
@@ -30,10 +30,10 @@ using PlayerID = protocol::PlayerID;
 //
 // 边界：不承载玩家数据（Avatar 常驻数据归 baseapp），不跨进程改任何进程内存——
 // 本进程只维护自己的目录表。
-class BaseAppMgr {
+class OnlineDirectory {
 public:
-    explicit BaseAppMgr(uint16_t port, std::string host = "0.0.0.0");
-    ~BaseAppMgr();
+    explicit OnlineDirectory(uint16_t port, std::string host = "0.0.0.0");
+    ~OnlineDirectory();
 
     void start();
     void stop();
@@ -110,9 +110,11 @@ public:
 
     // M1 控制面装配（P4-4 批④；start 前调用。port 0 = 面关默认）
     void set_m1_face(std::uint16_t port, std::string route_json) {
+        m1_enabled_ = true;
         m1_port_ = port;
         m1_route_json_ = std::move(route_json);
     }
+    std::uint16_t listenPort() const { return m1Server_ ? m1Server_->listenPort() : 0; }
 
     // ---- 玩家迁移编排（P0-2 路 2 五步，backup-revive §9.2）----
     struct MigrationResult {
@@ -167,6 +169,7 @@ private:
 
     // M1 控制面（P4-4 批④；m1_port_ = 0 = 不装配）
     std::uint16_t m1_port_ = 0;
+    bool m1_enabled_ = false;
     std::string m1_route_json_;
     std::unique_ptr<M1ControlServer> m1Server_;
 
@@ -187,4 +190,4 @@ private:
     std::atomic<std::uint64_t> migrateSeq_{1};
 };
 
-} // namespace baseappmgr
+} // namespace online_directory

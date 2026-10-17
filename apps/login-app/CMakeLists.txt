@@ -15,6 +15,7 @@ target_include_directories(login-app
 
 target_link_libraries(login-app
     PRIVATE
+        apollo_app_services
         apollo::base
         apollo::core
         apollo::runtime

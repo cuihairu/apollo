@@ -33,7 +33,7 @@ san 树（树 4）为独立 sanitizer 配置（`/tmp` 下 ASan+UBSan + `-fno-san
 | contract 契约生成（注册于 modules/contract、sdks/gen） | apollo_contract_tests / apollo_contract_gen_compile_test / apollo_gen_golden_check |
 | base 基础件 | MemoryTests / StringTests / TerminalTests / ThreadPoolTests / TimeTests / TimerWheelTests |
 | core 框架核 | CoreLifecycleTests / CoreLogTests / CoreConfigTests / LogStructuredTests / MetricsTests / LoggerRetrievalTests |
-| runtime 进程面 | RuntimeTests / BaseAnchorTests / BaseAppMgrTests |
+| runtime 进程面 | RuntimeTests / BaseAnchorTests / OnlineDirectoryTests |
 | net 网络件 | NetTests / NetWireTests / ReconnectTests / GatewayRouteTests / ProtocolBootstrapTests / LinkTests（net M1 内核：帧定界/分发/水位/InterServerLink/TCP 底座/管理器） |
 | game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SupervisorTests / SceneTests / InstanceTests / WorldAcceptanceTests / GameTests |
 | battle 玩法 | BattleRuntimeTests / RngSubstreamTests / BattleOffloadTests |

@@ -16,7 +16,6 @@ struct GatewayConfig {
 
     // 后端服务地址（ChatApp 项已摘除：fleet 无 chat 进程，P3-4 处方③）
     std::string loginAppUrl = "tcp://127.0.0.1:9001";
-    std::string baseAppUrl = "tcp://127.0.0.1:9002";
     std::string worldUrl = "tcp://127.0.0.1:9100";  // 可以是多个
 
     // WorldApp M1 出口（2b-iii）：InterServerLink active 端点直连 WorldApp M1 接收端
@@ -31,8 +30,8 @@ struct GatewayConfig {
 
     // Manager M1 控制面（P4-4 批④）：active 端点拨 manager 控制面
     // （ResolveRoute 路由解析）；0 = 面关（路由解析缺席 → 默认路由兜底）
-    std::string baseAppMgrM1Host = "127.0.0.1";
-    std::uint16_t baseAppMgrM1Port = 0;
+    std::string directoryM1Host = "127.0.0.1";
+    std::uint16_t directoryM1Port = 0;
 
     // 会话配置
     int sessionTimeoutMs = 30000;       // 30秒无心跳断开

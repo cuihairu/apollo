@@ -1,9 +1,9 @@
 #pragma once
 
-#include "base/config.hpp"
-#include "base/database_service.hpp"
-#include "base/m1_base_server.hpp"
-#include "base/migration_wire.hpp"
+#include "player_store/config.hpp"
+#include "player_store/database_service.hpp"
+#include "player_store/m1_server.hpp"
+#include "player_store/migration_wire.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/game/session/anchor_manager.hpp"
 #include "apollo/game/session/player_directory.hpp"
@@ -18,15 +18,15 @@
 #include <unordered_map>
 #include <atomic>
 
-namespace base {
+namespace player_store {
 
 namespace protocol = apollo::protocol;
 
 // BaseApp 服务器
-class BaseServer {
+class PlayerStore {
 public:
-    explicit BaseServer(const BaseConfig& config);
-    ~BaseServer();
+    explicit PlayerStore(const PlayerStoreConfig& config);
+    ~PlayerStore();
 
     // 启动服务器
     void start();
@@ -117,7 +117,7 @@ private:
     std::vector<uint8_t> handlePlayerHandoffRequest(const std::vector<uint8_t>& request);
 
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
-    // 归 apps/baseappmgr（目录 + 调度面，BW BaseAppMgr 直系）。
+    // 归 apps/baseappmgr（目录 + 调度面，BW OnlineDirectory 直系）。
 
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
@@ -137,7 +137,7 @@ private:
     std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayerAnchor(PlayerID playerId);
     void finalizeSave(PlayerID playerId, bool success);
 
-    BaseConfig config_;
+    PlayerStoreConfig config_;
     std::unique_ptr<DatabaseService> database_;
     std::unique_ptr<SaveQueue> saveQueue_;
     std::unique_ptr<apollo::data::journal::PersistJournal> journal_;
@@ -150,7 +150,7 @@ private:
     std::atomic<bool> shuttingDown_{false};  // 停机五阶段幂等闸 + 维护位（G-3）
 
     // M1 base 受理面（P4-4 批③；m1Port = 0 = 不装配）
-    std::unique_ptr<M1BaseServer> m1Server_;
+    std::unique_ptr<PlayerStoreLinkServer> m1Server_;
 
     // 迁移快照暂存（P0-2 路 2 ②'：收 936 落、③ handoff 受理取用取走）
     std::unordered_map<PlayerID, PlayerSnapshotData> migrationSnapshots_;
@@ -158,4 +158,4 @@ private:
     std::thread autoSaveThread_;
 };
 
-} // namespace base
+} // namespace player_store

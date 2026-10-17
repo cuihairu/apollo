@@ -1,4 +1,4 @@
-#include "base/database_service.hpp"
+#include "player_store/database_service.hpp"
 #include "apollo/core/log/log_manager.h"
 
 #include <chrono>
@@ -8,7 +8,7 @@
 #include <iostream>
 #include <sstream>
 
-namespace base {
+namespace player_store {
 
 namespace fs = std::filesystem;
 
@@ -103,15 +103,15 @@ PlayerData PlayerData::fromJson(const std::string& json) {
 
 class DatabaseService::ConnectionPool {
 public:
-    explicit ConnectionPool(const BaseConfig& config)
+    explicit ConnectionPool(const PlayerStoreConfig& config)
         : config_(config) {
     }
 
 private:
-    BaseConfig config_;
+    PlayerStoreConfig config_;
 };
 
-DatabaseService::DatabaseService(const BaseConfig& config)
+DatabaseService::DatabaseService(const PlayerStoreConfig& config)
     : config_(config)
     , pool_(std::make_unique<ConnectionPool>(config)) {
 }
@@ -341,4 +341,4 @@ void SaveQueue::workerLoop() {
     }
 }
 
-} // namespace base
+} // namespace player_store

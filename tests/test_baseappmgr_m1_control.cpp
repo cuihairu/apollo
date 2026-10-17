@@ -1,7 +1,7 @@
-// BaseAppMgr M1 控制面 × login/gateway 客户端面 e2e 测试（P4-4 批④：
-// BaseAppMgrM1ControlTests）。
+// OnlineDirectory M1 控制面 × login/gateway 客户端面 e2e 测试（P4-4 批④：
+// OnlineDirectoryM1ControlTests）。
 //
-// 缝工厂两侧真实现直编 + **真 BaseAppMgr 分派面**（比批③ 假 handler 更强：
+// 缝工厂两侧真实现直编 + **真 OnlineDirectory 分派面**（比批③ 假 handler 更强：
 // dispatchRequest 直通 = 会话语义零分叉，目录裁决/路由解析全真）：
 //   1. control_e2e：双拨入方 fan-out（login + gateway 同面各自握手入表）
 //      — AssignWorld 经 login 客户端落真目录、ResolveRoute 经 gateway
@@ -11,8 +11,8 @@
 
 #include "gateway/m1_route_client.hpp"
 #include "login/m1_base_client.hpp"
-#include "baseappmgr/m1_control_server.hpp"
-#include "baseappmgr/baseappmgr.hpp"
+#include "online_directory/m1_server.hpp"
+#include "online_directory/online_directory.hpp"
 #include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
@@ -79,15 +79,15 @@ bool wait_peer_up(gateway::M1RouteClient& client) {
 
 bool test_control_e2e() {
 #if !defined(_WIN32)
-    // 真 BaseAppMgr（不 start，纯内存目录面——baseappmgr_tests 同例）；
+    // 真 OnlineDirectory（不 start，纯内存目录面——baseappmgr_tests 同例）；
     // handler 直通 dispatchRequest，受理语义与 nng REP 路径零分叉。
-    baseappmgr::BaseAppMgr mgr(0);
+    online_directory::OnlineDirectory mgr(0);
 
-    baseappmgr::M1ControlServerConfig serverConfig;
+    online_directory::M1ControlServerConfig serverConfig;
     serverConfig.host = "127.0.0.1";
     serverConfig.port = 0;  // 内核分配，listenPort() 读回
     serverConfig.route_json = APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON;
-    auto server = baseappmgr::makeM1ControlServer(
+    auto server = online_directory::makeM1ControlServer(
         serverConfig, [&mgr](const std::uint8_t* frame, std::size_t size) {
             return mgr.dispatchRequest(std::vector<std::uint8_t>(frame, frame + size));
         });
@@ -95,12 +95,12 @@ bool test_control_e2e() {
     TEST_ASSERT(server->listenPort() != 0, "ephemeral port observed");
     TEST_ASSERT(server->peerCount() == 0, "no peers before dial");
 
-    // 拨入方一：login（AssignWorld 落点裁决链，批④ peer_name="baseappmgr"）。
+    // 拨入方一：login（AssignWorld 落点裁决链，批④ peer_name="login"）。
     login::M1BaseClientConfig loginConfig;
     loginConfig.host = "127.0.0.1";
     loginConfig.port = server->listenPort();
     loginConfig.route_json = APOLLO_LOGIN_CONTRACT_ROUTE_JSON;
-    loginConfig.peer_name = "baseappmgr";
+    loginConfig.peer_name = "login";
     auto loginClient = login::makeM1BaseClient(loginConfig);
     TEST_ASSERT(loginClient != nullptr, "login baseappmgr client starts");
     TEST_ASSERT(wait_peer_up(*loginClient), "login client dials control face");
@@ -119,7 +119,7 @@ bool test_control_e2e() {
     }
     TEST_ASSERT(server->peerCount() == 2, "face observes both dialed peers");
 
-    // AssignWorld 经 login 客户端 → 真 BaseAppMgr 落点裁决（真目录写入）。
+    // AssignWorld 经 login 客户端 → 真 OnlineDirectory 落点裁决（真目录写入）。
     protocol::PlayerAssignWorldRequest assign;
     assign.playerId = 42;
     assign.worldId = 7;
@@ -285,10 +285,10 @@ int main() {
         }
     }
     if (failed == 0) {
-        std::cout << "BaseAppMgrM1ControlTests: all "
+        std::cout << "OnlineDirectoryM1ControlTests: all "
                   << (sizeof(cases) / sizeof(cases[0])) << " cases passed" << std::endl;
         return 0;
     }
-    std::cout << "BaseAppMgrM1ControlTests: " << failed << " case(s) failed" << std::endl;
+    std::cout << "OnlineDirectoryM1ControlTests: " << failed << " case(s) failed" << std::endl;
     return 1;
 }

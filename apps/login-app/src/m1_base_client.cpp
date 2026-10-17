@@ -45,7 +45,7 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "login";
+        mc.self_name = config_.self_name;
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         manager_ = std::make_unique<link::LinkManager>(mc);
 

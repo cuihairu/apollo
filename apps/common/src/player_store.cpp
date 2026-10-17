@@ -1,6 +1,6 @@
-#include "base/base_server.hpp"
-#include "base/migration_puller.hpp"
-#include "base/migration_wire.hpp"
+#include "player_store/player_store.hpp"
+#include "player_store/migration_puller.hpp"
+#include "player_store/migration_wire.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -12,7 +12,7 @@
 #include <thread>
 #include <utility>
 
-namespace base {
+namespace player_store {
 
 namespace {
 
@@ -45,10 +45,10 @@ const char* toAnchorStateString(apollo::game::session::AnchorState state) {
 } // namespace
 
 //==============================================================================
-// BaseServer 实现
+// PlayerStore 实现
 //==============================================================================
 
-BaseServer::BaseServer(const BaseConfig& config)
+PlayerStore::PlayerStore(const PlayerStoreConfig& config)
     : config_(config)
     , database_(std::make_unique<DatabaseService>(config))
     , saveQueue_(std::make_unique<SaveQueue>(config_.workerThreads))
@@ -62,7 +62,7 @@ BaseServer::BaseServer(const BaseConfig& config)
     });
 }
 
-std::size_t BaseServer::appendJournal(const PlayerData& data) {
+std::size_t PlayerStore::appendJournal(const PlayerData& data) {
     // write-ahead：先落 journal（恢复位点），再经 SaveQueue 异步落档
     return journal_->append(std::to_string(data.playerId), data.toJson(),
                             getCurrentTimeMs())
@@ -70,7 +70,7 @@ std::size_t BaseServer::appendJournal(const PlayerData& data) {
                : 0u;
 }
 
-std::size_t BaseServer::drainJournal() {
+std::size_t PlayerStore::drainJournal() {
     // journal 消费侧（P1-5）：定额出队，把已落 journal 的载荷压到档案；
     // 载荷为全量快照，重放幂等
     return journal_->drain(
@@ -86,11 +86,11 @@ std::size_t BaseServer::drainJournal() {
         static_cast<std::size_t>(config_.journalDrainQuota));
 }
 
-BaseServer::~BaseServer() {
+PlayerStore::~PlayerStore() {
     stop();
 }
 
-std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::activatePlayer(PlayerID playerId) {
+std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayer(PlayerID playerId) {
     PlayerData data;
     if (!database_->loadPlayer(playerId, data)) {
         return nullptr;
@@ -105,12 +105,12 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::activatePlayer(
     return anchor;
 }
 
-void BaseServer::set_directory_event_sink(
+void PlayerStore::set_directory_event_sink(
     apollo::game::session::PlayerDirectory::EventSink sink) {
     directoryEventSink_ = std::move(sink);
 }
 
-bool BaseServer::bindSession(
+bool PlayerStore::bindSession(
     PlayerID playerId,
     const apollo::game::session::SessionBinding& binding
 ) {
@@ -142,7 +142,7 @@ bool BaseServer::bindSession(
     return true;
 }
 
-bool BaseServer::unbindSession(protocol::SessionID sessionId) {
+bool PlayerStore::unbindSession(protocol::SessionID sessionId) {
     const auto playerId = sessionLocator_->find_player_by_session(sessionId);
     if (!playerId.has_value()) {
         return false;
@@ -166,20 +166,20 @@ bool BaseServer::unbindSession(protocol::SessionID sessionId) {
     return true;
 }
 
-std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::findAnchor(PlayerID playerId) const {
+std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::findAnchor(PlayerID playerId) const {
     return anchorManager_->find(playerId);
 }
 
-std::optional<PlayerID> BaseServer::findPlayerBySession(protocol::SessionID sessionId) const {
+std::optional<PlayerID> PlayerStore::findPlayerBySession(protocol::SessionID sessionId) const {
     return sessionLocator_->find_player_by_session(sessionId);
 }
 
-void BaseServer::start() {
+void PlayerStore::start() {
     if (running_) return;
     // 停机位单向（G-3）：stop 后本实例不再服务——重启语义归进程重启，
     // 防止复位后静默落入维护中受理
     if (shuttingDown_) {
-        throw std::runtime_error("BaseServer cannot restart after stop (process restart instead)");
+        throw std::runtime_error("PlayerStore cannot restart after stop (process restart instead)");
     }
 
     // 初始化数据库
@@ -237,12 +237,12 @@ void BaseServer::start() {
     // M1 base 受理面（P4-4 批③）：m1Port 非零 = link M1 面（dispatchRequest
     // 直通——nng REP 已随批⑤退役[桩传输死面]）；装配失败降级（警告 + 不拦
     // 启动，RPC 面缺席）。
-    if (config_.m1Port != 0) {
-        M1BaseServerConfig m1Config;
+    if (config_.m1Enabled || config_.m1Port != 0) {
+        PlayerStoreLinkServerConfig m1Config;
         m1Config.host = config_.host;
         m1Config.port = config_.m1Port;
         m1Config.route_json = config_.m1RouteJson;
-        m1Server_ = makeM1BaseServer(
+        m1Server_ = makePlayerStoreLinkServer(
             std::move(m1Config), [this](const std::uint8_t* frame, std::size_t size) {
                 return dispatchRequest(std::vector<std::uint8_t>(frame, frame + size));
             });
@@ -257,13 +257,13 @@ void BaseServer::start() {
     }
 
     // 启动自动保存线程
-    autoSaveThread_ = std::thread(&BaseServer::autoSaveLoop, this);
+    autoSaveThread_ = std::thread(&PlayerStore::autoSaveLoop, this);
 
     blog().info("Base server listening on " + config_.host + ":"
                 + std::to_string(config_.port));
 }
 
-void BaseServer::stop() {
+void PlayerStore::stop() {
     // 幂等闸（G-3）：信号处理器与析构可能先后各调一次——CAS 保证五阶段
     // 只走一遍（此前二次调用会重复 flush 与 double database shutdown）
     bool expected = false;
@@ -315,7 +315,7 @@ void BaseServer::stop() {
                 + std::to_string(journal_->pending()) + ")");
 }
 
-std::vector<uint8_t> BaseServer::dispatchRequest(const std::vector<uint8_t>& data) {
+std::vector<uint8_t> PlayerStore::dispatchRequest(const std::vector<uint8_t>& data) {
     // 维护闸（G-3，§10.2-①）：停机中不再受理新请求——受理面统一回维护
     // 中应答（与 Unknown message type 同族错误回包；stub 传输树无 control
     // 通道面，维护中语义落在受理入口）
@@ -372,7 +372,7 @@ std::vector<uint8_t> BaseServer::dispatchRequest(const std::vector<uint8_t>& dat
     }
 }
 
-std::vector<uint8_t> BaseServer::handleDbLoadRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> PlayerStore::handleDbLoadRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -395,7 +395,7 @@ std::vector<uint8_t> BaseServer::handleDbLoadRequest(const std::vector<uint8_t>&
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseServer::handleDbSaveRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -431,7 +431,7 @@ std::vector<uint8_t> BaseServer::handleDbSaveRequest(const std::vector<uint8_t>&
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseServer::handleDbQueryRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> PlayerStore::handleDbQueryRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
 
     // 简化处理
@@ -442,7 +442,7 @@ std::vector<uint8_t> BaseServer::handleDbQueryRequest(const std::vector<uint8_t>
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseServer::handlePlayerActivateRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> PlayerStore::handlePlayerActivateRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -462,7 +462,7 @@ std::vector<uint8_t> BaseServer::handlePlayerActivateRequest(const std::vector<u
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseServer::handlePlayerBindSessionRequest(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> PlayerStore::handlePlayerBindSessionRequest(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -486,7 +486,7 @@ std::vector<uint8_t> BaseServer::handlePlayerBindSessionRequest(const std::vecto
     return protocol::MessageCodec::encode(response, header.sessionId);
 }
 
-std::vector<uint8_t> BaseServer::handlePing(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> PlayerStore::handlePing(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -498,7 +498,7 @@ std::vector<uint8_t> BaseServer::handlePing(const std::vector<uint8_t>& request)
     return protocol::MessageCodec::encode(pong, header.sessionId);
 }
 
-void BaseServer::autoSaveLoop() {
+void PlayerStore::autoSaveLoop() {
     while (running_) {
         // 分片睡等（G-3）：running_ 翻 false 最迟一个分片内可观察——停机
         // join 不吃整个 autoSaveIntervalMs（§10.2 停机时延兜底；此前整段
@@ -522,7 +522,7 @@ void BaseServer::autoSaveLoop() {
     }
 }
 
-std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
+std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
     std::size_t flushed = 0;
     for (auto& anchor : anchorManager_->snapshot()) {
         if (!anchor || !anchor->needs_save()) {
@@ -563,7 +563,7 @@ std::size_t BaseServer::flushDirtyAnchors(const char* reason) {
 
 // ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步 zone 侧）----
 
-bool BaseServer::freezePlayer(PlayerID playerId) {
+bool PlayerStore::freezePlayer(PlayerID playerId) {
     auto anchor = anchorManager_->find(playerId);
     if (!anchor) {
         return false;
@@ -586,7 +586,7 @@ bool BaseServer::freezePlayer(PlayerID playerId) {
     return true;
 }
 
-BaseServer::PlayerSnapshotData BaseServer::snapshotPlayer(PlayerID playerId) {
+PlayerStore::PlayerSnapshotData PlayerStore::snapshotPlayer(PlayerID playerId) {
     PlayerSnapshotData out;
     // 前置 = 已冻结（Transferring）——未冻结拒（防半写态出快照，§9.2 ①→② 序）
     auto anchor = anchorManager_->find(playerId);
@@ -609,11 +609,11 @@ BaseServer::PlayerSnapshotData BaseServer::snapshotPlayer(PlayerID playerId) {
     return out;
 }
 
-void BaseServer::storeMigrationSnapshot(PlayerID playerId, PlayerSnapshotData snapshot) {
+void PlayerStore::storeMigrationSnapshot(PlayerID playerId, PlayerSnapshotData snapshot) {
     migrationSnapshots_[playerId] = std::move(snapshot);
 }
 
-bool BaseServer::adoptPlayer(PlayerID playerId, const std::string& profileJson,
+bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
                              std::uint64_t sessionId, std::uint32_t gatewayId,
                              std::uint32_t homeZoneId) {
     PlayerData data;
@@ -642,7 +642,7 @@ bool BaseServer::adoptPlayer(PlayerID playerId, const std::string& profileJson,
 
 // 迁移族 handler（933/935/937）：wire 面 = migration_wire 全帧；decode 失败
 // 回 ErrorMessage（Unknown message type 同族错误回包惯例）。
-std::vector<uint8_t> BaseServer::handlePlayerFreezeRequest(
+std::vector<uint8_t> PlayerStore::handlePlayerFreezeRequest(
     const std::vector<uint8_t>& request) {
     protocol::SessionID session = 0;
     migration::FreezeRequest req;
@@ -664,7 +664,7 @@ std::vector<uint8_t> BaseServer::handlePlayerFreezeRequest(
     return migration::encodeFrame(reply, session);
 }
 
-std::vector<uint8_t> BaseServer::handlePlayerSnapshotRequest(
+std::vector<uint8_t> PlayerStore::handlePlayerSnapshotRequest(
     const std::vector<uint8_t>& request) {
     protocol::SessionID session = 0;
     migration::SnapshotRequest req;
@@ -688,7 +688,7 @@ std::vector<uint8_t> BaseServer::handlePlayerSnapshotRequest(
     return migration::encodeFrame(reply, session);
 }
 
-std::vector<uint8_t> BaseServer::handlePlayerHandoffRequest(
+std::vector<uint8_t> PlayerStore::handlePlayerHandoffRequest(
     const std::vector<uint8_t>& request) {
     protocol::SessionID session = 0;
     migration::HandoffRequest req;
@@ -744,13 +744,13 @@ std::vector<uint8_t> BaseServer::handlePlayerHandoffRequest(
     return migration::encodeFrame(reply, session);
 }
 
-int64_t BaseServer::getCurrentTimeMs() const {
+int64_t PlayerStore::getCurrentTimeMs() const {
     auto now = std::chrono::steady_clock::now();
     auto duration = now.time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 }
 
-std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::activatePlayerAnchor(PlayerID playerId) {
+std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayerAnchor(PlayerID playerId) {
     auto anchor = anchorManager_->activate(playerId);
     if (!anchor) {
         return nullptr;
@@ -763,7 +763,7 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> BaseServer::activatePlayerA
     return anchor;
 }
 
-void BaseServer::finalizeSave(PlayerID playerId, bool success) {
+void PlayerStore::finalizeSave(PlayerID playerId, bool success) {
     auto anchor = anchorManager_->find(playerId);
     if (!anchor) {
         return;
@@ -792,4 +792,4 @@ void BaseServer::finalizeSave(PlayerID playerId, bool success) {
     anchor->set_state(apollo::game::session::AnchorState::Disconnected);
 }
 
-} // namespace base
+} // namespace player_store

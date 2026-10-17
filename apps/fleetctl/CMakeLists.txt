@@ -9,7 +9,7 @@ add_executable(fleetctl
 # migrate 命令的 wire 面（base/migration_wire.hpp，header-only）+ eval 命令
 # 的契约 wire 面（944/945 裸帧编解码）
 target_include_directories(fleetctl PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/base-app/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/modules/net/contract_wire/include
 )
 

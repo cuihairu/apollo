@@ -11,7 +11,7 @@
 #include "apollo/game/session/recovery.hpp"
 
 #include "apollo/data/orm/persist_journal.hpp"
-#include "base/database_service.hpp"
+#include "player_store/database_service.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -142,17 +142,17 @@ bool test_crash_replay_recovers_profile() {
     fs::create_directories(data_dir);
     const auto journal_path = (root / "persist.log").string();
 
-    base::BaseConfig config;
+    player_store::PlayerStoreConfig config;
     config.dataDir = data_dir.string();
 
     // 进程一：档案尚未落盘（保存只走了 write-ahead），「崩溃」
     {
-        base::DatabaseService db(config);
+        player_store::DatabaseService db(config);
         TEST_ASSERT(db.initialize(), "db init");
         apollo::data::journal::PersistJournal journal(journal_path);
         TEST_ASSERT(journal.open(), "journal open");
 
-        base::PlayerData pending;
+        player_store::PlayerData pending;
         pending.playerId = 77;
         pending.username = "dave";
         pending.level = 15;
@@ -162,7 +162,7 @@ bool test_crash_replay_recovers_profile() {
 
     // 进程二：启动序列 restore→admission→ready，replay 把位点压成档案
     {
-        base::DatabaseService db(config);
+        player_store::DatabaseService db(config);
         TEST_ASSERT(db.initialize(), "db init");
         apollo::data::journal::PersistJournal journal(journal_path);
         journal.open();
@@ -171,8 +171,8 @@ bool test_crash_replay_recovers_profile() {
             "base-app",
             [&]() -> std::size_t {
                 return journal.replay([&](const apollo::data::journal::JournalEntry& e) {
-                    base::PlayerData data = base::PlayerData::fromJson(e.payload);
-                    data.playerId = static_cast<base::PlayerID>(std::stoull(e.key));
+                    player_store::PlayerData data = player_store::PlayerData::fromJson(e.payload);
+                    data.playerId = static_cast<player_store::PlayerID>(std::stoull(e.key));
                     return db.savePlayer(data);
                 });
             },
@@ -181,7 +181,7 @@ bool test_crash_replay_recovers_profile() {
         TEST_ASSERT(coordinator.run() && coordinator.ready(), "恢复序列完成");
         TEST_ASSERT(coordinator.replayed() == 1, "回放一条位点");
 
-        base::PlayerData loaded;
+        player_store::PlayerData loaded;
         TEST_ASSERT(db.loadPlayer(77, loaded), "崩溃前未落盘的档案经 replay 恢复");
         TEST_ASSERT(loaded.username == "dave" && loaded.level == 15 && loaded.exp == 555,
                     "恢复内容一致");

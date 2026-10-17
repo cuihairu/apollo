@@ -23,7 +23,7 @@
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
-#include "base/migration_wire.hpp"
+#include "player_store/migration_wire.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -49,7 +49,7 @@ namespace {
 // 冲突（m1_base_client 在 login 域内做别名同理）。
 namespace link = apollo::net::link;
 namespace protocol = apollo::protocol;
-namespace migration = base::migration;
+namespace migration = player_store::migration;
 namespace wire = apollo::net::wire;
 using apollo::contract::gen::MsgId;
 
@@ -159,7 +159,7 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         return false;
     }
     if (opt.peer.empty()) {
-        opt.peer = opt.command == "eval" ? "world" : "baseappmgr";
+        opt.peer = opt.command == "eval" ? "world" : "login";
     }
     if (opt.command == "eval") {
         return !opt.source.empty();  // Lua 源必给（0 保留关联键由本进程单调分配）

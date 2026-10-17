@@ -1,38 +1,11 @@
 #!/usr/bin/env bash
-#
-# Apollo dev 编队一键起停（P3-4；machined 批 F「拉起/重启」半边的包装）。
-#
-# 用法：
-#   scripts/dev_fleet.sh up      # 生成 roster 并后台拉起 machined（含编队子进程）
-#   scripts/dev_fleet.sh down    # SIGTERM machined（子进程随批 F 关停面收割）
-#   scripts/dev_fleet.sh status  # machined 存活 + 子进程清单
-#   scripts/dev_fleet.sh roster  # 打印本次编队 roster 内容
-#
-# 环境变量：
-#   APOLLO_BUILD_DIR  构建树（默认 <repo>/build，须 GAME_MODULE=ON 全 app 已构建）
-#   APOLLO_FLEET_DIR  运行目录（默认 /tmp/apollo-fleet-<uid>：roster + pid + 日志）
-#   APOLLO_LOG_PUSH_ADDR  log push collector 地址（默认 127.0.0.1:9102；置空
-#     = push 关，app 退 v1 单出口——logging.md §5 断连降级由客户端队列承担）
-#   APOLLO_METRICS_PUSH_ADDR  metrics exporter 地址（默认 127.0.0.1:9106；置空
-#     = push 关——logging.md §5.1 采样流断连丢拍不积压，最新者胜）
-#
-# dev 端口布局（仅本脚本约定的开发面，无配置真相——生产部署不由此起）：
-#   login 9001 / gateway 9002 / baseappmgr 9003 / base-app 9004 / WorldApp M1 9101
-#   login M1 准入 9103 / base M1 9104 / baseappmgr M1 control 9105
-#   （P4-4 批①③④：准入、base RPC 链与 baseappmgr 控制面 M1 面）
-#   / logger serve 9102（log push collector，L4）
-#   / admin serve 9106（metrics link，P3-3）+ 9107（HTTP GET /metrics）
-#   （app 缺省端口以各自 config 为准，本脚本显式传参避免歧义）
-#
-# 边界：编队 = 生命周期半边（拉起/重启/收割）+ 成员注册半边（P3-4 收尾批）：
-# 服务五 app（login/gateway/baseappmgr/base/cell）经 FleetMember 向 machined
-# 心跳注册（--machined-port 9600 + 编队组件号），machined 目录面成员身份可见
-# （members=N 行 + member component= 明细）；logger/admin/game 不注册（辅助
-# 面与演示进程不入编队表）。
-#
-# 编队组件号（machined 保留：1=目录 2=baseappmgr；10 起分配服务 app——
-# 死亡上报与成员注册同源身份，roster 中列与 app --component-id 一致）：
-#   base=10 / cell=11 / gateway=12 / login=13
+# Apollo 开发编队：Login / Gateway / World，由 machined 拉起和监督。
+# 用法：scripts/dev_fleet.sh up|down|status|roster
+# APOLLO_BUILD_DIR 指定构建目录，APOLLO_FLEET_DIR 指定运行目录。
+# World：玩法链路 9101、玩家档案链路 9104。
+# Login：认证/准入链路 9103、在线目录链路 9105。
+# Gateway：客户端 TCP 9002。logger 9102；admin 指标链路 9106、HTTP 9107。
+# 组件号：World=11，Gateway=12，Login=13。运维工具不注册业务成员。
 
 set -euo pipefail
 
@@ -44,21 +17,13 @@ PIDFILE="$FLEET_DIR/machined.pid"
 LOGFILE="$FLEET_DIR/machined.log"
 MACHINED="$BUILD_DIR/apps/machined/machined"
 
-# 编队清单：name | component_id | 命令（dev 端口见文件头布局；中列 = 编队
-# 组件号，machined 死亡上报 wire 身份——0 = 未入编队仅落日志）
-# gateway 显式补传三后端 URL（ADR-011 最小修复处方②）：config.hpp 缺省
-# BaseApp 9002（=gateway 自身端口）/ WorldApp 9100 与 dev 布局错位，不传则
-# 错位缺省值直接生效。处方①（start 连接失败降级）与③（ChatApp 幽灵依赖
-# 摘除）属功能代码，不在文档/脚本批边界内，留待边界放行批。
 fleet_entries() {
     cat <<EOF
 logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
-login     | 13 | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 13
-gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --world tcp://127.0.0.1:9005 --world-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 12
-baseappmgr| 2 | $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003 --m1-port 9105 --machined-port 9600
-base      | 10 | $BUILD_DIR/apps/base-app/base-app --port 9004 --m1-port 9104 --machined-port 9600 --component-id 10
-world     | 11 | $BUILD_DIR/apps/world-app/world-app --m1-port 9101 --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/world-app/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world-app/world-app --world-id 1 --m1-port 9101 --player-store-m1-port 9104 --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/world-app/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+login     | 13 | $BUILD_DIR/apps/login-app/login-app --m1-port 9103 --world-store-m1-port 9104 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
+gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port 9103 --directory-m1-port 9105 --machined-port 9600 --component-id 12
 game      | 0 | $BUILD_DIR/apps/game-server/apollo_game_server
 EOF
 }
@@ -150,7 +115,7 @@ cmd_down() {
     # 精确清理（pgrep -x 进程名匹配，避 -f 误中外层 shell 命令行）。
     # terminate_all 已发 SIGTERM：先共享 5s 宽限让慢关子进程自行退出，再 KILL 残留。
     local -a names=()
-    while IFS='|' read -r name cmd; do
+    while IFS='|' read -r name comp cmd; do
         local bin
         bin="$(echo "$cmd" | awk '{print $1}')"
         [[ -z "$bin" ]] && continue

@@ -47,11 +47,24 @@ static apollo::core::log::LoggerPtr initLogging() {
 // 加载配置
 WorldAppConfig loadConfig(int argc, char* argv[]) {
     WorldAppConfig config;
+    config.playerStoreEnabled = true;
+    config.playerStore.m1Enabled = true;
+    config.playerStore.m1Port = 9104;
+    config.playerStore.dataDir.clear();
+    config.playerStore.journalPath.clear();
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
-        if (arg == "--m1-port" && i + 1 < argc) {
+        if (arg == "--world-id" && i + 1 < argc) {
+            config.worldId = static_cast<std::uint32_t>(std::stoul(argv[++i]));
+        } else if (arg == "--player-store-m1-port" && i + 1 < argc) {
+            config.playerStore.m1Port = static_cast<std::uint16_t>(std::stoul(argv[++i]));
+        } else if (arg == "--data-dir" && i + 1 < argc) {
+            config.playerStore.dataDir = argv[++i];
+        } else if (arg == "--journal" && i + 1 < argc) {
+            config.playerStore.journalPath = argv[++i];
+        } else if (arg == "--m1-port" && i + 1 < argc) {
             config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
@@ -69,6 +82,10 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
+                      << "  --world-id <id>            World identity (default: 1)\n"
+                      << "  --player-store-m1-port <port>  Hosted player data endpoint (default: 9104)\n"
+                      << "  --data-dir <path>          Player profile directory\n"
+                      << "  --journal <path>           Player journal path\n"
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
@@ -81,6 +98,9 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
         }
     }
 
+    const auto data_root = "data/world-" + std::to_string(config.worldId);
+    if (config.playerStore.dataDir.empty()) config.playerStore.dataDir = data_root + "/players";
+    if (config.playerStore.journalPath.empty()) config.playerStore.journalPath = data_root + "/journal/persist.log";
     return config;
 }
 
