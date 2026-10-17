@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'scripts/ci/docs_i18n_check.py'
       - '.github/workflows/docs.yml'
   pull_request:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'scripts/ci/docs_i18n_check.py'
   workflow_dispatch:
 
 # 设置权限
@@ -38,6 +40,9 @@ jobs:
         with:
           version: 9
 
+      - name: Check locale pages and routes
+        run: python3 scripts/ci/docs_i18n_check.py
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,6 +57,9 @@ jobs:
         run: pnpm run docs:build
         env:
           NODE_ENV: production
+
+      - name: Check generated locale metadata
+        run: python3 scripts/ci/docs_i18n_check.py --dist docs/.vitepress/dist
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
