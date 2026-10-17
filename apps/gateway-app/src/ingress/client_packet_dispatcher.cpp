@@ -43,6 +43,13 @@ bool ClientPacketDispatcher::isWorldMessage(apollo::protocol::MessageType messag
         case MessageType::COMBAT_DAMAGE:
         case MessageType::COMBAT_HEAL:
         case MessageType::COMBAT_DEATH:
+        // 队伍与小队副本族（P2 真实链路）：经 World 受理面执行。
+        case MessageType::PARTY_CREATE_REQUEST:
+        case MessageType::PARTY_JOIN_REQUEST:
+        case MessageType::SQUAD_LAUNCH:
+        case MessageType::SQUAD_ENTER:
+        case MessageType::SQUAD_START:
+        case MessageType::SQUAD_KILL:
             return true;
 
         default:

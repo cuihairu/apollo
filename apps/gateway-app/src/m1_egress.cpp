@@ -69,7 +69,7 @@ trace::HeadSampler& head_sampler() {
     return sampler;
 }
 
-// legacy 消息型 → 契约意图 id（五族白名单；0 = 不在 M1 前递面）。
+// legacy 消息型 → 契约意图 id（白名单；0 = 不在 M1 前递面）。
 std::uint16_t contract_id_for(apollo::protocol::MessageType type) {
     using MT = apollo::protocol::MessageType;
     switch (type) {
@@ -78,6 +78,14 @@ std::uint16_t contract_id_for(apollo::protocol::MessageType type) {
         case MT::CELL_ENTITY_MOVE: return id_of(MsgId::cell_entity_move);
         case MT::CELL_CROSS_BORDER: return id_of(MsgId::cell_cross_border);
         case MT::COMBAT_SKILL_CAST: return id_of(MsgId::cell_skill_cast);
+        // 队伍与小队副本族（P2 真实链路）：sessionId 由头部透传（协议帧头
+        // session_id 即源会话，受理面入箱前已带）。
+        case MT::PARTY_CREATE_REQUEST: return id_of(MsgId::party_create_intent);
+        case MT::PARTY_JOIN_REQUEST: return id_of(MsgId::party_join_intent);
+        case MT::SQUAD_LAUNCH: return id_of(MsgId::squad_launch_intent);
+        case MT::SQUAD_ENTER: return id_of(MsgId::squad_enter_intent);
+        case MT::SQUAD_START: return id_of(MsgId::squad_start_intent);
+        case MT::SQUAD_KILL: return id_of(MsgId::squad_kill_intent);
         default: return 0;
     }
 }
@@ -128,6 +136,10 @@ public:
 
         started_.store(true, std::memory_order_release);
         return true;
+    }
+
+    void setClientDeliver(ClientDeliverFn fn) override {
+        client_deliver_ = std::move(fn);
     }
 
     void stop() override {
@@ -208,6 +220,14 @@ public:
         return dropped_.load(std::memory_order_relaxed);
     }
 
+    std::uint64_t deliveredClients() const override {
+        return deliver_count_.load(std::memory_order_relaxed);
+    }
+
+    std::uint64_t undeliverableClients() const override {
+        return undeliverable_.load(std::memory_order_relaxed);
+    }
+
     std::size_t pendingAcks() const override {
         return pending_.size();
     }
@@ -238,12 +258,52 @@ private:
     void install_dispatching(link::InterServerLink& link) {
         auto& dispatcher = link.dispatcher();
         dispatcher.set_route_table(route_table_.get());
-        dispatcher.allow_domain("internal");  // 929 应答族入闸（同意图族域）
+        dispatcher.allow_domain("internal");  // 929 应答 / 939 下行族入闸（同域）
         dispatcher.set_handler(id_of(MsgId::cell_intent_ack),
                                [this](std::uint16_t, const std::uint8_t* data,
                                       std::size_t size) {
                                    handle_ack(data, size);
                                });
+        // 客户端帧下行（P2 真实下行）：939 携客户端 wire 全帧回网关，
+        // 按 session_id 投递；gateway_id 非零且不匹配本网关时落地不投
+        //（多网关防串投——本批单网关恒 0，字段面为多网关批留）。
+        dispatcher.set_handler(id_of(MsgId::client_deliver),
+                               [this](std::uint16_t, const std::uint8_t* data,
+                                      std::size_t size) {
+                                   handle_client_deliver(data, size);
+                               });
+    }
+
+    void handle_client_deliver(const std::uint8_t* data, std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::client_deliver), data, size, fields) ||
+            fields.size() < 3) {
+            ++undeliverable_;
+            return;
+        }
+        const auto session_id = static_cast<std::uint64_t>(fields[0].integer);
+        const auto gateway_id = static_cast<std::uint32_t>(fields[1].integer);
+        auto payload = fields[2].bytes;
+        if (session_id == 0 || payload.empty() || payload.size() <
+                sizeof(apollo::protocol::MessageHeader)) {
+            ++undeliverable_;  // 残帧/空投递落地
+            return;
+        }
+        // 身份校验：本网关身份已配（非 0）且回带不匹配 = 串投，落地不投；
+        // 身份未配（0，单网关批缺省）或回带 0（World 不指定）均放行。
+        if (config_.gateway_id != 0 && gateway_id != 0 &&
+            gateway_id != config_.gateway_id) {
+            ++undeliverable_;
+            m1log().warning("client_deliver gateway mismatch: got "
+                            + std::to_string(gateway_id) + " own "
+                            + std::to_string(config_.gateway_id) + " session "
+                            + std::to_string(session_id));
+            return;
+        }
+        deliver_count_.fetch_add(1, std::memory_order_relaxed);
+        if (client_deliver_) {
+            client_deliver_(session_id, gateway_id, payload);
+        }
     }
 
     void drain_inbox(std::uint64_t now_ms) {
@@ -327,6 +387,49 @@ private:
                 fields[8].real = msg.targetPos.x;
                 fields[9].real = msg.targetPos.y;
                 fields[10].real = msg.targetPos.z;
+                break;
+            }
+            // 队伍与小队副本族（P2 真实链路）：字段序 = 契约表序，头部两字段
+            // （request_id/session_id）出 switch 统一填。
+            case id_of(MsgId::party_create_intent): {
+                fields.resize(2);  // 空 body：仅头部
+                break;
+            }
+            case id_of(MsgId::party_join_intent): {
+                const auto msg = apollo::protocol::MessageCodec::decodeBody<
+                    apollo::protocol::PartyJoinRequest>(body);
+                fields.resize(3);
+                fields[2].integer = static_cast<std::int64_t>(msg.partyId);
+                break;
+            }
+            case id_of(MsgId::squad_launch_intent): {
+                const auto msg = apollo::protocol::MessageCodec::decodeBody<
+                    apollo::protocol::SquadLaunch>(body);
+                fields.resize(4);
+                fields[2].integer = static_cast<std::int64_t>(msg.partyId);
+                fields[3].integer = static_cast<std::int64_t>(msg.mapId);
+                break;
+            }
+            case id_of(MsgId::squad_enter_intent): {
+                const auto msg = apollo::protocol::MessageCodec::decodeBody<
+                    apollo::protocol::SquadEnter>(body);
+                fields.resize(3);
+                fields[2].integer = static_cast<std::int64_t>(msg.partyId);
+                break;
+            }
+            case id_of(MsgId::squad_start_intent): {
+                const auto msg = apollo::protocol::MessageCodec::decodeBody<
+                    apollo::protocol::SquadStart>(body);
+                fields.resize(3);
+                fields[2].integer = static_cast<std::int64_t>(msg.partyId);
+                break;
+            }
+            case id_of(MsgId::squad_kill_intent): {
+                const auto msg = apollo::protocol::MessageCodec::decodeBody<
+                    apollo::protocol::SquadKill>(body);
+                fields.resize(4);
+                fields[2].integer = static_cast<std::int64_t>(msg.partyId);
+                fields[3].integer = static_cast<std::int64_t>(msg.monsterEntityId);
                 break;
             }
             default:
@@ -451,6 +554,8 @@ private:
     std::unordered_map<std::uint64_t, Pending> pending_;  // 泵线程独占
     std::uint64_t next_request_id_ = 1;    // 0 = legacy 无应答哨兵，不配发
 
+    ClientDeliverFn client_deliver_;       // 泵线程回调（939 下行出口）
+
     std::atomic<bool> started_{false};
     std::atomic<std::uint64_t> sent_{0};
     std::atomic<std::uint64_t> acked_{0};
@@ -458,6 +563,8 @@ private:
     std::atomic<std::uint64_t> timed_out_{0};
     std::atomic<std::uint64_t> unforwardable_{0};
     std::atomic<std::uint64_t> dropped_{0};
+    std::atomic<std::uint64_t> deliver_count_{0};
+    std::atomic<std::uint64_t> undeliverable_{0};
 };
 
 } // namespace

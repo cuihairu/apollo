@@ -13,6 +13,7 @@
 #include <optional>
 #include <thread>
 #include <atomic>
+#include <functional>
 #include <unordered_map>
 
 namespace gateway {
@@ -40,6 +41,11 @@ public:
     // 转发消息到 BaseApp（nng 双 Channel 摘除，P4-4 批②：落地面 =
     // m1Egress degraded 同口径；真实 base 面挂账 P4-4 ③ zone M1 受理面）
     void forwardToBaseApp(SessionID sessionId, const std::vector<uint8_t>& message);
+
+    // 客户端帧下行出口装配（P2 真实下行；须在 start 前调）：契约 939
+    // client_deliver 到达时把 World 回带的客户端 wire 全帧投给目标会话。
+    // gateway 身份校验在 M1 出口内（config.gateway_id）。
+    void setDeliverToClient(std::function<void(SessionID, const std::vector<uint8_t>&)> fn);
 
     RouteSnapshot buildDefaultRoute() const;
 

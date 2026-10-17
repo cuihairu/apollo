@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,7 +27,17 @@ struct M1EgressConfig {
     std::string route_json;               // 契约路由表（与 cell 同一事实源）
     std::uint64_t ack_timeout_ms = 5000;  // 应答超时：pending 关联清扫线
     std::size_t inbox_cap = 4096;         // 投递箱顶格：溢出落地（legacy 死面同型）
+    std::uint32_t gateway_id = 0;         // 本网关身份（0 = 未配；939 回带非 0
+                                         // 且不匹配时落地不投——多网关防串投）
 };
+
+// 客户端帧下行回调（P2 真实下行；契约 939 client_deliver 到达时调用）：
+// session_id = 目标客户端会话；gateway_id = World 回带网关（0 = 不校验，
+// 非零且不等于本网关身份时落地不投）；payload = 客户端 wire 全帧
+//（MessageHeader + body），原样投递不解释。在宿主泵线程上回调。
+using ClientDeliverFn = std::function<void(std::uint64_t session_id,
+                                           std::uint32_t gateway_id,
+                                           const std::vector<std::uint8_t>& payload)>;
 
 class M1Egress {
 public:
@@ -37,6 +48,9 @@ public:
     // active 端点自带退避重连。
     virtual bool start() { return true; }
     virtual void stop() {}
+
+    // 下行装配（start 前设置）：939 到达时的客户端投递出口。
+    virtual void setClientDeliver(ClientDeliverFn fn) { (void)fn; }
 
     // 宿主泵一拍：投递箱排空（翻译+发送）→ 链路推进（收发/握手）→ 超时清扫
     virtual void pump(std::uint64_t now_ms) { (void)now_ms; }
@@ -58,6 +72,8 @@ public:
     virtual std::uint64_t timedOutIntents() const { return 0; }     // 清扫线回收
     virtual std::uint64_t unforwardableFrames() const { return 0; } // 非五族/残帧/箱满
     virtual std::uint64_t droppedSends() const { return 0; }        // 链路拒收（背压）
+    virtual std::uint64_t deliveredClients() const { return 0; }    // 939 下行成功投递
+    virtual std::uint64_t undeliverableClients() const { return 0; }// 939 残帧/身份不匹配
     // pending 关联账面（仅限宿主泵线程读——泵拍外的原子计数只有其余各面）
     virtual std::size_t pendingAcks() const { return 0; }
 };

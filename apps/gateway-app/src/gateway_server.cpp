@@ -114,6 +114,21 @@ void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint
                 + std::to_string(sessionId) + " (no base forwarding face)");
 }
 
+void MessageRouter::setDeliverToClient(
+    std::function<void(SessionID, const std::vector<uint8_t>&)> fn) {
+    // 939 下行出口：M1 出口解字段 → 本回调（宿主泵线程）→ 入口投递队列。
+    // egress 降级时闭包不装——World 回带只落 observability 计数。
+    if (!m1Egress_) {
+        glog().warning("gateway client deliver unset: M1 egress degraded");
+        return;
+    }
+    m1Egress_->setClientDeliver(
+        [fn = std::move(fn)](std::uint64_t session_id, std::uint32_t /*gateway_id*/,
+                             const std::vector<std::uint8_t>& payload) {
+            fn(session_id, payload);
+        });
+}
+
 RouteSnapshot MessageRouter::buildDefaultRoute() const {
     RouteSnapshot routeSnapshot;
     routeSnapshot.worldId = 1;
@@ -168,6 +183,13 @@ GatewayServer::~GatewayServer() {
 
 void GatewayServer::start() {
     if (running_) return;
+
+    // 客户端帧下行出口（P2 真实下行；start 前装配）：
+    // World 939 回带 → M1 出口解字段 → sendToClient（会话在即真投）。
+    messageRouter_->setDeliverToClient(
+        [this](SessionID sessionId, const std::vector<uint8_t>& message) {
+            sendToClient(sessionId, message);
+        });
 
     // 启动消息路由器
     messageRouter_->start();
