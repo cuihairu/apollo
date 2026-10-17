@@ -4,11 +4,13 @@
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene_descriptor.hpp"
 #include "apollo/game/world/world.hpp"
+#include "squad_instance/settlement_ledger.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -158,6 +160,22 @@ public:
     [[nodiscard]] std::optional<GameplayProgress> gameplay(
         std::uint64_t party_id) const;
 
+    // ---- 结算幂等落账（P2-4：既有奖励/持久化接口 + 重试/失败/恢复）----
+    // 锚点解析装配（须在 launch 前设置；副本受理时开账即取本解析器）。
+    void set_anchor_resolver(AnchorResolveFn fn);
+    // 显式奖励口（宿主奖励表/过渡期直测面）：单条幂等落账。
+    SettlementLedger::ApplyError credit_settlement(std::uint64_t party_id,
+                                                   std::uint64_t player_id,
+                                                   std::int64_t score);
+    // 补账：重试该副本全部未落条目，返回本次补账人数。
+    std::size_t retry_settlement(std::uint64_t party_id);
+    // 恢复面：按持久化痕迹回填已落账标记（防重启重放双记）。
+    void restore_settlement(std::uint64_t party_id,
+                            const std::vector<std::uint64_t>& applied_players);
+    // 结算状态查询；无绑定（或未开账）返回 nullopt。
+    [[nodiscard]] std::optional<SettlementLedger::Snapshot> settlement(
+        std::uint64_t party_id) const;
+
     // ---- 生命周期钩子装配 ----
     void set_instance_started(InstanceStartedFn fn);
     void set_instance_closing(InstanceClosingFn fn);
@@ -204,6 +222,7 @@ private:
     RemoteSpawnFn remote_spawner_;
     InstanceStartedFn instance_started_;
     InstanceClosingFn instance_closing_;
+    AnchorResolveFn anchor_resolver_;
 
     struct WorldSlot {
         std::size_t max_instances = 0;
@@ -214,6 +233,8 @@ private:
     std::unordered_map<std::uint64_t, ActiveSquadInstance> active_;  // instance_id → 绑定
     std::unordered_map<std::uint64_t, std::uint64_t> party_to_instance_;
     std::unordered_map<std::uint64_t, GameplayState> gameplay_;  // instance_id → 玩法记账
+    // unique_ptr 保地址稳定：battle 持账本观察指针跨 tick 存活。
+    std::unordered_map<std::uint64_t, std::unique_ptr<SettlementLedger>> settlements_;
     std::unordered_set<std::uint64_t> busy_members_;
     std::uint64_t name_seq_ = 0;
     std::uint64_t monster_seq_ = 0;  // 副本怪实体 id 发号（Scene 私有，全局递增）

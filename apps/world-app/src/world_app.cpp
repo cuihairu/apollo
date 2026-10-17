@@ -117,6 +117,11 @@ WorldApp::WorldApp(const WorldAppConfig& config)
                    sessions->find_by_player(
                        apollo::game::core::PlayerId{player_id}) != nullptr;
         });
+    // 结算落账解析（P2-4）：PlayerStore 晚于本段装配，经 this 惰性解引用；
+    // 锚点缺位（未装载/迁移中）由账本挂账待补。
+    squadInstanceService_->set_anchor_resolver([this](std::uint64_t player_id) {
+        return playerStore_ ? playerStore_->findAnchor(player_id).get() : nullptr;
+    });
 }
 
 WorldApp::~WorldApp() {

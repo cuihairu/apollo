@@ -11,6 +11,8 @@
 //   8. 失败判定：超时 → cancel 进入结算（不发成功奖励）、可释放回收。
 
 #include "apollo/game/core/entity.hpp"
+#include "apollo/game/session/anchor_reward_sink.hpp"
+#include "apollo/game/session/player_anchor.hpp"
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/world.hpp"
@@ -19,6 +21,7 @@
 #include <cstdint>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <utility>
@@ -568,6 +571,177 @@ bool test_squad_gameplay_guards_and_quotas() {
 }
 
 
+// 结算锚点面：roster 成员各持锚；missing 名单注入 resolve 失败（pending 路径）。
+struct AnchorTable {
+    std::map<std::uint64_t, std::unique_ptr<apollo::game::session::PlayerAnchor>> anchors;
+    std::set<std::uint64_t> missing;
+    apollo::game::session::PlayerAnchor* resolve(std::uint64_t id) {
+        if (missing.contains(id)) return nullptr;
+        const auto it = anchors.find(id);
+        return it == anchors.end() ? nullptr : it->second.get();
+    }
+};
+
+AnchorTable make_anchor_table(std::initializer_list<std::uint64_t> ids) {
+    AnchorTable table;
+    for (const auto id : ids)
+        table.anchors.emplace(id, std::make_unique<apollo::game::session::PlayerAnchor>(id));
+    return table;
+}
+
+std::int64_t exp_of(const AnchorTable& table, std::uint64_t id) {
+    return table.anchors.at(id)->progress(apollo::game::session::AnchorRewardSink::kExpKey);
+}
+
+bool test_squad_settlement_idempotent_credit_and_retry() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    TEST_ASSERT(!service.settlement(404).has_value(), "no settlement for unknown party");
+
+    // 受理即开账：名册快照入账本，未落账不 complete
+    auto snap = service.settlement(1);
+    TEST_ASSERT(snap.has_value() && snap->roster_size == 3 && snap->applied == 0 &&
+                    !snap->complete,
+                "settlement opened with roster snapshot");
+
+    // 显式奖励口（宿主奖励表/直测面）：幂等——重复落账只记一次
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "leader credited");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "reward lands on anchor exp");
+    TEST_ASSERT(table.anchors.at(kLeader)->needs_save(),
+                "settlement marks anchor dirty for write-behind");
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
+                    squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
+                "double credit refused");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "no double exp on retry");
+    TEST_ASSERT(service.credit_settlement(1, kOutsider, 10) ==
+                    squad_instance::SettlementLedger::ApplyError::UnknownPlayer,
+                "non-roster credit refused");
+
+    // 锚点暂不可得：挂账不落；恢复后补账一次
+    table.missing.insert(kMemberC);
+    TEST_ASSERT(service.credit_settlement(1, kMemberC, 30) ==
+                    squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
+                "unavailable anchor unsettled");
+    snap = service.settlement(1);
+    TEST_ASSERT(snap->applied == 1 && snap->pending == 1 && !snap->complete,
+                "partial settlement visible");
+    table.missing.erase(kMemberC);
+    TEST_ASSERT(service.retry_settlement(1) == 1, "retry drains unsettled");
+    TEST_ASSERT(exp_of(table, kMemberC) == 30, "drained reward lands once");
+    TEST_ASSERT(service.retry_settlement(1) == 0, "settled entries not re-credited");
+
+    // 剩余成员经补账收口
+    TEST_ASSERT(service.credit_settlement(1, kMemberB, 20) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "member B credited");
+    snap = service.settlement(1);
+    TEST_ASSERT(snap->complete && snap->applied == 3, "settlement complete");
+    return true;
+}
+
+bool test_squad_settlement_battle_settles_on_goal_completion() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+
+    // 目标完成 → Instance finish → battle 结算段全名册落账（既有奖励接口）
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "wave spawned");
+    const auto* binding = service.find_by_party(1);
+    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "goal met");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "settlement entered");
+    auto snap = service.settlement(1);
+    TEST_ASSERT(snap.has_value() && snap->complete && snap->applied == 3,
+                "battle settle applied whole roster");
+
+    // battle 结算已收口：显式补记一律幂等拒绝
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 1) ==
+                    squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
+                "post-settle credit refused");
+
+    // 骨架期战斗无输入路径 → 无命中事件 → 分值 0：标记已落账但不写锚
+    //（零分值不产生档案脏位，数值随玩法批）
+    TEST_ASSERT(exp_of(table, kLeader) == 0, "zero-score settle credits no exp");
+    TEST_ASSERT(!table.anchors.at(kLeader)->needs_save(),
+                "zero-score settle leaves anchor clean");
+    return true;
+}
+
+bool test_squad_settlement_recovery_and_failure_line() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+
+    // 恢复面：回填已落账标记，重放不双记（重启后防重复结算）
+    service.restore_settlement(1, {kLeader});
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
+                    squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
+                "restored mark dedups replay");
+    TEST_ASSERT(exp_of(table, kLeader) == 0, "replay credits nothing");
+    auto snap = service.settlement(1);
+    TEST_ASSERT(snap->applied == 1 && !snap->complete, "restored state visible");
+
+    // 失败线：超时 cancel 收场——battle 不结算、无奖励落账
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 3;
+    goal.timeout_ticks = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal with timeout");
+    TEST_ASSERT(service.advance_tick(1, 2) == SquadInstanceService::GameplayError::Ok,
+                "timeout crossed");
+    snap = service.settlement(1);
+    TEST_ASSERT(snap->applied == 1 && !snap->complete,
+                "failure line settles no rewards");
+    TEST_ASSERT(service.retry_settlement(1) == 0, "nothing to retry after failure");
+    TEST_ASSERT(exp_of(table, kMemberB) == 0 && exp_of(table, kMemberC) == 0,
+                "no exp on failure");
+
+    // 终态释放后账本随绑定清除
+    for (const auto member : std::vector<std::uint64_t>{kLeader, kMemberB, kMemberC}) {
+        TEST_ASSERT(instance->leave(apollo::game::core::PlayerId{member}), "member leaves");
+    }
+    TEST_ASSERT(instance->settle() && instance->drain() && instance->destroy(),
+                "terminal reached");
+    TEST_ASSERT(service.release(launch.instance_id), "released");
+    TEST_ASSERT(!service.settlement(1).has_value(), "settlement cleared with binding");
+    return true;
+}
+
+
 bool test_squad_hooks_close_on_release() {
     PartyManager parties;
     World world;
@@ -624,6 +798,12 @@ int main() {
         {"squad_gameplay_timeout_drives_failure_settlement",
          test_squad_gameplay_timeout_drives_failure_settlement},
         {"squad_gameplay_guards_and_quotas", test_squad_gameplay_guards_and_quotas},
+        {"squad_settlement_idempotent_credit_and_retry",
+         test_squad_settlement_idempotent_credit_and_retry},
+        {"squad_settlement_battle_settles_on_goal_completion",
+         test_squad_settlement_battle_settles_on_goal_completion},
+        {"squad_settlement_recovery_and_failure_line",
+         test_squad_settlement_recovery_and_failure_line},
         {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
     };
 

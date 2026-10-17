@@ -31,6 +31,10 @@ void SquadInstanceService::set_instance_closing(InstanceClosingFn fn) {
     instance_closing_ = std::move(fn);
 }
 
+void SquadInstanceService::set_anchor_resolver(AnchorResolveFn fn) {
+    anchor_resolver_ = std::move(fn);
+}
+
 SquadInstanceService::EnterError SquadInstanceService::enter(std::uint64_t party_id,
                                                              std::uint64_t player_id) {
     const auto* binding = find_by_party(party_id);
@@ -195,6 +199,39 @@ std::optional<GameplayProgress> SquadInstanceService::gameplay(
     return progress;
 }
 
+SettlementLedger::ApplyError SquadInstanceService::credit_settlement(
+    std::uint64_t party_id, std::uint64_t player_id, std::int64_t score) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return SettlementLedger::ApplyError::UnknownPlayer;
+    const auto it = settlements_.find(binding->instance_id);
+    if (it == settlements_.end()) return SettlementLedger::ApplyError::UnknownPlayer;
+    return it->second->apply(player_id, score);
+}
+
+std::size_t SquadInstanceService::retry_settlement(std::uint64_t party_id) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return 0;
+    const auto it = settlements_.find(binding->instance_id);
+    return it == settlements_.end() ? 0 : it->second->retry();
+}
+
+void SquadInstanceService::restore_settlement(
+    std::uint64_t party_id, const std::vector<std::uint64_t>& applied_players) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return;
+    if (const auto it = settlements_.find(binding->instance_id); it != settlements_.end())
+        it->second->restore(applied_players);
+}
+
+std::optional<SettlementLedger::Snapshot> SquadInstanceService::settlement(
+    std::uint64_t party_id) const {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return std::nullopt;
+    const auto it = settlements_.find(binding->instance_id);
+    if (it == settlements_.end()) return std::nullopt;
+    return it->second->snapshot();
+}
+
 LaunchError SquadInstanceService::validate(const LaunchRequest& request,
                                            std::vector<std::uint64_t>& members) const {
     if (request.map_id == 0) return LaunchError::InvalidRequest;
@@ -264,6 +301,22 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
             result.error = LaunchError::SpawnRejected;
             return result;
         }
+        // 受理即开账：结算名册 = 受理快照成员；battle 结算段经账本（IRewardSink
+        // 单向口）→ AnchorRewardSink 语义落锚点（P2-4 幂等落账）。
+        auto ledger = std::make_unique<SettlementLedger>();
+        ledger->begin(members, anchor_resolver_);
+        // battle 与 instance 同生：enter 段收参战者（Instance::enter 转发）、
+        // tick 段随 Instance 玩法时钟推进、finish 段结算落账；seed 取
+        // instance_id（确定性可复算基线，玩法数值随玩法批）。
+        auto battle = std::make_unique<apollo::game::battle::BattleRuntime>(
+            instance->id(), instance->id(), ledger.get());
+        if (!instance->attach_battle(std::move(battle))) {
+            local_world_->destroy_instance(instance->id());
+            local_world_->destroy_scene(scene->scene_id());
+            result.error = LaunchError::SpawnRejected;
+            return result;
+        }
+        settlements_[instance->id()] = std::move(ledger);
         result.scene_id = scene->scene_id();
         result.instance_id = instance->id();
     } else {
@@ -337,6 +390,7 @@ void SquadInstanceService::erase_binding(
         party_to_instance_.erase(pit);
     }
     gameplay_.erase(it->second.instance_id);
+    settlements_.erase(it->second.instance_id);
     for (const auto member : it->second.members) busy_members_.erase(member);
     auto wit = worlds_.find(it->second.world_id);
     if (wit != worlds_.end() && wit->second.used > 0) --wit->second.used;
