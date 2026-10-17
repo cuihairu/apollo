@@ -96,6 +96,9 @@ struct Options {
     std::uint64_t observe_ticks = 100;    // 世界侧灰度观察窗（tick 计）
     std::uint64_t fault_threshold = 0;    // 窗内 fault 上限（超阈早失败）
     std::uint32_t rollout_timeout_s = 60; // 每目标终态轮询上限（秒）
+    // drain 面（P4 排空批）：begin 期限（0 = 无期限自然排空；终态轮询复用
+    // --timeout）
+    std::uint64_t drain_deadline_s = 0;
 };
 
 void printUsage() {
@@ -114,6 +117,8 @@ void printUsage() {
               << "                   [--deps A,B] [--observe-ticks T] [--fault-threshold X]\n"
               << "                   [--timeout S] [--peer NAME]\n"
               << "                   (跨 World 模块编排：canary 先行，观察窗全绿再推余下)\n"
+              << "  fleetctl drain   --target H:P [--deadline S] [--timeout S] [--peer NAME]\n"
+              << "                   (gateway 排空：停新连接、既有连接服务至自然退出或期限强停；default peer=gateway)\n"
               << "Exit codes: 0 admitted/ok / 2 rejected/failed / 3 unreachable / 1 usage or setup\n";
 }
 
@@ -124,7 +129,7 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
             return (i + 1 < argc) ? argv[++i] : nullptr;
         };
         if (arg == "assign" || arg == "resolve" || arg == "migrate" || arg == "eval"
-            || arg == "module") {
+            || arg == "module" || arg == "drain") {
             opt.command = arg;
         } else if (arg == "--host") {
             if (const auto* v = next()) opt.host = v; else return false;
@@ -181,6 +186,9 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
             if (const auto* v = next())
                 opt.rollout_timeout_s = static_cast<std::uint32_t>(std::atoi(v));
             else return false;
+        } else if (arg == "--deadline") {
+            if (const auto* v = next()) opt.drain_deadline_s = std::strtoull(v, nullptr, 10);
+            else return false;
         } else if (arg == "--player") {
             if (const auto* v = next()) opt.player_id = std::strtoull(v, nullptr, 10);
             else return false;
@@ -214,10 +222,16 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         return false;
     }
     if (opt.peer.empty()) {
-        opt.peer = (opt.command == "eval" || opt.command == "module") ? "world" : "login";
+        opt.peer = (opt.command == "eval" || opt.command == "module")
+                       ? "world"
+                       : (opt.command == "drain" ? "gateway" : "login");
     }
     if (opt.command == "eval") {
         return !opt.source.empty();  // Lua 源必给（0 保留关联键由本进程单调分配）
+    }
+    if (opt.command == "drain") {
+        // 编排面：目标必给（单 target H:P = gateway 控制受理面）
+        return !opt.targets.empty();
     }
     if (opt.command == "module") {
         // 编排面：目标集 + 模块名/版本 + 源（文件或内联）必给；canary 缺省
@@ -814,6 +828,139 @@ int runModule(const Options& opt) {
     return 0;
 }
 
+// ---------- gateway drain（P4 排空批；契约 954/955）----------
+
+struct DrainCapture {
+    std::mutex m;
+    struct Reply {
+        bool ok = false;
+        std::int32_t state = 0;
+        std::uint64_t active = 0;
+        std::string detail;
+    };
+    std::map<std::uint64_t, Reply> replies;
+};
+
+std::atomic<std::uint64_t> next_drain_id{1};  // 0 保留（对端静默面）
+
+// 954 单发 + 955 等待（一问一答；ControlDial 自带泵线程，本函数只等）
+bool drain_call(ControlDial& dial, DrainCapture& capture, std::int32_t op,
+                std::uint64_t deadline_s, DrainCapture::Reply& out) {
+    const auto request_id = next_drain_id.fetch_add(1, std::memory_order_relaxed);
+    std::vector<wire::FieldValue> fields(3);
+    fields[0].integer = static_cast<std::int64_t>(request_id);
+    fields[1].integer = op;
+    fields[2].integer = static_cast<std::int64_t>(deadline_s);
+    std::vector<std::uint8_t> payload;
+    if (!wire::encode_payload(id_of(MsgId::gateway_drain_request), fields, payload)
+        || !dial.send_frame(id_of(MsgId::gateway_drain_request), payload)) {
+        return false;
+    }
+    const auto deadline = Clock::now() + kRpcTimeout;
+    while (Clock::now() < deadline) {
+        {
+            std::lock_guard<std::mutex> lock(capture.m);
+            const auto it = capture.replies.find(request_id);
+            if (it != capture.replies.end()) {
+                out = it->second;
+                return true;
+            }
+        }
+        std::this_thread::sleep_for(kPumpTick);
+    }
+    return false;
+}
+
+// Gateway 排空编排（session-and-online-directory §2）：begin 关监听停新
+// 连接，既有连接服务至自然退出（--deadline 0）或明确期限（期限到强停收线
+// ——结果显形在 drained 回执 detail）。编排面轮询 status 到 drained 终态；
+// 进程替换归 ops 面后续步骤（gateway 不自退，排空态可观测）。
+int runDrain(const Options& opt) {
+    if (opt.targets.empty()) {
+        std::cerr << "fleetctl: drain requires --target H:P" << std::endl;
+        return 1;
+    }
+    const auto& label = opt.targets[0];
+    const auto colon = label.rfind(':');
+    const auto port = colon == std::string::npos
+                          ? 0
+                          : static_cast<std::uint16_t>(
+                              std::strtoul(label.c_str() + colon + 1, nullptr, 10));
+    if (colon == std::string::npos || port == 0) {
+        std::cerr << "fleetctl: bad --target " << label << " (want H:P)" << std::endl;
+        return 1;
+    }
+
+    ControlDial dial(APOLLO_FLEETCTL_CONTRACT_ROUTE_JSON, opt.peer /* gateway */,
+                     label.substr(0, colon), port);
+    if (!dial.ready()) {
+        std::cerr << "fleetctl: control face setup failed (route table missing)"
+                  << std::endl;
+        return 1;
+    }
+    DrainCapture capture;
+    dial.set_frame_handler(
+        id_of(MsgId::gateway_drain_reply),
+        [&capture](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+            std::vector<wire::FieldValue> fields;
+            if (!wire::decode_payload(id_of(MsgId::gateway_drain_reply), data, size,
+                                      fields)
+                || fields.size() != 6) {
+                return;
+            }
+            DrainCapture::Reply r;
+            r.ok = fields[2].integer != 0;
+            r.state = static_cast<std::int32_t>(fields[3].integer);
+            r.active = static_cast<std::uint64_t>(fields[4].integer);
+            r.detail = fields[5].text;
+            const auto request_id = static_cast<std::uint64_t>(fields[0].integer);
+            std::lock_guard<std::mutex> lock(capture.m);
+            capture.replies[request_id] = r;
+        });
+    if (!dial.waitUp()) {
+        std::cout << "DRAIN_UNREACHABLE target=" << label << std::endl;
+        return 3;
+    }
+
+    DrainCapture::Reply r;
+    if (!drain_call(dial, capture, 1, opt.drain_deadline_s, r)) {
+        std::cout << "DRAIN_UNREACHABLE target=" << label << " (no begin reply)"
+                  << std::endl;
+        return 3;
+    }
+    if (!r.ok) {
+        std::cout << "DRAIN_REJECTED target=" << label << " detail=" << r.detail
+                  << std::endl;
+        return 2;
+    }
+    std::cout << "DRAIN_BEGIN target=" << label << " state=" << r.state
+              << " active=" << r.active << std::endl;
+
+    // 轮询 status 到 drained（2）终态；--timeout 面内不出终态 = 超时退出
+    const auto deadline = Clock::now() + std::chrono::seconds(opt.rollout_timeout_s);
+    while (Clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (!drain_call(dial, capture, 2, 0, r)) {
+            std::cout << "DRAIN_UNREACHABLE target=" << label << " (no status reply)"
+                      << std::endl;
+            return 3;
+        }
+        if (!r.ok) {
+            std::cout << "DRAIN_REJECTED target=" << label << " detail=" << r.detail
+                      << std::endl;
+            return 2;
+        }
+        if (r.state == 2) {
+            std::cout << "DRAIN_DRAINED target=" << label << " detail=" << r.detail
+                      << std::endl;
+            return 0;
+        }
+    }
+    std::cout << "DRAIN_TIMEOUT target=" << label << " state=" << r.state
+              << " active=" << r.active << std::endl;
+    return 3;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -823,10 +970,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // module 编排自管拨号（一 target 一条 ControlDial；共享单拨号只服
-    // 单对端命令），先行分流。
+    // module / drain 编排自管拨号（一 target 一条 ControlDial；共享单拨号
+    // 只服单对端命令），先行分流。
     if (opt.command == "module") {
         return runModule(opt);
+    }
+    if (opt.command == "drain") {
+        return runDrain(opt);
     }
 
     // 契约代次可注入（APOLLO_FLEETCTL_ROUTE_JSON）：滚动发布演练以旧代
