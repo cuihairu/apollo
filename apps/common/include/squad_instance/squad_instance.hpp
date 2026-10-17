@@ -67,6 +67,13 @@ using MemberOnlineFn = std::function<bool(std::uint64_t player_id)>;
 using RemoteSpawnFn = std::function<std::optional<std::pair<std::uint64_t, std::uint64_t>>(
     std::uint32_t world_id, const LaunchRequest& request)>;
 
+// 副本生命周期钩子（宿主装配；须在宿主玩法线程上同步调用——ScriptRuntime
+// 归属线程即由钩子宿主保证）：
+//   started：Waiting→Running 启动玩法时（宿主据此建副本私有脚本状态）；
+//   closing：终态释放前一刻（宿主据此销毁私有脚本状态与副本内残留）。
+using InstanceStartedFn = std::function<void(std::uint64_t instance_id, std::uint64_t scene_id)>;
+using InstanceClosingFn = std::function<void(std::uint64_t instance_id)>;
+
 class SquadInstanceService {
 public:
     SquadInstanceService(apollo::game::social::PartyManager& parties,
@@ -81,6 +88,25 @@ public:
 
     // ---- 受理 ----
     LaunchResult launch(const LaunchRequest& request);
+
+    // ---- 成员进入与玩法启动（P2：进入受理快照成员；首进驱动
+    // Create→Initialize→Waiting；全员到齐后队长启动 Waiting→Running）----
+    enum class EnterError : std::uint32_t {
+        Ok = 0,
+        NoBinding,      // 小队无活动副本
+        NotLocal,       // 副本不在本 World（跨进程进入随后续条目接通）
+        NotRoster,      // 非受理快照成员
+        StateRejected,  // 副本状态不允许（非 Waiting/Running 或推进失败）
+        Duplicate,      // 重复进入
+        NotLeader,      // 启动请求者非队长
+        NotAllEntered,  // 尚有成员未进入
+    };
+    EnterError enter(std::uint64_t party_id, std::uint64_t player_id);
+    EnterError start_gameplay(std::uint64_t party_id, std::uint64_t requester_id);
+
+    // ---- 生命周期钩子装配 ----
+    void set_instance_started(InstanceStartedFn fn);
+    void set_instance_closing(InstanceClosingFn fn);
 
     // 仅终态（Destroyed）Instance 可释放；本地 World 同步销毁 Instance 与其
     // 临时 Scene（复用 World 终态双回收），容量空位与小队绑定一并归还。
@@ -107,6 +133,8 @@ private:
     std::size_t max_squad_size_ = apollo::game::social::Party::kMaxMembers;
     MemberOnlineFn member_online_;
     RemoteSpawnFn remote_spawner_;
+    InstanceStartedFn instance_started_;
+    InstanceClosingFn instance_closing_;
 
     struct WorldSlot {
         std::size_t max_instances = 0;

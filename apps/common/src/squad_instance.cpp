@@ -1,5 +1,7 @@
 #include "squad_instance/squad_instance.hpp"
 
+#include <algorithm>
+
 namespace squad_instance {
 
 SquadInstanceService::SquadInstanceService(apollo::game::social::PartyManager& parties,
@@ -19,6 +21,59 @@ void SquadInstanceService::set_member_online(MemberOnlineFn fn) { member_online_
 
 void SquadInstanceService::set_remote_spawner(RemoteSpawnFn fn) {
     remote_spawner_ = std::move(fn);
+}
+
+void SquadInstanceService::set_instance_started(InstanceStartedFn fn) {
+    instance_started_ = std::move(fn);
+}
+
+void SquadInstanceService::set_instance_closing(InstanceClosingFn fn) {
+    instance_closing_ = std::move(fn);
+}
+
+SquadInstanceService::EnterError SquadInstanceService::enter(std::uint64_t party_id,
+                                                             std::uint64_t player_id) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return EnterError::NoBinding;
+    if (binding->world_id != local_world_id_ || !local_world_)
+        return EnterError::NotLocal;
+    const bool in_roster =
+        std::find(binding->members.begin(), binding->members.end(), player_id) !=
+        binding->members.end();
+    if (!in_roster) return EnterError::NotRoster;
+
+    auto* instance = local_world_->find_instance(binding->instance_id);
+    if (!instance) return EnterError::NoBinding;
+    // 首进驱动建场：Create→Initialize→Waiting（成员可预进），失败即拒。
+    if (instance->state() == apollo::game::world::Instance::State::Create) {
+        if (!instance->initialize() || !instance->ready())
+            return EnterError::StateRejected;
+    }
+    if (!instance->enter(apollo::game::core::PlayerId{player_id}))
+        return EnterError::Duplicate;
+    return EnterError::Ok;
+}
+
+SquadInstanceService::EnterError SquadInstanceService::start_gameplay(
+    std::uint64_t party_id, std::uint64_t requester_id) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return EnterError::NoBinding;
+    if (binding->world_id != local_world_id_ || !local_world_)
+        return EnterError::NotLocal;
+    auto* party = parties_.find(party_id);
+    if (!party || party->leader_player_id() != requester_id)
+        return EnterError::NotLeader;
+
+    auto* instance = local_world_->find_instance(binding->instance_id);
+    if (!instance) return EnterError::NoBinding;
+    // 全员到齐才准启动：受理快照成员须全部在场。
+    for (const auto member : binding->members) {
+        if (!instance->has_player(apollo::game::core::PlayerId{member}))
+            return EnterError::NotAllEntered;
+    }
+    if (!instance->start()) return EnterError::StateRejected;
+    if (instance_started_) instance_started_(binding->instance_id, binding->scene_id);
+    return EnterError::Ok;
 }
 
 LaunchError SquadInstanceService::validate(const LaunchRequest& request,
@@ -126,6 +181,9 @@ bool SquadInstanceService::release(std::uint64_t instance_id) {
         if (!local_world_) return false;
         auto* instance = local_world_->find_instance(instance_id);
         if (!instance || !instance->is_destroyed()) return false;
+        // closing 钩子在 Scene/Instance 回收前触发：宿主在此销毁私有脚本
+        // 状态并摘除副本内残留（钩子见 set_instance_closing）。
+        if (instance_closing_) instance_closing_(instance_id);
         if (!local_world_->destroy_instance(instance_id)) return false;
     }
     erase_binding(it);

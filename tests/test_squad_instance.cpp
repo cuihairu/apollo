@@ -7,7 +7,9 @@
 //   3. 容量裁决：本地满载转远端；无容量拒绝；释放后容量回收；
 //   4. 回收约束：仅终态 Instance 可释放，Scene 随 Instance 一并回收。
 
+#include "apollo/game/core/entity.hpp"
 #include "apollo/game/social/party.hpp"
+#include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/world.hpp"
 #include "squad_instance/squad_instance.hpp"
 
@@ -251,6 +253,144 @@ struct Case {
     bool (*fn)();
 };
 
+// 最小实体（实体隔离用例；模式同 test_scene 的 CountingEntity）
+class TaggedEntity : public apollo::game::core::Entity {
+public:
+    explicit TaggedEntity(apollo::game::core::EntityId id) : Entity(id, "tagged") {}
+};
+
+bool test_squad_enter_and_start_gameplay() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    TEST_ASSERT(service.enter(404, kLeader) ==
+                    SquadInstanceService::EnterError::NoBinding,
+                "enter without binding rejected");
+
+    std::uint64_t started_instance = 0, started_scene = 0;
+    int started_calls = 0;
+    service.set_instance_started(
+        [&](std::uint64_t instance_id, std::uint64_t scene_id) {
+            ++started_calls;
+            started_instance = instance_id;
+            started_scene = scene_id;
+        });
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.enter(1, kOutsider) ==
+                    SquadInstanceService::EnterError::NotRoster,
+                "outsider enter rejected");
+    auto* instance = world.find_instance(launch.instance_id);
+    TEST_ASSERT(instance != nullptr &&
+                    instance->state() == apollo::game::world::Instance::State::Create,
+                "fresh instance in Create");
+
+    // 首进驱动 Create→Initialize→Waiting
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "leader enters");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Waiting,
+                "first enter drives to Waiting");
+    TEST_ASSERT(service.enter(1, kMemberB) == SquadInstanceService::EnterError::Ok,
+                "member B enters");
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Duplicate,
+                "duplicate enter rejected");
+
+    // 未全员到齐：非队长拒、缺员拒
+    TEST_ASSERT(service.start_gameplay(1, kMemberB) ==
+                    SquadInstanceService::EnterError::NotLeader,
+                "non-leader cannot start");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    SquadInstanceService::EnterError::NotAllEntered,
+                "start blocked until all roster entered");
+
+    TEST_ASSERT(service.enter(1, kMemberC) == SquadInstanceService::EnterError::Ok,
+                "member C enters");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "leader starts gameplay");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
+                "instance Running");
+    TEST_ASSERT(started_calls == 1 && started_instance == launch.instance_id &&
+                    started_scene == launch.scene_id,
+                "started hook fired once with ids");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    SquadInstanceService::EnterError::StateRejected,
+                "second start rejected");
+    return true;
+}
+
+bool test_squad_instance_isolation_between_instances() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    make_party(parties, 2, 200, 201, 202);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    const auto a = service.launch(basic_request(1));
+    const auto b = service.launch(basic_request(2, 200));
+    TEST_ASSERT(a.error == LaunchError::Ok && b.error == LaunchError::Ok, "both live");
+    TEST_ASSERT(a.scene_id != b.scene_id, "distinct temp scenes");
+
+    auto* scene_a = world.find_scene(a.scene_id);
+    auto* scene_b = world.find_scene(b.scene_id);
+    TEST_ASSERT(scene_a != nullptr && scene_b != nullptr && scene_a != scene_b,
+                "independent Scene runtimes");
+
+    // 实体隔离：A 场实体在 B 场不可见（AOI 与实体集均为 Scene 私有）
+    scene_a->spawn_entity(std::make_shared<TaggedEntity>(apollo::game::core::EntityId(10)));
+    TEST_ASSERT(scene_a->get_entity_count() == 1, "scene A holds its entity");
+    TEST_ASSERT(scene_b->get_entity_count() == 0, "scene B sees nothing of A");
+    TEST_ASSERT(scene_b->get_entity(apollo::game::core::EntityId(10)) == nullptr,
+                "entity lookup cannot cross scenes");
+
+    scene_b->spawn_entity(std::make_shared<TaggedEntity>(apollo::game::core::EntityId(11)));
+    TEST_ASSERT(scene_a->get_entity_count() == 1, "scene A unaffected by B spawn");
+    return true;
+}
+
+bool test_squad_hooks_close_on_release() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    int closing_calls = 0;
+    std::uint64_t closing_instance = 0;
+    service.set_instance_closing([&](std::uint64_t instance_id) {
+        ++closing_calls;
+        closing_instance = instance_id;
+    });
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    for (const auto member : std::vector<std::uint64_t>{kLeader, kMemberB, kMemberC}) {
+        TEST_ASSERT(service.enter(1, member) == SquadInstanceService::EnterError::Ok,
+                    "roster enters");
+    }
+    TEST_ASSERT(service.start_gameplay(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "gameplay started");
+    TEST_ASSERT(closing_calls == 0, "no closing while running");
+
+    auto* instance = world.find_instance(launch.instance_id);
+    // 玩家退出后才允许销毁（P2 回收约束）
+    for (const auto member : std::vector<std::uint64_t>{kLeader, kMemberB, kMemberC}) {
+        TEST_ASSERT(instance->leave(apollo::game::core::PlayerId{member}), "member leaves");
+    }
+    TEST_ASSERT(instance->cancel() && instance->settle() && instance->drain() &&
+                    instance->destroy(),
+                "reaches terminal state");
+    TEST_ASSERT(service.release(launch.instance_id), "released");
+    TEST_ASSERT(closing_calls == 1 && closing_instance == launch.instance_id,
+                "closing hook fired once before reclaim");
+    return true;
+}
+
+
 } // namespace
 
 int main() {
@@ -261,6 +401,9 @@ int main() {
         {"squad_launch_capacity_and_recycle", test_squad_launch_capacity_and_recycle},
         {"squad_launch_selects_world_with_capacity", test_squad_launch_selects_world_with_capacity},
         {"squad_launch_temp_scene_fresh_per_instance", test_squad_launch_temp_scene_fresh_per_instance},
+        {"squad_enter_and_start_gameplay", test_squad_enter_and_start_gameplay},
+        {"squad_instance_isolation_between_instances", test_squad_instance_isolation_between_instances},
+        {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
     };
 
     int passed = 0;
