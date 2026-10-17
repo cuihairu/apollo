@@ -16,14 +16,19 @@
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/world.hpp"
+#include "squad_instance/settlement_credential_store.hpp"
 #include "squad_instance/squad_instance.hpp"
 
+#include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -636,6 +641,15 @@ std::int64_t exp_of(const AnchorTable& table, std::uint64_t id) {
     return table.anchors.at(id)->progress(apollo::game::session::AnchorRewardSink::kExpKey);
 }
 
+// 隔离落盘目录（结算凭据面测试用）
+std::string make_tmp_dir(const char* tag) {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    auto dir = std::filesystem::temp_directory_path() /
+               ("apollo_squad_cred_" + std::string(tag) + "_" + std::to_string(now));
+    std::filesystem::create_directories(dir);
+    return dir.string();
+}
+
 bool test_squad_settlement_idempotent_credit_and_retry() {
     PartyManager parties;
     World world;
@@ -1148,6 +1162,174 @@ bool test_squad_process_recovery_policy() {
     return true;
 }
 
+// ---- 结算去重凭据持久提交（P2-4 真实奖励持久化）：落账先持久提交凭据，
+// 进程重启后凭据装载回填——重放不双记、挂账不漏补、终局凭据回收。----
+
+bool test_settlement_credential_store_roundtrip() {
+    const auto dir = make_tmp_dir("store");
+    squad_instance::SettlementCredentialStore store(dir);
+
+    TEST_ASSERT(store.record_applied(5, kLeader, 40), "credential committed");
+    TEST_ASSERT(store.record_applied(5, kMemberB, 20), "second credential committed");
+    TEST_ASSERT(store.record_applied(5, kLeader, 40), "duplicate commit idempotent");
+
+    auto marks = store.load_all();
+    TEST_ASSERT(marks.size() == 1 && marks.count(5) == 1, "one party loaded");
+    TEST_ASSERT(marks[5].size() == 2 && marks[5].at(kLeader) == 40 &&
+                    marks[5].at(kMemberB) == 20,
+                "applied players with scores loaded");
+
+    TEST_ASSERT(store.record_applied(7, 200, 9), "second party committed");
+    marks = store.load_all();
+    TEST_ASSERT(marks.size() == 2 && marks[7].size() == 1, "two parties loaded");
+
+    TEST_ASSERT(store.erase(5), "erase ok");
+    TEST_ASSERT(!std::filesystem::exists(std::filesystem::path(dir) / "settlement_5.cred"),
+                "credential file reclaimed");
+    marks = store.load_all();
+    TEST_ASSERT(marks.size() == 1 && marks.count(7) == 1, "erased party gone");
+
+    // 垃圾行跳过、可解析行保留；crash 残留 .tmp 不入账
+    {
+        std::ofstream garbage(std::filesystem::path(dir) / "settlement_9.cred",
+                              std::ios::binary | std::ios::trunc);
+        garbage << "not a line\n123 45\nxxx\n";
+    }
+    marks = store.load_all();
+    TEST_ASSERT(marks.size() == 2 && marks[9].size() == 1 && marks[9].at(123) == 45,
+                "malformed lines skipped, parseable kept");
+
+    // 目录不可造（路径被常规文件占位）：提交失败如实上报 false
+    const auto blocker = std::filesystem::path(dir) / "blocker";
+    {
+        std::ofstream file(blocker, std::ios::binary | std::ios::trunc);
+        file << "x";
+    }
+    squad_instance::SettlementCredentialStore blocked((blocker / "settlements").string());
+    TEST_ASSERT(!blocked.record_applied(1, kLeader, 5), "uncommittable store reports false");
+    TEST_ASSERT(blocked.load_all().empty(), "unreadable store loads empty");
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+bool test_squad_settlement_credential_replay_dedup_across_restart() {
+    PartyManager parties;
+    make_party(parties, 1);
+    const auto dir = make_tmp_dir("restart");
+
+    // 代次一：落账两条（不 teardown——模拟进程消亡，凭据留盘）
+    {
+        World world;
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+        service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+        service.set_credential_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "gen1 launched");
+        TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        TEST_ASSERT(service.credit_settlement(1, kMemberB, 20) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "member B credited");
+        TEST_ASSERT(exp_of(table, kLeader) == 40, "gen1 leader exp");
+        TEST_ASSERT(
+            std::filesystem::exists(std::filesystem::path(dir) / "settlement_1.cred"),
+            "credential committed at credit time");
+    }  // 代次一进程消亡（无 teardown——副本未收尾）
+
+    // 代次二：凭据装载回填新账本——重放拒、挂账补、回写凭据、终局回收
+    {
+        World world;
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+        service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+        service.set_credential_dir(dir);
+
+        TEST_ASSERT(service.ingest_restored_credentials() == 1, "one credential ingested");
+        TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "gen2 launched");
+
+        // 已落账玩家重放拒绝（新代次锚点 exp 从 0 起——双记会加出 80）
+        TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
+                    "leader replay refused across restart");
+        TEST_ASSERT(service.credit_settlement(1, kMemberB, 20) ==
+                        squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
+                    "member B replay refused across restart");
+        TEST_ASSERT(exp_of(table, kLeader) == 0, "replay credits nothing");
+        TEST_ASSERT(exp_of(table, kMemberB) == 0, "replay credits nothing (B)");
+
+        // 未落账成员照常补齐——重试面不漏
+        TEST_ASSERT(service.credit_settlement(1, kMemberC, 30) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "member C credited");
+        TEST_ASSERT(exp_of(table, kMemberC) == 30, "C reward lands once");
+
+        // 恢复标记在 launch 时已回写凭据（代次二再崩不丢已落凭据）
+        {
+            std::ifstream in(std::filesystem::path(dir) / "settlement_1.cred");
+            TEST_ASSERT(in.good(), "credential re-persisted at restore");
+            std::stringstream buf;
+            buf << in.rdbuf();
+            const auto text = buf.str();
+            TEST_ASSERT(text.find("100 40") != std::string::npos &&
+                            text.find("101 20") != std::string::npos &&
+                            text.find("102 30") != std::string::npos,
+                        "restored + new marks all present");
+        }
+
+        // 终局收尾：凭据回收（结算代次闭环）
+        TEST_ASSERT(service.abort(1), "gen2 torn down");
+        TEST_ASSERT(
+            !std::filesystem::exists(std::filesystem::path(dir) / "settlement_1.cred"),
+            "credential reclaimed at teardown");
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+bool test_squad_settlement_credential_failure_holds_ledger() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    const auto dir = make_tmp_dir("blocked");
+    // 凭据面落在常规文件之下——目录不可造 = 每次提交失败
+    const auto blocker = std::filesystem::path(dir) / "blocker";
+    {
+        std::ofstream file(blocker, std::ios::binary | std::ios::trunc);
+        file << "x";
+    }
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    service.set_credential_dir((blocker / "settlements").string());
+
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+
+    // 凭据未持久提交 = 挂账不落（绝不无凭据落账）
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
+                "uncommittable credential holds the credit");
+    TEST_ASSERT(exp_of(table, kLeader) == 0, "no exp without committed credential");
+    TEST_ASSERT(service.retry_settlement(1) == 0,
+                "retry also held while credential face is down");
+
+    auto snap = service.settlement(1);
+    TEST_ASSERT(snap.has_value() && snap->pending == 1 && snap->applied == 0,
+                "held entry visible as pending");
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
 
 bool test_squad_hooks_close_on_release() {
     PartyManager parties;
@@ -1382,6 +1564,11 @@ int main() {
         {"squad_all_exit_drives_failure_line", test_squad_all_exit_drives_failure_line},
         {"squad_party_disband_aborts_instance", test_squad_party_disband_aborts_instance},
         {"squad_process_recovery_policy", test_squad_process_recovery_policy},
+        {"settlement_credential_store_roundtrip", test_settlement_credential_store_roundtrip},
+        {"squad_settlement_credential_replay_dedup_across_restart",
+         test_squad_settlement_credential_replay_dedup_across_restart},
+        {"squad_settlement_credential_failure_holds_ledger",
+         test_squad_settlement_credential_failure_holds_ledger},
         {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
         {"squad_concurrent_instances_gameplay_isolation",
          test_squad_concurrent_instances_gameplay_isolation},

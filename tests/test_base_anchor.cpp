@@ -171,6 +171,207 @@ bool test_shutdown_flushes_journal_and_archive() {
     return true;
 }
 
+// ---- 真实奖励持久化（P2-4）：奖励落 Anchor 长期态，flush 载荷收集自
+// Anchor（exp 覆盖写回）而非仅重写旧档案；重启播种不双记；冻结迁移
+// 路径同样收集。----
+
+bool test_reward_collect_persists_profile() {
+    std::cout << "Running: test_reward_collect_persists_profile..." << std::endl;
+
+    player_store::PlayerStoreConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 10;
+    config.host = "127.0.0.1";
+    config.port = 39004;
+    config.dataDir = "base_anchor_test_reward_data/players";
+    config.journalPath = "base_anchor_test_reward_data/journal/persist.log";
+    config.shutdownFlushTimeoutMs = 2000;
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+
+    player_store::PlayerData seed;
+    seed.playerId = 1003;
+    seed.username = "reward-test";
+    seed.exp = 100;
+    {
+        player_store::DatabaseService seeder(config);
+        TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
+    }
+
+    {
+        player_store::PlayerStore server(config);
+        server.start();
+
+        auto anchor = server.activatePlayer(1003);
+        TEST_ASSERT(anchor != nullptr, "anchor activated");
+        // 结算奖励正路径：AnchorRewardSink 语义（exp 键 + mark_dirty）
+        apollo::game::session::AnchorRewardSink sink(*anchor);
+        sink.on_reward(1003, 50);
+        TEST_ASSERT(anchor->needs_save(), "reward marks anchor dirty");
+        TEST_ASSERT(
+            anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 150,
+            "anchor carries profile exp plus reward");
+
+        server.stop();
+    }
+
+    // flush 载荷收集自 Anchor：档案 exp = 播种 100 + 奖励 50（旧路径只
+    // 重写旧档案——奖励随进程消亡）
+    {
+        player_store::DatabaseService reloader(config);
+        player_store::PlayerData loaded;
+        TEST_ASSERT(reloader.loadPlayer(1003, loaded), "archive readable");
+        TEST_ASSERT(loaded.exp == 150, "reward collected into archive on flush");
+    }
+
+    std::cout << "  PASSED" << std::endl;
+    std::filesystem::remove_all("base_anchor_test_reward_data");
+    return true;
+}
+
+bool test_reward_survives_restart_no_double_count() {
+    std::cout << "Running: test_reward_survives_restart_no_double_count..." << std::endl;
+
+    const std::string root = "base_anchor_test_restart_data";
+    player_store::PlayerStoreConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 10;
+    config.host = "127.0.0.1";
+    config.port = 39005;
+    config.dataDir = root + "/players";
+    config.journalPath = root + "/journal/persist.log";
+    config.shutdownFlushTimeoutMs = 2000;
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+
+    player_store::PlayerData seed;
+    seed.playerId = 1004;
+    seed.username = "restart-test";
+    seed.exp = 100;
+    {
+        player_store::DatabaseService seeder(config);
+        TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
+    }
+
+    // 代次一：+50 落档 150
+    {
+        player_store::PlayerStore server(config);
+        server.start();
+        auto anchor = server.activatePlayer(1004);
+        TEST_ASSERT(anchor != nullptr, "gen1 anchor activated");
+        apollo::game::session::AnchorRewardSink(*anchor).on_reward(1004, 50);
+        server.stop();
+    }
+    {
+        player_store::DatabaseService reloader(config);
+        player_store::PlayerData loaded;
+        TEST_ASSERT(reloader.loadPlayer(1004, loaded) && loaded.exp == 150,
+                    "gen1 flush collected reward");
+    }
+
+    // 代次二：重启播种（anchor exp = 档案 150）再 +30 → 落档 180
+    {
+        player_store::PlayerStore server(config);
+        server.start();
+        auto anchor = server.activatePlayer(1004);
+        TEST_ASSERT(anchor != nullptr, "gen2 anchor activated");
+        TEST_ASSERT(
+            anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 150,
+            "restart seeds anchor from archive (no double count)");
+        apollo::game::session::AnchorRewardSink(*anchor).on_reward(1004, 30);
+        server.stop();
+    }
+    {
+        player_store::DatabaseService reloader(config);
+        player_store::PlayerData loaded;
+        TEST_ASSERT(reloader.loadPlayer(1004, loaded) && loaded.exp == 180,
+                    "gen2 adds on seeded baseline");
+    }
+
+    // 代次三：再激活再停——覆写幂等（不因重复 flush/播种加出 210）
+    {
+        player_store::PlayerStore server(config);
+        server.start();
+        auto anchor = server.activatePlayer(1004);
+        TEST_ASSERT(anchor != nullptr, "gen3 anchor activated");
+        TEST_ASSERT(
+            anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 180,
+            "gen3 seeds from archive");
+        server.stop();
+    }
+    {
+        player_store::DatabaseService reloader(config);
+        player_store::PlayerData loaded;
+        TEST_ASSERT(reloader.loadPlayer(1004, loaded) && loaded.exp == 180,
+                    "idempotent across re-flush and restart");
+    }
+
+    std::cout << "  PASSED" << std::endl;
+    std::filesystem::remove_all(root);
+    return true;
+}
+
+bool test_freeze_collects_pending_reward() {
+    std::cout << "Running: test_freeze_collects_pending_reward..." << std::endl;
+
+    const std::string root = "base_anchor_test_freeze_data";
+    player_store::PlayerStoreConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 60000;  // 冻结前不触发自动保存——增量只经冻结收口
+    config.host = "127.0.0.1";
+    config.port = 39006;
+    config.dataDir = root + "/players";
+    config.journalPath = root + "/journal/persist.log";
+    config.shutdownFlushTimeoutMs = 2000;
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+
+    player_store::PlayerData seed;
+    seed.playerId = 1005;
+    seed.username = "freeze-test";
+    seed.exp = 100;
+    {
+        player_store::DatabaseService seeder(config);
+        TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
+    }
+
+    player_store::PlayerStore server(config);
+    server.start();
+    auto anchor = server.activatePlayer(1005);
+    TEST_ASSERT(anchor != nullptr, "anchor activated");
+    apollo::game::session::AnchorRewardSink(*anchor).on_reward(1005, 50);
+
+    // 冻结段同步排平：未 flush 的奖励增量随冻结落档（否则迁移快照丢奖励）
+    TEST_ASSERT(server.freezePlayer(1005), "player frozen");
+    {
+        player_store::DatabaseService reloader(config);
+        player_store::PlayerData loaded;
+        TEST_ASSERT(reloader.loadPlayer(1005, loaded) && loaded.exp == 150,
+                    "freeze collects pending reward");
+    }
+    const auto snapshot = server.snapshotPlayer(1005);
+    TEST_ASSERT(snapshot.success, "snapshot taken after freeze");
+    TEST_ASSERT(snapshot.profile_json.find("150") != std::string::npos,
+                "snapshot carries collected exp");
+
+    // 目标侧接权播种：adopt 后锚点 exp = 快照档案值（真源随档走）
+    TEST_ASSERT(server.adoptPlayer(1006, snapshot.profile_json, 9002, 3, 5),
+                "adopted with write authority");
+    auto adopted = server.findAnchor(1006);
+    TEST_ASSERT(adopted != nullptr, "adopted anchor online");
+    TEST_ASSERT(adopted->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 150,
+                "adopt seeds anchor exp from adopted profile");
+
+    server.stop();
+
+    std::cout << "  PASSED" << std::endl;
+    std::filesystem::remove_all(root);
+    return true;
+}
+
 // ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步 zone 侧；
 // wire = 契约 933-938，migration_wire 全帧经 dispatchRequest 分流）----
 

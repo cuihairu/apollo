@@ -27,6 +27,34 @@ features:
     details: 网络、数据、实体契约、AOI、战斗和运行时模块；README 与模块文档说明当前实现状态。
 ---
 
+<script setup lang="ts">
+// 首次访问按浏览器语言选择文档语言（vitepress 无此能力，GitHub Pages 不支持 _redirects）
+// 优先级：localStorage 手动选择 > navigator.language > 保持当前 locale
+import { onBeforeMount } from 'vue'
+const KEY = 'apollo-lang-auto-picked'
+const BASE = '/apollo/'
+const ROOT_PATH = BASE
+const ZH_PATH = BASE + 'zh/'
+onBeforeMount(() => {{
+  if (typeof window === 'undefined') return
+  const p = window.location.pathname
+  if (p !== ROOT_PATH && p !== ROOT_PATH.slice(0, -1)) return
+  const picked = localStorage.getItem(KEY)
+  if (picked) {{ if (picked !== p) window.location.replace(picked); return }}
+  const langs = (navigator.languages?.length ? navigator.languages : [navigator.language]).map(l => l.toLowerCase())
+  if (langs.some(l => l.startsWith('zh'))) window.location.replace(ZH_PATH)
+}})
+if (typeof window !== 'undefined') {{
+  window.addEventListener('click', (e) => {{
+    const a = (e.target as HTMLElement)?.closest?.('a') as HTMLAnchorElement | null
+    const href = a?.getAttribute('href') || ''
+    if (href.startsWith(ZH_PATH) || href.startsWith('zh/')) localStorage.setItem(KEY, ZH_PATH)
+    else if (href === ROOT_PATH || href === ROOT_PATH.slice(0, -1)) localStorage.setItem(KEY, ROOT_PATH)
+  }}, true)
+}}
+</script>
+
+
 ## 项目定位
 
 Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合作 PvE/PvP、竞技场和副本。MMO 是可能的产品规模或产品形态，不是服务端架构名称；Apollo 当前不以持久化无缝大世界为目标。
