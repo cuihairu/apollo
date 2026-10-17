@@ -106,6 +106,17 @@ WorldApp::WorldApp(const WorldAppConfig& config)
     worldId_ = config.worldId;
     worldHost_->add_world_service(
         std::make_shared<WorldAppService>(*world_, config_));
+    // 小队副本受理面（P2）：注册本 World 容量；在线谓词按本进程会话面
+    // 裁定（权威在线目录在 Login 侧，跨进程校验随后续条目接通）。
+    squadInstanceService_ = std::make_unique<squad_instance::SquadInstanceService>(
+        squadParties_, world_.get(), config_.worldId);
+    squadInstanceService_->register_world(config_.worldId, config_.maxInstances);
+    squadInstanceService_->set_member_online(
+        [sessions = worldSessionManager_](std::uint64_t player_id) {
+            return sessions &&
+                   sessions->find_by_player(
+                       apollo::game::core::PlayerId{player_id}) != nullptr;
+        });
 }
 
 WorldApp::~WorldApp() {

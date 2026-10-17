@@ -5,6 +5,7 @@
 #include "world_app/m1_link_server.hpp"
 #include "world_app/world_types.hpp"
 #include "player_store/player_store.hpp"
+#include "squad_instance/squad_instance.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
@@ -40,6 +41,11 @@ public:
     // 是否运行中
     bool isRunning() const { return running_; }
     player_store::PlayerStore* playerStore() noexcept { return playerStore_.get(); }
+
+    // 小队副本受理面（P2）：进程内装配完成；测试与后续 M1 入口共用。
+    squad_instance::SquadInstanceService* squadInstanceService() noexcept {
+        return squadInstanceService_.get();
+    }
 
     // 受理点判定（M1 面与测试共用）：维护闸闭 / 顶格拒收 = false（M1 面
     // 据此回 2001/2101 即时应答；受理成功不回包，延时应答随 executeIntent
@@ -132,6 +138,11 @@ private:
 
     WorldAppConfig config_;
     std::unique_ptr<player_store::PlayerStore> playerStore_;
+    // 小队副本受理面（P2）：PartyManager + 受理服务。入口链路（客户端→
+    // Gateway→World 的真实上行）随后续条目接通；本批先在进程内装配并
+    // 注册本 World 容量。
+    apollo::game::social::PartyManager squadParties_;
+    std::unique_ptr<squad_instance::SquadInstanceService> squadInstanceService_;
     // Zone 世界容器（P0-3）：create_scene / create_instance / scene.enter 路径
     std::unique_ptr<apollo::game::world::World> world_;
     std::shared_ptr<apollo::game::world::WorldSessionManager> worldSessionManager_;

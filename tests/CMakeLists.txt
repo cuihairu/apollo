@@ -1960,6 +1960,10 @@ foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests 
     if(TARGET ${apollo_hosted_target})
         target_link_libraries(${apollo_hosted_target} PRIVATE apollo_app_services)
     endif()
+    # world_app.cpp 编入的目标需小队受理面符号（P2）
+    if(TARGET ${apollo_hosted_target} AND TARGET apollo_squad_instance)
+        target_link_libraries(${apollo_hosted_target} PRIVATE apollo_squad_instance)
+    endif()
 endforeach()
 
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
@@ -1979,5 +1983,18 @@ target_compile_definitions(hosted_services_tests PRIVATE
     APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
 target_link_libraries(hosted_services_tests PRIVATE apollo_app_services
     apollo::game_world apollo::script apollo::net_linktrace)
+if(TARGET apollo_squad_instance)
+    target_link_libraries(hosted_services_tests PRIVATE apollo_squad_instance)
+endif()
 add_test(NAME HostedServicesTests COMMAND hosted_services_tests)
+endif()
+
+# Squad instance admission (P2)：小队创建请求受理——队伍/成员/人数/准入
+# 校验、World 容量选择、独立 Instance 与临时 Scene 创建。
+if(TARGET apollo_squad_instance)
+add_executable(squad_instance_tests
+    test_squad_instance.cpp
+)
+target_link_libraries(squad_instance_tests PRIVATE apollo_squad_instance apollo::base apollo::core)
+add_test(NAME SquadInstanceTests COMMAND squad_instance_tests)
 endif()

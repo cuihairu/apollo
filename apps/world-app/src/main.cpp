@@ -58,6 +58,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
 
         if (arg == "--world-id" && i + 1 < argc) {
             config.worldId = static_cast<std::uint32_t>(std::stoul(argv[++i]));
+        } else if (arg == "--max-instances" && i + 1 < argc) {
+            config.maxInstances = static_cast<std::size_t>(std::stoull(argv[++i]));
         } else if (arg == "--player-store-m1-port" && i + 1 < argc) {
             config.playerStore.m1Port = static_cast<std::uint16_t>(std::stoul(argv[++i]));
         } else if (arg == "--data-dir" && i + 1 < argc) {
@@ -83,6 +85,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  --world-id <id>            World identity (default: 1)\n"
+                      << "  --max-instances <n>        Squad instance capacity (default: 16)\n"
                       << "  --player-store-m1-port <port>  Hosted player data endpoint (default: 9104)\n"
                       << "  --data-dir <path>          Player profile directory\n"
                       << "  --journal <path>           Player journal path\n"
