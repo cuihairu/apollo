@@ -27,7 +27,7 @@
 
 - [x] 复用现有 World、Scene、Instance 和 Instance 八态状态机，不重写同义生命周期。
 - [x] 补齐底层回收约束：同一 Scene 只绑定一个 Instance，活动副本保护 Scene，终态回收同时移除两项注册，取消流程不发成功奖励、玩家退出后才允许销毁；通过回归测试。
-- [ ] 接通小队创建请求：验证队伍、成员、人数和准入条件，选择有容量的 World，创建独立 Instance 与临时 Scene。
+- [x] 接通小队创建请求：验证队伍、成员、人数和准入条件，选择有容量的 World，创建独立 Instance 与临时 Scene。（d4d55f65：apps/common SquadInstanceService 受理面——队伍存在/队长/人数上限/在线谓词/成员忙校验，本地优先按容量选 World，独立 Instance + 临时 Scene 一对一创建，终态释放双回收；SquadInstanceTests 6/6，门禁 77/77 绿。客户端→Gateway→World 真实上行仍留待后项。）
 - [ ] 接通成员进入和准备完成后启动玩法，隔离副本内实体、AOI、任务与脚本状态。
 - [ ] 接通刷怪、目标完成与失败判定，驱动 Instance 进入结算阶段。
 - [ ] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。
