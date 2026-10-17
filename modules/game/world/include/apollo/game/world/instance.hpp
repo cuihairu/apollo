@@ -26,7 +26,7 @@ class Scene;
 //   Draining ──destroy──▶ Destroyed（终态，不可逆）
 //
 // 校验表（is_transition_valid）：只有上表相邻推进合法；任何回退/跳段均拒绝
-// （八态是单向生命周期，异常走 finish 而非回退）。Destroyed 后所有转换拒绝。
+// （八态是单向生命周期，异常通过显式 cancel 入口收尾）。Destroyed 后所有转换拒绝。
 // Instance 是「Scene 的玩法生命周期载体」：Scene 是空间运行时（P0-3 拆分后），
 // Instance 管玩法起止与在场玩家集合。
 class Instance {
@@ -61,6 +61,9 @@ public:
     bool ready();
     bool start();
     bool finish();
+    // 取消/失败：进入 Finishing 收尾，不发放成功奖励。
+    // 正常状态转换表保持相邻推进；取消是显式的异常终止入口。
+    bool cancel();
     bool settle();
     bool drain();
     bool destroy();

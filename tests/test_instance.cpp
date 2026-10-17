@@ -267,6 +267,32 @@ bool test_instance_battle_tick_loop() {
     return true;
 }
 
+bool test_instance_cancel_and_cleanup() {
+    for (int stage = 0; stage <= 3; ++stage) {
+        Instance instance(20 + stage, 200 + stage);
+        auto sink = std::make_unique<MemoryRewardSink>();
+        TEST_ASSERT(instance.attach_battle(std::make_unique<apollo::game::battle::BattleRuntime>(
+            100, 42, sink.get())), "attach cancellable battle");
+        if (stage >= 1) instance.initialize();
+        if (stage >= 2) instance.ready();
+        if (stage >= 3) {
+            TEST_ASSERT(instance.enter(PlayerId{10}) && instance.start(), "start cancellable battle");
+        }
+        TEST_ASSERT(instance.cancel(), "cancel before or during gameplay");
+        TEST_ASSERT(!instance.cancel() && !instance.start(), "cancelled instance cannot restart");
+        TEST_ASSERT(sink->payouts.empty(), "cancel does not issue success rewards");
+        TEST_ASSERT(instance.battle() == nullptr, "cancel releases battle workload");
+        TEST_ASSERT(instance.settle() && instance.drain(), "cancel enters cleanup");
+        if (stage >= 3) {
+            TEST_ASSERT(!instance.destroy(), "players must leave before destruction");
+            TEST_ASSERT(instance.leave(PlayerId{10}), "remove player during drain");
+        }
+        TEST_ASSERT(instance.destroy() && !instance.destroy(), "terminal cleanup occurs once");
+        TEST_ASSERT(!instance.enter(PlayerId{10}), "late admission rejected");
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -284,6 +310,7 @@ int main() {
         {"instance_invalid_player_rejected", test_instance_invalid_player_rejected},
         {"instance_battle_hangup_window", test_instance_battle_hangup_window},
         {"instance_battle_tick_loop", test_instance_battle_tick_loop},
+        {"instance_cancel_and_cleanup", test_instance_cancel_and_cleanup},
     };
 
     for (const auto& c : cases) {

@@ -28,7 +28,8 @@ public:
     // scene_id 自增分配（进程内单调，0 保留为无效哨兵）。
     Scene* create_scene(const SceneDescriptor& descriptor);
     Scene* find_scene(std::uint64_t scene_id);
-    void destroy_scene(std::uint64_t scene_id);
+    // 拒绝删除仍有活动 Instance 的 Scene。
+    bool destroy_scene(std::uint64_t scene_id);
     [[nodiscard]] std::size_t scene_count() const noexcept;
     [[nodiscard]] const std::vector<Scene*>& scenes() const noexcept;
 
@@ -38,6 +39,8 @@ public:
     Instance* find_instance(Instance::InstanceId instance_id);
     // 场景 → 实例定位（换幕准入预检用；一 scene 至多挂一实例——P1 口径）
     Instance* find_instance_by_scene(std::uint64_t scene_id);
+    // 仅回收终态 Instance；同时释放其临时 Scene。重复回收返回 false。
+    bool destroy_instance(Instance::InstanceId instance_id);
     [[nodiscard]] std::size_t instance_count() const noexcept;
 
     // 全场 tick（WorldHost 服务侧调用；逐 scene 六阶段）

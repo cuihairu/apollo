@@ -26,7 +26,11 @@ Scene* World::find_scene(std::uint64_t scene_id) {
     return it != scenes_.end() ? it->second.get() : nullptr;
 }
 
-void World::destroy_scene(std::uint64_t scene_id) {
+bool World::destroy_scene(std::uint64_t scene_id) {
+    if (auto* instance = find_instance_by_scene(scene_id)) {
+        if (!instance->is_destroyed()) return false;
+        instances_.erase(instance->id());
+    }
     // 先摘顺序表再删场：scenes_.erase 即析构 Scene，反向次序会在顺序表
     // 里解引用悬垂指针比 scene_id（use-after-free，sanitizer 树实抓）
     for (auto order_it = scene_order_.begin(); order_it != scene_order_.end(); ++order_it) {
@@ -35,7 +39,7 @@ void World::destroy_scene(std::uint64_t scene_id) {
             break;
         }
     }
-    scenes_.erase(scene_id);
+    return scenes_.erase(scene_id) != 0;
 }
 
 std::size_t World::scene_count() const noexcept {
@@ -47,7 +51,7 @@ const std::vector<Scene*>& World::scenes() const noexcept {
 }
 
 InstancePtr World::create_instance(std::uint64_t scene_id, const std::string& name) {
-    if (scenes_.count(scene_id) == 0) {
+    if (scenes_.count(scene_id) == 0 || find_instance_by_scene(scene_id)) {
         return nullptr;  // 场景不存在
     }
     const auto instance_id = next_instance_id_++;
@@ -68,6 +72,13 @@ Instance* World::find_instance_by_scene(std::uint64_t scene_id) {
         }
     }
     return nullptr;
+}
+
+bool World::destroy_instance(Instance::InstanceId instance_id) {
+    auto* instance = find_instance(instance_id);
+    if (!instance || !instance->is_destroyed()) return false;
+    const auto scene_id = instance->scene_id();
+    return destroy_scene(scene_id);
 }
 
 std::size_t World::instance_count() const noexcept {

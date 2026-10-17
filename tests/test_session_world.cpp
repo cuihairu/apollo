@@ -184,7 +184,15 @@ bool test_world_create_scene_and_instance() {
     TEST_ASSERT(scene->tick_count() == 1, "world tick advances scene");
 
     const auto destroyed_id = scene->scene_id();
-    world.destroy_scene(destroyed_id);
+    TEST_ASSERT(world.create_instance(destroyed_id) == nullptr, "one Instance per Scene");
+    TEST_ASSERT(!world.destroy_scene(destroyed_id), "active Instance protects Scene");
+    TEST_ASSERT(!world.destroy_instance(instance->id()), "active Instance cannot be reclaimed");
+    TEST_ASSERT(instance->cancel(), "unstarted Instance can be cancelled");
+    TEST_ASSERT(instance->settle() && instance->drain() && instance->destroy(), "cancelled Instance reaches terminal state");
+    const auto instance_id = instance->id();
+    TEST_ASSERT(world.destroy_instance(instance_id), "terminal Instance and Scene reclaimed together");
+    TEST_ASSERT(world.find_instance(instance_id) == nullptr && world.instance_count() == 0, "Instance registry cleared");
+    TEST_ASSERT(!world.destroy_instance(instance_id), "repeated reclamation rejected");
     TEST_ASSERT(world.scene_count() == 0, "scene destroyed");
     // 摘除后顺序表同步干净（destroy 次序错即悬垂指针 use-after-free，
     // sanitizer 树实抓）——重建场后 tick 必须在干净顺序表上推进

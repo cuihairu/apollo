@@ -88,6 +88,7 @@ bool Instance::ready() {
 }
 
 bool Instance::start() {
+    if (!is_transition_valid(state_, State::Running)) return false;
     // 挂了 battle 的 instance：start 前置校验参战者收集完成（battle.begin 需非空；
     // 失败则 instance 状态不推进——八态与五段一致可观察）
     if (battle_ && !battle_->begin()) {
@@ -111,12 +112,24 @@ bool Instance::settle() {
     return transition_to(State::Rewarding);
 }
 
+bool Instance::cancel() {
+    if (state_ != State::Create && state_ != State::Initialize && state_ != State::Waiting && state_ != State::Running)
+        return false;
+    battle_.reset();
+    state_ = State::Finishing;
+    return true;
+}
+
 bool Instance::drain() {
     return transition_to(State::Draining);
 }
 
 bool Instance::destroy() {
-    return transition_to(State::Destroyed);
+    if (!players_.empty() || !transition_to(State::Destroyed)) return false;
+    battle_.reset();
+    player_index_.clear();
+    players_.clear();
+    return true;
 }
 
 bool Instance::is_destroyed() const noexcept {
