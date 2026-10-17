@@ -240,13 +240,18 @@ InterServerLink* LinkManager::find_staging_peer(Managed& m, const std::string& n
 }
 
 InterServerLink* LinkManager::link(const std::string& name) {
-    // 端点名命中的：active → 本端链路；passive → 单 peer 兜底（1:1 场景
-    // 端点名 = 对端名；多 peer 端点名歧义拒答）。
+    // 端点名命中的：active → 本端链路；passive → 先按对端自报名直查（fan-out
+    // 面：端点名与对端名同名时，多 peer 场景须按名消歧而非拒答——否则第二
+    // 条对端链上线即吞掉全部按端点名回执），再单 peer 兜底（1:1 场景端点名
+    // = 对端名）。
     auto it = by_name_.find(name);
     if (it != by_name_.end()) {
         Managed& m = *it->second;
         if (m.config.role == EndpointRole::kActive) {
             return m.link.get();
+        }
+        if (auto p = m.peers.find(name); p != m.peers.end()) {
+            return p->second.get();  // 对端自报名与端点名同链路名：按名精确消歧
         }
         if (m.peers.size() == 1) {
             return m.peers.begin()->second.get();
