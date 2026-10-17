@@ -232,6 +232,24 @@ bool test_route_version_from_hash() {
     return true;
 }
 
+bool test_compat_route_versions_from_text() {
+    // 兼容窗口装配文本：逗号/空白分隔的旧代 schema_hash 列表 → 握手版本
+    // 集合。口径与 route_version_from_hash 同源（首 16 hex 大端）。
+    const std::string h1 = "132a03c831fc18630207e5fb22272df7f97275c0abf85b32b22f75955f44a874";
+    const std::string h2 = "c7b4dac8bdfa7b782f910ec2c4b5f452c1f47bcf9566d8dd4caca83d4658eaff";
+    const auto two = compat_route_versions_from_text(h1 + "," + h2);
+    TEST_ASSERT(two.size() == 2, "comma list parsed");
+    TEST_ASSERT(two[0] == 0x132a03c831fc1863ull && two[1] == 0xc7b4dac8bdfa7b78ull,
+                "big-endian prefix values");
+    const auto spaced = compat_route_versions_from_text("  " + h1 + " \t\n" + h2);
+    TEST_ASSERT(spaced.size() == 2, "whitespace separators");
+    TEST_ASSERT(compat_route_versions_from_text("").empty(), "empty text = no window");
+    TEST_ASSERT(compat_route_versions_from_text(",,,").empty(), "empty segments skipped");
+    TEST_ASSERT(compat_route_versions_from_text("zzzz").empty(),
+                "zero-value tokens skipped");
+    return true;
+}
+
 bool test_dispatcher_gates() {
     RouteTable t;
     t.add(make_entry(900, "internal"));
@@ -758,6 +776,118 @@ bool test_link_route_version_mismatch() {
     return true;
 }
 
+bool test_link_compat_window() {
+    // N/N-1 兼容窗口（sdk-contract §6 发布窗）：滚动发布期两端各带受理集
+    // {本代} ∪ {旧代}，hello 互检按各自受理集裁决——窗内旧代对端正常握
+    // 手、业务照跑、对端代次可观测（上层据它选解码口径）。
+    const std::uint64_t v_old = 0xAAAA000000000001ull;
+    const std::uint64_t v_new = 0xBBBB000000000002ull;
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    LinkConfig ca = make_link_config("auth", v_new);
+    ca.compat_route_versions = {v_old};  // 新代进程开窗受理旧代
+    LinkConfig cb = make_link_config("game", v_old);
+    cb.compat_route_versions = {v_new};  // 旧代进程开窗受理新代
+    InterServerLink a(ca), b(cb);
+    SinkRecorder sa, sb;
+    RxLog rx;
+    a.set_sink(sa.sink());
+    b.set_sink(sb.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    b.dispatcher().set_handler(901, rx.handler());
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "window pair up");
+    TEST_ASSERT(a.peer_route_version() == v_old, "new side sees old-gen peer");
+    TEST_ASSERT(b.peer_route_version() == v_new, "old side sees new-gen peer");
+    // 窗内业务照跑（可靠帧过线 + ack 出队）。
+    TEST_ASSERT(a.send(901, std::vector<std::uint8_t>{'w'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "send accepted");
+    pump_rounds(a, b, 2000);
+    TEST_ASSERT(rx.got.size() == 1 && rx.got[0] == "901:w", "business crosses window");
+    TEST_ASSERT(a.stats().reliable_acked == 1 && a.reliable_pending() == 0,
+                "ack round trip drained queue");
+    return true;
+}
+
+bool test_link_compat_window_edges() {
+    // 窗外与回滚三形（sdk-contract §6 发布/回滚验收）：
+    // ① N-2 代对窗 {N, N-1} = 窗外拒；② 收敛关窗后旧代 = 拒（原语义）；
+    // ③ 服务端回滚到旧代、对端已升新代 = 拒；④ 双端同回旧代 = up。
+    const std::uint64_t v_old = 0xAAAA000000000001ull;
+    const std::uint64_t v_new = 0xBBBB000000000002ull;
+    const std::uint64_t v_far = 0xCCCC000000000003ull;
+    // ① 窗外（N-2）拒，检出侧仍报 kRouteVersionMismatch。
+    {
+        auto [ep_a, ep_b] = make_loopback_pair();
+        LinkConfig ca = make_link_config("auth", v_new);
+        ca.compat_route_versions = {v_old};
+        InterServerLink a(ca);
+        InterServerLink b(make_link_config("game", v_far));
+        SinkRecorder sa, sb;
+        a.set_sink(sa.sink());
+        b.set_sink(sb.sink());
+        a.attach(std::move(ep_a), 1000);
+        b.attach(std::move(ep_b), 1000);
+        pump_rounds(a, b, 1100);
+        TEST_ASSERT(a.state() == LinkState::kDown && b.state() == LinkState::kDown,
+                    "outside window down");
+        TEST_ASSERT(sb.last_reason == LinkDownReason::kRouteVersionMismatch,
+                    "outside window flagged");
+        TEST_ASSERT(sa.last_reason == LinkDownReason::kPeerClosed, "other sees close");
+    }
+    // ② 收敛关窗（无 compat 的本代）对旧代：破坏性形态，原语义不变。
+    {
+        auto [ep_a, ep_b] = make_loopback_pair();
+        InterServerLink a(make_link_config("auth", v_new));
+        InterServerLink b(make_link_config("game", v_old));
+        SinkRecorder sa, sb;
+        a.set_sink(sa.sink());
+        b.set_sink(sb.sink());
+        a.attach(std::move(ep_a), 1000);
+        b.attach(std::move(ep_b), 1000);
+        pump_rounds(a, b, 1100);
+        TEST_ASSERT(a.state() == LinkState::kDown && b.state() == LinkState::kDown,
+                    "closed window down");
+        TEST_ASSERT(sb.last_reason == LinkDownReason::kRouteVersionMismatch,
+                    "closed window flagged");
+    }
+    // ③ 服务端回滚（受理集回落旧代）对已升新代对端：拒。
+    {
+        auto [ep_a, ep_b] = make_loopback_pair();
+        LinkConfig ca = make_link_config("auth", v_old);
+        ca.compat_route_versions = {v_new};
+        InterServerLink a(ca);
+        InterServerLink b(make_link_config("game", v_new));
+        SinkRecorder sa, sb;
+        a.set_sink(sa.sink());
+        b.set_sink(sb.sink());
+        a.attach(std::move(ep_a), 1000);
+        b.attach(std::move(ep_b), 1000);
+        pump_rounds(a, b, 1100);
+        TEST_ASSERT(a.state() == LinkState::kDown && b.state() == LinkState::kDown,
+                    "rolled-back server rejects upgraded peer");
+        TEST_ASSERT(sb.last_reason == LinkDownReason::kRouteVersionMismatch,
+                    "rollback flagged");
+    }
+    // ④ 双端同回旧代（回滚收敛）：up。
+    {
+        auto [ep_a, ep_b] = make_loopback_pair();
+        InterServerLink a(make_link_config("auth", v_old));
+        InterServerLink b(make_link_config("game", v_old));
+        SinkRecorder sa, sb;
+        a.set_sink(sa.sink());
+        b.set_sink(sb.sink());
+        a.attach(std::move(ep_a), 1000);
+        b.attach(std::move(ep_b), 1000);
+        TEST_ASSERT(up_both(a, b, 1100), "rollback converged up");
+    }
+    return true;
+}
+
 bool test_link_droppable_cleared_on_down() {
     RouteTable table = make_dispatch_table();
     auto [ep_a, ep_b] = make_loopback_pair();
@@ -1132,6 +1262,59 @@ bool test_manager_pair_e2e() {
     return true;
 }
 
+bool test_manager_compat_window() {
+    // 管理器窗口转发：LinkManagerConfig.compat_route_versions 逐链下发
+    // （active 与 passive fan-out 同源）——滚动发布期新代 manager 与旧代
+    // manager 互拨成链，peer 按对端代次入册。
+    RouteTable table = make_dispatch_table();
+    LinkManagerConfig mca;
+    mca.self_name = "auth";
+    mca.route_version = 8;
+    mca.compat_route_versions = {7};  // 新代进程开窗
+    LinkManagerConfig mcb = mca;
+    mcb.self_name = "game";
+    mcb.route_version = 7;
+    mcb.compat_route_versions = {8};  // 旧代进程开窗
+    LinkManager mgr_a(mca), mgr_b(mcb);
+
+    EndpointConfig pb;
+    pb.name = "auth";
+    pb.host = "127.0.0.1";
+    pb.role = EndpointRole::kPassive;
+    TEST_ASSERT(mgr_b.add_endpoint(pb), "passive endpoint bound");
+
+    EndpointConfig pa;
+    pa.name = "game";
+    pa.host = "127.0.0.1";
+    pa.port = mgr_b.endpoint_port("auth");
+    TEST_ASSERT(mgr_a.add_endpoint(pa), "active endpoint added");
+
+    InterServerLink* la = mgr_a.link("game");
+    InterServerLink* lb = nullptr;
+    TEST_ASSERT(la != nullptr, "active link exposed");
+    mgr_b.set_peer_listener([&](InterServerLink& peer) {
+        peer.dispatcher().set_route_table(&table);
+        lb = &peer;
+    });
+    la->dispatcher().set_route_table(&table);
+
+    std::uint64_t t = 1000;
+    for (int i = 0; i < 500; ++i) {
+        t += 5;
+        mgr_a.pump(t);
+        mgr_b.pump(t);
+        if (la->state() == LinkState::kUp && lb != nullptr) {
+            break;
+        }
+    }
+    TEST_ASSERT(la->state() == LinkState::kUp && lb != nullptr && lb->state() == LinkState::kUp,
+                "managed window pair up");
+    TEST_ASSERT(la->peer_route_version() == 7 && lb->peer_route_version() == 8,
+                "peer generations observed");
+    TEST_ASSERT(mgr_b.peer_count("auth") == 1, "old-gen manager registered new peer");
+    return true;
+}
+
 bool test_manager_fanout_two_peers() {
     // passive fan-out（L4 collector 形态）：一个 passive 端点收两个 active
     // 对端（不同自报名）——各自成链、独立分发（按对端归账）；其一重拨 =
@@ -1294,6 +1477,7 @@ int main() {
         {"oversize_len_fatal", test_oversize_len_fatal},
         {"route_table_basics", test_route_table_basics},
         {"route_version_from_hash", test_route_version_from_hash},
+        {"compat_route_versions_from_text", test_compat_route_versions_from_text},
         {"dispatcher_gates", test_dispatcher_gates},
         {"dispatcher_no_table_rejects", test_dispatcher_no_table_rejects},
         {"load_golden_route_json", test_load_golden_route_json},
@@ -1309,6 +1493,8 @@ int main() {
         {"link_cut_sustained_down", test_link_cut_sustained_down},
         {"link_heartbeat_timeout", test_link_heartbeat_timeout},
         {"link_route_version_mismatch", test_link_route_version_mismatch},
+        {"link_compat_window", test_link_compat_window},
+        {"link_compat_window_edges", test_link_compat_window_edges},
         {"link_droppable_cleared_on_down", test_link_droppable_cleared_on_down},
 #if !defined(_WIN32)
         {"tcp_raw_echo", test_tcp_raw_echo},
@@ -1320,6 +1506,7 @@ int main() {
         {"manager_fleet_gate", test_manager_fleet_gate},
         {"manager_pair_e2e", test_manager_pair_e2e},
         {"manager_fanout_two_peers", test_manager_fanout_two_peers},
+        {"manager_compat_window", test_manager_compat_window},
 #endif
     };
     int failed = 0;
