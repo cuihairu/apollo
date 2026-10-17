@@ -31,14 +31,14 @@ TEST(RemoteEntityRef, FieldAccess) {
     RemoteEntityRef ref;
     ref.entity_id     = 42;
     ref.domain        = EntityDomain::World;
-    ref.target_app    = "room-server-1";
+    ref.target_app    = "world-1";
     ref.role          = AuthorityRole::Replica;
     ref.route_version = 7;
     ref.shard_key     = 3;
 
     EXPECT_EQ(ref.entity_id, 42u);
     EXPECT_EQ(ref.domain, EntityDomain::World);
-    EXPECT_EQ(ref.target_app, "room-server-1");
+    EXPECT_EQ(ref.target_app, "world-1");
     EXPECT_EQ(ref.role, AuthorityRole::Replica);
     EXPECT_EQ(ref.route_version, 7u);
     EXPECT_EQ(ref.shard_key, 3u);
@@ -90,14 +90,14 @@ TEST(RouteResolver, UpdateAndResolve) {
     RouteResolver resolver;
     RemoteEntityRef ref;
     ref.entity_id     = 42;
-    ref.target_app    = "room-server-1";
+    ref.target_app    = "world-1";
     ref.route_version = 1;
     resolver.update_route(ref);
 
     auto result = resolver.resolve(42);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->entity_id, 42u);
-    EXPECT_EQ(result->target_app, "room-server-1");
+    EXPECT_EQ(result->target_app, "world-1");
     EXPECT_EQ(resolver.size(), 1u);
 }
 
@@ -105,13 +105,13 @@ TEST(RouteResolver, VersionBumpOnUpdate) {
     RouteResolver resolver;
     RemoteEntityRef ref;
     ref.entity_id = 42;
-    ref.target_app = "room-server-1";
+    ref.target_app = "world-1";
     resolver.update_route(ref);
     EXPECT_EQ(resolver.route_version(), 1u);
 
     RemoteEntityRef ref2;
     ref2.entity_id = 43;
-    ref2.target_app = "room-server-2";
+    ref2.target_app = "world-2";
     resolver.update_route(ref2);
     EXPECT_EQ(resolver.route_version(), 2u);
 }
@@ -120,17 +120,17 @@ TEST(RouteResolver, OverwriteSameEntity) {
     RouteResolver resolver;
     RemoteEntityRef ref;
     ref.entity_id = 42;
-    ref.target_app = "room-server-1";
+    ref.target_app = "world-1";
     resolver.update_route(ref);
 
     RemoteEntityRef ref2;
     ref2.entity_id = 42;
-    ref2.target_app = "room-server-2";
+    ref2.target_app = "world-2";
     resolver.update_route(ref2);
 
     auto result = resolver.resolve(42);
     ASSERT_TRUE(result.has_value());
-    EXPECT_EQ(result->target_app, "room-server-2");
+    EXPECT_EQ(result->target_app, "world-2");
     EXPECT_EQ(resolver.size(), 1u);
 }
 
@@ -187,7 +187,7 @@ TEST(RpcTrace, EmitSpanWhenSampled) {
     auto ctx = RpcTrace::create_context();
     RemoteEntityRef ref;
     ref.entity_id = 42;
-    ref.target_app = "room-server-1";
+    ref.target_app = "world-1";
 
     RpcTrace::emit_rpc_span("PAS", ref, ctx, 100, 150);
 

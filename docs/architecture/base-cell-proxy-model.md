@@ -44,19 +44,19 @@ Apollo 要参考 KBE，最关键的一条对象模型原则是：
 
 从本地源码看：
 
-- [proxy.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/server/baseapp/proxy.h)
+- [proxy.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/baseapp/proxy.h)
   - `sendToClient`
   - `hasClient`
   - `giveClientTo`
   - `onGetWitness`
   - `kick`
-- [entity.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/server/baseapp/entity.h)
+- [entity.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/baseapp/entity.h)
   - `cellEntityCall`
   - `clientEntityCall`
   - `onTeleport*`
   - `onMigrationCellapp*`
   - `reqBackupCellData`
-- [entity.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/server/cellapp/entity.h)
+- [entity.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/cellapp/entity.h)
   - `realCell`
   - `ghostCell`
   - `baseEntityCall`

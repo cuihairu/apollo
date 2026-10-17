@@ -196,7 +196,7 @@ Mapping onto §7's phasing: the original "P3 bus lands" wording becomes "**M1 go
 
 ### 5.7 The Inter-Process Connection Facility (InterServerLink): Stable Connections Opened to Upper Layers
 
-§5.6's M1 fixes the inter-process segment as the "framework-internal bus"; but **upper-layer business needs this layer too** — cross-server gameplay, matchmaking, chat, GM/ops tools, collector push all want the same few things: stable connections, disconnection awareness, automatic reconnection, backpressure. This section fixes it as a first-class public facility. BigWorld's form is exactly this: all server code uses Mercury directly, with entity mailboxes, backup streams, and tool processes sharing one network library (roomservermgr.cpp hits Bundle/Channel 25 times in a single file) — "opened to upper layers" is not a convenience added for apollo; it is this layer's original form upstream. Two new Mercury pieces of evidence serve as direct references: TCPConnectionOpener (the outbound connection state machine) and LoggerEndpoint (the exemplar and anti-example of an upper-layer consumer building its own stable connection).
+§5.6's M1 fixes the inter-process segment as the "framework-internal bus"; but **upper-layer business needs this layer too** — cross-server gameplay, matchmaking, chat, GM/ops tools, collector push all want the same few things: stable connections, disconnection awareness, automatic reconnection, backpressure. This section fixes it as a first-class public facility. BigWorld's form is exactly this: all server code uses Mercury directly, with entity mailboxes, backup streams, and tool processes sharing one network library (cellappmgr.cpp hits Bundle/Channel 25 times in a single file) — "opened to upper layers" is not a convenience added for apollo; it is this layer's original form upstream. Two new Mercury pieces of evidence serve as direct references: TCPConnectionOpener (the outbound connection state machine) and LoggerEndpoint (the exemplar and anti-example of an upper-layer consumer building its own stable connection).
 
 **Vocabulary: the Link is level one; no session layer stacked on top**
 
@@ -366,19 +366,19 @@ Server-side **outbound** HTTP (third-party login verification / payment callback
 
 - **P1**: L1 frame format + L2 session basics (seq/ack/heartbeat/four-level watermark) + the native adapter converged as the only L0; the GameConnection Facade goes live, and attribute sync's P1 depends on this layer's attributes channel.
 - **P2**: reconnect-and-resume (resume token) + the movement channel's "send newest only" + hard-watermark-coupled budget downshift with the attribute budget.
-- Current status: the inter-process M1 link and Gateway egress prototype exist; Room routing integration, multi-instance selection, Gateway draining, and production rollout validation remain in the root `todo.md`.
+- Current status: the inter-process M1 link and Gateway egress prototype exist; Instance routing integration, multi-instance selection, Gateway draining, and production rollout validation remain in the root `todo.md`.
 
 ### Process Supervision and Recovery Boundary
 
-Apollo's current process supervision is provided by `machined`: local process launch, death detection, and restart. It does not provide hot backups of Room state, cross-machine takeover, or migration of active matches. The target gameplay unit is a Room; the world is not spatially partitioned into Cell/Space processes.
+Apollo's current process supervision is provided by `machined`: local process launch, death detection, and restart. It does not provide hot backups of Instance state, cross-machine takeover, or migration of active matches. The target gameplay unit is an Instance; the world is not spatially partitioned into Cell/Space processes.
 
-When a RoomServer exits unexpectedly, its in-memory Rooms do not appear automatically in another process. Until state recovery or authority transfer is implemented and verified, affected matches must be treated as failed and settled or restarted according to game rules. Moving a player between servers requires an explicit handoff of the single authoritative object and a route update; this belongs to RoomServer/Room lifecycle work, not to the transport layer by default.
+When a World exits unexpectedly, its in-memory Instances do not appear automatically in another process. Until state recovery or authority transfer is implemented and verified, affected matches must be treated as failed and settled or restarted according to game rules. Moving a player between servers requires an explicit handoff of the single authoritative object and a route update; this belongs to World/Instance lifecycle work, not to the transport layer by default.
 
-`baseappmgr`, hot-standby replicas, and automatic RoomServer rebalancing are neither required target processes nor implemented capabilities. Check `apps/machined` and the root `todo.md` for current process-supervision status.
+`baseappmgr`, hot-standby replicas, and automatic World rebalancing are neither required target processes nor implemented capabilities. Check `apps/machined` and the root `todo.md` for current process-supervision status.
 
 **Inter-process state and messages:** one owner is responsible for each authoritative state; other processes receive the projections they need through messages. Transport acknowledgement, state consistency, and persistence are separate guarantees and must be designed and verified separately. Message delivery alone does not mean authority has transferred or data has persisted.
 
-**Remote entity calls:** the current M1 link provides inter-process message transport primitives. RoomServer routing, request idempotency, authority epochs, and active-Room migration still need implementation for gameplay that requires them. The target `OneWay` and `RequestReply` semantics in the remote-call design do not mean end-to-end cross-server gameplay is complete.
+**Remote entity calls:** the current M1 link provides inter-process message transport primitives. World routing, request idempotency, authority epochs, and active-Instance migration still need implementation for gameplay that requires them. The target `OneWay` and `RequestReply` semantics in the remote-call design do not mean end-to-end cross-server gameplay is complete.
 
 ## 8. Intersections with the Other Designs
 

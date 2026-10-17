@@ -10,7 +10,7 @@
   },
   "keywords": [
     "apollo",
-    "room-based-multiplayer",
+    "instance-based-multiplayer",
     "tower-defense",
     "game-server",
     "documentation"

@@ -10,7 +10,7 @@
 | 1 | Draw the MMORPG server architecture you know, explaining each component's responsibilities and communication | Done | [q1-server-architecture.md](qa/q1-server-architecture.md) |
 | 2 | What do CellApp and BaseApp each do in the BigWorld architecture? Why is it split this way? | Done | [q2-bigworld-cell-base.md](qa/q2-bigworld-cell-base.md) |
 | 3 | What is AOI (Area of Interest)? What implementations exist? What are the pros and cons of each? | Done | [q3-aoi-implementation.md](qa/q3-aoi-implementation.md) |
-| 4 | Why does Apollo not implement a seamless world, and how do rooms transition? | Done | [q4-room-based-boundary.md](qa/q4-room-based-boundary.md) |
+| 4 | Why does Apollo not implement a seamless world, and how do instances transition? | Done | [q4-instance-boundary.md](qa/q4-instance-boundary.md) |
 | 5 | How should the server be designed to support dynamic scaling? | Done | [q5-dynamic-scaling.md](qa/q5-dynamic-scaling.md) |
 | 6 | Single-server architecture vs distributed architecture — how to choose? | Done | [q6-single-vs-distributed.md](qa/q6-single-vs-distributed.md) |
 | 7 | In-process architecture vs multi-process architecture — what are the respective advantages and disadvantages? | Done | [q7-process-architecture.md](qa/q7-process-architecture.md) |

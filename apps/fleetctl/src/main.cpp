@@ -6,7 +6,7 @@
 // 等待在主线程（禁泵线程纪律不变）。
 //
 // eval 子命令（scripting-lua §7.1 attach transport 的 admin 入口）：对
-// 目标进程（默认 cell）发 944 debug_eval_request 裸帧 + 等 945 回执——
+// 目标进程（默认 world）发 944 debug_eval_request 裸帧 + 等 945 回执——
 // eval 结果晚一拍（Scene tick 边界执行），不可走 rpc 同步面，故 ControlDial
 // 另开契约裸帧 handler/send 面。
 //
@@ -81,7 +81,7 @@ struct Options {
     std::uint16_t target_port = 0;
     std::uint32_t target_zone_id = 0;
     // eval 面（§7.1 attach transport；目标 peer 自报名 + 目标 scene + Lua 源）
-    std::string peer;                 // 空 = 按命令取默认（eval→cell，余→baseappmgr）
+    std::string peer;                 // 空 = 按命令取默认（eval→world，余→baseappmgr）
     std::uint64_t scene_id = 0;       // 0 = 默认 scene
     std::string source;               // Lua 源（表达式优先、语句回退）
 };
@@ -96,7 +96,7 @@ void printUsage() {
               << "                   --target-port TP --target-zone Z\n"
               << "                   [--source-host SH] [--target-host TH]\n"
               << "  fleetctl eval    [--host H] --port P [--peer NAME] [--scene S] --source SRC\n"
-              << "                   (default peer=cell, port 9101 = RoomServer M1 link)\n"
+              << "                   (default peer=world, port 9101 = WorldApp M1 link)\n"
               << "Exit codes: 0 admitted/ok / 2 rejected/failed / 3 unreachable / 1 usage or setup\n";
 }
 
@@ -159,7 +159,7 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         return false;
     }
     if (opt.peer.empty()) {
-        opt.peer = opt.command == "eval" ? "room-server" : "baseappmgr";
+        opt.peer = opt.command == "eval" ? "world" : "baseappmgr";
     }
     if (opt.command == "eval") {
         return !opt.source.empty();  // Lua 源必给（0 保留关联键由本进程单调分配）
@@ -181,7 +181,7 @@ std::uint64_t now_ms() {
 
 // 一次性拨号会话：装配（kUp 前装齐路由表/白名单/客户端——rpc_channel
 // 纪律）→ 自泵 → 等 kUp → call → 收线（先停泵再拆面）。peer 名参数化
-// （baseappmgr 控制面 / cell 调试面共用）；契约裸帧面（944/945 族）与
+// （baseappmgr 控制面 / World 调试面共用）；契约裸帧面（944/945 族）与
 // rpc 面并存——eval 回执晚一拍，handler 捕获 + 主线程轮询关账。
 class ControlDial {
 public:

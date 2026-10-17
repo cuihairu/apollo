@@ -1,9 +1,9 @@
 #pragma once
 
-#include "room_server/config.hpp"
-#include "room_server/acceptance_queue.hpp"
-#include "room_server/m1_link_server.hpp"
-#include "room_server/room_manager.hpp"
+#include "world_app/config.hpp"
+#include "world_app/acceptance_queue.hpp"
+#include "world_app/m1_link_server.hpp"
+#include "world_app/world_types.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
@@ -20,15 +20,15 @@ namespace apollo::script {
 class ScriptRuntime;
 }
 
-namespace room_server {
+namespace world_app {
 
 namespace protocol = apollo::protocol;
 
-// RoomServer 服务器
-class RoomServer {
+// WorldApp 服务器
+class WorldApp {
 public:
-    explicit RoomServer(const RoomServerConfig& config);
-    ~RoomServer();
+    explicit WorldApp(const WorldAppConfig& config);
+    ~WorldApp();
 
     // 启动服务器
     void start();
@@ -128,7 +128,7 @@ private:
     // 每拍 2×场景数次（10Hz 量级，检测面非热路径）。
     void record_metrics(std::int64_t elapsed_ms);
 
-    RoomServerConfig config_;
+    WorldAppConfig config_;
     // Zone 世界容器（P0-3）：create_scene / create_instance / scene.enter 路径
     std::unique_ptr<apollo::game::world::World> world_;
     std::shared_ptr<apollo::game::world::WorldSessionManager> worldSessionManager_;
@@ -160,16 +160,16 @@ private:
 
     // metrics admin 通道计数面（引用在注册表存续期恒稳定——注册表头注；
     // last_* 为绝对值→Counter 增量推进的影子读数，gameLoop 线程独占）
-    apollo::core::metrics::Counter& roomServerTicksTotal_{
-        apollo::core::metrics::MetricRegistry::instance().counter("room_server_ticks_total")};
-    apollo::core::metrics::Counter& roomServerIntentsReceivedTotal_{
-        apollo::core::metrics::MetricRegistry::instance().counter("room_server_intents_received_total")};
-    apollo::core::metrics::Counter& roomServerFramesRejectedTotal_{
-        apollo::core::metrics::MetricRegistry::instance().counter("room_server_frames_rejected_total")};
+    apollo::core::metrics::Counter& worldAppTicksTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("world_ticks_total")};
+    apollo::core::metrics::Counter& worldAppIntentsReceivedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("world_intents_received_total")};
+    apollo::core::metrics::Counter& worldAppFramesRejectedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("world_frames_rejected_total")};
     std::uint64_t lastIntentsReceived_{0};
     std::uint64_t lastFramesRejected_{0};
 
     std::thread gameThread_;
 };
 
-} // namespace room_server
+} // namespace world_app

@@ -338,7 +338,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 ### 10.1 为什么是固定步长 tick，不是消息驱动
 
-三家范式对照（architecture-review §16.2）：BigWorld/KBEngine 固定步长 tick（BigWorld roomserver.cpp:806-808；KBEngine gameUpdateHertz=10，kbengine_defaults.xml:5 + roomserver.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315，一次 dispatch 一条消息，空队列 cond_wait）。本设计**选 tick**，论证写下来防未来再议：
+三家范式对照（architecture-review §16.2）：BigWorld/KBEngine 固定步长 tick（BigWorld cellapp.cpp:806-808；KBEngine gameUpdateHertz=10，kbengine_defaults.xml:5 + cellapp.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315，一次 dispatch 一条消息，空队列 cond_wait）。本设计**选 tick**，论证写下来防未来再议：
 
 1. **本设计的三个核心机制都以确定性节拍边界为前提**——`acked_seq`/`world_seq` 的序号推进与超时判定（§3.2/§3.3 "3 个广播 tick"）、派生 DAG 的拓扑批处理（recalc 阶段一次收敛整张图，§2.4）、token bucket 按 tick 领预算与突发上限（§5.1）。消息驱动下这三件事各自需要发明私有节拍，等于把 tick 散落进每个机制。
 2. **skynet 范式与权威实体模型错位**：skynet 适合**无共享状态的服务编排**（一条消息触发一个无副作用服务），其单写者边界是"服务"而非"实体"；apollo 的单写者边界是**实体归属的场景线程**，写语义（§3.1 全程无锁的前提）要求"一批变更在固定边界内可见、有序、可序号化"，这是 tick 的定义而不是消息的。

@@ -7,7 +7,7 @@
 
 ## 执行摘要
 
-1. **存在前提写死**：本服务只为**客户端权威战斗**（36 号 #18 缝兑现的小房间 lockstep / 客户端演算战斗）而存在。apollo 主路线（intent-only、服务端权威）**不需要本服务**——BW/KBE/skynet 无内建同因，正因三家均为状态同步 + 服务端权威（§0）。
+1. **存在前提写死**：本服务只为**客户端权威战斗**（36 号 #18 缝兑现的小副本 lockstep / 客户端演算战斗）而存在。apollo 主路线（intent-only、服务端权威）**不需要本服务**——BW/KBE/skynet 无内建同因，正因三家均为状态同步 + 服务端权威（§0）。
 2. **形态**：独立进程 `verifier`（编队组件，G-1 machined+UDP 双层注册，Type 段新增 VERIFIER），InterServerLink + internal 域（id 900+）三消息族：Submit（上行四元组+hash 申报，ReliableEvent）/ Result（下行 verdict+结算载荷，OneWay）/ Query（仲裁控制面，RequestReply）。
 3. **计算面 = Lua 双端影子复算**：同一份战斗逻辑 bundle（`combat_bundle_hash` 锚定）客户端 xLua 跑、服务端 verifier 沙盒重跑（一局一 `lua_State`）；确定性子集 = battle-determinism §2 四约束**全量继承** + **跨端增量三件**（运算白名单 / bundle+VM 版本锚 / 残余漂移降级 WARN——浮点位一致是工程目标不是硬承诺，三层保障防跨端微漂误伤真实玩家）。
 4. **验证强度两档**：一档 hash 链终局对照（cheap 常开——客户端本地按 §5 同式算链、只上行 checkpoint+终局摘要，verifier 复算对终局）；二档逐 tick 复算回放（贵——争议仲裁/分歧定位/采样复核，复用 §5 录制策略：排位常开、普通采样）。
@@ -20,7 +20,7 @@
 
 | 判定 | 场景 | 理由与去处 |
 |---|---|---|
-| **适用** | 客户端权威战斗玩法：lockstep 小房间（1v1 竞技场类，36 号 #18 缝）、客户端演算战斗（休闲/卡牌自动战斗类） | 判定在客户端 → 服务端无权威数值可校，只能**同逻辑复算对账**——本服务唯一存在理由 |
+| **适用** | 客户端权威战斗玩法：lockstep 小副本（1v1 竞技场类，36 号 #18 缝）、客户端演算战斗（休闲/卡牌自动战斗类） | 判定在客户端 → 服务端无权威数值可校，只能**同逻辑复算对账**——本服务唯一存在理由 |
 | **不适用** | 服务端权威战斗（apollo 主路线，intent-only） | 服务端自己就是判定者，复算自己无反作弊收益——attribute-sync §9 预测/纠正已覆盖表现层漂移；BW/KBE/skynet 无内建验证服务同因（三家皆服务端权威，deep-dive §18） |
 | **不适用** | 观战 / 精彩回放 | battle-determinism §5 事件流重演（不重模拟，cheap），不走本服务 |
 | **不适用** | 物理层作弊（加速齿轮/改内存/协议篡改） | net-abstraction §5.9 威胁模型边界（「加密防网络第三方，不防持客户端的玩家」）；输入合理性归 intent 校验域 + §4.3 限流，客户端完整性检测是反外挂客户端件非服务端域。本件只管**逻辑层对账**：客户端算出的战斗结果是否与同输入的忠实复算一致 |
@@ -128,7 +128,7 @@ battle-determinism §2 四约束（判定域唯一/浮点纪律/迭代序/随机
 
 ## 6. 命名纪律与边界
 
-- **battle 词专属此域**（concept-glossary §0 裁决 1-②）：`battle-verification`/`BattleVerify*` 消息/verdict 术语只用于战斗验证与结算域；空间/实例命名一律 instance 族（副本/room/dungeon 别名照 glossary）——历史错名「Battle」已废，永不回用。
+- **battle 词专属此域**（concept-glossary §0 裁决 1-②）：`battle-verification`/`BattleVerify*` 消息/verdict 术语只用于战斗验证与结算域；空间/实例命名一律 instance 族（副本/instance/dungeon 别名照 glossary）——历史错名「Battle」已废，永不回用。
 - **行业同型对照**（glossary 词条口径）：JS 双端（客户端 JS + Node 验证服）/ C# 双端（Unity + .NET，可热更）为社区通型；apollo 形态 = **Lua 双端**（xLua + scripting-lua）——跨端差异点不在语言而在**版本锚**（C# 双端同需程序集哈希锚，问题同型；apollo 以 `combat_bundle_hash` + VM 版本线双锚解）。
 - **不做清单**：不做通用反作弊平台（本件 = 逻辑层对账单件）；不做实时拦截（实时性归 intent 校验 + §9 权威纠正，本件是事后异步）；不做客户端完整性检测（反外挂客户端域）；不吞并战斗结算逻辑本身（结算规则在 bundle，verifier 只复算与导出，结算落库归 instance）。
 

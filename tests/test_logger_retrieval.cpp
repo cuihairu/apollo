@@ -53,17 +53,17 @@ using apollo::core::log::to_structured_line;
 // ---------- 读侧：写侧行解析回读 ----------
 
 bool test_parse_round_trip_plain() {
-    LogContext::set_process("room-server");
+    LogContext::set_process("world");
     LogContext::set_tick(7);
-    LogRecord record(LogLevel::Info, "starting server", "room-server");
+    LogRecord record(LogLevel::Info, "starting server", "world");
     const std::string line = to_structured_line(record);
 
     StructuredLine parsed;
     TEST_ASSERT(parse_structured_line(line, &parsed), "plain line parses");
     TEST_ASSERT(parsed.level == "INFO", "level round trip");
-    TEST_ASSERT(parsed.proc == "room-server", "proc round trip");
+    TEST_ASSERT(parsed.proc == "world", "proc round trip");
     TEST_ASSERT(parsed.tick == 7, "tick round trip");
-    TEST_ASSERT(parsed.cat == "room-server", "cat round trip");
+    TEST_ASSERT(parsed.cat == "world", "cat round trip");
     TEST_ASSERT(parsed.msg == "starting server", "msg round trip");
     TEST_ASSERT(parsed.ts > 0, "ts positive");
     TEST_ASSERT(parsed.kv.empty(), "no kv without src");
@@ -161,20 +161,20 @@ StructuredLine make_line(std::uint64_t ts, const char* level, const char* proc,
 
 bool test_filter_dimensions() {
     RetrievalFilter filter;
-    TEST_ASSERT(filter.passes(make_line(100, "INFO", "room-server", "room-server")),
+    TEST_ASSERT(filter.passes(make_line(100, "INFO", "world", "world")),
                 "empty filter passes all");
 
     filter.min_level = level_rank("WARN");
-    TEST_ASSERT(!filter.passes(make_line(100, "INFO", "room-server", "room-server")),
+    TEST_ASSERT(!filter.passes(make_line(100, "INFO", "world", "world")),
                 "info below warn threshold");
-    TEST_ASSERT(filter.passes(make_line(100, "WARN", "room-server", "room-server")),
+    TEST_ASSERT(filter.passes(make_line(100, "WARN", "world", "world")),
                 "warn at threshold");
-    TEST_ASSERT(filter.passes(make_line(100, "ERROR", "room-server", "room-server")),
+    TEST_ASSERT(filter.passes(make_line(100, "ERROR", "world", "world")),
                 "error above threshold");
 
     RetrievalFilter proc_filter;
-    proc_filter.proc = "room-server";
-    TEST_ASSERT(proc_filter.passes(make_line(1, "INFO", "room-server", "x")),
+    proc_filter.proc = "world";
+    TEST_ASSERT(proc_filter.passes(make_line(1, "INFO", "world", "x")),
                 "proc match");
     TEST_ASSERT(!proc_filter.passes(make_line(1, "INFO", "base", "x")),
                 "proc mismatch");
@@ -220,13 +220,13 @@ bool test_ingest_dir_from_real_appender() {
 
     FileAppenderConfig config;
     config.directory = dir.string();
-    config.baseName = "room-server";
+    config.baseName = "world";
     config.structuredOutput = true;
-    LogContext::set_process("room-server");
+    LogContext::set_process("world");
     LogContext::set_tick(3);
     {
         FileAppender appender(config);
-        LogRecord info(LogLevel::Info, "first line", "room-server");
+        LogRecord info(LogLevel::Info, "first line", "world");
         appender.append(info);
         LogRecord warn(LogLevel::Warning, "second line", "recovery");
         warn.setLocation("a.cpp", 9, "fn");
@@ -241,7 +241,7 @@ bool test_ingest_dir_from_real_appender() {
     TEST_ASSERT(sink.records.size() == 2, "both records sunk");
     TEST_ASSERT(sink.records[0].level == "INFO" && sink.records[0].msg == "first line",
                 "first record fields");
-    TEST_ASSERT(sink.records[0].proc == "room-server" && sink.records[0].tick == 3,
+    TEST_ASSERT(sink.records[0].proc == "world" && sink.records[0].tick == 3,
                 "proc/tick context");
     TEST_ASSERT(sink.records[1].level == "WARN", "second record level");
     TEST_ASSERT(sink.records[1].src() == "a.cpp:9", "second record src");

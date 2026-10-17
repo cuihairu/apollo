@@ -231,7 +231,7 @@ foundation = InterServerLink, with the client session surface added on top:
   rather than drop) / `kControl` (independent small budget, insulated from other channels'
   cut). Mapping to link SendClass: movement→kDroppable, the rest→kReliable.
 - **Three return codes** (§2): `kAccepted` / `kTrimmedLow` (enqueued, but the oldest LOW
-  frame on the same channel was dropped to make room, counted in
+  frame on the same channel was dropped to make instance, counted in
   `session_stats().trimmed_low_dropped`) / `kBackPressured` (rejected; the caller degrades
   on its own).
 - **Four water levels** (§4.2): the metric is each channel's ring byte usage / ring capacity

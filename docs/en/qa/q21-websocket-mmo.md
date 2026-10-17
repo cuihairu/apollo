@@ -72,7 +72,7 @@ If the gameplay tempo is not extreme, WebSocket can also carry:
 - Turn-based combat
 - Board and card games
 - Light ARPG
-- Room-based small-scale battles
+- Instance-based small-scale battles
 
 But if requirements for high-frequency state sync, packet loss recovery, and extreme weak-network performance are very high, evaluation should be cautious.
 

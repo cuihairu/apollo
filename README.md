@@ -6,7 +6,7 @@
 
 # Apollo
 
-**A lightweight room-based multiplayer game server engine.**
+**A lightweight instance-based multiplayer game server engine.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
@@ -14,11 +14,11 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
 
-> Lightweight room-based multiplayer game server engine
+> Lightweight instance-based multiplayer game server engine
 
 ## Introduction
 
-Apollo is a C++20 server runtime for lightweight multiplayer games organized around rooms and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It is a multiplayer game server engine, not a seamless-world MMO engine.
+Apollo is a C++20 server runtime for lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It is a multiplayer game server engine, not a seamless-world MMO engine.
 
 The target game flow uses familiar, role-based terms:
 
@@ -26,30 +26,30 @@ The target game flow uses familiar, role-based terms:
 Client ──► Login — account authentication and login ticket
    │
    └──► Gateway — client connections and message routing
-           └──► RoomServer — hosts rooms and runs authoritative match logic
-                   └── Room — one match; created and destroyed with the match
+           └──► World — hosts instances and runs authoritative match logic
+                   └── Instance — one match; created and destroyed with the match
                        ├── Player / Entity
                        ├── AOI
                        └── Game logic and settlement
 ```
 
-Each room is a gameplay instance; one RoomServer process may host multiple rooms. During a match, each player has one authoritative runtime object on the RoomServer that owns the room. Cross-server play transfers that authority to the destination RoomServer and updates routing; it does not keep two active copies of the player.
+Each instance is a gameplay instance; one World process may host multiple instances. During a match, each player has one authoritative runtime object on the World that owns the instance. Cross-server play transfers that authority to the destination World and updates routing; it does not keep two active copies of the player.
 
 ## Use Cases
 
-**A good fit** — games whose natural play boundary is a room or match:
+**A good fit** — games whose natural play boundary is an instance or match:
 
 | Scenario | Instance Form |
 |------|----------|
-| Tower defense and fixed maps | One room per match; room state is released at match end |
-| Dungeons / Roguelike | One room per run |
-| Arena / battle royale | One room per match |
-| Multiplayer PvE / survival / co-op | A room for the group |
-| Multiplayer PvP | A room for the match |
+| Tower defense and fixed maps | One instance per match; instance state is released at match end |
+| Dungeons / Roguelike | One instance per run |
+| Arena / battle royale | One instance per match |
+| Multiplayer PvE / survival / co-op | An instance for the group |
+| Multiplayer PvP | An instance for the match |
 
 **Not the intended fit** — a persistent seamless world where players roam continuously across spatially partitioned processes. That is a different server architecture and is outside Apollo's current design.
 
-> MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from rooms and matches, but it is not designed as a persistent seamless-world MMO engine.
+> MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from instances and matches, but it is not designed as a persistent seamless-world MMO engine.
 
 ## Core Concepts
 
@@ -57,8 +57,8 @@ Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes curre
 
 | Concept | One-liner | Component |
 |------|--------|------|
-| **Room** | One match and its temporary state | Target gameplay unit |
-| **RoomServer** | Process that hosts one or more Rooms and runs their authoritative logic | Target process role |
+| **Instance** | One match and its temporary state | Target gameplay unit |
+| **World** | Process that hosts one or more Instances and runs their authoritative logic | Target process role |
 | **Player** | Player identity; one authoritative runtime object in a match | `PlayerAnchor` exists in current prototype code |
 | **Entity** | Runtime object participating in gameplay | `Entity` / `Avatar` contracts |
 | **AOI** | Determines which nearby entities each player observes | `SceneAoi` implementation |
@@ -80,13 +80,13 @@ Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes curre
 
 Apollo documents two release modes. A protocol update changes the XML/XSD contract under `sdks/contract/` and regenerates artifacts; safe rollout requires server/client compatibility across old and new contract versions. The contract, generator, and golden artifact checks exist, while version negotiation and end-to-end compatibility-window validation remain incomplete.
 
-A code-only update keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides module preparation, tick-boundary commit, observation, and rollback primitives; production rollout control across RoomServer processes remains incomplete. C++ changes use a process rollout after Rooms drain or after an independently implemented state transfer. Gateway multi-instance deployment can keep new connections available while old sockets drain, but Gateway does not migrate existing TCP connections between processes.
+A code-only update keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides module preparation, tick-boundary commit, observation, and rollback primitives; production rollout control across World processes remains incomplete. C++ changes use a process rollout after Instances drain or after an independently implemented state transfer. Gateway multi-instance deployment can keep new connections available while old sockets drain, but Gateway does not migrate existing TCP connections between processes.
 
 See [Gateway update boundaries](docs/design/gateway-topology-survey.md) and [contract versioning](docs/design/sdk-contract.md).
 
 ## Architecture
 
-> See [Architecture Overview](docs/guide/architecture.md) for the target room-based model and [Server Applications](docs/apps/index.md) for the current executable prototypes.
+> See [Architecture Overview](docs/guide/architecture.md) for the target instance-based model and [Server Applications](docs/apps/index.md) for the current executable prototypes.
 
 ### Tech Stack
 
@@ -476,3 +476,9 @@ Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependenc
 ---
 
 **Apollo - Instance-based multiplayer game server engine**
+
+## Temporary instance lifecycle
+
+A group requests an activity → World creates an Instance and temporary Scene → members pass admission and enter → clear enemies and complete objectives → settle → players leave → destroy the Instance, scene, and temporary resources.
+
+Reuse the existing eight-state Instance lifecycle. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. The state machine exists, while group-triggered creation, objective settlement, and automatic resource cleanup still need application integration and validation.

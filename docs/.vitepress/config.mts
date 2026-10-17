@@ -12,7 +12,7 @@ const architectureSidebar = [
       { text: '观测与运行时内省', link: '/architecture/observability-watcher-and-runtime-introspection-design' },
       { text: 'Host Builder 与 DI', link: '/architecture/host-builder-and-di-design' },
       { text: 'Starter 与模块装配', link: '/architecture/starter-and-module-assembly-design' },
-      { text: '房间制 GameServer 设计', link: '/30-Room-Based_GameServer_Design' },
+      { text: '副本制 GameServer 设计', link: '/30-Instance_GameServer_Design' },
     ],
   },
   {
@@ -33,7 +33,7 @@ const architectureSidebar = [
 
 export default defineConfig({
   title: 'Apollo',
-  description: '轻量房间制多人游戏服务器引擎',
+  description: '轻量副本制多人游戏服务器引擎',
   base: isProd ? '/apollo/' : '/',
   cleanUrls: true,
   ignoreDeadLinks: false,
@@ -73,7 +73,7 @@ export default defineConfig({
             { text: '设计总览', link: '/design/' }, { text: '概念词汇表', link: '/design/concept-glossary' },
             { text: '玩家对象模型', link: '/design/player-object-model' }, { text: '会话与在线目录', link: '/design/session-and-online-directory' },
             { text: '登录流程', link: '/design/login-flow' }, { text: '网关拓扑', link: '/design/gateway-topology-survey' },
-            { text: 'RoomServer 单写者', link: '/design/room-server-single-writer' }, { text: 'Lua 脚本', link: '/design/scripting-lua' },
+            { text: 'WorldApp 单写者', link: '/design/world-single-writer' }, { text: 'Lua 脚本', link: '/design/scripting-lua' },
             { text: 'SDK 契约', link: '/design/sdk-contract' }, { text: 'XML 契约生成', link: '/design/xml-generation' },
           ] }],
           '/modules/': [{ text: '模块', items: [
@@ -94,7 +94,6 @@ export default defineConfig({
         editLink: { pattern: 'https://github.com/cuihairu/apollo/edit/main/docs/:path', text: '在 GitHub 上编辑此页' },
         lastUpdated: { text: '最后更新', formatOptions: { dateStyle: 'short', timeStyle: 'medium' } },
         footer: { message: '基于 MIT 许可发布', copyright: 'Copyright (c) 2024-present Apollo Team' },
-        search: { provider: 'local', options: { translations: { button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' }, modal: { noResultsText: '没有找到结果', resetButtonTitle: '清除查询', footer: { selectText: '选择', navigateText: '切换', closeText: '关闭' } } } } },
       },
     },
     en: {
@@ -122,11 +121,11 @@ export default defineConfig({
               { text: 'Remote Entity Call', link: '/en/architecture/remote-entity-call-design' },
               { text: 'Observability', link: '/en/architecture/observability-watcher-and-runtime-introspection-design' },
               { text: 'Host Builder and DI', link: '/en/architecture/host-builder-and-di-design' },
-              { text: 'Room-Based GameServer', link: '/en/30-Room-Based_GameServer_Design' },
+              { text: 'Instance-Based GameServer', link: '/en/30-Instance_GameServer_Design' },
             ] },
             { text: 'External Engine References', items: [
               { text: 'BigWorld', link: '/en/architecture/bigworld' }, { text: 'BigWorld Lifecycle', link: '/en/architecture/bigworld-lifecycle' },
-              { text: 'KBEngine Analysis', link: '/en/architecture/kbe-source-analysis' }, { text: 'Reference Principles', link: '/en/architecture/kbe-reference-principles' },
+              { text: 'Reference Principles', link: '/en/architecture/kbe-reference-principles' },
               { text: 'Base / Cell / Proxy', link: '/en/architecture/base-cell-proxy-model' }, { text: 'Witness and Ghost', link: '/en/architecture/witness-ghost-design' },
             ] },
           ],
@@ -134,7 +133,7 @@ export default defineConfig({
             { text: 'Overview', link: '/en/design/' }, { text: 'Glossary', link: '/en/design/concept-glossary' },
             { text: 'Player Object Model', link: '/en/design/player-object-model' }, { text: 'Sessions and Online Directory', link: '/en/design/session-and-online-directory' },
             { text: 'Login Flow', link: '/en/design/login-flow' }, { text: 'Gateway Topology', link: '/en/design/gateway-topology-survey' },
-            { text: 'RoomServer Single Writer', link: '/en/design/room-server-single-writer' }, { text: 'Lua Scripting', link: '/en/design/scripting-lua' },
+            { text: 'WorldApp Single Writer', link: '/en/design/world-single-writer' }, { text: 'Lua Scripting', link: '/en/design/scripting-lua' },
             { text: 'SDK Contract', link: '/en/design/sdk-contract' }, { text: 'XML Contract Generation', link: '/en/design/xml-generation' },
           ] }],
           '/en/modules/': [{ text: 'Modules', items: [
@@ -154,13 +153,29 @@ export default defineConfig({
         editLink: { pattern: 'https://github.com/cuihairu/apollo/edit/main/docs/:path', text: 'Edit this page on GitHub' },
         lastUpdated: { text: 'Last updated', formatOptions: { dateStyle: 'short', timeStyle: 'medium' } },
         footer: { message: 'Released under the MIT License', copyright: 'Copyright (c) 2024-present Apollo Team' },
-        search: { provider: 'local', options: { translations: { button: { buttonText: 'Search', buttonAriaLabel: 'Search docs' }, modal: { noResultsText: 'No results found', resetButtonTitle: 'Clear search', footer: { selectText: 'Select', navigateText: 'Navigate', closeText: 'Close' } } } } },
       },
     },
   },
 
   themeConfig: {
     logo: '/apollo.png',
+    search: {
+      provider: 'local',
+      options: {
+        locales: {
+          root: {
+            translations: {
+              button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' },
+              modal: {
+                noResultsText: '没有找到结果',
+                resetButtonTitle: '清除查询',
+                footer: { selectText: '选择', navigateText: '切换', closeText: '关闭' },
+              },
+            },
+          },
+        },
+      },
+    },
     socialLinks: [{ icon: 'github', link: 'https://github.com/cuihairu/apollo' }],
   },
 

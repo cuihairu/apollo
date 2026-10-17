@@ -46,14 +46,14 @@ Apollo 进入 BigWorld 模式后，必须明确拆开这两层：
 
 从本地源码看：
 
-- [witness.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/server/cellapp/witness.h)
+- [witness.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/cellapp/witness.h)
   - 持有 `viewRadius`
   - 持有 `ViewTrigger`
   - 持有 `viewEntities`
   - 提供 `onEnterView/onLeaveView`
   - 提供 `sendToClient`
   - 提供 `addUpdateToStream`
-- [ghost_manager.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/server/cellapp/ghost_manager.h)
+- [ghost_manager.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/server/cellapp/ghost_manager.h)
   - 管理 `realEntities_`
   - 管理 `ghost_route_`
   - 管理待同步 `messages_`
@@ -65,7 +65,7 @@ Apollo 进入 BigWorld 模式后，必须明确拆开这两层：
 - `GhostManager` 关注实体投影和消息接力
 
 这篇文档讨论的是 BigWorld 增强态下的运行时对象，
-不是当前 `apps/room-server` 里已经完整落地的能力。
+不是当前 `apps/world-app` 里已经完整落地的能力。
 
 ## 三、为什么单纯 AOI 不够
 

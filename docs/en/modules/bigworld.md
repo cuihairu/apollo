@@ -67,7 +67,7 @@ BigWorld::update();              // 驱动定时器帧
 | `destroyEntity(id)` | supported under the same name |
 | `Runtime()->addTimer(ms, fn, repeat)` | `addTimer(initialSec, repeatSec, fn(TimerId, int32_t), userArg)` (seconds) |
 | `ICallback` / `registerCallback` | does not exist — one-shot uses `callback(delay, fn)`, periodic uses `addTimer` |
-| `Proxy` / `RoomServer` concept mapping | for the process surface see [Server Apps](/en/apps/); Witness/Ghost distributed spaces are planned state |
+| `Proxy` / `World` concept mapping | for the process surface see [Server Apps](/en/apps/); Witness/Ghost distributed spaces are planned state |
 
 ## Incompatible Parts
 

@@ -233,16 +233,16 @@ for (const auto& r : scene.drain_debug_eval_results()) { /* 回传 transport */ 
 scene.set_debug_eval_queue_depth(8);  // 默认 8（与 eval 同 tick 限流对齐）
 ```
 
-The first batch of owning-host wiring has landed in room-server (scripting-lua §2, one state
-per logical thread): `RoomServer` builds the `ScriptRuntime` at the top of gameThread, and
+The first batch of owning-host wiring has landed in world-app (scripting-lua §2, one state
+per logical thread): `World` builds the `ScriptRuntime` at the top of gameThread, and
 `--script-boot <file>` loads the boot source (missing/failing is a warning only, no
 shutdown; faults go through the runtime event surface). The host startup load order
 (scripting-lua §3.4) = `--script-handlers` (the contract-route handler surface) →
 `--script-contract` (the contract table; the load gate verifies per route that a handler is
 in place) → `--script-boot` (may read the `contract` global). The contract-route handler
-placeholder module ships with the repo at `apps/room-server/scripts/contract_handlers.lua`
+placeholder module ships with the repo at `apps/world-app/scripts/contract_handlers.lua`
 (45 routes; the gameplay batch fills in the semantics), with the golden contract sync gate
-`contract_handler_tests` (2 cases) and the startup-loading `room_server_script_host_tests` (3
+`contract_handler_tests` (2 cases) and the startup-loading `world_app_script_host_tests` (3
 cases, including the boot-lands-after-contract assertion, missing-handler rejection, and
 continuing service when the contract file is absent); every tick it idempotently attaches
 scenes not yet attached (new scenes take effect the next tick), and on shutdown a final
@@ -251,8 +251,8 @@ host's outward delivery-locating surface (the runtime pointer is never exposed).
 single-entry transport has landed (the 944/945 M1 raw-frame family: the cell-side
 dispatcher accepts — not-attached/backpressure gets an immediate 945 rejection; an accepted
 request posts an association entry awaiting the tick-window drain for an async reply; the
-admin side has the `fleetctl eval` entry; `room_server_m1_link_tests` eval family 3 cases +
-`room_server_script_host_tests` 7 cases).
+admin side has the `fleetctl eval` entry; `world_app_m1_link_tests` eval family 3 cases +
+`world_app_script_host_tests` 7 cases).
 
 **Boundaries**: the client send path, slice composite types, and attach transport (admin
 single entry + control-channel forwarding to the target process) are all later batches.

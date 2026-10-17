@@ -112,7 +112,7 @@ public:
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
-        ep.name = "room-server";
+        ep.name = "world";
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kActive;
@@ -179,7 +179,7 @@ public:
         return true;
     }
 
-    bool roomServerConnected() const override {
+    bool worldConnected() const override {
         auto* link = const_cast<M1EgressImpl*>(this)->gateway_link();
         return link != nullptr && link->state() == link::LinkState::kUp;
     }
@@ -214,7 +214,7 @@ public:
 
 private:
     link::InterServerLink* gateway_link() {
-        return manager_ ? manager_->link("room-server") : nullptr;
+        return manager_ ? manager_->link("world") : nullptr;
     }
 
     bool load_route_table(link::RouteTable& table) {
@@ -258,7 +258,7 @@ private:
         }
     }
 
-    // legacy 帧 → 契约字段（序 = 契约表序，RoomServer 侧 build_legacy_intent 镜像
+    // legacy 帧 → 契约字段（序 = 契约表序，WorldApp 侧 build_legacy_intent 镜像
     // 互逆）；帧体非法 = 落地计数（受理面已过帧头筛选，此处兜底）。
     void translate_and_send(const InboxItem& item, std::uint64_t now_ms) {
         const auto request_id = next_request_id_++;
@@ -347,14 +347,14 @@ private:
         // trace 子集（P3-3 语义层批）：意图恒走 932 internal_envelope——
         // trace 字段恒带（ids 恒传播，未采样不发射 span 行）；头采样在本
         // 进程（链根）裁决，下游按旗标传播不再重采。发端 span id 恒生成
-        // 进信封 parent 位——RoomServer span 以此挂链（gateway span 记录仅采样
+        // 进信封 parent 位——WorldApp span 以此挂链（gateway span 记录仅采样
         // 命中时发射）。
         trace::HeadSampler& sampler = head_sampler();
         trace::EnvelopeFields env;
         env.message_type = trace::EnvelopeKind::EntityMethodCall;
         env.request_id = request_id;
         env.source_app = "gateway";
-        env.target_app = "room-server";
+        env.target_app = "world";
         env.trace.trace_id = trace::generate_trace_id();
         env.trace.parent_span_id = trace::generate_span_id();
         env.trace.sampled = sampler.should_sample();
@@ -407,7 +407,7 @@ private:
         const auto it = pending_.find(request_id);
         if (it == pending_.end()) {
             // 超时清扫后迟到的应答 / 未知关联键——无挂账可消，观察面记 debug
-            m1log().debug("RoomServer intent ack without pending entry: request_id="
+            m1log().debug("WorldApp intent ack without pending entry: request_id="
                           + std::to_string(request_id));
             return;
         }
@@ -416,7 +416,7 @@ private:
             ++acked_;
         } else {
             ++failed_;
-            m1log().warning("RoomServer intent rejected by remote: request_id="
+            m1log().warning("WorldApp intent rejected by remote: request_id="
                             + std::to_string(request_id) + " code="
                             + std::to_string(code));
         }
@@ -425,7 +425,7 @@ private:
     void sweep_timeouts(std::uint64_t now_ms) {
         for (auto it = pending_.begin(); it != pending_.end();) {
             if (now_ms - it->second.sent_at_ms >= config_.ack_timeout_ms) {
-                m1log().warning("RoomServer intent ack timeout: request_id="
+                m1log().warning("WorldApp intent ack timeout: request_id="
                                 + std::to_string(it->first) + " session="
                                 + std::to_string(it->second.session_id));
                 it = pending_.erase(it);

@@ -1,4 +1,4 @@
-#include "room_server/room_server.hpp"
+#include "world_app/world_app.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/linktrace/span_emitter.hpp"
 #include "apollo/protocol/messages.hpp"
@@ -17,12 +17,12 @@
 #include <stdexcept>
 #include <vector>
 
-namespace room_server {
+namespace world_app {
 
 namespace {
-// 库面日志出口：cat=room_server（§5.1 cat= 检索键；主程已接文件面）
-apollo::core::log::Logger& roomServerLog() {
-    return *apollo::core::log::global_log_manager().createLogger("room_server");
+// 库面日志出口：cat=world_app（§5.1 cat= 检索键；主程已接文件面）
+apollo::core::log::Logger& worldLog() {
+    return *apollo::core::log::global_log_manager().createLogger("world_app");
 }
 
 // 读整个 Lua 源文件（binary 模式——Windows CRLF 落盘纪律）；缺文件返回
@@ -39,7 +39,7 @@ std::optional<std::string> read_script_file(const std::string& path) {
 
 namespace protocol = apollo::protocol;
 
-// P1-3：Scene 持有 AOI 后 RoomServer 侧直接消费 SceneAoi（Vec3/查询面）
+// P1-3：Scene 持有 AOI 后 WorldApp 侧直接消费 SceneAoi（Vec3/查询面）
 using apollo::game::world::SceneAoi;
 
 namespace {
@@ -55,17 +55,17 @@ const char* entity_type_name(protocol::EntityType type) {
     }
 }
 
-class RoomServerWorldService final : public apollo::runtime::IWorldService {
+class WorldAppService final : public apollo::runtime::IWorldService {
 public:
-    RoomServerWorldService(
+    WorldAppService(
         apollo::game::world::World& world,
-        RoomServerConfig config)
+        WorldAppConfig config)
         : world_(world)
         , config_(std::move(config)) {
     }
 
     std::string_view service_name() const override {
-        return "RoomServerWorldService";
+        return "WorldAppService";
     }
 
     bool initialize() override {
@@ -86,7 +86,7 @@ public:
 
 private:
     apollo::game::world::World& world_;
-    RoomServerConfig config_;
+    WorldAppConfig config_;
     std::uint64_t tick_count_ = 0;
 };
 
@@ -94,27 +94,27 @@ private:
 
 //==============================================================================
 //==============================================================================
-// RoomServer 实现
+// WorldApp 实现
 //==============================================================================
 
-RoomServer::RoomServer(const RoomServerConfig& config)
+WorldApp::WorldApp(const WorldAppConfig& config)
     : config_(config)
     , world_(std::make_unique<apollo::game::world::World>())
     , worldSessionManager_(std::make_shared<apollo::game::world::WorldSessionManager>())
     , worldHost_(std::make_shared<apollo::runtime::WorldHost>(
           static_cast<std::uint32_t>(1000 / std::max(config.tickRateMs, 1)))) {
     worldHost_->add_world_service(
-        std::make_shared<RoomServerWorldService>(*world_, config_));
+        std::make_shared<WorldAppService>(*world_, config_));
 }
 
-RoomServer::~RoomServer() {
+WorldApp::~WorldApp() {
     stop();
 }
 
-void RoomServer::start() {
+void WorldApp::start() {
     if (running_) return;
 
-    // net M1 接收端（2b-ii，2b-iii 起 RoomServer 唯一受理入口——legacy RepSocket
+    // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket
     // 已退役）：InterServerLink passive 端点装配（监听在 start 内 bind/listen，
     // bind 失败同契约显形）
     m1Link_ = makeM1LinkServer(
@@ -130,7 +130,7 @@ void RoomServer::start() {
     if (!m1Link_->start()) {
         accepting_ = false;
         m1Link_.reset();
-        throw std::runtime_error("failed to start RoomServer M1 link endpoint (route table load or bind failed)");
+        throw std::runtime_error("failed to start WorldApp M1 link endpoint (route table load or bind failed)");
     }
 
     ensureDefaultScene();
@@ -145,16 +145,16 @@ void RoomServer::start() {
     running_ = true;
 
     // 启动游戏循环线程
-    gameThread_ = std::thread(&RoomServer::gameLoop, this);
+    gameThread_ = std::thread(&WorldApp::gameLoop, this);
 
-    roomServerLog().info("RoomServer M1 link listening on " + config_.host + ":"
+    worldLog().info("WorldApp M1 link listening on " + config_.host + ":"
                 + std::to_string(m1Link_->listenPort()));
-    roomServerLog().info("Space: " + config_.spaceName + " ("
+    worldLog().info("Space: " + config_.spaceName + " ("
                 + std::to_string(config_.spaceWidth) + "x"
                 + std::to_string(config_.spaceHeight) + ")");
 }
 
-void RoomServer::stop() {
+void WorldApp::stop() {
     // 停机 G-3 镜像顺序（ADR-016）：停受理 → 队列 drain → gameThread join →
     // M1 端点停 → worldHost stop（尾扫 drain 的延时应答仍要有发送面，M1
     // 端点停在其后）
@@ -175,7 +175,7 @@ void RoomServer::stop() {
     }
 }
 
-bool RoomServer::submitIntent(IntentEnvelope intent) {
+bool WorldApp::submitIntent(IntentEnvelope intent) {
     // 受理点判定（ADR-017 决策 1，M1 面与测试共用）：只入队意图信封，
     // 不做 world 读写；回执纪律见 onM1Intent。
     if (!accepting_.load(std::memory_order_acquire)) {
@@ -187,14 +187,14 @@ bool RoomServer::submitIntent(IntentEnvelope intent) {
     }
     if (result.high_watermark) {
         // ADR-016 两级水位：越告警线提示一次，回落滞回后再报
-        roomServerLog().warning("acceptance queue high watermark: pending="
+        worldLog().warning("acceptance queue high watermark: pending="
                        + std::to_string(acceptanceQueue_.size()) + "/"
                        + std::to_string(acceptanceQueue_.cap()));
     }
     return true;
 }
 
-void RoomServer::onM1Intent(IntentEnvelope intent) {
+void WorldApp::onM1Intent(IntentEnvelope intent) {
     // M1 受理点（2b-ii，泵线程 = gameThread_）：submitIntent 判定 + 拒收即时
     // 回执。延时应答（ADR-017）：受理成功不回包，回执随 executeIntent 消费后
     // 按 request_id 回带；即时回执面只剩两类永不入队的拒收。
@@ -214,7 +214,7 @@ void RoomServer::onM1Intent(IntentEnvelope intent) {
     }
 }
 
-void RoomServer::sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message) {
+void WorldApp::sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message) {
     if (request_id == 0) {
         return;  // legacy 路径（ack-on-accept）无应答关联键
     }
@@ -227,7 +227,7 @@ void RoomServer::sendM1Ack(std::uint64_t request_id, std::int32_t code, const st
 // 对齐 Scene 队列深度的量级放大，超过即时回执拒收）。
 constexpr std::size_t kM1EvalBacklogMax = 64;
 
-void RoomServer::onM1DebugEval(const std::string& peer, const DebugEvalRequest& request) {
+void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& request) {
     // 944 受理（§7.1 attach transport；本回调在 gameThread_ 泵上下文）：
     // 语法面已在 M1LinkServer 解码，此处只做定位与背压判定——失败即时回
     // 945（不进 tick 窗口），成功挂账待 Scene tick 执行后回传。
@@ -254,14 +254,14 @@ void RoomServer::onM1DebugEval(const std::string& peer, const DebugEvalRequest& 
     scenePendingEvals_[scene_id].insert(request.eval_id);
 }
 
-void RoomServer::sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
+void WorldApp::sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                                  const std::string& result, const std::string& error) {
     if (m1Link_) {
         m1Link_->sendEvalResult(peer, eval_id, ok, result, error);
     }
 }
 
-void RoomServer::drainDebugEvalResults() {
+void WorldApp::drainDebugEvalResults() {
     // tick 窗口收账：Scene::tick 的 §7.1 固定调试点已执行在途 eval，此处取
     // 回传结果按 eval_id 回 945。仅在途才 drain（直接 enqueue 面不挤占）；
     // 同拍丢最旧的结果无回执（有界 FIFO 语义——admin 超时面重发裁决）。
@@ -296,7 +296,7 @@ void RoomServer::drainDebugEvalResults() {
     }
 }
 
-std::vector<uint8_t> RoomServer::handleCellCreateEntity(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> WorldApp::handleCellCreateEntity(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -331,7 +331,7 @@ std::vector<uint8_t> RoomServer::handleCellCreateEntity(const std::vector<uint8_
     return {};  // 空响应表示成功
 }
 
-std::vector<uint8_t> RoomServer::handleCellDestroyEntity(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> WorldApp::handleCellDestroyEntity(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -347,7 +347,7 @@ std::vector<uint8_t> RoomServer::handleCellDestroyEntity(const std::vector<uint8
     return {};  // 空响应表示成功
 }
 
-std::vector<uint8_t> RoomServer::handleCellEntityMove(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> WorldApp::handleCellEntityMove(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -367,7 +367,7 @@ std::vector<uint8_t> RoomServer::handleCellEntityMove(const std::vector<uint8_t>
     return {};  // 空响应表示成功
 }
 
-std::vector<uint8_t> RoomServer::handleCellCrossBorder(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> WorldApp::handleCellCrossBorder(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellCrossBorder>(bodyData);
@@ -420,7 +420,7 @@ std::vector<uint8_t> RoomServer::handleCellCrossBorder(const std::vector<uint8_t
         apollo::game::world::execute_scene_transfer(*world_, *worldSessionManager_, transfer);
     if (!outcome.ok()) {
         // 驳回/回滚面：单进程阶段仅可观察日志；错误下发随网关面（P1-6）
-        roomServerLog().warning("scene transfer rejected: player="
+        worldLog().warning("scene transfer rejected: player="
                        + std::to_string(player_id.value()) + " target_scene="
                        + std::to_string(transfer.target_scene_id) + " result="
                        + std::string(apollo::game::world::to_string(outcome.result))
@@ -430,7 +430,7 @@ std::vector<uint8_t> RoomServer::handleCellCrossBorder(const std::vector<uint8_t
     return {};
 }
 
-std::vector<uint8_t> RoomServer::handleCombatSkillCast(const std::vector<uint8_t>& request) {
+std::vector<uint8_t> WorldApp::handleCombatSkillCast(const std::vector<uint8_t>& request) {
     auto header = protocol::MessageCodec::parseHeader(request);
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
 
@@ -452,7 +452,7 @@ std::vector<uint8_t> RoomServer::handleCombatSkillCast(const std::vector<uint8_t
         // 广播伤害
         broadcastToViewers(msg.targetId, damageData);
 
-        roomServerLog().info("Skill cast: " + std::to_string(msg.casterId) + " -> "
+        worldLog().info("Skill cast: " + std::to_string(msg.casterId) + " -> "
                     + std::to_string(msg.targetId) + " (skill: "
                     + std::to_string(msg.skillId) + ")");
     }
@@ -460,7 +460,7 @@ std::vector<uint8_t> RoomServer::handleCombatSkillCast(const std::vector<uint8_t
     return {};
 }
 
-void RoomServer::executeIntent(const IntentEnvelope& intent) {
+void WorldApp::executeIntent(const IntentEnvelope& intent) {
     // 执行面（ADR-015(a)）：gameThread_ tick 边界——复用既有 handler 全量
     // 语义（解码+校验+world 变更+广播）；变更类返回值为空 ack，丢弃
     switch (intent.type) {
@@ -483,12 +483,12 @@ void RoomServer::executeIntent(const IntentEnvelope& intent) {
             break;
     }
 
-    // trace 子集（P3-3 语义层批）：采样命中的意图发 RoomServer span（受理→执行
+    // trace 子集（P3-3 语义层批）：采样命中的意图发 WorldApp span（受理→执行
     // 完成全程；parent = 发端 gateway span id，随 932 信封上行）。未采样
     // /bare 路径零开销跳过——emit_span 自守门，此处只备料。
     if (intent.trace.has_trace() && intent.trace.sampled) {
         trace::SpanRecord span;
-        span.name = "room_server_intent_execute";
+        span.name = "world_intent_execute";
         span.ctx = intent.trace;
         span.span_id = trace::generate_span_id();
         span.start_ms = intent.received_ms;
@@ -502,13 +502,13 @@ void RoomServer::executeIntent(const IntentEnvelope& intent) {
     sendM1Ack(intent.request_id, kIntentAckOk, "");
 }
 
-void RoomServer::drainAcceptanceQueue() {
+void WorldApp::drainAcceptanceQueue() {
     while (auto intent = acceptanceQueue_.try_pop()) {
         executeIntent(*intent);
     }
 }
 
-void RoomServer::gameLoop() {
+void WorldApp::gameLoop() {
     // 脚本宿主生命周期（scripting-lua §2 一状态一逻辑线程）：runtime 建/
     // 用/析全在本线程。boot 源加载失败不停机（fault 走 runtime 事件面，
     // cell 继续服务）。
@@ -520,25 +520,25 @@ void RoomServer::gameLoop() {
     if (!config_.scriptHandersFile.empty()) {
         const std::optional<std::string> handlers = read_script_file(config_.scriptHandersFile);
         if (!handlers) {
-            roomServerLog().warning("script handlers file missing: " + config_.scriptHandersFile);
+            worldLog().warning("script handlers file missing: " + config_.scriptHandersFile);
         } else if (!script_->call_string("cell_handlers", *handlers)) {
-            roomServerLog().warning("script handlers load failed: " + config_.scriptHandersFile);
+            worldLog().warning("script handlers load failed: " + config_.scriptHandersFile);
         }
     }
     if (!config_.scriptContractFile.empty()) {
         const std::optional<std::string> contract = read_script_file(config_.scriptContractFile);
         if (!contract) {
-            roomServerLog().warning("script contract file missing: " + config_.scriptContractFile);
+            worldLog().warning("script contract file missing: " + config_.scriptContractFile);
         } else if (!script_->load_contract(*contract)) {
-            roomServerLog().warning("script contract load failed: " + config_.scriptContractFile);
+            worldLog().warning("script contract load failed: " + config_.scriptContractFile);
         }
     }
     if (!config_.scriptBootFile.empty()) {
         const std::optional<std::string> boot = read_script_file(config_.scriptBootFile);
         if (!boot) {
-            roomServerLog().warning("script boot file missing: " + config_.scriptBootFile);
+            worldLog().warning("script boot file missing: " + config_.scriptBootFile);
         } else if (!script_->call_string("cell_boot", *boot)) {
-            roomServerLog().warning("script boot failed: " + config_.scriptBootFile);
+            worldLog().warning("script boot failed: " + config_.scriptBootFile);
         }
     }
 
@@ -588,7 +588,7 @@ void RoomServer::gameLoop() {
     script_.reset();
 }
 
-void RoomServer::attach_script_to_scenes() {
+void WorldApp::attach_script_to_scenes() {
     if (!script_) {
         return;
     }
@@ -599,43 +599,43 @@ void RoomServer::attach_script_to_scenes() {
     }
 }
 
-apollo::game::world::Scene* RoomServer::find_scene(std::uint64_t scene_id) {
+apollo::game::world::Scene* WorldApp::find_scene(std::uint64_t scene_id) {
     return world_ ? world_->find_scene(scene_id) : nullptr;
 }
 
-std::chrono::milliseconds RoomServer::tickInterval() const {
+std::chrono::milliseconds WorldApp::tickInterval() const {
     return std::chrono::milliseconds(std::max(config_.tickRateMs, 1));
 }
 
-void RoomServer::record_metrics(std::int64_t elapsed_ms) {
+void WorldApp::record_metrics(std::int64_t elapsed_ms) {
     auto& registry = apollo::core::metrics::MetricRegistry::instance();
     // 末拍瞬时值走 gauge（_last 后缀与同名直方图族分居——同族双 TYPE
     // 相撞是出口面 scrape 错误）
-    registry.gauge("room_server_tick_frame_ms_last").store(elapsed_ms);
+    registry.gauge("world_tick_frame_ms_last").store(elapsed_ms);
     // 帧耗时分布（P3-3 余项批）：桶位 ms 档覆盖亚毫秒抖动到秒级卡顿，
     // 20ms = ADR-016 消息段预算锚点
     static const std::vector<double> kFrameMsBuckets = {
         0.1, 0.5, 1, 2, 5, 10, 20, 50, 100, 500, 1000};
-    registry.histogram("room_server_tick_frame_ms", {}, kFrameMsBuckets)
+    registry.histogram("world_tick_frame_ms", {}, kFrameMsBuckets)
         .observe(static_cast<double>(elapsed_ms));
-    registry.gauge("room_server_queue_depth")
+    registry.gauge("world_queue_depth")
         .store(static_cast<std::int64_t>(acceptanceQueue_.size()));
-    roomServerTicksTotal_.increment(1);
+    worldAppTicksTotal_.increment(1);
     // M1 受理/拒收为进程期只增原子（m1_link_server 绝对值）——增量推进
-    counter_advance_to(roomServerIntentsReceivedTotal_, lastIntentsReceived_,
+    counter_advance_to(worldAppIntentsReceivedTotal_, lastIntentsReceived_,
                        m1Link_ ? m1Link_->receivedIntents() : 0);
-    counter_advance_to(roomServerFramesRejectedTotal_, lastFramesRejected_,
+    counter_advance_to(worldAppFramesRejectedTotal_, lastFramesRejected_,
                        m1Link_ ? m1Link_->rejectedFrames() : 0);
     for (const auto* scene : world_->scenes()) {
         const std::string scene_label = std::to_string(scene->scene_id());
-        registry.gauge("room_server_entities", {{"scene", scene_label}})
+        registry.gauge("world_entities", {{"scene", scene_label}})
             .store(static_cast<std::int64_t>(scene->get_entity_count()));
-        registry.gauge("room_server_scene_tick", {{"scene", scene_label}})
+        registry.gauge("world_scene_tick", {{"scene", scene_label}})
             .store(static_cast<std::int64_t>(scene->tick_count()));
     }
 }
 
-void RoomServer::broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message) {
+void WorldApp::broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message) {
     // P1-3：viewer set 驱动（旧 aoiManager_->getViewers 九宫格查询退役）——
     // 接收集合 = 实体所在 Scene 的 SceneAoi 视野查询（AOI 归 scene、scene_id
     // 隔离）；网关下发面随 P3-2（当前阶段下发 = 可观察日志）
@@ -646,21 +646,21 @@ void RoomServer::broadcastToViewers(EntityID entity_id, const std::vector<uint8_
     }
     const auto viewers = scene->aoi().viewers_of(apollo::game::core::EntityId(entity_id));
     if (!viewers.empty()) {
-        roomServerLog().info("broadcast: entity=" + std::to_string(entity_id) + " scene="
+        worldLog().info("broadcast: entity=" + std::to_string(entity_id) + " scene="
                     + std::to_string(scene->scene_id()) + " viewers="
                     + std::to_string(viewers.size()) + " bytes="
                     + std::to_string(message.size()));
     }
 }
 
-std::uint64_t RoomServer::resolve_scene_id(std::uint64_t space_id) const {
+std::uint64_t WorldApp::resolve_scene_id(std::uint64_t space_id) const {
     // 单进程单 scene 一条目（P1-1 口径）；未知空间回落默认 scene——
     // 与 create 的旧「空间无关全落全局表」行为等价
     const auto route = spaceToScene_.find(space_id);
     return route != spaceToScene_.end() ? route->second : defaultSceneId_;
 }
 
-apollo::game::world::Scene* RoomServer::find_scene_by_entity(EntityID entity_id) {
+apollo::game::world::Scene* WorldApp::find_scene_by_entity(EntityID entity_id) {
     // 玩家实体 → Avatar 实体号反查；非玩家实体 → Scene 实体集合直查
     //（P0-2 强分型 + P2-1b 实体集合归 Scene；实体号唯一归属一个 scene）
     const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
@@ -681,7 +681,7 @@ apollo::game::world::Scene* RoomServer::find_scene_by_entity(EntityID entity_id)
     return nullptr;
 }
 
-void RoomServer::ensureDefaultScene() {
+void WorldApp::ensureDefaultScene() {
     // P0-3：world.create_scene 路径（替代旧 ensureDefaultMapInstance 三层壳）。
     // 最小闭环：1 scene（descriptor 绑定地图资产）+ 1 instance（八态推进至 Running）。
     if (world_->find_scene(defaultSceneId_) != nullptr) {
@@ -713,7 +713,7 @@ void RoomServer::ensureDefaultScene() {
     spaceToScene_[defaultSpaceId_] = defaultSceneId_;
 }
 
-void RoomServer::attachPlayerWorldSession(
+void WorldApp::attachPlayerWorldSession(
     protocol::SessionID session_id,
     protocol::PlayerID player_id_raw,
     EntityID entity_id,
@@ -753,12 +753,12 @@ void RoomServer::attachPlayerWorldSession(
     // Entering → Active（resume 唯一合法前态；Closed/Leaving 会拒绝——接线异常
     // 的可观察面，不静默吞）
     if (!session->resume()) {
-        roomServerLog().warning("world session resume rejected for session "
+        worldLog().warning("world session resume rejected for session "
                     + std::to_string(session_id));
     }
 }
 
-void RoomServer::detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id) {
+void WorldApp::detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id) {
     auto session = worldSessionManager_->find_session(session_id);
     if (!session) {
         // 无会话 id 时按玩家身份反查（P0-2/P0-3：经 Scene 的 Avatar 容器由
@@ -794,8 +794,8 @@ void RoomServer::detachPlayerWorldSession(protocol::SessionID session_id, Entity
     worldSessionManager_->suspend_session(session->session_id());
     worldSessionManager_->close_session(session->session_id());
     // close 两段式收尾（P0-4）：Leaving 可观察窗口后显式终结（Closed 终态、
-    // 摘除双索引）；RoomServer 侧登出无延迟清理面，窗口内即 finalize。
+    // 摘除双索引）；WorldApp 侧登出无延迟清理面，窗口内即 finalize。
     worldSessionManager_->finalize_session(session->session_id());
 }
 
-} // namespace room_server
+} // namespace world_app

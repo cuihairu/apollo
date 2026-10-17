@@ -11,7 +11,7 @@ The problems it is best suited to solve are usually:
 
 - Too much shared state
 - Obvious lock contention
-- Objects that can naturally be partitioned by entity, room, or scene
+- Objects that can naturally be partitioned by entity, instance, or scene
 
 But the Actor model is not a universal silver bullet; cross-Actor collaboration, mailbox backlog, and debugging complexity are all real costs.
 
@@ -29,7 +29,7 @@ Its key is not "asynchrony", but "the same piece of state is modified by as few 
 
 Because it tries to avoid multiple threads modifying the same object at the same time.
 
-If objects like players, rooms, and scenes each have a clear owner, then many shared writes that originally needed locks become message delivery.
+If objects like players, instances, and scenes each have a clear owner, then many shared writes that originally needed locks become message delivery.
 
 This is also the biggest engineering value of Actors.
 
@@ -92,7 +92,7 @@ The Actor model is more like a concurrency organization method, not a belief tha
 Many online games adopt Actor ideas locally, for example:
 
 - Serial processing of entities within a scene
-- Room messages advanced by a single thread
+- Instance messages advanced by a single thread
 
 But the peripheral systems may still be:
 

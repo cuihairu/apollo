@@ -23,6 +23,6 @@ If you are already familiar with Apollo, go straight to:
 
 - [Architecture Overview](/en/guide/architecture) - Three panorama architecture diagrams (target form)
 - [Architecture Review & Current State](/en/analysis/architecture-review) - A deep look at the architecture design and audit conclusions
-- [Room-Based Server Design](/en/30-Room-Based_GameServer_Design) - Rooms, RoomServer, and cross-server transfer
+- [Instance-Based Server Design](/en/30-Instance_GameServer_Design) - Instances, World, and cross-server transfer
 - [Module Docs](/en/modules/) - Detailed description of each module
 - [API Reference](/en/api/) - Interfaces and classes

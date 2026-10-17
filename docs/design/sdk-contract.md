@@ -20,7 +20,7 @@
 
 Apollo 定义两类发布。**协议更新**修改契约 XML/XSD，并通过 `apollo_gen` 重新生成产物；服务端与客户端必须在兼容窗口内处理新旧协议。当前仓库已有契约源、生成器和生成结果校验，但 N/N-1 协议协商、兼容窗口检查及滚动发布验收尚未完成，因此不能将协议变更称为已实现的无停机热更。
 
-**仅代码更新**保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供预备、tick 边界提交、观察和回滚原语；将补丁投递到各 RoomServer 的控制面仍未形成完整生产流程。C++ 代码通过进程滚动替换发布，需排空房间或在另一个已实现的迁移流程中转移房间状态，不支持进程内热加载。
+**仅代码更新**保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供预备、tick 边界提交、观察和回滚原语；将补丁投递到各 World 的控制面仍未形成完整生产流程。C++ 代码通过进程滚动替换发布，需排空副本或在另一个已实现的迁移流程中转移副本状态，不支持进程内热加载。
 
 ## 1. 现状与问题（读码结论）
 
@@ -532,7 +532,7 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 |---|---|---|
 | 对客户端 | `hello` :99-100、`loginBaseapp` :144-145、`logoutBaseapp` :150、`reloginBaseapp` :156-157、`onClientActiveTick` :112-113、`reqAccountBindEmail` :264、`reqAccountNewPassword` :289 | `BASEAPP_MESSAGE_EXPOSED` |
 | 对 dbmgr | `onDbmgrInitCompleted` :90 | 无标记（内部） |
-| 对 roomserver | `onMigrationCellappStart` :326、`onMigrationCellappEnd` :331 | 无标记（内部） |
+| 对 cellapp | `onMigrationCellappStart` :326、`onMigrationCellappEnd` :331 | 无标记（内部） |
 
 **EXPOSED 只是导出标记，不是命名空间隔离**——`baseapp_interface_macros.h:27-36`：`BASEAPP_MESSAGE_EXPOSED(NAME)` 展开为 `NETWORK_MESSAGE_EXPOSED(Baseapp, NAME)`，仅影响「是否允许客户端通道调用」的检查，不参与 ID 分配语义。
 

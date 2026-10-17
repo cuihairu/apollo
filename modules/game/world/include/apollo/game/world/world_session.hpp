@@ -22,7 +22,7 @@ class WorldSession {
 public:
     using SessionId = std::uint64_t;
     // player 身份用 core::PlayerId 强分型（P0-2）：与 EntityId 互不隐式转换，
-    // 杜绝「实体 ID 当玩家 ID 传」（room_server.cpp 历史缺陷）。SessionId 保留
+    // 杜绝「实体 ID 当玩家 ID 传」（world_app.cpp 历史缺陷）。SessionId 保留
     // alias（连接域身份证，跨面仍以 raw 传参，与 gateway 会话面一致）。
     using PlayerId = apollo::game::core::PlayerId;
 

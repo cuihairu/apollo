@@ -1,6 +1,6 @@
 #pragma once
 
-// net M1 接收端缝（M1 上层接线批 · 2b-ii）：room-server 侧接收面 = InterServerLink
+// net M1 接收端缝（M1 上层接线批 · 2b-ii）：world-app 侧接收面 = InterServerLink
 // passive 端点（网关拨入，net-abstraction §5.6/§5.7）+ 契约 wire 解包 + 意图
 // 信封投递。
 //
@@ -13,14 +13,14 @@
 // 已消费）；顶格拒收（2101）与不受理（2001）在受理点即时回——这两类永不
 // 进队列，无需延后。
 
-#include "room_server/acceptance_queue.hpp"
+#include "world_app/acceptance_queue.hpp"
 
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 
-namespace room_server {
+namespace world_app {
 
 // M1 错误码（errors.xml 契约错误表；0 成功）。
 inline constexpr std::int32_t kIntentAckOk = 0;
@@ -51,7 +51,7 @@ public:
     // 装配 + 监听（passive bind/listen；失败 false——配置错误装配期显形）。
     virtual bool start() { return true; }
 
-    // 停机（先于 worldHost/legacy server 停，G-3 顺序见 RoomServer::stop）。
+    // 停机（先于 worldHost/legacy server 停，G-3 顺序见 WorldApp::stop）。
     virtual void stop() {}
 
     // 宿主泵：LinkManager 全部端点一拍（accept / 链路收发 / 重连）。now_ms =
@@ -95,4 +95,4 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {});
 
-} // namespace room_server
+} // namespace world_app

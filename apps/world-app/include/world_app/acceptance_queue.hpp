@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace room_server {
+namespace world_app {
 
 namespace protocol = apollo::protocol;
 namespace trace = apollo::net::trace;
@@ -30,7 +30,7 @@ struct IntentEnvelope {
     protocol::SessionID session_id{};
     std::uint64_t request_id = 0;  // M1 延时应答关联键；0 = legacy / 无应答
     trace::TraceContext trace{};   // trace_id + 发端 parent + 采样旗标
-    std::uint64_t received_ms = 0; // 受理时刻（RoomServer span 计时起点）
+    std::uint64_t received_ms = 0; // 受理时刻（WorldApp span 计时起点）
 };
 
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。
@@ -108,4 +108,4 @@ private:
     std::atomic<std::size_t> rejected_{0};
 };
 
-} // namespace room_server
+} // namespace world_app

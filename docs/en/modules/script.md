@@ -283,7 +283,7 @@ rt.get_global_bool("ready");
   handlers via `contract_route` (`call_route` wiring) — with the gameplay Lua batch (host
   startup loading has landed: the cell `--script-handlers`/`--script-contract` startup
   order runs handler surface → contract → boot source; the handler placeholder module ships
-  at `apps/room-server/scripts/contract_handlers.lua`, with the golden contract sync gate
+  at `apps/world-app/scripts/contract_handlers.lua`, with the golden contract sync gate
   `contract_handler_tests`)
 - Formulas as hooks (§5.3)
 - ScriptFaultEvent host context fields (scene/entity_id/module+version — filled with the
@@ -408,10 +408,10 @@ idle. Four-tree gate (build / sanitizer / OFF / examples) + ASan/UBSan/LSan all 
 
 `tests/test_contract_handlers.cpp` (2 cases, §3.4 host startup loading · the handler-surface
 sync gate): the full load path over the in-repo handler placeholder module
-(`apps/room-server/scripts/contract_handlers.lua`) + the golden contract
+(`apps/world-app/scripts/contract_handlers.lua`) + the golden contract
 (`sdks/cpp/generated/contract.lua`) — if apollo_gen adds a reflect message and the handler
 surface does not follow, it turns red; the contract data surface (version/routes) is
-readable after loading. The cell startup load-order cases live in `room_server_script_host_tests`
+readable after loading. The cell startup load-order cases live in `world_app_script_host_tests`
 (4→7: landing visibility of the startup order handler surface → contract → boot, the
 missing-handler gate rejecting without shutting down, and continuing service when the
 contract file is absent). Four-tree gate (build / sanitizer / OFF / examples) all green.

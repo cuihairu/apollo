@@ -1,43 +1,59 @@
-# Apollo migration checklist
+# Apollo 实施清单
 
-The target is a lightweight room-based multiplayer server engine for tower defense, co-op, arenas, and dungeons. It does not target a persistent seamless world. `Login`, `Gateway`, `RoomServer`, and `Room` are the canonical terms. One Room is one match; one RoomServer may host multiple Rooms; a player has one authoritative gameplay object in a Room at a time.
+唯一目标命名：`Login`、`Gateway`、`World` 是进程职责；`Scene` 是 World 内部模拟单元；`Instance` 是几名玩家组队创建、完成刷怪与结算后销毁的临时副本。程序 `world-app`、入口 `WorldApp`、命名空间 `world_app` 是 World 职责在代码中的形式。
 
-Two update modes are documented. Protocol updates regenerate contract artifacts and require old/new compatibility during rollout. Code-only updates keep the wire contract unchanged; Lua has runtime replacement primitives, while C++ changes use process replacement after Rooms drain or transfer. Production rollout, connection handoff, and uninterrupted active-Room updates remain unproven.
+本文仅跟踪当前工作，不保留作废命名或按日期追加的讨论记录。目标与实现状态必须分开；状态机、网络原语或单测存在不代表完整生产玩法已接通。
 
-## P0 — Documentation baseline
+## P0：文档与命名一致性
 
-- [x] Remove retired architecture archives and duplicated task ledgers that introduced competing process names. Keep BigWorld/KBEngine terms only in clearly labeled external-engine references.
-- [x] Define the target process roles, Room boundary, single-authority player object, and Gateway update limits in the architecture entry points.
-- [x] Document protocol-update and code-only update modes and distinguish existing runtime primitives from incomplete production rollout.
-- [x] Move English pages to the VitePress locale directory `docs/en/`; use `locales` configuration and the built-in locale switcher.
-- [x] Remove dead Markdown links with a static check across 467 pages.
-- [ ] Run the VitePress build and fix any build-time issues. The repository's `.gitignore` explicitly forbids operations in `node_modules`, so this check must wait until it can run without touching that directory.
+- [x] 在中英文架构入口、词汇表、玩家模型和 README 中统一 World / Scene / Instance 的职责。
+- [x] 明确副本流程：小队发起、World 分配、创建、进入、运行、目标完成、结算、离开、销毁及资源释放。
+- [x] 文档使用 VitePress locales：中文在 docs 根目录，英文在 docs/en。
+- [x] 修正被误改的外部引擎源码名称；第三方资料引用真实上游标识。
+- [x] 恢复当前有效 ADR 核心规则及编号含义，修正本轮涉及的关键引用。
+- [ ] 逐项复核其他设计稿引用的旧章节号和批次说明，改为当前规则与实现状态，不保留作废结论。
+- [x] 检查 464 个 Markdown 页及导航无失效本地链接；仓库外隔离目录 VitePress 正式构建通过，本地化页面与搜索索引已生成。
+- [x] 核对 GitHub About 描述和 topics 与最终定位一致。
 
-## P1 — Runtime naming
+## P1：World 应用接线
 
-- [x] Rename `apps/cell-app` to `apps/room-server`; update the CMake target, classes, namespace, includes, CLI flags, Gateway configuration, fleet script, logs, metrics, and related tests. Preserve existing `cell_*` wire message names and IDs.
-- [x] Review `base-app` and `baseappmgr`; map session, player-data, and routing responsibilities to `Login`, `Gateway`, and `Room` without adding standalone target processes. The prototype code migration remains tracked below.
-- [x] Route the current Gateway M1 link/configuration to `room-server`; remove user-facing claims that Cell/Space processes are part of Apollo target topology.
-- [ ] Confirm the RoomServer ownership boundary in code; lifecycle implementation is tracked in P2.
+- [x] 将游戏逻辑应用统一为 world-app / WorldApp / world_app，并同步 Gateway 配置、CLI、链路身份、日志指标、开发编队及测试。
+- [x] 完成全量构建及 75 项 CTest（含契约 golden 检查）；保留用户现有 .gitignore 改动和 tests/test_timer_main.cpp。
+- [ ] 按职责迁移 base-app 的玩家资料、会话和持久化能力，明确长期数据权威与对局实体边界。
+- [ ] 明确 baseappmgr 中目录、落点选择和迁移编排能力的实际所有者，再收敛部署；不得因命名变更直接把持久写入塞入 Login。
 
-## P2 — Room runtime
+## P2：小队副本完整流程
 
-- [ ] Add Room creation, admission, multi-Room hosting, settlement, and destruction to RoomServer.
-- [ ] Enforce one authoritative player object through admission, reconnect, and transfer paths.
-- [ ] Complete and verify the client → Gateway → RoomServer → Room message path.
-- [ ] Implement cross-RoomServer authority transfer with idempotency, route update, failure recovery, and tests.
+- [x] 复用现有 World、Scene、Instance 和 Instance 八态状态机，不重写同义生命周期。
+- [ ] 接通小队创建请求：验证队伍、成员、人数和准入条件，选择有容量的 World，创建独立 Instance 与临时 Scene。
+- [ ] 接通成员进入和准备完成后启动玩法，隔离副本内实体、AOI、任务与脚本状态。
+- [ ] 接通刷怪、目标完成与失败判定，驱动 Instance 进入结算阶段。
+- [ ] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。
+- [ ] 结算后移出玩家、拒绝迟到输入，释放实体、AOI、脚本/任务及临时 Scene，销毁 Instance 并从 World 注册表移除。
+- [ ] 覆盖无人进入、全员退出、掉线、队伍解散、超时和进程异常的收尾策略及测试。
+- [ ] 接通并验证客户端 → Gateway → World → Scene/Instance 的真实上行、结果和状态下行；现有 broadcastToViewers 日志不能作为下行完成证据。
+- [ ] 验证单 World 多副本隔离，以及多个 World 的分配与选路。
 
-## P3 — Update and availability behavior
+## P3：玩家迁移与会话恢复
 
-- [ ] Add protocol-version negotiation and an N/N-1 compatibility window; enforce generated-artifact and compatibility checks in CI.
-- [ ] Complete Lua patch distribution and rollout control across RoomServer instances, including canary health checks and rollback.
-- [ ] Implement graceful Gateway drain and validate how existing sockets behave through the drain deadline.
-- [ ] Define reconnect/session recovery for clients that reconnect through another Gateway.
-- [ ] Define RoomServer drain behavior for completion, migration, timeout, and forced shutdown.
-- [ ] Validate protocol and code-only rolling releases separately; do not claim seamless active-Room updates without end-to-end evidence.
+- [ ] 复用同进程 SceneTransfer；分别验证跨 World 的源端冻结、导出、目标确认、路由切换、源端清理和失败恢复。
+- [ ] 用迁移标识、权威代次和业务幂等拒绝重复接管、迟到输入及重复结算。
+- [ ] 完成跨 Gateway 重连后的会话恢复，明确重复登录、旧连接失效和路由持久性。
 
-## P4 — Project surface and verification
+## P4：两种更新方案与排空
 
-- [ ] Align README, examples, scripts, and deployment guidance with implemented behavior and distinguish target design from prototype status.
-- [ ] Run relevant build and test suites for each migration slice; preserve the pre-existing untracked `tests/test_timer_main.cpp` and unrelated `.gitignore` changes.
-- [x] Update and verify the GitHub About description and topics against the corrected documentation.
+- [ ] 协议更新：补齐版本协商、新旧契约兼容窗口及兼容检查，分别验证兼容变更和破坏性变更的发布/回滚。
+- [ ] 仅代码更新：复用 Lua prepare/commit/canary/rollback 和现有 ModuleRollout 原语，补齐跨 World 的可靠投递、观察和失败回滚接线。
+- [ ] Gateway 排空：停止接受新连接，保留既有连接服务至自然退出或明确期限；定义强停结果。
+- [ ] World 排空：停止分配新副本，等待活动副本结算并销毁；定义超时、强停与恢复策略。C++ 更新通过进程替换完成。
+- [ ] 分别验收服务持续接入、免重新登录、TCP 连接连续和活动副本连续；未经端到端验证不宣称无感热更。
+- [ ] 建立小队副本销毁、跨 World 迁移、Gateway/World 排空及升级回滚的可重复演练。
+
+## 后续能力：保持暂缓，需求触发再实施
+
+- [ ] 外部存储（MySQL/Redis/ClickHouse）：具体部署或容量要求触发后接入；当前仍是本地档案和 journal。
+- [ ] protobuf/zstd 进入真实消息路径：跨语言互操作或带宽实证触发后实施；现有依赖和生成产物不代表运行路径已使用。
+- [ ] Kafka / Prometheus / Grafana 等外部观测基建：实际观测部署需求触发后实施。
+- [ ] 战斗验证：有具体玩法内容可复算、验证规则与业务目标后实施。
+
+跨机热备与仲裁维持未立项目标；machined 的监督重启不作为热备能力验收。

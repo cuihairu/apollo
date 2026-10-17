@@ -58,11 +58,11 @@ target_include_directories(benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/data/orm/include
-    # 受理面段（P3-2 批 D）：协议 codec + RoomServer 受理队列头（header-only；
+    # 受理面段（P3-2 批 D）：协议 codec + WorldApp 受理队列头（header-only；
     # trace 子集载体入信封后追 linktrace include，P3-3 语义层批）
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/net/linktrace/include
-    ${CMAKE_SOURCE_DIR}/apps/room-server/include
+    ${CMAKE_SOURCE_DIR}/apps/world-app/include
     # 直编 scene.cpp（Scene 脚本桥批起含 script_runtime.hpp）
     ${CMAKE_SOURCE_DIR}/modules/script/include
     ${CMAKE_SOURCE_DIR}/include

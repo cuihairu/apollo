@@ -95,7 +95,7 @@ If it is one of these types, single server is often more suitable:
 
 - Card games
 - Turn-based games
-- Room-based mini-games
+- Instance-based mini-games
 - Low-realtime social gameplay
 
 The core pressure of these projects is usually the database, gateway connections, and activity peaks, rather than continuous spatial simulation.
@@ -109,7 +109,7 @@ If 2000 people in one scene must share the same battlefield state, the same skil
 For these problems you need to answer first:
 
 - Can it be partitioned by map
-- Can it be split by room
+- Can it be split by instance
 - Can it be split by channel
 - Can it be split by logical domain
 - Can partial degradation be accepted
@@ -273,7 +273,7 @@ At this point, splitting the gateway, session, space, and backend systems by mac
 | Scenario | More Suitable Choice | Reason |
 |------|--------------|------|
 | First MMO prototype of a small team | Single server or single machine multiple processes | Prioritize validating gameplay and processes |
-| Room-based game | Single server | State is naturally isolated by room; a single machine is enough |
+| Instance-based game | Single server | State is naturally isolated by instance; a single machine is enough |
 | Small-to-medium turn-based | Single server | No high demands on realtime or spatial continuity |
 | Large-world MMORPG | Distributed | Spatial simulation, AOI, migration all need splitting |
 | Large amounts of cross-server events | Distributed | Independent scale-up/down and isolation needed |
@@ -282,7 +282,7 @@ At this point, splitting the gateway, session, space, and backend systems by mac
 Special attention is needed:
 
 - `MMORPG = distributed` is not an absolute conclusion; a small-scale MMO can also start single-server
-- `FPS/MOBA = distributed` is also not an absolute conclusion; many room-based match services are essentially large numbers of independent single-room instances
+- `FPS/MOBA = distributed` is also not an absolute conclusion; many instance-based match services are essentially large numbers of independent single-instance instances
 - What truly matters is not the genre name, but the state coupling degree, realtime requirements, capacity targets, and operation requirements
 
 ---

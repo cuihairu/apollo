@@ -28,7 +28,7 @@ private:
 
 // 玩家 ID 强分型（P0-2，object-model O-1/O-4）：
 // 与 EntityId 同构但互不隐式转换——杜绝「把实体 ID 当玩家 ID 传」一类
-// 编译器不可见的错误（room_server.cpp 历史缺陷：find_by_player(entity_id)）。
+// 编译器不可见的错误（world_app.cpp 历史缺陷：find_by_player(entity_id)）。
 // 语义口径：PlayerId 标识长期玩家对象（PlayerAnchor 域）；EntityId 标识
 // 场景内实体（Scene/Avatar 域）。跨域传参必须显式转换。
 class PlayerId {

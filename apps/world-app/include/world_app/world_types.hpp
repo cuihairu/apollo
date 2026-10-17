@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace room_server {
+namespace world_app {
 
 using EntityID = uint64_t;
 using SpaceID = uint32_t;
@@ -31,9 +31,9 @@ struct Position {
     }
 };
 
-// P2-1b：RoomServer 侧 Entity/PlayerEntity/EntityManager 已删——实体集合归 Scene
+// P2-1b：WorldApp 侧 Entity/PlayerEntity/EntityManager 已删——实体集合归 Scene
 // （scene.hpp:33 既有裁决「承接 EntityManager 职责，行为等价迁移」）：
 // 玩家实体走 attach 路径入 avatars_，非玩家实体经 spawn_entity 入 entities_。
 // 本头仅保留消息面共用的枚举与位置类型。
 
-} // namespace room_server
+} // namespace world_app

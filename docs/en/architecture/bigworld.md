@@ -16,7 +16,7 @@ tag:
 
 This is a wrap-up entry page.
 
-Apollo's BigWorld compatibility module provides a familiar C++ API facade; it does not implement BigWorld's distributed seamless-world runtime. Apollo's target architecture is a room-based multiplayer game server; see the [Architecture Overview](../guide/architecture.md).
+Apollo's BigWorld compatibility module provides a familiar C++ API facade; it does not implement BigWorld's distributed seamless-world runtime. Apollo's target architecture is an instance-based multiplayer game server; see the [Architecture Overview](../guide/architecture.md).
 
 ## Semantic Boundaries
 

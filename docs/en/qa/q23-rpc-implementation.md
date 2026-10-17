@@ -44,7 +44,7 @@ Common approaches include:
 - Registry center
 - Routing based on entity ID or shard key
 
-In game services, many RPCs are not "find a service name" but "find the node responsible for this player, scene, room, or Cell".
+In game services, many RPCs are not "find a service name" but "find the node responsible for this player, scene, instance, or Cell".
 
 ### 2. Protocol and Serialization
 
@@ -129,7 +129,7 @@ RPC in game services often emphasizes more:
 
 - Entity- or partition-based routing
 - High-frequency short messages
-- Tight coupling with state machines, AOI, rooms, and sessions
+- Tight coupling with state machines, AOI, instances, and sessions
 - Very high sensitivity to tail latency
 
 It is not exactly the same as backend business services. Many times "method calling" is only the surface form; underneath it looks more like a targeted messaging mechanism.

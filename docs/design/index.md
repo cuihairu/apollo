@@ -9,10 +9,10 @@
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
 | [概念词汇表](./concept-glossary.md) | 活文档 | 新词登记处 |
-| [玩家对象模型](./player-object-model.md) | 子系统实现说明 | 玩家身份、实体与场景对象；目标对局边界以 Room 为准 |
+| [玩家对象模型](./player-object-model.md) | 子系统实现说明 | 玩家身份、实体与场景对象；目标对局边界以 Instance 为准 |
 | [属性系统与同步](./attribute-sync.md) | 子系统实现说明 | 属性数据与可见性/同步机制 |
-| [会话与在线目录](./session-and-online-directory.md) | 子系统实现说明 | 在线会话与当前房间路由信息 |
-| [登录流程](./login-flow.md) | 子系统设计稿 | Login、Gateway 与 RoomServer 的登录/路由边界 |
+| [会话与在线目录](./session-and-online-directory.md) | 子系统实现说明 | 在线会话与当前副本路由信息 |
+| [登录流程](./login-flow.md) | 子系统设计稿 | Login、Gateway 与 World 的登录/路由边界 |
 | [时钟与时间](./clock-and-time.md) | 已交付 | 墙钟/tick/帧预算口径 |
 
 ## 战斗
@@ -20,7 +20,7 @@
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
 | [战斗确定性](./battle-determinism.md) | 已交付 | 四约束 + 录制/回放/hash 链 |
-| [战斗实例卸载](./battle-instance-offload.md) | 子系统实现说明 | 战斗计算卸载实验；不改变 Room/RoomServer 目标术语 |
+| [战斗实例卸载](./battle-instance-offload.md) | 子系统实现说明 | 战斗计算卸载实验；不改变 Instance/World 目标术语 |
 | [战斗验证服务](./battle-verification-service.md) | 设计稿（评审中） | 客户端权威战斗复算对账（verifier） |
 
 ## 网络与运维
@@ -38,7 +38,7 @@
 
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
-| [RoomServer 模拟单写者](./room-server-single-writer.md) | 并发设计 | 网络受理与房间模拟线程的并发边界 |
+| [World 模拟单写者](./world-single-writer.md) | 并发设计 | 网络受理与副本模拟线程的并发边界 |
 | [脚本系统（Lua）](./scripting-lua.md) | 设计稿 | 双端共享战斗逻辑与热更纪律 |
 | [SDK 契约](./sdk-contract.md) | 活文档 | 客户端/服务端共享契约（contract.lua） |
 | [XML 契约生成](./xml-generation.md) | 已交付 | entities.xml → 三语言投影 |

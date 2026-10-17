@@ -82,7 +82,7 @@ state = pcg32_init( splitmix64( world_seed, tick, stream_id ) )   // 每 (tick, 
 ## 7. Closure with the No. 36 Decision Table
 
 - **#16 independent battle instances and replay**: the instance-offload form (Matchmaker/Instance Manager skeleton, traceable to docs/25 §3.1-3.2) belongs to the P3+ gameplay batch; **its determinism prerequisite = this doc's four constraints** — a cross-machine instance with the same binary is in the same determinism domain (§1). That No. 36 row's dangling docs/25 reference now points to this doc (a registry annotation, syncing with the next No. 36 batch).
-- **#18 frame sync keeps only the seam**: the seam's content made concrete = "server-authoritative replay determinism" (this doc); **lockstep (client participating in adjudication) does not enter the roadmap** — cross-end floating-point consistency + input latency compensation is a problem of another magnitude, unnecessary for an MMO server-authoritative model; "keeping the seam" means that if small-room gameplay is built in the future (a 1v1 arena lockstep-ized), the input-driven model (intent recording + tick replay) is reusable, with bounded adjudication-migration cost.
+- **#18 frame sync keeps only the seam**: the seam's content made concrete = "server-authoritative replay determinism" (this doc); **lockstep (client participating in adjudication) does not enter the roadmap** — cross-end floating-point consistency + input latency compensation is a problem of another magnitude, unnecessary for an MMO server-authoritative model; "keeping the seam" means that if small-instance gameplay is built in the future (a 1v1 arena lockstep-ized), the input-driven model (intent recording + tick replay) is reusable, with bounded adjudication-migration cost.
 
 ## 8. Phased Landing
 

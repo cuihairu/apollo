@@ -14,7 +14,7 @@ namespace apollo::game::world {
 // 成员（契约 §2.8：AOI 归 scene、scene_id 隔离）。
 //
 // 九宫格网格 AOI，与实体类型解耦（只认 EntityId + 位置值）——语义自
-// room_server::AOIManager 移植（P1-3 后 RoomServer 侧与 legacy aoi.cpp 双实现退役）。
+// world_app::AOIManager 移植（P1-3 后 WorldApp 侧与 legacy aoi.cpp 双实现退役）。
 // 每个 Scene 独享一个 SceneAoi 实例，天然按 scene 隔离。
 //
 // 事件面（P1-3 补全，契约 §13 ENTER/SYNC/LEAVE 三事件）：

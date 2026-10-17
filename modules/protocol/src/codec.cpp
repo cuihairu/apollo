@@ -118,7 +118,7 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, GatewayClientDis
 }
 
 //==============================================================================
-// RoomServer 消息
+// WorldApp 消息
 //==============================================================================
 
 std::vector<uint8_t> MessageCodec::encodeBody(const CellCreateEntity& msg) {

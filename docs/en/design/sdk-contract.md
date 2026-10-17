@@ -20,7 +20,7 @@
 
 Apollo defines two release modes. A **protocol update** changes contract XML/XSD and regenerates artifacts through `apollo_gen`; servers and clients must handle old and new contracts during a compatibility window. Contract sources, the generator, and generated-artifact checks exist, but N/N-1 negotiation, compatibility-window checks, and rolling-release validation are incomplete. Protocol changes therefore are not yet a proven no-downtime hot update.
 
-A **code-only update** keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides preparation, tick-boundary commit, observation, and rollback primitives. Production control-plane delivery to every RoomServer remains incomplete. C++ changes use process replacement after rooms drain, or after a separately implemented room-state transfer; C++ cannot be loaded into a running process.
+A **code-only update** keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides preparation, tick-boundary commit, observation, and rollback primitives. Production control-plane delivery to every World remains incomplete. C++ changes use process replacement after instances drain, or after a separately implemented instance-state transfer; C++ cannot be loaded into a running process.
 
 ## 1. Current State and Problems (code-reading conclusions)
 
@@ -550,7 +550,7 @@ The def-contract/protobuf relationship in one sentence: **the contract is the so
 |---|---|---|
 | To clients | `hello` :99-100, `loginBaseapp` :144-145, `logoutBaseapp` :150, `reloginBaseapp` :156-157, `onClientActiveTick` :112-113, `reqAccountBindEmail` :264, `reqAccountNewPassword` :289 | `BASEAPP_MESSAGE_EXPOSED` |
 | To dbmgr | `onDbmgrInitCompleted` :90 | none (internal) |
-| To roomserver | `onMigrationCellappStart` :326, `onMigrationCellappEnd` :331 | none (internal) |
+| To cellapp | `onMigrationCellappStart` :326, `onMigrationCellappEnd` :331 | none (internal) |
 
 **EXPOSED is just an export marker, not namespace isolation** — `baseapp_interface_macros.h:27-36`: `BASEAPP_MESSAGE_EXPOSED(NAME)` expands to `NETWORK_MESSAGE_EXPOSED(Baseapp, NAME)`, affecting only the "may the client channel call this" check, participating in no ID-allocation semantics.
 

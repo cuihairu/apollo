@@ -30,7 +30,7 @@ This document describes the actual directory layout of the current repository.
 | `gateway-app/` | Edge access layer |
 | `baseappmgr/` | Fleet scheduling and recovery/directory mirroring |
 | `base-app/` | Player anchor host |
-| `room-server/` | RoomServer runtime prototype |
+| `world-app/` | World runtime prototype |
 | `game-server/` | Compatibility or demo game service |
 | `machined/` | Process supervision (roster spawn/backoff restart/death reporting) |
 

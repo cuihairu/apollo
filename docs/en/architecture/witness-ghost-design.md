@@ -65,7 +65,7 @@ This already makes it quite clear that:
 - `GhostManager` cares about entity projection and message relay
 
 This document discusses the runtime objects in the BigWorld enhanced state,
-not capabilities already fully landed in the current `apps/room-server`.
+not capabilities already fully landed in the current `apps/world-app`.
 
 ## 3. Why Plain AOI Is Not Enough
 

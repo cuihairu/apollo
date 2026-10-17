@@ -42,7 +42,7 @@ If a piece of state can be clearly owned by:
 
 - A certain thread
 - A certain Actor
-- A certain session or room
+- A certain session or instance
 
 Then many races naturally disappear.
 

@@ -11,7 +11,7 @@ It can represent:
 
 - A map
 - An instance
-- A room
+- An instance
 - A logical scene container
 
 So when discussing `Space`, the first step is to separate "logical space" from "underlying physical partitioning or Cell splitting."
@@ -50,7 +50,7 @@ For example:
 
 - The main city is one Space
 - A certain instance is another Space
-- A battlefield room can also be a Space
+- A battlefield instance can also be a Space
 
 What they have in common is not size, but:
 
@@ -102,7 +102,7 @@ Inaccurate. Blocking is a hosting strategy; Space is a logical container.
 
 Not necessarily. Whether that holds depends on the specific implementation and resource allocation strategy.
 
-### 3. Instances and rooms don't count as Space
+### 3. Gameplay instances don't count as Space
 
 On the contrary, they are usually very well suited to be carried by a logical container like Space.
 

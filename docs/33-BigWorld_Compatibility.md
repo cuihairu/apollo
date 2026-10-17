@@ -138,4 +138,4 @@ This compatibility layer does **not** yet provide:
 - Python scripting compatibility
 - Network protocol compatibility with official BigWorld clients
 
-When you specify the exact BigWorld API surface/version you want (BaseApp/RoomServer, mailbox semantics, scripting language), the next step is to extend this layer incrementally with the same “API + tests” rule.
+When you specify the exact BigWorld API surface/version you want (BaseApp/World, mailbox semantics, scripting language), the next step is to extend this layer incrementally with the same “API + tests” rule.

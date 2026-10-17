@@ -43,17 +43,17 @@ Apollo 需要在现有 `Channel` 之上，补一层明确的实体远程调用�
 
 从本地源码看：
 
-- [entity_call.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/lib/entitydef/entity_call.h)
+- [entity_call.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/lib/entitydef/entity_call.h)
   - `EntityCall` 是显式远程实体引用
   - `createRemoteMethod`
   - `newCall`
-- [entitycallabstract.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/lib/entitydef/entitycallabstract.h)
+- [entitycallabstract.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/lib/entitydef/entitycallabstract.h)
   - 持有 `componentID`
   - 持有 `ENTITYCALL_TYPE`
   - 持有 `ENTITY_ID`
   - `sendCall`
   - `getChannel`
-- [bundle.h](/C:/Users/cui/Workspaces/kbengine/kbe/src/lib/network/bundle.h)
+- [bundle.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/lib/network/bundle.h)
   - `Bundle` 负责按消息边界写包
   - `newMessage`
   - `finiMessage`
@@ -69,13 +69,13 @@ Apollo 需要在现有 `Channel` 之上，补一层明确的实体远程调用�
 
 从当前代码看：
 
-- [channel.hpp](/C:/Users/cui/Workspaces/apollo/modules/net/protocol/include/apollo/net/protocol/channel.hpp)
+- `modules/net/protocol/include/apollo/net/protocol/channel.hpp`
   - `Channel` 只提供 `connect/send/receive`
   - 面向的是 endpoint，不是 entity route
-- [endpoint.hpp](/C:/Users/cui/Workspaces/apollo/modules/net/protocol/include/apollo/net/protocol/endpoint.hpp)
+- [endpoint.hpp](https://github.com/cuihairu/apollo/blob/main/modules/net/protocol/include/apollo/net/protocol/endpoint.hpp)
   - `Endpoint` 更偏服务发现结果
   - 没有 entity 级路由语义
-- [gateway_server.cpp](/C:/Users/cui/Workspaces/apollo/apps/gateway-app/src/gateway_server.cpp)
+- [gateway_server.cpp](https://github.com/cuihairu/apollo/blob/main/apps/gateway-app/src/gateway_server.cpp)
   - 当前转发更偏“按 app/service 路由”
 
 这意味着 Apollo 现在缺的不是 socket，而是下面三层：

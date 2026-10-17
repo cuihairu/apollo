@@ -39,7 +39,7 @@ The core of CellApp deployment is splitting scenes and load across multiple logi
 Common considerations include:
 
 - Allocating by map or scene
-- Allocating by instance or room
+- Allocating by gameplay instance
 - Dynamically splitting by regional heat
 - Decoupled deployment from the gateway and BaseApp
 
@@ -97,7 +97,7 @@ The Actor model's strengths are:
 - Reduces shared state contention
 - Suits entity-oriented modeling better
 
-This fits well with the game server design where "player entities, room entities, and scene entities are advanced by a single thread or a single mailbox".
+This fits well with the game server design where "player entities, instance entities, and scene entities are advanced by a single thread or a single mailbox".
 
 ## VI. Why You Cannot Simply Say "KBEngine Is Actor"
 

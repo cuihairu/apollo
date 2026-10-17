@@ -83,11 +83,11 @@ Skynet is a general service runtime and does not prescribe an MMO process topolo
 
 ### Colyseus and Photon
 
-Colyseus uses `Room` for a stateful multiplayer session/match hosted by a game-server process. Photon commonly uses `Master Server` for session discovery/allocation and `Game Server` to host rooms and matches. In both cases, `Room` is a gameplay session concept, not a process name.
+Colyseus uses `Instance` for a stateful multiplayer session/match hosted by a game-server process. Photon commonly uses `Master Server` for session discovery/allocation and `Game Server` to host instances and matches. In both cases, `Instance` is a gameplay session concept, not a process name.
 
 ### Agones
 
-Agones uses `GameServer`, `Fleet`, and `FleetAutoscaler` for game-server instances and orchestration resources on Kubernetes. It addresses deployment and capacity orchestration; it does not define the business model for player objects or rooms.
+Agones uses `GameServer`, `Fleet`, and `FleetAutoscaler` for game-server instances and orchestration resources on Kubernetes. It addresses deployment and capacity orchestration; it does not define the business model for player objects or instances.
 
 ## Apollo's common names
 
@@ -95,14 +95,14 @@ Agones uses `GameServer`, `Fleet`, and `FleetAutoscaler` for game-server instanc
 |---|---|---|
 | `Login` | Account authentication and login credentials. | `loginapp`, `authserver`, `loginserver` |
 | `Gateway` | Client game connections and message routing. | Pomelo `connector`, Ryzom `FES`, Skynet Gate |
-| `RoomServer` | Hosts multiple rooms and runs authoritative match logic. | Colyseus game-server process, Photon `Game Server` |
-| `Room` | One match and its temporary state. | Colyseus/Photon `Room`, match instance |
+| `World` | Hosts multiple instances and runs authoritative match logic. | Colyseus game-server process, Photon `Game Server` |
+| `Instance` | One match and its temporary state. | Colyseus/Photon `Instance`, match instance |
 
-Apollo does not use `RoomServer`, `ZoneServer`, `AreaServer`, and `SceneServer` as parallel names for the same room/match runtime. `Scene` may describe a spatial object in code; the public gameplay and hosting units are `Room` and `RoomServer`. One RoomServer can host multiple Rooms.
+Apollo does not use `World`, `ZoneServer`, `AreaServer`, and `SceneServer` as parallel names for the same instance/match runtime. `Scene` may describe a spatial object in code; the public gameplay and hosting units are `Instance` and `World`. One World can host multiple Instances.
 
 ## Gateway and updates
 
-`Gateway` is a common ingress responsibility, not a guarantee of zero-downtime updates. Multiple Gateways can accept new players after an old instance stops receiving new connections. Existing TCP connections require connection handoff or the old instance retaining them until drained. Keeping active rooms running across versions additionally requires room-state transfer, version compatibility, authority handoff, route switching, and rollback. These mechanisms must be verified separately.
+`Gateway` is a common ingress responsibility, not a guarantee of zero-downtime updates. Multiple Gateways can accept new players after an old instance stops receiving new connections. Existing TCP connections require connection handoff or the old instance retaining them until drained. Keeping active instances running across versions additionally requires instance-state transfer, version compatibility, authority handoff, route switching, and rollback. These mechanisms must be verified separately.
 
 ## Sources
 
@@ -112,5 +112,5 @@ Apollo does not use `RoomServer`, `ZoneServer`, `AreaServer`, and `SceneServer` 
 - [Pomelo terminology](https://github.com/NetEase/pomelo/wiki/Terminologies) and [LordOfPomelo server introduction](https://github.com/NetEase/pomelo/wiki/LordOfPomelo-server-introduction)
 - [Ryzom Core services](https://github.com/ryzom/ryzomcore/wiki/architecture_ryzom_services)
 - [Skynet GateServer](https://github.com/cloudwu/skynet/wiki/GateServer)
-- [Colyseus rooms](https://docs.colyseus.io/room/)
+- [Colyseus instances](https://docs.colyseus.io/instance/)
 - [Agones concepts](https://agones.dev/site/docs/)

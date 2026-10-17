@@ -19,7 +19,7 @@ SpatialOS's core idea has long been:
 - Different workers hold authority over different regions or functions
 - A platform layer manages state routing and load distribution
 
-What this route solves is not the ordinary room-server problem, but:
+What this route solves is not the ordinary world-app problem, but:
 
 - Extra-large worlds
 - Multi-worker cooperation

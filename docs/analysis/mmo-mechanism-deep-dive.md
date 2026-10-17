@@ -7,7 +7,7 @@
 
 - **证据分级**沿用 36 号 §0：A = 本地源码实读（`路径:行号`）；B = 本仓库文档；C = 官方网络文档；D = 社区资料（存疑标注）。
 - **三仓基线（本轮实测 HEAD）**：BigWorld `27446bab`（官方 14.4.1 包，`~/workspaces/BigWorld/programming/bigworld`）；KBEngine `0bc93d5`（cuihairu fork@master 浅克隆，`~/workspaces/kbengine`，取上游机制）；skynet `4f76d75`（`~/workspaces/skynet`）。
-- **行号出处双轨标注**：「本轮实测」= 2026-09-29 本会话直读；「§16.6 已核」= architecture-review 第七轮（2026-09-28）实读记录沿用。本轮对沿用条目中的承重行号做了抽检复核（witness.cpp dumpAoI 块、entitydef.cpp DetailLevels、machine.cpp 广播发现、archiver.cpp 平滑公式、roomserver handleGameTick、netpack read_size、skynet.lua:227），全部一致、未发现漂移；三仓为本地静态副本，无 pull 行为。
+- **行号出处双轨标注**：「本轮实测」= 2026-09-29 本会话直读；「§16.6 已核」= architecture-review 第七轮（2026-09-28）实读记录沿用。本轮对沿用条目中的承重行号做了抽检复核（witness.cpp dumpAoI 块、entitydef.cpp DetailLevels、machine.cpp 广播发现、archiver.cpp 平滑公式、cellapp handleGameTick、netpack read_size、skynet.lua:227），全部一致、未发现漂移；三仓为本地静态副本，无 pull 行为。
 - **负空间声明方式**：凡「某机制不存在」的论断，附检索命令与检索范围（本轮执行），不做无限断言。
 - **引用范围**：本文对 BigWorld、KBEngine 与 Skynet 的实现描述仅用于外部项目比较，不定义 Apollo 的进程模型或功能承诺。Apollo 当前目标架构见架构概览。
 - **第 19 行（不属本文对象，如实说明）**：36 号表现含 19 行；#19（编解码反射默认 v3）为 2026-09-29 同日新增的契约域决策，其「实现细节」的权威载体是 `docs/design/sdk-contract.md` §10.6 与生成器设计（xml-generation），**三家框架仓内无对应实现可深潜**（BW/KBE 的生成代码 vs 运行时协商分叉本身就是该行的论证对象，行内已述）——本文按任务书覆盖 #1–#18。
@@ -123,7 +123,7 @@
 
 **状态机/时序**：启动期（或 sync_db 工具）按 .def 生成/同步表结构；运行期无迁移机制。
 
-**配置参数默认值**：KBE `kbengine_defaults.xml` 各数据库段（本轮仅核 roomserver/baseapp 段，DB 段默认值未展开——不引用）。
+**配置参数默认值**：KBE `kbengine_defaults.xml` 各数据库段（本轮仅核 cellapp/baseapp 段，DB 段默认值未展开——不引用）。
 
 **已知缺陷**：C-51 五条中第 1/3/5 条成立（blob 化/无 journal/冷热分档缺位）；第 2/4 条已按 §16.3 修正（有 Archiver 周期归档、Indexed 有真实索引）。**#5 判定的实现级依据**：两家的持久化旗标长在契约描述结构体上（PropertyDescription/DataDescription），Apollo 用 storage.xml 物理分文件替代「同结构体字段级耦合」。
 
@@ -156,10 +156,10 @@
 ## §7 按观察者记水位（对应 36 号 #7：per-viewer acked_seq）
 
 **实现位置（A 级，本轮实测）**
-- `server/roomserver/witness.cpp:2470-2516`：dumpAoI 的**官方文档注释块**——逐字段解释输出行 `16777218: volatile 129/130. event 45/45. priority !0.000000`：观察者已收 volatile 更新 #129、实体已产 #130；事件 #45/#45；优先级 0.000000 且被 prioritised。首行 `Seen=2 AoIMap=2 AoIRadius=500.000 AoIHyst=5.000`。
-- `server/roomserver/witness.cpp:1248-1258`（本轮实测）：pop_heap 后重设 `pCache->priority(startingPriority)`、`updatePriority(entity_.position())`、`clearPrioritised()`——**per-(viewer,entity) 优先级堆**的维护点。
-- `server/roomserver/witness.hpp:26` `class Witness : public Updatable`、`:158-161` setAoIUpdateScheme/getAoIUpdateScheme、`:275` `EntityCacheMap aoiMap_`（本轮实测）。
-- 客户端上报更新率：`server/roomserver/server_connection.cpp:2370-2373`、per-client 字节预算 `:2034`（§16.6 已核）。
+- `server/cellapp/witness.cpp:2470-2516`：dumpAoI 的**官方文档注释块**——逐字段解释输出行 `16777218: volatile 129/130. event 45/45. priority !0.000000`：观察者已收 volatile 更新 #129、实体已产 #130；事件 #45/#45；优先级 0.000000 且被 prioritised。首行 `Seen=2 AoIMap=2 AoIRadius=500.000 AoIHyst=5.000`。
+- `server/cellapp/witness.cpp:1248-1258`（本轮实测）：pop_heap 后重设 `pCache->priority(startingPriority)`、`updatePriority(entity_.position())`、`clearPrioritised()`——**per-(viewer,entity) 优先级堆**的维护点。
+- `server/cellapp/witness.hpp:26` `class Witness : public Updatable`、`:158-161` setAoIUpdateScheme/getAoIUpdateScheme、`:275` `EntityCacheMap aoiMap_`（本轮实测）。
+- 客户端上报更新率：`server/cellapp/server_connection.cpp:2370-2373`、per-client 字节预算 `:2034`（§16.6 已核）。
 
 **数据结构与关键字段（A 级，本轮实测 entity_cache.hpp:80-101/:184-189）**
 ```cpp
@@ -173,15 +173,15 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：AoIRadius/AoIHyst per-entity 可设（dumpAoI 样例 500/5）；AoIUpdateScheme 见 §11。
 
-**已知缺陷**：witness 及其 EntityCache 全部位于 `server/roomserver/`（目录级证据）——**与 RoomServer 进程绑定**，36 号 #7「Apollo 把水位泛化到 AOI 独立服务」的改造动机由此实现位置直接可见。
+**已知缺陷**：witness 及其 EntityCache 全部位于 `server/cellapp/`（目录级证据）——**与 CellApp 进程绑定**，36 号 #7「Apollo 把水位泛化到 AOI 独立服务」的改造动机由此实现位置直接可见。
 
 ---
 
 ## §8 定 tick 与线程编队（对应 36 号 #8：20Hz 主线程 + IO 池）
 
 **实现位置（A 级）**
-- BW：`lib/server/common.hpp:19` `const long DEFAULT_GAME_UPDATE_HERTZ = 10;` + `lib/server/server_app_config.cpp:28`（BW_OPTION 注册，**默认 10Hz**——本轮实测）；`server/roomserver/roomserver.cpp:806-808` `addTimer(1000000/updateHertz, TIMEOUT_GAME_TICK)`、`:946-948` handleGameTickTimeSlice、`:1177-1190` updateLoad 三分统计（§16.6 已核）；主循环 `lib/server/server_app.cpp:240-242` processUntilBreak（§16.6 已核）。
-- KBE：`kbe/res/server/kbengine_defaults.xml:5` `<gameUpdateHertz> 10 </gameUpdateHertz>`（**默认 10Hz**）；`kbe/src/server/roomserver/roomserver.cpp:251-261` handleGameTick（本轮实测：`updateLoad()` 注释自述「一定要在最前面」→ `EntityApp<Entity>::handleGameTick()` → `updatables_.update()` → `SpaceMemorys::update()`）。
+- BW：`lib/server/common.hpp:19` `const long DEFAULT_GAME_UPDATE_HERTZ = 10;` + `lib/server/server_app_config.cpp:28`（BW_OPTION 注册，**默认 10Hz**——本轮实测）；`server/cellapp/cellapp.cpp:806-808` `addTimer(1000000/updateHertz, TIMEOUT_GAME_TICK)`、`:946-948` handleGameTickTimeSlice、`:1177-1190` updateLoad 三分统计（§16.6 已核）；主循环 `lib/server/server_app.cpp:240-242` processUntilBreak（§16.6 已核）。
+- KBE：`kbe/res/server/kbengine_defaults.xml:5` `<gameUpdateHertz> 10 </gameUpdateHertz>`（**默认 10Hz**）；`kbe/src/server/cellapp/cellapp.cpp:251-261` handleGameTick（本轮实测：`updateLoad()` 注释自述「一定要在最前面」→ `EntityApp<Entity>::handleGameTick()` → `updatables_.update()` → `SpaceMemorys::update()`）。
 - skynet（反例侧）：`skynet-src/skynet_main.c:160` `optint("thread",8)`（worker 默认 8）；线程编队 monitor+timer+socket+worker `skynet-src/skynet_start.c:209-227`（§16.6 已核，weight 表本轮再读：`{-1×4, 0×4, 1×8, 2×8, 3×8}`）；权重分频 dispatch `skynet-src/skynet_server.c:316-318`、每消息重入队 `:293-315`（§16.6 已核）；过载阈值 `skynet_mq.c:19` MQ_OVERLOAD 1024（§16.6 已核）。
 
 **数据结构与关键字段**：BW ScriptTimeQueue/EntityAppTimeQueue（`lib/server/entity_app.cpp:25-49` 本轮实测线索位）；skynet 全局队列 + 每服务私有 mq（spinlock，skynet_mq.c:22 §16.6 已核）。
@@ -198,8 +198,8 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 ## §9 无缝世界与 ghost（对应 36 号 #9：场景实例制）
 
 **实现位置（A 级，本轮实测）**
-- BW ghost 文件族（`server/roomserver/` 目录清点）：`buffered_ghost_message{.cpp,.hpp}` / `buffered_ghost_message_factory.*` / `buffered_ghost_message_queue.*` / `buffered_ghost_messages.*` / `buffered_ghost_messages_for_entity.*` / `entity_ghost_maintainer.{hpp,cpp}` / `real_caller.*` / `real_entity.{hpp,cpp}`。
-- `server/roomserver/entity_ghost_maintainer.hpp` 类注释（本轮实测节选）：*"This class is used to visit all the cells of a space, and create new ghosts for those that are required for a particular entity, as well as unmark those that are still required to exist."*
+- BW ghost 文件族（`server/cellapp/` 目录清点）：`buffered_ghost_message{.cpp,.hpp}` / `buffered_ghost_message_factory.*` / `buffered_ghost_message_queue.*` / `buffered_ghost_messages.*` / `buffered_ghost_messages_for_entity.*` / `entity_ghost_maintainer.{hpp,cpp}` / `real_caller.*` / `real_entity.{hpp,cpp}`。
+- `server/cellapp/entity_ghost_maintainer.hpp` 类注释（本轮实测节选）：*"This class is used to visit all the cells of a space, and create new ghosts for those that are required for a particular entity, as well as unmark those that are still required to exist."*
 
 **数据结构与关键字段**：ghost 消息缓存族（buffered_ghost_message_queue/for_entity）——**ghost 尚未建好时到达的方法调用先进缓冲队列，建好后补投**；real_caller/real_entity 维护「ghost→real 的调用回传」。
 
@@ -215,7 +215,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 ## §10 AOI 结构（对应 36 号 #10：AOI 独立服务）
 
 **实现位置（A 级，本轮实测）**
-- KBE 十字链：`kbe/src/server/roomserver/coordinate_node.h:94-99` 六向链存取（`pPrevX/pNextX/pPrevY/pNextY/pPrevZ/pNextZ`，:104-109 对应 setter）；`coordinate_system.{h,cpp,inl}` 维护三轴有序链；`entity_coordinate_node.{h,cpp}` 实体节点。
+- KBE 十字链：`kbe/src/server/cellapp/coordinate_node.h:94-99` 六向链存取（`pPrevX/pNextX/pPrevY/pNextY/pPrevZ/pNextZ`，:104-109 对应 setter）；`coordinate_system.{h,cpp,inl}` 维护三轴有序链；`entity_coordinate_node.{h,cpp}` 实体节点。
 - BW：无独立 AOI 数据结构模块——AOI = witness 的 aoiMap_（§7）+ 触发半径（AoIRadius/AoIHyst）+ AoIUpdateScheme（§11）。
 
 **数据结构与关键字段**：CoordinateNode（坐标 + 六向链指针，如上）；CoordinateSystem 持三轴链头。**十字链（linked-list on axes）**：移动 = O(链上定位) 更新，邻域查询 = X/Y 链上按半径截取。
@@ -224,14 +224,14 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：KBE 查询半径由 DetailLevels 的 radius 提供（detaillevel.h:21 默认 FLT_MAX，见 §3/§11）。
 
-**已知缺陷**：**文件全部位于 `kbe/src/server/roomserver/`（目录级证据）**——结构与 roomserver 进程绑死，36 号 #10「锁死在 roomserver 里、Apollo 剥离成 shard 服务」的判定即指此；BW 侧同理（witness 在 roomserver）。
+**已知缺陷**：**文件全部位于 `kbe/src/server/cellapp/`（目录级证据）**——结构与 cellapp 进程绑死，36 号 #10「锁死在 cellapp 里、Apollo 剥离成 shard 服务」的判定即指此；BW 侧同理（witness 在 cellapp）。
 
 ---
 
 ## §11 可见域分档与条件同步（对应 36 号 #11：SYNC_* bitmask）
 
 **实现位置与证据分级**
-- BW（A 级，本轮实测）：per 轴 volatile 优先级——`lib/entitydef/volatile_info.hpp:16-47`（四轴 float priority + `ALWAYS` 常量 + `shouldSendPosition() = priority > 0`）；.def 样例 Guard.def:2-6（`<pitch>20</pitch>` 即优先级 20）；**距离分档**：`server/roomserver/aoi_update_schemes.hpp:18-56` `class AoIUpdateScheme { float weighting_, distanceWeighting_; }`，`apply(distanceSq) = (sqrt(d)*distanceWeighting_ + 1) * weighting_`（权重 0 时按 coincident 恒 1.0）；静态 256 桶（`schemes_[256]`）+ 名字映射；**per-EntityCache 挂 scheme id**（entity_cache.hpp:98-99/:177）+ **per-LOD 事件序号数组** `lodEventNumbers_[MAX_LOD_LEVELS]`（entity_cache.hpp:189，访问器 :101/:164-165）。
+- BW（A 级，本轮实测）：per 轴 volatile 优先级——`lib/entitydef/volatile_info.hpp:16-47`（四轴 float priority + `ALWAYS` 常量 + `shouldSendPosition() = priority > 0`）；.def 样例 Guard.def:2-6（`<pitch>20</pitch>` 即优先级 20）；**距离分档**：`server/cellapp/aoi_update_schemes.hpp:18-56` `class AoIUpdateScheme { float weighting_, distanceWeighting_; }`，`apply(distanceSq) = (sqrt(d)*distanceWeighting_ + 1) * weighting_`（权重 0 时按 coincident 恒 1.0）；静态 256 桶（`schemes_[256]`）+ 名字映射；**per-EntityCache 挂 scheme id**（entity_cache.hpp:98-99/:177）+ **per-LOD 事件序号数组** `lodEventNumbers_[MAX_LOD_LEVELS]`（entity_cache.hpp:189，访问器 :101/:164-165）。
 - KBE（A 级，本轮实测）：`kbe/src/lib/entitydef/detaillevel.h:21-23` `struct Level{radius=FLT_MAX, hyst=1.0}` + `entitydef.cpp:409-417`（DetailLevels NEAR/MEDIUM/FAR 的 radius/hyst XML 子节点）+ `detaillevel.cpp/h` 判档实现。
 - UE `COND_*`（C 级）：官方文档链接见 36 号 #11 行（Conditional Property Replication）——本机无 UE 源码，**不引行号**。
 
@@ -307,8 +307,8 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 ## §16 战斗独立实例与回放（对应 36 号 #16）——自创设计的负空间确认
 
-**A 级负空间证据（本轮实测）**：BW `server/` 进程清单 = `{baseapp, baseapp_extensions, baseappmgr, roomserver, roomserver_extensions, roomservermgr, dbapp, dbapp_extensions, dbappmgr, loginapp, reviver, tools}`——**无战斗独立进程**；KBE `kbe/src/server/` = `{baseapp, baseappmgr, roomserver, roomservermgr, dbmgr, loginapp, machine, tools}`——同；skynet 无进程拓扑概念（单节点多服务）。
-**结论**：三家均无「战斗独立实例进程 + 确定性回放」的对应实现。Apollo 当前 RoomServer 与 Room 的边界见架构概览；本文不为 Apollo 增加目标进程角色。
+**A 级负空间证据（本轮实测）**：BW `server/` 进程清单 = `{baseapp, baseapp_extensions, baseappmgr, cellapp, cellapp_extensions, cellappmgr, dbapp, dbapp_extensions, dbappmgr, loginapp, reviver, tools}`——**无战斗独立进程**；KBE `kbe/src/server/` = `{baseapp, baseappmgr, cellapp, cellappmgr, dbmgr, loginapp, machine, tools}`——同；skynet 无进程拓扑概念（单节点多服务）。
+**结论**：三家均无「战斗独立实例进程 + 确定性回放」的对应实现。Apollo 当前 World 与 Instance 的边界见架构概览；本文不为 Apollo 增加目标进程角色。
 已知缺陷（作为自创设计的风险面，非外部缺陷）：独立战斗进程的组队/返回流程、跨进程实体投影一致性是 Apollo 需自行解决的问题——三家无先例可抄。
 
 ---

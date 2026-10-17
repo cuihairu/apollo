@@ -66,7 +66,7 @@ BigWorld::update();              // 驱动定时器帧
 | `destroyEntity(id)` | 同名支持 |
 | `Runtime()->addTimer(ms, fn, repeat)` | `addTimer(initialSec, repeatSec, fn(TimerId, int32_t), userArg)`（秒制） |
 | `ICallback` / `registerCallback` | 不存在——一次性用 `callback(delay, fn)`，周期用 `addTimer` |
-| `Proxy` / `RoomServer` 概念映射 | 进程面见[服务器应用](/apps/)；Witness/Ghost 分布式空间规划态 |
+| `Proxy` / `World` 概念映射 | 进程面见[服务器应用](/apps/)；Witness/Ghost 分布式空间规划态 |
 
 ## 不兼容的部分
 

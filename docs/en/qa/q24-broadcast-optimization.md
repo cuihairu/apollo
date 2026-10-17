@@ -34,7 +34,7 @@ This is the most common category in MMOs, and the bulk of the traffic.
 
 For example:
 
-- Room broadcast
+- Instance broadcast
 - Team broadcast
 - Instance broadcast
 - Guild broadcast
@@ -91,7 +91,7 @@ This requires the AOI system to not only answer "who is nearby", but also mainta
 
 ### 2. Logical Grouping
 
-Logical domains such as teams, rooms, guilds, and battlefields should not scan the whole server on the fly each time; member sets should be maintained in advance.
+Logical domains such as teams, instances, guilds, and battlefields should not scan the whole server on the fly each time; member sets should be maintained in advance.
 
 ### 3. Lower Frequency by Importance
 

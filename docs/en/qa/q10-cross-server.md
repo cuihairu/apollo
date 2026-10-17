@@ -9,7 +9,7 @@
 
 - Cross-server message interworking
 - Cross-server relationship interworking
-- Cross-server matching and room scheduling
+- Cross-server matching and instance scheduling
 - Cross-server trading and settlement
 
 Their requirements for real-time-ness, consistency, isolation, and recovery methods are completely different, so they cannot be covered by one single architecture.

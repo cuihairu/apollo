@@ -282,47 +282,9 @@ AppBootstrap
 
 Apollo 最终 app 不应该再各自手写一堆初始化顺序，而应该收口到统一 bootstrap。
 
-## 九、`Topology`
+## 部署拓扑
 
-`Topology` 是部署与运行形态层。
-
-它负责：
-
-- 最终拆成哪些 app
-- 每个 app 装哪些 starter
-- 每个 app 跑哪些 profile
-
-例如：
-
-### 轻在线项目
-
-- `gateway-app`
-- `login-app`
-- `game-app`
-- `platform-app`
-
-### 普通 MMO
-
-- `gateway-app`
-- `login-app`
-- `base-app`
-  目标语义是 `BaseApp(PlayerAnchor Host)`
-- `world-app`
-  当前仓库可先由 `apps/room-server` 承担其装配壳
-- `chat-app`
-- `db-app / persistence-app`
-
-### BigWorld 模式
-
-- `gateway-app`
-- `login-app`
-- `base-app`
-  目标语义是 `BaseApp(PlayerAnchor Host)`
-- `base-app-mgr`
-- `room-server`
-  这里才表示真正的 `RoomServer(Distributed World Node)`
-- `room-server-mgr`
-- `db-app / persistence-app`
+目标进程职责为 Login、Gateway 和 World。`world-app` 承载现有 World/Scene/Instance 模块；Instance 按小队请求创建，完成玩法与结算后销毁。当前 base-app 与 baseappmgr 是待收敛原型，不能据此推导额外目标拓扑。模块装配方式不改变这些职责。
 
 ## 十、推荐装配流程
 

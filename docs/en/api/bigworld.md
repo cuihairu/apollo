@@ -68,7 +68,7 @@ not built).
 | `BigWorld::destroyEntity(id)` | supported under the same name |
 | `BigWorld::Runtime()->addTimer(...)` | `BigWorld::addTimer(initial, repeat, fn(TimerId,int32), userArg)` |
 | `ICallback` / `registerCallback` | does not exist (use `callback(delay, fn)` one-shot or `addTimer` periodic) |
-| `Proxy` / `RoomServer` concepts | for the process surface see [Server Applications](/en/apps/); Witness/Ghost are planned, not built |
+| `Proxy` / `World` concepts | for the process surface see [Server Applications](/en/apps/); Witness/Ghost are planned, not built |
 
 ## Related Docs
 

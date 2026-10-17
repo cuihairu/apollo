@@ -7,7 +7,7 @@
 
 - **Evidence tiers** follow 36 §0: A = direct read of local source (`path:line`); B = this repo's docs; C = official web docs; D = community material (marked as dubious).
 - **Three-repo baseline (measured HEAD this round)**: BigWorld `27446bab` (official 14.4.1 package, `~/workspaces/BigWorld/programming/bigworld`); KBEngine `0bc93d5` (cuihairu fork@master shallow clone, `~/workspaces/kbengine`, upstream mechanisms taken); skynet `4f76d75` (`~/workspaces/skynet`).
-- **Line-number provenance, dual-track marking**: "measured this round" = direct read by this session on 2026-09-29; "verified in §16.6" = reusing the read records of architecture-review round seven (2026-09-28). This round spot-checked the load-bearing line numbers among reused items (the witness.cpp dumpAoI block, entitydef.cpp DetailLevels, machine.cpp broadcast discovery, archiver.cpp smoothing formula, roomserver handleGameTick, netpack read_size, skynet.lua:227) — all consistent, no drift found; the three repos are local static copies, no pulls.
+- **Line-number provenance, dual-track marking**: "measured this round" = direct read by this session on 2026-09-29; "verified in §16.6" = reusing the read records of architecture-review round seven (2026-09-28). This round spot-checked the load-bearing line numbers among reused items (the witness.cpp dumpAoI block, entitydef.cpp DetailLevels, machine.cpp broadcast discovery, archiver.cpp smoothing formula, cellapp handleGameTick, netpack read_size, skynet.lua:227) — all consistent, no drift found; the three repos are local static copies, no pulls.
 - **Negative-space statement style**: every claim of "mechanism X does not exist" carries the search command and scope (executed this round); no unbounded assertions.
 - **Reference scope**: BigWorld, KBEngine, and Skynet implementation details here compare external projects; they do not define Apollo process roles or feature guarantees.
 - **Row 19 (not this document's subject, stated as-is)**: 36's table now has 19 rows; #19 (codec reflection defaults to v3) is a contract-domain decision added the same day (2026-09-29) whose implementation details are authoritatively carried by `docs/design/sdk-contract.md` §10.6 and the generator design (xml-generation) — **the three framework repos have no corresponding implementation to deep-dive** (the fork between BW/KBE generated code and runtime negotiation is itself that row's object of argument, stated in the row) — this document covers #1–#18 per the task brief.
@@ -123,7 +123,7 @@
 
 **State machine/sequence**: at startup (or via the sync_db tool) table schemas are generated/synced from .def; no runtime migration mechanism.
 
-**Config parameter defaults**: KBE `kbengine_defaults.xml` database sections (this round only verified the roomserver/baseapp sections; DB-section defaults not expanded — not cited).
+**Config parameter defaults**: KBE `kbengine_defaults.xml` database sections (this round only verified the cellapp/baseapp sections; DB-section defaults not expanded — not cited).
 
 **Known defects**: of C-51's five claims, 1/3/5 hold (blob-ification/no journal/no hot-cold tiering); 2/4 were corrected per §16.3 (there is an Archiver with periodic archival, and Indexed has real indexes). **Implementation-level basis for the #5 verdict**: both engines' persistence flags grow on the contract-description struct (PropertyDescription/DataDescription); apollo replaces "field-level coupling within the same struct" with the physical file separation of storage.xml.
 
@@ -156,10 +156,10 @@
 ## §7 Per-Observer Watermarks (36 #7: per-viewer acked_seq)
 
 **Implementation locations (grade A, measured this round)**
-- `server/roomserver/witness.cpp:2470-2516`: the dumpAoI **official doc-comment block** — field-by-field explanation of the output line `16777218: volatile 129/130. event 45/45. priority !0.000000`: the observer has received volatile update #129, the entity has produced #130; events #45/#45; priority 0.000000 and prioritised. First line `Seen=2 AoIMap=2 AoIRadius=500.000 AoIHyst=5.000`.
-- `server/roomserver/witness.cpp:1248-1258` (measured this round): after pop_heap, reset `pCache->priority(startingPriority)`, `updatePriority(entity_.position())`, `clearPrioritised()` — the maintenance point of the **per-(viewer,entity) priority heap**.
-- `server/roomserver/witness.hpp:26` `class Witness : public Updatable`, `:158-161` setAoIUpdateScheme/getAoIUpdateScheme, `:275` `EntityCacheMap aoiMap_` (measured this round).
-- Client-reported update rates: `server/roomserver/server_connection.cpp:2370-2373`, per-client byte budget `:2034` (verified §16.6).
+- `server/cellapp/witness.cpp:2470-2516`: the dumpAoI **official doc-comment block** — field-by-field explanation of the output line `16777218: volatile 129/130. event 45/45. priority !0.000000`: the observer has received volatile update #129, the entity has produced #130; events #45/#45; priority 0.000000 and prioritised. First line `Seen=2 AoIMap=2 AoIRadius=500.000 AoIHyst=5.000`.
+- `server/cellapp/witness.cpp:1248-1258` (measured this round): after pop_heap, reset `pCache->priority(startingPriority)`, `updatePriority(entity_.position())`, `clearPrioritised()` — the maintenance point of the **per-(viewer,entity) priority heap**.
+- `server/cellapp/witness.hpp:26` `class Witness : public Updatable`, `:158-161` setAoIUpdateScheme/getAoIUpdateScheme, `:275` `EntityCacheMap aoiMap_` (measured this round).
+- Client-reported update rates: `server/cellapp/server_connection.cpp:2370-2373`, per-client byte budget `:2034` (verified §16.6).
 
 **Data structures and key fields (grade A, measured this round at entity_cache.hpp:80-101/:184-189)**
 ```cpp
@@ -173,15 +173,15 @@ plus the `Priority priority()` pair (:80-81). **These are the entity fields behi
 
 **Config parameter defaults**: AoIRadius/AoIHyst settable per entity (dumpAoI sample 500/5); AoIUpdateScheme in §11.
 
-**Known defects**: witness and its EntityCache all live in `server/roomserver/` (directory-level evidence) — **bound to the RoomServer process**; the implementation location makes directly visible the motive for 36 #7's "apollo generalizes the watermark into an independent AOI service".
+**Known defects**: witness and its EntityCache all live in `server/cellapp/` (directory-level evidence) — **bound to the CellApp process**; the implementation location makes directly visible the motive for 36 #7's "apollo generalizes the watermark into an independent AOI service".
 
 ---
 
 ## §8 Fixed Tick and Thread Fleet (36 #8: 20Hz main thread + IO pool)
 
 **Implementation locations (grade A)**
-- BW: `lib/server/common.hpp:19` `const long DEFAULT_GAME_UPDATE_HERTZ = 10;` + `lib/server/server_app_config.cpp:28` (BW_OPTION registration, **default 10Hz** — measured this round); `server/roomserver/roomserver.cpp:806-808` `addTimer(1000000/updateHertz, TIMEOUT_GAME_TICK)`, `:946-948` handleGameTickTimeSlice, `:1177-1190` the three-way updateLoad accounting (verified §16.6); main loop `lib/server/server_app.cpp:240-242` processUntilBreak (verified §16.6).
-- KBE: `kbe/res/server/kbengine_defaults.xml:5` `<gameUpdateHertz> 10 </gameUpdateHertz>` (**default 10Hz**); `kbe/src/server/roomserver/roomserver.cpp:251-261` handleGameTick (measured this round: the `updateLoad()` comment self-states "must be at the very front" → `EntityApp<Entity>::handleGameTick()` → `updatables_.update()` → `SpaceMemorys::update()`).
+- BW: `lib/server/common.hpp:19` `const long DEFAULT_GAME_UPDATE_HERTZ = 10;` + `lib/server/server_app_config.cpp:28` (BW_OPTION registration, **default 10Hz** — measured this round); `server/cellapp/cellapp.cpp:806-808` `addTimer(1000000/updateHertz, TIMEOUT_GAME_TICK)`, `:946-948` handleGameTickTimeSlice, `:1177-1190` the three-way updateLoad accounting (verified §16.6); main loop `lib/server/server_app.cpp:240-242` processUntilBreak (verified §16.6).
+- KBE: `kbe/res/server/kbengine_defaults.xml:5` `<gameUpdateHertz> 10 </gameUpdateHertz>` (**default 10Hz**); `kbe/src/server/cellapp/cellapp.cpp:251-261` handleGameTick (measured this round: the `updateLoad()` comment self-states "must be at the very front" → `EntityApp<Entity>::handleGameTick()` → `updatables_.update()` → `SpaceMemorys::update()`).
 - skynet (the counter-example side): `skynet-src/skynet_main.c:160` `optint("thread",8)` (workers default 8); the thread fleet monitor+timer+socket+worker `skynet-src/skynet_start.c:209-227` (verified §16.6; the weight table re-read this round: `{-1×4, 0×4, 1×8, 2×8, 3×8}`); weight-strided dispatch `skynet-src/skynet_server.c:316-318`, per-message requeue `:293-315` (verified §16.6); overload threshold `skynet_mq.c:19` MQ_OVERLOAD 1024 (verified §16.6).
 
 **Data structures and key fields**: BW ScriptTimeQueue/EntityAppTimeQueue (lead positions measured this round at `lib/server/entity_app.cpp:25-49`); skynet global queue + per-service private mq (spinlock, skynet_mq.c:22 verified §16.6).
@@ -198,8 +198,8 @@ plus the `Priority priority()` pair (:80-81). **These are the entity fields behi
 ## §9 Seamless World and Ghosts (36 #9: scene-instance system)
 
 **Implementation locations (grade A, census this round)**
-- The BW ghost file family (`server/roomserver/` directory census): `buffered_ghost_message{.cpp,.hpp}` / `buffered_ghost_message_factory.*` / `buffered_ghost_message_queue.*` / `buffered_ghost_messages.*` / `buffered_ghost_messages_for_entity.*` / `entity_ghost_maintainer.{hpp,cpp}` / `real_caller.*` / `real_entity.{hpp,cpp}`.
-- `server/roomserver/entity_ghost_maintainer.hpp` class comment (excerpt, measured this round): *"This class is used to visit all the cells of a space, and create new ghosts for those that are required for a particular entity, as well as unmark those that are still required to exist."*
+- The BW ghost file family (`server/cellapp/` directory census): `buffered_ghost_message{.cpp,.hpp}` / `buffered_ghost_message_factory.*` / `buffered_ghost_message_queue.*` / `buffered_ghost_messages.*` / `buffered_ghost_messages_for_entity.*` / `entity_ghost_maintainer.{hpp,cpp}` / `real_caller.*` / `real_entity.{hpp,cpp}`.
+- `server/cellapp/entity_ghost_maintainer.hpp` class comment (excerpt, measured this round): *"This class is used to visit all the cells of a space, and create new ghosts for those that are required for a particular entity, as well as unmark those that are still required to exist."*
 
 **Data structures and key fields**: the ghost message-buffer family (buffered_ghost_message_queue/for_entity) — **method calls arriving before a ghost is fully built enter a buffer queue first, and are delivered once built**; real_caller/real_entity maintain "the ghost→real call forwarding".
 
@@ -215,7 +215,7 @@ plus the `Priority priority()` pair (:80-81). **These are the entity fields behi
 ## §10 AOI Structure (36 #10: AOI as an independent service)
 
 **Implementation locations (grade A, measured this round)**
-- KBE cross-linked lists: `kbe/src/server/roomserver/coordinate_node.h:94-99` six-way list accessors (`pPrevX/pNextX/pPrevY/pNextY/pPrevZ/pNextZ`, :104-109 the corresponding setters); `coordinate_system.{h,cpp,inl}` maintain the three ordered axis lists; `entity_coordinate_node.{h,cpp}` the entity nodes.
+- KBE cross-linked lists: `kbe/src/server/cellapp/coordinate_node.h:94-99` six-way list accessors (`pPrevX/pNextX/pPrevY/pNextY/pPrevZ/pNextZ`, :104-109 the corresponding setters); `coordinate_system.{h,cpp,inl}` maintain the three ordered axis lists; `entity_coordinate_node.{h,cpp}` the entity nodes.
 - BW: no standalone AOI data-structure module — AOI = the witness's aoiMap_ (§7) + trigger radii (AoIRadius/AoIHyst) + AoIUpdateScheme (§11).
 
 **Data structures and key fields**: CoordinateNode (coordinates + six-way list pointers, above); CoordinateSystem holds the three axis-list heads. **Cross-linked lists (linked lists on axes)**: moving = O(position-in-list) updates; neighborhood queries = truncating the X/Y lists by radius.
@@ -224,14 +224,14 @@ plus the `Priority priority()` pair (:80-81). **These are the entity fields behi
 
 **Config parameter defaults**: KBE query radius comes from DetailLevels' radius (detaillevel.h:21 defaults to FLT_MAX, see §3/§11).
 
-**Known defects**: **the files all sit in `kbe/src/server/roomserver/` (directory-level evidence)** — the structure is welded to the roomserver process, exactly what 36 #10's "locked inside roomserver, apollo strips it out as a shard service" verdict points at; the BW side likewise (witness lives in roomserver).
+**Known defects**: **the files all sit in `kbe/src/server/cellapp/` (directory-level evidence)** — the structure is welded to the cellapp process, exactly what 36 #10's "locked inside cellapp, apollo strips it out as a shard service" verdict points at; the BW side likewise (witness lives in cellapp).
 
 ---
 
 ## §11 Visibility Tiering and Conditional Sync (36 #11: SYNC_* bitmask)
 
 **Implementation locations and evidence tiers**
-- BW (grade A, measured this round): per-axis volatile priorities — `lib/entitydef/volatile_info.hpp:16-47` (four-axis float priority + the `ALWAYS` constant + `shouldSendPosition() = priority > 0`); the .def sample Guard.def:2-6 (`<pitch>20</pitch>` is priority 20); **distance tiering**: `server/roomserver/aoi_update_schemes.hpp:18-56` `class AoIUpdateScheme { float weighting_, distanceWeighting_; }`, `apply(distanceSq) = (sqrt(d)*distanceWeighting_ + 1) * weighting_` (weight 0 gives a coincident constant 1.0); a static 256-bucket table (`schemes_[256]`) + name mapping; **scheme id hung per EntityCache** (entity_cache.hpp:98-99/:177) + **a per-LOD event-sequence array** `lodEventNumbers_[MAX_LOD_LEVELS]` (entity_cache.hpp:189, accessors :101/:164-165).
+- BW (grade A, measured this round): per-axis volatile priorities — `lib/entitydef/volatile_info.hpp:16-47` (four-axis float priority + the `ALWAYS` constant + `shouldSendPosition() = priority > 0`); the .def sample Guard.def:2-6 (`<pitch>20</pitch>` is priority 20); **distance tiering**: `server/cellapp/aoi_update_schemes.hpp:18-56` `class AoIUpdateScheme { float weighting_, distanceWeighting_; }`, `apply(distanceSq) = (sqrt(d)*distanceWeighting_ + 1) * weighting_` (weight 0 gives a coincident constant 1.0); a static 256-bucket table (`schemes_[256]`) + name mapping; **scheme id hung per EntityCache** (entity_cache.hpp:98-99/:177) + **a per-LOD event-sequence array** `lodEventNumbers_[MAX_LOD_LEVELS]` (entity_cache.hpp:189, accessors :101/:164-165).
 - KBE (grade A, measured this round): `kbe/src/lib/entitydef/detaillevel.h:21-23` `struct Level{radius=FLT_MAX, hyst=1.0}` + `entitydef.cpp:409-417` (the DetailLevels NEAR/MEDIUM/FAR radius/hyst XML children) + the tiering implementation in `detaillevel.cpp/h`.
 - UE `COND_*` (grade C): official doc links in 36's #11 row (Conditional Property Replication) — no UE source locally, **no line numbers cited**.
 
@@ -241,7 +241,7 @@ plus the `Priority priority()` pair (:80-81). **These are the entity fields behi
 
 **Config parameter defaults**: BW priority defaults -1 (don't send), the ALWAYS constant, schemes capped at 256; KBE radius defaults FLT_MAX, hyst 1.0.
 
-**Known defects**: UE COND_* is a compile-time macro (stated in 36 #11); BW/KBE tier declarations ride .def/engine internals, not configurable cross-endpoint — hence apollo's room to reshape via the `sync=` contract field.
+**Known defects**: UE COND_* is a compile-time macro (stated in 36 #11); BW/KBE tier declarations ride .def/engine internals, not configurable cross-endpoint — hence apollo's instance to reshape via the `sync=` contract field.
 **Implementation-level basis for the #11 verdict**: BW's LOD sequence array + the scheme weight function = a mature implementation of "tiered sync by distance/importance"; KBE's three-tier radius + hysteresis = the simple workable version.
 
 ---
@@ -313,8 +313,8 @@ plus the `Priority priority()` pair (:80-81). **These are the entity fields behi
 
 ## §16 Standalone Battle Instances and Replay (36 #16) — negative-space confirmation of a self-created design
 
-**Grade-A negative-space evidence (measured this round)**: BW's `server/` process inventory = `{baseapp, baseapp_extensions, baseappmgr, roomserver, roomserver_extensions, roomservermgr, dbapp, dbapp_extensions, dbappmgr, loginapp, reviver, tools}` — **no standalone battle process**; KBE's `kbe/src/server/` = `{baseapp, baseappmgr, roomserver, roomservermgr, dbmgr, loginapp, machine, tools}` — same; skynet has no process-topology concept at all (single node, many services).
-**Conclusion**: none of the three has an implementation of "standalone battle-instance process + deterministic replay" — 36 #16's "self-created + borrowed" label is accurate; **no external implementation details to deep-dive, honestly marked**; the authoritative carrier of its apollo-side mechanism details is docs/25 (deleted, traceable via `git show 1e37073d^:docs/25-Battle_Service_Design.md`; 36's citation of it is now a dangling historical reference) and docs/30.
+**Grade-A negative-space evidence (measured this round)**: BW's `server/` process inventory = `{baseapp, baseapp_extensions, baseappmgr, cellapp, cellapp_extensions, cellappmgr, dbapp, dbapp_extensions, dbappmgr, loginapp, reviver, tools}` — **no standalone battle process**; KBE's `kbe/src/server/` = `{baseapp, baseappmgr, cellapp, cellappmgr, dbmgr, loginapp, machine, tools}` — same; skynet has no process-topology concept at all (single node, many services).
+**Conclusion**: the reviewed repositories do not supply this exact combined mechanism. Apollo’s current World and Instance boundaries are defined in the architecture overview; this external comparison does not add a target process role.
 Known defects (as the risk surface of a self-created design, not an external defect): the party/return flow of standalone battle processes and cross-process entity-projection consistency are problems apollo must solve itself — no precedent among the three to copy.
 
 ---

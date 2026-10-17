@@ -107,7 +107,7 @@
 ### 4.4 Shared-Memory IPC (value ★★, deferred)
 
 - **Old engine design**: `SDOpenShmem/SDCreateShmem` unifying Windows mapping / POSIX shm.
-- **apollo scenario judgment**: once BigWorld-ized (base-app/room-server as separate processes), **same-machine inter-process** bulk read-only data (space grid snapshots, monitoring metrics, publish/subscribe hotspots) genuinely benefits from shm; but apollo today is mostly single-process, and the cross-process communication protocol is unsettled — adopting now would be premature optimization.
+- **apollo scenario judgment**: once BigWorld-ized (base-app/world-app as separate processes), **same-machine inter-process** bulk read-only data (space grid snapshots, monitoring metrics, publish/subscribe hotspots) genuinely benefits from shm; but apollo today is mostly single-process, and the cross-process communication protocol is unsettled — adopting now would be premature optimization.
 - **Recommendation**: list it among the inter-process channel candidates in net-abstraction.md (compared in the same frame as Aeron's IPC transport) — **already wired (2026-09-29)**: a formal row in net-abstraction §6's decision table + §7 P3 settled in the same batch as the self-built bus (adopting the design, not the code); the G-2 hot-standby mirror stream (same-machine shm SPSC ring) is its point-to-point exemplar scenario; implementation deferred to the multi-process landing phase.
 
 ### 4.5 The Rest (explicitly not adopted)

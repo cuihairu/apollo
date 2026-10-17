@@ -17,7 +17,7 @@
 #     = push 关——logging.md §5.1 采样流断连丢拍不积压，最新者胜）
 #
 # dev 端口布局（仅本脚本约定的开发面，无配置真相——生产部署不由此起）：
-#   login 9001 / gateway 9002 / baseappmgr 9003 / base-app 9004 / RoomServer M1 9101
+#   login 9001 / gateway 9002 / baseappmgr 9003 / base-app 9004 / WorldApp M1 9101
 #   login M1 准入 9103 / base M1 9104 / baseappmgr M1 control 9105
 #   （P4-4 批①③④：准入、base RPC 链与 baseappmgr 控制面 M1 面）
 #   / logger serve 9102（log push collector，L4）
@@ -47,7 +47,7 @@ MACHINED="$BUILD_DIR/apps/machined/machined"
 # 编队清单：name | component_id | 命令（dev 端口见文件头布局；中列 = 编队
 # 组件号，machined 死亡上报 wire 身份——0 = 未入编队仅落日志）
 # gateway 显式补传三后端 URL（ADR-011 最小修复处方②）：config.hpp 缺省
-# BaseApp 9002（=gateway 自身端口）/ RoomServer 9100 与 dev 布局错位，不传则
+# BaseApp 9002（=gateway 自身端口）/ WorldApp 9100 与 dev 布局错位，不传则
 # 错位缺省值直接生效。处方①（start 连接失败降级）与③（ChatApp 幽灵依赖
 # 摘除）属功能代码，不在文档/脚本批边界内，留待边界放行批。
 fleet_entries() {
@@ -55,10 +55,10 @@ fleet_entries() {
 logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
 login     | 13 | $BUILD_DIR/apps/login-app/login-app --port 9001 --m1-port 9103 --base-m1-port 9104 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 13
-gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --room-server tcp://127.0.0.1:9005 --room-server-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 12
+gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --login-app tcp://127.0.0.1:9001 --base-app tcp://127.0.0.1:9004 --world tcp://127.0.0.1:9005 --world-m1-port 9101 --login-m1-port 9103 --baseappmgr-m1-port 9105 --machined-port 9600 --component-id 12
 baseappmgr| 2 | $BUILD_DIR/apps/baseappmgr/baseappmgr --port 9003 --m1-port 9105 --machined-port 9600
 base      | 10 | $BUILD_DIR/apps/base-app/base-app --port 9004 --m1-port 9104 --machined-port 9600 --component-id 10
-room-server | 11 | $BUILD_DIR/apps/room-server/room-server --m1-port 9101 --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/room-server/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world-app/world-app --m1-port 9101 --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/world-app/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 game      | 0 | $BUILD_DIR/apps/game-server/apollo_game_server
 EOF
 }

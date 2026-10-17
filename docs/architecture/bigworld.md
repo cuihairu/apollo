@@ -16,7 +16,7 @@ tag:
 
 这是一页收口版入口。
 
-Apollo 的 BigWorld 兼容模块提供熟悉的 C++ API facade，不实现 BigWorld 的分布式无缝世界运行时。Apollo 目标架构是房间制多人游戏服务端，详见[架构总览](../guide/architecture.md)。
+Apollo 的 BigWorld 兼容模块提供熟悉的 C++ API facade，不实现 BigWorld 的分布式无缝世界运行时。Apollo 目标架构是副本制多人游戏服务端，详见[架构总览](../guide/architecture.md)。
 
 ## 语义边界
 

@@ -24,7 +24,7 @@
 
 | 项 | 值 | 出处/说明 |
 |---|---|---|
-| 主循环 | tick 20Hz，帧 50ms | room-server config tickRateMs=50（设计口径 10Hz 待校准） |
+| 主循环 | tick 20Hz，帧 50ms | world-app config tickRateMs=50（设计口径 10Hz 待校准） |
 | 容量目标 | 5000 CCU/进程 稳态 | sdk-contract :476 既有口径，本文升格为顶层目标 |
 | 极端场景 | 单场景 100 人同屏战斗 | attribute-sync §11 压测口径 |
 | 实体规模 | 玩家 5000 + NPC/怪物 ~20k（按场景配额） | 估算口径，配置化 |
@@ -76,7 +76,7 @@
 - 桩口径限制：无寻路/技能/跨景/网络发送面，帧成本为下界；§2 全帧段
   实测化分批补——flush 段已补
   （§2.3，2026-10-13）、persist-batch 段已补（§2.4，2026-10-13）。
-- 批 B 收口（room-server 单写者化，方案挂拍板）+ 多景并行线程化后按此
+- 批 B 收口（world-app 单写者化，方案挂拍板）+ 多景并行线程化后按此
   锚点复测。
 
 （批 A 首跑 20Hz 口径数据作废——主循环 10Hz 为 clock-and-time §4 定案，
@@ -121,7 +121,7 @@ parseHeader + decodeBody）分段微测，突发 = cap 顶格 1024 条真实移�
 逐条编成真实协议帧（Enter→CellCreateEntity / Sync→CellEntityMove /
 Leave→CellDestroyEntity，MessageCodec 全量编码，session_id 0 = 系统广播）；
 编码计时段与 scene 局部段分离。**网络 socket 发送不计**——网关下发面仍
-是桩（room_server `broadcastToViewers` 只落日志），本段量的是装包成本；
+是桩（world_app `broadcastToViewers` 只落日志），本段量的是装包成本；
 三跑 min（同 §2.1 纪律）。机器同 §2.1。
 
 | 模型 | scene 帧均(min) | flush 均值(min) | 全帧合计 | 全帧占比 | Msgs/帧 | KB/帧 |

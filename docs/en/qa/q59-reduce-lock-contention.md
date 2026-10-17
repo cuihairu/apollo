@@ -52,7 +52,7 @@ This is usually more stable than adding many locks to the object.
 Split one global lock into:
 
 - Sharding by key
-- Sharding by room
+- Sharding by instance
 - Partitioning by player or scene
 
 This noticeably reduces contention.

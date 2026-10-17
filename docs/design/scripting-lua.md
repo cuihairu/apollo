@@ -90,7 +90,7 @@ modules/lua/
 - **消息 handler 绑定**：上行业务消息经 C++ 帧路由按 `contract_route`（id→handler 名）分发到 Lua——handler 在模块表内注册，模块头注释声明 `handles: msg_a, msg_b`，加载器校验其与契约路由表一致，缺失启动红。
 - **写白名单数据化**：§4/§5 的 `ScriptWriteWhitelist` 位图从 contract.lua 构建（白名单仍由契约 `predict` 位生成——sdk-contract §5 机制不变，载体从生成常量变为契约表数据）；热换契约表时白名单随 tick 边界同换。
 - 版本偏序沿用 §3.3 同一规则：契约表版本 ≥ 消费它的脚本补丁版本才启用——契约加字段与使用该字段的 handler 补丁必须同批或先表后补。
-- **宿主启动装载已落地（2026-10-15 补）**：cell `--script-handlers <file>` / `--script-contract <file>`——启动装载序 handler 面 → 契约 → boot 源（gameThread 首拍，§2 单写者；契约装载闸逐 route `resolve_handler`，handler 未先行在位即拒载；boot 源可读 `contract` 全局）。任一步失败仅告警不停机（同 boot 源纪律，fault 走 runtime 事件面）。契约路由 handler 面占位模块随仓（`apps/room-server/scripts/contract_handlers.lua`，45 路由无操作占位——装载闸只验存在性，玩法批按消息语义填实体；apollo_gen 新增 reflect 消息须同步补行，`contract_handler_tests` 以 golden 契约 + 随仓 handler 模块全装载路径闸同步）。上行业务消息经 C++ 帧路由分发到 Lua handler 的 `call_route` 接线仍随玩法批。
+- **宿主启动装载已落地（2026-10-15 补）**：cell `--script-handlers <file>` / `--script-contract <file>`——启动装载序 handler 面 → 契约 → boot 源（gameThread 首拍，§2 单写者；契约装载闸逐 route `resolve_handler`，handler 未先行在位即拒载；boot 源可读 `contract` 全局）。任一步失败仅告警不停机（同 boot 源纪律，fault 走 runtime 事件面）。契约路由 handler 面占位模块随仓（`apps/world-app/scripts/contract_handlers.lua`，45 路由无操作占位——装载闸只验存在性，玩法批按消息语义填实体；apollo_gen 新增 reflect 消息须同步补行，`contract_handler_tests` 以 golden 契约 + 随仓 handler 模块全装载路径闸同步）。上行业务消息经 C++ 帧路由分发到 Lua handler 的 `call_route` 接线仍随玩法批。
 
 ### 3.5 字节码缓存与补丁形态
 
@@ -195,7 +195,7 @@ collect 阶段（§3.2 的 delta/快照组装）
 
 ### 7.1 attach 执行：admin 单入口 + tick 边界沙盒 eval
 
-- **先例**：KBE 每进程自带 telnet 服务，密码门禁 + 可配执行层（roomserver.cpp:292-293 `pTelnetServer_->start(telnet_passwd, telnet_deflayer, …)`），命令解码后进 Python 解释器**在线执行**（telnet_handler.cpp:801-812，`PyUnicode_DecodeUTF8(command)` 后 eval）；skynet debug_console 是一个 console 服务、`call` 任意服务在线执行 Lua（architecture-review §16.2，debug_console.lua:147-174）。
+- **先例**：KBE 每进程自带 telnet 服务，密码门禁 + 可配执行层（cellapp.cpp:292-293 `pTelnetServer_->start(telnet_passwd, telnet_deflayer, …)`），命令解码后进 Python 解释器**在线执行**（telnet_handler.cpp:801-812，`PyUnicode_DecodeUTF8(command)` 后 eval）；skynet debug_console 是一个 console 服务、`call` 任意服务在线执行 Lua（architecture-review §16.2，debug_console.lua:147-174）。
 - **apollo 取舍**：不学「每进程一个监听口」——收敛为**单 admin 入口**（认证/审计/权限分级只做一处）+ control 通道转发到目标进程/目标场景线程（skynet 形态）；单进程阶段 admin 入口即本机。认证后默认关、只绑内网（KBE passwd 先例）。
 - **执行语义（单写者纪律）**：调试命令投递进 owning 场景线程的任务队列，**下一 tick 的固定调试点**执行、结果回传——任何线程不直接摸 `lua_State`（§2 一线程一状态的推论；skynet 的 call 同构：console 投消息、目标服务在自己上下文执行）。
 - **eval 环境 = 独立 debug env**：§6 沙盒白名单的受限超集——只读查询 API + 少量受控动作（GC 步进、模块健康复位）；无业务写权限（不给 `apollo.db` 写路径）；结果大小上限 + 速率限制（防误操作打爆控制通道）；指令预算同样管辖 eval（超时打断并上报——tick 确定性优先于调试便利）。

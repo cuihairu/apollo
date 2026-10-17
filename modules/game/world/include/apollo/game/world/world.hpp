@@ -14,14 +14,14 @@
 
 namespace apollo::game::world {
 
-// World（Zone 内世界容器——object-model §2.1 目标态）：场景集合的单一权威。
+// World：游戏逻辑进程内的运行时容器，管理多个 Scene 与 Instance。
 //
 // 任务书 §27 目标 API 的落点（P0-3 起为真实代码路径）：
 //   world.create_scene(descriptor)          → 建运行时 Scene（+ AOI 网格）
 //   scene.create_instance(...)              → Instance（玩法八态载体，见 instance.hpp）
 //   instance.enter(player_id) / leave(...)  → 玩家进出
 //
-// World 不做持久化（世界配置属 Definition 层）；生命周期随 Zone 进程启停。
+// World 不做持久化（世界配置属 Definition 层）；生命周期随 World 进程启停。
 class World {
 public:
     // 创建运行时场景：descriptor 校验失败（未绑定资产）返回 nullptr。

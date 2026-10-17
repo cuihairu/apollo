@@ -38,7 +38,7 @@ Apollo's correct attitude toward KBE should be:
 
 - `Reference the way it solves problems`
 - `Do not copy its historical implementation forms`
-- `Preserve room that stays friendly to ECS/data-oriented design`
+- `Preserve instance that stays friendly to ECS/data-oriented design`
 - `Every design point must state its rationale, advantages, costs, and rejected alternatives`
 
 More precisely:
@@ -76,7 +76,7 @@ Apollo does not serve only one form:
 It must support:
 
 - Light online
-- Room-based games
+- Instance-based games
 - Ordinary MMO
 - BigWorld enhanced mode
 
@@ -312,7 +312,7 @@ Rationale:
 
 Advantages:
 
-- Preserves room for ECS/data-oriented design
+- Preserves instance for ECS/data-oriented design
 
 Costs:
 
@@ -336,7 +336,7 @@ Costs:
 
 Rationale:
 
-- For example, Apollo's current `base-app` and `room-server` both carry historical semantic drift
+- For example, Apollo's current `base-app` and `world-app` both carry historical semantic drift
 
 Advantages:
 
@@ -443,7 +443,7 @@ Apollo's correct path is neither to deny KBE nor to deify it.
 The more reasonable approach:
 
 - Reference KBE's experience in solving MMO distributed-world problems
-- Preserve modern modularity, script abstraction, platform-capability layering, and ECS/data-oriented room
+- Preserve modern modularity, script abstraction, platform-capability layering, and ECS/data-oriented instance
 - For every design point, state clearly the rationale, advantages, costs, and rejected alternatives
 
 Only then will this overall framework avoid becoming:

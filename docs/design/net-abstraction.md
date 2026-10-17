@@ -196,7 +196,7 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 
 ### 5.7 进程间连接设施（InterServerLink）：对上层开放的稳定连接
 
-§5.6 M1 把进程间段定型为「框架内部总线」；但**上层业务同样需要这层**——跨服玩法、匹配、聊天、GM/运维工具、collector 推送，要的都是同几件事：稳定连接、断连感知、自动重连、背压。本节把它定型为一等公民公开设施。BigWorld 的形态即如此：全部服务器代码直用 Mercury，entity mailbox、备份流、工具进程共一套网络库（roomservermgr.cpp 单文件 Bundle/Channel 命中 25 行）——「对上层开放」不是给 apollo 加的便利，而是这层在原版里的本来形态。两件 Mercury 新实证为直接参照：TCPConnectionOpener（出站连接状态机）与 LoggerEndpoint（上层消费者自建稳定连接的样例兼反面教材）。
+§5.6 M1 把进程间段定型为「框架内部总线」；但**上层业务同样需要这层**——跨服玩法、匹配、聊天、GM/运维工具、collector 推送，要的都是同几件事：稳定连接、断连感知、自动重连、背压。本节把它定型为一等公民公开设施。BigWorld 的形态即如此：全部服务器代码直用 Mercury，entity mailbox、备份流、工具进程共一套网络库（cellappmgr.cpp 单文件 Bundle/Channel 命中 25 行）——「对上层开放」不是给 apollo 加的便利，而是这层在原版里的本来形态。两件 Mercury 新实证为直接参照：TCPConnectionOpener（出站连接状态机）与 LoggerEndpoint（上层消费者自建稳定连接的样例兼反面教材）。
 
 **词汇：Link 一级，不再叠会话层**
 
@@ -366,19 +366,19 @@ S → C  ServerHello { nonce_s, pub_s(X25519), aead_selected }
 
 - **P1**：L1 帧格式 + L2 会话基础（seq/ack/心跳/四级水位）+ native adapter 收敛为唯一 L0；GameConnection Facade 上线，属性同步 P1 依赖本层 attributes 通道。
 - **P2**：重连续传（resume token）+ movement 通道"只发最新" + 与属性预算的 hard 水位联动降档。
-- 当前状态：进程间 M1 链路与 Gateway 出口原型已存在；Room 路由集成、多实例选择、Gateway 排空和生产发布验收仍在根目录 `todo.md`。
+- 当前状态：进程间 M1 链路与 Gateway 出口原型已存在；Instance 路由集成、多实例选择、Gateway 排空和生产发布验收仍在根目录 `todo.md`。
 
 ### 进程编队与恢复边界
 
-Apollo 当前的进程监督由 `machined` 提供本机进程拉起、死亡检测和重启能力。该机制不提供 Room 状态热备、跨机接管或活动对局迁移。目标玩法以 Room 为单位，不按 Cell/Space 对世界做空间切片。
+Apollo 当前的进程监督由 `machined` 提供本机进程拉起、死亡检测和重启能力。该机制不提供 Instance 状态热备、跨机接管或活动对局迁移。目标玩法以 Instance 为单位，不按 Cell/Space 对世界做空间切片。
 
-RoomServer 进程异常退出时，内存中的活动 Room 不会自动出现在其他进程。没有经过验证的状态恢复或权威迁移实现前，受影响对局按失败处理，并由游戏规则决定结算或重开。跨服务器移动玩家时，必须显式交接唯一权威对象并更新路由；这属于 RoomServer/Room 生命周期工作，不是网络传输层默认能力。
+World 进程异常退出时，内存中的活动 Instance 不会自动出现在其他进程。没有经过验证的状态恢复或权威迁移实现前，受影响对局按失败处理，并由游戏规则决定结算或重开。跨服务器移动玩家时，必须显式交接唯一权威对象并更新路由；这属于 World/Instance 生命周期工作，不是网络传输层默认能力。
 
-`baseappmgr`、热备副本和 RoomServer 自动再平衡都不是目标拓扑的必需进程或已实现能力。进程监督与服务发现的代码现状以 `apps/machined` 和根目录 `todo.md` 为准。
+`baseappmgr`、热备副本和 World 自动再平衡都不是目标拓扑的必需进程或已实现能力。进程监督与服务发现的代码现状以 `apps/machined` 和根目录 `todo.md` 为准。
 
 **跨进程状态与消息**：每份权威状态由一个所有者负责；其他进程通过消息获取所需投影。传输确认、状态一致性和持久化是不同保证，需分别设计和验证，消息送达本身不代表状态已接管或已持久化。
 
-**实体远程调用**：当前 M1 链路提供进程间消息传输原语；RoomServer 路由、请求幂等、权威 epoch 和活动 Room 迁移仍需按玩法需求接线。`OneWay` 和 `RequestReply` 的目标语义见远程调用设计，不应被理解为完整跨服玩法已交付。
+**实体远程调用**：当前 M1 链路提供进程间消息传输原语；World 路由、请求幂等、权威 epoch 和活动 Instance 迁移仍需按玩法需求接线。`OneWay` 和 `RequestReply` 的目标语义见远程调用设计，不应被理解为完整跨服玩法已交付。
 
 ## 8. 与其余设计的交集
 

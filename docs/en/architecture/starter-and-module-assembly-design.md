@@ -282,47 +282,9 @@ AppBootstrap
 
 Apollo's final apps should no longer each hand-write their own initialization order; everything should converge into a unified bootstrap.
 
-## 9. `Topology`
+## Deployment topology
 
-`Topology` is the deployment and runtime-shape layer.
-
-It is responsible for:
-
-- Which apps things finally split into
-- Which starters each app assembles
-- Which profile each app runs
-
-For example:
-
-### Light online projects
-
-- `gateway-app`
-- `login-app`
-- `game-app`
-- `platform-app`
-
-### Ordinary MMO
-
-- `gateway-app`
-- `login-app`
-- `base-app`
-  The target semantics are `BaseApp(PlayerAnchor Host)`
-- `world-app`
-  In the current repo, `apps/room-server` can serve as its assembly shell for now
-- `chat-app`
-- `db-app / persistence-app`
-
-### BigWorld mode
-
-- `gateway-app`
-- `login-app`
-- `base-app`
-  The target semantics are `BaseApp(PlayerAnchor Host)`
-- `base-app-mgr`
-- `room-server`
-  Only here does it denote the real `RoomServer(Distributed World Node)`
-- `room-server-mgr`
-- `db-app / persistence-app`
+The target process roles are Login, Gateway, and World. `world-app` hosts the existing World/Scene/Instance modules. Instances are created for groups and destroyed after gameplay, settlement, and cleanup. Current base-app and baseappmgr executables are prototypes awaiting consolidation; their names do not define additional target roles. Module assembly does not change these responsibilities.
 
 ## 10. Recommended Assembly Flow
 

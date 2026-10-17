@@ -6,7 +6,7 @@
 
 # Apollo
 
-**轻量房间制多人在线游戏服务器引擎。**
+**轻量副本制多人在线游戏服务器引擎。**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
@@ -14,11 +14,11 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
 
-> 轻量房间制多人在线游戏服务器引擎 —— Lightweight Room-based Multiplayer Game Server Engine
+> 轻量副本制多人在线游戏服务器引擎 —— Lightweight Instance-based Multiplayer Game Server Engine
 
 ## 项目简介
 
-Apollo 是一个 C++20 游戏服务器运行时，面向以房间和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。它定位为多人在线游戏服务器引擎，不是无缝大世界 MMO 引擎。
+Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。它定位为多人在线游戏服务器引擎，不是无缝大世界 MMO 引擎。
 
 目标游戏流程使用按职责命名的常见概念：
 
@@ -26,30 +26,30 @@ Apollo 是一个 C++20 游戏服务器运行时，面向以房间和对局为边
 Client ──► Login —— 账号认证与登录凭证
    │
    └──► Gateway —— 客户端连接与消息路由
-           └──► RoomServer —— 承载房间并运行权威对局逻辑
-                   └── Room —— 一场对局；开始时创建，结束后销毁
+           └──► World —— 承载副本并运行权威对局逻辑
+                   └── Instance —— 一场对局；开始时创建，结束后销毁
                        ├── Player / Entity
                        ├── AOI
                        └── 游戏逻辑与结算
 ```
 
-一个 Room 对应一场玩法实例；一个 RoomServer 进程可以承载多个 Room。对局中，每名玩家只有一个权威运行时对象，由承载该房间的 RoomServer 管理。跨服玩法将该权威转交给目标 RoomServer 并更新路由，不在两个进程中同时运行玩家对象。
+一个 Instance 对应一场玩法实例；一个 World 进程可以承载多个 Instance。对局中，每名玩家只有一个权威运行时对象，由承载该副本的 World 管理。跨服玩法将该权威转交给目标 World 并更新路由，不在两个进程中同时运行玩家对象。
 
 ## 适用场景 / Use Cases
 
-**适合**——玩法边界天然是房间或对局的游戏：
+**适合**——玩法边界天然是副本或对局的游戏：
 
 | 场景 | 实例形态 |
 |------|----------|
-| 塔防、固定地图 | 一场对局一个 Room，结束后回收房间状态 |
-| 副本 / Roguelike | 一次玩法一个 Room |
-| 竞技场 / 大逃杀 | 一场比赛一个 Room |
-| 多人 PvE / 生存 / Co-op | 小队共用一个 Room |
-| 多人 PvP | 一场对局一个 Room |
+| 塔防、固定地图 | 一场对局一个 Instance，结束后回收副本状态 |
+| 副本 / Roguelike | 一次玩法一个 Instance |
+| 竞技场 / 大逃杀 | 一场比赛一个 Instance |
+| 多人 PvE / 生存 / Co-op | 小队共用一个 Instance |
+| 多人 PvP | 一场对局一个 Instance |
 
 **当前目标不覆盖**——玩家在空间切片进程之间连续漫游的持久化无缝大世界。这类需求采用的是另一种服务器架构。
 
-> MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由房间和对局组成的 MMO 玩法，但目标不是持久化无缝大世界 MMO。
+> MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由副本和对局组成的 MMO 玩法，但目标不是持久化无缝大世界 MMO。
 
 ## 核心概念 / Core Concepts
 
@@ -57,8 +57,8 @@ Client ──► Login —— 账号认证与登录凭证
 
 | 概念 | 一句话 | 实件 |
 |------|--------|------|
-| **Room** | 一场对局及其临时状态 | 目标玩法单元 |
-| **RoomServer** | 承载一个或多个 Room 并运行权威逻辑的进程 | 目标进程职责 |
+| **Instance** | 一场对局及其临时状态 | 目标玩法单元 |
+| **World** | 承载一个或多个 Instance 并运行权威逻辑的进程 | 目标进程职责 |
 | **Player** | 玩家身份；每场对局中只有一个权威运行对象 | 当前原型代码含 `PlayerAnchor` |
 | **Entity** | 参与玩法的运行时对象 | `Entity` / `Avatar` 契约 |
 | **AOI** | 决定每名玩家能观察到哪些附近实体 | `SceneAoi` 实现 |
@@ -80,13 +80,13 @@ Client ──► Login —— 账号认证与登录凭证
 
 Apollo 区分两种发布方式。协议更新修改 `sdks/contract/` 下的 XML/XSD 并重新生成产物；安全滚动需要服务端和客户端在新旧契约之间保持兼容。契约、生成器和 golden 产物检查已经存在，版本协商及端到端兼容窗口验证尚未完成。
 
-仅代码更新保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供模块预备、tick 边界提交、观察和回滚原语；RoomServer 进程间的生产补丁分发编排仍未完成。C++ 更新通过进程滚动替换，需等待 Room 排空或先实现状态迁移。Gateway 多实例可在旧连接排空期间继续接入新连接，但不会自动把既有 TCP 连接迁移到另一个进程。
+仅代码更新保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供模块预备、tick 边界提交、观察和回滚原语；World 进程间的生产补丁分发编排仍未完成。C++ 更新通过进程滚动替换，需等待 Instance 排空或先实现状态迁移。Gateway 多实例可在旧连接排空期间继续接入新连接，但不会自动把既有 TCP 连接迁移到另一个进程。
 
 详见[Gateway 更新边界](docs/design/gateway-topology-survey.md)和[契约版本管理](docs/design/sdk-contract.md)。
 
 ## 架构设计
 
-> 目标房间制模型见[架构总览](docs/guide/architecture.md)；仓库现有可执行原型及其状态见[服务器应用](docs/apps/index.md)。
+> 目标副本制模型见[架构总览](docs/guide/architecture.md)；仓库现有可执行原型及其状态见[服务器应用](docs/apps/index.md)。
 
 ### 技术栈
 
@@ -473,3 +473,9 @@ Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与�
 ---
 
 **Apollo - 实例化多人在线游戏服务器引擎**
+
+## 临时副本生命周期
+
+几名玩家组队发起 → World 创建 Instance 及临时 Scene → 校验成员并进入 → 刷怪与完成目标 → 结算 → 玩家离开 → 销毁 Instance、场景和临时资源。
+
+复用现有 Instance 八态状态机，不新增同义类型。World 中的 Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。状态机已实现，小队触发创建、通关结算和自动资源回收仍需在应用入口接通并验收。

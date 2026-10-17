@@ -1,4 +1,4 @@
-// RoomServer M1 接收端批测试（M1 上层接线批 2b-ii；bare 退役批改张）：
+// WorldApp M1 接收端批测试（M1 上层接线批 2b-ii；bare 退役批改张）：
 // 契约意图族 924-928 真 TCP 上行（客户端 = 裸 LinkManager active 端点，
 // 恒走 932 internal_envelope 信封——bare 924-928 双受理已退役）→ 信封解包 →
 // 契约 wire 解包 → legacy 帧镜像 → 受理队列 → tick 边界执行 → 延时应答
@@ -6,7 +6,7 @@
 // 域越权/未知 id 不致命不断连、裸五族帧 = no_handler 静默丢弃）与顶格拒收
 // 即时回执 2101。
 // 无 GTest，plain-assert + main 汇总。
-#include "room_server/room_server.hpp"
+#include "world_app/world_app.hpp"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/linktrace/envelope.hpp"
@@ -47,9 +47,9 @@ namespace trace = apollo::net::trace;
 namespace wire = apollo::net::wire;
 namespace protocol = apollo::protocol;
 
-using room_server::RoomServerConfig;
-using room_server::RoomServer;
-using room_server::IntentEnvelope;
+using world_app::WorldAppConfig;
+using world_app::WorldApp;
+using world_app::IntentEnvelope;
 using apollo::contract::gen::MsgId;
 
 constexpr std::uint16_t id_of(MsgId id) {
@@ -59,7 +59,7 @@ constexpr std::uint16_t kAckId = id_of(MsgId::cell_intent_ack);
 constexpr std::uint16_t kEvalRequestId = id_of(MsgId::debug_eval_request);
 constexpr std::uint16_t kEvalResultId = id_of(MsgId::debug_eval_result);
 
-const char* kRouteJson = APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON;
+const char* kRouteJson = APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON;
 
 std::uint64_t now_ms() {
     return static_cast<std::uint64_t>(
@@ -145,7 +145,7 @@ struct EvalLog {
 
 EvalLog* g_evals = nullptr;
 
-// 客户端端（网关投影）：LinkManager active 端点拨入 RoomServer M1 端口，同一路由
+// 客户端端（网关投影）：LinkManager active 端点拨入 WorldApp M1 端口，同一路由
 // 表（同 schema_hash → 握手 route_version 一致）。
 struct ClientEnd {
     std::unique_ptr<link::RouteTable> table;
@@ -168,7 +168,7 @@ struct ClientEnd {
         manager = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
-        ep.name = "room-server";
+        ep.name = "world";
         ep.host = "127.0.0.1";
         ep.port = port;
         ep.role = link::EndpointRole::kActive;
@@ -176,7 +176,7 @@ struct ClientEnd {
             return false;
         }
 
-        auto& dispatcher = manager->link("room-server")->dispatcher();
+        auto& dispatcher = manager->link("world")->dispatcher();
         dispatcher.set_route_table(table.get());
         dispatcher.allow_domain("internal");
         dispatcher.set_handler(kAckId, [](std::uint16_t, const std::uint8_t* data,
@@ -202,10 +202,10 @@ struct ClientEnd {
 
     void pump() { manager->pump(now_ms()); }
 
-    link::InterServerLink* cell_link() { return manager->link("room-server"); }
+    link::InterServerLink* cell_link() { return manager->link("world"); }
 };
 
-// 客户端泵等待（服务端由 RoomServer gameThread 自泵；客户端由本测试线程泵）。
+// 客户端泵等待（服务端由 WorldApp gameThread 自泵；客户端由本测试线程泵）。
 bool pump_until(ClientEnd& client, const std::function<bool()>& cond, int timeout_ms) {
     const auto deadline = std::chrono::steady_clock::now()
         + std::chrono::milliseconds(timeout_ms);
@@ -234,7 +234,7 @@ bool send_intent(ClientEnd& client, std::uint16_t id, std::vector<wire::FieldVal
 }
 
 // 944 debug_eval_request 裸帧上行（§7.1 attach transport：eval 非意图族，
-// 不走 932 信封——RoomServer 受理面恒裸帧登记）。
+// 不走 932 信封——WorldApp 受理面恒裸帧登记）。
 bool send_debug_eval(ClientEnd& client, std::uint64_t eval_id, std::uint64_t scene_id,
                      const std::string& source) {
     std::vector<wire::FieldValue> f(3);
@@ -272,7 +272,7 @@ bool send_wrapped_intent_fields(ClientEnd& client, std::uint16_t inner_id,
     env.message_type = trace::EnvelopeKind::EntityMethodCall;
     env.request_id = request_id;
     env.source_app = "gateway";
-    env.target_app = "room-server";
+    env.target_app = "world";
     env.payload = wire::append_envelope(inner_id, [&] {
         std::vector<std::uint8_t> p;
         (void)wire::encode_payload(inner_id, fields, p);
@@ -302,15 +302,15 @@ wire::FieldValue f32(float v) {
 
 // 服务端：tick 速率按需；m1Port 0 = 内核分配（listenPort 查实占）。
 struct ServerEnd {
-    RoomServerConfig config;
-    std::unique_ptr<RoomServer> server;
+    WorldAppConfig config;
+    std::unique_ptr<WorldApp> server;
 
     bool start(int tick_rate_ms) {
         config.tickRateMs = tick_rate_ms;
         config.m1Port = 0;
         config.m1RouteJson = kRouteJson;
         try {
-            server = std::make_unique<RoomServer>(config);
+            server = std::make_unique<WorldApp>(config);
             server->start();
         } catch (const std::exception& e) {
             std::cout << "  server start failed: " << e.what() << std::endl;
@@ -330,7 +330,7 @@ struct ServerEnd {
 
 bool test_factory_smoke() {
     std::cout << "Running: test_factory_smoke..." << std::endl;
-    auto server = room_server::makeM1LinkServer(room_server::M1LinkConfig{}, [](IntentEnvelope) {});
+    auto server = world_app::makeM1LinkServer(world_app::M1LinkConfig{}, [](IntentEnvelope) {});
     TEST_ASSERT(server != nullptr, "factory non-null");
     TEST_ASSERT(!server->gatewayConnected(), "seam default disconnected");
 #if !defined(_WIN32)
@@ -464,7 +464,7 @@ bool test_malformed_intent_rejected() {
     env.message_type = trace::EnvelopeKind::EntityMethodCall;
     env.request_id = 70;
     env.source_app = "gateway";
-    env.target_app = "room-server";
+    env.target_app = "world";
     const std::vector<std::uint8_t> truncated{0x01, 0x02, 0x03};
     env.payload = wire::append_envelope(id_of(MsgId::cell_create_entity), truncated);
     TEST_ASSERT(send_wrapped_intent(c, env), "truncated inner sent");
@@ -628,7 +628,7 @@ bool test_wrapped_envelope_intent() {
                                             return p;
                                         }());
 
-    // span 收集器（RoomServer span 发射面：采样命中 + trace 链关联）
+    // span 收集器（WorldApp span 发射面：采样命中 + trace 链关联）
     std::vector<trace::SpanRecord> spans;
     trace::set_span_sink([&spans](const trace::SpanRecord& record) {
         spans.push_back(record);
@@ -643,18 +643,18 @@ bool test_wrapped_envelope_intent() {
     TEST_ASSERT(s.server->m1Link().rejectedFrames() == 0, "no rejects on wrapped intent");
     TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link still up");
 
-    // RoomServer span：parent = 信封发端（gateway span id），trace_id 同链
+    // WorldApp span：parent = 信封发端（gateway span id），trace_id 同链
     bool cell_span = false;
     for (const auto& record : spans) {
-        if (record.name == "room_server_intent_execute") {
+        if (record.name == "world_intent_execute") {
             cell_span = true;
-            TEST_ASSERT(record.ctx.trace_id == env.trace.trace_id, "RoomServer span same chain");
+            TEST_ASSERT(record.ctx.trace_id == env.trace.trace_id, "WorldApp span same chain");
             TEST_ASSERT(record.ctx.parent_span_id == env.trace.parent_span_id,
-                        "RoomServer span chains under gateway span");
-            TEST_ASSERT(record.start_ms <= record.end_ms, "RoomServer span timing ordered");
+                        "WorldApp span chains under gateway span");
+            TEST_ASSERT(record.start_ms <= record.end_ms, "WorldApp span timing ordered");
         }
     }
-    TEST_ASSERT(cell_span, "RoomServer span emitted for sampled intent");
+    TEST_ASSERT(cell_span, "WorldApp span emitted for sampled intent");
     trace::set_span_sink(nullptr);
 
     s.stop();
@@ -758,12 +758,12 @@ bool test_queue_full_backpressure_ack() {
         TEST_ASSERT(pump_until(c, [&] { return acks.size() >= static_cast<std::size_t>(kBurst); },
                                20000),
                     "all burst acks returned");
-        rejected = acks.count_code(room_server::kIntentAckBackpressure) > 0;
+        rejected = acks.count_code(world_app::kIntentAckBackpressure) > 0;
     }
     if (!rejected) {
         // 迟到回执兜底等待（2101 为受理点即时回执，正常一拍内到）
-        pump_until(c, [&] { return acks.count_code(room_server::kIntentAckBackpressure) > 0; }, 5000);
-        rejected = acks.count_code(room_server::kIntentAckBackpressure) > 0;
+        pump_until(c, [&] { return acks.count_code(world_app::kIntentAckBackpressure) > 0; }, 5000);
+        rejected = acks.count_code(world_app::kIntentAckBackpressure) > 0;
     }
 
     TEST_ASSERT(rejected, "at least one 2101 backpressure ack across rounds");
@@ -771,7 +771,7 @@ bool test_queue_full_backpressure_ack() {
     TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link survives overflow");
 
     const auto accepted = s.server->m1Link().receivedIntents();
-    const auto rejected_acks = acks.count_code(room_server::kIntentAckBackpressure);
+    const auto rejected_acks = acks.count_code(world_app::kIntentAckBackpressure);
     s.stop();
     c.manager.reset();
     g_acks = nullptr;
@@ -782,7 +782,7 @@ bool test_queue_full_backpressure_ack() {
 
 // ---------- §7.1 attach transport（944/945 debug eval 契约面） ----------
 
-// 全链 e2e：944 裸帧上行 → RoomServer 受理（默认 scene 定位 + enqueue）→ Scene
+// 全链 e2e：944 裸帧上行 → WorldApp 受理（默认 scene 定位 + enqueue）→ Scene
 // tick 首拍固定调试点执行 → 945 回执（eval_id 关联，ok/result/error 契约字序）。
 bool test_debug_eval_roundtrip() {
     std::cout << "Running: test_debug_eval_roundtrip..." << std::endl;

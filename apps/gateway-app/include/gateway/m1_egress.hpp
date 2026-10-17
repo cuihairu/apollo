@@ -21,7 +21,7 @@
 namespace gateway {
 
 struct M1EgressConfig {
-    std::string host = "127.0.0.1";       // RoomServer M1 接收端地址
+    std::string host = "127.0.0.1";       // WorldApp M1 接收端地址
     std::uint16_t port = 9101;
     std::string route_json;               // 契约路由表（与 cell 同一事实源）
     std::uint64_t ack_timeout_ms = 5000;  // 应答超时：pending 关联清扫线
@@ -51,7 +51,7 @@ public:
     }
 
     // 观测面
-    virtual bool roomServerConnected() const { return false; }
+    virtual bool worldConnected() const { return false; }
     virtual std::uint64_t sentIntents() const { return 0; }
     virtual std::uint64_t ackedIntents() const { return 0; }        // 929 code 0
     virtual std::uint64_t failedAcks() const { return 0; }          // 929 code != 0

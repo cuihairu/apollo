@@ -5,14 +5,14 @@
 //   4. 不可前递族落地（残帧/PING/断连通知——legacy 链路死观察面同型）
 //   5. 投递箱顶格溢出落地
 //   6. 路由表缺位 = 装配降级显形
-//   7. 全链 e2e：真客户端 socket → gateway 入口 → M1 出口 → 真 RoomServer M1
+//   7. 全链 e2e：真客户端 socket → gateway 入口 → M1 出口 → 真 WorldApp M1
 //      接收端 → 受理执行 → 延时应答 929 回流 → 出口关联回收
 // 客户端端 = 裸 LinkManager（拆帧工具复用 link 面，帧格式属被测契约）。
 
 #include "gateway/config.hpp"
 #include "gateway/gateway_server.hpp"
 #include "gateway/m1_egress.hpp"
-#include "room_server/room_server.hpp"
+#include "world_app/world_app.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -148,7 +148,7 @@ private:
     int fd_ = -1;
 };
 
-// 桩 RoomServer M1 接收端（裸 LinkManager，被动端点）：记录五族意图 + 按需回 929。
+// 桩 WorldApp M1 接收端（裸 LinkManager，被动端点）：记录五族意图 + 按需回 929。
 // 932 双受理（P3-3 语义层批）：信封解包 → 内层同族记录 + trace 携带面显形
 //（bare 记录 wrapped=false、trace 全零）。
 struct IntentRecord {
@@ -164,7 +164,7 @@ class FakeCell {
 public:
     FakeCell() {
         link::LinkManagerConfig mc;
-        mc.self_name = "room-server";
+        mc.self_name = "world";
         route_ok_ = load_route(table_);
         if (route_ok_) {
             mc.route_version = link::route_version_from_hash(table_.schema_hash());
@@ -404,7 +404,7 @@ bool test_egress_forwards_five_families() {
                 "all five intents reached fake cell");
     TEST_ASSERT(egress->sentIntents() == 5, "five sent");
     TEST_ASSERT(egress->pendingAcks() == 5, "five pending");
-    TEST_ASSERT(egress->roomServerConnected(), "link up");
+    TEST_ASSERT(egress->worldConnected(), "link up");
 
     const auto records = cell.records();
     TEST_ASSERT(records.size() == 5, "five recorded");
@@ -586,22 +586,22 @@ bool test_gateway_cell_e2e() {
     std::cout << "Running: test_gateway_cell_e2e..." << std::endl;
 
     // 真 cell：M1 接收端（被动）+ 受理队列 + tick 执行 + 延时应答
-    room_server::RoomServerConfig roomServerConfig;
-    roomServerConfig.host = "127.0.0.1";
-    roomServerConfig.tickRateMs = 20;
-    roomServerConfig.m1Port = 0;
-    roomServerConfig.m1RouteJson = kRouteJson;
-    room_server::RoomServer roomServer(roomServerConfig);
-    roomServer.start();
-    TEST_ASSERT(roomServer.m1Link().listenPort() != 0, "RoomServer M1 listening");
+    world_app::WorldAppConfig worldConfig;
+    worldConfig.host = "127.0.0.1";
+    worldConfig.tickRateMs = 20;
+    worldConfig.m1Port = 0;
+    worldConfig.m1RouteJson = kRouteJson;
+    world_app::WorldApp worldApp(worldConfig);
+    worldApp.start();
+    TEST_ASSERT(worldApp.m1Link().listenPort() != 0, "WorldApp M1 listening");
 
     // 真 gateway：M1 出口指向 cell，入口真 TCP 监听
     gateway::GatewayConfig gwCfg;
     gwCfg.host = "127.0.0.1";
     gwCfg.port = 0;
-    gwCfg.roomServerM1Host = "127.0.0.1";
-    gwCfg.roomServerM1Port = roomServer.m1Link().listenPort();
-    gwCfg.roomServerM1RouteJson = kRouteJson;
+    gwCfg.worldM1Host = "127.0.0.1";
+    gwCfg.worldM1Port = worldApp.m1Link().listenPort();
+    gwCfg.worldM1RouteJson = kRouteJson;
     gwCfg.sessionTimeoutMs = 60000;
     gwCfg.heartbeatCheckIntervalMs = 50;
     gateway::GatewayServer gw(gwCfg);
@@ -636,12 +636,12 @@ bool test_gateway_cell_e2e() {
     const auto packet = apollo::protocol::MessageCodec::encode(create, sid);
     client.sendAll(frame_bytes(1, 0, packet));
 
-    // 全链收敛：RoomServer 受理执行 → 929 回流 → 出口关联回收
+    // 全链收敛：WorldApp 受理执行 → 929 回流 → 出口关联回收
     auto* egress = gw.messageRouter() ? gw.messageRouter()->egress() : nullptr;
     TEST_ASSERT(egress != nullptr, "egress wired");
     bool converged = false;
     for (int i = 0; i < 500; ++i) {
-        if (roomServer.m1Link().receivedIntents() == 1 && egress->ackedIntents() == 1) {
+        if (worldApp.m1Link().receivedIntents() == 1 && egress->ackedIntents() == 1) {
             converged = true;
             break;
         }
@@ -649,14 +649,14 @@ bool test_gateway_cell_e2e() {
     }
     TEST_ASSERT(converged, "intent executed and ack resolved");
 
-    TEST_ASSERT(roomServer.m1Link().rejectedFrames() == 0, "no rejections");
+    TEST_ASSERT(worldApp.m1Link().rejectedFrames() == 0, "no rejections");
     TEST_ASSERT(egress->sentIntents() == 1, "one sent");
     TEST_ASSERT(egress->failedAcks() == 0, "no failed acks");
     TEST_ASSERT(egress->timedOutIntents() == 0, "no timeouts");
 
     client.close();
     gw.stop();
-    roomServer.stop();
+    worldApp.stop();
     std::cout << "  PASSED" << std::endl;
     return true;
 }

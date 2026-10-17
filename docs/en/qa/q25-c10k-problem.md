@@ -165,7 +165,7 @@ Evenly spreading connections across multiple access nodes is usually more realis
 
 ### 6.2 Business Partitioning
 
-Let different scenes, rooms, shards, and logical domains be handled by different nodes, avoiding all connections eventually converging on the same logical hotspot.
+Let different scenes, instances, shards, and logical domains be handled by different nodes, avoiding all connections eventually converging on the same logical hotspot.
 
 ### 6.3 Reduce Invalid Traffic
 

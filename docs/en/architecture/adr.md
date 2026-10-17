@@ -1,61 +1,71 @@
----
-title: Current Architecture Decisions
-icon: gavel
-order: 2
-category:
-  - Architecture
-tag:
-  - Decisions
----
-
 # Current Architecture Decisions
 
-This document records only rules that remain in effect. It does not retain withdrawn decisions, obsolete naming discussions, or batch history. Target processes and implementation status are defined by the [architecture status](../analysis/architecture-review.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
+Only current rules are kept. See [concepts and names](../design/concept-glossary.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md) for implementation work.
 
-## ADR-001: Player Authority Within a Room
+## ADR-001：Persistent player data and match authority
 
-A player has one authoritative gameplay runtime object in a match, owned by the RoomServer hosting that Room. Moving between RoomServers requires a confirmed authority handoff. Persistent player profile data is data, not a second runnable match object.
+Existing PlayerAnchor and persistence paths own persistent player data; settlement uses IRewardSink / AnchorRewardSink. Scene advances the match entity. Only one entity per player may accept input and authoritative simulation writes at a time. Persistent data is not another executable match object.
 
-## ADR-003: Room Is the Match Lifecycle Boundary
+## ADR-002：Scene as an internal simulation boundary
 
-A Room represents one gameplay instance and its temporary state, with creation, preparation, runtime, settlement, and destruction phases. A RoomServer is a process and may host multiple Rooms. Existing `Scene` and `Instance` components may support implementation but are not automatically a complete Room.
+Scene owns entities, AOI, entry/exit, and ticks inside World; it is not a process name. World manages multiple Scenes and Instances. Seamless-world partitions, Ghost mirrors, and continuous cross-process roaming are outside the architecture.
 
-## ADR-005: AOI Belongs to Room Simulation
+## ADR-003：Instance as the temporary gameplay lifecycle
 
-AOI determines which entities are visible within a Room and runs with that Room's authoritative simulation state. AOI is not a separate process and does not require cross-process spatial partitioning.
+A group requests an activity; World creates an Instance and associated Scene. Players enter, clear objectives, settle, leave, and release the instance, temporary scene, and resources. Reuse Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed. The state machine exists; group-triggered creation and completion cleanup still need application integration.
 
-## ADR-006: Battle Simulation Is Authoritative and Verifiable
+## ADR-004：Explicit scene and cross-World transfer
 
-The server advances battle state. If deterministic replay or verification is used, input ordering, random numbers, and settlement boundaries must be explicit. The current `BattleRuntime` is a module capability, not evidence that full gameplay content has shipped.
+Reuse SceneTransfer admission, detach, attach, and rollback for in-process transfers. Cross-World transfer separately requires source freeze, state handoff, target confirmation, routing, cleanup, and idempotency. An in-process transfer does not establish cross-process takeover.
 
-## ADR-007: Persistence Is a Capability Boundary
+## ADR-005：Scene owns AOI
 
-Cross-match data is stored by persistence capabilities; a separate business process is not required. The current player profile path uses JSON files and `PersistJournal`; external databases and Redis are not connected to the service runtime path.
+Scene owns and advances SceneAoi on its authoritative thread. Visibility is isolated per simulation unit; AOI does not require another business process.
 
-## ADR-010: Validate Update Promises Separately
+## ADR-006：Battle runtime and settlement
 
-Multiple instances and draining can keep new connections available. They do not preserve existing TCP connections across Gateway processes or keep active Rooms running across versions. Those outcomes require connection/session handoff and Room-state migration respectively, and must be verified separately. Service availability, avoiding a new login, uninterrupted connections, and uninterrupted matches are distinct promises.
+BattleRuntime is the deterministic combat module. Define randomness, input order, phases, and settlement boundaries. Instance owns its gameplay workload; rewards flow through the existing one-way sink into persistent player data. Retries must not duplicate rewards.
 
-## ADR-012: Room Failures Have an Explicit Boundary
+## ADR-007：Persistence status and boundary
 
-If a RoomServer process crashes, affected Rooms can recover only through an explicit recovery mechanism; their in-memory state does not implicitly exist in another process. Without a verified migration or recovery path, the match must be treated as failed and settled or restarted according to game rules.
+Current profiles use local JSON files, SaveQueue, and PersistJournal. Real MySQL/Redis business-runtime integration remains deferred until concrete deployment, capacity, or user requirements arise. A declared dependency is not a completed integration.
 
-## ADR-013: Log Collection Does Not Own Game Authority
+## ADR-008：Recovery scope
 
-The log collector receives and archives observability data; it does not make authoritative decisions about players, sessions, Rooms, or routes. If collection is unavailable, business services should degrade according to configuration instead of blocking simulation threads.
+Profile/journal replay and process restart are existing primitives, not recovery of active instance simulation. Reconfirm authority, routing, and resumable gameplay phases after recovery. Without a validated instance recovery path, define affected matches as failed.
 
-## ADR-015: Simulation State Has a Single Writer
+## ADR-009：Simulation ownership and threads
 
-Network and background threads submit intents to simulation workers. One logical executor applies mutations to each Room in order. IO callbacks must not concurrently mutate entities, scenes, or AOI state.
+The owning Scene logical executor modifies simulation state sequentially. Background work, networking, and debug requests use queue handoff; IO threads must not directly modify entities, AOI, or gameplay state. The current application pumps and advances World in one gameLoop.
 
-## ADR-016: Overload Is Explicitly Rejected
+## ADR-010：Restart supervision first; standby deferred
 
-Acceptance queues are bounded. When a queue is full, the service explicitly rejects new work and exposes metrics and an error result; it does not silently discard previously accepted work.
+machined supplies process supervision, death detection, and restart. Cross-machine standby, arbitration, and automatic takeover are outside current delivery. Reopen them only for explicit deployment or recovery requirements; restart is not standby availability.
 
-## ADR-017: Acknowledgement and Execution Semantics Are Separate
+## ADR-011：Gateway links and update acceptance
 
-Acceptance means only that a request entered the processing flow. If the protocol promises an execution result, the response must be sent after business processing completes. Each message family must distinguish transport acknowledgement, acceptance, and business result.
+Gateway owns connections, sessions, and routing. Its M1 egress reaches World; complete gameplay delivery, multiple-World selection, and cross-Gateway session recovery still require validation. Validate protocol and code-only updates separately. Availability, no re-login, uninterrupted TCP, and uninterrupted instances are different outcomes. Replicas do not transfer sockets automatically.
 
-## Target Process Names
+## ADR-012：On-demand instances and optional isolation
 
-Apollo's target architecture consistently uses `Login`, `Gateway`, `RoomServer`, and `Room`. BigWorld/KBEngine terms are reserved for describing those external engines. See [server applications](../apps/index.md) for current executable names and their mapping.
+Create Instances for groups inside World. Existing offload modules and in-memory transport stubs can support optional isolation work. If one process per instance becomes necessary, retain the World role and implement spawn, readiness, admission, exit, and crash-failure protocols. Production auto-spawn is not complete.
+
+## ADR-013：Logging and deferred capabilities
+
+logger supports local structured-log queries and M1 collection; applications can configure log push. Collection failure must not block simulation. Combat verification waits for concrete gameplay work; Kafka/Grafana infrastructure remains deferred. These are open future capabilities, not delivered features.
+
+## ADR-014：Process naming and gameplay objects
+
+World is the sole game-logic process role; its executable is world-app, entry type WorldApp, and namespace world_app. Login and Gateway retain their responsibilities. Instance is a temporary gameplay instance; Scene is the internal simulation unit. Migrate existing base-app/baseappmgr capabilities by authority and routing responsibilities; renaming alone does not complete consolidation. External references retain actual upstream identifiers and source paths.
+
+## ADR-015：Asynchronous intent admission
+
+Network callbacks submit intents to the bounded queue. WorldApp::gameLoop consumes them at fixed execution boundaries and advances World. Enqueue success is not execution completion; do not block IO workers waiting for a tick.
+
+## ADR-016：Watermarks, overload, and shutdown
+
+Retain existing capacity, warning thresholds, tick budget, and explicit rejection. Never silently discard accepted work. Close admission, sweep queued work, and stop simulation and links. Production drain also needs settlement, resource cleanup, deadlines, and forced-stop results.
+
+## ADR-017：Reply semantics
+
+Return correlated M1 intent replies after simulation-thread consumption; admission failure may reply immediately. Associate replies with request_id and distinguish delivery, admission, and execution. Consumption acknowledgement does not replace gameplay validation, idempotent settlement, or persistence confirmation.

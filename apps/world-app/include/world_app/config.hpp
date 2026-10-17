@@ -5,20 +5,20 @@
 
 // 契约路由表 JSON 的构建期默认路径（CMake 注入生成物路径；裸编时为空 =
 // M1 端点装配失败显形，不带隐式回退）。
-#ifndef APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON
-#define APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON ""
+#ifndef APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON
+#define APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON ""
 #endif
 
-namespace room_server {
+namespace world_app {
 
-struct RoomServerConfig {
+struct WorldAppConfig {
     // 监听配置
     std::string host = "0.0.0.0";
 
-    // net M1 接收端（M1 上层接线批 2b-ii；2b-iii 起 RoomServer 唯一受理入口）：
+    // net M1 接收端（M1 上层接线批 2b-ii；2b-iii 起 WorldApp 唯一受理入口）：
     // InterServerLink passive 端点，网关经它投递 cell 意图（924-928）
     uint16_t m1Port = 9101;
-    std::string m1RouteJson = APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON;
+    std::string m1RouteJson = APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON;
 
     // 空间配置
     std::string spaceName = "main_world";
@@ -42,4 +42,4 @@ struct RoomServerConfig {
 
 };
 
-} // namespace room_server
+} // namespace world_app

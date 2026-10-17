@@ -4,16 +4,16 @@
 #include "apollo/net/metricspush/metrics_push_env.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
-#include "room_server/room_server.hpp"
+#include "world_app/world_app.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdint>
 #include <memory>
 
-using namespace room_server;
+using namespace world_app;
 
 // 全局服务器指针
-static RoomServer* g_server = nullptr;
+static WorldApp* g_server = nullptr;
 
 // 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
@@ -28,25 +28,25 @@ void signalHandler(int signal) {
 static apollo::core::log::LoggerPtr initLogging() {
     auto& logs = apollo::core::log::global_log_manager();
     apollo::core::log::LogManagerConfig config;
-    config.processIdentity = "room-server";
+    config.processIdentity = "world";
     config.fileEnabled = true;
     config.fileConfig.directory = "log";
-    config.fileConfig.baseName = "room-server";
+    config.fileConfig.baseName = "world";
     config.fileConfig.structuredOutput = true;  // §5.1 结构化行（六键固定序）
     // L4 push 出口（logging.md §5 双出口）：APOLLO_LOG_PUSH_ADDR 非空才接
     // （collector 缺席 = 客户端有界队列缓冲，本地文件恒真相源）
-    if (auto push_client = apollo::net::logpush::make_log_push_from_env("room-server")) {
+    if (auto push_client = apollo::net::logpush::make_log_push_from_env("world")) {
         config.pushSink = [push_client](const std::string& line) {
             push_client->push(line);
         };
     }
     logs.initialize(config);
-    return logs.createLogger("room-server");
+    return logs.createLogger("world");
 }
 
 // 加载配置
-RoomServerConfig loadConfig(int argc, char* argv[]) {
-    RoomServerConfig config;
+WorldAppConfig loadConfig(int argc, char* argv[]) {
+    WorldAppConfig config;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -117,11 +117,11 @@ int main(int argc, char* argv[]) {
     // L4 指标 push 出口（logging.md §5.1 采样流）：APOLLO_METRICS_PUSH_ADDR
     // 环境接线（未设 = 关；exporter 缺席 = 丢拍不积压最新者胜）。句柄进程期
     // 存活，注册表快照渲染在客户端泵线程自拉。
-    auto metrics_push = apollo::net::metricspush::make_metrics_push_from_env("room-server");
+    auto metrics_push = apollo::net::metricspush::make_metrics_push_from_env("world");
     (void)metrics_push;
-    apollo::runtime::init_crash_capture(argc, argv, "room-server");
+    apollo::runtime::init_crash_capture(argc, argv, "world");
     std::cout << "======================================" << std::endl;
-    std::cout << "       Apollo Cell Server           " << std::endl;
+    std::cout << "       Apollo World           " << std::endl;
     std::cout << "======================================" << std::endl;
 
     auto config = loadConfig(argc, argv);
@@ -138,7 +138,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     try {
-        RoomServer server(config);
+        WorldApp server(config);
         g_server = &server;
 
         logger->info("Starting server...");

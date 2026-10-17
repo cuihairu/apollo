@@ -83,11 +83,11 @@ Skynet 提供通用服务运行时，本身不规定 MMO 进程拓扑。其 Gate
 
 ### Colyseus 与 Photon
 
-Colyseus 以 `Room` 表达一个有状态的多人会话/对局，Room 由游戏服务器进程承载。Photon 常用 `Master Server` 负责会话发现/分配、`Game Server` 承载房间与对局。两者的 `Room` 都是玩法会话概念，不是服务器进程名称。
+Colyseus 以 `Instance` 表达一个有状态的多人会话/对局，Instance 由游戏服务器进程承载。Photon 常用 `Master Server` 负责会话发现/分配、`Game Server` 承载副本与对局。两者的 `Instance` 都是玩法会话概念，不是服务器进程名称。
 
 ### Agones
 
-Agones 的 `GameServer`、`Fleet` 和 `FleetAutoscaler` 是 Kubernetes 上的游戏服务器实例及其编排资源名称。它解决部署和容量编排问题，不定义玩家对象或游戏房间的业务模型。
+Agones 的 `GameServer`、`Fleet` 和 `FleetAutoscaler` 是 Kubernetes 上的游戏服务器实例及其编排资源名称。它解决部署和容量编排问题，不定义玩家对象或游戏副本的业务模型。
 
 ## Apollo 采用的常见名称
 
@@ -95,14 +95,14 @@ Agones 的 `GameServer`、`Fleet` 和 `FleetAutoscaler` 是 Kubernetes 上的游
 |---|---|---|
 | `Login` | 账号认证和登录凭证。 | `loginapp`、`authserver`、`loginserver` |
 | `Gateway` | 客户端游戏连接和消息路由。 | Pomelo `connector`、Ryzom `FES`、Skynet Gate |
-| `RoomServer` | 承载多个房间并运行对局权威逻辑。 | Colyseus 的游戏服务器进程、Photon `Game Server` |
-| `Room` | 一场对局及其临时状态。 | Colyseus/Photon `Room`、匹配实例 |
+| `World` | 承载多个副本并运行对局权威逻辑。 | Colyseus 的游戏服务器进程、Photon `Game Server` |
+| `Instance` | 一场对局及其临时状态。 | Colyseus/Photon `Instance`、匹配实例 |
 
-Apollo 不再为单一房间/对局运行时并列使用 `RoomServer`、`ZoneServer`、`AreaServer`、`SceneServer` 等名称。空间对象在代码层可使用 `Scene`；对外的玩法和承载单位分别称 `Room` 与 `RoomServer`。一个 RoomServer 可以承载多个 Room。
+Apollo 不再为单一副本/对局运行时并列使用 `World`、`ZoneServer`、`AreaServer`、`SceneServer` 等名称。空间对象在代码层可使用 `Scene`；对外的玩法和承载单位分别称 `Instance` 与 `World`。一个 World 可以承载多个 Instance。
 
 ## Gateway 与热更新
 
-`Gateway` 是常见的接入职责名，不代表它天然支持不停机更新。多 Gateway 可以在旧实例停止接收新连接后继续由新实例接入新玩家；既有 TCP 连接要跨进程保持，需要连接交接或让旧实例保留连接直至排空。活动房间跨版本继续运行还需要房间状态迁移、版本兼容、权威接管、路由切换和失败回滚。以上是不同机制，必须分别验证。
+`Gateway` 是常见的接入职责名，不代表它天然支持不停机更新。多 Gateway 可以在旧实例停止接收新连接后继续由新实例接入新玩家；既有 TCP 连接要跨进程保持，需要连接交接或让旧实例保留连接直至排空。活动副本跨版本继续运行还需要副本状态迁移、版本兼容、权威接管、路由切换和失败回滚。以上是不同机制，必须分别验证。
 
 ## 参考来源
 
@@ -112,5 +112,5 @@ Apollo 不再为单一房间/对局运行时并列使用 `RoomServer`、`ZoneSer
 - [Pomelo terminology](https://github.com/NetEase/pomelo/wiki/Terminologies) and [LordOfPomelo server introduction](https://github.com/NetEase/pomelo/wiki/LordOfPomelo-server-introduction)
 - [Ryzom Core services](https://github.com/ryzom/ryzomcore/wiki/architecture_ryzom_services)
 - [Skynet GateServer](https://github.com/cloudwu/skynet/wiki/GateServer)
-- [Colyseus rooms](https://docs.colyseus.io/room/)
+- [Colyseus instances](https://docs.colyseus.io/instance/)
 - [Agones concepts](https://agones.dev/site/docs/)

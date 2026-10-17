@@ -40,13 +40,13 @@ else()
     message(STATUS "Legacy protocol apps disabled (requires legacy apollo_protocol AND APOLLO_BUILD_GAME_MODULE=ON)")
 endif()
 
-# RoomServer 以新模块为判据（P0-5，audit §1.3 app 门控链收口）：room-server 不链
+# WorldApp 以新模块为判据（P0-5，audit §1.3 app 门控链收口）：world-app 不链
 # apollo_protocol 库目标，协议编解码面直接编入 app 目标（直编习语沿袭）。
 if(TARGET apollo::game_core AND TARGET apollo::game_world)
-    add_subdirectory(room-server)
-    message(STATUS "RoomServer enabled (game modules found)")
+    add_subdirectory(world-app)
+    message(STATUS "WorldApp enabled (game modules found)")
 else()
-    message(STATUS "RoomServer disabled (requires APOLLO_BUILD_GAME_MODULE=ON)")
+    message(STATUS "WorldApp disabled (requires APOLLO_BUILD_GAME_MODULE=ON)")
 endif()
 
 # Game 模块

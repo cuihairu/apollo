@@ -143,21 +143,21 @@ bool test_render_histogram() {
     // histogram 族：TYPE 行 + _bucket 累计升档（含 +Inf）+ _sum + _count
     std::vector<Sample> samples;
     Sample h;
-    h.name = "room_server_tick_frame_ms";
+    h.name = "world_tick_frame_ms";
     h.is_histogram = true;
     h.histogram_bounds = {1.0, 20.0};
     h.histogram_buckets = {3, 4, 5};  // le=1 / le=20 / +Inf（累计）
     h.histogram_sum = 42.5;
     h.histogram_count = 5;
     samples.push_back(h);
-    const std::string text = metricspush::render_exposition(samples, "room-server");
+    const std::string text = metricspush::render_exposition(samples, "world");
     const std::string expected =
-        "# TYPE room_server_tick_frame_ms histogram\n"
-        "room_server_tick_frame_ms_bucket{proc=\"room-server\",le=\"1\"} 3\n"
-        "room_server_tick_frame_ms_bucket{proc=\"room-server\",le=\"20\"} 4\n"
-        "room_server_tick_frame_ms_bucket{proc=\"room-server\",le=\"+Inf\"} 5\n"
-        "room_server_tick_frame_ms_sum{proc=\"room-server\"} 42.5\n"
-        "room_server_tick_frame_ms_count{proc=\"room-server\"} 5\n";
+        "# TYPE world_tick_frame_ms histogram\n"
+        "world_tick_frame_ms_bucket{proc=\"world\",le=\"1\"} 3\n"
+        "world_tick_frame_ms_bucket{proc=\"world\",le=\"20\"} 4\n"
+        "world_tick_frame_ms_bucket{proc=\"world\",le=\"+Inf\"} 5\n"
+        "world_tick_frame_ms_sum{proc=\"world\"} 42.5\n"
+        "world_tick_frame_ms_count{proc=\"world\"} 5\n";
     if (text != expected) {
         std::cerr << "--- actual ---\n" << text << "--- expected ---\n"
                   << expected << std::endl;
@@ -169,8 +169,8 @@ bool test_render_histogram() {
     g.name = "entity_count";
     g.gauge_value = 9;
     samples.push_back(g);
-    const std::string mixed = metricspush::render_exposition(samples, "room-server");
-    TEST_ASSERT(mixed.find("# TYPE room_server_tick_frame_ms histogram\n") !=
+    const std::string mixed = metricspush::render_exposition(samples, "world");
+    TEST_ASSERT(mixed.find("# TYPE world_tick_frame_ms histogram\n") !=
                     std::string::npos &&
                 mixed.find("# TYPE entity_count gauge\n") != std::string::npos,
                 "混排 TYPE 各归其型");
@@ -406,9 +406,9 @@ bool test_hub_semantics() {
     admin::MetricsHubConfig cfg;
     cfg.max_body_bytes = 8;
     admin::MetricsHub limited(cfg);
-    limited.ingest("room-server", "ok\n", now_ms());
+    limited.ingest("world", "ok\n", now_ms());
     TEST_ASSERT(limited.ingested() == 1, "small body accepted");
-    limited.ingest("room-server", "way too long body\n", now_ms());
+    limited.ingest("world", "way too long body\n", now_ms());
     TEST_ASSERT(limited.rejected() == 1, "oversized body rejected");
     TEST_ASSERT(limited.ingested() == 1, "oversized not counted as ingested");
     const std::string kept = limited.render(now_ms());

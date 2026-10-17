@@ -1,5 +1,5 @@
 // §3.4 宿主启动装载·handler 面同步闸（玩法 Lua 批第一片）：
-// shipped handler 占位模块（apps/room-server/scripts/contract_handlers.lua）必须
+// shipped handler 占位模块（apps/world-app/scripts/contract_handlers.lua）必须
 // 满足 golden 契约（sdks/cpp/generated/contract.lua）的路由完整性闸——
 // apollo_gen 新增 reflect 消息而 handler 面没跟上时，此处即刻红。
 // 装载闸语义见 ScriptRuntime::load_contract（routes 逐条 resolve_handler）。
@@ -31,15 +31,15 @@ std::string read_whole_file(const char* path) {
 }  // namespace
 
 // 随仓 golden（绝对路径四树同源——同 script_tests 的生成器产物纪律）。
-#ifndef APOLLO_ROOM_SERVER_CONTRACT_HANDLERS_LUA
-#error "APOLLO_ROOM_SERVER_CONTRACT_HANDLERS_LUA not defined"
+#ifndef APOLLO_WORLD_APP_CONTRACT_HANDLERS_LUA
+#error "APOLLO_WORLD_APP_CONTRACT_HANDLERS_LUA not defined"
 #endif
 #ifndef APOLLO_GENERATED_CONTRACT_LUA
 #error "APOLLO_GENERATED_CONTRACT_LUA not defined"
 #endif
 
 TEST(ContractHandlers, ShippedHandlersSatisfyGeneratedContract) {
-    const std::string handlers = read_whole_file(APOLLO_ROOM_SERVER_CONTRACT_HANDLERS_LUA);
+    const std::string handlers = read_whole_file(APOLLO_WORLD_APP_CONTRACT_HANDLERS_LUA);
     ASSERT_FALSE(handlers.empty()) << "shipped handler module missing";
     const std::string contract = read_whole_file(APOLLO_GENERATED_CONTRACT_LUA);
     ASSERT_FALSE(contract.empty()) << "golden contract.lua missing";
@@ -56,7 +56,7 @@ TEST(ContractHandlers, ShippedHandlersSatisfyGeneratedContract) {
 }
 
 TEST(ContractHandlers, ContractDataFaceExposedAfterBootLoad) {
-    const std::string handlers = read_whole_file(APOLLO_ROOM_SERVER_CONTRACT_HANDLERS_LUA);
+    const std::string handlers = read_whole_file(APOLLO_WORLD_APP_CONTRACT_HANDLERS_LUA);
     const std::string contract = read_whole_file(APOLLO_GENERATED_CONTRACT_LUA);
     ASSERT_FALSE(handlers.empty());
     ASSERT_FALSE(contract.empty());

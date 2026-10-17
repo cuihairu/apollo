@@ -76,7 +76,7 @@ Apollo 不是只服务一种：
 而是要支持：
 
 - 轻在线
-- 房间制
+- 副本制
 - 普通 MMO
 - BigWorld 增强态
 
@@ -336,7 +336,7 @@ Apollo 应坚持：
 
 理由：
 
-- 例如当前 Apollo 的 `base-app` 和 `room-server` 都有历史语义偏差
+- 例如当前 Apollo 的 `base-app` 和 `world-app` 都有历史语义偏差
 
 优点：
 

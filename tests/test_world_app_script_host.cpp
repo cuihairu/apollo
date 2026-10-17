@@ -6,7 +6,7 @@
 // 观察面纪律：ScriptRuntime 归 gameThread_ 单写者（scripting-lua §2），故不断言
 // 其指针；一切跨线程观察走 Scene §7.1 队列（投递/回传两端自带互斥）。
 // 无 GTest，plain-assert + main 汇总（cell 族直编目标惯例）。
-#include "room_server/room_server.hpp"
+#include "world_app/world_app.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -32,10 +32,10 @@ int g_failures = 0;
         }                                                                          \
     } while (0)
 
-const char* kRouteJson = APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON;
+const char* kRouteJson = APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON;
 
-using room_server::RoomServerConfig;
-using room_server::RoomServer;
+using world_app::WorldAppConfig;
+using world_app::WorldApp;
 
 // 轮询谓词直到成立（每拍 sleep ≥2ms——macOS 裸自旋 flake 纪律）。
 template <typename Pred>
@@ -53,15 +53,15 @@ bool poll_until(Pred&& pred, int timeout_ms) {
 
 // 服务端：boot 路径按需；m1Port 0 = 内核分配（Windows 桩 listenPort 0，不断言）。
 struct ServerEnd {
-    RoomServerConfig config;
-    std::unique_ptr<RoomServer> server;
+    WorldAppConfig config;
+    std::unique_ptr<WorldApp> server;
 
     bool start(int tick_rate_ms) {
         config.tickRateMs = tick_rate_ms;
         config.m1Port = 0;
         config.m1RouteJson = kRouteJson;
         try {
-            server = std::make_unique<RoomServer>(config);
+            server = std::make_unique<WorldApp>(config);
             server->start();
         } catch (const std::exception& e) {
             std::cout << "  server start failed: " << e.what() << std::endl;
@@ -81,7 +81,7 @@ struct ServerEnd {
 struct BootFile {
     std::string path;
     BootFile(const std::string& source,
-             const char* name = "room_server_script_host_boot.lua")
+             const char* name = "world_script_host_boot.lua")
         : path(name) {
         std::ofstream out(path, std::ios::binary);
         out << source;
@@ -94,13 +94,13 @@ struct BootFile {
 };
 
 // 默认 scene（world 首建 = id 1）已挂上脚本宿主。
-bool default_scene_attached(RoomServer& server) {
+bool default_scene_attached(WorldApp& server) {
     auto* scene = server.find_scene(1);
     return scene != nullptr && scene->script_attached();
 }
 
 // 投一条 eval 并等回传结果（走 §7.1 队列：投递/回传自带互斥，跨线程安全）。
-bool eval_and_await(RoomServer& server, std::uint64_t id, const std::string& source,
+bool eval_and_await(WorldApp& server, std::uint64_t id, const std::string& source,
                     apollo::game::world::Scene::DebugEvalResult& out) {
     auto* scene = server.find_scene(1);
     if (scene == nullptr || !scene->enqueue_debug_eval(id, source)) {
@@ -152,7 +152,7 @@ bool test_missing_boot_file_keeps_cell_alive() {
     std::cout << "Running: test_missing_boot_file_keeps_cell_alive..." << std::endl;
 
     ServerEnd s;
-    s.config.scriptBootFile = "room_server_script_host_no_such_boot.lua";
+    s.config.scriptBootFile = "world_script_host_no_such_boot.lua";
     TEST_ASSERT(s.start(10), "server started with missing boot file");
 
     // runtime 仍照常建（boot 加载失败只发 warning），scene 照常挂上
@@ -224,7 +224,7 @@ bool test_contract_loads_at_boot_with_handlers() {
     // 契约能过装载闸 = handler 面先于契约落地（routes 引用的全局须已在位）。
     BootFile handlers("alpha_probe = function() end\n"
                       "beta_probe = function() end\n",
-                      "room_server_script_host_handlers.lua");
+                      "world_script_host_handlers.lua");
     BootFile contract(
         "return {\n"
         "  routes = {\n"
@@ -234,7 +234,7 @@ bool test_contract_loads_at_boot_with_handlers() {
         "  write_whitelist = {},\n"
         "  version = 7,\n"
         "}\n",
-        "room_server_script_host_contract.lua");
+        "world_script_host_contract.lua");
     BootFile boot("boot_seen_contract = tostring(contract and contract.version)\n");
 
     ServerEnd s;
@@ -269,7 +269,7 @@ bool test_contract_gate_rejects_missing_handler() {
     // 不存在；cell 照常服务（同 boot 源纪律）。
     BootFile contract(
         "return { routes = { [42003] = 'gamma_probe' }, version = 1 }\n",
-        "room_server_script_host_contract_bad.lua");
+        "world_script_host_contract_bad.lua");
 
     ServerEnd s;
     s.config.scriptContractFile = contract.path;
@@ -294,7 +294,7 @@ bool test_missing_contract_file_keeps_cell_alive() {
     std::cout << "Running: test_missing_contract_file_keeps_cell_alive..." << std::endl;
 
     ServerEnd s;
-    s.config.scriptContractFile = "room_server_script_host_no_such_contract.lua";
+    s.config.scriptContractFile = "world_script_host_no_such_contract.lua";
     TEST_ASSERT(s.start(10), "server started with missing contract file");
     TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
                 "scene attached after missing contract file");

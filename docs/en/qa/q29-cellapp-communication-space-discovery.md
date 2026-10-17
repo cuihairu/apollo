@@ -58,7 +58,7 @@ Many people easily understand it as:
 But real systems are usually more complex, because they also involve:
 
 - Multiple independent Spaces
-- Instances and rooms
+- Gameplay instances
 - Dynamic load balancing
 - Hotspot migration
 

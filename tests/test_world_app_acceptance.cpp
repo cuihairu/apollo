@@ -1,10 +1,10 @@
 // Cell 受理面批测试（P3-2 批 B / ADR-015(a)/016/017；2b-iii 迁 M1 受理缝）：
-//   受理队列单元面（FIFO/顶格拒收/两级水位滞回）+ RoomServer submitIntent
+//   受理队列单元面（FIFO/顶格拒收/两级水位滞回）+ WorldApp submitIntent
 //   受理判定（维护闸/tick 边界 drain/顶格拒收）。wire 回执面（2101/2001/延
-//   时 929）归 room_server_m1_link_tests（真 M1 链路断言），此处只断受理判定。
+//   时 929）归 world_m1_link_tests（真 M1 链路断言），此处只断受理判定。
 // 直编惯例同 scene_tests（无 GTest，plain-assert + main 汇总）；
-#include "room_server/acceptance_queue.hpp"
-#include "room_server/room_server.hpp"
+#include "world_app/acceptance_queue.hpp"
+#include "world_app/world_app.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 
@@ -29,10 +29,10 @@ int g_failures = 0;
         }                                                                         \
     } while (0)
 
-using room_server::AcceptanceQueue;
-using room_server::RoomServerConfig;
-using room_server::RoomServer;
-using room_server::IntentEnvelope;
+using world_app::AcceptanceQueue;
+using world_app::WorldAppConfig;
+using world_app::WorldApp;
+using world_app::IntentEnvelope;
 namespace protocol = apollo::protocol;
 
 // ---------- 受理队列单元面 ----------
@@ -100,7 +100,7 @@ bool test_queue_high_watermark_hysteresis() {
     return true;
 }
 
-// ---------- RoomServer 受理点接线 ----------
+// ---------- WorldApp 受理点接线 ----------
 
 std::vector<uint8_t> make_create_frame(std::uint64_t entity_id, protocol::SessionID session_id) {
     protocol::CellCreateEntity msg;
@@ -113,23 +113,23 @@ std::vector<uint8_t> make_create_frame(std::uint64_t entity_id, protocol::Sessio
     return protocol::MessageCodec::encode(msg, session_id);
 }
 
-room_server::IntentEnvelope make_create_intent(std::uint64_t entity_id,
+world_app::IntentEnvelope make_create_intent(std::uint64_t entity_id,
                                         protocol::SessionID session_id) {
-    room_server::IntentEnvelope intent;
+    world_app::IntentEnvelope intent;
     intent.type = protocol::MessageType::CELL_CREATE_ENTITY;
     intent.frame = make_create_frame(entity_id, session_id);
     intent.session_id = session_id;
     return intent;
 }
 
-room_server::IntentEnvelope make_move_intent(std::uint64_t entity_id,
+world_app::IntentEnvelope make_move_intent(std::uint64_t entity_id,
                                       protocol::SessionID session_id) {
     protocol::CellEntityMove msg;
     msg.entityId = entity_id;
     msg.newPos.x = 4.0f;
     msg.newPos.y = 5.0f;
     msg.newPos.z = 6.0f;
-    room_server::IntentEnvelope intent;
+    world_app::IntentEnvelope intent;
     intent.type = protocol::MessageType::CELL_ENTITY_MOVE;
     intent.frame = protocol::MessageCodec::encode(msg, session_id);
     intent.session_id = session_id;
@@ -139,9 +139,9 @@ room_server::IntentEnvelope make_move_intent(std::uint64_t entity_id,
 bool test_acceptance_gate_and_queue() {
     // tickRateMs=1000 + 首段 settle：gameThread 的首次 drain（空队列）已过，
     // 后续 drain 在 1s 外——入队计数断言确定性（不依赖调度时序）
-    RoomServerConfig config;
+    WorldAppConfig config;
     config.tickRateMs = 1000;
-    RoomServer server(config);
+    WorldApp server(config);
 
     // start 前：维护闸关 → 拒收
     TEST_ASSERT(!server.submitIntent(make_create_intent(1, 77)), "pre-start gated");
@@ -169,9 +169,9 @@ bool test_overload_rejects_at_cap() {
     // tickRateMs=1000：突发窗口内 gameThread 至多 drain 一次，故用 4×cap 突发
     // 保证拒收必现（单次 drain 让出的容量至多 cap，接得下上限 2×cap）；
     // 断言取调度容错形态——不依赖「突发恰好抢在首个 tick 前跑完」。
-    RoomServerConfig config;
+    WorldAppConfig config;
     config.tickRateMs = 1000;
-    RoomServer server(config);
+    WorldApp server(config);
     server.start();
 
     constexpr std::size_t kCap = AcceptanceQueue::kDefaultCap;
@@ -199,9 +199,9 @@ bool test_overload_rejects_at_cap() {
 bool test_drain_at_tick_boundary() {
     // ADR-015(a)：意图在 tick 边界执行——受理先入队，tick 后清空，随后恢复受理。
     // tickRateMs=1000 + 首段 settle：入队计数确定性，随后等 ≥1 tick 断言清空
-    RoomServerConfig config;
+    WorldAppConfig config;
     config.tickRateMs = 1000;
-    RoomServer server(config);
+    WorldApp server(config);
     server.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 

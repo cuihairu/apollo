@@ -1,10 +1,10 @@
-#include "room_server/m1_link_server.hpp"
+#include "world_app/m1_link_server.hpp"
 
 #if !defined(_WIN32)
 
 // net M1 接收端真实实现（M1 上层接线批 · 2b-ii）：InterServerLink passive
 // 端点 + 契约 wire 解包 + legacy 帧镜像。机制零内部线程——泵由宿主
-//（RoomServer::gameLoop）驱动，on_intent 投递与 sendIntentAck 都发生在
+//（WorldApp::gameLoop）驱动，on_intent 投递与 sendIntentAck 都发生在
 // 宿主泵线程内（单写者纪律，ADR-015(a)）。
 //
 // 镜像纪律：契约 924-928 字段与 legacy Cell*/Combat* 平铺一一对应（M1 契约
@@ -33,7 +33,7 @@
 
 #endif // !_WIN32
 
-namespace room_server {
+namespace world_app {
 
 #if !defined(_WIN32)
 
@@ -163,7 +163,7 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "room-server";
+        mc.self_name = "world";
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         manager_ = std::make_unique<link::LinkManager>(mc);
 
@@ -382,10 +382,10 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig /*config*/, std::function<void(IntentEnvelope)> /*on_intent*/,
     std::function<void(const std::string&, const DebugEvalRequest&)> /*on_debug_eval*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
-    // 实现：start true / 泵空转 / 应答丢弃），RoomServer 装配面无 #if。
+    // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();
 }
 
 #endif // !_WIN32
 
-} // namespace room_server
+} // namespace world_app
