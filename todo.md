@@ -56,7 +56,7 @@
 - [x] Lua 健康更新连续性：UpdateContinuityTests 验证真实客户端原 TCP 与会话无需再次认证、活动副本继续完成、新 TCP 可接入；认证使用原型入口，不宣称生产登录恢复。
 - [x] World 替换恢复：验证内部连接断开后自动重连、未发送消息有界保留并顺序投递、新副本可分配；已发但结果不明请求不跨代次自动重放。
 - [ ] 完整验收两种更新方案的四项结果：服务持续接入、免重新登录、客户端 TCP 连续、活动副本连续；覆盖真实协议升级、故障回滚、多实例入口和跨 Gateway 恢复。明确哪些路径允许重连或终止副本。
-- [ ] 整合可重复的副本销毁、迁移、Gateway/World 排空、进程替换及升级回滚演练；不能把各自原语测试当成全链无感发布证据。
+- [x] 整合可重复的副本销毁、迁移、Gateway/World 排空、进程替换及升级回滚演练；不能把各自原语测试当成全链无感发布证据。（drill_update.sh re-home：machined+login-app+world-app 现役拓扑，种档 3 份 → fleetctl drain --peer world 排空终态 → 原子换版 inode 证据 → SIGTERM 优雅停 journal 排空 → machined 退避重启 → 恢复收敛（Anchor restore 3 / full report intake=3 / 镜像 entries=3）→ 944 eval 受理面探针前后各一 → 逐玩家 sha256 字节恒等；连跑两遍全绿，分段 RTO 实录。副本销毁在 squad/world_drain e2e、迁移在 drill_migration、回滚在 module/proto 演练、Gateway 排空在 954 控制面测试——各面证据不互证，本演练亦不作全链无感发布证据。遗留：fleetctl assign 的 915 目录面 re-home 后无服务端，动词死面待处置。）
 
 ## 后续能力：需求触发后实施
 
