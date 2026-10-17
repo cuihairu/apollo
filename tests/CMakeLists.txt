@@ -1998,7 +1998,18 @@ endif()
 # Runtime sources host shared services even when executable apps are disabled.
 foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
-        target_link_libraries(${apollo_hosted_target} PRIVATE apollo_app_services)
+        # apollo_app_services 仅在 game 模块开启（⇒ apps/common 加入）时存在：
+        # 其守卫是 `TARGET apollo_protocol AND apollo::game_session`，而
+        # APOLLO_BUILD_GAME_MODULE 默认 OFF（CI 的 ci.yml 只开 TESTS、关
+        # EXAMPLES，未开 game）。此时 game/session 未建 ⇒ 守卫假 ⇒
+        # apps/common 不加入 ⇒ apollo_app_services 目标不存在，裸链会退化成
+        # `-lapollo_app_services`（非目标全路径）在 macOS 报「library not
+        # found」。base_m1_tests / login_m1_admission_tests 无条件
+        # add_executable 且直编所需源、不依赖该库符号（206bbfb4 前本就绿），
+        # 故 game-OFF 时守卫跳过；game-ON 的宿主壳照常链接。
+        if(TARGET apollo_app_services)
+            target_link_libraries(${apollo_hosted_target} PRIVATE apollo_app_services)
+        endif()
         # hosted 壳编进 world_app.cpp/login_server.cpp——其头面直含 discovery
         # （编队面 re-home），include 路径与库经此传递
         target_link_libraries(${apollo_hosted_target} PRIVATE apollo::net_discovery)
