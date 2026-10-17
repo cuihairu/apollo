@@ -74,6 +74,10 @@ struct LinkEventSink {
 struct LinkConfig {
     std::string self_name;            // 进程身份（G-1 组件名）
     std::uint64_t route_version = 0;  // 握手比对（schema hash 前缀）
+    // N-1 兼容窗口（sdk-contract §6 发布窗）：受理集 = {route_version} ∪
+    // 本表。滚动发布期两端各带窗口（hello 互检按各自受理集裁决），收敛后
+    // 撤窗恢复唯一版本纪律。空 = 无窗（仅本代，行为同前）。
+    std::vector<std::uint64_t> compat_route_versions;
     std::uint64_t authority_epoch = 1;
     WatermarkConfig watermark;
     std::uint64_t cut_close_ms = 5000;            // cut 持续 → 断
@@ -130,6 +134,10 @@ public:
     // 对端自报名（Hello 携带的组件名；空 = 握手未毕）。1:N 接收端据它
     // 归档/路由（LinkManager passive fan-out 按此键）。
     const std::string& peer_name() const { return peer_name_; }
+    // 对端 Hello 携带的 route_version（0 = 握手未毕/被拒）。兼容窗口期上
+    // 层据它识别对端代次，选对应解码口径（sdk-contract §6：协商与配套解
+    // 码器成对验证）。
+    std::uint64_t peer_route_version() const { return peer_route_version_; }
     const LinkConfig& config() const { return config_; }
 
     // 观测面（§5.6 M1 验收：背压可见、断连可检）。
@@ -200,6 +208,7 @@ private:
     std::uint64_t peer_epoch_ = 0;
     bool peer_epoch_seen_ = false;  // 本实例是否收到过 Hello（重启判定基准）
     std::string peer_name_;         // 对端自报名（Hello；空 = 握手未毕）
+    std::uint64_t peer_route_version_ = 0;  // 对端代次（Hello；0 = 握手未毕）
 
     // 收端去重 / ack 面（keyed by 对端 epoch；epoch 变即重置）。
     std::uint64_t rx_epoch_ = 0;

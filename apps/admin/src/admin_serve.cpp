@@ -95,6 +95,7 @@ int run_serve(const ServeOptions& options) {
     link::LinkManagerConfig mc;
     mc.self_name = "admin";
     mc.route_version = link::route_version_from_hash(table.schema_hash());
+        mc.compat_route_versions = link::compat_route_versions_from_env();
     link::LinkManager manager(mc);
 
     link::EndpointConfig ep;

@@ -262,13 +262,19 @@ void InterServerLink::handle_hello(const std::uint8_t* body, std::size_t size) {
         finish_down(LinkDownReason::kProtocolError);
         return;
     }
-    if (route_version != config_.route_version) {
+    // 版本受理集 = {本代} ∪ compat_route_versions（N-1 兼容窗口，sdk-contract
+    // §6 发布窗）：窗内旧代正常握手（上层按 peer_route_version 选代次口径），
+    // 窗外仍拒。窗口是发布期的双向声明（两端各自开窗互检），收敛后撤窗。
+    if (route_version != config_.route_version &&
+        std::find(config_.compat_route_versions.begin(), config_.compat_route_versions.end(),
+                  route_version) == config_.compat_route_versions.end()) {
         finish_down(LinkDownReason::kRouteVersionMismatch);
         return;
     }
 
     // 对端自报名（握手三元组第一元；重连重握手覆盖——对端身份以最新为准）。
     peer_name_.assign(reinterpret_cast<const char*>(body) + 24, name_len);
+    peer_route_version_ = route_version;
 
     if (peer_epoch_seen_ && epoch != peer_epoch_) {
         // 对端重启（§5.7：epoch 失配 ≠ 断线重连）：清可靠队列（老一代永不再

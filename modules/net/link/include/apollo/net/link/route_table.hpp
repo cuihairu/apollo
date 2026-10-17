@@ -49,4 +49,15 @@ private:
 // sdk-contract §10.6 装载期三件互检，不在链路层）。
 std::uint64_t route_version_from_hash(const std::string& hash_hex);
 
+// 兼容窗口装配文本 → 握手 route_version 集合（sdk-contract §6 N/N-1 发布
+// 窗）：逗号/空白分隔的旧代 schema_hash 列表，逐个按 route_version_from_hash
+// 口径转换。空段跳过、零值结果跳过（空文本/全非法 = 无窗）；错 hash = 窗对
+// 空代，握手期显形（旧代对端照拒，不静默放宽）。
+std::vector<std::uint64_t> compat_route_versions_from_text(const std::string& text);
+
+// APOLLO_ROUTE_COMPAT 环境变量 → 兼容窗口集合（进程装配期一口读入；未设/
+// 空 = 无窗）。滚动发布 ops 面与既有环境装配惯例同权（APOLLO_WEBHOOK_URL /
+// APOLLO_ALERT_RULES / APOLLO_LOGGER_*）。
+std::vector<std::uint64_t> compat_route_versions_from_env();
+
 }  // namespace apollo::net::link

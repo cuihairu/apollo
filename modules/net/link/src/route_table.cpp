@@ -2,6 +2,8 @@
 
 #include "apollo/net/link/route_table.hpp"
 
+#include <cstdlib>
+
 namespace apollo::net::link {
 
 bool RouteTable::add(RouteEntry entry) {
@@ -51,6 +53,37 @@ std::uint64_t route_version_from_hash(const std::string& hash_hex) {
         v <<= 4 * (16 - taken);
     }
     return v;
+}
+
+std::vector<std::uint64_t> compat_route_versions_from_text(const std::string& text) {
+    std::vector<std::uint64_t> out;
+    std::string token;
+    auto flush_token = [&] {
+        if (token.empty()) {
+            return;  // 空段跳过（连续分隔符 / 尾逗号）
+        }
+        const std::uint64_t v = route_version_from_hash(token);
+        token.clear();
+        if (v != 0) {
+            out.push_back(v);  // 零值（空/非 hex）跳过：窗对空代无意义
+        }
+    };
+    for (const char c : text) {
+        if (c == ',' || c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            flush_token();
+        } else {
+            token.push_back(c);
+        }
+    }
+    flush_token();
+    return out;
+}
+
+std::vector<std::uint64_t> compat_route_versions_from_env() {
+    if (const char* raw = std::getenv("APOLLO_ROUTE_COMPAT")) {
+        return compat_route_versions_from_text(raw);
+    }
+    return {};
 }
 
 }  // namespace apollo::net::link

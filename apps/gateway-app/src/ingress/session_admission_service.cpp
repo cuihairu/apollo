@@ -69,6 +69,7 @@ public:
         mc.self_name = "gateway";
         mc.route_version =
             apollo::net::link::route_version_from_hash(route_table_->schema_hash());
+        mc.compat_route_versions = apollo::net::link::compat_route_versions_from_env();
         manager_ = std::make_unique<apollo::net::link::LinkManager>(mc);
 
         apollo::net::link::EndpointConfig ep;

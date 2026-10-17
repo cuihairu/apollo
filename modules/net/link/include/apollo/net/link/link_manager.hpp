@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -52,6 +53,9 @@ struct EndpointConfig {
 struct LinkManagerConfig {
     std::string self_name;            // 本进程身份（各 Link 的 self_name 同值）
     std::uint64_t route_version = 0;  // 握手比对（全端点一致）
+    // N-1 兼容窗口（sdk-contract §6）：逐链下发到各 LinkConfig（active 与
+    // passive fan-out 同源）。空 = 无窗。
+    std::vector<std::uint64_t> compat_route_versions;
     std::uint64_t authority_epoch = 1;
     std::uint32_t backoff_initial_ms = 500;
     std::uint32_t backoff_max_ms = 15000;

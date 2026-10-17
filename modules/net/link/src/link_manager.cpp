@@ -10,6 +10,7 @@ LinkManager::Managed::Managed(const EndpointConfig& cfg, const LinkManagerConfig
     : config(cfg) {
     link_config.self_name = mc.self_name;
     link_config.route_version = mc.route_version;
+    link_config.compat_route_versions = mc.compat_route_versions;
     link_config.authority_epoch = mc.authority_epoch;
     // active 角色链路在此；passive 的链路族群由 pump 按对端各建（fan-out）。
     if (cfg.role == EndpointRole::kActive) {
