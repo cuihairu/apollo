@@ -375,6 +375,9 @@ int runResolve(const Options& opt, ControlDial& dial) {
 int runMigrate(const Options& opt, ControlDial& dial) {
     migration::MigrateRequest req;
     req.player_id = opt.player_id;
+    // 迁移标识（P3-6）：进程内单调（now_ms），目录按 (player, request_id)
+    // 幂等——同标识重试回缓存回执，不重跑编排
+    req.request_id = now_ms();
     req.source_host = opt.source_host;
     req.source_port = opt.source_port;
     req.target_host = opt.target_host;

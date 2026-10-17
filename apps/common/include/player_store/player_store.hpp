@@ -155,6 +155,13 @@ private:
     // 迁移快照暂存（P0-2 路 2 ②'：收 936 落、③ handoff 受理取用取走）
     std::unordered_map<PlayerID, PlayerSnapshotData> migrationSnapshots_;
 
+    // 已接权威代次高水位（P3-6 重复接管拒绝）：player → 已 adopt 的最大
+    // new_epoch。handoff new_epoch ≤ 高水位 = 重复/旧代次接管，拒——迟到的
+    // 旧 937 会按暂存快照（或现场重拉旧档）二次 adopt，覆盖目标侧迁移后
+    // 新写。进程内存账（同 migrationSnapshots_ 生命周期）；目标进程重启于
+    // 迁移窗内 = §9.2 人工介入形态，不自动裁决。
+    std::unordered_map<PlayerID, std::uint64_t> adoptedEpochs_;
+
     std::thread autoSaveThread_;
 };
 

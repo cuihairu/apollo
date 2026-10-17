@@ -169,6 +169,12 @@ const std::unordered_map<std::uint64_t, std::uint64_t>& PlayerAnchor::quests() c
 }
 
 void PlayerAnchor::add_progress(std::string_view key, std::int64_t delta) {
+    // 冻结只读（P3-6 迟到输入）：Transferring = 写权已交新进程（§9.2 ①）
+    // ——迟到业务写（含结算 exp）不进内存账（防脏）也不标脏（autoSave 冻
+    // 结跳过等于静默丢单；调用面按 SettlementLedger 挂账口径处置）。
+    if (state_ == AnchorState::Transferring) {
+        return;
+    }
     if (key.empty() || delta == 0) {
         return;
     }

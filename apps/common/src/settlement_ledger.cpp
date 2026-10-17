@@ -17,6 +17,14 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
     it->second.attempted = true;
     // 锚点缺失挂账不落：分值保留，待重试/补账收口。
     auto* anchor = resolver_ ? resolver_(player_id) : nullptr;
+    // 冻结锚点同挂账（P3-6 迟到输入/迟到结算拒绝）：Transferring = 写权已
+    // 交新进程——本域不得再落账（否则目标侧重算即双记）；分值保留，待
+    // 权威侧裁决（跨域结算重定向属后续跨服条目）。
+    if (anchor && anchor->state() ==
+                      apollo::game::session::AnchorState::Transferring) {
+        it->second.score = score;
+        return ApplyError::AnchorUnavailable;
+    }
     if (!anchor) {
         it->second.score = score;
         return ApplyError::AnchorUnavailable;

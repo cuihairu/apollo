@@ -173,6 +173,14 @@ private:
     std::string m1_route_json_;
     std::unique_ptr<M1ControlServer> m1Server_;
 
+    // 迁移标识幂等账（P3-6 重复编排拒绝）：player → (request_id, 成功回执
+    // 帧)。request_id != 0 的重放直接回缓存（不重跑 ①③④——重复编排会以
+    // 旧代次重拉快照二次接管目标）；失败不缓存（ops 同标识重试 = 真重跑，
+    // 网络态失败可自愈）；request_id = 0 = 调用方未供标识，不进不查（每
+    // 次真执行）。M1 控制面单泵线程串行化受理，免锁。
+    std::unordered_map<PlayerID, std::pair<std::uint64_t, std::vector<uint8_t>>>
+        migrateReplies_;
+
     // 目录：session→binding 双向映射复用 SessionLocator（自带锁）；
     // player→assignment 目录为本进程独有，独立互斥锁保护。
     // P1-2：条目级真值升级为 PlayerDirectory（顶号/事件族/epoch/对账）。

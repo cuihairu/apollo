@@ -115,6 +115,15 @@ bool PlayerStore::bindSession(
     const apollo::game::session::SessionBinding& binding
 ) {
     auto anchor = anchorManager_->find(playerId);
+    // 冻结锚点拒绑（P3-6 迟到输入）：写权已交新进程（§9.2 ①），迟到
+    // 重绑/重连不得把 Transferring 翻回 Online（否则源域重获写权 + 重回
+    // 在册集，双写不变量破口）
+    if (anchor &&
+        anchor->state() == apollo::game::session::AnchorState::Transferring) {
+        blog().warning("Player " + std::to_string(playerId)
+                       + " bind rejected (frozen for migration)");
+        return false;
+    }
     if (!anchor) {
         anchor = activatePlayer(playerId);
     }
@@ -403,6 +412,18 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
 
     protocol::DbSaveResponse response;
     response.success = false;
+
+    // 冻结锚点拒存（P3-6 迟到输入）：迁移只读态不入 journal/队列，不置
+    // Saving——旧路径在此翻写态（覆盖 Transferring）+ 入段，与无双写不变
+    // 量（§9.2 ①）正面冲突
+    if (const auto anchor = anchorManager_->find(saveReq.playerId);
+        anchor &&
+        anchor->state() == apollo::game::session::AnchorState::Transferring) {
+        response.errorMessage = "player frozen for migration";
+        blog().warning("Save rejected for player " + std::to_string(saveReq.playerId)
+                       + " (frozen for migration)");
+        return protocol::MessageCodec::encode(response, header.sessionId);
+    }
 
     // 异步保存
     SaveTask task;
@@ -699,6 +720,24 @@ std::vector<uint8_t> PlayerStore::handlePlayerHandoffRequest(
         return protocol::MessageCodec::encode(
             err, protocol::MessageCodec::parseHeader(request).sessionId);
     }
+    // 重复接管拒绝（P3-6 权威代次高水位）：new_epoch ≤ 本店已接代 = 旧
+    // 937 重放/迟到交权，拒于拉取之前——不重拉旧档、不二次 adopt（否则
+    // 覆盖目标侧迁移后新写）。见 adoptedEpochs_ 成员注。
+    {
+        const auto adopted = adoptedEpochs_.find(req.player_id);
+        if (adopted != adoptedEpochs_.end() &&
+            req.new_epoch <= adopted->second) {
+            migration::HandoffReply dup;
+            dup.player_id = req.player_id;
+            dup.request_id = req.request_id;
+            dup.error_message =
+                "duplicate takeover: epoch " + std::to_string(req.new_epoch)
+                + " <= adopted " + std::to_string(adopted->second);
+            blog().warning("Player " + std::to_string(req.player_id)
+                           + " handoff rejected (" + dup.error_message + ")");
+            return migration::encodeFrame(dup, session);
+        }
+    }
     // 快照落位前置（②'）：无暂存且 937 带源地址 = 现场拉取（五步②——
     // 新 zone 向老 zone 拨 935，老的已先 flush 再发；同步 ms 级，迁移面
     // 低频，批量异步化挂后续批）。源为空且无暂存 = 拒（②→③ 不可跳）。
@@ -738,6 +777,8 @@ std::vector<uint8_t> PlayerStore::handlePlayerHandoffRequest(
                                  req.gateway_id, homeZone);
     if (!reply.accepted) {
         reply.error_message = "adopt failed";
+    } else {
+        adoptedEpochs_[req.player_id] = req.new_epoch;  // 权威代次落账（§9.2 ③）
     }
     blog().info("Player " + std::to_string(req.player_id) + " handoff accepted (new epoch="
                 + std::to_string(req.new_epoch) + ")");

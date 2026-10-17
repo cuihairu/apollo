@@ -345,6 +345,9 @@ std::vector<uint8_t> OnlineDirectory::handlePing(const std::vector<uint8_t>& req
 // 编排命令入口（942→943；ops/fleetctl 同步等 943，耗时字段原样回带——
 // §9.8 单玩家切换耗时实测即此面出数）。解析失败回 ErrorMessage；migratePlayer
 // 的失败语义（含 ③ 后不可撤销）全在编排函数内，此层只转译。
+// 迁移标识幂等（P3-6）：同 (player, request_id) 重放 = 缓存成功回执原样回
+// 带（不重跑编排——重复编排会二次冻结源并二次接管目标）；失败不缓存，
+// request_id = 0 不进账（见成员注）。
 std::vector<uint8_t> OnlineDirectory::handlePlayerMigrateRequest(
     const std::vector<uint8_t>& request) {
     protocol::SessionID session = 0;
@@ -355,6 +358,13 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerMigrateRequest(
         err.message = "Bad player migrate request";
         return protocol::MessageCodec::encode(
             err, protocol::MessageCodec::parseHeader(request).sessionId);
+    }
+
+    if (req.request_id != 0) {
+        const auto it = migrateReplies_.find(req.player_id);
+        if (it != migrateReplies_.end() && it->second.first == req.request_id) {
+            return it->second.second;
+        }
     }
 
     const auto res = migratePlayer(req.player_id, req.source_host,
@@ -378,7 +388,11 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerMigrateRequest(
                + (res.ok ? std::string(" ok total_ms=") : std::string(" failed (")
                   + res.error_message + ") total_ms=")
                + std::to_string(res.total_ms));
-    return migration::encodeFrame(reply, session);
+    std::vector<uint8_t> out = migration::encodeFrame(reply, session);
+    if (res.ok && req.request_id != 0) {
+        migrateReplies_[req.player_id] = {req.request_id, out};
+    }
+    return out;
 }
 
 int64_t OnlineDirectory::getCurrentTimeMs() const {
