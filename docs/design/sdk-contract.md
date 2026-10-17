@@ -58,7 +58,7 @@ XML/XSD 契约是生成元数据的事实源。契约、字节编码、传输与
 
 生成物包含 schema、client 和 internal 指纹。客户端包只暴露客户端域，内部变化不应把内部 schema 泄露给客户端。哈希可判断不一致，不能独自判断兼容。
 
-当前 InterServerLink 的 route_version 不匹配会拒绝握手；它尚未提供 N/N-1 双版本业务解码和发布窗口。新旧版本支持范围必须通过显式协商与对应解码器验证。
+当前 InterServerLink 的握手受理集 = {本代 route_version} ∪ compat_route_versions（N/N-1 发布窗口；`APOLLO_ROUTE_COMPAT` 以旧代 schema_hash 列表开窗，双向声明、收敛撤窗、窗外仍拒），对端代次经 `peer_route_version()` 可观测。业务层 N/N-1 双版本解码尚未提供：窗口只保证握手与路由 id 可达，按代次选解码器必须由消费者按真实编码与语义另行验证。
 
 字段增加不自动兼容：当前定长字段序列编码、protobuf 编码以及业务默认值可能有不同结果。变更分类必须依据真实使用的编码和语义，不能只依据 XML diff。
 

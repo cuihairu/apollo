@@ -48,7 +48,7 @@
 
 ## P4：两种更新方案与排空
 
-- [ ] 协议更新：补齐版本协商、新旧契约兼容窗口及兼容检查，分别验证兼容变更和破坏性变更的发布/回滚。
+- [x] 协议更新：补齐版本协商、新旧契约兼容窗口及兼容检查，分别验证兼容变更和破坏性变更的发布/回滚。（49fb17e1/c9bc67a9/c7eca2a6：版本协商与兼容窗口——链路握手受理集 = {本代} ∪ compat_route_versions（LinkConfig/LinkManagerConfig 逐链下发，active 与 passive fan-out 同源），对端代次 peer_route_version() 可观测（上层据此选代次解码口径）；APOLLO_ROUTE_COMPAT 环境变量按旧代 schema_hash 列表开窗（13 个 M1 面统一装配，空 = 无窗行为同前），fleetctl 另有 APOLLO_FLEETCTL_ROUTE_JSON 代次注入（演练旧代拨入面）；兼容检查——窗外仍 kRouteVersionMismatch（N-2 拒）、验收期真进程 drill_proto_update 三形全过：A 破坏性（窗关旧代 UNREACHABLE exit 3，先以同代探针证服务面在把 exit 3 归因版本）、B 兼容发布（两端各带窗，旧代 resolve round-trip exit 2、本代与窗共存）、C 回滚收敛（撤窗本代健在 exit 2、旧代再拒 exit 3）；单测 link_compat_window（窗内互连 + 业务过窗 + 代次观测）/link_compat_window_edges（窗外拒 + 关窗拒 + 服务端回滚拒 + 双端同回 up 四形）/manager_compat_window（转发到 fan-out 链）/compat_route_versions_from_text，先红（窗对 up 失败）后绿；门禁 build-examples/build-off 双树 80/80、san 树 79/79。业务层 N/N-1 双版本解码未建（sdk-contract §6 明示：窗口只保证握手与路由 id 可达，按代次选解码器归消费者按真实编码验证——增字段不自动兼容，定长序列/protobuf/默认值语义各异）。）
 - [ ] 仅代码更新：复用 Lua prepare/commit/canary/rollback 和现有 ModuleRollout 原语，补齐跨 World 的可靠投递、观察和失败回滚接线。
 - [ ] Gateway 排空：停止接受新连接，保留既有连接服务至自然退出或明确期限；定义强停结果。
 - [ ] World 排空：停止分配新副本，等待活动副本结算并销毁；定义超时、强停与恢复策略。C++ 更新通过进程替换完成。
