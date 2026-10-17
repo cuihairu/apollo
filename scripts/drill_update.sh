@@ -3,6 +3,10 @@
 # 原子换二进制 → SIGTERM 优雅停（journal 排空）→ machined 退避重启 →
 # 恢复相位收敛 → 排空解除 → 逐玩家存档哈希比对。
 #
+# 【待迁移（todo P4 更新排空条目）】：本演练仍指向已退场的 baseappmgr/
+# base-app 进程（22438e36 re-home 后 Login/World 承接其面）。P4 更新/排空
+# 条目开工时按 drill_kill9.sh 的 re-home 版拓扑迁移；迁移完成前本脚本
+# 不作为验收证据。
 # 用法：scripts/drill_update.sh
 #   APOLLO_BUILD_DIR    构建树（默认 <repo>/build，须 GAME_MODULE=ON 已构建）
 #   APOLLO_DRILL_DIR    运行目录（默认 /tmp/apollo-drill-update-<pid>）

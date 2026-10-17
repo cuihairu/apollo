@@ -3,6 +3,10 @@
 # + §9.8 唯一待定档「单玩家切换耗时」实测件）：两 zone 真进程 + manager 编排面，
 # fleetctl migrate 驱动（942→943），逐段耗时取自进程自身（不墙钟反推）。
 #
+# 【待迁移（todo P3 跨 World 迁移条目）】：本演练仍指向已退场的 baseappmgr/
+# base-app 进程（22438e36 re-home 后 Login/World 承接其面）。跨 World 迁移
+# 条目开工时按 drill_kill9.sh 的 re-home 版拓扑迁移（login-app = 编排面、
+# world-app = 两 zone 承载面）；迁移完成前本脚本不作为验收证据。
 # 用法：scripts/drill_migration.sh
 #   APOLLO_BUILD_DIR   构建树（默认 <repo>/build，须 GAME_MODULE=ON 已构建）
 #   APOLLO_DRILL_DIR   运行目录（默认 /tmp/apollo-drill-migration-<pid>）
