@@ -16,12 +16,23 @@
 //      锚点（Transferring）离源端在册集，不再以源域上报回卷 ④ 改指；
 //   5. 失败恢复：源不可达 = 干净拒绝（目录不动）；目标不可达（冻结已生效）
 //      = 如实失败，源停留 Transferring（③ 前可回退、③ 后不可撤销面的
-//      §9.2 形态）、目录不改指。
+//      §9.2 形态）、目录不改指；
+//   6. 迁移标识幂等：同 (player, request_id) 重放返回缓存成功回执，不重跑
+//      编排（目标锚/落盘档案/目录代次全不动）；
+//   7. 重复接管拒绝：目标侧权威代次高水位——new_epoch ≤ 已接代的迁移
+//      937 直拨目标 = 拒（duplicate takeover，不落快照不 adopt）；
+//   8. 迟到输入拒绝（源冻结只读）：933 后会话重绑拒、DB 存档 wire 拒、
+//      锚点进度写静默拒（防脏）、结算落账面 AnchorUnavailable 挂账不落
+//      （迟到结算不得双记——重复结算拒绝面在 SettlementLedger 幂等 +
+//      冻结拒绝两道）。
 
 #include "apollo/net/discovery/udp_transport.hpp"
+#include "apollo/protocol/messages.hpp"
 #include "login/login_server.hpp"
 #include "player_store/database_service.hpp"
 #include "player_store/migration_wire.hpp"
+#include "player_store/store_dial.hpp"
+#include "squad_instance/settlement_ledger.hpp"
 #include "world_app/world_app.hpp"
 
 #include <chrono>
@@ -286,6 +297,111 @@ void migration_chain() {
         const auto* mirrored = mirror.find(42);
         require(mirrored && mirrored->zone_id == 5,
                 "mirror zone regressed after periodic reports");
+    }
+
+    // 6. 迁移标识幂等：同 (player, request_id) 重放 = 缓存成功回执，不重跑
+    //    （目标锚点/落盘档案/目录代次全不动——重复编排不得二次接管）
+    {
+        std::string landed_json;
+        {
+            std::ifstream in(new_config.playerStore.dataDir + "/player_42.json",
+                             std::ios::binary);
+            landed_json.assign((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+        }
+        const auto replay =
+            migrate(*login.onlineDirectory(), 42, 46131, 46141, 5);
+        require(replay.ok, "replayed migrate must return cached success");
+        require(replay.new_epoch == reply.new_epoch,
+                "replayed migrate must not advance epoch");
+        const auto* entry = login.onlineDirectory()->directory().find(42);
+        require(entry && entry->anchor_epoch == reply.new_epoch,
+                "directory epoch advanced by replayed migrate");
+        const auto anchor = world_new.playerStore()->findAnchor(42);
+        require(anchor != nullptr &&
+                    anchor->state() == session::AnchorState::Online &&
+                    anchor->session_binding().session_id == 4242,
+                "replayed migrate disturbed target anchor");
+        {
+            std::ifstream in(new_config.playerStore.dataDir + "/player_42.json",
+                             std::ios::binary);
+            std::string json((std::istreambuf_iterator<char>(in)),
+                             std::istreambuf_iterator<char>());
+            require(json == landed_json,
+                    "replayed migrate rewrote target profile");
+        }
+    }
+    // 7. 重复接管拒绝：目标权威代次高水位（new_epoch ≤ 已接代 = 拒）
+    {
+        migration::HandoffRequest stale;
+        stale.player_id = 42;
+        stale.request_id = 2;
+        stale.new_epoch = 1;  // 高水位已 2（主线迁移接代）——旧代次重放
+        stale.session_id = 4242;
+        stale.gateway_id = 7;
+        player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "login", "world",
+                                     "127.0.0.1", 46141);
+        require(dial.ready() && dial.waitUp(), "target store dial failed");
+        const auto raw = dial.call(migration::encodeFrame(stale));
+        require(raw.has_value(), "stale handoff reply missing");
+        migration::HandoffReply hr;
+        protocol::SessionID sid = 0;
+        require(migration::decodeFrame(*raw, hr, sid) && !hr.accepted,
+                "stale handoff not rejected");
+        require(hr.error_message.find("duplicate takeover") != std::string::npos,
+                "stale handoff rejection must name duplicate takeover");
+        dial.shutdown();
+        const auto anchor = world_new.playerStore()->findAnchor(42);
+        require(anchor != nullptr && anchor->state() == session::AnchorState::Online,
+                "rejected takeover disturbed target anchor");
+    }
+    // 8. 迟到输入拒绝（源冻结只读——Transferring 不再受理任何写面）
+    {
+        // 8a. 会话重绑拒（绑定列不动）
+        require(!world_old.playerStore()->bindSession(42, binding_of(9999, 9)),
+                "late session bind on frozen anchor accepted");
+        const auto anchor = world_old.playerStore()->findAnchor(42);
+        require(anchor != nullptr &&
+                    anchor->state() == session::AnchorState::Transferring &&
+                    anchor->session_binding().session_id == 4242,
+                "late bind disturbed frozen anchor");
+        // 8b. DB 存档 wire 拒（迟到客户端存档不得置回写态）
+        protocol::DbSaveRequest save;
+        save.playerId = 42;
+        save.jsonData = seeded.toJson();
+        player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "login", "world",
+                                     "127.0.0.1", 46131);
+        require(dial.ready() && dial.waitUp(), "source store dial failed");
+        const auto raw = dial.call(protocol::MessageCodec::encode(save, 0));
+        require(raw.has_value(), "late db save reply missing");
+        const auto hdr = protocol::MessageCodec::parseHeader(*raw);
+        require(static_cast<protocol::MessageType>(hdr.type) ==
+                    protocol::MessageType::DB_SAVE_RESPONSE,
+                "late db save reply type wrong");
+        const auto body = std::vector<std::uint8_t>(
+            raw->begin() + sizeof(protocol::MessageHeader), raw->end());
+        const auto resp =
+            protocol::MessageCodec::decodeBody<protocol::DbSaveResponse>(body);
+        require(!resp.success, "late db save on frozen anchor accepted");
+        const auto after = world_old.playerStore()->findAnchor(42);
+        require(after != nullptr &&
+                    after->state() == session::AnchorState::Transferring,
+                "late db save broke frozen read-only state");
+        dial.shutdown();
+        // 8c. 锚点进度写静默拒（迟到业务写不进内存账——防脏 + 防结算双记）
+        after->add_progress("exp", 100);
+        require(after->progress("exp") == 0 && !after->needs_save(),
+                "frozen anchor accepted progress write");
+        // 8d. 结算落账面：冻结锚点 = AnchorUnavailable 挂账不落
+        squad_instance::SettlementLedger ledger;
+        ledger.begin({42}, [&world_old](std::uint64_t pid) {
+            return world_old.playerStore()->findAnchor(pid).get();
+        });
+        require(ledger.apply(42, 50) ==
+                    squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
+                "late settlement on frozen anchor not held");
+        require(ledger.snapshot().pending == 1 && ledger.snapshot().applied == 0,
+                "held settlement disturbed ledger state");
     }
 
     login.stop();
