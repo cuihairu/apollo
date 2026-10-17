@@ -1996,9 +1996,12 @@ add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
 endif()
 
 # Runtime sources host shared services even when executable apps are disabled.
-foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
         target_link_libraries(${apollo_hosted_target} PRIVATE apollo_app_services)
+        # hosted 壳编进 world_app.cpp/login_server.cpp——其头面直含 discovery
+        # （编队面 re-home），include 路径与库经此传递
+        target_link_libraries(${apollo_hosted_target} PRIVATE apollo::net_discovery)
     endif()
     # world_app.cpp 编入的目标需小队受理面符号（P2）
     if(TARGET ${apollo_hosted_target} AND TARGET apollo_squad_instance)
@@ -2022,11 +2025,39 @@ target_include_directories(hosted_services_tests PRIVATE
 target_compile_definitions(hosted_services_tests PRIVATE
     APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
 target_link_libraries(hosted_services_tests PRIVATE apollo_app_services
-    apollo::game_world apollo::script apollo::net_linktrace)
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
 if(TARGET apollo_squad_instance)
     target_link_libraries(hosted_services_tests PRIVATE apollo_squad_instance)
 endif()
 add_test(NAME HostedServicesTests COMMAND hosted_services_tests)
+endif()
+
+# ========== Fleet Re-home Chain Tests (P3-1 真实进程链验收) ==========
+# 编队面 re-home：真 LoginServer（目录 owner 三面——镜像/恢复 intake/死亡
+# 订阅）+ 真 WorldApp（FleetReporter 全量重报）+ 测试侧 machined 替身，
+# 全 UDP 回环。断言事实源 = 门闸判定 / 目录条目态 / 镜像投影（日志不算
+# 证据）。Windows 下 UDP 面用例本体空转。
+if(TARGET apollo::game_world AND TARGET apollo_app_services)
+add_executable(fleet_rehome_chain_tests
+    test_fleet_rehome_chain.cpp
+    ../apps/world-app/src/world_app.cpp
+    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/login-app/src/login_server.cpp
+    ../apps/login-app/src/m1_admission_server.cpp
+    ../apps/login-app/src/m1_base_client.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp)
+target_include_directories(fleet_rehome_chain_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include)
+target_compile_definitions(fleet_rehome_chain_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+target_link_libraries(fleet_rehome_chain_tests PRIVATE apollo_app_services
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
+if(TARGET apollo_squad_instance)
+    target_link_libraries(fleet_rehome_chain_tests PRIVATE apollo_squad_instance)
+endif()
+add_test(NAME FleetRehomeChainTests COMMAND fleet_rehome_chain_tests)
 endif()
 
 # Squad instance admission (P2)：小队创建请求受理——队伍/成员/人数/准入
