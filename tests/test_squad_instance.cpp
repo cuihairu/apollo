@@ -1149,6 +1149,165 @@ bool test_squad_hooks_close_on_release() {
     return true;
 }
 
+// 单 World 多副本玩法期隔离（P2-8）：两副本并发 Running——怪号全流水不撞号、
+// 击杀进度/玩法时钟互不串场、结算收尾单边释放不惊动邻副本、账面随副本隔离。
+bool test_squad_concurrent_instances_gameplay_isolation() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    make_party(parties, 2, 200, 201, 202);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    const auto a = service.launch(basic_request(1));
+    const auto b = service.launch(basic_request(2, 200));
+    TEST_ASSERT(a.error == LaunchError::Ok && b.error == LaunchError::Ok, "both launched");
+    TEST_ASSERT(a.world_id == 1 && b.world_id == 1 && a.instance_id != b.instance_id,
+                "two instances on one world");
+    TEST_ASSERT(a.scene_id != b.scene_id, "distinct temp scenes");
+
+    // 双副本并进到 Running（进入序列各按各队名册）
+    const auto run_to_running = [&](std::uint64_t party_id, std::uint64_t leader,
+                                    std::uint64_t m1, std::uint64_t m2) {
+        for (const auto member : std::vector<std::uint64_t>{leader, m1, m2}) {
+            if (service.enter(party_id, member) != SquadInstanceService::EnterError::Ok)
+                return false;
+        }
+        return service.start_gameplay(party_id, leader) ==
+               SquadInstanceService::EnterError::Ok;
+    };
+    TEST_ASSERT(run_to_running(1, kLeader, kMemberB, kMemberC), "party 1 Running");
+    TEST_ASSERT(run_to_running(2, 200, 201, 202), "party 2 Running");
+
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 2;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal A set");
+    TEST_ASSERT(service.set_goal(2, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal B set");
+    TEST_ASSERT(service.spawn_wave(1, 2) == SquadInstanceService::GameplayError::Ok,
+                "wave A");
+    TEST_ASSERT(service.spawn_wave(2, 2) == SquadInstanceService::GameplayError::Ok,
+                "wave B");
+
+    // 怪号全局发号：两副本存活怪集合不相交
+    const auto progress_a = service.gameplay(1);
+    const auto progress_b = service.gameplay(2);
+    TEST_ASSERT(progress_a && progress_b && progress_a->monsters_alive.size() == 2 &&
+                    progress_b->monsters_alive.size() == 2,
+                "both waves live");
+    const std::set<std::uint64_t> ids_a(progress_a->monsters_alive.begin(),
+                                        progress_a->monsters_alive.end());
+    const std::set<std::uint64_t> ids_b(progress_b->monsters_alive.begin(),
+                                        progress_b->monsters_alive.end());
+    TEST_ASSERT(ids_a.size() == 2 && ids_b.size() == 2, "no duplicate ids within a wave");
+    for (const auto id : ids_a) {
+        TEST_ASSERT(ids_b.count(id) == 0, "monster ids disjoint across instances");
+    }
+
+    // 交错上报：A 一杀、B 两杀——进度只进各自账
+    const auto first_b = *ids_b.begin();
+    const auto second_b = *std::next(ids_b.begin());
+    TEST_ASSERT(service.report_monster_defeated(1, *ids_a.begin(), kLeader) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "kill in A");
+    TEST_ASSERT(service.report_monster_defeated(2, first_b, 200) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "kill 1 in B");
+    TEST_ASSERT(service.report_monster_defeated(2, second_b, 200) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "kill 2 in B");
+    auto now_a = service.gameplay(1);
+    auto now_b = service.gameplay(2);
+    TEST_ASSERT(now_a->monsters_defeated == 1 && now_a->monsters_alive.size() == 1,
+                "A progress isolated");
+    TEST_ASSERT(now_b->monsters_defeated == 2 && now_b->monsters_alive.empty(),
+                "B progress isolated");
+
+    // B 达标过拍进结算并收尾；A 全程无感
+    TEST_ASSERT(service.advance_tick(2, 1) == SquadInstanceService::GameplayError::Ok,
+                "B tick settles");
+    const auto* binding_b = service.find_by_party(2);
+    TEST_ASSERT(binding_b && world.find_instance(binding_b->instance_id)->state() ==
+                                 apollo::game::world::Instance::State::Finishing,
+                "B entering settlement");
+    TEST_ASSERT(service.dismiss(2), "B dismissed");
+    TEST_ASSERT(service.find_by_party(2) == nullptr, "B binding gone");
+    TEST_ASSERT(!service.settlement(2).has_value(), "B ledger cleared");
+
+    TEST_ASSERT(service.find_by_party(1) != nullptr, "A binding survives B teardown");
+    now_a = service.gameplay(1);
+    TEST_ASSERT(now_a && now_a->goal_set && now_a->monsters_defeated == 1 &&
+                    now_a->monsters_alive.size() == 1,
+                "A gameplay untouched");
+    auto* scene_a = world.find_scene(service.find_by_party(1)->scene_id);
+    TEST_ASSERT(scene_a != nullptr && scene_a->get_entity_count() == 1,
+                "A monster still live in its scene");
+
+    // A 收官：最后一杀过拍结算收尾，容量与绑定全数归还
+    TEST_ASSERT(service.report_monster_defeated(1, *now_a->monsters_alive.begin(),
+                                                kLeader) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "A final kill");
+    TEST_ASSERT(service.advance_tick(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "A tick settles");
+    TEST_ASSERT(service.dismiss(1), "A dismissed");
+    TEST_ASSERT(service.active_count() == 0 && service.used_capacity(1) == 0,
+                "both reclaimed, capacity returned");
+    return true;
+}
+
+// 多 World 分配选路（P2-8）：本地满载溢出远端时按 world_id 升序取首个空位
+//（注册顺序无关），各 World 容量独立记账，回收后空位可复用；全满拒绝。
+bool test_squad_multi_world_allocation_order() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    make_party(parties, 2, 200, 201, 202);
+    make_party(parties, 3, 300, 301, 302);
+    make_party(parties, 4, 400, 401, 402);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 1);
+    service.register_world(3, 1);  // 后注册高号位
+    service.register_world(2, 1);  // 后注册低号位——升序裁决与注册顺序无关
+
+    std::map<std::uint32_t, LaunchRequest> remote_calls;
+    service.set_remote_spawner(
+        [&remote_calls](std::uint32_t world_id, const LaunchRequest& request) {
+            remote_calls[world_id] = request;
+            return std::make_pair(9000 + world_id, 8000 + world_id);
+        });
+
+    const auto first = service.launch(basic_request(1));
+    TEST_ASSERT(first.error == LaunchError::Ok && first.world_id == 1,
+                "local capacity taken first");
+    const auto second = service.launch(basic_request(2, 200));
+    TEST_ASSERT(second.error == LaunchError::Ok && second.world_id == 2,
+                "overflow picks lowest remote id");
+    const auto third = service.launch(basic_request(3, 300));
+    TEST_ASSERT(third.error == LaunchError::Ok && third.world_id == 3,
+                "next overflow takes next world");
+    TEST_ASSERT(remote_calls.size() == 2 && remote_calls.count(2) && remote_calls.count(3),
+                "remote spawner invoked once per remote pick");
+    TEST_ASSERT(second.instance_id == 9002 && third.scene_id == 8003,
+                "remote ids propagated per world");
+    TEST_ASSERT(service.used_capacity(1) == 1 && service.used_capacity(2) == 1 &&
+                    service.used_capacity(3) == 1,
+                "capacity accounted per world");
+
+    const auto exhausted = service.launch(basic_request(4, 400));
+    TEST_ASSERT(exhausted.error == LaunchError::NoWorldCapacity, "all full refused");
+
+    // 回收线归还本地空位后复用：本地优先裁决不漂移（远端绑定回收面随
+    // 跨进程条目接通，abort/dismiss 只服务本地 World）
+    TEST_ASSERT(service.abort(1), "party 1 aborted");
+    TEST_ASSERT(service.used_capacity(1) == 0, "local slot returned");
+    const auto re_picked = service.launch(basic_request(4, 400));
+    TEST_ASSERT(re_picked.error == LaunchError::Ok && re_picked.world_id == 1,
+                "local slot reused ahead of remotes");
+    return true;
+}
+
 
 } // namespace
 
@@ -1185,6 +1344,9 @@ int main() {
         {"squad_party_disband_aborts_instance", test_squad_party_disband_aborts_instance},
         {"squad_process_recovery_policy", test_squad_process_recovery_policy},
         {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
+        {"squad_concurrent_instances_gameplay_isolation",
+         test_squad_concurrent_instances_gameplay_isolation},
+        {"squad_multi_world_allocation_order", test_squad_multi_world_allocation_order},
     };
 
     int passed = 0;
