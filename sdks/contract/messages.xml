@@ -542,4 +542,31 @@
     <field name="goal_set" type="bool"/>
     <field name="monsters" type="int64[]" desc="存活怪实体号（击杀上报对象；空 = 无怪存活）"/>
   </msg>
+
+  <!-- Module rollout 族（P4 仅代码更新批；scripting-lua §3.2 跨 World 编排
+       的世界侧受理面）：ops 控制面→目标 World M1 裸帧受理（eval 944 同型，
+       不走 932 信封）。World 本地以单目标 ModuleRollout（target= 本进程
+       runtime，canary= 自身）执行——prepare 拓扑预备、commit 进观察窗、
+       tick 拍自驱 observe/promote/rollback、status 供控制面聚合判定。
+       request_id = 控制面单调关联键（0 保留）。op: 1=prepare 2=commit
+       3=rollback 4=status。state = ModuleRollout::RolloutState 原值回带。 -->
+  <msg id="952" name="module_rollout_request" dir="P2P" channel="events" domain="internal" desc="模块投递编排请求（ops→World；eval 944 同型裸帧受理）">
+    <field name="request_id" type="int64" desc="编排关联键（调用方单调分配，0 保留）"/>
+    <field name="op" type="int32" desc="1=prepare 2=commit 3=rollback 4=status"/>
+    <field name="name" type="string" desc="模块名（prepare 输入）"/>
+    <field name="version" type="int64" desc="模块版本（prepare 输入）"/>
+    <field name="deps" type="string" desc="依赖名列表（逗号分隔；空 = 无依赖）"/>
+    <field name="source" type="string" desc="Lua 模块源（prepare 输入；status 时忽略）"/>
+    <field name="observe_ticks" type="int64" desc="灰度观察窗长（tick 计）"/>
+    <field name="fault_threshold" type="int64" desc="窗内 fault 上限；超阈早失败"/>
+  </msg>
+  <msg id="953" name="module_rollout_reply" dir="P2P" channel="events" domain="internal" desc="模块投递编排回执（World→ops；request_id 关联）">
+    <field name="request_id" type="int64" desc="回带请求关联号"/>
+    <field name="op" type="int32" desc="回带请求 op"/>
+    <field name="ok" type="bool" desc="1=受理成功；0=拒绝（detail 为原因，多行）"/>
+    <field name="state" type="int32" desc="本地编排状态机当前值（ModuleRollout 原值）"/>
+    <field name="window_faults" type="int64" desc="窗内归因 fault 数（status 有义）"/>
+    <field name="module_version" type="int64" desc="该模块当前生效版本（0 = 未装）"/>
+    <field name="detail" type="string" desc="错误行/状态摘要（ok=1 的 status 回执为摘要）"/>
+  </msg>
 </messages>

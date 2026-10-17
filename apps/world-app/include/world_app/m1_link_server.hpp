@@ -45,6 +45,22 @@ struct DebugEvalRequest {
     std::string source;
 };
 
+// 模块投递编排请求（契约 952，P4 仅代码更新批）：ops 控制面上行，World 本地
+// 以单目标 ModuleRollout（target = 本进程 runtime，canary = 自身）执行。
+// op：1=prepare 2=commit 3=rollback 4=status。回执 953 按 request_id 关联
+// （受理点同步执行——M1 泵在 gameThread_，ModuleRollout 契约线程 = owning
+// 线程；观察窗由 gameLoop 拍自驱，控制面按 status 聚合）。
+struct ModuleRolloutRequest {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;  // 1=prepare 2=commit 3=rollback 4=status
+    std::string name;
+    std::uint64_t version = 0;
+    std::string deps;  // 逗号分隔依赖名（空 = 无）
+    std::string source;
+    std::uint64_t observe_ticks = 0;
+    std::uint64_t fault_threshold = 0;
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -80,6 +96,24 @@ public:
         (void)error;
     }
 
+    // 模块编排回执（953 module_rollout_reply）：peer/关联键同 eval 面。
+    // state = ModuleRollout::RolloutState 原值；detail = 错误行（ok=0）或
+    // 状态摘要（status）。kReliable 同 945。
+    virtual void sendModuleRolloutReply(const std::string& peer, std::uint64_t request_id,
+                                        std::int32_t op, bool ok, std::int32_t state,
+                                        std::uint64_t window_faults,
+                                        std::uint64_t module_version,
+                                        const std::string& detail) {
+        (void)peer;
+        (void)request_id;
+        (void)op;
+        (void)ok;
+        (void)state;
+        (void)window_faults;
+        (void)module_version;
+        (void)detail;
+    }
+
     // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
     // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
     //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =
@@ -102,10 +136,13 @@ public:
 
 // 工厂：config.host:config.port 监听，契约路由表自 config.route_json 装载
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
-//（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request 裸帧经
-// on_debug_eval 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
+//（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
+// module_rollout_request 裸帧分别经 on_debug_eval / on_module_rollout 投递
+//（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
-    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {});
+    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {},
+    std::function<void(const std::string&, const ModuleRolloutRequest&)>
+        on_module_rollout = {});
 
 } // namespace world_app

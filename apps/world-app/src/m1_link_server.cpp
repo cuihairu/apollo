@@ -210,10 +210,13 @@ bool build_legacy_intent(std::uint16_t msg_id, const std::vector<wire::FieldValu
 class M1LinkServerImpl final : public M1LinkServer {
 public:
     M1LinkServerImpl(M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
-                     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval)
+                     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval,
+                     std::function<void(const std::string&, const ModuleRolloutRequest&)>
+                         on_module_rollout)
         : config_(std::move(config))
         , on_intent_(std::move(on_intent))
-        , on_debug_eval_(std::move(on_debug_eval)) {}
+        , on_debug_eval_(std::move(on_debug_eval))
+        , on_module_rollout_(std::move(on_module_rollout)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -306,6 +309,34 @@ public:
                          link::SendClass::kReliable);
     }
 
+    void sendModuleRolloutReply(const std::string& peer, std::uint64_t request_id,
+                                std::int32_t op, bool ok, std::int32_t state,
+                                std::uint64_t window_faults,
+                                std::uint64_t module_version,
+                                const std::string& detail) override {
+        if (!manager_ || request_id == 0) {
+            return;  // 0 保留（回执关联键缺位即静默）
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return;  // 未知 peer = 尽力面（控制面超时面重发裁决）
+        }
+        std::vector<wire::FieldValue> fields(7);
+        fields[0].integer = static_cast<std::int64_t>(request_id);
+        fields[1].integer = op;
+        fields[2].integer = ok ? 1 : 0;
+        fields[3].integer = state;
+        fields[4].integer = static_cast<std::int64_t>(window_faults);
+        fields[5].integer = static_cast<std::int64_t>(module_version);
+        fields[6].text = detail;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::module_rollout_reply), fields, payload)) {
+            return;
+        }
+        (void)link->send(id_of(MsgId::module_rollout_reply), payload.data(), payload.size(),
+                         link::SendClass::kReliable);
+    }
+
     void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
                            const std::vector<std::uint8_t>& payload) override {
         auto* link = gateway_link();
@@ -388,6 +419,14 @@ private:
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_debug_eval_frame(link.peer_name(), data, size);
             });
+        // 952 module_rollout_request 裸帧受理（P4 仅代码更新批）：受理点同步
+        // 执行于 gameThread_（M1 泵 = 宿主泵同线程）——ModuleRollout 契约线
+        // 程 = owning 线程，无需 tick 窗口排队；观察窗由 gameLoop 拍自驱。
+        dispatcher.set_handler(
+            id_of(MsgId::module_rollout_request),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_module_rollout_frame(link.peer_name(), data, size);
+            });
     }
 
     void handle_debug_eval_frame(const std::string& peer, const std::uint8_t* data,
@@ -403,6 +442,27 @@ private:
         req.scene_id = static_cast<std::uint64_t>(fields[1].integer);
         req.source = fields[2].text;
         on_debug_eval_(peer, req);
+    }
+
+    void handle_module_rollout_frame(const std::string& peer, const std::uint8_t* data,
+                                     std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::module_rollout_request), data, size,
+                                  fields)
+            || fields.size() != 8 || on_module_rollout_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        ModuleRolloutRequest req;
+        req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.op = static_cast<std::int32_t>(fields[1].integer);
+        req.name = fields[2].text;
+        req.version = static_cast<std::uint64_t>(fields[3].integer);
+        req.deps = fields[4].text;
+        req.source = fields[5].text;
+        req.observe_ticks = static_cast<std::uint64_t>(fields[6].integer);
+        req.fault_threshold = static_cast<std::uint64_t>(fields[7].integer);
+        on_module_rollout_(peer, req);
     }
 
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
@@ -444,6 +504,7 @@ private:
     M1LinkConfig config_;
     std::function<void(IntentEnvelope)> on_intent_;
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval_;
+    std::function<void(const std::string&, const ModuleRolloutRequest&)> on_module_rollout_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
     std::atomic<bool> started_{false};
@@ -455,16 +516,21 @@ private:
 
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
-    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval) {
+    std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval,
+    std::function<void(const std::string&, const ModuleRolloutRequest&)>
+        on_module_rollout) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
-                                              std::move(on_debug_eval));
+                                              std::move(on_debug_eval),
+                                              std::move(on_module_rollout));
 }
 
 #else // _WIN32
 
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig /*config*/, std::function<void(IntentEnvelope)> /*on_intent*/,
-    std::function<void(const std::string&, const DebugEvalRequest&)> /*on_debug_eval*/) {
+    std::function<void(const std::string&, const DebugEvalRequest&)> /*on_debug_eval*/,
+    std::function<void(const std::string&, const ModuleRolloutRequest&)>
+        /*on_module_rollout*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();

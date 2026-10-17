@@ -22,6 +22,7 @@
 
 namespace apollo::script {
 class ScriptRuntime;
+class ModuleRollout;
 }
 
 namespace world_app {
@@ -128,6 +129,16 @@ private:
     // executeIntent 消费后按 request_id 回带（ADR-017 延时应答）。
     void onM1Intent(IntentEnvelope intent);
 
+    // 模块投递编排受理点（952，P4 仅代码更新批；gameThread_ 内同步执行）：
+    // World 本地单目标 ModuleRollout（target = 本进程 runtime，canary = 自身）
+    // prepare/commit/rollback/status，回执 953 即时回带（观察窗随拍自驱）。
+    void onM1ModuleRollout(const std::string& peer, const ModuleRolloutRequest& request);
+
+    // 编排推进（gameLoop 每拍，drainDebugEvalResults 同址）：观察窗推拍 +
+    // promote/rollback 队列驱动 + 在装模块 onTick 驱动（fault 归因源——
+    // canary 窗的 fault 计账靠模块函数真被调用）。
+    void driveModuleRollout();
+
     // M1 延时应答出口（929 cell_intent_ack）；request_id = 0（legacy 路径）
     // 不作关联键，静默。
     void sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message);
@@ -181,6 +192,13 @@ private:
     // 脚本宿主（scripting-lua §2 一状态一逻辑线程：随 gameThread_ 生灭，
     // 建/用/析全在 gameLoop 线程）。
     std::unique_ptr<apollo::script::ScriptRuntime> script_;
+    // 模块投递编排（P4 仅代码更新批；gameThread_ 独占）：单目标编排器懒建
+    //（终态可串行多轮）；受理过的模块名随轮累积（onTick 驱动面 = fault 归
+    // 因源）。
+    std::unique_ptr<apollo::script::ModuleRollout> moduleRollout_;
+    std::vector<std::string> rolloutModuleNames_;
+    // 在装模块名（自驱相位跃迁日志面：promoted/rolled back 行带模块名）
+    std::string lastRolloutName_;
     std::atomic<bool> running_{false};
     // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前拒新意图；
     // 停机先关闸再排空队列，G-3 镜像顺序）

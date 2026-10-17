@@ -8,6 +8,7 @@
 #include "apollo/game/world/scene_transfer.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
+#include "apollo/script/module_rollout.hpp"
 #include "apollo/script/script_runtime.hpp"
 #include <algorithm>
 #include <iostream>
@@ -34,6 +35,40 @@ std::optional<std::string> read_script_file(const std::string& path) {
     }
     return std::string((std::istreambuf_iterator<char>(in)),
                        std::istreambuf_iterator<char>());
+}
+
+// 逗号分隔依赖名 → 列表（952 编排请求；空段跳过，全空 = 无依赖）。
+std::vector<std::string> split_dep_list(const std::string& text) {
+    std::vector<std::string> out;
+    std::string token;
+    auto flush = [&] {
+        if (!token.empty()) {
+            out.push_back(std::move(token));
+        }
+        token.clear();
+    };
+    for (const char c : text) {
+        if (c == ',') {
+            flush();
+        } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            token.push_back(c);
+        }
+    }
+    flush();
+    return out;
+}
+
+// 错误行拼合（953 detail 多行面）。
+std::string join_lines(const std::vector<std::string>& lines) {
+    std::string out;
+    for (const auto& l : lines) {
+        if (!out.empty()) {
+            out.push_back(';');
+            out.push_back(' ');
+        }
+        out += l;
+    }
+    return out;
 }
 } // namespace
 
@@ -149,6 +184,9 @@ void WorldApp::start() {
         [this](IntentEnvelope intent) { onM1Intent(std::move(intent)); },
         [this](const std::string& peer, const DebugEvalRequest& request) {
             onM1DebugEval(peer, request);
+        },
+        [this](const std::string& peer, const ModuleRolloutRequest& request) {
+            onM1ModuleRollout(peer, request);
         });
 
     // 开闸先于 m1Link_->start()：受理面就绪后网关才见得到入口
@@ -311,6 +349,171 @@ void WorldApp::sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, b
                                  const std::string& result, const std::string& error) {
     if (m1Link_) {
         m1Link_->sendEvalResult(peer, eval_id, ok, result, error);
+    }
+}
+
+void WorldApp::onM1ModuleRollout(const std::string& peer,
+                                 const ModuleRolloutRequest& request) {
+    // 952 受理（P4 仅代码更新批）：本回调在 gameThread_ 泵上下文 =
+    // ModuleRollout 契约线程（owning 线程直驱，无 tick 排队）。request_id
+    // = 0 保留；受理点同步回 953（观察窗推进随 gameLoop 拍，控制面按
+    // status 轮询聚合）。
+    if (request.request_id == 0) {
+        return;
+    }
+    auto reply = [&](bool ok, std::int32_t state, std::uint64_t faults,
+                     std::uint64_t version, const std::string& detail) {
+        if (m1Link_) {
+            m1Link_->sendModuleRolloutReply(peer, request.request_id, request.op,
+                                            ok, state, faults, version, detail);
+        }
+    };
+    if (script_ == nullptr) {
+        reply(false, -1, 0, 0, "script runtime not ready");
+        return;
+    }
+    const auto state_of = [&]() -> std::int32_t {
+        return static_cast<std::int32_t>(moduleRollout_->state());
+    };
+    const auto detail_of = [&]() -> std::string {
+        const auto errs = moduleRollout_->errors();
+        return errs.empty() ? std::string("no errors") : join_lines(errs);
+    };
+    switch (request.op) {
+        case 1: {  // prepare：拓扑预备（独立预备沙盒），成功 → kCanaryPending
+            if (moduleRollout_ == nullptr) {
+                // 单目标编排器（懒建，仅 prepare 造对象）：target = 本进程
+                // runtime，canary = 自身（跨 World 灰度 = 控制面按世界分相位
+                // 投递，世界内不再细分）。commit/rollback/status 不复活——
+                // 无在途轮次即显式拒（半开状态不可默默重建）。
+                moduleRollout_ = std::make_unique<apollo::script::ModuleRollout>(
+                    std::vector<apollo::script::RolloutTarget>{{"world", script_.get()}});
+            }
+            std::vector<std::string> deps = split_dep_list(request.deps);
+            apollo::script::RolloutModule mod;
+            mod.name = request.name;
+            mod.version = request.version;
+            mod.deps = std::move(deps);
+            mod.source = request.source;
+            const bool ok = moduleRollout_->prepare(
+                {mod}, {"world"},
+                apollo::script::CanaryParams{request.observe_ticks,
+                                             request.fault_threshold});
+            if (ok) {
+                lastRolloutName_ = request.name;
+                worldLog().info("module rollout prepared: " + request.name + " v"
+                                + std::to_string(request.version));
+            }
+            reply(ok, state_of(), 0, script_->module_version(request.name),
+                  detail_of());
+            return;
+        }
+        case 2: {  // commit：kCanaryPending → 提交本目标（单目标即入观察窗）
+            if (moduleRollout_ == nullptr) {
+                reply(false, 0, 0, script_->module_version(request.name),
+                      "no rollout in flight");
+                return;
+            }
+            if (moduleRollout_->state() ==
+                apollo::script::RolloutState::kCanaryPending) {
+                moduleRollout_->commit_target("world");
+            }
+            const auto st = moduleRollout_->state();
+            const bool ok = st == apollo::script::RolloutState::kObserving;
+            if (ok) {
+                // 受理名登记（onTick 驱动面；commit 即激活——驱动只对 active
+                // 版本，prepare 期不投——重名不重复登记）。
+                if (std::find(rolloutModuleNames_.begin(), rolloutModuleNames_.end(),
+                              request.name) == rolloutModuleNames_.end()) {
+                    rolloutModuleNames_.push_back(request.name);
+                }
+                worldLog().info("module rollout committed: " + request.name + " v"
+                                + std::to_string(request.version));
+            }
+            reply(ok, state_of(), 0, script_->module_version(request.name),
+                  detail_of());
+            return;
+        }
+        case 3: {  // rollback / abort：kRollingBack = 回滚已提交集；
+                   // kCanaryPending = 灰度未提交 → 丢弃预备轮复位（编排器已随
+                   // 早失败即止，活跃模块表未被触碰——下轮 prepare 从零重来）
+            if (moduleRollout_ == nullptr) {
+                // 无在途轮次：幂等空操作（编排器清尾可能追到已复位的世界）
+                reply(true, 0, 0, script_->module_version(request.name),
+                      "no rollout in flight");
+                return;
+            }
+            if (moduleRollout_->state() ==
+                apollo::script::RolloutState::kCanaryPending) {
+                moduleRollout_.reset();
+                worldLog().info("module rollout aborted: " + request.name);
+                reply(true, 0, 0, script_->module_version(request.name),
+                      "aborted: nothing committed");
+                return;
+            }
+            moduleRollout_->rollback_target("world");
+            const bool ok = moduleRollout_->state() ==
+                            apollo::script::RolloutState::kRolledBack;
+            if (ok) {
+                worldLog().info("module rollout rolled back: " + request.name);
+            }
+            reply(ok, state_of(), 0, script_->module_version(request.name),
+                  ok ? std::string("rolled back") : detail_of());
+            return;
+        }
+        case 4: {  // status：控制面聚合观察（state/faults/version）
+            std::uint64_t faults = 0;
+            const auto st = moduleRollout_ ? moduleRollout_->statuses()
+                                            : std::vector<apollo::script::TargetStatus>{};
+            if (!st.empty()) {
+                faults = st[0].window_faults;
+            }
+            reply(true, moduleRollout_ ? state_of() : 0, faults,
+                  script_->module_version(request.name),
+                  moduleRollout_ ? detail_of() : std::string("no rollout"));
+            return;
+        }
+        default:
+            reply(false, state_of(), 0, script_->module_version(request.name),
+                  "unknown op " + std::to_string(request.op));
+            return;
+    }
+}
+
+void WorldApp::driveModuleRollout() {
+    // gameLoop 拍（drainDebugEvalResults 同址）：先驱在装模块 onTick（fault
+    // 归因源——canary 窗计账靠模块函数真被调用，runtime 按 active 版本解
+    // 析），再推观察窗/推广/回滚队列（frame 序 = rollout 单测同型）。
+    if (script_ == nullptr) {
+        return;
+    }
+    for (const auto& name : rolloutModuleNames_) {
+        (void)script_->call_module(name, "onTick");
+    }
+    if (moduleRollout_ == nullptr) {
+        return;
+    }
+    const auto st = moduleRollout_->state();
+    if (st == apollo::script::RolloutState::kObserving) {
+        moduleRollout_->observe_target("world");
+    } else if (st == apollo::script::RolloutState::kPromoting) {
+        for (const auto& k : moduleRollout_->pending_promote()) {
+            moduleRollout_->commit_target(k);
+        }
+    } else if (st == apollo::script::RolloutState::kRollingBack) {
+        for (const auto& k : moduleRollout_->pending_rollback()) {
+            moduleRollout_->rollback_target(k);
+        }
+    }
+    const auto after = moduleRollout_->state();
+    if (st != after && (after == apollo::script::RolloutState::kPromoted ||
+                        after == apollo::script::RolloutState::kRolledBack)) {
+        // 自驱跃迁（观察窗判好/判坏）——控制面只拉 status，日志是唯一落证面
+        //（drill 断言 + 运维排障）。
+        worldLog().info(std::string("module rollout ")
+                         + (after == apollo::script::RolloutState::kPromoted ? "promoted"
+                                                                              : "rolled back")
+                         + ": " + lastRolloutName_);
     }
 }
 
@@ -944,6 +1147,10 @@ void WorldApp::gameLoop() {
 
         // §7.1 eval 回执收账（tick 内固定调试点已执行在途 eval）
         drainDebugEvalResults();
+
+        // 952 编排推进（P4 仅代码更新批）：在装模块 onTick + 观察窗/推广/
+        // 回滚队列（drainDebugEvalResults 同拍位，owning 线程纪律）
+        driveModuleRollout();
 
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime
