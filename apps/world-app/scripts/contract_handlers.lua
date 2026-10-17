@@ -62,3 +62,5 @@ squad_launch_intent = function() end
 squad_enter_intent = function() end
 squad_start_intent = function() end
 squad_kill_intent = function() end
+module_rollout_request = function() end
+module_rollout_reply = function() end

@@ -58,6 +58,8 @@ constexpr std::uint16_t id_of(MsgId id) {
 constexpr std::uint16_t kAckId = id_of(MsgId::cell_intent_ack);
 constexpr std::uint16_t kEvalRequestId = id_of(MsgId::debug_eval_request);
 constexpr std::uint16_t kEvalResultId = id_of(MsgId::debug_eval_result);
+constexpr std::uint16_t kRolloutRequestId = id_of(MsgId::module_rollout_request);
+constexpr std::uint16_t kRolloutReplyId = id_of(MsgId::module_rollout_reply);
 
 const char* kRouteJson = APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON;
 
@@ -145,6 +147,43 @@ struct EvalLog {
 
 EvalLog* g_evals = nullptr;
 
+// 953 module rollout 回执日志（P4 仅代码更新批契约面测试；request_id 关联）。
+struct RolloutReply {
+    std::uint64_t request_id = 0;
+    bool ok = false;
+    std::int32_t state = 0;
+    std::uint64_t faults = 0;
+    std::uint64_t version = 0;
+    std::string detail;
+};
+struct RolloutLog {
+    std::mutex mutex;
+    std::vector<RolloutReply> replies;
+
+    void add(RolloutReply r) {
+        std::lock_guard<std::mutex> lock(mutex);
+        replies.push_back(std::move(r));
+    }
+    bool find(std::uint64_t request_id, RolloutReply& out) {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (const auto& r : replies) {
+            if (r.request_id == request_id) {
+                out = r;
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+RolloutLog* g_rollouts = nullptr;
+
+// 模块源（module_rollout 单测同型：健康 / onTick 必炸两型）。
+const char* kModuleGood =
+    "return { onTick = function() end, smoke = function() return true end }";
+const char* kModuleBad =
+    "return { onTick = function() error('boom') end, smoke = function() return true end }";
+
 // 客户端端（网关投影）：LinkManager active 端点拨入 WorldApp M1 端口，同一路由
 // 表（同 schema_hash → 握手 route_version 一致）。
 struct ClientEnd {
@@ -197,6 +236,27 @@ struct ClientEnd {
                              fields[1].integer != 0, fields[2].text, fields[3].text);
             }
         });
+        dispatcher.set_handler(kRolloutReplyId,
+                               [](std::uint16_t, const std::uint8_t* data,
+                                  std::size_t size) {
+                                   std::vector<wire::FieldValue> fields;
+                                   if (wire::decode_payload(kRolloutReplyId, data, size,
+                                                            fields)
+                                       && fields.size() == 7 && g_rollouts != nullptr) {
+                                       RolloutReply r;
+                                       r.request_id =
+                                           static_cast<std::uint64_t>(fields[0].integer);
+                                       r.ok = fields[2].integer != 0;
+                                       r.state =
+                                           static_cast<std::int32_t>(fields[3].integer);
+                                       r.faults =
+                                           static_cast<std::uint64_t>(fields[4].integer);
+                                       r.version =
+                                           static_cast<std::uint64_t>(fields[5].integer);
+                                       r.detail = fields[6].text;
+                                       g_rollouts->add(std::move(r));
+                                   }
+                               });
         return true;
     }
 
@@ -246,6 +306,29 @@ bool send_debug_eval(ClientEnd& client, std::uint64_t eval_id, std::uint64_t sce
         return false;
     }
     return client.cell_link()->send(kEvalRequestId, payload.data(), payload.size(),
+                                    link::SendClass::kReliable)
+        == link::SendCode::kAccepted;
+}
+
+// 952 module_rollout_request 裸帧上行（P4 仅代码更新批；受理点同步回 953）。
+bool send_module_rollout(ClientEnd& client, std::uint64_t request_id, std::int32_t op,
+                         const std::string& name, std::uint64_t version,
+                         const std::string& deps, const std::string& source,
+                         std::uint64_t observe_ticks, std::uint64_t fault_threshold) {
+    std::vector<wire::FieldValue> f(8);
+    f[0].integer = static_cast<std::int64_t>(request_id);
+    f[1].integer = op;
+    f[2].text = name;
+    f[3].integer = static_cast<std::int64_t>(version);
+    f[4].text = deps;
+    f[5].text = source;
+    f[6].integer = static_cast<std::int64_t>(observe_ticks);
+    f[7].integer = static_cast<std::int64_t>(fault_threshold);
+    std::vector<std::uint8_t> payload;
+    if (!wire::encode_payload(kRolloutRequestId, f, payload)) {
+        return false;
+    }
+    return client.cell_link()->send(kRolloutRequestId, payload.data(), payload.size(),
                                     link::SendClass::kReliable)
         == link::SendCode::kAccepted;
 }
@@ -885,6 +968,236 @@ bool test_debug_eval_failure_surface() {
     return true;
 }
 
+// ---------- P4 仅代码更新批（952/953 module rollout 契约面） ----------
+
+// status 轮询到期望 state（控制面聚合观察；每拍一发，request_id 单调分配）。
+std::uint64_t g_rollout_status_id = 5000;
+bool rollout_status_until(ClientEnd& c, RolloutLog& log, const std::string& name,
+                          std::uint64_t version, std::int32_t want_state,
+                          RolloutReply& out, int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        const std::uint64_t id = g_rollout_status_id++;
+        if (!send_module_rollout(c, id, 4, name, version, "", "", 0, 0)) {
+            return false;
+        }
+        if (pump_until(c, [&] { return log.find(id, out); }, 300)
+            && out.state == want_state) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return false;
+}
+
+// 全链 e2e：prepare（kCanaryPending，未激活）→ commit（kObserving，版本
+// 激活）→ 观察窗自驱（gameLoop onTick + 窗满判好）→ kPromoted；终态相位
+// 纪律（kPromoted 下 rollback op 拒）。
+bool test_module_rollout_happy_path() {
+    std::cout << "Running: test_module_rollout_happy_path..." << std::endl;
+    RolloutLog rollouts;
+    g_rollouts = &rollouts;
+    ServerEnd s;
+    TEST_ASSERT(s.start(10), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp;
+                }, 5000), "link up");
+
+    // prepare：受理即 kCanaryPending（预备沙盒内——runtime 未激活，version 0）
+    TEST_ASSERT(send_module_rollout(c, 101, 1, "greet", 7, "", kModuleGood, 5, 0),
+                "prepare sent");
+    RolloutReply r;
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(101, r); }, 5000),
+                "prepare reply arrived");
+    TEST_ASSERT(r.ok, "prepare ok");
+    TEST_ASSERT(r.state == 2, "kCanaryPending after prepare");
+    TEST_ASSERT(r.version == 0, "not activated at prepare");
+
+    // commit：单目标世界即入观察窗（canary = 自身；版本激活）
+    TEST_ASSERT(send_module_rollout(c, 102, 2, "greet", 7, "", "", 0, 0),
+                "commit sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(102, r); }, 5000),
+                "commit reply arrived");
+    TEST_ASSERT(r.ok, "commit ok");
+    TEST_ASSERT(r.state == 3, "kObserving after commit");
+    TEST_ASSERT(r.version == 7, "active version after commit");
+
+    // 观察窗自驱 → kPromoted（faults=0 健康窗）
+    RolloutReply st;
+    TEST_ASSERT(rollout_status_until(c, rollouts, "greet", 7, 6, st, 10000),
+                "window promotes");
+    TEST_ASSERT(st.version == 7, "promoted version");
+    TEST_ASSERT(st.faults == 0, "healthy window zero faults");
+
+    // 相位纪律：kPromoted 终态下 rollback op = 拒（仅 kRollingBack 有义）
+    TEST_ASSERT(send_module_rollout(c, 103, 3, "greet", 7, "", "", 0, 0),
+                "rollback op sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(103, r); }, 5000),
+                "rollback reply arrived");
+    TEST_ASSERT(!r.ok, "rollback rejected outside kRollingBack");
+    TEST_ASSERT(r.state == 6, "state stays promoted");
+    TEST_ASSERT(s.server->isRunning(), "world alive after rollout");
+
+    s.stop();
+    c.manager.reset();
+    g_rollouts = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 故障回滚 e2e：v1 健康铺底 → v2 onTick 必炸（fault 阈 0 = 首 fault 早失败）
+// → gameLoop 自驱回滚 → kRolledBack + active 版本回 v1；宿主仍服务。
+bool test_module_rollout_fault_rollback() {
+    std::cout << "Running: test_module_rollout_fault_rollback..." << std::endl;
+    RolloutLog rollouts;
+    g_rollouts = &rollouts;
+    ServerEnd s;
+    TEST_ASSERT(s.start(10), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp;
+                }, 5000), "link up");
+
+    // v1 健康铺底（promoted 后成为回滚冷冻区）
+    TEST_ASSERT(send_module_rollout(c, 301, 1, "calc", 7, "", kModuleGood, 5, 0),
+                "v1 prepare sent");
+    RolloutReply r;
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(301, r); }, 5000),
+                "v1 prepare reply arrived");
+    TEST_ASSERT(r.ok, "v1 prepare ok");
+    TEST_ASSERT(send_module_rollout(c, 302, 2, "calc", 7, "", "", 0, 0),
+                "v1 commit sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(302, r); }, 5000),
+                "v1 commit reply arrived");
+    TEST_ASSERT(r.ok, "v1 commit ok");
+    RolloutReply st;
+    TEST_ASSERT(rollout_status_until(c, rollouts, "calc", 7, 6, st, 10000),
+                "v1 promoted");
+
+    // v2 坏模块：观察窗内 onTick 必炸 → 早失败自驱回滚
+    TEST_ASSERT(send_module_rollout(c, 401, 1, "calc", 8, "", kModuleBad, 600, 0),
+                "v2 prepare sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(401, r); }, 5000),
+                "v2 prepare reply arrived");
+    TEST_ASSERT(r.ok, "v2 prepare ok");
+    TEST_ASSERT(send_module_rollout(c, 402, 2, "calc", 8, "", "", 0, 0),
+                "v2 commit sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(402, r); }, 5000),
+                "v2 commit reply arrived");
+    TEST_ASSERT(r.ok, "v2 commit ok");
+    TEST_ASSERT(r.version == 8, "v2 active after commit");
+
+    // 回滚自驱 → kRolledBack；active 版本回 v1（7）；fault 计账 > 0
+    TEST_ASSERT(rollout_status_until(c, rollouts, "calc", 8, 7, st, 10000),
+                "faulted rollout rolls back");
+    TEST_ASSERT(st.faults > 0, "window faults counted");
+    RolloutReply after;
+    const std::uint64_t probe = g_rollout_status_id++;
+    TEST_ASSERT(send_module_rollout(c, probe, 4, "calc", 8, "", "", 0, 0),
+                "post status sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(probe, after); }, 5000),
+                "post status reply arrived");
+    TEST_ASSERT(after.version == 7, "rolled back to v1 baseline");
+
+    // 宿主仍服务（回滚不打断：后续 eval 正常回执）
+    EvalLog evals;
+    g_evals = &evals;
+    TEST_ASSERT(send_debug_eval(c, 555, 0, "1+1"), "liveness eval sent");
+    EvalReply ev;
+    TEST_ASSERT(pump_until(c, [&] { return evals.find(555, ev); }, 5000),
+                "liveness eval reply arrived");
+    TEST_ASSERT(ev.ok && ev.result == "2", "host still serving after rollback");
+
+    s.stop();
+    c.manager.reset();
+    g_rollouts = nullptr;
+    g_evals = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 中止语义（P4 灰度即止的清理面）：kCanaryPending 时 op3 = 丢弃预备轮复位
+//（活跃模块表未被触碰）；复位后 status = 空载 idle 面，commit = 显式拒；下一
+// 轮 prepare 从零重来（不留半开状态阻断发布）。
+bool test_module_rollout_abort_idle() {
+    std::cout << "Running: test_module_rollout_abort_idle..." << std::endl;
+    RolloutLog rollouts;
+    g_rollouts = &rollouts;
+    ServerEnd s;
+    TEST_ASSERT(s.start(10), "server started");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp;
+                }, 5000), "link up");
+
+    // 预备后中止（灰度未提交）
+    TEST_ASSERT(send_module_rollout(c, 601, 1, "echo", 3, "", kModuleGood, 5, 0),
+                "prepare sent");
+    RolloutReply r;
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(601, r); }, 5000),
+                "prepare reply arrived");
+    TEST_ASSERT(r.ok && r.state == 2, "prepared to kCanaryPending");
+
+    TEST_ASSERT(send_module_rollout(c, 602, 3, "echo", 3, "", "", 0, 0),
+                "abort sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(602, r); }, 5000),
+                "abort reply arrived");
+    TEST_ASSERT(r.ok, "abort accepted");
+    TEST_ASSERT(r.state == 0, "aborted to idle");
+    TEST_ASSERT(r.version == 0, "nothing activated by the aborted round");
+
+    // 复位后 status = 空载面；commit = 显式拒（不静默）
+    TEST_ASSERT(send_module_rollout(c, 603, 4, "echo", 3, "", "", 0, 0),
+                "idle status sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(603, r); }, 5000),
+                "idle status reply arrived");
+    TEST_ASSERT(r.ok && r.state == 0, "idle status ok");
+
+    TEST_ASSERT(send_module_rollout(c, 604, 2, "echo", 3, "", "", 0, 0),
+                "orphan commit sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(604, r); }, 5000),
+                "orphan commit reply arrived");
+    TEST_ASSERT(!r.ok, "orphan commit rejected");
+    TEST_ASSERT(r.detail.find("no rollout") != std::string::npos,
+                "orphan commit names the missing rollout");
+
+    // 编排器清尾追到已复位世界：abort 幂等空操作（不得拒绝、不得造对象）
+    TEST_ASSERT(send_module_rollout(c, 605, 3, "echo", 3, "", "", 0, 0),
+                "idle abort sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(605, r); }, 5000),
+                "idle abort reply arrived");
+    TEST_ASSERT(r.ok && r.state == 0, "abort is idempotent when idle");
+
+    // 下一轮从零重来：prepare → commit → 观察窗 → kPromoted
+    TEST_ASSERT(send_module_rollout(c, 606, 1, "echo", 4, "", kModuleGood, 5, 0),
+                "re-prepare sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(606, r); }, 5000),
+                "re-prepare reply arrived");
+    TEST_ASSERT(r.ok && r.state == 2, "re-prepared after abort");
+    TEST_ASSERT(send_module_rollout(c, 607, 2, "echo", 4, "", "", 0, 0),
+                "re-commit sent");
+    TEST_ASSERT(pump_until(c, [&] { return rollouts.find(607, r); }, 5000),
+                "re-commit reply arrived");
+    TEST_ASSERT(r.ok && r.state == 3, "re-committed to kObserving");
+
+    RolloutReply st;
+    TEST_ASSERT(rollout_status_until(c, rollouts, "echo", 4, 6, st, 10000),
+                "re-rollout promotes");
+    TEST_ASSERT(st.version == 4, "re-rolled version active");
+    TEST_ASSERT(st.faults == 0, "re-rollout window zero faults");
+
+    s.stop();
+    c.manager.reset();
+    g_rollouts = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -903,6 +1216,9 @@ int main() {
     if (!test_debug_eval_roundtrip()) ++failed;
     if (!test_debug_eval_reject_face()) ++failed;
     if (!test_debug_eval_failure_surface()) ++failed;
+    if (!test_module_rollout_happy_path()) ++failed;
+    if (!test_module_rollout_fault_rollback()) ++failed;
+    if (!test_module_rollout_abort_idle()) ++failed;
 #endif
     if (failed == 0) {
         std::cout << "ALL CELL M1 LINK TESTS PASSED" << std::endl;
