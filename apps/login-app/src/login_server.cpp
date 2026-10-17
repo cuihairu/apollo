@@ -307,6 +307,47 @@ std::string SessionManager::generateLoginTicket(PlayerID playerId, SessionID ses
 // LoginServer 实现
 //==============================================================================
 
+//==============================================================================
+// 编队面（P3-1 re-home：baseappmgr 退场后目录 owner = Login 进程）
+//==============================================================================
+
+namespace {
+namespace session_ns = apollo::game::session;
+namespace disco_ns = apollo::net::discovery;
+
+std::uint64_t steady_now_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
+
+// 目录全量快照导出（旧 baseappmgr 壳同款，增量② owner 侧）：Online 条目 →
+// 镜像投影条目（gateway_addr 不上 wire——镜像是定位面不是连接面）。
+std::vector<session_ns::MirrorEntry> collect_mirror_entries(
+    const online_directory::OnlineDirectory& directory) {
+    std::vector<session_ns::MirrorEntry> entries;
+    const auto& dir = directory.directory();
+    entries.reserve(dir.size());
+    for (const auto player_id : dir.online_ids()) {
+        const auto* entry = dir.find(player_id);
+        if (entry == nullptr) {
+            continue;
+        }
+        session_ns::MirrorEntry me;
+        me.player_id = player_id;
+        me.anchor_epoch = entry->anchor_epoch;
+        me.session_id = entry->binding.session_id;
+        me.gateway_id = entry->binding.gateway_id;
+        me.zone_id = entry->zone_id;
+        me.state = entry->state;
+        me.assignment = entry->assignment;
+        entries.push_back(me);
+    }
+    return entries;
+}
+} // namespace
+
 LoginServer::LoginServer(const LoginConfig& config)
     : config_(config)
     , authenticator_(std::make_unique<Authenticator>(config))
@@ -415,6 +456,68 @@ void LoginServer::start() {
         }
     }
 
+    // ---- 编队面（P3-1 re-home：baseappmgr 退场后目录 owner = Login 进程；
+    //      三面全关 = 零接线零线程，与旧进程壳默认一致）----
+    if (directory_ && config_.mirrorPort != 0 && mirrorTransport_.open()) {
+        const auto host = config_.mirrorHost;
+        const auto port = config_.mirrorPort;
+        mirrorPublisher_ = std::make_shared<session_ns::DirectoryPublisher>(
+            [this, host, port](const std::uint8_t* data, std::size_t len) {
+                return mirrorTransport_.send_bytes(host, port, data, len);
+            });
+    }
+    if (directory_ && config_.recoveryPort != 0 &&
+        recoveryFeed_.open(config_.recoveryPort, "0.0.0.0")) {
+        // 恢复相位排他（拒新）：进程启动 = machined 拉起后的恢复序——收各
+        // World/gateway 全量重报，收敛（全报或超时）开放准入。
+        recovery_ = std::make_unique<session_ns::FleetRecoveryCoordinator>(
+            config_.recoveryExpected, config_.recoveryTimeoutMs,
+            [this](std::uint64_t component_id, std::uint32_t zone_id,
+                   const std::vector<session_ns::MirrorEntry>& sessions) {
+                const auto taken =
+                    directory_->intake_directory_full_report(sessions);
+                apollo::core::log::global_log_manager()
+                    .createLogger("fleet")
+                    ->info("full report: component=" + std::to_string(component_id) +
+                           " zone=" + std::to_string(zone_id) + " sessions=" +
+                           std::to_string(sessions.size()) +
+                           " intake=" + std::to_string(taken));
+            });
+        recovery_->begin(steady_now_ms());
+        directory_->set_admission_gate(
+            [this]() { return recovery_->admissible(); });
+        apollo::core::log::global_log_manager()
+            .createLogger("login_server")
+            ->info("fleet recovery intake on port " +
+                   std::to_string(recoveryFeed_.port()) + " (expected " +
+                   std::to_string(config_.recoveryExpected) + ", timeout " +
+                   std::to_string(config_.recoveryTimeoutMs) + "ms)");
+    }
+    if (directory_ && mirrorPublisher_) {
+        // 目录事件链入镜像 publisher（迁移编排完成后的改指立即推由
+        // set_snapshot_publisher 承担；快照按周期发布）
+        directory_->set_snapshot_publisher(mirrorPublisher_);
+        directory_->set_directory_event_listener(
+            [publisher = mirrorPublisher_](
+                const apollo::game::session::PlayerDirectory::Event& event) {
+                publisher->publish(event);
+            });
+        // 启动即发一轮全量（晚加入镜像不用等首周期）
+        mirrorPublisher_->publish_snapshot(collect_mirror_entries(*directory_));
+    }
+    if (config_.machinedPort != 0 && config_.machinedComponentId != 0 &&
+        deathFeed_.open(0, "0.0.0.0") && deathTransport_.open()) {
+        disco_ns::MemberId self;
+        self.component_id = config_.machinedComponentId;
+        self.service_port = deathFeed_.port();
+        deathListener_ = std::make_unique<disco_ns::DeathListener>(
+            self, config_.machinedHost, config_.machinedPort, deathTransport_);
+        (void)deathListener_->subscribe();
+    }
+    if (mirrorPublisher_ || recovery_ || deathListener_) {
+        fleetThread_ = std::thread([this]() { fleetLoop(); });
+    }
+
     // 启动会话清理线程
     cleanupThread_ = std::thread([this]() {
         std::unique_lock<std::mutex> lock(cleanupMutex_);
@@ -434,6 +537,14 @@ void LoginServer::start() {
 void LoginServer::stop() {
     running_ = false;
     cleanupWake_.notify_all();
+
+    // 编队面先收线（fleet 线程引用 directory_/协调器/publisher，先 join 再拆）。
+    if (fleetThread_.joinable()) {
+        fleetThread_.join();
+    }
+    deathListener_.reset();
+    recovery_.reset();
+    mirrorPublisher_.reset();
 
     // M1 准入面先收线（泵线程停驱 + 监听拆线）。
     if (m1Admission_) {
@@ -458,6 +569,119 @@ void LoginServer::stop() {
     if (directory_) {
         directory_->stop();
         directory_.reset();
+    }
+}
+
+//==============================================================================
+// 编队面（P3-1 re-home：baseappmgr 退场后目录 owner = Login 进程）
+//==============================================================================
+
+void LoginServer::fleetLoop() {
+    const auto logger =
+        apollo::core::log::global_log_manager().createLogger("fleet");
+    auto since_snapshot = std::chrono::milliseconds(0);
+    bool was_recovering = recovery_ && recovery_->recovering();
+    std::uint8_t report_buf[disco_ns::kMaxDatagramSize];
+    std::uint8_t death_buf[disco_ns::kWireSize];
+
+    while (running_.load()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        since_snapshot += std::chrono::seconds(1);
+
+        // 恢复相位轮询（增量③）：收 FullReport 分片 + 喂钟收敛判定
+        if (recovery_) {
+            std::size_t rlen = 0;
+            while (recoveryFeed_.try_receive(report_buf, sizeof(report_buf), rlen)) {
+                session_ns::FleetReportPart part;
+                if (session_ns::decode_fleet_report(report_buf, rlen, part)) {
+                    (void)recovery_->on_report_part(part);
+                }
+            }
+            recovery_->tick(steady_now_ms());
+            if (was_recovering && !recovery_->recovering()) {
+                was_recovering = false;
+                logger->info("recovery converged: reported="
+                             + std::to_string(recovery_->last_reported_count())
+                             + "/" + std::to_string(config_.recoveryExpected)
+                             + ", admission open");
+                // 收敛即向镜像面发一轮全量（重建目录进投影）
+                if (mirrorPublisher_ && directory_) {
+                    const auto entries =
+                        collect_mirror_entries(*directory_);
+                    const auto parts =
+                        mirrorPublisher_->publish_snapshot(entries);
+                    logger->info("snapshot published entries=" +
+                                 std::to_string(entries.size()) + " parts=" +
+                                 std::to_string(parts));
+                }
+            }
+        }
+
+        // 周期全量快照（对账 healing 面：delta 丢失由快照收敛）
+        if (mirrorPublisher_ && directory_ &&
+            since_snapshot.count() >=
+                static_cast<std::int64_t>(config_.mirrorSnapshotMs)) {
+            since_snapshot = std::chrono::milliseconds(0);
+            const auto entries = collect_mirror_entries(*directory_);
+            const auto parts = mirrorPublisher_->publish_snapshot(entries);
+            logger->info("snapshot published entries=" +
+                         std::to_string(entries.size()) + " parts=" +
+                         std::to_string(parts));
+        }
+
+        // 窗口满扫描（§4 tick 驱动）：到期 Suspended 删条目 + SessionDown
+        //（事件链自动进镜像面）。0 终结不打日志（空转是常态）。
+        if (directory_) {
+            if (const auto expired =
+                    directory_->sweep_suspended(steady_now_ms() / 1000);
+                expired > 0) {
+                logger->info("sweep expired=" + std::to_string(expired));
+            }
+        }
+
+        if (!deathListener_) {
+            continue;
+        }
+        // 订阅刷新（幂等——machined 侧 TTL = 3 × 其心跳周期，漏刷即停推）
+        (void)deathListener_->subscribe();
+        // 死亡事件收包 → 死亡行窗口处置（zone 行 / gateway 行批量进保活
+        // 窗口，窗口满由 sweep 终结）
+        std::string sender_host;
+        std::uint16_t sender_port = 0;
+        while (deathFeed_.try_receive(death_buf, sender_host, sender_port)) {
+            disco_ns::WirePacket packet;
+            if (!disco_ns::WirePacket::decode_from(death_buf, packet)) {
+                continue;
+            }
+            disco_ns::DeathEvent death;
+            if (!disco_ns::death_event_from(packet, death)) {
+                continue;
+            }
+            logger->warning("death: component="
+                            + std::to_string(death.member.component_id) + " zone="
+                            + std::to_string(death.member.zone_id) + " exit="
+                            + std::to_string(death.exit_code));
+            if (!directory_) {
+                continue;
+            }
+            const std::uint64_t now_tick = steady_now_ms() / 1000;
+            if (death.member.zone_id != 0) {
+                const auto suspended = directory_->suspend_zone_sessions(
+                    death.member.zone_id, now_tick, config_.suspendWindowTicks);
+                logger->warning("zone death zone=" +
+                                std::to_string(death.member.zone_id) +
+                                " suspended=" + std::to_string(suspended));
+            }
+            const auto gw = config_.gatewayByComponent.find(death.member.component_id);
+            if (gw != config_.gatewayByComponent.end() && gw->second != 0) {
+                const auto suspended = directory_->suspend_gateway_sessions(
+                    gw->second, now_tick, config_.suspendWindowTicks);
+                logger->warning("gateway death component=" +
+                                std::to_string(death.member.component_id) +
+                                " gateway=" + std::to_string(gw->second) +
+                                " suspended=" + std::to_string(suspended));
+            }
+        }
     }
 }
 

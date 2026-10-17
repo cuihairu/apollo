@@ -79,6 +79,33 @@ LoginConfig loadConfig(int argc, char* argv[]) {
             config.worldStoreM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--directory-client-port" && i + 1 < argc) {
             config.m1OnlineDirectoryPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--mirror-host" && i + 1 < argc) {
+            config.mirrorHost = argv[++i];
+        } else if (arg == "--mirror-port" && i + 1 < argc) {
+            config.mirrorPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--mirror-snapshot-ms" && i + 1 < argc) {
+            config.mirrorSnapshotMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--recovery-port" && i + 1 < argc) {
+            config.recoveryPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--recovery-expected" && i + 1 < argc) {
+            config.recoveryExpected = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--recovery-timeout-ms" && i + 1 < argc) {
+            config.recoveryTimeoutMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--suspend-window-ticks" && i + 1 < argc) {
+            config.suspendWindowTicks = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--gateway-component" && i + 1 < argc) {
+            // 死亡 wire 不带 gateway 身份：component → gateway 显式映射
+            const std::string spec = argv[++i];
+            const auto colon = spec.find(':');
+            if (colon != std::string::npos) {
+                const std::uint64_t cid =
+                    std::strtoull(spec.substr(0, colon).c_str(), nullptr, 10);
+                const std::uint32_t gid = static_cast<std::uint32_t>(
+                    std::strtoul(spec.substr(colon + 1).c_str(), nullptr, 10));
+                if (cid != 0 && gid != 0) {
+                    config.gatewayByComponent[cid] = gid;
+                }
+            }
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -90,6 +117,17 @@ LoginConfig loadConfig(int argc, char* argv[]) {
                       << "  --m1-port <port>           M1 admission listen port (0 = off, default: 0)\n"
                       << "  --world-store-m1-port <port>  World player data endpoint (default: 9104)\n"
                       << "  --directory-client-port <port>   OnlineDirectory M1 control dial port (0 = off, default: 0)\n"
+                      << "  --mirror-host <ipv4>       Directory mirror target host (default: 127.0.0.1)\n"
+                      << "  --mirror-port <port>       Directory mirror target port; 0 disables (default: 0)\n"
+                      << "  --mirror-snapshot-ms <ms>  Full snapshot publish period (default: 10000)\n"
+                      << "  --recovery-port <port>     Fleet recovery intake port; 0 disables (default: 0; 0-port bind = kernel assigned)\n"
+                      << "  --recovery-expected <n>    Expected full-report senders (default: 0)\n"
+                      << "  --recovery-timeout-ms <ms> Recovery phase timeout window (default: 5000)\n"
+                      << "  --machined-host <ipv4>     Machined host for death feed (default: 127.0.0.1)\n"
+                      << "  --machined-port <port>     Machined port; 0 disables death feed (default: 0)\n"
+                      << "  --component-id <n>         This component's fleet id (death feed identity)\n"
+                      << "  --suspend-window-ticks <n> Death-row keepalive window ticks, tick = 1s (default: 30)\n"
+                      << "  --gateway-component <cid:gid>  Death component -> gateway id mapping, repeatable\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -136,6 +174,11 @@ int main(int argc, char* argv[]) {
     std::cout << "======================================" << std::endl;
 
     auto config = loadConfig(argc, argv);
+    // 死亡订阅面身份（P3-1 re-home）：machined 地址复用编队注册的组件号口径
+    const FleetOptions fleet = loadFleetOptions(argc, argv);
+    config.machinedHost = fleet.machined_host;
+    config.machinedPort = fleet.machined_port;
+    config.machinedComponentId = fleet.component_id;
 
     logger->info("Configuration:");
     logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
@@ -160,7 +203,6 @@ int main(int argc, char* argv[]) {
 
         // 编队成员注册（P3-4 收尾批）：machined 在位才上 wire；beat 交给
         // 主循环秒拍，退出路径优雅注销（TTL 兜底覆盖注销包丢失）
-        const FleetOptions fleet = loadFleetOptions(argc, argv);
         apollo::net::discovery::UdpBeaconTransport fleet_transport;
         std::unique_ptr<apollo::net::discovery::FleetMember> fleet_member;
         if (fleet.machined_port != 0) {

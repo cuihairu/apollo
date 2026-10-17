@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,27 @@ struct LoginConfig {
     bool directoryEnabled = false;
     std::uint16_t directoryPort = 0;
     std::string directoryEpochPath;
+
+    // ---- 目录/恢复/死亡编队面（P3-1 re-home：baseappmgr 退场后目录 owner
+    //      = Login 进程；三面全 0 = 关，行为与旧进程壳一致）----
+    // 目录镜像 owner 面（增量②）：目录事件 → Delta + 周期全量快照
+    std::string mirrorHost = "127.0.0.1";  // 镜像消费方地址
+    std::uint16_t mirrorPort = 0;          // 0 = 镜像面关
+    std::uint32_t mirrorSnapshotMs = 10000;
+    // 编队恢复 intake 面（增量③）：收各 World/gateway 全量重报，恢复相位
+    // 排他（拒新）直至收敛（全报或超时）
+    std::uint16_t recoveryPort = 0;        // 0 = 恢复面关（0 端口绑定 = 内核分配）
+    std::uint32_t recoveryExpected = 0;
+    std::uint32_t recoveryTimeoutMs = 5000;
+    // 死亡订阅面（machined → Login）：World/gateway 进程死亡 → 目录死亡行
+    // 窗口处置。machinedPort = 0 = 两面全关
+    std::string machinedHost = "127.0.0.1";
+    std::uint16_t machinedPort = 0;
+    std::uint64_t machinedComponentId = 0;  // 订阅者身份（本进程组件号）
+    std::uint32_t suspendWindowTicks = 30;  // 保活窗口（主循环秒拍 tick）
+    // 死亡 wire 不带 gateway 身份：component → gateway 显式映射（骨架期桥接）
+    std::map<std::uint64_t, std::uint32_t> gatewayByComponent;
+
     // 监听配置
     std::string host = "0.0.0.0";
     uint16_t port = 9001;

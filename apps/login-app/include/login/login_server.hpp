@@ -1,5 +1,9 @@
 #pragma once
 
+#include "apollo/game/session/directory_mirror.hpp"
+#include "apollo/game/session/fleet_recovery.hpp"
+#include "apollo/net/discovery/discovery.hpp"
+#include "apollo/net/discovery/udp_transport.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "login/config.hpp"
 #include "login/m1_admission_server.hpp"
@@ -148,6 +152,11 @@ public:
     bool isRunning() const { return running_; }
     online_directory::OnlineDirectory* onlineDirectory() noexcept { return directory_.get(); }
     std::uint16_t admissionPort() const { return m1Admission_ ? m1Admission_->listenPort() : 0; }
+    // 编队恢复 intake 实占端口（recoveryPort = 0 绑定 = 内核分配；测试/演练
+    // 拨号键）。面关 = 0。
+    std::uint16_t recoveryListenPort() const { return recoveryFeed_.port(); }
+    // 死亡订阅收包口实占端口（machined 死亡通知回投地址；面关 = 0）
+    std::uint16_t deathFeedPort() const { return deathFeed_.port(); }
     std::vector<std::uint8_t> dispatchRequest(const std::vector<std::uint8_t>& request);
 
     // 网关分配请求处理（M1 准入面 handler 直通——MessageCodec 全帧进出，
@@ -155,6 +164,10 @@ public:
     std::vector<uint8_t> handleGatewayAssignRequest(const std::vector<uint8_t>& request);
 
 private:
+    // 编队面主循环（P3-1 re-home，秒拍）：恢复 intake 收包/收敛、周期全量
+    // 快照、死亡行窗口扫描、死亡订阅刷新与收包处置。任一面启用才起线程。
+    void fleetLoop();
+
     // 处理登录请求
     std::vector<uint8_t> handleLoginRequest(const std::vector<uint8_t>& request);
 
@@ -186,6 +199,24 @@ private:
 
     // M1 manager 客户端面（P4-4 批④；m1OnlineDirectoryPort = 0 = 不装配，同上）
     std::unique_ptr<M1BaseClient> m1OnlineDirectoryClient_;
+
+    // ---- 编队面（P3-1 re-home：baseappmgr 退场后目录 owner = Login 进程，
+    //      旧进程壳三面移植——镜像 publisher / 恢复 intake / 死亡订阅）----
+    // 目录镜像 owner 面（增量②）：事件 → Delta + 周期快照；mirrorPort = 0 关
+    apollo::net::discovery::UdpBeaconTransport mirrorTransport_;
+    std::shared_ptr<apollo::game::session::DirectoryPublisher> mirrorPublisher_;
+
+    // 恢复相位 intake 面（增量③）：FullReport 收包 + 收敛裁决；recoveryPort
+    // = 0 关。intake 回调落 directory_（start() 装配）
+    apollo::net::discovery::UdpFeed recoveryFeed_;
+    std::unique_ptr<apollo::game::session::FleetRecoveryCoordinator> recovery_;
+
+    // 死亡订阅面：machined 死亡通知 → 目录死亡行窗口处置；machinedPort = 0 关
+    apollo::net::discovery::UdpFeed deathFeed_;
+    apollo::net::discovery::UdpBeaconTransport deathTransport_;
+    std::unique_ptr<apollo::net::discovery::DeathListener> deathListener_;
+
+    std::thread fleetThread_;
 };
 
 } // namespace login
