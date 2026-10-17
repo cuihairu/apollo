@@ -139,6 +139,15 @@ private:
     // canary 窗的 fault 计账靠模块函数真被调用）。
     void driveModuleRollout();
 
+    // World 排空受理点（956，P4 更新排空批；gameThread_ 内同步执行——与
+    // launch/玩法推进同线程，状态机单线程独占无锁）：op 1=begin（排空闸闭
+    // 合 + 期限登记）2=status（快照回带），回执 957 即时回。
+    void onM1WorldDrain(const std::string& peer, const WorldDrainRequest& request);
+    // 排空推进（gameLoop 每拍，driveSquadGameplay 同址后拍）：draining 期
+    // active_count 归零落 drained；期限到未清强停剩余副本（abort 取消线 /
+    // dismiss 结算线收尾）。drained 终态不反闸——恢复 = 进程替换。
+    void driveWorldDrain();
+
     // M1 延时应答出口（929 cell_intent_ack）；request_id = 0（legacy 路径）
     // 不作关联键，静默。
     void sendM1Ack(std::uint64_t request_id, std::int32_t code, const std::string& message);
@@ -199,6 +208,12 @@ private:
     std::vector<std::string> rolloutModuleNames_;
     // 在装模块名（自驱相位跃迁日志面：promoted/rolled back 行带模块名）
     std::string lastRolloutName_;
+    // World 排空状态机（P4 更新排空批；gameThread_ 独占——956 受理点与
+    // driveWorldDrain 同线程，无跨线程访问）。期限 0 = 无期限自然排空；
+    // drained 终态不反闸——恢复 = 进程替换（副本临时态随进程消亡）。
+    std::int32_t worldDrainState_{kWorldDrainServing};
+    std::uint64_t worldDrainDeadlineMs_{0};  // 0 = 无期限（steady 毫秒域）
+    std::string worldDrainDetail_;
     std::atomic<bool> running_{false};
     // 受理面（ADR-016/017）：accepting_=false 即维护闸（start 前拒新意图；
     // 停机先关闸再排空队列，G-3 镜像顺序）

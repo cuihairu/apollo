@@ -30,4 +30,5 @@
   <error code="1115" name="squad_wave_too_large" desc="累计刷怪超出目标配额"/>
   <error code="1116" name="squad_unknown_monster" desc="击杀上报的怪物不属于本副本"/>
   <error code="1117" name="squad_not_in_instance" desc="名册成员但当前不在副本内"/>
+  <error code="1118" name="squad_world_draining" desc="World 排空中，停止分配新副本（既有副本服务至结算销毁）"/>
 </errors>

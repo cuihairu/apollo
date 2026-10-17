@@ -378,6 +378,12 @@ std::optional<std::uint32_t> SquadInstanceService::pick_world() const {
 
 LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
     LaunchResult result;
+    // 排空闸（P4 更新排空批）：闭合期停分新副本——既有副本照常服务至
+    // 结算销毁；分配端按 Draining 重选 World 或取消预留。
+    if (drain_.load(std::memory_order_acquire)) {
+        result.error = LaunchError::Draining;
+        return result;
+    }
     std::vector<std::uint64_t> members;
     result.error = validate(request, members);
     if (result.error != LaunchError::Ok) return result;

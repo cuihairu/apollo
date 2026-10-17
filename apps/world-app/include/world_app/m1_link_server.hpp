@@ -23,6 +23,11 @@
 
 namespace world_app {
 
+// World 排空状态机值（956/957 契约面；gateway 954 同值口径）。
+inline constexpr std::int32_t kWorldDrainServing = 0;
+inline constexpr std::int32_t kWorldDrainDraining = 1;
+inline constexpr std::int32_t kWorldDrainDrained = 2;
+
 // M1 错误码（errors.xml 契约错误表；0 成功）。
 inline constexpr std::int32_t kIntentAckOk = 0;
 inline constexpr std::int32_t kIntentAckInternal = 2001;        // internal
@@ -59,6 +64,15 @@ struct ModuleRolloutRequest {
     std::string source;
     std::uint64_t observe_ticks = 0;
     std::uint64_t fault_threshold = 0;
+};
+
+// World 排空控制请求（契约 956，P4 更新排空批）：停止分配新副本，既有
+// 副本服务至结算销毁。op：1=begin 2=status。回执 957 按 request_id 关联
+// （受理点同步执行——M1 泵在 gameThread_，与 launch/玩法推进同线程）。
+struct WorldDrainRequest {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;  // 1=begin 2=status
+    std::int64_t deadline_s = 0;  // begin 有义：期限到未清强停剩余副本
 };
 
 class M1LinkServer {
@@ -114,6 +128,23 @@ public:
         (void)detail;
     }
 
+    // World 排空回执（957 world_drain_reply）：peer/关联键同 953 面。
+    // state：0=serving 1=draining 2=drained；active_instances = 活动副本
+    // 绑定数；detail = 状态摘要（drained 含强停结果；ok=0 拒绝原因）。
+    // kReliable 同 945。
+    virtual void sendWorldDrainReply(const std::string& peer, std::uint64_t request_id,
+                                     std::int32_t op, bool ok, std::int32_t state,
+                                     std::uint64_t active_instances,
+                                     const std::string& detail) {
+        (void)peer;
+        (void)request_id;
+        (void)op;
+        (void)ok;
+        (void)state;
+        (void)active_instances;
+        (void)detail;
+    }
+
     // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
     // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
     //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =
@@ -137,12 +168,15 @@ public:
 // 工厂：config.host:config.port 监听，契约路由表自 config.route_json 装载
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
-// module_rollout_request 裸帧分别经 on_debug_eval / on_module_rollout 投递
-//（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
+// module_rollout_request / 956 world_drain_request 裸帧分别经 on_debug_eval /
+// on_module_rollout / on_world_drain 投递（入参 = 请求 + 发端 peer 自报名，
+// 回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {},
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
-        on_module_rollout = {});
+        on_module_rollout = {},
+    std::function<void(const std::string&, const WorldDrainRequest&)>
+        on_world_drain = {});
 
 } // namespace world_app

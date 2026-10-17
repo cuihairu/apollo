@@ -187,6 +187,9 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const ModuleRolloutRequest& request) {
             onM1ModuleRollout(peer, request);
+        },
+        [this](const std::string& peer, const WorldDrainRequest& request) {
+            onM1WorldDrain(peer, request);
         });
 
     // 开闸先于 m1Link_->start()：受理面就绪后网关才见得到入口
@@ -477,6 +480,116 @@ void WorldApp::onM1ModuleRollout(const std::string& peer,
             reply(false, state_of(), 0, script_->module_version(request.name),
                   "unknown op " + std::to_string(request.op));
             return;
+    }
+}
+
+void WorldApp::onM1WorldDrain(const std::string& peer, const WorldDrainRequest& request) {
+    // 956 受理（P4 更新排空批）：gameThread_ 泵上下文 = launch/玩法推进同
+    // 线程——排空状态机单线程独占无锁，受理点同步回 957。request_id = 0 保留。
+    if (request.request_id == 0) {
+        return;
+    }
+    const auto now_ms = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    const auto active_of = [&]() -> std::uint64_t {
+        return squadInstanceService_ ? squadInstanceService_->active_count() : 0;
+    };
+    const auto detail_of = [&]() -> std::string {
+        switch (worldDrainState_) {
+            case kWorldDrainDrained:
+                return worldDrainDetail_;
+            case kWorldDrainDraining:
+                return "draining: " + std::to_string(active_of())
+                       + " active instances settling";
+            default:
+                return "serving";
+        }
+    };
+    auto reply = [&](bool ok, const std::string& detail) {
+        if (m1Link_) {
+            m1Link_->sendWorldDrainReply(peer, request.request_id, request.op, ok,
+                                         worldDrainState_, active_of(), detail);
+        }
+    };
+    if (squadInstanceService_ == nullptr) {
+        reply(false, "squad service not ready");
+        return;
+    }
+    switch (request.op) {
+        case 1: {  // begin：排空闸闭合 + 期限登记（重复 begin 幂等，期限只紧不松）
+            if (worldDrainState_ == kWorldDrainServing) {
+                squadInstanceService_->set_drain(true);
+                worldDrainState_ = kWorldDrainDraining;
+                worldDrainDeadlineMs_ =
+                    request.deadline_s > 0
+                        ? now_ms + static_cast<std::uint64_t>(request.deadline_s) * 1000U
+                        : 0;
+                worldLog().info("world drain begun");
+            } else if (worldDrainState_ == kWorldDrainDraining && request.deadline_s > 0) {
+                // 已在排空：期限取更紧者（0 = 无期限不覆盖既有期限）
+                const auto deadline =
+                    now_ms + static_cast<std::uint64_t>(request.deadline_s) * 1000U;
+                if (worldDrainDeadlineMs_ == 0 || deadline < worldDrainDeadlineMs_) {
+                    worldDrainDeadlineMs_ = deadline;
+                }
+            }
+            reply(true, detail_of());
+            return;
+        }
+        case 2: {  // status：控制面聚合观察（state/active/detail）
+            reply(true, detail_of());
+            return;
+        }
+        default:
+            reply(false, "unknown op " + std::to_string(request.op));
+            return;
+    }
+}
+
+void WorldApp::driveWorldDrain() {
+    // gameLoop 拍（driveSquadGameplay 同拍位后拍）：本拍结算收尾已推进，
+    // 归零即落 drained；期限到未清强停剩余副本——Create..Running 走 abort
+    //（取消线，不发成功奖励），已入结算走 dismiss（收尾推进），两原语覆盖
+    // 全部活动相位。drained 终态不反闸（恢复 = 进程替换）。
+    if (worldDrainState_ != kWorldDrainDraining || squadInstanceService_ == nullptr) {
+        return;
+    }
+    auto active = squadInstanceService_->active_count();
+    if (active == 0) {
+        worldDrainState_ = kWorldDrainDrained;
+        worldDrainDetail_ = "drained: all instances settled";
+        worldLog().info("world " + worldDrainDetail_);
+        return;
+    }
+    if (worldDrainDeadlineMs_ == 0) {
+        return;  // 无期限：既有副本服务至自然结算
+    }
+    const auto now_ms = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    if (now_ms < worldDrainDeadlineMs_) {
+        return;
+    }
+    // 强停：快照遍历（abort/dismiss 同步释放绑定，快照期内安全）
+    std::size_t force_stopped = 0;
+    for (const auto& binding : squadInstanceService_->activeBindings()) {
+        if (squadInstanceService_->abort(binding.party_id)
+            || squadInstanceService_->dismiss(binding.party_id)) {
+            ++force_stopped;
+        }
+    }
+    active = squadInstanceService_->active_count();
+    if (active == 0) {
+        worldDrainState_ = kWorldDrainDrained;
+        worldDrainDetail_ = "drained: deadline reached, " + std::to_string(force_stopped)
+                            + " instances force-aborted";
+        worldLog().info("world " + worldDrainDetail_);
+    } else {
+        worldLog().warning("world drain force-stop left " + std::to_string(active)
+                           + " instances; retrying next tick");
     }
 }
 
@@ -855,6 +968,7 @@ std::vector<uint8_t> WorldApp::handleSquadLaunch(const std::vector<uint8_t>& req
         case squad_instance::LaunchError::MemberBusy: code = 1105; break;
         case squad_instance::LaunchError::NoWorldCapacity: code = 1106; break;
         case squad_instance::LaunchError::SpawnRejected: code = 1107; break;
+        case squad_instance::LaunchError::Draining: code = 1118; break;
     }
     const auto* binding = squadInstanceService_->find_by_party(msg.partyId);
     deliverSquadResult(header.sessionId,
@@ -1144,6 +1258,10 @@ void WorldApp::gameLoop() {
         // 小队副本玩法拍（P2 真实链路）：Running 副本 tick 推进（含已受理
         // 击杀的 battle 输入序）+ 结算期副本收尾；状态帧随后续操作/收尾下发
         driveSquadGameplay(static_cast<double>(tickInterval().count()) / 1000.0);
+
+        // World 排空推进（P4 更新排空批；driveSquadGameplay 后拍——本拍结算
+        // 收尾先推进，归零判定用新值）
+        driveWorldDrain();
 
         // §7.1 eval 回执收账（tick 内固定调试点已执行在途 eval）
         drainDebugEvalResults();

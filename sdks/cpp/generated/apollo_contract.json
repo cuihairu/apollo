@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "7d61a7bae351b1d8f68b0673da0de5fdd7d62fbe62b18b75a806d98a1ce32808",
-  "client_hash": "82438de9a7ff583499456ff7fb71adcf5691dab1efddb47afef15b86a0b821e3",
-  "internal_hash": "124aa27000cc61fe24933f413242f75050e4bacfbaf5b8758ac90dfc2ced2d89",
+  "schema_hash": "ce166a84343b694b100cf131e88d0ae65b8c0a27eda28b600ed762688c9ca333",
+  "client_hash": "c8e8e4de6ad5274e224e27113528ec9d88fc66b75b3cae31a2490edc0411207c",
+  "internal_hash": "71cab1f3c848c5e2cce9a383cb98033261c66d81fc0fcb96821e01489a1cbe35",
   "contract_version": 3,
   "aliases": [
     {
@@ -3179,6 +3179,82 @@
         }
       ],
       "desc": "Gateway 排空控制回执（Gateway→ops；request_id 关联）"
+    },
+    {
+      "id": 956,
+      "name": "world_drain_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（调用方单调分配，0 保留）"
+        },
+        {
+          "name": "op",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "1=begin 2=status"
+        },
+        {
+          "name": "deadline_s",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "排空期限（秒，begin 有义；0 = 无期限自然排空，期限到未清即强停剩余副本）"
+        }
+      ],
+      "desc": "World 排空控制请求（ops→World M1 控制受理面；停止分配新副本，既有副本服务至结算销毁）"
+    },
+    {
+      "id": 957,
+      "name": "world_drain_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带请求关联号"
+        },
+        {
+          "name": "op",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "回带请求 op"
+        },
+        {
+          "name": "ok",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=受理成功；0=拒绝（detail 为原因）"
+        },
+        {
+          "name": "state",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "排空状态机当前值：0=serving 1=draining 2=drained"
+        },
+        {
+          "name": "active_instances",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "当前活动副本绑定数（含玩法期与结算期）"
+        },
+        {
+          "name": "detail",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "状态摘要（drained 时含强停结果；ok=0 为拒绝原因）"
+        }
+      ],
+      "desc": "World 排空控制回执（World→ops；request_id 关联）"
     }
   ],
   "entities": [
@@ -3490,6 +3566,11 @@
       "code": 1117,
       "name": "squad_not_in_instance",
       "desc": "名册成员但当前不在副本内"
+    },
+    {
+      "code": 1118,
+      "name": "squad_world_draining",
+      "desc": "World 排空中，停止分配新副本（既有副本服务至结算销毁）"
     },
     {
       "code": 2001,

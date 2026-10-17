@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "82438de9a7ff583499456ff7fb71adcf5691dab1efddb47afef15b86a0b821e3",
+  "client_hash": "c8e8e4de6ad5274e224e27113528ec9d88fc66b75b3cae31a2490edc0411207c",
   "messages": [
     {
       "id": 10,
@@ -605,6 +605,11 @@
       "code": 1117,
       "name": "squad_not_in_instance",
       "desc": "名册成员但当前不在副本内"
+    },
+    {
+      "code": 1118,
+      "name": "squad_world_draining",
+      "desc": "World 排空中，停止分配新副本（既有副本服务至结算销毁）"
     },
     {
       "code": 2001,

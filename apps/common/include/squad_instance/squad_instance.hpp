@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -36,6 +37,7 @@ enum class LaunchError : std::uint32_t {
     MemberBusy,       // 有成员已绑在活动副本
     NoWorldCapacity,  // 所有已注册 World 均满载
     SpawnRejected,    // 派生被拒（本地创建失败/远端 World 拒绝）
+    Draining,         // 本 World 排空中（P4 更新排空批）：停止分配新副本
 };
 
 struct LaunchRequest {
@@ -106,6 +108,12 @@ public:
     void set_max_squad_size(std::size_t max_members) noexcept;  // 默认 Party::kMaxMembers
     void set_member_online(MemberOnlineFn fn);
     void set_remote_spawner(RemoteSpawnFn fn);
+    // 排空闸（P4 更新排空批，同 OnlineDirectory::set_drain 口径）：闭合期
+    // launch 拒新（LaunchError::Draining），既有副本照常 enter/start/结算/
+    // 销毁——等待面即 active_count() 归零；恢复 = 进程替换（副本临时态随
+    // 进程消亡，结算账 restore 回填防双记），无运行中反闸。
+    void set_drain(bool on) noexcept { drain_.store(on, std::memory_order_release); }
+    bool draining() const noexcept { return drain_.load(std::memory_order_acquire); }
 
     // ---- 受理 ----
     LaunchResult launch(const LaunchRequest& request);
@@ -281,6 +289,7 @@ private:
     // unique_ptr 保地址稳定：battle 持账本观察指针跨 tick 存活。
     std::unordered_map<std::uint64_t, std::unique_ptr<SettlementLedger>> settlements_;
     std::unordered_set<std::uint64_t> busy_members_;
+    std::atomic<bool> drain_{false};  // 排空闸（宿主 owning 线程置位；launch 判定）
     std::uint64_t name_seq_ = 0;
     std::uint64_t monster_seq_ = 0;  // 副本怪实体 id 发号（Scene 私有，全局递增）
 };

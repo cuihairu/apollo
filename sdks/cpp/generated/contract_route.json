@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "7d61a7bae351b1d8f68b0673da0de5fdd7d62fbe62b18b75a806d98a1ce32808",
-  "client_hash": "82438de9a7ff583499456ff7fb71adcf5691dab1efddb47afef15b86a0b821e3",
-  "internal_hash": "124aa27000cc61fe24933f413242f75050e4bacfbaf5b8758ac90dfc2ced2d89",
+  "schema_hash": "ce166a84343b694b100cf131e88d0ae65b8c0a27eda28b600ed762688c9ca333",
+  "client_hash": "c8e8e4de6ad5274e224e27113528ec9d88fc66b75b3cae31a2490edc0411207c",
+  "internal_hash": "71cab1f3c848c5e2cce9a383cb98033261c66d81fc0fcb96821e01489a1cbe35",
   "contract_version": 3,
   "routes": [
     {
@@ -724,6 +724,24 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "gateway_drain_reply"
+    },
+    {
+      "id": 956,
+      "name": "world_drain_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "world_drain_request"
+    },
+    {
+      "id": 957,
+      "name": "world_drain_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "world_drain_reply"
     }
   ]
 }

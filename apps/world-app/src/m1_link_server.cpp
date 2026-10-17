@@ -212,11 +212,14 @@ public:
     M1LinkServerImpl(M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
                      std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval,
                      std::function<void(const std::string&, const ModuleRolloutRequest&)>
-                         on_module_rollout)
+                         on_module_rollout,
+                     std::function<void(const std::string&, const WorldDrainRequest&)>
+                         on_world_drain)
         : config_(std::move(config))
         , on_intent_(std::move(on_intent))
         , on_debug_eval_(std::move(on_debug_eval))
-        , on_module_rollout_(std::move(on_module_rollout)) {}
+        , on_module_rollout_(std::move(on_module_rollout))
+        , on_world_drain_(std::move(on_world_drain)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -357,6 +360,32 @@ public:
                          link::SendClass::kReliable);
     }
 
+    void sendWorldDrainReply(const std::string& peer, std::uint64_t request_id,
+                             std::int32_t op, bool ok, std::int32_t state,
+                             std::uint64_t active_instances,
+                             const std::string& detail) override {
+        if (!manager_ || request_id == 0) {
+            return;  // 0 保留（回执关联键缺位即静默）
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return;  // 未知 peer = 尽力面（控制面超时面重发裁决）
+        }
+        std::vector<wire::FieldValue> fields(6);
+        fields[0].integer = static_cast<std::int64_t>(request_id);
+        fields[1].integer = op;
+        fields[2].integer = ok ? 1 : 0;
+        fields[3].integer = state;
+        fields[4].integer = static_cast<std::int64_t>(active_instances);
+        fields[5].text = detail;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::world_drain_reply), fields, payload)) {
+            return;
+        }
+        (void)link->send(id_of(MsgId::world_drain_reply), payload.data(), payload.size(),
+                         link::SendClass::kReliable);
+    }
+
     std::uint16_t listenPort() const override {
         return manager_ ? manager_->endpoint_port("gateway") : 0;
     }
@@ -427,6 +456,14 @@ private:
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_module_rollout_frame(link.peer_name(), data, size);
             });
+        // 956 world_drain_request 裸帧受理（P4 更新排空批）：受理点同步执行
+        // 于 gameThread_（与 launch/玩法推进同线程）——排空状态机单线程独占
+        // 无锁，同步回 957。
+        dispatcher.set_handler(
+            id_of(MsgId::world_drain_request),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_world_drain_frame(link.peer_name(), data, size);
+            });
     }
 
     void handle_debug_eval_frame(const std::string& peer, const std::uint8_t* data,
@@ -463,6 +500,21 @@ private:
         req.observe_ticks = static_cast<std::uint64_t>(fields[6].integer);
         req.fault_threshold = static_cast<std::uint64_t>(fields[7].integer);
         on_module_rollout_(peer, req);
+    }
+
+    void handle_world_drain_frame(const std::string& peer, const std::uint8_t* data,
+                                  std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::world_drain_request), data, size, fields)
+            || fields.size() != 3 || on_world_drain_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        WorldDrainRequest req;
+        req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.op = static_cast<std::int32_t>(fields[1].integer);
+        req.deadline_s = fields[2].integer;
+        on_world_drain_(peer, req);
     }
 
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
@@ -505,6 +557,7 @@ private:
     std::function<void(IntentEnvelope)> on_intent_;
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval_;
     std::function<void(const std::string&, const ModuleRolloutRequest&)> on_module_rollout_;
+    std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
     std::atomic<bool> started_{false};
@@ -518,10 +571,12 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval,
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
-        on_module_rollout) {
+        on_module_rollout,
+    std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
                                               std::move(on_debug_eval),
-                                              std::move(on_module_rollout));
+                                              std::move(on_module_rollout),
+                                              std::move(on_world_drain));
 }
 
 #else // _WIN32
@@ -530,7 +585,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig /*config*/, std::function<void(IntentEnvelope)> /*on_intent*/,
     std::function<void(const std::string&, const DebugEvalRequest&)> /*on_debug_eval*/,
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
-        /*on_module_rollout*/) {
+        /*on_module_rollout*/,
+    std::function<void(const std::string&, const WorldDrainRequest&)>
+        /*on_world_drain*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();

@@ -590,4 +590,17 @@
     <field name="active_connections" type="int64" desc="当前活跃客户端连接数"/>
     <field name="detail" type="string" desc="状态摘要（drained 时含强停结果；ok=0 为拒绝原因）"/>
   </msg>
+  <msg id="956" name="world_drain_request" dir="P2P" channel="events" domain="internal" desc="World 排空控制请求（ops→World M1 控制受理面；停止分配新副本，既有副本服务至结算销毁）">
+    <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
+    <field name="op" type="int32" desc="1=begin 2=status"/>
+    <field name="deadline_s" type="int64" desc="排空期限（秒，begin 有义；0 = 无期限自然排空，期限到未清即强停剩余副本）"/>
+  </msg>
+  <msg id="957" name="world_drain_reply" dir="P2P" channel="events" domain="internal" desc="World 排空控制回执（World→ops；request_id 关联）">
+    <field name="request_id" type="int64" desc="回带请求关联号"/>
+    <field name="op" type="int32" desc="回带请求 op"/>
+    <field name="ok" type="bool" desc="1=受理成功；0=拒绝（detail 为原因）"/>
+    <field name="state" type="int32" desc="排空状态机当前值：0=serving 1=draining 2=drained"/>
+    <field name="active_instances" type="int64" desc="当前活动副本绑定数（含玩法期与结算期）"/>
+    <field name="detail" type="string" desc="状态摘要（drained 时含强停结果；ok=0 为拒绝原因）"/>
+  </msg>
 </messages>
