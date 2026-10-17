@@ -2060,6 +2060,34 @@ endif()
 add_test(NAME FleetRehomeChainTests COMMAND fleet_rehome_chain_tests)
 endif()
 
+# ========== Migration Chain Tests (P3-5 跨 World 迁移真实进程链) ==========
+# 真 LoginServer（目录 owner + 942 编排受理面）+ 两真 WorldApp（源/目标
+# PlayerStore M1 面 + 933/935/936/937 迁移 wire 真拨）。断言：源端冻结形态、
+# 导出/目标确认（锚点 + 档案一致）、路由切换（改指 + 代次 + 立即推镜像）、
+# 周期重报不回卷、失败恢复两形态（源不可达干净拒绝 / 目标不可达如实停留）。
+if(TARGET apollo::game_world AND TARGET apollo_app_services)
+add_executable(migration_chain_tests
+    test_migration_chain.cpp
+    ../apps/world-app/src/world_app.cpp
+    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/login-app/src/login_server.cpp
+    ../apps/login-app/src/m1_admission_server.cpp
+    ../apps/login-app/src/m1_base_client.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp)
+target_include_directories(migration_chain_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include)
+target_compile_definitions(migration_chain_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+target_link_libraries(migration_chain_tests PRIVATE apollo_app_services
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
+if(TARGET apollo_squad_instance)
+    target_link_libraries(migration_chain_tests PRIVATE apollo_squad_instance)
+endif()
+add_test(NAME MigrationChainTests COMMAND migration_chain_tests)
+endif()
+
 # Squad instance admission (P2)：小队创建请求受理——队伍/成员/人数/准入
 # 校验、World 容量选择、独立 Instance 与临时 Scene 创建。
 if(TARGET apollo_squad_instance)
