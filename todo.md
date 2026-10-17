@@ -30,7 +30,7 @@
 - [x] 接通小队创建请求：验证队伍、成员、人数和准入条件，选择有容量的 World，创建独立 Instance 与临时 Scene。（d4d55f65：apps/common SquadInstanceService 受理面——队伍存在/队长/人数上限/在线谓词/成员忙校验，本地优先按容量选 World，独立 Instance + 临时 Scene 一对一创建，终态释放双回收；SquadInstanceTests 6/6，门禁 77/77 绿。客户端→Gateway→World 真实上行仍留待后项。）
 - [ ] 接通成员进入和准备完成后启动玩法，隔离副本内实体、AOI、任务与脚本状态。（476512c2：受理快照校验进入、首进驱动 Create→Initialize→Waiting、全员到齐队长 Waiting→Running、实体/AOI 场级隔离——独立 Scene 私有实体集与 AOI，SquadInstanceTests 9/9、门禁 77/77 绿。剩余：副本私有脚本状态与任务隔离需随 gameLoop 线程入口（真实上行项）接线——ScriptRuntime 归属 gameLoop 单写者，钩子（started/closing）已留好装配点；任务系统本身属后续能力。）
 - [x] 接通刷怪、目标完成与失败判定，驱动 Instance 进入结算阶段。（860472fd：SquadInstanceService 玩法面——Running 期设目标（击杀配额+超时 tick，基线取 Instance 玩法时钟）、配额封顶刷怪入副本私有 Scene、击杀上报只认本副本怪且达标 finish() 进结算（成功线）、超时 cancel() 进结算不发成功奖励（失败线）、结算期拒绝迟到玩法输入、进度查询随绑定释放清除；SquadInstanceTests 12/12，门禁 77/77 绿，build-off 全量重建绿。gameLoop 驱动与客户端击杀上报的宿主接线随真实上行项。）
-- [ ] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。
+- [x] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。（77f03803：SettlementLedger 受理即开账（名册快照）；battle 与 instance 同生——enter 段收参战者、tick 段随玩法时钟、finish 段结算经 IRewardSink → AnchorRewardSink 落锚点 exp + mark_dirty 随 SaveQueue 落档（既有持久化接口）；幂等口径 (instance,player) 一条账，applied 后重复落账/重试/恢复重放一律拒绝；挂账重试只补曾尝试未落条目；restore 回填已落标记防重启双记；超时失败线不结算不发奖励；宿主经 PlayerStore::findAnchor 惰性解析装配；SquadInstanceTests 15/15、门禁 77/77 绿、build-off 全量重建绿。battle 分值输入路径与账本跨进程持久化随真实上行/排空项。）
 - [ ] 结算后移出玩家、拒绝迟到输入，释放实体、AOI、脚本/任务及临时 Scene，销毁 Instance 并从 World 注册表移除。
 - [ ] 覆盖无人进入、全员退出、掉线、队伍解散、超时和进程异常的收尾策略及测试。
 - [ ] 接通并验证客户端 → Gateway → World → Scene/Instance 的真实上行、结果和状态下行；现有 broadcastToViewers 日志不能作为下行完成证据。
