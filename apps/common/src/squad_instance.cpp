@@ -53,6 +53,10 @@ SquadInstanceService::EnterError SquadInstanceService::enter(std::uint64_t party
         if (!instance->initialize() || !instance->ready())
             return EnterError::StateRejected;
     }
+    // 准入窗口 = Waiting/Running；结算期及终态拒绝迟到进入。
+    if (instance->state() != apollo::game::world::Instance::State::Waiting &&
+        instance->state() != apollo::game::world::Instance::State::Running)
+        return EnterError::StateRejected;
     if (!instance->enter(apollo::game::core::PlayerId{player_id}))
         return EnterError::Duplicate;
     return EnterError::Ok;
@@ -230,6 +234,45 @@ std::optional<SettlementLedger::Snapshot> SquadInstanceService::settlement(
     const auto it = settlements_.find(binding->instance_id);
     if (it == settlements_.end()) return std::nullopt;
     return it->second->snapshot();
+}
+
+bool SquadInstanceService::dismiss(std::uint64_t party_id) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return false;
+    if (binding->world_id != local_world_id_ || !local_world_) return false;
+    auto* instance = local_world_->find_instance(binding->instance_id);
+    if (!instance) return false;
+    // 仅入结算后可收尾；玩法期（Create..Running）返回 false。
+    switch (instance->state()) {
+        case apollo::game::world::Instance::State::Finishing:
+        case apollo::game::world::Instance::State::Rewarding:
+        case apollo::game::world::Instance::State::Draining:
+        case apollo::game::world::Instance::State::Destroyed:
+            break;
+        default:
+            return false;
+    }
+    // 移出玩家：按受理名册逐一移出（destroy 前置约束）。
+    for (const auto member : binding->members) {
+        instance->leave(apollo::game::core::PlayerId{member});
+    }
+    // 结算链按当前相位推进至终态（Finishing→Rewarding→Draining→Destroyed）。
+    const auto advanced = [&]() {
+        if (instance->state() == apollo::game::world::Instance::State::Finishing &&
+            !instance->settle())
+            return false;
+        if (instance->state() == apollo::game::world::Instance::State::Rewarding &&
+            !instance->drain())
+            return false;
+        if (instance->state() == apollo::game::world::Instance::State::Draining &&
+            !instance->destroy())
+            return false;
+        return instance->state() == apollo::game::world::Instance::State::Destroyed;
+    }();
+    if (!advanced) return false;
+    // 双回收（release 内触发 closing 钩子→销毁 Instance 与临时 Scene；
+    // 实体/AOI 随 Scene 释放），账面清除。
+    return release(binding->instance_id);
 }
 
 LaunchError SquadInstanceService::validate(const LaunchRequest& request,

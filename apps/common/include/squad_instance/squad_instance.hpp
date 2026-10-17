@@ -176,6 +176,13 @@ public:
     [[nodiscard]] std::optional<SettlementLedger::Snapshot> settlement(
         std::uint64_t party_id) const;
 
+    // ---- 结算后收尾（P2：移出玩家、拒绝迟到输入、释放销毁）----
+    // 入结算（Finishing 起）才可收尾：按受理名册移出玩家 → 结算推进
+    // （Finishing→Rewarding→Draining→Destroyed）→ release（终态双回收：
+    // 实体/AOI/临时 Scene 随 Scene 释放，脚本/任务残留由 closing 钩子宿主
+    // 销毁）→ 绑定/玩法/结算账面清除。玩法期/无绑定返回 false。
+    bool dismiss(std::uint64_t party_id);
+
     // ---- 生命周期钩子装配 ----
     void set_instance_started(InstanceStartedFn fn);
     void set_instance_closing(InstanceClosingFn fn);

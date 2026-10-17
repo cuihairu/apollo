@@ -742,6 +742,146 @@ bool test_squad_settlement_recovery_and_failure_line() {
 }
 
 
+bool test_squad_dismiss_evicts_players_and_reclaims() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    make_party(parties, 2, 200, 201, 202);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    int closing_calls = 0;
+    service.set_instance_closing([&](std::uint64_t) { ++closing_calls; });
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+
+    // 玩法期未入结算：不允许收尾
+    TEST_ASSERT(!service.dismiss(1), "dismiss refused while Running");
+
+    // 成功线入结算 → 收尾：移出玩家 → 结算推进 → 销毁 → 释放
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "wave spawned");
+    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "goal met");
+    TEST_ASSERT(service.dismiss(1), "dismiss completes teardown");
+    TEST_ASSERT(closing_calls == 1, "closing hook fired once");
+
+    // World 注册表干净：Instance/临时 Scene 一并回收
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "instance and temp scene reclaimed");
+    TEST_ASSERT(world.find_instance(launch.instance_id) == nullptr &&
+                    world.find_scene(launch.scene_id) == nullptr,
+                "registry lookups empty");
+    // 绑定与账面随之清除
+    TEST_ASSERT(service.find_by_party(1) == nullptr && service.active_count() == 0,
+                "binding erased");
+    TEST_ASSERT(!service.gameplay(1).has_value() && !service.settlement(1).has_value(),
+                "gameplay and settlement ledgers cleared");
+    TEST_ASSERT(service.used_capacity(1) == 0, "capacity returned");
+
+    // 失败线同样可收尾（超时 cancel → Finishing）
+    const auto second = service.launch(basic_request(2, 200));
+    TEST_ASSERT(second.error == LaunchError::Ok, "capacity reusable after dismiss");
+    (void)second;
+    return true;
+}
+
+bool test_squad_dismiss_on_failure_line_and_guards() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    // 无绑定收尾拒绝
+    TEST_ASSERT(!service.dismiss(404), "dismiss without binding refused");
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+
+    // Create/Waiting 期不允许收尾
+    TEST_ASSERT(!service.dismiss(1), "dismiss refused before settlement");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+
+    // 失败线：超时入结算 → 收尾
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 3;
+    goal.timeout_ticks = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal with timeout");
+    TEST_ASSERT(service.advance_tick(1, 2) == SquadInstanceService::GameplayError::Ok,
+                "timeout crossed");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "failure settlement entered");
+    TEST_ASSERT(service.dismiss(1), "dismiss completes failure teardown");
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "failure path reclaims too");
+    return true;
+}
+
+bool test_squad_late_input_refused_after_settlement() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+
+    // 入结算（超时失败线）
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 1;
+    goal.timeout_ticks = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.advance_tick(1, 2) == SquadInstanceService::GameplayError::Ok,
+                "timeout crossed");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "settlement entered");
+
+    // 迟到进入/启动：结算期一律 StateRejected（此前误报 Duplicate）
+    TEST_ASSERT(service.enter(1, kMemberB) ==
+                    SquadInstanceService::EnterError::StateRejected,
+                "late enter refused as StateRejected");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    SquadInstanceService::EnterError::StateRejected,
+                "late start refused");
+    // 迟到玩法输入：NotRunning
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::NotRunning,
+                "late spawn refused");
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 5) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "settlement credit still accepted in settlement phase");
+
+    TEST_ASSERT(service.dismiss(1), "dismissed");
+    // 收尾后绑定消失：所有入口 NoBinding
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::NoBinding,
+                "enter after dismiss is NoBinding");
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 5) ==
+                    squad_instance::SettlementLedger::ApplyError::UnknownPlayer,
+                "credit after dismiss refused");
+    TEST_ASSERT(!service.dismiss(1), "second dismiss refused");
+    return true;
+}
+
+
 bool test_squad_hooks_close_on_release() {
     PartyManager parties;
     World world;
@@ -804,6 +944,12 @@ int main() {
          test_squad_settlement_battle_settles_on_goal_completion},
         {"squad_settlement_recovery_and_failure_line",
          test_squad_settlement_recovery_and_failure_line},
+        {"squad_dismiss_evicts_players_and_reclaims",
+         test_squad_dismiss_evicts_players_and_reclaims},
+        {"squad_dismiss_on_failure_line_and_guards",
+         test_squad_dismiss_on_failure_line_and_guards},
+        {"squad_late_input_refused_after_settlement",
+         test_squad_late_input_refused_after_settlement},
         {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
     };
 
