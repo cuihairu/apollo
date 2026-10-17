@@ -231,6 +231,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/gateway_control_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
@@ -269,6 +270,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/gateway_control_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
@@ -305,6 +307,50 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_compile_options(gateway_ingress_tests PRIVATE /utf-8)
 	    endif()
 	    add_test(NAME GatewayIngressTests COMMAND gateway_ingress_tests)
+
+	    # gateway 排空真接线测试（P4 排空批；契约 954/955 + drain 状态机，
+	    # localhost 实 socket；Windows 下 link TCP 底座不进 M1 批，TCP 用例
+	    # 本体空转）
+	    add_executable(gateway_drain_tests
+	        test_gateway_drain.cpp
+	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/gateway_control_server.cpp
+	        ../apps/gateway-app/src/m1_egress.cpp
+	        ../apps/gateway-app/src/m1_route_client.cpp
+	        ../apps/gateway-app/include/gateway/session_manager.cpp
+            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
+            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	    )
+	    target_include_directories(gateway_drain_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	    )
+	    target_compile_definitions(gateway_drain_tests PRIVATE
+	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
+	    target_link_libraries(gateway_drain_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::runtime
+	        apollo::net_tcp
+	        apollo::net_protocol
+	        apollo::net_link
+	        apollo::net_contract_wire
+	        apollo::net_linktrace
+	        apollo_net_linkrpc
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(gateway_drain_tests PRIVATE ws2_32)
+	        target_compile_definitions(gateway_drain_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	    endif()
+	    if(MSVC)
+	        target_compile_options(gateway_drain_tests PRIVATE /utf-8)
+	    endif()
+	    add_test(NAME GatewayDrainTests COMMAND gateway_drain_tests)
 
 	    add_executable(protocol_bootstrap_tests test_protocol_bootstrap.cpp)
 	    target_link_libraries(protocol_bootstrap_tests PRIVATE
@@ -506,6 +552,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/gateway_control_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
@@ -544,6 +591,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
 	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/gateway_control_server.cpp
 	        ../apps/gateway-app/src/m1_egress.cpp
 	        ../apps/gateway-app/src/m1_route_client.cpp
 	        ../apps/gateway-app/include/gateway/session_manager.cpp
@@ -580,6 +628,50 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_compile_options(gateway_ingress_tests PRIVATE /utf-8)
 	    endif()
 	    add_test(NAME GatewayIngressTests COMMAND gateway_ingress_tests)
+
+	    # gateway 排空真接线测试（P4 排空批；契约 954/955 + drain 状态机，
+	    # localhost 实 socket；Windows 下 link TCP 底座不进 M1 批，TCP 用例
+	    # 本体空转）
+	    add_executable(gateway_drain_tests
+	        test_gateway_drain.cpp
+	        ../apps/gateway-app/src/gateway_server.cpp
+	        ../apps/gateway-app/src/gateway_control_server.cpp
+	        ../apps/gateway-app/src/m1_egress.cpp
+	        ../apps/gateway-app/src/m1_route_client.cpp
+	        ../apps/gateway-app/include/gateway/session_manager.cpp
+            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
+            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	    )
+	    target_include_directories(gateway_drain_tests PRIVATE
+	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	    )
+	    target_compile_definitions(gateway_drain_tests PRIVATE
+	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	    )
+	    target_link_libraries(gateway_drain_tests PRIVATE
+	        apollo
+	        apollo::base
+	        apollo::core
+	        apollo::runtime
+	        apollo::net_tcp
+	        apollo::net_protocol
+	        apollo::net_link
+	        apollo::net_contract_wire
+	        apollo::net_linktrace
+	        apollo_net_linkrpc
+	        apollo_protocol
+	    )
+	    if(WIN32)
+	        target_link_libraries(gateway_drain_tests PRIVATE ws2_32)
+	        target_compile_definitions(gateway_drain_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+	    endif()
+	    if(MSVC)
+	        target_compile_options(gateway_drain_tests PRIVATE /utf-8)
+	    endif()
+	    add_test(NAME GatewayDrainTests COMMAND gateway_drain_tests)
 
 	    add_executable(protocol_bootstrap_tests test_protocol_bootstrap.cpp)
 	    target_link_libraries(protocol_bootstrap_tests PRIVATE
@@ -1261,6 +1353,7 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
 add_executable(gateway_m1_egress_tests
     test_gateway_m1_egress.cpp
     ../apps/gateway-app/src/gateway_server.cpp
+    ../apps/gateway-app/src/gateway_control_server.cpp
     ../apps/gateway-app/src/m1_egress.cpp
     ../apps/gateway-app/src/m1_route_client.cpp
     ../apps/gateway-app/include/gateway/session_manager.cpp
