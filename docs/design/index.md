@@ -2,19 +2,18 @@
 
 # 设计件总览
 
-> 本目录 = apollo 的**系统设计件**（design docs）落点：每件对应一个能力域的设计/调研/裁决记录。
-> 状态口径：**已交付**（代码已落）/ **设计稿**（评审中或待批）/ **前置设计**（立项前调研件，拍板点在文内列明）。
-> 术语纪律：命名优先复用 BigWorld/KBE 既有概念；新词先入 [concept-glossary](./concept-glossary.md) 并给出对照与理由。
+> 本目录包含各能力域的设计稿和实现说明。Apollo 的目标架构、公开术语和进程边界以[架构总览](../guide/architecture.md)与[概念与命名](./concept-glossary.md)为准；子系统文档不能引入第二套进程拓扑。
+> 状态口径：**已交付**（代码已落）/ **设计稿**（评审中或待批）/ **前置设计**（立项前调研件）。外部引擎术语用于比较，不自动成为 Apollo 概念。
 
 ## 基础与模型
 
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
 | [概念词汇表](./concept-glossary.md) | 活文档 | 新词登记处 |
-| [玩家对象模型](./player-object-model.md) | 已交付 | Anchor/Avatar/Scene/Instance 所有权与生命周期 |
-| [属性系统与同步](./attribute-sync.md) | 已交付（部分批待接线） | 长期态字段模型 + 可见性/同步域 |
-| [会话与在线目录](./session-and-online-directory.md) | 已交付（骨架） | manager 域目录权威 + 跨进程镜像/恢复相位 |
-| [登录流程](./login-flow.md) | 设计稿 | login/gateway/base 三段握手 |
+| [玩家对象模型](./player-object-model.md) | 子系统实现说明 | 玩家身份、实体与场景对象；目标对局边界以 Room 为准 |
+| [属性系统与同步](./attribute-sync.md) | 子系统实现说明 | 属性数据与可见性/同步机制 |
+| [会话与在线目录](./session-and-online-directory.md) | 子系统实现说明 | 在线会话与当前房间路由信息 |
+| [登录流程](./login-flow.md) | 子系统设计稿 | Login、Gateway 与 RoomServer 的登录/路由边界 |
 | [时钟与时间](./clock-and-time.md) | 已交付 | 墙钟/tick/帧预算口径 |
 
 ## 战斗
@@ -22,7 +21,7 @@
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
 | [战斗确定性](./battle-determinism.md) | 已交付 | 四约束 + 录制/回放/hash 链 |
-| [战斗实例卸载](./battle-instance-offload.md) | 已交付（骨架） | offload 进程形态（三拍板点已裁 ADR-012） |
+| [战斗实例卸载](./battle-instance-offload.md) | 子系统实现说明 | 战斗计算卸载实验；不改变 Room/RoomServer 目标术语 |
 | [战斗验证服务](./battle-verification-service.md) | 设计稿（评审中） | 客户端权威战斗复算对账（verifier） |
 
 ## 网络与运维
@@ -41,7 +40,7 @@
 
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
-| [Cell 单写者收口](./cell-single-writer.md) | 前置设计（六拍板点全裁 ADR-015/016/017） | RPC 受理与模拟线程的并发形态（P3-2 批 B） |
+| [模拟单写者收口](./cell-single-writer.md) | 前置设计 | RPC 受理与房间模拟线程的并发形态 |
 | [受理队列水位与过载](./queue-watermark.md) | 前置设计（已裁 ADR-016） | 两级水位/回调错误码/tick 预算锚定 |
 | [入站第三方对接面](./inbound-interfaces.md) | 设计稿（评审中） | 渠道回调承载进程与鉴权/幂等 |
 | [脚本系统（Lua）](./scripting-lua.md) | 设计稿 | 双端共享战斗逻辑与热更纪律 |

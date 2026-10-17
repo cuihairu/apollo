@@ -1,296 +1,117 @@
 [English](36-MMO_Frameworks_Comparative_Analysis.en.md) | [中文](36-MMO_Frameworks_Comparative_Analysis.md)
 
-# 36. Comparative Analysis of Common MMO Server Frameworks (an Apollo Perspective)
+# 36. Common Names in Multiplayer Game Servers
 
-> Status: analysis document (comparative study). Covers ten subjects: BigWorld, KBEngine, skynet, Pomelo, NoahGameFrame, Unity Netcode, UE Replication, EQEmu, the WoW ecosystem (approximated by TrinityCore/CMaNGOS), and Space Engineers (marked as insufficient data). Each dimension is mapped against Apollo's design choices (docs/00, docs/04, docs/05 — all three deleted, traceable in git; references to them are historical references; docs/design/*), with the rationale for each trade-off. Pure documentation work, zero source changes.
+This document explains names used by other game server projects and the responsibilities they carry. “Similar” means overlapping responsibilities, not equivalent implementations. See [Concepts and Names](design/concept-glossary.en.md) for Apollo's target terms and [Architecture Overview](guide/architecture.en.md) for its target topology.
 
-## 0. Evidence Grading and Conventions
+## Project terminology
 
-| Grade | Meaning | Notation |
+### KBEngine
+
+| Name | Responsibility |
+|---|---|
+| `loginapp` | Login entry and authentication-flow coordination. |
+| `baseapp` | Base entities and client proxies; hosts non-spatial entities. |
+| `cellapp` | Entities and spatial logic inside a Space. |
+| `baseappmgr` | BaseApp selection, load information, and login allocation. |
+| `cellappmgr` | CellApp selection and Space/Cell creation and recovery coordination. |
+| `dbmgr` | Database access and entity-persistence coordination. |
+| `machine` | Machine discovery and process-management support. |
+
+Base/Cell are part of KBEngine's entity and spatial model. Apollo does not use these words for its target processes.
+
+### BigWorld
+
+| Name | Responsibility |
+|---|---|
+| `loginapp` | Login entry. |
+| `baseapp` | Base entities, client proxies, and non-spatial player state. |
+| `cellapp` | Cell entities and Space simulation. |
+| `baseappmgr` | BaseApp allocation and load management. |
+| `cellappmgr` | CellApp/Space management and recovery coordination. |
+| `dbapp` / `dbappmgr` | Database task processing and management. |
+| `bwmachined` | Machine discovery, monitoring, and process-management support. |
+
+BigWorld's Cell/ghost mechanisms support continuous space across Cells; these names are used here only as BigWorld terminology.
+
+### TrinityCore / AzerothCore
+
+| Name | Responsibility |
+|---|---|
+| `authserver` | Account authentication and Realm entry. |
+| `worldserver` | Realm runtime, including player connections and much of the game-world logic. |
+
+These names describe public open-source implementations and do not establish the internal topology of commercial MMOs.
+
+### EQEmu
+
+| Name | Responsibility |
+|---|---|
+| `loginserver` | Login service. |
+| `world` | World-level coordination and client/Zone connection management. |
+| `zone` | Runs a game area and its related gameplay. |
+| `ucs` | Standalone communication service. |
+
+`zone` is EQEmu's name for its area runtime; it is not an Apollo process name.
+
+### Pomelo / LordOfPomelo
+
+| Name | Responsibility |
+|---|---|
+| `gate` | Initial ingress and Connector selection. |
+| `connector` | Maintains client connections and sessions and forwards messages. |
+| `area` | Entities and game logic for a map area. |
+| `master` | Configures and manages service processes. |
+
+Pomelo's `gate` and `connector` are separate roles. `connector` is closer to the common client-Gateway responsibility.
+
+### Ryzom Core
+
+| Name | Responsibility |
+|---|---|
+| `FES` (Front End Service) | Client ingress and message front end. |
+| `EGS` (Entities Game Service) | Entities and core game logic. |
+| `AIS` (AI Service) | AI logic. |
+| `MS` (Mirror Service) | Inter-service entity data mirroring. |
+| `NS` (Naming Service) | Service discovery/naming. |
+| `AES` (Administration Executor Service) | Service start/stop and administration. |
+
+These abbreviations belong to Ryzom's service layout and should not be copied into Apollo as extra concepts.
+
+### Skynet
+
+Skynet is a general service runtime and does not prescribe an MMO process topology. Its Gate example handles client connections and message forwarding; names such as Agent and Watchdog come from example service arrangements, with exact roles defined by the application.
+
+### Colyseus and Photon
+
+Colyseus uses `Room` for a stateful multiplayer session/match hosted by a game-server process. Photon commonly uses `Master Server` for session discovery/allocation and `Game Server` to host rooms and matches. In both cases, `Room` is a gameplay session concept, not a process name.
+
+### Agones
+
+Agones uses `GameServer`, `Fleet`, and `FleetAutoscaler` for game-server instances and orchestration resources on Kubernetes. It addresses deployment and capacity orchestration; it does not define the business model for player objects or rooms.
+
+## Apollo's common names
+
+| Apollo target name | Responsibility | Similar concepts elsewhere |
 |---|---|---|
-| A | Local source actually read (BigWorld official 14.4.1 package `~/workspaces/BigWorld`, KBEngine shallow clone `~/workspaces/kbengine`, skynet `~/workspaces/skynet`) | `path:line` |
-| B | This repository's docs (docs/00, 04, 05, 17, 25, the BigWorld deep-dive, analysis/architecture-review, design/*) | `docs/… §…` |
-| C | Official web docs/announcements (archived repos, vendor doc pages) | Markdown links |
-| D | Community material/hiring wording/forums, weaker reliability | 「(D)」 suffix at the end or an explicit doubt marker |
+| `Login` | Account authentication and login credentials. | `loginapp`, `authserver`, `loginserver` |
+| `Gateway` | Client game connections and message routing. | Pomelo `connector`, Ryzom `FES`, Skynet Gate |
+| `RoomServer` | Hosts multiple rooms and runs authoritative match logic. | Colyseus game-server process, Photon `Game Server` |
+| `Room` | One match and its temporary state. | Colyseus/Photon `Room`, match instance |
 
-**Assumptions and conventions (declared up front)**:
-1. "NoahWolf" in the task book is interpreted as **NoahGameFrame** (ketoo); there is no public record of a framework named "NoahWolf" (D).
-2. "Space Engineers MSE" could not be verified on the public web or on this machine as a corresponding project (possibly a mis-recollection of MES — Modular Encounters Systems — a modding framework, or a Keen internal codename); the local `~/workspaces/SSEngine` was inventoried and is a general C++ support library (threads/memory pools/DB facade, MIT, see its README.md), **not** the Space Engineers engine. The Space Engineers section is treated as "insufficient data", giving only the verifiable public material on the 1.187 Multiplayer Overhaul.
-3. Blizzard has never officially published WoW server internals; the WoW section uses **TrinityCore/CMaNGOS public implementations + community docs** as approximate evidence (TrinityCore source not actually read; the section leans D-grade, marked item by item).
-4. docs/17 and docs/25 are early design drafts; their Transport=NNG statements were superseded by the architecture-review self-built-networking decision; when this document cites the two, it takes only their **structural design** (orchestration/AOI/Battle layering, Pipeline, replay), not their transport choices.
-5. KBEngine line numbers are based on the shallow-cloned working copy; BigWorld line numbers on the official 14.4.1 package; both agree with the verified evidence in architecture-review §16.
+Apollo does not use `CellApp`, `ZoneServer`, `AreaServer`, and `SceneServer` as parallel names for the same room/match runtime. `Scene` may describe a spatial object in code; the public gameplay and hosting units are `Room` and `RoomServer`. One RoomServer can host multiple Rooms.
 
----
+## Gateway and updates
 
-## 1. Apollo Decision Traceability Table
+`Gateway` is a common ingress responsibility, not a guarantee of zero-downtime updates. Multiple Gateways can accept new players after an old instance stops receiving new connections. Existing TCP connections require connection handoff or the old instance retaining them until drained. Keeping active rooms running across versions additionally requires room-state transfer, version compatibility, authority handoff, route switching, and rollback. These mechanisms must be verified separately.
 
-| # | Apollo key design point | Source framework/idea | Adopted/adapted/rejected | Rationale (grounded in the other side's concrete practice) |
-|---|---|---|---|---|
-| 1 | Self-built four-layer networking (L0 poll-Reactor / L1 frame delimiting magic+seq+CRC32C / L2 session / L3 GameConnection) | BigWorld Mercury (`lib/network/udp_channel.hpp:81/:139-140` filter stack); skynet gate's frame encapsulation | Adapted | Mercury makes filters a pluggable byte↔byte boundary stack (encryption/compression/packet shaping), proving layered filtering is feasible inside an engine; but Mercury is bound to UDP+aggregated packets while Apollo wants both a TCP and a WebSocket family, so only the filter-position semantics are kept and the frame format is custom (net-abstraction §3, §5.5) |
-| 2 | nng retired; the middleware survives only as a semantic blueprint | skynet's harbor→cluster two-generation IPC replacement (verified in architecture-review §16) | Third-party message layer rejected | skynet itself replaced harbor with cluster, proving that generational replacement of an in-house inter-process message bus is the norm; adopting nng means outsourcing replacement risk to a community project — better to own the four layers (net-abstraction summary items 3/6 closed) |
-| 3 | Contract = XML+XSD (xs:key/keyref/enumeration), one-attribute-per-line compact style | KBEngine `.def` (the essence of declare-once-generate-for-many-ends); BigWorld `.def` is isomorphic (`entity_description.cpp:184-190`, C-50) | Adopted + reinforced | Both houses' .def were already XML but both **only parse, with no schema layer** — a misspelled tag silently defaults; Apollo's increment is exactly XSD formal validation — designer-readable, diff-friendly, zero validator development (sdk-contract §2, architecture-review §15.3) |
-| 4 | `sdks/{contract,gen,unity,cocos,laya,cpp}` layout; the generator is an independent binary | KBEngine's `sdks/` directory + the precedent of `kbe/tools/xlsx2py` living outside src | Adopted | The generator never enters the runtime link graph; a failure blocks the release instead of shipping sick (xml-generation §4) |
-| 5 | Contract decoupled from storage (`storage.xml` private to the server, two-phase) | **Rejected**: KBEngine `.def` attribute/storage coupling | Their coupling rejected | The direct consequence of KBE binding persistence into .def: complex types blobified, base-snapshot-only, no journal, no query surface (attribute-sync §8's five shortcomings); Apollo's single principle — the contract answers "how it travels on the wire", storage answers "how it lands" (sdk-contract §7) |
-| 6 | write-behind journal + column promotion (log first, then snapshot) | BW BaseApp periodic backup (`baseapp/backup_sender.cpp`, `write_to_db_reply.cpp`); KBE Archiver smooth DB flush (`archiver.cpp:20-70`) | Adapted | KBE's smoothing algorithm (per tick take the head segment of `size*archiveIndex_/periodInTicks`) was rewritten by Apollo as "per tick take the head segment of dirty-entity-count / target-flush-tick-count" — dirty-entity bursts no longer flatten unevenly (attribute-sync §8.2 revised in sync) |
-| 7 | per-viewer acked_seq ChangeHistory + dual-axis markers | BW witness/volatile+event dual sequence numbers (`witness.cpp:2470-2516` dumpAoI evidence) | Adapted | BW proved "record watermarks per observer" is right, but witness is welded to CellApp and the entity cache; Apollo generalizes the watermark into per-observer acked_seq + time/event dual-axis markers, usable by an independent AOI service too (attribute-sync §10) |
-| 8 | 20Hz single logic main thread + network/DB thread-pool MPSC | BW/KBE fixed tick (KBE 10Hz, Archiver counts periods in ticks); skynet single-service serialization | Hybrid | Only a fixed tick gives stable DB-flush/diff cadence (KBE evidence); only single-service serialization gives a lock-free total order (skynet evidence); Apollo wants both: main-thread total order + pooled bypass IO (05 §3.3, attribute-sync §10.1) |
-| 9 | Scene-instance granularity (Zone) instead of seamless cells | **Rejected**: BW seamless world | Rejected | Costs BW itself admits: ghost dual writes, boundary negotiation, cross-process debugging cannot single-step (docs/BigWorld架构深度解析.md §五 shortcomings 1-4); Apollo targets an instance/channel-based MMORPG (5000+ CCU SLO), where scene instances' failure domains and scaling already suffice (docs/00, 17 §3) |
-| 10 | AOI as an independent service (grid + quadtree + shard, independently scalable) | Everyone's in-cell AOI (BW cellapp, KBE `cellapp/coordinate_node.*` cross-linked lists) + the idea of servicing it independently | Adapted | KBE's cross-linked lists are a good structure — "in-process, O(1) neighbor add/remove as entities move" — but locked inside cellapp; Apollo strips AOI computation out of the logic process into a shard service, so Zone stalls don't drag AOI (17 §5.1/§5.4) |
-| 11 | 8-bit SYNC_* bitmask visibility domains + 50ms batched diff | UE's `COND_*` condition-bit idea ([Conditional Property Replication](https://dev.epicgames.com/documentation/unreal-engine/conditional-property-replication?application_version=4.27)) | Adapted | UE's condition bits are **C++ macros** (compile-time; changing the protocol requires recompiling); Apollo makes the condition a contract field `sync=` (sdk-contract §2.3), 8-bit mask batched diff (05 §6.3/§6.4), runtime-configurable, one source for all ends |
-| 12 | Lua whitelist scripting (revised twice on 2026-09-30: sol2 dropped for native C API bindings; version = 5.5 mainline via the vcpkg lua port, currently 5.5.x — scripting-lua §2) | skynet's C/Lua actor ecosystem; KBEngine's cellapp-embedded Python | Adapted | KBE's full-featured Python scripting has a large attack surface and uncontrolled hot-reload risk; skynet proved Lua can carry business logic and be hot-reloaded; Apollo tightens further: the script-writable surface is a contract-generated whitelist (predict-bit intersection, sdk-contract §5) |
-| 13 | Process discovery = **machined-style daemon + UDP broadcast, two layers, no etcd/consul registry** (rewritten by user ruling 2026-09-30; the original line "Consul/Etcd registration + heartbeat 5s/30s" is void) | BigWorld bwmachined daemon + machine_guard birth/death broadcast (machine_guard.hpp:496-497/:609-613); KBEngine machine UDP broadcast probing (`kbe/src/server/machine` machine.cpp:646-670) — two precedents, taking the best of each | Adapted (the original "reject UDP broadcast" reversed) | The topology is small and changes are low-frequency; daemon+broadcast eventual consistency suffices, and an external strong-consistency dependency buys no matching benefit (net-abstraction §7 G-1); KBE's broadcast failing across subnets is admitted by upstream config comments (kbengine_defaults.xml:814-833 `<addresses>` manual workaround, deep-dive §13) — hence two complementary layers: cross-machine spawn/birth-death goes to the single-machine daemon, same-subnet topology discovery goes to broadcast; the original line's convention came from docs/05 §2.3 (deleted, traceable in git) |
-| 14 | Prometheus/Kafka/ClickHouse observability stack | BW `server/tools/{message_logger,bw_profile,…}`; KBE `tools/logger` as an independent process; skynet's monitor+debug_console+logger trio (`skynet_start.c:209-211` startup sequence) | Adapted | All three built "logging/profiling as first-class citizen" into engine-bundled components — right direction, dated form: self-built wheels disconnected from ecosystems; Apollo learns the positioning, not the implementation, and plugs straight into the external standard stack (docs/00) |
-| 15 | 64-bit ServerID (Region/Group/Type/Instance segments) | **Apollo original design** (falsification correction 2026-09-30: BW source has no 64-bit segmented counterpart — it actually has EntityID=int32 (basictypes.hpp:104) / DatabaseID=int64 (:191) / a 128-bit dotted UniqueID (unique_id.hpp:17-25); "64-bit segmented" existed only in illustrative code of a deleted B-grade doc, traceable at git 1e37073d^) | Original (referencing the idea of embedding origin information in IDs) | Segmented IDs make an entity traceable to its originating process; Apollo segments by deployment semantics (05 §2.2) — the idea referenced, the mechanism self-developed |
-| 16 | Battle as an independent instance + Replay/Inspector adaptation seam | A general solution for mixed sync needs (see §4 Q10); BW computes combat inside the cell, no independent instance | Original + borrowed | Large-scale battles offload to short-lived instance processes with independently tunable failure domains and tick rates (25 §3.2/§3.3/§8); keyframe recording leaves a seam for deterministic replay (25 §6) |
-| 17 | MySQL 8.0 + Redis + ClickHouse; a seam left for PostgreSQL, none for MongoDB | BW db_storage_mysql/db_storage_xml dual backends; KBE MySQL+Redis dual backends (falsification correction 2026-09-30: the original "KBE MySQL-only" was inaccurate — kbe/src/lib/db_redis/ is a complete entity-storage backend; entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis implement the same abstract base classes as db_interface/entity_table.h; redis production-readiness unverified, deep-dive §17) | Benchmarked, self-defined | Both houses make the DB a pluggable backend, each with a demonstrated second backend (BW=XML, KBE=Redis) — dual-backend isomorphism; Apollo's storage.xml "statements are data" naturally leaves a SQL-dialect seam (see §4 Q11) |
-| 18 | Lockstep: keep only an adaptation seam, no implementation | No framework has built-in lockstep (see §4 Q10) | Deferred | An MMORPG's uplink intent-only (server adjudicates) directly conflicts with lockstep determinism; if combat frame sync is ever needed, run it in a separate deterministic Battle-instance runtime without polluting the big-world protocol (25 §3.3/§6) |
-| 19 | Codec: **reflection as default, code as a two-end enhancement (v3, same-day correction 2026-09-29)**: the framework's fixed message families (AttrDelta/AttrBatch/movement/heartbeat etc., schema **does not vary with the contract**) are strongly typed code generated once and built into the framework, guarding the server hot path; business messages go descriptor.bin reflection → C-API transport bridge (renamed 2026-09-30: originally "sol2 bridge"; after dropping sol2 it is the native Lua C API — sdk-contract §10.6 sidebar update note) → Lua handlers (contract.lua carries the attr table/routing/whitelist), **zero server recompiles on contract change**; clients are tiered by code-hot-update capability — ends with hot-update pipelines (Unity/HybridCLR, Cocos/Laya TS scripting) use protoc/pbjs generated code (compile-time type checking + hot update in one), with bin as the fallback/tooling/new-end channel | The **real fork** between BW (generated code with zero overhead but every contract change recompiles all ends) and KBE (generated code compiled into the package, not hot-updatable, patched with importClientMessages runtime negotiation — the disease registered in §2.2 ④) — copying neither: take protobuf's self-describing FileDescriptorSet intermediate + a load-time consistency gate (bin↔hash anchoring, bin↔Lua routing aligned item-by-item at startup or red), moving rigor from compile time to load time | Benchmarked, self-defined (v3 reflection-default) | The two slowest links of the evolution chain (server C++ recompile, client store release) are decoupled from the protocol **simultaneously**; the reflection tax lands only on low-frequency business messages (tens of thousands/sec × µs-level decode, negligible), and the two-way message split keeps the hot path reflection-free; .bin/contract.lua/end-side code are all build-time-frozen and runtime-read-only (outside the "runtime interpretation" critique); a single contract source emits all artifacts in the same batch, with per-file hashes in the manifest blocking mix-and-match; where business-message reflection **decodes is an assembly choice, not a contract fork** (C++ reflection + C-API transport bridge by default / byte passthrough + lua-protobuf on the Lua side as an alternative — both from the same source, same batch, same bin; switching changes assembly with zero contract changes, sdk-contract §10.6 sidebar) |
+## Sources
 
----
-
-## 2. Framework-by-Framework Overview
-
-Each section follows eight fixed facets: process topology / concurrency model / AOI / sync and property replication / scripting integration / extension mechanisms / typical production scale / failure lessons.
-
-### 2.1 BigWorld (official 14.4.1, locally read, grade A)
-
-- **Process topology**: bwmachined (daemon, spawn/stop/monitor) → loginapp (auth+assignment) → baseappmgr/cellappmgr (management plane) → cellapp (space logic) ×N, baseapp (player proxy+persistence) ×N, dbapp-related extensions (inventoried under `programming/bigworld/server/{cellapp,baseapp,cellappmgr,baseappmgr,loginapp}`; `server/tools/bwmachined`). The client connects to loginapp first, is assigned to a baseapp, and the baseapp then "delivers" the entity into cell space.
-- **Concurrency model**: mostly multi-process; within a process a single main-thread tick + TimeQueue timers (`lib/cstdmf/time_queue.hpp:60/:74`, with its own unit test `test_time_queue.cpp`; cited by architecture-review §16.2). Everything cross-process goes through Mercury messages.
-- **AOI**: witness/entity cache inside cellapp + the ghost mechanism; AOI update schemes are configurable per entity type (`cellapp/aoi_update_schemes.hpp:18/:58/:75` — `AoIUpdateScheme` adjusts update density by distance); the observer-side dumpAoI outputs volatile 129/130 + event 45/45 dual sequence numbers (`cellapp/witness.cpp:2470-2516`).
-- **Sync/property replication**: per-property detail-level tiers (`cellapp/entity_cache.hpp:89-90/:186`, `DetailLevel` a uint8 tier number) — the farther the distance, the lower the tier, fields and frequency shrinking with it; cross-cell uses ghost shadow replication (the full `cellapp/buffered_ghost_message*.cpp/hpp` family).
-- **Scripting integration**: Python embedded in cell/base entity logic (.def declares exposed methods).
-- **Extension mechanisms**: .def data-driven + Mercury filter stack (pluggable encryption/compression) + the standalone server/tools toolchain.
-- **Typical production scale**: World of Tanks publicly reported 190k concurrent players on a single server (Guinness wording)[(C/D)](https://worldoftanks.eu/en/news/general-news/wargaming-acquires-bigworld); the engine's marketing supports large seamless worlds.
-- **Failure lessons**: ① 2012-08-07 Wargaming acquired BigWorld Pty for US$45M — the technology went closed-source and proprietary, external licensing stopped after 2014; a middleware company bought out by a single big customer is the extreme ending for an engine vendor ([GamesIndustry](https://www.gamesindustry.biz/companies/bigworld-technology), [Wikipedia: Riot Sydney](https://en.wikipedia.org/wiki/Riot_Sydney)); ② the complexity and debugging cost of ghost/boundary consistency is a publicly acknowledged shortcoming (docs/BigWorld架构深度解析.md §五).
-
-### 2.2 KBEngine (local shallow clone read, mostly grade A)
-
-- **Process topology**: machine (process management/broadcast discovery) → loginapp → baseappmgr/cellappmgr → cellapp ×N, baseapp ×N, dbmgr (centralized DB facade), interfaces (third-party account integration) (inventory of `kbe/src/server/`: `baseapp baseappmgr cellapp cellappmgr dbmgr loginapp machine tools`).
-- **Concurrency model**: multi-process, single logic thread per process; tick-cadence driven (10Hz wording; Archiver periods counted in ticks: `kbe/src/server/baseapp/archiver.cpp:20-70`, `size * archiveIndex_ / periodInTicks` head-segment smooth DB flush); timers `lib/common/timer.h:101/:108`.
-- **AOI**: in-cellapp **cross-linked lists** (two ordered coordinate lists on x/z) — `kbe/src/server/cellapp/coordinate_node.{h,cpp,inl}`, `coordinate_system.h`, `entity_coordinate_node.*`; entities add/remove neighbors on the lists as they move, paired with a viewspace radius.
-- **Sync/property replication**: .def declares property flags (ALL_CLIENTS and other visibility domains) + cell/base space kinds; the server packs and ships dirty data, the client SDK applies it via onData callbacks (SDK repo not on this machine; client details marked grade C, not read).
-- **Scripting integration**: Python embedded in cellapp/baseapp (.def-exposed methods/properties); a Bot tool (`tools/bots`).
-- **Extension mechanisms**: .def → multi-end SDK generation (C++/Unity/Cocos etc.; analyzed in this repo's sdk-contract §2.1); `kbe/tools/xlsx2py` turns designer tables into .py.
-- **Typical production scale**: widely used by small/mid teams for mobile and web games; no reliable public CCU data (D).
-- **Failure lessons**: ① storage is a structural shortcoming — .def's persistence coupling causes blobification/no journal/no query surface (attribute-sync §8); ② machine UDP broadcast discovery fails in cloud network environments (this repo's traceability line 13); ③ the project's maintenance pace has slowed in recent years, community activity concentrated in the Chinese-speaking world (D); ④ **no internal/external contract separation** — `*_interface.h` single files interleave messages for three audiences (to the client, `hello`/`loginBaseapp`/`onClientActiveTick` with the EXPOSED marker, `baseapp_interface.h:99-157`; to dbmgr `onDbmgrInitCompleted` :90; to cellapp `onMigrationCellappStart/End` :326-331), with message IDs sharing a single in-process auto-increment allocation table (`message_handler.cpp:139`; EXPOSED is only an export marker, not an ID-space separation, `baseapp_interface_macros.h:27-36`) — adding/removing internal messages shifts ID layout and forces client SDK regeneration; `importClientMessages` ships the message table dynamically at connection time (`baseapp.cpp:4859→4891`), using runtime negotiation to paper over the non-separated contract. BigWorld has the same disease in another shape: .def single files interleave Client/Base method sections (architecture-review §16.2), and Mercury's `InterfaceMinder::add` allocates by `elements_.size()` order, with exposed methods occupying a reserved segment of the same 0-254 table via `ExposedMethodMessageRange` (`interface_minder.cpp:38/:53-70`, `method_description.hpp:31`) — one ID allocation table, undivided by audience. Apollo's avoidance (sdk-contract §11): single contract source + a msg `domain` attribute, msg ids segmented by domain with independent layout, `schema_hash` split per domain (client_hash covers only the client domain — stable handshake, bin not resent), apollo_gen projects per domain (the client bin contains only the client domain), and an XSD cross-domain reference ban; domain segmentation is a hard rule, physical organization (single file/include aggregation) is unconstrained.
-
-### 2.3 skynet (locally read, grade A)
-
-- **Process topology**: **no preset game topology** — hundreds or thousands of services (actors) inside one process; cross-process via gate/multi-node skynet + cluster; game-logic login/gate/scene are all business-layer service role conventions, not engine concepts.
-- **Concurrency model**: multiple worker threads pull service messages from a global queue, **strictly serial within a single service** (`skynet-src/skynet_start.c:156-167`, `thread_worker` → `skynet_context_message_dispatch`); no unified tick, purely event-driven; MQ overflow (default 1024) errors out, monitor watches for infinite loops (verified in architecture-review §16).
-- **AOI**: not built into the engine; the community self-builds 3×3 grids/cross-linked lists as services (e.g. sproto-ecosystem projects, D).
-- **Sync/property replication**: not built in; messages are everything (sproto/custom protocols).
-- **Scripting integration**: Lua as first-class citizen, business services all Lua; Yun Feng's book 《Skynet 框架设计与实现》 (Skynet Framework Design and Implementation).
-- **Extension mechanisms**: C services (.so) dynamically registered + Lua-layer wrapping; two generations of IPC (harbor→cluster) prove its extension route is "self-develop, don't adopt middleware".
-- **Typical production scale**: Jane/灵犀互娱's 《陌陌争霸》 (Momo Zhengba) and 《心动庄园》 (Xindong Zhuangyuan); a Momo MMO project consulted Yun Feng before launch ([codingnow blog](https://blog.codingnow.com)); Shunwang annual reports disclose skynet-engine games ([annual report](https://vip.stock.finance.sina.com.cn)); 37 Interactive and others require skynet in job postings (D-grade wording, multiple sources) (C/D).
-- **Failure lessons**: ① the origin is itself a lesson — the original framework was written in Erlang, missed performance targets, and Yun Feng rewrote it in C/Lua in 2012-07 ([gameres interview](https://www.gameres.com/867001.html)); ② sproto has no built-in version field; protocol evolution relies on human discipline (verified in architecture-review §16); ③ no built-in storage/logging pipeline, a large self-build surface for business — the price of being a "framework" rather than an "engine".
-
-### 2.4 Pomelo (NetEase, web material, grade C)
-
-- **Process topology**: master + server directory conventions: frontend (connector/gate) / backend (area/chat/…), with master handling process management and the RPC routing table.
-- **Concurrency model**: Node.js event loop, single thread/process, multi-process horizontal scaling.
-- **AOI**: not built in (the area service example has a simple broadcast domain, D).
-- **Sync/property replication**: no property replication built in; provides a **filter chain** (before/after handler filters) for cross-cutting concerns, channel.broadcast broadcasting; the sync model is self-built by the business ([archived repo](https://github.com/NetEase/pomelo)).
-- **Scripting integration**: JS is the script (Node.js itself); no independent hot-reload design.
-- **Extension mechanisms**: component/plugin system, protobuf protocol + route strings.
-- **Typical production scale**: the official Lord of Pomelo example is demo-scale; no reliable production CCU data (D).
-- **Failure lessons**: **officially archived and made read-only 2023-09-25**; the last npm release 2019-11-08 ([npm](https://www.npmjs.com/package/pomelo)); the community continuation fork is pinus ([pinus](https://github.com/node-pinus/pinus)). Lesson: a framework bound to a single language runtime rises and falls with that runtime's lifecycle.
-
-### 2.5 NoahGameFrame (web material, grade C, limited data)
-
-- **Process topology**: a distributed plugin framework with multiple server processes (self-described actor library + network library) ([GitHub](https://github.com/ketoo/NoahGameFrame)).
-- **Concurrency model**: multithreading + an actor library (self-description; source not read).
-- **AOI / sync**: claims real-time multiplayer support; AOI/replication details are scarce in public material (D).
-- **Scripting/extension**: plugin (dynamic library) driven; a property/event-driven component model.
-- **Typical production scale**: ~4.1k stars; no reliable production case data (D).
-- **Failure lessons**: maintenance slowing (no substantive commits in recent years, D); thin documentation; community mostly Chinese-speaking.
-
-### 2.6 Unity Netcode for GameObjects (official docs, grade C)
-
-- **Topology/concurrency**: a **client-engine networking layer**, not a server framework — host/dedicated server in a single process (official [docs](https://docs.unity3d.com/Packages/com.unity.netcode.gameobjects@latest)); MMO-scale splitting requires layering your own backend.
-- **AOI**: no built-in AOI; provides object spawn/visibility callbacks for self-building (C).
-- **Sync**: server-authoritative `NetworkVariable<T>` (by default writable only by server/Owner, delta delivery + OnValueChanged); `ServerRpc`/`ClientRpc` (C).
-- **Scripting/extension**: the C# component model; the Transport layer is replaceable.
-- **Typical scale**: small room-based (tens of players) (C/D); MMO scenarios are not a design goal.
-- **Failure lessons**: its predecessor MLAPI was absorbed as NGO with major API churn and high migration cost (community consensus, D); it does nothing for server-side process topology/persistence — using it for an MMO means buying only the client sync piece.
-
-### 2.7 Unreal Replication (official docs, grade C)
-
-- **Topology/concurrency**: a single authoritative server process (GameThread drives replication gathering); multiple instances mean multiple dedicated-server processes.
-- **AOI**: the **relevancy** mechanism — `NetCullDistanceSquared` distance spheres + `bAlwaysRelevant`/`bOnlyRelevantToOwner` exception bits ([Unreal Python docs](https://dev.epicgames.com/documentation/unreal-engine) wording, [Neukirchen Compendium](https://cedric-neukirchen.net/docs/multiplayer-compendium/replication)); bandwidth allocated by `NetUpdateFrequency`/`NetPriority` quotas.
-- **Sync**: property replication (`DOREPLIFETIME` + `COND_*` conditions: COND_OwnerOnly/SkipOwner/InitialOnly…) + dormancy (`DORM_Never/DORM_Initial`; dormant actors leave the replication list wholesale) ([Dormancy](https://dev.epicgames.com/documentation/unreal-engine/actor-network-dormancy-in-unreal-engine), [Conditional Replication](https://dev.epicgames.com/documentation/unreal-engine/conditional-property-replication?application_version=4.27), [Replicate Actor Properties](https://dev.epicgames.com/documentation/unreal-engine/replicate-actor-properties-in-unreal-engine)).
-- **Scripting**: Blueprint is not hot-updatable (changing blueprint logic at runtime requires restart/level reload, C).
-- **Extension**: ReplicationGraph (a replication graph for large scenes) is the official performance way out (community wording, D).
-- **Typical scale**: mature for open-world multiplayer (tens of players/instance); MMO scale requires building your own partitioned backend (C/D).
-- **Failure lessons**: property replication defaults to full comparison packed per connection; large worlds must move to ReplicationGraph or hit a CPU/bandwidth double bottleneck (community consensus, D); non-hot-updatable Blueprints pair poorly with MMO always-on operations.
-
-### 2.8 EQEmu (web material + forum wording, grade C/D)
-
-- **Process topology**: login server (auth) → world (hub: character selection, zone process management) → **zone processes ×N** (launched by `eqlaunch`, `./eqlaunch first/second/zone`) + ucs (chat) + queryserv (DB query offload) ([EQEmulator forums startup sequence](https://www.eqemulator.org/forums)); zone config and dynamic data are distributed via **shared memory** (multiple forum threads on "shared memory error after reboot" corroborate).
-- **Concurrency model**: multi-process (each zone an independent process), single-threaded tick inside a zone.
-- **AOI**: original EQ cut the world at zone boundaries (the zone is the loading unit); no fine-grained AOI (public wording).
-- **Sync**: server-authoritative spawn/movement/property packets (approximating the original protocol).
-- **Scripting**: **dual-language Perl + Lua quest scripts** (`zone/embparser.cpp` embedded parser; scripts register NPC events); the community is migrating Perl assets to Lua ([forums](https://www.eqemulator.org/forums)).
-- **Extension**: quest scripts + DB-table-driven (all content in MySQL, see §4 Q11).
-- **Typical scale**: replica community servers, tens to hundreds of CCU per server (D).
-- **Failure lessons**: the operational fragility of the shared-memory approach (post-reboot segment failures are a common forum theme, D); zone-granularity world-cutting produces the EQ-style "loading screen" experience — a **counter-example** that corroborates the middle road between seamless worlds and instancing.
-
-### 2.9 The WoW ecosystem (TrinityCore/CMaNGOS approximation, mostly grade D, marked doubtful)
-
-- **Topology** (public emulator-implementation wording): authserver (auth) + worldserver (all world logic), two processes ([TrinityCore](https://github.com/TrinityCore/TrinityCore)).
-- **Concurrency**: **per-map multithreading** inside worldserver (one update context per map, executed by a thread pool; community discussion of Lua script bindings holding per-map state corroborates [talk.trinitycore.org](https://talk.trinitycore.org); source not read, doubtful).
-- **AOI**: grid/cell two-level division + view distance (~90-yard VISIBILITY_* constants, community material, doubtful); players entering/leaving a cell fire visibility events.
-- **Sync**: server-authoritative movement/property packets (the SMSG/opcode system); opcodes hard-coded in source tables.
-- **Scripting**: C++ script modules (TrinityCore) + — no, not SQLite — script content is DB-table-driven; CMaNGOS is isomorphic. Third-party Lua engines are community extensions ([forum discussion](https://talk.trinitycore.org), D).
-- **Extension**: DB-table-driven content (creature/quest/loot all in MySQL); opcodes hard-coded at compile time (D).
-- **Typical scale**: Blizzard's real architecture is not public; emulators run hundreds to low-thousands per server (D). **WoT analogy**: WoW's official concurrent peak is publicly reported in the tens of millions (network-wide, many servers, not one server, D).
-- **Failure lessons**: ① total-order serialization within one map is the theoretical ceiling (per-map threads cannot subdivide further; community consensus, D); ② the legal risk and uneven code quality of the private-server ecosystem is an engineering lesson, not an architectural one; ③ this whole section rests on approximations — Blizzard internals are unavailable, so citation strength is the lowest.
-
-### 2.10 Space Engineers (MSE) — an entry for insufficient data
-
-The task book's "MSE" does not match any findable project on the public web (multiple keyword combinations came up empty); the closest public material:
-- The 2018-07 Update 1.187 "Major Overhaul of Multiplayer" ([Marek Rosa's official blog](https://blog.marekrosa.org/2018/07/space-engineers-multiplayer-overhaul)): server authoritativeness, dedicated-server optimization, Safe Zones — the migration from a P2P host to a dedicated-server authority model.
-- The official wiki multiplayer and dedicated-server pages ([wiki](https://spaceengineers.wiki.gg/wiki/Multiplayer)).
-- "MES (Modular Encounters Systems)" is an NPC-encounter modding framework for Space Engineers, unrelated to server frameworks (similar name; likely the source of the task book's slip).
-
-**Conclusion**: server-authoritative physics sync for a physics sandbox (anti-cheat synchronization of rigid-body state) and MMO property sync are two different problem domains; Keen's 1.187 rework proves that "moving from client trust to server authority" is a real pain point for physics games, but the public material cannot support an eight-facet analysis. As the task book allows, this is honestly marked insufficient-data and does not enter the comparison table's main columns (a placeholder note only).
-
----
-
-## 3. Multi-Dimensional Comparison Table
-
-| Dimension | BigWorld | KBEngine | skynet | Pomelo | NoahFrame | Unity NGO | UE Replication | EQEmu | WoW/TC ecosystem | Apollo |
-|---|---|---|---|---|---|---|---|---|---|---|
-| **Concurrency model** | Multi-process + single-threaded tick/process + TimeQueue | Multi-process + single logic thread 10Hz | Single process, multithreaded + serial actors | Multi-process Node event loop | Multithreaded actors | Unity main loop, single-threaded | GameThread single-threaded replication | Multi-process zone, single-threaded | per-map multithreading (doubtful) | Single Zone 20Hz total order + MPSC pool (05 §3.3) |
-| **Process split** | cellapp/baseapp/loginapp/machined | Same BW lineage + dbmgr | None preset (service conventions) | connector/area/master | Multi-server plugin processes | None (single process) | Single authoritative process | world/zone/ucs/queryserv | authserver+worldserver | Gate/World/Orchestrator/Zone/AOI/Battle/DataProxy/Social/LogAgent (00) |
-| **AOI** | witness+ghost+detail tiers | Cross-linked lists in cellapp | Not built in | Not built in | Limited public data | None (self-build via callbacks) | Relevancy distance spheres + priority | Zone boundary is the AOI | grid/cell + view distance (doubtful) | Independent AOI service: grid + quadtree + shard (17 §5) |
-| **State sync** | Property filters/detail levels/dual sequence numbers | .def flags + dirty packing | Not built in (self-built messaging) | Not built in (filter chain) | Limited public data | NetworkVariable authoritative delta | COND_*+dormancy+frequency quotas | Authoritative spawn/movement packets | opcode authoritative packets (doubtful) | 8-bit SYNC_* + 50ms batched diff + acked_seq watermark (05 §6, attribute-sync §10) |
-| **Script hot update** | Python (cell/base) | Python + toolchain | Lua first-class + hot update | JS itself | Plugin dynamic libraries | C# (community IL hot-update schemes) | Blueprint not hot-updatable | Perl/Lua quests | C++/community Lua (doubtful) | Lua 5.5.x (vcpkg) whitelist (contract-generated; native C API bindings, sol2 dropped 2026-09-30) |
-| **Storage** | MySQL+XML dual backends (`db_storage_mysql/xml`) | MySQL+Redis dual backends (`lib/db_{mysql,redis}` — corrected 2026-09-30; the original "MySQL-only" was inaccurate) | None built in | Community dao (MySQL/Redis) | Simple bundled storage (D) | Not applicable | Not applicable | MySQL + shared memory | MySQL (official dependency) | MySQL8+Redis+ClickHouse, journal+snapshot two-phase (00, attribute-sync §8) |
-| **Observability** | message_logger/bw_profile toolchain | logger as an independent process | monitor+debug_console+logger | log4js plugin (C) | Basic logging (D) | Self-built, outside the engine | Self-built, outside the engine | logsys (D) | GM commands + logs (D) | LogAgent→Kafka→ClickHouse + runtime ConsoleEvent (00) |
-| **Community/license** | Closed-source, acquired (US$45M, 2012) | Open-source MIT, mostly Chinese community, pace slowing | MIT, Yun Feng + an active domestic ecosystem | **Archived** (2023-09) | MIT, slowing | Officially maintained by Unity (subject to Unity's commercial policy) | Officially maintained by Epic (5% revenue-share model) | Open-source community (C/D) | GPL-line private-server ecosystem (D) | Self-developed (this repository) |
-
----
-
-## 4. Design Trade-Offs in Depth (Eleven Questions)
-
-### Q1: Logic thread model — single-threaded logic vs multithreading vs multiprocessing
-
-- **skynet**: single process, multiple worker threads + actors. Trade-off point: workers contend for the global queue (`skynet_start.c:156-167`), serial within a service — logic needs no locks; the price is that one blocked service starves the queue, with isolation via MQ-overflow alerts (1024) + monitor catching infinite loops (grade-A evidence). Stall-isolation granularity = the service (message queue).
-- **BigWorld/KBEngine**: multi-process, single-threaded tick. Isolation granularity = the process (a cellapp crash kills only one area); the price is that every cross-entity interaction is an RPC. BW's TimeQueue (`time_queue.hpp:60/:74`) and KBE's timer (`timer.h:101/:108`) are both single-threaded timer wheels, evidence that both houses pull "timing" into the logic thread too.
-- **TrinityCore**: per-map multithreading — the map is the unit of parallelism, still total order within a map (doubtful wording). Stall isolation = the map.
-- **EQEmu**: multiprocessing to the extreme: one zone one process (evidenced by the eqlaunch startup sequence); the most thorough isolation, at the heaviest cost in memory/handles and cross-zone communication.
-- **UE/NGO**: single-threaded game loop + replication gathering; isolation = instance process count (C).
-- **Apollo's choice**: inside ZoneServer, a 20Hz single logic main thread total order + network/DB thread-pool MPSC bypass (05 §3.3). **Not copying** TC's per-map multithreading: per-viewer acked_seq ChangeHistory depends on a single-server sequence (attribute-sync §10.1); multiple logic threads would shard the watermark tables, and the gain doesn't pay for the complexity; **not copying** skynet's pure events: DB flushing/diffing/heartbeat need a stable cadence (the tick argument in §10.1). Stall isolation = the scene instance (17 §4.3, buffered AOI events processed per frame) + the independent Battle instance (25 §3.2).
-
-### Q2: The cell/base split — why split, the costs, boundary migration
-
-- **BigWorld**: cellapp (space logic + AOI + ghost) / baseapp (player proxy + persistence + backup) responsibility split — DB IO never occupies a cell tick (docs/BigWorld架构深度解析.md §四). Boundary migration: `Entity::migrate()` (`cellapp/entity.hpp:283`) + `migratedAll()` (:284, waits for all ghosts to confirm completion) + the whole `buffered_ghost_message*` family (message buffering during the migration window). The cost is self-evident from their docs: ghost dual writes, boundary negotiation, cross-process debugging cannot single-step (架构深度解析 §五 shortcomings 1-4).
-- **KBEngine**: isomorphic split (`kbe/src/server/{cellapp,baseapp}`), with dbmgr as a third split (the DB facade as an independent process); the migration mechanism's details were not deep-read in the local shallow clone and are not expanded (honestly marked).
-- **Apollo's choice**: **do not split cell/base; split Zone/DataProxy instead**. The reasons for splitting were proven by BW (IO/logic separation, failure-domain separation), but Apollo's world is instance-based — a Zone is one scene process, with no cross-process space boundary, so the ghost mechanism is wholesale unneeded; persistence becomes an independent DataProxy service (00 topology), and the storage protocol fully separates from the game protocol (the two-phase form in sdk-contract §7). Cross-Zone migration = scene-level FSM (17 §3.1 TransferPlayer, lifecycle Create→Recycle), migrating "whole scenes" as the unit, with no entity-level boundary negotiation at all.
-
-### Q3: How property sync is implemented (granularity/bandwidth strategy)
-
-- **BigWorld**: per-property **detail-level tiers** (`entity_cache.hpp:89-90/:186`, uint8 tier numbers) — distance decides the tier, the tier decides the field subset and frequency; `AoIUpdateScheme` dynamically adjusts density by distance (`aoi_update_schemes.hpp:75` `apply(scheme, distance)`); the witness dual sequence numbers (the volatile movement stream + the discrete event stream, `witness.cpp:2470-2516`) guarantee per-observer gap filling. Bandwidth strategy = **space-driven tiered load shedding**.
-- **KBEngine**: .def property flags declare visibility domains; the server packs and ships dirty data; the client SDK applies per property in onData (SDK not read, grade C). Bandwidth strategy = **declarative visibility domains**, no tiering.
-- **Pomelo**: no property replication; the filter chain (before/after) is a request-pipeline cross-cut, not a sync mechanism (C).
-- **UE**: a trio — relevancy (`NetCullDistanceSquared` distance spheres) × frequency (`NetUpdateFrequency`+`NetPriority` bandwidth quotas) × conditions (`COND_OwnerOnly/SkipOwner/…`) + wholesale dormancy (three official docs, links in §2.7). Bandwidth strategy = **condition bits + quotas**, the finest-grained but all inside C++ macros.
-- **Unity NGO**: NetworkVariable authoritative delta (C) — granularity = the variable; no condition bits, no tiering.
-- **Apollo's choice**: 8-bit SYNC_* bitmask declaring the five domains SELF/TEAM/GUILD/AOI/WORLD (05 §6.3) + 50ms batched diff (05 §6.4) + per-viewer acked_seq watermark gap filling (attribute-sync §10). **Learning UE's condition bits** but placed in a contract field instead of macros (sdk-contract §2.3 `sync=`); **learning BW's distance tiering** idea, landed as dual-axis markers dense-near/sparse-far (attribute-sync §10); **not learning KBE's single-tier visibility domains** — the five-domain mask is a superset of KBE flags and shares the contract source.
-
-### Q4: How contracts are defined; version evolution
-
-- **BigWorld/KBEngine**: .def XML → parse and generate (BW `entity_description.cpp:184-190`, KBE `entitydef.cpp:188-210`, C-50: already XML but no schema layer); evolution = edit the file and restart, no version handshake.
-- **Pomelo**: protobuf + route strings hard-coded (C); evolution by manual synchronization, no validation.
-- **skynet**: sproto has no built-in version field (grade-A evidence, architecture-review §16); community convention is "add fields, rely on default values for compatibility".
-- **UE**: compile-time macros (DOREPLIFETIME/UHT generation) — changing the protocol requires recompiling (C).
-- **NGO**: NetworkVariable registered at runtime, no standalone contract file (C).
-- **EQEmu/TC**: opcodes hard-coded in source tables (D).
-- **Apollo's choice**: XML+XSD contract (xs:key/keyref/enumeration) + generator + `schema_hash` handshake (the server simultaneously supports N/N-1) (sdk-contract §2.3/§6, attribute-sync §7.2). Learning KBE's "declare once, generate for many ends" essence; adding the XSD validation neither house has; a hash rather than a hand-maintained version number to prevent missed updates. Evolution discipline: adding fields is compatible; changing semantics bumps the version; deletions happen in the same cycle on both ends (sdk-contract §6).
-
-### Q5: When data hits the DB, the cache layer, disconnect/reconnect
-
-- **BigWorld**: baseapp periodic backup chain (`baseapp/backup_sender.cpp`, `offloaded_backups.cpp`, `write_to_db_reply.cpp` file evidence) + shutdown snapshot; DB backends doubly pluggable (`lib/db_storage_mysql`/`db_storage_xml`). Cache layer = baseapp memory is authoritative; no separate cache process.
-- **KBEngine**: Archiver smooth flushing (`archiver.cpp:20-70`: per tick take the head segment, ~300s period; `shouldAutoArchive` supports KBE_NEXT_ONLY writing once then stopping); dbmgr centralized writes (`buffered_dbtasks.cpp`). Disconnect/reconnect = the baseapp re-delivers the entity after a keepalive window (public wording C/D).
-- **EQEmu**: zone periodic character saves (forum wording, D).
-- **TC/WoW ecosystem**: worldserver writes MySQL directly, no write-behind abstraction (D).
-- **skynet/Pomelo/NGO/UE**: not built in (the former has no DB component in-tree, verified by inventory; the latter two are client engines and uninvolved).
-- **Apollo's choice**: write-behind journal (append the journal first, then snapshot, two-phase) + the column-promotion mechanism (attribute-sync §8/§8.2); KBE's smoothing algorithm adapted to "per tick take the head segment of dirty-entity-count / target-flush-tick-count" to keep bursts from flattening unevenly; Redis sits after DataProxy for sessions/hot data (00). Disconnect/reconnect = the enter-view full snapshot → dwell deltas → leave cleanup three-phase (attribute-sync §6, sdk-contract §4 layer 3), isomorphic to BW's per-observer gap filling but sunk into the contract layer (the snapshot carries attr_schema_version; during the old/new entity coexistence period the client picks the decode table by version, sdk-contract §6).
-
-### Q6: The log-collection pipeline
-
-- **BigWorld**: logging as an engine component — an independent message_logger process aggregating + the bw_profile profiling tool (inventory of `server/tools/`) — the in-engine form of a "BI pipeline".
-- **KBEngine**: an independent logger process (`kbe/src/server/tools/logger`) + guiconsole; log level configured per process.
-- **skynet**: the trio — logger service + debug_console + monitor (`skynet_start.c:209-211` startup-sequence evidence, architecture-review §16).
-- **Pomelo**: log4js plugin (C); **EQEmu/TC**: logsys categorized files / GM-command logs (D).
-- **Apollo's choice**: don't reinvent the logging wheel — business events go out through LogAgent to Kafka, the analytics side is ClickHouse (00); runtime ops commands go through the ConsoleEvent/IConsoleEventSource interface (architecture-review §16.8 two layers: primitives in modules, aggregation in apps/). Learning the three houses' "logging as first-class citizen" positioning while dropping their self-built storage — ClickHouse's column store was not an option in the message_logger era.
-
-### Q7: Atomicity of cross-server operations
-
-- **BigWorld**: baseapp single-entity serial callbacks + backup redundancy (baseapp file inventory); cross-cell coordinated by cellappmgr; no 2PC — consistency via "single writer + backup".
-- **KBEngine**: dbmgr centralizes and serializes DB tasks (`dbmgr/buffered_dbtasks.cpp` + `dbtasks.cpp` file evidence) — a textbook implementation of the "serialize everything" route; cross-server (cross-cellapp/baseapp) goes through entity mailbox forwarding, no transaction primitives.
-- **skynet**: single-service serialization is naturally atomic; cross-node cluster.call request-response (harbor→cluster, two generations evidenced); failure compensation is written by the business.
-- **EQEmu/TC**: single-DB direct writes, no cross-server concept (D).
-- **Apollo's choice**: serialize inside the single logic thread's total order (most "cross-server" is really cross-service — already totally ordered inside a Zone); true cross-process (mail/trading) goes through the DataProxy **single writer** + journal atomic commit; settlement-type work (battle results landing in accounts) uses the compensation pattern — Result Dispatcher failures are reverted/compensated by the fault-tolerance layer (25 §3.4/§7: re-match, settlement compensation, checkpoint recovery). **No 2PC**: under the 5000 CCU/P99<60ms SLO, cross-process blocking waits on a two-phase tail latency are unacceptable (00 SLO); compensation-retry trades consistency for eventuality — same lineage as the BW/KBE single-writer route, but "single writer" is promoted from a process convention to the DataProxy service boundary.
-
-### Q8: Performance trade-offs — AOI algorithms, tick rates, CCU bottlenecks
-
-- **AOI algorithm lineage**: the 3×3 grid (a domestic tradition; simple to implement, coarse threshold jumps — the comparison-table wording in docs/BigWorld架构深度解析.md); **cross-linked lists** (KBE `cellapp/coordinate_node.*` + `coordinate_system.h`: two ordered lists on x/z; movement only adds/removes neighbors, O(1) threshold updates — memory locality better than the grid, grade-A evidence); **ghost+witness** (BW: the cost and capability of cross-process space sharing come from the same source, the `buffered_ghost_message*` family + witness.cpp); **relevancy distance spheres** (UE: per-actor radius + priority quotas, official docs, C).
-- **Tick rates**: BW/KBE fixed tick (KBE 10Hz, evidenced) — stable DB-flush/diff cadence; skynet purely event-driven, no tick — saves idle spinning but you build your own cadence; Apollo 20Hz main loop + 50ms diffing (05 §3.3/§6.4), Battle instances 20-50ms configurable (25 §8).
-- **Bottlenecks**: BW = ghost bandwidth + cross-cell negotiation CPU; KBE = the ceiling is one app's logic thread saturating; skynet = one service's MQ serializing (1024 overflow, evidenced); TC = total order per map (D); UE = GameThread replication gathering (D). Apollo = total order per scene — the solution is **horizontal**: scene instancing + Orchestrator load scheduling (17 §3.2) + AOI shards scaling independently (17 §5.1); SLO 5000+ CCU per server, P99<60ms (00).
-- **Apollo's choice**: AOI as an independent service (grid + quadtree + shard, 17 §5.1) rather than in-process cross-linked lists — KBE's lists are fast in-process, but Apollo needs AOI decoupled from the logic process for independent scaling; dense-near/sparse-far lands BW's `AoIUpdateScheme` tiering idea via dual-axis markers (attribute-sync §10). **No seamless world**: BW's ghost consistency cost buys nothing for an instance-based game (traceability row 9).
-
-### Q9: One "Apollo verdict" paragraph per framework
-
-- **BigWorld**: adopt Mercury filter layering, detail-level tiering, per-observer watermarks, the logging-as-first-class-citizen positioning, and the idea of "IDs embedding origin information" (the 64-bit segmentation itself is Apollo-original — #15's 2026-09-30 falsification correction: BW source has no counterpart); reject the seamless cell world (ghost cost) and the business-model lesson of "bought out and closed-source by a big customer" (the US$45M acquisition); adapt witness→acked_seq watermarks, TimeQueue→main-loop driven.
-- **KBEngine**: adopt the .def contract-generation essence, the sdks/ layout, xlsx2py's "generator outside src", the Archiver smooth-flush algorithm; reject .def storage coupling (five shortcomings), machine UDP broadcast, and full-featured Python scripting; adapt the smoothing algorithm against bursts, tighten the scripting surface with a whitelist.
-- **skynet**: adopt the C/Lua stack and single-service serial lock-free total order, and the view of self-developed generational replacement (harbor→cluster); reject the total freedom of "a framework with no preset topology" — Apollo keeps an explicit nine-service topology (00) because operations and troubleshooting need static structure; fill in the storage/observability standard stack skynet lacks.
-- **Pomelo**: adopt the multi-process frontend/backend split idea (Gate/World is its projection); its archival lesson directly supports Apollo's "don't bind to a single language runtime" — a C++20 kernel + Lua only as the business layer, binding the runtime lifecycle to the C++ standard rather than a community project.
-- **NoahGameFrame**: the plugin-ization direction is rejected by Apollo (no associative-container semantics; architecture-review assembly discipline); its actor + property/event-driven approach points the same way as Apollo's ECS event flow — reference only.
-- **Unity NGO**: its client-sync-piece positioning is clear — Apollo's four-end SDKs (sdk-contract §4) take on the same duties client-side (property container + prediction double buffering), but server authority and contract-source-sharing are things NGO cannot give.
-- **UE Replication**: the condition-bit/frequency-quota/dormancy trio is absorbed with adaptation (contract-ized SYNC_*, 50ms diffing, journal-ized logging as the approximate analogue of "storage dormancy"); Blueprint's non-hot-updatability is the counter-example supporting the Lua whitelist hot-reload route.
-- **EQEmu**: zone-granularity multiprocessing is a distant relative of Apollo's scene instancing (one process per instance, clean failure domains); the operational fragility of shared-memory distribution reminds Apollo: cross-process shared state must go through messages + journal, never direct segment reads.
-- **The WoW/TC ecosystem**: per-map multithreading, grid+view-distance AOI, and DB-table-driven content are recorded as reference frames; since the citations are all approximations (grade D), none is the sole basis for any Apollo decision — which is why this table writes "doubtful" in stone.
-- **Space Engineers**: insufficient data; the only usable insight is the 1.187 rework direction — "migrating from client trust to server authority" is isomorphic to Apollo's uplink intent-only (05 §6.4), a corroboration, not a source.
-
-### Q10: Lockstep and state sync, and the adaptation layer
-
-- **State-sync only**: BW (witness/property filters — the extreme of server-authoritative property streams), KBE (.def flags + dirty), EQEmu/TC (opcode authoritative packets), UE (authoritative property replication), NGO (authoritative NetworkVariable). All five built "the server computes logic, the client presents" into the kernel; no built-in lockstep.
-- **Neither built in (sync model self-built by the business)**: skynet (messages are everything; the public MMO projects SkynetMMO/UnityMMO are self-built state-sync examples, D), Pomelo (self-built channel broadcast). In theory a deterministic service mesh could run lockstep, but the community has no mature precedent (D).
-- **The lockstep ecosystem**: none of the above frameworks build it in. RTS/fighting lockstep depends on deterministic frame order + input broadcast + verify/rollback; the open-source world mostly has standalone solutions (GGPO-like) rather than server-framework built-ins — a general conclusion (D).
-- **A hybridable form**: combat frame sync + big-world state sync mixed, requiring the combat instance to be **one-way decoupled** from outside state — a lockstep instance consumes only an initial snapshot + input stream and emits only results.
-- **Apollo's choice and adaptation layer**: single-track state sync in the big world (05 §6.4: uplink intent-only, server adjudicates); combat offloaded to independent Battle instance processes (25 §3.2/§3.3: Input Collection→Validation→Execution→Settlement→Broadcast, a five-stage Pipeline), results landed back one-way via Result Dispatcher (25 §3.4), Gate↔Battle never directly connected (25 §5) — exactly the "one-way decoupling" the hybrid form needs. **Three adaptation seams**: ① contract channels can grow a battle-specific channel (beyond the current movement/attributes/events/control in sdk-contract §2.3); ② Battle instance tick 20-50ms independently configurable (25 §8); ③ Replay/Inspector keyframe recording (25 §6) is the first step toward deterministic replay. **Lockstep not implemented today**: the gaps = a deterministic runtime (fixed-point numbers + a restricted Lua instruction set + no floats), with no conflict with the existing 20Hz main-thread total order — if RTS/fighting gameplay is greenlit someday, it is satisfied inside Battle instances without polluting the big-world protocol. This is a design seam, not an implemented capability — honestly declared.
-
-### Q11: Database support matrix
-
-| Framework | Official DB | Evidence | ORM/pooling/sharding | PG/Mongo/Redis extension status |
-|---|---|---|---|---|
-| BigWorld | **MySQL** (production) + **XML** (dev/small scale) + SQLite embedded in baseapp | `lib/db_storage_mysql/mysql_database_creation.cpp`, `mysql_billing_system.cpp`; `lib/db_storage_xml/xml_database.cpp`; `baseapp/sqlite_database.cpp` (all grade-A evidence) | .def-driven auto table creation (entity_defs→tables); no built-in pooling/sharding (public wording, C) | MySQL the de-facto only production path; the XML backend is the official "seam" (file-level evidence) |
-| KBEngine | **MySQL+Redis dual backends** (corrected 2026-09-30: the original "MySQL-only" was inaccurate) | `kbe/src/lib/db_{mysql,redis}` (grade-A evidence; the redis backend's entity_table_redis.{h,cpp,inl}/db_interface_redis/kbe_table_redis implement the same abstract base classes as db_interface/entity_table.h — production readiness unverified, deep-dive §17); dbmgr centralized tasks `buffered_dbtasks.cpp` | .def-driven table creation; no ORM abstraction (direct SQL wrapping); no sharding | No official PG/Mongo (community discussion, D) |
-| skynet | **None built in** | local tree skynet-src/service inventory has no DB component (grade A) | Business picks MySQL/Redis clients (community wording, D) | Fully open — no concept of "official support" |
-| Pomelo | No official unified ORM | archived repo docs (C); Lord of Pomelo demonstrates a MySQL+Redis dao (D) | community dao layer | Redis common in the wild (D) |
-| NoahFrame | A simple bundled storage component (public details limited, D) | — | — | — |
-| Unity NGO / UE | Not involved in game DB (client engines; UE's OnlineSubsystem targets platform services, not game saves) | official doc positioning (C) | — | — |
-| EQEmu | **MySQL** (content + characters all in the DB) | official repo positioning + forums (C/D) | No ORM; shared memory as the inter-zone cache (C/D) | No official PG |
-| TC/WoW ecosystem | **MySQL** (auth/world dual databases) | official build-dependency README wording (C/D) | DB-table-driven content; no sharding | Community PG port attempts exist (D, weak) |
-| **Apollo** | **MySQL 8.0 primary + Redis cache/session + ClickHouse analytics** (00 tech-stack table) | this repository, grade B | **storage.xml "statements are data"** (the MyBatis mapped-statement form, xml-generation §6); connections pooled by DataProxy; shard key = the ServerID Group bits (05 §2.2) | **Seam left for PG** (below); **no seam for Mongo** (below) |
-
-- **Why a seam for PostgreSQL (grounded in implementation)**: Apollo's persistence layer treats SQL as **data**, not code — storage.xml holds the statement set (tables/column promotion/journal statements) and the generator only loads it (xml-generation §6). Switching to PG = swapping in another statement set + dialect marker, with zero changes to contract, generator, and server accessors. That's the direct dividend of "learning from MyBatis rather than learning ORM". BW's db_storage_mysql/xml dual backends proved pluggability at the engine layer; Apollo sinks the socket from "compile-time backend classes" to "statement-set data".
-- **Why no seam for MongoDB (grounded in lessons)**: the two-phase design (journal append + column snapshot + column promotion, attribute-sync §8.2) depends on **relational-column semantics** — column promotion (persisting a new field → add a column) degrades into whole-document blobs in a document model, exactly reproducing KBE's number-one shortcoming (attribute-sync §8: blobified complex types, no query surface). A document store is not "another dialect" but "another paradigm"; the cost of a seam = rewriting journal replay semantics, the benefit = zero — explicitly not left.
-- **Where Redis sits**: only after DataProxy as cache/session (00), **never on the consistency path** — consistent with KBE not making Redis official and Pomelo using Redis only at the dao layer; the correctness of the write-behind journal does not depend on the cache layer.
-
----
-
-## 5. Insufficient Data and Doubts, Summarized
-
-1. **Space Engineers "MSE"**: no corresponding project found on the public web or this machine (the SSEngine inventory is a general C++ support library); treated as insufficient data, only the §2.10 entry.
-2. **The WoW/TrinityCore section**: source not read; per-map threading, view-distance constants, and the opcode system are all community wording (grade D, marked item by item); Blizzard's internal architecture has no public material.
-3. **The KBEngine client SDK (onData etc.)**: the SDK repo is not on this machine; client-side descriptions follow official doc wording (grade C); the server side is all grade-A reading.
-4. **NoahGameFrame**: no reliable public data on AOI/sync details or production cases (grade D).
-5. **Pomelo production scale**: no reliable production CCU data after archival (grade D).
-6. **WoT's 190k single-server CCU**: public reporting, Guinness wording (C/D); the 1.1M network-wide wording could not be sourced first-hand and was not adopted.
-7. The NNG statements in docs/17 and docs/25 were superseded by the architecture-review networking decision (convention declared in §0 item 4).
-
----
-
-*Baseline: apollo main @ 30c4ca3a. Local evidence: BigWorld official 14.4.1 package (`~/workspaces/BigWorld`), KBEngine shallow clone (`~/workspaces/kbengine`), skynet (`~/workspaces/skynet`), SSEngine (`~/workspaces/SSEngine`, inventory conclusion in §0). Line numbers are all from actual reading, consistent with the evidence chain in docs/analysis/architecture-review.md §16. First draft 2026-09-29.*
+- [KBEngine entity definitions](https://kbengine.github.io/docs/programming/entitydef.html) and [startup/shutdown](https://kbengine.github.io/docs/startup_shutdown.html)
+- [TrinityCore networking](https://trinitycore.info/install/Networking)
+- [EQEmu server installation](https://github.com/EQEmu/eqemu-docs-v2/blob/main/docs/server/installation/server-installation-windows.md)
+- [Pomelo terminology](https://github.com/NetEase/pomelo/wiki/Terminologies) and [LordOfPomelo server introduction](https://github.com/NetEase/pomelo/wiki/LordOfPomelo-server-introduction)
+- [Ryzom Core services](https://github.com/ryzom/ryzomcore/wiki/architecture_ryzom_services)
+- [Skynet GateServer](https://github.com/cloudwu/skynet/wiki/GateServer)
+- [Colyseus rooms](https://docs.colyseus.io/room/)
+- [Agones concepts](https://agones.dev/site/docs/)

@@ -1,202 +1,44 @@
 [English](concept-glossary.en.md) | [中文](concept-glossary.md)
 
-# Apollo 核心术语表（concept-glossary）
+# Apollo 概念与命名
 
-> 状态：术语权威载体（登记性文档，随裁决滚动增补）。定位：把**通用架构概念**整理成一张表——每个词条给三件事：**一般含义 / 出现在哪些引擎 / apollo 的对应物与立场**（带权威载体指针）。后续设计与分析文档引用本表词条名，不再各自从零定义；新概念**先入本表再落文档**。口径日期 2026-09-30。
+本文是 Apollo 目标架构的术语表。对外统一使用常见的游戏服务器概念；代码原型名称仅作为实现定位，不构成第二套架构命名。外部引擎专有术语只在[引擎对照资料](../36-MMO_Frameworks_Comparative_Analysis.md)中解释。
 
----
+## 产品定位
 
-## 0. 用法与裁决记录
+Apollo 是轻量房间制多人在线游戏服务器引擎，适合塔防、合作玩法、竞技场和副本。MMO 可以是产品形态，但 Apollo 当前不以持久化无缝大世界为目标。
 
-**新词规则（严格，2026-10-12 用户令）**
-1. **先查现成词**：定任何术语前，第一步先查 BigWorld 和 KBEngine 有没有现成词——有现成词一律用现成词，不许另起。
-2. **新词须给理由**：确实两家都没有的，才允许新词，且必须同时写一行「为什么现成词不够」。
-3. **未点头标待定**：新词在没有用户点头之前一律标**待定**，不进设计文档和代码。
-4. **审定写出处**：表里任何一条都不许写「用户审定」，除非能在 git log 或会话记录里找到出处——找到出处就把 commit hash 或日期写上；查不到写「来源不明」。
+## 目标概念
 
-**引用用法**
-- 引用格式：「词条名（concept-glossary）」；跨引擎对照以本表为准，不重复贴行号。
-- 收录判据：多家引擎/业界共有的**通用概念**，或 apollo 自造且易混的词；机制参数、实现细节归各设计文档，本表只定边界。
-- 表内跨引擎行号为各仓工作副本实读记录（双轨口径同 deep-dive §0）；apollo 载体指针随设计文档滚动，以 `docs/design/*` 为准。
+| 名称 | 定义 | 边界 |
+|---|---|---|
+| `Login` | 账号认证并签发登录凭证的职责。 | 不承载对局状态。 |
+| `Gateway` | 接受客户端游戏连接并按会话路由消息的职责。 | 不拥有权威游戏状态；名称本身不意味着支持连接无损迁移。 |
+| `RoomServer` | 创建、运行、销毁房间并执行房间权威逻辑的进程角色。 | 一个进程可以承载多个 Room。 |
+| `Room` | 一场玩法/对局及其临时状态。 | 对局结束后回收；不代表进程。 |
+| `Player` | 玩家身份。 | 对局中对应一个权威运行时对象。 |
+| `Entity` | 游戏内参与模拟的运行时对象。 | `Avatar` 是玩家参与对局时的实体表示。 |
+| `AOI` | 兴趣管理，确定玩家应观察到的实体集合。 | 属于房间模拟能力，不是独立进程要求。 |
+| `Persistence` | 保存跨对局持续存在的数据。 | 是能力/模块，不预设独立服务进程。 |
 
-**术语裁决记录（2026-09-30，用户指令）**
-1. **Battle → 副本定名**（两则）：① docs/25「Battle Service」的真实语义是**副本**而非「战斗」——该名**作废**，后续文档一律写「**副本**」（英文/代码标识 = **instance**；别名 dungeon；塔防/竞技语境口语 = room）。② **「battle/战斗」一词保留给战斗逻辑域**（战斗验证/战斗结算——见「战斗验证服务」词条），不再用于任何空间/实例命名。对应 KBEngine `Space` 概念；已删 docs/25 按 `git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯。
-2. **不引注册中心**：不引入 etcd/consul 类外部注册中心；进程发现唯一口径 = **G-1 双层**（machined 守护 + UDP 广播，net-abstraction §7）。注册中心来源文档 docs/05 §2.3 随裁决整档删除（git 可溯），36 号 #13 行同步改写。
-3. **ghost 不做**（决策 #9，2026-09-29 登记）：跨 baseapp 迁移走显式 handoff；远程可见走 RO_MIRROR 只读镜像。
+## 玩家对象迁移
 
----
+跨服玩法将玩家对象的权威从源 RoomServer 转移到目标 RoomServer。迁移可以传送对象状态，但同一时刻只能有一方处理玩家请求、推进权威状态和执行权威写入。目标端确认接管后切换 Gateway 路由，再删除源端对象；失败路径必须避免双重权威或丢失权威。
 
-## 1. 术语总表
+## 更新语义
 
-### 1.1 世界与实例
+`Gateway` 是接入与路由角色，不是不停机更新方案。RoomServer 可以停止接收新房间并等待现有房间完成后滚动退出。活动对局跨版本继续运行需要额外的状态迁移和版本兼容机制；现有连接跨 Gateway 进程保持需要连接交接机制。服务可用、客户端免重新登录、TCP 不断开、活动对局不中断是不同结果，不能互相替代。
 
-| 术语 | 一般含义 | 出现的引擎 | apollo 对应与立场（权威载体） |
-|---|---|---|---|
-| **场景**（Scene / Space） | 世界中一块有归属的逻辑单元（地图、分区、副本皆是）：实体容器、AOI 边界与地理数据的载体 | BW = `Space`（cellapp/space.hpp「represent a space」；cellappmgr/space.hpp「manage the different spaces」——**场景侧进程与管理进程各持 Space 定义**）；KBE = `Space`（cellapp/space.h `class Space : public Entity`——空间本身是实体；cellappmgr/space.h `spaceID_+Cells+geomappingPath`）；skynet 无世界单元概念 | **scene**——副本与分段可见隔离已落为结构性实现：每个 `Scene` 独享一个 `SceneAoi`（P1-3），由场景线程承载（scripting-lua §2 单写者纪律）；attribute-sync §4.3 |
-| **副本**（英文定名 **instance**；别名 dungeon、room——历史错名「Battle」已废，见 §0 裁决 1） | 一次玩法开启的**独立世界实例**：自带场景、规则与参战实体，生命周期随玩法起止——语义是「实例化的场景」，不是「战斗」 | KBE = `Space` 实例（space 即场景/副本的统一概念——用户 2026-09-30 指认）；BW = Space 实例（cellappmgr 按 space 分配 cellapp，**无独立进程**）；skynet 无 | **副本实例**（instance，短生命周期、tick 20-50ms 可配、结果单向落回——36号 #16「自创+借鉴」，三家无独立进程，deep-dive §16 负空间）；塔防/竞技的「**房间（room）**」= 副本的口语形态，一个房间一个副本实例（docs/30）；小玩法可不 offload 留 baseapp |
-| **baseapp** | **逻辑服进程**（BigWorld 词；承载面与 BW/KBE 拆分形态的差异见对照列）：承载 **1..N 个 scene** 的运行与实体权威，是故障域与扩缩的粒度（§2.1；「场景实例粒度」旧表述 2026-10-03 修正）；**不拆 cell/base 两族进程**——Base/Cell 是对象职责分层不是进程分层（player-object-model §0） | 对照：BW/KBE = cellapp（空间侧）+ baseapp（会话侧）两族进程；EQEmu = zone 一进程；skynet = 单节点多 service | 36号 #9「场景实例粒度（baseapp）而非无缝 cell」；网关透传/baseapp 解码的装配分工（sdk-contract §10.6）；「instance 进程」= 给单个 scene 单开进程的 offload 形态（36号 #16） |
-| **玩家对象模型**（Proxy/Base/Cell） | 玩家对象的**职责三分层**：Proxy/Session（连接承载）、Base/PlayerAnchor（长期逻辑+断线保留+跨场景锚点，驻 Home baseapp 不动）、Cell/Avatar（场景内空间权威，进 scene 生出 scene 死）——**对象分层 ≠ 进程分层**，三层同驻 baseapp | KBE/BW = 三层且跨 baseapp/cellapp 两族进程（base-cell-proxy-model 参考件）；TrinityCore = 单进程内对象 | **player-object-model.md（2026-10-03 落盘，gap #18）**：A 三层保留 + Cell 精简（砍 ghost/迁移、精简 witness、断线升 Base、换幕=Cell 销毁重建） |
-| **战斗验证服务**（battle verification / 影子复算） | 客户端权威战斗（帧同步/客户端演算）下，**服务端独立运行同一份战斗逻辑复算验证**——注册为服务、RPC 交互：输入流/战报上行、验证与结算结果下行，用于反作弊 | 行业通型但非引擎内建：JS 双端（客户端 JS + Node 验证服）、C# 双端（Unity + .NET，可热更）皆社区/自行开发实践；BW/KBE/skynet 无内建（均为状态同步、服务端权威，无需）——36号 §2 各节 | apollo **设计已立**（docs/design/battle-verification-service.md，2026-09-30；缺口 #17 立项即落盘）：独立 verifier 服务注册进 G-1（InterServerLink + internal 域三消息族），上行 battle-determinism §5 四元组 + 客户端 hash 申报、下行 verdict 四值 + **权威结算载荷（复算产出，客户端申报仅对照）**；验证两档 = 终局 hash 对照常开 / 逐 tick 复算按需；语言面 = **Lua 双端共享**（客户端 xLua/服务端 scripting-lua，`combat_bundle_hash`+VM 版本线双锚；确定性子集 = battle-determinism §2 全量继承 + 跨端增量三件）——与 C#/JS 方案同型；存在前提 = 客户端权威战斗（服务端权威不需要，§0 写死）；命名纪律 = battle 词专属此域（§0 裁决 1-②） |
-| **无缝世界**（Seamless） | 大世界跨进程连续：实体在逻辑分区（cell）间自由漫游，边界对玩家不可见 | BW = 无缝世界（代价：ghost 双写/边界协商/跨进程调试不可单步——36号 #9 引已删 BigWorld架构深度解析 §五）；KBE = 同（ghost + entity migration） | **否决，采副本/分线制**（36号 #9）——5000+ CCU SLO 下场景实例的故障域与扩缩已够用；**无无缝地图仍是 MMO**：判据是大规模同时在线+持久世界交互，非地图连贯（WoW/FF14 分区+副本+分线照旧是 MMO 代名词）——定位句见 player-object-model §5：副本/分线制轻量 MMO 服务器引擎 |
-| **线**（line / 分线） | 同一地图的**并行场景实例**——「几线」= 同 map 的第几个实例；中文 MMO 圈通称 | KBE = 引擎无 line 一级概念（源码/配置零命中——同图多 `Space` 实例即多线，Spaces 管理在脚本层）；BW = 无缝世界不分线；行业（国产 MMO）口语通称 | **线非一级概念**：由 scene_id/instance_id 承载（在线目录条目记所在线——session-and-online-directory §1）；「换线」= 显式 handoff / 重进另一实例（决策 #9 推论），不做无缝 |
+## 仓库实现名称
 
-### 1.2 进程与编队
+| 代码/程序名 | 状态说明 |
+|---|---|
+| `login-app` | Login 原型。 |
+| `gateway-app` | Gateway 原型。 |
+| `cell-app` | 对局/场景运行时原型；名称沿用 BigWorld 词汇，不表示采用 Cell 空间切片。目标职责归入 RoomServer。 |
+| `base-app` | 玩家状态与持久化原型；不代表目标必须设置独立 BaseApp 进程。 |
+| `baseappmgr` | 目录/落点管理原型；不代表目标必须设置 BigWorld 式管理进程。 |
+| `machined` | 本机进程监督原型，属于部署运维面。 |
+| `game-server` | 单进程模块装配示例。 |
 
-| 术语 | 一般含义 | 出现的引擎 | apollo 对应与立场 |
-|---|---|---|---|
-| **服务发现** | 进程启动后如何知道彼此存在与死活 | BW = bwmachined 守护 + machine_guard 生死广播（machine_guard.hpp:496-497/:609-613）；KBE = machine UDP 广播探测（machine.cpp:646-670——上游注释自认同网段失效，`<addresses>` 手工 workaround 见 kbengine_defaults.xml:814-833）；skynet = 静态 cluster 节点表（clusterd.lua:88-108 loadconfig，按需 TCP）；微服务业界 = etcd/consul 注册中心 | **G-1 双层**：单机 machined 守护 + 跨机 UDP 广播，**不引 etcd/consul**（2026-09-30 裁决——net-abstraction §7 G-1；深潜证据 deep-dive §13） |
-| **注册中心**（Registry） | 外部强一致 KV：集中存进程表、租约心跳、客户端拉取——微服务标配 | 业界（etcd / Consul / ZooKeeper）；**KBE 语境的「注册中心」多指 machine/mgr 这类引擎内管理组件，不是外部服务**（docs/qa q28 辨析） | **不引入**（§0 裁决 2）——原 docs/05 §2.3 设计（Redis/etcd + 心跳 5s/30s）已删 git 可溯 |
-| **守护进程**（machined） | 每机一个的本地监工：拉起、重启、上报本机进程生死 | BW = bwmachined（server/tools/bwmachined + machine_guard 协议）；KBE = machine（组件表 + 超时清理）；skynet 无 | **machined 式守护**（G-1 左半：本机进程生死/拉起/崩溃上报；拉起策略 = 编队配置） |
-| **热备与接管**（backup / reviver） | 主进程死、备进程按已知位点升为权威 | BW = backup_sender 分帧热备 + 一致性哈希备份链 + reviver 独立进程（server/reviver/）；KBE = **无进程级容灾**（宕机 = 最后归档窗口，C-51）；skynet = 无 | **未立项**（ADR-010 拍板 2026-10-10：案 A 先行 restart-only，standby 不立项——backup-hash 链不先行、reviver 不设、镜像流不建；单机编队 standby 同机同死，重开条件 = 生产数据提出亚秒 RTO/多机形态立项）。「热备流 = PersistJournal 只读镜像、备机 ack 位点即接管起点」为留档候选形态（net-abstraction §7 G-2），非现行口径 |
-| **恢复相位**（recovery） | 拓扑剧变期间的**排他窗口**：拒绝新请求直至收敛，防恢复中拓扑再变 | BW = cellappmgr `startRecovery()`（cellappmgr.cpp:281/:1411）+ 恢复期 `Denying…` 拒新（:1300）；KBE/skynet 无此层 | **baseappmgr 域排他恢复相位**（G-1 增量③已交付）：machined 死亡事件 → 拒新场景/新进程 → 各 baseapp/gateway 全量重报现存会话 → 收敛开放（session-and-online-directory §6）；接管粒度三档见 ADR-010——「base 死走 reviver」路径未立项（reviver 不设） |
-| **负载与准入**（load balancing / admission） | 落点选择（挑最轻）+ 过载保护（拒登/排队），一份指标两用 | BW = `minAppLoad()` 最轻分配（baseappmgr.cpp:588-599）+ LoginConditions 过载准入（:947-954）+ cell 再平衡族（cellappmgr.hpp:305/:307）；skynet = MQ 溢出告警（skynet_mq.c:19 MQ_OVERLOAD 1024） | **baseappmgr 域**：指标同源 G-5（观测与调度同一份数据）、新负载往轻处走 + 准入闸门；自动 cell 迁移推迟 M2+（net-abstraction §7） |
-| **在线目录**（online directory） | 谁在线、在哪条线/哪个进程的全局登记与查询——跨进程寻址与顶号裁决的数据底座 | BW = 分散在 mgr（baseappmgr 持 base 分配表 + (addr, load) 上报 loginapp 分流——baseappmgr.cpp:588-599/:1117）；KBE = **无**（在线 = baseapp 实体在内存，重复登录裁决在脚本层）；微服务业界 = 注册中心里的会话表（apollo 不引，见 §2.3） | **baseappmgr 域集中权威 + 事件投影镜像**（session-and-online-directory，2026-09-30 落盘）：进程内存权威态（不进 Redis 不落 DB 无 journal）、事件上报 + 周期对账、查询走镜像（RouteResolver/GM/广播三消费方）；「全局仲裁态集中不共享」通道族（net-abstraction §7）的落地件 |
-| **登录链**（login flow） | 从客户端启动到进入世界的完整链路：账号鉴权 → 选服/准入 → 入场凭证签发 → 游戏连接建立——流程横跨多进程，凭证与裁决点是设计核心 | BW = loginapp 独立进程（鉴权 + mgr 指派 baseapp，36号 §2.1）；KBE = loginapp 独立进程 + clientsdk_downloader SDK 下发（deep-dive §4）；skynet 无内建（业务自写） | **两阶段连接**（login-flow，2026-10-01 落盘，缺口 #13 CLOSED）：登录连接 client↔login-app 短连接（匿名握手 + AEAD 传凭据）；游戏连接 client↔gateway（ClientHello 带 login_token）——「拓扑入口 = gateway」指游戏会话面；token = HMAC-SHA256 自包含 + **baseappmgr 准入临界区一次性核销**（准入/选服/顶号预裁归 baseappmgr 单点）；鉴权/账号域归 login-app；三凭证辨析见 §2.5 |
-| **入站对接**（interfaces） | 外部第三方**主动进来**的 HTTP 面：渠道支付回调、账号绑定回调——承载进程、验签、幂等、向游戏内投递的接线（与出站 HTTP 是同渠道两方向） | KBE = `tools/server/interfaces` 独立进程（HTTP 收回调 → 查询/投递内部，deep-dive §4）；BW = 无独立对接进程（billing 记录直进 db 层 mysql_billing_system，36号 问11）；skynet 无 | **独立 interfaces 进程**（inbound-interfaces，2026-10-01 落盘，缺口 #14 CLOSED）：薄监听层（无模板/会话/静态文件——Drogon 裁决维持不复议）；鉴权 = HMAC 签名主 + IP 白名单辅（mTLS 不进路线图）；投递两段式（先持久后处理 + 查在线目录定 baseapp，tick 边界消费）；幂等键 = 渠道订单号；入站限定三类白名单（回调/健康检查/预留运维——后台 UI/报表/GM 不入此面） |
-
-### 1.3 实体与同步
-
-| 术语 | 一般含义 | 出现的引擎 | apollo 对应与立场 |
-|---|---|---|---|
-| **实体标识**（EntityID） | 世界内实体的唯一 id；能否内嵌来源信息决定可追溯性 | BW = EntityID=int32（basictypes.hpp:104）/ DatabaseID=int64（:191）/ UniqueID 128 位点分（unique_id.hpp:17-25）；KBE = `ENTITY_ID` int32（platform.h:342） | **64 位 ServerID 分段（Region/Group/Type/Instance）——自创设计**（36号 #15 证伪修正：BW 无分段对应物；原 05 §2.2 已删 git 可溯） |
-| **ghost** | 实体在邻进程的**双向投影**：跨边界可见 + 调用转发，无缝世界的运行基础 | BW = ghost/real 双侧（entity_ghost_maintainer、buffered_ghost_message 缓冲队列族——deep-dive §9）；KBE = ghost（cellapp/ghost_manager.*）+ entity migration | **不做 ghost**（决策 #9）；对应机制 = **RO_MIRROR 远程只读镜像**（attribute-sync §4.4——单向只读，调用转发权威侧）；跨 baseapp 迁移走显式 handoff（todo 批次 3） |
-| **属性同步**（property replication） | 权威侧属性变更如何到客户端：脏打包、可见域、按观察者补洞 | BW = properties + witness 双序号（witness.cpp:2470-2516 dumpAoI 实证）；KBE = `.def` flags + dirty 打包 + DetailLevels；skynet 无内置 | 契约 `sync`/`predict` 位 + 8 位可见域掩码 + per-viewer acked_seq 水位（attribute-sync §5/§10） |
-| **AOI** | 决定「谁该看到什么」的邻域计算与分发 | BW = cellapp witness/aoiMap_（随 CellApp 绑死）；KBE = `coordinate_node.*` 十字链（进程内 O(1) 增删，同样锁在 cellapp）；skynet 无内置 | **独立 AOI 服务**（网格+四叉树+shard，sceneId 隔离——可独立扩缩、baseapp 卡顿不拖 AOI；36号 #10） |
-| **可见域分档**（condition / LOD） | 按身份/距离/档位决定字段子集与更新频率 | UE = `COND_*` 条件位（C++ 宏，改协议须重编）；BW = AoIUpdateScheme 权重函数 + LOD 事件序号数组（aoi_update_schemes.hpp:18-56、entity_cache.hpp:189）；KBE = DetailLevels 三档半径+滞回（detaillevel.h:21-23） | 8 位 `SYNC_*` 掩码（SELF/TEAM/GUILD/AOI/WORLD 五域）——**条件做成契约字段而非宏**（sdk-contract §2.3 `sync=`，36号 #11） |
-
-### 1.4 调用与连接
-
-| 术语 | 一般含义 | 出现的引擎 | apollo 对应与立场 |
-|---|---|---|---|
-| **远程实体调用** | 跨进程调用另一进程上的实体方法 | BW = Mailbox（异步单向）；KBE = EntityCall（异步单向，结果用反向调用）；skynet = `skynet.call`（同步阻塞当前协程，lualib/skynet.lua:227） | **RemoteEntityCall 四件套**：OneWay 默认、RequestReply 只限控制面（同步返回不进热路径——net-abstraction §7、architecture/remote-entity-call-design.md） |
-| **进程间连接设施** | 稳定连接公共底座：拨号、心跳、重连、断连语义——业务不自写重试 | BW = Mercury（TCPConnectionOpener 状态机；LoggerEndpoint 各消费者自写重连 = 反面教材，logger_endpoint.cpp:672-703）；KBE = Network 模块 Channel 族；skynet = cluster 按需 TCP | **InterServerLink**：连接器 / 统一重连（指数退避 + 编队事件联动）/ in-flight 按 invoke_mode 分 / authority_epoch 区分对端重启（net-abstraction §5.7） |
-| **心跳与卡死检测** | 两件事：传输层「还活着吗」与逻辑层「还在干活吗」——不可混用 | skynet = monitor 版本号比对（不变 = 报警不杀，skynet_monitor.c:31-45）；KBE = machine 组件超时清理（进程级）；BW = machine_guard 生死 + 连接层保活 | 分两层：连接级心跳归 net-abstraction §3/§5.7；逻辑卡死归 **G-5 检测原语**（per-scene 心跳版本号/队列水位/实体计数/帧耗时，control 通道上行——net-abstraction §7） |
-| **顶号**（duplicate login / kick） | 同账号新登录**顶替**旧会话：旧连接被踢、旧实体终结，新会话成立——与断线重连（resume）是两件事 | KBE = 引擎无内建、assets 脚本层自决（销毁旧 avatar）；BW = baseapp 销毁旧 base 实体族；行业通型（端游/手游皆有） | **框架语义：新顶旧**，裁决权在 baseappmgr（目录 owner 单点串行）——同一临界区旧条目终结+新条目写入，异步下发踢除；`anchor_epoch` 锚竞争裁决（resume/迟到上行验 epoch 失效即拒）；与 resume 分工：resume = 同会话连接级恢复（net-abstraction §3），顶号 = 新会话替代（session-and-online-directory §3） |
-| **掉线保活窗口**（grace window） | 断线后实体保留、等待重连的时间窗——窗口内不销毁不落档，窗口满按离线处置 | 行业通型（KBE/BW 以脚本层定时器与 base 生命周期近似实现，引擎无专门语义） | **Suspended 态**：窗口与 resume token TTL **同源一个值**（不设两套）；窗口内实体留 baseapp、resume 成功回 Online；窗口满 → 目录删条目 + baseapp 终结（存档走 write-behind）；计时 = baseappmgr 定时器 deadline=tick 号（session-and-online-directory §4） |
-
-### 1.5 节拍与数据
-
-| 术语 | 一般含义 | 出现的引擎 | apollo 对应与立场 |
-|---|---|---|---|
-| **tick / 单写者** | 固定节拍、单线程全序推进世界——换来无锁与确定性 | BW = 定 tick 默认 10Hz（server_app_config.cpp:28 DEFAULT_GAME_UPDATE_HERTZ）；KBE = 定 tick 默认 10Hz（kbengine_defaults.xml:5 gameUpdateHertz）；skynet = 事件驱动无 tick（省空转但要自建节拍） | **场景线程单写者 + 主循环 20Hz**（cell-app config tickRateMs=50；clock-and-time §4 设计口径 10Hz 与实现默认 20Hz 不一致，待校准） |
-| **意图上行**（intent-only） | 客户端只发「想做什么」，服务端校验并定夺 | 对照物 = lockstep（客户端输入进判定、帧同步）——三框架源码均无内建 lockstep（deep-dive §18 负空间） | sdk-contract §2.3「intent only, 服务端定夺」；lockstep 取舍 = 36号 #18（只留适配缝、不进大世界协议） |
-| **write-behind journal** | 状态变更先落追加日志、后刷快照，崩溃可重放 | BW = baseapp 周期备份（backup_sender 族，快照流无 journal）；KBE = Archiver 平滑刷库（archiver.cpp:20-70，按 tick 头部区段）；skynet 无 | attribute-sync §8.2——journal 用途：崩溃恢复位点 + 落库队列（「三用一位」之 G-2 备份镜像流**未立项**，ADR-010 镜像流不建；留档候选形态见 net-abstraction §7 G-2） |
-| **契约**（contract） | 一份声明（属性/消息/白名单）多端生成的单一真相源 | BW/KBE = `.def`（两家皆 XML 但**无 schema 层**，错拼标签静默缺省——entity_description.cpp:184-190 / entitydef.cpp:188-210）；UE = 编译期宏；EQEmu/TC = 源码 opcode 表 | XML + XSD 形式校验 + 生成器（sdk-contract §2、xml-generation）——生成器不进运行时链接图（36号 #4） |
-| **受理应答形态**（ack-on-accept / 延时应答） | RPC 受理面两种回执接线：受理点立即回执 vs 消费执行后在发送侧回执 | BW/KBE/skynet 均随传输形态而定（REQ-REP 族锁步传输强制前者；队列化解耦传输可后者） | apollo 现行 = **ack-on-accept**（ADR-017：worker 受理点回执、gameThread_ tick 边界消费执行结果不落应答——nng_rep0 lockstep[socket.cpp:139-172]不支持延时应答）；**延时应答为 M1 升级项**（InterServerLink recv/send 解耦 + pending-reply 关联面），受理面骨架零废弃 |
-| **意图信封**（intent envelope） | 跨线程投递的「想做什么」最小载体：解码后的操作请求 + 关联键，由非权威线程入队、权威线程在固定边界独占消费执行 | BW/KBE 跨进程实体调用皆消息化（mailbox / remote call），无 RPC handler 直写世界态形态；skynet 消息驱动同型 | ADR-015 (a) 受理面载体——RepSocket worker 解码+校验后入队（有界队列 + ADR-016 两级水位），gameThread_ tick 边界独占消费；与 G-1 收包入队先例同构（死亡事件/镜像包/恢复重报） |
-
----
-
-## 2. 重点辨析（易混词对）
-
-### 2.1 scene vs 副本 vs baseapp——三个粒度各管什么
-
-- **scene（场景）** = 数据与逻辑单位：实体容器、AOI 边界（sceneId）。
-- **副本** = scene 的**生命周期形态**：玩法开启时实例化、结束时销毁；可放独立进程（apollo 的副本实例进程），在 KBE 里就是又一个 `Space` 实体（space 本身就是可脚本实体）。
-- **baseapp** = **进程单位**：承载一个或多个 scene/副本的逻辑服进程，是故障域与扩缩的粒度。
-- 一句话：**scene 是「一块世界」，副本是「一块世界的一次运行」，baseapp 是「跑世界的机器格子」**。
-- 玩家对象同轴收口（2026-10-03）：**锚在 Base（Home baseapp 不动），空间态在 Cell（随 scene 生死）**——三层职责与换幕/断线/重连规则见 player-object-model（gap #18）；**对象分层 ≠ 进程分层**，三层同驻 baseapp。
-
-### 2.2 ghost vs RO_MIRROR——名字不同因为立场不同
-
-ghost 服务于**无缝世界**：邻进程双向投影、双写、调用转发，是 apollo 决策 #9 否决的形态；RO_MIRROR 是 apollo 保留的**单向只读镜像**：热备流与只读视图用，写永远只在 owner，调用转发权威侧——「共享 = 订阅 owner 的投影」（net-abstraction §7 共享模型）在镜像类信息上的落点。所以 apollo 不是「把 ghost 改名」，而是**换了同步模型**。
-
-### 2.3 服务发现 vs 注册中心——事实获得 vs 外部台账
-
-发现回答「谁活着、在哪」（apollo：守护 + 广播，最终一致）；注册中心是外部强一致台账（etcd/consul，租约 + watch）。裁决不引的依据：进程拓扑小、变更低频，强一致换不来对等收益（net-abstraction §7 G-1）；广播跨网段的缺口由**单机守护**补——机器级生死与拉起本来就不该靠广播（deep-dive §13 裁决后读法）。注意 KBE 语境里的「注册中心」多指 machine/mgr 这类**引擎内**管理组件（qa q28），与微服务注册中心不是一回事。
-
-### 2.4 心跳的两个层次
-
-连接心跳（字节层：RTO/超时 → 断连重连 resume）与逻辑心跳（tick 层：版本号不变 = 卡死）不可混用——前者由传输/会话层处置（可杀连接），后者只报警不杀（skynet monitor 同型）。apollo 两层各有归属（§1.4 末行），检测与恢复也是两件事：G-5 只出信号，处置归 baseappmgr 恢复相位。
-
-### 2.5 login_token vs session_key vs resume token——三层凭证各管一段（2026-10-01，随 login-flow 落盘）
-
-| 凭证 | 域 | 管什么 | 签发/协商方 | 寿命 |
-|---|---|---|---|---|
-| **login_token** | 账号域 | 一次性**入场券**：证明「鉴权已过、准入已批」——gateway 本地验签、baseappmgr 临界区核销 | login-app 签发（HMAC-SHA256 自包含） | 短 TTL（60s 建议）+ 一次性（nonce 核销） |
-| **session_key** | 连接域 | **帧加密密钥**：ClientHello/ServerHello 握手协商出，喂给 CryptoFilter 加密全帧 | 每连接双方协商（X25519+HKDF，net-abstraction §5.9） | 每连接新——resume 重连也重走 ECDH，**不恢复旧密钥** |
-| **resume token** | 会话域 | **断线恢复凭证**：证明「我是刚才那条会话」——重连时恢复 L2 seq/队列状态 | 游戏连接建立时服务端发（L2） | TTL 与掉线保活窗口**同源一个值**（session-and-online-directory §4） |
-
-三层互不通用、互不派生（密钥层次 net-abstraction §5.9 :317 的凭证面）：偷到 resume token 的人造不出 session_key（要重走握手），持旧 session_key 重连不被接受（nonce 新鲜性），login_token 用第二次即拒（nonce 已核销）——每层的失守都封死在层内。
-
----
-
-## 3. 增补纪律与基线
-
-- **命名与拼写以本表为真相源**（2026-10-12 口径）：本表管三件套命名（中文/英文/代码标识）与含义辨析；**命名优先复用 BigWorld/KBE 既有概念以降低理解成本，确需新词必须同时给出 BW/KBE 对照与「现成词为什么不够」的理由**；新概念先进本表，再进设计文档与代码。
-- 新概念**先入本表再落文档**；文档引用词条名，不重复定义。裁决改口径时同步改本表（沿革注写在 §0）。
-- 已删文档（docs/00、docs/05、docs/17、docs/25、BigWorld架构深度解析）一律按「git 历史可溯」读，本表不复述其内容、只留指针。
-- 跨引擎行号为本地三仓工作副本实读（双轨口径见 deep-dive §0）；三家之外的引擎（UE/Unity/EQEmu/WoW 生态）只写到机制名、不引行号（源码不在本机，36号 §0 分级口径）。
-
----
-
-## 4. 术语总表（全仓登记，六列）
-
-> 定位（2026-10-12）：全仓术语的唯一登记表——进程名/二进制名、modules 模块名、契约实体名、现行事实件专有词，一表收口；§1 的概念辨析表与 §2 易混词对保持详注职能，引用词条名以本表为准。**代码标识一列全部为源码/契约实读**（附路径）；新词规则见 §0（严格四条）。历史时点件（审计七件套/analysis/qa/他家对照件）只做参照不入表。
-
-| 族 | 中文名 | 英文名 | 代码标识（实读，附路径） | BigWorld / KBEngine 对照 | 状态 | 来源 |
-|---|---|---|---|---|---|---|
-| apps | 登录进程 | login-app | 二进制 `login-app`；roster 名 `login`；类 `LoginServer`（apps/login-app/include/login/login_server.hpp:134）；namespace `login` | BW/KBE = loginapp | 现用 | ADR-014 撤销回改（b17b96cc，2026-10-12） |
-| apps | 网关 | gateway-app | 二进制 `gateway-app`；roster 名 `gateway`；类 `GatewayServer`（gateway_server.hpp:58）；namespace `gateway`；收益口径 = 断线后能快速重连（只此一条，参考火龙果——用户 2026-10-12 口径） | 两家均无（两家拓扑无独立网关进程） | 现用 | ADR-011（独立 gateway-app 留任；gateway-topology-survey 2026-10-08） |
-| apps | 管理进程 | baseappmgr | 二进制 `baseappmgr`；roster 名 `baseappmgr`；类 `BaseAppMgr`（apps/baseappmgr/include/baseappmgr/baseappmgr.hpp）；namespace `baseappmgr`；crash db `crashdumps/baseappmgr` | BW/KBE = baseappmgr | 现用 | BW 原词；a5750eda 曾改 manager、b17b96cc 回改（2026-10-12） |
-| apps | 逻辑服进程 | base-app | 二进制 `base-app`；roster 名 `base`；类 `BaseServer`（apps/base-app/include/base/base_server.hpp）；namespace `base`；日志身份 `base`；crash db `crashdumps/base-app` | BW/KBE = baseapp | 现用 | b17b96cc（2026-10-12；ADR-014 撤销注记） |
-| apps | 空间进程 | cell-app | 二进制 `cell-app`；roster 名 `cell`；类 `CellServer`（apps/cell-app/include/cell/cell_server.hpp:22）；namespace `cell` | BW/KBE = cellapp | 现用（世界运行时原型；去留随玩法批） | ADR-014 决策 2（原型名不动） |
-| apps | 游戏进程 | game-server | 二进制 `game-server`；roster 名 `game`；类 `GameServerService`（apps/game-server/src/main.cpp:52） | 两家均无 | 现用（原型） | 初始仓（4fe2b576 可溯） |
-| apps | 日志进程 | logger | 二进制 `logger`；roster 名 `logger`；类 `LoggerApp`（apps/logger/include/logger/logger_app.hpp）；namespace `logger` | BW = server logger 中心日志；KBE = logger 组件 | 现用 | logging 批 L3（24cc7ab6） |
-| apps | 指标出口进程 | admin | 二进制 `admin`；roster 名 `admin`；类 `AdminApp`（apps/admin/include/admin/admin_app.hpp:15）；namespace `apollo::admin`；serve 子命令 = metrics link 9106（被动收 931 快照）+ HTTP `GET /metrics` 9107 | 两家均无（指标聚合出口为观测面运维进程） | 现用 | metrics admin 通道批（08641684，2026-10-12） |
-| apps | 监督进程 | machined | 二进制 `machined`（非编队成员，每机一个）；类 `Supervisor`（apps/machined/src/supervisor.hpp）；目录面 UDP 9600 | BW = bwmachined；KBE = machine | 现用 | G-1 双层发现（2026-09-30 裁决 2：不引注册中心） |
-| modules | 基础库 | base | `apollo::base`（modules/base/include/apollo/base/，含 timer_wheel.hpp 等） | 两家均无 | 现用 | 初始仓 |
-| modules | 兼容层 | bigworld | `apollo::bigworld`（modules/bigworld/include/apollo/bigworld/entity.hpp，包 apollo::bw 实现面） | 模块本身即 BigWorld 兼容层 | 现用 | 初始仓 |
-| modules | 契约 | contract | `apollo::contract`（modules/contract/）+ sdks/contract/（entities.xml、messages.xml、attrs.xml、errors.xml、apollo.xsd）+ 生成器 sdks/gen | BW/KBE = .def（两家皆 XML 无 schema 层） | 现用 | 36号 #3/#4/#5（a5334014 起；G-6 = 73e282d5） |
-| modules | 核心 | core | `apollo::core`（modules/core/：config、log、metrics；MetricRegistry 见下） | 两家均无 | 现用 | 初始仓 |
-| modules | 数据 | data | `apollo::data`（modules/data/：orm、cache、core；PersistJournal 于 orm/persist_journal.hpp:29） | KBE = Archiver/dbmgr（职责近似）；BW = db 层 | 现用 | ADR-007（Persistence Model） |
-| modules | 游戏 | game | `apollo::game`（modules/game/：attributes、battle、core、session、social、world） | 两家均无（业务域） | 现用 | 初始仓 |
-| modules | 网络 | net | `apollo::net`（modules/net/：link、discovery、contract_wire、http、linkrpc、logpush、metricspush、protocol、rpc、tcp、websocket） | 两家均无（组件族；传输层职能参照 BW Mercury/KBE Channel） | 现用 | 初始仓 |
-| modules | 协议 | protocol | `apollo::protocol`（modules/protocol/；messages.hpp 931 消息面） | BW/KBE = 消息分域枚举（形态同型） | 现用 | 36号 #3（931 增量 f1469dd3） |
-| modules | 运行时 | runtime | `apollo::runtime`（modules/runtime/；IHostedService——apps/game-server/src/main.cpp:52 引用） | 两家均无 | 现用 | 初始仓 |
-| 实体 | 怪物 | Monster | sdks/contract/entities.xml `<entity id="Monster">`（attr 10 个） | 两家无引擎内建（assets 示例层同名通型） | 现用 | 714ea677（P2-3 契约修订） |
-| 实体 | NPC | NPC | entities.xml `<entity id="NPC" parent="Monster">`（纯继承） | 同上 | 现用 | 714ea677 |
-| 实体 | 化身 | Avatar | entities.xml `<entity id="Avatar">`（根实体，attr 17 个） | BW/KBE = 示例实体 Avatar 同名 | 现用 | 714ea677（摘脱怪物族为根实体） |
-| 实体 | 玩家（实体） | Player | 无代码标识（实体已从契约删除） | 两家 assets 通型 | 已废 | 714ea677（玩家长期归属 = PlayerAnchor、场景对象 = Avatar） |
-| 专有词 | 玩家对象三层 | Proxy / Base / Cell | Base 层 = `PlayerAnchor`（player_anchor.hpp）；Cell 层 = `Avatar`（entities.xml）；Proxy 层 = 会话承载面（文档词） | BW/KBE = 同名三层原生（base-cell-proxy-model 参考件） | 现用 | player-object-model（gap #18，2026-10-03） |
-| 专有词 | 玩家锚 | PlayerAnchor | modules/game/session/include/apollo/game/session/player_anchor.hpp | 两家均无（职责 ≈ BW/KBE base 实体驻留面）——新词理由：两家 base 实体承担长期态，但 apollo 把长期归属从实体抽为独立锚对象，现成词不含此抽象 | 现用 | player-object-model（gap #18，2026-10-03） |
-| 专有词 | 世界指派 | WorldAssignment | modules/game/session/include/apollo/game/session/world_assignment.hpp:7 | 两家均无（职责 ≈ BW baseappmgr 指派 baseapp 的 mgr 分配表） | 现用 | session 域批（e3907bc8 可溯） |
-| 专有词 | 会话定位 | SessionLocator | modules/game/session/include/apollo/game/session/session_locator.hpp | 两家均无 | 现用 | gap #12 批（e3907bc8 可溯） |
-| 专有词 | 锚管理 | AnchorManager | modules/game/session/include/apollo/game/session/anchor_manager.hpp:13 | 两家均无 | 现用 | 初始骨架批（e3907bc8 可溯） |
-| 专有词 | 在线目录 | PlayerDirectory | modules/game/session/include/apollo/game/session/player_directory.hpp | 两家均无（BW 分散在 baseappmgr 分配表；KBE 无目录概念）——新词理由：两家无跨进程会话目录一级概念，apollo 将其立为 baseappmgr 域权威件 | 现用 | session-and-online-directory（2026-09-30 落盘；dfead442 可溯） |
-| 专有词 | 目录镜像 | DirectoryMirror | modules/game/session/include/apollo/game/session/directory_mirror.hpp | 两家均无 | 现用 | 同上（a3f1008e 可溯） |
-| 专有词 | 锚纪元 | anchor_epoch | player_directory.hpp 字段（接管后旧主迟到消息按 epoch 失效拒绝） | 两家均无 | 现用 | session-and-online-directory §3（2026-09-30） |
-| 专有词 | 恢复协调 | RecoveryCoordinator | modules/game/session/include/apollo/game/session/recovery.hpp:50（标识 `base-app`） | 两家均无 | 现用 | G-2 批 0（068a8fbe 可溯，2026-10-09） |
-| 专有词 | 编队恢复协调 | FleetRecoveryCoordinator | modules/game/session/include/apollo/game/session/fleet_recovery.hpp:96 | 两家均无 | 现用 | G-1 批（b9c27cb6 可溯） |
-| 专有词 | 锚记奖励口 | AnchorRewardSink / IRewardSink | modules/game/session/include/apollo/game/session/anchor_reward_sink.hpp | 两家均无 | 现用 | P2-4 批（social，IRewardSink 真实落账接线） |
-| 专有词 | 会话管理 | WorldSessionManager | modules/game/world/include/apollo/game/world/world_session_manager.hpp | 两家均无 | 现用 | 初始骨架批（e3907bc8 可溯） |
-| 专有词 | 场景 | Scene | modules/game/world/include/apollo/game/world/scene.hpp:37 | BW/KBE = Space（cellapp 侧） | 现用 | 36号 #9（2026-09-30） |
-| 专有词 | 场景 AOI | SceneAoi | modules/game/world/include/apollo/game/world/scene_aoi.hpp:26 | BW = witness/aoiMap_（cellapp 绑定）；KBE = coordinate_node 十字链 | 现用 | P1-3 批（9ee48219 可溯） |
-| 专有词 | 世界 | World | modules/game/world/include/apollo/game/world/world.hpp:25 | 两家均无 | 现用 | 初始骨架批 |
-| 专有词 | 卸载宿主 | OffloadHost | modules/game/battle/include/apollo/game/battle/offload_host.hpp | 两家均无——新词理由：副本独立进程承载为 apollo offload 形态，两家均以 Space 概念内嵌无独立宿主 | 现用（原型） | offload 批（51b85ae0 可溯） |
-| 专有词 | 卸载节点 | OffloadNode | modules/game/battle/include/apollo/game/battle/offload_node.hpp | 两家均无 | 现用（原型） | 同上 |
-| 专有词 | 强类型标识 | EntityId / PlayerId | modules/game/core/include/apollo/game/core/entity.hpp:10/:34 | BW = EntityID/DatabaseID/UniqueID（basictypes.hpp）；KBE = ENTITY_ID | 现用 | P0-2 批（cell_server.cpp 型错不可见修复） |
-| 专有词 | 服务器间链路 | InterServerLink | modules/net/link/interserver_link.cpp | 两家均无（BW Mercury、KBE Channel 为传输层组件） | 现用 | net-abstraction §5.7 |
-| 专有词 | 链路管理 | LinkManager | modules/net/link/link_manager.cpp | 两家均无 | 现用 | 同上 |
-| 专有词 | 路由表 | RouteTable | modules/net/link/route_json.hpp | 两家均无 | 现用 | link 批 |
-| 专有词 | 链路 RPC | LinkRpc（模块 modules/net/linkrpc/） | modules/net/linkrpc/ | BW = Mailbox（异步单向）；KBE = EntityCall | 现用 | linkrpc 底座批 |
-| 专有词 | 日志推 | LogPushClient | modules/net/logpush/include/apollo/net/logpush/log_push_client.hpp | 两家均无 | 现用 | L4 批（6dd9445f；d8499672 收口，2026-10-12） |
-| 专有词 | 指标推 | MetricsPushClient | modules/net/metricspush/include/apollo/net/metricspush/metrics_push_client.hpp | 两家均无 | 现用 | metrics 批（9af1a9a2，2026-10-12） |
-| 专有词 | trace 子集 | apollo::net::trace（模块 modules/net/linktrace/：TraceContext/HeadSampler/SpanRecord；契约载体 932 internal_envelope） | modules/net/linktrace/include/apollo/net/linktrace/ | 两家均无（W3C traceparent 语义借模型不引 SDK——span 结构化行进日志流，不引 OTLP exporter） | 现用 | P3-3 语义层批 L6（cef1b87e→4aade72b，2026-10-12） |
-| 专有词 | 告警 notifier | apollo::admin::AlertNotifier（AlertRule/AlertEvent；出站=注入 sink，缺省 cat=alert 结构化行） | apps/admin/include/admin/alert_notifier.hpp | 两家均无（logging §5.2 层 B 内核：判定/静默聚合/速率上限；webhook POST 随 curl 出站批） | 现用 | P3-3 余项批 L7（b1d5c78f→e24e8fe9，2026-10-12） |
-| 专有词 | 发现 | apollo::net::discovery | modules/net/discovery/include/apollo/net/discovery/discovery.hpp | BW = bwmachined 生死广播；KBE = machine UDP 探测 | 现用 | G-1 双层（2026-09-30 裁决 2） |
-| 专有词 | 指标注册 | MetricRegistry（Counter/Gauge/Histogram 三型） | modules/core/metrics/metric_registry.h | 两家均无 | 现用 | P3-3 批 B（G-5 检测原语）；Histogram 随 L7（b1d5c78f） |
-| 专有词 | 定时器轮 | TimerWheel | modules/base/include/apollo/base/timer_wheel.hpp | 两家均无 | 现用 | G-4 批（ed19a6eb，2026-10-08） |
-| 专有词 | 持久日志 | PersistJournal | modules/data/orm/include/apollo/data/orm/persist_journal.hpp:29 | BW = backup_sender 快照流（无 journal）；KBE = Archiver 平滑刷库 | 现用 | attribute-sync §8.2（67bd1ea4 可溯） |
-| 专有词 | 落档队列 | SaveQueue | apps/base-app/src/database_service.cpp:266 | KBE = Archiver 刷库（职责近似） | 现用 | P0-4 批 |
-| 专有词 | 数据库服务 | DatabaseService | apps/base-app/include/base/database_service.hpp:42 | BW = dbutil；KBE = dbmgr | 现用 | 初始骨架批（bbbba035 可溯） |
-| 专有词 | 副本（实例） | instance | 契约字段 `space_id`/`instance_id`（sdks/contract/messages.xml:67-68） | KBE = Space 实例；BW = Space 实例 | 现用 | §0 裁决 1（用户 2026-09-30 指令） |
-| 专有词 | zone 标识符族 | zone_id / home_zone_id / by_zone / mark_suspended_by_zone / suspend_zone_sessions | 契约字段 `zone_id`（messages.xml:63）；`home_zone_id`（player_anchor.hpp:62） | EQEmu = zone 进程（他家对照事实）；BW/KBE 无 zone 词 | 现用（**仅代码标识符**——叙述层禁用 zone 指进程，进程义一律写 baseapp，2026-10-12 口径） | b17b96cc（2026-10-12） |
-| 专有词 | 落点提示 | zone_hint | 无代码标识（契约与源码零实读，仅文档引用） | 两家均无 | **待定**（文档在用但未入契约/代码，转正与否待拍板） | login-flow（2026-10-01 落盘） |
-| 专有词 | 备份接管 | backup / reviver | 无代码标识 | BW = backup_sender 分帧热备 + 一致性哈希备份链 + reviver 独立进程；KBE 无进程级容灾 | 已废（未立项——ADR-010 拍板案 A restart-only，standby 不立项；2026-10-10） | ADR-010 |
-| 专有词 | 撮合器 | Matchmaker | 无代码标识（文档词） | 两家均无 | **待定**（文档登记的后续批职责，未进代码） | battle-instance-offload（落点接入批注记） |
-| 专有词 | 只读镜像 | RO_MIRROR | 无代码标识（文档词，attribute-sync §4.4） | 两家均无（ghost 为反向形态，已否决）——新词理由：apollo 单向只读同步模型与 ghost 双向投影对立，现成词无此概念 | 现用 | 决策 #9（2026-09-29 登记） |
-
----
-
-*基线：apollo main（本文件随提交见 git 记录）；术语裁决 2 条（Battle→副本定名、不引注册中心）为用户 2026-09-30 当日指令，ghost 否决为决策 #9（2026-09-29 登记）。§4 总表登记于 2026-10-12（新词规则用户令；对照词命中与状态计数见登记当日回报）。跨引擎源证沿用 36号 §1 决策追溯表与 deep-dive §1-§18 实读记录 + 本轮实读（BW cellapp/space.hpp、cellappmgr/space.hpp；KBE cellapp/space.h、cellappmgr/space.h、platform.h:342——2026-09-30）。零源码改动。*
+目标进程角色只称 `Login`、`Gateway`、`RoomServer`；`Room` 是其承载的玩法对象。BigWorld/KBEngine 的 `BaseApp`、`CellApp`、`BaseAppMgr` 仅是外部引擎术语，不得作为 Apollo 目标设计的同义词。

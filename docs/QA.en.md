@@ -1,9 +1,8 @@
 [English](QA.en.md) | [中文](QA.md)
 
-# MMORPG Architecture QA
+# Game Server Architecture QA
 
-> This document is an index of MMORPG server-architecture questions; each question has
-> its own detailed answer page.
+> This index covers general game-server architecture and external engine mechanisms. BigWorld/KBEngine questions are comparative references and do not imply that Apollo adopts their topology.
 >
 > Note: the linked detail pages under `qa/` are Chinese-only in this round — the
 > subdirectory bilingualizing scope is registered in `todo.md` for the next round.

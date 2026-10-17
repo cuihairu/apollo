@@ -139,7 +139,7 @@ Apollo 重新定位（任务书 §1）：**面向轻量 MMO、场景化多人在
 - 结构成熟区：docs/design/（12 份设计文档+契约，质量高、决策齐全）、docs/analysis/（36号决策集、architecture-review 25 轮历史、design-gap-inventory）。
 - 失真区（与代码不符）：
   - docs/guide/quick-start.md 引用不存在的 API（dispatcher/ServiceRegistry 等），示例代码无法编译。
-  - docs/apps/BigWorld服务器应用实现.md 与代码有 9 项差异（文档假设 NNG ready、拓扑缺 baseappmgr、WorldApp 名称与 cell-app 不符、Pub/Sub 零实现、GatewayApp "optional" 与代码相反）。
+  - 旧的服务器应用拓扑说明已移除，当前程序原型以 [服务器应用索引](../apps/index.md) 为准。
   - docs/architecture/ 与 design 文档中多处声称的能力（属性同步管线、在线目录、四通道、write-behind journal）在代码中无实现（差异清单逐条见 architecture.md §7）。
 
 ---

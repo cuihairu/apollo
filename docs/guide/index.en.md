@@ -25,6 +25,6 @@ If you are already familiar with Apollo, go straight to:
 
 - [Architecture Overview](/guide/architecture) - Three panorama architecture diagrams (target form)
 - [Architecture Review & Current State](/analysis/architecture-review) - A deep look at the architecture design and audit conclusions
-- [Compact Form Positioning](/30-Compact_GameServer_Design) - Form and selection for lightweight MMO or tower-defense projects
+- [Room-Based Server Design](/30-Room-Based_GameServer_Design) - Rooms, RoomServer, and cross-server transfer
 - [Module Docs](/modules/) - Detailed description of each module
 - [API Reference](/api/) - Interfaces and classes

@@ -1,67 +1,43 @@
 [English](todo.en.md) | [中文](todo.md)
 
-# TODO 任务计划（任务书 P0-P4 重排，2026-10-04）
+# TODO
 
-> 重排依据：`docs/rearchitecture/architecture-review-plan.md`（40 节任务书）+ 第一阶段审计七件套。
-> 术语纪律：命名优先复用 BigWorld/KBE 既有概念；新词先入 glossary 并给出对照与理由。
+## P0：统一目标术语与设计基线
 
-## 已完成（审计期 2026-10-04）
+- [ ] 全仓审查面向开发者的设计文档和导航：目标进程统一称 `Login`、`Gateway`、`RoomServer`；对局单元称 `Room`；玩家对象在一场对局中只有一个权威实例。BigWorld/KBEngine 的 Base/Cell/Zone 等词只用于说明对应外部引擎，不作为 Apollo 目标命名。
+  - 验收：README、文档首页、架构总览、术语表、登录、路由、玩家对象和 Gateway 文档相互一致；其余设计页不再把旧进程拓扑写成 Apollo 当前/目标架构；引擎对照页明确区分对照事实和 Apollo 设计。
+- [ ] 检查所有旧文档路径、目录导航、脚本和引用；删除已被新文档取代且没有独立参考价值的架构稿，不留冲突的历史命名清单。
+  - 验收：文档构建通过；站内链接无失效；文档中保留的旧程序名仅用于准确描述当前源码实现，不作为目标概念。
+- [ ] 决定并记录不停机更新的验收目标：服务持续可接入、客户端不重新登录、既有 TCP 连接不中断、活动 Room 跨版本继续运行分别验收，不互相替代。
+  - 验收：每个目标明确是否要求、可接受的客户端行为、升级时限和失败回滚条件。
 
-- [x] 任务书入库（ce91a739）
-- [x] 第一阶段只读审计七件套落库推送（aac84a25）
-- [x] 用户审定，解冻进入代码阶段（2026-10-04）
+## P1：收敛应用程序与实现命名
 
-## P0 —— 对象所有权与核心模型重建
+- [ ] 按目标模型盘点 `apps/`，明确 Login、Gateway、RoomServer 的实现边界和可合并部署方式；移除没有目标职责的重复进程拆分。
+- [ ] 将现有 `cell-app` 场景/对局原型收敛为 RoomServer 职责；不实现 Cell 空间切片、无缝地图或 ghost 模型。
+- [ ] 收敛 `base-app`、`baseappmgr` 中仍被需要的玩家数据、在线路由和监督功能；路由目录不默认新增独立 Manager 进程。
+- [ ] 统一实际需要的可执行文件、目录、类名、命名空间、配置、协议身份、日志/指标身份、启动脚本、测试和文档名称。
+  - 验收：源码、构建产物、开发脚本和用户文档使用同一目标名称；迁移后无旧名死路由、死配置或仅为兼容旧架构保留的空壳。
 
-- [x] P0-1 执行上下文基础：WorldHost 补编译 + 定帧抽象 + ThreadAffinity/SceneContext 标注（fd61ff7f）
-- [x] P0-2 玩家对象模型三件套：Avatar 类 + PlayerAnchor 字段 + PlayerId/EntityId 强类型分型
-- [x] P0-3 Scene/Instance 模型重建：Scene 运行时容器 + Instance 八态状态机 + `world.create_scene`/`scene.create_instance`/`instance.enter`
-- [x] P0-4 生命周期收口：WorldSession Leaving 可观察 + transfer 异步化与失败回滚 + 应用关闭协议
-- [x] P0-5 构建基座加固：6 未编译源挂 target + 零 app 断链
-- [x] P0-6 双树收敛预备：LogManager ODR 消除 + 死单例第一批
-- [x] PORT-1 跨平台可移植性小批：config_value.h 补 `<cstdint>` + net_util.h setKeepAliveParams 三平台分支
+## P2：实现房间运行与玩家权威迁移
 
-## P1 —— 换幕 / 目录 / AOI / 持久化 / 恢复 / 重连
+- [ ] 实现 Room 生命周期：RoomServer 可承载多个独立 Room；创建、加入、运行、结算、销毁的状态和失败路径明确。
+- [ ] 确保每个玩家在一个 Room 中只有一个权威运行对象；持久数据与对局临时状态边界明确。
+- [ ] 实现跨 RoomServer 玩家对象迁移：源端冻结并导出、目标端恢复并确认、在线路由与 Gateway 切换、源端清理；失败时回滚到唯一权威端。
+- [ ] 为迁移请求、结算和持久写入提供幂等/去重保护，拒绝源端迟到消息和双重权威写入。
+  - 验收：自动化测试覆盖正常迁移、目标拒绝、超时、源端/目标端崩溃、路由更新失败、重复请求和迟到消息；任何时刻最多一个端点能推进权威状态。
 
-- [x] P1-1 Scene Transfer/换幕：prepare→detach→attach→state sync→resume 协议 + 失败回滚 + 断线处理
-- [x] P1-2 PlayerDirectory/在线目录：modules/game/session PlayerDirectory + 契约 900-905 + 行为契约单测 7 组
-- [x] P1-3 AOI 收敛与接入 Scene：SceneAoi 单实现 + ViewerState 水位 + test_game 9 条迁移（15/10 全绿）
-- [x] P1-4 持久化栈收敛+最小落盘：五套→一套 + SaveQueue 真落盘 + PersistJournal 骨架 + 写盘→重启→读回
-- [x] P1-5 Recovery：三档清单 + RecoveryCoordinator 启动序列 + journal replay + recovery_tests 5 组
-- [x] P1-6 Reconnect/保活窗口：契约 906-908 + WorldSession 挂机窗口 + gateway 结构化断连（819cd25e；ON 30/30、OFF 27/27）
-- [x] 全量文档对账：README/docs 全站 vs HEAD 真实现
+## P3：补齐 Gateway 路由与更新能力
 
-## P2 —— Battle / ECS / Social / Guild / Party
+- [ ] 接通 Gateway 到多个 RoomServer 的真实上行、下行和在线路由；支持 Gateway 多实例唯一身份及路由更新。
+- [ ] 实现 Gateway 排空：停止接受新连接，同时让既有连接继续工作，直至自然断开或达到明确期限。
+- [ ] 根据 P0 的更新目标实现所需连接恢复或跨进程连接交接；如果目标只要求服务持续可用，明确客户端重连行为和会话恢复约束。
+- [ ] 实现 RoomServer 滚动更新策略：停止分配新 Room，等待活动 Room 结束后退出；若要求活动 Room 跨版本运行，再实现 Room 状态迁移、版本兼容和回滚。
+  - 验收：用真实客户端和多个 Gateway/RoomServer 做升级演练，分别记录新连接可用性、既有 TCP 连接、重新登录次数、活动 Room 连续性和消息/结算正确性；不得仅用 Ping 或进程存活作为通过标准。
 
-- [x] P2-1 ECS 收敛：五套→场景内一套（2bbae2a3）
-- [x] P2-2 Battle Runtime：determinism 四约束 + battle tick 接入 + reward 单向口（battle_runtime_tests 6 + rng_substream_tests 6）
-- [x] P2-3 契约系统修订：entities.xml 继承链修文 + 12 条新协议消息 + golden check（15→27）
-- [x] P2-4 Social/Guild/Party：Anchor 长期态字段 + Guild/Party 对象 + 契约 18-27（37 msgs；ON/OFF 33/33）
+## P4：部署与故障验收
 
-## P3 —— Deployment / Performance / Observability / DevEx
-
-- [x] P3-1 部署与进程形态：baseappmgr 域目录跨进程化 + machined 监督面 + G-1 全链 + instance offload 协议契约 + 改名批（a5750eda）+ 回改批
-- [x] P3-2 性能：三模型 benchmark 桩 + 受理面实测 ~0.1µs/意图 + flush 段 + persist 段（934f5df2 / fd46aaf9 / 97b84a54；ON 58/58、OFF 49/49、san 49/49）
-- [x] P3-3 可观测性：日志收敛 + LoggerApp + L4 push 通道 + MetricRegistry + metrics admin 通道 + trace 子集 + histogram + 告警 notifier + proc 存活 + 采样装配 + BI 分流（L1-L9；ON 59/59、OFF 50/50、san 50/50）
-- [x] P3-4 DevEx：dev_fleet.sh + gateway 三步处方 + net M1 内核 + ingress 接线 + M1 契约 + cell/gateway M1 + 编队成员注册（0de62ea9；ON 56/56）
-
-## P4 —— Documentation / Examples / Benchmark / Tutorial
-
-- [x] P4-1 文档修订：quick-start 实 API + apps 文档 11 项修正 + tests/README 重写 + README 第一屏 + docs/architecture/overview.md + ADR-001..009
-- [x] P4-2 最小可运行示例：examples/full_loop_demo.cpp 进程内八步驱动（36 断言门）
-- [x] P4-3 Benchmark/Tutorial：docs/guide/tutorial.md 新手上路 + 三模型基准复用
-- [x] P4-4 术语承接：全仓用词核对 + nng 底座替换迁移五批全清（9121ebc2；四树 53/53·44/44·51/51·44/44）
-
-## 遗留登记（已关 / 未列主线项，不扩写）
-
-- 旧 9 批次计划（2026-09-29）：批次 1 契约已交付；批次 2-4 重叠者并入 P1-P4；批次 5-8（AI 寻路/脚本/SDK/监控）未列主线，保持现状。
-- 审计遗留死件清账：comval 手写 union + attribute_id 290 常量已清（2026-10-09）；LocalServiceDiscovery/queue 族/IPC 旁支保持现状登记。
-- G 系列能力缺口：G-1 编队/发现全交付；G-4 定时器轮库件已交付（timer_wheel_tests 12 组）；G-3 停机序列代码面已交付；G-5 检测原语已交付；G-6 契约继承生成期展开已交付；G-2 备份容灾前置设计已立（ADR-010 案 A 先行，standby 不立项，批 0 已交付）。
-- 契约差异清欠：entities.xml Player parent 冲突已随 P2-3 消账；WorldSpace 词根随 P0-3 消账；进程名随 P3-1；nng/modules·protocol 已归档（M1 自研内核）。
-
-## 推进纪律（任务书 §37/§40 + improvement-plan §7）
-
-1. 每批完成即重跑四门禁（Build / Unit / Integration / Examples），全绿才提交推送；CI 触发跑一轮。
-2. 小步提交推送：每批一个提交，仅含本批文件；先删后建（收敛）与先建后删（立核）批次分开。
-3. 术语纪律：命名优先复用 BigWorld/KBE 既有概念；新词先入 glossary 并给出对照与理由。
-4. 批内文件范围以 improvement-plan.md 文件级清单为准，超范围改动即上报协调。
+- [ ] 明确 Login、Gateway、RoomServer 的单机/多机部署拓扑、启动依赖、健康检查、过载拒绝和优雅退出行为。
+- [ ] 为在线路由数据确定实际所有者、存储与恢复方式；设计需满足目标规模，不因此引入无需求的独立进程。
+- [ ] 建立跨服迁移、Gateway 排空、RoomServer 排空和升级回滚的自动化/可重复演练。
+  - 验收：进程被强制终止、网络中断和升级超时后，玩家不会出现双权威或不可恢复状态；服务可用性和客户端连接承诺分别有可观测证据。

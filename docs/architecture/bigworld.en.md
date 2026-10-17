@@ -18,7 +18,7 @@ tag:
 
 This is a wrap-up entry page.
 
-BigWorld in Apollo is an optional distributed-world enhancement layer, not the default starting form. The current mainline is still `Standard MMO` and `Compact GameServer`.
+Apollo's BigWorld compatibility module provides a familiar C++ API facade; it does not implement BigWorld's distributed seamless-world runtime. Apollo's target architecture is a room-based multiplayer game server; see the [Architecture Overview](../guide/architecture.en.md).
 
 ## Semantic Boundaries
 

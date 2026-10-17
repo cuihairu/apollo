@@ -5,49 +5,26 @@ order: 5
 category:
   - 应用
 tag:
-  - BigWorld
   - 服务器
-  - 应用
 ---
 
 [English](index.en.md) | [中文](index.md)
 
 # 服务器应用
 
-Apollo 项目提供了一系列可装配的服务器应用程序，用于实现两种 MMO 主拓扑：
+Apollo 的目标模型使用常见的职责名：`Login`、`Gateway`、`RoomServer` 和 `Room`。这是架构概念清单，不代表仓库已经有同名且完整可部署的进程。当前仓库包含若干原型程序，名称保留在本节只用于说明实现现状；它们不构成另一套目标架构。
 
-- `Standard MMO`
-- `Distributed World`
+| 当前程序 | 当前作用 | 与目标模型的关系 |
+|---|---|---|
+| `login-app` | 登录服务原型 | 对应 `Login` |
+| `gateway-app` | 客户端接入和消息路由原型 | 对应 `Gateway` |
+| `cell-app` | 场景/对局运行时原型，命名沿用 BigWorld 术语 | 目标职责归入 `RoomServer`；不采用 Cell 空间切片模型 |
+| `base-app` | 玩家状态、会话和持久化原型 | 相关职责尚需按房间模型收敛；不作为必须独立存在的目标进程 |
+| `baseappmgr` | 玩家目录与落点管理原型 | 目标架构没有要求必须保留独立同名管理进程 |
+| `machined` | 本机进程监督原型 | 部署需要时使用，不承载游戏业务 |
+| `game-server` | 单进程装配样例 | 用于展示模块装配，不代表完整生产拓扑 |
+| `logger`、`admin`、`fleetctl` | 运维与管理工具原型 | 不属于房间业务模型 |
 
-需要先说明两个边界：
+房间是一次对局，`RoomServer` 是承载房间的进程；一个进程可以承载多个房间。玩家在对局中只有一个权威运行对象。跨服时迁移该对象的权威归属并更新 Gateway 路由，不复制出可同时运行的第二个权威对象。
 
-- `BaseApp` 不是数据库服务器
-- `GatewayApp` 不是 BigWorld / KBEngine 语义里的默认必选核心
-
-更准确地说：
-
-- 普通 MMO 默认主链是 `LoginApp -> GatewayApp -> BaseApp(PlayerAnchor) -> WorldApp`
-- 分布式世界默认主链是 `LoginApp -> BaseApp(Proxy + PlayerAnchor) -> CellApp`
-
-> **现状注记（2026-10-07 对账）**：`WorldApp` 当前没有独立进程目录——世界运行时
-> 以库件形态落在 `modules/game/world`（Scene/AOI/Instance），单机装配参考
-> `apps/game-server`（装配样例）；独立 world-app 进程随拓扑接线批立项。
-
-## 应用列表
-
-| 应用 | 说明 | 文档 |
-|------|------|------|
-| **GatewayApp** | 边缘接入层，处理客户端连接、接入校验和消息转发 | [详情](/apps/BigWorld服务器应用实现) |
-| **LoginApp** | 登录入口，处理账号认证、入口分配和会话票据生成 | [详情](/apps/BigWorld服务器应用实现) |
-| **BaseApp** | 玩家锚点宿主，处理 `PlayerAnchor`、会话归属和重连恢复 | [详情](/apps/BigWorld服务器应用实现) |
-| **CellApp** | 世界运行时宿主，处理 AOI、实体、战斗和空间逻辑 | [详情](/apps/BigWorld服务器应用实现) |
-| **BaseAppMgr** | 调度面：全局目录（player→SessionBinding/WorldAssignment）与落点裁决、路由解析 | [详情](/apps/BigWorld服务器应用实现) |
-| **Machined** | 守护进程：编队目录（UDP 广播发现）+ roster 拉起与退避重启监督 | [详情](/apps/BigWorld服务器应用实现) |
-| **game-server** | 单体装配样例（RuntimeManifest/ServiceHost/DI/数据源演示），非拓扑成员 | [详情](/apps/BigWorld服务器应用实现) |
-
-## 相关文档
-
-- [BigWorld 服务器应用实现](BigWorld服务器应用实现.md) - 完整的实现细节和使用指南
-- [BigWorld 架构深度解析](/architecture/bigworld) - 架构设计概述
-- [BigWorld 进程架构与玩家生命周期](/architecture/bigworld-lifecycle) - 进程职责与生命周期
-- [AOI 九宫格系统详解](/architecture/aoi) - AOI 系统详解
+BigWorld/KBEngine 的 `BaseApp`、`CellApp`、`BaseAppMgr` 等名字只用于引擎对照资料，不是 Apollo 的目标进程名称。详见[架构总览](../guide/architecture.md)。

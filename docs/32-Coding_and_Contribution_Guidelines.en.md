@@ -3,7 +3,7 @@
 # Coding & Contribution Guidelines
 
 > Purpose: Establish unified coding standards, code review process, branch strategy,
-> and commit requirements for the Apollo MMORPG server project, so that high quality
+> and commit requirements for the Apollo room-based multiplayer game server project, so that high quality
 > and consistency are maintained under multi-person collaboration.
 
 ## 1. Branches and Version Management

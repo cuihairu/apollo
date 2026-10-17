@@ -139,7 +139,7 @@ Also: login's qr config `chatAppUrl=tcp://127.0.0.1:9003` collides with baseappm
 - Mature-structure areas: docs/design/ (12 design docs + contracts, high quality, decisions complete), docs/analysis/ (the #36 decision set, 25 rounds of architecture-review history, design-gap-inventory).
 - Distortion areas (mismatched with code):
   - docs/guide/quick-start.md cites nonexistent APIs (dispatcher/ServiceRegistry etc.); the sample code does not compile.
-  - docs/apps/BigWorld服务器应用实现.md differs from the code in 9 ways (the doc assumes NNG ready, the topology omits baseappmgr, the WorldApp name mismatches cell-app, Pub/Sub unimplemented, GatewayApp "optional" contradicts the code).
+  - The obsolete server-application topology page was removed; see the [Server Applications index](../apps/index.en.md) for current prototype status.
   - Several capabilities claimed in docs/architecture/ and the design docs (the attribute sync pipeline, the online directory, the four channels, the write-behind journal) have no implementation in code (item-by-item differences in architecture.md §7).
 
 ---

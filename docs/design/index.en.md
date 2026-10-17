@@ -2,19 +2,18 @@
 
 # Design Docs Overview
 
-> This directory = apollo's landing point for **system design docs**: each doc is the design/survey/decision record of one capability domain.
-> Status semantics: **Delivered** (code has landed) / **Design draft** (under review or awaiting approval) / **Prerequisite design** (pre-initiation survey piece; decision points listed inside).
-> Terminology discipline: naming reuses existing BigWorld/KBE concepts first; new terms enter [concept-glossary](./concept-glossary.en.md) first, with cross-references and rationale.
+> This directory contains design and implementation notes for individual capabilities. Apollo's target architecture, public terminology, and process boundaries are defined by the [Architecture Overview](../guide/architecture.en.md) and [Concepts and Names](./concept-glossary.en.md); subsystem documents must not introduce a second process topology.
+> Status terms: **Delivered** (implemented) / **Design draft** (under review or awaiting approval) / **Prerequisite design** (pre-initiation survey). External engine terminology is comparative material, not automatically an Apollo concept.
 
 ## Foundations and Models
 
 | Design doc | Status | One-line positioning |
 |---|---|---|
 | [Concept glossary](./concept-glossary.en.md) | Living document | New-term registry |
-| [Player object model](./player-object-model.en.md) | Delivered | Anchor/Avatar/Scene/Instance ownership and lifecycle |
-| [Attribute system and sync](./attribute-sync.en.md) | Delivered (partial batches pending wiring) | Long-term-state field model + visibility/sync domains |
-| [Session and online directory](./session-and-online-directory.en.md) | Delivered (skeleton) | Manager-domain directory authority + cross-process mirroring/recovery phases |
-| [Login flow](./login-flow.en.md) | Design draft | login/gateway/base three-segment handshake |
+| [Player object model](./player-object-model.en.md) | Subsystem implementation note | Player identity, entities, and scene objects; Room is the target match boundary |
+| [Attribute system and sync](./attribute-sync.en.md) | Subsystem implementation note | Attribute data and visibility/synchronization mechanisms |
+| [Session and online directory](./session-and-online-directory.en.md) | Subsystem implementation note | Online sessions and current room routing |
+| [Login flow](./login-flow.en.md) | Subsystem design draft | Login, Gateway, and RoomServer login/routing boundaries |
 | [Clock and time](./clock-and-time.en.md) | Delivered | Wall clock/tick/frame budget semantics |
 
 ## Combat
@@ -22,7 +21,7 @@
 | Design doc | Status | One-line positioning |
 |---|---|---|
 | [Battle determinism](./battle-determinism.en.md) | Delivered | Four constraints + recording/replay/hash chain |
-| [Battle instance offload](./battle-instance-offload.en.md) | Delivered (skeleton) | Offload process form (three decision points ruled, ADR-012) |
+| [Battle instance offload](./battle-instance-offload.en.md) | Subsystem implementation note | Battle-computation offload experiment; does not change Room/RoomServer target terms |
 | [Battle verification service](./battle-verification-service.en.md) | Design draft (under review) | Client-authoritative battle recomputation and reconciliation (verifier) |
 
 ## Networking and Operations
@@ -41,7 +40,7 @@
 
 | Design doc | Status | One-line positioning |
 |---|---|---|
-| [Cell single-writer closure](./cell-single-writer.en.md) | Prerequisite design (all six decision points ruled, ADR-015/016/017) | The concurrency form of RPC acceptance and the simulation thread (P3-2 batch B) |
+| [Simulation single-writer design](./cell-single-writer.en.md) | Prerequisite design | Concurrency between RPC acceptance and the room simulation thread |
 | [Acceptance queue watermark and overload](./queue-watermark.en.md) | Prerequisite design (ruled, ADR-016) | Two-tier watermark/callback error codes/tick budget anchoring |
 | [Inbound third-party interfaces](./inbound-interfaces.en.md) | Design draft (under review) | Channel-callback hosting process with authentication/idempotency |
 | [Scripting system (Lua)](./scripting-lua.en.md) | Design draft | Both-end shared battle logic and hot-update discipline |

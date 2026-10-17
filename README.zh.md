@@ -6,7 +6,7 @@
 
 # Apollo
 
-**An instance-based multiplayer game server engine.**
+**轻量房间制多人在线游戏服务器引擎。**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
@@ -14,64 +14,55 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
 
-> 实例化多人在线游戏服务器引擎 —— Instance-based Multiplayer Game Server Engine
+> 轻量房间制多人在线游戏服务器引擎 —— Lightweight Room-based Multiplayer Game Server Engine
 
 ## 项目简介
 
-Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
+Apollo 是一个 C++20 游戏服务器运行时，面向以房间和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。它定位为多人在线游戏服务器引擎，不是无缝大世界 MMO 引擎。
 
-Apollo 把游戏进程拆成两个角色：**baseapp** 持有玩家权威状态（`PlayerAnchor`、存档 journal、会话绑定），**cellapp** 运行场景与游戏副本（实体、AOI、战斗）。每个实例可以独立创建、调度、恢复与回收。
+目标游戏流程使用按职责命名的常见概念：
 
 ```text
-Client
+Client ──► Login —— 账号认证与登录凭证
    │
-Gateway
-   ├──► baseapp —— 玩家权威与调度单元
-   │       ├── Session
-   │       ├── PlayerAnchor（玩家长期状态）
-   │       └── Journal ──► DataProxy ──► DB
-   └──► cellapp —— 场景 / 副本运行时
-           ├── Scene / Instance（独立创建、调度、
-           │   恢复、回收）
-           ├── AOI
-           └── Battle（结算单向写入锚点）
+   └──► Gateway —— 客户端连接与消息路由
+           └──► RoomServer —— 承载房间并运行权威对局逻辑
+                   └── Room —— 一场对局；开始时创建，结束后销毁
+                       ├── Player / Entity
+                       ├── AOI
+                       └── 游戏逻辑与结算
 ```
 
-The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
-
-This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, baseapps and cellapps can be orchestrated across machines while preserving the same runtime model.
-
-中文定位：**实例化多人在线游戏服务器引擎**——房间/场景/副本/比赛为一等公民；MMO 是 supported use case（「由大量实例组成」——场景实例跑在 cellapp、玩家权威在 baseapp 的 instance-oriented MMO architectures），非核心身份。技术栈为现代 C++20，核心模块覆盖网络通信、数据存储、游戏逻辑与战斗系统。
+一个 Room 对应一场玩法实例；一个 RoomServer 进程可以承载多个 Room。对局中，每名玩家只有一个权威运行时对象，由承载该房间的 RoomServer 管理。跨服玩法将该权威转交给目标 RoomServer 并更新路由，不在两个进程中同时运行玩家对象。
 
 ## 适用场景 / Use Cases
 
-**适合**——自然世界的边界天然是「房间 / 场景 / 副本 / 比赛 / 实例」的游戏：
+**适合**——玩法边界天然是房间或对局的游戏：
 
 | 场景 | 实例形态 |
 |------|----------|
-| 塔防、固定地图（绿色循环圈等） | cellapp 内多房间，开局 `CreateInstance` |
-| 副本 / Dungeon / Roguelike | 一局一实例，用完回收 |
-| 竞技场 / Arena / 大逃杀 | Match 实例，赛毕销毁 |
-| 多人 PvE / 生存 / Co-op | 小队实例 |
-| 多人 PvP | 对局实例 |
-| MMO 分线与副本 | 线 = scene_id 实例，大量 cellapp 实例横向编排 |
+| 塔防、固定地图 | 一场对局一个 Room，结束后回收房间状态 |
+| 副本 / Roguelike | 一次玩法一个 Room |
+| 竞技场 / 大逃杀 | 一场比赛一个 Room |
+| 多人 PvE / 生存 / Co-op | 小队共用一个 Room |
+| 多人 PvP | 一场对局一个 Room |
 
-**不适合**——**连续共享大世界**（persistent seamless world）：无缝地图、跨进程空间漫游、「一个 World 横向切成 CellApp」的部署模型。Apollo 有意不做 cell 分片 / ghost / 实体迁移（架构裁决 #9），这类需求请选 BigWorld / KBEngine 一类 continuous-world 引擎。
+**当前目标不覆盖**——玩家在空间切片进程之间连续漫游的持久化无缝大世界。这类需求采用的是另一种服务器架构。
 
-> 一句话判据：**世界的自然边界是房间/场景/副本/比赛 → 适用；要求跨进程连续的大世界 → 不适用。**
+> MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由房间和对局组成的 MMO 玩法，但目标不是持久化无缝大世界 MMO。
 
 ## 核心概念 / Core Concepts
 
-六个词读完 Apollo 的运行时模型（全部有实件，详见[文档站](docs/guide/concepts.md)）：
+核心玩法概念（当前代码组件详见[概念指南](docs/guide/concepts.md)）：
 
 | 概念 | 一句话 | 实件 |
 |------|--------|------|
-| **Player** | 玩家长期态——登录在场、跨副本持续的档案与锚点 | `PlayerAnchor`（modules/game/session） |
-| **Scene** | 空间运行时边界——AOI 所有权归场景 | `Scene` + `SceneAoi`（modules/game/world） |
-| **Instance** | 一局一实例的一等公民——八态生命周期（Create→…→Destroyed），用完回收 | `Instance`（modules/game/world） |
-| **AOI** | 兴趣管理——九宫格差集 + 逐观察者水位，Enter/Sync/Leave 事件 | `SceneAoi` + `ViewerState` |
-| **Battle** | 战斗域——确定性 tick 判定，结算单向落玩家长期态 | `BattleRuntime`（modules/game/battle） |
-| **Persistence** | 档案与日志——JSON 档案原子写 + write-behind 日志，零外部存储依赖 | `PersistJournal`（modules/data） |
+| **Room** | 一场对局及其临时状态 | 目标玩法单元 |
+| **RoomServer** | 承载一个或多个 Room 并运行权威逻辑的进程 | 目标进程职责 |
+| **Player** | 玩家身份；每场对局中只有一个权威运行对象 | 当前原型代码含 `PlayerAnchor` |
+| **Entity** | 参与玩法的运行时对象 | `Entity` / `Avatar` 契约 |
+| **AOI** | 决定每名玩家能观察到哪些附近实体 | `SceneAoi` 实现 |
+| **Persistence** | 保存跨对局的玩家数据 | `PersistJournal` 实现 |
 
 ### 核心特性
 
@@ -87,15 +78,15 @@ This makes Apollo a compact alternative for games where the natural world bounda
 
 ## 架构设计
 
-> 完整架构图（系统架构概览 / 核心模块架构 / 分布式部署架构）已迁至文档站：[架构总览](docs/guide/architecture.md)。进程编队、权威分解与 Zone/无缝辨析见[架构审计报告](docs/analysis/architecture-review.md) §31。
+> 目标房间制模型见[架构总览](docs/guide/architecture.md)；仓库现有可执行原型及其状态见[服务器应用](docs/apps/index.md)。
 
 ### 技术栈
 
 - **编程语言**: C++20
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自写跨平台网络层
-- **序列化/契约**: 两层分工、互不冲突（docs/36 决策 #3/#19）——**def 契约管语义**（属性/权限位/sync 掩码/内外分域；XML+XSD + 生成器 `apollo_gen`，`sdks/contract`，已交付；服务端载体为 contract.lua，业务 handler 与白名单数据化）；**protobuf 管字节编码**（反射为默认：descriptor.bin + 框架固定消息族内建强类型守热路径；有代码热更管线的客户端走生成代码、bin 兜底；L1 帧格式 + zstd，规划；`docs/design/sdk-contract.md`）。protobuf 现为依赖+测试，未上消息通路（消息通路仍为手写 codec；golden .proto 已存在但未消费）
-- **数据库**: 现状零外部存储依赖——玩家档案 = JSON 文件 + `PersistJournal` write-behind 日志（P1-4/P1-5 交付）；MySQL 8（主存储）/ Redis（缓存/会话）/ ClickHouse（分析）均为规划态未接线，PostgreSQL 留缝（docs/36 决策 #17）
+- **序列化/契约**：XML+XSD 契约定义游戏数据语义，`apollo_gen` 生成客户端/服务端契约产物（见 `docs/design/sdk-contract.md`）。protobuf 目前仅作为依赖和测试使用，尚未进入消息通路；当前消息编码由手写 codec 实现。
+- **数据库**：当前无需外部存储依赖。玩家档案使用 JSON 文件和 `PersistJournal`；MySQL、Redis、ClickHouse 接入仍属规划。
 - **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自写消息总线（规划，`docs/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
 - **日志系统**: 自写多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
@@ -395,7 +386,7 @@ cd build && ctest -R BigWorldApiTests
 
 ```
 apollo/
-├── apps/                   # 可执行服务：login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server / admin / fleetctl
+├── apps/                   # 可执行原型与工具；现状见 docs/apps/index.md
 ├── modules/                # 模块化源码：base/core/data/game/net/runtime 等
 ├── include/                # 公共头文件与兼容层头文件
 ├── src/                    # 公共实现与兼容层实现

@@ -12,7 +12,7 @@ const architectureSidebar = [
       { text: '观测与运行时内省', link: '/architecture/observability-watcher-and-runtime-introspection-design' },
       { text: 'Host Builder 与 DI', link: '/architecture/host-builder-and-di-design' },
       { text: 'Starter 与模块装配', link: '/architecture/starter-and-module-assembly-design' },
-      { text: 'Compact GameServer 定位', link: '/30-Compact_GameServer_Design' },
+      { text: '房间制 GameServer 设计', link: '/30-Room-Based_GameServer_Design' },
     ],
   },
   {
@@ -33,7 +33,7 @@ const architectureSidebar = [
 
 export default defineConfig({
   title: 'Apollo',
-  description: '轻量 MMO 与塔防游戏服务端引擎',
+  description: '轻量房间制多人游戏服务器引擎',
   base: isProd ? '/apollo/' : '/',
   cleanUrls: true,
   ignoreDeadLinks: true,

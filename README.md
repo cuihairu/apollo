@@ -6,7 +6,7 @@
 
 # Apollo
 
-**An instance-based multiplayer game server engine.**
+**A lightweight room-based multiplayer game server engine.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
@@ -14,64 +14,55 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
 
-> Instance-based multiplayer game server engine
+> Lightweight room-based multiplayer game server engine
 
 ## Introduction
 
-Apollo is a lightweight, scalable game server runtime for building instance-based multiplayer games, including co-op games, PvE/PvP instances, dungeon systems, tower defense, arena games, and instance-oriented MMO architectures.
+Apollo is a C++20 server runtime for lightweight multiplayer games organized around rooms and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It is a multiplayer game server engine, not a seamless-world MMO engine.
 
-Apollo splits a game process into two roles: **baseapp** holds the authoritative player state (the `PlayerAnchor`, save journal and session binding), while **cellapp** runs scenes and game instances (entities, AOI, battle). Each instance can be created, scheduled, recovered, and recycled independently.
+The target game flow uses familiar, role-based terms:
 
 ```text
-Client
+Client ──► Login — account authentication and login ticket
    │
-Gateway
-   ├──► baseapp — player authority & scheduling
-   │       ├── Session
-   │       ├── PlayerAnchor (long-term player state)
-   │       └── Journal ──► DataProxy ──► DB
-   └──► cellapp — scene / instance runtime
-           ├── Scene / Instance (created, scheduled,
-           │   recovered, recycled independently)
-           ├── AOI
-           └── Battle (settles one-way into anchors)
+   └──► Gateway — client connections and message routing
+           └──► RoomServer — hosts rooms and runs authoritative match logic
+                   └── Room — one match; created and destroyed with the match
+                       ├── Player / Entity
+                       ├── AOI
+                       └── Game logic and settlement
 ```
 
-The architecture intentionally does **not** require BigWorld-style continuous-world mechanisms such as cross-process spatial partitioning, ghost entities, or cell migration.
-
-This makes Apollo a compact alternative for games where the natural world boundary is a **room, scene, dungeon, match, or instance**. For larger deployments, baseapps and cellapps can be orchestrated across machines while preserving the same runtime model.
-
-Positioning: **an instance-based multiplayer game server engine** — rooms/scenes/dungeons/matches are first-class citizens; MMO is a supported use case ("an MMO composed of many instances" — scene instances run in cellapps while baseapps hold player authority, i.e. instance-oriented MMO architectures), not the core identity. The tech stack is modern C++20, with core modules covering networking, data storage, game logic, and the battle system.
+Each room is a gameplay instance; one RoomServer process may host multiple rooms. During a match, each player has one authoritative runtime object on the RoomServer that owns the room. Cross-server play transfers that authority to the destination RoomServer and updates routing; it does not keep two active copies of the player.
 
 ## Use Cases
 
-**A good fit** — games whose natural world boundary is a "room / scene / dungeon / match / instance":
+**A good fit** — games whose natural play boundary is a room or match:
 
 | Scenario | Instance Form |
 |------|----------|
-| Tower defense, fixed maps (e.g. tower-defense circles) | Multiple rooms in one cellapp, `CreateInstance` on game start |
-| Dungeons / Roguelike | One instance per run, recycled when finished |
-| Arena / battle royale | Match instance, destroyed after the match |
-| Multiplayer PvE / survival / co-op | Squad instances |
-| Multiplayer PvP | Match instances |
-| MMO sharding (lines) and dungeons | A line = a scene_id instance, many cellapp-hosted instances orchestrated horizontally |
+| Tower defense and fixed maps | One room per match; room state is released at match end |
+| Dungeons / Roguelike | One room per run |
+| Arena / battle royale | One room per match |
+| Multiplayer PvE / survival / co-op | A room for the group |
+| Multiplayer PvP | A room for the match |
 
-**Not a fit** — a **persistent seamless world**: seamless maps, cross-process spatial roaming, or a deployment model where "one World is split horizontally into CellApps". Apollo intentionally does not do cell partitioning / ghosts / entity migration (architecture decision #9); for such requirements, choose a continuous-world engine such as BigWorld / KBEngine.
+**Not the intended fit** — a persistent seamless world where players roam continuously across spatially partitioned processes. That is a different server architecture and is outside Apollo's current design.
 
-> One-line rule of thumb: **if the world's natural boundary is a room/scene/dungeon/match, it fits; if it requires a cross-process continuous world, it does not.**
+> MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from rooms and matches, but it is not designed as a persistent seamless-world MMO engine.
 
 ## Core Concepts
 
-Six terms that cover Apollo's runtime model (all backed by real components; see the [docs site](docs/guide/concepts.md) for details):
+Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes current code components):
 
 | Concept | One-liner | Component |
 |------|--------|------|
-| **Player** | A player's long-term state — login presence, profiles and anchors that persist across dungeons | `PlayerAnchor` (modules/game/session) |
-| **Scene** | Spatial runtime boundary — AOI ownership belongs to the scene | `Scene` + `SceneAoi` (modules/game/world) |
-| **Instance** | A first-class citizen, one instance per run — eight-state lifecycle (Create→…→Destroyed), recycled when done | `Instance` (modules/game/world) |
-| **AOI** | Interest management — 3×3 grid diffing + per-observer watermarks, Enter/Sync/Leave events | `SceneAoi` + `ViewerState` |
-| **Battle** | Battle domain — deterministic tick resolution, settlement flows one way into the player's long-term state | `BattleRuntime` (modules/game/battle) |
-| **Persistence** | Profiles and journals — atomic JSON profile writes + write-behind journal, zero external storage dependencies | `PersistJournal` (modules/data) |
+| **Room** | One match and its temporary state | Target gameplay unit |
+| **RoomServer** | Process that hosts one or more Rooms and runs their authoritative logic | Target process role |
+| **Player** | Player identity; one authoritative runtime object in a match | `PlayerAnchor` exists in current prototype code |
+| **Entity** | Runtime object participating in gameplay | `Entity` / `Avatar` contracts |
+| **AOI** | Determines which nearby entities each player observes | `SceneAoi` implementation |
+| **Persistence** | Stores player data across matches | `PersistJournal` implementation |
 
 ### Key Features
 
@@ -87,15 +78,15 @@ Six terms that cover Apollo's runtime model (all backed by real components; see 
 
 ## Architecture
 
-> The full architecture diagrams (system overview / core module architecture / distributed deployment architecture) have moved to the docs site: [Architecture Overview](docs/guide/architecture.md). For process formation, authority decomposition, and the Zone vs. seamless-world analysis, see the [Architecture Audit Report](docs/analysis/architecture-review.md) §31.
+> See [Architecture Overview](docs/guide/architecture.md) for the target room-based model and [Server Applications](docs/apps/index.md) for the current executable prototypes.
 
 ### Tech Stack
 
 - **Language**: C++20
 - **Build system**: CMake + Ninja, vcpkg manifest mode for dependency management
 - **Networking library**: hand-written cross-platform network layer
-- **Serialization/contracts**: two layers with a clear division of labor and no conflicts (docs/36 decisions #3/#19) — **def contracts own semantics** (attributes/permission bits/sync masks/internal-external domains; XML+XSD + generator `apollo_gen`, `sdks/contract`, delivered; the server-side carrier is contract.lua, with business handlers and whitelist data driven by the contract); **protobuf owns byte encoding** (reflection as default: descriptor.bin + framework-fixed message families with built-in strong typing for the hot path; clients with a hot-update code pipeline use generated code, bin as fallback; L1 frame format + zstd, planned; `docs/design/sdk-contract.md`). Protobuf is currently a dependency + tests only, not on the message path (the repo has zero of its own .proto files; the current implementation uses hand-written encoding)
-- **Database**: currently zero external storage dependencies — player profiles = JSON files + `PersistJournal` write-behind journal (P1-4/P1-5 delivered); MySQL 8 (primary storage) / Redis (cache/sessions) / ClickHouse (analytics) are all planned and not wired up; PostgreSQL has a reserved seam (docs/36 decision #17)
+- **Serialization/contracts**: XML+XSD contracts define game data semantics; `apollo_gen` generates client/server contract artifacts (`docs/design/sdk-contract.md`). Protobuf is a dependency used by tests, not the current message path; the implementation uses hand-written encoding.
+- **Database**: no external storage dependency is currently required. Player profiles use JSON files and `PersistJournal`; MySQL, Redis, and ClickHouse integration remains planned.
 - **Message queue**: Kafka for the observability pipeline (planned, decision #14); inter-service messaging uses a hand-written message bus (planned, `docs/design/net-abstraction.md`)
 - **Monitoring**: Prometheus + Grafana (planned, batch 8)
 - **Logging**: hand-written multi-level logging (`apollo::core::log`); target pipeline LogAgent→Kafka→ClickHouse (decision #14)
@@ -398,7 +389,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable services: login-app / gateway-app / baseappmgr / base-app / cell-app / machined / logger / game-server / admin / fleetctl
+├── apps/                   # Executable prototypes and tools; see docs/apps/index.md for current status
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations
