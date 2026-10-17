@@ -32,7 +32,7 @@
 - [x] 接通刷怪、目标完成与失败判定，驱动 Instance 进入结算阶段。（860472fd：SquadInstanceService 玩法面——Running 期设目标（击杀配额+超时 tick，基线取 Instance 玩法时钟）、配额封顶刷怪入副本私有 Scene、击杀上报只认本副本怪且达标 finish() 进结算（成功线）、超时 cancel() 进结算不发成功奖励（失败线）、结算期拒绝迟到玩法输入、进度查询随绑定释放清除；SquadInstanceTests 12/12，门禁 77/77 绿，build-off 全量重建绿。gameLoop 驱动与客户端击杀上报的宿主接线随真实上行项。）
 - [x] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。（77f03803：SettlementLedger 受理即开账（名册快照）；battle 与 instance 同生——enter 段收参战者、tick 段随玩法时钟、finish 段结算经 IRewardSink → AnchorRewardSink 落锚点 exp + mark_dirty 随 SaveQueue 落档（既有持久化接口）；幂等口径 (instance,player) 一条账，applied 后重复落账/重试/恢复重放一律拒绝；挂账重试只补曾尝试未落条目；restore 回填已落标记防重启双记；超时失败线不结算不发奖励；宿主经 PlayerStore::findAnchor 惰性解析装配；SquadInstanceTests 15/15、门禁 77/77 绿、build-off 全量重建绿。battle 分值输入路径与账本跨进程持久化随真实上行/排空项。）
 - [x] 结算后移出玩家、拒绝迟到输入，释放实体、AOI、脚本/任务及临时 Scene，销毁 Instance 并从 World 注册表移除。（470d8528：SquadInstanceService::dismiss 收尾面——入结算（Finishing 起）才可收尾，按受理名册移出玩家 → 结算链推进至终态 → release 终态双回收（实体/AOI/临时 Scene 随 Scene 释放、closing 钩子宿主销毁脚本/任务残留）→ 绑定/玩法/结算账面清除、容量归还；enter() 迟到进入在结算期改报 StateRejected（原误报 Duplicate），start/刷怪/上报/tick 均 NotRunning 拒绝，收尾后全入口 NoBinding；成功线与失败线（超时）收尾均覆盖；SquadInstanceTests 18/18、门禁 77/77 绿、build-off 全量重建绿。）
-- [ ] 覆盖无人进入、全员退出、掉线、队伍解散、超时和进程异常的收尾策略及测试。
+- [x] 覆盖无人进入、全员退出、掉线、队伍解散、超时和进程异常的收尾策略及测试。（26abe6ed：无人进入/队伍解散/宿主排空走 abort 策略收尾（Create..Running 取消线，不发成功奖励，收尾即释放绑定）；Running 期全员退出 = 失败判定（leave 面按名册校验，掉线同口径，末位退出自动进结算，中途退出可重进）；超时线此前项已覆盖；进程异常口径 = 副本临时态随进程消亡、重启全新受理、结算账以 restore 回填防重放双记（重启用例覆盖跨进程不双记）；SquadInstanceTests 22/22、门禁 77/77 绿、build-off 全量重建绿。）
 - [ ] 接通并验证客户端 → Gateway → World → Scene/Instance 的真实上行、结果和状态下行；现有 broadcastToViewers 日志不能作为下行完成证据。
 - [ ] 验证单 World 多副本隔离，以及多个 World 的分配与选路。
 
