@@ -47,6 +47,11 @@
 
 namespace apollo::net::link {
 
+// 进程代次自铸（LinkConfig.authority_epoch = 0 时的缺省源）：首次调用取
+// 系统钟计数并进程内缓存——同进程全部链路同一标识。它不是持久化
+// 权威代次，不提供跨主机唯一性或单调性；需强保证的宿主应显式配置。
+std::uint64_t process_authority_epoch();
+
 enum class LinkState {
     kIdle,         // 未挂传输
     kHandshaking,  // 传输已挂，Hello 未齐
@@ -78,7 +83,11 @@ struct LinkConfig {
     // 本表。滚动发布期两端各带窗口（hello 互检按各自受理集裁决），收敛后
     // 撤窗恢复唯一版本纪律。空 = 无窗（仅本代，行为同前）。
     std::vector<std::uint64_t> compat_route_versions;
-    std::uint64_t authority_epoch = 1;
+    // 进程代次（§5.7）：0 = 进程自铸（首次取链时刻的系统钟 ns，进程内全部
+    // 链同一值）。代次恒增 → 进程重启必换代次，对端以换代判定重启并清旧
+    // 代次在途态；同代次断线重连不清（恰一次补投语义）。显式非 0 值原样
+    // 使用（重启语义单测在此注入）。
+    std::uint64_t authority_epoch = 0;
     WatermarkConfig watermark;
     std::uint64_t cut_close_ms = 5000;            // cut 持续 → 断
     std::uint32_t heartbeat_interval_ms = 5000;   // 空闲 ping 间隔

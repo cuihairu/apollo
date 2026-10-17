@@ -180,7 +180,8 @@ void WorldApp::start() {
     // 已退役）：InterServerLink passive 端点装配（监听在 start 内 bind/listen，
     // bind 失败同契约显形）
     m1Link_ = makeM1LinkServer(
-        M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson},
+        M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson,
+                     config_.m1AuthorityEpoch},
         [this](IntentEnvelope intent) { onM1Intent(std::move(intent)); },
         [this](const std::string& peer, const DebugEvalRequest& request) {
             onM1DebugEval(peer, request);

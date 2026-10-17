@@ -4,7 +4,7 @@ modules/script provides ScriptRuntime with native Lua C API bindings. The vcpkg 
 
 ## Executive summary
 
-Module preparation, commit, rollback, fault attribution, sandboxing, contract-table loading, and async handoff primitives exist. Reliable cross-World rollout, real business backends, and multi-instance private-state isolation still need application integration.
+Module preparation, commit, rollback, fault attribution, sandboxing, contract-table loading, and async handoff primitives exist. fleetctl module coordinates cross-World canary rollout, observation, and failure rollback; temporary Scene script state follows its lifecycle. Complete business backends and version recovery after process restart still require acceptance.
 
 ## 1. Responsibility
 

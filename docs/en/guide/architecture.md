@@ -39,10 +39,10 @@ Gateway provides connections and routing; it does not by itself provide zero-dow
 
 ## Repository status
 
-Business executables are `login-app`, `gateway-app`, and `world-app`, with optional `machined` supervision. World hosts PlayerStore for persistent profiles; Login hosts OnlineDirectory for routing and placement. Complete multi-Instance application orchestration remains pending. See [Server Applications](../apps/index.md) for implementation status.
+Business executables are `login-app`, `gateway-app`, and `world-app`, with optional `machined` supervision. World hosts PlayerStore for persistent profiles; Login hosts OnlineDirectory for routing and placement. Group Instance orchestration and protocol replies are integrated; durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete. See [Server Applications](../apps/index.md) for implementation status.
 
 ## Temporary instance lifecycle
 
 A group requests an activity → World creates an Instance and temporary Scene → members pass admission and enter → clear enemies and complete objectives → settle → players leave → destroy the Instance, scene, and temporary resources.
 
-Reuse the existing eight-state Instance lifecycle. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. The state machine exists, while group-triggered creation, objective settlement, and automatic resource cleanup still need application integration and validation.
+The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete.

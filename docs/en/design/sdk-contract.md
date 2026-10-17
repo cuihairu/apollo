@@ -4,7 +4,7 @@ XML/XSD contracts are the source for generated metadata. Validate contracts, wir
 
 ## Executive summary
 
-Parsing, generation, hashes, domain filtering, inheritance expansion, slice declarations, and golden checks exist. Some applications still use MessageCodec/M1 translation. N/N-1 negotiation, complete client integration, and production rollout remain in todo.md.
+Parsing, generation, hashes, domain filtering, inheritance expansion, slice declarations, and golden checks exist. Some applications still use MessageCodec/M1 translation. Handshake compatibility windows are integrated; version-specific business decoding, complete client upgrades, and production rollout acceptance remain in todo.md.
 
 ## Protocol and code-only updates
 
@@ -56,7 +56,7 @@ Validate direction/domain against routing metadata and bind registered handlers.
 
 Generated artifacts contain schema, client, and internal fingerprints. Client packages expose only client definitions. Hashes detect differences but do not alone classify compatibility.
 
-InterServerLink currently rejects route_version mismatch. It does not implement an N/N-1 application decoding window. Negotiation must select supported versions and corresponding decoders explicitly.
+InterServerLink accepts the current route_version and compat_route_versions. APOLLO_ROUTE_COMPAT configures the window using prior schema hashes; peers declare acceptance in both directions and reject versions outside the window. peer_route_version() exposes the selected peer generation. This does not provide version-specific application decoders: consumers must validate field layout and business semantics for each encoding.
 
 Adding fields is not automatically compatible: current positional encoding, protobuf, and business defaults can differ. Classify changes against actual encoding and semantics, not only XML diffs.
 

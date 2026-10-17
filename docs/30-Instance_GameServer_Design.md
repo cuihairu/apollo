@@ -31,10 +31,10 @@ Client → Gateway（连接与路由）→ World（游戏逻辑进程）
 
 ## 更新
 
-协议更新修改 XML/XSD 契约并重新生成产物，新旧版本兼容与滚动发布仍需完成。仅代码更新保持协议不变：Lua 使用预备、tick 边界提交、观察与回滚原语；C++ 通过进程替换发布。
+协议更新修改 XML/XSD 契约并重新生成产物，握手兼容窗口与发布/回滚演练已接入，但业务报文兼容仍需逐种编码和变更验证。仅代码更新保持协议不变：Lua 使用预备、tick 边界提交、观察与回滚原语；C++ 通过进程替换发布。
 
 World 排空时停止分配新副本，等待现有副本完成结算和资源销毁后退出；超时强停需明确失败及恢复策略。Gateway 持有 TCP 连接，多实例不自动迁移既有连接。活动副本跨版本运行还需要状态迁移、兼容检查和失败回滚。
 
 ## 实现状态
 
-现有 `World`、`Scene`、`Instance`、`SceneTransfer`、`BattleRuntime` 和 Lua 更新原语可复用。`world-app` 当前创建默认 Scene/Instance，尚未接通完整的小队请求、动态分配、玩法通关结算与资源回收流程；客户端下行广播仍有原型缺口。具体工作见根目录 [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md)。
+复用现有 Instance 八态状态机。Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。小队创建、成员进入、目标判定、结算和临时资源回收已接入 World；SquadInstanceTests 与 SquadWireE2eTests 覆盖受理规则、隔离及上行和结果下行。跨进程结算账持久化与跨 Gateway 会话恢复仍需完善。 具体工作见根目录 [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md)。

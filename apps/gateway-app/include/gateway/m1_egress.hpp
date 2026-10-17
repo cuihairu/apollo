@@ -52,7 +52,8 @@ public:
     // 下行装配（start 前设置）：939 到达时的客户端投递出口。
     virtual void setClientDeliver(ClientDeliverFn fn) { (void)fn; }
 
-    // 宿主泵一拍：投递箱排空（翻译+发送）→ 链路推进（收发/握手）→ 超时清扫
+    // 宿主泵一拍：链路推进 → 已连接时投递箱排空（翻译+发送）→ 超时清扫。
+    // 未发送帧留在有界箱；已发但未确认帧不跨 World 进程代次自动重放。
     virtual void pump(std::uint64_t now_ms) { (void)now_ms; }
 
     // legacy 世界帧前递（见类注线程纪律）。false = 不可前递（非五族意图 /

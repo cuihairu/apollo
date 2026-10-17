@@ -67,6 +67,10 @@ void MessageRouter::start() {
         m1Egress_.reset();
     }
 
+    if (m1Egress_ && deliverToClient_) {
+        setDeliverToClient(deliverToClient_);
+    }
+
     running_ = true;
 }
 
@@ -116,16 +120,17 @@ void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint
 
 void MessageRouter::setDeliverToClient(
     std::function<void(SessionID, const std::vector<uint8_t>&)> fn) {
+    // 保留宿主在 start 前设置的出口，重启路由器后也需重新装配。
+    deliverToClient_ = std::move(fn);
     // 939 下行出口：M1 出口解字段 → 本回调（宿主泵线程）→ 入口投递队列。
     // egress 降级时闭包不装——World 回带只落 observability 计数。
     if (!m1Egress_) {
-        glog().warning("gateway client deliver unset: M1 egress degraded");
         return;
     }
     m1Egress_->setClientDeliver(
-        [fn = std::move(fn)](std::uint64_t session_id, std::uint32_t /*gateway_id*/,
+        [fn = deliverToClient_](std::uint64_t session_id, std::uint32_t /*gateway_id*/,
                              const std::vector<std::uint8_t>& payload) {
-            fn(session_id, payload);
+            if (fn) fn(session_id, payload);
         });
 }
 

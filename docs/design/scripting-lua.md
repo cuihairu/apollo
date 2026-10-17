@@ -4,7 +4,7 @@
 
 ## 执行摘要
 
-已有模块预备、提交、回滚、故障归因、沙盒、契约表装载及异步交接原语。跨 World 可靠发布、完整业务后端和多副本脚本状态隔离仍需应用接线；不能以库功能推导生产更新完成。
+已有模块预备、提交、回滚、故障归因、沙盒、契约表装载及异步交接原语。fleetctl module 已接通跨 World 灰度发布、观察与故障回滚；临时 Scene 脚本状态随生命周期装配和清理。完整业务后端及进程重启后的版本恢复仍需验收。
 
 ## 1. 职责
 
@@ -24,7 +24,7 @@ WorldApp 当前装配一个脚本状态并接入默认 Scene。多 Instance 的�
 
 ### 3.2 prepare / commit / rollback
 
-`prepare_module` 产生预备结果，`commit_module` 在所属 tick 边界切换，`rollback_module` 恢复可用旧版本。通过 `module_faults_since` 等原语观察灰度故障。存在这些 API 不等于跨进程投递、确认、重试和回滚编排已完成。
+`prepare_module` 产生预备结果，`commit_module` 在所属 tick 边界切换，`rollback_module` 恢复可用旧版本。通过 `module_faults_since` 等原语观察灰度故障。跨 World 编排由 fleetctl module 与 World 控制面提供，drill_module_update.sh 验证双 World 灰度发布与故障回滚；不据此推导所有生产故障路径已覆盖。
 
 代码更新保留 wire；C++ 更新使用进程替换。活跃副本连续运行、状态兼容与超时排空需要单独验证。
 

@@ -16,14 +16,14 @@ Apollo's target model uses familiar responsibility names: `Login`, `Gateway`, `W
 |---|---|---|
 | `login-app` | Authentication, online directory, and placement control | Hosts `OnlineDirectory`; does not persist player gameplay profiles |
 | `gateway-app` | Client ingress and message-routing prototype | Corresponds to `Gateway` |
-| `world-app` | Simulation runtime and player profile host | Hosts `PlayerStore` and reuses World, Scene, and Instance; complete instance orchestration remains pending |
+| `world-app` | Simulation runtime and player profile host | Hosts `PlayerStore` and reuses World, Scene, and Instance; group Instance creation, gameplay, settlement, and cleanup are integrated |
 | `machined` | Local process-supervision prototype | Optional for deployment; carries no game business logic |
 | `game-server` | Single-process assembly example | Demonstrates module assembly, not a complete production topology |
 | `logger`, `admin`, `fleetctl` | Operations and management prototypes | Outside the instance gameplay model |
 
 `apps/common` is a shared application library, not another process. World hosts `player_store::PlayerStore`, which owns PlayerAnchor, local profiles, SaveQueue, and PersistJournal. Login hosts `online_directory::OnlineDirectory`, which owns online routing, placement projections, and migration coordination. Gateway holds client connections and caches routing. Each hosted service has its own link endpoint and follows its application lifecycle.
 
-`HostedServicesTests` validates activation, session binding, Gateway directory lookup, missing-profile rejection, and profile reads after shutdown over real TCP. Multi-World placement, migration recovery, and complete instance settlement still require the acceptance work in `todo.md`.
+HostedServicesTests validates activation, session binding, directory lookup, and profile retention over real TCP. SquadWireE2eTests covers Instance inputs and replies. MigrationChainTests covers freeze, export, destination adoption, and directory switching; source-object deletion, complete failure recovery, and cross-Gateway client recovery remain incomplete.
 
 An instance is one match; a `World` process hosts instances, and one process may host many instances. Each player has one authoritative runtime object during a match. Cross-server play transfers its authority and updates Gateway routing; it does not create a second authoritative object that can run concurrently.
 

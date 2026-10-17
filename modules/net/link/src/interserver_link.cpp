@@ -1,6 +1,7 @@
 #include "apollo/net/link/interserver_link.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 
 namespace apollo::net::link {
@@ -58,8 +59,18 @@ std::vector<std::uint8_t> make_business_payload(std::uint16_t msg_id, const std:
 
 }  // namespace
 
+std::uint64_t process_authority_epoch() {
+    static const std::uint64_t epoch = static_cast<std::uint64_t>(
+        std::chrono::system_clock::now().time_since_epoch().count());
+    return epoch;
+}
+
 InterServerLink::InterServerLink(LinkConfig config)
-    : config_(std::move(config)), watermark_(config_.watermark) {}
+    : config_(std::move(config)), watermark_(config_.watermark) {
+    if (config_.authority_epoch == 0) {
+        config_.authority_epoch = process_authority_epoch();  // 进程代次自铸
+    }
+}
 
 InterServerLink::~InterServerLink() {
     if (transport_) {

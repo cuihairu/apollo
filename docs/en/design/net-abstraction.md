@@ -89,7 +89,7 @@ Introduce optimizations behind clear layer interfaces and measured benchmarks. C
 
 ### 5.7 InterServerLink
 
-Handshake includes process identity, route_version, and authority_epoch. Current route-version mismatch disconnects the link; this is not N/N-1 protocol negotiation. A peer epoch change emits a restart event for upper-layer recovery. Distinguish same-epoch reconnect from process restart.
+Handshake includes process identity, route_version, and authority_epoch. Accepted versions include the current route version and compat_route_versions, configured through APOLLO_ROUTE_COMPAT. Versions outside the window are rejected. Handshake acceptance does not provide version-specific business decoding. A peer epoch change emits a restart event for upper-layer recovery. Distinguish same-epoch reconnect from process restart.
 
 Reliable uses send queues, receive deduplication, and cumulative ACKs. Droppable does not guarantee retransmission. The owning pump advances link state sequentially. Business transfer additionally requires durable authority records and commit reconciliation.
 

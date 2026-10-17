@@ -135,6 +135,9 @@ public:
         // 装配一次，重连不复装。
         install_dispatching(*manager_->link(ep.name));
 
+        // 已发但未确认的请求结果不明，不能跨 World 进程代次自动重放。
+        // 旧代 reliable 由链路清除；pending 保留到超时，供观测与业务恢复。
+        // 尚未发送的帧留在有界 inbox，握手成功后按原受理顺序投递。
         started_.store(true, std::memory_order_release);
         return true;
     }
@@ -157,8 +160,10 @@ public:
         if (!manager_) {
             return;
         }
-        drain_inbox(now_ms);
         manager_->pump(now_ms);
+        if (worldConnected()) {
+            drain_inbox(now_ms);
+        }
         sweep_timeouts(now_ms);
     }
 

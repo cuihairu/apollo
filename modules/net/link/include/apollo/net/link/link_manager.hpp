@@ -56,7 +56,9 @@ struct LinkManagerConfig {
     // N-1 兼容窗口（sdk-contract §6）：逐链下发到各 LinkConfig（active 与
     // passive fan-out 同源）。空 = 无窗。
     std::vector<std::uint64_t> compat_route_versions;
-    std::uint64_t authority_epoch = 1;
+    // 进程代次（§5.7）：0 = 进程自铸（透传给各链；同进程共用标识
+    // 对端据此识别代次变化；唯一性边界见 LinkConfig.authority_epoch）。
+    std::uint64_t authority_epoch = 0;
     std::uint32_t backoff_initial_ms = 500;
     std::uint32_t backoff_max_ms = 15000;
 };

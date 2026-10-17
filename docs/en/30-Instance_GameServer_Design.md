@@ -31,10 +31,10 @@ Cross-server scenes are an explicit reserved requirement. Keep home-server affil
 
 ## Updates
 
-Protocol updates regenerate XML/XSD contract artifacts; version compatibility and rolling release validation remain incomplete. Code-only updates preserve the protocol: Lua provides preparation, tick-boundary commit, observation, and rollback; C++ uses process replacement.
+Protocol updates regenerate XML/XSD contract artifacts; handshake compatibility windows and publish/rollback drills exist, while business payload compatibility requires validation for each encoding and change. Code-only updates preserve the protocol: Lua provides preparation, tick-boundary commit, observation, and rollback; C++ uses process replacement.
 
 World drain stops assigning new instances and waits for settlement and resource cleanup before exiting. A forced-stop deadline needs defined failure and recovery behavior. Gateway owns TCP connections; replicas do not automatically transfer sockets. Continuing active instances across versions requires state transfer, compatibility checks, and rollback.
 
 ## Implementation status
 
-Reuse World, Scene, Instance, SceneTransfer, BattleRuntime, and Lua update primitives. `world-app` currently creates a default Scene/Instance; group-triggered creation, dynamic placement, objective settlement, and resource cleanup are not integrated end to end. Client broadcast delivery also has prototype gaps. See the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
+The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete. See the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).

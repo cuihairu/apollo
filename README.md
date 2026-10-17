@@ -80,9 +80,9 @@ Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes curre
 
 ## Update Modes
 
-Apollo documents two release modes. A protocol update changes the XML/XSD contract under `sdks/contract/` and regenerates artifacts; safe rollout requires server/client compatibility across old and new contract versions. The contract, generator, and golden artifact checks exist, while version negotiation and end-to-end compatibility-window validation remain incomplete.
+Apollo documents two release modes. A protocol update changes the XML/XSD contract under `sdks/contract/` and regenerates artifacts; safe rollout requires server/client compatibility across old and new contract versions. Handshake compatibility windows and publish/rollback drills exist. Business payload compatibility still requires validation for each encoding and schema change; accepting an old hash does not decode an old layout automatically.
 
-A code-only update keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides module preparation, tick-boundary commit, observation, and rollback primitives; production rollout control across World processes remains incomplete. C++ changes use a process rollout after Instances drain or after an independently implemented state transfer. Gateway multi-instance deployment can keep new connections available while old sockets drain, but Gateway does not migrate existing TCP connections between processes.
+A code-only update keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides module preparation, tick-boundary commit, observation, and rollback primitives; fleetctl coordinates cross-World delivery, canary observation, and failure rollback. C++ changes use a process rollout after Instances drain or after an independently implemented state transfer. Gateway multi-instance deployment can keep new connections available while old sockets drain, but Gateway does not migrate existing TCP connections between processes.
 
 See [Gateway update boundaries](docs/design/gateway-topology-survey.md) and [contract versioning](docs/design/sdk-contract.md).
 
@@ -463,7 +463,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 Apollo is an original implementation of this repository, not a fork of any existing project; its architecture concepts and terminology reference the following open-source projects, with sources cited where referenced:
 
-- **BigWorld**: BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`); the architecture audit includes source-level comparison of BigWorld / KBEngine / skynet (`docs/analysis/architecture-review.md` §16)
+- **BigWorld**: BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`); the architecture audit includes source-level comparison of BigWorld / KBEngine / skynet (`docs/analysis/mmo-mechanism-deep-dive.md`)
 - **KBEngine**: several entries in `docs/qa/` analyze its source mechanisms
 - **skynet**: design precedents such as the observability channel (`docs/analysis/architecture-review.md`)
 
@@ -483,4 +483,4 @@ Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependenc
 
 A group requests an activity → World creates an Instance and temporary Scene → members pass admission and enter → clear enemies and complete objectives → settle → players leave → destroy the Instance, scene, and temporary resources.
 
-Reuse the existing eight-state Instance lifecycle. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. The state machine exists, while group-triggered creation, objective settlement, and automatic resource cleanup still need application integration and validation.
+The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete.

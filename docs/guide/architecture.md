@@ -45,4 +45,4 @@ Gateway 负责连接和路由，不会自动提供不停机更新。World 滚动
 
 几名玩家组队发起 → World 创建 Instance 及临时 Scene → 校验成员并进入 → 刷怪与完成目标 → 结算 → 玩家离开 → 销毁 Instance、场景和临时资源。
 
-复用现有 Instance 八态状态机，不新增同义类型。World 中的 Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。状态机已实现，小队触发创建、通关结算和自动资源回收仍需在应用入口接通并验收。
+复用现有 Instance 八态状态机。Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。小队创建、成员进入、目标判定、结算和临时资源回收已接入 World；SquadInstanceTests 与 SquadWireE2eTests 覆盖受理规则、隔离及上行和结果下行。跨进程结算账持久化与跨 Gateway 会话恢复仍需完善。

@@ -39,6 +39,9 @@ struct M1LinkConfig {
     // 契约路由表 JSON（生成物）：表是 Dispatcher 白名单事实源，schema_hash
     // 是握手 route_version 事实源。空路径 = 装配失败（start false）。
     std::string route_json;
+    // 进程代次（§5.7）：0 = 进程自铸（见 LinkConfig.authority_epoch）。真进程
+    // 各自铸不相等；同进程模拟替换（e2e）在此显式注入不同代次。
+    std::uint64_t authority_epoch = 0;
 };
 
 // 脚本调试 eval 请求（契约 944，scripting-lua §7.1 attach transport）：admin

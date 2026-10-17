@@ -18,7 +18,7 @@ Apollo 当前边界见[架构现状](./architecture-review.md)、[SDK 契约](..
 
 | 机制 | BigWorld（Mercury） | skynet |
 |---|---|---|
-| 事件多路复用 | `lib/network/event_poller.hpp:95-137` 抽象基类（doRegisterForRead/Write + processPendingEvents 纯虚）；**唯一后端 select**：`lib/network/event_poller.cpp:496` `select( fdLargest_+1, … )` | socket 线程独占 epoll：`skynet-src/socket_epoll.h:20`（§5.8 已核；kqueue 变体 socket_kqueue.h 并存） |
+| 事件多路复用 | `lib/network/event_poller.hpp:95-137` 抽象基类（doRegisterForRead/Write + processPendingEvents 纯虚）；**唯一后端 select**：`lib/network/event_poller.cpp:496` `select( fdLargest_+1, … )` | socket 线程独占 epoll：`skynet-src/socket_epoll.h:20`（kqueue 变体 socket_kqueue.h 并存） |
 | 帧定界 | Bundle 分片：`lib/network/udp_bundle.cpp:567` | gate 长度头：`service-src/service_gate.c:353`（sscanf 启动参数）/:362（header 只许 `'S'`/`'L'`）；2B 路径大端读长 `lualib-src/lua-netpack.c:184-185`（`buffer[0]<<8 \| buffer[1]`） |
 | filter 插件位 | `lib/network/udp_channel.hpp:81` 构造注入 `PacketFilterPtr`、`:139-140` 存取；双族接口 `packet_filter.hpp:37/:48/:56`、`stream_filter.hpp:46/:55` | 无 filter 层——WS 帧定界在 Lua 服务组装层（`lualib/http/websocket.lua`，源码基线 已核） |
 | 双协议 | `lib/network/channel.hpp:104` `isTCP()` | TCP only（gate） |
@@ -37,9 +37,9 @@ Apollo 当前边界见[架构现状](./architecture-review.md)、[SDK 契约](..
 - BW：poller 无配置项（编译期选定 select）；通道窗口等参数见 源码基线 已核各条。
 
 **已知缺陷**
-- BW select-only：fd 数量受 FD_SETSIZE 限制，扩展即换后端——但二十年没换（§5.8 的「主流停在就绪家族」证据）。
-- skynet gate：帧定界（2B/4B）与消息体（sproto）两层耦合在 netpack/gate 组装里，不像 BW 有统一 filter 槽位——加封装要改 gate/netpack 本体（architecture-review 16.8.2 表已述）。
-- 36 号 #1 判定「只取 filter 位置语义、帧格式自定」的实现级依据即上表：filter 注入位（udp_channel.hpp:81）可移植，UDP+聚合包绑定不可移植。
+- BW select-only：fd 数量受 FD_SETSIZE 限制，扩展即换后端；此处只说明已读基线，不推断后续上游演进。
+- skynet gate：帧定界（2B/4B）与消息体（sproto）两层耦合在 netpack/gate 组装里，不像 BW 有统一 filter 槽位——加封装要改 gate/netpack 本体。
+可分别研究 filter 注入位置与 Mercury 的帧格式、传输绑定，不将两者作为同一项架构要求。
 
 ---
 
@@ -58,8 +58,8 @@ Apollo 当前边界见[架构现状](./architecture-review.md)、[SDK 契约](..
 
 **已知缺陷**
 - 8 位 harbor = 至多 255 节点；master/slave 模式复杂（cmaster/cslave 服务族仍在 `service/` 目录）。
-- **两代并存于同一框架**（源码基线 已核、16.5-③ 佐证）——这是 36 号 #2 的直接论据：自行开发消息层的代际更替是常态，引入 nng 即把更替风险外包。
-- 本机 skynet `docs/architecture/harbor-cluster.md` 为「编写中」占位文档（基线源码 sed 头部）——**上游文档未给 harbor 弃用时间线的权威口径，如实标注查不到**；代码事实（两代并存、cluster 为 Lua 全家桶）足以支撑 #2 判定。
+**源码观察**：已读基线包含两代消息实现；不能据此推断上游更替时间线。
+- 本机 skynet `docs/architecture/harbor-cluster.md` 为「编写中」占位文档（基线源码 sed 头部）——**上游文档未给 harbor 弃用时间线的权威口径，如实标注查不到**；代码事实（两代并存、cluster 为 Lua 全家桶）不能替代上游时间线核验。
 
 ---
 
@@ -105,8 +105,8 @@ Apollo 当前边界见[架构现状](./architecture-review.md)、[SDK 契约](..
 
 **配置参数默认值**：xlsx2py 的 config.py 为用户侧可编辑配置（未展开比对，不引用具体默认值）。
 
-**已知缺陷**：Excel→py 无 schema 校验（类型错误到运行期才炸）；BW entitydef 走运行期解析而非生成期（16.8.3-② 已述「apollo 有意偏离」的对照面）。
-**#4 判定的实现级依据**：两家「源→工件」转换器全部位于运行期链接图之外（kbe/tools 源码树外、BW server/tools 独立二进制）——apollo sdks/gen 同型。
+**已知缺陷**：Excel→py 无 schema 校验（类型错误到运行期才炸）；BW entitydef 走运行期解析而非生成期。
+**机制对照**：两家「源→工件」转换器全部位于运行期链接图之外（kbe/tools 源码树外、BW server/tools 独立二进制）——apollo sdks/gen 同型。
 
 ---
 
@@ -122,7 +122,7 @@ Apollo 当前边界见[架构现状](./architecture-review.md)、[SDK 契约](..
 
 **配置参数默认值**：KBE `kbengine_defaults.xml` 各数据库段（本轮仅核 cellapp/baseapp 段，DB 段默认值未展开——不引用）。
 
-**已知缺陷**：C-51 五条中第 1/3/5 条成立（blob 化/无 journal/冷热分档缺位）；第 2/4 条已按 源码基线 修正（有 Archiver 周期归档、Indexed 有真实索引）。**#5 判定的实现级依据**：两家的持久化旗标长在契约描述结构体上（PropertyDescription/DataDescription），Apollo 用 storage.xml 物理分文件替代「同结构体字段级耦合」。
+**边界**：这些基线实现将持久化旗标放在 PropertyDescription/DataDescription 中。Apollo 存储契约状态见 [SDK 契约](../design/sdk-contract.md)，不能把 storage.xml 设计当成已实现的装载器。
 
 ---
 
@@ -144,9 +144,9 @@ Apollo 当前边界见[架构现状](./architecture-review.md)、[SDK 契约](..
 **配置参数默认值**：BW backupPeriod **10 秒**（baseapp_config.cpp:23）；KBE archivePeriod **300 秒**（kbengine_defaults.xml:621）、backupPeriod **300 秒**（:625 区域，基线源码同段）。
 
 **已知缺陷**
-- KBE 归档**非脏驱动**（按实体轮询、不感知属性 dirty——C-51 第 2 条修正后的准确表述）；窗口 300s 默认粗。
+- KBE 归档**非脏驱动**（按实体轮询、不感知属性 dirty）；窗口 300s 默认粗。
 - BW 备份是**快照流**（base 状态整发），无 journal/redo——宕机恢复粒度即备份周期（G-2 论证的参照面）。
-- 两家平滑算法同型不同实现：BW 浮点余数（backup_sender.cpp:114-117 基线源码：`numToBackUpFloat = bases.size()/periodInTicks + backupRemainder_; … backupRemainder_ = 小数部分`）、KBE 区段游标——**36 号 #6「KBE 平滑算法被 Apollo 改写为脏实体头部区段」的实现级依据即此**。
+- 两家平滑算法同型不同实现：BW 浮点余数（backup_sender.cpp:114-117 基线源码：`numToBackUpFloat = bases.size()/periodInTicks + backupRemainder_; … backupRemainder_ = 小数部分`）、KBE 区段游标.
 
 ---
 
@@ -164,13 +164,13 @@ EventNumber     lastEventNumber_;          // int32  —— 客户端已收事�
 VolatileNumber  lastVolatileUpdateNumber_; // uint16 —— 客户端已收 volatile 序号
 EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 ```
-外加 `Priority priority()` 对（:80-81）。**这就是 36 号 #7「volatile+event 双序号」的实体字段**。
+外加 `Priority priority()` 对（:80-81）。
 
 **状态机/时序**：每 tick witness 从优先级堆顶取 cache → 若实体 volatile/event 序号已前进则发增量 → pop_heap 重排。
 
 **配置参数默认值**：AoIRadius/AoIHyst per-entity 可设（dumpAoI 样例 500/5）；AoIUpdateScheme 见 §11。
 
-**已知缺陷**：witness 及其 EntityCache 全部位于 `server/cellapp/`（目录级证据）——**与 CellApp 进程绑定**，36 号 #7「Apollo 把水位泛化到 AOI 独立服务」的改造动机由此实现位置直接可见。
+**Apollo 边界**：AOI 属于 World 内的 Scene；此处不引入独立 AOI 进程。
 
 ---
 
@@ -188,7 +188,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 **配置参数默认值**：三家默认 10 / 10 / 8 线程（如上）。
 
 **已知缺陷**：skynet 权重分频使重服务饥饿风险显式化（weight 0 = 每消息让出）；BW/KBE 定 tick 下消息处理与 tick 抢同一线程（time slice 分派即为此设计）。
-**#8 判定的实现级依据**：KBE 10Hz 定 tick（defaults xml:5）+ skynet 单 service 串行（skynet_server.c:293-315）——两实证对应「Apollo 主线程全序 + 池化旁路」的混合取材。
+**机制对照**：KBE 10Hz 定 tick（defaults xml:5）+ skynet 单 service 串行（skynet_server.c:293-315）——两实证对应「Apollo 主线程全序 + 池化旁路」的混合取材。
 
 ---
 
@@ -205,7 +205,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 **配置参数默认值**：本轮未定位 ghost 阈值的独立配置项（BW 以 cell 边界/AoI 半径驱动，未见独立默认值——**如实标注查不到独立参数**）。
 
 **已知缺陷**：ghost 双写、边界协商、跨进程调试不可单步；实现侧佐证：缓冲队列族的存在本身即「跨进程一致性的复杂度税」。
-**#9 判定的实现级依据**：上述文件族全部服务于「跨 cell 视图一致性」，Apollo 副本制不需要该层。
+**机制对照**：上述文件族全部服务于「跨 cell 视图一致性」，Apollo 副本制不需要该层。
 
 ---
 
@@ -221,7 +221,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：KBE 查询半径由 DetailLevels 的 radius 提供（detaillevel.h:21 默认 FLT_MAX，见 §3/§11）。
 
-**已知缺陷**：**文件全部位于 `kbe/src/server/cellapp/`（目录级证据）**——结构与 cellapp 进程绑死，36 号 #10「锁死在 cellapp 里、Apollo 剥离成 shard 服务」的判定即指此；BW 侧同理（witness 在 cellapp）。
+**Apollo 边界**：AOI 属于 World 内的 Scene；此处不引入独立 AOI 进程。
 
 ---
 
@@ -230,7 +230,6 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 **实现位置与证据分级**
 - BW（A 级，基线源码）：per 轴 volatile 优先级——`lib/entitydef/volatile_info.hpp:16-47`（四轴 float priority + `ALWAYS` 常量 + `shouldSendPosition() = priority > 0`）；.def 样例 Guard.def:2-6（`<pitch>20</pitch>` 即优先级 20）；**距离分档**：`server/cellapp/aoi_update_schemes.hpp:18-56` `class AoIUpdateScheme { float weighting_, distanceWeighting_; }`，`apply(distanceSq) = (sqrt(d)*distanceWeighting_ + 1) * weighting_`（权重 0 时按 coincident 恒 1.0）；静态 256 桶（`schemes_[256]`）+ 名字映射；**per-EntityCache 挂 scheme id**（entity_cache.hpp:98-99/:177）+ **per-LOD 事件序号数组** `lodEventNumbers_[MAX_LOD_LEVELS]`（entity_cache.hpp:189，访问器 :101/:164-165）。
 - KBE（A 级，基线源码）：`kbe/src/lib/entitydef/detaillevel.h:21-23` `struct Level{radius=FLT_MAX, hyst=1.0}` + `entitydef.cpp:409-417`（DetailLevels NEAR/MEDIUM/FAR 的 radius/hyst XML 子节点）+ `detaillevel.cpp/h` 判档实现。
-- UE `COND_*`（C 级）：官方文档链接见 36 号 #11 行（Conditional Property Replication）——本机无 UE 源码，**不引行号**。
 
 **数据结构**：如上（AoIUpdateScheme 双权重 / Level 半径+滞回 / LOD 序号数组）。
 
@@ -238,8 +237,8 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：BW priority 默认 -1（不发）、ALWAYS 常量、schemes 上限 256；KBE radius 默认 FLT_MAX、hyst 默认 1.0。
 
-**已知缺陷**：UE COND_* 是编译期宏（36 号 #11 已述）；BW/KBE 分档声明的载体是 .def/引擎内建，跨端不可配——Apollo `sync=` 契约字段的改造空间由此。
-**#11 判定的实现级依据**：BW 的 LOD 序号数组 + scheme 权重函数 =「按距离/重要性分档同步」的成熟实现；KBE 三档半径 + 滞回 = 简单可用版。
+**范围**：此处描述 BW/KBE 基线中的可见性声明；Apollo 的契约同步规则见 [SDK 契约](../design/sdk-contract.md)。
+**机制对照**：BW 的 LOD 序号数组 + scheme 权重函数 =「按距离/重要性分档同步」的成熟实现；KBE 三档半径 + 滞回 = 简单可用版。
 
 ---
 
@@ -248,16 +247,15 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 **实现位置（A 级，基线源码）**
 - KBE Python 嵌入：`kbe/src/lib/pyscript/script.cpp:76`（`Py_InitializeFromConfig`）/`:229`（`Py_Initialize` 兼容路径）——**全功能 Python、无沙盒**；`:383` 引擎自身 `PyImport_ImportModule("os")`（取系统信息用）——os 模块直接可达脚本层。
 - skynet 热更：`service/debug_console.lua:159`（命令表登记 `inject`）/`:270`（`COMMAND.inject(address, filename, ...)`）；实现 `lualib/skynet/debug.lua:85-87`（`require "skynet.inject"` 后在目标服务上下文执行）——**在线向指定服务注入新代码**，官方 docs/architecture/hot-reload.md 为占位文档（基线源码，机制细节以代码为准）。
-- skynet 协程观感：`lualib/skynet.lua:227` `coroutine_yield "SUSPEND"`（本轮再核一致）。
+- skynet 协程观感：`lualib/skynet.lua:227` `coroutine_yield "SUSPEND"`（基线记录）。
 
 **数据结构与关键字段**：KBE `Script` 类持 `__main__` 模块与 extraModule_（script.cpp:161/:240-243 基线源码）；skynet inject 以源文件为单位替换函数定义（debug.lua 消费 dispatch/register_protocol 引用）。
 
 **状态机/时序**：KBE：进程启动 → Py 初始化 → 注册 KBEngine 模块 → 加载 scripts；**已读范围内未见服务端脚本热更机制**（如实标注：未在 kbe/src 检出 reload/inject 对应物）。skynet：console 下 inject 命令 → 目标服务在自己的消息循环里执行注入代码。
 
-**配置参数默认值**：KBE python 相关配置在 kbengine_defaults.xml（entryScriptFile 等，本轮见 bots 段样例 `kbemain`；未逐项展开）。
+**配置参数默认值**：KBE python 相关配置在 kbengine_defaults.xml（entryScriptFile 等，基线 bots 段样例 `kbemain`；未逐项展开）。
 
-**已知缺陷**：KBE Python 攻击面（os 可达，script.cpp:383）+ 无热更（重启进程）；skynet inject 粒度是函数级替换、无版本/回滚协议（对照 apollo scripting-lua §3.2 的冒烟+回滚协议即增量）。
-**#12 判定的实现级依据**：KBE 反面（全功能+不可热更）、skynet 正面（Lua 可承载业务+可热更）双实证齐备。
+**边界**：脚本能访问 os 会扩大可用能力范围；已读证据未确认完整的服务端热更流程。Apollo 模块发布见 [Lua 脚本](../design/scripting-lua.md)。
 
 ---
 
@@ -288,41 +286,42 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：未展开各 logger 落盘参数（不引用）。
 
-**已知缺陷**：三家共同形态「检测原语在进程内、聚合呈现在外挂工具」（16.8.2 表）；缺陷是**自建轮子不接生态**（36 号 #14「方向对、形态旧」）——BW message_logger 自带查询引擎 + MongoDB 后端即为「旧但重」的极端例证。
+**边界**：运行时检测与外部聚合是不同职责；源码目录清单不等于运维可靠性验收。
 
 ---
 
-## §15 实体/进程标识体系——**本文对 36 号的修正行**
+## §15 实体/进程标识体系
 
 **A 级事实（基线源码）**
 - `lib/network/basictypes.hpp:104` `typedef int32 EntityID;`——**BW 实体 id 是 32 位**（进程内唯一，持久化前）。
 - `lib/network/basictypes.hpp:191` `typedef int64 DatabaseID;`（含 `PENDING_DATABASE_ID = -1`）——**64 位的是数据库 id**，由 db 侧分配，**未见分段语义**。
-- `lib/cstdmf/unique_id.hpp:17-25` `class UniqueID { uint a_,b_,c_,d_; }`——128 位、四段十进制点分格式（头注释 *"4 uints represented in hex separated by periods"*），用于 machined/日志等组件标识（配套映射 `lib/db_storage_mysql/mappings/unique_id_mapping.cpp`）。
+- `lib/cstdmf/unique_id.hpp:17-25` `class UniqueID { uint a_,b_,c_,d_; }`——128 位、四段十六进制点分格式（头注释 *"4 uints represented in hex separated by periods"*），用于 machined/日志等组件标识（配套映射 `lib/db_storage_mysql/mappings/unique_id_mapping.cpp`）。
 - 进程在网络层的身份 = Mercury `Address`（ip:port）。
 
 ---
 
-## §16 战斗独立实例与回放——自创设计的负空间确认
+## §16 战斗独立实例与回放
 
 **A 级负空间证据（基线源码）**：BW `server/` 进程清单 = `{baseapp, baseapp_extensions, baseappmgr, cellapp, cellapp_extensions, cellappmgr, dbapp, dbapp_extensions, dbappmgr, loginapp, reviver, tools}`——**无战斗独立进程**；KBE `kbe/src/server/` = `{baseapp, baseappmgr, cellapp, cellappmgr, dbmgr, loginapp, machine, tools}`——同；skynet 无进程拓扑概念（单节点多服务）。
 **结论**：三家均无「战斗独立实例进程 + 确定性回放」的对应实现。Apollo 当前 World 与 Instance 的边界见架构概览；本文不为 Apollo 增加目标进程角色。
-已知缺陷（作为自创设计的风险面，非外部缺陷）：独立战斗进程的组队/返回流程、跨进程实体投影一致性是 Apollo 需自行解决的问题——三家无先例可抄。
 
 ---
 
-## §17 数据库支持矩阵——**本文对 36 号的修正行**
+## §17 数据库支持矩阵
 
 **A 级事实（基线源码目录清点）**
-- BW：`lib/db_storage/`（抽象）+ `lib/db_storage_mysql/`（entity_table 映射、buffered_entity_tasks、bw_meta_data、column_type.cpp）+ `lib/db_storage_xml/`（xml_database.cpp 等）——**MySQL + XML 双后端**，与 36 号表述一致。
+- BW：`lib/db_storage/`（抽象）+ `lib/db_storage_mysql/`（entity_table 映射、buffered_entity_tasks、bw_meta_data、column_type.cpp）+ `lib/db_storage_xml/`（xml_database.cpp 等）——**MySQL + XML 双后端**。
 - KBE：`kbe/src/lib/db_interface/`（抽象：db_interface.{h,cpp} + entity_table.h 基类）+ `kbe/src/lib/db_mysql/`（entity_table_mysql.* 等）+ **`kbe/src/lib/db_redis/`（完整实体存储后端：entity_table_redis.{h,cpp,inl}、kbe_table_redis.*、db_interface_redis.*、db_transaction、redis_watcher——entity_table_redis.h:10 `#include "db_interface/entity_table.h"` 实现同一抽象基类）**。
 
-**结论（修正 36 号 #17）**：36 号「KBE MySQL-only（目录实证）」**失准**——KBE 同样是 db_interface 抽象 + 双实现（MySQL + Redis）。应改写为「两家均为可插抽象：BW = MySQL+XML、KBE = MySQL+Redis（Redis 后端为 fork 内实存代码，其生产可用性与上游主线状态未验证——如实标注）」。Apollo「storage.xml 语句即数据天然留 SQL 方言缝」的论证不受影响（抽象层的存在反而强化「方言缝是行业常态」）。
+**结论**：已读 BW 基线包含 MySQL 与 XML 后端；已读 KBE fork 包含 MySQL 与 Redis 实现。Redis 后端的生产可用性及上游主线状态未验证。
 
 **数据结构/默认值**：沿用 §5 各条；KBE 各后端 SQL/Redis 语句映射见 entity_sqlstatement_mapping（§6）。
 
 ---
 
-## §18 帧同步——负空间确认
+## §18 帧同步——检索范围
+
+记录的基线源码关键词检索未发现 lockstep 匹配。这仅限定关键词和目录范围，不能据此证明这些引擎没有确定性模拟或回放机制，也不为 Apollo 引入独立战斗进程。
 
 ---
 
@@ -334,8 +333,6 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 | skynet harbor→cluster 更替时间线的上游权威口径 | 本机 docs 为占位文档 | §2 已如实标注；代码事实足以支撑判定 |
 | KBE db_redis 后端的生产可用性/上游主线状态 | 仅证实体存在与接口实现 | §17 已如实标注 |
 | KBE 服务端脚本热更机制 | 已读范围内未检出 | §12 已如实标注（负空间） |
-| UE COND_* 的源码级实现 | 本机无 UE 源码 | §11 维持 C 级官方文档引用，不引行号 |
-| 36 号 #15「分段 64 位」的 BW 源码对应物 | **证伪**（EntityID=int32） | §15 修正行 |
-| 36 号 #17「KBE MySQL-only」 | **证伪**（db_redis 实存） | §17 修正行 |
+| UE COND_* 的源码级实现 | 本机无 UE 源码 | 未核验，不作为 Apollo 设计依据 |
 
 ---

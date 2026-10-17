@@ -1462,6 +1462,49 @@ if(MSVC)
     target_compile_options(world_drain_tests PRIVATE /utf-8)
 endif()
 add_test(NAME WorldDrainTests COMMAND world_drain_tests)
+
+# 更新连续性：真实客户端 TCP → Gateway → World，Lua 模块替换与 World
+# 排空替换分别验收。不代替业务双版本解码、生产登录或跨 Gateway 恢复。
+add_executable(update_continuity_tests
+    test_update_continuity.cpp
+    ../apps/gateway-app/src/gateway_server.cpp
+    ../apps/gateway-app/src/gateway_control_server.cpp
+    ../apps/gateway-app/include/gateway/session_manager.cpp
+    ../apps/gateway-app/src/ingress/client_ingress_server.cpp
+    ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway-app/src/ingress/session_admission_service.cpp
+    ../apps/gateway-app/src/m1_egress.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp
+    ../apps/world-app/src/world_app.cpp
+    ../apps/world-app/src/m1_link_server.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+)
+target_include_directories(update_continuity_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
+)
+target_compile_definitions(update_continuity_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(update_continuity_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
+    apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
+    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+if(WIN32)
+    target_link_libraries(update_continuity_tests PRIVATE ws2_32)
+    target_compile_definitions(update_continuity_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(update_continuity_tests PRIVATE /utf-8)
+endif()
+add_test(NAME UpdateContinuityTests COMMAND update_continuity_tests)
 endif()
 
 # ========== Logger Retrieval Tests (ADR-013 批 L3) ==========
@@ -2121,7 +2164,7 @@ add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
 endif()
 
 # Runtime sources host shared services even when executable apps are disabled.
-foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests update_continuity_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
         # apollo_app_services 仅在 game 模块开启（⇒ apps/common 加入）时存在：
         # 其守卫是 `TARGET apollo_protocol AND apollo::game_session`，而

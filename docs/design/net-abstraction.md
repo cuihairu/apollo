@@ -89,7 +89,7 @@ TCP 与链路确认不能替代模拟回执或持久化确认。跨重连序号�
 
 ### 5.7 InterServerLink
 
-握手包含进程身份、route_version 和 authority_epoch。当前 route_version 不匹配会断开，尚不是 N/N-1 协议兼容协商。对端代次变化触发重启事件，由上层重建状态；同代次的断线恢复与进程重启必须区分。
+握手包含进程身份、route_version 和 authority_epoch。受理版本为本代与 compat_route_versions；`APOLLO_ROUTE_COMPAT` 配置窗口，窗外版本仍断开。握手放行不提供业务报文双版本解码。对端代次变化触发重启事件，由上层重建状态；同代次的断线恢复与进程重启必须区分。
 
 Reliable 使用发送队列、接收去重与累积 ACK；Droppable 不保证重传。链接对象和它的状态由所属泵顺序推进。业务迁移还需要持久权威记录和提交结果对账。
 

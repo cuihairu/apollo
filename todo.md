@@ -1,65 +1,68 @@
 # Apollo 实施清单
 
-唯一目标命名：`Login`、`Gateway`、`World` 是进程职责；`Scene` 是 World 内部模拟单元；`Instance` 是几名玩家组队创建、完成刷怪与结算后销毁的临时副本。程序 `world-app`、入口 `WorldApp`、命名空间 `world_app` 是 World 职责在代码中的形式。
+固定命名：`Login`、`Gateway`、`World` 是业务进程职责；`Scene` 是 World 内的模拟单元；`Instance` 是小队创建、完成玩法与结算后销毁的临时副本。跨服复用这些概念，不增加同义进程。
 
-本文仅跟踪当前工作，不保留作废命名或按日期追加的讨论记录。目标与实现状态必须分开；状态机、网络原语或单测存在不代表完整生产玩法已接通。
+勾选表示该项明确范围已有实现和验收，不代表相邻业务链路已经完成。仅有内存原语、注入会话或链路握手不能作为持久化、真实登录恢复或业务协议兼容的证据。
 
-## P0：文档与命名一致性
+## P0：文档与命名
 
-- [x] 在中英文架构入口、词汇表、玩家模型和 README 中统一 World / Scene / Instance 的职责。
-- [x] 明确副本流程：小队发起、World 分配、创建、进入、运行、目标完成、结算、离开、销毁及资源释放。
-- [x] 文档使用 VitePress locales：中文在 docs 根目录，英文在 docs/en。
-- [x] 按 VitePress 标准修正文档国际化：语言目录页面配对、独立导航与主题文字、英文页面路由、无语言后缀页面；将配对和路由检查加入文档 CI。
-- [x] 修正被误改的外部引擎源码名称；第三方资料引用真实上游标识。
-- [x] 恢复当前有效 ADR 核心规则及编号含义，修正本轮涉及的关键引用。
-- [x] 逐项复核其他设计稿引用的旧章节号和批次说明，改为当前规则与实现状态，不保留作废结论。
-- [x] 检查 234 对中英文页面及页面路由；仓库外隔离目录 VitePress 正式构建通过，本地化页面与搜索索引已生成。
-- [x] 核对 GitHub About 描述和 topics 与最终定位一致。
+- [x] 统一 README、架构入口、应用说明和词汇表中的 World / Scene / Instance 职责，保留第三方引擎真实源码名称。
+- [x] 使用 VitePress 原生 locales：中文 docs 根目录、英文 docs/en，分别配置导航、侧栏和主题文字，不在同页并列两种语言。
+- [x] 将 234 对语言页面、路由及生成 HTML 的语言与描述校验纳入文档 CI；依赖和正式构建放在仓库外隔离目录。
+- [x] 说明两种更新方案，区分握手兼容、业务解码、Lua 模块替换和 C++ 进程替换。
+- [x] 清理已作废命名和架构结论，修正外部引擎引用及当前能力入口，不保留旧方案作为另一套指引。
+- [x] GitHub About 与 topics 对齐轻量副本制多人在线服务器定位。
+- [x] 更新副本接线、迁移及更新能力的说明，将持久化、源端清理和会话恢复的未完成部分明确列出。
 
-## P1：World 应用接线
+## P1：业务进程与服务归属
 
-- [x] 将游戏逻辑应用统一为 world-app / WorldApp / world_app，并同步 Gateway 配置、CLI、链路身份、日志指标、开发编队及测试。
-- [x] 完成全量构建及 76 项 CTest（含契约 golden 与真实托管服务集成检查）。
-- [x] 将玩家资料、会话绑定和持久化迁入 World 托管的 PlayerStore，删除独立同义进程入口；真实 TCP 验证激活、会话绑定、档案保留与服务缺席拒绝登录。
-- [x] 将在线目录、落点和迁移编排归入 Login 托管的 OnlineDirectory，开发编队只启动 Login / Gateway / World 业务进程；玩家游戏档案不写入 Login。
+- [x] World 托管 PlayerStore、PlayerAnchor、档案、SaveQueue 与 PersistJournal；删除独立同义进程入口。
+- [x] Login 托管 OnlineDirectory、在线落点和迁移编排，不保存玩家游戏档案。
+- [x] Gateway 持有客户端连接和路由缓存；CLI、链路身份、开发编队与测试按三种业务进程接线。
+- [x] HostedServicesTests 用真实 TCP 验证激活、会话绑定、目录查询、缺失档案拒绝与停机档案保留。
+- [x] 目录镜像、死亡订阅、全量重报与恢复协调接入现有 Login / World；FleetRehomeChainTests 与 drill_kill9.sh 验证真实链路。
 
-## P2：小队副本完整流程
+## P2：小队副本
 
-- [x] 复用现有 World、Scene、Instance 和 Instance 八态状态机，不重写同义生命周期。
-- [x] 补齐底层回收约束：同一 Scene 只绑定一个 Instance，活动副本保护 Scene，终态回收同时移除两项注册，取消流程不发成功奖励、玩家退出后才允许销毁；通过回归测试。
-- [x] 接通小队创建请求：验证队伍、成员、人数和准入条件，选择有容量的 World，创建独立 Instance 与临时 Scene。（d4d55f65：apps/common SquadInstanceService 受理面——队伍存在/队长/人数上限/在线谓词/成员忙校验，本地优先按容量选 World，独立 Instance + 临时 Scene 一对一创建，终态释放双回收；SquadInstanceTests 6/6，门禁 77/77 绿。客户端→Gateway→World 真实上行仍留待后项。）
-- [x] 接通成员进入和准备完成后启动玩法，隔离副本内实体、AOI、任务与脚本状态。（476512c2：受理快照校验进入、首进驱动 Create→Initialize→Waiting、全员到齐队长 Waiting→Running、实体/AOI 场级隔离——独立 Scene 私有实体集与 AOI，SquadInstanceTests 9/9、门禁 77/77 绿。副本私有脚本状态随 scene 挂载收口：ScriptRuntime 归属 gameLoop 单写者，场景幂等补挂（206bbfb4）遍历 world 全部 scene——临时副本 scene 建立次拍自动入列，started/closing 钩子留给宿主扩展点；真实上行链路 e2e（918255c3）经真进程验证副本 scene 创建与玩法启动；任务隔离随任务系统属后续能力。）
-- [x] 接通刷怪、目标完成与失败判定，驱动 Instance 进入结算阶段。（860472fd：SquadInstanceService 玩法面——Running 期设目标（击杀配额+超时 tick，基线取 Instance 玩法时钟）、配额封顶刷怪入副本私有 Scene、击杀上报只认本副本怪且达标 finish() 进结算（成功线）、超时 cancel() 进结算不发成功奖励（失败线）、结算期拒绝迟到玩法输入、进度查询随绑定释放清除；SquadInstanceTests 12/12，门禁 77/77 绿，build-off 全量重建绿。gameLoop 驱动与客户端击杀上报的宿主接线随真实上行项。）
-- [x] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。（77f03803：SettlementLedger 受理即开账（名册快照）；battle 与 instance 同生——enter 段收参战者、tick 段随玩法时钟、finish 段结算经 IRewardSink → AnchorRewardSink 落锚点 exp + mark_dirty 随 SaveQueue 落档（既有持久化接口）；幂等口径 (instance,player) 一条账，applied 后重复落账/重试/恢复重放一律拒绝；挂账重试只补曾尝试未落条目；restore 回填已落标记防重启双记；超时失败线不结算不发奖励；宿主经 PlayerStore::findAnchor 惰性解析装配；SquadInstanceTests 15/15、门禁 77/77 绿、build-off 全量重建绿。battle 分值输入路径与账本跨进程持久化随真实上行/排空项。）
-- [x] 结算后移出玩家、拒绝迟到输入，释放实体、AOI、脚本/任务及临时 Scene，销毁 Instance 并从 World 注册表移除。（470d8528：SquadInstanceService::dismiss 收尾面——入结算（Finishing 起）才可收尾，按受理名册移出玩家 → 结算链推进至终态 → release 终态双回收（实体/AOI/临时 Scene 随 Scene 释放、closing 钩子宿主销毁脚本/任务残留）→ 绑定/玩法/结算账面清除、容量归还；enter() 迟到进入在结算期改报 StateRejected（原误报 Duplicate），start/刷怪/上报/tick 均 NotRunning 拒绝，收尾后全入口 NoBinding；成功线与失败线（超时）收尾均覆盖；SquadInstanceTests 18/18、门禁 77/77 绿、build-off 全量重建绿。）
-- [x] 覆盖无人进入、全员退出、掉线、队伍解散、超时和进程异常的收尾策略及测试。（26abe6ed：无人进入/队伍解散/宿主排空走 abort 策略收尾（Create..Running 取消线，不发成功奖励，收尾即释放绑定）；Running 期全员退出 = 失败判定（leave 面按名册校验，掉线同口径，末位退出自动进结算，中途退出可重进）；超时线此前项已覆盖；进程异常口径 = 副本临时态随进程消亡、重启全新受理、结算账以 restore 回填防重放双记（重启用例覆盖跨进程不双记）；SquadInstanceTests 22/22、门禁 77/77 绿、build-off 全量重建绿。）
-- [x] 接通并验证客户端 → Gateway → World → Scene/Instance 的真实上行、结果和状态下行；现有 broadcastToViewers 日志不能作为下行完成证据。（918255c3 全链真进程 e2e（SquadWireE2eTests）：真 gateway M1Egress 经 loopback TCP 直连真 WorldApp——上行 CELL_CREATE_ENTITY 会话进图、建队/入队/开启/进入/启动/击杀上报全族契约翻译 932 意图、gameLoop tick 边界受理；下行结果帧（PartyResult/SquadResult）与状态帧（SquadState 含存活怪列表）经 939 client_deliver → egress 客户端投递口回带——断言事实源 = 投递口收到的协议帧内容（日志不算），终态 Destroyed 回执到齐全员三会话；击杀分值经 battle 输入序落锚点 exp（上报人归属），结算后绑定与容量归还（active_count/used_capacity 归零）；契约层 ff6e5032（客户端族 0x0070-0x0078 + 内部 939/946-951 + 错误码 1100-1117）、协议层 9fd9690b（native 编解码 + 截断拒收，6/6）、执行层 031a0ee5（击杀→battle 输入→结算，目标完成 defer 一拍让分值先入序，23/23）、网关层 f27d6b8d、门禁 build-examples/build-off 双树 78/78 全绿。副本私有脚本状态随 scene 挂载在 gameLoop 收口（见上一条勾销）；账本跨进程持久化随排空项。）
-- [x] 验证单 World 多副本隔离，以及多个 World 的分配与选路。（92b08a10：并发隔离用例——同 World 两副本并发 Running，怪号全局发号两集合不相交、交错击杀进度各进各账、单边达标结算收尾后邻副本绑定/进度/存活怪全无感、收官后绑定与容量全数归还；多 World 选路用例——本地满载溢出按 world_id 升序取首个空位（注册顺序无关）、远端派生钩子按选路结果各调一次且 id 透传、容量逐 World 独立记账、全满 NoWorldCapacity、本地槽回收后本地优先复用不漂移（abort/dismiss 本地面，远端绑定实际回收随跨进程条目）；SquadInstanceTests 25/25、门禁 build-examples/build-off 双树 78/78 全绿。）
+- [x] 复用 Instance 八态生命周期；同一 Scene 只绑定一个 Instance，活动副本保护 Scene，终态同步回收两项注册。
+- [x] 校验队长、队伍、成员、人数、在线与忙碌状态；按容量创建 Instance 与临时 Scene。
+- [x] 成员进入、全员就绪启动；实体与 AOI 按 Scene 隔离，临时 Scene 挂载独立脚本状态。
+- [x] 刷怪、击杀目标、超时失败驱动结算；结算后移出玩家并销毁临时资源，拒绝迟到输入。
+- [x] 内存 SettlementLedger 支持按副本和玩家去重、缺失锚点挂账重试及显式 restore；失败取消不发成功奖励。
+- [ ] 完成真实奖励持久化：从 Anchor 收集变更而非仅重写旧档案；奖励与结算去重凭据持久提交，重试及进程重启不能重记或漏记。
+- [ ] 串行化 PlayerStore 修改、journal 与同玩家存档，避免自动保存、RPC 和保存回调竞争或旧快照覆盖新数据；通过故障与重启测试验证。
+- [x] 无人进入、全员退出、掉线、队伍解散、超时与排空有明确收尾；进程消亡不保留临时副本状态。
+- [x] SquadWireE2eTests 验证客户端协议经 Gateway 出口到 World 的输入与结果/状态投递；UpdateContinuityTests 进一步验证真实客户端 socket 下行，修复启动前设置的回调丢失。
+- [x] 同 World 多副本隔离和多 World 容量分配规则有测试。
+- [ ] 完成多个真实 World 的动态端点选路及远端绑定回收；当前 Gateway 游戏出口仍是单 World 端点，容量测试与远端回调不等于多进程路由验收。
 
-## P3：玩家迁移与会话恢复
+## P3：迁移与会话恢复
 
-- [x] 将目录镜像、死亡订阅、全量重报与恢复协调接入 Login / World 当前入口，并迁移进程演练脚本；不能用底层原语测试替代当前进程链路验收。（f8d88f81 Login 承接 baseappmgr 三面——镜像 owner（目录事件 → Delta + 周期快照，snapshot published 日志面）、恢复 intake（FullReport 收包 + FleetRecoveryCoordinator 收敛裁决 + 准入闸排他）、machined 死亡订阅（zone/gateway 行窗口处置 + 窗口满 sweep）；2376f9a0 World 承接 base-app 报告方——锚点快照 → FullReport 启动即报 + 周期刷新，fleet 组件号同源一进程一身份；c116f73b 真实进程链验收 FleetRehomeChainTests：真 LoginServer + 真 WorldApp + machined 替身全 UDP 回环——恢复排他期门闸拒 → 启动重报收敛放行、锚点重报 intake 落目录、镜像消费侧投影（真 Delta/快照 wire）、死亡通知 zone 反查 Suspended、窗口满 sweep 条目终结 + SessionDown 达镜像、非 zone 行不越界；14285c37 drill_kill9 迁 login-app/world-app 实测全链断言过（死亡检测 0.02s/重启 1.0s/重报 intake 1.9s/镜像重发 2.9s），migration/update 演练挂待迁注记归各自账面条目；门禁 build-examples/build-off 双树 79/79、san 树 78/78 全绿。）
-- [x] 明确跨服场景设计预留：区服归属与 World 运行位置分开，复用 Scene/Instance，定义准入、单权威交接、结算与返回规则；暂不启用跨服部署。
-- [ ] 跨服需求启用时，扩展契约中的原区服、World 进程代次、玩家权威代次、准入凭证与返回位置；区服身份不得直接复用 home_zone_id。
-- [ ] 跨服需求启用时，接通区服分组、跨服 World 容量分配、两区服同场景准入、幂等结算和返回原区服；覆盖原 World 不可用、安全回退、掉线及提交结果不明的恢复。
-- [x] 复用同进程 SceneTransfer；分别验证跨 World 的源端冻结、导出、目标确认、路由切换、源端清理和失败恢复。（b358cd90/f51baad8：真实进程迁移链验收 test_migration_chain——真 LoginServer（目录 owner + 942 受理面）+ 两真 WorldApp（源 zone 2 / 目标 zone 5，真 PlayerStore M1 面 933/935/936/937 经 StoreDial 真拨）：失败恢复 A 源不可达干净拒绝（目录条目逐字段同迁移前）、失败 B 目标不可达冻结已生效源停留 Transferring 且目录不改指、主线 ①→④ 冻结/导出/接权/改指+代次推进（目标锚 Online、原区服保留、会话双锚恢复、落盘档案字段与源一致、SessionMoved+④ 立即推达镜像 wire）；b358cd90 报告两道防回卷——报告条目 zone=承载域（非原区服 home zone，迁移改指不被周期重报回卷）+ 源冻结锚点（Transferring）离在册集不再上报（否则目录在两报告方间来回翻转，测试构造序使采样可判，去过滤确定失败）；源端清理=⑤ 停留 Transferring 如实边界（§9.9-2 gateway 缓冲未接线，无 unfreeze 面）；d3a5e9c1 drill_migration re-home 版（login-app 编排面 + 两 world-app，fleetctl 942 驱动，镜像观察端 APD2 wire 断言 + 存档 sha256 恒等 + 30s 周期快照回卷断言 + 源重报 sessions=0 冻结离册）实测全过（freeze 44ms/handoff 130ms/CLI 0.195s）；门禁 build-examples/build-off 双树 80/80、san 树 79/79 全绿。）
-- [x] 用迁移标识、权威代次和业务幂等拒绝重复接管、迟到输入及重复结算。（71318a48/8adeef57：迁移标识幂等——目录按 (player, request_id) 缓存成功 943 回执，同标识重放原样回带不重跑编排（失败不缓存保留 ops 重试语义；request_id=0 不进账；fleetctl 补单调标识）；重复接管拒绝——目标店权威代次高水位 adoptedEpochs_，937 new_epoch ≤ 已接代拒于拉取之前（迟到旧交权不得按旧档二次 adopt 覆盖目标侧新写）；迟到输入拒绝（冻结只读三道）——源店 bindSession 拒绑（防 Transferring 翻回 Online 重获写权）、DB 存档 wire 拒（防旧路径置回写态+入段）、锚点 add_progress 冻结静默拒（防脏）；迟到结算拒绝——SettlementLedger 冻结锚点 AnchorUnavailable 挂账不落（与既有 (instance,player) 幂等两道合口）；test_migration_chain 新增 6/7/8 三段断言（重放全不动：epoch/目标锚/落盘档案逐项；旧代次 937 直拨拒于 duplicate takeover；绑定/存档/进度/结算四写面全拒），先红后绿（重放推进 epoch→修复后绿）；门禁 build-examples/build-off 双树 80/80、san 树 79/79，drill_migration 与 drill_kill9 复跑全过。）
-- [ ] 完成跨 Gateway 重连后的会话恢复，明确重复登录、旧连接失效和路由持久性。
+- [x] 同进程复用 SceneTransfer；MigrationChainTests 和 drill_migration.sh 验证真实 Login 编排两端 World 的冻结、导出、目标接权与目录改指。
+- [x] 迁移请求标识缓存成功回执，目标拒绝旧权威代次；源冻结后拒绝绑定、存档、进度和结算写入，重报不回卷路由。
+- [ ] 补齐迁移源对象最终删除、失败后的源端恢复、提交结果不明时的协调查询及重启恢复；源对象停留 Transferring 不能算完整清理。
+- [ ] 完成跨 Gateway 重连后的真实会话恢复；明确重复登录、旧连接失效、会话代次、路由持久性与补偿。不能用注入会话或新会话建图代替验收。
+- [x] 预留跨服场景：区服归属与 World 运行位置分开，复用 Scene/Instance，约束准入、单权威交接、结算与返回；暂不启用跨服部署。
+- [ ] 跨服需求启用时，扩展原区服、World 进程代次、玩家权威代次、准入凭证与返回位置；不得直接复用 home_zone_id 表示业务区服。
+- [ ] 跨服需求启用时，接通区服分组、跨服容量分配、两区服同场准入、幂等结算及返回；覆盖原 World 不可用、安全回退和掉线恢复。
 
-## P4：两种更新方案与排空
+## P4：更新、排空与连续性
 
-- [x] 协议更新：补齐版本协商、新旧契约兼容窗口及兼容检查，分别验证兼容变更和破坏性变更的发布/回滚。（49fb17e1/c9bc67a9/c7eca2a6/7f7b90f3：版本协商与兼容窗口——链路握手受理集 = {本代} ∪ compat_route_versions（LinkConfig/LinkManagerConfig 逐链下发，active 与 passive fan-out 同源），对端代次 peer_route_version() 可观测（上层据此选代次解码口径）；APOLLO_ROUTE_COMPAT 环境变量按旧代 schema_hash 列表开窗（13 个 M1 面统一装配，空 = 无窗行为同前），fleetctl 另有 APOLLO_FLEETCTL_ROUTE_JSON 代次注入（7f7b90f3）（演练旧代拨入面）；兼容检查——窗外仍 kRouteVersionMismatch（N-2 拒）、验收期真进程 drill_proto_update 三形全过：A 破坏性（窗关旧代 UNREACHABLE exit 3，先以同代探针证服务面在把 exit 3 归因版本）、B 兼容发布（两端各带窗，旧代 resolve round-trip exit 2、本代与窗共存）、C 回滚收敛（撤窗本代健在 exit 2、旧代再拒 exit 3）；单测 link_compat_window（窗内互连 + 业务过窗 + 代次观测）/link_compat_window_edges（窗外拒 + 关窗拒 + 服务端回滚拒 + 双端同回 up 四形）/manager_compat_window（转发到 fan-out 链）/compat_route_versions_from_text，先红（窗对 up 失败）后绿；门禁 build-examples/build-off 双树 80/80、san 树 79/79。业务层 N/N-1 双版本解码未建（sdk-contract §6 明示：窗口只保证握手与路由 id 可达，按代次选解码器归消费者按真实编码验证——增字段不自动兼容，定长序列/protobuf/默认值语义各异）。）
-- [x] 仅代码更新：复用 Lua prepare/commit/canary/rollback 和现有 ModuleRollout 原语，补齐跨 World 的可靠投递、观察和失败回滚接线。（bd0249b3/290d2f0d/485a751b/6b0ed826：契约 952 module_rollout_request（prepare/commit/rollback/status 四 op）+ 953 module_rollout_reply（request_id 关联）——世界侧 M1 受理点在 gameThread_ 泵内同步执行（ModuleRollout 契约线程 = owning 线程），单目标编排器 target=本进程 runtime 懒建仅 prepare 造对象（abort 复位后 commit/rollback/status 不复活，孤儿 commit 显式拒），canary 窗随拍自驱（观察窗推拍 + promote/rollback 队列 + 在装模块 onTick 驱动 = fault 归因源），自驱相位跃迁落日志；模块名仅 commit 即激活时登记（prepare 期不投 onTick——否则未激活模块的 phantom fault 污染下一观察窗）；fleetctl module 编排器对 N World 各开一条拨号：canary 集（缺省首个 target）先行 prepare+commit、观察窗到终态裁决 kRolledBack 即止（余下目标只预备未提交，conductor op3 abort 清尾不留半开）、kPromoted 再逐个推余下目标；exit 0=MODULE_OK / 2=回滚或各 FAILED / 3=不可达或观察超时；真双 World drill_module_update 四相全过：首装灰度（v101 canary w1 窗满全绿推 w2）/ 迭代 v102 / 故障早失败（v103 canary 窗首 fault 即回滚，exit 2）/ 抑制半径（w2 无 v103 触碰行，回滚后 v104 发布照常）；单测 module_rollout_happy_path（prepare→commit→观察窗 kPromoted→rollback 拒）/fault_rollback（坏模块窗内回滚、faults>0、基线版本复原、存活 eval 验证）/abort_idle（abort 复位到 kIdle、孤儿 commit 拒、idle abort 幂等、复位后重发布照常）；先红（孤儿 commit 被 prepare 懒建静默收编）后绿；门禁 build-examples/build-off 双树 80/80、san 树 79/79。）
-- [x] Gateway 排空：停止接受新连接，保留既有连接服务至自然退出或明确期限；定义强停结果。（fcfd56b1/b082d266/b313662f：契约 954 gateway_drain_request（begin/status）+ 955 gateway_drain_reply（state: 0=serving 1=draining 2=drained，active_connections，detail）——gateway 自有排空控制受理面（InterServerLink passive 端点，契约路由表白名单，954 裸帧受理 + 955 kReliable 现场回带；宿主泵 = 客户端入口泵同线程，排空状态机单线程独占无锁）；begin 关监听停新连接（TcpListener close + accept 守卫——新连接内核层拒）、既有连接照常 io_round 服务，至自然退出（deadline_s=0）或明确期限（泵拍 10ms 推进）；强停结果 = 期限到全量收线（close 经投递队列落 socket，在途客户端工作丢弃，数量显形在日志与 drained detail「force-closed」），drained 终态后监听保持关闭（新连接持续拒）；gateway 不自退进程——排空态可观测，进程替换归 ops 面后续步骤；fleetctl drain --target H:P [--deadline S]（begin→轮询 status 到 drained，exit 0=drained / 2=拒 / 3=不可达或超时）；单测 gateway_drain（lifecycle：serving 快照 → 新连接拒/既有 PING→PONG 照常 → 自然离开落 drained（detail「all client connections left」）→ 终态后监听仍关 + 重复 begin 幂等 / deadline_force：1s 期限到强停收线（客户端见 EOF，detail「force-closed」）/ unknown_op：显式拒点名）；先红（controlM1Port=0 双义「面关/内核分配」撞车——统一为内核分配语义后绿）；真进程 smoke：gateway-app + fleetctl drain 全链 exit 0。门禁 build-examples/build-off 双树 81/81、san 树 80/80。）
-- [x] World 排空：停止分配新副本，等待活动副本结算并销毁；定义超时、强停与恢复策略。C++ 更新通过进程替换完成。（bbf2c054/827a8115/2fd48fe5/414bd3a5：契约 956 world_drain_request（begin/status，deadline_s 0=无期限自然排空，>0 期限到未清即强停）+ 957 world_drain_reply（state: 0=serving 1=draining 2=drained，active_instances，detail）+ 错误码 1118 squad_world_draining——world 自有排空控制受理面（M1 链路复用 9101 端点，956 裸帧受理 + 957 kReliable 现场回带；宿主泵 = gameLoop 同线程，排空状态机单线程独占无锁）；begin 起 SquadInstanceService 启动闸（set_drain/draining()，LaunchError::Draining→1118 回带），既有副本 enter/start 照常服务至结算销毁；强停 = 期限到按 activeBindings 快照逐副本 abort（取消线）|| dismiss（结算线），强停数显形在 drained detail「force-aborted」；自然排空 = active 归零即 drained（detail「all instances settled」）；drained 终态永不复开（恢复 = 进程替换——副本临时态随进程消亡，结算账 restore 回填防双记；world 不自退，排空态可观测）；fleetctl drain --target H:P [--deadline S] --peer world（956/957 线；begin→轮询 status 到 drained，exit 0=drained / 2=拒 / 3=不可达或超时；缺省 peer=gateway 走 954/955 不变）；连带修复 LinkManager::link() 端点名 fan-out 歧义（world M1 端点名 "gateway" 与对端自报名同链路名，第二对端 fleetctl 上线即吞掉全部按端点名回执——929/939/945/953 回执全灭的既有生产缺陷；修 = 先按对端自报名精确消歧，单 peer 兜底保留，staging 竞速窗兜底；单测 manager_fanout_same_endpoint_name 覆盖）；单测 squad_drain_gate（闸前可启/闸后新启 1118/既有实例 enter·start 照常/abort 归还容量）+ WorldDrainTests 真链路 e2e（lifecycle：serving 快照→副本 A 开启 Running→begin 后 B 启动 1118→A 三副本击杀结算→自然 drained→终态后重启仍 1118 / deadline_force：1s 期限到强停（detail force-aborted、绑定与容量归零）/ unknown_op：显式拒点名）；真进程 smoke：world-app + fleetctl drain --peer world 全链 exit 0。门禁 build-examples/build-off 双树 82/82、san 树 81/81、契约 golden check 过。）
-- [ ] 分别验收服务持续接入、免重新登录、TCP 连接连续和活动副本连续；未经端到端验证不宣称无感热更。
-- [ ] 建立小队副本销毁、跨 World 迁移、Gateway/World 排空及升级回滚的可重复演练。
+- [x] 链路握手支持 APOLLO_ROUTE_COMPAT 兼容窗口与对端版本观察；drill_proto_update.sh 验证开窗、拒绝、发布与回滚。
+- [ ] 完成业务报文双版本解码及语义兼容验证，覆盖兼容变更、破坏性变更和回滚；接受旧 schema_hash 不等于旧报文可正确执行。
+- [x] 仅代码更新复用 Lua prepare/commit/canary/rollback 与 ModuleRollout；fleetctl module 和 drill_module_update.sh 接通多 World 投递、观察、推广及故障回滚。
+- [x] Gateway 排空停止新连接，已有连接继续服务；自然退出与期限强停均有真实 socket 测试和控制面。
+- [x] World 排空拒绝新副本，既有副本可结束；期限强停显式取消并回收，终态不复开，C++ 更新使用进程替换。
+- [x] Lua 健康更新连续性：UpdateContinuityTests 验证真实客户端原 TCP 与会话无需再次认证、活动副本继续完成、新 TCP 可接入；认证使用原型入口，不宣称生产登录恢复。
+- [x] World 替换恢复：验证内部连接断开后自动重连、未发送消息有界保留并顺序投递、新副本可分配；已发但结果不明请求不跨代次自动重放。
+- [ ] 完整验收两种更新方案的四项结果：服务持续接入、免重新登录、客户端 TCP 连续、活动副本连续；覆盖真实协议升级、故障回滚、多实例入口和跨 Gateway 恢复。明确哪些路径允许重连或终止副本。
+- [ ] 整合可重复的副本销毁、迁移、Gateway/World 排空、进程替换及升级回滚演练；不能把各自原语测试当成全链无感发布证据。
 
-## 后续能力：保持暂缓，需求触发再实施
+## 后续能力：需求触发后实施
 
-- [ ] 外部存储（MySQL/Redis/ClickHouse）：具体部署或容量要求触发后接入；当前仍是本地档案和 journal。
-- [ ] protobuf/zstd 进入真实消息路径：跨语言互操作或带宽实证触发后实施；现有依赖和生成产物不代表运行路径已使用。
-- [ ] Kafka / Prometheus / Grafana 等外部观测基建：实际观测部署需求触发后实施。
-- [ ] 战斗验证：有具体玩法内容可复算、验证规则与业务目标后实施。
+- [ ] 外部存储 MySQL/Redis/ClickHouse：具体部署或容量需求触发后接入；当前使用本地档案和 journal。
+- [ ] protobuf/zstd 真实消息路径：跨语言互操作或带宽证据触发后实施，依赖和生成产物不代表运行路径使用。
+- [ ] Kafka / Prometheus / Grafana 等外部观测：实际部署需求触发后实施。
+- [ ] 战斗验证：具体玩法具备可复算内容、验证规则与业务目标后实施。
 
-跨机热备与仲裁维持未立项目标；machined 的监督重启不作为热备能力验收。
+跨机热备与仲裁未立项；machined 监督重启不作为热备验收。

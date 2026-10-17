@@ -235,6 +235,7 @@ public:
         mc.self_name = "world";
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         mc.compat_route_versions = link::compat_route_versions_from_env();
+        mc.authority_epoch = config_.authority_epoch;  // 0 = 进程自铸
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;

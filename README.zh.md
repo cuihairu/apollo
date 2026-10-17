@@ -80,9 +80,9 @@ World 同时预留承载多个区服玩家共同参与的场景。玩家原区�
 
 ## 更新方案
 
-Apollo 区分两种发布方式。协议更新修改 `sdks/contract/` 下的 XML/XSD 并重新生成产物；安全滚动需要服务端和客户端在新旧契约之间保持兼容。契约、生成器和 golden 产物检查已经存在，版本协商及端到端兼容窗口验证尚未完成。
+Apollo 区分两种发布方式。协议更新修改 `sdks/contract/` 下的 XML/XSD 并重新生成产物；安全滚动需要服务端和客户端在新旧契约之间保持兼容。已接入握手兼容窗口及发布/回滚演练；业务报文仍需逐种编码和变更验证，接受旧哈希不代表能自动解码旧布局。
 
-仅代码更新保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供模块预备、tick 边界提交、观察和回滚原语；World 进程间的生产补丁分发编排仍未完成。C++ 更新通过进程滚动替换，需等待 Instance 排空或先实现状态迁移。Gateway 多实例可在旧连接排空期间继续接入新连接，但不会自动把既有 TCP 连接迁移到另一个进程。
+仅代码更新保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供模块预备、tick 边界提交、观察和回滚原语；fleetctl 已接入跨 World 投递、灰度观察与故障回滚。C++ 更新通过进程滚动替换，需等待 Instance 排空或先实现状态迁移。Gateway 多实例可在旧连接排空期间继续接入新连接，但不会自动把既有 TCP 连接迁移到另一个进程。
 
 详见[Gateway 更新边界](docs/design/gateway-topology-survey.md)和[契约版本管理](docs/design/sdk-contract.md)。
 
@@ -480,4 +480,4 @@ Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与�
 
 几名玩家组队发起 → World 创建 Instance 及临时 Scene → 校验成员并进入 → 刷怪与完成目标 → 结算 → 玩家离开 → 销毁 Instance、场景和临时资源。
 
-复用现有 Instance 八态状态机，不新增同义类型。World 中的 Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。状态机已实现，小队触发创建、通关结算和自动资源回收仍需在应用入口接通并验收。
+复用现有 Instance 八态状态机。Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。小队创建、成员进入、目标判定、结算和临时资源回收已接入 World；SquadInstanceTests 与 SquadWireE2eTests 覆盖受理规则、隔离及上行和结果下行。跨进程结算账持久化与跨 Gateway 会话恢复仍需完善。

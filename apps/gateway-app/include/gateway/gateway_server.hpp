@@ -58,6 +58,7 @@ private:
 
     // cell 面（2b-iii：world nng 通道池退役，M1 出口单端点直连）
     std::unique_ptr<M1Egress> m1Egress_;
+    std::function<void(SessionID, const std::vector<uint8_t>&)> deliverToClient_;
 
     std::atomic<bool> running_{false};
 };

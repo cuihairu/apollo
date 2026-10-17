@@ -675,6 +675,47 @@ bool test_link_peer_restart_epoch() {
     return true;
 }
 
+bool test_epoch_auto_mint() {
+    // §5.7 进程代次自铸（缺省 0 = 进程自铸）：0 只在 LinkConfig 缺省面出现；
+    // 链对象构造即换铸成进程常量——同进程全链同代次（握手零重启事件），
+    // 不据此断言跨主机唯一性。显式非 0 值原样使用（重启语义单测在此注入，见
+    // test_link_peer_restart_epoch）。
+    TEST_ASSERT(LinkConfig{}.authority_epoch == 0, "default config keeps mint sentinel");
+    const auto minted = process_authority_epoch();
+    TEST_ASSERT(minted != 0, "minted epoch is never zero");
+    TEST_ASSERT(process_authority_epoch() == minted, "mint is process-stable");
+
+    RouteTable table = make_dispatch_table();
+    auto [ep_a, ep_b] = make_loopback_pair();
+    LinkConfig cfg_a;  // epoch 缺省 0 = 构造时自铸（make_link_config 注入 1，勿用）
+    cfg_a.self_name = "auth";
+    cfg_a.route_version = 7;
+    LinkConfig cfg_b;
+    cfg_b.self_name = "game";
+    cfg_b.route_version = 7;
+    InterServerLink a(cfg_a);
+    InterServerLink b(cfg_b);  // 同进程：同一自铸值
+    SinkRecorder sa;
+    a.set_sink(sa.sink());
+    a.dispatcher().set_route_table(&table);
+    b.dispatcher().set_route_table(&table);
+    b.dispatcher().allow_domain("internal");
+    RxLog rx;
+    b.dispatcher().set_handler(901, rx.handler());
+    a.attach(std::move(ep_a), 1000);
+    b.attach(std::move(ep_b), 1000);
+    TEST_ASSERT(up_both(a, b, 1100), "default-epoch pair handshakes");
+    TEST_ASSERT(sa.restarts == 0, "same process mint = no restart event");
+    TEST_ASSERT(a.peer_epoch() == minted && b.peer_epoch() == minted,
+                "both sides report the minted epoch");
+
+    const std::vector<std::uint8_t> body = {'m', '1'};
+    TEST_ASSERT(a.send(901, body, SendClass::kReliable) == SendCode::kAccepted, "m1 accepted");
+    pump_rounds(a, b, 2000);
+    TEST_ASSERT(rx.got.size() == 1, "m1 dispatched");
+    return true;
+}
+
 bool test_link_send_gates() {
     LinkConfig c = make_link_config("auth", 7);
     c.watermark.capacity_bytes = 1000;  // soft 500 / hard 750 / cut 950（千分比缺省）
@@ -1576,6 +1617,7 @@ int main() {
         {"link_disconnect_detect", test_link_disconnect_detect},
         {"link_redelivery_exactly_once", test_link_redelivery_exactly_once},
         {"link_peer_restart_epoch", test_link_peer_restart_epoch},
+        {"epoch_auto_mint", test_epoch_auto_mint},
         {"link_send_gates", test_link_send_gates},
         {"link_cut_sustained_down", test_link_cut_sustained_down},
         {"link_heartbeat_timeout", test_link_heartbeat_timeout},

@@ -162,9 +162,10 @@ struct IntentRecord {
 
 class FakeCell {
 public:
-    FakeCell() {
+    explicit FakeCell(std::uint16_t port = 0, std::uint64_t epoch = 0) {
         link::LinkManagerConfig mc;
         mc.self_name = "world";
+        mc.authority_epoch = epoch;
         route_ok_ = load_route(table_);
         if (route_ok_) {
             mc.route_version = link::route_version_from_hash(table_.schema_hash());
@@ -174,7 +175,7 @@ public:
         link::EndpointConfig ep;
         ep.name = "gateway";
         ep.host = "127.0.0.1";
-        ep.port = 0;
+        ep.port = port;
         ep.role = link::EndpointRole::kPassive;
         added_ = manager_->add_endpoint(ep);
         if (added_) {
@@ -453,6 +454,58 @@ bool test_egress_forwards_five_families() {
 
     egress->stop();
     std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 已执行但缺业务应答的帧不能在新 World 代次重复执行；断线后尚未
+// 发送的帧则按原受理顺序投递。使用真实回环 TCP 与不同代次握手。
+bool test_egress_restart_does_not_replay_ambiguous_requests() {
+    auto old_world = std::make_unique<FakeCell>(0, 101);
+    TEST_ASSERT(old_world->healthy(), "old world assembled");
+    const auto port = old_world->listen_port();
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = port;
+    cfg.route_json = kRouteJson;
+    cfg.ack_timeout_ms = 30000;
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+    const auto frames = five_family_frames();
+    TEST_ASSERT(egress->forwardIntent(91, frames[0]), "old request accepted");
+    TEST_ASSERT(pump_both(*egress, *old_world,
+                         [&] { return old_world->count() == 1; }, 5000),
+                "old request executed without business ack");
+    TEST_ASSERT(egress->pendingAcks() == 1, "old result remains ambiguous");
+    old_world.reset();
+    const auto deadline = now_ms() + 3000;
+    while (egress->worldConnected() && now_ms() < deadline) {
+        egress->pump(now_ms());
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    TEST_ASSERT(!egress->worldConnected(), "old connection closed");
+    const auto sent = egress->sentIntents();
+    TEST_ASSERT(egress->forwardIntent(92, frames[0]), "unsent create queued");
+    TEST_ASSERT(egress->forwardIntent(92, frames[1]), "unsent destroy queued");
+    egress->pump(now_ms());
+    TEST_ASSERT(egress->sentIntents() == sent, "disconnected inbox stays unsent");
+    FakeCell new_world(port, 202);
+    TEST_ASSERT(new_world.healthy(), "new world listening at same address");
+    TEST_ASSERT(pump_both(*egress, new_world,
+                         [&] { return new_world.count() >= 2; }, 8000),
+                "unsent inbox delivered after restart");
+    pump_both(*egress, new_world, [] { return false; }, 150);
+    const auto received = new_world.records();
+    TEST_ASSERT(received.size() == 2, "ambiguous old operation never replayed");
+    TEST_ASSERT(received[0].session_id == 92 && received[1].session_id == 92,
+                "only new inbox frames delivered");
+    TEST_ASSERT(received[0].contract_id == id_of(MsgId::cell_create_entity) &&
+                    received[1].contract_id == id_of(MsgId::cell_destroy_entity),
+                "unsent inbox preserves request order");
+    TEST_ASSERT(egress->pendingAcks() == 3, "all unresolved results observable");
+    egress->pump(now_ms() + cfg.ack_timeout_ms + 1);
+    TEST_ASSERT(egress->pendingAcks() == 0 && egress->timedOutIntents() == 3,
+                "unresolved requests expire through timeout accounting");
+    egress->stop();
     return true;
 }
 
@@ -739,6 +792,7 @@ int main() {
     int failed = 0;
     if (!test_egress_forwards_five_families()) ++failed;
     if (!test_egress_timeout_sweep()) ++failed;
+    if (!test_egress_restart_does_not_replay_ambiguous_requests()) ++failed;
     if (!test_egress_unforwardable_frames()) ++failed;
     if (!test_egress_inbox_overflow()) ++failed;
     if (!test_egress_route_table_missing()) ++failed;

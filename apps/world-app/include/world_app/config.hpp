@@ -26,6 +26,9 @@ struct WorldAppConfig {
     // InterServerLink passive 端点，网关经它投递 cell 意图（924-928）
     uint16_t m1Port = 9101;
     std::string m1RouteJson = APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON;
+    // 进程代次透传（§5.7；0 = 进程自铸）——真进程不配（自铸即不同）；同进程
+    // 模拟替换（e2e）在此注入不同代次。
+    std::uint64_t m1AuthorityEpoch = 0;
 
     // 空间配置
     std::string spaceName = "main_world";
