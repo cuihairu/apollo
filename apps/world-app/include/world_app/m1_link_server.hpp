@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace world_app {
 
@@ -77,6 +78,18 @@ public:
         (void)ok;
         (void)result;
         (void)error;
+    }
+
+    // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
+    // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
+    //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =
+    // 客户端 wire 全帧（MessageHeader + body），网关原样投递不解释。
+    // kReliable（断连排队重连补投）；链路未连 = 排队待补投。
+    virtual void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                                   const std::vector<std::uint8_t>& payload) {
+        (void)session_id;
+        (void)gateway_id;
+        (void)payload;
     }
 
     virtual std::uint16_t listenPort() const { return 0; }

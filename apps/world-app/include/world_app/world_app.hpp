@@ -80,6 +80,28 @@ private:
     // 处理战斗请求
     std::vector<uint8_t> handleCombatSkillCast(const std::vector<uint8_t>& request);
 
+    // ---- 队伍与小队副本真实链路（P2 真实上行/下行；全在 gameThread_ tick
+    // 边界经 executeIntent 执行）----
+    std::vector<uint8_t> handlePartyCreate(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handlePartyJoin(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadLaunch(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadEnter(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadStart(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadKill(const std::vector<uint8_t>& request);
+
+    // 意图源会话 → 玩家号（worldSessionManager_ 反查；0 = 未知会话）。
+    std::uint64_t resolveIntentPlayer(std::uint64_t session_id) const;
+    // 客户端帧下行（939 client_deliver 出口；未装配链路 = 尽力面落地）。
+    void deliverToClient(std::uint64_t session_id, const std::vector<uint8_t>& frame);
+    // 组装并下行：队伍结果 / 副本结果 / 副本状态（单会话与名册全员两型）。
+    void deliverPartyResult(std::uint64_t session_id, std::int32_t op, std::int32_t code,
+                            std::uint64_t party_id);
+    void deliverSquadResult(std::uint64_t session_id, std::int32_t op, std::int32_t code,
+                            const squad_instance::ActiveSquadInstance* binding);
+    void deliverSquadStateToParty(std::uint64_t party_id);
+    // 玩法拍驱动（gameLoop 每拍：Running 副本 tick 推进 + 结算期副本收尾）。
+    void driveSquadGameplay(double delta_seconds);
+
     // 游戏循环
     void gameLoop();
 
@@ -159,6 +181,11 @@ private:
     std::atomic<bool> accepting_{false};
     std::uint32_t worldId_ = 1;
     std::uint64_t defaultSceneId_ = 0;
+    // 队伍发号（契约 23 语义：服务端分配 party_id；gameThread_ 独占）。
+    std::uint64_t nextPartyId_ = 1;
+    // 队长启动玩法时的宿主玩法内容（骨架）：默认目标 + 首波怪。
+    static constexpr std::uint64_t kHostGoalMonsters = 3;
+    static constexpr std::uint64_t kHostGoalTimeoutTicks = 600;
     apollo::game::world::InstancePtr defaultInstance_;
     // 默认场景的 space 承载 id（P0-2 起与 instance id 分离，撤销旧「space=map
     // instance」复用；P0-3 由 SceneDescriptor/Scene 统一提供）

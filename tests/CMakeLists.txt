@@ -1299,6 +1299,46 @@ endif()
 add_test(NAME GatewayM1EgressTests COMMAND gateway_m1_egress_tests)
 endif()
 
+# ========== Squad Wire E2E Tests (P2 真实上行/下行) ==========
+# 小队副本全链真进程 e2e：客户端帧 → 真 gateway M1Egress（契约翻译 932）
+# → 真 WorldApp M1 接收端（gameLoop 受理）→ SquadInstanceService 执行面
+# → 结果/状态帧 → 契约 939 client_deliver → egress 客户端投递口。
+# 断言事实源 = 投递口收到的协议帧（日志不算下行证据）。Windows 下 link
+# TCP 底座不进 M1 批，用例本体空转。
+if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
+add_executable(squad_wire_e2e_tests
+    test_squad_wire_e2e.cpp
+    ../apps/gateway-app/src/m1_egress.cpp
+    ../apps/gateway-app/src/m1_route_client.cpp
+    ../apps/world-app/src/world_app.cpp
+    ../apps/world-app/src/m1_link_server.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+)
+target_include_directories(squad_wire_e2e_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
+)
+target_compile_definitions(squad_wire_e2e_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(squad_wire_e2e_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
+    apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
+    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+if(WIN32)
+    target_link_libraries(squad_wire_e2e_tests PRIVATE ws2_32)
+    target_compile_definitions(squad_wire_e2e_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(squad_wire_e2e_tests PRIVATE /utf-8)
+endif()
+add_test(NAME SquadWireE2eTests COMMAND squad_wire_e2e_tests)
+endif()
+
 # ========== Logger Retrieval Tests (ADR-013 批 L3) ==========
 # LoggerApp 检索面 v1：结构化行读侧（写侧契约镜像）、proc/level/ts/cat
 # 过滤、目录摄取全链（FileAppender structuredOutput → 落盘 → ingest）、
@@ -1956,7 +1996,7 @@ add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
 endif()
 
 # Runtime sources host shared services even when executable apps are disabled.
-foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
         target_link_libraries(${apollo_hosted_target} PRIVATE apollo_app_services)
     endif()

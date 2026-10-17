@@ -139,6 +139,69 @@ bool build_legacy_intent(std::uint16_t msg_id, const std::vector<wire::FieldValu
             out.frame = protocol::MessageCodec::encode(msg, out.session_id);
             return true;
         }
+        // 队伍与小队副本意图族（P2 真实链路；契约 946-951）：头部两字段同
+        // cell 族（request_id + session_id），业务字段 → 协议 native 帧。
+        case id_of(MsgId::party_create_intent): {
+            if (f.size() != 2) {
+                return false;
+            }
+            protocol::PartyCreateRequest msg;
+            out.type = protocol::MessageType::PARTY_CREATE_REQUEST;
+            out.frame = protocol::MessageCodec::encode(msg, out.session_id);
+            return true;
+        }
+        case id_of(MsgId::party_join_intent): {
+            if (f.size() != 3) {
+                return false;
+            }
+            protocol::PartyJoinRequest msg;
+            msg.partyId = static_cast<protocol::EntityID>(f[2].integer);
+            out.type = protocol::MessageType::PARTY_JOIN_REQUEST;
+            out.frame = protocol::MessageCodec::encode(msg, out.session_id);
+            return true;
+        }
+        case id_of(MsgId::squad_launch_intent): {
+            if (f.size() != 4) {
+                return false;
+            }
+            protocol::SquadLaunch msg;
+            msg.partyId = static_cast<protocol::EntityID>(f[2].integer);
+            msg.mapId = static_cast<protocol::EntityID>(f[3].integer);
+            out.type = protocol::MessageType::SQUAD_LAUNCH;
+            out.frame = protocol::MessageCodec::encode(msg, out.session_id);
+            return true;
+        }
+        case id_of(MsgId::squad_enter_intent): {
+            if (f.size() != 3) {
+                return false;
+            }
+            protocol::SquadEnter msg;
+            msg.partyId = static_cast<protocol::EntityID>(f[2].integer);
+            out.type = protocol::MessageType::SQUAD_ENTER;
+            out.frame = protocol::MessageCodec::encode(msg, out.session_id);
+            return true;
+        }
+        case id_of(MsgId::squad_start_intent): {
+            if (f.size() != 3) {
+                return false;
+            }
+            protocol::SquadStart msg;
+            msg.partyId = static_cast<protocol::EntityID>(f[2].integer);
+            out.type = protocol::MessageType::SQUAD_START;
+            out.frame = protocol::MessageCodec::encode(msg, out.session_id);
+            return true;
+        }
+        case id_of(MsgId::squad_kill_intent): {
+            if (f.size() != 4) {
+                return false;
+            }
+            protocol::SquadKill msg;
+            msg.partyId = static_cast<protocol::EntityID>(f[2].integer);
+            msg.monsterEntityId = static_cast<protocol::EntityID>(f[3].integer);
+            out.type = protocol::MessageType::SQUAD_KILL;
+            out.frame = protocol::MessageCodec::encode(msg, out.session_id);
+            return true;
+        }
         default:
             return false;
     }
@@ -239,6 +302,26 @@ public:
         }
         // Reliable：回执不可丢（sendIntentAck 同型——断连排队，重连恰一次补投）。
         (void)link->send(id_of(MsgId::debug_eval_result), payload.data(), payload.size(),
+                         link::SendClass::kReliable);
+    }
+
+    void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                           const std::vector<std::uint8_t>& payload) override {
+        auto* link = gateway_link();
+        if (link == nullptr || payload.empty()) {
+            return;  // 端点未装配 = 静默（start 前回调不应发生）
+        }
+        std::vector<wire::FieldValue> fields(3);
+        fields[0].integer = static_cast<std::int64_t>(session_id);
+        fields[1].integer = gateway_id;
+        fields[2].bytes = payload;
+        std::vector<std::uint8_t> packed;
+        if (!wire::encode_payload(id_of(MsgId::client_deliver), fields, packed)) {
+            return;
+        }
+        // Reliable：下行不可丢（断连排队，重连恰一次补投；sendIntentAck 同型）。
+        //（InterServerLink::send 自封 u16 id 信封——传裸载荷，勿再包一层）
+        (void)link->send(id_of(MsgId::client_deliver), packed.data(), packed.size(),
                          link::SendClass::kReliable);
     }
 
