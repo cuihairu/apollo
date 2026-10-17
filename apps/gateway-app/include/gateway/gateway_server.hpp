@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gateway/config.hpp"
+#include "gateway/gateway_control_server.hpp"
 #include "gateway/ingress/client_ingress_server.hpp"
 #include "gateway/ingress/client_packet_dispatcher.hpp"
 #include "gateway/ingress/gateway_connection_registry.hpp"
@@ -82,6 +83,22 @@ public:
     // 消息路由器观测面（测试与编排面经此读 M1 出口计数）
     MessageRouter* messageRouter() const { return messageRouter_.get(); }
 
+    // 排空控制宿主面（契约 954/955；受理点在泵线程——控制面泵与客户端
+    // 入口泵同线程，状态机单线程独占无锁）。op 1=begin（关监听停新连接 +
+    // 起期限，幂等）/ 2=status（快照）；返回值现场渲染 955。
+    DrainStatus handleDrainRequest(const DrainControlRequest& request);
+
+    // 排空状态观测面（跨线程安全；终态 detail 含强停结果——经 955 status
+    // 与日志读）。
+    std::int32_t drainState() const {
+        return drain_state_.load(std::memory_order_acquire);
+    }
+
+    // 排空控制受理面实占端口（port 0 = 内核分配时经此读回；面关/降级 = 0）
+    std::uint16_t drainControlPort() const {
+        return controlServer_ ? controlServer_->listenPort() : 0;
+    }
+
     SessionID createPendingSession(const std::string& clientIP, uint16_t clientPort);
     SessionID createPendingSession(const ClientEndpoint& endpoint);
     bool authenticateSession(SessionID sessionId, PlayerID playerId, const std::string& loginTicket);
@@ -111,6 +128,11 @@ private:
     // 处理客户端断开
     void onClientDisconnect(SessionID sessionId, bool normalClose);
 
+    // 排空推进（泵拍）：连接清零落 drained；期限到强停收线（全量 close 经
+    // 投递队列落 socket，在途客户端工作丢弃——结果显形在日志与 status）。
+    void drain_pump(std::uint64_t now_ms);
+    void enter_drained(const std::string& detail);
+
     // 发送消息给客户端
     void sendToClient(SessionID sessionId, const std::vector<uint8_t>& message);
 
@@ -128,6 +150,16 @@ private:
     // M1 路由解析客户端面（P4-4 批④；directoryM1Port = 0 = 不装配，路由
     // 解析缺席 → buildDefaultRoute 兜底）
     std::unique_ptr<M1RouteClient> m1RouteClient_;
+
+    // 排空控制受理面（P4 排空批；controlM1Port = 0 或装配失败 = 不装配，
+    // ops 不可达降级面）。on_request 回调在本泵线程（见 acceptNewConnections）。
+    std::unique_ptr<GatewayControlServer> controlServer_;
+
+    // 排空状态机（P4 排空批）：state 原子 = 跨线程观测面；期限与终态摘要
+    // 泵线程独占（受理点/推进/回执同线程）。
+    std::atomic<std::int32_t> drain_state_{kDrainServing};
+    std::uint64_t drain_deadline_ms_{0};  // 0 = 无期限自然排空
+    std::string drain_detail_;            // 终态摘要（自然排空 / 期限强停）
 
     // TCP 监听器归 ingress 真入口（link TcpListener），本类不持裸 fd
 

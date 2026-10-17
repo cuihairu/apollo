@@ -110,6 +110,40 @@ public:
         return started_ ? listener_.port() : 0;
     }
 
+    // 排空面（P4 排空批）：关监听 = 新连接内核层拒（backlog 全 RST）；
+    // 既有连接照常 io_round。幂等——排水期重入不再动监听器。
+    void beginDrain() override {
+        if (!started_ || draining_) {
+            return;
+        }
+        draining_ = true;
+        listener_.close();
+        glog().info("client ingress drain begun: listener closed, " +
+                    std::to_string(activeConnections()) +
+                    " existing connections served");
+    }
+
+    std::size_t activeConnections() const override {
+        std::size_t n = 0;
+        for (const auto& [id, conn] : connections_) {
+            if (!conn->closing) {
+                ++n;
+            }
+        }
+        return n;
+    }
+
+    std::vector<ConnectionID> connectionIds() const override {
+        std::vector<ConnectionID> ids;
+        ids.reserve(connections_.size());
+        for (const auto& [id, conn] : connections_) {
+            if (!conn->closing) {
+                ids.push_back(id);
+            }
+        }
+        return ids;
+    }
+
     void send(ConnectionID connectionId, std::span<const std::uint8_t> payload) override {
         std::lock_guard<std::mutex> lock(handoffMutex_);
         handoff_.push_back(HandedOp{connectionId, false,
@@ -152,6 +186,9 @@ private:
     }
 
     void accept_new() {
+        if (draining_) {
+            return;  // 排空期不接受新连接（监听已关，守卫兜底竞速入站的尾批）
+        }
         while (auto transport = listener_.accept()) {
             if (maxConnections_ != 0 && connections_.size() >= maxConnections_) {
                 glog().warning("client ingress at capacity, dropping incoming connection");
@@ -301,6 +338,7 @@ private:
     ConnectionID nextConnectionId_{1};
     IClientIngressObserver* observer_{nullptr};
     bool started_{false};
+    bool draining_{false};  // 泵线程独占（beginDrain 归宿主泵线程调）
 };
 
 } // namespace

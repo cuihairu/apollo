@@ -46,6 +46,16 @@ public:
     // 实际监听端口（port 0 = 内核分配时经此读回；未启动返回 0）。
     virtual std::uint16_t listenPort() const { return 0; }
 
+    // 排空面（P4 排空批）：停止接受新连接（关监听），既有连接照常服务。
+    // 幂等；null 桩空实现。
+    virtual void beginDrain() {}
+
+    // 活跃连接数（排空裁决面：非 closing 的在册连接数）。
+    virtual std::size_t activeConnections() const { return 0; }
+
+    // 在册连接号快照（排空强停收线面）。
+    virtual std::vector<ConnectionID> connectionIds() const { return {}; }
+
     virtual void send(ConnectionID connectionId, std::span<const std::uint8_t> payload) = 0;
     virtual void close(ConnectionID connectionId, DisconnectReason reason) = 0;
 

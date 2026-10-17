@@ -77,6 +77,8 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.directoryM1Host = argv[++i];
         } else if (arg == "--directory-m1-port" && i + 1 < argc) {
             config.directoryM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--control-m1-port" && i + 1 < argc) {
+            config.controlM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -91,6 +93,7 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --login-m1-port <port>     Login M1 admission port (0 = stub transport, default: 0)\n"
                       << "  --directory-m1-host <host>   OnlineDirectory M1 control host (default: 127.0.0.1)\n"
                       << "  --directory-m1-port <port>   OnlineDirectory M1 control port (0 = stub transport, default: 0)\n"
+                      << "  --control-m1-port <port>   Drain control face port (0 = kernel-assigned, default: 9106)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }

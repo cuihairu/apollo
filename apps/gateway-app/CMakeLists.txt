@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.20)
 add_executable(gateway-app
     src/main.cpp
     src/gateway_server.cpp
+    src/gateway_control_server.cpp
     src/m1_egress.cpp
     src/m1_route_client.cpp
     include/gateway/session_manager.cpp

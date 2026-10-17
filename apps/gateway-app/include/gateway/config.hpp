@@ -33,6 +33,11 @@ struct GatewayConfig {
     std::string directoryM1Host = "127.0.0.1";
     std::uint16_t directoryM1Port = 0;
 
+    // 排空控制受理面（P4 排空批）：ops 拨入面（契约 954/955，fleetctl drain）；
+    // 0 = 内核分配（drainControlPort 查实占）。路由表与 cell 出口共用契约
+    // 表。绑定失败降级（警告 + ops 不可达，不拦启动——端口撞车场景）。
+    std::uint16_t controlM1Port = 9106;
+
     // 会话配置
     int sessionTimeoutMs = 30000;       // 30秒无心跳断开
 

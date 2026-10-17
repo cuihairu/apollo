@@ -569,4 +569,25 @@
     <field name="module_version" type="int64" desc="该模块当前生效版本（0 = 未装）"/>
     <field name="detail" type="string" desc="错误行/状态摘要（ok=1 的 status 回执为摘要）"/>
   </msg>
+
+  <!-- Gateway 排空族（P4 排空批；session-and-online-directory §2、gateway
+       topology survey §2：更新 Gateway 时旧实例停止接受新连接，既有连接
+       服务至自然退出或明确期限）。ops 控制面→Gateway 自有 M1 控制受理面
+       裸帧受理（952 同型，不走 932 信封）。request_id = 控制面单调关联键
+       （0 保留）。op: 1=begin 2=status。state: 0=serving 1=draining
+       2=drained。期限到仍有连接 = 强停：全量收线后落 drained（detail 记
+       强停结果）。 -->
+  <msg id="954" name="gateway_drain_request" dir="P2P" channel="events" domain="internal" desc="Gateway 排空控制请求（ops→Gateway 控制受理面）">
+    <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
+    <field name="op" type="int32" desc="1=begin 2=status"/>
+    <field name="deadline_s" type="int64" desc="排空期限（秒，begin 有义；0 = 无期限自然排空）"/>
+  </msg>
+  <msg id="955" name="gateway_drain_reply" dir="P2P" channel="events" domain="internal" desc="Gateway 排空控制回执（Gateway→ops；request_id 关联）">
+    <field name="request_id" type="int64" desc="回带请求关联号"/>
+    <field name="op" type="int32" desc="回带请求 op"/>
+    <field name="ok" type="bool" desc="1=受理成功；0=拒绝（detail 为原因）"/>
+    <field name="state" type="int32" desc="排空状态机当前值：0=serving 1=draining 2=drained"/>
+    <field name="active_connections" type="int64" desc="当前活跃客户端连接数"/>
+    <field name="detail" type="string" desc="状态摘要（drained 时含强停结果；ok=0 为拒绝原因）"/>
+  </msg>
 </messages>
