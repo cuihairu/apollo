@@ -28,7 +28,7 @@
 - [x] 复用现有 World、Scene、Instance 和 Instance 八态状态机，不重写同义生命周期。
 - [x] 补齐底层回收约束：同一 Scene 只绑定一个 Instance，活动副本保护 Scene，终态回收同时移除两项注册，取消流程不发成功奖励、玩家退出后才允许销毁；通过回归测试。
 - [x] 接通小队创建请求：验证队伍、成员、人数和准入条件，选择有容量的 World，创建独立 Instance 与临时 Scene。（d4d55f65：apps/common SquadInstanceService 受理面——队伍存在/队长/人数上限/在线谓词/成员忙校验，本地优先按容量选 World，独立 Instance + 临时 Scene 一对一创建，终态释放双回收；SquadInstanceTests 6/6，门禁 77/77 绿。客户端→Gateway→World 真实上行仍留待后项。）
-- [ ] 接通成员进入和准备完成后启动玩法，隔离副本内实体、AOI、任务与脚本状态。
+- [ ] 接通成员进入和准备完成后启动玩法，隔离副本内实体、AOI、任务与脚本状态。（476512c2：受理快照校验进入、首进驱动 Create→Initialize→Waiting、全员到齐队长 Waiting→Running、实体/AOI 场级隔离——独立 Scene 私有实体集与 AOI，SquadInstanceTests 9/9、门禁 77/77 绿。剩余：副本私有脚本状态与任务隔离需随 gameLoop 线程入口（真实上行项）接线——ScriptRuntime 归属 gameLoop 单写者，钩子（started/closing）已留好装配点；任务系统本身属后续能力。）
 - [ ] 接通刷怪、目标完成与失败判定，驱动 Instance 进入结算阶段。
 - [ ] 结算通过既有奖励/持久化接口幂等落账，定义重试、失败与恢复处理。
 - [ ] 结算后移出玩家、拒绝迟到输入，释放实体、AOI、脚本/任务及临时 Scene，销毁 Instance 并从 World 注册表移除。
