@@ -118,7 +118,8 @@ void printUsage() {
               << "                   [--timeout S] [--peer NAME]\n"
               << "                   (跨 World 模块编排：canary 先行，观察窗全绿再推余下)\n"
               << "  fleetctl drain   --target H:P [--deadline S] [--timeout S] [--peer NAME]\n"
-              << "                   (gateway 排空：停新连接、既有连接服务至自然退出或期限强停；default peer=gateway)\n"
+              << "                   (排空：gateway 停新连接 / world(--peer world) 停分新副本；\n"
+              << "                    既有面服务至自然退出或期限强停；default peer=gateway)\n"
               << "Exit codes: 0 admitted/ok / 2 rejected/failed / 3 unreachable / 1 usage or setup\n";
 }
 
@@ -230,7 +231,8 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         return !opt.source.empty();  // Lua 源必给（0 保留关联键由本进程单调分配）
     }
     if (opt.command == "drain") {
-        // 编排面：目标必给（单 target H:P = gateway 控制受理面）
+        // 编排面：目标必给（单 target H:P = 控制受理面；--peer 选组件——
+        // gateway 缺省 954/955，world 956/957）
         return !opt.targets.empty();
     }
     if (opt.command == "module") {
@@ -828,7 +830,7 @@ int runModule(const Options& opt) {
     return 0;
 }
 
-// ---------- gateway drain（P4 排空批；契约 954/955）----------
+// ---------- drain 编排（P4 排空批；gateway 契约 954/955，world 契约 956/957）----------
 
 struct DrainCapture {
     std::mutex m;
@@ -843,17 +845,31 @@ struct DrainCapture {
 
 std::atomic<std::uint64_t> next_drain_id{1};  // 0 保留（对端静默面）
 
-// 954 单发 + 955 等待（一问一答；ControlDial 自带泵线程，本函数只等）
-bool drain_call(ControlDial& dial, DrainCapture& capture, std::int32_t op,
-                std::uint64_t deadline_s, DrainCapture::Reply& out) {
+// 排空 wire 面（按对端组件选契约对：gateway=954/955，world=956/957；回执
+// 字段同构——6 字段，active 计数量纲随对端为连接数/副本数）
+struct DrainWire {
+    std::uint16_t request_id;
+    std::uint16_t reply_id;
+};
+
+DrainWire drain_wire_for(const std::string& peer) {
+    if (peer == "world") {
+        return {id_of(MsgId::world_drain_request), id_of(MsgId::world_drain_reply)};
+    }
+    return {id_of(MsgId::gateway_drain_request), id_of(MsgId::gateway_drain_reply)};
+}
+
+// 请求单发 + 回执等待（一问一答；ControlDial 自带泵线程，本函数只等）
+bool drain_call(ControlDial& dial, DrainCapture& capture, const DrainWire& wire,
+                std::int32_t op, std::uint64_t deadline_s, DrainCapture::Reply& out) {
     const auto request_id = next_drain_id.fetch_add(1, std::memory_order_relaxed);
     std::vector<wire::FieldValue> fields(3);
     fields[0].integer = static_cast<std::int64_t>(request_id);
     fields[1].integer = op;
     fields[2].integer = static_cast<std::int64_t>(deadline_s);
     std::vector<std::uint8_t> payload;
-    if (!wire::encode_payload(id_of(MsgId::gateway_drain_request), fields, payload)
-        || !dial.send_frame(id_of(MsgId::gateway_drain_request), payload)) {
+    if (!wire::encode_payload(wire.request_id, fields, payload)
+        || !dial.send_frame(wire.request_id, payload)) {
         return false;
     }
     const auto deadline = Clock::now() + kRpcTimeout;
@@ -871,10 +887,12 @@ bool drain_call(ControlDial& dial, DrainCapture& capture, std::int32_t op,
     return false;
 }
 
-// Gateway 排空编排（session-and-online-directory §2）：begin 关监听停新
-// 连接，既有连接服务至自然退出（--deadline 0）或明确期限（期限到强停收线
-// ——结果显形在 drained 回执 detail）。编排面轮询 status 到 drained 终态；
-// 进程替换归 ops 面后续步骤（gateway 不自退，排空态可观测）。
+// 排空编排（session-and-online-directory §2）：begin 关闸停新（gateway 关
+// 监听停新连接 / world 闭排空闸停分新副本），既有面服务至自然退出
+//（--deadline 0）或明确期限（期限到强停——结果显形在 drained 回执 detail）。
+// 编排面轮询 status 到 drained 终态；进程替换归 ops 面后续步骤（服务不
+// 自退，排空态可观测）。--peer world 拨 World M1 面（956/957），缺省
+// gateway（954/955）。
 int runDrain(const Options& opt) {
     if (opt.targets.empty()) {
         std::cerr << "fleetctl: drain requires --target H:P" << std::endl;
@@ -891,20 +909,21 @@ int runDrain(const Options& opt) {
         return 1;
     }
 
-    ControlDial dial(APOLLO_FLEETCTL_CONTRACT_ROUTE_JSON, opt.peer /* gateway */,
+    ControlDial dial(APOLLO_FLEETCTL_CONTRACT_ROUTE_JSON, opt.peer,
                      label.substr(0, colon), port);
     if (!dial.ready()) {
         std::cerr << "fleetctl: control face setup failed (route table missing)"
                   << std::endl;
         return 1;
     }
+    const DrainWire wire = drain_wire_for(opt.peer);
     DrainCapture capture;
     dial.set_frame_handler(
-        id_of(MsgId::gateway_drain_reply),
-        [&capture](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+        wire.reply_id,
+        [&capture, reply_id = wire.reply_id](
+            std::uint16_t, const std::uint8_t* data, std::size_t size) {
             std::vector<wire::FieldValue> fields;
-            if (!wire::decode_payload(id_of(MsgId::gateway_drain_reply), data, size,
-                                      fields)
+            if (!wire::decode_payload(reply_id, data, size, fields)
                 || fields.size() != 6) {
                 return;
             }
@@ -923,7 +942,7 @@ int runDrain(const Options& opt) {
     }
 
     DrainCapture::Reply r;
-    if (!drain_call(dial, capture, 1, opt.drain_deadline_s, r)) {
+    if (!drain_call(dial, capture, wire, 1, opt.drain_deadline_s, r)) {
         std::cout << "DRAIN_UNREACHABLE target=" << label << " (no begin reply)"
                   << std::endl;
         return 3;
@@ -940,7 +959,7 @@ int runDrain(const Options& opt) {
     const auto deadline = Clock::now() + std::chrono::seconds(opt.rollout_timeout_s);
     while (Clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        if (!drain_call(dial, capture, 2, 0, r)) {
+        if (!drain_call(dial, capture, wire, 2, 0, r)) {
             std::cout << "DRAIN_UNREACHABLE target=" << label << " (no status reply)"
                       << std::endl;
             return 3;
