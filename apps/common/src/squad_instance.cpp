@@ -84,6 +84,73 @@ SquadInstanceService::EnterError SquadInstanceService::start_gameplay(
     return EnterError::Ok;
 }
 
+SquadInstanceService::LeaveError SquadInstanceService::leave(std::uint64_t party_id,
+                                                             std::uint64_t player_id) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return LeaveError::NoBinding;
+    if (binding->world_id != local_world_id_ || !local_world_)
+        return LeaveError::NotLocal;
+    const bool in_roster = std::find(binding->members.begin(), binding->members.end(),
+                                     player_id) != binding->members.end();
+    if (!in_roster) return LeaveError::NotRoster;
+    auto* instance = local_world_->find_instance(binding->instance_id);
+    if (!instance) return LeaveError::NoBinding;
+    if (!instance->leave(apollo::game::core::PlayerId{player_id}))
+        return LeaveError::NotInInstance;
+    // 全员退出（掉线同口径）= 失败判定：Running 期无人可续。
+    if (instance->state() == apollo::game::world::Instance::State::Running &&
+        instance->player_count() == 0) {
+        fail_running(*binding, instance);
+    }
+    return LeaveError::Ok;
+}
+
+bool SquadInstanceService::abort(std::uint64_t party_id) {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return false;
+    if (binding->world_id != local_world_id_ || !local_world_) return false;
+    auto* instance = local_world_->find_instance(binding->instance_id);
+    if (!instance) return false;
+    // 前置结算相位（Create..Running）才可取消收尾；结算期走 dismiss。
+    if (!instance->cancel()) return false;
+    return evict_and_release(*binding);
+}
+
+void SquadInstanceService::fail_running(const ActiveSquadInstance& binding,
+                                        apollo::game::world::Instance* instance) {
+    if (auto it = gameplay_.find(binding.instance_id); it != gameplay_.end())
+        it->second.all_exited = true;
+    // 失败线：取消流程不发成功奖励（battle 随 cancel 复位，无结算事件流）。
+    instance->cancel();
+}
+
+bool SquadInstanceService::evict_and_release(const ActiveSquadInstance& binding) {
+    auto* instance = local_world_ ? local_world_->find_instance(binding.instance_id)
+                                  : nullptr;
+    if (!instance) return false;
+    // 移出玩家：按受理名册逐一移出（destroy 前置约束）。
+    for (const auto member : binding.members) {
+        instance->leave(apollo::game::core::PlayerId{member});
+    }
+    // 结算链按当前相位推进至终态（Finishing→Rewarding→Draining→Destroyed）。
+    const auto advanced = [&]() {
+        if (instance->state() == apollo::game::world::Instance::State::Finishing &&
+            !instance->settle())
+            return false;
+        if (instance->state() == apollo::game::world::Instance::State::Rewarding &&
+            !instance->drain())
+            return false;
+        if (instance->state() == apollo::game::world::Instance::State::Draining &&
+            !instance->destroy())
+            return false;
+        return instance->state() == apollo::game::world::Instance::State::Destroyed;
+    }();
+    if (!advanced) return false;
+    // 双回收（release 内触发 closing 钩子→销毁 Instance 与临时 Scene；
+    // 实体/AOI 随 Scene 释放），账面清除。
+    return release(binding.instance_id);
+}
+
 SquadInstanceService::GameplayError SquadInstanceService::resolve_running(
     std::uint64_t party_id, const ActiveSquadInstance** binding,
     apollo::game::world::Instance** instance) {
@@ -196,6 +263,7 @@ std::optional<GameplayProgress> SquadInstanceService::gameplay(
     progress.monsters_spawned = it->second.spawned;
     progress.monsters_defeated = it->second.defeated;
     progress.timed_out = it->second.timed_out;
+    progress.all_exited = it->second.all_exited;
     if (binding->world_id == local_world_id_ && local_world_) {
         if (auto* instance = local_world_->find_instance(binding->instance_id))
             progress.ticks_elapsed = instance->tick_count();
@@ -242,7 +310,7 @@ bool SquadInstanceService::dismiss(std::uint64_t party_id) {
     if (binding->world_id != local_world_id_ || !local_world_) return false;
     auto* instance = local_world_->find_instance(binding->instance_id);
     if (!instance) return false;
-    // 仅入结算后可收尾；玩法期（Create..Running）返回 false。
+    // 仅入结算后可收尾；玩法期（Create..Running）返回 false（策略收尾走 abort）。
     switch (instance->state()) {
         case apollo::game::world::Instance::State::Finishing:
         case apollo::game::world::Instance::State::Rewarding:
@@ -252,27 +320,7 @@ bool SquadInstanceService::dismiss(std::uint64_t party_id) {
         default:
             return false;
     }
-    // 移出玩家：按受理名册逐一移出（destroy 前置约束）。
-    for (const auto member : binding->members) {
-        instance->leave(apollo::game::core::PlayerId{member});
-    }
-    // 结算链按当前相位推进至终态（Finishing→Rewarding→Draining→Destroyed）。
-    const auto advanced = [&]() {
-        if (instance->state() == apollo::game::world::Instance::State::Finishing &&
-            !instance->settle())
-            return false;
-        if (instance->state() == apollo::game::world::Instance::State::Rewarding &&
-            !instance->drain())
-            return false;
-        if (instance->state() == apollo::game::world::Instance::State::Draining &&
-            !instance->destroy())
-            return false;
-        return instance->state() == apollo::game::world::Instance::State::Destroyed;
-    }();
-    if (!advanced) return false;
-    // 双回收（release 内触发 closing 钩子→销毁 Instance 与临时 Scene；
-    // 实体/AOI 随 Scene 释放），账面清除。
-    return release(binding->instance_id);
+    return evict_and_release(*binding);
 }
 
 LaunchError SquadInstanceService::validate(const LaunchRequest& request,

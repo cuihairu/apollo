@@ -74,6 +74,7 @@ struct GameplayProgress {
     std::uint64_t monsters_defeated = 0;
     std::uint64_t ticks_elapsed = 0;  // Instance 玩法时钟（Running 起）
     bool timed_out = false;           // 失败判定：超时
+    bool all_exited = false;          // 失败判定：Running 期全员退出
 };
 
 // 成员在线谓词：false = 不予准入。未设置则跳过在线校验（权威在线目录在
@@ -121,6 +122,24 @@ public:
     };
     EnterError enter(std::uint64_t party_id, std::uint64_t player_id);
     EnterError start_gameplay(std::uint64_t party_id, std::uint64_t requester_id);
+
+    // ---- 边界收尾（P2：无人进入/全员退出/掉线/解散/进程异常）----
+    // 成员退出（掉线同口径）：Running 期全员退出 = 失败判定（无人可续），
+    // 进入结算线（不发成功奖励）；退出后重进走 enter 准入窗口。
+    enum class LeaveError : std::uint32_t {
+        Ok = 0,
+        NoBinding,      // 小队无活动副本
+        NotLocal,       // 副本不在本 World
+        NotRoster,      // 非受理快照成员
+        NotInInstance,  // 名册成员但不在场
+    };
+    LeaveError leave(std::uint64_t party_id, std::uint64_t player_id);
+
+    // 策略收尾（无人进入悬挂 / 队伍解散 / 宿主停机排空）：取消线销毁——
+    // 任意前置结算相位（Create..Running）可调；移出名册 → cancel（不发
+    // 成功奖励）→ 终态链 → 双回收。已入结算或无绑定返回 false（结算期用
+    // dismiss）。
+    bool abort(std::uint64_t party_id);
 
     // ---- 刷怪与目标/失败判定（P2：驱动 Instance 进入结算阶段）----
     // 副本刷怪实体（目标判定的击杀对象）：最小类型，玩法内容随后续条目接入。
@@ -208,6 +227,7 @@ private:
         std::uint64_t spawned = 0;
         std::uint64_t defeated = 0;
         bool timed_out = false;
+        bool all_exited = false;  // Running 期全员退出（失败判定）
         std::vector<apollo::game::core::EntityId> monsters;  // 存活怪
     };
 
@@ -217,6 +237,11 @@ private:
     GameplayError resolve_running(std::uint64_t party_id,
                                   const ActiveSquadInstance** binding,
                                   apollo::game::world::Instance** instance);
+    // 失败线（取消）：Running 期无人可续——进入结算相位，不发成功奖励。
+    void fail_running(const ActiveSquadInstance& binding,
+                      apollo::game::world::Instance* instance);
+    // 收尾共用尾段：移出名册 → 终态链推进 → 双回收（closing 钩子在 release）。
+    bool evict_and_release(const ActiveSquadInstance& binding);
     // 选世界：本地有空位优先，否则按 world_id 升序取首个空位（确定性）。
     [[nodiscard]] std::optional<std::uint32_t> pick_world() const;
     void erase_binding(std::unordered_map<std::uint64_t, ActiveSquadInstance>::iterator it);

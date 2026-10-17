@@ -882,6 +882,188 @@ bool test_squad_late_input_refused_after_settlement() {
 }
 
 
+bool test_squad_nobody_entered_abort_policy() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    make_party(parties, 2, 200, 201, 202);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    int closing_calls = 0;
+    service.set_instance_closing([&](std::uint64_t) { ++closing_calls; });
+
+    // 无人进入（Create 态悬挂）：策略收尾 = abort，全量回收
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.abort(1), "abort reclaims never-entered instance");
+    TEST_ASSERT(closing_calls == 1, "closing hook fired");
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "nothing left behind");
+    TEST_ASSERT(service.used_capacity(1) == 0, "capacity returned");
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok,
+                "same party can relaunch");
+
+    // 部分进入（Waiting 悬挂）同样可 abort，玩家被移出
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "leader enters");
+    auto* instance = world.find_instance(service.find_by_party(1)->instance_id);
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Waiting,
+                "Waiting after partial entry");
+    TEST_ASSERT(service.abort(1), "abort from Waiting");
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "Waiting abort reclaims");
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::NoBinding,
+                "enter after abort is NoBinding");
+
+    // 玩法期 abort：取消线（不发成功奖励），结算面为空
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "relaunched");
+    instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 5;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.abort(1), "abort mid-gameplay");
+    TEST_ASSERT(!service.find_by_party(1) && service.gameplay(1) == std::nullopt,
+                "binding and gameplay cleared");
+    TEST_ASSERT(!service.settlement(1).has_value(),
+                "settlement cleared with binding");
+    TEST_ASSERT(exp_of(table, kLeader) == 0, "abort settles no rewards");
+    TEST_ASSERT(service.launch(basic_request(2, 200)).error == LaunchError::Ok,
+                "capacity freed for other squad");
+    TEST_ASSERT(service.abort(2), "fresh instance abortable");
+    // 无绑定 abort 与重复 abort 拒绝（收尾即释放绑定）
+    TEST_ASSERT(!service.abort(404), "abort without binding refused");
+    TEST_ASSERT(!service.abort(2), "second abort refused");
+    return true;
+}
+
+bool test_squad_all_exit_drives_failure_line() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 5;  // 不设超时，专测退出线
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal without timeout");
+
+    // 非名册退出拒绝
+    TEST_ASSERT(service.leave(1, kOutsider) ==
+                    SquadInstanceService::LeaveError::NotRoster,
+                "outsider leave refused");
+    TEST_ASSERT(service.leave(404, kLeader) ==
+                    SquadInstanceService::LeaveError::NoBinding,
+                "unknown party leave refused");
+
+    // 中途退出可再进（Running 准入窗口）
+    TEST_ASSERT(service.leave(1, kMemberB) == SquadInstanceService::LeaveError::Ok,
+                "member B leaves");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
+                "instance survives partial exit");
+    TEST_ASSERT(service.enter(1, kMemberB) == SquadInstanceService::EnterError::Ok,
+                "member B re-enters");
+
+    // 全员退出 → 失败判定（无人可续）：进入结算、不发奖励
+    TEST_ASSERT(service.leave(1, kMemberB) == SquadInstanceService::LeaveError::Ok,
+                "member B leaves again");
+    TEST_ASSERT(service.leave(1, kMemberC) == SquadInstanceService::LeaveError::Ok,
+                "member C leaves");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
+                "leader alone keeps it running");
+    TEST_ASSERT(service.leave(1, kLeader) == SquadInstanceService::LeaveError::Ok,
+                "last member leaves");
+    const auto progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->all_exited, "all-exit flagged");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "all-exit drives settlement entry");
+    TEST_ASSERT(service.settlement(1)->applied == 0, "no rewards on all-exit");
+    TEST_ASSERT(service.dismiss(1), "dismiss completes all-exit teardown");
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "reclaimed after all-exit");
+    return true;
+}
+
+bool test_squad_party_disband_aborts_instance() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    // 无绑定时解散：服务面无需动作
+    TEST_ASSERT(!service.abort(1), "abort without instance refused");
+
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 5;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+
+    // 队伍解散 → abort 收尾：副本销毁、成员解绑（MemberBusy 清除）
+    TEST_ASSERT(parties.disband(1, kLeader), "party disbanded");
+    TEST_ASSERT(service.abort(1), "instance aborted on disband");
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "disband teardown reclaims");
+    TEST_ASSERT(service.active_count() == 0, "binding erased");
+    // 成员可再组队开新副本（忙位已清）
+    auto* party2 = parties.create(2, kLeader);
+    party2->add_member(kMemberB);
+    party2->add_member(kMemberC);
+    TEST_ASSERT(service.launch(basic_request(2)).error == LaunchError::Ok,
+                "same members admitted in new party");
+    return true;
+}
+
+bool test_squad_process_recovery_policy() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    // 进程一：副本开跑并落账一条
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "credited in first process");
+    TEST_ASSERT(exp_of(table, kLeader) == 40, "exp persisted via anchor");
+    TEST_ASSERT(service.abort(1), "process one torn down");
+    TEST_ASSERT(service.active_count() == 0, "process one settled down");
+
+    // 进程二（重启 = 全新服务/World，副本临时态随进程消亡）：从零受理
+    SquadInstanceService restarted(parties, &world, 1);
+    restarted.register_world(1, 4);
+    restarted.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    TEST_ASSERT(restarted.active_count() == 0, "no phantom bindings after restart");
+    TEST_ASSERT(restarted.launch(basic_request(1)).error == LaunchError::Ok,
+                "fresh admission after restart");
+
+    // 恢复面：按持久化痕迹回填已落标记，重放不双记
+    restarted.restore_settlement(1, {kLeader});
+    TEST_ASSERT(restarted.credit_settlement(1, kLeader, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
+                "replay refused after restore");
+    TEST_ASSERT(exp_of(table, kLeader) == 40, "no double exp across restart");
+    return true;
+}
+
+
 bool test_squad_hooks_close_on_release() {
     PartyManager parties;
     World world;
@@ -950,6 +1132,10 @@ int main() {
          test_squad_dismiss_on_failure_line_and_guards},
         {"squad_late_input_refused_after_settlement",
          test_squad_late_input_refused_after_settlement},
+        {"squad_nobody_entered_abort_policy", test_squad_nobody_entered_abort_policy},
+        {"squad_all_exit_drives_failure_line", test_squad_all_exit_drives_failure_line},
+        {"squad_party_disband_aborts_instance", test_squad_party_disband_aborts_instance},
+        {"squad_process_recovery_policy", test_squad_process_recovery_policy},
         {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
     };
 
