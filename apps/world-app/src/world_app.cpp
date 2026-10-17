@@ -987,16 +987,30 @@ std::vector<apollo::game::session::MirrorEntry> WorldApp::collect_anchor_entries
     if (!anchors) {
         return sessions;
     }
+    // 报告条目 zone = 承载域（本 World 宿主域，同 FleetReporter zone 口径）
+    // 而非锚点 home_zone_id（原区服）：目录条目 zone 是死亡反查与迁移改指
+    // 的路由键——迁移后玩家由目标域承载，周期重报若按原区服进 intake 会
+    // 回卷 ④ 已改指条目（P3-5 迁移链实测修）。
+    const std::uint32_t hosting_zone =
+        config_.reportZoneId != 0 ? config_.reportZoneId : worldId_;
     sessions.reserve(anchors->anchor_count());
     for (const auto& anchor : anchors->snapshot()) {
         if (!anchor || anchor->player_id() == 0) {
+            continue;
+        }
+        // 冻结锚点离在册集（§9.2 ①）：Transferring = 停写交权中，不再是
+        // 本域活会话——周期重报不得再以本域 zone 上报（否则 intake 把 ④
+        // 已改指条目回卷源域，目录在两报告方之间来回翻转）。⑤ 未接线时
+        // 锚点停留 Transferring，即持续缺席重报——目标域独占报告权。
+        if (anchor->state() ==
+            apollo::game::session::AnchorState::Transferring) {
             continue;
         }
         apollo::game::session::MirrorEntry e;
         e.player_id = anchor->player_id();
         e.session_id = anchor->session_binding().session_id;
         e.gateway_id = anchor->session_binding().gateway_id;
-        e.zone_id = anchor->home_zone_id();
+        e.zone_id = hosting_zone;
         e.state = apollo::game::session::PlayerDirectory::EntryState::Online;
         e.assignment = anchor->world_assignment();
         sessions.push_back(e);
