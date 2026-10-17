@@ -1,11 +1,14 @@
-// 小队创建请求单测（P2：验证队伍/成员/人数/准入，选择有容量的 World，
-// 创建独立 Instance 与临时 Scene）。
+// 小队副本单测（P2：创建受理、成员进入与玩法启动、刷怪与目标/失败判定）。
 //
 // 覆盖：
 //   1. 正常路径：队长发起 → 本地 World 创建独立 Instance + 临时 Scene；
 //   2. 校验拒绝：队伍不存在 / 非队长 / 超人数 / 成员离线 / 成员已有副本；
 //   3. 容量裁决：本地满载转远端；无容量拒绝；释放后容量回收；
-//   4. 回收约束：仅终态 Instance 可释放，Scene 随 Instance 一并回收。
+//   4. 回收约束：仅终态 Instance 可释放，Scene 随 Instance 一并回收；
+//   5. 进入与启动：受理快照校验、首进建场、全员到齐队长启动 Running；
+//   6. 实体隔离：各副本 Scene 私有实体集与 AOI；
+//   7. 刷怪与目标：配额刷怪入 Scene、击杀上报达标 → Finishing；
+//   8. 失败判定：超时 → cancel 进入结算（不发成功奖励）、可释放回收。
 
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/social/party.hpp"
@@ -352,6 +355,219 @@ bool test_squad_instance_isolation_between_instances() {
     return true;
 }
 
+// 队 1 走完整启动流（launch → 三人进入 → 队长启动），返回 Running 实例。
+// launch_first=false 用于绑定已存在（受理校验另测）的用例。
+apollo::game::world::Instance* run_party_to_running(SquadInstanceService& service,
+                                                    World& world, bool launch_first = true) {
+    if (launch_first && service.launch(basic_request(1)).error != LaunchError::Ok)
+        return nullptr;
+    for (const auto member : std::vector<std::uint64_t>{kLeader, kMemberB, kMemberC}) {
+        if (service.enter(1, member) != SquadInstanceService::EnterError::Ok) return nullptr;
+    }
+    if (service.start_gameplay(1, kLeader) != SquadInstanceService::EnterError::Ok)
+        return nullptr;
+    const auto* binding = service.find_by_party(1);
+    if (!binding) return nullptr;
+    return world.find_instance(binding->instance_id);
+}
+
+bool test_squad_gameplay_goal_completion_drives_settlement() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    // 未启动不可设目标；启动后设目标，一副本一目标
+    squad_instance::GameplayGoal goal;
+    TEST_ASSERT(service.set_goal(404, goal) ==
+                    SquadInstanceService::GameplayError::NoBinding,
+                "goal without binding rejected");
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.set_goal(1, goal) ==
+                    SquadInstanceService::GameplayError::NotRunning,
+                "goal rejected before Running");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr &&
+                    instance->state() == apollo::game::world::Instance::State::Running,
+                "instance Running");
+    TEST_ASSERT(service.set_goal(1, goal) ==
+                    SquadInstanceService::GameplayError::InvalidGoal,
+                "zero quota rejected");
+    goal.monsters_to_defeat = 3;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set while Running");
+    TEST_ASSERT(service.set_goal(1, goal) ==
+                    SquadInstanceService::GameplayError::AlreadySet,
+                "goal set once per instance");
+
+    // 刷怪入副本私有 Scene；累计不得超出目标配额
+    const auto* binding = service.find_by_party(1);
+    auto* scene = world.find_scene(binding->scene_id);
+    TEST_ASSERT(scene != nullptr && scene->get_entity_count() == 0, "scene empty pre-waves");
+    TEST_ASSERT(service.spawn_wave(1, 2) == SquadInstanceService::GameplayError::Ok,
+                "first wave admitted");
+    TEST_ASSERT(scene->get_entity_count() == 2, "wave monsters live in instance scene");
+    TEST_ASSERT(service.spawn_wave(1, 2) ==
+                    SquadInstanceService::GameplayError::WaveTooLarge,
+                "wave capped by quota");
+    TEST_ASSERT(scene->get_entity_count() == 2, "rejected wave spawned nothing");
+    TEST_ASSERT(service.spawn_wave(1, 0) ==
+                    SquadInstanceService::GameplayError::InvalidRequest,
+                "empty wave rejected");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "final wave fills quota");
+
+    // 击杀上报：只认本副本怪物；达标即驱动结算（成功线 → Finishing）
+    TEST_ASSERT(service.report_monster_defeated(1, 424242) ==
+                    SquadInstanceService::GameplayError::UnknownMonster,
+                "unknown monster rejected");
+    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "kill 1");
+    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+                    SquadInstanceService::GameplayError::UnknownMonster,
+                "dead monster not reportable twice");
+    TEST_ASSERT(service.report_monster_defeated(1, 2) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "kill 2");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
+                "quota not yet met");
+    TEST_ASSERT(service.report_monster_defeated(1, 3) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "kill 3 meets quota");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "goal completion drives settlement entry");
+    TEST_ASSERT(scene->get_entity_count() == 0, "defeated monsters despawned");
+
+    // 进入结算后拒绝迟到玩法输入
+    TEST_ASSERT(service.report_monster_defeated(1, 4) ==
+                    SquadInstanceService::GameplayError::NotRunning,
+                "post-settlement kill rejected");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::NotRunning,
+                "post-settlement spawn rejected");
+    TEST_ASSERT(service.advance_tick(1) == SquadInstanceService::GameplayError::NotRunning,
+                "post-settlement tick rejected");
+
+    const auto progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->goal_set &&
+                    progress->monsters_defeated == 3 && progress->monsters_spawned == 3,
+                "progress reflects goal run");
+    TEST_ASSERT(!progress->timed_out, "no timeout flagged");
+    TEST_ASSERT(instance->settle(), "settlement advances to Rewarding");
+    return true;
+}
+
+bool test_squad_gameplay_timeout_drives_failure_settlement() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    auto* instance = run_party_to_running(service, world);
+    TEST_ASSERT(instance != nullptr, "running baseline");
+
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 3;
+    goal.timeout_ticks = 10;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal with timeout set");
+    TEST_ASSERT(service.spawn_wave(1, 3) == SquadInstanceService::GameplayError::Ok,
+                "wave spawned");
+
+    // 玩法时钟由 Instance tick 驱动；未到期限不判负
+    TEST_ASSERT(service.advance_tick(1, 5) == SquadInstanceService::GameplayError::Ok,
+                "ticks advance");
+    TEST_ASSERT(instance->tick_count() == 5, "instance gameplay clock advances");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
+                "within timeout");
+    TEST_ASSERT(!service.gameplay(1)->timed_out, "no timeout yet");
+
+    // 超时 → 失败判定：cancel 进入结算（不发成功奖励）
+    TEST_ASSERT(service.advance_tick(1, 5) == SquadInstanceService::GameplayError::Ok,
+                "timeout-crossing ticks accepted");
+    TEST_ASSERT(service.gameplay(1)->timed_out, "timeout flagged");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "failure drives settlement entry");
+    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+                    SquadInstanceService::GameplayError::NotRunning,
+                "late kill rejected after failure");
+    const auto progress = service.gameplay(1);
+    TEST_ASSERT(progress->monsters_defeated == 0 && progress->timed_out,
+                "no kills credited on failure");
+
+    // 失败收尾走完终态链并释放：Scene/Instance 回收、容量归还
+    for (const auto member : std::vector<std::uint64_t>{kLeader, kMemberB, kMemberC}) {
+        TEST_ASSERT(instance->leave(apollo::game::core::PlayerId{member}), "member leaves");
+    }
+    TEST_ASSERT(instance->settle() && instance->drain() && instance->destroy(),
+                "failure path reaches terminal state");
+    TEST_ASSERT(service.release(instance->id()), "released");
+    TEST_ASSERT(world.scene_count() == 0 && world.instance_count() == 0,
+                "scene and instance reclaimed");
+    TEST_ASSERT(service.used_capacity(1) == 0, "capacity returned");
+    TEST_ASSERT(!service.gameplay(1).has_value(), "progress cleared with binding");
+    return true;
+}
+
+bool test_squad_gameplay_guards_and_quotas() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+
+    // 无绑定 / 非玩法期一律拒绝
+    TEST_ASSERT(service.set_goal(404, {}) == SquadInstanceService::GameplayError::NoBinding,
+                "goal without binding rejected");
+    TEST_ASSERT(service.spawn_wave(404, 1) ==
+                    SquadInstanceService::GameplayError::NoBinding,
+                "spawn without binding rejected");
+    TEST_ASSERT(service.report_monster_defeated(404, 1) ==
+                    SquadInstanceService::GameplayError::NoBinding,
+                "report without binding rejected");
+    TEST_ASSERT(service.advance_tick(404) ==
+                    SquadInstanceService::GameplayError::NoBinding,
+                "tick without binding rejected");
+
+    // Waiting（全员已进未启动）仍非玩法期
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    for (const auto member : std::vector<std::uint64_t>{kLeader, kMemberB, kMemberC}) {
+        TEST_ASSERT(service.enter(1, member) == SquadInstanceService::EnterError::Ok,
+                    "roster enters");
+    }
+    const auto* binding = service.find_by_party(1);
+    auto* instance = world.find_instance(binding->instance_id);
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Waiting,
+                "Waiting pre-start");
+    TEST_ASSERT(service.set_goal(1, {}) == SquadInstanceService::GameplayError::NotRunning,
+                "goal rejected while Waiting");
+
+    // 目标未设先刷怪/上报：拒；tick 可走（玩法时钟与目标解耦）
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    SquadInstanceService::EnterError::Ok,
+                "started");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::NoGoal,
+                "spawn without goal rejected");
+    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+                    SquadInstanceService::GameplayError::NoGoal,
+                "report without goal rejected");
+    TEST_ASSERT(service.advance_tick(1, 3) == SquadInstanceService::GameplayError::Ok,
+                "clock runs without goal");
+    TEST_ASSERT(instance->tick_count() == 3, "ticks counted from start");
+
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 2;
+    goal.timeout_ticks = 100;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set after ticks");
+    TEST_ASSERT(service.gameplay(1)->ticks_elapsed == 3,
+                "progress clock mirrors instance clock");
+    return true;
+}
+
+
 bool test_squad_hooks_close_on_release() {
     PartyManager parties;
     World world;
@@ -403,6 +619,11 @@ int main() {
         {"squad_launch_temp_scene_fresh_per_instance", test_squad_launch_temp_scene_fresh_per_instance},
         {"squad_enter_and_start_gameplay", test_squad_enter_and_start_gameplay},
         {"squad_instance_isolation_between_instances", test_squad_instance_isolation_between_instances},
+        {"squad_gameplay_goal_completion_drives_settlement",
+         test_squad_gameplay_goal_completion_drives_settlement},
+        {"squad_gameplay_timeout_drives_failure_settlement",
+         test_squad_gameplay_timeout_drives_failure_settlement},
+        {"squad_gameplay_guards_and_quotas", test_squad_gameplay_guards_and_quotas},
         {"squad_hooks_close_on_release", test_squad_hooks_close_on_release},
     };
 

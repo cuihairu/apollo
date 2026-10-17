@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo/game/core/entity.hpp"
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene_descriptor.hpp"
 #include "apollo/game/world/world.hpp"
@@ -58,6 +59,21 @@ struct ActiveSquadInstance {
     std::vector<std::uint64_t> members;  // 受理时的队伍快照
 };
 
+// 刷怪与目标/失败判定参数（P2）：目标完成与超时失败驱动 Instance 进入结算。
+struct GameplayGoal {
+    std::uint64_t monsters_to_defeat = 0;  // 目标击杀配额（非 0）
+    std::uint64_t timeout_ticks = 0;       // 玩法超时 tick（0 = 不限）
+};
+
+struct GameplayProgress {
+    bool goal_set = false;
+    std::uint64_t monsters_to_defeat = 0;
+    std::uint64_t monsters_spawned = 0;
+    std::uint64_t monsters_defeated = 0;
+    std::uint64_t ticks_elapsed = 0;  // Instance 玩法时钟（Running 起）
+    bool timed_out = false;           // 失败判定：超时
+};
+
 // 成员在线谓词：false = 不予准入。未设置则跳过在线校验（权威在线目录在
 // Login 侧；宿主按自己的会话面装配）。
 using MemberOnlineFn = std::function<bool(std::uint64_t player_id)>;
@@ -104,6 +120,44 @@ public:
     EnterError enter(std::uint64_t party_id, std::uint64_t player_id);
     EnterError start_gameplay(std::uint64_t party_id, std::uint64_t requester_id);
 
+    // ---- 刷怪与目标/失败判定（P2：驱动 Instance 进入结算阶段）----
+    // 副本刷怪实体（目标判定的击杀对象）：最小类型，玩法内容随后续条目接入。
+    class MonsterEntity : public apollo::game::core::Entity {
+    public:
+        explicit MonsterEntity(apollo::game::core::EntityId id)
+            : apollo::game::core::Entity(id, "monster") {}
+    };
+
+    enum class GameplayError : std::uint32_t {
+        Ok = 0,
+        NoBinding,       // 小队无活动副本
+        NotLocal,        // 副本不在本 World
+        NotRunning,      // 副本未处于 Running 玩法期（含已入结算/终态）
+        InvalidRequest,  // 刷怪数量为 0
+        InvalidGoal,     // 目标击杀配额为 0
+        AlreadySet,      // 目标已设置（一副本一目标）
+        NoGoal,          // 目标未设置先刷怪/上报
+        WaveTooLarge,    // 累计刷怪超出目标配额
+        UnknownMonster,  // 击杀上报的实体不属于本副本
+    };
+
+    // 目标设置：仅 Running 玩法期、一副本一次。超时基线取设置时的
+    // Instance 玩法时钟。
+    GameplayError set_goal(std::uint64_t party_id, const GameplayGoal& goal);
+    // 刷怪：怪物实体入副本私有 Scene；累计不得超出目标配额。
+    GameplayError spawn_wave(std::uint64_t party_id, std::uint64_t count);
+    // 击杀上报：只认本副本存活怪物；击杀数达标即目标完成，
+    // Instance.finish() 进入结算阶段（成功线）。
+    GameplayError report_monster_defeated(std::uint64_t party_id,
+                                          std::uint64_t monster_entity_id);
+    // 玩法时钟推进（驱动 Instance tick）；跨过超时线即失败判定，
+    // Instance.cancel() 进入结算阶段（失败线，不发成功奖励）。
+    GameplayError advance_tick(std::uint64_t party_id, std::uint64_t ticks = 1,
+                               double delta_seconds = 0.0);
+    // 目标与进度查询；无绑定或非本地副本返回 nullopt。
+    [[nodiscard]] std::optional<GameplayProgress> gameplay(
+        std::uint64_t party_id) const;
+
     // ---- 生命周期钩子装配 ----
     void set_instance_started(InstanceStartedFn fn);
     void set_instance_closing(InstanceClosingFn fn);
@@ -121,8 +175,23 @@ public:
     [[nodiscard]] std::size_t used_capacity(std::uint32_t world_id) const noexcept;
 
 private:
+    // 玩法期记账（instance_id 维度，随绑定释放一并清除）。
+    struct GameplayState {
+        GameplayGoal goal{};
+        bool goal_set = false;
+        std::uint64_t goal_base_ticks = 0;  // 目标设置时的玩法时钟
+        std::uint64_t spawned = 0;
+        std::uint64_t defeated = 0;
+        bool timed_out = false;
+        std::vector<apollo::game::core::EntityId> monsters;  // 存活怪
+    };
+
     LaunchError validate(const LaunchRequest& request,
                          std::vector<std::uint64_t>& members) const;
+    // 玩法期通用守卫：绑定存在 → 本地 → Running。任一不满足即拒。
+    GameplayError resolve_running(std::uint64_t party_id,
+                                  const ActiveSquadInstance** binding,
+                                  apollo::game::world::Instance** instance);
     // 选世界：本地有空位优先，否则按 world_id 升序取首个空位（确定性）。
     [[nodiscard]] std::optional<std::uint32_t> pick_world() const;
     void erase_binding(std::unordered_map<std::uint64_t, ActiveSquadInstance>::iterator it);
@@ -144,8 +213,10 @@ private:
 
     std::unordered_map<std::uint64_t, ActiveSquadInstance> active_;  // instance_id → 绑定
     std::unordered_map<std::uint64_t, std::uint64_t> party_to_instance_;
+    std::unordered_map<std::uint64_t, GameplayState> gameplay_;  // instance_id → 玩法记账
     std::unordered_set<std::uint64_t> busy_members_;
     std::uint64_t name_seq_ = 0;
+    std::uint64_t monster_seq_ = 0;  // 副本怪实体 id 发号（Scene 私有，全局递增）
 };
 
 } // namespace squad_instance

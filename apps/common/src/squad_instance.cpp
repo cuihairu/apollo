@@ -76,6 +76,125 @@ SquadInstanceService::EnterError SquadInstanceService::start_gameplay(
     return EnterError::Ok;
 }
 
+SquadInstanceService::GameplayError SquadInstanceService::resolve_running(
+    std::uint64_t party_id, const ActiveSquadInstance** binding,
+    apollo::game::world::Instance** instance) {
+    *binding = find_by_party(party_id);
+    if (!*binding) return GameplayError::NoBinding;
+    if ((*binding)->world_id != local_world_id_ || !local_world_)
+        return GameplayError::NotLocal;
+    auto* inst = local_world_->find_instance((*binding)->instance_id);
+    if (!inst) return GameplayError::NoBinding;
+    // 目标、刷怪、击杀与超时判定只在 Running 玩法期受理；
+    // 结算期（Finishing 起）及终态一律拒绝迟到输入。
+    if (inst->state() != apollo::game::world::Instance::State::Running)
+        return GameplayError::NotRunning;
+    *instance = inst;
+    return GameplayError::Ok;
+}
+
+SquadInstanceService::GameplayError SquadInstanceService::set_goal(
+    std::uint64_t party_id, const GameplayGoal& goal) {
+    const ActiveSquadInstance* binding = nullptr;
+    apollo::game::world::Instance* instance = nullptr;
+    if (const auto resolved = resolve_running(party_id, &binding, &instance);
+        resolved != GameplayError::Ok) {
+        return resolved;
+    }
+    if (goal.monsters_to_defeat == 0) return GameplayError::InvalidGoal;
+    auto& state = gameplay_[binding->instance_id];
+    if (state.goal_set) return GameplayError::AlreadySet;
+    state.goal = goal;
+    state.goal_set = true;
+    state.goal_base_ticks = instance->tick_count();
+    return GameplayError::Ok;
+}
+
+SquadInstanceService::GameplayError SquadInstanceService::spawn_wave(
+    std::uint64_t party_id, std::uint64_t count) {
+    const ActiveSquadInstance* binding = nullptr;
+    apollo::game::world::Instance* instance = nullptr;
+    if (const auto resolved = resolve_running(party_id, &binding, &instance);
+        resolved != GameplayError::Ok) {
+        return resolved;
+    }
+    auto& state = gameplay_[binding->instance_id];
+    if (!state.goal_set) return GameplayError::NoGoal;
+    if (count == 0) return GameplayError::InvalidRequest;
+    // 配额封顶：副本内怪物总量不超出目标所需。
+    if (state.spawned + count > state.goal.monsters_to_defeat)
+        return GameplayError::WaveTooLarge;
+    auto* scene = local_world_->find_scene(binding->scene_id);
+    if (!scene) return GameplayError::NoBinding;
+    for (std::uint64_t i = 0; i < count; ++i) {
+        const auto id = apollo::game::core::EntityId{++monster_seq_};
+        scene->spawn_entity(std::make_shared<MonsterEntity>(id));
+        state.monsters.push_back(id);
+    }
+    state.spawned += count;
+    return GameplayError::Ok;
+}
+
+SquadInstanceService::GameplayError SquadInstanceService::report_monster_defeated(
+    std::uint64_t party_id, std::uint64_t monster_entity_id) {
+    const ActiveSquadInstance* binding = nullptr;
+    apollo::game::world::Instance* instance = nullptr;
+    if (const auto resolved = resolve_running(party_id, &binding, &instance);
+        resolved != GameplayError::Ok) {
+        return resolved;
+    }
+    auto& state = gameplay_[binding->instance_id];
+    if (!state.goal_set) return GameplayError::NoGoal;
+    const auto monster_id = apollo::game::core::EntityId{monster_entity_id};
+    const auto it = std::find(state.monsters.begin(), state.monsters.end(), monster_id);
+    if (it == state.monsters.end()) return GameplayError::UnknownMonster;
+    state.monsters.erase(it);
+    if (auto* scene = local_world_->find_scene(binding->scene_id))
+        scene->despawn_entity(monster_id);
+    ++state.defeated;
+    // 目标完成（成功线）：Instance 进入结算阶段。
+    if (state.defeated >= state.goal.monsters_to_defeat) instance->finish();
+    return GameplayError::Ok;
+}
+
+SquadInstanceService::GameplayError SquadInstanceService::advance_tick(
+    std::uint64_t party_id, std::uint64_t ticks, double delta_seconds) {
+    const ActiveSquadInstance* binding = nullptr;
+    apollo::game::world::Instance* instance = nullptr;
+    if (const auto resolved = resolve_running(party_id, &binding, &instance);
+        resolved != GameplayError::Ok) {
+        return resolved;
+    }
+    for (std::uint64_t i = 0; i < ticks; ++i) instance->tick(delta_seconds);
+    auto& state = gameplay_[binding->instance_id];
+    // 超时（失败线）：取消流程不发成功奖励，同样进入结算阶段。
+    if (state.goal_set && !state.timed_out && state.goal.timeout_ticks != 0 &&
+        instance->tick_count() - state.goal_base_ticks >= state.goal.timeout_ticks) {
+        state.timed_out = true;
+        instance->cancel();
+    }
+    return GameplayError::Ok;
+}
+
+std::optional<GameplayProgress> SquadInstanceService::gameplay(
+    std::uint64_t party_id) const {
+    const auto* binding = find_by_party(party_id);
+    if (!binding) return std::nullopt;
+    const auto it = gameplay_.find(binding->instance_id);
+    if (it == gameplay_.end()) return std::nullopt;
+    GameplayProgress progress;
+    progress.goal_set = it->second.goal_set;
+    progress.monsters_to_defeat = it->second.goal.monsters_to_defeat;
+    progress.monsters_spawned = it->second.spawned;
+    progress.monsters_defeated = it->second.defeated;
+    progress.timed_out = it->second.timed_out;
+    if (binding->world_id == local_world_id_ && local_world_) {
+        if (auto* instance = local_world_->find_instance(binding->instance_id))
+            progress.ticks_elapsed = instance->tick_count();
+    }
+    return progress;
+}
+
 LaunchError SquadInstanceService::validate(const LaunchRequest& request,
                                            std::vector<std::uint64_t>& members) const {
     if (request.map_id == 0) return LaunchError::InvalidRequest;
@@ -217,6 +336,7 @@ void SquadInstanceService::erase_binding(
         pit != party_to_instance_.end()) {
         party_to_instance_.erase(pit);
     }
+    gameplay_.erase(it->second.instance_id);
     for (const auto member : it->second.members) busy_members_.erase(member);
     auto wit = worlds_.find(it->second.world_id);
     if (wit != worlds_.end() && wit->second.used > 0) --wit->second.used;
