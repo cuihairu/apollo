@@ -172,14 +172,14 @@ bool test_squad_launch_capacity_and_recycle() {
     TEST_ASSERT(!service.release(binding->instance_id), "active instance not releasable");
 
     // 推进到终态后释放：Instance 与临时 Scene 一并回收，容量空位归还
-    auto* instance = world.find_instance(binding->instance_id);
+    const auto instance_id = binding->instance_id;  // release 即回收绑定，先拷贝
+    auto* instance = world.find_instance(instance_id);
     TEST_ASSERT(instance != nullptr, "instance resolvable");
     TEST_ASSERT(instance->cancel() && instance->settle() && instance->drain() &&
                     instance->destroy(),
                 "instance reaches terminal state");
-    TEST_ASSERT(service.release(binding->instance_id), "terminal instance released");
-    TEST_ASSERT(world.find_instance(binding->instance_id) == nullptr &&
-                    world.scene_count() == 0,
+    TEST_ASSERT(service.release(instance_id), "terminal instance released");
+    TEST_ASSERT(world.find_instance(instance_id) == nullptr && world.scene_count() == 0,
                 "instance and temp scene reclaimed");
     TEST_ASSERT(service.used_capacity(1) == 0, "capacity slot returned");
 
