@@ -12,6 +12,7 @@
 | [Player object model](./player-object-model.md) | Subsystem implementation note | Player identity, entities, and scene objects; Instance is the target match boundary |
 | [Attribute system and sync](./attribute-sync.md) | Subsystem implementation note | Attribute data and visibility/synchronization mechanisms |
 | [Session and online directory](./session-and-online-directory.md) | Subsystem implementation note | Online sessions and current instance routing |
+| [Cross-server scenes](./cross-server-scenes.md) | Reserved design; disabled | Server affiliation, shared-scene admission, authority transfer, settlement, and return |
 | [Login flow](./login-flow.md) | Subsystem design draft | Login, Gateway, and World login/routing boundaries |
 | [Clock and time](./clock-and-time.md) | Delivered | Wall clock/tick/frame budget semantics |
 

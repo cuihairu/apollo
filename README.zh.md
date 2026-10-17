@@ -35,7 +35,9 @@ Client ──► Login —— 账号认证与登录凭证
 
 一个 Instance 对应一场玩法实例；一个 World 进程可以承载多个 Instance。对局中，每名玩家只有一个权威运行时对象，由承载该副本的 World 管理。跨服玩法将该权威转交给目标 World 并更新路由，不在两个进程中同时运行玩家对象。
 
-## 适用场景 / Use Cases
+World 同时预留承载多个区服玩家共同参与的场景。玩家原区服归属与运行位置分开；跨服准入、权威交接、结算与返回均复用 World / Scene / Instance。当前为[设计预留](docs/design/cross-server-scenes.md)，尚未启用跨服部署。
+
+## 适用场景
 
 **适合**——玩法边界天然是副本或对局的游戏：
 
@@ -51,7 +53,7 @@ Client ──► Login —— 账号认证与登录凭证
 
 > MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由副本和对局组成的 MMO 玩法，但目标不是持久化无缝大世界 MMO。
 
-## 核心概念 / Core Concepts
+## 核心概念
 
 核心玩法概念（当前代码组件详见[概念指南](docs/guide/concepts.md)）：
 

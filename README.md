@@ -35,6 +35,8 @@ Client ──► Login — account authentication and login ticket
 
 Each instance is a gameplay instance; one World process may host multiple instances. During a match, each player has one authoritative runtime object on the World that owns the instance. Cross-server play transfers that authority to the destination World and updates routing; it does not keep two active copies of the player.
 
+World also reserves support for scenes shared by players from multiple game servers. Home-server affiliation stays separate from runtime placement; cross-server admission, authority transfer, settlement, and return use the same World/Scene/Instance model. This is a [reserved design](docs/en/design/cross-server-scenes.md), not an enabled deployment feature.
+
 ## Use Cases
 
 **A good fit** — games whose natural play boundary is an instance or match:
