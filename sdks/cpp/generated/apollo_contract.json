@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "255d01212abd617c633c24ea5b72db4a28858cf26e11abfc2c57753e84e13090",
-  "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
-  "internal_hash": "043f0f07b3228a48c340749d81387efaf289545439245b336dfcf8042cd85ded",
+  "schema_hash": "5c0a8e74cdaf40c00a247ffa152839d9d3f15ddb997a710c6564c4e2fbb9156d",
+  "client_hash": "82438de9a7ff583499456ff7fb71adcf5691dab1efddb47afef15b86a0b821e3",
+  "internal_hash": "0199a0e41c17b35cccd8c8398b62fe36a87b498095e68071c9ba43b631d61c16",
   "contract_version": 3,
   "aliases": [
     {
@@ -847,6 +847,186 @@
         }
       ],
       "desc": "队伍操作结果（四操作唯一应答面）"
+    },
+    {
+      "id": 28,
+      "name": "squad_launch",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "map_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "临时 Scene 地图资产 id（0 = 服务端默认）"
+        }
+      ],
+      "desc": "副本开启意图（仅队长；受理即创建独立 Instance 与临时 Scene）"
+    },
+    {
+      "id": 29,
+      "name": "squad_enter",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "副本进入意图（受理快照成员；首进驱动建场）"
+    },
+    {
+      "id": 30,
+      "name": "squad_start",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "玩法启动意图（仅队长；全员到齐后 Waiting→Running）"
+    },
+    {
+      "id": 31,
+      "name": "squad_kill",
+      "dir": "C2S",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "monster_entity_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "击杀上报（目标判定输入；只认本副本存活怪）"
+    },
+    {
+      "id": 32,
+      "name": "squad_result",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "op",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "1=launch 2=enter 3=start 4=kill"
+        },
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "0=成功；非 0 为驳回原因（errors.xml）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "launch 成功回带（0 = 无）"
+        },
+        {
+          "name": "world_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "launch 成功回带（副本落位 World；0 = 无）"
+        },
+        {
+          "name": "scene_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "launch 成功回带（0 = 无）"
+        }
+      ],
+      "desc": "副本操作结果（四操作唯一应答面）"
+    },
+    {
+      "id": 33,
+      "name": "squad_state",
+      "dir": "S2C",
+      "channel": "control",
+      "domain": "client",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "phase",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "Instance 八态当前值（Create=0..Destroyed=7）"
+        },
+        {
+          "name": "monsters_defeated",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "ticks",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "玩法时钟（Running 起累计）"
+        },
+        {
+          "name": "goal_set",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": ""
+        },
+        {
+          "name": "monsters",
+          "type": "int64[]",
+          "wire_type": "int64[]",
+          "desc": "存活怪实体号（击杀上报对象；空 = 无怪存活）"
+        }
+      ],
+      "desc": "副本状态下行（阶段与目标推进；真实下行证据面）"
     },
     {
       "id": 900,
@@ -2382,6 +2562,35 @@
       "desc": "写权交接回执（新 zone→manager；accepted = 新 epoch 已生效，此后不可撤销）"
     },
     {
+      "id": 939,
+      "name": "client_deliver",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标客户端会话"
+        },
+        {
+          "name": "gateway_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "回带网关（非零时网关校验身份；0 = 不校验）"
+        },
+        {
+          "name": "payload",
+          "type": "bytes",
+          "wire_type": "bytes",
+          "desc": "客户端 wire 全帧（MessageHeader + body）"
+        }
+      ],
+      "desc": "客户端帧下行（World→Gateway；网关按 session_id 投递）"
+    },
+    {
       "id": 940,
       "name": "rpc_request",
       "dir": "P2P",
@@ -2602,6 +2811,186 @@
         }
       ],
       "desc": "脚本调试 eval 回执（目标进程→admin；eval_id 关联）"
+    },
+    {
+      "id": 946,
+      "name": "party_create_intent",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "意图号（回执按此关联）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "源客户端会话（回执路由）"
+        }
+      ],
+      "desc": "建队意图（Zone→World 受理面；服务端分配 party_id）"
+    },
+    {
+      "id": 947,
+      "name": "party_join_intent",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "意图号（回执按此关联）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "源客户端会话（回执路由）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "入队意图（Zone→World 受理面；满员拒绝）"
+    },
+    {
+      "id": 948,
+      "name": "squad_launch_intent",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "意图号（回执按此关联）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "源客户端会话（回执路由）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "map_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "0 = 服务端默认"
+        }
+      ],
+      "desc": "副本开启意图（Zone→World 受理面；仅队长）"
+    },
+    {
+      "id": 949,
+      "name": "squad_enter_intent",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "意图号（回执按此关联）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "源客户端会话（回执路由）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "副本进入意图（Zone→World 受理面；受理快照成员）"
+    },
+    {
+      "id": 950,
+      "name": "squad_start_intent",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "意图号（回执按此关联）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "源客户端会话（回执路由）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "玩法启动意图（Zone→World 受理面；仅队长、全员到齐）"
+    },
+    {
+      "id": 951,
+      "name": "squad_kill_intent",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "意图号（回执按此关联）"
+        },
+        {
+          "name": "session_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "源客户端会话（回执路由）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "monster_entity_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        }
+      ],
+      "desc": "击杀上报意图（Zone→World 受理面；只认本副本存活怪）"
     }
   ],
   "entities": [
@@ -2823,6 +3212,96 @@
       "code": 1004,
       "name": "schema_mismatch",
       "desc": "契约 hash 不匹配（sdk-contract §6 握手）"
+    },
+    {
+      "code": 1100,
+      "name": "squad_bad_request",
+      "desc": "请求字段不合法（map_id 为 0、刷怪数量为 0 等）"
+    },
+    {
+      "code": 1101,
+      "name": "squad_party_not_found",
+      "desc": "队伍不存在"
+    },
+    {
+      "code": 1102,
+      "name": "squad_not_leader",
+      "desc": "仅队长可执行（建副本/启动玩法）"
+    },
+    {
+      "code": 1103,
+      "name": "squad_party_too_large",
+      "desc": "队伍人数超出副本准入上限"
+    },
+    {
+      "code": 1104,
+      "name": "squad_member_offline",
+      "desc": "有队伍成员不在线，不予准入"
+    },
+    {
+      "code": 1105,
+      "name": "squad_member_busy",
+      "desc": "有成员已绑定其他活动副本"
+    },
+    {
+      "code": 1106,
+      "name": "squad_no_world_capacity",
+      "desc": "所有 World 副本容量已满"
+    },
+    {
+      "code": 1107,
+      "name": "squad_spawn_rejected",
+      "desc": "副本创建被拒（本地失败或目标 World 拒绝）"
+    },
+    {
+      "code": 1108,
+      "name": "squad_no_binding",
+      "desc": "小队当前无活动副本"
+    },
+    {
+      "code": 1109,
+      "name": "squad_not_roster",
+      "desc": "非副本受理名册成员"
+    },
+    {
+      "code": 1110,
+      "name": "squad_state_rejected",
+      "desc": "副本状态不允许该操作（含结算期迟到进入）"
+    },
+    {
+      "code": 1111,
+      "name": "squad_duplicate_enter",
+      "desc": "已进入本副本，勿重复进入"
+    },
+    {
+      "code": 1112,
+      "name": "squad_not_all_entered",
+      "desc": "尚有成员未进入，无法启动玩法"
+    },
+    {
+      "code": 1113,
+      "name": "squad_goal_conflict",
+      "desc": "目标已设置或配额不合法（一副本一目标）"
+    },
+    {
+      "code": 1114,
+      "name": "squad_not_running",
+      "desc": "副本未处于玩法期，拒绝玩法输入"
+    },
+    {
+      "code": 1115,
+      "name": "squad_wave_too_large",
+      "desc": "累计刷怪超出目标配额"
+    },
+    {
+      "code": 1116,
+      "name": "squad_unknown_monster",
+      "desc": "击杀上报的怪物不属于本副本"
+    },
+    {
+      "code": 1117,
+      "name": "squad_not_in_instance",
+      "desc": "名册成员但当前不在副本内"
     },
     {
       "code": 2001,

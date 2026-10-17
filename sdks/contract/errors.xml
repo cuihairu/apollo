@@ -9,4 +9,25 @@
   <error code="2001" name="internal" desc="内部错误"/>
   <error code="2002" name="db_busy" desc="存储层忙"/>
   <error code="2101" name="cell_backpressure" desc="cell 受理队列顶格拒收（ADR-015 两级水位，cap 满回错误包）"/>
+
+  <!-- 小队副本受理面（P2 真实链路；随 squad_result/squad_state 下行）。
+       与 SquadInstanceService 的 Launch/Enter/Leave/GameplayError 一一对应。 -->
+  <error code="1100" name="squad_bad_request" desc="请求字段不合法（map_id 为 0、刷怪数量为 0 等）"/>
+  <error code="1101" name="squad_party_not_found" desc="队伍不存在"/>
+  <error code="1102" name="squad_not_leader" desc="仅队长可执行（建副本/启动玩法）"/>
+  <error code="1103" name="squad_party_too_large" desc="队伍人数超出副本准入上限"/>
+  <error code="1104" name="squad_member_offline" desc="有队伍成员不在线，不予准入"/>
+  <error code="1105" name="squad_member_busy" desc="有成员已绑定其他活动副本"/>
+  <error code="1106" name="squad_no_world_capacity" desc="所有 World 副本容量已满"/>
+  <error code="1107" name="squad_spawn_rejected" desc="副本创建被拒（本地失败或目标 World 拒绝）"/>
+  <error code="1108" name="squad_no_binding" desc="小队当前无活动副本"/>
+  <error code="1109" name="squad_not_roster" desc="非副本受理名册成员"/>
+  <error code="1110" name="squad_state_rejected" desc="副本状态不允许该操作（含结算期迟到进入）"/>
+  <error code="1111" name="squad_duplicate_enter" desc="已进入本副本，勿重复进入"/>
+  <error code="1112" name="squad_not_all_entered" desc="尚有成员未进入，无法启动玩法"/>
+  <error code="1113" name="squad_goal_conflict" desc="目标已设置或配额不合法（一副本一目标）"/>
+  <error code="1114" name="squad_not_running" desc="副本未处于玩法期，拒绝玩法输入"/>
+  <error code="1115" name="squad_wave_too_large" desc="累计刷怪超出目标配额"/>
+  <error code="1116" name="squad_unknown_monster" desc="击杀上报的怪物不属于本副本"/>
+  <error code="1117" name="squad_not_in_instance" desc="名册成员但当前不在副本内"/>
 </errors>

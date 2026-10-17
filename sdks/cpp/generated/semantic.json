@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "0a8705e60c9487941da4b0f1333f7dc5056d5a5c66f3eaf80d5385da3af56194",
+  "client_hash": "82438de9a7ff583499456ff7fb71adcf5691dab1efddb47afef15b86a0b821e3",
   "messages": [
     {
       "id": 10,
@@ -322,6 +322,136 @@
           "type": "int64"
         }
       ]
+    },
+    {
+      "id": 28,
+      "name": "squad_launch",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        },
+        {
+          "name": "map_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "name": "squad_enter",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "name": "squad_start",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "name": "squad_kill",
+      "dir": "C2S",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        },
+        {
+          "name": "monster_entity_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "name": "squad_result",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "op",
+          "type": "int32"
+        },
+        {
+          "name": "code",
+          "type": "int32"
+        },
+        {
+          "name": "party_id",
+          "type": "int64"
+        },
+        {
+          "name": "instance_id",
+          "type": "int64"
+        },
+        {
+          "name": "world_id",
+          "type": "int32"
+        },
+        {
+          "name": "scene_id",
+          "type": "int64"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "squad_state",
+      "dir": "S2C",
+      "channel": "control",
+      "binding": "native",
+      "fields": [
+        {
+          "name": "party_id",
+          "type": "int64"
+        },
+        {
+          "name": "instance_id",
+          "type": "int64"
+        },
+        {
+          "name": "phase",
+          "type": "int32"
+        },
+        {
+          "name": "monsters_defeated",
+          "type": "int64"
+        },
+        {
+          "name": "ticks",
+          "type": "int64"
+        },
+        {
+          "name": "goal_set",
+          "type": "bool"
+        },
+        {
+          "name": "monsters",
+          "type": "int64[]"
+        }
+      ]
     }
   ],
   "predict": [
@@ -385,6 +515,96 @@
       "code": 1004,
       "name": "schema_mismatch",
       "desc": "契约 hash 不匹配（sdk-contract §6 握手）"
+    },
+    {
+      "code": 1100,
+      "name": "squad_bad_request",
+      "desc": "请求字段不合法（map_id 为 0、刷怪数量为 0 等）"
+    },
+    {
+      "code": 1101,
+      "name": "squad_party_not_found",
+      "desc": "队伍不存在"
+    },
+    {
+      "code": 1102,
+      "name": "squad_not_leader",
+      "desc": "仅队长可执行（建副本/启动玩法）"
+    },
+    {
+      "code": 1103,
+      "name": "squad_party_too_large",
+      "desc": "队伍人数超出副本准入上限"
+    },
+    {
+      "code": 1104,
+      "name": "squad_member_offline",
+      "desc": "有队伍成员不在线，不予准入"
+    },
+    {
+      "code": 1105,
+      "name": "squad_member_busy",
+      "desc": "有成员已绑定其他活动副本"
+    },
+    {
+      "code": 1106,
+      "name": "squad_no_world_capacity",
+      "desc": "所有 World 副本容量已满"
+    },
+    {
+      "code": 1107,
+      "name": "squad_spawn_rejected",
+      "desc": "副本创建被拒（本地失败或目标 World 拒绝）"
+    },
+    {
+      "code": 1108,
+      "name": "squad_no_binding",
+      "desc": "小队当前无活动副本"
+    },
+    {
+      "code": 1109,
+      "name": "squad_not_roster",
+      "desc": "非副本受理名册成员"
+    },
+    {
+      "code": 1110,
+      "name": "squad_state_rejected",
+      "desc": "副本状态不允许该操作（含结算期迟到进入）"
+    },
+    {
+      "code": 1111,
+      "name": "squad_duplicate_enter",
+      "desc": "已进入本副本，勿重复进入"
+    },
+    {
+      "code": 1112,
+      "name": "squad_not_all_entered",
+      "desc": "尚有成员未进入，无法启动玩法"
+    },
+    {
+      "code": 1113,
+      "name": "squad_goal_conflict",
+      "desc": "目标已设置或配额不合法（一副本一目标）"
+    },
+    {
+      "code": 1114,
+      "name": "squad_not_running",
+      "desc": "副本未处于玩法期，拒绝玩法输入"
+    },
+    {
+      "code": 1115,
+      "name": "squad_wave_too_large",
+      "desc": "累计刷怪超出目标配额"
+    },
+    {
+      "code": 1116,
+      "name": "squad_unknown_monster",
+      "desc": "击杀上报的怪物不属于本副本"
+    },
+    {
+      "code": 1117,
+      "name": "squad_not_in_instance",
+      "desc": "名册成员但当前不在副本内"
     },
     {
       "code": 2001,

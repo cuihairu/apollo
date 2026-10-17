@@ -424,6 +424,50 @@
     <field name="error_message" type="string" desc="错误原文（限流/语法/运行错；ok=1 时为空）"/>
   </msg>
 
+  <!-- 客户端帧下行（P2 真实下行）：World 业务帧回网关的唯一通道；payload =
+       客户端 wire 全帧（MessageHeader + body），网关按 session_id 投递，
+       gateway_id 非零时校验本网关身份再投（多网关防串投）。 -->
+  <msg id="939" name="client_deliver" dir="P2P" channel="events" domain="internal" desc="客户端帧下行（World→Gateway；网关按 session_id 投递）">
+    <field name="session_id" type="int64" desc="目标客户端会话"/>
+    <field name="gateway_id" type="int32" desc="回带网关（非零时网关校验身份；0 = 不校验）"/>
+    <field name="payload" type="bytes" desc="客户端 wire 全帧（MessageHeader + body）"/>
+  </msg>
+
+  <!-- Squad/Party 意图族（P2 小队副本真实上行；同 cell 意图族头两字段：
+       request_id（回执关联）+ session_id（源会话）。受理由 WorldApp
+       gameThread 意图消费面（ADR-015(a)）。 -->
+  <msg id="946" name="party_create_intent" dir="P2P" channel="events" domain="internal" desc="建队意图（Zone→World 受理面；服务端分配 party_id）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+  </msg>
+  <msg id="947" name="party_join_intent" dir="P2P" channel="events" domain="internal" desc="入队意图（Zone→World 受理面；满员拒绝）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="948" name="squad_launch_intent" dir="P2P" channel="events" domain="internal" desc="副本开启意图（Zone→World 受理面；仅队长）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="party_id" type="int64"/>
+    <field name="map_id" type="int64" desc="0 = 服务端默认"/>
+  </msg>
+  <msg id="949" name="squad_enter_intent" dir="P2P" channel="events" domain="internal" desc="副本进入意图（Zone→World 受理面；受理快照成员）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="950" name="squad_start_intent" dir="P2P" channel="events" domain="internal" desc="玩法启动意图（Zone→World 受理面；仅队长、全员到齐）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="951" name="squad_kill_intent" dir="P2P" channel="events" domain="internal" desc="击杀上报意图（Zone→World 受理面；只认本副本存活怪）">
+    <field name="request_id" type="int64" desc="意图号（回执按此关联）"/>
+    <field name="session_id" type="int64" desc="源客户端会话（回执路由）"/>
+    <field name="party_id" type="int64"/>
+    <field name="monster_entity_id" type="int64"/>
+  </msg>
+
   <!-- Guild/Party 族（P2-4：社交面归 Anchor 长期态，improvement-plan P2-4 消息面）。
        C2S 意图 only（服务端定夺，docs/05 §6.4）——操作码经唯一 S2C 结果回带
        （op：1=create 2=disband 3=join 4=leave）；两族各一条 result 收口，
@@ -460,5 +504,42 @@
     <field name="op" type="int32" desc="1=create 2=disband 3=join 4=leave"/>
     <field name="code" type="int32" desc="0=成功；非 0 为驳回原因（errors.xml）"/>
     <field name="party_id" type="int64" desc="操作关联队伍（create 成功=新 id）"/>
+  </msg>
+
+  <!-- Squad/Instance 族（P2 小队副本：受理→进入→玩法→结算，链路见 todo P2）。
+       承载 = 客户端 native 帧族（同 CELL/COMBAT：wire id 见 modules/protocol
+       messages.hpp MessageType），本表记录语义与字段面；上行经 946-951
+       意图族入 World 受理队列，下行经 939 client_deliver 回网关。op 语义：
+       1=launch 2=enter 3=start 4=kill。 -->
+  <msg id="28" name="squad_launch" dir="C2S" channel="control" domain="client" desc="副本开启意图（仅队长；受理即创建独立 Instance 与临时 Scene）">
+    <field name="party_id" type="int64"/>
+    <field name="map_id" type="int64" desc="临时 Scene 地图资产 id（0 = 服务端默认）"/>
+  </msg>
+  <msg id="29" name="squad_enter" dir="C2S" channel="control" domain="client" desc="副本进入意图（受理快照成员；首进驱动建场）">
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="30" name="squad_start" dir="C2S" channel="control" domain="client" desc="玩法启动意图（仅队长；全员到齐后 Waiting→Running）">
+    <field name="party_id" type="int64"/>
+  </msg>
+  <msg id="31" name="squad_kill" dir="C2S" channel="control" domain="client" desc="击杀上报（目标判定输入；只认本副本存活怪）">
+    <field name="party_id" type="int64"/>
+    <field name="monster_entity_id" type="int64"/>
+  </msg>
+  <msg id="32" name="squad_result" dir="S2C" channel="control" domain="client" desc="副本操作结果（四操作唯一应答面）">
+    <field name="op" type="int32" desc="1=launch 2=enter 3=start 4=kill"/>
+    <field name="code" type="int32" desc="0=成功；非 0 为驳回原因（errors.xml）"/>
+    <field name="party_id" type="int64"/>
+    <field name="instance_id" type="int64" desc="launch 成功回带（0 = 无）"/>
+    <field name="world_id" type="int32" desc="launch 成功回带（副本落位 World；0 = 无）"/>
+    <field name="scene_id" type="int64" desc="launch 成功回带（0 = 无）"/>
+  </msg>
+  <msg id="33" name="squad_state" dir="S2C" channel="control" domain="client" desc="副本状态下行（阶段与目标推进；真实下行证据面）">
+    <field name="party_id" type="int64"/>
+    <field name="instance_id" type="int64"/>
+    <field name="phase" type="int32" desc="Instance 八态当前值（Create=0..Destroyed=7）"/>
+    <field name="monsters_defeated" type="int64"/>
+    <field name="ticks" type="int64" desc="玩法时钟（Running 起累计）"/>
+    <field name="goal_set" type="bool"/>
+    <field name="monsters" type="int64[]" desc="存活怪实体号（击杀上报对象；空 = 无怪存活）"/>
   </msg>
 </messages>
