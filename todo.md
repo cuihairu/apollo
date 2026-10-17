@@ -42,7 +42,7 @@
 - [x] 明确跨服场景设计预留：区服归属与 World 运行位置分开，复用 Scene/Instance，定义准入、单权威交接、结算与返回规则；暂不启用跨服部署。
 - [ ] 跨服需求启用时，扩展契约中的原区服、World 进程代次、玩家权威代次、准入凭证与返回位置；区服身份不得直接复用 home_zone_id。
 - [ ] 跨服需求启用时，接通区服分组、跨服 World 容量分配、两区服同场景准入、幂等结算和返回原区服；覆盖原 World 不可用、安全回退、掉线及提交结果不明的恢复。
-- [ ] 复用同进程 SceneTransfer；分别验证跨 World 的源端冻结、导出、目标确认、路由切换、源端清理和失败恢复。
+- [x] 复用同进程 SceneTransfer；分别验证跨 World 的源端冻结、导出、目标确认、路由切换、源端清理和失败恢复。（b358cd90/f51baad8：真实进程迁移链验收 test_migration_chain——真 LoginServer（目录 owner + 942 受理面）+ 两真 WorldApp（源 zone 2 / 目标 zone 5，真 PlayerStore M1 面 933/935/936/937 经 StoreDial 真拨）：失败恢复 A 源不可达干净拒绝（目录条目逐字段同迁移前）、失败 B 目标不可达冻结已生效源停留 Transferring 且目录不改指、主线 ①→④ 冻结/导出/接权/改指+代次推进（目标锚 Online、原区服保留、会话双锚恢复、落盘档案字段与源一致、SessionMoved+④ 立即推达镜像 wire）；b358cd90 报告两道防回卷——报告条目 zone=承载域（非原区服 home zone，迁移改指不被周期重报回卷）+ 源冻结锚点（Transferring）离在册集不再上报（否则目录在两报告方间来回翻转，测试构造序使采样可判，去过滤确定失败）；源端清理=⑤ 停留 Transferring 如实边界（§9.9-2 gateway 缓冲未接线，无 unfreeze 面）；d3a5e9c1 drill_migration re-home 版（login-app 编排面 + 两 world-app，fleetctl 942 驱动，镜像观察端 APD2 wire 断言 + 存档 sha256 恒等 + 30s 周期快照回卷断言 + 源重报 sessions=0 冻结离册）实测全过（freeze 44ms/handoff 130ms/CLI 0.195s）；门禁 build-examples/build-off 双树 80/80、san 树 79/79 全绿。）
 - [ ] 用迁移标识、权威代次和业务幂等拒绝重复接管、迟到输入及重复结算。
 - [ ] 完成跨 Gateway 重连后的会话恢复，明确重复登录、旧连接失效和路由持久性。
 
