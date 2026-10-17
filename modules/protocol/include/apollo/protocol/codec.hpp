@@ -84,6 +84,15 @@ public:
     static std::vector<uint8_t> encodeBody(const PlayerAssignWorldResponse& msg);
     static std::vector<uint8_t> encodeBody(const PlayerResolveRouteRequest& msg);
     static std::vector<uint8_t> encodeBody(const PlayerResolveRouteResponse& msg);
+    static std::vector<uint8_t> encodeBody(const PartyCreateRequest& msg);
+    static std::vector<uint8_t> encodeBody(const PartyJoinRequest& msg);
+    static std::vector<uint8_t> encodeBody(const SquadLaunch& msg);
+    static std::vector<uint8_t> encodeBody(const SquadEnter& msg);
+    static std::vector<uint8_t> encodeBody(const SquadStart& msg);
+    static std::vector<uint8_t> encodeBody(const SquadKill& msg);
+    static std::vector<uint8_t> encodeBody(const PartyResult& msg);
+    static std::vector<uint8_t> encodeBody(const SquadResult& msg);
+    static std::vector<uint8_t> encodeBody(const SquadState& msg);
 
     //==========================================================================
     // 解码
@@ -153,6 +162,14 @@ public:
     static void decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorldResponse& msg);
     static void decodeBody(const std::vector<uint8_t>& data, PlayerResolveRouteRequest& msg);
     static void decodeBody(const std::vector<uint8_t>& data, PlayerResolveRouteResponse& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PartyJoinRequest& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, SquadLaunch& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, SquadEnter& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, SquadStart& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, SquadKill& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, PartyResult& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, SquadResult& msg);
+    static void decodeBody(const std::vector<uint8_t>& data, SquadState& msg);
 
     //==========================================================================
     // 辅助

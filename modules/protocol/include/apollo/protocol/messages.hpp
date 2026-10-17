@@ -61,6 +61,19 @@ enum class MessageType : uint16_t {
     PLAYER_RESOLVE_ROUTE_REQUEST = 0x0066,
     PLAYER_RESOLVE_ROUTE_RESPONSE = 0x0067,
 
+    // 队伍与小队副本（P2 真实链路；契约面 ids 23-33）。
+    // C2S 上行：Gateway 按 World 转发；S2C 下行：World 经契约 939
+    // client_deliver 回网关按 sessionId 投递。sessionId 走帧头。
+    PARTY_CREATE_REQUEST  = 0x0070,
+    PARTY_JOIN_REQUEST    = 0x0071,
+    SQUAD_LAUNCH          = 0x0072,
+    SQUAD_ENTER           = 0x0073,
+    SQUAD_START           = 0x0074,
+    SQUAD_KILL            = 0x0075,
+    PARTY_RESULT          = 0x0076,
+    SQUAD_RESULT          = 0x0077,
+    SQUAD_STATE           = 0x0078,
+
     // 系统相关
     PING                    = 0x1000,
     PONG                    = 0x1001,
@@ -408,6 +421,90 @@ struct ChatMessage {
 };
 
 //==============================================================================
+// 队伍与小队副本消息（P2 真实链路；二进制 body，同 CELL/COMBAT 约定）
+//==============================================================================
+
+// 副本操作应答 op（squad_result / party_result 共用取值约定）
+enum class SquadOp : int32_t {
+    PARTY_CREATE = 1,
+    PARTY_DISBAND = 2,
+    PARTY_JOIN = 3,
+    PARTY_LEAVE = 4,
+    SQUAD_LAUNCH = 5,
+    SQUAD_ENTER = 6,
+    SQUAD_START = 7,
+    SQUAD_KILL = 8,
+};
+
+struct PartyCreateRequest {
+    static constexpr MessageType TYPE = MessageType::PARTY_CREATE_REQUEST;
+};
+
+struct PartyJoinRequest {
+    EntityID partyId;
+
+    static constexpr MessageType TYPE = MessageType::PARTY_JOIN_REQUEST;
+};
+
+struct SquadLaunch {
+    EntityID partyId;
+    EntityID mapId;  // 0 = 服务端默认
+
+    static constexpr MessageType TYPE = MessageType::SQUAD_LAUNCH;
+};
+
+struct SquadEnter {
+    EntityID partyId;
+
+    static constexpr MessageType TYPE = MessageType::SQUAD_ENTER;
+};
+
+struct SquadStart {
+    EntityID partyId;
+
+    static constexpr MessageType TYPE = MessageType::SQUAD_START;
+};
+
+struct SquadKill {
+    EntityID partyId;
+    EntityID monsterEntityId;
+
+    static constexpr MessageType TYPE = MessageType::SQUAD_KILL;
+};
+
+struct PartyResult {
+    int32_t op;      // SquadOp
+    int32_t code;    // 0=成功；非 0 为 errors.xml 客户端错误码
+    EntityID partyId;
+
+    static constexpr MessageType TYPE = MessageType::PARTY_RESULT;
+};
+
+struct SquadResult {
+    int32_t op;      // SquadOp
+    int32_t code;    // 0=成功；非 0 为 errors.xml 客户端错误码
+    EntityID partyId;
+    EntityID instanceId;
+    uint32_t worldId;
+    EntityID sceneId;
+
+    static constexpr MessageType TYPE = MessageType::SQUAD_RESULT;
+};
+
+// 副本状态下行（状态同步面；结算/销毁后 partyId 保留作终态回执）
+struct SquadState {
+    EntityID partyId;
+    EntityID instanceId;
+    int32_t phase;               // Instance 八态 0..7（Create..Destroyed）
+    EntityID monstersDefeated;
+    EntityID ticks;              // 玩法时钟
+    int32_t goalSet;             // 0/1
+    std::vector<EntityID> monsters;  // 存活怪实体号（击杀上报对象）
+
+    static constexpr MessageType TYPE = MessageType::SQUAD_STATE;
+};
+
+//==============================================================================
 // 系统消息
 //==============================================================================
 
@@ -472,6 +569,15 @@ inline const char* toString(MessageType type) {
         case MessageType::PLAYER_ASSIGN_WORLD_RESPONSE: return "PLAYER_ASSIGN_WORLD_RESPONSE";
         case MessageType::PLAYER_RESOLVE_ROUTE_REQUEST: return "PLAYER_RESOLVE_ROUTE_REQUEST";
         case MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE: return "PLAYER_RESOLVE_ROUTE_RESPONSE";
+        case MessageType::PARTY_CREATE_REQUEST: return "PARTY_CREATE_REQUEST";
+        case MessageType::PARTY_JOIN_REQUEST: return "PARTY_JOIN_REQUEST";
+        case MessageType::SQUAD_LAUNCH: return "SQUAD_LAUNCH";
+        case MessageType::SQUAD_ENTER: return "SQUAD_ENTER";
+        case MessageType::SQUAD_START: return "SQUAD_START";
+        case MessageType::SQUAD_KILL: return "SQUAD_KILL";
+        case MessageType::PARTY_RESULT: return "PARTY_RESULT";
+        case MessageType::SQUAD_RESULT: return "SQUAD_RESULT";
+        case MessageType::SQUAD_STATE: return "SQUAD_STATE";
         default: return "UNKNOWN";
     }
 }

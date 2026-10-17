@@ -556,5 +556,151 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerResolveRou
     msg.errorMessage = j.value("errorMessage", "");
 }
 
+//==============================================================================
+// 队伍与小队副本（P2 真实链路；二进制 body，同 CELL/COMBAT 约定）
+//==============================================================================
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PartyCreateRequest& /*msg*/) {
+    return {};
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PartyJoinRequest& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID));
+    std::memcpy(result.data(), &msg.partyId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PartyJoinRequest& msg) {
+    if (data.size() < sizeof(EntityID)) throw std::runtime_error("body truncated");
+    std::memcpy(&msg.partyId, data.data(), sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const SquadLaunch& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID) * 2);
+    std::memcpy(result.data(), &msg.partyId, sizeof(EntityID));
+    std::memcpy(result.data() + sizeof(EntityID), &msg.mapId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, SquadLaunch& msg) {
+    if (data.size() < sizeof(EntityID) * 2) throw std::runtime_error("body truncated");
+    std::memcpy(&msg.partyId, data.data(), sizeof(EntityID));
+    std::memcpy(&msg.mapId, data.data() + sizeof(EntityID), sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const SquadEnter& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID));
+    std::memcpy(result.data(), &msg.partyId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, SquadEnter& msg) {
+    if (data.size() < sizeof(EntityID)) throw std::runtime_error("body truncated");
+    std::memcpy(&msg.partyId, data.data(), sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const SquadStart& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID));
+    std::memcpy(result.data(), &msg.partyId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, SquadStart& msg) {
+    if (data.size() < sizeof(EntityID)) throw std::runtime_error("body truncated");
+    std::memcpy(&msg.partyId, data.data(), sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const SquadKill& msg) {
+    std::vector<uint8_t> result(sizeof(EntityID) * 2);
+    std::memcpy(result.data(), &msg.partyId, sizeof(EntityID));
+    std::memcpy(result.data() + sizeof(EntityID), &msg.monsterEntityId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, SquadKill& msg) {
+    if (data.size() < sizeof(EntityID) * 2) throw std::runtime_error("body truncated");
+    std::memcpy(&msg.partyId, data.data(), sizeof(EntityID));
+    std::memcpy(&msg.monsterEntityId, data.data() + sizeof(EntityID), sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const PartyResult& msg) {
+    std::vector<uint8_t> result(sizeof(int32_t) * 2 + sizeof(EntityID));
+    size_t offset = 0;
+    std::memcpy(result.data() + offset, &msg.op, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(result.data() + offset, &msg.code, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(result.data() + offset, &msg.partyId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PartyResult& msg) {
+    if (data.size() < sizeof(int32_t) * 2 + sizeof(EntityID)) throw std::runtime_error("body truncated");
+    size_t offset = 0;
+    std::memcpy(&msg.op, data.data() + offset, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(&msg.code, data.data() + offset, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(&msg.partyId, data.data() + offset, sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const SquadResult& msg) {
+    std::vector<uint8_t> result(sizeof(int32_t) * 2 + sizeof(EntityID) * 3 + sizeof(uint32_t));
+    size_t offset = 0;
+    std::memcpy(result.data() + offset, &msg.op, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(result.data() + offset, &msg.code, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(result.data() + offset, &msg.partyId, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.instanceId, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.worldId, sizeof(uint32_t)); offset += sizeof(uint32_t);
+    std::memcpy(result.data() + offset, &msg.sceneId, sizeof(EntityID));
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, SquadResult& msg) {
+    constexpr size_t kBody = sizeof(int32_t) * 2 + sizeof(EntityID) * 3 + sizeof(uint32_t);
+    if (data.size() < kBody) throw std::runtime_error("body truncated");
+    size_t offset = 0;
+    std::memcpy(&msg.op, data.data() + offset, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(&msg.code, data.data() + offset, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(&msg.partyId, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.instanceId, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.worldId, data.data() + offset, sizeof(uint32_t)); offset += sizeof(uint32_t);
+    std::memcpy(&msg.sceneId, data.data() + offset, sizeof(EntityID));
+}
+
+std::vector<uint8_t> MessageCodec::encodeBody(const SquadState& msg) {
+    // 尾变长段（存活怪列表）：u32 计数 + n×8B，同契约 Int64List 线形
+    std::vector<uint8_t> result(sizeof(EntityID) * 4 + sizeof(int32_t) * 2 +
+                                 sizeof(uint32_t) + msg.monsters.size() * sizeof(EntityID));
+    size_t offset = 0;
+    std::memcpy(result.data() + offset, &msg.partyId, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.instanceId, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.phase, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(result.data() + offset, &msg.monstersDefeated, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.ticks, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(result.data() + offset, &msg.goalSet, sizeof(int32_t)); offset += sizeof(int32_t);
+    const auto count = static_cast<uint32_t>(msg.monsters.size());
+    std::memcpy(result.data() + offset, &count, sizeof(uint32_t)); offset += sizeof(uint32_t);
+    for (const auto monster : msg.monsters) {
+        std::memcpy(result.data() + offset, &monster, sizeof(EntityID)); offset += sizeof(EntityID);
+    }
+    return result;
+}
+
+void MessageCodec::decodeBody(const std::vector<uint8_t>& data, SquadState& msg) {
+    constexpr size_t kBody = sizeof(EntityID) * 4 + sizeof(int32_t) * 2;
+    if (data.size() < kBody + sizeof(uint32_t)) throw std::runtime_error("body truncated");
+    size_t offset = 0;
+    std::memcpy(&msg.partyId, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.instanceId, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.phase, data.data() + offset, sizeof(int32_t)); offset += sizeof(int32_t);
+    std::memcpy(&msg.monstersDefeated, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.ticks, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    std::memcpy(&msg.goalSet, data.data() + offset, sizeof(int32_t)); offset += sizeof(int32_t);
+    uint32_t count = 0;
+    std::memcpy(&count, data.data() + offset, sizeof(uint32_t)); offset += sizeof(uint32_t);
+    if (data.size() < offset + count * sizeof(EntityID)) throw std::runtime_error("body truncated");
+    msg.monsters.resize(count);
+    for (auto& monster : msg.monsters) {
+        std::memcpy(&monster, data.data() + offset, sizeof(EntityID)); offset += sizeof(EntityID);
+    }
+}
+
 } // namespace protocol
 } // namespace apollo

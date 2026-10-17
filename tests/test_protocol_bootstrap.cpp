@@ -172,6 +172,143 @@ bool test_gateway_client_disconnect_codec() {
     return true;
 }
 
+bool test_squad_wire_codec() {
+    std::cout << "Running: test_squad_wire_codec..." << std::endl;
+
+    using apollo::protocol::EntityID;
+    using apollo::protocol::MessageCodec;
+    using apollo::protocol::MessageHeader;
+
+    // C2S 上行族：party create（空 body）/ join / launch / enter / start / kill。
+    const auto create = MessageCodec::encode(apollo::protocol::PartyCreateRequest{}, 42);
+    auto header = MessageCodec::parseHeader(create);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::PARTY_CREATE_REQUEST),
+        "party create type encoded"
+    );
+    TEST_ASSERT(header.sessionId == 42, "party create session encoded");
+    TEST_ASSERT(
+        create.size() == sizeof(MessageHeader),
+        "party create empty body"
+    );
+
+    apollo::protocol::PartyJoinRequest join;
+    join.partyId = 7001;
+    const auto joinFrame = MessageCodec::encode(join, 43);
+    header = MessageCodec::parseHeader(joinFrame);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::PARTY_JOIN_REQUEST),
+        "party join type encoded"
+    );
+    auto body = std::vector<uint8_t>(joinFrame.begin() + sizeof(MessageHeader), joinFrame.end());
+    auto decodedJoin = MessageCodec::decodeBody<apollo::protocol::PartyJoinRequest>(body);
+    TEST_ASSERT(decodedJoin.partyId == 7001, "party join id decoded");
+
+    apollo::protocol::SquadLaunch launch;
+    launch.partyId = 7001;
+    launch.mapId = 4400;
+    const auto launchFrame = MessageCodec::encode(launch, 44);
+    header = MessageCodec::parseHeader(launchFrame);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::SQUAD_LAUNCH),
+        "squad launch type encoded"
+    );
+    body = std::vector<uint8_t>(launchFrame.begin() + sizeof(MessageHeader), launchFrame.end());
+    auto decodedLaunch = MessageCodec::decodeBody<apollo::protocol::SquadLaunch>(body);
+    TEST_ASSERT(decodedLaunch.partyId == 7001, "squad launch party decoded");
+    TEST_ASSERT(decodedLaunch.mapId == 4400, "squad launch map decoded");
+
+    apollo::protocol::SquadKill kill;
+    kill.partyId = 7001;
+    kill.monsterEntityId = 90002;
+    const auto killFrame = MessageCodec::encode(kill, 45);
+    header = MessageCodec::parseHeader(killFrame);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::SQUAD_KILL),
+        "squad kill type encoded"
+    );
+    body = std::vector<uint8_t>(killFrame.begin() + sizeof(MessageHeader), killFrame.end());
+    auto decodedKill = MessageCodec::decodeBody<apollo::protocol::SquadKill>(body);
+    TEST_ASSERT(decodedKill.partyId == 7001, "squad kill party decoded");
+    TEST_ASSERT(decodedKill.monsterEntityId == 90002, "squad kill monster decoded");
+
+    // S2C 下行族：party result / squad result / squad state。
+    apollo::protocol::PartyResult partyResult;
+    partyResult.op = static_cast<int32_t>(apollo::protocol::SquadOp::PARTY_CREATE);
+    partyResult.code = 0;
+    partyResult.partyId = 8801;
+    const auto partyFrame = MessageCodec::encode(partyResult, 42);
+    header = MessageCodec::parseHeader(partyFrame);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::PARTY_RESULT),
+        "party result type encoded"
+    );
+    body = std::vector<uint8_t>(partyFrame.begin() + sizeof(MessageHeader), partyFrame.end());
+    auto decodedParty = MessageCodec::decodeBody<apollo::protocol::PartyResult>(body);
+    TEST_ASSERT(decodedParty.op == 1, "party result op decoded");
+    TEST_ASSERT(decodedParty.partyId == 8801, "party result id decoded");
+
+    apollo::protocol::SquadResult result;
+    result.op = static_cast<int32_t>(apollo::protocol::SquadOp::SQUAD_LAUNCH);
+    result.code = 1101;
+    result.partyId = 8801;
+    result.instanceId = 5501;
+    result.worldId = 3;
+    result.sceneId = 6601;
+    const auto resultFrame = MessageCodec::encode(result, 42);
+    header = MessageCodec::parseHeader(resultFrame);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::SQUAD_RESULT),
+        "squad result type encoded"
+    );
+    body = std::vector<uint8_t>(resultFrame.begin() + sizeof(MessageHeader), resultFrame.end());
+    auto decodedResult = MessageCodec::decodeBody<apollo::protocol::SquadResult>(body);
+    TEST_ASSERT(decodedResult.op == 5, "squad result op decoded");
+    TEST_ASSERT(decodedResult.code == 1101, "squad result code decoded");
+    TEST_ASSERT(decodedResult.partyId == 8801, "squad result party decoded");
+    TEST_ASSERT(decodedResult.instanceId == 5501, "squad result instance decoded");
+    TEST_ASSERT(decodedResult.worldId == 3, "squad result world decoded");
+    TEST_ASSERT(decodedResult.sceneId == 6601, "squad result scene decoded");
+
+    apollo::protocol::SquadState state;
+    state.partyId = 8801;
+    state.instanceId = 5501;
+    state.phase = 3;  // Running
+    state.monstersDefeated = 2;
+    state.ticks = 120;
+    state.goalSet = 1;
+    state.monsters = {91001, 91002, 91003};
+    const auto stateFrame = MessageCodec::encode(state, 42);
+    header = MessageCodec::parseHeader(stateFrame);
+    TEST_ASSERT(
+        header.type == static_cast<uint16_t>(apollo::protocol::MessageType::SQUAD_STATE),
+        "squad state type encoded"
+    );
+    body = std::vector<uint8_t>(stateFrame.begin() + sizeof(MessageHeader), stateFrame.end());
+    auto decodedState = MessageCodec::decodeBody<apollo::protocol::SquadState>(body);
+    TEST_ASSERT(decodedState.partyId == 8801, "squad state party decoded");
+    TEST_ASSERT(decodedState.phase == 3, "squad state phase decoded");
+    TEST_ASSERT(decodedState.monstersDefeated == 2, "squad state kills decoded");
+    TEST_ASSERT(decodedState.ticks == 120, "squad state ticks decoded");
+    TEST_ASSERT(decodedState.goalSet == 1, "squad state goal decoded");
+    TEST_ASSERT(decodedState.monsters.size() == 3 && decodedState.monsters[0] == 91001 &&
+                    decodedState.monsters[2] == 91003,
+                "squad state live monsters decoded");
+
+    // 截断 body 必须拒收（短 body 不允许静默读越界）。
+    bool threw = false;
+    try {
+        const std::vector<uint8_t> truncated(stateFrame.begin(), stateFrame.begin() + 10);
+        MessageCodec::decodeBody<apollo::protocol::SquadState>(truncated);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    TEST_ASSERT(threw, "truncated squad state rejected");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -192,6 +329,7 @@ int main() {
     run(test_player_resolve_route_codec);
     run(test_login_assign_codec);
     run(test_gateway_client_disconnect_codec);
+    run(test_squad_wire_codec);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;
