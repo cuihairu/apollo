@@ -47,6 +47,16 @@ struct WorldAppConfig {
     std::string scriptContractFile;
     std::string scriptBootFile;
 
+    // ---- 恢复相位全量重报面（P3-1 re-home：base-app 退场后 reporter = World
+    //      进程；reportPort = 0 = 关）----
+    // 锚点快照（AnchorManager）→ FullReport 分片发目录 owner（Login 的
+    // intake 口）——启动即报 + 周期刷新（幂等 intake，restore-not-kick）。
+    std::string reportHost = "127.0.0.1";
+    std::uint16_t reportPort = 0;
+    std::uint64_t reportComponentId = 0;  // 0 = 派生 worldId（fleet 同号口径）
+    std::uint32_t reportZoneId = 0;       // 0 = 派生 worldId
+    std::uint32_t reportIntervalMs = 30000;  // 0 = 仅启动期一报
+
 };
 
 } // namespace world_app

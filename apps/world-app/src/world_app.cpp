@@ -169,6 +169,28 @@ void WorldApp::start() {
         throw std::runtime_error("failed to start WorldHost");
     }
 
+    // 恢复相位全量重报面（P3-1 re-home，增量③报告方）：本进程锚点快照 →
+    // FullReport 分片发目录 owner（Login intake 口）——启动即报 + gameLoop
+    // 周期刷新（幂等 intake）。reportPort = 0 = 关；组件号缺省派生 worldId
+    //（编队同号口径）。
+    if (config_.reportPort != 0 && reportTransport_.open()) {
+        const auto component_id =
+            config_.reportComponentId != 0 ? config_.reportComponentId : worldId_;
+        const auto zone_id =
+            config_.reportZoneId != 0 ? config_.reportZoneId : worldId_;
+        const auto host = config_.reportHost;
+        const auto port = config_.reportPort;
+        fleetReporter_ = std::make_unique<apollo::game::session::FleetReporter>(
+            component_id, zone_id,
+            [this, host, port](const std::uint8_t* data, std::size_t len) {
+                return reportTransport_.send_bytes(host, port, data, len);
+            });
+        worldLog().info("fleet report: component=" + std::to_string(component_id)
+                    + " zone=" + std::to_string(zone_id) + " -> " + host + ":"
+                    + std::to_string(port) + " (interval "
+                    + std::to_string(config_.reportIntervalMs) + "ms)");
+    }
+
     running_ = true;
 
     // 启动游戏循环线程
@@ -880,8 +902,26 @@ void WorldApp::gameLoop() {
         }
     }
 
+    // 启动即报（增量③：恢复相位方有非零锚点可收；幂等 intake 重放无害）
+    if (fleetReporter_) {
+        const auto sent = fleetReporter_->report_full(collect_anchor_entries());
+        lastReportMs_ = std::chrono::steady_clock::now();
+        (void)sent;
+    }
+
     while (running_) {
         auto startTime = std::chrono::steady_clock::now();
+
+        // 周期全量重报刷新（增量③：0 = 仅启动期一报）
+        if (fleetReporter_ && config_.reportIntervalMs != 0) {
+            const auto since_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                      std::chrono::steady_clock::now() - lastReportMs_)
+                                      .count();
+            if (since_ms >= static_cast<std::int64_t>(config_.reportIntervalMs)) {
+                lastReportMs_ = std::chrono::steady_clock::now();
+                (void)fleetReporter_->report_full(collect_anchor_entries());
+            }
+        }
 
         // net M1 接收面一拍（2b-ii）：链路泵与受理队列入队同线程（单写者
         // 纪律，ADR-015(a)）；回执发送在后续拍的泵内上线
@@ -939,6 +979,29 @@ void WorldApp::attach_script_to_scenes() {
             scene->attach_script(*script_);
         }
     }
+}
+
+std::vector<apollo::game::session::MirrorEntry> WorldApp::collect_anchor_entries() const {
+    std::vector<apollo::game::session::MirrorEntry> sessions;
+    const auto anchors = playerStore_ ? playerStore_->anchor_manager() : nullptr;
+    if (!anchors) {
+        return sessions;
+    }
+    sessions.reserve(anchors->anchor_count());
+    for (const auto& anchor : anchors->snapshot()) {
+        if (!anchor || anchor->player_id() == 0) {
+            continue;
+        }
+        apollo::game::session::MirrorEntry e;
+        e.player_id = anchor->player_id();
+        e.session_id = anchor->session_binding().session_id;
+        e.gateway_id = anchor->session_binding().gateway_id;
+        e.zone_id = anchor->home_zone_id();
+        e.state = apollo::game::session::PlayerDirectory::EntryState::Online;
+        e.assignment = anchor->world_assignment();
+        sessions.push_back(e);
+    }
+    return sessions;
 }
 
 apollo::game::world::Scene* WorldApp::find_scene(std::uint64_t scene_id) {

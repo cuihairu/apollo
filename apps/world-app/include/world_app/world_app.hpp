@@ -11,6 +11,8 @@
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
 #include "apollo/core/metrics/metric_registry.h"
+#include "apollo/game/session/fleet_recovery.hpp"
+#include "apollo/net/discovery/udp_transport.hpp"
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -105,6 +107,11 @@ private:
     // 游戏循环
     void gameLoop();
 
+    // 恢复相位全量重报（P3-1 re-home，增量③报告方供数面）：AnchorManager
+    // 快照 → 镜像投影条目（epoch 列恒 0——裁决键归目录 owner，intake
+    // restore-not-kick）。
+    std::vector<apollo::game::session::MirrorEntry> collect_anchor_entries() const;
+
     // 意图执行（ADR-015(a)：gameThread_ tick 边界消费——复用既有 handler，
     // 返回值丢弃（延时应答随 M1 升级批））
     void executeIntent(const IntentEnvelope& intent);
@@ -197,6 +204,12 @@ private:
     // M1 eval 关联账（944 受理面；gameLoop 线程独占——受理与 drain 同泵线程）：
     // eval_id → 回传 peer 自报名；scene_id → 在途 eval id 集（drain 圈定面）。
     std::unordered_map<std::uint64_t, std::string> evalReplyPeers_;
+
+    // 恢复相位全量重报面（P3-1 re-home，增量③报告方）：reportPort = 0 关。
+    // 发送在 gameLoop 线程（启动即报 + 周期刷新）；transport 归进程期所有。
+    apollo::net::discovery::UdpBeaconTransport reportTransport_;
+    std::unique_ptr<apollo::game::session::FleetReporter> fleetReporter_;
+    std::chrono::steady_clock::time_point lastReportMs_{};
     std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
 
     // metrics admin 通道计数面（引用在注册表存续期恒稳定——注册表头注；

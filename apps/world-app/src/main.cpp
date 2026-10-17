@@ -81,6 +81,14 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.scriptHandersFile = argv[++i];
         } else if (arg == "--script-contract" && i + 1 < argc) {
             config.scriptContractFile = argv[++i];
+        } else if (arg == "--report-to-host" && i + 1 < argc) {
+            config.reportHost = argv[++i];
+        } else if (arg == "--report-to-port" && i + 1 < argc) {
+            config.reportPort = static_cast<std::uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--report-zone-id" && i + 1 < argc) {
+            config.reportZoneId = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--report-interval-ms" && i + 1 < argc) {
+            config.reportIntervalMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -96,6 +104,10 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --script-boot <file>        Lua boot source file (default: none)\n"
                       << "  --script-handlers <file>    Lua contract handler module, loaded first (default: none)\n"
                       << "  --script-contract <file>    Lua contract table, loaded after handlers (default: none)\n"
+                      << "  --report-to-host <ipv4>    Fleet recovery full-report target host (default: 127.0.0.1)\n"
+                      << "  --report-to-port <port>    Fleet recovery intake port; 0 disables (default: 0)\n"
+                      << "  --report-zone-id <n>       Home zone id for full reports (default: world id)\n"
+                      << "  --report-interval-ms <ms>  Full report refresh period; 0 = startup only (default: 30000)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -109,11 +121,13 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
 
 // 编队成员注册（P3-4 收尾批）：--machined-port 0 = 关（standalone 跑不依赖
 // 编队）；--component-id 0 = 未入编队（仅跑服务不注册）。身份 service_port
-// = M1 受理端口（消费方拨号键）。
+// = M1 受理端口（消费方拨号键）；zone_id 进编队名册（死亡事件携带，目录
+// owner 按 zone 行反查死亡处置——不进名册 = 死亡不带 zone）。
 struct FleetOptions {
     std::string machined_host = "127.0.0.1";
     std::uint16_t machined_port = 0;
     std::uint64_t component_id = 0;
+    std::uint32_t zone_id = 0;
 };
 
 static FleetOptions loadFleetOptions(int argc, char* argv[]) {
@@ -128,6 +142,9 @@ static FleetOptions loadFleetOptions(int argc, char* argv[]) {
         } else if (arg == "--component-id" && i + 1 < argc) {
             opts.component_id =
                 std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--zone-id" && i + 1 < argc) {
+            opts.zone_id =
+                static_cast<std::uint32_t>(std::atoi(argv[++i]));
         }
     }
     return opts;
@@ -161,6 +178,14 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     try {
+        // 报告方组件号同源（旧壳一进程一身份口径）：--component-id 显式
+        // 优先，缺省保留 0 派生 worldId。先解析再建 WorldApp（config 进
+        // 构造器后不可改）。
+        const FleetOptions fleet = loadFleetOptions(argc, argv);
+        if (fleet.component_id != 0 && config.reportComponentId == 0) {
+            config.reportComponentId = fleet.component_id;
+        }
+
         WorldApp server(config);
         g_server = &server;
 
@@ -169,7 +194,6 @@ int main(int argc, char* argv[]) {
 
         // 编队成员注册（P3-4 收尾批）：machined 在位才上 wire；beat 交给
         // 主循环秒拍，退出路径优雅注销（TTL 兜底覆盖注销包丢失）
-        const FleetOptions fleet = loadFleetOptions(argc, argv);
         apollo::net::discovery::UdpBeaconTransport fleet_transport;
         std::unique_ptr<apollo::net::discovery::FleetMember> fleet_member;
         if (fleet.machined_port != 0) {
@@ -180,6 +204,7 @@ int main(int argc, char* argv[]) {
             } else if (fleet_transport.open()) {
                 apollo::net::discovery::MemberId self;
                 self.component_id = fleet.component_id;
+                self.zone_id = fleet.zone_id != 0 ? fleet.zone_id : config.worldId;
                 self.service_port = config.m1Port;
                 fleet_member =
                     std::make_unique<apollo::net::discovery::FleetMember>(
@@ -187,6 +212,7 @@ int main(int argc, char* argv[]) {
                         fleet_transport);
                 logger->info("fleet member: component="
                              + std::to_string(fleet.component_id)
+                             + " zone=" + std::to_string(self.zone_id)
                              + " service_port=" + std::to_string(config.m1Port)
                              + " -> machined " + fleet.machined_host + ":"
                              + std::to_string(fleet.machined_port));
