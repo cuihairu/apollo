@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo/game/battle/battle_runtime.hpp"
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene_descriptor.hpp"
@@ -75,6 +76,7 @@ struct GameplayProgress {
     std::uint64_t ticks_elapsed = 0;  // Instance 玩法时钟（Running 起）
     bool timed_out = false;           // 失败判定：超时
     bool all_exited = false;          // 失败判定：Running 期全员退出
+    std::vector<std::uint64_t> monsters_alive;  // 存活怪实体号（击杀上报对象）
 };
 
 // 成员在线谓词：false = 不予准入。未设置则跳过在线校验（权威在线目录在
@@ -167,10 +169,13 @@ public:
     GameplayError set_goal(std::uint64_t party_id, const GameplayGoal& goal);
     // 刷怪：怪物实体入副本私有 Scene；累计不得超出目标配额。
     GameplayError spawn_wave(std::uint64_t party_id, std::uint64_t count);
-    // 击杀上报：只认本副本存活怪物；击杀数达标即目标完成，
-    // Instance.finish() 进入结算阶段（成功线）。
+    // 击杀上报：只认本副本存活怪物；击杀数达标即目标完成判定成立，
+    // Instance.finish() 随下一玩法拍进入结算阶段（成功线——先让已受理击杀
+    // 的分值进入 battle 输入序再结算）。reporter = 上报玩家（战斗分值归属；
+    // 0 = 无归属——分值按 battle 正路径仍计事件但不落该玩家账）。
     GameplayError report_monster_defeated(std::uint64_t party_id,
-                                          std::uint64_t monster_entity_id);
+                                          std::uint64_t monster_entity_id,
+                                          std::uint64_t reporter_player_id = 0);
     // 玩法时钟推进（驱动 Instance tick）；跨过超时线即失败判定，
     // Instance.cancel() 进入结算阶段（失败线，不发成功奖励）。
     GameplayError advance_tick(std::uint64_t party_id, std::uint64_t ticks = 1,
@@ -215,6 +220,8 @@ public:
     [[nodiscard]] const ActiveSquadInstance* find_by_party(std::uint64_t party_id) const noexcept;
     [[nodiscard]] const ActiveSquadInstance* find_by_instance(
         std::uint64_t instance_id) const noexcept;
+    // 活动绑定快照（宿主逐拍驱动面：tick 推进/结算收尾遍历用）。
+    [[nodiscard]] std::vector<ActiveSquadInstance> activeBindings() const;
     [[nodiscard]] std::size_t active_count() const noexcept;
     [[nodiscard]] std::size_t used_capacity(std::uint32_t world_id) const noexcept;
 
@@ -228,7 +235,13 @@ private:
         std::uint64_t defeated = 0;
         bool timed_out = false;
         bool all_exited = false;  // Running 期全员退出（失败判定）
+        bool goal_met = false;    // 目标完成判定成立（finish 随下一拍——先让
+                                  // 已受理击杀的分值进入 battle 输入序再结算）
         std::vector<apollo::game::core::EntityId> monsters;  // 存活怪
+        // 已受理击杀的 battle 输入（opcode 1=攻击命中），随下一拍进入
+        // battle 输入序（Instance::tick(delta, inputs)）——击杀→结算分值
+        // 全走 battle 正路径，不在账本侧另开分值来源。
+        std::vector<apollo::game::battle::BattleInput> pending_battle_inputs;
     };
 
     LaunchError validate(const LaunchRequest& request,

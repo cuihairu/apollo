@@ -211,7 +211,8 @@ SquadInstanceService::GameplayError SquadInstanceService::spawn_wave(
 }
 
 SquadInstanceService::GameplayError SquadInstanceService::report_monster_defeated(
-    std::uint64_t party_id, std::uint64_t monster_entity_id) {
+    std::uint64_t party_id, std::uint64_t monster_entity_id,
+    std::uint64_t reporter_player_id) {
     const ActiveSquadInstance* binding = nullptr;
     apollo::game::world::Instance* instance = nullptr;
     if (const auto resolved = resolve_running(party_id, &binding, &instance);
@@ -227,8 +228,14 @@ SquadInstanceService::GameplayError SquadInstanceService::report_monster_defeate
     if (auto* scene = local_world_->find_scene(binding->scene_id))
         scene->despawn_entity(monster_id);
     ++state.defeated;
-    // 目标完成（成功线）：Instance 进入结算阶段。
-    if (state.defeated >= state.goal.monsters_to_defeat) instance->finish();
+    // 击杀 → battle 输入（分值正路径）：随下一拍 Instance::tick 进入输入序。
+    apollo::game::battle::BattleInput input;
+    input.player_id = reporter_player_id;
+    input.opcode = 1;  // 攻击命中（骨架期唯一判定语义）
+    state.pending_battle_inputs.push_back(input);
+    // 目标完成判定成立：finish 随下一拍（advance_tick 段）——本拍先让击杀
+    // 分值进入 battle 输入序，随后结算，命中的分值不丢。
+    if (state.defeated >= state.goal.monsters_to_defeat) state.goal_met = true;
     return GameplayError::Ok;
 }
 
@@ -240,8 +247,24 @@ SquadInstanceService::GameplayError SquadInstanceService::advance_tick(
         resolved != GameplayError::Ok) {
         return resolved;
     }
-    for (std::uint64_t i = 0; i < ticks; ++i) instance->tick(delta_seconds);
     auto& state = gameplay_[binding->instance_id];
+    // 已受理击杀的 battle 输入随首拍进入（instance 玩法时钟的下一 tick）。
+    // 输入的 tick 戳记在入拍时打——判定段按 (in.tick == tick_index) 过滤，
+    // 入队时刻的拍号未知，不能提前定。
+    auto battle_inputs = std::move(state.pending_battle_inputs);
+    state.pending_battle_inputs.clear();
+    for (std::uint64_t i = 0; i < ticks; ++i) {
+        if (i == 0 && !battle_inputs.empty()) {
+            const auto ride_tick =
+                static_cast<std::uint32_t>(instance->tick_count() + 1);
+            for (auto& in : battle_inputs) in.tick = ride_tick;
+            instance->tick(delta_seconds, battle_inputs);
+        } else {
+            instance->tick(delta_seconds);
+        }
+    }
+    // 目标完成（成功线）：分值已入 battle 输入序，Instance 进入结算阶段。
+    if (state.goal_met && !state.timed_out) instance->finish();
     // 超时（失败线）：取消流程不发成功奖励，同样进入结算阶段。
     if (state.goal_set && !state.timed_out && state.goal.timeout_ticks != 0 &&
         instance->tick_count() - state.goal_base_ticks >= state.goal.timeout_ticks) {
@@ -264,6 +287,9 @@ std::optional<GameplayProgress> SquadInstanceService::gameplay(
     progress.monsters_defeated = it->second.defeated;
     progress.timed_out = it->second.timed_out;
     progress.all_exited = it->second.all_exited;
+    progress.monsters_alive.reserve(it->second.monsters.size());
+    for (const auto& monster : it->second.monsters)
+        progress.monsters_alive.push_back(monster.value());
     if (binding->world_id == local_world_id_ && local_world_) {
         if (auto* instance = local_world_->find_instance(binding->instance_id))
             progress.ticks_elapsed = instance->tick_count();
@@ -465,6 +491,15 @@ const ActiveSquadInstance* SquadInstanceService::find_by_instance(
     std::uint64_t instance_id) const noexcept {
     const auto it = active_.find(instance_id);
     return it != active_.end() ? &it->second : nullptr;
+}
+
+std::vector<ActiveSquadInstance> SquadInstanceService::activeBindings() const {
+    std::vector<ActiveSquadInstance> bindings;
+    bindings.reserve(active_.size());
+    for (const auto& [instance_id, binding] : active_) {
+        bindings.push_back(binding);
+    }
+    return bindings;
 }
 
 std::size_t SquadInstanceService::active_count() const noexcept { return active_.size(); }

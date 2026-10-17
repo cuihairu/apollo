@@ -421,24 +421,29 @@ bool test_squad_gameplay_goal_completion_drives_settlement() {
     TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::Ok,
                 "final wave fills quota");
 
-    // 击杀上报：只认本副本怪物；达标即驱动结算（成功线 → Finishing）
+    // 击杀上报：只认本副本怪物；达标即目标完成判定成立，结算随下一拍进入
+    //（成功线 → Finishing——分值先入 battle 输入序）
     TEST_ASSERT(service.report_monster_defeated(1, 424242) ==
                     SquadInstanceService::GameplayError::UnknownMonster,
                 "unknown monster rejected");
-    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+    TEST_ASSERT(service.report_monster_defeated(1, 1, kLeader) ==
                     SquadInstanceService::GameplayError::Ok,
                 "kill 1");
-    TEST_ASSERT(service.report_monster_defeated(1, 1) ==
+    TEST_ASSERT(service.report_monster_defeated(1, 1, kLeader) ==
                     SquadInstanceService::GameplayError::UnknownMonster,
                 "dead monster not reportable twice");
-    TEST_ASSERT(service.report_monster_defeated(1, 2) ==
+    TEST_ASSERT(service.report_monster_defeated(1, 2, kMemberB) ==
                     SquadInstanceService::GameplayError::Ok,
                 "kill 2");
     TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
                 "quota not yet met");
-    TEST_ASSERT(service.report_monster_defeated(1, 3) ==
+    TEST_ASSERT(service.report_monster_defeated(1, 3, kMemberC) ==
                     SquadInstanceService::GameplayError::Ok,
                 "kill 3 meets quota");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Running,
+                "goal met pending tick");
+    TEST_ASSERT(service.advance_tick(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "tick carries kill scores then settles");
     TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
                 "goal completion drives settlement entry");
     TEST_ASSERT(scene->get_entity_count() == 0, "defeated monsters despawned");
@@ -673,6 +678,8 @@ bool test_squad_settlement_battle_settles_on_goal_completion() {
     TEST_ASSERT(service.report_monster_defeated(1, 1) ==
                     SquadInstanceService::GameplayError::Ok,
                 "goal met");
+    TEST_ASSERT(service.advance_tick(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "settle tick");
     TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
                 "settlement entered");
     auto snap = service.settlement(1);
@@ -684,11 +691,49 @@ bool test_squad_settlement_battle_settles_on_goal_completion() {
                     squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
                 "post-settle credit refused");
 
-    // 骨架期战斗无输入路径 → 无命中事件 → 分值 0：标记已落账但不写锚
-    //（零分值不产生档案脏位，数值随玩法批）
-    TEST_ASSERT(exp_of(table, kLeader) == 0, "zero-score settle credits no exp");
+    // 无上报人归属（reporter=0）→ 事件不落名册账：零分值标记已落账但不写锚
+    TEST_ASSERT(exp_of(table, kLeader) == 0, "unattributed kill credits no exp");
     TEST_ASSERT(!table.anchors.at(kLeader)->needs_save(),
                 "zero-score settle leaves anchor clean");
+    return true;
+}
+
+// 击杀上报 → battle 正路径分值：上报人命中分值经 battle 输入序落账
+//（分值来源唯一 = battle 命中事件，不在账本侧另开入口）。
+bool test_squad_kill_scores_flow_through_battle() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+    auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
+    TEST_ASSERT(instance != nullptr, "running");
+
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "wave spawned");
+
+    // 击杀带上报人 → 下一拍输入序携带命中 → finish → 结算分值 > 0
+    TEST_ASSERT(service.report_monster_defeated(1, 1, kLeader) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "attributed kill");
+    TEST_ASSERT(service.advance_tick(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "tick rides the hit then settles");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "settlement entered after score ride");
+    const auto snap = service.settlement(1);
+    TEST_ASSERT(snap.has_value() && snap->complete && snap->applied == 3,
+                "roster settled");
+    TEST_ASSERT(exp_of(table, kLeader) > 0, "reporter score credited via battle");
+    TEST_ASSERT(exp_of(table, kMemberB) == 0, "non-reporter scores nothing");
+    TEST_ASSERT(table.anchors.at(kLeader)->needs_save(), "score dirties anchor");
     return true;
 }
 
@@ -773,6 +818,8 @@ bool test_squad_dismiss_evicts_players_and_reclaims() {
     TEST_ASSERT(service.report_monster_defeated(1, 1) ==
                     SquadInstanceService::GameplayError::Ok,
                 "goal met");
+    TEST_ASSERT(service.advance_tick(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "settle tick");
     TEST_ASSERT(service.dismiss(1), "dismiss completes teardown");
     TEST_ASSERT(closing_calls == 1, "closing hook fired once");
 
@@ -1124,6 +1171,7 @@ int main() {
          test_squad_settlement_idempotent_credit_and_retry},
         {"squad_settlement_battle_settles_on_goal_completion",
          test_squad_settlement_battle_settles_on_goal_completion},
+        {"squad_kill_scores_flow_through_battle", test_squad_kill_scores_flow_through_battle},
         {"squad_settlement_recovery_and_failure_line",
          test_squad_settlement_recovery_and_failure_line},
         {"squad_dismiss_evicts_players_and_reclaims",

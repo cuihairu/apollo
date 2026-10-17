@@ -88,6 +88,11 @@ public:
 
     // ---- tick 计数（玩法节奏观察点；Running 态才累加）----
     void tick(double delta_seconds) noexcept;
+    // 带 battle 输入的推进（P2 真实上行：客户端意图随 tick 进入 battle 输入
+    // 序——tick_index 用累加后的 tick_count_，输入序不影响确定性：battle
+    // 侧按 (player_id, opcode) 规范序排序）。非 Running/battle 缺席时输入丢弃。
+    void tick(double delta_seconds,
+              const std::vector<apollo::game::battle::BattleInput>& battle_inputs) noexcept;
     [[nodiscard]] std::uint64_t tick_count() const noexcept;
     [[nodiscard]] double elapsed_seconds() const noexcept;
 

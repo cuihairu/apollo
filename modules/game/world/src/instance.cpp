@@ -187,6 +187,12 @@ const std::vector<apollo::game::core::PlayerId>& Instance::players() const noexc
 }
 
 void Instance::tick(double delta_seconds) noexcept {
+    static const std::vector<apollo::game::battle::BattleInput> kNoInputs;
+    tick(delta_seconds, kNoInputs);
+}
+
+void Instance::tick(double delta_seconds,
+                    const std::vector<apollo::game::battle::BattleInput>& battle_inputs) noexcept {
     // 玩法节奏：Running 态才累加（等待/结算期不计玩法时长）
     if (state_ != State::Running) {
         return;
@@ -194,9 +200,10 @@ void Instance::tick(double delta_seconds) noexcept {
     ++tick_count_;
     elapsed_seconds_ += delta_seconds;
     // battle tick 接入（P2-2）：Running 态驱动玩法负载；tick_index 用累加后
-    // 的 tick_count_（严格递增，与 battle 复算口径一致）
+    // 的 tick_count_（严格递增，与 battle 复算口径一致）。battle 缺席/非
+    // Battling 时输入随拍丢弃（非 Running 本就拒收——与意图受理面同口径）。
     if (battle_ && battle_->phase() == apollo::game::battle::BattlePhase::Battling) {
-        battle_->tick(static_cast<std::uint32_t>(tick_count_));
+        battle_->tick(static_cast<std::uint32_t>(tick_count_), battle_inputs);
     }
 }
 
