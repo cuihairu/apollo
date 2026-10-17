@@ -12,8 +12,6 @@ tag:
   - Replication
 ---
 
-[English](witness-ghost-design.en.md) | [中文](witness-ghost-design.md)
-
 # Witness 与 Ghost 设计
 
 这篇文档是 Apollo 进入 BigWorld 模式后，最关键的一篇运行时专题。
@@ -67,7 +65,7 @@ Apollo 进入 BigWorld 模式后，必须明确拆开这两层：
 - `GhostManager` 关注实体投影和消息接力
 
 这篇文档讨论的是 BigWorld 增强态下的运行时对象，
-不是当前 `apps/cell-app` 里已经完整落地的能力。
+不是当前 `apps/room-server` 里已经完整落地的能力。
 
 ## 三、为什么单纯 AOI 不够
 

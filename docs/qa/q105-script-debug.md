@@ -1,4 +1,5 @@
-[English](q105-script-debug.en.md) | [中文](q105-script-debug.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q105: 如何调试脚本？
 
@@ -72,7 +73,6 @@ def complex_calculation(a, b, c):
 
     return result
 
-
 # pdb 常用命令
 """
 pdb 命令:
@@ -91,7 +91,6 @@ cl 1            # 清除断点1
 !expression     # 执行表达式
 q (quit)        # 退出
 """
-
 
 # 使用示例
 if __name__ == "__main__":
@@ -130,7 +129,6 @@ class CustomPdb(pdb.Pdb):
             for name, value in frame.f_locals.items():
                 print(f"{name} = {value}")
 
-
 def debug_on_error(func):
     """错误时自动进入调试"""
     def wrapper(*args, **kwargs):
@@ -144,7 +142,6 @@ def debug_on_error(func):
             raise
     return wrapper
 
-
 @debug_on_error
 def buggy_function(data):
     """有问题的函数"""
@@ -154,7 +151,6 @@ def buggy_function(data):
         value = int(item) / len(item)
         result.append(value)
     return result
-
 
 # 条件断点
 def conditional_break():
@@ -201,7 +197,6 @@ class RemoteDebugger:
         if self.debugger:
             self.debugger.set_trace()
 
-
 # 使用示例
 def remote_debug_example():
     """远程调试示例"""
@@ -220,7 +215,6 @@ def remote_debug_example():
         result = value * 2
 
     return data
-
 
 # 使用 pydevd (PyCharm 兼容)
 def pydevd_debug():
@@ -421,7 +415,6 @@ class KBEngineDebugger:
                                    reverse=True):
             print(f"{func}: {count} calls")
 
-
 # 实体中添加调试方法
 class DebuggableEntity(KBEngine.Entity):
     """可调试的实体"""
@@ -509,7 +502,6 @@ def profile_function(func, *args, **kwargs):
 
     return result
 
-
 # 使用示例
 def game_logic_update():
     """游戏逻辑更新"""
@@ -522,7 +514,6 @@ def game_logic_update():
         z = x + y
 
     return len(players)
-
 
 # 分析
 profile_function(game_logic_update)

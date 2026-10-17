@@ -1,4 +1,5 @@
-[English](q1-server-architecture.en.md) | [中文](q1-server-architecture.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q1: 请画出你熟悉的 MMORPG 服务器架构图，说明各组件的职责和通信方式
 

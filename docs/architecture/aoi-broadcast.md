@@ -11,8 +11,6 @@ tag:
   - 消息去重
 ---
 
-[English](aoi-broadcast.en.md) | [中文](aoi-broadcast.md)
-
 # AOI广播与消息去重
 
 ## 目录

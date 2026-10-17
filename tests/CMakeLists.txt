@@ -1183,79 +1183,79 @@ add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
 
 
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
-# cell 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ CellServer 受理点
+# RoomServer 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ RoomServer 受理点
 # 接线（维护闸/受理回执/Pong/tick 边界 drain/过载回错误包）。直编协议源惯例
-# 同 apps/cell-app（协议源直编习语）。
+# 同 apps/room-server（协议源直编习语）。
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
-add_executable(cell_acceptance_tests
-    test_cell_acceptance.cpp
-    ../apps/cell-app/src/cell_server.cpp
-    ../apps/cell-app/src/m1_link_server.cpp
+add_executable(room_server_acceptance_tests
+    test_room_server_acceptance.cpp
+    ../apps/room-server/src/room_server.cpp
+    ../apps/room-server/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
-target_include_directories(cell_acceptance_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+target_include_directories(room_server_acceptance_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/room-server/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
 )
-target_compile_definitions(cell_acceptance_tests PRIVATE
-    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+target_compile_definitions(room_server_acceptance_tests PRIVATE
+    APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
-target_link_libraries(cell_acceptance_tests PRIVATE
+target_link_libraries(room_server_acceptance_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script apollo::runtime
     apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
-    target_link_libraries(cell_acceptance_tests PRIVATE ws2_32)
-    target_compile_definitions(cell_acceptance_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(room_server_acceptance_tests PRIVATE ws2_32)
+    target_compile_definitions(room_server_acceptance_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 if(MSVC)
-    target_compile_options(cell_acceptance_tests PRIVATE /utf-8)
+    target_compile_options(room_server_acceptance_tests PRIVATE /utf-8)
 endif()
-add_test(NAME CellAcceptanceTests COMMAND cell_acceptance_tests)
+add_test(NAME RoomServerAcceptanceTests COMMAND room_server_acceptance_tests)
 endif()
 
-# ========== Cell M1 Link Tests (M1 上层接线批 2b-ii) ==========
-# cell M1 接收端：契约意图族 924-928 经 InterServerLink 真 TCP 上行 → 契约
+# ========== RoomServer M1 Link Tests (M1 上层接线批 2b-ii) ==========
+# RoomServer M1 接收端：契约意图族 924-928 经 InterServerLink 真 TCP 上行 → 契约
 # wire 解包 → legacy 帧镜像 → 受理队列 → tick 边界执行 → 延时应答 929
 # （request_id 关联，code 0/2101）；字段级非法/域越权/未知 id 拒收面。
-# 直编协议源惯例同 cell_acceptance_tests；客户端端 = 裸 LinkManager。
+# 直编协议源惯例同 room_server_acceptance_tests；客户端端 = 裸 LinkManager。
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
-add_executable(cell_m1_link_tests
-    test_cell_m1_link.cpp
-    ../apps/cell-app/src/cell_server.cpp
-    ../apps/cell-app/src/m1_link_server.cpp
+add_executable(room_server_m1_link_tests
+    test_room_server_m1_link.cpp
+    ../apps/room-server/src/room_server.cpp
+    ../apps/room-server/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
-target_include_directories(cell_m1_link_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+target_include_directories(room_server_m1_link_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/room-server/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
 )
-target_compile_definitions(cell_m1_link_tests PRIVATE
-    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+target_compile_definitions(room_server_m1_link_tests PRIVATE
+    APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
-target_link_libraries(cell_m1_link_tests PRIVATE
+target_link_libraries(room_server_m1_link_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
-    target_link_libraries(cell_m1_link_tests PRIVATE ws2_32)
-    target_compile_definitions(cell_m1_link_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(room_server_m1_link_tests PRIVATE ws2_32)
+    target_compile_definitions(room_server_m1_link_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 if(MSVC)
-    target_compile_options(cell_m1_link_tests PRIVATE /utf-8)
+    target_compile_options(room_server_m1_link_tests PRIVATE /utf-8)
 endif()
-add_test(NAME CellM1LinkTests COMMAND cell_m1_link_tests)
+add_test(NAME RoomServerM1LinkTests COMMAND room_server_m1_link_tests)
 endif()
 
 # ========== Gateway M1 Egress Tests (M1 上层接线批 2b-iii) ==========
 # gateway M1 出口：legacy 世界帧 → 契约 wire 前递（924-928，request_id 关联）
-# → 真 cell M1 接收端 → 延时应答 929 回流 → pending 关联回收/超时清扫；
+# → 真 RoomServer M1 接收端 → 延时应答 929 回流 → pending 关联回收/超时清扫；
 # 投递箱溢出/不可前递族（断连通知等）落地观察面；真客户端 socket → gateway
-# 入口 → cell M1 → 应答回流全链 e2e。gateway 与 cell 两侧直编（缝工厂两侧
+# 入口 → RoomServer M1 → 应答回流全链 e2e。gateway 与 cell 两侧直编（缝工厂两侧
 # 真实现），Windows 下 link TCP 底座不进 M1 批，用例本体空转。
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(gateway_m1_egress_tests
@@ -1269,21 +1269,21 @@ add_executable(gateway_m1_egress_tests
     ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
     ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
     ../apps/gateway-app/src/ingress/session_admission_service.cpp
-    ../apps/cell-app/src/cell_server.cpp
-    ../apps/cell-app/src/m1_link_server.cpp
+    ../apps/room-server/src/room_server.cpp
+    ../apps/room-server/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(gateway_m1_egress_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
-    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+    ${CMAKE_SOURCE_DIR}/apps/room-server/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
 )
 target_compile_definitions(gateway_m1_egress_tests PRIVATE
     APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
-    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 target_link_libraries(gateway_m1_egress_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
@@ -1768,7 +1768,7 @@ add_test(NAME RolloutTests COMMAND rollout_tests)
 # OFF 树同样执行）。
 add_executable(contract_handler_tests test_contract_handlers.cpp)
 target_compile_definitions(contract_handler_tests PRIVATE
-    APOLLO_CELL_CONTRACT_HANDLERS_LUA="${CMAKE_SOURCE_DIR}/apps/cell-app/scripts/contract_handlers.lua"
+    APOLLO_ROOM_SERVER_CONTRACT_HANDLERS_LUA="${CMAKE_SOURCE_DIR}/apps/room-server/scripts/contract_handlers.lua"
     APOLLO_GENERATED_CONTRACT_LUA="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract.lua"
 )
 target_link_libraries(contract_handler_tests PRIVATE
@@ -1923,34 +1923,34 @@ endif()
 # cell 脚本宿主接线（scripting-lua §2 一状态一逻辑线程 + §5.1 Scene 桥）：
 # boot 源加载（成功执行 / 缺失不停机）+ 未挂 scene 幂等补挂（新 scene 下一拍
 # 生效）+ debug eval 队列在宿主 tick 窗口的回传。直编协议源习语同
-# cell_acceptance_tests；OFF 树无 game_core/game_world/runtime 故带目标门控。
+# room_server_acceptance_tests；OFF 树无 game_core/game_world/runtime 故带目标门控。
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime
    AND TARGET apollo::script)
-add_executable(cell_script_host_tests
-    test_cell_script_host.cpp
-    ../apps/cell-app/src/cell_server.cpp
-    ../apps/cell-app/src/m1_link_server.cpp
+add_executable(room_server_script_host_tests
+    test_room_server_script_host.cpp
+    ../apps/room-server/src/room_server.cpp
+    ../apps/room-server/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
-target_include_directories(cell_script_host_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/cell-app/include
+target_include_directories(room_server_script_host_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/room-server/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
 )
-target_compile_definitions(cell_script_host_tests PRIVATE
-    APOLLO_CELL_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+target_compile_definitions(room_server_script_host_tests PRIVATE
+    APOLLO_ROOM_SERVER_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
-target_link_libraries(cell_script_host_tests PRIVATE
+target_link_libraries(room_server_script_host_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_link apollo::net_contract_wire apollo::net_linktrace)
 if(WIN32)
-    target_link_libraries(cell_script_host_tests PRIVATE ws2_32)
-    target_compile_definitions(cell_script_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(room_server_script_host_tests PRIVATE ws2_32)
+    target_compile_definitions(room_server_script_host_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 if(MSVC)
-    target_compile_options(cell_script_host_tests PRIVATE /utf-8)
+    target_compile_options(room_server_script_host_tests PRIVATE /utf-8)
 endif()
-add_test(NAME CellScriptHostTests COMMAND cell_script_host_tests)
+add_test(NAME RoomServerScriptHostTests COMMAND room_server_script_host_tests)
 endif()

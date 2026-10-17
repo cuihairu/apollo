@@ -33,7 +33,7 @@ TraceId generate_trace_id();
 std::uint64_t now_ms();
 
 struct SpanRecord {
-    std::string name;       // 跨度名（gateway_intent_forward / cell_intent_execute …）
+    std::string name;       // 跨度名（gateway_intent_forward / room_server_intent_execute …）
     TraceContext ctx;       // trace_id + 发端 parent + sampled（恒 true——未采样不发射）
     SpanId span_id{};       // 本 span（对端下一跳的 parent_span_id 来源）
     std::uint64_t start_ms = 0;

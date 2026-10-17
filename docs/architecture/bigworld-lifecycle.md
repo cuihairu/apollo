@@ -12,8 +12,6 @@ tag:
   - 登录流程
 ---
 
-[English](bigworld-lifecycle.en.md) | [中文](bigworld-lifecycle.md)
-
 # BigWorld 进程架构与玩家生命周期
 
 这是一页收口版入口，用来把 BigWorld 语义下的进程职责讲清楚。

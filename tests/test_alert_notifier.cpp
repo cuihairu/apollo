@@ -56,17 +56,17 @@ AlertRule rule_at(const char* metric, double threshold, bool greater,
 bool test_rule_eval_basic() {
     AlertNotifier notifier;
     TEST_ASSERT(notifier.rule_count() == 0, "空规则表");
-    notifier.observe("cell", "queue_depth 5\n", 1000);
+    notifier.observe("room-server", "queue_depth 5\n", 1000);
     TEST_ASSERT(notifier.fired() == 0, "空规则零开销不火");
 
     std::vector<AlertEvent> events;
     notifier.set_sink([&](const AlertEvent& e) { events.push_back(e); });
     notifier.set_rules({rule_at("queue_depth", 10, true)});
-    notifier.observe("cell", "queue_depth 5\n", 1000);
+    notifier.observe("room-server", "queue_depth 5\n", 1000);
     TEST_ASSERT(notifier.fired() == 0, "阈值内不火");
-    notifier.observe("cell", "queue_depth{proc=\"x\"} 11\n", 2000);
+    notifier.observe("room-server", "queue_depth{proc=\"x\"} 11\n", 2000);
     TEST_ASSERT(notifier.fired() == 1 && events.size() == 1, "超限首拍即火");
-    TEST_ASSERT(events[0].rule_name == "queue_depth" && events[0].proc == "cell" &&
+    TEST_ASSERT(events[0].rule_name == "queue_depth" && events[0].proc == "room-server" &&
                     events[0].value == 11 && events[0].threshold == 10 &&
                     events[0].greater && events[0].now_ms == 2000,
                 "事件字段封闭集完整");
@@ -83,17 +83,17 @@ bool test_sustain_window() {
     notifier.set_sink([&](const AlertEvent& e) { events.push_back(e); });
     // silence=0：本组只验 sustain 面（silence 独立成组）
     notifier.set_rules({rule_at("frame_ms", 20, true, 100, 0)});
-    notifier.observe("cell", "frame_ms 30\n", 0);
+    notifier.observe("room-server", "frame_ms 30\n", 0);
     TEST_ASSERT(notifier.fired() == 0, "持续未满不火");
-    notifier.observe("cell", "frame_ms 30\n", 50);
+    notifier.observe("room-server", "frame_ms 30\n", 50);
     TEST_ASSERT(notifier.fired() == 0, "持续过半不火");
-    notifier.observe("cell", "frame_ms 30\n", 100);
+    notifier.observe("room-server", "frame_ms 30\n", 100);
     TEST_ASSERT(notifier.fired() == 1, "持续满窗即火");
     // 恢复清零：回落再超限，sustain 重启
-    notifier.observe("cell", "frame_ms 5\n", 150);
-    notifier.observe("cell", "frame_ms 30\n", 200);
+    notifier.observe("room-server", "frame_ms 5\n", 150);
+    notifier.observe("room-server", "frame_ms 30\n", 200);
     TEST_ASSERT(notifier.fired() == 1, "恢复后重启 sustain");
-    notifier.observe("cell", "frame_ms 30\n", 300);
+    notifier.observe("room-server", "frame_ms 30\n", 300);
     TEST_ASSERT(notifier.fired() == 2, "重启后满窗再火");
     return true;
 }
@@ -101,12 +101,12 @@ bool test_sustain_window() {
 bool test_silence_window() {
     AlertNotifier notifier;
     notifier.set_rules({rule_at("queue_depth", 10, true, 0, 1000)});
-    notifier.observe("cell", "queue_depth 11\n", 0);
+    notifier.observe("room-server", "queue_depth 11\n", 0);
     TEST_ASSERT(notifier.fired() == 1, "首火");
-    notifier.observe("cell", "queue_depth 12\n", 500);
-    notifier.observe("cell", "queue_depth 13\n", 999);
+    notifier.observe("room-server", "queue_depth 12\n", 500);
+    notifier.observe("room-server", "queue_depth 13\n", 999);
     TEST_ASSERT(notifier.fired() == 1, "静默窗内不重火");
-    notifier.observe("cell", "queue_depth 14\n", 1000);
+    notifier.observe("room-server", "queue_depth 14\n", 1000);
     TEST_ASSERT(notifier.fired() == 2, "静默窗外可再火");
     return true;
 }
@@ -119,15 +119,15 @@ bool test_rate_cap() {
     notifier.set_rules({rule_at("m1_total", 0, true),
                         rule_at("m2_total", 0, true),
                         rule_at("m3_total", 0, true)});
-    notifier.observe("cell", "m1_total 1\nm2_total 1\nm3_total 1\n", 0);
+    notifier.observe("room-server", "m1_total 1\nm2_total 1\nm3_total 1\n", 0);
     TEST_ASSERT(notifier.fired() == 2, "限额内两火");
     TEST_ASSERT(notifier.dropped() == 1, "超限弃火计数");
     // 同窗内继续弃：m3 首次被弃未进静默窗（③弃火不更新②静默）——再拍
     // 重试仍被限额拦（m1 在静默窗内不再试探，②③各归其位）
-    notifier.observe("cell", "m3_total 2\n", 1000);
+    notifier.observe("room-server", "m3_total 2\n", 1000);
     TEST_ASSERT(notifier.dropped() == 2, "窗内继续弃");
     // 窗口翻转后再火
-    notifier.observe("cell", "m1_total 3\n", 60000);
+    notifier.observe("room-server", "m1_total 3\n", 60000);
     TEST_ASSERT(notifier.fired() == 3 && notifier.dropped() == 2,
                 "窗口翻转后再火");
     return true;
@@ -195,11 +195,11 @@ bool test_env_rules_parsing() {
 bool test_missing_metric_clears_state() {
     AlertNotifier notifier;
     notifier.set_rules({rule_at("frame_ms", 20, true, 100)});
-    notifier.observe("cell", "frame_ms 30\n", 0);
-    notifier.observe("cell", "queue_depth 1\n", 50);  // 度量缺席 = 清态
-    notifier.observe("cell", "frame_ms 30\n", 60);
+    notifier.observe("room-server", "frame_ms 30\n", 0);
+    notifier.observe("room-server", "queue_depth 1\n", 50);  // 度量缺席 = 清态
+    notifier.observe("room-server", "frame_ms 30\n", 60);
     TEST_ASSERT(notifier.fired() == 0, "缺席清态后 sustain 重启（不挂陈值）");
-    notifier.observe("cell", "frame_ms 30\n", 160);
+    notifier.observe("room-server", "frame_ms 30\n", 160);
     TEST_ASSERT(notifier.fired() == 1, "重启满窗再火");
     return true;
 }
@@ -209,7 +209,7 @@ bool test_sink_and_default_line() {
     AlertNotifier notifier;
     notifier.set_sink([](const AlertEvent&) { throw std::runtime_error("x"); });
     notifier.set_rules({rule_at("m_total", 0, true)});
-    notifier.observe("cell", "m_total 1\n", 0);
+    notifier.observe("room-server", "m_total 1\n", 0);
     TEST_ASSERT(notifier.fired() == 1, "异常吞掉计数照记");
 
     // 缺省行文本（cat=alert 行 msg 段）逐位比对
@@ -239,38 +239,38 @@ bool test_liveness_builtin() {
     TEST_ASSERT(notifier.rule_count() == 0, "内置规则不占规则表");
     std::vector<AlertEvent> events;
     notifier.set_sink([&](const AlertEvent& e) { events.push_back(e); });
-    notifier.observe_liveness("cell", true, 0);
+    notifier.observe_liveness("room-server", true, 0);
     TEST_ASSERT(notifier.fired() == 0, "up 不火");
-    notifier.observe_liveness("cell", false, 1000);
+    notifier.observe_liveness("room-server", false, 1000);
     TEST_ASSERT(notifier.fired() == 1 && events.size() == 1, "down 首拍即火");
     TEST_ASSERT(events[0].rule_name == "apollo_proc_up" &&
                     events[0].metric == "apollo_proc_up" &&
-                    events[0].proc == "cell" && events[0].value == 0 &&
+                    events[0].proc == "room-server" && events[0].value == 0 &&
                     events[0].threshold == 1 && !events[0].greater &&
                     events[0].now_ms == 1000,
                 "事件字段 = 内置规则口径（墓碑值 0 < 1）");
     // 持续 down：静默窗（默认 60s）内不重火，窗外按窗重火（持续告警）
-    notifier.observe_liveness("cell", false, 30000);
+    notifier.observe_liveness("room-server", false, 30000);
     TEST_ASSERT(notifier.fired() == 1, "持续 down 静默窗内不重火");
-    notifier.observe_liveness("cell", false, 61000);
+    notifier.observe_liveness("room-server", false, 61000);
     TEST_ASSERT(notifier.fired() == 2, "静默窗外再火");
     // 内置规则与 env 规则共存：规则面照常判定，互不串
     notifier.set_rules({rule_at("queue_depth", 10, true)});
-    notifier.observe("cell", "queue_depth 11\n", 61000);
+    notifier.observe("room-server", "queue_depth 11\n", 61000);
     TEST_ASSERT(notifier.fired() == 3, "规则面与存活告警共用出口");
     return true;
 }
 
 bool test_liveness_recovery() {
     AlertNotifier notifier;
-    notifier.observe_liveness("cell", false, 0);
+    notifier.observe_liveness("room-server", false, 0);
     TEST_ASSERT(notifier.fired() == 1, "down 首火");
-    notifier.observe_liveness("cell", true, 1000);   // 恢复清零
-    notifier.observe_liveness("cell", false, 2000);  // 静默窗内再 down
+    notifier.observe_liveness("room-server", true, 1000);   // 恢复清零
+    notifier.observe_liveness("room-server", false, 2000);  // 静默窗内再 down
     TEST_ASSERT(notifier.fired() == 1, "恢复后静默窗口径不变（不重火）");
     // set_rules 只清规则账，不清存活账（两路状态互不串）
     notifier.set_rules({rule_at("other", 1, true)});
-    notifier.observe_liveness("cell", false, 61000);
+    notifier.observe_liveness("room-server", false, 61000);
     TEST_ASSERT(notifier.fired() == 2, "set_rules 后静默窗外再火");
     // proc 隔离：逐 proc 独立记账
     notifier.observe_liveness("gateway", false, 61000);

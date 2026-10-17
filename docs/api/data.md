@@ -4,8 +4,6 @@ icon: database
 prev: /api/README.md
 ---
 
-[English](data.en.md) | [中文](data.md)
-
 # Data API
 
 > 2026-10-04 对账：本页按 HEAD 实况重写。旧稿的 `orm::Session`/`Query`/

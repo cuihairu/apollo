@@ -1,4 +1,3 @@
-[English](30-Room-Based_GameServer_Design.en.md) | [中文](30-Room-Based_GameServer_Design.md)
 
 # 房间制 GameServer 设计
 
@@ -40,4 +39,4 @@ RoomServer 可通过停止接收新房间、等待当前房间结束后退出，
 
 ## 5. 当前实现边界
 
-本设计是目标模型。当前仓库仍有 `base-app`、`cell-app`、`baseappmgr` 等原型程序；这些名字及其拆分方式不构成目标概念。实现状态见[服务器应用](apps/index.md)，当前总体架构见[架构总览](guide/architecture.md)。BigWorld/KBEngine 的 Base/Cell 进程只在对照材料中作为外部引擎术语。
+本设计是目标模型。当前仓库仍有 `base-app`、`room-server`、`baseappmgr` 等原型程序；这些名字及其拆分方式不构成目标概念。实现状态见[服务器应用](apps/index.md)，当前总体架构见[架构总览](guide/architecture.md)。BigWorld/KBEngine 的 Base/Cell 进程只在对照材料中作为外部引擎术语。

@@ -12,8 +12,6 @@ tag:
   - Proxy
 ---
 
-[English](base-cell-proxy-model.en.md) | [中文](base-cell-proxy-model.md)
-
 # Base Cell Proxy 对象模型
 
 这篇文档解决的是 KBE 体系里一个最容易被误解、但又最关键的对象模型问题：
@@ -187,7 +185,7 @@ Apollo 里这一层已经在前面的文档里定义得比较清楚了。
 - 移动
 - AOI
 - combat/skill 表现
-- cell 侧实时 authority
+- CellApp 侧实时 authority
 
 它不应该持有：
 
@@ -284,7 +282,7 @@ AvatarEntity
 进入 BigWorld 模式后，还会进一步分裂成：
 
 - base 侧长期逻辑
-- cell 侧实时 authority
+- CellApp 侧实时 authority
 - ghost 侧投影
 
 也就是说：

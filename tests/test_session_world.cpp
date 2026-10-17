@@ -244,7 +244,7 @@ bool test_scene_transfer_end_to_end() {
     auto session = fx.sessions.create_session(6001, player);
     TEST_ASSERT(session != nullptr, "session created");
 
-    // 进 A 场（attach 面与 cell_server 同构：Avatar 重建 + instance.enter）
+    // 进 A 场（attach 面与 room_server 同构：Avatar 重建 + instance.enter）
     const auto entity = apollo::game::core::EntityId(9001);
     auto avatar = std::make_shared<apollo::game::world::Avatar>(player, entity);
     TEST_ASSERT(fx.scene_a->enter(avatar, {1.0f, 2.0f, 3.0f}), "avatar entered scene a");

@@ -1,4 +1,5 @@
-[English](q104-script-timeout.en.md) | [中文](q104-script-timeout.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q104: 如何限制脚本的执行时间？
 
@@ -75,7 +76,6 @@ def time_limit(seconds):
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old_handler)
 
-
 # 使用示例
 def execute_script_with_timeout(script_func, timeout=5):
     """执行脚本并限制时间"""
@@ -89,7 +89,6 @@ def execute_script_with_timeout(script_func, timeout=5):
         print(f"Script execution error: {e}")
         return None
 
-
 # 测试
 def long_running_task():
     """长时间运行的任务"""
@@ -97,7 +96,6 @@ def long_running_task():
     time.sleep(10)  # 模拟长时间运行
     print("Task completed")
     return "Done"
-
 
 # 正常情况
 result = execute_script_with_timeout(lambda: time.sleep(1), timeout=5)
@@ -148,7 +146,6 @@ def execute_with_timeout(func, args=(), kwargs={}, timeout=5):
     except queue.Empty:
         return None
 
-
 # 使用示例
 def complex_calculation(n):
     """复杂计算"""
@@ -157,7 +154,6 @@ def complex_calculation(n):
         total += i ** 2
         time.sleep(0.001)  # 模拟耗时
     return total
-
 
 # 超时控制
 result = execute_with_timeout(complex_calculation, args=(1000000,), timeout=2)
@@ -196,7 +192,6 @@ def execute_in_process(func, args=(), kwargs={}, timeout=5):
 
     return process.exitcode
 
-
 def process_wrapper(func, args, kwargs):
     """进程包装器"""
     try:
@@ -204,7 +199,6 @@ def process_wrapper(func, args, kwargs):
         # 通过队列返回结果
     except Exception as e:
         print(f"Process error: {e}")
-
 
 # 安全的脚本执行
 class SafeScriptExecutor:
@@ -226,7 +220,6 @@ class SafeScriptExecutor:
         result = execute_in_process(script_runner, timeout=self.timeout)
 
         return result
-
 
 # 使用示例
 executor = SafeScriptExecutor(timeout=3)
@@ -433,7 +426,6 @@ class Sandbox:
 
         return exec_globals
 
-
 # 使用示例
 sandbox = Sandbox(timeout=3)
 
@@ -527,7 +519,6 @@ class TaskExecutor:
 
         except Exception as e:
             ERROR_MSG(f"Task execution error: {e}")
-
 
 # 玩家任务示例
 class Avatar(KBEngine.Entity):

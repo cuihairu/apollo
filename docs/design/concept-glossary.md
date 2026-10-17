@@ -1,4 +1,3 @@
-[English](concept-glossary.en.md) | [中文](concept-glossary.md)
 
 # Apollo 概念与命名
 
@@ -35,7 +34,7 @@ Apollo 是轻量房间制多人在线游戏服务器引擎，适合塔防、合�
 |---|---|
 | `login-app` | Login 原型。 |
 | `gateway-app` | Gateway 原型。 |
-| `cell-app` | 对局/场景运行时原型；名称沿用 BigWorld 词汇，不表示采用 Cell 空间切片。目标职责归入 RoomServer。 |
+| `room-server` | RoomServer 原型可执行程序；目前承载默认场景与受理队列，完整 Room 创建、销毁和多房间管理尚未实现。 |
 | `base-app` | 玩家状态与持久化原型；不代表目标必须设置独立 BaseApp 进程。 |
 | `baseappmgr` | 目录/落点管理原型；不代表目标必须设置 BigWorld 式管理进程。 |
 | `machined` | 本机进程监督原型，属于部署运维面。 |

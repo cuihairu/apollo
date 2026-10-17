@@ -1,4 +1,5 @@
-[English](q16-state-sync.en.md) | [中文](q16-state-sync.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q16: 什么是同步问题？客户端和服务端的状态如何同步？
 

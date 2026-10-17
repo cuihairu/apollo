@@ -1,4 +1,5 @@
-[English](q17-latency-compensation.en.md) | [中文](q17-latency-compensation.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q17: 什么是延迟补偿？应该补什么，不应该补什么？
 

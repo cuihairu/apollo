@@ -1,4 +1,5 @@
-[English](q3-aoi-implementation.en.md) | [中文](q3-aoi-implementation.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q3: 什么是 AOI（Area of Interest）？有哪些实现方式？各有什么优缺点？
 

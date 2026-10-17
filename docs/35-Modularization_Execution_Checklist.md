@@ -1,4 +1,3 @@
-[English](35-Modularization_Execution_Checklist.en.md) | [中文](35-Modularization_Execution_Checklist.md)
 
 # Apollo 模块化执行清单
 

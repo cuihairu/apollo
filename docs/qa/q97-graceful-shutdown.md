@@ -1,4 +1,5 @@
-[English](q97-graceful-shutdown.en.md) | [中文](q97-graceful-shutdown.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q97: 如何实现优雅关机？
 
@@ -196,7 +197,6 @@ class ShutdownManager:
         # KBEngine DBMgr 会自动关闭
         pass
 
-
 # KBEngine 脚本中的关机处理
 def onKBEngineShutDown():
     """
@@ -212,7 +212,6 @@ def onKBEngineShutDown():
     # 保存全局状态
     save_global_state()
 
-
 def cleanup_resources():
     """清理资源"""
     # 清理缓存
@@ -223,7 +222,6 @@ def cleanup_resources():
 
     # 取消定时器
     cancel_all_timers()
-
 
 def save_global_state():
     """保存全局状态"""
@@ -263,7 +261,6 @@ class SaveOnShutdown:
                 results.append((callback.__name__, False, str(e)))
 
         return results
-
 
 class Account(KBEngine.Account):
     """账号实体 - 支持关机保存"""
@@ -340,7 +337,6 @@ class ConnectionManager:
 
         if self.connections:
             WARNING_MSG(f"Timeout with {len(self.connections)} connections remaining")
-
 
 class KBEngineConnection(KBEngine.Entity):
     """KBEngine 连接处理"""

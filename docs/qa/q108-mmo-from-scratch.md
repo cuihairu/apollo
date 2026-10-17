@@ -1,4 +1,5 @@
-[English](q108-mmo-from-scratch.en.md) | [中文](q108-mmo-from-scratch.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q108: 从 0 到 1 搭建一个 MMO 服务器，你的思路是什么？
 
@@ -365,7 +366,6 @@ class PlayerSchema:
         'space_id', 'position_x', 'position_y', 'position_z'
     ]
 
-
 class ItemSchema:
     """物品数据模式"""
 
@@ -455,7 +455,6 @@ class Actor:
             return response_queue.get(timeout=timeout)
         except queue.Empty:
             raise TimeoutError("Actor response timeout")
-
 
 # 远程 Actor
 class RemoteActor:

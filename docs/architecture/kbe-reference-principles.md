@@ -12,8 +12,6 @@ tag:
   - 设计原则
 ---
 
-[English](kbe-reference-principles.en.md) | [中文](kbe-reference-principles.md)
-
 # KBE 参考原则与 ECS 兼容取舍
 
 这篇文档不是讲某一个具体模块，而是给 Apollo 后续所有架构设计定一个总原则：
@@ -338,7 +336,7 @@ Apollo 应坚持：
 
 理由：
 
-- 例如当前 Apollo 的 `base-app` 和 `cell-app` 都有历史语义偏差
+- 例如当前 Apollo 的 `base-app` 和 `room-server` 都有历史语义偏差
 
 优点：
 

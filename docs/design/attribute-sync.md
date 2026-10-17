@@ -1,4 +1,3 @@
-[English](attribute-sync.en.md) | [中文](attribute-sync.md)
 
 # Apollo 属性同步系统设计（attribute-sync）
 
@@ -290,7 +289,7 @@ message AttrSyncFrame {               // 每客户端每广播 tick 至多一帧
 - **BI 分流**：docs/08 的 BI/TLog 走独立采集通道（属性变更事件在收集阶段旁路采样导出，§5 预算外），**不允许 BI 需求反过来污染属性表结构**（KBEngine blob 化的诱因正是"什么都想存下来查"）。
 - **Redis 层**：只做跨进程共享热数据（公会/排行榜/全局状态），**不做实体属性缓存**（双写一致性成本 > 收益，属性权威在进程内存 + DB）。
 
-### 8.3 DDL 生命周期：版本化迁移（2026-09-30 补，design-gap-inventory #3）
+### 8.3 DDL 生命周期：版本化迁移
 
 storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / journal append / replay range + 列提升读写）；本节补**结构演化面**——表怎么建、列怎么加、迁移怎么管。两者同域：服务端私有，不进契约目录、不进 schema_hash（§15.4 两段式纪律照旧——纯存储演化零协议版本事件）。
 
@@ -302,7 +301,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 - **先例**：KBE entity_table_mysql.cpp:113 启动期 `ALTER TABLE ADD INDEX`——无版本化、每次启动都可能自改表、无位点记录（**反面参照**：不可审计不可重放，正是本节要消灭的形态）；BW sync_db 独立工具（形态参照）；Flyway/Liquibase 位点表模型（借形态不引依赖——MySQL 侧 runner 百行级，与 §15.5「校验器 ≤0 行」的取舍不同但同理：这套没有现成零成本件，值得自写）。
 - **与契约列提升的联动**：attrs.xml `column:true` 变更 → 生成器 CI 出 **diff 提醒**（「契约声明了列提升但库结构未见对应列」），不自动产迁移——DDL 的每一行过人眼。
 
-### 8.4 Redis 部署与键空间纪律（2026-09-30 补，design-gap-inventory #9）
+### 8.4 Redis 部署与键空间纪律
 
 §8.2 末行已定**定位**（跨进程共享热数据，不做实体属性缓存、不做二级缓存）；本节补部署面，使定位可执行。
 
@@ -337,15 +336,15 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
   7. shutdown*      — 仅停机路径进入（§10.2）：flush journal → 停收新连接 → drain → 落库 → 逆序停模块
 ```
 
-### 10.1 为什么是固定步长 tick，不是消息驱动（2026-09-28 深化，architecture-review G-7）
+### 10.1 为什么是固定步长 tick，不是消息驱动
 
-三家范式对照（architecture-review §16.2）：BigWorld/KBEngine 固定步长 tick（BigWorld cellapp.cpp:806-808；KBEngine gameUpdateHertz=10，kbengine_defaults.xml:5 + cellapp.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315，一次 dispatch 一条消息，空队列 cond_wait）。本设计**选 tick**，论证写下来防未来再议：
+三家范式对照（architecture-review §16.2）：BigWorld/KBEngine 固定步长 tick（BigWorld roomserver.cpp:806-808；KBEngine gameUpdateHertz=10，kbengine_defaults.xml:5 + roomserver.cpp:252-261），skynet 纯消息驱动无 tick（skynet_server.c:293-315，一次 dispatch 一条消息，空队列 cond_wait）。本设计**选 tick**，论证写下来防未来再议：
 
 1. **本设计的三个核心机制都以确定性节拍边界为前提**——`acked_seq`/`world_seq` 的序号推进与超时判定（§3.2/§3.3 "3 个广播 tick"）、派生 DAG 的拓扑批处理（recalc 阶段一次收敛整张图，§2.4）、token bucket 按 tick 领预算与突发上限（§5.1）。消息驱动下这三件事各自需要发明私有节拍，等于把 tick 散落进每个机制。
 2. **skynet 范式与权威实体模型错位**：skynet 适合**无共享状态的服务编排**（一条消息触发一个无副作用服务），其单写者边界是"服务"而非"实体"；apollo 的单写者边界是**实体归属的场景线程**，写语义（§3.1 全程无锁的前提）要求"一批变更在固定边界内可见、有序、可序号化"，这是 tick 的定义而不是消息的。
 3. **把 §0 的「思想与形态之分」用到调度范式**：skynet 的思想（服务轻量、消息驱动、过载可见）已分别吸收（服务≈场景、队列≈MPSC 环、MQ_OVERLOAD≈四级水位）；tick 与消息驱动是**形态**选择，由权威属性同步的本质决定，不是谁更现代的问题。BigWorld/KBEngine 两家 MMO 先例同选 tick（16.5-④），选型无异常。
 
-### 10.2 优雅停机序列（2026-09-28 深化，architecture-review G-3）
+### 10.2 优雅停机序列
 
 阶段 7 的展开（正常停机路径，崩溃路径不经过这里）：
 
@@ -383,7 +382,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 - **P2（体验与带宽）**：slice 复合类型 → 带宽预算 + 实体优先级 → 节流分级 + zstd → 持久化 write-behind + 列式提升 → 客户端预测（移动）。
 - **P3（BigWorld 化）**：CELL/RO_MIRROR 镜像 + authority_epoch → 实体迁移 → ghost 广播后端（net-abstraction.md 的进程间通道落地时启用）。
 
-## 12.1 已落地实现（2026-10-13）
+## 12.1 已落地实现
 
 `modules/game/attrsync/` 子模块已交付 per-viewer delta 管线核心层 + 集成层 + 帧编解码 + ACK 超时降级 + SceneAoi 接线 + §5 优先级与节流 + §8.2 写后日志入口，共七批：
 
@@ -503,7 +502,7 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 
 **测试**：`tests/test_attr_sync.cpp` 增 8 用例（SelfDomainHiddenFromOtherViewer / SelfDomainVisibleToOwner / PublicDomainVisibleByDefault / WorldDomainVisibleLikePublic / TeamDomainHiddenWithoutGate / TeamDomainVisibleThroughGate / DeltaPathRespectsDomain / ExhaustedHistorySnapshotAlsoFiltered）；`tests/test_attr_sync_manager.cpp` 增 2 用例（CollectHidesSelfDomainFromOtherViewer / GroupGateControlsTeamVisibility）；`tests/test_scene_attrsync_wiring.cpp` 增 1 用例（FirstSightHidesSelfDomainFromOther）；`tests/test_attr_ack_degrade.cpp` 增 1 用例（DegradeSnapshotCarriesFullValues）。build 树 + sanitizer 树 + OFF 树全绿。
 
-### 批 10 — §2.2 slice 复合类型机制层（2026-10-15）
+### 批 10 — §2.2 slice 复合类型机制层
 
 | 件 | 文件 | 状态 |
 |---|---|---|
@@ -567,5 +566,3 @@ storage.xml 定的是**运行语句面**（§15.5 三语句：快照 upsert / jo
 | 预测 | 移动预测 + reconcile | 客户端可选 | 移动预测 + 表现层预测 + 意图上行 |
 
 ---
-
-*基线：apollo main @ 35a9c528（attribute.hpp/attribute_id.h/aoi.hpp/docs03 现状以其为准）。2026-09-28 同步修订（③⑥）：§7.1 标注 protobuf 为编码布局参考（契约源 XML+XSD）、§8.1 第 2/4 条按 C-51 重写（KBEngine Archiver 周期归档与 Indexed 真实索引实证；KBEngine 行号对应 github.com/cuihairu/kbengine fork master 浅克隆工作副本）、附录持久化行按 C-52 改写；源证 architecture-review §16.3。同日深化（第七轮增量，随 263a3888 之后的本次提交）：§5.2 witness 实证、§7.3 继承交集、§8.2 摊写节拍、§10.1/§10.2（G-7/G-3），摘要 7；BigWorld 行号对应 14.4.1 官方包工作副本（programming/bigworld/server/cellapp/witness.cpp）。2026-09-29 补 §8.2 范围声明（「数据不丢」与「进程不倒」分界，architecture-review G-2 → net-abstraction §7「P3 前置设计」）。*

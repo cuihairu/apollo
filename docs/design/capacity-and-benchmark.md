@@ -1,8 +1,7 @@
-[English](capacity-and-benchmark.en.md) | [中文](capacity-and-benchmark.md)
 
 # Apollo 容量模型与基准设施（capacity-and-benchmark）
 
-> 状态：设计稿（评审中）。定位：把散落在六份设计里的容量数值（5000 CCU / 25k msg/s / movement <100B / 32KB/s token bucket……）集中为**单进程容量预算表并给出推导链**；回答「net-abstraction §5.6『M2+ 每项先有基准再动手』的基准从哪来」；补 C++ 侧内存与对象池预算（Lua 侧上限已有 scripting-lua §6，C++ 侧此前零对应物）。缺口登记：design-gap-inventory #5（容量模型/基准设施）+ #7（内存对象池，同批）。与 `clock-and-time.md`（tick 10Hz 口径/跳拍率指标）、`attribute-sync.md`（§5 带宽/§10 六阶段/§11 验收表）、`net-abstraction.md`（§4 水位/§4.3 上行限流/§5.6 演进阶梯）、`scripting-lua.md`（§5.2 钩子预算/§6 沙盒上限）、`sdk-contract.md`（§10.6 性能量化）、`battle-determinism.md`（§5 录制格式——基准负载复用）互为引用。
+> 状态：设计稿（评审中）。定位：把散落在六份设计里的容量数值（5000 CCU / 25k msg/s / movement <100B / 32KB/s token bucket……）集中为**单进程容量预算表并给出推导链**；回答「net-abstraction §5.6『M2+ 每项先有基准再动手』的基准从哪来」；补 C++ 侧内存与对象池预算（Lua 侧上限已有 scripting-lua §6，C++ 侧此前零对应物）。与 `clock-and-time.md`（tick 10Hz 口径/跳拍率指标）、`attribute-sync.md`（§5 带宽/§10 六阶段/§11 验收表）、`net-abstraction.md`（§4 水位/§4.3 上行限流/§5.6 演进阶梯）、`scripting-lua.md`（§5.2 钩子预算/§6 沙盒上限）、`sdk-contract.md`（§10.6 性能量化）、`battle-determinism.md`（§5 录制格式——基准负载复用）互为引用。
 
 ---
 
@@ -25,7 +24,7 @@
 
 | 项 | 值 | 出处/说明 |
 |---|---|---|
-| 主循环 | tick 20Hz，帧 50ms | cell-app config tickRateMs=50（设计口径 10Hz 待校准） |
+| 主循环 | tick 20Hz，帧 50ms | room-server config tickRateMs=50（设计口径 10Hz 待校准） |
 | 容量目标 | 5000 CCU/进程 稳态 | sdk-contract :476 既有口径，本文升格为顶层目标 |
 | 极端场景 | 单场景 100 人同屏战斗 | attribute-sync §11 压测口径 |
 | 实体规模 | 玩家 5000 + NPC/怪物 ~20k（按场景配额） | 估算口径，配置化 |
@@ -77,7 +76,7 @@
 - 桩口径限制：无寻路/技能/跨景/网络发送面，帧成本为下界；§2 全帧段
   实测化分批补——flush 段已补
   （§2.3，2026-10-13）、persist-batch 段已补（§2.4，2026-10-13）。
-- 批 B 收口（cell-app 单写者化，方案挂拍板）+ 多景并行线程化后按此
+- 批 B 收口（room-server 单写者化，方案挂拍板）+ 多景并行线程化后按此
   锚点复测。
 
 （批 A 首跑 20Hz 口径数据作废——主循环 10Hz 为 clock-and-time §4 定案，
@@ -122,7 +121,7 @@ parseHeader + decodeBody）分段微测，突发 = cap 顶格 1024 条真实移�
 逐条编成真实协议帧（Enter→CellCreateEntity / Sync→CellEntityMove /
 Leave→CellDestroyEntity，MessageCodec 全量编码，session_id 0 = 系统广播）；
 编码计时段与 scene 局部段分离。**网络 socket 发送不计**——网关下发面仍
-是桩（cell_server `broadcastToViewers` 只落日志），本段量的是装包成本；
+是桩（room_server `broadcastToViewers` 只落日志），本段量的是装包成本；
 三跑 min（同 §2.1 纪律）。机器同 §2.1。
 
 | 模型 | scene 帧均(min) | flush 均值(min) | 全帧合计 | 全帧占比 | Msgs/帧 | KB/帧 |
@@ -247,7 +246,7 @@ min A 10.06 / B 6.13 / C 8.74ms 留档作机制对照，见下。）
 | 水位 soft+ 触发率 | 稳态 <1% 会话·min（触发即负载异常信号） | net-abstraction §4.2（新增量化） |
 | violation_score 断开率 | 稳态 <0.01% 会话·min | net-abstraction §4.3（新增量化） |
 | 重连恢复 / 崩溃回档 | ≤1 RTT+快照(≤50KB) / ≤2s journal 零丢失 | attribute-sync §11 |
-| 进程恢复全链耗时 | kill -9 → 重报收敛 ≤3s / 镜像收敛 ≤3.5s（骨架两跑实测 1.3-1.8s / 2.3-2.8s，**满载噪声期上限口径**——load 75-90 机器共用期，空载当更优；主导项 = 重启退避 1s；RPO/RTO 目标值定档见 backup-revive 拍板点 4） | backup-revive §6 批 0 演练（scripts/drill_kill9.sh，2026-10-09，i9-10880H 本机编队） |
+| 进程恢复全链耗时 | kill -9 → 重报收敛 ≤3s / 镜像收敛 ≤3.5s（骨架两跑实测 1.3-1.8s / 2.3-2.8s，**满载噪声期上限口径**——load 75-90 机器共用期，空载当更优；主导项 = 重启退避 1s；RPO/RTO 目标值定档见 current process-recovery behavior 拍板点 4） | current process-recovery behavior §6 批 0 演练（scripts/drill_kill9.sh，2026-10-09，i9-10880H 本机编队） |
 | 帧耗时分位 | tick 段 p99 ≤70ms（§2 表合计），连续 3 帧 >80ms 过载告警 | clock-and-time §4（新增量化） |
 | 录制体积 / hash 链分歧率 | ≤5MB/关键战斗 / 复算分歧 = 0（版本内） | battle-determinism §5/§8（接入点） |
 | RSS | 稳态 ≤4GB，告警 6GB | §4（本表） |
@@ -271,5 +270,3 @@ min A 10.06 / B 6.13 / C 8.74ms 留档作机制对照，见下。）
 | architecture-review | 16.8.3 归属判据的执行：apps/bench（聚合工具）↔ modules 检测原语两截；基准 golden 化与契约 golden 同哲学 |
 
 ---
-
-*基线：apollo main @ e0b360be（散落数值出处本会话实读：sdk-contract :395/:476/:500、attribute-sync §5.1/§11、net-abstraction §3/§4.1/§4.2/§4.3/§5.6/§5.8、scripting-lua §5.2/§6、clock-and-time §4/§10、battle-determinism §4/§5/§8）。全部估算值标注「初始/量级口径」，基准校准前不作为硬验收——与 sdk-contract §10.6「估算口径，非基准」同一诚实纪律。缺口登记：design-gap-inventory #5/#7；本件落盘后回填状态列。*

@@ -1,4 +1,5 @@
-[English](q23-rpc-implementation.en.md) | [中文](q23-rpc-implementation.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q23: 如何实现 RPC 调用？
 

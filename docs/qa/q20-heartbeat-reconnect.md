@@ -1,4 +1,5 @@
-[English](q20-heartbeat-reconnect.en.md) | [中文](q20-heartbeat-reconnect.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q20: 长连接如何保持心跳？断线重连如何设计？
 

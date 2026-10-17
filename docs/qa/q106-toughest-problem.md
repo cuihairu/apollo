@@ -1,4 +1,5 @@
-[English](q106-toughest-problem.en.md) | [中文](q106-toughest-problem.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q106: 你遇到过最难的技术问题是什么？如何解决的？
 
@@ -98,7 +99,6 @@ class MemoryLeakDebugger:
                 print(f"Object {obj} referenced by:")
                 for ref in referrers:
                     print(f"  {type(ref).__name__}: {ref}")
-
 
 # KBEngine 内存泄漏案例
 """

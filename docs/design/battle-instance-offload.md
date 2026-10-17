@@ -1,4 +1,3 @@
-[English](battle-instance-offload.en.md) | [中文](battle-instance-offload.md)
 
 # Battle Instance Offload 前置设计（副本进程形态）
 

@@ -6,8 +6,6 @@ prev: /guide/
 next: /guide/quick-start
 ---
 
-[English](installation.en.md) | [中文](installation.md)
-
 # 安装 Apollo
 
 ## 环境要求

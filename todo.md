@@ -1,45 +1,43 @@
-# apollo 巡检台账（仓库根 todo.md）
+# Apollo migration checklist
 
-> 分工：本文件 = 巡检需求清单；`docs/todo.md` = 重构任务书批次台账（权威任务源）。
-> 验收口径：三树门禁（GAME_MODULE ON/OFF）ctest 全绿 + sanitizer 零报告；文档/设计稿不计入已实现。
+The target is a lightweight room-based multiplayer server engine for tower defense, co-op, arenas, and dungeons. It does not target a persistent seamless world. `Login`, `Gateway`, `RoomServer`, and `Room` are the canonical terms. One Room is one match; one RoomServer may host multiple Rooms; a player has one authoritative gameplay object in a Room at a time.
 
-## 待办（需求）
+Two update modes are documented. Protocol updates regenerate contract artifacts and require old/new compatibility during rollout. Code-only updates keep the wire contract unchanged; Lua has runtime replacement primitives, while C++ changes use process replacement after Rooms drain or transfer. Production rollout, connection handoff, and uninterrupted active-Room updates remain unproven.
 
-- [x] trace 四件套余件：RemoteEntityRef / RemoteMethodSchema / RouteResolver 与 RPC 链 trace（49d3d3a8，14 用例）
-- [x] Lua 脚本：`docs/design/scripting-lua.md`——运行时底座十三批已交付（沙盒宿主 + §3.2 热替换 + §5.1/§5.2 属性钩子窗口 + §6.1 模块熔断与三级事件（WARN 去抖/FAULT/TRIP-RECOVER + 结构化字段） + §6.1 WARN 阈值可配（warn_threshold_percent，0 = 关闭） + §3.4 契约表装载（路由完整性闸/白名单数据化/契约路由分发） + §7.1 attach eval（沙盒面/结果截断/限流/失败面错误原文） + §5.1 Scene×ScriptRuntime 适配桥（tick 六阶段接线/契约白名单/帧预算） + §7.1 attach 执行队列（跨线程投递/tick 首拍固定调试点/结果 id 回传） + §6.1 熔断状态持久化（隔离/去抖账跨重启） + cell 宿主接线（gameThread 随生灭 runtime/boot 源加载失败不停机/scene 幂等补挂与停机摘挂/eval 经宿主 tick 窗口） + debug eval 族契约（944 请求/945 回执，internal 域） + admin attach transport（cell 侧 944 受理/945 异步回执 + fleetctl eval 入口） + §3.5 字节码缓存（构建期 lua_precompile 产物 + manifest 三元组校验装载 + APOLLO_LUA_BYTECODE_CACHE 门控与回退源码） + §7.2 状态面只读内省（gc_state 内存与增量参数只读查询 + reload_history 热替换审计环 64 条 + env_snapshot 裸遍历快照） + 宿主侧 Lua 结构访问全 raw（global 读写与装载/调用路径探测不经元表——__index/__newindex 恶意表不再崩进程） + §7.3 性能归因分桶（六调用边界 per-chunk 指令与墙钟入账 + profile_snapshot/reset + 超标事件状态面环 64 条；C++ 侧外采与 MetricRegistry 聚合归 observability 批） + apollo_gen 吐 contract.lua 装载面形态收口（M.routes 平表 + 整数白名单 id 数组——load_contract 零歧义消费，生成器产物集成装载测试锚死形态），script_tests 58 用例 + scene_script_tests 16 用例 + cell_script_host_tests 7 用例 + cell_m1_link_tests eval 族 3 用例 + bytecode_cache_tests 10 用例 + lua_precompile 冒烟 1 例 + script_state_tests 21 用例 + §8 异步底座（L1 交接原语 register_async_service 扩展点 + apollo.async.call/complete/fail/cancel_pending/drain_async + set_async_validator re-validate + 注入错误不计熔断 + 指令预算跨 yield + Lua 长跳资源先释放纪律 + §7.2 协程清单 coroutine_snapshot 与 coroutine.create/wrap/resume 登记，async_tests 20 用例；L0 真实后端 Redis/DB/跨服随各自批次、async.all 随消费批） + §3.2 Phase A 两段式热替换（prepare_module 独立预备沙盒编译+求值+冒烟+预备镜像拓扑序 + commit_module 进程内字节码交接+hash 完整性校验+与 swap 共用换表尾+冒烟不重跑，phase_a_tests 13 用例） + §3.2 current 版本指针持久化（version_store 清单 swap/commit/rollback 三处回写 + 原子 rename + current_version_manifest 读面 + 防坏版本崩溃循环，version_store_tests 15 用例） + §3.2 Phase A 工程面 patch 目录读与 hash 校验控制面（load_patch_directory manifest 驱动逐条目 + 源 hash 不符拒载 + 字节码 hash/format_sig 双校验不符丢字节码留源码，patch_loader_tests 12 用例） + §3.2 Phase C 灰度观察期 canary 判定原语（ModuleCanary 观察窗 + per-module fault 流水 module_faults_since + 超阈早失败 + 回滚全回路，canary_tests 6 用例） + §3.2 Phase A 工程面灰度 per 场景线程投递编排（ModuleRollout 一次预备服务全部目标 + Kahn 拓扑序 + per-target 分步投递队列 + 每(灰度目标,模块)一 canary + 任一窗判坏早失败回滚 + 推广失败 per-target + 跨轮复用预备沙盒保留，rollout_tests 12 用例） + §3.4 宿主启动装载（cell --script-handlers/--script-contract 启动序 handler 面→契约→boot + 契约路由 handler 面占位模块随仓 45 路由 + golden 契约装载闸同步，contract_handler_tests 2 用例 + cell_script_host_tests 3 用例）
-- [x] 属性增量同步：管线核心十三批已交付（c7b6c3dc/b4449d9d/0d0b6def/2fcb80c2 + SceneAoi 接线批 + §5 优先级与节流派 + §8.2 写后日志入口 + §3.3 快照负载组装 + §2.2 域投影机制层 + GameConnection Facade L3 适配层 + scripting-lua §5.1 钩子窗口注入点（attrsync 侧）+ Scene × ScriptRuntime 适配桥（Scene tick 六阶段接线 + 契约白名单 + 帧预算）+ Facade L2 会话增量（四通道队列/trim 分级/场景线程投递/Resuming），112 用例 + gameconnection_tests 20 用例 + §2.2 slice 复合类型机制层（组合 id = slot<<16|base、slot 0 = 长度格、per-slot 脏标记/序号/下发、收缩即终态擦除 + DeltaBuilder 死格过滤 + 域继承 base，attrsync 家族 107 用例；声明面 slice_count/slice_type 归契约批）+ §2.2 域标记契约声明生成（契约 sync 掩码 → AttrDomain 映射原语 + `apply_contract_domains` 表应用 helper，FW1016D 已代决映射规则与消费形态，attrsync 家族 127 用例；宿主启动期注册点接线随社交/玩法批），attrsync 管线核心全清（16ef9534，四树绿：build 116/116 + san 3/3 + off 2/2 + examples 1/1）
-- [ ] battle-verification-service：ADR-013 明示暂缓（随 Lua/玩法批）（2026-10-16 巡检复核：暂缓依据「Lua 面未入主线」已过时——Lua 运行时底座十三批已交付入主线；但玩法批未到（玩法 authoring 归玩法批，未排期），解锁条件半满足。2026-10-16 FW1016D 已代决：提前立项与否 = 不提前——零玩法内容可复算（主线无技能/效果 authoring，BattleRuntime 确定性已由 battle_runtime/rng_substream 测试覆盖，早立项只会得到复算既有确定性测试面的空壳 worker 池），维持随玩法批；解锁触发 = 玩法批立项；用户可推翻）
-- [ ] 外部存储接线（MySQL/Redis/ClickHouse）：ADR-007 现行=文件+journal 零外部依赖（未排期）（2026-10-16 巡检复核：现行持久化=SaveQueue/PersistJournal 文件+journal，无外部存储服务；`redis_service_discovery.cpp` 属遗留 IPC 旁支（遗留登记在案）非持久化路径，mysql 代码命中仅 `net_util.h:478` 端口号工具映射；ADR-007 状态「已落地」未变。2026-10-16 FW1016D 已代决：维持不立项——ADR-007 自身依据仍成立（存储语义定型前接外部 DB 是负资产、拉高跑起来门槛），且无生产部署/容量需求信号（同 G-2 关闭的事实基座）；解锁触发 = 生产部署立项或用户点名清单；用户可推翻）
-- [ ] Kafka 观测管道 + Prometheus/Grafana：架构决策 #14 计划，仓内零实现（未排期）（2026-10-16 巡检复核：设计源=docs/18-Data_Architecture_Whitepaper.md TLog 管道；代码面 Kafka/Grafana 零命中，metricspush 仅自拼 Prometheus exposition 文本（logging.md §5.1 明确不引 prometheus-cpp）即已交付口径本身，非本条范围。2026-10-16 FW1016D 已代决：维持未排期——仓内推送面（L4 push + metricspush Prometheus 文本面）已覆盖现行观测需求，Kafka/Grafana 需常设外部基建属外部条件、仓内无可先行切片；解锁触发 = 常设观测基建立项或生产部署立项；用户可推翻）
-- [ ] protobuf+zstd 消息路径：protobuf 现为依赖+测试不在消息路径，zstd 未入 vcpkg.json（未排期）（2026-10-16 巡检复核：modules/net 现役 add_subdirectory 十处不含 rpc/tcp，protobuf 命中仅在两处未接线遗留目录（rpc/tcp）与测试；vcpkg.json 依赖面（openssl/lua/protobuf/gtest/curl/nlohmann-json/pugixml/readline/crashpad）无 zstd。2026-10-16 FW1016D 已代决：维持自持内核不上 protobuf 消息路径——M1 自研内核五批迁移刚收敛全绿，无互操作/带宽压力实证，反转无因；zstd 同步不入依赖。解锁触发 = 跨语言客户端互操作需求或压测带宽瓶颈实证；用户可推翻）
-- [ ] G-2 热备仲裁面：ADR-010 已裁「案 A 先行、standby 不立项」（有裁决搁置；R1015F 已代决维持关闭，无反裁不重开）（2026-10-16 巡检复核：ADR 序列至 017 无反裁条目；重开条件=生产数据亚秒 RTO 需求 / 多机形态立项，仓内仍单机编队形态、无生产部署，两条件均未触发；维持关闭）
-- [x] docs/ 子目录文档双语配对（2026-10-16 用户执行单遗留项）：docs/ 根目录 14 份已配对完成（12 份新增 .en.md 译版 + 1 份新增 .zh.md + 03 号 2804 行仅加切换器与「暂无译版」说明）；子目录共 234 份，已配对 109 份 = sdks(3，c2cebf6e) + R2PATROL 第二批 apps(2)/api(8)/guide(10)/modules(9，3721031c) + 第三批 analysis(4)/rearchitecture(8)（各 1 份 ≥1000 行仅加「暂无译版」标注不出 .en.md：analysis/architecture-review.md 3150 行、rearchitecture/architecture-review-plan.md 1565 行） + 第四批 design(23，全部全量翻译无 ≥1000 行件) + 第五批 architecture(41，其中 kbe-source-analysis.md 1404 行仅加「暂无译版」标注不出 .en.md) + 第六批 qa 全清(124 份全量翻译 + q116-cpp-design-patterns-in-kbengine.md 1329 行仅加「暂无译版」标注不出 .en.md)，234/234 全部配对，账本项完成（排除 node_modules 297 与 public 静态资源 1）。判据同根目录：中文文档配英文版、英文文档配 .zh.md，两份顶部首屏内加语言切换器，命令/路径/代码块/专有名词原样保留不译，超长文档如实标注暂无译版不硬造劣质翻译。门禁同 docs 根目录轮：VitePress 构建通过 + 单 commit 英文简短
+## P0 — Documentation baseline
 
-## 代决记录
+- [x] Remove retired architecture archives and duplicated task ledgers that introduced competing process names. Keep BigWorld/KBEngine terms only in clearly labeled external-engine references.
+- [x] Define the target process roles, Room boundary, single-authority player object, and Gateway update limits in the architecture entry points.
+- [x] Document protocol-update and code-only update modes and distinguish existing runtime primitives from incomplete production rollout.
+- [x] Move English pages to the VitePress locale directory `docs/en/`; use `locales` configuration and the built-in locale switcher.
+- [x] Remove dead Markdown links with a static check across 467 pages.
+- [ ] Run the VitePress build and fix any build-time issues. The repository's `.gitignore` explicitly forbids operations in `node_modules`, so this check must wait until it can run without touching that directory.
 
-- **2026-10-15（R1015F 已代决）初始导入脚手架测试目标 8 个删除**：data_structures / log / network / protobuf / rest_template / utils / id_pool / timer 测的是已删 API（`apollo/net/protobuf_message.hpp`、`HttpHeader`、`utils::Random` 函数式调用形态等），无改写对象；CMake/CTest 接线同批清除（buffer_tests 绿，保留），四树构建 + ctest 全绿。遗留注记：`include/apollo/utils/lock.h` 与 `thread_pool.h` 唯一消费者即已删 test_utils.cpp，已成孤儿头——后续批已删（2026-10-15，全仓零引用核实：代码引用全指向 `apollo/base/thread_pool.hpp` 与 `apollo/utils/threading/thread_pool.hpp` 两处现役实现）；同批对 `include/apollo/utils/` 全部 9 个兄弟头做了消费者复查，`memory_pool.h`（header-only，零 .cpp、零 CMake 接线、零消费者）同删，其余 6 个均有现役消费者保留（crypto/id_pool→src/apollo/utils/*.cpp 与 session_manager.h、data_queue/loop_buffer→net/session_manager.h 与 message_codec.h、random→service_discovery.cpp、serializer→examples/serializer_demo.cpp、time→6 处）。
-- **2026-10-15（R1015F 已代决）覆盖率不硬造**：两份 todo 均无覆盖率条目，维持不动；如需补覆盖率由用户明示范围。
-- **2026-10-15（R1015F 已代决）G-2 维持硬关闭**：ADR-010 案 A 先行、standby 不立项、批 1-4 取消维持；无 ADR 反裁或生产数据触发不重开（决策记录见 `docs/architecture/adr.md` ADR-010 代决注记）。
-- **2026-10-16（FW1016D 已代决）四条暂缓/未排期条目转代决态**：battle-verification-service 不提前立项（零玩法内容可复算，维持随玩法批，触发 = 玩法批立项，注记入 ADR-013）、外部存储接线不立项（ADR-007 依据成立 + 无生产需求信号，触发 = 生产部署立项或用户点名清单，注记入 ADR-007）、Kafka 观测管道维持未排期（仓内推送面已覆盖 + 常设外部基建属外部条件，触发 = 观测基建立项）、protobuf+zstd 消息路径不立项（M1 自持内核无反转因，触发 = 互操作需求或带宽瓶颈实证）。授权依据 = FW1016D 第 2 条（用户授权代决，事后可推翻）；G-2 维持 R1015F 已代决关闭不重开；四条解锁条件与同日早轮 FW1016B 复核时无变化。
-- **2026-10-16（FW1016D 已代决）契约 sync 掩码 → AttrDomain 映射规则与消费形态**（attribute-sync §2.2，批 11）：① 映射规则 = 最宽可见性胜出，总序 WORLD > APPR/PROP > GUILD > TEAM > SELF，空掩码 = kPublic，IMMEDIATE 时序位不参与、DB 位契约禁用即便出现也不贡献，TEAM|GUILD 平局取 kGuild——契约掩码是可见范围的并集声明，批 9 裁剪按域二值判定，并集取最宽者是唯一单调且不失宽的选择（取窄即数据丢失），kWorld 映射保留上游全服路由意图；② 消费形态 = 表驱动（契约=数据 / attrsync=机制 / 宿主=接线），映射 helper 落 attrsync（结果类型是本模块 AttrDomain）、掩码位本地镜像不引 game_attrsync→contract 依赖边、漂移由 attrsync_tests 7 处 static_assert 编译期钉住——机制层保持零契约耦合（批 9/10 分工口径），生成物是本仓已检入常量表、非运行期依赖边。理由与批记见 `docs/design/attribute-sync.md` 批 11。未接线项：宿主启动期 `apply_contract_domains` 注册点（当前 `EntityAttrs` / `set_domain` 无宿主消费者，机制层与测试之外零触达），随社交/玩法批的成员数据注入与实体注册面一并接。授权依据 = FW1016D 第 2 条（用户授权代决，事后可推翻）。
+## P1 — Runtime naming
 
-## 已完成（证据）
+- [x] Rename `apps/cell-app` to `apps/room-server`; update the CMake target, classes, namespace, includes, CLI flags, Gateway configuration, fleet script, logs, metrics, and related tests. Preserve existing `cell_*` wire message names and IDs.
+- [x] Review `base-app` and `baseappmgr`; map session, player-data, and routing responsibilities to `Login`, `Gateway`, and `Room` without adding standalone target processes. The prototype code migration remains tracked below.
+- [x] Route the current Gateway M1 link/configuration to `room-server`; remove user-facing claims that Cell/Space processes are part of Apollo target topology.
+- [ ] Confirm the RoomServer ownership boundary in code; lifecycle implementation is tracked in P2.
 
-- [x] 核心框架（`apollo::core::di` + `ApplicationHost` 六态生命周期 + `ConfigRegistry`）：P0-1 起，fd61ff7f
-- [x] 网络自持四层（net M1）：nng 迁移五批 2026-10-12 全清，9121ebc2
-- [x] linkrpc 关联原语（契约 940/941 + corr_id + call_async/poll/wait 桥）：5ae86969
-- [x] Scene/Instance 模型 + PlayerAnchor 权威 + 换幕 scene_transfer + PlayerDirectory + AOI 3×3 + 持久化栈 + Recovery/Reconnect + 确定性战斗 BattleRuntime + 契约系统 + Social/Guild/Party：P0-P2 各批（docs/todo.md 批记链）
-- [x] cell 受理面 + 延时应答（队列化异步受理 + 水位/过载 + pending-reply 升级）：2ffc4711 / 6b48984a / 0b8273fc
-- [x] 可观测性最小面（P3-3 批 A-L7）：日志四套收敛 + LoggerApp + L4 push 通道 + MetricRegistry + metrics admin 通道 + trace 子集 + 告警 notifier
-- [x] 崩溃采集（crashpad + machined 对照链 + 符号化）：批①②③④
-- [x] 进程编队（G-1）：machined 监督面 + discovery 库 + 目录镜像 + FleetRecoveryCoordinator + 死亡行窗口处置
-- [x] 玩家迁移（backup-revive §9.2）：契约族 933-938（62d53d35）+ 服务器双面（22b0431e）+ zone 迁移 pull on handoff（fb0cba36）+ directory moved epoch（2372c3fc）+ manager 编排器（af884542）+ migrate 命令接线（e4404801）+ 编排演练（897cfabf）
-- [x] 更新排空与演练工具：drain 闸 SIGUSR1/2（fa201213）+ fleetctl probe（8b155a04）+ route1 更新演练（33e577be）
-- [x] 性能基准：三模型 benchmark 桩 + 受理面实测 ~0.1µs/意图 + flush 段实测（934f5df2）
-- [x] DevEx：dev_fleet.sh 一键起停 + gateway ingress 接线 + 编队成员注册批 0de62ea9（21/21 绿）
-- [x] 契约 slice 声明面（attribute-sync 批 10 余项）：attrs.xml/XSD 新增 slice_count/slice_type 成对声明 + 解析校验（成对性、≥1、元素类型可解析）+ apollo_contract.h AttrMeta/apollo_contract.json/contract.lua 产物携带 + 编译期 static_assert；随仓契约零 slice 内容（玩法 authoring 归玩法批），golden 重吐一致性绿
-- [x] 测试面：tests/ 86 个 test_*.cpp（gated by ctest，ctest -N 77 项）
-- [x] P3-2 / P3-3 / P3-4 全部收口：2026-10-13（批次台账 28/28 全勾）
-- [x] P4-4 术语承接：697c49d5（`APOLLO_USE_NNG|nng_` 代码 0 残余）
-- [x] 移交件② bare 924-928 双受理退役：9eac60d8
-- [x] 移交件③ collector 归档滚动：67fa7fd8
+## P2 — Room runtime
+
+- [ ] Add Room creation, admission, multi-Room hosting, settlement, and destruction to RoomServer.
+- [ ] Enforce one authoritative player object through admission, reconnect, and transfer paths.
+- [ ] Complete and verify the client → Gateway → RoomServer → Room message path.
+- [ ] Implement cross-RoomServer authority transfer with idempotency, route update, failure recovery, and tests.
+
+## P3 — Update and availability behavior
+
+- [ ] Add protocol-version negotiation and an N/N-1 compatibility window; enforce generated-artifact and compatibility checks in CI.
+- [ ] Complete Lua patch distribution and rollout control across RoomServer instances, including canary health checks and rollback.
+- [ ] Implement graceful Gateway drain and validate how existing sockets behave through the drain deadline.
+- [ ] Define reconnect/session recovery for clients that reconnect through another Gateway.
+- [ ] Define RoomServer drain behavior for completion, migration, timeout, and forced shutdown.
+- [ ] Validate protocol and code-only rolling releases separately; do not claim seamless active-Room updates without end-to-end evidence.
+
+## P4 — Project surface and verification
+
+- [ ] Align README, examples, scripts, and deployment guidance with implemented behavior and distinguish target design from prototype status.
+- [ ] Run relevant build and test suites for each migration slice; preserve the pre-existing untracked `tests/test_timer_main.cpp` and unrelated `.gitignore` changes.
+- [x] Update and verify the GitHub About description and topics against the corrected documentation.

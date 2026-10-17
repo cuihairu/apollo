@@ -1,4 +1,3 @@
-[English](Attribute_SDK.en.md) | [中文](Attribute_SDK.md)
 
 # Unity 属性同步 SDK
 

@@ -1,4 +1,3 @@
-[English](32-Coding_and_Contribution_Guidelines.en.md) | [中文](32-Coding_and_Contribution_Guidelines.md)
 
 # Coding & Contribution Guidelines
 

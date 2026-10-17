@@ -1,4 +1,3 @@
-[English](README.en.md) | [中文](README.md)
 
 # MMO 框架架构分析索引
 

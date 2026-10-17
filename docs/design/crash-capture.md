@@ -1,4 +1,3 @@
-[English](crash-capture.en.md) | [中文](crash-capture.md)
 
 # 崩溃采集设计（crash-capture）
 
@@ -106,5 +105,3 @@ main(argc, argv)
 | scripts/dev_fleet.sh | 编队冒烟与崩溃采集的 cwd/日志目录共存面（crashdumps/ 与 fleet 日志并列） |
 
 ---
-
-*基线：apollo main @ a63855ac。本机环境：GCC 15.2.0 / CMake 4.2.3 / vcpkg 工具 2026-07-27（编译实证 2026-10-09 随批②补验完成——crashpad:x64-linux@2026-07-02 全量构建通过，产物四静态库+crashpad_handler+头树）；crashpad overlay 端口 version-date 2026-07-02（上游 chromium.googlesource crashpad @ efdc820b，vcpkg 端口自 vcpkg 2026-07-27 工具版 vendored）。Breakpad 工具链按需构建（google/breakpad master），产物不入门禁。上传面/外发默认关——数据外发纪律（logging 三禁/出站白名单）同族，打开归拍板/审批面。*

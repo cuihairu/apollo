@@ -1,8 +1,7 @@
-[English](QA.en.md) | [中文](QA.md)
 
 # 游戏服务器架构 QA
 
-> 本文档汇总通用游戏服务器架构与外部引擎机制问题；BigWorld/KBEngine 等问题是引擎对照资料，不代表 Apollo 采用相同拓扑。
+> 本文档是通用游戏服务器知识和外部引擎机制的学习问答，不构成 Apollo 的架构承诺或已实现能力。BigWorld/KBEngine 等页面只解释外部引擎。Apollo 的目标术语和实现边界以[架构总览](guide/architecture.md)及[架构现状](analysis/architecture-review.md)为准。
 
 ## 一、架构设计篇
 
@@ -11,7 +10,7 @@
 | 1 | 请画出你熟悉的 MMORPG 服务器架构图，说明各组件的职责和通信方式 | 已完成 | [q1-server-architecture.md](qa/q1-server-architecture.md) |
 | 2 | BigWorld 架构中的 CellApp 和 BaseApp 分别负责什么？为什么这样分离？ | 已完成 | [q2-bigworld-cell-base.md](qa/q2-bigworld-cell-base.md) |
 | 3 | 什么是 AOI（Area of Interest）？有哪些实现方式？各有什么优缺点？ | 已完成 | [q3-aoi-implementation.md](qa/q3-aoi-implementation.md) |
-| 4 | 如何实现大地图的无缝切换？如何处理跨服务器的玩家移动？ | 已完成 | [q4-seamless-world.md](qa/q4-seamless-world.md) |
+| 4 | Apollo 为什么不实现无缝大世界？房间之间如何切换？ | 已完成 | [q4-room-based-boundary.md](qa/q4-room-based-boundary.md) |
 | 5 | 服务端如何设计才能支持动态扩容？ | 已完成 | [q5-dynamic-scaling.md](qa/q5-dynamic-scaling.md) |
 | 6 | 单服架构 vs 分布式架构，如何选择？ | 已完成 | [q6-single-vs-distributed.md](qa/q6-single-vs-distributed.md) |
 | 7 | 进程内架构 vs 多进程架构，各有什么优劣？ | 已完成 | [q7-process-architecture.md](qa/q7-process-architecture.md) |
@@ -176,7 +175,7 @@
 | 113 | 如何平衡代码质量和开发速度？ | 已完成 | [q113-quality-vs-speed.md](qa/q113-quality-vs-speed.md) |
 | 114 | 你对哪些开源游戏服务器框架有了解？各有什么特点？ | 已完成 | [q114-open-source-frameworks.md](qa/q114-open-source-frameworks.md) |
 | 115 | 如果让你重新设计，你会如何改进当前框架？ | 已完成 | [q115-framework-redesign.md](qa/q115-framework-redesign.md) |
-| 116 | C++ 设计模式在 KBEngine 中有哪些实践？为什么这样设计？ | 已完成 | [q116-cpp-design-patterns-in-kbengine.md](qa/q116-cpp-design-patterns-in-kbengine.md) |
+| 116 | C++ 设计模式在 KBEngine 中有哪些实践？为什么这样设计？ | 已完成 | [q116-cpp-design-patterns-in-kbengine.md](/qa/q116-cpp-design-patterns-in-kbengine) |
 
 ---
 

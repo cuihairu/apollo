@@ -9,8 +9,6 @@ tag:
   - 数据库
 ---
 
-[English](data.en.md) | [中文](data.md)
-
 # Data 模块
 
 Data 模块提供数据访问层。2026-10-04 对账后的现状：三个子库——core（连接抽象）、

@@ -1,4 +1,3 @@
-[English](net-abstraction.en.md) | [中文](net-abstraction.md)
 
 # Apollo 网络层抽象设计（net-abstraction）
 
@@ -29,7 +28,7 @@
 | Session | `include/apollo/net/session.h:37-128` | 回调式：`onRecv(data,len)` 裸字节 + 返回处理字节数；send 直通 Connection；心跳仅 get/set 时间戳，无实现 | 接口形态不对（裸 TCP 语义漏给上层）；**重设计为 L2** |
 | native_adapter | `include/apollo/net/adapters/native_adapter.h` | 自行开发 epoll 骨架 | 保留为 L0 唯一真实现 |
 | sdnet_adapter | `include/apollo/net/adapters/sdnet_adapter.h:8,12-80` | **伪 SSCP**：`#define APOLLO_USE_SDNET` 后手写 `namespace SSCP`、ISSBase/ISSConnection/版本结构/错误码——仓库无任何配置链接真 SSEngine | **删除**（见 §6） |
-| HTTP/WebSocket/RPC | `include/apollo/net/http/`、`websocket.h`、`rpc.h` | 外围能力雏形（出站 HTTP 现状证据见 §5.10） | 出站 HTTP 裁决见 §5.10（2026-09-30 补）；websocket 树归下轮审计候选（design-gap-inventory §4.2） |
+| HTTP/WebSocket/RPC | `include/apollo/net/http/`、`websocket.h`、`rpc.h` | 外围能力雏形（出站 HTTP 现状证据见 §5.10） | 出站 HTTP 裁决见 §5.10（2026-09-30 补）；websocket 树归下轮审计候选 |
 | protocol 模块 | `modules/protocol`（codec/messages/nng_wrapper/socket） | NNG 封装 + 自行开发消息编码；**全仓库无 .proto 文件** | codec 并入 L1；nng_wrapper 见 §6 决策 |
 | SSEngine sdnet | `/home/cui/workspaces/SSEngine`（对照） | `Send/DelaySend`（跨线程投递）、`GetSendBufFree`（水位可见）、`SetBufferSize`、GATE 变体 | 思想收编（§5.4） |
 
@@ -112,7 +111,7 @@ IO 线程 flush：按水位预算从环上取帧 writev
 - **水位查询标准化**：`Watermark::query(conn, ch) -> level` 取代 sdnet `GetSendBufFree()` 的裸字节数——把老引擎"水位可见"思想收进类型化 API（ssengine-reference.md §3 判定）。
 - **两级控制正交**：attribute-sync 的 token bucket 决定"本 tick 该发多少字节"（节流），本层水位决定"还能不能入队"（背压）；前者是主动整形、后者是被动熔断，相遇在 hard 水位（预算降档）。
 
-### 4.3 上行侧：per-session 限流与风控计数（2026-09-30 补，design-gap-inventory #8）
+### 4.3 上行侧：per-session 限流与风控计数
 
 §4.1/§4.2 全部是**下行**（服务器→客户端）的通道与水位；上行此前只有「intent only，服务端定夺」一句（sdk-contract §2.3 msg 注释）——恶意/故障客户端的持续上行灌包零防线（BW LoginConditions 类登录时点准入不管持续期，§7），本节补齐。上下行是镜像关系：下行防「发得出去」（预算+水位），上行防「收得进来」（限流+风控）。
 
@@ -168,7 +167,7 @@ IO 线程 flush：按水位预算从环上取帧 writev
 | GATE 变体 | gateway-app（apps/gateway-app 规划） | 方向一致；网关与本层的接口即 §2 API |
 | sdpkg 帧头 | L1 帧格式 | 加 seq + CRC32C（§3） |
 
-### 5.5 Mercury filter 双族 → L1 帧管线蓝本（2026-09-28 增补，源证见 architecture-review §16.7.1）
+### 5.5 Mercury filter 双族 → L1 帧管线蓝本
 
 BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，四点收编：
 
@@ -178,7 +177,7 @@ BigWorld Mercury 的 filter 是**已运行二十年的帧管线插件体系**，
 - **边界纪律**：filter 只做字节↔字节变换（压缩/加密/混淆）；seq/ack/重传窗口留在 L2 通道内核——BigWorld 的窗口重传在 udp_channel 而非 filter 里，这是"插件位"与"会话核心"的分界。
 - **归属与前置条件**（architecture-review §16.8.3-①）：FrameFilter 接口与内置插件落**收敛后的 modules/net**——先例：BW filter 与通道同库、构造注入（udp_channel.hpp:81/:139-140）；protocol（生成 codec）经 L1 codec 槽位注入，apps/gateway-app 只装配不实现。**前置条件 = C-29 四套网络树收敛**（architecture-review §12.2 四套盘点、§15.2「禁止第五套」纪律）——filter 不落现存四套中任何一套的原样，否则 filter 链即第五处网络代码。
 
-### 5.6 内部网络层的演进策略：先立内核、持续优化（2026-09-29 增补）
+### 5.6 内部网络层的演进策略：先立内核、持续优化
 
 BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次性交付的库——filter 双族（§5.5）、udp_channel 窗口重传等能力是多年逐步叠加的（源证 architecture-review §16.7.1），游戏层 API 在这期间保持稳定。apollo 的自行开发决定（§15.2）要学的正是这个形态：**自行开发 = 拥有可持续优化的内核**，不是「一次写完对标二十年」——引外部库反而把优化节奏交给别人。apollo 的内部网络层 = 本设计的 L0-L3（客户端/单进程路径）+ 进程间路径，**同一套语义、同一个层**（§2 四动作、SendCode 返回码、四通道、水位机、FrameFilter 槽位两路通用），差异只在传输与拓扑。演进阶梯：
 
@@ -195,9 +194,9 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 
 与 §7 分期的对应：原「P3 总线落地」口径改为「**M1 上线**」；M2+ 不占分期里程碑——它们是内部网络层的**常态工作**，不是路线图节点。
 
-### 5.7 进程间连接设施（InterServerLink）：对上层开放的稳定连接（2026-09-29 增补）
+### 5.7 进程间连接设施（InterServerLink）：对上层开放的稳定连接
 
-§5.6 M1 把进程间段定型为「框架内部总线」；但**上层业务同样需要这层**——跨服玩法、匹配、聊天、GM/运维工具、collector 推送，要的都是同几件事：稳定连接、断连感知、自动重连、背压。本节把它定型为一等公民公开设施。BigWorld 的形态即如此：全部服务器代码直用 Mercury，entity mailbox、备份流、工具进程共一套网络库（cellappmgr.cpp 单文件 Bundle/Channel 命中 25 行）——「对上层开放」不是给 apollo 加的便利，而是这层在原版里的本来形态。两件 Mercury 新实证为直接参照：TCPConnectionOpener（出站连接状态机）与 LoggerEndpoint（上层消费者自建稳定连接的样例兼反面教材）。
+§5.6 M1 把进程间段定型为「框架内部总线」；但**上层业务同样需要这层**——跨服玩法、匹配、聊天、GM/运维工具、collector 推送，要的都是同几件事：稳定连接、断连感知、自动重连、背压。本节把它定型为一等公民公开设施。BigWorld 的形态即如此：全部服务器代码直用 Mercury，entity mailbox、备份流、工具进程共一套网络库（roomservermgr.cpp 单文件 Bundle/Channel 命中 25 行）——「对上层开放」不是给 apollo 加的便利，而是这层在原版里的本来形态。两件 Mercury 新实证为直接参照：TCPConnectionOpener（出站连接状态机）与 LoggerEndpoint（上层消费者自建稳定连接的样例兼反面教材）。
 
 **词汇：Link 一级，不再叠会话层**
 
@@ -247,7 +246,7 @@ BigWorld 的 Mercury 是**演进了二十年的内部网络层**，不是一次�
 
 > 2026-10-12（P4-4 批⓪）：**linkrpc 关联原语已交付**（modules/net/linkrpc，契约 940/941）——请求/响应关联 + 同步等待桥，载荷不透明（body = MessageCodec 全帧，业务语义归各进程 handler）。RPC 归宿按本节「不开放」行收口：上层自定义消息不走字符串协议，关联信封（corr_id + bytes）是唯一 M1 RPC 面；五处 nng 消费面（摸底批 P4-4）以此迁装，首例 gateway 准入已换装（login `--m1-port` / gateway `--login-m1-port`）。线程纪律：分发回调在宿主泵线程，同步等待禁泵线程自等自达——自带泵线程的缝（准入服务 / 后续 login↔base、manager 控制面同型）照此。
 
-### 5.8 L0 传输模型：就绪（reactor）与完成（proactor）两族——接口与运行模式（2026-09-29 补）
+### 5.8 L0 传输模型：就绪（reactor）与完成（proactor）两族——接口与运行模式
 
 §3 分层图的 L0 行列了 epoll/io_uring/IOCP 槽位、§15.2 定 B 栈为唯一底座并写明演进路径——但「两族模型在**接口形状与运行模式**上差在哪、L0 接口如何同时承载两族」此前零分析（本节补）。不定形这层，将来换后端就是重写：IOCP 已成熟、io_uring 是 Linux 新方向，设计期必须把接口缝留对。
 
@@ -297,7 +296,7 @@ io_uring 是两族超集（`IORING_OP_POLL_ADD` 可当纯就绪用、带缓冲�
 
 **与 §5.6 演进阶梯的衔接**：M1 = epoll（含 poll→epoll 首刀）；M2+ = io_uring 按需（基准准入）；IOCP/kqueue = 非目标（垫片级）。接口按本节「环提交语义」定形后，全部替换是层内替换、消费方零感知——§5.6「优化只发生在层内」纪律在 L0 的兑现点。
 
-### 5.9 客户端通道安全与加密库选型（2026-09-30 补，design-gap-inventory #4）
+### 5.9 客户端通道安全与加密库选型
 
 sdk-contract §10.5 帧层图的 `[加密 P3]` 占位在此定型：加密 = **FrameFilter 族的 CryptoFilter**（§5.5 槽位；filter 位次已定 sdk-contract §10.5——**压缩之后**：密文不可压缩，先压后密），握手归 control 通道，密钥不出 filter 层。
 
@@ -334,7 +333,7 @@ S → C  ServerHello { nonce_s, pub_s(X25519), aead_selected }
 
 - **WSS 兜底形态**：WS 页端客户端的加密由 wss（TLS）承载，与 TCP+CryptoFilter 双形态并存——P3 随 gateway-app 定案；TCP 自定义握手是主路径（帧开销可控 + filter 栈统一），wss 只为浏览器端兜底。
 
-### 5.10 出站 HTTP 与第三方接出（2026-09-30 补，design-gap-inventory #11）
+### 5.10 出站 HTTP 与第三方接出
 
 服务器**出站** HTTP（第三方登录验证/支付回调/推送）是 P3 真需求；现状是「5048 行已写、默认构建全桩」——modules/net/http（rest_client.h 343 + rest_client.cpp 734 + http.cpp 816 + event_loop.cpp 648 + websocket.cpp 1193 + 三公共头 1314，登记时漏计后两项——architecture-review §18 勘误），rest_client.cpp:13 `#ifdef APOLLO_HAS_CURL`、:16 `APOLLO_CURL_STUB 1`（vcpkg.json 无 curl——与 C-45 宏门 MySQL 同族）；零生产消费方（仅 examples/tests/docs）。§1 现状表「另行处理」——本节即裁决。
 
@@ -360,71 +359,26 @@ S → C  ServerHello { nonce_s, pub_s(X25519), aead_selected }
 | FrameFilter 体系 | **新建**于收敛后的 modules/net（四套收敛为前置条件） | architecture-review §16.8.3-①：BW 同库 + 注入式装配先例（udp_channel.hpp:81/:139-140） |
 | L0 传输模型 | **reactor（epoll）为基线**；接口按「发送环提交语义」定形以兼容完成模型——io_uring M2+ 基准准入、IOCP/kqueue 不进路线图（垫片级） | §5.8（2026-09-29）：三框架先例全 reactor（BW event_poller.hpp:95-137 select-only、KBE poller_epoll.cpp、skynet socket_epoll.h:20）；ipc 树 async_io.h 为仓内既有完成模型接口（C-29 盘点外，随 ipc 审计轮处置） |
 | sdshmem 类同机共享内存通道 | **暂缓**（P3 随进程间总线同批定案；引设计不引代码——与 Aeron 同等处理） | 只承载**同机大块只读共享与点对点镜像流**（空间格子快照/监控指标/G-2 热备镜像流），**不做通用消息总线**（architecture-review §15.2 禁第二套 IPC 并存的边界照旧）；ssengine-reference §4.4 + Aeron IPC 同框（§5.2） |
-| 客户端通道加密 | **OpenSSL 单一 crypto 源 + CryptoFilter**（§5.9）：X25519 + AEAD + HKDF-SHA256；MD5/SHA-1（新代码）等禁用表进评审红线 | design-gap-inventory #4；libsodium 零命中保持；sdk-contract §10.5 占位收口 |
-| 出站 HTTP | **curl 进 vcpkg + Drogon 分支删除 + 同步 API 禁场景线程直调 + 目标白名单**（§5.10） | design-gap-inventory #11；§15.2 禁并存纪律对象；SSRF 面 |
+| 客户端通道加密 | **OpenSSL 单一 crypto 源 + CryptoFilter**（§5.9）：X25519 + AEAD + HKDF-SHA256；MD5/SHA-1（新代码）等禁用表进评审红线 | ；libsodium 零命中保持；sdk-contract §10.5 占位收口 |
+| 出站 HTTP | **curl 进 vcpkg + Drogon 分支删除 + 同步 API 禁场景线程直调 + 目标白名单**（§5.10） | ；§15.2 禁并存纪律对象；SSRF 面 |
 
 ## 7. 分期落地
 
 - **P1**：L1 帧格式 + L2 会话基础（seq/ack/心跳/四级水位）+ native adapter 收敛为唯一 L0；GameConnection Facade 上线，属性同步 P1 依赖本层 attributes 通道。
 - **P2**：重连续传（resume token）+ movement 通道"只发最新" + 与属性预算的 hard 水位联动降档。
-- **P3**：内部网络层 **M1 最小正确内核**上线（§5.6 演进阶梯——进程间段：帧定界 + contract_route 按 id 分发 + 背压水位 + 单播拓扑，正确性优先、不设性能指标；蓝本：§5.2 语义 + §5.5 Mercury filter 双族；同机段加评估 sdshmem 类共享内存通道——只承载大块只读共享与点对点镜像流（快照/指标/热备镜像），不做通用总线，§15.2 边界照旧，随内核同批定案，引设计不引代码：ssengine-reference §4.4、Aeron IPC 传输同框；窗口重传/流控聚合/bundle 聚合归 **M2+ 持续优化**，不占本里程碑）、网关模式（gateway-app 接入）、Archive 类消息审计；运维观测通道两截落位（architecture-review §16.8.3-⑤）：检测原语（per-scene 心跳版本号/队列水位/实体计数/帧耗时）内嵌 owning 模块并经 control 通道上行，聚合工具归 apps/（依赖面 = modules/runtime 的 ConsoleEvent/IConsoleEventSource，application_host.hpp:20/:28；先例 skynet debug_console/monitor、BW server/tools/{bw_profile,message_logger}）——模块零依赖 apps，ops 工具只触只读自省接口。**接出形态定案**（2026-09-30，design-gap-inventory #10）：游戏进程不直连 Kafka、不引 OTel SDK、不开 per-process HTTP 端口——单一 exporter（admin 吐 /metrics）+ 日志 tail 外采 + trace 子集，细则见 logging.md §5.1。
+- 当前状态：进程间 M1 链路与 Gateway 出口原型已存在；Room 路由集成、多实例选择、Gateway 排空和生产发布验收仍在根目录 `todo.md`。
 
-### P3 前置设计：进程编队与服务发现 / 备份容灾 / 实体远程调用（2026-09-29 补，architecture-review §16.4 G-1/G-2 + RPC 接线）
+### 进程编队与恢复边界
 
-P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来，防止到时拍脑袋（G-1/G-2 为原六份设计文档的空白，登记于 architecture-review §16.4；实体远程调用为既有 architecture/ 代设计的接线，同日补）。
+Apollo 当前的进程监督由 `machined` 提供本机进程拉起、死亡检测和重启能力。该机制不提供 Room 状态热备、跨机接管或活动对局迁移。目标玩法以 Room 为单位，不按 Cell/Space 对世界做空间切片。
 
-**现状声明（显式）**：apollo 单进程阶段**无进程级高可用**——崩溃安全 = write-behind journal 数据不丢（attribute-sync §8.2）+ 重启拉起；backup/接管/迁移为零起步。这是分期不是遗漏。
+RoomServer 进程异常退出时，内存中的活动 Room 不会自动出现在其他进程。没有经过验证的状态恢复或权威迁移实现前，受影响对局按失败处理，并由游戏规则决定结算或重开。跨服务器移动玩家时，必须显式交接唯一权威对象并更新路由；这属于 RoomServer/Room 生命周期工作，不是网络传输层默认能力。
 
-**G-1 进程编队与服务发现**（进程如何被发现、如何感知彼此死亡）：
+`baseappmgr`、热备副本和 RoomServer 自动再平衡都不是目标拓扑的必需进程或已实现能力。进程监督与服务发现的代码现状以 `apps/machined` 和根目录 `todo.md` 为准。
 
-- 先例一 BigWorld：每机一个 bwmachined 守护进程，birth/death 通知经 machine_guard 协议订阅/广播（machine_guard.hpp:496-497/:609-613/:882-883）；cellappmgr/baseappmgr/dbappmgr 消费生死事件做编队决策，cellappmgr 兼负载平衡（cellappmgr.hpp:43/:192-194）。
-- 先例二 KBEngine：无守护进程，machine 以 UDP 广播应答发现（machine.cpp:646-670，KBE_PORT_BROADCAST_DISCOVERY）——更轻，但「机器死了谁来报」无解。
-- apollo 形态（P3 定稿口径）：两层并存——单机 machined 式守护（本机进程生死/拉起/崩溃上报）+ UDP 广播发现（跨机拓扑发现），分别取两先例长处；与 architecture-review §15.2 自行开发纪律对齐，不引 etcd/consul 类外部协调服务——游戏服进程拓扑小、变更低频，守护+广播的最终一致够用，外部强一致依赖换不来对等收益（**2026-09-30 用户裁决落档：不引入额外注册中心——原 docs/05 §2.3 注册中心稿（Redis/etcd+心跳 5s/30s）已整档删除，36 号 #13 行同步改写，git 可溯**）。控制面复用 §4.1 control 通道的进程间延伸：编队事件（进程加入/退出/机器死亡）作为 control 事件进各进程轮询源——不开新通道体系。
+**跨进程状态与消息**：每份权威状态由一个所有者负责；其他进程通过消息获取所需投影。传输确认、状态一致性和持久化是不同保证，需分别设计和验证，消息送达本身不代表状态已接管或已持久化。
 
-**G-2 备份与宕机接管**（BigWorld 全套先例；~~apollo P3 骨架取两件~~ → **拍板改写（ADR-010，2026-10-10）：案 A 先行 restart-only，本节骨架方案未立项**——下列先例件与候选形态留档，重开条件=生产数据提出亚秒 RTO/多机形态立项；现行接管口径见 backup-revive §4 三档）：
-
-- 先例件：baseapp 热备分帧发送（backup_sender.hpp:52-61）+ 一致性哈希备份链（backup_hash/backup_hash_chain——备机按链持续追主机实体状态流）+ reviver 协调接管（主机死亡后备机把镜像实体升级为权威；cellapp 死则 cellappmgr 在幸存 CellApp 重建 cell）+ secondary db 任务族 + dbappmgr 扩缩容哈希再分布（dbappmgr.cpp:472/:637）。KBEngine 对照：无此层（architecture-review C-51/§16.4）——宕机靠实体最后一次归档，窗口 = 归档周期。
-- apollo P3 最小骨架：~~backup-hash 链 + reviver 两件先行~~ → **拍板改写（ADR-010，2026-10-10）：案 A 先行 restart-only——backup-hash 链不先行、reviver 不设、镜像流不建**；secondary db/动态扩缩容维持推迟到多 cell 稳定运行后。
-- **备份粒度对齐单写者纪律**（留档候选形态，非现行口径）：热备流 = PersistJournal 的只读镜像消费（attribute-sync §8.2 journal 的第二消费者），不另起一套备份协议——备机 ack 的 journal 位点即接管起点，与属性 seq 语义（ViewerState.acked_seq 同模型）天然衔接；接管 = 备机在 journal 位点重放后于 tick 边界切换为权威写者（复用 attribute-sync §10.2 停机序列的镜像路径：先停旧主的写入认定，再切权）。镜像流传输形态候选：**同机部署候选 = sdshmem 类 shm SPSC 环**（主机单写 journal 追加、备机单读消费——正是 §6 决策表「点对点镜像流」的典型场景；ack 仍走 control 通道），跨机则随进程间总线。现行口径 = 三档接管（有状态重建/无状态重启/崩溃即作废），journal write-ahead 保 RPO=0，重启退避 + 重报收敛保 RTO 秒级（backup-revive §4/§6）。
-
-**负载均衡与异常恢复（manager 域，2026-09-29 补）**：
-
-- **BW 先例（全套，本轮补证）**：
-  - 负载即观测：cellapp 每 tick 三分负载统计上报（cellapp.cpp:1177-1190，§16.2 已引）；baseappmgr `minAppLoad()` 全遍历取最轻（baseappmgr.cpp:588-599）——新 base 落点 = 最轻 baseapp；过载触发登录准入闸门（:947-954，LoginConditions）并把 (addr, load) 对上报 loginapp 做登录分流（:1117）。
-  - cell 侧再平衡：周期 `loadBalanceTimer_`/`overloadCheckTimer_`（cellappmgr.hpp:305/:307）+ `metaLoadBalance/loadBalance/updateRanges`（:233-236）+ cellapp 主动 `shouldOffload` 上行（:98）。
-  - **异常恢复是排他相位**：mgr 向 machined 注册死亡监听（cellappmgr.cpp:276-277 `MachineDaemon::registerDeathListener → handleCellAppDeath`——G-1 编队事件的消费端）；死亡/自身重启即 `startRecovery()`（:281/:1411，cellappmgr.hpp:230-231），**恢复期间拒绝新请求**（:1300 "Denying %s since in middle recovery"）——防恢复中拓扑再变。
-  - baseapp 接管：reviver **独立进程**（server/reviver/——component_reviver/reviver/reviver_config 三层）。
-- **apollo 设计（P3 最小骨架——取 BW 骨架，不取全家桶）**：
-  - **指标同源**：负载 = G-5 检测原语的聚合（帧耗时/实体数/队列水位，经 control 通道上报）——观测与调度消费**同一份数据**，不做第二套负载统计。
-  - **分配与准入**：新场景/新会话落点 = 最轻进程（minAppLoad 同型 + 水位硬约束）；过载 = 准入闸门（拒登/排队，BW LoginConditions 同型）——负载既是调度输入也是准入依据。
-  - **再平衡分层**：P3 只做「新负载往轻处走」+ 过载告警 + 手动搬迁工具；**自动 cell 迁移（BW meta balancing/shouldOffload 族）推迟 M2+**——迁移协议依赖实体搬迁与视图重建全套，不属于最小骨架。
-  - **异常恢复链（按死者角色分）**：检测 = machined 死亡事件（G-1）→ mgr 进入**恢复相位（排他——期间拒绝新场景/新进程加入，BW :1300 先例）**；base 死 = reviver 式接管（G-2 backup-hash 链 + journal 位点重放切权）；cell 死 = mgr 在幸存进程重建场景（权威源 = write-behind journal attribute-sync §8.2 + base 侧重放）；进程本身拉起归 machined（重启策略 = 编队配置，mgr 只消费事件不做进程管理）。
-  - **两层恢复独立成立**：进程级恢复（本节）与连接级恢复（§5.7 onLinkDown/自动重连）互不依赖——客户端重连走 §3 resume，进程重建走本节，谁先完成谁先服务。
-  - **会话与在线目录**（谁在线/在哪条线/顶号裁决/掉线保活窗口/RouteResolver 宿主定位供数）= manager 域的另一职责件——进程内存权威态（「全局仲裁态集中不共享」+「会话」两行通道的落地）、事件上报 + 周期对账、崩溃恢复 = 全量重报重建（同本节恢复相位）；全量设计见 `docs/design/session-and-online-directory.md`（design-gap-inventory #12，2026-09-30 落盘）。
-  - 「是否参考 BigWorld」：**是，且只能参考它**——三家仅 BW 有完整此层（KBE 无进程级容灾，architecture-review C-51/§16.4；skynet 单节点无编队）；明确不搬：动态 cell 迁移、secondary db、自动扩缩容（M2+ 按需评估）。
-
-**进程间信息共享与同步模型（2026-09-29 补）**：
-
-- 原则一句话：**每条信息有唯一 owner 进程，「共享」= 订阅 owner 的投影**——单写者纪律的进程间延伸。不存在「两个进程可写同一块内存」的通用共享（跨进程锁把死锁域扩大到 OS 级，且破坏所有权模型；§15.2「禁第二套 IPC」边界照旧）。
-- **四类通道**：
-
-| 信息形态 | 通道 | 同步机制 |
-|---|---|---|
-| 有 ownership 的动态状态（实体属性/会话/场景） | InterServerLink 消息（§5.7） | owner 广播 delta，消费者本地镜像 + seq/位点续传 |
-| 读多写少的远程镜像（ghost 视图 / G-2 热备） | RO_MIRROR 镜像流（attribute-sync §4.4 / 本节 G-2 backup-hash） | journal 位点 ack + authority_epoch 防回写 |
-| 同机只读大块（空间快照/监控指标/加载后的配置表） | sdshmem 类 shm（§5.3/§6 决策行——只承载大块只读，不做通用总线） | **换页发布**：新版本写新页 + 原子切指针，读侧永见完整版本（SSEngine sdshmem 先例，ssengine-reference §4.4） |
-| 全局仲裁态（编队拓扑/持久数据/日志） | **集中不共享**：machined+mgr（G-1）/ DB journal（attribute-sync §8.2）/ collector（logging.md） | 事件广播 + 落盘 |
-
-- **「同步」三层含义分清（防混用）**：① **传输同步**（seq/ack/续传）——连接层（§3/§5.7）的事；② **状态同步**（镜像位点/epoch）——owner-订阅模型的事（attribute-sync §3 ViewerState 推广到进程间）；③ **数据一致**（journal/落库）——持久层的事（attribute-sync §8.2）。三层各自独立成立、互不兜底——「消息到了」≠「镜像追平」≠「落库了」，每层各有自己的恢复路径（续传 / 快照重置 / journal 重放）。
-
-**实体远程调用（RemoteEntityCall——BW EntityMailbox / KBE EntityCall 的对应物）**：
-
-- **语义层设计已存在，本设计只接底座**：`docs/architecture/remote-entity-call-design.md`（architecture/ 代）四件套——`RemoteEntityRef`（entity_id/entity_type/target_domain/authority_role/route_version/shard_key）、`RemoteMethodSchema`（method_alias/invoke_mode/arg_types/timeout_ms/idempotent）、`InternalMessageEnvelope`（trace_id/request_id/source/target_app/entity_id/method_alias/route_version/authority_epoch）、`RouteResolver`（宿主定位/route 版本校验/ghost 转发）+ 消息四分类（EntityMethodCall/RouteControl/LifecycleEvent/ReplicationCommand）——语义层以该文档为准，此处做三件接线与对齐：
-- **传输底座 = §5.6 M1 内核**（按 id 分发单播；连接级语义 = §5.7 InterServerLink——断连/重连/对端重启事件，invoke_mode 的断连处置即其 in-flight 语义表）：该文档所引 `Channel/Endpoint`（modules/net/protocol 旧形态）一律按本设计 L0-L3 口径读作 M1 内核接口；envelope 走 internal 域消息，不另起协议。
-- **术语对齐**（该文档写于 design 语料定稿前）：`target_domain` 的 Ghost ≈ attribute-sync §4.4 `RO_MIRROR`（远程只读镜像，调用转发权威侧）；World ≈ CELL 权威侧；Anchor/Proxy ≈ base 侧（登录/会话入口）——两套词汇指同一权威模型，落地统一为 attribute-sync §2.3 双轴标记（所有权轴 × 可见域轴）。
-- **invoke_mode 判定（对照两家刻意不做的事）**：BW/KBE 的实体调用均为**异步单向、无返回值**（结果用反向调用）——同步返回把网络 RTT 引进 tick，与 G-7 的确定性节拍论证冲突。apollo 口径：**OneWay 为默认**；RequestReply（request_id + future）只限低频控制面（跨进程 DB/GM/运维），永不进热路径；ReliableEvent 复用 events 通道语义。
-- **信封与契约合流**：`InternalMessageEnvelope` = sdk-contract §11 internal 域消息（id 900+）的统一信封——request_id/trace_id/route_version/authority_epoch 为信封标准字段，进契约由生成器产出（contract_route 清单扩展：method alias → internal 消息绑定），不手写第二份。
-- **先例病根规避**：方法 id 若走两家同病的单一分配表（§11.1 KBE message_handlers 单表、§11.2 BW InterfaceMinder 单表——内部演进推动客户端重发版），即重蹈覆辙；apollo 的方法 id 归契约 internal 域分段管辖，域分段四规则（sdk-contract §11.3）天然免疫。
+**实体远程调用**：当前 M1 链路提供进程间消息传输原语；RoomServer 路由、请求幂等、权威 epoch 和活动 Room 迁移仍需按玩法需求接线。`OneWay` 和 `RequestReply` 的目标语义见远程调用设计，不应被理解为完整跨服玩法已交付。
 
 ## 8. 与其余设计的交集
 
@@ -442,5 +396,3 @@ P1-P2 单进程阶段本层零落地；此节先把 P3 的前置形态定下来�
 | inbound-interfaces.md | §5.10 出站三裁决的**镜像面**（curl 出站复用/渠道域进出站白名单/Drogon 删除裁决维持不复议）；§5.7 InterServerLink = 回调第二段投递通道（OneWay + per-Link 背压 + 具名端点）；§7 G-1 编队声明 interfaces 组件——独立进程承载入站 HTTP（缺口 #14，2026-10-01 落盘） |
 
 ---
-
-*基线：apollo main @ 35a9c528（include/apollo/net、modules/protocol 读码）；Aeron 参考其官方仓库文档与 C++ 客户端源码概念；SSEngine sdnet 读码对照。2026-09-28 同步修订（②）：Aeron/nng 决策关闭（architecture-review §15.2）、§5.5 Mercury filter 双族蓝本增补（§16.7.1 源证）。2026-09-29 增补（③）：filter 归属/前置条件与决策表 FrameFilter 行（architecture-review §16.9.2 粘贴）、§7 P3 观测通道行（§16.9.5 粘贴）、新增「P3 前置设计」节（G-1/G-2，architecture-review §16.4 空白的补设计）。同日增补（④）：sdshmem 同机共享内存由「暂缓观察」升格为 P3 正式候选（与 Aeron 同等处理——引设计不引代码、随自行开发总线同批定案）——§5.3 行改口径、§6 新增决策行、§7 P3 总线段加评估、G-2 热备镜像流补同机传输候选（ssengine-reference §4.4 既有登记的接线）。同日增补（⑤）：新增 §5.6「内部网络层的演进策略」——自行开发 = 拥有可持续优化的内核（Mercury 二十年演进同型）：M0 语义定型（P1）/ M1 最小正确内核（P3，正确性优先不设性能指标）/ M2+ 持续优化（无截止、每项先有基准）；摘要 7 与 §7 P3 里程碑口径同步（「总线一次性落地」→「M1 上线」，窗口重传/流控聚合/bundle 聚合移出路线图归常态优化）。同日增补（⑥）：§7 P3 前置设计补实体远程调用块（RemoteEntityCall——语义层引用 architecture/remote-entity-call-design.md 四件套，传输底座接 §5.6 M1，invoke_mode 定 OneWay 默认/RequestReply 只限控制面，信封合流 sdk-contract internal 域）。同日增补（⑦）：新增 §5.7「进程间连接设施（InterServerLink）」——对上层开放的稳定连接语义（连接器/统一重连/in-flight 分类/背压分界/公开面边界）；Mercury 两件新实证：TCPConnectionOpener（tcp_connection_opener.cpp:53/:99-101/:113-146/:186-231 全文实读）与 LoggerEndpoint（logger_endpoint.cpp:672-703 有界重连 + send 有界缓冲）；摘要 8、§5.6 M1 行、§7 传输底座行、§8 交集表（logging.md 行）联动。同日增补（⑧）：§7 P3 前置设计补两块——「负载均衡与异常恢复（manager 域）」（BW 补证：baseappmgr.cpp:588-599 最轻分配/:947-954 过载准入/:1117 负载分流、cellappmgr.hpp:98/:233-236/:305/:307 再平衡族、cellappmgr.cpp:276-277 machined 死亡监听/:281/:1411 startRecovery/:1300 恢复期拒新请求、server/reviver/ 独立进程；apollo 取骨架不取全家桶——自动 cell 迁移推迟 M2+）与「进程间信息共享与同步模型」（owner-订阅原则 + 四类通道表 + 同步三层含义分清）。同日增补（⑨）：新增 §5.8「L0 传输模型：就绪与完成两族」——reactor/proactor 接口分野表（缓冲所有权/背压/取消三差异）、三框架先例实读（BW event_poller.hpp:95-137 + event_dispatcher.cpp:370 select-only、KBE poller_epoll.cpp/poller_select.cpp、skynet socket_epoll.h:20）、apollo 三处 L0 现状（B 栈 include/apollo/network/transport/reactor.hpp + reactor.cpp:57-59/:92 poll 轮询、栈 A native_adapter.cpp:778/:786/:1027-1075 IOCP+epoll 建而事件循环未消费、ipc async_io.h:12-25/:201+ IoMultiplexer 完成模型三后端 + vector 拷贝）、发送环提交语义定形（两族通吃 + 水位判据不变 + 取消 ABORTED）、运行模式（epoll M1 首刀/io_uring M2+ 基准准入不开 SQPOLL/IOCP 不进路线图）；摘要 9、§6 决策表 L0 传输模型行联动。同日增补（⑩，design-gap-inventory B5 批）：§4.3 上行限流（#8——四通道参数表/三级处置/violation_score 单桶）；§5.9 客户端通道安全与加密库选型（#4——威胁模型裁域/X25519+AEAD+HKDF 握手序列/算法分级禁用表/OpenSSL 单一源定案）；§5.10 出站 HTTP 三裁决（#11——curl 进 vcpkg/Drogon 删/异步交接/SSRF 白名单）；§1 现状表 HTTP 行、§6 决策表两行、§7 P3 观测行接出引用、摘要 10 联动；观测接出细则落 logging.md §5.1（#10）。2026-09-30 勘误回填（architecture-review §19.1 P-1/§19.2 P-2，设计批粘贴）：§5.10 裁决 3「既有 event_loop.cpp …curl_multi」→「按新建计」（C-57：event_loop.cpp 为纯 poll reactor、与 curl 零接线——工作量口径修正，裁决方向不变）；§5.10 现存段行数 2541→5048（websocket.cpp 1193 + 三公共头 1314 登记时漏计）。*

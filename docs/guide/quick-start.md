@@ -6,8 +6,6 @@ prev: /guide/installation
 next: /guide/concepts
 ---
 
-[English](quick-start.en.md) | [中文](quick-start.md)
-
 # 快速开始
 
 本教程引导你用 Apollo 的实 API（与 HEAD 仓库一致，2026-10-07 按实对账）搭一个最小游戏服务器：宿主帧驱动 + 结构化日志 + AOI 场景兴趣管理。

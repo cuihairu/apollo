@@ -1,4 +1,3 @@
-[English](BUILDING.en.md) | [中文](BUILDING.md)
 
 # 构建 Apollo 服务端
 

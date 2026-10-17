@@ -12,8 +12,6 @@ tag:
   - RPC
 ---
 
-[English](remote-entity-call-design.en.md) | [中文](remote-entity-call-design.md)
-
 # RemoteEntityCall 设计
 
 这篇文档解决的是 Apollo 后续做多进程 world、玩家锚点、跨节点实体协作时，一个绕不过去的问题：
@@ -101,8 +99,6 @@ Apollo 需要在现有 `Channel` 之上，补一层明确的实体远程调用�
 - payload codec
 
 ### 3. 缺 schema 驱动的方法表
-
-Apollo 已经在 原 EntitySchema 设计（已删，git 可溯） 里定义了 `MethodSchema` 方向，但还没有把它落成“可执行的远程调用表”。
 
 ## 四、推荐目标
 
@@ -366,7 +362,7 @@ Apollo 现在不需要一口气做成 KBE 全量脚本式 `EntityCall`，但至�
 
 不要让方法名、参数格式继续散在业务代码里。
 
-## 十一、已落地实现（2026-10-13）
+## 十一、已落地实现
 
 `modules/net/remoteentity/` 子模块已交付四件套核心：
 

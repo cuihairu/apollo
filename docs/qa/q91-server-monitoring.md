@@ -1,4 +1,5 @@
-[English](q91-server-monitoring.en.md) | [中文](q91-server-monitoring.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q91: 如何监控服务器状态？
 
@@ -104,7 +105,6 @@ class KBEngineMonitor:
         """性能快照"""
         return KBEngine.profile()
 
-
 class ComponentMonitor:
     """组件监控"""
 
@@ -140,7 +140,6 @@ class ComponentMonitor:
             return KBEngine.getWatcher().get(f"components/{component_name}/heartbeat")
         except:
             return False
-
 
 class PerformanceMonitor:
     """性能监控"""
@@ -227,7 +226,6 @@ class PrometheusMetrics:
     def update_entity_count(self, count):
         """更新实体数量"""
         self.entity_count.set(count)
-
 
 class KBEnginePrometheusExporter:
     """KBEngine Prometheus 导出器"""
@@ -325,7 +323,6 @@ class AlertManager:
         for handler in self.alert_handlers:
             handler.send(alert)
 
-
 class AlertRule:
     """告警规则"""
 
@@ -334,7 +331,6 @@ class AlertRule:
         self.message = message
         self.check_func = check_func
         self.severity = severity
-
 
 class EmailAlertHandler:
     """邮件告警处理器"""
@@ -404,7 +400,6 @@ class MonitorDashboard:
             "cellapp1": {"status": "up", "address": "localhost:20021"},
             "dbmgr": {"status": "up", "address": "localhost:20004"},
         })
-
 
 # HTML 模板 (简化)
 DASHBOARD_HTML = """

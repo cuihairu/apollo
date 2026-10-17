@@ -27,8 +27,6 @@ features:
     details: 网络、数据、实体契约、AOI、战斗和运行时模块；README 与模块文档说明当前实现状态。
 ---
 
-[English](index.en.md) | [中文](index.md)
-
 ## 项目定位
 
 Apollo 是轻量房间制多人在线游戏服务器引擎，适合塔防、合作 PvE/PvP、竞技场和副本。MMO 是可能的产品规模或产品形态，不是服务端架构名称；Apollo 当前不以持久化无缝大世界为目标。

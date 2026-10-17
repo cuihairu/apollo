@@ -4,8 +4,6 @@ icon: cube
 prev: /api/README.md
 ---
 
-[English](base.en.md) | [中文](base.md)
-
 # Base API
 
 > 2026-10-10 对账：本页按 HEAD 实况重写（modules/base 八头：time/thread_pool/

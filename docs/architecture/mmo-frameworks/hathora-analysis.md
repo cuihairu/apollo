@@ -1,4 +1,3 @@
-[English](hathora-analysis.en.md) | [中文](hathora-analysis.md)
 
 # Hathora 架构分析
 

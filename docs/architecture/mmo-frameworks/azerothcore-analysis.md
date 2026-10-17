@@ -1,4 +1,3 @@
-[English](azerothcore-analysis.en.md) | [中文](azerothcore-analysis.md)
 
 # AzerothCore 架构分析
 

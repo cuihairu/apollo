@@ -9,8 +9,6 @@ tag:
   - 基础
 ---
 
-[English](base.en.md) | [中文](base.md)
-
 # Base 模块
 
 Base 模块提供纯基础设施，无任何框架语义，可以被任何 C++ 项目独立使用。

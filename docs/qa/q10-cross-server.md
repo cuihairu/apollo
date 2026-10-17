@@ -1,4 +1,5 @@
-[English](q10-cross-server.en.md) | [中文](q10-cross-server.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q10: 如何实现跨服功能（如跨服战场、跨服聊天）？
 

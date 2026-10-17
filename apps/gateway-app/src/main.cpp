@@ -64,12 +64,12 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.loginAppUrl = argv[++i];
         } else if (arg == "--base-app" && i + 1 < argc) {
             config.baseAppUrl = argv[++i];
-        } else if (arg == "--cell-app" && i + 1 < argc) {
-            config.cellAppUrl = argv[++i];
-        } else if (arg == "--cell-m1-host" && i + 1 < argc) {
-            config.cellM1Host = argv[++i];
-        } else if (arg == "--cell-m1-port" && i + 1 < argc) {
-            config.cellM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--room-server" && i + 1 < argc) {
+            config.roomServerUrl = argv[++i];
+        } else if (arg == "--room-server-m1-host" && i + 1 < argc) {
+            config.roomServerM1Host = argv[++i];
+        } else if (arg == "--room-server-m1-port" && i + 1 < argc) {
+            config.roomServerM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--login-m1-host" && i + 1 < argc) {
             config.loginM1Host = argv[++i];
         } else if (arg == "--login-m1-port" && i + 1 < argc) {
@@ -86,9 +86,9 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --max-connections <num>     Max connections (default: 10000)\n"
                       << "  --login-app <url>          LoginApp URL\n"
                       << "  --base-app <url>           BaseApp URL\n"
-                      << "  --cell-app <url>           CellApp URL (route label)\n"
-                      << "  --cell-m1-host <host>      Cell M1 link host (default: 127.0.0.1)\n"
-                      << "  --cell-m1-port <port>      Cell M1 link port (default: 9101)\n"
+                      << "  --room-server <url>           RoomServer URL (route label)\n"
+                      << "  --room-server-m1-host <host>      RoomServer M1 link host (default: 127.0.0.1)\n"
+                      << "  --room-server-m1-port <port>      RoomServer M1 link port (default: 9101)\n"
                       << "  --login-m1-host <host>     Login M1 admission host (default: 127.0.0.1)\n"
                       << "  --login-m1-port <port>     Login M1 admission port (0 = stub transport, default: 0)\n"
                       << "  --baseappmgr-m1-host <host>   BaseAppMgr M1 control host (default: 127.0.0.1)\n"
@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
     logger->info("  Max connections: " + std::to_string(config.maxConnections));
     logger->info("  LoginApp: " + config.loginAppUrl);
     logger->info("  BaseApp: " + config.baseAppUrl);
-    logger->info("  CellApp: " + config.cellAppUrl);
+    logger->info("  RoomServer: " + config.roomServerUrl);
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);

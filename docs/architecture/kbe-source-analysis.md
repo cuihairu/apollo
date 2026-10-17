@@ -12,8 +12,6 @@ tag:
   - MMO
 ---
 
-English: not yet translated | [中文](kbe-source-analysis.md)
-
 # KBEngine 源码分析
 
 > **暂无英文译版 / No English translation yet.** 本文是 1400+ 行源码分析长文，整篇翻译只会产出劣质占位稿，故此处仅标注语言状态，正文仅中文。

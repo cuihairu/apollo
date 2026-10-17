@@ -1,4 +1,5 @@
-[English](q102-cpp-lua-binding.en.md) | [中文](q102-cpp-lua-binding.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q102: C++ 如何调用 Lua？Lua 如何调用 C++？
 
@@ -143,7 +144,6 @@ private:
     lua_State* L;
 };
 
-
 // Lua 脚本示例 (game_logic.lua)
 /*
 -- 简单函数
@@ -274,7 +274,6 @@ void registerFunctions(lua_State *L) {
     lua_setglobal(L, "Player");  // 设置为全局变量 Player
 }
 
-
 // Lua 使用示例
 /*
 -- 直接调用
@@ -347,7 +346,6 @@ void registerWithLuaBridge(lua_State *L) {
         .endNamespace();
 }
 
-
 // Lua 使用
 /*
 local player = Game.Player("Hero")
@@ -417,7 +415,6 @@ void registerWithSol(sol::state& lua) {
         std::cout << "[LUA] " << msg << std::endl;
     });
 }
-
 
 // Lua 使用
 /*
@@ -546,7 +543,6 @@ void register_vector3(lua_State *L) {
     // 注册构造函数
     lua_register(L, "Vector3", lua_vector3_new);
 }
-
 
 // Lua 使用
 /*

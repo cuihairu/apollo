@@ -1,4 +1,3 @@
-[English](login-flow.en.md) | [中文](login-flow.md)
 
 # 登录流程
 

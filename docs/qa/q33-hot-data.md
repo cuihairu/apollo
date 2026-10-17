@@ -1,4 +1,5 @@
-[English](q33-hot-data.en.md) | [中文](q33-hot-data.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q33: 如何处理热点数据？
 

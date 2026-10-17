@@ -1,4 +1,3 @@
-[English](logging.en.md) | [中文](logging.md)
 
 # Apollo 运行日志与崩溃取证设计（logging）
 
@@ -107,7 +106,7 @@ logger 线程（1 个）：批量出环 → 格式化 → 本地文件；（P3�
 - **失败语义**：collector 挂 → 各进程只写本地（断连检测 + 缓冲上限 + 重连），零业务影响、零进程退出——**收集永远不构成进程的运行依赖**。
 - **每进程文件布局**：`log/<app>-<instance>.log`（主日志）+ `log/crash-<pid>-<time>.log`（崩溃摘要）+ core 分区目录；实例号区分同机多进程（用户要求：每个进程有自己的日志）。**落地偏差记（2026-10-10，L1+L2）**：实际布局走 FileAppender 自有 scheme `log/<proc>_<日期>[_<序号>].log`（baseName=processIdentity、ByDate 滚动 + 重启序号续接、maxFiles 清理）——与设计口径 `<app>-<instance>.log` 的差异 = 分隔符与实例号形式（序号续接 vs 实例号声明）；单一职责归 FileAppender（logger-app.md 拍板点 4），布局语义等价（每进程每机独立文件集），口径不改设计件、以本注记对齐现实。crash 摘要走 crashdumps/ 目录（crash-capture 批②），非本布局面。
 
-### 5.1 外采边界：单一 exporter、tail 采集与 trace 子集（2026-09-30 补，design-gap-inventory #10）
+### 5.1 外采边界：单一 exporter、tail 采集与 trace 子集
 
 G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两截落位）；「内部 → 外部标准栈（Prometheus/Kafka/ES）」的接出契约此前零设计，本节定型（方向 2026-09-30 定调，细则随 P3 批）。
 
@@ -117,7 +116,7 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 - **日志外采 = 结构化行 + 稳定目录 + 外挂 tail**：行格式定型为结构化键值（`ts=wall_ms level= proc= tick= cat= msg=` + kv 扩展段——键集稳定、引号规则进 P3 批）；目录即上节布局（`log/<app>-<instance>.log`）；轮转 rename 原子（外采器 inode 跟随语义）；filebeat/fluent-bit 类采集器 tail 上送 Kafka/ES——**Kafka 在采集器之后**，游戏进程不知其存在。collector（apps/logger）与外采 tail 的关系：collector 管进程间汇聚检索（内部），tail 管标准栈上送（外部）——两出口并行不互斥，本地文件同为真相源。**落地（2026-10-07，P3-3 批 C）**：六键固定序 + 引号规则 + LogContext（proc/tick 注入）+ FileAppender `structuredOutput` 开关（默认关，apps/LoggerApp 接线批打开）——键集与转义细则以 `modules/core/log/include/apollo/core/log/structured.h` 头注为契约源（logfmt 族可解析，单行保证：值内换行转义）。
 - **trace 子集（借模型不引 SDK）**：字段 = trace_id/span_id + W3C traceparent 语义（含采样标志）；**生成在进程入口**（客户端会话首触点/跨进程消息首生成处，`InternalMessageEnvelope.trace_id` 已是信封标准字段——net-abstraction §7）；**span 界定 = 消息边界**（一条消息的处理跨度为一段，跨进程两 span 同 trace_id）；**头部采样极低率**（默认 1/10⁴，配置常量，入口进程决定——生产装配面 = gateway-app configure 期 `-DAPOLLO_TRACE_SAMPLE_RATE=<N>` 定死编译期常量并压过 dev env 覆写，dev 面 = `APOLLO_TRACE_SAMPLE_RATE` env）；采样命中的 span 以结构化行进日志流（随 tail 上送）——不引 OTLP exporter。用途限定：慢链路定位（「登录 800ms 慢在哪一跳」），不做全链路追踪系统。
 
-### 5.2 告警出口与 webhook 默认实现族（2026-09-30 补，architecture-review §19.5.2 / P-5）
+### 5.2 告警出口与 webhook 默认实现族
 
 §5.1 定了「内部 → 标准栈」的**数据**接出（/metrics + tail + trace 子集）；本节补最后一跳：**告警判定与通知发送**落在哪里、默认给什么。
 
@@ -167,5 +166,3 @@ G-5 与本文件此前只定了**内部**形态（MetricRegistry/collector/两�
 | ssengine-reference.md | 「头文件注释撒谎」教训（§5）同样适用：崩溃路径的宣称必须被 CI 测试证实，不接受注释自述 |
 
 ---
-
-*基线：apollo 现状引 architecture-review §11.5（C-25/C-26，源码基线 35a9c528 时实读）与 C-32（§12）；三家框架行号对应各自工作副本本轮实读（skynet skynet-src/skynet_start.c:287-291、service-src/service_logger.c:9-27；KBEngine kbe/src/lib/helper/debug_helper.{h,cpp}:217-218/:973-986/:1177-1180、kbe/src/lib/server/signal_handler.cpp:22-27/:112、kbe/src/server/tools/logger/；BigWorld lib/server/signal_processor.cpp:29-34、lib/cstdmf/callstack_linux.cpp:228）。2026-09-29 首次落盘（设计语料的日志空白——G-5 只接了观测通道，运行日志与崩溃取证此前零落点）。2026-09-30 增补 §5.1 外采边界（design-gap-inventory #10——三禁/单一 exporter/tail 采集/trace 子集；net-abstraction §7 P3 观测行与本节互引）。2026-09-30 增补 §5.2 告警出口与 webhook 默认实现族（architecture-review §19.4 P-5——双层边界（层 A Alertmanager 零代码/层 B exporter 内置 notifier）/规则表驱动/四家模板（企业微信/钉钉/飞书/Slack）/发送纪律六条；§19.5.2 候选方向的正式落盘）——摘要 8、§7 P3 行联动。*

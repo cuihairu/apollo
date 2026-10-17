@@ -1,4 +1,5 @@
-[English](q111-client-collab.en.md) | [中文](q111-client-collab.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q111: 如何与客户端同学协作？
 
@@ -321,7 +322,6 @@ class GameClientTester:
             data += packet
         return data
 
-
 # 使用示例
 def test_login():
     """测试登录"""
@@ -343,7 +343,6 @@ def test_login():
         print(f"Response: {response['body']}")
 
     client.disconnect()
-
 
 if __name__ == '__main__':
     test_login()

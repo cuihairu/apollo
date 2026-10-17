@@ -9,8 +9,6 @@ tag:
   - 网络
 ---
 
-[English](net.en.md) | [中文](net.md)
-
 # Network 模块
 
 Network 模块提供网络通信能力。
@@ -195,7 +193,7 @@ client.connect("127.0.0.1", 8888);
 auto response = client.call("PlayerService.getPlayerInfo", {{"id", 12345}});
 ```
 
-## M1 内核子模块（2026-10-12 起）
+## M1 内核子模块
 
 net M1 内核已收敛为自研四层，以下为已交付的子模块：
 

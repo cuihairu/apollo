@@ -1,4 +1,5 @@
-[English](q79-thread-safe-container.en.md) | [中文](q79-thread-safe-container.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q79: 如何设计线程安全的容器？
 

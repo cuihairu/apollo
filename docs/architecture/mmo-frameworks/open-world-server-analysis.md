@@ -1,4 +1,3 @@
-[English](open-world-server-analysis.en.md) | [中文](open-world-server-analysis.md)
 
 # Open World Server 架构分析
 

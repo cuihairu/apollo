@@ -4,11 +4,9 @@ icon: terminal
 order: 7
 ---
 
-[English](tooling.en.md) | [中文](tooling.md)
-
 # 工具脚本（scripts/）
 
-仓库自带的运维/验收脚本一览。设计依据与交付注记见各归属设计件（崩溃采集 / 备份容灾 / 容量基准）。
+仓库自带的运维/验收脚本一览。这些脚本服务于仓库当前原型与本地开发，不定义目标生产拓扑。
 
 ## dev 编队：dev_fleet.sh
 
@@ -23,13 +21,13 @@ scripts/dev_fleet.sh roster  # 打印本次编队 roster（未构建的 app 标�
 
 - 构建树须 `GAME_MODULE=ON` 且全 app 已构建（`APOLLO_BUILD_DIR` 可调，默认 `<repo>/build`）。
 - 运行目录 `APOLLO_FLEET_DIR`（默认 `/tmp/apollo-fleet-<uid>`：roster + pidfile + 日志）。
-- dev 端口布局（脚本约定，无配置真相）：login 9001 / gateway 9002 / baseappmgr 9003 / base-app 9004 / cell 9005 / game（bootstrap 演示退出）/ logger（scan/follow 检索面 + serve 收集面，fleet 内 9102 端口——各 app 结构化文件 log/*.log 的编队汇聚行进 fleet.log）。
+- dev 端口布局（脚本约定，无配置真相）：login 9001 / gateway 9002 / baseappmgr 9003 / base-app 9004 / room-server 9005 / game（bootstrap 演示退出）/ logger（scan/follow 检索面 + serve 收集面，fleet 内 9102 端口——各 app 结构化文件 log/*.log 的编队汇聚行进 fleet.log）。
 - 已知边界：ingress 已接线（a004a220，2026-10-11）——`acceptNewConnections` 经 `TcpClientIngressServer` 收客户端帧，gateway 有真实客户端入口；「退出码」边界已消账。**处方状态**：三步全落地——②roster 补传三后端 URL（5ccfc651）、①start 连接失败降级警告+空件返回/③ChatApp 幽灵依赖四处摘除（d7f21831）；无后端 standalone 冒烟实证三后端降级警告全出、存活至超时（原 `exit=1` 不复现）。
 - 实机走查（2026-10-10）：up → status → down 全链复验——born×6、game bootstrap 演示 exit=0、gateway exit=1 退避×5 give-up，与批 A 冒烟口径一致；**走查修一处缺陷**：down 的孤儿兜底原为 `pgrep -P <死 pid>`（machined 死后子进程重挂 init，恒空=死代码），login-app 慢关（~3-5s）会在「编队已停」后暂留孤儿——改为按 roster 二进制名 `pgrep -x`/`pkill -x` 精确清理（共享 5s 宽限后 KILL 残留），复验 down 返回即零孤儿。
 
 ## kill -9 全链演练：drill_kill9.sh
 
-G-2 备份容灾批 0 验收链（backup-revive §6）：编队内 kill -9 base-app，实测「死亡上 wire → 退避重启 → journal replay → 恢复相位 ready → 全量重报收敛 → 目录镜像收敛」各段 RTO。
+当前原型的进程恢复演练：编队内 kill -9 base-app，实测「死亡上 wire → 退避重启 → journal replay → 恢复相位 ready → 全量重报收敛 → 目录镜像收敛」各段 RTO。
 
 ```bash
 scripts/drill_kill9.sh       # 全自动：起编队 → kill -9 → 断言收敛 → 打印 RTO 表 → 收割
@@ -72,6 +70,5 @@ tools/crash-bin/minidump_stackwalk --symbol-path <symdir> <dump>   # minidump �
 ## 相关文档
 
 - [崩溃采集](/design/crash-capture) —— 符号面与验收链全链
-- [备份容灾与宕机接管](/design/backup-revive) —— 批 0 演练链与 RTO 数字
 - [容量与基准](/design/capacity-and-benchmark) —— 指标口径
 - 测试套件：仓库 `tests/README.md` —— 门禁口径与新增测试惯例

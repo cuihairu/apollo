@@ -4,8 +4,6 @@ icon: laptop-code
 order: 1
 ---
 
-[English](index.en.md) | [中文](index.md)
-
 # SDK 文档
 
 Apollo 的客户端 SDK 负责把服务端协议、属性同步、会话和消息路由能力封装到客户端侧。

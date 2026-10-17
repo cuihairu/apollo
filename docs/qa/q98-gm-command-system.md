@@ -1,4 +1,5 @@
-[English](q98-gm-command-system.en.md) | [中文](q98-gm-command-system.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q98: 如何实现 GM 命令系统？
 
@@ -71,7 +72,6 @@ class GMCommand:
         func.gm_permission = self.permission_level
         func.gm_help = self.help_text
         return func
-
 
 class GMCommandSystem:
     """GM 命令系统"""
@@ -165,10 +165,8 @@ class GMCommandSystem:
 
         return commands
 
-
 # 全局命令系统实例
 gm_system = GMCommandSystem()
-
 
 # 命令处理器
 class PlayerCommands:
@@ -232,7 +230,6 @@ class PlayerCommands:
         # 实现封禁逻辑
         return f"Banned player {player_id} for {duration_sec} seconds"
 
-
 class ItemCommands:
     """物品相关命令"""
 
@@ -264,7 +261,6 @@ class ItemCommands:
             removed = player.inventory.removeItem(item_id, count)
             return f"Removed {removed}x item {item_id}"
         return "Player has no inventory"
-
 
 class SystemCommands:
     """系统相关命令"""
@@ -313,7 +309,6 @@ class SystemCommands:
             shutdown_mgr.initiate_shutdown("gm_command")
             return "Server shutting down..."
 
-
 # 注册所有命令
 gm_system.register_handler(PlayerCommands())
 gm_system.register_handler(ItemCommands())
@@ -351,7 +346,6 @@ class GMCommandServer:
     def authenticate(self, password):
         """验证密码"""
         return password == self.password
-
 
 class TelnetGMHandler:
     """Telnet GM 处理器"""
@@ -425,7 +419,6 @@ class TelnetGMHandler:
         else:
             return f"Error: {result['message']}"
 
-
 class HTTPGMHandler(BaseHTTPRequestHandler):
     """HTTP GM 处理器"""
 
@@ -456,7 +449,6 @@ class HTTPGMHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """禁用默认日志"""
         pass
-
 
 class GMPlayer:
     """虚拟 GM 玩家"""
@@ -514,7 +506,6 @@ class GMAuditLogger:
         """记录到数据库"""
         # 异步写入数据库
         pass
-
 
 # 修改 GMCommandSystem 以支持审计
 class AuditedGMCommandSystem(GMCommandSystem):
@@ -587,7 +578,6 @@ class KBEngineConsole:
             if name.lower() in entity_name.lower():
                 return f"{eid}: {entity_name} at {entity.position}"
         return "Not found"
-
 
 # 在脚本初始化时注册
 def onInit(isReload):

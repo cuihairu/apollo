@@ -12,8 +12,6 @@ tag:
   - CellApp
 ---
 
-[English](bigworld.en.md) | [中文](bigworld.md)
-
 # BigWorld 架构深度解析
 
 这是一页收口版入口。

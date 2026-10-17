@@ -1,4 +1,3 @@
-[English](pragma-analysis.en.md) | [中文](pragma-analysis.md)
 
 # Pragma 架构分析
 

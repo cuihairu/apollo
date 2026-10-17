@@ -1,4 +1,3 @@
-[English](mmo-frameworks-comparison.en.md) | [中文](mmo-frameworks-comparison.md)
 
 # MMO 框架总对照
 

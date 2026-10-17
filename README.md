@@ -76,6 +76,14 @@ Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes curre
 - **Observability** - multi-level logging + structured line format + `MetricRegistry`
 - **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`)
 
+## Update Modes
+
+Apollo documents two release modes. A protocol update changes the XML/XSD contract under `sdks/contract/` and regenerates artifacts; safe rollout requires server/client compatibility across old and new contract versions. The contract, generator, and golden artifact checks exist, while version negotiation and end-to-end compatibility-window validation remain incomplete.
+
+A code-only update keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides module preparation, tick-boundary commit, observation, and rollback primitives; production rollout control across RoomServer processes remains incomplete. C++ changes use a process rollout after Rooms drain or after an independently implemented state transfer. Gateway multi-instance deployment can keep new connections available while old sockets drain, but Gateway does not migrate existing TCP connections between processes.
+
+See [Gateway update boundaries](docs/design/gateway-topology-survey.md) and [contract versioning](docs/design/sdk-contract.md).
+
 ## Architecture
 
 > See [Architecture Overview](docs/guide/architecture.md) for the target room-based model and [Server Applications](docs/apps/index.md) for the current executable prototypes.

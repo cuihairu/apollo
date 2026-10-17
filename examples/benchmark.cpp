@@ -27,7 +27,7 @@
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
-#include "cell/acceptance_queue.hpp"
+#include "room_server/acceptance_queue.hpp"
 
 using namespace std;
 using namespace std::chrono;
@@ -547,7 +547,7 @@ void benchmarkLocks() {
 //   → flush 段（P3-2 ①全帧段实测化：逐事件编真实协议帧——Enter→
 //   CellCreateEntity / Sync→CellEntityMove / Leave→CellDestroyEntity，
 //   MessageCodec 全量编码 = 下发面装包成本，网络 socket 发送不计——
-//   网关下发面仍是桩（cell_server broadcastToViewers 只日志），本段
+//   网关下发面仍是桩（room_server broadcastToViewers 只日志），本段
 //   量的是「collect+flush」两段的可测部分）。
 // 桩口径：移动 = 匀速直线 + 世界边界回绕，无寻路/技能/跨景——帧成本是
 // 下界，作 capacity-and-benchmark 帧预算表实测化的锚点数据。
@@ -924,12 +924,12 @@ double measureAcceptNs(const std::vector<uint8_t>& frame,
     double best = 0;
     bool first = true;
     for (int run = 0; run < kAcceptRuns; ++run) {
-        cell::AcceptanceQueue queue;
+        room_server::AcceptanceQueue queue;
         std::uint64_t sink = 0;
         auto start = std::chrono::steady_clock::now();
         for (std::size_t i = 0; i < kAcceptBurstSize; ++i) {
             auto header = apollo::protocol::MessageCodec::parseHeader(frame);
-            cell::IntentEnvelope intent;
+            room_server::IntentEnvelope intent;
             intent.type = static_cast<apollo::protocol::MessageType>(header.type);
             intent.frame = frame;  // 信封承载原始帧（同 acceptRequest）
             intent.session_id = header.sessionId;
@@ -953,9 +953,9 @@ double measureExecuteNs(const std::vector<uint8_t>& frame,
     double best = 0;
     bool first = true;
     for (int run = 0; run < kAcceptRuns; ++run) {
-        cell::AcceptanceQueue queue;
+        room_server::AcceptanceQueue queue;
         for (std::size_t i = 0; i < kAcceptBurstSize; ++i) {
-            cell::IntentEnvelope intent;
+            room_server::IntentEnvelope intent;
             intent.type = apollo::protocol::MessageType::CELL_ENTITY_MOVE;
             intent.frame = frame;
             intent.session_id = 1;

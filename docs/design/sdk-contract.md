@@ -1,8 +1,7 @@
-[English](sdk-contract.en.md) | [中文](sdk-contract.md)
 
 # Apollo 多端 SDK 契约设计（sdk-contract）
 
-> 状态：设计稿（评审中）。参照：KBEngine 的"单独 `sdks/` 目录 + 契约定义协议约定"精髓（学精髓不学形），并修正其短板（对数据的存储太弱——分析见 `docs/design/attribute-sync.md` §8）。本设计与 `attribute-sync.md`（属性模型/预测/attr_schema_hash）、`net-abstraction.md`（帧/通道）、`scripting-lua.md`（脚本白名单）、`architecture-review.md`（装配纪律）互为引用。
+> 状态：契约源、XSD 校验、生成器、生成产物及 golden 检查已在仓库实现；多端运行时接入、协议协商和兼容窗口尚未端到端完成。本文的“计划”部分仍是目标工作，不表示已实现。
 
 ---
 
@@ -16,6 +15,12 @@
 6. **存储自由演化**：持久列/日志重放（attribute-sync §8 的对策）在服务端内部独立演进，不受契约冻结——加持久化字段不动契约，反之亦然。这就是"数据存储不弱"与"协议清晰"同时成立的分界。
 
 ---
+
+## 协议更新与仅代码更新
+
+Apollo 定义两类发布。**协议更新**修改契约 XML/XSD，并通过 `apollo_gen` 重新生成产物；服务端与客户端必须在兼容窗口内处理新旧协议。当前仓库已有契约源、生成器和生成结果校验，但 N/N-1 协议协商、兼容窗口检查及滚动发布验收尚未完成，因此不能将协议变更称为已实现的无停机热更。
+
+**仅代码更新**保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供预备、tick 边界提交、观察和回滚原语；将补丁投递到各 RoomServer 的控制面仍未形成完整生产流程。C++ 代码通过进程滚动替换发布，需排空房间或在另一个已实现的迁移流程中转移房间状态，不支持进程内热加载。
 
 ## 1. 现状与问题（读码结论）
 
@@ -124,6 +129,8 @@ sdks/
 
 ## 6. 版本与兼容策略
 
+本节是协议滚动更新的目标策略，不表示当前服务端已完成多版本协商。当前实现状态见本文开头。
+
 ```
 契约提交 → CI 生成 → schema_hash = SHA-256(契约源+生成器版本) → 各端 SDK 发布
 线上服务器：server_supported = {hash_N, hash_{N-1}}
@@ -160,9 +167,7 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 
 ---
 
-## 10. 契约 → protobuf 编码：两层模型与 proto 后端（2026-09-29 追加）
-
-> 定位：README/36 号文档把「def 管语义、protobuf 管字节」一句话带过（决策 #3），本节写透——两层模型、def→proto 映射规则、生成器 proto 后端、与差分同步的配合、zstd 边界，以及「编译期生成 / descriptor 反射池 / 运行时解释」三路线的正面权衡（§10.6）。分期落 P2（§8 已补行）；第一批契约（`sdks/contract` v1 @ a5334014）尚无 proto 产物，本节是其后端设计定稿。引用基线：attribute-sync §3/§5/§7、net-abstraction §3/§5.5、architecture-review §16.7.2、docs/05 §6.1/§6.3（docs/05 已于 2026-09-30 删除，git 可溯）。
+## 10. 契约与 protobuf 编码：两层模型（目标设计）
 
 ### 10.0 为什么 def 契约不排斥 protobuf——反而依赖它
 
@@ -279,14 +284,6 @@ KBEngine 的结构性弱点（attribute-sync §8，要点）：.def 属性形态
 | 嵌套 object（P2+ 按需） | nested message | LEN | msg field type 引用另一 msg name → message 引用；第一批契约无此形态 |
 
 #### 10.2.3 attr id 分段与 message 拆分的取舍
-
-现状分段（docs/05 §6.1——已删 git 可溯；attrs.xml 注释同源）：1-99 基础 / 100-199 战斗 / 300-399 状态 / 600-699 外观 / 700-799 社交 / 800-899 标记。三个候选方案：
-
-| 方案 | 形态 | 判定 |
-|---|---|---|
-| A 全属性单 message（逐属性 field，§10.2.1 强类型路径） | 生成一个 AttrSet | **P3 可选产物**（编辑器/调试工具 golden），非运行时通路 |
-| B 同段一 message（AttrsBasic_1_99 / AttrsCombat_100_199…） | 按段分组投影 | **否决**——把「段」编进 wire 词汇：docs/05（已删 git 可溯）分段表调整（语义组织演化）会强制 schema 变更；段是给策划/评审的组织，不是编码组织 |
-| C 分段完全不进 wire（差分/快照都走通用对） | 段只是契约注释 + 生成枚举的分区 | **主路径采纳**——wire 与分段表解耦，调段零 wire 变更 |
 
 #### 10.2.4 sync 掩码：不进 wire、不拆 message、不用 optional 表达可见性
 
@@ -523,7 +520,7 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 
 ---
 
-## 11. 内外契约分域：KBE「内外契约不分离」缺陷登记与规避设计（2026-09-29 追加）
+## 11. 内外契约分域：KBE「内外契约不分离」缺陷登记与规避设计
 
 > 缺陷来源：用户实测 KBE 代码发现（行号为本会话浅克隆工作副本实读核对）。规避设计定稿口径：**域 = 消息上的逻辑属性，不是物理文件**——契约物理组织不做强制，唯一硬规则是域分段逻辑（ID 分段 + 双 hash + 按域过滤 + 跨域禁令）必须成立，与物理组织正交。分域只作用于 messages（attrs 的 SELF/TEAM/GUILD/WORLD 是「客户端内」的可见域细分，不属本节的内外之分；服务端私有数据走 internal 消息或存储层）。
 
@@ -535,7 +532,7 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 |---|---|---|
 | 对客户端 | `hello` :99-100、`loginBaseapp` :144-145、`logoutBaseapp` :150、`reloginBaseapp` :156-157、`onClientActiveTick` :112-113、`reqAccountBindEmail` :264、`reqAccountNewPassword` :289 | `BASEAPP_MESSAGE_EXPOSED` |
 | 对 dbmgr | `onDbmgrInitCompleted` :90 | 无标记（内部） |
-| 对 cellapp | `onMigrationCellappStart` :326、`onMigrationCellappEnd` :331 | 无标记（内部） |
+| 对 roomserver | `onMigrationCellappStart` :326、`onMigrationCellappEnd` :331 | 无标记（内部） |
 
 **EXPOSED 只是导出标记，不是命名空间隔离**——`baseapp_interface_macros.h:27-36`：`BASEAPP_MESSAGE_EXPOSED(NAME)` 展开为 `NETWORK_MESSAGE_EXPOSED(Baseapp, NAME)`，仅影响「是否允许客户端通道调用」的检查，不参与 ID 分配语义。
 
@@ -552,8 +549,6 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 ### 11.3 规避设计：域分段逻辑（硬规则，与物理组织正交）
 
 四条规则全部落在生成器/XSD/hash 机制上，不依赖文件怎么拆：
-
-**① ID 空间按域分段。**messages 的 msg id 空间（独立于 attr id）划两段：client 域与 internal 域各占一段（示例：client 1-899 / internal 900+，段值落地时定、XSD 锁段边界——沿 attrs.xml id 分段同型纪律，docs/05 §6.1 先例——已删 git 可溯）。**段内自由增删，互不推动对方排布**——对 KBE 单一分配表病根的直接反制。落地形态：msg 元素带 `domain="client|internal"` 属性（xs:enumeration），id 与 domain 的段约束进 XSD。
 
 **② schema_hash 按域算两份。**`client_hash` 只覆盖 client 域的 canonical bundle，`internal_hash` 只覆盖 internal 域（算法同 §6，输入按域过滤）。internal 变更不改 client_hash——**客户端握手稳定、bin 不重发**；握手用 client_hash（§6 的 N/N-1 窗口语义不变，对象收窄为 client 域），internal_hash 只做服务端部署期同批断言（同批重编同批起，无需灰度窗口）。落地口径（P2 已实现）：client bundle = client 域消息 + attrs + errors（与客户端产物面内容一一对应）；internal bundle = internal 域消息 + entities；**手工 version 不进域 bundle**——version 随任何变更走，若入 bundle 则 internal-only 变更也推动 client_hash，握手稳定即失效（全量身份含 version 仍由 schema_hash 锚定）。配套携带面纪律见 §11.6。
 
@@ -600,7 +595,7 @@ def 契约与 protobuf 的关系一句话：**契约是源，proto 是它最重�
 
 随 P2 proto/bin 双后端同批（§8 已补行）：domain 属性与 id 分段进 XSD 是契约侧小改；按域过滤是 bin 投影的同一趟代码；双 hash 是 §10.6 schema_hash 两态一致的直接推广（client_hash 锚定 client 域 bin 字节，internal_hash 锚定服务端 .pb.cc 批次）；客户端契约包（§11.6 三件套）是 bin 后端的同一趟产出。
 
-### 11.6 客户端契约包与 manifest：多文件交付的一致性闭环（2026-09-29 追加）
+### 11.6 客户端契约包与 manifest：多文件交付的一致性闭环
 
 对 §10.6 的补漏：descriptor.bin 只覆盖 wire 层——§10.6 已声明掩码/predict 不进 .bin，语义消费端走 JSON golden 与生成常量表。客户端实际还需要**语义侧小件**：predict 表（→ 预测混合器）、attr id→name（→ 调试/UI 绑定）、错误码表。「多个文件」是事实，不回避——解法不是多文件各自校验，而是**交付单元从文件升成包**：
 
@@ -645,7 +640,7 @@ apollo_gen 同批吐三件（与 .pb.cc 同一次跑；有代码热更管线的�
 
 ---
 
-## 12. 契约工具链与工作流：生成流程、CI/CD 与编辑器集成（2026-09-29 追加）
+## 12. 契约工具链与工作流：生成流程、CI/CD 与编辑器集成
 
 > 定位：§10.3 v3 定了生成器形态与分发纪律，本节把**端到端流程写明确**——从改契约到两端生效的每一步、每步的工具与失败挡点，以及 CI/CD job 与编辑器集成的分期提供。纪律红线：**所有工具只消费 apollo_gen 与其产物，绝不做第二个契约解析实现**（XSD 即时校验除外——那是标准 XML Schema 机制，由编辑器扩展执行，非自行开发）。
 
@@ -710,5 +705,3 @@ apollo_gen 同批吐三件（与 .pb.cc 同一次跑；有代码热更管线的�
 - **P3**：`compat_window_check` + VSCode 插件层（按需）+ apollo_gen 预编译单二进制分发（本地快速迭代进阶，§10.3）。
 
 ---
-
-*基线：apollo main @ 35a9c528（`sdks/`、`skds/` 读码，git log 38656f90 目录改名记录）；KBEngine 参照其公开文档的 .def/生成器/SDK 结构（非源码评审）。2026-09-28 同步修订（①⑤）：契约形态 TOML → XML+XSD（architecture-review §15.3/§15.4）、.def 表述按 C-50 修正（改以 architecture-review §16 源码证据为准：BigWorld entity_description.cpp:184-190、KBEngine entitydef.cpp:188-210，两工作副本为浅克隆/官方包）；行号基线仍为 35a9c528。2026-09-29 追加 §10（契约→protobuf 编码：两层模型/映射规则/proto 后端/差分配合/zstd 边界/三路线权衡——编译期生成 vs descriptor.bin 反射池 vs 运行时解释，含各运行时动态加载 API 查证与 C++ DescriptorPool 换代注意点；**定案 A+C 双轨、C 为主**：A 收窄服务端热路径，C 为默认通道走客户端热更资源管线，生成器同批吐 .pb.cc 与 descriptor.bin，schema_hash 两态一致）——引用 attribute-sync §3/§5/§7、net-abstraction §3/§5.5、architecture-review §16.7.2、contract_model.hpp:19-27 掩码位（@ a5334014 实读）、sdks/contract v1 全部契约文件（@ a5334014）；§8 P2 分期同步扩为 proto/bin 双后端行；决策同步 docs/36 决策追溯表 #19。同日再追加 §11（内外契约分域：KBE `baseapp_interface.h` 三类受众混布/EXPOSED 仅标记/单一 ID 分配表/importClientMessages 运行时协商——实证登记；BigWorld Mercury `InterfaceMinder` 单表顺序分配 + `ExposedMethodMessageRange` 同表保留段——同病异形对照；规避 = 域分段四条硬规则（ID 按域分段/双 hash/按域过滤/跨域引用禁令），物理组织三形态只记事实不设强制、include 聚合为生成器读取层能力）——KBE/BigWorld 行号对应各自浅克隆/官方包工作副本本会话实读；§8 P2 补分域行；docs/36 §2.2 失败教训补 ④。同日续加 §11.6（客户端契约包与 manifest：bin 只覆盖 wire 层的补漏——语义小件第二文件是事实，交付单元升为包，manifest 逐文件 SHA-256 + 单点 client_hash 握手，不一致全闭环在加载期/握手期；单文件三案否决）。同日定案修正 v3（**反射为默认、代码为两端增强**，替代首版「A+C 双轨、C 为主」）：修正触发=端侧代码热更通道（HybridCLR/TS 脚本）使 A 发版代价消失 + 服务端零重编诉求使 .pb.cc 投影退役；核心=消息两分法（框架固定消息族 schema 不随契约变→内建强类型守热路径；业务消息→bin 反射+sol2 桥+contract.lua，服务端契约变更零重编）、客户端按热更能力分档（生成代码主通道、bin 兜底）、装载期一致性闸（bin↔internal_hash 锚定/bin↔Lua 路由逐条对齐/白名单存在性——严谨性从编译期改装载期承接）；§10.3 补 v3 后端与工具链分工（无自建 AST——pugixml DOM 即解析树、IR+薄 writer；前端零工具链、protoc CI 单点、contract.lua 为 IR 的 Lua 表 dump 无编译环节）；§10.7/§8 P2/§11.6 包结构（代码文件进 manifest）/docs/36 #19 行同步改口径。同日加 §12（契约工具链与工作流：端到端七步流程——编辑/生成/提交/PR 校验/发版打包/服务端装载/客户端拉包，每步责任人+工具+失败挡点，前端零工具链在流程上成立；CI/CD 四 job——golden_check/contract_pack（CI 即 manifest 签发者）/schema_hash_report/compat_window_check；VSCode 集成三层递进——零成本 XSD 关联（P1 已可用）/脚手架 tasks.json（P2 尾）/插件层（P3 按需，只调 apollo_gen 读产物、不做第二个契约解析实现））；§8 P2/P3 行同步。同日补 §10.6 附节（业务消息解码位置两案：案一 C++ 反射+sol2 桥**默认**——sol2 无动态绑定能力，桥为自写固定通用转换（descriptor 数据驱动循环）；案二字节透传+Lua 侧 lua-protobuf 备选——C++ 只帧路由 payload 透传；对照维度=解码位置/C++ 消息面可见性/自行开发代码/依赖/性能/一致性闸执行者；**契约零分叉**——binding 不编码解码位置（装配选择故意不进契约）、两案同源同批同 bin 格式、新增共用产物 contract_route 路由清单（§10.3 已补）；切换条件=确认 C++ 永不需要消息内容时换装配、契约与 golden 零改动）；docs/36 #19 理由列同步。同日补性能量化与混布（案二少一次中间表示=1.5-2× 常数因子——两次转换 vs 一次转换；25k 条/秒基准下两案各占帧预算 8%/4%，性能不构成决策依据，解码可 IO 池旁路两案同开放；装配粒度 per-进程——网关透传+Zone 解码混布，契约/route/golden 不变，「两案」为装配谱系两端；接入层过滤/调试/错误处理/测试四维精简补记）。同日 P2 第三批代码落地（§11.3 ② 双域 hash：computeDomainHash 算法同 §6 输入按域过滤——bundle 划分与 version 剥离如上文口径；§11.6 携带面纪律——semantic.json/client proto 去 schema_hash 与 contract_version 只带 client_hash，服务端五产物带全量+双域三 hash；internal-only 变更+version bump 后客户端包成员逐字节不变、服务端产物全变，本机实测通过；ctest 17/17、编译期三 hash 互异断言入 gen_compile_test）。同日第四批落 CI 工具链（§12.2：contract_pack——scripts/ci/contract_pack.sh 从已提交 golden 组双包（`dist/client/<client_hash>/` + `dist/server/<schema_hash>/`），manifest 携带域 hash+生成器+protoc 版本+逐文件 SHA-256，protoc pin 29.3；schema_hash_report——读两 ref 已提交 golden 出三 hash/变更域/集合 diff，PR 评论幂等；workflow .github/workflows/contract.yml；包级不变性实测——internal-only 变更+version bump 后客户端包含 manifest 逐字节不变）。同日第五批落 include 聚合（§11.4 落地注记如上文：expandIncludes 目录级读取层 + XSD include 声明 + 分文件/单文件 hash 相等测试锁死；xsd_gate job 补闸一接线）。同日粘贴 ⑨（§3 链接边界段：gen 为构建期工具、运行期零链接、运行期代码禁 include gen 内部头——architecture-review §16.9.3）。*

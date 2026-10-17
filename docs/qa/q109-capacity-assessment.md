@@ -1,4 +1,5 @@
-[English](q109-capacity-assessment.en.md) | [中文](q109-capacity-assessment.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q109: 如何评估服务器承载能力？
 
@@ -138,7 +139,6 @@ class LoadTester:
             'p95_latency': statistics.quantiles(all_latencies, n=20)[18] if len(all_latencies) > 20 else 0,
             'p99_latency': statistics.quantiles(all_latencies, n=100)[98] if len(all_latencies) > 100 else 0
         }
-
 
 # 使用示例
 async def main():
@@ -330,7 +330,6 @@ class CapacityCalculator:
             'bottleneck': min(results, key=results.get),
             'details': results
         }
-
 
 # 使用示例
 config = {

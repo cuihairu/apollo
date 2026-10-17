@@ -1,4 +1,3 @@
-[English](edgegap-analysis.en.md) | [中文](edgegap-analysis.md)
 
 # Edgegap 架构分析
 

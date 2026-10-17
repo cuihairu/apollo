@@ -12,8 +12,6 @@ tag:
   - MonoRepo
 ---
 
-[English](starter-and-module-assembly-design.en.md) | [中文](starter-and-module-assembly-design.md)
-
 # Starter 与模块装配设计
 
 > **状态（2026-09-30，C-76 同型延伸）**：**参考件（装配思想历史源）**——starter/manifest 实现现状（双 INTERFACE 壳 + 幻影测试，C-68）与现行装配口径（显式注册装配单元、main 收口）以 `docs/analysis/architecture-review.md` §17/§21 为准；本文价值 = 「不做 Spring 克隆、显式 builder、轻注册」的正面表述源（§1/§4 引）。状态表 = `docs/architecture/README.md` A 档。**更新（2026-10-08）**：`modules/starter` 磁盘空壳已整目录删除（C-68 消账，拍板=删除——补实即重建 §17 已否决的运行期 Starter 对象图/条件求值器且与 runtime ApplicationHost 重叠），本文自此仅存思想表述、无实现对应物；§14 引用清单同步。
@@ -310,7 +308,7 @@ Apollo 最终 app 不应该再各自手写一堆初始化顺序，而应该收�
 - `base-app`
   目标语义是 `BaseApp(PlayerAnchor Host)`
 - `world-app`
-  当前仓库可先由 `apps/cell-app` 承担其装配壳
+  当前仓库可先由 `apps/room-server` 承担其装配壳
 - `chat-app`
 - `db-app / persistence-app`
 
@@ -321,9 +319,9 @@ Apollo 最终 app 不应该再各自手写一堆初始化顺序，而应该收�
 - `base-app`
   目标语义是 `BaseApp(PlayerAnchor Host)`
 - `base-app-mgr`
-- `cell-app`
-  这里才表示真正的 `CellApp(Distributed World Node)`
-- `cell-app-mgr`
+- `room-server`
+  这里才表示真正的 `RoomServer(Distributed World Node)`
+- `room-server-mgr`
 - `db-app / persistence-app`
 
 ## 十、推荐装配流程

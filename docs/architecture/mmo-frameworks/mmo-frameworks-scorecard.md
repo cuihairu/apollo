@@ -1,4 +1,3 @@
-[English](mmo-frameworks-scorecard.en.md) | [中文](mmo-frameworks-scorecard.md)
 
 # MMO 框架五维评分
 

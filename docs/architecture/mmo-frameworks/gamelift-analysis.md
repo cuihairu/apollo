@@ -1,4 +1,3 @@
-[English](gamelift-analysis.en.md) | [中文](gamelift-analysis.md)
 
 # AWS GameLift 架构分析
 

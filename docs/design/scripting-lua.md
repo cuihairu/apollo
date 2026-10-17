@@ -1,4 +1,3 @@
-[English](scripting-lua.en.md) | [中文](scripting-lua.md)
 
 # Apollo Lua 脚本层设计（scripting-lua）
 
@@ -91,9 +90,9 @@ modules/lua/
 - **消息 handler 绑定**：上行业务消息经 C++ 帧路由按 `contract_route`（id→handler 名）分发到 Lua——handler 在模块表内注册，模块头注释声明 `handles: msg_a, msg_b`，加载器校验其与契约路由表一致，缺失启动红。
 - **写白名单数据化**：§4/§5 的 `ScriptWriteWhitelist` 位图从 contract.lua 构建（白名单仍由契约 `predict` 位生成——sdk-contract §5 机制不变，载体从生成常量变为契约表数据）；热换契约表时白名单随 tick 边界同换。
 - 版本偏序沿用 §3.3 同一规则：契约表版本 ≥ 消费它的脚本补丁版本才启用——契约加字段与使用该字段的 handler 补丁必须同批或先表后补。
-- **宿主启动装载已落地（2026-10-15 补）**：cell `--script-handlers <file>` / `--script-contract <file>`——启动装载序 handler 面 → 契约 → boot 源（gameThread 首拍，§2 单写者；契约装载闸逐 route `resolve_handler`，handler 未先行在位即拒载；boot 源可读 `contract` 全局）。任一步失败仅告警不停机（同 boot 源纪律，fault 走 runtime 事件面）。契约路由 handler 面占位模块随仓（`apps/cell-app/scripts/contract_handlers.lua`，45 路由无操作占位——装载闸只验存在性，玩法批按消息语义填实体；apollo_gen 新增 reflect 消息须同步补行，`contract_handler_tests` 以 golden 契约 + 随仓 handler 模块全装载路径闸同步）。上行业务消息经 C++ 帧路由分发到 Lua handler 的 `call_route` 接线仍随玩法批。
+- **宿主启动装载已落地（2026-10-15 补）**：cell `--script-handlers <file>` / `--script-contract <file>`——启动装载序 handler 面 → 契约 → boot 源（gameThread 首拍，§2 单写者；契约装载闸逐 route `resolve_handler`，handler 未先行在位即拒载；boot 源可读 `contract` 全局）。任一步失败仅告警不停机（同 boot 源纪律，fault 走 runtime 事件面）。契约路由 handler 面占位模块随仓（`apps/room-server/scripts/contract_handlers.lua`，45 路由无操作占位——装载闸只验存在性，玩法批按消息语义填实体；apollo_gen 新增 reflect 消息须同步补行，`contract_handler_tests` 以 golden 契约 + 随仓 handler 模块全装载路径闸同步）。上行业务消息经 C++ 帧路由分发到 Lua handler 的 `call_route` 接线仍随玩法批。
 
-### 3.5 字节码缓存与补丁形态（2026-09-29 补）
+### 3.5 字节码缓存与补丁形态
 
 - **成本账**：每次启动与每次热更 Phase A 都要 `luaL_loadbuffer` 全量模块——模块到百级、单文件数 KB 时，整包编译是可感知的启动成本（重启路径上串行发生在装载线程）。缓存 = 把编译从运行期挪到构建期。
 - **形态**：**patch 目录直接携带预编译 chunk**——构建管线对每模块产 `<name>.luac`（luac -o 或宿主 `string.dump`），manifest 记三元组 `(源 hash, bytecode hash, Lua 版本头)`；装载按 manifest 校验：源 hash 防篡改、**版本头不匹配即拒载并回退源码编译**（bytecode 格式与 Lua 小版本绑定——§2 版本锁定纪律的执行点）。dev 目录仍用源码（改完即载，缓存无收益）。
@@ -170,7 +169,7 @@ collect 阶段（§3.2 的 delta/快照组装）
 - 调试面：错误审计通道（错误摘要带模块名+版本+数据快照）进 `docs/design/attribute-sync.md` 的 BI 旁路，独立于游戏通道，运维可查"热更升级后某模块错误率突增"。
 - 灰度联动：模块健康分（错误计数/预算超限率）驱动 §3.2 的回滚阈值。
 
-### 6.1 故障通知契约：三级事件、冷路径单点与模块熔断（2026-09-30 补，architecture-review §19.5.1 / P-4）
+### 6.1 故障通知契约：三级事件、冷路径单点与模块熔断
 
 §6 表内「报错入日志 → 实体回退」只定义了**引擎内部**处置；「引擎 → 运维/业务」的对外通知契约（事件长什么样、谁消费、脚本层有没有可编程钩子）此前零设计，本节定型。立场先行：
 
@@ -190,13 +189,13 @@ collect 阶段（§3.2 的 delta/快照组装）
 - **幂等与聚合（对外不打爆的保证）**：引擎侧去抖只做 WARN 一级（上表）；FAULT 级靠**计数器语义**天然聚合——下游看到的是 `script_fault_total` 的速率而非逐条事件；TRIP 本身低频。告警阈值/静默窗口/限频是 exporter 侧规则（logging §5.2），不进引擎——引擎侧再配一套告警规则 = 两处真相。
 - **确定性与回放**：fault 的**处置**（中止/回退/熔断隔离）是世界线程 tick 内的确定性状态迁移，复算重放自动复现；fault **事件本身**不进录制输入流（引擎自产观测数据，不是世界输入）——battle-determinism §5 的输入序列不含它，回放正确性不依赖「告警是否发生过」。
 
-## 7. 在线调试与性能归因：attach 执行 / Lua 状态内省 / profile（2026-09-29 增补）
+## 7. 在线调试与性能归因：attach 执行 / Lua 状态内省 / profile
 
 > 语义层以 `docs/architecture/observability-watcher-and-runtime-introspection-design.md`（architecture/ 代）为准——Watcher Tree、Passive Query vs Controlled Action 分级、AccessController；本节接脚本域三件事（attach 执行、Lua 状态面、性能归因）与一个立场（不做断点调试器）。通道与归属沿用 G-5 两截落位（net-abstraction §7 P3，architecture-review §16.8.3-⑤）：检测原语内嵌 ScriptHost（模块内），交互工具归 apps/ admin 面。
 
 ### 7.1 attach 执行：admin 单入口 + tick 边界沙盒 eval
 
-- **先例**：KBE 每进程自带 telnet 服务，密码门禁 + 可配执行层（cellapp.cpp:292-293 `pTelnetServer_->start(telnet_passwd, telnet_deflayer, …)`），命令解码后进 Python 解释器**在线执行**（telnet_handler.cpp:801-812，`PyUnicode_DecodeUTF8(command)` 后 eval）；skynet debug_console 是一个 console 服务、`call` 任意服务在线执行 Lua（architecture-review §16.2，debug_console.lua:147-174）。
+- **先例**：KBE 每进程自带 telnet 服务，密码门禁 + 可配执行层（roomserver.cpp:292-293 `pTelnetServer_->start(telnet_passwd, telnet_deflayer, …)`），命令解码后进 Python 解释器**在线执行**（telnet_handler.cpp:801-812，`PyUnicode_DecodeUTF8(command)` 后 eval）；skynet debug_console 是一个 console 服务、`call` 任意服务在线执行 Lua（architecture-review §16.2，debug_console.lua:147-174）。
 - **apollo 取舍**：不学「每进程一个监听口」——收敛为**单 admin 入口**（认证/审计/权限分级只做一处）+ control 通道转发到目标进程/目标场景线程（skynet 形态）；单进程阶段 admin 入口即本机。认证后默认关、只绑内网（KBE passwd 先例）。
 - **执行语义（单写者纪律）**：调试命令投递进 owning 场景线程的任务队列，**下一 tick 的固定调试点**执行、结果回传——任何线程不直接摸 `lua_State`（§2 一线程一状态的推论；skynet 的 call 同构：console 投消息、目标服务在自己上下文执行）。
 - **eval 环境 = 独立 debug env**：§6 沙盒白名单的受限超集——只读查询 API + 少量受控动作（GC 步进、模块健康复位）；无业务写权限（不给 `apollo.db` 写路径）；结果大小上限 + 速率限制（防误操作打爆控制通道）；指令预算同样管辖 eval（超时打断并上报——tick 确定性优先于调试便利）。
@@ -226,7 +225,7 @@ collect 阶段（§3.2 的 delta/快照组装）
 - 预防式调试的另一半已在 §3.2：热替换前的工作线程冒烟（smoke 用例集 + 灰度 scene 试跑 + 健康分回滚）——新版本先在影子环境证明自己。
 - 分期：本节全部跟随 G-5 同批（net-abstraction §7 P3 两截落位）——检测原语随 owning 模块落地，admin 交互面归 apps/；dev 期临时手段 = 日志 + §6 错误审计 + §3.2 版本审计。
 
-### 7.5 GM/运营命令面（2026-09-30 补，design-gap-inventory #6）
+### 7.5 GM/运营命令面
 
 §7.1-§7.4 是框架侧调试；玩法 GM（发道具/封禁/踢人/改属性）此前零设计（「GM」在设计文档中仅作为 admin 消息来源出现）——本节补三件：指令表/权限分级/审计存储。**管道零新增**：GM 命令与 attach 同路（admin 单入口 → control 通道 → 目标场景线程 **tick 边界**执行，§7.1）。
 
@@ -237,7 +236,7 @@ collect 阶段（§3.2 的 delta/快照组装）
 - **确定性与回放**：GM 命令经 admin 会话上行 = 普通 intent 流的一类——battle-determinism §5 输入录制（session=admin）天然含 GM 输入，复算重放自动包含 GM 干预；GM 改世界与玩家操作在判定域同权（tick 边界输入），不破确定性。
 - **踢人/封禁的执行位**：会话断开 = net 层 close（net-abstraction §2 四动作）；封禁 = login-app 准入闸门消费的风控记录（violation_score 同族，net-abstraction §4.3）——GM 命令是触发器，机制归各自域，不在脚本层重造。
 
-## 8. 异步任务模型：单写者线程下的 Redis/DB/跨服（2026-09-29 补）
+## 8. 异步任务模型：单写者线程下的 Redis/DB/跨服
 
 > 业务逻辑收敛到场景线程单写者（§2 / attribute-sync §10）后，「一次 Redis 读 / DB 查询 / 跨服调用」不能再原地阻塞等待——等待即卡整个场景的 tick。本节定架构层的异步封装：**C++ 侧回调 + request_id 交接，Lua 侧协程**，两层各自取最优模型。（§9 交集表原引的「§异步模型」即本节，悬空引用就此闭环。）
 >
@@ -288,5 +287,3 @@ L0 执行层（C++，IO/DB 线程池） hiredis 异步接口 / DB Command 队列
 | logging.md | §6 脚本错误审计与 §7.3 错误率计数经 BI 旁路在 collector 汇合（logging §5）；崩溃摘要的离线符号化依赖 §7.3 符号不剥离纪律 |
 
 ---
-
-*基线：apollo main @ 35a9c528。2026-09-29 补 §3.4 与执行摘要 7（契约表 contract.lua 装载——sdk-contract §10.6 v3 的服务端语义载体：handler 路由绑定/写白名单数据化/换表协议同构/版本偏序）。同日增补 §7「在线调试与性能归因」（attach 执行/Lua 状态内省/profile——语义层引用 architecture/observability-watcher-and-runtime-introspection-design.md；先例 KBE telnet 在线 eval（telnet_handler.cpp:801-812、cellapp.cpp:292-293）+ KBE watcher 路径树（serverapp.cpp:165-181，guiconsole 消费端）+ skynet debug_console；原 §7 交集表顺移 §8，net-abstraction §2 的外部引用同步）。同日再补（第二批）：§2 Lua 版本锁定纪律（sol2 + Lua 5.4，LuaJIT 门槛）与 bytecode 红线精确化（禁未校验来源、预编译产物走专用路径）；§3.2 热更四补（current 版本指针持久化/协程升级语义/灰度粒度 per 场景线程/模块私有状态零迁移）；新增 §3.5 字节码缓存（构建期预编译 + manifest 三元组 + 三条失效规则）；新增 §8「异步任务模型」（三模型对比定 C++ 回调+request_id、Lua 协程；先例 skynet lualib/skynet.lua:18-26/:227/:415；三纪律 re-validate/超时/协作式取消；ssengine-reference §4.1 与 InterServerLink §5.7 接线），原 §8 交集表顺移 §9（§7.2/§9 内部引用同步，§9 net 行的悬空「§异步模型」引用闭环）；摘要 9 联动。2026-09-30 修订（第三批）：§2 绑定层弃 sol2 定原生 Lua C API 薄绑定 + 版本锁 5.5.1（上游维护停滞判定，用户指令；绑定面小前提；§3.4 luac 表述去版本号）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 附节更新注、docs/todo 批次 6 同步；36 号 #12/#19 与 deep-dive §12 的 sol2/Lua 5.4 历史表述修正登记 design-gap-inventory §3（随下一 36 号批次）。2026-09-30 增补（第四批）：§7.5 GM/运营命令面（design-gap-inventory #6——指令表/权限分级/审计存储三件；管道与 §7.1 attach 同路；gm_write 白名单与 predict 分列；gm_audit 独立审计表；GM 输入进 battle-determinism 复算）——摘要 11 联动。2026-09-30 再修订（第五批）：§2 版本策略从「锁 5.5.1」改「**5.5 主线随 vcpkg lua port（当前 5.5.x）**」——补丁位随依赖解析浮动（§3.5 版本头校验守尾）、小版本升级仍显式批次、删 overlay port 自持兜底（用户指令：版本跟着 vcpkg 走）——摘要 10、battle-determinism §2 Lua 行、sdk-contract §10.6 注、docs/todo 批次 6 同步；同批执行 36 号 #12/#15/#17/#19 与 deep-dive §12 历史表述修正（design-gap-inventory §3 与登记簿回填）。2026-09-30 增补（第六批，architecture-review §19.4 P-4）：新增 §6.1「故障通知契约」（三级事件 WARN/FAULT/TRIP + 冷路径单点 onScriptFault + 模块熔断 + ScriptFaultEvent 字段封闭集 + 幂等聚合与确定性分界；明令不做脚本实现的故障 SPI——§19.5.1 候选方向的正式落盘）——摘要 12 联动；§7.2/§7.3 状态面与计数器被 §6.1 引用为其消费面。*

@@ -1,4 +1,5 @@
-[English](q40-ecs-architecture.en.md) | [中文](q40-ecs-architecture.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q40: ECS 架构是什么？在游戏中有什么优势？
 

@@ -6,8 +6,6 @@ prev: /guide/concepts
 next: /guide/configuration
 ---
 
-[English](module-system.en.md) | [中文](module-system.md)
-
 # 模块系统
 
 Apollo 采用分层模块化架构，每个模块职责清晰，可以独立使用。

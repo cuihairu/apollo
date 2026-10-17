@@ -1,4 +1,3 @@
-[English](trinitycore-analysis.en.md) | [中文](trinitycore-analysis.md)
 
 # TrinityCore 架构分析
 

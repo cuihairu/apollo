@@ -9,8 +9,6 @@ tag:
   - 核心
 ---
 
-[English](core.en.md) | [中文](core.md)
-
 # Core 模块
 
 Core 模块提供框架内核，定义公共运行语义。

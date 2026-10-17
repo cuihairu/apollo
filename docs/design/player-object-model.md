@@ -1,4 +1,3 @@
-[English](player-object-model.en.md) | [中文](player-object-model.md)
 
 # 玩家对象模型
 
@@ -32,7 +31,7 @@ Apollo 的目标模型在一场对局中只保留一个玩家权威运行对象�
 - `Gateway` 持有网络连接，不拥有玩家模拟权威。
 - `Room` 是对局及其临时状态；RoomServer 是承载它的进程。
 - `Scene` 可描述房间中的地图/空间数据，不是另一个玩家对象宿主进程。
-- `BaseApp`、`CellApp`、Proxy/ghost 等属于外部引擎模型，不作为 Apollo 的目标对象分层。
+- `BaseApp`、`RoomServer`、Proxy/ghost 等属于外部引擎模型，不作为 Apollo 的目标对象分层。
 
 ## 当前实现
 

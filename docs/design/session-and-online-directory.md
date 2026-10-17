@@ -1,4 +1,3 @@
-[English](session-and-online-directory.en.md) | [中文](session-and-online-directory.md)
 
 # 会话与在线路由
 

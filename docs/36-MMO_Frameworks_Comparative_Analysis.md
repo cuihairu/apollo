@@ -1,4 +1,3 @@
-[English](36-MMO_Frameworks_Comparative_Analysis.en.md) | [中文](36-MMO_Frameworks_Comparative_Analysis.md)
 
 # 36. 多人游戏服务器常见名称对照
 
@@ -99,7 +98,7 @@ Agones 的 `GameServer`、`Fleet` 和 `FleetAutoscaler` 是 Kubernetes 上的游
 | `RoomServer` | 承载多个房间并运行对局权威逻辑。 | Colyseus 的游戏服务器进程、Photon `Game Server` |
 | `Room` | 一场对局及其临时状态。 | Colyseus/Photon `Room`、匹配实例 |
 
-Apollo 不再为单一房间/对局运行时并列使用 `CellApp`、`ZoneServer`、`AreaServer`、`SceneServer` 等名称。空间对象在代码层可使用 `Scene`；对外的玩法和承载单位分别称 `Room` 与 `RoomServer`。一个 RoomServer 可以承载多个 Room。
+Apollo 不再为单一房间/对局运行时并列使用 `RoomServer`、`ZoneServer`、`AreaServer`、`SceneServer` 等名称。空间对象在代码层可使用 `Scene`；对外的玩法和承载单位分别称 `Room` 与 `RoomServer`。一个 RoomServer 可以承载多个 Room。
 
 ## Gateway 与热更新
 

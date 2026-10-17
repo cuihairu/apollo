@@ -33,7 +33,7 @@ public:
     // 泵线程 acceptNewConnections 循环调用）
     void pump();
 
-    // 转发消息到 CellApp（M1 出口：legacy 世界帧 → 契约 wire 前递）
+    // 转发消息到 RoomServer（M1 出口：legacy 世界帧 → 契约 wire 前递）
     void forwardToWorld(SessionID sessionId, const RouteSnapshot& routeSnapshot,
                         const std::vector<uint8_t>& message);
 

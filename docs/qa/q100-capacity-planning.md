@@ -1,4 +1,5 @@
-[English](q100-capacity-planning.en.md) | [中文](q100-capacity-planning.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q100: 如何进行服务器容量规划？
 
@@ -252,7 +253,6 @@ class CapacityCalculator:
 
         return total_cache / 1024  # MB
 
-
 # 容量规划计算器
 def plan_capacity(target_ccu, growth_rate=0.2):
     """容量规划"""
@@ -343,7 +343,6 @@ class ScalingStrategy:
         current_instances = int(current / max_ccu)
 
         return max(0, target_instances - current_instances)
-
 
 class AutoScaler:
     """自动扩展器"""

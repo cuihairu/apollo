@@ -2,8 +2,6 @@
 title: 模块总览
 ---
 
-[English](index.en.md) | [中文](index.md)
-
 # 模块总览
 
 Apollo 的模块拆分围绕一条原则：
@@ -22,8 +20,8 @@ Apollo 的模块拆分围绕一条原则：
 | [Net](/modules/net) | 传输、协议、消息编解码、会话通信 |
 | [Game](/modules/game) | 实体、AOI、战斗、属性、会话目录与世界逻辑 |
 | [BigWorld](/modules/bigworld) | BigWorld API 兼容层（实体/回调/定时器薄迁移面） |
-| [Contract](/modules/contract) | 契约消息定义与生成（messages.xml → C++/Lua/JSON） |
-| [Protocol](/modules/protocol) | 消息编解码与 URL 路由（codec + url） |
+| [Contract](/design/sdk-contract) | 契约源与协议版本管理（XML/XSD） |
+| [Protocol](/api/net) | 消息传输与协议接口 |
 
 推荐阅读顺序：
 

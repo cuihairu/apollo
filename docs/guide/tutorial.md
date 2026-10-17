@@ -6,8 +6,6 @@ prev: /guide/quick-start
 next: /guide/concepts
 ---
 
-[English](tutorial.en.md) | [中文](tutorial.md)
-
 # 上手教程
 
 从零到跑通一局完整对战：登录锚 → 建副本 → 挂战斗 → 进场 → AOI → 打完 → 结算 → 离场。全程进程内单线程，对应仓库里的可运行样例 `examples/full_loop_demo.cpp`（32 个断言门全过，本教程按它逐步拆解）。

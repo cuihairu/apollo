@@ -1,4 +1,5 @@
-[English](q101-script-language.en.md) | [中文](q101-script-language.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q101: 为什么要嵌入脚本语言？Lua vs Python 如何选择？
 
@@ -248,7 +249,6 @@ class Account(KBEngine.Account):
             "Avatar",
             {"position": (0, 0, 0)}
         )
-
 
 class Avatar(KBEngine.Entity):
     """角色类"""

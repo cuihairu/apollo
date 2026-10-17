@@ -125,7 +125,7 @@ bool exposition_lookup(const std::string& body, const std::string& metric,
                        double& out);
 
 /// env 规则面（最小）：APOLLO_ALERT_RULES = `<metric><op><threshold>` 以
-/// `;` 连接，op ∈ {>, <}（例 "gateway_sessions<1;cell_queue_depth>100"）。
+/// `;` 连接，op ∈ {>, <}（例 "gateway_sessions<1;room_server_queue_depth>100"）。
 /// 规则名 = metric 名；sustain/silence 取默认。坏条目跳过不中断。
 std::vector<AlertRule> parse_alert_rules(const std::string& spec);
 

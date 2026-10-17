@@ -1,4 +1,5 @@
-[English](q89-rate-limiting.en.md) | [中文](q89-rate-limiting.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q89: 如何设计限流和防刷机制？
 

@@ -1,4 +1,5 @@
-[English](q113-quality-vs-speed.en.md) | [中文](q113-quality-vs-speed.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q113: 如何平衡代码质量和开发速度？
 
@@ -208,7 +209,6 @@ class DecisionFramework:
         else:
             return {'approach': 'Balanced', 'reason': '平衡质量和速度'}
 
-
 # 使用示例
 decisions = [
     DecisionFramework.make_decision({
@@ -282,7 +282,6 @@ class TechnicalDebt:
                 total_effort += debt['effort']
 
         return selected
-
 
 # 债务示例
 debts = [

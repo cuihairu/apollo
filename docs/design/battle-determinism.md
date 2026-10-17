@@ -1,8 +1,7 @@
-[English](battle-determinism.en.md) | [中文](battle-determinism.md)
 
 # Apollo 战斗确定性与回放（battle-determinism）
 
-> 状态：设计稿（评审中）。定位：战斗判定的**确定性四约束**（判定域/浮点/迭代序/随机数）与**回放格式**——36 号决策表 #16「战斗独立实例与回放」与 #18「帧同步只留缝」的确定性承载件；被删 docs/25（B 级清理，`git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯）的 §3.3 五段管线形态在此接续，其「支持回放/校验」一句展开成本文。与 `clock-and-time.md`（tick 号 = 回放时间轴）、`attribute-sync.md`（§9 预测与校验边界、§10 tick 六阶段）、`scripting-lua.md`（§4 沙盒/§6 指令预算/§8 异步交接）、`battle-verification-service.md`（客户端权威战斗的验证与权威结算——§5 四元组/hash 链的跨端消费方）互为引用。缺口登记：design-gap-inventory #2。
+> 状态：设计稿（评审中）。定位：战斗判定的**确定性四约束**（判定域/浮点/迭代序/随机数）与**回放格式**——36 号决策表 #16「战斗独立实例与回放」与 #18「帧同步只留缝」的确定性承载件；被删 docs/25（B 级清理，`git show 1e37073d^:docs/25-Battle_Service_Design.md` 可溯）的 §3.3 五段管线形态在此接续，其「支持回放/校验」一句展开成本文。与 `clock-and-time.md`（tick 号 = 回放时间轴）、`attribute-sync.md`（§9 预测与校验边界、§10 tick 六阶段）、`scripting-lua.md`（§4 沙盒/§6 指令预算/§8 异步交接）、`battle-verification-service.md`（客户端权威战斗的验证与权威结算——§5 四元组/hash 链的跨端消费方）互为引用。
 
 ---
 
@@ -109,5 +108,3 @@ state = pcg32_init( splitmix64( world_seed, tick, stream_id ) )   // 每 (tick, 
 | architecture-review | 36 号 #16/#18 收口与 docs/25 悬空引用改指（登记簿注记）；C-34 ECS 收敛为本件前置（既有登记）；编译档浮点锁登记代码影响项 |
 
 ---
-
-*基线：apollo main @ 05919db9（docs/25 经 `git show 1e37073d^:docs/25-Battle_Service_Design.md` 取回——五段管线 §3.3/回放记录 §3.4 为其全部确定性遗产；docs/30 Compact_GameServer_Design 在册）；36 号 #16/#18 表述与负空间证据 = mmo-mechanism-deep-dive §16/§18 已核记录；lockstep 三仓零命中检索命令随深潜 §18 可溯。缺口登记：design-gap-inventory #2；本件落盘后回填状态列。*

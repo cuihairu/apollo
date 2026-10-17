@@ -1,4 +1,5 @@
-[English](q99-cluster-management.en.md) | [中文](q99-cluster-management.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q99: 如何管理服务器集群？
 
@@ -152,7 +153,6 @@ class ComponentRegistry:
                     WARNING_MSG(f"Component {component_id} marked as dead")
                     return True
         return False
-
 
 # KBEngine 组件发现扩展
 class KBEngineComponentDiscovery:
@@ -314,7 +314,6 @@ class BaseAppLoadBalancer:
         # 简单哈希
         hash_val = hash(player_id) % len(baseapps)
         return baseapps[hash_val]
-
 
 # KBEngine BaseAppMgr 中的负载均衡
 class BaseAppManager(KBEngine.Entity):

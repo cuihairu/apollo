@@ -12,8 +12,6 @@ tag:
   - Bootstrap
 ---
 
-[English](host-builder-and-di-design.en.md) | [中文](host-builder-and-di-design.md)
-
 # Host Builder 与 DI 设计
 
 > **状态（2026-09-30 裁决落档，C-76）**：**参考件**——容器/生命周期/装配的实现现状与现行结论以 `docs/analysis/architecture-review.md` §17/§21 为准（HostBuilder/ServiceCollection 未实现且未排期；容器全仓唯一消费方 = game-server demo——§20 十项对照）；本文 §16「多脚本后端按 profile 选择」已被 `docs/design/scripting-lua.md` §2（Lua 单语言，决策 #12）取代。状态表 = `docs/architecture/README.md` A 档。

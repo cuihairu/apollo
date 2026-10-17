@@ -1,4 +1,3 @@
-[English](smartfoxserver-analysis.en.md) | [中文](smartfoxserver-analysis.md)
 
 # SmartFoxServer 架构分析
 

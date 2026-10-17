@@ -1,4 +1,3 @@
-[English](33-BigWorld_Compatibility.md) | [中文](33-BigWorld_Compatibility.zh.md)
 
 # BigWorld 兼容层（Apollo）
 
@@ -139,4 +138,4 @@ CTest 目标：
 - Python 脚本兼容
 - 与官方 BigWorld 客户端的网络协议兼容
 
-当你明确所需的 BigWorld API 面/版本（BaseApp/CellApp、mailbox 语义、脚本语言）后，下一步是按同样的「API + 测试」规则增量扩展本层。
+当你明确所需的 BigWorld API 面/版本（BaseApp/RoomServer、mailbox 语义、脚本语言）后，下一步是按同样的「API + 测试」规则增量扩展本层。

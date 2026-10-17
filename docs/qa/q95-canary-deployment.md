@@ -1,4 +1,5 @@
-[English](q95-canary-deployment.en.md) | [中文](q95-canary-deployment.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q95: 如何实现灰度发布？
 

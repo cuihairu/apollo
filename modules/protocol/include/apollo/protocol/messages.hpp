@@ -32,7 +32,7 @@ enum class MessageType : uint16_t {
     DB_QUERY_REQUEST        = 0x0024,
     DB_QUERY_RESPONSE       = 0x0025,
 
-    // CellApp 相关
+    // RoomServer 相关
     CELL_CREATE_ENTITY      = 0x0030,
     CELL_DESTROY_ENTITY     = 0x0031,
     CELL_ENTITY_ENTER       = 0x0032,
@@ -312,7 +312,7 @@ struct PlayerResolveRouteResponse {
 };
 
 //==============================================================================
-// CellApp 消息
+// RoomServer 消息
 //==============================================================================
 
 struct CellCreateEntity {

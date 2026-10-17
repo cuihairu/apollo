@@ -1,4 +1,5 @@
-[English](q11-transport-protocol.en.md) | [中文](q11-transport-protocol.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q11: TCP vs UDP vs KCP，MMO 中各自的使用场景是什么？
 

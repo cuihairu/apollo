@@ -1,4 +1,5 @@
-[English](q96-config-management.en.md) | [中文](q96-config-management.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q96: 如何管理服务器配置？
 
@@ -264,7 +265,6 @@ class ConfigManager:
                     return default
 
             return value
-
 
 # 使用示例
 game_config = ConfigManager("config/game.xml")

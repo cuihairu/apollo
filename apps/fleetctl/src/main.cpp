@@ -96,7 +96,7 @@ void printUsage() {
               << "                   --target-port TP --target-zone Z\n"
               << "                   [--source-host SH] [--target-host TH]\n"
               << "  fleetctl eval    [--host H] --port P [--peer NAME] [--scene S] --source SRC\n"
-              << "                   (default peer=cell, port 9101 = cell M1 link)\n"
+              << "                   (default peer=cell, port 9101 = RoomServer M1 link)\n"
               << "Exit codes: 0 admitted/ok / 2 rejected/failed / 3 unreachable / 1 usage or setup\n";
 }
 
@@ -159,7 +159,7 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         return false;
     }
     if (opt.peer.empty()) {
-        opt.peer = opt.command == "eval" ? "cell" : "baseappmgr";
+        opt.peer = opt.command == "eval" ? "room-server" : "baseappmgr";
     }
     if (opt.command == "eval") {
         return !opt.source.empty();  // Lua 源必给（0 保留关联键由本进程单调分配）

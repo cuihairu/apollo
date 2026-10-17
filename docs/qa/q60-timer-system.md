@@ -1,4 +1,5 @@
-[English](q60-timer-system.en.md) | [中文](q60-timer-system.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q60: 如何设计定时器系统？
 

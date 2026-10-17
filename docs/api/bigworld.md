@@ -4,8 +4,6 @@ icon: bigworld
 prev: /api/README.md
 ---
 
-[English](bigworld.en.md) | [中文](bigworld.md)
-
 # BigWorld API
 
 > 2026-10-10 对账：本页按 HEAD 实况重写（兼容面 = `include/bigworld/BigWorld.h`
@@ -66,7 +64,7 @@ Witness/Ghost 分布式空间为规划态）。
 | `BigWorld::destroyEntity(id)` | 同名支持 |
 | `BigWorld::Runtime()->addTimer(...)` | `BigWorld::addTimer(initial, repeat, fn(TimerId,int32), userArg)` |
 | `ICallback` / `registerCallback` | 不存在（改 `callback(delay, fn)` 一次性或 `addTimer` 周期） |
-| `Proxy` / `CellApp` 概念 | 进程面见 [服务器应用](/apps/)；Witness/Ghost 规划态 |
+| `Proxy` / `RoomServer` 概念 | 进程面见 [服务器应用](/apps/)；Witness/Ghost 规划态 |
 
 ## 相关文档
 

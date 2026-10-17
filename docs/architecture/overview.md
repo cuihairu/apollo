@@ -1,4 +1,3 @@
-[English](overview.en.md) | [中文](overview.md)
 
 # 架构总览
 
@@ -10,4 +9,4 @@ Apollo 面向轻量房间制多人游戏。目标运行链路是 `Client → Gat
 
 Gateway 可配合多实例和滚动部署提升服务可用性，但自身不提供连接迁移。RoomServer 允许通过停止分配新房间、等待现有房间结束后退出，进行滚动更新；这不等于活动对局跨版本无损迁移，也不保证现存 TCP 连接不断开。
 
-以上是目标模型。仓库中 `base-app`、`cell-app`、`baseappmgr` 等程序是当前原型实现名称，详见[服务器应用现状](../apps/index.md)；不得将这些遗留名称解释为目标拓扑。BigWorld/KBEngine 术语仅在引擎对照资料中用于解释外部实现。
+以上是目标模型。仓库中 `base-app`、`room-server`、`baseappmgr` 等程序是当前原型实现名称，详见[服务器应用现状](../apps/index.md)；不得将这些遗留名称解释为目标拓扑。BigWorld/KBEngine 术语仅在引擎对照资料中用于解释外部实现。

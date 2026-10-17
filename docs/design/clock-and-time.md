@@ -1,8 +1,7 @@
-[English](clock-and-time.en.md) | [中文](clock-and-time.md)
 
 # Apollo 时间与时钟模型（clock-and-time）
 
-> 状态：设计稿（评审中）。目标：定形「时间」在 apollo 里的三种形态与各自禁入区——单调钟只做测量、tick 号只做判定序、wall 钟只做人类可读；并回答 tick 调度（固定步长/追赶/暂停）、客户端校时边界、跨进程时钟不互信、定时器的时间接口。与 `docs/design/attribute-sync.md`（§10 六阶段/§5.1 预算/§8.2 摊写——全部以本文件的 tick 号为刻度；§10.1 已论证「为什么是 tick 不是消息驱动」G-7，本文不重复）、`docs/analysis/ssengine-reference.md` §4.3（定时器轮）、`docs/analysis/mmo-mechanism-deep-dive.md` §8（定 tick 与线程编队三家先例）互为引用。缺口登记：design-gap-inventory #1。
+> 状态：设计稿（评审中）。目标：定形「时间」在 apollo 里的三种形态与各自禁入区——单调钟只做测量、tick 号只做判定序、wall 钟只做人类可读；并回答 tick 调度（固定步长/追赶/暂停）、客户端校时边界、跨进程时钟不互信、定时器的时间接口。与 `docs/design/attribute-sync.md`（§10 六阶段/§5.1 预算/§8.2 摊写——全部以本文件的 tick 号为刻度；§10.1 已论证「为什么是 tick 不是消息驱动」G-7，本文不重复）、`docs/analysis/ssengine-reference.md` §4.3（定时器轮）、`docs/analysis/mmo-mechanism-deep-dive.md` §8（定 tick 与线程编队三家先例）互为引用。
 
 ---
 
@@ -10,7 +9,7 @@
 
 1. **三钟分工是本设计的全部**：`steady_clock`（单调钟）——**唯一测量入口**（帧耗时/超时/退避/预算补给时长）；**tick 号**（uint64 逻辑钟）——**唯一世界状态判定序**（属性 seq 容器/定时器刻度/journal 位点锚/预算领取节拍）；`system_clock`（wall 钟）——**唯一人类可读与跨系统对齐**（日志行/持久化 created_at/GM 审计/报表）。三钟各有禁入区：wall 差值不测时长（NTP 跳变出负值）、tick 不换算真实时间（重放语义）、steady 不进游戏判定（跨端不一致）。
 2. **tick 号判定，时间戳永不判定**：回放确定性（回放 = seed + 按 tick 对齐的输入序列——battle-determinism 的时间轴即此）、NTP/闰秒免疫、单调无回退、跨端零对表成本。BW/KBE 全部以 tick 为节拍（`DEFAULT_GAME_UPDATE_HERTZ = 10`，lib/server/common.hpp:19；`gameUpdateHertz 10`，kbengine_defaults.xml:5——deep-dive §8 实测）。
-3. **固定步长（设计口径 100ms/10Hz，实现默认 50ms/20Hz），进程级单一 TickSource**：主循环 = 消息处理段 + tick 段（BW time slice 同型，cellapp.cpp:946-948）；追赶有界（落后 ≤ catch_up_max 连跑补齐，超则跳拍 + 告警 + 记 dropped_ticks——不允许无界连跑挤死 IO）；tick 号进程内单调、重启归零、跨重启连续性由 journal 持久序号承担。实现默认 tickRateMs=50（20Hz），设计口径 100ms（10Hz）待校准。
+3. **固定步长（设计口径 100ms/10Hz，实现默认 50ms/20Hz），进程级单一 TickSource**：主循环 = 消息处理段 + tick 段（BW time slice 同型，roomserver.cpp:946-948）；追赶有界（落后 ≤ catch_up_max 连跑补齐，超则跳拍 + 告警 + 记 dropped_ticks——不允许无界连跑挤死 IO）；tick 号进程内单调、重启归零、跨重启连续性由 journal 持久序号承担。实现默认 tickRateMs=50（20Hz），设计口径 100ms（10Hz）待校准。
 4. **时钟注入纪律**：游戏逻辑不直接调 OS 时钟——经 core::di 构造注入的只读 ClockService 门面（三钟读数 + tick 计数）；单测/回放注入 fake clock。`apps/game-server/src/main.cpp:20` 的 `GameClockService` 现为演示壳（仅 `std::string name = "clock"`，无任何时钟语义）——代码阶段按本设计重写或随演示代码清理，设计不依赖其现状。
 5. **客户端时间只做显示**：tick 号随快照/关键消息下发（客户端进度显示/插值对齐）；校时协议 P3 且只影响显示层；movement 通道时间戳取最新已有语义不变（net-abstraction §4.1）。任何「客户端时钟参与服务器判定」的提案按本设计直接否决。
 6. **跨进程时钟不互信**：进程间「谁先谁后」比较一律用 seq/位点/epoch（net-abstraction §5.7 握手三元组已有 authority_epoch；G-2 接管锚 = journal 位点，不是时间点）。时间值不跨进程比较——两机 NTP 偏差可到毫秒级，而 tick 判定粒度就是 100ms。
@@ -25,7 +24,7 @@
 | `GameClockService` | apps/game-server/src/main.cpp:20-22 | `struct { std::string name = "clock"; }`——纯演示壳；`LoginPipeline` 持引用（:24-27）只为演示 DI 装配；tick() 只递增计数（:51-53） | 代码阶段重写为真门面或随演示清理（登记：下轮代码批） |
 | legacy 时间轮 | include/apollo/core/timer/{timer.h,timer_manager.h} + src/apollo/core/timer | C-23/C-24 已判死（>1 tick 永不触发/无锁 unlock UB/跨线程竞争） | 先删后建（登记簿已注）；新轮的时间接口归本设计 §8 |
 | `include/apollo/utils/time.h` | utils | 移植件（旧树） | 随属性/遗留树收敛批处置，不新增依赖 |
-| tick 调度 | 无 | 主循环有固定步长（cell_server.cpp:421 gameLoop）；实现默认 20Hz（tickRateMs=50），设计口径 10Hz 待校准 | 本设计新建（§4） |
+| tick 调度 | 无 | 主循环有固定步长（room_server.cpp:421 gameLoop）；实现默认 20Hz（tickRateMs=50），设计口径 10Hz 待校准 | 本设计新建（§4） |
 
 负空间：design 六份无「时钟/单调钟/steady_clock/校时」成文（gap inventory #1 证据）；BW/KBE 亦无独立时钟设计（深潜 §3/§8 只见 updateHertz 常量）——**本件为超先例自定，先例只提供「10Hz + tick 节拍」的形态佐证**。
 
@@ -117,5 +116,3 @@ journal 行 / 快照行 / GM 审计行统一双写 **(tick, wall_ms)**：
 - **P3**：校时协议（可选，显示层）；跨进程 tick 观测对齐（信封可选字段）；G-2 接管/journal 位点与 tick 双写的落库核验（容量批 §5 基准含「跳拍率」指标）。
 
 ---
-
-*基线：apollo main @ 05919db9（modules/base/time.hpp、apps/game-server/src/main.cpp 本轮实读：:16-29 steady/:31-33 wall/:20-22 GameClockService 演示壳/:51-53 tick 计数）；BW/KBE/skynet 行号沿用 mmo-mechanism-deep-dive §8/§16.6 已核记录（common.hpp:19、kbengine_defaults.xml:5、cellapp.cpp:806-808/:946-948、backup_sender.cpp:114-117、baseapp_config.cpp:84、skynet_start.c:131-140）。缺口登记：design-gap-inventory #1；本件落盘后回填状态列。*

@@ -1,4 +1,3 @@
-[English](Directory_Structure.en.md) | [中文](Directory_Structure.md)
 
 # Apollo 项目目录结构
 
@@ -31,7 +30,7 @@
 | `gateway-app/` | 边缘接入层 |
 | `baseappmgr/` | 编队调度与恢复/目录镜像 |
 | `base-app/` | 玩家锚点宿主 |
-| `cell-app/` | 世界运行时原型 |
+| `room-server/` | RoomServer 原型运行时 |
 | `game-server/` | 兼容或演示型游戏服务 |
 | `machined/` | 进程监督（roster 拉起/退避重启/死亡上报） |
 
@@ -62,7 +61,7 @@
 | `modules/` | 模块设计文档 |
 | `api/` | API 参考 |
 | `qa/` | 问答索引 |
-| `rearchitecture/` | 重构审计与规划 |
+| `analysis/` | 当前架构现状与差距分析 |
 | `sdks/` | SDK 文档 |
 | `public/` | 静态资源 |
 

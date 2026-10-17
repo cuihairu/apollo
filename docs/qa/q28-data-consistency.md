@@ -1,4 +1,5 @@
-[English](q28-data-consistency.en.md) | [中文](q28-data-consistency.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q28: 如何解决数据一致性问题？
 

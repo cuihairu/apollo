@@ -1,4 +1,5 @@
-[English](q117-interviewer-follow-up.en.md) | [中文](q117-interviewer-follow-up.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q117: 如果已经掌握 MMO 基础问题，接下来还应该继续思考哪些深入问题？
 

@@ -1,4 +1,5 @@
-English: not yet translated | [中文](q116-cpp-design-patterns-in-kbengine.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # C++ 设计模式在 KBEngine 中的实践
 

@@ -1,8 +1,7 @@
-[English](battle-verification-service.en.md) | [中文](battle-verification-service.md)
 
 # Apollo 战斗验证服务（battle-verification-service）
 
-> 状态：设计稿（评审中；实现 M0-M5 全部随代码批——源码冻结纪律）。定位：**客户端权威战斗的反作弊对账与权威结算件**——独立服务注册进 G-1，RPC 交互：上行输入流/战报（battle-determinism §5 四元组 + 客户端 hash 申报），下行验证与结算结果（verdict + 权威结算载荷）。语言面 = **Lua 双端共享同一份战斗逻辑**（客户端 xLua / 服务端 scripting-lua）——与业界 JS 双端（Node 验证服）/ C# 双端（Unity + .NET）同型，concept-glossary「战斗验证服务」词条的展开件。与 `battle-determinism.md`（§2 四约束全量继承、§5 录制/链复用）、`scripting-lua.md`（§6.1 三级事件形态移植、§2/§4 沙盒纪律）、`attribute-sync.md`（§8.2 :285 结算前 snapshot、§9 预测边界）、`net-abstraction.md`（§7 G-1、§5.7 InterServerLink、§4.3 violation_score）、`sdk-contract.md`（§11 internal 域）互为引用。缺口登记：design-gap-inventory #17（立项即设计落盘）。
+> 状态：设计稿（评审中；实现 M0-M5 全部随代码批——源码冻结纪律）。定位：**客户端权威战斗的反作弊对账与权威结算件**——若未来立项，作为玩法服务能力接入现有部署，不新增 Apollo 目标进程名；RPC 交互：上行输入流/战报（battle-determinism §5 四元组 + 客户端 hash 申报），下行验证与结算结果（verdict + 权威结算载荷）。语言面 = **Lua 双端共享同一份战斗逻辑**（客户端 xLua / 服务端 scripting-lua）——与业界 JS 双端（Node 验证服）/ C# 双端（Unity + .NET）同型，concept-glossary「战斗验证服务」词条的展开件。与 `battle-determinism.md`（§2 四约束全量继承、§5 录制/链复用）、`scripting-lua.md`（§6.1 三级事件形态移植、§2/§4 沙盒纪律）、`attribute-sync.md`（§8.2 :285 结算前 snapshot、§9 预测边界）、`net-abstraction.md`（§7 G-1、§5.7 InterServerLink、§4.3 violation_score）、`sdk-contract.md`（§11 internal 域）互为引用。
 
 ---
 
@@ -148,17 +147,4 @@ battle-determinism §2 四约束（判定域唯一/浮点纪律/迭代序/随机
 
 ## 8. 与其余设计的交集
 
-| 关联设计 | 落点 |
-|---|---|
-| battle-determinism | §2 四约束全量继承 + 跨端增量三件（本稿 §2.2）；§5 四元组/hash 链/录制策略复用——`binary_id` 取值域差异：服务端权威复算 = 引擎+契约 hash，客户端权威验证 = `combat_bundle_hash`+VM 版本线；P2/P3 与本件 M1/M5 咬合 |
-| scripting-lua | §2/§4 沙盒与 VM 版本线（verifier 复用不新起）；§6.1 三级事件形态移植（§4.1）；§3.2 版本指针 = bundle 服务端侧装载锚；§8 异步交接不适用本件（复算本身是 worker 全程任务，非场景线程内异步段） |
-| attribute-sync | §9 预测边界 = 服务端权威形态不需要本件的前提；§8.2 :285 结算前 L3 显式 snapshot = 结算门冻结面；§8.2 journal = 战报存储/起始快照位点来源 |
-| net-abstraction | §7 G-1 注册（VERIFIER 型）；§5.7 InterServerLink invoke_mode 三分（ReliableEvent/OneWay/RequestReply 各归其位）；§4.3 violation_score 单桶新增第四计数源 |
-| sdk-contract | §11 internal 域 id 900+ 三消息族（M0）；client 域零新增域（终局申报走既有 events 通道一条消息） |
-| concept-glossary | 「战斗验证服务」词条（本稿为其展开件）；命名纪律 §0 裁决 1-②（battle 词专属）与裁决 1-①（副本 instance 定名）双执行 |
-| capacity-and-benchmark | §5 复算吞吐/降级序并入；DRIFT 率/MISMATCH 率/门超时率进指标集（M4 落参数） |
-| ~~architecture/combat-runtime-and-ecs-boundary-design.md~~ | 原 C 档参考件，**2026-10-01 已随过期设计清理删除（git 可溯）**——其战斗运行时边界的历史讨论由本稿 + battle-determinism 承接 |
-
 ---
-
-*基线：apollo main @ 4299dd99（文档态）。行号引用为本轮实读（attribute-sync :285/:319、scripting-lua §6.1 :168-186、sdk-contract §11 :546-565、net-abstraction §4.3 :123-129）；跨端确定性增量对 battle-determinism §2「不做定点」口径的关系已在 §2.2 写明（原口径成立域 = 服务端单侧判定；跨端档不靠定点、靠运算白名单+版本锚+漂移降级三层，定点查表仅作为 `apollo.battle` 注入件继承）。M0-M5 全部随代码批，本稿零源码改动。缺口登记：design-gap-inventory #17（2026-09-30 立项即设计落盘）。*

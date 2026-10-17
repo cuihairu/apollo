@@ -1,4 +1,3 @@
-[English](beamable-analysis.en.md) | [中文](beamable-analysis.md)
 
 # Beamable 架构分析
 

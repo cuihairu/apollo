@@ -1,4 +1,3 @@
-[English](18-Data_Architecture_Whitepaper.en.md) | [中文](18-Data_Architecture_Whitepaper.md)
 
 # 数据架构白皮书
 
@@ -75,7 +74,7 @@ CREATE TABLE `t_character` (
 - 分布式锁/去重：使用 `SETNX` 或 RedLock 管理账号登录/操作。
 - 缓存更新：通用模式（invalidate + reload），或通过订阅消息（Pub/Sub）同步。
 
-## 5. storage.xml 语句规范（2026-09-29 补强）
+## 5. storage.xml 语句规范
 
 > 落库侧的唯一语句源。与契约侧（`sdks/contract/`，docs/36 决策 #3）对称：**def 管线上传输，storage.xml 管落库**。参考形态取自 MyBatis mapper 的「语句声明化 + 启动全量解析即败 + 参数化」三件套（调研全文见 docs/design/xml-generation.md §6），明确不引入的部分见 §5.5。
 

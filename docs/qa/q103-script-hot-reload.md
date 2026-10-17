@@ -1,4 +1,5 @@
-[English](q103-script-hot-reload.en.md) | [中文](q103-script-hot-reload.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q103: 如何实现脚本热更新？
 
@@ -118,7 +119,6 @@ class ScriptReloader(FileSystemEventHandler):
 
         return module_path
 
-
 class HotReloadManager:
     """热更新管理器"""
 
@@ -141,7 +141,6 @@ class HotReloadManager:
         if self.observer:
             self.observer.stop()
             self.observer.join()
-
 
 # 使用示例
 if __name__ == "__main__":
@@ -217,7 +216,6 @@ class StatefulReloader:
                     setattr(module, name, value)
                 except:
                     pass
-
 
 # 脚本中定义保存/恢复函数
 """
@@ -425,7 +423,6 @@ class HotReloadHandler:
         KBEngine.registerEntityType("Avatar", Avatar)
         # ...
 
-
 # 实体中处理热更新
 class Account(KBEngine.Account):
     def __init__(self):
@@ -502,7 +499,6 @@ class ProgressiveReloader:
 
         print("All phases completed successfully")
         return True
-
 
 # 使用示例
 def hot_update_game_logic():

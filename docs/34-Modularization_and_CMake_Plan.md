@@ -1,4 +1,3 @@
-[English](34-Modularization_and_CMake_Plan.en.md) | [中文](34-Modularization_and_CMake_Plan.md)
 
 # Apollo 模块化与 CMake 拆分落地方案
 

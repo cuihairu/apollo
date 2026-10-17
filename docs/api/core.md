@@ -4,8 +4,6 @@ icon: core
 prev: /api/README.md
 ---
 
-[English](core.en.md) | [中文](core.md)
-
 # Core API
 
 > 2026-10-10 对账：本页按 HEAD 实况重写（modules/core 七头 + log 头树九件）。

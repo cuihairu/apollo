@@ -57,13 +57,13 @@ void MessageRouter::start() {
     // world 前递落地），起进程不拦——处方①同口径。cell 不在线不在此刻判断，
     // active 端点自带退避重连。
     M1EgressConfig egressConfig;
-    egressConfig.host = config_.cellM1Host;
-    egressConfig.port = config_.cellM1Port;
-    egressConfig.route_json = config_.cellM1RouteJson;
+    egressConfig.host = config_.roomServerM1Host;
+    egressConfig.port = config_.roomServerM1Port;
+    egressConfig.route_json = config_.roomServerM1RouteJson;
     m1Egress_ = makeM1Egress(std::move(egressConfig));
     if (!m1Egress_->start()) {
-        glog().warning("gateway cell M1 egress degraded: route table unavailable ("
-                       + config_.cellM1RouteJson + "), world forwarding disabled");
+        glog().warning("gateway RoomServer M1 egress degraded: route table unavailable ("
+                       + config_.roomServerM1RouteJson + "), RoomServer forwarding disabled");
         m1Egress_.reset();
     }
 
@@ -123,7 +123,7 @@ RouteSnapshot MessageRouter::buildDefaultRoute() const {
     routeSnapshot.routeVersion = 1;
     // 路由名目留存（路由解析面与快照消费方仍按 url 标认 world 落点）；
     // M1 出口单端点直连，不据其选择——选择面随多 cell 批回归。
-    routeSnapshot.worldServerUrl = config_.cellAppUrl;
+    routeSnapshot.worldServerUrl = config_.roomServerUrl;
     return routeSnapshot;
 }
 
@@ -140,10 +140,10 @@ std::unique_ptr<SessionAdmissionService> makeAdmissionService(const GatewayConfi
         return makeDefaultSessionAdmissionService();
     }
     auto linkService = makeLinkSessionAdmissionService(
-        config.loginM1Host, config.loginM1Port, config.cellM1RouteJson);
+        config.loginM1Host, config.loginM1Port, config.roomServerM1RouteJson);
     if (!linkService) {
         glog().warning("gateway login M1 admission degraded: route table unavailable ("
-                       + config.cellM1RouteJson + "), admission degrades tolerant");
+                       + config.roomServerM1RouteJson + "), admission degrades tolerant");
         return makeDefaultSessionAdmissionService();
     }
     return linkService;
@@ -182,14 +182,14 @@ void GatewayServer::start() {
         M1RouteClientConfig routeConfig;
         routeConfig.host = config_.baseAppMgrM1Host;
         routeConfig.port = config_.baseAppMgrM1Port;
-        routeConfig.route_json = config_.cellM1RouteJson;
+        routeConfig.route_json = config_.roomServerM1RouteJson;
         m1RouteClient_ = makeM1RouteClient(std::move(routeConfig));
         if (m1RouteClient_) {
             glog().info("Gateway M1 route client dialing " + config_.baseAppMgrM1Host
                         + ":" + std::to_string(config_.baseAppMgrM1Port));
         } else {
             glog().warning("gateway M1 route client degraded: route table unavailable ("
-                           + config_.cellM1RouteJson + "), default route stays");
+                           + config_.roomServerM1RouteJson + "), default route stays");
         }
     }
 
@@ -554,7 +554,7 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         routeSnapshot.instanceId = parsed.instanceId;
                         routeSnapshot.spaceId = parsed.spaceId;
                         routeSnapshot.routeVersion = parsed.routeVersion;
-                        routeSnapshot.worldServerUrl = config_.cellAppUrl;
+                        routeSnapshot.worldServerUrl = config_.roomServerUrl;
                         return routeSnapshot;
                     }
                     return std::nullopt;  // success=false = 路由未备

@@ -1,4 +1,5 @@
-[English](q28-kbengine-registry-actor-transport.en.md) | [中文](q28-kbengine-registry-actor-transport.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q28: KBEngine 是否存在注册中心？CellApp 如何部署和通信？Actor 模型适用吗？
 

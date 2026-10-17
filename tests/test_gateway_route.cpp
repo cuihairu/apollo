@@ -161,7 +161,7 @@ bool test_router_degrades_when_backends_unreachable() {
     gateway::GatewayConfig config;
     config.loginAppUrl = "tcp://127.0.0.1:1";
     config.baseAppUrl = "tcp://127.0.0.1:1";
-    config.cellAppUrl = "tcp://127.0.0.1:1";
+    config.roomServerUrl = "tcp://127.0.0.1:1";
 
     gateway::MessageRouter router(config);
     bool threw = false;
@@ -174,7 +174,7 @@ bool test_router_degrades_when_backends_unreachable() {
 
     // 降级面：world 节点不可用 → 默认路由仍指名但不可指派，转发静默落空不崩
     const auto route = router.buildDefaultRoute();
-    TEST_ASSERT(route.worldServerUrl == config.cellAppUrl, "default route still names world url");
+    TEST_ASSERT(route.worldServerUrl == config.roomServerUrl, "default route still names world url");
 
     router.forwardToWorld(1, route, {1, 2, 3});
     router.forwardToBaseApp(1, {1, 2, 3});

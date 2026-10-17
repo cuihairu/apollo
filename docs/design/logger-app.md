@@ -1,8 +1,7 @@
-[English](logger-app.en.md) | [中文](logger-app.md)
 
 # LoggerApp 立项前置设计（进程壳与结构化行接线的落地形态）
 
-> 状态：**已落地（2026-10-10，L1+L2+L3 三批同日交付；L4 挂 M1）**。定位：ADR-013「LoggerApp 立项」的落地形态展开——钉 apps 接线现状实证、钉 v1 采集形态三岔、钉批切分与拍板点。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload/cell-single-writer。术语以本件为准（日志收集进程 logger / 代码标识 `LoggerApp`）；权威口径 = ADR-013（立项切分：壳先行 + 开关打开 + push 留接口）+ logging.md §5（collector 形态母件）。批记见 ADR-013 落地注记（adr.md）。
+> 状态：**已落地（2026-10-10，L1+L2+L3 三批同日交付；L4 挂 M1）**。定位：ADR-013「LoggerApp 立项」的落地形态展开——钉 apps 接线现状实证、钉 v1 采集形态三岔、钉批切分与拍板点。体裁仿 net-abstraction §7「P3 前置设计」/battle-instance-offload/room-server-single-writer。术语以本件为准（日志收集进程 logger / 代码标识 `LoggerApp`）；权威口径 = ADR-013（立项切分：壳先行 + 开关打开 + push 留接口）+ logging.md §5（collector 形态母件）。批记见 ADR-013 落地注记（adr.md）。
 
 ---
 
@@ -16,7 +15,7 @@
 **立项时点：模块面已交付（P3-3 批 C），apps 接线 = 零。**
 
 - 结构化行面在库：`FileAppenderConfig::structuredOutput` 默认 false（file_appender.h:46）、写路径三元分支（file_appender.cpp:79-80 `structuredOutput ? to_structured_line(record) : format(record)`）、`to_structured_line`（structured.cpp:116）、六键固定序 + 引号规则契约以 structured.h 头注为源；`LogManagerConfig::processIdentity` 注入位（log_manager.h:46）；测试面 test_log_structured / test_core_log / test_log 在库。FileAppender 滚动（ByDate/BySize/ByBoth + 重启序号续接 + maxFiles 清理）已交付。
-- **七 app 输出面全部 `std::cout` 直写**——machined（main.cpp:60-71 born/death/restart 行）、baseappmgr（:28-99）、base-app（:22-65）、cell-app（:14-53）、gateway-app（:16-61）、login-app（login_server.cpp:364-431）、game-server（main.cpp:123-126）。唯一 log 模块触点 = game-server main.cpp:73 `global_log_manager()`（崩溃遗留可见化行 cat=crash pending=N，经 console 出）。
+- **七 app 输出面全部 `std::cout` 直写**——machined（main.cpp:60-71 born/death/restart 行）、baseappmgr（:28-99）、base-app（:22-65）、room-server（:14-53）、gateway-app（:16-61）、login-app（login_server.cpp:364-431）、game-server（main.cpp:123-126）。唯一 log 模块触点 = game-server main.cpp:73 `global_log_manager()`（崩溃遗留可见化行 cat=crash pending=N，经 console 出）。
 - 推论一：**文件出口现状不存在**（fileEnabled 默认 false 且无人开）；`log/<app>-<instance>.log` 布局是 logging.md §5 设计口径非现实。
 - 推论二：ADR-013「各 app FileAppender structuredOutput 开关打开」实含两层——**先接 log 模块（L1）、再翻开关（L2）**。todo P3-3 批 C 边界「apps 接线未做」即指 L1；本件钉此批切，防立项批把两层并成一句漏做 L1。
 - 收集面空白：apps/ 七进程无 collector；machined 监督面（supervisor.cpp:121-124 退避参数 / :204-205 重启裁决）为 roster 接入点；dev_fleet fleet_entries 六成员（dev_fleet.sh:36-43）。
@@ -56,7 +55,7 @@ v1 终态：logger 进程入编队；各 app 双出口第一步 = 本地结构�
 | 失败语义 | 平凡满足 | 需断连降级面 | 需容忍丢行 |
 | 检索面复用 | L4 换底座不动 | 检索面同型 | 同型 |
 
-## 5. 拍板点（2026-10-10 随 ADR-013 拍板裁定的落定口径）
+## 5. 拍板点
 
 1. **v1 采集形态 = (a) tail 拉**——(b) push 直连违 ADR-013「push 留接口不实现」（本批权威切分）、(c) UDP 推有损与审计/取证语义冲突（§3/§4 双否已裁）；L1+L2 文件真相源落定后 (a) 是唯一可行岔。
 2. **接线批切分 = L1+L2 合并一批**——立项批指令字面即为合并（apps 接 log 模块 + structuredOutput 开关打开一并交付）；行为面回归未发生（kill -9 演练全链断言绿，消息正文子串契约全保）。
@@ -101,7 +100,5 @@ v1 终态：logger 进程入编队；各 app 双出口第一步 = 本地结构�
 
 ## 8. 证据清单
 
-- A 级（2026-10-10 本地源码实读）：modules/core/log/include/apollo/core/log/file_appender.h:46、modules/core/log/src/file_appender.cpp:79-80、modules/core/log/src/structured.cpp:116、modules/core/log/include/apollo/core/log/log_manager.h:46、apps/machined/src/main.cpp:60-71、apps/baseappmgr/src/main.cpp:28-99、apps/base-app/src/main.cpp:22-65、apps/cell-app/src/main.cpp:14-53、apps/gateway-app/src/main.cpp:16-61、apps/login-app/src/login_server.cpp:364-431、apps/game-server/src/main.cpp:73/:123-126、apps/machined/src/supervisor.cpp:121-124/:204-205、scripts/dev_fleet.sh:36-43、tests/test_log_structured.cpp
-- B 级（本仓文档）：docs/design/logging.md §5/§5.1/§7、docs/architecture/adr.md ADR-013、docs/todo.md P3-3（批 C 边界「apps 接线未做」）
-
-*基线：apollo main @ 331de147（写件时）；L1+L2 = 7ad64938、L3 批随同日落库。§1 行号为前置设计稿时点实读（2026-10-10），L1+L2 落地后 apps 输出面已全量转 logger，行号不再对应当前源码——现状实证以 ADR-013 批记为准。*
+- A 级（2026-10-10 本地源码实读）：modules/core/log/include/apollo/core/log/file_appender.h:46、modules/core/log/src/file_appender.cpp:79-80、modules/core/log/src/structured.cpp:116、modules/core/log/include/apollo/core/log/log_manager.h:46、apps/machined/src/main.cpp:60-71、apps/baseappmgr/src/main.cpp:28-99、apps/base-app/src/main.cpp:22-65、apps/room-server/src/main.cpp:14-53、apps/gateway-app/src/main.cpp:16-61、apps/login-app/src/login_server.cpp:364-431、apps/game-server/src/main.cpp:73/:123-126、apps/machined/src/supervisor.cpp:121-124/:204-205、scripts/dev_fleet.sh:36-43、tests/test_log_structured.cpp
+- B 级（本仓文档）：docs/design/logging.md §5/§5.1/§7、docs/architecture/adr.md ADR-013、root todo.md P3-3（批 C 边界「apps 接线未做」）

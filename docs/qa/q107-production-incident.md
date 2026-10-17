@@ -1,4 +1,5 @@
-[English](q107-production-incident.en.md) | [中文](q107-production-incident.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q107: 线上出过什么严重事故？如何处理的？
 
@@ -318,7 +319,6 @@ class TradingSystem:
             'count': count,
             'new_gold': player['gold'] + price
         })
-
 
 class AntiAbuse:
     """防刷系统"""

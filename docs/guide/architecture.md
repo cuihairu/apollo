@@ -5,8 +5,6 @@ order: 7
 prev: /guide/configuration
 ---
 
-[English](architecture.en.md) | [中文](architecture.md)
-
 # 架构总览
 
 Apollo 面向以房间和对局为边界的轻量多人游戏，例如塔防、合作玩法、竞技场和副本。一个房间承载一场玩法；一个 `RoomServer` 进程可以运行多个房间。Apollo 当前不以持久化无缝大世界为设计目标，也不采用按空间切片的进程模型。
@@ -41,4 +39,4 @@ Gateway 负责连接和路由，不会自动提供不停机更新。RoomServer �
 
 ## 代码现状
 
-上图是目标概念模型，不是当前部署拓扑。仓库仍有 `login-app`、`gateway-app`、`base-app`、`cell-app`、`baseappmgr`、`machined` 等历史原型程序；其中 `cell-app` 的名字来自 BigWorld 术语，不能据此把它理解为 Apollo 目标架构中的空间切片进程。各程序的实际代码状态见[服务器应用](../apps/index.md)。BigWorld/KBEngine 术语只在[兼容层和引擎对照文档](../33-BigWorld_Compatibility.md)中作为参考。
+上图是目标概念模型，不是当前部署拓扑。仓库仍有 `login-app`、`gateway-app`、`base-app`、`room-server`、`baseappmgr`、`machined` 等历史原型程序；`room-server` 是已迁移到目标职责名称的原型程序，目前仍未实现完整的多 Room 生命周期。各程序的实际代码状态见[服务器应用](../apps/index.md)。BigWorld/KBEngine 术语只在[兼容层和引擎对照文档](../33-BigWorld_Compatibility.md)中作为参考。

@@ -35,7 +35,7 @@ san 树（树 4）为独立 sanitizer 配置（`/tmp` 下 ASan+UBSan + `-fno-san
 | core 框架核 | CoreLifecycleTests / CoreLogTests / CoreConfigTests / LogStructuredTests / MetricsTests / LoggerRetrievalTests |
 | runtime 进程面 | RuntimeTests / BaseAnchorTests / BaseAppMgrTests |
 | net 网络件 | NetTests / NetWireTests / ReconnectTests / GatewayRouteTests / ProtocolBootstrapTests / LinkTests（net M1 内核：帧定界/分发/水位/InterServerLink/TCP 底座/管理器） |
-| game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SupervisorTests / SceneTests / InstanceTests / CellAcceptanceTests / GameTests |
+| game 会话/世界 | SessionWorldTests / WorldHostTests / AvatarTests / PlayerDirectoryTests / DirectoryMirrorTests / FleetRecoveryTests / SupervisorTests / SceneTests / InstanceTests / RoomServerAcceptanceTests / GameTests |
 | battle 玩法 | BattleRuntimeTests / RngSubstreamTests / BattleOffloadTests |
 | social 社交 | SocialTests |
 | discovery 编队发现 | DiscoveryTests |

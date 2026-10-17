@@ -1,4 +1,5 @@
-[English](q70-message-queue.en.md) | [中文](q70-message-queue.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q70: 如何设计高性能的消息队列？
 

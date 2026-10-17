@@ -1,4 +1,5 @@
-[English](q9-cellappmgr-failure.en.md) | [中文](q9-cellappmgr-failure.md)
+
+> 本文是通用知识/外部引擎参考，不是 Apollo 架构或实现承诺。目标术语和实现边界见[架构现状](../analysis/architecture-review.md)。
 
 # Q9: CellAppMgr 如果宕机了怎么办？有哪些解决方案？
 

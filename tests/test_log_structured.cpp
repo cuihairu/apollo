@@ -146,12 +146,12 @@ bool test_basic_key_order() {
 }
 
 bool test_context_injection() {
-    LogContext::set_process("cell-app-7");
+    LogContext::set_process("room-server-7");
     LogContext::set_tick(42);
     const LogRecord r(LogLevel::Warning, "frame");
     const std::string line = to_structured_line(r);
     std::string v;
-    TEST_ASSERT(extractValue(line, "proc", v) && v == "cell-app-7", "proc 注入");
+    TEST_ASSERT(extractValue(line, "proc", v) && v == "room-server-7", "proc 注入");
     TEST_ASSERT(extractValue(line, "tick", v) && v == "42", "tick 注入");
     TEST_ASSERT(extractValue(line, "level", v) && v == "WARN", "level toString 口径");
     LogContext::set_process("");
