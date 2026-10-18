@@ -260,6 +260,57 @@ bool test_submit_enqueues_only_state_at_tick() {
     return true;
 }
 
+// L69/L42 兼容底线（cell 受理面）：畸形意图 body（残帧头 / 合法帧头+残
+// body）不得炸 gameLoop——drain 逐意图消费，坏意图丢弃（已出队，不堵队
+// 列），同拍与后续好意图照常执行。坏意图无延时回执（受理已成功，执行面
+// 丢弃）：请求方按超时口径收敛，属 P2 分离面的回执纪律余量。
+bool test_malformed_intent_drained_without_killing_tick() {
+    WorldAppConfig config;
+    config.tickRateMs = 1000;
+    WorldApp server(config);
+    server.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));  // 首拍 settle
+
+    // 坏一：整帧垃圾（parseHeader 即拒）
+    world_app::IntentEnvelope garbage_frame;
+    garbage_frame.type = protocol::MessageType::CELL_CREATE_ENTITY;
+    garbage_frame.frame = {'n', 'o', 't', ' ', 'j', 's', 'o', 'n'};
+    garbage_frame.session_id = 88;
+    TEST_ASSERT(server.submitIntent(std::move(garbage_frame)), "garbage frame queued");
+
+    // 坏二：合法帧头 + 残 body（decodeBody 才炸）
+    auto corrupted = make_create_intent(999, 88);
+    for (std::size_t i = sizeof(protocol::MessageHeader); i < corrupted.frame.size(); ++i) {
+        corrupted.frame[i] = 0x7a;
+    }
+    TEST_ASSERT(server.submitIntent(std::move(corrupted)), "corrupt body queued");
+
+    // 好：同拍后续玩家意图必须照常生效
+    TEST_ASSERT(server.submitIntent(make_create_player_intent(43, 89)), "good queued");
+    TEST_ASSERT(server.pendingIntentCount() == 3, "three intents queued");
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (server.resolveIntentPlayer(89) == 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    TEST_ASSERT(server.resolveIntentPlayer(89) == 43,
+                "good intent executed despite bad ones");
+    TEST_ASSERT(server.pendingIntentCount() == 0, "bad intents consumed, not stuck");
+
+    // 受理面未被污染：后续好意图照常执行
+    TEST_ASSERT(server.submitIntent(make_create_player_intent(44, 90)),
+                "accepts again after malformed batch");
+    const auto deadline2 = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (server.resolveIntentPlayer(90) == 0 &&
+           std::chrono::steady_clock::now() < deadline2) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    TEST_ASSERT(server.resolveIntentPlayer(90) == 44, "later intent executed");
+    server.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -275,6 +326,8 @@ int main() {
         {"overload_rejects_at_cap", test_overload_rejects_at_cap},
         {"drain_at_tick_boundary", test_drain_at_tick_boundary},
         {"submit_enqueues_only_state_at_tick", test_submit_enqueues_only_state_at_tick},
+        {"malformed_intent_drained_without_killing_tick",
+         test_malformed_intent_drained_without_killing_tick},
     };
     for (const auto& c : cases) {
         const int before = g_failures;

@@ -1187,7 +1187,16 @@ void WorldApp::executeIntent(const IntentEnvelope& intent) {
 
 void WorldApp::drainAcceptanceQueue() {
     while (auto intent = acceptanceQueue_.try_pop()) {
-        executeIntent(*intent);
+        // L69/L42 兼容底线：畸形意图（残帧头/残 body）只丢本条（已出队，
+        // 不堵队列、不炸 gameLoop）；无延时回执=请求方按超时口径收敛
+        // （P2 分离面的回执纪律余量）。
+        try {
+            executeIntent(*intent);
+        } catch (const std::exception& error) {
+            worldLog().warning("malformed intent dropped: type=" +
+                           std::to_string(static_cast<int>(intent->type)) +
+                           " reason=" + error.what());
+        }
     }
 }
 
