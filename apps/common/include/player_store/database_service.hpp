@@ -1,16 +1,18 @@
 #pragma once
 
 #include "player_store/config.hpp"
+#include "player_store/storage.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <queue>
+#include <deque>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace player_store {
@@ -39,23 +41,25 @@ struct PlayerData {
 };
 
 // 数据库服务接口
-class DatabaseService {
+class DatabaseService : public PlayerStorage {
 public:
     explicit DatabaseService(const PlayerStoreConfig& config);
-    ~DatabaseService();
+    ~DatabaseService() override;
 
     // 初始化
-    bool initialize();
+    bool initialize() override;
 
     // 关闭
-    void shutdown();
+    void shutdown() override;
 
     // 加载玩家数据（缓存 → 磁盘档案）；不存在返回 false——
     // 不再凭空 bootstrap「player_+id」（P1-4 清账，建号走 createPlayer，账号域 P2）
-    bool loadPlayer(PlayerID playerId, PlayerData& outData);
+    bool loadPlayer(PlayerID playerId, PlayerData& outData) override;
 
     // 保存玩家数据
-    bool savePlayer(const PlayerData& data);
+    bool savePlayer(const PlayerData& data) override;
+
+    bool listPlayers(std::vector<std::uint64_t>& ids) override;
 
     // 异步保存
     void savePlayerAsync(const PlayerData& data, std::function<void(bool)> callback);
@@ -98,6 +102,7 @@ public:
     std::function<void(bool)> callback;
     int64_t createdAtMs;
     int retryCount = 0;
+    std::uint64_t journalSeq = 0;  // 配对 write-ahead 段全局序（落档水位记账）
 };
 
 // 保存队列管理器
@@ -110,8 +115,12 @@ public:
     explicit SaveQueue(int workerThreads = 4);
     ~SaveQueue();
 
-    // 添加保存任务
-    void enqueue(const SaveTask& task);
+    // 添加保存任务。按 playerId 分槽（playerId % 槽数）——同一玩家的
+    // 任务永远落在同一单线程执行面，落盘顺序即入队顺序，旧快照不得
+    // 覆盖新数据（PlayerStore 存档串行化）；不同玩家仍并行。
+    // 返回 false = 该玩家已有未落盘的在途任务，本任务合并跳过
+    // 调用方须保留被跳过的载荷（脏位或 journal）；队列不会更新在途载荷。
+    bool enqueue(const SaveTask& task);
 
     // 设置落盘执行器（start 之前调用）
     void set_worker(Worker worker);
@@ -125,12 +134,21 @@ public:
     // 获取队列大小
     size_t size() const;
 
+    // 该玩家是否有未落盘任务（排队或在途）——freeze/adopt 写序收口等待用
+    bool has_pending_or_inflight(PlayerID playerId) const;
+
+    // worker 面是否仍在服务（stop 后 drain sink 直写分流判据）
+    bool is_running() const { return running_.load(); }
+
 private:
-    void workerLoop();
+    // 单槽消费者：只取自己槽位（playerId 哈希）——同玩家严格串行
+    void workerLoop(std::size_t slot);
 
     Worker worker_;
     std::vector<std::thread> workers_;
-    std::queue<SaveTask> queue_;
+    std::vector<std::deque<SaveTask>> slots_;
+    std::vector<std::size_t> inflight_;  // 槽内执行中的任务数（合并判定）
+    std::unordered_set<PlayerID> pendingPlayers_;
     mutable std::mutex queueMutex_;
     std::condition_variable queueCV_;
     std::atomic<bool> running_{false};

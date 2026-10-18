@@ -10,7 +10,9 @@
 //   - drain(sink, max)：定额出队，sink 返回 true 视为已应用；
 //     应用过的行在 compact 时从文件压薄；
 //   - replay(sink)：从文件头回放全部（崩溃恢复），回放后 seq 续接；
-//   - 单写者假设：调用方保证串行（SaveQueue worker / 启动单线程）。
+//   - 线程安全（PlayerStore 存档串行化批）：append/open/replay/compact
+//     类内互斥；drain 串行化（drain 互斥）且 sink 在 journal 锁外执行——
+//     多线程并发 append + 单/多线程 drain 均不丢条、不乱序（seq 单调）。
 //
 // 持久面批（2026-10-13）：append 走常驻句柄（P1-4 逐行开/关在帧预算表
 // 实测超预算 1-3×，capacity-and-benchmark §2.4）——逐行 flush 耐久口径
@@ -22,6 +24,7 @@
 #include <deque>
 #include <fstream>
 #include <functional>
+#include <mutex>
 #include <string>
 
 namespace apollo::data::journal {
@@ -43,11 +46,14 @@ public:
     // 打开（或创建）journal 文件；已存在则恢复 next_sequence_
     bool open();
 
-    // 追加一条（write-ahead：先落盘再入队）；返回 false 表示写盘失败
-    bool append(std::string key, std::string payload, std::int64_t timestamp_ms);
+    // 追加一条（write-ahead：先落盘再入队）；返回分配的全局序（0 = 写盘失败）
+    std::uint64_t append(std::string key, std::string payload, std::int64_t timestamp_ms);
 
     // 未应用条目数
-    std::size_t pending() const { return pending_.size(); }
+    std::size_t pending() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return pending_.size();
+    }
 
     // 定额出队：最多 max_entries 条交给 sink；返回实际应用条数
     std::size_t drain(const ApplySink& sink, std::size_t max_entries);
@@ -60,7 +66,10 @@ public:
     // applied 为空时文件截断为空。
     std::size_t compact();
 
-    std::uint64_t next_sequence() const { return next_sequence_; }
+    std::uint64_t next_sequence() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return next_sequence_;
+    }
 
 private:
     // 常驻写句柄（app|binary）；关闭态 = 下拍 append 重开
@@ -71,6 +80,9 @@ private:
     std::uint64_t next_sequence_ = 1;
     bool opened_ = false;
     std::ofstream out_;
+
+    mutable std::mutex mutex_;   // 数据面互斥（append/open/drain/compact/replay）
+    std::mutex drainMutex_;      // drain 串行化（多引流者互斥；sink 锁外执行）
 };
 
 } // namespace apollo::data::journal

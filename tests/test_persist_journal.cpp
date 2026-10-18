@@ -5,13 +5,17 @@
 
 #include "apollo/data/orm/persist_journal.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #define TEST_ASSERT(cond, msg)                                                           \
@@ -185,6 +189,81 @@ bool test_append_survives_compact() {
 
 // 行格式逐位回归：seq|timestamp_ms|key|payload 单行 + '\n'，常驻句柄
 // 切换不落额外字节（Windows binary 口径同验）
+// 并发 append + drain：多写者单/多引流者下不丢条、seq 无重复、应用序
+// 与入队序一致（PlayerStore 存档串行化批——journal 类内互斥收口）。
+bool test_concurrent_append_and_drain() {
+    const auto path = make_tmp_path("conc");
+    {
+        apollo::data::journal::PersistJournal journal(path);
+        TEST_ASSERT(journal.open(), "open 成功");
+
+        constexpr int kPerThread = 40;
+        std::atomic<int> appended{0};
+        std::mutex appliedMutex;
+        std::vector<std::uint64_t> appliedSeqs;
+        std::atomic<bool> draining{true};
+
+        auto appender = [&](const char* key) {
+            for (int i = 0; i < kPerThread; ++i) {
+                if (journal.append(key, "{\"i\":" + std::to_string(i) + "}", i)) {
+                    appended.fetch_add(1);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        };
+
+        std::thread appenderA(appender, "A");
+        std::thread appenderB(appender, "B");
+        std::thread drainer([&] {
+            while (draining.load()) {
+                journal.drain(
+                    [&](const apollo::data::journal::JournalEntry& e) {
+                        std::lock_guard<std::mutex> lock(appliedMutex);
+                        appliedSeqs.push_back(e.sequence);
+                        return true;
+                    },
+                    8);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        });
+
+        appenderA.join();
+        appenderB.join();
+        draining.store(false);
+        drainer.join();
+
+        // 收尾排空
+        journal.drain(
+            [&](const apollo::data::journal::JournalEntry& e) {
+                std::lock_guard<std::mutex> lock(appliedMutex);
+                appliedSeqs.push_back(e.sequence);
+                return true;
+            },
+            4 * kPerThread);
+
+        TEST_ASSERT(appended.load() == 2 * kPerThread, "并发 append 全部成功");
+        TEST_ASSERT(journal.pending() == 0, "journal 排空");
+        TEST_ASSERT(appliedSeqs.size() == 2u * kPerThread, "应用条数 == 追加条数（不丢）");
+
+        // seq 唯一（互斥下全局单调分配）
+        const std::set<std::uint64_t> uniq(appliedSeqs.begin(), appliedSeqs.end());
+        TEST_ASSERT(uniq.size() == appliedSeqs.size(), "seq 无重复");
+
+        // drain 期间同玩家保序：单 key 应用序 == 入队序（A 线程序列单调）
+        std::vector<std::uint64_t> seqCopy;
+        {
+            std::lock_guard<std::mutex> lock(appliedMutex);
+            seqCopy = appliedSeqs;
+        }
+        TEST_ASSERT(std::is_sorted(seqCopy.begin(), seqCopy.end()),
+                    "应用序 == journal 全局序（不乱序）");
+    }
+
+    std::error_code ec;
+    fs::remove(path, ec);
+    return true;
+}
+
 bool test_line_format_regression() {
     const auto path = make_tmp_path("format");
     {
@@ -219,6 +298,7 @@ int main() {
         {"journal_crash_replay_and_sequence_continuity",
          test_crash_replay_and_sequence_continuity},
         {"journal_append_survives_compact", test_append_survives_compact},
+        {"journal_concurrent_append_and_drain", test_concurrent_append_and_drain},
         {"journal_line_format_regression", test_line_format_regression},
     };
 

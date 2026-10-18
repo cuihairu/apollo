@@ -257,6 +257,20 @@ bool DatabaseService::queryPlayer(const std::string& username, PlayerID& outPlay
     return false;
 }
 
+bool DatabaseService::listPlayers(std::vector<std::uint64_t>& ids) {
+    ids.clear();
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(config_.dataDir, ec)) {
+        const auto name = entry.path().filename().string();
+        if (name.rfind("player_", 0) != 0 || name.size() <= 12 ||
+            name.substr(name.size() - 5) != ".json") continue;
+        const auto id = name.substr(7, name.size() - 12);
+        if (id.find_first_not_of("0123456789") != std::string::npos) continue;
+        try { ids.push_back(std::stoull(id)); } catch (const std::exception&) {}
+    }
+    return !ec;
+}
+
 void DatabaseService::saveBatch(const std::vector<PlayerData>& players) {
     for (const auto& player : players) {
         savePlayer(player);
@@ -265,18 +279,32 @@ void DatabaseService::saveBatch(const std::vector<PlayerData>& players) {
 
 SaveQueue::SaveQueue(int workerThreads)
     : workers_(static_cast<std::size_t>(workerThreads)) {
+    // 每线程一槽：同玩家任务按 playerId 固定归槽，槽内单线程 = 玩家域串行
+    const std::size_t slotCount = workers_.empty() ? 1u : workers_.size();
+    slots_.assign(slotCount, {});
+    inflight_.assign(slotCount, 0u);
 }
 
 SaveQueue::~SaveQueue() {
     stop();
 }
 
-void SaveQueue::enqueue(const SaveTask& task) {
+bool SaveQueue::enqueue(const SaveTask& task) {
     {
         std::lock_guard<std::mutex> lock(queueMutex_);
-        queue_.push(task);
+        if (slots_.empty()) {
+            return false;
+        }
+        const std::size_t slot = task.playerId % slots_.size();
+        // 同玩家已有未落盘任务（排队或在途）：合并跳过。在途任务 + 新任务
+        // 并行写同档 = 旧快照覆盖新数据的破口；跳过者保持脏位由下轮再取
+        if (!pendingPlayers_.insert(task.playerId).second) {
+            return false;
+        }
+        slots_[slot].push_back(task);
     }
-    queueCV_.notify_one();
+    queueCV_.notify_all();
+    return true;
 }
 
 void SaveQueue::set_worker(Worker worker) {
@@ -288,8 +316,8 @@ void SaveQueue::start() {
         return;
     }
 
-    for (auto& worker : workers_) {
-        worker = std::thread(&SaveQueue::workerLoop, this);
+    for (std::size_t slot = 0; slot < workers_.size(); ++slot) {
+        workers_[slot] = std::thread(&SaveQueue::workerLoop, this, slot);
     }
 }
 
@@ -308,29 +336,42 @@ void SaveQueue::stop() {
 
 size_t SaveQueue::size() const {
     std::lock_guard<std::mutex> lock(queueMutex_);
-    return queue_.size();
+    std::size_t total = 0;
+    for (const auto& slot : slots_) {
+        total += slot.size();
+    }
+    return total;
 }
 
-void SaveQueue::workerLoop() {
-    while (running_) {
+bool SaveQueue::has_pending_or_inflight(PlayerID playerId) const {
+    std::lock_guard<std::mutex> lock(queueMutex_);
+    if (slots_.empty()) {
+        return false;
+    }
+    return pendingPlayers_.count(playerId) != 0;
+}
+
+void SaveQueue::workerLoop(std::size_t slot) {
+    while (true) {
         SaveTask task;
 
         {
             std::unique_lock<std::mutex> lock(queueMutex_);
-            queueCV_.wait_for(lock, std::chrono::milliseconds(100), [this] {
-                return !running_ || !queue_.empty();
+            queueCV_.wait_for(lock, std::chrono::milliseconds(100), [this, slot] {
+                return !running_ || !slots_[slot].empty();
             });
 
-            if (!running_ && queue_.empty()) {
+            if (!running_ && slots_[slot].empty()) {
                 return;
             }
 
-            if (queue_.empty()) {
+            if (slots_[slot].empty()) {
                 continue;
             }
 
-            task = queue_.front();
-            queue_.pop();
+            task = std::move(slots_[slot].front());
+            slots_[slot].pop_front();
+            ++inflight_[slot];
         }
 
         // P1-4 真链路落盘分支：worker 未设置时视为成功（空转兼容）
@@ -338,6 +379,15 @@ void SaveQueue::workerLoop() {
         if (task.callback) {
             task.callback(ok);
         }
+
+        // 在途清零后放行同玩家下一任务（先出临界区执行落盘，再回临界区
+        // 释放槽位并唤醒同槽等待者）
+        {
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            --inflight_[slot];
+            pendingPlayers_.erase(task.playerId);
+        }
+        queueCV_.notify_all();
     }
 }
 

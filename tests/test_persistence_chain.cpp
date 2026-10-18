@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -175,6 +176,88 @@ bool test_anchor_dirty_save_chain() {
     return true;
 }
 
+// 同玩家任务串行 + 合并（PlayerStore 存档串行化批）：SaveQueue 按玩家
+// 分槽——同玩家落盘序恒等于入队序（旧快照不得晚于新数据落盘），跨玩家
+// 任务并行不破坏该序；在途期间同玩家新任务被拒（合并跳过）。
+bool test_savequeue_same_player_serial_and_coalesce() {
+    // 相位一：4 worker + 慢落盘——同玩家 20 任务与其它玩家任务交错，
+    // 同玩家子序必须严格递增
+    {
+        std::mutex orderMutex;
+        std::vector<std::int64_t> player77Order;
+        std::atomic<int> executed{0};
+        player_store::SaveQueue queue(4);
+        queue.set_worker([&](const player_store::PlayerData& data) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));  // 交错窗
+            std::lock_guard<std::mutex> lock(orderMutex);
+            if (data.playerId == 77) {
+                player77Order.push_back(data.exp);
+            }
+            executed.fetch_add(1);
+            return true;
+        });
+        queue.start();
+
+        for (int i = 1; i <= 20; ++i) {
+            player_store::SaveTask task;
+            task.playerId = 77;
+            task.data.playerId = 77;
+            task.data.exp = i;  // 载荷新旧标记
+            queue.enqueue(task);
+            // 交叉塞入其它玩家（同槽不同槽皆可能）验证跨玩家不破坏同玩家序
+            player_store::SaveTask other;
+            other.playerId = 100 + (i % 4);
+            other.data.playerId = other.playerId;
+            other.data.exp = i;
+            queue.enqueue(other);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        queue.stop();  // 排干后退出
+
+        TEST_ASSERT(executed.load() >= 20, "任务被执行");
+        TEST_ASSERT(player77Order.size() >= 2, "同玩家样本足够");
+        for (std::size_t i = 1; i < player77Order.size(); ++i) {
+            TEST_ASSERT(player77Order[i] > player77Order[i - 1],
+                        "同玩家落盘序 == 入队序（无旧覆盖新）");
+        }
+    }
+
+    // 相位二：确定性合并——首个任务门控在 worker 内（promise 闸），
+    // 在途期间同玩家第二任务必被拒、异玩家不受影响
+    {
+        std::promise<void> release;
+        auto gate = release.get_future();
+        std::atomic<bool> firstStarted{false};
+        player_store::SaveQueue queue(2);
+        queue.set_worker([&](const player_store::PlayerData&) {
+            if (!firstStarted.exchange(true)) {
+                gate.wait();  // 首个任务持住 worker
+            }
+            return true;
+        });
+        queue.start();
+
+        player_store::SaveTask held;
+        held.playerId = 7;
+        held.data.playerId = 7;
+        TEST_ASSERT(queue.enqueue(held), "首个任务受理");
+        while (!firstStarted.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        player_store::SaveTask dup;
+        dup.playerId = 7;
+        dup.data.playerId = 7;
+        TEST_ASSERT(!queue.enqueue(dup), "同玩家在途合并跳过（返回 false）");
+        player_store::SaveTask other;
+        other.playerId = 9;
+        other.data.playerId = 9;
+        TEST_ASSERT(queue.enqueue(other), "异玩家不受合并影响");
+        release.set_value();
+        queue.stop();
+    }
+    return true;
+}
+
 bool test_worker_failure_reports_false() {
     const auto dir = make_tmp_dir("fail");
     player_store::DatabaseService db(make_config(dir));
@@ -221,6 +304,8 @@ int main() {
         {"persistence_load_miss_no_bootstrap", test_load_miss_no_bootstrap},
         {"persistence_json_symmetry", test_json_symmetry},
         {"persistence_anchor_dirty_save_chain", test_anchor_dirty_save_chain},
+        {"persistence_savequeue_same_player_serial_and_coalesce",
+         test_savequeue_same_player_serial_and_coalesce},
         {"persistence_worker_failure_reports_false", test_worker_failure_reports_false},
     };
 

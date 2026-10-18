@@ -12,6 +12,7 @@
 #include "apollo/protocol/messages.hpp"
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -22,10 +23,11 @@ namespace player_store {
 
 namespace protocol = apollo::protocol;
 
-// BaseApp 服务器
+// 长期玩家对象与基础业务宿主（baseServer）。
 class PlayerStore {
 public:
-    explicit PlayerStore(const PlayerStoreConfig& config);
+    explicit PlayerStore(const PlayerStoreConfig& config,
+                         std::unique_ptr<PlayerStorage> storage = nullptr);
     ~PlayerStore();
 
     // 启动服务器
@@ -129,22 +131,31 @@ private:
     // 关闭协议与自动保存共用。返回入队数量（占位实现，落库接 P1）。
     std::size_t flushDirtyAnchors(const char* reason);
 
-    // journal write-ahead 与消费侧（P1-5）
-    std::size_t appendJournal(const PlayerData& data);
+    // journal write-ahead 与消费侧（P1-5）：appendJournal 返回段全局序
+    // （0 = 写盘失败）——随 SaveTask 落档记水位，drain 跳过已被更新落档
+    // 覆盖的旧段（旧快照不倒灌）
+    std::uint64_t appendJournal(const PlayerData& data);
     std::size_t drainJournal();
 
     int64_t getCurrentTimeMs() const;
     std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayerAnchor(PlayerID playerId);
-    void finalizeSave(PlayerID playerId, bool success);
+    void finalizeSave(PlayerID playerId, bool success, std::uint64_t journalSeq);
 
     PlayerStoreConfig config_;
-    std::unique_ptr<DatabaseService> database_;
+    std::unique_ptr<PlayerStorage> database_;
     std::unique_ptr<SaveQueue> saveQueue_;
     std::unique_ptr<apollo::data::journal::PersistJournal> journal_;
     std::unique_ptr<apollo::game::session::RecoveryCoordinator> recovery_;
     std::shared_ptr<apollo::game::session::AnchorManager> anchorManager_;
     std::shared_ptr<apollo::game::session::SessionLocator> sessionLocator_;
     apollo::game::session::PlayerDirectory::EventSink directoryEventSink_;
+
+    // 存档串行化（P2 存档竞争清账）：锚点态/脏位改动、journal 入段与保存
+    // 入队的同一串行点——自动保存、RPC 受理、保存回调、迁移冻结四线在此
+    // 原子交错；落盘 I/O 全部在锁外（SaveQueue worker 面按玩家分槽串行，
+    // 见 database_service.hpp enqueue）。锁序：storeMutex_ → SaveQueue/
+    // PersistJournal 内部锁，反向不入。
+    mutable std::mutex storeMutex_;
 
     std::atomic<bool> running_{false};
     std::atomic<bool> shuttingDown_{false};  // 停机五阶段幂等闸 + 维护位（G-3）
@@ -161,6 +172,20 @@ private:
     // 新写。进程内存账（同 migrationSnapshots_ 生命周期）；目标进程重启于
     // 迁移窗内 = §9.2 人工介入形态，不自动裁决。
     std::unordered_map<PlayerID, std::uint64_t> adoptedEpochs_;
+
+    // 接权落档水位（存档串行化批）：player → adopt 时的 journal 全局序。
+    // drain 回放序 < 水位的条目 = 接权前旧域快照——消费但不落档（接权
+    // 直写已是终值，旧条目回放会覆盖它）；水位后的条目为新域写入照常
+    // 落档。同 adoptedEpochs_ 生命周期（进程内存账）。
+    std::unordered_map<PlayerID, std::uint64_t> adoptWatermarks_;
+
+    // 已落档水位（存档串行化批）：player → 最后落盘 SaveTask 的 journal
+    // 段全局序。drain 回放序 ≤ 水位的条目已被更新或同版的落盘覆盖——
+    // 消费不落档（防旧快照经 journal 回放倒灌覆盖新数据）；> 水位的条目
+    // 是被合并跳过的唯一载荷载体（如 coalesce 被拒的 RPC 保存），照常
+    // 经队列落档。同上：进程内存账，重启归零（重启 replay 全量应用 =
+    // 恢复语义）。
+    std::unordered_map<PlayerID, std::uint64_t> landedSeqs_;
 
     std::thread autoSaveThread_;
 };

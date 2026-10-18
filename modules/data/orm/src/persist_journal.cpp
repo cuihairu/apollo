@@ -72,6 +72,7 @@ bool PersistJournal::ensure_handle() {
 }
 
 bool PersistJournal::open() {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (opened_) {
         return true;
     }
@@ -97,9 +98,10 @@ bool PersistJournal::open() {
     return true;
 }
 
-bool PersistJournal::append(std::string key, std::string payload, std::int64_t timestamp_ms) {
+std::uint64_t PersistJournal::append(std::string key, std::string payload, std::int64_t timestamp_ms) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!opened_) {
-        return false;
+        return 0;
     }
 
     JournalEntry e;
@@ -110,32 +112,47 @@ bool PersistJournal::append(std::string key, std::string payload, std::int64_t t
 
     // write-ahead：先落盘，再入内存队列（常驻句柄 + 逐行 flush 耐久口径不变）
     if (!ensure_handle()) {
-        return false;
+        return 0;
     }
     out_ << encode_line(e);
     out_.flush();
     if (!out_) {
         out_.close();  // 下拍 append 重开（自愈同旧逐行开语义）
-        return false;
+        return 0;
     }
 
     ++next_sequence_;
     pending_.push_back(std::move(e));
-    return true;
+    return e.sequence;
 }
 
 std::size_t PersistJournal::drain(const ApplySink& sink, std::size_t max_entries) {
     if (!sink) {
         return 0;
     }
+    // drain 串行化：多引流者互斥（sink 里的落盘 I/O 在 journal 锁外）
+    std::lock_guard<std::mutex> drainLock(drainMutex_);
 
     std::size_t applied = 0;
-    while (applied < max_entries && !pending_.empty()) {
-        const JournalEntry& front = pending_.front();
-        if (!sink(front)) {
-            break;  // 首条失败即停（保序；失败条目下轮重试）
+    bool failed = false;
+    while (applied < max_entries && !failed) {
+        JournalEntry front;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (pending_.empty()) {
+                break;
+            }
+            front = pending_.front();
+            pending_.pop_front();
         }
-        pending_.pop_front();
+        if (!sink(front)) {
+            // 应用失败：条目顶回队首（此间新 append 落队尾，相对序不变——
+            // 首条失败即停（保序；失败条目下轮重试）
+            std::lock_guard<std::mutex> lock(mutex_);
+            pending_.push_front(std::move(front));
+            failed = true;
+            break;
+        }
         ++applied;
     }
 
@@ -146,6 +163,7 @@ std::size_t PersistJournal::drain(const ApplySink& sink, std::size_t max_entries
 }
 
 std::size_t PersistJournal::replay(const ApplySink& sink) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (!opened_) {
         return 0;
     }
@@ -170,6 +188,7 @@ std::size_t PersistJournal::replay(const ApplySink& sink) {
 }
 
 std::size_t PersistJournal::compact() {
+    std::lock_guard<std::mutex> lock(mutex_);
     // 先关句柄再重写：tmp+rename 换 inode（旧句柄续写=幽灵文件丢数据），
     // Windows 更不许删打开中文件；重写后重开，开不出则下拍 append 重试
     out_.close();

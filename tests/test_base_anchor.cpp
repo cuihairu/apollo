@@ -7,8 +7,11 @@
 #include "apollo/protocol/messages.hpp"
 #include "apollo/net/link/tcp_transport.hpp"
 
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <thread>
 
 namespace {
 
@@ -591,6 +594,99 @@ bool test_player_migration_faces() {
 // 真链路 ②：937 带源地址 → 新 zone 现场拨老 zone 拉 936（五步② wire 落
 // 地：MigrationPuller active 拨 M1 passive，老的已先 flush 再发）。
 // Windows 桩树 M1 面缺席（start false）——护栏跳过（tcp 测试同款）。
+// 存档串行化 + 故障重启（P2 存档竞争清账验收）：「自动保存、RPC 保存、
+// 保存回调」三线并跑——同玩家不并发落盘、旧快照不回卷新数据、exp 以锚点
+// 为真源；停机五阶段排平后重启读回 level/exp 恒定，journal 追平不残留。
+bool test_save_race_and_restart_persistence() {
+    std::cout << "Running: test_save_race_and_restart_persistence..." << std::endl;
+
+    namespace fs = std::filesystem;
+    const std::string root = "base_anchor_test_race_data";
+    fs::remove_all(root);
+    fs::create_directories(root + "/players");
+    fs::create_directories(root + "/journal");
+
+    player_store::PlayerStoreConfig config;
+    config.workerThreads = 4;
+    config.autoSaveIntervalMs = 20;
+    config.host = "127.0.0.1";
+    config.port = 39007;
+    config.dataDir = root + "/players";
+    config.journalPath = root + "/journal/persist.log";
+
+    player_store::PlayerData seed;
+    seed.playerId = 9001;
+    seed.username = "race-test";
+    seed.level = 1;
+    seed.exp = 100;
+    {
+        player_store::DatabaseService seeder(config);
+        TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
+    }
+
+    player_store::PlayerStore server(config);
+    server.start();
+    const auto anchor = server.activatePlayer(9001);
+    TEST_ASSERT(anchor != nullptr, "anchor activated");
+    anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 150);
+    anchor->mark_dirty("race_seed");
+
+    // 线①（模拟权威）：奖励单向落锚点——exp 真源的唯一写者
+    std::atomic<bool> done{false};
+    std::thread sim([&] {
+        for (int i = 0; i < 20; ++i) {
+            anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 10);
+            anchor->mark_dirty("sim_tick");
+            std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        }
+        done.store(true);
+    });
+
+    // 线②（RPC 受理面）：载荷带 level=7 与旧 exp=9999——旧 exp 回放必须被
+    // 锚点真源挡下，level 字段必须不被 flush 旧基线回卷
+    std::thread rpc([&] {
+        for (int i = 0; i < 20; ++i) {
+            player_store::PlayerData payload = seed;
+            payload.playerId = 9001;
+            payload.level = 7;
+            payload.exp = 9999;
+            apollo::protocol::DbSaveRequest req;
+            req.playerId = 9001;
+            req.jsonData = payload.toJson();
+            server.dispatchRequest(apollo::protocol::MessageCodec::encode(req, 0));
+            std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        }
+    });
+
+    sim.join();
+    rpc.join();
+
+    // 停机五阶段：flush → 队列排干 → journal 追平（故障重启的优雅面）
+    server.stop();
+
+    const std::int64_t expectedExp = 100 + 150 + 20 * 10;
+    {
+        player_store::DatabaseService reader(config);
+        player_store::PlayerData loaded;
+        TEST_ASSERT(reader.loadPlayer(9001, loaded), "archive readable after restart");
+        TEST_ASSERT(loaded.level == 7, "RPC payload field survived (no stale rollback)");
+        TEST_ASSERT(loaded.exp == expectedExp,
+                    "anchor-truth exp survived (stale replay blocked, no loss/no dup)");
+    }
+
+    // 重启播种一致：新代次锚点 exp == 档案 exp（不叠加、不丢）
+    player_store::PlayerStore next(config);
+    const auto reactivated = next.activatePlayer(9001);
+    TEST_ASSERT(reactivated != nullptr, "reactivated after restart");
+    TEST_ASSERT(reactivated->progress(apollo::game::session::AnchorRewardSink::kExpKey)
+                    == expectedExp,
+                "restart seed equals archive exp");
+    next.stop();
+
+    fs::remove_all(root);
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
 #if !defined(_WIN32)
 bool test_player_migration_pull_on_handoff() {
     std::cout << "Running: test_player_migration_pull_on_handoff..." << std::endl;
@@ -700,6 +796,7 @@ bool test_player_migration_pull_on_handoff() {
     std::cout << "  PASSED" << std::endl;
     return true;
 }
+
 #endif // !_WIN32
 
 } // namespace
@@ -723,6 +820,7 @@ int main() {
     run(test_reward_collect_persists_profile);
     run(test_reward_survives_restart_no_double_count);
     run(test_freeze_collects_pending_reward);
+    run(test_save_race_and_restart_persistence);
     run(test_player_migration_faces);
 #if !defined(_WIN32)
     run(test_player_migration_pull_on_handoff);
