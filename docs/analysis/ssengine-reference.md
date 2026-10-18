@@ -71,7 +71,7 @@
 | 包帧格式 | sdpkg 定长头+校验 | `modules/protocol`（codec/messages/nng_wrapper） | 已有；帧头字段设计可对齐（mark+len+checksum+序号） |
 | 属性同步 | **无** | docs/03 草稿 + `game/attributes`（AttributeContainer 雏形） | 见 `docs/design/attribute-sync.md`（以 BigWorld 为目标） |
 | 算法（CRC/MD5/DES） | sdalgorithm | `utils/crypto.h` + protocol | 已有；DES/MD5 属遗留密码学，新代码禁用 |
-| 网关/管道/控制台 | sdgate/sdpipe/sdconsole/sddebugviewer | apps/gateway-app 规划中；utils/terminal | 方向已有，模块无需引入 |
+| 网关/管道/控制台 | sdgate/sdpipe/sdconsole/sddebugviewer | apps/gateway 已落地；utils/terminal | 方向已有，模块无需引入 |
 
 ## 4. 建议引入清单（按价值排序）
 

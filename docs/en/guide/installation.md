@@ -77,8 +77,8 @@ cmake --build build -j$(nproc)
 # 运行测试
 ctest --test-dir build --output-on-failure
 
-# 运行示例
-./build/apps/game-server/apollo_game_server
+# 运行示例（world 入口自检）
+./build/apps/world/world --help
 ```
 
 ## Directory structure

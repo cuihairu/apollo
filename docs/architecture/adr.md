@@ -4,7 +4,7 @@
 
 ## ADR-001：玩家长期资料与模拟权威
 
-baseServer 持有 PlayerAnchor 与基础业务，cell 承载权威 Avatar/Entity，database 负责存储访问。各数据域独占写权；跨服和副本销毁不搬长期档案。
+baseServer 持有 `base::Avatar` 与基础业务，cell 承载权威 `cell::Avatar`/Entity，database 负责存储访问。各数据域独占写权；跨服和副本销毁不搬长期档案。
 
 ## ADR-002：Space、Cell 与现有 Scene
 

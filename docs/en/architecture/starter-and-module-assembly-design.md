@@ -14,7 +14,7 @@ CMake targets define build/link dependencies. Application configuration selects 
 |---|---|---|
 | loginServer | Authentication, service/online directories | No persistent gameplay profiles |
 | gateway | Connections, admission, separate Base/cell routes | No simulation or profile writes |
-| baseServer | PlayerAnchor, base gameplay, settlement validation | Storage requests go to database |
+| baseServer | `base::Avatar`, base gameplay, settlement validation | Storage requests go to database |
 | worldServer | Executor registration, Space/Cell placement, topology, migrations | CellAppMgr-like management |
 | cell | WorldHost, Scene/Instance, Avatar and Lua execution | Gameplay snapshots/Base associations; dedicated entry pending |
 | database | Storage operations, queues, journal, connections | No reward or combat rules |

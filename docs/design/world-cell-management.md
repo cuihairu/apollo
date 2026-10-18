@@ -16,20 +16,20 @@
 
 ### 1.1. 应用目录与二进制
 
-本草案采用本轮讨论的短名：目录、CMake 可执行目标和最终程序名统一，不带 `Server`、`-server` 或 `-app` 后缀。以下是待实施迁移关系，不是保留两套可用别名；当前代码和其他现行文档尚未完成这次命名迁移。
+本草案采用本轮讨论的短名：目录、CMake 可执行目标和最终程序名统一，不带 `Server`、`-server` 或 `-app` 后缀。命名迁移已完成，没有保留另一套可用别名；world 缺省即管理角色，`--role=cell` 选执行角色。
 
-| 当前应用目录 / 程序 | 目标目录 / 程序 | 职责 |
-|---|---|---|
-| apps/gateway-app / gateway-app | apps/gateway / gateway | 客户端连接、会话与转发 |
-| apps/login-app / login-app | apps/login / login | 认证、服务目录与位置投影 |
-| apps/base-server / baseServer | apps/base / base | 长期玩家对象与基础业务 |
-| apps/world-app / world-app | apps/world / world | 默认管理角色；`--role=cell` 执行角色 |
-| apps/database / database | apps/database / database | 存储访问与持久结果 |
-| apps/machined / machined | apps/machined / machined | 本机进程监督 |
+| 应用目录 / 程序 | 职责 |
+|---|---|
+| apps/gateway / gateway | 客户端连接、会话与转发 |
+| apps/login / login | 认证、服务目录与位置投影 |
+| apps/base / base | 长期玩家对象与基础业务 |
+| apps/world / world | 默认管理角色；`--role=cell` 执行角色 |
+| apps/database / database | 存储访问与持久结果 |
+| apps/machined / machined | 本机进程监督 |
 
-cell 的装配与实现放在 World 应用或共享库内，保留模块边界，不建立另一个应用二进制。现有 `apps/game-server` 的重叠宿主职责须在实施时核对、迁入并清理，不把它当短名方案的又一个部署角色。运维工具如 logger、admin、fleetctl 按自身职责保留，不因本案统一改名。
+cell 的装配与实现放在 World 应用或共享库内，保留模块边界，不建立另一个应用二进制。曾存在的宿主演示入口（apps/game-server）已移除，其宿主职责由 world 与共享库承载，不作为短名方案之外的部署角色。运维工具如 logger、admin、fleetctl 按自身职责保留，不因本案统一改名。
 
-实施时同时更新配置、脚本、CMake 引用、测试、文档和发布路径，不遗留另一套启动别名。C++ 类型名不随可执行文件机械改写。
+C++ 类型名不随可执行文件机械改写：Base 部分为 `base::Avatar`，Cell 部分为 `cell::Avatar`。
 
 ## 2. 所有权与调用路径
 
@@ -37,7 +37,7 @@ cell 的装配与实现放在 World 应用或共享库内，保留模块边界�
 |---|---|---|
 | world | cell 注册、Space/Cell 分配、容量预留、拓扑版本、创建/迁移决定和排空 | 接收 Base 的空间申请，向 cell 发控制命令，发布已提交位置 |
 | cell | 本地 Cell 的 Entity/Avatar、AOI、战斗、Lua、模拟时钟；当前活动的 Instance | 接收 gateway 模拟输入，向 gateway 下发模拟结果，向原 Base 提交业务请求 |
-| base | PlayerAnchor、玩家长期资料与业务规则、结算去重 | gateway 基础业务 → Base → database；cell 结算 → 原 Base → database |
+| base | `base::Avatar`、玩家长期资料与业务规则、结算去重 | gateway 基础业务 → Base → database；cell 结算 → 原 Base → database |
 | login | 认证、服务地址和玩家位置投影 | 注册、查址、更新投影；不决定 Cell 分配 |
 | gateway | 客户端连接、会话与 Base/cell 路由缓存 | 模拟输入直达 cell，不逐帧经过 World 管理端 |
 | 本机监督机制 / machined | 本机进程启停、存活检测与重启退避 | 默认 World 复用监督代码管理 cell 子进程；独立 machined 模式下由它执行本机启停，不授予模拟写权 |

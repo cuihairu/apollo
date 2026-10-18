@@ -27,7 +27,7 @@ public:
 
 // strongly-typed player ID (P0-2): same shape as EntityId but no implicit
 // conversion between them — PlayerId identifies the long-lived player object
-// (the PlayerAnchor domain), EntityId identifies in-scene entities
+// (the base::Avatar domain), EntityId identifies in-scene entities
 class PlayerId {
 public:
     constexpr explicit PlayerId(uint64_t id);
@@ -247,10 +247,10 @@ are in the headers and design docs:
 - `FleetRecoveryCoordinator` — recovery phase made cross-process
   (Normal↔Recovering, converges on open admission).
 - `RecoveryCoordinator` — in-process recovery orchestration (journal replay →
-  Anchor restore → admission gate, restore-not-kick).
-- `AnchorManager`/`PlayerAnchor` — long-lived player-state anchors
-  (AnchorState machine, single-writer discipline); `AnchorRewardSink` — battle
-  settlement rewards → Anchor accounting.
+  Avatar restore → admission gate, restore-not-kick).
+- `AvatarManager`/`base::Avatar` — the long-lived player-state authority
+  (AvatarState machine, single-writer discipline); `AvatarRewardSink` — battle
+  settlement rewards → base::Avatar accounting.
 - `SessionLocator`/`WorldAssignment` — session location and world assignment
   arbitration.
 

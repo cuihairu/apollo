@@ -8,7 +8,7 @@ next: /en/guide/concepts
 
 # Tutorial
 
-From zero to a complete battle loop: login anchor → create instance → attach battle → enter scene → AOI → fight to the end → settle → leave. Single-threaded in-process throughout, corresponding to the runnable sample `examples/full_loop_demo.cpp` in the repository (all 32 assertion gates pass; this tutorial unpacks it step by step).
+From zero to a complete battle loop: login Avatar → create instance → attach battle → enter scene → AOI → fight to the end → settle → leave. Single-threaded in-process throughout, corresponding to the runnable sample `examples/full_loop_demo.cpp` in the repository (all 32 assertion gates pass; this tutorial unpacks it step by step).
 
 > Prerequisite: build completed per [Quick Start](./quick-start) (the three-tree gate baseline is in the repository's `tests/README` referenced by [Test Suite](/en/guide/quick-start)).
 
@@ -24,15 +24,15 @@ cmake --build build-examples --target full_loop_demo
 
 A successful run prints eight `[OK]` steps plus the AOI event counts at the end.
 
-## Step 1: login — activating the login anchor
+## Step 1: login — activating the login Avatar
 
 ```cpp
-AnchorManager anchors;
-auto anchor = anchors.activate(kPlayer);          // 1001
-// 重登幂等：anchors.find(kPlayer) == anchor
+AvatarManager avatars;
+auto avatar = avatars.activate(kPlayer);          // 1001
+// 重登幂等：avatars.find(kPlayer) == avatar
 ```
 
-`PlayerAnchor` is the sole authority for a player's long-term state (ADR-001): activated at login, owned by Base independently of Instances and unloaded under its session policy. The battle settlement later posts into it one-way.
+`base::Avatar` is the sole authority for a player's long-term state (ADR-001): activated at login, owned by Base independently of Instances and unloaded under its session policy. The battle settlement later posts into it one-way.
 
 ## Step 2: create the instance — the eight-state machine starts
 
@@ -48,7 +48,7 @@ instance.initialize();
 ## Step 3: attach the battle load — the Waiting window
 
 ```cpp
-AnchorRewardSink sink(*anchor);                   // 奖励单向落锚口
+AvatarRewardSink sink(*avatar);                   // 奖励单向落账口
 auto battle = std::make_unique<BattleRuntime>(1, kSeed, &sink);
 instance.attach_battle(std::move(battle));        // 只有 Waiting 接受挂接
 ```
@@ -110,11 +110,11 @@ The determinism trio: strictly increasing ticks, sorted inputs, `CombatRoll` sub
 
 ```cpp
 battle->finish();                                 // → Finished
-// anchor->progress("exp") > 0：奖励落了长期态
-// !anchor->dirty_reasons().empty()：内存脏标记；持久确认另行完成
+// avatar->progress("exp") > 0：奖励落了长期态
+// !avatar->dirty_reasons().empty()：内存脏标记；持久确认另行完成
 ```
 
-This demonstrates an in-process reward primitive. mark_dirty indicates an in-memory change, not durable success. In the target-role topology, cell submits settlement to the owning Base, which validates and commits through database. A local Anchor example does not establish distributed settlement or saving.
+This demonstrates an in-process reward primitive. mark_dirty indicates an in-memory change, not durable success. In the target-role topology, cell submits settlement to the owning Base, which validates and commits through database. A local Avatar example does not establish distributed settlement or saving.
 
 ## Step 8: leave — leaving and reclamation
 
@@ -124,7 +124,7 @@ instance.leave(PlayerId{kPlayer});
 instance.leave(PlayerId{kObserver});
 instance.finish(); instance.settle(); instance.drain(); instance.destroy();
 // is_destroyed()：八态走完，终态封死
-anchors.deactivate(kPlayer);                      // 登出锚回收
+avatars.deactivate(kPlayer);                      // 登出 Avatar 回收
 ```
 
 AOI Leave is a bidirectional event (the leaver's viewpoint plus others' viewpoints); once the instance's final four one-way transitions reach Destroyed, it cannot be reused.

@@ -4,7 +4,7 @@ Keep only current rules. See the [mapping](../design/bigworld-apollo-mapping.md)
 
 ## ADR-001：Persistent and simulation authority
 
-Base owns PlayerAnchor and persistent gameplay; cell owns authoritative Avatar/Entity simulation; database accesses storage. Each domain has one writer. Cross-server play and Instance destruction do not move profiles.
+Base owns `base::Avatar` and persistent gameplay; cell owns authoritative `cell::Avatar`/Entity simulation; database accesses storage. Each domain has one writer. Cross-server play and Instance destruction do not move profiles.
 
 ## ADR-002：Space, Cell, and existing Scene
 

@@ -6,7 +6,7 @@ logger is an observability tool. It does not own player, Scene, Instance, or rou
 
 Applications write local structured logs. APOLLO_LOG_PUSH_ADDR enables existing M1 log push to a collector. logger provides scan/follow queries and a serve collection entry point, with process, severity, time, and category filters.
 
-Collector failure uses bounded buffering and degradation, retaining local logs without blocking simulation. World uses the runtime/log identity world and executable world-app.
+Collector failure uses bounded buffering and degradation, retaining local logs without blocking simulation. World uses the runtime/log identity world and executable world.
 
 ## Implementation
 

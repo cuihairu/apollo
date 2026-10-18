@@ -64,8 +64,8 @@ public:
 
 `ServiceHost` (same header) is its thin wrapper: `add_service` /
 `add_shutdown_hook` / `set_console_source` / `set_signal_source` / `start` /
-`run_once` / `is_running` / `stop` each forward directly — apps/game-server
-uses this form.
+`run_once` / `is_running` / `stop` each forward directly — the test side
+(runtime_comprehensive_tests) uses this form.
 
 **Thread safety**: conditionally safe (`request_stop` may be called from a
 signal handler; single-threaded during assembly)

@@ -17,7 +17,7 @@
 | 契约编码 | `modules/net/contract_wire` | 按生成路由表编码/解码字段 |
 | 应用编码 | `modules/protocol` | 当前部分应用仍使用 MessageCodec，M1 入口存在契约与应用帧转换 |
 | 出站 HTTP | `modules/net/http` | CMake 必需 libcurl 并设置 `APOLLO_HAS_CURL=1`；不等于全部业务已接出 |
-| 客户端接入 | `apps/gateway-app` | TCP 入口、准入、路由查询与 World 意图出口原型 |
+| 客户端接入 | `apps/gateway` | TCP 入口、准入、路由查询与 World 意图出口原型 |
 
 契约 XML/XSD、生成器及 `.proto` 产物已经存在。protobuf/zstd 是否进入真实玩法路径，必须另行验证，不能从依赖或产物推断。
 

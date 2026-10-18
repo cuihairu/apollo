@@ -14,22 +14,22 @@
 | [Unreal 官方 Gameplay Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-framework-in-unreal-engine) | Pawn 表达可被玩家或 AI 控制的世界对象；Character 是其子类；PlayerState 与 Controller 是另外的职责。 | 同样区分角色实体、控制与状态，但不能把 PlayerState 当作 Apollo 的持久 Base 或直接照搬类名。 |
 | [Unity 官方 Avatar/重定向说明](https://docs.unity.com/en-us/engine/6000.6/manual/animation-section/animation-mecanim/avatar-creationand-setup/retargeting) | 配置后的 Avatar 为人形动画重定向提供标准骨骼层级和名称。 | Unity 的动画 Avatar 不是这里的服务端实体；跨引擎没有一个含义完全一致的 Avatar 类。 |
 
-命名判断：Avatar 用于角色语义是合适的，但 Apollo 当前 `Avatar` 只实现玩家的 Cell 模拟部分，范围比 BigWorld 的词义窄；`PlayerAnchor` 在本次核对的上述官方实体术语中不是共同名称，只应作为 Apollo 代码实现名。“Anchor”也不表示玩家永远固定在某个 Base 进程。
+命名判断：Avatar 用于角色语义是合适的，但单独一个 `Avatar` 只实现玩家的 Cell 模拟部分，范围比 BigWorld 的词义窄。曾用的 `PlayerAnchor` 在本次核对的上述官方实体术语中不是共同名称，且“Anchor”不表示玩家永远固定在某个 Base 进程——该名已随 2026-10 的命名迁移弃用，不再出现在生产代码与文档。
 
-文档以**玩家角色实体的 Base 部分、Cell 部分**描述职责，引用实现时写 `PlayerAnchor`（Base 部分）与 `Avatar`（Cell 部分）。不把二者宣传为上游通用的一对类型，不新增中间容器或同义类。本次不改 C++ 类名、别名或 wire；若后续统一代码命名，按上述实体/部分边界单独实施。
+文档以**玩家角色实体的 Base 部分、Cell 部分**描述职责，引用实现时写 `apollo::game::base::Avatar`（Base 部分）与 `apollo::game::cell::Avatar`（Cell 部分）。不把二者宣传为上游通用的一对类型，不新增中间容器或同义类；生产代码无别名或转发头，旧类名不保留。
 
 | 文档概念 | 当前代码对应 | 说明 |
 |---|---|---|
 | 玩家角色实体 | 由长期对象和模拟对象关联表达 | 是业务语义，不宣称当前已有完整通用分布式 Entity 类型。 |
-| 玩家角色的 Base 部分 | PlayerAnchor | 独立于登录连接、Cell 对象和 Instance，可离线激活；承载进程可迁移。 |
-| 玩家角色的 Cell 部分 | Avatar | 当前玩家模拟对象，不代表整个逻辑角色，也不等于全部 Cell/Real 实体；NPC 和怪物可使用其他 Entity 类型。 |
+| 玩家角色的 Base 部分 | `apollo::game::base::Avatar` | 独立于登录连接、Cell 对象和 Instance，可离线激活；承载进程可迁移。 |
+| 玩家角色的 Cell 部分 | `apollo::game::cell::Avatar` | 当前玩家模拟对象，不代表整个逻辑角色，也不等于全部 Cell/Real 实体；NPC 和怪物可使用其他 Entity 类型。 |
 | 客户端会话 | Session 及 gateway 连接 | 连接状态，不是玩家角色实体本身。 |
 
-### Apollo 代码命名与实施任务
+### Apollo 代码命名
 
-拟将 Base 部分统一为 `apollo::game::base::Avatar`，Cell 部分统一为 `apollo::game::cell::Avatar`，用模块/命名空间表达分布式角色的不同部分。裸 `Avatar` 只在上下文明确时使用；不把两部分合并为共享内存对象，也不把所有 NPC/Entity 改为 Avatar。命名空间是 Apollo 的实现约定，依据是上游 Base/Cell 分部模型，不是声称 BigWorld 使用相同 C++ 类型。
+Base 部分实现为 `apollo::game::base::Avatar`（modules/game/base），Cell 部分实现为 `apollo::game::cell::Avatar`（modules/game/cell），依赖单向 cell→base→core，用模块/命名空间表达分布式角色的不同部分。裸 `Avatar` 只在上下文明确时使用；不把两部分合并为共享内存对象，也不把所有 NPC/Entity 改为 Avatar。命名空间是 Apollo 的实现约定，依据是上游 Base/Cell 分部模型，不是声称 BigWorld 使用相同 C++ 类型。
 
-当前 `PlayerAnchor` 和 `apollo::game::world::Avatar` 尚未迁移，代码、头路径、附属符号、调用点与旧名清理统一列入根目录 [todo.md 的 P0.1](https://github.com/cuihairu/apollo/blob/main/todo.md)。实施后删除过渡映射，避免长期保留两套类名。
+命名迁移已完成（根目录 [todo.md 的 P0.1](https://github.com/cuihairu/apollo/blob/main/todo.md)）：`PlayerAnchor`→`base::Avatar`、`world::Avatar`→`cell::Avatar`，代码、头路径、附属符号与调用点同步清理，过渡映射已删；wire 状态串与契约字段逐字节不变，无别名或转发头。
 
 行业术语的通用说明集中维护在 [hello-game](https://github.com/cuihairu/hello-game/blob/main/docs/glossary/11.md)，本页保留 Apollo 的职责和代码对应。
 
@@ -37,8 +37,8 @@
 
 | 对象 | 所有者 | 状态与生命周期 |
 |---|---|---|
-| Base 部分（当前 PlayerAnchor） | baseServer | 背包、装备、成长、任务和玩家基础业务；加载、在线、断线保留和卸载独立于副本。 |
-| Cell 部分（当前 Avatar） | cell 内权威 Cell（现有 Scene 的空间语义） | 场景位置、战斗中的血量、技能运行状态和临时效果；按进出场及副本规则创建、迁移和释放。 |
+| Base 部分（`base::Avatar`） | baseServer | 背包、装备、成长、任务和玩家基础业务；加载、在线、断线保留和卸载独立于副本。 |
+| Cell 部分（`cell::Avatar`） | cell 内权威 Cell（现有 Scene 的空间语义） | 场景位置、战斗中的血量、技能运行状态和临时效果；按进出场及副本规则创建、迁移和释放。 |
 | Session | gateway 连接与在线目录关联 | 绑定认证身份和当前连接，使用会话版本拒绝旧连接。 |
 
 同一玩家的完整长期资料只有一个 Base 写入者，场景实体只有一个 cell 模拟者。cell 使用玩法所需快照，消耗或奖励通过请求交由 Base 校验；会跨对局保留的战斗结果应显式结算，不能默认所有场景字段都写入档案。
@@ -59,6 +59,6 @@
 
 ## 当前实现
 
-PlayerAnchor、Avatar、Scene 与 Instance 类型可复用。需要从当前 WorldApp 模拟宿主迁出长期资料与存储职责，接入 Base/database 边界；本轮文档更新不代表代码已完成该迁移。实施任务只维护在根目录 todo.md。
+`base::Avatar`、`cell::Avatar`、Scene 与 Instance 类型可复用。长期资料与存储职责已由 WorldApp 迁出，由 base 独立入口持有并经 database 持久提交，WorldApp 不再宿主档案。未闭合部分：只读玩法快照与返回业务请求的边界定义、禁止跨界指针修改纪律（P1），以及管理与执行分离（P2）。实施任务只维护在根目录 todo.md。
 
-worldServer 管理 Space/Cell 分配，不另持一份玩家模拟对象。Base 实体对应 PlayerAnchor，Real/Cell 实体对应 Avatar/Entity；原词与实现缺口见[体系对照](./bigworld-apollo-mapping.md)。
+worldServer 管理 Space/Cell 分配，不另持一份玩家模拟对象。Base 实体对应 `base::Avatar`，Real/Cell 实体对应 `cell::Avatar`/Entity；原词与实现缺口见[体系对照](./bigworld-apollo-mapping.md)。

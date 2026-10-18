@@ -28,7 +28,7 @@ Read upstream [proxy.h](https://github.com/kbengine/kbengine/blob/master/kbe/src
 |---|---|
 | Client connections/delivery | gateway |
 | Authentication/directories | loginServer |
-| Persistent-player objects/base gameplay | baseServer; reuse PlayerAnchor |
+| Persistent-player objects/base gameplay | baseServer; reuse `base::Avatar` |
 | Space/Cell management | worldServer; CellAppMgr-like management |
 | Scene entities | authoritative Cell in cell; reuse Avatar/Entity |
 | Profile loading/durable saving | database |

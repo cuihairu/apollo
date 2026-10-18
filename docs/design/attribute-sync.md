@@ -118,7 +118,7 @@ AttrSyncManager::ChangeSink 把变更交给宿主，不直接链接数据层。B
 
 ### 8.3 结算
 
-World 发出带稳定结算 ID 的请求，Base 校验后修改长期态并经 database 持久提交；既有 IRewardSink / AnchorRewardSink 可复用，但不能继续跨边界直接修改本地资料对象。业务必须补齐持久化映射、去重、重试与恢复确认。结算成功下行以约定的持久确认结果为准。
+World 发出带稳定结算 ID 的请求，Base 校验后修改长期态并经 database 持久提交；既有 IRewardSink / AvatarRewardSink 可复用，但不能继续跨边界直接修改本地资料对象。业务必须补齐持久化映射、去重、重试与恢复确认。结算成功下行以约定的持久确认结果为准。
 
 ### 8.4 外部存储
 

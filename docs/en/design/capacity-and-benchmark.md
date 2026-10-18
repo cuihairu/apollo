@@ -24,7 +24,7 @@
 
 | Item | Value | Source/notes |
 |---|---|---|
-| Main loop | tick 20Hz, frame 50ms | world-app config tickRateMs=50 (design semantics 10Hz, calibration pending) |
+| Main loop | tick 20Hz, frame 50ms | world config tickRateMs=50 (design semantics 10Hz, calibration pending) |
 | Capacity target | 5000 CCU/process steady state | sdk-contract :476 incumbent semantics; this document promotes it to the top-level target |
 | Extreme scenario | single scene, 100 players on screen in battle | attribute-sync §11 stress-test semantics |
 | Entity scale | 5000 players + ~20k NPCs/monsters (per-scene quota) | estimate semantics, configurable |
@@ -64,7 +64,7 @@
 - B (multi-scene high density) is heaviest: the broadcast event face ~19543 events/frame ≈ 195k events/s @10Hz — the AOI diff + ViewerState watermark maintenance is the first artificial-load hot-spot candidate.
 - Event counts bit-deterministic (movement pattern fixed → diff sequence deterministic) — the benchmark can serve as a regression signal (event-count drift = an AOI/ViewerState behavior change).
 - Stub-scope limits: no pathfinding/skills/cross-scene/network-send face; frame cost is a lower bound; making the §2 whole-frame segments empirical goes by batches — the flush segment is done (§2.3, 2026-10-13), the persist-batch segment is done (§2.4, 2026-10-13).
-- After Batch B's closure (world-app single-writer-ization, plan pending decision) + multi-scene parallel threading, re-measure against this anchor.
+- After Batch B's closure (World single-writer simulation, plan pending decision) + multi-scene parallel threading, re-measure against this anchor.
 
 (Batch A's first-run 20Hz-semantics data voided — the main loop at 10Hz is the clock-and-time §4 settlement; benchmark kFrameDelta/budget constants errata'd with Batch C to 10Hz/100ms.)
 

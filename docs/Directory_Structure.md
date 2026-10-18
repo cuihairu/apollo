@@ -26,14 +26,14 @@
 
 | 目录 | 说明 |
 |------|------|
-| `login-app/` | 登录入口 |
-| `gateway-app/` | 边缘接入层 |
-| `base-server/` | baseServer 独立入口，远程访问 database |
+| `login/` | 登录入口（认证、服务/在线目录、恢复编队面） |
+| `gateway/` | 边缘接入层 |
+| `base/` | base 独立入口，远程访问 database，承载长期资料与结算受理 |
 | `database/` | 独立存储入口，M1 加载/保存与文件 journal |
-| `common/` | 可复用的玩家资料、存储及目录实现；须按 Base/database 边界迁移宿主 |
-| `world-app/` | 当前管理/模拟混合入口，待拆 worldServer 管理与 cell 执行并迁出长期资料/存储 |
-| `game-server/` | 兼容或演示型游戏服务 |
+| `common/` | 可复用的玩家资料、存储及目录实现；宿主按 Base/database 边界装配 |
+| `world/` | world 入口，缺省管理角色，`--role=cell` 执行角色；管理/执行拆分随 P2 |
 | `machined/` | 本机进程监督（拉起/退避重启/死亡上报），不决定跨服路由 |
+| `admin/`、`fleetctl/`、`logger/` | 运维与量测工具 |
 
 ## modules/
 

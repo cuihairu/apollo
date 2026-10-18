@@ -20,7 +20,7 @@ Apollo's BigWorld compatibility module provides a familiar C++ API facade; it do
 
 ## Semantic Boundaries
 
-- `BaseApp` is closer to `PlayerAnchor + Proxy Host`
+- `BaseApp` is closer to `base::Avatar + Proxy Host`
 - `CellApp` is closer to a spatial real-time authority node
 - `LoginApp` handles authentication and entry assignment
 - `GatewayApp` is only enabled in Apollo's edge-access assembly

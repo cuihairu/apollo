@@ -118,7 +118,7 @@ AttrSyncManager::ChangeSink reports changes to its host without directly linking
 
 ### 8.3 Settlement
 
-Reuse IRewardSink / AnchorRewardSink for long-term effects. Complete persistence mapping, settlement-ID deduplication, retries, and recovery. Success delivery follows the defined durable confirmation.
+Reuse IRewardSink / AvatarRewardSink for long-term effects. Complete persistence mapping, settlement-ID deduplication, retries, and recovery. Success delivery follows the defined durable confirmation.
 
 ### 8.4 External storage
 

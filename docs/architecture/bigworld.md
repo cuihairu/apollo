@@ -20,7 +20,7 @@ Apollo 的 BigWorld 兼容模块提供熟悉的 C++ API facade，不实现 BigWo
 
 ## 语义边界
 
-- `BaseApp` 更接近 `PlayerAnchor + Proxy Host`
+- `BaseApp` 更接近 `base::Avatar + Proxy Host`
 - `CellApp` 更接近空间实时权威节点
 - `LoginApp` 负责认证与入口分配
 - `GatewayApp` 只在 Apollo 的边缘接入装配里启用

@@ -71,7 +71,7 @@
 | Packet frame format | sdpkg fixed header + checksum | `modules/protocol` (codec/messages/nng_wrapper) | already have; frame-header field design can align (mark+len+checksum+sequence) |
 | Attribute sync | **none** | docs/03 draft + `game/attributes` (AttributeContainer embryo) | see `docs/design/attribute-sync.md` (targeting BigWorld) |
 | Algorithms (CRC/MD5/DES) | sdalgorithm | `utils/crypto.h` + protocol | already have; DES/MD5 are legacy crypto, banned in new code |
-| Gateway/pipe/console | sdgate/sdpipe/sdconsole/sddebugviewer | apps/gateway-app planned; utils/terminal | direction exists; no module adoption needed |
+| Gateway/pipe/console | sdgate/sdpipe/sdconsole/sddebugviewer | apps/gateway shipped; utils/terminal | direction exists; no module adoption needed |
 
 ## 4. Recommended Adoption List (ordered by value)
 

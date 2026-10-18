@@ -1,6 +1,8 @@
 
 # Apollo Modularization Execution Checklist
 
+> **Historical note (reconciled 2026-10-19)**: this checklist is a historical record of the modularization work; application directories and executable targets were later unified (`apps/{gateway,login,base,world}`, no `-app`/`-server` suffixes), and `apps/game-server` was removed in that unification — unchecked items that reference it are kept as written and no longer executed.
+
 This checklist tracks the construction order for migrating from the monolithic
 `apollo` target to modular targets.
 

@@ -109,13 +109,13 @@ the old draft do not exist in the repository.
 
 ## Session & Directory (session sub-library, the G-1 deliverable)
 
-Nine headers for anchors/online directory/recovery/fleet recovery:
-`AnchorManager`/`PlayerAnchor` (the single write point for long-lived player state) +
-`AnchorRewardSink` (settlement posting) + `PlayerDirectory` (online directory,
-epoch/suspend window/re-report convergence) + `DirectoryPublisher` (the "APD2" directory
-mirror) + `FleetRecoveryCoordinator` (cross-process recovery phases) +
-`RecoveryCoordinator` (journal replay → Anchor restore → admission gate) +
-`SessionLocator`/`WorldAssignment`. For API details see the [Game API](/en/api/game) page and
+Nine headers for long-lived player state/online directory/recovery/fleet recovery
+(five in base, four in session): base side `AvatarManager`/`Avatar` (the single write
+point for long-lived player state) + `AvatarRewardSink` (settlement posting) +
+`RecoveryCoordinator` (journal replay → Avatar restore → admission gate) +
+`WorldAssignment`; session side `PlayerDirectory` (online directory, epoch/suspend
+window/re-report convergence) + `DirectoryPublisher` (the "APD2" directory mirror) +
+`FleetRecoveryCoordinator` (cross-process recovery phases) + `SessionLocator`. For API details see the [Game API](/en/api/game) page and
 the session-and-online-directory design doc.
 
 ## Social (social sub-library)
@@ -233,14 +233,14 @@ for (const auto& r : scene.drain_debug_eval_results()) { /* 回传 transport */ 
 scene.set_debug_eval_queue_depth(8);  // 默认 8（与 eval 同 tick 限流对齐）
 ```
 
-The first batch of owning-host wiring has landed in world-app (scripting-lua §2, one state
+The first batch of owning-host wiring has landed in the world application (scripting-lua §2, one state
 per logical thread): `World` builds the `ScriptRuntime` at the top of gameThread, and
 `--script-boot <file>` loads the boot source (missing/failing is a warning only, no
 shutdown; faults go through the runtime event surface). The host startup load order
 (scripting-lua §3.4) = `--script-handlers` (the contract-route handler surface) →
 `--script-contract` (the contract table; the load gate verifies per route that a handler is
 in place) → `--script-boot` (may read the `contract` global). The contract-route handler
-placeholder module ships with the repo at `apps/world-app/scripts/contract_handlers.lua`
+placeholder module ships with the repo at `apps/world/scripts/contract_handlers.lua`
 (45 routes; the gameplay batch fills in the semantics), with the golden contract sync gate
 `contract_handler_tests` (2 cases) and the startup-loading `world_app_script_host_tests` (3
 cases, including the boot-lands-after-contract assertion, missing-handler rejection, and

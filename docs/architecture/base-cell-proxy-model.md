@@ -28,7 +28,7 @@ KBEngine 的 Proxy 处理与客户端关联的能力，Base 承载非空间实�
 |---|---|
 | 客户端连接与投递 | gateway |
 | 账号认证和目录 | loginServer |
-| 长期玩家对象与基础业务 | baseServer；复用 PlayerAnchor |
+| 长期玩家对象与基础业务 | baseServer；复用 `base::Avatar` |
 | Space/Cell 管理 | worldServer；对照 CellAppMgr |
 | 场景运行实体 | cell 内的权威 Cell；复用 Avatar/Entity |
 | 资料加载和持久保存 | database |

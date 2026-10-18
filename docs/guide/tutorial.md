@@ -24,15 +24,15 @@ cmake --build build-examples --target full_loop_demo
 
 跑通输出八步 `[OK]` 与结尾 AOI 事件计数。
 
-## 第 1 步：login——登录锚激活
+## 第 1 步：login——登录 Avatar 激活
 
 ```cpp
-AnchorManager anchors;
-auto anchor = anchors.activate(kPlayer);          // 1001
-// 重登幂等：anchors.find(kPlayer) == anchor
+AvatarManager avatars;
+auto avatar = avatars.activate(kPlayer);          // 1001
+// 重登幂等：avatars.find(kPlayer) == avatar
 ```
 
-`PlayerAnchor` 是玩家长期态的唯一权威（ADR-001）：登录激活、跨副本持续、登出回收。后续战斗结算会单向落账到这里。
+`base::Avatar` 是玩家长期态的唯一权威（ADR-001）：登录激活、跨副本持续、登出回收。后续战斗结算会单向落账到这里。
 
 ## 第 2 步：建副本——八态机起步
 
@@ -48,7 +48,7 @@ instance.initialize();
 ## 第 3 步：挂战斗负载——Waiting 窗口
 
 ```cpp
-AnchorRewardSink sink(*anchor);                   // 奖励单向落锚口
+AvatarRewardSink sink(*avatar);                   // 奖励单向落账口
 auto battle = std::make_unique<BattleRuntime>(1, kSeed, &sink);
 instance.attach_battle(std::move(battle));        // 只有 Waiting 接受挂接
 ```
@@ -110,11 +110,11 @@ for (std::uint32_t t = 0; t < 5; ++t) {
 
 ```cpp
 battle->finish();                                 // → Finished
-// anchor->progress("exp") > 0：奖励落了长期态
-// !anchor->dirty_reasons().empty()：内存脏标记；持久确认另行完成
+// avatar->progress("exp") > 0：奖励落了长期态
+// !avatar->dirty_reasons().empty()：内存脏标记；持久确认另行完成
 ```
 
-此处演示进程内奖励原语；mark_dirty 只表示内存变更。目标角色链路中，cell 提交结算给所属 Base，由 Base 校验并经 database 持久确认。直接操作本地 Anchor 的示例不代表跨进程结算或保存已经成功。
+此处演示进程内奖励原语；mark_dirty 只表示内存变更。目标角色链路中，cell 提交结算给所属 Base，由 Base 校验并经 database 持久确认。直接操作本地 Avatar 的示例不代表跨进程结算或保存已经成功。
 
 ## 第 8 步：leave——离场与回收
 
@@ -124,7 +124,7 @@ instance.leave(PlayerId{kPlayer});
 instance.leave(PlayerId{kObserver});
 instance.finish(); instance.settle(); instance.drain(); instance.destroy();
 // is_destroyed()：八态走完，终态封死
-anchors.deactivate(kPlayer);                      // 登出锚回收
+avatars.deactivate(kPlayer);                      // 登出 Avatar 回收
 ```
 
 AOI Leave 是双向事件（离场者视角 + 他人视角）；副本尾四段单向推进到 Destroyed 后不可复用。

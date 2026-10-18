@@ -24,7 +24,7 @@ public:
 };
 
 // 玩家 ID 强分型（P0-2）：与 EntityId 同构但互不隐式转换——
-// PlayerId 标识长期玩家对象（PlayerAnchor 域），EntityId 标识场景内实体
+// PlayerId 标识长期玩家对象（base::Avatar 域），EntityId 标识场景内实体
 class PlayerId {
 public:
     constexpr explicit PlayerId(uint64_t id);
@@ -236,10 +236,10 @@ private:
   SnapshotReply/FullReport，owner 侧快照发布）。
 - `FleetRecoveryCoordinator`——恢复相位跨进程化（Normal↔Recovering，收敛
   开放准入）。
-- `RecoveryCoordinator`——进程内恢复编排（journal replay → Anchor restore →
+- `RecoveryCoordinator`——进程内恢复编排（journal replay → Avatar restore →
   准入闸，restore-not-kick）。
-- `AnchorManager`/`PlayerAnchor`——长期玩家态锚点（AnchorState 状态机、
-  唯一写点纪律）；`AnchorRewardSink`——battle 结算奖励 → Anchor 落账。
+- `AvatarManager`/`base::Avatar`——长期玩家态权威（AvatarState 状态机、
+  唯一写点纪律）；`AvatarRewardSink`——battle 结算奖励 → base::Avatar 落账。
 - `SessionLocator`/`WorldAssignment`——会话定位与世界分配裁决。
 
 ## 世界与副本（world 子库其余件）

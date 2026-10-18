@@ -70,8 +70,8 @@ int main() {
 ```
 
 The ApplicationHost core (the host kernel) and ServiceHost share one header; ServiceHost is
-its thin wrapper, and entry applications pick one of the two (apps/game-server uses
-ServiceHost).
+its thin wrapper, and host entries pick one of the two (current ServiceHost users are on
+the test side: runtime_comprehensive_tests / test_runtime).
 
 ## ServiceHost
 

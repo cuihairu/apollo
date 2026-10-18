@@ -17,7 +17,7 @@ Apollo 当前面向塔防、合作玩法和小队副本，预留未来无缝地�
 |---|---|
 | gateway | 客户端 socket、会话、Base 与模拟端点路由；更换后端不迁移 socket。 |
 | loginServer | 认证、凭证、服务目录与玩家在线关联；保存位置投影，不裁决 Cell 拓扑。 |
-| baseServer | PlayerAnchor 等长期对象、基础业务与资料写权；不随副本销毁或跨服转移。 |
+| baseServer | `base::Avatar` 等长期对象、基础业务与资料写权；不随副本销毁或跨服转移。 |
 | worldServer | 类似 CellAppMgr 的管理职责：cell 注册、容量、Space/Cell 分配、拓扑、排空和迁移。 |
 | cell | 类似 CellApp 的执行职责：承载本地 Cell，运行 Avatar/Entity、AOI、战斗、Lua 与 tick。 |
 | database | 资料加载、保存、存储路由、队列/journal 及持久结果；不制定奖励规则。 |

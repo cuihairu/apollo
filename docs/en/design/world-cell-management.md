@@ -16,20 +16,20 @@ The [BigWorld CellAppMgr source](https://github.com/v2v3v4/BigWorld-Engine-14.4.
 
 ### 1.1. Application Directories and Binaries
 
-This draft adopts the short names discussed in this review: application directory, executable CMake target, and published program match, without `Server`, `-server`, or `-app` suffixes. This is a pending migration map, not retained startup aliases. Current code and other active documents have not yet completed this naming migration.
+This draft adopts the short names discussed in this review: application directory, executable CMake target, and published program match, without `Server`, `-server`, or `-app` suffixes. The naming migration is complete; no competing startup aliases are retained. world defaults to the management role and `--role=cell` selects the executor.
 
-| Current directory / program | Target directory / program | Responsibility |
-|---|---|---|
-| apps/gateway-app / gateway-app | apps/gateway / gateway | Client connections, sessions, routing |
-| apps/login-app / login-app | apps/login / login | Authentication, directory, location projections |
-| apps/base-server / baseServer | apps/base / base | Persistent player objects and business |
-| apps/world-app / world-app | apps/world / world | Default management role; `--role=cell` executor |
-| apps/database / database | apps/database / database | Storage and durable results |
-| apps/machined / machined | apps/machined / machined | Local supervision |
+| Directory / program | Responsibility |
+|---|---|
+| apps/gateway / gateway | Client connections, sessions, routing |
+| apps/login / login | Authentication, directory, location projections |
+| apps/base / base | Persistent player objects and business |
+| apps/world / world | Default management role; `--role=cell` executor |
+| apps/database / database | Storage and durable results |
+| apps/machined / machined | Local supervision |
 
-Keep cell assembly within the World application or shared libraries with module boundaries, without another application binary. Audit and migrate overlapping hosting in `apps/game-server`, then remove redundant wiring instead of adding another deployment role. Operations tools such as logger, admin, and fleetctl retain their own responsibilities and names.
+Keep cell assembly within the World application or shared libraries with module boundaries, without another application binary. The former host demo entry (apps/game-server) was removed; its hosting duties are carried by world and the shared libraries, not by another deployment role. Operations tools such as logger, admin, and fleetctl retain their own responsibilities and names.
 
-Migrate configuration, scripts, CMake references, tests, documentation, and release paths together without keeping competing startup aliases. Do not mechanically rename C++ types after binary names.
+C++ type names do not follow binary names mechanically: the Base part is `base::Avatar`, the Cell part `cell::Avatar`.
 
 ## 2. Ownership and Calls
 
@@ -37,7 +37,7 @@ Migrate configuration, scripts, CMake references, tests, documentation, and rele
 |---|---|---|
 | world | Executor registration, Space/Cell placement, capacity reservations, topology, creation/migration decisions, draining | Base requests placement; World commands cell and publishes committed locations |
 | cell | Local Entity/Avatar, AOI, combat, Lua, simulation clock, active Instance | Gateway inputs directly to cell; simulation output to gateway; business requests to original Base |
-| base | PlayerAnchor, persistent player state, business rules, settlement deduplication | Basic business and settlement through Base to database |
+| base | `base::Avatar`, persistent player state, business rules, settlement deduplication | Basic business and settlement through Base to database |
 | login | Authentication, service directory, player-location projections | Address discovery and projections, without Cell-placement authority |
 | gateway | Client connection, session, Base/cell route caches | Simulation traffic bypasses the World manager |
 | Local supervision / machined | Process startup, liveness, exit, restart backoff | World embeds reusable supervision by default; standalone machined can execute local lifecycle requests |

@@ -26,14 +26,14 @@ This document describes the actual directory layout of the current repository.
 
 | Directory | Description |
 |------|------|
-| `login-app/` | Login entry point |
-| `gateway-app/` | Edge access layer |
-| `base-server/` | Standalone baseServer with remote database access |
+| `login/` | Login entry point (authentication, service/online directories, recovery fleet face) |
+| `gateway/` | Edge access layer |
+| `base/` | Standalone base entry with remote database access, owning persistent profiles and settlement admission |
 | `database/` | Dedicated M1 load/save and file journal |
-| `common/` | Reusable profile, storage, and directory implementations; host ownership must follow Base/database boundaries |
-| `world-app/` | Current combined manager/executor prototype; split worldServer management and cell simulation |
-| `game-server/` | Compatibility or demo game service |
+| `common/` | Reusable profile, storage, and directory implementations; hosts assemble along Base/database boundaries |
+| `world/` | world entry, manager role by default and `--role=cell` executor; management/execution split follows P2 |
 | `machined/` | Process supervision (roster spawn/backoff restart/death reporting) |
+| `admin/`, `fleetctl/`, `logger/` | Operations and measurement tools |
 
 ## modules/
 

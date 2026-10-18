@@ -8,7 +8,7 @@ Keep gateway, loginServer, baseServer, worldServer, database, machined, and the 
 |---|---|---|
 | gateway | Separate connection layer, partial Proxy/session duties | Client sockets/delivery and cached Base/simulation routes. |
 | loginServer | LoginApp plus Apollo service/online directories | Authentication, Base/World lookup, ownership/location projections. |
-| baseServer | Persistent non-spatial BaseApp behavior | PlayerAnchor/base gameplay/settlement validation. |
+| baseServer | Persistent non-spatial BaseApp behavior | `base::Avatar` persistent objects, base gameplay, settlement validation. |
 | worldServer | CellAppMgr spatial/process management duties | cell registration/readiness/load, Space/Cell placement/topology, transfer/drain. |
 | cell execution process | CellApp | Local Cell entities, AOI, combat, scripts, ticks, and results to owning Bases. |
 | database | DBApp storage access duties | Load/save, storage routing, durable outcomes, not reward rules. |
@@ -24,8 +24,8 @@ cell registers with its owning worldServer without requiring local machined. wor
 | Space | Identified runtime coordinate space corresponding to the spatial semantics of existing Scene. Do not stack synonymous containers; Scene currently implements a local container. |
 | Cell | Spatial partition with bounds/authoritative entities assigned to a process; not the cell process itself. |
 | Instance | Apollo temporary group/objective/clock/settlement/cleanup lifecycle associated with Space, not a claimed native BigWorld eight-state type. |
-| Base entity | Persistent non-spatial object in baseServer; player-side code is PlayerAnchor. |
-| Cell/Real entity | Entity with simulation write authority inside cell; reuse Avatar for players. |
+| Base entity | Persistent non-spatial object in baseServer; player-side code is `base::Avatar`. |
+| Cell/Real entity | Entity with simulation write authority inside cell; players reuse `cell::Avatar`. |
 | Ghost | Reserved non-authoritative adjacent projection without independent business writes. |
 | Witness | Client-visible world context; ViewerState, SceneAoi, and attribute sync cover part of the duties. |
 
@@ -33,7 +33,7 @@ Default to one cell execution process and one Cell per Space. A process can host
 
 ## Character entities and Avatar
 
-BigWorld's Avatar terminology includes player characters and NPCs. BigWorld/KBEngine character entities may have Base, Cell, and client parts as needed. Apollo's current PlayerAnchor maps to the player's Base part; Avatar implements only the Cell simulation part. PlayerAnchor is a project class name, not common upstream terminology or a fixed-process guarantee. Describe responsibilities with Base/Cell parts and retain actual implementation names. See [player object model](./player-object-model.md) for sources and naming assessment.
+BigWorld's Avatar terminology includes player characters and NPCs. BigWorld/KBEngine character entities may have Base, Cell, and client parts as needed. Apollo's player character is expressed by two implementation classes, `base::Avatar` (Base part) and `cell::Avatar` (Cell simulation part); the naming is an Apollo convention, neither common upstream terminology nor a fixed-process guarantee. Describe responsibilities with Base/Cell parts and retain actual implementation names. See [player object model](./player-object-model.md) for sources and naming assessment.
 
 ## Data ownership and lifecycle
 

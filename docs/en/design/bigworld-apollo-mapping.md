@@ -6,8 +6,8 @@ This page maps BigWorld 14.4.1 server terms to Apollo processes, objects, and co
 
 | BigWorld | Apollo counterpart | Responsibility and difference | Implementation boundary |
 |---|---|---|---|
-| LoginApp | Authentication in loginServer | Login ingress/authentication; Apollo also hosts service/online directories here. | Existing login-app primitives; final Base/cell wiring incomplete. |
-| BaseApp | baseServer | Persistent non-spatial logic; PlayerAnchor implements the player profile side. Base is not the database process. | apps/base-server provides baseServer with PlayerAnchor activation through remote database. Directory ownership, business migration, and settlement wiring remain pending. |
+| LoginApp | Authentication in loginServer | Login ingress/authentication; Apollo also hosts service/online directories here. | Existing login primitives; final Base/cell wiring incomplete. |
+| BaseApp | baseServer | Persistent non-spatial logic; `base::Avatar` implements the player profile side. Base is not the database process. | apps/base provides the standalone base entry with Avatar activation through remote database. Base gameplay and settlement admission are wired; directory ownership remains pending. |
 | Relevant BaseAppMgr duties | Base registration, placement, and directories in loginServer | Reuse responsibility boundaries without claiming a full BaseAppMgr implementation. | Base registration/ownership/recovery pending. |
 | Relevant CellAppMgr duties | worldServer | Manage cell processes, Space/Cell assignment, capacity, topology, drain, and transfer; no per-entity simulation loop. | WorldApp still directly ticks Scene; management/execution separation pending. |
 | CellApp | cell execution process | Host local Cells of one or more Spaces; advance entities, AOI, combat, scripts, and ticks. | Independent entry, registration, readiness, and remote dispatch pending. |
@@ -41,7 +41,7 @@ Instance is gameplay rather than a spatial layer. Temporary tower-defense activi
 
 | BigWorld | Apollo counterpart | Authority/implementation boundary |
 |---|---|---|
-| Base entity | PlayerAnchor and other persistent objects in baseServer | Base validates persistent gameplay and saves through database; simulation transfers retain storage affiliation, while Base hosting can migrate independently. PlayerAnchor is not a complete generic Base-entity implementation. |
+| Base entity | `base::Avatar` and other persistent objects in baseServer | Base validates persistent gameplay and saves through database; simulation transfers retain storage affiliation, while Base hosting can migrate independently. base::Avatar is not a complete generic Base-entity implementation. |
 | Cell/Real entity | Avatar and simulated Entity in the owning cell partition | One effective simulation writer per entity. Avatar is a player gameplay type, not another process. Preserve entity IDs through transfer. |
 | Ghost entity | Reserved non-authoritative adjacent-Cell projection | Supports visibility/queries, not independent damage, rewards, or profile writes. Replication/deduplication/expiry are incomplete; a transfer snapshot is not a persistent Ghost. |
 | Witness | Partial observer-view duties in SceneAoi, ViewerState, and attribute sync | View management differs from cross-partition projection. Local AOI is not complete Witness or cross-Cell visibility. |
@@ -52,7 +52,7 @@ See [Cell Entity](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/pro
 
 ### Scope of the Avatar name
 
-Avatar describes a character, not a Cell execution location. BigWorld's 2.1 glossary also includes NPCs, and its tutorial and KBEngine demos show Base/Cell parts. Apollo's current PlayerAnchor maps to the player's Base part and Avatar to the Cell part. This implementation mapping neither makes upstream Avatar Cell-only nor establishes PlayerAnchor as common industry terminology. See [player object model](./player-object-model.md) for sources, other engines, and naming assessment.
+Avatar describes a character, not a Cell execution location. BigWorld's 2.1 glossary also includes NPCs, and its tutorial and KBEngine demos show Base/Cell parts. Apollo maps `base::Avatar` to the player's Base part and `cell::Avatar` to the Cell part. This implementation mapping neither makes upstream Avatar Cell-only nor establishes either name as common industry terminology. See [player object model](./player-object-model.md) for sources, other engines, and naming assessment.
 
 ## 4. Apollo request ownership
 
@@ -75,7 +75,7 @@ Implement spatial splitting, adjacent replication, boundary combat, dynamic load
 | WorldApp, World, WorldHost | Currently combine management and simulation | Separate worldServer management from cell execution; existing names identify implementation only. |
 | Scene, SceneDescriptor | Local spatial container and static resource reference | Unify Space identity/coordinates and separate local partition state from logical space. |
 | Instance | Temporary activity lifecycle | Keep eight states; add durable remote settlement and exclusive shared-state ownership. |
-| PlayerAnchor, Avatar | Persistent Base object / player Cell entity | Separate hosts, snapshots, trusted associations; remove cross-boundary pointer access. |
+| `base::Avatar`, `cell::Avatar` | Persistent Base object / player Cell entity | Separate hosts, snapshots, trusted associations; remove cross-boundary pointer access. |
 | SceneAoi, ViewerState | Local partition visibility | Add adjacency replication, merged spatial visibility, deduplication, continuity. |
 | WorldAssignment, RemoteEntityRef | Routing/reference primitives | Separate Base, World, Space, Cell, and process identities with authority/version checks. |
 | SceneTransfer | Explicit scene departure/recreation | Same-Space Cell handoff preserves health, skills, clocks, and necessary script state without scene-exit reset. |

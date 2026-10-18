@@ -60,7 +60,7 @@ public:
 
 `ServiceHost`（同头文件）为其薄包装：`add_service` / `add_shutdown_hook` /
 `set_console_source` / `set_signal_source` / `start` / `run_once` / `is_running` /
-`stop` 逐一转发——apps/game-server 即用此形态。
+`stop` 逐一转发——测试侧（runtime_comprehensive_tests）即用此形态。
 
 **线程安全**: 条件安全（`request_stop` 可自信号处理器调用；装配期单线程）
 

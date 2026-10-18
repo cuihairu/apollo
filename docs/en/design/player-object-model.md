@@ -14,22 +14,22 @@ Avatar is established character terminology, but its scope varies by engine. The
 | [Unreal official Gameplay Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-framework-in-unreal-engine) | Pawn is a world object controlled by a player or AI; Character derives from Pawn, while PlayerState and Controller have separate roles. | Separate representation, control, and state, without equating PlayerState with persistent Base or importing the class names wholesale. |
 | [Unity official Avatar/retargeting documentation](https://docs.unity.com/en-us/engine/6000.6/manual/animation-section/animation-mecanim/avatar-creationand-setup/retargeting) | A configured Avatar supplies standard humanoid bone hierarchy/names for animation retargeting. | Unity's animation Avatar is distinct from a server entity; Avatar has no identical class meaning across engines. |
 
-Naming assessment: Avatar is suitable character terminology, but Apollo's current Avatar implements only the player's Cell simulation part, narrower than BigWorld's definition. PlayerAnchor is not shared entity terminology in the official sources reviewed here; treat it as Apollo's implementation name. Anchor does not imply a permanent hosting Base process.
+Naming assessment: Avatar is suitable character terminology, but a single Avatar type implements only the player's Cell simulation part, narrower than BigWorld's definition. The former PlayerAnchor name is not shared entity terminology in the official sources reviewed here, and Anchor implied a permanent hosting Base process it never guaranteed; the name was dropped in the 2026-10 naming migration and no longer appears in production code or docs.
 
-Describe responsibilities as **the player character entity's Base part and Cell part**, mapping implementation references to PlayerAnchor (Base part) and Avatar (Cell part). Do not present this pair as common upstream types or add another synonymous container/class. This change renames no C++ types, aliases, or wire fields. Any later code naming migration must follow these entity/part boundaries explicitly.
+Describe responsibilities as **the player character entity's Base part and Cell part**, mapping implementation references to `apollo::game::base::Avatar` (Base part) and `apollo::game::cell::Avatar` (Cell part). Do not present this pair as common upstream types or add another synonymous container/class. Production code carries no aliases or forwarding headers; the old class names are gone.
 
 | Documentation concept | Current implementation | Meaning |
 |---|---|---|
 | Player character entity | Association of persistent and simulation objects | Business semantics, not a claim of a complete generic distributed Entity implementation. |
-| Player character Base part | PlayerAnchor | Independent of connection, Cell object, and Instance; supports offline activation as a target, and hosting-process migration. |
-| Player character Cell part | Avatar | Current player simulation object, not the whole logical character or every Cell/Real entity; NPCs and monsters can use other Entity types. |
+| Player character Base part | `apollo::game::base::Avatar` | Independent of connection, Cell object, and Instance; supports offline activation as a target, and hosting-process migration. |
+| Player character Cell part | `apollo::game::cell::Avatar` | Current player simulation object, not the whole logical character or every Cell/Real entity; NPCs and monsters can use other Entity types. |
 | Client session | Session and gateway connection | Connection state, not the character entity itself. |
 
-### Apollo Code Naming and Implementation Tasks
+### Apollo Code Naming
 
-The proposed types are `apollo::game::base::Avatar` and `apollo::game::cell::Avatar`: module/namespace identifies each distributed part. Use unqualified Avatar only in an unambiguous context. Do not combine the parts into shared memory or rename every NPC/Entity to Avatar. These namespaces are Apollo conventions based on the upstream Base/Cell-part model, not claims about BigWorld C++ type names.
+The Base part is implemented as `apollo::game::base::Avatar` (modules/game/base) and the Cell part as `apollo::game::cell::Avatar` (modules/game/cell), with one-way dependencies cell→base→core; module/namespace identifies each distributed part. Use unqualified Avatar only in an unambiguous context. Do not combine the parts into shared memory or rename every NPC/Entity to Avatar. These namespaces are Apollo conventions based on the upstream Base/Cell-part model, not claims about BigWorld C++ type names.
 
-PlayerAnchor and `apollo::game::world::Avatar` have not yet migrated. Root [todo.md, P0.1](https://github.com/cuihairu/apollo/blob/main/todo.md) tracks headers, supporting symbols, callers, and old-name removal. Remove transitional mappings after implementation instead of retaining two sets of class names.
+The naming migration is complete (root [todo.md, P0.1](https://github.com/cuihairu/apollo/blob/main/todo.md)): PlayerAnchor→`base::Avatar` and `world::Avatar`→`cell::Avatar`, with headers, supporting symbols, and callers updated and transitional mappings removed; wire state strings and contract fields are byte-identical, with no aliases or forwarding headers.
 
 General industry terminology is maintained in [hello-game](https://github.com/cuihairu/hello-game/blob/main/docs/glossary/11.md); this page retains Apollo responsibilities and implementation mappings.
 
@@ -37,8 +37,8 @@ General industry terminology is maintained in [hello-game](https://github.com/cu
 
 | Object | Owner | State and lifecycle |
 |---|---|---|
-| Base part (current PlayerAnchor) | baseServer | Inventory, equipment, progression, quests, and base gameplay; loading, online retention, disconnection, and unloading are independent of Instances. |
-| Cell part (current Avatar) | authoritative Cell within a cell executor (current Scene semantics) | Position, combat health, skill execution, and temporary effects; created, transferred, and released under scene rules. |
+| Base part (`base::Avatar`) | baseServer | Inventory, equipment, progression, quests, and base gameplay; loading, online retention, disconnection, and unloading are independent of Instances. |
+| Cell part (`cell::Avatar`) | authoritative Cell within a cell executor (current Scene semantics) | Position, combat health, skill execution, and temporary effects; created, transferred, and released under scene rules. |
 | Session | gateway connection and online-directory association | Binds authenticated identity to a connection and rejects stale session versions. |
 
 Only one Base writes the complete persistent player data; only one cell advances the scene entity. cell consumes gameplay snapshots and requests validated consumption or rewards from Base. Explicitly settle results that persist across matches instead of automatically treating every simulation field as profile data.
@@ -59,6 +59,6 @@ Storage affiliation does not fix the hosting process. Load balancing and replace
 
 ## Implementation status
 
-PlayerAnchor, Avatar, Scene, and Instance are reusable code types. Persistent-player and storage responsibilities still need to move out of the current WorldApp host and integrate with Base/database boundaries. This documentation update does not implement that migration. Track work in root todo.md.
+`base::Avatar`, `cell::Avatar`, Scene, and Instance are reusable code types. Persistent-player and storage responsibilities have moved out of the WorldApp host: the standalone base entry owns them and commits through database, and WorldApp no longer hosts profiles. Remaining open work: the read-only gameplay snapshot and return-request boundary, the no-cross-boundary-pointer discipline (P1), and management/execution separation (P2). Track work in root todo.md.
 
-worldServer manages Space/Cell placement without another simulation object. PlayerAnchor corresponds to the player-side Base entity; Avatar/Entity to Real/Cell entities. See the [mapping](./bigworld-apollo-mapping.md) for terms and gaps.
+worldServer manages Space/Cell placement without another simulation object. `base::Avatar` corresponds to the player-side Base entity; `cell::Avatar`/Entity to Real/Cell entities. See the [mapping](./bigworld-apollo-mapping.md) for terms and gaps.

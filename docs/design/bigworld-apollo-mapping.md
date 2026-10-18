@@ -6,8 +6,8 @@
 
 | BigWorld 概念 | Apollo 对应 | 职责与差异 | 当前实现边界 |
 |---|---|---|---|
-| LoginApp | loginServer 的认证部分 | 验证账号和登录入口；Apollo 另由该进程托管服务/在线目录。 | login-app 已有认证和目录原语，最终 Base/cell 接线待完成。 |
-| BaseApp | baseServer | 承载长期、非空间实体逻辑；Apollo 玩家资料对象使用 PlayerAnchor。Base 不是数据库进程。 | apps/base-server 已提供 baseServer，PlayerAnchor 经远程 database 激活；目录归属、业务迁出和结算接线未完成。 |
+| LoginApp | loginServer 的认证部分 | 验证账号和登录入口；Apollo 另由该进程托管服务/在线目录。 | login 已有认证和目录原语，最终 Base/cell 接线待完成。 |
+| BaseApp | baseServer | 承载长期、非空间实体逻辑；Apollo 玩家资料对象使用 `base::Avatar`。Base 不是数据库进程。 | apps/base 已提供 base 独立入口，Avatar 经远程 database 激活；基础业务与结算受理已接入，目录归属未完成。 |
 | BaseAppMgr 的相关职责 | loginServer 的 Base 注册、落点与目录部分 | 只借鉴注册和分配边界，不宣称已复刻完整 BaseAppMgr。 | Base 服务注册、玩家 Base 归属及恢复待补。 |
 | CellAppMgr 的相关职责 | worldServer | 管理 cell 执行进程、Space/Cell 分配、容量、拓扑版本、排空与迁移；不运行每个实体的逐帧逻辑。 | 当前 WorldApp 仍直接推进 Scene，管理/执行拆分待做。 |
 | CellApp | cell 执行进程 | 实际承载一个或多个 Space 的本地 Cell，推进实体、AOI、战斗、脚本与 tick。 | 独立执行入口、注册、就绪与远程调度未实现。 |
@@ -41,7 +41,7 @@ BigWorld 的 [Space](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/
 
 | BigWorld 概念 | Apollo 对应 | 权威与实现边界 |
 |---|---|---|
-| Base 实体 | PlayerAnchor 等长期对象，归 baseServer | 基础业务和长期资料由 Base 校验修改，跨 Cell/Space/服的模拟迁移不改变存储归属，Base 承载可独立迁移；经 database 保存。PlayerAnchor 是当前玩家侧实现，不代表完整通用 Base 实体体系已实现。 |
+| Base 实体 | `base::Avatar` 等长期对象，归 baseServer | 基础业务和长期资料由 Base 校验修改，跨 Cell/Space/服的模拟迁移不改变存储归属，Base 承载可独立迁移；经 database 保存。base::Avatar 是当前玩家侧实现，不代表完整通用 Base 实体体系已实现。 |
 | Cell 实体 / Real 实体 | Avatar 与参与模拟的 Entity，归 cell 内的权威分区 | 一个实体只有一个有效模拟写入者。Avatar 是玩家玩法类型，不增加一层独立进程。实体 ID 在迁移时保持稳定。 |
 | Ghost 实体 | 邻接 Cell 的非权威投影，设计预留 | 用于跨边界可见性/查询，不能独立扣血、发奖或写档。当前没有完整复制、去重和失效实现；迁移快照不等于长期 Ghost。 |
 | Witness | 当前 SceneAoi、ViewerState、属性同步承担部分可见集职责 | Witness 是观察者视图语义，Ghost 是跨分区投影语义。现有本地 AOI 不等于完整 Witness 或跨 Cell 可见性。 |
@@ -52,7 +52,7 @@ BigWorld 的 [Cell Entity](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob
 
 ### Avatar 名称的适用范围
 
-Avatar 是角色语义，不是 Cell 执行位置。BigWorld 2.1 官方词汇表还包含 NPC，教程和 KBEngine 示例均展示角色的 Base/Cell 部分。Apollo 当前 `PlayerAnchor` 对应玩家 Base 部分，`Avatar` 对应玩家 Cell 部分；它们是当前实现映射，不能据此宣称上游 Avatar 只存在于 Cell 或 PlayerAnchor 是行业共同类型。完整引用、其他引擎用法和命名判断见[玩家对象模型](./player-object-model.md)。
+Avatar 是角色语义，不是 Cell 执行位置。BigWorld 2.1 官方词汇表还包含 NPC，教程和 KBEngine 示例均展示角色的 Base/Cell 部分。Apollo 以 `base::Avatar` 对应玩家 Base 部分，`cell::Avatar` 对应玩家 Cell 部分；它们是当前实现映射，不能据此宣称上游 Avatar 只存在于 Cell 或两者是行业共同类型。完整引用、其他引擎用法和命名判断见[玩家对象模型](./player-object-model.md)。
 
 ## 4. Apollo 的请求与归属
 
@@ -75,7 +75,7 @@ Base 资料写权与 Cell 模拟写权属于不同数据域；玩家不是一份
 | WorldApp、World、WorldHost | 目前将管理和模拟装在一起 | worldServer 管理与 cell 执行拆分；旧类名只标识当前实现。 |
 | Scene、SceneDescriptor | 单进程空间容器及静态资源引用 | 统一 Space 语义、空间 ID 与全局坐标；本地分区状态与逻辑空间身份分开。 |
 | Instance | 临时玩法生命周期 | 保留八态，补跨进程结算和共享状态唯一负责人。 |
-| PlayerAnchor、Avatar | Base 长期资料与玩家 Cell 实体 | 独立宿主、快照和可信关联，禁止跨界直接指针调用。 |
+| `base::Avatar`、`cell::Avatar` | Base 长期资料与玩家 Cell 实体 | 独立宿主、快照和可信关联，禁止跨界直接指针调用。 |
 | SceneAoi、ViewerState | 本地分区可见性原语 | 邻接复制、全空间可见性合并、去重与连续观察。 |
 | WorldAssignment、RemoteEntityRef | 路由/引用原语 | 分开 Base、World、Space、Cell 和执行进程，带有效代次和版本。 |
 | SceneTransfer | 当前显式换场景，销毁后重建 Avatar | 同 Space 跨 Cell 保留血量、技能、计时和必要脚本状态，不走离场重置。 |

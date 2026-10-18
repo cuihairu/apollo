@@ -1,6 +1,8 @@
 
 # Apollo 模块化执行清单
 
+> **历史件标注（2026-10-19 对账）**：本清单是模块化施工的历史记录；应用目录与可执行目标此后统一（`apps/{gateway,login,base,world}`，不带 `-app`/`-server` 后缀），`apps/game-server` 已随统一移除——涉及它的未勾条目按原样留档，不再执行。
+
 本清单用于跟踪从单体 `apollo` target 迁移到模块化 target 的施工顺序。
 
 ## Phase 1: 骨架完成

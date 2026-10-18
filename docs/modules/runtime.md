@@ -71,7 +71,7 @@ int main() {
 ```
 
 ApplicationHost 本体（宿主内核）与 ServiceHost 同头文件；ServiceHost 是其
-薄包装，入口应用按需二选一（apps/game-server 用 ServiceHost）。
+薄包装，宿主入口按需二选一（当前 ServiceHost 的使用方在测试侧：runtime_comprehensive_tests / test_runtime）。
 
 ## ServiceHost
 

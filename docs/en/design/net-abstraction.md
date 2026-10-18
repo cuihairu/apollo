@@ -17,7 +17,7 @@ Game logic uses explicit messages, correlation, and execution boundaries. Transp
 | Contract encoding | `modules/net/contract_wire` | Field encoding and decoding using generated routing metadata |
 | Application encoding | `modules/protocol` | MessageCodec remains in some application paths, with M1 frame translation |
 | Outbound HTTP | `modules/net/http` | CMake requires libcurl and defines `APOLLO_HAS_CURL=1`; business integration is separate |
-| Client ingress | `apps/gateway-app` | TCP listener, admission, directory lookup, and World intention forwarding |
+| Client ingress | `apps/gateway` | TCP listener, admission, directory lookup, and World intention forwarding |
 
 XML/XSD contracts, a generator, and `.proto` artifacts already exist. Dependencies and generated files do not establish protobuf/zstd use in real gameplay traffic.
 

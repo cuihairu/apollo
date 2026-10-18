@@ -17,7 +17,7 @@ Apollo currently targets tower defense, cooperative play, and group instances, w
 |---|---|
 | gateway | Client sockets, sessions, and Base/simulation routes; backend replacement does not move sockets. |
 | loginServer | Authentication, credentials, service and online directories; location projections, not Cell topology decisions. |
-| baseServer | PlayerAnchor persistent objects, base gameplay, and profile write authority, independent of instances and cross-server play. |
+| baseServer | `base::Avatar` persistent objects, base gameplay, and profile write authority, independent of instances and cross-server play. |
 | worldServer | CellAppMgr-like management: executor registration, capacity, Space/Cell placement, topology, drain, and migration. |
 | cell | CellApp-like execution: local Cells, Avatar/Entity, AOI, combat, Lua, and ticks. |
 | database | Profile operations, storage routing, queues/journal, and durable results, without reward rules. |

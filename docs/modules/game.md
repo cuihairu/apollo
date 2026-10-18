@@ -103,12 +103,13 @@ ECS 收敛已随 P2-1 交付（battle::ecs 全支删除，实体集合归 Scene�
 
 ## 会话与目录（session 子库，G-1 交付面）
 
-锚点/在线目录/恢复/编队恢复九头：`AnchorManager`/`PlayerAnchor`（长期玩家态
-唯一写点）+ `AnchorRewardSink`（结算落账）+ `PlayerDirectory`（在线目录，
-epoch/suspend 窗口/重报收敛）+ `DirectoryPublisher`（"APD2" 目录镜像）+
-`FleetRecoveryCoordinator`（恢复相位跨进程化）+ `RecoveryCoordinator`
-（journal replay → Anchor restore → 准入闸）+ `SessionLocator`/
-`WorldAssignment`。API 明细见 [Game API](/api/game) 与
+长期玩家态/在线目录/恢复/编队恢复九头（base 五件 + session 四件）：base 侧
+`AvatarManager`/`Avatar`（长期玩家态唯一写点）+ `AvatarRewardSink`（结算落账）+
+`RecoveryCoordinator`（journal replay → Avatar restore → 准入闸）+
+`WorldAssignment`；session 侧 `PlayerDirectory`（在线目录，epoch/suspend
+窗口/重报收敛）+ `DirectoryPublisher`（"APD2" 目录镜像）+
+`FleetRecoveryCoordinator`（恢复相位跨进程化）+ `SessionLocator`。
+API 明细见 [Game API](/api/game) 与
 session-and-online-directory 设计件。
 
 ## 社交（social 子库）
@@ -222,7 +223,7 @@ for (const auto& r : scene.drain_debug_eval_results()) { /* 回传 transport */ 
 scene.set_debug_eval_queue_depth(8);  // 默认 8（与 eval 同 tick 限流对齐）
 ```
 
-owning 宿主接线首批已落 world-app（scripting-lua §2 一状态一逻辑线程）：`World` gameThread 开头建 `ScriptRuntime`、`--script-boot <file>` 加载 boot 源（缺失/失败仅告警不停机，fault 走 runtime 事件面）。宿主启动装载序（scripting-lua §3.4）= `--script-handlers`（契约路由 handler 面）→ `--script-contract`（契约表，装载闸逐 route 验 handler 已在位）→ `--script-boot`（可读 `contract` 全局）；契约路由 handler 面占位模块随仓 `apps/world-app/scripts/contract_handlers.lua`（45 路由，玩法批按语义填实体），golden 契约同步闸 `contract_handler_tests` 2 用例 + 启动装载 `world_app_script_host_tests` 3 用例（含 boot 源先于契约落地断言、缺 handler 拒载、契约文件缺失继续服务）、每拍幂等补挂未挂 scene（新 scene 下一拍生效）、停机尾扫摘挂全部 scene 后随线程析构；`find_scene(scene_id)` 为宿主对外的投递定位面（runtime 指针不外露）。admin 单入口 transport 已落（944/945 M1 裸帧族：World 侧 dispatcher 受理——未挂/背压即时回 945 拒收，受理挂关联账待 tick 窗口 drain 异步回传；admin 侧 `fleetctl eval` 入口；`world_app_m1_link_tests` eval 族 3 用例 + `world_app_script_host_tests` 7 用例）。
+owning 宿主接线首批已落 world 应用（scripting-lua §2 一状态一逻辑线程）：`World` gameThread 开头建 `ScriptRuntime`、`--script-boot <file>` 加载 boot 源（缺失/失败仅告警不停机，fault 走 runtime 事件面）。宿主启动装载序（scripting-lua §3.4）= `--script-handlers`（契约路由 handler 面）→ `--script-contract`（契约表，装载闸逐 route 验 handler 已在位）→ `--script-boot`（可读 `contract` 全局）；契约路由 handler 面占位模块随仓 `apps/world/scripts/contract_handlers.lua`（45 路由，玩法批按语义填实体），golden 契约同步闸 `contract_handler_tests` 2 用例 + 启动装载 `world_app_script_host_tests` 3 用例（含 boot 源先于契约落地断言、缺 handler 拒载、契约文件缺失继续服务）、每拍幂等补挂未挂 scene（新 scene 下一拍生效）、停机尾扫摘挂全部 scene 后随线程析构；`find_scene(scene_id)` 为宿主对外的投递定位面（runtime 指针不外露）。admin 单入口 transport 已落（944/945 M1 裸帧族：World 侧 dispatcher 受理——未挂/背压即时回 945 拒收，受理挂关联账待 tick 窗口 drain 异步回传；admin 侧 `fleetctl eval` 入口；`world_app_m1_link_tests` eval 族 3 用例 + `world_app_script_host_tests` 7 用例）。
 
 **边界**：客户端发送路径、slice 复合类型、attach transport（admin 单入口 + control 通道转发到目标进程）均为后续批次。
 

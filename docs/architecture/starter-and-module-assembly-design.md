@@ -14,7 +14,7 @@ CMake target 决定构建和链接依赖；应用配置决定本次启动启用�
 |---|---|---|
 | loginServer | 认证、服务目录、在线目录 | 不保存玩法档案 |
 | gateway | 连接、准入、分开的 Base/World 转发 | 不推进模拟或修改档案 |
-| baseServer | PlayerAnchor、基础业务、结算校验 | 向 database 提交存储请求 |
+| baseServer | `base::Avatar`、基础业务、结算校验 | 向 database 提交存储请求 |
 | worldServer | cell 注册、Space/Cell 分配、拓扑与迁移记录 | 管理职责，对照 CellAppMgr |
 | cell | WorldHost、Scene/Instance、Avatar、Lua 的执行职责 | 玩法快照和逐玩家 Base 关联，独立入口待实现 |
 | database | 存储操作、队列、journal、连接 | 不制定奖励或战斗规则 |

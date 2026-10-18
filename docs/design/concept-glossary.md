@@ -8,7 +8,7 @@
 |---|---|---|
 | gateway | 独立连接层，承担部分 Proxy/会话相关职责 | 客户端 socket 与投递，缓存 Base 和模拟目标路由。 |
 | loginServer | LoginApp 加 Apollo 的服务/在线目录职责 | 认证、Base/World 服务寻址、玩家归属与位置投影。 |
-| baseServer | BaseApp 的长期非空间逻辑 | PlayerAnchor 等长期对象、基础业务、结算校验。 |
+| baseServer | BaseApp 的长期非空间逻辑 | `base::Avatar` 等长期对象、基础业务、结算校验。 |
 | worldServer | CellAppMgr 的空间/执行进程管理职责 | cell 注册、就绪、负载、Space/Cell 分配与拓扑、迁移和排空。 |
 | cell 执行进程 | CellApp | 本地 Cell 的实体、AOI、战斗、脚本和 tick，向各所属 Base 提交业务结果。 |
 | database | DBApp 的存储访问职责 | 资料加载、保存、存储路由、持久结果；不制定业务奖励。 |
@@ -24,8 +24,8 @@ cell 自注册到所属 worldServer；独立部署不要求同机 machined。wor
 | Space | 一份有独立 ID 和坐标的运行空间，对应现有 Scene 的空间语义；两者不叠加为同义容器。现有 Scene 是单进程实现映射。 |
 | Cell | Space 的空间分区，记录范围与权威实体，分配到执行进程；不等于 cell 进程。 |
 | Instance | Apollo 的临时玩法生命周期，管理小队、目标、计时、结算和回收；关联 Space，不冒称 BigWorld 原生八态类型。 |
-| Base 实体 | baseServer 的长期非空间对象，玩家侧现有代码为 PlayerAnchor。 |
-| Cell/Real 实体 | cell 进程中拥有模拟写权的实体，玩家侧复用 Avatar。 |
+| Base 实体 | baseServer 的长期非空间对象，玩家侧现有代码为 `base::Avatar`。 |
+| Cell/Real 实体 | cell 进程中拥有模拟写权的实体，玩家侧复用 `cell::Avatar`。 |
 | Ghost | 邻接分区的非权威投影，设计预留；不执行独立业务写入。 |
 | Witness | 面向客户端的可见世界上下文；现有 ViewerState、SceneAoi 与属性同步只承担部分职责。 |
 
@@ -33,7 +33,7 @@ cell 自注册到所属 worldServer；独立部署不要求同机 machined。wor
 
 ## 角色实体与 Avatar
 
-Avatar 在 BigWorld 词汇中可包含玩家和 NPC；BigWorld/KBEngine 的角色实体可按需有 Base、Cell、客户端部分。Apollo 当前 `PlayerAnchor` 对应玩家角色的 Base 部分，`Avatar` 仅对应其 Cell 模拟部分。`PlayerAnchor` 是项目类名，不是上游通用术语，不表示固定 Base 进程。文档使用 Base/Cell 部分描述职责，代码引用保持真实名称；行业原文与命名判断见[玩家对象模型](./player-object-model.md)。
+Avatar 在 BigWorld 词汇中可包含玩家和 NPC；BigWorld/KBEngine 的角色实体可按需有 Base、Cell、客户端部分。Apollo 的玩家角色由 `base::Avatar`（Base 部分）与 `cell::Avatar`（Cell 模拟部分）两个实现类共同表达，命名是 Apollo 的实现约定，不是上游通用术语，也不表示固定 Base 进程。文档使用 Base/Cell 部分描述职责，代码引用保持真实名称；行业原文与命名判断见[玩家对象模型](./player-object-model.md)。
 
 ## 数据归属与生命周期
 
