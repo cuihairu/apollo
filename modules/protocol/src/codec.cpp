@@ -339,6 +339,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const DbSaveRequest& msg) {
     j["playerId"] = msg.playerId;
     j["tableName"] = msg.tableName;
     j["jsonData"] = msg.jsonData;
+    j["writeGen"] = msg.writeGen;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
 }
@@ -349,6 +350,7 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, DbSaveRequest& m
     msg.playerId = j.value("playerId", PlayerID(0));
     msg.tableName = j.value("tableName", "");
     msg.jsonData = j.value("jsonData", "");
+    msg.writeGen = j.value("writeGen", std::uint64_t(0));
 }
 
 std::vector<uint8_t> MessageCodec::encodeBody(const DbSaveResponse& msg) {

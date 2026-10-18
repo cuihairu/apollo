@@ -64,6 +64,7 @@ bool test_write_reload_roundtrip() {
     created.x = 12.5f;
     created.y = -3.25f;
     created.z = 40.125f;
+    created.writeGen = 12;
 
     {
         player_store::DatabaseService db(make_config(dir));
@@ -79,6 +80,7 @@ bool test_write_reload_roundtrip() {
     TEST_ASSERT(loaded.exp == 9876543210LL, "int64 exp 无截断");
     TEST_ASSERT(loaded.x == 12.5f && loaded.y == -3.25f && loaded.z == 40.125f,
                 "位置浮点对称读回");
+    TEST_ASSERT(loaded.writeGen == 12, "写入代次随档案对称读回");
 
     std::error_code ec;
     fs::remove_all(dir, ec);

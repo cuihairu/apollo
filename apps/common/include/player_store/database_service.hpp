@@ -32,6 +32,8 @@ struct PlayerData {
     float x = 0;
     float y = 0;
     float z = 0;
+    // 写端自持写入代次（随档案持久化，database 验单调拒旧写）；0 = 无版本
+    std::uint64_t writeGen = 0;
 
     // 转换为 JSON
     std::string toJson() const;

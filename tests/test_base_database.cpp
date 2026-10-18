@@ -13,7 +13,8 @@
 #include <stdexcept>
 #include <thread>
 
-#define CHECK(condition) do { if (!(condition)) throw std::runtime_error(#condition); } while (false)
+#define CHECK(condition) do { if (!(condition)) \
+    throw std::runtime_error(std::string(#condition) + " @" + std::to_string(__LINE__)); } while (false)
 namespace fs = std::filesystem;
 namespace protocol = apollo::protocol;
 
@@ -272,6 +273,109 @@ void pending_journal_recovery() {
     CHECK(recovered.exp == 123);
 }
 
+// L23 写入代次（database 半）：写端（Base）自持每玩家单调写入代次，
+// database 只验单调不分配——旧进程迟到写（代次更低）如实拒绝、档案不动；
+// 同代次重试幂等回执且不重复落盘（first-landed truth wins）；更高代次落盘；
+// 无版本写端（writeGen=0）兼容受理且不清代次地板（旧代次仍拒）；
+// database 重启后地板从档案恢复，跨重启旧代次依旧被拒。
+void write_generation_ordering() {
+    Fixture f;
+    database::Server server(f.config);
+    CHECK(server.start());
+    const auto realPort = server.port();
+    auto readerCfg = f.client(realPort);
+    readerCfg.self_name = "write-gen-reader";  // 独立读面，防被主链顶替
+    auto reader = database::makeClient(readerCfg);
+    CHECK(reader->initialize());
+
+    // 直发帧助手：显式 writeGen（模拟代次感知写端）；server 实例随步骤显式传入
+    const auto dispatch_gen_save = [](database::Server& srv, std::uint64_t gen,
+                                      std::int64_t exp) {
+        protocol::DbSaveRequest request;
+        request.playerId = 601;
+        request.tableName = "players";
+        request.writeGen = gen;
+        player_store::PlayerData data;
+        data.playerId = 601;
+        data.exp = exp;
+        request.jsonData = data.toJson();
+        const auto reply = srv.dispatch(protocol::MessageCodec::encode(request));
+        const auto header = protocol::MessageCodec::parseHeader(reply);
+        CHECK(header.type == static_cast<std::uint16_t>(protocol::DbSaveResponse::TYPE));
+        return protocol::MessageCodec::decodeBody<protocol::DbSaveResponse>(
+            {reply.begin() + sizeof(header), reply.end()});
+    };
+
+    // ① 更高代次受理落盘：gen 5 → exp 10，档案 writeGen=5
+    auto first = dispatch_gen_save(server, 5, 10);
+    CHECK(first.success);
+    player_store::PlayerData landed{};
+    CHECK(reader->loadPlayer(601, landed));
+    CHECK(landed.exp == 10);
+    CHECK(landed.writeGen == 5);
+
+    // ② 旧进程迟到写（gen 3 < 地板 5）拒绝，档案不动
+    auto stale = dispatch_gen_save(server, 3, 999);
+    CHECK(!stale.success);
+    CHECK(reader->loadPlayer(601, landed));
+    CHECK(landed.exp == 10 && landed.writeGen == 5);
+
+    // ③ 同代次重试（回执丢失重放）：幂等成功但不重复落盘
+    auto replay = dispatch_gen_save(server, 5, 999);
+    CHECK(replay.success);
+    CHECK(reader->loadPlayer(601, landed));
+    CHECK(landed.exp == 10 && landed.writeGen == 5);
+
+    // ④ 更高代次继续落盘：gen 6 → exp 20
+    auto next = dispatch_gen_save(server, 6, 20);
+    CHECK(next.success);
+    CHECK(reader->loadPlayer(601, landed));
+    CHECK(landed.exp == 20 && landed.writeGen == 6);
+
+    // ⑤ database 重启：地板从档案恢复，跨重启旧代次仍拒
+    reader->shutdown();
+    server.stop();
+    auto revivedCfg = f.config;
+    revivedCfg.port = realPort;
+    database::Server revived(revivedCfg);
+    CHECK(revived.start());
+    auto reader2 = database::makeClient(readerCfg);
+    CHECK(reader2->initialize());
+    CHECK(reader2->loadPlayer(601, landed));
+    CHECK(landed.exp == 20 && landed.writeGen == 6);  // 重启读回带代次
+    auto crossRestart = dispatch_gen_save(revived, 2, 999);
+    CHECK(!crossRestart.success);
+    CHECK(reader2->loadPlayer(601, landed));
+    CHECK(landed.exp == 20);
+
+    // ⑥ 无版本写端（writeGen=0）兼容受理且不清代次地板
+    auto legacy = dispatch_gen_save(revived, 0, 30);
+    CHECK(legacy.success);
+    CHECK(reader2->loadPlayer(601, landed));
+    CHECK(landed.exp == 30);
+    CHECK(landed.writeGen == 6);  // 地板保持，后续旧代次仍拒
+    auto staleAfterLegacy = dispatch_gen_save(revived, 4, 999);
+    CHECK(!staleAfterLegacy.success);
+
+    // ⑦ 代次感知客户端：PlayerData.writeGen 透传落盘、load 读回
+    auto clientCfg = f.client(realPort);
+    clientCfg.self_name = "write-gen-writer";
+    auto client = database::makeClient(clientCfg);
+    CHECK(client->initialize());
+    player_store::PlayerData genAware{};
+    genAware.playerId = 602;
+    genAware.username = "gen-aware";
+    genAware.writeGen = 7;
+    CHECK(client->savePlayer(genAware));
+    player_store::PlayerData round{};
+    CHECK(client->loadPlayer(602, round));
+    CHECK(round.writeGen == 7);
+
+    client->shutdown();
+    reader2->shutdown();
+    revived.stop();
+}
+
 int main(int argc, char** argv) {
     try {
         if (argc == 5 && std::string(argv[1]) == "--probe") {
@@ -296,6 +400,7 @@ int main(int argc, char** argv) {
         reject_bad_requests_and_failures();
         database_crash_survives_restart();
         pending_journal_recovery();
+        write_generation_ordering();
         std::cout << "Base/database TCP, persistence, isolation, failures, crash restart and replay passed\n";
         return 0;
     } catch (const std::exception& error) {

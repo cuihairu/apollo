@@ -107,18 +107,34 @@ std::vector<std::uint8_t> Server::dispatch(const std::vector<std::uint8_t>& fram
         if (header.type == static_cast<std::uint16_t>(protocol::MessageType::DB_SAVE_REQUEST)) {
             const auto request = protocol::MessageCodec::decodeBody<protocol::DbSaveRequest>(body);
             protocol::DbSaveResponse response{};
-            const auto profile = player_store::PlayerData::fromJson(request.jsonData);
+            auto profile = player_store::PlayerData::fromJson(request.jsonData);
             if (!request.playerId || request.tableName != "players" || profile.playerId != request.playerId) {
                 response.errorMessage = "profile identity mismatch";
             } else if (!impl_->drain()) {
                 response.errorMessage = "previous storage operation pending";
             } else {
-                const auto now = std::chrono::system_clock::now().time_since_epoch();
-                const auto sequence = impl_->journal.append(std::to_string(profile.playerId),
-                    profile.toJson(), std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
-                // Success follows journal + profile application, never mere queue acceptance.
-                response.success = sequence && impl_->drain();
-                if (!response.success) response.errorMessage = "storage write failed";
+                // L23 写入代次（database 半）：写端自持代次，database 只验单调。
+                // 地板 = 已落盘档案的 writeGen（磁盘真源，重启天然恢复）。
+                player_store::PlayerData landed{};
+                const auto hasArchive = impl_->storage.loadPlayer(request.playerId, landed);
+                const auto floor = hasArchive ? landed.writeGen : std::uint64_t(0);
+                if (request.writeGen != 0 && request.writeGen < floor) {
+                    // 旧进程迟到写 / 旧快照回放：如实拒绝，档案不动
+                    response.errorMessage = "stale write generation";
+                } else if (request.writeGen != 0 && request.writeGen == floor) {
+                    // 同代次重试（回执丢失重放）：幂等成功，不重复落盘
+                    response.success = true;
+                } else {
+                    // 受理落盘：代次感知写端落自身代次；无版本写端（0）兼容
+                    // 受理但不清代次地板（后续旧代次仍拒）
+                    profile.writeGen = request.writeGen != 0 ? request.writeGen : floor;
+                    const auto now = std::chrono::system_clock::now().time_since_epoch();
+                    const auto sequence = impl_->journal.append(std::to_string(profile.playerId),
+                        profile.toJson(), std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
+                    // Success follows journal + profile application, never mere queue acceptance.
+                    response.success = sequence && impl_->drain();
+                    if (!response.success) response.errorMessage = "storage write failed";
+                }
             }
             return protocol::MessageCodec::encode(response, session);
         }

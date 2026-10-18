@@ -37,6 +37,7 @@ std::string PlayerData::toJson() const {
     j["x"] = x;
     j["y"] = y;
     j["z"] = z;
+    j["writeGen"] = writeGen;
     return j.dump();
 }
 
@@ -54,6 +55,7 @@ PlayerData PlayerData::fromJson(const std::string& json) {
     data.x = j.value("x", data.x);
     data.y = j.value("y", data.y);
     data.z = j.value("z", data.z);
+    data.writeGen = j.value("writeGen", std::uint64_t(0));
     return data;
 }
 

@@ -100,6 +100,7 @@ public:
         request.playerId = data.playerId;
         request.tableName = "players";
         request.jsonData = data.toJson();
+        request.writeGen = data.writeGen;  // 写端自持代次透传（0 = 无版本兼容）
         protocol::DbSaveResponse response;
         return exchange(request, response) && response.success;
     }

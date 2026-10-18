@@ -221,6 +221,7 @@ struct DbSaveRequest {
     PlayerID playerId;
     std::string tableName;
     std::string jsonData;  // JSON 格式的玩家数据
+    std::uint64_t writeGen = 0;  // 写端自持写入代次；0 = 无版本写端（兼容受理）
 
     static constexpr MessageType TYPE = MessageType::DB_SAVE_REQUEST;
 };
