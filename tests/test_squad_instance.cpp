@@ -839,6 +839,70 @@ bool test_squad_settlement_recovery_and_failure_line() {
 }
 
 
+// 离场/Instance 销毁不卸载长期资料（P1-3 验收）：成员中途离场（掉线同
+// 口径）、剩余成员成功线销毁后，锚点长期态原样保留——分值不复位、锚点
+// 仍可解析；重复离场拒绝同样不扰动资料。
+bool test_squad_departure_keeps_long_term_state() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
+    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+
+    auto* instance = run_party_to_running(service, world);
+    TEST_ASSERT(instance != nullptr, "running baseline");
+
+    // 既有长期分值入锚（基线：离场/销毁不得扰动存量资料）
+    TEST_ASSERT(service.credit_settlement(1, kMemberB, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "pre-departure credit lands");
+    TEST_ASSERT(exp_of(table, kMemberB) == 40, "baseline exp on anchor");
+
+    // 成员 B 中途离场（掉线同口径）：锚点不被卸载、分值原样
+    TEST_ASSERT(service.leave(1, kMemberB) == SquadInstanceService::LeaveError::Ok,
+                "member departs mid-run");
+    TEST_ASSERT(table.resolve(kMemberB) != nullptr, "leaver anchor still resolvable");
+    TEST_ASSERT(exp_of(table, kMemberB) == 40, "departure leaves exp intact");
+    TEST_ASSERT(service.leave(1, kMemberB) ==
+                    SquadInstanceService::LeaveError::NotInInstance,
+                "second departure rejected");
+    TEST_ASSERT(table.resolve(kMemberB) != nullptr && exp_of(table, kMemberB) == 40,
+                "rejected departure also leaves data intact");
+
+    // 剩余成员成功线打到目标完成 → 结算只记在场命中（离场者不再入账）
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 1;
+    TEST_ASSERT(service.set_goal(1, goal) == SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.spawn_wave(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "wave spawned");
+    TEST_ASSERT(service.report_monster_defeated(1, 1, kLeader) ==
+                    SquadInstanceService::GameplayError::Ok,
+                "leader meets goal");
+    TEST_ASSERT(service.advance_tick(1, 1) == SquadInstanceService::GameplayError::Ok,
+                "settle tick");
+    TEST_ASSERT(instance->state() == apollo::game::world::Instance::State::Finishing,
+                "settlement entered");
+
+    // Instance 销毁（dismiss 收尾三段）：离场者与在场者锚点全部保留
+    TEST_ASSERT(service.dismiss(1), "dismiss completes teardown");
+    TEST_ASSERT(world.instance_count() == 0 && world.scene_count() == 0,
+                "instance and scene reclaimed");
+    TEST_ASSERT(service.active_count() == 0 && service.used_capacity(1) == 0,
+                "binding cleared and capacity returned");
+
+    // 销毁不卸载长期资料：三锚点全部仍可解析，离场者分值原样、
+    // 在场者结算分值已落
+    for (const auto id : {kLeader, kMemberB, kMemberC}) {
+        TEST_ASSERT(table.resolve(id) != nullptr, "anchor survives instance destroy");
+    }
+    TEST_ASSERT(exp_of(table, kMemberB) == 40, "departed member exp survives destroy");
+    TEST_ASSERT(exp_of(table, kLeader) > 0, "leader battle settlement landed");
+    return true;
+}
+
 bool test_squad_dismiss_evicts_players_and_reclaims() {
     PartyManager parties;
     World world;
@@ -1551,6 +1615,8 @@ int main() {
          test_squad_settlement_idempotent_credit_and_retry},
         {"squad_settlement_battle_settles_on_goal_completion",
          test_squad_settlement_battle_settles_on_goal_completion},
+        {"departure keeps long term state",
+         test_squad_departure_keeps_long_term_state},
         {"squad_kill_scores_flow_through_battle", test_squad_kill_scores_flow_through_battle},
         {"squad_settlement_recovery_and_failure_line",
          test_squad_settlement_recovery_and_failure_line},
