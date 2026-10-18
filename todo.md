@@ -1,8 +1,8 @@
 # Apollo 实施清单
 
-目标职责：gateway、loginServer、baseServer、worldServer、cell、database、machined。worldServer 管理执行进程与 Space/Cell，cell 执行模拟；Cell 是空间分区，不是进程。Space 对应现有 Scene 的空间语义，Instance 保留临时玩法生命周期，不增加同义容器或擅自改代码名。
+目标职责与程序短名：gateway、login、base、world、database、machined；cell 是 world 同一二进制的执行角色。world 管理执行进程与 Space/Cell，cell 执行模拟；Cell 是空间分区，不是进程。Space 对应现有 Scene 的空间语义，Instance 保留临时玩法生命周期，不增加同义容器或擅自改代码名。
 
-依据：[BigWorld 与 Apollo 对照](docs/design/bigworld-apollo-mapping.md)、[架构](docs/guide/architecture.md)、[当前决策](docs/architecture/adr.md)。按下面依赖顺序实施，每项以真实验收勾选；库原语或旧拓扑测试不能代替最终接线。跨服保留原 Base、区服和存储归属，当前不启用无缝地图，接口预留未来扩展。
+依据：[BigWorld 与 Apollo 对照](docs/design/bigworld-apollo-mapping.md)、[架构](docs/guide/architecture.md)、[当前决策](docs/architecture/adr.md)。按下面依赖顺序实施，每项以真实验收勾选；库原语或旧拓扑测试不能代替最终接线。跨服模拟不改变原区服和存储归属；Base 承载可随负载或更新独立迁移，按玩家身份解析当前归属。当前不启用无缝地图，接口预留未来扩展。
 
 ## P0：文档与命名
 
@@ -13,6 +13,44 @@
 - [x] 区分支持协议更新的进程替换与仅代码更新；Base、cell、World 管理端各交接不同状态，TCP/会话/活动连续分别验收。
 - [x] 保持 VitePress 原生 locales：中文根目录、英文 en，各自正文与导航，新增对照入口并纳入文档 CI。
 - [x] 专用 Profiler、OpenTelemetry SDK/OTLP exporter 标为未集成，自研日志、MetricRegistry、span/trace 不作为集成证据。
+
+## P0.1：角色实体与应用命名迁移（待实施）
+
+依据：[玩家对象模型与行业引用](docs/design/player-object-model.md)、[World/cell 设计草案](docs/design/world-cell-management.md)。本节按本轮讨论登记，尚未修改代码或验收；下面章节中的旧程序/类名描述当前实现，实施后同步清理。行业通用语义为角色实体的 Base/Cell 部分；具体 C++ 命名空间是 Apollo 的实现约定，不宣称是上游原名。
+
+- [ ] 固定代码迁移表：`apollo::game::session::PlayerAnchor` → `apollo::game::base::Avatar`；`apollo::game::world::Avatar` → `apollo::game::cell::Avatar`。两者是同一玩家角色的不同职责部分，不新增第三个 Avatar 容器，不把客户端 Session 合并进角色对象；通用 Entity/NPC 类型不机械改成 Avatar。
+- [ ] 将 Base 部分头源与命名空间迁到匹配的 Base 模块；整理 `AnchorManager`、`AnchorRewardSink`、`AnchorPtr`、恢复/结算接口等附属符号，按实际职责迁到 Base 部分并清除 Anchor 术语，不以另一批任意名称扩展公开概念。公共基础库 `apollo::base` 与游戏 `apollo::game::base` 必须区分。
+- [ ] 将 Cell 部分头源、`AvatarState`、`AvatarPtr` 与场景/战斗/AOI/脚本接口引用迁到 Cell 模块；World/Scene 可以引用 Cell 类型，但管理端不能因此加载或推进模拟。同步 CMake 依赖、前置声明、include 路径与安装/导出头。
+- [ ] 更新 PlayerStore、WorldHost/WorldApp、Scene/Instance、迁移/恢复、Lua 桥、奖励接收端及真实测试中的全部类型引用；使用完整命名空间避免两种 Avatar 的歧义，不通过同名全局 using 抹去边界。结构性数据/进程拆分仍按 P1/P2 实施，不把纯重命名当作独立宿主完成。
+- [ ] 保留玩家/实体稳定 ID、存档字段、方法编号和 wire 语义；C++ 类型改名不隐式改数据库键或协议。若确需契约演进，明确版本、旧资料/快照读取规则和回归证据，不用旧类名兼容别名冒充迁移完成。
+- [ ] 统一应用目录、可执行 CMake 目标与发布名：`apps/gateway` / `gateway`、`apps/login` / `login`、`apps/base` / `base`、`apps/world` / `world`；database、machined 保持一致。核对并迁入 `apps/game-server` 重叠宿主职责，移除多余部署入口；更新配置、编队脚本、安装/发布、崩溃处理器打包、CI 与测试中的路径和命令，清理旧 `-app`/`Server` 启动别名。
+- [ ] world 共用二进制分角色：无参数或未指定角色默认管理端，`world --role=cell` 启动执行端；错误角色/缺值明确拒绝，cell 不递归派生。具体自动拉起、扩缩容与监督接续按 P2 管理/执行设计实现并验收，不随改名虚报完成。
+- [ ] 将 Base 离线激活、并发登录复用已有对象、动态迁移与当前归属解析列为后续行为验收：离线不创建第二写入者；支付/结算按稳定玩家身份投递，订单不永久绑定 Base 进程 ID；资料归属不等于进程不变。存储写权隔离与结算幂等依赖 P1/P3/P4，不由命名本身保证。
+- [ ] 同步中英文词汇表、架构图、类型映射与开发说明；迁移完成后删掉旧目标名称、旧类型名、过渡对照和死链接，不保留生产代码别名/转发头或两套命令。第三方引擎源码原名和必要的协议兼容规则保留真实含义，不误清理外部引用。
+- [ ] 验收真实默认配置与 game 模块配置的构建/测试，覆盖 Base 激活/恢复/持久化、Cell 入场/离场/模拟、结算和迁移；Windows/Linux/macOS CI、双角色真进程启动及文档国际化/构建/内链均通过。按 git 文件清单复查旧名残留，只有对应实现和清理完成才勾选，不为纯改名新增镜像实现的测试。
+
+## P0.2：项目初始化 CLI 与开发脚手架（待实施）
+
+现状：仓库有 CMake、scripts/dev_fleet.sh、编队运维和 CI，但现有服务 CLI 没有 init 项，不能称为已交付项目初始化。参考 [Mistlane 核对](docs/analysis/mistlane-review.md)的实际入口，按 Apollo 目标角色生成，不搬旧项目的角色名或游戏业务。
+
+- [ ] 明确 init 子命令的唯一 CLI 入口、默认模板和帮助说明；区分运行参数、项目生成与测试/压测工具，不向每个服务复制一套初始化器，不把 CI 描述成在线服务。最终入口统一后同步可执行目标、发布包和教程。
+- [ ] 生成最小项目的配置、Lua 入口、契约入口、目录说明、忽略规则和启停脚本：gateway/login/base/world/database，world 自动维护 cell；machined/独立 interfaces 按部署需求启用。不生成生产凭据或伪造的支付验签实现。
+- [ ] 统一项目根路径和逐实例运行目录；模板不依赖启动时 cwd，角色、端口、构建版本、日志/资料/管理记录路径明确，多个 cell 不共写目录。
+- [ ] 提供有真实 readiness 的最小编队启动/停止/状态命令；处理依赖失败、超时及只回滚本次新启动成员，保留已有实例，避免固定 sleep 冒充就绪。
+- [ ] 生成可审查的 CMake/CI 配置与开发验证入口，覆盖构建、契约生成、测试和文档；CI 由仓库 workflow 执行，不装入业务处理循环。公共引擎 CI 与生成游戏项目 CI 分开验收。
+- [ ] 验收非空目录拒绝覆盖、非法名称/路径、从其他 cwd 启动、文件权限、无秘密配置、最小客户端登录/进入玩法、停止清理及失败回滚；模板完成前文档标为待实现。
+
+## P0.3：两类外部入口与图文接线（待实施）
+
+- [ ] 游戏 gateway 与 HTTP interfaces 均支持按监听独立启用 WS/WSS，允许多个监听及明文/TLS 共存；游戏 WebSocket 进入游戏会话，HTTP 服务的 WebSocket 使用专用 upgrade 路由和连接生命周期，普通 HTTP 请求仍走 HTTP handler。补证书、端口冲突、路由隔离及并行监听验收。
+
+- [ ] 游戏 TCP/WS/WSS 接入接到 gateway 的同一游戏帧/会话/意图路径，分别路由 Base 与 cell；WebSocket 升级不进入 interfaces 的 HTTP 业务 handler，内部协议与传输封装分离。
+- [ ] 为游戏 WS/WSS 补客户端消息到 Lua/场景逻辑、稳定 session 寻址下行、服务端主动推送/广播、AOI 同步、有界积压、慢读处理及重复/乱序规则；不能以单次 echo 请求/响应或已有通用 websocket 库作为完整接线证据。
+- [ ] 分别验收 TCP、WS、WSS 的登录、Base 业务、cell 输入/异步下行、断线重连和迁移路由刷新；WSS 覆盖证书链/主机名错误拒绝和密钥配置，协议更新与 TCP/WS 会话连续分别记录。
+- [ ] 独立 interfaces HTTP/HTTPS 入口用于平台账号/支付等服务端回调；保留必要原始请求体以按渠道规范验签，设置请求体/并发/超时预算，Lua/业务执行进入自己的有界单写者受理链，不阻塞游戏模拟。
+- [ ] 实现订单/通知可靠受理与持久待办，确认收到不等于发货完成；通过稳定玩家/角色身份关联订单，再查询当前 Base 和归属代次。Base 不可达、玩家离线、迁移和升级期间都能恢复投递，不永久绑定 Base ID/IP。
+- [ ] Base 唯一激活/写权、订单校验、奖励与发货去重凭据原子持久提交，覆盖通知重复/乱序、回执丢失、离线激活、并发登录、Base 迁移及接口/存储重启；当前 DB_LOAD/DB_SAVE 原型不能代替订单事务。
+- [ ] 首页及架构图分别展示游戏 WS/WSS、HTTP 回调、动态 Base 查询与持久发货；区分运行进程、CLI 工具和 CI，并标注实现/规划。相关图只随真实验收更新状态，不因画出节点而宣称能力完成。
 
 ## P1：独立 Base 与 database
 
