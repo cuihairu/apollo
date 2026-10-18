@@ -15,7 +15,7 @@
 
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/base/avatar.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 
 #include <cstdint>
 #include <iostream>
@@ -35,8 +35,8 @@ namespace {
 
 using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
-using apollo::game::world::Avatar;
-using apollo::game::world::AvatarState;
+using apollo::game::cell::Avatar;
+using apollo::game::cell::AvatarState;
 
 bool test_avatar_identity_and_scene_attachment() {
     PlayerId pid(42);

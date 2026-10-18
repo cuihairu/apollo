@@ -8,7 +8,7 @@
 //   4. 窗口外 resume 拒绝 → 完整重登（Avatar 按场景规则重建）。
 
 #include "apollo/game/world/scene.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 
 #include <iostream>
@@ -28,7 +28,7 @@ namespace {
 
 using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
-using apollo::game::world::Avatar;
+using apollo::game::cell::Avatar;
 using apollo::game::world::Scene;
 using apollo::game::world::WorldSession;
 using apollo::game::world::WorldSessionManager;
@@ -59,7 +59,7 @@ bool test_disconnect_suspends_session_and_avatar() {
                 "会话窗口化挂机");
     TEST_ASSERT(fx.scene.suspend_avatar(PlayerId(7)), "Avatar 挂机");
     TEST_ASSERT(session->state() == WorldSessionState::Suspended, "会话 Suspended");
-    TEST_ASSERT(avatar->state() == apollo::game::world::AvatarState::Suspended,
+    TEST_ASSERT(avatar->state() == apollo::game::cell::AvatarState::Suspended,
                 "Avatar Suspended");
     TEST_ASSERT(fx.scene.has_avatar(PlayerId(7)), "挂机驻留场景");
     TEST_ASSERT(fx.scene.aoi().contains(EntityId(70)), "AOI 保留");
@@ -140,7 +140,7 @@ bool test_resume_after_expiry_rebuilds_avatar() {
     fresh->bind_avatar(EntityId(101));
     TEST_ASSERT(fresh->resume() || fresh->state() == WorldSessionState::Active,
                 "新会话激活");
-    TEST_ASSERT(rebuilt->state() == apollo::game::world::AvatarState::Active,
+    TEST_ASSERT(rebuilt->state() == apollo::game::cell::AvatarState::Active,
                 "重建 Avatar Active");
     TEST_ASSERT(fx.scene.has_avatar(PlayerId(10)), "重建后在场");
     return true;

@@ -66,7 +66,7 @@ EntityPtr Scene::get_entity(EntityId id) const {
     return it != entities_.end() ? it->second : nullptr;
 }
 
-bool Scene::enter(const AvatarPtr& avatar, const SceneAoi::Vec3& position) {
+bool Scene::enter(const apollo::game::cell::AvatarPtr& avatar, const SceneAoi::Vec3& position) {
     if (!avatar || !avatar->player_id().is_valid()) {
         return false;
     }
@@ -92,7 +92,7 @@ bool Scene::enter(const AvatarPtr& avatar, const SceneAoi::Vec3& position) {
 
 bool Scene::suspend_avatar(apollo::game::core::PlayerId player_id) {
     const auto avatar = get_avatar(player_id);
-    if (!avatar || avatar->state() != AvatarState::Active) {
+    if (!avatar || avatar->state() != apollo::game::cell::AvatarState::Active) {
         return false;
     }
     avatar->suspend();
@@ -101,7 +101,7 @@ bool Scene::suspend_avatar(apollo::game::core::PlayerId player_id) {
 
 bool Scene::resume_avatar(apollo::game::core::PlayerId player_id) {
     const auto avatar = get_avatar(player_id);
-    if (!avatar || avatar->state() != AvatarState::Suspended) {
+    if (!avatar || avatar->state() != apollo::game::cell::AvatarState::Suspended) {
         return false;
     }
     avatar->resume();
@@ -126,7 +126,7 @@ bool Scene::leave(apollo::game::core::PlayerId player_id) {
     return true;
 }
 
-AvatarPtr Scene::get_avatar(apollo::game::core::PlayerId player_id) const {
+apollo::game::cell::AvatarPtr Scene::get_avatar(apollo::game::core::PlayerId player_id) const {
     auto it = avatars_.find(player_id.value());
     return it != avatars_.end() ? it->second : nullptr;
 }

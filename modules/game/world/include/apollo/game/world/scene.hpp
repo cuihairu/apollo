@@ -2,7 +2,7 @@
 
 #include "apollo/game/attrsync/attr_sync_manager.hpp"
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/scene_aoi.hpp"
 
 #include <cstdint>
@@ -60,7 +60,7 @@ public:
     // ---- 玩家进出（Avatar 随进出生死；player-object-model §3）----
     // enter：Avatar 挂 scene + AOI 入列；重复进入拒绝（返回 false）。
     // position 为进场落点（出生点/门口由玩法规则决定）。
-    bool enter(const AvatarPtr& avatar, const SceneAoi::Vec3& position);
+    bool enter(const apollo::game::cell::AvatarPtr& avatar, const SceneAoi::Vec3& position);
     // leave：Avatar 出 scene（对象由调用方/Instance 处置——P0-3 由
     // world-app 持容器，Instance::destroy 时清场）。
     bool leave(apollo::game::core::PlayerId player_id);
@@ -69,7 +69,7 @@ public:
     bool suspend_avatar(apollo::game::core::PlayerId player_id);
     bool resume_avatar(apollo::game::core::PlayerId player_id);
 
-    [[nodiscard]] AvatarPtr get_avatar(apollo::game::core::PlayerId player_id) const;
+    [[nodiscard]] apollo::game::cell::AvatarPtr get_avatar(apollo::game::core::PlayerId player_id) const;
     [[nodiscard]] bool has_avatar(apollo::game::core::PlayerId player_id) const noexcept;
     [[nodiscard]] std::size_t avatar_count() const noexcept;
     [[nodiscard]] const std::vector<apollo::game::core::PlayerId>& avatars() const noexcept;
@@ -142,7 +142,7 @@ private:
     std::uint64_t scene_id_ = 0;
     std::string name_;
     std::unordered_map<std::uint64_t, EntityPtr> entities_;
-    std::unordered_map<std::uint64_t, AvatarPtr> avatars_;  // key = PlayerId.value()
+    std::unordered_map<std::uint64_t, apollo::game::cell::AvatarPtr> avatars_;  // key = PlayerId.value()
     std::vector<apollo::game::core::PlayerId> avatar_order_;  // 进场顺序可观察
     SceneAoi aoi_;
     apollo::game::attrsync::AttrSyncManager* attrsync_ = nullptr;  // attach 期有效

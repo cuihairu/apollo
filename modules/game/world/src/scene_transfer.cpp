@@ -1,6 +1,6 @@
 #include "apollo/game/world/scene_transfer.hpp"
 
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/instance.hpp"
 #include "apollo/game/world/scene.hpp"
 
@@ -114,7 +114,7 @@ SceneTransferOutcome execute_scene_transfer(World& world,
     old_avatar.reset();  // 出 scene 死：引用即弃
 
     // ---- ④ attach：新 scene 重建 Avatar（Avatar 投影 + AOI 入列）----
-    auto avatar = std::make_shared<Avatar>(request.player_id, avatar_entity_id);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(request.player_id, avatar_entity_id);
     if (request.avatar != nullptr) {
         avatar->project_from(*request.avatar);
     }
@@ -129,7 +129,7 @@ SceneTransferOutcome execute_scene_transfer(World& world,
             return outcome;  // 会话悬空：调用方必须隔离/终结
         }
         if (source != nullptr) {
-            auto restored = std::make_shared<Avatar>(request.player_id, avatar_entity_id);
+            auto restored = std::make_shared<apollo::game::cell::Avatar>(request.player_id, avatar_entity_id);
             if (request.avatar != nullptr) {
                 restored->project_from(*request.avatar);
             }

@@ -21,7 +21,7 @@
 #include <memory>
 #include <filesystem>
 
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/scene_aoi.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
@@ -556,8 +556,8 @@ namespace {
 
 using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
-using apollo::game::world::Avatar;
-using apollo::game::world::AvatarPtr;
+using apollo::game::cell::Avatar;
+using apollo::game::cell::AvatarPtr;
 using apollo::game::world::Scene;
 using apollo::game::world::SceneAoi;
 

@@ -4,7 +4,7 @@
 #include "apollo/game/base/avatar.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/game/base/world_assignment.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/scene_transfer.hpp"
 #include "apollo/game/world/world.hpp"
@@ -254,7 +254,7 @@ bool test_scene_transfer_end_to_end() {
 
     // 进 A 场（attach 面与 world_app 同构：Avatar 重建 + instance.enter）
     const auto entity = apollo::game::core::EntityId(9001);
-    auto avatar = std::make_shared<apollo::game::world::Avatar>(player, entity);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player, entity);
     TEST_ASSERT(fx.scene_a->enter(avatar, {1.0f, 2.0f, 3.0f}), "avatar entered scene a");
     TEST_ASSERT(fx.instance_a->enter(player), "player entered instance a");
     session->assign_world(1);
@@ -317,7 +317,7 @@ bool test_scene_transfer_prepare_rejections() {
     TwoSceneFixture fx;
     const auto player = apollo::game::core::PlayerId(7002);
     auto session = fx.sessions.create_session(6002, player);
-    auto avatar = std::make_shared<apollo::game::world::Avatar>(player, apollo::game::core::EntityId(9002));
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player, apollo::game::core::EntityId(9002));
     TEST_ASSERT(fx.scene_a->enter(avatar, {}), "avatar entered");
     session->assign_space(fx.scene_a->scene_id());
     session->set_state(apollo::game::world::WorldSessionState::Active);
@@ -372,7 +372,7 @@ bool test_scene_transfer_rollback_on_attach_failure() {
     const auto player = apollo::game::core::PlayerId(7003);
     auto session = fx.sessions.create_session(6003, player);
     const auto entity = apollo::game::core::EntityId(9003);
-    auto avatar = std::make_shared<apollo::game::world::Avatar>(player, entity);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player, entity);
     TEST_ASSERT(fx.scene_a->enter(avatar, {5.0f, 6.0f, 7.0f}), "avatar entered scene a");
     TEST_ASSERT(fx.instance_a->enter(player), "player entered instance a");
     session->assign_map_instance(fx.instance_a->id());
@@ -380,7 +380,7 @@ bool test_scene_transfer_rollback_on_attach_failure() {
     session->set_state(apollo::game::world::WorldSessionState::Active);
 
     // 预占目标：B 场已有同名 Avatar → attach 必败（重复进入拒绝）
-    auto blocker = std::make_shared<apollo::game::world::Avatar>(player, apollo::game::core::EntityId(9004));
+    auto blocker = std::make_shared<apollo::game::cell::Avatar>(player, apollo::game::core::EntityId(9004));
     TEST_ASSERT(fx.scene_b->enter(blocker, {}), "blocker pre-entered target");
 
     apollo::game::world::SceneTransferRequest request;

@@ -14,7 +14,7 @@
 #include "apollo/game/core/entity.hpp"
 #include "apollo/game/base/avatar_manager.hpp"
 #include "apollo/game/base/avatar_reward_sink.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/instance.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/scene_aoi.hpp"
@@ -31,8 +31,8 @@ using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
 using apollo::game::base::AvatarManager;
 using apollo::game::base::AvatarRewardSink;
-using apollo::game::world::Avatar;
-using apollo::game::world::AvatarPtr;
+using apollo::game::cell::Avatar;
+using apollo::game::cell::AvatarPtr;
 using apollo::game::world::Instance;
 using apollo::game::world::Scene;
 using apollo::game::world::SceneAoi;

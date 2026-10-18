@@ -30,7 +30,7 @@ namespace {
 using apollo::game::core::Entity;
 using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
-using apollo::game::world::Avatar;
+using apollo::game::cell::Avatar;
 using apollo::game::world::Scene;
 using apollo::game::world::SceneAoi;
 using apollo::game::world::SceneTickPhase;
@@ -77,7 +77,7 @@ bool test_scene_enter_leave_avatar() {
     TEST_ASSERT(scene.avatar_count() == 1, "在场人数");
     TEST_ASSERT(scene.get_avatar(PlayerId(7)) == avatar, "按玩家取回 Avatar");
     TEST_ASSERT(avatar->scene_id() == 2, "Avatar 挂 scene 归属");
-    TEST_ASSERT(avatar->state() == apollo::game::world::AvatarState::Active, "进 scene 生");
+    TEST_ASSERT(avatar->state() == apollo::game::cell::AvatarState::Active, "进 scene 生");
     TEST_ASSERT(avatar->position().x == 1.0f && avatar->position().z == 3.0f,
                 "权威落点生效");
     TEST_ASSERT(scene.aoi().contains(EntityId(70)), "AOI 入列");
@@ -88,7 +88,7 @@ bool test_scene_enter_leave_avatar() {
     TEST_ASSERT(scene.leave(PlayerId(7)), "leave 成功");
     TEST_ASSERT(!scene.has_avatar(PlayerId(7)), "离场可查");
     TEST_ASSERT(avatar->scene_id() == 0, "出 scene 归属解除");
-    TEST_ASSERT(avatar->state() == apollo::game::world::AvatarState::Leaving, "出 scene 死前态");
+    TEST_ASSERT(avatar->state() == apollo::game::cell::AvatarState::Leaving, "出 scene 死前态");
     TEST_ASSERT(!scene.aoi().contains(EntityId(70)), "AOI 出列");
     TEST_ASSERT(!scene.leave(PlayerId(7)), "重复 leave 拒绝");
 

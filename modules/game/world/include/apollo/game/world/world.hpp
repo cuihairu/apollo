@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/instance.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/scene_descriptor.hpp"

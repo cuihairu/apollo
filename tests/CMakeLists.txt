@@ -758,7 +758,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
         ../modules/game/world/src/scene.cpp
         ../modules/game/world/src/scene_aoi.cpp
         ../modules/game/world/src/viewer_state.cpp
-        ../modules/game/world/src/avatar.cpp
+        ../modules/game/cell/src/avatar.cpp
         # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
         ../modules/game/attrsync/src/change_history.cpp
         ../modules/game/attrsync/src/viewer_attr_state.cpp
@@ -772,6 +772,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     target_include_directories(game_tests PRIVATE
         ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/modules/game/core/include
+        ${CMAKE_SOURCE_DIR}/modules/game/cell/include
         ${CMAKE_SOURCE_DIR}/modules/game/world/include
         ${CMAKE_SOURCE_DIR}/modules/game/battle/include
         ${CMAKE_SOURCE_DIR}/modules/game/base/include
@@ -814,12 +815,13 @@ add_test(NAME WorldHostTests COMMAND world_host_tests)
 # （直编源惯例同 game_tests；Avatar 依赖 PlayerAnchor 实现，故一并编入）
 add_executable(avatar_tests
     test_avatar.cpp
-    ../modules/game/world/src/avatar.cpp
+    ../modules/game/cell/src/avatar.cpp
     ../modules/game/base/src/avatar.cpp
 )
 target_include_directories(avatar_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/base/include
@@ -944,7 +946,7 @@ add_executable(reconnect_tests
     ../modules/game/world/src/scene.cpp
     ../modules/game/world/src/scene_aoi.cpp
     ../modules/game/world/src/viewer_state.cpp
-    ../modules/game/world/src/avatar.cpp
+    ../modules/game/cell/src/avatar.cpp
     ../modules/game/world/src/world_session.cpp
     ../modules/game/world/src/world_session_manager.cpp
     # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
@@ -958,6 +960,7 @@ add_executable(reconnect_tests
 target_include_directories(reconnect_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/base/include
@@ -1211,7 +1214,7 @@ add_executable(scene_tests
     ../modules/game/world/src/scene.cpp
     ../modules/game/world/src/scene_aoi.cpp
     ../modules/game/world/src/viewer_state.cpp
-    ../modules/game/world/src/avatar.cpp
+    ../modules/game/cell/src/avatar.cpp
     # Game AttrSync (scene.cpp attrsync wiring, 2026-10-14 批)
     ../modules/game/attrsync/src/change_history.cpp
     ../modules/game/attrsync/src/viewer_attr_state.cpp
@@ -1223,6 +1226,7 @@ add_executable(scene_tests
 target_include_directories(scene_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
@@ -1253,6 +1257,7 @@ add_executable(instance_tests
 target_include_directories(instance_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
     ${CMAKE_SOURCE_DIR}/modules/game/base/include

@@ -1458,7 +1458,7 @@ void WorldApp::attachPlayerWorldSession(
 
     // create Avatar + scene.enter / instance.enter（P0-3 任务书 §27 API 路径：
     // Avatar 由 Scene 持有（进 scene 生/出 scene 死），玩法侧走 instance.enter）
-    auto avatar = std::make_shared<apollo::game::world::Avatar>(player_id, avatar_entity_id);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player_id, avatar_entity_id);
     if (scene != nullptr) {
         scene->enter(avatar, {position.x, position.y, position.z});
     }

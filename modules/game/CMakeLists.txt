@@ -1,6 +1,7 @@
 # Game module
 add_subdirectory(core)
 add_subdirectory(base)
+add_subdirectory(cell)
 add_subdirectory(session)
 add_subdirectory(world)
 add_subdirectory(battle)

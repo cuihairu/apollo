@@ -5,7 +5,7 @@
 #include "world_app/m1_link_server.hpp"
 #include "world_app/world_types.hpp"
 #include "squad_instance/squad_instance.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"

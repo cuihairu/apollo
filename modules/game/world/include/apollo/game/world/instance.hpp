@@ -2,7 +2,7 @@
 
 #include "apollo/game/battle/battle_runtime.hpp"
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 
 #include <cstdint>
 #include <memory>

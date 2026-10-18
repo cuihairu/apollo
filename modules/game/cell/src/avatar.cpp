@@ -1,8 +1,8 @@
-#include "apollo/game/world/avatar.hpp"
+#include "apollo/game/cell/avatar.hpp"
 
 #include <algorithm>
 
-namespace apollo::game::world {
+namespace apollo::game::cell {
 
 Avatar::Avatar(apollo::game::core::PlayerId player_id,
                apollo::game::core::EntityId entity_id,
@@ -162,4 +162,4 @@ std::uint32_t Avatar::home_zone_id() const noexcept {
     return home_zone_id_;
 }
 
-} // namespace apollo::game::world
+} // namespace apollo::game::cell

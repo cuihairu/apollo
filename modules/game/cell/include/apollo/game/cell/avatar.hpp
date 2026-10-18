@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-namespace apollo::game::world {
+namespace apollo::game::cell {
 
 // Avatar 生命周期状态（term-contract §1.2 / player-object-model §3）。
 // 「进 scene 生、出 scene 死」：
@@ -107,4 +107,4 @@ private:
 
 using AvatarPtr = std::shared_ptr<Avatar>;
 
-} // namespace apollo::game::world
+} // namespace apollo::game::cell

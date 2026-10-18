@@ -1,6 +1,6 @@
-# Game - World module (AOI, scene, avatar, world/instance runtime)
+# Game - World module (AOI, scene, world/instance runtime)
+# scene-runtime Avatar 已迁 cell 模块（L23）；World/Scene 引用 cell 类型
 add_library(apollo_game_world STATIC
-    src/avatar.cpp
     src/instance.cpp
     src/scene.cpp
     src/scene_aoi.cpp
@@ -22,6 +22,8 @@ target_include_directories(apollo_game_world
 target_link_libraries(apollo_game_world
     PUBLIC
         apollo::game_core
+        apollo::game_base
+        apollo::game_cell
         apollo::game_session
         apollo::game_battle
         apollo::game_attrsync

@@ -18,7 +18,7 @@ add_executable(full_loop_demo full_loop_demo.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene_aoi.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/viewer_state.cpp
-    ${CMAKE_SOURCE_DIR}/modules/game/world/src/avatar.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/src/avatar.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/instance.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/battle/src/battle_runtime.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/battle/src/battle_system.cpp
@@ -29,6 +29,7 @@ target_include_directories(full_loop_demo PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
@@ -48,7 +49,7 @@ add_executable(benchmark benchmark.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene_aoi.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/viewer_state.cpp
-    ${CMAKE_SOURCE_DIR}/modules/game/world/src/avatar.cpp
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/src/avatar.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/base/src/avatar.cpp
     ${CMAKE_SOURCE_DIR}/modules/protocol/src/codec.cpp
     ${CMAKE_SOURCE_DIR}/modules/data/orm/src/persist_journal.cpp
@@ -56,6 +57,7 @@ add_executable(benchmark benchmark.cpp
 target_include_directories(benchmark PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/cell/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
