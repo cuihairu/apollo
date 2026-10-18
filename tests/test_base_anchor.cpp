@@ -24,6 +24,20 @@ namespace {
         } \
     } while (0)
 
+// 隔离数据目录护栏：预清残留
+struct MigrationDir {
+    std::string path;
+    explicit MigrationDir(std::string p) : path(std::move(p)) {
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+        std::filesystem::create_directories(path);
+    }
+    ~MigrationDir() {
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+    }
+};
+
 // baseapp（数据面）锚点生命周期测试。
 // 落点裁决/目录查询（assignWorld/ResolveRoute 族）已拆至 apps/baseappmgr，
 // 见 test_baseappmgr.cpp。
@@ -34,7 +48,7 @@ bool test_base_server_anchor_lifecycle() {
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
     config.dataDir = "base_anchor_test_data";  // 隔离落盘目录
-    std::filesystem::create_directories(config.dataDir);
+    const MigrationDir dataGuard(config.dataDir);  // 预清残留 + 退出回收（失败路径不泄漏）
 
     // P1-4 口径：loadPlayer 只读已存在档案，不再凭空 bootstrap——先播种档案
     player_store::PlayerData seed;
@@ -379,20 +393,6 @@ bool test_freeze_collects_pending_reward() {
 
 // ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步 zone 侧；
 // wire = 契约 933-938，migration_wire 全帧经 dispatchRequest 分流）----
-
-// 隔离数据目录护栏：预清残留
-struct MigrationDir {
-    std::string path;
-    explicit MigrationDir(std::string p) : path(std::move(p)) {
-        std::error_code ec;
-        std::filesystem::remove_all(path, ec);
-        std::filesystem::create_directories(path);
-    }
-    ~MigrationDir() {
-        std::error_code ec;
-        std::filesystem::remove_all(path, ec);
-    }
-};
 
 // 未知/未受理消息型契约（L69 兼容面）：新增代次消息型（如 squad 族后续
 // 迭代）到达未升级受理面 = 结构化 ERROR 回包（非崩溃、非断链），会话号
