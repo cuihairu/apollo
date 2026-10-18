@@ -20,9 +20,9 @@ features:
   - title: 副本与对局
     details: 一个 Instance 对应一场玩法；cell 进程可承载多个 Space/Cell 及 Instance，对局结束后回收临时状态。
   - title: 长期资料与模拟分权
-    details: Base 长期对象与 Cell 模拟实体分开；每个实体只有一个模拟权威，跨服保持原 Base。
+    details: Base 长期对象与 Cell 模拟实体分开；每个实体只有一个模拟权威，跨服保持存储归属，Base 承载可独立迁移。
   - title: 清晰的接入职责
-    details: loginServer 管认证与目录，gateway 管连接，baseServer 管长期资料，worldServer 管拓扑与执行端，cell 管模拟，database 管存储，machined 管本机监督。
+    details: login 管认证与目录，gateway 管连接，base 管长期资料，world 管拓扑与执行端，cell 管模拟，database 管存储，machined 管本机监督。
   - title: 现代 C++20 模块
     details: 网络、数据、实体契约、AOI、战斗和运行时模块；README 与模块文档说明当前实现状态。
 ---
@@ -31,15 +31,23 @@ features:
 
 ## 目标架构
 
-业务消息经 gateway 直达所属 Base 或当前 cell；worldServer 管理分配与拓扑。实线表示业务请求与结果，虚线表示注册与管理。
+业务消息经 gateway 直达所属 Base 或当前 cell；world 管理分配与拓扑。实线表示业务请求与结果，虚线表示注册与管理。
 
 <ArchitectureDiagram kind="system" />
+
+## 外部 HTTP 回调与开发入口
+
+支付和渠道回调由可选 interfaces 的 HTTP/HTTPS 入口接收；可靠保存后，按稳定玩家身份解析当前 Base，由 Base 校验并经 database 幂等发货。玩家离线不依赖 gateway 会话，Base 承载迁移后重新解析归属。游戏 WS/WSS 则属于 gateway 的游戏消息入口，不进入 HTTP handler；实际接线仍待实现。
+
+<ArchitectureDiagram kind="callbacks" />
+
+interfaces、订单事务和项目初始化 CLI 均为待实现方案；现有仓库编队脚本与 CI 不等于已提供 init。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
 
 ## 项目定位
 
 Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合作 PvE/PvP、竞技场和副本。MMO 是可能的产品规模或产品形态，不是服务端架构名称；当前不实现无缝地图，预留同 Space 多 Cell、邻接可见性与权威交接。
 
-目标链路：客户端经 gateway 分别访问所属 Base 的基础业务和当前 cell 的场景模拟；Base 经 database 读写长期资料，loginServer 提供认证与目录，machined 按需监督本机进程。跨服只改变场景位置，保留 Base 和数据归属。
+目标链路：客户端经 gateway 分别访问所属 Base 的基础业务和当前 cell 的场景模拟；Base 经 database 读写长期资料，login 提供认证与目录，machined 按需监督本机进程。跨服只改变场景位置，保留原存储归属，Base 承载按独立调度更新。
 
 ## 文档入口
 
@@ -53,4 +61,4 @@ Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合�
 | BigWorld 与 Apollo 体系对照 | [职责、概念与代码映射](/design/bigworld-apollo-mapping) |
 | 外部引擎对照 | [MMO 框架比较](/36-MMO_Frameworks_Comparative_Analysis) |
 
-BigWorld/KBEngine 的 BaseApp、CellApp 等真实名称保留用于外部比较。Apollo 固定使用 baseServer 管长期资料、worldServer 管 Space/Cell，cell 管模拟，完整名称见词汇表。
+BigWorld/KBEngine 的 BaseApp、CellApp 等真实名称保留用于外部比较。Apollo 固定使用 base 管长期资料、world 管 Space/Cell，cell 管模拟，完整名称见词汇表。

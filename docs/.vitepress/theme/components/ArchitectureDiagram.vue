@@ -2,16 +2,20 @@
 import { computed } from 'vue'
 import { useData, withBase } from 'vitepress'
 
-const props = defineProps<{ kind: 'system' | 'space' | 'cross-server' }>()
+const props = defineProps<{ kind: 'system' | 'space' | 'cross-server' | 'callbacks' }>()
 const { lang } = useData()
 const english = computed(() => lang.value.startsWith('en'))
 const language = computed(() => english.value ? 'en' : 'zh')
 const source = computed(() => withBase(`/architecture/${props.kind}-${language.value}.svg`))
 const narrowSource = computed(() => withBase(`/architecture/${props.kind}-${language.value}-mobile.svg`))
 const descriptions = {
+  callbacks: {
+    zh: 'Apollo 外部 HTTP 回调目标：interfaces 验签并可靠受理，按玩家身份查询当前 Base，Base 经 database 幂等发货；项目初始化 CLI 尚待实现，CI 在仓库执行。',
+    en: 'Proposed HTTP callback flow: interfaces verifies and durably accepts notifications, resolves current Base, and Base fulfills through database; initialization CLI is pending and CI runs in the repository.',
+  },
   system: {
-    zh: 'Apollo 目标架构：gateway 分别路由到 Base 与 cell，worldServer 管理空间和执行进程，Base 经 database 保存长期资料。',
-    en: 'Apollo target architecture: gateway routes to Base and cell; worldServer manages spaces and executors; Base saves profiles through database.',
+    zh: 'Apollo 目标架构：gateway 分别路由到 Base 与 cell，world 管理空间和执行进程，Base 经 database 保存长期资料。',
+    en: 'Apollo target architecture: gateway routes to Base and cell; world manages spaces and executors; Base saves profiles through database.',
   },
   space: {
     zh: 'Space、Cell、cell 进程与 Instance 的边界：默认每 Space 一个 Cell，未来可在同一 Space 内扩展多个 Cell。',
@@ -23,8 +27,8 @@ const descriptions = {
   },
 }
 const description = computed(() => descriptions[props.kind][language.value])
-const wideHeight = computed(() => ({ system: 840, space: 700, 'cross-server': 760 })[props.kind])
-const narrowHeight = computed(() => ({ system: 1440, space: 1135, 'cross-server': 1270 })[props.kind])
+const wideHeight = computed(() => ({ system: 840, space: 700, 'cross-server': 760, callbacks: 920 })[props.kind])
+const narrowHeight = computed(() => ({ system: 1440, space: 1135, 'cross-server': 1270, callbacks: 1510 })[props.kind])
 </script>
 
 <template>

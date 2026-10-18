@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="920" viewBox="0 0 1280 920" role="img" aria-labelledby="title desc" lang="zh-CN">
+<title id="title">Apollo 外部 HTTP 回调与开发工具边界</title><desc id="desc">目标设计，尚未实现。interfaces 可靠接收通知，按稳定玩家身份查询当前 Base，Base 经 database 幂等发货。脚手架与 CI 属于开发工具，不是在线业务进程。</desc>
+<defs>
+ <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
+</defs><rect width="1280" height="920" fill="#fff"/>
+<text x="28" y="42" font-size="26" font-weight="600" text-anchor="start">外部回调、动态 Base 路由与持久发货</text>
+<text x="28" y="76" font-size="18" font-weight="400" text-anchor="start" class="sub">目标方案：interfaces、订单事务与 init 脚手架均待实现。</text>
+<g data-node="外部平台">
+<rect x="36" y="130" width="240" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="54" y="163" font-size="23" font-weight="600" text-anchor="start">外部平台</text>
+<text x="54" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">支付 / 渠道通知</text>
+<text x="54" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">服务端回调</text>
+</g>
+<g data-node="interfaces">
+<rect x="386" y="130" width="350" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="404" y="163" font-size="23" font-weight="600" text-anchor="start">interfaces</text>
+<text x="404" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">HTTPS 验签 · 可靠受理 · 异步投递</text>
+<text x="404" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">订单绑定稳定玩家身份</text>
+</g>
+<g data-node="login：服务 / 归属目录">
+<rect x="902" y="130" width="338" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="920" y="163" font-size="21" font-weight="600" text-anchor="start">login：服务 / 归属目录</text>
+<text x="920" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">玩家 → 当前 Base + 归属代次</text>
+<text x="920" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">供 gateway / interfaces 查询</text>
+</g>
+<path d="M276 184 L386 184" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="300.0" y="153" width="60.0" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="330" y="168" font-size="16" font-weight="500" text-anchor="middle" class="blue">HTTPS</text>
+<path d="M736 174 L902 174" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="772.5" y="142" width="91" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="818" y="156" font-size="15" font-weight="500" text-anchor="middle" class="teal">查当前归属</text>
+<g data-node="base：当前承载进程">
+<rect x="386" y="405" width="350" height="136" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="404" y="438" font-size="22" font-weight="600" text-anchor="start">base：当前承载进程</text>
+<text x="404" y="465" font-size="17" font-weight="400" text-anchor="start" class="sub">离线也可激活角色 Base 部分</text>
+<text x="404" y="488" font-size="17" font-weight="400" text-anchor="start" class="sub">订单校验 · 幂等业务发货</text>
+<text x="404" y="511" font-size="17" font-weight="400" text-anchor="start" class="sub">迁移后拒绝旧写入者</text>
+</g>
+<g data-node="database">
+<rect x="902" y="405" width="338" height="136" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="920" y="438" font-size="23" font-weight="600" text-anchor="start">database</text>
+<text x="920" y="465" font-size="17" font-weight="400" text-anchor="start" class="sub">通知 / 订单待办持久化</text>
+<text x="920" y="488" font-size="17" font-weight="400" text-anchor="start" class="sub">奖励 + 去重凭据原子提交</text>
+<text x="920" y="511" font-size="17" font-weight="400" text-anchor="start" class="sub">新事务接口待实现</text>
+</g>
+<path d="M560 242 L560 405" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="444.475" y="309" width="231.05" height="25" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="560" y="325" font-size="17" font-weight="500" text-anchor="middle" class="blue">按玩家寻址 / 重试同一订单</text>
+<path d="M736 214 L816 214 L816 441 L902 441" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="765.0" y="290" width="96" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="813" y="305" font-size="16" font-weight="500" text-anchor="middle" class="blue">先持久受理</text>
+<path d="M736 500 L902 500" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="781.0" y="470" width="76" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="819" y="484" font-size="15" font-weight="500" text-anchor="middle" class="blue">持久发货</text>
+<text x="36" y="325" font-size="19" font-weight="600" text-anchor="start">回调确认 ≠ 发货完成</text>
+<text x="36" y="360" font-size="17" font-weight="400" text-anchor="start" class="sub">可靠保存后及时确认通知。</text>
+<text x="36" y="394" font-size="17" font-weight="400" text-anchor="start" class="sub">Base 不可达时保留待办。</text>
+<text x="36" y="428" font-size="17" font-weight="400" text-anchor="start" class="sub">不永久绑定 Base ID / IP。</text>
+<rect x="28" y="593" width="1224" height="74" rx="10" fill="#f4f9f8" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="48" y="623" font-size="19" font-weight="600" text-anchor="start">world / cell 不参与支付发货；gateway 只在玩家在线时投递通知。</text>
+<text x="48" y="650" font-size="17" font-weight="400" text-anchor="start" class="sub">跨服不改变原存储归属；当前 Base 可随负载、恢复或升级迁移。</text>
+<rect x="28" y="706" width="1224" height="184" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="48" y="737" font-size="19" font-weight="600" text-anchor="start">开发与交付工具 · 与在线请求链路分开</text>
+<g data-node="项目初始化 CLI：init（待实现）">
+<rect x="48" y="758" width="500" height="106" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="66" y="791" font-size="21" font-weight="600" text-anchor="start">项目初始化 CLI：init（待实现）</text>
+<text x="66" y="818" font-size="17" font-weight="400" text-anchor="start" class="sub">生成配置 / Lua / 启停脚本 / CI 模板</text>
+</g>
+<g data-node="仓库 CI workflow">
+<rect x="760" y="758" width="464" height="106" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="778" y="791" font-size="21" font-weight="600" text-anchor="start">仓库 CI workflow</text>
+<text x="778" y="818" font-size="17" font-weight="400" text-anchor="start" class="sub">构建 · 测试 · 契约 / 文档检查</text>
+</g>
+<path d="M548 810 L760 810" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="593.5" y="780" width="121" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="654" y="794" font-size="15" font-weight="500" text-anchor="middle" class="teal">生成项目可接入</text>
+</svg>

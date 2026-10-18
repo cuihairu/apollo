@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="920" viewBox="0 0 1280 920" role="img" aria-labelledby="title desc" lang="en">
+<title id="title">Apollo external HTTP callbacks and developer tooling</title><desc id="desc">Proposed design, not implemented: interfaces durably receives callbacks and resolves current Base by player identity; Base fulfills idempotently through database. Scaffolding and CI are developer tooling, not online services.</desc>
+<defs>
+ <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
+</defs><rect width="1280" height="920" fill="#fff"/>
+<text x="28" y="42" font-size="26" font-weight="600" text-anchor="start">External callbacks, dynamic Base routing and fulfillment</text>
+<text x="28" y="76" font-size="18" font-weight="400" text-anchor="start" class="sub">Proposed: interfaces, order transactions and init scaffolding are pending.</text>
+<g data-node="Platform">
+<rect x="36" y="130" width="240" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="54" y="163" font-size="23" font-weight="600" text-anchor="start">Platform</text>
+<text x="54" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">Payments / channels</text>
+<text x="54" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">Server callbacks</text>
+</g>
+<g data-node="interfaces">
+<rect x="386" y="130" width="350" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="404" y="163" font-size="23" font-weight="600" text-anchor="start">interfaces</text>
+<text x="404" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">HTTPS · verify · durable intake</text>
+<text x="404" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">Orders bind stable player identity</text>
+</g>
+<g data-node="login: owner directory">
+<rect x="902" y="130" width="338" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="920" y="163" font-size="21" font-weight="600" text-anchor="start">login: owner directory</text>
+<text x="920" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">Player → current Base + epoch</text>
+<text x="920" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">Queried by gateway / interfaces</text>
+</g>
+<path d="M276 184 L386 184" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="300.0" y="153" width="60.0" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="330" y="168" font-size="16" font-weight="500" text-anchor="middle" class="blue">HTTPS</text>
+<path d="M736 174 L902 174" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="756.375" y="142" width="123.25" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="818" y="156" font-size="15" font-weight="500" text-anchor="middle" class="teal">Resolve owner</text>
+<g data-node="base: current host">
+<rect x="386" y="405" width="350" height="136" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="404" y="438" font-size="22" font-weight="600" text-anchor="start">base: current host</text>
+<text x="404" y="465" font-size="17" font-weight="400" text-anchor="start" class="sub">Activate Base part while offline</text>
+<text x="404" y="488" font-size="17" font-weight="400" text-anchor="start" class="sub">Validate order · fulfill once</text>
+<text x="404" y="511" font-size="17" font-weight="400" text-anchor="start" class="sub">Fence stale writers after migration</text>
+</g>
+<g data-node="database">
+<rect x="902" y="405" width="338" height="136" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="920" y="438" font-size="23" font-weight="600" text-anchor="start">database</text>
+<text x="920" y="465" font-size="17" font-weight="400" text-anchor="start" class="sub">Durable notifications / pending work</text>
+<text x="920" y="488" font-size="17" font-weight="400" text-anchor="start" class="sub">Atomic reward + dedup record</text>
+<text x="920" y="511" font-size="17" font-weight="400" text-anchor="start" class="sub">Transaction interfaces pending</text>
+</g>
+<path d="M560 242 L560 405" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="383.7" y="309" width="352.6" height="25" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="560" y="325" font-size="17" font-weight="500" text-anchor="middle" class="blue">Address by player / retry same order</text>
+<path d="M736 214 L816 214 L816 441 L902 441" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="717.0" y="290" width="192.0" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="813" y="305" font-size="16" font-weight="500" text-anchor="middle" class="blue">Persist intake first</text>
+<path d="M736 500 L902 500" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="736.75" y="470" width="164.5" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="819" y="484" font-size="15" font-weight="500" text-anchor="middle" class="blue">Commit fulfillment</text>
+<text x="36" y="325" font-size="19" font-weight="600" text-anchor="start">Callback ACK ≠ fulfilled</text>
+<text x="36" y="360" font-size="17" font-weight="400" text-anchor="start" class="sub">ACK after durable intake.</text>
+<text x="36" y="394" font-size="17" font-weight="400" text-anchor="start" class="sub">Keep work if Base is unavailable.</text>
+<text x="36" y="428" font-size="17" font-weight="400" text-anchor="start" class="sub">No permanent Base ID/IP binding.</text>
+<rect x="28" y="593" width="1224" height="74" rx="10" fill="#f4f9f8" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="48" y="623" font-size="19" font-weight="600" text-anchor="start">world / cell do not fulfill payments; gateway delivers optional online notifications.</text>
+<text x="48" y="650" font-size="17" font-weight="400" text-anchor="start" class="sub">Cross-server play retains storage affiliation; current Base may move for load, recovery or updates.</text>
+<rect x="28" y="706" width="1224" height="184" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="48" y="737" font-size="19" font-weight="600" text-anchor="start">Developer and delivery tooling · separate from runtime requests</text>
+<g data-node="Project initialization CLI: init (pending)">
+<rect x="48" y="758" width="500" height="106" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="66" y="791" font-size="21" font-weight="600" text-anchor="start">Project initialization CLI: init (pending)</text>
+<text x="66" y="818" font-size="17" font-weight="400" text-anchor="start" class="sub">Generate config / Lua / ops / CI template</text>
+</g>
+<g data-node="Repository CI workflow">
+<rect x="760" y="758" width="464" height="106" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="778" y="791" font-size="21" font-weight="600" text-anchor="start">Repository CI workflow</text>
+<text x="778" y="818" font-size="17" font-weight="400" text-anchor="start" class="sub">Build · tests · contract / docs checks</text>
+</g>
+<path d="M548 810 L760 810" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="542.875" y="780" width="222.25" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="654" y="794" font-size="15" font-weight="500" text-anchor="middle" class="teal">Generated project can use</text>
+</svg>

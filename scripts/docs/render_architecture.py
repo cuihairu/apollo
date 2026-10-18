@@ -56,7 +56,7 @@ class Diagram:
 
 def system(en=False,mobile=False):
     t=lambda zh,eng:eng if en else zh
-    d=Diagram(480 if mobile else 1280,1440 if mobile else 840,t('Apollo 目标进程与通信','Apollo target processes and communication'),t('实线表示业务请求与结果，虚线表示注册和管理。Base 管长期资料，cell 管模拟；worldServer 管理分配，machined 只监督本机。','Solid lines carry business requests/results; dashed lines carry registration and management. Base owns profiles, cell owns simulation, World manages placement, machined supervises locally.'),'en' if en else 'zh-CN')
+    d=Diagram(480 if mobile else 1280,1440 if mobile else 840,t('Apollo 目标进程与通信','Apollo target processes and communication'),t('实线表示业务请求与结果，虚线表示注册和管理。Base 管长期资料，cell 管模拟；world 管理分配，machined 只监督本机。','Solid lines carry business requests/results; dashed lines carry registration and management. Base owns profiles, cell owns simulation, World manages placement, machined supervises locally.'),'en' if en else 'zh-CN')
     if not mobile:
         d.text(28,40,t('目标进程与通信','Target processes and communication'),27,600)
         d.arrow([(820,31),(866,31)]);d.text(878,37,t('业务请求 / 结果','Business / results'),16,kind='sub')
@@ -64,18 +64,18 @@ def system(en=False,mobile=False):
         d.text(28,75,t('已有独立原型：Base ↔ database；World/cell 拆分与整体接线待完成。','Base ↔ database has standalone prototypes; World/cell separation and full wiring remain pending.'),17,kind='sub')
         d.rect(28,106,1224,178,'#f4f9f8')
         d.text(48,134,t('认证、目录与空间管理','Authentication, directories and placement'),17,600,'teal')
-        d.node(300,154,270,104,'loginServer',[t('认证 · 服务 / 在线目录','Auth · directories')])
-        d.node(760,154,320,104,'worldServer',[t('Space/Cell 分配 · 拓扑 · 排空','Space/Cell placement · topology')],t('管理 / 执行待拆分','Manager / executor split pending'))
+        d.node(300,154,270,104,'login',[t('认证 · 服务 / 在线目录','Auth · directories')])
+        d.node(760,154,320,104,'world',[t('Space/Cell 分配 · 拓扑 · 排空','Space/Cell placement · topology')],t('管理 / 执行待拆分','Manager / executor split pending'))
         d.arrow([(760,207),(570,207)],True);d.label(665,191,t('注册 / 位置投影','Register / project'),15,'teal')
         d.rect(28,330,1224,356,'#f8fafc')
         d.text(48,358,t('连接、业务与模拟','Connections, gameplay and simulation'),17,600)
         d.node(48,386,160,96,t('客户端','Client'),[t('游戏连接','Game client')],size=22)
         d.node(278,386,220,96,'gateway',[t('socket · 会话 · 转发','Sockets · sessions')])
-        d.node(615,386,250,96,'baseServer',[t('PlayerAnchor · 长期资料','PlayerAnchor · profiles')],t('独立原型','Standalone prototype'),'blue')
+        d.node(615,386,250,96,'base',[t('Avatar · Base 部分','Avatar · Base part')],t('独立原型','Standalone prototype'),'blue')
         d.node(966,386,250,96,'database',[t('加载 / 保存 · journal','Load / save · journal')],t('独立原型','Standalone prototype'),'blue')
         d.node(580,558,330,112,t('cell 执行进程','cell executor'),[t('Avatar/Entity · AOI · 战斗','Avatar/Entity · AOI · combat')],t('独立执行入口待实现','Dedicated executor pending'))
         d.cylinder(1001,558,180,87,t('实际存储','Storage'),t('文件 / 数据库','Files / database'))
-        d.arrow([(208,434),(278,434)],both=True);d.label(243,419,'TCP',15)
+        d.arrow([(208,434),(278,434)],both=True);d.label(243,374,'TCP / WS / WSS',15)
         d.arrow([(498,434),(615,434)],both=True);d.label(556,419,t('基础业务','Base gameplay'),15)
         d.arrow([(865,434),(966,434)],both=True);d.label(915,419,t('加载 / 保存','Load / save'),15)
         d.arrow([(388,482),(388,614),(580,614)],both=True);d.label(477,598,t('场景输入 / 同步','Input / state sync'),16)
@@ -93,17 +93,17 @@ def system(en=False,mobile=False):
         d.text(24,67,t('Base ↔ database：独立原型已具备','Base ↔ database: standalone prototypes'),16,kind='sub')
         d.text(24,92,t('World/cell 拆分与整体接线待完成','World/cell split and full wiring pending'),16,kind='sub')
         d.text(30,133,t('认证、目录与空间管理','Authentication and placement'),18,600,'teal')
-        d.node(30,155,420,94,'loginServer',[t('认证 · 服务目录 · 玩家位置投影','Auth · services · player location projections')])
-        d.node(30,291,420,102,'worldServer',[t('管理 cell · Space/Cell 分配 · 拓扑','cell registry · Space/Cell placement')],t('管理 / 执行待拆分','Manager / executor split pending'))
+        d.node(30,155,420,94,'login',[t('认证 · 服务目录 · 玩家位置投影','Auth · services · player location projections')])
+        d.node(30,291,420,102,'world',[t('管理 cell · Space/Cell 分配 · 拓扑','cell registry · Space/Cell placement')],t('管理 / 执行待拆分','Manager / executor split pending'))
         d.arrow([(240,291),(240,249)],True);d.label(240,276,t('服务注册 / 位置投影','Service registry / location projection'),16,'teal')
         d.text(30,421,t('cell 向 World 注册，由 World 分配空间。','cell registers with World for placement.'),17,kind='sub')
-        d.text(30,445,t('客户端向 loginServer 认证。','Client authenticates with loginServer.'),17,kind='sub')
+        d.text(30,445,t('客户端向 login 认证。','Client authenticates with login.'),17,kind='sub')
         d.arrow([(30,504),(7,504),(7,180),(30,180)],True,both=True)
         d.node(30,464,420,80,t('客户端','Client'),[t('游戏连接','Game client')])
         d.node(30,594,420,96,'gateway',[t('持有 socket · 缓存 Base / cell 路由','Own sockets · cache Base / cell routes')])
-        d.arrow([(240,544),(240,594)],both=True);d.label(285,575,'TCP',17)
+        d.arrow([(240,544),(240,594)],both=True);d.label(285,575,'TCP / WS(S)',17)
         d.arrow([(30,641),(16,641),(16,202),(30,202)],True,both=True)
-        d.node(30,806,190,112,'baseServer',['PlayerAnchor',t('长期资料','Persistent profile')],tone='blue',size=21)
+        d.node(30,806,190,112,'base',['Avatar · Base',t('长期资料','Persistent profile')],tone='blue',size=21)
         d.node(260,806,190,112,t('cell 进程','cell executor'),['Avatar / Entity','AOI · '+t('战斗','combat')],size=21)
         d.arrow([(240,690),(240,738),(125,738),(125,806)])
         d.arrow([(240,738),(355,738),(355,806)])
@@ -128,7 +128,7 @@ def space(en=False,mobile=False):
     d=Diagram(480 if mobile else 1280,1135 if mobile else 700,t('Space、Cell、执行进程与 Instance','Space, Cell, executor and Instance'),t('默认每 Space 一个 Cell，一个执行进程承载多个空间的 Cell；未来同一 Space 可分配多个 Cell 到不同执行进程。Instance 只关联玩法空间。','Initially each Space has one Cell; one executor hosts Cells from multiple Spaces. Future Cells of one Space may run in different executors. Instance associates with a gameplay Space.'),'en' if en else 'zh-CN')
     if not mobile:
         d.text(28,40,t('运行空间、分区与玩法的边界','Runtime space, partition and gameplay boundaries'),27,600)
-        d.node(467,65,346,83,'worldServer',[t('管理注册、Space/Cell 拓扑与分配','Registry · topology · placement')])
+        d.node(467,65,346,83,'world',[t('管理注册、Space/Cell 拓扑与分配','Registry · topology · placement')])
         d.text(28,203,t('默认基础路径 · 实施目标','Initial implementation target'),22,600)
         d.text(692,203,t('未来扩展 · 尚未实现','Future extension · not implemented'),22,600)
         d.rect(28,235,560,220,'#f8fafc')
@@ -153,7 +153,7 @@ def space(en=False,mobile=False):
         d.text(48,665,t('Instance 管玩法生命周期，不叠加为 Scene → Space 同义容器。','Instance owns gameplay lifecycle; do not add synonymous Scene → Space containers.'),17,kind='sub')
     else:
         d.text(24,38,t('空间、分区与玩法','Spaces, partitions and gameplay'),23,600)
-        d.node(24,73,432,88,'worldServer',[t('注册 · Space/Cell 拓扑 · 分配','Registry · Space/Cell topology · placement')])
+        d.node(24,73,432,88,'world',[t('注册 · Space/Cell 拓扑 · 分配','Registry · Space/Cell topology · placement')])
         d.text(24,203,t('默认基础路径 · 实施目标','Initial implementation target'),21,600)
         d.rect(24,226,432,254,'#f8fafc')
         d.text(44,260,t('cell 进程 1','cell process 1'),20,600)
@@ -179,13 +179,13 @@ def cross_server(en=False,mobile=False):
     t=lambda zh,eng:eng if en else zh
     d=Diagram(480 if mobile else 1280,1270 if mobile else 760,t('跨服玩法的 Base 与模拟归属','Base and simulation ownership in cross-server play'),t('原服 A、B 各保留 Base 长期对象和 database；共享跨服 cell 只持 Avatar 和运行状态，按每位玩家的 Base 关联提交结果。','Each home server retains its Base profiles and database. A shared cross-server cell holds Avatars/runtime state and submits results to each owning Base.'),'en' if en else 'zh-CN')
     if not mobile:
-        d.text(28,40,t('跨服只改变模拟位置，原 Base 与存储归属保持','Cross-server play changes simulation, not Base or storage ownership'),25,600)
+        d.text(28,40,t('跨服保留存储归属，Base 承载可独立迁移','Cross-server play retains storage; Base hosting may migrate'),25,600)
         d.text(28,74,t('跨服设计预留 · 尚未启用默认编队；临时活动可关联 Instance。','Reserved design · not enabled in the default fleet; temporary activities may associate with Instance.'),17,kind='sub')
-        d.node(460,113,360,90,'worldServer',[t('跨服 Space/Cell 分配与迁移管理','Cross-server placement / transfer')])
+        d.node(460,113,360,90,'world',[t('跨服 Space/Cell 分配与迁移管理','Cross-server placement / transfer')])
         for x,letter in [(28,'A'),(892,'B')]:
             d.rect(x,265,360,352,'#f8fafc')
             d.text(x+24,297,t('原服 ','Home server ')+letter,21,600)
-            d.node(x+24,322,312,124,'baseServer '+letter,['PlayerAnchor '+letter,t('长期资料所有者，归属不变','Profile ownership stays here')],tone='blue')
+            d.node(x+24,322,312,124,'base '+letter,['Avatar · Base '+letter,t('长期资料所有者，归属不变','Profile ownership stays here')],tone='blue')
             d.node(x+24,525,312,68,'database '+letter,[],tone='blue')
             d.arrow([(x+180,446),(x+180,525)],both=True);d.label(x+218,495,t('持久化','Persist'),16)
         d.node(460,322,360,196,t('共享 cell 执行进程','Shared cell executor'),['Space C · Cell C1','Avatar A  /  Avatar B',t('只持玩法快照与运行状态','Gameplay snapshots and runtime only')])
@@ -202,26 +202,85 @@ def cross_server(en=False,mobile=False):
     else:
         d.text(24,38,t('跨服玩法与资料归属','Cross-server ownership'),24,600)
         d.text(24,70,t('设计预留 · 未启用默认编队','Reserved · not enabled in default fleet'),17,kind='sub')
-        d.node(24,119,432,91,'worldServer',[t('管理跨服 Space/Cell 与迁移','Manage cross-server Space/Cell and transfer')])
+        d.node(24,119,432,91,'world',[t('管理跨服 Space/Cell 与迁移','Manage cross-server Space/Cell and transfer')])
         d.node(24,326,432,179,t('共享 cell 执行进程','Shared cell executor'),['Space C · Cell C1','Avatar A  /  Avatar B',t('玩法快照与运行状态','Gameplay snapshots and runtime state')])
         d.arrow([(240,210),(240,326)],True,both=True);d.label(299,274,t('注册 / 分配','Register / place'),17,'teal')
         for x,letter in [(24,'A'),(252,'B')]:
             center=x+102
             d.text(x,631,t('原服 ','Home server ')+letter,20,600)
-            d.node(x,659,204,147,'baseServer '+letter,['PlayerAnchor '+letter,t('长期资料不迁走','Profiles stay here')],tone='blue',size=20)
+            d.node(x,659,204,147,'base '+letter,['Avatar · Base '+letter,t('长期资料不迁走','Profiles stay here')],tone='blue',size=20)
             d.node(x,921,204,91,'database '+letter,[t('原存储归属','Original storage')],tone='blue',size=20)
             d.arrow([(center,505),(center,659)],both=True);d.label(center,575,t('快照 / 业务结果','Snapshot / outcomes'),16)
             d.arrow([(center,806),(center,921)],both=True);d.label(center,871,t('分别持久确认','Persist separately'),16)
-        d.text(24,1060,t('跨服只改变模拟位置，保留原 Base。','Only simulation moves; retain original Base.'),18,600)
+        d.text(24,1060,t('跨服保留存储归属，Base 承载可迁移。','Home storage; Base hosting can move.'),18,600)
         d.text(24,1093,t('共享 cell 不获取各服数据库地址或凭证。','cell receives no home database credentials.'),17,kind='sub')
         d.text(24,1143,t('源冻结 → 目标准备 → 条件提交','Freeze source → prepare → conditional commit'),17,kind='sub')
         d.text(24,1175,t('目标激活 → 源清理，禁止双端模拟。','Activate target → clean source; one authority.'),17,kind='sub')
         d.text(24,1222,t('临时活动关联 Instance，不改变资料归属。','Instance activities do not move profile ownership.'),16,kind='sub')
     return d.finish()
 
+def callbacks(en=False, mobile=False):
+    t=lambda zh,eng: eng if en else zh
+    d=Diagram(480 if mobile else 1280,1510 if mobile else 920,
+        t('Apollo 外部 HTTP 回调与开发工具边界','Apollo external HTTP callbacks and developer tooling'),
+        t('目标设计，尚未实现。interfaces 可靠接收通知，按稳定玩家身份查询当前 Base，Base 经 database 幂等发货。脚手架与 CI 属于开发工具，不是在线业务进程。',
+          'Proposed design, not implemented: interfaces durably receives callbacks and resolves current Base by player identity; Base fulfills idempotently through database. Scaffolding and CI are developer tooling, not online services.'),
+        'en' if en else 'zh-CN')
+    if not mobile:
+        d.text(28,42,t('外部回调、动态 Base 路由与持久发货','External callbacks, dynamic Base routing and fulfillment'),26,600)
+        d.text(28,76,t('目标方案：interfaces、订单事务与 init 脚手架均待实现。','Proposed: interfaces, order transactions and init scaffolding are pending.'),18,kind='sub')
+        d.node(36,130,240,112,t('外部平台','Platform'),[t('支付 / 渠道通知','Payments / channels'),t('服务端回调','Server callbacks')])
+        d.node(386,130,350,112,'interfaces',[t('HTTPS 验签 · 可靠受理 · 异步投递','HTTPS · verify · durable intake'),t('订单绑定稳定玩家身份','Orders bind stable player identity')])
+        d.node(902,130,338,112,t('login：服务 / 归属目录','login: owner directory'),[t('玩家 → 当前 Base + 归属代次','Player → current Base + epoch'),t('供 gateway / interfaces 查询','Queried by gateway / interfaces')],size=21)
+        d.arrow([(276,184),(386,184)],both=True);d.label(330,168,'HTTPS',16)
+        d.arrow([(736,174),(902,174)],True,both=True);d.label(818,156,t('查当前归属','Resolve owner'),15,'teal')
+        d.node(386,405,350,136,t('base：当前承载进程','base: current host'),[t('离线也可激活角色 Base 部分','Activate Base part while offline'),t('订单校验 · 幂等业务发货','Validate order · fulfill once'),t('迁移后拒绝旧写入者','Fence stale writers after migration')],size=22)
+        d.node(902,405,338,136,'database',[t('通知 / 订单待办持久化','Durable notifications / pending work'),t('奖励 + 去重凭据原子提交','Atomic reward + dedup record'),t('新事务接口待实现','Transaction interfaces pending')])
+        d.arrow([(560,242),(560,405)]);d.label(560,325,t('按玩家寻址 / 重试同一订单','Address by player / retry same order'),17)
+        d.arrow([(736,214),(816,214),(816,441),(902,441)])
+        d.label(813,305,t('先持久受理','Persist intake first'),16)
+        d.arrow([(736,500),(902,500)],both=True);d.label(819,484,t('持久发货','Commit fulfillment'),15)
+        d.text(36,325,t('回调确认 ≠ 发货完成','Callback ACK ≠ fulfilled'),19,600)
+        d.text(36,360,t('可靠保存后及时确认通知。','ACK after durable intake.'),17,kind='sub')
+        d.text(36,394,t('Base 不可达时保留待办。','Keep work if Base is unavailable.'),17,kind='sub')
+        d.text(36,428,t('不永久绑定 Base ID / IP。','No permanent Base ID/IP binding.'),17,kind='sub')
+        d.rect(28,593,1224,74,'#f4f9f8')
+        d.text(48,623,t('world / cell 不参与支付发货；gateway 只在玩家在线时投递通知。','world / cell do not fulfill payments; gateway delivers optional online notifications.'),19,600)
+        d.text(48,650,t('跨服不改变原存储归属；当前 Base 可随负载、恢复或升级迁移。','Cross-server play retains storage affiliation; current Base may move for load, recovery or updates.'),17,kind='sub')
+        d.rect(28,706,1224,184,'#f8fafc')
+        d.text(48,737,t('开发与交付工具 · 与在线请求链路分开','Developer and delivery tooling · separate from runtime requests'),19,600)
+        d.node(48,758,500,106,t('项目初始化 CLI：init（待实现）','Project initialization CLI: init (pending)'),[t('生成配置 / Lua / 启停脚本 / CI 模板','Generate config / Lua / ops / CI template')],size=21)
+        d.node(760,758,464,106,t('仓库 CI workflow','Repository CI workflow'),[t('构建 · 测试 · 契约 / 文档检查','Build · tests · contract / docs checks')],size=21)
+        d.arrow([(548,810),(760,810)],True);d.label(654,794,t('生成项目可接入','Generated project can use'),15,'teal')
+    else:
+        d.text(24,38,t('外部 HTTP 回调','External HTTP callbacks'),25,600)
+        d.text(24,72,t('interfaces / 订单事务：待实现','interfaces / transactions: pending'),18,kind='sub')
+        d.node(30,109,420,96,t('外部支付 / 渠道平台','Payment / channel platform'),[t('HTTP 服务端通知','HTTP server notification')],size=21)
+        d.node(30,262,420,114,'interfaces',[t('HTTPS 验签 · 可靠受理 · 异步投递','HTTPS · verify · durable intake'),t('按稳定玩家身份处理订单','Orders use stable player identity')])
+        d.arrow([(240,205),(240,262)],both=True);d.label(288,242,'HTTPS',18)
+        d.node(30,454,420,110,t('login：服务 / 归属目录','login: owner directory'),[t('玩家 → 当前 Base + 归属代次','Player → current Base + epoch')],size=22)
+        d.arrow([(130,376),(130,454)],True,both=True);d.label(248,420,t('interfaces 查询当前归属','interfaces resolves owner'),17,'teal')
+        d.node(30,680,420,133,t('base：当前承载进程','base: current hosting process'),[t('离线激活 · 校验订单 · 幂等发货','Offline activation · fulfill once'),t('迁移后旧写入者必须被隔离','Fence stale writers after transfer')],size=22)
+        d.arrow([(30,320),(10,320),(10,746),(30,746)])
+        d.text(42,620,t('interfaces 按玩家身份投递到当前 Base','interfaces delivers by player identity'),18,600)
+        d.node(30,925,420,133,'database',[t('通知 / 待办可靠保存','Durably store intake / pending work'),t('奖励与去重凭据原子提交','Atomic reward + dedup record'),t('事务接口待实现','Transaction interfaces pending')])
+        d.arrow([(330,376),(468,376),(468,960),(450,960)])
+        d.arrow([(240,813),(240,925)],both=True);d.label(240,878,t('Base 提交业务结果','Base commits business result'),17)
+        d.text(30,1110,t('确认收到 ≠ 发货完成；不可达则保留待办。','ACK ≠ fulfillment; retain pending work.'),18,600)
+        d.text(30,1145,t('world / cell 不处理支付发货。','world / cell do not fulfill payments.'),18,kind='sub')
+        d.rect(24,1200,432,280,'#f8fafc')
+        d.text(42,1236,t('开发与交付工具','Developer / delivery tools'),21,600)
+        d.text(42,1280,t('项目初始化 CLI：init（待实现）','Project CLI: init (pending)'),20,600)
+        d.text(42,1318,t('生成配置、Lua 与启停 / CI 模板','Generate config, Lua, ops / CI'),18,kind='sub')
+        d.text(42,1372,t('CI workflow 在仓库执行','CI workflow runs in repository'),20,600)
+        d.text(42,1410,t('构建、测试、契约和文档检查','Build, tests, contracts and docs'),18,kind='sub')
+        d.text(42,1450,t('不属于在线业务处理链路。','Outside the runtime request path.'),18,kind='sub')
+    return d.finish()
+
+
 def main():
     outputs={}
-    for name,render in [('system',system),('space',space),('cross-server',cross_server)]:
+    for name,render in [('system',system),('space',space),('cross-server',cross_server),('callbacks',callbacks)]:
         for lang,en in [('zh',False),('en',True)]:
             for mobile in [False,True]:
                 outputs[OUT/f'{name}-{lang}{"-mobile" if mobile else ""}.svg']=render(en,mobile)
