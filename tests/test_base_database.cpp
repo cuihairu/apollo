@@ -9,7 +9,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
+#include <thread>
 
 #define CHECK(condition) do { if (!(condition)) throw std::runtime_error(#condition); } while (false)
 namespace fs = std::filesystem;
@@ -128,6 +130,127 @@ void reject_bad_requests_and_failures() {
     CHECK(!broken.port());
 }
 
+// L25 崩溃恢复契约（重试/失败/重启三态各自可辨）：database 运行中被终止 →
+// 保存如实失败（传输失败，不假受理成功）、锚点真值保留 → database 同存储
+// 同端口重启 → base 进程亦随编队重启（新存储客户端）→ 载入的是最后一次
+// 已落盘真值而非断链期的未落档增量，断链期失败的写入不得复活，且复活后
+// 新的写入照常落盘。跨崩溃未落档增量的重试缓冲在远程模式下不存在（无本地
+// journal），此为可证明的边界而非回退成功。
+void database_crash_survives_restart() {
+    Fixture f;
+    // 直接落盘播种（不经 server，杜绝缓存参与）
+    {
+        player_store::DatabaseService seed(f.config.storage);
+        CHECK(seed.initialize());
+        player_store::PlayerData p;
+        p.playerId = 501;
+        p.username = "crash-restart";
+        p.exp = 1;
+        CHECK(seed.savePlayer(p));
+    }
+
+    database::Server server(f.config);
+    CHECK(server.start());
+    const auto realPort = server.port();
+
+    auto readerCfg = f.client(realPort);
+    readerCfg.timeout = std::chrono::milliseconds(400);  // 断链期快败
+    readerCfg.self_name = "crash-restart-reader";  // 同名互斥：读面独立命名，防被 base 链顶替
+    auto reader = database::makeClient(readerCfg);
+    CHECK(reader->initialize());
+
+    auto clientCfg = f.client(realPort);
+    clientCfg.timeout = std::chrono::milliseconds(400);  // 断链期快败
+
+    player_store::PlayerStoreConfig baseCfg;
+    baseCfg.dataDir = (f.path / "blocked" / "players").string();  // 远程 base 不触本地档案
+    baseCfg.journalPath = (f.path / "blocked" / "journal.log").string();
+    baseCfg.autoSaveIntervalMs = 60000;  // 手动驱动保存，排除自动保存干扰
+    baseCfg.workerThreads = 1;
+    baseCfg.shutdownFlushTimeoutMs = 4000;
+    const auto key = apollo::game::session::AnchorRewardSink::kExpKey;
+    const auto dispatch_save = [](std::unique_ptr<player_store::PlayerStore>& base,
+                                  std::uint64_t id, std::int64_t exp) {
+        protocol::DbSaveRequest request;
+        request.playerId = id;
+        request.tableName = "players";
+        player_store::PlayerData data;
+        data.playerId = id;
+        data.exp = exp;
+        request.jsonData = data.toJson();
+        const auto reply = base->dispatchRequest(protocol::MessageCodec::encode(request, 0));
+        const auto header = protocol::MessageCodec::parseHeader(reply);
+        CHECK(header.type == static_cast<std::uint16_t>(protocol::DbSaveResponse::TYPE));
+        return protocol::MessageCodec::decodeBody<protocol::DbSaveResponse>(
+            {reply.begin() + sizeof(header), reply.end()});
+    };
+
+    // ① 正常路径：已落盘真值 100
+    {
+        std::unique_ptr<player_store::PlayerStore> base(
+            new player_store::PlayerStore(baseCfg, database::makeClient(clientCfg)));
+        base->start();
+        auto anchor = base->activatePlayer(501);
+        CHECK(anchor);
+        CHECK(anchor->progress(key) == 1);
+        anchor->add_progress(key, 99);  // 真值 100
+        CHECK(dispatch_save(base, 501, anchor->progress(key)).success);
+        base->stop();
+    }
+    {
+        player_store::PlayerData landed;
+        CHECK(reader->loadPlayer(501, landed));
+        CHECK(landed.exp == 100);
+    }
+
+    // ② 断链：base 先在活链上载入，再终止 server——保存如实失败，锚点真值保留
+    std::unique_ptr<player_store::PlayerStore> base(
+        new player_store::PlayerStore(baseCfg, database::makeClient(clientCfg)));
+    base->start();
+    auto anchor = base->activatePlayer(501);
+    CHECK(anchor);
+    CHECK(anchor->progress(key) == 100);  // 断链前真值已可载回
+    server.stop();
+    anchor->add_progress(key, 50);  // 未落档增量：真值 150
+    player_store::PlayerData ghost;
+    ghost.playerId = 501;
+    ghost.exp = 999;  // 断链期必败写入，此后不得复活
+    CHECK(!reader->savePlayer(ghost));  // 传输失败：无回执不假成功
+    const auto failed = dispatch_save(base, 501, anchor->progress(key));
+    CHECK(!failed.success);  // 持久失败如实回执
+    CHECK(anchor->progress(key) == 150);  // 失败不吞锚点真值
+    base->stop();
+
+    // ③ 复活：同存储同端口重建 database
+    auto revivedCfg = f.config;
+    revivedCfg.port = realPort;
+    database::Server revived(revivedCfg);
+    CHECK(revived.start());
+
+    // ④ base 随编队重启（新存储客户端）：载入最后一次已落盘真值
+    {
+        std::unique_ptr<player_store::PlayerStore> base2(
+            new player_store::PlayerStore(baseCfg, database::makeClient(clientCfg)));
+        base2->start();
+        auto restored = base2->activatePlayer(501);
+        CHECK(restored);
+        CHECK(restored->progress(key) == 100);  // 未落档的 150 不复活，已落盘的 100 存活
+        restored->add_progress(key, 5);  // 复活后新的写入
+        CHECK(dispatch_save(base2, 501, restored->progress(key)).success);
+        base2->stop();
+    }
+
+    // ⑤ 终局盘上真值（全新后端，绕过一切缓存）
+    player_store::DatabaseService disk(f.config.storage);
+    CHECK(disk.initialize());
+    player_store::PlayerData final;
+    CHECK(disk.loadPlayer(501, final));
+    CHECK(final.exp == 105);
+    CHECK(final.exp != 999);
+    reader->shutdown();
+    revived.stop();
+}
+
 void pending_journal_recovery() {
     Fixture f;
     fs::create_directories(fs::path(f.config.storage.journalPath).parent_path());
@@ -171,8 +294,9 @@ int main(int argc, char** argv) {
         }
         roundtrip_and_base_restart();
         reject_bad_requests_and_failures();
+        database_crash_survives_restart();
         pending_journal_recovery();
-        std::cout << "Base/database TCP, persistence, isolation, failures and replay passed\n";
+        std::cout << "Base/database TCP, persistence, isolation, failures, crash restart and replay passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAILED: " << error.what() << '\n';
