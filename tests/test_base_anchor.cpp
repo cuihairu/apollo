@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <thread>
@@ -392,6 +393,70 @@ struct MigrationDir {
         std::filesystem::remove_all(path, ec);
     }
 };
+
+// 未知/未受理消息型契约（L69 兼容面）：新增代次消息型（如 squad 族后续
+// 迭代）到达未升级受理面 = 结构化 ERROR 回包（非崩溃、非断链），会话号
+// 保留，且后续已知类型受理不受污染——增量协议演进的受理面底线。
+bool test_dispatch_unknown_type_contract() {
+    std::cout << "Running: test_dispatch_unknown_type_contract..." << std::endl;
+
+    player_store::PlayerStoreConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 60000;
+    config.host = "127.0.0.1";
+    config.port = 39008;  // 高位端口：stub 树 start() 无传输面，避撞
+    config.dataDir = "base_anchor_test_unknown_data/players";
+    config.journalPath = "base_anchor_test_unknown_data/journal/persist.log";
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+
+    player_store::PlayerStore server(config);
+    server.start();
+
+    // 两类「新代型」：未受理的既有枚举成员 + 枚举之外的裸值
+    const uint16_t unknown_types[] = {
+        static_cast<uint16_t>(apollo::protocol::MessageType::SQUAD_LAUNCH),
+        0x07FF,
+    };
+    for (const auto type : unknown_types) {
+        apollo::protocol::MessageHeader header{};
+        header.magic = apollo::protocol::MessageHeader::MAGIC;
+        header.version = apollo::protocol::MessageHeader::CURRENT_VERSION;
+        header.type = type;
+        header.length = 4;
+        header.sequence = 1;
+        header.sessionId = 13;
+        std::vector<uint8_t> frame(sizeof(header) + 4, 0x5a);
+        std::memcpy(frame.data(), &header, sizeof(header));
+
+        const auto reply = server.dispatchRequest(frame);
+        const auto replyHeader = apollo::protocol::MessageCodec::parseHeader(reply);
+        TEST_ASSERT(replyHeader.type ==
+                        static_cast<uint16_t>(apollo::protocol::MessageType::ERROR),
+                    "unknown type answered with ERROR envelope");
+        TEST_ASSERT(replyHeader.sessionId == 13, "unknown type reply keeps session id");
+
+        apollo::protocol::ErrorMessage err;
+        apollo::protocol::MessageCodec::decodeBody(
+            {reply.begin() + sizeof(replyHeader), reply.end()}, err);
+        TEST_ASSERT(!err.message.empty(), "unknown type error carries reason");
+    }
+
+    // 受理面未被污染：已知类型照常受理
+    apollo::protocol::Ping ping;
+    ping.timestamp = 7;
+    const auto alive =
+        server.dispatchRequest(apollo::protocol::MessageCodec::encode(ping, 13));
+    TEST_ASSERT(apollo::protocol::MessageCodec::parseHeader(alive).type ==
+                    static_cast<uint16_t>(apollo::protocol::MessageType::PONG),
+                "known type still served after unknown type");
+
+    server.stop();
+    std::filesystem::remove_all("base_anchor_test_unknown_data");
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
 
 bool test_player_migration_faces() {
     std::cout << "Running: test_player_migration_faces..." << std::endl;
@@ -821,6 +886,7 @@ int main() {
     run(test_reward_survives_restart_no_double_count);
     run(test_freeze_collects_pending_reward);
     run(test_save_race_and_restart_persistence);
+    run(test_dispatch_unknown_type_contract);
     run(test_player_migration_faces);
 #if !defined(_WIN32)
     run(test_player_migration_pull_on_handoff);
