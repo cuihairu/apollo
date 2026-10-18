@@ -35,7 +35,7 @@ private:
 };
 
 // APOLLO_TRACE_SAMPLE_RATE 读取（dev 面；生产以配置常量装配 HeadSampler
-// 为准——装配面 = gateway-app configure 期 -DAPOLLO_TRACE_SAMPLE_RATE=<N>，
+// 为准——装配面 = gateway configure 期 -DAPOLLO_TRACE_SAMPLE_RATE=<N>，
 // 定死编译期常量 APOLLO_TRACE_SAMPLE_RATE_CONST 并压过本 env 面）。
 // 未设/空/非数字/0 = 缺省；溢出截断为缺省。
 inline std::uint32_t sample_rate_from_env() {

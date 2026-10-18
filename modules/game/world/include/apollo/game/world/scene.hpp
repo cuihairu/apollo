@@ -62,7 +62,7 @@ public:
     // position 为进场落点（出生点/门口由玩法规则决定）。
     bool enter(const apollo::game::cell::AvatarPtr& avatar, const SceneAoi::Vec3& position);
     // leave：Avatar 出 scene（对象由调用方/Instance 处置——P0-3 由
-    // world-app 持容器，Instance::destroy 时清场）。
+    // WorldApp 持容器，Instance::destroy 时清场）。
     bool leave(apollo::game::core::PlayerId player_id);
     // 断线挂机窗口（P1-6，lifecycle §2.4）：Avatar Active↔Suspended，
     // 驻留场景（AOI 保留）；窗口满由调用方经 leave() 移除销毁

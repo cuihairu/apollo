@@ -29,7 +29,7 @@ else()
 endif()
 
 # Legacy protocol apps still depend on modules/protocol.
-# base-app/baseappmgr additionally link apollo::game_session (game module).
+# base additionally links apollo::game_session (game module).
 if(TARGET apollo_protocol AND TARGET apollo::game_session)
     add_subdirectory(base)
     add_subdirectory(database)

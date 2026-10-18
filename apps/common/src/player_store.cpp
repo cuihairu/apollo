@@ -470,7 +470,7 @@ std::vector<uint8_t> PlayerStore::dispatchRequest(const std::vector<uint8_t>& da
             return handlePlayerScoreCreditRequest(data);
 
         // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
-        // 归 apps/baseappmgr（目录 + 落点裁决），base-app 不再受理。
+        // 归 baseappmgr 域（目录 + 落点裁决），base 不再受理。
 
         case protocol::MessageType::PING:
             return handlePing(data);

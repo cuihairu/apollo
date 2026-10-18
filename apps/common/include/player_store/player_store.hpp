@@ -128,7 +128,7 @@ private:
     std::uint64_t nextWriteGen(PlayerID playerId, const std::uint64_t* seed_hint);
 
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
-    // 归 apps/baseappmgr（目录 + 调度面，BW OnlineDirectory 直系）。
+    // 归 baseappmgr 域（目录 + 调度面，BW OnlineDirectory 直系；现由 login 进程承载）。
 
     // 处理心跳
     std::vector<uint8_t> handlePing(const std::vector<uint8_t>& request);
