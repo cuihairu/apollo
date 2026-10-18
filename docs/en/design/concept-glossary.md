@@ -31,9 +31,13 @@ cell registers with its owning worldServer without requiring local machined. wor
 
 Default to one cell execution process and one Cell per Space. A process can host Cells from multiple Spaces. Scale whole Spaces across processes first; allow multiple Cells within one Space later. Space identity/coordinates survive process/partition changes.
 
+## Character entities and Avatar
+
+BigWorld's Avatar terminology includes player characters and NPCs. BigWorld/KBEngine character entities may have Base, Cell, and client parts as needed. Apollo's current PlayerAnchor maps to the player's Base part; Avatar implements only the Cell simulation part. PlayerAnchor is a project class name, not common upstream terminology or a fixed-process guarantee. Describe responsibilities with Base/Cell parts and retain actual implementation names. See [player object model](./player-object-model.md) for sources and naming assessment.
+
 ## Data ownership and lifecycle
 
-The owning Base validates persistent changes through database; one authoritative Cell advances each entity. Cross-server, cross-Space, and cross-Cell movement retain original Base/storage ownership. Destroying an Instance releases temporary gameplay/spatial resources, not profiles.
+The owning Base validates persistent changes through database; one authoritative Cell advances each entity. Simulation movement across servers, Spaces, and Cells retains persistent-data/storage affiliation; Base hosting can migrate independently for load or updates, with directory ownership and write-authority generations transferred together. Destroying an Instance releases temporary gameplay/spatial resources, not profiles.
 
 Group request → Base validates → worldServer allocates → cell creates associated Space/Cell/gameplay → members run → owning Bases/database durably confirm settlement → depart/clean up. Retain `Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed`.
 

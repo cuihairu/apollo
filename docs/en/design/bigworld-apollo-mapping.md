@@ -41,7 +41,7 @@ Instance is gameplay rather than a spatial layer. Temporary tower-defense activi
 
 | BigWorld | Apollo counterpart | Authority/implementation boundary |
 |---|---|---|
-| Base entity | PlayerAnchor and other persistent objects in baseServer | Base validates persistent gameplay across Cell/Space/server transfers and saves through database. PlayerAnchor is not a complete generic Base-entity implementation. |
+| Base entity | PlayerAnchor and other persistent objects in baseServer | Base validates persistent gameplay and saves through database; simulation transfers retain storage affiliation, while Base hosting can migrate independently. PlayerAnchor is not a complete generic Base-entity implementation. |
 | Cell/Real entity | Avatar and simulated Entity in the owning cell partition | One effective simulation writer per entity. Avatar is a player gameplay type, not another process. Preserve entity IDs through transfer. |
 | Ghost entity | Reserved non-authoritative adjacent-Cell projection | Supports visibility/queries, not independent damage, rewards, or profile writes. Replication/deduplication/expiry are incomplete; a transfer snapshot is not a persistent Ghost. |
 | Witness | Partial observer-view duties in SceneAoi, ViewerState, and attribute sync | View management differs from cross-partition projection. Local AOI is not complete Witness or cross-Cell visibility. |
@@ -49,6 +49,10 @@ Instance is gameplay rather than a spatial layer. Temporary tower-defense activi
 | Proxy/client association | gateway connections, Session, and Base association | Connection, profile, and spatial entity have separate owners; changing simulation hosts need not replace client sockets. |
 
 See [Cell Entity](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/programming/bigworld/server/cellapp/entity.hpp) for Real/Ghost ownership and [Witness](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/programming/bigworld/server/cellapp/witness.hpp) for observer views. These support comparisons, not claims that Apollo implements them.
+
+### Scope of the Avatar name
+
+Avatar describes a character, not a Cell execution location. BigWorld's 2.1 glossary also includes NPCs, and its tutorial and KBEngine demos show Base/Cell parts. Apollo's current PlayerAnchor maps to the player's Base part and Avatar to the Cell part. This implementation mapping neither makes upstream Avatar Cell-only nor establishes PlayerAnchor as common industry terminology. See [player object model](./player-object-model.md) for sources, other engines, and naming assessment.
 
 ## 4. Apollo request ownership
 

@@ -31,9 +31,13 @@ cell 自注册到所属 worldServer；独立部署不要求同机 machined。wor
 
 默认一个 cell 执行进程，每个 Space 一个 Cell；同一进程可以承载多个 Space 的 Cell。扩展先分配完整 Space 到多个执行进程，未来允许一个 Space 多 Cell。Space 身份和坐标不因执行进程或分区变化而改变。
 
+## 角色实体与 Avatar
+
+Avatar 在 BigWorld 词汇中可包含玩家和 NPC；BigWorld/KBEngine 的角色实体可按需有 Base、Cell、客户端部分。Apollo 当前 `PlayerAnchor` 对应玩家角色的 Base 部分，`Avatar` 仅对应其 Cell 模拟部分。`PlayerAnchor` 是项目类名，不是上游通用术语，不表示固定 Base 进程。文档使用 Base/Cell 部分描述职责，代码引用保持真实名称；行业原文与命名判断见[玩家对象模型](./player-object-model.md)。
+
 ## 数据归属与生命周期
 
-长期资料只由所属 Base 校验修改并经 database 保存；模拟实体只由一个权威 Cell 推进。跨服、跨 Space、跨 Cell 都保留原 Base 和数据库归属。Instance 销毁只释放临时玩法和空间资源，不销毁长期资料。
+长期资料只由所属 Base 校验修改并经 database 保存；模拟实体只由一个权威 Cell 推进。跨服、跨 Space、跨 Cell 的模拟迁移不改变长期资料和原存储归属；Base 承载进程可按负载或更新独立迁移，玩家到当前 Base 的目录记录和写权代次必须同步交接。Instance 销毁只释放临时玩法和空间资源，不销毁长期资料。
 
 小队请求 → Base 校验 → worldServer 分配 → cell 创建关联 Space/Cell 与玩法 → 成员运行 → 各所属 Base/database 持久确认结算 → 离开并回收。复用既有 `Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed`。
 

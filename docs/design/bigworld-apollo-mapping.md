@@ -41,7 +41,7 @@ BigWorld 的 [Space](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/
 
 | BigWorld 概念 | Apollo 对应 | 权威与实现边界 |
 |---|---|---|
-| Base 实体 | PlayerAnchor 等长期对象，归 baseServer | 基础业务和长期资料由 Base 校验修改，跨 Cell/Space/服不改变归属；经 database 保存。PlayerAnchor 是当前玩家侧实现，不代表完整通用 Base 实体体系已实现。 |
+| Base 实体 | PlayerAnchor 等长期对象，归 baseServer | 基础业务和长期资料由 Base 校验修改，跨 Cell/Space/服的模拟迁移不改变存储归属，Base 承载可独立迁移；经 database 保存。PlayerAnchor 是当前玩家侧实现，不代表完整通用 Base 实体体系已实现。 |
 | Cell 实体 / Real 实体 | Avatar 与参与模拟的 Entity，归 cell 内的权威分区 | 一个实体只有一个有效模拟写入者。Avatar 是玩家玩法类型，不增加一层独立进程。实体 ID 在迁移时保持稳定。 |
 | Ghost 实体 | 邻接 Cell 的非权威投影，设计预留 | 用于跨边界可见性/查询，不能独立扣血、发奖或写档。当前没有完整复制、去重和失效实现；迁移快照不等于长期 Ghost。 |
 | Witness | 当前 SceneAoi、ViewerState、属性同步承担部分可见集职责 | Witness 是观察者视图语义，Ghost 是跨分区投影语义。现有本地 AOI 不等于完整 Witness 或跨 Cell 可见性。 |
@@ -49,6 +49,10 @@ BigWorld 的 [Space](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/
 | Proxy / 客户端关联 | gateway 的连接、Session 与 Base 关联 | 连接、长期资料对象和空间实体分别管理；更换模拟进程不要求更换客户端 socket。 |
 
 BigWorld 的 [Cell Entity](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/programming/bigworld/server/cellapp/entity.hpp) 描述 Real/Ghost 权威区别；[Witness](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/programming/bigworld/server/cellapp/witness.hpp) 提供观察者视图参考。这些源码支持机制对照，不证明 Apollo 已实现对应能力。
+
+### Avatar 名称的适用范围
+
+Avatar 是角色语义，不是 Cell 执行位置。BigWorld 2.1 官方词汇表还包含 NPC，教程和 KBEngine 示例均展示角色的 Base/Cell 部分。Apollo 当前 `PlayerAnchor` 对应玩家 Base 部分，`Avatar` 对应玩家 Cell 部分；它们是当前实现映射，不能据此宣称上游 Avatar 只存在于 Cell 或 PlayerAnchor 是行业共同类型。完整引用、其他引擎用法和命名判断见[玩家对象模型](./player-object-model.md)。
 
 ## 4. Apollo 的请求与归属
 
