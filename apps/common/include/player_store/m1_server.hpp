@@ -23,6 +23,8 @@ struct PlayerStoreLinkServerConfig {
     std::string host = "0.0.0.0";
     std::uint16_t port = 0;              // 0 = 面关
     std::string route_json;              // 契约路由表（缺位 = start false）
+    std::string self_name = "world";
+    std::string endpoint_name = "login";
 };
 
 class PlayerStoreLinkServer {

@@ -309,6 +309,8 @@ void PlayerStore::start() {
         m1Config.host = config_.host;
         m1Config.port = config_.m1Port;
         m1Config.route_json = config_.m1RouteJson;
+        m1Config.self_name = config_.m1SelfName;
+        m1Config.endpoint_name = config_.m1EndpointName;
         m1Server_ = makePlayerStoreLinkServer(
             std::move(m1Config), [this](const std::uint8_t* frame, std::size_t size) {
                 try {

@@ -2276,3 +2276,25 @@ add_executable(squad_instance_tests
 target_link_libraries(squad_instance_tests PRIVATE apollo_squad_instance apollo::base apollo::core)
 add_test(NAME SquadInstanceTests COMMAND squad_instance_tests)
 endif()
+
+# Independent Base/storage boundary over real M1 TCP (current transport is POSIX).
+if(TARGET apollo_database_rpc AND NOT WIN32)
+    add_executable(base_database_tests test_base_database.cpp)
+    target_link_libraries(base_database_tests PRIVATE apollo_database_rpc)
+    target_compile_definitions(base_database_tests PRIVATE
+        APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+    add_test(NAME BaseDatabaseTests COMMAND base_database_tests)
+    set_tests_properties(BaseDatabaseTests PROPERTIES TIMEOUT 30)
+endif()
+if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_dependencies(base_database_tests baseServer database)
+        add_test(NAME BaseDatabaseProcessSmoke COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/base_database_process_smoke.py
+            $<TARGET_FILE:baseServer> $<TARGET_FILE:database>
+            $<TARGET_FILE:base_database_tests>
+            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
+        set_tests_properties(BaseDatabaseProcessSmoke PROPERTIES TIMEOUT 40)
+    endif()
+endif()

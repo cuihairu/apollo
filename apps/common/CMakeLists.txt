@@ -14,6 +14,12 @@ target_link_libraries(apollo_app_services PUBLIC
 )
 target_compile_features(apollo_app_services PUBLIC cxx_std_20)
 
+# Base-facing storage operations over the existing M1 RPC envelope and DB codec.
+add_library(apollo_database_rpc STATIC src/database_client.cpp src/database_server.cpp)
+target_include_directories(apollo_database_rpc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(apollo_database_rpc PUBLIC apollo_app_services)
+target_compile_features(apollo_database_rpc PUBLIC cxx_std_20)
+
 # World-hosted squad instance admission (P2): World/Scene/Instance + Party
 # orchestration. Separate library so Login-side hosts do not pull game modules.
 # battle/session = P2-4 settlement ledger (battle sink → anchor rewards).

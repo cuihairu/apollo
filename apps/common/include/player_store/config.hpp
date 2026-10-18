@@ -19,6 +19,8 @@ struct PlayerStoreConfig {
     uint16_t m1Port = 0;
     bool m1Enabled = false;
     std::string m1RouteJson = APOLLO_BASEAPP_CONTRACT_ROUTE_JSON;
+    std::string m1SelfName = "world"; // Existing embedded host; standalone Base sets base.
+    std::string m1EndpointName = "login";
 
     // 数据库配置
     std::string dbHost = "localhost";

@@ -46,13 +46,13 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "world";
+        mc.self_name = config_.self_name;
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         mc.compat_route_versions = link::compat_route_versions_from_env();
         manager_ = std::make_unique<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
-        ep.name = "login";  // 拨入方 G-1 组件名（握手身份 = 其 Link self_name）
+        ep.name = config_.endpoint_name;
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kPassive;
@@ -99,7 +99,7 @@ public:
     }
 
     std::uint16_t listenPort() const override {
-        return manager_ ? manager_->endpoint_port("login") : 0;
+        return manager_ ? manager_->endpoint_port(config_.endpoint_name) : 0;
     }
 
     bool peerConnected() const override {
@@ -109,7 +109,7 @@ public:
 
 private:
     link::InterServerLink* login_peer() {
-        return manager_ ? manager_->link("login") : nullptr;
+        return manager_ ? manager_->link(config_.endpoint_name) : nullptr;
     }
 
     bool load_route_table(link::RouteTable& table) {

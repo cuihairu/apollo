@@ -31,6 +31,8 @@ endif()
 # Legacy protocol apps still depend on modules/protocol.
 # base-app/baseappmgr additionally link apollo::game_session (game module).
 if(TARGET apollo_protocol AND TARGET apollo::game_session)
+    add_subdirectory(base-server)
+    add_subdirectory(database)
     add_subdirectory(login-app)
     add_subdirectory(fleetctl)
     message(STATUS "Legacy protocol apps enabled (apollo_protocol + game_session found)")
