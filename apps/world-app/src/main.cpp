@@ -47,11 +47,6 @@ static apollo::core::log::LoggerPtr initLogging() {
 // 加载配置
 WorldAppConfig loadConfig(int argc, char* argv[]) {
     WorldAppConfig config;
-    config.playerStoreEnabled = true;
-    config.playerStore.m1Enabled = true;
-    config.playerStore.m1Port = 9104;
-    config.playerStore.dataDir.clear();
-    config.playerStore.journalPath.clear();
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -60,12 +55,6 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.worldId = static_cast<std::uint32_t>(std::stoul(argv[++i]));
         } else if (arg == "--max-instances" && i + 1 < argc) {
             config.maxInstances = static_cast<std::size_t>(std::stoull(argv[++i]));
-        } else if (arg == "--player-store-m1-port" && i + 1 < argc) {
-            config.playerStore.m1Port = static_cast<std::uint16_t>(std::stoul(argv[++i]));
-        } else if (arg == "--data-dir" && i + 1 < argc) {
-            config.playerStore.dataDir = argv[++i];
-        } else if (arg == "--journal" && i + 1 < argc) {
-            config.playerStore.journalPath = argv[++i];
         } else if (arg == "--m1-port" && i + 1 < argc) {
             config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--space" && i + 1 < argc) {
@@ -81,22 +70,11 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.scriptHandersFile = argv[++i];
         } else if (arg == "--script-contract" && i + 1 < argc) {
             config.scriptContractFile = argv[++i];
-        } else if (arg == "--report-to-host" && i + 1 < argc) {
-            config.reportHost = argv[++i];
-        } else if (arg == "--report-to-port" && i + 1 < argc) {
-            config.reportPort = static_cast<std::uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--report-zone-id" && i + 1 < argc) {
-            config.reportZoneId = static_cast<std::uint32_t>(std::atoi(argv[++i]));
-        } else if (arg == "--report-interval-ms" && i + 1 < argc) {
-            config.reportIntervalMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  --world-id <id>            World identity (default: 1)\n"
                       << "  --max-instances <n>        Squad instance capacity (default: 16)\n"
-                      << "  --player-store-m1-port <port>  Hosted player data endpoint (default: 9104)\n"
-                      << "  --data-dir <path>          Player profile directory\n"
-                      << "  --journal <path>           Player journal path\n"
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
@@ -104,18 +82,11 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --script-boot <file>        Lua boot source file (default: none)\n"
                       << "  --script-handlers <file>    Lua contract handler module, loaded first (default: none)\n"
                       << "  --script-contract <file>    Lua contract table, loaded after handlers (default: none)\n"
-                      << "  --report-to-host <ipv4>    Fleet recovery full-report target host (default: 127.0.0.1)\n"
-                      << "  --report-to-port <port>    Fleet recovery intake port; 0 disables (default: 0)\n"
-                      << "  --report-zone-id <n>       Home zone id for full reports (default: world id)\n"
-                      << "  --report-interval-ms <ms>  Full report refresh period; 0 = startup only (default: 30000)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
     }
 
-    const auto data_root = "data/world-" + std::to_string(config.worldId);
-    if (config.playerStore.dataDir.empty()) config.playerStore.dataDir = data_root + "/players";
-    if (config.playerStore.journalPath.empty()) config.playerStore.journalPath = data_root + "/journal/persist.log";
     return config;
 }
 
@@ -178,13 +149,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     try {
-        // 报告方组件号同源（旧壳一进程一身份口径）：--component-id 显式
-        // 优先，缺省保留 0 派生 worldId。先解析再建 WorldApp（config 进
-        // 构造器后不可改）。
         const FleetOptions fleet = loadFleetOptions(argc, argv);
-        if (fleet.component_id != 0 && config.reportComponentId == 0) {
-            config.reportComponentId = fleet.component_id;
-        }
 
         WorldApp server(config);
         g_server = &server;

@@ -190,4 +190,16 @@ private:
     std::thread autoSaveThread_;
 };
 
+// 报告条目收集（P3-1 增量③；资料归属切换后由 baseServer 宿主调用）：
+// store 锚点快照 → 目录镜像条目。报告条目 zone = 承载域（调用方宿主域，
+// 同 FleetReporter zone 口径）而非锚点 home_zone_id（原区服）：目录条目
+// zone 是死亡反查与迁移改指的路由键——迁移后玩家由目标域承载，周期重报
+// 若按原区服进 intake 会回卷 ④ 已改指条目（P3-5 迁移链实测修）。冻结
+// 锚点（Transferring）离在册集（§9.2 ①）：停写交权中，不再是本域活会话
+// ——周期重报不得再以本域 zone 上报（否则 intake 把 ④ 已改指条目回卷
+// 源域，目录在两报告方之间来回翻转）。⑤ 未接线时锚点停留 Transferring，
+// 即持续缺席重报——目标域独占报告权。
+std::vector<apollo::game::session::MirrorEntry> collect_mirror_entries(
+    const PlayerStore& store, std::uint32_t hosting_zone);
+
 } // namespace player_store

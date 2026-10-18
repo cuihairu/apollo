@@ -1,8 +1,9 @@
-// 编队面 re-home 真实进程链验收（P3-1：baseappmgr/base-app 退场后目录
-// owner 面 = Login 进程、报告方 = World 进程）：
-//   真 LoginServer（镜像 owner / 恢复 intake / 死亡订阅三面）+ 真 WorldApp
-//   （FleetReporter 全量重报）+ 测试侧 machined 替身（DeathNotifier 收订阅
-//   / 发死亡通知）——全 UDP 真回环，无进程内桩直调。
+// 编队面 re-home 真实进程链验收（P3-1：目录 owner 面 = Login 进程；
+// L19 资料归属切换后报告方 = Base 宿主 store，原 WorldApp 位由
+// StoreHost 替身承接）：
+//   真 LoginServer（镜像 owner / 恢复 intake / 死亡订阅三面）+ 独立
+//   PlayerStore 宿主（FleetReporter 全量重报）+ 测试侧 machined 替身
+//   （DeathNotifier 收订阅 / 发死亡通知）——全 UDP 真回环，无进程内桩直调。
 //
 // 断言事实源（对齐 tooling.md 演练口径——日志不算证据）：
 //   1. 恢复相位排他：intake 口开启期 bindSession 拒绝（门闸关）；
@@ -15,7 +16,8 @@
 
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "login/login_server.hpp"
-#include "world_app/world_app.hpp"
+#include "player_store/player_store.hpp"
+#include "store_host.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -111,28 +113,21 @@ void fleet_rehome_chain() {
     require(!login.onlineDirectory()->bindSession(777, probe_binding),
             "admission gate did not refuse during recovery");
 
-    // ---- 报告方进程：World（恢复相位全量重报 → Login intake 口）----
-    world_app::WorldAppConfig world_config;
-    world_config.worldId = 44;
-    world_config.host = "127.0.0.1";
-    world_config.m1Port = 0;  // 本链路不走 M1 意图面（spawn 链归 squad e2e）
-    world_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
-    world_config.playerStoreEnabled = true;
-    world_config.playerStore.m1Enabled = true;
-    world_config.playerStore.host = "127.0.0.1";
-    world_config.playerStore.dataDir = (files.path / "players").string();
-    world_config.playerStore.journalPath = (files.path / "journal/persist.log").string();
-    world_config.reportHost = "127.0.0.1";
-    world_config.reportPort = login.recoveryListenPort();
-    world_config.reportComponentId = 11;
-    world_config.reportZoneId = 44;
-    world_config.reportIntervalMs = 400;
+    // ---- 报告方进程：Base（L19 资料归属切换后 = Base 宿主 store + 全量
+    //      重报；StoreHost 替身与 baseServer main 同口径装配）----
+    player_store::PlayerStoreConfig store_config;
+    store_config.host = "127.0.0.1";
+    store_config.m1Enabled = true;
+    store_config.m1Port = 0;
+    store_config.m1SelfName = "baseServer";
+    store_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_config.dataDir = (files.path / "players").string();
+    store_config.journalPath = (files.path / "journal/persist.log").string();
 
-    world_app::WorldApp world(world_config);
-    world.start();
-    require(world.isRunning(), "world app did not start");
+    StoreHost base(store_config, login.recoveryListenPort(), 11, 44, 400);
+    require(base.store->m1_listen_port(), "base store did not listen");
 
-    // World 启动全量重报（真实 datagram）→ 收敛开放——门闸开。timeout
+    // Base 启动全量重报（真实 datagram）→ 收敛开放——门闸开。timeout
     // (30s) 远大于重报到达，收敛是报告驱动不是超时兜底
     pump_until([&] {
         return login.onlineDirectory()->bindSession(777, probe_binding);
@@ -146,8 +141,7 @@ void fleet_rehome_chain() {
     const std::vector<std::pair<std::uint64_t, std::uint64_t>> roster{
         {9001, 100}, {9002, 101}, {9003, 102}};
     for (const auto [session_id, player_id] : roster) {
-        require(world.playerStore() != nullptr, "player store not hosted");
-        require(world.playerStore()->adoptPlayer(player_id, "", session_id, 7, 44),
+        require(base.store->adoptPlayer(player_id, "", session_id, 7, 44),
                 "adoptPlayer failed");
     }
 
@@ -161,6 +155,7 @@ void fleet_rehome_chain() {
     };
     bool roster_mirrored = false;
     pump_until([&] {
+        base.pump();
         pump_mirror();
         roster_mirrored = true;
         for (const auto [session_id, player_id] : roster) {
@@ -177,10 +172,10 @@ void fleet_rehome_chain() {
                 mirror.find(102) != nullptr,
             "mirror projection incomplete");
 
-    // ---- World 退场（真死亡拓扑：死亡进程不再刷新重报——后续 intake 不再
-    // 复活条目；intake 的 restore-not-kick 复活面正是对「活进程重报」的
-    // 语义，与本 死亡窗口 拍不冲突）----
-    world.stop();
+    // ---- Base 报告面退场（真死亡拓扑：死亡进程不再刷新重报——后续
+    // intake 不再复活条目；intake 的 restore-not-kick 复活面正是对「活
+    // 进程重报」的语义，与本 死亡窗口 拍不冲突）----
+    base.stop_reports();
 
     // ---- machined 替身：收订阅（真 DeathSubscribe wire）→ 发死亡通知 ----
     bool subscribed = false;

@@ -1044,4 +1044,33 @@ void PlayerStore::finalizeSave(PlayerID playerId, bool success, std::uint64_t jo
     anchor->set_state(apollo::game::session::AnchorState::Disconnected);
 }
 
+std::vector<apollo::game::session::MirrorEntry> collect_mirror_entries(
+    const PlayerStore& store, std::uint32_t hosting_zone) {
+    std::vector<apollo::game::session::MirrorEntry> sessions;
+    const auto anchors = store.anchor_manager();
+    if (!anchors) {
+        return sessions;
+    }
+    // 承载域口径与冻结锚点过滤语义见头注（collect_mirror_entries）。
+    sessions.reserve(anchors->anchor_count());
+    for (const auto& anchor : anchors->snapshot()) {
+        if (!anchor || anchor->player_id() == 0) {
+            continue;
+        }
+        if (anchor->state() ==
+            apollo::game::session::AnchorState::Transferring) {
+            continue;
+        }
+        apollo::game::session::MirrorEntry e;
+        e.player_id = anchor->player_id();
+        e.session_id = anchor->session_binding().session_id;
+        e.gateway_id = anchor->session_binding().gateway_id;
+        e.zone_id = hosting_zone;
+        e.state = apollo::game::session::PlayerDirectory::EntryState::Online;
+        e.assignment = anchor->world_assignment();
+        sessions.push_back(e);
+    }
+    return sessions;
+}
+
 } // namespace player_store

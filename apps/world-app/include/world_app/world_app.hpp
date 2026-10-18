@@ -4,15 +4,12 @@
 #include "world_app/acceptance_queue.hpp"
 #include "world_app/m1_link_server.hpp"
 #include "world_app/world_types.hpp"
-#include "player_store/player_store.hpp"
 #include "squad_instance/squad_instance.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
 #include "apollo/core/metrics/metric_registry.h"
-#include "apollo/game/session/fleet_recovery.hpp"
-#include "apollo/net/discovery/udp_transport.hpp"
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -43,7 +40,6 @@ public:
 
     // 是否运行中
     bool isRunning() const { return running_; }
-    player_store::PlayerStore* playerStore() noexcept { return playerStore_.get(); }
 
     // 小队副本受理面（P2）：进程内装配完成；测试与后续 M1 入口共用。
     squad_instance::SquadInstanceService* squadInstanceService() noexcept {
@@ -110,11 +106,6 @@ private:
 
     // 游戏循环
     void gameLoop();
-
-    // 恢复相位全量重报（P3-1 re-home，增量③报告方供数面）：AnchorManager
-    // 快照 → 镜像投影条目（epoch 列恒 0——裁决键归目录 owner，intake
-    // restore-not-kick）。
-    std::vector<apollo::game::session::MirrorEntry> collect_anchor_entries() const;
 
     // 意图执行（ADR-015(a)：gameThread_ tick 边界消费——复用既有 handler，
     // 返回值丢弃（延时应答随 M1 升级批））
@@ -189,7 +180,6 @@ private:
     void record_metrics(std::int64_t elapsed_ms);
 
     WorldAppConfig config_;
-    std::unique_ptr<player_store::PlayerStore> playerStore_;
     // 小队副本受理面（P2）：PartyManager + 受理服务。入口链路（客户端→
     // Gateway→World 的真实上行）随后续条目接通；本批先在进程内装配并
     // 注册本 World 容量。
@@ -241,11 +231,6 @@ private:
     // eval_id → 回传 peer 自报名；scene_id → 在途 eval id 集（drain 圈定面）。
     std::unordered_map<std::uint64_t, std::string> evalReplyPeers_;
 
-    // 恢复相位全量重报面（P3-1 re-home，增量③报告方）：reportPort = 0 关。
-    // 发送在 gameLoop 线程（启动即报 + 周期刷新）；transport 归进程期所有。
-    apollo::net::discovery::UdpBeaconTransport reportTransport_;
-    std::unique_ptr<apollo::game::session::FleetReporter> fleetReporter_;
-    std::chrono::steady_clock::time_point lastReportMs_{};
     std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
 
     // metrics admin 通道计数面（引用在注册表存续期恒稳定——注册表头注；

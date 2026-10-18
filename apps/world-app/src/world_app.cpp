@@ -145,6 +145,9 @@ WorldApp::WorldApp(const WorldAppConfig& config)
     // 裁定（权威在线目录在 Login 侧，跨进程校验随后续条目接通）。
     squadInstanceService_ = std::make_unique<squad_instance::SquadInstanceService>(
         squadParties_, world_.get(), config_.worldId);
+    // 资料归属切换（L19）：档案宿主 = baseServer，World 不再持有 PlayerStore
+    // ——结算落账解析器留空（SettlementLedger 挂账待补的设计降级态），
+    // Base 业务受理接口随后续条目接线后恢复落账。
     squadInstanceService_->register_world(config_.worldId, config_.maxInstances);
     squadInstanceService_->set_member_online(
         [sessions = worldSessionManager_](std::uint64_t player_id) {
@@ -152,11 +155,6 @@ WorldApp::WorldApp(const WorldAppConfig& config)
                    sessions->find_by_player(
                        apollo::game::core::PlayerId{player_id}) != nullptr;
         });
-    // 结算落账解析（P2-4）：PlayerStore 晚于本段装配，经 this 惰性解引用；
-    // 锚点缺位（未装载/迁移中）由账本挂账待补。
-    squadInstanceService_->set_anchor_resolver([this](std::uint64_t player_id) {
-        return playerStore_ ? playerStore_->findAnchor(player_id).get() : nullptr;
-    });
 }
 
 WorldApp::~WorldApp() {
@@ -166,20 +164,6 @@ WorldApp::~WorldApp() {
 void WorldApp::start() {
     if (running_) return;
 
-    if (config_.playerStoreEnabled) {
-        auto storage_config = config_.playerStore;
-        storage_config.m1RouteJson = config_.m1RouteJson;
-        playerStore_ = std::make_unique<player_store::PlayerStore>(storage_config);
-        playerStore_->start();
-        if ((storage_config.m1Enabled || storage_config.m1Port != 0) && playerStore_->m1_listen_port() == 0) {
-            throw std::runtime_error("World player store failed to listen");
-        }
-        // 结算去重凭据面（真实奖励持久化）：凭据与玩家档案同属 World 数据
-        // 域；上一代消亡时留盘的已落账凭据在此装载，重开副本回填不双记。
-        squadInstanceService_->set_credential_dir(
-            storage_config.dataDir + "/settlement_credentials");
-        squadInstanceService_->ingest_restored_credentials();
-    }
 
     // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket
     // 已退役）：InterServerLink passive 端点装配（监听在 start 内 bind/listen，
@@ -216,27 +200,6 @@ void WorldApp::start() {
         throw std::runtime_error("failed to start WorldHost");
     }
 
-    // 恢复相位全量重报面（P3-1 re-home，增量③报告方）：本进程锚点快照 →
-    // FullReport 分片发目录 owner（Login intake 口）——启动即报 + gameLoop
-    // 周期刷新（幂等 intake）。reportPort = 0 = 关；组件号缺省派生 worldId
-    //（编队同号口径）。
-    if (config_.reportPort != 0 && reportTransport_.open()) {
-        const auto component_id =
-            config_.reportComponentId != 0 ? config_.reportComponentId : worldId_;
-        const auto zone_id =
-            config_.reportZoneId != 0 ? config_.reportZoneId : worldId_;
-        const auto host = config_.reportHost;
-        const auto port = config_.reportPort;
-        fleetReporter_ = std::make_unique<apollo::game::session::FleetReporter>(
-            component_id, zone_id,
-            [this, host, port](const std::uint8_t* data, std::size_t len) {
-                return reportTransport_.send_bytes(host, port, data, len);
-            });
-        worldLog().info("fleet report: component=" + std::to_string(component_id)
-                    + " zone=" + std::to_string(zone_id) + " -> " + host + ":"
-                    + std::to_string(port) + " (interval "
-                    + std::to_string(config_.reportIntervalMs) + "ms)");
-    }
 
     running_ = true;
 
@@ -268,10 +231,6 @@ void WorldApp::stop() {
 
     if (worldHost_) {
         worldHost_->stop();
-    }
-    if (playerStore_) {
-        playerStore_->stop();
-        playerStore_.reset();
     }
 }
 
@@ -1234,26 +1193,8 @@ void WorldApp::gameLoop() {
         }
     }
 
-    // 启动即报（增量③：恢复相位方有非零锚点可收；幂等 intake 重放无害）
-    if (fleetReporter_) {
-        const auto sent = fleetReporter_->report_full(collect_anchor_entries());
-        lastReportMs_ = std::chrono::steady_clock::now();
-        (void)sent;
-    }
-
     while (running_) {
         auto startTime = std::chrono::steady_clock::now();
-
-        // 周期全量重报刷新（增量③：0 = 仅启动期一报）
-        if (fleetReporter_ && config_.reportIntervalMs != 0) {
-            const auto since_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      std::chrono::steady_clock::now() - lastReportMs_)
-                                      .count();
-            if (since_ms >= static_cast<std::int64_t>(config_.reportIntervalMs)) {
-                lastReportMs_ = std::chrono::steady_clock::now();
-                (void)fleetReporter_->report_full(collect_anchor_entries());
-            }
-        }
 
         // net M1 接收面一拍（2b-ii）：链路泵与受理队列入队同线程（单写者
         // 纪律，ADR-015(a)）；回执发送在后续拍的泵内上线
@@ -1319,43 +1260,6 @@ void WorldApp::attach_script_to_scenes() {
             scene->attach_script(*script_);
         }
     }
-}
-
-std::vector<apollo::game::session::MirrorEntry> WorldApp::collect_anchor_entries() const {
-    std::vector<apollo::game::session::MirrorEntry> sessions;
-    const auto anchors = playerStore_ ? playerStore_->anchor_manager() : nullptr;
-    if (!anchors) {
-        return sessions;
-    }
-    // 报告条目 zone = 承载域（本 World 宿主域，同 FleetReporter zone 口径）
-    // 而非锚点 home_zone_id（原区服）：目录条目 zone 是死亡反查与迁移改指
-    // 的路由键——迁移后玩家由目标域承载，周期重报若按原区服进 intake 会
-    // 回卷 ④ 已改指条目（P3-5 迁移链实测修）。
-    const std::uint32_t hosting_zone =
-        config_.reportZoneId != 0 ? config_.reportZoneId : worldId_;
-    sessions.reserve(anchors->anchor_count());
-    for (const auto& anchor : anchors->snapshot()) {
-        if (!anchor || anchor->player_id() == 0) {
-            continue;
-        }
-        // 冻结锚点离在册集（§9.2 ①）：Transferring = 停写交权中，不再是
-        // 本域活会话——周期重报不得再以本域 zone 上报（否则 intake 把 ④
-        // 已改指条目回卷源域，目录在两报告方之间来回翻转）。⑤ 未接线时
-        // 锚点停留 Transferring，即持续缺席重报——目标域独占报告权。
-        if (anchor->state() ==
-            apollo::game::session::AnchorState::Transferring) {
-            continue;
-        }
-        apollo::game::session::MirrorEntry e;
-        e.player_id = anchor->player_id();
-        e.session_id = anchor->session_binding().session_id;
-        e.gateway_id = anchor->session_binding().gateway_id;
-        e.zone_id = hosting_zone;
-        e.state = apollo::game::session::PlayerDirectory::EntryState::Online;
-        e.assignment = anchor->world_assignment();
-        sessions.push_back(e);
-    }
-    return sessions;
 }
 
 apollo::game::world::Scene* WorldApp::find_scene(std::uint64_t scene_id) {

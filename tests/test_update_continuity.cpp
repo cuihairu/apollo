@@ -13,7 +13,6 @@
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
-#include "player_store/database_service.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -515,8 +514,8 @@ bool poll_rollout_state(OpsEnd& ops, std::int32_t want_state,
     return false;
 }
 
-// 服务端壳：WorldApp（port 0 = 内核分配；替换路径给固定口重听）+ playerStore
-// 落临时目录（seed=false 复用既有档——进程替换后档案仍在）。
+// 服务端壳：WorldApp（port 0 = 内核分配；替换路径给固定口重听）。档案宿主
+// 已迁 baseServer（L19）——seed 形参保留调用面兼容，语义空置。
 struct WorldEnd {
     TemporaryDirectory files;
     WorldAppConfig config;
@@ -530,26 +529,7 @@ struct WorldEnd {
         config.m1RouteJson = kRouteJson;
         config.m1AuthorityEpoch = epoch;
         config.tickRateMs = 20;
-        config.playerStoreEnabled = true;
-        config.playerStore.m1Enabled = true;
-        config.playerStore.host = "127.0.0.1";
-        config.playerStore.dataDir = (files.path / "players").string();
-        config.playerStore.journalPath = (files.path / "journal/persist.log").string();
-        if (seed) {
-            player_store::DatabaseService database(config.playerStore);
-            if (!database.initialize()) {
-                return false;
-            }
-            for (const auto id : {100u, 101u, 102u, 200u, 300u}) {
-                player_store::PlayerData profile{};
-                profile.playerId = id;
-                profile.username = "p" + std::to_string(id);
-                if (!database.createPlayer(profile)) {
-                    return false;
-                }
-            }
-            database.shutdown();
-        }
+        (void)seed;  // 档案宿主迁 baseServer（L19）——种子面已随宿主移除
         try {
             world = std::make_unique<WorldApp>(config);
             world->start();

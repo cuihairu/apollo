@@ -10,7 +10,6 @@
 
 #include "world_app/world_app.hpp"
 #include "gateway/m1_egress.hpp"
-#include "player_store/database_service.hpp"
 #include "apollo/protocol/codec.hpp"
 
 #include <chrono>
@@ -108,24 +107,8 @@ void squad_wire_e2e() {
     world_config.host = "127.0.0.1";
     world_config.m1Port = 0;  // 内核分配：测试经 listenPort() 读回
     world_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
-    world_config.playerStoreEnabled = true;
-    world_config.playerStore.m1Enabled = true;
-    world_config.playerStore.host = "127.0.0.1";
-    world_config.playerStore.dataDir = (files.path / "players").string();
-    world_config.playerStore.journalPath = (files.path / "journal/persist.log").string();
-    // 三名队员档案（结算锚点解析的事实源）
-    {
-        player_store::DatabaseService database(world_config.playerStore);
-        require(database.initialize(), "Profile database initialization failed");
-        for (const auto [id, name] :
-             {std::pair{100u, "tank"}, std::pair{101u, "heal"}, std::pair{102u, "dps"}}) {
-            player_store::PlayerData profile{};
-            profile.playerId = id;
-            profile.username = name;
-            require(database.createPlayer(profile), "Profile creation failed");
-        }
-        database.shutdown();
-    }
+    // 资料归属切换（L19）：档案宿主 = baseServer，World 不带 PlayerStore
+    // ——结算无锚点解析器 = 挂账待补（设计降级态），成员档案不再种子。
 
     world_app::WorldApp world(world_config);
     world.start();
@@ -315,13 +298,10 @@ void squad_wire_e2e() {
                },
                5000);
     require(destroyed_reached.size() == 3, "terminal state did not reach every roster session");
-    // 击杀分值经 battle 正路径落账（上报人 100）：下行证据 + 锚点落账双验
-    pump_until(*egress,
-               [&] {
-                   const auto anchor = world.playerStore()->findAnchor(100);
-                   return anchor && anchor->progress("exp") > 0;
-               },
-               5000);
+    // 结算落账（上报人 100）：World 侧无锚点解析器 = 分值挂账待补
+    // （SettlementLedger 设计降级态），不得阻塞收尾——终态回收 + 容量
+    // 归还即结算收尾完成证据；锚点落账断言随 Base 业务受理接口接线
+    // （后续条目）回归 Base 侧链路。
     require(squads->active_count() == 0, "instance binding not reclaimed");
     require(squads->used_capacity(44) == 0, "world capacity not returned");
 

@@ -1,8 +1,8 @@
-#include "world_app/world_app.hpp"
 #include "login/login_server.hpp"
 #include "login/m1_base_client.hpp"
 #include "gateway/m1_route_client.hpp"
 #include "player_store/database_service.hpp"
+#include "player_store/player_store.hpp"
 #include "apollo/protocol/codec.hpp"
 
 #include <chrono>
@@ -41,18 +41,18 @@ struct TemporaryDirectory {
 
 void hosted_services() {
     TemporaryDirectory files;
-    world_app::WorldAppConfig world_config;
-    world_config.worldId = 33;
-    world_config.host = "127.0.0.1";
-    world_config.m1Port = 0;
-    world_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
-    world_config.playerStoreEnabled = true;
-    world_config.playerStore.m1Enabled = true;
-    world_config.playerStore.host = "127.0.0.1";
-    world_config.playerStore.dataDir = (files.path / "players").string();
-    world_config.playerStore.journalPath = (files.path / "journal/persist.log").string();
+    // 档案宿主 = Base（L19 资料归属切换）：store M1 面独立进程壳装配，
+    // 不再经由 WorldApp 宿主。
+    player_store::PlayerStoreConfig store_config;
+    store_config.host = "127.0.0.1";
+    store_config.m1Enabled = true;
+    store_config.m1Port = 0;  // 内核分配
+    store_config.m1SelfName = "baseServer";
+    store_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_config.dataDir = (files.path / "players").string();
+    store_config.journalPath = (files.path / "journal/persist.log").string();
     {
-        player_store::DatabaseService database(world_config.playerStore);
+        player_store::DatabaseService database(store_config);
         require(database.initialize(), "Profile database initialization failed");
         player_store::PlayerData profile{};
         profile.playerId = 1001;
@@ -61,9 +61,9 @@ void hosted_services() {
         require(database.createPlayer(profile), "Profile creation failed");
         database.shutdown();
     }
-    world_app::WorldApp world(world_config);
-    world.start();
-    require(world.playerStore() && world.playerStore()->m1_listen_port(), "World did not host player store");
+    player_store::PlayerStore base(store_config);
+    base.start();
+    require(base.m1_listen_port(), "Base did not host player store");
 
     login::LoginConfig config;
     config.host = "127.0.0.1";
@@ -71,7 +71,7 @@ void hosted_services() {
     config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
     config.directoryEnabled = true;
     config.directoryEpochPath = (files.path / "login/epochs.json").string();
-    config.worldStoreM1Port = world.playerStore()->m1_listen_port();
+    config.worldStoreM1Port = base.m1_listen_port();
     config.initialWorldId = 33;
     login::LoginServer login(config);
     login.start();
@@ -97,7 +97,7 @@ void hosted_services() {
         if (!response.success) std::this_thread::sleep_for(10ms);
     } while (!response.success && std::chrono::steady_clock::now() < deadline);
     require(response.success && response.playerId == 1001 && !response.loginTicket.empty(), "Real login failed");
-    auto anchor = world.playerStore()->findAnchor(1001);
+    auto anchor = base.findAnchor(1001);
     require(anchor && anchor->session_binding().session_id == response.sessionId, "World did not bind session");
 
     gateway::M1RouteClientConfig route_config;
@@ -138,13 +138,13 @@ void hosted_services() {
         require(recovered_floor > epoch_floor, "Restart regressed authority epoch");
         restarted.stop();
     }
-    world.stop();
+    base.stop();
     {
-        player_store::DatabaseService database(world_config.playerStore);
+        player_store::DatabaseService database(store_config);
         require(database.initialize(), "Profile reload initialization failed");
         player_store::PlayerData profile{};
         require(database.loadPlayer(1001, profile) && profile.exp == 10 && profile.username == "player1",
-                "World shutdown damaged persistent profile");
+                "Base shutdown damaged persistent profile");
         database.shutdown();
     }
     login::LoginConfig unavailable;

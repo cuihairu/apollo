@@ -1,7 +1,7 @@
 // 跨 World 迁移真实进程链验收（P3-5，backup-revive §9.2 五步已接线段）：
-//   真 LoginServer（目录 owner + 942 迁移编排受理面）+ 两个真 WorldApp
-//  （源 zone 2 / 目标 zone 5，真 PlayerStore M1 面 + 933/935/936/937 迁移
-//   wire 经 StoreDial 真拨）——迁移命令走 dispatchRequest 真受理面（与
+//   真 LoginServer（目录 owner + 942 迁移编排受理面）+ 两个独立 Base 宿主
+//  （源 zone 2 / 目标 zone 5，StoreHost 替身 = store M1 面 + 全量重报面
+//   ——L19 资料归属切换后原 WorldApp 位；933/935/936/937 迁移 wire 真拨）——迁移命令走 dispatchRequest 真受理面（与
 //   fleetctl 942 同 handler），非进程内直调编排函数。
 //
 // 断言面（分别验证，日志不算证据）：
@@ -33,7 +33,8 @@
 #include "player_store/migration_wire.hpp"
 #include "player_store/store_dial.hpp"
 #include "squad_instance/settlement_ledger.hpp"
-#include "world_app/world_app.hpp"
+#include "player_store/player_store.hpp"
+#include "store_host.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -137,23 +138,15 @@ void migration_chain() {
     login.start();
     require(login.recoveryListenPort() == 45913, "recovery intake did not listen");
 
-    // ---- 源 World（zone 2）：种子档案 42（迁移前后档案一致性事实源）----
-    world_app::WorldAppConfig old_config;
-    old_config.worldId = 2;
-    old_config.host = "127.0.0.1";
-    old_config.m1Port = 0;
-    old_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
-    old_config.playerStoreEnabled = true;
-    old_config.playerStore.m1Enabled = true;
-    old_config.playerStore.host = "127.0.0.1";
-    old_config.playerStore.m1Port = 46131;
-    old_config.playerStore.dataDir = (files.path / "old/players").string();
-    old_config.playerStore.journalPath = (files.path / "old/journal/persist.log").string();
-    old_config.reportHost = "127.0.0.1";
-    old_config.reportPort = login.recoveryListenPort();
-    old_config.reportComponentId = 21;
-    old_config.reportZoneId = 2;
-    old_config.reportIntervalMs = 400;
+    // ---- 源 Base 宿主（zone 2）：种子档案 42（迁移前后档案一致性事实源）----
+    player_store::PlayerStoreConfig old_store;
+    old_store.host = "127.0.0.1";
+    old_store.m1Enabled = true;
+    old_store.m1Port = 46131;
+    old_store.m1SelfName = "baseServer";
+    old_store.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    old_store.dataDir = (files.path / "old/players").string();
+    old_store.journalPath = (files.path / "old/journal/persist.log").string();
 
     player_store::PlayerData seeded{};
     seeded.playerId = 42;
@@ -162,34 +155,32 @@ void migration_chain() {
     seeded.exp = 1234;
     seeded.hp = 66;
     {
-        player_store::DatabaseService database(old_config.playerStore);
+        player_store::DatabaseService database(old_store);
         require(database.initialize(), "profile database initialization failed");
         require(database.createPlayer(seeded), "profile creation failed");
         database.shutdown();
     }
 
-    // ---- 目标 World（zone 5，空载承接）----
-    world_app::WorldAppConfig new_config = old_config;
-    new_config.worldId = 5;
-    new_config.playerStore.m1Port = 46141;
-    new_config.playerStore.dataDir = (files.path / "new/players").string();
-    new_config.playerStore.journalPath = (files.path / "new/journal/persist.log").string();
-    new_config.reportComponentId = 22;
-    new_config.reportZoneId = 5;
+    // ---- 目标 Base 宿主（zone 5，空载承接）----
+    player_store::PlayerStoreConfig new_store = old_store;
+    new_store.m1Port = 46141;
+    new_store.dataDir = (files.path / "new/players").string();
+    new_store.journalPath = (files.path / "new/journal/persist.log").string();
 
     // 目标先起（构造序决定两报告方在同一 intake 排水批内的到达序——目标
     // 先报 = 源后报最后落笔；源冻结锚点若仍在报，目录在排水间稳定停在
     // 源域 zone 2，采样必见——不加过滤时本测试确定失败，非相位运气）
-    world_app::WorldApp world_new(new_config);
-    world_new.start();
-    world_app::WorldApp world_old(old_config);
-    world_old.start();
-    require(world_old.playerStore()->m1_listen_port() == 46131 &&
-                world_new.playerStore()->m1_listen_port() == 46141,
+    StoreHost world_new(new_store, login.recoveryListenPort(), 22, 5, 400);
+    StoreHost world_old(old_store, login.recoveryListenPort(), 21, 2, 400);
+    require(world_old.store->m1_listen_port() == 46131 &&
+                world_new.store->m1_listen_port() == 46141,
             "player store M1 faces did not listen");
 
-    // 恢复收敛（两报告方全报）→ 门闸开
+    // 恢复收敛（两报告方全报）→ 门闸开。StoreHost 报告泵同生产 baseServer
+    // 语义（interval 到点即全量重报）——等待窗内持续泵，不让报告断流
     pump_until([&] {
+        world_old.pump();
+        world_new.pump();
         return login.onlineDirectory()->bindSession(42, binding_of(4242, 7));
     }, 15000, "recovery convergence");
 
@@ -198,10 +189,22 @@ void migration_chain() {
             "player 43 bind refused");
     require(login.onlineDirectory()->bindSession(44, binding_of(4444, 9)),
             "player 44 bind refused");
-    require(world_old.playerStore()->adoptPlayer(42, seeded.toJson(), 4242, 7, 2),
+    require(world_old.store->adoptPlayer(42, seeded.toJson(), 4242, 7, 2),
             "player 42 adopt failed");
-    require(world_old.playerStore()->adoptPlayer(44, "", 4444, 9, 2),
+    require(world_old.store->adoptPlayer(44, "", 4444, 9, 2),
             "player 44 adopt failed");
+
+    // 采纳后报告刷新 → intake 落目录：在册行带承载域 zone 2（后续改指/
+    // 不改指断言的基线——旧 WorldApp 宿主 gameLoop 每拍自泵，替身在此
+    // 显式等报告到位）
+    pump_until([&] {
+        world_old.pump();
+        world_new.pump();
+        const auto* e42 = login.onlineDirectory()->directory().find(42);
+        const auto* e44 = login.onlineDirectory()->directory().find(44);
+        return e42 != nullptr && e42->zone_id == 2 && e44 != nullptr &&
+               e44->zone_id == 2;
+    }, 10000, "post-adopt report intake");
     const auto epoch_before =
         login.onlineDirectory()->directory().find(42)->anchor_epoch;
 
@@ -227,7 +230,7 @@ void migration_chain() {
         const auto reply =
             migrate(*login.onlineDirectory(), 44, 46131, 46000, 5);
         require(!reply.ok, "migrate to unreachable target unexpectedly succeeded");
-        const auto anchor = world_old.playerStore()->findAnchor(44);
+        const auto anchor = world_old.store->findAnchor(44);
         require(anchor != nullptr &&
                     anchor->state() == session::AnchorState::Transferring,
                 "frozen source anchor not in Transferring after failed handoff");
@@ -244,14 +247,14 @@ void migration_chain() {
 
     // 1. 源端冻结形态（⑤ 老侧停留——如实边界：写入被拒兜住）
     {
-        const auto anchor = world_old.playerStore()->findAnchor(42);
+        const auto anchor = world_old.store->findAnchor(42);
         require(anchor != nullptr &&
                     anchor->state() == session::AnchorState::Transferring,
                 "source anchor not frozen after migration");
     }
     // 2. 目标确认：锚点激活 + 原区服保留 + 会话/网关双锚
     {
-        const auto anchor = world_new.playerStore()->findAnchor(42);
+        const auto anchor = world_new.store->findAnchor(42);
         require(anchor != nullptr, "target anchor missing after migration");
         require(anchor->state() == session::AnchorState::Online,
                 "target anchor not Online");
@@ -263,7 +266,7 @@ void migration_chain() {
     }
     // 2b. 导出一致性：目标落盘档案字段 == 源种子档案
     {
-        std::ifstream in(new_config.playerStore.dataDir + "/player_42.json",
+        std::ifstream in(new_store.dataDir + "/player_42.json",
                          std::ios::binary);
         require(in.good(), "target profile file missing");
         std::string json((std::istreambuf_iterator<char>(in)),
@@ -290,6 +293,8 @@ void migration_chain() {
     //    域报告 42；任一采样拍 zone≠5 = 源端 Transferring 锚点仍以上报回卷）
     for (int i = 0; i < 12; ++i) {
         std::this_thread::sleep_for(150ms);
+        world_old.pump();
+        world_new.pump();
         pump_mirror();
         const auto* entry = login.onlineDirectory()->directory().find(42);
         require(entry && entry->zone_id == 5,
@@ -304,7 +309,7 @@ void migration_chain() {
     {
         std::string landed_json;
         {
-            std::ifstream in(new_config.playerStore.dataDir + "/player_42.json",
+            std::ifstream in(new_store.dataDir + "/player_42.json",
                              std::ios::binary);
             landed_json.assign((std::istreambuf_iterator<char>(in)),
                                std::istreambuf_iterator<char>());
@@ -317,13 +322,13 @@ void migration_chain() {
         const auto* entry = login.onlineDirectory()->directory().find(42);
         require(entry && entry->anchor_epoch == reply.new_epoch,
                 "directory epoch advanced by replayed migrate");
-        const auto anchor = world_new.playerStore()->findAnchor(42);
+        const auto anchor = world_new.store->findAnchor(42);
         require(anchor != nullptr &&
                     anchor->state() == session::AnchorState::Online &&
                     anchor->session_binding().session_id == 4242,
                 "replayed migrate disturbed target anchor");
         {
-            std::ifstream in(new_config.playerStore.dataDir + "/player_42.json",
+            std::ifstream in(new_store.dataDir + "/player_42.json",
                              std::ios::binary);
             std::string json((std::istreambuf_iterator<char>(in)),
                              std::istreambuf_iterator<char>());
@@ -351,16 +356,16 @@ void migration_chain() {
         require(hr.error_message.find("duplicate takeover") != std::string::npos,
                 "stale handoff rejection must name duplicate takeover");
         dial.shutdown();
-        const auto anchor = world_new.playerStore()->findAnchor(42);
+        const auto anchor = world_new.store->findAnchor(42);
         require(anchor != nullptr && anchor->state() == session::AnchorState::Online,
                 "rejected takeover disturbed target anchor");
     }
     // 8. 迟到输入拒绝（源冻结只读——Transferring 不再受理任何写面）
     {
         // 8a. 会话重绑拒（绑定列不动）
-        require(!world_old.playerStore()->bindSession(42, binding_of(9999, 9)),
+        require(!world_old.store->bindSession(42, binding_of(9999, 9)),
                 "late session bind on frozen anchor accepted");
-        const auto anchor = world_old.playerStore()->findAnchor(42);
+        const auto anchor = world_old.store->findAnchor(42);
         require(anchor != nullptr &&
                     anchor->state() == session::AnchorState::Transferring &&
                     anchor->session_binding().session_id == 4242,
@@ -383,7 +388,7 @@ void migration_chain() {
         const auto resp =
             protocol::MessageCodec::decodeBody<protocol::DbSaveResponse>(body);
         require(!resp.success, "late db save on frozen anchor accepted");
-        const auto after = world_old.playerStore()->findAnchor(42);
+        const auto after = world_old.store->findAnchor(42);
         require(after != nullptr &&
                     after->state() == session::AnchorState::Transferring,
                 "late db save broke frozen read-only state");
@@ -396,7 +401,7 @@ void migration_chain() {
         // 8d. 结算落账面：冻结锚点 = AnchorUnavailable 挂账不落
         squad_instance::SettlementLedger ledger;
         ledger.begin({42}, [&world_old](std::uint64_t pid) {
-            return world_old.playerStore()->findAnchor(pid).get();
+            return world_old.store->findAnchor(pid).get();
         });
         require(ledger.apply(42, 50) ==
                     squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
@@ -406,8 +411,7 @@ void migration_chain() {
     }
 
     login.stop();
-    world_new.stop();
-    world_old.stop();
+    // 宿主收口：StoreHost 析构自停（先报告面后 store，随作用域退出）。
 }
 
 } // namespace
