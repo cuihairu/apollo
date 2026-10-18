@@ -56,6 +56,8 @@
 
 namespace {
 
+#if !defined(_WIN32)
+
 // 阻塞式测试客户端（同 test_gateway_ingress 独立实现口径）。
 class TestClient {
 public:
@@ -132,8 +134,6 @@ public:
 private:
     int fd_ = -1;
 };
-
-#if !defined(_WIN32)
 
 namespace link = apollo::net::link;
 namespace wire = apollo::net::wire;
