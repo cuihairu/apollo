@@ -2,9 +2,9 @@
 // →spawn→AOI→battle→reward→leave）。
 //
 // 形态：进程内单线程驱动六模块真件（benchmark 同款直编惯例，不依赖
-// GAME_MODULE target）——登录锚（session/AnchorManager）→ 副本八态生命周期
+// GAME_MODULE target）——登录锚（session/AvatarManager）→ 副本八态生命周期
 // （world/Instance）→ 进场 + AOI 事件流（world/Scene+SceneAoi）→ 五段战斗
-// （battle/BattleRuntime）→ 奖励落账（session/AnchorRewardSink→Anchor 长期态
+// （battle/BattleRuntime）→ 奖励落账（session/AvatarRewardSink→Avatar 长期态
 // mark_dirty）。跨进程接线（网关/login 协议栈、G-1 编队）不在本例——归
 // P3-1 G-1 收尾批与 net M1。
 //
@@ -12,8 +12,8 @@
 
 #include "apollo/game/battle/battle_runtime.hpp"
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/session/anchor_manager.hpp"
-#include "apollo/game/session/anchor_reward_sink.hpp"
+#include "apollo/game/base/avatar_manager.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/instance.hpp"
 #include "apollo/game/world/scene.hpp"
@@ -29,8 +29,8 @@ using apollo::game::battle::BattlePhase;
 using apollo::game::battle::BattleRuntime;
 using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
-using apollo::game::session::AnchorManager;
-using apollo::game::session::AnchorRewardSink;
+using apollo::game::base::AvatarManager;
+using apollo::game::base::AvatarRewardSink;
 using apollo::game::world::Avatar;
 using apollo::game::world::AvatarPtr;
 using apollo::game::world::Instance;
@@ -64,16 +64,16 @@ int main() {
     constexpr float kWorld = 100.0f;            // 100² 世界（模型 B 同款）
     constexpr std::uint64_t kSeed = 42;
 
-    AnchorManager anchors;
+    AvatarManager avatars;
     std::uint64_t enter_events = 0;
     std::uint64_t sync_events = 0;
     std::uint64_t leave_events = 0;
 
     // ---- 1. login：登录锚激活（session 长期态在场） ----
-    step("1. login（AnchorManager::activate）");
-    auto anchor = anchors.activate(kPlayer);
-    CHECK(anchor != nullptr, "锚激活");
-    CHECK(anchors.find(kPlayer) == anchor, "重登幂等（同锚）");
+    step("1. login（AvatarManager::activate）");
+    auto base_avatar = avatars.activate(kPlayer);
+    CHECK(base_avatar != nullptr, "锚激活");
+    CHECK(avatars.find(kPlayer) == base_avatar, "重登幂等（同锚）");
 
     // ---- 2. lobby：建副本（八态前两段 Create→Initialize→Waiting） ----
     step("2. lobby + create instance（八态 Create→Waiting）");
@@ -83,8 +83,8 @@ int main() {
     CHECK(instance.state() == Instance::State::Waiting, "等待态");
 
     // ---- 3. 装载玩法负载（挂接窗口 = Waiting；奖励单向落锚） ----
-    step("3. attach battle（IRewardSink→Anchor 单向落账口）");
-    AnchorRewardSink sink(*anchor);
+    step("3. attach battle（IRewardSink→Avatar 单向落账口）");
+    AvatarRewardSink sink(*base_avatar);
     auto battle = std::make_unique<BattleRuntime>(1, kSeed, &sink);
     CHECK(instance.attach_battle(std::move(battle)), "Waiting 窗口挂接");
     CHECK(instance.battle() != nullptr, "副本持有玩法负载");
@@ -140,12 +140,12 @@ int main() {
     CHECK(instance.battle()->hash_chain() != 0, "hash 链滚动（确定性指纹）");
     CHECK(instance.tick_count() == 0, "副本 tick 计数（显式判定域驱动不经 instance.tick）");
 
-    // ---- 7. reward：结算落账（battle→Anchor 长期态 mark_dirty） ----
+    // ---- 7. reward：结算落账（battle→Avatar 长期态 mark_dirty） ----
     step("7. reward + settle（五段尾 Rewarding→Finished；exp 落账）");
     CHECK(instance.battle()->finish(), "finish 结算");
     CHECK(instance.battle()->phase() == BattlePhase::Finished, "散场终态");
-    CHECK(anchor->progress(AnchorRewardSink::kExpKey) > 0, "exp 落账（长期态）");
-    CHECK(!anchor->dirty_reasons().empty(), "长期态变更即脏（随 SaveQueue 落档）");
+    CHECK(base_avatar->progress(AvatarRewardSink::kExpKey) > 0, "exp 落账（长期态）");
+    CHECK(!base_avatar->dirty_reasons().empty(), "长期态变更即脏（随 SaveQueue 落档）");
 
     // ---- 8. leave：出视野 + 副本八态走完 + 登出 ----
     step("8. leave（AOI Leave→finish→settle→drain→destroy→deactivate）");
@@ -156,8 +156,8 @@ int main() {
     CHECK(instance.finish() && instance.settle() && instance.drain() && instance.destroy(),
           "八态尾四段单向推进");
     CHECK(instance.is_destroyed(), "Destroyed 终态封死");
-    anchors.deactivate(kPlayer);
-    CHECK(anchors.find(kPlayer) == nullptr, "登出锚回收");
+    avatars.deactivate(kPlayer);
+    CHECK(avatars.find(kPlayer) == nullptr, "登出锚回收");
 
     // ---- 总结 ----
     std::cout << "\n全链路（login→lobby→instance→enter→spawn→AOI→battle→reward→leave）："

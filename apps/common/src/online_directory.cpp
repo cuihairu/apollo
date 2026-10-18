@@ -73,7 +73,7 @@ OnlineDirectory::~OnlineDirectory() {
 
 bool OnlineDirectory::assignWorld(
     PlayerID playerId,
-    const apollo::game::session::WorldAssignment& assignment
+    const apollo::game::base::WorldAssignment& assignment
 ) {
     if (playerId == 0) {
         return false;
@@ -102,7 +102,7 @@ bool OnlineDirectory::clearWorldAssignment(PlayerID playerId) {
     return assignments_.erase(playerId) > 0;
 }
 
-bool OnlineDirectory::bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding) {
+bool OnlineDirectory::bindSession(PlayerID playerId, const apollo::game::base::SessionBinding& binding) {
     if (playerId == 0 || binding.session_id == 0) {
         return false;
     }
@@ -117,7 +117,7 @@ bool OnlineDirectory::bindSession(PlayerID playerId, const apollo::game::session
 
     // 目录登记锚点（P1-2）：条目级真值 + SessionUp 事件；同账号已有条目
     // 时目录内完成顶号（SessionKicked 事件面）
-    apollo::game::session::WorldAssignment assignment;
+    apollo::game::base::WorldAssignment assignment;
     {
         std::lock_guard<std::mutex> lock(assignmentsMutex_);
         const auto it = assignments_.find(playerId);
@@ -148,7 +148,7 @@ std::optional<PlayerID> OnlineDirectory::findPlayerBySession(protocol::SessionID
     return sessionLocator_.find_player_by_session(sessionId);
 }
 
-std::optional<apollo::game::session::WorldAssignment> OnlineDirectory::resolveWorldAssignment(
+std::optional<apollo::game::base::WorldAssignment> OnlineDirectory::resolveWorldAssignment(
     PlayerID playerId,
     protocol::SessionID sessionId
 ) const {
@@ -168,7 +168,7 @@ std::optional<apollo::game::session::WorldAssignment> OnlineDirectory::resolveWo
     return it->second;
 }
 
-std::optional<apollo::game::session::SessionBinding> OnlineDirectory::resolveSessionBinding(
+std::optional<apollo::game::base::SessionBinding> OnlineDirectory::resolveSessionBinding(
     PlayerID playerId,
     protocol::SessionID sessionId
 ) const {
@@ -272,7 +272,7 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerAssignWorldRequest(const std::
     response.success = false;
     response.routeVersion = assignReq.routeVersion;
 
-    apollo::game::session::WorldAssignment assignment;
+    apollo::game::base::WorldAssignment assignment;
     assignment.world_id = assignReq.worldId;
     assignment.map_id = assignReq.mapId;
     assignment.instance_id = assignReq.instanceId;

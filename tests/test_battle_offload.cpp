@@ -49,7 +49,7 @@ using apollo::game::battle::offload::OffloadEnvelope;
 using MsgId = apollo::contract::gen::MsgId;
 namespace acg = apollo::contract::gen;
 
-// 宿主侧落回收集 sink（生产 = AnchorRewardSink；此处记序验证）
+// 宿主侧落回收集 sink（生产 = AvatarRewardSink；此处记序验证）
 struct CollectingSink : public IRewardSink {
     std::vector<std::pair<std::uint64_t, std::int64_t>> rewards;
     void on_reward(std::uint64_t player_id, std::int64_t score) override {

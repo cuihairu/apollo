@@ -195,7 +195,7 @@ public:
 
     // ---- 结算幂等落账（P2-4：既有奖励/持久化接口 + 重试/失败/恢复）----
     // 锚点解析装配（须在 launch 前设置；副本受理时开账即取本解析器）。
-    void set_anchor_resolver(AnchorResolveFn fn);
+    void set_avatar_resolver(AvatarResolveFn fn);
 
     // 业务受理装配（P1 结算迁入；须在 launch 前设置）：锚点写权在 Base
     // 时落账走返回业务请求（958/959），本域不持锚点指针。设置后锚点解析
@@ -291,7 +291,7 @@ private:
     RemoteSpawnFn remote_spawner_;
     InstanceStartedFn instance_started_;
     InstanceClosingFn instance_closing_;
-    AnchorResolveFn anchor_resolver_;
+    AvatarResolveFn avatar_resolver_;
     SettlementLedger::BusinessSink business_sink_;
     std::unique_ptr<SettlementCredentialStore> credential_store_;
 

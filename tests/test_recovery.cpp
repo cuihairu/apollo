@@ -3,12 +3,12 @@
 // 覆盖：
 //   1. 三档清单：六恢复对象逐项分级（必须持久化/可重算/可丢）；
 //   2. RecoveryCoordinator 启动序列 restore→admission→ready（失败路径）；
-//   3. restore_anchors：锚点重建置 Offline（档案在、会话无）；
+//   3. restore_avatars：锚点重建置 Offline（档案在、会话无）；
 //   4. 端到端：journal write-ahead → 「崩溃」→ coordinator replay → 档案
 //      恢复可读（恢复位点语义）。
 
-#include "apollo/game/session/anchor_manager.hpp"
-#include "apollo/game/session/recovery.hpp"
+#include "apollo/game/base/avatar_manager.hpp"
+#include "apollo/game/base/recovery.hpp"
 
 #include "apollo/data/orm/persist_journal.hpp"
 #include "player_store/database_service.hpp"
@@ -33,11 +33,11 @@ namespace {
 
 namespace fs = std::filesystem;
 
-using apollo::game::session::RecoveryPhase;
-using apollo::game::session::RecoveryTier;
-using apollo::game::session::RecoveryCoordinator;
-using apollo::game::session::recovery_manifest;
-using apollo::game::session::restore_anchors;
+using apollo::game::base::RecoveryPhase;
+using apollo::game::base::RecoveryTier;
+using apollo::game::base::RecoveryCoordinator;
+using apollo::game::base::recovery_manifest;
+using apollo::game::base::restore_avatars;
 
 bool test_manifest_three_tiers() {
     const auto& manifest = recovery_manifest();
@@ -64,7 +64,7 @@ bool test_manifest_three_tiers() {
     TEST_ASSERT(lossy == 1, "可丢一档（战斗中间态）");
 
     // 关键行核对
-    TEST_ASSERT(std::string(manifest[0].object) == "player_anchored_state" &&
+    TEST_ASSERT(std::string(manifest[0].object) == "player_avatar_state" &&
                     manifest[0].tier == RecoveryTier::MustPersist,
                 "玩家长期态必须持久化");
     TEST_ASSERT(std::string(manifest[1].object) == "scene_runtime_state" &&
@@ -120,15 +120,15 @@ bool test_coordinator_failure_paths() {
     return true;
 }
 
-bool test_restore_anchors_offline() {
-    apollo::game::session::AnchorManager manager;
-    const auto restored = restore_anchors(manager, {1, 2, 3});
+bool test_restore_avatars_offline() {
+    apollo::game::base::AvatarManager manager;
+    const auto restored = restore_avatars(manager, {1, 2, 3});
     TEST_ASSERT(restored == 3, "三锚点恢复");
-    TEST_ASSERT(manager.anchor_count() == 3, "锚点在册");
+    TEST_ASSERT(manager.avatar_count() == 3, "锚点在册");
     for (const auto id : {1, 2, 3}) {
-        const auto anchor = manager.find(id);
-        TEST_ASSERT(anchor != nullptr, "锚点可查");
-        TEST_ASSERT(anchor->state() == apollo::game::session::AnchorState::Offline,
+        const auto avatar = manager.find(id);
+        TEST_ASSERT(avatar != nullptr, "锚点可查");
+        TEST_ASSERT(avatar->state() == apollo::game::base::AvatarState::Offline,
                     "恢复态 Offline（档案在、会话无）");
     }
     return true;
@@ -205,7 +205,7 @@ int main() {
         {"recovery_manifest_three_tiers", test_manifest_three_tiers},
         {"recovery_coordinator_happy_path", test_coordinator_happy_path},
         {"recovery_coordinator_failure_paths", test_coordinator_failure_paths},
-        {"recovery_restore_anchors_offline", test_restore_anchors_offline},
+        {"recovery_restore_avatars_offline", test_restore_avatars_offline},
         {"recovery_crash_replay_recovers_profile", test_crash_replay_recovers_profile},
     };
 

@@ -143,12 +143,12 @@ std::uint64_t Avatar::broadcast_count() const noexcept {
     return broadcast_count_;
 }
 
-void Avatar::project_from(const apollo::game::session::PlayerAnchor& anchor) noexcept {
+void Avatar::project_from(const apollo::game::base::Avatar& avatar) noexcept {
     // player-object-model §3：换幕时状态从 Base 投影。P0-2 投影面 = home_zone_id
-    // （已落 Anchor 字段的长期属性）；属性/装备/长期 buff 随 P0-4 扩展。
-    home_zone_id_ = anchor.home_zone_id();
-    // Anchor 离开 Online 态（断线/转移）→ Avatar 侧进入挂起保活窗口
-    if (anchor.state() != apollo::game::session::AnchorState::Online) {
+    // （已落 Avatar 字段的长期属性）；属性/装备/长期 buff 随 P0-4 扩展。
+    home_zone_id_ = avatar.home_zone_id();
+    // Avatar 离开 Online 态（断线/转移）→ Avatar 侧进入挂起保活窗口
+    if (avatar.state() != apollo::game::base::AvatarState::Online) {
         suspend();
     }
     projected_ = true;

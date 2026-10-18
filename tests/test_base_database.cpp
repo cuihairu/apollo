@@ -2,7 +2,7 @@
 #include "database/server.hpp"
 #include "player_store/database_service.hpp"
 #include "player_store/player_store.hpp"
-#include "apollo/game/session/anchor_reward_sink.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
 #include "apollo/protocol/codec.hpp"
 
 #include <chrono>
@@ -12,6 +12,7 @@
 #include <memory>
 #include <stdexcept>
 #include <thread>
+
 
 #define CHECK(condition) do { if (!(condition)) \
     throw std::runtime_error(std::string(#condition) + " @" + std::to_string(__LINE__)); } while (false)
@@ -67,18 +68,18 @@ void roundtrip_and_base_restart() {
     {
         player_store::PlayerStore base(baseConfig, database::makeClient(f.client(server.port())));
         base.start();
-        auto anchor = base.activatePlayer(81);
-        CHECK(anchor);
-        CHECK(anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == profile.exp);
-        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 37);
+        auto avatar = base.activatePlayer(81);
+        CHECK(avatar);
+        CHECK(avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == profile.exp);
+        avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey, 37);
         base.stop();
     }
     {
         player_store::PlayerStore base(baseConfig, database::makeClient(f.client(server.port())));
         base.start();
-        auto anchor = base.activatePlayer(81);
-        CHECK(anchor);
-        CHECK(anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == profile.exp + 37);
+        auto avatar = base.activatePlayer(81);
+        CHECK(avatar);
+        CHECK(avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == profile.exp + 37);
         base.stop();
     }
     CHECK(!fs::exists(f.path / "data"));
@@ -169,7 +170,7 @@ void database_crash_survives_restart() {
     baseCfg.autoSaveIntervalMs = 60000;  // 手动驱动保存，排除自动保存干扰
     baseCfg.workerThreads = 1;
     baseCfg.shutdownFlushTimeoutMs = 4000;
-    const auto key = apollo::game::session::AnchorRewardSink::kExpKey;
+    const auto key = apollo::game::base::AvatarRewardSink::kExpKey;
     const auto dispatch_save = [](std::unique_ptr<player_store::PlayerStore>& base,
                                   std::uint64_t id, std::int64_t exp) {
         protocol::DbSaveRequest request;
@@ -191,11 +192,11 @@ void database_crash_survives_restart() {
         std::unique_ptr<player_store::PlayerStore> base(
             new player_store::PlayerStore(baseCfg, database::makeClient(clientCfg)));
         base->start();
-        auto anchor = base->activatePlayer(501);
-        CHECK(anchor);
-        CHECK(anchor->progress(key) == 1);
-        anchor->add_progress(key, 99);  // 真值 100
-        CHECK(dispatch_save(base, 501, anchor->progress(key)).success);
+        auto avatar = base->activatePlayer(501);
+        CHECK(avatar);
+        CHECK(avatar->progress(key) == 1);
+        avatar->add_progress(key, 99);  // 真值 100
+        CHECK(dispatch_save(base, 501, avatar->progress(key)).success);
         base->stop();
     }
     {
@@ -208,18 +209,18 @@ void database_crash_survives_restart() {
     std::unique_ptr<player_store::PlayerStore> base(
         new player_store::PlayerStore(baseCfg, database::makeClient(clientCfg)));
     base->start();
-    auto anchor = base->activatePlayer(501);
-    CHECK(anchor);
-    CHECK(anchor->progress(key) == 100);  // 断链前真值已可载回
+    auto avatar = base->activatePlayer(501);
+    CHECK(avatar);
+    CHECK(avatar->progress(key) == 100);  // 断链前真值已可载回
     server.stop();
-    anchor->add_progress(key, 50);  // 未落档增量：真值 150
+    avatar->add_progress(key, 50);  // 未落档增量：真值 150
     player_store::PlayerData ghost;
     ghost.playerId = 501;
     ghost.exp = 999;  // 断链期必败写入，此后不得复活
     CHECK(!reader->savePlayer(ghost));  // 传输失败：无回执不假成功
-    const auto failed = dispatch_save(base, 501, anchor->progress(key));
+    const auto failed = dispatch_save(base, 501, avatar->progress(key));
     CHECK(!failed.success);  // 持久失败如实回执
-    CHECK(anchor->progress(key) == 150);  // 失败不吞锚点真值
+    CHECK(avatar->progress(key) == 150);  // 失败不吞锚点真值
     base->stop();
 
     // ③ 复活：同存储同端口重建 database
@@ -419,9 +420,9 @@ void base_write_generation_self_managed() {
     {
         player_store::PlayerStore base(baseConfig, database::makeClient(f.client(realPort)));
         base.start();
-        auto anchor = base.activatePlayer(51);
-        CHECK(anchor);
-        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 5);
+        auto avatar = base.activatePlayer(51);
+        CHECK(avatar);
+        avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey, 5);
         base.stop();
     }
     read_archive(gen, exp);
@@ -432,9 +433,9 @@ void base_write_generation_self_managed() {
     {
         player_store::PlayerStore base(baseConfig, database::makeClient(f.client(realPort)));
         base.start();
-        auto anchor = base.activatePlayer(51);
-        CHECK(anchor);
-        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 7);
+        auto avatar = base.activatePlayer(51);
+        CHECK(avatar);
+        avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey, 7);
         base.stop();
     }
     read_archive(gen, exp);

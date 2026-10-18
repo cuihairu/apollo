@@ -32,6 +32,7 @@ namespace {
 using namespace std::chrono_literals;
 namespace disco = apollo::net::discovery;
 namespace session = apollo::game::session;
+namespace base = apollo::game::base;
 
 void require(bool value, const char* message) {
     if (!value) throw std::runtime_error(message);
@@ -107,7 +108,7 @@ void fleet_rehome_chain() {
     require(login.deathFeedPort() != 0, "death feed did not listen");
 
     // 恢复相位排他（增量③）：收敛前 bindSession 拒绝——门闸关
-    session::SessionBinding probe_binding;
+    base::SessionBinding probe_binding;
     probe_binding.session_id = 7777;
     probe_binding.gateway_id = 9;
     require(!login.onlineDirectory()->bindSession(777, probe_binding),

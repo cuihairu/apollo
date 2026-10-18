@@ -31,8 +31,8 @@ void SquadInstanceService::set_instance_closing(InstanceClosingFn fn) {
     instance_closing_ = std::move(fn);
 }
 
-void SquadInstanceService::set_anchor_resolver(AnchorResolveFn fn) {
-    anchor_resolver_ = std::move(fn);
+void SquadInstanceService::set_avatar_resolver(AvatarResolveFn fn) {
+    avatar_resolver_ = std::move(fn);
 }
 
 void SquadInstanceService::set_business_sink(SettlementLedger::BusinessSink fn) {
@@ -443,9 +443,9 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
             return result;
         }
         // 受理即开账：结算名册 = 受理快照成员；battle 结算段经账本（IRewardSink
-        // 单向口）→ AnchorRewardSink 语义落锚点（P2-4 幂等落账）。
+        // 单向口）→ AvatarRewardSink 语义落锚点（P2-4 幂等落账）。
         auto ledger = std::make_unique<SettlementLedger>();
-        ledger->begin(members, anchor_resolver_);
+        ledger->begin(members, avatar_resolver_);
         // 业务受理面（P1 结算迁入）：锚点写权在 Base 时，落账经受理 wire
         // 返回业务请求（958/959），本地解析不消费。
         if (business_sink_) {

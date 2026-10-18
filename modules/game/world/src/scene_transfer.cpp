@@ -113,10 +113,10 @@ SceneTransferOutcome execute_scene_transfer(World& world,
     }
     old_avatar.reset();  // 出 scene 死：引用即弃
 
-    // ---- ④ attach：新 scene 重建 Avatar（Anchor 投影 + AOI 入列）----
+    // ---- ④ attach：新 scene 重建 Avatar（Avatar 投影 + AOI 入列）----
     auto avatar = std::make_shared<Avatar>(request.player_id, avatar_entity_id);
-    if (request.anchor != nullptr) {
-        avatar->project_from(*request.anchor);
+    if (request.avatar != nullptr) {
+        avatar->project_from(*request.avatar);
     }
     if (!target->enter(avatar, request.landing) ||
         (target_instance != nullptr && !target_instance->enter(request.player_id))) {
@@ -130,8 +130,8 @@ SceneTransferOutcome execute_scene_transfer(World& world,
         }
         if (source != nullptr) {
             auto restored = std::make_shared<Avatar>(request.player_id, avatar_entity_id);
-            if (request.anchor != nullptr) {
-                restored->project_from(*request.anchor);
+            if (request.avatar != nullptr) {
+                restored->project_from(*request.avatar);
             }
             if (!source->enter(restored, origin)) {
                 outcome.result = SceneTransferResult::RollbackFailed;

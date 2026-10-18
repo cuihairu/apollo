@@ -14,7 +14,7 @@
 //                              → Voided（终态：§7(a) 崩溃即作废，落回不再受理）
 //
 // 落回（Result Dispatcher 单向，§3）：battle_result.player_ids/scores 逐玩家
-// 经 IRewardSink 语义出账（Zone 侧生产实现 = AnchorRewardSink，P2-4）；battle
+// 经 IRewardSink 语义出账（Zone 侧生产实现 = AvatarRewardSink，P2-4）；battle
 // 只出不进——本类不回写实例任何状态。
 //
 // 单线程纪律（同 discovery）：request/notify/on_envelope 全部由驱动方线程
@@ -41,7 +41,7 @@ public:
     };
 
     // downlink：下行传输（Zone→实例方向）；result_sink：落回出账口
-    // （非所有权观察指针；生产 = Zone 侧 AnchorRewardSink）
+    // （非所有权观察指针；生产 = Zone 侧 AvatarRewardSink）
     explicit InstanceOffloadHost(IOffloadTransport& downlink,
                                  apollo::game::battle::IRewardSink* result_sink = nullptr);
 

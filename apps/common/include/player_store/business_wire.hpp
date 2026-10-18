@@ -7,7 +7,7 @@
 //
 // 幂等口径：重复投递去重归调用方账本（World 侧 SettlementLedger applied
 // 标记 + retry 补账），Base 只受理不回放判定——与本地锚点落账同语义
-// （AnchorRewardSink 幂等面 = exp 键 + mark_dirty 随 SaveQueue 落档）。
+// （AvatarRewardSink 幂等面 = exp 键 + mark_dirty 随 SaveQueue 落档）。
 // 锚点暂不可得（离线/迁移中 Transferring）→ accepted=0，调用方挂账待补。
 // header-only 直编习语（app 域件，不进 game_session 模块）。
 

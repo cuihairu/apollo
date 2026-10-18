@@ -51,6 +51,7 @@
 namespace {
 
 namespace session = apollo::game::session;
+namespace base = apollo::game::base;
 namespace disco = apollo::net::discovery;
 using session::FleetReportPart;
 using session::FleetRecoveryCoordinator;
@@ -312,10 +313,10 @@ bool test_directory_intake_restore_not_kick() {
     });
 
     // 预置条目：player 1 epoch 1
-    session::SessionBinding binding;
+    base::SessionBinding binding;
     binding.session_id = 1001;
     binding.gateway_id = 9;
-    session::WorldAssignment assignment;
+    base::WorldAssignment assignment;
     assignment.world_id = 1;
     directory.session_up(1, binding, assignment, 5);
 

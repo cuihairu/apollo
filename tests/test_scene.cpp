@@ -8,7 +8,7 @@
 //   4. tick 六阶段骨架（固定顺序 + 逐阶段计数可观察）。
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/viewer_state.hpp"
 

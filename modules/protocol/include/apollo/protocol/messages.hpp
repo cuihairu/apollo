@@ -261,7 +261,7 @@ struct PlayerActivateRequest {
 struct PlayerActivateResponse {
     bool success;
     PlayerID playerId;
-    std::string state;      // AnchorState 字符串
+    std::string state;      // AvatarState 字符串
     std::string errorMessage;
 
     static constexpr MessageType TYPE = MessageType::PLAYER_ACTIVATE_RESPONSE;

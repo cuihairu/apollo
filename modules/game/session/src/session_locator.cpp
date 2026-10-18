@@ -2,7 +2,7 @@
 
 namespace apollo::game::session {
 
-void SessionLocator::bind(std::uint64_t player_id, const SessionBinding& binding) {
+void SessionLocator::bind(std::uint64_t player_id, const apollo::game::base::SessionBinding& binding) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     const auto existing = by_player_.find(player_id);
@@ -40,7 +40,7 @@ void SessionLocator::unbind_session(std::uint64_t session_id) {
     by_session_.erase(it);
 }
 
-std::optional<SessionBinding> SessionLocator::find_by_player(std::uint64_t player_id) const {
+std::optional<apollo::game::base::SessionBinding> SessionLocator::find_by_player(std::uint64_t player_id) const {
     std::lock_guard<std::mutex> lock(mutex_);
 
     const auto it = by_player_.find(player_id);

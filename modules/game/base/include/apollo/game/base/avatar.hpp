@@ -1,6 +1,6 @@
 #pragma once
 
-#include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/base/world_assignment.hpp"
 
 #include <array>
 #include <cstdint>
@@ -10,9 +10,9 @@
 #include <unordered_map>
 #include <vector>
 
-namespace apollo::game::session {
+namespace apollo::game::base {
 
-enum class AnchorState : std::uint8_t {
+enum class AvatarState : std::uint8_t {
     Loading = 0,
     Online,
     Transferring,
@@ -41,13 +41,13 @@ struct ItemStack {
     [[nodiscard]] bool operator==(const ItemStack&) const noexcept = default;
 };
 
-class PlayerAnchor {
+class Avatar {
 public:
-    explicit PlayerAnchor(std::uint64_t player_id);
+    explicit Avatar(std::uint64_t player_id);
 
     [[nodiscard]] std::uint64_t player_id() const noexcept;
-    [[nodiscard]] AnchorState state() const noexcept;
-    void set_state(AnchorState state) noexcept;
+    [[nodiscard]] AvatarState state() const noexcept;
+    void set_state(AvatarState state) noexcept;
 
     [[nodiscard]] const SessionBinding& session_binding() const noexcept;
     void bind_session(const SessionBinding& binding);
@@ -63,7 +63,7 @@ public:
     void set_home_zone_id(std::uint32_t home_zone_id) noexcept;
 
     // ---- 长期态字段模型（P2-4，object-model 差异清单 #1 消账）----
-    // 任务书 §6 玩家一等对象字段面的契约落点：承载者 = PlayerAnchor（持久）
+    // 任务书 §6 玩家一等对象字段面的契约落点：承载者 = Avatar（持久）
     // + Avatar（运行时）；四域变更一律 mark_dirty（长期态变更即脏，随
     // SaveQueue/write-behind 落档）。物品/任务 id 用裸 uint64（对齐本类风格；
     // 强分型随玩法批需求再加）。
@@ -85,21 +85,21 @@ public:
     [[nodiscard]] const std::unordered_map<std::uint64_t, std::uint64_t>& quests() const noexcept;
 
     // Progress：通用成长键值累计（exp/货币/声望等；battle 结算经
-    // AnchorRewardSink 落「exp」键——奖励单向落 Anchor 的真实接线口）
+    // AvatarRewardSink 落「exp」键——奖励单向落 Avatar 的真实接线口）
     void add_progress(std::string_view key, std::int64_t delta);
     [[nodiscard]] std::int64_t progress(std::string_view key) const noexcept;
     [[nodiscard]] const std::unordered_map<std::string, std::int64_t>& progresses() const noexcept;
 
-    // Social：所属公会（0 = 未入会；Guild 对象与管理在 social 模块，Anchor
+    // Social：所属公会（0 = 未入会；Guild 对象与管理在 social 模块，Avatar
     // 只记归属——「契约只承认 Avatar 的玩家面」修文后的社交长期态落点）
     [[nodiscard]] std::uint64_t guild_id() const noexcept;
     void set_guild_id(std::uint64_t guild_id);
 
-    // 脏数据出队（journal）钩子（P0-2，object-model O-1/O-4）：Anchor 变更时
+    // 脏数据出队（journal）钩子（P0-2，object-model O-1/O-4）：Avatar 变更时
     // 回调注入方（持久化职责在 Base 侧，P0-4 与 SaveQueue 挂钩；此处只保证
     // 「上报有变更」这一契约）。回调在 mark_dirty 的调用链上同步执行。
     // 返回 false 表示本次上报未被消费（调用方决定是否原样保留）。
-    using JournalFn = std::function<bool(const PlayerAnchor& anchor, std::string_view reason)>;
+    using JournalFn = std::function<bool(const Avatar& avatar, std::string_view reason)>;
     void set_journal(JournalFn journal);
     [[nodiscard]] const JournalFn& journal() const noexcept;
 
@@ -112,7 +112,7 @@ private:
     std::uint64_t player_id_ = 0;
     std::uint32_t home_zone_id_ = 0;
     JournalFn journal_ = nullptr;
-    AnchorState state_ = AnchorState::Loading;
+    AvatarState state_ = AvatarState::Loading;
     SessionBinding session_binding_{};
     WorldAssignment world_assignment_{};
 
@@ -127,4 +127,4 @@ private:
     std::vector<std::string> dirty_reasons_;
 };
 
-} // namespace apollo::game::session
+} // namespace apollo::game::base

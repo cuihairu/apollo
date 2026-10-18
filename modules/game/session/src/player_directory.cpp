@@ -62,8 +62,8 @@ bool PlayerDirectory::persist_epoch_floor() {
 }
 
 std::uint64_t PlayerDirectory::session_up(std::uint64_t player_id,
-                                          const SessionBinding& binding,
-                                          const WorldAssignment& assignment,
+                                          const apollo::game::base::SessionBinding& binding,
+                                          const apollo::game::base::WorldAssignment& assignment,
                                           std::uint32_t zone_id) {
     if (player_id == 0) {
         return 0;
@@ -197,7 +197,7 @@ std::uint64_t PlayerDirectory::evict_for_relogin(std::uint64_t player_id,
     return old_epoch;
 }
 
-bool PlayerDirectory::moved(std::uint64_t player_id, const WorldAssignment& assignment,
+bool PlayerDirectory::moved(std::uint64_t player_id, const apollo::game::base::WorldAssignment& assignment,
                             std::uint64_t new_anchor_epoch,
                             std::uint32_t new_zone_id) {
     const auto it = entries_.find(player_id);
@@ -302,7 +302,7 @@ std::size_t PlayerDirectory::intake_full_report(
             ++taken;
             continue;
         }
-        SessionBinding binding;
+        apollo::game::base::SessionBinding binding;
         binding.session_id = reported.session_id;
         binding.gateway_id = reported.gateway_id;
         session_up(reported.player_id, binding, reported.assignment, reported.zone_id);

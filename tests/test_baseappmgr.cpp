@@ -1,5 +1,5 @@
 #include "online_directory/online_directory.hpp"
-#include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/base/world_assignment.hpp"
 #include "apollo/game/session/directory_mirror.hpp"
 #include "player_store/player_store.hpp"
 #include "player_store/migration_wire.hpp"
@@ -25,7 +25,7 @@ bool test_baseappmgr_directory_and_route() {
 
     online_directory::OnlineDirectory mgr(0); // 不 start()，只测目录方法
 
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 9001;
     binding.gateway_id = 7;
     binding.gateway_addr = "gateway://127.0.0.1:8888";
@@ -36,7 +36,7 @@ bool test_baseappmgr_directory_and_route() {
     TEST_ASSERT(playerBySession.has_value(), "player resolved by session");
     TEST_ASSERT(*playerBySession == 1001, "resolved player id matches");
 
-    apollo::game::session::WorldAssignment assignment;
+    apollo::game::base::WorldAssignment assignment;
     assignment.world_id = 3;
     assignment.map_id = 100;
     assignment.instance_id = 200;
@@ -81,10 +81,10 @@ bool test_baseappmgr_admission_gate() {
 
     online_directory::OnlineDirectory mgr(0);
 
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 9101;
     binding.gateway_id = 7;
-    apollo::game::session::WorldAssignment assignment;
+    apollo::game::base::WorldAssignment assignment;
     assignment.world_id = 3;
 
     // 无闸门：恒放行
@@ -110,7 +110,7 @@ bool test_baseappmgr_admission_gate() {
     return true;
 }
 
-// 更新排空闸（backup-revive §8 路1 缺口接线：排空指令 → WorldAssignment/
+// 更新排空闸（backup-revive §8 路1 缺口接线：排空指令 → apollo::game::base::WorldAssignment/
 // 落点指派跳过更新窗内的进程）：drain 置位期 bindSession/assignWorld 拒新，
 // 关闭后恢复；与恢复相位准入闸共用闸门语义（§9.6），排空不挡查询。
 bool test_baseappmgr_update_drain() {
@@ -118,10 +118,10 @@ bool test_baseappmgr_update_drain() {
 
     online_directory::OnlineDirectory mgr(0);
 
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 9201;
     binding.gateway_id = 7;
-    apollo::game::session::WorldAssignment assignment;
+    apollo::game::base::WorldAssignment assignment;
     assignment.world_id = 3;
 
     // 排空前：恒放行
@@ -159,6 +159,7 @@ bool test_baseappmgr_window_disposition_passthrough() {
     online_directory::OnlineDirectory mgr(0);
 
     namespace session = apollo::game::session;
+namespace base = apollo::game::base;
     std::vector<session::MirrorEntry> report;
     for (const std::uint64_t pid : {3001ULL, 3002ULL, 3003ULL}) {
         session::MirrorEntry e;
@@ -207,13 +208,14 @@ bool test_baseappmgr_window_disposition_passthrough() {
 }
 
 // ---- 玩家迁移编排真链路（P0-2 路 2 ①③④；两 zone 真 M1 面 + mgr 编排）。
-// Windows 桩树 M1 面缺席——护栏跳过（base_anchor 真链路组同款）。
+// Windows 桩树 M1 面缺席——护栏跳过（base_avatar 真链路组同款）。
 #if !defined(_WIN32)
 bool test_baseappmgr_migrate_player() {
     std::cout << "Running: test_baseappmgr_migrate_player..." << std::endl;
     namespace migration = player_store::migration;
     namespace protocol = apollo::protocol;
     namespace session = apollo::game::session;
+namespace base = apollo::game::base;
 
     // 隔离数据目录护栏
     struct Dir {
@@ -268,14 +270,14 @@ bool test_baseappmgr_migrate_player() {
     oldZone.start();
     TEST_ASSERT(oldZone.m1_listen_port() == srcM1, "old zone m1 face up");
     {
-        auto anchor = oldZone.activatePlayer(42);
-        TEST_ASSERT(anchor != nullptr, "old zone anchor activated");
-        session::SessionBinding binding;
+        auto avatar = oldZone.activatePlayer(42);
+        TEST_ASSERT(avatar != nullptr, "old zone avatar activated");
+        base::SessionBinding binding;
         binding.session_id = 777;
         binding.gateway_id = 3;
         TEST_ASSERT(oldZone.bindSession(42, binding), "old zone session bound");
-        oldZone.findAnchor(42)->set_home_zone_id(2);
-        oldZone.findAnchor(42)->mark_dirty("migrate_drill");
+        oldZone.findAvatar(42)->set_home_zone_id(2);
+        oldZone.findAvatar(42)->mark_dirty("migrate_drill");
     }
 
     // 新 zone：空载起（承接 937 + 现场拉 935/936）
@@ -296,11 +298,11 @@ bool test_baseappmgr_migrate_player() {
         });
     mgr.set_snapshot_publisher(publisher);
     {
-        session::SessionBinding binding;
+        base::SessionBinding binding;
         binding.session_id = 777;
         binding.gateway_id = 3;
         TEST_ASSERT(mgr.bindSession(42, binding), "mgr entry registered");
-        session::WorldAssignment assignment;
+        base::WorldAssignment assignment;
         assignment.world_id = 1;
         assignment.route_version = 1;
         TEST_ASSERT(mgr.assignWorld(42, assignment), "mgr assignment set");
@@ -319,20 +321,20 @@ bool test_baseappmgr_migrate_player() {
 
     // 老侧：Transferring 停留（⑤ 老进程摘除随排空退场——批记边界）
     {
-        auto anchor = oldZone.findAnchor(42);
-        TEST_ASSERT(anchor != nullptr
-                        && anchor->state() == session::AnchorState::Transferring,
+        auto avatar = oldZone.findAvatar(42);
+        TEST_ASSERT(avatar != nullptr
+                        && avatar->state() == base::AvatarState::Transferring,
                     "old side stays Transferring");
-        TEST_ASSERT(!anchor->needs_save(), "old side journal drained");
+        TEST_ASSERT(!avatar->needs_save(), "old side journal drained");
     }
     // 新侧：接权生效（Online + binding + home zone + 档案落盘）
     {
-        auto anchor = newZone.findAnchor(42);
-        TEST_ASSERT(anchor != nullptr
-                        && anchor->state() == session::AnchorState::Online,
-                    "new side anchor online");
-        TEST_ASSERT(anchor->session_binding().session_id == 777
-                        && anchor->home_zone_id() == 2,
+        auto avatar = newZone.findAvatar(42);
+        TEST_ASSERT(avatar != nullptr
+                        && avatar->state() == base::AvatarState::Online,
+                    "new side avatar online");
+        TEST_ASSERT(avatar->session_binding().session_id == 777
+                        && avatar->home_zone_id() == 2,
                     "binding and home zone restored");
         player_store::PlayerData migrated;
         player_store::DatabaseService reader(newCfg);

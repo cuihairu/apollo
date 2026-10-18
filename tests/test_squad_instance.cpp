@@ -11,8 +11,8 @@
 //   8. 失败判定：超时 → cancel 进入结算（不发成功奖励）、可释放回收。
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/session/anchor_reward_sink.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/world.hpp"
@@ -620,25 +620,25 @@ bool test_squad_gameplay_guards_and_quotas() {
 
 
 // 结算锚点面：roster 成员各持锚；missing 名单注入 resolve 失败（pending 路径）。
-struct AnchorTable {
-    std::map<std::uint64_t, std::unique_ptr<apollo::game::session::PlayerAnchor>> anchors;
+struct AvatarTable {
+    std::map<std::uint64_t, std::unique_ptr<apollo::game::base::Avatar>> avatars;
     std::set<std::uint64_t> missing;
-    apollo::game::session::PlayerAnchor* resolve(std::uint64_t id) {
+    apollo::game::base::Avatar* resolve(std::uint64_t id) {
         if (missing.contains(id)) return nullptr;
-        const auto it = anchors.find(id);
-        return it == anchors.end() ? nullptr : it->second.get();
+        const auto it = avatars.find(id);
+        return it == avatars.end() ? nullptr : it->second.get();
     }
 };
 
-AnchorTable make_anchor_table(std::initializer_list<std::uint64_t> ids) {
-    AnchorTable table;
+AvatarTable make_avatar_table(std::initializer_list<std::uint64_t> ids) {
+    AvatarTable table;
     for (const auto id : ids)
-        table.anchors.emplace(id, std::make_unique<apollo::game::session::PlayerAnchor>(id));
+        table.avatars.emplace(id, std::make_unique<apollo::game::base::Avatar>(id));
     return table;
 }
 
-std::int64_t exp_of(const AnchorTable& table, std::uint64_t id) {
-    return table.anchors.at(id)->progress(apollo::game::session::AnchorRewardSink::kExpKey);
+std::int64_t exp_of(const AvatarTable& table, std::uint64_t id) {
+    return table.avatars.at(id)->progress(apollo::game::base::AvatarRewardSink::kExpKey);
 }
 
 // 隔离落盘目录（结算凭据面测试用）
@@ -656,8 +656,8 @@ bool test_squad_settlement_idempotent_credit_and_retry() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     const auto launch = service.launch(basic_request(1));
     TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
@@ -673,9 +673,9 @@ bool test_squad_settlement_idempotent_credit_and_retry() {
     TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
                     squad_instance::SettlementLedger::ApplyError::Ok,
                 "leader credited");
-    TEST_ASSERT(exp_of(table, kLeader) == 50, "reward lands on anchor exp");
-    TEST_ASSERT(table.anchors.at(kLeader)->needs_save(),
-                "settlement marks anchor dirty for write-behind");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "reward lands on avatar exp");
+    TEST_ASSERT(table.avatars.at(kLeader)->needs_save(),
+                "settlement marks avatar dirty for write-behind");
     TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
                     squad_instance::SettlementLedger::ApplyError::AlreadyApplied,
                 "double credit refused");
@@ -687,8 +687,8 @@ bool test_squad_settlement_idempotent_credit_and_retry() {
     // 锚点暂不可得：挂账不落；恢复后补账一次
     table.missing.insert(kMemberC);
     TEST_ASSERT(service.credit_settlement(1, kMemberC, 30) ==
-                    squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
-                "unavailable anchor unsettled");
+                    squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                "unavailable avatar unsettled");
     snap = service.settlement(1);
     TEST_ASSERT(snap->applied == 1 && snap->pending == 1 && !snap->complete,
                 "partial settlement visible");
@@ -712,8 +712,8 @@ bool test_squad_settlement_battle_settles_on_goal_completion() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
     auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
@@ -745,8 +745,8 @@ bool test_squad_settlement_battle_settles_on_goal_completion() {
 
     // 无上报人归属（reporter=0）→ 事件不落名册账：零分值标记已落账但不写锚
     TEST_ASSERT(exp_of(table, kLeader) == 0, "unattributed kill credits no exp");
-    TEST_ASSERT(!table.anchors.at(kLeader)->needs_save(),
-                "zero-score settle leaves anchor clean");
+    TEST_ASSERT(!table.avatars.at(kLeader)->needs_save(),
+                "zero-score settle leaves avatar clean");
     return true;
 }
 
@@ -758,8 +758,8 @@ bool test_squad_kill_scores_flow_through_battle() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
     auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
@@ -785,7 +785,7 @@ bool test_squad_kill_scores_flow_through_battle() {
                 "roster settled");
     TEST_ASSERT(exp_of(table, kLeader) > 0, "reporter score credited via battle");
     TEST_ASSERT(exp_of(table, kMemberB) == 0, "non-reporter scores nothing");
-    TEST_ASSERT(table.anchors.at(kLeader)->needs_save(), "score dirties anchor");
+    TEST_ASSERT(table.avatars.at(kLeader)->needs_save(), "score dirties avatar");
     return true;
 }
 
@@ -795,8 +795,8 @@ bool test_squad_settlement_recovery_and_failure_line() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     const auto launch = service.launch(basic_request(1));
     TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
@@ -848,8 +848,8 @@ bool test_squad_departure_keeps_long_term_state() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     auto* instance = run_party_to_running(service, world);
     TEST_ASSERT(instance != nullptr, "running baseline");
@@ -858,12 +858,12 @@ bool test_squad_departure_keeps_long_term_state() {
     TEST_ASSERT(service.credit_settlement(1, kMemberB, 40) ==
                     squad_instance::SettlementLedger::ApplyError::Ok,
                 "pre-departure credit lands");
-    TEST_ASSERT(exp_of(table, kMemberB) == 40, "baseline exp on anchor");
+    TEST_ASSERT(exp_of(table, kMemberB) == 40, "baseline exp on avatar");
 
     // 成员 B 中途离场（掉线同口径）：锚点不被卸载、分值原样
     TEST_ASSERT(service.leave(1, kMemberB) == SquadInstanceService::LeaveError::Ok,
                 "member departs mid-run");
-    TEST_ASSERT(table.resolve(kMemberB) != nullptr, "leaver anchor still resolvable");
+    TEST_ASSERT(table.resolve(kMemberB) != nullptr, "leaver avatar still resolvable");
     TEST_ASSERT(exp_of(table, kMemberB) == 40, "departure leaves exp intact");
     TEST_ASSERT(service.leave(1, kMemberB) ==
                     SquadInstanceService::LeaveError::NotInInstance,
@@ -896,7 +896,7 @@ bool test_squad_departure_keeps_long_term_state() {
     // 销毁不卸载长期资料：三锚点全部仍可解析，离场者分值原样、
     // 在场者结算分值已落
     for (const auto id : {kLeader, kMemberB, kMemberC}) {
-        TEST_ASSERT(table.resolve(id) != nullptr, "anchor survives instance destroy");
+        TEST_ASSERT(table.resolve(id) != nullptr, "avatar survives instance destroy");
     }
     TEST_ASSERT(exp_of(table, kMemberB) == 40, "departed member exp survives destroy");
     TEST_ASSERT(exp_of(table, kLeader) > 0, "leader battle settlement landed");
@@ -910,8 +910,8 @@ bool test_squad_dismiss_evicts_players_and_reclaims() {
     make_party(parties, 2, 200, 201, 202);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     int closing_calls = 0;
     service.set_instance_closing([&](std::uint64_t) { ++closing_calls; });
@@ -965,8 +965,8 @@ bool test_squad_dismiss_on_failure_line_and_guards() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     // 无绑定收尾拒绝
     TEST_ASSERT(!service.dismiss(404), "dismiss without binding refused");
@@ -1001,8 +1001,8 @@ bool test_squad_late_input_refused_after_settlement() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
     auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
@@ -1079,8 +1079,8 @@ bool test_squad_nobody_entered_abort_policy() {
                 "enter after abort is NoBinding");
 
     // 玩法期 abort：取消线（不发成功奖励），结算面为空
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "relaunched");
     instance = run_party_to_running(service, world, /*launch_first=*/false);
     TEST_ASSERT(instance != nullptr, "running");
@@ -1109,8 +1109,8 @@ bool test_squad_all_exit_drives_failure_line() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
     auto* instance = run_party_to_running(service, world, /*launch_first=*/false);
@@ -1162,8 +1162,8 @@ bool test_squad_party_disband_aborts_instance() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     // 无绑定时解散：服务面无需动作
     TEST_ASSERT(!service.abort(1), "abort without instance refused");
@@ -1197,22 +1197,22 @@ bool test_squad_process_recovery_policy() {
     make_party(parties, 1);
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
 
     // 进程一：副本开跑并落账一条
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
     TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
                     squad_instance::SettlementLedger::ApplyError::Ok,
                 "credited in first process");
-    TEST_ASSERT(exp_of(table, kLeader) == 40, "exp persisted via anchor");
+    TEST_ASSERT(exp_of(table, kLeader) == 40, "exp persisted via avatar");
     TEST_ASSERT(service.abort(1), "process one torn down");
     TEST_ASSERT(service.active_count() == 0, "process one settled down");
 
     // 进程二（重启 = 全新服务/World，副本临时态随进程消亡）：从零受理
     SquadInstanceService restarted(parties, &world, 1);
     restarted.register_world(1, 4);
-    restarted.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    restarted.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
     TEST_ASSERT(restarted.active_count() == 0, "no phantom bindings after restart");
     TEST_ASSERT(restarted.launch(basic_request(1)).error == LaunchError::Ok,
                 "fresh admission after restart");
@@ -1288,8 +1288,8 @@ bool test_squad_settlement_credential_replay_dedup_across_restart() {
         World world;
         SquadInstanceService service(parties, &world, 1);
         service.register_world(1, 4);
-        auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-        service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+        auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+        service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
         service.set_credential_dir(dir);
 
         TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "gen1 launched");
@@ -1310,8 +1310,8 @@ bool test_squad_settlement_credential_replay_dedup_across_restart() {
         World world;
         SquadInstanceService service(parties, &world, 1);
         service.register_world(1, 4);
-        auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-        service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+        auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+        service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
         service.set_credential_dir(dir);
 
         TEST_ASSERT(service.ingest_restored_credentials() == 1, "one credential ingested");
@@ -1371,15 +1371,15 @@ bool test_squad_settlement_credential_failure_holds_ledger() {
     }
     SquadInstanceService service(parties, &world, 1);
     service.register_world(1, 4);
-    auto table = make_anchor_table({kLeader, kMemberB, kMemberC});
-    service.set_anchor_resolver([&table](std::uint64_t id) { return table.resolve(id); });
+    auto table = make_avatar_table({kLeader, kMemberB, kMemberC});
+    service.set_avatar_resolver([&table](std::uint64_t id) { return table.resolve(id); });
     service.set_credential_dir((blocker / "settlements").string());
 
     TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
 
     // 凭据未持久提交 = 挂账不落（绝不无凭据落账）
     TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
-                    squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
+                    squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
                 "uncommittable credential holds the credit");
     TEST_ASSERT(exp_of(table, kLeader) == 0, "no exp without committed credential");
     TEST_ASSERT(service.retry_settlement(1) == 0,

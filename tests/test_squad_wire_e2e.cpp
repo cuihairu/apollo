@@ -336,23 +336,23 @@ void squad_wire_e2e() {
     require(squads->active_count() == 0, "instance binding not reclaimed");
     require(squads->used_capacity(44) == 0, "world capacity not returned");
     for (const auto [session_id, player_id] : roster) {
-        const auto anchor = base.store->findAnchor(player_id);
-        require(anchor != nullptr, "roster anchor missing on base after settlement");
-        require(anchor->state() == apollo::game::session::AnchorState::Online,
-                "roster anchor not Online after settlement");
+        const auto avatar = base.store->findAvatar(player_id);
+        require(avatar != nullptr, "roster avatar missing on base after settlement");
+        require(avatar->state() == apollo::game::base::AvatarState::Online,
+                "roster avatar not Online after settlement");
     }
     {
-        const auto anchor = base.store->findAnchor(100);
-        require(anchor != nullptr && anchor->progress("exp") > 0,
-                "killer settlement score did not reach base anchor");
+        const auto avatar = base.store->findAvatar(100);
+        require(avatar != nullptr && avatar->progress("exp") > 0,
+                "killer settlement score did not reach base avatar");
     }
 
     // ---- 第二轮（party 2）：凭据持久化生产接线端到端（L67）----
     // 装载回填咬合：队长 100 的第二轮结算分值按已落凭据幂等拒绝——Base
     // exp 停在第一轮值（未接线/未配置时第二轮结算会继续增长）；release
     // 擦除后凭据目录清空（record → launch 消费回写 → release 擦除）。
-    const auto exp_after_first = base.store->findAnchor(100)->progress(
-        apollo::game::session::AnchorRewardSink::kExpKey);
+    const auto exp_after_first = base.store->findAvatar(100)->progress(
+        apollo::game::base::AvatarRewardSink::kExpKey);
     require(exp_after_first > 0, "first run killer exp missing");
 
     require(egress->forwardIntent(
@@ -508,9 +508,9 @@ void squad_wire_e2e() {
     require(squads->active_count() == 0 && squads->used_capacity(44) == 0,
             "squad 2 binding not reclaimed");
     {
-        const auto anchor = base.store->findAnchor(100);
-        require(anchor != nullptr &&
-                    anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) ==
+        const auto avatar = base.store->findAvatar(100);
+        require(avatar != nullptr &&
+                    avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) ==
                         exp_after_first,
                 "restored credential did not dedup second settlement");
     }

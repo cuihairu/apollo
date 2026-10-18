@@ -225,12 +225,12 @@ void WorldApp::start() {
                     if (!reply ||
                         !player_store::business::decodeFrame(*reply, rep, sid)) {
                         return squad_instance::SettlementLedger::ApplyError::
-                            AnchorUnavailable;  // 传输不可达/回包畸形：挂账待补
+                            AvatarUnavailable;  // 传输不可达/回包畸形：挂账待补
                     }
                     return rep.accepted
                                ? squad_instance::SettlementLedger::ApplyError::Ok
                                : squad_instance::SettlementLedger::ApplyError::
-                                     AnchorUnavailable;  // 离线/迁移中：挂账待补
+                                     AvatarUnavailable;  // 离线/迁移中：挂账待补
                 });
             worldLog().info(
                 "base business dialing " + config_.baseBusinessHost + ":"

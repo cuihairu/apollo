@@ -2,13 +2,13 @@
 // 独立 PlayerStore 宿主（M1 受理面，StoreHost 纯 store 位——无报告面）+
 // StoreDial 真拨（同 migration 族底座，握手只验 route_version）：
 //   1. 常规落账：adoptPlayer 建锚 → 958 → accepted=1，锚点 exp 累入分值
-//      （progress 读数断言，非日志——与 AnchorRewardSink 语义对齐）；
+//      （progress 读数断言，非日志——与 AvatarRewardSink 语义对齐）；
 //   2. 无锚点玩家 → accepted=0（挂账语义，不抛不崩）；
 //   3. 冻结（933 真拨 → Transferring）后 958 → accepted=0（迟到结算
 //      拒绝——跨域双记防线）；
 //   4. SettlementLedger 业务受理装配：sink = 958/959 wire → apply Ok +
 //      双投 AlreadyApplied（幂等归调用方账本，二次不达 wire）；
-//   5. 受理面停 → AnchorUnavailable 挂账（传输不可达同挂账语义）。
+//   5. 受理面停 → AvatarUnavailable 挂账（传输不可达同挂账语义）。
 
 #include "player_store/business_wire.hpp"
 #include "player_store/migration_wire.hpp"
@@ -81,10 +81,10 @@ SettlementLedger::ApplyError wire_sink(player_store::StoreDial& dial,
     business::ScoreCreditReply rep;
     apollo::protocol::SessionID sid = 0;
     if (!reply || !business::decodeFrame(*reply, rep, sid)) {
-        return SettlementLedger::ApplyError::AnchorUnavailable;  // 传输不可达
+        return SettlementLedger::ApplyError::AvatarUnavailable;  // 传输不可达
     }
     return rep.accepted ? SettlementLedger::ApplyError::Ok
-                        : SettlementLedger::ApplyError::AnchorUnavailable;
+                        : SettlementLedger::ApplyError::AvatarUnavailable;
 }
 
 void base_business_wire() {
@@ -111,11 +111,11 @@ void base_business_wire() {
     require(base.store->adoptPlayer(7, "", 7001, 5, 2), "player 7 adopt failed");
     {
         const auto rep = fire_credit(dial, 1, 7, 120, 2);
-        require(rep.accepted, "score credit on live anchor not accepted");
-        const auto anchor = base.store->findAnchor(7);
-        require(anchor != nullptr, "player 7 anchor missing after credit");
-        require(anchor->progress("exp") == 120,
-                "credited score did not land on anchor exp");
+        require(rep.accepted, "score credit on live avatar not accepted");
+        const auto avatar = base.store->findAvatar(7);
+        require(avatar != nullptr, "player 7 avatar missing after credit");
+        require(avatar->progress("exp") == 120,
+                "credited score did not land on avatar exp");
     }
 
     // ---- 2. 无锚点玩家 → accepted=0 ----
@@ -141,7 +141,7 @@ void base_business_wire() {
     }
     {
         const auto rep = fire_credit(dial, 3, 8, 60, 2);
-        require(!rep.accepted, "score credit on transferring anchor accepted");
+        require(!rep.accepted, "score credit on transferring avatar accepted");
     }
 
     // ---- 4. SettlementLedger 业务受理装配：Ok + 幂等（双投不双记）----
@@ -157,15 +157,15 @@ void base_business_wire() {
                 "ledger business apply not Ok");
         require(ledger.apply(9, 80) == SettlementLedger::ApplyError::AlreadyApplied,
                 "ledger double apply not idempotent");
-        const auto anchor = base.store->findAnchor(9);
-        require(anchor != nullptr && anchor->progress("exp") == 80,
+        const auto avatar = base.store->findAvatar(9);
+        require(avatar != nullptr && avatar->progress("exp") == 80,
                 "ledger business credit did not land exactly once");
         const auto snap = ledger.snapshot();
         require(snap.applied == 1 && snap.pending == 0 && snap.complete,
                 "ledger snapshot wrong after business apply");
     }
 
-    // ---- 5. 受理面停 → AnchorUnavailable 挂账（分值保留不丢）----
+    // ---- 5. 受理面停 → AvatarUnavailable 挂账（分值保留不丢）----
     {
         SettlementLedger ledger;
         ledger.begin({10}, nullptr);
@@ -175,7 +175,7 @@ void base_business_wire() {
         });
         base.store->stop();  // Base 受理面退场（真死亡拓扑：面关）
         require(ledger.apply(10, 90) ==
-                    SettlementLedger::ApplyError::AnchorUnavailable,
+                    SettlementLedger::ApplyError::AvatarUnavailable,
                 "ledger apply on down base face not deferred");
         require(ledger.snapshot().pending == 1 && ledger.snapshot().applied == 0,
                 "deferred settlement disturbed ledger state");

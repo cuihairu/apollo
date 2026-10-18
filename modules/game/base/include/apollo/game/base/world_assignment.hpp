@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace apollo::game::session {
+namespace apollo::game::base {
 
 struct WorldAssignment {
     std::uint32_t world_id = 0;
@@ -19,4 +19,4 @@ struct WorldAssignment {
     [[nodiscard]] bool operator==(const WorldAssignment&) const noexcept = default;
 };
 
-} // namespace apollo::game::session
+} // namespace apollo::game::base

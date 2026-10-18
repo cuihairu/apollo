@@ -3,7 +3,7 @@
 #include "player_store/migration_puller.hpp"
 #include "player_store/migration_wire.hpp"
 #include "apollo/core/log/log_manager.h"
-#include "apollo/game/session/anchor_reward_sink.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include <algorithm>
@@ -24,21 +24,21 @@ apollo::core::log::Logger& blog() {
     return *apollo::core::log::global_log_manager().createLogger("base_server");
 }
 
-const char* toAnchorStateString(apollo::game::session::AnchorState state) {
-    using apollo::game::session::AnchorState;
+const char* toAvatarStateString(apollo::game::base::AvatarState state) {
+    using apollo::game::base::AvatarState;
 
     switch (state) {
-        case AnchorState::Loading:
+        case AvatarState::Loading:
             return "loading";
-        case AnchorState::Online:
+        case AvatarState::Online:
             return "online";
-        case AnchorState::Transferring:
+        case AvatarState::Transferring:
             return "transferring";
-        case AnchorState::Disconnected:
+        case AvatarState::Disconnected:
             return "disconnected";
-        case AnchorState::Saving:
+        case AvatarState::Saving:
             return "saving";
-        case AnchorState::Offline:
+        case AvatarState::Offline:
             return "offline";
         default:
             return "unknown";
@@ -56,7 +56,7 @@ PlayerStore::PlayerStore(const PlayerStoreConfig& config,
     : config_(config)
     , database_(storage ? std::move(storage) : std::make_unique<DatabaseService>(config))
     , saveQueue_(std::make_unique<SaveQueue>(config_.workerThreads, config_.saveQueueCapacity))
-    , anchorManager_(std::make_shared<apollo::game::session::AnchorManager>())
+    , avatarManager_(std::make_shared<apollo::game::base::AvatarManager>())
     , sessionLocator_(std::make_shared<apollo::game::session::SessionLocator>())
     , journal_(database_->ownsJournal() ? nullptr :
           std::make_unique<apollo::data::journal::PersistJournal>(config_.journalPath)) {
@@ -111,9 +111,9 @@ std::size_t PlayerStore::drainJournal() {
             std::lock_guard<std::mutex> lock(storeMutex_);
             // 只读态玩家（迁移已交权/接权排干窗）：档案不由本域队列写
             // （无双写不变量；冻结/接权段已同步直写收口，条目消费即可）
-            if (const auto anchor = anchorManager_->find(data.playerId);
-                anchor &&
-                anchor->state() == apollo::game::session::AnchorState::Transferring) {
+            if (const auto avatar = avatarManager_->find(data.playerId);
+                avatar &&
+                avatar->state() == apollo::game::base::AvatarState::Transferring) {
                 return true;
             }
             // 接权前旧域条目（seq < 水位）：消费不落档——接权直写已是终值
@@ -145,7 +145,7 @@ PlayerStore::~PlayerStore() {
     stop();
 }
 
-std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayer(PlayerID playerId) {
+std::shared_ptr<apollo::game::base::Avatar> PlayerStore::activatePlayer(PlayerID playerId) {
     // 存档串行化：fresh 判定、播种、清脏同一临界区——并发激活不得双播种
     std::lock_guard<std::mutex> lock(storeMutex_);
     PlayerData data;
@@ -161,20 +161,20 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayer
         writeGens_.emplace(playerId, data.writeGen);
     }
 
-    // 长期态播种（真实奖励持久化）：exp 以 Anchor 为持久真源——新锚点按
+    // 长期态播种（真实奖励持久化）：exp 以 Avatar 为持久真源——新锚点按
     // 现档播种，flush 收集覆盖写回；仅新锚点播种（既存锚点重复加值即双记）。
-    const bool fresh = anchorManager_->find(playerId) == nullptr;
-    auto anchor = activatePlayerAnchor(playerId);
-    if (!anchor) {
+    const bool fresh = avatarManager_->find(playerId) == nullptr;
+    auto avatar = activateAvatar(playerId);
+    if (!avatar) {
         return nullptr;
     }
     if (fresh) {
-        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey,
+        avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey,
                              data.exp);
     }
 
-    anchor->clear_dirty();
-    return anchor;
+    avatar->clear_dirty();
+    return avatar;
 }
 
 void PlayerStore::set_directory_event_sink(
@@ -184,9 +184,9 @@ void PlayerStore::set_directory_event_sink(
 
 bool PlayerStore::bindSession(
     PlayerID playerId,
-    const apollo::game::session::SessionBinding& binding
+    const apollo::game::base::SessionBinding& binding
 ) {
-    if (!anchorManager_->find(playerId)) {
+    if (!avatarManager_->find(playerId)) {
         // 未激活先激活（activatePlayer 自持串行点）；拒绝路径的态判定在
         // 下方临界区内复核——find 与锁间窗口内冻结可能落位
         if (!activatePlayer(playerId)) {
@@ -200,18 +200,18 @@ bool PlayerStore::bindSession(
     // 重绑/重连不得把 Transferring 翻回 Online（否则源域重获写权 + 重回
     // 在册集，双写不变量破口）
     std::lock_guard<std::mutex> lock(storeMutex_);
-    auto anchor = anchorManager_->find(playerId);
-    if (!anchor) {
+    auto avatar = avatarManager_->find(playerId);
+    if (!avatar) {
         return false;
     }
-    if (anchor->state() == apollo::game::session::AnchorState::Transferring) {
+    if (avatar->state() == apollo::game::base::AvatarState::Transferring) {
         blog().warning("Player " + std::to_string(playerId)
                        + " bind rejected (frozen for migration)");
         return false;
     }
 
-    anchor->bind_session(binding);
-    anchor->set_state(apollo::game::session::AnchorState::Online);
+    avatar->bind_session(binding);
+    avatar->set_state(apollo::game::base::AvatarState::Online);
     sessionLocator_->bind(playerId, binding);
 
     // 目录事件源①（P1-2）：会话建立上报 SessionUp 同形事件（权威目录在
@@ -221,8 +221,8 @@ bool PlayerStore::bindSession(
         event.kind = apollo::game::session::PlayerDirectory::Event::Kind::SessionUp;
         event.player_id = playerId;
         event.binding = binding;
-        if (anchor->world_assignment().is_assigned()) {
-            event.assignment = anchor->world_assignment();
+        if (avatar->world_assignment().is_assigned()) {
+            event.assignment = avatar->world_assignment();
         }
         directoryEventSink_(event);
     }
@@ -237,9 +237,9 @@ bool PlayerStore::unbindSession(protocol::SessionID sessionId) {
 
     {
         std::lock_guard<std::mutex> lock(storeMutex_);
-        if (auto anchor = anchorManager_->find(*playerId)) {
-            anchor->unbind_session(sessionId);
-            anchor->set_state(apollo::game::session::AnchorState::Disconnected);
+        if (auto avatar = avatarManager_->find(*playerId)) {
+            avatar->unbind_session(sessionId);
+            avatar->set_state(apollo::game::base::AvatarState::Disconnected);
         }
     }
 
@@ -256,8 +256,8 @@ bool PlayerStore::unbindSession(protocol::SessionID sessionId) {
     return true;
 }
 
-std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::findAnchor(PlayerID playerId) const {
-    return anchorManager_->find(playerId);
+std::shared_ptr<apollo::game::base::Avatar> PlayerStore::findAvatar(PlayerID playerId) const {
+    return avatarManager_->find(playerId);
 }
 
 std::optional<PlayerID> PlayerStore::findPlayerBySession(protocol::SessionID sessionId) const {
@@ -282,7 +282,7 @@ void PlayerStore::start() {
     if (journal_ && !journal_->open()) {
         throw std::runtime_error("Failed to open storage journal");
     }
-    recovery_ = std::make_unique<apollo::game::session::RecoveryCoordinator>(
+    recovery_ = std::make_unique<apollo::game::base::RecoveryCoordinator>(
         "base-app",
         [this]() -> std::size_t {
             if (!journal_) return 0;
@@ -298,30 +298,30 @@ void PlayerStore::start() {
             });
         },
         [this]() {
-            // Anchor 恢复（档案在、会话无，Offline 待登录）+ 数据面准入
+            // Avatar 恢复（档案在、会话无，Offline 待登录）+ 数据面准入
             std::vector<PlayerID> ids;
             if (!database_->listPlayers(ids)) return false;
             const auto restored =
-                apollo::game::session::restore_anchors(*anchorManager_, ids);
-            blog().info("Anchor restore: " + std::to_string(restored)
-                        + " anchors offline-resumed");
-            // 恢复锚点播种（真实奖励持久化）：flush 收集以 Anchor 为 exp 真源——
+                apollo::game::base::restore_avatars(*avatarManager_, ids);
+            blog().info("Avatar restore: " + std::to_string(restored)
+                        + " avatars offline-resumed");
+            // 恢复锚点播种（真实奖励持久化）：flush 收集以 Avatar 为 exp 真源——
             // 未播种的恢复锚首次 flush 会把现档 exp 覆写归零
             for (const auto id : ids) {
                 PlayerData profile;
                 if (!database_->loadPlayer(id, profile)) continue;
-                if (auto anchor = anchorManager_->find(id)) {
-                    anchor->add_progress(
-                        apollo::game::session::AnchorRewardSink::kExpKey,
+                if (auto avatar = avatarManager_->find(id)) {
+                    avatar->add_progress(
+                        apollo::game::base::AvatarRewardSink::kExpKey,
                         profile.exp);
-                    anchor->clear_dirty();
+                    avatar->clear_dirty();
                 }
             }
             return true;
         });
     if (!recovery_->run() || !recovery_->ready()) {
         throw std::runtime_error(std::string("Recovery failed at phase: ") +
-                                 apollo::game::session::to_string(recovery_->phase()));
+                                 apollo::game::base::to_string(recovery_->phase()));
     }
 
     // 启动保存队列
@@ -388,7 +388,7 @@ void PlayerStore::stop() {
     if (autoSaveThread_.joinable()) {
         autoSaveThread_.join();
     }
-    flushDirtyAnchors("shutdown_flush");
+    flushDirtyAvatars("shutdown_flush");
 
     // ③ 持久链追平（§10.2-③）：队列全量排空（SaveQueue::stop 的 worker
     // 至队空方退）→ journal 循环 drain 至 pending==0，带超时上限——超时
@@ -500,7 +500,7 @@ std::vector<uint8_t> PlayerStore::handleDbLoadRequest(const std::vector<uint8_t>
 
     PlayerData data;
     if (database_->loadPlayer(loadReq.playerId, data)) {
-        auto anchor = activatePlayer(loadReq.playerId);
+        auto avatar = activatePlayer(loadReq.playerId);
         response.success = true;
         response.jsonData = data.toJson();
 
@@ -530,9 +530,9 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
         // 冻结锚点拒存（P3-6 迟到输入）：迁移只读态不入 journal/队列，不置
         // Saving——旧路径在此翻写态（覆盖 Transferring）+ 入段，与无双写不变
         // 量（§9.2 ①）正面冲突
-        const auto anchor = anchorManager_->find(saveReq.playerId);
-        if (anchor &&
-            anchor->state() == apollo::game::session::AnchorState::Transferring) {
+        const auto avatar = avatarManager_->find(saveReq.playerId);
+        if (avatar &&
+            avatar->state() == apollo::game::base::AvatarState::Transferring) {
             frozen = true;
         } else {
             // 异步保存
@@ -541,9 +541,9 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
             task.data = PlayerData::fromJson(saveReq.jsonData);
             // exp 以锚点长期态为准（真实奖励持久化口径）：外部载荷的 exp
             // 可能是旧快照回放——锚点即真源，覆盖写入防旧值回卷
-            if (anchor) {
-                task.data.exp = anchor->progress(
-                    apollo::game::session::AnchorRewardSink::kExpKey);
+            if (avatar) {
+                task.data.exp = avatar->progress(
+                    apollo::game::base::AvatarRewardSink::kExpKey);
             }
             if (database_->ownsJournal()) {
                 if (task.data.playerId != saveReq.playerId) {
@@ -552,7 +552,7 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
                     // 写端自持代次（L64 Base 半；database 半验单调）
                     task.data.writeGen = nextWriteGen(saveReq.playerId, nullptr);
                     response.success = database_->savePlayer(task.data);
-                    if (anchor && response.success) anchor->clear_dirty();
+                    if (avatar && response.success) avatar->clear_dirty();
                     if (!response.success) response.errorMessage = "database write not confirmed";
                 }
                 return protocol::MessageCodec::encode(response, header.sessionId);
@@ -561,11 +561,11 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
 
             // 先置 Saving 再入段/入队（worker finalize 才有 Saving 可回写；
             // 后置会与快速完成竞态把锚点卡死 Saving）
-            const auto prev = anchor ? anchor->state()
-                                     : apollo::game::session::AnchorState::Online;
-            if (anchor) {
-                anchor->mark_dirty("db_save_request");
-                anchor->set_state(apollo::game::session::AnchorState::Saving);
+            const auto prev = avatar ? avatar->state()
+                                     : apollo::game::base::AvatarState::Online;
+            if (avatar) {
+                avatar->mark_dirty("db_save_request");
+                avatar->set_state(apollo::game::base::AvatarState::Saving);
             }
             // write-ahead（P1-5）：先落 journal 恢复位点，再异步落档——
             // 合并被拒时载荷由 journal 段承载（下轮 drain 经队列落档）
@@ -575,9 +575,9 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
                 finalizeSave(playerId, success, seq);
             };
             accepted = saveQueue_->enqueue(task);
-            if (anchor && !accepted) {
+            if (avatar && !accepted) {
                 // 同玩家在途任务合并跳过：恢复原态留脏，载荷走 journal 段
-                anchor->set_state(prev);
+                avatar->set_state(prev);
             }
         }
     }
@@ -619,11 +619,11 @@ std::vector<uint8_t> PlayerStore::handlePlayerActivateRequest(const std::vector<
     response.success = false;
     response.playerId = activateReq.playerId;
 
-    if (auto anchor = activatePlayer(activateReq.playerId)) {
+    if (auto avatar = activatePlayer(activateReq.playerId)) {
         response.success = true;
-        response.state = toAnchorStateString(anchor->state());
+        response.state = toAvatarStateString(avatar->state());
     } else {
-        response.errorMessage = "Failed to activate player anchor";
+        response.errorMessage = "Failed to activate player avatar";
     }
 
     return protocol::MessageCodec::encode(response, header.sessionId);
@@ -638,7 +638,7 @@ std::vector<uint8_t> PlayerStore::handlePlayerBindSessionRequest(const std::vect
     protocol::PlayerBindSessionResponse response;
     response.success = false;
 
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = bindReq.sessionId;
     binding.gateway_id = bindReq.gatewayId;
     binding.gateway_addr = bindReq.gatewayAddr;
@@ -681,7 +681,7 @@ void PlayerStore::autoSaveLoop() {
 
         // 自动保存（P0-4「Saving 真做」）：把脏锚点送入保存队列（六态
         // Disconnected/Saving 由 flush 与回调维护），不再仅打印。
-        flushDirtyAnchors("auto_save");
+        flushDirtyAvatars("auto_save");
 
         // journal 消费侧（P1-5）：定额出队压档（attribute-sync §8.2
         // 每 tick 定比、有界队列）
@@ -689,7 +689,7 @@ void PlayerStore::autoSaveLoop() {
     }
 }
 
-std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
+std::size_t PlayerStore::flushDirtyAvatars(const char* reason) {
     // 单临界区（串行化批）：态判定、基线读档、exp 收集、入段与入队原子
     // ——基线在锁内取（DatabaseService 缓存随每次 save 同步刷新，命中
     // 即取，无盘面 I/O 占锁；激活时已首载入缓存），锁内基线 + 锁内入队
@@ -697,18 +697,18 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
     // 过期窗。锚点创建必经 activatePlayer（首载），故此处恒缓存命中。
     std::lock_guard<std::mutex> lock(storeMutex_);
     std::size_t flushed = 0;
-    for (auto& anchor : anchorManager_->snapshot()) {
-        if (!anchor || !anchor->needs_save()) {
+    for (auto& avatar : avatarManager_->snapshot()) {
+        if (!avatar || !avatar->needs_save()) {
             continue;
         }
         // 迁移中锚点跳过（P0-2 路 2 ① Transferring = 只读态）：写权已交
         // 新进程，老进程不再落盘（无双写不变量，§9.2）
-        if (anchor->state() == apollo::game::session::AnchorState::Transferring) {
+        if (avatar->state() == apollo::game::base::AvatarState::Transferring) {
             continue;
         }
 
         SaveTask task;
-        task.playerId = anchor->player_id();
+        task.playerId = avatar->player_id();
         // 载荷以现档为基线（P1-4 落盘真做后，默认值载荷会清档）：
         // 无档即跳过——不凭空造档案（bootstrap 恶龙已废）。
         if (!database_->loadPlayer(task.playerId, task.data)) {
@@ -716,17 +716,17 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
                             + " (no profile) (" + reason + ")");
             continue;
         }
-        // exp 收集自 Anchor 长期态（真实奖励持久化）：奖励落锚点即真源，
+        // exp 收集自 Avatar 长期态（真实奖励持久化）：奖励落锚点即真源，
         // flush 覆盖写回——不再仅重写旧档案丢增量（播种见 activatePlayer/
         // 启动恢复/adoptPlayer）。
-        task.data.exp = anchor->progress(
-            apollo::game::session::AnchorRewardSink::kExpKey);
+        task.data.exp = avatar->progress(
+            apollo::game::base::AvatarRewardSink::kExpKey);
         if (database_->ownsJournal()) {
             // 写端自持代次（L64 Base 半；database 半验单调）——基线即现档，
             // 作缺账播种真源，不另发读
             task.data.writeGen = nextWriteGen(task.playerId, &task.data.writeGen);
             if (database_->savePlayer(task.data)) {
-                anchor->clear_dirty();
+                avatar->clear_dirty();
                 ++flushed;
             }
             continue;
@@ -735,8 +735,8 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
 
         // 先置 Saving 再入段/入队（worker finalize 才有 Saving 可回写；
         // 后置会与快速完成竞态把锚点卡死 Saving）
-        const auto prev = anchor->state();
-        anchor->set_state(apollo::game::session::AnchorState::Saving);
+        const auto prev = avatar->state();
+        avatar->set_state(apollo::game::base::AvatarState::Saving);
         // write-ahead（P1-5）：同 handleDbSaveRequest——合并被拒时载荷
         // 由 journal 段承载（下轮 drain 经队列落档），锚点留脏
         task.journalSeq = appendJournal(task.data);
@@ -745,7 +745,7 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
             finalizeSave(playerId, success, seq);
         };
         if (!saveQueue_->enqueue(task)) {
-            anchor->set_state(prev);  // 同玩家在途：合并跳过，下轮再取
+            avatar->set_state(prev);  // 同玩家在途：合并跳过，下轮再取
             continue;
         }
         ++flushed;
@@ -760,14 +760,14 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
 bool PlayerStore::freezePlayer(PlayerID playerId) {
     {
         std::lock_guard<std::mutex> lock(storeMutex_);
-        const auto anchor = anchorManager_->find(playerId);
-        if (!anchor) {
+        const auto avatar = avatarManager_->find(playerId);
+        if (!avatar) {
             return false;
         }
         // 只读态前置（§9.2 ①）：先 Transferring 再排段——autoSave/RPC 保存
-        // /journal drain 见只读态即闸（flushDirtyAnchors、handleDbSaveRequest、
+        // /journal drain 见只读态即闸（flushDirtyAvatars、handleDbSaveRequest、
         // drainJournal sink 三守卫），此后此玩家无新增队列任务
-        anchor->set_state(apollo::game::session::AnchorState::Transferring);
+        avatar->set_state(apollo::game::base::AvatarState::Transferring);
     }
     // 在途排干（写序收口）：本玩家队列任务全部落盘后，冻结段同步直写才是
     // 最后落盘者——否则在途旧快照晚于冻结写落盘 = 旧覆盖新。等待不加锁
@@ -778,20 +778,20 @@ bool PlayerStore::freezePlayer(PlayerID playerId) {
     }
     {
         std::lock_guard<std::mutex> lock(storeMutex_);
-        const auto anchor = anchorManager_->find(playerId);
-        if (!anchor) {
+        const auto avatar = avatarManager_->find(playerId);
+        if (!avatar) {
             return false;
         }
         // journal 段排平（write-ahead 已入段 → 同步直写追平档案：低频迁移面
         // ms 级——此后此玩家只读，无双写）
-        if (anchor->needs_save()) {
+        if (avatar->needs_save()) {
             PlayerData data;
             if (database_->loadPlayer(playerId, data)) {
                 // 冻结段同步排平：未 flush 的奖励增量随冻结落档（快照才带上
                 // 最新 exp——迁移不丢奖励）；同步直写即落档——journal 段序
                 // 直接记入水位（drain 回放同段消费不重写）
-                data.exp = anchor->progress(
-                    apollo::game::session::AnchorRewardSink::kExpKey);
+                data.exp = avatar->progress(
+                    apollo::game::base::AvatarRewardSink::kExpKey);
                 // 写端自持代次（L64 Base 半；database 半验单调）——基线即
                 // 现档，作缺账播种真源
                 data.writeGen = nextWriteGen(playerId, &data.writeGen);
@@ -802,7 +802,7 @@ bool PlayerStore::freezePlayer(PlayerID playerId) {
                         landed = seq;
                     }
                 }
-                anchor->clear_dirty();
+                avatar->clear_dirty();
             }
         }
     }
@@ -815,9 +815,9 @@ PlayerStore::PlayerSnapshotData PlayerStore::snapshotPlayer(PlayerID playerId) {
     // 串行化 + 前置 = 已冻结（Transferring）——未冻结拒（防半写态出快照，
     // §9.2 ①→② 序）；冻结排干完成后档案即终值，锁内读无并发写
     std::lock_guard<std::mutex> lock(storeMutex_);
-    auto anchor = anchorManager_->find(playerId);
-    if (!anchor
-        || anchor->state() != apollo::game::session::AnchorState::Transferring) {
+    auto avatar = avatarManager_->find(playerId);
+    if (!avatar
+        || avatar->state() != apollo::game::base::AvatarState::Transferring) {
         out.error_message = "player not frozen";
         return out;
     }
@@ -828,10 +828,10 @@ PlayerStore::PlayerSnapshotData PlayerStore::snapshotPlayer(PlayerID playerId) {
     }
     out.success = true;
     out.profile_json = data.toJson();
-    const auto& binding = anchor->session_binding();
+    const auto& binding = avatar->session_binding();
     out.session_id = binding.session_id;
     out.gateway_id = binding.gateway_id;
-    out.home_zone_id = anchor->home_zone_id();
+    out.home_zone_id = avatar->home_zone_id();
     return out;
 }
 
@@ -855,21 +855,21 @@ bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
         adoptWatermarks_[playerId] = (journal_ ? journal_->next_sequence() : 0);
         // 接权播种收敛（真实奖励持久化）：档案（快照）为本域 exp 权威——锚点
         // 归一到档案现值（既有锚点含启动播种/旧值时以差值收敛，不叠加重播）。
-        auto anchor = anchorManager_->activate(playerId);
-        if (!anchor) {
+        auto avatar = avatarManager_->activate(playerId);
+        if (!avatar) {
             return false;
         }
-        anchor->add_progress(
-            apollo::game::session::AnchorRewardSink::kExpKey,
-            data.exp - anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey));
-        apollo::game::session::SessionBinding binding;
+        avatar->add_progress(
+            apollo::game::base::AvatarRewardSink::kExpKey,
+            data.exp - avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey));
+        apollo::game::base::SessionBinding binding;
         binding.session_id = sessionId;
         binding.gateway_id = gatewayId;
-        anchor->bind_session(binding);
-        anchor->set_home_zone_id(homeZoneId);
+        avatar->bind_session(binding);
+        avatar->set_home_zone_id(homeZoneId);
         // 临时只读闸：Transferring 闸住 flush/RPC/drain 的同玩家新任务，
         // 在途任务排干后本域直写档案（终值 = 快照），无旧快照晚落覆盖
-        anchor->set_state(apollo::game::session::AnchorState::Transferring);
+        avatar->set_state(apollo::game::base::AvatarState::Transferring);
     }
     // 在途排干（写序收口，同 freezePlayer；分片睡等不加锁）
     while (saveQueue_->has_pending_or_inflight(playerId)) {
@@ -877,19 +877,19 @@ bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
     }
     {
         std::lock_guard<std::mutex> lock(storeMutex_);
-        const auto anchor = anchorManager_->find(playerId);
-        if (!anchor) {
+        const auto avatar = avatarManager_->find(playerId);
+        if (!avatar) {
             return false;
         }
         // 写端自持代次（L64 Base 半）：接权快照即播种真源，盖章后落库
         //——database 地板随接权推进，接管后旧进程迟到写必被拒
         data.writeGen = nextWriteGen(playerId, &data.writeGen);
         if (!database_->savePlayer(data)) {
-            anchor->set_state(apollo::game::session::AnchorState::Offline);
+            avatar->set_state(apollo::game::base::AvatarState::Offline);
             return false;
         }
-        anchor->clear_dirty();  // 档案已直写落盘——不脏（autoSave 不再碰）
-        anchor->set_state(apollo::game::session::AnchorState::Online);
+        avatar->clear_dirty();  // 档案已直写落盘——不脏（autoSave 不再碰）
+        avatar->set_state(apollo::game::base::AvatarState::Online);
     }
     blog().info("Player " + std::to_string(playerId)
                 + " adopted with write authority");
@@ -915,7 +915,7 @@ std::vector<uint8_t> PlayerStore::handlePlayerFreezeRequest(
     reply.request_id = req.request_id;
     reply.accepted = accepted;
     if (!accepted) {
-        reply.error_message = "unknown player or no anchor";
+        reply.error_message = "unknown player or no avatar";
     }
     return migration::encodeFrame(reply, session);
 }
@@ -923,7 +923,7 @@ std::vector<uint8_t> PlayerStore::handlePlayerFreezeRequest(
 // 结算分值入账受理（958）：资料归属切换后的 Base 业务受理面——World 结算
 // 以返回业务请求落账，不跨界持锚点指针。幂等/重放去重归调用方账本（World
 // 侧 SettlementLedger）；本面无锚点或锚点 Transferring → accepted=0（调用
-// 方挂账待补）。落账走 AnchorRewardSink 语义（exp 键 + mark_dirty 随
+// 方挂账待补）。落账走 AvatarRewardSink 语义（exp 键 + mark_dirty 随
 // SaveQueue 落档）。
 std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
     const std::vector<uint8_t>& request) {
@@ -939,14 +939,14 @@ std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
     business::ScoreCreditReply reply;
     reply.player_id = req.player_id;
     reply.request_id = req.request_id;
-    const auto anchor = findAnchor(req.player_id);
-    if (!anchor) {
-        reply.error_message = "unknown player or no anchor";
-    } else if (anchor->state() ==
-               apollo::game::session::AnchorState::Transferring) {
-        reply.error_message = "anchor transferring";
+    const auto avatar = findAvatar(req.player_id);
+    if (!avatar) {
+        reply.error_message = "unknown player or no avatar";
+    } else if (avatar->state() ==
+               apollo::game::base::AvatarState::Transferring) {
+        reply.error_message = "avatar transferring";
     } else {
-        apollo::game::session::AnchorRewardSink sink(*anchor);
+        apollo::game::base::AvatarRewardSink sink(*avatar);
         sink.on_reward(req.player_id, req.score);
         reply.accepted = true;
     }
@@ -1066,25 +1066,25 @@ int64_t PlayerStore::getCurrentTimeMs() const {
     return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
 }
 
-std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayerAnchor(PlayerID playerId) {
-    auto anchor = anchorManager_->activate(playerId);
-    if (!anchor) {
+std::shared_ptr<apollo::game::base::Avatar> PlayerStore::activateAvatar(PlayerID playerId) {
+    auto avatar = avatarManager_->activate(playerId);
+    if (!avatar) {
         return nullptr;
     }
 
-    if (anchor->state() == apollo::game::session::AnchorState::Loading) {
-        anchor->set_state(apollo::game::session::AnchorState::Online);
+    if (avatar->state() == apollo::game::base::AvatarState::Loading) {
+        avatar->set_state(apollo::game::base::AvatarState::Online);
     }
 
-    return anchor;
+    return avatar;
 }
 
 void PlayerStore::finalizeSave(PlayerID playerId, bool success, std::uint64_t journalSeq) {
     // 串行化：态守卫判定与回写同一临界区——与 freeze/adopt 的只读闸原子
     // 交错，不得覆盖 Transferring（双写不变量破口的收口）
     std::lock_guard<std::mutex> lock(storeMutex_);
-    auto anchor = anchorManager_->find(playerId);
-    if (!anchor) {
+    auto avatar = avatarManager_->find(playerId);
+    if (!avatar) {
         return;
     }
     // 落档水位记账（成功才推进）：journal 回放序 ≤ 此序的条目已被本任务
@@ -1100,49 +1100,49 @@ void PlayerStore::finalizeSave(PlayerID playerId, bool success, std::uint64_t jo
     // Transferring（freeze 与 autoSave 的竞态窗口）——finalize 不得覆盖
     // 只读态（推回 Online = 双写不变量破口）。仅 Saving 态回写结果态；
     // 其它态只清/标脏，态留给持有者。
-    if (anchor->state() != apollo::game::session::AnchorState::Saving) {
+    if (avatar->state() != apollo::game::base::AvatarState::Saving) {
         if (success) {
-            anchor->clear_dirty();
+            avatar->clear_dirty();
         } else {
-            anchor->mark_dirty("save_failed");
+            avatar->mark_dirty("save_failed");
         }
         return;
     }
 
     if (success) {
-        anchor->clear_dirty();
-        anchor->set_state(apollo::game::session::AnchorState::Online);
+        avatar->clear_dirty();
+        avatar->set_state(apollo::game::base::AvatarState::Online);
         return;
     }
 
-    anchor->mark_dirty("save_failed");
-    anchor->set_state(apollo::game::session::AnchorState::Disconnected);
+    avatar->mark_dirty("save_failed");
+    avatar->set_state(apollo::game::base::AvatarState::Disconnected);
 }
 
 std::vector<apollo::game::session::MirrorEntry> collect_mirror_entries(
     const PlayerStore& store, std::uint32_t hosting_zone) {
     std::vector<apollo::game::session::MirrorEntry> sessions;
-    const auto anchors = store.anchor_manager();
-    if (!anchors) {
+    const auto avatars = store.avatar_manager();
+    if (!avatars) {
         return sessions;
     }
     // 承载域口径与冻结锚点过滤语义见头注（collect_mirror_entries）。
-    sessions.reserve(anchors->anchor_count());
-    for (const auto& anchor : anchors->snapshot()) {
-        if (!anchor || anchor->player_id() == 0) {
+    sessions.reserve(avatars->avatar_count());
+    for (const auto& avatar : avatars->snapshot()) {
+        if (!avatar || avatar->player_id() == 0) {
             continue;
         }
-        if (anchor->state() ==
-            apollo::game::session::AnchorState::Transferring) {
+        if (avatar->state() ==
+            apollo::game::base::AvatarState::Transferring) {
             continue;
         }
         apollo::game::session::MirrorEntry e;
-        e.player_id = anchor->player_id();
-        e.session_id = anchor->session_binding().session_id;
-        e.gateway_id = anchor->session_binding().gateway_id;
+        e.player_id = avatar->player_id();
+        e.session_id = avatar->session_binding().session_id;
+        e.gateway_id = avatar->session_binding().gateway_id;
         e.zone_id = hosting_zone;
         e.state = apollo::game::session::PlayerDirectory::EntryState::Online;
-        e.assignment = anchor->world_assignment();
+        e.assignment = avatar->world_assignment();
         sessions.push_back(e);
     }
     return sessions;

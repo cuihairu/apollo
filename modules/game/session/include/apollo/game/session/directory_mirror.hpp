@@ -33,7 +33,7 @@
 // 源）；不起内部线程、不依赖钟——节奏由调用方注入。
 
 #include "apollo/game/session/player_directory.hpp"
-#include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/base/world_assignment.hpp"
 
 #include <cstddef>
 #include <cstdint>

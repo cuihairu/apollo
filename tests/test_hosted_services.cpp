@@ -97,8 +97,8 @@ void hosted_services() {
         if (!response.success) std::this_thread::sleep_for(10ms);
     } while (!response.success && std::chrono::steady_clock::now() < deadline);
     require(response.success && response.playerId == 1001 && !response.loginTicket.empty(), "Real login failed");
-    auto anchor = base.findAnchor(1001);
-    require(anchor && anchor->session_binding().session_id == response.sessionId, "World did not bind session");
+    auto avatar = base.findAvatar(1001);
+    require(avatar && avatar->session_binding().session_id == response.sessionId, "World did not bind session");
 
     gateway::M1RouteClientConfig route_config;
     route_config.port = login.onlineDirectory()->listenPort();
@@ -132,7 +132,7 @@ void hosted_services() {
         login::LoginServer restarted(config);
         restarted.start();
         require(restarted.onlineDirectory()->directory().epoch_store_ok(), "Directory epoch recovery failed");
-        require(restarted.onlineDirectory()->bindSession(1001, anchor->session_binding()), "Recovered directory could not bind session");
+        require(restarted.onlineDirectory()->bindSession(1001, avatar->session_binding()), "Recovered directory could not bind session");
         std::uint64_t recovered_floor = 0;
         std::ifstream(config.directoryEpochPath) >> recovered_floor;
         require(recovered_floor > epoch_floor, "Restart regressed authority epoch");

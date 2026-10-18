@@ -5,10 +5,10 @@
 //   1. createPlayer 落盘 → 新 DatabaseService（模拟重启）loadPlayer 读回一致；
 //   2. loadPlayer 未命中返回 false——不再凭空 bootstrap「player_+id」；
 //   3. toJson/fromJson 全字段对称（含 playerId/exp int64/x/y/z 浮点）；
-//   4. Anchor mark_dirty → SaveQueue worker 落盘 → 读回（Anchor dirty 链路）；
+//   4. Avatar mark_dirty → SaveQueue worker 落盘 → 读回（Avatar dirty 链路）；
 //   5. worker 失败 → callback(false) 真结果上报。
 
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "player_store/database_service.hpp"
 
 #include <atomic>
@@ -161,7 +161,7 @@ bool test_archive_special_char_and_garbage_tolerance() {
     return true;
 }
 
-bool test_anchor_dirty_save_chain() {
+bool test_avatar_dirty_save_chain() {
     const auto dir = make_tmp_dir("chain");
     const std::string cfg_dir = dir;
     player_store::DatabaseService db(make_config(dir));
@@ -174,10 +174,10 @@ bool test_anchor_dirty_save_chain() {
     profile.level = 7;
     TEST_ASSERT(db.createPlayer(profile), "建号");
 
-    // Anchor dirty → SaveQueue 落盘（flushDirtyAnchors 同形链路）
-    apollo::game::session::PlayerAnchor anchor(55);
-    anchor.mark_dirty("test_flush");
-    TEST_ASSERT(anchor.needs_save(), "dirty 可观察");
+    // Avatar dirty → SaveQueue 落盘（flushDirtyAvatars 同形链路）
+    apollo::game::base::Avatar avatar(55);
+    avatar.mark_dirty("test_flush");
+    TEST_ASSERT(avatar.needs_save(), "dirty 可观察");
 
     player_store::SaveQueue queue(1);
     std::atomic<bool> called{false};
@@ -188,7 +188,7 @@ bool test_anchor_dirty_save_chain() {
     task.callback = [&](bool success) {
         ok = success;
         called = true;
-        anchor.clear_dirty();
+        avatar.clear_dirty();
     };
     queue.set_worker([&db](const player_store::PlayerData& data) { return db.savePlayer(data); });
     queue.start();
@@ -202,7 +202,7 @@ bool test_anchor_dirty_save_chain() {
 
     TEST_ASSERT(called.load(), "回调到达");
     TEST_ASSERT(ok.load(), "落盘真结果");
-    TEST_ASSERT(!anchor.needs_save(), "回调里 clear_dirty");
+    TEST_ASSERT(!avatar.needs_save(), "回调里 clear_dirty");
 
     // 重启读回验证链路末端
     player_store::DatabaseService revived(make_config(cfg_dir));
@@ -396,7 +396,7 @@ int main() {
         {"persistence_json_symmetry", test_json_symmetry},
         {"persistence_archive_special_char_and_garbage_tolerance",
          test_archive_special_char_and_garbage_tolerance},
-        {"persistence_anchor_dirty_save_chain", test_anchor_dirty_save_chain},
+        {"persistence_avatar_dirty_save_chain", test_avatar_dirty_save_chain},
         {"persistence_savequeue_same_player_serial_and_coalesce",
          test_savequeue_same_player_serial_and_coalesce},
         {"persistence_savequeue_bounded_rejects_overload",

@@ -5,7 +5,7 @@
 //     承载 lifecycle §3 矩阵，逐项标注恢复动作；
 //   - RecoveryCoordinator：进程启动序列 restore→admission→ready（缺一进
 //     Failed，拒绝服务）；
-//   - restore_anchors：落盘玩家按需重建锚点（恢复态 Offline——档案在、
+//   - restore_avatars：落盘玩家按需重建Avatar（恢复态 Offline——档案在、
 //     会话无；登录路径 activatePlayer 再转 Online）。
 //
 // journal 消费侧经 RestoreStep 注入（本模块不依赖 data 栈；base-app 以
@@ -16,9 +16,9 @@
 #include <string>
 #include <vector>
 
-namespace apollo::game::session {
+namespace apollo::game::base {
 
-class AnchorManager;
+class AvatarManager;
 
 enum class RecoveryTier : std::uint8_t {
     MustPersist = 0,  // 必须持久化
@@ -76,9 +76,9 @@ private:
     std::size_t replayed_ = 0;
 };
 
-// Anchor 恢复：为落盘玩家重建锚点并置 Offline（会话未至）。
-// 返回恢复锚点数。
-std::size_t restore_anchors(AnchorManager& manager,
+// Avatar 恢复：为落盘玩家重建Avatar并置 Offline（会话未至）。
+// 返回恢复Avatar数。
+std::size_t restore_avatars(AvatarManager& manager,
                             const std::vector<std::uint64_t>& player_ids);
 
-} // namespace apollo::game::session
+} // namespace apollo::game::base

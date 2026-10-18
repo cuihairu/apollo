@@ -1,7 +1,7 @@
 #include "player_store/player_store.hpp"
 #include "player_store/migration_wire.hpp"
-#include "apollo/game/session/anchor_reward_sink.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
@@ -41,19 +41,19 @@ struct MigrationDir {
 // baseapp（数据面）锚点生命周期测试。
 // 落点裁决/目录查询（assignWorld/ResolveRoute 族）已拆至 apps/baseappmgr，
 // 见 test_baseappmgr.cpp。
-bool test_base_server_anchor_lifecycle() {
-    std::cout << "Running: test_base_server_anchor_lifecycle..." << std::endl;
+bool test_base_server_avatar_lifecycle() {
+    std::cout << "Running: test_base_server_avatar_lifecycle..." << std::endl;
 
     player_store::PlayerStoreConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
-    config.dataDir = "base_anchor_test_data";  // 隔离落盘目录
+    config.dataDir = "base_avatar_test_data";  // 隔离落盘目录
     const MigrationDir dataGuard(config.dataDir);  // 预清残留 + 退出回收（失败路径不泄漏）
 
     // P1-4 口径：loadPlayer 只读已存在档案，不再凭空 bootstrap——先播种档案
     player_store::PlayerData seed;
     seed.playerId = 1001;
-    seed.username = "anchor-test";
+    seed.username = "avatar-test";
     {
         player_store::DatabaseService seeder(config);
         TEST_ASSERT(seeder.savePlayer(seed), "seed archive written");
@@ -61,29 +61,29 @@ bool test_base_server_anchor_lifecycle() {
 
     player_store::PlayerStore server(config);
 
-    auto anchor = server.activatePlayer(1001);
-    TEST_ASSERT(anchor != nullptr, "anchor activated");
-    TEST_ASSERT(anchor->player_id() == 1001, "player id preserved");
-    TEST_ASSERT(anchor->state() == apollo::game::session::AnchorState::Online, "anchor online after activate");
+    auto avatar = server.activatePlayer(1001);
+    TEST_ASSERT(avatar != nullptr, "avatar activated");
+    TEST_ASSERT(avatar->player_id() == 1001, "player id preserved");
+    TEST_ASSERT(avatar->state() == apollo::game::base::AvatarState::Online, "avatar online after activate");
 
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 9001;
     binding.gateway_id = 7;
     binding.gateway_addr = "gateway://127.0.0.1:8888";
 
     TEST_ASSERT(server.bindSession(1001, binding), "session bound");
 
-    anchor = server.findAnchor(1001);
-    TEST_ASSERT(anchor != nullptr, "anchor found after bind");
-    TEST_ASSERT(anchor->session_binding().session_id == 9001, "session stored on anchor");
+    avatar = server.findAvatar(1001);
+    TEST_ASSERT(avatar != nullptr, "avatar found after bind");
+    TEST_ASSERT(avatar->session_binding().session_id == 9001, "session stored on avatar");
 
     const auto playerBySession = server.findPlayerBySession(9001);
     TEST_ASSERT(playerBySession.has_value(), "player resolved by session");
     TEST_ASSERT(*playerBySession == 1001, "resolved player id matches");
 
     TEST_ASSERT(server.unbindSession(9001), "session unbound");
-    TEST_ASSERT(anchor->state() == apollo::game::session::AnchorState::Disconnected, "anchor disconnected after unbind");
-    TEST_ASSERT(!anchor->session_binding().is_bound(), "binding removed from anchor");
+    TEST_ASSERT(avatar->state() == apollo::game::base::AvatarState::Disconnected, "avatar disconnected after unbind");
+    TEST_ASSERT(!avatar->session_binding().is_bound(), "binding removed from avatar");
     TEST_ASSERT(!server.findPlayerBySession(9001).has_value(), "session locator cleaned");
 
     std::cout << "  PASSED" << std::endl;
@@ -100,8 +100,8 @@ bool test_shutdown_maintenance_gate() {
     config.autoSaveIntervalMs = 10;
     config.host = "127.0.0.1";
     config.port = 39002;  // 高位端口：stub 树 start() 无传输面，nng 复活也避撞
-    config.dataDir = "base_anchor_test_gate_data/players";
-    config.journalPath = "base_anchor_test_gate_data/journal/persist.log";
+    config.dataDir = "base_avatar_test_gate_data/players";
+    config.journalPath = "base_avatar_test_gate_data/journal/persist.log";
     config.shutdownFlushTimeoutMs = 2000;
     std::filesystem::create_directories(config.dataDir);
     std::filesystem::create_directories(
@@ -131,7 +131,7 @@ bool test_shutdown_maintenance_gate() {
     server.stop();  // 幂等：二次 stop（信号 + 析构双调用路径）不重复关停
     std::cout << "  PASSED" << std::endl;
 
-    std::filesystem::remove_all("base_anchor_test_gate_data");
+    std::filesystem::remove_all("base_avatar_test_gate_data");
     return true;
 }
 
@@ -145,8 +145,8 @@ bool test_shutdown_flushes_journal_and_archive() {
     config.autoSaveIntervalMs = 10;
     config.host = "127.0.0.1";
     config.port = 39003;
-    config.dataDir = "base_anchor_test_stop_data/players";
-    config.journalPath = "base_anchor_test_stop_data/journal/persist.log";
+    config.dataDir = "base_avatar_test_stop_data/players";
+    config.journalPath = "base_avatar_test_stop_data/journal/persist.log";
     config.shutdownFlushTimeoutMs = 2000;
     std::filesystem::create_directories(config.dataDir);
     std::filesystem::create_directories(
@@ -164,9 +164,9 @@ bool test_shutdown_flushes_journal_and_archive() {
     player_store::PlayerStore server(config);
     server.start();
 
-    auto anchor = server.activatePlayer(1002);
-    TEST_ASSERT(anchor != nullptr, "anchor activated");
-    anchor->mark_dirty("shutdown_test");
+    auto avatar = server.activatePlayer(1002);
+    TEST_ASSERT(avatar != nullptr, "avatar activated");
+    avatar->mark_dirty("shutdown_test");
 
     server.stop();
 
@@ -186,12 +186,12 @@ bool test_shutdown_flushes_journal_and_archive() {
 
     std::cout << "  PASSED" << std::endl;
 
-    std::filesystem::remove_all("base_anchor_test_stop_data");
+    std::filesystem::remove_all("base_avatar_test_stop_data");
     return true;
 }
 
-// ---- 真实奖励持久化（P2-4）：奖励落 Anchor 长期态，flush 载荷收集自
-// Anchor（exp 覆盖写回）而非仅重写旧档案；重启播种不双记；冻结迁移
+// ---- 真实奖励持久化（P2-4）：奖励落 Avatar 长期态，flush 载荷收集自
+// Avatar（exp 覆盖写回）而非仅重写旧档案；重启播种不双记；冻结迁移
 // 路径同样收集。----
 
 bool test_reward_collect_persists_profile() {
@@ -202,8 +202,8 @@ bool test_reward_collect_persists_profile() {
     config.autoSaveIntervalMs = 10;
     config.host = "127.0.0.1";
     config.port = 39004;
-    config.dataDir = "base_anchor_test_reward_data/players";
-    config.journalPath = "base_anchor_test_reward_data/journal/persist.log";
+    config.dataDir = "base_avatar_test_reward_data/players";
+    config.journalPath = "base_avatar_test_reward_data/journal/persist.log";
     config.shutdownFlushTimeoutMs = 2000;
     std::filesystem::create_directories(config.dataDir);
     std::filesystem::create_directories(
@@ -222,20 +222,20 @@ bool test_reward_collect_persists_profile() {
         player_store::PlayerStore server(config);
         server.start();
 
-        auto anchor = server.activatePlayer(1003);
-        TEST_ASSERT(anchor != nullptr, "anchor activated");
-        // 结算奖励正路径：AnchorRewardSink 语义（exp 键 + mark_dirty）
-        apollo::game::session::AnchorRewardSink sink(*anchor);
+        auto avatar = server.activatePlayer(1003);
+        TEST_ASSERT(avatar != nullptr, "avatar activated");
+        // 结算奖励正路径：AvatarRewardSink 语义（exp 键 + mark_dirty）
+        apollo::game::base::AvatarRewardSink sink(*avatar);
         sink.on_reward(1003, 50);
-        TEST_ASSERT(anchor->needs_save(), "reward marks anchor dirty");
+        TEST_ASSERT(avatar->needs_save(), "reward marks avatar dirty");
         TEST_ASSERT(
-            anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 150,
-            "anchor carries profile exp plus reward");
+            avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 150,
+            "avatar carries profile exp plus reward");
 
         server.stop();
     }
 
-    // flush 载荷收集自 Anchor：档案 exp = 播种 100 + 奖励 50（旧路径只
+    // flush 载荷收集自 Avatar：档案 exp = 播种 100 + 奖励 50（旧路径只
     // 重写旧档案——奖励随进程消亡）
     {
         player_store::DatabaseService reloader(config);
@@ -245,14 +245,14 @@ bool test_reward_collect_persists_profile() {
     }
 
     std::cout << "  PASSED" << std::endl;
-    std::filesystem::remove_all("base_anchor_test_reward_data");
+    std::filesystem::remove_all("base_avatar_test_reward_data");
     return true;
 }
 
 bool test_reward_survives_restart_no_double_count() {
     std::cout << "Running: test_reward_survives_restart_no_double_count..." << std::endl;
 
-    const std::string root = "base_anchor_test_restart_data";
+    const std::string root = "base_avatar_test_restart_data";
     player_store::PlayerStoreConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 10;
@@ -278,9 +278,9 @@ bool test_reward_survives_restart_no_double_count() {
     {
         player_store::PlayerStore server(config);
         server.start();
-        auto anchor = server.activatePlayer(1004);
-        TEST_ASSERT(anchor != nullptr, "gen1 anchor activated");
-        apollo::game::session::AnchorRewardSink(*anchor).on_reward(1004, 50);
+        auto avatar = server.activatePlayer(1004);
+        TEST_ASSERT(avatar != nullptr, "gen1 avatar activated");
+        apollo::game::base::AvatarRewardSink(*avatar).on_reward(1004, 50);
         server.stop();
     }
     {
@@ -290,16 +290,16 @@ bool test_reward_survives_restart_no_double_count() {
                     "gen1 flush collected reward");
     }
 
-    // 代次二：重启播种（anchor exp = 档案 150）再 +30 → 落档 180
+    // 代次二：重启播种（avatar exp = 档案 150）再 +30 → 落档 180
     {
         player_store::PlayerStore server(config);
         server.start();
-        auto anchor = server.activatePlayer(1004);
-        TEST_ASSERT(anchor != nullptr, "gen2 anchor activated");
+        auto avatar = server.activatePlayer(1004);
+        TEST_ASSERT(avatar != nullptr, "gen2 avatar activated");
         TEST_ASSERT(
-            anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 150,
-            "restart seeds anchor from archive (no double count)");
-        apollo::game::session::AnchorRewardSink(*anchor).on_reward(1004, 30);
+            avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 150,
+            "restart seeds avatar from archive (no double count)");
+        apollo::game::base::AvatarRewardSink(*avatar).on_reward(1004, 30);
         server.stop();
     }
     {
@@ -313,10 +313,10 @@ bool test_reward_survives_restart_no_double_count() {
     {
         player_store::PlayerStore server(config);
         server.start();
-        auto anchor = server.activatePlayer(1004);
-        TEST_ASSERT(anchor != nullptr, "gen3 anchor activated");
+        auto avatar = server.activatePlayer(1004);
+        TEST_ASSERT(avatar != nullptr, "gen3 avatar activated");
         TEST_ASSERT(
-            anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 180,
+            avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 180,
             "gen3 seeds from archive");
         server.stop();
     }
@@ -335,7 +335,7 @@ bool test_reward_survives_restart_no_double_count() {
 bool test_freeze_collects_pending_reward() {
     std::cout << "Running: test_freeze_collects_pending_reward..." << std::endl;
 
-    const std::string root = "base_anchor_test_freeze_data";
+    const std::string root = "base_avatar_test_freeze_data";
     player_store::PlayerStoreConfig config;
     config.workerThreads = 1;
     config.autoSaveIntervalMs = 60000;  // 冻结前不触发自动保存——增量只经冻结收口
@@ -359,9 +359,9 @@ bool test_freeze_collects_pending_reward() {
 
     player_store::PlayerStore server(config);
     server.start();
-    auto anchor = server.activatePlayer(1005);
-    TEST_ASSERT(anchor != nullptr, "anchor activated");
-    apollo::game::session::AnchorRewardSink(*anchor).on_reward(1005, 50);
+    auto avatar = server.activatePlayer(1005);
+    TEST_ASSERT(avatar != nullptr, "avatar activated");
+    apollo::game::base::AvatarRewardSink(*avatar).on_reward(1005, 50);
 
     // 冻结段同步排平：未 flush 的奖励增量随冻结落档（否则迁移快照丢奖励）
     TEST_ASSERT(server.freezePlayer(1005), "player frozen");
@@ -379,10 +379,10 @@ bool test_freeze_collects_pending_reward() {
     // 目标侧接权播种：adopt 后锚点 exp = 快照档案值（真源随档走）
     TEST_ASSERT(server.adoptPlayer(1006, snapshot.profile_json, 9002, 3, 5),
                 "adopted with write authority");
-    auto adopted = server.findAnchor(1006);
-    TEST_ASSERT(adopted != nullptr, "adopted anchor online");
-    TEST_ASSERT(adopted->progress(apollo::game::session::AnchorRewardSink::kExpKey) == 150,
-                "adopt seeds anchor exp from adopted profile");
+    auto adopted = server.findAvatar(1006);
+    TEST_ASSERT(adopted != nullptr, "adopted avatar online");
+    TEST_ASSERT(adopted->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 150,
+                "adopt seeds avatar exp from adopted profile");
 
     server.stop();
 
@@ -405,8 +405,8 @@ bool test_dispatch_unknown_type_contract() {
     config.autoSaveIntervalMs = 60000;
     config.host = "127.0.0.1";
     config.port = 39008;  // 高位端口：stub 树 start() 无传输面，避撞
-    config.dataDir = "base_anchor_test_unknown_data/players";
-    config.journalPath = "base_anchor_test_unknown_data/journal/persist.log";
+    config.dataDir = "base_avatar_test_unknown_data/players";
+    config.journalPath = "base_avatar_test_unknown_data/journal/persist.log";
     std::filesystem::create_directories(config.dataDir);
     std::filesystem::create_directories(
         config.journalPath.substr(0, config.journalPath.find_last_of('/')));
@@ -453,7 +453,7 @@ bool test_dispatch_unknown_type_contract() {
                 "known type still served after unknown type");
 
     server.stop();
-    std::filesystem::remove_all("base_anchor_test_unknown_data");
+    std::filesystem::remove_all("base_avatar_test_unknown_data");
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -470,8 +470,8 @@ bool test_decode_compat_structured_faces() {
     config.autoSaveIntervalMs = 60000;
     config.host = "127.0.0.1";
     config.port = 39009;  // 高位端口：stub 树 start() 无传输面，避撞
-    config.dataDir = "base_anchor_test_compat_data/players";
-    config.journalPath = "base_anchor_test_compat_data/journal/persist.log";
+    config.dataDir = "base_avatar_test_compat_data/players";
+    config.journalPath = "base_avatar_test_compat_data/journal/persist.log";
     std::filesystem::create_directories(config.dataDir);
     std::filesystem::create_directories(
         config.journalPath.substr(0, config.journalPath.find_last_of('/')));
@@ -530,7 +530,7 @@ bool test_decode_compat_structured_faces() {
     }
 
     server.stop();
-    std::filesystem::remove_all("base_anchor_test_compat_data");
+    std::filesystem::remove_all("base_avatar_test_compat_data");
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -569,15 +569,15 @@ bool test_player_migration_faces() {
     }
     player_store::PlayerStore oldServer(oldCfg);
     {
-        auto anchor = oldServer.activatePlayer(42);
-        TEST_ASSERT(anchor != nullptr, "old side anchor activated");
-        apollo::game::session::SessionBinding binding;
+        auto avatar = oldServer.activatePlayer(42);
+        TEST_ASSERT(avatar != nullptr, "old side avatar activated");
+        apollo::game::base::SessionBinding binding;
         binding.session_id = 777;
         binding.gateway_id = 3;
         TEST_ASSERT(oldServer.bindSession(42, binding), "old side session bound");
-        anchor = oldServer.findAnchor(42);
-        anchor->set_home_zone_id(2);
-        TEST_ASSERT(anchor->needs_save(), "old side anchor dirty before freeze");
+        avatar = oldServer.findAvatar(42);
+        avatar->set_home_zone_id(2);
+        TEST_ASSERT(avatar->needs_save(), "old side avatar dirty before freeze");
     }
 
     // ① 停写（933 → 934 accepted；Transferring + journal 段排平）
@@ -589,11 +589,11 @@ bool test_player_migration_faces() {
         TEST_ASSERT(migration::decodeFrame(reply, out, session), "934 reply decodes");
         TEST_ASSERT(out.accepted && out.player_id == 42 && out.request_id == 1,
                     "freeze accepted with echo keys");
-        auto anchor = oldServer.findAnchor(42);
-        TEST_ASSERT(anchor->state()
-                        == apollo::game::session::AnchorState::Transferring,
-                    "anchor read-only after freeze");
-        TEST_ASSERT(!anchor->needs_save(), "journal segment drained (not dirty)");
+        auto avatar = oldServer.findAvatar(42);
+        TEST_ASSERT(avatar->state()
+                        == apollo::game::base::AvatarState::Transferring,
+                    "avatar read-only after freeze");
+        TEST_ASSERT(!avatar->needs_save(), "journal segment drained (not dirty)");
     }
     // 未知玩家拒
     {
@@ -618,7 +618,7 @@ bool test_player_migration_faces() {
                     "profile json carried as-is (ADR-007)");
         TEST_ASSERT(out.session_id == 777 && out.gateway_id == 3
                         && out.home_zone_id == 2,
-                    "anchor metadata carried");
+                    "avatar metadata carried");
     }
     {
         // 未冻结玩家（43 无档案无锚）快照拒
@@ -658,14 +658,14 @@ bool test_player_migration_faces() {
         TEST_ASSERT(out.accepted && out.player_id == 42 && out.request_id == 6,
                     "handoff accepted (write authority moved)");
 
-        auto anchor = newServer.findAnchor(42);
-        TEST_ASSERT(anchor != nullptr
-                        && anchor->state() == apollo::game::session::AnchorState::Online,
-                    "new side anchor online");
-        TEST_ASSERT(anchor->session_binding().session_id == 777
-                        && anchor->session_binding().gateway_id == 3,
+        auto avatar = newServer.findAvatar(42);
+        TEST_ASSERT(avatar != nullptr
+                        && avatar->state() == apollo::game::base::AvatarState::Online,
+                    "new side avatar online");
+        TEST_ASSERT(avatar->session_binding().session_id == 777
+                        && avatar->session_binding().gateway_id == 3,
                     "binding restored on new side");
-        TEST_ASSERT(anchor->home_zone_id() == 2, "home zone from snapshot");
+        TEST_ASSERT(avatar->home_zone_id() == 2, "home zone from snapshot");
 
         // 档案真落新目录（loadPlayer 校验内容一致）
         player_store::PlayerData migrated;
@@ -743,7 +743,7 @@ bool test_save_race_and_restart_persistence() {
     std::cout << "Running: test_save_race_and_restart_persistence..." << std::endl;
 
     namespace fs = std::filesystem;
-    const std::string root = "base_anchor_test_race_data";
+    const std::string root = "base_avatar_test_race_data";
     fs::remove_all(root);
     fs::create_directories(root + "/players");
     fs::create_directories(root + "/journal");
@@ -768,17 +768,17 @@ bool test_save_race_and_restart_persistence() {
 
     player_store::PlayerStore server(config);
     server.start();
-    const auto anchor = server.activatePlayer(9001);
-    TEST_ASSERT(anchor != nullptr, "anchor activated");
-    anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 150);
-    anchor->mark_dirty("race_seed");
+    const auto avatar = server.activatePlayer(9001);
+    TEST_ASSERT(avatar != nullptr, "avatar activated");
+    avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey, 150);
+    avatar->mark_dirty("race_seed");
 
     // 线①（模拟权威）：奖励单向落锚点——exp 真源的唯一写者
     std::atomic<bool> done{false};
     std::thread sim([&] {
         for (int i = 0; i < 20; ++i) {
-            anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 10);
-            anchor->mark_dirty("sim_tick");
+            avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey, 10);
+            avatar->mark_dirty("sim_tick");
             std::this_thread::sleep_for(std::chrono::milliseconds(4));
         }
         done.store(true);
@@ -813,14 +813,14 @@ bool test_save_race_and_restart_persistence() {
         TEST_ASSERT(reader.loadPlayer(9001, loaded), "archive readable after restart");
         TEST_ASSERT(loaded.level == 7, "RPC payload field survived (no stale rollback)");
         TEST_ASSERT(loaded.exp == expectedExp,
-                    "anchor-truth exp survived (stale replay blocked, no loss/no dup)");
+                    "avatar-truth exp survived (stale replay blocked, no loss/no dup)");
     }
 
     // 重启播种一致：新代次锚点 exp == 档案 exp（不叠加、不丢）
     player_store::PlayerStore next(config);
     const auto reactivated = next.activatePlayer(9001);
     TEST_ASSERT(reactivated != nullptr, "reactivated after restart");
-    TEST_ASSERT(reactivated->progress(apollo::game::session::AnchorRewardSink::kExpKey)
+    TEST_ASSERT(reactivated->progress(apollo::game::base::AvatarRewardSink::kExpKey)
                     == expectedExp,
                 "restart seed equals archive exp");
     next.stop();
@@ -872,15 +872,15 @@ bool test_player_migration_pull_on_handoff() {
     oldServer.start();
     TEST_ASSERT(oldServer.m1_listen_port() == m1Port, "m1 face on probed port");
     {
-        auto anchor = oldServer.activatePlayer(42);
-        TEST_ASSERT(anchor != nullptr, "old side anchor activated");
-        apollo::game::session::SessionBinding binding;
+        auto avatar = oldServer.activatePlayer(42);
+        TEST_ASSERT(avatar != nullptr, "old side avatar activated");
+        apollo::game::base::SessionBinding binding;
         binding.session_id = 777;
         binding.gateway_id = 3;
         TEST_ASSERT(oldServer.bindSession(42, binding), "old side session bound");
-        anchor = oldServer.findAnchor(42);
-        anchor->set_home_zone_id(2);
-        anchor->mark_dirty("pull_drill");
+        avatar = oldServer.findAvatar(42);
+        avatar->set_home_zone_id(2);
+        avatar->mark_dirty("pull_drill");
     }
     // ① 停写先行（五步序：编排面先 933 再 937——snapshot 前置 Transferring）
     {
@@ -909,13 +909,13 @@ bool test_player_migration_pull_on_handoff() {
         TEST_ASSERT(out.accepted && out.player_id == 42 && out.request_id == 9,
                     "handoff accepted after on-the-fly pull");
 
-        auto anchor = newServer.findAnchor(42);
-        TEST_ASSERT(anchor != nullptr
-                        && anchor->state() == apollo::game::session::AnchorState::Online,
-                    "new side anchor online");
-        TEST_ASSERT(anchor->session_binding().session_id == 777,
+        auto avatar = newServer.findAvatar(42);
+        TEST_ASSERT(avatar != nullptr
+                        && avatar->state() == apollo::game::base::AvatarState::Online,
+                    "new side avatar online");
+        TEST_ASSERT(avatar->session_binding().session_id == 777,
                     "binding restored from pulled snapshot");
-        TEST_ASSERT(anchor->home_zone_id() == 2, "home zone from pulled snapshot");
+        TEST_ASSERT(avatar->home_zone_id() == 2, "home zone from pulled snapshot");
 
         player_store::PlayerData migrated;
         player_store::DatabaseService reader(newCfg);
@@ -944,7 +944,7 @@ bool test_player_migration_pull_on_handoff() {
 } // namespace
 
 int main() {
-    std::cout << "=== Apollo Base Anchor Test Suite ===" << std::endl;
+    std::cout << "=== Apollo Base Avatar Test Suite ===" << std::endl;
 
     int total = 0;
     int passed = 0;
@@ -956,7 +956,7 @@ int main() {
         }
     };
 
-    run(test_base_server_anchor_lifecycle);
+    run(test_base_server_avatar_lifecycle);
     run(test_shutdown_maintenance_gate);
     run(test_shutdown_flushes_journal_and_archive);
     run(test_reward_collect_persists_profile);

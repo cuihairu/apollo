@@ -6,15 +6,15 @@
 //      （乱序/重放拒绝、非 Active 态拒绝）；
 //   3. 战斗权威（Cell 职责二）：hp 结算、击杀判定、Leaving 态不结算；
 //   4. AOI 广播（Cell 职责三）：viewer 集合幂等增删 + 广播计数；
-//   5. Anchor 投影（player-object-model §3）：home_zone_id 单向拷贝、
-//      Anchor 非 Online → Avatar 挂起、投影标记；
-//   6. PlayerAnchor P0-2 扩展：home_zone_id 变更即脏 + journal 钩子触发；
+//   5. Avatar 投影（player-object-model §3）：home_zone_id 单向拷贝、
+//      Avatar 非 Online → Avatar 挂起、投影标记；
+//   6. Avatar P0-2 扩展：home_zone_id 变更即脏 + journal 钩子触发；
 //   7. PlayerId/EntityId 强分型：互不隐式转换（编译期校验）、无效哨兵、哈希键。
 //
 // 无网络、无定时器：全部纯内存断言，确定性单测。
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "apollo/game/world/avatar.hpp"
 
 #include <cstdint>
@@ -35,8 +35,6 @@ namespace {
 
 using apollo::game::core::EntityId;
 using apollo::game::core::PlayerId;
-using apollo::game::session::AnchorState;
-using apollo::game::session::PlayerAnchor;
 using apollo::game::world::Avatar;
 using apollo::game::world::AvatarState;
 
@@ -163,60 +161,60 @@ bool test_avatar_aoi_broadcast() {
     return true;
 }
 
-bool test_avatar_projection_from_anchor() {
-    PlayerAnchor anchor(PlayerId(7).value());
-    anchor.set_home_zone_id(3);
-    anchor.set_state(AnchorState::Online);
+bool test_avatar_projection_from_base() {
+    apollo::game::base::Avatar src(PlayerId(7).value());
+    src.set_home_zone_id(3);
+    src.set_state(apollo::game::base::AvatarState::Online);
 
     Avatar avatar(PlayerId(7), EntityId(2), "Proj");
     avatar.attach_scene(4);
     TEST_ASSERT(!avatar.has_projection(), "投影前标记未置");
     TEST_ASSERT(avatar.home_zone_id() == 0, "投影前无 home zone");
 
-    avatar.project_from(anchor);
+    avatar.project_from(src);
     TEST_ASSERT(avatar.has_projection(), "投影完成置标记");
-    TEST_ASSERT(avatar.home_zone_id() == 3, "home_zone_id 从 Anchor 单向拷贝");
-    TEST_ASSERT(avatar.state() == AvatarState::Active, "Anchor Online 投影保持 Active");
+    TEST_ASSERT(avatar.home_zone_id() == 3, "home_zone_id 从 Avatar 单向拷贝");
+    TEST_ASSERT(avatar.state() == AvatarState::Active, "Avatar Online 投影保持 Active");
 
-    // Anchor 离开 Online → Avatar 挂起（断线保活窗口，player-object-model §3）
-    PlayerAnchor offline(PlayerId(7).value());
+    // Avatar 离开 Online → Avatar 挂起（断线保活窗口，player-object-model §3）
+    apollo::game::base::Avatar offline(PlayerId(7).value());
     offline.set_home_zone_id(3);
-    offline.set_state(AnchorState::Disconnected);
+    offline.set_state(apollo::game::base::AvatarState::Disconnected);
     avatar.resume();
     avatar.project_from(offline);
-    TEST_ASSERT(avatar.state() == AvatarState::Suspended, "Anchor 非 Online 投影 → Avatar 挂起");
+    TEST_ASSERT(avatar.state() == AvatarState::Suspended, "Avatar 非 Online 投影 → Avatar 挂起");
     return true;
 }
 
-bool test_anchor_home_zone_journal() {
-    PlayerAnchor anchor(PlayerId(9).value());
+bool test_avatar_home_zone_journal() {
+    apollo::game::base::Avatar base_avatar(PlayerId(9).value());
 
-    TEST_ASSERT(anchor.home_zone_id() == 0, "初始未分配 home zone");
+    TEST_ASSERT(base_avatar.home_zone_id() == 0, "初始未分配 home zone");
 
     // 变更 → 脏 + journal 引发（用可观测计数验证）
     int call_count = 0;
-    anchor.set_journal([&call_count](const PlayerAnchor& anchor_ref,
-                                     std::string_view reason) -> bool {
-        (void)anchor_ref;
+    base_avatar.set_journal([&call_count](const apollo::game::base::Avatar& avatar_ref,
+                                          std::string_view reason) -> bool {
+        (void)avatar_ref;
         (void)reason;
         ++call_count;
         return true;
     });
-    anchor.set_home_zone_id(3);
-    TEST_ASSERT(anchor.home_zone_id() == 3, "home_zone_id 生效");
-    TEST_ASSERT(anchor.needs_save(), "home_zone 变更即脏");
+    base_avatar.set_home_zone_id(3);
+    TEST_ASSERT(base_avatar.home_zone_id() == 3, "home_zone_id 生效");
+    TEST_ASSERT(base_avatar.needs_save(), "home_zone 变更即脏");
     TEST_ASSERT(call_count == 1, "journal 钩子随脏上报触发一次");
-    TEST_ASSERT(anchor.dirty_reasons().size() == 1, "脏原因入队");
+    TEST_ASSERT(base_avatar.dirty_reasons().size() == 1, "脏原因入队");
 
-    anchor.set_home_zone_id(3);  // 同值幂等
+    base_avatar.set_home_zone_id(3);  // 同值幂等
     TEST_ASSERT(call_count == 1, "同值设置不重复上报");
 
-    anchor.set_home_zone_id(4);
+    base_avatar.set_home_zone_id(4);
     TEST_ASSERT(call_count == 2, "再次变更继续上报");
-    TEST_ASSERT(anchor.dirty_reasons().size() == 2, "脏原因累积");
+    TEST_ASSERT(base_avatar.dirty_reasons().size() == 2, "脏原因累积");
 
-    anchor.clear_dirty();
-    TEST_ASSERT(!anchor.needs_save(), "clear_dirty 复位");
+    base_avatar.clear_dirty();
+    TEST_ASSERT(!base_avatar.needs_save(), "clear_dirty 复位");
     return true;
 }
 
@@ -260,8 +258,8 @@ int main() {
         {"avatar_move_authority_reconcile", test_avatar_move_authority_reconcile},
         {"avatar_combat_authority", test_avatar_combat_authority},
         {"avatar_aoi_broadcast", test_avatar_aoi_broadcast},
-        {"avatar_projection_from_anchor", test_avatar_projection_from_anchor},
-        {"anchor_home_zone_journal", test_anchor_home_zone_journal},
+        {"avatar_projection_from_base", test_avatar_projection_from_base},
+        {"avatar_home_zone_journal", test_avatar_home_zone_journal},
         {"playerid_strong_typing", test_playerid_strong_typing},
     };
 

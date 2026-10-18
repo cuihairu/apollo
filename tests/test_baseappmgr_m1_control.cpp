@@ -147,7 +147,7 @@ bool test_control_e2e() {
 
     // gateway 侧绑定直写目录（wire bind 面 ≠ baseappmgr 分派——nng 时代同位），
     // ResolveRoute 才有完整 binding+assignment 可解析。
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 9;
     binding.gateway_id = 1;
     binding.gateway_addr = "tcp://127.0.0.1:9002";

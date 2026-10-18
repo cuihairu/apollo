@@ -1,7 +1,7 @@
 #pragma once
 
-#include "apollo/game/session/player_anchor.hpp"
-#include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/base/avatar.hpp"
+#include "apollo/game/base/world_assignment.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -22,7 +22,7 @@ struct MirrorEntry;
 // 单进程落地（§9 P2 形态：baseappmgr 域进程内表）。
 //
 // 行为契约（本类即契约，单测逐条断言）：
-//   - 数据模型（§1）：条目 = SessionBinding + WorldAssignment + state +
+//   - 数据模型（§1）：条目 = apollo::game::base::SessionBinding + apollo::game::base::WorldAssignment + state +
 //     anchor_epoch + deadline_tick + zone_id；全部内存哈希，无落盘。
 //   - 状态机（§1）：(无)→Online→Suspended→Removed / Online→Leaving→Removed；
 //     任意态 + 新登录命中 → 旧 Removed(kicked) + 新条目。
@@ -53,8 +53,8 @@ public:
         std::uint64_t anchor_epoch = 0;      // 幂等键 + 竞争裁决键
         std::uint32_t zone_id = 0;           // 宿主 Zone（单进程 = 0）
         std::uint32_t reason = 0;            // Down/Kicked 原因码（0 = 未注明）
-        SessionBinding binding;              // Up/Moved/Kicked 携带
-        WorldAssignment assignment;          // Up/Moved 携带
+        apollo::game::base::SessionBinding binding;              // Up/Moved/Kicked 携带
+        apollo::game::base::WorldAssignment assignment;          // Up/Moved 携带
     };
 
     using EventSink = std::function<void(const Event&)>;
@@ -67,8 +67,8 @@ public:
     // 条目状态（§1 状态机列）
     enum class EntryState : std::uint8_t { Online = 0, Suspended, Leaving };
     struct Entry {
-        SessionBinding binding;
-        WorldAssignment assignment;
+        apollo::game::base::SessionBinding binding;
+        apollo::game::base::WorldAssignment assignment;
         EntryState state = EntryState::Online;
         std::uint64_t anchor_epoch = 0;      // 同账号第 N 次会话（从 1 起）
         std::uint64_t deadline_tick = 0;     // Suspended 窗口截止（tick 号）
@@ -84,8 +84,8 @@ public:
     // SessionKicked 后删除，新条目写入并分配新 epoch。返回新条目 epoch
     // （player_id == 0 返回 0 且无副作用）。
     std::uint64_t session_up(std::uint64_t player_id,
-                             const SessionBinding& binding,
-                             const WorldAssignment& assignment,
+                             const apollo::game::base::SessionBinding& binding,
+                             const apollo::game::base::WorldAssignment& assignment,
                              std::uint32_t zone_id = 0);
 
     // 显式下线（登出/实体销毁）：删除条目 + SessionDown。未知玩家 false。
@@ -133,7 +133,7 @@ public:
     // 换幕既有语义）。
     // new_zone_id 非 0 = 条目 zone 反查键同步改指（跨 zone 迁移必带——
     // mark_suspended_by_zone 按它反查）；0 = zone 不动。
-    bool moved(std::uint64_t player_id, const WorldAssignment& assignment,
+    bool moved(std::uint64_t player_id, const apollo::game::base::WorldAssignment& assignment,
                std::uint64_t new_anchor_epoch = 0, std::uint32_t new_zone_id = 0);
 
     // 显式登出中间态（§1 Leaving）：Online → Leaving；未知/非 Online false。
@@ -207,7 +207,7 @@ struct MirrorEntry {
     std::uint32_t gateway_id = 0;
     std::uint32_t zone_id = 0;
     PlayerDirectory::EntryState state = PlayerDirectory::EntryState::Online;
-    WorldAssignment assignment{};
+    apollo::game::base::WorldAssignment assignment{};
 
     [[nodiscard]] bool operator==(const MirrorEntry&) const noexcept = default;
 };

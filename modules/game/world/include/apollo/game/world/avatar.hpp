@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -26,10 +26,10 @@ enum class AvatarState : std::uint8_t {
 // 移动权威（reconcile）、战斗权威、AOI 广播。连接/持久化/跨场景/断线全部不归它。
 //
 // 生命周期由 Scene 管理（P0-3 起 instance.enter / instance.leave 接管进出）；
-// 换幕时状态从 PlayerAnchor（Base）投影（home_zone_id 等长期属性）。
+// 换幕时状态从 Avatar（Base）投影（home_zone_id 等长期属性）。
 class Avatar {
 public:
-    // name 为创建时投影快照（anchor 域暂无该字段，P0-2 由外部传入；
+    // name 为创建时投影快照（avatar 域暂无该字段，P0-2 由外部传入；
     // 属性/装备/长期 buff 等投影面随 P0-4 对象模型扩展）。
     Avatar(apollo::game::core::PlayerId player_id,
            apollo::game::core::EntityId entity_id,
@@ -84,8 +84,8 @@ public:
     void broadcast() noexcept;
     [[nodiscard]] std::uint64_t broadcast_count() const noexcept;
 
-    // ---- Anchor 投影（player-object-model §3）：长期属性从 Base 单向拷贝 ----
-    void project_from(const apollo::game::session::PlayerAnchor& anchor) noexcept;
+    // ---- Avatar 投影（player-object-model §3）：长期属性从 Base 单向拷贝 ----
+    void project_from(const apollo::game::base::Avatar& avatar) noexcept;
     [[nodiscard]] bool has_projection() const noexcept;
     [[nodiscard]] std::uint32_t home_zone_id() const noexcept;
 
@@ -102,7 +102,7 @@ private:
     std::vector<apollo::game::core::EntityId> viewers_;
     std::uint64_t broadcast_count_ = 0;
     std::uint32_t home_zone_id_ = 0;
-    bool projected_ = false;  // 是否完成至少一次 Anchor 投影（换幕正确性校验）
+    bool projected_ = false;  // 是否完成至少一次 Avatar 投影（换幕正确性校验）
 };
 
 using AvatarPtr = std::shared_ptr<Avatar>;

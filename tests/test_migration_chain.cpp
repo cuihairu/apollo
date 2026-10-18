@@ -22,7 +22,7 @@
 //   7. 重复接管拒绝：目标侧权威代次高水位——new_epoch ≤ 已接代的迁移
 //      937 直拨目标 = 拒（duplicate takeover，不落快照不 adopt）；
 //   8. 迟到输入拒绝（源冻结只读）：933 后会话重绑拒、DB 存档 wire 拒、
-//      锚点进度写静默拒（防脏）、结算落账面 AnchorUnavailable 挂账不落
+//      锚点进度写静默拒（防脏）、结算落账面 AvatarUnavailable 挂账不落
 //      （迟到结算不得双记——重复结算拒绝面在 SettlementLedger 幂等 +
 //      冻结拒绝两道）。
 
@@ -49,6 +49,7 @@ namespace {
 using namespace std::chrono_literals;
 namespace disco = apollo::net::discovery;
 namespace session = apollo::game::session;
+namespace base = apollo::game::base;
 namespace migration = player_store::migration;
 namespace protocol = apollo::protocol;
 
@@ -98,8 +99,8 @@ migration::MigrateReply migrate(online_directory::OnlineDirectory& directory,
     return out;
 }
 
-session::SessionBinding binding_of(std::uint64_t session_id, std::uint32_t gateway_id) {
-    session::SessionBinding binding;
+base::SessionBinding binding_of(std::uint64_t session_id, std::uint32_t gateway_id) {
+    base::SessionBinding binding;
     binding.session_id = session_id;
     binding.gateway_id = gateway_id;
     return binding;
@@ -230,10 +231,10 @@ void migration_chain() {
         const auto reply =
             migrate(*login.onlineDirectory(), 44, 46131, 46000, 5);
         require(!reply.ok, "migrate to unreachable target unexpectedly succeeded");
-        const auto anchor = world_old.store->findAnchor(44);
-        require(anchor != nullptr &&
-                    anchor->state() == session::AnchorState::Transferring,
-                "frozen source anchor not in Transferring after failed handoff");
+        const auto avatar = world_old.store->findAvatar(44);
+        require(avatar != nullptr &&
+                    avatar->state() == base::AvatarState::Transferring,
+                "frozen source avatar not in Transferring after failed handoff");
         const auto* entry = login.onlineDirectory()->directory().find(44);
         require(entry && entry->zone_id == 2,
                 "failed handoff must not re-point directory");
@@ -247,22 +248,22 @@ void migration_chain() {
 
     // 1. 源端冻结形态（⑤ 老侧停留——如实边界：写入被拒兜住）
     {
-        const auto anchor = world_old.store->findAnchor(42);
-        require(anchor != nullptr &&
-                    anchor->state() == session::AnchorState::Transferring,
-                "source anchor not frozen after migration");
+        const auto avatar = world_old.store->findAvatar(42);
+        require(avatar != nullptr &&
+                    avatar->state() == base::AvatarState::Transferring,
+                "source avatar not frozen after migration");
     }
     // 2. 目标确认：锚点激活 + 原区服保留 + 会话/网关双锚
     {
-        const auto anchor = world_new.store->findAnchor(42);
-        require(anchor != nullptr, "target anchor missing after migration");
-        require(anchor->state() == session::AnchorState::Online,
-                "target anchor not Online");
-        require(anchor->home_zone_id() == 2,
-                "target anchor lost home zone (原区服)");
-        require(anchor->session_binding().session_id == 4242 &&
-                    anchor->session_binding().gateway_id == 7,
-                "target anchor session/gateway binding not restored");
+        const auto avatar = world_new.store->findAvatar(42);
+        require(avatar != nullptr, "target avatar missing after migration");
+        require(avatar->state() == base::AvatarState::Online,
+                "target avatar not Online");
+        require(avatar->home_zone_id() == 2,
+                "target avatar lost home zone (原区服)");
+        require(avatar->session_binding().session_id == 4242 &&
+                    avatar->session_binding().gateway_id == 7,
+                "target avatar session/gateway binding not restored");
     }
     // 2b. 导出一致性：目标落盘档案字段 == 源种子档案
     {
@@ -322,11 +323,11 @@ void migration_chain() {
         const auto* entry = login.onlineDirectory()->directory().find(42);
         require(entry && entry->anchor_epoch == reply.new_epoch,
                 "directory epoch advanced by replayed migrate");
-        const auto anchor = world_new.store->findAnchor(42);
-        require(anchor != nullptr &&
-                    anchor->state() == session::AnchorState::Online &&
-                    anchor->session_binding().session_id == 4242,
-                "replayed migrate disturbed target anchor");
+        const auto avatar = world_new.store->findAvatar(42);
+        require(avatar != nullptr &&
+                    avatar->state() == base::AvatarState::Online &&
+                    avatar->session_binding().session_id == 4242,
+                "replayed migrate disturbed target avatar");
         {
             std::ifstream in(new_store.dataDir + "/player_42.json",
                              std::ios::binary);
@@ -356,20 +357,20 @@ void migration_chain() {
         require(hr.error_message.find("duplicate takeover") != std::string::npos,
                 "stale handoff rejection must name duplicate takeover");
         dial.shutdown();
-        const auto anchor = world_new.store->findAnchor(42);
-        require(anchor != nullptr && anchor->state() == session::AnchorState::Online,
-                "rejected takeover disturbed target anchor");
+        const auto avatar = world_new.store->findAvatar(42);
+        require(avatar != nullptr && avatar->state() == base::AvatarState::Online,
+                "rejected takeover disturbed target avatar");
     }
     // 8. 迟到输入拒绝（源冻结只读——Transferring 不再受理任何写面）
     {
         // 8a. 会话重绑拒（绑定列不动）
         require(!world_old.store->bindSession(42, binding_of(9999, 9)),
-                "late session bind on frozen anchor accepted");
-        const auto anchor = world_old.store->findAnchor(42);
-        require(anchor != nullptr &&
-                    anchor->state() == session::AnchorState::Transferring &&
-                    anchor->session_binding().session_id == 4242,
-                "late bind disturbed frozen anchor");
+                "late session bind on frozen avatar accepted");
+        const auto avatar = world_old.store->findAvatar(42);
+        require(avatar != nullptr &&
+                    avatar->state() == base::AvatarState::Transferring &&
+                    avatar->session_binding().session_id == 4242,
+                "late bind disturbed frozen avatar");
         // 8b. DB 存档 wire 拒（迟到客户端存档不得置回写态）
         protocol::DbSaveRequest save;
         save.playerId = 42;
@@ -387,25 +388,25 @@ void migration_chain() {
             raw->begin() + sizeof(protocol::MessageHeader), raw->end());
         const auto resp =
             protocol::MessageCodec::decodeBody<protocol::DbSaveResponse>(body);
-        require(!resp.success, "late db save on frozen anchor accepted");
-        const auto after = world_old.store->findAnchor(42);
+        require(!resp.success, "late db save on frozen avatar accepted");
+        const auto after = world_old.store->findAvatar(42);
         require(after != nullptr &&
-                    after->state() == session::AnchorState::Transferring,
+                    after->state() == base::AvatarState::Transferring,
                 "late db save broke frozen read-only state");
         dial.shutdown();
         // 8c. 锚点进度写静默拒（迟到业务写不进内存账——防脏 + 防结算双记；
         // 锚点 exp = 启动播种的档案现值——迟到写不叠加）
         after->add_progress("exp", 100);
         require(after->progress("exp") == seeded.exp && !after->needs_save(),
-                "frozen anchor accepted progress write");
-        // 8d. 结算落账面：冻结锚点 = AnchorUnavailable 挂账不落
+                "frozen avatar accepted progress write");
+        // 8d. 结算落账面：冻结锚点 = AvatarUnavailable 挂账不落
         squad_instance::SettlementLedger ledger;
         ledger.begin({42}, [&world_old](std::uint64_t pid) {
-            return world_old.store->findAnchor(pid).get();
+            return world_old.store->findAvatar(pid).get();
         });
         require(ledger.apply(42, 50) ==
-                    squad_instance::SettlementLedger::ApplyError::AnchorUnavailable,
-                "late settlement on frozen anchor not held");
+                    squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                "late settlement on frozen avatar not held");
         require(ledger.snapshot().pending == 1 && ledger.snapshot().applied == 0,
                 "held settlement disturbed ledger state");
     }

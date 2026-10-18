@@ -166,20 +166,20 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
-	    add_executable(base_anchor_tests
-	        test_base_anchor.cpp
+	    add_executable(base_avatar_tests
+	        test_base_avatar.cpp
 	        ../apps/common/src/player_store.cpp
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
-	    target_include_directories(base_anchor_tests PRIVATE
+	    target_include_directories(base_avatar_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
-	    target_compile_definitions(base_anchor_tests PRIVATE
+	    target_compile_definitions(base_avatar_tests PRIVATE
 	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
-	    target_link_libraries(base_anchor_tests PRIVATE
+	    target_link_libraries(base_avatar_tests PRIVATE
 	        apollo
 	        apollo::base
 	        apollo::core
@@ -191,12 +191,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # 直编 database_service.cpp：其 nlohmann 序列化依赖在此口径自取
 	    #（可缺失环境守卫，同 modules/protocol 口径）
 	    if(TARGET nlohmann_json::nlohmann_json)
-	        target_link_libraries(base_anchor_tests PRIVATE nlohmann_json::nlohmann_json)
+	        target_link_libraries(base_avatar_tests PRIVATE nlohmann_json::nlohmann_json)
 	    endif()
 	    if(WIN32)
-	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
+	        target_link_libraries(base_avatar_tests PRIVATE ws2_32)
 	    endif()
-	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+	    add_test(NAME BaseAvatarTests COMMAND base_avatar_tests)
 
 	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
@@ -495,20 +495,20 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    add_test(NAME RuntimeTests COMMAND runtime_tests)
 
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
-	    add_executable(base_anchor_tests
-	        test_base_anchor.cpp
+	    add_executable(base_avatar_tests
+	        test_base_avatar.cpp
 	        ../apps/common/src/player_store.cpp
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
-	    target_include_directories(base_anchor_tests PRIVATE
+	    target_include_directories(base_avatar_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
-	    target_compile_definitions(base_anchor_tests PRIVATE
+	    target_compile_definitions(base_avatar_tests PRIVATE
 	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
-	    target_link_libraries(base_anchor_tests PRIVATE
+	    target_link_libraries(base_avatar_tests PRIVATE
 	        apollo
 	        apollo::base
 	        apollo::core
@@ -520,12 +520,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # 直编 database_service.cpp：其 nlohmann 序列化依赖在此口径自取
 	    #（可缺失环境守卫，同 modules/protocol 口径）
 	    if(TARGET nlohmann_json::nlohmann_json)
-	        target_link_libraries(base_anchor_tests PRIVATE nlohmann_json::nlohmann_json)
+	        target_link_libraries(base_avatar_tests PRIVATE nlohmann_json::nlohmann_json)
 	    endif()
 	    if(WIN32)
-	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
+	        target_link_libraries(base_avatar_tests PRIVATE ws2_32)
 	    endif()
-	    add_test(NAME BaseAnchorTests COMMAND base_anchor_tests)
+	    add_test(NAME BaseAvatarTests COMMAND base_avatar_tests)
 
 	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
 	    add_executable(baseappmgr_tests
@@ -765,7 +765,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
         ../modules/game/attrsync/src/delta_builder.cpp
         ../modules/game/attrsync/src/entity_attrs.cpp
         ../modules/game/attrsync/src/attr_sync_manager.cpp
-        ../modules/game/session/src/player_anchor.cpp
+        ../modules/game/base/src/avatar.cpp
         # Game Attributes (using attribute.hpp, not attribute_value.h)
         ../modules/game/attributes/src/attribute.cpp
     )
@@ -774,6 +774,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
         ${CMAKE_SOURCE_DIR}/modules/game/core/include
         ${CMAKE_SOURCE_DIR}/modules/game/world/include
         ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+        ${CMAKE_SOURCE_DIR}/modules/game/base/include
         ${CMAKE_SOURCE_DIR}/modules/game/session/include
         ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
         # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
@@ -814,13 +815,14 @@ add_test(NAME WorldHostTests COMMAND world_host_tests)
 add_executable(avatar_tests
     test_avatar.cpp
     ../modules/game/world/src/avatar.cpp
-    ../modules/game/session/src/player_anchor.cpp
+    ../modules/game/base/src/avatar.cpp
 )
 target_include_directories(avatar_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/include
 )
@@ -843,6 +845,7 @@ add_executable(player_directory_tests
 )
 target_include_directories(player_directory_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/include
 )
@@ -877,10 +880,11 @@ add_test(NAME PersistJournalTests COMMAND persist_journal_tests)
 add_executable(persistence_chain_tests
     test_persistence_chain.cpp
     ../apps/common/src/database_service.cpp
-    ../modules/game/session/src/player_anchor.cpp
+    ../modules/game/base/src/avatar.cpp
 )
 target_include_directories(persistence_chain_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/common/include
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
 )
@@ -904,13 +908,14 @@ add_test(NAME PersistenceChainTests COMMAND persistence_chain_tests)
 # 三档清单 + restore→admission→ready + journal 消费侧（崩溃回放）。
 add_executable(recovery_tests
     test_recovery.cpp
-    ../modules/game/session/src/recovery.cpp
-    ../modules/game/session/src/anchor_manager.cpp
-    ../modules/game/session/src/player_anchor.cpp
+    ../modules/game/base/src/recovery.cpp
+    ../modules/game/base/src/avatar_manager.cpp
+    ../modules/game/base/src/avatar.cpp
     ../modules/data/orm/src/persist_journal.cpp
     ../apps/common/src/database_service.cpp
 )
 target_include_directories(recovery_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/data/orm/include
     ${CMAKE_SOURCE_DIR}/modules/core/include
@@ -948,13 +953,14 @@ add_executable(reconnect_tests
     ../modules/game/attrsync/src/delta_builder.cpp
     ../modules/game/attrsync/src/entity_attrs.cpp
     ../modules/game/attrsync/src/attr_sync_manager.cpp
-    ../modules/game/session/src/player_anchor.cpp
+    ../modules/game/base/src/avatar.cpp
 )
 target_include_directories(reconnect_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
     # scene.cpp 直编含 Scene 脚本桥头（Scene 桥批起）
@@ -1135,6 +1141,7 @@ add_executable(directory_mirror_tests
     ../modules/net/discovery/src/udp_transport.cpp
 )
 target_include_directories(directory_mirror_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/net/discovery/include
     ${CMAKE_SOURCE_DIR}/include
@@ -1161,6 +1168,7 @@ add_executable(fleet_recovery_tests
     ../modules/net/discovery/src/udp_transport.cpp
 )
 target_include_directories(fleet_recovery_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/net/discovery/include
     ${CMAKE_SOURCE_DIR}/include
@@ -1210,12 +1218,13 @@ add_executable(scene_tests
     ../modules/game/attrsync/src/delta_builder.cpp
     ../modules/game/attrsync/src/entity_attrs.cpp
     ../modules/game/attrsync/src/attr_sync_manager.cpp
-    ../modules/game/session/src/player_anchor.cpp
+    ../modules/game/base/src/avatar.cpp
 )
 target_include_directories(scene_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/modules/game/attrsync/include
     ${CMAKE_SOURCE_DIR}/include
@@ -1246,6 +1255,7 @@ target_include_directories(instance_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/game/core/include
     ${CMAKE_SOURCE_DIR}/modules/game/world/include
     ${CMAKE_SOURCE_DIR}/modules/game/battle/include
+    ${CMAKE_SOURCE_DIR}/modules/game/base/include
     ${CMAKE_SOURCE_DIR}/modules/game/session/include
     ${CMAKE_SOURCE_DIR}/include
 )

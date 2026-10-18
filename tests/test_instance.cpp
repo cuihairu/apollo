@@ -164,7 +164,7 @@ bool test_instance_invalid_player_rejected() {
 
 // ---- P2-2：instance×battle 挂接闭环（create→attach→enter→battle→reward）----
 
-// 内存奖励账本（IRewardSink 骨架实现；真 Anchor 落账随 P2-4）
+// 内存奖励账本（IRewardSink 骨架实现；真 Avatar 落账随 P2-4）
 struct MemoryRewardSink : apollo::game::battle::IRewardSink {
     std::vector<std::pair<std::uint64_t, std::int64_t>> payouts;
 

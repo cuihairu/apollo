@@ -54,6 +54,7 @@
 namespace {
 
 namespace session = apollo::game::session;
+namespace base = apollo::game::base;
 namespace disco = apollo::net::discovery;
 using session::DirectoryDeltaBody;
 using session::DirectoryMirror;
@@ -61,8 +62,8 @@ using session::DirectoryPublisher;
 using session::DirectorySnapshotPart;
 using session::MirrorEntry;
 using session::PlayerDirectory;
-using session::SessionBinding;
-using session::WorldAssignment;
+using base::SessionBinding;
+using base::WorldAssignment;
 using session::encode_snapshot_request;
 using session::is_snapshot_request;
 using session::kMaxSnapshotPartEntries;
@@ -445,10 +446,10 @@ bool test_e2e_directory_to_mirror() {
         publisher.publish(event);
     });
 
-    SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 1001;
     binding.gateway_id = 3;
-    WorldAssignment assignment;
+    apollo::game::base::WorldAssignment assignment;
     assignment.world_id = 7;
     TEST_ASSERT(directory.session_up(100, binding, assignment, 2) == 1, "目录登记");
 
@@ -462,7 +463,7 @@ bool test_e2e_directory_to_mirror() {
                 "SessionUp 事件跨发布件到镜像");
 
     sent.clear();
-    WorldAssignment moved_to;
+    apollo::game::base::WorldAssignment moved_to;
     moved_to.world_id = 9;
     moved_to.map_id = 50;
     TEST_ASSERT(directory.moved(100, moved_to), "目录迁移");

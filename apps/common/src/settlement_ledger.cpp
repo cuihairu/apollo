@@ -2,7 +2,7 @@
 
 namespace squad_instance {
 
-void SettlementLedger::begin(std::vector<std::uint64_t> roster, AnchorResolveFn resolver) {
+void SettlementLedger::begin(std::vector<std::uint64_t> roster, AvatarResolveFn resolver) {
     roster_ = std::move(roster);
     resolver_ = std::move(resolver);
     entries_.clear();
@@ -27,7 +27,7 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
     // 绝不无凭据落账；重试同路径重提，提交方须幂等。
     if (credential_sink_ && !credential_sink_(player_id, score)) {
         it->second.score = score;
-        return ApplyError::AnchorUnavailable;
+        return ApplyError::AvatarUnavailable;
     }
     // 业务受理出口（P1 结算迁入）：锚点写权在 Base——落账经 958/959 受理
     // wire 走返回业务请求，本域不解析本地锚点（设置后 resolver 不消费）。
@@ -43,22 +43,22 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
         return ApplyError::Ok;
     }
     // 锚点缺失挂账不落：分值保留，待重试/补账收口。
-    auto* anchor = resolver_ ? resolver_(player_id) : nullptr;
+    auto* avatar = resolver_ ? resolver_(player_id) : nullptr;
     // 冻结锚点同挂账（P3-6 迟到输入/迟到结算拒绝）：Transferring = 写权已
     // 交新进程——本域不得再落账（否则目标侧重算即双记）；分值保留，待
     // 权威侧裁决（跨域结算重定向属后续跨服条目）。
-    if (anchor && anchor->state() ==
-                      apollo::game::session::AnchorState::Transferring) {
+    if (avatar && avatar->state() ==
+                      apollo::game::base::AvatarState::Transferring) {
         it->second.score = score;
-        return ApplyError::AnchorUnavailable;
+        return ApplyError::AvatarUnavailable;
     }
-    if (!anchor) {
+    if (!avatar) {
         it->second.score = score;
-        return ApplyError::AnchorUnavailable;
+        return ApplyError::AvatarUnavailable;
     }
-    // 既有奖励接口：AnchorRewardSink 语义（exp 键 + mark_dirty 随
+    // 既有奖励接口：AvatarRewardSink 语义（exp 键 + mark_dirty 随
     // SaveQueue 落档；零分值跳过入账——无档案脏位）。落账后即收口。
-    apollo::game::session::AnchorRewardSink sink(*anchor);
+    apollo::game::base::AvatarRewardSink sink(*avatar);
     sink.on_reward(player_id, score);
     it->second.applied = true;
     it->second.score = 0;

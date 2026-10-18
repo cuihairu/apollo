@@ -16,6 +16,7 @@
 #include <iostream>
 #include <vector>
 
+
 using apollo::base::Pcg32;
 using apollo::base::StreamId;
 using apollo::base::derive_substream;

@@ -1,12 +1,12 @@
-#include "apollo/game/session/recovery.hpp"
+#include "apollo/game/base/recovery.hpp"
 
-#include "apollo/game/session/anchor_manager.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar_manager.hpp"
+#include "apollo/game/base/avatar.hpp"
 
 #include <iostream>
 #include <mutex>
 
-namespace apollo::game::session {
+namespace apollo::game::base {
 
 const char* to_string(RecoveryTier tier) {
     switch (tier) {
@@ -39,12 +39,12 @@ const char* to_string(RecoveryPhase phase) {
 const std::vector<RecoveryItem>& recovery_manifest() {
     static const std::vector<RecoveryItem> manifest = {
         // lifecycle §3 恢复矩阵，逐行承载
-        {"player_anchored_state", RecoveryTier::MustPersist,
+        {"player_avatar_state", RecoveryTier::MustPersist,
          "write-behind journal + 档案落盘（P1-4）；重启 replay 恢复位点"},
         {"scene_runtime_state", RecoveryTier::Recomputable,
          "重开 scene（SceneDescriptor 重建，world.create_scene）"},
         {"instance_settlement", RecoveryTier::MustPersist,
-         "结算结果单向落 Anchor 随档案落盘；中途 abort 可丢"},
+         "结算结果单向落 Avatar 随档案落盘；中途 abort 可丢"},
         {"session_connection", RecoveryTier::Recomputable,
          "重连窗口内重建（P1-6 resume）；窗口外可丢"},
         {"service_topology", RecoveryTier::Recomputable,
@@ -106,19 +106,19 @@ bool RecoveryCoordinator::run() {
     return restore() && admit();
 }
 
-std::size_t restore_anchors(AnchorManager& manager,
+std::size_t restore_avatars(AvatarManager& manager,
                             const std::vector<std::uint64_t>& player_ids) {
     std::size_t restored = 0;
     for (const auto player_id : player_ids) {
-        auto anchor = manager.activate(player_id);
-        if (!anchor) {
+        auto avatar = manager.activate(player_id);
+        if (!avatar) {
             continue;
         }
         // 恢复态 Offline：档案在、会话无；登录路径再转 Online
-        anchor->set_state(AnchorState::Offline);
+        avatar->set_state(AvatarState::Offline);
         ++restored;
     }
     return restored;
 }
 
-} // namespace apollo::game::session
+} // namespace apollo::game::base

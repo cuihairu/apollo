@@ -3,7 +3,7 @@
 #include "apollo/game/session/directory_mirror.hpp"
 #include "apollo/game/session/player_directory.hpp"
 #include "apollo/game/session/session_locator.hpp"
-#include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/base/world_assignment.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "online_directory/m1_server.hpp"
 #include <atomic>
@@ -24,7 +24,7 @@ using PlayerID = protocol::PlayerID;
 // OnlineDirectory 服务器——目录 + 落点裁决（BigWorld OnlineDirectory 直系）。
 //
 // 职责（调度面）：
-//   - Directory：player→SessionBinding / player→WorldAssignment 的全局目录
+//   - Directory：player→apollo::game::base::SessionBinding / player→apollo::game::base::WorldAssignment 的全局目录
 //   - 落点裁决：assignWorld / clearWorldAssignment
 //   - 路由解析：ResolveRoute（供 gateway 问「玩家在哪个 world、经哪个 gateway」）
 //
@@ -41,18 +41,18 @@ public:
     bool isRunning() const { return running_; }
 
     // ---- 目录裁决（内存为准） ----
-    bool assignWorld(PlayerID playerId, const apollo::game::session::WorldAssignment& assignment);
+    bool assignWorld(PlayerID playerId, const apollo::game::base::WorldAssignment& assignment);
     bool clearWorldAssignment(PlayerID playerId);
-    bool bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding);
+    bool bindSession(PlayerID playerId, const apollo::game::base::SessionBinding& binding);
     bool unbindSession(protocol::SessionID sessionId);
 
     // ---- 目录查询 ----
     std::optional<PlayerID> findPlayerBySession(protocol::SessionID sessionId) const;
-    std::optional<apollo::game::session::WorldAssignment> resolveWorldAssignment(
+    std::optional<apollo::game::base::WorldAssignment> resolveWorldAssignment(
         PlayerID playerId,
         protocol::SessionID sessionId = 0
     ) const;
-    std::optional<apollo::game::session::SessionBinding> resolveSessionBinding(
+    std::optional<apollo::game::base::SessionBinding> resolveSessionBinding(
         PlayerID playerId,
         protocol::SessionID sessionId = 0
     ) const;
@@ -186,7 +186,7 @@ private:
     // P1-2：条目级真值升级为 PlayerDirectory（顶号/事件族/epoch/对账）。
     apollo::game::session::SessionLocator sessionLocator_;
     mutable std::mutex assignmentsMutex_;
-    std::unordered_map<PlayerID, apollo::game::session::WorldAssignment> assignments_;
+    std::unordered_map<PlayerID, apollo::game::base::WorldAssignment> assignments_;
     apollo::game::session::PlayerDirectory directory_;
     apollo::game::session::PlayerDirectory::EventSink directory_listener_;
     std::function<bool()> admission_gate_;

@@ -550,7 +550,7 @@ void benchmarkLocks() {
 //   网关下发面仍是桩（world_app broadcastToViewers 只日志），本段
 //   量的是「collect+flush」两段的可测部分）。
 // 桩口径：移动 = 匀速直线 + 世界边界回绕，无寻路/技能/跨景——帧成本是
-// 下界，作 capacity-and-benchmark 帧预算表实测化的锚点数据。
+// 下界，作 capacity-and-benchmark 帧预算表实测化的Avatar数据。
 
 namespace {
 
@@ -657,7 +657,7 @@ ModelStats run_model(const ModelConfig& cfg) {
     frame_events.reserve(16384);
 
     // persist 段 journal（write-ahead 面在 game thread——§8.2 落库形态）：
-    // 临时文件逐跑唯一，跑毕清理；开不了 = 基准锚点缺失，响亮失败
+    // 临时文件逐跑唯一，跑毕清理；开不了 = 基准Avatar缺失，响亮失败
     static std::atomic<int> journal_run{0};
     const std::string journal_path =
         (std::filesystem::temp_directory_path()
@@ -854,7 +854,7 @@ void benchmarkThreeModels() {
     cout << "负载：全体玩家匀速漂移（5 单位/s）+ AOI move 差集 + tick 六阶段"
          << " + flush 段（事件→协议帧编码）+ persist 段（journal append+drain）"
          << "（单线程；预热 " << kWarmupFrames << " 帧不入统计）" << endl;
-    cout << "口径：帧预算 100ms @ 10Hz 主循环（capacity-and-benchmark §2 锚点）；"
+    cout << "口径：帧预算 100ms @ 10Hz 主循环（capacity-and-benchmark §2 Avatar）；"
          << "scene 局部 = 移动+AOI+tick，flush = collect+flush 编码段，"
          << "persist = journal 交 DB 线程面（append 落盘实盘 IO，介质=宿主 /tmp；"
          << "DB 线程序列化不计），total = 全帧（§2 预算表三段）" << endl;
@@ -889,11 +889,11 @@ void benchmarkThreeModels() {
 }
 
 //==============================================================================
-// 受理面基准（P3-2 批 D；ADR-016 #3 tick 预算锚定 + capacity §2.1 同型锚点）
+// 受理面基准（P3-2 批 D；ADR-016 #3 tick 预算锚定 + capacity §2.1 同型Avatar）
 //==============================================================================
 // 口径：受理面局部成本——受理路径（parseHeader + 信封构造 + 入队）与执行
 // 路径队列侧（出队 + parseHeader + decodeBody）。world 变更面（handler 全量
-// 语义：校验/变更/广播）不在本段，归 §2.1 scene 三模型锚点；两段夹逼出受理
+// 语义：校验/变更/广播）不在本段，归 §2.1 scene 三模型Avatar；两段夹逼出受理
 // 面全量成本。三跑取 min（下界口径，负载噪声期均值守不可信，同 §2.1 纪律）。
 
 namespace {
@@ -990,7 +990,7 @@ void benchmarkAcceptanceFace() {
     cout << "\n=== Acceptance Face Benchmark (P3-2 D; ADR-016 #3 锚定) ===" << endl;
     cout << "负载：单场景 1024 条移动意图突发（= 受理队列 cap 顶格）；受理路径"
          << " 与执行路径队列侧分段；三跑取 min" << endl;
-    cout << "口径：受理面局部成本下界——无 world 变更/广播面（归 §2.1 scene 锚点）"
+    cout << "口径：受理面局部成本下界——无 world 变更/广播面（归 §2.1 scene Avatar）"
          << "；帧预算 100ms @ 10Hz，消息段预算 20ms" << endl;
 
     auto frame = makeMoveFrame(1, 1.0f);

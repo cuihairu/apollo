@@ -1,8 +1,6 @@
-# Game - Session module (PlayerAnchor, session routing, assignments)
+# Game - Session module (session routing, directory, fleet recovery)
+# Avatar 长期对象 / 管理器 / 恢复接口已迁 base 模块（L22）
 add_library(apollo_game_session STATIC
-    src/anchor_manager.cpp
-    src/recovery.cpp
-    src/player_anchor.cpp
     src/player_directory.cpp
     src/directory_mirror.cpp
     src/fleet_recovery.cpp
@@ -19,6 +17,7 @@ target_include_directories(apollo_game_session
 
 target_link_libraries(apollo_game_session
     PUBLIC
+        apollo::game_base
         apollo::game_core
         apollo::game_battle
 )

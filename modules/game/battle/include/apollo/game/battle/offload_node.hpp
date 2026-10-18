@@ -17,7 +17,7 @@
 //
 // 落回捕获：本类即 runtime 的 IRewardSink——settle_rewards 按 player_id 全序
 // 逐个落本类（含 0 分），进 result 平行数组；Zone 侧真实落账在宿主
-// （AnchorRewardSink），实例侧只出不进。
+// （AvatarRewardSink），实例侧只出不进。
 //
 // 单线程纪律（同 discovery）：on_envelope/tick/settle 全部由宿主定时器/泵
 // 线程驱动，无内锁；节拍（20-50ms 可配）由调用方注入，不依赖钟。

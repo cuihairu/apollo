@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 
@@ -13,13 +13,13 @@ namespace apollo::game::world {
 // 换幕（Scene Transfer）流程模块——P1-1，lifecycle §2.3 六差距收口：
 //
 //   prepare（准入）→ begin（会话 TransferringOut）→ detach（旧 Avatar 销毁）
-//   → attach（新 scene 重建 Avatar，Anchor 投影）→ state sync（会话字段确认）
+//   → attach（新 scene 重建 Avatar，Avatar 投影）→ state sync（会话字段确认）
 //   → complete（resume 回 Active）
 //
 // 六差距逐条落点：
 //   1. 准入/驳回   —— Prepare 阶段显式校验（会话态、目标 scene 存在、
 //                     目标 instance 态放行），驳回原因可观察；
-//   2. 对象投影   —— detach 销毁旧 Avatar，attach 以 Anchor 投影重建
+//   2. 对象投影   —— detach 销毁旧 Avatar，attach 以 Avatar 投影重建
 //                     （不再字段搬运）；
 //   3. 失败回滚   —— attach 失败（重复进入等）回滚：会话 abort + 原 scene
 //                     原落点重进；回滚再失败给 RollbackFailed（终态错误）；
@@ -35,8 +35,8 @@ struct SceneTransferRequest {
     std::uint64_t target_scene_id = 0;
     SceneAoi::Vec3 landing{};
     // 可选投影源：单进程内存锚点（cell 进程无锚点存储时传 nullptr，
-    // Avatar 以出厂态进场；结算类结果单向落回 Anchor 不属于本流程）。
-    apollo::game::session::PlayerAnchor* anchor = nullptr;
+    // Avatar 以出厂态进场；结算类结果单向落回 Avatar 不属于本流程）。
+    apollo::game::base::Avatar* avatar = nullptr;
 };
 
 // 流程步骤（失败定位可观察）

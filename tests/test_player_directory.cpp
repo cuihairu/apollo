@@ -13,8 +13,8 @@
 namespace {
 
 using apollo::game::session::PlayerDirectory;
-using apollo::game::session::SessionBinding;
-using apollo::game::session::WorldAssignment;
+using apollo::game::base::SessionBinding;
+using apollo::game::base::WorldAssignment;
 
 #define TEST_ASSERT(cond, msg) \
     do { \
@@ -40,8 +40,8 @@ struct EventLog {
     void clear() { rows.clear(); }
 };
 
-SessionBinding makeBinding(std::uint64_t session_id) {
-    SessionBinding b;
+apollo::game::base::SessionBinding makeBinding(std::uint64_t session_id) {
+    apollo::game::base::SessionBinding b;
     b.session_id = session_id;
     b.gateway_id = 7;
     b.gateway_addr = "gateway://127.0.0.1:8888";
@@ -49,14 +49,14 @@ SessionBinding makeBinding(std::uint64_t session_id) {
     return b;
 }
 
-SessionBinding makeBindingWithGateway(std::uint64_t session_id, std::uint32_t gateway_id) {
-    SessionBinding b = makeBinding(session_id);
+apollo::game::base::SessionBinding makeBindingWithGateway(std::uint64_t session_id, std::uint32_t gateway_id) {
+    apollo::game::base::SessionBinding b = makeBinding(session_id);
     b.gateway_id = gateway_id;
     return b;
 }
 
-WorldAssignment makeAssignment(std::uint32_t world_id) {
-    WorldAssignment a;
+apollo::game::base::WorldAssignment makeAssignment(std::uint32_t world_id) {
+    apollo::game::base::WorldAssignment a;
     a.world_id = world_id;
     a.map_id = 100;
     a.instance_id = 1;
@@ -206,8 +206,8 @@ bool test_suspend_window_and_sweep() {
 }
 
 // ---- §4/§3-③：resume 双锚校验 ----
-bool test_resume_dual_anchor() {
-    std::cout << "Running: test_resume_dual_anchor..." << std::endl;
+bool test_resume_dual_avatar() {
+    std::cout << "Running: test_resume_dual_avatar..." << std::endl;
 
     PlayerDirectory dir;
     dir.session_up(1001, makeBinding(9001), makeAssignment(1));
@@ -477,7 +477,7 @@ bool test_moved_epoch_bump() {
     log.clear();
 
     // ③ 交写权：moved 带新 epoch——条目键推进 + 事件带新 epoch + 水位随推
-    WorldAssignment dest = makeAssignment(2);
+    apollo::game::base::WorldAssignment dest = makeAssignment(2);
     TEST_ASSERT(dir.moved(1001, dest, 41, 5), "迁移带新 epoch 受理");
     auto* entry = dir.find(1001);
     TEST_ASSERT(entry != nullptr && entry->anchor_epoch == 41, "条目 epoch 键推进");
@@ -520,7 +520,7 @@ int main() {
     run(test_session_down_removes_entry);
     run(test_suspend_window_and_sweep);
     run(test_zone_gateway_window_disposition);
-    run(test_resume_dual_anchor);
+    run(test_resume_dual_avatar);
     run(test_reconcile_and_snapshot_reset);
     run(test_begin_leave_lifecycle);
     run(test_epoch_store_resume);

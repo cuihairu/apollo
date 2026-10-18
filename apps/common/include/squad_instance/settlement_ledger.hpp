@@ -1,7 +1,7 @@
 #pragma once
 
 // 结算幂等账本（P2-4「结算通过既有奖励/持久化接口幂等落账」）：
-// battle 结算段（IRewardSink 单向口）的副本落点——逐玩家经 AnchorRewardSink
+// battle 结算段（IRewardSink 单向口）的副本落点——逐玩家经 AvatarRewardSink
 // 语义（exp 键 + mark_dirty 随 SaveQueue/write-behind 落档）入锚点长期态。
 //
 // 幂等口径：(instance, player) 一条账——applied 后重复 apply / 重试 / 恢复
@@ -14,8 +14,8 @@
 // 一次，不双记（与「已发未确认请求不跨代次自动重放」同口径）。
 
 #include "apollo/game/battle/battle_runtime.hpp"
-#include "apollo/game/session/anchor_reward_sink.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
+#include "apollo/game/base/avatar.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -25,9 +25,9 @@
 
 namespace squad_instance {
 
-// 锚点解析：player_id → PlayerAnchor*（null = 暂不可落）。宿主按自己的
-// AnchorManager/PlayerStore 面装配；未装配 = 全部挂账待补。
-using AnchorResolveFn = std::function<apollo::game::session::PlayerAnchor*(std::uint64_t)>;
+// 锚点解析：player_id → Avatar*（null = 暂不可落）。宿主按自己的
+// AvatarManager/PlayerStore 面装配；未装配 = 全部挂账待补。
+using AvatarResolveFn = std::function<apollo::game::base::Avatar*(std::uint64_t)>;
 
 class SettlementLedger : public apollo::game::battle::IRewardSink {
 public:
@@ -35,7 +35,7 @@ public:
         Ok = 0,
         UnknownPlayer,     // 非结算名册成员
         AlreadyApplied,    // 已落账（幂等拒绝）
-        AnchorUnavailable, // 锚点暂不可得（挂账，待重试）
+        AvatarUnavailable, // 锚点暂不可得（挂账，待重试）
     };
 
     struct Snapshot {
@@ -46,7 +46,7 @@ public:
     };
 
     // 开账：结算名册 = 受理快照成员（全序由调用面保证 = 名册顺序）。
-    void begin(std::vector<std::uint64_t> roster, AnchorResolveFn resolver);
+    void begin(std::vector<std::uint64_t> roster, AvatarResolveFn resolver);
 
     // 凭据出口（真实奖励持久化）：落账前先经此持久提交 (player, score)
     // 凭据，返回 false = 未持久提交（挂账待补）——绝不无凭据落账。重试同
@@ -64,7 +64,7 @@ public:
                                                   std::int64_t score)>;
     void set_business_sink(BusinessSink sink);
 
-    // 单条落账：名册校验 → 锚点解析 → AnchorRewardSink 语义入账 → 标记已落。
+    // 单条落账：名册校验 → 锚点解析 → AvatarRewardSink 语义入账 → 标记已落。
     // applied 后重复调用返回 AlreadyApplied（幂等核心）。
     ApplyError apply(std::uint64_t player_id, std::int64_t score);
 
@@ -89,7 +89,7 @@ private:
     };
     std::unordered_map<std::uint64_t, Entry> entries_;
     std::vector<std::uint64_t> roster_;
-    AnchorResolveFn resolver_;
+    AvatarResolveFn resolver_;
     CredentialSink credential_sink_;
     BusinessSink business_sink_;
 };

@@ -12,7 +12,7 @@
 //   奖励落账）按 entity_id/player_id 全序执行；
 // - 随机数（约束④）：无全局游标，任意 (tick, stream_id) 独立派生子流；
 // - reward 单向（player-object-model §3）：BattleRuntime 只经 IRewardSink 产出
-//   奖励、不持有 Anchor、不读玩家态；Anchor 字段与真实落账接线随 P2-4。
+//   奖励、不持有 Avatar、不读玩家态；Avatar 字段与真实落账接线随 P2-4。
 //
 // 复算回放：同四元组（world_seed + 同输入序列 + 同实体拓扑）必得同事件流与
 // 同 hash 链——test_battle_runtime 以此为判定。
@@ -38,7 +38,7 @@ enum class BattlePhase : std::uint8_t {
     Finished = 4,  // leave：散场终态
 };
 
-// 奖励单向落账口：battle 只出不进。实现方（P2-4 起）接 PlayerAnchor 落账，
+// 奖励单向落账口：battle 只出不进。实现方（P2-4 起）接 Avatar 落账，
 // 本骨架期测试以内存 sink 承接。
 class IRewardSink {
 public:

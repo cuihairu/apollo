@@ -5,9 +5,9 @@
 #include "player_store/m1_server.hpp"
 #include "player_store/migration_wire.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
-#include "apollo/game/session/anchor_manager.hpp"
+#include "apollo/game/base/avatar_manager.hpp"
 #include "apollo/game/session/player_directory.hpp"
-#include "apollo/game/session/recovery.hpp"
+#include "apollo/game/base/recovery.hpp"
 #include "apollo/game/session/session_locator.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <cstddef>
@@ -54,10 +54,10 @@ public:
     // 测不了受理语义
     std::vector<uint8_t> dispatchRequest(const std::vector<uint8_t>& data);
 
-    std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayer(PlayerID playerId);
-    bool bindSession(PlayerID playerId, const apollo::game::session::SessionBinding& binding);
+    std::shared_ptr<apollo::game::base::Avatar> activatePlayer(PlayerID playerId);
+    bool bindSession(PlayerID playerId, const apollo::game::base::SessionBinding& binding);
     bool unbindSession(protocol::SessionID sessionId);
-    std::shared_ptr<apollo::game::session::PlayerAnchor> findAnchor(PlayerID playerId) const;
+    std::shared_ptr<apollo::game::base::Avatar> findAvatar(PlayerID playerId) const;
     std::optional<PlayerID> findPlayerBySession(protocol::SessionID sessionId) const;
 
     // 目录事件上报源（P1-2，session-and-online-directory §2 事件源①）：
@@ -68,9 +68,9 @@ public:
         apollo::game::session::PlayerDirectory::EventSink sink);
 
     // 锚点域快照出口（P3-1 增量③：恢复相位全量重报的供数面——进程壳
-    // 从 AnchorManager 快照收集现存会话发 FullReport）
-    std::shared_ptr<apollo::game::session::AnchorManager> anchor_manager() const {
-        return anchorManager_;
+    // 从 AvatarManager 快照收集现存会话发 FullReport）
+    std::shared_ptr<apollo::game::base::AvatarManager> avatar_manager() const {
+        return avatarManager_;
     }
 
     // ---- 玩家迁移受理面（P0-2 路 2 第一步，backup-revive §9.2 五步
@@ -138,7 +138,7 @@ private:
 
     // 脏锚点 flush（P0-4）：把 needs_save() 的锚点置 Saving 并入保存队列；
     // 关闭协议与自动保存共用。返回入队数量（占位实现，落库接 P1）。
-    std::size_t flushDirtyAnchors(const char* reason);
+    std::size_t flushDirtyAvatars(const char* reason);
 
     // journal write-ahead 与消费侧（P1-5）：appendJournal 返回段全局序
     // （0 = 写盘失败）——随 SaveTask 落档记水位，drain 跳过已被更新落档
@@ -147,15 +147,15 @@ private:
     std::size_t drainJournal();
 
     int64_t getCurrentTimeMs() const;
-    std::shared_ptr<apollo::game::session::PlayerAnchor> activatePlayerAnchor(PlayerID playerId);
+    std::shared_ptr<apollo::game::base::Avatar> activateAvatar(PlayerID playerId);
     void finalizeSave(PlayerID playerId, bool success, std::uint64_t journalSeq);
 
     PlayerStoreConfig config_;
     std::unique_ptr<PlayerStorage> database_;
     std::unique_ptr<SaveQueue> saveQueue_;
     std::unique_ptr<apollo::data::journal::PersistJournal> journal_;
-    std::unique_ptr<apollo::game::session::RecoveryCoordinator> recovery_;
-    std::shared_ptr<apollo::game::session::AnchorManager> anchorManager_;
+    std::unique_ptr<apollo::game::base::RecoveryCoordinator> recovery_;
+    std::shared_ptr<apollo::game::base::AvatarManager> avatarManager_;
     std::shared_ptr<apollo::game::session::SessionLocator> sessionLocator_;
     apollo::game::session::PlayerDirectory::EventSink directoryEventSink_;
 

@@ -1,9 +1,9 @@
 #include "apollo/game/battle/battle_runtime.hpp"
-#include "apollo/game/session/anchor_manager.hpp"
-#include "apollo/game/session/anchor_reward_sink.hpp"
-#include "apollo/game/session/player_anchor.hpp"
+#include "apollo/game/base/avatar_manager.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
+#include "apollo/game/base/avatar.hpp"
 #include "apollo/game/session/session_locator.hpp"
-#include "apollo/game/session/world_assignment.hpp"
+#include "apollo/game/base/world_assignment.hpp"
 #include "apollo/game/world/avatar.hpp"
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/scene_transfer.hpp"
@@ -22,24 +22,24 @@ namespace {
         } \
     } while (0)
 
-bool test_anchor_manager_activate_and_find() {
-    std::cout << "Running: test_anchor_manager_activate_and_find..." << std::endl;
+bool test_avatar_manager_activate_and_find() {
+    std::cout << "Running: test_avatar_manager_activate_and_find..." << std::endl;
 
-    apollo::game::session::AnchorManager manager;
-    auto anchor = manager.activate(1001);
+    apollo::game::base::AvatarManager manager;
+    auto avatar = manager.activate(1001);
 
-    TEST_ASSERT(anchor != nullptr, "anchor created");
-    TEST_ASSERT(anchor->player_id() == 1001, "player id assigned");
-    TEST_ASSERT(manager.anchor_count() == 1, "anchor count");
-    TEST_ASSERT(manager.find(1001) == anchor, "find returns same anchor");
+    TEST_ASSERT(avatar != nullptr, "avatar created");
+    TEST_ASSERT(avatar->player_id() == 1001, "player id assigned");
+    TEST_ASSERT(manager.avatar_count() == 1, "avatar count");
+    TEST_ASSERT(manager.find(1001) == avatar, "find returns same avatar");
 
-    anchor->mark_dirty("load");
-    TEST_ASSERT(anchor->needs_save(), "dirty tracked");
+    avatar->mark_dirty("load");
+    TEST_ASSERT(avatar->needs_save(), "dirty tracked");
 
     // snapshot（P0-4）：flush 遍历面
     const auto snapshot = manager.snapshot();
     TEST_ASSERT(snapshot.size() == 1, "snapshot size");
-    TEST_ASSERT(snapshot[0] == anchor, "snapshot carries anchor");
+    TEST_ASSERT(snapshot[0] == avatar, "snapshot carries avatar");
 
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -49,7 +49,7 @@ bool test_session_locator_bind_and_unbind() {
     std::cout << "Running: test_session_locator_bind_and_unbind..." << std::endl;
 
     apollo::game::session::SessionLocator locator;
-    apollo::game::session::SessionBinding binding;
+    apollo::game::base::SessionBinding binding;
     binding.session_id = 2001;
     binding.gateway_id = 7;
     binding.gateway_addr = "gateway-01";
@@ -263,17 +263,17 @@ bool test_scene_transfer_end_to_end() {
     session->bind_avatar(entity);
     session->set_state(apollo::game::world::WorldSessionState::Active);
 
-    // Anchor 投影源（Online 态 → Avatar 不进挂起窗口）
-    apollo::game::session::PlayerAnchor anchor(player.value());
-    anchor.set_state(apollo::game::session::AnchorState::Online);
-    anchor.set_home_zone_id(42);
+    // Avatar 投影源（Online 态 → Avatar 不进挂起窗口）
+    apollo::game::base::Avatar base_avatar(player.value());
+    base_avatar.set_state(apollo::game::base::AvatarState::Online);
+    base_avatar.set_home_zone_id(42);
 
     // ---- 换幕：A → B ----
     apollo::game::world::SceneTransferRequest request;
     request.player_id = player;
     request.target_scene_id = fx.scene_b->scene_id();
     request.landing = {10.0f, 20.0f, 30.0f};
-    request.anchor = &anchor;
+    request.avatar = &base_avatar;
 
     const auto outcome =
         apollo::game::world::execute_scene_transfer(fx.world, fx.sessions, request);
@@ -290,7 +290,7 @@ bool test_scene_transfer_end_to_end() {
     TEST_ASSERT(rebuilt->scene_id() == fx.scene_b->scene_id(), "scene ownership moved");
     TEST_ASSERT(rebuilt->position().x == 10.0f && rebuilt->position().z == 30.0f,
                 "landing position applied (易失态坐标不带走)");
-    TEST_ASSERT(rebuilt->has_projection(), "anchor projection done");
+    TEST_ASSERT(rebuilt->has_projection(), "avatar projection done");
     TEST_ASSERT(rebuilt->home_zone_id() == 42, "home zone projected");
 
     // 差距 ⑤：AOI 重建——AOI 出入列随 enter/leave 完成
@@ -459,83 +459,83 @@ bool test_transfer_disconnect_window() {
 } // namespace
 
 
-// ---- P2-4：Anchor 长期态字段模型 + 奖励单向落 Anchor 真实接线 ----
+// ---- P2-4：Avatar 长期态字段模型 + 奖励单向落 Avatar 真实接线 ----
 
-bool test_anchor_longterm_state_fields() {
-    std::cout << "Running: test_anchor_longterm_state_fields..." << std::endl;
-    apollo::game::session::PlayerAnchor anchor(1001);
+bool test_avatar_longterm_state_fields() {
+    std::cout << "Running: test_avatar_longterm_state_fields..." << std::endl;
+    apollo::game::base::Avatar avatar(1001);
 
     // Inventory：同 id 合并 / 不足整体拒绝
-    TEST_ASSERT(anchor.add_item(7001, 3), "入包");
-    TEST_ASSERT(anchor.add_item(7001, 2), "同 id 合并");
-    TEST_ASSERT(anchor.inventory().size() == 1 && anchor.inventory()[0].count == 5,
+    TEST_ASSERT(avatar.add_item(7001, 3), "入包");
+    TEST_ASSERT(avatar.add_item(7001, 2), "同 id 合并");
+    TEST_ASSERT(avatar.inventory().size() == 1 && avatar.inventory()[0].count == 5,
                 "合并计数");
-    TEST_ASSERT(!anchor.remove_item(7001, 6), "超扣整体拒绝");
-    TEST_ASSERT(anchor.remove_item(7001, 5), "足额扣减");
-    TEST_ASSERT(anchor.inventory().empty(), "清零即收格");
-    TEST_ASSERT(!anchor.add_item(0, 1) && !anchor.add_item(7001, 0), "非法入参拒绝");
+    TEST_ASSERT(!avatar.remove_item(7001, 6), "超扣整体拒绝");
+    TEST_ASSERT(avatar.remove_item(7001, 5), "足额扣减");
+    TEST_ASSERT(avatar.inventory().empty(), "清零即收格");
+    TEST_ASSERT(!avatar.add_item(0, 1) && !avatar.add_item(7001, 0), "非法入参拒绝");
 
     // Equipment：固定槽位
-    TEST_ASSERT(anchor.equip(0, 8001), "装 0 号位");
-    TEST_ASSERT(anchor.equipment_at(0) == 8001, "槽位可查");
-    TEST_ASSERT(!anchor.equip(apollo::game::session::PlayerAnchor::kEquipSlotCount, 8002), "越界槽位拒绝");
-    TEST_ASSERT(!anchor.equip(1, 0), "空物品 id 拒绝");
-    TEST_ASSERT(anchor.unequip(0) && anchor.equipment_at(0) == 0, "卸下");
-    TEST_ASSERT(!anchor.unequip(0), "空槽卸下拒绝");
+    TEST_ASSERT(avatar.equip(0, 8001), "装 0 号位");
+    TEST_ASSERT(avatar.equipment_at(0) == 8001, "槽位可查");
+    TEST_ASSERT(!avatar.equip(apollo::game::base::Avatar::kEquipSlotCount, 8002), "越界槽位拒绝");
+    TEST_ASSERT(!avatar.equip(1, 0), "空物品 id 拒绝");
+    TEST_ASSERT(avatar.unequip(0) && avatar.equipment_at(0) == 0, "卸下");
+    TEST_ASSERT(!avatar.unequip(0), "空槽卸下拒绝");
 
     // Quest：进度写读
-    TEST_ASSERT(anchor.quest_progress(9001) == 0, "未接任务进度为 0");
-    anchor.set_quest_progress(9001, 7);
-    TEST_ASSERT(anchor.quest_progress(9001) == 7, "进度可查");
-    anchor.set_quest_progress(9001, 9);
-    TEST_ASSERT(anchor.quest_progress(9001) == 9, "进度覆盖写");
+    TEST_ASSERT(avatar.quest_progress(9001) == 0, "未接任务进度为 0");
+    avatar.set_quest_progress(9001, 7);
+    TEST_ASSERT(avatar.quest_progress(9001) == 7, "进度可查");
+    avatar.set_quest_progress(9001, 9);
+    TEST_ASSERT(avatar.quest_progress(9001) == 9, "进度覆盖写");
 
     // Progress：通用成长键值
-    anchor.add_progress("exp", 100);
-    anchor.add_progress("exp", 50);
-    TEST_ASSERT(anchor.progress("exp") == 150, "累计");
-    anchor.add_progress("exp", 0);
-    TEST_ASSERT(anchor.progress("exp") == 150, "零增量无副作用");
+    avatar.add_progress("exp", 100);
+    avatar.add_progress("exp", 50);
+    TEST_ASSERT(avatar.progress("exp") == 150, "累计");
+    avatar.add_progress("exp", 0);
+    TEST_ASSERT(avatar.progress("exp") == 150, "零增量无副作用");
 
     // Social：公会归属
-    TEST_ASSERT(anchor.guild_id() == 0, "未入会");
-    anchor.set_guild_id(1);
-    TEST_ASSERT(anchor.guild_id() == 1, "归属可写");
+    TEST_ASSERT(avatar.guild_id() == 0, "未入会");
+    avatar.set_guild_id(1);
+    TEST_ASSERT(avatar.guild_id() == 1, "归属可写");
 
     // 长期态变更即脏：每域操作都应留痕
-    TEST_ASSERT(anchor.needs_save(), "长期态变更后需要保存");
+    TEST_ASSERT(avatar.needs_save(), "长期态变更后需要保存");
     bool saw_inventory = false, saw_progress = false, saw_guild = false;
-    for (const auto& r : anchor.dirty_reasons()) {
+    for (const auto& r : avatar.dirty_reasons()) {
         saw_inventory = saw_inventory || r == "inventory_add";
         saw_progress = saw_progress || r == "progress_add";
         saw_guild = saw_guild || r == "guild_change";
     }
     TEST_ASSERT(saw_inventory && saw_progress && saw_guild, "三域脏因留痕");
-    anchor.clear_dirty();
-    TEST_ASSERT(!anchor.needs_save(), "清理后复位");
+    avatar.clear_dirty();
+    TEST_ASSERT(!avatar.needs_save(), "清理后复位");
     return true;
 }
 
-bool test_anchor_reward_sink_wiring() {
-    std::cout << "Running: test_anchor_reward_sink_wiring..." << std::endl;
-    apollo::game::session::PlayerAnchor anchor(2001);
-    apollo::game::session::AnchorRewardSink sink(anchor);
+bool test_avatar_reward_sink_wiring() {
+    std::cout << "Running: test_avatar_reward_sink_wiring..." << std::endl;
+    apollo::game::base::Avatar avatar(2001);
+    apollo::game::base::AvatarRewardSink sink(avatar);
 
-    // 奖励单向落 Anchor（P2-4 接线）：score 累计入 Progress「exp」
+    // 奖励单向落 Avatar（P2-4 接线）：score 累计入 Progress「exp」
     sink.on_reward(2001, 30);
     sink.on_reward(2001, 12);
-    TEST_ASSERT(anchor.progress(apollo::game::session::AnchorRewardSink::kExpKey) == 42, "奖励累计入 exp");
-    TEST_ASSERT(anchor.needs_save(), "落账即脏（write-behind 面可见）");
+    TEST_ASSERT(avatar.progress(apollo::game::base::AvatarRewardSink::kExpKey) == 42, "奖励累计入 exp");
+    TEST_ASSERT(avatar.needs_save(), "落账即脏（write-behind 面可见）");
 
-    // 单 Anchor 绑定：他人分账忽略；零分忽略
+    // 单 Avatar 绑定：他人分账忽略；零分忽略
     sink.on_reward(2999, 100);
     sink.on_reward(2001, 0);
-    TEST_ASSERT(anchor.progress("exp") == 42, "越主/零分不落账");
+    TEST_ASSERT(avatar.progress("exp") == 42, "越主/零分不落账");
 
     // battle 只出不进：sink 侧无回写通道（编译面即证——IRewardSink 纯单向），
-    // 运行时证：经 BattleRuntime finish 结算，Anchor 收到账
-    apollo::game::session::PlayerAnchor winner(2001);
-    apollo::game::session::AnchorRewardSink winner_sink(winner);
+    // 运行时证：经 BattleRuntime finish 结算，Avatar 收到账
+    apollo::game::base::Avatar winner(2001);
+    apollo::game::base::AvatarRewardSink winner_sink(winner);
     apollo::game::battle::BattleRuntime battle(1, 777, &winner_sink);
     TEST_ASSERT(battle.enter_player(2001), "参战");
     TEST_ASSERT(battle.begin(), "开局");
@@ -555,7 +555,7 @@ bool test_anchor_reward_sink_wiring() {
     TEST_ASSERT(battle.tick(hit_tick, inputs), "命中推进");
     TEST_ASSERT(battle.finish(), "散场");
     TEST_ASSERT(battle.phase() == apollo::game::battle::BattlePhase::Finished, "五段走完");
-    TEST_ASSERT(winner.progress(apollo::game::session::AnchorRewardSink::kExpKey) > 0, "结算奖励落 Anchor");
+    TEST_ASSERT(winner.progress(apollo::game::base::AvatarRewardSink::kExpKey) > 0, "结算奖励落 Avatar");
     TEST_ASSERT(winner.needs_save(), "战斗结算留脏");
     return true;
 }
@@ -573,7 +573,7 @@ int main() {
         }
     };
 
-    run(test_anchor_manager_activate_and_find);
+    run(test_avatar_manager_activate_and_find);
     run(test_session_locator_bind_and_unbind);
     run(test_world_session_manager_lifecycle);
     run(test_world_create_scene_and_instance);
@@ -581,8 +581,8 @@ int main() {
     run(test_scene_transfer_prepare_rejections);
     run(test_scene_transfer_rollback_on_attach_failure);
     run(test_transfer_disconnect_window);
-    run(test_anchor_longterm_state_fields);
-    run(test_anchor_reward_sink_wiring);
+    run(test_avatar_longterm_state_fields);
+    run(test_avatar_reward_sink_wiring);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

@@ -878,11 +878,11 @@ bool LoginServer::preparePlayerOnline(
         }
 
         if (directory_) {
-            apollo::game::session::SessionBinding binding;
+            apollo::game::base::SessionBinding binding;
             binding.session_id = sessionId;
             binding.gateway_id = bindReq.gatewayId;
             binding.gateway_addr = gatewayUrl;
-            apollo::game::session::WorldAssignment assignment;
+            apollo::game::base::WorldAssignment assignment;
             assignment.world_id = config_.initialWorldId;
             assignment.map_id = config_.initialMapId;
             assignment.instance_id = config_.initialInstanceId;

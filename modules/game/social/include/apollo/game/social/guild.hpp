@@ -9,14 +9,14 @@
 
 namespace apollo::game::social {
 
-// Guild（公会——契约：社交面归 Anchor 长期态，player-object-model §1「跨场景
+// Guild（公会——契约：社交面归 Avatar 长期态，player-object-model §1「跨场景
 // 锚点、背包/成长等长期状态」的社交延伸；object-model §2.9 审计：代码此前
 // 不存在，P2-4 骨架落地）。
 //
 // 所有权域：baseappmgr 域（跨 Zone 持久对象，随 improvement-plan P2-4「Guild/
 // Party 对象（baseappmgr 域或 Zone 域）」——公会存活与会者会话无关，归持久域；
-// 进程形态落点随 P3）。成员以裸 player_id 记账（对齐 PlayerAnchor 风格），
-// 归属回写由调用方同步到 Anchor（anchor.set_guild_id）。
+// 进程形态落点随 P3）。成员以裸 player_id 记账（对齐 Avatar 风格），
+// 归属回写由调用方同步到 Avatar（avatar.set_guild_id）。
 class Guild {
 public:
     static constexpr std::size_t kMaxMembers = 100;  // 骨架容量（扩容随玩法批）
@@ -45,12 +45,12 @@ private:
 };
 
 // GuildManager：guild_id/name 双唯一（创建口裁决）；骨架期进程内集合，
-// 持久化落点随 P1-4 栈的 Anchor 落档延伸批。
+// 持久化落点随 P1-4 栈的 Avatar 落档延伸批。
 class GuildManager {
 public:
     // 重 id/重名拒绝（返回 nullptr 不产生副作用）
     Guild* create(std::uint64_t guild_id, std::string name, std::uint64_t leader_player_id);
-    // 仅会长可解散；解散即销毁对象（成员归属清理由调用方回写 Anchor）
+    // 仅会长可解散；解散即销毁对象（成员归属清理由调用方回写 Avatar）
     bool disband(std::uint64_t guild_id, std::uint64_t requester_player_id);
     [[nodiscard]] Guild* find(std::uint64_t guild_id) const noexcept;
     [[nodiscard]] Guild* find_by_name(std::string_view name) const noexcept;
