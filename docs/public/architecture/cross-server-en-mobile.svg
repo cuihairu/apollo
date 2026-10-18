@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="1270" viewBox="0 0 480 1270" role="img" aria-labelledby="title desc" lang="en">
+<title id="title">Base and simulation ownership in cross-server play</title><desc id="desc">Each home server retains its Base profiles and database. A shared cross-server cell holds Avatars/runtime state and submits results to each owning Base.</desc>
+<defs>
+ <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
+</defs><rect width="480" height="1270" fill="#fff"/>
+<text x="24" y="38" font-size="24" font-weight="600" text-anchor="start">Cross-server ownership</text>
+<text x="24" y="70" font-size="18" font-weight="400" text-anchor="start" class="sub">Reserved · not enabled in default fleet</text>
+<g data-node="worldServer">
+<rect x="24" y="119" width="432" height="91" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="42" y="152" font-size="23" font-weight="600" text-anchor="start">worldServer</text>
+<text x="42" y="179" font-size="18" font-weight="400" text-anchor="start" class="sub">Manage cross-server Space/Cell and transfer</text>
+</g>
+<g data-node="Shared cell executor">
+<rect x="24" y="326" width="432" height="179" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="42" y="359" font-size="23" font-weight="600" text-anchor="start">Shared cell executor</text>
+<text x="42" y="386" font-size="18" font-weight="400" text-anchor="start" class="sub">Space C · Cell C1</text>
+<text x="42" y="409" font-size="18" font-weight="400" text-anchor="start" class="sub">Avatar A  /  Avatar B</text>
+<text x="42" y="432" font-size="18" font-weight="400" text-anchor="start" class="sub">Gameplay snapshots and runtime state</text>
+</g>
+<path d="M240 210 L240 326" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="216.2" y="258" width="165.60000000000002" height="25" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="299" y="274" font-size="18" font-weight="500" text-anchor="middle" class="teal">Register / place</text>
+<text x="24" y="631" font-size="20" font-weight="600" text-anchor="start">Home server A</text>
+<g data-node="baseServer A">
+<rect x="24" y="659" width="204" height="147" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="42" y="692" font-size="20" font-weight="600" text-anchor="start">baseServer A</text>
+<text x="42" y="719" font-size="18" font-weight="400" text-anchor="start" class="sub">PlayerAnchor A</text>
+<text x="42" y="742" font-size="18" font-weight="400" text-anchor="start" class="sub">Profiles stay here</text>
+</g>
+<g data-node="database A">
+<rect x="24" y="921" width="204" height="91" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="42" y="954" font-size="20" font-weight="600" text-anchor="start">database A</text>
+<text x="42" y="981" font-size="18" font-weight="400" text-anchor="start" class="sub">Original storage</text>
+</g>
+<path d="M126 505 L126 659" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="34.39999999999999" y="560" width="183.20000000000002" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="126" y="575" font-size="18" font-weight="500" text-anchor="middle" class="blue">Snapshot / outcomes</text>
+<path d="M126 806 L126 921" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="38.8" y="856" width="174.4" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="126" y="871" font-size="18" font-weight="500" text-anchor="middle" class="blue">Persist separately</text>
+<text x="252" y="631" font-size="20" font-weight="600" text-anchor="start">Home server B</text>
+<g data-node="baseServer B">
+<rect x="252" y="659" width="204" height="147" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="270" y="692" font-size="20" font-weight="600" text-anchor="start">baseServer B</text>
+<text x="270" y="719" font-size="18" font-weight="400" text-anchor="start" class="sub">PlayerAnchor B</text>
+<text x="270" y="742" font-size="18" font-weight="400" text-anchor="start" class="sub">Profiles stay here</text>
+</g>
+<g data-node="database B">
+<rect x="252" y="921" width="204" height="91" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="270" y="954" font-size="20" font-weight="600" text-anchor="start">database B</text>
+<text x="270" y="981" font-size="18" font-weight="400" text-anchor="start" class="sub">Original storage</text>
+</g>
+<path d="M354 505 L354 659" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="262.4" y="560" width="183.20000000000002" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="354" y="575" font-size="18" font-weight="500" text-anchor="middle" class="blue">Snapshot / outcomes</text>
+<path d="M354 806 L354 921" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="266.8" y="856" width="174.4" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="354" y="871" font-size="18" font-weight="500" text-anchor="middle" class="blue">Persist separately</text>
+<text x="24" y="1060" font-size="18" font-weight="600" text-anchor="start">Only simulation moves; retain original Base.</text>
+<text x="24" y="1093" font-size="18" font-weight="400" text-anchor="start" class="sub">cell receives no home database credentials.</text>
+<text x="24" y="1143" font-size="18" font-weight="400" text-anchor="start" class="sub">Freeze source → prepare → conditional commit</text>
+<text x="24" y="1175" font-size="18" font-weight="400" text-anchor="start" class="sub">Activate target → clean source; one authority.</text>
+<text x="24" y="1222" font-size="18" font-weight="400" text-anchor="start" class="sub">Instance activities do not move profile ownership.</text>
+</svg>

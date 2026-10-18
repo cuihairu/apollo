@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="1135" viewBox="0 0 480 1135" role="img" aria-labelledby="title desc" lang="zh-CN">
+<title id="title">Space、Cell、执行进程与 Instance</title><desc id="desc">默认每 Space 一个 Cell，一个执行进程承载多个空间的 Cell；未来同一 Space 可分配多个 Cell 到不同执行进程。Instance 只关联玩法空间。</desc>
+<defs>
+ <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
+</defs><rect width="480" height="1135" fill="#fff"/>
+<text x="24" y="38" font-size="23" font-weight="600" text-anchor="start">空间、分区与玩法</text>
+<g data-node="worldServer">
+<rect x="24" y="73" width="432" height="88" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="42" y="106" font-size="23" font-weight="600" text-anchor="start">worldServer</text>
+<text x="42" y="133" font-size="18" font-weight="400" text-anchor="start" class="sub">注册 · Space/Cell 拓扑 · 分配</text>
+</g>
+<text x="24" y="203" font-size="21" font-weight="600" text-anchor="start">默认基础路径 · 实施目标</text>
+<rect x="24" y="226" width="432" height="254" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="44" y="260" font-size="20" font-weight="600" text-anchor="start">cell 进程 1</text>
+<g data-node="Cell A1">
+<rect x="44" y="285" width="184" height="160" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="62" y="318" font-size="22" font-weight="600" text-anchor="start">Cell A1</text>
+<text x="62" y="345" font-size="18" font-weight="400" text-anchor="start" class="sub">Space A</text>
+<text x="62" y="368" font-size="18" font-weight="400" text-anchor="start" class="sub">空间全范围</text>
+</g>
+<g data-node="Cell B1">
+<rect x="252" y="285" width="184" height="160" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="270" y="318" font-size="22" font-weight="600" text-anchor="start">Cell B1</text>
+<text x="270" y="345" font-size="18" font-weight="400" text-anchor="start" class="sub">Space B</text>
+<text x="270" y="368" font-size="18" font-weight="400" text-anchor="start" class="sub">空间全范围</text>
+</g>
+<path d="M420 161 L420 226" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="361.0" y="183" width="48" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="385" y="198" font-size="18" font-weight="500" text-anchor="middle" class="teal">分配</text>
+<g data-node="Instance X">
+<rect x="24" y="542" width="432" height="88" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="42" y="575" font-size="23" font-weight="600" text-anchor="start">Instance X</text>
+<text x="42" y="602" font-size="18" font-weight="400" text-anchor="start" class="sub">临时玩法关联 Space A</text>
+</g>
+<text x="24" y="659" font-size="18" font-weight="400" text-anchor="start" class="sub">持续空间无需临时 Instance。</text>
+<path d="M136 445 L136 512 L240 512 L240 542" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
+<text x="24" y="684" font-size="21" font-weight="600" text-anchor="start">未来扩展 · 尚未实现</text>
+<rect x="24" y="707" width="432" height="249" rx="10" fill="#f4f9f8" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="44" y="741" font-size="21" font-weight="600" text-anchor="start">同一个 Space A</text>
+<g data-node="Cell A1">
+<rect x="44" y="767" width="184" height="151" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="62" y="800" font-size="22" font-weight="600" text-anchor="start">Cell A1</text>
+<text x="62" y="827" font-size="18" font-weight="400" text-anchor="start" class="sub">cell 进程 1</text>
+<text x="62" y="850" font-size="18" font-weight="400" text-anchor="start" class="sub">权威实体</text>
+</g>
+<g data-node="Cell A2">
+<rect x="252" y="767" width="184" height="151" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="270" y="800" font-size="22" font-weight="600" text-anchor="start">Cell A2</text>
+<text x="270" y="827" font-size="18" font-weight="400" text-anchor="start" class="sub">cell 进程 2</text>
+<text x="270" y="850" font-size="18" font-weight="400" text-anchor="start" class="sub">权威实体</text>
+</g>
+<path d="M228 837 L252 837" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<text x="24" y="997" font-size="18" font-weight="600" text-anchor="start">Space = 运行空间；Cell = 空间分区</text>
+<text x="24" y="1027" font-size="18" font-weight="400" text-anchor="start" class="sub">cell = 执行进程；Instance = 玩法生命周期</text>
+<text x="24" y="1060" font-size="18" font-weight="400" text-anchor="start" class="sub">Space 对应现有 Scene 语义，不叠加同义层。</text>
+<text x="24" y="1091" font-size="18" font-weight="400" text-anchor="start" class="sub">Ghost、连续可见性与跨边界战斗尚未实现。</text>
+</svg>

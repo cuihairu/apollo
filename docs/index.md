@@ -29,6 +29,12 @@ features:
 
 
 
+## 目标架构
+
+业务消息经 gateway 直达所属 Base 或当前 cell；worldServer 管理分配与拓扑。实线表示业务请求与结果，虚线表示注册与管理。
+
+<ArchitectureDiagram kind="system" />
+
 ## 项目定位
 
 Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合作 PvE/PvP、竞技场和副本。MMO 是可能的产品规模或产品形态，不是服务端架构名称；当前不实现无缝地图，预留同 Space 多 Cell、邻接可见性与权威交接。

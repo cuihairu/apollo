@@ -31,17 +31,7 @@ Source boundaries: [CellAppMgr](https://github.com/v2v3v4/BigWorld-Engine-14.4.1
 
 Default deployment has one cell execution process and one full-range Cell per Space. Multiple activity Spaces/Cells can share that process. Scale whole Spaces/Cells to additional processes first; future seamless simulation may partition one Space across multiple Cells.
 
-```text
-worldServer: manage Spaces, Cell topology, and execution processes
-  Space A (spatial semantics of the existing Scene)
-    Cell A1 → cell process 1
-  Space B
-    Cell B1 → cell process 1
-
-Future partitioning:
-  Space A: Cell A1 → process 1; Cell A2 → process 2
-  Preserve Space ID/coordinates; entity ownership changes across partitions
-```
+<ArchitectureDiagram kind="space" />
 
 Instance is gameplay rather than a spatial layer. Temporary tower-defense activities manage their objectives, settlement, and associated Space. Persistent Spaces need no temporary Instance. Two groups can load the same assets into separate runtime Spaces. The existing one-Instance/one-Scene rule is Apollo gameplay scope, not a universal BigWorld constraint.
 
@@ -62,14 +52,7 @@ See [Cell Entity](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/main/pro
 
 ## 4. Apollo request ownership
 
-```text
-Client ↔ gateway ↔ owning baseServer ↔ database ↔ storage
-                ↔ current cell execution process: entities, AOI, combat
-worldServer: cell registration/placement, Space/Cell topology, transfer, routes
-loginServer: authentication, service/player directories and location projections
-machined: optional local process supervision
-cell → each owning Base: rewards, consumption, quest results, stable settlement IDs
-```
+<ArchitectureDiagram kind="system" />
 
 Base profile authority and Cell simulation authority concern different data. Cross-server simulation receives gameplay snapshots/state and trusted Base association, not full profiles or storage credentials. Base rollout hands off persistent objects, cell rollout hands off simulation, and worldServer rollout hands off management topology and in-flight transfers.
 

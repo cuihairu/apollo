@@ -11,17 +11,7 @@ Apollo 当前面向塔防、合作玩法和小队副本，预留未来无缝地�
 
 ## 目标模型
 
-```mermaid
-flowchart LR
-    Client --> Login[loginServer：认证与目录]
-    Client <--> Gateway[gateway：连接与转发]
-    Gateway <--> Base[baseServer：长期对象]
-    Gateway <--> Cell[cell：空间模拟]
-    World[worldServer：Space/Cell 管理] --> Cell
-    Cell -->|结算及基础业务请求| Base
-    Base <--> Database[database：存储访问]
-    Database <--> Storage[实际存储]
-```
+<ArchitectureDiagram kind="system" />
 
 | 角色 | 职责与生命周期 |
 |---|---|
@@ -38,6 +28,8 @@ flowchart LR
 Space 是独立运行空间，对应现有 Scene 的空间语义；Scene 是当前代码名，不新增同义 Scene→Space 容器链。Cell 是 Space 的空间分区，cell 是承载分区的进程，两者身份分开。默认仅一个执行进程，每个 Space 一个覆盖其范围的 Cell；一个进程可承载多个 Space 的 Cell。
 
 Instance 继续表示小队、目标、计时、结算与回收的临时玩法生命周期，复用八态状态机。它关联 Space，不是另一种空间分区；持续开放的 Space 可以没有临时 Instance。
+
+<ArchitectureDiagram kind="space" />
 
 ## 玩家与数据归属
 

@@ -11,17 +11,7 @@ Apollo currently targets tower defense, cooperative play, and group instances, w
 
 ## Target model
 
-```mermaid
-flowchart LR
-    Client --> Login[loginServer: authentication and directories]
-    Client <--> Gateway[gateway: connections and forwarding]
-    Gateway <--> Base[baseServer: persistent objects]
-    Gateway <--> Cell[cell: spatial simulation]
-    World[worldServer: Space/Cell management] --> Cell
-    Cell -->|settlement and base requests| Base
-    Base <--> Database[database: storage access]
-    Database <--> Storage[Storage backend]
-```
+<ArchitectureDiagram kind="system" />
 
 | Role | Responsibility and lifecycle |
 |---|---|
@@ -38,6 +28,8 @@ flowchart LR
 Space is an independent runtime space, corresponding to the spatial meaning of the existing Scene type. Do not add a synonymous Scene→Space container chain. A Cell is a partition of a Space; a cell process hosts partitions. Initially use one executor and one full-range Cell per Space. One executor may host Cells from several Spaces.
 
 Instance retains the temporary group gameplay lifecycle: members, objectives, clocks, settlement, and cleanup, with the existing eight states. It associates with Space rather than adding another partition. Persistent Spaces need no temporary Instance.
+
+<ArchitectureDiagram kind="space" />
 
 ## Player and data ownership
 

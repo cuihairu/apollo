@@ -22,14 +22,12 @@ Apollo is a C++20 server runtime for lightweight multiplayer games organized aro
 
 The process roles are fixed as `gateway`, `loginServer`, `baseServer`, `worldServer`, `cell`, `database`, and `machined`; cell is the discussed executor and Cell means a spatial partition.
 
-```text
-Client → loginServer: authentication and directories
-Client ↔ gateway ↔ baseServer ↔ database ↔ storage
-                ↔ cell: Cell / Avatar / Instance simulation
-worldServer: executor registration, Space/Cell placement and migration
-cell → each owning baseServer: validated settlement requests
-machined: optional local process supervision
-```
+<picture>
+  <source media="(max-width: 640px)" srcset="docs/public/architecture/system-en-mobile.svg" />
+  <img src="docs/public/architecture/system-en.svg" alt="Apollo target architecture: separate Base profiles, cell simulation, and World management" />
+</picture>
+
+Target design: standalone Base ↔ database prototypes exist; World/cell separation and full wiring remain pending.
 
 baseServer owns persistent-player data and base gameplay; worldServer manages executors/topology and cell runs entities/temporary gameplay. Cross-server play retains the original Base and storage affiliation. A World can serve players from multiple Bases using per-player Base associations, without database credentials or local machined.
 

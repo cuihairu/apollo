@@ -6,6 +6,8 @@ worldServer manages Space/Cell and executors; cell runs simulation. Base owns pe
 
 Space corresponds to existing Scene semantics. Cell is a partition; its executor corresponds to CellApp. Initially one executor hosts full Cells from several Spaces. Scale whole-Space placement first and reserve same-Space partitioning. Instance is Apollo's temporary lifecycle for members, objectives, clocks, settlement, and cleanup; persistent Spaces need no temporary Instance.
 
+<ArchitectureDiagram kind="space" />
+
 ## Temporary activity flow
 
 1. Base validates members, eligibility, configuration, and compatibility, then requests World capacity.

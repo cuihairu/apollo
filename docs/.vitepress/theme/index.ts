@@ -3,9 +3,13 @@ import { inBrowser, useRoute } from 'vitepress'
 import { nextTick, watch } from 'vue'
 import type { Theme } from 'vitepress'
 import './custom.css'
+import ArchitectureDiagram from './components/ArchitectureDiagram.vue'
 
 const theme: Theme = {
   extends: DefaultTheme,
+  enhanceApp({ app }) {
+    app.component('ArchitectureDiagram', ArchitectureDiagram)
+  },
   setup() {
     const route = useRoute()
 

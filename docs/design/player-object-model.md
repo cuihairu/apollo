@@ -18,13 +18,7 @@
 
 ## 跨服迁移
 
-```text
-原 baseServer：持续拥有长期资料和数据归属
-源 cell 执行进程：冻结场景实体，导出必要运行状态
-目标 cell 执行进程：校验准入及 Base 关联，恢复为待接管状态
-worldServer：条件提交模拟归属；目录与 gateway：更新位置投影和转发路由
-源 cell 执行进程：清理旧场景实体
-```
+<ArchitectureDiagram kind="cross-server" />
 
 跨服保留所属 Base 身份和原区服，不搬迁完整档案、数据库归属或数据库凭证。目标与源不得同时模拟同一实体；迁移结果不明先核对提交记录。对局连续迁移需同时覆盖整个 Instance 的共享状态，详见[跨服场景](./cross-server-scenes.md)。
 

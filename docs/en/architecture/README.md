@@ -1,5 +1,7 @@
 # Architecture Reference
 
+<ArchitectureDiagram kind="system" />
+
 Keep gateway, loginServer, baseServer, worldServer, database, and machined. Use the discussed cell executor: worldServer overlaps CellAppMgr management and cell overlaps CellApp execution. Base owns persistent objects and saves through database.
 
 Space corresponds to existing Scene spatial semantics, Cell is a partition, and Instance is a temporary gameplay lifecycle. Initially one executor and one Cell per Space; reserve multiple Cells per Space. Seamless splitting, Ghosts, and cross-boundary combat remain unimplemented.

@@ -28,14 +28,7 @@ apps/common 是共享实现库，不是业务进程；logger/admin/fleetctl 是�
 
 ## 数据与请求链路
 
-```text
-基础业务：Client → gateway → 所属 baseServer → database → 实际存储
-模拟输入：Client → gateway → 当前 cell 执行进程
-玩法结果：cell → 各所属 baseServer → database → 持久确认
-管理：cell 向 worldServer 注册，worldServer 分配 Space/Cell
-目录：loginServer 保存 Base/World 服务、玩家位置投影与会话关联
-监督：machined 按需监督本机进程
-```
+<ArchitectureDiagram kind="system" />
 
 Scene 对应 Space 的现有单进程实现，Cell 为未来分区边界，Instance 为临时玩法生命周期。一个 cell 进程可承载多个 Space 的本地 Cell；不要求一副本一进程。跨服保留原 Base 和数据库归属。
 

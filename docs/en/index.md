@@ -27,6 +27,12 @@ features:
     details: Networking, data, entity contracts, AOI, combat, and runtime modules; the README and module docs describe implementation status.
 ---
 
+## Target architecture
+
+Business traffic goes directly through gateway to the owning Base or current cell. worldServer manages placement and topology. Solid lines show business traffic; dashed lines show registration and management.
+
+<ArchitectureDiagram kind="system" />
+
 ## Positioning
 
 Apollo is a lightweight instance-based multiplayer game server engine for tower defense, co-op PvE/PvP, arenas, and dungeons. MMO describes a possible product scale or form, not the server architecture. Seamless maps are deferred, with multiple Cells per Space, neighboring visibility, and authority handoff reserved.

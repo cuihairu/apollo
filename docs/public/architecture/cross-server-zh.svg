@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc" lang="zh-CN">
+<title id="title">跨服玩法的 Base 与模拟归属</title><desc id="desc">原服 A、B 各保留 Base 长期对象和 database；共享跨服 cell 只持 Avatar 和运行状态，按每位玩家的 Base 关联提交结果。</desc>
+<defs>
+ <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+ <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
+</defs><rect width="1280" height="760" fill="#fff"/>
+<text x="28" y="40" font-size="25" font-weight="600" text-anchor="start">跨服只改变模拟位置，原 Base 与存储归属保持</text>
+<text x="28" y="74" font-size="17" font-weight="400" text-anchor="start" class="sub">跨服设计预留 · 尚未启用默认编队；临时活动可关联 Instance。</text>
+<g data-node="worldServer">
+<rect x="460" y="113" width="360" height="90" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="478" y="146" font-size="23" font-weight="600" text-anchor="start">worldServer</text>
+<text x="478" y="173" font-size="17" font-weight="400" text-anchor="start" class="sub">跨服 Space/Cell 分配与迁移管理</text>
+</g>
+<rect x="28" y="265" width="360" height="352" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="52" y="297" font-size="21" font-weight="600" text-anchor="start">原服 A</text>
+<g data-node="baseServer A">
+<rect x="52" y="322" width="312" height="124" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="70" y="355" font-size="23" font-weight="600" text-anchor="start">baseServer A</text>
+<text x="70" y="382" font-size="17" font-weight="400" text-anchor="start" class="sub">PlayerAnchor A</text>
+<text x="70" y="405" font-size="17" font-weight="400" text-anchor="start" class="sub">长期资料所有者，归属不变</text>
+</g>
+<g data-node="database A">
+<rect x="52" y="525" width="312" height="68" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="70" y="558" font-size="23" font-weight="600" text-anchor="start">database A</text>
+</g>
+<path d="M208 446 L208 525" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="214.0" y="480" width="64" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="246" y="495" font-size="16" font-weight="500" text-anchor="middle" class="blue">持久化</text>
+<rect x="892" y="265" width="360" height="352" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="916" y="297" font-size="21" font-weight="600" text-anchor="start">原服 B</text>
+<g data-node="baseServer B">
+<rect x="916" y="322" width="312" height="124" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="934" y="355" font-size="23" font-weight="600" text-anchor="start">baseServer B</text>
+<text x="934" y="382" font-size="17" font-weight="400" text-anchor="start" class="sub">PlayerAnchor B</text>
+<text x="934" y="405" font-size="17" font-weight="400" text-anchor="start" class="sub">长期资料所有者，归属不变</text>
+</g>
+<g data-node="database B">
+<rect x="916" y="525" width="312" height="68" rx="10" fill="#f0f5fe" stroke="#9bb5dc" stroke-width="1.3"/>
+<text x="934" y="558" font-size="23" font-weight="600" text-anchor="start">database B</text>
+</g>
+<path d="M1072 446 L1072 525" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
+<rect x="1078.0" y="480" width="64" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="1110" y="495" font-size="16" font-weight="500" text-anchor="middle" class="blue">持久化</text>
+<g data-node="共享 cell 执行进程">
+<rect x="460" y="322" width="360" height="196" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
+<text x="478" y="355" font-size="23" font-weight="600" text-anchor="start">共享 cell 执行进程</text>
+<text x="478" y="382" font-size="17" font-weight="400" text-anchor="start" class="sub">Space C · Cell C1</text>
+<text x="478" y="405" font-size="17" font-weight="400" text-anchor="start" class="sub">Avatar A  /  Avatar B</text>
+<text x="478" y="428" font-size="17" font-weight="400" text-anchor="start" class="sub">只持玩法快照与运行状态</text>
+</g>
+<path d="M640 203 L640 322" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
+<rect x="646.8" y="251" width="106.4" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="700" y="266" font-size="16" font-weight="500" text-anchor="middle" class="teal">注册 / 分配</text>
+<path d="M364 360 L460 360" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="387.0" y="332" width="46" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="410" y="346" font-size="15" font-weight="500" text-anchor="middle" class="blue">快照</text>
+<path d="M460 417 L364 417" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="372.0" y="389" width="76" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="410" y="403" font-size="15" font-weight="500" text-anchor="middle" class="blue">业务结果</text>
+<path d="M916 360 L820 360" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="845.0" y="332" width="46" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="868" y="346" font-size="15" font-weight="500" text-anchor="middle" class="blue">快照</text>
+<path d="M820 417 L916 417" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="830.0" y="389" width="76" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="868" y="403" font-size="15" font-weight="500" text-anchor="middle" class="blue">业务结果</text>
+<text x="640" y="565" font-size="18" font-weight="600" text-anchor="middle">逐玩家关联原 Base</text>
+<text x="640" y="595" font-size="16" font-weight="400" text-anchor="middle" class="sub">不获取各服数据库地址或凭证</text>
+<rect x="28" y="661" width="1224" height="68" rx="10" fill="#f4f9f8" stroke="none" stroke-width="1.3"/>
+<text x="48" y="688" font-size="18" font-weight="600" text-anchor="start">交接：源冻结 → 目标准备 → 条件提交权威 / 路由 → 激活与源清理</text>
+<text x="48" y="714" font-size="17" font-weight="400" text-anchor="start" class="sub">同一实体只允许一个模拟写入者；结算由各原 Base 校验，经 database 分别持久确认。</text>
+</svg>

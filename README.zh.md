@@ -22,14 +22,12 @@ Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边
 
 进程名称固定为 `gateway`、`loginServer`、`baseServer`、`worldServer`、`cell`、`database`、`machined`；cell 为已讨论的模拟执行职责，Cell 为分区。
 
-```text
-Client → loginServer：认证与目录
-Client ↔ gateway ↔ baseServer ↔ database ↔ 实际存储
-                ↔ cell：Cell / Avatar / Instance 模拟
-worldServer：管理 cell 注册、Space/Cell 分配与迁移
-cell → 各玩家所属 baseServer：结算等业务请求
-machined：按需监督本机进程
-```
+<picture>
+  <source media="(max-width: 640px)" srcset="docs/public/architecture/system-zh-mobile.svg" />
+  <img src="docs/public/architecture/system-zh.svg" alt="Apollo 目标架构：Base 长期资料、cell 模拟与 World 管理分别负责" />
+</picture>
+
+目标设计图：Base ↔ database 独立原型已具备；World/cell 拆分与整体接线仍待完成。
 
 baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运行实体与临时玩法。跨服保持原 Base 和数据库归属；同一个 World 可以通过逐玩家的 Base 关联接待多个区服，无需各服数据库凭证，也不要求同机部署 machined。
 

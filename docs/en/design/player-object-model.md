@@ -18,13 +18,7 @@ After authentication, the owning Base loads or restores persistent data through 
 
 ## Cross-server transfer
 
-```text
-Original baseServer: retains persistent-player and storage ownership
-Source cell executor: freezes the scene entity and exports required runtime state
-Destination cell executor: validates admission/Base association and prepares restoration
-worldServer: conditionally commit simulation ownership; directories/gateway: project location and update forwarding
-Source cell executor: removes the old scene entity
-```
+<ArchitectureDiagram kind="cross-server" />
 
 Retain the owning Base and home-server affiliation. Do not move the full profile, storage affiliation, or database credentials. Source and destination cannot both simulate the entity. Reconcile ambiguous commits. Preserving an ongoing match also requires its shared Instance state; see [cross-server scenes](./cross-server-scenes.md).
 

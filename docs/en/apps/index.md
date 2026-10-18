@@ -28,14 +28,7 @@ apps/common is a shared library; logger/admin/fleetctl are auxiliary tools. The 
 
 ## Requests and ownership
 
-```text
-Base gameplay: Client → gateway → owning baseServer → database → storage
-Simulation: Client → gateway → current cell executor
-Results: cell → each owning baseServer → database → durable confirmation
-Management: cell registers with worldServer, which places Space/Cell
-Directories: loginServer stores Base/World services, location projections, sessions
-Supervision: optional local machined
-```
+<ArchitectureDiagram kind="system" />
 
 Scene is the current local implementation of Space semantics. Cell is a spatial partition; Instance is a temporary gameplay lifecycle. One executor may host Cells from several Spaces, without one process per instance. Cross-server play retains original Base/storage affiliation.
 

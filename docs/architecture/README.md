@@ -1,5 +1,7 @@
 # 架构参考
 
+<ArchitectureDiagram kind="system" />
+
 Apollo 角色保持 gateway、loginServer、baseServer、worldServer、database、machined，模拟执行使用已讨论的 cell。worldServer 对应 CellAppMgr 的管理职责，cell 对应 CellApp；长期对象由 Base 管理，经 database 保存。
 
 Space 对应现有 Scene 的空间语义，Cell 是空间分区，Instance 是临时玩法生命周期。默认一个执行进程、每 Space 一个 Cell；预留同 Space 多 Cell，无缝切分、Ghost 与跨边界战斗暂未实现。

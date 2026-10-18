@@ -31,17 +31,7 @@ BigWorld 的 [CellAppMgr](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/
 
 默认一个 cell 执行进程；每个 Space 只有一个覆盖其范围的 Cell。多个副本可以各有独立 Space/Cell，但由同一个执行进程承载。扩容先将完整 Space/Cell 分配到更多进程；未来无缝模拟允许同一个 Space 包含多个 Cell。
 
-```text
-worldServer：管理 Space、Cell 拓扑与执行进程
-  Space A（现有 Scene 的逻辑空间语义）
-    Cell A1 → cell 进程 1
-  Space B
-    Cell B1 → cell 进程 1
-
-未来同一 Space 分区：
-  Space A：Cell A1 → 进程 1；Cell A2 → 进程 2
-  Space ID 与坐标保持不变，实体跨分区只改变模拟归属
-```
+<ArchitectureDiagram kind="space" />
 
 Instance 不是空间层级：一场临时塔防活动管理其目标、结算及关联 Space；持续开放的 Space 可以没有临时 Instance。两个队伍可复用同一地图资源创建不同运行空间。当前项目的 Instance 与 Scene 一对一约束属于现有玩法实现，不是 BigWorld 的通用限制。
 
@@ -62,14 +52,7 @@ BigWorld 的 [Cell Entity](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob
 
 ## 4. Apollo 的请求与归属
 
-```text
-Client ↔ gateway ↔ 所属 baseServer ↔ database ↔ 实际存储
-                ↔ 当前 cell 执行进程：Cell 实体、AOI 与战斗
-worldServer：注册/分配 cell，管理 Space/Cell 与迁移，发布场景路由
-loginServer：认证、服务目录、玩家 Base/World/会话关联及位置投影
-machined：按需监督本机进程
-cell → 各玩家所属 Base：奖励、消耗、任务结果与稳定结算 ID
-```
+<ArchitectureDiagram kind="system" />
 
 Base 资料写权与 Cell 模拟写权属于不同数据域；玩家不是一份随地图整体搬迁的档案。跨服目的地只接收玩法所需快照、运行状态和可信 Base 关联，不获得原服数据库凭证。Base 更新独立交接长期对象，cell 更新交接模拟状态，worldServer 更新交接管理拓扑和在途迁移记录。
 

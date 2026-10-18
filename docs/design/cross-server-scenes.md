@@ -2,6 +2,8 @@
 
 跨服复用 worldServer 管理和 cell 执行，不新增另一种进程。Space 对应现有 Scene 空间语义，临时活动关联 Instance；术语与代码见[体系对照](./bigworld-apollo-mapping.md)。玩家原 Base、区服与数据库归属不变。
 
+<ArchitectureDiagram kind="cross-server" />
+
 ## 注册与独立部署
 
 Base/World 向 loginServer 托管的服务目录发布逻辑身份、地址、代次、兼容版本和就绪；cell 向所属 worldServer 注册负载与执行能力。World 决定 Space/Cell 分配并发布位置投影，目录不另行裁决分区。

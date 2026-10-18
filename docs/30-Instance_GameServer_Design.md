@@ -6,6 +6,8 @@ worldServer 管理 Space/Cell 与执行进程，cell 实际运行模拟；Base �
 
 Space 对应现有 Scene 空间语义；Cell 是空间分区，执行进程对应 BigWorld CellApp。默认一个执行进程承载多个 Space 的完整 Cell；扩容先分配完整 Space，未来可在同 Space 切分。Instance 是 Apollo 临时玩法的成员、目标、计时、结算和回收生命周期，关联 Space；持续空间不必有临时 Instance。
 
+<ArchitectureDiagram kind="space" />
+
 ## 临时副本流程
 
 1. Base 验证成员、资格、配置和版本，向 World 申请兼容容量。

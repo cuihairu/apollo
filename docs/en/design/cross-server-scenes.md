@@ -2,6 +2,8 @@
 
 Reuse worldServer management and cell execution without another process role. Space corresponds to existing Scene semantics; temporary activities use Instance. See the [mapping](./bigworld-apollo-mapping.md). Preserve home Base, server, and database affiliation.
 
+<ArchitectureDiagram kind="cross-server" />
+
 ## Registration and independent deployment
 
 Base/World publish identities, endpoints, generations, compatibility, and readiness to loginServer directories. Executors register load/capabilities with their worldServer. World decides Space/Cell placement and publishes location projections; directories do not independently assign partitions.
