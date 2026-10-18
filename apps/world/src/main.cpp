@@ -5,6 +5,7 @@
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "world_app/world_app.hpp"
+#include "world_app/role_options.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdint>
@@ -48,6 +49,14 @@ static apollo::core::log::LoggerPtr initLogging() {
 WorldAppConfig loadConfig(int argc, char* argv[]) {
     WorldAppConfig config;
 
+    // 分角色（L27）：缺省 manager；cell/manager 之外与缺值在入口显式拒绝
+    // （退出非零），不静默回退默认角色。
+    std::string role_err;
+    if (!parse_world_role(argc, argv, config.role, role_err)) {
+        std::cerr << "world: " << role_err << std::endl;
+        std::exit(2);
+    }
+
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
@@ -80,6 +89,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
+                      << "  --role <manager|cell>      manager = management (default), cell = execution\n"
                       << "  --world-id <id>            World identity (default: 1)\n"
                       << "  --max-instances <n>        Squad instance capacity (default: 16)\n"
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
@@ -148,6 +158,7 @@ int main(int argc, char* argv[]) {
     auto config = loadConfig(argc, argv);
 
     logger->info("Configuration:");
+    logger->info("  Role: " + config.role + " (shared binary, L27)");
     logger->info("  M1 link: " + config.host + ":" + std::to_string(config.m1Port));
     logger->info("  Space: " + config.spaceName + " (" + std::to_string(config.spaceWidth)
                  + "x" + std::to_string(config.spaceHeight) + ")");

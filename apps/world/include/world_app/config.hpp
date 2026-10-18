@@ -14,6 +14,11 @@ namespace world_app {
 
 struct WorldAppConfig {
     std::uint32_t worldId = 1;
+    // 共用二进制分角色（L27）：manager = 管理端（缺省），cell = 执行端
+    // （--role=cell）。解析见 role_options.hpp——未知/缺值入口已显式拒绝；
+    // 管理/执行职责切分随 P2 设计，两角色现阶段同栈启动，role 先行入账
+    // （日志/配置可见，不静默丢弃）。
+    std::string role = "manager";
     // 小队副本容量（P2）：本 World 可同时承载的独立 Instance 数上限。
     std::size_t maxInstances = 16;
     // 监听配置

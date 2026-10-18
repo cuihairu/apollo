@@ -1315,6 +1315,21 @@ endif()
 add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
 
 
+# ========== World Role Tests (L27 共用二进制分角色) ==========
+# --role 解析：缺省 manager（管理端）/ --role=cell 执行端受理 / 未知与缺值
+# 显式拒绝 / 重复后到覆盖（header-only 纯解析直测，无网络依赖）
+add_executable(world_role_tests
+    test_world_role.cpp
+)
+target_include_directories(world_role_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+)
+if(MSVC)
+    target_compile_options(world_role_tests PRIVATE /utf-8)
+endif()
+add_test(NAME WorldRoleTests COMMAND world_role_tests)
+
+
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
 # WorldApp 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ WorldApp 受理点
 # 接线（维护闸/受理回执/Pong/tick 边界 drain/过载回错误包）。直编协议源惯例
