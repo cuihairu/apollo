@@ -83,8 +83,9 @@ std::size_t PlayerStore::drainJournal() {
     // 保持：同槽先入队者先落盘）
     return journal_->drain(
         [this](const apollo::data::journal::JournalEntry& e) {
-            PlayerData data = PlayerData::fromJson(e.payload);
+            PlayerData data;
             try {
+                data = PlayerData::fromJson(e.payload);
                 data.playerId = static_cast<PlayerID>(std::stoull(e.key));
             } catch (const std::exception&) {
                 return false;  // 脏条目保留，人工排查
@@ -260,8 +261,9 @@ void PlayerStore::start() {
         [this]() -> std::size_t {
             if (!journal_) return 0;
             return journal_->replay([this](const apollo::data::journal::JournalEntry& e) {
-                PlayerData data = PlayerData::fromJson(e.payload);
+                PlayerData data;
                 try {
+                    data = PlayerData::fromJson(e.payload);
                     data.playerId = static_cast<PlayerID>(std::stoull(e.key));
                 } catch (const std::exception&) {
                     return false;

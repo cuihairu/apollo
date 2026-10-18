@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <algorithm>
 #include <future>
 #include <iostream>
@@ -120,6 +121,41 @@ bool test_json_symmetry() {
                 "整数字段对称");
     TEST_ASSERT(out.exp == 1234567890123LL, "exp int64 对称");
     TEST_ASSERT(out.x == 0.5f && out.y == 100.0f && out.z == -7.75f, "x/y/z 对称");
+    return true;
+}
+
+// 档案面健壮性（L69 存量缺陷修复）：旧 toJson 裸写字符串不转义——含引号/
+// 逗号的用户名产出歧义档案，含 "exp": 片段的用户名甚至污染字段解析。契约：
+// 特殊字符对称不损；垃圾档案（非 JSON）loadPlayer 如实失败，不静默载回
+// 全默认档（防伪档覆盖真档）。
+bool test_archive_special_char_and_garbage_tolerance() {
+    player_store::PlayerData in;
+    in.playerId = 77;
+    in.username = "a\"b,c\\d,\"exp\":9999,\"x\":\"e\",陈";
+    in.level = 5;
+    in.exp = 42;
+    in.x = 1.5f;
+
+    const auto out = player_store::PlayerData::fromJson(in.toJson());
+    TEST_ASSERT(out.playerId == 77 && out.username == in.username,
+                "特殊字符用户名对称（转义后无损）");
+    TEST_ASSERT(out.exp == 42, "含 exp 片段的用户名不污染 exp");
+    TEST_ASSERT(out.level == 5 && out.x == 1.5f, "其余字段不受污染");
+
+    // 垃圾档案：loadPlayer 如实失败（不再静默默认档）
+    const auto dir = make_tmp_dir("garbage");
+    player_store::DatabaseService db(make_config(dir));
+    TEST_ASSERT(db.initialize(), "initialize");
+    {
+        std::ofstream bad(dir + "/player_88.json", std::ios::binary);
+        bad << "not json at all";
+    }
+    player_store::PlayerData ghost;
+    TEST_ASSERT(!db.loadPlayer(88, ghost), "垃圾档案如实失败");
+    TEST_ASSERT(ghost.username.empty(), "失败路径不产出半档");
+
+    std::error_code ec;
+    fs::remove_all(dir, ec);
     return true;
 }
 
@@ -356,6 +392,8 @@ int main() {
         {"persistence_write_reload_roundtrip", test_write_reload_roundtrip},
         {"persistence_load_miss_no_bootstrap", test_load_miss_no_bootstrap},
         {"persistence_json_symmetry", test_json_symmetry},
+        {"persistence_archive_special_char_and_garbage_tolerance",
+         test_archive_special_char_and_garbage_tolerance},
         {"persistence_anchor_dirty_save_chain", test_anchor_dirty_save_chain},
         {"persistence_savequeue_same_player_serial_and_coalesce",
          test_savequeue_same_player_serial_and_coalesce},

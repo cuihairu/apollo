@@ -188,6 +188,11 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_net_link
 	        apollo_net_linkrpc
 	    )
+	    # 直编 database_service.cpp：其 nlohmann 序列化依赖在此口径自取
+	    #（可缺失环境守卫，同 modules/protocol 口径）
+	    if(TARGET nlohmann_json::nlohmann_json)
+	        target_link_libraries(base_anchor_tests PRIVATE nlohmann_json::nlohmann_json)
+	    endif()
 	    if(WIN32)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
 	    endif()
@@ -219,6 +224,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_net_link
 	        apollo_net_linkrpc
 	    )
+	    if(TARGET nlohmann_json::nlohmann_json)
+	        target_link_libraries(baseappmgr_tests PRIVATE nlohmann_json::nlohmann_json)
+	    endif()
 	    if(WIN32)
 	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
 	    endif()
@@ -509,6 +517,11 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_net_link
 	        apollo_net_linkrpc
 	    )
+	    # 直编 database_service.cpp：其 nlohmann 序列化依赖在此口径自取
+	    #（可缺失环境守卫，同 modules/protocol 口径）
+	    if(TARGET nlohmann_json::nlohmann_json)
+	        target_link_libraries(base_anchor_tests PRIVATE nlohmann_json::nlohmann_json)
+	    endif()
 	    if(WIN32)
 	        target_link_libraries(base_anchor_tests PRIVATE ws2_32)
 	    endif()
@@ -540,6 +553,9 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_net_link
 	        apollo_net_linkrpc
 	    )
+	    if(TARGET nlohmann_json::nlohmann_json)
+	        target_link_libraries(baseappmgr_tests PRIVATE nlohmann_json::nlohmann_json)
+	    endif()
 	    if(WIN32)
 	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
 	    endif()
@@ -869,6 +885,12 @@ target_include_directories(persistence_chain_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/core/include
 )
 target_link_libraries(persistence_chain_tests PRIVATE apollo::base apollo::core)
+# 直编 database_service.cpp：其 nlohmann 序列化依赖在此口径自取
+#（可缺失环境守卫，同 modules/protocol 口径）
+find_package(nlohmann_json CONFIG QUIET)
+if(nlohmann_json_FOUND)
+    target_link_libraries(persistence_chain_tests PRIVATE nlohmann_json::nlohmann_json)
+endif()
 if(WIN32)
     target_link_libraries(persistence_chain_tests PRIVATE ws2_32)
     target_compile_definitions(persistence_chain_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -895,6 +917,10 @@ target_include_directories(recovery_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/common/include
 )
 target_link_libraries(recovery_tests PRIVATE apollo::base apollo::core)
+# 直编 database_service.cpp：同 persistence_chain_tests 的 nlohmann 口径
+if(nlohmann_json_FOUND)
+    target_link_libraries(recovery_tests PRIVATE nlohmann_json::nlohmann_json)
+endif()
 if(WIN32)
     target_link_libraries(recovery_tests PRIVATE ws2_32)
     target_compile_definitions(recovery_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)

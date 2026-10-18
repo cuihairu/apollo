@@ -12,6 +12,12 @@ target_link_libraries(apollo_app_services PUBLIC
     apollo::data_orm apollo::data_cache apollo::game_session
     apollo_net_link apollo_net_linkrpc apollo_protocol
 )
+# nlohmann/json：database_service.cpp（PlayerData 序列化）实现依赖，与
+# modules/protocol 同口径——可缺失环境下由直编源测试目标各自守卫兜底
+find_package(nlohmann_json CONFIG QUIET)
+if(nlohmann_json_FOUND)
+    target_link_libraries(apollo_app_services PUBLIC nlohmann_json::nlohmann_json)
+endif()
 target_compile_features(apollo_app_services PUBLIC cxx_std_20)
 
 # Base-facing storage operations over the existing M1 RPC envelope and DB codec.

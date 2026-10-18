@@ -1,6 +1,8 @@
 #include "player_store/database_service.hpp"
 #include "apollo/core/log/log_manager.h"
 
+#include <nlohmann/json.hpp>
+
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -17,86 +19,41 @@ namespace fs = std::filesystem;
 // 归位——PlayerData 声明在本文件对应的 database_service.hpp）
 //==============================================================================
 
+// L69 档案面修复：旧实现裸写字符串不转义——特殊字符用户名产出歧义档案，
+// 含 "exp": 片段甚至污染字段解析（stof/stoi 抛异常炸读档方）。改走
+// nlohmann：序列化真转义、反序列化类型化容忍（缺字段 = 结构体默认值，
+// 未知字段忽略）；非法 JSON 抛异常由调用面兜底（loadPlayer 如实失败、
+// journal 脏条目保留，不静默默认档）。
 std::string PlayerData::toJson() const {
-    std::stringstream ss;
-    ss << "{"
-       << "\"playerId\":" << playerId << ","
-       << "\"username\":\"" << username << "\","
-       << "\"level\":" << level << ","
-       << "\"exp\":" << exp << ","
-       << "\"hp\":" << hp << ","
-       << "\"maxHp\":" << maxHp << ","
-       << "\"mp\":" << mp << ","
-       << "\"maxMp\":" << maxMp << ","
-       << "\"x\":" << x << ","
-       << "\"y\":" << y << ","
-       << "\"z\":" << z
-       << "}";
-    return ss.str();
+    nlohmann::json j;
+    j["playerId"] = playerId;
+    j["username"] = username;
+    j["level"] = level;
+    j["exp"] = exp;
+    j["hp"] = hp;
+    j["maxHp"] = maxHp;
+    j["mp"] = mp;
+    j["maxMp"] = maxMp;
+    j["x"] = x;
+    j["y"] = y;
+    j["z"] = z;
+    return j.dump();
 }
 
 PlayerData PlayerData::fromJson(const std::string& json) {
     PlayerData data;
-    // 简化解析，实际应该用 nlohmann/json
-    // 这里只做基础实现
-    size_t pos = 0;
-
-    auto extractString = [&json, &pos](const std::string& key) -> std::string {
-        std::string search = "\"" + key + "\":\"";
-        size_t p = json.find(search, pos);
-        if (p == std::string::npos) return "";
-        p += search.length();
-        size_t end = json.find("\"", p);
-        if (end == std::string::npos) return "";
-        std::string result = json.substr(p, end - p);
-        pos = end + 1;
-        return result;
-    };
-
-    auto extractInt = [&json, &pos](const std::string& key) -> int {
-        std::string search = "\"" + key + "\":";
-        size_t p = json.find(search, pos);
-        if (p == std::string::npos) return 0;
-        p += search.length();
-        size_t end = json.find_first_of(",}", p);
-        if (end == std::string::npos) return 0;
-        pos = end + 1;
-        return std::stoi(json.substr(p, end - p));
-    };
-
-    auto extractInt64 = [&json](const std::string& key) -> int64_t {
-        std::string search = "\"" + key + "\":";
-        size_t p = json.find(search);
-        if (p == std::string::npos) return 0;
-        p += search.length();
-        size_t end = json.find_first_of(",}", p);
-        if (end == std::string::npos) return 0;
-        return std::stoll(json.substr(p, end - p));
-    };
-
-    // 浮点抽取（P1-4 对称修复：fromJson 此前缺 x/y/z，round-trip 丢位置）
-    auto extractFloat = [&json](const std::string& key) -> float {
-        std::string search = "\"" + key + "\":";
-        size_t p = json.find(search);
-        if (p == std::string::npos) return 0.0f;
-        p += search.length();
-        size_t end = json.find_first_of(",}", p);
-        if (end == std::string::npos) return 0.0f;
-        return std::stof(json.substr(p, end - p));
-    };
-
-    data.playerId = static_cast<PlayerID>(extractInt64("playerId"));
-    data.username = extractString("username");
-    data.level = extractInt("level");
-    data.exp = extractInt64("exp");
-    data.hp = extractInt("hp");
-    data.maxHp = extractInt("maxHp");
-    data.mp = extractInt("mp");
-    data.maxMp = extractInt("maxMp");
-    data.x = extractFloat("x");
-    data.y = extractFloat("y");
-    data.z = extractFloat("z");
-
+    const auto j = nlohmann::json::parse(json);
+    data.playerId = static_cast<PlayerID>(j.value("playerId", std::int64_t(0)));
+    data.username = j.value("username", std::string());
+    data.level = j.value("level", data.level);
+    data.exp = j.value("exp", data.exp);
+    data.hp = j.value("hp", data.hp);
+    data.maxHp = j.value("maxHp", data.maxHp);
+    data.mp = j.value("mp", data.mp);
+    data.maxMp = j.value("maxMp", data.maxMp);
+    data.x = j.value("x", data.x);
+    data.y = j.value("y", data.y);
+    data.z = j.value("z", data.z);
     return data;
 }
 
@@ -190,7 +147,12 @@ bool DatabaseService::loadPlayer(PlayerID playerId, PlayerData& outData) {
         return false;
     }
 
-    PlayerData data = PlayerData::fromJson(os.str());
+    PlayerData data;
+    try {
+        data = PlayerData::fromJson(os.str());
+    } catch (const std::exception&) {
+        return false;  // 垃圾/损坏档案如实失败，不静默默认档
+    }
     data.playerId = playerId;  // 路径即权威，防载荷缺失
 
     {
