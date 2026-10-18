@@ -18,24 +18,22 @@
 
 ## Introduction
 
-Apollo is a C++20 server runtime for lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It is a multiplayer game server engine, not a seamless-world MMO engine.
+Apollo is a C++20 server runtime for lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It currently delivers lightweight instances while reserving future seamless Space/Cell, authority, and visibility boundaries.
 
-The target game flow uses familiar, role-based terms:
+The process roles are fixed as `gateway`, `loginServer`, `baseServer`, `worldServer`, `cell`, `database`, and `machined`; cell is the discussed executor and Cell means a spatial partition.
 
 ```text
-Client ──► Login — account authentication and login ticket
-   │
-   └──► Gateway — client connections and message routing
-           └──► World — hosts instances and runs authoritative match logic
-                   └── Instance — one match; created and destroyed with the match
-                       ├── Player / Entity
-                       ├── AOI
-                       └── Game logic and settlement
+Client → loginServer: authentication and directories
+Client ↔ gateway ↔ baseServer ↔ database ↔ storage
+                ↔ cell: Cell / Avatar / Instance simulation
+worldServer: executor registration, Space/Cell placement and migration
+cell → each owning baseServer: validated settlement requests
+machined: optional local process supervision
 ```
 
-Each instance is a gameplay instance; one World process may host multiple instances. During a match, each player has one authoritative runtime object on the World that owns the instance. Cross-server play transfers that authority to the destination World and updates routing; it does not keep two active copies of the player.
+baseServer owns persistent-player data and base gameplay; worldServer manages executors/topology and cell runs entities/temporary gameplay. Cross-server play retains the original Base and storage affiliation. A World can serve players from multiple Bases using per-player Base associations, without database credentials or local machined.
 
-World also reserves support for scenes shared by players from multiple game servers. Home-server affiliation stays separate from runtime placement; cross-server admission, authority transfer, settlement, and return use the same World/Scene/Instance model. This is a [reserved design](docs/en/design/cross-server-scenes.md), not an enabled deployment feature.
+Protocol-capable upgrades replace Base, cell, or World management independently through state conversion, exclusive handoff, route switching, and source cleanup. Complete active matches require Instance state transfer. The role split and corresponding runtime wiring remain implementation tasks; see [architecture](docs/en/guide/architecture.md), [applications](docs/en/apps/index.md), and [cross-server scenes](docs/en/design/cross-server-scenes.md).
 
 ## Use Cases
 
@@ -49,22 +47,26 @@ World also reserves support for scenes shared by players from multiple game serv
 | Multiplayer PvE / survival / co-op | An instance for the group |
 | Multiplayer PvP | An instance for the match |
 
-**Not the intended fit** — a persistent seamless world where players roam continuously across spatially partitioned processes. That is a different server architecture and is outside Apollo's current design.
+**Seamless maps are deferred.** Initially one executor hosts one Cell per Space. Reserve multiple Cells per Space, neighboring visibility, and authority handoff within the same architecture.
 
-> MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from instances and matches, but it is not designed as a persistent seamless-world MMO engine.
+> MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from instances and matches, while prioritizing instances and reserving seamless-map boundaries.
+
+[BigWorld–Apollo mapping](docs/en/design/bigworld-apollo-mapping.md)
 
 ## Core Concepts
 
-Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes current code components):
+Core gameplay terms (the [concept guide](docs/en/guide/concepts.md) describes current code components):
 
-| Concept | One-liner | Component |
-|------|--------|------|
-| **Instance** | One match and its temporary state | Target gameplay unit |
-| **World** | Process that hosts one or more Instances and runs their authoritative logic | Target process role |
-| **Player** | Player identity; one authoritative runtime object in a match | `PlayerAnchor` exists in current prototype code |
-| **Entity** | Runtime object participating in gameplay | `Entity` / `Avatar` contracts |
-| **AOI** | Determines which nearby entities each player observes | `SceneAoi` implementation |
-| **Persistence** | Stores player data across matches | `PersistJournal` implementation |
+| Concept | Responsibility | Existing code / boundary |
+|---|---|---|
+| baseServer | Persistent-player objects and base gameplay | Standalone baseServer and remote storage exist; ownership/default routing migration remains pending |
+| worldServer | Executor registration, Space/Cell topology and migration | Split current WorldApp management/execution |
+| cell | Local Cell simulation, entities, AOI, combat | Reuse WorldHost, Scene, Instance, Avatar; dedicated entry pending |
+| Space / Cell | Runtime space / spatial partition | Space matches current Scene semantics without duplicate containers |
+| database | Load/save, storage routing, durable results | Dedicated database hosts profiles/journal; complete write authority/queues remain pending |
+| Instance | Temporary group activity | Existing eight-state lifecycle |
+| AOI | Scene visibility | SceneAoi |
+| loginServer / gateway / machined | Authentication/directories, connections, local supervision | Existing entries require routing/deployment updates |
 
 ### Key Features
 
@@ -73,22 +75,22 @@ Core gameplay terms (the [concept guide](docs/guide/concepts.md) describes curre
 - **Async networking** - non-blocking sockets + select()/epoll event loop (Windows polls via select(); no IOCP)
 - **Transport codec (target state)** - protobuf reflection as default + zstd (planned); the current implementation uses hand-written encoding
 - **AOI 3×3 grid** - `SceneAoi` single implementation + `ViewerState` per-observer watermarks; the event surface is delivered
-- **Battle system** - `BattleRuntime` deterministic battle domain (five-phase lifecycle, hash-chain fingerprint) settling one-way into player anchors
+- **Battle system** - `BattleRuntime` deterministic battle domain (five-phase lifecycle, hash-chain fingerprint) with settlement routed through the owning Base and database
 - **Data storage** - atomic player profile file writes + `PersistJournal` write-behind; external DB/Redis not wired up
-- **Observability** - multi-level logging + structured line format + `MetricRegistry`
+- **Observability** - self-built logging, structured events, MetricRegistry, and span/trace primitives; no dedicated Profiler or OpenTelemetry SDK/exporter integration
 - **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`)
 
 ## Update Modes
 
-Apollo documents two release modes. A protocol update changes the XML/XSD contract under `sdks/contract/` and regenerates artifacts; safe rollout requires server/client compatibility across old and new contract versions. Handshake compatibility windows and publish/rollback drills exist. Business payload compatibility still requires validation for each encoding and schema change; accepting an old hash does not decode an old layout automatically.
+Protocol updates start a new Base, cell, or World management process, convert/restore state, commit exclusive authority/routes, and retire the old process. cell transfers simulation, World transfers topology/pending management records, and Base transfers persistent objects while retaining storage affiliation. Version-specific message decoding, state conversion, rollback limits, and unchanged-client compatibility require explicit acceptance. A handshake compatibility window alone is insufficient.
 
-A code-only update keeps the contract and wire format unchanged. Lua `ScriptRuntime` provides module preparation, tick-boundary commit, observation, and rollback primitives; fleetctl coordinates cross-World delivery, canary observation, and failure rollback. C++ changes use a process rollout after Instances drain or after an independently implemented state transfer. Gateway multi-instance deployment can keep new connections available while old sockets drain, but Gateway does not migrate existing TCP connections between processes.
+Code-only updates preserve contract IDs, fields, and wire format. Lua can prepare/commit, observe, and roll back modules; C++ uses process replacement. Preserve gateway to retain its TCP connections; replacing gateway requires drain or client recovery. Current primitives do not establish the full target-role upgrade workflow.
 
-See [Gateway update boundaries](docs/design/gateway-topology-survey.md) and [contract versioning](docs/design/sdk-contract.md).
+See [update boundaries](docs/en/design/gateway-topology-survey.md) and [contract versioning](docs/en/design/sdk-contract.md).
 
 ## Architecture
 
-> See [Architecture Overview](docs/guide/architecture.md) for the target instance-based model and [Server Applications](docs/apps/index.md) for the current executable prototypes.
+> See [Architecture Overview](docs/en/guide/architecture.md) for the target instance-based model and [Server Applications](docs/en/apps/index.md) for the current executable prototypes.
 
 ### Tech Stack
 
@@ -399,7 +401,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable prototypes and tools; see docs/apps/index.md for current status
+├── apps/                   # Executable prototypes and tools; see docs/en/apps/index.md for current status
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations
@@ -483,4 +485,4 @@ Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependenc
 
 A group requests an activity → World creates an Instance and temporary Scene → members pass admission and enter → clear enemies and complete objectives → settle → players leave → destroy the Instance, scene, and temporary resources.
 
-The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete.
+Reuse the existing eight-state Instance lifecycle. worldServer owns topology and cell owns simulation; Base owns persistent data and validates settlement through database. Rewire existing tests to this boundary and validate durable settlement, full Instance migration, and cross-gateway recovery separately.

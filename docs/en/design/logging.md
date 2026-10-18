@@ -1,5 +1,7 @@
 # Runtime Logs and Failure Evidence
 
+> Implementation status: Apollo has self-built logging, MetricRegistry, and span/trace primitives. A dedicated Profiler, OpenTelemetry SDK, and OTLP exporter are not integrated. Tool comparisons and observability designs on this page are not claims of deployed functionality.
+
 Current logging belongs to `modules/core/log`. Applications configure console output, local files, and optional push through the shared manager. This page separates existing paths, deployment rules, and unverified failure guarantees without dated migration records.
 
 ## Executive summary

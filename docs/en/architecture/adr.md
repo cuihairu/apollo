@@ -1,71 +1,71 @@
 # Current Architecture Decisions
 
-Only current rules are kept. See [concepts and names](../design/concept-glossary.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md) for implementation work.
+Keep only current rules. See the [mapping](../design/bigworld-apollo-mapping.md) for terms and implementation gaps, and root todo.md for tasks.
 
-## ADR-001：Persistent player data and match authority
+## ADR-001：Persistent and simulation authority
 
-Existing PlayerAnchor and persistence paths own persistent player data; settlement uses IRewardSink / AnchorRewardSink. Scene advances the match entity. Only one entity per player may accept input and authoritative simulation writes at a time. Persistent data is not another executable match object.
+Base owns PlayerAnchor and persistent gameplay; cell owns authoritative Avatar/Entity simulation; database accesses storage. Each domain has one writer. Cross-server play and Instance destruction do not move profiles.
 
-## ADR-002：Scene as an internal simulation boundary
+## ADR-002：Space, Cell, and existing Scene
 
-Scene owns entities, AOI, entry/exit, and ticks inside World; it is not a process name. World manages multiple Scenes and Instances. Seamless-world partitions, Ghost mirrors, and continuous cross-process roaming are outside the architecture.
+Space is an independent runtime space corresponding to Scene semantics, without a synonymous container chain. Cell is a partition; cell is an executor. Initially one process and one Cell per Space; reserve multiple Cells per Space. Current Scene remains local.
 
-## ADR-003：Instance as the temporary gameplay lifecycle
+## ADR-003：Instance lifecycle
 
-A group requests an activity; World creates an Instance and associated Scene. Players enter, clear objectives, settle, leave, and release the instance, temporary scene, and resources. Reuse Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed. The state machine exists; group-triggered creation and completion cleanup still need application integration.
+Base validates groups, World places space/executors, and cell runs Instance and submits settlement to owning Bases for durable database confirmation. Reuse eight states. Instance is neither space nor process; shared state has one logical owner.
 
-## ADR-004：Explicit scene and cross-World transfer
+## ADR-004：Space changes and Cell handoff
 
-Reuse SceneTransfer admission, detach, attach, and rollback for in-process transfers. Cross-World transfer separately requires source freeze, state handoff, target confirmation, routing, cleanup, and idempotency. An in-process transfer does not establish cross-process takeover.
+Explicit Space changes differ from same-Space Cell handoff. Current SceneTransfer recreates Avatar, without continuous partition transfer. Freeze, prepare, conditionally commit, activate, and clean while retaining Base. Reconcile ambiguity first.
 
-## ADR-005：Scene owns AOI
+## ADR-005：Local AOI and observer views
 
-Scene owns and advances SceneAoi on its authoritative thread. Visibility is isolated per simulation unit; AOI does not require another business process.
+SceneAoi/ViewerState are local visibility primitives executed by cell. Neighbor Ghosts, merged visibility, and complete Witness semantics are future work, without an AOI business process.
 
-## ADR-006：Battle runtime and settlement
+## ADR-006：Combat and settlement
 
-BattleRuntime is the deterministic combat module. Define randomness, input order, phases, and settlement boundaries. Instance owns its gameplay workload; rewards flow through the existing one-way sink into persistent player data. Retries must not duplicate rewards.
+cell runs BattleRuntime with explicit randomness, ordering, and clocks. Owning Bases validate stable settlement IDs; database commits profiles and deduplication credentials durably. Delivery, admission, and in-memory rewards are not persistence.
 
-## ADR-007：Persistence status and boundary
+## ADR-007：Independent storage
 
-Current profiles use local JSON files, SaveQueue, and PersistJournal. Real MySQL/Redis business-runtime integration remains deferred until concrete deployment, capacity, or user requirements arise. A declared dependency is not a completed integration.
+database owns profile operations, routing, and durable results; Base owns business rules. Extract JSON, SaveQueue, and PersistJournal. Executors receive neither full profiles nor home database credentials. External MySQL/Redis remain requirement-driven.
 
 ## ADR-008：Recovery scope
 
-Profile/journal replay and process restart are existing primitives, not recovery of active instance simulation. Reconfirm authority, routing, and resumable gameplay phases after recovery. Without a validated instance recovery path, define affected matches as failed.
+Journal replay/restart does not restore active simulation. Recover Base profiles, World topology, and cell simulation separately; reestablish authority/routes and define failure for unvalidated activity recovery.
 
-## ADR-009：Simulation ownership and threads
+## ADR-009：Simulation threads
 
-The owning Scene logical executor modifies simulation state sequentially. Background work, networking, and debug requests use queue handoff; IO threads must not directly modify entities, AOI, or gameplay state. The current application pumps and advances World in one gameLoop.
+Each entity has one authoritative Cell writer. Logical executors modify sequentially; IO/background workers submit bounded intents. Shared multi-Cell Instance state has one logical owner without shared memory or global lockstep.
 
-## ADR-010：Restart supervision first; standby deferred
+## ADR-010：Registration and supervision
 
-machined supplies process supervision, death detection, and restart. Cross-machine standby, arbitration, and automatic takeover are outside current delivery. Reopen them only for explicit deployment or recovery requirements; restart is not standby availability.
+Base/World register with loginServer; executors register with their World. World decides topology; directories project location. machined only supervises locally and is optional beside World/cell. Cross-machine standby/arbitration remain deferred.
 
-## ADR-011：Gateway links and update acceptance
+## ADR-011：Gateway and two update schemes
 
-Gateway owns connections, sessions, and routing. Its M1 egress reaches World; complete gameplay delivery, multiple-World selection, and cross-Gateway session recovery still require validation. Validate protocol and code-only updates separately. Availability, no re-login, uninterrupted TCP, and uninterrupted instances are different outcomes. Replicas do not transfer sockets automatically.
+gateway retains sockets and separate Base/cell routes. Protocol replacement converts state; Base, cell, and World management hand off their own state. Code-only changes preserve wire and may update Lua. Validate TCP, sessions, and complete activity continuity separately.
 
-## ADR-012：On-demand instances and optional isolation
+## ADR-012：Default deployment and scaling
 
-Create Instances for groups inside World. Existing offload modules and in-memory transport stubs can support optional isolation work. If one process per instance becomes necessary, retain the World role and implement spawn, readiness, admission, exit, and crash-failure protocols. Production auto-spawn is not complete.
+Initially one executor hosts full Cells for multiple Spaces, without one process per instance. More executors register with World; place whole Space/Cells first, enable same-Space partitions later. Spawn/readiness/failure protocols remain work.
 
-## ADR-013：Logging and deferred capabilities
+## ADR-013：Observability status
 
-logger supports local structured-log queries and M1 collection; applications can configure log push. Collection failure must not block simulation. Combat verification waits for concrete gameplay work; Kafka/Grafana infrastructure remains deferred. These are open future capabilities, not delivered features.
+Reuse custom logging, MetricRegistry, span/trace, and M1 collection without blocking simulation. Dedicated Profiler and OpenTelemetry SDK/OTLP exporter are not integrated. External observability deployment is requirement-driven.
 
-## ADR-014：Process naming and gameplay objects
+## ADR-014：Names and correspondence
 
-World is the sole game-logic process role; executable world-app, entry WorldApp, namespace world_app. World hosts PlayerStore for data and persistence; Login hosts OnlineDirectory for routing, placement, and migration coordination. Scene is the simulation unit; Instance is the temporary gameplay lifecycle. External-engine source names remain unchanged.
+Retain gateway, loginServer, baseServer, worldServer, database, and machined; add the discussed cell execution role. World management overlaps CellAppMgr, cell overlaps CellApp, Scene corresponds to Space, and Instance is Apollo gameplay. Preserve external names.
 
-## ADR-015：Asynchronous intent admission
+## ADR-015：Asynchronous admission
 
-Network callbacks submit intents to the bounded queue. WorldApp::gameLoop consumes them at fixed execution boundaries and advances World. Enqueue success is not execution completion; do not block IO workers waiting for a tick.
+Current WorldApp::gameLoop pumps/consumes acceptanceQueue_ and advances World. Move that simulation loop into cell, leaving management in World. Admission is not execution; never block IO waiting for ticks.
 
-## ADR-016：Watermarks, overload, and shutdown
+## ADR-016：Overload and shutdown
 
-Retain existing capacity, warning thresholds, tick budget, and explicit rejection. Never silently discard accepted work. Close admission, sweep queued work, and stop simulation and links. Production drain also needs settlement, resource cleanup, deadlines, and forced-stop results.
+Define capacity, thresholds, budgets, and rejection; never silently discard accepted work. Close admission, sweep, settle, release, then stop. Management placement drain differs from executor activity drain.
 
 ## ADR-017：Reply semantics
 
-Return correlated M1 intent replies after simulation-thread consumption; admission failure may reply immediately. Associate replies with request_id and distinguish delivery, admission, and execution. Consumption acknowledgement does not replace gameplay validation, idempotent settlement, or persistence confirmation.
+Correlate request_id and distinguish delivery, admission, execution, and persistence. Consumption acknowledgement does not replace validation, idempotent settlement, or durable save confirmation.

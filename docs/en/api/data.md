@@ -137,7 +137,7 @@ public:
 }
 ```
 
-**Thread safety**: unsafe (belongs to the host save thread — World PlayerStore:
+**Thread safety**: unsafe (requires serialized storage-owner calls, targeting database:
 autoSaveLoop drain + shutdown close-out)
 
 ---

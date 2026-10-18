@@ -102,7 +102,7 @@ Reuse `apollo::base::TimerWheel` and its existing tests. Timer scheduling is a d
 
 ### 4.4 Shared memory IPC: deferred
 
-Current inter-process communication uses M1. Shared memory may later serve measured same-host data-transfer needs without changing World/Scene/Instance ownership or creating another protocol source. It is not a cross-server authority-transfer or hot-standby guarantee.
+Current inter-process communication uses M1. Shared memory may later serve measured same-host data-transfer needs without changing World management and cell simulation/Instance ownership or creating another protocol source. It is not a cross-server authority-transfer or hot-standby guarantee.
 
 ### 4.5 The Rest (explicitly not adopted)
 

@@ -14,411 +14,43 @@ tag:
 
 # RemoteEntityCall 设计
 
-这篇文档解决的是 Apollo 后续做多进程 world、玩家锚点、跨节点实体协作时，一个绕不过去的问题：
+本页说明已有远程引用原语与目标架构的调用边界；同 Space 多 Cell 与 Ghost 路线仅预留接口。Base 业务与场景模拟分别寻址，规则见[会话与在线路由](../design/session-and-online-directory.md)。
 
-`实体之间到底怎么做远程调用，内部消息又该长什么样。`
+## 调用边界
 
-如果这层不补出来，Apollo 后面很容易继续停留在：
+- gateway 向所属 Base 发基础业务，向当前 cell 发场景输入。
+- Base 经 World 管理准入/分配，向 cell 提供玩法快照；cell 向各玩家 Base 发结算等请求。
+- Base 向 database 请求加载或持久提交，不把数据库位置暴露给 cell。
+- loginServer 托管的目录提供服务和玩家关联查询，正常消息可使用缓存路由直接通信。
 
-- 直接拿 `service name + channel` 发裸消息
-- 消息内容靠调用方自己约定
-- entity route、authority、版本信息散落在业务层
+## 当前实现
 
-前期能跑，后期一定会乱。
+`modules/net/remoteentity` 是可复用库，提供 RemoteEntityRef、RemoteMethodSchema、RouteResolver 与 RpcTrace。目标调用是否经过这些原语仍须按真实接线验证；库类型存在不等于业务目录、完整 RPC 编解码或版本迁移已实现。
 
-## 一、先说结论
+## 5. 引用、方法与解析
 
-Apollo 需要在现有 `Channel` 之上，补一层明确的实体远程调用模型：
+### 5.1 RemoteEntityRef
 
-- `RemoteEntityRef`
-- `RemoteMethodSchema`
-- `InternalMessageEnvelope`
-- `RouteResolver`
-- `EntityCallEncoder`
-- `RemoteEntityCall`
+源码：`modules/net/remoteentity/include/apollo/net/remote/entity_ref.hpp`。引用包含 entity_id、domain、target_app、role、route_version 和 shard_key。数据中的目标及版本必须由可信目录与准入确定，不能采信客户端自行声明的资料所有者。
 
-这层的目标不是再造一套重量级 RPC 框架，而是把 `PlayerAnchor`、`AvatarEntity`、`GhostReplica`、`Witness` 之间的调用边界收口。
+### 5.2 RemoteMethodSchema
 
-## 二、KBE 里的直接证据
+源码：同目录 method_schema.hpp。定义方法名、别名、调用模式、目标域、参数类型、超时及幂等声明。声明幂等不自动完成去重，业务仍需持久 ID 和确认结果。
 
-从本地源码看：
+### 5.3 RpcTrace
 
-- [entity_call.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/lib/entitydef/entity_call.h)
-  - `EntityCall` 是显式远程实体引用
-  - `createRemoteMethod`
-  - `newCall`
-- [entitycallabstract.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/lib/entitydef/entitycallabstract.h)
-  - 持有 `componentID`
-  - 持有 `ENTITYCALL_TYPE`
-  - 持有 `ENTITY_ID`
-  - `sendCall`
-  - `getChannel`
-- [bundle.h](https://github.com/kbengine/kbengine/blob/master/kbe/src/lib/network/bundle.h)
-  - `Bundle` 负责按消息边界写包
-  - `newMessage`
-  - `finiMessage`
-  - 支持多字段顺序编码
+源码：同目录 rpc_trace.hpp 与 src/rpc_trace.cpp。复用 linktrace 的上下文和 span 发射。它是自研跟踪原语，尚未接入 OpenTelemetry SDK 或 OTLP exporter，也不是性能采样 Profiler。
 
-这说明 KBE 的关键点不是“能跨进程发数据”，而是：
+### 5.4 RouteResolver
 
-- 远程实体引用是显式对象
-- 调用方法和路由信息绑定在这个引用上
-- 发包边界不是业务层临时拼字符串
+源码：同目录 route_resolver.hpp 与 src/route_resolver.cpp。提供进程内路由的 resolve、update_route、clear 与版本查询。更新由所属执行者串行完成。该表不自动提供跨进程目录或分开的玩家 Base/模拟位置关联，不能取代业务目录。
 
-## 三、Apollo 当前的缺口
+## 7. 路由失效与结果语义
 
-从当前代码看：
+服务地址或代次变化后刷新引用，拒绝旧写权、旧会话及旧模拟代次。Base 替换与 cell 迁移分别更新对应路由，不能互相覆盖。
 
-- `modules/net/protocol/include/apollo/net/protocol/channel.hpp`
-  - `Channel` 只提供 `connect/send/receive`
-  - 面向的是 endpoint，不是 entity route
-- [endpoint.hpp](https://github.com/cuihairu/apollo/blob/main/modules/net/protocol/include/apollo/net/protocol/endpoint.hpp)
-  - `Endpoint` 更偏服务发现结果
-  - 没有 entity 级路由语义
-- [gateway_server.cpp](https://github.com/cuihairu/apollo/blob/main/apps/gateway-app/src/gateway_server.cpp)
-  - 当前转发更偏“按 app/service 路由”
+区分传输到达、业务受理、执行结果和持久确认。结果不明先查业务记录或使用同一 ID 重试；跨代次重发不能重新分配 ID 导致重复奖励。trace 可关联故障，不能证明操作已持久执行。
 
-这意味着 Apollo 现在缺的不是 socket，而是下面三层：
+## 当前工作
 
-### 1. 缺显式远程实体引用
-
-当前没有一个统一对象表达：
-
-- 我想调哪个实体
-- 调的是 anchor、avatar 还是 ghost
-- 这条 route 当前版本是多少
-
-### 2. 缺统一内部消息信封
-
-当前消息如果继续靠调用方自己拼，会缺少：
-
-- trace
-- route version
-- authority role
-- method alias
-- payload codec
-
-### 3. 缺 schema 驱动的方法表
-
-## 四、推荐目标
-
-Apollo 应该把远程调用统一成下面这条链：
-
-```text
-业务对象
-    -> RemoteEntityRef
-    -> RouteResolver
-    -> InternalMessageEnvelope
-    -> EntityCallEncoder
-    -> Channel
-```
-
-也就是说：
-
-- 业务只声明“调谁、调什么方法、带什么参数”
-- 路由、版本、编码、发包边界由统一层处理
-
-## 五、核心对象设计
-
-### `RemoteEntityRef`
-
-这是远程实体引用对象。
-
-建议至少包含：
-
-```text
-RemoteEntityRef
-    entity_id
-    entity_type
-    target_domain
-    target_app
-    authority_role
-    route_version
-    shard_key
-```
-
-其中：
-
-- `target_domain`
-  - `Anchor`
-  - `World`
-  - `Proxy`
-  - `Ghost`
-- `authority_role`
-  - `Authoritative`
-  - `Replica`
-  - `ForwardOnly`
-
-### `RemoteMethodSchema`
-
-建议在 `EntitySchema` 基础上补一层可执行方法定义：
-
-```text
-RemoteMethodSchema
-    method_name
-    method_alias
-    invoke_mode
-    target_domain
-    arg_types
-    codec
-    timeout_ms
-    idempotent
-```
-
-`invoke_mode` 建议至少支持：
-
-- `OneWay`
-- `RequestReply`
-- `ReliableEvent`
-
-### `InternalMessageEnvelope`
-
-这层相当于 Apollo 版 `Bundle` 的统一消息头。
-
-建议至少包含：
-
-```text
-InternalMessageEnvelope
-    message_type
-    trace_id
-    request_id
-    source_app
-    target_app
-    entity_id
-    method_alias
-    route_version
-    authority_epoch
-    flags
-    payload
-```
-
-### `RouteResolver`
-
-职责：
-
-- 根据 `RemoteEntityRef` 找到当前真实宿主
-- 校验 route version 是否过期
-- 决定是否需要转发到 `PlayerAnchor`、`WorldHost`、`GhostRoute`
-
-### `EntityCallEncoder`
-
-职责：
-
-- 根据 `RemoteMethodSchema` 编码参数
-- 写入 envelope
-- 做 alias 压缩
-- 输出 `apollo::net::protocol::Message`
-
-## 六、推荐消息分类
-
-不要把所有内部消息都混成一种“泛 RPC”。
-
-建议至少分成 4 类：
-
-### 1. `EntityMethodCall`
-
-用于：
-
-- `PlayerAnchor` 调 `AvatarEntity`
-- `AvatarEntity` 回调 `PlayerAnchor`
-- `Proxy` 通知 `Witness`
-
-### 2. `RouteControl`
-
-用于：
-
-- route 刷新
-- authority epoch 更新
-- ghost 转发切换
-
-### 3. `LifecycleEvent`
-
-用于：
-
-- 实体创建
-- 进入 world
-- 离开 world
-- migration 完成
-
-### 4. `ReplicationCommand`
-
-用于：
-
-- 请求增量快照
-- ack 某个复制窗口
-- detail level 调整
-
-这样 Apollo 后面在排查问题时，日志和监控都更容易收口。
-
-## 七、推荐调用流程
-
-### 标准 one-way 调用
-
-1. 业务拿到 `RemoteEntityRef`
-2. 通过 `MethodSchema` 找到目标方法
-3. `RouteResolver` 定位目标 app 和 route version
-4. `EntityCallEncoder` 编码 envelope
-5. 通过 `Channel` 发送
-6. 接收端按 `entity_id + method_alias` 分发
-
-### request-reply 调用
-
-1. 生成 `request_id`
-2. 发送 `InternalMessageEnvelope`
-3. 接收端执行后回包
-4. 调用方按 `request_id` 收口 promise/future
-
-### route 过期处理
-
-1. 接收端发现 `route_version` 旧了
-2. 返回 `RouteStale`
-3. 调用方刷新 `RemoteEntityRef`
-4. 重新发送
-
-这一步必须显式做，不要靠业务层猜。
-
-## 八、和对象模型的关系
-
-这层要和 [Base Cell Proxy 对象模型](./base-cell-proxy-model.md) 对齐。
-
-### `PlayerAnchor`
-
-适合承接：
-
-- 长期在线态
-- world 分配
-- 重连恢复
-
-因此它更适合作为很多远程调用的稳定入口。
-
-### `AvatarEntity`
-
-适合承接：
-
-- 空间内实时行为
-- AOI
-- 战斗表现
-
-它的 route 更容易变化，所以更依赖 `route_version`。
-
-### `Proxy`
-
-适合承接：
-
-- 向客户端发送
-- session 绑定
-
-但不应成为所有业务调用的默认入口。
-
-## 九、Apollo 推荐接口草图
-
-建议后续在模块层形成类似下面的接口：
-
-```cpp
-struct RemoteInvokeOptions {
-    InvokeMode mode;
-    std::chrono::milliseconds timeout;
-    bool allowRouteRefresh;
-};
-
-class RemoteEntityCall {
-public:
-    explicit RemoteEntityCall(RemoteEntityRef ref);
-
-    bool invokeOneWay(std::string_view method, const EncodedArgs& args);
-    Expected<EncodedReply, InvokeError> invokeRequest(
-        std::string_view method,
-        const EncodedArgs& args,
-        RemoteInvokeOptions options);
-};
-```
-
-这里关键不是接口长什么样，而是：
-
-- route
-- schema
-- envelope
-- trace
-
-必须被统一封住。
-
-## 十、当前落地建议
-
-Apollo 现在不需要一口气做成 KBE 全量脚本式 `EntityCall`，但至少应先补这 4 步：
-
-### 第一步：补 envelope
-
-先定义统一内部消息头，不再裸发字符串负载。
-
-### 第二步：补 `RemoteEntityRef`
-
-把 `PlayerAnchorRef`、`AvatarRef`、`ProxyRef` 的公共远程引用抽出来。
-
-### 第三步：补 `RouteResolver`
-
-让 route 刷新、迁移重定向、ghost forwarding 有统一入口。
-
-### 第四步：补 schema 驱动的方法分发表
-
-不要让方法名、参数格式继续散在业务代码里。
-
-## 十一、已落地实现
-
-`modules/net/remoteentity/` 子模块已交付四件套核心：
-
-| 件 | 文件 | 状态 |
-|---|---|---|
-| `RemoteEntityRef` | `include/apollo/net/remote/entity_ref.hpp` | ✅ 已落地 |
-| `RemoteMethodSchema` | `include/apollo/net/remote/method_schema.hpp` | ✅ 已落地 |
-| `RouteResolver` | `include/apollo/net/remote/route_resolver.hpp` + `src/route_resolver.cpp` | ✅ 已落地 |
-| `RpcTrace` | `include/apollo/net/remote/rpc_trace.hpp` + `src/rpc_trace.cpp` | ✅ 已落地 |
-
-**模块构建**：`modules/net/remoteentity/CMakeLists.txt` — STATIC library + ALIAS `apollo::net_remoteentity`，链接 `apollo::net_linktrace` + `apollo::core`。
-
-**测试**：`tests/test_remote_entity.cpp` — 14 用例（RemoteEntityRef 2 + RemoteMethodSchema 2 + RouteResolver 5 + RpcTrace 5），build 树 + sanitizer 树全绿。
-
-**commit**：`49d3d3a8` — `feat: add remoteentity module with trace integration`
-
-**边界**：
-- `InternalMessageEnvelope` / `EntityCallEncoder` / `RemoteEntityCall` 高层未实现（设计§五/§九待后续批）
-- 跨进程 route 刷新协议（§七 route 过期处理）未实现
-- schema 驱动方法分发表（§十第四步）未实现
-
-## 十一、和普通 MMO / BigWorld 两种模式的关系
-
-### 普通 MMO 模式
-
-这层仍然有价值，因为即使没有 distributed cell，也有：
-
-- `Gateway -> BaseApp`
-- `BaseApp -> WorldHost`
-- `WorldHost -> Gateway`
-
-这些内部调用。
-
-### BigWorld 模式
-
-这层会变成刚需，因为还会新增：
-
-- `Cell -> Ghost`
-- `Cell -> Witness`
-- `Cell -> AuthorityTransfer`
-- `AppMgr -> RouteControl`
-
-## 十二、结论
-
-Apollo 下一步如果要继续参考 KBE，不能只看进程划分，更要补“实体远程调用”这层中间件语义。
-
-真正该收口的是：
-
-- 远程实体引用
-- 方法 schema
-- 消息信封
-- route 解析
-- 版本与 authority 校验
-
-只有这层立住，后面的 `PlayerAnchor`、`Distributed Space`、`Ghost/Witness` 才不会继续靠业务代码硬拼。
-
-## 相关阅读
-- [Base Cell Proxy 对象模型](./base-cell-proxy-model.md)
-- [Witness 与 Ghost 设计](./witness-ghost-design.md)
+补齐 Base/database 边界的契约、可信注册、独立路由、版本解码及失败恢复。已有实现与代码迁移见[服务器应用](../apps/index.md)，任务只维护在根目录 todo.md；不保留另一套后续模式或对象抽象路线。

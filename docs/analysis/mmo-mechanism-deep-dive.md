@@ -170,7 +170,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：AoIRadius/AoIHyst per-entity 可设（dumpAoI 样例 500/5）；AoIUpdateScheme 见 §11。
 
-**Apollo 边界**：AOI 属于 World 内的 Scene；此处不引入独立 AOI 进程。
+**Apollo 边界**：AOI 由 cell 执行（现有 Scene/SceneAoi 原语），World 管理空间分配；此处不引入独立 AOI 进程。
 
 ---
 
@@ -221,7 +221,7 @@ EventNumber     lodEventNumbers_[ MAX_LOD_LEVELS ]; // int32 × LOD 层数
 
 **配置参数默认值**：KBE 查询半径由 DetailLevels 的 radius 提供（detaillevel.h:21 默认 FLT_MAX，见 §3/§11）。
 
-**Apollo 边界**：AOI 属于 World 内的 Scene；此处不引入独立 AOI 进程。
+**Apollo 边界**：AOI 由 cell 执行（现有 Scene/SceneAoi 原语），World 管理空间分配；此处不引入独立 AOI 进程。
 
 ---
 

@@ -1,6 +1,6 @@
 # Network Abstraction and Transport Kernel
 
-This page separates current primitives from application guarantees. Business process roles are Login, Gateway, and World; Scene and Instance run inside World. Passing library tests does not establish complete gameplay, cross-server recovery, or no-downtime release.
+This page separates current primitives from application guarantees. The target roles are gateway, loginServer, baseServer, worldServer, cell, database, and machined. World manages Space/Cell and cell executes simulation/Instance; Base owns persistent gameplay and database owns storage access. Passing library tests does not establish complete gameplay, cross-server recovery, or no-downtime release.
 
 ## Executive summary
 
@@ -117,7 +117,7 @@ machined provides local supervised restart. Active Instances do not automaticall
 
 Validate Gateway drain, World drain, cross-Gateway recovery, cross-World authority transfer, compatibility windows, and rollout rollback separately. Continued admission, no extra login, TCP continuity, and active-match continuity are distinct outcomes.
 
-Cross-server scenes reuse [World, Scene, and Instance](./cross-server-scenes.md), without seamless maps. Implementation tasks live only in the root todo.md.
+Cross-server scenes reuse [World management, cell execution, and Space/Cell/Instance](./cross-server-scenes.md), reserving future seamless interfaces. Implementation tasks live only in the root todo.md.
 
 ## 8. Related designs
 

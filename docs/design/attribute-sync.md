@@ -1,6 +1,6 @@
 # 属性系统与同步
 
-属性同步在所属 Scene 的逻辑线程上管理实体值、变更历史和每个观察者的进度。World 持有当前权威；持久资料与场景模拟职责分开，不拆成另一套业务进程。外部引擎机制仅作为参考。
+属性同步在所属 Scene 的逻辑线程上管理实体值、变更历史和每个观察者的进度。cell 内的权威 Cell 持有模拟写权，worldServer 管理分配，baseServer 持有长期资料权威，database 执行存储请求。外部引擎机制仅作为参考。
 
 ## 执行摘要
 
@@ -68,7 +68,7 @@ Scene 挂接 AttrSyncManager 后，实体创建/进入时注册属性；首次 E
 
 ### 4.4 跨服
 
-跨服复用 Scene 与现有同步机制。转移唯一权威、刷新路由和重建观察者基线后恢复同步；不引入 Ghost 或连续空间分片目标。参见[跨服场景设计](./cross-server-scenes.md)。
+跨服复用 Scene 与现有同步机制。转移唯一权威、刷新路由和重建观察者基线后恢复同步；当前不依赖 Ghost；未来同 Space 多 Cell 需连续可见性、邻接投影与去重，保留此扩展边界。参见[跨服场景设计](./cross-server-scenes.md)。
 
 ## 5. 预算、优先级与节流
 
@@ -110,15 +110,15 @@ AttrDelta 和 FrameCodec 提供 varint/zigzag 编解码与边界校验。属性�
 
 ### 8.1 所有权
 
-World 内 PlayerStore 持有玩家资料、SaveQueue 和 PersistJournal。Scene 同步状态及玩家长期资料不是可同时独立写入的两个游戏对象。
+baseServer 持有玩家长期资料，worldServer 持有场景状态；两者不是同一份完整资料的并行写入副本。保存队列、journal 与实际存储交由 database。跨服保留原 Base 和数据库归属。
 
 ### 8.2 写入交接
 
-AttrSyncManager::ChangeSink 把变更交给宿主，不直接链接数据层。玩家保存路径先记录 journal，再按策略更新档案。必须验证字段转换、保存失败、顺序和重放，不能只看 mark_dirty 就宣布奖励持久化成功。
+AttrSyncManager::ChangeSink 把变更交给宿主，不直接链接数据层。Base 校验资料变更后向 database 提交，存储路径先记录 journal 再按策略更新档案。必须验证字段转换、保存失败、顺序和重放，不能只看 mark_dirty 就宣布奖励持久化成功。
 
 ### 8.3 结算
 
-奖励沿既有 IRewardSink / AnchorRewardSink 接口进入长期态；业务必须补齐持久化映射、结算 ID 去重、重试与恢复确认。结算成功下行以约定的持久确认结果为准。
+World 发出带稳定结算 ID 的请求，Base 校验后修改长期态并经 database 持久提交；既有 IRewardSink / AnchorRewardSink 可复用，但不能继续跨边界直接修改本地资料对象。业务必须补齐持久化映射、去重、重试与恢复确认。结算成功下行以约定的持久确认结果为准。
 
 ### 8.4 外部存储
 

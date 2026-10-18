@@ -5,7 +5,7 @@ description: Runtime, entity, networking, and spatial responsibilities in KBEngi
 
 # KBEngine Source Analysis
 
-This page explains KBEngine's source organization and the responsibilities behind its process names. These are external-engine concepts. Apollo's current architecture remains Login, Gateway, and World, with Scene and Instance inside World; see [active architecture decisions](./adr.md).
+This page explains KBEngine's source organization and the responsibilities behind its process names. These are external-engine concepts. Apollo uses gateway, loginServer, baseServer, worldServer, cell, database, and machined, with worldServer managing Space/Cell and cell executing simulation/Instance; see [active architecture decisions](./adr.md).
 
 ## Reading order
 
@@ -38,7 +38,7 @@ BaseApp is more than a database process: its player/session role includes `Proxy
 
 `Witness` and visibility triggers define what a client can observe. `GhostManager` belongs to distributed spatial authority and replica coordination. CellAppMgr manages spatial placement/topology, while BaseAppMgr manages entry placement and non-spatial load. These are specific responsibilities, not generic names for every multiplayer server.
 
-Apollo does not target seamless spatial partitioning or Ghost replication. Its World hosts Scene simulation and temporary Instance lifecycles, and also hosts player data services. Its Login hosts the online directory and placement control. Do not reintroduce Base/Cell process names through this comparison.
+Apollo retains persistent-player responsibilities in baseServer, management in worldServer, and simulation in cell. database provides storage access; loginServer hosts directories. Cross-server scene transfer preserves the original Base and storage affiliation. No seamless spatial partitions or Ghost replicas are required.
 
 ## Operations and observability
 
@@ -55,4 +55,4 @@ Apollo's supervision remains distinct from active gameplay recovery. Similarly, 
 - Avoid copying macro-heavy interfaces, pervasive singleton dependencies, or Python-specific coupling merely to resemble the external engine.
 - Adopt mechanisms according to Apollo's documented requirements. Cross-server activities require explicit authority transfer and server affiliation; they do not require seamless-world spatial partitioning.
 
-The detailed source walkthrough is available in the [Chinese source analysis](/architecture/kbe-source-analysis). Apollo implementation tasks are maintained in the root backlog, not in an alternative Base/Cell migration roadmap.
+The detailed source walkthrough is available in the [Chinese source analysis](/architecture/kbe-source-analysis). Apollo implementation tasks are maintained in the root backlog, in the single implementation plan.

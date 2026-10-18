@@ -17,7 +17,7 @@
 | `dbmgr` | 数据库访问和实体持久化协调。 |
 | `machine` | 机器发现与进程管理辅助。 |
 
-KBEngine 的 Base/Cell 是其实体与空间模型的一部分。Apollo 不以这些词命名目标进程。
+KBEngine 的 Base/Cell 是其实体与空间模型的一部分。Apollo 将长期资料放在 Base，worldServer 管理 cell，cell 执行模拟；复用 Space/Cell 语义，默认每 Space 单 Cell，未来无缝能力预留。
 
 ### BigWorld
 
@@ -31,7 +31,7 @@ KBEngine 的 Base/Cell 是其实体与空间模型的一部分。Apollo 不以�
 | `dbapp` / `dbappmgr` | 数据库任务处理及其管理。 |
 | `bwmachined` | 机器发现、监控与进程管理支持。 |
 
-BigWorld 的 Cell/ghost 机制服务于跨 Cell 的连续空间；这些名称仅作为 BigWorld 术语使用。
+BigWorld 的 Cell/ghost 机制服务于跨 Cell 的连续空间；对应 Apollo 的管理/执行/空间边界见[完整对照](design/bigworld-apollo-mapping.md)，不宣称全部机制已实现。
 
 ### TrinityCore / AzerothCore
 
@@ -83,7 +83,7 @@ Skynet 提供通用服务运行时，本身不规定 MMO 进程拓扑。其 Gate
 
 ### Colyseus 与 Photon
 
-Colyseus 以 `Instance` 表达一个有状态的多人会话/对局，Instance 由游戏服务器进程承载。Photon 常用 `Master Server` 负责会话发现/分配、`Game Server` 承载副本与对局。两者的 `Instance` 都是玩法会话概念，不是服务器进程名称。
+Colyseus 的实际类型是 `Room`，表示拥有状态和客户端组的会话，由服务端承载；见[官方 Rooms 文档](https://docs.colyseus.io/room)。Photon 的 Master Server 与 Game Server 是其服务角色。第三方的会话名不改变 Apollo 的 Instance 命名。
 
 ### Agones
 
@@ -91,14 +91,18 @@ Agones 的 `GameServer`、`Fleet` 和 `FleetAutoscaler` 是 Kubernetes 上的游
 
 ## Apollo 采用的常见名称
 
-| Apollo 目标名称 | 职责 | 其他项目中相近的概念 |
+| 目标名称 | 职责 | 可参考的外部职责 |
 |---|---|---|
-| `Login` | 账号认证和登录凭证。 | `loginapp`、`authserver`、`loginserver` |
-| `Gateway` | 客户端游戏连接和消息路由。 | Pomelo `connector`、Ryzom `FES`、Skynet Gate |
-| `World` | 承载多个副本并运行对局权威逻辑。 | Colyseus 的游戏服务器进程、Photon `Game Server` |
-| `Instance` | 一场对局及其临时状态。 | Colyseus/Photon `Instance`、匹配实例 |
+| loginServer | 账号认证、凭证与目录 | loginapp/authserver 的认证边界 |
+| gateway | 客户端连接和消息转发 | Pomelo connector、Ryzom FES、Skynet Gate |
+| baseServer | 长期玩家对象与基础业务 | BaseApp 的非空间玩家逻辑；不等同数据库进程 |
+| worldServer | cell 注册、Space/Cell 分配和拓扑 | CellAppMgr 的相关管理职责 |
+| cell 执行进程 | 分区模拟、实体、AOI 与 tick | CellApp；进程可承载多个 Cell |
+| database | 资料加载、保存及存储访问 | dbmgr、dbapp 的存储职责 |
+| machined | 本机进程启停与监督 | 本地进程管理职责；不承担玩家归属裁决 |
+| Space（现有 Scene 语义）/ Cell / Instance | 运行空间 / 空间分区 / 临时玩法生命周期 | Space/Cell 复用 BigWorld，Instance 为 Apollo 玩法对象 |
 
-Apollo 不再为单一副本/对局运行时并列使用 `World`、`ZoneServer`、`AreaServer`、`SceneServer` 等名称。空间对象在代码层可使用 `Scene`；对外的玩法和承载单位分别称 `Instance` 与 `World`。一个 World 可以承载多个 Instance。
+跨服保留玩家的 Base 和数据库归属，cell 为每个成员记录所属 Base；详见[概念与命名](design/concept-glossary.md)。跨项目对照只比较职责，不宣称各引擎拓扑相同。
 
 ## Gateway 与热更新
 
@@ -112,5 +116,5 @@ Apollo 不再为单一副本/对局运行时并列使用 `World`、`ZoneServer`�
 - [Pomelo terminology](https://github.com/NetEase/pomelo/wiki/Terminologies) and [LordOfPomelo server introduction](https://github.com/NetEase/pomelo/wiki/LordOfPomelo-server-introduction)
 - [Ryzom Core services](https://github.com/ryzom/ryzomcore/wiki/architecture_ryzom_services)
 - [Skynet GateServer](https://github.com/cloudwu/skynet/wiki/GateServer)
-- [Colyseus instances](https://docs.colyseus.io/instance/)
+- [Colyseus Rooms](https://docs.colyseus.io/room)
 - [Agones concepts](https://agones.dev/site/docs/)

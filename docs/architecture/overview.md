@@ -1,18 +1,21 @@
-
 # 架构总览
 
-Apollo 面向轻量副本制多人游戏。目标运行链路是 `Client → Gateway → World → Instance`：Gateway 维护客户端连接并路由消息；World 承载一个或多个副本；Instance 是一场对局及其临时状态。Login 负责账号认证和登录凭证，持久化保存跨对局数据。
+Apollo 角色保持 gateway、loginServer、baseServer、worldServer、database、machined，模拟执行使用已讨论的 cell。worldServer 对应 CellAppMgr 的管理职责，cell 对应 CellApp；长期对象由 Base 管理，经 database 保存。
 
-每个玩家在一场对局中只有一个权威运行对象。跨服时迁移该对象的权威归属，接管成功后更新 Gateway 路由并清理源端对象。传输期间允许状态快照短暂存在于两端，但不得双重处理请求、推进游戏状态或执行权威写入。
+Space 对应现有 Scene 的空间语义，Cell 是空间分区，Instance 是临时玩法生命周期。默认一个执行进程、每 Space 一个 Cell；预留同 Space 多 Cell，无缝切分、Ghost 与跨边界战斗暂未实现。
 
-该模型不依赖无缝大世界的空间切片、Cell/ghost 投影或跨进程空间漫游。MMO 是可能的产品规模，不是 Apollo 当前的架构类别；本项目定位为轻量多人在线游戏服务器引擎，特别适合塔防、合作玩法、竞技场和副本。
+cell 向 World 注册，World 管理拓扑和迁移；loginServer 托管服务/在线目录的位置投影，gateway 直接转发到 Base/cell。machined 只监督本机进程，独立 World/cell 不要求同机部署它。跨服保留原 Base 和数据库归属，不搬完整档案。
 
-Gateway 可配合多实例和滚动部署提升服务可用性，但自身不提供连接迁移。World 允许通过停止分配新副本、等待现有副本结束后退出，进行滚动更新；这不等于活动对局跨版本无损迁移，也不保证现存 TCP 连接不断开。
-
-业务程序为 `login-app`、`gateway-app`、`world-app`；World 托管玩家资料与持久化，Login 托管在线目录与落点控制。实际接线和待验收边界详见[服务器应用现状](../apps/index.md)。BigWorld/KBEngine 术语仅在引擎对照资料中用于解释外部实现。
+协议更新分别交接 Base 长期对象、cell 模拟状态和 World 管理状态，再切换权威与路由。仅代码更新保持 wire，可采用 Lua 更新；C++ 使用进程替换。TCP、会话与完整活动连续分别验收。
 
 ## 临时副本生命周期
 
-几名玩家组队发起 → World 创建 Instance 及临时 Scene → 校验成员并进入 → 刷怪与完成目标 → 结算 → 玩家离开 → 销毁 Instance、场景和临时资源。
+小队申请 → Base 校验 → World 分配 Space/Cell → cell 创建并运行 Instance → 原 Base/database 持久结算 → 离场与回收。复用八态，持续 Space 可以没有临时 Instance。
 
-复用现有 Instance 八态状态机，不新增同义类型。World 中的 Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。状态机已实现，小队触发创建、通关结算和自动资源回收仍需在应用入口接通并验收。
+## 文档入口
+
+- [BigWorld 与 Apollo 完整对照](../design/bigworld-apollo-mapping.md)：原词、目标角色、代码类型和实现缺口。
+- [架构总览](../guide/architecture.md)、[玩家对象](../design/player-object-model.md)、[跨服](../design/cross-server-scenes.md)与[更新边界](../design/gateway-topology-survey.md)。
+- [服务器应用](../apps/index.md)：当前 WorldApp 尚未拆分管理与执行，Base/database 独立原型已具备，cell 入口及整体接线待完成；任务见根目录 todo.md。
+
+外部引擎源码保持真实名称，不构成另一套 Apollo 目标拓扑。

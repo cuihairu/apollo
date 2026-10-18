@@ -8,12 +8,13 @@
 
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
-| [概念词汇表](./concept-glossary.md) | 活文档 | 新词登记处 |
-| [玩家对象模型](./player-object-model.md) | 子系统实现说明 | 玩家身份、实体与场景对象；目标对局边界以 Instance 为准 |
+| [BigWorld 与 Apollo 对照](./bigworld-apollo-mapping.md) | 定稿规则 | 原词、目标职责、现有代码和缺口 |
+| [概念词汇表](./concept-glossary.md) | 定稿规则 | 目标角色职责、Space/Cell 与玩法边界 |
+| [玩家对象模型](./player-object-model.md) | 子系统实现说明 | Base 长期资料与 Cell 模拟实体分别管理 |
 | [属性系统与同步](./attribute-sync.md) | 子系统实现说明 | 属性数据与可见性/同步机制 |
-| [会话与在线目录](./session-and-online-directory.md) | 子系统实现说明 | 在线会话与当前副本路由信息 |
+| [会话与在线目录](./session-and-online-directory.md) | 子系统实现说明 | 所属 Base、当前 World、会话与服务端点独立寻址 |
 | [跨服场景](./cross-server-scenes.md) | 设计预留，暂不启用 | 区服归属、共享场景准入、权威交接、结算与返回 |
-| [登录流程](./login-flow.md) | 子系统设计稿 | Login、Gateway 与 World 的登录/路由边界 |
+| [登录流程](./login-flow.md) | 子系统设计稿 | loginServer、gateway、Base/database 加载和 World 准入 |
 | [时钟与时间](./clock-and-time.md) | 已交付 | 墙钟/tick/帧预算口径 |
 
 ## 战斗

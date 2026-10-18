@@ -14,29 +14,20 @@ tag:
 
 # BigWorld Process Architecture and Player Lifecycle
 
-This is a wrap-up entry page, used to lay out the process responsibilities under BigWorld semantics.
+This is an external-engine responsibility comparison, not another Apollo login/deployment topology. Apollo uses gateway, loginServer, baseServer, worldServer, cell, database, and machined. See [architecture](../guide/architecture.md).
 
-The mainline Apollo recommends today is not "BaseApp as a database server", but rather:
+## Process responsibilities
 
-`Client -> LoginApp -> BaseApp(PlayerAnchor + Proxy) -> CellApp`
+BigWorld LoginApp provides login ingress, BaseApp hosts non-spatial entities and client-proxy behavior, CellApp hosts spatial simulation, and database applications handle entity storage work. Client proxies and storage access are distinct responsibilities; BaseApp is not simply a database process.
 
-Only if edge-access governance is to be layered on top is a separate `GatewayApp` introduced.
+## Lifecycle
 
-## Process Responsibilities
+Study authentication, persistent-entity loading, spatial entry, synchronization, disconnect handling, and persistence completion separately. Exact messages, objects, and process names depend on the external source version.
 
-- `LoginApp`: authentication, entry assignment, ticket generation
-- `BaseApp`: the player's long-term online main state, session ownership, reconnect recovery
-- `GatewayApp`: connection management, routing, and edge protection
-- `CellApp`: real-time logic inside a space, AOI, combat, cross-boundary migration
+Apollo uses gateway for connections, Base for persistent-player gameplay, World for Space/Cell management, cell for simulation/Instance, and database for storage access. Scene transfer retains Base/storage affiliation; protocol upgrades replace Base, cell, or World management independently. Reserve same-Space partitions/seamless capabilities within this architecture; see the [mapping](../design/bigworld-apollo-mapping.md).
 
-## The Lifecycle Mainline
+## Related reading
 
-1. Login
-2. Activate `PlayerAnchor`
-3. Assign the world/space entry
-4. Enter `CellApp`
-5. Runtime synchronization
-6. Disconnect protection and recovery
-7. Persistence closure
-
-## Recommended Reading
+- [Player objects](../design/player-object-model.md)
+- [Base Cell Proxy comparison](./base-cell-proxy-model.md)
+- [Cross-server scenes](../design/cross-server-scenes.md)

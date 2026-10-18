@@ -3,6 +3,8 @@
 
 # Q56: 如何进行性能分析？有哪些工具？
 
+> 实现状态：Apollo 已有自研日志、MetricRegistry 和 span/trace 原语；尚未集成专用 Profiler、OpenTelemetry SDK 或 OTLP exporter。本页的工具比较及观测方案不代表运行链路已经接入。
+
 ## 核心结论
 
 性能分析的第一原则不是“先优化”，而是“先定位”。

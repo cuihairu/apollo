@@ -1,5 +1,7 @@
 # 运行日志与故障证据
 
+> 实现状态：Apollo 已有自研日志、MetricRegistry 和 span/trace 原语；尚未集成专用 Profiler、OpenTelemetry SDK 或 OTLP exporter。本页的工具比较及观测方案不代表运行链路已经接入。
+
 当前日志实现归 `modules/core/log`。应用通过统一日志管理器配置控制台、本地文件和可选推送。本文区分已有路径、部署规则和待验收的故障保证，不保留按日期追加的收敛记录。
 
 ## 执行摘要

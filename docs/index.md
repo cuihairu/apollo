@@ -5,7 +5,7 @@ titleTemplate: false
 hero:
   name: Apollo
   text: 轻量副本制多人在线游戏服务器引擎
-  tagline: C++20 运行时，面向塔防、合作玩法、竞技场和副本；MMO 是可能的产品形态，不以无缝大世界为目标。
+  tagline: C++20 运行时，面向塔防、合作玩法、竞技场和副本；MMO 是可能的产品形态，当前优先副本玩法，预留无缝地图设计。
   image:
     src: /apollo.png
     alt: Apollo
@@ -18,48 +18,22 @@ hero:
       link: /design/concept-glossary
 features:
   - title: 副本与对局
-    details: 一个 Instance 对应一场玩法；World 进程可承载多个 Instance，对局结束后回收临时状态。
-  - title: 单一权威玩家对象
-    details: 玩家在对局中只有一个权威运行对象。跨服玩法迁移对象状态、接管权威并更新 Gateway 路由。
+    details: 一个 Instance 对应一场玩法；cell 进程可承载多个 Space/Cell 及 Instance，对局结束后回收临时状态。
+  - title: 长期资料与模拟分权
+    details: Base 长期对象与 Cell 模拟实体分开；每个实体只有一个模拟权威，跨服保持原 Base。
   - title: 清晰的接入职责
-    details: Login 负责账号认证，Gateway 负责客户端连接与消息路由，World 负责对局模拟。
+    details: loginServer 管认证与目录，gateway 管连接，baseServer 管长期资料，worldServer 管拓扑与执行端，cell 管模拟，database 管存储，machined 管本机监督。
   - title: 现代 C++20 模块
     details: 网络、数据、实体契约、AOI、战斗和运行时模块；README 与模块文档说明当前实现状态。
 ---
 
-<script setup lang="ts">
-// 首次访问按浏览器语言选择文档语言（vitepress 无此能力，GitHub Pages 不支持 _redirects）
-// 优先级：localStorage 手动选择 > navigator.language > 保持当前 locale
-import { onBeforeMount } from 'vue'
-const KEY = 'apollo-lang-auto-picked'
-const BASE = '/apollo/'
-const ROOT_PATH = BASE
-const ZH_PATH = BASE + 'zh/'
-onBeforeMount(() => {{
-  if (typeof window === 'undefined') return
-  const p = window.location.pathname
-  if (p !== ROOT_PATH && p !== ROOT_PATH.slice(0, -1)) return
-  const picked = localStorage.getItem(KEY)
-  if (picked) {{ if (picked !== p) window.location.replace(picked); return }}
-  const langs = (navigator.languages?.length ? navigator.languages : [navigator.language]).map(l => l.toLowerCase())
-  if (langs.some(l => l.startsWith('zh'))) window.location.replace(ZH_PATH)
-}})
-if (typeof window !== 'undefined') {{
-  window.addEventListener('click', (e) => {{
-    const a = (e.target as HTMLElement)?.closest?.('a') as HTMLAnchorElement | null
-    const href = a?.getAttribute('href') || ''
-    if (href.startsWith(ZH_PATH) || href.startsWith('zh/')) localStorage.setItem(KEY, ZH_PATH)
-    else if (href === ROOT_PATH || href === ROOT_PATH.slice(0, -1)) localStorage.setItem(KEY, ROOT_PATH)
-  }}, true)
-}}
-</script>
 
 
 ## 项目定位
 
-Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合作 PvE/PvP、竞技场和副本。MMO 是可能的产品规模或产品形态，不是服务端架构名称；Apollo 当前不以持久化无缝大世界为目标。
+Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合作 PvE/PvP、竞技场和副本。MMO 是可能的产品规模或产品形态，不是服务端架构名称；当前不实现无缝地图，预留同 Space 多 Cell、邻接可见性与权威交接。
 
-目标链路为 `Client → Gateway → World → Instance`。一个 Instance 是一场对局；一个 World 可以运行多个 Instance。跨服玩法迁移玩家对象的权威归属，同一时刻只有一个进程能够处理该对象的权威操作。
+目标链路：客户端经 gateway 分别访问所属 Base 的基础业务和当前 cell 的场景模拟；Base 经 database 读写长期资料，loginServer 提供认证与目录，machined 按需监督本机进程。跨服只改变场景位置，保留 Base 和数据归属。
 
 ## 文档入口
 
@@ -70,6 +44,7 @@ Apollo 是轻量副本制多人在线游戏服务器引擎，适合塔防、合�
 | 当前程序原型 | [服务器应用](/apps/) |
 | World 和跨服迁移设计 | [副本制 GameServer 设计](/30-Instance_GameServer_Design) |
 | 代码构建 | [构建指南](/BUILDING) |
+| BigWorld 与 Apollo 体系对照 | [职责、概念与代码映射](/design/bigworld-apollo-mapping) |
 | 外部引擎对照 | [MMO 框架比较](/36-MMO_Frameworks_Comparative_Analysis) |
 
-BigWorld/KBEngine 的 Base/Cell 等名称保留在外部引擎比较资料中，只用于解释那些引擎的实现，不作为 Apollo 的目标架构术语。
+BigWorld/KBEngine 的 BaseApp、CellApp 等真实名称保留用于外部比较。Apollo 固定使用 baseServer 管长期资料、worldServer 管 Space/Cell，cell 管模拟，完整名称见词汇表。

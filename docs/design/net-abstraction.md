@@ -1,6 +1,6 @@
 # 网络抽象与传输内核
 
-本文说明当前网络原语及其目标边界。业务进程为 Login、Gateway、World；Scene 和 Instance 位于 World 内。库原语测试通过，不等于完整玩法、跨服恢复或不停机发布已经完成。
+本文说明当前网络原语及其目标边界。目标角色为 gateway、loginServer、baseServer、worldServer、cell、database、machined；World 管理 Space/Cell，cell 执行模拟与 Instance，长期资料与存储分别归 Base 和 database。库原语测试通过，不等于完整玩法、跨服恢复或不停机发布已经完成。
 
 ## 执行摘要
 
@@ -117,7 +117,7 @@ machined 提供本机监督重启。World 崩溃后，活动 Instance 不会自�
 
 Gateway 排空、World 排空、跨 Gateway 会话恢复、跨 World 权威交接、协议兼容窗口及发布回滚分别验收。持续接入、免重新登录、TCP 连接连续和活动副本连续不能互相替代。
 
-跨服场景使用[既有 World / Scene / Instance 模型](./cross-server-scenes.md)，不要求无缝地图。任务仅维护在根目录 todo.md。
+跨服场景使用[World 管理、cell 执行及 Space/Cell/Instance 模型](./cross-server-scenes.md)，不要求无缝地图。任务仅维护在根目录 todo.md。
 
 ## 8. 关联设计
 

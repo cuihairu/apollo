@@ -1,17 +1,21 @@
+# Architecture Reference
 
-# Architecture References
+Keep gateway, loginServer, baseServer, worldServer, database, and machined. Use the discussed cell executor: worldServer overlaps CellAppMgr management and cell overlaps CellApp execution. Base owns persistent objects and saves through database.
 
-Apollo's authoritative target architecture is documented in the [architecture status and target model](../analysis/architecture-review.md), [architecture overview](../guide/architecture.md), and [instance-based GameServer design](../30-Instance_GameServer_Design.md).
+Space corresponds to existing Scene spatial semantics, Cell is a partition, and Instance is a temporary gameplay lifecycle. Initially one executor and one Cell per Space; reserve multiple Cells per Space. Seamless splitting, Ghosts, and cross-boundary combat remain unimplemented.
 
-BigWorld, KBEngine, AOI, and other MMO framework materials in this directory describe external implementations. They do not mean Apollo adopts those process models or provides the same capabilities. In particular, `BaseApp`, `CellApp`, `BaseAppMgr`, `Witness`, `Ghost`, and `Space` are not Apollo target concepts.
+Executors register with World, which manages topology/migration. loginServer hosts service/online location projections; gateway forwards directly to Base/cell. machined supervises locally and is optional beside independently deployed World/cell. Cross-server play retains home Base/storage affiliation without moving complete profiles.
 
-Apollo's target terms are:
+Protocol replacement separately transfers Base objects, cell simulation, and World management state before switching authority/routes. Code-only updates preserve wire and may update Lua; C++ uses replacement processes. Validate TCP, sessions, and complete activity continuity separately.
 
-| Name | Meaning |
-|---|---|
-| `Login` | Account authentication and login credentials. |
-| `Gateway` | Client connections, sessions, and message routing. |
-| `World` | A process that hosts instances and runs authoritative match logic. |
-| `Instance` | One match and its temporary state. |
+## Temporary instance lifecycle
 
-The business executables are `login-app`, `gateway-app`, and `world-app`. World hosts player data and persistence; Login hosts the directory and placement control. See [server applications](../apps/index.md) for implementation and acceptance boundaries.
+Group request → Base validation → World Space/Cell placement → cell creates/runs Instance → original Base/database durable settlement → departure/cleanup. Reuse eight states; persistent Spaces need no temporary Instance.
+
+## Reading
+
+- [BigWorld–Apollo mapping](../design/bigworld-apollo-mapping.md): original terms, roles, code types, and gaps.
+- [Architecture](../guide/architecture.md), [player objects](../design/player-object-model.md), [cross-server play](../design/cross-server-scenes.md), and [updates](../design/gateway-topology-survey.md).
+- [Applications](../apps/index.md): current WorldApp combines management/execution; Base/database prototypes exist; cell entry and full wiring remain pending. Track implementation in root todo.md.
+
+Preserve external-engine source names without treating them as another Apollo topology.

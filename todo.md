@@ -1,68 +1,95 @@
 # Apollo 实施清单
 
-固定命名：`Login`、`Gateway`、`World` 是业务进程职责；`Scene` 是 World 内的模拟单元；`Instance` 是小队创建、完成玩法与结算后销毁的临时副本。跨服复用这些概念，不增加同义进程。
+目标职责：gateway、loginServer、baseServer、worldServer、cell、database、machined。worldServer 管理执行进程与 Space/Cell，cell 执行模拟；Cell 是空间分区，不是进程。Space 对应现有 Scene 的空间语义，Instance 保留临时玩法生命周期，不增加同义容器或擅自改代码名。
 
-勾选表示该项明确范围已有实现和验收，不代表相邻业务链路已经完成。仅有内存原语、注入会话或链路握手不能作为持久化、真实登录恢复或业务协议兼容的证据。
+依据：[BigWorld 与 Apollo 对照](docs/design/bigworld-apollo-mapping.md)、[架构](docs/guide/architecture.md)、[当前决策](docs/architecture/adr.md)。按下面依赖顺序实施，每项以真实验收勾选；库原语或旧拓扑测试不能代替最终接线。跨服保留原 Base、区服和存储归属，当前不启用无缝地图，接口预留未来扩展。
 
 ## P0：文档与命名
 
-- [x] 统一 README、架构入口、应用说明和词汇表中的 World / Scene / Instance 职责，保留第三方引擎真实源码名称。
-- [x] 使用 VitePress 原生 locales：中文 docs 根目录、英文 docs/en，分别配置导航、侧栏和主题文字，不在同页并列两种语言。
-- [x] 将 234 对语言页面、路由及生成 HTML 的语言与描述校验纳入文档 CI；依赖和正式构建放在仓库外隔离目录。
-- [x] 说明两种更新方案，区分握手兼容、业务解码、Lua 模块替换和 C++ 进程替换。
-- [x] 清理已作废命名和架构结论，修正外部引擎引用及当前能力入口，不保留旧方案作为另一套指引。
-- [x] GitHub About 与 topics 对齐轻量副本制多人在线服务器定位。
-- [x] 更新副本接线、迁移及更新能力的说明，将持久化、源端清理和会话恢复的未完成部分明确列出。
+- [x] 建立 BigWorld 原词 → Apollo 角色 → 现有代码 → 实现缺口的中英文对照；保留真实第三方名称，清除冲突目标，不保留历史备选。
+- [x] 明确 worldServer/CellAppMgr、cell/CellApp、Space/Scene、Cell 分区及 Instance 玩法边界；默认一个执行进程，每 Space 一个 Cell。
+- [x] 明确 Base 长期对象、Real/Cell 实体、Witness 部分原语及 Ghost 预留，不声称完整 BigWorld 已实现。
+- [x] 明确注册、拓扑权威与位置投影，machined 只监督本机，World/cell 独立部署不要求同机 machined。
+- [x] 区分支持协议更新的进程替换与仅代码更新；Base、cell、World 管理端各交接不同状态，TCP/会话/活动连续分别验收。
+- [x] 保持 VitePress 原生 locales：中文根目录、英文 en，各自正文与导航，新增对照入口并纳入文档 CI。
+- [x] 专用 Profiler、OpenTelemetry SDK/OTLP exporter 标为未集成，自研日志、MetricRegistry、span/trace 不作为集成证据。
 
-## P1：业务进程与服务归属
+## P1：独立 Base 与 database
 
-- [x] World 托管 PlayerStore、PlayerAnchor、档案、SaveQueue 与 PersistJournal；删除独立同义进程入口。
-- [x] Login 托管 OnlineDirectory、在线落点和迁移编排，不保存玩家游戏档案。
-- [x] Gateway 持有客户端连接和路由缓存；CLI、链路身份、开发编队与测试按三种业务进程接线。
-- [x] HostedServicesTests 用真实 TCP 验证激活、会话绑定、目录查询、缺失档案拒绝与停机档案保留。
-- [x] 目录镜像、死亡订阅、全量重报与恢复协调接入现有 Login / World；FleetRehomeChainTests 与 drill_kill9.sh 验证真实链路。
+- [ ] 完成 baseServer 在默认编队中的资料归属、基础业务与结算迁入；独立入口已具备，离场或 Instance 销毁不卸载长期资料。
+- [ ] 完善 database 的有界异步保存队列（磁盘 I/O 移出 RPC 泵线程）、存储路由与写入代次；独立入口、Base-facing 加载/保存和文件 journal 已具备，不以 MySQL 为前提。
+- [x] 有界保存队列先落地（446626fd）：SaveQueue 排队+在途容量上限（saveQueueCapacity，默认 4096，0=不设界），满载背压拒收不丢数据——载荷 journal 先段，脏位/下轮 flush 重取；磁盘 I/O 已在独立 worker 面（P1-4）、存储路由与写入代次已随 PlayerStorage 接口与 journalSeq 水位落地（499111be）。满载拒收 1 例新增；build-off 85/85、build-examples 85/85、san 84/84 无发现、drill 全链断言全过。
+- [ ] 从当前 WorldApp/模拟宿主移出完整档案、长期写权和直接存储依赖；定义只读玩法快照与返回业务请求，禁止跨界使用本地 Anchor 指针修改资料。
+- [ ] Base 串行修改资料，database 对玩家保存排序并验证写入代次/版本，拒绝旧进程与旧快照覆盖。
+- [x] 单进程存档串行化先落地（499111be）：PlayerStore 以 storeMutex_ 为单一串行点，自动保存/RPC 受理/保存回调/迁移冻结四线原子交错，落盘 I/O 全在锁外；SaveQueue 按玩家分槽（playerId % 槽数）同玩家 FIFO 落盘、在途合并拒绝；PersistJournal 类内互斥、sink 锁外执行、append 返回段全局序；SaveTask 携带 journalSeq，landedSeqs_/adoptWatermarks_ 双水位令 drain 回放拒绝旧快照倒灌；freeze/adopt 先等排空再同步写回。新增并发 append/drain、同玩家串行合并、RPC+自动保存竞加重启三例；build-off 85/85、build-examples 85/85、san 84/84 无发现、drill 全链断言全过。
+- [ ] 真实保存载荷接入 database，资料变更与去重凭据持久提交；区分传输、受理、执行和持久结果，覆盖重试、乱序、失败与重启。
+- [x] 当前单进程口径先落地（d2574505）：exp 以 Anchor 为持久真源，activate/启动恢复/adopt 三路播种、flush/freeze 收集覆盖写回、adopt 以快照差值收敛；结算凭据 settlement_<party>.cred 持久提交，重启 ingest 回填、重开副本重放拒绝、未落账补齐、终局回收；build-off/build-examples 各 83/83 绿，含凭据 roundtrip/跨重启去重/挂账 6 例新增与迁移链播种不变量更新。
 
-## P2：小队副本
+- [x] 恢复 baseServer 独立可执行入口，通过 PlayerStorage 注入远程 database，按需激活 PlayerAnchor；远程模式不访问本地档案与存储 journal，无存储不可达时的本地回退。
+- [x] 新增 database 独立入口，复用现有 DB_LOAD/DB_SAVE 与 M1 信封，提供文件加载/保存、journal 先写/恢复、身份校验及写入完成回执；尚非完整存储分区与异步执行队列。
+- [x] 保存队列按玩家 ID 去重，允许同线程槽的不同玩家排队；停机排完已受理任务，不因关闭 running 标志提前丢弃。
+- [x] BaseDatabaseTests、BaseDatabaseProcessSmoke、BaseAnchorTests、PersistJournalTests、PersistenceChainTests、RecoveryTests、HostedServicesTests 共 7 个定向门禁通过；独立双进程分别重启、Base 无本地档案及不可达拒起已验收。
+- [ ] 拆分旧 PlayerData 的长期字段与模拟位置/运行字段，移除默认 WorldApp 的旧档案宿主及直接存储路径；独立原型不作为最终 Base/Cell 对象契约完成证据。
 
-- [x] 复用 Instance 八态生命周期；同一 Scene 只绑定一个 Instance，活动副本保护 Scene，终态同步回收两项注册。
-- [x] 校验队长、队伍、成员、人数、在线与忙碌状态；按容量创建 Instance 与临时 Scene。
-- [x] 成员进入、全员就绪启动；实体与 AOI 按 Scene 隔离，临时 Scene 挂载独立脚本状态。
-- [x] 刷怪、击杀目标、超时失败驱动结算；结算后移出玩家并销毁临时资源，拒绝迟到输入。
-- [x] 内存 SettlementLedger 支持按副本和玩家去重、缺失锚点挂账重试及显式 restore；失败取消不发成功奖励。
-- [ ] 完成真实奖励持久化：从 Anchor 收集变更而非仅重写旧档案；奖励与结算去重凭据持久提交，重试及进程重启不能重记或漏记。
-- [ ] 串行化 PlayerStore 修改、journal 与同玩家存档，避免自动保存、RPC 和保存回调竞争或旧快照覆盖新数据；通过故障与重启测试验证。
-- [x] 无人进入、全员退出、掉线、队伍解散、超时与排空有明确收尾；进程消亡不保留临时副本状态。
-- [x] SquadWireE2eTests 验证客户端协议经 Gateway 出口到 World 的输入与结果/状态投递；UpdateContinuityTests 进一步验证真实客户端 socket 下行，修复启动前设置的回调丢失。
-- [x] 同 World 多副本隔离和多 World 容量分配规则有测试。
-- [ ] 完成多个真实 World 的动态端点选路及远端绑定回收；当前 Gateway 游戏出口仍是单 World 端点，容量测试与远端回调不等于多进程路由验收。
+## P2：worldServer 管理与 cell 执行分离
 
-## P3：迁移与会话恢复
+- [ ] 从当前 WorldApp 分离 worldServer 管理职责与 cell 模拟入口；模拟循环、WorldHost/Scene/Avatar、AOI、战斗与 Lua 迁入执行端，World 保留注册、拓扑、容量和迁移管理。
+- [ ] 明确 Space 对应现有 Scene 的实现映射，分开空间 ID、Cell 分区 ID 与执行进程 ID；保留静态 SceneDescriptor 与 Instance 八态，不新增 Scene→Space 同义层。
+- [ ] 默认一个 cell 进程，每 Space 一个完整 Cell；同进程承载多个 Space，复用既有副本流程，验证隔离与临时资源回收。
+- [ ] cell 向所属 World 注册地址、代次、版本、就绪、负载与排空状态；World 分配完整 Space/Cell，定义心跳失效、重注册、旧执行端隔离和控制面失联策略。
+- [ ] World 管理拓扑、邻接与分配版本，单实体只有一个有效模拟代次；Instance 共享目标/时钟/结算明确唯一逻辑负责人。
+- [ ] 保留有界意图队列、模拟线程写入、过载拒收及停机尾扫；不得由 IO、管理端或后台线程直接改模拟状态。
+- [ ] 更新真实 CMake 入口、CLI、配置、脚本和开发编队，删除冲突宿主接线与别名；文档只标记真实存在的程序，不虚构目录。
 
-- [x] 同进程复用 SceneTransfer；MigrationChainTests 和 drill_migration.sh 验证真实 Login 编排两端 World 的冻结、导出、目标接权与目录改指。
-- [x] 迁移请求标识缓存成功回执，目标拒绝旧权威代次；源冻结后拒绝绑定、存档、进度和结算写入，重报不回卷路由。
-- [ ] 补齐迁移源对象最终删除、失败后的源端恢复、提交结果不明时的协调查询及重启恢复；源对象停留 Transferring 不能算完整清理。
-- [ ] 完成跨 Gateway 重连后的真实会话恢复；明确重复登录、旧连接失效、会话代次、路由持久性与补偿。不能用注入会话或新会话建图代替验收。
-- [x] 预留跨服场景：区服归属与 World 运行位置分开，复用 Scene/Instance，约束准入、单权威交接、结算与返回；暂不启用跨服部署。
-- [ ] 跨服需求启用时，扩展原区服、World 进程代次、玩家权威代次、准入凭证与返回位置；不得直接复用 home_zone_id 表示业务区服。
-- [ ] 跨服需求启用时，接通区服分组、跨服容量分配、两区服同场准入、幂等结算及返回；覆盖原 World 不可用、安全回退和掉线恢复。
+## P3：服务目录、Gateway 与登录
 
-## P4：更新、排空与连续性
+- [ ] Base/World 向 loginServer 注册逻辑身份、管理地址、代次、兼容与就绪；World 发布已提交执行位置投影，目录不另行分配 Cell。
+- [ ] 玩家记录分开原区服、Base/归属版本、World/Space/Cell/执行进程/可选 Instance/模拟代次，以及 gateway/session/会话版本。
+- [ ] 分开进程代次、资料写入代次、实体权威代次、拓扑版本和路由/会话版本；扩展 WorldAssignment/远程引用与真实 wire，不把现有字段当完整契约。
+- [ ] gateway 基础业务接所属 Base，模拟输入接当前 cell，下行绑定真实会话；缓存失效、迟到位置投影、重定向和旧代次拒绝可恢复，正常消息不逐条经目录或 World 管理端代理。
+- [ ] 登录串联认证 → gateway 会话 → Base 经 database 激活 → World 准入/分配 → cell 创建实体；未进玩法也可保有 Base 对象。
+- [ ] 多 gateway 重连、重复登录、旧会话撤销与路由持久性接真实网络，恢复原 Base 与当前模拟位置，不创建第二个资料写入者。
+- [ ] 验证 World/cell 无同机 machined 独立注册与运行；machined 不知道各服资料位置，也不裁决跨服去向。
 
-- [x] 链路握手支持 APOLLO_ROUTE_COMPAT 兼容窗口与对端版本观察；drill_proto_update.sh 验证开窗、拒绝、发布与回滚。
-- [ ] 完成业务报文双版本解码及语义兼容验证，覆盖兼容变更、破坏性变更和回滚；接受旧 schema_hash 不等于旧报文可正确执行。
-- [x] 仅代码更新复用 Lua prepare/commit/canary/rollback 与 ModuleRollout；fleetctl module 和 drill_module_update.sh 接通多 World 投递、观察、推广及故障回滚。
-- [x] Gateway 排空停止新连接，已有连接继续服务；自然退出与期限强停均有真实 socket 测试和控制面。
-- [x] World 排空拒绝新副本，既有副本可结束；期限强停显式取消并回收，终态不复开，C++ 更新使用进程替换。
-- [x] Lua 健康更新连续性：UpdateContinuityTests 验证真实客户端原 TCP 与会话无需再次认证、活动副本继续完成、新 TCP 可接入；认证使用原型入口，不宣称生产登录恢复。
-- [x] World 替换恢复：验证内部连接断开后自动重连、未发送消息有界保留并顺序投递、新副本可分配；已发但结果不明请求不跨代次自动重放。
-- [ ] 完整验收两种更新方案的四项结果：服务持续接入、免重新登录、客户端 TCP 连续、活动副本连续；覆盖真实协议升级、故障回滚、多实例入口和跨 Gateway 恢复。明确哪些路径允许重连或终止副本。
-- [x] 整合可重复的副本销毁、迁移、Gateway/World 排空、进程替换及升级回滚演练；不能把各自原语测试当成全链无感发布证据。（drill_update.sh re-home：machined+login-app+world-app 现役拓扑，种档 3 份 → fleetctl drain --peer world 排空终态 → 原子换版 inode 证据 → SIGTERM 优雅停 journal 排空 → machined 退避重启 → 恢复收敛（Anchor restore 3 / full report intake=3 / 镜像 entries=3）→ 944 eval 受理面探针前后各一 → 逐玩家 sha256 字节恒等；连跑两遍全绿，分段 RTO 实录。副本销毁在 squad/world_drain e2e、迁移在 drill_migration、回滚在 module/proto 演练、Gateway 排空在 954 控制面测试——各面证据不互证，本演练亦不作全链无感发布证据。遗留：fleetctl assign 的 915 目录面 re-home 后无服务端，动词死面待处置。）
+## P4：副本结算、模拟迁移与跨服
+
+- [ ] Base 校验小队、资格和版本，向 World 申请容量；cell 准入可信绑定各成员原 Base、快照、会话和有期限凭证。
+- [ ] Instance 结果接 cell → 各原 Base → database，稳定玩法/结算 ID 校验模拟代次；多 Base 分别确认，定义部分成功、补偿、待重试和最终结束。
+- [ ] 未持久确认保留唯一结算与恢复记录，覆盖 Base 暂不可达、断线、解散、超时和异常；失败取消不发成功奖励。
+- [ ] 真实链路覆盖多 Space/Instance 隔离、多个执行进程选路及远端回收，不沿用 World 间完整档案搬迁作为场景迁移。
+- [ ] 明确显式换 Space 与同 Space 跨 Cell 两条路径；现有 SceneTransfer 离场重建 Avatar 可用于换场原语，不能实现连续 Cell 交接。
+- [ ] 迁移完整必要运行状态，保持实体 ID、血量、冷却、时钟和必要脚本状态；源冻结、目标未激活准备、条件提交、路由投影更新、目标激活与源清理逐步确认。
+- [ ] 迁移决定持久可查询，跨 World 有唯一协调提交依据；结果不明先对账，隔离旧源，覆盖每步超时、源/目标及管理端重启，禁止双端解冻。
+- [x] 跨服设计预留：原区服/Base/存储归属稳定，目的地持各成员原 Base 关联，不获取各服数据库凭证；持续 Space 与临时 Instance 均有边界。
+- [ ] 跨服需求启用时，接两区服两 Base 同场、分组、容量、准入、逐 Base 幂等结算与安全返回；home_zone_id 不直接当业务区服 ID。
+
+## P5：两种更新方案
+
+- [ ] 协议更新验证真实新旧业务解码、状态转换、未升级服务/客户端兼容；握手 schema_hash 白名单不能代替兼容实现，存储结构演进另行验收。
+- [ ] cell 更新：新旧并存、停止源新分配、tick 边界冻结、目标准备、World 提交权威/路由、按序恢复输入、源清理后退出，原 Base 与存储归属不变。
+- [ ] 完整活动连续包含成员、实体、怪物、目标、计时、随机与必要脚本状态；只搬玩家、自然结束或强停不能作为连续迁移证据。
+- [ ] Base 更新：排平存储、交接长期对象/会话/待办、提交写权代次、刷新 Base 路由、隔离旧写及清理；数据库归属不变。
+- [ ] World 管理端更新：交接拓扑、注册代次、容量/排空、在途创建/迁移决定与提交记录；冻结冲突分配、隔离旧管理端并恢复执行端关联，不让双管理端分配同一 Space/Cell。
+- [ ] 定义管理失联期间执行权限/租约与继续 tick 的期限，区分故障停止、重新接管与已有活动恢复，不能用单纯进程重启证明管理升级。
+- [ ] 各更新阶段覆盖超时、提交不明、双方重启、不可逆转换及回滚边界，已生效请求不能跨代次盲目重放。
+- [ ] 仅代码更新保持编号、字段与 wire；Lua 在执行边界处理模块私有状态、旧协程和回滚副作用，C++ 复用对应角色进程替换。
+- [ ] gateway 持续持有 TCP；其自身替换分别验收自然排空、期限强停、免重登恢复与新连接持续接入；TCP 无断开需独立连接交接实现。
+- [ ] 分别记录服务接入、免重登、TCP 连续及活动连续，使用真实客户端、多个 Base/World/cell 和失败回滚验证。
+
+## P6：预留接口与最终验收
+
+- [ ] 在当前单 Cell 契约中表达同 Space 多 Cell、全空间坐标、稳定实体 ID、分区范围/邻接/拓扑版本和实体权威代次，避免假定 Space 永远等于一个进程。
+- [ ] 预留 Real/Ghost 与观察者视图、邻接复制的版本/失效、可见集连续/去重、跨 Cell 请求裁决/顺序/幂等与故障对账边界；Ghost 无模拟和持久写权，迁移快照不当作 Ghost。
+- [ ] 将契约、真实网络、持久化、故障重启、排空、两种更新演练重接最终拓扑；资料、管理与模拟恢复分别验证。
+- [ ] 清理冲突配置、脚本、死命令和注释，完成适当构建与回归后按证据更新文档，不以旧档案搬迁日志验收新模型。
 
 ## 后续能力：需求触发后实施
 
-- [ ] 外部存储 MySQL/Redis/ClickHouse：具体部署或容量需求触发后接入；当前使用本地档案和 journal。
-- [ ] protobuf/zstd 真实消息路径：跨语言互操作或带宽证据触发后实施，依赖和生成产物不代表运行路径使用。
-- [ ] Kafka / Prometheus / Grafana 等外部观测：实际部署需求触发后实施。
-- [ ] 战斗验证：具体玩法具备可复算内容、验证规则与业务目标后实施。
+- [ ] 实际无缝地图：空间切分/动态负载、邻接 Ghost、连续可见性、跨边界战斗和故障接管；基于上述同一体系扩展，当前不实现算法。
+- [ ] 外部 MySQL/Redis/ClickHouse 后端；database 职责先独立，不以产品选择为前提。
+- [ ] protobuf/zstd 真实消息路径；生成产物不代表运行接线完成。
+- [ ] 专用 Profiler，验证采样开销与启停；当前未集成。
+- [ ] OpenTelemetry SDK/OTLP exporter，验证上下文、采样、背压和降级；当前未集成。
+- [ ] Kafka/Prometheus/Grafana 部署及具体玩法战斗验证，按实际需求实施。
 
-跨机热备与仲裁未立项；machined 监督重启不作为热备验收。
+跨机热备与仲裁未立项；machined 监督重启不作为热备、管理接管或活动恢复证据。

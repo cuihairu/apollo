@@ -28,10 +28,12 @@
 |------|------|
 | `login-app/` | 登录入口 |
 | `gateway-app/` | 边缘接入层 |
-| `common/` | 供 World / Login 托管的玩家资料与在线目录服务 |
-| `world-app/` | World 原型运行时 |
+| `base-server/` | baseServer 独立入口，远程访问 database |
+| `database/` | 独立存储入口，M1 加载/保存与文件 journal |
+| `common/` | 可复用的玩家资料、存储及目录实现；须按 Base/database 边界迁移宿主 |
+| `world-app/` | 当前管理/模拟混合入口，待拆 worldServer 管理与 cell 执行并迁出长期资料/存储 |
 | `game-server/` | 兼容或演示型游戏服务 |
-| `machined/` | 进程监督（roster 拉起/退避重启/死亡上报） |
+| `machined/` | 本机进程监督（拉起/退避重启/死亡上报），不决定跨服路由 |
 
 ## modules/
 

@@ -868,9 +868,9 @@ KBE 假设实体可能：
 
 ## 十八、Apollo 的采用边界
 
-Apollo 采用 Login、Gateway、World 三项业务进程职责。World 内的 Scene 拥有模拟状态，Instance 承载临时玩法生命周期；World 还托管玩家资料与持久化，Login 托管在线目录、落点与迁移编排。
+目标进程固定为 gateway、loginServer、baseServer、worldServer、cell、database、machined。Base 管长期资料，World 管 Space/Cell 拓扑，cell 管模拟，database 管实际存储访问，loginServer 托管认证与目录；具体接线见[服务器应用](../apps/index.md)。
 
-借鉴 KBE 的共同宿主、契约元数据、网络分层、可见性和结构化观测，不照搬 Base/Cell 分布式空间拓扑。当前架构不提供 Ghost、无缝地图或另一种 BigWorld 运行模式，不能由本篇外部源码分析推导新的 Apollo 进程角色。
+借鉴共同宿主、契约元数据、网络分层和空间职责。worldServer 对照 CellAppMgr，cell 对照 CellApp，Scene 空间语义对照 Space；默认单 Cell，预留未来同空间分区与 Ghost。完整映射和未实现边界见[体系对照](../design/bigworld-apollo-mapping.md)，不另建 BigWorld 运行模式。
 
 跨服场景是明确的设计预留：原区服归属与运行位置分开，多区服玩家可进入同一 Scene，临时副本继续使用 Instance。跨 World 必须显式冻结、准备目标、条件提交权威、更新路由并清理源对象；跨服不意味着同时运行两份玩家对象。
 

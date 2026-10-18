@@ -111,10 +111,10 @@ for (std::uint32_t t = 0; t < 5; ++t) {
 ```cpp
 battle->finish();                                 // → Finished
 // anchor->progress("exp") > 0：奖励落了长期态
-// !anchor->dirty_reasons().empty()：变更即脏（随 SaveQueue 落档）
+// !anchor->dirty_reasons().empty()：内存脏标记；持久确认另行完成
 ```
 
-结算按玩家 Hit 伤害合计经 `AnchorRewardSink` 落 `PlayerAnchor`，`mark_dirty` 后由持久化线（ADR-007 的 write-behind）落档。
+此处演示进程内奖励原语；mark_dirty 只表示内存变更。目标角色链路中，cell 提交结算给所属 Base，由 Base 校验并经 database 持久确认。直接操作本地 Anchor 的示例不代表跨进程结算或保存已经成功。
 
 ## 第 8 步：leave——离场与回收
 

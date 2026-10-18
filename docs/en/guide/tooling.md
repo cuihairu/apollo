@@ -4,40 +4,21 @@ icon: terminal
 order: 7
 ---
 
-# Tooling
+# Tooling Scripts
 
-Scripts support current applications and local acceptance without defining additional production process roles.
+Tools must wire the target roles gateway, loginServer, baseServer, worldServer, cell, database, and machined rather than define another production topology.
 
 ## Development fleet
 
-`scripts/dev_fleet.sh` uses machined to manage Login, Gateway, and World, with optional logger, admin, and module-assembly examples.
+scripts/dev_fleet.sh entries, configuration, and ownership need migration with Base/database and World/cell separation. Starting existing processes does not establish the target-role topology. A local profile endpoint inside World is not the target Base/database deployment. See [applications](../apps/index.md) and root todo.md.
 
-```bash
-scripts/dev_fleet.sh up
-scripts/dev_fleet.sh status
-scripts/dev_fleet.sh roster
-scripts/dev_fleet.sh down
-```
-
-`APOLLO_BUILD_DIR` selects the build directory; `APOLLO_FLEET_DIR` selects the run directory. Required applications must be built. Missing executables are marked as skipped in the roster.
-
-| Development port | Purpose |
-|---|---|
-| 9002 | Gateway client TCP |
-| 9101 | World gameplay link |
-| 9104 | World player-profile link |
-| 9103 | Login authentication/admission link |
-| 9105 | Login online directory |
-| 9102 | Log collection |
-| 9106 / 9107 | Metric link / HTTP metrics |
-
-These are script conventions rather than a configuration source of truth. A live fleet does not establish successful login or playable instances. Prototype accounts also require corresponding player profiles.
+machined supervises local processes only. World may start independently and register with loginServer's service directory. Cross-server admission and Base lookup do not require local machined. Distinguish process liveness, service readiness, admission, and business availability.
 
 ## Process and update drills
 
-Current application wiring and acceptance for `scripts/drill_kill9.sh`, `drill_migration.sh`, and `drill_update.sh` remain tracked in the root todo.md. Drills must target current Login/Gateway/World applications before serving as acceptance evidence. Primitive tests or existing logs do not replace a complete current path.
+Existing drill_kill9.sh, drill_migration.sh, drill_update.sh, drill_proto_update.sh, and drill_module_update.sh retain their actual primitive coverage. Revalidate durable Base/database confirmation, scene transfer retaining Base, complete Instance replacement, independent Base rollout, and cross-gateway recovery under the target-role topology.
 
-Validate profile recovery, exclusive authority transfer, route switching, settlement deduplication, Gateway drain, World instance completion, and rollout rollback separately. Record TCP continuity, no-extra-login recovery, and active-instance continuity as distinct results.
+Protocol drills must exercise real old/new business messages and state conversion. Handshake allowlists do not validate payload compatibility. Restart or waiting for matches to finish does not establish active-match migration. Record availability, no repeated login, client TCP, and gameplay continuity separately.
 
 ## Crash symbol tools
 
@@ -46,12 +27,16 @@ scripts/split_symbols.sh <binary>
 scripts/build_crash_tools.sh
 ```
 
-Symbols and release binaries must share a build-id. Processing tools live under `tools/crash-bin/`. Missing tools or symbols must be visible; raw-address traces do not establish symbolization acceptance. See [crash capture](../design/crash-capture.md).
+Keep symbols and binaries on the same build-id; tools live in tools/crash-bin. Validate capture, symbolization, profile recovery, and match recovery separately. See [crash capture](../design/crash-capture.md).
+
+## Performance and telemetry status
+
+Self-built logging, MetricRegistry, and span/trace primitives exist. No dedicated Profiler, OpenTelemetry SDK, OTLP exporter, or complete external telemetry pipeline is integrated. External-tool guidance does not establish built-in engine functionality; integration remains requirement-driven.
 
 ## CI helpers
 
-- `scripts/ci/contract_pack.sh`: contract artifact packaging.
-- `scripts/ci/schema_hash_report.sh`: contract hash reporting.
-- `scripts/ci/docs_i18n_check.py`: VitePress locale pairs and routing; `--dist <path>` validates generated page languages and descriptions.
+- scripts/ci/contract_pack.sh packages contract artifacts.
+- scripts/ci/schema_hash_report.sh reports contract hashes.
+- scripts/ci/docs_i18n_check.py checks native VitePress locale pairs, routes, and generated HTML language/descriptions.
 
-Respect workspace dependency-directory restrictions and use an external isolated directory for local documentation builds. Pages use standard locales rather than concatenated translations.
+Build documentation in an isolated directory outside the repository, respecting workspace dependency restrictions. Chinese pages live at docs root and English pages under docs/en, each with its own language content.

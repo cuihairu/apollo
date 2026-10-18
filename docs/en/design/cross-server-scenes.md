@@ -1,58 +1,55 @@
-# Cross-server scene design reservation
+# Cross-Server Scene Reservation
 
-Cross-server gameplay is an explicit World extension requirement. The design is reserved now; cross-server deployment is not enabled. Local and cross-server gameplay reuse `World`, `Scene`, and `Instance`, without another process role or seamless maps.
+Reuse worldServer management and cell execution without another process role. Space corresponds to existing Scene semantics; temporary activities use Instance. See the [mapping](./bigworld-apollo-mapping.md). Preserve home Base, server, and database affiliation.
 
-## Server affiliation and runtime location
+## Registration and independent deployment
 
-A player's home game server is a business affiliation. World identifies a simulation process. These require distinct identities. Players from several game servers may enter the same Scene hosted by one selected World. Worlds can serve both local and cross-server activities; a dedicated World pool may later provide capacity or fault isolation using the same `world-app` executable.
+Base/World publish identities, endpoints, generations, compatibility, and readiness to loginServer directories. Executors register load/capabilities with their worldServer. World decides Space/Cell placement and publishes location projections; directories do not independently assign partitions.
 
-Cross-server Scenes may be persistent. Temporary group activities associate the existing Instance lifecycle with their Scene; cross-server gameplay is not restricted to temporary instances.
+machined supervises local processes only. Independent World/cell deployment requires neither local machined nor home database credentials. Cross-server pools configure admission scope while retaining the same roles.
 
-The following are reserved interface requirements, not claims about fields already present on the wire.
+## Admission contract
 
 | Data | Purpose |
 |---|---|
-| Unique player ID and home server ID | Preserve identity and affiliation without creating a new account on the destination |
-| World ID, Scene ID, optional Instance ID | Runtime location; process-local Scene/Instance IDs require World context |
-| World process incarnation and player authority epoch | Reject messages from earlier processes and owners |
-| Session ID, Gateway ID, route version | Preserve authentication while forwarding to the new owner |
-| Transfer ID, destination admission credential and expiry | Deduplication and server-authorized destination admission |
-| Settlement ID and return location | Deduplicate rewards and return to the home server, with a safe fallback |
+| Player, home server, Base, ownership version | Retain profile authority with server-validated origin. |
+| Source/target World, Space, Cell, executor, optional Instance | Separate management domain, space, partition, and hosting process. |
+| Process/simulation generations and topology version | Fence stale executors/placements independently of Base writes. |
+| gateway/session and session/route versions | Preserve connection and update simulation forwarding. |
+| Transfer ID, expiring admission, compatible versions | Bind destination, members, capacity, and handoff; reject replay. |
+| Gameplay snapshot, runtime state, state version | Supply needed gameplay data without a complete profile. |
+| Stable settlement ID and return placement | Deduplicate outcomes and return safely to the home server. |
 
-Extend the existing identity and contract mechanisms when wiring the feature. The legacy `home_zone_id` field does not establish an implemented business server identity.
+These are target requirements, not completed WorldAssignment/wire fields. Resolve Base endpoints from cached directory entries; neither IP nor storage location defines player affiliation. home_zone_id is not a complete home-server identity.
 
-## Responsibilities and placement
+## Authority handoff
 
-Login hosts the directory, placement, and authority-transfer coordination. Persistent routing and recovery are prerequisites for enabling cross-server play. Gateway retains the client connection and refreshes forwarding routes without requiring another login. World validates admission and holds the player's single active simulation object and exclusive profile write authority.
+1. Original Base validates admission; World selects the executor and records return placement.
+2. Source cell freezes at a simulation boundary, reconciles or records in-flight work, and exports runtime state. Original Base keeps profiles.
+3. Target cell validates admission, Base, state, and generations, then restores without activation.
+4. World conditionally commits against expected source/authority. Cross-World transfer requires coordination with one recoverable commit decision. Target activates from commit evidence, directories project the result, and gateway refreshes.
+5. Source deletes old entities/resources and confirms completion. Fence late source inputs, settlement, and writes by generation.
 
-Local activities accept their own server by default. Cross-server activities explicitly configure participating servers, grouping, capacity, and compatible versions. Clients request an activity; they cannot nominate arbitrary destinations or assert membership. Placement deduplicates group requests and cancels or replaces reservations if a World drains, overloads, or becomes unavailable.
+Preparation is not activation. Confirm no commit before canceling; reconcile ambiguous outcomes from durable records, never reactivate both ends. Complete Instance continuity includes members, enemies, objectives, clocks, randomness, and necessary script state.
 
-## Authority transfer
+## Relationship to seamless handoff
 
-1. Validate membership and capacity; record transfer ID, source/destination, expected authority epoch, and return location.
-2. Freeze the source at a simulation boundary, complete confirmed persistent writes, and export state. Reject further source simulation input and writes.
-3. Restore the destination as prepared but inactive, validating identity, version, credential, expiry, and transfer ID.
-4. Conditionally commit the new owner and epoch in the directory against the expected source and epoch. Activate the destination only after obtaining commit evidence. Refresh Gateway routing and clear source objects and write authority.
-5. Record completion and release snapshots and reservations. Retries return the same transfer outcome.
+Cross-server entry into another Space changes spaces explicitly. Future movement between Cells in the same Space changes simulation ownership while preserving Space/entity IDs, coordinates, health, cooldowns, clocks, script state, and continuous visibility. Current SceneTransfer recreates Avatar after departure and cannot implement this path.
 
-Prepared does not mean active. An ambiguous timeout requires checking durable directory and transfer records before unfreezing the source. Roll back to the source only when commit is proven absent. After commit, recover the destination authority. Reject stale session/authority epochs, duplicates, and expired input.
+Initially use one executor and one Cell per Space. Spatial splitting, Ghost replication, and cross-boundary combat remain deferred. Reserve multiple Cells per Space, adjacency, topology versions, and authority handoff within the same architecture.
 
-Test in-process SceneTransfer, same-server cross-World transfer, and cross-server admission separately. Cross-server play additionally requires affiliation, admission, and settlement policies.
+## Settlement and failure
 
-## Settlement, return, and failure
+cell submits rewards, consumption, and quest outcomes to each original Base using stable activity/settlement IDs and simulation generations. Base validates; database durably commits changes with deduplication credentials. Transport ACK is not persistence. Query or retry the same transaction after ambiguity; never create a new ID to repeat it.
 
-The player retains home-server affiliation while the current World owns the only writable profile. Home-server asynchronous rewards and administrative writes must reach the current owner or wait for transfer completion. Never update two independent profile copies. Reuse existing reward/persistence interfaces, deduplicate by settlement ID, and confirm durability before announcing completed settlement.
+Bases confirm independently, without a cross-Base atomicity claim. Define partial success, compensation, unavailability, and durable pending evidence; never delete the sole recovery record early. Return to the home server or a safe Space if the original is unavailable. Base upgrades change routing/generations without changing home/storage affiliation.
 
-Completion, leave, disband, and expiry settle first, then return through the same authority-transfer protocol. If the original World is unavailable, allocate a safe Scene on the home server. Retain recoverable state, confirmed rewards, and return work when return fails.
+## Activation acceptance
 
-Reconnect resolves the current cross-server location through the directory. Destination crashes, directory restarts, settlement retries, and forced drain must reconcile durable authority records. Where active gameplay cannot recover, fail the activity explicitly while preserving confirmed rewards and return information. Supervised restart alone does not recover a match.
+- Two home servers/Bases share a Space with unchanged ownership; persistent and temporary Spaces are addressable.
+- Executors register with World; standalone deployment works without machined; stale generations fail after restart.
+- Cover admission, versions, capacity, freeze, prepare, ambiguous commit, restart, and cleanup over real links.
+- Durable settlement is idempotent per Base; partial success and safe return recover.
+- Validate backend route switches, sessions, and client TCP separately; implement seamless features later.
 
-## Acceptance before activation
-
-- Players from at least two business servers share one Scene/Instance without identity collisions or affiliation changes.
-- Local activities reject unauthorized cross-server joins; cross-server admission rejects forged membership, expired credentials, excess capacity, and incompatible versions.
-- Transfers retain one authority under retries, per-stage timeouts, delayed routing, and source/destination restarts.
-- Settlement retries issue rewards once; reconnect avoids another login; return supports unavailable original Worlds.
-- Multi-Scene isolation, multi-World placement, and draining work without seamless maps or TCP socket handoff.
-
-Implementation and verification remain tracked in the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
+Track work in root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).

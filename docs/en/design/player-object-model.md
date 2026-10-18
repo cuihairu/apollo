@@ -1,38 +1,39 @@
-
 # Player Object Model
 
-Apollo's target model keeps one authoritative runtime object for a player in a match. See [Concepts and Names](./concept-glossary.md) for target terms. `Player` is the player identity, `Entity` is a runtime object, and `Avatar` represents a player as an entity during a match.
+Persistent player objects and scene entities have distinct owners, lifecycles, and write boundaries. See [concepts and names](./concept-glossary.md).
 
 ## Ownership
 
-- Before login, the account is authenticated by `Login`; login credentials do not carry the player game object.
-- After the player joins an instance, the World creates or restores one player entity and becomes its sole authoritative owner.
-- On disconnect, the World may retain the entity briefly for reconnection according to game rules; the session policy determines whether and how long.
-- At match end, commit settlement/persistence data and destroy the player's entity for that match.
+| Object | Owner | State and lifecycle |
+|---|---|---|
+| PlayerAnchor | baseServer | Inventory, equipment, progression, quests, and base gameplay; loading, online retention, disconnection, and unloading are independent of Instances. |
+| Avatar / Entity | authoritative Cell within a cell executor (current Scene semantics) | Position, combat health, skill execution, and temporary effects; created, transferred, and released under scene rules. |
+| Session | gateway connection and online-directory association | Binds authenticated identity to a connection and rejects stale session versions. |
 
-The target model does not split one player into a persistent Base object and a scene Cell object. Disconnects, server transfers, or Gateway changes do not create a second authoritative player object.
+Only one Base writes the complete persistent player data; only one cell advances the scene entity. cell consumes gameplay snapshots and requests validated consumption or rewards from Base. Explicitly settle results that persist across matches instead of automatically treating every simulation field as profile data.
+
+## Lifecycle
+
+After authentication, the owning Base loads or restores persistent data through database. cell receives admission information and a read-only base-stat snapshot, then creates the scene entity. On departure or completion, Base validates and commits idempotent settlement while cell releases scene entities. Destroying an Instance does not destroy persistent data.
 
 ## Cross-server transfer
 
-When a player needs to join an instance on another World, authority for the same logical object is transferred:
-
 ```text
-Source World: freeze and export state
-Destination World: restore and confirm takeover
-Route directory/Gateway: switch to destination
-Source World: remove old object
+Original baseServer: retains persistent-player and storage ownership
+Source cell executor: freezes the scene entity and exports required runtime state
+Destination cell executor: validates admission/Base association and prepares restoration
+worldServer: conditionally commit simulation ownership; directories/gateway: project location and update forwarding
+Source cell executor: removes the old scene entity
 ```
 
-Until the destination confirms takeover, the source remains authoritative. After confirmation, the destination becomes the sole authority. A state snapshot may briefly be copied during transfer, but both sides must never accept input, advance simulation, or commit authoritative writes for the same player. On failure, roll back to one source authority or report failure while preserving recoverable state.
+Retain the owning Base and home-server affiliation. Do not move the full profile, storage affiliation, or database credentials. Source and destination cannot both simulate the entity. Reconcile ambiguous commits. Preserving an ongoing match also requires its shared Instance state; see [cross-server scenes](./cross-server-scenes.md).
 
-## Boundaries with related concepts
+## Base replacement
 
-- `Session` describes the session associated with a client connection; it is not the player object.
-- `Gateway` owns network connections, not simulation authority for players.
-- `Instance` is a match and its temporary state; World is the process that hosts it.
-- `Scene` is an internal World simulation unit owning entities, AOI, player entry/exit, and ticks; Instance controls its gameplay lifecycle.
-- `BaseApp`, `CellApp`, Proxy, and ghost belong to external engine models, not Apollo's target object hierarchy.
+Stable ownership does not require an irreplaceable process. A Base replacement hands off persistent objects, sessions, and in-flight operations, then updates the logical Base endpoint while retaining storage affiliation. Drain writes before switching, reject stale-process writes afterward, and reconcile late settlement and retries.
 
-## Current implementation
+## Implementation status
 
-The repository contains existing code components named `PlayerAnchor`, `Avatar`, `Scene`, and `Instance`. They do not imply that the target model keeps two player objects or splits Base/Cell processes. The current prototypes have not completed object-state transfer between Worlds or end-to-end route switching.
+PlayerAnchor, Avatar, Scene, and Instance are reusable code types. Persistent-player and storage responsibilities still need to move out of the current WorldApp host and integrate with Base/database boundaries. This documentation update does not implement that migration. Track work in root todo.md.
+
+worldServer manages Space/Cell placement without another simulation object. PlayerAnchor corresponds to the player-side Base entity; Avatar/Entity to Real/Cell entities. See the [mapping](./bigworld-apollo-mapping.md) for terms and gaps.

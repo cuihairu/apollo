@@ -10,13 +10,17 @@ title: 应用模块装配
 
 CMake target 决定构建和链接依赖；应用配置决定本次启动启用什么；宿主负责已经注册的服务生命周期。三者不能互相代替。
 
-| 业务程序 | 应用内服务 | 边界 |
+| 业务程序 | 所属服务 | 边界 |
 |---|---|---|
-| Login | 认证、OnlineDirectory、准入链路 | 不持有玩家游戏档案 |
-| Gateway | 客户端连接、准入客户端、目录查询、World 出口 | 不推进玩法模拟 |
-| World | WorldHost、World/Scene/Instance、PlayerStore、Lua | 持有当前模拟与玩家资料写权 |
+| loginServer | 认证、服务目录、在线目录 | 不保存玩法档案 |
+| gateway | 连接、准入、分开的 Base/World 转发 | 不推进模拟或修改档案 |
+| baseServer | PlayerAnchor、基础业务、结算校验 | 向 database 提交存储请求 |
+| worldServer | cell 注册、Space/Cell 分配、拓扑与迁移记录 | 管理职责，对照 CellAppMgr |
+| cell | WorldHost、Scene/Instance、Avatar、Lua 的执行职责 | 玩法快照和逐玩家 Base 关联，独立入口待实现 |
+| database | 存储操作、队列、journal、连接 | 不制定奖励或战斗规则 |
+| machined | 本机拉起、监督与重启 | 不决定玩家归属或跨服落点 |
 
-`apps/common` 提供 PlayerStore 和 OnlineDirectory 的共享实现，编译为 `apollo_app_services`，不生成额外业务程序。运维工具和 machined 按部署需要独立运行。
+apps/common 是可复用实现库，Base/database 独立入口已存在，默认编队的宿主归属和网络接线仍需迁移，见[服务器应用](../apps/index.md)。共享代码不合并进程职责，World 独立注册不依赖同机 machined。
 
 ## 模块依赖
 
@@ -40,7 +44,7 @@ CMake target 决定构建和链接依赖；应用配置决定本次启动启用�
 
 ## 跨服预留
 
-普通与跨服场景复用同一 World 程序及 Scene/Instance 类型。以后可按部署配置选择承载跨服活动的 World 池，不能据此引入新的进程角色或同义对象。参见[跨服场景设计](../design/cross-server-scenes.md)。
+普通与跨服场景复用同一 World 管理与 cell 执行职责、Scene/Instance 原语。以后可按部署配置选择承载跨服活动的 World 池，不能据此引入新的进程角色或同义对象。参见[跨服场景设计](../design/cross-server-scenes.md)。
 
 ## 关联文档
 

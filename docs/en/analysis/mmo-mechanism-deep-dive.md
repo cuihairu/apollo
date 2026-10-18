@@ -204,7 +204,7 @@ plus the `Priority priority()` pair (:80-81).
 
 **Config parameter defaults**: no independent ghost-threshold config item was located the stated baseline (BW drives it by cell boundaries/AoI radius; no separate default seen — **honestly marked: no independent parameter found**).
 
-**Boundary**: the buffering and ghost-management mechanisms add cross-process consistency work. Apollo does not adopt seamless-world Ghost replication.
+**Boundary**: the buffering and ghost-management mechanisms add cross-process consistency work. Apollo reserves future same-Space Cells and Ghost replication interfaces, without implementing those algorithms today.
 **Mechanism comparison**: the entire file family above serves "cross-cell view consistency", a layer apollo's instance system does not need.
 
 ---

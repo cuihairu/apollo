@@ -1,71 +1,71 @@
 # 当前架构决策
 
-仅保留当前有效规则。命名以[概念与命名](../design/concept-glossary.md)为准，实现工作见根目录 [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md)。
+仅保留有效规则，完整术语与实现缺口见[体系对照](../design/bigworld-apollo-mapping.md)，任务见根目录 todo.md。
 
-## ADR-001：玩家持久资料与对局实体权威
+## ADR-001：玩家长期资料与模拟权威
 
-玩家长期资料由现有 PlayerAnchor 及其持久化路径负责，结算通过既有 IRewardSink / AnchorRewardSink 写入。对局实体由所在 Scene 权威推进；同一玩家同一时刻只允许一个实体接受输入和推进权威模拟。持久资料不是第二个可运行的对局对象。
+baseServer 持有 PlayerAnchor 与基础业务，cell 承载权威 Avatar/Entity，database 负责存储访问。各数据域独占写权；跨服和副本销毁不搬长期档案。
 
-## ADR-002：Scene 是内部模拟边界
+## ADR-002：Space、Cell 与现有 Scene
 
-Scene 拥有实体、AOI、玩家进出和 tick；它位于 World 进程内，不作为进程名称。World 管理多个 Scene 与 Instance。架构不提供无缝大世界的空间分片、Ghost 镜像或连续跨进程漫游。
+Space 为独立运行空间，对应现有 Scene 的空间语义，不叠加同义容器。Cell 是分区，cell 是承载进程；默认一进程、每 Space 一 Cell，预留一 Space 多 Cell。当前 Scene 仍为本地实现。
 
-## ADR-003：Instance 是临时副本生命周期
+## ADR-003：Instance 临时玩法生命周期
 
-几名玩家组队发起，World 创建 Instance 与关联 Scene；玩家进入后完成刷怪等玩法目标，结算并离开，最终释放副本、临时场景和资源。复用现有 Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed 八态状态机。状态机已经实现，应用层的小队创建和通关回收接线仍需完成。
+Base 校验小队，World 分配空间和执行端，cell 运行 Instance 并向各所属 Base 提交结算，由 database 持久确认。复用八态，不将 Instance 定义为空间或进程；共享状态保持唯一逻辑负责人。
 
-## ADR-004：显式场景切换与跨 World 迁移
+## ADR-004：显式换空间与 Cell 权威交接
 
-进程内换场景使用已有 SceneTransfer 的准入、移出、移入和失败回滚流程。跨 World 需另外实现冻结、状态交接、目标确认、路由更新、源端清理及幂等保护；不能将进程内换场景宣称为已完成的跨进程迁移。
+不同 Space 显式切换与同 Space 跨 Cell 分开。现有 SceneTransfer 重建 Avatar，不实现连续跨分区。完整交接冻结、准备、条件提交、目标激活、源清理并保留原 Base；结果不明先查记录。
 
-## ADR-005：AOI 归 Scene
+## ADR-005：本地 AOI 与观察者视图
 
-SceneAoi 由 Scene 持有，随该 Scene 的权威线程修改。可见性集合与模拟单元隔离，不把 AOI 拆成新增业务进程。
+SceneAoi/ViewerState 是现有本地可见性原语，目标由 cell 推进。未来邻接 Ghost、跨 Cell 可见集合并和 Witness 完整语义另行实现，不新增 AOI 业务进程。
 
-## ADR-006：战斗运行时与结算
+## ADR-006：战斗与结算
 
-BattleRuntime 是确定性战斗模块；随机源、输入顺序、阶段和结算写入边界必须明确。Instance 持有玩法负载，奖励通过既有单向落账接口进入玩家长期资料，失败或重试须避免重复发奖。
+cell 运行 BattleRuntime，确定随机源、顺序和时钟；稳定结算 ID 交各所属 Base 校验，再经 database 持久提交资料与去重凭据。传输、受理和内存奖励均不等于持久成功。
 
-## ADR-007：持久化现状与边界
+## ADR-007：存储独立
 
-现役档案使用本地 JSON 文件、SaveQueue 和 PersistJournal。MySQL、Redis 等真实外部存储尚未接入业务运行路径；在具体部署、容量或用户需求触发前维持暂缓，不把依赖声明当作接入完成。
+database 提供加载、保存、路由与持久结果；Base 制定业务规则。提取既有 JSON、SaveQueue、PersistJournal，模拟端不持有完整档案或原服数据库凭证。外部 MySQL/Redis 按需求接入。
 
-## ADR-008：故障恢复的范围
+## ADR-008：故障恢复范围
 
-文件、journal 重放与进程重启是已有恢复原语，不等于活动副本状态已经恢复。恢复后需要重新确认玩家权威、路由与可继续的玩法阶段；没有验证过的副本恢复路径必须明确按失败处理。
+journal 和进程重启不等于恢复活动模拟。分别恢复 Base 资料、World 管理拓扑和 cell 模拟，重建权威与路由；未经验证的活动恢复须明确失败策略。
 
-## ADR-009：模拟写入与线程所有权
+## ADR-009：模拟写入与线程
 
-模拟状态由所属 Scene 的逻辑执行者顺序修改。后台工作、网络和调试请求通过已有队列交接，禁止从 IO 线程直接改写实体、AOI 或玩法状态。当前应用以单个 gameLoop 泵送和推进 World。
+每个实体只有一个 Cell 权威写入者；逻辑执行者顺序修改，IO/后台投递有界意图。多 Cell 的共享 Instance 状态有唯一逻辑负责人，不要求共享内存或全局锁步。
 
-## ADR-010：监督重启先行，热备暂缓
+## ADR-010：注册与本机监督
 
-machined 提供现有进程监督、死亡检测及重启能力。跨机热备、仲裁与自动接管未作为当前交付目标；只有明确的部署或恢复指标需求触发后再设计并验收，不能从自动重启推导热备可用。
+Base/World 向 loginServer 目录注册，cell 向所属 World 注册。World 裁决拓扑，目录保存位置投影。machined 只监督本机；独立 World/cell 不要求本机 machined。跨机热备与仲裁未立项。
 
-## ADR-011：Gateway 链路与更新验收
+## ADR-011：Gateway 与两种更新
 
-Gateway 负责连接、会话和路由。当前 M1 出口接入 World，上下行完整玩法、多 World 选路与跨 Gateway 会话恢复仍需验收。协议更新与仅代码更新分别验收；服务持续接入、免重新登录、TCP 不断开、活动副本不中断是不同结果。多实例不自动提供连接交接。
+gateway 持有 socket，分开 Base/cell 路由。协议更新替换进程并转换状态，Base、cell、World 管理端分别交接其状态；仅代码更新保持 wire，可使用 Lua 更新。TCP、会话与完整活动连续分别验收。
 
-## ADR-012：按需副本与进程隔离
+## ADR-012：默认部署与容量扩展
 
-Instance 按小队请求创建，在 World 内运行。现有 offload 模块和内存传输桩可作为可选隔离能力的基础；若后续需要一副本一进程，仍使用 World 职责，必须补齐按需拉起、就绪、准入、退出及崩溃失败协议。当前没有完整生产级自动拉起链路。
+默认一个 cell 进程，承载多个 Space 的完整 Cell；不要求一副本一进程。更多执行端向 World 注册，先支持完整 Space/Cell 分配，未来再启用同 Space 分区。自动拉起、就绪和失效协议仍须实现。
 
-## ADR-013：日志收集与延后能力
+## ADR-013：观测状态
 
-logger 已提供本地结构化日志检索与 M1 收集入口，业务进程可配置日志推送；收集失败不得阻塞模拟。战斗验证能力维持随具体玩法立项再接入，Kafka/Grafana 等外部观测基建维持暂缓；这些是未关闭的后续能力，不是已交付功能。
+复用自研日志、MetricRegistry、span/trace 与 M1 收集；收集失败不得阻塞模拟。专用 Profiler、OpenTelemetry SDK/OTLP exporter 尚未集成，外部观测部署按需求实施。
 
-## ADR-014：进程命名与实例对象
+## ADR-014：固定名称与对照
 
-游戏逻辑进程唯一职责名为 World；程序 world-app，入口 WorldApp，代码命名空间 world_app。Login 和 Gateway 继续承担各自职责。Instance 是临时玩法副本，Scene 是内部模拟单元。玩家资料与持久化由 World 内 PlayerStore 托管；在线目录、落点和迁移编排由 Login 内 OnlineDirectory 托管。第三方引擎资料保持真实上游名称和源码路径。
+gateway、loginServer、baseServer、worldServer、database、machined 保持原名；增加已讨论的 cell 执行职责。worldServer 对照 CellAppMgr 管理，cell 对照 CellApp。现有 Scene 对照 Space；Instance 为 Apollo 玩法对象。第三方名称保留原样。
 
 ## ADR-015：异步意图受理
 
-网络回调提交意图至有界队列；WorldApp::gameLoop 在固定执行边界消费并推进 World。入队成功不等于业务已执行完成，不为等待 tick 而阻塞 IO 工作线程。
+当前 WorldApp::gameLoop 泵送和消费 acceptanceQueue_ 并推进 World。拆分后该模拟循环归 cell；World 留管理。入队不等于执行，不阻塞 IO 等待 tick。
 
-## ADR-016：水位、过载与停机
+## ADR-016：过载与停机
 
-沿用既有队列容量与告警水位、tick 消费预算和拒收策略。容量满时显式拒收，不静默丢弃已受理工作。停机关闭受理后完成队列尾扫，停止模拟和链路；生产排空还需定义副本结算、资源销毁、超时与强停的结果。
+容量、水位、预算和拒收明确，不静默丢弃已受理工作。关闭受理、尾扫、结算和资源释放后停机；管理端排空执行分配与模拟端排空活动分别处理。
 
 ## ADR-017：回执语义
 
-M1 意图由模拟线程消费后返回关联回执，受理失败可立即返回拒绝结果。回执关联 request_id，明确区分传输到达、受理和执行；消费回执不能替代玩法结果校验、幂等结算或持久化确认。
+关联 request_id，区分传输、受理、执行与持久结果。消费回执不能替代业务验证、幂等结算或存档确认。

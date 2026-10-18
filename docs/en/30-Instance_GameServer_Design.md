@@ -1,40 +1,28 @@
 # World and Instance Design
 
-Apollo targets lightweight multiplayer gameplay. `World` is the game-logic process. `Instance` is a temporary gameplay instance created for a group of players and destroyed after objectives, settlement, and cleanup. See [concepts and names](design/concept-glossary.md).
+worldServer manages Space/Cell and executors; cell runs simulation. Base owns persistent objects and database owns storage. Follow the [BigWorld–Apollo mapping](design/bigworld-apollo-mapping.md) without synonymous containers or code renames.
 
 ## Processes and objects
 
-```text
-Client → Login (authentication and credentials)
-Client → Gateway (connections and routing) → World (game-logic process)
-                                             ├── Scene (entities, AOI, tick)
-                                             └── Instance (lifecycle, associated Scene)
-```
+Space corresponds to existing Scene semantics. Cell is a partition; its executor corresponds to CellApp. Initially one executor hosts full Cells from several Spaces. Scale whole-Space placement first and reserve same-Space partitioning. Instance is Apollo's temporary lifecycle for members, objectives, clocks, settlement, and cleanup; persistent Spaces need no temporary Instance.
 
-One World can host multiple isolated instances. Reuse the existing Instance lifecycle and Scene simulation containers. A World may also host persistent scenes; gameplay determines whether a temporary Instance is required.
+## Temporary activity flow
 
-## Temporary instance flow
+1. Base validates members, eligibility, configuration, and compatibility, then requests World capacity.
+2. World places Space/Cell; cell creates Instance/space and validates Base associations/admission.
+3. cell advances combat, enemies, objectives, and clocks using necessary snapshots/runtime state only.
+4. Submit completion/failure results to each original Base using stable settlement IDs; database confirms durability.
+5. Define pending, partial success, compensation, and cancellation without deleting sole recovery evidence. Cancellation grants no success reward.
+6. Depart and reclaim entities, AOI, scripts, Instance, and temporary Space; Base objects survive.
 
-1. A group requests an activity; the server validates membership, capacity, and admission rules.
-2. Select a World with capacity, create an Instance and temporary Scene, and bind gameplay configuration.
-3. Admit members and start gameplay when ready; run enemy spawning, combat, and objective checks.
-4. On success or failure, stop gameplay progression and commit idempotent, recoverable settlement.
-5. Players leave or are removed by policy. Reject late input; release entities, AOI, tasks, and scene resources; destroy the Instance.
+Reuse Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed. Cover no entry, all disconnected, disbanding, and timeout. A state machine does not establish distributed persistence.
 
-Reuse `Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed`. Empty groups, disconnection, disbanding, and timeouts need explicit cleanup without dropping valid settlement results.
+## Cross-server play and updates
 
-## Authority and cross-server play
+Transfer simulation authority without moving Base/storage affiliation. Executors submit outcomes to original Bases, without home storage credentials. Explicit Space changes differ from future same-Space Cell handoff; current SceneTransfer recreates Avatar and cannot provide seamless continuity.
 
-Persistent player data uses persistence modules; the current Scene in World authoritatively advances the player's match entity. Cross-World transfer requires source freeze, export, target confirmation, route switching, and source cleanup. Only one entity can accept player input and authoritative writes at a time. Validate existing in-process SceneTransfer separately from cross-process takeover.
-
-Cross-server scenes are an explicit reserved requirement. Keep home-server affiliation separate from World runtime location; players from multiple servers may share a Scene. Temporary cross-server activities reuse Instance. See [Cross-server scene design](design/cross-server-scenes.md) for admission, transfer, settlement, and return rules.
-
-## Updates
-
-Protocol updates regenerate XML/XSD contract artifacts; handshake compatibility windows and publish/rollback drills exist, while business payload compatibility requires validation for each encoding and change. Code-only updates preserve the protocol: Lua provides preparation, tick-boundary commit, observation, and rollback; C++ uses process replacement.
-
-World drain stops assigning new instances and waits for settlement and resource cleanup before exiting. A forced-stop deadline needs defined failure and recovery behavior. Gateway owns TCP connections; replicas do not automatically transfer sockets. Continuing active instances across versions requires state transfer, compatibility checks, and rollback.
+Protocol updates separately transfer Base objects, cell simulation, and World topology/outstanding decisions. Full activity continuity includes members, entities, enemies, objectives, clocks, randomness, and script state. Code-only updates preserve wire; Lua changes commit at execution boundaries and C++ uses replacement. Validate gateway survival/replacement separately.
 
 ## Implementation status
 
-The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete. See the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
+World, Scene, Instance, SceneTransfer, BattleRuntime, and rollout/drain primitives remain reusable. Current WorldApp combines management/execution; Base/database prototypes exist, while the cell entry, trusted associations, real routes, and complete migration remain pending. Future seamless maps reserve identity, partition, topology, Ghost, and visibility boundaries but are disabled today. See [cross-server play](design/cross-server-scenes.md), [updates](design/gateway-topology-survey.md), and root todo.md.

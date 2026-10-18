@@ -1,33 +1,23 @@
-
 # Login Flow
 
-This document describes login boundaries in the instance-based model. See the [Architecture Overview](../guide/architecture.md) for target topology.
-
-## Responsibilities
-
-- `Login` authenticates accounts and issues short-lived login credentials.
-- The client uses the credential to establish a game connection to `Gateway`.
-- `Gateway` validates the credential and establishes a connection session, then routes messages to the World currently hosting the player.
-- After accepting a join-instance request, the World creates or restores the player's match runtime object; it is the sole authority for match state.
-
-Account authentication, client connections, and match simulation are separate responsibilities. A login credential proves that account authentication succeeded; it does not decide which process owns the player object. The server must validate instance admission and routing information. Clients cannot select the authoritative World themselves.
+loginServer authenticates, gateway binds the connection, and Base activates persistent objects through database. World places gameplay; cell creates simulation entities. See the [mapping](./bigworld-apollo-mapping.md).
 
 ## Typical flow
 
 ```text
-Client → Login: account authentication
-Login → Client: login credential
-Client → Gateway: establish game connection and submit credential
-Gateway → World: validate session and route instance-join request
-World → Gateway/Client: accept join and return initial state
+Client → loginServer: authenticate and obtain credentials/ingress
+Client → gateway: connect, validate credentials, associate session
+Directory: resolve owning Base, unchanged by cross-server play
+baseServer → database: load profiles and confirm activation
+Client → gateway → Base: persistent business or gameplay request
+Base → worldServer: members, Base association, snapshot, admission
+World → cell: place Space/Cell, create temporary Instance if needed
+Directory/gateway: project committed World/Space/Cell/executor location
+cell ↔ gateway ↔ Client: initial scene and simulation input/state
 ```
 
-The implementation design owns credential format, handshake encryption, expiry, replay protection, queueing, and account storage. Do not describe unimplemented details as current capabilities.
+Servers validate home scope, versions, capacity, credentials, and members. Clients cannot assign profile ownership or storage. Base objects can exist before gameplay entry. World does not keep another simulation entity; cell does not load complete profiles.
 
-## Reconnection and transfer
+## Reconnection and implementation
 
-When the same account logs in again, the old session must be invalidated or explicitly replaced. Reconnection restores session identity, but may establish a new connection. Cross-server transfer is defined in [Sessions and Online Routing](./session-and-online-directory.md): the World completes authority handoff first, then Gateway routing is updated.
-
-## Implementation status
-
-The repository contains `login-app` and `gateway-app` prototypes. End-to-end login, Gateway credential validation, World routing, and cross-server takeover still need validation against this flow. Base/Cell routes in prototype code do not define the target flow.
+Duplicate login revokes old sessions. Reconnection restores original Base and current simulation location without another profile writer. Authentication, ingress, and directory primitives exist; Base/database prototypes provide remote storage; default login routing, World/cell separation, and real recovery remain unfinished. Test profiles/injected sessions are not production authentication evidence. Track work in root todo.md.

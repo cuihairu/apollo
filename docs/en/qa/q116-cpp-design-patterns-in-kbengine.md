@@ -28,7 +28,7 @@ For persistent state, distinguish accepted work from durable work. A callback in
 
 ## Applying the lessons to Apollo
 
-Apollo's reusable host and module lifecycle provide the common runtime boundary. World hosts Scene/Instance simulation and player data services; Login hosts authentication and directory/placement control; Gateway holds client connections. These responsibilities remain stable regardless of whether their implementation uses factories, observers, strategies, or composition.
+Apollo's reusable host and module lifecycle provide the common runtime boundary. baseServer owns persistent-player gameplay; worldServer manages Space/Cell and executors; cell owns simulation/Instance; database owns storage access; loginServer hosts authentication/directories; gateway holds connections; machined supervises local processes. These responsibilities remain stable regardless of whether their implementation uses factories, observers, strategies, or composition.
 
 Ghost/proxy concepts from KBEngine's distributed spatial model are not a requirement for Apollo's explicit cross-World transfer. Likewise, a manager strategy does not justify adding another business process when the same responsibility can be hosted by an existing application.
 

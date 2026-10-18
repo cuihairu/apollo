@@ -7,42 +7,58 @@ prev: /en/guide/configuration
 
 # Architecture Overview
 
-Apollo targets lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, arenas, and dungeons. An instance hosts one gameplay session; one `World` process can host multiple instances. Apollo is not designed around a persistent seamless world or spatially partitioned processes.
+Apollo currently targets tower defense, cooperative play, and group instances, while reserving future seamless maps. The [BigWorld–Apollo mapping](../design/bigworld-apollo-mapping.md) retains the six agreed role names and adds the discussed cell executor. worldServer manages executors rather than running entity ticks.
 
 ## Target model
 
 ```mermaid
 flowchart LR
-    Client[Client] --> Login[Login<br/>account authentication and login ticket]
-    Client <-->|game connection| Gateway[Gateway<br/>connection and message routing]
-    Gateway --> World[World<br/>instance hosting and match simulation]
-    World --> Instance[Instance<br/>one gameplay session]
-    Instance --> Player[Player / Entity<br/>single authoritative runtime object]
-    Instance --> AOI[AOI]
-    Instance --> Battle[game logic and settlement]
-    World --> Store[player persistence]
+    Client --> Login[loginServer: authentication and directories]
+    Client <--> Gateway[gateway: connections and forwarding]
+    Gateway <--> Base[baseServer: persistent objects]
+    Gateway <--> Cell[cell: spatial simulation]
+    World[worldServer: Space/Cell management] --> Cell
+    Cell -->|settlement and base requests| Base
+    Base <--> Database[database: storage access]
+    Database <--> Storage[Storage backend]
 ```
 
-| Name | Responsibility |
+| Role | Responsibility and lifecycle |
 |---|---|
-| `Login` | Authenticates accounts and issues credentials to enter the game. |
-| `Gateway` | Accepts game connections and routes messages by session. It does not own authoritative match state. |
-| `World` | Creates, runs, and destroys instances; executes authoritative game logic in each instance. One process can host multiple instances. |
-| `Instance` | The lifecycle and temporary state of one match. It is reclaimed when the match ends. |
-| `Player` / `Entity` | A player's runtime object in the current match. Each player has one authoritative object at a time. |
+| gateway | Client sockets, sessions, and Base/simulation routes; backend replacement does not move sockets. |
+| loginServer | Authentication, credentials, service and online directories; location projections, not Cell topology decisions. |
+| baseServer | PlayerAnchor persistent objects, base gameplay, and profile write authority, independent of instances and cross-server play. |
+| worldServer | CellAppMgr-like management: executor registration, capacity, Space/Cell placement, topology, drain, and migration. |
+| cell | CellApp-like execution: local Cells, Avatar/Entity, AOI, combat, Lua, and ticks. |
+| database | Profile operations, storage routing, queues/journal, and durable results, without reward rules. |
+| machined | Optional local supervision, without player ownership or spatial placement decisions. |
 
-Cross-server play transfers the player's authoritative object. The source `World` pauses authoritative processing, the destination receives the state and confirms ownership, Gateway routing is updated, and the source object is then removed. Transfer data may briefly exist at both ends, but only one process may handle requests, advance state, or commit authoritative writes.
+## Spatial and gameplay objects
+
+Space is an independent runtime space, corresponding to the spatial meaning of the existing Scene type. Do not add a synonymous Scene→Space container chain. A Cell is a partition of a Space; a cell process hosts partitions. Initially use one executor and one full-range Cell per Space. One executor may host Cells from several Spaces.
+
+Instance retains the temporary group gameplay lifecycle: members, objectives, clocks, settlement, and cleanup, with the existing eight states. It associates with Space rather than adding another partition. Persistent Spaces need no temporary Instance.
+
+## Player and data ownership
+
+Base owns profiles and supplies validated gameplay snapshots. A cell modifies authoritative simulation state in its Cells. Submit rewards, consumption, and quest results to each owning Base for validation and durable commit through database. Receipt ACK is not persistence. Cross-server play preserves home Base, server, and storage affiliation; destinations receive no home database credentials.
+
+## Registration, addressing, and migration
+
+Base/World register with loginServer; cell executors register readiness with their owning worldServer. worldServer is authoritative for Space/Cell placement and topology. The online directory stores projections of Base, World, Space, Cell, executor, and session associations. gateway caches Base and executor routes for direct business traffic.
+
+Freeze the source executor at a simulation boundary; restore the destination without activation. worldServer conditionally commits ownership against the expected source and generation, then updates route projections, activates the target, and cleans the source. Cross-World transfer needs coordination and durable commit evidence, never independent activation by two managers. Reconcile ambiguous results before simulation resumes. Neither World nor cell requires local machined.
 
 ## Update boundary
 
-Gateway provides connections and routing; it does not by itself provide zero-downtime updates. A rolling `World` update can keep the service available by stopping new instance assignments, letting existing instances finish, and then exiting the old process. This does not guarantee uninterrupted TCP connections or preserve active instances across versions. Continuing active instances across an update requires instance-state transfer, route switching, and rollback to be implemented and verified separately.
+Protocol updates prepare replacements, verify message/state compatibility, restore state, hand off exclusive authority and routes, then retire sources. Base transfers persistent objects and in-flight business; cell transfers necessary simulation state; worldServer transfers topology and outstanding placement/migration records. Their snapshots differ.
+
+Code-only updates preserve message IDs, fields, and wire format. Lua changes commit at the owning execution boundary; C++ uses replacement processes. Keeping gateway retains its TCP sockets; replacing it requires drain or reconnect recovery. Complete Instance continuity includes members, enemies, objectives, clocks, and necessary script state. See [update boundaries](../design/gateway-topology-survey.md).
+
+## Seamless-map reservation
+
+Spatial splitting, Ghost replication, and cross-boundary combat are deferred. Reserve multiple Cells in one Space, global coordinates, stable entity IDs, adjacency/topology, authority generations, complete state handoff, and continuous visibility. Explicit Space changes differ from same-Space Cell handoff; departure resets cannot implement seamless transfer.
 
 ## Repository status
 
-Business executables are `login-app`, `gateway-app`, and `world-app`, with optional `machined` supervision. World hosts PlayerStore for persistent profiles; Login hosts OnlineDirectory for routing and placement. Group Instance orchestration and protocol replies are integrated; durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete. See [Server Applications](../apps/index.md) for implementation status.
-
-## Temporary instance lifecycle
-
-A group requests an activity → World creates an Instance and temporary Scene → members pass admission and enter → clear enemies and complete objectives → settle → players leave → destroy the Instance, scene, and temporary resources.
-
-The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete.
+WorldApp, World, and Scene currently combine management and simulation. Dedicated Base/database prototypes provide remote load/save. The cell entry point, registration, business migration, and full routing remain unfinished. SceneTransfer changes scenes within one process, not complete Cell ownership. Existing primitives/tests establish their own scope only. See [applications](../apps/index.md) and root todo.md.

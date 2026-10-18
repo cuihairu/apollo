@@ -10,7 +10,7 @@
 | 1 | 请画出你熟悉的 MMORPG 服务器架构图，说明各组件的职责和通信方式 | 已完成 | [q1-server-architecture.md](qa/q1-server-architecture.md) |
 | 2 | BigWorld 架构中的 CellApp 和 BaseApp 分别负责什么？为什么这样分离？ | 已完成 | [q2-bigworld-cell-base.md](qa/q2-bigworld-cell-base.md) |
 | 3 | 什么是 AOI（Area of Interest）？有哪些实现方式？各有什么优缺点？ | 已完成 | [q3-aoi-implementation.md](qa/q3-aoi-implementation.md) |
-| 4 | Apollo 为什么不实现无缝大世界？副本之间如何切换？ | 已完成 | [q4-instance-boundary.md](qa/q4-instance-boundary.md) |
+| 4 | 副本如何创建、完成与销毁？ | 已完成 | [q4-instance-boundary.md](qa/q4-instance-boundary.md) |
 | 5 | 服务端如何设计才能支持动态扩容？ | 已完成 | [q5-dynamic-scaling.md](qa/q5-dynamic-scaling.md) |
 | 6 | 单服架构 vs 分布式架构，如何选择？ | 已完成 | [q6-single-vs-distributed.md](qa/q6-single-vs-distributed.md) |
 | 7 | 进程内架构 vs 多进程架构，各有什么优劣？ | 已完成 | [q7-process-architecture.md](qa/q7-process-architecture.md) |

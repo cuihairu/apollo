@@ -28,8 +28,10 @@ This document describes the actual directory layout of the current repository.
 |------|------|
 | `login-app/` | Login entry point |
 | `gateway-app/` | Edge access layer |
-| `common/` | Hosted player data and online-directory services |
-| `world-app/` | World runtime prototype |
+| `base-server/` | Standalone baseServer with remote database access |
+| `database/` | Dedicated M1 load/save and file journal |
+| `common/` | Reusable profile, storage, and directory implementations; host ownership must follow Base/database boundaries |
+| `world-app/` | Current combined manager/executor prototype; split worldServer management and cell simulation |
 | `game-server/` | Compatibility or demo game service |
 | `machined/` | Process supervision (roster spawn/backoff restart/death reporting) |
 

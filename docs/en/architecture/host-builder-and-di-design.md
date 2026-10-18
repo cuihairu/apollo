@@ -37,7 +37,7 @@ The application supplies these example types. Current validation includes assert
 
 Entry points load their configuration, compose services, register hosts, initialize logging/runtime facilities, and define shutdown order. ApplicationHost owns the lifecycle of registered services; other services remain explicitly application-owned.
 
-WorldApp currently uses WorldHost for simulation and explicitly manages PlayerStore. LoginServer explicitly manages OnlineDirectory and admission links. They are not fully containerized applications, and consistent terminology does not require additional unimplemented HostBuilder or ServiceCollection types.
+Current WorldApp uses WorldHost for simulation; move execution into cell and retain World management. LoginServer manages OnlineDirectory/admission. Persistent-player and storage components must be hosted by dedicated baseServer/database entries. They are not fully containerized applications, and consistent terminology does not require additional unimplemented HostBuilder or ServiceCollection types.
 
 Shutdown closes admission and intake before completing accepted work, settlement, persistence, and resource cleanup. Dependency facilities stop last. Deadlines and active-instance recovery require business acceptance rather than inference from destructor order.
 

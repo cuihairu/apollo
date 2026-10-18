@@ -32,7 +32,7 @@ auto anchor = anchors.activate(kPlayer);          // 1001
 // 重登幂等：anchors.find(kPlayer) == anchor
 ```
 
-`PlayerAnchor` is the sole authority for a player's long-term state (ADR-001): activated at login, persistent across instances, reclaimed at logout. The battle settlement later posts into it one-way.
+`PlayerAnchor` is the sole authority for a player's long-term state (ADR-001): activated at login, owned by Base independently of Instances and unloaded under its session policy. The battle settlement later posts into it one-way.
 
 ## Step 2: create the instance — the eight-state machine starts
 
@@ -111,10 +111,10 @@ The determinism trio: strictly increasing ticks, sorted inputs, `CombatRoll` sub
 ```cpp
 battle->finish();                                 // → Finished
 // anchor->progress("exp") > 0：奖励落了长期态
-// !anchor->dirty_reasons().empty()：变更即脏（随 SaveQueue 落档）
+// !anchor->dirty_reasons().empty()：内存脏标记；持久确认另行完成
 ```
 
-Settlement totals per-player Hit damage and posts into `PlayerAnchor` via `AnchorRewardSink`; after `mark_dirty` the persistence line (ADR-007's write-behind) archives it.
+This demonstrates an in-process reward primitive. mark_dirty indicates an in-memory change, not durable success. In the target-role topology, cell submits settlement to the owning Base, which validates and commits through database. A local Anchor example does not establish distributed settlement or saving.
 
 ## Step 8: leave — leaving and reclamation
 

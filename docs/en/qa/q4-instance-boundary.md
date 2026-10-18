@@ -1,7 +1,7 @@
-# Q4: How are gameplay instances created, completed, and destroyed?
+# Q4: How are instances created, completed, and destroyed?
 
-World hosts game logic. Instance is a temporary activity created for a group of players. Scene owns entities, AOI, and ticks inside World; Instance owns the activity lifecycle.
+Base validates the group, worldServer places Space/Cell/executor, and cell creates/runs the temporary Instance. Space matches existing Scene semantics; Instance owns members, objectives, clocks, settlement, and cleanup, without another spatial layer or process.
 
-After a group request, validate members, select World, and create an Instance and temporary Scene. Players enter, clear enemies and objectives, and receive idempotent settlement. After they leave, release entities, tasks, scripts, and scene resources, then destroy the instance. Empty groups, departures, failures, and timeouts need explicit cleanup.
+Send completion/failure results to owning Bases for validation and durable database confirmation, then depart and release temporary resources. Persistent Base objects survive. Define cancellation, no entry, disconnect, and timeout outcomes.
 
-World, Scene, and the Instance state machine exist. Group admission, objective settlement, and automatic destruction are not integrated end to end. Cross-World transfers separately require authority handoff and Gateway route validation. See [World and Instance design](../30-Instance_GameServer_Design.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
+World/Scene/Instance primitives exist; manager/executor separation and complete distributed wiring remain unfinished. Initially one Cell per Space; reserve future multiple Cells/seamless maps. See the [mapping](../design/bigworld-apollo-mapping.md), [instance design](../30-Instance_GameServer_Design.md), and root todo.md.

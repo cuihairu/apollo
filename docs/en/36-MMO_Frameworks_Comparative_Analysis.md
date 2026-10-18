@@ -17,7 +17,7 @@ This document explains names used by other game server projects and the responsi
 | `dbmgr` | Database access and entity-persistence coordination. |
 | `machine` | Machine discovery and process-management support. |
 
-Base/Cell are part of KBEngine's entity and spatial model. Apollo does not use these words for its target processes.
+Base/Cell belong to KBEngine's entity/spatial model. Apollo keeps profiles in Base, executor management in worldServer, and simulation in cell. Reuse Space/Cell semantics, initially one Cell per Space, reserving future seamless capabilities.
 
 ### BigWorld
 
@@ -31,7 +31,7 @@ Base/Cell are part of KBEngine's entity and spatial model. Apollo does not use t
 | `dbapp` / `dbappmgr` | Database task processing and management. |
 | `bwmachined` | Machine discovery, monitoring, and process-management support. |
 
-BigWorld's Cell/ghost mechanisms support continuous space across Cells; these names are used here only as BigWorld terminology.
+BigWorld's Cell/ghost mechanisms support continuous space across Cells; see the [Apollo mapping](design/bigworld-apollo-mapping.md) for management/execution/spatial correspondence, without claiming full implementation.
 
 ### TrinityCore / AzerothCore
 
@@ -83,22 +83,26 @@ Skynet is a general service runtime and does not prescribe an MMO process topolo
 
 ### Colyseus and Photon
 
-Colyseus uses `Instance` for a stateful multiplayer session/match hosted by a game-server process. Photon commonly uses `Master Server` for session discovery/allocation and `Game Server` to host instances and matches. In both cases, `Instance` is a gameplay session concept, not a process name.
+Colyseus uses the actual `Room` type for a stateful client group; see [official Rooms documentation](https://docs.colyseus.io/room). Photon Master Server and Game Server are service roles. External session names do not change Apollo Instance terminology.
 
 ### Agones
 
 Agones uses `GameServer`, `Fleet`, and `FleetAutoscaler` for game-server instances and orchestration resources on Kubernetes. It addresses deployment and capacity orchestration; it does not define the business model for player objects or instances.
 
-## Apollo's common names
+## Apollo names
 
-| Apollo target name | Responsibility | Similar concepts elsewhere |
+| Target name | Responsibility | External responsibility reference |
 |---|---|---|
-| `Login` | Account authentication and login credentials. | `loginapp`, `authserver`, `loginserver` |
-| `Gateway` | Client game connections and message routing. | Pomelo `connector`, Ryzom `FES`, Skynet Gate |
-| `World` | Hosts multiple instances and runs authoritative match logic. | Colyseus game-server process, Photon `Game Server` |
-| `Instance` | One match and its temporary state. | Colyseus/Photon `Instance`, match instance |
+| loginServer | Authentication, credentials, directories | loginapp/authserver authentication boundaries |
+| gateway | Client connections and forwarding | Pomelo connector, Ryzom FES, Skynet Gate |
+| baseServer | Persistent-player objects and base gameplay | Non-spatial BaseApp behavior; not a database process |
+| worldServer | Executor registration, Space/Cell placement and topology | Relevant CellAppMgr management duties |
+| cell executor | Partition simulation, entities, AOI and ticks | CellApp; one process may host several Cells |
+| database | Profile loading/saving and storage access | dbmgr/dbapp storage responsibilities |
+| machined | Local process lifecycle/supervision | Local process management, not player ownership |
+| Space (existing Scene semantics) / Cell / Instance | Runtime space / partition / temporary gameplay | Reuse BigWorld Space/Cell; Instance is Apollo gameplay |
 
-Apollo does not use `World`, `ZoneServer`, `AreaServer`, and `SceneServer` as parallel names for the same instance/match runtime. `Scene` may describe a spatial object in code; the public gameplay and hosting units are `Instance` and `World`. One World can host multiple Instances.
+Cross-server play retains Base/storage affiliation; cell associates each player with its Base. See [concepts](design/concept-glossary.md). Similar responsibilities do not imply identical engine topologies.
 
 ## Gateway and updates
 
@@ -112,5 +116,5 @@ Apollo does not use `World`, `ZoneServer`, `AreaServer`, and `SceneServer` as pa
 - [Pomelo terminology](https://github.com/NetEase/pomelo/wiki/Terminologies) and [LordOfPomelo server introduction](https://github.com/NetEase/pomelo/wiki/LordOfPomelo-server-introduction)
 - [Ryzom Core services](https://github.com/ryzom/ryzomcore/wiki/architecture_ryzom_services)
 - [Skynet GateServer](https://github.com/cloudwu/skynet/wiki/GateServer)
-- [Colyseus instances](https://docs.colyseus.io/instance/)
+- [Colyseus Rooms](https://docs.colyseus.io/room)
 - [Agones concepts](https://agones.dev/site/docs/)

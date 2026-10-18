@@ -1,6 +1,6 @@
 # Attribute System and Synchronization
 
-The owning Scene logic thread manages values, history, and each observer's progress. World holds current authority. Persistent data and simulation remain distinct responsibilities without another business process topology.
+The owning Scene logic thread manages values, history, and each observer's progress. cell owns simulation and worldServer manages placement, baseServer owns persistent-player gameplay, and database owns storage access.
 
 ## Executive summary
 
@@ -26,7 +26,7 @@ Current primitives use integer values and slice slots. Composite ID is `(slot <<
 
 ### 2.3 Authority and visibility domains
 
-The current World manages profile write authority and Scene simulation, with explicit transfer. Visibility is separate: Public/World, Self, Team, and Guild projections depend on declarations and host-provided membership.
+baseServer owns persistent-data writes; cell owns simulation and worldServer manages placement; database performs storage access. Scene transfer retains Base/storage affiliation. Visibility is separate: Public/World, Self, Team, and Guild projections depend on declarations and host-provided membership.
 
 Current Public/World domains are visible; Self compares observer/entity identity; Team/Guild require an injected group gate and remain hidden without one. Hosts must correctly map player and entity identity instead of treating defaults as complete authorization.
 
@@ -68,7 +68,7 @@ Membership and authorization changes require projection refresh, including remov
 
 ### 4.4 Cross-server play
 
-Reuse Scene and synchronization. Transfer exclusive authority, refresh routes, and rebuild observer baselines. Ghosts and seamless spatial partitioning are not targets. See [cross-server scenes](./cross-server-scenes.md).
+Reuse Scene and synchronization. Transfer exclusive authority, refresh routes, and rebuild observer baselines. Ghost replication and seamless partitions are deferred; reserve adjacent projections, continuous views, and deduplication for future same-Space Cells. See [cross-server scenes](./cross-server-scenes.md).
 
 ## 5. Budgets, priority, and throttling
 
@@ -110,7 +110,7 @@ Generation expands entity inheritance into flat metadata. SDKs must not independ
 
 ### 8.1 Ownership
 
-World hosts PlayerStore, profiles, SaveQueue, and PersistJournal. Scene state and long-term data are not two independently writable gameplay authorities.
+Base owns persistent profiles, cell owns scene state and World manages topology, and database owns save queues, journal, and storage access. They are not concurrent writers of the same complete profile. Scene transfer retains Base/storage affiliation.
 
 ### 8.2 Handoff
 

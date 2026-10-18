@@ -1,33 +1,23 @@
-
 # 登录流程
 
-本文说明副本制模型中的登录边界。目标拓扑见[架构总览](../guide/architecture.md)。
-
-## 职责
-
-- `Login` 验证账号并签发短期登录凭证。
-- 客户端使用凭证建立游戏连接到 `Gateway`。
-- `Gateway` 校验凭证并建立连接会话，再根据在线路由将消息转发给玩家当前所在的 World。
-- World 接受加入副本请求后创建/恢复玩家的对局运行对象；它是对局状态唯一权威。
-
-账号认证、客户端连接和对局模拟是三个职责。登录凭证只证明账号认证通过，不直接决定玩家对象由哪个进程持有。进入副本时的准入和路由信息必须由服务端验证，客户端不能自行指定权威 World。
+loginServer 认证、gateway 绑定连接、Base 经 database 激活长期对象；进入玩法由 World 管理分配、cell 创建模拟实体。术语见[体系对照](./bigworld-apollo-mapping.md)。
 
 ## 典型流程
 
 ```text
-Client → Login: 账号认证
-Login → Client: 登录凭证
-Client → Gateway: 建立游戏连接并提交凭证
-Gateway → World: 验证会话并路由进入副本请求
-World → Gateway/Client: 接受进入副本并返回初始状态
+Client → loginServer：认证，取得凭证与接入信息
+Client → gateway：连接、验证凭证、绑定会话
+目录：解析所属 Base（不因跨服改变）
+baseServer → database：加载长期资料，确认激活
+Client → gateway → Base：基础业务或申请玩法
+Base → worldServer：成员资格、Base 关联、玩法快照与准入申请
+World → cell：分配 Space/Cell，创建临时 Instance（如需要）
+目录/gateway：记录已提交 World/Space/Cell/执行端位置投影
+cell ↔ gateway ↔ Client：初始场景与后续模拟输入/状态
 ```
 
-具体的票据格式、加密握手、过期时间、重放防护、排队和账号存储方式由实现设计确定；不得在本文把未实现细节表述为当前能力。
+服务端验证区服、版本、容量、凭证与成员；客户端不能自行指定资料归属或数据库。未进玩法的玩家也可有长期 Base 对象。World 不另持一份模拟实体；cell 不加载完整长期档案。
 
-## 重连与迁移
+## 重连与实现状态
 
-同一账号重新登录时，旧会话必须失效或被明确替换。断线重连恢复会话身份，但连接本身可能重建。跨服迁移由[会话与在线路由](./session-and-online-directory.md)定义：World 先完成权威接管，随后更新 Gateway 的路由。
-
-## 实现状态
-
-仓库含 `login-app` 和 `gateway-app` 原型。当前端到端登录、Gateway 凭证校验、World 路由和跨服接管仍需按此流程验收。原型代码中的 Base/Cell 路由不构成目标流程。
+重复登录撤销旧会话；重连恢复原 Base 和当前模拟位置，不创建第二个资料写入者。已有认证、接入和目录原语可复用，Base/database 原型已提供远程读写，默认登录路由、World/cell 拆分及真实恢复仍待接线。测试档案或注入会话不代表生产认证验收，任务见根目录 todo.md。

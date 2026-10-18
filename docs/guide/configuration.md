@@ -24,26 +24,13 @@ const auto port = config.get_int64("server.port");
 
 ## 应用配置
 
-| 应用 | 配置结构 | 职责 |
-|---|---|---|
-| Login | `login::LoginConfig` | 认证、Gateway 分配、World 玩家资料链路和在线目录 |
-| Gateway | `gateway::GatewayConfig` | 客户端监听、准入链路、在线目录查询和 World 消息链路 |
-| World | `world_app::WorldAppConfig` | 模拟、脚本、玩家档案与持久化 |
+配置须与目标角色对应：loginServer 配置认证与目录；gateway 配置接入及分开的 Base/cell 路由；Base 配置玩家归属和 database 客户端；World 配置执行端注册、容量、拓扑和准入；cell 配置所属 World、模拟与 Base 寻址；database 配置存储分区、连接和保存队列；machined 只配置本机监督。
 
-每个入口自行解析 CLI；以对应程序的 `--help` 为准。配置结构中的测试默认值与程序入口启用的服务默认值可能不同，不能把库配置的端口 0 当成应用入口的部署端口。
+逻辑服务身份与地址分开。玩家切换 World 保持原区服、Base 和存储归属。独立 World 需要服务目录配置，不需要原服数据库凭证或强制同机 machined。进程代次、玩家资料写权、场景模拟代次、会话版本与存储结构版本分别定义，不能混用。
 
-```bash
-world-app --world-id 1 --m1-port 9101 --player-store-m1-port 9104 \
-  --data-dir data/world-1/players --journal data/world-1/journal/persist.log
-login-app --m1-port 9103 --world-store-m1-port 9104 --directory-port 9105 \
-  --directory-epochs data/login/epochs.json --gateway tcp://127.0.0.1:9002
-gateway-app --port 9002 --world-m1-port 9101 \
-  --login-m1-port 9103 --directory-m1-port 9105
-```
+现有 LoginConfig、GatewayConfig、WorldAppConfig 尚未完整实现上述拆分。须将资料和直接存储职责移出 World，接到 Base/database 入口。当前 CLI 以程序 --help 为准，不能作为另一套目标部署方案；代码映射和迁移任务见[服务器应用](../apps/index.md)及根目录 todo.md。
 
-World 默认按 `worldId` 分开档案和 journal 目录，避免不同 World 共写同一个本地存储。Login 仅保存目录权威代次水位，不承载玩家游戏档案。当前认证器仍是测试账号原型；成功登录还要求 World 中已有对应玩家档案，不能把这组命令当成生产建号和鉴权方案。
-
-跨服场景的区服分组、准入和返回策略是[设计预留](../design/cross-server-scenes.md)，尚未提供可启用的部署配置。
+认证器仍是原型，测试档案不代表生产建号与鉴权。跨服分组、准入与返回配置为[设计预留](../design/cross-server-scenes.md)，未启用跨服部署。
 
 ## 策划表与能力边界
 

@@ -8,12 +8,13 @@
 
 | Design doc | Status | One-line positioning |
 |---|---|---|
-| [Concept glossary](./concept-glossary.md) | Living document | New-term registry |
-| [Player object model](./player-object-model.md) | Subsystem implementation note | Player identity, entities, and scene objects; Instance is the target match boundary |
+| [BigWorld–Apollo mapping](./bigworld-apollo-mapping.md) | Agreed rules | Original terms, Apollo roles, code and gaps |
+| [Concept glossary](./concept-glossary.md) | Agreed rules | Established names and responsibility boundaries |
+| [Player object model](./player-object-model.md) | Subsystem implementation note | Base persistent objects, Cell entities, and Instance gameplay lifecycles |
 | [Attribute system and sync](./attribute-sync.md) | Subsystem implementation note | Attribute data and visibility/synchronization mechanisms |
-| [Session and online directory](./session-and-online-directory.md) | Subsystem implementation note | Online sessions and current instance routing |
+| [Session and online directory](./session-and-online-directory.md) | Subsystem implementation note | Base ownership, Space/Cell/executor location, and session routing |
 | [Cross-server scenes](./cross-server-scenes.md) | Reserved design; disabled | Server affiliation, shared-scene admission, authority transfer, settlement, and return |
-| [Login flow](./login-flow.md) | Subsystem design draft | Login, Gateway, and World login/routing boundaries |
+| [Login flow](./login-flow.md) | Subsystem design draft | loginServer/gateway authentication, Base/database loading, and World admission |
 | [Clock and time](./clock-and-time.md) | Delivered | Wall clock/tick/frame budget semantics |
 
 ## Combat
@@ -39,7 +40,7 @@
 
 | Design doc | Status | One-line positioning |
 |---|---|---|
-| [World simulation single-writer](./world-single-writer.md) | Concurrency design | Concurrency boundary between network acceptance and instance simulation |
+| [Simulation single-writer](./world-single-writer.md) | Concurrency design | Concurrency boundary between network acceptance and instance simulation |
 | [Scripting system (Lua)](./scripting-lua.md) | Design draft | Both-end shared battle logic and hot-update discipline |
 | [SDK contract](./sdk-contract.md) | Living document | Client/server shared contract (contract.lua) |
 | [XML contract generation](./xml-generation.md) | Delivered | entities.xml → three-language projections |

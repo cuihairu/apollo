@@ -134,7 +134,7 @@ public:
 }
 ```
 
-**线程安全**: 不安全（归宿主保存线程（World PlayerStore：autoSaveLoop drain + 关停收口））
+**线程安全**: 不安全（须由存储宿主串行调用，目标归 database；不允许并发 append/drain/replay）
 
 ---
 

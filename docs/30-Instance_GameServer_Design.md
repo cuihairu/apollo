@@ -1,40 +1,28 @@
 # World 与 Instance 设计
 
-Apollo 面向轻量多人在线玩法。游戏逻辑进程统一称 `World`；几名玩家组队创建、完成刷怪与结算后销毁的副本统一称 `Instance`。术语以[概念与命名](design/concept-glossary.md)为准。
+worldServer 管理 Space/Cell 与执行进程，cell 实际运行模拟；Base 管长期对象，database 管存储。按 [BigWorld 与 Apollo 对照](design/bigworld-apollo-mapping.md)使用术语，不增加同义容器或改动现有代码名。
 
 ## 进程与对象
 
-```text
-Client → Login（认证与凭证）
-Client → Gateway（连接与路由）→ World（游戏逻辑进程）
-                                ├── Scene（实体、AOI、tick）
-                                └── Instance（玩法生命周期，关联 Scene）
-```
-
-一个 World 可以管理多个互相隔离的副本。Instance 与 Scene 已有代码实现；Instance 管玩法起止，Scene 管模拟状态，不为相同职责再增加类型。一个进程也可以承载持久场景，是否使用临时 Instance 由玩法决定。
+Space 对应现有 Scene 空间语义；Cell 是空间分区，执行进程对应 BigWorld CellApp。默认一个执行进程承载多个 Space 的完整 Cell；扩容先分配完整 Space，未来可在同 Space 切分。Instance 是 Apollo 临时玩法的成员、目标、计时、结算和回收生命周期，关联 Space；持续空间不必有临时 Instance。
 
 ## 临时副本流程
 
-1. 小队发起玩法请求，服务端验证成员、人数、队伍和准入条件。
-2. 选择有容量的 World，创建 Instance 及其临时 Scene，绑定本次玩法配置。
-3. 成员进入；准备完成后启动玩法，驱动刷怪、战斗和目标判定。
-4. 通关或失败后停止推进玩法，提交可去重、可恢复的结算。
-5. 玩家离开或被按规则移出，拒绝迟到输入，释放实体、AOI、任务与场景资源，销毁 Instance。
+1. Base 验证成员、资格、配置和版本，向 World 申请兼容容量。
+2. World 分配 Space/Cell 与执行端，cell 创建 Instance 和运行空间，校验成员 Base 关联及准入。
+3. cell 推进战斗、怪物、目标与时钟；只持有必要基础快照和运行状态。
+4. 通关或失败后停止有效玩法输入，以稳定结算 ID 将结果交各原 Base 校验，由 database 持久确认。
+5. 待确认、部分成功、补偿和取消有明确策略，不能销毁唯一恢复凭据；取消不发成功奖励。
+6. 成员离开，回收实体、AOI、脚本与临时资源，销毁 Instance 和临时 Space，原 Base 对象继续存在。
 
-对应现有状态机：`Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed`。无人进入、途中掉线、队伍解散和超时必须有明确处理；不能跳过结算边界直接丢弃有效结果。
+复用 Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed 八态，覆盖无人进入、全员断线、解散及超时。状态机不能代替跨进程持久确认。
 
-## 玩家权威与跨服
+## 跨服与更新
 
-玩家持久资料由持久化能力保存，对局实体由所在 World 中的 Scene 权威推进。跨 World 时执行源端冻结、导出、目标确认、路由切换和源端清理；任何时刻仅一个实体能处理玩家输入和权威写入。现有同进程 SceneTransfer 与跨进程权威交接须分别验收。
+跨服只转移模拟归属，原 Base 与数据库归属不变；cell 向各成员原 Base 提交业务结果，不获取各服存储凭证。显式换空间与未来同空间跨 Cell 分开，现有 SceneTransfer 重建 Avatar 不能提供无缝连续。
 
-跨服场景是明确的扩展要求，当前只做设计预留。区服归属与 World 运行位置分开，多个区服的玩家可进入同一 Scene；临时跨服副本仍使用 Instance。准入、交接、结算与返回规则见[跨服场景设计预留](design/cross-server-scenes.md)。
-
-## 更新
-
-协议更新修改 XML/XSD 契约并重新生成产物，握手兼容窗口与发布/回滚演练已接入，但业务报文兼容仍需逐种编码和变更验证。仅代码更新保持协议不变：Lua 使用预备、tick 边界提交、观察与回滚原语；C++ 通过进程替换发布。
-
-World 排空时停止分配新副本，等待现有副本完成结算和资源销毁后退出；超时强停需明确失败及恢复策略。Gateway 持有 TCP 连接，多实例不自动迁移既有连接。活动副本跨版本运行还需要状态迁移、兼容检查和失败回滚。
+协议更新分别交接 Base 长期对象、cell 模拟状态、World 管理拓扑和在途决定。完整活动连续迁移包括成员、实体、怪物、目标、时钟、随机与必要脚本状态。仅代码更新保持 wire，Lua 可在执行边界更新，C++ 使用进程替换；保持 gateway 与替换 gateway 分别验收。
 
 ## 实现状态
 
-复用现有 Instance 八态状态机。Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。小队创建、成员进入、目标判定、结算和临时资源回收已接入 World；SquadInstanceTests 与 SquadWireE2eTests 覆盖受理规则、隔离及上行和结果下行。跨进程结算账持久化与跨 Gateway 会话恢复仍需完善。 具体工作见根目录 [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md)。
+World、Scene、Instance、SceneTransfer、BattleRuntime 及发布/排空原语可复用；现有 WorldApp 仍混合管理和执行，Base/database 独立原型已具备，cell 入口、可信关联、真实路由和完整迁移待接。未来无缝地图仅预留身份、分区、拓扑、Ghost 和可见性边界，当前不启用。见[跨服场景](design/cross-server-scenes.md)、[更新边界](design/gateway-topology-survey.md)与根目录 todo.md。

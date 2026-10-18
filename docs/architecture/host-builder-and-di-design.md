@@ -37,7 +37,7 @@ if (!context.initialize()) return 1;
 
 应用入口负责加载自身配置、构造共享服务、注册宿主、初始化日志与运行时设施，并定义停止顺序。`ApplicationHost` 负责其已注册服务的生命周期；没有注册的服务仍由所属应用管理。
 
-WorldApp 当前使用 WorldHost 驱动模拟，并显式管理 PlayerStore；LoginServer 显式管理 OnlineDirectory 和准入链路。它们不是已经完成全部容器化的程序，也不需要为统一词汇再增加 HostBuilder、ServiceCollection 等未实现类型。
+WorldApp 使用 WorldHost 驱动模拟，LoginServer 管理 OnlineDirectory 和准入链路；长期资料及存储组件须分别接入 baseServer 和 database 的独立入口。它们不是已经完成全部容器化的程序，也不需要为统一词汇再增加 HostBuilder、ServiceCollection 等未实现类型。
 
 停止时先关闭准入和受理，再完成已接受工作、结算/持久写入及资源释放，最后关闭依赖设施。超时强停和活动副本恢复须按业务验收，不能从析构顺序推导成功恢复。
 

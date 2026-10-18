@@ -24,26 +24,13 @@ const auto port = config.get_int64("server.port");
 
 ## Application configuration
 
-| Application | Configuration | Responsibility |
-|---|---|---|
-| Login | `login::LoginConfig` | Authentication, Gateway allocation, World profile access, and online directory |
-| Gateway | `gateway::GatewayConfig` | Client listener, admission, directory queries, and World forwarding |
-| World | `world_app::WorldAppConfig` | Simulation, scripts, player profiles, and persistence |
+Configuration must reflect the target roles: loginServer configures authentication/directories; gateway configures ingress and separate Base/cell routes; Base configures ownership and database clients; World configures executor registration, capacity, topology, and admission; cell configures its World, simulation, and Base lookup; database configures storage partitions/connections/queues; machined configures only local supervision.
 
-Each entry point parses its own CLI; consult that executable's `--help`. Library defaults used by tests can differ from services enabled by an executable entry point. Port 0 in a library configuration does not establish the executable's deployment port.
+Logical identities and endpoints are separate. A player keeps its home server, Base, and storage affiliation when changing World. A standalone World needs service-directory configuration, not home database credentials or a mandatory local machined. Service generation, player ownership generation, simulation generation, session version, and storage schema version have distinct meanings.
 
-```bash
-world-app --world-id 1 --m1-port 9101 --player-store-m1-port 9104 \
-  --data-dir data/world-1/players --journal data/world-1/journal/persist.log
-login-app --m1-port 9103 --world-store-m1-port 9104 --directory-port 9105 \
-  --directory-epochs data/login/epochs.json --gateway tcp://127.0.0.1:9002
-gateway-app --port 9002 --world-m1-port 9101 \
-  --login-m1-port 9103 --directory-m1-port 9105
-```
+Existing LoginConfig, GatewayConfig, and WorldAppConfig do not yet implement this complete split. Remove profile/direct-storage ownership from World and move it behind Base/database entry points. Current executable CLI flags are implementation details discoverable through --help, not a second deployment architecture. See [application mappings](../apps/index.md) and root todo.md.
 
-World derives separate profile and journal directories from `worldId`. Separate Worlds must not write the same local storage. Login stores directory authority epoch floors, not gameplay profiles. Its authenticator still uses prototype test accounts; a successful login also requires the corresponding profile in World. These commands are not a production account-provisioning or authentication solution.
-
-Cross-server grouping, admission, and return policies are a [reserved design](../design/cross-server-scenes.md), without enabled deployment configuration.
+The authenticator remains a prototype; test profiles do not establish production account registration. Cross-server grouping, admission, and return remain [reserved design](../design/cross-server-scenes.md), not enabled deployment options.
 
 ## Data tables and boundaries
 

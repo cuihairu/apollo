@@ -14,28 +14,26 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
 
-> 轻量副本制多人在线游戏服务器引擎 —— Lightweight Instance-based Multiplayer Game Server Engine
+> 轻量副本制多人在线游戏服务器引擎
 
 ## 项目简介
 
-Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。它定位为多人在线游戏服务器引擎，不是无缝大世界 MMO 引擎。
+Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。当前交付轻量副本路径，预留未来无缝地图的 Space/Cell、权威和可见性边界。
 
-目标游戏流程使用按职责命名的常见概念：
+进程名称固定为 `gateway`、`loginServer`、`baseServer`、`worldServer`、`cell`、`database`、`machined`；cell 为已讨论的模拟执行职责，Cell 为分区。
 
 ```text
-Client ──► Login —— 账号认证与登录凭证
-   │
-   └──► Gateway —— 客户端连接与消息路由
-           └──► World —— 承载副本并运行权威对局逻辑
-                   └── Instance —— 一场对局；开始时创建，结束后销毁
-                       ├── Player / Entity
-                       ├── AOI
-                       └── 游戏逻辑与结算
+Client → loginServer：认证与目录
+Client ↔ gateway ↔ baseServer ↔ database ↔ 实际存储
+                ↔ cell：Cell / Avatar / Instance 模拟
+worldServer：管理 cell 注册、Space/Cell 分配与迁移
+cell → 各玩家所属 baseServer：结算等业务请求
+machined：按需监督本机进程
 ```
 
-一个 Instance 对应一场玩法实例；一个 World 进程可以承载多个 Instance。对局中，每名玩家只有一个权威运行时对象，由承载该副本的 World 管理。跨服玩法将该权威转交给目标 World 并更新路由，不在两个进程中同时运行玩家对象。
+baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运行实体与临时玩法。跨服保持原 Base 和数据库归属；同一个 World 可以通过逐玩家的 Base 关联接待多个区服，无需各服数据库凭证，也不要求同机部署 machined。
 
-World 同时预留承载多个区服玩家共同参与的场景。玩家原区服归属与运行位置分开；跨服准入、权威交接、结算与返回均复用 World / Scene / Instance。当前为[设计预留](docs/design/cross-server-scenes.md)，尚未启用跨服部署。
+支持协议变化的更新通过状态转换、单权威交接、路由切换和源端清理，分别替换 Base、cell 或 World 管理端。活动副本要连续，须迁移完整必要 Instance 状态。目标角色拆分及运行接线仍需实施，见[架构总览](docs/guide/architecture.md)、[服务器应用](docs/apps/index.md)和[跨服场景](docs/design/cross-server-scenes.md)。
 
 ## 适用场景
 
@@ -49,22 +47,26 @@ World 同时预留承载多个区服玩家共同参与的场景。玩家原区�
 | 多人 PvE / 生存 / Co-op | 小队共用一个 Instance |
 | 多人 PvP | 一场对局一个 Instance |
 
-**当前目标不覆盖**——玩家在空间切片进程之间连续漫游的持久化无缝大世界。这类需求采用的是另一种服务器架构。
+**当前不实施无缝地图。** 默认一个执行进程、每 Space 一个 Cell；预留同 Space 多 Cell、邻接可见性与权威交接，不另建一套架构。
 
-> MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由副本和对局组成的 MMO 玩法，但目标不是持久化无缝大世界 MMO。
+> MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由副本和对局组成的 MMO 玩法，当前优先副本路径，无缝能力保留设计边界。
+
+[BigWorld 与 Apollo 体系对照](docs/design/bigworld-apollo-mapping.md)
 
 ## 核心概念
 
 核心玩法概念（当前代码组件详见[概念指南](docs/guide/concepts.md)）：
 
-| 概念 | 一句话 | 实件 |
-|------|--------|------|
-| **Instance** | 一场对局及其临时状态 | 目标玩法单元 |
-| **World** | 承载一个或多个 Instance 并运行权威逻辑的进程 | 目标进程职责 |
-| **Player** | 玩家身份；每场对局中只有一个权威运行对象 | 当前原型代码含 `PlayerAnchor` |
-| **Entity** | 参与玩法的运行时对象 | `Entity` / `Avatar` 契约 |
-| **AOI** | 决定每名玩家能观察到哪些附近实体 | `SceneAoi` 实现 |
-| **Persistence** | 保存跨对局的玩家数据 | `PersistJournal` 实现 |
+| 概念 | 职责 | 现有代码与边界 |
+|---|---|---|
+| baseServer | 长期资料对象与基础业务 | baseServer 独立入口和远程存储已具备；目录归属及默认链路待迁移 |
+| worldServer | cell 注册、Space/Cell 拓扑与迁移 | 当前 WorldApp 管理/执行混合，需拆分 |
+| cell | 本地 Cell 模拟、实体、AOI、战斗 | 复用 WorldHost、Scene、Instance、Avatar，独立入口待实现 |
+| Space / Cell | 运行空间 / 空间分区 | Space 对应现有 Scene 语义，不新增同义容器 |
+| database | 加载、保存、存储路由与持久结果 | database 独立入口承载文件档案与 journal；完整写权/队列待补 |
+| Instance | 临时小队玩法 | 复用已有八态状态机 |
+| AOI | 场景可见性 | SceneAoi |
+| loginServer / gateway / machined | 认证与目录、连接转发、本机监督 | 复用现有入口，更新路由与部署接线 |
 
 ### 核心特性
 
@@ -73,18 +75,18 @@ World 同时预留承载多个区服玩家共同参与的场景。玩家原区�
 - **异步网络层** - 非阻塞 socket + select()/epoll 事件循环（Windows 走 select()，不使用 IOCP）
 - **传输编解码（目标态）** - protobuf 反射为默认 + zstd（规划）；现网手写编码
 - **AOI 九宫格** - `SceneAoi` 单实现 + `ViewerState` 逐观察者水位，事件面已交付
-- **战斗系统** - `BattleRuntime` 确定性战斗域（五段相位 + hash 链指纹），结算单向落锚
+- **战斗系统** - `BattleRuntime` 确定性战斗域（五段相位 + hash 链指纹），结算经所属 Base 与 database 确认
 - **数据存储** - 玩家档案文件原子写 + `PersistJournal` write-behind；外部 DB/Redis 未接线
-- **可观测** - 多级别日志 + 结构化行格式 + `MetricRegistry`
+- **可观测** - 自研日志、结构化事件、MetricRegistry 和 span/trace 原语；尚未集成专用 Profiler 或 OpenTelemetry SDK/exporter
 - **BigWorld 兼容层** - BigWorld 风格 C++ API facade（`docs/33-BigWorld_Compatibility.md`）
 
 ## 更新方案
 
-Apollo 区分两种发布方式。协议更新修改 `sdks/contract/` 下的 XML/XSD 并重新生成产物；安全滚动需要服务端和客户端在新旧契约之间保持兼容。已接入握手兼容窗口及发布/回滚演练；业务报文仍需逐种编码和变更验证，接受旧哈希不代表能自动解码旧布局。
+协议更新启动新的 Base、cell 或 World 管理进程，转换并恢复旧状态，条件提交权威与路由，清理并退出旧进程。cell 更新交接模拟状态，World 更新交接拓扑与在途管理记录，Base 更新交接长期对象；资料与存储归属保持。新旧消息解码、状态转换、回滚边界及旧客户端兼容需明确验收，握手兼容窗口不等于业务兼容。
 
-仅代码更新保持契约和 wire 格式不变。Lua `ScriptRuntime` 已提供模块预备、tick 边界提交、观察和回滚原语；fleetctl 已接入跨 World 投递、灰度观察与故障回滚。C++ 更新通过进程滚动替换，需等待 Instance 排空或先实现状态迁移。Gateway 多实例可在旧连接排空期间继续接入新连接，但不会自动把既有 TCP 连接迁移到另一个进程。
+仅代码更新保持契约编号、字段和 wire 不变。Lua 可预备、提交、观察与回滚模块，C++ 使用进程替换。保留 gateway 可维持其既有 TCP；替换 gateway 需要排空或客户端恢复。现有原语不代表目标角色的完整升级链路已接通。
 
-详见[Gateway 更新边界](docs/design/gateway-topology-survey.md)和[契约版本管理](docs/design/sdk-contract.md)。
+详见[更新边界](docs/design/gateway-topology-survey.md)和[契约版本管理](docs/design/sdk-contract.md)。
 
 ## 架构设计
 
@@ -480,4 +482,4 @@ Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与�
 
 几名玩家组队发起 → World 创建 Instance 及临时 Scene → 校验成员并进入 → 刷怪与完成目标 → 结算 → 玩家离开 → 销毁 Instance、场景和临时资源。
 
-复用现有 Instance 八态状态机。Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。小队创建、成员进入、目标判定、结算和临时资源回收已接入 World；SquadInstanceTests 与 SquadWireE2eTests 覆盖受理规则、隔离及上行和结果下行。跨进程结算账持久化与跨 Gateway 会话恢复仍需完善。
+复用现有 Instance 八态状态机。worldServer 管拓扑，cell 管模拟，Base 管长期资料并通过 database 确认结算。现有测试须重接该边界，持久结算、完整副本迁移和跨 gateway 恢复分别验收。

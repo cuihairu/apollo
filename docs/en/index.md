@@ -5,7 +5,7 @@ titleTemplate: false
 hero:
   name: Apollo
   text: Lightweight Instance-Based Multiplayer Game Server Engine
-  tagline: A C++20 runtime for tower defense, co-op, arenas, and dungeons. MMO is a possible product form; seamless worlds are not the target.
+  tagline: A C++20 runtime for tower defense, co-op, arenas, and dungeons. MMO is a possible product form; instances come first, with seamless-map design reserved.
   image:
     src: /apollo.png
     alt: Apollo
@@ -18,20 +18,20 @@ hero:
       link: /en/design/concept-glossary
 features:
   - title: Instances and matches
-    details: One Instance is one gameplay session. A World process can host multiple Instances and reclaims temporary state when matches end.
-  - title: One authoritative player object
-    details: A player has one authoritative runtime object during a match. Cross-server play transfers its state and authority, then updates Gateway routing.
+    details: One Instance is one gameplay session. A cell executor can host multiple Space/Cells and Instances and reclaims temporary state when matches end.
+  - title: Separate profile and simulation authority
+    details: Base persistent objects and Cell simulation entities are distinct. Each entity has one simulation authority; cross-server play retains Base.
   - title: Clear ingress responsibilities
-    details: Login authenticates accounts, Gateway handles client connections and routing, and World runs match simulation.
+    details: loginServer authenticates and hosts directories; gateway handles connections; Base owns persistent gameplay, World topology/executor management, cell simulation, database storage access, and machined local supervision.
   - title: Modern C++20 modules
     details: Networking, data, entity contracts, AOI, combat, and runtime modules; the README and module docs describe implementation status.
 ---
 
 ## Positioning
 
-Apollo is a lightweight instance-based multiplayer game server engine for tower defense, co-op PvE/PvP, arenas, and dungeons. MMO describes a possible product scale or form, not the server architecture. Apollo is not currently designed around a persistent seamless world.
+Apollo is a lightweight instance-based multiplayer game server engine for tower defense, co-op PvE/PvP, arenas, and dungeons. MMO describes a possible product scale or form, not the server architecture. Seamless maps are deferred, with multiple Cells per Space, neighboring visibility, and authority handoff reserved.
 
-The target path is `Client → Gateway → World → Instance`. An Instance is one match; one World can host multiple Instances. Cross-server play transfers authority for a player object, and only one process may perform authoritative operations for it at a time.
+The target-role model routes client base gameplay and simulation separately through gateway. Base loads/saves through database, loginServer hosts authentication/directories, and machined optionally supervises local processes. Scene transfer retains Base/storage affiliation.
 
 ## Documentation
 
@@ -42,6 +42,7 @@ The target path is `Client → Gateway → World → Instance`. An Instance is o
 | Current executable prototypes | [Server Applications](/en/apps/) |
 | World and cross-server transfer | [Instance-Based GameServer Design](/en/30-Instance_GameServer_Design) |
 | Building the code | [Build Guide](/en/BUILDING) |
+| BigWorld–Apollo correspondence | [Roles, concepts, and code mapping](/en/design/bigworld-apollo-mapping) |
 | External engine comparisons | [MMO Framework Comparison](/en/36-MMO_Frameworks_Comparative_Analysis) |
 
-BigWorld/KBEngine names such as Base/Cell remain in external engine comparison material to explain those implementations; they are not Apollo target architecture terms.
+External BaseApp/CellApp names retain their real meanings. Apollo uses baseServer for persistent-player gameplay and worldServer for Space/Cell management and cell for simulation; see the target-role glossary.

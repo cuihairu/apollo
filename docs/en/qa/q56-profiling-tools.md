@@ -3,6 +3,8 @@
 
 # Q56: How to Do Performance Profiling? What Tools Are There?
 
+> Implementation status: Apollo has self-built logging, MetricRegistry, and span/trace primitives. A dedicated Profiler, OpenTelemetry SDK, and OTLP exporter are not integrated. Tool comparisons and observability designs on this page are not claims of deployed functionality.
+
 ## Core Conclusion
 
 The first principle of performance profiling is not "optimize first", but "locate first".

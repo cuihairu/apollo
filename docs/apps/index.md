@@ -10,21 +10,50 @@ tag:
 
 # 服务器应用
 
-Apollo 的目标模型使用常见的职责名：`Login`、`Gateway`、`World` 和 `Instance`。这是架构概念清单，不代表仓库已经有同名且完整可部署的进程。当前仓库包含若干原型程序，名称保留在本节只用于说明实现现状；它们不构成另一套目标架构。
+目标职责和代码是两个层面。以下按 [BigWorld 与 Apollo 对照](../design/bigworld-apollo-mapping.md)列出真实缺口，不把尚未拆分的入口当成另一套设计。
 
-| 当前程序 | 当前作用 | 与目标模型的关系 |
+## 目标职责与代码映射
+
+| 目标角色 | 负责 | 当前入口与待迁移边界 |
 |---|---|---|
-| `login-app` | 认证、在线目录和落点控制面 | 托管 `OnlineDirectory`；不保存玩家游戏档案 |
-| `gateway-app` | 客户端接入和消息路由原型 | 对应 `Gateway` |
-| `world-app` | 模拟运行时和玩家档案宿主 | 托管 `PlayerStore`，复用 World、Scene、Instance；小队副本创建、运行、结算及回收已接通 |
-| `machined` | 本机进程监督原型 | 部署需要时使用，不承载游戏业务 |
-| `game-server` | 单进程装配样例 | 用于展示模块装配，不代表完整生产拓扑 |
-| `logger`、`admin`、`fleetctl` | 运维与管理工具原型 | 不属于副本业务模型 |
+| gateway | 连接、会话、Base 与 cell 转发 | gateway-app 已有接入、旧 World 出口和排空；独立 Base/cell 路由待接。 |
+| loginServer | 认证、服务/在线目录 | login-app 已托管 OnlineDirectory；Base 归属、管理端与执行端地址投影待补。 |
+| baseServer | PlayerAnchor、长期业务与结算校验 | apps/base-server 构建 baseServer，复用 PlayerStore/PlayerAnchor 并注入远程存储；目录与结算接线待完成。 |
+| worldServer | cell 注册、Space/Cell 分配、拓扑与迁移 | world-app / WorldApp 当前还直接运行 Scene，管理与执行必须拆开。 |
+| cell | Cell 内实体、AOI、战斗、脚本与 tick | 独立入口未实现；复用现有 WorldHost/Scene/Avatar 等执行原语，默认一个进程。 |
+| database | 加载、保存、存储路由与持久结果 | apps/database 构建 database，承载文件档案、journal 和 M1 加载/保存；完整排队、写权与分区待完成。 |
+| machined | 本机进程监督与重启 | 可复用监督原语，不负责跨服发现或玩家归属。 |
 
-`apps/common` 是应用共用实现库，不是额外进程。`player_store::PlayerStore` 在 World 内持有 PlayerAnchor、档案、SaveQueue 和 PersistJournal；`online_directory::OnlineDirectory` 在 Login 内持有在线目录、路由投影与迁移编排。Gateway 只缓存路由并持有客户端连接。玩家游戏档案不写入 Login。两项服务使用独立链路端点，分别由所属应用启动、停止。
+apps/common 是共享实现库，不是业务进程；logger/admin/fleetctl 是辅助工具。上表只列真实入口；默认编队和业务迁移按根目录 todo.md 推进。
 
-`HostedServicesTests` 验证真实 TCP 登录激活、会话绑定、目录查询和档案保留；`SquadWireE2eTests` 验证副本上行与结果下行；`MigrationChainTests` 验证源冻结、导出、目标接权和目录改指。后者尚未完成源对象删除、完整失败回退与客户端跨 Gateway 恢复，不能视为完整无感迁移。
+## 数据与请求链路
 
-副本是一次对局，`World` 是承载副本的进程；一个进程可以承载多个副本。玩家在对局中只有一个权威运行对象。跨服时迁移该对象的权威归属并更新 Gateway 路由，不复制出可同时运行的第二个权威对象。
+```text
+基础业务：Client → gateway → 所属 baseServer → database → 实际存储
+模拟输入：Client → gateway → 当前 cell 执行进程
+玩法结果：cell → 各所属 baseServer → database → 持久确认
+管理：cell 向 worldServer 注册，worldServer 分配 Space/Cell
+目录：loginServer 保存 Base/World 服务、玩家位置投影与会话关联
+监督：machined 按需监督本机进程
+```
 
-BigWorld/KBEngine 的 `BaseApp`、`CellApp`、`BaseAppMgr` 等名字只用于引擎对照资料，不是 Apollo 的目标进程名称。详见[架构总览](../guide/architecture.md)。
+Scene 对应 Space 的现有单进程实现，Cell 为未来分区边界，Instance 为临时玩法生命周期。一个 cell 进程可承载多个 Space 的本地 Cell；不要求一副本一进程。跨服保留原 Base 和数据库归属。
+
+## 已有测试的范围
+
+HostedServicesTests、SquadInstanceTests、SquadWireE2eTests、UpdateContinuityTests 及恢复测试可证明已有代码行为。独立 Base/database、worldServer/cell 分离、真实路由、持久结算、完整 Instance 迁移及双版本协议须按目标拓扑重新验收。旧 World 间完整档案搬迁不能充当新边界的证据。
+
+## 独立 Base 与 database 原型
+
+构建 `baseServer` 和 `database` target 后，可单独启动此存储链路（当前 M1 TCP 为 POSIX 路径）：
+
+```sh
+./build-examples/apps/database/database --port 9200 --data-dir data/database/players --journal data/database/persist.log
+./build-examples/apps/base-server/baseServer --port 9201 --database-host 127.0.0.1 --database-port 9200
+```
+
+两者支持 `--route-json` 指定现有契约路由表；Base 支持 `--id` 设置执行身份。Base 通过 PlayerStorage 注入远程客户端，按需加载 PlayerAnchor，不扫描共享数据库的全部玩家，不打开本地档案或存储 journal。database 复用现有 DB_LOAD/DB_SAVE 消息，验证档案身份，以串行执行和文件 journal 完成保存后回执；启动先恢复未应用记录，存储或监听不可用不发布就绪，Base 无法连接 database 时启动失败，无本地回退。
+
+这是独立链路原型：当前 WorldApp 默认仍托管旧 PlayerStore，登录/gateway、Base 所属目录、跨 Base 写权代次、业务结算、存储分区与完整异步队列仍待迁移。现有 PlayerData 仍是旧档案适配类型，含位置/运行字段；不能据此把它定义为最终 Base 业务模型，字段契约拆分与旧保存路径清理属于后续任务。当前文件实现为 flush/rename 和进程重启恢复，不承诺掉电级 fsync 耐久性。协议升级与活动连续迁移也尚未完成。
+
+BaseDatabaseTests 覆盖真实 TCP、Base 无本地目录、关闭/重启后加载、档案身份拒绝、不可达和 journal 恢复。BaseDatabaseProcessSmoke 单独启动两个可执行文件，验证分别重启与存储隔离；不作为完整编队验收。

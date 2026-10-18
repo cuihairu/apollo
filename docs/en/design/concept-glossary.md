@@ -1,31 +1,44 @@
 # Apollo Concepts and Names
 
-The target process roles are `Login`, `Gateway`, and `World`. Gameplay instances use the existing `Instance` type. See [server applications](../apps/index.md) for the implementation mapping.
+Keep gateway, loginServer, baseServer, worldServer, database, machined, and the managed `cell` execution process. Reuse BigWorld spatial/entity semantics. See [BigWorld to Apollo mapping](./bigworld-apollo-mapping.md) for source meanings, Apollo responsibilities, code, and gaps.
 
-| Name | Responsibility and boundary |
+## Process and execution boundaries
+
+| Apollo name | Responsibility reference | Ownership |
+|---|---|---|
+| gateway | Separate connection layer, partial Proxy/session duties | Client sockets/delivery and cached Base/simulation routes. |
+| loginServer | LoginApp plus Apollo service/online directories | Authentication, Base/World lookup, ownership/location projections. |
+| baseServer | Persistent non-spatial BaseApp behavior | PlayerAnchor/base gameplay/settlement validation. |
+| worldServer | CellAppMgr spatial/process management duties | cell registration/readiness/load, Space/Cell placement/topology, transfer/drain. |
+| cell execution process | CellApp | Local Cell entities, AOI, combat, scripts, ticks, and results to owning Bases. |
+| database | DBApp storage access duties | Load/save, storage routing, durable outcomes, not reward rules. |
+| machined | Local supervision | Process lifecycle/restart, not player or cross-server placement. |
+
+cell registers with its owning worldServer without requiring local machined. worldServer owns topology; loginServer projections and gateway caches refresh by version rather than decide partition ownership independently.
+
+## Spatial and gameplay boundaries
+
+| Concept | Apollo meaning |
 |---|---|
-| `Login` | Authenticate accounts, issue login credentials, and host routing, placement, and migration coordination. |
-| `Gateway` | Own client connections, associate sessions, and route messages using the player's current location. |
-| `World` | The game-logic process; manage scenes and multiple independent Instances, advance authoritative simulation, and host player data and persistence. The executable is `world-app`, with entry type `WorldApp`. |
-| `Scene` | An internal simulation unit owning entities, AOI, admission, and ticks; not a process name. |
-| `Instance` | A temporary gameplay instance created for a group of players. Players enter, clear enemies or complete objectives, receive settlement, leave, and release the instance, temporary scene, and resources. |
-| `Player` | Persistent player identity; persistent data and an in-match runtime entity have distinct responsibilities. |
-| `Avatar` / `Entity` | Runtime simulation entities. A player has only one authoritative entity accepting input and state writes during a match. |
-| `AOI` | Scene-local entity visibility. |
-| `Persistence` | Modules that store data and settlement results across instances. |
+| Map resources | Static geometry/configuration referenced by SceneDescriptor, not a running activity. |
+| Space | Identified runtime coordinate space corresponding to the spatial semantics of existing Scene. Do not stack synonymous containers; Scene currently implements a local container. |
+| Cell | Spatial partition with bounds/authoritative entities assigned to a process; not the cell process itself. |
+| Instance | Apollo temporary group/objective/clock/settlement/cleanup lifecycle associated with Space, not a claimed native BigWorld eight-state type. |
+| Base entity | Persistent non-spatial object in baseServer; player-side code is PlayerAnchor. |
+| Cell/Real entity | Entity with simulation write authority inside cell; reuse Avatar for players. |
+| Ghost | Reserved non-authoritative adjacent projection without independent business writes. |
+| Witness | Client-visible world context; ViewerState, SceneAoi, and attribute sync cover part of the duties. |
 
-## Instance lifecycle
+Default to one cell execution process and one Cell per Space. A process can host Cells from multiple Spaces. Scale whole Spaces across processes first; allow multiple Cells within one Space later. Space identity/coordinates survive process/partition changes.
 
-Target flow: group request → select World → create Instance and Scene → validate members → admit and run → clear objectives → settle → players leave → destroy the instance and temporary scene.
+## Data ownership and lifecycle
 
-Reuse the existing eight-state lifecycle: `Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed`. Settlement must be idempotent; in-flight requests and departing players need explicit cleanup. Empty groups, timeouts, and failed runs also need defined termination paths.
+The owning Base validates persistent changes through database; one authoritative Cell advances each entity. Cross-server, cross-Space, and cross-Cell movement retain original Base/storage ownership. Destroying an Instance releases temporary gameplay/spatial resources, not profiles.
 
-## Authority and updates
+Group request → Base validates → worldServer allocates → cell creates associated Space/Cell/gameplay → members run → owning Bases/database durably confirm settlement → depart/clean up. Retain `Create → Initialize → Waiting → Running → Finishing → Rewarding → Draining → Destroyed`.
 
-World reserves cross-server scenes: home-server affiliation is separate from runtime location. Cross-server play retains the original affiliation and a single active authority. Local and cross-server gameplay reuse Scene and Instance; see [Cross-server scenes](./cross-server-scenes.md).
+## Transfer, updates, and seamless reservation
 
-A cross-World transfer freezes the source, restores and confirms the target, changes Gateway routing, and cleans up the source. Transfer snapshots may coexist briefly, but there is only one authoritative executor.
+Distinguish cross-Space entry/departure from same-Space Cell handoff. The latter preserves entity ID, position, health, skills, and necessary script state without full departure reset. Shared gameplay needs one logical owner without binding a multi-Cell space to one mutable object/thread.
 
-Protocol updates change contracts and regenerate artifacts, requiring version compatibility and rollout validation. Code-only updates preserve the wire contract and can use Lua module replacement or C++ process rollout. Runtime primitives do not imply a complete production rollout path.
-
-World does not imply a seamless persistent world. Apollo targets tower defense, co-op PvE/PvP, arenas, and group-created instances destroyed after completion. BigWorld/KBEngine names are reserved for external-engine references.
+Protocol upgrades separately replace Base objects, worldServer management state, and cell simulation. Code-only updates preserve wire format and may use Lua rollout. Seamless execution is disabled initially; reserve partition, adjacent visibility, Real/Ghost, authority transfer, and cross-Cell interaction boundaries. Track implementation only in root todo.md.

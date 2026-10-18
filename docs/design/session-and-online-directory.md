@@ -1,40 +1,38 @@
-
 # 会话与在线路由
 
-本文定义副本制架构下的会话和玩家位置数据。目标拓扑与命名以[架构总览](../guide/architecture.md)和[概念与命名](./concept-glossary.md)为准。
+目录分别回答资料归哪个 Base、模拟实体在哪个 Space/Cell 和执行进程、连接在哪个 gateway。完整职责对照见[BigWorld 与 Apollo](./bigworld-apollo-mapping.md)。
 
-## 职责
+## 权威与位置投影
 
-- `Gateway` 维护客户端连接和会话，并把玩家消息发往当前 World。
-- `World` 是当前副本内玩家对象的权威持有者。
-- 在线路由数据回答“玩家在哪个 Gateway、World 和 Instance”，用于消息转发和跨服迁移。
-- `Login` 验证账号并签发登录凭证，不负责承载活动对局。
-
-在线目录由 Login 托管的 `OnlineDirectory` 持有，负责会话位置、落点与迁移编排；Gateway 保存路由缓存。目录不保存玩家游戏档案，长期资料由 World 内 `PlayerStore` 持有。当前目录及投影在内存中，权威代次水位写入文件；完整路由持久化与恢复需要单独验收。
+loginServer 托管服务目录及玩家在线关联；worldServer 独占所属 Space/Cell 的拓扑和分配写权。cell 向所属 worldServer 注册，不向 machined 请求业务归属。目录保存已提交位置投影，gateway 缓存转发信息，两者不成为第二个拓扑裁决者。正常请求直达 Base 或 cell，不逐条代理目录。
 
 ## 路由记录
 
-记录至少需要将 `player_id` 关联到当前 `session_id`、`gateway_id`、`world_id` 和 `instance_id`。重复登录或连接恢复时使用会话代次/版本拒绝旧连接的迟到消息。离线或对局结束时清理对应记录。
+| 映射 | 作用 |
+|---|---|
+| Base 身份 → 地址、就绪、进程代次 | 解析资料业务目标及独立 Base 升级。 |
+| World 身份 → 管理地址、就绪、容量与版本 | 选择普通或跨服 World 管理域。 |
+| 执行进程 ID → 所属 World、地址、代次、就绪与负载 | 由 worldServer 管理注册和排空；进程可承载多个 Cell。 |
+| Space/Cell → 范围、邻接、执行进程、拓扑版本 | worldServer 权威记录；默认每 Space 一个 Cell。 |
+| 玩家 → 原区服、Base 身份与归属版本 | 长期资料所有者，跨服不改变。 |
+| 玩家 → World、Space、Cell、执行进程、可选 Instance、模拟代次 | 已提交模拟位置与执行路由的投影。 |
+| 玩家 → session/gateway、会话代次、路由版本 | 连接、重复登录与重连。 |
+| 迁移 ID → 源/目标、预期代次、准备与提交结果 | 恢复结果不明的交接；跨 World 也需唯一提交依据。 |
 
-目录只保存寻址所需的路由状态，不成为玩家游戏数据的第二权威副本。玩家对象状态由当前 World 权威持有，跨对局数据由持久化能力保存。
+Space、Cell、执行进程 ID 不混用；进程代次、实体权威代次、拓扑版本与会话版本分别表达不同变化。现有 WorldAssignment 缺少这些完整字段，不能把设计表写成 wire 已实现。旧 home_zone_id 不直接当业务区服 ID；IP 和数据库凭证不成为玩家归属。
 
-## 跨服迁移
+## 模拟交接
 
-跨服迁移应按一次权威交接执行：
+Base 校验准入并提供基础快照；World 选择目标 cell。源冻结、目标准备但不激活，管理权威按预期版本条件提交；目标凭提交依据激活，目录更新投影，gateway 刷新路由，源清理。投影传播迟到必须可刷新、重定向或拒绝旧代次，不能重新授予源模拟权。
 
-1. 源 World 暂停玩家对象的权威处理并生成迁移状态。
-2. 目标 World 恢复状态并确认接管。
-3. 更新在线路由和 Gateway 转发目标。
-4. 源端删除旧对象并确认迁移完成。
+提交前取消须确认未提交，结果不明先查持久记录，禁止双端解冻。资料和结算仍交原 Base，经 database 确认。
 
-迁移状态在途时可短暂存在两端，但旧端必须冻结且不得处理玩家输入或提交权威写入。目标拒绝或超时则恢复源端权威；路由更新失败不得让两个端点同时对外服务。
+## Base 与 Gateway 替换
 
-迁移请求需有唯一标识，目标端以此去重；迁移后业务写入继续使用自身幂等语义。可靠传输不等同业务恰好执行一次。
+Base 单独交接长期对象、在途业务与写入代次；数据库归属不变，旧写必须在业务和存储边界拒绝。cell/gateway 刷新 Base 缓存。
 
-## Gateway 边界
-
-Gateway 依据在线路由转发消息。多 Gateway 可承载不同客户端连接；单个连接由其所在 Gateway 持有。更新 Gateway 时，旧实例可停止接收新连接并继续服务现有连接直至排空。把既有 TCP 连接移到另一 Gateway 需要专门的连接交接机制；路由表切换本身不会迁移 socket。
+后端路由切换不迁移 socket。gateway 保持运行可保留 TCP；替换 gateway 需排空、重连恢复或显式连接交接。重连恢复原 Base 和当前模拟位置。
 
 ## 实现状态
 
-`LoginServer` 托管 `OnlineDirectory`，`WorldApp` 托管 `PlayerStore`；两者复用 `SessionLocator`、`PlayerDirectory` 和 `WorldAssignment`。登录激活、会话绑定、目录查询及停机档案读取已有真实 TCP 集成测试。多 World 分配、Gateway 接管和完整端到端迁移仍需按本文目标验收。
+OnlineDirectory、SessionLocator、PlayerDirectory、WorldAssignment 是可复用原语。管理/执行分离、Base 归属、分开的代次、跨进程目录投影及持久提交均待接线，现有完整档案迁移测试不作为新模型验收。

@@ -1,24 +1,23 @@
-# Apollo Architecture Status
+# Apollo Architecture: Current Code and Target
 
-Apollo is a lightweight instance-based multiplayer game server engine for matches such as tower defense, co-op, arenas, and dungeons. It does not target a persistent seamless world or spatially partitioned simulation processes.
+Keep one target, with responsibilities and actual gaps defined by the [BigWorld–Apollo mapping](../design/bigworld-apollo-mapping.md).
 
-The target runtime path is `Client → Login / Gateway → World → Instance`. An Instance is one match, a World can host multiple Instances, and each player has one authoritative gameplay object in an Instance at a time. Cross-server play requires an explicit authority transfer and route update.
+## Conclusions
 
-## Current implementation boundary
+Apollo prioritizes tower defense and temporary group activities while reserving seamless maps, without claiming complete BigWorld capabilities. Retain six agreed role names and add the discussed cell executor; Cell means a partition.
 
-The repository contains prototypes, not a complete production deployment: `login-app`, `gateway-app`, `world-app`, and optional `machined` supervision. World hosts PlayerStore for data and persistence; Login hosts OnlineDirectory for routing and placement. `world-app` integrates group creation, admission, objectives, settlement, and temporary Scene/Instance cleanup; durable settlement-ledger recovery remains incomplete. See [Server Applications](../apps/index.md) and the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md) for verified status and remaining work.
+worldServer overlaps CellAppMgr registration, Space/Cell placement, topology, and migration management. cell overlaps CellApp simulation. Base persistent objects and Cell entities are distinct; database owns storage. loginServer hosts authentication, service directories, and location projections. gateway retains sockets and forwards directly to Base/cell; machined supervises locally.
 
-Gateway does not automatically provide no-downtime updates. Multiple Gateway instances can keep new connections available while an old instance drains existing sockets. Cross-process TCP handoff, session recovery without another login, and uninterrupted active Instances each require separate mechanisms and validation.
+Space matches current Scene semantics and Instance is temporary gameplay, without a synonymous Scene→Space layer. Initially use one executor and one Cell per Space; reserve multiple Cells, Real/Ghost, continuous views, and complete authority handoff.
 
-## Update modes
+## Unfinished boundaries
 
-- **Protocol update:** change XML/XSD under `sdks/contract/`, regenerate artifacts, and roll out with an old/new compatibility window. Handshake compatibility windows and publish/rollback drills exist. Business payload compatibility and version-specific decoding must still be verified for each encoding and change.
-- **Code-only update:** preserve the protocol contract and wire format. Lua `ScriptRuntime` has preparation, tick-boundary commit, observation, and rollback primitives; fleetctl distributes module operations across Worlds with canary observation and failure rollback. C++ changes use process replacement after Instance drain or a separately implemented state transfer.
+WorldApp, World, and Scene currently combine management/execution; split profile/storage duties in PlayerStore. Base/database prototypes provide remote load/save and a file journal. cell, registration/routing, complete business commits, cross-server associations, dual-version decoders, and three state handoffs remain unfinished. SceneTransfer recreates Avatar and supports explicit scene changes rather than same-Space seamless handoff.
 
-BigWorld and KBEngine terms are reserved for external-engine reference material. They do not define Apollo target processes or imply that Apollo implements seamless-world mechanisms.
+Cross-server play retains original Base/storage affiliation with idempotent durable settlement. Base, cell, and World management transfer persistent objects, simulation, and management records respectively. Gateway survival/replacement have separate TCP outcomes; activity continuity needs complete necessary Instance state.
 
-## Temporary instance lifecycle
+Dedicated Profiler and OpenTelemetry SDK/OTLP exporter are not integrated. Custom logging/MetricRegistry/span primitives are not integration evidence.
 
-A group requests an activity → World creates an Instance and temporary Scene → members pass admission and enter → clear enemies and complete objectives → settle → players leave → destroy the Instance, scene, and temporary resources.
+## Implementation
 
-The existing eight-state Instance lifecycle is integrated into World. Scene owns entities, AOI, and ticks; Instance owns gameplay start and completion. SquadInstanceTests and SquadWireE2eTests cover group admission, creation, gameplay objectives, settlement, cleanup, isolation, and protocol replies. Durable settlement-ledger recovery and cross-Gateway session recovery remain incomplete.
+[Architecture](../guide/architecture.md), [applications](../apps/index.md), [objects](../design/player-object-model.md), [routing](../design/session-and-online-directory.md), [cross-server play](../design/cross-server-scenes.md), and [updates](../design/gateway-topology-survey.md) follow these conclusions. Root todo.md tracks implementation/acceptance; planning is not completion evidence.

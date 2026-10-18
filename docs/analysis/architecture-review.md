@@ -1,78 +1,23 @@
 # Apollo 架构现状与目标模型
 
-本文记录当前有效的架构定位、术语和实现边界。它不是按日期追加的讨论记录；过期拓扑和作废命名不保留在正文中。BigWorld/KBEngine 的专有名称仅在比较具体外部引擎时使用。实现状态需以当前源码核查和根目录 `todo.md` 为准，不把过去批次完成记录当成当前验收证据。
+只保留当前目标，职责和真实代码缺口以[BigWorld 与 Apollo 体系对照](../design/bigworld-apollo-mapping.md)为准。
 
-## 产品定位
+## 当前结论
 
-Apollo 是轻量副本制多人在线游戏服务器引擎，重点面向塔防、合作 PvE/PvP、竞技场和副本。MMO 描述游戏规模或产品形态，不意味着采用某种服务端拓扑。Apollo 当前不面向持久化无缝大世界，也不按地图空间切片分配多个模拟进程。
+Apollo 优先塔防和小队临时玩法，预留未来无缝地图；不宣称已经具备完整 BigWorld 能力。保留六个既定角色名称，增加已讨论的 cell 执行职责，Cell 表示分区。
 
-## 目标拓扑与名称
+worldServer 对照 CellAppMgr 管理注册、Space/Cell 分配、拓扑和迁移；cell 对照 CellApp 执行模拟。Base 长期对象与 Cell 实体分开，database 承担存储。loginServer 托管认证、服务和玩家位置投影，gateway 持有连接并直达 Base/cell；machined 只监督本机。
 
-```text
-Client ── Login       账号认证与登录凭证
-   └──── Gateway      游戏连接与消息路由
-             └──── World ── Instance × N
-                                  对局权威模拟
-```
+Space 对应当前 Scene 的空间语义，Instance 是临时玩法生命周期，不增加 Scene→Space 同义层。默认一个执行进程、每 Space 一个 Cell；预留同空间多 Cell、Real/Ghost、连续观察和完整权威交接。
 
-| 名称 | 职责 | 是否目标独立进程 |
-|---|---|---|
-| `Login` | 认证账号并签发登录凭证。 | 可独立部署，规模小时可合并部署。 |
-| `Gateway` | 维护客户端游戏连接，关联会话并路由消息。 | 可多实例部署；不持有权威对局状态。 |
-| `World` | 创建、运行、销毁副本并执行副本内权威模拟。 | 是；一个进程可承载多个副本。 |
-| `Instance` | 一场对局及其临时状态。 | 否，是 World 内的逻辑对象。 |
-| `Persistence` | 保存跨对局持续数据。 | 是一项能力，不要求独立进程。 |
+## 待完成边界
 
-目标命名采用职责清晰的常见词，不沿用 BigWorld/KBEngine 的 `BaseApp` / `CellApp` 进程名，不增加 `Zone`、`Area` 等同义层。`Scene` 是 World 内的模拟单元，拥有实体、AOI、玩家进出和 tick；`Instance` 管理关联场景的玩法生命周期。两者均是进程内部对象。
+WorldApp、World、Scene 当前混合管理和执行，PlayerStore 仍需拆分资料和存储。独立 Base/database 原型已有远程加载/保存与文件 journal；cell、注册路由、完整业务持久提交、跨服关联、协议双版本及三类交接仍待实现。现有 SceneTransfer 重建 Avatar，只能作为显式换场原语，不能实现同 Space 无缝迁移。
 
-## 玩家权威与跨服
+跨服保留原 Base 与存储归属，结算经原 Base/database 幂等持久确认。Base、cell 和 World 管理端分别交接长期对象、模拟状态和管理记录。保持 gateway 与替换 gateway 的 TCP 结果分别验收；活动连续要求完整必要 Instance 状态。
 
-玩家在对局内只有一个权威运行对象，由持有目标 Instance 的 World 管理。跨服是权威迁移：
+专用 Profiler、OpenTelemetry SDK/OTLP exporter 未集成，自研日志/MetricRegistry/span 原语不构成集成证据。
 
-1. 源端冻结该玩家对象并生成迁移状态。
-2. 目标端恢复对象并明确确认接管。
-3. 更新玩家目录和 Gateway 路由。
-4. 源端删除对象。
+## 实施入口
 
-迁移期间允许序列化状态或待接管对象短暂存在于两端，但只有一端可处理玩家输入、推进状态和执行权威写入。接管失败时要恢复源端权威或明确失败；不能双写，也不能让玩家同时归属两端。
-
-## Gateway 与更新
-
-Gateway 将客户端连接与副本逻辑解耦，但它本身不提供不停机热更新。需要区分以下结果：
-
-| 结果 | 可行方式 | 当前能力结论 |
-|---|---|---|
-| 新连接持续可用 | 多 Gateway 实例，负载入口停止向旧实例分配新连接 | 需要部署接线和故障验证。 |
-| 既有连接保持 | 旧 Gateway 保持连接至自然排空，或实现连接/会话交接 | 当前代码没有跨进程 TCP 连接交接。 |
-| 活动副本不中断 | Instance 状态迁移、版本兼容、权威接管、路由切换和回滚 | Lua 模块替换与 C++ 进程替换分别验收；完整 Instance 跨进程迁移仍未实现。 |
-| 旧 World 平滑退出 | 停止分配新副本，等待活动副本结束后退出 | 这是排空式滚动更新，不是活动副本热迁移。 |
-
-因此 Gateway 可作为可用性架构的一部分，但“有 Gateway”或“多 Gateway”不能单独证明客户端无感、连接不中断或活动对局不停。
-
-## 仓库实现现状
-
-业务入口已按 Login / Gateway / World 接线，仍需区分已有验收与完整生产能力：
-
-| 当前名称 | 实现范围 |
-|---|---|
-| `login-app` | 认证、在线目录和落点控制；托管 OnlineDirectory。 |
-| `gateway-app` | 客户端接入和路由原型。 |
-| `world-app` | 模拟与玩家档案宿主；托管 PlayerStore；已接通小队创建、进入、玩法目标、结算与临时 Scene/Instance 回收；跨进程账本恢复仍待完善。 |
-| `machined` | 本机进程监督原型。 |
-| `game-server` | 单进程模块装配示例。 |
-
-业务进程职责固定为 Login、Gateway、World。共享应用服务位于 apps/common，不构成新增进程；玩家长期资料的唯一持有者与对局模拟边界分开。
-
-## 文档权威入口
-
-- [架构总览](../guide/architecture.md)：目标运行链路和更新边界。
-- [概念与命名](../design/concept-glossary.md)：目标词汇表。
-- [服务器应用](../apps/index.md)：当前程序原型及职责映射。
-- [副本制 GameServer 设计](../30-Instance_GameServer_Design.md)：副本生命周期和跨服迁移。
-- [框架比较](../36-MMO_Frameworks_Comparative_Analysis.md)：外部引擎术语与机制对照。
-
-## 临时副本生命周期
-
-几名玩家组队发起 → World 创建 Instance 及临时 Scene → 校验成员并进入 → 刷怪与完成目标 → 结算 → 玩家离开 → 销毁 Instance、场景和临时资源。
-
-复用现有 Instance 八态状态机。Scene 负责实体、AOI 和 tick，Instance 负责玩法起止。小队创建、成员进入、目标判定、结算和临时资源回收已接入 World；SquadInstanceTests 与 SquadWireE2eTests 覆盖受理规则、隔离及上行和结果下行。跨进程结算账持久化与跨 Gateway 会话恢复仍需完善。
+[架构](../guide/architecture.md)、[应用](../apps/index.md)、[对象](../design/player-object-model.md)、[在线路由](../design/session-and-online-directory.md)、[跨服](../design/cross-server-scenes.md)、[更新](../design/gateway-topology-survey.md)同步此结论。代码工作与真实验收维护在根目录 todo.md，文档不将规划写成已实现。

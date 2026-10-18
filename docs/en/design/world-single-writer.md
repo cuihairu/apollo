@@ -1,28 +1,24 @@
+# Simulation Threads and Write Ownership
 
-# World Simulation Thread and Write Boundary
+The target executor is cell; worldServer manages Space/Cell topology. Retain this document path while correcting responsibilities. Current WorldApp still combines both roles; see the [mapping](./bigworld-apollo-mapping.md).
 
-This document defines single-writer ownership for match simulation and separates the target model from the current gameplay prototype. Target terminology is defined in the [concept glossary](./concept-glossary.md).
+## Target rules
 
-## Target Rule
+An entity has one authoritative Cell writer at a time. Its logical executor sequentially modifies local entities, AOI, and simulation. IO, background, and debug work submit bounded intents. One executor may host Cells from multiple Spaces; neither Space nor Instance is a process.
 
-One logical thread applies authoritative mutations for each Instance in order. Network IO, administrative requests, and background workers submit intents with correlation IDs; the World validates and applies them at a simulation boundary, then returns results. This gives each match a clear mutation order and prevents concurrent writes to its Entity, Scene, or AOI state.
+Initially each Space has one Cell. Future multi-Cell Spaces execute partitions independently and send cross-partition actions to the entity authority for adjudication. Shared Instance objectives, clocks, and settlement need one logical owner, without shared memory or global lockstep. Base retains profile writes; database validates and persists them separately.
 
-One World may schedule multiple Instances on one simulation thread or use multiple simulation threads that do not share mutable state. Thread allocation is an implementation and capacity decision; it does not change the single-authority rule for an Instance.
+## Current code
 
-## Current Code
+WorldApp::gameLoop pumps M1, accepts intents into acceptanceQueue_, consumes them at fixed boundaries, runs Lua, and calls WorldHost::tick. Closing admission precedes a final queue sweep and host teardown. Move this simulation loop into cell while retaining management in worldServer; existing class names do not prove the target deployment exists.
 
-The existing `world-app` prototype uses `WorldApp::gameLoop` as the `World` write thread. The loop pumps the M1 link, whose callbacks enqueue intents into a bounded `acceptanceQueue_`; it consumes intents at a fixed point, runs Lua integration, and calls `WorldHost::tick`. After stopping acceptance, the loop performs a final queue drain before destroying the script host. The source class name remains part of the implementation mapping; this process has the target responsibility of a World.
+## Overload and shutdown
 
-The prototype currently creates one default `Scene` and one `Instance` at startup. The underlying `World` has an API for creating more scenes, and Instance already supplies an eight-state lifecycle. Group-triggered creation, allocation, objective settlement, and resource cleanup are not integrated end to end. Existing `Scene` and `Instance` objects should not be described as a complete World implementation.
+Reject overload explicitly; never discard accepted intents silently. Close admission, sweep work, then stop simulation and links. Define drain deadlines, settlement policy, failure replies, and forced-stop recovery. Distinguish admission, execution, and persistence.
 
-## Overload and Shutdown
+## Concurrency acceptance
 
-When the queue is full, the server rejects new intents and reports overload; it does not silently discard accepted work. Shutdown closes acceptance, lets the simulation thread perform its final drain, then stops the link and host. Production behavior still needs a defined drain deadline, failure replies for unfinished requests, and recovery behavior after forced termination; track acceptance criteria in the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
-
-## Concurrency Acceptance
-
-- Network pumping and background jobs never mutate Instance simulation state directly.
-- Each Instance has a reproducible input order, and duplicate requests cannot repeat non-idempotent writes.
-- Queue saturation produces observable rejection results and metrics.
-- Normal shutdown completes accepted work or returns explicit failures; forced shutdown can recover or explicitly fail the match.
-- Tests cover queue saturation, duplicate requests, shutdown races, and simulation-thread failures.
+- IO/background workers never mutate simulation objects directly; each entity has one effective authority generation.
+- Input order is traceable and duplicate requests do not duplicate business writes.
+- Queue saturation, shutdown races, execution failure, and forced stop have explicit outcomes.
+- Targets remain inactive before commit; fence sources afterward, including shared Instance ownership.

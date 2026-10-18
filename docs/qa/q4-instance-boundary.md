@@ -1,7 +1,7 @@
 # Q4：副本如何创建、完成与销毁？
 
-Apollo 使用 World 承载游戏逻辑，Instance 表示几名玩家组队创建的临时副本。World 内的 Scene 拥有实体、AOI 和 tick，Instance 负责玩法生命周期。
+Base 验证小队，worldServer 分配 Space/Cell 与执行进程，cell 创建并运行临时 Instance。Space 对应现有 Scene 空间语义，Instance 管成员、目标、计时、结算与回收；不是额外空间层或进程。
 
-小队发起请求后，服务端校验成员并选择 World，创建 Instance 与临时 Scene。玩家进入后完成刷怪等目标，服务端提交幂等结算；玩家离开后释放实体、任务、脚本及场景资源，销毁副本。无人进入、全员退出、失败和超时也需明确收尾。
+通关或失败结果交各所属 Base 校验，经 database 持久确认后退出并释放临时资源；长期 Base 对象继续存在。取消、无人进入、掉线和超时均有明确收尾策略。
 
-World、Scene、Instance 状态机已有实现，完整的小队请求、通关结算和自动销毁接线尚未完成。跨 World 玩家转移需单独验证权威交接与 Gateway 路由更新。详见[World 与 Instance 设计](../30-Instance_GameServer_Design.md)和根目录 [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md)。
+World/Scene/Instance 原语已存在，管理/执行拆分和完整跨进程接线仍待完成。默认每 Space 单 Cell，未来同 Space 多 Cell 与无缝地图仅预留设计。见[体系对照](../design/bigworld-apollo-mapping.md)、[副本设计](../30-Instance_GameServer_Design.md)和根目录 todo.md。
