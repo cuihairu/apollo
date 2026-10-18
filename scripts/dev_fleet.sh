@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Apollo 开发编队：Login / Gateway / World，由 machined 拉起和监督。
+# Apollo 开发编队：Database / BaseServer / Login / Gateway / World，
+# 由 machined 拉起和监督。
 # 用法：scripts/dev_fleet.sh up|down|status|roster
 # APOLLO_BUILD_DIR 指定构建目录，APOLLO_FLEET_DIR 指定运行目录。
+# Database：持久档案存储 9200（data-dir/journal 落 $APOLLO_FLEET_DIR）。
+# BaseServer：玩家档案与基础业务受理 9201，存储后端为 Database 9200；
+#   编队位置在 Database 之后——存储不可达即拒起（由 machined 退避重试）。
 # World：玩法链路 9101、玩家档案链路 9104。
 # Login：认证/准入链路 9103、在线目录链路 9105。
 # Gateway：客户端 TCP 9002。logger 9102；admin 指标链路 9106、HTTP 9107。
-# 组件号：World=11，Gateway=12，Login=13。运维工具不注册业务成员。
+# 组件号：World=11，Gateway=12，Login=13。Database/BaseServer 尚未接
+#   machined 成员注册（号=0，同运维工具口径）；注册接线属后续切片。
 
 set -euo pipefail
 
@@ -21,6 +26,8 @@ fleet_entries() {
     cat <<EOF
 logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
+database  | 0 | $BUILD_DIR/apps/database/database --port 9200 --data-dir $FLEET_DIR/data/database/players --journal $FLEET_DIR/data/database/persist.log
+baseServer | 0 | $BUILD_DIR/apps/base-server/baseServer --port 9201 --database-port 9200
 world     | 11 | $BUILD_DIR/apps/world-app/world-app --world-id 1 --m1-port 9101 --player-store-m1-port 9104 --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/world-app/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 login     | 13 | $BUILD_DIR/apps/login-app/login-app --m1-port 9103 --world-store-m1-port 9104 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
 gateway   | 12 | $BUILD_DIR/apps/gateway-app/gateway-app --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port 9103 --directory-m1-port 9105 --machined-port 9600 --component-id 12
