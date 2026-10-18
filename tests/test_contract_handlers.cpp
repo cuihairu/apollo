@@ -1,5 +1,5 @@
 // §3.4 宿主启动装载·handler 面同步闸（玩法 Lua 批第一片）：
-// shipped handler 占位模块（apps/world-app/scripts/contract_handlers.lua）必须
+// shipped handler 占位模块（apps/world/scripts/contract_handlers.lua）必须
 // 满足 golden 契约（sdks/cpp/generated/contract.lua）的路由完整性闸——
 // apollo_gen 新增 reflect 消息而 handler 面没跟上时，此处即刻红。
 // 装载闸语义见 ScriptRuntime::load_contract（routes 逐条 resolve_handler）。

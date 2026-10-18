@@ -2,8 +2,8 @@
 # G-2 批 0 验收链演练（docs/design/backup-revive.md §6）：编队 kill -9 全链
 # RTO 实测——死亡上 wire → machined 退避重启 → journal replay →
 # RecoveryCoordinator ready → 全量重报收敛 → 目录镜像收敛。
-# P3-1 re-home 版（baseappmgr/base-app 退场）：mgr 面 = login-app、base 面 =
-# world-app（现役入口；scripts drill 迁移随 todo P3-1 条目）。
+# P3-1 re-home 版（baseappmgr/base-app 退场）：mgr 面 = login、base 面 =
+# world（现役入口；scripts drill 迁移随 todo P3-1 条目）。
 #
 # 用法：scripts/drill_kill9.sh
 #   APOLLO_BUILD_DIR   构建树（默认 <repo>/build，须 GAME_MODULE=ON 已构建）
@@ -12,11 +12,11 @@
 # 演练拓扑（独立端口段，不与 dev_fleet 9001-9005/9101-9107、drill_migration
 # 19621+/19631+/19641+、drill_update 19610-19614/19013-19014/19105 冲突）：
 #   machined --port 19600 --interval 500 --backoff 1000（编队监督 + 死亡通知）
-#   login = login-app --recovery-port 19602 --recovery-expected 1（恢复相位）
+#   login = login --recovery-port 19602 --recovery-expected 1（恢复相位）
 #                  --mirror-port 19601（目录镜像 owner）--component-id 2
-#   world = world-app --world-id 2 --report-to-port 19602 --component-id 30
+#   world = world --world-id 2 --report-to-port 19602 --component-id 30
 #                  --zone-id 2 --report-interval-ms 5000
-# 脚本 kill -9 world-app 后按行首 wall-clock 戳算各段耗时并断言收敛。
+# 脚本 kill -9 world 后按行首 wall-clock 戳算各段耗时并断言收敛。
 # 如实边界：会话面无种子工具（旧 base-app --demo-anchors 随进程退场），
 # 全量重报 sessions=0——死亡/重启/重报/intake/镜像收敛链 RTO 实测不受影响；
 # 真实会话进出随 P3-2 网关链路批次。
@@ -29,8 +29,8 @@ DRILL_DIR="${APOLLO_DRILL_DIR:-/tmp/apollo-drill-kill9-$$}"
 mkdir -p "$DRILL_DIR"
 
 MACHINED="$BUILD_DIR/apps/machined/machined"
-LOGIN="$BUILD_DIR/apps/login-app/login-app"
-WORLD="$BUILD_DIR/apps/world-app/world-app"
+LOGIN="$BUILD_DIR/apps/login/login"
+WORLD="$BUILD_DIR/apps/world/world"
 
 PORT_DISCO=19600
 PORT_RECOVERY=19602
@@ -86,15 +86,15 @@ cleanup() {
         sleep 2
         pgrep -x machined >/dev/null 2>&1 && kill -KILL "$mpid" 2>/dev/null || true
     fi
-    pkill -KILL -x login-app 2>/dev/null || true
-    pkill -KILL -x world-app 2>/dev/null || true
+    pkill -KILL -x login 2>/dev/null || true
+    pkill -KILL -x world 2>/dev/null || true
     echo "[drill] teardown end" >&2
 }
 trap cleanup EXIT
 
 # 残留进程护栏（同端口编队不互踩；-x 精确匹配进程名，不误伤外层 shell）
-pkill -KILL -x login-app 2>/dev/null || true
-pkill -KILL -x world-app 2>/dev/null || true
+pkill -KILL -x login 2>/dev/null || true
+pkill -KILL -x world 2>/dev/null || true
 pkill -KILL -x machined 2>/dev/null || true
 sleep 0.5
 
@@ -112,13 +112,13 @@ if ! wait_log "admission open" 1 20; then
     tail -30 "$LOG"; fail "initial recovery convergence not observed"; exit 1
 fi
 if ! wait_log "recovery ready" 1 20; then
-    tail -30 "$LOG"; fail "world-app recovery ready not observed"; exit 1
+    tail -30 "$LOG"; fail "world recovery ready not observed"; exit 1
 fi
-ok "初始收敛：恢复相位开放 + world-app recovery ready"
+ok "初始收敛：恢复相位开放 + world recovery ready"
 
-WORLD_PID=$(pgrep -x world-app | head -1)
-[[ -n "$WORLD_PID" ]] || { fail "world-app pid not found"; exit 1; }
-ok "kill 前 baseline：world-app pid=$WORLD_PID"
+WORLD_PID=$(pgrep -x world | head -1)
+[[ -n "$WORLD_PID" ]] || { fail "world pid not found"; exit 1; }
+ok "kill 前 baseline：world pid=$WORLD_PID"
 
 T0=$(date +%s.%N)
 kill -KILL "$WORLD_PID"
@@ -127,7 +127,7 @@ kill -KILL "$WORLD_PID"
 wait_log "child death world" 1 10 || fail "machined child death line missing"
 grep -q "child death world exit=137" "$LOG" || fail "exit code is not 137 (128+SIGKILL)"
 wait_log "restart world" 1 15 || fail "machined restart line missing"
-wait_log "recovery ready" 2 20 || fail "restarted world-app recovery ready not observed"
+wait_log "recovery ready" 2 20 || fail "restarted world recovery ready not observed"
 wait_log "zone death" 1 10 || fail "zone death window disposition missing"
 
 T3=$(ts_of "recovery ready" 2)
@@ -140,7 +140,7 @@ wait_log_after() { # 等到 min_ts 后出现 pattern
     return 1
 }
 wait_log_after "full report: component=30" "$T3" 20 || \
-    fail "restarted world-app full report not received"
+    fail "restarted world full report not received"
 
 T4=$(ts_after "full report: component=30" "$T3")
 LAST_INTAKE=$(grep "full report: component=30" "$LOG" | tail -1)

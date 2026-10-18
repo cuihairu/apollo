@@ -8,7 +8,7 @@ set(WORLD_APP_PROTOCOL_SOURCES
 )
 
 # WorldApp 可执行文件
-add_executable(world-app
+add_executable(world
     src/main.cpp
     src/world_app.cpp
     src/m1_link_server.cpp
@@ -17,7 +17,7 @@ add_executable(world-app
 
 find_package(nlohmann_json CONFIG QUIET)
 
-target_include_directories(world-app
+target_include_directories(world
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/include
@@ -26,11 +26,11 @@ target_include_directories(world-app
 )
 
 # 契约路由表 JSON（M1 接收端装配事实源；生成物随仓）
-target_compile_definitions(world-app PRIVATE
+target_compile_definitions(world PRIVATE
     APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 
-target_link_libraries(world-app
+target_link_libraries(world
     PRIVATE
         apollo_app_services
         apollo_squad_instance
@@ -49,14 +49,14 @@ target_link_libraries(world-app
 )
 
 if(nlohmann_json_FOUND)
-    target_link_libraries(world-app PRIVATE nlohmann_json::nlohmann_json)
+    target_link_libraries(world PRIVATE nlohmann_json::nlohmann_json)
 endif()
 
-target_compile_features(world-app PRIVATE cxx_std_20)
+target_compile_features(world PRIVATE cxx_std_20)
 
 # Windows 特定设置
 if(WIN32)
-    target_link_libraries(world-app PRIVATE ws2_32)
+    target_link_libraries(world PRIVATE ws2_32)
 endif()
 
-apollo_package_crash_handler(world-app)
+apollo_package_crash_handler(world)

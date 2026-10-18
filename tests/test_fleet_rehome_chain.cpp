@@ -115,12 +115,12 @@ void fleet_rehome_chain() {
             "admission gate did not refuse during recovery");
 
     // ---- 报告方进程：Base（L19 资料归属切换后 = Base 宿主 store + 全量
-    //      重报；StoreHost 替身与 baseServer main 同口径装配）----
+    //      重报；StoreHost 替身与 base main 同口径装配）----
     player_store::PlayerStoreConfig store_config;
     store_config.host = "127.0.0.1";
     store_config.m1Enabled = true;
     store_config.m1Port = 0;
-    store_config.m1SelfName = "baseServer";
+    store_config.m1SelfName = "base";
     store_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
     store_config.dataDir = (files.path / "players").string();
     store_config.journalPath = (files.path / "journal/persist.log").string();

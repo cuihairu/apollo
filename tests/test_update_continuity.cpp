@@ -515,7 +515,7 @@ bool poll_rollout_state(OpsEnd& ops, std::int32_t want_state,
 }
 
 // 服务端壳：WorldApp（port 0 = 内核分配；替换路径给固定口重听）。档案宿主
-// 已迁 baseServer（L19）——seed 形参保留调用面兼容，语义空置。
+// 已迁 base（L19）——seed 形参保留调用面兼容，语义空置。
 struct WorldEnd {
     TemporaryDirectory files;
     WorldAppConfig config;
@@ -529,7 +529,7 @@ struct WorldEnd {
         config.m1RouteJson = kRouteJson;
         config.m1AuthorityEpoch = epoch;
         config.tickRateMs = 20;
-        (void)seed;  // 档案宿主迁 baseServer（L19）——种子面已随宿主移除
+        (void)seed;  // 档案宿主迁 base（L19）——种子面已随宿主移除
         try {
             world = std::make_unique<WorldApp>(config);
             world->start();

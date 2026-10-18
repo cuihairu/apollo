@@ -226,7 +226,7 @@ bool test_file_appender_structured_output() {
     } catch (...) {
     }
 
-    LogContext::set_process("login-app-1");
+    LogContext::set_process("login-1");
     LogContext::set_tick(7);
 
     std::string structured_path;
@@ -272,7 +272,7 @@ bool test_file_appender_structured_output() {
     std::string line;
     TEST_ASSERT(readFirstLine(structured_path, line), "结构化文件可读");
     std::string v;
-    TEST_ASSERT(extractValue(line, "proc", v) && v == "login-app-1", "落盘 proc 注入");
+    TEST_ASSERT(extractValue(line, "proc", v) && v == "login-1", "落盘 proc 注入");
     TEST_ASSERT(extractValue(line, "tick", v) && v == "7", "落盘 tick 注入");
     TEST_ASSERT(extractValue(line, "msg", v) && v == "started", "落盘 msg");
 

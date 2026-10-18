@@ -1,9 +1,9 @@
 #pragma once
 
 // 独立 PlayerStore 宿主替身（L19 资料归属切换测试面）：store M1 面 +
-// 锚点全量重报面同口径装配（对齐 apps/base-server/src/main.cpp），替换
+// 锚点全量重报面同口径装配（对齐 apps/base/src/main.cpp），替换
 // 原 WorldApp 宿主位。periodic 泵由测试侧 pump_until 循环驱动（同
-// baseServer 主循环语义：启动即报 + interval 周期刷新，幂等 intake）。
+// base 主循环语义：启动即报 + interval 周期刷新，幂等 intake）。
 
 #include "player_store/player_store.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"

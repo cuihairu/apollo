@@ -144,7 +144,7 @@ void migration_chain() {
     old_store.host = "127.0.0.1";
     old_store.m1Enabled = true;
     old_store.m1Port = 46131;
-    old_store.m1SelfName = "baseServer";
+    old_store.m1SelfName = "base";
     old_store.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
     old_store.dataDir = (files.path / "old/players").string();
     old_store.journalPath = (files.path / "old/journal/persist.log").string();
@@ -177,7 +177,7 @@ void migration_chain() {
                 world_new.store->m1_listen_port() == 46141,
             "player store M1 faces did not listen");
 
-    // 恢复收敛（两报告方全报）→ 门闸开。StoreHost 报告泵同生产 baseServer
+    // 恢复收敛（两报告方全报）→ 门闸开。StoreHost 报告泵同生产 base
     // 语义（interval 到点即全量重报）——等待窗内持续泵，不让报告断流
     pump_until([&] {
         world_old.pump();

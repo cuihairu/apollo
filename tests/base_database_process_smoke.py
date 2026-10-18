@@ -53,11 +53,11 @@ try:
                                       "database ready port=")
         probe(storage_port, "database", "seed")
         base_args = ["--port", "0", "--database-port", str(storage_port), "--route-json", routes]
-        base, base_port = start(base_binary, base_args, base_dir, "baseServer ready port=")
-        probe(base_port, "baseServer", "load")
+        base, base_port = start(base_binary, base_args, base_dir, "base ready port=")
+        probe(base_port, "base", "load")
         stop(base)
-        base, base_port = start(base_binary, base_args, base_dir, "baseServer ready port=")
-        probe(base_port, "baseServer", "load")
+        base, base_port = start(base_binary, base_args, base_dir, "base ready port=")
+        probe(base_port, "base", "load")
         stop(base)
         stop(storage)
         storage, storage_port = start(database_binary, database_args, database_dir,
@@ -68,7 +68,7 @@ try:
         failed = subprocess.run([base_binary, *base_args], cwd=base_dir,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, timeout=8)
-        assert failed.returncode != 0 and "baseServer ready" not in failed.stdout, failed.stdout
+        assert failed.returncode != 0 and "base ready" not in failed.stdout, failed.stdout
         assert not list(base_dir.rglob("player_*.json")), "Base wrote profile files"
         assert not list(base_dir.rglob("*.log")), "Base opened a storage journal"
         print("Independent Base/database process restart and storage isolation passed")

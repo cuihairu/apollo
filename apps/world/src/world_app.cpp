@@ -147,7 +147,7 @@ WorldApp::WorldApp(const WorldAppConfig& config)
     // 裁定（权威在线目录在 Login 侧，跨进程校验随后续条目接通）。
     squadInstanceService_ = std::make_unique<squad_instance::SquadInstanceService>(
         squadParties_, world_.get(), config_.worldId);
-    // 资料归属切换（L19）：档案宿主 = baseServer，World 不再持有 PlayerStore
+    // 资料归属切换（L19）：档案宿主 = base，World 不再持有 PlayerStore
     // ——结算落账解析器留空（SettlementLedger 挂账待补的设计降级态），
     // Base 业务受理接口随后续条目接线后恢复落账。
     squadInstanceService_->register_world(config_.worldId, config_.maxInstances);
@@ -202,7 +202,7 @@ void WorldApp::start() {
         throw std::runtime_error("failed to start WorldHost");
     }
 
-    // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 baseServer
+    // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 base
     // store M1 面（958/959——资料归属切换后锚点写权在 Base）。拨号装配
     // 失败降级（警告 + 挂账面照旧），不拦启动。Sink 在 gameThread_ 结算段
     // 同步调 call（自泵线程禁自调纪律不涉——StoreDial 泵独立线程）。

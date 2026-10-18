@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # GatewayApp 可执行文件
-add_executable(gateway-app
+add_executable(gateway
     src/main.cpp
     src/gateway_server.cpp
     src/gateway_control_server.cpp
@@ -15,14 +15,14 @@ add_executable(gateway-app
     src/ingress/session_admission_service.cpp
 )
 
-target_include_directories(gateway-app
+target_include_directories(gateway
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/../gateway-app/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../gateway/include
 )
 
 # 契约路由表 JSON（M1 出口装配事实源；生成物随仓）
-target_compile_definitions(gateway-app PRIVATE
+target_compile_definitions(gateway PRIVATE
     APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 
@@ -35,11 +35,11 @@ if(DEFINED APOLLO_TRACE_SAMPLE_RATE AND NOT APOLLO_TRACE_SAMPLE_RATE STREQUAL ""
         message(FATAL_ERROR
             "APOLLO_TRACE_SAMPLE_RATE must be a positive integer (1/N denominator), got: ${APOLLO_TRACE_SAMPLE_RATE}")
     endif()
-    target_compile_definitions(gateway-app PRIVATE
+    target_compile_definitions(gateway PRIVATE
         APOLLO_TRACE_SAMPLE_RATE_CONST=${APOLLO_TRACE_SAMPLE_RATE})
 endif()
 
-target_link_libraries(gateway-app
+target_link_libraries(gateway
     PRIVATE
         apollo::base
         apollo::core
@@ -56,11 +56,11 @@ target_link_libraries(gateway-app
         apollo_protocol
 )
 
-target_compile_features(gateway-app PRIVATE cxx_std_20)
+target_compile_features(gateway PRIVATE cxx_std_20)
 
 # Windows 特定设置
 if(WIN32)
-    target_link_libraries(gateway-app PRIVATE ws2_32 mswsock)
+    target_link_libraries(gateway PRIVATE ws2_32 mswsock)
 endif()
 
-apollo_package_crash_handler(gateway-app)
+apollo_package_crash_handler(gateway)

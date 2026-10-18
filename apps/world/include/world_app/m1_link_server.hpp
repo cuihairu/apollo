@@ -1,6 +1,6 @@
 #pragma once
 
-// net M1 接收端缝（M1 上层接线批 · 2b-ii）：world-app 侧接收面 = InterServerLink
+// net M1 接收端缝（M1 上层接线批 · 2b-ii）：world 侧接收面 = InterServerLink
 // passive 端点（网关拨入，net-abstraction §5.6/§5.7）+ 契约 wire 解包 + 意图
 // 信封投递。
 //

@@ -20,7 +20,7 @@ BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"  # 绝对化：子 shell cd 后相对路�
 DRILL_DIR="${APOLLO_DRILL_DIR:-/tmp/apollo-drill-module-$$}"
 mkdir -p "$DRILL_DIR"
 
-WORLD="$BUILD_DIR/apps/world-app/world-app"
+WORLD="$BUILD_DIR/apps/world/world"
 FLEETCTL="$BUILD_DIR/apps/fleetctl/fleetctl"
 
 W1_PORT=19631
@@ -60,7 +60,7 @@ stop_worlds() {
             kill -KILL "$pid" 2>/dev/null || true
         fi
     done
-    pkill -KILL -x world-app 2>/dev/null || true
+    pkill -KILL -x world 2>/dev/null || true
     W1_PID=""
     W2_PID=""
     sleep 0.3

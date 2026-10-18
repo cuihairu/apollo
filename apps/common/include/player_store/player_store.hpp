@@ -23,7 +23,7 @@ namespace player_store {
 
 namespace protocol = apollo::protocol;
 
-// 长期玩家对象与基础业务宿主（baseServer）。
+// 长期玩家对象与基础业务宿主（base）。
 class PlayerStore {
 public:
     explicit PlayerStore(const PlayerStoreConfig& config,
@@ -204,7 +204,7 @@ private:
     std::thread autoSaveThread_;
 };
 
-// 报告条目收集（P3-1 增量③；资料归属切换后由 baseServer 宿主调用）：
+// 报告条目收集（P3-1 增量③；资料归属切换后由 base 宿主调用）：
 // store 锚点快照 → 目录镜像条目。报告条目 zone = 承载域（调用方宿主域，
 // 同 FleetReporter zone 口径）而非锚点 home_zone_id（原区服）：目录条目
 // zone 是死亡反查与迁移改指的路由键——迁移后玩家由目标域承载，周期重报

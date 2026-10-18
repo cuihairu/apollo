@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
         config.host = "127.0.0.1";
         config.m1Enabled = true;
         config.m1Port = 9201;
-        config.m1SelfName = "baseServer";
+        config.m1SelfName = "base";
         config.dataDir.clear();
         config.journalPath.clear();
         config.m1RouteJson = APOLLO_SERVICE_ROUTE_JSON;
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
             if (arg == "--help" || arg == "-h") {
-                std::cout << "baseServer [--host IP] [--port N] [--id NAME] "
+                std::cout << "base [--host IP] [--port N] [--id NAME] "
                              "[--database-host IP] [--database-port N] [--database-id NAME] [--route-json PATH] "
                              "[--report-host IP] [--report-port N] [--report-component-id N] "
                              "[--report-zone-id N] [--report-interval-ms N]\n";
@@ -81,13 +81,13 @@ int main(int argc, char** argv) {
         apollo::core::log::LogManagerConfig logging;
         logging.processIdentity = config.m1SelfName;
         apollo::core::log::global_log_manager().initialize(logging);
-        apollo::runtime::init_crash_capture(argc, argv, "baseServer");
+        apollo::runtime::init_crash_capture(argc, argv, "base");
         std::signal(SIGINT, onSignal);
         std::signal(SIGTERM, onSignal);
         player_store::PlayerStore base(config, database::makeClient(storage));
         base.start();
         if (!base.m1_listen_port()) throw std::runtime_error("Base listener unavailable");
-        std::cout << "baseServer ready port=" << base.m1_listen_port() << std::endl;
+        std::cout << "base ready port=" << base.m1_listen_port() << std::endl;
 
         // 恢复相位全量重报（P3-1 增量③）：启动即报 + 周期刷新（幂等
         // intake；interval 0 = 仅启动期一报）。承载域 zone 由部署给定。
@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
                 });
             (void)reporter->report_full(
                 player_store::collect_mirror_entries(base, reportZone));
-            std::cout << "baseServer fleet report: component=" << reportComponent
+            std::cout << "base fleet report: component=" << reportComponent
                       << " zone=" << reportZone << " -> " << reportHost << ":"
                       << reportPort << " (interval " << reportIntervalMs << "ms)" << std::endl;
         }
@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
         base.stop();
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "baseServer startup/service failure: " << error.what() << '\n';
+        std::cerr << "base startup/service failure: " << error.what() << '\n';
         return 1;
     }
 }

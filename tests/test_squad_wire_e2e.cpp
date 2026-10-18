@@ -106,13 +106,13 @@ protocol::CellCreateEntity make_player_spawn(std::uint64_t player_id) {
 void squad_wire_e2e() {
     TemporaryDirectory files;
 
-    // Base 宿主（L19 资料归属切换）：档案锚点在 baseServer；结算落账 =
+    // Base 宿主（L19 资料归属切换）：档案锚点在 base；结算落账 =
     // World 业务受理面拨本面（958/959 返回业务请求——P1 基础业务与结算迁入）。
     player_store::PlayerStoreConfig base_config;
     base_config.host = "127.0.0.1";
     base_config.m1Enabled = true;
     base_config.m1Port = 0;  // 内核分配：测试经 m1_listen_port() 读回
-    base_config.m1SelfName = "baseServer";
+    base_config.m1SelfName = "base";
     base_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
     base_config.dataDir = (files.path / "base/players").string();
     base_config.journalPath = (files.path / "base/journal/persist.log").string();
@@ -124,7 +124,7 @@ void squad_wire_e2e() {
     world_config.host = "127.0.0.1";
     world_config.m1Port = 0;  // 内核分配：测试经 listenPort() 读回
     world_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
-    // 结算落账业务受理面拨 baseServer（0 = 挂账降级态；本 e2e 全链接线）
+    // 结算落账业务受理面拨 base（0 = 挂账降级态；本 e2e 全链接线）
     world_config.baseBusinessPort = base.store->m1_listen_port();
 
     // 结算凭据目录（L67 去重凭据面生产接线）+ 预置 party 2 队长已落凭据

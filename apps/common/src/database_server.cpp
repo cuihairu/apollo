@@ -59,7 +59,7 @@ bool Server::start() {
     config.port = impl_->config.port;
     config.route_json = impl_->config.route_json;
     config.self_name = impl_->config.self_name;
-    config.endpoint_name = "baseServer";
+    config.endpoint_name = "base";
     impl_->ready = true;
     impl_->listener = player_store::makePlayerStoreLinkServer(config,
         [this](const std::uint8_t* bytes, std::size_t size) {

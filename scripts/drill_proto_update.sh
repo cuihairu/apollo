@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# drill_proto_update（sdk-contract §6 发布/回滚验收 · 真进程）：真 login-app
+# drill_proto_update（sdk-contract §6 发布/回滚验收 · 真进程）：真 login
 # 目录 M1 面 + fleetctl 双代次拨入——协议更新的发布/回滚三形各在真 TCP +
 # 真 hello 握手上落证：
 #   A 破坏性变更（窗关）：旧代 fleetctl 拨本代服务面 → UNREACHABLE(exit 3)
@@ -22,7 +22,7 @@ BUILD_DIR="$(cd "$BUILD_DIR" && pwd)"  # 绝对化：子 shell cd 后相对路�
 DRILL_DIR="${APOLLO_DRILL_DIR:-/tmp/apollo-drill-proto-$$}"
 mkdir -p "$DRILL_DIR"
 
-LOGIN="$BUILD_DIR/apps/login-app/login-app"
+LOGIN="$BUILD_DIR/apps/login/login"
 FLEETCTL="$BUILD_DIR/apps/fleetctl/fleetctl"
 GOLDEN="$REPO_ROOT/sdks/cpp/generated/contract_route.json"
 
@@ -60,7 +60,7 @@ stop_login() {
         kill -KILL "$LOGIN_PID" 2>/dev/null || true
         LOGIN_PID=""
     fi
-    pkill -KILL -x login-app 2>/dev/null || true
+    pkill -KILL -x login 2>/dev/null || true
     sleep 0.3
 }
 cleanup() {

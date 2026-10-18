@@ -4,7 +4,7 @@
 # 二进制 → SIGTERM 优雅停（journal 排空）→ machined 退避重启 → 恢复相位
 # 收敛（离线锚点复断 + 全量重报 + 目录镜像）→ 录取面恢复 → 逐玩家存档
 # 哈希比对。
-# P3-1/P4 re-home 版拓扑：mgr 面 = login-app、base 面 = world-app（旧
+# P3-1/P4 re-home 版拓扑：mgr 面 = login、base 面 = world（旧
 # baseappmgr/base-app 版随进程退场退役；SIGUSR1/USR2 排空闸由契约控制面
 # 956/957 承接）。
 #
@@ -17,10 +17,10 @@
 # 演练拓扑（独立端口段 19610-19614/19013-19014/19105，不与 drill_kill9
 # 19600-19602/19003-19005/19015、drill_migration 19621+/19631+/19641+ 冲突）：
 #   machined --port 19610 --interval 500 --backoff 1000（编队监督 + 死亡通知）
-#   login = login-app --port 19013（fleetctl assign 拨入面）
+#   login = login --port 19013（fleetctl assign 拨入面）
 #                  --directory-port 19014 --mirror-port 19611
 #                  --recovery-port 19612 --recovery-expected 1
-#   world = world-app --m1-port 19105（fleetctl drain --peer world 拨入面）
+#   world = world --m1-port 19105（fleetctl drain --peer world 拨入面）
 #                  --player-store-m1-port 19613 --report-to-port 19612
 #
 # 种档：player_1..3.json 按 PlayerData::toJson 精确字节序种入 world 数据目录
@@ -41,8 +41,8 @@ DATA_DIR="$DRILL_DIR/world-data/players"
 mkdir -p "$RUN_DIR" "$DATA_DIR"
 
 MACHINED="$BUILD_DIR/apps/machined/machined"
-LOGIN="$BUILD_DIR/apps/login-app/login-app"
-WORLD="$BUILD_DIR/apps/world-app/world-app"
+LOGIN="$BUILD_DIR/apps/login/login"
+WORLD="$BUILD_DIR/apps/world/world"
 FLEETCTL="$BUILD_DIR/apps/fleetctl/fleetctl"
 
 PORT_DISCO=19610
@@ -57,7 +57,7 @@ WORLD_ID=2
 
 LOG="$DRILL_DIR/fleet.log"
 ROSTER="$DRILL_DIR/drill.roster"
-ORIG_BACKUP="$DRILL_DIR/world-app.orig.drill"
+ORIG_BACKUP="$DRILL_DIR/world.orig.drill"
 FAIL=0
 
 fail() { echo "FAIL: $*" >&2; FAIL=1; }
@@ -125,15 +125,15 @@ cleanup() {
         sleep 2
         pgrep -x machined >/dev/null 2>&1 && kill -KILL "$mpid" 2>/dev/null || true
     fi
-    pkill -KILL -x login-app 2>/dev/null || true
-    pkill -KILL -x world-app 2>/dev/null || true
+    pkill -KILL -x login 2>/dev/null || true
+    pkill -KILL -x world 2>/dev/null || true
     echo "[drill] teardown end" >&2
 }
 trap cleanup EXIT
 
 # 残留进程护栏（同端口编队不互踩；-x 精确匹配进程名，不误伤外层 shell）
-pkill -KILL -x login-app 2>/dev/null || true
-pkill -KILL -x world-app 2>/dev/null || true
+pkill -KILL -x login 2>/dev/null || true
+pkill -KILL -x world 2>/dev/null || true
 pkill -KILL -x machined 2>/dev/null || true
 sleep 0.5
 
@@ -165,9 +165,9 @@ if ! wait_log "admission open" 1 20; then
     tail -30 "$LOG"; fail "initial recovery convergence not observed"; exit 1
 fi
 if ! wait_log "recovery ready" 1 20; then
-    tail -30 "$LOG"; fail "world-app recovery ready not observed"; exit 1
+    tail -30 "$LOG"; fail "world recovery ready not observed"; exit 1
 fi
-ok "初始收敛：恢复相位开放 + world-app recovery ready"
+ok "初始收敛：恢复相位开放 + world recovery ready"
 # 种档在启动前落盘 → 首次启动即走离线恢复扫描（档案在、会话无）
 wait_log "Anchor restore: 3 anchors offline-resumed" 1 10 || \
     fail "startup anchor restore from seeded profiles not observed"
@@ -175,14 +175,14 @@ ok "启动恢复：3 份种档离线复断（Anchor restore: 3）"
 
 T_INTAKE1=$(date +%s.%N)
 wait_log_after "full report: component=30" "$T_INTAKE1" 20 || \
-    fail "world-app full report not received"
+    fail "world full report not received"
 sleep 1  # 让 intake 后首个镜像快照落日志（周期 500ms）
 wait_log_after "snapshot published entries=3 parts" "$T_INTAKE1" 10 || \
     fail "directory mirror not converged (entries=3)"
 ok "目录镜像收敛：entries=3（3 份种档全量重报入录）"
 
-WORLD_PID=$(pgrep -x world-app | head -1)
-[[ -n "$WORLD_PID" ]] || { fail "world-app pid not found"; exit 1; }
+WORLD_PID=$(pgrep -x world | head -1)
+[[ -n "$WORLD_PID" ]] || { fail "world pid not found"; exit 1; }
 ok "baseline：world pid=$WORLD_PID"
 
 # —— 排空前录取面：闸开新玩家可进 ——
@@ -233,12 +233,12 @@ ok "journal 排空：stopped (journal pending: 0)"
 # —— machined 退避重启（attempt 1 → 1s backoff）+ 换版证据 ——
 wait_log "restart world" 1 15 || fail "machined restart line missing"
 T_RESTART=$(ts_of "restart world" 1)
-wait_log "recovery ready" 2 20 || fail "restarted world-app recovery ready not observed"
+wait_log "recovery ready" 2 20 || fail "restarted world recovery ready not observed"
 T_READY2=$(ts_of "recovery ready" 2)
 wait_log "Anchor restore: 3 anchors offline-resumed" 2 10 || \
-    fail "restarted world-app anchor restore not observed"
-WORLD_PID2=$(pgrep -x world-app | head -1)
-[[ -n "$WORLD_PID2" && "$WORLD_PID2" != "$WORLD_PID" ]] || { fail "world-app pid unchanged after restart"; exit 1; }
+    fail "restarted world anchor restore not observed"
+WORLD_PID2=$(pgrep -x world | head -1)
+[[ -n "$WORLD_PID2" && "$WORLD_PID2" != "$WORLD_PID" ]] || { fail "world pid unchanged after restart"; exit 1; }
 INODE_RUN_B=$(stat -Lc %i "/proc/$WORLD_PID2/exe")
 [[ "$INODE_RUN_B" == "$INODE_FILE_NEW" ]] || \
     fail "restarted process did not run swapped binary (inode $INODE_RUN_B != $INODE_FILE_NEW)"
@@ -246,7 +246,7 @@ ok "换版重启：新 pid=$WORLD_PID2 跑的 exe inode=$INODE_RUN_B = 磁上换
 
 # —— 恢复收敛：全量重报 + 目录镜像（排空态不跨进程：新进程全新受理面）——
 wait_log_after "full report: component=30" "$T_READY2" 20 || \
-    fail "restarted world-app full report not received"
+    fail "restarted world full report not received"
 LAST_INTAKE=$(grep "full report: component=30" "$LOG" | tail -1)
 echo "$LAST_INTAKE" | grep -q "sessions=3 intake=3" || \
     fail "intake count wrong (drop count = 3 - intake): $LAST_INTAKE"

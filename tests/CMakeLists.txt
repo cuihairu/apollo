@@ -238,19 +238,19 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo_protocol)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
-	        ../apps/gateway-app/src/gateway_server.cpp
-	        ../apps/gateway-app/src/gateway_control_server.cpp
-	        ../apps/gateway-app/src/m1_egress.cpp
-	        ../apps/gateway-app/src/m1_route_client.cpp
-	        ../apps/gateway-app/include/gateway/session_manager.cpp
-            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	        ../apps/gateway/src/gateway_server.cpp
+	        ../apps/gateway/src/gateway_control_server.cpp
+	        ../apps/gateway/src/m1_egress.cpp
+	        ../apps/gateway/src/m1_route_client.cpp
+	        ../apps/gateway/include/gateway/session_manager.cpp
+            ../apps/gateway/src/ingress/client_ingress_server.cpp
+            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway/src/ingress/session_admission_service.cpp
 	    )
 	    target_include_directories(gateway_route_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
 	    )
 	    target_compile_definitions(gateway_route_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
@@ -277,19 +277,19 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # Windows 下 link TCP 底座不进 M1 批，TCP 用例本体空转）
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
-	        ../apps/gateway-app/src/gateway_server.cpp
-	        ../apps/gateway-app/src/gateway_control_server.cpp
-	        ../apps/gateway-app/src/m1_egress.cpp
-	        ../apps/gateway-app/src/m1_route_client.cpp
-	        ../apps/gateway-app/include/gateway/session_manager.cpp
-            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	        ../apps/gateway/src/gateway_server.cpp
+	        ../apps/gateway/src/gateway_control_server.cpp
+	        ../apps/gateway/src/m1_egress.cpp
+	        ../apps/gateway/src/m1_route_client.cpp
+	        ../apps/gateway/include/gateway/session_manager.cpp
+            ../apps/gateway/src/ingress/client_ingress_server.cpp
+            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway/src/ingress/session_admission_service.cpp
 	    )
 	    target_include_directories(gateway_ingress_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
 	    )
 	    target_compile_definitions(gateway_ingress_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
@@ -321,19 +321,19 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # 本体空转）
 	    add_executable(gateway_drain_tests
 	        test_gateway_drain.cpp
-	        ../apps/gateway-app/src/gateway_server.cpp
-	        ../apps/gateway-app/src/gateway_control_server.cpp
-	        ../apps/gateway-app/src/m1_egress.cpp
-	        ../apps/gateway-app/src/m1_route_client.cpp
-	        ../apps/gateway-app/include/gateway/session_manager.cpp
-            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	        ../apps/gateway/src/gateway_server.cpp
+	        ../apps/gateway/src/gateway_control_server.cpp
+	        ../apps/gateway/src/m1_egress.cpp
+	        ../apps/gateway/src/m1_route_client.cpp
+	        ../apps/gateway/include/gateway/session_manager.cpp
+            ../apps/gateway/src/ingress/client_ingress_server.cpp
+            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway/src/ingress/session_admission_service.cpp
 	    )
 	    target_include_directories(gateway_drain_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
 	    )
 	    target_compile_definitions(gateway_drain_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
@@ -567,19 +567,19 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo_protocol)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
-	        ../apps/gateway-app/src/gateway_server.cpp
-	        ../apps/gateway-app/src/gateway_control_server.cpp
-	        ../apps/gateway-app/src/m1_egress.cpp
-	        ../apps/gateway-app/src/m1_route_client.cpp
-	        ../apps/gateway-app/include/gateway/session_manager.cpp
-            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	        ../apps/gateway/src/gateway_server.cpp
+	        ../apps/gateway/src/gateway_control_server.cpp
+	        ../apps/gateway/src/m1_egress.cpp
+	        ../apps/gateway/src/m1_route_client.cpp
+	        ../apps/gateway/include/gateway/session_manager.cpp
+            ../apps/gateway/src/ingress/client_ingress_server.cpp
+            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway/src/ingress/session_admission_service.cpp
 	    )
 	    target_include_directories(gateway_route_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
 	    )
 	    target_compile_definitions(gateway_route_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
@@ -606,19 +606,19 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # Windows 下 link TCP 底座不进 M1 批，TCP 用例本体空转）
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
-	        ../apps/gateway-app/src/gateway_server.cpp
-	        ../apps/gateway-app/src/gateway_control_server.cpp
-	        ../apps/gateway-app/src/m1_egress.cpp
-	        ../apps/gateway-app/src/m1_route_client.cpp
-	        ../apps/gateway-app/include/gateway/session_manager.cpp
-            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	        ../apps/gateway/src/gateway_server.cpp
+	        ../apps/gateway/src/gateway_control_server.cpp
+	        ../apps/gateway/src/m1_egress.cpp
+	        ../apps/gateway/src/m1_route_client.cpp
+	        ../apps/gateway/include/gateway/session_manager.cpp
+            ../apps/gateway/src/ingress/client_ingress_server.cpp
+            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway/src/ingress/session_admission_service.cpp
 	    )
 	    target_include_directories(gateway_ingress_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
 	    )
 	    target_compile_definitions(gateway_ingress_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
@@ -650,19 +650,19 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # 本体空转）
 	    add_executable(gateway_drain_tests
 	        test_gateway_drain.cpp
-	        ../apps/gateway-app/src/gateway_server.cpp
-	        ../apps/gateway-app/src/gateway_control_server.cpp
-	        ../apps/gateway-app/src/m1_egress.cpp
-	        ../apps/gateway-app/src/m1_route_client.cpp
-	        ../apps/gateway-app/include/gateway/session_manager.cpp
-            ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway-app/src/ingress/session_admission_service.cpp
+	        ../apps/gateway/src/gateway_server.cpp
+	        ../apps/gateway/src/gateway_control_server.cpp
+	        ../apps/gateway/src/m1_egress.cpp
+	        ../apps/gateway/src/m1_route_client.cpp
+	        ../apps/gateway/include/gateway/session_manager.cpp
+            ../apps/gateway/src/ingress/client_ingress_server.cpp
+            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+            ../apps/gateway/src/ingress/session_admission_service.cpp
 	    )
 	    target_include_directories(gateway_drain_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
 	    )
 	    target_compile_definitions(gateway_drain_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
@@ -1318,17 +1318,17 @@ add_test(NAME TimerWheelTests COMMAND timer_wheel_tests)
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
 # WorldApp 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ WorldApp 受理点
 # 接线（维护闸/受理回执/Pong/tick 边界 drain/过载回错误包）。直编协议源惯例
-# 同 apps/world-app（协议源直编习语）。
+# 同 apps/world（协议源直编习语）。
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(world_app_acceptance_tests
     test_world_app_acceptance.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(world_app_acceptance_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -1357,13 +1357,13 @@ endif()
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(world_app_m1_link_tests
     test_world_app_m1_link.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(world_app_m1_link_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -1393,24 +1393,24 @@ endif()
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(gateway_m1_egress_tests
     test_gateway_m1_egress.cpp
-    ../apps/gateway-app/src/gateway_server.cpp
-    ../apps/gateway-app/src/gateway_control_server.cpp
-    ../apps/gateway-app/src/m1_egress.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp
-    ../apps/gateway-app/include/gateway/session_manager.cpp
-    ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-    ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-    ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-    ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-    ../apps/gateway-app/src/ingress/session_admission_service.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(gateway_m1_egress_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -1442,16 +1442,16 @@ endif()
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(squad_wire_e2e_tests
     test_squad_wire_e2e.cpp
-    ../apps/gateway-app/src/m1_egress.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(squad_wire_e2e_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -1474,16 +1474,16 @@ add_test(NAME SquadWireE2eTests COMMAND squad_wire_e2e_tests)
 
 add_executable(world_drain_tests
     test_world_drain.cpp
-    ../apps/gateway-app/src/m1_egress.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(world_drain_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -1508,24 +1508,24 @@ add_test(NAME WorldDrainTests COMMAND world_drain_tests)
 # 排空替换分别验收。不代替业务双版本解码、生产登录或跨 Gateway 恢复。
 add_executable(update_continuity_tests
     test_update_continuity.cpp
-    ../apps/gateway-app/src/gateway_server.cpp
-    ../apps/gateway-app/src/gateway_control_server.cpp
-    ../apps/gateway-app/include/gateway/session_manager.cpp
-    ../apps/gateway-app/src/ingress/client_ingress_server.cpp
-    ../apps/gateway-app/src/ingress/tcp_client_ingress_server.cpp
-    ../apps/gateway-app/src/ingress/client_packet_dispatcher.cpp
-    ../apps/gateway-app/src/ingress/gateway_connection_registry.cpp
-    ../apps/gateway-app/src/ingress/session_admission_service.cpp
-    ../apps/gateway-app/src/m1_egress.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(update_continuity_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -1810,15 +1810,15 @@ add_test(NAME RemoteEntityTests COMMAND remoteentity_tests)
 # 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
 add_executable(login_m1_admission_tests
     test_login_m1_admission.cpp
-    ../apps/login-app/src/m1_admission_server.cpp
-    ../apps/gateway-app/src/ingress/session_admission_service.cpp
-    ../apps/gateway-app/include/gateway/session_manager.cpp
+    ../apps/login/src/m1_admission_server.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(login_m1_admission_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/login-app/include
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
 target_compile_definitions(login_m1_admission_tests PRIVATE
@@ -1843,11 +1843,11 @@ add_test(NAME LoginM1AdmissionTests COMMAND login_m1_admission_tests)
 add_executable(base_m1_tests
     test_base_m1.cpp
     ../apps/common/src/player_store_m1.cpp
-    ../apps/login-app/src/m1_base_client.cpp
+    ../apps/login/src/m1_base_client.cpp
 )
 target_include_directories(base_m1_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/common/include
-    ${CMAKE_SOURCE_DIR}/apps/login-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
 target_compile_definitions(base_m1_tests PRIVATE
@@ -2017,7 +2017,7 @@ add_test(NAME RolloutTests COMMAND rollout_tests)
 # OFF 树同样执行）。
 add_executable(contract_handler_tests test_contract_handlers.cpp)
 target_compile_definitions(contract_handler_tests PRIVATE
-    APOLLO_WORLD_APP_CONTRACT_HANDLERS_LUA="${CMAKE_SOURCE_DIR}/apps/world-app/scripts/contract_handlers.lua"
+    APOLLO_WORLD_APP_CONTRACT_HANDLERS_LUA="${CMAKE_SOURCE_DIR}/apps/world/scripts/contract_handlers.lua"
     APOLLO_GENERATED_CONTRACT_LUA="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract.lua"
 )
 target_link_libraries(contract_handler_tests PRIVATE
@@ -2085,14 +2085,14 @@ add_executable(baseappmgr_m1_control_tests
     test_baseappmgr_m1_control.cpp
     ../apps/common/src/directory_m1.cpp
     ../apps/common/src/online_directory.cpp
-    ../apps/login-app/src/m1_base_client.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp
+    ../apps/login/src/m1_base_client.cpp
+    ../apps/gateway/src/m1_route_client.cpp
 )
 target_include_directories(baseappmgr_m1_control_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/apps/common/include
-    ${CMAKE_SOURCE_DIR}/apps/login-app/include
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
 target_compile_definitions(baseappmgr_m1_control_tests PRIVATE
@@ -2177,13 +2177,13 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
    AND TARGET apollo::script)
 add_executable(world_app_script_host_tests
     test_world_app_script_host.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(world_app_script_host_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
@@ -2232,16 +2232,16 @@ endforeach()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(hosted_services_tests
     test_hosted_services.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
-    ../apps/login-app/src/login_server.cpp
-    ../apps/login-app/src/m1_admission_server.cpp
-    ../apps/login-app/src/m1_base_client.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp)
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
+    ../apps/login/src/login_server.cpp
+    ../apps/login/src/m1_admission_server.cpp
+    ../apps/login/src/m1_base_client.cpp
+    ../apps/gateway/src/m1_route_client.cpp)
 target_include_directories(hosted_services_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
-    ${CMAKE_SOURCE_DIR}/apps/login-app/include
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include)
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(hosted_services_tests PRIVATE
     APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
 target_link_libraries(hosted_services_tests PRIVATE apollo_app_services
@@ -2260,16 +2260,16 @@ endif()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(fleet_rehome_chain_tests
     test_fleet_rehome_chain.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
-    ../apps/login-app/src/login_server.cpp
-    ../apps/login-app/src/m1_admission_server.cpp
-    ../apps/login-app/src/m1_base_client.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp)
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
+    ../apps/login/src/login_server.cpp
+    ../apps/login/src/m1_admission_server.cpp
+    ../apps/login/src/m1_base_client.cpp
+    ../apps/gateway/src/m1_route_client.cpp)
 target_include_directories(fleet_rehome_chain_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
-    ${CMAKE_SOURCE_DIR}/apps/login-app/include
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include)
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(fleet_rehome_chain_tests PRIVATE
     APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
 target_link_libraries(fleet_rehome_chain_tests PRIVATE apollo_app_services
@@ -2288,16 +2288,16 @@ endif()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(migration_chain_tests
     test_migration_chain.cpp
-    ../apps/world-app/src/world_app.cpp
-    ../apps/world-app/src/m1_link_server.cpp
-    ../apps/login-app/src/login_server.cpp
-    ../apps/login-app/src/m1_admission_server.cpp
-    ../apps/login-app/src/m1_base_client.cpp
-    ../apps/gateway-app/src/m1_route_client.cpp)
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/m1_link_server.cpp
+    ../apps/login/src/login_server.cpp
+    ../apps/login/src/m1_admission_server.cpp
+    ../apps/login/src/m1_base_client.cpp
+    ../apps/gateway/src/m1_route_client.cpp)
 target_include_directories(migration_chain_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world-app/include
-    ${CMAKE_SOURCE_DIR}/apps/login-app/include
-    ${CMAKE_SOURCE_DIR}/apps/gateway-app/include)
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(migration_chain_tests PRIVATE
     APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
 target_link_libraries(migration_chain_tests PRIVATE apollo_app_services
@@ -2347,10 +2347,10 @@ endif()
 if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
-        add_dependencies(base_database_tests baseServer database)
+        add_dependencies(base_database_tests base database)
         add_test(NAME BaseDatabaseProcessSmoke COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/base_database_process_smoke.py
-            $<TARGET_FILE:baseServer> $<TARGET_FILE:database>
+            $<TARGET_FILE:base> $<TARGET_FILE:database>
             $<TARGET_FILE:base_database_tests>
             ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
         set_tests_properties(BaseDatabaseProcessSmoke PROPERTIES TIMEOUT 40)

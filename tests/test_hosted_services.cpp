@@ -47,7 +47,7 @@ void hosted_services() {
     store_config.host = "127.0.0.1";
     store_config.m1Enabled = true;
     store_config.m1Port = 0;  // 内核分配
-    store_config.m1SelfName = "baseServer";
+    store_config.m1SelfName = "base";
     store_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
     store_config.dataDir = (files.path / "players").string();
     store_config.journalPath = (files.path / "journal/persist.log").string();

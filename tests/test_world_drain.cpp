@@ -394,7 +394,7 @@ bool poll_drained(OpsEnd& ops, std::uint64_t request_id, DrainReply& out,
     return false;
 }
 
-// 服务端壳：WorldApp（m1Port 0 内核分配；档案宿主已迁 baseServer）。
+// 服务端壳：WorldApp（m1Port 0 内核分配；档案宿主已迁 base）。
 struct WorldEnd {
     TemporaryDirectory files;
     WorldAppConfig config;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P3-5 跨 World 迁移演练 re-home 版（docs/design/backup-revive.md §9.2 五步
-# ①②③④ 编排 + §9.8「单玩家切换耗时」实测件）：真 login-app（目录 owner +
-# 942 编排受理面）+ 两真 world-app（源 zone 2 / 目标 zone 5，真 PlayerStore
+# ①②③④ 编排 + §9.8「单玩家切换耗时」实测件）：真 login（目录 owner +
+# 942 编排受理面）+ 两真 world（源 zone 2 / 目标 zone 5，真 PlayerStore
 # M1 面，933/935/936/937 迁移 wire 经 StoreDial 真拨），fleetctl migrate
 # 驱动（942→943，与测试走同一 dispatchRequest 受理面），逐段耗时取自 943
 # 回执（不墙钟反推）。
@@ -14,13 +14,13 @@
 # 演练拓扑（独立端口段，不与 drill_update 19610-19614/19013-19014/19105、
 # drill_kill9 19600-19602/19003-19005/19015、dev_fleet 9001-9005/9101-9107
 # 冲突）：
-#   login = login-app --port 19623 --directory-port 19625（fleetctl 编排命令面）
+#   login = login --port 19623 --directory-port 19625（fleetctl 编排命令面）
 #                   --recovery-port 19622 --recovery-expected 2（两报告方收敛）
 #                   --mirror-port 19626 --mirror-snapshot-ms 30000
 #                   （30s 周期 = 演练窗内 ④ 后恰有一次周期快照，作回卷断言面）
-#   old   = world-app --world-id 2 --player-store-m1-port 19632 --component-id 30
+#   old   = world --world-id 2 --player-store-m1-port 19632 --component-id 30
 #                   --zone-id 2 --report-to-port 19622 --report-interval-ms 1000
-#   new   = world-app --world-id 5 --player-store-m1-port 19642 --component-id 31
+#   new   = world --world-id 5 --player-store-m1-port 19642 --component-id 31
 #                   --zone-id 5 --report-to-port 19622 --report-interval-ms 1000
 # 种档（会话面无种子工具——旧 base-app --demo-anchors 随进程退场）：种子档
 # player_<N>.json 落源端 dataDir，PlayerStore 启动 restore 离线建锚（档案在、
@@ -50,8 +50,8 @@ OLD_DATA="$OLD_DIR/players"
 NEW_DATA="$NEW_DIR/players"
 mkdir -p "$RUN_DIR" "$OLD_DATA" "$NEW_DATA"
 
-LOGIN="$BUILD_DIR/apps/login-app/login-app"
-WORLD="$BUILD_DIR/apps/world-app/world-app"
+LOGIN="$BUILD_DIR/apps/login/login"
+WORLD="$BUILD_DIR/apps/world/world"
 FLEETCTL="$BUILD_DIR/apps/fleetctl/fleetctl"
 
 PORT_LOGIN=19623
@@ -141,15 +141,15 @@ cleanup() {
     for p in "$LOGIN_PID" "$OLD_PID" "$NEW_PID" "$WATCH_PID"; do
         [[ -n "$p" ]] && kill -KILL "$p" 2>/dev/null || true
     done
-    pkill -KILL -x login-app 2>/dev/null || true
-    pkill -KILL -x world-app 2>/dev/null || true
+    pkill -KILL -x login 2>/dev/null || true
+    pkill -KILL -x world 2>/dev/null || true
     echo "[drill] teardown end" >&2
 }
 trap cleanup EXIT
 
 # 残留进程护栏（-x 精确匹配进程名）
-pkill -KILL -x login-app 2>/dev/null || true
-pkill -KILL -x world-app 2>/dev/null || true
+pkill -KILL -x login 2>/dev/null || true
+pkill -KILL -x world 2>/dev/null || true
 sleep 0.5
 
 # —— 种档：PlayerData::toJson 精确字节序（database_service 字段序、
@@ -221,9 +221,9 @@ WATCH_PID=$!
     2>&1 ) | ts >> "$NEW_LOG" &
 
 sleep 0.5
-LOGIN_PID=$(pgrep -x login-app | head -1)
-OLD_PID=$(pgrep -x world-app | head -1)
-NEW_PID=$(pgrep -x world-app | tail -1)
+LOGIN_PID=$(pgrep -x login | head -1)
+OLD_PID=$(pgrep -x world | head -1)
+NEW_PID=$(pgrep -x world | tail -1)
 for pid in "$LOGIN_PID" "$OLD_PID" "$NEW_PID"; do
     [[ -n "$pid" ]] || { fail "process pid missing"; exit 1; }
 done
