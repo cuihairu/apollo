@@ -405,6 +405,9 @@ std::vector<uint8_t> PlayerStore::dispatchRequest(const std::vector<uint8_t>& da
     auto header = protocol::MessageCodec::parseHeader(data);
     auto msgType = static_cast<protocol::MessageType>(header.type);
 
+    // L69 受理面兼容底线：合法帧头下的畸形/旧形消息体（残缺 JSON、未升级
+    // 客户端载荷）结构化 ERROR 回包（会话号保留），绝不向泵线程抛异常。
+    try {
     switch (msgType) {
         case protocol::MessageType::DB_LOAD_REQUEST:
             return handleDbLoadRequest(data);
@@ -444,6 +447,12 @@ std::vector<uint8_t> PlayerStore::dispatchRequest(const std::vector<uint8_t>& da
             err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
             err.message = "Unknown message type";
             return protocol::MessageCodec::encode(err, header.sessionId);
+    }
+    } catch (const std::exception&) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Malformed request body";
+        return protocol::MessageCodec::encode(err, header.sessionId);
     }
 }
 

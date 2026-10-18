@@ -458,6 +458,83 @@ bool test_dispatch_unknown_type_contract() {
     return true;
 }
 
+// L69 解码兼容面：合法帧头下的新旧/畸形消息体结构化边界。未升级客户端的
+// 旧形消息体（缺字段 → 默认值容忍）、携未知未来字段的档案载荷（忽略不污染
+// 已知字段）都不得炸受理面；畸形 body（非 JSON）必须结构化 ERROR 回包
+// （会话号保留），绝不向泵线程抛异常。
+bool test_decode_compat_structured_faces() {
+    std::cout << "Running: test_decode_compat_structured_faces..." << std::endl;
+    namespace protocol = apollo::protocol;
+    player_store::PlayerStoreConfig config;
+    config.workerThreads = 1;
+    config.autoSaveIntervalMs = 60000;
+    config.host = "127.0.0.1";
+    config.port = 39009;  // 高位端口：stub 树 start() 无传输面，避撞
+    config.dataDir = "base_anchor_test_compat_data/players";
+    config.journalPath = "base_anchor_test_compat_data/journal/persist.log";
+    std::filesystem::create_directories(config.dataDir);
+    std::filesystem::create_directories(
+        config.journalPath.substr(0, config.journalPath.find_last_of('/')));
+    player_store::PlayerStore server(config);
+    server.start();
+
+    // ① 畸形 body（非 JSON）：结构化 ERROR 回包，会话号保留，不向泵抛异常
+    {
+        protocol::MessageHeader header{};
+        header.magic = protocol::MessageHeader::MAGIC;
+        header.version = protocol::MessageHeader::CURRENT_VERSION;
+        header.type = static_cast<uint16_t>(protocol::MessageType::DB_LOAD_REQUEST);
+        header.length = 8;
+        header.sequence = 1;
+        header.sessionId = 21;
+        std::vector<uint8_t> frame(sizeof(header) + 8, 0);
+        std::memcpy(frame.data(), &header, sizeof(header));
+        std::memcpy(frame.data() + sizeof(header), "not json", 8);
+        const auto reply = server.dispatchRequest(frame);
+        const auto replyHeader = protocol::MessageCodec::parseHeader(reply);
+        TEST_ASSERT(replyHeader.type ==
+                        static_cast<uint16_t>(protocol::MessageType::ERROR),
+                    "malformed body answered with ERROR envelope");
+        TEST_ASSERT(replyHeader.sessionId == 21, "malformed body keeps session id");
+        protocol::ErrorMessage err;
+        protocol::MessageCodec::decodeBody(
+            {reply.begin() + sizeof(replyHeader), reply.end()}, err);
+        TEST_ASSERT(!err.message.empty(), "malformed body error carries reason");
+    }
+
+    // ② 旧形消息体（缺字段 → 默认值容忍）：结构化响应而非异常
+    {
+        protocol::DbLoadRequest legacy{};
+        const auto reply =
+            server.dispatchRequest(protocol::MessageCodec::encode(legacy, 22));
+        const auto replyHeader = protocol::MessageCodec::parseHeader(reply);
+        TEST_ASSERT(replyHeader.type ==
+                        static_cast<uint16_t>(protocol::DbLoadResponse::TYPE),
+                    "legacy minimal body still decodes to response");
+        auto resp = protocol::MessageCodec::decodeBody<protocol::DbLoadResponse>(
+            {reply.begin() + sizeof(replyHeader), reply.end()});
+        TEST_ASSERT(!resp.success, "playerId 0 load rejected structurally");
+    }
+
+    // ③ 档案载荷前后兼容：未知字段忽略不污染、缺字段默认不炸
+    {
+        player_store::PlayerData data = player_store::PlayerData::fromJson(
+            R"({"playerId":31,"username":"compat","futureField":123,"futureStr":"x"})");
+        TEST_ASSERT(data.playerId == 31 && data.username == "compat",
+                    "unknown fields do not pollute known fields");
+        player_store::PlayerData minimal =
+            player_store::PlayerData::fromJson(R"({"playerId":32})");
+        TEST_ASSERT(minimal.playerId == 32 && minimal.username.empty() &&
+                        minimal.exp == 0,
+                    "old minimal archive decodes with defaults");
+    }
+
+    server.stop();
+    std::filesystem::remove_all("base_anchor_test_compat_data");
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_player_migration_faces() {
     std::cout << "Running: test_player_migration_faces..." << std::endl;
     namespace migration = player_store::migration;
@@ -887,6 +964,7 @@ int main() {
     run(test_freeze_collects_pending_reward);
     run(test_save_race_and_restart_persistence);
     run(test_dispatch_unknown_type_contract);
+    run(test_decode_compat_structured_faces);
     run(test_player_migration_faces);
 #if !defined(_WIN32)
     run(test_player_migration_pull_on_handoff);
