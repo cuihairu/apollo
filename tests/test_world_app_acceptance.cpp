@@ -102,10 +102,11 @@ bool test_queue_high_watermark_hysteresis() {
 
 // ---------- WorldApp 受理点接线 ----------
 
-std::vector<uint8_t> make_create_frame(std::uint64_t entity_id, protocol::SessionID session_id) {
+std::vector<uint8_t> make_create_frame(std::uint64_t entity_id, protocol::SessionID session_id,
+                                       protocol::EntityType entity_type = protocol::EntityType::NPC) {
     protocol::CellCreateEntity msg;
     msg.entityId = entity_id;
-    msg.entityType = protocol::EntityType::NPC;
+    msg.entityType = entity_type;
     msg.spaceId = 1;
     msg.position.x = 1.0f;
     msg.position.y = 2.0f;
@@ -118,6 +119,17 @@ world_app::IntentEnvelope make_create_intent(std::uint64_t entity_id,
     world_app::IntentEnvelope intent;
     intent.type = protocol::MessageType::CELL_CREATE_ENTITY;
     intent.frame = make_create_frame(entity_id, session_id);
+    intent.session_id = session_id;
+    return intent;
+}
+
+// 玩家实体型（attach 路径）：创建成功后 session→player 绑定，可经
+// resolveIntentPlayer（互斥会话表，跨线程安全只读）探测 world 侧生效。
+world_app::IntentEnvelope make_create_player_intent(std::uint64_t entity_id,
+                                                    protocol::SessionID session_id) {
+    world_app::IntentEnvelope intent;
+    intent.type = protocol::MessageType::CELL_CREATE_ENTITY;
+    intent.frame = make_create_frame(entity_id, session_id, protocol::EntityType::PLAYER);
     intent.session_id = session_id;
     return intent;
 }
@@ -219,6 +231,35 @@ bool test_drain_at_tick_boundary() {
     return true;
 }
 
+// L42 单写者纪律可观察面：submitIntent 只入队不写 world——模拟线程之外
+// 提交后即刻探测，会话表无绑定（submit 未触碰模拟状态）；world 变更仅在
+// gameThread 的 tick 边界 drain 后显形。resolveIntentPlayer 走互斥会话表，
+// 是跨线程安全的只读探针（玩家实体走 attach 路径才建会话）。
+bool test_submit_enqueues_only_state_at_tick() {
+    WorldAppConfig config;
+    config.tickRateMs = 1000;
+    WorldApp server(config);
+    server.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));  // 首拍 settle
+
+    TEST_ASSERT(server.resolveIntentPlayer(77) == 0, "no session before submit");
+    TEST_ASSERT(server.submitIntent(make_create_player_intent(42, 77)), "accepted");
+    TEST_ASSERT(server.pendingIntentCount() == 1, "queued, not applied");
+    TEST_ASSERT(server.resolveIntentPlayer(77) == 0,
+                "submit did not mutate sim state");
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (server.resolveIntentPlayer(77) == 0 &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    TEST_ASSERT(server.resolveIntentPlayer(77) == 42,
+                "session bound at tick boundary");
+    TEST_ASSERT(server.pendingIntentCount() == 0, "queue empty after drain");
+    server.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -233,6 +274,7 @@ int main() {
         {"acceptance_gate_and_queue", test_acceptance_gate_and_queue},
         {"overload_rejects_at_cap", test_overload_rejects_at_cap},
         {"drain_at_tick_boundary", test_drain_at_tick_boundary},
+        {"submit_enqueues_only_state_at_tick", test_submit_enqueues_only_state_at_tick},
     };
     for (const auto& c : cases) {
         const int before = g_failures;

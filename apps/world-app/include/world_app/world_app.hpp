@@ -67,6 +67,11 @@ public:
     // 只有 gameThread_ 可读；宿主对外的观察面是 Scene §7.1 debug eval 队列。
     apollo::game::world::Scene* find_scene(std::uint64_t scene_id);
 
+    // 意图源会话 → 玩家号（worldSessionManager_ 反查；0 = 未知会话）。互斥
+    // 会话表的只读反查，跨线程安全；观测/测试面：受理单写者纪律断言用
+    // （submitIntent 不触碰模拟状态，会话绑定仅在 tick 边界 drain 后显形）。
+    std::uint64_t resolveIntentPlayer(std::uint64_t session_id) const;
+
 private:
     // 处理创建实体请求
     std::vector<uint8_t> handleCellCreateEntity(const std::vector<uint8_t>& request);
@@ -92,8 +97,6 @@ private:
     std::vector<uint8_t> handleSquadStart(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handleSquadKill(const std::vector<uint8_t>& request);
 
-    // 意图源会话 → 玩家号（worldSessionManager_ 反查；0 = 未知会话）。
-    std::uint64_t resolveIntentPlayer(std::uint64_t session_id) const;
     // 客户端帧下行（939 client_deliver 出口；未装配链路 = 尽力面落地）。
     void deliverToClient(std::uint64_t session_id, const std::vector<uint8_t>& frame);
     // 组装并下行：队伍结果 / 副本结果 / 副本状态（单会话与名册全员两型）。
