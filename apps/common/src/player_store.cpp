@@ -53,7 +53,7 @@ PlayerStore::PlayerStore(const PlayerStoreConfig& config,
                          std::unique_ptr<PlayerStorage> storage)
     : config_(config)
     , database_(storage ? std::move(storage) : std::make_unique<DatabaseService>(config))
-    , saveQueue_(std::make_unique<SaveQueue>(config_.workerThreads))
+    , saveQueue_(std::make_unique<SaveQueue>(config_.workerThreads, config_.saveQueueCapacity))
     , anchorManager_(std::make_shared<apollo::game::session::AnchorManager>())
     , sessionLocator_(std::make_shared<apollo::game::session::SessionLocator>())
     , journal_(database_->ownsJournal() ? nullptr :

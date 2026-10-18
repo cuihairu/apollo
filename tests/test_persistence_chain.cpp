@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <algorithm>
 #include <future>
 #include <iostream>
 #include <mutex>
@@ -258,6 +259,58 @@ bool test_savequeue_same_player_serial_and_coalesce() {
     return true;
 }
 
+// 有界队列背压（P1「完善 database 的有界异步保存队列」）：排队+在途总数
+// 达容量上限后新任务被拒（满载拒绝）；载荷已在 journal 留段（write-ahead
+// 先于入队），拒绝不丢数据——脏位/下轮 flush 重取。
+bool test_savequeue_bounded_rejects_overload() {
+    std::promise<void> release;
+    auto gate = release.get_future();
+    std::atomic<bool> firstStarted{false};
+    std::mutex writtenMutex;
+    std::vector<player_store::PlayerID> written;
+    player_store::SaveQueue queue(1, /*maxPending=*/3);  // 单 worker + 容量 3
+    queue.set_worker([&](const player_store::PlayerData& data) {
+        if (!firstStarted.exchange(true)) {
+            gate.wait();  // 首任务持住在途名额
+        }
+        std::lock_guard<std::mutex> lock(writtenMutex);
+        written.push_back(data.playerId);
+        return true;
+    });
+    queue.start();
+
+    player_store::SaveTask first;
+    first.playerId = 701;
+    first.data.playerId = 701;
+    TEST_ASSERT(queue.enqueue(first), "容量内首任务受理");
+    while (!firstStarted.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    player_store::SaveTask second;
+    second.playerId = 702;
+    second.data.playerId = 702;
+    TEST_ASSERT(queue.enqueue(second), "排队 1/3 受理");
+    player_store::SaveTask third;
+    third.playerId = 703;
+    third.data.playerId = 703;
+    TEST_ASSERT(queue.enqueue(third), "排队 2/3 受理");
+
+    player_store::SaveTask overflow;
+    overflow.playerId = 704;
+    overflow.data.playerId = 704;
+    TEST_ASSERT(!queue.enqueue(overflow), "排队+在途满载（3/3）拒收");
+
+    release.set_value();
+    queue.stop();  // 排干已受理任务
+
+    std::lock_guard<std::mutex> lock(writtenMutex);
+    TEST_ASSERT(written.size() == 3, "恰有容量内 3 任务落盘");
+    TEST_ASSERT(std::find(written.begin(), written.end(), 704) == written.end(),
+                "被拒任务不落盘");
+    return true;
+}
+
 bool test_worker_failure_reports_false() {
     const auto dir = make_tmp_dir("fail");
     player_store::DatabaseService db(make_config(dir));
@@ -306,6 +359,8 @@ int main() {
         {"persistence_anchor_dirty_save_chain", test_anchor_dirty_save_chain},
         {"persistence_savequeue_same_player_serial_and_coalesce",
          test_savequeue_same_player_serial_and_coalesce},
+        {"persistence_savequeue_bounded_rejects_overload",
+         test_savequeue_bounded_rejects_overload},
         {"persistence_worker_failure_reports_false", test_worker_failure_reports_false},
     };
 

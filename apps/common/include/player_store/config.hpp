@@ -33,6 +33,7 @@ struct PlayerStoreConfig {
     int autoSaveIntervalMs = 60000;  // 1分钟自动保存
     int journalDrainQuota = 32;      // 每轮 journal 定额出队（attribute-sync §8.2）
     int shutdownFlushTimeoutMs = 5000;  // 停机 journal 追平超时上限（§10.2-③：日志完整性优先于停机速度）
+    std::size_t saveQueueCapacity = 4096;  // 有界保存队列容量（排队+在途总数上限；0=不设界）。满载拒绝由脏位/journal 兜底重试
 
     // 性能配置
     int workerThreads = 4;

@@ -112,14 +112,16 @@ public:
     // 未设置时视为恒成功（空转兼容）
     using Worker = std::function<bool(const PlayerData&)>;
 
-    explicit SaveQueue(int workerThreads = 4);
+    // maxPending = 排队+在途总数上限（有界队列；0 = 不设界）
+    explicit SaveQueue(int workerThreads = 4, std::size_t maxPending = 4096);
     ~SaveQueue();
 
     // 添加保存任务。按 playerId 分槽（playerId % 槽数）——同一玩家的
     // 任务永远落在同一单线程执行面，落盘顺序即入队顺序，旧快照不得
     // 覆盖新数据（PlayerStore 存档串行化）；不同玩家仍并行。
-    // 返回 false = 该玩家已有未落盘的在途任务，本任务合并跳过
-    // 调用方须保留被跳过的载荷（脏位或 journal）；队列不会更新在途载荷。
+    // 返回 false = 拒绝：该玩家已有未落盘在途任务（合并跳过），或队列
+    // 满载（排队+在途总数达容量上限，背压拒收）。调用方须保留被跳过的
+    // 载荷（脏位或 journal）；队列不会更新在途载荷。
     bool enqueue(const SaveTask& task);
 
     // 设置落盘执行器（start 之前调用）
@@ -148,6 +150,8 @@ private:
     std::vector<std::thread> workers_;
     std::vector<std::deque<SaveTask>> slots_;
     std::vector<std::size_t> inflight_;  // 槽内执行中的任务数（合并判定）
+    std::size_t pendingTotal_ = 0;       // 排队+在途总数（有界判定，与 slots_/inflight_ 同锁维护）
+    std::size_t maxPending_;             // 容量上限（0 = 不设界）
     std::unordered_set<PlayerID> pendingPlayers_;
     mutable std::mutex queueMutex_;
     std::condition_variable queueCV_;

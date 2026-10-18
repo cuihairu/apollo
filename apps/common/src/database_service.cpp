@@ -277,8 +277,9 @@ void DatabaseService::saveBatch(const std::vector<PlayerData>& players) {
     }
 }
 
-SaveQueue::SaveQueue(int workerThreads)
-    : workers_(static_cast<std::size_t>(workerThreads)) {
+SaveQueue::SaveQueue(int workerThreads, std::size_t maxPending)
+    : workers_(static_cast<std::size_t>(workerThreads))
+    , maxPending_(maxPending) {
     // 每线程一槽：同玩家任务按 playerId 固定归槽，槽内单线程 = 玩家域串行
     const std::size_t slotCount = workers_.empty() ? 1u : workers_.size();
     slots_.assign(slotCount, {});
@@ -301,7 +302,14 @@ bool SaveQueue::enqueue(const SaveTask& task) {
         if (!pendingPlayers_.insert(task.playerId).second) {
             return false;
         }
+        // 有界队列：排队+在途总数达上限即拒收（背压）。载荷已在 journal
+        // 留段（write-ahead），拒绝不丢数据——drain 回放或下轮 flush 重取
+        if (maxPending_ != 0 && pendingTotal_ >= maxPending_) {
+            pendingPlayers_.erase(task.playerId);
+            return false;
+        }
         slots_[slot].push_back(task);
+        ++pendingTotal_;
     }
     queueCV_.notify_all();
     return true;
@@ -371,7 +379,7 @@ void SaveQueue::workerLoop(std::size_t slot) {
 
             task = std::move(slots_[slot].front());
             slots_[slot].pop_front();
-            ++inflight_[slot];
+            ++inflight_[slot];  // 出队转在途：占位不变（pendingTotal_ 计排队+在途，完成时才释放）
         }
 
         // P1-4 真链路落盘分支：worker 未设置时视为成功（空转兼容）
@@ -385,6 +393,7 @@ void SaveQueue::workerLoop(std::size_t slot) {
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             --inflight_[slot];
+            --pendingTotal_;  // 落盘完成，释放容量占位
             pendingPlayers_.erase(task.playerId);
         }
         queueCV_.notify_all();
