@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "ce166a84343b694b100cf131e88d0ae65b8c0a27eda28b600ed762688c9ca333",
+  "schema_hash": "bb6f027e44049afd83d479d24edf8f9d933e76fdd5dcda23a5e8e9fef581d220",
   "client_hash": "c8e8e4de6ad5274e224e27113528ec9d88fc66b75b3cae31a2490edc0411207c",
-  "internal_hash": "71cab1f3c848c5e2cce9a383cb98033261c66d81fc0fcb96821e01489a1cbe35",
+  "internal_hash": "8cb7888d2b7ea3deb313374c754b1cd0cff231a06c7778e4d65c71c3ee9240ce",
   "contract_version": 3,
   "aliases": [
     {
@@ -3255,6 +3255,76 @@
         }
       ],
       "desc": "World 排空控制回执（World→ops；request_id 关联）"
+    },
+    {
+      "id": 958,
+      "name": "player_score_credit_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "调用方关联号（账本幂等在 World 侧 SettlementLedger——Base 只受理不记重放）"
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "score",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "结算分值（入 exp 键）"
+        },
+        {
+          "name": "source_zone_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "发起玩法域（排查面；不参与受理裁决）"
+        }
+      ],
+      "desc": "结算分值入账受理（World→Base 业务面；资料归属切换后锚点写权在 Base——World 结算面以返回业务请求落账，不跨界持锚点指针）"
+    },
+    {
+      "id": 959,
+      "name": "player_score_credit_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": ""
+        },
+        {
+          "name": "accepted",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=已入锚点长期态（mark_dirty 随 SaveQueue 落档）"
+        },
+        {
+          "name": "error_message",
+          "type": "string",
+          "wire_type": "string",
+          "desc": ""
+        }
+      ],
+      "desc": "结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补）"
     }
   ],
   "entities": [

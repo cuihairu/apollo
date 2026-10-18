@@ -2293,6 +2293,23 @@ endif()
 add_test(NAME MigrationChainTests COMMAND migration_chain_tests)
 endif()
 
+# ========== Base Business Wire Tests (P1 基础业务与结算迁入 958/959) ==========
+# 独立 PlayerStore 宿主（StoreHost 纯 store 位）+ StoreDial 真拨：常规落账
+# （锚点 exp 读数）、无锚点/冻结拒绝、SettlementLedger 业务受理装配
+# （Ok + 幂等 + 停面挂账）。
+if(TARGET apollo_app_services)
+add_executable(base_business_wire_tests
+    test_base_business_wire.cpp)
+target_compile_definitions(base_business_wire_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+target_link_libraries(base_business_wire_tests PRIVATE apollo_app_services
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
+if(TARGET apollo_squad_instance)
+    target_link_libraries(base_business_wire_tests PRIVATE apollo_squad_instance)
+endif()
+add_test(NAME BaseBusinessWireTests COMMAND base_business_wire_tests)
+endif()
+
 # Squad instance admission (P2)：小队创建请求受理——队伍/成员/人数/准入
 # 校验、World 容量选择、独立 Instance 与临时 Scene 创建。
 if(TARGET apollo_squad_instance)

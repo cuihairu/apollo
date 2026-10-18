@@ -35,6 +35,10 @@ void SquadInstanceService::set_anchor_resolver(AnchorResolveFn fn) {
     anchor_resolver_ = std::move(fn);
 }
 
+void SquadInstanceService::set_business_sink(SettlementLedger::BusinessSink fn) {
+    business_sink_ = std::move(fn);
+}
+
 void SquadInstanceService::set_credential_dir(const std::string& dir) {
     credential_store_ = std::make_unique<SettlementCredentialStore>(dir);
 }
@@ -442,6 +446,11 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
         // 单向口）→ AnchorRewardSink 语义落锚点（P2-4 幂等落账）。
         auto ledger = std::make_unique<SettlementLedger>();
         ledger->begin(members, anchor_resolver_);
+        // 业务受理面（P1 结算迁入）：锚点写权在 Base 时，落账经受理 wire
+        // 返回业务请求（958/959），本地解析不消费。
+        if (business_sink_) {
+            ledger->set_business_sink(business_sink_);
+        }
         // 去重凭据面（真实奖励持久化）：落账先持久提交 (小队, 玩家, 分值)
         // 凭据，提交失败挂账不落。
         if (credential_store_) {

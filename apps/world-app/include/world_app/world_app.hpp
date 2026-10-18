@@ -22,6 +22,10 @@ class ScriptRuntime;
 class ModuleRollout;
 }
 
+namespace player_store {
+class StoreDial;
+}
+
 namespace world_app {
 
 namespace protocol = apollo::protocol;
@@ -191,6 +195,11 @@ private:
     std::shared_ptr<apollo::runtime::WorldHost> worldHost_;
 
     std::unique_ptr<M1LinkServer> m1Link_;
+    // Base 业务受理面拨号（P1 结算迁入；头文件只持指针——StoreDial 实现在
+    // .cpp 侧包含，析构随 ~WorldApp 取完整类型）
+    std::unique_ptr<player_store::StoreDial> baseBusinessDial_;
+    // 业务受理关联号（gameThread_ 结算段独占）
+    std::uint64_t businessSeq_{0};
     // 脚本宿主（scripting-lua §2 一状态一逻辑线程：随 gameThread_ 生灭，
     // 建/用/析全在 gameLoop 线程）。
     std::unique_ptr<apollo::script::ScriptRuntime> script_;

@@ -1,4 +1,5 @@
 #include "player_store/player_store.hpp"
+#include "player_store/business_wire.hpp"
 #include "player_store/migration_puller.hpp"
 #include "player_store/migration_wire.hpp"
 #include "apollo/core/log/log_manager.h"
@@ -438,6 +439,11 @@ std::vector<uint8_t> PlayerStore::dispatchRequest(const std::vector<uint8_t>& da
         case static_cast<protocol::MessageType>(migration::HandoffRequest::TYPE):
             return handlePlayerHandoffRequest(data);
 
+        // 结算分值入账（P1 基础业务与结算迁入；958——World 结算返回业务
+        // 请求，锚点写权在本 store）
+        case static_cast<protocol::MessageType>(business::ScoreCreditRequest::TYPE):
+            return handlePlayerScoreCreditRequest(data);
+
         // PLAYER_ASSIGN_WORLD_REQUEST / PLAYER_RESOLVE_ROUTE_REQUEST
         // 归 apps/baseappmgr（目录 + 落点裁决），base-app 不再受理。
 
@@ -876,6 +882,39 @@ std::vector<uint8_t> PlayerStore::handlePlayerFreezeRequest(
         reply.error_message = "unknown player or no anchor";
     }
     return migration::encodeFrame(reply, session);
+}
+
+// 结算分值入账受理（958）：资料归属切换后的 Base 业务受理面——World 结算
+// 以返回业务请求落账，不跨界持锚点指针。幂等/重放去重归调用方账本（World
+// 侧 SettlementLedger）；本面无锚点或锚点 Transferring → accepted=0（调用
+// 方挂账待补）。落账走 AnchorRewardSink 语义（exp 键 + mark_dirty 随
+// SaveQueue 落档）。
+std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
+    const std::vector<uint8_t>& request) {
+    protocol::SessionID session = 0;
+    business::ScoreCreditRequest req;
+    if (!business::decodeFrame(request, req, session)) {
+        protocol::ErrorMessage err;
+        err.code = static_cast<uint32_t>(protocol::MessageType::ERROR);
+        err.message = "Bad player score credit request";
+        return protocol::MessageCodec::encode(
+            err, protocol::MessageCodec::parseHeader(request).sessionId);
+    }
+    business::ScoreCreditReply reply;
+    reply.player_id = req.player_id;
+    reply.request_id = req.request_id;
+    const auto anchor = findAnchor(req.player_id);
+    if (!anchor) {
+        reply.error_message = "unknown player or no anchor";
+    } else if (anchor->state() ==
+               apollo::game::session::AnchorState::Transferring) {
+        reply.error_message = "anchor transferring";
+    } else {
+        apollo::game::session::AnchorRewardSink sink(*anchor);
+        sink.on_reward(req.player_id, req.score);
+        reply.accepted = true;
+    }
+    return business::encodeFrame(reply, session);
 }
 
 std::vector<uint8_t> PlayerStore::handlePlayerSnapshotRequest(

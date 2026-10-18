@@ -13,6 +13,10 @@ void SettlementLedger::set_credential_sink(CredentialSink sink) {
     credential_sink_ = std::move(sink);
 }
 
+void SettlementLedger::set_business_sink(BusinessSink sink) {
+    business_sink_ = std::move(sink);
+}
+
 SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
                                                      std::int64_t score) {
     auto it = entries_.find(player_id);
@@ -24,6 +28,19 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
     if (credential_sink_ && !credential_sink_(player_id, score)) {
         it->second.score = score;
         return ApplyError::AnchorUnavailable;
+    }
+    // 业务受理出口（P1 结算迁入）：锚点写权在 Base——落账经 958/959 受理
+    // wire 走返回业务请求，本域不解析本地锚点（设置后 resolver 不消费）。
+    // Ok = 已落收口；其余 = 挂账待补（分值保留，retry 同路径重提）。
+    if (business_sink_) {
+        const auto rc = business_sink_(player_id, score);
+        if (rc != ApplyError::Ok) {
+            it->second.score = score;
+            return rc;
+        }
+        it->second.applied = true;
+        it->second.score = 0;
+        return ApplyError::Ok;
     }
     // 锚点缺失挂账不落：分值保留，待重试/补账收口。
     auto* anchor = resolver_ ? resolver_(player_id) : nullptr;

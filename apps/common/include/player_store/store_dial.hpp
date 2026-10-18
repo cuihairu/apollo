@@ -96,6 +96,13 @@ public:
         return false;
     }
 
+    // 对端链路态观测面（诊断/编排用；调用面不得以此代等待——拨号后业务
+    // 调用仍以 call 返回为准）。
+    bool peerUp() const {
+        auto* peer = manager_ ? manager_->link(peer_name_) : nullptr;
+        return peer != nullptr && peer->state() == link::LinkState::kUp;
+    }
+
     std::optional<std::vector<std::uint8_t>> call(std::vector<std::uint8_t> frame) {
         if (client_ == nullptr) {
             return std::nullopt;

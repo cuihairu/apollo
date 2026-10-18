@@ -1,4 +1,6 @@
 #include "world_app/world_app.hpp"
+#include "player_store/business_wire.hpp"
+#include "player_store/store_dial.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/linktrace/span_emitter.hpp"
 #include "apollo/protocol/messages.hpp"
@@ -200,6 +202,46 @@ void WorldApp::start() {
         throw std::runtime_error("failed to start WorldHost");
     }
 
+    // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 baseServer
+    // store M1 面（958/959——资料归属切换后锚点写权在 Base）。拨号装配
+    // 失败降级（警告 + 挂账面照旧），不拦启动。Sink 在 gameThread_ 结算段
+    // 同步调 call（自泵线程禁自调纪律不涉——StoreDial 泵独立线程）。
+    if (config_.baseBusinessPort != 0) {
+        baseBusinessDial_ = std::make_unique<player_store::StoreDial>(
+            config_.m1RouteJson, "world", "base", config_.baseBusinessHost,
+            config_.baseBusinessPort);
+        if (baseBusinessDial_->ready()) {
+            squadInstanceService_->set_business_sink(
+                [this](std::uint64_t player_id, std::int64_t score) {
+                    player_store::business::ScoreCreditRequest req;
+                    req.request_id = businessSeq_++;
+                    req.player_id = player_id;
+                    req.score = score;
+                    req.source_zone_id = config_.worldId;
+                    const auto reply = baseBusinessDial_->call(
+                        player_store::business::encodeFrame(req));
+                    player_store::business::ScoreCreditReply rep;
+                    protocol::SessionID sid = 0;
+                    if (!reply ||
+                        !player_store::business::decodeFrame(*reply, rep, sid)) {
+                        return squad_instance::SettlementLedger::ApplyError::
+                            AnchorUnavailable;  // 传输不可达/回包畸形：挂账待补
+                    }
+                    return rep.accepted
+                               ? squad_instance::SettlementLedger::ApplyError::Ok
+                               : squad_instance::SettlementLedger::ApplyError::
+                                     AnchorUnavailable;  // 离线/迁移中：挂账待补
+                });
+            worldLog().info(
+                "base business dialing " + config_.baseBusinessHost + ":"
+                + std::to_string(config_.baseBusinessPort));
+        } else {
+            baseBusinessDial_.reset();
+            worldLog().warning(
+                "base business dial degraded: route table unavailable ("
+                + config_.m1RouteJson + "), settlement stays deferred");
+        }
+    }
 
     running_ = true;
 
@@ -222,6 +264,12 @@ void WorldApp::stop() {
 
     if (gameThread_.joinable()) {
         gameThread_.join();
+    }
+
+    // Base 业务拨号面随 gameThread_ 收口（结算面唯一调用者已 join）。
+    if (baseBusinessDial_) {
+        baseBusinessDial_->shutdown();
+        baseBusinessDial_.reset();
     }
 
     if (m1Link_) {

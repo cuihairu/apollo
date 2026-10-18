@@ -56,6 +56,14 @@ public:
                                               std::int64_t score)>;
     void set_credential_sink(CredentialSink sink);
 
+    // 业务受理出口（P1 结算迁入；返回业务请求面）：锚点写权在 Base 时，
+    // 落账不走本地锚点解析——分值经 958/959 受理 wire 入 Base 锚点长期态。
+    // 返回 Ok = 已落（applied 收口）；其余 = 挂账待补（分值保留，retry 同
+    // 路径重提）。设置后 resolver 不再消费（World 无锚点可解析）。
+    using BusinessSink = std::function<ApplyError(std::uint64_t player_id,
+                                                  std::int64_t score)>;
+    void set_business_sink(BusinessSink sink);
+
     // 单条落账：名册校验 → 锚点解析 → AnchorRewardSink 语义入账 → 标记已落。
     // applied 后重复调用返回 AlreadyApplied（幂等核心）。
     ApplyError apply(std::uint64_t player_id, std::int64_t score);
@@ -83,6 +91,7 @@ private:
     std::vector<std::uint64_t> roster_;
     AnchorResolveFn resolver_;
     CredentialSink credential_sink_;
+    BusinessSink business_sink_;
 };
 
 } // namespace squad_instance

@@ -603,4 +603,16 @@
     <field name="active_instances" type="int64" desc="当前活动副本绑定数（含玩法期与结算期）"/>
     <field name="detail" type="string" desc="状态摘要（drained 时含强停结果；ok=0 为拒绝原因）"/>
   </msg>
+  <msg id="958" name="player_score_credit_request" dir="P2P" channel="events" domain="internal" desc="结算分值入账受理（World→Base 业务面；资料归属切换后锚点写权在 Base——World 结算面以返回业务请求落账，不跨界持锚点指针）">
+    <field name="request_id" type="int64" desc="调用方关联号（账本幂等在 World 侧 SettlementLedger——Base 只受理不记重放）"/>
+    <field name="player_id" type="int64"/>
+    <field name="score" type="int64" desc="结算分值（入 exp 键）"/>
+    <field name="source_zone_id" type="int32" desc="发起玩法域（排查面；不参与受理裁决）"/>
+  </msg>
+  <msg id="959" name="player_score_credit_reply" dir="P2P" channel="events" domain="internal" desc="结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补）">
+    <field name="request_id" type="int64"/>
+    <field name="player_id" type="int64"/>
+    <field name="accepted" type="bool" desc="1=已入锚点长期态（mark_dirty 随 SaveQueue 落档）"/>
+    <field name="error_message" type="string"/>
+  </msg>
 </messages>

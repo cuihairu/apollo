@@ -57,6 +57,11 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.maxInstances = static_cast<std::size_t>(std::stoull(argv[++i]));
         } else if (arg == "--m1-port" && i + 1 < argc) {
             config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--base-business-host" && i + 1 < argc) {
+            config.baseBusinessHost = argv[++i];
+        } else if (arg == "--base-business-port" && i + 1 < argc) {
+            config.baseBusinessPort =
+                static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
         } else if (arg == "--size" && i + 2 < argc) {
@@ -76,6 +81,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --world-id <id>            World identity (default: 1)\n"
                       << "  --max-instances <n>        Squad instance capacity (default: 16)\n"
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
+                      << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
+                      << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"

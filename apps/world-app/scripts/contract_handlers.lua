@@ -68,3 +68,5 @@ gateway_drain_request = function() end
 gateway_drain_reply = function() end
 world_drain_request = function() end
 world_drain_reply = function() end
+player_score_credit_request = function() end
+player_score_credit_reply = function() end

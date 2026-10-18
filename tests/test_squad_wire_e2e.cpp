@@ -10,6 +10,8 @@
 
 #include "world_app/world_app.hpp"
 #include "gateway/m1_egress.hpp"
+#include "player_store/player_store.hpp"
+#include "store_host.hpp"
 #include "apollo/protocol/codec.hpp"
 
 #include <chrono>
@@ -102,13 +104,27 @@ protocol::CellCreateEntity make_player_spawn(std::uint64_t player_id) {
 
 void squad_wire_e2e() {
     TemporaryDirectory files;
+
+    // Base 宿主（L19 资料归属切换）：档案锚点在 baseServer；结算落账 =
+    // World 业务受理面拨本面（958/959 返回业务请求——P1 基础业务与结算迁入）。
+    player_store::PlayerStoreConfig base_config;
+    base_config.host = "127.0.0.1";
+    base_config.m1Enabled = true;
+    base_config.m1Port = 0;  // 内核分配：测试经 m1_listen_port() 读回
+    base_config.m1SelfName = "baseServer";
+    base_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    base_config.dataDir = (files.path / "base/players").string();
+    base_config.journalPath = (files.path / "base/journal/persist.log").string();
+    StoreHost base(base_config, 0, 0, 0, 0);  // 纯 store 位（无报告面）
+    require(base.store->m1_listen_port() != 0, "base store did not listen");
+
     world_app::WorldAppConfig world_config;
     world_config.worldId = 44;
     world_config.host = "127.0.0.1";
     world_config.m1Port = 0;  // 内核分配：测试经 listenPort() 读回
     world_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
-    // 资料归属切换（L19）：档案宿主 = baseServer，World 不带 PlayerStore
-    // ——结算无锚点解析器 = 挂账待补（设计降级态），成员档案不再种子。
+    // 结算落账业务受理面拨 baseServer（0 = 挂账降级态；本 e2e 全链接线）
+    world_config.baseBusinessPort = base.store->m1_listen_port();
 
     world_app::WorldApp world(world_config);
     world.start();
@@ -134,6 +150,11 @@ void squad_wire_e2e() {
     // 会话 9001/9002/9003 ↔ 玩家 100/101/102。
     const std::vector<std::pair<std::uint64_t, std::uint64_t>> roster{
         {9001, 100}, {9002, 101}, {9003, 102}};
+    // 名册成员档案接纳（Base 宿主真实接纳路径：会话/网关双锚 + 承载域 44）
+    for (const auto [session_id, player_id] : roster) {
+        require(base.store->adoptPlayer(player_id, "", session_id, 12, 44),
+                "base adopt failed");
+    }
     for (const auto [session_id, player_id] : roster) {
         const auto frame = protocol::MessageCodec::encode(make_player_spawn(player_id),
                                                           session_id);
@@ -298,12 +319,22 @@ void squad_wire_e2e() {
                },
                5000);
     require(destroyed_reached.size() == 3, "terminal state did not reach every roster session");
-    // 结算落账（上报人 100）：World 侧无锚点解析器 = 分值挂账待补
-    // （SettlementLedger 设计降级态），不得阻塞收尾——终态回收 + 容量
-    // 归还即结算收尾完成证据；锚点落账断言随 Base 业务受理接口接线
-    // （后续条目）回归 Base 侧链路。
+    // 结算落账（P1 基础业务与结算迁入）：返回业务请求（958/959）真拨 Base
+    // ——锚点 exp 在 Base 侧读数（挂账面已接线，分值不丢）；收尾三件套
+    // （终态回收 + 容量归还 + 名册锚点 Online 在 Base）。
     require(squads->active_count() == 0, "instance binding not reclaimed");
     require(squads->used_capacity(44) == 0, "world capacity not returned");
+    for (const auto [session_id, player_id] : roster) {
+        const auto anchor = base.store->findAnchor(player_id);
+        require(anchor != nullptr, "roster anchor missing on base after settlement");
+        require(anchor->state() == apollo::game::session::AnchorState::Online,
+                "roster anchor not Online after settlement");
+    }
+    {
+        const auto anchor = base.store->findAnchor(100);
+        require(anchor != nullptr && anchor->progress("exp") > 0,
+                "killer settlement score did not reach base anchor");
+    }
 
     egress->stop();
     world.stop();

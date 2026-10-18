@@ -118,6 +118,10 @@ private:
     std::vector<uint8_t> handlePlayerSnapshotRequest(const std::vector<uint8_t>& request);
     std::vector<uint8_t> handlePlayerHandoffRequest(const std::vector<uint8_t>& request);
 
+    // 结算分值入账受理（P1 基础业务与结算迁入；958——World 结算返回业务
+    // 请求，锚点写权在本 store；幂等归调用方账本）
+    std::vector<uint8_t> handlePlayerScoreCreditRequest(const std::vector<uint8_t>& request);
+
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
     // 归 apps/baseappmgr（目录 + 调度面，BW OnlineDirectory 直系）。
 

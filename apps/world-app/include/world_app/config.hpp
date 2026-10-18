@@ -27,6 +27,12 @@ struct WorldAppConfig {
     // 模拟替换（e2e）在此注入不同代次。
     std::uint64_t m1AuthorityEpoch = 0;
 
+    // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 baseServer
+    // store M1 面（958/959）。port = 0 = 面关（结算挂账降级态——L19 资料
+    // 归属切换后 World 无锚点解析器）。
+    std::string baseBusinessHost = "127.0.0.1";
+    std::uint16_t baseBusinessPort = 0;
+
     // 空间配置
     std::string spaceName = "main_world";
     float spaceWidth = 1000.0f;

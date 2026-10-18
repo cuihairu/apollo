@@ -197,6 +197,11 @@ public:
     // 锚点解析装配（须在 launch 前设置；副本受理时开账即取本解析器）。
     void set_anchor_resolver(AnchorResolveFn fn);
 
+    // 业务受理装配（P1 结算迁入；须在 launch 前设置）：锚点写权在 Base
+    // 时落账走返回业务请求（958/959），本域不持锚点指针。设置后锚点解析
+    // 不再消费（World 无锚点可解析）。
+    void set_business_sink(SettlementLedger::BusinessSink fn);
+
     // 结算去重凭据面装配（真实奖励持久化）：设置后每条落账先持久提交
     // (小队, 玩家, 分值) 凭据再入锚点——未提交挂账不落。未设置 = 无凭据
     // 面（测试桩兼容）。目录按 World 数据域挂放（宿主派生）。
@@ -287,6 +292,7 @@ private:
     InstanceStartedFn instance_started_;
     InstanceClosingFn instance_closing_;
     AnchorResolveFn anchor_resolver_;
+    SettlementLedger::BusinessSink business_sink_;
     std::unique_ptr<SettlementCredentialStore> credential_store_;
 
     struct WorldSlot {
