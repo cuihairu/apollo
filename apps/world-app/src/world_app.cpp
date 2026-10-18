@@ -243,6 +243,19 @@ void WorldApp::start() {
         }
     }
 
+    // 结算凭据持久化（L67 去重凭据面生产接线）：World 运行目录持久提交
+    // (小队, 玩家, 分值) 凭据——settle 与 release 崩溃窗内重启装载回填，
+    // 重放不双记；未配置 = 降级态（凭据仅进程内存）。
+    if (!config_.settlementCredentialDir.empty()) {
+        squadInstanceService_->set_credential_dir(
+            config_.settlementCredentialDir);
+        const auto restored =
+            squadInstanceService_->ingest_restored_credentials();
+        worldLog().info("settlement credentials dir "
+                        + config_.settlementCredentialDir + " (restored parties="
+                        + std::to_string(restored) + ")");
+    }
+
     running_ = true;
 
     // 启动游戏循环线程

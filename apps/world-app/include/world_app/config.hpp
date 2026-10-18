@@ -33,6 +33,11 @@ struct WorldAppConfig {
     std::string baseBusinessHost = "127.0.0.1";
     std::uint16_t baseBusinessPort = 0;
 
+    // 结算凭据目录（L67 去重凭据面生产接线）：(小队, 玩家, 分值) 凭据
+    // 持久提交——settle 与 release 崩溃窗内重启装载回填，重放不双记。
+    // 空 = 不持久化（凭据仅进程内存，降级态）。
+    std::string settlementCredentialDir;
+
     // 空间配置
     std::string spaceName = "main_world";
     float spaceWidth = 1000.0f;

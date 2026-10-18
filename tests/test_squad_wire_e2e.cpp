@@ -11,6 +11,7 @@
 #include "world_app/world_app.hpp"
 #include "gateway/m1_egress.hpp"
 #include "player_store/player_store.hpp"
+#include "squad_instance/settlement_credential_store.hpp"
 #include "store_host.hpp"
 #include "apollo/protocol/codec.hpp"
 
@@ -125,6 +126,16 @@ void squad_wire_e2e() {
     world_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
     // 结算落账业务受理面拨 baseServer（0 = 挂账降级态；本 e2e 全链接线）
     world_config.baseBusinessPort = base.store->m1_listen_port();
+
+    // 结算凭据目录（L67 去重凭据面生产接线）+ 预置 party 2 队长已落凭据
+    //（party id 分配确定 = nextPartyId_ 自 1 起）：启动装载回填后，party 2
+    // launch 消费标记，battle 结算对队长 100 的分值按已落幂等拒绝。
+    world_config.settlementCredentialDir = (files.path / "world/settlements").string();
+    {
+        squad_instance::SettlementCredentialStore seeded(
+            world_config.settlementCredentialDir);
+        require(seeded.record_applied(2, 100, 33), "credential seed write failed");
+    }
 
     world_app::WorldApp world(world_config);
     world.start();
@@ -334,6 +345,179 @@ void squad_wire_e2e() {
         const auto anchor = base.store->findAnchor(100);
         require(anchor != nullptr && anchor->progress("exp") > 0,
                 "killer settlement score did not reach base anchor");
+    }
+
+    // ---- 第二轮（party 2）：凭据持久化生产接线端到端（L67）----
+    // 装载回填咬合：队长 100 的第二轮结算分值按已落凭据幂等拒绝——Base
+    // exp 停在第一轮值（未接线/未配置时第二轮结算会继续增长）；release
+    // 擦除后凭据目录清空（record → launch 消费回写 → release 擦除）。
+    const auto exp_after_first = base.store->findAnchor(100)->progress(
+        apollo::game::session::AnchorRewardSink::kExpKey);
+    require(exp_after_first > 0, "first run killer exp missing");
+
+    require(egress->forwardIntent(
+                9001, protocol::MessageCodec::encode(protocol::PartyCreateRequest{}, 9001)),
+            "party 2 create refused");
+    std::uint64_t party2 = 0;
+    pump_until(*egress,
+               [&] {
+                   std::size_t create_acks = 0;  // 每拍现算（take 全量回放防累计）
+                   party2 = 0;
+                   for (const auto& frame : clients.take(
+                            static_cast<std::uint16_t>(protocol::MessageType::PARTY_RESULT))) {
+                       if (frame.session_id != 9001) continue;
+                       const auto decoded =
+                           protocol::MessageCodec::decodeBody<protocol::PartyResult>(frame.body);
+                       if (decoded.op ==
+                               static_cast<std::int32_t>(protocol::SquadOp::PARTY_CREATE) &&
+                           decoded.code == 0) {
+                           party2 = decoded.partyId;  // 后写胜 = 最新 create
+                           ++create_acks;
+                       }
+                   }
+                   return create_acks >= 2;  // 首轮 + 本轮
+               },
+               5000);
+    require(party2 == 2, "party id allocation not deterministic from 1");
+
+    for (const auto session_id : {9002u, 9003u}) {
+        protocol::PartyJoinRequest join;
+        join.partyId = party2;
+        require(egress->forwardIntent(
+                    session_id, protocol::MessageCodec::encode(join, session_id)),
+                "party 2 join refused");
+    }
+    pump_until(*egress,
+               [&] {
+                   return clients.take(static_cast<std::uint16_t>(
+                                              protocol::MessageType::PARTY_RESULT))
+                              .size() >= 6;  // 首轮 3 帧 + 本轮 3 帧
+               },
+               5000);
+
+    protocol::SquadLaunch launch2;
+    launch2.partyId = party2;
+    require(egress->forwardIntent(9001, protocol::MessageCodec::encode(launch2, 9001)),
+            "squad 2 launch refused");
+    protocol::SquadResult launch2_result{};
+    pump_until(*egress,
+               [&] {
+                   for (const auto& frame : clients.take(static_cast<std::uint16_t>(
+                            protocol::MessageType::SQUAD_RESULT))) {
+                       if (frame.session_id != 9001) continue;
+                       const auto decoded = protocol::MessageCodec::decodeBody<
+                           protocol::SquadResult>(frame.body);
+                       if (decoded.op ==
+                               static_cast<std::int32_t>(protocol::SquadOp::SQUAD_LAUNCH) &&
+                           decoded.partyId == party2)
+                           launch2_result = decoded;
+                   }
+                   return launch2_result.code != 0 ||
+                          (launch2_result.partyId == party2 &&
+                           launch2_result.instanceId != 0 && launch2_result.worldId == 44);
+               },
+               5000);
+    require(launch2_result.code == 0, "squad 2 launch rejected");
+
+    const auto enter_acks = [&](std::uint64_t party) {
+        std::size_t n = 0;
+        for (const auto& frame : clients.take(static_cast<std::uint16_t>(
+                 protocol::MessageType::SQUAD_RESULT))) {
+            const auto decoded =
+                protocol::MessageCodec::decodeBody<protocol::SquadResult>(frame.body);
+            if (decoded.op == static_cast<std::int32_t>(protocol::SquadOp::SQUAD_ENTER) &&
+                decoded.code == 0 &&
+                decoded.partyId == static_cast<std::int64_t>(party))
+                ++n;
+        }
+        return n;
+    };
+    for (const auto session_id : {9001u, 9002u, 9003u}) {
+        protocol::SquadEnter enter;
+        enter.partyId = party2;
+        require(egress->forwardIntent(
+                    session_id, protocol::MessageCodec::encode(enter, session_id)),
+                "squad 2 enter refused");
+    }
+    pump_until(*egress, [&] { return enter_acks(party2) >= 3; }, 5000);
+
+    protocol::SquadStart start2;
+    start2.partyId = party2;
+    require(egress->forwardIntent(9001, protocol::MessageCodec::encode(start2, 9001)),
+            "squad 2 start refused");
+    std::vector<DeliveredFrame> running2;
+    pump_until(*egress,
+               [&] {
+                   running2.clear();
+                   for (const auto& frame : clients.take(static_cast<std::uint16_t>(
+                            protocol::MessageType::SQUAD_STATE))) {
+                       const auto decoded =
+                           protocol::MessageCodec::decodeBody<protocol::SquadState>(frame.body);
+                       if (decoded.partyId == party2 && decoded.phase == 3 &&
+                           !decoded.monsters.empty())
+                           running2.push_back(frame);
+                   }
+                   return !running2.empty();
+               },
+               5000);
+    const auto monsters2 = protocol::MessageCodec::decodeBody<protocol::SquadState>(
+                               running2.front().body)
+                               .monsters;
+    require(monsters2.size() == 3, "squad 2 goal wave missing");
+
+    const auto kill_acks = [&](std::uint64_t party) {
+        std::size_t n = 0;
+        for (const auto& frame : clients.take(static_cast<std::uint16_t>(
+                 protocol::MessageType::SQUAD_RESULT))) {
+            const auto decoded =
+                protocol::MessageCodec::decodeBody<protocol::SquadResult>(frame.body);
+            if (decoded.op == static_cast<std::int32_t>(protocol::SquadOp::SQUAD_KILL) &&
+                decoded.code == 0 &&
+                decoded.partyId == static_cast<std::int64_t>(party))
+                ++n;
+        }
+        return n;
+    };
+    std::size_t killed2 = 0;
+    for (const auto monster : monsters2) {
+        protocol::SquadKill kill;
+        kill.partyId = party2;
+        kill.monsterEntityId = monster;
+        require(egress->forwardIntent(9001, protocol::MessageCodec::encode(kill, 9001)),
+                "squad 2 kill refused");
+        ++killed2;
+        const auto target = killed2;
+        pump_until(*egress, [&] { return kill_acks(party2) >= target; }, 5000);
+    }
+
+    std::set<std::uint64_t> destroyed2;
+    pump_until(*egress,
+               [&] {
+                   destroyed2.clear();
+                   for (const auto& frame : clients.take(static_cast<std::uint16_t>(
+                            protocol::MessageType::SQUAD_STATE))) {
+                       const auto decoded =
+                           protocol::MessageCodec::decodeBody<protocol::SquadState>(frame.body);
+                       if (decoded.partyId == party2 && decoded.phase == 7)
+                           destroyed2.insert(frame.session_id);
+                   }
+                   return destroyed2.size() == 3;
+               },
+               5000);
+    require(destroyed2.size() == 3, "squad 2 terminal state incomplete");
+    require(squads->active_count() == 0 && squads->used_capacity(44) == 0,
+            "squad 2 binding not reclaimed");
+    {
+        const auto anchor = base.store->findAnchor(100);
+        require(anchor != nullptr &&
+                    anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey) ==
+                        exp_after_first,
+                "restored credential did not dedup second settlement");
+    }
+    {
+        squad_instance::SettlementCredentialStore after(
+            world_config.settlementCredentialDir);
+        require(after.load_all().empty(), "credentials not erased after release");
     }
 
     egress->stop();

@@ -62,6 +62,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
         } else if (arg == "--base-business-port" && i + 1 < argc) {
             config.baseBusinessPort =
                 static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--settlement-credential-dir" && i + 1 < argc) {
+            config.settlementCredentialDir = argv[++i];
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
         } else if (arg == "--size" && i + 2 < argc) {
@@ -83,6 +85,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
                       << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
                       << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
+                      << "  --settlement-credential-dir <dir>  Settlement credential dir (default: off)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"
