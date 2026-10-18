@@ -55,7 +55,8 @@
 ## P1：独立 Base 与 database
 
 - [ ] 完成 baseServer 在默认编队中的资料归属、基础业务与结算迁入；独立入口已具备，离场或 Instance 销毁不卸载长期资料。
-- [x] baseServer/database 进默认编队先落地：dev_fleet.sh 拉起 database 9200（data-dir/journal 落编队运行目录）+ baseServer 9201（存储后端 database 9200，存储不可达即拒起、由 machined 退避重试；编队位置在 database 之后）。进程级验收：双成员 ready 且无退避重启、--probe 经编队内 database 真存真读（player_900001.json 落盘读回）、machined 监督 7 成员在列（重启抖动仅遗留 game 占位项，非本次引入）。双进程尚无 machined 成员注册（号=0）。剩余：资料归属切换（WorldApp 弃档案宿主）、基础业务与结算迁入、离场/Instance 销毁不卸载长期资料验收。
+- [x] baseServer/database 进默认编队先落地：dev_fleet.sh 拉起 database 9200（data-dir/journal 落编队运行目录）+ baseServer 9201（存储后端 database 9200，存储不可达即拒起、由 machined 退避重试；编队位置在 database 之后）。进程级验收：双成员 ready 且无退避重启、--probe 经编队内 database 真存真读（player_900001.json 落盘读回）、machined 监督 7 成员在列（重启抖动仅遗留 game 占位项，非本次引入）。双进程尚无 machined 成员注册（号=0）。剩余：基础业务与结算迁入、离场/Instance 销毁不卸载长期资料验收。
+- [x] 资料归属切换落地（205cac3d）：WorldApp 弃档案宿主——store/报告面/结算锚点解析器/credential 目录全撤（config/main/gameLoop 同步清场），档案宿主 = baseServer 9201（dev_fleet 档案客户端拨 9201）；baseServer 装备 store 报告面（--report-host/port/component-id/zone-id/interval-ms）+ collect_mirror_entries 收集面（zone = 承载域、Transferring 过滤）；六测试套重构（hosted_services/fleet_rehome/migration_chain 以 StoreHost 替身同口径装配、squad_wire_e2e/world_drain/update_continuity 弃档案种子——结算挂账为设计降级态，收尾不阻塞，锚点落账断言随基础业务迁入回归 Base 侧）。门禁：build-off 全量重建 85/85、san 十套受影响 ASan+UBSan 绿、build-examples 全量重建绿。
 - [ ] 完善 database 的有界异步保存队列（磁盘 I/O 移出 RPC 泵线程）、存储路由与写入代次；独立入口、Base-facing 加载/保存和文件 journal 已具备，不以 MySQL 为前提。
 - [x] 有界保存队列先落地（446626fd）：SaveQueue 排队+在途容量上限（saveQueueCapacity，默认 4096，0=不设界），满载背压拒收不丢数据——载荷 journal 先段，脏位/下轮 flush 重取；磁盘 I/O 已在独立 worker 面（P1-4）、存储路由与写入代次已随 PlayerStorage 接口与 journalSeq 水位落地（499111be）。满载拒收 1 例新增；build-off 85/85、build-examples 85/85、san 84/84 无发现、drill 全链断言全过。
 - [ ] 从当前 WorldApp/模拟宿主移出完整档案、长期写权和直接存储依赖；定义只读玩法快照与返回业务请求，禁止跨界使用本地 Anchor 指针修改资料。
