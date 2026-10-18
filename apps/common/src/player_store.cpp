@@ -6,6 +6,7 @@
 #include "apollo/game/session/anchor_reward_sink.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -64,6 +65,22 @@ PlayerStore::PlayerStore(const PlayerStoreConfig& config,
     saveQueue_->set_worker([this](const PlayerData& data) {
         return database_->savePlayer(data);
     });
+}
+
+std::uint64_t PlayerStore::nextWriteGen(PlayerID playerId,
+                                        const std::uint64_t* seed_hint) {
+    auto it = writeGens_.find(playerId);
+    if (it != writeGens_.end()) {
+        return ++it->second;
+    }
+    // 缺账播种：调用方已持真源（接权快照/首载基线）取其大，必要时补一次
+    // 现档读——接管旧进程无本进程账，迟到标记值必 ≤ database 地板被拒
+    std::uint64_t seed = seed_hint != nullptr ? *seed_hint : 0;
+    PlayerData landed{};
+    if (database_->loadPlayer(playerId, landed)) {
+        seed = std::max(seed, landed.writeGen);
+    }
+    return ++writeGens_.emplace(playerId, seed).first->second;
 }
 
 std::uint64_t PlayerStore::appendJournal(const PlayerData& data) {
@@ -134,6 +151,14 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayer
     PlayerData data;
     if (!database_->loadPlayer(playerId, data)) {
         return nullptr;
+    }
+
+    // 写端代次账播种（L64 Base 半）：首载档案代次（重启续代）；已有账
+    // 取大不回退（重激活不降代次）
+    if (const auto gen = writeGens_.find(playerId); gen != writeGens_.end()) {
+        gen->second = std::max(gen->second, data.writeGen);
+    } else {
+        writeGens_.emplace(playerId, data.writeGen);
     }
 
     // 长期态播种（真实奖励持久化）：exp 以 Anchor 为持久真源——新锚点按
@@ -524,6 +549,8 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
                 if (task.data.playerId != saveReq.playerId) {
                     response.errorMessage = "profile identity mismatch";
                 } else {
+                    // 写端自持代次（L64 Base 半；database 半验单调）
+                    task.data.writeGen = nextWriteGen(saveReq.playerId, nullptr);
                     response.success = database_->savePlayer(task.data);
                     if (anchor && response.success) anchor->clear_dirty();
                     if (!response.success) response.errorMessage = "database write not confirmed";
@@ -695,6 +722,9 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
         task.data.exp = anchor->progress(
             apollo::game::session::AnchorRewardSink::kExpKey);
         if (database_->ownsJournal()) {
+            // 写端自持代次（L64 Base 半；database 半验单调）——基线即现档，
+            // 作缺账播种真源，不另发读
+            task.data.writeGen = nextWriteGen(task.playerId, &task.data.writeGen);
             if (database_->savePlayer(task.data)) {
                 anchor->clear_dirty();
                 ++flushed;
@@ -762,6 +792,9 @@ bool PlayerStore::freezePlayer(PlayerID playerId) {
                 // 直接记入水位（drain 回放同段消费不重写）
                 data.exp = anchor->progress(
                     apollo::game::session::AnchorRewardSink::kExpKey);
+                // 写端自持代次（L64 Base 半；database 半验单调）——基线即
+                // 现档，作缺账播种真源
+                data.writeGen = nextWriteGen(playerId, &data.writeGen);
                 const auto seq = appendJournal(data);
                 if (database_->savePlayer(data) && seq != 0) {
                     auto& landed = landedSeqs_[playerId];
@@ -848,6 +881,9 @@ bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
         if (!anchor) {
             return false;
         }
+        // 写端自持代次（L64 Base 半）：接权快照即播种真源，盖章后落库
+        //——database 地板随接权推进，接管后旧进程迟到写必被拒
+        data.writeGen = nextWriteGen(playerId, &data.writeGen);
         if (!database_->savePlayer(data)) {
             anchor->set_state(apollo::game::session::AnchorState::Offline);
             return false;

@@ -376,6 +376,86 @@ void write_generation_ordering() {
     revived.stop();
 }
 
+// L64 Base 半：写端代次自发分配——store 激活首载播种地板、每次落库
+// 自增代次（database 半只验单调）；重启续代；接管后旧进程迟到写
+//（代次 ≤ 地板）被 database 半拒，长期资料不动。
+void base_write_generation_self_managed() {
+    Fixture f;
+    database::Server server(f.config);
+    CHECK(server.start());
+    const auto realPort = server.port();
+    auto observerCfg = f.client(realPort);
+    observerCfg.self_name = "base-gen-observer";  // 独立读面 + 旧进程替身
+    auto observer = database::makeClient(observerCfg);
+    CHECK(observer->initialize());
+
+    // 建号（无版本写端兼容受理，地板 0）
+    player_store::PlayerData profile{};
+    profile.playerId = 51;
+    profile.username = "base-gen-seed";
+    profile.exp = 100;
+    CHECK(observer->savePlayer(profile));
+
+    player_store::PlayerStoreConfig baseConfig;
+    fs::create_directories(f.path);
+    baseConfig.dataDir = (f.path / "blocked" / "players").string();
+    baseConfig.journalPath = (f.path / "blocked" / "journal.log").string();
+    baseConfig.autoSaveIntervalMs = 60000;
+
+    // 磁盘直读（绕开一切 RPC/进程缓存）
+    const auto read_archive = [&](std::uint64_t& gen, std::int64_t& exp) {
+        player_store::DatabaseService disk(f.config.storage);
+        CHECK(disk.initialize());
+        player_store::PlayerData landed{};
+        CHECK(disk.loadPlayer(51, landed));
+        gen = landed.writeGen;
+        exp = landed.exp;
+        disk.shutdown();
+    };
+    std::uint64_t gen = 0;
+    std::int64_t exp = 0;
+
+    // ① 本进程落库：激活首载播种地板 0 → 停机 flush 落库代次 1
+    {
+        player_store::PlayerStore base(baseConfig, database::makeClient(f.client(realPort)));
+        base.start();
+        auto anchor = base.activatePlayer(51);
+        CHECK(anchor);
+        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 5);
+        base.stop();
+    }
+    read_archive(gen, exp);
+    CHECK(gen == 1);
+    CHECK(exp == 105);
+
+    // ② 重启续代：首载播种地板 1 → flush 落库代次 2（单调续进）
+    {
+        player_store::PlayerStore base(baseConfig, database::makeClient(f.client(realPort)));
+        base.start();
+        auto anchor = base.activatePlayer(51);
+        CHECK(anchor);
+        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey, 7);
+        base.stop();
+    }
+    read_archive(gen, exp);
+    CHECK(gen == 2);
+    CHECK(exp == 112);
+
+    // ③ 旧进程迟到写（接管后旧 Base 复活持旧代次写）：≤ 地板 → database 半拒
+    player_store::PlayerData stale{};
+    stale.playerId = 51;
+    stale.username = "base-gen-seed";
+    stale.exp = 1;
+    stale.writeGen = 1;
+    CHECK(!observer->savePlayer(stale));
+    read_archive(gen, exp);
+    CHECK(gen == 2);
+    CHECK(exp == 112);
+
+    observer->shutdown();
+    server.stop();
+}
+
 int main(int argc, char** argv) {
     try {
         if (argc == 5 && std::string(argv[1]) == "--probe") {
@@ -401,6 +481,7 @@ int main(int argc, char** argv) {
         database_crash_survives_restart();
         pending_journal_recovery();
         write_generation_ordering();
+        base_write_generation_self_managed();
         std::cout << "Base/database TCP, persistence, isolation, failures, crash restart and replay passed\n";
         return 0;
     } catch (const std::exception& error) {

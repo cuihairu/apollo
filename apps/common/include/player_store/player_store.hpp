@@ -122,6 +122,11 @@ private:
     // 请求，锚点写权在本 store；幂等归调用方账本）
     std::vector<uint8_t> handlePlayerScoreCreditRequest(const std::vector<uint8_t>& request);
 
+    // 取下一落库代次（L64 Base 半；storeMutex_ 持有内调用）：账内自增；
+    // 缺账播种 = max(调用方已持真源 seed_hint， 现档代次)——每玩家每进程
+    // 至多补一次 loadPlayer。返回值即本次落库载荷的 writeGen。
+    std::uint64_t nextWriteGen(PlayerID playerId, const std::uint64_t* seed_hint);
+
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
     // 归 apps/baseappmgr（目录 + 调度面，BW OnlineDirectory 直系）。
 
@@ -176,6 +181,11 @@ private:
     // 新写。进程内存账（同 migrationSnapshots_ 生命周期）；目标进程重启于
     // 迁移窗内 = §9.2 人工介入形态，不自动裁决。
     std::unordered_map<PlayerID, std::uint64_t> adoptedEpochs_;
+    // 写端自持写入代次账（L64 Base 半）：player → 本进程已落库代次。
+    // 种子 = 激活/接权首载档案代次（重启续代），每次落库前自增——database
+    // 半只验单调（高受理/同代幂等/低拒），接管后旧进程无有效账，标记值
+    // 必 ≤ database 地板，迟到写被拒。
+    std::unordered_map<PlayerID, std::uint64_t> writeGens_;
 
     // 接权落档水位（存档串行化批）：player → adopt 时的 journal 全局序。
     // drain 回放序 < 水位的条目 = 接权前旧域快照——消费但不落档（接权
