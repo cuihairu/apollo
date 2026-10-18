@@ -174,6 +174,11 @@ void WorldApp::start() {
         if ((storage_config.m1Enabled || storage_config.m1Port != 0) && playerStore_->m1_listen_port() == 0) {
             throw std::runtime_error("World player store failed to listen");
         }
+        // 结算去重凭据面（真实奖励持久化）：凭据与玩家档案同属 World 数据
+        // 域；上一代消亡时留盘的已落账凭据在此装载，重开副本回填不双记。
+        squadInstanceService_->set_credential_dir(
+            storage_config.dataDir + "/settlement_credentials");
+        squadInstanceService_->ingest_restored_credentials();
     }
 
     // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket

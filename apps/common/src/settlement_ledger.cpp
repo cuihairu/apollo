@@ -9,12 +9,22 @@ void SettlementLedger::begin(std::vector<std::uint64_t> roster, AnchorResolveFn 
     for (const auto player : roster_) entries_.emplace(player, Entry{});
 }
 
+void SettlementLedger::set_credential_sink(CredentialSink sink) {
+    credential_sink_ = std::move(sink);
+}
+
 SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
                                                      std::int64_t score) {
     auto it = entries_.find(player_id);
     if (it == entries_.end()) return ApplyError::UnknownPlayer;
     if (it->second.applied) return ApplyError::AlreadyApplied;
     it->second.attempted = true;
+    // 凭据持久提交先于锚点入账（真实奖励持久化）：未提交 = 挂账待补，
+    // 绝不无凭据落账；重试同路径重提，提交方须幂等。
+    if (credential_sink_ && !credential_sink_(player_id, score)) {
+        it->second.score = score;
+        return ApplyError::AnchorUnavailable;
+    }
     // 锚点缺失挂账不落：分值保留，待重试/补账收口。
     auto* anchor = resolver_ ? resolver_(player_id) : nullptr;
     // 冻结锚点同挂账（P3-6 迟到输入/迟到结算拒绝）：Transferring = 写权已

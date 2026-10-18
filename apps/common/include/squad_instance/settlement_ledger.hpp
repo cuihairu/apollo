@@ -7,6 +7,11 @@
 // 幂等口径：(instance, player) 一条账——applied 后重复 apply / 重试 / 恢复
 // 重放一律拒绝，不双记；锚点暂不可得（离线/迁移中）则挂账不落，重试只补
 // 未落条目；restore 供宿主重启后按持久化痕迹回填已落标记（防重放双记）。
+//
+// 凭据口径（真实奖励持久化）：配了 CredentialSink 时每条落账先经其持久提交
+// 凭据再入锚点——未提交 = 挂账待补，绝不无凭据落账（重试同路径重提，凭据
+// 提交须幂等）。凭据已提交而锚点未入账即崩溃的窗口内重放一律拒绝：至多
+// 一次，不双记（与「已发未确认请求不跨代次自动重放」同口径）。
 
 #include "apollo/game/battle/battle_runtime.hpp"
 #include "apollo/game/session/anchor_reward_sink.hpp"
@@ -43,6 +48,14 @@ public:
     // 开账：结算名册 = 受理快照成员（全序由调用面保证 = 名册顺序）。
     void begin(std::vector<std::uint64_t> roster, AnchorResolveFn resolver);
 
+    // 凭据出口（真实奖励持久化）：落账前先经此持久提交 (player, score)
+    // 凭据，返回 false = 未持久提交（挂账待补）——绝不无凭据落账。重试同
+    // 路径重提，提交方须幂等。须在 begin 之后、结算流之前设置；未设置
+    // （测试桩兼容）= 无凭据面，落账照旧。
+    using CredentialSink = std::function<bool(std::uint64_t player_id,
+                                              std::int64_t score)>;
+    void set_credential_sink(CredentialSink sink);
+
     // 单条落账：名册校验 → 锚点解析 → AnchorRewardSink 语义入账 → 标记已落。
     // applied 后重复调用返回 AlreadyApplied（幂等核心）。
     ApplyError apply(std::uint64_t player_id, std::int64_t score);
@@ -69,6 +82,7 @@ private:
     std::unordered_map<std::uint64_t, Entry> entries_;
     std::vector<std::uint64_t> roster_;
     AnchorResolveFn resolver_;
+    CredentialSink credential_sink_;
 };
 
 } // namespace squad_instance

@@ -1,5 +1,6 @@
 #include "player_store/player_store.hpp"
 #include "player_store/migration_wire.hpp"
+#include "apollo/game/session/anchor_reward_sink.hpp"
 #include "apollo/game/session/player_anchor.hpp"
 #include "apollo/data/orm/persist_journal.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -719,6 +720,9 @@ int main() {
     run(test_base_server_anchor_lifecycle);
     run(test_shutdown_maintenance_gate);
     run(test_shutdown_flushes_journal_and_archive);
+    run(test_reward_collect_persists_profile);
+    run(test_reward_survives_restart_no_double_count);
+    run(test_freeze_collects_pending_reward);
     run(test_player_migration_faces);
 #if !defined(_WIN32)
     run(test_player_migration_pull_on_handoff);

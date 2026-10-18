@@ -22,6 +22,7 @@ if(TARGET apollo::game_world AND TARGET apollo::game_social AND
 add_library(apollo_squad_instance STATIC
     src/squad_instance.cpp
     src/settlement_ledger.cpp
+    src/settlement_credential_store.cpp
 )
 target_include_directories(apollo_squad_instance PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(apollo_squad_instance PUBLIC

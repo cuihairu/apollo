@@ -388,9 +388,10 @@ void migration_chain() {
                     after->state() == session::AnchorState::Transferring,
                 "late db save broke frozen read-only state");
         dial.shutdown();
-        // 8c. 锚点进度写静默拒（迟到业务写不进内存账——防脏 + 防结算双记）
+        // 8c. 锚点进度写静默拒（迟到业务写不进内存账——防脏 + 防结算双记；
+        // 锚点 exp = 启动播种的档案现值——迟到写不叠加）
         after->add_progress("exp", 100);
-        require(after->progress("exp") == 0 && !after->needs_save(),
+        require(after->progress("exp") == seeded.exp && !after->needs_save(),
                 "frozen anchor accepted progress write");
         // 8d. 结算落账面：冻结锚点 = AnchorUnavailable 挂账不落
         squad_instance::SettlementLedger ledger;

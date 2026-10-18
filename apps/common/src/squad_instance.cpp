@@ -35,6 +35,20 @@ void SquadInstanceService::set_anchor_resolver(AnchorResolveFn fn) {
     anchor_resolver_ = std::move(fn);
 }
 
+void SquadInstanceService::set_credential_dir(const std::string& dir) {
+    credential_store_ = std::make_unique<SettlementCredentialStore>(dir);
+}
+
+std::size_t SquadInstanceService::ingest_restored_credentials() {
+    if (!credential_store_) return 0;
+    std::size_t ingested = 0;
+    for (const auto& [party_id, marks] : credential_store_->load_all()) {
+        pending_restore_marks_[party_id] = marks;
+        ++ingested;
+    }
+    return ingested;
+}
+
 SquadInstanceService::EnterError SquadInstanceService::enter(std::uint64_t party_id,
                                                              std::uint64_t player_id) {
     const auto* binding = find_by_party(party_id);
@@ -428,6 +442,29 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
         // 单向口）→ AnchorRewardSink 语义落锚点（P2-4 幂等落账）。
         auto ledger = std::make_unique<SettlementLedger>();
         ledger->begin(members, anchor_resolver_);
+        // 去重凭据面（真实奖励持久化）：落账先持久提交 (小队, 玩家, 分值)
+        // 凭据，提交失败挂账不落。
+        if (credential_store_) {
+            ledger->set_credential_sink(
+                [store = credential_store_.get(), party_id = request.party_id](
+                    std::uint64_t player_id, std::int64_t score) {
+                    return store->record_applied(party_id, player_id, score);
+                });
+            // 代次延续（重启装载）：崩溃前已落账玩家回填已落标记——重放
+            // 不双记；标记回写凭据（代次二再崩不丢）；挂起标记消费。
+            if (const auto rit = pending_restore_marks_.find(request.party_id);
+                rit != pending_restore_marks_.end()) {
+                std::vector<std::uint64_t> applied;
+                applied.reserve(rit->second.size());
+                for (const auto& [player_id, score] : rit->second) {
+                    credential_store_->record_applied(request.party_id, player_id,
+                                                       score);
+                    applied.push_back(player_id);
+                }
+                ledger->restore(applied);
+                pending_restore_marks_.erase(rit);
+            }
+        }
         // battle 与 instance 同生：enter 段收参战者（Instance::enter 转发）、
         // tick 段随 Instance 玩法时钟推进、finish 段结算落账；seed 取
         // instance_id（确定性可复算基线，玩法数值随玩法批）。
@@ -523,6 +560,8 @@ void SquadInstanceService::erase_binding(
     }
     gameplay_.erase(it->second.instance_id);
     settlements_.erase(it->second.instance_id);
+    // 凭据生命周期 = 结算代次：终局回收（重启装载的挂起标记同队已消费）
+    if (credential_store_) credential_store_->erase(it->second.party_id);
     for (const auto member : it->second.members) busy_members_.erase(member);
     auto wit = worlds_.find(it->second.world_id);
     if (wit != worlds_.end() && wit->second.used > 0) --wit->second.used;

@@ -6,6 +6,7 @@
 #include "apollo/game/world/scene_descriptor.hpp"
 #include "apollo/game/world/world.hpp"
 #include "squad_instance/settlement_ledger.hpp"
+#include "squad_instance/settlement_credential_store.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -195,6 +196,16 @@ public:
     // ---- 结算幂等落账（P2-4：既有奖励/持久化接口 + 重试/失败/恢复）----
     // 锚点解析装配（须在 launch 前设置；副本受理时开账即取本解析器）。
     void set_anchor_resolver(AnchorResolveFn fn);
+
+    // 结算去重凭据面装配（真实奖励持久化）：设置后每条落账先持久提交
+    // (小队, 玩家, 分值) 凭据再入锚点——未提交挂账不落。未设置 = 无凭据
+    // 面（测试桩兼容）。目录按 World 数据域挂放（宿主派生）。
+    void set_credential_dir(const std::string& dir);
+
+    // 重启装载：凭据目录内的小队凭据 → 挂起恢复标记（该小队下次受理即回
+    // 填新账本并重写凭据——重放不双记），返回装载份数。文件不在此删除：
+    // 回写在 launch、回收在终局 teardown，期间再崩凭据仍在盘。
+    std::size_t ingest_restored_credentials();
     // 显式奖励口（宿主奖励表/过渡期直测面）：单条幂等落账。
     SettlementLedger::ApplyError credit_settlement(std::uint64_t party_id,
                                                    std::uint64_t player_id,
@@ -276,6 +287,7 @@ private:
     InstanceStartedFn instance_started_;
     InstanceClosingFn instance_closing_;
     AnchorResolveFn anchor_resolver_;
+    std::unique_ptr<SettlementCredentialStore> credential_store_;
 
     struct WorldSlot {
         std::size_t max_instances = 0;
@@ -288,6 +300,10 @@ private:
     std::unordered_map<std::uint64_t, GameplayState> gameplay_;  // instance_id → 玩法记账
     // unique_ptr 保地址稳定：battle 持账本观察指针跨 tick 存活。
     std::unordered_map<std::uint64_t, std::unique_ptr<SettlementLedger>> settlements_;
+    // 重启装载的挂起恢复标记（小队 → 玩家 → 分值）：launch 回填新账本时
+    // 消费，凭据回写在 launch 收口（非 ingest）。
+    std::unordered_map<std::uint64_t, std::unordered_map<std::uint64_t, std::int64_t>>
+        pending_restore_marks_;
     std::unordered_set<std::uint64_t> busy_members_;
     std::atomic<bool> drain_{false};  // 排空闸（宿主 owning 线程置位；launch 判定）
     std::uint64_t name_seq_ = 0;

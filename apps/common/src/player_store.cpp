@@ -2,6 +2,7 @@
 #include "player_store/migration_puller.hpp"
 #include "player_store/migration_wire.hpp"
 #include "apollo/core/log/log_manager.h"
+#include "apollo/game/session/anchor_reward_sink.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "apollo/protocol/codec.hpp"
 #include <chrono>
@@ -96,9 +97,16 @@ std::shared_ptr<apollo::game::session::PlayerAnchor> PlayerStore::activatePlayer
         return nullptr;
     }
 
+    // 长期态播种（真实奖励持久化）：exp 以 Anchor 为持久真源——新锚点按
+    // 现档播种，flush 收集覆盖写回；仅新锚点播种（既存锚点重复加值即双记）。
+    const bool fresh = anchorManager_->find(playerId) == nullptr;
     auto anchor = activatePlayerAnchor(playerId);
     if (!anchor) {
         return nullptr;
+    }
+    if (fresh) {
+        anchor->add_progress(apollo::game::session::AnchorRewardSink::kExpKey,
+                             data.exp);
     }
 
     anchor->clear_dirty();
@@ -231,6 +239,18 @@ void PlayerStore::start() {
                 apollo::game::session::restore_anchors(*anchorManager_, ids);
             blog().info("Anchor restore: " + std::to_string(restored)
                         + " anchors offline-resumed");
+            // 恢复锚点播种（真实奖励持久化）：flush 收集以 Anchor 为 exp 真源——
+            // 未播种的恢复锚首次 flush 会把现档 exp 覆写归零
+            for (const auto id : ids) {
+                PlayerData profile;
+                if (!database_->loadPlayer(id, profile)) continue;
+                if (auto anchor = anchorManager_->find(id)) {
+                    anchor->add_progress(
+                        apollo::game::session::AnchorRewardSink::kExpKey,
+                        profile.exp);
+                    anchor->clear_dirty();
+                }
+            }
             return !ec;
         });
     if (!recovery_->run() || !recovery_->ready()) {
@@ -559,12 +579,16 @@ std::size_t PlayerStore::flushDirtyAnchors(const char* reason) {
         task.playerId = anchor->player_id();
         // 载荷以现档为基线（P1-4 落盘真做后，默认值载荷会清档）：
         // 无档即跳过——不凭空造档案（bootstrap 恶龙已废）。
-        // Anchor 属性字段模型扩展后此处改为从 Anchor 收集（P2-4）。
         if (!database_->loadPlayer(anchor->player_id(), task.data)) {
             blog().warning("Flush skipped for player " + std::to_string(anchor->player_id())
                             + " (no profile) (" + reason + ")");
             continue;
         }
+        // exp 收集自 Anchor 长期态（真实奖励持久化）：奖励落锚点即真源，
+        // flush 覆盖写回——不再仅重写旧档案丢增量（播种见 activatePlayer/
+        // 启动恢复/adoptPlayer）。
+        task.data.exp = anchor->progress(
+            apollo::game::session::AnchorRewardSink::kExpKey);
         task.callback = [this, playerId = anchor->player_id()](bool success) {
             finalizeSave(playerId, success);
         };
@@ -598,6 +622,10 @@ bool PlayerStore::freezePlayer(PlayerID playerId) {
     if (anchor->needs_save()) {
         PlayerData data;
         if (database_->loadPlayer(playerId, data)) {
+            // 冻结段同步排平：未 flush 的奖励增量随冻结落档（快照才带上
+            // 最新 exp——迁移不丢奖励）
+            data.exp = anchor->progress(
+                apollo::game::session::AnchorRewardSink::kExpKey);
             appendJournal(data);
             database_->savePlayer(data);
             anchor->clear_dirty();
@@ -645,10 +673,15 @@ bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
     if (!database_->savePlayer(data)) {
         return false;
     }
+    // 接权播种收敛（真实奖励持久化）：档案（快照）为本域 exp 权威——锚点
+    // 归一到档案现值（既有锚点含启动播种/旧值时以差值收敛，不叠加重播）。
     auto anchor = anchorManager_->activate(playerId);
     if (!anchor) {
         return false;
     }
+    anchor->add_progress(
+        apollo::game::session::AnchorRewardSink::kExpKey,
+        data.exp - anchor->progress(apollo::game::session::AnchorRewardSink::kExpKey));
     apollo::game::session::SessionBinding binding;
     binding.session_id = sessionId;
     binding.gateway_id = gatewayId;
