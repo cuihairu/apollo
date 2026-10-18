@@ -9,6 +9,7 @@
 | 设计件 | 状态 | 一句话定位 |
 |---|---|---|
 | [BigWorld 与 Apollo 对照](./bigworld-apollo-mapping.md) | 定稿规则 | 原词、目标职责、现有代码和缺口 |
+| [World 与 cell 管理设计](./world-cell-management.md) | 评审草案 | 共用二进制、角色启动、本机扩缩容、空间分配与恢复迁移 |
 | [概念词汇表](./concept-glossary.md) | 定稿规则 | 目标角色职责、Space/Cell 与玩法边界 |
 | [玩家对象模型](./player-object-model.md) | 子系统实现说明 | Base 长期资料与 Cell 模拟实体分别管理 |
 | [属性系统与同步](./attribute-sync.md) | 子系统实现说明 | 属性数据与可见性/同步机制 |

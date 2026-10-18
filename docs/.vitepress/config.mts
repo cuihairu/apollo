@@ -8,6 +8,7 @@ const architectureSidebar = [
     items: [
       { text: '架构总览', link: '/architecture/overview' },
       { text: 'BigWorld 与 Apollo 对照', link: '/design/bigworld-apollo-mapping' },
+      { text: 'World 与 cell 管理设计', link: '/design/world-cell-management' },
       { text: '当前架构决策', link: '/architecture/adr' },
       { text: 'Remote Entity Call 语义层', link: '/architecture/remote-entity-call-design' },
       { text: '观测与运行时内省', link: '/architecture/observability-watcher-and-runtime-introspection-design' },
@@ -84,6 +85,7 @@ export default defineConfig({
           '/design/': [{ text: '设计文档', items: [
             { text: '设计总览', link: '/design/' }, { text: '概念词汇表', link: '/design/concept-glossary' },
             { text: 'BigWorld 与 Apollo 对照', link: '/design/bigworld-apollo-mapping' },
+            { text: 'World 与 cell 管理设计', link: '/design/world-cell-management' },
             { text: '玩家对象模型', link: '/design/player-object-model' }, { text: '会话与在线目录', link: '/design/session-and-online-directory' },
             { text: '跨服场景设计预留', link: '/design/cross-server-scenes' },
             { text: '登录流程', link: '/design/login-flow' }, { text: '网关拓扑', link: '/design/gateway-topology-survey' },
@@ -132,7 +134,8 @@ export default defineConfig({
           ] }],
           '/en/architecture/': [
             { text: 'Apollo Architecture', items: [
-              { text: 'Overview', link: '/en/architecture/overview' }, { text: 'BigWorld–Apollo Mapping', link: '/en/design/bigworld-apollo-mapping' }, { text: 'Active Decisions', link: '/en/architecture/adr' },
+              { text: 'Overview', link: '/en/architecture/overview' }, { text: 'BigWorld–Apollo Mapping', link: '/en/design/bigworld-apollo-mapping' },
+              { text: 'World and cell Management', link: '/en/design/world-cell-management' }, { text: 'Active Decisions', link: '/en/architecture/adr' },
               { text: 'Remote Entity Call', link: '/en/architecture/remote-entity-call-design' },
               { text: 'Observability', link: '/en/architecture/observability-watcher-and-runtime-introspection-design' },
               { text: 'Hosts and Dependency Injection', link: '/en/architecture/host-builder-and-di-design' },
@@ -151,6 +154,7 @@ export default defineConfig({
           '/en/design/': [{ text: 'Design Documents', items: [
             { text: 'Overview', link: '/en/design/' }, { text: 'Glossary', link: '/en/design/concept-glossary' },
             { text: 'BigWorld–Apollo Mapping', link: '/en/design/bigworld-apollo-mapping' },
+            { text: 'World and cell Management', link: '/en/design/world-cell-management' },
             { text: 'Player Object Model', link: '/en/design/player-object-model' }, { text: 'Sessions and Online Directory', link: '/en/design/session-and-online-directory' },
             { text: 'Cross-server Scenes', link: '/en/design/cross-server-scenes' },
             { text: 'Login Flow', link: '/en/design/login-flow' }, { text: 'Gateway Topology', link: '/en/design/gateway-topology-survey' },

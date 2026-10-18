@@ -77,3 +77,5 @@ Implement spatial splitting, adjacent replication, boundary combat, dynamic load
 | SceneTransfer | Explicit scene departure/recreation | Same-Space Cell handoff preserves health, skills, clocks, and necessary script state without scene-exit reset. |
 
 This documentation does not rename C++ types, executables, or wire fields, and does not claim implementation is complete. Root todo.md tracks migration under this single semantic model.
+
+See [World and cell management](./world-cell-management.md), a review draft covering the proposed short binary name `world`, default manager role, `--role=cell` executors, local automatic growth, and natural shrinking. Naming and wiring migration remain pending.
