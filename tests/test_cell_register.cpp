@@ -10,6 +10,7 @@
 // 服务端 gameLoop 自泵，本线程泵客户端（同 test_world_drain 惯例）。
 // 无 GTest，plain-assert + main 汇总。
 #include "world_app/world_app.hpp"
+#include "world_app/cell_register_client.hpp"
 #include "world_app/m1_link_server.hpp"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -425,6 +426,129 @@ bool test_cell_register_malformed_rejected() {
     return true;
 }
 
+// ---------- production client：真 CellRegisterClient 拨装注册 + 重拨幂等 ----------
+
+template <typename Pred>
+bool wait_until(Pred&& done, int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (done()) return true;
+        std::this_thread::sleep_for(10ms);
+    }
+    return done();
+}
+
+bool test_production_client_registers_and_redials() {
+    std::cout << "Running: test_production_client_registers_and_redials..." << std::endl;
+    WorldEnd server;
+    TEST_ASSERT(server.start(114), "world started with M1 port");
+
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = server.world->m1Link().listenPort();
+    cfg.cell_id = 42;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8801;
+    cfg.start_epoch = 5;
+    cfg.route_json = kRouteJson;
+    auto client = world_app::makeCellRegisterClient(cfg);
+    TEST_ASSERT(client->start(), "client started");
+    // 服务端 gameLoop 自泵受理，本线程泵客户端（同 test_world_drain 惯例）。
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return server.world->find_cell_registration(42) != nullptr
+                           && client->state().replies >= 1;
+                }, 5000),
+                "first registration roundtrip");
+    TEST_ASSERT(client->linkUp(), "client link up");
+
+    // 回执记账：受理裁决原样显形（码/管理代次/确认 ID）
+    const auto st = client->state();
+    TEST_ASSERT(st.sent, "request sent");
+    TEST_ASSERT(st.accepted, "accepted");
+    TEST_ASSERT(st.code == world_app::kCellRegisterAccepted, "code accepted");
+    TEST_ASSERT(st.management_epoch == 77, "management epoch echoed");
+    TEST_ASSERT(st.assigned_cell_id == 42, "cell id confirmed");
+    TEST_ASSERT(st.attempts == 1 && st.replies == 1, "attempt/reply counted once");
+
+    // World 端注册表：自报面 + peer 自报名入表
+    const auto* reg = server.world->find_cell_registration(42);
+    TEST_ASSERT(reg != nullptr, "registry entry");
+    TEST_ASSERT(reg->start_epoch == 5, "epoch recorded");
+    TEST_ASSERT(reg->host == "127.0.0.1", "advertise host recorded");
+    TEST_ASSERT(reg->port == 8801, "advertise port recorded");
+    TEST_ASSERT(reg->drain_state == 0 && reg->ready, "serving and ready recorded");
+    TEST_ASSERT(reg->peer == "cell-42", "peer self name recorded");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "one registration");
+
+    // 重拨（断链重建，同代次）→ 幂等刷新 code 2；自报排空态随行更新
+    client->setReportedDrainState(1);
+    client->stop();
+    TEST_ASSERT(client->start(), "client re-dialed");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return client->state().replies >= 2;
+                }, 5000),
+                "second registration roundtrip");
+    const auto st2 = client->state();
+    TEST_ASSERT(st2.code == world_app::kCellRegisterAcceptedIdempotent,
+                "same epoch idempotent");
+    TEST_ASSERT(st2.attempts == 2 && st2.replies == 2, "attempt/reply accumulated");
+    reg = server.world->find_cell_registration(42);
+    TEST_ASSERT(reg != nullptr && reg->drain_state == 1, "drain refreshed on redial");
+    TEST_ASSERT(reg != nullptr && reg->start_epoch == 5, "epoch unchanged");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "count unchanged");
+
+    // 新代次重拨（重启换代语义：旧进程先退，新进程换代注册）→ 替换 code 1。
+    // 旧客户端必须先 stop——双活同名 peer（同 cell-42 两链）不是本例语义，
+    // 同名链路替换竞态归 L101 旧执行端隔离批。
+    client->stop();
+    cfg.start_epoch = 6;
+    auto client2 = world_app::makeCellRegisterClient(cfg);
+    TEST_ASSERT(client2->start(), "second client started");
+    TEST_ASSERT(wait_until([&] {
+                    client2->pump(now_ms());
+                    return client2->state().replies >= 1;
+                }, 5000),
+                "third registration roundtrip");
+    TEST_ASSERT(client2->state().code == world_app::kCellRegisterAccepted,
+                "new epoch replaced");
+    reg = server.world->find_cell_registration(42);
+    TEST_ASSERT(reg != nullptr && reg->start_epoch == 6, "epoch replaced in registry");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "still one cell");
+
+    client2->stop();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_production_client_invalid_config() {
+    std::cout << "Running: test_production_client_invalid_config..." << std::endl;
+    // cell_id 缺位 = 装配拒绝
+    world_app::CellRegisterConfig bad;
+    bad.world_host = "127.0.0.1";
+    bad.world_port = 9;
+    bad.cell_id = 0;
+    bad.route_json = kRouteJson;
+    auto client = world_app::makeCellRegisterClient(bad);
+    TEST_ASSERT(!client->start(), "cell id 0 rejected");
+    TEST_ASSERT(!client->linkUp(), "no link");
+    const auto st = client->state();
+    TEST_ASSERT(!st.sent && st.attempts == 0, "nothing sent");
+
+    // 路由表缺位 = 装配拒绝
+    world_app::CellRegisterConfig bad2 = bad;
+    bad2.cell_id = 1;
+    bad2.route_json.clear();
+    auto client2 = world_app::makeCellRegisterClient(bad2);
+    TEST_ASSERT(!client2->start(), "empty route json rejected");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -434,7 +558,9 @@ int main() {
 #else
     const bool ok = test_cell_register_lifecycle()
                     && test_cell_register_invalid_and_reserved()
-                    && test_cell_register_malformed_rejected();
+                    && test_cell_register_malformed_rejected()
+                    && test_production_client_registers_and_redials()
+                    && test_production_client_invalid_config();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;

@@ -13,6 +13,7 @@ add_executable(world
     src/world_app.cpp
     src/cell_app.cpp
     src/m1_link_server.cpp
+    src/cell_register_client.cpp
     ${WORLD_APP_PROTOCOL_SOURCES}
 )
 

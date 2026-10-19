@@ -1849,6 +1849,7 @@ add_executable(cell_register_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )

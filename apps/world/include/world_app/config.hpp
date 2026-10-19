@@ -32,6 +32,14 @@ struct WorldAppConfig {
     // 模拟替换（e2e）在此注入不同代次。
     std::uint64_t m1AuthorityEpoch = 0;
 
+    // cell 角色注册拨号（L101 次切片；契约 960/961）：启动后主动拨所属
+    // World 的 M1 受理面注册（逻辑 ID + 启动代次 + 自报面）。port = 0 =
+    // 不注册（缺省单机 manager 形态，配置面缺席即静默）。
+    std::string registerHost;
+    std::uint16_t registerPort = 0;
+    // 逻辑 cell ID（注册开则必须非 0；PID/IP 不当身份，重启保留同 ID 换代次）。
+    std::uint64_t cellId = 0;
+
     // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 base
     // store M1 面（958/959）。port = 0 = 面关（结算挂账降级态——L19 资料
     // 归属切换后 World 无锚点解析器）。

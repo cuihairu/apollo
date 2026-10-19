@@ -5,6 +5,7 @@
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "world_app/world_app.hpp"
+#include "world_app/cell_register_client.hpp"
 #include "world_app/role_options.hpp"
 #include <iostream>
 #include <csignal>
@@ -75,6 +76,12 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                 static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--settlement-credential-dir" && i + 1 < argc) {
             config.settlementCredentialDir = argv[++i];
+        } else if (arg == "--register-host" && i + 1 < argc) {
+            config.registerHost = argv[++i];
+        } else if (arg == "--register-port" && i + 1 < argc) {
+            config.registerPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--cell-id" && i + 1 < argc) {
+            config.cellId = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
         } else if (arg == "--size" && i + 2 < argc) {
@@ -98,6 +105,9 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
                       << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
                       << "  --settlement-credential-dir <dir>  Settlement credential dir (default: off)\n"
+                      << "  --register-host <h>        World M1 host to register with, cell role (default: off)\n"
+                      << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
+                      << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"
@@ -206,11 +216,21 @@ int main(int argc, char* argv[]) {
             CellApp cell(config);
             CellLinkEgress egress;
             cell.set_egress(&egress);
-            // 拍首钩子 = M1 泵（链路对象先行，监听在闸开之后）；post-tick
-            // 缺席——cell 角色无管理推进
-            cell.set_pre_tick([&egress](std::uint64_t now_ms) {
+            // 注册拨号客户端（L101 次切片；960/961）：配置了 World 地址即
+            // 主动注册。对象先声明（pre-tick 捕获引用），装配在 M1 端点
+            // start 之后——自报端口 = 本进程受理端口实占值。
+            std::unique_ptr<CellRegisterClient> register_client;
+            // 拍首钩子 = M1 泵 + 注册泵（链路对象先行，监听在闸开之后）；
+            // post-tick 缺席——cell 角色无管理推进
+            cell.set_pre_tick([&egress, &register_client, &cell](std::uint64_t now_ms) {
                 if (egress.link) {
                     egress.link->pump(now_ms);
+                }
+                if (register_client) {
+                    auto* squads = cell.squadInstanceService();
+                    register_client->setReportedDrainState(
+                        squads != nullptr && squads->draining() ? 1 : 0);
+                    register_client->pump(now_ms);
                 }
             });
             auto link = makeM1LinkServer(
@@ -219,6 +239,27 @@ int main(int argc, char* argv[]) {
                 [&cell](IntentEnvelope intent) { cell.onIntent(std::move(intent)); });
             egress.link = link.get();
             g_stop_request = [&cell] { cell.stop(); };
+            // 注册拨号客户端（L101 次切片；960/961）：配置了 World 地址即主
+            // 动注册；装配面在此（link 已在）——自报端口 = 本进程受理端口
+            // 实占值，调用在 M1 端点 start 之后。
+            auto build_register_client = [&]() {
+                if (config.registerPort == 0) {
+                    return;  // 未配置 = 注册关（缺省单机形态）
+                }
+                if (config.registerHost.empty() || config.cellId == 0) {
+                    throw std::runtime_error(
+                        "--register-port requires --register-host and --cell-id");
+                }
+                CellRegisterConfig rc;
+                rc.world_host = config.registerHost;
+                rc.world_port = config.registerPort;
+                rc.cell_id = config.cellId;
+                rc.advertise_host = config.host;
+                rc.advertise_port = link->listenPort();
+                rc.route_json = config.m1RouteJson;
+                rc.authority_epoch = config.m1AuthorityEpoch;
+                register_client = makeCellRegisterClient(std::move(rc));
+            };
 
             logger->info("Starting server...");
             cell.start();
@@ -228,6 +269,17 @@ int main(int argc, char* argv[]) {
             }
             logger->info("Cell M1 link listening on " + config.host + ":"
                          + std::to_string(link->listenPort()));
+            build_register_client();
+            if (register_client) {
+                if (!register_client->start()) {
+                    throw std::runtime_error(
+                        "failed to start cell registration client (config or route "
+                        "table invalid)");
+                }
+                logger->info("Cell registration: dialing " + config.registerHost + ":"
+                             + std::to_string(config.registerPort) + " as cell-"
+                             + std::to_string(config.cellId));
+            }
 
             // 编队成员注册（P3-4 收尾批）：与 manager 同面（service_port =
             // M1 受理端口，消费方按角色拨号）
