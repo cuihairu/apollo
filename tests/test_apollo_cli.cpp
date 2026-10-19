@@ -152,8 +152,12 @@ bool test_init_creates_skeleton() {
 
     for (const char* file : {"config/runtime.conf", "scripts/lib.sh",
                              "scripts/start.sh", "scripts/stop.sh", "scripts/status.sh",
-                             "lua/boot.lua", "lua/contract_handlers.lua",
-                             "contract/README.md", "run/.gitkeep"}) {
+                             "scripts/verify.sh", "CMakeLists.txt",
+                             ".github/workflows/ci.yml", "lua/boot.lua",
+                             "lua/contract_handlers.lua", "contract/README.md",
+                             "contract/version", "contract/errors.xml",
+                             "contract/attrs.xml", "contract/entities.xml",
+                             "contract/messages.xml", "run/.gitkeep"}) {
         TEST_ASSERT(std::filesystem::is_regular_file(target / file),
                     std::string("生成模板文件 ") + file);
     }
@@ -297,6 +301,12 @@ bool test_generated_template_integrity() {
     TEST_ASSERT(readme.find("sh scripts/status.sh") != std::string::npos &&
                     readme.find("rollback") != std::string::npos,
                 "README 给出状态命令与失败回滚口径");
+    TEST_ASSERT(readme.find("sh scripts/verify.sh") != std::string::npos,
+                "README 给出开发验证入口");
+    TEST_ASSERT(readme.find(".github/workflows/ci.yml") != std::string::npos,
+                "README 指向 CI 配置");
+    TEST_ASSERT(readme.find("cmake --build") != std::string::npos,
+                "README 说明 CMake 门禁目标入口");
     TEST_ASSERT(readme.find("No auth material is generated") != std::string::npos,
                 "README 声明不生成认证材料");
     TEST_ASSERT(readme.find("run/<role>") != std::string::npos ||
@@ -307,12 +317,113 @@ bool test_generated_template_integrity() {
     TEST_ASSERT(readme.find("BUILD_VERSION") != std::string::npos,
                 "README 说明构建版本");
 
-    // 契约入口：说明 apollo_gen 生成流程与 handler 同步纪律。
+    // 契约入口：说明 apollo_gen 生成流程、漂移门禁与 handler 同步纪律。
     auto contract = read_text(target / "contract/README.md");
     TEST_ASSERT(contract.find("apollo_gen") != std::string::npos,
                 "契约入口指向生成器");
     TEST_ASSERT(contract.find("--contract contract") != std::string::npos,
                 "契约入口给出生成命令");
+    TEST_ASSERT(contract.find("verify.sh") != std::string::npos &&
+                    contract.find("--check") != std::string::npos,
+                "契约入口指向验证入口与漂移门禁");
+
+    // L40 构建面：可审查的 CMake 配置，只暴露门禁目标，不复制门禁逻辑。
+    auto cmk = read_text(target / "CMakeLists.txt");
+    TEST_ASSERT(cmk.find("cmake_minimum_required(VERSION 3.20)") !=
+                    std::string::npos,
+                "CMake 声明最低版本");
+    TEST_ASSERT(cmk.find("LANGUAGES NONE") != std::string::npos,
+                "CMake 不编译 C++，契约与文档是唯一构建物");
+    TEST_ASSERT(cmk.find("APOLLO_ENGINE_DIR") != std::string::npos &&
+                    cmk.find("APOLLO_GEN") != std::string::npos,
+                "CMake 显式声明引擎与生成器输入，不静默回退");
+    TEST_ASSERT(cmk.find("APOLLO_BIN_DIR") == std::string::npos,
+                "CMake 不掺运行时启动面");
+    for (const char* gate : {"verify-build", "verify-contract", "verify-test",
+                             "verify-docs", "verify"}) {
+        TEST_ASSERT(cmk.find(gate) != std::string::npos,
+                    std::string("CMake 暴露门禁目标 ") + gate);
+    }
+    TEST_ASSERT(cmk.find("scripts/verify.sh") != std::string::npos,
+                "CMake 门禁目标是验证入口的薄封装，不复制门禁逻辑");
+    TEST_ASSERT(cmk.find("add_subdirectory") == std::string::npos,
+                "CMake 不拉引擎源码，只消费引擎产物");
+    TEST_ASSERT(cmk.find("publish") == std::string::npos &&
+                    cmk.find("create-release") == std::string::npos &&
+                    cmk.find("gh release") == std::string::npos,
+                "CMake 不含发布动作");
+
+    // L40 CI 面：仓库 workflow 走与本地同一入口，不装进业务处理循环，
+    // 不做任何发布动作。
+    auto ci = read_text(target / ".github/workflows/ci.yml");
+    TEST_ASSERT(ci.find("scripts/verify.sh") != std::string::npos,
+                "CI 走与本地同一开发验证入口");
+    TEST_ASSERT(ci.find("APOLLO_ENGINE_DIR") != std::string::npos,
+                "CI 显式给出引擎路径");
+    TEST_ASSERT(ci.find("apollo_gen") != std::string::npos,
+                "CI 自建生成器，不依赖本机路径");
+    TEST_ASSERT(ci.find("push") != std::string::npos &&
+                    ci.find("pull_request") != std::string::npos,
+                "CI 覆盖 push 与 PR 触发");
+    TEST_ASSERT(ci.find("workflow_dispatch") != std::string::npos,
+                "CI 支持手动触发");
+    TEST_ASSERT(ci.find("create-release") == std::string::npos &&
+                    ci.find("publish") == std::string::npos &&
+                    ci.find("gh release") == std::string::npos,
+                "CI 不做任何发布动作，版本号不来自 CI");
+
+    // L40 开发验证入口：build/contract/test/docs 四道门禁，失败即停。
+    auto verify = read_text(target / "scripts/verify.sh");
+    TEST_ASSERT(verify.find("set -eu") != std::string::npos,
+                "验证入口失败即停");
+    TEST_ASSERT(verify.find(". \"$(dirname \"$0\")/lib.sh\"") !=
+                    std::string::npos,
+                "验证入口源 lib.sh 取项目根");
+    for (const char* stage : {"gate_build", "gate_contract", "gate_test",
+                              "gate_docs"}) {
+        TEST_ASSERT(verify.find(stage) != std::string::npos,
+                    std::string("验证入口提供阶段 ") + stage);
+    }
+    TEST_ASSERT(verify.find("xmllint --noout --schema") != std::string::npos,
+                "契约门禁一：schema 校验");
+    TEST_ASSERT(verify.find("--check") != std::string::npos &&
+                    verify.find("--contract") != std::string::npos &&
+                    verify.find("--out") != std::string::npos,
+                "构建与契约门禁：生成产物并做漂移比对");
+    TEST_ASSERT(verify.find("sh -n") != std::string::npos &&
+                    verify.find("luac") != std::string::npos &&
+                    verify.find(" -p ") != std::string::npos,
+                "测试门禁：脚本与 Lua 语法检查");
+    TEST_ASSERT(verify.find("README.md") != std::string::npos,
+                "文档门禁：说明文档存在");
+    TEST_ASSERT(verify.find("APOLLO_ENGINE_DIR") != std::string::npos &&
+                    verify.find("apollo.xsd") != std::string::npos,
+                "验证入口要求显式引擎路径（schema 来源）");
+    TEST_ASSERT(verify.find("sleep") == std::string::npos,
+                "验证入口无等待循环");
+
+    // L40 starter 契约：从可校验的最小 errors 表起步，门禁有真实输入。
+    TEST_ASSERT(read_text(target / "contract/version") == "1\n",
+                "契约版本从 1 起步");
+    auto errors = read_text(target / "contract/errors.xml");
+    TEST_ASSERT(errors.find("<errors version=\"1\">") != std::string::npos,
+                "starter 契约版本属性与 version 文件一致");
+    TEST_ASSERT(errors.find("code=\"0\"") != std::string::npos &&
+                    errors.find("name=\"ok\"") != std::string::npos,
+                "starter 契约含 0/ok 基线");
+    TEST_ASSERT(read_text(target / "contract/attrs.xml").find(
+                        "<attrs version=\"1\">") != std::string::npos &&
+                    read_text(target / "contract/entities.xml").find(
+                        "<entities version=\"1\">") != std::string::npos &&
+                    read_text(target / "contract/messages.xml").find(
+                        "<messages version=\"1\">") != std::string::npos,
+                "starter 契约空根齐全且根版本与 version 文件一致");
+    bool baseline_leaked = false;
+    for (const auto& f : apollo_cli::scaffold_files("proj")) {
+        if (f.first.rfind("contract/generated", 0) == 0) baseline_leaked = true;
+    }
+    TEST_ASSERT(!baseline_leaked,
+                "契约生成基线不在清单内，由验证入口产出后提交");
 
     // 全模板禁物扫描：不生成认证材料、不残留 CRLF。
     const char* forbidden[] = {"secret", "password", "credential", "BEGIN RSA"};
@@ -330,9 +441,12 @@ bool test_generated_template_integrity() {
                     std::string("模板无 CRLF ") + file.first);
     }
 
-    // 清单本身：12 个文件、全为相对路径、无重复。
+    // 清单本身：20 个文件、全为相对路径、无重复。
     auto files = apollo_cli::scaffold_files("proj");
-    TEST_ASSERT(files.size() == 12, "模板清单 12 个文件");
+    TEST_ASSERT(files.size() == 20, "模板清单 20 个文件");
+    TEST_ASSERT(read_text(target / ".gitignore").find("contract/generated/") ==
+                        std::string::npos,
+                "契约生成基线是提交物，不被忽略");
     for (const auto& file : files) {
         TEST_ASSERT(!file.first.empty() && file.first.front() != '/',
                     "清单路径为相对路径");
