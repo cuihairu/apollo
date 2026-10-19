@@ -147,6 +147,36 @@ void CellApp::start() {
 
     ensureDefaultScene();
 
+    // L100 多 Space 声明面：config 声明的额外 Space 在启动窗逐条登记（同
+    // add_space 幂等语义；Instance-less——只建 scene + 路由，实例随玩法
+    // 副本流程自建）。id 缺位/与默认 Space 相撞、descriptor 失效 = 启动
+    // 失败显形（不带隐式回退）。
+    for (const auto& decl : config_.spaces) {
+        if (decl.space_id == 0) {
+            throw std::runtime_error("declared space id 0 invalid");
+        }
+        if (decl.space_id == defaultSpaceId_) {
+            throw std::runtime_error("declared space id "
+                                     + std::to_string(decl.space_id)
+                                     + " collides with default space");
+        }
+        apollo::game::world::SceneDescriptor descriptor;
+        descriptor.map_id = 1;  // 唯一在册地图资产——静态资产面不虚构 id
+        descriptor.map_name =
+            decl.name.empty() ? ("space-" + std::to_string(decl.space_id)) : decl.name;
+        descriptor.width = config_.spaceWidth;
+        descriptor.height = config_.spaceHeight;
+        descriptor.grid_size = config_.gridSize;
+        descriptor.view_radius = config_.viewRadius;
+        if (add_space(decl.space_id, descriptor) == 0) {
+            throw std::runtime_error("failed to create declared space "
+                                     + std::to_string(decl.space_id)
+                                     + " (invalid descriptor)");
+        }
+        worldLog().info("declared space: id=" + std::to_string(decl.space_id) + " name="
+                        + descriptor.map_name);
+    }
+
     if (!worldHost_->start()) {
         throw std::runtime_error("failed to start WorldHost");
     }

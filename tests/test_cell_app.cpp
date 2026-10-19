@@ -468,6 +468,67 @@ bool test_cell_kernel_unknown_space_falls_back_to_default() {
     return true;
 }
 
+// L100 多 Space 默认接线：config.spaces 声明面——start 装配窗逐条登记
+//（add_space 同幂等语义），默认 Space 不受影响；声明 Space 为 Instance-less
+//（批㉑口径，实例随玩法副本流程自建）。CLI 入口另在装配拒绝重复/非法 id，
+// config API 层只测内核幂等。
+bool test_config_declared_spaces() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    config.spaces = {{7, "aux"}, {8, "lobby"}};
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+
+    // 声明面装配：默认 + 7 + 8 三路由；scene id 域独立且互异
+    TEST_ASSERT(cell.space_count() == 3, "default plus two declared spaces");
+    const auto s1 = cell.scene_id_of_space(1);
+    const auto s7 = cell.scene_id_of_space(7);
+    const auto s8 = cell.scene_id_of_space(8);
+    TEST_ASSERT(s1 != 0 && s7 != 0 && s8 != 0, "all declared routes resolved");
+    TEST_ASSERT(s1 != s7 && s7 != s8 && s1 != s8, "scene ids distinct across spaces");
+
+    // 会话落点证明（仅线程安全观测面——egress 可见性 + 转移链；scene 直读
+    // 非跨线程观测面）：A 落 space 7、B 落 space 8，跨声明空间互盲；A 7→8
+    // 转移成功 = A 确在 space 7 scene（config 声明 Space 对路由/落点面与
+    // add_space 手工登记完全同权）
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent_in_space(51, 81, 7, 4001)),
+                "create in declared space 7 accepted");
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent_in_space(52, 82, 8, 4002)),
+                "create in declared space 8 accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(81) == 51; },
+                           std::chrono::seconds(3)),
+                "A bound in declared space 7");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(82) == 52; },
+                           std::chrono::seconds(3)),
+                "B bound in declared space 8");
+    TEST_ASSERT(cell.submitIntent(make_move_intent(51, 81)), "A move accepted");
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));  // 让移动先落地
+    TEST_ASSERT(move_frame_count(egress, 82) == 0, "B blind to A across declared spaces");
+    TEST_ASSERT(cell.submitIntent(make_xborder_intent(51, 81, 8)),
+                "A transfer 7 to 8 accepted");
+    TEST_ASSERT(cell.submitIntent(make_move_intent(52, 82)), "B move accepted");
+    TEST_ASSERT(wait_until([&] { return move_frame_count(egress, 81) >= 1; },
+                           std::chrono::seconds(3)),
+                "A sees B after declared-space transfer");
+
+    cell.stop();
+
+    // 重复声明幂等（config API 同 add_space 口径：重复登记不重建 scene）
+    world_app::WorldAppConfig dup;
+    dup.tickRateMs = 20;
+    dup.spaces = {{7, "first"}, {7, "second"}};
+    world_app::CellApp cell2(dup);
+    cell2.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    TEST_ASSERT(cell2.space_count() == 2, "duplicate declaration idempotent");
+    TEST_ASSERT(cell2.scene_id_of_space(7) != 0, "duplicate route exists");
+    cell2.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -488,6 +549,7 @@ int main() {
         {"cell_kernel_cross_space_transfer", test_cell_kernel_cross_space_transfer},
         {"cell_kernel_unknown_space_falls_back_to_default",
          test_cell_kernel_unknown_space_falls_back_to_default},
+        {"config_declared_spaces", test_config_declared_spaces},
     };
 
     for (const auto& c : cases) {

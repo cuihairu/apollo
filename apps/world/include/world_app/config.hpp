@@ -3,6 +3,7 @@
 #include <string>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 // 契约路由表 JSON 的构建期默认路径（CMake 注入生成物路径；裸编时为空 =
 // M1 端点装配失败显形，不带隐式回退）。
@@ -65,6 +66,16 @@ struct WorldAppConfig {
 
     // AOI 配置
     float viewRadius = 200.0f;
+
+    // 多 Space 声明面（L100）：cell 进程启动窗装配的额外 Space（默认 Space 1
+    // 之外，每 Space 一个 scene + 路由，Instance-less——实例随玩法副本流程
+    // 自建）。几何面沿用上方全局尺寸字段，map 资产引用共用唯一在册资产。
+    // 重复声明幂等（add_space 口径）；CLI 入口另行拒绝重复/非法 id。
+    struct SpaceDecl {
+        std::uint64_t space_id = 0;
+        std::string name;
+    };
+    std::vector<SpaceDecl> spaces;
 
     // Tick 配置
     int tickRateMs = 50;  // 20 ticks per second

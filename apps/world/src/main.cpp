@@ -86,6 +86,27 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
+        } else if (arg == "--add-space" && i + 1 < argc) {
+            const std::string spec = argv[++i];
+            const auto colon = spec.find(':');
+            if (colon == std::string::npos || colon == 0 || colon + 1 == spec.size()) {
+                std::cerr << "world: --add-space expects <id>:<name>" << std::endl;
+                std::exit(2);
+            }
+            const std::uint64_t space_id =
+                std::strtoull(spec.substr(0, colon).c_str(), nullptr, 10);
+            if (space_id == 0) {
+                std::cerr << "world: --add-space id must be non-zero" << std::endl;
+                std::exit(2);
+            }
+            for (const auto& s : config.spaces) {
+                if (s.space_id == space_id) {
+                    std::cerr << "world: --add-space duplicate id "
+                              << std::to_string(space_id) << std::endl;
+                    std::exit(2);
+                }
+            }
+            config.spaces.push_back({space_id, spec.substr(colon + 1)});
         } else if (arg == "--size" && i + 2 < argc) {
             config.spaceWidth = static_cast<float>(std::atof(argv[++i]));
             config.spaceHeight = static_cast<float>(std::atof(argv[++i]));
@@ -112,6 +133,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
+                      << "  --add-space <id>:<name>     Declare an extra Space at startup, repeatable (default: none)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"
                       << "  --script-boot <file>        Lua boot source file (default: none)\n"

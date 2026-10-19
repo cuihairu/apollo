@@ -10,7 +10,7 @@
 | BaseApp | baseServer | 承载长期、非空间实体逻辑；Apollo 玩家资料对象使用 `base::Avatar`。Base 不是数据库进程。 | apps/base 已提供 base 独立入口，Avatar 经远程 database 激活；基础业务与结算受理已接入，目录归属未完成。 |
 | BaseAppMgr 的相关职责 | loginServer 的 Base 注册、落点与目录部分 | 只借鉴注册和分配边界，不宣称已复刻完整 BaseAppMgr。 | Base 服务注册、玩家 Base 归属及恢复待补。 |
 | CellAppMgr 的相关职责 | worldServer | 管理 cell 执行进程、Space/Cell 分配、容量、拓扑版本、排空与迁移；不运行每个实体的逐帧逻辑。 | 执行内核已从 WorldApp 分离（CellApp，模拟循环/Scene/AOI/战斗/Lua 归内核；WorldApp 保留管理受理面并内嵌内核）；cell 注册受理面已落地（契约 960/961 裸帧，代次裁决注册表，见 todo L101 首切片）；进程级管理、Space/Cell 分配、容量申报与拓扑版本待做。 |
-| CellApp | cell 执行进程 | 实际承载一个或多个 Space 的本地 Cell，推进实体、AOI、战斗、脚本与 tick。 | 内核可经 `--role=cell` 独立入口运行（仅意图受理面）；注册双面与心跳失效已落地——World 侧受理（960 九字段自报面入表、961 回带管理代次与裁决码；裸帧受理同 944/952/956，认证凭据面按 world-cell-management 差距表另行挂账）与 cell 侧主动拨号（`--register-host/--register-port/--cell-id`，链路 up 跃迁即注册、断链重拨幂等刷新），周期心跳续活（默认 5s 重发 960）+ World 侧过期窗摘除（`--cell-expiry-ms`，默认 30s，超窗未刷新整条移除、重注册按首注册受理）；容量申报与拓扑分配未实现。 |
+| CellApp | cell 执行进程 | 实际承载一个或多个 Space 的本地 Cell，推进实体、AOI、战斗、脚本与 tick。 | 内核可经 `--role=cell` 独立入口运行（仅意图受理面）；注册双面与心跳失效已落地——World 侧受理（960 九字段自报面入表、961 回带管理代次与裁决码；裸帧受理同 944/952/956，认证凭据面按 world-cell-management 差距表另行挂账）与 cell 侧主动拨号（`--register-host/--register-port/--cell-id`，链路 up 跃迁即注册、断链重拨幂等刷新），周期心跳续活（默认 5s 重发 960）+ World 侧过期窗摘除（`--cell-expiry-ms`，默认 30s，超窗未刷新整条移除、重注册按首注册受理）；多 Space 声明面已落地（`--add-space <id>:<name>` 启动窗装配，每 Space 一 scene 一路由、Instance-less）；容量申报与拓扑分配未实现。 |
 | DBApp / DBAppMgr 的存储职责 | database | 提供资料加载、保存、存储路由和持久结果；不处理基础业务奖励规则。 | apps/database 已提供独立入口、M1 加载/保存与文件 journal；写入代次、存储分区及完整队列仍待补。 |
 | bwmachined 的本机监督职责 | machined | 拉起、停止、监督及重启本机进程；不决定玩家 Base 或 Space 归属。 | 可复用监督原语；服务就绪与业务恢复分别验收。 |
 | Proxy 的连接/会话相关职责 | gateway 加 Base/会话关联 | BigWorld Proxy 属于 Base 侧实体模型。Apollo 使用独立 gateway 持有 socket，Base 保留业务关联，不能把 gateway 直接称为完整 Proxy 实现。 | 连接与部分会话原语已在，分开的 Base/cell 路由待接。 |
@@ -82,4 +82,4 @@ Base 资料写权与 Cell 模拟写权属于不同数据域；玩家不是一份
 
 本次整理不重命名 C++ 类、可执行文件或协议字段，不把迁移计划写成代码已完成。后续代码按根目录 todo.md 实施，文档只保留这套语义和清晰的实现映射。
 
-管理/执行拆分的具体方案见 [World 与 cell 管理设计](./world-cell-management.md)（评审草案）：拟统一短名 `world`，无参数启动管理角色、`--role=cell` 启动执行角色，本机自动扩容、自然排空缩容。执行内核分离与 `--role=cell` 入口已落地（见根 todo L98 首切片）；Space↔Scene 显式映射已落地（L99 首切片，space→scene 路由表支持同进程多 Space）；cell 注册受理与主动拨号双面已落地（L101 首切片 960/961 裸帧 + 代次裁决注册表，次切片 `--register-host/--cell-id` 拨号重拨）；心跳失效与过期摘除已落地（周期 960 续活 + `--cell-expiry-ms` 过期窗，重注册走首注册路径）。本机自动扩容、自然排空缩容与旧执行端隔离/控制面失联策略尚待实施。
+管理/执行拆分的具体方案见 [World 与 cell 管理设计](./world-cell-management.md)（评审草案）：拟统一短名 `world`，无参数启动管理角色、`--role=cell` 启动执行角色，本机自动扩容、自然排空缩容。执行内核分离与 `--role=cell` 入口已落地（见根 todo L98 首切片）；Space↔Scene 显式映射已落地（L99 首切片，space→scene 路由表支持同进程多 Space）；cell 注册受理与主动拨号双面已落地（L101 首切片 960/961 裸帧 + 代次裁决注册表，次切片 `--register-host/--cell-id` 拨号重拨）；心跳失效与过期摘除已落地（周期 960 续活 + `--cell-expiry-ms` 过期窗，重注册走首注册路径）；多 Space 声明面接线已落地（L100 承接批㉑——`--add-space <id>:<name>` 启动窗装配 config 声明 Space，重复幂等、入口拒绝非法/撞默认 id）。本机自动扩容、自然排空缩容与旧执行端隔离/控制面失联策略尚待实施。
