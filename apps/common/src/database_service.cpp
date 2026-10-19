@@ -34,9 +34,9 @@ std::string PlayerData::toJson() const {
     j["maxHp"] = maxHp;
     j["mp"] = mp;
     j["maxMp"] = maxMp;
-    j["x"] = x;
-    j["y"] = y;
-    j["z"] = z;
+    j["x"] = runtime.x;
+    j["y"] = runtime.y;
+    j["z"] = runtime.z;
     j["writeGen"] = writeGen;
     return j.dump();
 }
@@ -52,9 +52,9 @@ PlayerData PlayerData::fromJson(const std::string& json) {
     data.maxHp = j.value("maxHp", data.maxHp);
     data.mp = j.value("mp", data.mp);
     data.maxMp = j.value("maxMp", data.maxMp);
-    data.x = j.value("x", data.x);
-    data.y = j.value("y", data.y);
-    data.z = j.value("z", data.z);
+    data.runtime.x = j.value("x", data.runtime.x);
+    data.runtime.y = j.value("y", data.runtime.y);
+    data.runtime.z = j.value("z", data.runtime.z);
     data.writeGen = j.value("writeGen", std::uint64_t(0));
     return data;
 }

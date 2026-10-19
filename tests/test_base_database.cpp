@@ -95,6 +95,47 @@ void roundtrip_and_base_restart() {
     CHECK(loaded.exp == profile.exp + 37);
 }
 
+// L92 拆分验证：长期字段与模拟位置/运行字段分型（PlayerData / PlayerRuntimeState）。
+// 档案 JSON 键保持平面 x/y/z（老档案可读、跨进程 wire 不变）；位置经 runtime
+// 子结构出入，长期字段不再与模拟位置混排。
+void runtime_field_split() {
+    // 旧档案（拆分前落盘的平面 JSON）可读——位置键进 runtime 子结构。
+    const std::string legacy =
+        R"({"playerId":82,"username":"legacy","level":3,"exp":42,)"
+        R"("hp":77,"maxHp":90,"mp":30,"maxMp":50,"x":1.5,"y":2.5,"z":3.5,"writeGen":7})";
+    const auto restored = player_store::PlayerData::fromJson(legacy);
+    CHECK(restored.playerId == 82);
+    CHECK(restored.level == 3);
+    CHECK(restored.exp == 42);
+    CHECK(restored.writeGen == 7);
+    CHECK(restored.runtime.x == 1.5f);
+    CHECK(restored.runtime.y == 2.5f);
+    CHECK(restored.runtime.z == 3.5f);
+
+    // roundtrip：runtime 出入对称，JSON 仍发平面 x/y/z 键（键名兼容）。
+    player_store::PlayerData data{};
+    data.playerId = 83;
+    data.username = "split";
+    data.exp = 1234;
+    data.runtime = player_store::PlayerRuntimeState{9.5f, -2.0f, 4.25f};
+    const auto encoded = data.toJson();
+    CHECK(encoded.find("\"x\":9.5") != std::string::npos);
+    CHECK(encoded.find("\"y\":-2.0") != std::string::npos);
+    CHECK(encoded.find("\"z\":4.25") != std::string::npos);
+    const auto back = player_store::PlayerData::fromJson(encoded);
+    CHECK(back.runtime.x == 9.5f);
+    CHECK(back.runtime.y == -2.0f);
+    CHECK(back.runtime.z == 4.25f);
+    CHECK(back.exp == 1234);
+
+    // 缺位置键的 JSON 读回 runtime 缺省 0；长期字段不随缺键丢失。
+    const auto no_pos = player_store::PlayerData::fromJson(R"({"playerId":84,"exp":5})");
+    CHECK(no_pos.exp == 5);
+    CHECK(no_pos.runtime.x == 0.0f);
+    CHECK(no_pos.runtime.y == 0.0f);
+    CHECK(no_pos.runtime.z == 0.0f);
+}
+
 void reject_bad_requests_and_failures() {
     Fixture f;
     database::Server server(f.config);
@@ -478,6 +519,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         roundtrip_and_base_restart();
+        runtime_field_split();
         reject_bad_requests_and_failures();
         database_crash_survives_restart();
         pending_journal_recovery();

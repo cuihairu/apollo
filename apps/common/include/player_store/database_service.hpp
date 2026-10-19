@@ -19,8 +19,18 @@ namespace player_store {
 
 using PlayerID = uint64_t;
 
-// 玩家数据
+// 模拟位置/运行字段（L92 拆分）：模拟域所有，随档案暂存最后位置——非长期
+// 进度，不参与写入代次语义；未来玩法快照投影（只读，World 侧）不含本段。
+// JSON 仍写平面 x/y/z 键：老档案可读、跨进程 wire 不变。
+struct PlayerRuntimeState {
+    float x = 0;
+    float y = 0;
+    float z = 0;
+};
+
+// 玩家数据（L92：长期字段与模拟位置/运行字段分型，位置入 runtime 子结构）
 struct PlayerData {
+    // —— 长期字段：档案持久化的玩法进度（写权在 Base 域）——
     PlayerID playerId;
     std::string username;
     int level = 1;
@@ -29,11 +39,11 @@ struct PlayerData {
     int maxHp = 100;
     int mp = 50;
     int maxMp = 50;
-    float x = 0;
-    float y = 0;
-    float z = 0;
     // 写端自持写入代次（随档案持久化，database 验单调拒旧写）；0 = 无版本
     std::uint64_t writeGen = 0;
+
+    // —— 模拟位置/运行字段：见 PlayerRuntimeState（L92 拆分）——
+    PlayerRuntimeState runtime;
 
     // 转换为 JSON
     std::string toJson() const;

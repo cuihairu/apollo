@@ -61,9 +61,9 @@ bool test_write_reload_roundtrip() {
     created.maxHp = 120;
     created.mp = 30;
     created.maxMp = 75;
-    created.x = 12.5f;
-    created.y = -3.25f;
-    created.z = 40.125f;
+    created.runtime.x = 12.5f;
+    created.runtime.y = -3.25f;
+    created.runtime.z = 40.125f;
     created.writeGen = 12;
 
     {
@@ -78,7 +78,8 @@ bool test_write_reload_roundtrip() {
     TEST_ASSERT(revived.loadPlayer(1001, loaded), "重启后读回");
     TEST_ASSERT(loaded.username == "alice" && loaded.level == 42, "字段一致");
     TEST_ASSERT(loaded.exp == 9876543210LL, "int64 exp 无截断");
-    TEST_ASSERT(loaded.x == 12.5f && loaded.y == -3.25f && loaded.z == 40.125f,
+    TEST_ASSERT(loaded.runtime.x == 12.5f && loaded.runtime.y == -3.25f &&
+                    loaded.runtime.z == 40.125f,
                 "位置浮点对称读回");
     TEST_ASSERT(loaded.writeGen == 12, "写入代次随档案对称读回");
 
@@ -111,9 +112,9 @@ bool test_json_symmetry() {
     in.maxHp = 2;
     in.mp = 3;
     in.maxMp = 4;
-    in.x = 0.5f;
-    in.y = 100.0f;
-    in.z = -7.75f;
+    in.runtime.x = 0.5f;
+    in.runtime.y = 100.0f;
+    in.runtime.z = -7.75f;
 
     const auto out = player_store::PlayerData::fromJson(in.toJson());
     TEST_ASSERT(out.playerId == 7, "playerId 对称");
@@ -122,7 +123,9 @@ bool test_json_symmetry() {
                     out.maxMp == 4,
                 "整数字段对称");
     TEST_ASSERT(out.exp == 1234567890123LL, "exp int64 对称");
-    TEST_ASSERT(out.x == 0.5f && out.y == 100.0f && out.z == -7.75f, "x/y/z 对称");
+    TEST_ASSERT(out.runtime.x == 0.5f && out.runtime.y == 100.0f &&
+                    out.runtime.z == -7.75f,
+                "x/y/z 对称");
     return true;
 }
 
@@ -136,13 +139,13 @@ bool test_archive_special_char_and_garbage_tolerance() {
     in.username = "a\"b,c\\d,\"exp\":9999,\"x\":\"e\",陈";
     in.level = 5;
     in.exp = 42;
-    in.x = 1.5f;
+    in.runtime.x = 1.5f;
 
     const auto out = player_store::PlayerData::fromJson(in.toJson());
     TEST_ASSERT(out.playerId == 77 && out.username == in.username,
                 "特殊字符用户名对称（转义后无损）");
     TEST_ASSERT(out.exp == 42, "含 exp 片段的用户名不污染 exp");
-    TEST_ASSERT(out.level == 5 && out.x == 1.5f, "其余字段不受污染");
+    TEST_ASSERT(out.level == 5 && out.runtime.x == 1.5f, "其余字段不受污染");
 
     // 垃圾档案：loadPlayer 如实失败（不再静默默认档）
     const auto dir = make_tmp_dir("garbage");
