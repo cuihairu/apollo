@@ -360,6 +360,22 @@ protocol::CellCreateEntity make_player_spawn(std::uint64_t player_id) {
     return msg;
 }
 
+// 落点显式的玩家实体（AOI 视野关系由进场位置决定：view_radius 默认 20）。
+protocol::CellCreateEntity make_player_spawn_at(std::uint64_t player_id,
+                                                float x, float y, float z) {
+    auto msg = make_player_spawn(player_id);
+    msg.position = {x, y, z};
+    return msg;
+}
+
+protocol::CellEntityMove make_move(std::uint64_t entity_id, float x, float y, float z) {
+    protocol::CellEntityMove msg;
+    msg.entityId = entity_id;
+    msg.oldPos = {0.0f, 0.0f, 0.0f};
+    msg.newPos = {x, y, z};
+    return msg;
+}
+
 // 收到的协议全帧（会话号 + 类型 + body），下行断言事实源。
 struct ProtocolFrame {
     std::uint64_t session_id;
@@ -377,6 +393,17 @@ bool wait_until(const std::function<bool()>& pred, int timeout_ms) {
         std::this_thread::sleep_for(kTick);
     }
     return pred();
+}
+
+// 等玩家实体出栏（spawn intent 在 tick 边界消费；resolveIntentPlayer 非零 =
+// 会话已绑玩家，场景 Avatar 已入 AOI）。
+bool wait_player_spawned(world_app::WorldApp& world, std::uint64_t session_id,
+                         std::uint64_t player_id, int timeout_ms) {
+    return wait_until(
+        [&world, session_id, player_id] {
+            return world.resolveIntentPlayer(session_id) == player_id;
+        },
+        timeout_ms);
 }
 
 // 从 TCP 客户端收帧直到命中目标类型/会话（其间帧记入 sink）；超时 false。
@@ -695,6 +722,216 @@ bool test_push_session_addressed() {
     return true;
 }
 
+// ---- 4. AOI 移动广播只达视野内会话（缆线可见：真客户端收帧） ----
+
+bool test_aoi_broadcast_to_viewers() {
+    std::cout << "Running: test_aoi_broadcast_to_viewers..." << std::endl;
+    WorldEnd world;
+    TEST_ASSERT(world.start(47), "world started with M1 port");
+    gateway::GatewayServer server(gateway_config(world.world->m1Link().listenPort(), 0));
+    server.start();
+
+    // mover 原点；near 视野内 (1,0,0)；far 视野外 (500,0,0)（world 默认
+    // 视野半径 200，SceneAoi 类默认 20 不适用）。
+    TcpTestClient mover;
+    std::uint64_t sid_mover = 0;
+    TEST_ASSERT(tcp_establish(mover, server, server.listenPort(), 9201, sid_mover),
+                "mover session established");
+    mover.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9201, 0.0f, 0.0f, 0.0f), sid_mover)));
+
+    TcpTestClient near_c;
+    std::uint64_t sid_near = 0;
+    TEST_ASSERT(tcp_establish(near_c, server, server.listenPort(), 9202, sid_near),
+                "near viewer session established");
+    near_c.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9202, 1.0f, 0.0f, 0.0f), sid_near)));
+
+    TcpTestClient far_c;
+    std::uint64_t sid_far = 0;
+    TEST_ASSERT(tcp_establish(far_c, server, server.listenPort(), 9203, sid_far),
+                "far client session established");
+    far_c.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9203, 500.0f, 0.0f, 0.0f), sid_far)));
+
+    // 三玩家全出栏再动——AOI 视野关系随 scene.enter 建立。
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_mover, 9201, 8000), "mover spawned");
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_near, 9202, 8000), "near viewer spawned");
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_far, 9203, 8000), "far client spawned");
+
+    // 清先导帧（spawn 无响应，但为 far 负例断言做隔离）。
+    {
+        std::vector<std::uint8_t> scratch;
+        while (mover.recvLinkFrame(scratch)) {}
+        while (near_c.recvLinkFrame(scratch)) {}
+        while (far_c.recvLinkFrame(scratch)) {}
+    }
+
+    // mover 移动：world 广播给视野内所有玩家（含自身）。
+    mover.sendAll(frame_bytes(3, 0,
+        protocol::MessageCodec::encode(make_move(9201, 3.0f, 0.0f, 0.0f), sid_mover)));
+
+    ProtocolFrame out_near;
+    std::vector<ProtocolFrame> sink_near;
+    TEST_ASSERT(wait_tcp_frame(near_c, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                               sid_near, out_near, sink_near, 8000),
+                "near viewer receives re-addressed move broadcast");
+    const auto move = protocol::MessageCodec::decodeBody<protocol::CellEntityMove>(out_near.body);
+    TEST_ASSERT(move.entityId == 9201 && move.newPos.x == 3.0f && move.newPos.y == 0.0f,
+                "move body intact for near viewer (entity + new position)");
+
+    // 己方回传（服务端权威：mover 知道自己动了）。
+    ProtocolFrame out_self;
+    std::vector<ProtocolFrame> sink_self;
+    TEST_ASSERT(wait_tcp_frame(mover, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                               sid_mover, out_self, sink_self, 8000),
+                "mover receives its own move echo");
+
+    // 视野外客户端不得收到任何移动广播。
+    ProtocolFrame out_far;
+    std::vector<ProtocolFrame> sink_far;
+    TEST_ASSERT(!wait_tcp_frame(far_c, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                                sid_far, out_far, sink_far, 1500),
+                "far client receives no move broadcast");
+    for (const auto& f : sink_far) {
+        TEST_ASSERT(f.type != static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                    "no move frame of any session reached far client");
+    }
+
+    server.stop();
+    world.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 5. WS 视野内客户端收到同一路移动广播（跨传输） ----
+
+bool test_aoi_broadcast_to_ws_viewer() {
+    std::cout << "Running: test_aoi_broadcast_to_ws_viewer..." << std::endl;
+    const auto ws_port = probe_free_port();
+    TEST_ASSERT(ws_port != 0, "free ws port probed");
+    WorldEnd world;
+    TEST_ASSERT(world.start(48), "world started with M1 port");
+    gateway::GatewayServer server(gateway_config(world.world->m1Link().listenPort(), ws_port));
+    server.start();
+    TEST_ASSERT(server.wsListenPort() != 0, "ws ingress listening");
+
+    TcpTestClient mover;
+    std::uint64_t sid_mover = 0;
+    TEST_ASSERT(tcp_establish(mover, server, server.listenPort(), 9211, sid_mover),
+                "tcp mover session established");
+    mover.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9211, 0.0f, 0.0f, 0.0f), sid_mover)));
+
+    WsTestClient viewer;
+    std::uint64_t sid_viewer = 0;
+    TEST_ASSERT(ws_establish(viewer, server, server.wsListenPort(), 9212, sid_viewer),
+                "ws viewer session established");
+    // WS 上行：link 帧包协议帧，客户端掩码。
+    const auto spawn = frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9212, 2.0f, 0.0f, 0.0f), sid_viewer));
+    std::vector<std::uint8_t> ws_spawn;
+    append_masked_frame(ws_spawn, ws::OpCode::kBinary, true, spawn.data(), spawn.size(), 0x77);
+    viewer.sendAll(ws_spawn);
+
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_mover, 9211, 8000), "mover spawned");
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_viewer, 9212, 8000), "ws viewer spawned");
+
+    {
+        std::vector<std::uint8_t> scratch;
+        while (mover.recvLinkFrame(scratch)) {}
+        for (int i = 0; i < 8; ++i) {
+            std::uint8_t op = 0;
+            std::vector<std::uint8_t> p;
+            if (!viewer.recvWsFrame(op, p)) {
+                break;
+            }
+        }
+    }
+
+    mover.sendAll(frame_bytes(3, 0,
+        protocol::MessageCodec::encode(make_move(9211, 5.0f, 0.0f, 0.0f), sid_mover)));
+
+    ProtocolFrame out;
+    std::vector<ProtocolFrame> sink;
+    TEST_ASSERT(wait_ws_frame(viewer, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                              sid_viewer, out, sink, 8000),
+                "ws viewer receives re-addressed move broadcast");
+    const auto move = protocol::MessageCodec::decodeBody<protocol::CellEntityMove>(out.body);
+    TEST_ASSERT(move.entityId == 9211 && move.newPos.x == 5.0f,
+                "move body intact for ws viewer");
+
+    server.stop();
+    world.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 6. 技能伤害广播：零会话号帧头按 viewer 重编（战斗下发面） ----
+
+bool test_skill_damage_broadcast() {
+    std::cout << "Running: test_skill_damage_broadcast..." << std::endl;
+    WorldEnd world;
+    TEST_ASSERT(world.start(49), "world started with M1 port");
+    gateway::GatewayServer server(gateway_config(world.world->m1Link().listenPort(), 0));
+    server.start();
+
+    // caster 与 target 都在视野内（半径 200）；CombatDamage 帧头会话号为 0，
+    // 下行必须按各 viewer 会话号重编才可寻址。
+    TcpTestClient caster;
+    std::uint64_t sid_caster = 0;
+    TEST_ASSERT(tcp_establish(caster, server, server.listenPort(), 9301, sid_caster),
+                "caster session established");
+    caster.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9301, 0.0f, 0.0f, 0.0f), sid_caster)));
+
+    TcpTestClient target;
+    std::uint64_t sid_target = 0;
+    TEST_ASSERT(tcp_establish(target, server, server.listenPort(), 9302, sid_target),
+                "target session established");
+    target.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9302, 1.0f, 0.0f, 0.0f), sid_target)));
+
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_caster, 9301, 8000), "caster spawned");
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_target, 9302, 8000), "target spawned");
+    {
+        std::vector<std::uint8_t> scratch;
+        while (caster.recvLinkFrame(scratch)) {}
+        while (target.recvLinkFrame(scratch)) {}
+    }
+
+    // 施放：COMBAT_SKILL_CAST → world 广播 COMBAT_DAMAGE 给目标视野内全员。
+    protocol::CombatSkillCast cast;
+    cast.casterId = 9301;
+    cast.targetId = 9302;
+    cast.skillId = 7;
+    cast.casterPos = {0.0f, 0.0f, 0.0f};
+    cast.targetPos = {1.0f, 0.0f, 0.0f};
+    caster.sendAll(frame_bytes(3, 0, protocol::MessageCodec::encode(cast, sid_caster)));
+
+    // 目标收到伤害帧（帧头会话号 = 本会话，body 完整）。
+    ProtocolFrame out_target;
+    std::vector<ProtocolFrame> sink_target;
+    TEST_ASSERT(wait_tcp_frame(target, static_cast<std::uint16_t>(protocol::MessageType::COMBAT_DAMAGE),
+                               sid_target, out_target, sink_target, 8000),
+                "target receives re-addressed damage broadcast");
+    const auto damage = protocol::MessageCodec::decodeBody<protocol::CombatDamage>(out_target.body);
+    TEST_ASSERT(damage.targetId == 9302 && damage.sourceId == 9301 && damage.damage == -10,
+                "damage body intact for target");
+
+    // 施法者同在目标视野，也收同一路广播（自己的会话号寻址）。
+    ProtocolFrame out_caster;
+    std::vector<ProtocolFrame> sink_caster;
+    TEST_ASSERT(wait_tcp_frame(caster, static_cast<std::uint16_t>(protocol::MessageType::COMBAT_DAMAGE),
+                               sid_caster, out_caster, sink_caster, 8000),
+                "caster receives the same broadcast addressed to its own session");
+
+    server.stop();
+    world.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -708,6 +945,9 @@ int main() {
         {"tcp_push_downlink", test_tcp_push_downlink},
         {"ws_push_downlink", test_ws_push_downlink},
         {"push_session_addressed", test_push_session_addressed},
+        {"aoi_broadcast_to_viewers", test_aoi_broadcast_to_viewers},
+        {"aoi_broadcast_to_ws_viewer", test_aoi_broadcast_to_ws_viewer},
+        {"skill_damage_broadcast", test_skill_damage_broadcast},
     };
 
     int failed = 0;

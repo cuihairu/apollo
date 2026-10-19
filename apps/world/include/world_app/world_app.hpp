@@ -165,11 +165,15 @@ private:
     std::chrono::milliseconds tickInterval() const;
 
     // 广播消息给视野内玩家（P1-3：viewer set 驱动——接收集合来自实体所在
-    // Scene 的 SceneAoi；网关下发面随 P3-2）
+    // Scene 的 SceneAoi；下发面：每 viewer 按其会话号重编帧头后走 939 下行）
     void broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message);
 
     // 实体号 → 所在 Scene（Avatar 挂 scene 归属反查；无归属返回 nullptr）
     apollo::game::world::Scene* find_scene_by_entity(EntityID entity_id);
+    // 实体号 → 世界会话号（Scene 的 Avatar 容器反查玩家 + find_by_player；
+    // 非玩家实体 / 无会话返回 0）
+    std::uint64_t session_of_entity(EntityID entity_id,
+                                    apollo::game::world::Scene* scene) const;
     // space → scene 路由解析（P2-1b 实体创建共用；未知空间落默认 scene）
     std::uint64_t resolve_scene_id(std::uint64_t space_id) const;
 

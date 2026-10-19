@@ -1362,19 +1362,59 @@ void WorldApp::record_metrics(std::int64_t elapsed_ms) {
 void WorldApp::broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message) {
     // P1-3：viewer set 驱动（旧 aoiManager_->getViewers 九宫格查询退役）——
     // 接收集合 = 实体所在 Scene 的 SceneAoi 视野查询（AOI 归 scene、scene_id
-    // 隔离）；网关下发面随 P3-2（当前阶段下发 = 可观察日志）
-    (void)message;
+    // 隔离）。下发面：每 viewer 按其会话号重编帧头（body 原样）走 939
+    // client_deliver 网关下行；无会话 viewer（NPC 等非玩家实体）自然落过。
     apollo::game::world::Scene* scene = find_scene_by_entity(entity_id);
     if (scene == nullptr) {
         return;
     }
+    if (message.size() < sizeof(protocol::MessageHeader)) {
+        return;  // 残帧不广播
+    }
+    const auto header = protocol::MessageCodec::parseHeader(message);
+    const std::vector<uint8_t> body(message.begin() + sizeof(protocol::MessageHeader),
+                                    message.end());
     const auto viewers = scene->aoi().viewers_of(apollo::game::core::EntityId(entity_id));
-    if (!viewers.empty()) {
+    std::size_t delivered = 0;
+    for (const auto& viewer : viewers) {
+        const auto viewer_session = session_of_entity(viewer.value(), scene);
+        if (viewer_session == 0) {
+            continue;
+        }
+        protocol::MessageHeader routed = header;
+        routed.sessionId = viewer_session;
+        auto frame = protocol::MessageCodec::encodeHeader(routed);
+        frame.insert(frame.end(), body.begin(), body.end());
+        deliverToClient(viewer_session, frame);
+        ++delivered;
+    }
+    if (delivered != 0) {
         worldLog().info("broadcast: entity=" + std::to_string(entity_id) + " scene="
                     + std::to_string(scene->scene_id()) + " viewers="
-                    + std::to_string(viewers.size()) + " bytes="
+                    + std::to_string(viewers.size()) + " delivered="
+                    + std::to_string(delivered) + " bytes="
                     + std::to_string(message.size()));
     }
+}
+
+std::uint64_t WorldApp::session_of_entity(EntityID entity_id,
+                                          apollo::game::world::Scene* scene) const {
+    if (scene == nullptr) {
+        return 0;
+    }
+    const auto entity = apollo::game::core::EntityId(entity_id);
+    for (const auto& player_id : scene->avatars()) {
+        const auto avatar = scene->get_avatar(player_id);
+        if (avatar && avatar->entity_id() == entity) {
+            if (worldSessionManager_) {
+                if (const auto session = worldSessionManager_->find_by_player(player_id)) {
+                    return session->session_id();
+                }
+            }
+            return 0;
+        }
+    }
+    return 0;
 }
 
 std::uint64_t WorldApp::resolve_scene_id(std::uint64_t space_id) const {
