@@ -1166,6 +1166,57 @@ endif()
 add_test(NAME GatewayWsIngressTests COMMAND gateway_ws_ingress_tests)
 endif()
 
+# ========== Gateway 会话连续测试 (L53 断线重连：保留窗内跨连接/跨传输恢复) ==========
+# TCP 与 WS 分别验收（TCP 掉线 → WS 恢复 / WS 掉线 → TCP 恢复双向），恢复
+# 判据走线缆可见面（PONG 回执头 sessionId 同号）。Windows 下 link TCP/TLS
+# 底座不进 M1 批，用例本体空转。
+if(TARGET apollo_protocol)
+add_executable(gateway_session_resume_tests
+    test_gateway_session_resume.cpp
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+)
+target_include_directories(gateway_session_resume_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+)
+target_compile_definitions(gateway_session_resume_tests PRIVATE
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(gateway_session_resume_tests PRIVATE
+    apollo
+    apollo::base
+    apollo::core
+    apollo::runtime
+    apollo::net_tcp
+    apollo::net_protocol
+    apollo::net_link
+    apollo_net_tls
+    apollo_net_ws
+    apollo::net_contract_wire
+    apollo::net_linktrace
+    apollo_net_linkrpc
+    apollo_protocol
+)
+if(WIN32)
+    target_link_libraries(gateway_session_resume_tests PRIVATE ws2_32)
+    target_compile_definitions(gateway_session_resume_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(gateway_session_resume_tests PRIVATE /utf-8)
+endif()
+add_test(NAME GatewaySessionResumeTests COMMAND gateway_session_resume_tests)
+endif()
+
 # ========== Interfaces HTTP/HTTPS 入口真接线测试 (L45 批④) ==========
 # 平台/渠道回调入口（localhost 实 socket）：HTTP 路由 + 专用 ws 升级路由
 # 路由隔离（升级路由不降级、http 路由不受理升级）+ 预算面（8KiB 头 →

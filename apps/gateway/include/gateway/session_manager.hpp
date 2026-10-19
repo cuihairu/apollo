@@ -47,6 +47,11 @@ struct ClientConnection {
     SessionState state;
     int64_t lastHeartbeatMs;
 
+    // 会话连续（L53 断线重连）：掉线保留态的起始钟（steady 毫秒；0 = 在
+    // 线）。DISCONNECTED 态按保留窗（checkRetentions）裁决，不吃心跳
+    // 超时（checkTimeouts 跳过）。
+    int64_t disconnectedAtMs{0};
+
     RouteSnapshot routeSnapshot;
 };
 
@@ -83,14 +88,29 @@ public:
         const RouteSnapshot& routeSnapshot
     );
 
+    // 会话连续（L53 断线重连）：连接掉线转保留态——状态 DISCONNECTED、
+    // 记录保留窗起始钟、解绑连接（无活传输可投）。false = 未保留
+    // （会话不存在/未绑玩家/已在保留态）→ 调用方走即时销毁。
+    bool markDisconnected(SessionID sessionId);
+
+    // 窗内恢复：重绑新连接、状态回原玩法态（路由已指派 = IN_GAME，否则
+    // AUTHENTICATED）、心跳复位。false = 非保留态/窗已过/会话不存在。
+    bool resumeSession(SessionID sessionId, ConnectionID connectionId,
+                       std::int64_t retentionMs);
+
     // 获取所有会话
     std::vector<std::shared_ptr<ClientConnection>> getAllSessions();
 
     // 获取会话数量
     size_t getSessionCount() const;
 
-    // 检查超时会话
+    // 检查超时会话（在线会话心跳超时裁决；DISCONNECTED 保留态不在此列——
+    // 由 checkRetentions 按保留窗单独裁决）
     std::vector<SessionID> checkTimeouts(int timeoutMs);
+
+    // 保留窗到期会话集（DISCONNECTED 且掉线时长超窗；调用方销毁并下发
+    // 延迟断线通知）。retentionMs ≤ 0 = 无窗（返回空）。
+    std::vector<SessionID> checkRetentions(std::int64_t retentionMs);
 
     // 是否存在会话
     bool hasSession(SessionID sessionId) const;

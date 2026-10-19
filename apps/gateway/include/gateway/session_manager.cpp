@@ -152,6 +152,9 @@ std::vector<SessionID> SessionManager::checkTimeouts(int timeoutMs) {
     int64_t now = getCurrentTimeMs();
 
     for (auto& pair : sessions_) {
+        if (pair.second->state == SessionState::DISCONNECTED) {
+            continue;  // 保留态不吃心跳超时（checkRetentions 单独裁决）
+        }
         int64_t elapsed = now - pair.second->lastHeartbeatMs;
         if (elapsed > timeoutMs) {
             timeoutSessions.push_back(pair.first);
@@ -159,6 +162,58 @@ std::vector<SessionID> SessionManager::checkTimeouts(int timeoutMs) {
     }
 
     return timeoutSessions;
+}
+
+bool SessionManager::markDisconnected(SessionID sessionId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = sessions_.find(sessionId);
+    if (it == sessions_.end() || it->second->playerId == 0 ||
+        it->second->state == SessionState::DISCONNECTED) {
+        return false;  // 不存在/未认证/已在保留态：无可保留
+    }
+    it->second->state = SessionState::DISCONNECTED;
+    it->second->disconnectedAtMs = getCurrentTimeMs();
+    it->second->connectionId = 0;  // 无活传输可投（sendToClient 落地丢弃）
+    return true;
+}
+
+bool SessionManager::resumeSession(SessionID sessionId, ConnectionID connectionId,
+                                   std::int64_t retentionMs) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = sessions_.find(sessionId);
+    if (it == sessions_.end() || it->second->state != SessionState::DISCONNECTED) {
+        return false;  // 不存在/非保留态（已恢复或已销毁）
+    }
+    if (retentionMs <= 0 || getCurrentTimeMs() - it->second->disconnectedAtMs > retentionMs) {
+        return false;  // 窗已过（到期销毁竞态下也守门）
+    }
+    it->second->connectionId = connectionId;
+    it->second->state = it->second->routeSnapshot.isAssigned() ? SessionState::IN_GAME
+                                                               : SessionState::AUTHENTICATED;
+    it->second->disconnectedAtMs = 0;
+    it->second->lastHeartbeatMs = getCurrentTimeMs();
+    return true;
+}
+
+std::vector<SessionID> SessionManager::checkRetentions(std::int64_t retentionMs) {
+    std::vector<SessionID> expired;
+
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (retentionMs <= 0) {
+        return expired;
+    }
+    const int64_t now = getCurrentTimeMs();
+    for (auto& pair : sessions_) {
+        if (pair.second->state == SessionState::DISCONNECTED &&
+            now - pair.second->disconnectedAtMs > retentionMs) {
+            expired.push_back(pair.first);
+        }
+    }
+
+    return expired;
 }
 
 bool SessionManager::hasSession(SessionID sessionId) const {

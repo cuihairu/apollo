@@ -393,10 +393,53 @@ void GatewayServer::onPacketReceived(ConnectionID connectionId, std::span<const 
         return;
     }
 
+    auto sessionId = connection->sessionId;
+    if (payload.size() >= sizeof(apollo::protocol::MessageHeader)) {
+        // 会话连续（L53）：上行帧头携异地会话号 = 重连恢复尝试（客户端记
+        // 住旧会话号，新连接首包带上）。信封残缺/魔数不符 = 按无恢复尝试
+        // 处理（分发器另行按 Invalid 落地），入口不因畸形头抛穿。
+        try {
+            const auto header = apollo::protocol::MessageCodec::parseHeader(payload.data(), payload.size());
+            if (header.sessionId != 0 && header.sessionId != sessionId) {
+                tryResumeSession(sessionId, header.sessionId, connectionId);
+                const auto rebound = connectionRegistry_->getConnection(connectionId);
+                if (rebound) {
+                    sessionId = rebound->sessionId;
+                }
+            }
+        } catch (const std::exception&) {
+            // 畸形信封：不进恢复逻辑
+        }
+    }
+
     handleClientMessage(
-        connection->sessionId,
+        sessionId,
         std::vector<std::uint8_t>(payload.begin(), payload.end())
     );
+}
+
+void GatewayServer::tryResumeSession(SessionID freshSessionId, SessionID retainedSessionId,
+                                     ConnectionID connectionId) {
+    const auto fresh = sessionManager_->getSession(freshSessionId);
+    if (!fresh || fresh->playerId != 0 || freshSessionId == retainedSessionId) {
+        return;  // 本连接已认证（防抢线）或同号回显：非恢复语义
+    }
+
+    if (!sessionManager_->resumeSession(retainedSessionId, connectionId,
+                                        config_.sessionRetentionMs)) {
+        glog().info("Gateway session resume rejected for session "
+                    + std::to_string(retainedSessionId) +
+                    " (not retained, window expired, or already resumed)");
+        return;  // 落回 fresh 会话 = 完整重登路径
+    }
+
+    sessionManager_->removeSession(freshSessionId);
+    connectionRegistry_->attachSession(connectionId, retainedSessionId);
+
+    const auto resumed = sessionManager_->getSession(retainedSessionId);
+    glog().info("Gateway resumed session " + std::to_string(retainedSessionId) +
+                " for player " + std::to_string(resumed ? resumed->playerId : 0) +
+                " on new connection " + std::to_string(connectionId));
 }
 
 void GatewayServer::onConnectionClosed(ConnectionID connectionId, DisconnectReason reason) {
@@ -429,6 +472,13 @@ void GatewayServer::heartbeatCheckLoop() {
             glog().info("Session " + std::to_string(sessionId)
                         + " timeout, disconnecting...");
             onClientDisconnect(sessionId, false);
+        }
+
+        // 会话连续（L53）：保留窗到期销毁——延迟的断线通知此时才下发后端。
+        for (auto sessionId : sessionManager_->checkRetentions(config_.sessionRetentionMs)) {
+            glog().info("Session " + std::to_string(sessionId)
+                        + " reconnect window expired, disconnecting...");
+            destroySessionAndNotify(sessionId, false);
         }
     }
 }
@@ -583,6 +633,10 @@ std::size_t GatewayServer::getRegisteredConnectionCount() const {
     return connectionRegistry_ ? connectionRegistry_->getConnectionCount() : 0;
 }
 
+std::size_t GatewayServer::getSessionCount() const {
+    return sessionManager_ ? sessionManager_->getSessionCount() : 0;
+}
+
 // 实际监听端口（port 0 = 内核分配，测试与编排面经此读回）。
 std::uint16_t GatewayServer::listenPort() const {
     return ingressServer_ ? ingressServer_->listenPort() : 0;
@@ -612,6 +666,36 @@ std::uint16_t GatewayServer::wssListenPort() const {
 }
 
 void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {
+    auto session = sessionManager_->getSession(sessionId);
+    if (!session) return;
+
+    // 会话连续（L53 断线重连）：已认证会话掉线进保留窗——连接拆掉、会话
+    // 留存（playerId/路由快照/会话号原样），后端断线通知延到窗到期才下发
+    // （窗内恢复即无通知；Zone 侧 907/908 resume 握手随 world 链路批接线，
+    // 本批为 gateway 本地面）。未认证会话无可保留（重连即全新会话），
+    // retention=0 关窗回旧语义（掉线即销毁）。
+    if (config_.sessionRetentionMs > 0) {
+        const auto connectionId = session->connectionId;  // 先取：mark 后置 0
+        if (sessionManager_->markDisconnected(sessionId)) {
+            glog().info("Session " + std::to_string(sessionId)
+                        + " disconnected, retained for reconnect window");
+            if (connectionId != 0) {
+                if (ingressServer_) {
+                    ingressServer_->close(connectionId,
+                                          normalClose ? DisconnectReason::NormalClose
+                                                      : DisconnectReason::IdleTimeout);
+                }
+                connectionRegistry_->markClosed(connectionId);
+                connectionRegistry_->removeConnection(connectionId);
+            }
+            return;
+        }
+    }
+
+    destroySessionAndNotify(sessionId, normalClose);
+}
+
+void GatewayServer::destroySessionAndNotify(SessionID sessionId, bool normalClose) {
     auto session = sessionManager_->getSession(sessionId);
     if (!session) return;
 

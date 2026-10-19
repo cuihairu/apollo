@@ -79,6 +79,8 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.directoryM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--control-m1-port" && i + 1 < argc) {
             config.controlM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--session-retention-ms" && i + 1 < argc) {
+            config.sessionRetentionMs = std::strtoll(argv[++i], nullptr, 10);
         } else if (arg == "--ws-port" && i + 1 < argc) {
             config.wsPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--wss-port" && i + 1 < argc) {
@@ -109,6 +111,7 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --directory-m1-host <host>   OnlineDirectory M1 control host (default: 127.0.0.1)\n"
                       << "  --directory-m1-port <port>   OnlineDirectory M1 control port (0 = stub transport, default: 0)\n"
                       << "  --control-m1-port <port>   Drain control face port (0 = kernel-assigned, default: 9106)\n"
+                      << "  --session-retention-ms <ms> Session reconnect window after drop (0 = off, default: 30000)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }

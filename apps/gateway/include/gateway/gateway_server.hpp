@@ -114,6 +114,10 @@ public:
     std::optional<ClientEndpoint> findClientEndpoint(SessionID sessionId) const;
     std::size_t getRegisteredConnectionCount() const;
 
+    // 会话数观测面（含 DISCONNECTED 保留态会话——掉线保留窗验收判据：
+    // 连接清零后会话仍在册 = 已保留）。
+    std::size_t getSessionCount() const;
+
 private:
     void onConnectionOpened(ConnectionID connectionId, const ClientEndpoint& endpoint) override;
     void onPacketReceived(ConnectionID connectionId, std::span<const std::uint8_t> payload) override;
@@ -126,6 +130,12 @@ private:
     // 处理客户端消息
     void handleClientMessage(SessionID sessionId, const std::vector<uint8_t>& message);
 
+    // 会话连续（L53 断线重连）：上行帧头携异地会话号 = 重连恢复尝试。仅
+    // 本连接 fresh 会话未认证时受理（已认证连接不换会话——防抢线）；恢复
+    // 失败（号死/窗过/非保留态）静默落回 fresh 会话 = 完整重登路径。
+    void tryResumeSession(SessionID freshSessionId, SessionID retainedSessionId,
+                          ConnectionID connectionId);
+
     // 心跳检查线程
     void heartbeatCheckLoop();
 
@@ -134,8 +144,12 @@ private:
     // 增量推进（counter_advance_to）
     void recordMetrics();
 
-    // 处理客户端断开
+    // 处理客户端断开（会话连续：先判保留窗，窗内留存则不进本路径）
     void onClientDisconnect(SessionID sessionId, bool normalClose);
+
+    // 会话销毁收口（延迟断线通知后端 + 拆连接账本 + 移除会话）——保留窗
+    // 到期与不保留两条路径的公共终态。
+    void destroySessionAndNotify(SessionID sessionId, bool normalClose);
 
     // 排空推进（泵拍）：连接清零落 drained；期限到强停收线（全量 close 经
     // 投递队列落 socket，在途客户端工作丢弃——结果显形在日志与 status）。

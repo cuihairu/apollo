@@ -53,6 +53,11 @@ struct GatewayConfig {
     // 会话配置
     int sessionTimeoutMs = 30000;       // 30秒无心跳断开
 
+    // 会话连续保留窗（L53 断线重连）：已认证会话掉线后保留的毫秒数，窗内
+    // 重连（可跨 TCP/WS 传输）携旧会话号上行即恢复同一会话；窗到期才销毁
+    // 会话并下发延迟的断线通知。0 = 关窗（旧语义：掉线即销毁）。
+    std::int64_t sessionRetentionMs = 30000;
+
     // 性能配置
     int maxConnections = 10000;
 
