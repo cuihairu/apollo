@@ -82,6 +82,32 @@ void SessionManager::updateHeartbeat(SessionID sessionId) {
     }
 }
 
+bool SessionManager::acceptUplinkSequence(SessionID sessionId, uint64_t sequence) {
+    // 重复/乱序规则（L51）：按会话记水位。0 = 无序语义占位头（直通不推
+    // 水位——占位帧不参与去重）；≤ 水位 = 重放/重复拒收；> 水位 = 受理并
+    // 推进（gap = 流传输丢帧空洞，容忍不停链）。
+    if (sequence == 0) {
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = sessions_.find(sessionId);
+    if (it == sessions_.end()) {
+        return true;  // 未知会话：分发层自会拒（此处不越权吞帧）
+    }
+    auto& session = *it->second;
+    if (sequence <= session.uplinkSeqWatermark) {
+        ++duplicateUplinkFrames_;
+        return false;  // 重放/重复：拒收
+    }
+    session.uplinkSeqWatermark = sequence;
+    return true;
+}
+
+uint64_t SessionManager::duplicateUplinkFrames() const {
+    return duplicateUplinkFrames_.load();
+}
+
 void SessionManager::assignRoute(SessionID sessionId, const RouteSnapshot& routeSnapshot) {
     std::lock_guard<std::mutex> lock(mutex_);
 

@@ -53,6 +53,38 @@ bool test_gateway_route_snapshot_lifecycle() {
     return true;
 }
 
+bool test_gateway_uplink_sequence_gate() {
+    std::cout << "Running: test_gateway_uplink_sequence_gate..." << std::endl;
+
+    gateway::SessionManager manager;
+    const auto sessionId = manager.createSession("127.0.0.1", 5000);
+    manager.bindPlayer(sessionId, 1001);
+
+    TEST_ASSERT(manager.duplicateUplinkFrames() == 0, "no duplicates yet");
+
+    // 零序 = 无序占位直通：受理且不推水位、不计数。
+    TEST_ASSERT(manager.acceptUplinkSequence(sessionId, 0), "zero-sequence passes");
+    TEST_ASSERT(manager.duplicateUplinkFrames() == 0, "zero-sequence not counted");
+
+    // 正常前进受理；同序/旧序重放拒收并计数；跳空视为流丢帧空洞容忍。
+    TEST_ASSERT(manager.acceptUplinkSequence(sessionId, 10), "first forward accepted");
+    TEST_ASSERT(!manager.acceptUplinkSequence(sessionId, 10), "same sequence gated");
+    TEST_ASSERT(manager.acceptUplinkSequence(sessionId, 11), "next sequence accepted");
+    TEST_ASSERT(manager.acceptUplinkSequence(sessionId, 20), "forward gap tolerated");
+    TEST_ASSERT(!manager.acceptUplinkSequence(sessionId, 15), "stale sequence gated");
+    TEST_ASSERT(manager.duplicateUplinkFrames() == 2, "both duplicates counted");
+
+    // 零序在水位已推进后仍直通：占位帧不参与去重。
+    TEST_ASSERT(manager.acceptUplinkSequence(sessionId, 0), "zero-sequence still passes");
+    TEST_ASSERT(manager.duplicateUplinkFrames() == 2, "zero-sequence never counted");
+
+    // 未知会话：不越权吞帧（分发层自会拒）。
+    TEST_ASSERT(manager.acceptUplinkSequence(9999, 10), "unknown session not gated here");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_gateway_authenticate_session() {
     std::cout << "Running: test_gateway_authenticate_session..." << std::endl;
 
@@ -199,6 +231,7 @@ int main() {
     };
 
     run(test_gateway_route_snapshot_lifecycle);
+    run(test_gateway_uplink_sequence_gate);
     run(test_gateway_authenticate_session);
     run(test_gateway_connection_registry_bind_and_remove);
     run(test_client_packet_dispatcher_routes_message_kinds);

@@ -52,6 +52,11 @@ struct ClientConnection {
     // 超时（checkTimeouts 跳过）。
     int64_t disconnectedAtMs{0};
 
+    // 上行重复/乱序规则（L51）：本会话已受理的最高帧序号水位（0 = 尚未
+    // 见序）。只经 acceptUplinkSequence 在管理器锁内推进；随保留窗存活
+    // ——重连后旧序重放同闸拦截。
+    uint64_t uplinkSeqWatermark{0};
+
     RouteSnapshot routeSnapshot;
 };
 
@@ -79,6 +84,15 @@ public:
 
     // 更新心跳
     void updateHeartbeat(SessionID sessionId);
+
+    // 上行重复/乱序规则（L51）：帧序号闸——sequence 0 = 无序语义（占位头）
+    // 直通不推水位；sequence ≤ 水位 = 重放/重复拒收（计数 +1，返回 false）；
+    // sequence > 水位 = 受理并推水位（gap 按流传输语义视为丢帧空洞容忍）。
+    // 水位随会话保留窗存活——重连后旧序重放同闸拦截。
+    bool acceptUplinkSequence(SessionID sessionId, uint64_t sequence);
+
+    // 上行重复拒收累计（观测/测试面；管理器存续期恒稳定）。
+    uint64_t duplicateUplinkFrames() const;
 
     void assignRoute(SessionID sessionId, const RouteSnapshot& routeSnapshot);
     void clearRoute(SessionID sessionId);
@@ -121,6 +135,7 @@ private:
     mutable std::mutex mutex_;
     std::unordered_map<SessionID, std::shared_ptr<ClientConnection>> sessions_;
     std::atomic<uint64_t> nextSessionId_{1};
+    std::atomic<uint64_t> duplicateUplinkFrames_{0};
 };
 
 } // namespace gateway

@@ -416,12 +416,15 @@ void GatewayServer::onPacketReceived(ConnectionID connectionId, std::span<const 
     }
 
     auto sessionId = connection->sessionId;
+    bool haveHeader = false;
+    apollo::protocol::MessageHeader header{};
     if (payload.size() >= sizeof(apollo::protocol::MessageHeader)) {
         // 会话连续（L53）：上行帧头携异地会话号 = 重连恢复尝试（客户端记
         // 住旧会话号，新连接首包带上）。信封残缺/魔数不符 = 按无恢复尝试
         // 处理（分发器另行按 Invalid 落地），入口不因畸形头抛穿。
         try {
-            const auto header = apollo::protocol::MessageCodec::parseHeader(payload.data(), payload.size());
+            header = apollo::protocol::MessageCodec::parseHeader(payload.data(), payload.size());
+            haveHeader = true;
             if (header.sessionId != 0 && header.sessionId != sessionId) {
                 tryResumeSession(sessionId, header.sessionId, connectionId);
                 const auto rebound = connectionRegistry_->getConnection(connectionId);
@@ -430,8 +433,16 @@ void GatewayServer::onPacketReceived(ConnectionID connectionId, std::span<const 
                 }
             }
         } catch (const std::exception&) {
-            // 畸形信封：不进恢复逻辑
+            // 畸形信封：不进恢复逻辑与序号闸（分发器另行按 Invalid 落地）
         }
+    }
+
+    // 上行重复/乱序规则（L51）：恢复解析后按最终会话过序号闸——重放/重复
+    // 帧（≤ 水位）不再分发到业务（计数在 SessionManager）；乱序空档按流
+    // 传输语义容忍。恢复重绑发生在闸前，故旧会话号的旧序重放落回原会话
+    // 水位上判定。
+    if (haveHeader && !sessionManager_->acceptUplinkSequence(sessionId, header.sequence)) {
+        return;
     }
 
     handleClientMessage(

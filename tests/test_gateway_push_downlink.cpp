@@ -12,7 +12,8 @@
 //   4. AOI 移动广播只达视野内会话（逐 viewer 重编帧头；视野外零帧）；
 //   5. 同一移动广播经 WS 视野内客户端复现（跨传输）；
 //   6. 技能伤害广播：零会话号帧头按 viewer 重编（战斗下发面）；
-//   7. 客户端消息 → Lua 契约路由消费 → world 模块挂推送源（脚本源帧回环）。
+//   7. 客户端消息 → Lua 契约路由消费 → world 模块挂推送源（脚本源帧回环）；
+//   8. 上行重复/乱序规则：重放/旧序帧闸外（负窗零帧）、跳空容忍、零序直通。
 // 下行证据走线缆可见面（客户端 socket 真收到协议全帧），非日志非计数。
 // Windows：link TCP/TLS 底座不进 M1 批，用例本体空转。
 
@@ -352,6 +353,17 @@ std::vector<std::uint8_t> ping_packet(std::uint64_t session_id) {
     protocol::Ping ping;
     ping.timestamp = 777;
     return protocol::MessageCodec::encode(ping, session_id);
+}
+
+// 控序协议帧：encode 产物改写协议头 sequence（重复/乱序闸面在协议头序号，
+// 链路层帧号不参与判定）。
+std::vector<std::uint8_t> with_sequence(const std::vector<std::uint8_t>& frame,
+                                        std::uint64_t sequence) {
+    auto header = protocol::MessageCodec::parseHeader(frame.data(), frame.size());
+    header.sequence = sequence;
+    auto out = protocol::MessageCodec::encodeHeader(header);
+    out.insert(out.end(), frame.begin() + sizeof(protocol::MessageHeader), frame.end());
+    return out;
 }
 
 protocol::MessageHeader header_of(const std::vector<std::uint8_t>& protocol_frame) {
@@ -1031,6 +1043,74 @@ bool test_lua_intent_push_loop() {
     return true;
 }
 
+// ---- 8. 重复/乱序规则：重放帧闸外、gap 容忍、零序直通（缆线可见负例）----
+// 闸在网关会话层按协议头 sequence 记水位：≤ 水位 = 重放/重复不分发，
+// > 水位（含跳空）= 受理，0 = 无序占位直通不推水位。以 mover 自 echo 的
+// AOI 移动广播为「已受理」证据面——重复帧不受理即零帧到达。
+bool test_uplink_duplicate_frames_gated() {
+    std::cout << "Running: test_uplink_duplicate_frames_gated..." << std::endl;
+
+    WorldEnd world;
+    TEST_ASSERT(world.start(52), "world started with M1 port");
+    gateway::GatewayServer server(gateway_config(world.world->m1Link().listenPort(), 0));
+    server.start();
+
+    TcpTestClient mover;
+    std::uint64_t sid = 0;
+    TEST_ASSERT(tcp_establish(mover, server, server.listenPort(), 9501, sid),
+                "mover session established");
+
+    // nextSequence 为进程全局自增（PING 已占号）——建会话后取新基，测序恒
+    // 大于 PING 建立的水位，判定不依赖计数器绝对值。
+    const auto base = protocol::MessageCodec::nextSequence();
+
+    const auto spawn = with_sequence(
+        protocol::MessageCodec::encode(make_player_spawn_at(9501, 0.0f, 0.0f, 0.0f), sid),
+        base + 1);
+    mover.sendAll(frame_bytes(2, 0, spawn));
+    TEST_ASSERT(wait_player_spawned(*world.world, sid, 9501, 8000),
+                "spawn accepted and bound (seq advances watermark)");
+
+    const auto move_a = with_sequence(
+        protocol::MessageCodec::encode(make_move(9501, 3.0f, 0.0f, 0.0f), sid), base + 2);
+    mover.sendAll(frame_bytes(3, 0, move_a));
+    ProtocolFrame out;
+    std::vector<ProtocolFrame> sink;
+    const auto move_type = static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE);
+    TEST_ASSERT(wait_tcp_frame(mover, move_type, sid, out, sink, 8000),
+                "move A broadcast to mover");
+
+    // 原帧重放（同序 base+2 ≤ 水位）：闸外——窗内零移动帧。
+    mover.sendAll(frame_bytes(3, 0, move_a));
+    TEST_ASSERT(!wait_tcp_frame(mover, move_type, sid, out, sink, 500),
+                "replayed frame gated out");
+
+    // 跳空前进（base+2 → base+7）：流传输丢帧空洞容忍，受理并广播。
+    const auto move_b = with_sequence(
+        protocol::MessageCodec::encode(make_move(9501, 4.0f, 0.0f, 0.0f), sid), base + 7);
+    mover.sendAll(frame_bytes(3, 0, move_b));
+    TEST_ASSERT(wait_tcp_frame(mover, move_type, sid, out, sink, 8000),
+                "forward gap tolerated");
+
+    // 旧序重放（base+2 < 水位 base+7）：同闸拦截。
+    mover.sendAll(frame_bytes(3, 0, move_a));
+    TEST_ASSERT(!wait_tcp_frame(mover, move_type, sid, out, sink, 500),
+                "stale replay gated out");
+
+    // 零序占位（无序语义）：两帧均直通受理——零序不推水位，不参与去重。
+    for (const auto step : {5.0f, 6.0f}) {
+        mover.sendAll(frame_bytes(3, 0,
+            with_sequence(protocol::MessageCodec::encode(make_move(9501, step, 0.0f, 0.0f), sid), 0)));
+        TEST_ASSERT(wait_tcp_frame(mover, move_type, sid, out, sink, 8000),
+                    "zero-sequence frame passes through");
+    }
+
+    server.stop();
+    world.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -1048,6 +1128,7 @@ int main() {
         {"aoi_broadcast_to_ws_viewer", test_aoi_broadcast_to_ws_viewer},
         {"skill_damage_broadcast", test_skill_damage_broadcast},
         {"lua_intent_push_loop", test_lua_intent_push_loop},
+        {"uplink_duplicate_frames_gated", test_uplink_duplicate_frames_gated},
     };
 
     int failed = 0;
