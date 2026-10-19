@@ -35,13 +35,14 @@ inline void print_usage(std::ostream& out) {
         << "CI belongs to the repository workflow, not to this tool.\n";
 }
 
-// 生成模板：五个目录占位 + templates.hpp 清单里的全部文件。
-// 成功 true；失败 false 且 err 已填原因。调用方保证 target 已通过校验。
+// 生成模板：五个目录占位（run/ 是逐角色运行根，L38）+ templates.hpp 清单
+// 里的全部文件。成功 true；失败 false 且 err 已填原因。调用方保证 target
+// 已通过校验。
 inline bool scaffold_project(const std::filesystem::path& target,
                              const std::string& project_name,
                              std::string& err) {
     std::error_code ec;
-    for (const char* dir : {"config", "scripts", "lua", "contract", "data"}) {
+    for (const char* dir : {"config", "scripts", "lua", "contract", "run"}) {
         std::filesystem::create_directories(target / dir, ec);
         if (ec) {
             err = "cannot create directory '" + (target / dir).string() +

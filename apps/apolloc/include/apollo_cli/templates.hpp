@@ -1,11 +1,14 @@
 #pragma once
 
-// apolloc init 模板内容源（P0.2 L37）：返回 相对路径 → 文件内容 的清单，
-// cli.hpp 负责校验与落盘。纯函数，无文件系统副作用，可直接断言。
+// apolloc init 模板内容源（P0.2 L37 模板 + L38 布局）：返回 相对路径 →
+// 文件内容 的清单，cli.hpp 负责校验与落盘。纯函数，无文件系统副作用，
+// 可直接断言。
 //
 // 纪律（与本层职责绑定，改动前先看注释）：
-//   1. 只生成真实可跑的参数：每个 flag 都对应服务二进制的现有解析项，
-//      不发明配置键，不生成服务不读的文件。
+//   1. 只生成真实可跑的参数：每个 flag 都对应服务二进制的现有解析项，不发明
+//      配置键，不生成服务不读的文件。注意 --crash-dump-dir 只有
+//      login/world/gateway 受理（database 与 base 的参数循环严格拒未知项，
+//      而它们的 init_crash_capture 在循环之后才跑），故那两个角色不传该 flag。
 //   2. 不生成认证材料：无 key/证书/验签实现占位；结算凭据目录不生成
 //      （world --settlement-credential-dir 保持关闭），支付验签留待项目
 //      接入真实凭据提供方后再写。
@@ -13,6 +16,9 @@
 //      readiness 与失败回滚）；脚本内无 sleep。
 //   4. 全部 LF 行尾（落盘走 binary 流，Windows 不翻译 CRLF）。
 //   5. 脚本用 sh 调用（README 明示），不落可执行位——跨平台一致。
+//   6. 路径统一（L38）：ROOT、RUN_DIR、逐角色日志/资料/管理记录目录与
+//      引擎二进制定位集中在 scripts/lib.sh，start/stop 只消费不各自解析；
+//      cell 运行按编号给独立目录，不共写。
 
 #include <map>
 #include <string>
@@ -28,13 +34,14 @@ inline std::string readme_template(const std::string& project_name) {
         "\n"
         "| Path | Content |\n"
         "|---|---|\n"
-        "| `config/runtime.conf` | Host, ports, ids and data paths, sourced by the fleet scripts |\n"
+        "| `config/runtime.conf` | Host, ports, ids, runtime root and build label |\n"
+        "| `scripts/lib.sh` | Project root and per-role runtime paths, sourced by the fleet scripts |\n"
         "| `scripts/start.sh` | Starts database, login, base, world, gateway in dependency order |\n"
-        "| `scripts/stop.sh` | Stops only the members this project started (`.run/*.pid`) |\n"
+        "| `scripts/stop.sh` | Stops only the members this project started (PID files in `run/`) |\n"
         "| `lua/boot.lua` | World Lua boot entry (`--script-boot`), placeholder |\n"
         "| `lua/contract_handlers.lua` | World contract handler module (`--script-handlers`), placeholder |\n"
         "| `contract/` | Contract source entry (`entities.xml`, `messages.xml`), authored per project |\n"
-        "| `data/` | Runtime data and journal (gitignored, not source) |\n"
+        "| `run/` | Per-role runtime root: `run/<role>/logs`, `data`, `admin` |\n"
         "\n"
         "## Prerequisites\n"
         "\n"
@@ -44,23 +51,41 @@ inline std::string readme_template(const std::string& project_name) {
         "export APOLLO_BIN_DIR=/path/to/apollo/build-examples/apps\n"
         "```\n"
         "\n"
-        "Then start and stop the single-node dev stack:\n"
+        "Then start and stop the single-node dev stack. The scripts resolve\n"
+        "the project root from their own location, so they work from any\n"
+        "working directory:\n"
         "\n"
         "```sh\n"
         "sh scripts/start.sh\n"
         "sh scripts/stop.sh\n"
         "```\n"
         "\n"
-        "`start.sh` records one PID file per member under `.run/` and does\n"
-        "not assert readiness; `stop.sh` kills only recorded PIDs and refuses\n"
-        "to touch processes this project did not start.\n"
+        "`start.sh` records one PID file per member under `run/<role>/` but\n"
+        "does not assert readiness - readiness is not asserted by this\n"
+        "template. `stop.sh` kills only recorded PIDs and refuses to touch\n"
+        "processes this project did not start.\n"
+        "\n"
+        "## Runtime paths\n"
+        "\n"
+        "Every member writes to its own `run/<role>/` directory: `logs/`\n"
+        "for output, `data/` for storage (database only), `admin/` for crash\n"
+        "records where the member accepts `--crash-dump-dir` (login, world,\n"
+        "gateway). Nothing is shared between roles.\n"
+        "Cell runs follow the same scheme with distinct directories\n"
+        "(`run/cell-1`, `run/cell-2`, ...) — two cells must never write to\n"
+        "the same directory.\n"
+        "\n"
+        "`config/runtime.conf` declares `BUILD_VERSION` (the engine build\n"
+        "label this project was validated against); `start.sh` records it to\n"
+        "`run/engine.version`. Set it to a release tag when the project pins\n"
+        "a specific engine build.\n"
         "\n"
         "## Status of this template\n"
         "\n"
-        "Config, Lua entries, contract entry, ignore rules and start/stop\n"
-        "scripts are delivered. Still pending and marked in the generated\n"
-        "files: real readiness plus failure rollback, contract XML source,\n"
-        "and per-role runtime directories per instance.\n"
+        "Config, Lua entries, contract entry, ignore rules, start/stop\n"
+        "scripts and the per-role runtime layout are delivered. Still\n"
+        "pending: real readiness plus failure rollback, a status command,\n"
+        "project CMake/CI, and contract XML source.\n"
         "\n"
         "machined and standalone interfaces are deployment options, not part\n"
         "of this default template; enable them when the deployment needs\n"
@@ -70,11 +95,20 @@ inline std::string readme_template(const std::string& project_name) {
 
 inline std::string runtime_conf_template() {
     return "# Single-node dev stack runtime config (generated by apolloc init).\n"
-        "# Sourced by scripts/start.sh and scripts/stop.sh. Ports match the\n"
-        "# service defaults of the engine binaries; adjust here, not in the\n"
-        "# scripts. No auth material belongs in this file.\n"
+        "# Sourced by scripts/lib.sh consumers (start.sh, stop.sh). Ports\n"
+        "# match the service defaults of the engine binaries; adjust ports\n"
+        "# here, not in the scripts. No auth material belongs in this file.\n"
         "\n"
         "HOST=127.0.0.1\n"
+        "\n"
+        "# Engine build label this project was validated against; start.sh\n"
+        "# records it to $RUN_DIR/engine.version. Use a release tag when the\n"
+        "# project pins a specific engine build.\n"
+        "BUILD_VERSION=local\n"
+        "\n"
+        "# Runtime root holding per-role logs, data and admin records.\n"
+        "# Empty means <project root>/run (see lib.sh).\n"
+        "# RUN_DIR=/absolute/runtime/root\n"
         "\n"
         "# database —— storage entry: M1 load/save plus file journal\n"
         "DATABASE_PORT=9200\n"
@@ -89,8 +123,9 @@ inline std::string runtime_conf_template() {
         "LOGIN_M1_PORT=9104\n"
         "DIRECTORY_PORT=9105\n"
         "\n"
-        "# world —— management role (default); cell execution role is a\n"
-        "# separate process when the management/execution split lands\n"
+        "# world —— management role (default); cell execution runs are\n"
+        "# separate processes with separate run/cell-<n> directories when\n"
+        "# the management/execution split lands\n"
         "WORLD_M1_PORT=9101\n"
         "WORLD_ID=1\n"
         "SPACE_NAME=main_world\n"
@@ -101,32 +136,46 @@ inline std::string runtime_conf_template() {
         "GATEWAY_PORT=8888\n";
 }
 
-inline std::string start_sh_template() {
+inline std::string lib_sh_template() {
     return "#!/bin/sh\n"
-        "# Single-node dev stack start (generated by apolloc init).\n"
-        "# Start order follows dependency: database, login, base, world,\n"
-        "# gateway. Each member gets one PID file under .run/ so stop.sh\n"
-        "# only ever touches members this project started.\n"
-        "# Readiness is NOT asserted here: no health probe, no wait loops.\n"
-        "\n"
-        "set -eu\n"
+        "# Project layout shared by every fleet script (generated by\n"
+        "# apolloc init). Source this file, do not execute it; keep it in\n"
+        "# <root>/scripts/ so the root resolution below stays valid.\n"
         "\n"
         "ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n"
-        "cd \"$ROOT\"\n"
         "\n"
-        "if [ -z \"${APOLLO_BIN_DIR:-}\" ]; then\n"
-        "    echo \"APOLLO_BIN_DIR is not set (engine apps binary dir)\" >&2\n"
-        "    exit 1\n"
-        "fi\n"
-        "if [ ! -d \"$APOLLO_BIN_DIR\" ]; then\n"
-        "    echo \"APOLLO_BIN_DIR does not exist: $APOLLO_BIN_DIR\" >&2\n"
-        "    exit 1\n"
-        "fi\n"
+        "# Per-role runtime root: RUN_DIR/<role>/{logs,data,admin} keeps\n"
+        "# every member's output, storage and admin records apart.\n"
+        ": \"${RUN_DIR:=$ROOT/run}\"\n"
         "\n"
-        ". \"$ROOT/config/runtime.conf\"\n"
+        "role_dir() { echo \"$RUN_DIR/$1\"; }\n"
+        "log_file() { echo \"$RUN_DIR/$1/logs/$1.log\"; }\n"
+        "data_dir() { echo \"$RUN_DIR/$1/data\"; }\n"
+        "admin_dir() { echo \"$RUN_DIR/$1/admin\"; }\n"
+        "pid_file() { echo \"$RUN_DIR/$1/$1.pid\"; }\n"
         "\n"
-        "mkdir -p \"$ROOT/.run\" \"$ROOT/logs\" \"$ROOT/data/database/players\"\n"
+        "ensure_role_dir() {\n"
+        "    mkdir -p \"$RUN_DIR/$1/logs\" \"$RUN_DIR/$1/data\" \"$RUN_DIR/$1/admin\"\n"
+        "}\n"
         "\n"
+        "# Cell runs are separate processes and get separate directories:\n"
+        "# cell_dir 1 and cell_dir 2 never resolve to the same path.\n"
+        "cell_dir() { echo \"$RUN_DIR/cell-$1\"; }\n"
+        "\n"
+        "# Engine binary directory: required, never guessed.\n"
+        "require_bin_dir() {\n"
+        "    if [ -z \"${APOLLO_BIN_DIR:-}\" ]; then\n"
+        "        echo \"APOLLO_BIN_DIR is not set (engine apps binary dir)\" >&2\n"
+        "        exit 1\n"
+        "    fi\n"
+        "    if [ ! -d \"$APOLLO_BIN_DIR\" ]; then\n"
+        "        echo \"APOLLO_BIN_DIR does not exist: $APOLLO_BIN_DIR\" >&2\n"
+        "        exit 1\n"
+        "    fi\n"
+        "}\n"
+        "\n"
+        "# Both build layouts are honoured: <dir>/<role> and\n"
+        "# <dir>/<role>/<role>.\n"
         "bin_of() {\n"
         "    role=\"$1\"\n"
         "    if [ -x \"$APOLLO_BIN_DIR/$role/$role\" ]; then\n"
@@ -137,11 +186,35 @@ inline std::string start_sh_template() {
         "        echo \"engine binary not found for $role under $APOLLO_BIN_DIR\" >&2\n"
         "        exit 1\n"
         "    fi\n"
-        "}\n"
-"start_one() {\n"
+        "}\n";
+}
+
+inline std::string start_sh_template() {
+    return "#!/bin/sh\n"
+        "# Single-node dev stack start (generated by apolloc init).\n"
+        "# Layout, runtime paths and engine binary discovery live in lib.sh;\n"
+        "# this script only orders the members. Start order follows\n"
+        "# dependency: database, login, base, world, gateway. Each member\n"
+        "# writes its own logs/, data/ and admin/ under RUN_DIR.\n"
+        "# Readiness is NOT asserted here: no health probe, no wait loops.\n"
+        "\n"
+        "set -eu\n"
+        "\n"
+        ". \"$(dirname \"$0\")/lib.sh\"\n"
+        ". \"$ROOT/config/runtime.conf\"\n"
+        "\n"
+        "require_bin_dir\n"
+        "mkdir -p \"$RUN_DIR\"\n"
+        "echo \"${BUILD_VERSION:-unset}\" > \"$RUN_DIR/engine.version\"\n"
+        "echo \"project: $ROOT\"\n"
+        "echo \"runtime: $RUN_DIR\"\n"
+        "echo \"engine build label: ${BUILD_VERSION:-unset}\"\n"
+        "\n"
+        "start_one() {\n"
         "    name=\"$1\"\n"
         "    shift\n"
-        "    pidfile=\"$ROOT/.run/$name.pid\"\n"
+        "    ensure_role_dir \"$name\"\n"
+        "    pidfile=\"$(pid_file \"$name\")\"\n"
         "    if [ -f \"$pidfile\" ]; then\n"
         "        old=\"$(cat \"$pidfile\")\"\n"
         "        if kill -0 \"$old\" 2>/dev/null; then\n"
@@ -150,57 +223,65 @@ inline std::string start_sh_template() {
         "        fi\n"
         "        rm -f \"$pidfile\"\n"
         "    fi\n"
-        "    \"$@\" >> \"$ROOT/logs/$name.log\" 2>&1 &\n"
+        "    \"$@\" >> \"$(log_file \"$name\")\" 2>&1 &\n"
         "    pid=$!\n"
         "    echo \"$pid\" > \"$pidfile\"\n"
         "    echo \"started $name (pid $pid) - readiness not asserted\"\n"
         "}\n"
         "\n"
+        "# database and base reject unknown options and run their crash\n"
+        "# capture after the arg loop, so they take no --crash-dump-dir:\n"
+        "# the admin dir has no crash output for those two.\n"
         "start_one database \"$(bin_of database)\" \\\n"
-        "    --host \"\$HOST\" --port \"\$DATABASE_PORT\" --id \"\$DATABASE_ID\" \\\n"
-        "    --data-dir \"\$ROOT/data/database/players\" \\\n"
-        "    --journal \"\$ROOT/data/database/persist.log\"\n"
+        "    --host \"$HOST\" --port \"$DATABASE_PORT\" --id \"$DATABASE_ID\" \\\n"
+        "    --data-dir \"$(data_dir database)\" \\\n"
+        "    --journal \"$(data_dir database)/persist.log\"\n"
         "\n"
         "start_one login \"$(bin_of login)\" \\\n"
-        "    --host \"\$HOST\" --port \"\$LOGIN_PORT\" \\\n"
-        "    --directory-port \"\$DIRECTORY_PORT\" --m1-port \"\$LOGIN_M1_PORT\"\n"
+        "    --host \"$HOST\" --port \"$LOGIN_PORT\" \\\n"
+        "    --directory-port \"$DIRECTORY_PORT\" --m1-port \"$LOGIN_M1_PORT\" \\\n"
+        "    --crash-dump-dir \"$(admin_dir login)/crashdumps\"\n"
         "\n"
         "start_one base \"$(bin_of base)\" \\\n"
-        "    --host \"\$HOST\" --port \"\$BASE_PORT\" --id \"\$BASE_ID\" \\\n"
-        "    --database-host \"\$HOST\" --database-port \"\$DATABASE_PORT\" \\\n"
-        "    --database-id \"\$DATABASE_ID\"\n"
+        "    --host \"$HOST\" --port \"$BASE_PORT\" --id \"$BASE_ID\" \\\n"
+        "    --database-host \"$HOST\" --database-port \"$DATABASE_PORT\" \\\n"
+        "    --database-id \"$DATABASE_ID\"\n"
         "\n"
         "start_one world \"$(bin_of world)\" \\\n"
-        "    --world-id \"\$WORLD_ID\" --m1-port \"\$WORLD_M1_PORT\" \\\n"
-        "    --space \"\$SPACE_NAME\" --size \"\$SPACE_SIZE\" \"\$SPACE_SIZE\" \\\n"
-        "    --tick-rate \"\$WORLD_TICK_MS\" \\\n"
-        "    --script-boot \"\$ROOT/lua/boot.lua\" \\\n"
-        "    --script-handlers \"\$ROOT/lua/contract_handlers.lua\"\n"
+        "    --world-id \"$WORLD_ID\" --m1-port \"$WORLD_M1_PORT\" \\\n"
+        "    --space \"$SPACE_NAME\" --size \"$SPACE_SIZE\" \"$SPACE_SIZE\" \\\n"
+        "    --tick-rate \"$WORLD_TICK_MS\" \\\n"
+        "    --script-boot \"$ROOT/lua/boot.lua\" \\\n"
+        "    --script-handlers \"$ROOT/lua/contract_handlers.lua\" \\\n"
+        "    --crash-dump-dir \"$(admin_dir world)/crashdumps\"\n"
         "\n"
         "start_one gateway \"$(bin_of gateway)\" \\\n"
-        "    --host \"\$HOST\" --port \"\$GATEWAY_PORT\" \\\n"
-        "    --login \"tcp://\$HOST:\$LOGIN_PORT\" \\\n"
-        "    --world-m1-host \"\$HOST\" --world-m1-port \"\$WORLD_M1_PORT\" \\\n"
-        "    --login-m1-host \"\$HOST\" --login-m1-port \"\$LOGIN_M1_PORT\"\n"
+        "    --host \"$HOST\" --port \"$GATEWAY_PORT\" \\\n"
+        "    --login \"tcp://$HOST:$LOGIN_PORT\" \\\n"
+        "    --world-m1-host \"$HOST\" --world-m1-port \"$WORLD_M1_PORT\" \\\n"
+        "    --login-m1-host \"$HOST\" --login-m1-port \"$LOGIN_M1_PORT\" \\\n"
+        "    --crash-dump-dir \"$(admin_dir gateway)/crashdumps\"\n"
         "\n"
-        "echo \"stack started; check logs/ for per-member output\"\n";
+        "echo \"stack started; check logs under $RUN_DIR for per-member output\"\n";
 }
 
 inline std::string stop_sh_template() {
     return "#!/bin/sh\n"
         "# Single-node dev stack stop (generated by apolloc init).\n"
         "# Stops members in reverse start order and only when a PID file\n"
-        "# recorded by start.sh exists; missing members are reported, never\n"
-        "# guessed. Graceful TERM only, no retry wait and no force signal.\n"
+        "# recorded by start.sh exists; missing and stale members are\n"
+        "# reported, never guessed. Graceful TERM only, no retry wait and no\n"
+        "# force signal. Runtime data, logs and admin records stay in\n"
+        "# RUN_DIR for post-mortem.\n"
         "\n"
         "set -eu\n"
         "\n"
-        "ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"\n"
-        "cd \"$ROOT\"\n"
+        ". \"$(dirname \"$0\")/lib.sh\"\n"
+        ". \"$ROOT/config/runtime.conf\"\n"
         "\n"
         "stop_one() {\n"
         "    name=\"$1\"\n"
-        "    pidfile=\"$ROOT/.run/$name.pid\"\n"
+        "    pidfile=\"$(pid_file \"$name\")\"\n"
         "    if [ ! -f \"$pidfile\" ]; then\n"
         "        echo \"$name not started here (no pid file)\"\n"
         "        return 0\n"
@@ -270,13 +351,17 @@ inline std::string contract_readme_template() {
 inline std::string gitignore_template() {
     return "build/\n"
         "data/\n"
-        "logs/\n"
-        ".run/\n"
+        "run/*\n"
+        "!run/.gitkeep\n"
         "*.log\n";
 }
 
 inline std::string marker_template() {
     return "{\n  \"scaffold_version\": 1\n}\n";
+}
+
+inline std::string keep_template() {
+    return "# Keeps the per-role runtime root visible in version control.\n";
 }
 
 // 相对路径 → 内容；落盘顺序无关。
@@ -286,7 +371,9 @@ inline std::map<std::string, std::string> scaffold_files(
     files["README.md"] = readme_template(project_name);
     files[".gitignore"] = gitignore_template();
     files[".apollo-project.json"] = marker_template();
+    files["run/.gitkeep"] = keep_template();
     files["config/runtime.conf"] = runtime_conf_template();
+    files["scripts/lib.sh"] = lib_sh_template();
     files["scripts/start.sh"] = start_sh_template();
     files["scripts/stop.sh"] = stop_sh_template();
     files["lua/boot.lua"] = boot_lua_template();

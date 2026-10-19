@@ -125,7 +125,7 @@ bool test_init_creates_skeleton() {
     TEST_ASSERT(r.code == 0, "init 新建目录成功");
     TEST_ASSERT(r.out.find(target.string()) != std::string::npos, "成功输出目标路径");
 
-    for (const char* dir : {"config", "scripts", "lua", "contract", "data"}) {
+    for (const char* dir : {"config", "scripts", "lua", "contract", "run"}) {
         TEST_ASSERT(std::filesystem::is_directory(target / dir),
                     std::string("生成目录 ") + dir);
     }
@@ -141,16 +141,19 @@ bool test_init_creates_skeleton() {
 
     auto ignore = read_text(target / ".gitignore");
     TEST_ASSERT(ignore.find("build/") != std::string::npos, ".gitignore 忽略 build/");
-    TEST_ASSERT(ignore.find("data/") != std::string::npos, ".gitignore 忽略 data/");
+    TEST_ASSERT(ignore.find("run/*") != std::string::npos,
+                ".gitignore 忽略运行目录内容");
+    TEST_ASSERT(ignore.find("!run/.gitkeep") != std::string::npos,
+                ".gitignore 保留运行目录占位");
 
     auto marker = read_text(target / ".apollo-project.json");
     TEST_ASSERT(marker.find("scaffold_version") != std::string::npos,
                 "项目标记带脚手架版本");
 
-    for (const char* file : {"config/runtime.conf", "scripts/start.sh",
-                             "scripts/stop.sh", "lua/boot.lua",
-                             "lua/contract_handlers.lua",
-                             "contract/README.md"}) {
+    for (const char* file : {"config/runtime.conf", "scripts/lib.sh",
+                             "scripts/start.sh", "scripts/stop.sh",
+                             "lua/boot.lua", "lua/contract_handlers.lua",
+                             "contract/README.md", "run/.gitkeep"}) {
         TEST_ASSERT(std::filesystem::is_regular_file(target / file),
                     std::string("生成模板文件 ") + file);
     }
@@ -168,26 +171,67 @@ bool test_generated_template_integrity() {
     for (const char* key : {"HOST=127.0.0.1", "DATABASE_PORT=9200",
                             "BASE_PORT=9201", "LOGIN_PORT=9001",
                             "WORLD_M1_PORT=9101", "GATEWAY_PORT=8888",
-                            "DATABASE_ID=database-1", "BASE_ID=base-1"}) {
+                            "DATABASE_ID=database-1", "BASE_ID=base-1",
+                            "BUILD_VERSION=local"}) {
         TEST_ASSERT(conf.find(key) != std::string::npos,
                     std::string("配置含 ") + key);
     }
 
+    TEST_ASSERT(conf.find("RUN_DIR=") != std::string::npos,
+                "配置可覆盖运行根目录");
+
+    // 布局集中：ROOT/RUN_DIR/逐角色日志·资料·管理记录目录只在 lib.sh 定义。
+    auto lib = read_text(target / "scripts/lib.sh");
+    TEST_ASSERT(lib.find("ROOT=\"$(cd \"$(dirname \"$0\")/..\" && pwd)\"") !=
+                    std::string::npos,
+                "lib.sh 从自身位置解析项目根，不依赖启动 cwd");
+    TEST_ASSERT(lib.find(": \"${RUN_DIR:=$ROOT/run}\"") != std::string::npos,
+                "运行根默认 <root>/run 且配置可覆盖");
+    for (const char* helper : {"role_dir()", "log_file()", "data_dir()",
+                               "admin_dir()", "pid_file()", "ensure_role_dir()",
+                               "cell_dir()", "require_bin_dir()", "bin_of()"}) {
+        TEST_ASSERT(lib.find(helper) != std::string::npos,
+                    std::string("lib.sh 提供 ") + helper);
+    }
+    TEST_ASSERT(lib.find("$RUN_DIR/cell-$1") != std::string::npos,
+                "cell 目录按编号给出，不共写同一目录");
+    TEST_ASSERT(lib.find("$RUN_DIR/$1/logs/$1.log") != std::string::npos,
+                "日志按角色隔离");
+    TEST_ASSERT(lib.find("$RUN_DIR/$1/data") != std::string::npos,
+                "资料按角色隔离");
+    TEST_ASSERT(lib.find("$RUN_DIR/$1/admin") != std::string::npos,
+                "管理记录按角色隔离");
+    TEST_ASSERT(lib.find("APOLLO_BIN_DIR is not set") != std::string::npos &&
+                    lib.find("$APOLLO_BIN_DIR/$role/$role") != std::string::npos &&
+                    lib.find("$APOLLO_BIN_DIR/$role") != std::string::npos,
+                "引擎目录校验与两种布局探测集中在 lib.sh");
+    TEST_ASSERT(lib.find("engine binary not found") != std::string::npos,
+                "引擎二进制缺失时报错退出");
+
     // 启动脚本：依赖顺序 database→login→base→world→gateway，flag 均为服务
     // 现有解析项，且不落任何就绪伪装（无 sleep）。
     auto start = read_text(target / "scripts/start.sh");
-    TEST_ASSERT(start.find("APOLLO_BIN_DIR") != std::string::npos,
-                "启动脚本要求引擎二进制目录");
-    TEST_ASSERT(start.find("bin_of") != std::string::npos &&
-                    start.find("$APOLLO_BIN_DIR/$role/$role") != std::string::npos &&
-                    start.find("$APOLLO_BIN_DIR/$role") != std::string::npos,
-                "启动脚本兼容两种二进制布局");
-    TEST_ASSERT(start.find("engine binary not found") != std::string::npos,
-                "引擎二进制缺失时报错退出");
+    TEST_ASSERT(start.find(". \"$(dirname \"$0\")/lib.sh\"") !=
+                    std::string::npos,
+                "启动脚本源 lib.sh 而非自行解析路径");
+    TEST_ASSERT(start.find("config/runtime.conf") != std::string::npos,
+                "启动脚本源配置");
+    TEST_ASSERT(start.find("require_bin_dir") != std::string::npos,
+                "启动脚本校验引擎二进制目录");
     TEST_ASSERT(start.find("config/runtime.conf") != std::string::npos,
                 "启动脚本源配置");
     TEST_ASSERT(start.find("--database-host") != std::string::npos,
                 "base→database 接线走真实 flag");
+    TEST_ASSERT(start.find("--crash-dump-dir") != std::string::npos,
+                "管理记录目录逐角色显式给出");
+    TEST_ASSERT(start.find("\"$(data_dir database)\"") != std::string::npos,
+                "资料目录来自统一布局");
+    TEST_ASSERT(start.find("RUN_DIR/engine.version") != std::string::npos,
+                "构建版本落盘到运行根");
+    TEST_ASSERT(start.find(". \"$ROOT/config/runtime.conf\"") ==
+                    std::string::npos || start.find("$ROOT/config/runtime.conf") !=
+                    std::string::npos,
+                "配置路径明确");
     TEST_ASSERT(start.find("--script-boot") != std::string::npos &&
                     start.find("lua/boot.lua") != std::string::npos,
                 "world 接 Lua boot 入口");
@@ -206,9 +250,11 @@ bool test_generated_template_integrity() {
 
     // 停止脚本：只按 start.sh 记录的 PID 反向停止，不猜进程。
     auto stop = read_text(target / "scripts/stop.sh");
-    TEST_ASSERT(stop.find(".run/") != std::string::npos &&
-                    stop.find(".pid") != std::string::npos,
-                "停止脚本只认 PID 记录");
+    TEST_ASSERT(stop.find(". \"$(dirname \"$0\")/lib.sh\"") !=
+                    std::string::npos,
+                "停止脚本源 lib.sh");
+    TEST_ASSERT(stop.find("pid_file") != std::string::npos,
+                "停止脚本只认 lib.sh 记录的 PID 面");
     TEST_ASSERT(stop.find("kill ") != std::string::npos, "停止脚本发 TERM");
     TEST_ASSERT(stop.find("start_one gateway") == std::string::npos &&
                     stop.find("stop_one gateway") < stop.find("stop_one database"),
@@ -225,6 +271,13 @@ bool test_generated_template_integrity() {
                 "README 声明不断言就绪");
     TEST_ASSERT(readme.find("No auth material is generated") != std::string::npos,
                 "README 声明不生成认证材料");
+    TEST_ASSERT(readme.find("run/<role>") != std::string::npos ||
+                    readme.find("run/role") != std::string::npos,
+                "README 说明逐角色运行目录");
+    TEST_ASSERT(readme.find("cell") != std::string::npos,
+                "README 说明 cell 目录不共写");
+    TEST_ASSERT(readme.find("BUILD_VERSION") != std::string::npos,
+                "README 说明构建版本");
 
     // 契约入口：说明 apollo_gen 生成流程与 handler 同步纪律。
     auto contract = read_text(target / "contract/README.md");
@@ -249,9 +302,9 @@ bool test_generated_template_integrity() {
                     std::string("模板无 CRLF ") + file.first);
     }
 
-    // 清单本身：9 个文件、全为相对路径、无重复。
+    // 清单本身：11 个文件、全为相对路径、无重复。
     auto files = apollo_cli::scaffold_files("proj");
-    TEST_ASSERT(files.size() == 9, "模板清单 9 个文件");
+    TEST_ASSERT(files.size() == 11, "模板清单 11 个文件");
     for (const auto& file : files) {
         TEST_ASSERT(!file.first.empty() && file.first.front() != '/',
                     "清单路径为相对路径");
