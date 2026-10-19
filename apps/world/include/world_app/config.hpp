@@ -47,6 +47,11 @@ struct WorldAppConfig {
     // 时无差；cell 全停发 30s 后摘除是缺省策略）。
     std::uint64_t cellExpiryMs = 30000;
 
+    // Space 分配池（L101 分配面首切片，manager 侧）：池内 Space 分配给注册
+    // 就绪 cell——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分
+    //（重平衡/回收/拓扑版本随 L108）。空 = 分配关（缺省单机形态不变）。
+    std::vector<std::uint64_t> assignSpaces;
+
     // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 base
     // store M1 面（958/959）。port = 0 = 面关（结算挂账降级态——L19 资料
     // 归属切换后 World 无锚点解析器）。

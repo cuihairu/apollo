@@ -160,14 +160,7 @@ void CellApp::start() {
                                      + std::to_string(decl.space_id)
                                      + " collides with default space");
         }
-        apollo::game::world::SceneDescriptor descriptor;
-        descriptor.map_id = 1;  // 唯一在册地图资产——静态资产面不虚构 id
-        descriptor.map_name =
-            decl.name.empty() ? ("space-" + std::to_string(decl.space_id)) : decl.name;
-        descriptor.width = config_.spaceWidth;
-        descriptor.height = config_.spaceHeight;
-        descriptor.grid_size = config_.gridSize;
-        descriptor.view_radius = config_.viewRadius;
+        const auto descriptor = space_descriptor_for(config_, decl.space_id, decl.name);
         if (add_space(decl.space_id, descriptor) == 0) {
             throw std::runtime_error("failed to create declared space "
                                      + std::to_string(decl.space_id)
@@ -1193,6 +1186,20 @@ std::uint64_t CellApp::resolve_scene_id(std::uint64_t space_id) const {
     // 与 create 的旧「空间无关全落全局表」行为等价
     const auto route = spaceToScene_.find(space_id);
     return route != spaceToScene_.end() ? route->second : defaultSceneId_;
+}
+
+apollo::game::world::SceneDescriptor space_descriptor_for(const WorldAppConfig& config,
+                                                          std::uint64_t space_id,
+                                                          const std::string& name) {
+    // 声明（--add-space）与分配（962）两面的共用装配；几何 = 全局字段。
+    apollo::game::world::SceneDescriptor descriptor;
+    descriptor.map_id = 1;  // 唯一在册地图资产——静态资产面不虚构 id
+    descriptor.map_name = name.empty() ? ("space-" + std::to_string(space_id)) : name;
+    descriptor.width = config.spaceWidth;
+    descriptor.height = config.spaceHeight;
+    descriptor.grid_size = config.gridSize;
+    descriptor.view_radius = config.viewRadius;
+    return descriptor;
 }
 
 std::uint64_t CellApp::add_space(std::uint64_t space_id,

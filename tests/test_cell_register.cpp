@@ -53,6 +53,7 @@ int g_failures = 0;
 constexpr std::uint16_t id_of(MsgId id) { return static_cast<std::uint16_t>(id); }
 constexpr std::uint16_t kRegisterRequestId = id_of(MsgId::cell_register_request);
 constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
+constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 const char* kRouteJson = APOLLO_TEST_ROUTE_JSON;
 
 std::uint64_t now_ms() {
@@ -74,13 +75,23 @@ struct RegisterReply {
 std::mutex g_replies_mutex;
 std::map<std::uint64_t, RegisterReply>* g_replies = nullptr;
 
+// 962 分配账（同上惯例：dispatcher 写 / 断言读，指针注入 + 串行）。
+struct SpaceAssignFrame {
+    std::uint64_t version = 0;
+    std::uint64_t management_epoch = 0;
+    std::uint64_t assigned_cell_id = 0;
+    bool ready = false;
+};
+std::mutex g_assigns_mutex;
+std::map<std::uint64_t, SpaceAssignFrame>* g_assigns = nullptr;  // space_id → frame
+
 // cell 侧投影：cell→World M1 控制受理面（裸 960 上行，961 按 request_id
 // 收账）。peer 自报名 = 链路名（服务端按名回链路与记入注册表）。
 struct CellEnd {
     std::unique_ptr<link::RouteTable> table;
     std::unique_ptr<link::LinkManager> manager;
 
-    bool start(std::uint16_t port) {
+    bool start(std::uint16_t port, const char* self_name = "cell-x") {
         table = std::make_unique<link::RouteTable>();
         std::ifstream in(kRouteJson, std::ios::binary);
         if (!in) {
@@ -92,7 +103,7 @@ struct CellEnd {
             return false;
         }
         link::LinkManagerConfig mc;
-        mc.self_name = "cell-x";
+        mc.self_name = self_name;
         mc.route_version = link::route_version_from_hash(table->schema_hash());
         manager = std::make_unique<link::LinkManager>(mc);
 
@@ -129,6 +140,30 @@ struct CellEnd {
                                    std::lock_guard<std::mutex> lock(g_replies_mutex);
                                    if (g_replies != nullptr) {
                                        (*g_replies)[request_id] = std::move(r);
+                                   }
+                               });
+        // 962 分配（World 推；test_cell_space_assignment 断言面）
+        dispatcher.set_handler(kSpaceAssignId,
+                               [](std::uint16_t, const std::uint8_t* data,
+                                  std::size_t size) {
+                                   std::vector<wire::FieldValue> fields;
+                                   if (!wire::decode_payload(kSpaceAssignId, data, size,
+                                                             fields)
+                                       || fields.size() != 5) {
+                                       return;
+                                   }
+                                   SpaceAssignFrame f;
+                                   f.version = static_cast<std::uint64_t>(fields[0].integer);
+                                   f.management_epoch =
+                                       static_cast<std::uint64_t>(fields[1].integer);
+                                   f.assigned_cell_id =
+                                       static_cast<std::uint64_t>(fields[3].integer);
+                                   f.ready = fields[4].integer != 0;
+                                   const auto space_id =
+                                       static_cast<std::uint64_t>(fields[2].integer);
+                                   std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                                   if (g_assigns != nullptr) {
+                                       (*g_assigns)[space_id] = f;
                                    }
                                });
         return true;
@@ -245,9 +280,10 @@ struct WorldEnd {
     }
 };
 
-// 拨装：cell（960 控制面）拨 WorldApp M1 端点并等待链路 up。
-bool dial_cell(WorldEnd& server, CellEnd& cell) {
-    if (!cell.start(server.world->m1Link().listenPort())) {
+// 拨装：cell（960 控制面）拨 WorldApp M1 端点并等待链路 up。自报名可配
+//（多 cell 并存用例必配不同名——同名双活竞态归 L101 旧执行端隔离批）。
+bool dial_cell(WorldEnd& server, CellEnd& cell, const char* self_name = "cell-x") {
+    if (!cell.start(server.world->m1Link().listenPort(), self_name)) {
         return false;
     }
     const auto deadline = std::chrono::steady_clock::now() + 5s;
@@ -632,6 +668,147 @@ bool test_cell_heartbeat_and_expiry() {
     return true;
 }
 
+// ---------- space assignment：World 分配面（962 推送 + 认领独占 + 客户端去重）----------
+// 池 = WorldAppConfig.assignSpaces；策略 = 首个就绪 cell 独占认领全池未分配
+// Space（code 1/2 受理即推当前分配），后续注册不重分——重平衡/回收/拓扑版本
+// 随 L108。断言事实源：962 帧内容 + World 分配表观测面 + 客户端监听去重。
+
+bool test_cell_space_assignment() {
+    std::cout << "Running: test_cell_space_assignment..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    TEST_ASSERT(server.start(116), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    // 首注册：受理即推当前分配（池 7/8 → 本 cell），帧内容逐字段断言
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell), "cell dialed");
+    RegisterReply r;
+    TEST_ASSERT(register_roundtrip(cell, 9701, 21, 1, "127.0.0.1", 9201, 1, 10, 0, true, r),
+                "register accepted");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "first registration accepted");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.size() >= 2;
+                }, 3000),
+                "both pool spaces pushed");
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        const auto it7 = assigns.find(7);
+        const auto it8 = assigns.find(8);
+        TEST_ASSERT(it7 != assigns.end() && it8 != assigns.end(),
+                    "spaces 7 and 8 assigned");
+        TEST_ASSERT(it7 != assigns.end() && it7->second.version == 1,
+                    "assignment version 1");
+        TEST_ASSERT(it7 != assigns.end() && it7->second.assigned_cell_id == 21,
+                    "assigned to registering cell");
+        TEST_ASSERT(it7 != assigns.end() && it7->second.management_epoch == 77,
+                    "management epoch echoed");
+        TEST_ASSERT(it7 != assigns.end() && it7->second.ready, "ready flagged");
+    }
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "world assignment table");
+    const auto* a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->cell_id == 21 && a7->version == 1,
+                "world assignment recorded");
+
+    // 后续注册不重分（认领独占）：第二 cell 收不到任何 962
+    CellEnd cell2;
+    TEST_ASSERT(dial_cell(server, cell2, "cell-y"), "second cell dialed");
+    TEST_ASSERT(register_roundtrip(cell2, 9702, 22, 1, "127.0.0.1", 9202, 1, 10, 0, true, r),
+                "second register accepted");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "second accepted (no spaces left)");
+    std::this_thread::sleep_for(300ms);  // 若有误推，300ms 窗内必达
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        TEST_ASSERT(assigns.size() == 2, "no reassignment to second cell");
+    }
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "table unchanged");
+
+    // 同代次刷新（心跳路径）→ 重推当前分配、版本不变（客户端按版本去重）
+    TEST_ASSERT(register_roundtrip(cell, 9703, 21, 1, "127.0.0.1", 9201, 1, 10, 0, true, r),
+                "refresh roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAcceptedIdempotent,
+                "refresh idempotent");
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        const auto it7 = assigns.find(7);
+        TEST_ASSERT(it7 != assigns.end() && it7->second.version == 1,
+                    "refresh re-push keeps version");
+    }
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- production client：962 监听去重（版本不前进不重复触发）----------
+
+bool test_production_client_space_assign_listener() {
+    std::cout << "Running: test_production_client_space_assign_listener..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    TEST_ASSERT(server.start(117), "world started with M1 port");
+
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = server.world->m1Link().listenPort();
+    cfg.cell_id = 31;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8802;
+    cfg.start_epoch = 9;
+    cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 40;
+    auto client = world_app::makeCellRegisterClient(cfg);
+
+    std::mutex m;
+    std::vector<world_app::SpaceAssignRecord> fired;
+    client->setSpaceAssignListener([&](const world_app::SpaceAssignRecord& rec) {
+        std::lock_guard<std::mutex> lock(m);
+        fired.push_back(rec);
+    });
+    TEST_ASSERT(client->start(), "client started");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    std::lock_guard<std::mutex> lock(m);
+                    return fired.size() >= 2 && client->state().replies >= 1;
+                }, 5000),
+                "assignment listener fired for pool");
+    {
+        std::lock_guard<std::mutex> lock(m);
+        TEST_ASSERT(fired.size() == 2, "one fire per space");
+        TEST_ASSERT(fired[0].space_id == 7 && fired[1].space_id == 8,
+                    "pool spaces in push order");
+        TEST_ASSERT(fired[0].version == 1 && fired[1].version == 1, "versions");
+        TEST_ASSERT(fired[0].assigned_cell_id == 31, "assigned cell recorded");
+        TEST_ASSERT(fired[0].ready, "ready recorded");
+    }
+    TEST_ASSERT(client->space_assign_count() == 2, "client assignment face");
+
+    // 心跳重推（版本不前进）→ 监听不重复触发（去重面）
+    const auto keep_deadline = std::chrono::steady_clock::now() + 200ms;
+    while (std::chrono::steady_clock::now() < keep_deadline) {
+        client->pump(now_ms());
+        std::this_thread::sleep_for(10ms);
+    }
+    {
+        std::lock_guard<std::mutex> lock(m);
+        TEST_ASSERT(fired.size() == 2, "no duplicate fires on heartbeat re-push");
+        TEST_ASSERT(client->state().replies >= 3, "heartbeats flowed");
+    }
+
+    client->stop();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -644,7 +821,9 @@ int main() {
                     && test_cell_register_malformed_rejected()
                     && test_production_client_registers_and_redials()
                     && test_production_client_invalid_config()
-                    && test_cell_heartbeat_and_expiry();
+                    && test_cell_heartbeat_and_expiry()
+                    && test_cell_space_assignment()
+                    && test_production_client_space_assign_listener();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;

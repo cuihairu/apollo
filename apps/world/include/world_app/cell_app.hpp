@@ -47,6 +47,14 @@ class StoreDial;
 
 namespace world_app {
 
+// 声明/分配 Space 共用的 SceneDescriptor 装配（L100 多 Space + L101 分配面）：
+// 几何 = 全局配置字段；map 资产引用 = 唯一在册资产 1（静态资产面不虚构 id，
+// 每 Space 独立资产随资产管线）；名缺省回退 space-<id>。
+apollo::game::world::SceneDescriptor space_descriptor_for(const WorldAppConfig& config,
+                                                          std::uint64_t space_id,
+                                                          const std::string& name);
+
+
 namespace protocol = apollo::protocol;
 
 // M1 出口缝：cell 内核对传输面只依赖本接口——客户端帧下行（939

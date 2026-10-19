@@ -34,6 +34,7 @@ using apollo::contract::gen::MsgId;
 constexpr std::uint16_t id_of(MsgId id) { return static_cast<std::uint16_t>(id); }
 constexpr std::uint16_t kRegisterRequestId = id_of(MsgId::cell_register_request);
 constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
+constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 
 std::uint64_t steady_now_ms() {
     return static_cast<std::uint64_t>(
@@ -101,6 +102,11 @@ public:
             [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_reply(data, size);
             });
+        dispatcher.set_handler(
+            kSpaceAssignId,
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_assign(data, size);
+            });
         up_seen_ = false;
         return true;
     }
@@ -141,6 +147,16 @@ public:
     void setReportedDrainState(std::int32_t drain_state) override {
         std::lock_guard<std::mutex> lock(state_mutex_);
         reported_drain_state_ = drain_state;
+    }
+
+    void setSpaceAssignListener(SpaceAssignListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        assign_listener_ = std::move(fn);
+    }
+
+    std::size_t space_assign_count() const override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        return assign_versions_.size();
     }
 
 private:
@@ -198,6 +214,35 @@ private:
         ++state_.replies;
     }
 
+    void handle_assign(const std::uint8_t* data, std::size_t size) {
+        // 962 分配应用面（L101 分配面首切片）：每 Space 版本前进才触发监听
+        //（World 每次受理重推当前分配，重推同版本 = 幂等不触发）；残帧尽力
+        // 面丢弃。锁外回调（监听器不得重入泵面）。
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(kSpaceAssignId, data, size, fields)
+            || fields.size() != 5) {
+            return;
+        }
+        SpaceAssignRecord rec;
+        rec.version = static_cast<std::uint64_t>(fields[0].integer);
+        rec.space_id = static_cast<std::uint64_t>(fields[2].integer);
+        rec.assigned_cell_id = static_cast<std::uint64_t>(fields[3].integer);
+        rec.ready = fields[4].integer != 0;
+        SpaceAssignListener fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            const auto it = assign_versions_.find(rec.space_id);
+            if (it != assign_versions_.end() && rec.version <= it->second) {
+                return;  // 重推/旧推——版本不前进不触发
+            }
+            assign_versions_[rec.space_id] = rec.version;
+            fn = assign_listener_;
+        }
+        if (fn) {
+            fn(rec);
+        }
+    }
+
     std::int32_t reported_drain_state() const {
         std::lock_guard<std::mutex> lock(state_mutex_);
         return reported_drain_state_;
@@ -212,6 +257,8 @@ private:
     mutable std::mutex state_mutex_;
     CellRegisterState state_;        // 泵上下文写 / 任意线程读
     std::int32_t reported_drain_state_ = 0;  // 宿主写 / 泵上下文读
+    SpaceAssignListener assign_listener_;            // 宿主装配 / 泵上下文读
+    std::map<std::uint64_t, std::uint64_t> assign_versions_;  // space → 已应用版本
 };
 
 } // namespace

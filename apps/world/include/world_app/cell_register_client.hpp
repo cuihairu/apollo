@@ -21,6 +21,8 @@
 // 侧 cellExpiryMs 超窗摘除）；旧执行端隔离与控制面失联策略仍待做。
 
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
 #include <string>
 
@@ -47,6 +49,16 @@ struct CellRegisterConfig {
     // 握手代次（§5.7；0 = 进程自铸）。
     std::uint64_t authority_epoch = 0;
 };
+
+// 分配记录（962 cell_space_assign 应用面）：监听器只在版本前进时触发一次
+//（去重在客户端——World 每次受理/心跳都重推当前分配，版本不变即幂等）。
+struct SpaceAssignRecord {
+    std::uint64_t space_id = 0;
+    std::uint64_t version = 0;
+    std::uint64_t assigned_cell_id = 0;
+    bool ready = false;
+};
+using SpaceAssignListener = std::function<void(const SpaceAssignRecord&)>;
 
 // 注册账快照（泵上下文写，宿主/测试跨线程读——mutex 守）。
 struct CellRegisterState {
@@ -86,6 +98,13 @@ public:
     virtual void setReportedDrainState(std::int32_t drain_state) {
         (void)drain_state;
     }
+
+    // Space 分配监听（962；版本前进才触发，重推幂等）。监听器在泵上下文
+    // 同步回调（与 961 同纪律——锁外回调，不得重入 pump/state）。
+    virtual void setSpaceAssignListener(SpaceAssignListener fn) { (void)fn; }
+
+    // 已记账（版本前进）分配条数（观测面）。
+    virtual std::size_t space_assign_count() const { return 0; }
 };
 
 // 工厂：world_host:world_port 主动拨号，961 按 request_id 记账。

@@ -177,6 +177,20 @@ public:
         (void)detail;
     }
 
+    // Space 分配推送（962 cell_space_assign，L101 分配面首切片）：peer = cell
+    // 自报名；分配版本 = 该 Space 当前版本（首分配 = 1，重平衡随 L108）。
+    // kReliable 同 945。
+    virtual void sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
+                                     std::uint64_t management_epoch, std::uint64_t space_id,
+                                     std::uint64_t assigned_cell_id, bool ready) {
+        (void)peer;
+        (void)assignment_version;
+        (void)management_epoch;
+        (void)space_id;
+        (void)assigned_cell_id;
+        (void)ready;
+    }
+
     // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
     // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
     //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =

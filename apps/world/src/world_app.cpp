@@ -471,6 +471,8 @@ void WorldApp::onCellRegister(const std::string& peer,
                         + " epoch=" + std::to_string(request.start_epoch)
                         + " peer=" + peer);
         reply(true, kCellRegisterAccepted, "registered");
+        // 分配推送（962 分配面；首注册即认领池内未分配 Space）
+        pushSpaceAssignments(peer, request.cell_id);
         return;
     }
     if (request.start_epoch < it->second.start_epoch) {
@@ -499,6 +501,35 @@ void WorldApp::onCellRegister(const std::string& peer,
     reply(true, idempotent ? kCellRegisterAcceptedIdempotent : kCellRegisterAccepted,
           idempotent ? "re-registered (same epoch, refreshed)"
                      : "replaced (new epoch)");
+    // 分配推送（962 分配面；code 1/2 受理都推——断链重拨后分配不丢）
+    pushSpaceAssignments(peer, request.cell_id);
+}
+
+void WorldApp::pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id) {
+    // 分配面（L101 分配面首切片）：池内未分配 Space 认领给本 cell（首分配
+    // 版本 = 1；已归属其它 cell 的跳过不重分——重平衡随 L108 拓扑批）。
+    if (config_.assignSpaces.empty()) {
+        return;
+    }
+    for (std::uint64_t space_id : config_.assignSpaces) {
+        auto it = spaceAssignments_.find(space_id);
+        if (it == spaceAssignments_.end()) {
+            SpaceAssignment a;
+            a.space_id = space_id;
+            a.cell_id = cell_id;
+            a.version = 1;
+            it = spaceAssignments_.emplace(space_id, a).first;
+            worldLog().info("space assigned: space=" + std::to_string(space_id)
+                            + " cell=" + std::to_string(cell_id) + " version=1");
+        } else if (it->second.cell_id != cell_id) {
+            continue;  // 认领独占——不重分
+        }
+        if (m1Link_) {
+            m1Link_->sendCellSpaceAssign(peer, it->second.version,
+                                         config_.m1AuthorityEpoch, space_id,
+                                         it->second.cell_id, true);
+        }
+    }
 }
 
 const WorldApp::CellRegistration* WorldApp::find_cell_registration(
@@ -506,6 +537,12 @@ const WorldApp::CellRegistration* WorldApp::find_cell_registration(
     // 泵上下文只读观测面（注册表单写者 = M1 泵上下文受理点）
     const auto it = cellRegistrations_.find(cell_id);
     return it != cellRegistrations_.end() ? &it->second : nullptr;
+}
+
+const WorldApp::SpaceAssignment* WorldApp::find_space_assignment(
+    std::uint64_t space_id) const {
+    const auto it = spaceAssignments_.find(space_id);
+    return it != spaceAssignments_.end() ? &it->second : nullptr;
 }
 
 void WorldApp::driveCellRegistry() {

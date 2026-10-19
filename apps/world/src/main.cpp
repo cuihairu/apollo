@@ -84,6 +84,28 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--cell-expiry-ms" && i + 1 < argc) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--assign-spaces" && i + 1 < argc) {
+            std::stringstream ss(argv[++i]);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                if (item.empty()) {
+                    continue;
+                }
+                const std::uint64_t space_id = std::strtoull(item.c_str(), nullptr, 10);
+                if (space_id == 0) {
+                    std::cerr << "world: --assign-spaces ids must be non-zero"
+                              << std::endl;
+                    std::exit(2);
+                }
+                if (std::find(config.assignSpaces.begin(), config.assignSpaces.end(),
+                              space_id)
+                    != config.assignSpaces.end()) {
+                    std::cerr << "world: --assign-spaces duplicate id "
+                              << std::to_string(space_id) << std::endl;
+                    std::exit(2);
+                }
+                config.assignSpaces.push_back(space_id);
+            }
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
         } else if (arg == "--add-space" && i + 1 < argc) {
@@ -132,6 +154,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
                       << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
+                      << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells (default: off)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --add-space <id>:<name>     Declare an extra Space at startup, repeatable (default: none)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
@@ -284,6 +307,21 @@ int main(int argc, char* argv[]) {
                 rc.route_json = config.m1RouteJson;
                 rc.authority_epoch = config.m1AuthorityEpoch;
                 register_client = makeCellRegisterClient(std::move(rc));
+                // 962 分配应用面（L101 分配面首切片）：监听在 pre-tick 泵内
+                // 同步回调 = 内核线程上下文（add_space 注册窗含此面），按
+                // 版本前进触发（客户端去重）——幂等登记进内核路由表。
+                register_client->setSpaceAssignListener(
+                    [&cell, &config, &logger](const SpaceAssignRecord& rec) {
+                        if (!rec.ready || rec.assigned_cell_id != config.cellId) {
+                            return;
+                        }
+                        const auto scene_id = cell.add_space(
+                            rec.space_id,
+                            space_descriptor_for(config, rec.space_id, ""));
+                        logger->info("space assigned: id=" + std::to_string(rec.space_id)
+                                     + " version=" + std::to_string(rec.version)
+                                     + " scene=" + std::to_string(scene_id));
+                    });
             };
 
             logger->info("Starting server...");

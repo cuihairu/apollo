@@ -416,6 +416,30 @@ public:
                          link::SendClass::kReliable);
     }
 
+    void sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
+                             std::uint64_t management_epoch, std::uint64_t space_id,
+                             std::uint64_t assigned_cell_id, bool ready) override {
+        if (!manager_) {
+            return;
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return;  // 未知 peer = 尽力面（重推随下个受理拍）
+        }
+        std::vector<wire::FieldValue> fields(5);
+        fields[0].integer = static_cast<std::int64_t>(assignment_version);
+        fields[1].integer = static_cast<std::int64_t>(management_epoch);
+        fields[2].integer = static_cast<std::int64_t>(space_id);
+        fields[3].integer = static_cast<std::int64_t>(assigned_cell_id);
+        fields[4].integer = ready ? 1 : 0;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::cell_space_assign), fields, payload)) {
+            return;
+        }
+        (void)link->send(id_of(MsgId::cell_space_assign), payload.data(), payload.size(),
+                         link::SendClass::kReliable);
+    }
+
     std::uint16_t listenPort() const override {
         return manager_ ? manager_->endpoint_port("gateway") : 0;
     }

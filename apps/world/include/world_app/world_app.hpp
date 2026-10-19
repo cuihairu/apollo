@@ -101,6 +101,19 @@ public:
     std::size_t registered_cell_count() const { return cellRegistrations_.size(); }
     const CellRegistration* find_cell_registration(std::uint64_t cell_id) const;
 
+    // ---- Space 分配表（962，L101 分配面首切片）----
+    // 分配条目：space_id → （归属 cell + 分配版本）。池 = config.assignSpaces；
+    // 策略 = 首个就绪 cell 独占认领全池未分配 Space（code 1/2 受理即推当前
+    // 分配），后续注册不重分——重平衡/回收/拓扑版本随 L108 拓扑批。观测面
+    // 同注册表口径（泵上下文单写者）。
+    struct SpaceAssignment {
+        std::uint64_t space_id = 0;
+        std::uint64_t cell_id = 0;
+        std::uint64_t version = 0;  // 每 Space 独立单调（本切片首分配 = 1）
+    };
+    std::size_t assigned_space_count() const { return spaceAssignments_.size(); }
+    const SpaceAssignment* find_space_assignment(std::uint64_t space_id) const;
+
 private:
     // M1 出口适配（内核缝的宿主侧实现）：IM1Egress → 真传输端点。链路未
     // 装配 = 尽力面落地（同内核「egress 缺席」语义）。
@@ -158,6 +171,10 @@ private:
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。
     void driveCellRegistry();
+    // 分配推送（962，受理点内同步发）：认领池内未分配 Space（首分配 = 1，
+    // 已归属其它 cell 的跳过不重分）并逐条推给该 cell 的 peer 链路；code 1/2
+    // 受理都推（断链重拨后分配不丢——cell 侧按版本去重幂等应用）。
+    void pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id);
     // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
     void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                          const std::string& result, const std::string& error);
@@ -194,6 +211,8 @@ private:
     // driveCellRegistry（过期窗 cellExpiryMs）。旧执行端隔离、World 侧
     // 分配（L102 拓扑批）待做——本表是它们的承载面。
     std::unordered_map<std::uint64_t, CellRegistration> cellRegistrations_;
+    // Space 分配表（962 分配面）：space_id → 分配；认领独占策略见观测面注。
+    std::unordered_map<std::uint64_t, SpaceAssignment> spaceAssignments_;
 };
 
 } // namespace world_app
