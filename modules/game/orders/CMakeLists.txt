@@ -1,7 +1,9 @@
-# Game - Orders module (durable order intake + delivery, L63)
+# Game - Orders module (durable order intake + delivery + fulfillment, L63/L64)
 add_library(apollo_game_orders STATIC
     src/order_store.cpp
     src/order_delivery.cpp
+    src/base_authority.cpp
+    src/order_fulfillment.cpp
 )
 add_library(apollo::game_orders ALIAS apollo_game_orders)
 
