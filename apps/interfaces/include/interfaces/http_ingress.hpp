@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -25,9 +26,10 @@ namespace interfaces {
 // HTTP 请求不降级（400）。响应一律 Connection: close（每请求一连接，
 // L50 业务接线再议 keep-alive）。
 //
-// 预算面：请求头 8 KiB 上限（431）；请求体 1 MiB 上限（413）。tls 置空 =
-// 明文 HTTP（TcpListener 底座）；非空 = HTTPS（TlsListener 底座，凭据须
-// 已装载）。
+// 预算面：请求头 8 KiB 上限（431）；请求体 1 MiB 上限（413，头齐即拒）；
+// 请求超时 requestTimeout（0 = 不限；>0 = 首字节起 T 内未完成即 408 断连）；
+// 并发上限 maxConnections。tls 置空 = 明文 HTTP（TcpListener 底座）；非空
+// = HTTPS（TlsListener 底座，凭据须已装载）。
 //
 // Windows：link TCP/TLS 底座不进 M1 批（POSIX only）——本工厂 Windows 下
 // 退回 null 桩（同签名编译期分叉）。
@@ -50,6 +52,10 @@ struct HttpRequest {
     std::string path;
     std::vector<std::pair<std::string, std::string>> headers;  // 名已小写
     std::vector<std::uint8_t> body;
+    // 逐字节原始请求帧（请求行 + 头 + 声明体长的体）。验签保真面（todo
+    // L62）：headers 面已小写、body 面只收声明体长——渠道规范若按原始
+    // 大小写头或整帧签名，只此一处有原始形态。
+    std::vector<std::uint8_t> raw_request;
 };
 
 struct HttpResponse {
@@ -81,6 +87,9 @@ struct HttpIngressConfig {
     apollo::net::tls::TlsServerContext* tls = nullptr;  // 空 = 明文 http
     std::size_t maxConnections = 0;
     std::uint64_t connectionIdBase = 0;  // 号段基址（多监听并装分占互斥号段）
+    // 请求超时预算（0 = 不限）：请求首字节起 T 内未完成（头不齐/体不齐）
+    // → 408 + 断连。渠道回调重试语义下，挂死的半请求不吃并发预算。
+    std::chrono::milliseconds requestTimeout{0};
 };
 
 class HttpIngressServer {

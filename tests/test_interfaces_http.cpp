@@ -13,10 +13,18 @@
 //   9. 体超 1 MiB 预算 → 413（头齐即拒，不等体到齐）；
 //  10. HTTPS round-trip：TLS 底座上同一套请求语义（自签夹具）；
 //  11. 并行监听 = 独立实例 + 互斥号段（基址 0 / 1<<40）；
-//  12. 端口冲突 → start() 抛（绑定失败显形，不静默）。
+//  12. 端口冲突 → start() 抛（绑定失败显形，不静默）；
+//  13. 平台回调受理链（L62 批⑮）：cap 顶格拒收、告警线滞回、单拍消费
+//      预算、FIFO 序、业务抛异常不断链、滞留过期丢弃计数；
+//  14. 回调路由真接线：入队 202 / 顶格 429，drain 业务恰见受理的请求、
+//      体逐字节保真；
+//  15. 原始帧保留（验签保真面）：raw_request = 请求行 + 原始大小写头 +
+//      恰取声明体长（管道尾字节不吞），body 含多字节/NUL 逐字节保真；
+//  16. 请求超时预算：首字节起 T 内未完成 → 408 + 断连，完整请求不受误伤。
 //
 // Windows：link TCP/TLS 底座不进 M1 批（POSIX only）——用例本体空转。
 
+#include "interfaces/callback_chain.hpp"
 #include "interfaces/http_ingress.hpp"
 #include "apollo/net/tls/tls_transport.hpp"
 #include "apollo/net/ws/frame.hpp"
@@ -28,6 +36,7 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -55,6 +64,9 @@
 namespace {
 
 namespace ws = apollo::net::ws;
+using interfaces::CallbackChain;
+using interfaces::CallbackChainConfig;
+using interfaces::CallbackRequest;
 using interfaces::ClientEndpoint;
 using interfaces::ConnectionID;
 using interfaces::DisconnectReason;
@@ -835,6 +847,285 @@ bool test_port_conflict_start_throws() {
     return true;
 }
 
+// ---- 13. 有界单写者回调链（单元：cap/滞回/拒收/单拍预算/抛异常/过期）----
+
+bool test_callback_chain_bounded_single_writer() {
+    std::cout << "Running: test_callback_chain_bounded_single_writer..." << std::endl;
+
+    CallbackChainConfig config;
+    config.cap = 4;
+    config.high_watermark = 3;
+    config.max_per_pump = 2;
+    config.expire_after = std::chrono::milliseconds(50);
+    CallbackChain chain(config);
+
+    auto make = [](const std::string& path) {
+        HttpRequest request;
+        request.method = "POST";
+        request.path = path;
+        const std::string body = "body-of-" + path;
+        request.body.assign(body.begin(), body.end());
+        return interfaces::snapshot(request);
+    };
+
+    // cap 4 / 告警线 3：第三条越线告警一次，第四条不重复（滞回）。
+    TEST_ASSERT(chain.push(make("/a")).accepted, "first accepted");
+    const auto second = chain.push(make("/b"));
+    TEST_ASSERT(second.accepted && !second.high_watermark, "below line no alarm");
+    const auto third = chain.push(make("/c"));
+    TEST_ASSERT(third.accepted && third.high_watermark, "third crosses line, alarm once");
+    const auto fourth = chain.push(make("/d"));
+    TEST_ASSERT(fourth.accepted && !fourth.high_watermark, "no repeat alarm (hysteresis)");
+    TEST_ASSERT(fourth.id == 4, "sequential ids");
+    const auto fifth = chain.push(make("/e"));
+    TEST_ASSERT(!fifth.accepted && fifth.id == 0, "cap reject assigns no id");
+    TEST_ASSERT(chain.rejected_count() == 1, "rejection counted");
+    TEST_ASSERT(chain.size() == 4, "four queued");
+
+    // 单拍消费预算 2：两拍各消费 2 条，FIFO 序 + 受理号递增。
+    std::vector<std::string> order;
+    std::vector<std::uint64_t> ids;
+    const auto business = [&](const CallbackRequest& callback) {
+        order.push_back(callback.path);
+        ids.push_back(callback.id);
+    };
+    const auto drain_one = chain.drain(business);
+    TEST_ASSERT(drain_one.executed == 2 && chain.size() == 2, "budget 2 per pump");
+    const auto drain_two = chain.drain(business);
+    TEST_ASSERT(drain_two.executed == 2 && chain.size() == 0, "second pump drains rest");
+    TEST_ASSERT(order == std::vector<std::string>({"/a", "/b", "/c", "/d"}),
+                "fifo order");
+    TEST_ASSERT(ids == std::vector<std::uint64_t>({1, 2, 3, 4}), "ids ascending");
+    TEST_ASSERT(chain.executed_count() == 4, "executed counter");
+
+    // 滞回：排空回落告警线以下后，重新越线再告警一次。
+    chain.push(make("/x"));
+    chain.push(make("/y"));
+    TEST_ASSERT(chain.push(make("/z")).high_watermark, "alarm re-arms after fall");
+
+    // 业务抛异常：计 failed，链不断（同拍余量继续，余项下拍补）。
+    const auto fail_on_x = [&](const CallbackRequest& callback) {
+        if (callback.path == "/x") {
+            throw std::runtime_error("boom on x");
+        }
+        business(callback);
+    };
+    const auto throwing_stats = chain.drain(fail_on_x);
+    TEST_ASSERT(throwing_stats.failed == 1, "throw counted failed");
+    TEST_ASSERT(throwing_stats.executed == 1, "same-pump budget continues after throw");
+    TEST_ASSERT(chain.failed_count() == 1, "failed counter");
+    TEST_ASSERT(chain.size() == 1, "tail still queued");
+    const auto tail = chain.drain(business);
+    TEST_ASSERT(tail.executed == 1 && tail.failed == 0, "tail drained cleanly");
+
+    // 滞留过期：迟到的回调不执行，丢弃并计数（渠道侧重试补齐）。
+    chain.push(make("/stale"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+    const auto stale_stats = chain.drain(business);
+    TEST_ASSERT(stale_stats.expired == 1 && stale_stats.executed == 0,
+                "stale dropped");
+    TEST_ASSERT(chain.expired_count() == 1, "expired counter");
+    TEST_ASSERT(chain.size() == 0, "nothing left");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 14. 回调路由真接线：入队 202 / 顶格 429 / drain 体保真 ----
+
+bool test_http_callback_route_202_and_429() {
+    std::cout << "Running: test_http_callback_route_202_and_429..." << std::endl;
+
+    RecordingObserver observer;
+    HttpIngressConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    auto ingress = interfaces::makeHttpIngressServer(config);
+
+    CallbackChainConfig chain_config;
+    chain_config.cap = 2;
+    chain_config.high_watermark = 2;
+    chain_config.max_per_pump = 8;
+    CallbackChain chain(chain_config);
+
+    // 与 apps/interfaces main 同面：受理入队回 202，顶格 429。
+    ingress->setHttpRoute("/callbacks", [&chain](const HttpRequest& request) {
+        HttpResponse response;
+        const auto result = chain.push(interfaces::snapshot(request));
+        response.status = result.accepted ? 202 : 429;
+        response.reason = result.accepted ? "Accepted" : "Too Many Requests";
+        const std::string body =
+            result.accepted ? "accepted\n" : "callback backlog full\n";
+        response.body.assign(body.begin(), body.end());
+        return response;
+    });
+    ingress->setObserver(&observer);
+    ingress->start();
+    TEST_ASSERT(ingress->listenPort() != 0, "port assigned");
+
+    // 入口每应答一连接（Connection: close）——一请求一连接三连发。
+    std::string response;
+    auto post = [&](const std::string& body) {
+        HttpTestClient client;
+        if (!client.connect("127.0.0.1", ingress->listenPort())) {
+            return false;
+        }
+        client.sendAll(plain_request("POST", "/callbacks", body));
+        return pump_until(*ingress,
+                          [&] { return client.recvHttpResponse(response); }, 2000);
+    };
+    TEST_ASSERT(post("payload-one"), "first response");
+    TEST_ASSERT(response.find("202") != std::string::npos, "first accepted 202");
+    TEST_ASSERT(post("payload-two"), "second response");
+    TEST_ASSERT(response.find("202") != std::string::npos, "second accepted 202");
+    TEST_ASSERT(post("payload-three"), "third response");
+    TEST_ASSERT(response.find("429") != std::string::npos, "third backpressured 429");
+
+    TEST_ASSERT(chain.size() == 2, "two queued");
+    TEST_ASSERT(chain.rejected_count() == 1, "one rejected");
+
+    // drain：业务恰见受理的两条，FIFO 序 + 体逐字节（验签输入保真）。
+    std::vector<std::vector<std::uint8_t>> bodies;
+    const auto stats = chain.drain(
+        [&](const CallbackRequest& callback) { bodies.push_back(callback.body); });
+    TEST_ASSERT(stats.executed == 2, "business saw exactly two");
+    const std::vector<std::uint8_t> one{'p', 'a', 'y', 'l', 'o', 'a', 'd', '-', 'o', 'n', 'e'};
+    const std::vector<std::uint8_t> two{'p', 'a', 'y', 'l', 'o', 'a', 'd', '-', 't', 'w', 'o'};
+    TEST_ASSERT(bodies.size() == 2 && bodies[0] == one, "first body verbatim");
+    TEST_ASSERT(bodies[1] == two, "second body verbatim");
+
+    ingress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 15. 原始帧保留（验签保真面）：raw_request 逐字节、头名原大小写、
+//          体恰取声明长度（管道尾字节不吞）----
+
+bool test_raw_request_retained_verbatim() {
+    std::cout << "Running: test_raw_request_retained_verbatim..." << std::endl;
+
+    RecordingObserver observer;
+    HttpIngressConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    auto ingress = interfaces::makeHttpIngressServer(config);
+
+    CallbackChain chain;
+    ingress->setHttpRoute("/callbacks", [&chain](const HttpRequest& request) {
+        HttpResponse response;
+        const auto result = chain.push(interfaces::snapshot(request));
+        response.status = result.accepted ? 202 : 429;
+        response.reason = result.accepted ? "Accepted" : "Too Many Requests";
+        const std::string body =
+            result.accepted ? "accepted\n" : "callback backlog full\n";
+        response.body.assign(body.begin(), body.end());
+        return response;
+    });
+    ingress->setObserver(&observer);
+    ingress->start();
+    TEST_ASSERT(ingress->listenPort() != 0, "port assigned");
+
+    // 二进制体（含多字节 UTF-8 与 NUL，6 字节声明）；同一次 write 附带
+    // 管道尾字节——raw/body 均不得吞入（验签按声明体长算哈希）。
+    const std::vector<std::uint8_t> payload{0x70, 0x61, 0xC3, 0xA9, 0x79, 0x00};
+    std::vector<std::uint8_t> wire;
+    const auto push_str = [&wire](const std::string& text) {
+        wire.insert(wire.end(), text.begin(), text.end());
+    };
+    push_str("POST /callbacks HTTP/1.1\r\n"
+             "Host: localhost\r\n"
+             "X-Signature: abc123DEF\r\n"
+             "Content-Length: 6\r\n"
+             "\r\n");
+    wire.insert(wire.end(), payload.begin(), payload.end());
+    const std::vector<std::uint8_t> expected_raw = wire;  // 请求行+头+体（原大小写）
+    const std::vector<std::uint8_t> trailing{'T', 'R', 'A', 'I', 'L'};
+    wire.insert(wire.end(), trailing.begin(), trailing.end());
+
+    HttpTestClient client;
+    TEST_ASSERT(client.connect("127.0.0.1", ingress->listenPort()), "client connected");
+    client.sendAll(wire);
+    std::string response;
+    TEST_ASSERT(pump_until(*ingress, [&] { return client.recvHttpResponse(response); },
+                           2000),
+                "response received");
+    TEST_ASSERT(response.find("202") != std::string::npos, "accepted 202");
+
+    std::optional<CallbackRequest> captured;
+    const auto stats = chain.drain(
+        [&](const CallbackRequest& callback) { captured = callback; });
+    TEST_ASSERT(stats.executed == 1, "one callback drained");
+    TEST_ASSERT(captured.has_value(), "captured");
+    TEST_ASSERT(captured->raw_request == expected_raw,
+                "raw frame verbatim (head + declared body only)");
+    TEST_ASSERT(captured->body == payload, "body bytes verbatim");
+    bool signature_header_kept = false;
+    for (const auto& [name, value] : captured->headers) {
+        if (name == "x-signature" && value == "abc123DEF") {
+            signature_header_kept = true;
+        }
+    }
+    TEST_ASSERT(signature_header_kept, "parsed header lowercased, value intact");
+
+    ingress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 16. 请求超时预算：首字节起 T 内未完成 → 408 + 断连；完整请求不受误伤 ----
+
+bool test_request_timeout_408() {
+    std::cout << "Running: test_request_timeout_408..." << std::endl;
+
+    RecordingObserver observer;
+    HttpIngressConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.requestTimeout = std::chrono::milliseconds(300);
+    auto ingress = interfaces::makeHttpIngressServer(config);
+    ingress->setHttpRoute("/health", [](const HttpRequest&) {
+        HttpResponse response;
+        const std::string body = "{\"status\":\"ok\"}\n";
+        response.body.assign(body.begin(), body.end());
+        return response;
+    });
+    ingress->setObserver(&observer);
+    ingress->start();
+    TEST_ASSERT(ingress->listenPort() != 0, "port assigned");
+
+    // 慢客户端：头齐 + 声明体长 5，体不续传 → 300ms 截止 408 + 断连。
+    HttpTestClient slow;
+    TEST_ASSERT(slow.connect("127.0.0.1", ingress->listenPort()), "slow connected");
+    const std::string partial = "POST /health HTTP/1.1\r\n"
+                                "Host: localhost\r\n"
+                                "Content-Length: 5\r\n"
+                                "\r\n";
+    slow.sendAll({partial.begin(), partial.end()});
+    pump_rounds(*ingress, 700);  // 超 300ms 截止：408 生成并写出（拍间隔 ≥2ms）
+    std::string response;
+    TEST_ASSERT(slow.recvHttpResponse(response), "408 response received");
+    TEST_ASSERT(response.find("408") != std::string::npos, "408 status");
+    TEST_ASSERT(response.find("request timeout") != std::string::npos,
+                "reason body");
+    TEST_ASSERT(slow.waitEof(2000), "connection closed after timeout");
+
+    // 同一入口的完整请求不受预算误伤（快客户端照常 200，零假阳性）。
+    HttpTestClient fast;
+    TEST_ASSERT(fast.connect("127.0.0.1", ingress->listenPort()), "fast connected");
+    fast.sendAll(plain_request("GET", "/health"));
+    std::string fast_response;
+    TEST_ASSERT(pump_until(*ingress,
+                           [&] { return fast.recvHttpResponse(fast_response); },
+                           2000),
+                "fast response received");
+    TEST_ASSERT(fast_response.find("200") != std::string::npos, "no false positive");
+
+    ingress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -857,6 +1148,10 @@ int main() {
         {"https_roundtrip", test_https_roundtrip},
         {"parallel_listeners_disjoint_ids", test_parallel_listeners_disjoint_ids},
         {"port_conflict_start_throws", test_port_conflict_start_throws},
+        {"callback_chain_bounded_single_writer", test_callback_chain_bounded_single_writer},
+        {"http_callback_route_202_and_429", test_http_callback_route_202_and_429},
+        {"raw_request_retained_verbatim", test_raw_request_retained_verbatim},
+        {"request_timeout_408", test_request_timeout_408},
     };
     int failures = 0;
     for (const auto& c : cases) {

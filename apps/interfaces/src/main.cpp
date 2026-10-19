@@ -1,6 +1,7 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/tls/tls_transport.hpp"
+#include "interfaces/callback_chain.hpp"
 #include "interfaces/http_ingress.hpp"
 #include <atomic>
 #include <chrono>
@@ -39,6 +40,10 @@ struct InterfacesConfig {
     std::string tlsKeyPath;
     std::string wsPath = "/ws";    // 专用升级路由
     std::size_t maxConnections = 0;
+    std::uint32_t requestTimeoutMs = 0;   // 0 = 不限；>0 = 请求超时 408
+    std::size_t callbackCap = 1024;       // 回调链顶格拒收线
+    std::size_t callbackMaxPump = 64;     // 回调链单拍消费上限
+    std::uint32_t callbackExpireMs = 0;   // 0 = 不过期；>0 = 滞留超期丢弃
 };
 
 InterfacesConfig loadConfig(int argc, char* argv[]) {
@@ -59,6 +64,14 @@ InterfacesConfig loadConfig(int argc, char* argv[]) {
             config.wsPath = argv[++i];
         } else if (arg == "--max-connections" && i + 1 < argc) {
             config.maxConnections = static_cast<std::size_t>(std::atoi(argv[++i]));
+        } else if (arg == "--request-timeout" && i + 1 < argc) {
+            config.requestTimeoutMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--callback-cap" && i + 1 < argc) {
+            config.callbackCap = static_cast<std::size_t>(std::atoi(argv[++i]));
+        } else if (arg == "--callback-max-pump" && i + 1 < argc) {
+            config.callbackMaxPump = static_cast<std::size_t>(std::atoi(argv[++i]));
+        } else if (arg == "--callback-expire-ms" && i + 1 < argc) {
+            config.callbackExpireMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -69,6 +82,10 @@ InterfacesConfig loadConfig(int argc, char* argv[]) {
                       << "  --tls-key <file>         HTTPS PEM private key (required by --https-port)\n"
                       << "  --ws-path <path>         Dedicated websocket upgrade route (default: /ws)\n"
                       << "  --max-connections <num>   Max connections per listener (0 = unlimited, default: 0)\n"
+                      << "  --request-timeout <ms>    Request completion budget (0 = unlimited, default: 0)\n"
+                      << "  --callback-cap <num>      Callback chain capacity before 429 (default: 1024)\n"
+                      << "  --callback-max-pump <num> Callback drain budget per tick (default: 64)\n"
+                      << "  --callback-expire-ms <ms> Callback staleness budget before drop (0 = never, default: 0)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -76,8 +93,8 @@ InterfacesConfig loadConfig(int argc, char* argv[]) {
     return config;
 }
 
-// 演示路由（L50 平台回调接线替换此面）：健康检查 + 回显；ws 侧专用升级
-// 路由走 echo 生命周期，不进 HTTP handler（todo L45 路由隔离验收）。
+// 演示路由（健康检查 + 回显；ws 侧专用升级路由走 echo 生命周期，不进
+// HTTP handler——todo L45 路由隔离验收）。
 void install_demo_routes(HttpIngressServer& server, const std::string& ws_path) {
     server.setHttpRoute("/health", [](const HttpRequest&) {
         HttpResponse response;
@@ -91,6 +108,23 @@ void install_demo_routes(HttpIngressServer& server, const std::string& ws_path) 
         return response;
     });
     server.setWsRoute(ws_path);
+}
+
+// 平台回调路由（todo L62）：受理面只做快照入队 + 回执——202 受理（业务
+// 异步执行）、429 顶格拒收（渠道侧重试补齐）。渠道验签/发货等业务逻辑
+// 在回调链的单写者 drain 上跑；真实业务 executor（Lua/发货）= P3 Base
+// 玩法意图词汇落地后的挂账接线面，本批交付的是有界调度面。
+void install_callback_route(HttpIngressServer& server, CallbackChain& chain) {
+    server.setHttpRoute("/callbacks", [&chain](const HttpRequest& request) {
+        HttpResponse response;
+        const auto result = chain.push(snapshot(request));
+        response.status = result.accepted ? 202 : 429;
+        response.reason = result.accepted ? "Accepted" : "Too Many Requests";
+        const std::string body = result.accepted ? "accepted\n"
+                                                 : "callback backlog full\n";
+        response.body.assign(body.begin(), body.end());
+        return response;
+    });
 }
 
 // 日志接线（ADR-013 L1+L2）：console 人读 + 本地结构化文件真相源并行。
@@ -164,6 +198,17 @@ int main(int argc, char* argv[]) {
         http_config.port = config.port;
         http_config.maxConnections = config.maxConnections;
         http_config.connectionIdBase = 0;
+        http_config.requestTimeout = std::chrono::milliseconds(config.requestTimeoutMs);
+
+        // 平台回调受理链（有界单写者）：入口泵入队 + 202/429 回执，drain 在
+        // 主循环单写者上消费（业务执行与入口泵同宿主但不同步进——见 pump 循环）。
+        CallbackChainConfig chain_config;
+        chain_config.cap = config.callbackCap;
+        chain_config.high_watermark =
+            (config.callbackCap * 3) / 4 > 0 ? (config.callbackCap * 3) / 4 : 1;
+        chain_config.max_per_pump = config.callbackMaxPump;
+        chain_config.expire_after = std::chrono::milliseconds(config.callbackExpireMs);
+        CallbackChain callback_chain(chain_config);
 
         std::unique_ptr<apollo::net::tls::TlsServerContext> tls_context;
         HttpIngressConfig https_config;
@@ -171,6 +216,7 @@ int main(int argc, char* argv[]) {
         https_config.port = config.httpsPort;
         https_config.maxConnections = config.maxConnections;
         https_config.connectionIdBase = kIdStride;
+        https_config.requestTimeout = std::chrono::milliseconds(config.requestTimeoutMs);
         if (config.httpsPort != 0) {
             if (config.tlsCertPath.empty() || config.tlsKeyPath.empty()) {
                 throw std::runtime_error(
@@ -188,6 +234,7 @@ int main(int argc, char* argv[]) {
 
         auto http_server = makeHttpIngressServer(http_config);
         install_demo_routes(*http_server, config.wsPath);
+        install_callback_route(*http_server, callback_chain);
         http_server->setObserver(&observer);
         http_server->start();
 
@@ -195,6 +242,7 @@ int main(int argc, char* argv[]) {
         if (config.httpsPort != 0) {
             https_server = makeHttpIngressServer(https_config);
             install_demo_routes(*https_server, config.wsPath);
+            install_callback_route(*https_server, callback_chain);
             https_server->setObserver(&observer);
             https_server->start();
         }
@@ -211,6 +259,22 @@ int main(int argc, char* argv[]) {
             http_server->pump();
             if (https_server) {
                 https_server->pump();
+            }
+            // 回调链单写者消费（与入口泵同线程 = 顺序两相：入队相位完成于
+            // pump()，业务相位在此；业务慢只推迟本拍余量，入口受理面不堵）。
+            // 演示 executor = 观测日志（真实业务接线 = P3 词汇落地后的挂账面）。
+            const auto drained =
+                callback_chain.drain([&](const CallbackRequest& callback) {
+                    logger->info("callback id=" + std::to_string(callback.id) + " "
+                                 + callback.method + " " + callback.path + " body="
+                                 + std::to_string(callback.body.size()) + "B");
+                });
+            if (drained.executed != 0 || drained.expired != 0 || drained.failed != 0) {
+                logger->info("callback drain: executed="
+                             + std::to_string(drained.executed)
+                             + " expired=" + std::to_string(drained.expired)
+                             + " failed=" + std::to_string(drained.failed)
+                             + " backlog=" + std::to_string(callback_chain.size()));
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }

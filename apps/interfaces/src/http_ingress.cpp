@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <span>
 #include <stdexcept>
@@ -61,9 +62,12 @@ inline std::string trim(std::string_view text) {
 const char* status_reason(int status) {
     switch (status) {
         case 200: return "OK";
+        case 202: return "Accepted";
         case 400: return "Bad Request";
+        case 408: return "Request Timeout";
         case 404: return "Not Found";
         case 413: return "Payload Too Large";
+        case 429: return "Too Many Requests";
         case 431: return "Request Header Fields Too Large";
         case 500: return "Internal Server Error";
         default: return "Unknown";
@@ -148,9 +152,15 @@ struct HttpConnection {
     std::vector<std::uint8_t> tx;        // 出站残余，泵线程独占
     std::vector<std::uint8_t> netframe;  // ws echo 组帧中转
     std::size_t body_need{0};            // Content-Length 目标体长
+    bool body_declared{false};           // 有 Content-Length（区别于无体请求）
     HttpRequest request;                 // 头解析结果（body 阶段续填）
     netws::FrameParser frames;           // ws 专用路由生命周期
     std::uint32_t stalledPumps{0};       // closing 且残余写不尽的泵计数
+    // 请求超时预算（requestTimeout > 0 才生效）：首请求字节到达武装，绝对
+    // 截止——T 内未完成即 408。TLS 握手期 read 返 0，不会误武装（首字节 =
+    // 首个应用层字节）。
+    bool requestDeadlineArmed{false};
+    std::chrono::steady_clock::time_point requestDeadline{};
 };
 
 // 请求行 + 头部解析（失败 = 400；body 字节留在 rx）。
@@ -323,6 +333,7 @@ private:
     }
 
     void io_round() {
+        const auto now = std::chrono::steady_clock::now();
         for (auto& [id, conn] : connections_) {
             if (conn->phase == HttpConnection::Phase::kClosing) {
                 // 应答/回执写尽即拆；滞留有强拆兜底（对端不读 socket）。
@@ -333,6 +344,13 @@ private:
                         conn->tx.clear();
                     }
                 }
+                continue;
+            }
+            // 请求超时预算：首字节起 T 内未完成（头不齐/体不齐）→ 408 断连，
+            // 挂死的半请求不吃并发预算（渠道侧重试补齐）。
+            if (conn->phase == HttpConnection::Phase::kRequest && conn->requestDeadlineArmed &&
+                config_.requestTimeout.count() > 0 && now > conn->requestDeadline) {
+                reply_simple(*conn, 408, "request timeout");
                 continue;
             }
             flush_tx(*conn);
@@ -369,6 +387,11 @@ private:
                     feed_ws_bytes(conn, std::span<const std::uint8_t>(
                                             buf, static_cast<std::size_t>(n)));
                 } else {
+                    if (!conn.requestDeadlineArmed) {
+                        conn.requestDeadlineArmed = true;
+                        conn.requestDeadline =
+                            std::chrono::steady_clock::now() + config_.requestTimeout;
+                    }
                     conn.rx.insert(conn.rx.end(), buf, buf + n);
                     if (conn.phase == HttpConnection::Phase::kRequest) {
                         step_request(conn);
@@ -454,6 +477,7 @@ private:
                 return;
             }
             conn.body_need = static_cast<std::size_t>(parsed);
+            conn.body_declared = true;
         }
         if (conn.rx.size() - head_size >= conn.body_need) {
             finish_request(conn, head_size);
@@ -462,8 +486,18 @@ private:
     }
 
     void finish_request(HttpConnection& conn, std::size_t head_size) {
-        conn.request.body.assign(conn.rx.begin() + static_cast<long>(head_size),
-                                 conn.rx.end());
+        const std::size_t available = conn.rx.size() - head_size;
+        // 体恰取声明的 body_need 字节（无声明则无体）：管道残余尾字节不吞进
+        // body/raw——渠道按声明体长算的验签哈希，多吞一个字节 = 必败。raw
+        // 保留头 + 声明体长的原始帧（原始大小写头只在 raw 面有）。
+        const std::size_t body_len = conn.body_declared
+            ? std::min(available, conn.body_need)
+            : 0;
+        conn.request.raw_request.assign(
+            conn.rx.begin(), conn.rx.begin() + static_cast<long>(head_size + body_len));
+        conn.request.body.assign(
+            conn.rx.begin() + static_cast<long>(head_size),
+            conn.rx.begin() + static_cast<long>(head_size + body_len));
         conn.rx.clear();
         HttpResponse response;
         try {
