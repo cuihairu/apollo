@@ -289,6 +289,19 @@ void TlsListener::close() {
     port_ = 0;
 }
 
+// ---- link 管理器 accept 装配工厂 ----
+
+std::function<std::unique_ptr<link::ILinkTransport>(int, const link::EndpointConfig&)>
+make_tls_accept_factory(TlsServerContext& ctx, std::uint32_t handshake_timeout_ms) {
+    SSL_CTX* borrowed = static_cast<SSL_CTX*>(ctx.ctx_);
+    return [borrowed, handshake_timeout_ms](
+               int fd, const link::EndpointConfig&) -> std::unique_ptr<link::ILinkTransport> {
+        // 与 TlsListener::accept 同语义：记录层 fatal（对端不握手/坏流/
+        // 截止）由缝读写 -1 显形，不在此吞。
+        return std::make_unique<TlsTransport>(fd, borrowed, handshake_timeout_ms);
+    };
+}
+
 }  // namespace apollo::net::tls
 
 #endif  // !_WIN32

@@ -26,15 +26,28 @@
 // 证书由部署供给，机制不生成、不内置任何凭据。
 
 #include "apollo/net/link/transport.hpp"
+#include "apollo/net/link/link_manager.hpp"
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
 #if !defined(_WIN32)
 
 namespace apollo::net::tls {
+
+class TlsClientContext;
+
+// link LinkManagerConfig.dial_factory 装配面（OpenSSL 不进 link 内核的
+// 注入缝——消费者把本工厂装进管理器，active 拨号 TCP 连上后裸 fd 即换
+// TLS 客户端记录层，链 + 主机名验签不过则传输当场作废、链路按断连对待
+// 重拨）。验签目标 = 端点 host（LinkManagerConfig 拨号地址；IP 字面量直
+// 连时须证书含该 IP SAN 才能过，否则部署侧应改用主机名端点）。上下文须
+// 活得比工厂与全部产出的传输久（工厂捕获其地址）。
+std::function<std::unique_ptr<link::ILinkTransport>(int fd, const link::EndpointConfig&)>
+make_tls_dial_factory(TlsClientContext& ctx, std::uint32_t handshake_timeout_ms = 10000);
 
 // 客户端 TLS 上下文：装载一次、多个监听/连接共享。头不泄 OpenSSL 类型。
 class TlsClientContext {
@@ -63,6 +76,8 @@ public:
 
 private:
     friend class TlsClientTransport;
+    friend std::function<std::unique_ptr<link::ILinkTransport>(int, const link::EndpointConfig&)>
+        make_tls_dial_factory(TlsClientContext&, std::uint32_t);
     void* ctx_ = nullptr;  // SSL_CTX*（构造即建，凭据装载成功才可用）
     bool loaded_ = false;  // 信任锚装载完成标志
     bool verify_enabled_ = true;

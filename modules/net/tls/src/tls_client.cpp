@@ -256,6 +256,17 @@ bool TlsClientTransport::fail() {
     return false;
 }
 
+// ---- link 管理器 dial 装配工厂 ----
+
+std::function<std::unique_ptr<link::ILinkTransport>(int, const link::EndpointConfig&)>
+make_tls_dial_factory(TlsClientContext& ctx, std::uint32_t handshake_timeout_ms) {
+    return [&ctx, handshake_timeout_ms](
+               int fd, const link::EndpointConfig& ep) -> std::unique_ptr<link::ILinkTransport> {
+        // 验签目标 = 端点 host（拨号地址即期望身份；见头注 IP 字面量纪律）。
+        return std::make_unique<TlsClientTransport>(fd, ctx, ep.host, handshake_timeout_ms);
+    };
+}
+
 }  // namespace apollo::net::tls
 
 #endif  // !_WIN32

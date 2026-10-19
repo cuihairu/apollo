@@ -61,6 +61,14 @@ struct LinkManagerConfig {
     std::uint64_t authority_epoch = 0;
     std::uint32_t backoff_initial_ms = 500;
     std::uint32_t backoff_max_ms = 15000;
+    // 记录层包装缝（OpenSSL 不进 link 内核——消费者经 apollo_net_tls 注入
+    // 工厂；未注入 = 明文 TCP，现状语义）。dial_factory：active 拨号 TCP
+    // 连上后把已连裸 fd 换成包装传输（TLS 客户端记录层 + 链/主机名验签）；
+    // accept_factory：passive accept 出的裸 fd 同理（TLS 服务端记录层）。
+    // 工厂接管 fd 所有权（含失败路径的关闭责任），返回 nullptr = 该连接
+    // 作废（dial 侧按一次拨号失败计入退避；accept 侧丢弃，不占链路槽位）。
+    std::function<std::unique_ptr<ILinkTransport>(int fd, const EndpointConfig&)> dial_factory;
+    std::function<std::unique_ptr<ILinkTransport>(int fd, const EndpointConfig&)> accept_factory;
 };
 
 class LinkManager {
@@ -144,6 +152,10 @@ private:
     void schedule_backoff(Managed& m, std::uint64_t now_ms);
     // 竞速窗兜底：staging 里握手完毕（kUp）未迁册的同名链（link() 用）。
     InterServerLink* find_staging_peer(Managed& m, const std::string& name);
+    // 裸 TCP 传输换记录层包装（工厂未注入 = 原样返回；拒收/无 fd = nullptr）。
+    std::unique_ptr<ILinkTransport> wrap_with(
+        const std::function<std::unique_ptr<ILinkTransport>(int, const EndpointConfig&)>& factory,
+        std::unique_ptr<ILinkTransport> raw, const EndpointConfig& cfg);
 
     LinkManagerConfig config_;
     std::vector<std::unique_ptr<Managed>> endpoints_;  // 保序（泵次序确定）

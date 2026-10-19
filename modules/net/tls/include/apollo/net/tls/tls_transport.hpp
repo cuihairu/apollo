@@ -26,14 +26,26 @@
 // 凭据与安全传输是显式部署集成）。
 
 #include "apollo/net/link/transport.hpp"
+#include "apollo/net/link/link_manager.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
 #if !defined(_WIN32)
 
 namespace apollo::net::tls {
+
+class TlsServerContext;
+
+// link LinkManagerConfig.accept_factory 装配面（OpenSSL 不进 link 内核的
+// 注入缝——消费者把本工厂装进管理器，passive accept 出的裸 fd 即换 TLS
+// 服务端记录层，语义与 TlsListener::accept 完全一致）。工厂接管 fd 所有
+// 权（含失败路径的关闭责任）。上下文须活得比工厂与全部产出的传输久
+// （工厂捕获其地址——与 TlsListener start 捕获 ctx 同纪律）。
+std::function<std::unique_ptr<link::ILinkTransport>(int fd, const link::EndpointConfig&)>
+make_tls_accept_factory(TlsServerContext& ctx, std::uint32_t handshake_timeout_ms = 10000);
 
 // 服务端 TLS 上下文：装载一次、监听器共享。头不泄 OpenSSL 类型。
 class TlsServerContext {
@@ -56,6 +68,8 @@ public:
 
 private:
     friend class TlsListener;
+    friend std::function<std::unique_ptr<link::ILinkTransport>(int, const link::EndpointConfig&)>
+        make_tls_accept_factory(TlsServerContext&, std::uint32_t);
     void* ctx_ = nullptr;  // SSL_CTX*（构造即建，凭据装载成功才可用）
     bool loaded_ = false;  // 装载完成标志（ctx 存在 ≠ 凭据已装）
 };

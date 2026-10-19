@@ -18,11 +18,16 @@
 //      + 主机名匹配握手通；不受信链 fatal（验签码 = 链不受信）；主机名
 //      不匹配 fatal（验签码 = 主机名不匹配）；显式关闭验签的本地联调
 //      逃生门可用。
+//  10. link 管理器 TLS 装配（工厂缝）：passive accept 工厂 + active dial
+//      工厂包成 TLS 记录层，Hello + 双向 reliable 全走 TLS；信任锚装错
+//      → 链路永不 kUp、退避重拨、服务端计数失败握手。
 
 #if !defined(_WIN32)
 
 #include "tls_test_support.hpp"
 
+#include "apollo/net/link/link_manager.hpp"
+#include "apollo/net/link/route_table.hpp"
 #include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/net/link/transport.hpp"
 #include "apollo/net/tls/tls_client.hpp"
@@ -57,6 +62,35 @@ using apollo::net::tls::TlsClientContext;
 using apollo::net::tls::TlsClientTransport;
 using apollo::net::tls::TlsListener;
 using apollo::net::tls::TlsServerContext;
+using apollo::net::tls::make_tls_accept_factory;
+using apollo::net::tls::make_tls_dial_factory;
+using link::EndpointConfig;
+using link::EndpointRole;
+using link::InterServerLink;
+using link::LinkManager;
+using link::LinkManagerConfig;
+using link::LinkState;
+using link::RouteTable;
+using link::SendClass;
+using link::SendCode;
+
+// 管理器 e2e 夹具（与 link 测试同形：单路由表 + 收帧日志）。
+struct RxLog {
+    std::vector<std::string> got;
+
+    link::Dispatcher::Handler handler() {
+        return [this](std::uint16_t id, const std::uint8_t* data, std::size_t size) {
+            got.emplace_back(std::to_string(id) + ":" +
+                             std::string(reinterpret_cast<const char*>(data), size));
+        };
+    }
+};
+
+RouteTable make_dispatch_table() {
+    RouteTable t;
+    t.add({901, "test.echo", "P2P", "control", "internal", "native"});
+    return t;
+}
 
 // macOS CI 裸自旋必 flake：重试循环每拍 sleep ≥2ms。
 const auto kTick = std::chrono::milliseconds(2);
@@ -579,6 +613,167 @@ bool test_client_verify_disabled_local_dev() {
     return true;
 }
 
+// ---- 10. link 管理器 TLS 装配：工厂缝把拨号/接受包成 TLS 记录层 ----
+
+bool test_link_manager_tls_pair_e2e() {
+    const TempCerts certs = make_certs();
+    TEST_ASSERT(certs.ok, "自签证书夹具生成成功");
+
+    TlsServerContext server_ctx;
+    TEST_ASSERT(server_ctx.load(certs.a.cert_path, certs.a.key_path).ok, "服务端装载通过");
+    TlsClientContext client_ctx;
+    TEST_ASSERT(client_ctx.loadCaFile(certs.a.cert_path).ok, "信任锚装载通过");
+
+    RouteTable table = make_dispatch_table();
+
+    // passive：accept 工厂把 accept 出的裸 fd 换 TLS 服务端记录层。
+    LinkManagerConfig passive_cfg;
+    passive_cfg.self_name = "game";
+    passive_cfg.route_version = 7;
+    passive_cfg.backoff_initial_ms = 50;
+    passive_cfg.backoff_max_ms = 200;
+    passive_cfg.accept_factory = make_tls_accept_factory(server_ctx);
+    LinkManager passive(passive_cfg);
+
+    EndpointConfig pe;
+    pe.name = "game";
+    pe.host = "127.0.0.1";
+    pe.role = EndpointRole::kPassive;
+    TEST_ASSERT(passive.add_endpoint(pe), "passive endpoint bound");
+
+    // active：dial 工厂把拨号连上的裸 fd 换 TLS 客户端记录层（验签目标
+    // = 端点 host，证书 CN=localhost → 主机名端点）。
+    LinkManagerConfig active_cfg;
+    active_cfg.self_name = "auth";
+    active_cfg.route_version = 7;
+    active_cfg.backoff_initial_ms = 50;
+    active_cfg.backoff_max_ms = 200;
+    active_cfg.dial_factory = make_tls_dial_factory(client_ctx);
+    LinkManager active(active_cfg);
+
+    int a_ups = 0, b_ups = 0;
+    active.on_up([&](const std::string&) { ++a_ups; });
+    passive.on_up([&](const std::string&) { ++b_ups; });
+
+    EndpointConfig ae;
+    ae.name = "game";
+    ae.host = "localhost";
+    ae.port = passive.endpoint_port("game");
+    TEST_ASSERT(ae.port != 0, "ephemeral port observed");
+    TEST_ASSERT(active.add_endpoint(ae), "active endpoint added");
+
+    InterServerLink* la = active.link("game");
+    TEST_ASSERT(la != nullptr, "active link exposed");
+    InterServerLink* lb = nullptr;
+    RxLog rx, rx_a;
+    passive.set_peer_listener([&](InterServerLink& peer) {
+        peer.dispatcher().set_route_table(&table);
+        peer.dispatcher().allow_domain("internal");
+        peer.dispatcher().set_handler(901, rx.handler());
+        lb = &peer;
+    });
+    la->dispatcher().set_route_table(&table);
+    la->dispatcher().allow_domain("internal");
+    la->dispatcher().set_handler(901, rx_a.handler());
+
+    // 泵到握手完成（TLS 双侧步进在缝读写内隐式推进；每拍实睡——
+    // TLS 握手要真实墙钟 I/O，裸自旋会饿死 I/O 且 macOS CI 必 flake）。
+    std::uint64_t t = 1000;
+    for (int i = 0; i < 2000; ++i) {
+        t += 5;
+        active.pump(t);
+        passive.pump(t);
+        if (la->state() == LinkState::kUp && lb != nullptr &&
+            lb->state() == LinkState::kUp) {
+            break;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    TEST_ASSERT(la->state() == LinkState::kUp, "active up over tls");
+    TEST_ASSERT(lb != nullptr && lb->state() == LinkState::kUp, "passive peer up over tls");
+    TEST_ASSERT(lb->peer_name() == "auth", "peer name over tls");
+    TEST_ASSERT(a_ups == 1 && b_ups == 1, "manager events over tls");
+
+    // 双向 reliable 各一帧 + 双向 ack（全走 TLS 记录层）。
+    TEST_ASSERT(la->send(901, std::vector<std::uint8_t>{'a'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "a send");
+    TEST_ASSERT(lb->send(901, std::vector<std::uint8_t>{'b'}, SendClass::kReliable) ==
+                    SendCode::kAccepted,
+                "b send");
+    for (int i = 0; i < 2000; ++i) {
+        t += 5;
+        active.pump(t);
+        passive.pump(t);
+        if (rx.got.size() == 1 && rx_a.got.size() == 1 &&
+            la->stats().reliable_acked == 1 && lb->stats().reliable_acked == 1) {
+            break;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    TEST_ASSERT(rx.got.size() == 1 && rx_a.got.size() == 1, "both directions over tls");
+    TEST_ASSERT(rx.got[0] == "901:a" && rx_a.got[0] == "901:b", "payloads true over tls");
+    TEST_ASSERT(la->stats().reliable_acked == 1 && lb->stats().reliable_acked == 1,
+                "acks round trip over tls");
+    return true;
+}
+
+bool test_link_manager_tls_rejects_untrusted() {
+    const TempCerts certs = make_certs();
+    TEST_ASSERT(certs.ok, "自签证书夹具生成成功");
+
+    TlsServerContext server_ctx;
+    TEST_ASSERT(server_ctx.load(certs.a.cert_path, certs.a.key_path).ok, "服务端装载通过");
+    // 信任锚故意装错（b 与服务端 a 无关）——TCP 恒通，TLS 验签恒拒：
+    // 链路必须永不 kUp，且拨号退避重试（不是一次性吞掉）。
+    TlsClientContext client_ctx;
+    TEST_ASSERT(client_ctx.loadCaFile(certs.b.cert_path).ok, "错误信任锚装载通过");
+
+    LinkManagerConfig passive_cfg;
+    passive_cfg.self_name = "game";
+    passive_cfg.route_version = 7;
+    passive_cfg.backoff_initial_ms = 50;
+    passive_cfg.backoff_max_ms = 200;
+    passive_cfg.accept_factory = make_tls_accept_factory(server_ctx);
+    LinkManager passive(passive_cfg);
+
+    EndpointConfig pe;
+    pe.name = "game";
+    pe.host = "127.0.0.1";
+    pe.role = EndpointRole::kPassive;
+    TEST_ASSERT(passive.add_endpoint(pe), "passive endpoint bound");
+
+    LinkManagerConfig active_cfg;
+    active_cfg.self_name = "auth";
+    active_cfg.route_version = 7;
+    active_cfg.backoff_initial_ms = 50;
+    active_cfg.backoff_max_ms = 200;
+    active_cfg.dial_factory = make_tls_dial_factory(client_ctx);
+    LinkManager active(active_cfg);
+
+    int a_ups = 0;
+    active.on_up([&](const std::string&) { ++a_ups; });
+
+    EndpointConfig ae;
+    ae.name = "game";
+    ae.host = "localhost";
+    ae.port = passive.endpoint_port("game");
+    TEST_ASSERT(active.add_endpoint(ae), "active endpoint added");
+
+    std::uint64_t t = 1000;
+    for (int i = 0; i < 750; ++i) {  // ~1.5s：覆盖多轮 50ms 起步的退避重拨
+        t += 5;
+        active.pump(t);
+        passive.pump(t);
+        std::this_thread::sleep_for(kTick);
+    }
+    TEST_ASSERT(active.link("game")->state() != LinkState::kUp, "link never up on bad chain");
+    TEST_ASSERT(a_ups == 0, "no up events on bad chain");
+    TEST_ASSERT(active.dial_attempts("game") >= 2, "dial retried with backoff");
+    TEST_ASSERT(passive.handshake_failures("game") >= 2, "server counted failed handshakes");
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -598,6 +793,8 @@ int main() {
         {"client_rejects_untrusted_chain", test_client_rejects_untrusted_chain},
         {"client_rejects_hostname_mismatch", test_client_rejects_hostname_mismatch},
         {"client_verify_disabled_local_dev", test_client_verify_disabled_local_dev},
+        {"link_manager_tls_pair_e2e", test_link_manager_tls_pair_e2e},
+        {"link_manager_tls_rejects_untrusted", test_link_manager_tls_rejects_untrusted},
     };
 
     int failed = 0;

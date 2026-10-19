@@ -121,11 +121,17 @@ void LinkManager::pump(std::uint64_t now_ms) {
                 break;
             case EndpointRole::kPassive: {
                 // accept 出的每条传输独立成链（fan-out；对端重拨 = 同名新链
-                // 替换旧链，语义见 pump_passive）。
+                // 替换旧链，语义见 pump_passive）。accept_factory 在位时把
+                // 裸 fd 换记录层包装（TLS）；包装拒收的连接丢弃不占槽位。
                 while (auto transport = m.listener.accept()) {
+                    auto wrapped =
+                        wrap_with(config_.accept_factory, std::move(transport), m.config);
+                    if (wrapped == nullptr) {
+                        continue;
+                    }
                     auto peer = std::make_unique<InterServerLink>(m.link_config);
                     wire_peer_sink(*peer);
-                    peer->attach(std::move(transport), now_ms);
+                    peer->attach(std::move(wrapped), now_ms);
                     m.staging.push_back(std::move(peer));
                 }
                 pump_passive(m, now_ms);
@@ -181,8 +187,19 @@ void LinkManager::pump_active(Managed& m, std::uint64_t now_ms) {
     if (m.dialing) {
         const auto r = m.connector.pump(now_ms);
         if (r == TcpConnector::PumpResult::kConnected) {
-            m.link->attach(m.connector.take_transport(), now_ms);
+            auto transport = wrap_with(config_.dial_factory, m.connector.take_transport(),
+                                       m.config);
             m.dialing = false;
+            if (transport == nullptr) {
+                // 记录层拒收（如 TLS 装配失败）：按一次拨号失败计，走同
+                // 一退避；不产出半连状态。
+                if (m.consecutive_failures < ~std::uint32_t{0}) {
+                    ++m.consecutive_failures;
+                }
+                schedule_backoff(m, now_ms);
+                return;
+            }
+            m.link->attach(std::move(transport), now_ms);
             m.consecutive_failures = 0;  // 连上即复位退避
         } else if (r == TcpConnector::PumpResult::kFailed) {
             m.connector.cancel();
@@ -216,6 +233,25 @@ void LinkManager::pump_active(Managed& m, std::uint64_t now_ms) {
             schedule_backoff(m, now_ms);
         }
     }
+}
+
+std::unique_ptr<ILinkTransport> LinkManager::wrap_with(
+    const std::function<std::unique_ptr<ILinkTransport>(int, const EndpointConfig&)>& factory,
+    std::unique_ptr<ILinkTransport> raw, const EndpointConfig& cfg) {
+    if (raw == nullptr) {
+        return nullptr;
+    }
+    if (!factory) {
+        return raw;  // 未注入 = 明文 TCP（现状语义）
+    }
+    // take_transport()/accept() 产出恒为 TcpTransport（本模块底座）——
+    // fd 移交后包装工厂接管所有权（含失败路径的关闭责任）。
+    auto* tcp = static_cast<TcpTransport*>(raw.get());
+    const int fd = tcp->releaseFd();
+    if (fd < 0) {
+        return nullptr;
+    }
+    return factory(fd, cfg);
 }
 
 void LinkManager::schedule_backoff(Managed& m, std::uint64_t now_ms) {

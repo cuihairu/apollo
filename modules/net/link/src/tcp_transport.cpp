@@ -67,6 +67,12 @@ TcpTransport::~TcpTransport() {
     close();
 }
 
+int TcpTransport::releaseFd() {
+    const int fd = fd_;
+    fd_ = -1;  // 所有权已移交：closed() 即 true，析构不再关（记录层负责）
+    return fd;
+}
+
 int TcpTransport::read(std::uint8_t* buf, std::size_t cap) {
     if (fd_ < 0) {
         return -1;
