@@ -151,7 +151,7 @@ bool test_init_creates_skeleton() {
                 "项目标记带脚手架版本");
 
     for (const char* file : {"config/runtime.conf", "scripts/lib.sh",
-                             "scripts/start.sh", "scripts/stop.sh",
+                             "scripts/start.sh", "scripts/stop.sh", "scripts/status.sh",
                              "lua/boot.lua", "lua/contract_handlers.lua",
                              "contract/README.md", "run/.gitkeep"}) {
         TEST_ASSERT(std::filesystem::is_regular_file(target / file),
@@ -189,7 +189,9 @@ bool test_generated_template_integrity() {
                 "运行根默认 <root>/run 且配置可覆盖");
     for (const char* helper : {"role_dir()", "log_file()", "data_dir()",
                                "admin_dir()", "pid_file()", "ensure_role_dir()",
-                               "cell_dir()", "require_bin_dir()", "bin_of()"}) {
+                               "cell_dir()", "require_bin_dir()", "bin_of()",
+                               "ready_line()", "member_ready()", "wait_ready()",
+                               "stop_one()"}) {
         TEST_ASSERT(lib.find(helper) != std::string::npos,
                     std::string("lib.sh 提供 ") + helper);
     }
@@ -207,6 +209,11 @@ bool test_generated_template_integrity() {
                 "引擎目录校验与两种布局探测集中在 lib.sh");
     TEST_ASSERT(lib.find("engine binary not found") != std::string::npos,
                 "引擎二进制缺失时报错退出");
+    TEST_ASSERT(lib.find("database ready port=") != std::string::npos &&
+                    lib.find("Server is running") != std::string::npos,
+                "就绪标记取自各服务真实启动行，不虚构");
+    TEST_ASSERT(lib.find("kill ") != std::string::npos,
+                "TERM 面集中在 lib.sh，start/stop 共用");
 
     // 启动脚本：依赖顺序 database→login→base→world→gateway，flag 均为服务
     // 现有解析项，且不落任何就绪伪装（无 sleep）。
@@ -224,6 +231,11 @@ bool test_generated_template_integrity() {
                 "base→database 接线走真实 flag");
     TEST_ASSERT(start.find("--crash-dump-dir") != std::string::npos,
                 "管理记录目录逐角色显式给出");
+    TEST_ASSERT(start.find("wait_ready") != std::string::npos,
+                "启动在真实就绪后推进下一成员");
+    TEST_ASSERT(start.find("rollback") != std::string::npos &&
+                    start.find("STARTED") != std::string::npos,
+                "失败只回滚本次新启动成员，保留已有实例");
     TEST_ASSERT(start.find("\"$(data_dir database)\"") != std::string::npos,
                 "资料目录来自统一布局");
     TEST_ASSERT(start.find("RUN_DIR/engine.version") != std::string::npos,
@@ -237,11 +249,12 @@ bool test_generated_template_integrity() {
                 "world 接 Lua boot 入口");
     TEST_ASSERT(start.find("--settlement-credential-dir") == std::string::npos,
                 "不生成结算凭据目录参数");
-    TEST_ASSERT(start.find("sleep") == std::string::npos,
-                "启动脚本无 sleep 冒充就绪");
-    const char* order[] = {"start_one database", "start_one login",
-                           "start_one base", "start_one world",
-                           "start_one gateway"};
+    TEST_ASSERT(lib.find("READY_TIMEOUT_SECONDS") != std::string::npos &&
+                    lib.find("sleep 1") != std::string::npos,
+                "就绪轮询有界且按秒 tick，不用固定 sleep 冒充就绪");
+    const char* order[] = {"start_member database", "start_member login",
+                           "start_member base", "start_member world",
+                           "start_member gateway"};
     for (std::size_t i = 1; i < 5; ++i) {
         TEST_ASSERT(start.find(order[i - 1]) < start.find(order[i]),
                     std::string("启动顺序 ") + order[i - 1] + " 先于 " +
@@ -253,22 +266,37 @@ bool test_generated_template_integrity() {
     TEST_ASSERT(stop.find(". \"$(dirname \"$0\")/lib.sh\"") !=
                     std::string::npos,
                 "停止脚本源 lib.sh");
-    TEST_ASSERT(stop.find("pid_file") != std::string::npos,
-                "停止脚本只认 lib.sh 记录的 PID 面");
-    TEST_ASSERT(stop.find("kill ") != std::string::npos, "停止脚本发 TERM");
+    TEST_ASSERT(stop.find("stop_one") != std::string::npos,
+                "停止脚本消费 lib.sh 的 PID 面");
+    TEST_ASSERT(lib.find("kill ") != std::string::npos, "停止脚本发 TERM");
     TEST_ASSERT(stop.find("start_one gateway") == std::string::npos &&
                     stop.find("stop_one gateway") < stop.find("stop_one database"),
                 "停止顺序与启动反向");
     TEST_ASSERT(stop.find("sleep") == std::string::npos, "无等待循环");
+
+    // 状态脚本：只读，逐成员报 PID 文件状态与真实 readiness，不启停。
+    auto status = read_text(target / "scripts/status.sh");
+    TEST_ASSERT(status.find(". \"$(dirname \"$0\")/lib.sh\"") !=
+                    std::string::npos,
+                "状态脚本源 lib.sh");
+    TEST_ASSERT(status.find("member_ready") != std::string::npos,
+                "状态读真实 readiness 面");
+    TEST_ASSERT(status.find("kill -0") != std::string::npos,
+                "状态只观测存活");
+    TEST_ASSERT(status.find("start_one") == std::string::npos &&
+                    status.find("stop_one") == std::string::npos,
+                "状态脚本无启停动作");
+    TEST_ASSERT(status.find("sleep") == std::string::npos,
+                "状态脚本无等待循环");
 
     // 目录说明：README 列出模板布局、调用方式与未实现状态。
     auto readme = read_text(target / "README.md");
     TEST_ASSERT(readme.find("## Layout") != std::string::npos, "README 有目录说明");
     TEST_ASSERT(readme.find("sh scripts/start.sh") != std::string::npos,
                 "README 给出启动方式");
-    TEST_ASSERT(readme.find("readiness is not asserted") != std::string::npos ||
-                    readme.find("does\nnot assert readiness") != std::string::npos,
-                "README 声明不断言就绪");
+    TEST_ASSERT(readme.find("sh scripts/status.sh") != std::string::npos &&
+                    readme.find("rollback") != std::string::npos,
+                "README 给出状态命令与失败回滚口径");
     TEST_ASSERT(readme.find("No auth material is generated") != std::string::npos,
                 "README 声明不生成认证材料");
     TEST_ASSERT(readme.find("run/<role>") != std::string::npos ||
@@ -302,9 +330,9 @@ bool test_generated_template_integrity() {
                     std::string("模板无 CRLF ") + file.first);
     }
 
-    // 清单本身：11 个文件、全为相对路径、无重复。
+    // 清单本身：12 个文件、全为相对路径、无重复。
     auto files = apollo_cli::scaffold_files("proj");
-    TEST_ASSERT(files.size() == 11, "模板清单 11 个文件");
+    TEST_ASSERT(files.size() == 12, "模板清单 12 个文件");
     for (const auto& file : files) {
         TEST_ASSERT(!file.first.empty() && file.first.front() != '/',
                     "清单路径为相对路径");
