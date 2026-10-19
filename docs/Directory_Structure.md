@@ -34,6 +34,7 @@
 | `world/` | world 入口，缺省管理角色，`--role=cell` 执行角色；管理/执行拆分随 P2 |
 | `machined/` | 本机进程监督（拉起/退避重启/死亡上报），不决定跨服路由 |
 | `admin/`、`fleetctl/`、`logger/` | 运维与量测工具 |
+| `apolloc/` | 项目初始化 CLI（`apolloc init <path>` 生成最小项目骨架；模板随 P0.2） |
 
 ## modules/
 

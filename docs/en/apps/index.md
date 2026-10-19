@@ -24,7 +24,7 @@ Target roles and current code are distinct. The [BigWorld–Apollo mapping](../d
 | database | Load/save, storage routing, durable results | apps/database builds database with file profiles, journal, and M1 load/save; full queues, write authority, and partitioning remain pending. |
 | machined | Local supervision and restart | Reuse supervision primitives, without cross-server discovery or player placement. |
 
-apps/common is a shared library; logger/admin/fleetctl are auxiliary tools. The table identifies real entry points; track default-fleet and business migration in root todo.md.
+apps/common is a shared library; logger/admin/fleetctl are auxiliary tools; apolloc is the project scaffold CLI (`apolloc init <path>`, template pending P0.2). The table identifies real entry points; track default-fleet and business migration in root todo.md.
 
 ## Requests and ownership
 

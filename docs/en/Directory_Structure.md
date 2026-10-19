@@ -34,6 +34,7 @@ This document describes the actual directory layout of the current repository.
 | `world/` | world entry, manager role by default and `--role=cell` executor; management/execution split follows P2 |
 | `machined/` | Process supervision (roster spawn/backoff restart/death reporting) |
 | `admin/`, `fleetctl/`, `logger/` | Operations and measurement tools |
+| `apolloc/` | Project scaffold CLI (`apolloc init <path>` creates a minimal skeleton; template pending P0.2) |
 
 ## modules/
 

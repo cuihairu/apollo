@@ -18,6 +18,11 @@ add_subdirectory(logger)
 # 与 logger 同为运维侧无门控进程。
 add_subdirectory(admin)
 
+# apolloc——项目初始化 CLI 的唯一入口（P0.2 L36，名避 modules umbrella
+# interface 目标 apollo）：init 子命令生成最小项目骨架。全仓唯一初始化器，
+# 不向每个服务复制；无业务链路依赖。
+add_subdirectory(apolloc)
+
 # 检查依赖是否可用
 # Gateway app 的 ingress 头仍包含旧 modules/protocol 的 apollo/protocol/*.hpp
 # （迁移未完成），故除 net::protocol 外还需旧模块目标存在。

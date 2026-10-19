@@ -24,7 +24,7 @@ tag:
 | database | 加载、保存、存储路由与持久结果 | apps/database 构建 database，承载文件档案、journal 和 M1 加载/保存；完整排队、写权与分区待完成。 |
 | machined | 本机进程监督与重启 | 可复用监督原语，不负责跨服发现或玩家归属。 |
 
-apps/common 是共享实现库，不是业务进程；logger/admin/fleetctl 是辅助工具。上表只列真实入口；默认编队和业务迁移按根目录 todo.md 推进。
+apps/common 是共享实现库，不是业务进程；logger/admin/fleetctl 是辅助工具；apolloc 是项目初始化 CLI（`apolloc init <path>`，模板随 P0.2 落地）。上表只列真实入口；默认编队和业务迁移按根目录 todo.md 推进。
 
 ## 数据与请求链路
 

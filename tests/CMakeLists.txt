@@ -1330,6 +1330,23 @@ endif()
 add_test(NAME WorldRoleTests COMMAND world_role_tests)
 
 
+# ========== Apollo CLI Tests (P0.2 L36 项目初始化唯一入口) ==========
+# init 子命令：help 三形态/无参用法码、未知子命令与缺参拒绝、空目录骨架
+# 生成（目录占位 + README + .gitignore + 项目标记）、非空目录/已存在文件/
+# 空 path/目录穿越显式拒绝且不动原有内容、空已存在目录受理、二次 init 拒收、
+# 相对 path 按调用者 cwd 解析（header-only 分派直测，无网络依赖）
+add_executable(apollo_cli_tests
+    test_apollo_cli.cpp
+)
+target_include_directories(apollo_cli_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/apolloc/include
+)
+if(MSVC)
+    target_compile_options(apollo_cli_tests PRIVATE /utf-8)
+endif()
+add_test(NAME ApolloCliTests COMMAND apollo_cli_tests)
+
+
 # ========== Cell Acceptance Tests (P3-2 批 B, ADR-015(a)/016/017) ==========
 # WorldApp 受理面：意图信封队列（FIFO/顶格拒收/两级水位滞回）+ WorldApp 受理点
 # 接线（维护闸/受理回执/Pong/tick 边界 drain/过载回错误包）。直编协议源惯例
