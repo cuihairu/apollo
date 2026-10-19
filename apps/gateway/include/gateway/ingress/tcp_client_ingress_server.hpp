@@ -21,7 +21,11 @@ namespace gateway {
 //
 // Windows：link TCP 底座不进 M1 批（POSIX only）——本工厂 Windows 下退回
 // null 桩（同签名编译期分叉，装配面无 #if）。
+//
+// connectionIdBase：连接号空间的基址（号 = base + 1 起）。多监听并装
+// （TCP/WS/WSS 扇入）时各子入口分占互不重叠的号段——上层按号路由 send/close。
 std::unique_ptr<ClientIngressServer> makeTcpClientIngressServer(
-    std::string host, std::uint16_t port, std::size_t maxConnections = 0);
+    std::string host, std::uint16_t port, std::size_t maxConnections = 0,
+    std::uint64_t connectionIdBase = 0);
 
 } // namespace gateway

@@ -41,6 +41,10 @@ public:
         return feed(data.data(), data.size());
     }
 
+    // 头部之后的字节（与头部同 chunk 粘发的帧字节）经此移交帧层——
+    // 仅 kReady 后有意义，后续 feed 续入残余；取走即清。
+    std::vector<std::uint8_t> take_remainder();
+
     // 仅 kReady 后有效。
     const UpgradeRequest& request() const { return request_; }
 

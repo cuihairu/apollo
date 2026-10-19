@@ -1,11 +1,15 @@
 #include "gateway/gateway_server.hpp"
+#include "gateway/ingress/ingress_fan_in.hpp"
 #include "gateway/ingress/tcp_client_ingress_server.hpp"
+#include "gateway/ingress/ws_client_ingress_server.hpp"
 #include "apollo/core/log/log_manager.h"
+#include "apollo/net/tls/tls_transport.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <chrono>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 
 namespace gateway {
 
@@ -37,6 +41,66 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
 constexpr std::uint32_t kM1RouteTimeoutMs = 500;  // 路由解析同步等待上限
 
 } // namespace
+
+#if !defined(_WIN32)
+namespace {
+
+// 客户端入口多监听装配（L45 批③）：TCP 明文主入口 + 可选 WS/WSS 子入口，
+// 号段互斥分区（TCP 0 / WS 1<<40 / WSS 2<<40）。wsPort/wssPort 均 0 =
+// 单 TCP 入口原形态（不套扇入）。WSS 凭据缺失/装载失败即装配拒绝（凭据
+// 是显式部署集成，net-abstraction §5.9——不静默降级成明文）；监听绑定
+// 失败归 start 面（同 TCP 口径，响亮失败）。
+struct AssembledIngress {
+    std::unique_ptr<apollo::net::tls::TlsServerContext> tlsContext;
+    std::unique_ptr<ClientIngressServer> server;
+};
+
+AssembledIngress assemble_client_ingress(const GatewayConfig& config) {
+    const std::size_t max_conns = static_cast<std::size_t>(config.maxConnections);
+    std::vector<IngressFanInBinding> bindings;
+    bindings.push_back(IngressFanInBinding{
+        makeTcpClientIngressServer(config.host, config.port, max_conns, 0), 0});
+
+    std::unique_ptr<apollo::net::tls::TlsServerContext> tls_context;
+    if (config.wsPort != 0) {
+        WsIngressConfig ws;
+        ws.host = config.host;
+        ws.port = config.wsPort;
+        ws.path = config.wsPath;
+        ws.maxConnections = max_conns;
+        ws.connectionIdBase = 1 * kIngressFanInIdStride;
+        bindings.push_back(IngressFanInBinding{
+            makeWsClientIngressServer(ws), ws.connectionIdBase});
+    }
+    if (config.wssPort != 0) {
+        if (config.tlsCertPath.empty() || config.tlsKeyPath.empty()) {
+            throw std::runtime_error(
+                "wss ingress enabled but tls cert/key not configured (--tls-cert/--tls-key)");
+        }
+        tls_context = std::make_unique<apollo::net::tls::TlsServerContext>();
+        const auto loaded = tls_context->load(config.tlsCertPath, config.tlsKeyPath);
+        if (!loaded.ok) {
+            throw std::runtime_error("wss tls context load failed: " + loaded.error);
+        }
+        WsIngressConfig wss;
+        wss.host = config.host;
+        wss.port = config.wssPort;
+        wss.path = config.wsPath;
+        wss.tls = tls_context.get();
+        wss.maxConnections = max_conns;
+        wss.connectionIdBase = 2 * kIngressFanInIdStride;
+        bindings.push_back(IngressFanInBinding{
+            makeWsClientIngressServer(wss), wss.connectionIdBase});
+    }
+
+    if (bindings.size() == 1) {
+        return {nullptr, std::move(bindings[0].server)};
+    }
+    return {std::move(tls_context), makeIngressFanIn(std::move(bindings))};
+}
+
+} // namespace
+#endif // !_WIN32
 
 //==============================================================================
 // MessageRouter 实现
@@ -187,12 +251,20 @@ std::uint64_t steady_now_ms() {
 GatewayServer::GatewayServer(const GatewayConfig& config)
     : config_(config)
     , sessionManager_(std::make_unique<SessionManager>())
-    , ingressServer_(makeTcpClientIngressServer(
-          config_.host, config_.port, static_cast<std::size_t>(config_.maxConnections)))
     , packetDispatcher_(std::make_unique<ClientPacketDispatcher>())
     , connectionRegistry_(std::make_unique<GatewayConnectionRegistry>())
     , admissionService_(makeAdmissionService(config))
     , messageRouter_(std::make_unique<MessageRouter>(config)) {
+    // 多监听装配在构造体（凭据装载失败即此处抛出）：tlsContext_ 先于
+    // ingressServer_ 声明 → 后于其析构（监听器持有其 SSL_CTX）。
+#if !defined(_WIN32)
+    auto assembled = assemble_client_ingress(config_);
+    tlsContext_ = std::move(assembled.tlsContext);
+    ingressServer_ = std::move(assembled.server);
+#else
+    ingressServer_ = makeTcpClientIngressServer(
+        config_.host, config_.port, static_cast<std::size_t>(config_.maxConnections));
+#endif
 }
 
 GatewayServer::~GatewayServer() {
@@ -514,6 +586,29 @@ std::size_t GatewayServer::getRegisteredConnectionCount() const {
 // 实际监听端口（port 0 = 内核分配，测试与编排面经此读回）。
 std::uint16_t GatewayServer::listenPort() const {
     return ingressServer_ ? ingressServer_->listenPort() : 0;
+}
+
+std::uint16_t GatewayServer::wsListenPort() const {
+#if !defined(_WIN32)
+    // 装配序（assemble_client_ingress）：TCP 0，WS 1。
+    if (config_.wsPort == 0 || !ingressServer_) return 0;
+    const auto ports = ingressServer_->listenPorts();
+    return ports.size() > 1 ? ports[1] : 0;
+#else
+    return 0;
+#endif
+}
+
+std::uint16_t GatewayServer::wssListenPort() const {
+#if !defined(_WIN32)
+    // 装配序：TCP 0，[WS]，WSS——按配置跳缺位。
+    if (config_.wssPort == 0 || !ingressServer_) return 0;
+    const auto ports = ingressServer_->listenPorts();
+    const std::size_t idx = 1 + (config_.wsPort != 0 ? 1 : 0);
+    return ports.size() > idx ? ports[idx] : 0;
+#else
+    return 0;
+#endif
 }
 
 void GatewayServer::onClientDisconnect(SessionID sessionId, bool normalClose) {

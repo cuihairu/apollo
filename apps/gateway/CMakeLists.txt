@@ -10,6 +10,8 @@ add_executable(gateway
     include/gateway/session_manager.cpp
     src/ingress/client_ingress_server.cpp
     src/ingress/tcp_client_ingress_server.cpp
+    src/ingress/ws_client_ingress_server.cpp
+    src/ingress/ingress_fan_in.cpp
     src/ingress/client_packet_dispatcher.cpp
     src/ingress/gateway_connection_registry.cpp
     src/ingress/session_admission_service.cpp
@@ -47,6 +49,8 @@ target_link_libraries(gateway
         apollo::net_tcp
         apollo::net_protocol
         apollo::net_link
+        apollo_net_tls
+        apollo_net_ws
         apollo::net_contract_wire
         apollo::net_linktrace
         apollo::net_discovery

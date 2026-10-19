@@ -46,6 +46,10 @@ public:
     // 实际监听端口（port 0 = 内核分配时经此读回；未启动返回 0）。
     virtual std::uint16_t listenPort() const { return 0; }
 
+    // 全部监听端口（装配序；扇入返回各子入口，单入口返回自身）。
+    // port 0 = 内核分配时经此读回；未启动的监听器记 0。
+    virtual std::vector<std::uint16_t> listenPorts() const { return {listenPort()}; }
+
     // 排空面（P4 排空批）：停止接受新连接（关监听），既有连接照常服务。
     // 幂等；null 桩空实现。
     virtual void beginDrain() {}

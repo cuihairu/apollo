@@ -15,7 +15,8 @@
 //   8. 扩展长度路径：ext16（300B）与 ext64（70000B）掩码帧 round-trip；
 //   9. 协议负例：RSV 位/客户端无掩码/控制帧分片/保留 opcode/声明超限
 //      → fatal（语义：断连，无重同步）；
-//  10. 增量喂入等价：任意切分与一次整喂同果。
+//  10. 增量喂入等价：任意切分与一次整喂同果；
+//  11. 头部同 chunk 粘帧：就绪后残余完整移交帧层（快客户端粘发态）。
 
 #include "apollo/net/ws/frame.hpp"
 #include "apollo/net/ws/handshake.hpp"
@@ -437,6 +438,43 @@ bool test_incremental_equivalence() {
     return true;
 }
 
+// ---- 11. 头部同 chunk 粘帧残余 ----
+
+bool test_handshake_remainder() {
+    // 升级请求与首帧粘在一个 chunk：头部就绪后残余必须完整移交帧层，
+    // 不得丢弃（快客户端一并把帧发上来的实态）。
+    std::vector<std::uint8_t> stream(kGoodUpgrade, kGoodUpgrade + std::strlen(kGoodUpgrade));
+    const std::uint8_t hello[] = "hello";
+    append_masked_frame(stream, ws::OpCode::kBinary, true, hello, 5, 0x5a);
+
+    ws::HandshakeParser parser;
+    const auto state = parser.feed(stream);
+    TEST_ASSERT(state == ws::HandshakeParser::State::kReady, "粘帧 chunk 头部仍就绪");
+    const auto remainder = parser.take_remainder();
+    TEST_ASSERT(remainder.size() == 11, "残余 = 首帧 11 字节（2 头 + 4 掩码 + 5 载荷）");
+    TEST_ASSERT(parser.take_remainder().empty(), "取走即清");
+
+    // 后续 chunk 继续入残余（掩码空 binary 帧：2 头 + 4 掩码，零载荷）。
+    const std::uint8_t tail[] = {0x82, 0x80, 0x01, 0x02, 0x03, 0x04};
+    TEST_ASSERT(parser.feed(tail, sizeof tail) == ws::HandshakeParser::State::kReady,
+                "头部就绪后再喂不判坏");
+    const auto more = parser.take_remainder();
+    TEST_ASSERT(more.size() == 6 && more[0] == 0x82, "后续字节续入残余");
+
+    // 残余直喂帧层即可解出消息（粘的字节完整）。
+    ws::FrameParser frames;
+    const auto out1 = frames.feed(remainder);
+    const auto out2 = frames.feed(more);
+    TEST_ASSERT(!out1.fatal && out1.messages.size() == 1, "残余首帧完整可解");
+    TEST_ASSERT(out1.messages[0].opcode == ws::OpCode::kBinary &&
+                    std::string(out1.messages[0].payload.begin(),
+                                out1.messages[0].payload.end()) == "hello",
+                "载荷解掩码正确");
+    TEST_ASSERT(!out2.fatal && out2.messages.size() == 1 && out2.messages[0].payload.empty(),
+                "残余后续帧完整可解");
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -454,6 +492,7 @@ int main() {
         {"extended_lengths", test_extended_lengths},
         {"protocol_errors", test_protocol_errors},
         {"incremental_equivalence", test_incremental_equivalence},
+        {"handshake_remainder", test_handshake_remainder},
     };
 
     int failed = 0;

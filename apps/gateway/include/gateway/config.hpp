@@ -14,6 +14,18 @@ struct GatewayConfig {
     std::string host = "0.0.0.0";
     uint16_t port = 8888;
 
+    // 客户端入口多监听（L45 批③）：WS/WSS 附加监听，与 TCP 明文主入口
+    // 并存（同一线形，ws binary 载荷 = link Frame）。0 = 关。升级路径
+    // wsPath 判据（不命中 = no-such-route 拒绝）。
+    std::uint16_t wsPort = 0;
+    std::uint16_t wssPort = 0;
+    std::string wsPath = "/game";
+
+    // WSS 凭据（PEM 证书链 + 私钥；wssPort 非 0 时必填——缺失即启动失
+    // 败，不静默降级成明文。凭据由部署供给，机制不生成，§5.9）。
+    std::string tlsCertPath;
+    std::string tlsKeyPath;
+
     // 后端服务地址（ChatApp 项已摘除：fleet 无 chat 进程，P3-4 处方③）
     std::string loginAppUrl = "tcp://127.0.0.1:9001";
     std::string worldUrl = "tcp://127.0.0.1:9100";  // 可以是多个

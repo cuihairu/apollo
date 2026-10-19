@@ -17,6 +17,10 @@
 #include <functional>
 #include <unordered_map>
 
+namespace apollo::net::tls {
+class TlsServerContext;
+}
+
 namespace gateway {
 
 // 消息路由器
@@ -81,6 +85,10 @@ public:
     // 实际监听端口（port 0 = 内核分配，测试与编排面经此读回）
     std::uint16_t listenPort() const;
 
+    // WS/WSS 附加监听实际端口（0 = 未装配或未启动；L45 批③ 多监听）
+    std::uint16_t wsListenPort() const;
+    std::uint16_t wssListenPort() const;
+
     // 消息路由器观测面（测试与编排面经此读 M1 出口计数）
     MessageRouter* messageRouter() const { return messageRouter_.get(); }
 
@@ -142,6 +150,11 @@ private:
 
     GatewayConfig config_;
     std::unique_ptr<SessionManager> sessionManager_;
+#if !defined(_WIN32)
+    // WSS 凭据上下文（多监听装配持有；须先于 ingress 析构——监听器在
+    // start 时捕获其 SSL_CTX）。Windows：TLS 底座不进 M1 批，无此件。
+    std::unique_ptr<apollo::net::tls::TlsServerContext> tlsContext_;
+#endif
     std::unique_ptr<ClientIngressServer> ingressServer_;
     std::unique_ptr<ClientPacketDispatcher> packetDispatcher_;
     std::unique_ptr<GatewayConnectionRegistry> connectionRegistry_;

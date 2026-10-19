@@ -120,22 +120,32 @@ void HandshakeParser::reset() {
 HandshakeParser::State HandshakeParser::feed(const std::uint8_t* data,
                                              std::size_t size) {
     if (done_) {
-        return State::kReady;  // 只吃头部；头部之后的字节归帧层
+        // 只吃头部；头部之后的字节归帧层——攒入残余，take_remainder() 移交。
+        buf_.insert(buf_.end(), data, data + size);
+        return State::kReady;
     }
     buf_.insert(buf_.end(), data, data + size);
     if (buf_.size() > kMaxHeaderBytes) {
         return State::kBad;
     }
-    if (std::search(buf_.begin(), buf_.end(), kTerminator, kTerminator + 4) ==
-        buf_.end()) {
+    const auto terminator = std::search(buf_.begin(), buf_.end(), kTerminator,
+                                        kTerminator + 4);
+    if (terminator == buf_.end()) {
         return State::kNeedMore;
     }
     if (!parse_buffer()) {
         return State::kBad;
     }
-    buf_.clear();
+    // 头部吃掉，同 chunk 粘的首帧字节留作残余（不丢弃）。
+    buf_.erase(buf_.begin(), terminator + 4);
     done_ = true;
     return State::kReady;
+}
+
+std::vector<std::uint8_t> HandshakeParser::take_remainder() {
+    std::vector<std::uint8_t> remainder;
+    remainder.swap(buf_);
+    return remainder;
 }
 
 bool HandshakeParser::parse_buffer() {

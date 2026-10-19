@@ -57,8 +57,10 @@ struct IngressConnection {
 
 class TcpClientIngressServer final : public ClientIngressServer {
 public:
-    TcpClientIngressServer(std::string host, std::uint16_t port, std::size_t maxConnections)
-        : host_(std::move(host)), port_(port), maxConnections_(maxConnections) {}
+    TcpClientIngressServer(std::string host, std::uint16_t port, std::size_t maxConnections,
+                           std::uint64_t connectionIdBase)
+        : host_(std::move(host)), port_(port), maxConnections_(maxConnections),
+          nextConnectionId_(connectionIdBase + 1) {}
 
     void start() override {
         if (!listener_.start(host_, port_)) {
@@ -344,8 +346,10 @@ private:
 } // namespace
 
 std::unique_ptr<ClientIngressServer> makeTcpClientIngressServer(
-    std::string host, std::uint16_t port, std::size_t maxConnections) {
-    return std::make_unique<TcpClientIngressServer>(std::move(host), port, maxConnections);
+    std::string host, std::uint16_t port, std::size_t maxConnections,
+    std::uint64_t connectionIdBase) {
+    return std::make_unique<TcpClientIngressServer>(std::move(host), port, maxConnections,
+                                                     connectionIdBase);
 }
 
 } // namespace gateway
@@ -355,7 +359,8 @@ std::unique_ptr<ClientIngressServer> makeTcpClientIngressServer(
 namespace gateway {
 
 std::unique_ptr<ClientIngressServer> makeTcpClientIngressServer(
-    std::string /*host*/, std::uint16_t /*port*/, std::size_t /*maxConnections*/) {
+    std::string /*host*/, std::uint16_t /*port*/, std::size_t /*maxConnections*/,
+    std::uint64_t /*connectionIdBase*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退回 null 桩。
     return makeNullClientIngressServer();
 }

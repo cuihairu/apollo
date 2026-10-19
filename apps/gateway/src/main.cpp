@@ -79,12 +79,27 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.directoryM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--control-m1-port" && i + 1 < argc) {
             config.controlM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--ws-port" && i + 1 < argc) {
+            config.wsPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--wss-port" && i + 1 < argc) {
+            config.wssPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--ws-path" && i + 1 < argc) {
+            config.wsPath = argv[++i];
+        } else if (arg == "--tls-cert" && i + 1 < argc) {
+            config.tlsCertPath = argv[++i];
+        } else if (arg == "--tls-key" && i + 1 < argc) {
+            config.tlsKeyPath = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
                       << "  --port <port>              Listen port (default: 8888)\n"
                       << "  --host <host>              Listen address (default: 0.0.0.0)\n"
                       << "  --max-connections <num>     Max connections (default: 10000)\n"
+                      << "  --ws-port <port>           WebSocket ingress port (0 = off, default: 0)\n"
+                      << "  --wss-port <port>          TLS WebSocket ingress port (0 = off, default: 0)\n"
+                      << "  --ws-path <path>           WebSocket upgrade path (default: /game)\n"
+                      << "  --tls-cert <file>          WSS PEM cert chain (required by --wss-port)\n"
+                      << "  --tls-key <file>           WSS PEM private key (required by --wss-port)\n"
                       << "  --login <url>          LoginApp URL\n"
                       << "  --world <url>           WorldApp URL (route label)\n"
                       << "  --world-m1-host <host>      WorldApp M1 link host (default: 127.0.0.1)\n"
@@ -145,6 +160,11 @@ int main(int argc, char* argv[]) {
 
     logger->info("Configuration:");
     logger->info("  Listen: " + config.host + ":" + std::to_string(config.port));
+    if (config.wsPort != 0 || config.wssPort != 0) {
+        logger->info("  WS ingress: " + std::to_string(config.wsPort)
+                     + "  WSS ingress: " + std::to_string(config.wssPort)
+                     + "  path: " + config.wsPath);
+    }
     logger->info("  Max connections: " + std::to_string(config.maxConnections));
     logger->info("  LoginApp: " + config.loginAppUrl);
     logger->info("  WorldApp: " + config.worldUrl);

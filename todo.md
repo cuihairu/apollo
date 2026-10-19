@@ -43,6 +43,7 @@
 ## P0.3：两类外部入口与图文接线（待实施）
 
 - [ ] 游戏 gateway 与 HTTP interfaces 均支持按监听独立启用 WS/WSS，允许多个监听及明文/TLS 共存；游戏 WebSocket 进入游戏会话，HTTP 服务的 WebSocket 使用专用 upgrade 路由和连接生命周期，普通 HTTP 请求仍走 HTTP handler。补证书、端口冲突、路由隔离及并行监听验收。
+  - 批③（gateway WS/WSS 游戏入口）已交付：`ws_client_ingress_server`（升级判据 + 路径 `/game` 命中才受理；不命中/非法/超限一律 400 + 无 observer 事件断连；ws binary 载荷 = link Frame 同 TCP 线形；text = 契约外断连；ping→pong、close echo、WSS 走 TlsListener 底座凭据显式装载）、`ingress_fan_in`（TCP/WS/WSS 号段互斥分区 0 / 1<<40 / 2<<40，越界号容忍，重叠装配即抛）、GatewayConfig `wsPort/wssPort(0=关)/wsPath/tlsCertPath/tlsKeyPath` + main `--ws-port --wss-port --ws-path --tls-cert --tls-key`（WSS 缺凭据装配即抛，绑定失败 start 抛）；`HandshakeParser::take_remainder` 修头部同 chunk 粘帧丢弃。测试 gateway_ws_ingress_tests 10 例全绿（roundtrip / wrong path / invalid / garbage / ping-close / text 拒 / wss / 扇入 / 缺凭据抛 / 全链 PING→PONG e2e）。待批④：interfaces HTTP 侧专用 upgrade 路由与多监听，及证书链/主机名拒绝、协议更新会话连续验收。
 
 - [ ] 游戏 TCP/WS/WSS 接入接到 gateway 的同一游戏帧/会话/意图路径，分别路由 Base 与 cell；WebSocket 升级不进入 interfaces 的 HTTP 业务 handler，内部协议与传输封装分离。
 - [ ] 为游戏 WS/WSS 补客户端消息到 Lua/场景逻辑、稳定 session 寻址下行、服务端主动推送/广播、AOI 同步、有界积压、慢读处理及重复/乱序规则；不能以单次 echo 请求/响应或已有通用 websocket 库作为完整接线证据。

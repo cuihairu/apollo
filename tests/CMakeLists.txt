@@ -245,6 +245,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ingress_fan_in.cpp
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -263,6 +265,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo_net_tls
+	        apollo_net_ws
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
@@ -284,6 +288,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ingress_fan_in.cpp
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -302,6 +308,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo_net_tls
+	        apollo_net_ws
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
@@ -328,6 +336,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ingress_fan_in.cpp
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -346,6 +356,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo_net_tls
+	        apollo_net_ws
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
@@ -574,6 +586,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ingress_fan_in.cpp
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -592,6 +606,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo_net_tls
+	        apollo_net_ws
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
@@ -613,6 +629,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ingress_fan_in.cpp
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -631,6 +649,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo_net_tls
+	        apollo_net_ws
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
@@ -657,6 +677,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+            ../apps/gateway/src/ingress/ingress_fan_in.cpp
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -675,6 +697,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_tcp
 	        apollo::net_protocol
 	        apollo::net_link
+	        apollo_net_tls
+	        apollo_net_ws
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
@@ -1091,6 +1115,57 @@ if(MSVC)
 endif()
 add_test(NAME WsTests COMMAND ws_tests)
 
+# ========== Gateway WS/WSS 入口真接线测试 (L45 批③) ==========
+# 多监听扇入 + ws/wss 游戏入口（localhost 实 socket；ws binary 载荷 =
+# link Frame 同 TCP 入口线形）。WSS 证书夹具现场自签（tls_test_support），
+# 仓库不存凭据。Windows 下 link TCP/TLS 底座不进 M1 批，用例本体空转。
+if(TARGET apollo_protocol)
+add_executable(gateway_ws_ingress_tests
+    test_gateway_ws_ingress.cpp
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+)
+target_include_directories(gateway_ws_ingress_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+)
+target_compile_definitions(gateway_ws_ingress_tests PRIVATE
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(gateway_ws_ingress_tests PRIVATE
+    apollo
+    apollo::base
+    apollo::core
+    apollo::runtime
+    apollo::net_tcp
+    apollo::net_protocol
+    apollo::net_link
+    apollo_net_tls
+    apollo_net_ws
+    apollo::net_contract_wire
+    apollo::net_linktrace
+    apollo_net_linkrpc
+    apollo_protocol
+)
+if(WIN32)
+    target_link_libraries(gateway_ws_ingress_tests PRIVATE ws2_32)
+    target_compile_definitions(gateway_ws_ingress_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(gateway_ws_ingress_tests PRIVATE /utf-8)
+endif()
+add_test(NAME GatewayWsIngressTests COMMAND gateway_ws_ingress_tests)
+endif()
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests
@@ -1457,6 +1532,8 @@ add_executable(gateway_m1_egress_tests
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
     ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
     ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
     ../apps/gateway/src/ingress/gateway_connection_registry.cpp
     ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -1479,7 +1556,7 @@ target_compile_definitions(gateway_m1_egress_tests PRIVATE
 target_link_libraries(gateway_m1_egress_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
 if(WIN32)
     target_link_libraries(gateway_m1_egress_tests PRIVATE ws2_32)
     target_compile_definitions(gateway_m1_egress_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1519,7 +1596,7 @@ target_compile_definitions(squad_wire_e2e_tests PRIVATE
 target_link_libraries(squad_wire_e2e_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
 if(WIN32)
     target_link_libraries(squad_wire_e2e_tests PRIVATE ws2_32)
     target_compile_definitions(squad_wire_e2e_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1551,7 +1628,7 @@ target_compile_definitions(world_drain_tests PRIVATE
 target_link_libraries(world_drain_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
 if(WIN32)
     target_link_libraries(world_drain_tests PRIVATE ws2_32)
     target_compile_definitions(world_drain_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -1570,6 +1647,8 @@ add_executable(update_continuity_tests
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
     ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
     ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
     ../apps/gateway/src/ingress/gateway_connection_registry.cpp
     ../apps/gateway/src/ingress/session_admission_service.cpp
@@ -1594,7 +1673,7 @@ target_compile_definitions(update_continuity_tests PRIVATE
 target_link_libraries(update_continuity_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
 if(WIN32)
     target_link_libraries(update_continuity_tests PRIVATE ws2_32)
     target_compile_definitions(update_continuity_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
