@@ -251,14 +251,16 @@ bool register_roundtrip(CellEnd& cell, std::uint64_t request_id, std::uint64_t c
 
 // 服务端壳：WorldApp（m1Port 0 内核分配；档案宿主已迁 base）。
 // m1AuthorityEpoch = 管理代次注入（§5.7 透传；961 回带断言面）。
+// fixed_m1_port 非 0 = 绑定该端口（重启同址——失联冻结/重拨例用；0 = 内核分配）。
 struct WorldEnd {
     WorldAppConfig config;
     std::unique_ptr<WorldApp> world;
+    std::uint16_t fixed_m1_port = 0;
 
     bool start(std::uint32_t world_id) {
         config.worldId = world_id;
         config.host = "127.0.0.1";
-        config.m1Port = 0;
+        config.m1Port = fixed_m1_port;
         config.m1RouteJson = kRouteJson;
         config.m1AuthorityEpoch = 77;
         config.tickRateMs = 20;
@@ -589,8 +591,9 @@ bool test_production_client_invalid_config() {
 // ---------- heartbeat + expiry：心跳续活 / 停发过期摘除 / 过期后重注册 ----------
 // World 过期窗 cellExpiryMs = 服务端单方裁决注册表存活（last-heard = 每次
 // 受理刷新的 registered_at_ms）；心跳 = 周期 960 走幂等刷新路径（兼作 961
-// 回执丢失重试）。过期 = 整条移除——代次墓碑随旧执行端隔离批，过期后旧
-// 代次重注册按首注册受理（不假装记得）。
+// 回执丢失重试）。过期 = 整条移除；代次水位（本进程曾受理的最高代次）
+// 保留——旧代次复活拒 code 3、同代次复活仍首注册（隔离切片见
+// test_stale_epoch_watermark_isolation）；持久墓碑随管理日志批。
 
 bool test_cell_heartbeat_and_expiry() {
     std::cout << "Running: test_cell_heartbeat_and_expiry..." << std::endl;
@@ -615,7 +618,7 @@ bool test_cell_heartbeat_and_expiry() {
                 "expired entry removed");
     TEST_ASSERT(server.world->registered_cell_count() == 0, "registry empty");
 
-    // 过期后同代次重注册 → 首注册受理（登记忘却；代次墓碑随旧执行端隔离批）
+    // 过期后同代次重注册 → 首注册受理（登记忘却；同代次=水位不拦，见隔离切片）
     TEST_ASSERT(register_roundtrip(cell, 9602, 7, 1, "127.0.0.1", 9201, 1, 10, 0, true, r),
                 "re-register after expiry reply arrived");
     TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
@@ -809,6 +812,147 @@ bool test_production_client_space_assign_listener() {
     return true;
 }
 
+// ---------- 失联宽限冻结 + 复核解冻（L101 失联策略切片）----------
+// cell 侧控制面失联：链路 down 超宽限窗（link_grace_ms）→ 冻结监听器触发
+// 一次（宿主停模拟 + 关闸）；重连后 World 重新受理（961 accepted）才解冻
+// ——链路恢复本身不解冻（§4：不能自行解冻，复核以 961 裁决为准）。
+// World 端固定端口重启（同址起新 World），客户端端点配置不变即可重拨。
+
+bool test_grace_freeze_and_readmit() {
+    std::cout << "Running: test_grace_freeze_and_readmit..." << std::endl;
+    WorldEnd server;
+    server.fixed_m1_port = 18877;
+    TEST_ASSERT(server.start(116), "world started on fixed port");
+
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = 18877;
+    cfg.cell_id = 61;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8805;
+    cfg.start_epoch = 9;
+    cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 40;
+    cfg.link_grace_ms = 150;  // 测试窗（生产默认 15000）
+    std::atomic<int> freeze_fires = 0;
+    std::atomic<int> grace_fires = 0;
+    std::atomic<int> readmit_fires = 0;
+    auto client = world_app::makeCellRegisterClient(cfg);
+    client->set_link_freeze_listener([&](world_app::LinkFreezeReason reason) {
+        ++freeze_fires;
+        if (reason == world_app::LinkFreezeReason::kGraceExpired) {
+            ++grace_fires;
+        }
+    });
+    client->set_readmit_listener([&] { ++readmit_fires; });
+    TEST_ASSERT(client->start(), "client started");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return client->state().replies >= 1;
+                }, 5000),
+                "first registration");
+    TEST_ASSERT(client->state().accepted, "accepted before outage");
+    TEST_ASSERT(freeze_fires == 0 && readmit_fires == 0, "no freeze while link up");
+
+    // 控制面失联：World 全停 → 链路 down → 宽限窗到期冻结（触发一次）
+    server.stop();
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return freeze_fires.load() >= 1;
+                }, 5000),
+                "freeze fired after grace expiry");
+    TEST_ASSERT(grace_fires == 1, "reason = grace expired");
+    TEST_ASSERT(client->state().frozen, "frozen state visible");
+    const auto frozen_at = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - frozen_at < std::chrono::milliseconds(250)) {
+        client->pump(now_ms());
+        std::this_thread::sleep_for(10ms);
+    }
+    TEST_ASSERT(freeze_fires == 1, "freeze fires once per outage");
+
+    // 同址起新 World → 客户端重拨 → 新 World 重新受理（961 code 1）→ 解冻
+    WorldEnd world2;
+    world2.fixed_m1_port = 18877;
+    TEST_ASSERT(world2.start(116), "world restarted on same port");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return readmit_fires.load() >= 1;
+                }, 5000),
+                "re-admitted after fresh acceptance");
+    TEST_ASSERT(freeze_fires == 1 && grace_fires == 1, "no re-freeze on recovery");
+    TEST_ASSERT(!client->state().frozen, "frozen cleared on re-admission");
+    TEST_ASSERT(client->state().accepted, "re-admission accepted");
+    // 重拨首受理 code 1，随后 40ms 心跳幂等刷新 code 2——读面取末次回执，
+    // 断言受理码族（1/2 均 = World 重新认可本端）
+    const auto re_code = client->state().code;
+    TEST_ASSERT(re_code == world_app::kCellRegisterAccepted
+                    || re_code == world_app::kCellRegisterAcceptedIdempotent,
+                "re-admission adjudicated accepted (fresh or idempotent)");
+
+    client->stop();
+    world2.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- 旧执行端隔离：代次水位（L101 隔离切片）----------
+// 过期摘除忘却登记，但本进程曾受理的最高代次保留（内存水位）：摘除后旧
+// 代次（< 水位）复活被拒（code 3，登记不复活）——旧执行端不能借摘除冒认
+// 首注册；同代次（= 水位，同一化身断链回拨）仍按首注册受理（批㉔ 语义保
+// 留）。持久墓碑（跨 World 重启）随管理日志批。
+
+bool test_stale_epoch_watermark_isolation() {
+    std::cout << "Running: test_stale_epoch_watermark_isolation..." << std::endl;
+    WorldEnd server;
+    server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
+    TEST_ASSERT(server.start(117), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+
+    CellEnd old_end;
+    TEST_ASSERT(dial_cell(server, old_end, "cell-old"), "old epoch end dialed");
+    CellEnd new_end;
+    TEST_ASSERT(dial_cell(server, new_end, "cell-new"), "new epoch end dialed");
+    RegisterReply r;
+    TEST_ASSERT(
+        register_roundtrip(old_end, 7101, 51, 100, "127.0.0.1", 9205, 0, 0, 0, true, r),
+        "old epoch first registration");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "code accepted");
+    TEST_ASSERT(
+        register_roundtrip(new_end, 7102, 51, 200, "127.0.0.1", 9206, 0, 0, 0, true, r),
+        "new epoch replaced");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "replace accepted");
+    const auto* reg = server.world->find_cell_registration(51);
+    TEST_ASSERT(reg != nullptr && reg->start_epoch == 200, "registry holds new epoch");
+
+    // 双端停发 → 过期摘除（登记忘却，水位保留）
+    TEST_ASSERT(wait_until([&] { return server.world->registered_cell_count() == 0; },
+                           3000),
+                "entry expired and removed");
+
+    // 旧代次复活：水位 200 拒 100 → code 3，登记不复活
+    TEST_ASSERT(
+        register_roundtrip(old_end, 7103, 51, 100, "127.0.0.1", 9205, 0, 0, 0, true, r),
+        "stale resurrection roundtrip");
+    TEST_ASSERT(!r.accepted, "stale resurrection rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch, "code stale epoch");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "no resurrection entry");
+
+    // 同代次（= 水位）复活：同一化身回拨 → 首注册受理（批㉔ 语义保留）
+    TEST_ASSERT(
+        register_roundtrip(new_end, 7104, 51, 200, "127.0.0.1", 9206, 0, 0, 0, true, r),
+        "same epoch resurrection roundtrip");
+    TEST_ASSERT(r.accepted, "same epoch admitted fresh");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "code fresh accepted");
+    reg = server.world->find_cell_registration(51);
+    TEST_ASSERT(reg != nullptr && reg->start_epoch == 200, "re-entry holds same epoch");
+
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -823,7 +967,9 @@ int main() {
                     && test_production_client_invalid_config()
                     && test_cell_heartbeat_and_expiry()
                     && test_cell_space_assignment()
-                    && test_production_client_space_assign_listener();
+                    && test_production_client_space_assign_listener()
+                    && test_grace_freeze_and_readmit()
+                    && test_stale_epoch_watermark_isolation();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;

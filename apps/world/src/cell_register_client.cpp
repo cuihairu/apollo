@@ -14,6 +14,7 @@
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
+#include "world_app/acceptance_queue.hpp"
 #include "apollo_contract.h"
 
 #include <chrono>
@@ -108,6 +109,8 @@ public:
                 handle_assign(data, size);
             });
         up_seen_ = false;
+        down_since_ms_ = 0;
+        freeze_signaled_ = false;
         return true;
     }
 
@@ -115,6 +118,10 @@ public:
         manager_.reset();
         route_table_.reset();
         up_seen_ = false;
+        down_since_ms_ = 0;
+        freeze_signaled_ = false;
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.frozen = false;  // 宿主意图停机：冻结态随新生命周期重置
     }
 
     void pump(std::uint64_t now_ms) override {
@@ -122,10 +129,24 @@ public:
             return;
         }
         manager_->pump(now_ms);  // 961 记账在 handle_reply 内自取锁
+        const bool up = link_up();
+        // 失联宽限（L101 失联策略切片）：down 起算（曾 up 过的失联期），
+        // 超窗冻结一次；kUp 清零重起算（解冻仍需 961 复核——见 handle_reply，
+        // 链路恢复本身不解冻）。从未连上不算失联（无既有授权可失）。
+        if (up) {
+            down_since_ms_ = 0;
+        } else {
+            if (down_since_ms_ == 0) {
+                down_since_ms_ = now_ms;
+            }
+            if (config_.link_grace_ms > 0 && !freeze_signaled_
+                && now_ms - down_since_ms_ >= config_.link_grace_ms) {
+                fire_freeze(LinkFreezeReason::kGraceExpired);
+            }
+        }
         // kUp 跃迁（首连/断链重连）即发 960；up 期间周期心跳（heartbeat_ms
         // 间隔）重发 960——幂等刷新 World 侧 last-heard，兼作 961 回执丢失的
         // 重试（重发裁决在受理面幂等，不重试风暴）。
-        const bool up = link_up();
         if (up && !up_seen_) {
             up_seen_ = true;
             send_register(now_ms);
@@ -152,6 +173,16 @@ public:
     void setSpaceAssignListener(SpaceAssignListener fn) override {
         std::lock_guard<std::mutex> lock(state_mutex_);
         assign_listener_ = std::move(fn);
+    }
+
+    void set_link_freeze_listener(LinkFreezeListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        freeze_listener_ = std::move(fn);
+    }
+
+    void set_readmit_listener(ReadmitListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        readmit_listener_ = std::move(fn);
     }
 
     std::size_t space_assign_count() const override {
@@ -204,14 +235,43 @@ private:
             || fields.size() != 6) {
             return;  // 残帧 = 尽力面丢弃（账不动；受理面已计拒收）
         }
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        state_.replied = true;
-        state_.accepted = fields[1].integer != 0;
-        state_.code = static_cast<std::int32_t>(fields[2].integer);
-        state_.management_epoch = static_cast<std::uint64_t>(fields[3].integer);
-        state_.assigned_cell_id = static_cast<std::uint64_t>(fields[4].integer);
-        state_.detail = fields[5].text;
-        ++state_.replies;
+        // 裁决记账 + 失联复核（L101 失联切片）：受理（code 1/2）= World 重新
+        // 认可本端 → 若曾冻结则触发解冻（链路恢复本身不解冻——复核以裁决
+        // 为准）；code 3（旧代次被替换）= World 已隔离本执行端 → 自冻结，
+        // 不得继续产生权威副作用。监听器锁外回调。
+        const bool accepted = fields[1].integer != 0;
+        const auto code = static_cast<std::int32_t>(fields[2].integer);
+        LinkFreezeListener freeze_fn;
+        LinkFreezeReason freeze_reason = LinkFreezeReason::kGraceExpired;
+        ReadmitListener readmit_fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.replied = true;
+            state_.accepted = accepted;
+            state_.code = code;
+            state_.management_epoch = static_cast<std::uint64_t>(fields[3].integer);
+            state_.assigned_cell_id = static_cast<std::uint64_t>(fields[4].integer);
+            state_.detail = fields[5].text;
+            ++state_.replies;
+            if (accepted && freeze_signaled_) {
+                freeze_signaled_ = false;
+                state_.frozen = false;
+                down_since_ms_ = 0;
+                readmit_fn = readmit_listener_;
+            } else if (!accepted && code == kCellRegisterRejectedStaleEpoch
+                       && !freeze_signaled_) {
+                freeze_signaled_ = true;
+                state_.frozen = true;
+                freeze_fn = freeze_listener_;
+                freeze_reason = LinkFreezeReason::kAdjudicationRejected;
+            }
+        }
+        if (readmit_fn) {
+            readmit_fn();
+        }
+        if (freeze_fn) {
+            freeze_fn(freeze_reason);
+        }
     }
 
     void handle_assign(const std::uint8_t* data, std::size_t size) {
@@ -248,16 +308,34 @@ private:
         return reported_drain_state_;
     }
 
+    void fire_freeze(LinkFreezeReason reason) {
+        // 每失联期一次（宿主侧不重复处理）；泵上下文锁外回调。
+        freeze_signaled_ = true;
+        LinkFreezeListener fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            state_.frozen = true;
+            fn = freeze_listener_;
+        }
+        if (fn) {
+            fn(reason);
+        }
+    }
+
     CellRegisterConfig config_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;  // 宿主泵线程生命周期
     bool up_seen_ = false;
     std::uint64_t last_send_ms_ = 0;  // 最近一次 960 发送成功时刻（心跳节拍基准）
     std::uint64_t next_request_id_ = 0;  // 0 保留，从 1 起单调
+    std::uint64_t down_since_ms_ = 0;  // 失联起算（曾 up；kUp 清零——L101 失联切片）
+    bool freeze_signaled_ = false;     // 失联/隔离冻结已触发（解冻随 961 复核受理）
     mutable std::mutex state_mutex_;
     CellRegisterState state_;        // 泵上下文写 / 任意线程读
     std::int32_t reported_drain_state_ = 0;  // 宿主写 / 泵上下文读
     SpaceAssignListener assign_listener_;            // 宿主装配 / 泵上下文读
+    LinkFreezeListener freeze_listener_;             // 宿主装配 / 泵上下文读
+    ReadmitListener readmit_listener_;               // 宿主装配 / 泵上下文读
     std::map<std::uint64_t, std::uint64_t> assign_versions_;  // space → 已应用版本
 };
 

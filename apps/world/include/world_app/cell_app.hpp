@@ -102,6 +102,17 @@ public:
     void stop();
     bool isRunning() const { return running_; }
 
+    // ---- 控制面失联冻结面（L101 失联策略切片，§4 失联策略）----
+    // 冻结 = tick 边界停模拟推进（意图消费/脚本补挂/worldHost tick/玩法拍
+    // 暂停，已受理意图保序滞留）+ 关受理闸（新输入拒收 2001 = IO 层关闭新
+    // 受理）；pre/post tick 钩子与传输泵照跑——链路必须活着才能听到 World
+    // 复核。解冻只随 961 复核受理（恢复连接本身不解冻——不能自行解冻），
+    // 闸随解冻恢复（仅 running 期；停机语义不受冻结影响，尾扫照常清队）。
+    // 调用上下文：pre-tick 泵上下文（= 内核线程，注册客户端监听器）或测试
+    // 线程（atomic 可见）。
+    void set_frozen(bool frozen);
+    bool frozen() const { return frozen_.load(std::memory_order_acquire); }
+
     // ---- 受理面 ----
     // M1 意图受理点（泵线程 = 内核线程）：submitIntent 判定 + 拒收即时回执
     //（顶格 2101 / 维护闸 2001）；受理成功不回包，回执随 tick 边界消费后按
@@ -226,6 +237,8 @@ private:
     // 受理面（ADR-016/017）：accepting_=false 即维护闸
     AcceptanceQueue acceptanceQueue_;
     std::atomic<bool> accepting_{false};
+    // 冻结面（L101 失联策略）：true = 模拟推进暂停 + 受理闸关（见 set_frozen）
+    std::atomic<bool> frozen_{false};
     std::uint32_t worldId_ = 1;
     std::uint64_t defaultSceneId_ = 0;
     // 队伍发号（契约 23 语义：服务端分配 party_id；内核线程独占）

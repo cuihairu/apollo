@@ -529,6 +529,54 @@ bool test_config_declared_spaces() {
     return true;
 }
 
+// L101 失联策略切片：内核冻结面——冻结 = tick 边界停模拟推进（意图消费
+// 暂停、已受理意图保序滞留）+ 关受理闸（新输入拒收）；解冻恢复闸并让滞留
+// 意图在 tick 边界执行 + 延时回执。泵/钩子照跑（听 World 复核解冻）由
+// cell_register_tests 的生产客户端例覆盖，本例钉内核语义。
+bool test_cell_kernel_freeze_face() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));  // 首拍 settle
+
+    // 冻结即关闸：新输入拒收（IO 层关闭新受理——§4 失联策略）
+    cell.set_frozen(true);
+    TEST_ASSERT(cell.frozen(), "frozen flag visible");
+    TEST_ASSERT(!cell.submitIntent(make_create_player_intent(9, 70, 5001)),
+                "gate closed while frozen");
+
+    // 已受理意图滞留不执行：冻结拍不消费队列（模拟推进暂停）、无延时回执
+    cell.set_frozen(false);
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(55, 90, 5002)),
+                "intent accepted before freeze");
+    cell.set_frozen(true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));  // > 5 拍（20ms tick）
+    TEST_ASSERT(cell.resolveIntentPlayer(90) == 0, "held intent not executed while frozen");
+    TEST_ASSERT(cell.pendingIntentCount() == 1, "intent held in queue, in order");
+    TEST_ASSERT(ack_count(egress) == 0, "no deferred ack while frozen");
+
+    // 解冻：闸随 running 恢复，滞留意图在 tick 边界执行 + 延时回执补上
+    cell.set_frozen(false);
+    TEST_ASSERT(!cell.frozen(), "unfrozen");
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(8, 71, 5003)),
+                "gate reopened on unfreeze");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(90) == 55; },
+                           std::chrono::seconds(3)),
+                "held intent executed after unfreeze");
+    TEST_ASSERT(wait_until([&] { return ack_seen(egress, 5002, 0); },
+                           std::chrono::seconds(3)),
+                "held intent acked after unfreeze");
+    TEST_ASSERT(wait_until([&] { return ack_seen(egress, 5003, 0); },
+                           std::chrono::seconds(3)),
+                "post-unfreeze intent acked");
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -550,6 +598,7 @@ int main() {
         {"cell_kernel_unknown_space_falls_back_to_default",
          test_cell_kernel_unknown_space_falls_back_to_default},
         {"config_declared_spaces", test_config_declared_spaces},
+        {"cell_kernel_freeze_face", test_cell_kernel_freeze_face},
     };
 
     for (const auto& c : cases) {

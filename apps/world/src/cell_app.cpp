@@ -241,10 +241,28 @@ void CellApp::start() {
                 + std::to_string(config_.spaceHeight) + ")");
 }
 
+void CellApp::set_frozen(bool frozen) {
+    // 冻结面（L101 失联策略切片；§4：宽限期到期 tick 边界冻结 + IO 层关新
+    // 受理；解冻只随 961 复核，宿主监听器调用本面）。调用上下文 = pre-tick
+    // 泵上下文（内核线程）或测试线程——frozen_/accepting_ 均 atomic。
+    const bool was = frozen_.exchange(frozen, std::memory_order_acq_rel);
+    if (was == frozen) {
+        return;
+    }
+    if (frozen) {
+        accepting_ = false;  // IO 层关闭新输入受理（新意图 2001）
+        worldLog().warning("kernel frozen: simulation paused (control link lost)");
+    } else {
+        accepting_ = running_.load(std::memory_order_acquire);  // 闸随解冻恢复
+        worldLog().info("kernel resumed: re-admitted by world");
+    }
+}
+
 void CellApp::stop() {
     // 停机 G-3 镜像顺序（ADR-016）：停受理 → 队列尾扫（内核循环退出前）→
     // join → 拨号面收口 → worldHost stop。延时应答经 egress 缝——宿主传输
     // 面由 WorldApp::stop 在本调用返回后停（尾扫回执仍要有发送面）。
+    // 停机语义覆盖冻结：尾扫照常清队（冻结只是暂停模拟推进，非停机意图）。
     accepting_ = false;
     running_ = false;
 
@@ -890,18 +908,23 @@ void CellApp::gameLoop() {
                     startTime.time_since_epoch()).count()));
         }
 
-        // ADR-015(a)：意图消费在 tick 边界（world 变更只发生在此线程）
-        drainAcceptanceQueue();
-
-        // 脚本宿主接线：未挂的 scene 幂等补挂（新 scene 下一拍生效）
-        attach_script_to_scenes();
-
-        worldHost_->tick();
-
-        // 小队副本玩法拍（P2 真实链路）：Running 副本 tick 推进（含已受理
-        // 击杀的 battle 输入序）+ 结算期副本收尾；状态帧随后续操作/收尾下发
+        // 冻结拍（L101 失联策略）：停模拟推进（意图消费/脚本补挂/worldHost
+        // tick/玩法拍——已受理意图保序滞留）；泵与钩子照跑，链路必须活着
+        // 才能听到 World 复核解冻
         const auto delta_seconds = static_cast<double>(tickInterval().count()) / 1000.0;
-        driveSquadGameplay(delta_seconds);
+        if (!frozen_.load(std::memory_order_acquire)) {
+            // ADR-015(a)：意图消费在 tick 边界（world 变更只发生在此线程）
+            drainAcceptanceQueue();
+
+            // 脚本宿主接线：未挂的 scene 幂等补挂（新 scene 下一拍生效）
+            attach_script_to_scenes();
+
+            worldHost_->tick();
+
+            // 小队副本玩法拍（P2 真实链路）：Running 副本 tick 推进（含已受理
+            // 击杀的 battle 输入序）+ 结算期副本收尾；状态帧随后续操作/收尾下发
+            driveSquadGameplay(delta_seconds);
+        }
 
         // 玩法拍后钩子（管理推进：排空 / eval 收账 / 模块编排——宿主在
         // 内核线程内驱动，单写者纪律不破）

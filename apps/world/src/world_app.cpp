@@ -455,6 +455,15 @@ void WorldApp::onCellRegister(const std::string& peer,
             .count());
     auto it = cellRegistrations_.find(request.cell_id);
     if (it == cellRegistrations_.end()) {
+        // 旧执行端隔离（L101 隔离切片）：代次水位——摘除忘却登记，但本进程
+        // 曾受理的更高代次仍拒旧代次复活（旧端不能借摘除冒认首注册；同代次
+        // = 同一化身断链回拨，放行走首注册。内存水位，持久墓碑随管理日志批）
+        const auto wm = cellEpochWatermarks_.find(request.cell_id);
+        if (wm != cellEpochWatermarks_.end() && request.start_epoch < wm->second) {
+            reply(false, kCellRegisterRejectedStaleEpoch,
+                  "stale epoch: watermark=" + std::to_string(wm->second));
+            return;
+        }
         CellRegistration reg;
         reg.cell_id = request.cell_id;
         reg.start_epoch = request.start_epoch;
@@ -467,6 +476,7 @@ void WorldApp::onCellRegister(const std::string& peer,
         reg.registered_at_ms = now_ms;
         reg.peer = peer;
         cellRegistrations_.emplace(request.cell_id, std::move(reg));
+        cellEpochWatermarks_[request.cell_id] = request.start_epoch;
         worldLog().info("cell registered: id=" + std::to_string(request.cell_id)
                         + " epoch=" + std::to_string(request.start_epoch)
                         + " peer=" + peer);
@@ -494,6 +504,7 @@ void WorldApp::onCellRegister(const std::string& peer,
     it->second.ready = request.ready;
     it->second.registered_at_ms = now_ms;
     it->second.peer = peer;
+    cellEpochWatermarks_[request.cell_id] = request.start_epoch;  // 水位随受理推进
     worldLog().info(std::string("cell re-") + (idempotent ? "registered: " : "placed (new epoch): ")
                     + "id=" + std::to_string(request.cell_id)
                     + " epoch=" + std::to_string(request.start_epoch)

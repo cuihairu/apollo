@@ -18,7 +18,9 @@
 // 次 960——同代次重注册由受理面裁决为幂等刷新（code 2），新代次替换
 //（code 1），旧代次拒绝（code 3）原样显形给宿主。心跳失效/重注册窗口已
 // 落地（heartbeat_ms 周期重发 960 = last-heard 刷新 + 回执丢失重试；World
-// 侧 cellExpiryMs 超窗摘除）；旧执行端隔离与控制面失联策略仍待做。
+// 侧 cellExpiryMs 超窗摘除）。失联策略已落地（L101 失联切片）：链路 down
+// 超 link_grace_ms 或收到 code 3 触发冻结监听（宿主停模拟关闸），解冻只随
+// 961 复核受理——链路恢复本身不解冻。
 
 #include <cstdint>
 #include <functional>
@@ -46,6 +48,11 @@ struct CellRegisterConfig {
     // World 侧 last-heard，兼作 961 回执丢失的重试）。0 = 关（仅 kUp 跃迁
     // 单发——注册即幂等，重发无害）。
     std::uint64_t heartbeat_ms = 5000;
+    // 失联宽限窗毫秒（L101 失联策略切片）：控制链路 down 超窗即触发冻结
+    // 监听器一次（宿主停模拟关闸——§4 宽限期冻结）；0 = 永不冻结。缺省
+    // 15000 = 3 心跳拍容忍（默认心跳 5000），低于 World 过期窗 30000——
+    // cell 先自冻结、World 后摘除（冻结先于除名，避免摘除后旧端仍写）。
+    std::uint64_t link_grace_ms = 15000;
     // 握手代次（§5.7；0 = 进程自铸）。
     std::uint64_t authority_epoch = 0;
 };
@@ -60,6 +67,16 @@ struct SpaceAssignRecord {
 };
 using SpaceAssignListener = std::function<void(const SpaceAssignRecord&)>;
 
+// 失联冻结原因（L101 失联策略切片）：kGraceExpired——链路 down 超宽限窗
+//（link_grace_ms）；kAdjudicationRejected——961 code 3（旧代次被替换，
+// World 已隔离本执行端——本端自冻结，不得继续产生权威副作用）。
+enum class LinkFreezeReason {
+    kGraceExpired,
+    kAdjudicationRejected,
+};
+using LinkFreezeListener = std::function<void(LinkFreezeReason)>;
+using ReadmitListener = std::function<void()>;
+
 // 注册账快照（泵上下文写，宿主/测试跨线程读——mutex 守）。
 struct CellRegisterState {
     bool sent = false;    // 至少发出过一次 960
@@ -71,6 +88,7 @@ struct CellRegisterState {
     std::string detail;                 // World 回执明细
     std::uint64_t attempts = 0;         // 960 发送次数（首连 + 断链重拨累计）
     std::uint64_t replies = 0;          // 961 回执次数
+    bool frozen = false;                // 失联冻结已触发（解冻随 961 复核受理）
 };
 
 class CellRegisterClient {
@@ -105,6 +123,14 @@ public:
 
     // 已记账（版本前进）分配条数（观测面）。
     virtual std::size_t space_assign_count() const { return 0; }
+
+    // 失联冻结监听（L101 失联策略切片）：链路 down 超 link_grace_ms 触发
+    // kGraceExpired 一次/失联期；961 code 3 触发 kAdjudicationRejected（旧
+    // 执行端自隔离）。readmit：961 accepted（code 1/2，World 重新受理本端）
+    // 解冻——链路恢复本身不解冻（§4 不能自行解冻，复核以裁决为准）。均
+    // 泵上下文锁外同步回调（同 962 纪律——不得重入 pump/state）。
+    virtual void set_link_freeze_listener(LinkFreezeListener fn) { (void)fn; }
+    virtual void set_readmit_listener(ReadmitListener fn) { (void)fn; }
 };
 
 // 工厂：world_host:world_port 主动拨号，961 按 request_id 记账。

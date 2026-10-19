@@ -84,6 +84,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--cell-expiry-ms" && i + 1 < argc) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--link-grace-ms" && i + 1 < argc) {
+            config.linkGraceMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--assign-spaces" && i + 1 < argc) {
             std::stringstream ss(argv[++i]);
             std::string item;
@@ -154,6 +156,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
                       << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
+                      << "  --link-grace-ms <ms>      Cell-side control-link grace window before freeze, 0 = never (default: 15000)\n"
                       << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells (default: off)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --add-space <id>:<name>     Declare an extra Space at startup, repeatable (default: none)\n"
@@ -306,6 +309,7 @@ int main(int argc, char* argv[]) {
                 rc.advertise_port = link->listenPort();
                 rc.route_json = config.m1RouteJson;
                 rc.authority_epoch = config.m1AuthorityEpoch;
+                rc.link_grace_ms = config.linkGraceMs;
                 register_client = makeCellRegisterClient(std::move(rc));
                 // 962 分配应用面（L101 分配面首切片）：监听在 pre-tick 泵内
                 // 同步回调 = 内核线程上下文（add_space 注册窗含此面），按
@@ -322,6 +326,22 @@ int main(int argc, char* argv[]) {
                                      + " version=" + std::to_string(rec.version)
                                      + " scene=" + std::to_string(scene_id));
                     });
+                // 失联冻结面（L101 失联策略切片）：宽限窗到期 / 裁决拒（code 3
+                // 旧执行端隔离）→ 冻结内核（停模拟 + 关闸，泵照跑听复核）；
+                // 961 复核受理 → 解冻。监听在 pre-tick 泵内 = 内核线程上下文。
+                register_client->set_link_freeze_listener(
+                    [&cell, &logger](LinkFreezeReason reason) {
+                        cell.set_frozen(true);
+                        logger->warning(
+                            std::string(reason == LinkFreezeReason::kGraceExpired
+                                            ? "control link grace expired"
+                                            : "adjudication rejected (stale epoch)")
+                            + ": kernel frozen");
+                    });
+                register_client->set_readmit_listener([&cell, &logger]() {
+                    cell.set_frozen(false);
+                    logger->info("re-admitted by world: kernel resumed");
+                });
             };
 
             logger->info("Starting server...");

@@ -208,9 +208,15 @@ private:
     std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
     // cell 注册登记（960，L101 注册首切片）：cell_id → 登记；代次裁决在
     // 受理点（旧代次拒、新代次替换、同代次幂等刷新），心跳失效摘除在
-    // driveCellRegistry（过期窗 cellExpiryMs）。旧执行端隔离、World 侧
-    // 分配（L102 拓扑批）待做——本表是它们的承载面。
+    // driveCellRegistry（过期窗 cellExpiryMs）。旧执行端隔离已落地（代次
+    // 水位，见 cellEpochWatermarks_）；World 侧断连存疑标记与对账、持久墓
+    // 碑（跨 World 重启）随管理日志批，分配完整面随 L108 拓扑批。
     std::unordered_map<std::uint64_t, CellRegistration> cellRegistrations_;
+    // 代次水位（L101 旧执行端隔离切片）：cell_id → 本进程曾受理的最高启动
+    // 代次。过期摘除忘却登记但水位保留——摘除后旧代次（< 水位）复活拒
+    // code 3，同代次（= 水位，同一化身断链回拨）仍首注册受理。内存面：
+    // 跨 World 重启的持久墓碑随管理日志批（不假装记得重启前的事）。
+    std::unordered_map<std::uint64_t, std::uint64_t> cellEpochWatermarks_;
     // Space 分配表（962 分配面）：space_id → 分配；认领独占策略见观测面注。
     std::unordered_map<std::uint64_t, SpaceAssignment> spaceAssignments_;
 };
