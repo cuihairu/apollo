@@ -1,15 +1,18 @@
 // apolloc CLI 脚手架单测（P0.2 L36：项目初始化的唯一 CLI 入口）。
 //   1. help/--help/-h 三种形态打印用法并退出 0；无参打印用法并退出 1；
 //   2. 未知子命令显式拒绝（不静默回退），init 缺 path 与多余参数退出 1；
-//   3. init 在空新目录生成骨架（目录占位 + README + .gitignore + 项目标记）；
-//   4. 非空目录、已存在文件、目录穿越路径显式拒绝（退出 2），原有内容不动；
-//   5. 空已存在目录受理；已生成目录二次 init 拒收（不覆盖）；
-//   6. 相对 path 按调用者 cwd 解析，不依赖启动时 cwd。
+//   3. init 在空新目录生成模板（五目录占位 + 配置 + Lua 入口 +
+//      契约入口 + README + .gitignore + 项目标记），内容逐项断言；
+//   4. 模板禁物：不生成认证材料、无 CRLF、启动/停止脚本无 sleep；
+//   5. 非空目录、已存在文件、目录穿越路径显式拒绝（退出 2），原有内容不动；
+//   6. 空已存在目录受理；已生成目录二次 init 拒收（不覆盖）；
+//   7. 相对 path 按调用者 cwd 解析，不依赖启动时 cwd。
 //
 // 全部用例在临时目录下落盘自清理，无网络无定时器。
 
 #include "apollo_cli/cli.hpp"
 
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -143,6 +146,121 @@ bool test_init_creates_skeleton() {
     auto marker = read_text(target / ".apollo-project.json");
     TEST_ASSERT(marker.find("scaffold_version") != std::string::npos,
                 "项目标记带脚手架版本");
+
+    for (const char* file : {"config/runtime.conf", "scripts/start.sh",
+                             "scripts/stop.sh", "lua/boot.lua",
+                             "lua/contract_handlers.lua",
+                             "contract/README.md"}) {
+        TEST_ASSERT(std::filesystem::is_regular_file(target / file),
+                    std::string("生成模板文件 ") + file);
+    }
+    return true;
+}
+
+bool test_generated_template_integrity() {
+    auto root = fresh_dir();
+    auto target = root / "proj";
+    auto r = run({"init", target.string()});
+    TEST_ASSERT(r.code == 0, "模板生成成功");
+
+    // 配置：五个角色的主机/端口/身份齐全，端口按服务缺省对齐。
+    auto conf = read_text(target / "config/runtime.conf");
+    for (const char* key : {"HOST=127.0.0.1", "DATABASE_PORT=9200",
+                            "BASE_PORT=9201", "LOGIN_PORT=9001",
+                            "WORLD_M1_PORT=9101", "GATEWAY_PORT=8888",
+                            "DATABASE_ID=database-1", "BASE_ID=base-1"}) {
+        TEST_ASSERT(conf.find(key) != std::string::npos,
+                    std::string("配置含 ") + key);
+    }
+
+    // 启动脚本：依赖顺序 database→login→base→world→gateway，flag 均为服务
+    // 现有解析项，且不落任何就绪伪装（无 sleep）。
+    auto start = read_text(target / "scripts/start.sh");
+    TEST_ASSERT(start.find("APOLLO_BIN_DIR") != std::string::npos,
+                "启动脚本要求引擎二进制目录");
+    TEST_ASSERT(start.find("bin_of") != std::string::npos &&
+                    start.find("$APOLLO_BIN_DIR/$role/$role") != std::string::npos &&
+                    start.find("$APOLLO_BIN_DIR/$role") != std::string::npos,
+                "启动脚本兼容两种二进制布局");
+    TEST_ASSERT(start.find("engine binary not found") != std::string::npos,
+                "引擎二进制缺失时报错退出");
+    TEST_ASSERT(start.find("config/runtime.conf") != std::string::npos,
+                "启动脚本源配置");
+    TEST_ASSERT(start.find("--database-host") != std::string::npos,
+                "base→database 接线走真实 flag");
+    TEST_ASSERT(start.find("--script-boot") != std::string::npos &&
+                    start.find("lua/boot.lua") != std::string::npos,
+                "world 接 Lua boot 入口");
+    TEST_ASSERT(start.find("--settlement-credential-dir") == std::string::npos,
+                "不生成结算凭据目录参数");
+    TEST_ASSERT(start.find("sleep") == std::string::npos,
+                "启动脚本无 sleep 冒充就绪");
+    const char* order[] = {"start_one database", "start_one login",
+                           "start_one base", "start_one world",
+                           "start_one gateway"};
+    for (std::size_t i = 1; i < 5; ++i) {
+        TEST_ASSERT(start.find(order[i - 1]) < start.find(order[i]),
+                    std::string("启动顺序 ") + order[i - 1] + " 先于 " +
+                        order[i]);
+    }
+
+    // 停止脚本：只按 start.sh 记录的 PID 反向停止，不猜进程。
+    auto stop = read_text(target / "scripts/stop.sh");
+    TEST_ASSERT(stop.find(".run/") != std::string::npos &&
+                    stop.find(".pid") != std::string::npos,
+                "停止脚本只认 PID 记录");
+    TEST_ASSERT(stop.find("kill ") != std::string::npos, "停止脚本发 TERM");
+    TEST_ASSERT(stop.find("start_one gateway") == std::string::npos &&
+                    stop.find("stop_one gateway") < stop.find("stop_one database"),
+                "停止顺序与启动反向");
+    TEST_ASSERT(stop.find("sleep") == std::string::npos, "无等待循环");
+
+    // 目录说明：README 列出模板布局、调用方式与未实现状态。
+    auto readme = read_text(target / "README.md");
+    TEST_ASSERT(readme.find("## Layout") != std::string::npos, "README 有目录说明");
+    TEST_ASSERT(readme.find("sh scripts/start.sh") != std::string::npos,
+                "README 给出启动方式");
+    TEST_ASSERT(readme.find("readiness is not asserted") != std::string::npos ||
+                    readme.find("does\nnot assert readiness") != std::string::npos,
+                "README 声明不断言就绪");
+    TEST_ASSERT(readme.find("No auth material is generated") != std::string::npos,
+                "README 声明不生成认证材料");
+
+    // 契约入口：说明 apollo_gen 生成流程与 handler 同步纪律。
+    auto contract = read_text(target / "contract/README.md");
+    TEST_ASSERT(contract.find("apollo_gen") != std::string::npos,
+                "契约入口指向生成器");
+    TEST_ASSERT(contract.find("--contract contract") != std::string::npos,
+                "契约入口给出生成命令");
+
+    // 全模板禁物扫描：不生成认证材料、不残留 CRLF。
+    const char* forbidden[] = {"secret", "password", "credential", "BEGIN RSA"};
+    for (const auto& file : apollo_cli::scaffold_files("proj")) {
+        const auto body = read_text(target / file.first);
+        for (const char* word : forbidden) {
+            auto lowered = body;
+            for (auto& ch : lowered) {
+                ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            }
+            TEST_ASSERT(lowered.find(word) == std::string::npos,
+                        std::string("模板禁物 ") + file.first + " 含 " + word);
+        }
+        TEST_ASSERT(body.find('\r') == std::string::npos,
+                    std::string("模板无 CRLF ") + file.first);
+    }
+
+    // 清单本身：9 个文件、全为相对路径、无重复。
+    auto files = apollo_cli::scaffold_files("proj");
+    TEST_ASSERT(files.size() == 9, "模板清单 9 个文件");
+    for (const auto& file : files) {
+        TEST_ASSERT(!file.first.empty() && file.first.front() != '/',
+                    "清单路径为相对路径");
+        TEST_ASSERT(file.first.find("..") == std::string::npos,
+                    "清单路径无穿越分量");
+        TEST_ASSERT(!file.second.empty() &&
+                        file.second.back() == '\n',
+                    std::string("清单内容非空且 LF 收尾 ") + file.first);
+    }
     return true;
 }
 
@@ -225,6 +343,7 @@ int main() {
         test_help_forms,
         test_no_args_and_unknown,
         test_init_creates_skeleton,
+        test_generated_template_integrity,
         test_init_refuses_nonempty_and_file,
         test_init_rejects_empty_and_traversal,
         test_init_empty_existing_and_refuses_rescaffold,
