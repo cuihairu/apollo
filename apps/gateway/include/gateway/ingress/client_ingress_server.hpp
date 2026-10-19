@@ -15,11 +15,23 @@ struct ClientEndpoint {
     std::uint16_t port{0};
 };
 
+// 有界积压（L51，TCP/WS 客户端入口共用）：单连接出站残余字节上限——写不尽
+// 且超限 = 对端不读，踢线。2×kMaxPayload：足纳一帧最大载荷在途 + 一帧余量。
+inline constexpr std::size_t kMaxTxBacklogBytes = 2 * 1024 * 1024;
+
+// 有界积压（L51）：跨线程投递队列 op 数上限——send 侧生产快过泵消费时顶格
+// 丢最旧（帧号在 pump drain 侧才分配，丢 op 不产生序列缝）。与受理队列
+// kDefaultCap 同量级。
+inline constexpr std::size_t kMaxHandoffOps = 1024;
+
 enum class DisconnectReason {
     NormalClose,
     IdleTimeout,
     AdmissionRejected,
     TransportError,
+    // 慢读踢线（L51 有界积压面）：出站积压超限 = 对端不读——断连保内存，
+    // 会话保留窗承接重连续传（非 normal 断开，session resume 语义同传输错）。
+    SlowConsumer,
 };
 
 class IClientIngressObserver {

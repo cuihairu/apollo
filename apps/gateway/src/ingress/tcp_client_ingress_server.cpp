@@ -151,6 +151,12 @@ public:
         handoff_.push_back(HandedOp{connectionId, false,
                                     DisconnectReason::TransportError,
                                     {payload.begin(), payload.end()}});
+        // 有界积压：投递面顶格丢最旧（send 侧生产快过泵消费 = 泵停或慢读
+        // 在途，老状态先作废；警告每次溢出记一行，恢复由泵自然排水）。
+        while (handoff_.size() > kMaxHandoffOps) {
+            handoff_.pop_front();
+            glog().warning("client ingress handoff at cap, dropping oldest queued op");
+        }
     }
 
     void close(ConnectionID connectionId, DisconnectReason reason) override {
@@ -230,9 +236,18 @@ private:
                 return;
             }
             if (n == 0) {
-                return;  // 暂不可写：余量留到下个泵周期
+                break;  // 暂不可写：余量留到下个泵周期
             }
             conn.tx.erase(conn.tx.begin(), conn.tx.begin() + n);
+        }
+        // 有界积压：写不尽且超限 = 对端不读——踢线（SlowConsumer，会话
+        // 保留窗承接重连续传）；closing 在途的收尾回执不受此限（字节小，
+        // 由既有停泵兜底面处理——本连接走 mark_closed 后 closing 已置位）。
+        if (!conn.closing && conn.tx.size() > kMaxTxBacklogBytes) {
+            glog().warning("client ingress tx backlog " + std::to_string(conn.tx.size()) +
+                           " bytes over cap, kicking slow consumer conn " +
+                           std::to_string(conn.id));
+            mark_closed(conn, DisconnectReason::SlowConsumer);
         }
     }
 

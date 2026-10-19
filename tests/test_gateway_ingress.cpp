@@ -8,7 +8,9 @@
 //   5. close 经投递队列收线（泵外线程调用面）；
 //   6. 未知连接 send 容忍（不崩不炸）；
 //   7. 满载拒收（超出 maxConnections 的入站在 accept 即关）；
-//   8. GatewayServer 全链 e2e：真 TCP PING → 分发 → PONG 回包。
+//   8. 慢读踢线（有界积压：出站残余超上限 → SlowConsumer 断开）；
+//   9. 投递队列有界（顶格丢最旧，帧号 drain 侧分配无序列缝）；
+//   10. GatewayServer 全链 e2e：真 TCP PING → 分发 → PONG 回包。
 //
 // Windows：link TCP 底座不进 M1 批（POSIX only）——TCP 用例本体空转，
 // 仅保留工厂烟囱（null 桩回退可启停）。
@@ -183,6 +185,32 @@ public:
         }
     }
 
+    // 底层描述符（多帧连续收取面用——recvFrame 单帧语义会丢中间缓冲）。
+    int fd() const { return fd_; }
+
+    // 排空至 EOF（慢读踢线用例：踢线前已灌入大站出站残留，单帧读法读不到
+    // EOF——必须连读到对端 FIN/RST）。
+    bool drainToEof(int timeoutMs) {
+        const auto deadline = std::chrono::steady_clock::now()
+                              + std::chrono::milliseconds(timeoutMs);
+        while (std::chrono::steady_clock::now() < deadline) {
+            pollfd pfd{fd_, POLLIN, 0};
+            if (::poll(&pfd, 1, 50) <= 0) {
+                continue;
+            }
+            std::uint8_t buf[65536];
+            const ssize_t n = ::recv(fd_, buf, sizeof buf, 0);
+            if (n > 0) {
+                continue;
+            }
+            if (n < 0 && errno == EINTR) {
+                continue;
+            }
+            return true;  // EOF 或读错误（RST）都算收到断开
+        }
+        return false;
+    }
+
 private:
     int fd_ = -1;
 };
@@ -209,6 +237,7 @@ std::vector<std::uint8_t> frame_bytes(std::uint32_t seq, std::uint8_t flags,
     return out;
 }
 
+// ---- 1. 帧 round-trip：入站载荷原样达 observer；出站帧原样达客户端 ----
 bool test_ingress_frame_roundtrip() {
     std::cout << "Running: test_ingress_frame_roundtrip..." << std::endl;
 
@@ -416,6 +445,105 @@ bool test_ingress_capacity_cap() {
     return true;
 }
 
+// ---- 9. 有界积压：慢读踢线（出站残余超上限 → SlowConsumer 断开）----
+bool test_ingress_slow_consumer_kicked() {
+    std::cout << "Running: test_ingress_slow_consumer_kicked..." << std::endl;
+
+    RecordingObserver observer;
+    auto ingress = gateway::makeTcpClientIngressServer("127.0.0.1", 0, 0);
+    ingress->setObserver(&observer);
+    ingress->start();
+
+    TestClient client;
+    TEST_ASSERT(client.connect("127.0.0.1", ingress->listenPort()), "connected");
+    TEST_ASSERT(pump_until(*ingress, [&] { return observer.count(EventKind::Opened) == 1; },
+                           2000),
+                "opened");
+    const auto connectionId = observer.snapshot().front().connectionId;
+
+    // 客户端不读：8 MiB 出站灌压（32×256 KiB）远超内核双侧缓冲与
+    // kMaxTxBacklogBytes=2 MiB 上限——flush 余量滞留 tx，超限即踢
+    //（SlowConsumer；会话保留窗承接重连续传属上层语义，此处验收踢线事实）。
+    const std::vector<std::uint8_t> big(256 * 1024, 0x7C);
+    for (int i = 0; i < 32; ++i) {
+        ingress->send(connectionId, big);
+    }
+    TEST_ASSERT(pump_until(*ingress, [&] { return observer.count(EventKind::Closed) == 1; },
+                           8000),
+                "slow consumer kicked closed");
+    const auto events = observer.snapshot();
+    TEST_ASSERT(events.back().reason == gateway::DisconnectReason::SlowConsumer,
+                "close reason is slow consumer");
+    TEST_ASSERT(client.drainToEof(2000), "client sees EOF after kick");
+
+    ingress->stop();
+    client.close();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 10. 有界积压：投递队列顶格丢最旧（帧号 drain 侧分配，无序列缝）----
+bool test_ingress_handoff_cap_drops_oldest() {
+    std::cout << "Running: test_ingress_handoff_cap_drops_oldest..." << std::endl;
+
+    RecordingObserver observer;
+    auto ingress = gateway::makeTcpClientIngressServer("127.0.0.1", 0, 0);
+    ingress->setObserver(&observer);
+    ingress->start();
+
+    TestClient client;
+    TEST_ASSERT(client.connect("127.0.0.1", ingress->listenPort()), "connected");
+    TEST_ASSERT(pump_until(*ingress, [&] { return observer.count(EventKind::Opened) == 1; },
+                           2000),
+                "opened");
+    const auto connectionId = observer.snapshot().front().connectionId;
+
+    // 不泵连投 kMaxHandoffOps+50 个带序 payload（本地序 4 字节）：最旧 50 个
+    // 被弃，保号连续——收到帧数恰为 cap，首帧序 = 50、尾帧序 = cap+49。
+    constexpr std::size_t kSent = gateway::kMaxHandoffOps + 50;
+    for (std::uint32_t i = 0; i < kSent; ++i) {
+        std::vector<std::uint8_t> payload(4);
+        std::memcpy(payload.data(), &i, 4);
+        ingress->send(connectionId, payload);
+    }
+
+    TEST_ASSERT(pump_until(*ingress, [&] { return true; }, 0), "pumped once");
+
+    // 连收 kMaxHandoffOps 帧（独立 parser 持续喂流，不丢中间缓冲）。
+    apollo::net::link::FrameParser parser;
+    std::vector<std::uint32_t> indices;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+    while (indices.size() < gateway::kMaxHandoffOps &&
+           std::chrono::steady_clock::now() < deadline) {
+        pollfd pfd{client.fd(), POLLIN, 0};
+        if (::poll(&pfd, 1, 50) <= 0) {
+            continue;
+        }
+        std::uint8_t buf[8192];
+        const ssize_t n = ::recv(client.fd(), buf, sizeof buf, 0);
+        if (n <= 0) {
+            break;
+        }
+        const auto outcome = parser.feed(buf, static_cast<std::size_t>(n));
+        TEST_ASSERT(!outcome.fatal, "frame stream intact after oldest-drop");
+        for (const auto& frame : outcome.frames) {
+            std::uint32_t v = 0;
+            if (frame.payload.size() >= 4) {
+                std::memcpy(&v, frame.payload.data(), 4);
+            }
+            indices.push_back(v);
+        }
+    }
+    TEST_ASSERT(indices.size() == gateway::kMaxHandoffOps, "exactly cap ops delivered");
+    TEST_ASSERT(indices.front() == 50, "oldest 50 ops dropped first");
+    TEST_ASSERT(indices.back() == static_cast<std::uint32_t>(kSent) - 1, "newest op kept");
+
+    ingress->stop();
+    client.close();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_gateway_server_ping_pong_e2e() {
     std::cout << "Running: test_gateway_server_ping_pong_e2e..." << std::endl;
 
@@ -487,6 +615,8 @@ int main() {
     if (!test_ingress_close_from_foreign_thread()) ++failed;
     if (!test_ingress_send_unknown_connection_dropped()) ++failed;
     if (!test_ingress_capacity_cap()) ++failed;
+    if (!test_ingress_slow_consumer_kicked()) ++failed;
+    if (!test_ingress_handoff_cap_drops_oldest()) ++failed;
     if (!test_gateway_server_ping_pong_e2e()) ++failed;
 #endif
     if (failed == 0) {

@@ -52,6 +52,8 @@ struct ObserverEvent {
 // 塞满即 0），泵 N 拍后强拆，不滞留连接表。
 inline constexpr std::uint32_t kStalledTxPumpLimit = 500;
 
+// 有界积压常量取共享面（client_ingress_server.hpp，TCP 入口同款）。
+
 struct WsIngressConnection {
     ConnectionID id{0};
     ClientEndpoint endpoint;
@@ -174,6 +176,11 @@ public:
         handoff_.push_back(HandedOp{connectionId, false,
                                     DisconnectReason::TransportError,
                                     {payload.begin(), payload.end()}});
+        // 有界积压：投递面顶格丢最旧（TCP 入口同款纪律）。
+        while (handoff_.size() > kMaxHandoffOps) {
+            handoff_.pop_front();
+            glog().warning("ws ingress handoff at cap, dropping oldest queued op");
+        }
     }
 
     void close(ConnectionID connectionId, DisconnectReason reason) override {
@@ -292,9 +299,17 @@ private:
                 return;
             }
             if (n == 0) {
-                return;  // 暂不可写：余量留到下个泵周期
+                break;  // 暂不可写：余量留到下个泵周期
             }
             conn.tx.erase(conn.tx.begin(), conn.tx.begin() + n);
+        }
+        // 有界积压：业务连接写不尽且超限 = 对端不读——踢线（TCP 入口同款）。
+        // closing 在途的收尾回执不受此限（小字节，走 kStalledTxPumpLimit 兜底）。
+        if (!conn.closing && conn.upgraded && conn.tx.size() > kMaxTxBacklogBytes) {
+            glog().warning("ws ingress tx backlog " + std::to_string(conn.tx.size()) +
+                           " bytes over cap, kicking slow consumer conn " +
+                           std::to_string(conn.id));
+            mark_closed(conn, DisconnectReason::SlowConsumer);
         }
     }
 

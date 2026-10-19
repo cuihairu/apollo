@@ -13,7 +13,9 @@
 //   8. 扇入号段：TCP(基址 0) + WS(基址 1<<40) 并装，号互斥、send 各回各；
 //   9. WSS 配置缺凭据 → GatewayServer 装配即抛（不静默降级成明文）；
 //  10. GatewayServer 全链 e2e：config.wsPort 起 WS 监听，真 ws 客户端
-//      PING（netlink 帧）→ 分发 → PONG 回包（ws binary 帧）。
+//      PING（netlink 帧）→ 分发 → PONG 回包（ws binary 帧）；
+//  11. 有界积压：升级后业务连接出站残余超上限 → SlowConsumer 踢线
+//      （客户端不读，8 MiB 灌压）。
 //
 // Windows：link TCP/TLS 底座不进 M1 批（POSIX only）——用例本体空转。
 
@@ -341,6 +343,9 @@ public:
         const ssize_t n = ::recv(fd_, scratch, sizeof scratch, 0);
         return n <= 0;
     }
+
+    // 底层描述符（慢读踢线收线面：泵 + 大块排空交替用）。
+    int fd() const { return fd_; }
 
     void close() {
         if (fd_ >= 0) {
@@ -886,6 +891,63 @@ bool test_wss_without_certs_throws() {
 
 // ---- 10. GatewayServer 全链 e2e：WS 上 PING → PONG ----
 
+// ---- 11. 有界积压：慢读踢线（升级后业务连接出站残余超上限 → SlowConsumer）----
+bool test_ws_slow_consumer_kicked() {
+    std::cout << "Running: test_ws_slow_consumer_kicked..." << std::endl;
+
+    RecordingObserver observer;
+    auto ingress = make_game_ws_ingress(observer);
+    TEST_ASSERT(ingress->listenPort() != 0, "ephemeral port assigned");
+
+    WsTestClient client;
+    TEST_ASSERT(client.connect("127.0.0.1", ingress->listenPort()), "client connected");
+    client.sendAll(upgrade_request("GET", "/game"));
+    TEST_ASSERT(pump_until(*ingress, [&] { return observer.count(EventKind::Opened) == 1; },
+                           2000),
+                "opened after upgrade");
+    std::string response;
+    TEST_ASSERT(client.recvHttpResponse(response), "101 response received");
+
+    const auto connectionId = observer.snapshot().front().connectionId;
+    // 客户端不读：8 MiB 业务出站（32×256 KiB）远超内核双侧缓冲与
+    // kMaxTxBacklogBytes=2 MiB 上限——flush 余量滞留 tx，超限即踢（TCP 入口
+    // 同款纪律；closing 回执的 kStalledTxPumpLimit 兜底不受影响）。
+    const std::vector<std::uint8_t> big(256 * 1024, 0x7C);
+    for (int i = 0; i < 32; ++i) {
+        ingress->send(connectionId, big);
+    }
+    TEST_ASSERT(pump_until(*ingress, [&] { return observer.count(EventKind::Closed) == 1; },
+                           8000),
+                "slow consumer kicked closed");
+    const auto events = observer.snapshot();
+    TEST_ASSERT(events.back().reason == DisconnectReason::SlowConsumer,
+                "close reason is slow consumer");
+    // 踢线后残余不滞留连接表：closing 期残余走既有停泵兜底（500 拍强拆），
+    // 连接最终真断——本批的有界积压与既有滞留兜底串成完整闭环。泵与客户端
+    // 大块排空交替（残留 64B 读法读不尽，永碰不到 EOF）。
+    bool torn_down = false;
+    const auto teardown_deadline = std::chrono::steady_clock::now()
+                                   + std::chrono::milliseconds(5000);
+    while (std::chrono::steady_clock::now() < teardown_deadline) {
+        ingress->pump();
+        pollfd pfd{client.fd(), POLLIN, 0};
+        if (::poll(&pfd, 1, 1) > 0) {
+            std::uint8_t scratch[65536];
+            const ssize_t n = ::recv(client.fd(), scratch, sizeof scratch, 0);
+            if (n <= 0 && !(n < 0 && errno == EINTR)) {
+                torn_down = true;  // EOF 或读错误（RST）都算收到断开
+                break;
+            }
+        }
+    }
+    TEST_ASSERT(torn_down, "closing backlog force-dropped and connection torn down");
+
+    ingress->stop();
+    client.close();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_gateway_server_ws_e2e() {
     std::cout << "Running: test_gateway_server_ws_e2e..." << std::endl;
 
@@ -964,6 +1026,7 @@ int main() {
         {"fan_in_id_spaces", test_fan_in_id_spaces},
         {"wss_without_certs_throws", test_wss_without_certs_throws},
         {"gateway_server_ws_e2e", test_gateway_server_ws_e2e},
+        {"ws_slow_consumer_kicked", test_ws_slow_consumer_kicked},
     };
 
     int failed = 0;
