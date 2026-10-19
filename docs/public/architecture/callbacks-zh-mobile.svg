@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="1510" viewBox="0 0 480 1510" role="img" aria-labelledby="title desc" lang="zh-CN">
-<title id="title">Apollo 外部 HTTP 回调与开发工具边界</title><desc id="desc">目标设计，尚未实现。interfaces 可靠接收通知，按稳定玩家身份查询当前 Base，Base 经 database 幂等发货。脚手架与 CI 属于开发工具，不是在线业务进程。</desc>
+<title id="title">Apollo 外部 HTTP 回调与开发工具边界</title><desc id="desc">现状：interfaces 受理链、订单事务模块与 apolloc init 已落地并有测试；渠道验签与进程间接线规划中。interfaces 可靠受理回调，按稳定玩家身份解析当前 Base，Base 幂等发货。脚手架与 CI 属于开发工具，不是在线业务进程。</desc>
 <defs>
  <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
  <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
  <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
 </defs><rect width="480" height="1510" fill="#fff"/>
 <text x="24" y="38" font-size="25" font-weight="600" text-anchor="start">外部 HTTP 回调</text>
-<text x="24" y="72" font-size="18" font-weight="400" text-anchor="start" class="sub">interfaces / 订单事务：待实现</text>
+<text x="24" y="72" font-size="18" font-weight="400" text-anchor="start" class="sub">受理链 · 订单事务 · apolloc init：已落地</text>
 <g data-node="外部支付 / 渠道平台">
 <rect x="30" y="109" width="420" height="96" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="142" font-size="21" font-weight="600" text-anchor="start">外部支付 / 渠道平台</text>
@@ -15,7 +15,7 @@
 <g data-node="interfaces">
 <rect x="30" y="262" width="420" height="114" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="295" font-size="23" font-weight="600" text-anchor="start">interfaces</text>
-<text x="48" y="322" font-size="18" font-weight="400" text-anchor="start" class="sub">HTTPS 验签 · 可靠受理 · 异步投递</text>
+<text x="48" y="322" font-size="18" font-weight="400" text-anchor="start" class="sub">HTTPS 入口 · 可靠受理 · 异步投递</text>
 <text x="48" y="345" font-size="18" font-weight="400" text-anchor="start" class="sub">按稳定玩家身份处理订单</text>
 </g>
 <path d="M240 205 L240 262" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
@@ -52,7 +52,7 @@
 <text x="30" y="1145" font-size="18" font-weight="400" text-anchor="start" class="sub">world / cell 不处理支付发货。</text>
 <rect x="24" y="1200" width="432" height="280" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="42" y="1236" font-size="21" font-weight="600" text-anchor="start">开发与交付工具</text>
-<text x="42" y="1280" font-size="20" font-weight="600" text-anchor="start">项目初始化 CLI：init（待实现）</text>
+<text x="42" y="1280" font-size="20" font-weight="600" text-anchor="start">项目初始化 CLI：apolloc init（已实现）</text>
 <text x="42" y="1318" font-size="18" font-weight="400" text-anchor="start" class="sub">生成配置、Lua 与启停 / CI 模板</text>
 <text x="42" y="1372" font-size="20" font-weight="600" text-anchor="start">CI workflow 在仓库执行</text>
 <text x="42" y="1410" font-size="18" font-weight="400" text-anchor="start" class="sub">构建、测试、契约和文档检查</text>

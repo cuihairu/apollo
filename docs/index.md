@@ -37,11 +37,17 @@ features:
 
 ## 外部 HTTP 回调与开发入口
 
-支付和渠道回调由可选 interfaces 的 HTTP/HTTPS 入口接收；可靠保存后，按稳定玩家身份解析当前 Base，由 Base 校验并经 database 幂等发货。玩家离线不依赖 gateway 会话，Base 承载迁移后重新解析归属。游戏 WS/WSS 则属于 gateway 的游戏消息入口，不进入 HTTP handler；实际接线仍待实现。
+支付和渠道回调由可选 interfaces 的 HTTP/HTTPS 入口接收；可靠保存后，按稳定玩家身份解析当前 Base，由 Base 校验并经 database 幂等发货。玩家离线不依赖 gateway 会话，Base 承载迁移后重新解析归属。游戏 WS/WSS 属于 gateway 的游戏消息入口，与 TCP 共用同一条已验收的游戏帧路径，不进入 HTTP handler。
 
 <ArchitectureDiagram kind="callbacks" />
 
-interfaces、订单事务和项目初始化 CLI 均为待实现方案；现有仓库编队脚本与 CI 不等于已提供 init。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
+实现状态：gateway 游戏 TCP/WS/WSS 入口已验收（含 WSS 证书链/主机名错误拒绝与密钥配置负例）；interfaces 受理链（原始请求帧逐字节保留、请求超时与受理队列预算、有界单写者）、订单事务域（持久受理与待办、按归属代次解析当前 Base、发货去重凭据原子提交）与 apolloc init 脚手架均已落地并有测试覆盖；渠道验签执行器与进程间接线（interfaces→订单受理、baseServer 写权生命周期、奖励落账 executor）仍规划中。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
+
+## 进程、工具与 CI
+
+- 运行进程：gateway、loginServer、baseServer、worldServer、database、interfaces、machined；cell 独立执行入口规划中。gateway 提供游戏 TCP/WS/WSS 入口（已验收），interfaces 提供 HTTP/HTTPS 回调入口（受理链已落地）。
+- CLI 工具：apolloc（项目初始化 init，已交付）、fleetctl（编队量测断言）、admin 与 logger（观测辅助）——都是开发工具，不是在线业务进程。
+- CI：GitHub Actions（构建/测试、契约、文档）在仓库执行，不参与在线业务。
 
 ## 项目定位
 

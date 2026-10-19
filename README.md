@@ -20,7 +20,7 @@
 
 Apollo is a C++20 server runtime for lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It currently delivers lightweight instances while reserving future seamless Space/Cell, authority, and visibility boundaries.
 
-The process roles are fixed as `gateway`, `loginServer`, `baseServer`, `worldServer`, `cell`, `database`, and `machined`; cell is the discussed executor and Cell means a spatial partition.
+The process roles are fixed as `gateway`, `loginServer`, `baseServer`, `worldServer`, `cell`, `database`, and `machined`; cell is the discussed executor and Cell means a spatial partition. An optional `interfaces` process receives external HTTP/HTTPS callbacks.
 
 <picture>
   <source media="(max-width: 640px)" srcset="docs/public/architecture/system-en-mobile.svg" />
@@ -32,6 +32,25 @@ Target design: standalone Base ↔ database prototypes exist; World/cell separat
 baseServer owns persistent-player data and base gameplay; worldServer manages executors/topology and cell runs entities/temporary gameplay. Cross-server play retains the original Base and storage affiliation. A World can serve players from multiple Bases using per-player Base associations, without database credentials or local machined.
 
 Protocol-capable upgrades replace Base, cell, or World management independently through state conversion, exclusive handoff, route switching, and source cleanup. Complete active matches require Instance state transfer. The role split and corresponding runtime wiring remain implementation tasks; see [architecture](docs/en/guide/architecture.md), [applications](docs/en/apps/index.md), and [cross-server scenes](docs/en/design/cross-server-scenes.md).
+
+### Entry and Delivery Surfaces
+
+- Gameplay WS/WSS (accepted): gateway listens on TCP / WS / WSS together; login, session resume, and async downlink share one game-frame path. WSS covers certificate-chain/hostname rejection and key-configuration negatives; drops resume across transports within the retention window.
+- HTTP callbacks (intake implemented): payment/channel server callbacks enter a standalone interfaces HTTP/HTTPS ingress — byte-exact raw-request retention, request-timeout and queue budgets, and a bounded single-writer intake chain that never blocks simulation; the channel verification executor is planned.
+- Dynamic Base resolution and durable fulfillment (modules implemented): orders are accepted by stable player identity and journaled durably; each delivery attempt re-resolves the current Base plus epoch, so offline players, unreachable Bases, and migration windows never lose pending work; fulfillment commits a dedup credential atomically, converging duplicate notifications, lost ACKs, and crash restarts into one delivery. Inter-process wiring (interfaces→order intake, baseServer write-authority lifecycle, reward apply executor) is planned.
+
+<picture>
+  <source media="(max-width: 640px)" srcset="docs/public/architecture/callbacks-en-mobile.svg" />
+  <img src="docs/public/architecture/callbacks-en.svg" alt="Apollo external callbacks and fulfillment: interfaces intake, dynamic Base resolution, idempotent delivery" />
+</picture>
+
+### Processes, Tools, and CI
+
+| Kind | Members | Boundary |
+|---|---|---|
+| Runtime processes | `gateway`, `loginServer`, `baseServer`, `worldServer`, `database`, `interfaces`, `machined` | Online services; a standalone `cell` executor entry is planned |
+| CLI tools | `apolloc` (project init), `fleetctl`, `admin`, `logger` | Development/ops tools, not online services |
+| CI | GitHub Actions: build/tests, contracts, docs | Runs in the repository, not in the online path |
 
 ## Use Cases
 

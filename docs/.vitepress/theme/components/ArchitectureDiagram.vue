@@ -10,8 +10,8 @@ const source = computed(() => withBase(`/architecture/${props.kind}-${language.v
 const narrowSource = computed(() => withBase(`/architecture/${props.kind}-${language.value}-mobile.svg`))
 const descriptions = {
   callbacks: {
-    zh: 'Apollo 外部 HTTP 回调目标：interfaces 验签并可靠受理，按玩家身份查询当前 Base，Base 经 database 幂等发货；项目初始化 CLI 尚待实现，CI 在仓库执行。',
-    en: 'Proposed HTTP callback flow: interfaces verifies and durably accepts notifications, resolves current Base, and Base fulfills through database; initialization CLI is pending and CI runs in the repository.',
+    zh: 'Apollo 外部回调与发货：interfaces 可靠受理链、按归属代次解析当前 Base 与幂等发货模块已落地；渠道验签与进程间接线规划中；apolloc init 脚手架已交付，CI 在仓库执行。',
+    en: 'External callbacks and fulfillment: the interfaces intake chain, epoch-based current-Base resolution, and idempotent fulfillment modules are implemented; channel verification and inter-process wiring remain planned; the apolloc init scaffolding is delivered and CI runs in the repository.',
   },
   system: {
     zh: 'Apollo 目标架构：gateway 分别路由到 Base 与 cell，world 管理空间和执行进程，Base 经 database 保存长期资料。',

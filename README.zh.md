@@ -20,7 +20,7 @@
 
 Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。当前交付轻量副本路径，预留未来无缝地图的 Space/Cell、权威和可见性边界。
 
-进程名称固定为 `gateway`、`loginServer`、`baseServer`、`worldServer`、`cell`、`database`、`machined`；cell 为已讨论的模拟执行职责，Cell 为分区。
+进程名称固定为 `gateway`、`loginServer`、`baseServer`、`worldServer`、`cell`、`database`、`machined`；cell 为已讨论的模拟执行职责，Cell 为分区。可选的 `interfaces` 进程承接外部 HTTP/HTTPS 回调。
 
 <picture>
   <source media="(max-width: 640px)" srcset="docs/public/architecture/system-zh-mobile.svg" />
@@ -32,6 +32,25 @@ Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边
 baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运行实体与临时玩法。跨服保持原 Base 和数据库归属；同一个 World 可以通过逐玩家的 Base 关联接待多个区服，无需各服数据库凭证，也不要求同机部署 machined。
 
 支持协议变化的更新通过状态转换、单权威交接、路由切换和源端清理，分别替换 Base、cell 或 World 管理端。活动副本要连续，须迁移完整必要 Instance 状态。目标角色拆分及运行接线仍需实施，见[架构总览](docs/guide/architecture.md)、[服务器应用](docs/apps/index.md)和[跨服场景](docs/design/cross-server-scenes.md)。
+
+### 入口与交付面
+
+- 游戏 WS/WSS（已验收）：gateway 同时监听 TCP / WS / WSS，登录、会话恢复、异步下行共用同一条游戏帧路径；WSS 覆盖证书链/主机名错误拒绝与密钥配置负例，掉线可在保留窗内跨传输续接。
+- HTTP 回调（受理已落地）：支付/渠道服务端回调走独立 interfaces HTTP/HTTPS 入口——原始请求帧逐字节保留、请求超时与受理队列预算、有界单写者受理链，不阻塞游戏模拟；渠道验签执行器规划中。
+- 动态 Base 查询与持久发货（模块已落地）：订单按稳定玩家身份受理并持久记账，每次投递重新解析「当前 Base + 归属代次」，玩家离线、Base 不可达或迁移升级期间待办不丢；发货以去重凭据原子提交，重复通知、回执丢失与崩溃重启收敛为一次发货。interfaces→订单受理、baseServer 写权生命周期、奖励落账 executor 等进程间接线规划中。
+
+<picture>
+  <source media="(max-width: 640px)" srcset="docs/public/architecture/callbacks-zh-mobile.svg" />
+  <img src="docs/public/architecture/callbacks-zh.svg" alt="Apollo 外部回调与发货：interfaces 受理、动态 Base 解析与幂等发货" />
+</picture>
+
+### 进程、工具与 CI
+
+| 类别 | 成员 | 边界 |
+|---|---|---|
+| 运行进程 | `gateway`、`loginServer`、`baseServer`、`worldServer`、`database`、`interfaces`、`machined` | 在线业务进程；`cell` 独立执行入口规划中 |
+| CLI 工具 | `apolloc`（项目初始化 init）、`fleetctl`、`admin`、`logger` | 开发与运维工具，不参与在线业务 |
+| CI | GitHub Actions：构建/测试、契约、文档 | 仓库内执行，不参与在线业务 |
 
 ## 适用场景
 

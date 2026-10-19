@@ -35,11 +35,17 @@ Business traffic goes directly through gateway to the owning Base or current cel
 
 ## External HTTP Callbacks and Developer Entry Points
 
-Optional interfaces receives payment/channel callbacks over HTTP/HTTPS. Durable intake precedes asynchronous delivery to the current Base, resolved by stable player identity. Base validates and fulfills through database. Gameplay WS/WSS instead belongs to gateway and follows the simulation-message path, not the HTTP handler; integration remains pending.
+Optional interfaces receives payment/channel callbacks over HTTP/HTTPS. Durable intake precedes asynchronous delivery to the current Base, resolved by stable player identity. Base validates and fulfills through database. Gameplay WS/WSS belongs to the gateway game-message path — TCP/WS/WSS share one accepted path — and never enters the HTTP handler.
 
 <ArchitectureDiagram kind="callbacks" />
 
-interfaces, order transactions, and project initialization CLI remain proposed. Existing fleet scripts and repository CI do not provide init. See the [Mistlane/FOGS review](./analysis/mistlane-review.md); root todo.md tracks implementation.
+Implementation status: the gateway game TCP/WS/WSS entries are accepted (including WSS certificate-chain/hostname rejection and key-configuration negatives); the interfaces intake chain (byte-exact raw-request retention, request-timeout and queue budgets, bounded single-writer), the order transaction domain (durable intake and pending work, epoch-based current-Base resolution, atomic fulfillment dedup credentials), and the apolloc init scaffolding are implemented with test coverage; the channel verification executor and inter-process wiring (interfaces→order intake, baseServer write-authority lifecycle, reward apply executor) remain planned. See the [Mistlane/FOGS review](./analysis/mistlane-review.md); root todo.md tracks implementation.
+
+## Processes, Tools, and CI
+
+- Runtime processes: gateway, loginServer, baseServer, worldServer, database, interfaces, machined; a standalone cell executor entry is planned. gateway serves the game TCP/WS/WSS entries (accepted); interfaces serves the HTTP/HTTPS callback entry (intake chain implemented).
+- CLI tools: apolloc (project init, delivered), fleetctl (fleet drill assertions), admin and logger (observability helpers) — developer tools, not online services.
+- CI: GitHub Actions (build/tests, contracts, docs) runs in the repository, outside the online path.
 
 ## Positioning
 

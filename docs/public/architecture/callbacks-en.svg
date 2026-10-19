@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="920" viewBox="0 0 1280 920" role="img" aria-labelledby="title desc" lang="en">
-<title id="title">Apollo external HTTP callbacks and developer tooling</title><desc id="desc">Proposed design, not implemented: interfaces durably receives callbacks and resolves current Base by player identity; Base fulfills idempotently through database. Scaffolding and CI are developer tooling, not online services.</desc>
+<title id="title">Apollo external HTTP callbacks and developer tooling</title><desc id="desc">Current status: the interfaces intake chain, order transaction modules, and apolloc init are implemented with tests; channel verification and inter-process wiring remain planned. interfaces durably accepts callbacks, resolves the current Base by player identity, and Base fulfills idempotently. Scaffolding and CI are developer tooling, not online services.</desc>
 <defs>
  <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
  <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
  <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
 </defs><rect width="1280" height="920" fill="#fff"/>
 <text x="28" y="42" font-size="26" font-weight="600" text-anchor="start">External callbacks, dynamic Base routing and fulfillment</text>
-<text x="28" y="76" font-size="18" font-weight="400" text-anchor="start" class="sub">Proposed: interfaces, order transactions and init scaffolding are pending.</text>
+<text x="28" y="76" font-size="18" font-weight="400" text-anchor="start" class="sub">Landed: intake chain · order transaction modules · apolloc init; channel verification and wiring pending.</text>
 <g data-node="Platform">
 <rect x="36" y="130" width="240" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="54" y="163" font-size="23" font-weight="600" text-anchor="start">Platform</text>
@@ -16,7 +16,7 @@
 <g data-node="interfaces">
 <rect x="386" y="130" width="350" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="404" y="163" font-size="23" font-weight="600" text-anchor="start">interfaces</text>
-<text x="404" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">HTTPS · verify · durable intake</text>
+<text x="404" y="190" font-size="17" font-weight="400" text-anchor="start" class="sub">HTTPS ingress · durable intake</text>
 <text x="404" y="213" font-size="17" font-weight="400" text-anchor="start" class="sub">Orders bind stable player identity</text>
 </g>
 <g data-node="login: owner directory">
@@ -63,9 +63,9 @@
 <text x="48" y="650" font-size="17" font-weight="400" text-anchor="start" class="sub">Cross-server play retains storage affiliation; current Base may move for load, recovery or updates.</text>
 <rect x="28" y="706" width="1224" height="184" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="737" font-size="19" font-weight="600" text-anchor="start">Developer and delivery tooling · separate from runtime requests</text>
-<g data-node="Project initialization CLI: init (pending)">
+<g data-node="Project init CLI: apolloc init (implemented)">
 <rect x="48" y="758" width="500" height="106" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
-<text x="66" y="791" font-size="21" font-weight="600" text-anchor="start">Project initialization CLI: init (pending)</text>
+<text x="66" y="791" font-size="21" font-weight="600" text-anchor="start">Project init CLI: apolloc init (implemented)</text>
 <text x="66" y="818" font-size="17" font-weight="400" text-anchor="start" class="sub">Generate config / Lua / ops / CI template</text>
 </g>
 <g data-node="Repository CI workflow">
