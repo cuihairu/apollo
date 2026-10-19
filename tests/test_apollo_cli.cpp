@@ -7,6 +7,8 @@
 //   5. 非空目录、已存在文件、目录穿越路径显式拒绝（退出 2），原有内容不动；
 //   6. 空已存在目录受理；已生成目录二次 init 拒收（不覆盖）；
 //   7. 相对 path 按调用者 cwd 解析，不依赖启动时 cwd。
+//   8. 非法项目名（空格/分号/数字或点开头）拒收退出 2 且不落盘；合法形态
+//      （字母或下划线开头，含数字/下划线/连字符/点）照常受理（L41 验收）。
 //
 // 全部用例在临时目录下落盘自清理，无网络无定时器。
 
@@ -307,6 +309,9 @@ bool test_generated_template_integrity() {
                 "README 指向 CI 配置");
     TEST_ASSERT(readme.find("cmake --build") != std::string::npos,
                 "README 说明 CMake 门禁目标入口");
+    TEST_ASSERT(readme.find("scaffold acceptance pass") != std::string::npos &&
+                    readme.find("Still pending") != std::string::npos,
+                "README 声明验收已过并标注仍未交付项");
     TEST_ASSERT(readme.find("No auth material is generated") != std::string::npos,
                 "README 声明不生成认证材料");
     TEST_ASSERT(readme.find("run/<role>") != std::string::npos ||
@@ -531,6 +536,38 @@ bool test_init_relative_from_other_cwd() {
     return true;
 }
 
+bool test_init_rejects_unsafe_project_name() {
+    auto root = fresh_dir();
+
+    // 项目名进 README 首行与 CMake project()：空格会让生成的 CMake 无法
+    // configure，分号/引号还能注入。名字不安全即拒收，不生成坏文件。
+    auto spaced = root / "my proj";
+    auto r1 = run({"init", spaced.string()});
+    TEST_ASSERT(r1.code == 2, "含空格项目名拒收（退出 2）");
+    TEST_ASSERT(r1.err.find("not safe") != std::string::npos,
+                "项目名不安全原因明确");
+    TEST_ASSERT(!std::filesystem::exists(spaced), "拒收后不落任何目录");
+
+    auto semicolon = root / "bad;name";
+    auto r2 = run({"init", semicolon.string()});
+    TEST_ASSERT(r2.code == 2, "含分号项目名拒收（退出 2）");
+
+    auto digit = root / "7zip";
+    auto r3 = run({"init", digit.string()});
+    TEST_ASSERT(r3.code == 2, "数字开头项目名拒收（退出 2）");
+
+    auto dot = root / ".hidden";
+    auto r4 = run({"init", dot.string()});
+    TEST_ASSERT(r4.code == 2, "点开头项目名拒收（退出 2）");
+
+    // 合法形态不受影响：字母开头，允许数字/下划线/连字符/点。
+    for (const char* ok : {"proj", "my-proj", "my_proj", "proj.v2", "Proj1"}) {
+        auto r = run({"init", (root / ok).string()});
+        TEST_ASSERT(r.code == 0, std::string("合法项目名受理 ") + ok);
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -541,6 +578,7 @@ int main() {
         test_generated_template_integrity,
         test_init_refuses_nonempty_and_file,
         test_init_rejects_empty_and_traversal,
+        test_init_rejects_unsafe_project_name,
         test_init_empty_existing_and_refuses_rescaffold,
         test_init_relative_from_other_cwd,
     };

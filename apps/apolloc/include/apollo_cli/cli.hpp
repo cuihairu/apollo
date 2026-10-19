@@ -8,7 +8,7 @@
 //
 // 退出码对齐 fleetctl 三态口径：
 //   0 = 成功/help；1 = 用法错误（无参/未知子命令/init 缺或多参数）；
-//   2 = 目标拒绝（非空目录/已存在文件/空 path/目录穿越/文件系统失败）。
+//   2 = 目标拒绝（非空目录/已存在文件/空 path/目录穿越/非法项目名/文件系统失败）。
 // 目标已存在非空即拒收，绝不覆盖已有内容；目录穿越路径（含 .. 分量）在
 // 落盘前拒绝。文件一律 binary + LF（Windows 不做 CRLF 翻译，生成物跨平台
 // 字节一致）。
@@ -71,6 +71,31 @@ inline bool scaffold_project(const std::filesystem::path& target,
     return true;
 }
 
+// 项目名落进生成的 CMake project() 与文档首行，必须是安全标识符：字母或
+// 下划线开头，后续允许数字、下划线、连字符与点。空格会让 CMake 无法
+// configure，分号/引号可注入命令或字符串，数字/点开头不是合法标识符。
+// 不安全即拒收（退出 2），绝不生成坏文件。
+inline bool is_safe_project_name(const std::string& name) {
+    if (name.empty()) {
+        return false;
+    }
+    const auto head_ok = [](char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+    };
+    const auto body_ok = [&head_ok](char c) {
+        return head_ok(c) || (c >= '0' && c <= '9') || c == '-' || c == '.';
+    };
+    if (!head_ok(name.front())) {
+        return false;
+    }
+    for (const char c : name) {
+        if (!body_ok(c)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // 校验并受理 init 目标；通过时调用 scaffold_project。失败 false 且 err 已填。
 inline bool init_project(const std::string& raw_target,
                          std::ostream& out, std::string& err) {
@@ -112,6 +137,12 @@ inline bool init_project(const std::string& raw_target,
     }
 
     const std::string project_name = target.filename().string();
+    if (!is_safe_project_name(project_name)) {
+        err = "init: project name '" + project_name +
+              "' is not safe (use letters/digits/'_'/'-'/'.' and start with a "
+              "letter or '_')";
+        return false;
+    }
     if (!scaffold_project(target, project_name, err)) {
         return false;
     }
