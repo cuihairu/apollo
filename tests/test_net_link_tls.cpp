@@ -14,6 +14,10 @@
 //   7. 大载荷与短写：512 KiB 单次 write 短写余量逐泵重试，客户端收全；
 //      客户端→服务端同量；
 //   8. close 语义：服务端 close 后 read/write -1、closed()；客户端见 EOF。
+//   9. 客户端验签面（§5.9 出站侧）：信任链 + 主机名是受理前提——受信链
+//      + 主机名匹配握手通；不受信链 fatal（验签码 = 链不受信）；主机名
+//      不匹配 fatal（验签码 = 主机名不匹配）；显式关闭验签的本地联调
+//      逃生门可用。
 
 #if !defined(_WIN32)
 
@@ -21,6 +25,7 @@
 
 #include "apollo/net/link/tcp_transport.hpp"
 #include "apollo/net/link/transport.hpp"
+#include "apollo/net/tls/tls_client.hpp"
 #include "apollo/net/tls/tls_transport.hpp"
 
 #include <chrono>
@@ -30,6 +35,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #define TEST_ASSERT(cond, msg)                                                           \
     do {                                                                                 \
@@ -43,6 +53,8 @@
 namespace {
 
 namespace link = apollo::net::link;
+using apollo::net::tls::TlsClientContext;
+using apollo::net::tls::TlsClientTransport;
 using apollo::net::tls::TlsListener;
 using apollo::net::tls::TlsServerContext;
 
@@ -396,6 +408,177 @@ bool test_close_semantics() {
     return true;
 }
 
+// 客户端侧裸连（阻塞 connect——本机监听器必即刻受理；fd 交被测传输接管）。
+int raw_connect(std::uint16_t port) {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+    ::sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    if (::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr) != 1 ||
+        ::connect(fd, reinterpret_cast<::sockaddr*>(&addr), sizeof addr) != 0) {
+        ::close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+// 双侧泵步进至客户端握手完成（服务端 TlsTransport 由缝读写步进 SSL_accept）。
+bool pump_client_handshake(TlsClientTransport& client_side,
+                           link::ILinkTransport& server_side) {
+    std::uint8_t scratch[256];
+    for (int i = 0; i < 2000; ++i) {
+        if (client_side.handshakeDone()) {
+            return true;
+        }
+        (void)client_side.write(scratch, 0);  // 空写也推进 SSL_connect
+        (void)client_side.read(scratch, sizeof scratch);
+        (void)server_side.write(scratch, 0);
+        (void)server_side.read(scratch, sizeof scratch);
+        std::this_thread::sleep_for(kTick);
+    }
+    return client_side.handshakeDone();
+}
+
+// 明文 round-trip（双侧缝互发；client→server→client）。
+bool roundtrip(link::ILinkTransport& client_side, link::ILinkTransport& server_side) {
+    const std::vector<std::uint8_t> payload{'t', 'l', 's', '-', 'o', 'k'};
+    for (int i = 0; i < 2000; ++i) {
+        (void)client_side.write(payload.data(), payload.size());
+        std::uint8_t buf[64] = {};
+        const int n = server_side.read(buf, sizeof buf);
+        if (n == static_cast<int>(payload.size())) {
+            for (int j = 0; j < 2000; ++j) {
+                (void)server_side.write(buf, static_cast<std::size_t>(n));
+                const int m = client_side.read(buf, sizeof buf);
+                if (m == static_cast<int>(payload.size())) {
+                    return true;
+                }
+                std::this_thread::sleep_for(kTick);
+            }
+            return false;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    return false;
+}
+
+// ---- 9. 客户端验签：信任链 + 主机名是受理前提 ----
+
+bool test_client_verifies_chain_and_host() {
+    const TempCerts certs = make_certs();
+    TEST_ASSERT(certs.ok, "自签证书夹具生成成功");
+
+    // 服务端：证书 a（CN=localhost）作监听端。
+    TlsServerContext server_ctx;
+    TEST_ASSERT(server_ctx.load(certs.a.cert_path, certs.a.key_path).ok, "服务端装载通过");
+    TlsListener listener;
+    TEST_ASSERT(listener.start(server_ctx, "127.0.0.1", 0), "监听器 start 通过");
+
+    // 客户端：信任锚 = a 自签证书（自签证书兼作 CA），主机名绑定 localhost。
+    TlsClientContext client_ctx;
+    TEST_ASSERT(!client_ctx.loaded(), "未装载即 loaded=false");
+    TEST_ASSERT(client_ctx.verifyEnabled(), "验签默认开");
+    auto res = client_ctx.loadCaFile(certs.a.cert_path);
+    TEST_ASSERT(res.ok, "信任锚装载通过: " + res.error);
+    TEST_ASSERT(client_ctx.loaded(), "装载后 loaded=true");
+
+    const int fd = raw_connect(listener.port());
+    TEST_ASSERT(fd >= 0, "客户端裸连通过");
+    TlsClientTransport client_side(fd, client_ctx, "localhost");
+    auto server_side = listener.accept();
+    TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
+    TEST_ASSERT(pump_client_handshake(client_side, *server_side), "握手完成（链+主机名过）");
+    TEST_ASSERT(client_side.verifyResult() == 0, "验签码为 0");
+    TEST_ASSERT(client_side.failureReason().empty(), "无失败原因");
+    TEST_ASSERT(roundtrip(client_side, *server_side), "明文 round-trip 双向");
+    return true;
+}
+
+bool test_client_rejects_untrusted_chain() {
+    const TempCerts certs = make_certs();
+    TEST_ASSERT(certs.ok, "自签证书夹具生成成功");
+
+    TlsServerContext server_ctx;
+    TEST_ASSERT(server_ctx.load(certs.a.cert_path, certs.a.key_path).ok, "服务端装载通过");
+    TlsListener listener;
+    TEST_ASSERT(listener.start(server_ctx, "127.0.0.1", 0), "监听器 start 通过");
+
+    // 信任锚 = 另一张无关自签 b：a 的链不被覆盖 → 握手 fatal。
+    TlsClientContext client_ctx;
+    TEST_ASSERT(client_ctx.loadCaFile(certs.b.cert_path).ok, "信任锚 b 装载通过");
+
+    const int fd = raw_connect(listener.port());
+    TEST_ASSERT(fd >= 0, "客户端裸连通过");
+    TlsClientTransport client_side(fd, client_ctx, "localhost");
+    auto server_side = listener.accept();
+    TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
+    TEST_ASSERT(!pump_client_handshake(client_side, *server_side), "不受信链握手必败");
+    TEST_ASSERT(client_side.closed(), "fatal 后 closed()");
+    std::uint8_t buf[16];
+    TEST_ASSERT(client_side.read(buf, sizeof buf) == -1, "fatal 后 read -1");
+    TEST_ASSERT(client_side.write(buf, 1) == -1, "fatal 后 write -1");
+    TEST_ASSERT(client_side.verifyResult() == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT,
+                "验签码 = 链不受信（自签零深度）: got "
+                    + std::to_string(client_side.verifyResult()) + " "
+                    + client_side.failureReason());
+    TEST_ASSERT(!client_side.failureReason().empty(), "失败原因可读");
+    return true;
+}
+
+bool test_client_rejects_hostname_mismatch() {
+    const TempCerts certs = make_certs();
+    TEST_ASSERT(certs.ok, "自签证书夹具生成成功");
+
+    TlsServerContext server_ctx;
+    TEST_ASSERT(server_ctx.load(certs.a.cert_path, certs.a.key_path).ok, "服务端装载通过");
+    TlsListener listener;
+    TEST_ASSERT(listener.start(server_ctx, "127.0.0.1", 0), "监听器 start 通过");
+
+    // 链受信（锚 = a）但主机名与证书 subject 不匹配 → 握手 fatal。
+    TlsClientContext client_ctx;
+    TEST_ASSERT(client_ctx.loadCaFile(certs.a.cert_path).ok, "信任锚装载通过");
+
+    const int fd = raw_connect(listener.port());
+    TEST_ASSERT(fd >= 0, "客户端裸连通过");
+    TlsClientTransport client_side(fd, client_ctx, "other.example");
+    auto server_side = listener.accept();
+    TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
+    TEST_ASSERT(!pump_client_handshake(client_side, *server_side), "主机名不匹配握手必败");
+    TEST_ASSERT(client_side.closed(), "fatal 后 closed()");
+    TEST_ASSERT(client_side.verifyResult() == X509_V_ERR_HOSTNAME_MISMATCH,
+                "验签码 = 主机名不匹配");
+    TEST_ASSERT(!client_side.failureReason().empty(), "失败原因可读");
+    return true;
+}
+
+bool test_client_verify_disabled_local_dev() {
+    const TempCerts certs = make_certs();
+    TEST_ASSERT(certs.ok, "自签证书夹具生成成功");
+
+    TlsServerContext server_ctx;
+    TEST_ASSERT(server_ctx.load(certs.a.cert_path, certs.a.key_path).ok, "服务端装载通过");
+    TlsListener listener;
+    TEST_ASSERT(listener.start(server_ctx, "127.0.0.1", 0), "监听器 start 通过");
+
+    // 显式关闭验签（本地联调）：无信任锚 + 主机名不绑也须能通——但这是
+    // 显式逃生门，不是默认路径。
+    TlsClientContext client_ctx;
+    client_ctx.setVerifyEnabled(false);
+    TEST_ASSERT(!client_ctx.verifyEnabled(), "验签已显式关闭");
+
+    const int fd = raw_connect(listener.port());
+    TEST_ASSERT(fd >= 0, "客户端裸连通过");
+    TlsClientTransport client_side(fd, client_ctx, "unrelated.example");
+    auto server_side = listener.accept();
+    TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
+    TEST_ASSERT(pump_client_handshake(client_side, *server_side), "关闭验签后握手完成");
+    TEST_ASSERT(roundtrip(client_side, *server_side), "明文 round-trip 双向");
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -411,6 +594,10 @@ int main() {
         {"handshake_deadline", test_handshake_deadline},
         {"large_payload_short_write", test_large_payload_short_write},
         {"close_semantics", test_close_semantics},
+        {"client_verifies_chain_and_host", test_client_verifies_chain_and_host},
+        {"client_rejects_untrusted_chain", test_client_rejects_untrusted_chain},
+        {"client_rejects_hostname_mismatch", test_client_rejects_hostname_mismatch},
+        {"client_verify_disabled_local_dev", test_client_verify_disabled_local_dev},
     };
 
     int failed = 0;

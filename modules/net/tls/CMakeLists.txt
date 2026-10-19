@@ -13,6 +13,7 @@ endif()
 
 add_library(apollo_net_tls STATIC
     src/tls_transport.cpp
+    src/tls_client.cpp
 )
 add_library(apollo::net_tls ALIAS apollo_net_tls)
 
