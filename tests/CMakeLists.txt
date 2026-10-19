@@ -1066,6 +1066,19 @@ if(MSVC)
 endif()
 add_test(NAME LinkTests COMMAND link_tests)
 
+# ========== TLS 底座测试 ==========
+# TLS 是 link 内核的底座替换件（ILinkTransport 缝纪律同源），OpenSSL 只
+# 进 apollo_net_tls 与本目标——link_tests 保持纯 std 面。证书夹具由测试
+# 经 OpenSSL API 现场自签（tests/tls_test_support.hpp），仓库不存凭据。
+add_executable(tls_link_tests
+    test_net_link_tls.cpp
+)
+target_link_libraries(tls_link_tests PRIVATE apollo_net_tls)
+if(MSVC)
+    target_compile_options(tls_link_tests PRIVATE /utf-8)
+endif()
+add_test(NAME TlsLinkTests COMMAND tls_link_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests

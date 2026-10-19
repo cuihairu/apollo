@@ -113,6 +113,20 @@ private:
     std::uint16_t port_ = 0;
 };
 
+// 底座装配面（detail：不属公开缝——TCP/TLS 底座共用同一份 bind/listen/
+// accept 循环，避免双份实现漂移。TLS 底座见 apollo::net::tls）。
+namespace detail {
+
+// bind+listen（SO_REUSEADDR、listen backlog、置非阻塞、端口读回）。
+// 返回 false = 地址解析失败或占用/系统错。fd_out 归调用方关闭。
+bool listen_socket(const std::string& host, std::uint16_t port, int& fd_out,
+                   std::uint16_t& port_out);
+
+// 非阻塞 accept 一枚原始 fd：暂无连接或连接级错误 → -1。
+int accept_one(int listen_fd);
+
+}  // namespace detail
+
 }  // namespace apollo::net::link
 
 #endif  // !_WIN32

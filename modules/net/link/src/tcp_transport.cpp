@@ -237,15 +237,10 @@ void TcpConnector::classify_failure(int err) {
     state_ = ConnectState::kFailed;
 }
 
-// ---- TcpListener ----
+// ---- 底座装配面（detail）----
 
-TcpListener::~TcpListener() {
-    close();
-}
-
-bool TcpListener::start(const std::string& host, std::uint16_t port) {
-    close();
-
+bool detail::listen_socket(const std::string& host, std::uint16_t port, int& fd_out,
+                           std::uint16_t& port_out) {
     ::addrinfo hints{};
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -269,7 +264,7 @@ bool TcpListener::start(const std::string& host, std::uint16_t port) {
             continue;
         }
         set_nonblocking(fd);
-        fd_ = fd;
+        fd_out = fd;
         ok = true;
         break;
     }
@@ -280,29 +275,45 @@ bool TcpListener::start(const std::string& host, std::uint16_t port) {
 
     ::sockaddr_storage ss{};
     ::socklen_t slen = sizeof ss;
-    if (::getsockname(fd_, reinterpret_cast<::sockaddr*>(&ss), &slen) == 0) {
+    if (::getsockname(fd_out, reinterpret_cast<::sockaddr*>(&ss), &slen) == 0) {
         // ntohs 在 Darwin 是宏（展开含类型转换），不能加 :: 前缀。
-        port_ = ss.ss_family == AF_INET
-                    ? ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)
-                    : ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port);
+        port_out = ss.ss_family == AF_INET
+                       ? ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)
+                       : ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port);
+    }
+    return true;
+}
+
+int detail::accept_one(int listen_fd) {
+    for (;;) {
+        const int fd = ::accept(listen_fd, nullptr, nullptr);
+        if (fd >= 0) {
+            return fd;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        return -1;  // EAGAIN 暂无；其余连接级错误下个泵周期再试
+    }
+}
+
+// ---- TcpListener ----
+
+TcpListener::~TcpListener() {
+    close();
+}
+
+bool TcpListener::start(const std::string& host, std::uint16_t port) {
+    close();
+    if (!detail::listen_socket(host, port, fd_, port_)) {
+        return false;
     }
     return true;
 }
 
 std::unique_ptr<ILinkTransport> TcpListener::accept() {
-    if (fd_ < 0) {
-        return nullptr;
-    }
-    for (;;) {
-        const int fd = ::accept(fd_, nullptr, nullptr);
-        if (fd >= 0) {
-            return std::make_unique<TcpTransport>(fd);
-        }
-        if (errno == EINTR) {
-            continue;
-        }
-        return nullptr;  // EAGAIN 暂无；其余连接级错误下个泵周期再试
-    }
+    const int fd = fd_ >= 0 ? detail::accept_one(fd_) : -1;
+    return fd >= 0 ? std::make_unique<TcpTransport>(fd) : nullptr;
 }
 
 void TcpListener::close() {
