@@ -178,13 +178,15 @@ std::vector<apollo::game::core::EntityId> SceneAoi::viewers_at(const Vec3& posit
     const int cy = grid_y(position.y);
     const float radius_sq = view_radius_ * view_radius_;
 
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
-            const int gx = cx + dx;
-            const int gy = cy + dy;
-            if (gx < 0 || gx >= grid_cols_ || gy < 0 || gy >= grid_rows_) {
-                continue;
-            }
+    // Search every grid that can intersect the configured radius. A fixed
+    // 3x3 neighborhood loses visible entities when radius > grid_size.
+    const int grid_range = static_cast<int>(std::ceil(view_radius_ / grid_size_));
+    const int min_x = std::max(0, cx - grid_range);
+    const int max_x = std::min(grid_cols_ - 1, cx + grid_range);
+    const int min_y = std::max(0, cy - grid_range);
+    const int max_y = std::min(grid_rows_ - 1, cy + grid_range);
+    for (int gy = min_y; gy <= max_y; ++gy) {
+        for (int gx = min_x; gx <= max_x; ++gx) {
             for (const auto& id : grids_[static_cast<std::size_t>(gy) *
                                          static_cast<std::size_t>(grid_cols_) +
                                          static_cast<std::size_t>(gx)]) {

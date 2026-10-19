@@ -55,7 +55,7 @@ public:
     void leave(apollo::game::core::EntityId id);
 
     // ---- 查询 ----
-    // 视野内的实体（含自身；九宫格 + 半径过滤）
+    // 视野内的实体（含自身；覆盖视野半径所需网格 + 半径过滤）
     [[nodiscard]] std::vector<apollo::game::core::EntityId> viewers_of(
         apollo::game::core::EntityId id) const;
     [[nodiscard]] std::vector<apollo::game::core::EntityId> viewers_at(

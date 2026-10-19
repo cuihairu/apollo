@@ -10,6 +10,7 @@
 |---|---|---|
 | [BigWorld–Apollo mapping](./bigworld-apollo-mapping.md) | Agreed rules | Original terms, Apollo roles, code and gaps |
 | [World and cell management](./world-cell-management.md) | Review draft | Shared binary, role startup, local autoscaling, placement, recovery, and migration |
+| [Seamless map and multi-Cell Space](./seamless-map.md) | Target design, staged implementation | Partitioning, Ghosts, boundary AOI/combat, transfer, and takeover |
 | [Concept glossary](./concept-glossary.md) | Agreed rules | Established names and responsibility boundaries |
 | [Player object model](./player-object-model.md) | Subsystem implementation note | Base persistent objects, Cell entities, and Instance gameplay lifecycles |
 | [Attribute system and sync](./attribute-sync.md) | Subsystem implementation note | Attribute data and visibility/synchronization mechanisms |

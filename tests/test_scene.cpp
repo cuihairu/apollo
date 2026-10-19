@@ -12,6 +12,7 @@
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/viewer_state.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -213,6 +214,25 @@ bool test_scene_aoi_enter_events() {
     return true;
 }
 
+bool test_scene_aoi_view_radius_spans_multiple_grids() {
+    // 视野半径 25 跨越 2 个 10-unit 网格；只扫九宫格会漏掉 x=55 的实体。
+    SceneAoi aoi(100.0f, 100.0f, 10.0f, 25.0f);
+    aoi.enter(EntityId(1), {35, 0, 35});
+    aoi.enter(EntityId(2), {55, 0, 35});
+    aoi.enter(EntityId(3), {61, 0, 35});
+    const auto visible = aoi.viewers_of(EntityId(1));
+    TEST_ASSERT(std::find(visible.begin(), visible.end(), EntityId(2)) != visible.end(),
+                "跨越两个网格且在半径内的实体可见");
+    TEST_ASSERT(std::find(visible.begin(), visible.end(), EntityId(3)) == visible.end(),
+                "候选网格扩展后仍执行精确半径过滤");
+
+    aoi.move(EntityId(2), {75, 0, 35});
+    const auto moved = aoi.viewers_of(EntityId(1));
+    TEST_ASSERT(std::find(moved.begin(), moved.end(), EntityId(2)) == moved.end(),
+                "移动后离开视野的实体不可见");
+    return true;
+}
+
 bool test_scene_aoi_move_events() {
     SceneAoi aoi(1000.0f, 1000.0f, 100.0f, 20.0f);
     AoiEventLog log;
@@ -337,6 +357,7 @@ int main() {
         {"scene_tick_six_phases", test_scene_tick_six_phases},
         {"scene_id_sentinel", test_scene_id_sentinel},
         {"scene_aoi_enter_events", test_scene_aoi_enter_events},
+        {"scene_aoi_view_radius_spans_multiple_grids", test_scene_aoi_view_radius_spans_multiple_grids},
         {"scene_aoi_move_events", test_scene_aoi_move_events},
         {"scene_aoi_leave_events", test_scene_aoi_leave_events},
         {"scene_aoi_watermark_driven_by_viewer_state", test_scene_aoi_watermark_driven_by_viewer_state},
