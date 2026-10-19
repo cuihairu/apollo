@@ -8,6 +8,7 @@ add_subdirectory(battle)
 add_subdirectory(social)
 add_subdirectory(attributes)
 add_subdirectory(attrsync)
+add_subdirectory(orders)
 
 if(BUILD_TESTING)
     # Find GTest

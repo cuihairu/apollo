@@ -1329,6 +1329,26 @@ if(MSVC)
 endif()
 add_test(NAME SocialTests COMMAND social_tests)
 
+# ========== Orders Tests (L63 批⑯) ==========
+# 订单/通知可靠受理与持久待办（经 apollo::game_orders 链接真实模块目标）
+if(TARGET apollo::game_orders)
+add_executable(orders_tests test_orders.cpp)
+target_link_libraries(orders_tests PRIVATE
+    apollo
+    apollo::base
+    apollo::core
+    apollo::game_orders
+)
+if(WIN32)
+    target_link_libraries(orders_tests PRIVATE ws2_32)
+    target_compile_definitions(orders_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(orders_tests PRIVATE /utf-8)
+endif()
+add_test(NAME OrdersTests COMMAND orders_tests)
+endif()
+
 # ========== Metrics Tests (P3-3 批 B) ==========
 # MetricRegistry 最小集：counter/gauge 原语 + 标签规范化 + 快照确定性
 # （经 apollo::core 传递 apollo_core_metrics，单 cpp）
