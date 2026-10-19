@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "1664dd3b0008428b3d9077fe3fad762e0eea61c9f952ce23a004d7e68ec1b723",
+  "schema_hash": "426546fbb35855c61ff619aba4c20fa7fc3178804a936727d1511267da0a667d",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "c7ae805da184bd84a93a30b529f46d6a52fc4eaa45bc73bd6ca0eac8758cb11b",
+  "internal_hash": "d8fe5c249504628ac45c783688cf58327f9daf94b561d3629b00d8883019c8d2",
   "contract_version": 3,
   "aliases": [
     {
@@ -3325,6 +3325,118 @@
         }
       ],
       "desc": "结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补）"
+    },
+    {
+      "id": 960,
+      "name": "cell_register_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（cell 侧单调分配，0 保留）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "逻辑 cell ID（World 内唯一；PID/IP 不当身份，重启保留同 ID 换代次）"
+        },
+        {
+          "name": "start_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "进程启动代次（重启自增；旧代次注册不可覆盖新代次登记）"
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "cell 控制/模拟监听地址（World 分配 Space/Cell 时回连用；本切片仅记录）"
+        },
+        {
+          "name": "port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "cell 监听端口（0 = 未监听，仅登记）"
+        },
+        {
+          "name": "capabilities",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "能力位掩码（协议/快照能力声明；0 = 未声明，本切片记录不裁决）"
+        },
+        {
+          "name": "load",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "当前负载 0-100（0 = 未上报）"
+        },
+        {
+          "name": "drain_state",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "排空状态：0=serving 1=draining 2=drained（与 956/957 同口径）"
+        },
+        {
+          "name": "ready",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "就绪（1=可分配；进程存活不等于可分配）"
+        }
+      ],
+      "desc": "cell 执行进程注册请求（cell→World M1 控制受理面；声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——L101 注册首切片，认证凭据面按 world-cell-management 差距表另行挂账，本面裸帧受理同 944/952/956 惯例）"
+    },
+    {
+      "id": 961,
+      "name": "cell_register_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带请求关联号"
+        },
+        {
+          "name": "accepted",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=登记受理；0=拒绝（code/detail 为原因）"
+        },
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "1=accepted 2=accepted_idempotent（同 ID 同代次重注册刷新） 3=rejected_stale_epoch（旧代次不可覆盖） 4=rejected_invalid（cell_id/代次非法）"
+        },
+        {
+          "name": "management_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "World 管理代次（§5.7 透传；0 = 未初始化自铸）"
+        },
+        {
+          "name": "assigned_cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "确认的 cell ID（本切片原样回带；World 侧分配面在 L102 拓扑批）"
+        },
+        {
+          "name": "detail",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "状态摘要（拒绝原因等）"
+        }
+      ],
+      "desc": "cell 执行进程注册回执（World→cell；request_id 关联；返回管理代次——world-cell-management §4.3）"
     }
   ],
   "entities": [

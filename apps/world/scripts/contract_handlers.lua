@@ -70,3 +70,5 @@ world_drain_request = function() end
 world_drain_reply = function() end
 player_score_credit_request = function() end
 player_score_credit_reply = function() end
+cell_register_request = function() end
+cell_register_reply = function() end

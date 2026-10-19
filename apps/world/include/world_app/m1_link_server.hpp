@@ -71,6 +71,23 @@ struct WorldDrainRequest {
     std::int64_t deadline_s = 0;  // begin 有义：期限到未清强停剩余副本
 };
 
+// cell 执行进程注册请求（契约 960，L101 注册首切片）：cell→World M1 控制
+// 受理面。声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——
+// 认证凭据面按 world-cell-management 差距表另行挂账（裸帧受理同 944/952/
+// 956 惯例）。回执 961 按 request_id 关联（受理点同步执行——M1 泵在
+// gameThread_，与 drain 同线程）。
+struct CellRegisterRequest {
+    std::uint64_t request_id = 0;
+    std::uint64_t cell_id = 0;        // 逻辑 cell ID（0 = 非法——PID/IP 不当身份）
+    std::uint64_t start_epoch = 0;    // 进程启动代次（0 = 非法；重启自增）
+    std::string host;                 // 控制/模拟监听地址（World 回连用；本切片仅记录）
+    std::int32_t port = 0;            // cell 监听端口（0 = 未监听，仅登记）
+    std::int32_t capabilities = 0;    // 能力位掩码（0 = 未声明，记录不裁决）
+    std::int32_t load = 0;            // 负载 0-100（0 = 未上报）
+    std::int32_t drain_state = 0;     // 排空状态：0=serving 1=draining 2=drained
+    bool ready = false;               // 就绪（进程存活不等于可分配）
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -141,6 +158,25 @@ public:
         (void)detail;
     }
 
+    // cell 注册回执（961 cell_register_reply）：peer/关联键同 957 面。
+    // code = kCellRegister*（acceptance_queue.hpp 契约词汇）；accepted =
+    // 登记受理（幂等刷新/新代次替换同 true；旧代次/非法拒）；management_
+    // epoch = World 管理代次回带；assigned_cell_id = 确认的 cell ID（本
+    // 切片原样回带）。kReliable 同 945。
+    virtual void sendCellRegisterReply(const std::string& peer, std::uint64_t request_id,
+                                       bool accepted, std::int32_t code,
+                                       std::uint64_t management_epoch,
+                                       std::uint64_t assigned_cell_id,
+                                       const std::string& detail) {
+        (void)peer;
+        (void)request_id;
+        (void)accepted;
+        (void)code;
+        (void)management_epoch;
+        (void)assigned_cell_id;
+        (void)detail;
+    }
+
     // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
     // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
     //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =
@@ -164,15 +200,17 @@ public:
 // 工厂：config.host:config.port 监听，契约路由表自 config.route_json 装载
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
-// module_rollout_request / 956 world_drain_request 裸帧分别经 on_debug_eval /
-// on_module_rollout / on_world_drain 投递（入参 = 请求 + 发端 peer 自报名，
-// 回执按名回链路）。
+// module_rollout_request / 956 world_drain_request / 960 cell_register_request
+// 裸帧分别经 on_debug_eval / on_module_rollout / on_world_drain /
+// on_cell_register 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {},
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
         on_module_rollout = {},
     std::function<void(const std::string&, const WorldDrainRequest&)>
-        on_world_drain = {});
+        on_world_drain = {},
+    std::function<void(const std::string&, const CellRegisterRequest&)>
+        on_cell_register = {});
 
 } // namespace world_app

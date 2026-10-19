@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "1664dd3b0008428b3d9077fe3fad762e0eea61c9f952ce23a004d7e68ec1b723",
+  "schema_hash": "426546fbb35855c61ff619aba4c20fa7fc3178804a936727d1511267da0a667d",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "c7ae805da184bd84a93a30b529f46d6a52fc4eaa45bc73bd6ca0eac8758cb11b",
+  "internal_hash": "d8fe5c249504628ac45c783688cf58327f9daf94b561d3629b00d8883019c8d2",
   "contract_version": 3,
   "routes": [
     {
@@ -760,6 +760,24 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "player_score_credit_reply"
+    },
+    {
+      "id": 960,
+      "name": "cell_register_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_register_request"
+    },
+    {
+      "id": 961,
+      "name": "cell_register_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_register_reply"
     }
   ]
 }

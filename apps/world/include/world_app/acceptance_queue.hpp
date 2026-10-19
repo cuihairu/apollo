@@ -45,6 +45,12 @@ inline constexpr std::int32_t kWorldDrainServing = 0;
 inline constexpr std::int32_t kWorldDrainDraining = 1;
 inline constexpr std::int32_t kWorldDrainDrained = 2;
 
+// cell 注册受理码（960/961 契约面，L101 注册首切片；961 code 字段）。
+inline constexpr std::int32_t kCellRegisterAccepted = 1;
+inline constexpr std::int32_t kCellRegisterAcceptedIdempotent = 2;  // 同 ID 同代次刷新
+inline constexpr std::int32_t kCellRegisterRejectedStaleEpoch = 3;  // 旧代次不可覆盖
+inline constexpr std::int32_t kCellRegisterRejectedInvalid = 4;     // cell_id/代次非法
+
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。
 // 数值口径 = tick 预算锚定（ADR-016 #3）+ 实测校准（2026-10-11，P3-2 批 D，
 // examples/benchmark --acceptance 三跑 min，负载噪声期下界口径）：

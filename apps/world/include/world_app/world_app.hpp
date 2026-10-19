@@ -79,6 +79,27 @@ public:
         return cell_ ? cell_->resolveIntentPlayer(session_id) : 0;
     }
 
+    // ---- cell 注册登记（960/961，L101 注册首切片）----
+    // 注册表条目：逻辑 ID + 启动代次 + 自报面（地址/能力/负载/排空/就绪）
+    // + 链路 peer 自报名（回执与后续命令按名查链路）。registered_at_ms =
+    // steady 毫秒（心跳失效/重注册窗口的基准面，L101 后续切片消费）。
+    struct CellRegistration {
+        std::uint64_t cell_id = 0;
+        std::uint64_t start_epoch = 0;
+        std::string host;
+        std::int32_t port = 0;
+        std::int32_t capabilities = 0;
+        std::int32_t load = 0;
+        std::int32_t drain_state = 0;
+        bool ready = false;
+        std::uint64_t registered_at_ms = 0;
+        std::string peer;
+    };
+    // 注册表只读观测面（泵上下文口径，同世界状态单写者——受理点在 M1 泵
+    // 上下文改表，读面供测试/管理消费；跨线程持有返回指针违反单写者纪律）。
+    std::size_t registered_cell_count() const { return cellRegistrations_.size(); }
+    const CellRegistration* find_cell_registration(std::uint64_t cell_id) const;
+
 private:
     // M1 出口适配（内核缝的宿主侧实现）：IM1Egress → 真传输端点。链路未
     // 装配 = 尽力面落地（同内核「egress 缺席」语义）。
@@ -126,6 +147,12 @@ private:
     // scene（0 = 默认）→ 未挂宿主/排队失败即时回 945 拒收；受理成功挂关联
     // 账（eval_id → 回传 peer），回执随 tick 窗口 drain 异步回 945。
     void onM1DebugEval(const std::string& peer, const DebugEvalRequest& request);
+
+    // cell 注册受理点（960，L101 注册首切片；泵上下文，注册表单线程独占
+    // 无锁）：代次规则（world-cell-management §4.4）——同 ID 同代次重注册
+    // 幂等刷新，新代次替换（重启换代），旧代次拒绝不可覆盖；非法（cell_id/
+    // start_epoch = 0）显式驳回。回执 961 同步回带（管理代次 = §5.7 透传）。
+    void onCellRegister(const std::string& peer, const CellRegisterRequest& request);
     // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
     void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                          const std::string& result, const std::string& error);
@@ -157,6 +184,10 @@ private:
     // eval_id → 回传 peer 自报名；scene_id → 在途 eval id 集（drain 圈定面）。
     std::unordered_map<std::uint64_t, std::string> evalReplyPeers_;
     std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
+    // cell 注册登记（960，L101 注册首切片）：cell_id → 登记；代次裁决在
+    // 受理点（旧代次拒、新代次替换、同代次幂等刷新）。心跳失效/重注册与
+    // 旧执行端隔离、World 侧分配（L102 拓扑批）待做——本表是它们的承载面。
+    std::unordered_map<std::uint64_t, CellRegistration> cellRegistrations_;
 };
 
 } // namespace world_app

@@ -104,6 +104,9 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const WorldDrainRequest& request) {
             onM1WorldDrain(peer, request);
+        },
+        [this](const std::string& peer, const CellRegisterRequest& request) {
+            onCellRegister(peer, request);
         });
     egressAdapter_.link = m1Link_.get();
 
@@ -420,6 +423,87 @@ void WorldApp::driveWorldDrain() {
         worldLog().warning("world drain force-stop left " + std::to_string(active)
                            + " instances; retrying next tick");
     }
+}
+
+void WorldApp::onCellRegister(const std::string& peer,
+                              const CellRegisterRequest& request) {
+    // 960 受理（L101 注册首切片；本回调在内核线程泵上下文——注册表单线程
+    // 独占无锁，受理点同步回 961）。request_id = 0 保留（无回执无登记）。
+    // 认证凭据面按 world-cell-management 差距表另行挂账（裸帧受理同
+    // 944/952/956 惯例）。
+    if (request.request_id == 0) {
+        return;
+    }
+    const auto reply = [&](bool accepted, std::int32_t code, const std::string& detail) {
+        if (m1Link_) {
+            m1Link_->sendCellRegisterReply(peer, request.request_id, accepted, code,
+                                           config_.m1AuthorityEpoch, request.cell_id,
+                                           detail);
+        }
+    };
+    if (request.cell_id == 0 || request.start_epoch == 0) {
+        // 差距 ①：身份/代次非法显式驳回——逻辑 ID 与启动代次是登记前提
+        //（PID/IP 不当身份，0 号即缺位）
+        reply(false, kCellRegisterRejectedInvalid, "invalid cell_id or start_epoch");
+        return;
+    }
+    const auto now_ms = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    auto it = cellRegistrations_.find(request.cell_id);
+    if (it == cellRegistrations_.end()) {
+        CellRegistration reg;
+        reg.cell_id = request.cell_id;
+        reg.start_epoch = request.start_epoch;
+        reg.host = request.host;
+        reg.port = request.port;
+        reg.capabilities = request.capabilities;
+        reg.load = request.load;
+        reg.drain_state = request.drain_state;
+        reg.ready = request.ready;
+        reg.registered_at_ms = now_ms;
+        reg.peer = peer;
+        cellRegistrations_.emplace(request.cell_id, std::move(reg));
+        worldLog().info("cell registered: id=" + std::to_string(request.cell_id)
+                        + " epoch=" + std::to_string(request.start_epoch)
+                        + " peer=" + peer);
+        reply(true, kCellRegisterAccepted, "registered");
+        return;
+    }
+    if (request.start_epoch < it->second.start_epoch) {
+        // §4.4：旧代次不可覆盖新登记（重启获新代次——旧连接回拨拒绝，
+        // 登记保持新代次；旧执行端隔离随 L101 后续切片）
+        reply(false, kCellRegisterRejectedStaleEpoch,
+              "stale epoch: registered=" + std::to_string(it->second.start_epoch));
+        return;
+    }
+    const bool idempotent = request.start_epoch == it->second.start_epoch;
+    // 同代次幂等刷新 / 新代次替换：自报面整体刷新（peer 也换——重连 =
+    // 同名或新名链路，回执按名寻路）
+    it->second.start_epoch = request.start_epoch;
+    it->second.host = request.host;
+    it->second.port = request.port;
+    it->second.capabilities = request.capabilities;
+    it->second.load = request.load;
+    it->second.drain_state = request.drain_state;
+    it->second.ready = request.ready;
+    it->second.registered_at_ms = now_ms;
+    it->second.peer = peer;
+    worldLog().info(std::string("cell re-") + (idempotent ? "registered: " : "placed (new epoch): ")
+                    + "id=" + std::to_string(request.cell_id)
+                    + " epoch=" + std::to_string(request.start_epoch)
+                    + " peer=" + peer);
+    reply(true, idempotent ? kCellRegisterAcceptedIdempotent : kCellRegisterAccepted,
+          idempotent ? "re-registered (same epoch, refreshed)"
+                     : "replaced (new epoch)");
+}
+
+const WorldApp::CellRegistration* WorldApp::find_cell_registration(
+    std::uint64_t cell_id) const {
+    // 泵上下文只读观测面（注册表单写者 = M1 泵上下文受理点）
+    const auto it = cellRegistrations_.find(cell_id);
+    return it != cellRegistrations_.end() ? &it->second : nullptr;
 }
 
 void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& request) {
