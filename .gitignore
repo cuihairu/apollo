@@ -88,3 +88,8 @@ log/
 node_modules/
 **/node_modules/
 .pnpm-store/
+
+# 2026-10-19: login/world 进程默认运行目录（apps/login main.cpp:53 data/login、
+# player_store config dataDir data/world-1）——从仓根跑二进制时生成，运行时残留
+# 非源面产物，可再生
+data/
