@@ -59,16 +59,16 @@ TEST(RemoteMethodSchema, DefaultConstruction) {
 
 TEST(RemoteMethodSchema, FieldAccess) {
     RemoteMethodSchema schema;
-    schema.method_name   = "PlayerAnchor.send";
-    schema.method_alias  = "PAS";
+    schema.method_name   = "Avatar.send";
+    schema.method_alias  = "AS";
     schema.mode          = InvokeMode::RequestReply;
     schema.target_domain = EntityDomain::Anchor;
     schema.arg_types     = {"int64", "bytes"};
     schema.timeout       = std::chrono::milliseconds(2000);
     schema.idempotent    = true;
 
-    EXPECT_EQ(schema.method_name, "PlayerAnchor.send");
-    EXPECT_EQ(schema.method_alias, "PAS");
+    EXPECT_EQ(schema.method_name, "Avatar.send");
+    EXPECT_EQ(schema.method_alias, "AS");
     EXPECT_EQ(schema.mode, InvokeMode::RequestReply);
     EXPECT_EQ(schema.target_domain, EntityDomain::Anchor);
     EXPECT_EQ(schema.arg_types.size(), 2u);
@@ -189,10 +189,10 @@ TEST(RpcTrace, EmitSpanWhenSampled) {
     ref.entity_id = 42;
     ref.target_app = "world-1";
 
-    RpcTrace::emit_rpc_span("PAS", ref, ctx, 100, 150);
+    RpcTrace::emit_rpc_span("AS", ref, ctx, 100, 150);
 
     EXPECT_TRUE(emitted);
-    EXPECT_EQ(captured.name, "PAS");
+    EXPECT_EQ(captured.name, "AS");
     EXPECT_EQ(captured.ctx.trace_id, ctx.trace_id);
     EXPECT_EQ(captured.start_ms, 100u);
     EXPECT_EQ(captured.end_ms, 150u);

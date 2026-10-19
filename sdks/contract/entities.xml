@@ -7,7 +7,7 @@
 
      继承链修文（improvement-plan P2-3，object-model 差异清单 #2 消账）：
      - 「Player」实体删除——契约裁决 Player 已废（term-contract v1.0：玩家长期
-       归属 = PlayerAnchor，场景空间对象 = Avatar，实体继承面无「Player」位）。
+       长期归属 = base::Avatar，场景空间对象 = cell::Avatar，实体继承面无「Player」位）。
      - Avatar 摘脱怪物族为根实体——玩家化身不是怪物子类；其移动/战斗/AOI 面
        为场景化身自有职责（term-contract §1.2），不借怪物继承表达。
      - Monster/NPC 保留单继承（NPC 继承怪物移动/战斗面），二者是场景实体
@@ -25,7 +25,7 @@
     <attr name="stunned"/>
   </entity>
   <entity id="NPC" parent="Monster" desc="NPC（继承怪物移动/战斗面；场景实体——纯继承不另声明，展开集 = 怪物集）"/>
-  <entity id="Avatar" desc="场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 PlayerAnchor）">
+  <entity id="Avatar" desc="场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 base::Avatar）">
     <attr name="hp"/>
     <attr name="max_hp"/>
     <attr name="mp"/>

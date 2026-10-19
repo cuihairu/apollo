@@ -305,7 +305,7 @@ int main() {
 }
 ```
 
-> See `apps/game-server/src/main.cpp` for the complete runnable version. Assembly happens only at application entry points (apps/); modules internally never know about the container.
+> See `tests/test_runtime.cpp` (ApplicationHost cases) for the complete runnable version. Assembly happens only at application entry points (apps/); modules internally never know about the container.
 
 ### Using the AOI System
 
@@ -343,7 +343,7 @@ core::PlayerId player_id{1001};
 // Reward sink: battle settles one-way into the player's long-term state
 struct ScoreSink : battle::IRewardSink {
     void on_reward(std::uint64_t player_id, std::int64_t score) override {
-        // write into PlayerAnchor (mark_dirty)
+        // write into base::Avatar (mark_dirty)
     }
 };
 

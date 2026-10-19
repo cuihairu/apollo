@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "bb6f027e44049afd83d479d24edf8f9d933e76fdd5dcda23a5e8e9fef581d220",
-  "client_hash": "c8e8e4de6ad5274e224e27113528ec9d88fc66b75b3cae31a2490edc0411207c",
-  "internal_hash": "8cb7888d2b7ea3deb313374c754b1cd0cff231a06c7778e4d65c71c3ee9240ce",
+  "schema_hash": "1664dd3b0008428b3d9077fe3fad762e0eea61c9f952ce23a004d7e68ec1b723",
+  "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
+  "internal_hash": "c7ae805da184bd84a93a30b529f46d6a52fc4eaa45bc73bd6ca0eac8758cb11b",
   "contract_version": 3,
   "aliases": [
     {
@@ -606,7 +606,7 @@
           "desc": "客户端毫秒时钟"
         }
       ],
-      "desc": "登录请求（login-app 鉴权）"
+      "desc": "登录请求（login 鉴权）"
     },
     {
       "id": 17,
@@ -1370,7 +1370,7 @@
           "desc": "准入校验票据（login_response 下发的 ticket 原样上送核销）"
         }
       ],
-      "desc": "网关指派请求（gateway→login-app 随 RPC 上送）"
+      "desc": "网关指派请求（gateway→login 随 RPC 上送）"
     },
     {
       "id": 910,
@@ -1411,7 +1411,7 @@
           "desc": "P1-6 欠账字段入库"
         }
       ],
-      "desc": "网关指派应答（login-app→gateway）"
+      "desc": "网关指派应答（login→gateway）"
     },
     {
       "id": 911,
@@ -1454,7 +1454,7 @@
           "name": "state",
           "type": "string",
           "wire_type": "string",
-          "desc": "AnchorState 字符串（六态可观察）"
+          "desc": "AvatarState 字符串（六态可观察）"
         },
         {
           "name": "error_message",
@@ -1463,7 +1463,7 @@
           "desc": ""
         }
       ],
-      "desc": "玩家激活应答（AnchorState 回带）"
+      "desc": "玩家激活应答（AvatarState 回带）"
     },
     {
       "id": 913,
@@ -3416,7 +3416,7 @@
           "name": "stealth"
         }
       ],
-      "desc": "场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 PlayerAnchor）"
+      "desc": "场景化身（玩家场景内空间权威：移动/战斗/AOI；长期态归 base::Avatar）"
     },
     {
       "name": "Monster",

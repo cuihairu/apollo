@@ -812,7 +812,7 @@ add_test(NAME WorldHostTests COMMAND world_host_tests)
 
 # ========== Avatar / Player Object Model Tests (P0-2) ==========
 # Avatar 三职责（移动/战斗/AOI 广播）+ Anchor 投影 + PlayerId 强分型
-# （直编源惯例同 game_tests；Avatar 依赖 PlayerAnchor 实现，故一并编入）
+# （直编源惯例同 game_tests；cell::Avatar 依赖 base::Avatar 实现，故一并编入）
 add_executable(avatar_tests
     test_avatar.cpp
     ../modules/game/cell/src/avatar.cpp

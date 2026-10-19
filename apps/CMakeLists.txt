@@ -51,7 +51,7 @@ endif()
 
 # Game 模块
 if(TARGET apollo::game_core)
-    message(STATUS "Game-server app enabled (apollo::game_core found)")
+    message(STATUS "Game module enabled (apollo::game_core found)")
 else()
-    message(STATUS "Game-server app disabled (apollo::game_core not found - set APOLLO_BUILD_GAME_MODULE=ON)")
+    message(STATUS "Game module disabled (apollo::game_core not found - set APOLLO_BUILD_GAME_MODULE=ON)")
 endif()

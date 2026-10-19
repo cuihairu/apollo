@@ -304,7 +304,7 @@ int main() {
 }
 ```
 
-> 完整可运行版本见 `apps/game-server/src/main.cpp`。装配只发生在应用入口（apps/），模块内部互不感知容器。
+> 完整可运行版本见 `tests/test_runtime.cpp`（ApplicationHost 用例）。装配只发生在应用入口（apps/），模块内部互不感知容器。
 
 ### 使用AOI系统
 
@@ -342,7 +342,7 @@ core::PlayerId player_id{1001};
 // 奖励单向落账口：战斗结算只出不进，写入玩家长期态
 struct ScoreSink : battle::IRewardSink {
     void on_reward(std::uint64_t player_id, std::int64_t score) override {
-        // 写入 PlayerAnchor（mark_dirty）
+        // 写入 base::Avatar（mark_dirty）
     }
 };
 
