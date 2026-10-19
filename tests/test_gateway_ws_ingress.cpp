@@ -15,7 +15,19 @@
 //  10. GatewayServer 全链 e2e：config.wsPort 起 WS 监听，真 ws 客户端
 //      PING（netlink 帧）→ 分发 → PONG 回包（ws binary 帧）；
 //  11. 有界积压：升级后业务连接出站残余超上限 → SlowConsumer 踢线
-//      （客户端不读，8 MiB 灌压）。
+//      （客户端不读，8 MiB 灌压）；
+//  12. WSS 端到端（L61）：三监听并行（TCP + WS + WSS 号段互斥、明文/TLS
+//      共存），验签客户端（信任锚 + 主机名）握手通过 → 101 → 加密通道上
+//      masked binary PING → PONG 回带原时间戳；
+//  13. WSS 掉线重连：保留窗内携旧会话号重连恢复同号（登录/会话准入
+//      在 WSS 会话上落地）；
+//  14. WSS 掉线 → TCP 明文入口恢复同号会话（会话不绑定传输）；
+//  15. WSS 证书链不受信 → 握手 fatal（验签码可读），不上游戏会话面；
+//  16. WSS 主机名不符 → 握手 fatal（验签码可读），不上游戏会话面；
+//  17. WSS 凭据配置负例：文件缺失/内容非 PEM → 装配即抛，原因可读。
+//
+// 不冒充已交付：协议更新验收与迁移路由刷新验收在 P3/P5 更新域与迁移域
+// 收口（本文件不含其证据）。
 //
 // Windows：link TCP/TLS 底座不进 M1 批（POSIX only）——用例本体空转。
 
@@ -34,7 +46,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
+#include <deque>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <span>
@@ -1006,6 +1021,696 @@ bool test_gateway_server_ws_e2e() {
     return true;
 }
 
+// ---- 12-17. WSS 端到端接入面验收（L61）：TLS 记录层上跑同一套游戏帧/会话
+//      /意图路径，三监听并行（明文 + WS + WSS 共存）；WSS 上登录/会话准入与
+//      断线重连；证书链不受信、主机名不符的客户端握手即拒（不上会话）；
+//      凭据配置负例装配即抛。协议更新与迁移路由刷新验收在 P3/P5 与迁移域
+//      收口，本文件不冒充已交付。----
+
+// 控序无关的心跳帧：会话号进协议头（encode 第二参），body 只带时间戳。
+std::vector<std::uint8_t> ping_packet(uint64_t session_id) {
+    apollo::protocol::Ping ping;
+    ping.timestamp = 24680;
+    return apollo::protocol::MessageCodec::encode(ping, session_id);
+}
+
+std::vector<std::uint8_t> http_upgrade_request() {
+    return upgrade_request("GET", "/game");
+}
+
+// 加密通道上抽干到 deadline（TLS 读端 WANT_READ 视为暂无，与测试泵同拍
+// 纪律：不裸自旋，每拍 ≥2ms）。
+bool drain_tls(tls_test_support::TlsClient& client, std::vector<std::uint8_t>& sink,
+               int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::uint8_t chunk[4096];
+    for (;;) {
+        const int n = client.read(chunk, sizeof chunk);
+        if (n > 0) {
+            sink.insert(sink.end(), chunk, chunk + static_cast<std::size_t>(n));
+        } else if (n < 0) {
+            return false;  // EOF/错误
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return true;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+}
+
+// 加密通道上整段写出（TLS 短写/WANT_* 由循环消化）。
+void send_tls(tls_test_support::TlsClient& client, const std::vector<std::uint8_t>& bytes,
+              int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::size_t off = 0;
+    while (off < bytes.size()) {
+        const int n = client.write(bytes.data() + off, bytes.size() - off);
+        if (n > 0) {
+            off += static_cast<std::size_t>(n);
+        } else {
+            if (n < 0 || std::chrono::steady_clock::now() >= deadline) {
+                return;
+            }
+            std::this_thread::sleep_for(kTick);
+        }
+    }
+}
+
+// WSS 测试客户端：TLS 记录层 + ws 帧装配/解析（与服务端语义对偶——出向掩
+// 码、入向不掩码）。fd 归 TlsClient，析构即关。
+class WssTestClient {
+public:
+    ~WssTestClient() { close(); }
+
+    bool connect(std::uint16_t port) {
+        std::string error;
+        if (!tls_.start("127.0.0.1", port, error)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool handshake(int timeout_ms = 5000) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+        for (;;) {
+            const auto step = tls_.step();
+            if (step == tls_test_support::TlsClient::Step::kConnected) {
+                up_ = true;
+                return true;
+            }
+            if (step == tls_test_support::TlsClient::Step::kFailed ||
+                std::chrono::steady_clock::now() >= deadline) {
+                return false;
+            }
+            std::this_thread::sleep_for(kTick);
+        }
+    }
+
+    bool tlsUp() const { return up_; }
+    std::uint32_t verifyResult() const { return tls_.verifyResult(); }
+    std::string tlsError() const { return tls_.lastError(); }
+    // 验签配置（须在 connect 之前——SSL_new 会把 ctx 的 verify 模式拷走）。
+    bool configureVerify(const std::string& ca_pem_path, const std::string& host) {
+        return tls_.configureVerify(ca_pem_path, host);
+    }
+
+    void sendAll(const std::vector<std::uint8_t>& bytes) { send_tls(tls_, bytes, 5000); }
+
+    bool drain(std::vector<std::uint8_t>& sink) { return drain_tls(tls_, sink, 10); }
+
+    // 读 HTTP 应答头（至 \r\n\r\n）。
+    bool recvHttpResponse(std::string& response, int timeout_ms = 5000) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+        for (;;) {
+            const auto found = std::search(buf_.begin(), buf_.end(), kHeaderTerm,
+                                           kHeaderTerm + 4);
+            if (found != buf_.end()) {
+                response.assign(buf_.begin(), found + 4);
+                buf_.erase(buf_.begin(), found + 4);
+                return true;
+            }
+            if (std::chrono::steady_clock::now() >= deadline || !drain(buf_)) {
+                return false;
+            }
+        }
+    }
+
+    // 读一个服务端帧（无掩码）。
+    bool recvWsFrame(std::uint8_t& opcode, std::vector<std::uint8_t>& payload,
+                     int timeout_ms = 5000) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+        for (;;) {
+            if (buf_.size() >= 2) {
+                const std::uint8_t b0 = buf_[0];
+                const std::uint8_t b1 = buf_[1];
+                if ((b1 & 0x80) != 0) {
+                    return false;  // 服务端帧不掩码——掩码位即坏
+                }
+                const std::uint8_t len7 = static_cast<std::uint8_t>(b1 & 0x7F);
+                std::size_t header = 2;
+                std::size_t len = len7;
+                if (len7 == 126) {
+                    if (buf_.size() < 4) {
+                        header = 4;
+                        len = 0xFFFF;  // 占位：不足则回读
+                    } else {
+                        len = (static_cast<std::size_t>(buf_[2]) << 8) | buf_[3];
+                        header = 4;
+                    }
+                } else if (len7 == 127) {
+                    if (buf_.size() < 10) {
+                        header = 10;
+                        len = 0xFFFFFFFFFFFFFFFFull;
+                    } else {
+                        len = 0;
+                        for (int i = 0; i < 8; ++i) {
+                            len = (len << 8) | buf_[2 + i];
+                        }
+                        header = 10;
+                    }
+                }
+                if (buf_.size() >= header + len) {
+                    opcode = static_cast<std::uint8_t>(b0 & 0x0F);
+                    payload.assign(buf_.begin() + static_cast<long>(header),
+                                   buf_.begin() + static_cast<long>(header + len));
+                    buf_.erase(buf_.begin(), buf_.begin() + static_cast<long>(header + len));
+                    return true;
+                }
+            }
+            if (std::chrono::steady_clock::now() >= deadline || !drain(buf_)) {
+                return false;
+            }
+        }
+    }
+
+    void close() {
+        buf_.clear();
+        up_ = false;
+        tls_.close();
+    }
+
+private:
+    tls_test_support::TlsClient tls_;
+    bool up_ = false;
+    std::vector<std::uint8_t> buf_;
+};
+
+bool wait_until(const std::function<bool()>& pred, int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now()
+                          + std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (pred()) {
+            return true;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    return pred();
+}
+
+// 明文 TCP 对照客户端（跨传输恢复面：WSS 会话经 TCP 入口续接）。
+class TcpTestClient {
+public:
+    ~TcpTestClient() { close(); }
+
+    bool connect(const std::string& host, std::uint16_t port) {
+        fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (fd_ < 0) {
+            return false;
+        }
+        timeval tv{};
+        tv.tv_sec = 10;  // 单收上限：CI 挂死守门
+        ::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+        ::sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1 ||
+            ::connect(fd_, reinterpret_cast<::sockaddr*>(&addr), sizeof addr) != 0) {
+            ::close(fd_);
+            fd_ = -1;
+            return false;
+        }
+        return true;
+    }
+
+    void sendAll(const std::vector<std::uint8_t>& bytes) {
+        std::size_t off = 0;
+        while (off < bytes.size()) {
+            const ssize_t n = ::send(fd_, bytes.data() + off, bytes.size() - off, 0);
+            if (n <= 0) {
+                if (n < 0 && errno == EINTR) {
+                    continue;
+                }
+                return;
+            }
+            off += static_cast<std::size_t>(n);
+        }
+    }
+
+    // 读一个 link 帧，回载荷（协议全帧）。
+    bool recvLinkFrame(std::vector<std::uint8_t>& payload) {
+        for (;;) {
+            if (!pending_.empty()) {
+                payload = std::move(pending_.front());
+                pending_.pop_front();
+                return true;
+            }
+            if (!fill()) {
+                return false;
+            }
+            const auto outcome = parser_.feed(buf_.data(), buf_.size());
+            if (outcome.fatal) {
+                return false;
+            }
+            buf_.clear();
+            for (auto& frame : outcome.frames) {
+                pending_.push_back(std::move(frame.payload));
+            }
+        }
+    }
+
+    void close() {
+        if (fd_ >= 0) {
+            ::close(fd_);
+            fd_ = -1;
+        }
+    }
+
+private:
+    bool fill() {
+        std::uint8_t chunk[4096];
+        const ssize_t n = ::recv(fd_, chunk, sizeof chunk, 0);
+        if (n <= 0) {
+            return false;
+        }
+        buf_.insert(buf_.end(), chunk, chunk + n);
+        return true;
+    }
+
+    int fd_ = -1;
+    std::vector<std::uint8_t> buf_;
+    netlink::FrameParser parser_;
+    std::deque<std::vector<std::uint8_t>> pending_;
+};
+
+bool test_gateway_wss_game_e2e() {
+    std::cout << "Running: test_gateway_wss_game_e2e..." << std::endl;
+
+    const std::string dir = "/tmp/apollo-ws-ingress-tests-" + std::to_string(::getpid());
+    TEST_ASSERT(::system(("mkdir -p " + dir).c_str()) == 0, "cert dir created");
+    const auto certs = tls_test_support::generate_self_signed(dir, "accept", "localhost");
+    TEST_ASSERT(certs.error.empty(), "self-signed cert generated");
+
+    apollo::net::tls::TlsServerContext tls_context;
+    TEST_ASSERT(tls_context.load(certs.cert_path, certs.key_path).ok, "tls context loaded");
+
+    // 三监听并行：TCP 明文主入口 + WS + WSS（号段互斥分区，明文/TLS 共存）。
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.wsPort = probe_free_port();
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    config.sessionTimeoutMs = 60000;
+    config.heartbeatCheckIntervalMs = 1000;
+    TEST_ASSERT(config.wsPort != 0 && config.wssPort != 0, "free ports probed");
+
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(server.listenPort() != 0, "tcp ingress listening");
+    TEST_ASSERT(server.wsListenPort() != 0, "ws ingress listening");
+    TEST_ASSERT(server.wssListenPort() != 0, "wss ingress listening");
+    TEST_ASSERT(server.wssListenPort() != server.wsListenPort() &&
+                    server.wssListenPort() != server.listenPort() &&
+                    server.wsListenPort() != server.listenPort(),
+                "three distinct listeners coexist");
+
+    WssTestClient client;
+    // 验签开面：信任锚 = 服务端证书本身（自签兼 CA）+ 主机名 localhost。
+    // 须在 connect 之前——SSL_new 会把 ctx 的 verify 模式拷走。
+    TEST_ASSERT(client.configureVerify(certs.cert_path, "localhost"), "verify configured");
+    TEST_ASSERT(client.connect(server.wssListenPort()), "tcp connect to wss listener");
+    TEST_ASSERT(client.handshake(), "tls handshake accepted (chain + host verified)");
+    TEST_ASSERT(client.verifyResult() == 0, "verification result clean");
+
+    client.sendAll(http_upgrade_request());
+    std::string response;
+    TEST_ASSERT(client.recvHttpResponse(response) &&
+                    response.find("101") != std::string::npos,
+                "upgraded over tls");
+
+    const auto packet = ping_packet(0);
+    const auto link_frame = frame_bytes(1, 0, packet);
+    std::vector<std::uint8_t> ws_frame;
+    append_masked_frame(ws_frame, ws::OpCode::kBinary, true, link_frame.data(),
+                        link_frame.size(), 0x5b);
+    client.sendAll(ws_frame);
+
+    std::uint8_t opcode = 0;
+    std::vector<std::uint8_t> payload;
+    TEST_ASSERT(client.recvWsFrame(opcode, payload), "pong received over tls");
+    TEST_ASSERT(opcode == static_cast<std::uint8_t>(ws::OpCode::kBinary), "binary frame over tls");
+    netlink::FrameParser net_parser;
+    const auto outcome = net_parser.feed(payload);
+    TEST_ASSERT(!outcome.fatal && outcome.frames.size() == 1, "link frame intact over tls");
+    const auto& body = outcome.frames[0].payload;
+    TEST_ASSERT(body.size() > sizeof(apollo::protocol::MessageHeader), "pong carries header");
+    apollo::protocol::MessageHeader header{};
+    std::memcpy(&header, body.data(), sizeof header);
+    TEST_ASSERT(header.type == static_cast<std::uint16_t>(apollo::protocol::MessageType::PONG),
+                "reply is PONG over tls");
+    const std::vector<std::uint8_t> pong_body(
+        body.begin() + static_cast<long>(sizeof header), body.end());
+    const auto pong = apollo::protocol::MessageCodec::decodeBody<apollo::protocol::Pong>(pong_body);
+    TEST_ASSERT(pong.timestamp == 24680, "timestamp echoed over tls");
+    TEST_ASSERT(server.getRegisteredConnectionCount() == 1, "wss session registered");
+
+    client.close();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_gateway_wss_resume_after_drop() {
+    std::cout << "Running: test_gateway_wss_resume_after_drop..." << std::endl;
+
+    const std::string dir = "/tmp/apollo-ws-ingress-tests-" + std::to_string(::getpid());
+    const auto certs = tls_test_support::generate_self_signed(dir, "accept", "localhost");
+    TEST_ASSERT(certs.error.empty(), "self-signed cert generated");
+    apollo::net::tls::TlsServerContext tls_context;
+    TEST_ASSERT(tls_context.load(certs.cert_path, certs.key_path).ok, "tls context loaded");
+
+    // 保留窗 20s（掉线即刻重连，窗内恢复）；心跳超时不干扰。
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    config.sessionRetentionMs = 20000;
+    config.sessionTimeoutMs = 600000;
+    config.heartbeatCheckIntervalMs = 50;
+    config.controlM1Port = 0;
+    TEST_ASSERT(config.wssPort != 0, "free port probed");
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(server.wssListenPort() != 0, "wss ingress listening");
+
+    WssTestClient first;
+    TEST_ASSERT(first.configureVerify(certs.cert_path, "localhost"), "verify configured");
+    TEST_ASSERT(first.connect(server.wssListenPort()), "first wss connected");
+    TEST_ASSERT(first.handshake(), "first tls handshake accepted");
+    first.sendAll(http_upgrade_request());
+    std::string response;
+    TEST_ASSERT(first.recvHttpResponse(response) && response.find("101") != std::string::npos,
+                "first upgraded");
+    const auto ping_frame = frame_bytes(1, 0, ping_packet(0));
+    std::vector<std::uint8_t> first_ws_frame;
+    append_masked_frame(first_ws_frame, ws::OpCode::kBinary, true, ping_frame.data(),
+                        ping_frame.size(), 0x31);
+    first.sendAll(first_ws_frame);
+    std::uint8_t opcode = 0;
+    std::vector<std::uint8_t> payload;
+    TEST_ASSERT(first.recvWsFrame(opcode, payload), "first pong received");
+    netlink::FrameParser first_parser;
+    const auto first_outcome = first_parser.feed(payload);
+    TEST_ASSERT(!first_outcome.fatal && first_outcome.frames.size() == 1, "link frame intact");
+    const auto session_header = apollo::protocol::MessageCodec::parseHeader(
+        first_outcome.frames[0].payload.data(), first_outcome.frames[0].payload.size());
+    const auto old_session_id = session_header.sessionId;
+    TEST_ASSERT(server.authenticateSession(old_session_id, 910007, "ticket"),
+                "player bound on wss session");
+
+    first.close();
+    const auto torn_down = wait_until([&] { return server.getRegisteredConnectionCount() == 0; },
+                                      3000);
+    TEST_ASSERT(torn_down, "first wss connection torn down");
+    TEST_ASSERT(server.getSessionCount() == 1, "session retained for resume");
+
+    // 重连：新 TLS 连接 → 升级 → 帧头携旧会话号 = 恢复尝试（同号续走）。
+    WssTestClient second;
+    TEST_ASSERT(second.configureVerify(certs.cert_path, "localhost"), "verify configured");
+    TEST_ASSERT(second.connect(server.wssListenPort()), "second wss connected");
+    TEST_ASSERT(second.handshake(), "second tls handshake accepted");
+    second.sendAll(http_upgrade_request());
+    std::string second_response;
+    TEST_ASSERT(second.recvHttpResponse(second_response) &&
+                    second_response.find("101") != std::string::npos,
+                "second upgraded");
+    const auto resume_frame = frame_bytes(1, 0, ping_packet(old_session_id));
+    std::vector<std::uint8_t> second_ws;
+    append_masked_frame(second_ws, ws::OpCode::kBinary, true, resume_frame.data(),
+                        resume_frame.size(), 0x77);
+    second.sendAll(second_ws);
+
+    std::vector<std::uint8_t> second_payload;
+    TEST_ASSERT(second.recvWsFrame(opcode, second_payload), "resumed pong received");
+    netlink::FrameParser second_parser;
+    const auto second_outcome = second_parser.feed(second_payload);
+    TEST_ASSERT(!second_outcome.fatal && second_outcome.frames.size() == 1,
+                "resumed link frame intact");
+    const auto resumed_header = apollo::protocol::MessageCodec::parseHeader(
+        second_outcome.frames[0].payload.data(), second_outcome.frames[0].payload.size());
+    TEST_ASSERT(resumed_header.sessionId == old_session_id, "resumed same session over wss");
+    TEST_ASSERT(server.getRegisteredConnectionCount() == 1, "one connection after resume");
+    TEST_ASSERT(server.getSessionCount() == 1, "one session after resume");
+
+    second.close();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_gateway_wss_resume_after_tcp_drop() {
+    std::cout << "Running: test_gateway_wss_resume_after_tcp_drop..." << std::endl;
+
+    const std::string dir = "/tmp/apollo-ws-ingress-tests-" + std::to_string(::getpid());
+    const auto certs = tls_test_support::generate_self_signed(dir, "accept", "localhost");
+    TEST_ASSERT(certs.error.empty(), "self-signed cert generated");
+    apollo::net::tls::TlsServerContext tls_context;
+    TEST_ASSERT(tls_context.load(certs.cert_path, certs.key_path).ok, "tls context loaded");
+
+    // WSS 会话掉线 → 客户端改走 TCP 明文入口恢复：会话不绑定传输。
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    config.sessionRetentionMs = 20000;
+    config.sessionTimeoutMs = 600000;
+    config.heartbeatCheckIntervalMs = 50;
+    config.controlM1Port = 0;
+    gateway::GatewayServer server(config);
+    server.start();
+
+    WssTestClient first;
+    TEST_ASSERT(first.configureVerify(certs.cert_path, "localhost"), "verify configured");
+    TEST_ASSERT(first.connect(server.wssListenPort()), "wss connected");
+    TEST_ASSERT(first.handshake(), "tls handshake accepted");
+    first.sendAll(http_upgrade_request());
+    std::string response;
+    TEST_ASSERT(first.recvHttpResponse(response) && response.find("101") != std::string::npos,
+                "upgraded");
+    const auto ping_frame = frame_bytes(1, 0, ping_packet(0));
+    std::vector<std::uint8_t> first_ws_frame;
+    append_masked_frame(first_ws_frame, ws::OpCode::kBinary, true, ping_frame.data(),
+                        ping_frame.size(), 0x31);
+    first.sendAll(first_ws_frame);
+    std::uint8_t opcode = 0;
+    std::vector<std::uint8_t> payload;
+    TEST_ASSERT(first.recvWsFrame(opcode, payload), "pong received over wss");
+    netlink::FrameParser first_parser;
+    const auto first_outcome = first_parser.feed(payload);
+    TEST_ASSERT(!first_outcome.fatal && first_outcome.frames.size() == 1, "link frame intact");
+    const auto old_session_id = apollo::protocol::MessageCodec::parseHeader(
+                                    first_outcome.frames[0].payload.data(),
+                                    first_outcome.frames[0].payload.size())
+                                    .sessionId;
+    TEST_ASSERT(server.authenticateSession(old_session_id, 910008, "ticket"),
+                "player bound on wss session");
+
+    first.close();
+    TEST_ASSERT(wait_until([&] { return server.getRegisteredConnectionCount() == 0; }, 3000),
+                "wss connection torn down");
+    TEST_ASSERT(server.getSessionCount() == 1, "session retained");
+
+    TcpTestClient tcp;
+    TEST_ASSERT(tcp.connect("127.0.0.1", server.listenPort()), "tcp connected");
+    tcp.sendAll(frame_bytes(1, 0, ping_packet(old_session_id)));
+    std::vector<std::uint8_t> tcp_reply;
+    TEST_ASSERT(tcp.recvLinkFrame(tcp_reply), "pong received over tcp");
+    const auto resumed_header =
+        apollo::protocol::MessageCodec::parseHeader(tcp_reply.data(), tcp_reply.size());
+    TEST_ASSERT(resumed_header.sessionId == old_session_id,
+                "resumed same session across wss -> tcp");
+    TEST_ASSERT(server.getSessionCount() == 1, "one session across transports");
+
+    tcp.close();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_gateway_wss_rejects_untrusted_chain() {
+    std::cout << "Running: test_gateway_wss_rejects_untrusted_chain..." << std::endl;
+
+    const std::string dir = "/tmp/apollo-ws-ingress-tests-" + std::to_string(::getpid());
+    const auto certs = tls_test_support::generate_self_signed(dir, "accept", "localhost");
+    const auto other = tls_test_support::generate_self_signed(dir, "other", "localhost");
+    TEST_ASSERT(certs.error.empty() && other.error.empty(), "two cert fixtures generated");
+    apollo::net::tls::TlsServerContext tls_context;
+    TEST_ASSERT(tls_context.load(certs.cert_path, certs.key_path).ok, "tls context loaded");
+
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(server.wssListenPort() != 0, "wss ingress listening");
+
+    // 信任锚 = 另一张无关自签：服务端链不受信 → 握手 fatal。
+    tls_test_support::TlsClient client;
+    TEST_ASSERT(client.configureVerify(other.cert_path, "localhost"), "untrusted anchor bound");
+    std::string error;
+    TEST_ASSERT(client.start("127.0.0.1", server.wssListenPort(), error), "tcp connect ok");
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+    tls_test_support::TlsClient::Step step = tls_test_support::TlsClient::Step::kInProgress;
+    while (std::chrono::steady_clock::now() < deadline) {
+        step = client.step();
+        if (step != tls_test_support::TlsClient::Step::kInProgress) {
+            break;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    TEST_ASSERT(step == tls_test_support::TlsClient::Step::kFailed,
+                "untrusted chain fails the handshake");
+    TEST_ASSERT(client.verifyResult() == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT,
+                "verify code = untrusted self-signed chain");
+    TEST_ASSERT(!client.lastError().empty(), "failure reason readable");
+
+    // 入口侧：握不上来的连接不进入游戏会话面（无注册、无会话）。
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    TEST_ASSERT(server.getRegisteredConnectionCount() == 0, "no connection registered");
+    TEST_ASSERT(server.getSessionCount() == 0, "no session created");
+
+    client.close();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_gateway_wss_rejects_hostname_mismatch() {
+    std::cout << "Running: test_gateway_wss_rejects_hostname_mismatch..." << std::endl;
+
+    const std::string dir = "/tmp/apollo-ws-ingress-tests-" + std::to_string(::getpid());
+    const auto certs = tls_test_support::generate_self_signed(dir, "accept", "localhost");
+    TEST_ASSERT(certs.error.empty(), "self-signed cert generated");
+    apollo::net::tls::TlsServerContext tls_context;
+    TEST_ASSERT(tls_context.load(certs.cert_path, certs.key_path).ok, "tls context loaded");
+
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    gateway::GatewayServer server(config);
+    server.start();
+
+    // 链受信（锚 = 服务端证书）但主机名与证书 subject 不符 → 握手 fatal。
+    tls_test_support::TlsClient client;
+    TEST_ASSERT(client.configureVerify(certs.cert_path, "other.example"),
+                "chain trusted, host bound to mismatch");
+    std::string error;
+    TEST_ASSERT(client.start("127.0.0.1", server.wssListenPort(), error), "tcp connect ok");
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+    tls_test_support::TlsClient::Step step = tls_test_support::TlsClient::Step::kInProgress;
+    while (std::chrono::steady_clock::now() < deadline) {
+        step = client.step();
+        if (step != tls_test_support::TlsClient::Step::kInProgress) {
+            break;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    TEST_ASSERT(step == tls_test_support::TlsClient::Step::kFailed,
+                "hostname mismatch fails the handshake");
+    TEST_ASSERT(client.verifyResult() == X509_V_ERR_HOSTNAME_MISMATCH,
+                "verify code = hostname mismatch");
+    TEST_ASSERT(!client.lastError().empty(), "failure reason readable");
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    TEST_ASSERT(server.getRegisteredConnectionCount() == 0, "no connection registered");
+
+    client.close();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_gateway_wss_key_config_rejected() {
+    std::cout << "Running: test_gateway_wss_key_config_rejected..." << std::endl;
+
+    const std::string dir = "/tmp/apollo-ws-ingress-tests-" + std::to_string(::getpid());
+    TEST_ASSERT(::system(("mkdir -p " + dir).c_str()) == 0, "cert dir created");
+
+    // ① 凭据文件不存在：装配即抛，原因可读。
+    {
+        gateway::GatewayConfig config;
+        config.wssPort = probe_free_port();
+        config.tlsCertPath = dir + "/missing.crt.pem";
+        config.tlsKeyPath = dir + "/missing.key.pem";
+        bool threw = false;
+        std::string message;
+        try {
+            gateway::GatewayServer server(config);
+            (void)server;
+        } catch (const std::exception& ex) {
+            threw = true;
+            message = ex.what();
+        }
+        TEST_ASSERT(threw, "missing cert/key rejected at assembly");
+        TEST_ASSERT(message.find("tls") != std::string::npos,
+                    "assembly error names tls: " + message);
+    }
+
+    // ② 证书合法 + 私钥文件缺失：装载失败面可读（不是传输错误）。
+    const auto certs = tls_test_support::generate_self_signed(dir, "accept", "localhost");
+    TEST_ASSERT(certs.error.empty(), "self-signed cert generated");
+    {
+        gateway::GatewayConfig config;
+        config.wssPort = probe_free_port();
+        config.tlsCertPath = certs.cert_path;
+        config.tlsKeyPath = dir + "/nope.key.pem";
+        bool threw = false;
+        std::string message;
+        try {
+            gateway::GatewayServer server(config);
+            (void)server;
+        } catch (const std::exception& ex) {
+            threw = true;
+            message = ex.what();
+        }
+        TEST_ASSERT(threw, "missing private key rejected at assembly");
+        TEST_ASSERT(message.find("wss tls context load failed") != std::string::npos,
+                    "load failure surfaced: " + message);
+    }
+
+    // ③ 私钥文件内容不是 PEM：装载失败原因可读（不静默降级成明文入口）。
+    const std::string garbage_key = dir + "/garbage.key.pem";
+    {
+        std::FILE* key = std::fopen(garbage_key.c_str(), "wb");
+        TEST_ASSERT(key != nullptr, "garbage key file opened");
+        const char text[] = "not a private key at all\n";
+        std::fwrite(text, 1, sizeof(text), key);
+        std::fclose(key);
+    }
+    {
+        gateway::GatewayConfig config;
+        config.wssPort = probe_free_port();
+        config.tlsCertPath = certs.cert_path;
+        config.tlsKeyPath = garbage_key;
+        bool threw = false;
+        std::string message;
+        try {
+            gateway::GatewayServer server(config);
+            (void)server;
+        } catch (const std::exception& ex) {
+            threw = true;
+            message = ex.what();
+        }
+        TEST_ASSERT(threw, "garbage private key rejected at assembly");
+        TEST_ASSERT(!message.empty(), "load failure reason readable");
+    }
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif // !_WIN32
 
 }  // namespace
@@ -1027,6 +1732,12 @@ int main() {
         {"wss_without_certs_throws", test_wss_without_certs_throws},
         {"gateway_server_ws_e2e", test_gateway_server_ws_e2e},
         {"ws_slow_consumer_kicked", test_ws_slow_consumer_kicked},
+        {"gateway_wss_game_e2e", test_gateway_wss_game_e2e},
+        {"gateway_wss_resume_after_drop", test_gateway_wss_resume_after_drop},
+        {"gateway_wss_resume_after_tcp_drop", test_gateway_wss_resume_after_tcp_drop},
+        {"gateway_wss_rejects_untrusted_chain", test_gateway_wss_rejects_untrusted_chain},
+        {"gateway_wss_rejects_hostname_mismatch", test_gateway_wss_rejects_hostname_mismatch},
+        {"gateway_wss_key_config_rejected", test_gateway_wss_key_config_rejected},
     };
 
     int failed = 0;

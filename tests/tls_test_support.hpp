@@ -114,15 +114,20 @@ inline CertPair generate_self_signed(const std::string& dir, const std::string& 
 
 class TlsClient {
 public:
-    ~TlsClient() {
+    ~TlsClient() { close(); }
+
+    void close() {
         if (ssl_ != nullptr) {
             SSL_free(ssl_);
+            ssl_ = nullptr;
         }
         if (ctx_ != nullptr) {
             SSL_CTX_free(ctx_);
+            ctx_ = nullptr;
         }
         if (fd_ >= 0) {
             ::close(fd_);
+            fd_ = -1;
         }
     }
 
@@ -158,13 +163,62 @@ public:
             error = "ssl ctx failed";
             return false;
         }
-        SSL_CTX_set_verify(ctx_, SSL_VERIFY_NONE, nullptr);  // 自签夹具不校验链
+        // 默认 SSL_VERIFY_NONE = 自签夹具不校验链（底座/入口测试用）；
+        // configureVerify 先于本调用则装信任锚并置 SSL_VERIFY_PEER——verify
+        // 模式在 SSL_new 时拷进 SSL 对象，故必须先于 SSL_new 落到 ctx 上。
+        SSL_CTX_set_verify(ctx_, verify_configured_ ? SSL_VERIFY_PEER : SSL_VERIFY_NONE,
+                           nullptr);
+        if (verify_configured_ &&
+            SSL_CTX_load_verify_locations(ctx_, trust_anchor_.c_str(), nullptr) != 1) {
+            error = "ca chain load failed: " + trust_anchor_;
+            return false;
+        }
         ssl_ = SSL_new(ctx_);
         if (ssl_ == nullptr || SSL_set_fd(ssl_, fd_) != 1) {
             error = "ssl set fd failed";
             return false;
         }
+        if (!verify_host_.empty() && SSL_set1_host(ssl_, verify_host_.c_str()) != 1) {
+            error = "verify host bind failed";
+            return false;
+        }
         return true;
+    }
+
+    // ---- 验签面（L61 WSS 验收）：默认关（自签夹具不校验）；装信任锚即开
+    //      SSL_VERIFY_PEER，绑主机名即把 SNI 与 subject/CN/SAN 校验都上。
+    //      start() 之后调也有效（SSL_new 尚未发起握手）——本测试里总在
+    //      start() 返回后、首个 step() 前设置。----
+
+    // 验签配置：信任锚（PEM，自签证书兼作 CA 亦可）+ 主机名（SNI 与
+    // subject/CN/SAN 校验同绑）。须在 start() 之前调用——SSL_new 会把
+    // ctx 的 verify 模式拷进 SSL 对象，事后改 ctx 静默不生效（验签码照
+    // 常计算但握手仍通过，等于没验）。已 start 则返 false，让调用方当场
+    // 看见配错顺序，而不是拿到一条没验签的加密通道。
+    bool configureVerify(const std::string& ca_pem_path, const std::string& host) {
+        if (ssl_ != nullptr) {
+            return false;  // 已握手通道不可重配（见上方注释）
+        }
+        trust_anchor_ = ca_pem_path;
+        verify_host_ = host;
+        verify_configured_ = true;  // start() 建 ctx 时装锚并置 SSL_VERIFY_PEER
+        return true;
+    }
+
+    // X509 验签结论：0 = 通过（或未走到验签阶段）；非 0 = 验签错误码。
+    std::uint32_t verifyResult() const {
+        return ssl_ != nullptr ? static_cast<std::uint32_t>(SSL_get_verify_result(ssl_)) : 0;
+    }
+
+    // 最近一次 OpenSSL 错误串（step() 返回 kFailed 后读，供断言「原因可读」）。
+    std::string lastError() const {
+        char buf[512];
+        const unsigned long code = ERR_get_error();
+        if (code == 0) {
+            return "";
+        }
+        ERR_error_string_n(code, buf, sizeof buf);
+        return buf;
     }
 
     enum class Step { kInProgress, kConnected, kFailed };
@@ -229,6 +283,9 @@ private:
     SSL_CTX* ctx_ = nullptr;
     SSL* ssl_ = nullptr;
     bool socket_connected_ = false;
+    bool verify_configured_ = false;
+    std::string trust_anchor_;
+    std::string verify_host_;
 };
 
 }  // namespace tls_test_support
