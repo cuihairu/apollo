@@ -23,6 +23,11 @@ add_subdirectory(admin)
 # 不向每个服务复制；无业务链路依赖。
 add_subdirectory(apolloc)
 
+# InterfacesApp——平台/渠道回调 HTTP/HTTPS 入口进程壳（todo L45 批④）：
+# 只依赖 net M1 内核三件（link/tcp+tls/ws），无门控条件；与 gateway 游戏
+# 入口互不进入对方连接模型（路由隔离验收 todo L45）。
+add_subdirectory(interfaces)
+
 # 检查依赖是否可用
 # Gateway app 的 ingress 头仍包含旧 modules/protocol 的 apollo/protocol/*.hpp
 # （迁移未完成），故除 net::protocol 外还需旧模块目标存在。

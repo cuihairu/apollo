@@ -1166,6 +1166,34 @@ endif()
 add_test(NAME GatewayWsIngressTests COMMAND gateway_ws_ingress_tests)
 endif()
 
+# ========== Interfaces HTTP/HTTPS 入口真接线测试 (L45 批④) ==========
+# 平台/渠道回调入口（localhost 实 socket）：HTTP 路由 + 专用 ws 升级路由
+# 路由隔离（升级路由不降级、http 路由不受理升级）+ 预算面（8KiB 头 →
+# 431、1MiB 体 → 413）+ HTTPS 底座（证书夹具现场自签）+ 并行监听互斥
+# 号段 + 端口冲突显形。只依赖 net M1 三件（link/tcp+tls/ws），无协议
+# 门控。Windows 下 link TCP/TLS 底座不进 M1 批，用例本体空转。
+add_executable(interfaces_http_tests
+    test_interfaces_http.cpp
+    ../apps/interfaces/src/http_ingress.cpp
+)
+target_include_directories(interfaces_http_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/interfaces/include
+)
+target_link_libraries(interfaces_http_tests PRIVATE
+    apollo::core
+    apollo::net_link
+    apollo_net_tls
+    apollo_net_ws
+)
+if(WIN32)
+    target_link_libraries(interfaces_http_tests PRIVATE ws2_32)
+    target_compile_definitions(interfaces_http_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(interfaces_http_tests PRIVATE /utf-8)
+endif()
+add_test(NAME InterfacesHttpTests COMMAND interfaces_http_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests
