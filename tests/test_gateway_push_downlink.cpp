@@ -1,4 +1,4 @@
-// 网关服务端主动下行测试（L51 游戏 WS/WSS → Lua/场景接线与下行第一锤）：
+// 网关服务端主动下行测试（L51 游戏 WS/WSS → 下行/广播/Lua 消费全链）：
 // World 939 client_deliver → Gateway sendToClient → 真实客户端 socket。
 //
 // 既有 egress 级用例（world_drain/update_continuity）只用 ClientFace 汇流点
@@ -8,7 +8,11 @@
 // 真投真实 socket。覆盖：
 //   1. TCP 明文客户端收到 World 主动推送（帧头 sessionId = 本会话号）；
 //   2. WS 客户端收到同一路推送（升级 /game → masked binary → 服务端 binary）；
-//   3. 推送按会话寻址：非队长会话收不到 PARTY_RESULT（多会话隔离）。
+//   3. 推送按会话寻址：非队长会话收不到 PARTY_RESULT（多会话隔离）；
+//   4. AOI 移动广播只达视野内会话（逐 viewer 重编帧头；视野外零帧）；
+//   5. 同一移动广播经 WS 视野内客户端复现（跨传输）；
+//   6. 技能伤害广播：零会话号帧头按 viewer 重编（战斗下发面）；
+//   7. 客户端消息 → Lua 契约路由消费 → world 模块挂推送源（脚本源帧回环）。
 // 下行证据走线缆可见面（客户端 socket 真收到协议全帧），非日志非计数。
 // Windows：link TCP/TLS 底座不进 M1 批，用例本体空转。
 
@@ -18,6 +22,7 @@
 #include "apollo/net/ws/frame.hpp"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
+#include "apollo_contract.h"
 
 #include <algorithm>
 #include <chrono>
@@ -25,6 +30,7 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -486,6 +492,9 @@ struct WorldEnd {
     TemporaryDirectory files;
     WorldAppConfig config;
     std::unique_ptr<world_app::WorldApp> world;
+    // 脚本源（非空 = 落临时文件并接进启动装载序 handler → 契约）。
+    std::string scriptHandlersSrc;
+    std::string scriptContractSrc;
 
     bool start(std::uint32_t world_id) {
         config.worldId = world_id;
@@ -493,6 +502,26 @@ struct WorldEnd {
         config.m1Port = 0;
         config.m1RouteJson = kRouteJson;
         config.tickRateMs = 20;
+        if (!scriptHandlersSrc.empty() || !scriptContractSrc.empty()) {
+            // TemporaryDirectory 只算路径不建目录——落盘前显式建（ofstream
+            // 静默失败面：目录缺失时 f<< 为 no-op，读端只会拿到 nullopt）。
+            std::error_code ec;
+            std::filesystem::create_directories(files.path, ec);
+        }
+        if (!scriptHandlersSrc.empty()) {
+            const auto path = files.path / "handlers.lua";
+            std::ofstream f(path, std::ios::binary);
+            f << scriptHandlersSrc;
+            f.close();
+            config.scriptHandersFile = path.string();
+        }
+        if (!scriptContractSrc.empty()) {
+            const auto path = files.path / "contract.lua";
+            std::ofstream f(path, std::ios::binary);
+            f << scriptContractSrc;
+            f.close();
+            config.scriptContractFile = path.string();
+        }
         try {
             world = std::make_unique<world_app::WorldApp>(config);
             world->start();
@@ -932,6 +961,76 @@ bool test_skill_damage_broadcast() {
     return true;
 }
 
+// ---- 7. 客户端消息 → Lua 契约路由消费 → world 模块挂推送源（脚本源帧回环）----
+// CELL_ENTITY_MOVE 上行 → C++ handler（权威状态）→ dispatch_script_intent 按
+// 契约路由带参调 Lua cell_entity_move → 脚本 world.broadcast_viewers 挂源 →
+// 逐 viewer 重编帧头走 939 下行。缆线可见面验收「客户端消息到 Lua/场景逻辑」。
+bool test_lua_intent_push_loop() {
+    WorldEnd world;
+    // 契约只覆盖移动一路：路由 926 → 全局函数 cell_entity_move（参数面 =
+    // 帧体字段 entity + 前后坐标，typed LuaValue 推栈）。
+    world.scriptContractSrc =
+        "return { routes = { [" +
+        std::to_string(static_cast<int>(apollo::contract::gen::MsgId::cell_entity_move)) +
+        "] = 'cell_entity_move' }, write_whitelist = {}, version = 1 }\n";
+    world.scriptHandlersSrc =
+        "cell_entity_move = function(entity_id, ox, oy, oz, nx, ny, nz)\n"
+        "  world.broadcast_viewers(entity_id, 7777, 'lua-push:' .. tostring(nx))\n"
+        "end\n";
+    TEST_ASSERT(world.start(51), "world started with script + contract");
+    gateway::GatewayServer server(gateway_config(world.world->m1Link().listenPort(), 0));
+    server.start();
+
+    // mover 与 viewer 相邻（同在半径 200 视野内）：移动后两者都应收到脚本源
+    // 7777 帧（viewer 旁观 + mover 自 echo），帧头会话号各自重编。
+    TcpTestClient mover;
+    std::uint64_t sid_mover = 0;
+    TEST_ASSERT(tcp_establish(mover, server, server.listenPort(), 9401, sid_mover),
+                "mover session established");
+    mover.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9401, 0.0f, 0.0f, 0.0f), sid_mover)));
+
+    TcpTestClient viewer;
+    std::uint64_t sid_viewer = 0;
+    TEST_ASSERT(tcp_establish(viewer, server, server.listenPort(), 9402, sid_viewer),
+                "viewer session established");
+    viewer.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9402, 1.0f, 0.0f, 0.0f), sid_viewer)));
+
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_mover, 9401, 8000), "mover spawned");
+    TEST_ASSERT(wait_player_spawned(*world.world, sid_viewer, 9402, 8000), "viewer spawned");
+    {
+        std::vector<std::uint8_t> scratch;
+        while (mover.recvLinkFrame(scratch)) {}
+        while (viewer.recvLinkFrame(scratch)) {}
+    }
+
+    // 移动上行：C++ handler 先落权威状态，Lua 路由随后带参消费并挂推送源。
+    mover.sendAll(frame_bytes(3, 0,
+        protocol::MessageCodec::encode(make_move(9401, 3.0f, 0.0f, 0.0f), sid_mover)));
+
+    // viewer 收到脚本源帧：类型 7777、本会话号寻址、body = 'lua-push:' ..
+    // tostring(nx)。Lua 5.4 tostring(3.0) = "3.0"，故按前缀匹配。
+    ProtocolFrame out_viewer;
+    std::vector<ProtocolFrame> sink_viewer;
+    TEST_ASSERT(wait_tcp_frame(viewer, 7777, sid_viewer, out_viewer, sink_viewer, 8000),
+                "viewer receives lua-sourced broadcast");
+    const std::string body_viewer(out_viewer.body.begin(), out_viewer.body.end());
+    TEST_ASSERT(body_viewer.rfind("lua-push:3", 0) == 0,
+                "lua body carries new-x argument (tostring(3.0) prefix)");
+
+    // mover 自 echo：同一路广播按其会话号寻址到达自己。
+    ProtocolFrame out_mover;
+    std::vector<ProtocolFrame> sink_mover;
+    TEST_ASSERT(wait_tcp_frame(mover, 7777, sid_mover, out_mover, sink_mover, 8000),
+                "mover receives its own lua-sourced broadcast");
+
+    server.stop();
+    world.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -948,6 +1047,7 @@ int main() {
         {"aoi_broadcast_to_viewers", test_aoi_broadcast_to_viewers},
         {"aoi_broadcast_to_ws_viewer", test_aoi_broadcast_to_ws_viewer},
         {"skill_damage_broadcast", test_skill_damage_broadcast},
+        {"lua_intent_push_loop", test_lua_intent_push_loop},
     };
 
     int failed = 0;

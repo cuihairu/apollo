@@ -306,6 +306,18 @@ void ScriptRuntime::register_module(const char* name, const luaL_Reg* funcs) {
     raw_setglobal(L_, name);
 }
 
+void ScriptRuntime::register_module_ctx(const char* name, const luaL_Reg* funcs, void* ctx) {
+    // 同 register_module，但逐函数包一层 lightuserdata upvalue——模块函数
+    // 经 lua_upvalueindex(1) 取宿主句柄，无进程级全局态（§4.1 注入唯一通道）。
+    lua_createtable(L_, 0, 0);
+    for (; funcs->name != nullptr; ++funcs) {
+        lua_pushlightuserdata(L_, ctx);
+        lua_pushcclosure(L_, funcs->func, 1);
+        lua_setfield(L_, -2, funcs->name);
+    }
+    raw_setglobal(L_, name);
+}
+
 // ---- §3.2 热替换：编译 + 冒烟在影子栈完成，通过才原子换 _G[name] ----
 
 namespace {
@@ -1241,6 +1253,10 @@ bool ScriptRuntime::load_contract(const std::string& source) {
 }
 
 bool ScriptRuntime::call_route(std::uint32_t msg_id) {
+    return call_route_args(msg_id, {});
+}
+
+bool ScriptRuntime::call_route_args(std::uint32_t msg_id, const std::vector<LuaValue>& args) {
     const auto it = contract_routes_.find(msg_id);
     if (it == contract_routes_.end()) {
         return false;
@@ -1251,10 +1267,21 @@ bool ScriptRuntime::call_route(std::uint32_t msg_id) {
               "route handler missing: " + it->second);
         return false;
     }
+    for (const auto& v : args) {
+        switch (v.type) {
+            case LuaValue::Type::kNil: lua_pushnil(L_); break;
+            case LuaValue::Type::kBool: lua_pushboolean(L_, v.b ? 1 : 0); break;
+            case LuaValue::Type::kInt: lua_pushinteger(L_, v.i); break;
+            case LuaValue::Type::kDouble: lua_pushnumber(L_, v.d); break;
+            case LuaValue::Type::kString:
+                lua_pushlstring(L_, v.s.data(), v.s.size());
+                break;
+        }
+    }
     ++stats_.calls;
     used_instructions_ = 0;
     const auto t0 = steady_now_us();
-    const int rc = lua_pcall(L_, 0, 0, 0);
+    const int rc = lua_pcall(L_, static_cast<int>(args.size()), 0, 0);
     stats_.instructions += used_instructions_;
     profile_record(it->second.c_str(), used_instructions_, steady_now_us() - t0);
     if (rc != LUA_OK) {

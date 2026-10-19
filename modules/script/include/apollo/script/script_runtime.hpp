@@ -240,6 +240,9 @@ public:
 
     // §4.1 启动期注入：具名模块表挂到全局（白名单制，非自动反射）。
     void register_module(const char* name, const luaL_Reg* funcs);
+    // §4.1 模块注入（带宿主上下文）：每函数一 lightuserdata upvalue
+    //（lua_upvalueindex(1) = ctx），模块函数经此取宿主句柄（无全局态）。
+    void register_module_ctx(const char* name, const luaL_Reg* funcs, void* ctx);
 
     // §3.2 热替换：模块源必须 return 一个表。编译 + 冒烟（smoke()）在影子栈
     // 完成，全部通过才原子换 _G[name]（Phase B）；任何一步失败旧表不动。
@@ -347,6 +350,9 @@ public:
     // 契约路由分发：id → handler（全局函数或 module.func 点路径）。
     // 未注册 id / handler 不可达 / 执行错误均返回 false。
     bool call_route(std::uint32_t msg_id);
+    // 契约路由分发（带参）：args 逐值作 handler 实参（宿主 → 脚本传值面，
+    // 客户端消息进 Lua 消费端的通道）。其余语义同 call_route。
+    bool call_route_args(std::uint32_t msg_id, const std::vector<LuaValue>& args);
 
     // §7.1 attach eval：admin 单入口投递，owning 线程 tick 边界由宿主择机调用。
     // 同一沙盒面（白名单/预算/内存上限全管辖）；表达式优先、语句回退；

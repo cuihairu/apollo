@@ -10,6 +10,7 @@
 #include "apollo/game/world/world_session_manager.hpp"
 #include "apollo/runtime/world_host.hpp"
 #include "apollo/core/metrics/metric_registry.h"
+#include <lua.hpp>
 #include <chrono>
 #include <memory>
 #include <thread>
@@ -121,6 +122,18 @@ private:
     // 脚本宿主接线（scripting-lua §2/§5.1）：gameLoop 每拍幂等——未挂的
     // scene 挂上 runtime（新 scene 下一拍自动挂；attach 幂等守卫在 Scene）。
     void attach_script_to_scenes();
+
+    // 客户端消息 → 契约路由 Lua 分发（L51 消费端面）：C++ handler 先行
+    //（权威状态变更），随后按契约路由带参调 Lua（cell 五族按帧体字段）；
+    // 脚本未挂 / 契约未覆盖 = 静默跳过；执行错走 runtime fault 面，不停拍。
+    void dispatch_script_intent(const IntentEnvelope& intent);
+
+    // world 模块注入（scripting-lua §4.1）：Lua 挂推送源的唯一通道——
+    // broadcast_viewers / push_session 两出口（scene 脚本主动下发面）。
+    void register_world_module();
+    // world 模块 C 函数面（upvalue 1 = WorldApp*；静态成员取私有下行面）。
+    static int lua_world_broadcast_viewers(lua_State* L);
+    static int lua_world_push_session(lua_State* L);
 
     // M1 意图受理点（2b-ii：泵线程 = gameThread_ 内同步调用）：submitIntent
     // 判定 + 拒收即时回执（顶格 2101 / 维护闸 2001）；受理成功不回包，回执随
