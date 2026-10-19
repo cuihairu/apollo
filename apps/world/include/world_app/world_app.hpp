@@ -82,7 +82,8 @@ public:
     // ---- cell 注册登记（960/961，L101 注册首切片）----
     // 注册表条目：逻辑 ID + 启动代次 + 自报面（地址/能力/负载/排空/就绪）
     // + 链路 peer 自报名（回执与后续命令按名查链路）。registered_at_ms =
-    // steady 毫秒（心跳失效/重注册窗口的基准面，L101 后续切片消费）。
+    // last-heard（steady 毫秒，每次受理刷新；心跳失效窗 cellExpiryMs 的
+    // 摘除基准）。
     struct CellRegistration {
         std::uint64_t cell_id = 0;
         std::uint64_t start_epoch = 0;
@@ -153,6 +154,10 @@ private:
     // 幂等刷新，新代次替换（重启换代），旧代次拒绝不可覆盖；非法（cell_id/
     // start_epoch = 0）显式驳回。回执 961 同步回带（管理代次 = §5.7 透传）。
     void onCellRegister(const std::string& peer, const CellRegisterRequest& request);
+    // 注册表过期清扫（960 心跳批；post-tick 驱动，同注册表单写者上下文）：
+    // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
+    // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。
+    void driveCellRegistry();
     // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
     void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                          const std::string& result, const std::string& error);
@@ -185,8 +190,9 @@ private:
     std::unordered_map<std::uint64_t, std::string> evalReplyPeers_;
     std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
     // cell 注册登记（960，L101 注册首切片）：cell_id → 登记；代次裁决在
-    // 受理点（旧代次拒、新代次替换、同代次幂等刷新）。心跳失效/重注册与
-    // 旧执行端隔离、World 侧分配（L102 拓扑批）待做——本表是它们的承载面。
+    // 受理点（旧代次拒、新代次替换、同代次幂等刷新），心跳失效摘除在
+    // driveCellRegistry（过期窗 cellExpiryMs）。旧执行端隔离、World 侧
+    // 分配（L102 拓扑批）待做——本表是它们的承载面。
     std::unordered_map<std::uint64_t, CellRegistration> cellRegistrations_;
 };
 

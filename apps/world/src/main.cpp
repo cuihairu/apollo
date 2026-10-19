@@ -82,6 +82,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.registerPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--cell-id" && i + 1 < argc) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--cell-expiry-ms" && i + 1 < argc) {
+            config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
         } else if (arg == "--size" && i + 2 < argc) {
@@ -108,6 +110,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --register-host <h>        World M1 host to register with, cell role (default: off)\n"
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
                       << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
+                      << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
                       << "  --tick-rate <ms>            Tick rate in ms (default: 50)\n"

@@ -40,6 +40,12 @@ struct WorldAppConfig {
     // 逻辑 cell ID（注册开则必须非 0；PID/IP 不当身份，重启保留同 ID 换代次）。
     std::uint64_t cellId = 0;
 
+    // 注册表过期窗毫秒（L101 心跳批，manager 侧单方裁决）：登记条目
+    // last-heard（registered_at_ms，每次受理刷新）超窗未刷新即整条摘除——
+    // cell 侧周期心跳（960 重发）维持存活。0 = 永不过期（单机形态无注册面
+    // 时无差；cell 全停发 30s 后摘除是缺省策略）。
+    std::uint64_t cellExpiryMs = 30000;
+
     // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 base
     // store M1 面（958/959）。port = 0 = 面关（结算挂账降级态——L19 资料
     // 归属切换后 World 无锚点解析器）。

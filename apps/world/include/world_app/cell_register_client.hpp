@@ -16,8 +16,9 @@
 //
 // 生命周期（注册即幂等，重发无害）：链路 kUp 跃迁（首连与断链重连）各发一
 // 次 960——同代次重注册由受理面裁决为幂等刷新（code 2），新代次替换
-//（code 1），旧代次拒绝（code 3）原样显形给宿主。心跳失效/重注册窗口与
-// 旧执行端隔离仍待做（L101 后续切片，超时重发随心跳批）。
+//（code 1），旧代次拒绝（code 3）原样显形给宿主。心跳失效/重注册窗口已
+// 落地（heartbeat_ms 周期重发 960 = last-heard 刷新 + 回执丢失重试；World
+// 侧 cellExpiryMs 超窗摘除）；旧执行端隔离与控制面失联策略仍待做。
 
 #include <cstdint>
 #include <memory>
@@ -39,6 +40,10 @@ struct CellRegisterConfig {
     std::uint64_t start_epoch = 0;
     // 契约路由表 JSON（空路径 = 装配失败显形，不带隐式回退）。
     std::string route_json;
+    // 周期心跳间隔毫秒（心跳批）：链路 up 期间每间隔重发一次 960（幂等刷新
+    // World 侧 last-heard，兼作 961 回执丢失的重试）。0 = 关（仅 kUp 跃迁
+    // 单发——注册即幂等，重发无害）。
+    std::uint64_t heartbeat_ms = 5000;
     // 握手代次（§5.7；0 = 进程自铸）。
     std::uint64_t authority_epoch = 0;
 };

@@ -116,12 +116,16 @@ public:
             return;
         }
         manager_->pump(now_ms);  // 961 记账在 handle_reply 内自取锁
-        // kUp 跃迁（首连/断链重连）即发 960；非跃迁不重发——重发裁决在受理面
-        // 幂等，超时重发随心跳批次（不重试风暴）。
+        // kUp 跃迁（首连/断链重连）即发 960；up 期间周期心跳（heartbeat_ms
+        // 间隔）重发 960——幂等刷新 World 侧 last-heard，兼作 961 回执丢失的
+        // 重试（重发裁决在受理面幂等，不重试风暴）。
         const bool up = link_up();
         if (up && !up_seen_) {
             up_seen_ = true;
-            send_register();
+            send_register(now_ms);
+        } else if (up && config_.heartbeat_ms > 0
+                   && now_ms - last_send_ms_ >= config_.heartbeat_ms) {
+            send_register(now_ms);
         } else if (!up) {
             up_seen_ = false;
         }
@@ -148,7 +152,7 @@ private:
         return l != nullptr && l->state() == link::LinkState::kUp;
     }
 
-    void send_register() {
+    void send_register(std::uint64_t now_ms) {
         auto* l = manager_ ? manager_->link("world") : nullptr;
         if (l == nullptr) {
             return;
@@ -170,8 +174,9 @@ private:
         if (l->send(kRegisterRequestId, payload.data(), payload.size(),
                     link::SendClass::kReliable)
             != link::SendCode::kAccepted) {
-            return;  // 队列满等瞬态——下个跃迁再发
+            return;  // 队列满等瞬态——下个跃迁/心跳拍再发
         }
+        last_send_ms_ = now_ms;  // 心跳节拍基准（发送成功才推进）
         std::lock_guard<std::mutex> lock(state_mutex_);
         state_.sent = true;
         ++state_.attempts;
@@ -202,6 +207,7 @@ private:
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;  // 宿主泵线程生命周期
     bool up_seen_ = false;
+    std::uint64_t last_send_ms_ = 0;  // 最近一次 960 发送成功时刻（心跳节拍基准）
     std::uint64_t next_request_id_ = 0;  // 0 保留，从 1 起单调
     mutable std::mutex state_mutex_;
     CellRegisterState state_;        // 泵上下文写 / 任意线程读

@@ -31,7 +31,7 @@ This document describes the actual directory layout of the current repository.
 | `base/` | Standalone base entry with remote database access, owning persistent profiles and settlement admission |
 | `database/` | Dedicated M1 load/save and file journal |
 | `common/` | Reusable profile, storage, and directory implementations; hosts assemble along Base/database boundaries |
-| `world/` | world entry, manager role by default and `--role=cell` executor (execution kernel CellApp extracted and runnable standalone; the cell registration admission face and active dialing 960/961 are landed; topology/capacity orchestration follows later P2 items) |
+| `world/` | world entry, manager role by default and `--role=cell` executor (execution kernel CellApp extracted and runnable standalone; the cell registration admission face, active dialing, and heartbeat expiry window 960/961 are landed; topology/capacity orchestration follows later P2 items) |
 | `machined/` | Process supervision (roster spawn/backoff restart/death reporting) |
 | `admin/`, `fleetctl/`, `logger/` | Operations and measurement tools |
 | `apolloc/` | Project scaffold CLI (`apolloc init <path>` creates a minimal skeleton; template pending P0.2) |

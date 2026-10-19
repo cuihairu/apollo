@@ -79,6 +79,8 @@ WorldApp::WorldApp(const WorldAppConfig& config)
         // 952 编排推进（P4 仅代码更新批）：在装模块 onTick + 观察窗/推广/
         // 回滚队列（owning 线程纪律）
         driveModuleRollout();
+        // cell 注册表过期清扫（960 心跳批）：last-heard 超窗摘除
+        driveCellRegistry();
     });
 }
 
@@ -504,6 +506,30 @@ const WorldApp::CellRegistration* WorldApp::find_cell_registration(
     // 泵上下文只读观测面（注册表单写者 = M1 泵上下文受理点）
     const auto it = cellRegistrations_.find(cell_id);
     return it != cellRegistrations_.end() ? &it->second : nullptr;
+}
+
+void WorldApp::driveCellRegistry() {
+    // 注册表过期清扫（960 心跳批；post-tick 上下文 = 注册表单写者线程）：
+    // last-heard（registered_at_ms，每次受理刷新）超 cellExpiryMs 未刷新 =
+    // 心跳失效，整条摘除。摘除后该 cell 重注册走受理面首注册路径（登记
+    // 忘却——代次墓碑随旧执行端隔离批）；cell 侧心跳 = 周期 960 重发。
+    if (config_.cellExpiryMs == 0 || cellRegistrations_.empty()) {
+        return;
+    }
+    const auto now_ms = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    for (auto it = cellRegistrations_.begin(); it != cellRegistrations_.end();) {
+        if (now_ms - it->second.registered_at_ms > config_.cellExpiryMs) {
+            worldLog().info("cell expired: id=" + std::to_string(it->first)
+                            + " epoch=" + std::to_string(it->second.start_epoch)
+                            + " peer=" + it->second.peer);
+            it = cellRegistrations_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& request) {

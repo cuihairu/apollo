@@ -452,6 +452,7 @@ bool test_production_client_registers_and_redials() {
     cfg.advertise_port = 8801;
     cfg.start_epoch = 5;
     cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 0;  // 0 = 关（仅 kUp 跃迁单发形态由本例钉住；心跳归下一例）
     auto client = world_app::makeCellRegisterClient(cfg);
     TEST_ASSERT(client->start(), "client started");
     // 服务端 gameLoop 自泵受理，本线程泵客户端（同 test_world_drain 惯例）。
@@ -549,6 +550,88 @@ bool test_production_client_invalid_config() {
     return true;
 }
 
+// ---------- heartbeat + expiry：心跳续活 / 停发过期摘除 / 过期后重注册 ----------
+// World 过期窗 cellExpiryMs = 服务端单方裁决注册表存活（last-heard = 每次
+// 受理刷新的 registered_at_ms）；心跳 = 周期 960 走幂等刷新路径（兼作 961
+// 回执丢失重试）。过期 = 整条移除——代次墓碑随旧执行端隔离批，过期后旧
+// 代次重注册按首注册受理（不假装记得）。
+
+bool test_cell_heartbeat_and_expiry() {
+    std::cout << "Running: test_cell_heartbeat_and_expiry..." << std::endl;
+    WorldEnd server;
+    server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
+    TEST_ASSERT(server.start(115), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+
+    // 阶段 1：裸 960 注册后停发 → 过期窗内整条摘除
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell), "cell dialed");
+    RegisterReply r;
+    TEST_ASSERT(register_roundtrip(cell, 9601, 7, 1, "127.0.0.1", 9201, 1, 10, 0, true, r),
+                "register accepted");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "code accepted");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "one registration");
+    // 停发（不再泵不再发 960），等过期窗 + 清扫拍（服务端 gameLoop 自泵）
+    TEST_ASSERT(wait_until([&] {
+                    return server.world->find_cell_registration(7) == nullptr;
+                }, 3000),
+                "expired entry removed");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "registry empty");
+
+    // 过期后同代次重注册 → 首注册受理（登记忘却；代次墓碑随旧执行端隔离批）
+    TEST_ASSERT(register_roundtrip(cell, 9602, 7, 1, "127.0.0.1", 9201, 1, 10, 0, true, r),
+                "re-register after expiry reply arrived");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "re-register after expiry = fresh admission");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "re-registered");
+
+    // 阶段 2：生产客户端周期心跳 > 过期窗持续续活
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = server.world->m1Link().listenPort();
+    cfg.cell_id = 42;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8801;
+    cfg.start_epoch = 5;
+    cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 40;  // 测试窗（生产默认 5000；0 = 关 = 仅跃迁单发形态）
+    auto client = world_app::makeCellRegisterClient(cfg);
+    TEST_ASSERT(client->start(), "heartbeat client started");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return client->state().replies >= 1;
+                }, 5000),
+                "first heartbeat roundtrip");
+
+    // 持续跑 > 3×过期窗：心跳刷新 last-heard → 条目不摘除
+    const auto keep_deadline = std::chrono::steady_clock::now() + 600ms;
+    while (std::chrono::steady_clock::now() < keep_deadline) {
+        client->pump(now_ms());
+        std::this_thread::sleep_for(10ms);
+    }
+    const auto st = client->state();
+    TEST_ASSERT(st.attempts >= 3, "periodic heartbeats sent");
+    TEST_ASSERT(st.replies >= 3, "heartbeat replies recorded");
+    TEST_ASSERT(server.world->find_cell_registration(42) != nullptr,
+                "entry kept alive by heartbeats");
+
+    // 停心跳 → 过期摘除；cell 7（阶段 1 重注册后无心跳）同样过期——
+    // 停发/未发两条路径同归过期窗裁决
+    client->stop();
+    TEST_ASSERT(wait_until([&] {
+                    return server.world->registered_cell_count() == 0;
+                }, 3000),
+                "all entries expired after heartbeats cease");
+    TEST_ASSERT(server.world->find_cell_registration(7) == nullptr, "cell 7 expired");
+    TEST_ASSERT(server.world->find_cell_registration(42) == nullptr, "cell 42 expired");
+
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -560,7 +643,8 @@ int main() {
                     && test_cell_register_invalid_and_reserved()
                     && test_cell_register_malformed_rejected()
                     && test_production_client_registers_and_redials()
-                    && test_production_client_invalid_config();
+                    && test_production_client_invalid_config()
+                    && test_cell_heartbeat_and_expiry();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;
