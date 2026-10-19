@@ -114,6 +114,24 @@ public:
     // 消费；跨线程持有指针违反单写者纪律）----
     apollo::game::world::Scene* find_scene(std::uint64_t scene_id);
     std::uint64_t default_scene_id() const { return defaultSceneId_; }
+
+    // ---- Space ↔ Scene 映射面（L99 首切片）----
+    // 口径（docs/design/bigworld-apollo-mapping §2/§6）：Space 对应现有 Scene
+    // 的空间语义，不叠同义容器；space_id 是内核路由键（spaceToScene_），
+    // scene_id 由 world 自增分配——两域数值独立，映射是真实的表而非恒等别名。
+    // 三 ID 域分开：space id = 路由键；cell 分区 id 今日退化为 scene id（每
+    // Space 单全幅 Cell，跨 Space 拆分随 L101/L102 注册批）；执行进程身份 =
+    // 本进程（worldId；注册后由 worldServer 分配）。add_space 在内核线程 /
+    // start 前注册窗调用（同 ctor 时序）；返回目标 scene id（0 = 创建失败）。
+    // 重复空间幂等返回既有 scene。
+    std::uint64_t add_space(std::uint64_t space_id,
+                            const apollo::game::world::SceneDescriptor& descriptor);
+    // 路由查询（同 default_scene_id 的内核线程上下文约束；未知空间回落默认）
+    std::uint64_t scene_id_of_space(std::uint64_t space_id) const {
+        return resolve_scene_id(space_id);
+    }
+    std::size_t space_count() const { return spaceToScene_.size(); }
+
     squad_instance::SquadInstanceService* squadInstanceService() noexcept {
         return squadInstanceService_.get();
     }
@@ -165,8 +183,11 @@ private:
     std::uint64_t resolve_scene_id(std::uint64_t space_id) const;
 
     void ensureDefaultScene();
+    // space_id 承载会话落点：路由解析（未知空间回落默认）后进 scene；
+    // 实例绑定按落点 scene 反查（无实例的空间绑 0——Space 可无临时 Instance）
     void attachPlayerWorldSession(protocol::SessionID session_id, protocol::PlayerID player_id,
-                                  EntityID entity_id, const Position& position);
+                                  EntityID entity_id, const Position& position,
+                                  std::uint64_t space_id);
     void detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id);
 
     void record_metrics(std::int64_t elapsed_ms);

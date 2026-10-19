@@ -309,8 +309,10 @@ std::vector<uint8_t> CellApp::handleCellCreateEntity(const std::vector<uint8_t>&
             //   不再把 entity_id 兼任 session_id。
             const auto session_id = header.sessionId;
             const auto player_id = static_cast<protocol::PlayerID>(msg.entityId);
+            // L99：落点空间随请求（旧代码忽略 msg.spaceId 一律落默认空间）
             attachPlayerWorldSession(session_id, player_id, msg.entityId,
-                                     {msg.position.x, msg.position.y, msg.position.z});
+                                     {msg.position.x, msg.position.y, msg.position.z},
+                                     msg.spaceId);
         } else {
             // P2-1b：非玩家实体入 Scene 实体集合（随 Scene::tick 驱动）
             scene->spawn_entity(std::make_shared<apollo::game::core::Entity>(
@@ -1163,6 +1165,23 @@ std::uint64_t CellApp::resolve_scene_id(std::uint64_t space_id) const {
     return route != spaceToScene_.end() ? route->second : defaultSceneId_;
 }
 
+std::uint64_t CellApp::add_space(std::uint64_t space_id,
+                                 const apollo::game::world::SceneDescriptor& descriptor) {
+    // L99：显式登记面——space_id（路由键域）与 scene_id（world 自增域）
+    // 数值独立；本方法只建 scene + 登路由，不建 Instance（持续开放 Space
+    // 可无临时 Instance，玩法侧经副本受理面自建）。
+    const auto existing = spaceToScene_.find(space_id);
+    if (existing != spaceToScene_.end()) {
+        return existing->second;  // 幂等：重复登记不重建 scene
+    }
+    auto* scene = world_->create_scene(descriptor);
+    if (scene == nullptr) {
+        return 0;  // descriptor 无效（is_valid 拒绝）
+    }
+    spaceToScene_[space_id] = scene->scene_id();
+    return scene->scene_id();
+}
+
 apollo::game::world::Scene* CellApp::find_scene_by_entity(EntityID entity_id) {
     // 玩家实体 → Avatar 实体号反查；非玩家实体 → Scene 实体集合直查
     //（P0-2 强分型 + P2-1b 实体集合归 Scene；实体号唯一归属一个 scene）
@@ -1220,7 +1239,8 @@ void CellApp::attachPlayerWorldSession(
     protocol::SessionID session_id,
     protocol::PlayerID player_id_raw,
     EntityID entity_id,
-    const Position& position) {
+    const Position& position,
+    std::uint64_t space_id) {
     ensureDefaultScene();
 
     // 强分型（P0-2）：玩家身份与实体身份在类型面上分离——旧代码 entity_id 直接
@@ -1233,7 +1253,13 @@ void CellApp::attachPlayerWorldSession(
         session = worldSessionManager_->create_session(session_id, player_id);
     }
 
-    auto* scene = world_->find_scene(defaultSceneId_);
+    // L99：会话落点随 space 路由解析（未知空间回落默认 scene）；实例按落点
+    // scene 反查——无实例的空间绑 0（持续开放 Space 可无临时 Instance）。
+    const bool known_space = spaceToScene_.find(space_id) != spaceToScene_.end();
+    const auto effective_space = known_space ? space_id : defaultSpaceId_;
+    const auto scene_id = resolve_scene_id(space_id);
+    auto* scene = world_->find_scene(scene_id);
+    auto* instance = scene != nullptr ? world_->find_instance_by_scene(scene_id) : nullptr;
 
     // create Avatar + scene.enter / instance.enter（P0-3 任务书 §27 API 路径：
     // Avatar 由 Scene 持有（进 scene 生/出 scene 死），玩法侧走 instance.enter）
@@ -1241,15 +1267,16 @@ void CellApp::attachPlayerWorldSession(
     if (scene != nullptr) {
         scene->enter(avatar, {position.x, position.y, position.z});
     }
-    if (defaultInstance_) {
-        defaultInstance_->enter(player_id);
+    if (instance != nullptr) {
+        instance->enter(player_id);
     }
 
     session->assign_world(worldId_);
-    session->assign_map_instance(defaultInstance_ ? defaultInstance_->id() : 0);
+    session->assign_map_instance(instance != nullptr ? instance->id() : 0);
     // P0-2：space 与 instance 分离——space 承载 id 独立（旧代码以 map instance
-    // 号兼任 space 号）。P0-3 拆 SceneDescriptor 后由 scene 提供。
-    session->assign_space(defaultSpaceId_);
+    // 号兼任 space 号）。P0-3 拆 SceneDescriptor 后由 scene 提供。L99：登记的是
+    // 实际落点空间（未知空间回落默认，与 resolve_scene_id 同一口径）。
+    session->assign_space(effective_space);
     session->bind_avatar(avatar_entity_id);
     session->set_route_version(session->route_version() + 1);
     session->set_state(apollo::game::world::WorldSessionState::Entering);
@@ -1266,9 +1293,9 @@ void CellApp::detachPlayerWorldSession(protocol::SessionID session_id, EntityID 
     if (!session) {
         // 无会话 id 时按玩家身份反查（P0-2/P0-3：经 Scene 的 Avatar 容器由
         // 实体号定位玩家号，再按玩家查会话；不再把实体号当玩家号传）
-        const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
-        auto* scene = world_->find_scene(defaultSceneId_);
-        if (scene != nullptr) {
+        // L99：落点 scene 由实体实际所在反查（多空间后不再假设默认 scene）
+        if (auto* scene = find_scene_by_entity(entity_id)) {
+            const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
             for (const auto& player_id : scene->avatars()) {
                 const auto avatar = scene->get_avatar(player_id);
                 if (avatar && avatar->entity_id() == avatar_entity_id) {
@@ -1285,13 +1312,23 @@ void CellApp::detachPlayerWorldSession(protocol::SessionID session_id, EntityID 
 
     // 出 scene 死：Avatar 由 scene.leave 解除归属并出 AOI（对象随 shared_ptr
     // 释放——scene 是唯一持有者，player-object-model §3「出 scene 死」）
+    // L99：落点 scene / 实例由实体实际所在反查（多空间后不再假设默认 scene）
     const auto player_id = session->player_id();
-    auto* scene = world_->find_scene(defaultSceneId_);
+    auto* scene = find_scene_by_entity(entity_id);
+    if (scene == nullptr) {
+        // 实体号缺失或已失效时按玩家号反查落点 scene
+        for (apollo::game::world::Scene* candidate : world_->scenes()) {
+            if (candidate != nullptr && candidate->get_avatar(player_id) != nullptr) {
+                scene = candidate;
+                break;
+            }
+        }
+    }
     if (scene != nullptr) {
         scene->leave(player_id);
-    }
-    if (defaultInstance_) {
-        defaultInstance_->leave(player_id);
+        if (auto* instance = world_->find_instance_by_scene(scene->scene_id())) {
+            instance->leave(player_id);
+        }
     }
 
     worldSessionManager_->suspend_session(session->session_id());

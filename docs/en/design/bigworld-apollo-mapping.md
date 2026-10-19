@@ -24,7 +24,7 @@ Source boundaries: [CellAppMgr](https://github.com/v2v3v4/BigWorld-Engine-14.4.1
 | Concept | BigWorld meaning | Apollo counterpart/boundary |
 |---|---|---|
 | Map resources | Static geometry/resources loaded by runtime spaces | SceneDescriptor references assets, not an activity or process. |
-| Space | An identified runtime coordinate space spanning one or more Cells | Corresponds to the spatial meaning of Apollo's existing Scene. Scene currently implements a local container. Extend logical-space/partition boundaries without stacking synonymous Scene→Space containers. |
+| Space | An identified runtime coordinate space spanning one or more Cells | Corresponds to the spatial meaning of Apollo's existing Scene. Scene is the current code type name; the execution kernel now has an explicit space→scene routing table (CellApp add_space / scene_id_of_space), so one process can host multiple Spaces, and the mapping is a table rather than an identity alias. Extend logical-space/partition boundaries without stacking synonymous Scene→Space containers. |
 | Cell | A spatial partition owning authoritative entities within its range | Reuse Space association, partition ID, bounds, host process, and topology version. Not an execution-process name. |
 | CellApp | Process hosting Cells | Apollo cell execution process, potentially hosting Cells from multiple Spaces. |
 | Instance | No one-to-one built-in counterpart to Apollo's eight-state gameplay lifecycle was established in the inspected spatial core | Retain existing group, objective, clock, phase, settlement, and cleanup management. It associates with runtime space and is not another Space/Cell name or a claimed native BigWorld type. |
@@ -73,7 +73,7 @@ Implement spatial splitting, adjacent replication, boundary combat, dynamic load
 | Apollo code | Correspondence | Missing integration |
 |---|---|---|
 | WorldApp, World, WorldHost | Currently combine management and simulation | Separate worldServer management from cell execution; existing names identify implementation only. |
-| Scene, SceneDescriptor | Local spatial container and static resource reference | Unify Space identity/coordinates and separate local partition state from logical space. |
+| Scene, SceneDescriptor | Local spatial container and static resource reference | Explicit space→scene routing table landed (space ID and scene ID are separate domains); unified global coordinates and separating local partition state from logical-space identity remain pending. |
 | Instance | Temporary activity lifecycle | Keep eight states; add durable remote settlement and exclusive shared-state ownership. |
 | `base::Avatar`, `cell::Avatar` | Persistent Base object / player Cell entity | Separate hosts, snapshots, trusted associations; remove cross-boundary pointer access. |
 | SceneAoi, ViewerState | Local partition visibility | Add adjacency replication, merged spatial visibility, deduplication, continuity. |
@@ -82,4 +82,4 @@ Implement spatial splitting, adjacent replication, boundary combat, dynamic load
 
 This documentation does not rename C++ types, executables, or wire fields, and does not claim implementation is complete. Root todo.md tracks migration under this single semantic model.
 
-See [World and cell management](./world-cell-management.md), a review draft covering the proposed short binary name `world`, default manager role, `--role=cell` executors, local automatic growth, and natural shrinking. Execution kernel extraction and the `--role=cell` entry are now landed (see the L98 first slice in the root todo); local automatic growth, natural shrinking, and full registration wiring remain pending.
+See [World and cell management](./world-cell-management.md), a review draft covering the proposed short binary name `world`, default manager role, `--role=cell` executors, local automatic growth, and natural shrinking. Execution kernel extraction and the `--role=cell` entry are now landed (see the L98 first slice in the root todo); the explicit Space↔Scene mapping is landed too (L99 first slice — space→scene routing table hosting multiple Spaces per process). Local automatic growth, natural shrinking, and full registration wiring remain pending.

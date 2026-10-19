@@ -24,7 +24,7 @@ BigWorld 的 [CellAppMgr](https://github.com/v2v3v4/BigWorld-Engine-14.4.1/blob/
 | 概念 | BigWorld 含义 | Apollo 对应与边界 |
 |---|---|---|
 | 地图资源 | 几何等静态资源供运行空间加载 | 现有 SceneDescriptor 引用地图资产；资源不是一次副本，也不是进程。 |
-| Space | 有独立身份和坐标体系的运行空间，可由多个 Cell 承担模拟 | 对应 Apollo 当前 Scene 的空间语义。Scene 是现有代码类型名，当前只实现单进程容器；扩展时补逻辑空间与分区执行边界，不叠加同义的 Scene→Space 容器链。 |
+| Space | 有独立身份和坐标体系的运行空间，可由多个 Cell 承担模拟 | 对应 Apollo 当前 Scene 的空间语义。Scene 是现有代码类型名；执行内核已提供显式 space→scene 路由表（CellApp 的 add_space / scene_id_of_space），同一进程可承载多个 Space，映射是表而非恒等别名。扩展时补逻辑空间与分区执行边界，不叠加同义的 Scene→Space 容器链。 |
 | Cell | Space 的一个空间分区，拥有该范围的权威实体 | Apollo 复用此含义，记录 Space、分区 ID、范围、承载进程及拓扑版本；不是执行进程名。 |
 | CellApp | 承载 Cell 的进程 | Apollo 的 cell 执行进程；一个进程可承载不同 Space 的多个 Cell。 |
 | Instance | 本文核对的空间主干没有与 Apollo 八态玩法生命周期一一对应的内置层 | 保留 Apollo 现有 Instance：小队、目标、计时、玩法阶段、结算和回收。它关联运行空间，不是 Space/Cell 的另一种名字，也不声称来自 BigWorld 原生类型。 |
@@ -73,7 +73,7 @@ Base 资料写权与 Cell 模拟写权属于不同数据域；玩家不是一份
 | 当前 Apollo 代码 | 对应语义 | 需要补齐 |
 |---|---|---|
 | WorldApp、World、WorldHost | 目前将管理和模拟装在一起 | worldServer 管理与 cell 执行拆分；旧类名只标识当前实现。 |
-| Scene、SceneDescriptor | 单进程空间容器及静态资源引用 | 统一 Space 语义、空间 ID 与全局坐标；本地分区状态与逻辑空间身份分开。 |
+| Scene、SceneDescriptor | 单进程空间容器及静态资源引用 | space→scene 显式路由表已落地（空间 ID 与 scene ID 分域）；全局坐标统一与本地分区状态/逻辑空间身份分离待补。 |
 | Instance | 临时玩法生命周期 | 保留八态，补跨进程结算和共享状态唯一负责人。 |
 | `base::Avatar`、`cell::Avatar` | Base 长期资料与玩家 Cell 实体 | 独立宿主、快照和可信关联，禁止跨界直接指针调用。 |
 | SceneAoi、ViewerState | 本地分区可见性原语 | 邻接复制、全空间可见性合并、去重与连续观察。 |
@@ -82,4 +82,4 @@ Base 资料写权与 Cell 模拟写权属于不同数据域；玩家不是一份
 
 本次整理不重命名 C++ 类、可执行文件或协议字段，不把迁移计划写成代码已完成。后续代码按根目录 todo.md 实施，文档只保留这套语义和清晰的实现映射。
 
-管理/执行拆分的具体方案见 [World 与 cell 管理设计](./world-cell-management.md)（评审草案）：拟统一短名 `world`，无参数启动管理角色、`--role=cell` 启动执行角色，本机自动扩容、自然排空缩容。执行内核分离与 `--role=cell` 入口已落地（见根 todo L98 首切片）；本机自动扩容、自然排空缩容与完整注册接线尚待实施。
+管理/执行拆分的具体方案见 [World 与 cell 管理设计](./world-cell-management.md)（评审草案）：拟统一短名 `world`，无参数启动管理角色、`--role=cell` 启动执行角色，本机自动扩容、自然排空缩容。执行内核分离与 `--role=cell` 入口已落地（见根 todo L98 首切片）；Space↔Scene 显式映射已落地（L99 首切片，space→scene 路由表支持同进程多 Space）。本机自动扩容、自然排空缩容与完整注册接线尚待实施。
