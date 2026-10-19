@@ -1079,6 +1079,18 @@ if(MSVC)
 endif()
 add_test(NAME TlsLinkTests COMMAND tls_link_tests)
 
+# ========== WS 编解码测试 ==========
+# 纯编解码件（零 socket 零线程）：升级握手 + RFC 6455 帧。传输与生命
+# 周期归宿主泵（gateway 游戏入口 / interfaces HTTP 升级路由各自驱动）。
+add_executable(ws_tests
+    test_net_ws.cpp
+)
+target_link_libraries(ws_tests PRIVATE apollo_net_ws)
+if(MSVC)
+    target_compile_options(ws_tests PRIVATE /utf-8)
+endif()
+add_test(NAME WsTests COMMAND ws_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests
