@@ -9,6 +9,7 @@
 | Design doc | Status | One-line positioning |
 |---|---|---|
 | [BigWorld–Apollo mapping](./bigworld-apollo-mapping.md) | Agreed rules | Original terms, Apollo roles, code and gaps |
+| [Can Apollo exceed BigWorld?](./apollo-vs-bigworld.md) | Auditable assessment | Potential advantages, unproven claims, gaps, and acceptance criteria |
 | [World and cell management](./world-cell-management.md) | Review draft | Shared binary, role startup, local autoscaling, placement, recovery, and migration |
 | [Seamless map and multi-Cell Space](./seamless-map.md) | Target design, staged implementation | Partitioning, Ghosts, boundary AOI/combat, transfer, and takeover |
 | [Concept glossary](./concept-glossary.md) | Agreed rules | Established names and responsibility boundaries |
