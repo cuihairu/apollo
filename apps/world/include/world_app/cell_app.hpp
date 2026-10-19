@@ -1,0 +1,226 @@
+#pragma once
+
+// cell 执行内核（L98 首切片：执行/管理分离）。
+//
+// 目标职责（todo P2 L98）：模拟循环、WorldHost/Scene/Avatar、AOI、战斗与
+// Lua 全部迁入执行端——本类型是执行面的唯一宿主；管理面（注册/拓扑/容量/
+// 迁移编排、模块投递、排空、debug eval）不在本类型，由宿主进程（WorldApp
+// 或未来独立 cell 进程壳）经注入缝驱动。
+//
+// 传输缝：内核对网络零依赖——下行（939）与延时应答（929）走 IM1Egress，
+// 传输泵与管理推进走 pre/post tick 钩子；未装配 = 尽力面落地（同 WorldApp
+// 「m1Link_ 缺席」语义）。内核因此可裸编测试（tests/test_cell_app.cpp 只编
+// 本文件 + 协议源）。
+//
+// 线程纪律不变（ADR-015(a)）：内核状态单写者 = 内核循环线程；onIntent 只
+// 入队不写 world；访问器（find_scene/script_runtime 等）仅限内核线程上下文
+// ——管理面经 pre/post tick 钩子在内核线程内执行（WorldApp 的 eval/编排/
+// 排空受理点照旧跑在泵上下文）。
+
+#include "world_app/config.hpp"
+#include "world_app/acceptance_queue.hpp"
+#include "world_app/world_types.hpp"
+#include "squad_instance/squad_instance.hpp"
+#include "apollo/game/cell/avatar.hpp"
+#include "apollo/game/world/world.hpp"
+#include "apollo/game/world/world_session_manager.hpp"
+#include "apollo/runtime/world_host.hpp"
+#include "apollo/core/metrics/metric_registry.h"
+#include <lua.hpp>
+#include <chrono>
+#include <functional>
+#include <memory>
+#include <string>
+#include <thread>
+#include <atomic>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+namespace apollo::script {
+class ScriptRuntime;
+}
+
+namespace player_store {
+class StoreDial;
+}
+
+namespace world_app {
+
+namespace protocol = apollo::protocol;
+
+// M1 出口缝：cell 内核对传输面只依赖本接口——客户端帧下行（939
+// client_deliver）与意图延时应答（929 cell_intent_ack）+ 受理观测计数。
+// WorldApp 以真 M1LinkServer 适配实现；测试以桩实现收帧。
+class IM1Egress {
+public:
+    virtual ~IM1Egress() = default;
+
+    // 939 client_deliver：payload = 客户端 wire 全帧（MessageHeader + body），
+    // 网关按 session_id 路由投递不解释。
+    virtual void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                                   const std::vector<std::uint8_t>& payload) = 0;
+
+    // 929 cell_intent_ack：request_id 关联（0 = legacy 不作关联键）。
+    virtual void sendIntentAck(std::uint64_t request_id, std::int32_t code,
+                               const std::string& message) = 0;
+
+    // 受理观测计数（metrics 推进源；缺省 0 = 无传输面）。
+    virtual std::uint64_t receivedIntents() const { return 0; }
+    virtual std::uint64_t rejectedFrames() const { return 0; }
+};
+
+// cell 执行内核：模拟域全量所有权 + 受理队列（ADR-016）+ tick 边界消费
+//（ADR-015(a)）+ 延时应答（ADR-017）。
+class CellApp {
+public:
+    explicit CellApp(const WorldAppConfig& config);
+    ~CellApp();
+
+    // ---- 注入缝（start 前装配；缺省 = 尽力面）----
+    void set_egress(IM1Egress* egress) { egress_ = egress; }
+    // 拍首钩子：传输泵（WorldApp = m1Link_->pump(now_ms)）。now_ms = 单调毫秒。
+    void set_pre_tick(std::function<void(std::uint64_t now_ms)> hook) {
+        preTick_ = std::move(hook);
+    }
+    // 玩法拍后钩子：管理推进（WorldApp = 排空/eval 收账/模块编排三驱动）。
+    // delta_seconds = 本拍时长（秒），与 driveSquadGameplay 同值。
+    void set_post_tick(std::function<void(double delta_seconds)> hook) {
+        postTick_ = std::move(hook);
+    }
+
+    // ---- 生命周期 ----
+    void start();
+    void stop();
+    bool isRunning() const { return running_; }
+
+    // ---- 受理面 ----
+    // M1 意图受理点（泵线程 = 内核线程）：submitIntent 判定 + 拒收即时回执
+    //（顶格 2101 / 维护闸 2001）；受理成功不回包，回执随 tick 边界消费后按
+    // request_id 回带（ADR-017）。
+    void onIntent(IntentEnvelope intent);
+
+    // 受理点判定（M1 面与测试共用）：维护闸闭 / 顶格拒收 = false。
+    bool submitIntent(IntentEnvelope intent);
+
+    // 待执行意图数（观测/测试面：tick 边界 drain 断言用）
+    std::size_t pendingIntentCount() const { return acceptanceQueue_.size(); }
+
+    // 意图源会话 → 玩家号（0 = 未知会话）。互斥会话表的只读反查，跨线程
+    // 安全；受理单写者纪律断言用。
+    std::uint64_t resolveIntentPlayer(std::uint64_t session_id) const;
+
+    // ---- 内核线程上下文访问器（管理面经 pre/post tick 钩子在内核线程内
+    // 消费；跨线程持有指针违反单写者纪律）----
+    apollo::game::world::Scene* find_scene(std::uint64_t scene_id);
+    std::uint64_t default_scene_id() const { return defaultSceneId_; }
+    squad_instance::SquadInstanceService* squadInstanceService() noexcept {
+        return squadInstanceService_.get();
+    }
+    // 脚本宿主（管理面专用：模块编排 target / 版本查询）。scripting-lua §2
+    // 一状态一逻辑线程——指针只有内核线程可读。
+    apollo::script::ScriptRuntime* script_runtime() noexcept { return script_.get(); }
+
+private:
+    // ---- 意图执行（tick 边界，内核线程）----
+    std::vector<uint8_t> handleCellCreateEntity(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleCellDestroyEntity(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleCellEntityMove(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleCellCrossBorder(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleCombatSkillCast(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handlePartyCreate(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handlePartyJoin(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadLaunch(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadEnter(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadStart(const std::vector<uint8_t>& request);
+    std::vector<uint8_t> handleSquadKill(const std::vector<uint8_t>& request);
+
+    void executeIntent(const IntentEnvelope& intent);
+    void drainAcceptanceQueue();
+    void gameLoop();
+
+    // 脚本宿主接线 / world 模块注入 / 契约路由 Lua 分发（L51 消费端面）
+    void attach_script_to_scenes();
+    void register_world_module();
+    static int lua_world_broadcast_viewers(lua_State* L);
+    static int lua_world_push_session(lua_State* L);
+    void dispatch_script_intent(const IntentEnvelope& intent);
+
+    // 下行面（经 egress 缝；未装配 = 尽力面落地）
+    void deliverToClient(std::uint64_t session_id, const std::vector<uint8_t>& frame);
+    void deliverPartyResult(std::uint64_t session_id, std::int32_t op, std::int32_t code,
+                            std::uint64_t party_id);
+    void deliverSquadResult(std::uint64_t session_id, std::int32_t op, std::int32_t code,
+                            const squad_instance::ActiveSquadInstance* binding);
+    void deliverSquadStateToParty(std::uint64_t party_id);
+    void driveSquadGameplay(double delta_seconds);
+
+    // 延时应答出口（929；request_id = 0 静默）。经 egress 缝。
+    void sendAck(std::uint64_t request_id, std::int32_t code, const std::string& message);
+
+    void broadcastToViewers(EntityID entity_id, const std::vector<uint8_t>& message);
+    apollo::game::world::Scene* find_scene_by_entity(EntityID entity_id);
+    std::uint64_t session_of_entity(EntityID entity_id,
+                                    apollo::game::world::Scene* scene) const;
+    std::uint64_t resolve_scene_id(std::uint64_t space_id) const;
+
+    void ensureDefaultScene();
+    void attachPlayerWorldSession(protocol::SessionID session_id, protocol::PlayerID player_id,
+                                  EntityID entity_id, const Position& position);
+    void detachPlayerWorldSession(protocol::SessionID session_id, EntityID entity_id);
+
+    void record_metrics(std::int64_t elapsed_ms);
+    std::chrono::milliseconds tickInterval() const;
+
+    WorldAppConfig config_;
+    // 小队副本受理面（P2）：PartyManager + 受理服务
+    apollo::game::social::PartyManager squadParties_;
+    std::unique_ptr<squad_instance::SquadInstanceService> squadInstanceService_;
+    // Zone 世界容器（P0-3）：create_scene / create_instance / scene.enter 路径
+    std::unique_ptr<apollo::game::world::World> world_;
+    std::shared_ptr<apollo::game::world::WorldSessionManager> worldSessionManager_;
+    std::shared_ptr<apollo::runtime::WorldHost> worldHost_;
+
+    // 注入缝（宿主装配）
+    IM1Egress* egress_ = nullptr;
+    std::function<void(std::uint64_t now_ms)> preTick_;
+    std::function<void(double delta_seconds)> postTick_;
+
+    // Base 业务受理面拨号（P1 结算迁入；实现随析构取完整类型）
+    std::unique_ptr<player_store::StoreDial> baseBusinessDial_;
+    // 业务受理关联号（内核线程结算段独占）
+    std::uint64_t businessSeq_{0};
+    // 脚本宿主（scripting-lua §2 一状态一逻辑线程：随内核线程生灭）
+    std::unique_ptr<apollo::script::ScriptRuntime> script_;
+
+    std::atomic<bool> running_{false};
+    // 受理面（ADR-016/017）：accepting_=false 即维护闸
+    AcceptanceQueue acceptanceQueue_;
+    std::atomic<bool> accepting_{false};
+    std::uint32_t worldId_ = 1;
+    std::uint64_t defaultSceneId_ = 0;
+    // 队伍发号（契约 23 语义：服务端分配 party_id；内核线程独占）
+    std::uint64_t nextPartyId_ = 1;
+    // 队长启动玩法时的宿主玩法内容（骨架）：默认目标 + 首波怪
+    static constexpr std::uint64_t kHostGoalMonsters = 3;
+    static constexpr std::uint64_t kHostGoalTimeoutTicks = 600;
+    apollo::game::world::InstancePtr defaultInstance_;
+    std::uint64_t defaultSpaceId_ = 1;
+    // space → scene 路由（P1-1 换幕目标解析）
+    std::unordered_map<std::uint64_t, std::uint64_t> spaceToScene_;
+
+    // metrics admin 通道计数面（last_* 为绝对值→Counter 增量推进的影子读数，
+    // 内核线程独占）
+    apollo::core::metrics::Counter& cellTicksTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("world_ticks_total")};
+    apollo::core::metrics::Counter& cellIntentsReceivedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("world_intents_received_total")};
+    apollo::core::metrics::Counter& cellFramesRejectedTotal_{
+        apollo::core::metrics::MetricRegistry::instance().counter("world_frames_rejected_total")};
+    std::uint64_t lastIntentsReceived_{0};
+    std::uint64_t lastFramesRejected_{0};
+
+    std::thread gameThread_;
+};
+
+} // namespace world_app

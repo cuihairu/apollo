@@ -9,18 +9,20 @@
 #include <iostream>
 #include <csignal>
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 using namespace world_app;
 
-// 全局服务器指针
-static WorldApp* g_server = nullptr;
+// 全局停机钩子（L98 双角色：manager/cell 两壳各自装配；信号上下文直调
+// stop——同旧 g_server->stop() 语义）
+static std::function<void()> g_stop_request;
 
 // 信号处理（信号上下文保持直写 console——logger 面带锁，信号路径不进）
 void signalHandler(int signal) {
-    if (g_server) {
+    if (g_stop_request) {
         std::cout << "\nReceived signal " << signal << ", shutting down..." << std::endl;
-        g_server->stop();
+        g_stop_request();
     }
 }
 
@@ -141,6 +143,31 @@ static FleetOptions loadFleetOptions(int argc, char* argv[]) {
     return opts;
 }
 
+// cell 角色出口适配（L98）：IM1Egress → M1LinkServer（与 WorldApp 内嵌
+// 适配同型；链路未装配 = 尽力面落地）
+struct CellLinkEgress final : public IM1Egress {
+    M1LinkServer* link = nullptr;
+
+    void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                           const std::vector<std::uint8_t>& payload) override {
+        if (link) {
+            link->sendClientDeliver(session_id, gateway_id, payload);
+        }
+    }
+    void sendIntentAck(std::uint64_t request_id, std::int32_t code,
+                       const std::string& message) override {
+        if (link) {
+            link->sendIntentAck(request_id, code, message);
+        }
+    }
+    std::uint64_t receivedIntents() const override {
+        return link ? link->receivedIntents() : 0;
+    }
+    std::uint64_t rejectedFrames() const override {
+        return link ? link->rejectedFrames() : 0;
+    }
+};
+
 int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
@@ -172,8 +199,96 @@ int main(int argc, char* argv[]) {
     try {
         const FleetOptions fleet = loadFleetOptions(argc, argv);
 
+        // cell 角色（L98 首切片）：执行内核 + 仅意图 M1 面。管理受理（944
+        // eval / 952 编排 / 956 排空）不装配——M1LinkServer 分发面对缺席回调
+        // 自守门（判空拒收），注册/拓扑/容量编排归 manager 侧随后续条目。
+        if (config.role == "cell") {
+            CellApp cell(config);
+            CellLinkEgress egress;
+            cell.set_egress(&egress);
+            // 拍首钩子 = M1 泵（链路对象先行，监听在闸开之后）；post-tick
+            // 缺席——cell 角色无管理推进
+            cell.set_pre_tick([&egress](std::uint64_t now_ms) {
+                if (egress.link) {
+                    egress.link->pump(now_ms);
+                }
+            });
+            auto link = makeM1LinkServer(
+                M1LinkConfig{config.host, config.m1Port, config.m1RouteJson,
+                             config.m1AuthorityEpoch},
+                [&cell](IntentEnvelope intent) { cell.onIntent(std::move(intent)); });
+            egress.link = link.get();
+            g_stop_request = [&cell] { cell.stop(); };
+
+            logger->info("Starting server...");
+            cell.start();
+            if (!link->start()) {
+                throw std::runtime_error(
+                    "failed to start cell M1 link endpoint (route table load or bind failed)");
+            }
+            logger->info("Cell M1 link listening on " + config.host + ":"
+                         + std::to_string(link->listenPort()));
+
+            // 编队成员注册（P3-4 收尾批）：与 manager 同面（service_port =
+            // M1 受理端口，消费方按角色拨号）
+            apollo::net::discovery::FleetMember* fleet_raw = nullptr;
+            if (fleet.machined_port != 0 && fleet.component_id == 0) {
+                logger->warning(
+                    "machined-port set without --component-id; fleet "
+                    "registration disabled");
+            }
+            std::unique_ptr<apollo::net::discovery::FleetMember> cell_fleet_member;
+            if (fleet.machined_port != 0 && fleet.component_id != 0) {
+                apollo::net::discovery::UdpBeaconTransport cell_transport;
+                if (cell_transport.open()) {
+                    apollo::net::discovery::MemberId self;
+                    self.component_id = fleet.component_id;
+                    self.zone_id = fleet.zone_id != 0 ? fleet.zone_id : config.worldId;
+                    self.service_port = config.m1Port;
+                    cell_fleet_member =
+                        std::make_unique<apollo::net::discovery::FleetMember>(
+                            self, fleet.machined_host, fleet.machined_port,
+                            cell_transport);
+                    fleet_raw = cell_fleet_member.get();
+                    logger->info("fleet member: component="
+                                 + std::to_string(fleet.component_id)
+                                 + " zone=" + std::to_string(self.zone_id)
+                                 + " service_port=" + std::to_string(config.m1Port)
+                                 + " -> machined " + fleet.machined_host + ":"
+                                 + std::to_string(fleet.machined_port));
+                } else {
+                    logger->warning(
+                        "fleet transport open failed; running without fleet "
+                        "registration");
+                }
+            }
+
+            auto fleet_now_ms = [] {
+                return static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count());
+            };
+
+            logger->info("Server is running. Press Ctrl+C to stop.");
+
+            while (cell.isRunning()) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                if (fleet_raw) {
+                    fleet_raw->tick(fleet_now_ms());
+                }
+            }
+            if (fleet_raw) {
+                fleet_raw->stop();
+            }
+
+            logger->info("Server stopped.");
+            g_stop_request = nullptr;
+            return 0;
+        }
+
         WorldApp server(config);
-        g_server = &server;
+        g_stop_request = [&server] { server.stop(); };
 
         logger->info("Starting server...");
         server.start();
@@ -229,12 +344,12 @@ int main(int argc, char* argv[]) {
         }
 
         logger->info("Server stopped.");
+        g_stop_request = nullptr;
 
     } catch (const std::exception& e) {
         logger->error(std::string("Error: ") + e.what());
         return 1;
     }
 
-    g_server = nullptr;
     return 0;
 }

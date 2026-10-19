@@ -23,15 +23,8 @@
 
 namespace world_app {
 
-// World 排空状态机值（956/957 契约面；gateway 954 同值口径）。
-inline constexpr std::int32_t kWorldDrainServing = 0;
-inline constexpr std::int32_t kWorldDrainDraining = 1;
-inline constexpr std::int32_t kWorldDrainDrained = 2;
-
-// M1 错误码（errors.xml 契约错误表；0 成功）。
-inline constexpr std::int32_t kIntentAckOk = 0;
-inline constexpr std::int32_t kIntentAckInternal = 2001;        // internal
-inline constexpr std::int32_t kIntentAckBackpressure = 2101;    // cell_backpressure
+// 排空状态机值与 M1 错误码迁移至 acceptance_queue.hpp（受理面契约词汇；
+// L98 后执行内核 CellApp 只依赖该头）。
 
 struct M1LinkConfig {
     std::string host = "0.0.0.0";

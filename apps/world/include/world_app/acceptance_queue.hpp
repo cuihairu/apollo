@@ -33,6 +33,18 @@ struct IntentEnvelope {
     std::uint64_t received_ms = 0; // 受理时刻（WorldApp span 计时起点）
 };
 
+// 受理/排空契约码（m1_link_server.hpp 自此处取；L98 执行/管理分离后执行
+// 内核 CellApp 只依赖本头，不带传输头）。
+// M1 错误码（errors.xml 契约错误表；0 成功）。
+inline constexpr std::int32_t kIntentAckOk = 0;
+inline constexpr std::int32_t kIntentAckInternal = 2001;        // internal
+inline constexpr std::int32_t kIntentAckBackpressure = 2101;    // cell_backpressure
+
+// World 排空状态机值（956/957 契约面；gateway 954 同值口径）。
+inline constexpr std::int32_t kWorldDrainServing = 0;
+inline constexpr std::int32_t kWorldDrainDraining = 1;
+inline constexpr std::int32_t kWorldDrainDrained = 2;
+
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。
 // 数值口径 = tick 预算锚定（ADR-016 #3）+ 实测校准（2026-10-11，P3-2 批 D，
 // examples/benchmark --acceptance 三跑 min，负载噪声期下界口径）：

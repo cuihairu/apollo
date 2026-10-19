@@ -1618,6 +1618,7 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
 add_executable(world_app_acceptance_tests
     test_world_app_acceptance.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1644,6 +1645,38 @@ endif()
 add_test(NAME WorldAppAcceptanceTests COMMAND world_app_acceptance_tests)
 endif()
 
+# ========== Cell Kernel Tests (L98 首切片：执行/管理分离) ==========
+# 执行内核 CellApp 独立宿主（tests/test_cell_app.cpp）：接缝（IM1Egress +
+# pre/post tick 钩子）即断言面——只编 cell_app.cpp + 协议源，不编 WorldApp /
+# M1LinkServer（内核对传输零依赖的证明面）。覆盖：维护闸 / tick 边界执行 /
+# 延时应答 / 顶格拒收 / 停机尾扫 / 双内核隔离。route json 宏有 #ifndef 空串
+# 兜底（内核不拨号）。
+if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
+add_executable(cell_app_tests
+    test_cell_app.cpp
+    ../apps/world/src/cell_app.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+)
+target_include_directories(cell_app_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
+)
+target_link_libraries(cell_app_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script apollo::runtime
+    apollo::net_link apollo::net_linktrace)
+if(WIN32)
+    target_link_libraries(cell_app_tests PRIVATE ws2_32)
+    target_compile_definitions(cell_app_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(cell_app_tests PRIVATE /utf-8)
+endif()
+add_test(NAME CellAppTests COMMAND cell_app_tests)
+endif()
+
 # ========== WorldApp M1 Link Tests (M1 上层接线批 2b-ii) ==========
 # WorldApp M1 接收端：契约意图族 924-928 经 InterServerLink 真 TCP 上行 → 契约
 # wire 解包 → legacy 帧镜像 → 受理队列 → tick 边界执行 → 延时应答 929
@@ -1653,6 +1686,7 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
 add_executable(world_app_m1_link_tests
     test_world_app_m1_link.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1702,6 +1736,7 @@ add_executable(gateway_m1_egress_tests
     ../apps/gateway/src/ingress/gateway_connection_registry.cpp
     ../apps/gateway/src/ingress/session_admission_service.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1744,6 +1779,7 @@ add_executable(squad_wire_e2e_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1777,6 +1813,7 @@ add_executable(world_drain_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1822,6 +1859,7 @@ add_executable(update_continuity_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -1871,6 +1909,7 @@ add_executable(gateway_push_downlink_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -2531,6 +2570,7 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
 add_executable(world_app_script_host_tests
     test_world_app_script_host.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
@@ -2558,7 +2598,7 @@ add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
 endif()
 
 # Runtime sources host shared services even when executable apps are disabled.
-foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests update_continuity_tests gateway_push_downlink_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests cell_app_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests update_continuity_tests gateway_push_downlink_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
         # apollo_app_services 仅在 game 模块开启（⇒ apps/common 加入）时存在：
         # 其守卫是 `TARGET apollo_protocol AND apollo::game_session`，而
@@ -2586,6 +2626,7 @@ if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(hosted_services_tests
     test_hosted_services.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
@@ -2615,6 +2656,7 @@ if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(fleet_rehome_chain_tests
     test_fleet_rehome_chain.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
@@ -2644,6 +2686,7 @@ if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(migration_chain_tests
     test_migration_chain.cpp
     ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
