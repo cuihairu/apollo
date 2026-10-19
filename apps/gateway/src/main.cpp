@@ -77,6 +77,12 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.directoryM1Host = argv[++i];
         } else if (arg == "--directory-m1-port" && i + 1 < argc) {
             config.directoryM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--base-m1-host" && i + 1 < argc) {
+            config.baseM1Host = argv[++i];
+        } else if (arg == "--base-m1-port" && i + 1 < argc) {
+            config.baseM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--gateway-id" && i + 1 < argc) {
+            config.gatewayId = static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
         } else if (arg == "--control-m1-port" && i + 1 < argc) {
             config.controlM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--session-retention-ms" && i + 1 < argc) {
@@ -110,6 +116,9 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --login-m1-port <port>     Login M1 admission port (0 = stub transport, default: 0)\n"
                       << "  --directory-m1-host <host>   OnlineDirectory M1 control host (default: 127.0.0.1)\n"
                       << "  --directory-m1-port <port>   OnlineDirectory M1 control port (0 = stub transport, default: 0)\n"
+                      << "  --base-m1-host <host>      Base M1 activation host (default: 127.0.0.1)\n"
+                      << "  --base-m1-port <port>      Base M1 activation port (0 = off, default: 0)\n"
+                      << "  --gateway-id <id>          Gateway process id for Base session binding (default: 0)\n"
                       << "  --control-m1-port <port>   Drain control face port (0 = kernel-assigned, default: 9106)\n"
                       << "  --session-retention-ms <ms> Session reconnect window after drop (0 = off, default: 30000)\n"
                       << "  --help, -h                 Show this help\n";

@@ -45,6 +45,17 @@ struct GatewayConfig {
     std::string directoryM1Host = "127.0.0.1";
     std::uint16_t directoryM1Port = 0;
 
+    // Base M1 激活面（L53 登录串联第三环：Base 经 database 激活）：已准入
+    // 会话经本面激活玩家锚点（PlayerStore 装载 Anchor）并绑定会话号。
+    // 0 = 面关（旧语义：准入过即绑玩家）；非 0 且装配成而激活/绑定不成 =
+    // 认证拒绝（面在场 = 错误显形，login 准入面同口径）。路由表与 cell
+    // 出口共用契约表。
+    std::string baseM1Host = "127.0.0.1";
+    std::uint16_t baseM1Port = 0;
+
+    // 进程身份（Base 激活链第二跳写入 SessionBinding.gateway_id；0 = 未配置）
+    std::uint32_t gatewayId = 0;
+
     // 排空控制受理面（P4 排空批）：ops 拨入面（契约 954/955，fleetctl drain）；
     // 0 = 内核分配（drainControlPort 查实占）。路由表与 cell 出口共用契约
     // 表。绑定失败降级（警告 + ops 不可达，不拦启动——端口撞车场景）。

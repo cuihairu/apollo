@@ -305,6 +305,24 @@ void GatewayServer::start() {
         }
     }
 
+    // Base M1 激活面（L53 登录串联第三环）：baseM1Port 非零 = 拨 Base
+    // PlayerStore M1 受理面，准入通过后激活锚点 + 绑定会话；装配失败降级
+    // （警告 + 认证退容忍面——面缺席 ≠ 会话非法，准入面装配降级同口径）。
+    if (config_.baseM1Port != 0) {
+        M1BaseClientConfig baseConfig;
+        baseConfig.host = config_.baseM1Host;
+        baseConfig.port = config_.baseM1Port;
+        baseConfig.route_json = config_.worldM1RouteJson;
+        baseClient_ = makeM1BaseClient(std::move(baseConfig));
+        if (baseClient_) {
+            glog().info("Gateway M1 base client dialing " + config_.baseM1Host + ":"
+                        + std::to_string(config_.baseM1Port));
+        } else {
+            glog().warning("gateway M1 base client degraded: route table unavailable ("
+                           + config_.worldM1RouteJson + "), base activation off");
+        }
+    }
+
     // 排空控制受理面（P4 排空批）：装配失败降级（警告 + ops 不可达，客户端
     // 服务不受影响——出口降级同口径）。
     {
@@ -359,6 +377,10 @@ void GatewayServer::stop() {
     if (m1RouteClient_) {
         m1RouteClient_->stop();
         m1RouteClient_.reset();
+    }
+    if (baseClient_) {
+        baseClient_->stop();
+        baseClient_.reset();
     }
     if (ingressServer_) {
         ingressServer_->stop();
@@ -618,7 +640,89 @@ bool GatewayServer::authenticateSession(
         return false;
     }
 
+    // 登录串联第三环（L53）：Base 经 database 激活——面在场（baseM1Port
+    // ≠ 0 且装配成）= 激活/绑定不成即拒绝（无权威确认不放行）；面缺席 =
+    // 退容忍（准入过即绑玩家，旧语义）。
+    if (baseClient_ && !activateAndBindAtBase(sessionId, playerId)) {
+        return false;
+    }
+
     sessionManager_->bindPlayer(sessionId, playerId);
+    return true;
+}
+
+bool GatewayServer::activateAndBindAtBase(SessionID sessionId, PlayerID playerId) {
+    namespace protocol = apollo::protocol;
+    const std::chrono::milliseconds kTimeoutMs(500);  // 同步等待上限（准入面同值）
+
+    // ① 激活：database 装载 Anchor（PlayerStore activatePlayer）。
+    protocol::PlayerActivateRequest activate;
+    activate.playerId = playerId;
+    auto reply = baseClient_->call(protocol::MessageCodec::encode(activate, sessionId),
+                                   kTimeoutMs);
+    if (!reply) {
+        glog().warning("Base activation unreachable for player "
+                       + std::to_string(playerId));
+        return false;
+    }
+    try {
+        if (reply->size() < sizeof(protocol::MessageHeader)) {
+            return false;
+        }
+        const auto header = protocol::MessageCodec::parseHeader(*reply);
+        if (static_cast<protocol::MessageType>(header.type) !=
+            protocol::MessageType::PLAYER_ACTIVATE_RESPONSE) {
+            return false;
+        }
+        protocol::PlayerActivateResponse parsed;
+        const std::vector<std::uint8_t> body(reply->begin() + sizeof(protocol::MessageHeader),
+                                             reply->end());
+        protocol::MessageCodec::decodeBody(body, parsed);
+        if (!parsed.success) {
+            glog().warning("Base activation rejected for player "
+                           + std::to_string(playerId) + ": " + parsed.errorMessage);
+            return false;
+        }
+    } catch (const std::exception&) {
+        return false;  // 畸形回执 = 无权威确认
+    }
+
+    // ② 绑定：会话号 + 网关身份写入 SessionBinding（下行通道落点）。
+    protocol::PlayerBindSessionRequest bind;
+    bind.playerId = playerId;
+    bind.sessionId = sessionId;
+    bind.gatewayId = config_.gatewayId;
+    bind.gatewayAddr = config_.host + ":" + std::to_string(listenPort());
+    reply = baseClient_->call(protocol::MessageCodec::encode(bind, sessionId), kTimeoutMs);
+    if (!reply) {
+        glog().warning("Base session bind unreachable for session "
+                       + std::to_string(sessionId));
+        return false;
+    }
+    try {
+        if (reply->size() < sizeof(protocol::MessageHeader)) {
+            return false;
+        }
+        const auto header = protocol::MessageCodec::parseHeader(*reply);
+        if (static_cast<protocol::MessageType>(header.type) !=
+            protocol::MessageType::PLAYER_BIND_SESSION_RESPONSE) {
+            return false;
+        }
+        protocol::PlayerBindSessionResponse parsed;
+        const std::vector<std::uint8_t> body(reply->begin() + sizeof(protocol::MessageHeader),
+                                             reply->end());
+        protocol::MessageCodec::decodeBody(body, parsed);
+        if (!parsed.success) {
+            glog().warning("Base session bind rejected for session "
+                           + std::to_string(sessionId) + ": " + parsed.errorMessage);
+            return false;
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    glog().info("Player " + std::to_string(playerId) + " activated at Base, session "
+                + std::to_string(sessionId) + " bound");
     return true;
 }
 

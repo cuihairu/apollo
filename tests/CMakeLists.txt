@@ -242,6 +242,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
+        ../apps/gateway/src/m1_base_client.cpp
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -285,6 +286,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
+        ../apps/gateway/src/m1_base_client.cpp
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -333,6 +335,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
+        ../apps/gateway/src/m1_base_client.cpp
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -583,6 +586,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
+        ../apps/gateway/src/m1_base_client.cpp
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -626,6 +630,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
+        ../apps/gateway/src/m1_base_client.cpp
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -674,6 +679,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
+        ../apps/gateway/src/m1_base_client.cpp
 	        ../apps/gateway/include/gateway/session_manager.cpp
             ../apps/gateway/src/ingress/client_ingress_server.cpp
             ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -1126,6 +1132,7 @@ add_executable(gateway_ws_ingress_tests
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
     ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -1177,6 +1184,7 @@ add_executable(gateway_session_resume_tests
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
     ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -1215,6 +1223,62 @@ if(MSVC)
     target_compile_options(gateway_session_resume_tests PRIVATE /utf-8)
 endif()
 add_test(NAME GatewaySessionResumeTests COMMAND gateway_session_resume_tests)
+endif()
+
+# ========== Gateway Base 激活面测试 (L53 登录串联第三环：Base 经 database 激活) ==========
+# 真 Base PlayerStore M1 受理面宿主（StoreHost 纯 store 位）+ 网关拨号：
+# 认证 → 激活 + 绑定两跳（锚点 Online + SessionBinding 同号同网关身份）、
+# 无档案拒绝（面在场 = 错误显形）、面关退容忍（旧语义）、死端口 fail-closed。
+if(TARGET apollo_app_services)
+add_executable(gateway_base_activation_tests
+    test_gateway_base_activation.cpp
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+)
+target_include_directories(gateway_base_activation_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+)
+target_compile_definitions(gateway_base_activation_tests PRIVATE
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(gateway_base_activation_tests PRIVATE
+    apollo
+    apollo::base
+    apollo::core
+    apollo::runtime
+    apollo_app_services
+    apollo::net_tcp
+    apollo::net_protocol
+    apollo::net_link
+    apollo_net_tls
+    apollo_net_ws
+    apollo::net_contract_wire
+    apollo::net_linktrace
+    apollo_net_linkrpc
+    apollo::net_discovery
+    apollo_protocol
+)
+if(WIN32)
+    target_link_libraries(gateway_base_activation_tests PRIVATE ws2_32)
+    target_compile_definitions(gateway_base_activation_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(gateway_base_activation_tests PRIVATE /utf-8)
+endif()
+add_test(NAME GatewayBaseActivationTests COMMAND gateway_base_activation_tests)
 endif()
 
 # ========== Interfaces HTTP/HTTPS 入口真接线测试 (L45 批④) ==========
@@ -1608,6 +1672,7 @@ add_executable(gateway_m1_egress_tests
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
     ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
@@ -1657,6 +1722,7 @@ add_executable(squad_wire_e2e_tests
     test_squad_wire_e2e.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
@@ -1689,6 +1755,7 @@ add_executable(world_drain_tests
     test_world_drain.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
@@ -1733,6 +1800,7 @@ add_executable(update_continuity_tests
     ../apps/gateway/src/ingress/session_admission_service.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
     ../apps/world/src/world_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
@@ -2302,6 +2370,7 @@ add_executable(baseappmgr_m1_control_tests
     ../apps/common/src/online_directory.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
 )
 target_include_directories(baseappmgr_m1_control_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/common/include
@@ -2452,7 +2521,8 @@ add_executable(hosted_services_tests
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
-    ../apps/gateway/src/m1_route_client.cpp)
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(hosted_services_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/apps/login/include
@@ -2480,7 +2550,8 @@ add_executable(fleet_rehome_chain_tests
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
-    ../apps/gateway/src/m1_route_client.cpp)
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(fleet_rehome_chain_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/apps/login/include
@@ -2508,7 +2579,8 @@ add_executable(migration_chain_tests
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
-    ../apps/gateway/src/m1_route_client.cpp)
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(migration_chain_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/apps/login/include
