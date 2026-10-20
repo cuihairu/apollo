@@ -1242,6 +1242,37 @@ std::uint64_t CellApp::add_space(std::uint64_t space_id,
     return scene->scene_id();
 }
 
+std::uint64_t CellApp::remove_space(std::uint64_t space_id) {
+    // L108 首切片：撤销面——World 经 962 ready=0 通知本 cell 让渡一个 Space。
+    // 返回被撤 scene id（0 = 未撤）：默认 Space 是进程骨架不参与回收；未知
+    // 空间幂等；占用中（avatar_count > 0）拒绝并保持路由——不迁不销毁实体，
+    // 重平衡/排空联动后续批。已空则先擦路由再销毁 scene（World::destroy_scene
+    // 自身再拒未销毁的 Instance；顺序防 use-after-free，sanitizer 树实抓）。
+    // 内核线程上下文（同 add_space）：路由表与 world 容器由游戏线程单写。
+    if (space_id == defaultSpaceId_) {
+        return 0;  // 默认 Space 不回收
+    }
+    const auto route = spaceToScene_.find(space_id);
+    if (route == spaceToScene_.end()) {
+        return 0;  // 幂等：无路由可撤
+    }
+    const std::uint64_t scene_id = route->second;
+    const auto* scene = world_->find_scene(scene_id);
+    if (scene == nullptr) {
+        spaceToScene_.erase(route);  // 残留路由：清表即可
+        return 0;
+    }
+    if (scene->avatar_count() != 0) {
+        return 0;  // 占用中：拒绝，路由保持
+    }
+    spaceToScene_.erase(route);
+    if (world_->destroy_scene(scene_id)) {
+        return scene_id;
+    }
+    spaceToScene_[space_id] = scene_id;  // 销毁失败则恢复路由，保持同存
+    return 0;
+}
+
 apollo::game::world::Scene* CellApp::find_scene_by_entity(EntityID entity_id) {
     // 玩家实体 → Avatar 实体号反查；非玩家实体 → Scene 实体集合直查
     //（P0-2 强分型 + P2-1b 实体集合归 Scene；实体号唯一归属一个 scene）

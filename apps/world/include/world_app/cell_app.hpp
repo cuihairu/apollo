@@ -145,6 +145,11 @@ public:
     // 重复空间幂等返回既有 scene。
     std::uint64_t add_space(std::uint64_t space_id,
                             const apollo::game::world::SceneDescriptor& descriptor);
+    // 撤销面（L108 回收切片，同 add_space 的内核线程约束）：World 经 962
+    // ready=0 通知让渡时撤路由 + 销毁已空 scene。返回被撤 scene id；0 = 未
+    // 撤——默认 Space 拒撤、未知空间幂等、占用中（avatar_count > 0）拒绝
+    // 保持路由（排空/迁移联动后续批）。
+    std::uint64_t remove_space(std::uint64_t space_id);
     // 路由查询（同 default_scene_id 的内核线程上下文约束；未知空间回落默认）
     std::uint64_t scene_id_of_space(std::uint64_t space_id) const {
         return resolve_scene_id(space_id);

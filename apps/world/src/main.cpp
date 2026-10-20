@@ -311,12 +311,23 @@ int main(int argc, char* argv[]) {
                 rc.authority_epoch = config.m1AuthorityEpoch;
                 rc.link_grace_ms = config.linkGraceMs;
                 register_client = makeCellRegisterClient(std::move(rc));
-                // 962 分配应用面（L101 分配面首切片）：监听在 pre-tick 泵内
-                // 同步回调 = 内核线程上下文（add_space 注册窗含此面），按
-                // 版本前进触发（客户端去重）——幂等登记进内核路由表。
+                // 962 分配应用面（L101 首切片 + L108 回收切片）：监听在 pre-tick
+                // 泵内同步回调 = 内核线程上下文（add_space 注册窗含此面），按
+                // 版本前进触发（客户端去重）。ready=1 且归属本 cell → 幂等登记
+                // 进内核路由表；ready=0 或归属它方（含撤销标记：World 释放/
+                // 重分配）→ 撤本地路由（占用中被拒即保持，重试随排空联动批）。
                 register_client->setSpaceAssignListener(
                     [&cell, &config, &logger](const SpaceAssignRecord& rec) {
                         if (!rec.ready || rec.assigned_cell_id != config.cellId) {
+                            const auto removed = cell.remove_space(rec.space_id);
+                            if (removed != 0) {
+                                logger->info("space revoked: id="
+                                             + std::to_string(rec.space_id)
+                                             + " version="
+                                             + std::to_string(rec.version)
+                                             + " scene="
+                                             + std::to_string(removed));
+                            }
                             return;
                         }
                         const auto scene_id = cell.add_space(

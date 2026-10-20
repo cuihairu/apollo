@@ -718,19 +718,40 @@ bool test_cell_space_assignment() {
     TEST_ASSERT(a7 != nullptr && a7->cell_id == 21 && a7->version == 1,
                 "world assignment recorded");
 
-    // 后续注册不重分（认领独占）：第二 cell 收不到任何 962
+    // 后续注册不重分（认领独占）：962 = 权威归属视图（L108 回收批精化）——
+    // 第二 cell 收到的是非归属标记（ready=0、owner 仍是 21、版本 1），而非
+    // ready=1 分配；World 侧归属不变
     CellEnd cell2;
     TEST_ASSERT(dial_cell(server, cell2, "cell-y"), "second cell dialed");
     TEST_ASSERT(register_roundtrip(cell2, 9702, 22, 1, "127.0.0.1", 9202, 1, 10, 0, true, r),
                 "second register accepted");
     TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
                 "second accepted (no spaces left)");
-    std::this_thread::sleep_for(300ms);  // 若有误推，300ms 窗内必达
+    TEST_ASSERT(wait_until([&] {
+                    cell2.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && !it->second.ready
+                           && it->second.assigned_cell_id == 21;
+                }, 3000),
+                "second cell sees not-owner marker");
     {
         std::lock_guard<std::mutex> lock(g_assigns_mutex);
-        TEST_ASSERT(assigns.size() == 2, "no reassignment to second cell");
+        const auto it7 = assigns.find(7);
+        const auto it8 = assigns.find(8);
+        TEST_ASSERT(assigns.size() == 2, "no new assignments (pool fixed)");
+        TEST_ASSERT(it7 != assigns.end() && !it7->second.ready
+                        && it7->second.assigned_cell_id == 21,
+                    "space 7 marker: not owner, owner 21");
+        TEST_ASSERT(it8 != assigns.end() && !it8->second.ready,
+                    "space 8 marker: not owner");
+        TEST_ASSERT(it7 != assigns.end() && it7->second.version == 1,
+                    "marker carries current version");
     }
     TEST_ASSERT(server.world->assigned_space_count() == 2, "table unchanged");
+    a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->cell_id == 21 && a7->version == 1,
+                "ownership unchanged by second registration");
 
     // 同代次刷新（心跳路径）→ 重推当前分配、版本不变（客户端按版本去重）
     TEST_ASSERT(register_roundtrip(cell, 9703, 21, 1, "127.0.0.1", 9201, 1, 10, 0, true, r),
@@ -953,6 +974,90 @@ bool test_stale_epoch_watermark_isolation() {
     return true;
 }
 
+// ---------- Space 回收与重分配（L108 回收首切片）----------
+// 962 = 每 Space 权威归属视图（版本单调）：过期释放 owner→0（版本不变——
+// 无认领发生不推进），再认领版本 +1（连续——防离线旧主 ABA 回放），旧主重
+// 注册（同代次水位放行）即收全池视图（含失去 Space 的 ready=0 撤销标记）
+// ——离线期缺口靠重注册收敛，不再有永劫 stale 路由。
+
+bool test_space_release_and_reclaim() {
+    std::cout << "Running: test_space_release_and_reclaim..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
+    TEST_ASSERT(server.start(118), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    // A（cell 31）认领 7/8 v1
+    CellEnd cell_a;
+    TEST_ASSERT(dial_cell(server, cell_a, "cell-a"), "cell a dialed");
+    RegisterReply r;
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9801, 31, 1, "127.0.0.1", 9207, 0, 0, 0, true, r),
+        "cell a registered");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && it->second.ready;
+                }, 3000),
+                "cell a claimed space 7");
+
+    // A 停发（链路保持）→ 过期释放：owner→0，版本不变（无认领不推进）
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7 = server.world->find_space_assignment(7);
+                    return a7 != nullptr && a7->cell_id == 0;
+                }, 3000),
+                "expired cell releases ownership");
+    const auto* a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->version == 1, "release keeps version");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "registry emptied");
+
+    // B（cell 32）注册认领 → v2（版本连续，防离线旧主 ABA）
+    CellEnd cell_b;
+    TEST_ASSERT(dial_cell(server, cell_b, "cell-b"), "cell b dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_b, 9802, 32, 1, "127.0.0.1", 9208, 0, 0, 0, true, r),
+        "cell b registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7b = server.world->find_space_assignment(7);
+                    return a7b != nullptr && a7b->cell_id == 32 && a7b->version == 2;
+                }, 3000),
+                "cell b reclaims at version 2");
+    TEST_ASSERT(wait_until([&] {
+                    cell_b.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && it->second.ready
+                           && it->second.assigned_cell_id == 32
+                           && it->second.version == 2;
+                }, 3000),
+                "cell b receives ownership push at v2");
+
+    // A 重注册（同代次，水位放行走首注册）→ 收 7/8 撤销标记 v2（owner B）
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9803, 31, 1, "127.0.0.1", 9207, 0, 0, 0, true, r),
+        "cell a re-admitted fresh");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "fresh admission");
+    TEST_ASSERT(wait_until([&] {
+                    cell_a.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && !it->second.ready
+                           && it->second.assigned_cell_id == 32
+                           && it->second.version == 2;
+                }, 3000),
+                "old owner converges to revocation view");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -969,7 +1074,8 @@ int main() {
                     && test_cell_space_assignment()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
-                    && test_stale_epoch_watermark_isolation();
+                    && test_stale_epoch_watermark_isolation()
+                    && test_space_release_and_reclaim();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;

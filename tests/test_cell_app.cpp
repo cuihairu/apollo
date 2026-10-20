@@ -141,10 +141,11 @@ world_app::IntentEnvelope make_create_player_intent_in_space(
 
 world_app::IntentEnvelope make_xborder_intent(std::uint64_t entity_id,
                                               protocol::SessionID session_id,
-                                              std::uint64_t to_space) {
+                                              std::uint64_t to_space,
+                                              std::uint64_t from_space = 1) {
     protocol::CellCrossBorder msg;
     msg.entityId = entity_id;
-    msg.fromSpace = 1;
+    msg.fromSpace = static_cast<protocol::SpaceID>(from_space);
     msg.toSpace = static_cast<protocol::SpaceID>(to_space);
     msg.position.x = 5.0f;
     msg.position.y = 5.0f;
@@ -577,6 +578,60 @@ bool test_cell_kernel_freeze_face() {
     return true;
 }
 
+// L108 回收首切片：内核撤销面 remove_space——默认 Space 拒撤、未知空间幂
+// 等 0、占用中（scene 有 avatar）拒撤保路由、清场后撤销 = 摘路由 + 销毁空
+// scene。撤销面在生产里由 962 监听在 pre-tick 泵上下文调用（内核线程），
+// 本例经 post-tick 钩子在同上下文驱动（同纪律——测试线程不碰内核状态）。
+bool test_cell_kernel_remove_space() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+
+    // start 前注册窗：登记 space 7 + 默认/未知空间的撤销面语义
+    const auto space7_scene = cell.add_space(7, second_space_descriptor());
+    TEST_ASSERT(space7_scene != 0, "space 7 scene created");
+    TEST_ASSERT(cell.remove_space(1) == 0, "default space refuses revoke");
+    TEST_ASSERT(cell.remove_space(999) == 0, "unknown space idempotent no-op");
+    TEST_ASSERT(
+        cell.space_count() == 1 && cell.scene_id_of_space(7) == space7_scene,
+        "routes intact (default route registers lazily at start)");
+
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+
+    // 占用中拒撤：玩家在 space 7（post-tick 每拍尝试撤销面，记录首个结果）
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent_in_space(51, 91, 7, 6001)),
+                "create in space 7 accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(91) == 51; },
+                           std::chrono::seconds(3)),
+                "player bound in space 7");
+    std::atomic<int> revoke_seen{0};  // 0 = 拒撤（占用中），非 0 = 撤销的 scene id
+    cell.set_post_tick([&](double) {
+        const auto r = cell.remove_space(7);
+        int expected = 0;
+        revoke_seen.compare_exchange_strong(expected, static_cast<int>(r));
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));  // > 5 拍
+    TEST_ASSERT(revoke_seen.load() == 0, "occupied space refuses revoke");
+    TEST_ASSERT(cell.space_count() == 2, "route kept while occupied");
+
+    // 清场（跨境回默认 space）→ 撤销成功：摘路由 + 销毁空 scene（幂等 0）
+    TEST_ASSERT(cell.submitIntent(make_xborder_intent(51, 91, 1, 7)),
+                "player vacates space 7 via border");
+    TEST_ASSERT(wait_until([&] { return revoke_seen.load() != 0; },
+                           std::chrono::seconds(3)),
+                "revoke succeeds after vacate");
+    TEST_ASSERT(revoke_seen.load() == static_cast<int>(space7_scene),
+                "revoked scene id matches");
+    TEST_ASSERT(cell.space_count() == 1, "route removed");
+    TEST_ASSERT(cell.find_scene(space7_scene) == nullptr, "scene destroyed");
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -599,6 +654,7 @@ int main() {
          test_cell_kernel_unknown_space_falls_back_to_default},
         {"config_declared_spaces", test_config_declared_spaces},
         {"cell_kernel_freeze_face", test_cell_kernel_freeze_face},
+        {"cell_kernel_remove_space", test_cell_kernel_remove_space},
     };
 
     for (const auto& c : cases) {

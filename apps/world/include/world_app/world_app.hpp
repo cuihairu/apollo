@@ -175,6 +175,9 @@ private:
     // 已归属其它 cell 的跳过不重分）并逐条推给该 cell 的 peer 链路；code 1/2
     // 受理都推（断链重拨后分配不丢——cell 侧按版本去重幂等应用）。
     void pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id);
+    // 过期释放（driveCellRegistry 同上下文，注册表单写者线程）：该 cell
+    // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。
+    void releaseCellSpaces(std::uint64_t cell_id);
     // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
     void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                          const std::string& result, const std::string& error);
@@ -217,7 +220,10 @@ private:
     // code 3，同代次（= 水位，同一化身断链回拨）仍首注册受理。内存面：
     // 跨 World 重启的持久墓碑随管理日志批（不假装记得重启前的事）。
     std::unordered_map<std::uint64_t, std::uint64_t> cellEpochWatermarks_;
-    // Space 分配表（962 分配面）：space_id → 分配；认领独占策略见观测面注。
+    // Space 分配表（962 分配面，L101 首切片 + L108 回收切片）：space_id →
+    // 分配；认领独占（不重分他人），过期释放 owner→0（版本不变、条目保留
+    // 回池待认领，重认领版本 +1 防 ABA——离线旧主经重注册收 ready=0 撤销
+    // 标记收敛残留路由）。重平衡策略/拓扑版本随 L108 后续批。
     std::unordered_map<std::uint64_t, SpaceAssignment> spaceAssignments_;
 };
 

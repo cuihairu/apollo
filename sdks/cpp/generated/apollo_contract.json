@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "69f9e570f28abc1079694e8b7e4abc9685be273720f2f8694c14591ba57821c9",
+  "schema_hash": "142579feefd74c940b987b2ed570766820c4b4cbcf68ecf97e99c7482a67a397",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "7467522c48bd26a2fc6ed5d0ff40bc820d78380e83d0707c93cd0f103708eb81",
+  "internal_hash": "51e9c6d2287ffba2b4474feea43dfc3bb7c69bb18b3b2cc796be6921dc6f3728",
   "contract_version": 3,
   "aliases": [
     {
@@ -3450,7 +3450,7 @@
           "name": "assignment_version",
           "type": "int64",
           "wire_type": "int64",
-          "desc": "该 Space 的分配版本（World 侧按 Space 独立单调；cell 侧按版本去重，仅版本前进才应用）"
+          "desc": "该 Space 的分配版本（World 侧按 Space 独立单调，只在认领转移时前进；cell 侧按版本去重，仅版本前进才应用）"
         },
         {
           "name": "management_epoch",
@@ -3468,16 +3468,16 @@
           "name": "assigned_cell_id",
           "type": "int64",
           "wire_type": "int64",
-          "desc": "当前归属 cell id（与注册 cell_id 一致——分配即认领）"
+          "desc": "当前归属 cell id（ready=1 时 = 收帧 cell；ready=0 时 = 当前归属方，收帧方据此撤销本地路由）"
         },
         {
           "name": "ready",
           "type": "bool",
           "wire_type": "bool",
-          "desc": "1=可服务；0=回收（本切片恒 1——回收与重平衡随 L108 拓扑批）"
+          "desc": "1=归属收帧 cell（可服务）；0=非其所有（撤销标记）"
         }
       ],
-      "desc": "World→cell Space 分配（L101 分配面首切片：每 Space 一条——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分；重平衡/回收/拓扑版本随 L108 拓扑批）"
+      "desc": "World→cell Space 归属视图（L101 分配面首切片 + L108 回收切片：每 Space 一条——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分；每次受理推全池权威视图，重认领版本单调前进，旧主经 ready=0 撤销标记收敛离线期缺口；重平衡策略/拓扑版本随 L108 后续批）"
     }
   ],
   "entities": [

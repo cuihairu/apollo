@@ -517,8 +517,12 @@ void WorldApp::onCellRegister(const std::string& peer,
 }
 
 void WorldApp::pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id) {
-    // 分配面（L101 分配面首切片）：池内未分配 Space 认领给本 cell（首分配
-    // 版本 = 1；已归属其它 cell 的跳过不重分——重平衡随 L108 拓扑批）。
+    // 分配面（L101 首切片 + L108 回收切片）：受理即推全池权威归属视图——
+    // 未登记 Space 首认领（版本 1）；owner=0（过期释放）重认领且版本 +1
+    //（认领转移面：离线旧主本地视图停在旧版本，须版本前进才收敛，防 ABA
+    // 重放；同主回拨也前进）；本 cell 已归属的刷新（版本不变幂等）；归属
+    // 其它 cell 的推 ready=0 撤销标记（收帧方据此撤本地残留路由——离线期
+    // 缺口经重注册收敛，见 L108 切片）。认领独占：不重分他人 Space。
     if (config_.assignSpaces.empty()) {
         return;
     }
@@ -532,13 +536,39 @@ void WorldApp::pushSpaceAssignments(const std::string& peer, std::uint64_t cell_
             it = spaceAssignments_.emplace(space_id, a).first;
             worldLog().info("space assigned: space=" + std::to_string(space_id)
                             + " cell=" + std::to_string(cell_id) + " version=1");
+        } else if (it->second.cell_id == 0) {
+            ++it->second.version;  // 重认领转移：版本前进（防 ABA）
+            it->second.cell_id = cell_id;
+            worldLog().info("space re-claimed: space=" + std::to_string(space_id)
+                            + " cell=" + std::to_string(cell_id)
+                            + " version=" + std::to_string(it->second.version));
         } else if (it->second.cell_id != cell_id) {
-            continue;  // 认领独占——不重分
+            if (m1Link_) {
+                m1Link_->sendCellSpaceAssign(peer, it->second.version,
+                                             config_.m1AuthorityEpoch, space_id,
+                                             it->second.cell_id, false);
+            }
+            continue;  // 归属它方：撤销标记（owner/版本 = 当前归属视图）
         }
         if (m1Link_) {
             m1Link_->sendCellSpaceAssign(peer, it->second.version,
                                          config_.m1AuthorityEpoch, space_id,
                                          it->second.cell_id, true);
+        }
+    }
+}
+
+void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
+    // 过期释放（L108 回收切片，driveCellRegistry 同上下文）：owner 置 0、
+    // 版本不变——释放不是认领，无转移发生；重认领方经 pushSpaceAssignments
+    // 版本 +1 收敛。条目保留：池成员身份不随心跳消失，Space 回池待认领。
+    for (auto& entry : spaceAssignments_) {
+        if (entry.second.cell_id == cell_id) {
+            entry.second.cell_id = 0;
+            worldLog().info("space released: space="
+                            + std::to_string(entry.first)
+                            + " cell=" + std::to_string(cell_id)
+                            + " version=" + std::to_string(entry.second.version));
         }
     }
 }
@@ -573,6 +603,7 @@ void WorldApp::driveCellRegistry() {
             worldLog().info("cell expired: id=" + std::to_string(it->first)
                             + " epoch=" + std::to_string(it->second.start_epoch)
                             + " peer=" + it->second.peer);
+            releaseCellSpaces(it->first);  // 归属 Space 释放回池（L108 回收切片）
             it = cellRegistrations_.erase(it);
         } else {
             ++it;
