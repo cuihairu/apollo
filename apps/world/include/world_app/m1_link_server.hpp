@@ -203,6 +203,13 @@ public:
         (void)payload;
     }
 
+    // 对端断连通知（L101 断连存疑切片）：peer 自报名经 LinkManager::on_down
+    // 转报（握手期坏链无名字不出账——框架不回调）。触发在 pump 上下文 =
+    // 宿主泵线程（WorldApp 即内核线程）。默认无操作（Null 实现无链路）。
+    virtual void on_peer_down(std::function<void(const std::string& peer)> fn) {
+        (void)fn;
+    }
+
     virtual std::uint16_t listenPort() const { return 0; }
     virtual bool gatewayConnected() const { return false; }
 

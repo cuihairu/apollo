@@ -1145,6 +1145,57 @@ bool test_watermark_journal_persists_across_restart() {
     return true;
 }
 
+// 断连存疑标记（L101 断连存疑切片）：控制链路断（对端 TCP 关）→ 注册表
+// 条目置存疑（gap 表 §line71：断开后先标记存疑对账，不立即另端重建——
+// 本切片只落标记与清除，对账/重建约束随既有过期释放面）；同 ID 同代次
+// 重注册（961 复核受理）清存疑。观测面 suspect_cell_count（轮询口径同
+// registered_cell_count）。
+bool test_cell_link_down_marks_suspect() {
+    std::cout << "Running: test_cell_link_down_marks_suspect..." << std::endl;
+    WorldEnd server;
+    TEST_ASSERT(server.start(115), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+
+    // 注册：cell 31 epoch 5 受理，无存疑
+    CellEnd c1;
+    TEST_ASSERT(dial_cell(server, c1, "cell-suspect-1"), "cell dialed");
+    RegisterReply r;
+    TEST_ASSERT(register_roundtrip(c1, 6101, 31, 5, "127.0.0.1", 9311, 1, 10, 0,
+                                   true, r),
+                "register reply arrived");
+    TEST_ASSERT(r.accepted, "registered");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "one registration");
+    TEST_ASSERT(server.world->suspect_cell_count() == 0, "fresh entry not suspect");
+
+    // 断链：LinkManager 析构 → TCP 关 → 服务端泵读 EOF → on_down → 存疑
+    c1.manager.reset();
+    TEST_ASSERT(wait_until([&] { return server.world->suspect_cell_count() == 1; },
+                           3000),
+                "link down marks suspect");
+    const auto* reg = server.world->find_cell_registration(31);
+    TEST_ASSERT(reg != nullptr && reg->suspect, "suspect visible on entry");
+
+    // 同 ID 同代次重注册（断链重拨 walk-in）：复核受理清存疑
+    CellEnd c2;
+    TEST_ASSERT(dial_cell(server, c2, "cell-suspect-2"), "cell re-dialed");
+    TEST_ASSERT(register_roundtrip(c2, 6102, 31, 5, "127.0.0.1", 9311, 1, 10, 0,
+                                   true, r),
+                "re-register reply arrived");
+    TEST_ASSERT(r.accepted, "same-epoch walk-in accepted");
+    TEST_ASSERT(wait_until([&] { return server.world->suspect_cell_count() == 0; },
+                           3000),
+                "verified re-admission clears suspect");
+    reg = server.world->find_cell_registration(31);
+    TEST_ASSERT(reg != nullptr && !reg->suspect, "entry clear after re-admit");
+    TEST_ASSERT(reg->peer == "cell-suspect-2", "peer updated to new link");
+
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1163,7 +1214,8 @@ int main() {
                     && test_grace_freeze_and_readmit()
                     && test_stale_epoch_watermark_isolation()
                     && test_space_release_and_reclaim()
-                    && test_watermark_journal_persists_across_restart();
+                    && test_watermark_journal_persists_across_restart()
+                    && test_cell_link_down_marks_suspect();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;

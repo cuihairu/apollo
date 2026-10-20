@@ -258,6 +258,17 @@ public:
             install_dispatching(peer);
         });
 
+        // 对端断连转报（L101 断连存疑切片）：LinkManager::on_down 在 pump
+        // 上下文（宿主内核线程）触发；握手期坏链无名字，框架不出账——这里
+        // 收到的 peer 名都可对上登记。断连原因 M1 层不透传（上层只裁决
+        // 存疑与否；诊断走链路计数/日志面）。
+        manager_->on_down([this](const std::string& name, link::LinkDownReason reason) {
+            (void)reason;
+            if (on_peer_down_fn_) {
+                on_peer_down_fn_(name);
+            }
+        });
+
         started_.store(true, std::memory_order_release);
         return true;
     }
@@ -271,6 +282,10 @@ public:
         if (manager_) {
             manager_->pump(now_ms);
         }
+    }
+
+    void on_peer_down(std::function<void(const std::string& peer)> fn) override {
+        on_peer_down_fn_ = std::move(fn);
     }
 
     void sendIntentAck(std::uint64_t request_id, std::int32_t code,
@@ -642,6 +657,8 @@ private:
     std::function<void(const std::string&, const ModuleRolloutRequest&)> on_module_rollout_;
     std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain_;
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register_;
+    // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
+    std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
     std::atomic<bool> started_{false};

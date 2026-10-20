@@ -116,6 +116,9 @@ void WorldApp::start() {
             onCellRegister(peer, request);
         });
     egressAdapter_.link = m1Link_.get();
+    // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
+    //（pre-tick，内核线程）触发——注册表单写者上下文，直接改表。
+    m1Link_->on_peer_down([this](const std::string& peer) { onPeerLinkDown(peer); });
 
     // 执行内核启动：闸开（受理面就绪）+ 内核循环线程起
     try {
@@ -509,6 +512,7 @@ void WorldApp::onCellRegister(const std::string& peer,
     it->second.ready = request.ready;
     it->second.registered_at_ms = now_ms;
     it->second.peer = peer;
+    it->second.suspect = false;  // 断链复核归来（961 受理裁决通过）清存疑
     // 水位随受理推进 + 墓碑前进才落盘（recordEpochWatermark 统一判前进，
     // 这里不再直写 map——先写会骗过前进判定漏落盘）
     recordEpochWatermark(request.cell_id, request.start_epoch);
@@ -521,6 +525,31 @@ void WorldApp::onCellRegister(const std::string& peer,
                      : "replaced (new epoch)");
     // 分配推送（962 分配面；code 1/2 受理都推——断链重拨后分配不丢）
     pushSpaceAssignments(peer, request.cell_id);
+}
+
+void WorldApp::onPeerLinkDown(const std::string& peer) {
+    // 断连存疑标记（L101 断连存疑切片，on_down 泵上下文 = 注册表单写者
+    // 线程）：peer 对上登记即置存疑——gap 表 §line71 断开后先标记，不立即
+    // 另端重建权威（释放/重认领仍走既有过期窗裁决）。未知 peer（gateway/
+    // admin 链路无登记）无操作；同名重连前旧标记不清除（清除只随 961
+    // 复核受理，见 onCellRegister）。
+    for (auto& entry : cellRegistrations_) {
+        if (entry.second.peer == peer && !entry.second.suspect) {
+            entry.second.suspect = true;
+            worldLog().info("cell link down marked suspect: cell_id="
+                            + std::to_string(entry.first) + " peer=" + peer);
+        }
+    }
+}
+
+std::size_t WorldApp::suspect_cell_count() const {
+    std::size_t count = 0;
+    for (const auto& entry : cellRegistrations_) {
+        if (entry.second.suspect) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 void WorldApp::pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id) {

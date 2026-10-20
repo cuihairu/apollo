@@ -95,11 +95,18 @@ public:
         bool ready = false;
         std::uint64_t registered_at_ms = 0;
         std::string peer;
+        // 断连存疑（L101 断连存疑切片）：控制链路断（M1 on_down，泵上下文
+        // 即本表单写者线程）即置位——gap 表 §line71 断开后先标记对账；清除
+        // 只随 961 复核受理（同 ID 重注册裁决接受 = 活体归来），过期摘除
+        // 整条带走。
+        bool suspect = false;
     };
     // 注册表只读观测面（泵上下文口径，同世界状态单写者——受理点在 M1 泵
     // 上下文改表，读面供测试/管理消费；跨线程持有返回指针违反单写者纪律）。
     std::size_t registered_cell_count() const { return cellRegistrations_.size(); }
     const CellRegistration* find_cell_registration(std::uint64_t cell_id) const;
+    // 存疑条目数（L101 断连存疑切片观测面；轮询口径同 registered_cell_count）
+    std::size_t suspect_cell_count() const;
 
     // ---- Space 分配表（962，L101 分配面首切片）----
     // 分配条目：space_id → （归属 cell + 分配版本）。池 = config.assignSpaces；
@@ -175,6 +182,10 @@ private:
     // recordEpochWatermark = 内存水位对齐 + 前进才落盘（见 world_app.cpp）
     void loadEpochTombstones();
     void recordEpochWatermark(std::uint64_t cell_id, std::uint64_t epoch);
+    // 断连存疑标记（L101 断连存疑切片）：M1 on_peer_down 回调（泵上下文 =
+    // 内核线程，注册表单写者直接改表）。peer 对上登记条目即置 suspect；
+    // 未知 peer（gateway/admin 链路）无登记 = 无操作。
+    void onPeerLinkDown(const std::string& peer);
     // 分配推送（962，受理点内同步发）：认领池内未分配 Space（首分配 = 1，
     // 已归属其它 cell 的跳过不重分）并逐条推给该 cell 的 peer 链路；code 1/2
     // 受理都推（断链重拨后分配不丢——cell 侧按版本去重幂等应用）。
