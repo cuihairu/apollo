@@ -215,10 +215,15 @@ private:
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。
     void driveCellRegistry();
-    // 代次墓碑（L101 管理日志切片）：装载在 start() 闸开前（无并发写者）；
-    // recordEpochWatermark = 内存水位对齐 + 前进才落盘（见 world_app.cpp）
-    void loadEpochTombstones();
+    // 管理日志装载（L101 管理日志切片 → 批A journal v2）：装载在 start()
+    // 闸开前（无并发写者）；T/A/R/B 行终态重建 + B 行铸启动代次（见
+    // world_app.cpp）。recordEpochWatermark = 内存水位对齐 + 前进才落盘。
+    void loadWorldJournal();
     void recordEpochWatermark(std::uint64_t cell_id, std::uint64_t epoch);
+    // journal v2 行追加（批A）统一入口：append + flush 即返回。「成功才推
+    // 962」的声明闸由调用面裁决——A 行失败回滚认领不声明（write-ahead），
+    // R/B 行失败告警降级（批㉚ 可用性优先）。journal 关 = 纯内存语义恒成功。
+    bool appendJournalRow(const std::string& row);
     // 断连存疑标记（L101 断连存疑切片）：M1 on_peer_down 回调（泵上下文 =
     // 内核线程，注册表单写者直接改表）。peer 对上登记条目即置 suspect；
     // 未知 peer（gateway/admin 链路）无登记 = 无操作。
@@ -284,6 +289,11 @@ private:
     // 回池待认领，重认领版本 +1 防 ABA——离线旧主经重注册收 ready=0 撤销
     // 标记收敛残留路由）。重平衡策略/拓扑版本随 L108 后续批。
     std::unordered_map<std::uint64_t, SpaceAssignment> spaceAssignments_;
+    // journal 已知归属主（批A 装载终态重建）：cell_id → 装载时刻。重启后
+    // 未归队前 Space 保持归属（设计稿 §4「过期窗不来」行——不立即另端
+    // 重建），过期窗（cellExpiryMs）内不归队即释放回池；真身登记即除名
+    //（此后随登记面心跳/过期语义）。
+    std::unordered_map<std::uint64_t, std::uint64_t> pendingJournalOwners_;
 };
 
 } // namespace world_app

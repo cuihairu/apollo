@@ -1,6 +1,6 @@
 # World Restart Reconciliation Design
 
-> Status: **design draft (under review), not implemented**. This draft only defines the full management journal, the reconciliation protocol extension, and per-item adjudication rules; it touches no runtime code. Implementation slices are in §8; the sole implementation checklist remains the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
+> Status: **Batch A implemented** (§2 record family A/R/B lines + write-ahead order + replay-to-final-state reload + the B-line epoch mint, plus the pending-owner expiry window on reload — the §4 "absent in the expiry window" row; see root todo batch ㊴); Batch B (963 + adjudication) and Batch C (restart e2e + lock) not implemented. The implementation checklist remains the root [`todo.md`](https://github.com/cuihairu/apollo/blob/main/todo.md).
 >
 > Parent document: [World and cell Management](./world-cell-management.md) §4 (loss of contact) and §6 (management records and World restart). This draft refines §6's "restore the same records, raise the management epoch, then pull allocation lists from cells and reconcile item by item" down to record formats, contracts, and per-item verdicts.
 
@@ -81,6 +81,6 @@ Freeze granularity = **a single Space**, not the whole cell (minimal isolation: 
 
 ## 8. Implementation Slice Proposal (serial dependencies)
 
-- **Batch A (journal v2 record family)**: A/R/B lines + the write-ahead order + replay-to-final-state reload + the B-line epoch mint. Pure World side, no protocol change.
-- **Batch B (963 + adjudication)**: contract 963 (message count 87→88, through the apollo_gen generation chain) + post-admission self-report + the §4 adjudication table + the conflict-set observation face.
+- **Batch A (journal v2 record family)** — implemented (batch ㊴): A/R/B lines + the write-ahead order + replay-to-final-state reload + the B-line epoch mint + the pending-owner expiry window. Pure World side, no protocol change. Implementation decisions: A/R lines for non-pool spaces are skipped at load (counted in a warning); a failed A-line append rolls back the in-memory claim and withholds the 962 declaration (space stays pooled for retry); R/B line failures warn and degrade (batch-㉚ availability-first); released entries are still replayed (reclaim's version +1 depends on the historical version).
+- **Batch B (963 + adjudication)**: a new contract number (963/966 are taken by the retire management command face; `cell_space_report` takes a new id) + post-admission self-report + the §4 adjudication table + the conflict-set observation face.
 - **Batch C (restart e2e + lock)**: kill/restart real-binary smoke + the persistent-volume lock file + the empty-journal determination.

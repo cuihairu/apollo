@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -95,9 +96,10 @@ WorldApp::~WorldApp() {
 void WorldApp::start() {
     if (isRunning()) return;
 
-    // 代次墓碑装载（L101 管理日志切片）：闸开前——受理面未开，无并发写者
-    //（损坏行显式拒启，见 loadEpochTombstones）
-    loadEpochTombstones();
+    // 管理日志装载（L101 管理日志切片 → 批A journal v2）：闸开前——受理面
+    // 未开，无并发写者（损坏行显式拒启，见 loadWorldJournal；B 行铸代次
+    // 先记后开受理面——本调用先于 makeM1LinkServer 装配）
+    loadWorldJournal();
 
     // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket
     // 已退役）：InterServerLink passive 端点装配（先建对象不监听——内核
@@ -588,20 +590,39 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
             const bool reclaim = it != spaceAssignments_.end();  // owner=0
             if (reclaim) {
                 ++it->second.version;  // 重认领转移：版本前进（防 ABA）
-                worldLog().info("space re-claimed: space=" + std::to_string(space_id)
-                                + " cell=" + std::to_string(reg.cell_id)
-                                + " version=" + std::to_string(it->second.version));
             } else {
                 SpaceAssignment a;
                 a.space_id = space_id;
                 a.cell_id = reg.cell_id;
                 a.version = 1;
                 it = spaceAssignments_.emplace(space_id, a).first;
-                worldLog().info("space assigned: space=" + std::to_string(space_id)
-                                + " cell=" + std::to_string(reg.cell_id)
-                                + " version=1");
             }
             it->second.cell_id = reg.cell_id;
+            // write-ahead（批A journal v2）：A 行 append+flush 成功才推 962
+            // ——持久决定先于对外声明。落盘失败回滚内存认领并跳过声明
+            //（Space 留池待下次受理重试，告警 loudly；刷新/撤销标记不经此闸
+            //——无转移发生，最后一条 A 行已覆盖该归属+版本）。
+            if (!appendJournalRow("A " + std::to_string(space_id) + "|"
+                                  + std::to_string(reg.cell_id) + "|"
+                                  + std::to_string(it->second.version))) {
+                worldLog().warning(
+                    "world journal append failed: " + config_.worldJournalPath
+                    + " (space claim withheld: space=" + std::to_string(space_id)
+                    + " cell=" + std::to_string(reg.cell_id) + ")");
+                if (reclaim) {
+                    --it->second.version;  // 回滚版本前进（保持释放态）
+                } else {
+                    spaceAssignments_.erase(it);
+                }
+                continue;
+            }
+            worldLog().info(reclaim
+                                ? "space re-claimed: space=" + std::to_string(space_id)
+                                      + " cell=" + std::to_string(reg.cell_id)
+                                      + " version=" + std::to_string(it->second.version)
+                                : "space assigned: space=" + std::to_string(space_id)
+                                      + " cell=" + std::to_string(reg.cell_id)
+                                      + " version=1");
         } else if (it->second.cell_id != reg.cell_id) {
             if (m1Link_) {
                 m1Link_->sendCellSpaceAssign(peer, it->second.version,
@@ -640,6 +661,15 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
     for (auto& entry : spaceAssignments_) {
         if (entry.second.cell_id == cell_id) {
             entry.second.cell_id = 0;
+            // R 行（批A journal v2）：释放是终态转移（owner 归零、版本不变），
+            // 重放以每 space 最后一条 A/R 为准——缺席则重启误认旧主仍持有权。
+            // 失败告警降级（批㉚ 可用性优先；装载面对账裁决随批B）。
+            if (!appendJournalRow("R " + std::to_string(entry.first))) {
+                worldLog().warning("world journal append failed: "
+                                   + config_.worldJournalPath
+                                   + " (release replays as owned: space="
+                                   + std::to_string(entry.first) + ")");
+            }
             worldLog().info("space released: space="
                             + std::to_string(entry.first)
                             + " cell=" + std::to_string(cell_id)
@@ -757,27 +787,50 @@ const WorldApp::SpaceAssignment* WorldApp::find_space_assignment(
     return it != spaceAssignments_.end() ? &it->second : nullptr;
 }
 
-void WorldApp::loadEpochTombstones() {
-    // 墓碑装载（启动窗，M1 链路开闸前——受理面未开，无并发写者）：
-    // `cell_id|start_epoch` append-only 行，逐行取每 cell 最大重建水位。
-    // 0 号/非数字/缺字段/多字段 = 损坏显式拒启（不静默部分回放——orders
-    // journal 同口径）；行尾 \r 剥除（Windows 落盘坑账防御）。文件缺省 =
-    // 首启，append 建档。
+void WorldApp::loadWorldJournal() {
+    // 管理日志装载（启动窗，M1 链路开闸前——受理面未开，无并发写者）。
+    // v2 行型（world-reconciliation 设计稿 §2，前缀区型）：`[T] cell|epoch`
+    // 代次墓碑（T 前缀可省——v1 裸行直接升级不迁移）、`A space|cell|version`
+    // 认领转移、`R space` 释放（owner 归零版本不变）、`B epoch` 启动代次。
+    // 装载终态 = 每 space 最后一条 A/R + 每 cell 最大 T + 最大 B。0 号/非
+    // 数字/缺字段/多字段 = 损坏显式拒启（不静默部分回放——orders journal
+    // 同口径）；行尾 \r 剥除（Windows 落盘坑账防御）。文件缺省 = 首启，
+    // append 建档（空日志顶替禁令的判定随批C）。
     if (config_.worldJournalPath.empty()) {
         return;
     }
     std::ifstream in(config_.worldJournalPath, std::ios::binary);
     if (!in) {
-        return;  // 无墓碑 = 首启
+        return;  // 无记录 = 首启
     }
     const auto bad_line = [&](std::uint64_t line_no, const char* why) {
         throw std::runtime_error(std::string("world journal corrupt (") + why
                                  + ") at " + config_.worldJournalPath + ":"
                                  + std::to_string(line_no));
     };
+    const auto parse_u64 = [&](const std::string& field,
+                               std::uint64_t line_no) -> std::uint64_t {
+        std::size_t pos = 0;
+        std::uint64_t value = 0;
+        try {
+            value = std::stoull(field, &pos);
+        } catch (const std::exception&) {
+            bad_line(line_no, "not a number");
+        }
+        if (pos != field.size() || field.empty()) {
+            bad_line(line_no, "trailing garbage");
+        }
+        return value;
+    };
+    struct ReplaySpace {
+        std::uint64_t cell_id = 0;
+        std::uint64_t version = 0;
+    };
+    std::unordered_map<std::uint64_t, ReplaySpace> replay;
+    std::uint64_t max_boot_epoch = 0;
+    bool saw_boot_row = false;
     std::string line;
     std::uint64_t line_no = 0;
-    std::size_t loaded = 0;
     while (std::getline(in, line)) {
         ++line_no;
         if (!line.empty() && line.back() == '\r') {
@@ -786,25 +839,71 @@ void WorldApp::loadEpochTombstones() {
         if (line.empty()) {
             continue;
         }
-        const auto bar = line.find('|');
+        if (line.compare(0, 2, "A ") == 0) {
+            const std::string body = line.substr(2);
+            const auto b1 = body.find('|');
+            if (b1 == std::string::npos) {
+                bad_line(line_no, "missing '|'");
+            }
+            const auto b2 = body.find('|', b1 + 1);
+            if (b2 == std::string::npos) {
+                bad_line(line_no, "missing '|'");
+            }
+            if (body.find('|', b2 + 1) != std::string::npos) {
+                bad_line(line_no, "extra field");
+            }
+            const auto space_id = parse_u64(body.substr(0, b1), line_no);
+            const auto cell_id = parse_u64(body.substr(b1 + 1, b2 - b1 - 1), line_no);
+            const auto version = parse_u64(body.substr(b2 + 1), line_no);
+            if (space_id == 0 || cell_id == 0 || version == 0) {
+                bad_line(line_no, "zero id or version");
+            }
+            replay[space_id] = ReplaySpace{cell_id, version};  // 最后一条 A 为准
+            continue;
+        }
+        if (line.compare(0, 2, "R ") == 0) {
+            const std::string body = line.substr(2);
+            if (body.find('|') != std::string::npos) {
+                bad_line(line_no, "extra field");
+            }
+            const auto space_id = parse_u64(body, line_no);
+            if (space_id == 0) {
+                bad_line(line_no, "zero space id");
+            }
+            const auto it = replay.find(space_id);
+            if (it != replay.end()) {
+                it->second.cell_id = 0;  // 终态 owner 归零（版本保留）
+            }
+            // 无 A 的 R = 无操作（释放等价于从未认领）
+            continue;
+        }
+        if (line.compare(0, 2, "B ") == 0) {
+            const std::string body = line.substr(2);
+            if (body.find('|') != std::string::npos) {
+                bad_line(line_no, "extra field");
+            }
+            const auto epoch = parse_u64(body, line_no);
+            if (epoch == 0) {
+                bad_line(line_no, "zero epoch");
+            }
+            max_boot_epoch = std::max(max_boot_epoch, epoch);
+            saw_boot_row = true;
+            continue;
+        }
+        // T 行（可省前缀）：v2 带 `T ` 前缀或 v1 裸行，同解析。
+        std::string body = line;
+        if (line.compare(0, 2, "T ") == 0) {
+            body = line.substr(2);
+        }
+        const auto bar = body.find('|');
         if (bar == std::string::npos) {
             bad_line(line_no, "missing '|'");
         }
-        const auto parse_u64 = [&](const std::string& field) -> std::uint64_t {
-            std::size_t pos = 0;
-            std::uint64_t value = 0;
-            try {
-                value = std::stoull(field, &pos);
-            } catch (const std::exception&) {
-                bad_line(line_no, "not a number");
-            }
-            if (pos != field.size() || field.empty()) {
-                bad_line(line_no, "trailing garbage");
-            }
-            return value;
-        };
-        const auto cell_id = parse_u64(line.substr(0, bar));
-        const auto epoch = parse_u64(line.substr(bar + 1));
+        if (body.find('|', bar + 1) != std::string::npos) {
+            bad_line(line_no, "extra field");
+        }
+        const auto cell_id = parse_u64(body.substr(0, bar), line_no);
+        const auto epoch = parse_u64(body.substr(bar + 1), line_no);
         if (cell_id == 0 || epoch == 0) {
             bad_line(line_no, "zero id or epoch");
         }
@@ -812,33 +911,91 @@ void WorldApp::loadEpochTombstones() {
         if (epoch > wm) {
             wm = epoch;
         }
-        loaded = cellEpochWatermarks_.size();
+    }
+    // B 行铸代次（设计稿 §5 步骤3）：重启 = 最大 B + 1；首启无 B 行 = 配置
+    // 代次即初始代次（写首个 B 行——先记后开受理面，本函数先于链路装配）。
+    // 自铸代次（配置 0）且无 B 行 = 无从记，沿用进程自铸（每启动自然不同）。
+    // 追加失败告警降级：内存代次已铸，两次启动可能同代次（loudly 可见；
+    // flush/fsync 持久级别随设计稿待拍板项）。
+    if (config_.m1AuthorityEpoch != 0 || saw_boot_row) {
+        if (saw_boot_row && max_boot_epoch == std::numeric_limits<std::uint64_t>::max()) {
+            throw std::runtime_error("world journal epoch exhausted at "
+                                     + config_.worldJournalPath);
+        }
+        const std::uint64_t cast = saw_boot_row ? max_boot_epoch + 1
+                                                : config_.m1AuthorityEpoch;
+        if (!appendJournalRow("B " + std::to_string(cast))) {
+            worldLog().warning("world journal B row append failed: "
+                               + config_.worldJournalPath
+                               + " (restart may reuse management epoch)");
+        }
+        config_.m1AuthorityEpoch = cast;  // 受理面统一用铸后代次（961/962 透传）
+    }
+    // 装载终态重建进池（批A）：仅池成员生效（非池行计数告警——池配置变更后
+    // 旧记录无权威落点，逐项对账随批B）；已释放（owner=0）条目照旧重建——
+    // 重认领版本 +1 依赖历史版本（新启 version 1 会倒退，ABA 回放面）。
+    // 有主的条目进 pending 过期窗（driveCellRegistry 驱动释放）。
+    std::size_t seeded = 0;
+    std::size_t skipped = 0;
+    const auto boot_ms = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    for (const auto& entry : replay) {
+        if (std::find(config_.assignSpaces.begin(), config_.assignSpaces.end(),
+                      entry.first) == config_.assignSpaces.end()) {
+            ++skipped;
+            continue;
+        }
+        SpaceAssignment a;
+        a.space_id = entry.first;
+        a.cell_id = entry.second.cell_id;
+        a.version = entry.second.version;
+        spaceAssignments_[entry.first] = a;
+        if (a.cell_id != 0) {
+            pendingJournalOwners_[a.cell_id] = boot_ms;
+        }
+        ++seeded;
     }
     worldLog().info("world journal loaded: " + config_.worldJournalPath
-                    + " watermarks=" + std::to_string(loaded));
+                    + " watermarks=" + std::to_string(cellEpochWatermarks_.size())
+                    + " spaces=" + std::to_string(seeded)
+                    + (skipped != 0
+                           ? " skipped_nonpool=" + std::to_string(skipped)
+                           : "")
+                    + " epoch=" + std::to_string(config_.m1AuthorityEpoch));
+}
+
+bool WorldApp::appendJournalRow(const std::string& row) {
+    // journal v2 追加统一入口（批A）：append + flush 即返回——「成功才推
+    // 962」的裁决由调用面做（A 行闸声明、R/B 行告警降级）。journal 关 =
+    // 纯内存语义恒成功（批㉚ 已代决沿用）。调用点全在内核线程（受理点/
+    // 驱动钩子 = 注册表单写者上下文），无并发写者。
+    if (config_.worldJournalPath.empty()) {
+        return true;
+    }
+    std::ofstream out(config_.worldJournalPath, std::ios::app | std::ios::binary);
+    if (!out) {
+        return false;
+    }
+    out << row << '\n';
+    out.flush();
+    return static_cast<bool>(out);
 }
 
 void WorldApp::recordEpochWatermark(std::uint64_t cell_id, std::uint64_t epoch) {
     // 水位记录 + 墓碑追加（L101 管理日志切片）：仅水位真实前进才落盘——
     // 同代次刷新/回拨不追加（行冗余无害但省 I/O；prev 已在日志或本进程
-    // 追加过）。追加失败只告警不拒受理：墓碑缺席时隔离退化回批㉗ 内存
-    // 水位（可用性优先，loudly 可见）。调用点 = onCellRegister 受理点
-    //（内核线程泵上下文，单写者）。
+    // 追加过）。v1 裸行格式保留（装载面直接升级，不迁移）。追加失败只告
+    // 警不拒受理：墓碑缺席时隔离退化回批㉗ 内存水位（可用性优先，loudly
+    // 可见）。调用点 = onCellRegister 受理点（内核线程泵上下文，单写者）。
     const auto it = cellEpochWatermarks_.find(cell_id);
     const std::uint64_t prev = it != cellEpochWatermarks_.end() ? it->second : 0;
     cellEpochWatermarks_[cell_id] = std::max(prev, epoch);
-    if (epoch <= prev || config_.worldJournalPath.empty()) {
+    if (epoch <= prev) {
         return;
     }
-    std::ofstream out(config_.worldJournalPath, std::ios::app | std::ios::binary);
-    if (!out) {
-        worldLog().warning("world journal append failed: " + config_.worldJournalPath
-                           + " (isolation degrades to in-memory watermark)");
-        return;
-    }
-    out << cell_id << '|' << epoch << '\n';
-    out.flush();
-    if (!out) {
+    if (!appendJournalRow(std::to_string(cell_id) + '|' + std::to_string(epoch))) {
         worldLog().warning("world journal append failed: " + config_.worldJournalPath
                            + " (isolation degrades to in-memory watermark)");
     }
@@ -849,20 +1006,39 @@ void WorldApp::driveCellRegistry() {
     // last-heard（registered_at_ms，每次受理刷新）超 cellExpiryMs 未刷新 =
     // 心跳失效，整条摘除。摘除后该 cell 重注册走受理面首注册路径（登记
     // 忘却——代次墓碑随旧执行端隔离批）；cell 侧心跳 = 周期 960 重发。
-    if (config_.cellExpiryMs == 0 || cellRegistrations_.empty()) {
+    if (config_.cellExpiryMs == 0) {
         return;
     }
     const auto now_ms = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch())
             .count());
-    for (auto it = cellRegistrations_.begin(); it != cellRegistrations_.end();) {
-        if (now_ms - it->second.registered_at_ms > config_.cellExpiryMs) {
-            worldLog().info("cell expired: id=" + std::to_string(it->first)
-                            + " epoch=" + std::to_string(it->second.start_epoch)
-                            + " peer=" + it->second.peer);
-            releaseCellSpaces(it->first);  // 归属 Space 释放回池（L108 回收切片）
-            it = cellRegistrations_.erase(it);
+    if (!cellRegistrations_.empty()) {
+        for (auto it = cellRegistrations_.begin(); it != cellRegistrations_.end();) {
+            if (now_ms - it->second.registered_at_ms > config_.cellExpiryMs) {
+                worldLog().info("cell expired: id=" + std::to_string(it->first)
+                                + " epoch=" + std::to_string(it->second.start_epoch)
+                                + " peer=" + it->second.peer);
+                releaseCellSpaces(it->first);  // 归属 Space 释放回池（L108 回收切片）
+                it = cellRegistrations_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    // journal 已知归属主过期窗（批A 装载终态重建）：装载面重建的归属，其主
+    // 未随登记面出现——窗内保持归属（不立即另端重建，设计稿 §4「过期窗不
+    // 来」行），超窗未归队即释放回池（R 行）。真身已登记 = 除名（此后随
+    // 登记面心跳/过期语义，不双轨）。
+    for (auto it = pendingJournalOwners_.begin(); it != pendingJournalOwners_.end();) {
+        if (cellRegistrations_.count(it->first) > 0) {
+            it = pendingJournalOwners_.erase(it);
+            continue;
+        }
+        if (now_ms - it->second > config_.cellExpiryMs) {
+            worldLog().info("journal owner expired: cell=" + std::to_string(it->first));
+            releaseCellSpaces(it->first);
+            it = pendingJournalOwners_.erase(it);
         } else {
             ++it;
         }

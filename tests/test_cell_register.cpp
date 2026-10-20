@@ -1662,6 +1662,199 @@ bool test_watermark_journal_persists_across_restart() {
     return true;
 }
 
+// ---------- 管理日志 v2（断连对账批A 切片）：分配终态跨重启 ----------
+// A/R/B 行（设计稿 world-reconciliation §2）：认领转移记 A（write-ahead——
+// A 行 append+flush 成功才推 962，持久决定先于对外声明）、释放记 R（owner
+// 归零版本不变）、启动记 B（重启代次 = 最大 B + 1，先记后开受理面）。装载
+// 终态重建 = 每 space 最后一条 A/R 为归属；v1 裸行仍按 T 解析（不迁移）。
+// 重启后旧主未归队前 Space 不另端重建（设计稿 §4「过期窗不来」行）——装载
+// 主进 pending 过期窗（cellExpiryMs），窗内不归队释放回池（R 行），重认领
+// 版本 +1 依赖装载版本（池条目重建保留历史版本防 ABA 倒退）。
+bool test_journal_v2_assignment_state_across_restart() {
+    std::cout << "Running: test_journal_v2_assignment_state_across_restart..." << std::endl;
+    namespace fs = std::filesystem;
+    const fs::path journal_dir = "/tmp/apollo-cell-register-tests";
+    fs::create_directories(journal_dir);  // 临时目录不自动建坑账：落盘前显式建
+    const fs::path journal = journal_dir / "journal-v2.txt";
+    fs::remove(journal);
+
+    // v1 兼容预置：裸行 `81|9` = 旧格式水位，装载后 epoch 8 复活拒 code 3。
+    {
+        std::ofstream seed(journal, std::ios::binary);
+        seed << "81|9\n";
+    }
+
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+    RegisterReply r;
+
+    // W1：认领 61/62 → A 行落盘；B 行首启铸初始代次（配置 77）。
+    WorldEnd w1;
+    w1.config.worldJournalPath = journal.string();
+    w1.config.assignSpaces = {61, 62};
+    w1.config.cellExpiryMs = 5000;  // 本段无关过期（停机即收）
+    TEST_ASSERT(w1.start(121), "w1 started with journal");
+    CellEnd cx;
+    TEST_ASSERT(dial_cell(w1, cx, "cell-compat"), "compat cell dialed");
+    TEST_ASSERT(register_roundtrip(cx, 4201, 81, 8, "127.0.0.1", 9350, 1, 10, 0, true, r),
+                "compat stale epoch 8 roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch,
+                "v1 bare line seeds watermark");
+    CellEnd c1;
+    TEST_ASSERT(dial_cell(w1, c1, "cell-w1"), "cell 71 dialed w1");
+    TEST_ASSERT(register_roundtrip(c1, 4202, 71, 1, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "cell 71 fresh admission");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(61) && assigns.count(62)
+                           && assigns[61].ready && assigns[62].ready;
+                }, 3000),
+                "cell 71 claimed 61/62");
+    // write-ahead 旁证：声明已发出 = A/B 行已在盘上。
+    {
+        std::ifstream in(journal, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+        TEST_ASSERT(text.find("\nB 77\n") != std::string::npos,
+                    "B row cast at first boot");
+        TEST_ASSERT(text.find("\nA 61|71|1\n") != std::string::npos,
+                    "A row 61 on disk");
+        TEST_ASSERT(text.find("\nA 62|71|1\n") != std::string::npos,
+                    "A row 62 on disk");
+    }
+    w1.stop();
+
+    // W2 重启：装载终态 = 61/62 归 71 v1（任何登记前即重建）；B 铸代次 78。
+    WorldEnd w2;
+    w2.config.worldJournalPath = journal.string();
+    w2.config.assignSpaces = {61, 62};
+    w2.config.cellExpiryMs = 5000;  // 71 归队例不受 pending 过期窗干扰
+    TEST_ASSERT(w2.start(122), "w2 restarted with journal");
+    const auto* s61 = w2.world->find_space_assignment(61);
+    TEST_ASSERT(s61 != nullptr && s61->cell_id == 71 && s61->version == 1,
+                "journal replays ownership before any registration");
+    const auto* s62 = w2.world->find_space_assignment(62);
+    TEST_ASSERT(s62 != nullptr && s62->cell_id == 71 && s62->version == 1,
+                "journal replays space 62 ownership");
+
+    // 旁证 cell 72 ready 登记：不抢 61/62（不立即另端重建），收 owner 71
+    // 撤销标记；961 回带管理代次 = 重启新铸 78。
+    CellEnd c2;
+    TEST_ASSERT(dial_cell(w2, c2, "cell-w2"), "cell 72 dialed w2");
+    TEST_ASSERT(register_roundtrip(c2, 4203, 72, 1, "127.0.0.1", 9302, 1, 10, 0, true, r),
+                "cell 72 registered");
+    TEST_ASSERT(r.management_epoch == 78, "restart recasts management epoch max B + 1");
+    TEST_ASSERT(wait_until([&] {
+                    c2.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(61) && !assigns[61].ready
+                           && assigns[61].assigned_cell_id == 71;
+                }, 3000),
+                "absent owner keeps spaces; other cell gets revoke marker");
+    const auto* after = w2.world->find_space_assignment(61);
+    TEST_ASSERT(after != nullptr && after->cell_id == 71 && after->version == 1,
+                "not rebuilt on other side");
+
+    // 旧主 71 归队（同代次复核受理）→ 归属保持版本不变（刷新非转移）。
+    CellEnd c1b;
+    TEST_ASSERT(dial_cell(w2, c1b, "cell-w1b"), "cell 71 redialed w2");
+    TEST_ASSERT(register_roundtrip(c1b, 4204, 71, 1, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "cell 71 re-admitted after restart");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "same epoch fresh admission");
+    TEST_ASSERT(wait_until([&] {
+                    c1b.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns[61].ready && assigns[61].assigned_cell_id == 71
+                           && assigns[61].version == 1;
+                }, 3000),
+                "owner retains spaces at same version after restart");
+    w2.stop();
+
+    // W3：owner 71 不归队 → 一个过期窗后 pending 释放回池（R 行落盘），
+    // 随后 cell 73 首注册重认领 v2（装载版本保留 → 重认领 +1 不倒退）。
+    WorldEnd w3;
+    w3.config.worldJournalPath = journal.string();
+    w3.config.assignSpaces = {61, 62};
+    w3.config.cellExpiryMs = 250;  // pending 过期窗（测试窗）
+    TEST_ASSERT(w3.start(123), "w3 restarted with journal");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* p = w3.world->find_space_assignment(61);
+                    return p != nullptr && p->cell_id == 0;
+                }, 3000),
+                "absent journal owner expires and releases");
+    {
+        std::ifstream in(journal, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+        TEST_ASSERT(text.find("\nR 61\n") != std::string::npos,
+                    "R row on disk for 61");
+    }
+    CellEnd c3;
+    TEST_ASSERT(dial_cell(w3, c3, "cell-w3"), "cell 73 dialed w3");
+    TEST_ASSERT(register_roundtrip(c3, 4205, 73, 1, "127.0.0.1", 9303, 1, 10, 0, true, r),
+                "cell 73 registered on w3");
+    TEST_ASSERT(wait_until([&] {
+                    c3.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(61) && assigns[61].ready
+                           && assigns[61].assigned_cell_id == 73
+                           && assigns[61].version == 2;
+                }, 3000),
+                "released space reclaimed at version 2");
+    w3.stop();
+
+    // 损坏行拒启回归（v2 行格式）：A 行缺版本字段 = 损坏，显式拒启。
+    {
+        std::ofstream out(journal, std::ios::app | std::ios::binary);
+        out << "A 61|71\n";
+    }
+    WorldEnd w4;
+    w4.config.worldJournalPath = journal.string();
+    TEST_ASSERT(!w4.start(124), "corrupt v2 row refuses boot");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// write-ahead 声明闸（批A）：A 行 append 失败 = 不对外声明——认领内存回滚
+//（Space 留池待下次受理重试）、962 不发；受理面照常（T/B 行失败沿用批㉚
+// 告警降级，可用性优先）。journal 指向父目录缺失路径 = 确定性 append 失败。
+bool test_journal_v2_write_ahead_gates_declaration() {
+    std::cout << "Running: test_journal_v2_write_ahead_gates_declaration..." << std::endl;
+    namespace fs = std::filesystem;
+    const fs::path missing_dir = "/tmp/apollo-cell-register-tests/missing-dir";
+    fs::remove_all(missing_dir);  // 确保父目录缺失（ofstream append 必败）
+    WorldEnd server;
+    server.config.worldJournalPath = (missing_dir / "journal.txt").string();
+    server.config.assignSpaces = {65, 66};
+    TEST_ASSERT(server.start(126), "world started with unwritable journal path");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell, "cell-wa"), "cell dialed");
+    RegisterReply r;
+    TEST_ASSERT(register_roundtrip(cell, 4301, 74, 1, "127.0.0.1", 9306, 1, 10, 0, true, r),
+                "registration accepted despite journal failure");
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));  // 数拍确认无滞后声明
+    TEST_ASSERT(server.world->assigned_space_count() == 0,
+                "claim reverted when A row append failed");
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        TEST_ASSERT(assigns.empty(), "no 962 ownership declaration sent");
+    }
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // 断连存疑标记（L101 断连存疑切片）：控制链路断（对端 TCP 关）→ 注册表
 // 条目置存疑（gap 表 §line71：断开后先标记存疑对账，不立即另端重建——
 // 本切片只落标记与清除，对账/重建约束随既有过期释放面）；同 ID 同代次
@@ -1736,6 +1929,8 @@ int main() {
                     && test_stale_epoch_watermark_isolation()
                     && test_space_release_and_reclaim()
                     && test_watermark_journal_persists_across_restart()
+                    && test_journal_v2_assignment_state_across_restart()
+                    && test_journal_v2_write_ahead_gates_declaration()
                     && test_cell_link_down_marks_suspect();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
