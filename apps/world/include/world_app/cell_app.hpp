@@ -126,6 +126,10 @@ public:
     // 待执行意图数（观测/测试面：tick 边界 drain 断言用）
     std::size_t pendingIntentCount() const { return acceptanceQueue_.size(); }
 
+    // 意图受理队列容量（注册面负载上报的归一化分母；构造后不变，跨线程只读
+    // 安全）。0 = 容量未配置（宿主上报侧按空载处理）。
+    std::size_t intentQueueCap() const { return acceptanceQueue_.cap(); }
+
     // 意图源会话 → 玩家号（0 = 未知会话）。互斥会话表的只读反查，跨线程
     // 安全；受理单写者纪律断言用。
     std::uint64_t resolveIntentPlayer(std::uint64_t session_id) const;

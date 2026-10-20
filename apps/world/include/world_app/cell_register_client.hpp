@@ -117,6 +117,14 @@ public:
         (void)drain_state;
     }
 
+    // 自报负载（宿主注入；0-100 百分制，受理面最小负载优先裁决用。默认 0
+    // ——未上报即按空载登记，同 960 负载字段缺省口径）。
+    virtual void setReportedLoad(std::int32_t load) { (void)load; }
+
+    // 自报就绪（宿主注入；false = 不认领新 Space 但保留既有归属。默认 true
+    // ——未接线宿主按可分配登记，与既有行为一致）。
+    virtual void setReportedReady(bool ready) { (void)ready; }
+
     // Space 分配监听（962；版本前进才触发，重推幂等）。监听器在泵上下文
     // 同步回调（与 961 同纪律——锁外回调，不得重入 pump/state）。
     virtual void setSpaceAssignListener(SpaceAssignListener fn) { (void)fn; }

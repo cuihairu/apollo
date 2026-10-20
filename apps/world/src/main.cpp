@@ -315,6 +315,17 @@ int main(int argc, char* argv[]) {
                     auto* squads = cell.squadInstanceService();
                     register_client->setReportedDrainState(
                         squads != nullptr && squads->draining() ? 1 : 0);
+                    // 负载与就绪同拍注入（受理面最小负载优先 + 排空不认领）：
+                    // 负载 = 待执行意图队列填充率百分制（容量为分母，容量缺配
+                    // 按空载）；就绪 = 内核未冻结（冻结 = 失控不承接新分配）
+                    const auto queue_cap = cell.intentQueueCap();
+                    const auto pending = cell.pendingIntentCount();
+                    register_client->setReportedLoad(
+                        queue_cap == 0
+                            ? 0
+                            : static_cast<std::int32_t>(std::min(
+                                  std::size_t{100}, pending * 100 / queue_cap)));
+                    register_client->setReportedReady(!cell.frozen());
                     register_client->pump(now_ms);
                 }
             });

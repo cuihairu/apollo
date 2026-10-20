@@ -773,6 +773,212 @@ bool test_cell_space_assignment() {
     return true;
 }
 
+// ---------- 就绪/排空裁决：不认领新 Space，既有归属保留 ----------
+
+bool test_space_assignment_readiness() {
+    std::cout << "Running: test_space_assignment_readiness..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    TEST_ASSERT(server.start(119), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    RegisterReply r;
+
+    // 未就绪 cell：进程存活不等于可分配——不认领新 Space，也不发归属视图
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell, "cell-a"), "cell a dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell, 9901, 41, 1, "127.0.0.1", 9207, 0, 5, 0, false, r),
+        "unready register accepted");
+    TEST_ASSERT(r.accepted, "unready cell accepted");
+    std::this_thread::sleep_for(200ms);  // 拍足：无 962 才谈不认领
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        TEST_ASSERT(assigns.empty(), "unready cell claims nothing");
+    }
+    TEST_ASSERT(server.world->assigned_space_count() == 0, "no claim without ready");
+
+    // 转为就绪（同代次刷新 = 心跳面）：才首次认领
+    TEST_ASSERT(
+        register_roundtrip(cell, 9902, 41, 1, "127.0.0.1", 9207, 0, 5, 0, true, r),
+        "ready refresh accepted");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAcceptedIdempotent,
+                "ready refresh idempotent");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7 = server.world->find_space_assignment(7);
+                    return a7 != nullptr && a7->cell_id == 41 && a7->version == 1;
+                }, 3000),
+                "ready cell claims at version 1");
+    TEST_ASSERT(wait_until([&] {
+                    cell.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && it->second.ready
+                           && it->second.assigned_cell_id == 41;
+                }, 3000),
+                "ready cell receives ownership push");
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        TEST_ASSERT(assigns.size() == 2, "pool claimed at ready");
+    }
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "world assignment table");
+    const auto* a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->cell_id == 41 && a7->version == 1
+                    && a7->space_id == 7,
+                "world assignment recorded");
+
+    // 排空端：不认领新 Space（既有归属仍刷新，撤空不撤权）
+    TEST_ASSERT(
+        register_roundtrip(cell, 9903, 41, 1, "127.0.0.1", 9207, 0, 5, 1, true, r),
+        "draining refresh accepted");
+    const auto* a8 = server.world->find_space_assignment(8);
+    TEST_ASSERT(a8 != nullptr && a8->cell_id == 41 && a8->version == 1,
+                "draining keeps ownership");
+
+    // 高负载新 cell 无可认领者（池已满 = 只收撤销视图）
+    CellEnd cell2;
+    TEST_ASSERT(dial_cell(server, cell2, "cell-b"), "cell b dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell2, 9904, 42, 1, "127.0.0.1", 9208, 0, 90, 0, true, r),
+        "high-load register accepted");
+    TEST_ASSERT(wait_until([&] {
+                    cell2.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && !it->second.ready
+                           && it->second.assigned_cell_id == 41;
+                }, 3000),
+                "cell b sees retraction view");
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "table unchanged");
+
+    // A 断线失联（停发心跳）后 B 仍无可认领者——资格以自报面为准，不以
+    // World 侧是否怀疑为准（保守面：宁可不分，不抢分给失控端）
+    const auto* a8b = server.world->find_space_assignment(8);
+    TEST_ASSERT(a8b != nullptr && a8b->cell_id == 41, "no reclamation after silence");
+
+    // 归属它方者只收撤销标记，不迁移不重分
+    CellEnd cell3;
+    TEST_ASSERT(dial_cell(server, cell3, "cell-c"), "cell c dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell3, 9905, 43, 1, "127.0.0.1", 9209, 0, 1, 0, true, r),
+        "low-load newcomer accepted");
+    TEST_ASSERT(wait_until([&] {
+                    cell3.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && !it->second.ready
+                           && it->second.assigned_cell_id == 41
+                           && it->second.version == 1;
+                }, 3000),
+                "retraction carries owner and version");
+    const auto* a7b = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7b != nullptr && a7b->cell_id == 41 && a7b->version == 1,
+                "ownership not migrated by low-load newcomer");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- 负载裁决：释放面最小负载优先，高负载让位 ----------
+
+bool test_space_assignment_load_balance() {
+    std::cout << "Running: test_space_assignment_load_balance..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
+    TEST_ASSERT(server.start(120), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    RegisterReply r;
+
+    // A 先受理 → 独占全池（无人可让位）
+    CellEnd cell_a;
+    TEST_ASSERT(dial_cell(server, cell_a, "cell-a"), "cell a dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9911, 43, 1, "127.0.0.1", 9207, 0, 10, 0, true, r),
+        "cell a registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7 = server.world->find_space_assignment(7);
+                    return a7 != nullptr && a7->cell_id == 43 && a7->version == 1;
+                }, 3000),
+                "cell a claims space 7");
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "cell a claims pool");
+
+    // B / C 后到：他人已归属不迁移，只收撤销视图
+    CellEnd cell_b;
+    TEST_ASSERT(dial_cell(server, cell_b, "cell-b"), "cell b dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_b, 9912, 44, 1, "127.0.0.1", 9208, 0, 90, 0, true, r),
+        "cell b registered");
+    CellEnd cell_c;
+    TEST_ASSERT(dial_cell(server, cell_c, "cell-c"), "cell c dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_c, 9913, 45, 1, "127.0.0.1", 9209, 0, 20, 0, true, r),
+        "cell c registered");
+    TEST_ASSERT(wait_until([&] {
+                    cell_b.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && !it->second.ready
+                           && it->second.assigned_cell_id == 43;
+                }, 3000),
+                "cell b sees retraction view");
+
+    // A 停发心跳 → 过期释放（owner 置 0，版本不变）
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7 = server.world->find_space_assignment(7);
+                    return a7 != nullptr && a7->cell_id == 0;
+                }, 3000),
+                "cell a releases ownership");
+
+    // B（负载 90）刷新：同窗存在更低负载候选 C（20）→ 让位不认领
+    TEST_ASSERT(
+        register_roundtrip(cell_b, 9914, 44, 1, "127.0.0.1", 9208, 0, 90, 0, true, r),
+        "cell b refresh accepted");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAcceptedIdempotent,
+                "cell b still registered");
+    const auto* a7b = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7b != nullptr && a7b->cell_id == 0, "cell b yields to lighter peer");
+    const auto* a8b = server.world->find_space_assignment(8);
+    TEST_ASSERT(a8b != nullptr && a8b->cell_id == 0, "pool still released");
+
+    // C（负载 20）刷新：同窗无更低负载候选 → 最小负载方重认领（版本前进防
+    // 离线旧主 ABA）
+    TEST_ASSERT(
+        register_roundtrip(cell_c, 9915, 45, 1, "127.0.0.1", 9209, 0, 20, 0, true, r),
+        "cell c refresh accepted");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7c = server.world->find_space_assignment(7);
+                    return a7c != nullptr && a7c->cell_id == 45 && a7c->version == 2;
+                }, 3000),
+                "lightest peer reclaims at version 2");
+    TEST_ASSERT(wait_until([&] {
+                    cell_c.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && it->second.ready
+                           && it->second.assigned_cell_id == 45
+                           && it->second.version == 2;
+                }, 3000),
+                "cell c receives ownership push at v2");
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "pool fully assigned");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- production client：962 监听去重（版本不前进不重复触发）----------
 
 bool test_production_client_space_assign_listener() {
@@ -1210,6 +1416,8 @@ int main() {
                     && test_production_client_invalid_config()
                     && test_cell_heartbeat_and_expiry()
                     && test_cell_space_assignment()
+                    && test_space_assignment_readiness()
+                    && test_space_assignment_load_balance()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
                     && test_stale_epoch_watermark_isolation()

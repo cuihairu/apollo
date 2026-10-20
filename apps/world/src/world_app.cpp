@@ -492,8 +492,9 @@ void WorldApp::onCellRegister(const std::string& peer,
                         + " epoch=" + std::to_string(request.start_epoch)
                         + " peer=" + peer);
         reply(true, kCellRegisterAccepted, "registered");
-        // 分配推送（962 分配面；首注册即认领池内未分配 Space）
-        pushSpaceAssignments(peer, request.cell_id);
+        // 分配推送（962 分配面）：裁决随刚落表的自报面——ready/drain/load
+        // 同拍生效，首注册即按资格认领池内未分配 Space
+        pushSpaceAssignments(peer, cellRegistrations_.at(request.cell_id));
         return;
     }
     if (request.start_epoch < it->second.start_epoch) {
@@ -527,7 +528,7 @@ void WorldApp::onCellRegister(const std::string& peer,
           idempotent ? "re-registered (same epoch, refreshed)"
                      : "replaced (new epoch)");
     // 分配推送（962 分配面；code 1/2 受理都推——断链重拨后分配不丢）
-    pushSpaceAssignments(peer, request.cell_id);
+    pushSpaceAssignments(peer, it->second);
 }
 
 void WorldApp::onPeerLinkDown(const std::string& peer) {
@@ -555,33 +556,49 @@ std::size_t WorldApp::suspect_cell_count() const {
     return count;
 }
 
-void WorldApp::pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id) {
-    // 分配面（L101 首切片 + L108 回收切片）：受理即推全池权威归属视图——
-    // 未登记 Space 首认领（版本 1）；owner=0（过期释放）重认领且版本 +1
-    //（认领转移面：离线旧主本地视图停在旧版本，须版本前进才收敛，防 ABA
-    // 重放；同主回拨也前进）；本 cell 已归属的刷新（版本不变幂等）；归属
-    // 其它 cell 的推 ready=0 撤销标记（收帧方据此撤本地残留路由——离线期
-    // 缺口经重注册收敛，见 L108 切片）。认领独占：不重分他人 Space。
+void WorldApp::pushSpaceAssignments(const std::string& peer,
+                                    const CellRegistration& reg) {
+    // 分配面（L101 首切片 + L108 回收切片 + L104 就绪/排空/负载裁决切片）：
+    // 受理即推全池权威归属视图。未登记 Space 首认领（版本 1）；owner=0
+    // （过期释放）重认领且版本 +1（认领转移面：离线旧主本地视图停在旧版本，
+    // 须版本前进才收敛，防 ABA 重放；同主回拨也前进）；本 cell 已归属的
+    // 刷新（版本不变幂等）；归属其它 cell 的推 ready=0 撤销标记（收帧方据
+    // 此撤本地残留路由——离线期缺口经重注册收敛，见 L108 切片）。认领独占：
+    // 不重分他人 Space（重平衡随 L108 拓扑批）。
+    //
+    // 认领资格（L104 负载裁决切片）：未就绪 / 排空中的 cell 不认领新 Space
+    // ——进程存活不等于可分配，既有归属照常刷新（撤空不撤权）；已释放的
+    // Space 走最小负载优先，存在负载严格更低的候选则本 cell 退让（等负载面
+    // 收敛后随下次受理/刷新认领），同负载让位给先受理者（不抖动重分）。
     if (config_.assignSpaces.empty()) {
         return;
     }
+    const bool may_claim = reg.ready && reg.drain_state == 0;
     for (std::uint64_t space_id : config_.assignSpaces) {
         auto it = spaceAssignments_.find(space_id);
-        if (it == spaceAssignments_.end()) {
-            SpaceAssignment a;
-            a.space_id = space_id;
-            a.cell_id = cell_id;
-            a.version = 1;
-            it = spaceAssignments_.emplace(space_id, a).first;
-            worldLog().info("space assigned: space=" + std::to_string(space_id)
-                            + " cell=" + std::to_string(cell_id) + " version=1");
-        } else if (it->second.cell_id == 0) {
-            ++it->second.version;  // 重认领转移：版本前进（防 ABA）
-            it->second.cell_id = cell_id;
-            worldLog().info("space re-claimed: space=" + std::to_string(space_id)
-                            + " cell=" + std::to_string(cell_id)
-                            + " version=" + std::to_string(it->second.version));
-        } else if (it->second.cell_id != cell_id) {
+        if (it == spaceAssignments_.end() || it->second.cell_id == 0) {
+            // 未分配 / 已释放：无资格或让位者不发 962（无归属视图可推）
+            if (!may_claim || lower_load_peer(reg.cell_id, reg.load)) {
+                continue;
+            }
+            const bool reclaim = it != spaceAssignments_.end();  // owner=0
+            if (reclaim) {
+                ++it->second.version;  // 重认领转移：版本前进（防 ABA）
+                worldLog().info("space re-claimed: space=" + std::to_string(space_id)
+                                + " cell=" + std::to_string(reg.cell_id)
+                                + " version=" + std::to_string(it->second.version));
+            } else {
+                SpaceAssignment a;
+                a.space_id = space_id;
+                a.cell_id = reg.cell_id;
+                a.version = 1;
+                it = spaceAssignments_.emplace(space_id, a).first;
+                worldLog().info("space assigned: space=" + std::to_string(space_id)
+                                + " cell=" + std::to_string(reg.cell_id)
+                                + " version=1");
+            }
+            it->second.cell_id = reg.cell_id;
+        } else if (it->second.cell_id != reg.cell_id) {
             if (m1Link_) {
                 m1Link_->sendCellSpaceAssign(peer, it->second.version,
                                              config_.m1AuthorityEpoch, space_id,
@@ -595,6 +612,20 @@ void WorldApp::pushSpaceAssignments(const std::string& peer, std::uint64_t cell_
                                          it->second.cell_id, true);
         }
     }
+}
+
+bool WorldApp::lower_load_peer(std::uint64_t cell_id, std::int32_t load) const {
+    // 最小负载优先（L104 负载裁决切片）：登记表内任一就绪且不排空的候选负载
+    // 严格低于本 cell 即让位——同负载不退让（认领归先受理者，裁决对注册
+    // 顺序稳定）；存疑（suspect）条目仍参裁——链路未决时归属不动比抢分安全。
+    for (const auto& entry : cellRegistrations_) {
+        const auto& other = entry.second;
+        if (other.cell_id != cell_id && other.ready && other.drain_state == 0 &&
+            other.load < load) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {

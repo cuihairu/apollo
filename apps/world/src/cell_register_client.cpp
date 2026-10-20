@@ -6,10 +6,10 @@
 // M1 受理面 + 契约 wire 960/961。机制零内部线程——泵由宿主（cell 角色
 // pre-tick 钩子）驱动，960 发送与 961 记账都发生在宿主泵上下文内。
 //
-// 锁面：state_/reported_drain_state_ 跨线程读写（state() 观测面），mutex
-// 只守这两个字段——不跨 manager_->pump() 持锁（961 handler 在 pump 内同
-// 步回调，重入取锁即死锁）；manager_ 生命周期归宿主泵线程（start/stop/
-// pump 同线程），免锁访问。
+// 锁面：state_ 与自报面（排空/负载/就绪）跨线程读写（state() 观测面），
+// mutex 只守这几个字段——不跨 manager_->pump() 持锁（961 handler 在 pump
+// 内同步回调，重入取锁即死锁）；manager_ 生命周期归宿主泵线程（start/
+// stop/pump 同线程），免锁访问。
 
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -170,6 +170,16 @@ public:
         reported_drain_state_ = drain_state;
     }
 
+    void setReportedLoad(std::int32_t load) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        reported_load_ = load;
+    }
+
+    void setReportedReady(bool ready) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        reported_ready_ = ready;
+    }
+
     void setSpaceAssignListener(SpaceAssignListener fn) override {
         std::lock_guard<std::mutex> lock(state_mutex_);
         assign_listener_ = std::move(fn);
@@ -211,9 +221,9 @@ private:
         f[3].text = config_.advertise_host;
         f[4].integer = config_.advertise_port;
         f[5].integer = 0;  // capabilities 未声明（0——能力裁决随 L102 容量批）
-        f[6].integer = 0;  // load 未上报（0——容量申报随 L102）
+        f[6].integer = reported_load();       // 负载（宿主注入；0 = 空载缺省）
         f[7].integer = reported_drain_state();
-        f[8].integer = 1;  // ready：内核在跑即可分配（就绪判据细化随容量批）
+        f[8].integer = reported_ready() ? 1 : 0;  // 就绪 = 内核可分配（冻结即让位）
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return;
@@ -308,6 +318,16 @@ private:
         return reported_drain_state_;
     }
 
+    std::int32_t reported_load() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        return reported_load_;
+    }
+
+    bool reported_ready() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        return reported_ready_;
+    }
+
     void fire_freeze(LinkFreezeReason reason) {
         // 每失联期一次（宿主侧不重复处理）；泵上下文锁外回调。
         freeze_signaled_ = true;
@@ -333,6 +353,8 @@ private:
     mutable std::mutex state_mutex_;
     CellRegisterState state_;        // 泵上下文写 / 任意线程读
     std::int32_t reported_drain_state_ = 0;  // 宿主写 / 泵上下文读
+    std::int32_t reported_load_ = 0;          // 宿主写 / 泵上下文读（0 = 空载缺省）
+    bool reported_ready_ = true;              // 宿主写 / 泵上下文读（true = 可分配缺省）
     SpaceAssignListener assign_listener_;            // 宿主装配 / 泵上下文读
     LinkFreezeListener freeze_listener_;             // 宿主装配 / 泵上下文读
     ReadmitListener readmit_listener_;               // 宿主装配 / 泵上下文读

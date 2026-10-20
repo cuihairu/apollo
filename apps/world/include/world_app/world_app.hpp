@@ -117,11 +117,12 @@ public:
     // 存疑条目数（L101 断连存疑切片观测面；轮询口径同 registered_cell_count）
     std::size_t suspect_cell_count() const;
 
-    // ---- Space 分配表（962，L101 分配面首切片）----
+    // ---- Space 分配表（962，L101 分配面首切片 + L104 就绪/排空/负载裁决）----
     // 分配条目：space_id → （归属 cell + 分配版本）。池 = config.assignSpaces；
-    // 策略 = 首个就绪 cell 独占认领全池未分配 Space（code 1/2 受理即推当前
-    // 分配），后续注册不重分——重平衡/回收/拓扑版本随 L108 拓扑批。观测面
-    // 同注册表口径（泵上下文单写者）。
+    // 策略 = 未就绪/排空中的 cell 不认领（进程存活不等于可分配，既有归属
+    // 保留），可认领者中最小负载优先独占认领全池未分配 Space（code 1/2
+    // 受理即推当前分配），他人已归属的不迁移不重分——重平衡/拓扑版本随
+    // L108 拓扑批。观测面同注册表口径（泵上下文单写者）。
     struct SpaceAssignment {
         std::uint64_t space_id = 0;
         std::uint64_t cell_id = 0;
@@ -195,10 +196,15 @@ private:
     // 内核线程，注册表单写者直接改表）。peer 对上登记条目即置 suspect；
     // 未知 peer（gateway/admin 链路）无登记 = 无操作。
     void onPeerLinkDown(const std::string& peer);
-    // 分配推送（962，受理点内同步发）：认领池内未分配 Space（首分配 = 1，
-    // 已归属其它 cell 的跳过不重分）并逐条推给该 cell 的 peer 链路；code 1/2
-    // 受理都推（断链重拨后分配不丢——cell 侧按版本去重幂等应用）。
-    void pushSpaceAssignments(const std::string& peer, std::uint64_t cell_id);
+    // 分配推送（962，受理点内同步发）：按本条自报面（ready/drain/load）
+    // 裁决认领资格——首分配版本 1、已释放（owner=0）重认领版本 +1、本 cell
+    // 已归属的刷新版本不变、归属其它 cell 的推撤销标记（不迁移不重分），
+    // 逐条推给该 cell 的 peer 链路；code 1/2 受理都推（断链重拨后分配不丢
+    // ——cell 侧按版本去重幂等应用）。
+    void pushSpaceAssignments(const std::string& peer, const CellRegistration& reg);
+    // 最小负载优先裁决（注册表单只读）：登记表内是否存在就绪且不排空、
+    // 负载严格低于 load 的候选（排除自身）；true = 本 cell 退让。
+    bool lower_load_peer(std::uint64_t cell_id, std::int32_t load) const;
     // 过期释放（driveCellRegistry 同上下文，注册表单写者线程）：该 cell
     // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。
     void releaseCellSpaces(std::uint64_t cell_id);
