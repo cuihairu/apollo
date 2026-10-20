@@ -210,19 +210,23 @@ int main(int argc, char* argv[]) {
         chain_config.expire_after = std::chrono::milliseconds(config.callbackExpireMs);
         CallbackChain callback_chain(chain_config);
 
-        std::unique_ptr<apollo::net::tls::TlsServerContext> tls_context;
         HttpIngressConfig https_config;
         https_config.host = config.host;
         https_config.port = config.httpsPort;
         https_config.maxConnections = config.maxConnections;
         https_config.connectionIdBase = kIdStride;
         https_config.requestTimeout = std::chrono::milliseconds(config.requestTimeoutMs);
+#if !defined(_WIN32)
+        // TLS 上下文本体 POSIX only（windows 头面仅前向声明，指针型可存）
+        std::unique_ptr<apollo::net::tls::TlsServerContext> tls_context;
+#endif
         if (config.httpsPort != 0) {
             if (config.tlsCertPath.empty() || config.tlsKeyPath.empty()) {
                 throw std::runtime_error(
                     "https ingress enabled but tls cert/key not configured "
                     "(--tls-cert/--tls-key)");
             }
+#if !defined(_WIN32)
             tls_context = std::make_unique<apollo::net::tls::TlsServerContext>();
             const auto load_result = tls_context->load(config.tlsCertPath, config.tlsKeyPath);
             if (!load_result.ok) {
@@ -230,6 +234,11 @@ int main(int argc, char* argv[]) {
                                          + load_result.error);
             }
             https_config.tls = tls_context.get();
+#else
+            // TLS 底座不进本批：不降级为明文监听（端口声明即 TLS 面）
+            throw std::runtime_error(
+                "--https-port needs the tls base (posix only)");
+#endif
         }
 
         auto http_server = makeHttpIngressServer(http_config);
