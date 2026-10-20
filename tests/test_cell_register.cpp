@@ -979,6 +979,123 @@ bool test_space_assignment_load_balance() {
     return true;
 }
 
+// ---------- 缩容编排：World 单方缩容意图停止认领并回池归属，可取消 ----------
+
+bool test_cell_retire_and_reclaim() {
+    std::cout << "Running: test_cell_retire_and_reclaim..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    TEST_ASSERT(server.start(121), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    RegisterReply r;
+
+    // A（cell 51，负载 10）先受理独占全池
+    CellEnd cell_a;
+    TEST_ASSERT(dial_cell(server, cell_a, "cell-a"), "cell a dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9931, 51, 1, "127.0.0.1", 9207, 0, 10, 0, true, r),
+        "cell a registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7 = server.world->find_space_assignment(7);
+                    return a7 != nullptr && a7->cell_id == 51 && a7->version == 1;
+                }, 3000),
+                "cell a claims space 7");
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "cell a claims pool");
+
+    // 未知 cell 缩容 = 未命中（管理面显形，不静默成功）
+    TEST_ASSERT(!server.world->beginCellRetire(999), "unknown retire refused");
+
+    // 缩容 A：置 World 单方意图 + 名下归属回池（owner 归零、版本不变）
+    TEST_ASSERT(server.world->beginCellRetire(51), "retire hit");
+    const auto* reg51 = server.world->find_cell_registration(51);
+    TEST_ASSERT(reg51 != nullptr && reg51->retire, "retire flag recorded");
+    TEST_ASSERT(server.world->retired_cell_count() == 1, "one retired cell");
+    const auto* a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->cell_id == 0 && a7->version == 1,
+                "retire releases ownership, version kept");
+    const auto* a8 = server.world->find_space_assignment(8);
+    TEST_ASSERT(a8 != nullptr && a8->cell_id == 0, "whole pool released");
+
+    // B（cell 52，负载 50）重认领：A 负载更低但已缩容，不参与让位裁决
+    //（让位给永不安驻的缩容端会永久搁置该 Space）
+    CellEnd cell_b;
+    TEST_ASSERT(dial_cell(server, cell_b, "cell-b"), "cell b dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_b, 9932, 52, 1, "127.0.0.1", 9208, 0, 50, 0, true, r),
+        "cell b registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7b = server.world->find_space_assignment(7);
+                    return a7b != nullptr && a7b->cell_id == 52
+                           && a7b->version == 2;
+                }, 3000),
+                "higher-load peer reclaims from retired peer");
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "pool re-assigned");
+    TEST_ASSERT(wait_until([&] {
+                    cell_b.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && it->second.ready
+                           && it->second.assigned_cell_id == 52
+                           && it->second.version == 2;
+                }, 3000),
+                "cell b receives ownership push at v2");
+
+    // A 仍在册且照常心跳：收撤销视图（owner B、版本前进），不回抢已重认领
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9933, 51, 1, "127.0.0.1", 9207, 0, 10, 0, true, r),
+        "retired cell heartbeat accepted");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAcceptedIdempotent,
+                "retired heartbeat idempotent");
+    TEST_ASSERT(wait_until([&] {
+                    cell_a.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    const auto it = assigns.find(7);
+                    return it != assigns.end() && !it->second.ready
+                           && it->second.assigned_cell_id == 52
+                           && it->second.version == 2;
+                }, 3000),
+                "retired cell converges to revocation view");
+    const auto* a7c = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7c != nullptr && a7c->cell_id == 52 && a7c->version == 2,
+                "retired cell did not reclaim");
+
+    // 缩容 B 后取消：归属维持释放态，意图一清即恢复资格（版本继续前进）
+    TEST_ASSERT(server.world->beginCellRetire(52), "cell b retired");
+    const auto* a7d = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7d != nullptr && a7d->cell_id == 0, "cell b spaces released");
+    TEST_ASSERT(server.world->cancelCellRetire(52), "cell b retire cancelled");
+    const auto* reg52 = server.world->find_cell_registration(52);
+    TEST_ASSERT(reg52 != nullptr && !reg52->retire, "retire flag cleared");
+    TEST_ASSERT(server.world->retired_cell_count() == 1, "only cell a retired");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7e = server.world->find_space_assignment(7);
+                    return a7e != nullptr && a7e->cell_id == 52
+                           && a7e->version == 3;
+                }, 3000),
+                "cancelled cell reclaims at v3");
+
+    // A 也取消缩容恢复资格：他人已归属的不迁移不重分
+    TEST_ASSERT(server.world->cancelCellRetire(51), "cell a retire cancelled");
+    TEST_ASSERT(server.world->retired_cell_count() == 0, "no retired cells left");
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9934, 51, 1, "127.0.0.1", 9207, 0, 10, 0, true, r),
+        "restored cell heartbeat accepted");
+    const auto* a7f = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7f != nullptr && a7f->cell_id == 52 && a7f->version == 3,
+                "no migration of others' ownership");
+    TEST_ASSERT(server.world->assigned_space_count() == 2, "pool intact");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- production client：962 监听去重（版本不前进不重复触发）----------
 
 bool test_production_client_space_assign_listener() {
@@ -1418,6 +1535,7 @@ int main() {
                     && test_cell_space_assignment()
                     && test_space_assignment_readiness()
                     && test_space_assignment_load_balance()
+                    && test_cell_retire_and_reclaim()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
                     && test_stale_epoch_watermark_isolation()

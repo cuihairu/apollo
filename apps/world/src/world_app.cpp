@@ -566,14 +566,15 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
     // 此撤本地残留路由——离线期缺口经重注册收敛，见 L108 切片）。认领独占：
     // 不重分他人 Space（重平衡随 L108 拓扑批）。
     //
-    // 认领资格（L104 负载裁决切片）：未就绪 / 排空中的 cell 不认领新 Space
-    // ——进程存活不等于可分配，既有归属照常刷新（撤空不撤权）；已释放的
-    // Space 走最小负载优先，存在负载严格更低的候选则本 cell 退让（等负载面
-    // 收敛后随下次受理/刷新认领），同负载让位给先受理者（不抖动重分）。
+    // 认领资格（L104 负载裁决切片）：未就绪 / 自报排空中 / World 单方缩容
+    // （retire）的 cell 不认领新 Space——进程存活不等于可分配，既有归属照
+    // 常刷新（撤空不撤权）；已释放的 Space 走最小负载优先，存在负载严格更
+    // 低的候选则本 cell 退让（等负载面收敛后随下次受理/刷新认领），同负载
+    // 让位给先受理者（不抖动重分）。
     if (config_.assignSpaces.empty()) {
         return;
     }
-    const bool may_claim = reg.ready && reg.drain_state == 0;
+    const bool may_claim = reg.ready && reg.drain_state == 0 && !reg.retire;
     for (std::uint64_t space_id : config_.assignSpaces) {
         auto it = spaceAssignments_.find(space_id);
         if (it == spaceAssignments_.end() || it->second.cell_id == 0) {
@@ -615,13 +616,14 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
 }
 
 bool WorldApp::lower_load_peer(std::uint64_t cell_id, std::int32_t load) const {
-    // 最小负载优先（L104 负载裁决切片）：登记表内任一就绪且不排空的候选负载
-    // 严格低于本 cell 即让位——同负载不退让（认领归先受理者，裁决对注册
-    // 顺序稳定）；存疑（suspect）条目仍参裁——链路未决时归属不动比抢分安全。
+    // 最小负载优先（L104 负载裁决切片）：登记表内任一可认领候选负载严格低于
+    // 本 cell 即让位——同负载不退让（认领归先受理者，裁决对注册顺序稳定）；
+    // 存疑（suspect）条目仍参裁——链路未决时归属不动比抢分安全。缩容意图
+    // （retire）条目排除在外：它永不认领，让位给它会永久搁置该 Space。
     for (const auto& entry : cellRegistrations_) {
         const auto& other = entry.second;
         if (other.cell_id != cell_id && other.ready && other.drain_state == 0 &&
-            other.load < load) {
+            !other.retire && other.load < load) {
             return true;
         }
     }
@@ -641,6 +643,54 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
                             + " version=" + std::to_string(entry.second.version));
         }
     }
+}
+
+bool WorldApp::beginCellRetire(std::uint64_t cell_id) {
+    // 缩容编排（L104 缩容切片，注册表单写者上下文）：置 World 单方缩容意图
+    // ——与 cell 自报 drain_state 分面（自报是 cell 自己的活动状态，本位是
+    // World 的调度决定），此后该 cell 停止认领新 Space；名下归属即刻回池
+    // （owner 归零、版本不变——在途活动在 cell 本地自然排空，不强断），再
+    // 向其推当前权威视图：它收到的自有 Space 现为撤销标记，962 应用面据此
+    // 撤本地路由。撤路由受客户端版本去重约束（释放不推进版本），故实际撤
+    // 除随下次合格 peer 重认领后版本前进的那一拍收敛——同 L108 离线期缺口
+    // 的收敛口径，不为强收敛改写版本号语义。
+    auto it = cellRegistrations_.find(cell_id);
+    if (it == cellRegistrations_.end()) {
+        return false;
+    }
+    it->second.retire = true;
+    releaseCellSpaces(cell_id);
+    pushSpaceAssignments(it->second.peer, it->second);
+    worldLog().info("cell retire begun: id=" + std::to_string(cell_id)
+                    + " epoch=" + std::to_string(it->second.start_epoch)
+                    + " peer=" + it->second.peer);
+    return true;
+}
+
+bool WorldApp::cancelCellRetire(std::uint64_t cell_id) {
+    // 取消缩容（设计稿「尚未发出退出命令且重新缺容量时可取消排空」）：只清
+    // 意图，归属维持现状——已被他人重认领的不取回（不迁移不重分），仍释放
+    // （owner=0）的随本次推送由恢复资格的本人或最低负载 peer 重认领（版本 +1）。
+    auto it = cellRegistrations_.find(cell_id);
+    if (it == cellRegistrations_.end()) {
+        return false;
+    }
+    it->second.retire = false;
+    pushSpaceAssignments(it->second.peer, it->second);
+    worldLog().info("cell retire cancelled: id=" + std::to_string(cell_id)
+                    + " epoch=" + std::to_string(it->second.start_epoch)
+                    + " peer=" + it->second.peer);
+    return true;
+}
+
+std::size_t WorldApp::retired_cell_count() const {
+    std::size_t count = 0;
+    for (const auto& entry : cellRegistrations_) {
+        if (entry.second.retire) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 const WorldApp::CellRegistration* WorldApp::find_cell_registration(

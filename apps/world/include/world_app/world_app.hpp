@@ -109,6 +109,13 @@ public:
         // 只随 961 复核受理（同 ID 重注册裁决接受 = 活体归来），过期摘除
         // 整条带走。
         bool suspect = false;
+        // World 单方缩容意图（L104 缩容切片；与自报 drain_state 分面）：
+        // 自报 drain_state 是 cell 自己的活动状态，本位是 World 的调度决定
+        // ——begin_cell_retire 置位即停止向其认领新 Space 并释放其名下归属
+        // （自然排空，不强断在途活动），cancel_cell_retire 清除（未退出可
+        // 取消）。受理刷新不改本位（World 状态不由 cell 自报覆盖）；新代次
+        // 替换亦保留（退出中不可重新分配，须显式取消），过期摘除整条带走。
+        bool retire = false;
     };
     // 注册表只读观测面（泵上下文口径，同世界状态单写者——受理点在 M1 泵
     // 上下文改表，读面供测试/管理消费；跨线程持有返回指针违反单写者纪律）。
@@ -130,6 +137,22 @@ public:
     };
     std::size_t assigned_space_count() const { return spaceAssignments_.size(); }
     const SpaceAssignment* find_space_assignment(std::uint64_t space_id) const;
+
+    // ---- cell 缩容编排（L104 缩容切片；管理面入口）----
+    // 单写者纪律：与 driveCellRegistry 同上下文（受理点/M1 泵线程 = 注册表单
+    // 写者线程）调用；内核线程外调用会与受理点并发改表。管理命令入口（契约
+    // 面）随后续批接线，本批交付的是编排语义本身。
+    // begin：置缩容意图 + 释放该 cell 名下归属（owner 归零、版本不变）+ 向
+    // 其推当前权威视图（在途活动在本地自然排空，World 不再路由新业务）；
+    // 返回是否命中已登记 cell。已释放归属的重认领由合格 peer 在下一次
+    // 受理/刷新时按最小负载优先承接（版本 +1）。
+    bool beginCellRetire(std::uint64_t cell_id);
+    // cancel：清除缩容意图（设计稿「尚未退出可取消缩容」）。归属维持现状
+    // ——已被他人重认领的不取回（不迁移不重分），仍释放（owner=0）的随下次
+    // 受理由合格 peer 承接。返回是否命中已登记 cell。
+    bool cancelCellRetire(std::uint64_t cell_id);
+    // 缩容意图条目数（观测面，口径同 suspect_cell_count）
+    std::size_t retired_cell_count() const;
 
 private:
     // M1 出口适配（内核缝的宿主侧实现）：IM1Egress → 真传输端点。链路未
