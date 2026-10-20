@@ -153,12 +153,15 @@ bool test_register_lifecycle() {
     TEST_ASSERT(client->state().accepted, "idempotent refresh accepted");
     TEST_ASSERT(client->state().attempts >= 2, "heartbeat resent 964");
 
-    // 就绪面翻转随下次心跳显形（登记表自报面整体刷新）：以回执计数收敛为
-    // 同步点——第 3 拍 964（ready=0）被受理并回执后，登记表已整体刷新。
+    // 就绪面翻转随下次心跳显形（登记表自报面整体刷新）：同步点必须钉在
+    // "set_ready 之后的首拍 964"上——回执计数并行推进（回执迟到时 set_ready
+    // 前的拍子仍在计数），数拍数不指认拍面。set_ready 后记发送账，下一拍
+    // （第 N+1 发）是首拍 ready=0；链路 kReliable 有序，其回执被客户端收到
+    // = 受理面已整体刷新登记表。
     client->set_ready(false);
+    const auto attempts_before = client->state().attempts;
     TEST_ASSERT(wait_for(*client, [&] {
-                    const auto s = client->state();
-                    return s.attempts >= 3 && s.replies >= 3;
+                    return client->state().replies >= attempts_before + 1;
                 }),
                 "ready flip carried by next heartbeat");
     const auto* flipped = login_end.registry.find_service(kServiceKindBase, 7);
