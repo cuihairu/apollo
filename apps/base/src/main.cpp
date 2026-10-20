@@ -1,4 +1,5 @@
 #include "database/client.hpp"
+#include "login/m1_service_register_client.hpp"
 #include "player_store/player_store.hpp"
 #include "apollo/game/session/fleet_recovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
@@ -51,13 +52,20 @@ int main(int argc, char** argv) {
         std::uint64_t reportComponent = 0;
         std::uint32_t reportZone = 0;
         std::uint64_t reportIntervalMs = 0;
+        // login 服务注册拨号（L123 拨号次切片）：port 0 = 关。Base 无内建
+        // 数值身份——开启注册时逻辑 ID 必须显式给（--service-logical-id）。
+        std::string serviceRegisterHost = "127.0.0.1";
+        std::uint16_t serviceRegisterPort = 0;
+        std::uint64_t serviceLogicalId = 0;
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
             if (arg == "--help" || arg == "-h") {
                 std::cout << "base [--host IP] [--port N] [--id NAME] "
                              "[--database-host IP] [--database-port N] [--database-id NAME] [--route-json PATH] "
                              "[--report-host IP] [--report-port N] [--report-component-id N] "
-                             "[--report-zone-id N] [--report-interval-ms N]\n";
+                             "[--report-zone-id N] [--report-interval-ms N] "
+                             "[--service-register-host IP] [--service-register-port N] "
+                             "[--service-logical-id N]\n";
                 return 0;
             }
             if (i + 1 == argc) throw std::runtime_error("missing option value");
@@ -74,10 +82,15 @@ int main(int argc, char** argv) {
             else if (arg == "--report-component-id") reportComponent = positive(value, "report component id");
             else if (arg == "--report-zone-id") reportZone = static_cast<std::uint32_t>(positive(value, "report zone id"));
             else if (arg == "--report-interval-ms") reportIntervalMs = positive(value, "report interval");
+            else if (arg == "--service-register-host") serviceRegisterHost = value;
+            else if (arg == "--service-register-port") serviceRegisterPort = port(value, true);
+            else if (arg == "--service-logical-id") serviceLogicalId = positive(value, "service logical id");
             else throw std::runtime_error("unknown option: " + arg);
         }
         if (reportPort != 0 && reportComponent == 0)
             throw std::runtime_error("--report-component-id required when fleet reporting enabled");
+        if (serviceRegisterPort != 0 && serviceLogicalId == 0)
+            throw std::runtime_error("--service-logical-id required when service register enabled");
         apollo::core::log::LogManagerConfig logging;
         logging.processIdentity = config.m1SelfName;
         apollo::core::log::global_log_manager().initialize(logging);
@@ -88,6 +101,37 @@ int main(int argc, char** argv) {
         base.start();
         if (!base.m1_listen_port()) throw std::runtime_error("Base listener unavailable");
         std::cout << "base ready port=" << base.m1_listen_port() << std::endl;
+
+        // login 服务注册拨号（L123 拨号次切片）：装配失败降级警告不拦启动
+        //（同 cell 注册面/World 管理侧惯例）；泵在主循环 20ms 拍内驱动。
+        std::unique_ptr<login::M1ServiceRegisterClient> serviceRegister;
+        if (serviceRegisterPort != 0) {
+            login::M1ServiceRegisterClientConfig src;
+            src.login_host = serviceRegisterHost;
+            src.login_port = serviceRegisterPort;
+            src.service_kind = login::kServiceKindBase;
+            src.logical_id = serviceLogicalId;
+            src.advertise_host = config.host;
+            src.advertise_port = base.m1_listen_port();
+            src.route_json = config.m1RouteJson;
+            src.self_name = "base-" + std::to_string(serviceLogicalId);
+            serviceRegister = login::makeM1ServiceRegisterClient(std::move(src));
+            if (serviceRegister->start()) {
+                std::cout << "base service register: dialing " << serviceRegisterHost
+                          << ":" << serviceRegisterPort << " as base-"
+                          << serviceLogicalId << std::endl;
+            } else {
+                serviceRegister.reset();
+                std::cerr << "base service register degraded: config or route table invalid"
+                          << std::endl;
+            }
+        }
+        const auto steady_now_ms = [] {
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                    .count());
+        };
 
         // 恢复相位全量重报（P3-1 增量③）：启动即报 + 周期刷新（幂等
         // intake；interval 0 = 仅启动期一报）。承载域 zone 由部署给定。
@@ -110,6 +154,7 @@ int main(int argc, char** argv) {
         auto lastReport = std::chrono::steady_clock::now();
         while (run) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            if (serviceRegister) serviceRegister->pump(steady_now_ms());
             if (reporter && reportIntervalMs != 0) {
                 const auto since = std::chrono::duration_cast<std::chrono::milliseconds>(
                                        std::chrono::steady_clock::now() - lastReport)
@@ -123,6 +168,10 @@ int main(int argc, char** argv) {
         }
         reporter.reset();
         reportTransport.close();
+        if (serviceRegister) {
+            serviceRegister->stop();
+            serviceRegister.reset();
+        }
         base.stop();
         return 0;
     } catch (const std::exception& error) {

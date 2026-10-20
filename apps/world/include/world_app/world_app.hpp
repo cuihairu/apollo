@@ -15,6 +15,7 @@
 #include "world_app/acceptance_queue.hpp"
 #include "world_app/m1_link_server.hpp"
 #include "world_app/cell_app.hpp"
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -64,6 +65,14 @@ public:
     // M1 链路接收端（M1 上层接线批 2b-ii）：InterServerLink passive 端点，
     // 网关经它投递 cell 意图（924-928 契约族）；listenPort 查实占端口。
     M1LinkServer& m1Link() { return *m1Link_; }
+
+    // 管理侧拨号面拍首钩子（L123 服务注册拨号批）：宿主装配注入需与内核
+    // tick 同拍的出站泵面（服务注册拨号客户端等）。在 M1 泵之后、内核线程
+    // 每拍执行——线程纪律同 pre_tick 本体（钩子体内不得再回取管理面锁）。
+    // start 前后皆可置（钩子体每拍读取成员，无竞态面）；置空 = 无。
+    void set_manager_pre_tick(std::function<void(std::uint64_t now_ms)> hook) {
+        managerPreTick_ = std::move(hook);
+    }
 
     // scene 反查（内核线程内解析；测试面：eval 宿主接线定位投递目标用）。
     // 注：ScriptRuntime 刻意不外露——scripting-lua §2 一状态一逻辑线程，其
@@ -207,6 +216,8 @@ private:
     // 等构造期可用），start/stop 走生命周期
     std::unique_ptr<CellApp> cell_;
     std::unique_ptr<M1LinkServer> m1Link_;
+    // 管理侧拨号面拍首泵（L123）：set_manager_pre_tick 注入，pre_tick 内调用
+    std::function<void(std::uint64_t)> managerPreTick_;
 
     // ---- 管理面状态（内核线程独占——受理点与驱动同在钩子上下文）----
     // 模块投递编排（P4 仅代码更新批）：单目标编排器懒建（终态可串行多轮）；

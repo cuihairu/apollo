@@ -14,6 +14,7 @@ add_executable(world
     src/cell_app.cpp
     src/m1_link_server.cpp
     src/cell_register_client.cpp
+    ../login/src/m1_service_register_client.cpp
     ${WORLD_APP_PROTOCOL_SOURCES}
 )
 
@@ -22,6 +23,7 @@ find_package(nlohmann_json CONFIG QUIET)
 target_include_directories(world
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../login/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/runtime/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/script/include

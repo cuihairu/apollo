@@ -1,4 +1,8 @@
-add_executable(base src/main.cpp)
+add_executable(base
+    src/main.cpp
+    ../login/src/m1_service_register_client.cpp
+)
+target_include_directories(base PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../login/include)
 target_link_libraries(base PRIVATE apollo_app_services apollo_database_rpc
     apollo::net_discovery)
 target_compile_definitions(base PRIVATE

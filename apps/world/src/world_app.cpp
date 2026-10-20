@@ -70,6 +70,9 @@ WorldApp::WorldApp(const WorldAppConfig& config)
         if (m1Link_) {
             m1Link_->pump(now_ms);
         }
+        if (managerPreTick_) {
+            managerPreTick_(now_ms);  // 管理侧拨号面（L123 服务注册拨号）
+        }
     });
     cell_->set_post_tick([this](double) {
         // World 排空推进（P4 更新排空批；driveSquadGameplay 后拍——本拍结算

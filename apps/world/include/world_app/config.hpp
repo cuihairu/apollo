@@ -41,6 +41,13 @@ struct WorldAppConfig {
     // 逻辑 cell ID（注册开则必须非 0；PID/IP 不当身份，重启保留同 ID 换代次）。
     std::uint64_t cellId = 0;
 
+    // login 服务注册拨号（L123 拨号次切片，manager 角色）：启动后主动向
+    // loginServer 服务注册面（964/965）登记逻辑身份（kind=World，
+    // logical_id=worldId，代次自铸/注入）。port = 0 = 不注册（缺省单机
+    // 形态静默；装配失败降级警告不拦启动，同 cell 注册面惯例）。
+    std::string serviceRegisterHost;
+    std::uint16_t serviceRegisterPort = 0;
+
     // 注册表过期窗毫秒（L101 心跳批，manager 侧单方裁决）：登记条目
     // last-heard（registered_at_ms，每次受理刷新）超窗未刷新即整条摘除——
     // cell 侧周期心跳（960 重发）维持存活。0 = 永不过期（单机形态无注册面

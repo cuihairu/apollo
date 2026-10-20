@@ -7,6 +7,7 @@
 #include "world_app/world_app.hpp"
 #include "world_app/cell_register_client.hpp"
 #include "world_app/role_options.hpp"
+#include "login/m1_service_register_client.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdint>
@@ -82,6 +83,11 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.registerPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--cell-id" && i + 1 < argc) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--service-register-host" && i + 1 < argc) {
+            config.serviceRegisterHost = argv[++i];
+        } else if (arg == "--service-register-port" && i + 1 < argc) {
+            config.serviceRegisterPort =
+                static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--cell-expiry-ms" && i + 1 < argc) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--world-journal" && i + 1 < argc) {
@@ -157,6 +163,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --register-host <h>        World M1 host to register with, cell role (default: off)\n"
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
                       << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
+                      << "  --service-register-host <h>  login service register host, manager role (default: off)\n"
+                      << "  --service-register-port <p>  login service register port, 0 = off (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
                       << "  --world-journal <file>    Epoch tombstone journal for cross-restart cell isolation (default: off)\n"
                       << "  --link-grace-ms <ms>      Cell-side control-link grace window before freeze, 0 = never (default: 15000)\n"
@@ -441,6 +449,38 @@ int main(int argc, char* argv[]) {
         logger->info("Starting server...");
         server.start();
 
+        // login 服务注册拨号（L123 拨号次切片，manager 角色）：配置了 login
+        // 服务注册地址即登记 World 逻辑身份（kind=World, id=worldId，自报面
+        // = M1 实占监听）。泵挂管理侧拍首钩子（内核线程同拍，单写者纪律不
+        // 破）；装配失败降级警告不拦启动（同 admission/cell 注册面惯例）。
+        std::unique_ptr<login::M1ServiceRegisterClient> service_register;
+        if (config.serviceRegisterPort != 0) {
+            login::M1ServiceRegisterClientConfig src;
+            src.login_host = config.serviceRegisterHost;
+            src.login_port = config.serviceRegisterPort;
+            src.service_kind = login::kServiceKindWorld;
+            src.logical_id = config.worldId;
+            src.advertise_host = config.host;
+            src.advertise_port = server.m1Link().listenPort();
+            src.route_json = config.m1RouteJson;
+            src.self_name = "world-" + std::to_string(config.worldId);
+            service_register = login::makeM1ServiceRegisterClient(std::move(src));
+            if (service_register->start()) {
+                server.set_manager_pre_tick(
+                    [&service_register](std::uint64_t now_ms) {
+                        service_register->pump(now_ms);
+                    });
+                logger->info("Service register: dialing "
+                             + config.serviceRegisterHost + ":"
+                             + std::to_string(config.serviceRegisterPort)
+                             + " as world-" + std::to_string(config.worldId));
+            } else {
+                service_register.reset();
+                logger->warning(
+                    "service register degraded: config or route table invalid");
+            }
+        }
+
         // 编队成员注册（P3-4 收尾批）：machined 在位才上 wire；beat 交给
         // 主循环秒拍，退出路径优雅注销（TTL 兜底覆盖注销包丢失）
         apollo::net::discovery::UdpBeaconTransport fleet_transport;
@@ -489,6 +529,10 @@ int main(int argc, char* argv[]) {
         }
         if (fleet_member) {
             fleet_member->stop();
+        }
+        if (service_register) {
+            service_register->stop();
+            service_register.reset();
         }
 
         logger->info("Server stopped.");

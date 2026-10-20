@@ -2288,6 +2288,33 @@ if(MSVC)
 endif()
 add_test(NAME LoginServiceRegisterTests COMMAND login_service_register_tests)
 
+# login 服务注册拨号客户端 e2e（L123 拨号次切片）：kUp 跃迁/心跳 964 发送 +
+# 965 记账 + 装配守卫 + 对端缺席不空发。缝工厂两侧真实现直编
+# （login_service_register_tests 惯例）；Windows 下 link TCP 底座不进本批，
+# 用例本体空转。
+add_executable(login_service_register_client_tests
+    test_login_service_register_client.cpp
+    ../apps/login/src/m1_service_register_client.cpp
+    ../apps/login/src/m1_service_register_server.cpp
+)
+target_include_directories(login_service_register_client_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+)
+target_compile_definitions(login_service_register_client_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(login_service_register_client_tests PRIVATE
+    apollo::base apollo::core apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_protocol)
+if(WIN32)
+    target_link_libraries(login_service_register_client_tests PRIVATE ws2_32)
+    target_compile_definitions(login_service_register_client_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(login_service_register_client_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LoginServiceRegisterClientTests COMMAND login_service_register_client_tests)
+
 # BaseApp M1 base 面 × login base 客户端 e2e（P4-4 批③）：受理/应答/错误包
 # 三路径 + 对端缺席降级。缝工厂两侧真实现直编（login_m1_admission_tests
 # 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
