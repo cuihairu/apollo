@@ -39,6 +39,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -135,6 +136,23 @@ bool pump_to_connected(tls_test_support::TlsClient& client, link::ILinkTransport
     return false;
 }
 
+// 有界等待 accept：起连是非阻塞 connect，连入监听 accept 队列要真实墙钟
+// （macOS 拥挤 runner 上可达数百 ms）——accept 单发在队列未及处空手返回
+// nullptr。逐拍重试至超时；断言语义不变（accept 必出传输），只是把"调用
+// 即刻"修正为"有界内"。
+std::unique_ptr<link::ILinkTransport> accept_transport(TlsListener& listener,
+                                                       int timeout_ms = 5000) {
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (auto transport = listener.accept()) {
+            return transport;
+        }
+        std::this_thread::sleep_for(kTick);
+    }
+    return nullptr;
+}
+
 // ---- 1. 上下文装载 ----
 
 bool test_context_load() {
@@ -215,7 +233,7 @@ bool test_e2e_roundtrip() {
     std::string err;
     TEST_ASSERT(client.start("127.0.0.1", listener.port(), err), "客户端起连: " + err);
 
-    auto transport = listener.accept();
+    auto transport = accept_transport(listener);
     TEST_ASSERT(transport != nullptr, "accept 出传输");
     TEST_ASSERT(!transport->closed(), "新传输未关闭");
     TEST_ASSERT(transport->peerAddress() == "127.0.0.1", "对端地址 127.0.0.1");
@@ -262,7 +280,7 @@ bool test_fragmented_handshake() {
     tls_test_support::TlsClient client;
     std::string err;
     TEST_ASSERT(client.start("127.0.0.1", listener.port(), err), "客户端起连: " + err);
-    auto transport = listener.accept();
+    auto transport = accept_transport(listener);
     TEST_ASSERT(transport != nullptr, "accept 出传输");
 
     // 泵到握手完成本身就是分片推进：两侧每拍只走一步，ClientHello 与
@@ -297,7 +315,7 @@ bool test_garbage_handshake_fatal() {
     tls_test_support::TlsClient raw;  // 只用它的 connect 前半段
     std::string err;
     TEST_ASSERT(raw.start("127.0.0.1", listener.port(), err), "原始连接建立");
-    auto transport = listener.accept();
+    auto transport = accept_transport(listener);
     TEST_ASSERT(transport != nullptr, "accept 出传输");
 
     const std::uint8_t garbage[] = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
@@ -328,7 +346,7 @@ bool test_handshake_deadline() {
     tls_test_support::TlsClient silent;  // 起连后不发任何 TLS 字节
     std::string err;
     TEST_ASSERT(silent.start("127.0.0.1", listener.port(), err), "静默连接建立");
-    auto transport = listener.accept();
+    auto transport = accept_transport(listener);
     TEST_ASSERT(transport != nullptr, "accept 出传输");
 
     const auto begin = std::chrono::steady_clock::now();
@@ -359,7 +377,7 @@ bool test_large_payload_short_write() {
     tls_test_support::TlsClient client;
     std::string err;
     TEST_ASSERT(client.start("127.0.0.1", listener.port(), err), "客户端起连: " + err);
-    auto transport = listener.accept();
+    auto transport = accept_transport(listener);
     TEST_ASSERT(transport != nullptr, "accept 出传输");
     TEST_ASSERT(pump_to_connected(client, *transport), "握手完成");
 
@@ -388,13 +406,16 @@ bool test_large_payload_short_write() {
     TEST_ASSERT(received == got.size(), "客户端收全 512 KiB");
     TEST_ASSERT(std::memcmp(got.data(), big.data(), big.size()) == 0, "大载荷字节一致");
 
-    // 客户端 → 服务端同量反灌。
+    // 客户端 → 服务端同量反灌（与正向同面：短写/暂退逐泵重试收全；断言
+    // 只裁 fatal——n==0 是 TLS 缓冲暂退的合法瞬态，交付由收全+字节一致裁）。
     sent = 0;
-    while (sent < big.size()) {
+    for (int i = 0; i < 200000 && sent < big.size(); ++i) {
         const int n = client.write(big.data() + sent, big.size() - sent);
-        TEST_ASSERT(n > 0, "客户端发不 fatal");
+        TEST_ASSERT(n >= 0, "客户端发不 fatal");
         sent += static_cast<std::size_t>(n);
+        std::this_thread::sleep_for(kTick);
     }
+    TEST_ASSERT(sent == big.size(), "客户端发全 512 KiB");
     std::fill(got.begin(), got.end(), 0);
     received = 0;
     for (int i = 0; i < 200000 && received < got.size(); ++i) {
@@ -420,7 +441,7 @@ bool test_close_semantics() {
     tls_test_support::TlsClient client;
     std::string err;
     TEST_ASSERT(client.start("127.0.0.1", listener.port(), err), "客户端起连: " + err);
-    auto transport = listener.accept();
+    auto transport = accept_transport(listener);
     TEST_ASSERT(transport != nullptr, "accept 出传输");
     TEST_ASSERT(pump_to_connected(client, *transport), "握手完成");
 
@@ -524,7 +545,7 @@ bool test_client_verifies_chain_and_host() {
     const int fd = raw_connect(listener.port());
     TEST_ASSERT(fd >= 0, "客户端裸连通过");
     TlsClientTransport client_side(fd, client_ctx, "localhost");
-    auto server_side = listener.accept();
+    auto server_side = accept_transport(listener);
     TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
     TEST_ASSERT(pump_client_handshake(client_side, *server_side), "握手完成（链+主机名过）");
     TEST_ASSERT(client_side.verifyResult() == 0, "验签码为 0");
@@ -549,7 +570,7 @@ bool test_client_rejects_untrusted_chain() {
     const int fd = raw_connect(listener.port());
     TEST_ASSERT(fd >= 0, "客户端裸连通过");
     TlsClientTransport client_side(fd, client_ctx, "localhost");
-    auto server_side = listener.accept();
+    auto server_side = accept_transport(listener);
     TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
     TEST_ASSERT(!pump_client_handshake(client_side, *server_side), "不受信链握手必败");
     TEST_ASSERT(client_side.closed(), "fatal 后 closed()");
@@ -580,7 +601,7 @@ bool test_client_rejects_hostname_mismatch() {
     const int fd = raw_connect(listener.port());
     TEST_ASSERT(fd >= 0, "客户端裸连通过");
     TlsClientTransport client_side(fd, client_ctx, "other.example");
-    auto server_side = listener.accept();
+    auto server_side = accept_transport(listener);
     TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
     TEST_ASSERT(!pump_client_handshake(client_side, *server_side), "主机名不匹配握手必败");
     TEST_ASSERT(client_side.closed(), "fatal 后 closed()");
@@ -608,7 +629,7 @@ bool test_client_verify_disabled_local_dev() {
     const int fd = raw_connect(listener.port());
     TEST_ASSERT(fd >= 0, "客户端裸连通过");
     TlsClientTransport client_side(fd, client_ctx, "unrelated.example");
-    auto server_side = listener.accept();
+    auto server_side = accept_transport(listener);
     TEST_ASSERT(server_side != nullptr, "accept 出服务端传输");
     TEST_ASSERT(pump_client_handshake(client_side, *server_side), "关闭验签后握手完成");
     TEST_ASSERT(roundtrip(client_side, *server_side), "明文 round-trip 双向");
