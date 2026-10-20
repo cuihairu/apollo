@@ -4,6 +4,7 @@
 #include "apollo/script/script_runtime.hpp"
 #include <algorithm>
 #include <chrono>
+#include <fstream>
 #include <stdexcept>
 #include <vector>
 
@@ -90,6 +91,10 @@ WorldApp::~WorldApp() {
 
 void WorldApp::start() {
     if (isRunning()) return;
+
+    // 代次墓碑装载（L101 管理日志切片）：闸开前——受理面未开，无并发写者
+    //（损坏行显式拒启，见 loadEpochTombstones）
+    loadEpochTombstones();
 
     // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket
     // 已退役）：InterServerLink passive 端点装配（先建对象不监听——内核
@@ -476,7 +481,7 @@ void WorldApp::onCellRegister(const std::string& peer,
         reg.registered_at_ms = now_ms;
         reg.peer = peer;
         cellRegistrations_.emplace(request.cell_id, std::move(reg));
-        cellEpochWatermarks_[request.cell_id] = request.start_epoch;
+        recordEpochWatermark(request.cell_id, request.start_epoch);
         worldLog().info("cell registered: id=" + std::to_string(request.cell_id)
                         + " epoch=" + std::to_string(request.start_epoch)
                         + " peer=" + peer);
@@ -504,7 +509,9 @@ void WorldApp::onCellRegister(const std::string& peer,
     it->second.ready = request.ready;
     it->second.registered_at_ms = now_ms;
     it->second.peer = peer;
-    cellEpochWatermarks_[request.cell_id] = request.start_epoch;  // 水位随受理推进
+    // 水位随受理推进 + 墓碑前进才落盘（recordEpochWatermark 统一判前进，
+    // 这里不再直写 map——先写会骗过前进判定漏落盘）
+    recordEpochWatermark(request.cell_id, request.start_epoch);
     worldLog().info(std::string("cell re-") + (idempotent ? "registered: " : "placed (new epoch): ")
                     + "id=" + std::to_string(request.cell_id)
                     + " epoch=" + std::to_string(request.start_epoch)
@@ -584,6 +591,93 @@ const WorldApp::SpaceAssignment* WorldApp::find_space_assignment(
     std::uint64_t space_id) const {
     const auto it = spaceAssignments_.find(space_id);
     return it != spaceAssignments_.end() ? &it->second : nullptr;
+}
+
+void WorldApp::loadEpochTombstones() {
+    // 墓碑装载（启动窗，M1 链路开闸前——受理面未开，无并发写者）：
+    // `cell_id|start_epoch` append-only 行，逐行取每 cell 最大重建水位。
+    // 0 号/非数字/缺字段/多字段 = 损坏显式拒启（不静默部分回放——orders
+    // journal 同口径）；行尾 \r 剥除（Windows 落盘坑账防御）。文件缺省 =
+    // 首启，append 建档。
+    if (config_.worldJournalPath.empty()) {
+        return;
+    }
+    std::ifstream in(config_.worldJournalPath, std::ios::binary);
+    if (!in) {
+        return;  // 无墓碑 = 首启
+    }
+    const auto bad_line = [&](std::uint64_t line_no, const char* why) {
+        throw std::runtime_error(std::string("world journal corrupt (") + why
+                                 + ") at " + config_.worldJournalPath + ":"
+                                 + std::to_string(line_no));
+    };
+    std::string line;
+    std::uint64_t line_no = 0;
+    std::size_t loaded = 0;
+    while (std::getline(in, line)) {
+        ++line_no;
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            continue;
+        }
+        const auto bar = line.find('|');
+        if (bar == std::string::npos) {
+            bad_line(line_no, "missing '|'");
+        }
+        const auto parse_u64 = [&](const std::string& field) -> std::uint64_t {
+            std::size_t pos = 0;
+            std::uint64_t value = 0;
+            try {
+                value = std::stoull(field, &pos);
+            } catch (const std::exception&) {
+                bad_line(line_no, "not a number");
+            }
+            if (pos != field.size() || field.empty()) {
+                bad_line(line_no, "trailing garbage");
+            }
+            return value;
+        };
+        const auto cell_id = parse_u64(line.substr(0, bar));
+        const auto epoch = parse_u64(line.substr(bar + 1));
+        if (cell_id == 0 || epoch == 0) {
+            bad_line(line_no, "zero id or epoch");
+        }
+        auto& wm = cellEpochWatermarks_[cell_id];
+        if (epoch > wm) {
+            wm = epoch;
+        }
+        loaded = cellEpochWatermarks_.size();
+    }
+    worldLog().info("world journal loaded: " + config_.worldJournalPath
+                    + " watermarks=" + std::to_string(loaded));
+}
+
+void WorldApp::recordEpochWatermark(std::uint64_t cell_id, std::uint64_t epoch) {
+    // 水位记录 + 墓碑追加（L101 管理日志切片）：仅水位真实前进才落盘——
+    // 同代次刷新/回拨不追加（行冗余无害但省 I/O；prev 已在日志或本进程
+    // 追加过）。追加失败只告警不拒受理：墓碑缺席时隔离退化回批㉗ 内存
+    // 水位（可用性优先，loudly 可见）。调用点 = onCellRegister 受理点
+    //（内核线程泵上下文，单写者）。
+    const auto it = cellEpochWatermarks_.find(cell_id);
+    const std::uint64_t prev = it != cellEpochWatermarks_.end() ? it->second : 0;
+    cellEpochWatermarks_[cell_id] = std::max(prev, epoch);
+    if (epoch <= prev || config_.worldJournalPath.empty()) {
+        return;
+    }
+    std::ofstream out(config_.worldJournalPath, std::ios::app | std::ios::binary);
+    if (!out) {
+        worldLog().warning("world journal append failed: " + config_.worldJournalPath
+                           + " (isolation degrades to in-memory watermark)");
+        return;
+    }
+    out << cell_id << '|' << epoch << '\n';
+    out.flush();
+    if (!out) {
+        worldLog().warning("world journal append failed: " + config_.worldJournalPath
+                           + " (isolation degrades to in-memory watermark)");
+    }
 }
 
 void WorldApp::driveCellRegistry() {

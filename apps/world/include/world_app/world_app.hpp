@@ -171,6 +171,10 @@ private:
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。
     void driveCellRegistry();
+    // 代次墓碑（L101 管理日志切片）：装载在 start() 闸开前（无并发写者）；
+    // recordEpochWatermark = 内存水位对齐 + 前进才落盘（见 world_app.cpp）
+    void loadEpochTombstones();
+    void recordEpochWatermark(std::uint64_t cell_id, std::uint64_t epoch);
     // 分配推送（962，受理点内同步发）：认领池内未分配 Space（首分配 = 1，
     // 已归属其它 cell 的跳过不重分）并逐条推给该 cell 的 peer 链路；code 1/2
     // 受理都推（断链重拨后分配不丢——cell 侧按版本去重幂等应用）。

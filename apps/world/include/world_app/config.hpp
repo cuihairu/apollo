@@ -47,6 +47,11 @@ struct WorldAppConfig {
     // 时无差；cell 全停发 30s 后摘除是缺省策略）。
     std::uint64_t cellExpiryMs = 30000;
 
+    // 代次墓碑日志（L101 管理日志切片，manager 侧）：append-only 文本行
+    // `cell_id|start_epoch`，装载取每 cell 最大值重建水位。空 = 关（现状
+    // 内存水位，重启忘却）；配置即受理时追加落盘，旧执行端隔离跨重启成立。
+    std::string worldJournalPath;
+
     // cell 侧失联宽限窗毫秒（L101 失联策略切片）：注册链路 down 超窗即冻结
     // 内核（停模拟 + 关受理闸——§4 失联策略；解冻只随 961 复核受理）。0 =
     // 永不冻结。缺省 15000 = 3 心跳拍（默认 5000）容忍，低于过期窗 30000

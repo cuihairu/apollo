@@ -19,6 +19,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -1058,6 +1059,92 @@ bool test_space_release_and_reclaim() {
     return true;
 }
 
+// ---------- 持久墓碑（L101 管理日志切片）：代次水位跨 World 重启 ----------
+// 批㉗ 水位是内存面（重启忘却）——墓碑日志把「本进程曾受理的最高启动代次」
+// 落盘，旧执行端隔离跨 World 重启成立。同代次回拨仍放行（批㉔ 语义跨重启
+// 保留）；不配墓碑 = 现状内存水位（不假装记得重启前的事）。
+bool test_watermark_journal_persists_across_restart() {
+    std::cout << "Running: test_watermark_journal_persists_across_restart..." << std::endl;
+    namespace fs = std::filesystem;
+    const fs::path journal_dir = "/tmp/apollo-cell-register-tests";
+    fs::create_directories(journal_dir);  // 临时目录不自动建坑账：落盘前显式建
+    const fs::path journal = journal_dir / "tombstone-wm.txt";
+    fs::remove(journal);
+
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+
+    // W1：受理 cell 21 epoch 5（首注册）→ 停机。水位 5 进墓碑。
+    WorldEnd w1;
+    w1.config.worldJournalPath = journal.string();
+    TEST_ASSERT(w1.start(121), "w1 started with journal");
+    CellEnd c1;
+    TEST_ASSERT(dial_cell(w1, c1, "cell-w1"), "cell dialed w1");
+    RegisterReply r;
+    TEST_ASSERT(register_roundtrip(c1, 4101, 21, 5, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "w1 fresh admission epoch 5");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "accepted code 1");
+    w1.stop();
+
+    // W2：同墓碑重启——epoch 4 复活拒 code 3（水位来自日志，内存已空）；
+    // epoch 5 同代次仍首注册受理；epoch 6 替换受理且水位推进 6 落盘。
+    WorldEnd w2;
+    w2.config.worldJournalPath = journal.string();
+    TEST_ASSERT(w2.start(122), "w2 restarted with journal");
+    CellEnd c2;
+    TEST_ASSERT(dial_cell(w2, c2, "cell-w2"), "cell dialed w2");
+    TEST_ASSERT(register_roundtrip(c2, 4102, 21, 4, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "stale epoch 4 roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch,
+                "journal watermark rejects 4");
+    TEST_ASSERT(register_roundtrip(c2, 4103, 21, 5, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "same-epoch 5 roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted,
+                "same epoch 5 admitted fresh across restart");
+    TEST_ASSERT(register_roundtrip(c2, 4104, 21, 6, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "new epoch 6 roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "epoch 6 replaced");
+    w2.stop();
+
+    // W3：epoch 5 再复活仍拒（日志水位 6）；epoch 6 同代次受理。
+    WorldEnd w3;
+    w3.config.worldJournalPath = journal.string();
+    TEST_ASSERT(w3.start(123), "w3 restarted with journal");
+    CellEnd c3;
+    TEST_ASSERT(dial_cell(w3, c3, "cell-w3"), "cell dialed w3");
+    TEST_ASSERT(register_roundtrip(c3, 4105, 21, 5, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "stale epoch 5 roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch,
+                "journal watermark rejects 5");
+    TEST_ASSERT(register_roundtrip(c3, 4106, 21, 6, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "same-epoch 6 roundtrip");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "same epoch 6 admitted");
+    w3.stop();
+
+    // 对照组：不配墓碑 = 现状内存水位——重启忘却，epoch 7 仍受理。
+    WorldEnd w4;
+    TEST_ASSERT(w4.start(124), "w4 started without journal");
+    CellEnd c4;
+    TEST_ASSERT(dial_cell(w4, c4, "cell-w4"), "cell dialed w4");
+    TEST_ASSERT(register_roundtrip(c4, 4107, 23, 8, "127.0.0.1", 9304, 1, 10, 0, true, r),
+                "w4 fresh admission epoch 8");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "accepted");
+    w4.stop();
+    WorldEnd w5;
+    TEST_ASSERT(w5.start(125), "w5 restarted without journal");
+    CellEnd c5;
+    TEST_ASSERT(dial_cell(w5, c5, "cell-w5"), "cell dialed w5");
+    TEST_ASSERT(register_roundtrip(c5, 4108, 23, 7, "127.0.0.1", 9304, 1, 10, 0, true, r),
+                "epoch 7 roundtrip without journal");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted,
+                "no journal: watermark forgotten on restart");
+    g_replies = nullptr;
+    w5.stop();
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1075,7 +1162,8 @@ int main() {
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
                     && test_stale_epoch_watermark_isolation()
-                    && test_space_release_and_reclaim();
+                    && test_space_release_and_reclaim()
+                    && test_watermark_journal_persists_across_restart();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
         return 1;

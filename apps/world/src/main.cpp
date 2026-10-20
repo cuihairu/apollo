@@ -84,6 +84,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--cell-expiry-ms" && i + 1 < argc) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--world-journal" && i + 1 < argc) {
+            config.worldJournalPath = argv[++i];
         } else if (arg == "--link-grace-ms" && i + 1 < argc) {
             config.linkGraceMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--assign-spaces" && i + 1 < argc) {
@@ -156,6 +158,7 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
                       << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
+                      << "  --world-journal <file>    Epoch tombstone journal for cross-restart cell isolation (default: off)\n"
                       << "  --link-grace-ms <ms>      Cell-side control-link grace window before freeze, 0 = never (default: 15000)\n"
                       << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells (default: off)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
