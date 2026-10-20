@@ -1270,6 +1270,7 @@ bool test_manager_pair_e2e() {
         t += 5;
         mgr_a.pump(t);
         mgr_b.pump(t);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (la->state() == LinkState::kUp && lb != nullptr) {
             break;
         }
@@ -1291,6 +1292,7 @@ bool test_manager_pair_e2e() {
         t += 5;
         mgr_a.pump(t);
         mgr_b.pump(t);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (rx.got.size() == 1 && rx_a.got.size() == 1 &&
             la->stats().reliable_acked == 1 && lb->stats().reliable_acked == 1) {
             break;
@@ -1344,6 +1346,7 @@ bool test_manager_compat_window() {
         t += 5;
         mgr_a.pump(t);
         mgr_b.pump(t);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (la->state() == LinkState::kUp && lb != nullptr) {
             break;
         }
@@ -1415,6 +1418,7 @@ bool test_manager_fanout_two_peers() {
         m_a.pump(t);
         m_b.pump(t);
         mpassive.pump(t);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (p_a != nullptr && p_b != nullptr) {
             break;
         }
@@ -1444,6 +1448,7 @@ bool test_manager_fanout_two_peers() {
         m_a.pump(t);
         m_b.pump(t);
         mpassive.pump(t);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (rx_a.got.size() == 1 && rx_b.got.size() == 1) {
             break;
         }
@@ -1458,6 +1463,7 @@ bool test_manager_fanout_two_peers() {
         m_a.pump(t);
         m_b.pump(t);
         mpassive.pump(t);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (a_installs >= 2 && p_a != nullptr && p_a->state() == LinkState::kUp) {
             break;
         }
@@ -1559,6 +1565,7 @@ bool test_manager_fanout_same_endpoint_name() {
         m_gw.pump(t);
         m_ops.pump(t);
         mpassive.pump(t);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (p_gw != nullptr && p_ops != nullptr) {
             break;
         }
@@ -1578,6 +1585,7 @@ bool test_manager_fanout_same_endpoint_name() {
         m_gw.pump(t);
         m_ops.pump(t);
         mpassive.pump(t);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         if (rx_gw.got.size() == 1) {
             break;
         }

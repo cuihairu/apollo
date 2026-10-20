@@ -763,6 +763,20 @@ bool test_https_roundtrip() {
         return observer.count(EventKind::HttpHandled) == 1;
     }, 5000);
     TEST_ASSERT(handled, "handled over https");
+    // 响应晚 HttpHandled 一拍到端（同 wss 101 竞态）：泵到响应体真正可见再
+    // 断言——校验不弱化，只除掉同拍竞态。
+    TEST_ASSERT(pump_until(*ingress,
+                           [&] {
+                               drain_tls(stream);
+                               const std::string response(
+                                   reinterpret_cast<const char*>(stream.data()),
+                                   stream.size());
+                               return response.find("200") != std::string::npos
+                                      && response.find("{\"status\":\"ok\"}\n")
+                                             != std::string::npos;
+                           },
+                           5000),
+                "response captured over tls stream");
     const std::string response(reinterpret_cast<const char*>(stream.data()), stream.size());
     TEST_ASSERT(response.find("200") != std::string::npos, "200 seen in tls stream");
     TEST_ASSERT(response.find("Connection: close") != std::string::npos, "close declared");

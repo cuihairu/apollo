@@ -682,9 +682,20 @@ bool test_wss_roundtrip() {
         return observer.count(EventKind::Opened) == 1;
     }, 5000);
     TEST_ASSERT(upgraded, "opened over wss");
+    // 101 响应晚 Opened 一拍到端（服务端先转态再冲 TLS 记录层，慢机上一拍
+    // 竞态）：继续泵到状态行真正可见再断言——校验不弱化，只除掉同拍竞态。
+    TEST_ASSERT(pump_until(*ingress,
+                           [&] {
+                               drain_tls(stream);
+                               const std::string head(
+                                   reinterpret_cast<const char*>(stream.data()),
+                                   std::min<std::size_t>(stream.size(), 400));
+                               return head.find("101") != std::string::npos;
+                           },
+                           5000),
+                "101 seen in tls stream");
     const std::string head(reinterpret_cast<const char*>(stream.data()),
                            std::min<std::size_t>(stream.size(), 400));
-    TEST_ASSERT(head.find("101") != std::string::npos, "101 seen in tls stream");
 
     // 业务帧：netlink 帧（PING 包）入 masked binary。
     apollo::protocol::Ping ping;
