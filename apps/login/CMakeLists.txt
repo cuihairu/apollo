@@ -6,6 +6,7 @@ add_executable(login
     src/login_server.cpp
     src/m1_admission_server.cpp
     src/m1_base_client.cpp
+    src/m1_service_register_server.cpp
 )
 
 target_include_directories(login

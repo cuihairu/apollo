@@ -8,6 +8,8 @@
 #include "login/config.hpp"
 #include "login/m1_admission_server.hpp"
 #include "login/m1_base_client.hpp"
+#include "login/m1_service_register_server.hpp"
+#include "login/service_registry.hpp"
 #include "online_directory/online_directory.hpp"
 #include <condition_variable>
 #include <atomic>
@@ -152,6 +154,16 @@ public:
     bool isRunning() const { return running_; }
     online_directory::OnlineDirectory* onlineDirectory() noexcept { return directory_.get(); }
     std::uint16_t admissionPort() const { return m1Admission_ ? m1Admission_->listenPort() : 0; }
+    // 服务目录注册表观测面（L123；受理在 M1 服务注册面泵线程——跨线程只读
+    // 计数/查找与 WorldApp 注册表同口径）
+    ServiceRegistry* serviceRegistry() noexcept { return serviceRegistry_.get(); }
+    std::uint16_t serviceRegisterPort() const {
+        return m1ServiceRegister_ ? m1ServiceRegister_->listenPort() : 0;
+    }
+    // 残帧拒收计数透传（测试/运维观测面；面关 = 0）
+    std::uint64_t serviceRegisterRejectedFrames() const {
+        return m1ServiceRegister_ ? m1ServiceRegister_->rejectedFrames() : 0;
+    }
     // 编队恢复 intake 实占端口（recoveryPort = 0 绑定 = 内核分配；测试/演练
     // 拨号键）。面关 = 0。
     std::uint16_t recoveryListenPort() const { return recoveryFeed_.port(); }
@@ -192,6 +204,10 @@ private:
 
     // M1 准入受理面（P4-4 批①；m1Port = 0 = 不装配）
     std::unique_ptr<M1AdmissionServer> m1Admission_;
+
+    // 服务目录注册受理面（L123 首切片；serviceRegisterPort = 0 = 不装配）
+    std::unique_ptr<ServiceRegistry> serviceRegistry_;
+    std::unique_ptr<M1ServiceRegisterServer> m1ServiceRegister_;
 
     // M1 base 客户端面（P4-4 批③；worldStoreM1Port = 0 = 不装配，RPC 面缺席
     // = 降级缝 throw）

@@ -46,6 +46,11 @@ struct LoginConfig {
     bool m1Enabled = false;
     std::string m1RouteJson = APOLLO_LOGIN_CONTRACT_ROUTE_JSON;
 
+    // M1 服务注册受理面（L123 服务目录首切片）：Base/World 裸 964 拨入登记
+    // 逻辑身份/进程代次/管理地址/兼容/就绪；0 = 面关（缺省形态不接线）。
+    // 路由表共用 m1RouteJson
+    uint16_t serviceRegisterPort = 0;
+
     // 后端服务地址
 
     // M1 base 客户端面（P4-4 批③）：拨 base-app M1 受理面的链路侧；0 = 面关

@@ -352,7 +352,8 @@ LoginServer::LoginServer(const LoginConfig& config)
     : config_(config)
     , authenticator_(std::make_unique<Authenticator>(config))
     , gatewayAllocator_(std::make_unique<GatewayAllocator>(config))
-    , sessionManager_(std::make_unique<SessionManager>(config)) {
+    , sessionManager_(std::make_unique<SessionManager>(config))
+    , serviceRegistry_(std::make_unique<ServiceRegistry>()) {
 }
 
 LoginServer::~LoginServer() {
@@ -410,6 +411,30 @@ void LoginServer::start() {
                 ->warning("M1 admission degraded: route table unavailable ("
                           + config_.m1RouteJson + "), admission face stays off");
             m1Admission_.reset();
+        }
+    }
+
+    // M1 服务注册受理面（L123 首切片）：serviceRegisterPort = 0 = 不装配；
+    // 装配失败降级（警告 + 不拦启动，同准入面）。registry 常驻（面关也可
+    // 观测/后续批本地写入）。
+    if (config_.serviceRegisterPort != 0) {
+        M1ServiceRegisterConfig regConfig;
+        regConfig.host = config_.host;
+        regConfig.port = config_.serviceRegisterPort;
+        regConfig.route_json = config_.m1RouteJson;
+        m1ServiceRegister_ =
+            makeM1ServiceRegisterServer(std::move(regConfig), serviceRegistry_.get());
+        if (m1ServiceRegister_->start()) {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->info("service register listening on " + config_.host + ":"
+                       + std::to_string(m1ServiceRegister_->listenPort()));
+        } else {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->warning("service register degraded: route table unavailable ("
+                          + config_.m1RouteJson + "), register face stays off");
+            m1ServiceRegister_.reset();
         }
     }
 
@@ -550,6 +575,12 @@ void LoginServer::stop() {
     if (m1Admission_) {
         m1Admission_->stop();
         m1Admission_.reset();
+    }
+
+    // M1 服务注册面收线（同准入面：泵线程停驱 + 监听拆线）。
+    if (m1ServiceRegister_) {
+        m1ServiceRegister_->stop();
+        m1ServiceRegister_.reset();
     }
 
     // M1 base / manager 客户端面收线（in-flight call 由宿主泵线程先归还

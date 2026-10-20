@@ -75,6 +75,8 @@ LoginConfig loadConfig(int argc, char* argv[]) {
             config.gatewayUrls.push_back(argv[++i]);
         } else if (arg == "--m1-port" && i + 1 < argc) {
             config.m1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--service-register-port" && i + 1 < argc) {
+            config.serviceRegisterPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--world-store-m1-port" && i + 1 < argc) {
             config.worldStoreM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--directory-client-port" && i + 1 < argc) {
@@ -115,6 +117,7 @@ LoginConfig loadConfig(int argc, char* argv[]) {
                       << "  --host <host>              Listen address (default: 0.0.0.0)\n"
                       << "  --gateway <url>             Gateway URL (can be multiple)\n"
                       << "  --m1-port <port>           M1 admission listen port (0 = off, default: 0)\n"
+                      << "  --service-register-port <port>  Service register face port; 0 disables (default: 0)\n"
                       << "  --world-store-m1-port <port>  World player data endpoint (default: 9104)\n"
                       << "  --directory-client-port <port>   OnlineDirectory M1 control dial port (0 = off, default: 0)\n"
                       << "  --mirror-host <ipv4>       Directory mirror target host (default: 127.0.0.1)\n"

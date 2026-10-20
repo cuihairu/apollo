@@ -2262,6 +2262,32 @@ if(MSVC)
 endif()
 add_test(NAME LoginM1AdmissionTests COMMAND login_m1_admission_tests)
 
+# Login 服务注册受理面 e2e（L123 服务目录首切片；契约 964/965）：注册裁决
+# 全轮（首注册/复合键并存/幂等刷新/换代替换/旧代次拒绝）+ invalid 显式驳
+# 回 + 残帧拒收。缝工厂真实现直编（login_m1_admission_tests 惯例）；
+# Windows 下 link TCP 底座不进本批，用例本体空转。
+add_executable(login_service_register_tests
+    test_login_service_register.cpp
+    ../apps/login/src/m1_service_register_server.cpp
+)
+target_include_directories(login_service_register_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+)
+target_compile_definitions(login_service_register_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(login_service_register_tests PRIVATE
+    apollo::base apollo::core apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_protocol)
+if(WIN32)
+    target_link_libraries(login_service_register_tests PRIVATE ws2_32)
+    target_compile_definitions(login_service_register_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(login_service_register_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LoginServiceRegisterTests COMMAND login_service_register_tests)
+
 # BaseApp M1 base 面 × login base 客户端 e2e（P4-4 批③）：受理/应答/错误包
 # 三路径 + 对端缺席降级。缝工厂两侧真实现直编（login_m1_admission_tests
 # 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。
@@ -2665,6 +2691,7 @@ add_executable(hosted_services_tests
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
+    ../apps/login/src/m1_service_register_server.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(hosted_services_tests PRIVATE
@@ -2695,6 +2722,7 @@ add_executable(fleet_rehome_chain_tests
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
+    ../apps/login/src/m1_service_register_server.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(fleet_rehome_chain_tests PRIVATE
@@ -2725,6 +2753,7 @@ add_executable(migration_chain_tests
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
+    ../apps/login/src/m1_service_register_server.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(migration_chain_tests PRIVATE

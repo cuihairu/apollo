@@ -26,7 +26,7 @@ This document describes the actual directory layout of the current repository.
 
 | Directory | Description |
 |------|------|
-| `login/` | Login entry point (authentication, service/online directories, recovery fleet face) |
+| `login/` | Login entry point (authentication, service register/online directory, recovery fleet face) |
 | `gateway/` | Edge access layer |
 | `base/` | Standalone base entry with remote database access, owning persistent profiles and settlement admission |
 | `database/` | Dedicated M1 load/save and file journal |
