@@ -16,6 +16,9 @@
 #include <cstddef>
 #include <cstdint>
 
+// socket 面与 TlsClient 仅 POSIX（Windows CI 无这些头——底座/用例同批
+// POSIX only，Windows 下证书夹具仍可用，socket 面段整体缺席）。
+#if !defined(_WIN32)
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +28,7 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -105,6 +109,8 @@ inline CertPair generate_self_signed(const std::string& dir, const std::string& 
     EVP_PKEY_free(pkey);
     return out;
 }
+
+#if !defined(_WIN32)
 
 // ---- 非阻塞 TLS 测试客户端 ----
 //
@@ -287,5 +293,7 @@ private:
     std::string trust_anchor_;
     std::string verify_host_;
 };
+
+#endif // !_WIN32
 
 }  // namespace tls_test_support
