@@ -13,6 +13,9 @@
 //   5. 多执行核同进程隔离（L100 方向）：双 CellApp 各自 world/会话/下行独立；
 //   6. Space ↔ Scene 显式映射（L99 首切片）：多空间路由、跨空间 AOI 隔离、
 //      跨空间转移走 spaceToScene_ 路由表、未知空间回落默认 scene。
+//   7. 声明 Space × 小队副本同进程共存（L102 承接切片）：config.spaces 声明
+//      面上复用既有副本全流程，实例临时 Scene 独立自建自毁不占 Space 路由，
+//      声明 Space 的路由/scene/旁观者全程不受扰动。
 
 #include "world_app/cell_app.hpp"
 #include "apollo/protocol/messages.hpp"
@@ -25,6 +28,7 @@
 #include <functional>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -199,6 +203,58 @@ apollo::game::world::SceneDescriptor second_space_descriptor() {
     descriptor.grid_size = 100.0f;
     descriptor.view_radius = 200.0f;
     return descriptor;
+}
+
+// ---- 小队流程驱动面（L102 共存切片）：意图直投 + 下行帧解析 ----
+
+// 下行帧解包（会话 + 类型 + 去 header body）：副本族回执的事实源解析面，
+// 同 test_world_drain 的 ClientFace 口径搬到 FakeEgress 上。
+struct DeliveredFrame {
+    std::uint64_t session_id;
+    std::uint16_t type;
+    std::vector<std::uint8_t> body;
+};
+
+std::vector<DeliveredFrame> take_frames(const FakeEgress& e, std::uint16_t type) {
+    std::lock_guard<std::mutex> lock(e.mutex);
+    std::vector<DeliveredFrame> out;
+    for (const auto& f : e.frames) {
+        if (f.second.size() < sizeof(protocol::MessageHeader)) continue;
+        const auto h = protocol::MessageCodec::parseHeader(f.second);
+        if (h.type != type) continue;
+        out.push_back({f.first, h.type,
+                       std::vector<std::uint8_t>(f.second.begin() +
+                                                     sizeof(protocol::MessageHeader),
+                                                 f.second.end())});
+    }
+    return out;
+}
+
+// 泛型帧等待：类型 Msg 的任一已收帧满足 pred（帧只增不消费，重复扫描幂等）
+template <typename Msg, typename Pred>
+bool wait_frame(const FakeEgress& e, Pred&& pred, std::chrono::milliseconds timeout) {
+    return wait_until(
+        [&] {
+            for (const auto& f :
+                 take_frames(e, static_cast<std::uint16_t>(Msg::TYPE))) {
+                if (pred(protocol::MessageCodec::decodeBody<Msg>(f.body),
+                         f.session_id)) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        timeout);
+}
+
+world_app::IntentEnvelope make_squad_intent(protocol::MessageType type,
+                                            const std::vector<std::uint8_t>& frame,
+                                            std::uint64_t session_id) {
+    world_app::IntentEnvelope intent;
+    intent.type = type;
+    intent.frame = frame;
+    intent.session_id = session_id;
+    return intent;
 }
 
 // 维护闸 + tick 边界执行 + 延时应答 + 下行重编帧头（内核级全链）。
@@ -720,6 +776,281 @@ bool test_cell_kernel_cancel_space_revoke() {
     return true;
 }
 
+// L102 承接切片：声明 Space × 小队副本同进程共存。config.spaces 声明面上
+// 走完整副本流程（建队→入队→launch→enter×3→start→击杀满额→结算销毁）：
+// 实例临时 Scene 与两个 Space scene 三域互异、生命周期内不占 Space 路由表，
+// 结算销毁只回收临时 Scene——声明 Space 的路由/scene/在场旁观者全程不动。
+// 内核态（路由数/实例绑定/scene 在场性）经 post_tick 钩子在内核线程快照
+//（同 remove_space 例纪律）；协议面断言取 FakeEgress 下行帧（事实源）。
+bool test_declared_space_squad_flow_isolation() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    config.spaces = {{7, "aux"}};
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+
+    // 内核线程观测面：路由数 / 实例绑定 scene（sticky）/ scene 在场性
+    std::atomic<std::uint64_t> party_hint{0};  // 测试线程从 PARTY_RESULT 回填
+    std::atomic<std::size_t> route_count{0};
+    std::atomic<std::uint64_t> instance_scene{0};  // 最近一次可见的实例 scene id
+    std::atomic<bool> binding_alive{false};
+    std::atomic<bool> instance_scene_present{false};
+    cell.set_post_tick([&](double) {
+        route_count.store(cell.space_count());
+        const auto pid = party_hint.load(std::memory_order_acquire);
+        const auto* binding = pid != 0
+                                  ? cell.squadInstanceService()->find_by_party(pid)
+                                  : nullptr;
+        binding_alive.store(binding != nullptr, std::memory_order_release);
+        if (binding != nullptr) {
+            instance_scene.store(binding->scene_id, std::memory_order_release);
+        }
+        const auto scene = instance_scene.load(std::memory_order_acquire);
+        instance_scene_present.store(scene != 0 && cell.find_scene(scene) != nullptr,
+                                     std::memory_order_release);
+    });
+
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    TEST_ASSERT(route_count.load() == 2, "default plus declared space 7");
+    const auto default_scene = cell.scene_id_of_space(1);
+    const auto aux_scene = cell.scene_id_of_space(7);
+    TEST_ASSERT(default_scene != 0 && aux_scene != 0 && default_scene != aux_scene,
+                "declared route resolved");
+
+    // 名册：默认空间三人小队（77/78/79）+ space 7 旁观者（88）
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(101, 77)), "leader spawn");
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(102, 78)), "member spawn");
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(103, 79)), "member spawn");
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent_in_space(900, 88, 7)),
+                "observer spawn in declared space");
+    TEST_ASSERT(wait_until([&] {
+                    return cell.resolveIntentPlayer(77) == 101 &&
+                           cell.resolveIntentPlayer(78) == 102 &&
+                           cell.resolveIntentPlayer(79) == 103 &&
+                           cell.resolveIntentPlayer(88) == 900;
+                },
+                           std::chrono::seconds(3)),
+                "roster and observer bound");
+
+    // 建队（队长 77）：服务端分配 party_id（契约 23 语义）
+    TEST_ASSERT(cell.submitIntent(make_squad_intent(
+                    protocol::MessageType::PARTY_CREATE_REQUEST,
+                    protocol::MessageCodec::encode(protocol::PartyCreateRequest{}, 77),
+                    77)),
+                "party create accepted");
+    TEST_ASSERT(wait_frame<protocol::PartyResult>(
+                    egress,
+                    [](const protocol::PartyResult& r, std::uint64_t s) {
+                        return s == 77 &&
+                               r.op == static_cast<std::int32_t>(
+                                           protocol::SquadOp::PARTY_CREATE) &&
+                               r.code == 0 && r.partyId != 0;
+                    },
+                    std::chrono::seconds(3)),
+                "party created with server id");
+    std::uint64_t party_id = 0;
+    for (const auto& f : take_frames(egress, static_cast<std::uint16_t>(
+                                                protocol::MessageType::PARTY_RESULT))) {
+        const auto r = protocol::MessageCodec::decodeBody<protocol::PartyResult>(f.body);
+        if (f.session_id == 77 &&
+            r.op == static_cast<std::int32_t>(protocol::SquadOp::PARTY_CREATE) &&
+            r.code == 0) {
+            party_id = r.partyId;
+        }
+    }
+    TEST_ASSERT(party_id != 0, "party id parsed from downlink");
+    party_hint.store(party_id, std::memory_order_release);
+
+    // 入队 ×2：成员 78/79
+    for (const auto session : {std::uint64_t{78}, std::uint64_t{79}}) {
+        protocol::PartyJoinRequest join;
+        join.partyId = party_id;
+        TEST_ASSERT(cell.submitIntent(make_squad_intent(
+                        protocol::MessageType::PARTY_JOIN_REQUEST,
+                        protocol::MessageCodec::encode(join, session), session)),
+                    "party join accepted");
+        TEST_ASSERT(wait_frame<protocol::PartyResult>(
+                        egress,
+                        [&](const protocol::PartyResult& r, std::uint64_t s) {
+                            return s == session &&
+                                   r.op == static_cast<std::int32_t>(
+                                               protocol::SquadOp::PARTY_JOIN) &&
+                                   r.code == 0;
+                        },
+                        std::chrono::seconds(3)),
+                    "party join acked");
+    }
+
+    // launch（mapId 0 = 服务端默认资产）：实例临时 Scene 自建
+    protocol::SquadLaunch launch;
+    launch.partyId = party_id;
+    TEST_ASSERT(cell.submitIntent(make_squad_intent(
+                    protocol::MessageType::SQUAD_LAUNCH,
+                    protocol::MessageCodec::encode(launch, 77), 77)),
+                "squad launch accepted");
+    TEST_ASSERT(wait_frame<protocol::SquadResult>(
+                    egress,
+                    [](const protocol::SquadResult& r, std::uint64_t s) {
+                        return s == 77 &&
+                               r.op == static_cast<std::int32_t>(
+                                           protocol::SquadOp::SQUAD_LAUNCH) &&
+                               r.code == 0;
+                    },
+                    std::chrono::seconds(3)),
+                "squad launched");
+    std::uint64_t launch_scene = 0;
+    for (const auto& f : take_frames(egress, static_cast<std::uint16_t>(
+                                                protocol::MessageType::SQUAD_RESULT))) {
+        const auto r = protocol::MessageCodec::decodeBody<protocol::SquadResult>(f.body);
+        if (f.session_id == 77 &&
+            r.op == static_cast<std::int32_t>(protocol::SquadOp::SQUAD_LAUNCH) &&
+            r.code == 0) {
+            launch_scene = r.sceneId;
+        }
+    }
+    TEST_ASSERT(wait_until([&] { return binding_alive.load(); },
+                           std::chrono::seconds(3)),
+                "instance binding visible to kernel-thread hook");
+    const auto temp_scene = instance_scene.load();
+    TEST_ASSERT(temp_scene != 0, "instance temp scene allocated");
+    TEST_ASSERT(temp_scene != default_scene && temp_scene != aux_scene,
+                "temp scene distinct from both space scenes (three id domains)");
+    TEST_ASSERT(launch_scene == temp_scene, "wire scene id matches binding");
+    TEST_ASSERT(route_count.load() == 2, "instance adds no space route");
+
+    // enter ×3 → start → Running（phase 3）带首波怪
+    for (const auto session :
+         {std::uint64_t{77}, std::uint64_t{78}, std::uint64_t{79}}) {
+        protocol::SquadEnter enter;
+        enter.partyId = party_id;
+        TEST_ASSERT(cell.submitIntent(make_squad_intent(
+                        protocol::MessageType::SQUAD_ENTER,
+                        protocol::MessageCodec::encode(enter, session), session)),
+                    "squad enter accepted");
+        TEST_ASSERT(wait_frame<protocol::SquadResult>(
+                        egress,
+                        [&](const protocol::SquadResult& r, std::uint64_t s) {
+                            return s == session &&
+                                   r.op == static_cast<std::int32_t>(
+                                               protocol::SquadOp::SQUAD_ENTER) &&
+                                   r.code == 0;
+                        },
+                        std::chrono::seconds(3)),
+                    "squad enter acked");
+    }
+    protocol::SquadStart start;
+    start.partyId = party_id;
+    TEST_ASSERT(cell.submitIntent(make_squad_intent(
+                    protocol::MessageType::SQUAD_START,
+                    protocol::MessageCodec::encode(start, 77), 77)),
+                "squad start accepted");
+    TEST_ASSERT(wait_frame<protocol::SquadResult>(
+                    egress,
+                    [](const protocol::SquadResult& r, std::uint64_t s) {
+                        return s == 77 &&
+                               r.op == static_cast<std::int32_t>(
+                                           protocol::SquadOp::SQUAD_START) &&
+                               r.code == 0;
+                    },
+                    std::chrono::seconds(3)),
+                "squad start acked");
+    std::set<std::uint64_t> monster_ids;  // 帧只增不消费：按 id 去重收全波
+    TEST_ASSERT(wait_until(
+                    [&] {
+                        for (const auto& f :
+                             take_frames(egress, static_cast<std::uint16_t>(
+                                                      protocol::MessageType::SQUAD_STATE))) {
+                            const auto st =
+                                protocol::MessageCodec::decodeBody<protocol::SquadState>(
+                                    f.body);
+                            if (st.partyId == party_id && st.phase == 3) {
+                                monster_ids.insert(st.monsters.begin(),
+                                                   st.monsters.end());
+                            }
+                        }
+                        return monster_ids.size() >= 3;
+                    },
+                    std::chrono::seconds(3)),
+                "instance running with host wave");
+    TEST_ASSERT(monster_ids.size() == 3, "host goal wave spawned");
+
+    // 共存期隔离面：路由不变、临时 Scene 存活、旁观者照常且收不到副本流量
+    TEST_ASSERT(route_count.load() == 2, "routes intact while instance live");
+    TEST_ASSERT(instance_scene_present.load(), "temp scene alive while running");
+    TEST_ASSERT(cell.submitIntent(make_move_intent(900, 88)), "observer move accepted");
+    TEST_ASSERT(wait_until([&] { return move_frame_count(egress, 88) >= 1; },
+                           std::chrono::seconds(3)),
+                "observer in declared space still served");
+    {
+        std::size_t squad_frames_on_observer = 0;
+        std::lock_guard<std::mutex> lock(egress.mutex);
+        for (const auto& f : egress.frames) {
+            if (f.first != 88 || f.second.size() < sizeof(protocol::MessageHeader)) {
+                continue;
+            }
+            const auto h = protocol::MessageCodec::parseHeader(f.second);
+            const auto t = static_cast<protocol::MessageType>(h.type);
+            if (t == protocol::MessageType::PARTY_RESULT ||
+                t == protocol::MessageType::SQUAD_RESULT ||
+                t == protocol::MessageType::SQUAD_STATE) {
+                ++squad_frames_on_observer;
+            }
+        }
+        TEST_ASSERT(squad_frames_on_observer == 0,
+                    "instance traffic never reaches space 7 observer");
+    }
+
+    // 击杀满额（三怪）→ 目标达成 → 结算 → Destroyed 终态回执 + 绑定释放
+    for (const auto monster : monster_ids) {
+        protocol::SquadKill kill;
+        kill.partyId = party_id;
+        kill.monsterEntityId = monster;
+        TEST_ASSERT(cell.submitIntent(make_squad_intent(
+                        protocol::MessageType::SQUAD_KILL,
+                        protocol::MessageCodec::encode(kill, 77), 77)),
+                    "squad kill accepted");
+        TEST_ASSERT(wait_frame<protocol::SquadResult>(
+                        egress,
+                        [&](const protocol::SquadResult& r, std::uint64_t s) {
+                            return s == 77 &&
+                                   r.op == static_cast<std::int32_t>(
+                                               protocol::SquadOp::SQUAD_KILL) &&
+                                   r.code == 0 && r.partyId == party_id;
+                        },
+                        std::chrono::seconds(3)),
+                    "kill acked");
+    }
+    TEST_ASSERT(wait_frame<protocol::SquadState>(
+                    egress,
+                    [&](const protocol::SquadState& st, std::uint64_t) {
+                        return st.partyId == party_id && st.phase == 7;
+                    },
+                    std::chrono::seconds(5)),
+                "destroyed final state broadcast to party");
+    TEST_ASSERT(wait_until([&] { return !binding_alive.load(); },
+                           std::chrono::seconds(3)),
+                "binding released after goal settle");
+    TEST_ASSERT(wait_until([&] { return !instance_scene_present.load(); },
+                           std::chrono::seconds(3)),
+                "temp scene destroyed after settle (reclaimed)");
+
+    // 回收边界：只收临时 Scene——声明 Space 路由/scene/旁观者原样
+    TEST_ASSERT(route_count.load() == 2, "declared space route untouched by teardown");
+    TEST_ASSERT(cell.find_scene(aux_scene) != nullptr, "space 7 scene survives");
+    TEST_ASSERT(cell.resolveIntentPlayer(88) == 900, "observer session intact");
+    const auto observer_moves = move_frame_count(egress, 88);
+    TEST_ASSERT(cell.submitIntent(make_move_intent(900, 88)),
+                "observer move after settle accepted");
+    TEST_ASSERT(wait_until([&] { return move_frame_count(egress, 88) > observer_moves; },
+                           std::chrono::seconds(3)),
+                "observer still live after instance teardown");
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -745,6 +1076,7 @@ int main() {
         {"cell_kernel_remove_space", test_cell_kernel_remove_space},
         {"cell_kernel_pending_revoke_retry", test_cell_kernel_pending_revoke_retry},
         {"cell_kernel_cancel_space_revoke", test_cell_kernel_cancel_space_revoke},
+        {"declared_space_squad_flow_isolation", test_declared_space_squad_flow_isolation},
     };
 
     for (const auto& c : cases) {
