@@ -207,6 +207,10 @@ private:
     // 幂等刷新，新代次替换（重启换代），旧代次拒绝不可覆盖；非法（cell_id/
     // start_epoch = 0）显式驳回。回执 961 同步回带（管理代次 = §5.7 透传）。
     void onCellRegister(const std::string& peer, const CellRegisterRequest& request);
+    // 缩容管理命令受理点（963→966，L104 缩容管理命令面；泵上下文 = 登记表
+    // 单写者上下文）：begin 置意图并回池、cancel 只清意图；op 未知/cell_id
+    // 非法驳回，目标未登记显式 miss。回执 966 同步回带（管理代次 = §5.7）。
+    void onCellRetire(const std::string& peer, const CellRetireRequest& request);
     // 注册表过期清扫（960 心跳批；post-tick 驱动，同注册表单写者上下文）：
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。

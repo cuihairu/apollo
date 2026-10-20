@@ -73,5 +73,7 @@ player_score_credit_reply = function() end
 cell_register_request = function() end
 cell_register_reply = function() end
 cell_space_assign = function() end
+cell_retire_request = function() end
 service_register_request = function() end
 service_register_reply = function() end
+cell_retire_reply = function() end

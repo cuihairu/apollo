@@ -55,6 +55,8 @@ constexpr std::uint16_t id_of(MsgId id) { return static_cast<std::uint16_t>(id);
 constexpr std::uint16_t kRegisterRequestId = id_of(MsgId::cell_register_request);
 constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
+constexpr std::uint16_t kRetireRequestId = id_of(MsgId::cell_retire_request);
+constexpr std::uint16_t kRetireReplyId = id_of(MsgId::cell_retire_reply);
 const char* kRouteJson = APOLLO_TEST_ROUTE_JSON;
 
 std::uint64_t now_ms() {
@@ -85,6 +87,17 @@ struct SpaceAssignFrame {
 };
 std::mutex g_assigns_mutex;
 std::map<std::uint64_t, SpaceAssignFrame>* g_assigns = nullptr;  // space_id → frame
+
+// 966 缩容回执账（同上惯例：dispatcher 写 / 断言读，指针注入 + 串行）。
+struct RetireReply {
+    bool accepted = false;
+    std::int32_t code = 0;
+    std::uint64_t cell_id = 0;
+    std::uint64_t management_epoch = 0;
+    std::string detail;
+};
+std::mutex g_retire_replies_mutex;
+std::map<std::uint64_t, RetireReply>* g_retire_replies = nullptr;
 
 // cell 侧投影：cell→World M1 控制受理面（裸 960 上行，961 按 request_id
 // 收账）。peer 自报名 = 链路名（服务端按名回链路与记入注册表）。
@@ -167,6 +180,32 @@ struct CellEnd {
                                        (*g_assigns)[space_id] = f;
                                    }
                                });
+        // 966 缩容回执（World 回；test_cell_retire_management_command 断言面）
+        dispatcher.set_handler(kRetireReplyId,
+                               [](std::uint16_t, const std::uint8_t* data,
+                                  std::size_t size) {
+                                   std::vector<wire::FieldValue> fields;
+                                   if (!wire::decode_payload(kRetireReplyId, data, size,
+                                                             fields)
+                                       || fields.size() != 6) {
+                                       return;
+                                   }
+                                   RetireReply r;
+                                   r.accepted = fields[1].integer != 0;
+                                   r.code = static_cast<std::int32_t>(fields[2].integer);
+                                   r.management_epoch =
+                                       static_cast<std::uint64_t>(fields[3].integer);
+                                   r.cell_id =
+                                       static_cast<std::uint64_t>(fields[4].integer);
+                                   r.detail = fields[5].text;
+                                   const auto request_id =
+                                       static_cast<std::uint64_t>(fields[0].integer);
+                                   std::lock_guard<std::mutex> lock(
+                                       g_retire_replies_mutex);
+                                   if (g_retire_replies != nullptr) {
+                                       (*g_retire_replies)[request_id] = std::move(r);
+                                   }
+                               });
         return true;
     }
 
@@ -220,6 +259,40 @@ struct CellEnd {
                           link::SendClass::kReliable)
                == link::SendCode::kAccepted;
     }
+
+    // 963 缩容命令（fleetctl 同口；op 字面量 = 963 契约词汇 1=begin 2=cancel）。
+    bool send_retire(std::uint64_t request_id, std::int32_t op,
+                     std::uint64_t cell_id) {
+        std::vector<wire::FieldValue> f(3);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = op;
+        f[2].integer = static_cast<std::int64_t>(cell_id);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kRetireRequestId, f, payload)) {
+            return false;
+        }
+        return manager->link("world")
+                   ->send(kRetireRequestId, payload.data(), payload.size(),
+                          link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
+    // 残帧：合法 963 载荷截断（decode 必败 → 服务端拒收计数）。
+    bool send_truncated_retire(std::uint64_t request_id) {
+        std::vector<wire::FieldValue> f(3);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = 1;
+        f[2].integer = 51;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kRetireRequestId, f, payload)) {
+            return false;
+        }
+        payload.resize(payload.size() / 2);  // 截断 → decode 失败
+        return manager->link("world")
+                   ->send(kRetireRequestId, payload.data(), payload.size(),
+                          link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
 };
 
 // 960 单发 + 961 等（request_id 关联；服务端 gameLoop 自泵，本线程泵客户端）。
@@ -241,6 +314,30 @@ bool register_roundtrip(CellEnd& cell, std::uint64_t request_id, std::uint64_t c
             std::lock_guard<std::mutex> lock(g_replies_mutex);
             const auto it = g_replies->find(request_id);
             if (it != g_replies->end()) {
+                out = it->second;
+                return true;
+            }
+        }
+        std::this_thread::sleep_for(10ms);
+    }
+    return false;
+}
+
+// 963 单发 + 966 等（request_id 关联；服务端 gameLoop 自泵，本线程泵客户端）。
+// 期望无回执的用例（request_id=0 保留）靠 timeout 判负。
+bool retire_roundtrip(CellEnd& cell, std::uint64_t request_id, std::int32_t op,
+                      std::uint64_t cell_id, RetireReply& out, int timeout_ms = 5000) {
+    if (!cell.send_retire(request_id, op, cell_id)) {
+        return false;
+    }
+    const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        cell.pump();
+        {
+            std::lock_guard<std::mutex> lock(g_retire_replies_mutex);
+            const auto it = g_retire_replies->find(request_id);
+            if (it != g_retire_replies->end()) {
                 out = it->second;
                 return true;
             }
@@ -1096,6 +1193,103 @@ bool test_cell_retire_and_reclaim() {
     return true;
 }
 
+// ---------- 缩容管理命令面（963→966）：命令受理/驳回与意图撤销 ----------
+
+bool test_cell_retire_management_command() {
+    std::cout << "Running: test_cell_retire_management_command..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7, 8};
+    TEST_ASSERT(server.start(122), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, RetireReply> retire_replies;
+    g_retire_replies = &retire_replies;
+
+    RegisterReply reg;
+    RetireReply r;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell, "cell-rt"), "retire cell dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell, 9951, 51, 1, "127.0.0.1", 9207, 0, 10, 0, true, reg),
+        "cell registered");
+
+    // 未命中先验：目标未登记 = 显式 miss（运维据此判命令目标是否打错）
+    TEST_ASSERT(retire_roundtrip(cell, 9952, 1, 999, r), "miss reply delivered");
+    TEST_ASSERT(!r.accepted && r.code == world_app::kCellRetireRejectedUnknownCell,
+                "miss code");
+    TEST_ASSERT(r.detail.find("not registered") != std::string::npos, "miss detail");
+
+    // 请求合法性先看：cell_id = 0 与 op 未知均驳回，且不动表
+    TEST_ASSERT(retire_roundtrip(cell, 9953, 1, 0, r), "invalid cell_id reply");
+    TEST_ASSERT(!r.accepted && r.code == world_app::kCellRetireRejectedInvalid,
+                "invalid cell_id code");
+    TEST_ASSERT(retire_roundtrip(cell, 9954, 7, 51, r), "unknown op reply");
+    TEST_ASSERT(!r.accepted && r.code == world_app::kCellRetireRejectedInvalid,
+                "unknown op code");
+    TEST_ASSERT(r.detail.find("unknown op") != std::string::npos, "unknown op detail");
+    TEST_ASSERT(server.world->retired_cell_count() == 0,
+                "no intent set by rejections");
+
+    // begin 命中：意图置 + 名下归属回池；966 回带确认事实（代次/目标）
+    TEST_ASSERT(retire_roundtrip(cell, 9955, 1, 51, r), "begin reply delivered");
+    TEST_ASSERT(r.accepted, "begin accepted");
+    TEST_ASSERT(r.code == world_app::kCellRetireBegun, "begin code");
+    TEST_ASSERT(r.cell_id == 51, "begin cell id echoed");
+    TEST_ASSERT(r.management_epoch == 77, "begin management epoch echoed");
+    TEST_ASSERT(r.detail.find("released") != std::string::npos, "begin detail");
+    const auto* reg51 = server.world->find_cell_registration(51);
+    TEST_ASSERT(reg51 != nullptr && reg51->retire, "retire intent recorded");
+    const auto* a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->cell_id == 0 && a7->version == 1,
+                "begin releases ownership, version kept");
+
+    // cancel 命中：只清意图，不取回已被他人接管者——本例无人接管，恢复资格
+    // 的本人随本次推送重认领（版本 +1）；取消本身不迁移不重分。
+    TEST_ASSERT(retire_roundtrip(cell, 9956, 2, 51, r), "cancel reply delivered");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRetireCancelled, "cancel code");
+    TEST_ASSERT(r.cell_id == 51, "cancel cell id echoed");
+    TEST_ASSERT(reg51 != nullptr && !reg51->retire, "retire intent cleared");
+    TEST_ASSERT(server.world->retired_cell_count() == 0, "no retired cells");
+    TEST_ASSERT(
+        wait_until([&] {
+            const auto* a7x = server.world->find_space_assignment(7);
+            return a7x != nullptr && a7x->cell_id == 51 && a7x->version == 2;
+        }, 3000),
+        "cancelled cell reclaims own pool at v2");
+    TEST_ASSERT(retire_roundtrip(cell, 9957, 2, 999, r), "cancel miss reply");
+    TEST_ASSERT(!r.accepted && r.code == world_app::kCellRetireRejectedUnknownCell,
+                "cancel miss code");
+
+    // request_id = 0 保留：对端不关联静默不回（超时判负）
+    TEST_ASSERT(cell.send_retire(0, 1, 51), "reserved request id sent");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    while (std::chrono::steady_clock::now() < deadline) {
+        cell.pump();
+        std::this_thread::sleep_for(10ms);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_retire_replies_mutex);
+        TEST_ASSERT(g_retire_replies->find(0) == g_retire_replies->end(),
+                    "reserved request id not echoed");
+    }
+
+    // 残帧 = 拒收（不受理不算失败面，仅计数显形）
+    const auto rejected_before = server.world->m1Link().rejectedFrames();
+    TEST_ASSERT(cell.send_truncated_retire(9958), "truncated sent");
+    TEST_ASSERT(
+        wait_until([&] {
+            cell.pump();
+            return server.world->m1Link().rejectedFrames() > rejected_before;
+        }, 3000),
+        "truncated counted as rejected");
+
+    g_retire_replies = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- production client：962 监听去重（版本不前进不重复触发）----------
 
 bool test_production_client_space_assign_listener() {
@@ -1536,6 +1730,7 @@ int main() {
                     && test_space_assignment_readiness()
                     && test_space_assignment_load_balance()
                     && test_cell_retire_and_reclaim()
+                    && test_cell_retire_management_command()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
                     && test_stale_epoch_watermark_isolation()

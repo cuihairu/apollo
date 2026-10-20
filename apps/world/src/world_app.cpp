@@ -117,6 +117,9 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const CellRegisterRequest& request) {
             onCellRegister(peer, request);
+        },
+        [this](const std::string& peer, const CellRetireRequest& request) {
+            onCellRetire(peer, request);
         });
     egressAdapter_.link = m1Link_.get();
     // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
@@ -681,6 +684,54 @@ bool WorldApp::cancelCellRetire(std::uint64_t cell_id) {
                     + " epoch=" + std::to_string(it->second.start_epoch)
                     + " peer=" + it->second.peer);
     return true;
+}
+
+void WorldApp::onCellRetire(const std::string& peer, const CellRetireRequest& request) {
+    // 缩容管理命令受理（963 cell_retire_request → 966，M1 泵上下文 = 登记表
+    // 单写者上下文）：与 onCellRegister 同口，请求/回执同步同线程回发端链路。
+    // 请求合法性先看（op 未知/cell_id 非法 → 拒收，不动表），再查登记
+    // （目标未登记 = 显式 miss——运维据此判命令目标是否打错）。
+    if (m1Link_ == nullptr) {
+        return;
+    }
+    if (request.cell_id == 0) {
+        m1Link_->sendCellRetireReply(peer, request.request_id, false,
+                                     kCellRetireRejectedInvalid,
+                                     config_.m1AuthorityEpoch, request.cell_id,
+                                     "invalid cell_id");
+        return;
+    }
+    if (request.op == kCellRetireOpBegin) {
+        if (!beginCellRetire(request.cell_id)) {
+            m1Link_->sendCellRetireReply(peer, request.request_id, false,
+                                         kCellRetireRejectedUnknownCell,
+                                         config_.m1AuthorityEpoch, request.cell_id,
+                                         "cell not registered");
+            return;
+        }
+        m1Link_->sendCellRetireReply(peer, request.request_id, true, kCellRetireBegun,
+                                     config_.m1AuthorityEpoch, request.cell_id,
+                                     "retire intent set; assignments released to pool");
+        return;
+    }
+    if (request.op == kCellRetireOpCancel) {
+        if (!cancelCellRetire(request.cell_id)) {
+            m1Link_->sendCellRetireReply(peer, request.request_id, false,
+                                         kCellRetireRejectedUnknownCell,
+                                         config_.m1AuthorityEpoch, request.cell_id,
+                                         "cell not registered");
+            return;
+        }
+        m1Link_->sendCellRetireReply(peer, request.request_id, true,
+                                     kCellRetireCancelled, config_.m1AuthorityEpoch,
+                                     request.cell_id,
+                                     "retire intent cleared; ownership unchanged");
+        return;
+    }
+    m1Link_->sendCellRetireReply(peer, request.request_id, false,
+                                 kCellRetireRejectedInvalid,
+                                 config_.m1AuthorityEpoch, request.cell_id,
+                                 "unknown op");
 }
 
 std::size_t WorldApp::retired_cell_count() const {

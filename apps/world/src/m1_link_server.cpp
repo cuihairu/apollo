@@ -216,13 +216,16 @@ public:
                      std::function<void(const std::string&, const WorldDrainRequest&)>
                          on_world_drain,
                      std::function<void(const std::string&, const CellRegisterRequest&)>
-                         on_cell_register)
+                         on_cell_register,
+                     std::function<void(const std::string&, const CellRetireRequest&)>
+                         on_cell_retire)
         : config_(std::move(config))
         , on_intent_(std::move(on_intent))
         , on_debug_eval_(std::move(on_debug_eval))
         , on_module_rollout_(std::move(on_module_rollout))
         , on_world_drain_(std::move(on_world_drain))
-        , on_cell_register_(std::move(on_cell_register)) {}
+        , on_cell_register_(std::move(on_cell_register))
+        , on_cell_retire_(std::move(on_cell_retire)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -431,6 +434,32 @@ public:
                          link::SendClass::kReliable);
     }
 
+    void sendCellRetireReply(const std::string& peer, std::uint64_t request_id,
+                             bool accepted, std::int32_t code,
+                             std::int64_t management_epoch, std::uint64_t cell_id,
+                             const std::string& detail) override {
+        if (!manager_ || request_id == 0) {
+            return;  // 0 保留（回执关联键缺位即静默）
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return;  // 未知 peer = 尽力面
+        }
+        std::vector<wire::FieldValue> fields(6);
+        fields[0].integer = static_cast<std::int64_t>(request_id);
+        fields[1].integer = accepted ? 1 : 0;
+        fields[2].integer = code;
+        fields[3].integer = management_epoch;
+        fields[4].integer = static_cast<std::int64_t>(cell_id);
+        fields[5].text = detail;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::cell_retire_reply), fields, payload)) {
+            return;
+        }
+        (void)link->send(id_of(MsgId::cell_retire_reply), payload.data(), payload.size(),
+                         link::SendClass::kReliable);
+    }
+
     void sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
                              std::uint64_t management_epoch, std::uint64_t space_id,
                              std::uint64_t assigned_cell_id, bool ready) override {
@@ -541,6 +570,13 @@ private:
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_cell_register_frame(link.peer_name(), data, size);
             });
+        // 963 cell_retire_request 裸帧受理（L104 缩容管理命令面）：受理点
+        // 同步执行于 gameThread_（登记表/分配池单线程独占无锁），同步回 966。
+        dispatcher.set_handler(
+            id_of(MsgId::cell_retire_request),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_retire_frame(link.peer_name(), data, size);
+            });
     }
 
     void handle_debug_eval_frame(const std::string& peer, const std::uint8_t* data,
@@ -615,6 +651,21 @@ private:
         on_cell_register_(peer, req);
     }
 
+    void handle_cell_retire_frame(const std::string& peer, const std::uint8_t* data,
+                                  std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::cell_retire_request), data, size, fields)
+            || fields.size() != 3 || on_cell_retire_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        CellRetireRequest req;
+        req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.op = static_cast<std::int32_t>(fields[1].integer);
+        req.cell_id = static_cast<std::uint64_t>(fields[2].integer);
+        on_cell_retire_(peer, req);
+    }
+
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
                                std::size_t size) {
         trace::EnvelopeFields env;
@@ -657,6 +708,7 @@ private:
     std::function<void(const std::string&, const ModuleRolloutRequest&)> on_module_rollout_;
     std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain_;
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register_;
+    std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire_;
     // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
@@ -674,12 +726,14 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
         on_module_rollout,
     std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain,
-    std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register) {
+    std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register,
+    std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
                                               std::move(on_debug_eval),
                                               std::move(on_module_rollout),
                                               std::move(on_world_drain),
-                                              std::move(on_cell_register));
+                                              std::move(on_cell_register),
+                                              std::move(on_cell_retire));
 }
 
 #else // _WIN32
@@ -692,7 +746,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const WorldDrainRequest&)>
         /*on_world_drain*/,
     std::function<void(const std::string&, const CellRegisterRequest&)>
-        /*on_cell_register*/) {
+        /*on_cell_register*/,
+    std::function<void(const std::string&, const CellRetireRequest&)>
+        /*on_cell_retire*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();

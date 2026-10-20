@@ -51,6 +51,15 @@ inline constexpr std::int32_t kCellRegisterAcceptedIdempotent = 2;  // 同 ID �
 inline constexpr std::int32_t kCellRegisterRejectedStaleEpoch = 3;  // 旧代次不可覆盖
 inline constexpr std::int32_t kCellRegisterRejectedInvalid = 4;     // cell_id/代次非法
 
+// cell 缩容意图命令/回执（963/966 契约面，L104 缩容管理命令面）：op 取
+// 963 操作字段的契约词汇；code 取 966 code 字段的契约词汇。
+inline constexpr std::int32_t kCellRetireOpBegin = 1;
+inline constexpr std::int32_t kCellRetireOpCancel = 2;
+inline constexpr std::int32_t kCellRetireBegun = 1;
+inline constexpr std::int32_t kCellRetireCancelled = 2;
+inline constexpr std::int32_t kCellRetireRejectedUnknownCell = 3;   // 目标未登记
+inline constexpr std::int32_t kCellRetireRejectedInvalid = 4;       // op 未知/cell_id 非法
+
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。
 // 数值口径 = tick 预算锚定（ADR-016 #3）+ 实测校准（2026-10-11，P3-2 批 D，
 // examples/benchmark --acceptance 三跑 min，负载噪声期下界口径）：

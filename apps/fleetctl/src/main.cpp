@@ -99,6 +99,10 @@ struct Options {
     // drain 面（P4 排空批）：begin 期限（0 = 无期限自然排空；终态轮询复用
     // --timeout）
     std::uint64_t drain_deadline_s = 0;
+    // retire 面（L104 缩容管理命令面，world 契约 963/966）：目标 cell id +
+    // --cancel 走 cancel 语义
+    std::uint64_t cell_id = 0;
+    bool retire_cancel = false;
 };
 
 void printUsage() {
@@ -120,6 +124,10 @@ void printUsage() {
               << "  fleetctl drain   --target H:P [--deadline S] [--timeout S] [--peer NAME]\n"
               << "                   (排空：gateway 停新连接 / world(--peer world) 停分新副本；\n"
               << "                    既有面服务至自然退出或期限强停；default peer=gateway)\n"
+              << "  fleetctl retire  --target H:P --cell N [--cancel] [--peer NAME]\n"
+              << "                   (缩容：向 world 置该 cell 的缩容意图——停止新认领、\n"
+              << "                    名下 Space 回池，在途自然排空；--cancel 只撤意图\n"
+              << "                    不取回已接管者；default peer=world)\n"
               << "Exit codes: 0 admitted/ok / 2 rejected/failed / 3 unreachable / 1 usage or setup\n";
 }
 
@@ -130,7 +138,7 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
             return (i + 1 < argc) ? argv[++i] : nullptr;
         };
         if (arg == "assign" || arg == "resolve" || arg == "migrate" || arg == "eval"
-            || arg == "module" || arg == "drain") {
+            || arg == "module" || arg == "drain" || arg == "retire") {
             opt.command = arg;
         } else if (arg == "--host") {
             if (const auto* v = next()) opt.host = v; else return false;
@@ -190,6 +198,11 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         } else if (arg == "--deadline") {
             if (const auto* v = next()) opt.drain_deadline_s = std::strtoull(v, nullptr, 10);
             else return false;
+        } else if (arg == "--cell") {
+            if (const auto* v = next()) opt.cell_id = std::strtoull(v, nullptr, 10);
+            else return false;
+        } else if (arg == "--cancel") {
+            opt.retire_cancel = true;
         } else if (arg == "--player") {
             if (const auto* v = next()) opt.player_id = std::strtoull(v, nullptr, 10);
             else return false;
@@ -223,7 +236,8 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         return false;
     }
     if (opt.peer.empty()) {
-        opt.peer = (opt.command == "eval" || opt.command == "module")
+        opt.peer = (opt.command == "eval" || opt.command == "module"
+                     || opt.command == "retire")
                        ? "world"
                        : (opt.command == "drain" ? "gateway" : "login");
     }
@@ -234,6 +248,11 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
         // 编排面：目标必给（单 target H:P = 控制受理面；--peer 选组件——
         // gateway 缺省 954/955，world 956/957）
         return !opt.targets.empty();
+    }
+    if (opt.command == "retire") {
+        // 编排面：目标必给（单 target H:P = World M1 管理面）+ cell id 非 0
+        //（0 = 非法，对端亦拒）
+        return !opt.targets.empty() && opt.cell_id != 0;
     }
     if (opt.command == "module") {
         // 编排面：目标集 + 模块名/版本 + 源（文件或内联）必给；canary 缺省
@@ -980,6 +999,122 @@ int runDrain(const Options& opt) {
     return 3;
 }
 
+// ---------- 缩容管理命令（L104 缩容管理命令面；world 契约 963/966）----------
+
+std::atomic<std::uint64_t> next_retire_id{1};  // 0 保留（对端静默面）
+
+struct RetireReply {
+    bool accepted = false;
+    std::int32_t code = 0;
+    std::uint64_t cell_id = 0;
+    std::int64_t management_epoch = 0;
+    std::string detail;
+};
+
+struct RetireCapture {
+    std::mutex m;
+    std::map<std::uint64_t, RetireReply> replies;
+};
+
+// 缩容编排（CellAppMgr 缩容语义的命令面）：begin 置 World 单方缩容意图——
+// 目标停止认领新 Space、名下归属回池，在途活动在 cell 本地自然排空
+//（不强断）；--cancel 只清意图，已被他人重认领的不取回。命令是意图下达，
+// 不等待排空收敛——收敛状态经 Space 分配视图观测。op 字面量 = 963 契约
+// 词汇（1=begin 2=cancel），与 world 受理面同口径。
+int runRetire(const Options& opt) {
+    if (opt.targets.empty()) {
+        std::cerr << "fleetctl: retire requires --target H:P" << std::endl;
+        return 1;
+    }
+    const auto& label = opt.targets[0];
+    const auto colon = label.rfind(':');
+    const auto port = colon == std::string::npos
+                          ? 0
+                          : static_cast<std::uint16_t>(
+                              std::strtoul(label.c_str() + colon + 1, nullptr, 10));
+    if (colon == std::string::npos || port == 0) {
+        std::cerr << "fleetctl: bad --target " << label << " (want H:P)" << std::endl;
+        return 1;
+    }
+
+    ControlDial dial(APOLLO_FLEETCTL_CONTRACT_ROUTE_JSON, opt.peer,
+                     label.substr(0, colon), port);
+    if (!dial.ready()) {
+        std::cerr << "fleetctl: control face setup failed (route table missing)"
+                  << std::endl;
+        return 1;
+    }
+    RetireCapture capture;
+    dial.set_frame_handler(
+        id_of(MsgId::cell_retire_reply),
+        [&capture, reply_id = id_of(MsgId::cell_retire_reply)](
+            std::uint16_t, const std::uint8_t* data, std::size_t size) {
+            std::vector<wire::FieldValue> fields;
+            if (!wire::decode_payload(reply_id, data, size, fields)
+                || fields.size() != 6) {
+                return;
+            }
+            RetireReply r;
+            r.accepted = fields[1].integer != 0;
+            r.code = static_cast<std::int32_t>(fields[2].integer);
+            r.cell_id = static_cast<std::uint64_t>(fields[4].integer);
+            r.management_epoch = fields[3].integer;
+            r.detail = fields[5].text;
+            const auto request_id = static_cast<std::uint64_t>(fields[0].integer);
+            std::lock_guard<std::mutex> lock(capture.m);
+            capture.replies[request_id] = r;
+        });
+    if (!dial.waitUp()) {
+        std::cout << "RETIRE_UNREACHABLE target=" << label << std::endl;
+        return 3;
+    }
+
+    // op：1=begin（置意图） 2=cancel（撤意图）
+    const std::int32_t op = opt.retire_cancel ? 2 : 1;
+    const auto request_id = next_retire_id.fetch_add(1, std::memory_order_relaxed);
+    std::vector<wire::FieldValue> fields(3);
+    fields[0].integer = static_cast<std::int64_t>(request_id);
+    fields[1].integer = op;
+    fields[2].integer = static_cast<std::int64_t>(opt.cell_id);
+    std::vector<std::uint8_t> payload;
+    if (!wire::encode_payload(id_of(MsgId::cell_retire_request), fields, payload)
+        || !dial.send_frame(id_of(MsgId::cell_retire_request), payload)) {
+        std::cout << "RETIRE_UNREACHABLE target=" << label << " (send failed)"
+                  << std::endl;
+        return 3;
+    }
+    const auto deadline = Clock::now() + kRpcTimeout;
+    RetireReply r;
+    bool got = false;
+    while (Clock::now() < deadline) {
+        {
+            std::lock_guard<std::mutex> lock(capture.m);
+            const auto it = capture.replies.find(request_id);
+            if (it != capture.replies.end()) {
+                r = it->second;
+                got = true;
+                break;
+            }
+        }
+        std::this_thread::sleep_for(kPumpTick);
+    }
+    if (!got) {
+        std::cout << "RETIRE_UNREACHABLE target=" << label << " (no reply)"
+                  << std::endl;
+        return 3;
+    }
+    if (!r.accepted) {
+        std::cout << "RETIRE_REJECTED target=" << label << " cell=" << r.cell_id
+                  << " code=" << r.code << " detail=" << r.detail << std::endl;
+        return 2;
+    }
+    std::cout << (r.code == 2 ? "RETIRE_CANCELLED " : "RETIRE_BEGUN ")
+              << "target=" << label << " cell=" << r.cell_id
+              << " epoch=" << r.management_epoch << " detail=" << r.detail
+              << std::endl;
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -996,6 +1131,9 @@ int main(int argc, char* argv[]) {
     }
     if (opt.command == "drain") {
         return runDrain(opt);
+    }
+    if (opt.command == "retire") {
+        return runRetire(opt);
     }
 
     // 契约代次可注入（APOLLO_FLEETCTL_ROUTE_JSON）：滚动发布演练以旧代

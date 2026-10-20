@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "83487df201688bd0066842c36d2aebdf757aa789818ca8bb4aa13281ddafb2ac",
+  "schema_hash": "531988b0daad03d65386baa84b2df103de109e5008c1a2ca40af1335dcda650d",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "d2770604a5c2034b97e8c3d863fcacc0744e34ffff7cec3b1a8b76edad3ac95c",
+  "internal_hash": "1f7a0eb2ef01bc7321ac07fa0f1fdcaa28cad85d2cf89d84093ff439095c07c0",
   "contract_version": 3,
   "routes": [
     {
@@ -789,6 +789,15 @@
       "handler": "cell_space_assign"
     },
     {
+      "id": 963,
+      "name": "cell_retire_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_retire_request"
+    },
+    {
       "id": 964,
       "name": "service_register_request",
       "dir": "P2P",
@@ -805,6 +814,15 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "service_register_reply"
+    },
+    {
+      "id": 966,
+      "name": "cell_retire_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "cell_retire_reply"
     }
   ]
 }

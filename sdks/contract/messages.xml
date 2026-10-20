@@ -641,6 +641,11 @@
     <field name="assigned_cell_id" type="int64" desc="当前归属 cell id（ready=1 时 = 收帧 cell；ready=0 时 = 当前归属方，收帧方据此撤销本地路由）"/>
     <field name="ready" type="bool" desc="1=归属收帧 cell（可服务）；0=非其所有（撤销标记）"/>
   </msg>
+  <msg id="963" name="cell_retire_request" dir="P2P" channel="events" domain="internal" desc="World 侧 cell 缩容意图命令（fleetctl→world M1 管理面；置/撤该 cell 的缩容意图——L104 cell 级缩容编排批的管理命令面；认证凭据面同 960 惯例另行挂账，裸帧受理）">
+    <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
+    <field name="op" type="int32" desc="操作：1=begin_retire（置意图：停止新认领并归还其分配） 2=cancel_retire（撤意图：不回收已被其他 cell 接管者）"/>
+    <field name="cell_id" type="int64" desc="目标 cell 的 logical_id（与 960 logical_id 同源）"/>
+  </msg>
   <msg id="964" name="service_register_request" dir="P2P" channel="events" domain="internal" desc="服务目录注册请求（Base/World→loginServer M1 服务注册面；声明逻辑身份、进程代次、管理地址、兼容事实与就绪——L123 服务目录首切片，认证凭据面同 960 惯例另行挂账，裸帧受理）">
     <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
     <field name="service_kind" type="int32" desc="服务种类：0=Base 1=World（目录消费面按种类解析；未知值驳回）"/>
@@ -657,6 +662,14 @@
     <field name="code" type="int32" desc="1=accepted 2=accepted_idempotent（同 ID 同代次重注册刷新） 3=rejected_stale_incarnation（旧代次不可覆盖） 4=rejected_invalid（身份/代次非法或种类未知）"/>
     <field name="service_kind" type="int32" desc="确认的服务种类（原样回带）"/>
     <field name="logical_id" type="int64" desc="确认的逻辑身份（原样回带）"/>
+    <field name="detail" type="string" desc="状态摘要（拒绝原因等）"/>
+  </msg>
+  <msg id="966" name="cell_retire_reply" dir="P2P" channel="events" domain="internal" desc="cell 缩容意图回执（world→fleetctl M1 管理面；request_id 关联；确认的意图操作与代次——命令不等待 in-flight 排空，排空为自然收敛）">
+    <field name="request_id" type="int64" desc="回带请求关联号"/>
+    <field name="accepted" type="bool" desc="1=意图已置/撤；0=拒绝（code/detail 为原因）"/>
+    <field name="code" type="int32" desc="1=retire_begun 2=retire_cancelled 3=rejected_unknown_cell（目标未登记） 4=rejected_invalid（op 未知或 cell_id 非法）"/>
+    <field name="cell_id" type="int64" desc="确认的目标 cell logical_id（原样回带）"/>
+    <field name="management_epoch" type="int64" desc="受理时的 World 管理代次（§5.7 透传）"/>
     <field name="detail" type="string" desc="状态摘要（拒绝原因等）"/>
   </msg>
 </messages>

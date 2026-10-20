@@ -88,6 +88,16 @@ struct CellRegisterRequest {
     bool ready = false;               // 就绪（进程存活不等于可分配）
 };
 
+// cell 缩容意图命令（契约 963，L108 cell 级缩容编排的管理命令面）：
+// fleetctl→World M1 管理面。op = 1 begin_retire / 2 cancel_retire；受理点
+// 同步执行（M1 泵在 gameThread_，同 960），回执 966 按 request_id 关联。
+// 命令不等待 in-flight 排空——排空是自然收敛。
+struct CellRetireRequest {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;              // 1=begin_retire 2=cancel_retire
+    std::uint64_t cell_id = 0;        // 目标 cell logical_id（0 = 非法）
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -177,6 +187,24 @@ public:
         (void)detail;
     }
 
+    // cell 缩容意图回执（966 cell_retire_reply）：peer/关联键同 961 面。
+    // code = kCellRetire*（acceptance_queue.hpp 契约词汇）；accepted = 意图
+    // 已置/撤；management_epoch = 受理时管理代次回带；cell_id = 确认的目标
+    // 原样回带。kReliable 同 945。
+    virtual void sendCellRetireReply(const std::string& peer, std::uint64_t request_id,
+                                     bool accepted, std::int32_t code,
+                                     std::int64_t management_epoch,
+                                     std::uint64_t cell_id,
+                                     const std::string& detail) {
+        (void)peer;
+        (void)request_id;
+        (void)accepted;
+        (void)code;
+        (void)management_epoch;
+        (void)cell_id;
+        (void)detail;
+    }
+
     // Space 分配推送（962 cell_space_assign，L101 分配面首切片）：peer = cell
     // 自报名；分配版本 = 该 Space 当前版本（首分配 = 1，重平衡随 L108）。
     // kReliable 同 945。
@@ -222,8 +250,9 @@ public:
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
 // module_rollout_request / 956 world_drain_request / 960 cell_register_request
-// 裸帧分别经 on_debug_eval / on_module_rollout / on_world_drain /
-// on_cell_register 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
+// / 963 cell_retire_request 裸帧分别经 on_debug_eval / on_module_rollout /
+// on_world_drain / on_cell_register / on_cell_retire 投递（入参 = 请求 +
+// 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {},
@@ -232,6 +261,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const WorldDrainRequest&)>
         on_world_drain = {},
     std::function<void(const std::string&, const CellRegisterRequest&)>
-        on_cell_register = {});
+        on_cell_register = {},
+    std::function<void(const std::string&, const CellRetireRequest&)>
+        on_cell_retire = {});
 
 } // namespace world_app
