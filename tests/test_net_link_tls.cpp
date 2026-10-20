@@ -22,6 +22,8 @@
 //      工厂包成 TLS 记录层，Hello + 双向 reliable 全走 TLS；信任锚装错
 //      → 链路永不 kUp、退避重拨、服务端计数失败握手。
 
+#include <iostream>
+
 #if !defined(_WIN32)
 
 #include "tls_test_support.hpp"
