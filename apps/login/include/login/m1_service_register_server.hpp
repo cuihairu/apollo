@@ -25,6 +25,9 @@ struct M1ServiceRegisterConfig {
     std::string host = "0.0.0.0";
     std::uint16_t port = 0;  // 0 = 内核分配（测试经 listenPort 读回）
     std::string route_json;  // 契约路由表（缺位 = start false）
+    // 心跳失效窗（毫秒；0 = 不扫）：last-heard 超窗的登记移出目录。拨号端
+    // 心跳缺省 5000ms（M1ServiceRegisterClientConfig），窗取 3 拍容忍丢拍。
+    std::uint64_t heartbeat_timeout_ms = 15000;
 };
 
 class M1ServiceRegisterServer {

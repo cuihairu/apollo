@@ -86,7 +86,19 @@ public:
         running_.store(true, std::memory_order_release);
         pump_thread_ = std::thread([this]() {
             while (running_.load(std::memory_order_acquire)) {
-                manager_->pump(now_ms());
+                const auto now = now_ms();
+                manager_->pump(now);
+                // 心跳失效窗与受理同泵线程（registry 单写者纪律）；扫拍取
+                // 泵后现值（受理在泵内记账，时戳不早于本扫拍）。扫出显形
+                // 日志——目录收缩是运维可见事件，静默丢弃不可诊断。
+                const auto swept =
+                    registry_->sweep_expired(now_ms(), config_.heartbeat_timeout_ms);
+                if (swept != 0) {
+                    apollo::core::log::global_log_manager()
+                        .createLogger("login_server")
+                        ->info("service register expired: swept=" +
+                               std::to_string(swept));
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });

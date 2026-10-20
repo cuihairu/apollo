@@ -7,8 +7,8 @@
 // 同 ID 同代次幂等刷新（自报面整体更新）；新代次替换（重启换代）；旧代次
 // 拒绝不可覆盖。身份 = 逻辑 ID + 进程代次（PID/IP 不当身份）。
 //
-// 线程纪律：register_service / 观测面只在 M1 服务注册面泵线程调用（受理
-// 点同步裁决——同 WorldApp 注册表单写者上下文），类不加锁。
+// 线程纪律：register_service / sweep_expired / 观测面只在 M1 服务注册面泵
+// 线程调用（受理点同步裁决——同 WorldApp 注册表单写者上下文），类不加锁。
 //
 // 目录不另行分配 Cell/World（L123 行内拍板）：本表只登记自报事实，落点
 // 分配仍在 World 管理面（962）；位置投影发布随 L123 后续批。
@@ -107,6 +107,35 @@ public:
         return it == entries_.end() ? nullptr : &it->second;
     }
 
+    // 心跳失效窗（L123 心跳失效切片）：last-heard 距今超过 timeout_ms 的
+    // 登记移出目录——目录只登记可寻址的活服务，失效即不可寻址；同代次/
+    // 新代次再注册走首注册路径重入（受理面幂等裁决照常）。timeout_ms=0
+    // 不扫（纯登记面用法）。同一单写者泵上下文周期调用（受理面泵拍）。
+    // 返回本次扫出条数；expired_total 累计（观测面，不参与裁决）。
+    std::size_t sweep_expired(std::uint64_t now_ms, std::uint64_t timeout_ms) {
+        if (timeout_ms == 0) {
+            return 0;
+        }
+        std::size_t swept = 0;
+        for (auto it = entries_.begin(); it != entries_.end();) {
+            // 时钟面守卫：登记时刻晚于扫拍（同拍受理/时钟粒度）按 0 龄计，
+            // 不让无符号减法回绕成巨龄误扫。
+            const auto age = now_ms > it->second.registered_at_ms
+                                 ? now_ms - it->second.registered_at_ms
+                                 : 0;
+            if (age > timeout_ms) {
+                it = entries_.erase(it);
+                ++swept;
+            } else {
+                ++it;
+            }
+        }
+        expired_total_ += swept;
+        return swept;
+    }
+
+    std::uint64_t expired_total() const { return expired_total_; }
+
 private:
     static std::uint64_t key(std::int32_t service_kind, std::uint64_t logical_id) {
         // 种类与逻辑 ID 复合键：两域数值空间独立（Base 7 与 World 7 并存）
@@ -116,6 +145,7 @@ private:
     }
 
     std::unordered_map<std::uint64_t, ServiceRegistration> entries_;
+    std::uint64_t expired_total_ = 0;
 };
 
 } // namespace login

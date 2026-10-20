@@ -5,7 +5,9 @@
 //   登记保持新代次）→ 第二拨号端并存（peer 名分账）；
 //   invalid：logical_id=0 / incarnation=0 / 未知种类显式驳回（code 4 不入表），
 //   request_id=0 保留（无回执无登记）；
-//   malformed：残帧拒收计数（注册表不触碰，拒收不堵链路）。
+//   malformed：残帧拒收计数（注册表不触碰，拒收不堵链路）；
+//   expiry：停跳超窗的登记移出目录（心跳失效窗），再注册走首注册路径
+//   重入，窗 0 不扫。
 // 断言事实源：965 回执内容 + ServiceRegistry 观测面（日志不算）。
 // 缝工厂真实现直编（login_m1_admission_tests 惯例）；服务端自泵
 // （M1ServiceRegisterServer 内置 10ms 泵线程），本线程泵拨号端。
@@ -184,11 +186,12 @@ struct ServerEnd {
     login::ServiceRegistry registry;
     std::unique_ptr<login::M1ServiceRegisterServer> server;
 
-    bool start() {
+    bool start(std::uint64_t heartbeat_timeout_ms = 15000) {
         login::M1ServiceRegisterConfig config;
         config.host = "127.0.0.1";
         config.port = 0;
         config.route_json = kRouteJson;
+        config.heartbeat_timeout_ms = heartbeat_timeout_ms;
         server = login::makeM1ServiceRegisterServer(std::move(config), &registry);
         return server && server->start() && server->listenPort() != 0;
     }
@@ -402,6 +405,61 @@ bool test_register_malformed() {
 #endif
 }
 
+// 心跳失效窗（L123 心跳失效切片）：停跳超窗的登记移出目录——目录只登记
+// 可寻址的活服务；再注册走首注册路径重入（受理面幂等裁决照常）；窗 0 不扫
+// （纯登记面用法，条目不因静默消失）。
+bool test_register_expiry() {
+#if !defined(_WIN32)
+    ServerEnd login;
+    TEST_ASSERT(login.start(200), "register face starts (window 200ms)");
+    LinkEnd base;
+    TEST_ASSERT(dial(login, base, "base-x"), "base dials in");
+
+    ServiceReply r;
+    TEST_ASSERT(register_roundtrip(base, 1, kServiceKindBase, 7, 1, "10.0.0.7",
+                                   9301, 0, true, r),
+                "register answered");
+    TEST_ASSERT(r.accepted && r.code == kServiceRegisterAccepted,
+                "register accepted before expiry");
+    TEST_ASSERT(login.registry.find_service(kServiceKindBase, 7) != nullptr,
+                "entry present before expiry");
+
+    // 停跳等超窗（本端不再发 964；服务端 10ms 自泵扫；余量防 CI 负载）
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    TEST_ASSERT(login.registry.find_service(kServiceKindBase, 7) == nullptr,
+                "silent entry swept out of directory");
+    TEST_ASSERT(login.registry.registered_service_count() == 0,
+                "directory empty after sweep");
+    TEST_ASSERT(login.registry.expired_total() == 1, "expiry observable once");
+
+    // 再注册（同代次）：目录已失条——首注册路径（code 1），条目重入
+    TEST_ASSERT(register_roundtrip(base, 2, kServiceKindBase, 7, 1, "10.0.0.7",
+                                   9301, 0, true, r),
+                "re-register after expiry answered");
+    TEST_ASSERT(r.accepted && r.code == kServiceRegisterAccepted,
+                "re-register after expiry is fresh (code 1)");
+    TEST_ASSERT(login.registry.find_service(kServiceKindBase, 7) != nullptr,
+                "entry back in directory");
+
+    // 窗 0 = 不扫：停跳同窗长，条目保留
+    ServerEnd frozen;
+    TEST_ASSERT(frozen.start(0), "register face starts (window off)");
+    LinkEnd world;
+    TEST_ASSERT(dial(frozen, world, "world-y"), "world dials in");
+    TEST_ASSERT(register_roundtrip(world, 1, kServiceKindWorld, 3, 1, "10.0.0.3",
+                                   9101, 0, true, r),
+                "window-off register answered");
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    TEST_ASSERT(frozen.registry.find_service(kServiceKindWorld, 3) != nullptr,
+                "window off keeps silent entry");
+    TEST_ASSERT(frozen.registry.expired_total() == 0, "window off sweeps nothing");
+    return true;
+#else
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+#endif
+}
+
 } // namespace
 
 int main() {
@@ -412,6 +470,7 @@ int main() {
         {"register_lifecycle", test_register_lifecycle},
         {"register_invalid", test_register_invalid},
         {"register_malformed", test_register_malformed},
+        {"register_expiry", test_register_expiry},
     };
     int failed = 0;
     for (const auto& c : cases) {
