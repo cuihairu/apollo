@@ -41,11 +41,11 @@ features:
 
 <ArchitectureDiagram kind="callbacks" />
 
-实现状态：gateway 游戏 TCP/WS/WSS 入口已验收（含 WSS 证书链/主机名错误拒绝与密钥配置负例）；interfaces 受理链（原始请求帧逐字节保留、请求超时与受理队列预算、有界单写者）、订单事务域（持久受理与待办、按归属代次解析当前 Base、发货去重凭据原子提交）与 apolloc init 脚手架均已落地并有测试覆盖；渠道验签执行器与进程间接线（interfaces→订单受理、baseServer 写权生命周期、奖励落账 executor）仍规划中。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
+实现状态：gateway 游戏 TCP/WS/WSS 入口已验收（含 WSS 证书链/主机名错误拒绝与密钥配置负例）；interfaces 受理链（原始请求帧逐字节保留、请求超时与受理队列预算、有界单写者）、订单事务域（持久受理与待办、按归属代次解析当前 Base、发货去重凭据原子提交）与 apolloc init 脚手架均已落地并有测试覆盖；渠道验签执行器与进程间接线（interfaces→订单受理、base 写权生命周期、奖励落账 executor）仍规划中。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
 
 ## 进程、工具与 CI
 
-- 运行进程：gateway、loginServer、baseServer、worldServer、database、interfaces、machined；cell 独立执行入口规划中。gateway 提供游戏 TCP/WS/WSS 入口（已验收），interfaces 提供 HTTP/HTTPS 回调入口（受理链已落地）。
+- 运行进程：gateway、login、base、world、database、interfaces、machined；cell 为 world 二进制的执行角色。gateway 提供游戏 TCP/WS/WSS 入口（已验收），interfaces 提供 HTTP/HTTPS 回调入口（受理链已落地）。
 - CLI 工具：apolloc（项目初始化 init，已交付）、fleetctl（编队量测断言）、admin 与 logger（观测辅助）——都是开发工具，不是在线业务进程。
 - CI：GitHub Actions（构建/测试、契约、文档）在仓库执行，不参与在线业务。
 

@@ -39,11 +39,11 @@ Optional interfaces receives payment/channel callbacks over HTTP/HTTPS. Durable 
 
 <ArchitectureDiagram kind="callbacks" />
 
-Implementation status: the gateway game TCP/WS/WSS entries are accepted (including WSS certificate-chain/hostname rejection and key-configuration negatives); the interfaces intake chain (byte-exact raw-request retention, request-timeout and queue budgets, bounded single-writer), the order transaction domain (durable intake and pending work, epoch-based current-Base resolution, atomic fulfillment dedup credentials), and the apolloc init scaffolding are implemented with test coverage; the channel verification executor and inter-process wiring (interfaces→order intake, baseServer write-authority lifecycle, reward apply executor) remain planned. See the [Mistlane/FOGS review](./analysis/mistlane-review.md); root todo.md tracks implementation.
+Implementation status: the gateway game TCP/WS/WSS entries are accepted (including WSS certificate-chain/hostname rejection and key-configuration negatives); the interfaces intake chain (byte-exact raw-request retention, request-timeout and queue budgets, bounded single-writer), the order transaction domain (durable intake and pending work, epoch-based current-Base resolution, atomic fulfillment dedup credentials), and the apolloc init scaffolding are implemented with test coverage; the channel verification executor and inter-process wiring (interfaces→order intake, base write-authority lifecycle, reward apply executor) remain planned. See the [Mistlane/FOGS review](./analysis/mistlane-review.md); root todo.md tracks implementation.
 
 ## Processes, Tools, and CI
 
-- Runtime processes: gateway, loginServer, baseServer, worldServer, database, interfaces, machined; a standalone cell executor entry is planned. gateway serves the game TCP/WS/WSS entries (accepted); interfaces serves the HTTP/HTTPS callback entry (intake chain implemented).
+- Runtime processes: gateway, login, base, world, database, interfaces, machined; cell runs as a role of the world binary. gateway serves the game TCP/WS/WSS entries (accepted); interfaces serves the HTTP/HTTPS callback entry (intake chain implemented).
 - CLI tools: apolloc (project init, delivered), fleetctl (fleet drill assertions), admin and logger (observability helpers) — developer tools, not online services.
 - CI: GitHub Actions (build/tests, contracts, docs) runs in the repository, outside the online path.
 

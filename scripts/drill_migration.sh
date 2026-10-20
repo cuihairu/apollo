@@ -7,7 +7,7 @@
 # 回执（不墙钟反推）。
 #
 # 用法：scripts/drill_migration.sh
-#   APOLLO_BUILD_DIR   构建树（默认 <repo>/build，须 GAME_MODULE=ON 已构建）
+#   APOLLO_BUILD_DIR   构建树（默认 <repo>/build，须 APOLLO_BUILD_GAME_MODULE=ON 已构建）
 #   APOLLO_DRILL_DIR   运行目录（默认 /tmp/apollo-drill-migration-<pid>）
 #   APOLLO_MIG_PLAYER  迁移玩家号（默认 42）
 #
@@ -18,10 +18,11 @@
 #                   --recovery-port 19622 --recovery-expected 2（两报告方收敛）
 #                   --mirror-port 19626 --mirror-snapshot-ms 30000
 #                   （30s 周期 = 演练窗内 ④ 后恰有一次周期快照，作回卷断言面）
-#   old   = world --world-id 2 --player-store-m1-port 19632 --component-id 30
-#                   --zone-id 2 --report-to-port 19622 --report-interval-ms 1000
-#   new   = world --world-id 5 --player-store-m1-port 19642 --component-id 31
-#                   --zone-id 5 --report-to-port 19622 --report-interval-ms 1000
+#   old   = world --world-id 2 --component-id 30 --zone-id 2 --world-journal <…>
+#   new   = world --world-id 5 --component-id 31 --zone-id 5 --world-journal <…>
+# 如实边界：world 无 --host/--data-dir/--player-store-m1-port/--report-* 解析面
+# （今日无档案目录与迁移报告接线），这些旧 flag 曾静默忽略、现已拒启；
+# 目标端档案落盘断言依赖该档案目录面，未接线前该段断言会 fail。
 # 种档（会话面无种子工具——旧 base-app --demo-anchors 随进程退场）：种子档
 # player_<N>.json 落源端 dataDir，PlayerStore 启动 restore 离线建锚（档案在、
 # 会话无）→ 全量重报 intake 落目录。会话绑定列为空是该种子形态的如实边界
@@ -73,7 +74,7 @@ fail() { echo "FAIL: $*" >&2; FAIL=1; }
 ok()   { echo "ok:   $*"; }
 
 for bin in "$LOGIN" "$WORLD" "$FLEETCTL"; do
-    [[ -x "$bin" ]] || { echo "missing binary: $bin —— 先构建（GAME_MODULE=ON）" >&2; exit 1; }
+    [[ -x "$bin" ]] || { echo "missing binary: $bin —— 先构建（APOLLO_BUILD_GAME_MODULE=ON）" >&2; exit 1; }
 done
 
 ts() { perl -MTime::HiRes=time -pe 'BEGIN { $| = 1 } s/^/sprintf("%.3f ", time)/e'; }
@@ -203,21 +204,15 @@ WATCH_PID=$!
     2>&1 ) | ts >> "$LOG" &
 
 # —— 源 zone 2：种档离线建锚 + 全量重报 ——
-( cd "$OLD_DIR" && stdbuf -oL "$WORLD" --world-id 2 --host 127.0.0.1 \
-    --m1-port "$M1_OLD" --player-store-m1-port "$STORE_OLD" \
-    --data-dir "$OLD_DATA" --journal "$OLD_DIR/journal/persist.log" \
+( cd "$OLD_DIR" && stdbuf -oL "$WORLD" --world-id 2 \
+    --m1-port "$M1_OLD" --world-journal "$OLD_DIR/journal/persist.log" \
     --machined-port 0 --component-id 30 --zone-id 2 \
-    --report-to-port "$PORT_RECOVERY" --report-zone-id 2 \
-    --report-interval-ms 1000 \
     2>&1 ) | ts >> "$OLD_LOG" &
 
 # —— 目标 zone 5：空载承接 + 全量重报（迁移后其报告独占 42）——
-( cd "$NEW_DIR" && stdbuf -oL "$WORLD" --world-id 5 --host 127.0.0.1 \
-    --m1-port "$M1_NEW" --player-store-m1-port "$STORE_NEW" \
-    --data-dir "$NEW_DATA" --journal "$NEW_DIR/journal/persist.log" \
+( cd "$NEW_DIR" && stdbuf -oL "$WORLD" --world-id 5 \
+    --m1-port "$M1_NEW" --world-journal "$NEW_DIR/journal/persist.log" \
     --machined-port 0 --component-id 31 --zone-id 5 \
-    --report-to-port "$PORT_RECOVERY" --report-zone-id 5 \
-    --report-interval-ms 1000 \
     2>&1 ) | ts >> "$NEW_LOG" &
 
 sleep 0.5

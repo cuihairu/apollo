@@ -20,7 +20,7 @@
 
 Apollo is a C++20 server runtime for lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It currently delivers lightweight instances while reserving future seamless Space/Cell, authority, and visibility boundaries.
 
-The process roles are fixed as `gateway`, `loginServer`, `baseServer`, `worldServer`, `cell`, `database`, and `machined`; cell is the discussed executor and Cell means a spatial partition. An optional `interfaces` process receives external HTTP/HTTPS callbacks.
+The runnable processes are `gateway`, `login`, `base`, `world`, `database`, `interfaces`, and `machined`; the `loginServer`/`baseServer`/`worldServer` words in the design docs name the roles of the `login`/`base`/`world` binaries, and `cell` is the cell execution role of the `world` binary (`--role=cell`). Cell means a spatial partition.
 
 <picture>
   <source media="(max-width: 640px)" srcset="docs/public/architecture/system-en-mobile.svg" />
@@ -48,7 +48,7 @@ Protocol-capable upgrades replace Base, cell, or World management independently 
 
 | Kind | Members | Boundary |
 |---|---|---|
-| Runtime processes | `gateway`, `loginServer`, `baseServer`, `worldServer`, `database`, `interfaces`, `machined` | Online services; a standalone `cell` executor entry is planned |
+| Runtime processes | `gateway`, `login`, `base`, `world`, `database`, `interfaces`, `machined` | Online services; `cell` runs as a role of the `world` binary |
 | CLI tools | `apolloc` (project init), `fleetctl`, `admin`, `logger` | Development/ops tools, not online services |
 | CI | GitHub Actions: build/tests, contracts, docs | Runs in the repository, not in the online path |
 

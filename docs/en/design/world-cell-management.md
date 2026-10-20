@@ -84,7 +84,7 @@ world --config=<world-config>
 world --role=cell --config=<cell-config>
 ```
 
-No arguments, or no `--role`, defaults to World and the default configuration source. Explicit `--role=world` selects the same manager role. A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
+No arguments, or no `--role`, defaults to the World manager role (`--role` accepts only `manager` and `cell`; there is no `world` form). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
 
 World generates each child's role, logical identity, manager endpoint, separate runtime directory, and bootstrap credentials; developers do not maintain a handwritten configuration per executor. Do not log bootstrap secrets. Executors can bind ports and report them through authenticated registration rather than race between probing and binding a free port.
 

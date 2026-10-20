@@ -6,7 +6,7 @@
 # world（现役入口；scripts drill 迁移随 todo P3-1 条目）。
 #
 # 用法：scripts/drill_kill9.sh
-#   APOLLO_BUILD_DIR   构建树（默认 <repo>/build，须 GAME_MODULE=ON 已构建）
+#   APOLLO_BUILD_DIR   构建树（默认 <repo>/build，须 APOLLO_BUILD_GAME_MODULE=ON 已构建）
 #   APOLLO_DRILL_DIR   运行目录（默认 /tmp/apollo-drill-kill9-<pid>，演练日志留档）
 #
 # 演练拓扑（独立端口段，不与 dev_fleet 9001-9005/9101-9107、drill_migration
@@ -14,8 +14,9 @@
 #   machined --port 19600 --interval 500 --backoff 1000（编队监督 + 死亡通知）
 #   login = login --recovery-port 19602 --recovery-expected 1（恢复相位）
 #                  --mirror-port 19601（目录镜像 owner）--component-id 2
-#   world = world --world-id 2 --report-to-port 19602 --component-id 30
-#                  --zone-id 2 --report-interval-ms 5000
+#   world = world --world-id 2 --component-id 30 --zone-id 2 --world-journal <…>
+# 如实边界：world 无 --host/--data-dir/--player-store-m1-port/--report-* 解析面
+# （今日无档案目录与迁移报告接线）；这些旧 flag 曾静默忽略，现已拒启。
 # 脚本 kill -9 world 后按行首 wall-clock 戳算各段耗时并断言收敛。
 # 如实边界：会话面无种子工具（旧 base-app --demo-anchors 随进程退场），
 # 全量重报 sessions=0——死亡/重启/重报/intake/镜像收敛链 RTO 实测不受影响；
@@ -49,7 +50,7 @@ fail() { echo "FAIL: $*" >&2; FAIL=1; }
 ok()   { echo "ok:   $*"; }
 
 for bin in "$MACHINED" "$LOGIN" "$WORLD"; do
-    [[ -x "$bin" ]] || { echo "missing binary: $bin —— 先构建（GAME_MODULE=ON）" >&2; exit 1; }
+    [[ -x "$bin" ]] || { echo "missing binary: $bin —— 先构建（APOLLO_BUILD_GAME_MODULE=ON）" >&2; exit 1; }
 done
 
 # 行首 wall-clock 秒戳（HiRes，3 位小数）——分段耗时取自日志本身。
@@ -100,7 +101,7 @@ sleep 0.5
 
 cat > "$ROSTER" <<EOF
 login | 2 | 0 | $LOGIN --host 127.0.0.1 --port $PORT_LOGIN --directory-port $PORT_LOGIN_DIR --directory-epochs $DRILL_DIR/epochs.json --machined-port $PORT_DISCO --component-id 2 --recovery-port $PORT_RECOVERY --recovery-expected 1 --mirror-port $PORT_MIRROR --mirror-snapshot-ms 500 --suspend-window-ticks 30 --world-store-m1-port $PORT_WORLD_STORE
-world | 30 | 2 | $WORLD --world-id $WORLD_ID --host 127.0.0.1 --m1-port $PORT_WORLD --player-store-m1-port $PORT_WORLD_STORE --data-dir $DRILL_DIR/world-data/players --journal $DRILL_DIR/world-data/journal/persist.log --machined-port $PORT_DISCO --component-id 30 --zone-id $WORLD_ID --report-to-port $PORT_RECOVERY --report-zone-id $WORLD_ID --report-interval-ms 1000
+world | 30 | 2 | $WORLD --world-id $WORLD_ID --m1-port $PORT_WORLD --world-journal $DRILL_DIR/world-data/journal/persist.log --machined-port $PORT_DISCO --component-id 30 --zone-id $WORLD_ID
 EOF
 
 : > "$LOG"

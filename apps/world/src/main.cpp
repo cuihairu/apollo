@@ -49,6 +49,12 @@ static apollo::core::log::LoggerPtr initLogging() {
     return logs.createLogger("world");
 }
 
+// 编队面参数（loadFleetOptions 解析；本循环放行不解析，防未知参数守卫误判）
+bool is_fleet_arg(const std::string& arg) {
+    return arg == "--machined-host" || arg == "--machined-port" ||
+           arg == "--component-id" || arg == "--zone-id";
+}
+
 // 加载配置
 WorldAppConfig loadConfig(int argc, char* argv[]) {
     WorldAppConfig config;
@@ -178,6 +184,23 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --script-contract <file>    Lua contract table, loaded after handlers (default: none)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
+        } else if (arg == "--role" || arg.rfind("--role=", 0) == 0) {
+            // 角色面由 parse_world_role 处理（--role <v> 与 --role=<v>）；
+            // 取值形式吃掉参数，否则被下面的未知参数守卫误判
+            if (arg == "--role" && i + 1 < argc) {
+                ++i;
+            }
+        } else if (is_fleet_arg(arg)) {
+            // 编队面由 loadFleetOptions 处理（本循环只放行不解析）
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                ++i;
+            }
+        } else {
+            // 入口显形：未知参数过去静默忽略（drill 脚本曾传 --host/
+            // --report-to-port 等本进程无解析分支的 flag，整段配置带病无效）
+            std::cerr << "world: unknown arg " << arg << " (see --help)"
+                      << std::endl;
+            std::exit(2);
         }
     }
 

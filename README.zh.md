@@ -20,7 +20,7 @@
 
 Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。当前交付轻量副本路径，预留未来无缝地图的 Space/Cell、权威和可见性边界。
 
-进程名称固定为 `gateway`、`loginServer`、`baseServer`、`worldServer`、`cell`、`database`、`machined`；cell 为已讨论的模拟执行职责，Cell 为分区。可选的 `interfaces` 进程承接外部 HTTP/HTTPS 回调。
+可运行进程为 `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined`；设计文档里的 loginServer/baseServer/worldServer 是 `login`/`base`/`world` 二进制的角色称谓，`cell` 是 `world` 二进制的 cell 执行角色（`--role=cell`）。Cell 为分区。
 
 <picture>
   <source media="(max-width: 640px)" srcset="docs/public/architecture/system-zh-mobile.svg" />
@@ -48,7 +48,7 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 
 | 类别 | 成员 | 边界 |
 |---|---|---|
-| 运行进程 | `gateway`、`loginServer`、`baseServer`、`worldServer`、`database`、`interfaces`、`machined` | 在线业务进程；`cell` 独立执行入口规划中 |
+| 运行进程 | `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined` | 在线业务进程；`cell` 为 `world` 二进制的执行角色 |
 | CLI 工具 | `apolloc`（项目初始化 init）、`fleetctl`、`admin`、`logger` | 开发与运维工具，不参与在线业务 |
 | CI | GitHub Actions：构建/测试、契约、文档 | 仓库内执行，不参与在线业务 |
 

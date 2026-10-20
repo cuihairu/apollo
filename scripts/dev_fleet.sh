@@ -71,7 +71,7 @@ cmd_up() {
         spawned=$((spawned + 1))
     done < "$ROSTER"
     if [[ "$spawned" -eq 0 ]]; then
-        echo "roster 为空（无已构建 app）——先在 $BUILD_DIR 以 GAME_MODULE=ON 构建编队 app" >&2
+        echo "roster 为空（无已构建 app）——先在 $BUILD_DIR 以 APOLLO_BUILD_GAME_MODULE=ON 构建编队 app" >&2
         exit 1
     fi
 

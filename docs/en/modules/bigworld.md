@@ -85,7 +85,7 @@ BigWorld::update();              // 驱动定时器帧
 ```cmake
 add_subdirectory(path/to/apollo)
 target_link_libraries(my_app apollo::bigworld)
-# 模块默认 OFF，需 APOLLO_BUILD_BIGWORLD=ON 开启
+# 模块默认 OFF，需 APOLLO_BUILD_BIGWORLD_MODULE=ON 开启
 ```
 
 ## Related Docs

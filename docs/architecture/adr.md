@@ -56,7 +56,7 @@ gateway 持有 socket，分开 Base/cell 路由。协议更新替换进程并转
 
 ## ADR-014：固定名称与对照
 
-gateway、loginServer、baseServer、worldServer、database、machined 保持原名；增加已讨论的 cell 执行职责。worldServer 对照 CellAppMgr 管理，cell 对照 CellApp。现有 Scene 对照 Space；Instance 为 Apollo 玩法对象。第三方名称保留原样。
+可执行名为 gateway、login、base、world、database、machined；设计文档中的 loginServer/baseServer/worldServer 是对应二进制的角色称谓。增加已讨论的 cell 执行职责（world 二进制 `--role=cell`）。world 管理端对照 CellAppMgr 管理，cell 对照 CellApp。现有 Scene 对照 Space；Instance 为 Apollo 玩法对象。第三方名称保留原样。
 
 ## ADR-015：异步意图受理
 

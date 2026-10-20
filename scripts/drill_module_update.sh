@@ -73,15 +73,15 @@ trap cleanup EXIT
 stop_worlds
 
 start_worlds() {
+    # 如实边界：world 无 --player-store-m1-port/--data-dir 解析面（今日无
+    # 档案目录接线），旧 flag 曾静默忽略、现已拒启；journal → --world-journal。
     ( cd "$DRILL_DIR" && stdbuf -oL "$WORLD" --world-id 1 --m1-port "$W1_PORT" \
-        --player-store-m1-port 19141 \
-        --tick-rate "$TICK_MS" --data-dir "$DRILL_DIR/w1-players" \
-        --journal "$DRILL_DIR/w1-journal/persist.log" 2>&1 ) >> "$W1_LOG" &
+        --tick-rate "$TICK_MS" --world-journal "$DRILL_DIR/w1-journal/persist.log" \
+        2>&1 ) >> "$W1_LOG" &
     W1_PID=$!
     ( cd "$DRILL_DIR" && stdbuf -oL "$WORLD" --world-id 2 --m1-port "$W2_PORT" \
-        --player-store-m1-port 19142 \
-        --tick-rate "$TICK_MS" --data-dir "$DRILL_DIR/w2-players" \
-        --journal "$DRILL_DIR/w2-journal/persist.log" 2>&1 ) >> "$W2_LOG" &
+        --tick-rate "$TICK_MS" --world-journal "$DRILL_DIR/w2-journal/persist.log" \
+        2>&1 ) >> "$W2_LOG" &
     W2_PID=$!
     sleep 0.8
 }
