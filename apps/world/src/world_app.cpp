@@ -122,6 +122,9 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const CellRetireRequest& request) {
             onCellRetire(peer, request);
+        },
+        [this](const std::string& peer, const CellSpaceReport& report) {
+            onCellSpaceReport(peer, report);
         });
     egressAdapter_.link = m1Link_.get();
     // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
@@ -581,6 +584,12 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
     }
     const bool may_claim = reg.ready && reg.drain_state == 0 && !reg.retire;
     for (std::uint64_t space_id : config_.assignSpaces) {
+        // 冲突冻结（批B 967 裁决面）：冻结期不推新分配、不推刷新、不推撤销
+        //（设计稿 §4——自报与权威表分歧未决前，任何一侧声明都可能固化错误
+        // 归属；解冻随人工修复批挂账）。
+        if (conflictedSpaces_.count(space_id) > 0) {
+            continue;
+        }
         auto it = spaceAssignments_.find(space_id);
         if (it == spaceAssignments_.end() || it->second.cell_id == 0) {
             // 未分配 / 已释放：无资格或让位者不发 962（无归属视图可推）
@@ -659,6 +668,11 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
     // 版本不变——释放不是认领，无转移发生；重认领方经 pushSpaceAssignments
     // 版本 +1 收敛。条目保留：池成员身份不随心跳消失，Space 回池待认领。
     for (auto& entry : spaceAssignments_) {
+        // 冲突冻结（批B 967 裁决面）：冻结期不释放（设计稿 §4「不推新分配、
+        // 不释放」）——条目停尸在当前 owner，等待人工修复裁决解冻。
+        if (conflictedSpaces_.count(entry.first) > 0) {
+            continue;
+        }
         if (entry.second.cell_id == cell_id) {
             entry.second.cell_id = 0;
             // R 行（批A journal v2）：释放是终态转移（owner 归零、版本不变），
@@ -762,6 +776,67 @@ void WorldApp::onCellRetire(const std::string& peer, const CellRetireRequest& re
                                  kCellRetireRejectedInvalid,
                                  config_.m1AuthorityEpoch, request.cell_id,
                                  "unknown op");
+}
+
+void WorldApp::onCellSpaceReport(const std::string& peer, const CellSpaceReport& report) {
+    // 对账自报受理（967，断连对账批B；M1 泵上下文 = 注册表单写者上下文，
+    // 与 onCellRegister/onCellRetire 同口）。逐条目核对权威归属表（设计稿
+    // §4）——裁决就地生效，无回执（962 全池权威视图即裁决载体，冻结不经
+    // 协议下发）。request_id = 0 保留（静默弃，同 952/960 关联键纪律）。
+    if (report.request_id == 0 || report.cell_id == 0 || report.space_id == 0) {
+        return;
+    }
+    const auto reg = cellRegistrations_.find(report.cell_id);
+    if (reg == cellRegistrations_.end()) {
+        // 未登记来源：无裁决地位（对账表以登记为准），丢弃。
+        worldLog().info("space report from unregistered cell dropped: cell="
+                        + std::to_string(report.cell_id)
+                        + " space=" + std::to_string(report.space_id));
+        return;
+    }
+    if (report.start_epoch != reg->second.start_epoch) {
+        // 旧化身上报：登记已是新代次（新化身），旧端视图无对账效力，丢弃。
+        worldLog().info("space report from stale incarnation dropped: cell="
+                        + std::to_string(report.cell_id)
+                        + " reported_epoch=" + std::to_string(report.start_epoch));
+        return;
+    }
+    ++spaceReportCount_;
+    const auto entry = spaceAssignments_.find(report.space_id);
+    if (entry == spaceAssignments_.end()) {
+        // 未登记权威（§4「无 S 记录 | C 报 S」行）：权威归属表无此 Space
+        //（池外 id，或池内从未认领/记忆已失）——源隔离不明，进冲突集
+        //（观测面；池外 id 无分配语义可冻结，冻结面天然只作用于池内）。
+        const bool fresh = conflictedSpaces_.insert(report.space_id).second;
+        worldLog().warning("space report conflict (no authoritative record): space="
+                           + std::to_string(report.space_id)
+                           + " cell=" + std::to_string(report.cell_id)
+                           + (fresh ? " (frozen)" : " (already frozen)"));
+        return;
+    }
+    if (entry->second.cell_id == report.cell_id) {
+        if (entry->second.version == report.applied_version) {
+            // 匹配（§4 行1）：保持，无操作。
+            return;
+        }
+        // 版本冲突（§4 行2）：权威仍归属本 cell 但应用版本对不上——journal
+        // 落后或应用面偏离，该 Space 冻结（不认领不释放不推送），待对账修复。
+        const bool fresh = conflictedSpaces_.insert(report.space_id).second;
+        worldLog().warning("space report version conflict: space="
+                           + std::to_string(report.space_id)
+                           + " cell=" + std::to_string(report.cell_id)
+                           + " authoritative=" + std::to_string(entry->second.version)
+                           + " applied=" + std::to_string(report.applied_version)
+                           + (fresh ? " (frozen)" : " (already frozen)"));
+        return;
+    }
+    // 其余（owner=0 已释放 / 归属它方）：权威已前进——962 全池视图即裁决，
+    // 上报端随撤销标记/重认领推送收敛（§4 行3 既有路径），收敛滞后不入冲突集。
+    worldLog().info("space report lags authority: space="
+                    + std::to_string(report.space_id)
+                    + " cell=" + std::to_string(report.cell_id)
+                    + " authoritative_owner=" + std::to_string(entry->second.cell_id)
+                    + " applied=" + std::to_string(report.applied_version));
 }
 
 std::size_t WorldApp::retired_cell_count() const {

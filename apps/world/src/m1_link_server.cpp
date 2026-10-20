@@ -218,14 +218,17 @@ public:
                      std::function<void(const std::string&, const CellRegisterRequest&)>
                          on_cell_register,
                      std::function<void(const std::string&, const CellRetireRequest&)>
-                         on_cell_retire)
+                         on_cell_retire,
+                     std::function<void(const std::string&, const CellSpaceReport&)>
+                         on_cell_space_report)
         : config_(std::move(config))
         , on_intent_(std::move(on_intent))
         , on_debug_eval_(std::move(on_debug_eval))
         , on_module_rollout_(std::move(on_module_rollout))
         , on_world_drain_(std::move(on_world_drain))
         , on_cell_register_(std::move(on_cell_register))
-        , on_cell_retire_(std::move(on_cell_retire)) {}
+        , on_cell_retire_(std::move(on_cell_retire))
+        , on_cell_space_report_(std::move(on_cell_space_report)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -577,6 +580,13 @@ private:
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_cell_retire_frame(link.peer_name(), data, size);
             });
+        // 967 cell_space_report 裸帧受理（断连对账批B）：受理点同步裁决于
+        // gameThread_（登记表/分配池单写者上下文）；无回执——962 即裁决载体。
+        dispatcher.set_handler(
+            id_of(MsgId::cell_space_report),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_space_report_frame(link.peer_name(), data, size);
+            });
     }
 
     void handle_debug_eval_frame(const std::string& peer, const std::uint8_t* data,
@@ -666,6 +676,24 @@ private:
         on_cell_retire_(peer, req);
     }
 
+    void handle_cell_space_report_frame(const std::string& peer, const std::uint8_t* data,
+                                        std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::cell_space_report), data, size, fields)
+            || fields.size() != 6 || on_cell_space_report_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        CellSpaceReport req;
+        req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.cell_id = static_cast<std::uint64_t>(fields[1].integer);
+        req.start_epoch = static_cast<std::uint64_t>(fields[2].integer);
+        req.space_id = static_cast<std::uint64_t>(fields[3].integer);
+        req.applied_version = static_cast<std::uint64_t>(fields[4].integer);
+        req.applied_mgmt_epoch = static_cast<std::uint64_t>(fields[5].integer);
+        on_cell_space_report_(peer, req);
+    }
+
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
                                std::size_t size) {
         trace::EnvelopeFields env;
@@ -709,6 +737,7 @@ private:
     std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain_;
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register_;
     std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire_;
+    std::function<void(const std::string&, const CellSpaceReport&)> on_cell_space_report_;
     // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
@@ -727,13 +756,16 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
         on_module_rollout,
     std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain,
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register,
-    std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire) {
+    std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire,
+    std::function<void(const std::string&, const CellSpaceReport&)>
+        on_cell_space_report) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
                                               std::move(on_debug_eval),
                                               std::move(on_module_rollout),
                                               std::move(on_world_drain),
                                               std::move(on_cell_register),
-                                              std::move(on_cell_retire));
+                                              std::move(on_cell_retire),
+                                              std::move(on_cell_space_report));
 }
 
 #else // _WIN32
@@ -748,7 +780,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRegisterRequest&)>
         /*on_cell_register*/,
     std::function<void(const std::string&, const CellRetireRequest&)>
-        /*on_cell_retire*/) {
+        /*on_cell_retire*/,
+    std::function<void(const std::string&, const CellSpaceReport&)>
+        /*on_cell_space_report*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();

@@ -98,6 +98,18 @@ struct CellRetireRequest {
     std::uint64_t cell_id = 0;        // 目标 cell logical_id（0 = 非法）
 };
 
+// cell 已应用归属视图自报（契约 967，断连对账批B）：cell→World M1 管理面，
+// 961 受理后逐 Space 一帧（生成链无重复组）。无专用回执——962 全池权威归属
+// 视图即裁决载体；受理点同步裁决（M1 泵上下文 = 注册表单写者）。
+struct CellSpaceReport {
+    std::uint64_t request_id = 0;     // 0 保留（静默弃）
+    std::uint64_t cell_id = 0;        // 上报方 logical_id
+    std::uint64_t start_epoch = 0;    // 上报方进程启动代次（旧化身丢弃）
+    std::uint64_t space_id = 0;
+    std::uint64_t applied_version = 0;
+    std::uint64_t applied_mgmt_epoch = 0;
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -250,9 +262,9 @@ public:
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
 // module_rollout_request / 956 world_drain_request / 960 cell_register_request
-// / 963 cell_retire_request 裸帧分别经 on_debug_eval / on_module_rollout /
-// on_world_drain / on_cell_register / on_cell_retire 投递（入参 = 请求 +
-// 发端 peer 自报名，回执按名回链路）。
+// / 963 cell_retire_request / 967 cell_space_report 裸帧分别经 on_debug_eval /
+// on_module_rollout / on_world_drain / on_cell_register / on_cell_retire /
+// on_cell_space_report 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {},
@@ -263,6 +275,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRegisterRequest&)>
         on_cell_register = {},
     std::function<void(const std::string&, const CellRetireRequest&)>
-        on_cell_retire = {});
+        on_cell_retire = {},
+    std::function<void(const std::string&, const CellSpaceReport&)>
+        on_cell_space_report = {});
 
 } // namespace world_app

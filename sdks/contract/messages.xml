@@ -672,4 +672,12 @@
     <field name="management_epoch" type="int64" desc="受理时的 World 管理代次（§5.7 透传）"/>
     <field name="detail" type="string" desc="状态摘要（拒绝原因等）"/>
   </msg>
+  <msg id="967" name="cell_space_report" dir="P2P" channel="events" domain="internal" desc="cell 已应用归属视图自报（cell→World M1 管理面；961 受理后逐 Space 上发一条——World 重启对账「拉取分配清单」的上行面，稳态与重启窗共用；无专用回执——962 全池权威归属视图即裁决载体；裸帧受理同 960/962 惯例。设计稿预留号 963 已被缩容管理命令面占用，本消息另取新号，每条目一帧（生成链无重复组，条目数上限/分段问题不复存在）">
+    <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
+    <field name="cell_id" type="int64" desc="上报方 cell 的 logical_id（与 960 logical_id 同源）"/>
+    <field name="start_epoch" type="int64" desc="上报方进程启动代次（与 960 start_epoch 同源——旧化身上报丢弃）"/>
+    <field name="space_id" type="int64" desc="本地已应用的 Space"/>
+    <field name="applied_version" type="int64" desc="已应用的分配版本（与 962 version 同源）"/>
+    <field name="applied_mgmt_epoch" type="int64" desc="应用时的管理代次（与 962 management_epoch 同源——源端隔离不明判定）"/>
+  </msg>
 </messages>

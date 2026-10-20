@@ -1,7 +1,9 @@
 #pragma once
 
 // cell 侧注册客户端（L101 注册次切片）：cell 进程主动拨所属 World 的 M1
-// 受理面，发 960 cell_register_request、收 961 cell_register_reply 记账。
+// 受理面，发 960 cell_register_request、收 961 cell_register_reply 记账；
+// 961 受理后逐自有归属条目上发 967 cell_space_report（批B 对账上行面——
+// World 重启失忆时凭此对账，稳态重报幂等）。
 //
 // 与 M1LinkServer 的分界：M1LinkServer 是被动受理端（其它进程拨入），本类
 // 是主动客户端（cell→World 单方向注册）——两缝各自的 LinkManager 互不共享；
@@ -59,9 +61,12 @@ struct CellRegisterConfig {
 
 // 分配记录（962 cell_space_assign 应用面）：监听器只在版本前进时触发一次
 //（去重在客户端——World 每次受理/心跳都重推当前分配，版本不变即幂等）。
+// management_epoch 随 962 帧回带——967 自报（批B 对账上行面）原样上发，
+// World 侧观测用（裁决以版本为准）。
 struct SpaceAssignRecord {
     std::uint64_t space_id = 0;
     std::uint64_t version = 0;
+    std::uint64_t management_epoch = 0;
     std::uint64_t assigned_cell_id = 0;
     bool ready = false;
 };

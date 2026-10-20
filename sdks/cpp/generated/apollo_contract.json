@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "531988b0daad03d65386baa84b2df103de109e5008c1a2ca40af1335dcda650d",
+  "schema_hash": "0628d510aacdc0765e93de36cbf2f7dc0e3d8d40b477e6b8a20727580d285901",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "1f7a0eb2ef01bc7321ac07fa0f1fdcaa28cad85d2cf89d84093ff439095c07c0",
+  "internal_hash": "5282f3a0b22ac82cf6f69994842cdc4917bb81a8581c83c969c110d1a29a8f0a",
   "contract_version": 3,
   "aliases": [
     {
@@ -3660,6 +3660,53 @@
         }
       ],
       "desc": "cell 缩容意图回执（world→fleetctl M1 管理面；request_id 关联；确认的意图操作与代次——命令不等待 in-flight 排空，排空为自然收敛）"
+    },
+    {
+      "id": 967,
+      "name": "cell_space_report",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（调用方单调分配，0 保留）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "上报方 cell 的 logical_id（与 960 logical_id 同源）"
+        },
+        {
+          "name": "start_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "上报方进程启动代次（与 960 start_epoch 同源——旧化身上报丢弃）"
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "本地已应用的 Space"
+        },
+        {
+          "name": "applied_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "已应用的分配版本（与 962 version 同源）"
+        },
+        {
+          "name": "applied_mgmt_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "应用时的管理代次（与 962 management_epoch 同源——源端隔离不明判定）"
+        }
+      ],
+      "desc": "cell 已应用归属视图自报（cell→World M1 管理面；961 受理后逐 Space 上发一条——World 重启对账「拉取分配清单」的上行面，稳态与重启窗共用；无专用回执——962 全池权威归属视图即裁决载体；裸帧受理同 960/962 惯例。设计稿预留号 963 已被缩容管理命令面占用，本消息另取新号，每条目一帧（生成链无重复组，条目数上限/分段问题不复存在）"
     }
   ],
   "entities": [

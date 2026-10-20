@@ -137,6 +137,13 @@ public:
     };
     std::size_t assigned_space_count() const { return spaceAssignments_.size(); }
     const SpaceAssignment* find_space_assignment(std::uint64_t space_id) const;
+    // 对账冲突集（断连对账批B 观测面；轮询口径同 registered_cell_count）：
+    // 967 自报与权威归属核对不上的 Space（版本冲突 / 未登记权威——池外
+    // Space）。冻结面：不认领不释放不推送（§4），解冻随对账修复批。
+    std::size_t conflicted_space_count() const { return conflictedSpaces_.size(); }
+    // 已裁决自报条目数（967 受理并核对的条数；丢弃面——未登记/旧化身/
+    // 0 保留——不计）。
+    std::uint64_t space_report_count() const { return spaceReportCount_; }
 
     // ---- cell 缩容编排（L104 缩容切片；管理面入口）----
     // 单写者纪律：与 driveCellRegistry 同上下文（受理点/M1 泵线程 = 注册表单
@@ -211,6 +218,11 @@ private:
     // 单写者上下文）：begin 置意图并回池、cancel 只清意图；op 未知/cell_id
     // 非法驳回，目标未登记显式 miss。回执 966 同步回带（管理代次 = §5.7）。
     void onCellRetire(const std::string& peer, const CellRetireRequest& request);
+    // 对账自报受理点（967，断连对账批B；泵上下文 = 注册表单写者上下文）：
+    // 逐条目核对权威归属表（world-reconciliation 设计稿 §4）——匹配保持；
+    // 版本冲突/未登记权威进冲突集（该 Space 冻结：不认领不释放不推送）；
+    // 释放态上报 = 收敛滞后不冲突；未登记来源/旧化身上报丢弃。
+    void onCellSpaceReport(const std::string& peer, const CellSpaceReport& report);
     // 注册表过期清扫（960 心跳批；post-tick 驱动，同注册表单写者上下文）：
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。
@@ -294,6 +306,13 @@ private:
     // 重建），过期窗（cellExpiryMs）内不归队即释放回池；真身登记即除名
     //（此后随登记面心跳/过期语义）。
     std::unordered_map<std::uint64_t, std::uint64_t> pendingJournalOwners_;
+    // 对账冲突集（批B）：967 自报核对不上的 Space（版本冲突 / 未登记权威
+    //——含池外 id）。冻结 = pushSpaceAssignments/releaseCellSpaces 跳过该
+    // Space（§4「不推新分配、不释放」）；解冻随对账修复批（journal 补记 +
+    // 重推 962，人工命令与否待拍板）。
+    std::unordered_set<std::uint64_t> conflictedSpaces_;
+    // 已裁决自报条目计数（批B 观测面）
+    std::uint64_t spaceReportCount_ = 0;
 };
 
 } // namespace world_app

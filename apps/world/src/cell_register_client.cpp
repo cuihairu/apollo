@@ -36,6 +36,7 @@ constexpr std::uint16_t id_of(MsgId id) { return static_cast<std::uint16_t>(id);
 constexpr std::uint16_t kRegisterRequestId = id_of(MsgId::cell_register_request);
 constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
+constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
 
 std::uint64_t steady_now_ms() {
     return static_cast<std::uint64_t>(
@@ -197,7 +198,7 @@ public:
 
     std::size_t space_assign_count() const override {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        return assign_versions_.size();
+        return applied_assigns_.size();
     }
 
 private:
@@ -282,6 +283,11 @@ private:
         if (freeze_fn) {
             freeze_fn(freeze_reason);
         }
+        // 967 自报（批B 对账上行面）：每次 961 受理后逐自有归属条目重发
+        //（幂等——World 受理面裁决表 match 分支静默；重启窗 World 凭此对账）。
+        if (accepted) {
+            send_space_reports();
+        }
     }
 
     void handle_assign(const std::uint8_t* data, std::size_t size) {
@@ -295,21 +301,58 @@ private:
         }
         SpaceAssignRecord rec;
         rec.version = static_cast<std::uint64_t>(fields[0].integer);
+        rec.management_epoch = static_cast<std::uint64_t>(fields[1].integer);
         rec.space_id = static_cast<std::uint64_t>(fields[2].integer);
         rec.assigned_cell_id = static_cast<std::uint64_t>(fields[3].integer);
         rec.ready = fields[4].integer != 0;
         SpaceAssignListener fn;
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            const auto it = assign_versions_.find(rec.space_id);
-            if (it != assign_versions_.end() && rec.version <= it->second) {
+            const auto it = applied_assigns_.find(rec.space_id);
+            if (it != applied_assigns_.end() && rec.version <= it->second.version) {
                 return;  // 重推/旧推——版本不前进不触发
             }
-            assign_versions_[rec.space_id] = rec.version;
+            applied_assigns_[rec.space_id] = rec;
             fn = assign_listener_;
         }
         if (fn) {
             fn(rec);
+        }
+    }
+
+    void send_space_reports() {
+        // 967 逐条目上发（批B 对账上行面）：自有归属（owner=本 cell 且 ready）
+        // 各一帧——生成链无重复组，条目数即帧数。泵上下文（handle_reply 内）
+        // 锁外读副本后逐帧 Reliable 发送；链路非 kUp = 尽力面跳过（下次 961
+        // 受理重报，幂等）。
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || l->state() != link::LinkState::kUp) {
+            return;
+        }
+        std::vector<SpaceAssignRecord> own;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            for (const auto& entry : applied_assigns_) {
+                if (entry.second.assigned_cell_id == config_.cell_id
+                    && entry.second.ready) {
+                    own.push_back(entry.second);
+                }
+            }
+        }
+        for (const auto& rec : own) {
+            std::vector<wire::FieldValue> f(6);
+            f[0].integer = static_cast<std::int64_t>(++next_request_id_);
+            f[1].integer = static_cast<std::int64_t>(config_.cell_id);
+            f[2].integer = static_cast<std::int64_t>(config_.start_epoch);
+            f[3].integer = static_cast<std::int64_t>(rec.space_id);
+            f[4].integer = static_cast<std::int64_t>(rec.version);
+            f[5].integer = static_cast<std::int64_t>(rec.management_epoch);
+            std::vector<std::uint8_t> payload;
+            if (!wire::encode_payload(kSpaceReportId, f, payload)) {
+                continue;
+            }
+            l->send(kSpaceReportId, payload.data(), payload.size(),
+                    link::SendClass::kReliable);
         }
     }
 
@@ -358,7 +401,7 @@ private:
     SpaceAssignListener assign_listener_;            // 宿主装配 / 泵上下文读
     LinkFreezeListener freeze_listener_;             // 宿主装配 / 泵上下文读
     ReadmitListener readmit_listener_;               // 宿主装配 / 泵上下文读
-    std::map<std::uint64_t, std::uint64_t> assign_versions_;  // space → 已应用版本
+    std::map<std::uint64_t, SpaceAssignRecord> applied_assigns_;  // space → 已应用视图
 };
 
 } // namespace

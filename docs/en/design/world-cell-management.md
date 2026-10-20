@@ -141,7 +141,7 @@ Local supervision also needs surviving-process reassociation and supervision con
 
 For planned updates, stop new creation/migration, complete or record in-flight operations, hand off the journal, stop the old manager, and reassociate executors. Existing activities continue only within validated grace/authorization bounds; otherwise freeze. Simulation pause and client TCP loss are separate outcomes.
 
-The reconciliation record formats (journal v2), protocol extension (963 cell_space_report), and per-item adjudication are detailed in the [World Restart Reconciliation](./world-reconciliation.md) design draft (under review).
+The reconciliation record formats (journal v2), protocol extension (967 cell_space_report), and per-item adjudication are detailed in the [World Restart Reconciliation](./world-reconciliation.md) design (Batches A/B implemented, Batch C pending).
 
 ## 7. Whole-Space/Instance Migration
 

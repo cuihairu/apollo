@@ -141,7 +141,7 @@ World 必须保存：Space/Cell 分配和版本、创建/迁移请求与提交�
 
 有计划更新时先停止新创建与迁移，排平或记录在途操作，完成管理日志交接；旧 World 退出后新 World 接管并重新关联 cell。若 cell 已有活动要持续 tick，整个切换必须在已验证的宽限期和授权范围内完成，否则按失联策略冻结。活动短暂停顿与客户端 TCP 断开是不同验收项。
 
-对账的记录格式（journal v2）、协议扩展（963 cell_space_report）与逐项裁决细化见 [World 重启对账设计](./world-reconciliation.md)（设计稿，评审中）。
+对账的记录格式（journal v2）、协议扩展（967 cell_space_report）与逐项裁决细化见 [World 重启对账设计](./world-reconciliation.md)（批A/批B 已实施，批C 待实施）。
 
 ## 7. 完整 Space/Instance 迁移
 

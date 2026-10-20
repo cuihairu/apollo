@@ -57,6 +57,7 @@ constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 constexpr std::uint16_t kRetireRequestId = id_of(MsgId::cell_retire_request);
 constexpr std::uint16_t kRetireReplyId = id_of(MsgId::cell_retire_reply);
+constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
 const char* kRouteJson = APOLLO_TEST_ROUTE_JSON;
 
 std::uint64_t now_ms() {
@@ -290,6 +291,28 @@ struct CellEnd {
         payload.resize(payload.size() / 2);  // 截断 → decode 失败
         return manager->link("world")
                    ->send(kRetireRequestId, payload.data(), payload.size(),
+                          link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
+    // 967 自报（对账批B）：已应用归属视图逐 Space 一帧。
+    bool send_space_report(std::uint64_t request_id, std::uint64_t cell_id,
+                           std::uint64_t start_epoch, std::uint64_t space_id,
+                           std::uint64_t applied_version,
+                           std::uint64_t applied_mgmt_epoch) {
+        std::vector<wire::FieldValue> f(6);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = static_cast<std::int64_t>(cell_id);
+        f[2].integer = static_cast<std::int64_t>(start_epoch);
+        f[3].integer = static_cast<std::int64_t>(space_id);
+        f[4].integer = static_cast<std::int64_t>(applied_version);
+        f[5].integer = static_cast<std::int64_t>(applied_mgmt_epoch);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kSpaceReportId, f, payload)) {
+            return false;
+        }
+        return manager->link("world")
+                   ->send(kSpaceReportId, payload.data(), payload.size(),
                           link::SendClass::kReliable)
                == link::SendCode::kAccepted;
     }
@@ -1855,6 +1878,183 @@ bool test_journal_v2_write_ahead_gates_declaration() {
     return true;
 }
 
+// ---------- 对账自报与逐项裁决（断连对账批B 切片）----------
+// 967 cell_space_report（设计稿 world-reconciliation §3/§4）：cell 在 961 受理
+// 后逐 Space 自报本地已应用归属视图（每条目一帧——生成链无重复组）；World
+// 逐项核对权威归属表：匹配保持 / 版本冲突该 Space 冻结（不认领不释放、冲突
+// 集观测面）/ 未登记权威（池外 Space）冻结 / 释放态上报 = 收敛滞后不冲突 /
+// 未登记或旧化身上报丢弃。无专用回执——962 全池权威视图即裁决载体。
+bool test_cell_space_report_adjudication() {
+    std::cout << "Running: test_cell_space_report_adjudication..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {71, 72};
+    server.config.cellExpiryMs = 2500;  // 测试窗（生产默认 30000）
+    TEST_ASSERT(server.start(127), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+    RegisterReply r;
+
+    // cell 81 认领 71/72 v1。
+    CellEnd cell_a;
+    TEST_ASSERT(dial_cell(server, cell_a, "cell-report-a"), "cell a dialed");
+    TEST_ASSERT(register_roundtrip(cell_a, 4401, 81, 1, "127.0.0.1", 9401, 1, 10, 0, true, r),
+                "cell 81 registered");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(71) && assigns.count(72)
+                           && assigns[71].ready && assigns[72].ready;
+                }, 3000),
+                "cell 81 claimed 71/72");
+
+    // 匹配自报：两 Space 均按权威视图上报 → 无冲突，幂等重复不重裁决。
+    TEST_ASSERT(cell_a.send_space_report(1, 81, 1, 71, 1, 77), "report 71 v1");
+    TEST_ASSERT(cell_a.send_space_report(2, 81, 1, 72, 1, 77), "report 72 v1");
+    TEST_ASSERT(wait_until([&] {
+                    cell_a.pump();  // 出队发送（kAccepted = 入队，泵才上线）
+                    return server.world->space_report_count() >= 2;
+                }, 3000),
+                "match reports adjudicated");
+    TEST_ASSERT(server.world->conflicted_space_count() == 0, "matching view: no conflict");
+    TEST_ASSERT(cell_a.send_space_report(3, 81, 1, 71, 1, 77), "idempotent report");
+    TEST_ASSERT(wait_until([&] {
+                    cell_a.pump();
+                    return server.world->space_report_count() >= 3;
+                }, 3000),
+                "idempotent report adjudicated");
+    TEST_ASSERT(server.world->conflicted_space_count() == 0, "repeat keeps no conflict");
+
+    // 版本冲突自报：72 报 v9（权威 v1）→ 72 冻结；71 报文不变不受累。
+    TEST_ASSERT(cell_a.send_space_report(4, 81, 1, 72, 9, 77), "conflict report 72 v9");
+    TEST_ASSERT(wait_until([&] {
+                    cell_a.pump();
+                    return server.world->conflicted_space_count() == 1;
+                }, 3000),
+                "version conflict freezes space 72");
+
+    // 旁证 cell 82：71/72 均归属 81——71 收撤销标记、72 冻结完全静默（不推
+    // 新分配也不推撤销标记）。账清零重记：后续断言只看 cell 82 收到的帧
+    //（全局账含 cell 81 既有收帧，不能作旁证）。
+    CellEnd cell_b;
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        assigns.clear();
+    }
+    TEST_ASSERT(dial_cell(server, cell_b, "cell-report-b"), "cell b dialed");
+    TEST_ASSERT(register_roundtrip(cell_b, 4402, 82, 1, "127.0.0.1", 9402, 1, 10, 0, true, r),
+                "cell 82 registered");
+    TEST_ASSERT(wait_until([&] {
+                    cell_b.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(71) && !assigns[71].ready
+                           && assigns[71].assigned_cell_id == 81;
+                }, 3000),
+                "cell 82 gets revoke marker for 71");
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        TEST_ASSERT(!assigns.count(72), "frozen space 72 not pushed at all");
+    }
+    const auto* frozen = server.world->find_space_assignment(72);
+    TEST_ASSERT(frozen != nullptr && frozen->cell_id == 81, "frozen space keeps owner");
+
+    // 未登记权威：上报池外 Space 999 → 冲突集 +1。
+    TEST_ASSERT(cell_b.send_space_report(5, 82, 1, 999, 1, 77), "out-of-pool report");
+    TEST_ASSERT(wait_until([&] {
+                    cell_b.pump();
+                    return server.world->conflicted_space_count() == 2;
+                }, 3000),
+                "unregistered authority freezes 999");
+
+    // 过期摘除 cell 81：71 正常释放回池（owner→0），冻结的 72 不释放。
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a71 = server.world->find_space_assignment(71);
+                    return a71 != nullptr && a71->cell_id == 0;
+                }, 4000),
+                "expired owner releases 71");
+    const auto* held = server.world->find_space_assignment(72);
+    TEST_ASSERT(held != nullptr && held->cell_id == 81, "conflict freeze blocks release");
+
+    // 释放态上报 = 收敛滞后：cell 82 报 71（owner 已 0）→ 不入冲突集。
+    TEST_ASSERT(cell_b.send_space_report(6, 82, 1, 71, 1, 77), "released-space report");
+    TEST_ASSERT(wait_until([&] {
+                    cell_b.pump();
+                    return server.world->space_report_count() >= 5;
+                }, 3000),
+                "released-space report adjudicated");
+    TEST_ASSERT(server.world->conflicted_space_count() == 2,
+                "released-space report is convergence lag, not conflict");
+
+    // 释放的 71 可被重认领（冻结不外溢）：cell 83 首注册 → 71 v2，72 仍冻结。
+    CellEnd cell_c;
+    TEST_ASSERT(dial_cell(server, cell_c, "cell-report-c"), "cell c dialed");
+    TEST_ASSERT(register_roundtrip(cell_c, 4403, 83, 1, "127.0.0.1", 9403, 1, 10, 0, true, r),
+                "cell 83 registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a71 = server.world->find_space_assignment(71);
+                    return a71 != nullptr && a71->cell_id == 83 && a71->version == 2;
+                }, 3000),
+                "released 71 reclaimed at v2");
+    const auto* still = server.world->find_space_assignment(72);
+    TEST_ASSERT(still != nullptr && still->cell_id == 81 && server.world->conflicted_space_count() == 2,
+                "72 stays frozen for claims and reports");
+
+    // 未登记/旧化身上报：丢弃不裁决（计数不前进、冲突集不动；泵上下行走完
+    // 发送链——确证丢弃发生在受理面裁决，而非报文滞留队列）。
+    TEST_ASSERT(cell_b.send_space_report(7, 77, 1, 71, 1, 77), "unregistered report");
+    TEST_ASSERT(cell_b.send_space_report(8, 82, 9999, 71, 1, 77), "stale epoch report");
+    {
+        const auto deadline = std::chrono::steady_clock::now()
+            + std::chrono::milliseconds(300);
+        while (std::chrono::steady_clock::now() < deadline) {
+            cell_b.pump();
+            std::this_thread::sleep_for(10ms);
+        }
+    }
+    TEST_ASSERT(server.world->space_report_count() == 6, "dropped reports not adjudicated");
+    TEST_ASSERT(server.world->conflicted_space_count() == 2, "no conflict from dropped reports");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 生产客户端自报接线（批B）：CellRegisterClient 在 961 受理后自动逐 Space
+// 上发 967（已应用归属视图）——World 侧匹配裁决无冲突。
+bool test_production_client_space_report() {
+    std::cout << "Running: test_production_client_space_report..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {7};
+    TEST_ASSERT(server.start(128), "world started with M1 port");
+
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = server.world->m1Link().listenPort();
+    cfg.cell_id = 31;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8803;
+    cfg.start_epoch = 9;
+    cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 40;
+    auto client = world_app::makeCellRegisterClient(cfg);
+    TEST_ASSERT(client->start(), "client started");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return server.world->space_report_count() >= 1
+                           && server.world->conflicted_space_count() == 0;
+                }, 5000),
+                "client self-reported applied view after admission");
+    const auto* a7 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7 != nullptr && a7->cell_id == 31 && a7->version == 1,
+                "assignment matches reported view");
+    client->stop();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // 断连存疑标记（L101 断连存疑切片）：控制链路断（对端 TCP 关）→ 注册表
 // 条目置存疑（gap 表 §line71：断开后先标记存疑对账，不立即另端重建——
 // 本切片只落标记与清除，对账/重建约束随既有过期释放面）；同 ID 同代次
@@ -1931,6 +2131,8 @@ int main() {
                     && test_watermark_journal_persists_across_restart()
                     && test_journal_v2_assignment_state_across_restart()
                     && test_journal_v2_write_ahead_gates_declaration()
+                    && test_cell_space_report_adjudication()
+                    && test_production_client_space_report()
                     && test_cell_link_down_marks_suspect();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;
