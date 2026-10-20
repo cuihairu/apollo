@@ -311,25 +311,24 @@ int main(int argc, char* argv[]) {
                 rc.authority_epoch = config.m1AuthorityEpoch;
                 rc.link_grace_ms = config.linkGraceMs;
                 register_client = makeCellRegisterClient(std::move(rc));
-                // 962 分配应用面（L101 首切片 + L108 回收切片）：监听在 pre-tick
-                // 泵内同步回调 = 内核线程上下文（add_space 注册窗含此面），按
-                // 版本前进触发（客户端去重）。ready=1 且归属本 cell → 幂等登记
-                // 进内核路由表；ready=0 或归属它方（含撤销标记：World 释放/
-                // 重分配）→ 撤本地路由（占用中被拒即保持，重试随排空联动批）。
+                // 962 分配应用面（L101 首切片 + L108 回收/占用联动切片）：监听
+                // 在 pre-tick 泵内同步回调 = 内核线程上下文（add_space 注册窗含
+                // 此面），按版本前进触发（客户端去重）。ready=1 且归属本 cell →
+                // 取消陈旧待撤（最新 World 视图优先）+ 幂等登记进内核路由表；
+                // ready=0 或归属它方（撤销标记：World 释放/重分配）→ 入待撤表
+                // （占用中被拒每拍重试至腾空成功，见 CellApp::drainPendingRevokes）。
                 register_client->setSpaceAssignListener(
                     [&cell, &config, &logger](const SpaceAssignRecord& rec) {
                         if (!rec.ready || rec.assigned_cell_id != config.cellId) {
-                            const auto removed = cell.remove_space(rec.space_id);
-                            if (removed != 0) {
-                                logger->info("space revoked: id="
+                            if (cell.request_space_revoke(rec.space_id)) {
+                                logger->info("space revoke requested: id="
                                              + std::to_string(rec.space_id)
                                              + " version="
-                                             + std::to_string(rec.version)
-                                             + " scene="
-                                             + std::to_string(removed));
+                                             + std::to_string(rec.version));
                             }
                             return;
                         }
+                        cell.cancel_space_revoke(rec.space_id);
                         const auto scene_id = cell.add_space(
                             rec.space_id,
                             space_descriptor_for(config, rec.space_id, ""));

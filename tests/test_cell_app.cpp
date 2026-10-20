@@ -632,6 +632,94 @@ bool test_cell_kernel_remove_space() {
     return true;
 }
 
+// 撤销待重试面（L108 占用联动切片）：request_space_revoke 受理跨线程只入
+// 队，gameLoop tick 边界重试——占用中被拒的撤销在玩家跨境腾空后自动成功，
+// 无需第二次显式调用。观测面经 post_tick 钩子（内核线程）读 space_count，
+// 测试线程不碰内核状态（同 remove_space 例纪律）。
+bool test_cell_kernel_pending_revoke_retry() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+
+    const auto space7_scene = cell.add_space(7, second_space_descriptor());
+    TEST_ASSERT(space7_scene != 0, "space 7 scene created");
+    TEST_ASSERT(!cell.request_space_revoke(1), "default space revoke refused");
+    // 未知空间受理入队（跨线程面不读内核态），消费 tick 边界按「无路由」
+    // 出表丢弃——start 后首拍内归零
+    TEST_ASSERT(cell.request_space_revoke(999), "unknown space id accepted");
+    TEST_ASSERT(cell.pending_revoke_count() == 1, "pending holds unknown id");
+
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    TEST_ASSERT(cell.pending_revoke_count() == 0, "unknown id discarded by drain");
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent_in_space(61, 71, 7, 7001)),
+                "create in space 7 accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(71) == 61; },
+                           std::chrono::seconds(3)),
+                "player bound in space 7");
+
+    TEST_ASSERT(cell.request_space_revoke(7), "occupied space revoke accepted");
+    TEST_ASSERT(!cell.request_space_revoke(7), "duplicate revoke idempotent");
+    TEST_ASSERT(cell.pending_revoke_count() == 1, "one pending revoke");
+
+    std::atomic<int> route_count{-1};
+    cell.set_post_tick([&](double) {
+        route_count.store(static_cast<int>(cell.space_count()));
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));  // > 5 拍
+    TEST_ASSERT(route_count.load() == 2, "occupied keeps route under retry");
+    TEST_ASSERT(cell.pending_revoke_count() == 1, "still pending while occupied");
+
+    TEST_ASSERT(cell.submitIntent(make_xborder_intent(61, 71, 1, 7)),
+                "player vacates space 7 via border");
+    TEST_ASSERT(wait_until([&] { return route_count.load() == 1; },
+                           std::chrono::seconds(3)),
+                "pending retry removes route after vacate");
+    TEST_ASSERT(cell.pending_revoke_count() == 0, "pending cleared on success");
+
+    cell.stop();
+    return true;
+}
+
+// 取消待撤面：World 重认领（962 ready=1 回推）优先于陈旧撤销——占用中
+// 的待撤被取消后，腾空不再触发撤销，路由保持。
+bool test_cell_kernel_cancel_space_revoke() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+
+    TEST_ASSERT(cell.add_space(7, second_space_descriptor()) != 0, "space 7 created");
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent_in_space(62, 72, 7, 7002)),
+                "create in space 7 accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(72) == 62; },
+                           std::chrono::seconds(3)),
+                "player bound in space 7");
+
+    TEST_ASSERT(cell.request_space_revoke(7), "revoke pending");
+    TEST_ASSERT(cell.pending_revoke_count() == 1, "one pending before cancel");
+    cell.cancel_space_revoke(7);
+    TEST_ASSERT(cell.pending_revoke_count() == 0, "cancel clears pending");
+    cell.cancel_space_revoke(7);  // 重复取消 = no-op 不崩不回退
+
+    std::atomic<int> route_count{-1};
+    cell.set_post_tick([&](double) {
+        route_count.store(static_cast<int>(cell.space_count()));
+    });
+    TEST_ASSERT(cell.submitIntent(make_xborder_intent(62, 72, 1, 7)),
+                "player vacates space 7 via border");
+    std::this_thread::sleep_for(std::chrono::milliseconds(120));  // > 5 拍
+    TEST_ASSERT(route_count.load() == 2, "cancelled revoke keeps route after vacate");
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -655,6 +743,8 @@ int main() {
         {"config_declared_spaces", test_config_declared_spaces},
         {"cell_kernel_freeze_face", test_cell_kernel_freeze_face},
         {"cell_kernel_remove_space", test_cell_kernel_remove_space},
+        {"cell_kernel_pending_revoke_retry", test_cell_kernel_pending_revoke_retry},
+        {"cell_kernel_cancel_space_revoke", test_cell_kernel_cancel_space_revoke},
     };
 
     for (const auto& c : cases) {

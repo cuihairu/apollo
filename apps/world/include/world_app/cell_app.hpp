@@ -33,6 +33,7 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -150,6 +151,17 @@ public:
     // 撤——默认 Space 拒撤、未知空间幂等、占用中（avatar_count > 0）拒绝
     // 保持路由（排空/迁移联动后续批）。
     std::uint64_t remove_space(std::uint64_t space_id);
+    // 撤销待重试面（L108 占用联动切片）：request_space_revoke 受理跨线程
+    // 只入队（互斥表，不读内核状态——同 submitIntent 纪律；默认 Space 与
+    // 重复待撤拒收 false），消费在 gameLoop tick 边界（内核线程单写者）——
+    // 占用中被拒的撤销每拍重试至腾空成功。cancel_space_revoke 供 World 重
+    // 认领时取消陈旧待撤（最新 World 视图优先），重复取消 no-op。
+    bool request_space_revoke(std::uint64_t space_id);
+    void cancel_space_revoke(std::uint64_t space_id);
+    // 待撤计数（atomic 观测面，跨线程安全）
+    std::size_t pending_revoke_count() const {
+        return pendingRevokes_.load(std::memory_order_acquire);
+    }
     // 路由查询（同 default_scene_id 的内核线程上下文约束；未知空间回落默认）
     std::uint64_t scene_id_of_space(std::uint64_t space_id) const {
         return resolve_scene_id(space_id);
@@ -196,6 +208,8 @@ private:
                             const squad_instance::ActiveSquadInstance* binding);
     void deliverSquadStateToParty(std::uint64_t party_id);
     void driveSquadGameplay(double delta_seconds);
+    // 待撤销重试（tick 边界，内核线程——见 request_space_revoke 注）
+    void drainPendingRevokes();
 
     // 延时应答出口（929；request_id = 0 静默）。经 egress 缝。
     void sendAck(std::uint64_t request_id, std::int32_t code, const std::string& message);
@@ -255,6 +269,12 @@ private:
     std::uint64_t defaultSpaceId_ = 1;
     // space → scene 路由（P1-1 换幕目标解析）
     std::unordered_map<std::uint64_t, std::uint64_t> spaceToScene_;
+    // 待撤销重试表（L108 占用联动切片）：受理跨线程入队 / gameLoop tick
+    // 边界消费，互斥表 + 计数 atomic 双保险（消费侧持锁只做表操作与
+    // remove_space 调用，remove_space 本身不取本锁——无锁序反转）。
+    std::mutex pendingRevokesMutex_;
+    std::unordered_set<std::uint64_t> pendingRevokesSet_;
+    std::atomic<std::size_t> pendingRevokes_{0};
 
     // metrics admin 通道计数面（last_* 为绝对值→Counter 增量推进的影子读数，
     // 内核线程独占）

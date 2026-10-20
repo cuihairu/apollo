@@ -276,6 +276,14 @@ void CellApp::stop() {
         baseBusinessDial_.reset();
     }
 
+    // 待撤销重试表随内核线程收口清空（消费者已 join，无竞争；未完成的
+    // 撤销由 World 侧权威视图兜底——重注册收敛）
+    {
+        std::lock_guard<std::mutex> lock(pendingRevokesMutex_);
+        pendingRevokes_.store(0, std::memory_order_release);
+        pendingRevokesSet_.clear();
+    }
+
     if (worldHost_) {
         worldHost_->stop();
     }
@@ -921,6 +929,10 @@ void CellApp::gameLoop() {
 
             worldHost_->tick();
 
+            // 占用撤销重试（L108 占用联动切片）：本拍跨境腾空后下一拍即可
+            // 成功的撤销，无需 World 重推
+            drainPendingRevokes();
+
             // 小队副本玩法拍（P2 真实链路）：Running 副本 tick 推进（含已受理
             // 击杀的 battle 输入序）+ 结算期副本收尾；状态帧随后续操作/收尾下发
             driveSquadGameplay(delta_seconds);
@@ -1271,6 +1283,64 @@ std::uint64_t CellApp::remove_space(std::uint64_t space_id) {
     }
     spaceToScene_[space_id] = scene_id;  // 销毁失败则恢复路由，保持同存
     return 0;
+}
+
+bool CellApp::request_space_revoke(std::uint64_t space_id) {
+    // 受理点（L108 占用联动切片）：只入队不读内核状态（跨线程安全面同
+    // submitIntent 纪律——世界状态只允许内核线程读写）；默认 Space 拒收
+    //（remove_space 同口径），重复待撤幂等拒收。
+    if (space_id == defaultSpaceId_) {
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(pendingRevokesMutex_);
+        if (!pendingRevokesSet_.insert(space_id).second) {
+            return false;  // 已在待撤表
+        }
+    }
+    pendingRevokes_.fetch_add(1, std::memory_order_acq_rel);
+    return true;
+}
+
+void CellApp::cancel_space_revoke(std::uint64_t space_id) {
+    {
+        std::lock_guard<std::mutex> lock(pendingRevokesMutex_);
+        if (pendingRevokesSet_.erase(space_id) == 0) {
+            return;
+        }
+    }
+    pendingRevokes_.fetch_sub(1, std::memory_order_acq_rel);
+}
+
+void CellApp::drainPendingRevokes() {
+    // tick 边界重试（L108 占用联动切片，内核线程单写者）：腾空即撤销成功
+    // 出表，占用被拒留在表下一拍再试；路由已消失（他面撤过）直接出表。
+    if (pendingRevokes_.load(std::memory_order_acquire) == 0) {
+        return;
+    }
+    std::size_t done = 0;
+    {
+        std::lock_guard<std::mutex> lock(pendingRevokesMutex_);
+        for (auto it = pendingRevokesSet_.begin(); it != pendingRevokesSet_.end();) {
+            const auto space_id = *it;
+            if (spaceToScene_.find(space_id) == spaceToScene_.end()) {
+                it = pendingRevokesSet_.erase(it);  // 路由已消失：出表
+                ++done;
+                continue;
+            }
+            if (remove_space(space_id) != 0) {
+                it = pendingRevokesSet_.erase(it);
+                ++done;
+                worldLog().info("space revoked (pending retry): space="
+                                + std::to_string(space_id));
+                continue;
+            }
+            ++it;  // 占用中：下一拍再试
+        }
+    }
+    if (done != 0) {
+        pendingRevokes_.fetch_sub(done, std::memory_order_acq_rel);
+    }
 }
 
 apollo::game::world::Scene* CellApp::find_scene_by_entity(EntityID entity_id) {
