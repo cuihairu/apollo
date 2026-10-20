@@ -13,8 +13,10 @@
 //                 鉴权前移——鉴权在握手层 route_version/epoch 校验）
 //
 // M1 交付面：POSIX only（_WIN32 下本 TU 为空——Windows 底座不进 M1 内核批）。
-// 不做：证书/TLS（§5.9 归客户端段）、SO_REUSEPORT 多进程分流量、
-// IPv6 双栈显式用例（getaddrinfo 取首结果，本机测试全走 127.0.0.1）。
+// 不做：证书/TLS（§5.9 归客户端段）、SO_REUSEPORT 多进程分流量。
+// 双栈主机名：getaddrinfo 全候选按序尝试——首候选拒连不判死（本机回环的非阻塞
+// connect 一律先报 EINPROGRESS，RST 在下一拍 POLLOUT 才显形），逐候选收敛、
+// 耗尽才上报首个 errno；不实现 happy-eyeballs 并行探测。
 
 #include "apollo/net/link/transport.hpp"
 
@@ -23,6 +25,8 @@
 #include <string>
 
 #if !defined(_WIN32)
+
+#include <netdb.h>
 
 namespace apollo::net::link {
 
@@ -89,11 +93,22 @@ public:
 
 private:
     void classify_failure(int err);
+    void free_candidates();
+    // 前移到下一候选；false = 候选耗尽。
+    bool advance_candidate();
+    // 采纳当前候选（非阻塞 connect 已发起）；false = socket() 不可用，跳过。
+    bool begin_current(std::uint64_t now_ms);
+    // 收敛当前候选：在途 / 已建成 / 失败（首个 errno 记 first_err_）。
+    PumpResult drain_current(std::uint64_t now_ms);
 
     int fd_ = -1;
     ConnectState state_ = ConnectState::kIdle;
     ConnectFailure failure_ = ConnectFailure::kSystemError;
     std::uint64_t deadline_ms_ = 0;
+    std::uint32_t connect_timeout_ms_ = 0;
+    int first_err_ = 0;
+    struct addrinfo* candidates_ = nullptr;  // 候选链，归本连接器所有（cancel 释放）
+    struct addrinfo* cursor_ = nullptr;      // 当前候选
 };
 
 // 入站接受面。port 0 = 内核分配（start 后 port() 读实际端口——测试用）。

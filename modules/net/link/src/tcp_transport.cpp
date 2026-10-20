@@ -131,6 +131,7 @@ TcpConnector::~TcpConnector() {
 bool TcpConnector::start(const std::string& host, std::uint16_t port, std::uint32_t timeout_ms,
                          std::uint64_t now_ms) {
     cancel();
+    connect_timeout_ms_ = timeout_ms;
 
     ::addrinfo hints{};
     hints.ai_family = AF_UNSPEC;
@@ -143,33 +144,19 @@ bool TcpConnector::start(const std::string& host, std::uint16_t port, std::uint3
         failure_ = ConnectFailure::kSystemError;  // 名字解析失败归系统错（M1 不细分 DNS）
         return false;
     }
-
-    bool started = false;
-    for (::addrinfo* ai = res; ai != nullptr; ai = ai->ai_next) {
-        const int fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-        if (fd < 0) {
-            continue;
+    candidates_ = res;
+    cursor_ = res;
+    for (;;) {
+        if (begin_current(now_ms)) {
+            return true;
         }
-        set_nonblocking(fd);
-        if (::connect(fd, ai->ai_addr, ai->ai_addrlen) == 0) {
-            fd_ = fd;
-            state_ = ConnectState::kConnected;  // 本机回环常见：立即建成
-            started = true;
+        if (!advance_candidate()) {
             break;
         }
-        if (errno == EINPROGRESS) {
-            fd_ = fd;
-            state_ = ConnectState::kConnecting;
-            deadline_ms_ = now_ms + timeout_ms;
-            started = true;
-            break;
-        }
-        classify_failure(errno);
-        ::close(fd);
-        break;  // 首候选即分类失败——不逐候选吞错（错误是数据）
     }
-    ::freeaddrinfo(res);
-    return started;
+    state_ = ConnectState::kFailed;
+    failure_ = ConnectFailure::kSystemError;  // socket() 全候选不可用
+    return false;
 }
 
 void TcpConnector::cancel() {
@@ -178,17 +165,47 @@ void TcpConnector::cancel() {
         fd_ = -1;
     }
     state_ = ConnectState::kIdle;
+    free_candidates();
+    first_err_ = 0;
 }
 
-TcpConnector::PumpResult TcpConnector::pump(std::uint64_t now_ms) {
+void TcpConnector::free_candidates() {
+    if (candidates_ != nullptr) {
+        ::freeaddrinfo(candidates_);
+        candidates_ = nullptr;
+    }
+    cursor_ = nullptr;
+}
+
+bool TcpConnector::advance_candidate() {
+    cursor_ = (cursor_ != nullptr) ? cursor_->ai_next : nullptr;
+    return cursor_ != nullptr;
+}
+
+bool TcpConnector::begin_current(std::uint64_t now_ms) {
+    const int fd = ::socket(cursor_->ai_family, cursor_->ai_socktype, cursor_->ai_protocol);
+    if (fd < 0) {
+        return false;  // socket() 不可用：跳过该候选
+    }
+    fd_ = fd;
+    set_nonblocking(fd_);
+    deadline_ms_ = now_ms + connect_timeout_ms_;
+    if (::connect(fd_, cursor_->ai_addr, cursor_->ai_addrlen) == 0) {
+        state_ = ConnectState::kConnected;  // 本机回环常见：立即建成
+    } else {
+        state_ = ConnectState::kConnecting;  // EINPROGRESS：在途，drain_current 收敛
+    }
+    return true;
+}
+
+TcpConnector::PumpResult TcpConnector::drain_current(std::uint64_t now_ms) {
     if (state_ == ConnectState::kConnected) {
         return PumpResult::kConnected;
     }
-    if (state_ != ConnectState::kConnecting) {
-        return state_ == ConnectState::kFailed ? PumpResult::kFailed : PumpResult::kInProgress;
-    }
     if (now_ms >= deadline_ms_) {
-        classify_failure(ETIMEDOUT);
+        if (first_err_ == 0) {
+            first_err_ = ETIMEDOUT;
+        }
         ::close(fd_);
         fd_ = -1;
         return PumpResult::kFailed;
@@ -206,13 +223,37 @@ TcpConnector::PumpResult TcpConnector::pump(std::uint64_t now_ms) {
         so_err = errno;
     }
     if (so_err != 0) {
-        classify_failure(so_err);
+        if (first_err_ == 0) {
+            first_err_ = so_err;
+        }
         ::close(fd_);
         fd_ = -1;
         return PumpResult::kFailed;
     }
     state_ = ConnectState::kConnected;
     return PumpResult::kConnected;
+}
+
+TcpConnector::PumpResult TcpConnector::pump(std::uint64_t now_ms) {
+    if (state_ == ConnectState::kConnected) {
+        return PumpResult::kConnected;
+    }
+    if (state_ != ConnectState::kConnecting) {
+        return state_ == ConnectState::kFailed ? PumpResult::kFailed : PumpResult::kInProgress;
+    }
+    for (;;) {
+        const PumpResult r = drain_current(now_ms);
+        if (r != PumpResult::kFailed) {
+            return r;
+        }
+        // 当前候选失败不判死：前移下一候选（双栈主机名常 ::1 在前、监听只绑
+        // IPv4 字面量 → ::1 拒连）。全部候选耗尽才类型化上报首个 errno——
+        // 错误仍是数据，只是不再因解析顺序而判死整次拨号。
+        if (!advance_candidate() || !begin_current(now_ms)) {
+            classify_failure(first_err_);
+            return PumpResult::kFailed;
+        }
+    }
 }
 
 std::unique_ptr<ILinkTransport> TcpConnector::take_transport() {
