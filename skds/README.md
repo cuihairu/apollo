@@ -158,9 +158,6 @@ client.registerHandler(messageId, (message) => {
 ## 文档
 
 详细文档请查看各平台 SDK 目录：
-- [Unity SDK 文档](./unity/README.md)
-- [Cocos SDK 文档](./cocos/README.md)
-- [LayaBox SDK 文档](./laya/README.md)
 
 ## 许可证
 
