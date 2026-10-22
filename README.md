@@ -8,7 +8,7 @@
 
 **A lightweight instance-based multiplayer game server engine.**
 
-[![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/cuihairu/apollo/releases)
+<p align="center">[![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/cuihairu/apollo/releases)</p>
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
 [![Language](https://img.shields.io/badge/language-C%2B%2B20-blue.svg)](https://github.com/cuihairu/apollo)
