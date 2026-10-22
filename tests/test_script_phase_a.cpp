@@ -1,5 +1,5 @@
 // ScriptRuntime §3.2 Phase A 两段式热替换测试（scripting-lua.md §3.2：
-// 工作线程预加载 + owning 面 O(1) 换表；docs/modules/script.md 契约面）。
+// 工作线程预加载 + owning 面 O(1) 换表；docs/zh/modules/script.md 契约面）。
 //
 // 覆盖：
 //   - prepare → commit 往返（产物字节 + hash + 版本/审计入账）

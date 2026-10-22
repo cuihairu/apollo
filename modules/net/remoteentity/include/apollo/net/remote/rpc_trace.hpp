@@ -4,7 +4,7 @@
 //
 // 为 RPC 调用创建/传播 trace context 并发射 span。复用 linktrace 既有
 // 原语（TraceContext/SpanRecord/emit_span），不引 OTLP exporter。
-// 设计见 docs/architecture/remote-entity-call-design.md §7 + logging.md §5.1。
+// 设计见 docs/zh/architecture/remote-entity-call-design.md §7 + logging.md §5.1。
 //
 
 #include <cstdint>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 路1 端到端更新演练（docs/design/backup-revive.md §8 验收，re-home 版）：
+# 路1 端到端更新演练（docs/zh/design/backup-revive.md §8 验收，re-home 版）：
 # World 排空（fleetctl drain 956/957，期限强停到 drained 终态）→ 原子换
 # 二进制 → SIGTERM 优雅停（journal 排空）→ machined 退避重启 → 恢复相位
 # 收敛（离线锚点复断 + 全量重报 + 目录镜像）→ 录取面恢复 → 逐玩家存档

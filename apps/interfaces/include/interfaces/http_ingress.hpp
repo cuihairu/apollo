@@ -15,7 +15,7 @@ class TlsServerContext;
 
 namespace interfaces {
 
-// 独立 interfaces HTTP/HTTPS 入口（L45 批④；docs/index.md:40「支付和渠道
+// 独立 interfaces HTTP/HTTPS 入口（L45 批④；docs/zh/index.md:40「支付和渠道
 // 回调由可选 interfaces 的 HTTP/HTTPS 入口接收」的进程壳承载面）。纯泵
 // 模型（零内部线程，宿主 pump() 驱动，observer 回调全在泵线程）——
 // 传输/生命周期纪律与 gateway 入口同源。ws 侧出站面（平台回执 send）

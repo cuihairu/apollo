@@ -1,6 +1,6 @@
 #pragma once
 //
-// 崩溃采集初始化（crash-capture 设计批②；docs/design/crash-capture.md §2）。
+// 崩溃采集初始化（crash-capture 设计批②；docs/zh/design/crash-capture.md §2）。
 //
 // 定位：进程级崩溃采集面——minidump 落盘（Crashpad out-of-process handler）。
 // 初始化点 = 各 app main() 最早段（server.start() 前），采集面必须先立：

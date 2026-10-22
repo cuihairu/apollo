@@ -3,7 +3,7 @@
 // RemoteMethodSchema — 远程方法 schema（remote-entity-call 四件套之一）。
 //
 // 可执行方法定义：方法名/别名/调用模式/目标域/参数类型/超时/幂等。
-// 设计见 docs/architecture/remote-entity-call-design.md §5.2。
+// 设计见 docs/zh/architecture/remote-entity-call-design.md §5.2。
 //
 
 #include <chrono>

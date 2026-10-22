@@ -2,7 +2,7 @@
  * @file test_rng_substream.cpp
  * @brief RNG 子流派生测试（battle-determinism §4 约束④：随机数）
  *
- * 断言口径（docs/design/battle-determinism.md §4）：
+ * 断言口径（docs/zh/design/battle-determinism.md §4）：
  *  - 同 (world_seed, tick, stream_id) 三元组派生同一序列——任意机器、
  *    任意调用次序下可重放（无全局状态、无续流游标）；
  *  - stream_id 分域隔离——一个系统抽几次不影响别系统序列；

@@ -1,7 +1,7 @@
 [English](README.md) | [中文](README.zh.md)
 
 <p align="center">
-  <img src="docs/public/apollo.png" alt="Apollo Logo" height="80"/>
+  <img src="docs/zh/public/apollo.png" alt="Apollo Logo" height="80"/>
 </p>
 
 # Apollo
@@ -26,15 +26,15 @@ Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边
 可运行进程为 `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined`；设计文档里的 loginServer/baseServer/worldServer 是 `login`/`base`/`world` 二进制的角色称谓，`cell` 是 `world` 二进制的 cell 执行角色（`--role=cell`）。Cell 为分区。
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/public/architecture/system-zh-mobile.svg" />
-  <img src="docs/public/architecture/system-zh.svg" alt="Apollo 目标架构：Base 长期资料、cell 模拟与 World 管理分别负责" />
+  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/system-zh-mobile.svg" />
+  <img src="docs/zh/public/architecture/system-zh.svg" alt="Apollo 目标架构：Base 长期资料、cell 模拟与 World 管理分别负责" />
 </picture>
 
 目标设计图：Base ↔ database 独立原型已具备；World/cell 拆分与整体接线仍待完成。
 
 baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运行实体与临时玩法。跨服保持原 Base 和数据库归属；同一个 World 可以通过逐玩家的 Base 关联接待多个区服，无需各服数据库凭证，也不要求同机部署 machined。
 
-支持协议变化的更新通过状态转换、单权威交接、路由切换和源端清理，分别替换 Base、cell 或 World 管理端。活动副本要连续，须迁移完整必要 Instance 状态。目标角色拆分及运行接线仍需实施，见[架构总览](docs/guide/architecture.md)、[服务器应用](docs/apps/index.md)和[跨服场景](docs/design/cross-server-scenes.md)。
+支持协议变化的更新通过状态转换、单权威交接、路由切换和源端清理，分别替换 Base、cell 或 World 管理端。活动副本要连续，须迁移完整必要 Instance 状态。目标角色拆分及运行接线仍需实施，见[架构总览](docs/zh/guide/architecture.md)、[服务器应用](docs/zh/apps/index.md)和[跨服场景](docs/zh/design/cross-server-scenes.md)。
 
 ### 入口与交付面
 
@@ -43,8 +43,8 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 - 动态 Base 查询与持久发货（模块已落地）：订单按稳定玩家身份受理并持久记账，每次投递重新解析「当前 Base + 归属代次」，玩家离线、Base 不可达或迁移升级期间待办不丢；发货以去重凭据原子提交，重复通知、回执丢失与崩溃重启收敛为一次发货。interfaces→订单受理、baseServer 写权生命周期、奖励落账 executor 等进程间接线规划中。
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/public/architecture/callbacks-zh-mobile.svg" />
-  <img src="docs/public/architecture/callbacks-zh.svg" alt="Apollo 外部回调与发货：interfaces 受理、动态 Base 解析与幂等发货" />
+  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/callbacks-zh-mobile.svg" />
+  <img src="docs/zh/public/architecture/callbacks-zh.svg" alt="Apollo 外部回调与发货：interfaces 受理、动态 Base 解析与幂等发货" />
 </picture>
 
 ### 进程、工具与 CI
@@ -71,11 +71,11 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 
 > MMO 描述游戏规模和产品形态，不决定服务端拓扑。Apollo 可以支持由副本和对局组成的 MMO 玩法，当前优先副本路径，无缝能力保留设计边界。
 
-[BigWorld 与 Apollo 体系对照](docs/design/bigworld-apollo-mapping.md)
+[BigWorld 与 Apollo 体系对照](docs/zh/design/bigworld-apollo-mapping.md)
 
 ## 核心概念
 
-核心玩法概念（当前代码组件详见[概念指南](docs/guide/concepts.md)）：
+核心玩法概念（当前代码组件详见[概念指南](docs/zh/guide/concepts.md)）：
 
 | 概念 | 职责 | 现有代码与边界 |
 |---|---|---|
@@ -98,7 +98,7 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 - **战斗系统** - `BattleRuntime` 确定性战斗域（五段相位 + hash 链指纹），结算经所属 Base 与 database 确认
 - **数据存储** - 玩家档案文件原子写 + `PersistJournal` write-behind；外部 DB/Redis 未接线
 - **可观测** - 自研日志、结构化事件、MetricRegistry 和 span/trace 原语；尚未集成专用 Profiler 或 OpenTelemetry SDK/exporter
-- **BigWorld 兼容层** - BigWorld 风格 C++ API facade（`docs/33-BigWorld_Compatibility.md`）
+- **BigWorld 兼容层** - BigWorld 风格 C++ API facade（`docs/zh/33-BigWorld_Compatibility.md`）
 
 ## 更新方案
 
@@ -106,20 +106,20 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 
 仅代码更新保持契约编号、字段和 wire 不变。Lua 可预备、提交、观察与回滚模块，C++ 使用进程替换。保留 gateway 可维持其既有 TCP；替换 gateway 需要排空或客户端恢复。现有原语不代表目标角色的完整升级链路已接通。
 
-详见[更新边界](docs/design/gateway-topology-survey.md)和[契约版本管理](docs/design/sdk-contract.md)。
+详见[更新边界](docs/zh/design/gateway-topology-survey.md)和[契约版本管理](docs/zh/design/sdk-contract.md)。
 
 ## 架构设计
 
-> 目标副本制模型见[架构总览](docs/guide/architecture.md)；仓库现有可执行原型及其状态见[服务器应用](docs/apps/index.md)。
+> 目标副本制模型见[架构总览](docs/zh/guide/architecture.md)；仓库现有可执行原型及其状态见[服务器应用](docs/zh/apps/index.md)。
 
 ### 技术栈
 
 - **编程语言**: C++20
 - **构建系统**: CMake + Ninja，vcpkg 清单模式管理依赖
 - **网络库**: 自写跨平台网络层
-- **序列化/契约**：XML+XSD 契约定义游戏数据语义，`apollo_gen` 生成客户端/服务端契约产物（见 `docs/design/sdk-contract.md`）。protobuf 目前仅作为依赖和测试使用，尚未进入消息通路；当前消息编码由手写 codec 实现。
+- **序列化/契约**：XML+XSD 契约定义游戏数据语义，`apollo_gen` 生成客户端/服务端契约产物（见 `docs/zh/design/sdk-contract.md`）。protobuf 目前仅作为依赖和测试使用，尚未进入消息通路；当前消息编码由手写 codec 实现。
 - **数据库**：当前无需外部存储依赖。玩家档案使用 JSON 文件和 `PersistJournal`；MySQL、Redis、ClickHouse 接入仍属规划。
-- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自写消息总线（规划，`docs/design/net-abstraction.md`）
+- **消息队列**: Kafka 用于可观测管道（规划，决策 #14）；服务间通信用自写消息总线（规划，`docs/zh/design/net-abstraction.md`）
 - **监控系统**: Prometheus + Grafana（规划，批次8）
 - **日志系统**: 自写多级别日志（`apollo::core::log`）；目标链路 LogAgent→Kafka→ClickHouse（决策 #14）
 - **测试框架**: 零依赖断言式单测（统一测试树，ctest 门禁）；legacy GTest 批默认关
@@ -163,7 +163,7 @@ cmake --build build --parallel
 
 CI 与本地开发按改动面三路分流——改一行文档不该全量编译。
 
-1. **文档改动**（`*.md`、`docs/**`、图片）：不编译。主 CI workflow 的
+1. **文档改动**（`*.md`、`docs/zh/**`、图片）：不编译。主 CI workflow 的
    `paths-ignore` 已跳过这些路径。
 2. **代码改动**：只跑改动子集，不全量。
    - `ctest -R '<改动测试>' -C Debug`
@@ -172,7 +172,7 @@ CI 与本地开发按改动面三路分流——改一行文档不该全量编�
 
 ### 最小示例
 
-约 40 行跑起一个宿主托管的游戏服务（完整可编译版见 [quick-start](docs/guide/quick-start.md)，已按实 API 验证）：
+约 40 行跑起一个宿主托管的游戏服务（完整可编译版见 [quick-start](docs/zh/guide/quick-start.md)，已按实 API 验证）：
 
 ```cpp
 #include <apollo/runtime/application_host.hpp>
@@ -233,7 +233,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ### Base 基础设施（modules/base）
 - **定位**: 纯基础设施，无任何框架语义，可被任何 C++ 项目独立使用（不依赖 Apollo 其他模块）
 - **组件**: Time 时间工具、ThreadPool 线程池、IdPool ID 分配、String 字符串工具、Memory 内存工具、Terminal 终端工具
-- 详见 [Base 模块文档](docs/modules/base.md)
+- 详见 [Base 模块文档](docs/zh/modules/base.md)
 
 ### Core 核心框架（modules/core · modules/runtime）
 - **依赖注入**: `apollo::core::di` 极简构造注入容器——类型键 bean 图、拓扑序装配、仅 Singleton/Prototype 两档作用域
@@ -263,7 +263,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **配置系统**: `ConfigRegistry` 键值注册表（内存）
 
 ### Compatibility 兼容层
-- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
+- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/zh/33-BigWorld_Compatibility.md`)
 - **BigWorld API Tests**: `tests/test_bigworld_api.cpp` (CTest: `BigWorldApiTests`)
 
 ## 使用示例
@@ -418,7 +418,7 @@ cd build && ctest -R BigWorldApiTests
 
 ```
 apollo/
-├── apps/                   # 可执行原型与工具；现状见 docs/apps/index.md
+├── apps/                   # 可执行原型与工具；现状见 docs/zh/apps/index.md
 ├── modules/                # 模块化源码：base/core/data/game/net/runtime 等
 ├── include/                # 公共头文件与兼容层头文件
 ├── src/                    # 公共实现与兼容层实现
@@ -426,18 +426,18 @@ apollo/
 ├── examples/               # 示例代码
 ├── sdks/                   # Unity 客户端 SDK 与契约工具（contract 契约 + gen 生成器 + cpp 生成物）
 ├── skds/                   # Cocos / Laya / 历史 SDK 工作区
-├── docs/                   # VitePress 文档站点
+├── docs/zh/                   # VitePress 文档站点
 ├── cmake/                  # CMake 辅助脚本
 └── build*/                 # 构建输出
 ```
 
-详细目录说明见 [Directory Structure](docs/Directory_Structure.md)
+详细目录说明见 [Directory Structure](docs/zh/Directory_Structure.md)
 
 ## 客户端SDK
 
 ### Unity SDK
 
-Unity SDK 部分模块已交付（模块状态详见 [SDK_Structure](docs/sdks/unity/SDK_Structure.md)）：
+Unity SDK 部分模块已交付（模块状态详见 [SDK_Structure](docs/zh/sdks/unity/SDK_Structure.md)）：
 
 - 网络通信管理（NetworkManager，已有）
 - 登录认证（AuthManager，已有）
@@ -482,9 +482,9 @@ await client.LoginAsync(loginRequest);
 
 Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与术语参考了下列开源项目，引用处均标注来源：
 
-- **BigWorld**：BigWorld 风格 C++ API facade（`docs/33-BigWorld_Compatibility.md`）；架构审计含 BigWorld / KBEngine / skynet 三框架源码对照（`docs/analysis/architecture-review.md` §16）
-- **KBEngine**：`docs/qa/` 多篇条目为其源码机制分析
-- **skynet**：观测通道等设计先例（`docs/analysis/architecture-review.md`）
+- **BigWorld**：BigWorld 风格 C++ API facade（`docs/zh/33-BigWorld_Compatibility.md`）；架构审计含 BigWorld / KBEngine / skynet 三框架源码对照（`docs/zh/analysis/architecture-review.md` §16）
+- **KBEngine**：`docs/zh/qa/` 多篇条目为其源码机制分析
+- **skynet**：观测通道等设计先例（`docs/zh/analysis/architecture-review.md`）
 
 第三方依赖：[vcpkg](https://github.com/microsoft/vcpkg)（依赖管理）、[nlohmann/json](https://github.com/nlohmann/json)、[protobuf](https://github.com/protocolbuffers/protobuf)（现为依赖与测试，未上消息通路）、[GTest](https://github.com/google/googletest)、OpenSSL、libcurl、pugixml、readline、crashpad、[VitePress](https://vitepress.dev)（文档站）、GitHub Actions 与 Codecov（CI 与覆盖率）。传输层自持（`modules/net/link`），无 nng。
 

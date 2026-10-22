@@ -20,13 +20,13 @@ names = subprocess.check_output(
 pages = {
     name for name in names
     if name.startswith("docs/")
-    and not name.startswith(("docs/public/", "docs/.vitepress/"))
+    and not name.startswith(("docs/public/", "docs/.vitepress/", "docs/zh/public/"))
     and not any(part in {"node_modules", ".pnpm-store"} for part in Path(name).parts)
     and name.endswith(".md") and (ROOT / name).is_file()
 }
 errors = []
-chinese = {name.removeprefix("docs/") for name in pages if not name.startswith("docs/en/")}
-english = {name.removeprefix("docs/en/") for name in pages if name.startswith("docs/en/")}
+chinese = {name.removeprefix("docs/zh/") for name in pages if name.startswith("docs/zh/") and not name.startswith("docs/zh/en/")}
+english = {name.removeprefix("docs/zh/en/") for name in pages if name.startswith("docs/zh/en/")}
 for name in sorted(chinese ^ english):
     errors.append(f"Missing locale counterpart: {name}")
 
@@ -35,11 +35,11 @@ def check_route(page, label, value):
     if not route.startswith("/") or route.startswith("//"):
         return
     route = unquote(route)
-    target = ROOT / "docs" / route.lstrip("/")
+    target = ROOT / "docs" / "zh" / route.lstrip("/")
     candidates = [target, target.with_suffix(".md"), target / "index.md"]
     if not any(p.is_file() for p in candidates):
         errors.append(f"{page}: missing page route {value}")
-    expected_english = page.startswith("docs/en/")
+    expected_english = page.startswith("docs/zh/en/")
     actual_english = route.startswith("/en/")
     # A deliberately labelled link to an extended original-language reference
     # is allowed; navigation and ordinary page links must stay in their locale.
@@ -76,13 +76,15 @@ if args.dist:
 
     for page in sorted(pages):
         relative = Path(page.removeprefix("docs/")).with_suffix(".html")
+        if relative.parts and relative.parts[0] == "zh":
+            relative = Path("en").joinpath(*relative.parts[2:]) if relative.parts[1] == "en" else Path(*relative.parts[1:])
         output = args.dist / relative
         if not output.is_file():
             errors.append(f"Missing generated locale page: {output}")
             continue
         metadata = PageMetadata()
         metadata.feed(output.read_text())
-        expected = "en-US" if page.startswith("docs/en/") else "zh-CN"
+        expected = "en-US" if page.startswith("docs/zh/en/") else "zh-CN"
         if metadata.lang != expected:
             errors.append(f"{output}: html lang={metadata.lang!r}, expected {expected}")
         if not metadata.description:

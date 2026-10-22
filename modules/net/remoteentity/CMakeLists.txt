@@ -1,6 +1,6 @@
 # RemoteEntityCall 四件套（remote-entity-call 余件批：RemoteEntityRef /
 # RemoteMethodSchema / RouteResolver / RpcTrace）。
-# 设计见 docs/architecture/remote-entity-call-design.md。
+# 设计见 docs/zh/architecture/remote-entity-call-design.md。
 add_library(apollo_net_remoteentity STATIC
     src/route_resolver.cpp
     src/rpc_trace.cpp

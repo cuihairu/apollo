@@ -28,7 +28,7 @@ public:
 
 // 世界宿主：固定步长全序推进（clock-and-time §3 口径）。
 //
-// 设计口径（docs/design/clock-and-time.md §3 与 term-contract §1.5）：
+// 设计口径（docs/zh/design/clock-and-time.md §3 与 term-contract §1.5）：
 // - 固定步长 100ms（10Hz）默认，与 BW DEFAULT_GAME_UPDATE_HERTZ=10 / KBE gameUpdateHertz=10 一致；
 // - 追赶有界：单次 tick() 调用最多连跑 kCatchUpMaxSteps 步补齐积压，超出跳拍 + 告警 + 计 dropped_ticks；
 // - tick 号进程内单调、重启归零、0 保留为「未启动/无效」哨兵，首个完整 tick 计 1。

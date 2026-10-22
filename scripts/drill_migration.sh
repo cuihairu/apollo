@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P3-5 跨 World 迁移演练 re-home 版（docs/design/backup-revive.md §9.2 五步
+# P3-5 跨 World 迁移演练 re-home 版（docs/zh/design/backup-revive.md §9.2 五步
 # ①②③④ 编排 + §9.8「单玩家切换耗时」实测件）：真 login（目录 owner +
 # 942 编排受理面）+ 两真 world（源 zone 2 / 目标 zone 5，真 PlayerStore
 # M1 面，933/935/936/937 迁移 wire 经 StoreDial 真拨），fleetctl migrate

@@ -1,5 +1,5 @@
 # Runtime module
-# 崩溃采集面（crash-capture 批②，docs/design/crash-capture.md）：find_package
+# 崩溃采集面（crash-capture 批②，docs/zh/design/crash-capture.md）：find_package
 # 失败（非 vcpkg/无 overlay 端口环境）→ no-op 桩（APOLLO_HAS_CRASHPAD=0），
 # 三树照常绿——采集面是增强不是依赖（fail-open 同族纪律）。
 find_package(crashpad CONFIG QUIET)

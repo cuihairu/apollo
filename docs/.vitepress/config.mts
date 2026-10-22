@@ -40,6 +40,10 @@ export default defineConfig({
   base: isProd ? '/apollo/' : '/',
   cleanUrls: true,
   ignoreDeadLinks: false,
+  rewrites: {
+    'zh/:path*': ':path*',
+    'zh/en/:path*': 'en/:path*',
+  },
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/apollo.png' }],

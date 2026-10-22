@@ -3,7 +3,7 @@
 // RemoteEntityRef — 远程实体引用（remote-entity-call 四件套之一）。
 //
 // 显式表达「调哪个实体、调的是 anchor/avatar/ghost、route 版本多少」。
-// 设计见 docs/architecture/remote-entity-call-design.md §5.1。
+// 设计见 docs/zh/architecture/remote-entity-call-design.md §5.1。
 //
 
 #include <cstdint>

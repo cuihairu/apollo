@@ -474,7 +474,7 @@ PreparedModule ScriptRuntime::prepare_module(const ModuleSpec& spec,
     }
     ScriptRuntime* p = preparer_.get();
     // 依赖拓扑序（§3.1）：预备镜像内须已装齐——预备面只镜像经 prepare 的
-    // 模块，跨预备面 swap 的模块不在镜像内（控制面纪律，见 docs/modules/script.md）。
+    // 模块，跨预备面 swap 的模块不在镜像内（控制面纪律，见 docs/zh/modules/script.md）。
     for (const auto& dep : spec.deps) {
         if (!p->has_module(dep.c_str())) {
             out.error = "missing dependency on preparer: " + dep;

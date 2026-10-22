@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# G-2 批 0 验收链演练（docs/design/backup-revive.md §6）：编队 kill -9 全链
+# G-2 批 0 验收链演练（docs/zh/design/backup-revive.md §6）：编队 kill -9 全链
 # RTO 实测——死亡上 wire → machined 退避重启 → journal replay →
 # RecoveryCoordinator ready → 全量重报收敛 → 目录镜像收敛。
 # P3-1 re-home 版（baseappmgr/base-app 退场）：mgr 面 = login、base 面 =

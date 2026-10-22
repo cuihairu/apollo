@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 # InterfacesApp 可执行文件（todo L45 批④）：平台/渠道回调的 HTTP/HTTPS
 # 入口进程壳。只依赖 net M1 内核三件（link 缝 + TLS/WS 底座与编解码），
-# 不链 gateway——与 gateway 游戏入口互不进入对方的连接模型（docs/index.md
+# 不链 gateway——与 gateway 游戏入口互不进入对方的连接模型（docs/zh/index.md
 # §接口分工）。ws 出站业务回执面 L50 接线时再开。
 add_executable(interfaces
     src/main.cpp

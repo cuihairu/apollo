@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="1510" viewBox="0 0 480 1510" role="img" aria-labelledby="title desc" lang="en">
-<title id="title">Apollo external HTTP callbacks and developer tooling</title><desc id="desc">Current status: the interfaces intake chain, order transaction modules, and apolloc init are implemented with tests; channel verification and inter-process wiring remain planned. interfaces durably accepts callbacks, resolves the current Base by player identity, and Base fulfills idempotently. Scaffolding and CI are developer tooling, not online services.</desc>
+<title id="title">Apollo external HTTP callbacks and developer tooling</title><desc id="desc">Proposed design, not implemented: interfaces durably receives callbacks and resolves current Base by player identity; Base fulfills idempotently through database. Scaffolding and CI are developer tooling, not online services.</desc>
 <defs>
  <marker id="blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#245bb2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
  <marker id="teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#147565" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
  <style>text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans CJK SC","Microsoft YaHei",sans-serif;fill:#172b45}.sub{fill:#4c5d73}.blue{fill:#245bb2}.teal{fill:#147565}</style>
 </defs><rect width="480" height="1510" fill="#fff"/>
 <text x="24" y="38" font-size="25" font-weight="600" text-anchor="start">External HTTP callbacks</text>
-<text x="24" y="72" font-size="18" font-weight="400" text-anchor="start" class="sub">intake · order modules · apolloc init: landed</text>
+<text x="24" y="72" font-size="18" font-weight="400" text-anchor="start" class="sub">interfaces / transactions: pending</text>
 <g data-node="Payment / channel platform">
 <rect x="30" y="109" width="420" height="96" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="142" font-size="21" font-weight="600" text-anchor="start">Payment / channel platform</text>
@@ -15,7 +15,7 @@
 <g data-node="interfaces">
 <rect x="30" y="262" width="420" height="114" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="295" font-size="23" font-weight="600" text-anchor="start">interfaces</text>
-<text x="48" y="322" font-size="18" font-weight="400" text-anchor="start" class="sub">HTTPS ingress · durable intake</text>
+<text x="48" y="322" font-size="18" font-weight="400" text-anchor="start" class="sub">HTTPS · verify · durable intake</text>
 <text x="48" y="345" font-size="18" font-weight="400" text-anchor="start" class="sub">Orders use stable player identity</text>
 </g>
 <path d="M240 205 L240 262" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
@@ -52,7 +52,7 @@
 <text x="30" y="1145" font-size="18" font-weight="400" text-anchor="start" class="sub">world / cell do not fulfill payments.</text>
 <rect x="24" y="1200" width="432" height="280" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="42" y="1236" font-size="21" font-weight="600" text-anchor="start">Developer / delivery tools</text>
-<text x="42" y="1280" font-size="20" font-weight="600" text-anchor="start">Project CLI: apolloc init (implemented)</text>
+<text x="42" y="1280" font-size="20" font-weight="600" text-anchor="start">Project CLI: init (pending)</text>
 <text x="42" y="1318" font-size="18" font-weight="400" text-anchor="start" class="sub">Generate config, Lua, ops / CI</text>
 <text x="42" y="1372" font-size="20" font-weight="600" text-anchor="start">CI workflow runs in repository</text>
 <text x="42" y="1410" font-size="18" font-weight="400" text-anchor="start" class="sub">Build, tests, contracts and docs</text>

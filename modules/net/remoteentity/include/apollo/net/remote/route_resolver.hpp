@@ -3,7 +3,7 @@
 // RouteResolver — 路由解析器（remote-entity-call 四件套之一）。
 //
 // 根据 entity_id 找到当前真实宿主（target_app），校验 route version，
-// 决定是否需要转发。设计见 docs/architecture/remote-entity-call-design.md
+// 决定是否需要转发。设计见 docs/zh/architecture/remote-entity-call-design.md
 // §5.4 + §7 route 过期处理。
 //
 // 线程纪律：resolve 为 const 只读；update_route/clear 由宿主单写者调用

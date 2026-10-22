@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the localized architecture SVGs used by VitePress and GitHub README.
 
-Keep role names and relationships aligned with docs/design/bigworld-apollo-mapping.md.
+Keep role names and relationships aligned with docs/zh/design/bigworld-apollo-mapping.md.
 Run from any directory: python3 scripts/docs/render_architecture.py [--check]
 """
 from pathlib import Path

@@ -1,7 +1,7 @@
 [English](README.md) | [中文](README.zh.md)
 
 <p align="center">
-  <img src="docs/public/apollo.png" alt="Apollo Logo" height="80"/>
+  <img src="docs/zh/public/apollo.png" alt="Apollo Logo" height="80"/>
 </p>
 
 # Apollo
@@ -26,15 +26,15 @@ Apollo is a C++20 server runtime for lightweight multiplayer games organized aro
 The runnable processes are `gateway`, `login`, `base`, `world`, `database`, `interfaces`, and `machined`; the `loginServer`/`baseServer`/`worldServer` words in the design docs name the roles of the `login`/`base`/`world` binaries, and `cell` is the cell execution role of the `world` binary (`--role=cell`). Cell means a spatial partition.
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/public/architecture/system-en-mobile.svg" />
-  <img src="docs/public/architecture/system-en.svg" alt="Apollo target architecture: separate Base profiles, cell simulation, and World management" />
+  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/system-en-mobile.svg" />
+  <img src="docs/zh/public/architecture/system-en.svg" alt="Apollo target architecture: separate Base profiles, cell simulation, and World management" />
 </picture>
 
 Target design: standalone Base ↔ database prototypes exist; World/cell separation and full wiring remain pending.
 
 baseServer owns persistent-player data and base gameplay; worldServer manages executors/topology and cell runs entities/temporary gameplay. Cross-server play retains the original Base and storage affiliation. A World can serve players from multiple Bases using per-player Base associations, without database credentials or local machined.
 
-Protocol-capable upgrades replace Base, cell, or World management independently through state conversion, exclusive handoff, route switching, and source cleanup. Complete active matches require Instance state transfer. The role split and corresponding runtime wiring remain implementation tasks; see [architecture](docs/en/guide/architecture.md), [applications](docs/en/apps/index.md), and [cross-server scenes](docs/en/design/cross-server-scenes.md).
+Protocol-capable upgrades replace Base, cell, or World management independently through state conversion, exclusive handoff, route switching, and source cleanup. Complete active matches require Instance state transfer. The role split and corresponding runtime wiring remain implementation tasks; see [architecture](docs/zh/zh/en/guide/architecture.md), [applications](docs/zh/zh/en/apps/index.md), and [cross-server scenes](docs/zh/zh/en/design/cross-server-scenes.md).
 
 ### Entry and Delivery Surfaces
 
@@ -43,8 +43,8 @@ Protocol-capable upgrades replace Base, cell, or World management independently 
 - Dynamic Base resolution and durable fulfillment (modules implemented): orders are accepted by stable player identity and journaled durably; each delivery attempt re-resolves the current Base plus epoch, so offline players, unreachable Bases, and migration windows never lose pending work; fulfillment commits a dedup credential atomically, converging duplicate notifications, lost ACKs, and crash restarts into one delivery. Inter-process wiring (interfaces→order intake, baseServer write-authority lifecycle, reward apply executor) is planned.
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/public/architecture/callbacks-en-mobile.svg" />
-  <img src="docs/public/architecture/callbacks-en.svg" alt="Apollo external callbacks and fulfillment: interfaces intake, dynamic Base resolution, idempotent delivery" />
+  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/callbacks-en-mobile.svg" />
+  <img src="docs/zh/public/architecture/callbacks-en.svg" alt="Apollo external callbacks and fulfillment: interfaces intake, dynamic Base resolution, idempotent delivery" />
 </picture>
 
 ### Processes, Tools, and CI
@@ -71,11 +71,11 @@ Protocol-capable upgrades replace Base, cell, or World management independently 
 
 > MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from instances and matches, while prioritizing instances and reserving seamless-map boundaries.
 
-[BigWorld–Apollo mapping](docs/en/design/bigworld-apollo-mapping.md)
+[BigWorld–Apollo mapping](docs/zh/zh/en/design/bigworld-apollo-mapping.md)
 
 ## Core Concepts
 
-Core gameplay terms (the [concept guide](docs/en/guide/concepts.md) describes current code components):
+Core gameplay terms (the [concept guide](docs/zh/zh/en/guide/concepts.md) describes current code components):
 
 | Concept | Responsibility | Existing code / boundary |
 |---|---|---|
@@ -98,7 +98,7 @@ Core gameplay terms (the [concept guide](docs/en/guide/concepts.md) describes cu
 - **Battle system** - `BattleRuntime` deterministic battle domain (five-phase lifecycle, hash-chain fingerprint) with settlement routed through the owning Base and database
 - **Data storage** - atomic player profile file writes + `PersistJournal` write-behind; external DB/Redis not wired up
 - **Observability** - self-built logging, structured events, MetricRegistry, and span/trace primitives; no dedicated Profiler or OpenTelemetry SDK/exporter integration
-- **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`)
+- **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/zh/33-BigWorld_Compatibility.md`)
 
 ## Update Modes
 
@@ -106,20 +106,20 @@ Protocol updates start a new Base, cell, or World management process, convert/re
 
 Code-only updates preserve contract IDs, fields, and wire format. Lua can prepare/commit, observe, and roll back modules; C++ uses process replacement. Preserve gateway to retain its TCP connections; replacing gateway requires drain or client recovery. Current primitives do not establish the full target-role upgrade workflow.
 
-See [update boundaries](docs/en/design/gateway-topology-survey.md) and [contract versioning](docs/en/design/sdk-contract.md).
+See [update boundaries](docs/zh/zh/en/design/gateway-topology-survey.md) and [contract versioning](docs/zh/zh/en/design/sdk-contract.md).
 
 ## Architecture
 
-> See [Architecture Overview](docs/en/guide/architecture.md) for the target instance-based model and [Server Applications](docs/en/apps/index.md) for the current executable prototypes.
+> See [Architecture Overview](docs/zh/zh/en/guide/architecture.md) for the target instance-based model and [Server Applications](docs/zh/zh/en/apps/index.md) for the current executable prototypes.
 
 ### Tech Stack
 
 - **Language**: C++20
 - **Build system**: CMake + Ninja, vcpkg manifest mode for dependency management
 - **Networking library**: hand-written cross-platform network layer
-- **Serialization/contracts**: XML+XSD contracts define game data semantics; `apollo_gen` generates client/server contract artifacts (`docs/design/sdk-contract.md`). Protobuf is a dependency used by tests, not the current message path; the implementation uses hand-written encoding.
+- **Serialization/contracts**: XML+XSD contracts define game data semantics; `apollo_gen` generates client/server contract artifacts (`docs/zh/design/sdk-contract.md`). Protobuf is a dependency used by tests, not the current message path; the implementation uses hand-written encoding.
 - **Database**: no external storage dependency is currently required. Player profiles use JSON files and `PersistJournal`; MySQL, Redis, and ClickHouse integration remains planned.
-- **Message queue**: Kafka for the observability pipeline (planned, decision #14); inter-service messaging uses a hand-written message bus (planned, `docs/design/net-abstraction.md`)
+- **Message queue**: Kafka for the observability pipeline (planned, decision #14); inter-service messaging uses a hand-written message bus (planned, `docs/zh/design/net-abstraction.md`)
 - **Monitoring**: Prometheus + Grafana (planned, batch 8)
 - **Logging**: hand-written multi-level logging (`apollo::core::log`); target pipeline LogAgent→Kafka→ClickHouse (decision #14)
 - **Test framework**: zero-dependency assertion-style unit tests (unified tree, gated by ctest); legacy GTest batch is off by default
@@ -164,7 +164,7 @@ cmake --build build --parallel
 CI and local development split by change surface in three ways — editing one line of
 documentation should not trigger a full compile.
 
-1. **Documentation changes** (`*.md`, `docs/**`, images): no compile. The main CI workflow's
+1. **Documentation changes** (`*.md`, `docs/zh/**`, images): no compile. The main CI workflow's
    `paths-ignore` already skips these paths.
 2. **Code changes**: run only the changed subset, never the full suite.
    - `ctest -R '<changed-test>' -C Debug`
@@ -173,7 +173,7 @@ documentation should not trigger a full compile.
 
 ### Minimal Example
 
-About 40 lines to run a hosted game service (see [quick-start](docs/guide/quick-start.md) for the complete compilable version, verified against the actual API):
+About 40 lines to run a hosted game service (see [quick-start](docs/zh/guide/quick-start.md) for the complete compilable version, verified against the actual API):
 
 ```cpp
 #include <apollo/runtime/application_host.hpp>
@@ -234,7 +234,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ### Base Infrastructure (modules/base)
 - **Role**: pure infrastructure with no framework semantics; usable standalone in any C++ project (no dependency on other Apollo modules)
 - **Components**: Time utilities, ThreadPool, IdPool, String utilities, Memory utilities, Terminal utilities
-- See [Base module docs](docs/modules/base.md) for details
+- See [Base module docs](docs/zh/modules/base.md) for details
 
 ### Core Framework (modules/core · modules/runtime)
 - **Dependency injection**: `apollo::core::di` minimalist constructor-injection container — type-keyed bean graph, topologically ordered assembly, only Singleton/Prototype scopes
@@ -264,7 +264,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **Configuration**: `ConfigRegistry` key-value registry (in-memory)
 
 ### Compatibility Layer
-- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/33-BigWorld_Compatibility.md`)
+- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/zh/33-BigWorld_Compatibility.md`)
 - **BigWorld API Tests**: `tests/test_bigworld_api.cpp` (CTest: `BigWorldApiTests`)
 
 ## Examples
@@ -421,7 +421,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable prototypes and tools; see docs/en/apps/index.md for current status
+├── apps/                   # Executable prototypes and tools; see docs/zh/zh/en/apps/index.md for current status
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations
@@ -429,18 +429,18 @@ apollo/
 ├── examples/               # Example code
 ├── sdks/                   # Unity client SDK and contract tooling (contract + gen generator + cpp generated code)
 ├── skds/                   # Cocos / Laya / legacy SDK workspace
-├── docs/                   # VitePress documentation site
+├── docs/zh/                   # VitePress documentation site
 ├── cmake/                  # CMake helper scripts
 └── build*/                 # Build output
 ```
 
-See [Directory Structure](docs/Directory_Structure.md) for details.
+See [Directory Structure](docs/zh/Directory_Structure.md) for details.
 
 ## Client SDK
 
 ### Unity SDK
 
-Parts of the Unity SDK are delivered (module status: see [SDK_Structure](docs/sdks/unity/SDK_Structure.md)):
+Parts of the Unity SDK are delivered (module status: see [SDK_Structure](docs/zh/sdks/unity/SDK_Structure.md)):
 
 - Network communication management (NetworkManager, available)
 - Login authentication (AuthManager, available)
@@ -485,9 +485,9 @@ This project is licensed under the [MIT License](LICENSE).
 
 Apollo is an original implementation of this repository, not a fork of any existing project; its architecture concepts and terminology reference the following open-source projects, with sources cited where referenced:
 
-- **BigWorld**: BigWorld-style C++ API facade (`docs/33-BigWorld_Compatibility.md`); the architecture audit includes source-level comparison of BigWorld / KBEngine / skynet (`docs/analysis/mmo-mechanism-deep-dive.md`)
-- **KBEngine**: several entries in `docs/qa/` analyze its source mechanisms
-- **skynet**: design precedents such as the observability channel (`docs/analysis/architecture-review.md`)
+- **BigWorld**: BigWorld-style C++ API facade (`docs/zh/33-BigWorld_Compatibility.md`); the architecture audit includes source-level comparison of BigWorld / KBEngine / skynet (`docs/zh/analysis/mmo-mechanism-deep-dive.md`)
+- **KBEngine**: several entries in `docs/zh/qa/` analyze its source mechanisms
+- **skynet**: design precedents such as the observability channel (`docs/zh/analysis/architecture-review.md`)
 
 Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependency management), [nlohmann/json](https://github.com/nlohmann/json), [protobuf](https://github.com/protocolbuffers/protobuf) (currently a dependency + tests, not on the message path), [GTest](https://github.com/google/googletest), OpenSSL, libcurl, pugixml, readline, crashpad, [VitePress](https://vitepress.dev) (docs site), GitHub Actions and Codecov (CI and coverage). The transport layer is self-built (`modules/net/link`), no nng.
 
