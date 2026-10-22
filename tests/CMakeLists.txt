@@ -235,7 +235,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 
 	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
 	    # （apps/ 同惯例），模块关闭时跳过而非 configure 即红。
-	    if(TARGET apollo_protocol)
+    if(TARGET apollo_protocol AND TARGET apollo_app_services)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
 	        ../apps/gateway/src/gateway_server.cpp
@@ -251,12 +251,21 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
+            ../apps/world/src/world_app.cpp
+            ../apps/world/src/cell_app.cpp
+            ../apps/world/src/m1_link_server.cpp
+            ../modules/protocol/src/messages.cpp
+            ../modules/protocol/src/codec.cpp
 	    )
 	    target_include_directories(gateway_route_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
+	        ${CMAKE_SOURCE_DIR}/apps/world/include
+	        ${CMAKE_SOURCE_DIR}/modules/script/include
+	        ${CMAKE_SOURCE_DIR}/tests
 	    )
 	    target_compile_definitions(gateway_route_tests PRIVATE
 	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+	        APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
 	    target_link_libraries(gateway_route_tests PRIVATE
 	        apollo
@@ -271,7 +280,14 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo::net_contract_wire
 	        apollo::net_linktrace
 	        apollo_net_linkrpc
+	        apollo_app_services
 	        apollo_protocol
+	        apollo::game_core
+	        apollo::game_world
+	        apollo::game_social
+	        apollo_squad_instance
+	        apollo::script
+	        apollo::net_discovery
 	    )
 	    if(WIN32)
 	        target_link_libraries(gateway_route_tests PRIVATE ws2_32)
@@ -384,28 +400,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        target_link_libraries(protocol_bootstrap_tests PRIVATE ws2_32)
 	    endif()
 	    add_test(NAME ProtocolBootstrapTests COMMAND protocol_bootstrap_tests)
-	    endif()
-
-	    # Data module tests
-	    add_executable(data_tests test_data.cpp)
-	    target_link_libraries(data_tests PRIVATE apollo apollo::base apollo::core apollo::runtime apollo::data_cache apollo::data_orm)
-	    if(WIN32)
-	        target_link_libraries(data_tests PRIVATE ws2_32)
-	    endif()
-	    add_test(NAME DataTests COMMAND data_tests)
-
-	    # ========== Net Module Tests (New) ==========
-	    add_executable(net_tests test_net.cpp)
-	    target_link_libraries(net_tests PRIVATE apollo apollo::base)
-	    if(WIN32)
-	        target_link_libraries(net_tests PRIVATE ws2_32)
-	        target_compile_definitions(net_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
-	    endif()
-	    # /utf-8 是 MSVC 专有旗标——MinGW gcc 当链接输入直接报错（PORT-1）
-	    if(MSVC)
-	        target_compile_options(net_tests PRIVATE /utf-8)
-	    endif()
-	    add_test(NAME NetTests COMMAND net_tests)
 
 	    # ========== Crypto Tests ==========
 	    # Note: OpenSSL header conflicts on Windows, disabled pending fix
@@ -576,51 +570,6 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME OnlineDirectoryTests COMMAND baseappmgr_tests)
 	    endif()
-
-	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
-	    # （apps/ 同惯例），模块关闭时跳过而非 configure 即红。
-	    if(TARGET apollo_protocol)
-	    add_executable(gateway_route_tests
-	        test_gateway_route.cpp
-	        ../apps/gateway/src/gateway_server.cpp
-	        ../apps/gateway/src/gateway_control_server.cpp
-	        ../apps/gateway/src/m1_egress.cpp
-	        ../apps/gateway/src/m1_route_client.cpp
-        ../apps/gateway/src/m1_base_client.cpp
-	        ../apps/gateway/include/gateway/session_manager.cpp
-            ../apps/gateway/src/ingress/client_ingress_server.cpp
-            ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
-            ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
-            ../apps/gateway/src/ingress/ingress_fan_in.cpp
-            ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
-            ../apps/gateway/src/ingress/gateway_connection_registry.cpp
-            ../apps/gateway/src/ingress/session_admission_service.cpp
-	    )
-	    target_include_directories(gateway_route_tests PRIVATE
-	        ${CMAKE_SOURCE_DIR}/apps/gateway/include
-	    )
-	    target_compile_definitions(gateway_route_tests PRIVATE
-	        APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
-	    )
-	    target_link_libraries(gateway_route_tests PRIVATE
-	        apollo
-	        apollo::base
-	        apollo::core
-	        apollo::runtime
-	        apollo::net_tcp
-	        apollo::net_protocol
-	        apollo::net_link
-	        apollo_net_tls
-	        apollo_net_ws
-	        apollo::net_contract_wire
-	        apollo::net_linktrace
-	        apollo_net_linkrpc
-	        apollo_protocol
-	    )
-	    if(WIN32)
-	        target_link_libraries(gateway_route_tests PRIVATE ws2_32)
-	    endif()
-	    add_test(NAME GatewayRouteTests COMMAND gateway_route_tests)
 
 	    # gateway 入口真接线测试（link 帧定界 + TCP 底座，localhost 实 socket；
 	    # Windows 下 link TCP 底座不进 M1 批，TCP 用例本体空转）

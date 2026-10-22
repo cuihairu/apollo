@@ -39,6 +39,7 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
 }
 
 constexpr std::uint32_t kM1RouteTimeoutMs = 500;  // 路由解析同步等待上限
+constexpr std::uint32_t kM1BaseForwardTimeoutMs = 500;
 
 } // namespace
 
@@ -174,12 +175,22 @@ void MessageRouter::forwardToWorld(
 }
 
 void MessageRouter::forwardToBaseApp(SessionID sessionId, const std::vector<uint8_t>& message) {
-    // nng 双 Channel 摘除（P4-4 批②，ADR-011 ChatApp 同款）：桩上死面，
-    // 从未有帧过线；base 面的真实路由 = zone M1 受理面（挂账 P4-4 ③，
-    // 随 login↔base 链整批立项）。落地面 = m1Egress degraded 同口径。
-    (void)message;
-    glog().info("Gateway dropped base message for session "
-                + std::to_string(sessionId) + " (no base forwarding face)");
+    if (!forwardToBase_) {
+        glog().info("Gateway dropped base message for session "
+                    + std::to_string(sessionId) + " (base forwarding face absent)");
+        return;
+    }
+    if (forwardToBase_(sessionId, message) == 0) {
+        glog().info("Gateway dropped base message for session "
+                    + std::to_string(sessionId) + " (base transport unavailable)");
+    }
+}
+
+void MessageRouter::setBaseForwarding(
+    std::function<std::uint64_t(SessionID, const std::vector<std::uint8_t>&)> forward,
+    BaseResponseFn onResponse) {
+    forwardToBase_ = std::move(forward);
+    baseResponse_ = std::move(onResponse);
 }
 
 void MessageRouter::setDeliverToClient(
@@ -280,6 +291,27 @@ void GatewayServer::start() {
         [this](SessionID sessionId, const std::vector<uint8_t>& message) {
             sendToClient(sessionId, message);
         });
+    messageRouter_->setBaseForwarding(
+        [this](SessionID sessionId, const std::vector<uint8_t>& message) {
+            if (!baseClient_) return std::uint64_t{0};
+            auto result = baseClient_->callAsync(
+                message,
+                std::chrono::milliseconds(kM1BaseForwardTimeoutMs),
+                [this, sessionId](std::optional<std::vector<std::uint8_t>> response) {
+                    if (!response) {
+                        glog().warning("Base forward timeout for session "
+                                       + std::to_string(sessionId));
+                        return;
+                    }
+                    if (messageRouter_ && messageRouter_->baseResponse()) {
+                        messageRouter_->baseResponse()(sessionId, std::move(response));
+                    }
+                });
+            return result;
+        },
+        [this](SessionID sessionId, std::optional<std::vector<std::uint8_t>> response) {
+            if (response) sendToClient(sessionId, *response);
+        });
 
     // 启动消息路由器
     messageRouter_->start();
@@ -349,7 +381,7 @@ void GatewayServer::start() {
     heartbeatThread_ = std::thread(&GatewayServer::heartbeatCheckLoop, this);
 
     glog().info("Gateway server listening on " + config_.host + ":"
-                + std::to_string(config_.port));
+                + std::to_string(listenPort()));
 }
 
 void GatewayServer::stop() {
@@ -442,6 +474,8 @@ void GatewayServer::onPacketReceived(ConnectionID connectionId, std::span<const 
     // 传输语义容忍。恢复重绑发生在闸前，故旧会话号的旧序重放落回原会话
     // 水位上判定。
     if (haveHeader && !sessionManager_->acceptUplinkSequence(sessionId, header.sequence)) {
+        glog().warning("Uplink sequence gate dropped session " + std::to_string(sessionId)
+                       + " sequence=" + std::to_string(header.sequence));
         return;
     }
 
@@ -613,6 +647,13 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         }
 
         case ClientPacketKind::Base:
+            if (auto session = sessionManager_->getSession(sessionId);
+                !session || session->playerId == 0) {
+                glog().warning(
+                    "Gateway rejected unauthenticated base message for session "
+                    + std::to_string(sessionId));
+                return;
+            }
             messageRouter_->forwardToBaseApp(sessionId, message);
             return;
 
@@ -630,6 +671,11 @@ SessionID GatewayServer::createPendingSession(const ClientEndpoint& endpoint) {
     const auto sessionId = sessionManager_->createSession(endpoint.address, endpoint.port, connectionId);
     connectionRegistry_->attachSession(connectionId, sessionId);
     return sessionId;
+}
+
+ConnectionID GatewayServer::sessionIdToConnectionId(SessionID sessionId) const {
+    const auto connection = connectionRegistry_->getConnectionBySession(sessionId);
+    return connection ? connection->connectionId : 0;
 }
 
 bool GatewayServer::authenticateSession(

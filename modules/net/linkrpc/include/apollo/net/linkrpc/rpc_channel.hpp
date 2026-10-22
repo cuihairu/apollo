@@ -96,6 +96,13 @@ public:
     std::optional<std::vector<std::uint8_t>> call(const std::vector<std::uint8_t>& body,
                                                   std::chrono::milliseconds timeout);
 
+    // Pump-thread response observation. Must not block.
+    void setResponseObserver(
+        std::function<void(std::uint64_t,
+                           const std::optional<std::vector<std::uint8_t>>&)> fn) {
+        responseObserver_ = std::move(fn);
+    }
+
     const Stats& stats() const { return stats_; }
 
 private:
@@ -108,6 +115,8 @@ private:
     std::map<std::uint64_t, std::optional<std::vector<std::uint8_t>>> pending_;
     std::uint64_t next_corr_ = 1;  // mutex 内
     Stats stats_;                  // 泵线程单写者（响应链内）
+    std::function<void(std::uint64_t,
+                       const std::optional<std::vector<std::uint8_t>>&)> responseObserver_;
 };
 
 }  // namespace apollo::net::linkrpc

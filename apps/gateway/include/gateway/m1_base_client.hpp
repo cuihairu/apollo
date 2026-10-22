@@ -14,6 +14,8 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -29,6 +31,8 @@ struct M1BaseClientConfig {
 
 class M1BaseClient {
 public:
+    using ResponseFn = std::function<void(std::optional<std::vector<std::uint8_t>>)>;
+
     virtual ~M1BaseClient() = default;
 
     virtual bool start() = 0;
@@ -38,6 +42,12 @@ public:
     // （调用方按面在场裁决拒绝，准入面同口径）。禁止在本类泵线程上调用。
     virtual std::optional<std::vector<std::uint8_t>> call(
         const std::vector<std::uint8_t>& frame, std::chrono::milliseconds timeout) = 0;
+
+    // Start one opaque game-frame RPC. Completion runs on the client pump
+    // thread; the host only records state and returns.
+    virtual std::uint64_t callAsync(const std::vector<std::uint8_t>& frame,
+                                    std::chrono::milliseconds timeout,
+                                    ResponseFn onResponse) = 0;
 
     // 对端链路 kUp（就绪观测面，测试与编排面用）。
     virtual bool peerUp() const = 0;

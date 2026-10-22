@@ -136,6 +136,7 @@ void RpcClient::on_response(const std::uint8_t* data, std::size_t size) {
         return;
     }
     const auto corr = static_cast<std::uint64_t>(fields[0].integer);
+    if (responseObserver_) responseObserver_(corr, fields[1].bytes);
     {
         std::lock_guard<std::mutex> guard(mutex_);
         auto it = pending_.find(corr);

@@ -69,7 +69,8 @@ public:
             peer.dispatcher().allow_domain("internal");  // RPC 信封族入闸
             rpc_server_->install(
                 peer, [this](const std::uint8_t* frame, std::size_t size) {
-                    return handler_ ? handler_(frame, size) : std::vector<std::uint8_t>{};
+                    return handler_ ? handler_(frame, size)
+                                    : std::vector<std::uint8_t>{};
                 });
         });
 

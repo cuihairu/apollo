@@ -27,6 +27,9 @@ namespace gateway {
 // 消息路由器
 class MessageRouter {
 public:
+    using BaseResponseFn = std::function<void(SessionID,
+                                              std::optional<std::vector<std::uint8_t>>)>;
+
     explicit MessageRouter(const GatewayConfig& config);
     ~MessageRouter();
 
@@ -53,10 +56,16 @@ public:
     // gateway 身份校验在 M1 出口内（config.gateway_id）。
     void setDeliverToClient(std::function<void(SessionID, const std::vector<uint8_t>&)> fn);
 
+    void setBaseForwarding(
+        std::function<std::uint64_t(SessionID, const std::vector<std::uint8_t>&)> forward,
+        BaseResponseFn onResponse);
+
     RouteSnapshot buildDefaultRoute() const;
 
     // M1 出口观测面（降级时为空）
     M1Egress* egress() const { return m1Egress_.get(); }
+
+    const BaseResponseFn& baseResponse() const { return baseResponse_; }
 
 private:
     GatewayConfig config_;
@@ -64,6 +73,8 @@ private:
     // cell 面（2b-iii：world nng 通道池退役，M1 出口单端点直连）
     std::unique_ptr<M1Egress> m1Egress_;
     std::function<void(SessionID, const std::vector<uint8_t>&)> deliverToClient_;
+    std::function<std::uint64_t(SessionID, const std::vector<std::uint8_t>&)> forwardToBase_;
+    BaseResponseFn baseResponse_;
 
     std::atomic<bool> running_{false};
 };
@@ -111,6 +122,7 @@ public:
 
     SessionID createPendingSession(const std::string& clientIP, uint16_t clientPort);
     SessionID createPendingSession(const ClientEndpoint& endpoint);
+    ConnectionID sessionIdToConnectionId(SessionID sessionId) const;
     bool authenticateSession(SessionID sessionId, PlayerID playerId, const std::string& loginTicket);
 
     // Base 激活面对端链路就绪观测面（编排/测试用；不得以此代业务等待——

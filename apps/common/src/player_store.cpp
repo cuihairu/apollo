@@ -624,6 +624,7 @@ std::vector<uint8_t> PlayerStore::handlePlayerActivateRequest(const std::vector<
         response.state = toAvatarStateString(avatar->state());
     } else {
         response.errorMessage = "Failed to activate player avatar";
+        blog().warning("Player activation rejected id=" + std::to_string(activateReq.playerId));
     }
 
     return protocol::MessageCodec::encode(response, header.sessionId);
