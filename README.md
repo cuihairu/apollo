@@ -8,12 +8,14 @@
 
 **A lightweight instance-based multiplayer game server engine.**
 
-<p align="center">[![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/cuihairu/apollo/releases)</p>
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/cuihairu/apollo/blob/main/LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)](https://github.com/cuihairu/apollo)
-[![Language](https://img.shields.io/badge/language-C%2B%2B20-blue.svg)](https://github.com/cuihairu/apollo)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main)](https://github.com/cuihairu/apollo/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg)](https://codecov.io/gh/cuihairu/apollo)
+<p align="center">
+<a href="https://github.com/cuihairu/apollo/releases"><img alt="Status" src="https://img.shields.io/badge/status-in%20development-orange"></a>
+</p>
+<a href="https://github.com/cuihairu/apollo/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+<a href="https://github.com/cuihairu/apollo"><img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg"></a>
+<a href="https://github.com/cuihairu/apollo"><img alt="Language" src="https://img.shields.io/badge/language-C%2B%2B20-blue.svg"></a>
+<a href="https://github.com/cuihairu/apollo/actions/workflows/ci.yml"><img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/cuihairu/apollo/ci.yml?branch=main"></a>
+<a href="https://codecov.io/gh/cuihairu/apollo"><img alt="Coverage" src="https://codecov.io/gh/cuihairu/apollo/branch/main/graph/badge.svg"></a>
 
 > Lightweight instance-based multiplayer game server engine
 
