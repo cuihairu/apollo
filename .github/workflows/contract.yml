@@ -36,7 +36,7 @@ jobs:
     # 一律过 apollo.xsd——分片自身是完整根元素，独立可验。
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Install xmllint
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
@@ -54,10 +54,10 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup protoc (pin)
-        uses: arduino/setup-protoc@v3
+        uses: arduino/setup-protoc@v3.0.0
         with:
           version: "29.3"  # pin：descriptor.bin 字节稳定性前提（sdk-contract §10.3 纪律）；升级 = 换包重签
 
@@ -65,7 +65,7 @@ jobs:
         run: scripts/ci/contract_pack.sh . dist
 
       - name: Upload contract packs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: contract-pack
           path: dist/
@@ -79,7 +79,7 @@ jobs:
       pull-requests: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 

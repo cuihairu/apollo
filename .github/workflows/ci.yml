@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
       with:
         submodules: recursive
 
@@ -44,7 +44,7 @@ jobs:
       shell: bash
 
     - name: Cache vcpkg
-      uses: actions/cache@v4
+      uses: actions/cache@v6.1.0
       with:
         path: |
           ${{ github.workspace }}/vcpkg_installed
@@ -109,7 +109,7 @@ jobs:
         xcode-select --install 2>/dev/null || true
 
     - name: Setup CMake
-      uses: jwlawson/actions-setup-cmake@v1.14
+      uses: jwlawson/actions-setup-cmake@v2.2.0
       with:
         cmake-version: '3.20'
 
@@ -119,7 +119,7 @@ jobs:
     # 注入环境，CMake 在 windows 上稳定检出 MSVC。
     - name: Setup MSVC (Windows)
       if: matrix.os == 'windows-latest'
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: ilammy/msvc-dev-cmd@v1.13.0
 
     # APPLOCAL-RACE（CI 修正三）：vcpkg applocal 在每个可执行文件链接边尾随
     # z-applocal，把同一批依赖 DLL 并发拷进同目录——Ninja 并行链接下多条边
@@ -154,14 +154,14 @@ jobs:
         --parallel
 
     - name: Upload Test Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.2
       if: failure()
       with:
         name: test-results-${{ matrix.os }}-${{ matrix.build_type }}
         path: build/Testing/**/*.xml
 
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.2
       with:
         name: build-${{ matrix.os }}-${{ matrix.build_type }}
         path: |
@@ -176,7 +176,7 @@ jobs:
     needs: build
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7.0.1
       with:
         submodules: recursive
 
@@ -185,7 +185,7 @@ jobs:
       run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
     - name: Cache vcpkg
-      uses: actions/cache@v4
+      uses: actions/cache@v6.1.0
       with:
         path: |
           ${{ github.workspace }}/vcpkg_installed
@@ -256,21 +256,21 @@ jobs:
         genhtml -o coverage-html coverage.info
 
     - name: Upload Coverage Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.2
       with:
         name: coverage-lcov
         path: build/coverage.info
         retention-days: 30
 
     - name: Upload Coverage HTML
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7.0.2
       with:
         name: coverage-html
         path: build/coverage-html
         retention-days: 30
 
     - name: Upload Coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7.1.1
       with:
         files: ./build/coverage.info
         flags: unittests
