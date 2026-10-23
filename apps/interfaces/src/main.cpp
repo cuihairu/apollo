@@ -1,6 +1,7 @@
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/tls/tls_transport.hpp"
+#include "interfaces/callback_verifier.hpp"
 #include "interfaces/callback_chain.hpp"
 #include "interfaces/http_ingress.hpp"
 #include <atomic>
@@ -44,6 +45,7 @@ struct InterfacesConfig {
     std::size_t callbackCap = 1024;       // 回调链顶格拒收线
     std::size_t callbackMaxPump = 64;     // 回调链单拍消费上限
     std::uint32_t callbackExpireMs = 0;   // 0 = 不过期；>0 = 滞留超期丢弃
+    std::string callbackSecret;           // 空 = 验签 gate 拒绝回调
 };
 
 InterfacesConfig loadConfig(int argc, char* argv[]) {
@@ -72,6 +74,8 @@ InterfacesConfig loadConfig(int argc, char* argv[]) {
             config.callbackMaxPump = static_cast<std::size_t>(std::atoi(argv[++i]));
         } else if (arg == "--callback-expire-ms" && i + 1 < argc) {
             config.callbackExpireMs = static_cast<std::uint32_t>(std::atoi(argv[++i]));
+        } else if (arg == "--callback-secret" && i + 1 < argc) {
+            config.callbackSecret = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -86,6 +90,7 @@ InterfacesConfig loadConfig(int argc, char* argv[]) {
                       << "  --callback-cap <num>      Callback chain capacity before 429 (default: 1024)\n"
                       << "  --callback-max-pump <num> Callback drain budget per tick (default: 64)\n"
                       << "  --callback-expire-ms <ms> Callback staleness budget before drop (0 = never, default: 0)\n"
+                      << "  --callback-secret <secret> Enable HMAC-SHA256 callback verification\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         }
@@ -110,13 +115,22 @@ void install_demo_routes(HttpIngressServer& server, const std::string& ws_path) 
     server.setWsRoute(ws_path);
 }
 
-// 平台回调路由（todo L62）：受理面只做快照入队 + 回执——202 受理（业务
-// 异步执行）、429 顶格拒收（渠道侧重试补齐）。渠道验签/发货等业务逻辑
-// 在回调链的单写者 drain 上跑；真实业务 executor（Lua/发货）= P3 Base
-// 玩法意图词汇落地后的挂账接线面，本批交付的是有界调度面。
-void install_callback_route(HttpIngressServer& server, CallbackChain& chain) {
-    server.setHttpRoute("/callbacks", [&chain](const HttpRequest& request) {
+// 平台回调路由（todo L62）：验签 gate 在快照入链前执行。签名绑定
+// raw_request 逐字节原始帧；校验失败/缺声明体长 = 401/403 且不进入链。
+void install_callback_route(HttpIngressServer& server, CallbackChain& chain,
+                            const CallbackVerifier& verifier) {
+    server.setHttpRoute("/callbacks", [&chain, &verifier](const HttpRequest& request) {
         HttpResponse response;
+        const auto verified = verifier.verify(request);
+        if (!verified.valid) {
+            response.status = verified.status;
+            response.reason = verified.status == 401 ? "Unauthorized" : "Forbidden";
+            const std::string body =
+                verified.status == 401 ? "callback signature mismatch\n"
+                                       : "callback signature malformed\n";
+            response.body.assign(body.begin(), body.end());
+            return response;
+        }
         const auto result = chain.push(snapshot(request));
         response.status = result.accepted ? 202 : 429;
         response.reason = result.accepted ? "Accepted" : "Too Many Requests";
@@ -209,6 +223,7 @@ int main(int argc, char* argv[]) {
         chain_config.max_per_pump = config.callbackMaxPump;
         chain_config.expire_after = std::chrono::milliseconds(config.callbackExpireMs);
         CallbackChain callback_chain(chain_config);
+        const CallbackVerifier callback_verifier(config.callbackSecret);
 
         HttpIngressConfig https_config;
         https_config.host = config.host;
@@ -243,7 +258,7 @@ int main(int argc, char* argv[]) {
 
         auto http_server = makeHttpIngressServer(http_config);
         install_demo_routes(*http_server, config.wsPath);
-        install_callback_route(*http_server, callback_chain);
+        install_callback_route(*http_server, callback_chain, callback_verifier);
         http_server->setObserver(&observer);
         http_server->start();
 
@@ -251,7 +266,7 @@ int main(int argc, char* argv[]) {
         if (config.httpsPort != 0) {
             https_server = makeHttpIngressServer(https_config);
             install_demo_routes(*https_server, config.wsPath);
-            install_callback_route(*https_server, callback_chain);
+            install_callback_route(*https_server, callback_chain, callback_verifier);
             https_server->setObserver(&observer);
             https_server->start();
         }

@@ -6,7 +6,9 @@ cmake_minimum_required(VERSION 3.20)
 # §接口分工）。ws 出站业务回执面 L50 接线时再开。
 add_executable(interfaces
     src/main.cpp
+    src/callback_verifier.cpp
     src/http_ingress.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto.cpp
 )
 
 target_include_directories(interfaces
@@ -17,6 +19,7 @@ target_include_directories(interfaces
 target_link_libraries(interfaces
     PRIVATE
         apollo::base
+        apollo
         apollo::core
         apollo::runtime
         apollo::net_link

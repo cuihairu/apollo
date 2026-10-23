@@ -1239,13 +1239,16 @@ endif()
 # 门控。Windows 下 link TCP/TLS 底座不进 M1 批，用例本体空转。
 add_executable(interfaces_http_tests
     test_interfaces_http.cpp
+    ../apps/interfaces/src/callback_verifier.cpp
     ../apps/interfaces/src/http_ingress.cpp
+    ../src/apollo/utils/crypto.cpp
 )
 target_include_directories(interfaces_http_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/interfaces/include
 )
 target_link_libraries(interfaces_http_tests PRIVATE
     apollo::core
+    apollo
     apollo::net_link
     apollo_net_tls
     apollo_net_ws

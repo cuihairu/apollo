@@ -21,11 +21,15 @@
 //  15. 原始帧保留（验签保真面）：raw_request = 请求行 + 原始大小写头 +
 //      恰取声明体长（管道尾字节不吞），body 含多字节/NUL 逐字节保真；
 //  16. 请求超时预算：首字节起 T 内未完成 → 408 + 断连，完整请求不受误伤。
+//  17. 回调验签 gate：HMAC-SHA256 绑定 raw_request；正例入链 202，
+//      缺签/坏签/体长不符拒绝且链不受理。
 //
 // Windows：link TCP/TLS 底座不进 M1 批（POSIX only）——用例本体空转。
 
 #include "interfaces/callback_chain.hpp"
+#include "interfaces/callback_verifier.hpp"
 #include "interfaces/http_ingress.hpp"
+#include "apollo/utils/crypto.h"
 #include "apollo/net/tls/tls_transport.hpp"
 #include "apollo/net/ws/frame.hpp"
 #include "apollo/net/ws/handshake.hpp"
@@ -67,6 +71,7 @@ namespace ws = apollo::net::ws;
 using interfaces::CallbackChain;
 using interfaces::CallbackChainConfig;
 using interfaces::CallbackRequest;
+using interfaces::CallbackVerifier;
 using interfaces::ClientEndpoint;
 using interfaces::ConnectionID;
 using interfaces::DisconnectReason;
@@ -233,6 +238,54 @@ std::vector<std::uint8_t> plain_request(const std::string& method, const std::st
     }
     req += "\r\n" + body;
     return {req.begin(), req.end()};
+}
+
+std::string unsigned_callback_frame(const std::string& body,
+                                    const std::string& content_length = "") {
+    const std::string length = content_length.empty() ? std::to_string(body.size())
+                                                      : content_length;
+    return "POST /callbacks HTTP/1.1\r\n"
+           "Host: localhost\r\n"
+           "Content-Length: " +
+           length + "\r\n\r\n" + body;
+}
+
+std::string signed_callback_frame(const std::string& body, const std::string& secret,
+                                  const std::string& content_length = "") {
+    std::string frame = unsigned_callback_frame(body, content_length);
+    const std::string mac =
+        apollo::utils::HMAC::sha256(secret, frame.data(), frame.size());
+    const std::string separator("\r\n\r\n");
+    const std::size_t at = frame.rfind(separator);
+    if (at == std::string::npos) {
+        throw std::runtime_error("callback test frame malformed");
+    }
+    return frame.substr(0, at + 2) + "X-Signature: hmac-sha256=" + mac +
+           frame.substr(at);
+}
+
+void install_callback_route(HttpIngressServer& server, CallbackChain& chain,
+                            const CallbackVerifier& verifier) {
+    server.setHttpRoute("/callbacks", [&chain, &verifier](const HttpRequest& request) {
+        HttpResponse response;
+        const auto verified = verifier.verify(request);
+        if (!verified.valid) {
+            response.status = verified.status;
+            response.reason = verified.status == 401 ? "Unauthorized" : "Forbidden";
+            const std::string body =
+                verified.status == 401 ? "callback signature mismatch\n"
+                                       : "callback signature malformed\n";
+            response.body.assign(body.begin(), body.end());
+            return response;
+        }
+        const auto result = chain.push(interfaces::snapshot(request));
+        response.status = result.accepted ? 202 : 429;
+        response.reason = result.accepted ? "Accepted" : "Too Many Requests";
+        const std::string body =
+            result.accepted ? "accepted\n" : "callback backlog full\n";
+        response.body.assign(body.begin(), body.end());
+        return response;
+    });
 }
 
 // 客户端 → 服务端帧（必须掩码）。
@@ -961,18 +1014,8 @@ bool test_http_callback_route_202_and_429() {
     chain_config.high_watermark = 2;
     chain_config.max_per_pump = 8;
     CallbackChain chain(chain_config);
-
-    // 与 apps/interfaces main 同面：受理入队回 202，顶格 429。
-    ingress->setHttpRoute("/callbacks", [&chain](const HttpRequest& request) {
-        HttpResponse response;
-        const auto result = chain.push(interfaces::snapshot(request));
-        response.status = result.accepted ? 202 : 429;
-        response.reason = result.accepted ? "Accepted" : "Too Many Requests";
-        const std::string body =
-            result.accepted ? "accepted\n" : "callback backlog full\n";
-        response.body.assign(body.begin(), body.end());
-        return response;
-    });
+    const CallbackVerifier verifier("test-secret");
+    install_callback_route(*ingress, chain, verifier);
     ingress->setObserver(&observer);
     ingress->start();
     TEST_ASSERT(ingress->listenPort() != 0, "port assigned");
@@ -980,11 +1023,13 @@ bool test_http_callback_route_202_and_429() {
     // 入口每应答一连接（Connection: close）——一请求一连接三连发。
     std::string response;
     auto post = [&](const std::string& body) {
+        response.clear();
         HttpTestClient client;
         if (!client.connect("127.0.0.1", ingress->listenPort())) {
             return false;
         }
-        client.sendAll(plain_request("POST", "/callbacks", body));
+        const std::string frame = signed_callback_frame(body, "test-secret");
+        client.sendAll({frame.begin(), frame.end()});
         return pump_until(*ingress,
                           [&] { return client.recvHttpResponse(response); }, 2000);
     };
@@ -1081,6 +1126,80 @@ bool test_raw_request_retained_verbatim() {
         }
     }
     TEST_ASSERT(signature_header_kept, "parsed header lowercased, value intact");
+
+    ingress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 17. 回调验签 gate：正例入链，缺签/坏签/体长不符不入链 ----
+
+bool test_callback_signature_gate() {
+    std::cout << "Running: test_callback_signature_gate..." << std::endl;
+
+    RecordingObserver observer;
+    HttpIngressConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    auto ingress = interfaces::makeHttpIngressServer(config);
+
+    CallbackChainConfig chain_config;
+    chain_config.cap = 2;
+    CallbackChain chain(chain_config);
+    const CallbackVerifier verifier("channel-secret");
+    install_callback_route(*ingress, chain, verifier);
+    ingress->setObserver(&observer);
+    ingress->start();
+    TEST_ASSERT(ingress->listenPort() != 0, "port assigned");
+
+    const std::string body("\x00\xff-binary callback");
+    const std::string valid = signed_callback_frame(body, "channel-secret");
+    std::string response;
+    auto post = [&](const std::string& frame) {
+        response.clear();
+        HttpTestClient client;
+        if (!client.connect("127.0.0.1", ingress->listenPort())) {
+            return false;
+        }
+        client.sendAll({frame.begin(), frame.end()});
+        return pump_until(*ingress,
+                          [&] { return client.recvHttpResponse(response); }, 2000);
+    };
+
+    TEST_ASSERT(post(valid), "valid response received");
+    TEST_ASSERT(response.find("202") != std::string::npos, "valid signature accepted");
+
+    std::string tampered = valid;
+    const std::size_t scheme_at = tampered.find("hmac-sha256=");
+    TEST_ASSERT(scheme_at != std::string::npos && scheme_at + 12 < tampered.size(),
+                "signature digest found");
+    tampered[scheme_at + 12] = tampered[scheme_at + 12] == '0' ? '1' : '0';
+    TEST_ASSERT(post(tampered), "tampered response received");
+    TEST_ASSERT(response.find("401") != std::string::npos, "tampered signature rejected");
+
+    TEST_ASSERT(post(unsigned_callback_frame(body)), "missing response received");
+    TEST_ASSERT(response.find("401") != std::string::npos, "missing signature rejected");
+
+    std::string malformed = unsigned_callback_frame(body);
+    malformed.insert(malformed.rfind("\r\n\r\n"),
+                     "\r\nX-Signature: hmac-sha256=not-hex");
+    TEST_ASSERT(post(malformed), "malformed response received");
+    TEST_ASSERT(response.find("403") != std::string::npos, "malformed rejected");
+
+    const std::string bad_length = signed_callback_frame(
+        body, "channel-secret", std::to_string(body.size() + 1));
+    TEST_ASSERT(post(bad_length), "bad-length response received");
+    TEST_ASSERT(response.find("403") != std::string::npos,
+                "body length mismatch rejected");
+
+    TEST_ASSERT(chain.size() == 1, "only valid callback accepted");
+    TEST_ASSERT(chain.rejected_count() == 0, "security rejects bypass the chain");
+    std::string captured_raw;
+    const auto stats = chain.drain([&](const CallbackRequest& callback) {
+        captured_raw.assign(callback.raw_request.begin(), callback.raw_request.end());
+    });
+    TEST_ASSERT(stats.executed == 1, "one verified callback drained");
+    TEST_ASSERT(captured_raw == valid, "drained raw frame preserved");
 
     ingress->stop();
     std::cout << "  PASSED" << std::endl;
