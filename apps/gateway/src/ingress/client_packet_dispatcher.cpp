@@ -10,7 +10,12 @@ ClientPacketDispatchResult ClientPacketDispatcher::dispatch(std::span<const std:
     }
 
     const std::vector<std::uint8_t> buffer(payload.begin(), payload.end());
-    const auto header = apollo::protocol::MessageCodec::parseHeader(buffer);
+    apollo::protocol::MessageHeader header;
+    try {
+        header = apollo::protocol::MessageCodec::parseHeader(buffer);
+    } catch (const std::exception&) {
+        return {};
+    }
     const auto messageType = static_cast<apollo::protocol::MessageType>(header.type);
 
     if (messageType == apollo::protocol::MessageType::PING) {

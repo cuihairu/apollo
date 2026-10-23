@@ -6,8 +6,10 @@
 #include "world_app/world_app.hpp"
 #include "apollo/game/base/avatar_reward_sink.hpp"
 #include "apollo/net/link/frame.hpp"
+#include "apollo/net/tls/tls_transport.hpp"
 #include "apollo/net/ws/frame.hpp"
 #include "apollo/net/ws/handshake.hpp"
+#include "tls_test_support.hpp"
 #include "apollo/core/log/log_manager.h"
 
 #include <atomic>
@@ -18,6 +20,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <vector>
@@ -108,12 +111,23 @@ std::vector<std::uint8_t> http_upgrade_request() {
 }
 
 void append_masked_frame(std::vector<std::uint8_t>& out, ws::OpCode opcode,
-                         const std::vector<std::uint8_t>& payload, std::uint8_t maskKey) {
-    out.push_back(0x80 | static_cast<std::uint8_t>(opcode));
-    out.push_back(0x80 | static_cast<std::uint8_t>(payload.size()));
-    (void)maskKey;
-    for (int i = 0; i < 4; ++i) out.push_back(0x5a);
-    for (std::size_t i = 0; i < payload.size(); ++i) {
+                         bool fin, const std::uint8_t* payload, std::size_t size,
+                         std::uint8_t maskKey) {
+    out.push_back((fin ? 0x80 : 0x00) | static_cast<std::uint8_t>(opcode));
+    if (size < 126) {
+        out.push_back(0x80 | static_cast<std::uint8_t>(size));
+    } else if (size <= 0xffff) {
+        out.push_back(0x80 | 126);
+        out.push_back(static_cast<std::uint8_t>(size >> 8));
+        out.push_back(static_cast<std::uint8_t>(size & 0xff));
+    } else {
+        out.push_back(0x80 | 127);
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            out.push_back(static_cast<std::uint8_t>((size >> shift) & 0xff));
+        }
+    }
+    for (int i = 0; i < 4; ++i) out.push_back(maskKey);
+    for (std::size_t i = 0; i < size; ++i) {
         out.push_back(payload[i] ^ maskKey);
     }
 }
@@ -216,7 +230,8 @@ public:
     }
     void sendGameFrame(const std::vector<std::uint8_t>& payload) {
         std::vector<std::uint8_t> frame;
-        append_masked_frame(frame, ws::OpCode::kBinary, payload, 0x5a);
+        append_masked_frame(frame, ws::OpCode::kBinary, true, payload.data(),
+                            payload.size(), 0x5a);
         sendAll(frame);
     }
     bool readGameFrame(std::vector<std::uint8_t>& payload) {
@@ -289,6 +304,140 @@ private:
         payload = std::move(outcome.frames.front().payload);
         return true;
     }
+};
+
+class WssTestClient {
+public:
+    ~WssTestClient() { close(); }
+
+    bool connect(std::uint16_t port) {
+        std::string error;
+        return tls_.start("127.0.0.1", port, error);
+    }
+
+    bool handshake(int timeoutMs = 5000) {
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(timeoutMs);
+        for (;;) {
+            const auto step = tls_.step();
+            if (step == tls_test_support::TlsClient::Step::kConnected) return true;
+            if (step == tls_test_support::TlsClient::Step::kFailed ||
+                std::chrono::steady_clock::now() >= deadline) {
+                return false;
+            }
+            std::this_thread::sleep_for(kTick);
+        }
+    }
+
+    bool configureVerify(const std::string& caPath, const std::string& host) {
+        return tls_.configureVerify(caPath, host);
+    }
+
+    bool sendAll(const std::vector<std::uint8_t>& bytes) {
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(5000);
+        std::size_t offset = 0;
+        while (offset < bytes.size()) {
+            const auto count = tls_.write(bytes.data() + offset, bytes.size() - offset);
+            if (count <= 0) {
+                if (std::chrono::steady_clock::now() >= deadline) return false;
+                std::this_thread::sleep_for(kTick);
+                continue;
+            }
+            offset += static_cast<std::size_t>(count);
+        }
+        return true;
+    }
+
+    void sendGameFrame(const std::vector<std::uint8_t>& payload) {
+        std::vector<std::uint8_t> wsFrame;
+        append_masked_frame(wsFrame, ws::OpCode::kBinary, true, payload.data(),
+                            payload.size(), 0x5b);
+        sendAll(wsFrame);
+    }
+
+    bool readAvailableGameFrame(std::vector<std::uint8_t>& payload,
+                                int timeoutMs = 200) {
+        for (;;) {
+            if (parseOneGameFrame(payload)) return true;
+            std::array<std::uint8_t, 4096> chunk{};
+            const auto count = tls_.read(chunk.data(), chunk.size());
+            if (count <= 0) {
+                if (timeoutMs <= 0) return false;
+                timeoutMs -= 2;
+                std::this_thread::sleep_for(kTick);
+                continue;
+            }
+            buffer_.insert(buffer_.end(), chunk.begin(),
+                           chunk.begin() + static_cast<long>(count));
+        }
+    }
+
+    bool readGameFrame(std::vector<std::uint8_t>& payload, int timeoutMs = 5000) {
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(timeoutMs);
+        for (;;) {
+            if (readAvailableGameFrame(payload)) return true;
+            if (std::chrono::steady_clock::now() >= deadline) return false;
+        }
+    }
+
+    bool readHttpResponse(std::string& response, int timeoutMs = 5000) {
+        constexpr std::string_view terminator = "\r\n\r\n";
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(timeoutMs);
+        while (std::search(buffer_.begin(), buffer_.end(),
+                           terminator.begin(), terminator.end()) == buffer_.end()) {
+            std::array<std::uint8_t, 4096> chunk{};
+            const auto count = tls_.read(chunk.data(), chunk.size());
+            if (count > 0) {
+                buffer_.insert(buffer_.end(), chunk.begin(),
+                               chunk.begin() + static_cast<long>(count));
+            } else {
+                std::this_thread::sleep_for(kTick);
+            }
+            if (std::chrono::steady_clock::now() >= deadline) return false;
+        }
+        const auto end = std::search(buffer_.begin(), buffer_.end(),
+                                     terminator.begin(), terminator.end());
+        response.assign(buffer_.begin(), end + 4);
+        buffer_.erase(buffer_.begin(), end + 4);
+        return response.find(" 101 ") != std::string::npos;
+    }
+
+    void close() { tls_.close(); }
+
+private:
+    bool parseOneGameFrame(std::vector<std::uint8_t>& payload) {
+        if (buffer_.size() < 2 || (buffer_[1] & 0x80) != 0) return false;
+        const std::size_t len7 = buffer_[1] & 0x7f;
+        std::size_t header = 2;
+        std::size_t length = len7;
+        if (len7 == 126) {
+            if (buffer_.size() < 4) return false;
+            length = (static_cast<std::size_t>(buffer_[2]) << 8) | buffer_[3];
+            header = 4;
+        } else if (len7 == 127) {
+            if (buffer_.size() < 10) return false;
+            length = 0;
+            for (std::size_t offset = 2; offset < 10; ++offset) {
+                length = (length << 8) | buffer_[offset];
+            }
+            header = 10;
+        }
+        if (buffer_.size() < header + length) return false;
+        netlink::FrameParser gameFrames;
+        const auto outcome = gameFrames.feed(buffer_.data() + static_cast<long>(header),
+                                             length);
+        buffer_.erase(buffer_.begin(),
+                      buffer_.begin() + static_cast<long>(header + length));
+        if (outcome.fatal || outcome.frames.empty()) return false;
+        payload = std::move(outcome.frames.front().payload);
+        return true;
+    }
+
+    tls_test_support::TlsClient tls_;
+    std::vector<std::uint8_t> buffer_;
 };
 #endif
 
@@ -464,6 +613,13 @@ bool test_client_packet_dispatcher_routes_message_kinds() {
     const auto invalidResult = dispatcher.dispatch(
         std::span<const std::uint8_t>(invalid.data(), invalid.size()));
     TEST_ASSERT(invalidResult.kind == gateway::ClientPacketKind::Invalid, "short payload invalid");
+
+    std::vector<std::uint8_t> malformed = pingEncoded;
+    for (std::size_t i = 0; i < 4; ++i) malformed[i] = 0;
+    const auto malformedResult = dispatcher.dispatch(
+        std::span<const std::uint8_t>(malformed.data(), malformed.size()));
+    TEST_ASSERT(malformedResult.kind == gateway::ClientPacketKind::Invalid,
+                "malformed header invalid");
 
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -654,6 +810,291 @@ bool test_tcp_and_ws_route_to_base_and_cell() {
 #endif
 }
 
+
+bool test_wss_resume_route_to_base_and_cell() {
+    std::cout << "Running: test_wss_resume_route_to_base_and_cell..." << std::endl;
+#if defined(_WIN32)
+    std::cout << "  SKIPPED (link M1 transports are POSIX-only)" << std::endl;
+    return true;
+#else
+    world_app::WorldAppConfig cellConfig;
+    cellConfig.host = "127.0.0.1";
+    cellConfig.m1Port = 0;
+    cellConfig.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    world_app::WorldApp cell(cellConfig);
+    cell.start();
+    TEST_ASSERT(cell.m1Link().listenPort() != 0, "cell M1 listener started");
+
+    std::filesystem::path baseDataPath = std::filesystem::temp_directory_path() /
+        ("apollo-gateway-wss-resume-base-" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(baseDataPath / "players");
+    std::filesystem::create_directories(baseDataPath / "journal");
+    player_store::PlayerStoreConfig baseStoreConfig;
+    baseStoreConfig.host = "127.0.0.1";
+    baseStoreConfig.m1Enabled = true;
+    baseStoreConfig.m1Port = 0;
+    baseStoreConfig.m1SelfName = "base";
+    baseStoreConfig.m1EndpointName = "gateway";
+    baseStoreConfig.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    baseStoreConfig.dataDir = (baseDataPath / "players").string();
+    baseStoreConfig.journalPath = (baseDataPath / "journal/persist.log").string();
+    StoreHost base(baseStoreConfig, 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base M1 listener started");
+    TEST_ASSERT(base.store->adoptPlayer(710, "", 0, 0, 2), "seed wss resume player");
+
+    const std::string certDirectory = "/tmp/apollo-gateway-wss-resume-" +
+        std::to_string(::getpid());
+    std::filesystem::remove_all(certDirectory);
+    std::filesystem::create_directories(certDirectory);
+    const auto certs = tls_test_support::generate_self_signed(
+        certDirectory, "accept", "localhost");
+    TEST_ASSERT(certs.error.empty(), "self-signed certificate generated");
+
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.baseM1Host = "127.0.0.1";
+    config.baseM1Port = base.store->m1_listen_port();
+    config.worldM1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    config.worldM1Host = "127.0.0.1";
+    config.worldM1Port = cell.m1Link().listenPort();
+    config.gatewayId = 85;
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    config.sessionRetentionMs = 2000;
+    config.sessionTimeoutMs = 600000;
+    config.heartbeatCheckIntervalMs = 50;
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(wait_until([&] { return server.baseActivationReady(); }, 3000),
+                "base link ready");
+    TEST_ASSERT(server.wssListenPort() != 0, "wss ingress listening");
+
+    WssTestClient wss;
+    TEST_ASSERT(wss.configureVerify(certs.cert_path, "localhost"),
+                "wss verification configured");
+    TEST_ASSERT(wss.connect(server.wssListenPort()), "wss connected");
+    TEST_ASSERT(wss.handshake(), "wss TLS handshake completed");
+    TEST_ASSERT(wss.sendAll(http_upgrade_request()), "wss upgrade sent");
+    std::string upgradeResponse;
+    TEST_ASSERT(wss.readHttpResponse(upgradeResponse, 5000), "wss upgraded");
+    wss.sendGameFrame(frame_bytes(1, 0, ping_packet(0, 1)));
+    std::vector<std::uint8_t> handshakeReply;
+    TEST_ASSERT(wss.readGameFrame(handshakeReply, 5000), "wss handshake reply");
+    const auto sessionId = header_session_id(handshakeReply);
+    TEST_ASSERT(sessionId != 0, "wss session allocated");
+    TEST_ASSERT(server.authenticateSession(sessionId, 710, "ticket"),
+                "wss session authenticated");
+
+    wss.close();
+    TEST_ASSERT(wait_until([&] { return server.getRegisteredConnectionCount() == 0; }, 2000),
+                "wss connection torn down");
+    TEST_ASSERT(server.getSessionCount() == 1, "authed session retained");
+
+    WssTestClient resumed;
+    TEST_ASSERT(resumed.configureVerify(certs.cert_path, "localhost"),
+                "reconnect verification configured");
+    TEST_ASSERT(resumed.connect(server.wssListenPort()), "wss reconnected");
+    TEST_ASSERT(resumed.handshake(), "wss reconnect handshake completed");
+    TEST_ASSERT(resumed.sendAll(http_upgrade_request()), "wss reconnect upgrade sent");
+    std::string reconnectResponse;
+    TEST_ASSERT(resumed.readHttpResponse(reconnectResponse, 5000), "wss reconnected");
+    resumed.sendGameFrame(frame_bytes(1, 0, ping_packet(sessionId, 2)));
+    std::vector<std::uint8_t> resumeReply;
+    TEST_ASSERT(resumed.readGameFrame(resumeReply, 5000), "resume pong received");
+    TEST_ASSERT(header_session_id(resumeReply) == sessionId,
+                "wss reconnect resumes the same session");
+
+    player_store::business::ScoreCreditRequest businessRequest;
+    businessRequest.request_id = 84;
+    businessRequest.player_id = 710;
+    businessRequest.score = 14;
+    businessRequest.source_zone_id = 7;
+    resumed.sendGameFrame(frame_bytes(2, 0,
+        player_store::business::encodeFrame(businessRequest, sessionId)));
+
+    apollo::protocol::CellCreateEntity createIntent;
+    createIntent.entityId = 710;
+    createIntent.entityType = apollo::protocol::EntityType::PLAYER;
+    createIntent.spaceId = 1;
+    createIntent.position = apollo::protocol::Position(7.0f, 8.0f, 9.0f);
+    resumed.sendGameFrame(frame_bytes(3, 0,
+        apollo::protocol::MessageCodec::encode(createIntent, sessionId)));
+
+    player_store::business::ScoreCreditReply businessReply;
+    apollo::protocol::SessionID replySessionId = 0;
+    std::vector<std::uint8_t> reply;
+    bool replied = false;
+    for (int waited = 0; waited < 5000 && !replied; waited += 10) {
+        if (resumed.readGameFrame(reply, 10) &&
+            player_store::business::decodeFrame(reply, businessReply, replySessionId)) {
+            replied = true;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    TEST_ASSERT(replied, "post-resume Base contract-959 reply reached the same session");
+    TEST_ASSERT(replySessionId == sessionId, "post-resume Base reply preserves session");
+    TEST_ASSERT(businessReply.accepted && businessReply.request_id == 84,
+                "post-resume Base handler accepted the score request");
+    const auto avatar = base.store->findAvatar(710);
+    TEST_ASSERT(avatar &&
+                avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 14,
+                "post-resume Base request reached the authoritative anchor");
+    auto* egress = server.messageRouter() ? server.messageRouter()->egress() : nullptr;
+    TEST_ASSERT(egress != nullptr, "cell egress wired");
+    TEST_ASSERT(wait_until([&] { return egress->ackedIntents() == 1; }, 3000),
+                "post-resume cell intent acknowledged");
+    TEST_ASSERT(cell.m1Link().receivedIntents() == 1,
+                "post-resume cell intent reached the M1 egress");
+
+    std::error_code cleanupError;
+    std::filesystem::remove_all(baseDataPath, cleanupError);
+    std::filesystem::remove_all(certDirectory, cleanupError);
+    cell.stop();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+#endif
+}
+
+bool test_wss_route_to_base_and_cell() {
+    std::cout << "Running: test_wss_route_to_base_and_cell..." << std::endl;
+#if defined(_WIN32)
+    std::cout << "  SKIPPED (link M1 transports are POSIX-only)" << std::endl;
+    return true;
+#else
+    world_app::WorldAppConfig cellConfig;
+    cellConfig.host = "127.0.0.1";
+    cellConfig.m1Port = 0;
+    cellConfig.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    world_app::WorldApp cell(cellConfig);
+    cell.start();
+    TEST_ASSERT(cell.m1Link().listenPort() != 0, "cell M1 listener started");
+
+    std::filesystem::path baseDataPath = std::filesystem::temp_directory_path() /
+        ("apollo-gateway-wss-route-base-" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(baseDataPath / "players");
+    std::filesystem::create_directories(baseDataPath / "journal");
+    player_store::PlayerStoreConfig baseStoreConfig;
+    baseStoreConfig.host = "127.0.0.1";
+    baseStoreConfig.m1Enabled = true;
+    baseStoreConfig.m1Port = 0;
+    baseStoreConfig.m1SelfName = "base";
+    baseStoreConfig.m1EndpointName = "gateway";
+    baseStoreConfig.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    baseStoreConfig.dataDir = (baseDataPath / "players").string();
+    baseStoreConfig.journalPath = (baseDataPath / "journal/persist.log").string();
+    StoreHost base(baseStoreConfig, 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base M1 listener started");
+    TEST_ASSERT(base.store->adoptPlayer(709, "", 0, 0, 2), "seed wss player profile");
+
+    const std::string certDirectory = "/tmp/apollo-gateway-wss-route-" +
+        std::to_string(::getpid());
+    std::filesystem::create_directories(certDirectory);
+    const auto certs = tls_test_support::generate_self_signed(
+        certDirectory, "accept", "localhost");
+    if (!certs.error.empty()) {
+        std::cerr << "  certificate error: " << certs.error << std::endl;
+    }
+    TEST_ASSERT(certs.error.empty(), "self-signed certificate generated");
+
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.baseM1Host = "127.0.0.1";
+    config.baseM1Port = base.store->m1_listen_port();
+    config.worldM1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    config.worldM1Host = "127.0.0.1";
+    config.worldM1Port = cell.m1Link().listenPort();
+    config.gatewayId = 84;
+    config.wssPort = probe_free_port();
+    config.tlsCertPath = certs.cert_path;
+    config.tlsKeyPath = certs.key_path;
+    config.sessionTimeoutMs = 600000;
+    config.heartbeatCheckIntervalMs = 50;
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(wait_until([&] { return server.baseActivationReady(); }, 3000),
+                "base link ready");
+    TEST_ASSERT(server.wssListenPort() != 0, "wss ingress listening");
+
+    WssTestClient wss;
+    TEST_ASSERT(wss.configureVerify(certs.cert_path, "localhost"),
+                "wss verification configured");
+    TEST_ASSERT(wss.connect(server.wssListenPort()), "wss connected");
+    TEST_ASSERT(wss.handshake(), "wss TLS handshake completed");
+    TEST_ASSERT(wss.sendAll(http_upgrade_request()), "wss upgrade sent");
+
+    std::string upgradeResponse;
+    TEST_ASSERT(wss.readHttpResponse(upgradeResponse, 5000) &&
+                upgradeResponse.find(" 101 ") != std::string::npos,
+                "wss upgraded");
+    wss.sendGameFrame(frame_bytes(1, 0, ping_packet(0, 1)));
+    std::vector<std::uint8_t> handshakeReply;
+    TEST_ASSERT(wss.readGameFrame(handshakeReply, 5000), "wss handshake reply");
+    const auto sessionId = header_session_id(handshakeReply);
+    TEST_ASSERT(sessionId != 0, "wss session allocated");
+    const bool authenticated = server.authenticateSession(sessionId, 709, "ticket");
+    TEST_ASSERT(authenticated, "wss session authenticated");
+
+    player_store::business::ScoreCreditRequest businessRequest;
+    businessRequest.request_id = 83;
+    businessRequest.player_id = 709;
+    businessRequest.score = 13;
+    businessRequest.source_zone_id = 7;
+    wss.sendGameFrame(frame_bytes(2, 0,
+        player_store::business::encodeFrame(businessRequest, sessionId)));
+
+    apollo::protocol::CellCreateEntity createIntent;
+    createIntent.entityId = 709;
+    createIntent.entityType = apollo::protocol::EntityType::PLAYER;
+    createIntent.spaceId = 1;
+    createIntent.position = apollo::protocol::Position(4.0f, 5.0f, 6.0f);
+    wss.sendGameFrame(frame_bytes(3, 0,
+        apollo::protocol::MessageCodec::encode(createIntent, sessionId)));
+
+    player_store::business::ScoreCreditReply businessReply;
+    apollo::protocol::SessionID replySessionId = 0;
+    std::vector<std::uint8_t> reply;
+    bool replied = false;
+    for (int waited = 0; waited < 5000 && !replied; waited += 10) {
+        if (wss.readGameFrame(reply, 10) &&
+            player_store::business::decodeFrame(reply, businessReply, replySessionId)) {
+            replied = true;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    TEST_ASSERT(replied, "WSS Base contract-959 reply reached the same session");
+    TEST_ASSERT(replySessionId == sessionId,
+                "WSS Base reply preserves session addressing");
+    TEST_ASSERT(businessReply.accepted && businessReply.request_id == 83,
+                "WSS Base business handler accepted the score request");
+    const auto avatar = base.store->findAvatar(709);
+    TEST_ASSERT(avatar &&
+                avatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 13,
+                "WSS Base request reached the authoritative anchor");
+    auto* egress = server.messageRouter() ? server.messageRouter()->egress() : nullptr;
+    TEST_ASSERT(egress != nullptr, "cell egress wired");
+    TEST_ASSERT(wait_until([&] { return egress->ackedIntents() == 1; }, 3000),
+                "WSS cell intent acknowledged");
+    TEST_ASSERT(cell.m1Link().receivedIntents() == 1,
+                "WSS cell intent reached the M1 egress");
+
+    std::error_code cleanupError;
+    std::filesystem::remove_all(baseDataPath, cleanupError);
+    std::filesystem::remove_all(certDirectory, cleanupError);
+    cell.stop();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+#endif
+}
+
 } // namespace
 
 int main() {
@@ -679,6 +1120,8 @@ int main() {
     run(test_client_packet_dispatcher_routes_message_kinds);
     run(test_router_degrades_when_backends_unreachable);
     run(test_tcp_and_ws_route_to_base_and_cell);
+    run(test_wss_route_to_base_and_cell);
+    run(test_wss_resume_route_to_base_and_cell);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;
