@@ -34,7 +34,7 @@ jobs:
     # 闸一（sdk-contract §3/xml-generation §5）：xmllint --schema 全量契约 XML。
     # 校验器零开发（标准 XML Schema 机制）；目录内任何 *.xml（含 include 分片）
     # 一律过 apollo.xsd——分片自身是完整根元素，独立可验。
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -52,7 +52,7 @@ jobs:
 
   contract_pack:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -74,7 +74,7 @@ jobs:
 
   schema_hash_report:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     permissions:
       pull-requests: write
       contents: read
