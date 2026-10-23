@@ -283,6 +283,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_app_services
 	        apollo_protocol
 	        apollo::game_core
+			apollo::game_orders
 	        apollo::game_world
 	        apollo::game_social
 	        apollo_squad_instance

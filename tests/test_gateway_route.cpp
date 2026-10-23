@@ -5,6 +5,7 @@
 #include "store_host.hpp"
 #include "world_app/world_app.hpp"
 #include "apollo/game/base/avatar_reward_sink.hpp"
+#include "apollo/game/orders/base_authority.hpp"
 #include "apollo/net/link/frame.hpp"
 #include "apollo/net/tls/tls_transport.hpp"
 #include "apollo/net/ws/frame.hpp"
@@ -811,6 +812,181 @@ bool test_tcp_and_ws_route_to_base_and_cell() {
 }
 
 
+bool test_dual_base_forward_resolution() {
+    std::cout << "Running: test_dual_base_forward_resolution..." << std::endl;
+#if defined(_WIN32)
+    std::cout << "  SKIPPED (link M1 transports are POSIX-only)" << std::endl;
+    return true;
+#else
+    const std::filesystem::path testDataPath = std::filesystem::temp_directory_path() /
+        ("apollo-gateway-dual-base-" +
+         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::remove_all(testDataPath);
+    for (const char* storeName : {"a", "b"}) {
+        std::filesystem::create_directories(testDataPath / storeName / "players");
+        std::filesystem::create_directories(testDataPath / storeName / "journal");
+    }
+
+    player_store::PlayerStoreConfig baseAStoreConfig;
+    baseAStoreConfig.host = "127.0.0.1";
+    baseAStoreConfig.m1Enabled = true;
+    baseAStoreConfig.m1Port = 0;
+    baseAStoreConfig.m1SelfName = "base-a";
+    baseAStoreConfig.m1EndpointName = "gateway";
+    baseAStoreConfig.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    baseAStoreConfig.dataDir = (testDataPath / "a/players").string();
+    baseAStoreConfig.journalPath = (testDataPath / "a/journal/persist.log").string();
+    StoreHost baseA(baseAStoreConfig, 0, 0, 0, 0);
+    TEST_ASSERT(baseA.store->m1_listen_port() != 0, "dual-base A listener started");
+    TEST_ASSERT(baseA.store->adoptPlayer(1201, "", 0, 0, 2), "seed dual-base A profile");
+    TEST_ASSERT(baseA.store->adoptPlayer(1202, "", 0, 0, 2), "seed dual-base unactivated profile");
+
+    player_store::PlayerStoreConfig baseBStoreConfig;
+    baseBStoreConfig.host = "127.0.0.1";
+    baseBStoreConfig.m1Enabled = true;
+    baseBStoreConfig.m1Port = 0;
+    baseBStoreConfig.m1SelfName = "base-b";
+    baseBStoreConfig.m1EndpointName = "gateway";
+    baseBStoreConfig.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    baseBStoreConfig.dataDir = (testDataPath / "b/players").string();
+    baseBStoreConfig.journalPath = (testDataPath / "b/journal/persist.log").string();
+    StoreHost baseB(baseBStoreConfig, 0, 0, 0, 0);
+    TEST_ASSERT(baseB.store->m1_listen_port() != 0, "dual-base B listener started");
+    TEST_ASSERT(baseB.store->adoptPlayer(1201, "", 0, 0, 2), "seed dual-base B profile");
+
+    const std::string baseAEndpoint = "127.0.0.1:" +
+        std::to_string(baseA.store->m1_listen_port());
+    const std::string baseBEndpoint = "127.0.0.1:" +
+        std::to_string(baseB.store->m1_listen_port());
+    apollo::game::orders::BaseAuthorityRegistry authorityRegistry(
+        (testDataPath / "authority.log").string());
+    TEST_ASSERT(authorityRegistry.open(), "base authority journal opened");
+
+    const std::int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto firstActivation = authorityRegistry.activate(1201, baseAEndpoint, now_ms);
+    TEST_ASSERT(firstActivation.generation == 1 && firstActivation.address == baseAEndpoint,
+                "first activation registered at base A");
+    const auto currentActivation = authorityRegistry.activate(1201, baseBEndpoint, now_ms + 1);
+    TEST_ASSERT(currentActivation.generation > firstActivation.generation &&
+                currentActivation.address == baseBEndpoint,
+                "second activation replaced the current base holder");
+
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = 0;
+    config.baseM1Host = "127.0.0.1";
+    config.baseM1Port = baseA.store->m1_listen_port();
+    config.worldM1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    config.worldM1Host = "127.0.0.1";
+    config.worldM1Port = 0;
+    config.gatewayId = 87;
+    config.sessionTimeoutMs = 600000;
+    config.heartbeatCheckIntervalMs = 50;
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(wait_until([&] { return server.baseActivationReady(); }, 3000),
+                "base A activation link ready");
+    server.setBaseResolver(
+        [&](std::uint64_t playerId) {
+            const auto endpoint = authorityRegistry.resolve(playerId);
+            return endpoint.has_value()
+                ? std::optional<std::string>{endpoint->address}
+                : std::optional<std::string>{std::nullopt};
+        });
+
+    TcpTestClient activatedClient;
+    TEST_ASSERT(activatedClient.connect(server.listenPort()), "activated player connected");
+    activatedClient.sendAll(frame_bytes(1, 0, ping_packet(0, 1)));
+    std::vector<std::uint8_t> activatedHandshakeReply;
+    TEST_ASSERT(activatedClient.readGameFrame(activatedHandshakeReply),
+                "activated player handshake reply");
+    const auto activatedSessionId = header_session_id(activatedHandshakeReply);
+    TEST_ASSERT(activatedSessionId != 0, "activated player session allocated");
+    TEST_ASSERT(server.authenticateSession(activatedSessionId, 1201, "ticket"),
+                "activated player session authenticated");
+
+    TcpTestClient unactivatedClient;
+    TEST_ASSERT(unactivatedClient.connect(server.listenPort()), "unactivated player connected");
+    unactivatedClient.sendAll(frame_bytes(1, 0, ping_packet(0, 1)));
+    std::vector<std::uint8_t> unactivatedHandshakeReply;
+    TEST_ASSERT(unactivatedClient.readGameFrame(unactivatedHandshakeReply),
+                "unactivated player handshake reply");
+    const auto unactivatedSessionId = header_session_id(unactivatedHandshakeReply);
+    TEST_ASSERT(unactivatedSessionId != 0 && unactivatedSessionId != activatedSessionId,
+                "unactivated player session allocated");
+    TEST_ASSERT(server.authenticateSession(unactivatedSessionId, 1202, "ticket"),
+                "unactivated player session authenticated");
+
+    const auto initialResolves = server.baseForwardResolves();
+    const auto initialRejections = server.baseForwardRejections();
+    player_store::business::ScoreCreditRequest activatedRequest;
+    activatedRequest.request_id = 91;
+    activatedRequest.player_id = 1201;
+    activatedRequest.score = 21;
+    activatedRequest.source_zone_id = 7;
+    activatedClient.sendAll(frame_bytes(2, 0,
+        player_store::business::encodeFrame(activatedRequest, activatedSessionId)));
+
+    player_store::business::ScoreCreditRequest unactivatedRequest;
+    unactivatedRequest.request_id = 92;
+    unactivatedRequest.player_id = 1202;
+    unactivatedRequest.score = 22;
+    unactivatedRequest.source_zone_id = 7;
+    unactivatedClient.sendAll(frame_bytes(2, 0,
+        player_store::business::encodeFrame(unactivatedRequest, unactivatedSessionId)));
+
+    const auto resolvedEndpoint = authorityRegistry.resolve(1201);
+    const auto currentHolder = authorityRegistry.holder(1201);
+    TEST_ASSERT(resolvedEndpoint && resolvedEndpoint->address == baseBEndpoint &&
+                currentHolder && currentHolder->generation == currentActivation.generation &&
+                currentHolder->address == baseBEndpoint,
+                "authority registry resolves the current base holder and generation");
+
+    player_store::business::ScoreCreditReply activatedReply;
+    apollo::protocol::SessionID activatedReplySession = 0;
+    std::vector<std::uint8_t> reply;
+    bool activatedReplied = false;
+    for (int waited = 0; waited < 5000 && !activatedReplied; waited += 10) {
+        if (activatedClient.readGameFrame(reply) &&
+            player_store::business::decodeFrame(
+                reply, activatedReply, activatedReplySession)) {
+            activatedReplied = true;
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    TEST_ASSERT(activatedReplied, "current-base contract-959 reply reached the same session");
+    TEST_ASSERT(activatedReplySession == activatedSessionId &&
+                activatedReply.accepted && activatedReply.request_id == 91,
+                "current-base handler accepted the forwarded score request");
+    const auto currentAvatar = baseB.store->findAvatar(1201);
+    TEST_ASSERT(currentAvatar &&
+                currentAvatar->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 21,
+                "forwarded request landed on the current base holder");
+    TEST_ASSERT(baseA.store->findAvatar(1201) == nullptr ||
+                baseA.store->findAvatar(1201)->progress(
+                    apollo::game::base::AvatarRewardSink::kExpKey) == 0,
+                "forwarded request did not land on the replaced base");
+    TEST_ASSERT(server.baseForwardResolves() == initialResolves + 2,
+                "both Base-family forwards attempted current-owner resolution");
+    TEST_ASSERT(server.baseForwardRejections() == initialRejections + 1,
+                "unactivated player Base forward was rejected");
+
+    std::vector<std::uint8_t> lateReply;
+    TEST_ASSERT(!unactivatedClient.readGameFrame(lateReply),
+                "rejected forward did not send a base reply");
+    TEST_ASSERT(server.getSessionCount() == 2 && server.getRegisteredConnectionCount() == 2,
+                "rejected forward left both sessions and connections alive");
+
+    std::error_code cleanupError;
+    std::filesystem::remove_all(testDataPath, cleanupError);
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+#endif
+}
+
 bool test_wss_resume_route_to_base_and_cell() {
     std::cout << "Running: test_wss_resume_route_to_base_and_cell..." << std::endl;
 #if defined(_WIN32)
@@ -1122,6 +1298,7 @@ int main() {
     run(test_tcp_and_ws_route_to_base_and_cell);
     run(test_wss_route_to_base_and_cell);
     run(test_wss_resume_route_to_base_and_cell);
+    run(test_dual_base_forward_resolution);
 
     std::cout << "\n=== Summary ===" << std::endl;
     std::cout << "Total: " << total << std::endl;

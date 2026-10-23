@@ -11,11 +11,14 @@
 #include "gateway/m1_route_client.hpp"
 #include "gateway/session_manager.hpp"
 #include "apollo/core/metrics/metric_registry.h"
+#include <map>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <thread>
 #include <atomic>
 #include <functional>
+#include <mutex>
 #include <unordered_map>
 
 namespace apollo::net::tls {
@@ -138,6 +141,14 @@ public:
     // 连接清零后会话仍在册 = 已保留）。
     std::size_t getSessionCount() const;
 
+    // 游戏 Base 前递的当前归属解析缝（OrderDelivery::BaseResolver 同语义）：
+    // 每次前递重新解析，返回地址（host:port）。nullopt = 当前无归属，拒收
+    // 不缓存。未装配时沿用激活面初始路由（迁移前行为不动）。
+    void setBaseResolver(
+        std::function<std::optional<std::string>(PlayerID)> resolver);
+    std::uint64_t baseForwardResolves() const;
+    std::uint64_t baseForwardRejections() const;
+
 private:
     void onConnectionOpened(ConnectionID connectionId, const ClientEndpoint& endpoint) override;
     void onPacketReceived(ConnectionID connectionId, std::span<const std::uint8_t> payload) override;
@@ -153,6 +164,7 @@ private:
     // false = 任一跳传输缺席/回执不成（调用方拒绝认证——面在场 = 无权威
     // 确认不放行）。
     bool activateAndBindAtBase(SessionID sessionId, PlayerID playerId);
+    M1BaseClient* baseClientForEndpoint(const std::string& endpoint);
 
     // 处理客户端消息
     void handleClientMessage(SessionID sessionId, const std::vector<uint8_t>& message);
@@ -209,6 +221,12 @@ private:
     // Base M1 激活客户端面（L53 登录串联第三环；baseM1Port = 0 或装配失败
     // = 不装配，认证退容忍面）
     std::unique_ptr<M1BaseClient> baseClient_;
+    std::function<std::optional<std::string>(PlayerID)> baseResolver_;
+    std::mutex baseResolverMutex_;
+    std::mutex baseClientMutex_;
+    std::map<std::string, std::unique_ptr<M1BaseClient>> routedBaseClients_;
+    std::atomic<std::uint64_t> baseForwardResolves_{0};
+    std::atomic<std::uint64_t> baseForwardRejections_{0};
 
     // 排空控制受理面（P4 排空批；controlM1Port = 0 或装配失败 = 不装配，
     // ops 不可达降级面）。on_request 回调在本泵线程（见 acceptNewConnections）。

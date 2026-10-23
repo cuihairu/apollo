@@ -7,9 +7,12 @@
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <chrono>
+#include <cstdlib>
+#include <limits>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace gateway {
 
@@ -40,6 +43,44 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
 
 constexpr std::uint32_t kM1RouteTimeoutMs = 500;  // 路由解析同步等待上限
 constexpr std::uint32_t kM1BaseForwardTimeoutMs = 500;
+
+std::optional<std::pair<std::string, std::uint16_t>> parseEndpoint(
+    const std::string& endpoint) {
+    std::string host;
+    std::string portText;
+
+    if (!endpoint.empty() && endpoint.front() == '[') {
+        const auto close = endpoint.find(']');
+        if (close == std::string::npos || close + 2 != endpoint.size() ||
+            endpoint[close + 1] != ':') {
+            return std::nullopt;
+        }
+        host = endpoint.substr(1, close - 1);
+        portText = endpoint.substr(close + 2);
+    } else {
+        const auto colon = endpoint.rfind(':');
+        if (colon == std::string::npos || colon == 0 || colon + 1 == endpoint.size()) {
+            return std::nullopt;
+        }
+        host = endpoint.substr(0, colon);
+        portText = endpoint.substr(colon + 1);
+    }
+
+    if (host.empty() || portText.empty() || portText.size() > 5) {
+        return std::nullopt;
+    }
+    for (const char digit : portText) {
+        if (digit < '0' || digit > '9') {
+            return std::nullopt;
+        }
+    }
+
+    const auto port = std::strtoul(portText.c_str(), nullptr, 10);
+    if (port == 0 || port > std::numeric_limits<std::uint16_t>::max()) {
+        return std::nullopt;
+    }
+    return std::pair<std::string, std::uint16_t>{host, static_cast<std::uint16_t>(port)};
+}
 
 } // namespace
 
@@ -293,8 +334,61 @@ void GatewayServer::start() {
         });
     messageRouter_->setBaseForwarding(
         [this](SessionID sessionId, const std::vector<uint8_t>& message) {
+            std::function<std::optional<std::string>(PlayerID)> resolver;
+            {
+                std::lock_guard<std::mutex> guard(baseResolverMutex_);
+                resolver = baseResolver_;
+            }
+            if (resolver) {
+                ++baseForwardResolves_;
+                const auto session = sessionManager_ ? sessionManager_->getSession(sessionId) : nullptr;
+                if (!session || session->playerId == 0) {
+                    ++baseForwardRejections_;
+                    glog().warning("Base forward rejected: session " + std::to_string(sessionId) +
+                                   " has no bound player");
+                    return std::uint64_t{0};
+                }
+
+                std::optional<std::string> endpoint;
+                try {
+                    endpoint = resolver(session->playerId);
+                } catch (const std::exception& ex) {
+                    ++baseForwardRejections_;
+                    glog().warning("Base forward rejected: resolver failed for player " +
+                                   std::to_string(session->playerId) + ": " + ex.what());
+                    return std::uint64_t{0};
+                }
+                if (!endpoint || endpoint->empty()) {
+                    ++baseForwardRejections_;
+                    glog().warning("Base forward rejected: player " + std::to_string(session->playerId) +
+                                   " has no current Base");
+                    return std::uint64_t{0};
+                }
+
+                const auto client = baseClientForEndpoint(*endpoint);
+                if (!client || !client->peerUp()) {
+                    ++baseForwardRejections_;
+                    glog().warning("Base forward rejected: endpoint " + *endpoint + " is unreachable");
+                    return std::uint64_t{0};
+                }
+                const auto result = client->callAsync(
+                    message,
+                    std::chrono::milliseconds(kM1BaseForwardTimeoutMs),
+                    [this, sessionId](std::optional<std::vector<std::uint8_t>> response) {
+                        if (!response) {
+                            glog().warning("Base forward timeout for session "
+                                           + std::to_string(sessionId));
+                            return;
+                        }
+                        if (messageRouter_ && messageRouter_->baseResponse()) {
+                            messageRouter_->baseResponse()(sessionId, std::move(response));
+                        }
+                    });
+                return result;
+            }
+
             if (!baseClient_) return std::uint64_t{0};
-            auto result = baseClient_->callAsync(
+            const auto result = baseClient_->callAsync(
                 message,
                 std::chrono::milliseconds(kM1BaseForwardTimeoutMs),
                 [this, sessionId](std::optional<std::vector<std::uint8_t>> response) {
@@ -384,6 +478,71 @@ void GatewayServer::start() {
                 + std::to_string(listenPort()));
 }
 
+void GatewayServer::setBaseResolver(
+    std::function<std::optional<std::string>(PlayerID)> resolver) {
+    std::lock_guard<std::mutex> guard(baseResolverMutex_);
+    baseResolver_ = std::move(resolver);
+}
+
+std::uint64_t GatewayServer::baseForwardResolves() const {
+    return baseForwardResolves_.load(std::memory_order_acquire);
+}
+
+std::uint64_t GatewayServer::baseForwardRejections() const {
+    return baseForwardRejections_.load(std::memory_order_acquire);
+}
+
+M1BaseClient* GatewayServer::baseClientForEndpoint(const std::string& endpoint) {
+    const auto parsed = parseEndpoint(endpoint);
+    if (!parsed) {
+        return nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(baseClientMutex_);
+        const auto found = routedBaseClients_.find(endpoint);
+        if (found != routedBaseClients_.end()) {
+            return found->second.get();
+        }
+    }
+
+    M1BaseClientConfig clientConfig;
+    clientConfig.host = parsed->first;
+    clientConfig.port = parsed->second;
+    clientConfig.route_json = config_.worldM1RouteJson;
+    auto client = makeM1BaseClient(std::move(clientConfig));
+    if (!client || !client->start()) {
+        glog().warning("gateway Base forward route degraded: endpoint " + endpoint +
+                       " unavailable");
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> guard(baseClientMutex_);
+    const auto existing = routedBaseClients_.find(endpoint);
+    if (existing != routedBaseClients_.end()) {
+        client->stop();
+        return existing->second.get();
+    }
+    auto* live = client.get();
+    routedBaseClients_.emplace(endpoint, std::move(client));
+
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(kM1BaseForwardTimeoutMs);
+    while (!live->peerUp() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (!live->peerUp()) {
+        std::lock_guard<std::mutex> clear(baseClientMutex_);
+        const auto liveEntry = routedBaseClients_.find(endpoint);
+        if (liveEntry != routedBaseClients_.end()) {
+            liveEntry->second->stop();
+            routedBaseClients_.erase(liveEntry);
+        }
+        return nullptr;
+    }
+    return live;
+}
+
 void GatewayServer::stop() {
     running_ = false;
 
@@ -409,6 +568,13 @@ void GatewayServer::stop() {
     if (m1RouteClient_) {
         m1RouteClient_->stop();
         m1RouteClient_.reset();
+    }
+    {
+        std::lock_guard<std::mutex> guard(baseClientMutex_);
+        for (auto& [endpoint, client] : routedBaseClients_) {
+            client->stop();
+        }
+        routedBaseClients_.clear();
     }
     if (baseClient_) {
         baseClient_->stop();
