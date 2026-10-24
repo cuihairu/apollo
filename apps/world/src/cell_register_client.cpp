@@ -38,13 +38,6 @@ constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
 
-std::uint64_t steady_now_ms() {
-    return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
-}
-
 class CellRegisterClientImpl final : public CellRegisterClient {
 public:
     explicit CellRegisterClientImpl(CellRegisterConfig config)
@@ -406,6 +399,13 @@ private:
 };
 
 } // namespace
+
+std::uint64_t steady_now_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
 
 std::unique_ptr<CellRegisterClient> makeCellRegisterClient(CellRegisterConfig config) {
     return std::make_unique<CellRegisterClientImpl>(std::move(config));

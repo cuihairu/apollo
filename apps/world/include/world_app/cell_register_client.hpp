@@ -24,6 +24,7 @@
 // 超 link_grace_ms 或收到 code 3 触发冻结监听（宿主停模拟关闸），解冻只随
 // 961 复核受理——链路恢复本身不解冻。
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -81,6 +82,13 @@ enum class LinkFreezeReason {
 };
 using LinkFreezeListener = std::function<void(LinkFreezeReason)>;
 using ReadmitListener = std::function<void()>;
+
+// steady 毫秒（CLOCK_MONOTONIC）当前值。WorldApp 启动基准与 cell 自铸代次
+// 共用该单调域，测试与宿主可显式注入同一基准。
+static_assert(std::chrono::steady_clock::is_steady,
+              "boot basis and registration windows require a steady clock");
+
+std::uint64_t steady_now_ms();
 
 // 注册账快照（泵上下文写，宿主/测试跨线程读——mutex 守）。
 struct CellRegisterState {

@@ -1850,6 +1850,126 @@ bool test_journal_v2_assignment_state_across_restart() {
     return true;
 }
 
+// 重启 pending 归属窗单调基准：journal 不携带历史时间戳时以注入 bootAtMs
+// 为锚，与 registered_at_ms 共用 steady 毫秒和 cellExpiryMs 同一口径。
+bool test_journal_owner_boot_basis_window() {
+    std::cout << "Running: test_journal_owner_boot_basis_window..." << std::endl;
+    namespace fs = std::filesystem;
+    const fs::path journal_dir = "/tmp/apollo-cell-register-tests";
+    fs::create_directories(journal_dir);
+    const fs::path journal = journal_dir / "boot-basis-window.txt";
+    fs::remove_all(journal_dir);
+    fs::create_directories(journal_dir);
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> boot_assigns;
+    g_assigns = &boot_assigns;
+
+    // 源世界先持有既有管理关系证据（T 行），否则启动即按缺失日志冻结分配。
+    {
+        std::ofstream evidence(journal, std::ios::binary | std::ios::trunc);
+        evidence << "80|8\n";
+    }
+    WorldEnd source;
+    source.config.worldJournalPath = journal.string();
+    source.config.assignSpaces = {7, 8};
+    TEST_ASSERT(source.start(140), "evidence source world started");
+    CellEnd evidence_cell;
+    RegisterReply r;
+    TEST_ASSERT(dial_cell(source, evidence_cell, "cell-evidence"),
+                "evidence cell dialed");
+    TEST_ASSERT(register_roundtrip(evidence_cell, 4299, 81, 9, "127.0.0.1", 9400,
+                                   1, 10, 0, true, r),
+                "evidence cell registered");
+    source.stop();
+
+    // 首启生成 A 终态；v2 行只有归属/版本，重启时必须补时间基准。
+    WorldEnd w1;
+    w1.config.worldJournalPath = journal.string();
+    w1.config.assignSpaces = {7, 8};
+    w1.config.cellExpiryMs = 0;
+    TEST_ASSERT(w1.start(141), "journal source world started");
+    CellEnd c1;
+    TEST_ASSERT(dial_cell(w1, c1, "cell-w1"), "journal owner dialed");
+    TEST_ASSERT(register_roundtrip(c1, 4301, 81, 9, "127.0.0.1", 9401, 1, 10, 0,
+                                   true, r),
+                "journal owner registered");
+    TEST_ASSERT(wait_until([&] {
+                    c1.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return boot_assigns.count(7) > 0 && boot_assigns.count(8) > 0
+                           && boot_assigns[7].ready && boot_assigns[8].ready
+                           && boot_assigns[7].assigned_cell_id == 81
+                           && boot_assigns[8].assigned_cell_id == 81;
+                }, 3000),
+                "journal source claimed both spaces");
+    {
+        std::lock_guard<std::mutex> lock(g_assigns_mutex);
+        TEST_ASSERT(boot_assigns[7].assigned_cell_id == 81
+                        && boot_assigns[7].version == 1,
+                    "journal source assigned space 7");
+        TEST_ASSERT(boot_assigns[8].assigned_cell_id == 81
+                        && boot_assigns[8].version == 1,
+                    "journal source assigned space 8");
+    }
+    w1.stop();
+    g_assigns = nullptr;
+
+    const auto write_journal = [&](std::uint64_t boot_basis_row) {
+        std::ofstream out(journal, std::ios::binary | std::ios::trunc);
+        out << "T 81|" << boot_basis_row << "\nB 77\n"
+            << "A 7|81|1\nA 8|81|1\n";
+    };
+
+    // 历史锚已超窗：不依赖当前钟，W2 启动后第一拍即释放回池。
+    const std::uint64_t expired_boot = world_app::steady_now_ms() - 100;
+    write_journal(expired_boot);
+    WorldEnd w2;
+    w2.config.worldJournalPath = journal.string();
+    w2.config.assignSpaces = {7, 8};
+    w2.config.bootAtMs = expired_boot;
+    w2.config.cellExpiryMs = 40;
+    TEST_ASSERT(w2.start(142), "expired injected basis booted");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* first = w2.world->find_space_assignment(7);
+                    const auto* second = w2.world->find_space_assignment(8);
+                    return first != nullptr && first->cell_id == 0
+                           && second != nullptr && second->cell_id == 0;
+                }, 2000),
+                "injected past boot basis releases both owners");
+    w2.stop();
+
+    // 历史锚远未到期：真身重注册清除 pending，按登记语义重新认领并版本 +1。
+    const std::uint64_t future_boot = world_app::steady_now_ms() + 1000000;
+    write_journal(future_boot);
+    WorldEnd w3;
+    w3.config.worldJournalPath = journal.string();
+    w3.config.assignSpaces = {7, 8};
+    w3.config.bootAtMs = future_boot;
+    w3.config.cellExpiryMs = 2000;
+    TEST_ASSERT(w3.start(143), "future injected basis booted");
+    CellEnd c2;
+    TEST_ASSERT(dial_cell(w3, c2, "cell-w3"), "journal owner redialed");
+    TEST_ASSERT(register_roundtrip(c2, 4302, 81, future_boot + 1, "127.0.0.1", 9401, 1, 10, 0,
+                                   true, r),
+                "journal owner re-admitted");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted,
+                "restart owner re-admitted");
+    {
+        const auto* first = w3.world->find_space_assignment(7);
+        const auto* second = w3.world->find_space_assignment(8);
+        TEST_ASSERT(first != nullptr && first->cell_id == 81 && first->version == 2,
+                    "injected future basis retains space 7");
+        TEST_ASSERT(second != nullptr && second->cell_id == 81 && second->version == 2,
+                    "injected future basis retains space 8");
+    }
+    g_replies = nullptr;
+    g_assigns = nullptr;
+    w3.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // write-ahead 声明闸（批A）：A 行 append 失败 = 不对外声明——认领内存回滚
 //（Space 留池待下次受理重试）、962 不发；受理面照常（R/B/T 行失败沿用
 // 批㉚ 告警降级，可用性优先）。锁写入失败拒启单列；A 行失败用启动后摘卷
@@ -2320,6 +2440,7 @@ int main() {
                     && test_space_release_and_reclaim()
                     && test_watermark_journal_persists_across_restart()
                     && test_journal_v2_assignment_state_across_restart()
+                    && test_journal_owner_boot_basis_window()
                     && test_journal_v2_write_ahead_gates_declaration()
                     && test_cell_space_report_adjudication()
                     && test_production_client_space_report()

@@ -65,6 +65,11 @@ struct WorldAppConfig {
     // ——cell 先自冻结、World 后摘除。
     std::uint64_t linkGraceMs = 15000;
 
+    // World 进程启动时刻（steady 毫秒）。manager 装配时注入，作为 journal
+    // 装载主缺少历史时间戳时的重注册窗口基准——与 registered_at_ms 和
+    // cellExpiryMs 使用同一单调域与同一裁决窗，不引入第二套过期口径。
+    std::uint64_t bootAtMs = 0;
+
     // Space 分配池（L101 分配面首切片，manager 侧）：池内 Space 分配给注册
     // 就绪 cell——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分
     //（重平衡/回收/拓扑版本随 L108）。空 = 分配关（缺省单机形态不变）。

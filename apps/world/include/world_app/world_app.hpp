@@ -304,7 +304,9 @@ private:
     // journal 已知归属主（批A 装载终态重建）：cell_id → 装载时刻。重启后
     // 未归队前 Space 保持归属（设计稿 §4「过期窗不来」行——不立即另端
     // 重建），过期窗（cellExpiryMs）内不归队即释放回池；真身登记即除名
-    //（此后随登记面心跳/过期语义）。
+    //（此后随登记面心跳/过期语义）。时刻与 CellRegistration::
+    // registered_at_ms 同为 steady 毫秒，并共用 cellExpiryMs；journal 缺失
+    // 时间基准时取 config.bootAtMs，不引入第二套过期判定。
     std::unordered_map<std::uint64_t, std::uint64_t> pendingJournalOwners_;
     // 空日志缺失证据（§2）：journal 文件缺失，首个 cell 拨入即形成旧管理
     // 关系证据；true = 全池冻结，不开新分配。
@@ -319,8 +321,13 @@ private:
     // Space（§4「不推新分配、不释放」）；解冻随对账修复批（journal 补记 +
     // 重推 962，人工命令与否待拍板）。
     std::unordered_set<std::uint64_t> conflictedSpaces_;
+    // 管理日志批最小对账面：已通过 967 复核且与权威终态一致的 Space 计数。
+    // journal 开启时同步记 C 行；分歧/失联来源不记（分歧仍进批B 冲突集）。
+    std::uint64_t reconciledSpaceCount_ = 0;
     // 已裁决自报条目计数（批B 观测面）
     std::uint64_t spaceReportCount_ = 0;
+    // 与权威表匹配且已记入管理日志的 967 条数（journal 关 = 0）
+    std::uint64_t reconciled_space_count() const { return reconciledSpaceCount_; }
 };
 
 } // namespace world_app

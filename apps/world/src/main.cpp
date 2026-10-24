@@ -298,6 +298,7 @@ int main(int argc, char* argv[]) {
         // eval / 952 编排 / 956 排空）不装配——M1LinkServer 分发面对缺席回调
         // 自守门（判空拒收），注册/拓扑/容量编排归 manager 侧随后续条目。
         if (config.role == "cell") {
+            config.bootAtMs = steady_now_ms();
             CellApp cell(config);
             CellLinkEgress egress;
             cell.set_egress(&egress);

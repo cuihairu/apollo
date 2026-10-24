@@ -127,6 +127,12 @@ private:
 WorldApp::WorldApp(const WorldAppConfig& config)
     : config_(config)
     , cell_(std::make_unique<CellApp>(config)) {
+    if (config_.bootAtMs == 0) {
+        config_.bootAtMs = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch())
+                .count());
+    }
     // 注入缝装配（start 前即位）：出口缝 + 拍首传输泵 + 拍后管理推进。
     // 全部钩子在内核线程内执行——管理受理点（eval/编排/排空）与驱动同线程，
     // 单写者纪律不破（ADR-015(a)）。
@@ -705,7 +711,7 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
             //——无转移发生，最后一条 A 行已覆盖该归属+版本）。
             if (!appendJournalRow("A " + std::to_string(space_id) + "|"
                                   + std::to_string(reg.cell_id) + "|"
-                                  + std::to_string(it->second.version))) {
+                                  + std::to_string(it->second.version), true)) {
                 worldLog().warning(
                     "world journal append failed: " + config_.worldJournalPath
                     + " (space claim withheld: space=" + std::to_string(space_id)
@@ -893,8 +899,24 @@ void WorldApp::onCellSpaceReport(const std::string& peer, const CellSpaceReport&
                         + " reported_epoch=" + std::to_string(report.start_epoch));
         return;
     }
+    if (reg->second.suspect) {
+        // 控制面失联期隔离：961 复核归来前，同登记代次但走新/旧链路的
+        // 旧化身或旧端自报不得参与对账，也不能借 967 证明旧归属。
+        worldLog().warning("space report from suspect cell dropped: cell="
+                           + std::to_string(report.cell_id)
+                           + " space=" + std::to_string(report.space_id));
+        return;
+    }
     ++spaceReportCount_;
     const auto entry = spaceAssignments_.find(report.space_id);
+    if (!config_.worldJournalPath.empty() && entry != spaceAssignments_.end() &&
+        entry->second.cell_id == report.cell_id &&
+        entry->second.version == report.applied_version) {
+        appendJournalRow("C " + std::to_string(report.space_id) + '|'
+                         + std::to_string(report.cell_id) + '|'
+                         + std::to_string(report.applied_version));
+        ++reconciledSpaceCount_;
+    }
     if (entry == spaceAssignments_.end()) {
         // 未登记权威（§4「无 S 记录 | C 报 S」行）：权威归属表无此 Space
         //（池外 id，或池内从未认领/记忆已失）——源隔离不明，进冲突集
@@ -1069,6 +1091,9 @@ void WorldApp::loadWorldJournal() {
             saw_boot_row = true;
             continue;
         }
+        if (line.compare(0, 2, "C ") == 0 || line.compare(0, 2, "S ") == 0) {
+            continue;
+        }
         // T 行（可省前缀）：v2 带 `T ` 前缀或 v1 裸行，同解析；其余无管道
         // 行型显式损坏（防新行型被 T 兼容面误吞）。
         if (line.compare(0, 2, "T ") != 0 && line.find('|') == std::string::npos) {
@@ -1122,10 +1147,6 @@ void WorldApp::loadWorldJournal() {
     // 有主的条目进 pending 过期窗（driveCellRegistry 驱动释放）。
     std::size_t seeded = 0;
     std::size_t skipped = 0;
-    const auto boot_ms = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
     for (const auto& entry : replay) {
         if (std::find(config_.assignSpaces.begin(), config_.assignSpaces.end(),
                       entry.first) == config_.assignSpaces.end()) {
@@ -1138,7 +1159,7 @@ void WorldApp::loadWorldJournal() {
         a.version = entry.second.version;
         spaceAssignments_[entry.first] = a;
         if (a.cell_id != 0) {
-            pendingJournalOwners_[a.cell_id] = boot_ms;
+            pendingJournalOwners_[a.cell_id] = config_.bootAtMs;
         }
         ++seeded;
     }
