@@ -152,7 +152,7 @@ public:
             up_seen_ = true;
             send_register(now_ms);
         } else if (up && config_.heartbeat_ms > 0
-                   && now_ms - last_send_ms_ >= config_.heartbeat_ms) {
+                   && steady_now_ms() - last_send_ms_ >= config_.heartbeat_ms) {
             send_register(now_ms);
         } else if (!up) {
             up_seen_ = false;
@@ -234,7 +234,7 @@ private:
             != link::SendCode::kAccepted) {
             return;  // 队列满等瞬态——下个跃迁/心跳拍再发
         }
-        last_send_ms_ = now_ms;  // 心跳节拍基准（发送成功才推进）
+        last_send_ms_ = steady_now_ms();  // 心跳节拍基准（发送成功才推进）
         std::lock_guard<std::mutex> lock(state_mutex_);
         state_.sent = true;
         ++state_.attempts;
@@ -318,6 +318,7 @@ private:
         if (fn) {
             fn(rec);
         }
+        send_space_reports();
     }
 
     void send_space_reports() {

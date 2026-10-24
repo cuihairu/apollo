@@ -264,17 +264,27 @@ void database_crash_survives_restart() {
     CHECK(avatar->progress(key) == 150);  // 失败不吞锚点真值
     base->stop();
 
-    // ③ 复活：同存储同端口重建 database
+    // ③ 复活：旧链路完全收线后，同存储同端口重建 database
     auto revivedCfg = f.config;
     revivedCfg.port = realPort;
+    reader->shutdown();
     database::Server revived(revivedCfg);
     CHECK(revived.start());
 
     // ④ base 随编队重启（新存储客户端）：载入最后一次已落盘真值
     {
-        std::unique_ptr<player_store::PlayerStore> base2(
-            new player_store::PlayerStore(baseCfg, database::makeClient(clientCfg)));
-        base2->start();
+        std::unique_ptr<player_store::PlayerStore> base2;
+        for (int attempt = 0; attempt < 20 && !base2; ++attempt) {
+            try {
+                base2 = std::make_unique<player_store::PlayerStore>(
+                    baseCfg, database::makeClient(clientCfg));
+                base2->start();
+            } catch (const std::runtime_error&) {
+                base2.reset();
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        }
+        CHECK(base2);
         auto restored = base2->activatePlayer(501);
         CHECK(restored);
         CHECK(restored->progress(key) == 100);  // 未落档的 150 不复活，已落盘的 100 存活

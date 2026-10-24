@@ -235,7 +235,7 @@ private:
     // journal v2 行追加（批A）统一入口：append + flush 即返回。「成功才推
     // 962」的声明闸由调用面裁决——A 行失败回滚认领不声明（write-ahead），
     // R/B 行失败告警降级（批㉚ 可用性优先）。journal 关 = 纯内存语义恒成功。
-    bool appendJournalRow(const std::string& row);
+    bool appendJournalRow(const std::string& row, bool durable = false);
     // 断连存疑标记（L101 断连存疑切片）：M1 on_peer_down 回调（泵上下文 =
     // 内核线程，注册表单写者直接改表）。peer 对上登记条目即置 suspect；
     // 未知 peer（gateway/admin 链路）无登记 = 无操作。
@@ -306,6 +306,14 @@ private:
     // 重建），过期窗（cellExpiryMs）内不归队即释放回池；真身登记即除名
     //（此后随登记面心跳/过期语义）。
     std::unordered_map<std::uint64_t, std::uint64_t> pendingJournalOwners_;
+    // 空日志缺失证据（§2）：journal 文件缺失，首个 cell 拨入即形成旧管理
+    // 关系证据；true = 全池冻结，不开新分配。
+    bool missingJournal_ = false;
+    // journal 配置开且启动装载时文件缺失（§2 真空首启候选状态）。
+    bool journalMissingAtBoot_ = false;
+    // 持久卷锁已持有（§5/§6）：只锁管理 journal 同名 `.lock` 文件；启动
+    // 成功保持到 stop/析构，失败回滚即清。
+    bool volumeLocked_ = false;
     // 对账冲突集（批B）：967 自报核对不上的 Space（版本冲突 / 未登记权威
     //——含池外 id）。冻结 = pushSpaceAssignments/releaseCellSpaces 跳过该
     // Space（§4「不推新分配、不释放」）；解冻随对账修复批（journal 补记 +

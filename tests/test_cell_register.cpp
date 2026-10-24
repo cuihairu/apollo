@@ -18,7 +18,9 @@
 #include "apollo_contract.h"
 
 #include <chrono>
+#include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -383,7 +385,11 @@ struct WorldEnd {
         config.host = "127.0.0.1";
         config.m1Port = fixed_m1_port;
         config.m1RouteJson = kRouteJson;
-        config.m1AuthorityEpoch = 77;
+        if (config.m1AuthorityEpoch == 0) {
+            config.m1AuthorityEpoch = 77;
+        }
+        std::cout << "  shell boot epoch=" << config.m1AuthorityEpoch
+                  << " journal=" << config.worldJournalPath << std::endl;
         config.tickRateMs = 20;
         try {
             world = std::make_unique<WorldApp>(config);
@@ -1606,7 +1612,8 @@ bool test_space_release_and_reclaim() {
 bool test_watermark_journal_persists_across_restart() {
     std::cout << "Running: test_watermark_journal_persists_across_restart..." << std::endl;
     namespace fs = std::filesystem;
-    const fs::path journal_dir = "/tmp/apollo-cell-register-tests";
+    const fs::path journal_dir = fs::temp_directory_path()
+        / ("apollo-restart-e2e-" + std::to_string(::getpid()));
     fs::create_directories(journal_dir);  // 临时目录不自动建坑账：落盘前显式建
     const fs::path journal = journal_dir / "tombstone-wm.txt";
     fs::remove(journal);
@@ -1844,17 +1851,26 @@ bool test_journal_v2_assignment_state_across_restart() {
 }
 
 // write-ahead 声明闸（批A）：A 行 append 失败 = 不对外声明——认领内存回滚
-//（Space 留池待下次受理重试）、962 不发；受理面照常（T/B 行失败沿用批㉚
-// 告警降级，可用性优先）。journal 指向父目录缺失路径 = 确定性 append 失败。
+//（Space 留池待下次受理重试）、962 不发；受理面照常（R/B/T 行失败沿用
+// 批㉚ 告警降级，可用性优先）。锁写入失败拒启单列；A 行失败用启动后摘卷
+// 复现。
 bool test_journal_v2_write_ahead_gates_declaration() {
     std::cout << "Running: test_journal_v2_write_ahead_gates_declaration..." << std::endl;
     namespace fs = std::filesystem;
     const fs::path missing_dir = "/tmp/apollo-cell-register-tests/missing-dir";
-    fs::remove_all(missing_dir);  // 确保父目录缺失（ofstream append 必败）
+    fs::remove_all(missing_dir);
+    {
+        WorldEnd lock_probe;
+        lock_probe.config.worldJournalPath = (missing_dir / "journal.txt").string();
+        TEST_ASSERT(!lock_probe.start(136),
+                    "world refuses boot when journal lock cannot be written");
+    }
+    fs::create_directories(missing_dir);
     WorldEnd server;
     server.config.worldJournalPath = (missing_dir / "journal.txt").string();
     server.config.assignSpaces = {65, 66};
-    TEST_ASSERT(server.start(126), "world started with unwritable journal path");
+    TEST_ASSERT(server.start(126), "world started for write-ahead gate");
+    fs::remove_all(missing_dir);  // 启动后摘卷 = A 行 append 确定性失败
     std::map<std::uint64_t, RegisterReply> replies;
     g_replies = &replies;
     std::map<std::uint64_t, SpaceAssignFrame> assigns;
@@ -2055,6 +2071,180 @@ bool test_production_client_space_report() {
     return true;
 }
 
+// 重启 e2e（world-reconciliation §5 批C）：WorldApp 进程内真链路重启——
+// W1 认领/自报 → stop → W2 同 journal 重启铸 B 新代次；cell 重拨受理后
+// 967 匹配，无冲突时 962 闸开。真端点重启，但 World 与 cell 仍同测试进程，
+// 不引入外部监督器。
+bool test_world_restart_e2e_and_negative_cases() {
+    std::cout << "Running: test_world_restart_e2e_and_negative_cases..." << std::endl;
+    namespace fs = std::filesystem;
+    const fs::path journal_dir = "/tmp/apollo-cell-register-tests";
+    fs::create_directories(journal_dir);
+    const fs::path journal = journal_dir / "restart-e2e.txt";
+    const fs::path lock = journal.string() + ".lock";
+    fs::remove(journal);
+    fs::remove(lock);
+    {
+        std::ofstream seed(journal, std::ios::binary);
+        seed << "7|7\nA 7|7|1\nR 7\n";
+    }
+    WorldEnd w1;
+    w1.config.worldJournalPath = journal.string();
+    w1.config.assignSpaces = {7};
+    w1.config.m1AuthorityEpoch = 91;
+    w1.config.cellExpiryMs = 200;
+    w1.fixed_m1_port = 19877;
+    TEST_ASSERT(w1.start(131), "w1 started");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+    world_app::CellRegisterConfig cell_cfg;
+    cell_cfg.world_host = "127.0.0.1";
+    cell_cfg.world_port = w1.world->m1Link().listenPort();
+    cell_cfg.cell_id = 7;
+    cell_cfg.advertise_host = "127.0.0.1";
+    cell_cfg.advertise_port = 8803;
+    cell_cfg.start_epoch = 7;
+    cell_cfg.route_json = kRouteJson;
+    cell_cfg.heartbeat_ms = 20;
+    auto cell = world_app::makeCellRegisterClient(cell_cfg);
+    std::map<std::uint64_t, std::array<std::uint64_t, 3>> applied_assigns;
+    std::mutex assigns_mutex;
+    cell->setSpaceAssignListener([&applied_assigns, &assigns_mutex](
+                                     const world_app::SpaceAssignRecord& rec) {
+        std::lock_guard<std::mutex> lock(assigns_mutex);
+        applied_assigns[rec.space_id] = {rec.version, rec.management_epoch,
+                                          rec.assigned_cell_id};
+    });
+    TEST_ASSERT(cell->start(), "cell client dialed w1");
+    RegisterReply r;
+    TEST_ASSERT(wait_until([&] {
+                    cell->pump(now_ms());
+                    const auto state = cell->state();
+                    r.accepted = state.accepted;
+                    r.management_epoch = state.management_epoch;
+                    return state.replies >= 1;
+                }, 5000), "w1 admission");
+    TEST_ASSERT(wait_until([&] {
+                    cell->pump(now_ms());
+                    std::lock_guard<std::mutex> lock(assigns_mutex);
+                    return w1.world->space_report_count() >= 1
+                           && w1.world->conflicted_space_count() == 0
+                           && applied_assigns.count(7)
+                           && applied_assigns[7][1] == 91;
+                }, 5000), "w1 matched report and assignment gate opened");
+    std::cout << "  w1 state: accepted=" << r.accepted
+              << " epoch=" << r.management_epoch << std::endl;
+    cell->stop();
+    w1.stop();
+
+    // W2 固定同一控制面端口，客户端断链端点不变即可真重拨。
+    WorldEnd w2;
+    w2.config = w1.config;
+    w2.config.worldJournalPath = journal.string();
+    w2.config.assignSpaces = {7};
+    w2.config.m1AuthorityEpoch = 92;
+    w2.config.cellExpiryMs = 200;
+    w2.fixed_m1_port = 19877;
+    TEST_ASSERT(w2.start(132), "w2 restarted from journal");
+    TEST_ASSERT(w2.world->m1Link().listenPort() == 19877, "restart listened");
+    cell_cfg.world_port = 19877;
+    auto redial = world_app::makeCellRegisterClient(cell_cfg);
+    redial->setSpaceAssignListener([&applied_assigns, &assigns_mutex](
+                                     const world_app::SpaceAssignRecord& rec) {
+        std::lock_guard<std::mutex> lock(assigns_mutex);
+        applied_assigns[rec.space_id] = {rec.version, rec.management_epoch,
+                                          rec.assigned_cell_id};
+    });
+    TEST_ASSERT(redial->start(), "cell client re-dialed w2");
+    TEST_ASSERT(wait_until([&] {
+                    redial->pump(now_ms());
+                    const auto state = redial->state();
+                    r.accepted = state.accepted;
+                    r.management_epoch = state.management_epoch;
+                    return state.replies >= 1;
+                }, 5000), "redial admission");
+    TEST_ASSERT(r.accepted && r.management_epoch == 92,
+                "fresh B generation returned on redial");
+    applied_assigns.clear();
+    TEST_ASSERT(wait_until([&] {
+                    redial->pump(now_ms());
+                    return redial->linkUp();
+                }, 5000), "redial link up before recovery assertions");
+    TEST_ASSERT(wait_until([&] {
+                    redial->pump(now_ms());
+                    std::lock_guard<std::mutex> lock(assigns_mutex);
+                    return w2.world->space_report_count() >= 1
+                           && w2.world->conflicted_space_count() == 0
+                           && redial->space_assign_count() == 1
+                           && redial->state().management_epoch == 92;
+                }, 10000), "967 matched and recovery gate opened");
+    w2.stop();
+    redial->stop();
+
+    // 陈旧锁破锁：W2 正常释放后预置他人死 pid 锁，启动重写为本进程 owner。
+    WorldEnd live_lock;
+    live_lock.config.worldJournalPath = journal.string();
+    {
+        std::ofstream out(lock, std::ios::trunc);
+        out << "999999:2020-01-01T00:00:00Z\n";
+    }
+    TEST_ASSERT(live_lock.start(133), "stale foreign lock is broken and boot continues");
+    {
+        std::ifstream in(lock);
+        std::string owner;
+        TEST_ASSERT(std::getline(in, owner), "stale lock owner replaced");
+        TEST_ASSERT(owner.rfind(std::to_string(::getpid()) + ":", 0) == 0,
+                    "boot records current owner after stale break");
+    }
+    live_lock.stop();
+
+    // 活锁拒启：预置可读测试进程自身 pid 锁；当前进程确为持锁活进程。
+    {
+        std::ofstream out(lock, std::ios::trunc);
+        out << ::getpid() << ":2020-01-01T00:00:00Z\n";
+    }
+    WorldEnd active_lock;
+    active_lock.config.worldJournalPath = journal.string();
+    TEST_ASSERT(!active_lock.start(135), "live owner lock refuses replacement boot");
+    fs::remove(lock);
+    g_assigns = nullptr;
+
+    // 空日志负例：journal 缺失但 T 水位证明 cell 曾拨入 → 全池冻结。
+    fs::remove(journal);
+    WorldEnd missing_journal;
+    missing_journal.config.worldJournalPath = journal.string();
+    missing_journal.config.assignSpaces = {7};
+    TEST_ASSERT(missing_journal.start(134), "missing journal with tombstone boots");
+    std::map<std::uint64_t, SpaceAssignFrame> frozen_assigns;
+    g_assigns = &frozen_assigns;
+    CellEnd walk_in;
+    TEST_ASSERT(dial_cell(missing_journal, walk_in, "cell-missing-journal"),
+                "cell walked into missing journal world");
+    TEST_ASSERT(register_roundtrip(walk_in, 5203, 82, 7, "127.0.0.1", 9402, 1, 10, 0,
+                                   true, r), "walk-in registration roundtrip");
+    TEST_ASSERT(r.accepted, "walk-in admission does not violate log rule");
+    const auto* frozen = missing_journal.world->find_space_assignment(7);
+    TEST_ASSERT(frozen == nullptr || frozen->cell_id == 0,
+                "missing journal freezes all new assignment");
+    TEST_ASSERT(wait_until([&] {
+                    walk_in.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return frozen_assigns.empty();
+                }, 300), "no 962 declarations while evidence missing");
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    cell->stop();
+    redial->stop();
+    w1.stop();
+    w2.stop();
+    missing_journal.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // 断连存疑标记（L101 断连存疑切片）：控制链路断（对端 TCP 关）→ 注册表
 // 条目置存疑（gap 表 §line71：断开后先标记存疑对账，不立即另端重建——
 // 本切片只落标记与清除，对账/重建约束随既有过期释放面）；同 ID 同代次
@@ -2133,6 +2323,7 @@ int main() {
                     && test_journal_v2_write_ahead_gates_declaration()
                     && test_cell_space_report_adjudication()
                     && test_production_client_space_report()
+                    && test_world_restart_e2e_and_negative_cases()
                     && test_cell_link_down_marks_suspect();
     if (!ok || g_failures != 0) {
         std::cout << "CELL REGISTER TESTS FAILED (" << g_failures << ")" << std::endl;

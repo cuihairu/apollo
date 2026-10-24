@@ -4,8 +4,15 @@
 #include "apollo/script/script_runtime.hpp"
 #include <algorithm>
 #include <chrono>
+// POSIX journal fsync（批A 决定收口）
+#include <fcntl.h>
 #include <fstream>
 #include <limits>
+#include <csignal>
+#include <cstdio>
+#include <ctime>
+#include <filesystem>
+#include <unistd.h>
 #include <stdexcept>
 #include <vector>
 
@@ -54,6 +61,63 @@ std::string join_lines(const std::vector<std::string>& lines) {
 // M1 eval 在途关联账上限（host 级背压——防丢最旧语义下的无界挂账；
 // 对齐 Scene 队列深度的量级放大，超过即时回执拒收）。
 constexpr std::size_t kM1EvalBacklogMax = 64;
+
+class PersistentVolumeLock {
+public:
+    static bool acquire(const std::string& journal_path) {
+        const std::string path = journal_path + ".lock";
+        std::ifstream existing(path);
+        if (existing) {
+            std::string owner_line;
+            std::getline(existing, owner_line);
+            const auto sep = owner_line.find(':');
+            const bool mine = owner_line.rfind(std::to_string(::getpid()) + ":", 0) == 0;
+            if (sep != std::string::npos && pid_alive(owner_line.substr(0, sep))) {
+                throw std::runtime_error("world journal volume is locked by live pid "
+                                         + owner_line.substr(0, sep) + " at " + path);
+            }
+            if (sep == std::string::npos) {
+                worldLog().warning(
+                    "breaking malformed world journal volume lock at " + path);
+            } else if (!pid_alive(owner_line.substr(0, sep))) {
+                worldLog().warning(
+                    "breaking stale world journal volume lock at " + path
+                    + " stale_pid=" + owner_line.substr(0, sep));
+            }
+        }
+        std::ofstream out(path, std::ios::trunc);
+        if (!out) {
+            throw std::runtime_error("failed to open world journal volume lock at "
+                                     + path);
+        }
+        out << ::getpid() << ':' << started_at() << '\n';
+        out.flush();
+        if (!out) {
+            throw std::runtime_error("failed to write world journal volume lock at "
+                                     + path);
+        }
+        return true;
+    }
+
+private:
+    static std::string started_at() {
+        const auto now = std::chrono::system_clock::now();
+        const auto seconds = std::chrono::system_clock::to_time_t(now);
+        std::tm utc{};
+        gmtime_r(&seconds, &utc);
+        char buffer[32]{};
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &utc);
+        return buffer;
+    }
+
+    static bool pid_alive(const std::string& pid_text) {
+        char* end = nullptr;
+        const long pid = std::strtol(pid_text.c_str(), &end, 10);
+        return end != pid_text.c_str() && *end == '\0' && pid > 0
+               && ::kill(static_cast<pid_t>(pid), 0) == 0;
+    }
+
+};
 } // namespace
 
 //==============================================================================
@@ -96,6 +160,9 @@ WorldApp::~WorldApp() {
 void WorldApp::start() {
     if (isRunning()) return;
 
+    if (!config_.worldJournalPath.empty()) {
+        volumeLocked_ = PersistentVolumeLock::acquire(config_.worldJournalPath);
+    }
     // 管理日志装载（L101 管理日志切片 → 批A journal v2）：闸开前——受理面
     // 未开，无并发写者（损坏行显式拒启，见 loadWorldJournal；B 行铸代次
     // 先记后开受理面——本调用先于 makeM1LinkServer 装配）
@@ -166,6 +233,11 @@ void WorldApp::stop() {
         m1Link_.reset();
     }
     egressAdapter_.link = nullptr;
+    if (volumeLocked_ && !config_.worldJournalPath.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(config_.worldJournalPath + ".lock", ec);
+    }
+    volumeLocked_ = false;
 }
 
 void WorldApp::onM1ModuleRollout(const std::string& peer,
@@ -582,8 +654,28 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
     if (config_.assignSpaces.empty()) {
         return;
     }
+    if (journalMissingAtBoot_) {
+        if (!missingJournal_) {
+            missingJournal_ = true;
+            worldLog().warning(
+                "world journal missing evidence: cell=" + std::to_string(reg.cell_id)
+                + " has no tombstone; all assignments frozen");
+        }
+        for (std::uint64_t space_id : config_.assignSpaces) {
+            worldLog().warning(
+                "space assignment blocked by missing journal evidence: space="
+                + std::to_string(space_id));
+        }
+        return;
+    }
     const bool may_claim = reg.ready && reg.drain_state == 0 && !reg.retire;
     for (std::uint64_t space_id : config_.assignSpaces) {
+        if (missingJournal_) {
+            worldLog().warning(
+                "space assignment blocked by missing journal evidence: space="
+                + std::to_string(space_id));
+            continue;
+        }
         // 冲突冻结（批B 967 裁决面）：冻结期不推新分配、不推刷新、不推撤销
         //（设计稿 §4——自报与权威表分歧未决前，任何一侧声明都可能固化错误
         // 归属；解冻随人工修复批挂账）。
@@ -876,7 +968,19 @@ void WorldApp::loadWorldJournal() {
     }
     std::ifstream in(config_.worldJournalPath, std::ios::binary);
     if (!in) {
-        return;  // 无记录 = 首启
+        // 空日志判定（world-reconciliation §2）分两步：启动时文件缺失先按
+        // 「无 cell 拨入的真空候选」放行；首个 961 拨入即证明曾存在旧管理
+        // 关系，转记录缺失并全池冻结。装载面 T 水位也可直接证明证据缺失。
+        journalMissingAtBoot_ = true;
+        if (!cellEpochWatermarks_.empty()) {
+            missingJournal_ = true;
+            worldLog().warning(
+                "world journal file missing: " + config_.worldJournalPath
+                + " known_cells=" + std::to_string(cellEpochWatermarks_.size())
+                + " (missing journal evidence frozen all assignments)");
+            return;
+        }
+        return;  // 无记录 = 首启候选，受理后按拨入证据裁决
     }
     const auto bad_line = [&](std::uint64_t line_no, const char* why) {
         throw std::runtime_error(std::string("world journal corrupt (") + why
@@ -965,10 +1069,16 @@ void WorldApp::loadWorldJournal() {
             saw_boot_row = true;
             continue;
         }
-        // T 行（可省前缀）：v2 带 `T ` 前缀或 v1 裸行，同解析。
-        std::string body = line;
+        // T 行（可省前缀）：v2 带 `T ` 前缀或 v1 裸行，同解析；其余无管道
+        // 行型显式损坏（防新行型被 T 兼容面误吞）。
+        if (line.compare(0, 2, "T ") != 0 && line.find('|') == std::string::npos) {
+            bad_line(line_no, "unknown row type");
+        }
+        std::string body;
         if (line.compare(0, 2, "T ") == 0) {
             body = line.substr(2);
+        } else {
+            body = line;
         }
         const auto bar = body.find('|');
         if (bar == std::string::npos) {
@@ -1041,11 +1151,11 @@ void WorldApp::loadWorldJournal() {
                     + " epoch=" + std::to_string(config_.m1AuthorityEpoch));
 }
 
-bool WorldApp::appendJournalRow(const std::string& row) {
-    // journal v2 追加统一入口（批A）：append + flush 即返回——「成功才推
-    // 962」的裁决由调用面做（A 行闸声明、R/B 行告警降级）。journal 关 =
-    // 纯内存语义恒成功（批㉚ 已代决沿用）。调用点全在内核线程（受理点/
-    // 驱动钩子 = 注册表单写者上下文），无并发写者。
+bool WorldApp::appendJournalRow(const std::string& row, bool durable) {
+    // journal v2 追加统一入口（批A；批C 巡检代决：A 行 fsync，write-ahead
+    // 决定必须先落介质；R/B/T 行 flush + 失败告警降级，沿可用性优先）。
+    // journal 关 = 纯内存语义恒成功（批㉚ 已代决沿用）。调用点全在内核线程
+    //（受理点/驱动钩子 = 注册表单写者上下文），无并发写者。
     if (config_.worldJournalPath.empty()) {
         return true;
     }
@@ -1055,7 +1165,15 @@ bool WorldApp::appendJournalRow(const std::string& row) {
     }
     out << row << '\n';
     out.flush();
-    return static_cast<bool>(out);
+    if (!out) return false;
+    if (!durable) {
+        return true;
+    }
+    const int fd = ::open(config_.worldJournalPath.c_str(), O_RDONLY);
+    if (fd < 0) return false;
+    const bool synced = ::fsync(fd) == 0;
+    ::close(fd);
+    return synced;
 }
 
 void WorldApp::recordEpochWatermark(std::uint64_t cell_id, std::uint64_t epoch) {
