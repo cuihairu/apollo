@@ -10,7 +10,7 @@
 <text x="878" y="37" font-size="16" font-weight="400" text-anchor="start" class="sub">Business / results</text>
 <path d="M1060 31 L1106 31" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
 <text x="1118" y="37" font-size="16" font-weight="400" text-anchor="start" class="sub">Control</text>
-<text x="28" y="75" font-size="17" font-weight="400" text-anchor="start" class="sub">Base ↔ database has standalone prototypes; World/cell separation and full wiring remain pending.</text>
+<text x="28" y="75" font-size="17" font-weight="400" text-anchor="start" class="sub">Base ↔ database: standalone prototypes. World/cell split landed (--role=cell); gateway dials world.</text>
 <rect x="28" y="106" width="1224" height="178" rx="10" fill="#f4f9f8" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="134" font-size="17" font-weight="600" text-anchor="start" class="teal">Authentication, directories and placement</text>
 <g data-node="login">
@@ -22,11 +22,11 @@
 <rect x="760" y="154" width="320" height="104" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="778" y="187" font-size="23" font-weight="600" text-anchor="start">world</text>
 <text x="778" y="214" font-size="17" font-weight="400" text-anchor="start" class="sub">Space/Cell placement · topology</text>
-<text x="778" y="244" font-size="14" font-weight="500" text-anchor="start" class="sub">Manager / executor split pending</text>
+<text x="778" y="244" font-size="14" font-weight="500" text-anchor="start" class="sub">Embeds cell execution + places standalone cells</text>
 </g>
 <path d="M760 207 L570 207" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
-<rect x="582.75" y="177" width="164.5" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
-<text x="665" y="191" font-size="15" font-weight="500" text-anchor="middle" class="teal">Register / project</text>
+<rect x="575" y="177" width="180" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="665" y="191" font-size="15" font-weight="500" text-anchor="middle" class="teal">Service registry (964/965)</text>
 <rect x="28" y="330" width="1224" height="356" rx="10" fill="#f8fafc" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="48" y="358" font-size="17" font-weight="600" text-anchor="start">Connections, gameplay and simulation</text>
 <g data-node="Client">
@@ -55,7 +55,7 @@
 <rect x="580" y="558" width="330" height="112" rx="10" fill="#fff" stroke="#ced8e5" stroke-width="1.3"/>
 <text x="598" y="591" font-size="23" font-weight="600" text-anchor="start">cell executor</text>
 <text x="598" y="618" font-size="17" font-weight="400" text-anchor="start" class="sub">Avatar/Entity · AOI · combat</text>
-<text x="598" y="656" font-size="14" font-weight="500" text-anchor="start" class="sub">Dedicated executor pending</text>
+<text x="598" y="656" font-size="14" font-weight="500" text-anchor="start" class="sub">Embedded in world + --role=cell</text>
 </g>
 <path d="M1001 571 A90.0 13 0 0 1 1181 571 V632 A90.0 13 0 0 1 1001 632 Z" fill="#f5f7fa" stroke="#ced8e5" stroke-width="1.3"/>
 <ellipse cx="1091.0" cy="571" rx="90.0" ry="13" fill="#eef2f7" stroke="#ced8e5" stroke-width="1.3"/>
@@ -73,21 +73,18 @@
 <path d="M388 482 L388 614 L580 614" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
 <rect x="389.8" y="583" width="174.4" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
 <text x="477" y="598" font-size="16" font-weight="500" text-anchor="middle" class="blue">Input / state sync</text>
-<path d="M745 482 L745 558" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
-<rect x="753.0" y="511" width="192.0" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
-<text x="849" y="526" font-size="16" font-weight="500" text-anchor="middle" class="blue">Snapshots / outcomes</text>
+<path d="M745 482 L745 558" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="660" y="511" width="170" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="745" y="526" font-size="16" font-weight="500" text-anchor="middle" class="blue">Settlement (958/959)</text>
 <path d="M1091 482 L1091 558" fill="none" stroke="#245bb2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" marker-start="url(#blue)"/>
 <rect x="1088.625" y="513" width="106.75" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
 <text x="1142" y="527" font-size="15" font-weight="500" text-anchor="middle" class="blue">Storage I/O</text>
 <path d="M378 386 L378 258" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
-<rect x="365.875" y="299" width="90.25" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
-<text x="411" y="313" font-size="15" font-weight="500" text-anchor="middle" class="teal">Directory</text>
+<rect x="328.5" y="299" width="165" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
+<text x="411" y="313" font-size="15" font-weight="500" text-anchor="middle" class="teal">Route / session check</text>
 <path d="M650 386 L650 303 L520 303 L520 258" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" stroke-dasharray="7 6"/>
 <rect x="522.375" y="281" width="123.25" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
 <text x="584" y="295" font-size="15" font-weight="500" text-anchor="middle" class="teal">Base registry</text>
-<path d="M48 434 L16 434 L16 207 L300 207" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
-<rect x="107.75" y="178" width="164.5" height="23" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
-<text x="190" y="192" font-size="15" font-weight="500" text-anchor="middle" class="teal">Auth / credentials</text>
 <path d="M1080 207 L1232 207 L1232 712 L745 712 L745 670" fill="none" stroke="#147565" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#teal)" marker-start="url(#teal)" stroke-dasharray="7 6"/>
 <rect x="839.2" y="689" width="341.6" height="24" rx="3" fill="#fff" stroke="none" stroke-width="1.3"/>
 <text x="1010" y="704" font-size="16" font-weight="500" text-anchor="middle" class="teal">cell registration / placement / drain</text>
