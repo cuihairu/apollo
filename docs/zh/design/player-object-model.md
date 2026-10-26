@@ -59,6 +59,6 @@ Base 部分实现为 `apollo::game::base::Avatar`（modules/game/base），Cell 
 
 ## 当前实现
 
-`base::Avatar`、`cell::Avatar`、Scene 与 Instance 类型可复用。长期资料与存储职责已由 WorldApp 迁出，由 base 独立入口持有并经 database 持久提交，WorldApp 不再宿主档案。未闭合部分：只读玩法快照与返回业务请求的边界定义、禁止跨界指针修改纪律（P1），以及管理与执行分离（P2）。实施任务只维护在根目录 todo.md。
+`base::Avatar`、`cell::Avatar`、Scene 与 Instance 类型可复用。长期资料与存储职责已由 WorldApp 迁出，由 base 独立入口持有并经 database 持久提交，WorldApp 不再宿主档案。Base 到模拟域的跨界已按类型面收口（P1）：跨域只传只读玩法快照值（`base::GameplaySnapshot`，换幕经 `SceneTransferRequest::gameplay_snapshot` 值投影 `cell::Avatar::project_from`），不再携带 `base::Avatar*` 指针；结算写权唯一路径是返回业务请求（契约 958/959），副本账本不再装配本地锚点解析。快照生产面（Base 按准入链构造并下发）与 cell 可信绑定随后续条目实施。未闭合部分：管理与执行分离（P2）。实施任务只维护在根目录 todo.md。
 
 worldServer 管理 Space/Cell 分配，不另持一份玩家模拟对象。Base 实体对应 `base::Avatar`，Real/Cell 实体对应 `cell::Avatar`/Entity；原词与实现缺口见[体系对照](./bigworld-apollo-mapping.md)。

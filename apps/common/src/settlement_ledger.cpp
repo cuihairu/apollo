@@ -2,9 +2,8 @@
 
 namespace squad_instance {
 
-void SettlementLedger::begin(std::vector<std::uint64_t> roster, AvatarResolveFn resolver) {
+void SettlementLedger::begin(std::vector<std::uint64_t> roster) {
     roster_ = std::move(roster);
-    resolver_ = std::move(resolver);
     entries_.clear();
     for (const auto player : roster_) entries_.emplace(player, Entry{});
 }
@@ -23,43 +22,25 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
     if (it == entries_.end()) return ApplyError::UnknownPlayer;
     if (it->second.applied) return ApplyError::AlreadyApplied;
     it->second.attempted = true;
-    // 凭据持久提交先于锚点入账（真实奖励持久化）：未提交 = 挂账待补，
-    // 绝不无凭据落账；重试同路径重提，提交方须幂等。
+    // 凭据持久提交先于业务入账（真实奖励持久化）：未提交 = 挂账待补，
+    // 绝不无凭据入账；重试同路径重提，提交方须幂等。
     if (credential_sink_ && !credential_sink_(player_id, score)) {
         it->second.score = score;
         return ApplyError::AvatarUnavailable;
     }
-    // 业务受理出口（P1 结算迁入）：锚点写权在 Base——落账经 958/959 受理
-    // wire 走返回业务请求，本域不解析本地锚点（设置后 resolver 不消费）。
-    // Ok = 已落收口；其余 = 挂账待补（分值保留，retry 同路径重提）。
-    if (business_sink_) {
-        const auto rc = business_sink_(player_id, score);
-        if (rc != ApplyError::Ok) {
-            it->second.score = score;
-            return rc;
-        }
-        it->second.applied = true;
-        it->second.score = 0;
-        return ApplyError::Ok;
-    }
-    // 锚点缺失挂账不落：分值保留，待重试/补账收口。
-    auto* avatar = resolver_ ? resolver_(player_id) : nullptr;
-    // 冻结锚点同挂账（P3-6 迟到输入/迟到结算拒绝）：Transferring = 写权已
-    // 交新进程——本域不得再落账（否则目标侧重算即双记）；分值保留，待
-    // 权威侧裁决（跨域结算重定向属后续跨服条目）。
-    if (avatar && avatar->state() ==
-                      apollo::game::base::AvatarState::Transferring) {
+    // 业务受理出口（P1 结算迁入）：锚点写权在 Base——落账唯一路径 = 分值经
+    // 958/959 受理 wire 走返回业务请求；本域不解析本地锚点（todo L84 跨界
+    // 纪律）。Ok = 已受理收口；其余 = 挂账待补（分值保留，retry 同路径重
+    // 提）。未装配业务面 = 无落账路径，同样挂账不落（分值保留待补账）。
+    if (!business_sink_) {
         it->second.score = score;
         return ApplyError::AvatarUnavailable;
     }
-    if (!avatar) {
+    const auto rc = business_sink_(player_id, score);
+    if (rc != ApplyError::Ok) {
         it->second.score = score;
-        return ApplyError::AvatarUnavailable;
+        return rc;
     }
-    // 既有奖励接口：AvatarRewardSink 语义（exp 键 + mark_dirty 随
-    // SaveQueue 落档；零分值跳过入账——无档案脏位）。落账后即收口。
-    apollo::game::base::AvatarRewardSink sink(*avatar);
-    sink.on_reward(player_id, score);
     it->second.applied = true;
     it->second.score = 0;
     return ApplyError::Ok;

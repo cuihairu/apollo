@@ -161,28 +161,31 @@ bool test_avatar_aoi_broadcast() {
     return true;
 }
 
-bool test_avatar_projection_from_base() {
-    apollo::game::base::Avatar src(PlayerId(7).value());
-    src.set_home_zone_id(3);
-    src.set_state(apollo::game::base::AvatarState::Online);
-
+bool test_avatar_projection_from_gameplay_snapshot() {
     Avatar avatar(PlayerId(7), EntityId(2), "Proj");
     avatar.attach_scene(4);
     TEST_ASSERT(!avatar.has_projection(), "投影前标记未置");
     TEST_ASSERT(avatar.home_zone_id() == 0, "投影前无 home zone");
+    TEST_ASSERT(avatar.max_hp() == 100 && avatar.hp() == 100, "出厂态 100/100");
 
-    avatar.project_from(src);
+    // 只读玩法快照单向投影（值拷贝；跨界不持 Avatar 指针，todo L84 纪律）
+    apollo::game::base::GameplaySnapshot snap;
+    snap.home_zone_id = 3;
+    snap.max_hp = 240;
+    snap.hp = 180;
+    avatar.project_from(snap);
     TEST_ASSERT(avatar.has_projection(), "投影完成置标记");
-    TEST_ASSERT(avatar.home_zone_id() == 3, "home_zone_id 从 Avatar 单向拷贝");
-    TEST_ASSERT(avatar.state() == AvatarState::Active, "Avatar Online 投影保持 Active");
+    TEST_ASSERT(avatar.home_zone_id() == 3, "home_zone_id 从快照单向拷贝");
+    TEST_ASSERT(avatar.max_hp() == 240 && avatar.hp() == 180,
+                "基础属性从快照播种");
+    TEST_ASSERT(avatar.state() == AvatarState::Active, "投影不改场景生命周期态");
 
-    // Avatar 离开 Online → Avatar 挂起（断线保活窗口，player-object-model §3）
-    apollo::game::base::Avatar offline(PlayerId(7).value());
-    offline.set_home_zone_id(3);
-    offline.set_state(apollo::game::base::AvatarState::Disconnected);
-    avatar.resume();
-    avatar.project_from(offline);
-    TEST_ASSERT(avatar.state() == AvatarState::Suspended, "Avatar 非 Online 投影 → Avatar 挂起");
+    // 快照越界收口：max_hp 缺失兜底 1、负 hp 落 0（血面上限恒有效）
+    apollo::game::base::GameplaySnapshot bad;
+    bad.max_hp = -5;
+    bad.hp = -1;
+    avatar.project_from(bad);
+    TEST_ASSERT(avatar.max_hp() == 1 && avatar.hp() == 0, "越界快照被收口");
     return true;
 }
 
@@ -258,7 +261,8 @@ int main() {
         {"avatar_move_authority_reconcile", test_avatar_move_authority_reconcile},
         {"avatar_combat_authority", test_avatar_combat_authority},
         {"avatar_aoi_broadcast", test_avatar_aoi_broadcast},
-        {"avatar_projection_from_base", test_avatar_projection_from_base},
+        {"avatar_projection_from_gameplay_snapshot",
+         test_avatar_projection_from_gameplay_snapshot},
         {"avatar_home_zone_journal", test_avatar_home_zone_journal},
         {"playerid_strong_typing", test_playerid_strong_typing},
     };

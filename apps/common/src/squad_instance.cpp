@@ -31,10 +31,6 @@ void SquadInstanceService::set_instance_closing(InstanceClosingFn fn) {
     instance_closing_ = std::move(fn);
 }
 
-void SquadInstanceService::set_avatar_resolver(AvatarResolveFn fn) {
-    avatar_resolver_ = std::move(fn);
-}
-
 void SquadInstanceService::set_business_sink(SettlementLedger::BusinessSink fn) {
     business_sink_ = std::move(fn);
 }
@@ -442,12 +438,13 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
             result.error = LaunchError::SpawnRejected;
             return result;
         }
-        // 受理即开账：结算名册 = 受理快照成员；battle 结算段经账本（IRewardSink
-        // 单向口）→ AvatarRewardSink 语义落锚点（P2-4 幂等落账）。
+        // 受理即开账：结算名册 = 受理快照成员；battle 结算段经账本
+        // （IRewardSink 单向口）→ 返回业务请求（958/959）入 Base 锚点
+        // 长期态（P2-4 幂等落账；todo L84 跨界纪律：本地不持锚点指针）。
         auto ledger = std::make_unique<SettlementLedger>();
-        ledger->begin(members, avatar_resolver_);
-        // 业务受理面（P1 结算迁入）：锚点写权在 Base 时，落账经受理 wire
-        // 返回业务请求（958/959），本地解析不消费。
+        ledger->begin(members);
+        // 业务受理面（P1 结算迁入）：落账唯一路径 = 受理 wire 返回业务
+        // 请求（958/959）；未装配 = 无落账路径，全挂账不落。
         if (business_sink_) {
             ledger->set_business_sink(business_sink_);
         }

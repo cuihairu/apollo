@@ -29,6 +29,7 @@
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "apollo/protocol/messages.hpp"
 #include "login/login_server.hpp"
+#include "player_store/business_wire.hpp"
 #include "player_store/database_service.hpp"
 #include "player_store/migration_wire.hpp"
 #include "player_store/store_dial.hpp"
@@ -399,10 +400,29 @@ void migration_chain() {
         after->add_progress("exp", 100);
         require(after->progress("exp") == seeded.exp && !after->needs_save(),
                 "frozen avatar accepted progress write");
-        // 8d. 结算落账面：冻结锚点 = AvatarUnavailable 挂账不落
+        // 8d. 结算落账面：冻结锚点 = 旧 Base 业务受理拒（958 Transferring
+        // 不受理）→ 账本挂账不落（迟到结算不叠在已冻结资料上，双记风险由
+        // Base 侧拒收裁决——账本不解析本地锚点，todo L84 跨界纪律）
         squad_instance::SettlementLedger ledger;
-        ledger.begin({42}, [&world_old](std::uint64_t pid) {
-            return world_old.store->findAvatar(pid).get();
+        ledger.begin({42});
+        std::uint64_t credit_seq = 1;
+        ledger.set_business_sink([&world_old, &credit_seq](std::uint64_t pid,
+                                                           std::int64_t score) {
+            player_store::business::ScoreCreditRequest req;
+            req.request_id = ++credit_seq;
+            req.player_id = pid;
+            req.score = score;
+            const auto reply =
+                world_old.store->dispatchRequest(player_store::business::encodeFrame(req));
+            player_store::business::ScoreCreditReply rep;
+            apollo::protocol::SessionID sid = 0;
+            if (reply.empty() ||
+                !player_store::business::decodeFrame(reply, rep, sid)) {
+                return squad_instance::SettlementLedger::ApplyError::AvatarUnavailable;
+            }
+            return rep.accepted
+                       ? squad_instance::SettlementLedger::ApplyError::Ok
+                       : squad_instance::SettlementLedger::ApplyError::AvatarUnavailable;
         });
         require(ledger.apply(42, 50) ==
                     squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,

@@ -1,11 +1,12 @@
 #pragma once
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/base/avatar.hpp"
+#include "apollo/game/base/gameplay_snapshot.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string_view>
 
 namespace apollo::game::world {
@@ -34,9 +35,10 @@ struct SceneTransferRequest {
     apollo::game::core::PlayerId player_id{};
     std::uint64_t target_scene_id = 0;
     SceneAoi::Vec3 landing{};
-    // 可选投影源：单进程内存锚点（cell 进程无锚点存储时传 nullptr，
-    // Avatar 以出厂态进场；结算类结果单向落回 Avatar 不属于本流程）。
-    apollo::game::base::Avatar* avatar = nullptr;
+    // 可选投影源 = 只读玩法快照（值语义）：nullopt = 无快照，Avatar 以出厂
+    // 态进场。跨界只传快照值，不传 base::Avatar* 指针（todo L84：禁止跨界
+    // 使用本地 Anchor 指针修改资料）；结算类结果单向落回 Base 不属本流程。
+    std::optional<apollo::game::base::GameplaySnapshot> gameplay_snapshot;
 };
 
 // 流程步骤（失败定位可观察）

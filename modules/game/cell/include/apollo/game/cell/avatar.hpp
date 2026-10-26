@@ -1,7 +1,7 @@
 #pragma once
 
 #include "apollo/game/core/entity.hpp"
-#include "apollo/game/base/avatar.hpp"
+#include "apollo/game/base/gameplay_snapshot.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -84,8 +84,9 @@ public:
     void broadcast() noexcept;
     [[nodiscard]] std::uint64_t broadcast_count() const noexcept;
 
-    // ---- Avatar 投影（player-object-model §3）：长期属性从 Base 单向拷贝 ----
-    void project_from(const apollo::game::base::Avatar& avatar) noexcept;
+    // ---- Avatar 投影（player-object-model §3）：长期属性从只读玩法快照 ----
+    // 单向拷贝（值投影；跨界只传快照值不传 Avatar 指针，todo L84 纪律）。
+    void project_from(const apollo::game::base::GameplaySnapshot& snapshot) noexcept;
     [[nodiscard]] bool has_projection() const noexcept;
     [[nodiscard]] std::uint32_t home_zone_id() const noexcept;
 
@@ -97,6 +98,8 @@ private:
     AvatarState state_ = AvatarState::Active;
     Position position_{};
     std::uint64_t last_reconciled_seq_ = 0;
+    // 出厂态 100/100；project_from 以只读玩法快照播种（战斗中的血量是
+    // cell 侧模拟态，快照只定入场值）
     int hp_ = 100;
     int max_hp_ = 100;
     std::vector<apollo::game::core::EntityId> viewers_;

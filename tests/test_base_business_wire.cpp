@@ -148,7 +148,7 @@ void base_business_wire() {
     require(base.store->adoptPlayer(9, "", 7003, 7, 2), "player 9 adopt failed");
     {
         SettlementLedger ledger;
-        ledger.begin({9}, nullptr);  // World 无锚点可解析（资料归属在 Base）
+        ledger.begin({9});  // 账本不持锚点解析（资料归属在 Base，唯一落账路径 = 业务请求）
         std::uint64_t seq = 100;
         ledger.set_business_sink([&](std::uint64_t player_id, std::int64_t score) {
             return wire_sink(dial, seq, player_id, score);
@@ -168,7 +168,7 @@ void base_business_wire() {
     // ---- 5. 受理面停 → AvatarUnavailable 挂账（分值保留不丢）----
     {
         SettlementLedger ledger;
-        ledger.begin({10}, nullptr);
+        ledger.begin({10});
         std::uint64_t seq = 200;
         ledger.set_business_sink([&](std::uint64_t player_id, std::int64_t score) {
             return wire_sink(dial, seq, player_id, score);

@@ -263,17 +263,18 @@ bool test_scene_transfer_end_to_end() {
     session->bind_avatar(entity);
     session->set_state(apollo::game::world::WorldSessionState::Active);
 
-    // Avatar 投影源（Online 态 → Avatar 不进挂起窗口）
-    apollo::game::base::Avatar base_avatar(player.value());
-    base_avatar.set_state(apollo::game::base::AvatarState::Online);
-    base_avatar.set_home_zone_id(42);
+    // 投影源 = 只读玩法快照（值语义；跨界不传 Avatar 指针，todo L84）
+    apollo::game::base::GameplaySnapshot snapshot;
+    snapshot.home_zone_id = 42;
+    snapshot.max_hp = 120;
+    snapshot.hp = 90;
 
     // ---- 换幕：A → B ----
     apollo::game::world::SceneTransferRequest request;
     request.player_id = player;
     request.target_scene_id = fx.scene_b->scene_id();
     request.landing = {10.0f, 20.0f, 30.0f};
-    request.avatar = &base_avatar;
+    request.gameplay_snapshot = snapshot;
 
     const auto outcome =
         apollo::game::world::execute_scene_transfer(fx.world, fx.sessions, request);
@@ -292,6 +293,8 @@ bool test_scene_transfer_end_to_end() {
                 "landing position applied (易失态坐标不带走)");
     TEST_ASSERT(rebuilt->has_projection(), "avatar projection done");
     TEST_ASSERT(rebuilt->home_zone_id() == 42, "home zone projected");
+    TEST_ASSERT(rebuilt->max_hp() == 120 && rebuilt->hp() == 90,
+                "gameplay attributes seeded from read-only snapshot");
 
     // 差距 ⑤：AOI 重建——AOI 出入列随 enter/leave 完成
     TEST_ASSERT(fx.scene_b->aoi().contains(entity), "aoi re-registered in target");

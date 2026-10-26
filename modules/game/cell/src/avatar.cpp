@@ -143,14 +143,13 @@ std::uint64_t Avatar::broadcast_count() const noexcept {
     return broadcast_count_;
 }
 
-void Avatar::project_from(const apollo::game::base::Avatar& avatar) noexcept {
-    // player-object-model §3：换幕时状态从 Base 投影。P0-2 投影面 = home_zone_id
-    // （已落 Avatar 字段的长期属性）；属性/装备/长期 buff 随 P0-4 扩展。
-    home_zone_id_ = avatar.home_zone_id();
-    // Avatar 离开 Online 态（断线/转移）→ Avatar 侧进入挂起保活窗口
-    if (avatar.state() != apollo::game::base::AvatarState::Online) {
-        suspend();
-    }
+void Avatar::project_from(const apollo::game::base::GameplaySnapshot& snapshot) noexcept {
+    // player-object-model §3：换幕时长期属性从只读玩法快照单向拷贝（值投影，
+    // 不持档案指针——todo L84 跨界纪律）。挂起保活窗口由会话/scene 侧驱动
+    // （scene.cpp suspend），不再耦合档案宿主的运行态。
+    home_zone_id_ = snapshot.home_zone_id;
+    max_hp_ = std::max(snapshot.max_hp, 1);
+    hp_ = std::clamp(snapshot.hp, 0, max_hp_);
     projected_ = true;
 }
 

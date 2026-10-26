@@ -115,8 +115,8 @@ SceneTransferOutcome execute_scene_transfer(World& world,
 
     // ---- ④ attach：新 scene 重建 Avatar（Avatar 投影 + AOI 入列）----
     auto avatar = std::make_shared<apollo::game::cell::Avatar>(request.player_id, avatar_entity_id);
-    if (request.avatar != nullptr) {
-        avatar->project_from(*request.avatar);
+    if (request.gameplay_snapshot.has_value()) {
+        avatar->project_from(*request.gameplay_snapshot);
     }
     if (!target->enter(avatar, request.landing) ||
         (target_instance != nullptr && !target_instance->enter(request.player_id))) {
@@ -130,8 +130,8 @@ SceneTransferOutcome execute_scene_transfer(World& world,
         }
         if (source != nullptr) {
             auto restored = std::make_shared<apollo::game::cell::Avatar>(request.player_id, avatar_entity_id);
-            if (request.avatar != nullptr) {
-                restored->project_from(*request.avatar);
+            if (request.gameplay_snapshot.has_value()) {
+                restored->project_from(*request.gameplay_snapshot);
             }
             if (!source->enter(restored, origin)) {
                 outcome.result = SceneTransferResult::RollbackFailed;

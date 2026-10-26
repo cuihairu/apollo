@@ -14,6 +14,7 @@
 #include "squad_instance/settlement_credential_store.hpp"
 #include "store_host.hpp"
 #include "apollo/protocol/codec.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
 
 #include <chrono>
 #include <filesystem>

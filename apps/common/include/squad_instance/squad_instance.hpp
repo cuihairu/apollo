@@ -193,17 +193,14 @@ public:
     [[nodiscard]] std::optional<GameplayProgress> gameplay(
         std::uint64_t party_id) const;
 
-    // ---- 结算幂等落账（P2-4：既有奖励/持久化接口 + 重试/失败/恢复）----
-    // 锚点解析装配（须在 launch 前设置；副本受理时开账即取本解析器）。
-    void set_avatar_resolver(AvatarResolveFn fn);
-
-    // 业务受理装配（P1 结算迁入；须在 launch 前设置）：锚点写权在 Base
-    // 时落账走返回业务请求（958/959），本域不持锚点指针。设置后锚点解析
-    // 不再消费（World 无锚点可解析）。
+    // ---- 结算幂等落账（P2-4：业务受理 + 凭据持久提交 + 重试/失败/恢复）----
+    // 业务受理装配（P1 结算迁入；须在 launch 前设置）：锚点写权在 Base，
+    // 落账唯一路径 = 返回业务请求（958/959）；本域不持锚点指针（todo L84
+    // 跨界纪律：禁止跨界使用本地 Anchor 指针修改资料）。
     void set_business_sink(SettlementLedger::BusinessSink fn);
 
     // 结算去重凭据面装配（真实奖励持久化）：设置后每条落账先持久提交
-    // (小队, 玩家, 分值) 凭据再入锚点——未提交挂账不落。未设置 = 无凭据
+    // (小队, 玩家, 分值) 凭据再提业务请求——未提交挂账不落。未设置 = 无凭据
     // 面（测试桩兼容）。目录按 World 数据域挂放（宿主派生）。
     void set_credential_dir(const std::string& dir);
 
@@ -291,7 +288,6 @@ private:
     RemoteSpawnFn remote_spawner_;
     InstanceStartedFn instance_started_;
     InstanceClosingFn instance_closing_;
-    AvatarResolveFn avatar_resolver_;
     SettlementLedger::BusinessSink business_sink_;
     std::unique_ptr<SettlementCredentialStore> credential_store_;
 
