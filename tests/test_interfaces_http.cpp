@@ -22,7 +22,10 @@
 //      恰取声明体长（管道尾字节不吞），body 含多字节/NUL 逐字节保真；
 //  16. 请求超时预算：首字节起 T 内未完成 → 408 + 断连，完整请求不受误伤。
 //  17. 回调验签 gate：HMAC-SHA256 绑定 raw_request；正例入链 202，
-//      缺签/坏签/体长不符拒绝且链不受理。
+//      缺签/坏签/改体拒绝且链不受理（声明体长不符到不了 handler，见 18）。
+//  18. 验签 Reason 矩阵：8 个拒绝原因各归因一次（SignatureHeaderMissing
+//      由 17 覆盖），含 Content-Length 溢出防护、方案前缀大小写不敏感、
+//      签名头行剥离口径、密钥未配置。
 //
 // Windows：link TCP/TLS 底座不进 M1 批（POSIX only）——用例本体空转。
 
@@ -38,6 +41,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <initializer_list>
 #include <iostream>
 #include <mutex>
 #include <optional>
@@ -240,19 +244,17 @@ std::vector<std::uint8_t> plain_request(const std::string& method, const std::st
     return {req.begin(), req.end()};
 }
 
-std::string unsigned_callback_frame(const std::string& body,
-                                    const std::string& content_length = "") {
-    const std::string length = content_length.empty() ? std::to_string(body.size())
-                                                      : content_length;
+std::string unsigned_callback_frame(const std::string& body) {
+    // 不给「声明体长 ≠ 实际体长」留口：入口按声明体长恰读该字节数才派发，
+    // 线上造不出体长不符的完整请求（偏大则挂到超时，偏小则体被截断）。
     return "POST /callbacks HTTP/1.1\r\n"
            "Host: localhost\r\n"
            "Content-Length: " +
-           length + "\r\n\r\n" + body;
+           std::to_string(body.size()) + "\r\n\r\n" + body;
 }
 
-std::string signed_callback_frame(const std::string& body, const std::string& secret,
-                                  const std::string& content_length = "") {
-    std::string frame = unsigned_callback_frame(body, content_length);
+std::string signed_callback_frame(const std::string& body, const std::string& secret) {
+    std::string frame = unsigned_callback_frame(body);
     const std::string mac =
         apollo::utils::HMAC::sha256(secret, frame.data(), frame.size());
     const std::string separator("\r\n\r\n");
@@ -286,6 +288,43 @@ void install_callback_route(HttpIngressServer& server, CallbackChain& chain,
         response.body.assign(body.begin(), body.end());
         return response;
     });
+}
+
+// 单元级验签矩阵夹具：raw_request / body / headers 三面与入口解析产物同形，
+// 每个负例只动一面，结论即归因到那一处。
+struct CallbackFixture {
+    HttpRequest request;
+    std::string digest;  // 过验签 gate 的正确摘要（对无签名头行的帧算得）
+};
+
+CallbackFixture callback_fixture(const std::string& body, const std::string& secret) {
+    const std::string frame_no_sig = "POST /callbacks HTTP/1.1\r\n"
+                                     "Host: localhost\r\n"
+                                     "Content-Length: " + std::to_string(body.size()) +
+                                     "\r\n\r\n" + body;
+    const std::string digest = apollo::utils::HMAC::sha256(secret, frame_no_sig.data(),
+                                                           frame_no_sig.size());
+    const std::string separator("\r\n\r\n");
+    const std::size_t at = frame_no_sig.rfind(separator);
+    const std::string raw = frame_no_sig.substr(0, at + 2) +
+                            "X-Signature: hmac-sha256=" + digest + frame_no_sig.substr(at);
+
+    HttpRequest request;
+    request.method = "POST";
+    request.path = "/callbacks";
+    request.headers.emplace_back("content-length", std::to_string(body.size()));
+    request.headers.emplace_back("x-signature", "hmac-sha256=" + digest);
+    request.body.assign(body.begin(), body.end());
+    request.raw_request.assign(raw.begin(), raw.end());
+    return {request, digest};
+}
+
+// 显式字节构造：字面量从 const char* 初始化会在首个 NUL 处截断成空体，
+// 而验签用例要的是含 NUL 的二进制体（空体让 body.back() 越界成 UB）。
+std::string binary_callback_body() {
+    return std::string{'\x00', static_cast<char>(0xff), '-', 'b', 'i', 'n',
+                       'a', 'r', 'y', ' ', 'c', 'a', 'l', 'l', 'b', 'a',
+                       'c', 'k'};
 }
 
 // 客户端 → 服务端帧（必须掩码）。
@@ -1152,7 +1191,7 @@ bool test_callback_signature_gate() {
     ingress->start();
     TEST_ASSERT(ingress->listenPort() != 0, "port assigned");
 
-    const std::string body("\x00\xff-binary callback");
+    const std::string body = binary_callback_body();
     const std::string valid = signed_callback_frame(body, "channel-secret");
     std::string response;
     auto post = [&](const std::string& frame) {
@@ -1186,11 +1225,16 @@ bool test_callback_signature_gate() {
     TEST_ASSERT(post(malformed), "malformed response received");
     TEST_ASSERT(response.find("403") != std::string::npos, "malformed rejected");
 
-    const std::string bad_length = signed_callback_frame(
-        body, "channel-secret", std::to_string(body.size() + 1));
-    TEST_ASSERT(post(bad_length), "bad-length response received");
-    TEST_ASSERT(response.find("403") != std::string::npos,
-                "body length mismatch rejected");
+    // 体字节被改、Content-Length 与签名头原样 → 401：验签哈希覆盖声明体长。
+    std::string body_tampered = valid;
+    body_tampered.back() = static_cast<char>(body_tampered.back() ^ 0x01);
+    TEST_ASSERT(post(body_tampered), "body-tamper response received");
+    TEST_ASSERT(response.find("401") != std::string::npos, "body tamper rejected");
+
+    // 声明体长 ≠ 实际体长的负例只能走单测面（见 18）：入口按声明体长恰读该
+    // 字节数才派发给 handler——声明偏大则请求永不完成（挂到 requestTimeout →
+    // 408，见 16），声明偏小则体被截到声明长度，两种线上形态都到不了验签的
+    // Content-Length 比对（旧例在这里挂死等一个不会来的字节，故移除）。
 
     TEST_ASSERT(chain.size() == 1, "only valid callback accepted");
     TEST_ASSERT(chain.rejected_count() == 0, "security rejects bypass the chain");
@@ -1202,6 +1246,169 @@ bool test_callback_signature_gate() {
     TEST_ASSERT(captured_raw == valid, "drained raw frame preserved");
 
     ingress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---- 18. 验签 Reason 矩阵：8 个拒绝原因各归因一次，不混判
+//      （SignatureHeaderMissing 走真链路，见 17）----
+
+bool test_callback_verifier_reason_matrix() {
+    std::cout << "Running: test_callback_verifier_reason_matrix..." << std::endl;
+
+    const std::string body = binary_callback_body();
+    const CallbackVerifier verifier("channel-secret");
+    const auto fx = callback_fixture(body, "channel-secret");
+    TEST_ASSERT(verifier.verify(fx.request).valid, "fixture self-consistent");
+
+    // 摘要定长 + 定长比较：合法摘要过 gate。
+    const auto ok = verifier.verify(fx.request);
+    TEST_ASSERT(ok.valid && ok.status == 202, "valid accepted 202");
+
+    // 摘要与体不同步（body 与 raw 同字节翻转 = 线上改包）→ SignatureMismatch 401。
+    HttpRequest body_tampered = fx.request;
+    body_tampered.body.back() = static_cast<std::uint8_t>(body_tampered.body.back() ^ 0x01);
+    body_tampered.raw_request.back() =
+        static_cast<std::uint8_t>(body_tampered.raw_request.back() ^ 0x01);
+    const auto tampered = verifier.verify(body_tampered);
+    TEST_ASSERT(!tampered.valid && tampered.status == 401 &&
+                    tampered.reason == CallbackVerifier::Reason::SignatureMismatch,
+                "body tamper -> SignatureMismatch 401");
+
+    // 密钥不对（同一请求给别的 secret）→ SignatureMismatch 401。
+    const CallbackVerifier wrong_secret("other-secret");
+    const auto wrong = wrong_secret.verify(fx.request);
+    TEST_ASSERT(!wrong.valid && wrong.status == 401 &&
+                    wrong.reason == CallbackVerifier::Reason::SignatureMismatch,
+                "wrong secret -> SignatureMismatch 401");
+
+    // 按「含签名头行的整帧」算摘要（渠道未按去签名头行口径）→ SignatureMismatch
+    // 401：证明验签输入确实是剥离 x-signature 行的帧。
+    const std::string frame_no_sig("POST /callbacks HTTP/1.1\r\n"
+                                   "Host: localhost\r\n"
+                                   "Content-Length: " + std::to_string(body.size()) +
+                                   "\r\n\r\n" + body);
+    const std::string separator("\r\n\r\n");
+    const std::size_t sep_at = frame_no_sig.rfind(separator);
+    const std::string frame_with_sig = frame_no_sig.substr(0, sep_at + 2) +
+                                       "X-Signature: hmac-sha256=" +
+                                       std::string(64, '0') +
+                                       frame_no_sig.substr(sep_at);
+    HttpRequest header_included = fx.request;
+    std::string raw_with_sig(frame_with_sig.begin(), frame_with_sig.end());
+    header_included.raw_request.assign(raw_with_sig.begin(), raw_with_sig.end());
+    for (auto& [name, value] : header_included.headers) {
+        if (name == "x-signature") {
+            value = "hmac-sha256=" + apollo::utils::HMAC::sha256(
+                                          "channel-secret", raw_with_sig.data(),
+                                          raw_with_sig.size());
+        }
+    }
+    const auto header_included_result = verifier.verify(header_included);
+    TEST_ASSERT(!header_included_result.valid && header_included_result.status == 401 &&
+                    header_included_result.reason ==
+                        CallbackVerifier::Reason::SignatureMismatch,
+                "signature over header-bearing frame rejected");
+
+    // 方案前缀大小写不敏感（渠道客户端常见写法）→ 仍受理。
+    HttpRequest upper_scheme = fx.request;
+    for (auto& [name, value] : upper_scheme.headers) {
+        if (name == "x-signature") {
+            value = "HMAC-SHA256=" + fx.digest;
+        }
+    }
+    std::string upper_raw(upper_scheme.raw_request.begin(),
+                          upper_scheme.raw_request.end());
+    upper_raw.replace(upper_raw.find("hmac-sha256="), 12, "HMAC-SHA256=");
+    upper_scheme.raw_request.assign(upper_raw.begin(), upper_raw.end());
+    TEST_ASSERT(verifier.verify(upper_scheme).valid,
+                "uppercase scheme prefix accepted");
+
+    // 重复签名头（歧义签名面）→ SignatureHeaderAmbiguous 403。
+    HttpRequest ambiguous = fx.request;
+    ambiguous.headers.emplace_back("x-signature", "hmac-sha256=" + fx.digest);
+    const auto ambiguous_result = verifier.verify(ambiguous);
+    TEST_ASSERT(!ambiguous_result.valid && ambiguous_result.status == 403 &&
+                    ambiguous_result.reason ==
+                        CallbackVerifier::Reason::SignatureHeaderAmbiguous,
+                "duplicate signature header -> ambiguous 403");
+
+    // 摘要非 64 位十六进制 → SignatureMalformed 403。
+    HttpRequest short_digest = fx.request;
+    for (auto& [name, value] : short_digest.headers) {
+        if (name == "x-signature") {
+            value = "hmac-sha256=" + fx.digest.substr(0, 63);
+        }
+    }
+    const auto short_result = verifier.verify(short_digest);
+    TEST_ASSERT(!short_result.valid && short_result.status == 403 &&
+                    short_result.reason == CallbackVerifier::Reason::SignatureMalformed,
+                "63-char digest -> SignatureMalformed 403");
+
+    // 方案前缀不对 → SignatureHeaderMalformed 403。
+    HttpRequest bad_scheme = fx.request;
+    for (auto& [name, value] : bad_scheme.headers) {
+        if (name == "x-signature") {
+            value = "sha256=" + fx.digest;
+        }
+    }
+    const auto bad_scheme_result = verifier.verify(bad_scheme);
+    TEST_ASSERT(!bad_scheme_result.valid && bad_scheme_result.status == 403 &&
+                    bad_scheme_result.reason ==
+                        CallbackVerifier::Reason::SignatureHeaderMalformed,
+                "wrong scheme -> SignatureHeaderMalformed 403");
+
+    // Content-Length 缺失 → ContentLengthMissing 403。
+    HttpRequest no_length = fx.request;
+    for (auto it = no_length.headers.begin(); it != no_length.headers.end(); ++it) {
+        if (it->first == "content-length") {
+            no_length.headers.erase(it);
+            break;
+        }
+    }
+    const auto no_length_result = verifier.verify(no_length);
+    TEST_ASSERT(!no_length_result.valid && no_length_result.status == 403 &&
+                    no_length_result.reason == CallbackVerifier::Reason::ContentLengthMissing,
+                "missing content-length -> ContentLengthMissing 403");
+
+    // 声明体长超 size_t 表示域（30 位）→ 判 malformed 而非回绕命中 →
+    // ContentLengthMismatch 403（溢出防护，见 exact_size）。
+    HttpRequest huge_length = fx.request;
+    for (auto& [name, value] : huge_length.headers) {
+        if (name == "content-length") {
+            value.assign(30, '9');
+        }
+    }
+    const auto huge_result = verifier.verify(huge_length);
+    TEST_ASSERT(!huge_result.valid && huge_result.status == 403 &&
+                    huge_result.reason == CallbackVerifier::Reason::ContentLengthMismatch,
+                "oversized content-length -> ContentLengthMismatch 403");
+
+    // raw 面与 body 面不一致（尾字节不是 body）→ RawFrameMismatch 403。
+    HttpRequest raw_diverged = fx.request;
+    raw_diverged.raw_request.back() =
+        static_cast<std::uint8_t>(raw_diverged.raw_request.back() ^ 0x01);
+    const auto raw_result = verifier.verify(raw_diverged);
+    TEST_ASSERT(!raw_result.valid && raw_result.status == 403 &&
+                    raw_result.reason == CallbackVerifier::Reason::RawFrameMismatch,
+                "raw/body divergence -> RawFrameMismatch 403");
+
+    // raw 面为空 → RawFrameMismatch 403（无原始帧即无验签输入）。
+    HttpRequest no_raw = fx.request;
+    no_raw.raw_request.clear();
+    const auto no_raw_result = verifier.verify(no_raw);
+    TEST_ASSERT(!no_raw_result.valid && no_raw_result.status == 403 &&
+                    no_raw_result.reason == CallbackVerifier::Reason::RawFrameMismatch,
+                "empty raw frame -> RawFrameMismatch 403");
+
+    // 密钥未配置 → SecretNotConfigured 403（不受理任何回调）。
+    const CallbackVerifier no_secret("");
+    const auto no_secret_result = no_secret.verify(fx.request);
+    TEST_ASSERT(!no_secret_result.valid && no_secret_result.status == 403 &&
+                    no_secret_result.reason ==
+                        CallbackVerifier::Reason::SecretNotConfigured,
+                "unset secret -> SecretNotConfigured 403");
+
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -1285,6 +1492,8 @@ int main() {
         {"http_callback_route_202_and_429", test_http_callback_route_202_and_429},
         {"raw_request_retained_verbatim", test_raw_request_retained_verbatim},
         {"request_timeout_408", test_request_timeout_408},
+        {"callback_signature_gate", test_callback_signature_gate},
+        {"callback_verifier_reason_matrix", test_callback_verifier_reason_matrix},
     };
     int failures = 0;
     for (const auto& c : cases) {

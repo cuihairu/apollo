@@ -41,7 +41,7 @@ features:
 
 <ArchitectureDiagram kind="callbacks" />
 
-实现状态：gateway 游戏 TCP/WS/WSS 入口已验收（含 WSS 证书链/主机名错误拒绝与密钥配置负例）；interfaces 受理链（原始请求帧逐字节保留、请求超时与受理队列预算、有界单写者）、订单事务域（持久受理与待办、按归属代次解析当前 Base、发货去重凭据原子提交）与 apolloc init 脚手架均已落地并有测试覆盖；渠道验签执行器与进程间接线（interfaces→订单受理、base 写权生命周期、奖励落账 executor）仍规划中。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
+实现状态：gateway 游戏 TCP/WS/WSS 入口已验收（含 WSS 证书链/主机名错误拒绝与密钥配置负例）；interfaces 受理链（原始请求帧逐字节保留、请求超时与受理队列预算、有界单写者）与渠道验签 gate（HMAC-SHA256 按剥离签名头行的原始帧验签，缺签/改签/改体 401，签名格式与体长声明错误 403，摘要定长比较）、订单事务域（持久受理与待办、按归属代次解析当前 Base、发货去重凭据原子提交）与 apolloc init 脚手架均已落地并有测试覆盖；渠道回调 → 订单受理接线与发货 executor、base 写权生命周期（奖励落账）仍规划中。对照证据见 [Mistlane 与旧 FOGS 核对](./analysis/mistlane-review.md)，开发任务见根目录 todo.md。
 
 ## 进程、工具与 CI
 

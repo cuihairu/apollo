@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cctype>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -52,14 +53,34 @@ std::optional<std::size_t> exact_size(std::string_view value) {
     if (value.empty()) {
         return std::nullopt;
     }
+    const auto limit = std::numeric_limits<std::size_t>::max();
     std::size_t result = 0;
     for (unsigned char c : value) {
         if (c < '0' || c > '9') {
             return std::nullopt;
         }
-        result = result * 10 + static_cast<std::size_t>(c - '0');
+        const std::size_t digit = static_cast<std::size_t>(c - '0');
+        // 溢出防护：位数超体长表示域直接判 malformed。不防回绕会产生
+        // 小于原值的结果，声明体长与实收体的比对可被超长声明绕过。
+        if (result > (limit - digit) / 10) {
+            return std::nullopt;
+        }
+        result = result * 10 + digit;
     }
     return result;
+}
+
+bool constant_time_equal(std::string_view a, std::string_view b) {
+    // OpenSSL CRYPTO_memcmp 口径：长度先比（digest 定长 64，不泄密），
+    // 再全量异或累积、不早退——std::equal 会随首字节差异改变比较时长。
+    bool equal = a.size() == b.size();
+    unsigned char mismatch = 0;
+    const std::size_t span = a.size() < b.size() ? a.size() : b.size();
+    for (std::size_t i = 0; i < span; ++i) {
+        mismatch |= static_cast<unsigned char>(a[i]) ^
+                    static_cast<unsigned char>(b[i]);
+    }
+    return equal && mismatch == 0;
 }
 
 std::string signing_frame(std::string_view raw_request) {
@@ -154,12 +175,10 @@ CallbackVerifier::Result CallbackVerifier::verify(const HttpRequest& request) co
     const std::string frame = signing_frame(raw);
     const std::string expected =
         apollo::utils::HMAC::sha256(secret_, frame.data(), frame.size());
-    const bool matches =
-        expected.size() == provided.size() &&
-        std::equal(expected.begin(), expected.end(), provided.begin());
-    return matches ? CallbackVerifier::Result{true, Reason::SignatureMismatch, 202}
-                  : CallbackVerifier::Result{false, Reason::SignatureMismatch,
-                                             kUnauthorized};
+    return constant_time_equal(expected, provided)
+               ? CallbackVerifier::Result{true, Reason::SignatureMismatch, 202}
+               : CallbackVerifier::Result{false, Reason::SignatureMismatch,
+                                          kUnauthorized};
 }
 
 } // namespace interfaces
