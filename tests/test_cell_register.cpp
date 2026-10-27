@@ -218,18 +218,20 @@ struct CellEnd {
 
     bool send_register(std::uint64_t request_id, std::uint64_t cell_id,
                        std::uint64_t start_epoch, const std::string& host,
-                       std::int32_t port, std::int32_t capabilities, std::int32_t load,
+                       std::int32_t port, std::int32_t capabilities,
+                       std::int64_t compat, std::int32_t load,
                        std::int32_t drain_state, bool ready) {
-        std::vector<wire::FieldValue> f(9);
+        std::vector<wire::FieldValue> f(10);
         f[0].integer = static_cast<std::int64_t>(request_id);
         f[1].integer = static_cast<std::int64_t>(cell_id);
         f[2].integer = static_cast<std::int64_t>(start_epoch);
         f[3].text = host;
         f[4].integer = port;
         f[5].integer = capabilities;
-        f[6].integer = load;
-        f[7].integer = drain_state;
-        f[8].integer = ready ? 1 : 0;
+        f[6].integer = compat;
+        f[7].integer = load;
+        f[8].integer = drain_state;
+        f[9].integer = ready ? 1 : 0;
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return false;
@@ -242,16 +244,17 @@ struct CellEnd {
 
     // 残帧：合法 960 载荷截断（decode 必败 → 服务端拒收计数）。
     bool send_truncated_register(std::uint64_t request_id) {
-        std::vector<wire::FieldValue> f(9);
+        std::vector<wire::FieldValue> f(10);
         f[0].integer = static_cast<std::int64_t>(request_id);
         f[1].integer = 5;
         f[2].integer = 1;
         f[3].text = "127.0.0.1";
         f[4].integer = 9201;
         f[5].integer = 1;
-        f[6].integer = 10;
-        f[7].integer = 0;
-        f[8].integer = 1;
+        f[6].integer = world_app::contract_compat_projection();
+        f[7].integer = 10;
+        f[8].integer = 0;
+        f[9].integer = 1;
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return false;
@@ -326,9 +329,10 @@ bool register_roundtrip(CellEnd& cell, std::uint64_t request_id, std::uint64_t c
                         std::uint64_t start_epoch, const std::string& host,
                         std::int32_t port, std::int32_t capabilities, std::int32_t load,
                         std::int32_t drain_state, bool ready, RegisterReply& out,
+                        std::int64_t compat = world_app::contract_compat_projection(),
                         int timeout_ms = 5000) {
     if (!cell.send_register(request_id, cell_id, start_epoch, host, port, capabilities,
-                            load, drain_state, ready)) {
+                            compat, load, drain_state, ready)) {
         return false;
     }
     const auto deadline = std::chrono::steady_clock::now() +
@@ -524,7 +528,7 @@ bool test_cell_register_invalid_and_reserved() {
     // request_id = 0 保留：无回执、无登记（500ms 窗口判负）
     RegisterReply r;
     TEST_ASSERT(!register_roundtrip(cell, 0, 9, 1, "127.0.0.1", 9201, 1, 10, 0, true, r,
-                                    500),
+                                    world_app::contract_compat_projection(), 500),
                 "request_id 0 silent");
     TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
 
@@ -1204,6 +1208,83 @@ bool test_space_assignment_capability_filter() {
                 "space 8 stays with b across d's registration");
     TEST_ASSERT(server.world->find_space_assignment(9) == nullptr,
                 "space 9 still unclaimed by anyone");
+
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- 版本/兼容裁决：compat 投影不符或未声明（0）拒 code 5，不登记 ----------
+
+bool test_cell_register_compat_adjudication() {
+    std::cout << "Running: test_cell_register_compat_adjudication..." << std::endl;
+    WorldEnd server;
+    TEST_ASSERT(server.start(129), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell), "cell dialed");
+
+    const std::int64_t want = world_app::contract_compat_projection();
+    RegisterReply r;
+
+    // 投影不符（旧/异版进程）：显式驳回 code 5，不登记
+    TEST_ASSERT(
+        register_roundtrip(cell, 9941, 61, 1, "127.0.0.1", 9215, 1, 10, 0, true, r,
+                           want + 1),
+        "wrong-compat reply arrived");
+    TEST_ASSERT(!r.accepted, "wrong compat rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedIncompatible,
+                "wrong compat code 5");
+    TEST_ASSERT(r.detail.find("incompatible") != std::string::npos,
+                "incompatible detail");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
+
+    // 未声明（0 = 不可验证）：同拒 code 5（裸帧/异实现不得凭空受理）
+    TEST_ASSERT(
+        register_roundtrip(cell, 9942, 61, 1, "127.0.0.1", 9215, 1, 10, 0, true, r, 0),
+        "undeclared-compat reply arrived");
+    TEST_ASSERT(!r.accepted, "undeclared compat rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedIncompatible,
+                "undeclared compat code 5");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "still no registration");
+
+    // 投影同值：受理 + 登记保留声明值（观测面）
+    TEST_ASSERT(
+        register_roundtrip(cell, 9943, 61, 1, "127.0.0.1", 9215, 1, 10, 0, true, r),
+        "matching-compat reply arrived");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "matching compat accepted");
+    const auto* reg = server.world->find_cell_registration(61);
+    TEST_ASSERT(reg != nullptr, "registration recorded");
+    TEST_ASSERT(reg != nullptr && reg->compat == want, "compat declared value kept");
+
+    // 同代次幂等刷新（同投影）：code 2，登记兼容投影不变
+    TEST_ASSERT(
+        register_roundtrip(cell, 9944, 61, 1, "127.0.0.1", 9215, 1, 55, 1, false, r),
+        "idempotent reply arrived");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAcceptedIdempotent,
+                "same-epoch idempotent");
+    reg = server.world->find_cell_registration(61);
+    TEST_ASSERT(reg != nullptr && reg->compat == want, "compat unchanged on refresh");
+
+    // 代次裁决先于兼容裁决：旧代次（code 3）凭自冻结语义不被 code 5 抢答
+    TEST_ASSERT(
+        register_roundtrip(cell, 9945, 62, 5, "127.0.0.1", 9216, 1, 10, 0, true, r),
+        "cell 62 first epoch accepted");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "cell 62 registered at epoch 5");
+    TEST_ASSERT(
+        register_roundtrip(cell, 9946, 62, 3, "127.0.0.1", 9216, 1, 10, 0, true, r,
+                           want + 1),
+        "stale wrong-compat reply arrived");
+    TEST_ASSERT(!r.accepted, "stale epoch rejected even with wrong compat");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch,
+                "stale epoch preempts compat code 5");
+    reg = server.world->find_cell_registration(62);
+    TEST_ASSERT(reg != nullptr && reg->start_epoch == 5,
+                "registration not downgraded by stale wrong-compat request");
 
     g_replies = nullptr;
     server.stop();
@@ -2539,6 +2620,7 @@ int main() {
                     && test_space_assignment_readiness()
                     && test_space_assignment_load_balance()
                     && test_space_assignment_capability_filter()
+                    && test_cell_register_compat_adjudication()
                     && test_cell_retire_and_reclaim()
                     && test_cell_retire_management_command()
                     && test_production_client_space_assign_listener()

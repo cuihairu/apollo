@@ -208,16 +208,17 @@ private:
         if (l == nullptr) {
             return;
         }
-        std::vector<wire::FieldValue> f(9);
+        std::vector<wire::FieldValue> f(10);
         f[0].integer = static_cast<std::int64_t>(++next_request_id_);  // 0 保留
         f[1].integer = static_cast<std::int64_t>(config_.cell_id);
         f[2].integer = static_cast<std::int64_t>(config_.start_epoch);
         f[3].text = config_.advertise_host;
         f[4].integer = config_.advertise_port;
         f[5].integer = 0;  // capabilities 未声明（0——能力裁决随 L102 容量批）
-        f[6].integer = reported_load();       // 负载（宿主注入；0 = 空载缺省）
-        f[7].integer = reported_drain_state();
-        f[8].integer = reported_ready() ? 1 : 0;  // 就绪 = 内核可分配（冻结即让位）
+        f[6].integer = contract_compat_projection();  // 契约兼容投影（同批声明）
+        f[7].integer = reported_load();       // 负载（宿主注入；0 = 空载缺省）
+        f[8].integer = reported_drain_state();
+        f[9].integer = reported_ready() ? 1 : 0;  // 就绪 = 内核可分配（冻结即让位）
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return;

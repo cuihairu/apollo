@@ -83,6 +83,7 @@ struct CellRegisterRequest {
     std::string host;                 // 控制/模拟监听地址（World 回连用；本切片仅记录）
     std::int32_t port = 0;            // cell 监听端口（0 = 未监听，仅登记）
     std::int32_t capabilities = 0;    // 能力位掩码（0 = 未声明，记录不裁决）
+    std::int64_t compat = 0;          // 契约兼容投影（0 = 未声明；裁决拒 code 5）
     std::int32_t load = 0;            // 负载 0-100（0 = 未上报）
     std::int32_t drain_state = 0;     // 排空状态：0=serving 1=draining 2=drained
     bool ready = false;               // 就绪（进程存活不等于可分配）

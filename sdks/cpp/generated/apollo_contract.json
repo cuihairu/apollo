@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "5b015a45d354b7bce73b492e9b906bd1f2e83bc83f726270f52e618e75eba70b",
+  "schema_hash": "a5b41713831f0de6b1357605c3032d00cc8ec0c72ec91b6be0f9c47d90412ff3",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "77e775b43b0329e77f5038e2317b52d375f0a77ff546d6e29c359df84f16676f",
+  "internal_hash": "550a003c51cb183994f1f124b6d8bbd8b0126bc3d47aa5acdff667bb39bcfecd",
   "contract_version": 3,
   "aliases": [
     {
@@ -3371,6 +3371,12 @@
           "desc": "能力位掩码（协议/快照能力声明；0 = 未声明。World 按 Space 声明的能力位要求裁决认领资格——须覆盖该 Space needs 的全部位；池内无合格候选时该 Space 留池不认领）"
         },
         {
+          "name": "compat",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "契约兼容投影（kInternalHash 经 FNV-1a 64 折为 int64——World 裁决须与本进程同值才受理；0 = 未声明，按不可验证拒（961 code 5）。升级/混编的兼容范围白名单随协议更新批）"
+        },
+        {
           "name": "load",
           "type": "int32",
           "wire_type": "int32",
@@ -3415,7 +3421,7 @@
           "name": "code",
           "type": "int32",
           "wire_type": "int32",
-          "desc": "1=accepted 2=accepted_idempotent（同 ID 同代次重注册刷新） 3=rejected_stale_epoch（旧代次不可覆盖） 4=rejected_invalid（cell_id/代次非法）"
+          "desc": "1=accepted 2=accepted_idempotent（同 ID 同代次重注册刷新） 3=rejected_stale_epoch（旧代次不可覆盖） 4=rejected_invalid（cell_id/代次非法） 5=rejected_incompatible（契约兼容投影不符或未声明）"
         },
         {
           "name": "management_epoch",

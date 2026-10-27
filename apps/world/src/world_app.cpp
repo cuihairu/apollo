@@ -568,6 +568,8 @@ void WorldApp::onCellRegister(const std::string& peer,
             std::chrono::steady_clock::now().time_since_epoch())
             .count());
     auto it = cellRegistrations_.find(request.cell_id);
+    // 代次裁决先于兼容裁决（code 3 先于 code 5）：旧代次复活凭 code 3 自冻
+    // 结隔离（客户端语义）——若被 code 5 抢答，旧执行端失去自隔离信号
     if (it == cellRegistrations_.end()) {
         // 旧执行端隔离（L101 隔离切片）：代次水位——摘除忘却登记，但本进程
         // 曾受理的更高代次仍拒旧代次复活（旧端不能借摘除冒认首注册；同代次
@@ -578,12 +580,31 @@ void WorldApp::onCellRegister(const std::string& peer,
                   "stale epoch: watermark=" + std::to_string(wm->second));
             return;
         }
+    } else if (request.start_epoch < it->second.start_epoch) {
+        // §4.4：旧代次不可覆盖新登记（重启获新代次——旧连接回拨拒绝，
+        // 登记保持新代次；旧执行端隔离随 L101 后续切片）
+        reply(false, kCellRegisterRejectedStaleEpoch,
+              "stale epoch: registered=" + std::to_string(it->second.start_epoch));
+        return;
+    }
+    if (request.compat != contract_compat_projection()) {
+        // 契约兼容裁决（960 版本/兼容切片，§4.3「World 验证所属关系、版本
+        // 和身份」的版本面）：声明投影须与本进程同值才受理——未声明（0）
+        // 即不可验证，混编落地的兼容范围白名单随协议更新批
+        reply(false, kCellRegisterRejectedIncompatible,
+              "incompatible contract compat: declared="
+                  + std::to_string(request.compat) + " expected="
+                  + std::to_string(contract_compat_projection()));
+        return;
+    }
+    if (it == cellRegistrations_.end()) {
         CellRegistration reg;
         reg.cell_id = request.cell_id;
         reg.start_epoch = request.start_epoch;
         reg.host = request.host;
         reg.port = request.port;
         reg.capabilities = request.capabilities;
+        reg.compat = request.compat;
         reg.load = request.load;
         reg.drain_state = request.drain_state;
         reg.ready = request.ready;
@@ -600,13 +621,6 @@ void WorldApp::onCellRegister(const std::string& peer,
         pushSpaceAssignments(peer, cellRegistrations_.at(request.cell_id));
         return;
     }
-    if (request.start_epoch < it->second.start_epoch) {
-        // §4.4：旧代次不可覆盖新登记（重启获新代次——旧连接回拨拒绝，
-        // 登记保持新代次；旧执行端隔离随 L101 后续切片）
-        reply(false, kCellRegisterRejectedStaleEpoch,
-              "stale epoch: registered=" + std::to_string(it->second.start_epoch));
-        return;
-    }
     const bool idempotent = request.start_epoch == it->second.start_epoch;
     // 同代次幂等刷新 / 新代次替换：自报面整体刷新（peer 也换——重连 =
     // 同名或新名链路，回执按名寻路）
@@ -614,6 +628,7 @@ void WorldApp::onCellRegister(const std::string& peer,
     it->second.host = request.host;
     it->second.port = request.port;
     it->second.capabilities = request.capabilities;
+    it->second.compat = request.compat;
     it->second.load = request.load;
     it->second.drain_state = request.drain_state;
     it->second.ready = request.ready;

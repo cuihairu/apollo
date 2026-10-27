@@ -644,7 +644,7 @@ private:
                                     std::size_t size) {
         std::vector<wire::FieldValue> fields;
         if (!wire::decode_payload(id_of(MsgId::cell_register_request), data, size, fields)
-            || fields.size() != 9 || on_cell_register_ == nullptr) {
+            || fields.size() != 10 || on_cell_register_ == nullptr) {
             ++rejected_;
             return;
         }
@@ -655,9 +655,10 @@ private:
         req.host = fields[3].text;
         req.port = static_cast<std::int32_t>(fields[4].integer);
         req.capabilities = static_cast<std::int32_t>(fields[5].integer);
-        req.load = static_cast<std::int32_t>(fields[6].integer);
-        req.drain_state = static_cast<std::int32_t>(fields[7].integer);
-        req.ready = fields[8].integer != 0;
+        req.compat = fields[6].integer;
+        req.load = static_cast<std::int32_t>(fields[7].integer);
+        req.drain_state = static_cast<std::int32_t>(fields[8].integer);
+        req.ready = fields[9].integer != 0;
         on_cell_register_(peer, req);
     }
 

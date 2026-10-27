@@ -99,6 +99,10 @@ public:
         std::string host;
         std::int32_t port = 0;
         std::int32_t capabilities = 0;
+        // 契约兼容投影（960 版本/兼容裁决切片）：受理即裁决同值，登记保持
+        // 声明值供观测（registry 只存已受理者——投影必等 World 自身，观测
+        // 面证明裁决已过）。0 不落入（未声明拒 code 5）。
+        std::int64_t compat = 0;
         std::int32_t load = 0;
         std::int32_t drain_state = 0;
         bool ready = false;

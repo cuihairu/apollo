@@ -1,5 +1,6 @@
 #pragma once
 
+#include "apollo_contract.h"
 #include "apollo/net/linktrace/trace_context.hpp"
 #include "apollo/protocol/messages.hpp"
 
@@ -50,6 +51,24 @@ inline constexpr std::int32_t kCellRegisterAccepted = 1;
 inline constexpr std::int32_t kCellRegisterAcceptedIdempotent = 2;  // 同 ID 同代次刷新
 inline constexpr std::int32_t kCellRegisterRejectedStaleEpoch = 3;  // 旧代次不可覆盖
 inline constexpr std::int32_t kCellRegisterRejectedInvalid = 4;     // cell_id/代次非法
+inline constexpr std::int32_t kCellRegisterRejectedIncompatible = 5;  // 契约兼容投影不符
+
+// 契约兼容投影（960 版本/兼容裁决切片，L109 未收口）：kInternalHash 十六进制
+// 串经 FNV-1a 64 折为 int64——cell 侧声明、World 侧裁决须同值才受理（§4.3
+// 「World 验证所属关系、版本和身份」的版本面）；0 = 未声明按不可验证拒。
+// 混编/升级的兼容范围白名单与版本协商随协议更新批（§9 支持协议更新的进程
+// 替换）。双域口径（sdk-contract §11.3）：internal-only 变更只动 kInternalHash，
+// 客户端握手 kClientHash 不受扰——本投影取 internal 域恰为 cell↔World 控制
+// 协议指纹。
+inline constexpr std::int64_t contract_compat_projection() {
+    const char* s = apollo::contract::gen::kInternalHash;
+    std::uint64_t h = 14695981039346656037ull;  // FNV-1a 64 偏移基
+    for (; *s; ++s) {
+        h ^= static_cast<std::uint8_t>(*s);
+        h *= 1099511628211ull;  // FNV-1a 64 素数
+    }
+    return static_cast<std::int64_t>(h);
+}
 
 // cell 缩容意图命令/回执（963/966 契约面，L104 缩容管理命令面）：op 取
 // 963 操作字段的契约词汇；code 取 966 code 字段的契约词汇。
