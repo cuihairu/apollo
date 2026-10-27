@@ -405,7 +405,9 @@ int main(int argc, char* argv[]) {
                         cell.cancel_space_revoke(rec.space_id);
                         const auto scene_id = cell.add_space(
                             rec.space_id,
-                            space_descriptor_for(config, rec.space_id, ""));
+                            space_descriptor_for(config, rec.space_id,
+                                                 declared_space_name(config,
+                                                                      rec.space_id)));
                         logger->info("space assigned: id=" + std::to_string(rec.space_id)
                                      + " version=" + std::to_string(rec.version)
                                      + " scene=" + std::to_string(scene_id));

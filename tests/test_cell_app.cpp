@@ -1051,6 +1051,80 @@ bool test_declared_space_squad_flow_isolation() {
     return true;
 }
 
+// L100 承接切片后续接线（批㉕ 收尾半片）：声明名回查 + 分配（962）应用面
+// 装配——声明 Space 经撤路由→重认领重建时保留声明名，不静默回退成
+// space-<id> 缺省名。声明名回查/装配是纯 config 域（无内核态）；撤路由与
+// 重建在 post_tick（内核线程上下文）内做并读 scene 名，测试线程不碰内核态。
+bool test_declared_space_reassignment_keeps_name() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    config.spaces = {{7, "aux"}};
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+
+    // 声明名回查面：已声明命中；默认/未知返回空（调用方走缺省名）
+    TEST_ASSERT(world_app::declared_space_name(config, 7) == "aux",
+                "declared name resolved");
+    TEST_ASSERT(world_app::declared_space_name(config, 1).empty(),
+                "default space undeclared");
+    TEST_ASSERT(world_app::declared_space_name(config, 99).empty(),
+                "unknown space undeclared");
+
+    // 分配（962）应用面装配：声明名保留；未声明走 space-<id> 缺省
+    const auto desc7 =
+        world_app::space_descriptor_for(
+            config, 7, world_app::declared_space_name(config, 7));
+    TEST_ASSERT(desc7.map_name == "aux", "assignment descriptor carries declared name");
+    const auto desc99 =
+        world_app::space_descriptor_for(
+            config, 99, world_app::declared_space_name(config, 99));
+    TEST_ASSERT(desc99.map_name == "space-99", "assignment descriptor default fallback");
+
+    // 撤路由→重认领（962 重建路径同式）：重建 scene 名仍为声明名（非
+    // space-7 缺省）。engine：先撤一次，下一拍按 desc7 重建。
+    std::mutex rebuilt_mutex;
+    std::string rebuilt_name;
+    std::atomic<int> step{0};  // 0=待撤 1=已撤待重建 2=已重建
+    cell.set_post_tick([&](double) {
+        const int s = step.load();
+        if (s == 0) {
+            if (cell.scene_id_of_space(7) != cell.default_scene_id()) {
+                const auto removed = cell.remove_space(7);
+                if (removed != 0) {
+                    step.store(1);
+                }
+                return;
+            }
+            return;  // 未知/兜底必读默认 scene——声明路由未即显形，等拍
+        }
+        if (s == 1) {
+            // 路由已撤（remove 后 scene_id_of_space 回落默认 scene）；直接按
+            // 声明名装配的 descriptor 重建（962 应用面同式）。
+            const auto sid = cell.add_space(7, desc7);
+            auto* scene = cell.find_scene(sid);
+            std::lock_guard<std::mutex> lock(rebuilt_mutex);
+            rebuilt_name = scene ? scene->get_name() : "";
+            step.store(2);
+            return;
+        }
+        // s == 2：已重建，后续拍不再动
+    });
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    TEST_ASSERT(step.load() >= 1, "declared space revoked (empty scene)");
+    TEST_ASSERT(wait_until([&] { return step.load() == 2; },
+                           std::chrono::seconds(3)),
+                "declared space re-added after revoke");
+    {
+        std::lock_guard<std::mutex> lock(rebuilt_mutex);
+        TEST_ASSERT(rebuilt_name == "aux", "rebuilt scene keeps declared name");
+    }
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1077,6 +1151,8 @@ int main() {
         {"cell_kernel_pending_revoke_retry", test_cell_kernel_pending_revoke_retry},
         {"cell_kernel_cancel_space_revoke", test_cell_kernel_cancel_space_revoke},
         {"declared_space_squad_flow_isolation", test_declared_space_squad_flow_isolation},
+        {"declared_space_reassignment_keeps_name",
+         test_declared_space_reassignment_keeps_name},
     };
 
     for (const auto& c : cases) {

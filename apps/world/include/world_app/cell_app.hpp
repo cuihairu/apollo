@@ -55,6 +55,12 @@ apollo::game::world::SceneDescriptor space_descriptor_for(const WorldAppConfig& 
                                                           std::uint64_t space_id,
                                                           const std::string& name);
 
+// 声明名回查（L100 多 Space 声明面后续接线）：space_id 在 config.spaces 已
+// 声明时返回其名，未声明/默认 Space 返回空。分配（962）应用面据此保留声明
+// 名——撤路由后重认领的声明 Space 不会静默回退成 space-<id> 默认名。
+const std::string& declared_space_name(const WorldAppConfig& config,
+                                       std::uint64_t space_id);
+
 
 namespace protocol = apollo::protocol;
 

@@ -1237,6 +1237,20 @@ apollo::game::world::SceneDescriptor space_descriptor_for(const WorldAppConfig& 
     return descriptor;
 }
 
+const std::string& declared_space_name(const WorldAppConfig& config,
+                                       std::uint64_t space_id) {
+    // 声明名回查（L100 多 Space 声明面后续接线）：已声明的 space_id 返回声明
+    // 名；未声明/默认 Space 返回空，调用方走 space_descriptor_for 的
+    // space-<id> 缺省回退。
+    static const std::string kEmpty;
+    for (const auto& decl : config.spaces) {
+        if (decl.space_id == space_id) {
+            return decl.name;
+        }
+    }
+    return kEmpty;
+}
+
 std::uint64_t CellApp::add_space(std::uint64_t space_id,
                                  const apollo::game::world::SceneDescriptor& descriptor) {
     // L99：显式登记面——space_id（路由键域）与 scene_id（world 自增域）
