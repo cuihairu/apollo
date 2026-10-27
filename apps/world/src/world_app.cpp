@@ -24,6 +24,23 @@ apollo::core::log::Logger& worldLog() {
     return *apollo::core::log::global_log_manager().createLogger("world_app");
 }
 
+// 能力位覆盖判定（容量申报裁决）：cell 声明的 capabilities 须覆盖 Space
+// 要求的 needs 全部位才有认领资格。needs=0 = 无要求——任何 cell 均
+// 合格，含未声明（capabilities=0）的现状语义。
+bool capability_fit(std::int32_t capabilities, std::int32_t needs) {
+    return (capabilities & needs) == needs;
+}
+
+// 分配池成员判定（SpaceSlot 表口径，pool 复用两处：装载终态重建 + 观测）。
+bool pool_has(const WorldAppConfig& config, std::uint64_t space_id) {
+    for (const auto& slot : config.assignSpaces) {
+        if (slot.space_id == space_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 逗号分隔依赖名 → 列表（952 编排请求；空段跳过，全空 = 无依赖）。
 std::vector<std::string> split_dep_list(const std::string& text) {
     std::vector<std::string> out;
@@ -652,11 +669,13 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
     // 此撤本地残留路由——离线期缺口经重注册收敛，见 L108 切片）。认领独占：
     // 不重分他人 Space（重平衡随 L108 拓扑批）。
     //
-    // 认领资格（L104 负载裁决切片）：未就绪 / 自报排空中 / World 单方缩容
-    // （retire）的 cell 不认领新 Space——进程存活不等于可分配，既有归属照
-    // 常刷新（撤空不撤权）；已释放的 Space 走最小负载优先，存在负载严格更
-    // 低的候选则本 cell 退让（等负载面收敛后随下次受理/刷新认领），同负载
-    // 让位给先受理者（不抖动重分）。
+    // 认领资格（L104 负载裁决 + 容量申报裁决切片）：未就绪 / 自报排空中 /
+    // World 单方缩容（retire）的 cell 不认领新 Space——进程存活不等于可分配，
+    // 既有归属照常刷新（撤空不撤权）；声明能力未覆盖该 Space needs 的
+    // cell 同样不认领——没有容量明确拒绝（world-cell-management §5），留池
+    // 等合格候选，不落到不合格 cell 上凑数。已释放的 Space 走最小负载优先，
+    // 存在负载严格更低且同样合格的候选则本 cell 退让（等负载面收敛后随下次
+    // 受理/刷新认领），同负载让位给先受理者（不抖动重分）。
     if (config_.assignSpaces.empty()) {
         return;
     }
@@ -667,15 +686,16 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
                 "world journal missing evidence: cell=" + std::to_string(reg.cell_id)
                 + " has no tombstone; all assignments frozen");
         }
-        for (std::uint64_t space_id : config_.assignSpaces) {
+        for (const auto& slot : config_.assignSpaces) {
             worldLog().warning(
                 "space assignment blocked by missing journal evidence: space="
-                + std::to_string(space_id));
+                + std::to_string(slot.space_id));
         }
         return;
     }
     const bool may_claim = reg.ready && reg.drain_state == 0 && !reg.retire;
-    for (std::uint64_t space_id : config_.assignSpaces) {
+    for (const auto& slot : config_.assignSpaces) {
+        const std::uint64_t space_id = slot.space_id;
         if (missingJournal_) {
             worldLog().warning(
                 "space assignment blocked by missing journal evidence: space="
@@ -690,8 +710,10 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
         }
         auto it = spaceAssignments_.find(space_id);
         if (it == spaceAssignments_.end() || it->second.cell_id == 0) {
-            // 未分配 / 已释放：无资格或让位者不发 962（无归属视图可推）
-            if (!may_claim || lower_load_peer(reg.cell_id, reg.load)) {
+            // 未分配 / 已释放：无资格、无容量（能力未覆盖）或让位者不发 962
+            //（无归属视图可推）
+            if (!may_claim || !capability_fit(reg.capabilities, slot.needs) ||
+                lower_load_peer(reg.cell_id, reg.load, slot.needs)) {
                 continue;
             }
             const bool reclaim = it != spaceAssignments_.end();  // owner=0
@@ -746,15 +768,20 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
     }
 }
 
-bool WorldApp::lower_load_peer(std::uint64_t cell_id, std::int32_t load) const {
-    // 最小负载优先（L104 负载裁决切片）：登记表内任一可认领候选负载严格低于
-    // 本 cell 即让位——同负载不退让（认领归先受理者，裁决对注册顺序稳定）；
-    // 存疑（suspect）条目仍参裁——链路未决时归属不动比抢分安全。缩容意图
-    // （retire）条目排除在外：它永不认领，让位给它会永久搁置该 Space。
+bool WorldApp::lower_load_peer(std::uint64_t cell_id, std::int32_t load,
+                               std::int32_t needs) const {
+    // 最小负载优先（L104 负载裁决 + 容量申报裁决切片）：登记表内任一合格
+    // 候选负载严格低于本 cell 即让位——合格 = 就绪、不排空、未缩容且声明
+    // 能力覆盖该 Space 的 needs（不合格的更低负载 peer 不参裁，否则合格
+    // 方会把归属让给无资格方，Space 永久搁置）。同负载不退让（认领归先受理
+    // 者，裁决对注册顺序稳定）；存疑（suspect）条目仍参裁——链路未决时归属
+    // 不动比抢分安全。缩容意图（retire）条目排除在外：它永不认领，让位给
+    // 它会永久搁置该 Space。
     for (const auto& entry : cellRegistrations_) {
         const auto& other = entry.second;
         if (other.cell_id != cell_id && other.ready && other.drain_state == 0 &&
-            !other.retire && other.load < load) {
+            !other.retire && capability_fit(other.capabilities, needs) &&
+            other.load < load) {
             return true;
         }
     }
@@ -1148,8 +1175,7 @@ void WorldApp::loadWorldJournal() {
     std::size_t seeded = 0;
     std::size_t skipped = 0;
     for (const auto& entry : replay) {
-        if (std::find(config_.assignSpaces.begin(), config_.assignSpaces.end(),
-                      entry.first) == config_.assignSpaces.end()) {
+        if (!pool_has(config_, entry.first)) {
             ++skipped;
             continue;
         }

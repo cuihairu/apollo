@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "0628d510aacdc0765e93de36cbf2f7dc0e3d8d40b477e6b8a20727580d285901",
+  "schema_hash": "5b015a45d354b7bce73b492e9b906bd1f2e83bc83f726270f52e618e75eba70b",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "5282f3a0b22ac82cf6f69994842cdc4917bb81a8581c83c969c110d1a29a8f0a",
+  "internal_hash": "77e775b43b0329e77f5038e2317b52d375f0a77ff546d6e29c359df84f16676f",
   "contract_version": 3,
   "aliases": [
     {
@@ -3368,7 +3368,7 @@
           "name": "capabilities",
           "type": "int32",
           "wire_type": "int32",
-          "desc": "能力位掩码（协议/快照能力声明；0 = 未声明，本切片记录不裁决）"
+          "desc": "能力位掩码（协议/快照能力声明；0 = 未声明。World 按 Space 声明的能力位要求裁决认领资格——须覆盖该 Space needs 的全部位；池内无合格候选时该 Space 留池不认领）"
         },
         {
           "name": "load",
@@ -3477,7 +3477,7 @@
           "desc": "1=归属收帧 cell（可服务）；0=非其所有（撤销标记）"
         }
       ],
-      "desc": "World→cell Space 归属视图（L101 分配面首切片 + L108 回收切片：每 Space 一条——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分；每次受理推全池权威视图，重认领版本单调前进，旧主经 ready=0 撤销标记收敛离线期缺口；重平衡策略/拓扑版本随 L108 后续批）"
+      "desc": "World→cell Space 归属视图（L101 分配面首切片 + L108 回收切片：每 Space 一条——合格候选（就绪、不自报排空、未被 World 单方缩容且声明能力覆盖该 Space 能力位要求）中最小负载优先独占认领全池未分配 Space，后续注册不重分；池内无合格候选的 Space 留池不认领；每次受理推全池权威视图，重认领版本单调前进，旧主经 ready=0 撤销标记收敛离线期缺口；重平衡策略/拓扑版本随 L108 后续批）"
     },
     {
       "id": 963,

@@ -12,6 +12,7 @@
 #include <csignal>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 
 using namespace world_app;
@@ -107,20 +108,46 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                 if (item.empty()) {
                     continue;
                 }
-                const std::uint64_t space_id = std::strtoull(item.c_str(), nullptr, 10);
+                // 条目格式 <id> 或 <id>:<needs>——needs = 该 Space 的
+                // 能力位要求（容量申报裁决；十进制/十六进制 0x 皆可）。
+                const auto colon = item.find(':');
+                const std::string id_text =
+                    colon == std::string::npos ? item : item.substr(0, colon);
+                const std::uint64_t space_id = std::strtoull(id_text.c_str(), nullptr, 10);
                 if (space_id == 0) {
                     std::cerr << "world: --assign-spaces ids must be non-zero"
                               << std::endl;
                     std::exit(2);
                 }
-                if (std::find(config.assignSpaces.begin(), config.assignSpaces.end(),
-                              space_id)
-                    != config.assignSpaces.end()) {
+                std::int32_t needs = 0;
+                if (colon != std::string::npos) {
+                    const std::string caps_text = item.substr(colon + 1);
+                    char* caps_end = nullptr;
+                    const long caps_value =
+                        std::strtol(caps_text.c_str(), &caps_end, 0);
+                    if (caps_text.empty() || *caps_end != '\0' ||
+                        caps_value < 0 ||
+                        caps_value > std::numeric_limits<std::int32_t>::max()) {
+                        std::cerr << "world: --assign-spaces needs must be a "
+                                     "non-negative integer in "
+                                  << item << std::endl;
+                        std::exit(2);
+                    }
+                    needs = static_cast<std::int32_t>(caps_value);
+                }
+                bool duplicate = false;
+                for (const auto& slot : config.assignSpaces) {
+                    if (slot.space_id == space_id) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) {
                     std::cerr << "world: --assign-spaces duplicate id "
                               << std::to_string(space_id) << std::endl;
                     std::exit(2);
                 }
-                config.assignSpaces.push_back(space_id);
+                config.assignSpaces.push_back({space_id, needs});
             }
         } else if (arg == "--space" && i + 1 < argc) {
             config.spaceName = argv[++i];
@@ -174,7 +201,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
                       << "  --world-journal <file>    Epoch tombstone journal for cross-restart cell isolation (default: off)\n"
                       << "  --link-grace-ms <ms>      Cell-side control-link grace window before freeze, 0 = never (default: 15000)\n"
-                      << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells (default: off)\n"
+                      << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells,\n"
+                         "                             each entry <id> or <id>:<needs-bits> (default: off)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
                       << "  --add-space <id>:<name>     Declare an extra Space at startup, repeatable (default: none)\n"
                       << "  --size <width> <height>     Space size (default: 1000 1000)\n"
@@ -345,7 +373,7 @@ int main(int argc, char* argv[]) {
                 }
                 if (config.registerHost.empty() || config.cellId == 0) {
                     throw std::runtime_error(
-                        "--register-port requires --register-host and --cell-id");
+                        "--register-port needs --register-host and --cell-id");
                 }
                 CellRegisterConfig rc;
                 rc.world_host = config.registerHost;

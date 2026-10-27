@@ -621,7 +621,7 @@
     <field name="start_epoch" type="int64" desc="进程启动代次（重启自增；旧代次注册不可覆盖新代次登记）"/>
     <field name="host" type="string" desc="cell 控制/模拟监听地址（World 分配 Space/Cell 时回连用；本切片仅记录）"/>
     <field name="port" type="int32" desc="cell 监听端口（0 = 未监听，仅登记）"/>
-    <field name="capabilities" type="int32" desc="能力位掩码（协议/快照能力声明；0 = 未声明，本切片记录不裁决）"/>
+    <field name="capabilities" type="int32" desc="能力位掩码（协议/快照能力声明；0 = 未声明。World 按 Space 声明的能力位要求裁决认领资格——须覆盖该 Space needs 的全部位；池内无合格候选时该 Space 留池不认领）"/>
     <field name="load" type="int32" desc="当前负载 0-100（0 = 未上报）"/>
     <field name="drain_state" type="int32" desc="排空状态：0=serving 1=draining 2=drained（与 956/957 同口径）"/>
     <field name="ready" type="bool" desc="就绪（1=可分配；进程存活不等于可分配）"/>
@@ -634,7 +634,7 @@
     <field name="assigned_cell_id" type="int64" desc="确认的 cell ID（本切片原样回带；World 侧分配面在 L102 拓扑批）"/>
     <field name="detail" type="string" desc="状态摘要（拒绝原因等）"/>
   </msg>
-  <msg id="962" name="cell_space_assign" dir="P2P" channel="events" domain="internal" desc="World→cell Space 归属视图（L101 分配面首切片 + L108 回收切片：每 Space 一条——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分；每次受理推全池权威视图，重认领版本单调前进，旧主经 ready=0 撤销标记收敛离线期缺口；重平衡策略/拓扑版本随 L108 后续批）">
+  <msg id="962" name="cell_space_assign" dir="P2P" channel="events" domain="internal" desc="World→cell Space 归属视图（L101 分配面首切片 + L108 回收切片：每 Space 一条——合格候选（就绪、不自报排空、未被 World 单方缩容且声明能力覆盖该 Space 能力位要求）中最小负载优先独占认领全池未分配 Space，后续注册不重分；池内无合格候选的 Space 留池不认领；每次受理推全池权威视图，重认领版本单调前进，旧主经 ready=0 撤销标记收敛离线期缺口；重平衡策略/拓扑版本随 L108 后续批）">
     <field name="assignment_version" type="int64" desc="该 Space 的分配版本（World 侧按 Space 独立单调，只在认领转移时前进；cell 侧按版本去重，仅版本前进才应用）"/>
     <field name="management_epoch" type="int64" desc="World 管理代次（§5.7 透传；0 = 未初始化自铸）"/>
     <field name="space_id" type="int64" desc="被分配的 Space id（每 Space 一个完整 Cell，非分区）"/>

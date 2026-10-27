@@ -31,7 +31,7 @@
 | `base/` | base 独立入口，远程访问 database，承载长期资料与结算受理 |
 | `database/` | 独立存储入口，M1 加载/保存与文件 journal |
 | `common/` | 可复用的玩家资料、存储及目录实现；宿主按 Base/database 边界装配 |
-| `world/` | world 入口，缺省管理角色，`--role=cell` 执行角色（执行内核 CellApp 已分离，`--role=cell` 独立运行；cell 注册受理面、主动拨号、心跳失效窗 960/961、多 Space 声明面 `--add-space`、World 分配面 962 `--assign-spaces`（含过期释放/重认领/撤销标记与占用重试的回收切片）与失联冻结/代次水位隔离 `--link-grace-ms`、跨重启持久墓碑 `--world-journal`、断连存疑标记已落地，拓扑/容量编排待 P2 后续条目） |
+| `world/` | world 入口，缺省管理角色，`--role=cell` 执行角色（执行内核 CellApp 已分离，`--role=cell` 独立运行；cell 注册受理面、主动拨号、心跳失效窗 960/961、多 Space 声明面 `--add-space`、World 分配面 962 `--assign-spaces`（含过期释放/重认领/撤销标记与占用重试的回收切片；条目可带能力位要求 `<id>[:<needs>]`——认领须覆盖全部位，无合格候选留池不认领）与失联冻结/代次水位隔离 `--link-grace-ms`、跨重启持久墓碑 `--world-journal`、断连存疑标记已落地，拓扑版本/重平衡编排待 P2 后续条目） |
 | `machined/` | 本机进程监督（拉起/退避重启/死亡上报），不决定跨服路由 |
 | `admin/`、`fleetctl/`、`logger/` | 运维与量测工具 |
 | `apolloc/` | 项目初始化 CLI（`apolloc init <path>` 生成最小项目骨架；模板随 P0.2） |

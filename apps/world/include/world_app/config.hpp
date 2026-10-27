@@ -71,9 +71,19 @@ struct WorldAppConfig {
     std::uint64_t bootAtMs = 0;
 
     // Space 分配池（L101 分配面首切片，manager 侧）：池内 Space 分配给注册
-    // 就绪 cell——首个就绪 cell 独占认领全池未分配 Space，后续注册不重分
+    // 合格 cell——合格 = 就绪、不自报排空、未被 World 单方缩容、且声明能力
+    // 覆盖本 Space 的 needs（容量申报裁决），同窗存在负载更低的合格候选
+    // 则让位；池内无合格候选的 Space 留池不认领（world-cell-management §5
+    // 「没有容量明确拒绝」——不落到不合格 cell 上凑数），后续注册不重分
     //（重平衡/回收/拓扑版本随 L108）。空 = 分配关（缺省单机形态不变）。
-    std::vector<std::uint64_t> assignSpaces;
+    struct SpaceSlot {
+        std::uint64_t space_id = 0;
+        // 能力位要求（容量申报裁决）：cell 声明的 960 capabilities 须覆盖
+        // 此位掩码的全部位才有资格认领；0 = 无要求（任何合格 cell 均可，
+        // 含未声明 capabilities=0 的——现状语义）。
+        std::int32_t needs = 0;
+    };
+    std::vector<SpaceSlot> assignSpaces;
 
     // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 base
     // store M1 面（958/959）。port = 0 = 面关（结算挂账降级态——L19 资料

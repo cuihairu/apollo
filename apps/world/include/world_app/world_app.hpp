@@ -246,9 +246,12 @@ private:
     // 逐条推给该 cell 的 peer 链路；code 1/2 受理都推（断链重拨后分配不丢
     // ——cell 侧按版本去重幂等应用）。
     void pushSpaceAssignments(const std::string& peer, const CellRegistration& reg);
-    // 最小负载优先裁决（注册表单只读）：登记表内是否存在就绪且不排空、
-    // 负载严格低于 load 的候选（排除自身）；true = 本 cell 退让。
-    bool lower_load_peer(std::uint64_t cell_id, std::int32_t load) const;
+    // 最小负载优先裁决（注册表单只读）：登记表内是否存在就绪、不排空、
+    // 未缩容、能力覆盖 needs 且负载严格低于 load 的候选（排除自身）；
+    // true = 本 cell 退让。needs 参裁是为了避免合格方把归属让给不合格
+    // 的更低负载 peer（让位目标也须有资格）。
+    bool lower_load_peer(std::uint64_t cell_id, std::int32_t load,
+                         std::int32_t needs) const;
     // 过期释放（driveCellRegistry 同上下文，注册表单写者线程）：该 cell
     // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。
     void releaseCellSpaces(std::uint64_t cell_id);

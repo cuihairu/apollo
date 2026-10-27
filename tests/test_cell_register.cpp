@@ -806,7 +806,7 @@ bool test_cell_heartbeat_and_expiry() {
 bool test_cell_space_assignment() {
     std::cout << "Running: test_cell_space_assignment..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
     TEST_ASSERT(server.start(116), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
     g_replies = &replies;
@@ -904,7 +904,7 @@ bool test_cell_space_assignment() {
 bool test_space_assignment_readiness() {
     std::cout << "Running: test_space_assignment_readiness..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
     TEST_ASSERT(server.start(119), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
     g_replies = &replies;
@@ -1016,8 +1016,12 @@ bool test_space_assignment_readiness() {
 bool test_space_assignment_load_balance() {
     std::cout << "Running: test_space_assignment_load_balance..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
-    server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
+    // 过期窗须远大于阶段 1 序列（A 认领 → B/C 拨号+注册+收撤销帧）：窗内
+    // A 若先过期释放，最低负载的 C 会重认领 Space 7，B 收到的视图被覆盖成
+    // owner=C/ready=1，撤销断言永不成立（ASan 下已见假红）。同时须小于下文
+    // 各 3000ms 过期等待。
+    server.config.cellExpiryMs = 1500;
     TEST_ASSERT(server.start(120), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
     g_replies = &replies;
@@ -1105,12 +1109,114 @@ bool test_space_assignment_load_balance() {
     return true;
 }
 
+// ---------- 容量申报裁决：能力位要求过滤认领资格，无合格候选留池不认领 ----------
+
+bool test_space_assignment_capability_filter() {
+    std::cout << "Running: test_space_assignment_capability_filter..." << std::endl;
+    WorldEnd server;
+    // 池：Space 7 要求能力位 1、Space 8 要求位 2、Space 9 要求位 4（无任何
+    // cell 声明位 4 = 全池无合格候选，不得凑数落到不合格 cell 上）
+    server.config.assignSpaces = {{7, 1}, {8, 2}, {9, 4}};
+    // 过期窗须远大于阶段 1 序列（A/B 依次认领、C 注册期间 A 必须仍持有
+    // Space 7）：窗内 A 若先过期释放，持有稳定断言永不成立（ASan 下已见
+    // 假红）。同时须小于下文 3000ms 过期等待。
+    server.config.cellExpiryMs = 1500;
+    TEST_ASSERT(server.start(120), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+
+    RegisterReply r;
+
+    // A（能力 1，负载 50）先受理：只认领覆盖得了的 Space 7
+    CellEnd cell_a;
+    TEST_ASSERT(dial_cell(server, cell_a, "cell-a"), "cell a dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_a, 9921, 51, 1, "127.0.0.1", 9211, 1, 50, 0, true, r),
+        "cell a registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7 = server.world->find_space_assignment(7);
+                    return a7 != nullptr && a7->cell_id == 51 && a7->version == 1;
+                }, 3000),
+                "cell a claims its only capable space");
+    const auto* a8 = server.world->find_space_assignment(8);
+    TEST_ASSERT(a8 == nullptr || a8->cell_id == 0,
+                "incapable cell does not claim space 8");
+    TEST_ASSERT(server.world->find_space_assignment(9) == nullptr,
+                "space 9 unclaimed while nobody declares capability 4");
+
+    // B（能力 2，负载 10）：认领 Space 8；更低负载不构成抢 A 的 7（无重分）
+    CellEnd cell_b;
+    TEST_ASSERT(dial_cell(server, cell_b, "cell-b"), "cell b dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_b, 9922, 52, 1, "127.0.0.1", 9212, 2, 10, 0, true, r),
+        "cell b registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* b8 = server.world->find_space_assignment(8);
+                    return b8 != nullptr && b8->cell_id == 52 && b8->version == 1;
+                }, 3000),
+                "cell b claims its capable space");
+    const auto* a7b = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7b != nullptr && a7b->cell_id == 51,
+                "lighter peer does not reassign an owned space");
+
+    // C（能力 0 = 未声明，负载 0）：任何非零要求都覆盖不了 → 一格不领
+    CellEnd cell_c;
+    TEST_ASSERT(dial_cell(server, cell_c, "cell-c"), "cell c dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_c, 9923, 53, 1, "127.0.0.1", 9213, 0, 0, 0, true, r),
+        "cell c registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7c = server.world->find_space_assignment(7);
+                    return a7c != nullptr && a7c->cell_id == 51;
+                }, 3000),
+                "owner stable while an undeclared cell waits");
+    TEST_ASSERT(server.world->assigned_space_count() == 2,
+                "only capable spaces got table entries");
+
+    // A 停发心跳 → Space 7 过期释放；B（能力 2，负载 10）刷新：更低负载但
+    // 能力不足 → 不抢。让位目标也须合格，否则合格方把归属让给无资格方、
+    // Space 永久搁置
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a7r = server.world->find_space_assignment(7);
+                    return a7r != nullptr && a7r->cell_id == 0;
+                }, 3000),
+                "cell a releases space 7");
+    TEST_ASSERT(
+        register_roundtrip(cell_b, 9924, 52, 1, "127.0.0.1", 9212, 2, 10, 0, true, r),
+        "cell b refresh accepted");
+    const auto* a7r2 = server.world->find_space_assignment(7);
+    TEST_ASSERT(a7r2 != nullptr && a7r2->cell_id == 0,
+                "lighter but incapable peer does not steal space 7");
+
+    // D（能力 3 = 位 1|2，负载 1）：7 的唯一合格候选 → 重认领（版本前进）
+    CellEnd cell_d;
+    TEST_ASSERT(dial_cell(server, cell_d, "cell-d"), "cell d dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell_d, 9925, 54, 1, "127.0.0.1", 9214, 3, 1, 0, true, r),
+        "cell d registered");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* d7 = server.world->find_space_assignment(7);
+                    return d7 != nullptr && d7->cell_id == 54 && d7->version == 2;
+                }, 3000),
+                "only capable peer reclaims at version 2");
+    const auto* d8 = server.world->find_space_assignment(8);
+    TEST_ASSERT(d8 != nullptr && d8->cell_id == 52 && d8->version == 1,
+                "space 8 stays with b across d's registration");
+    TEST_ASSERT(server.world->find_space_assignment(9) == nullptr,
+                "space 9 still unclaimed by anyone");
+
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- 缩容编排：World 单方缩容意图停止认领并回池归属，可取消 ----------
 
 bool test_cell_retire_and_reclaim() {
     std::cout << "Running: test_cell_retire_and_reclaim..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
     TEST_ASSERT(server.start(121), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
     g_replies = &replies;
@@ -1227,7 +1333,7 @@ bool test_cell_retire_and_reclaim() {
 bool test_cell_retire_management_command() {
     std::cout << "Running: test_cell_retire_management_command..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
     TEST_ASSERT(server.start(122), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
     g_replies = &replies;
@@ -1324,7 +1430,7 @@ bool test_cell_retire_management_command() {
 bool test_production_client_space_assign_listener() {
     std::cout << "Running: test_production_client_space_assign_listener..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
     TEST_ASSERT(server.start(117), "world started with M1 port");
 
     world_app::CellRegisterConfig cfg;
@@ -1530,7 +1636,7 @@ bool test_stale_epoch_watermark_isolation() {
 bool test_space_release_and_reclaim() {
     std::cout << "Running: test_space_release_and_reclaim..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7, 8};
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
     server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
     TEST_ASSERT(server.start(118), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
@@ -1723,7 +1829,7 @@ bool test_journal_v2_assignment_state_across_restart() {
     // W1：认领 61/62 → A 行落盘；B 行首启铸初始代次（配置 77）。
     WorldEnd w1;
     w1.config.worldJournalPath = journal.string();
-    w1.config.assignSpaces = {61, 62};
+    w1.config.assignSpaces = {{61, 0}, {62, 0}};
     w1.config.cellExpiryMs = 5000;  // 本段无关过期（停机即收）
     TEST_ASSERT(w1.start(121), "w1 started with journal");
     CellEnd cx;
@@ -1759,7 +1865,7 @@ bool test_journal_v2_assignment_state_across_restart() {
     // W2 重启：装载终态 = 61/62 归 71 v1（任何登记前即重建）；B 铸代次 78。
     WorldEnd w2;
     w2.config.worldJournalPath = journal.string();
-    w2.config.assignSpaces = {61, 62};
+    w2.config.assignSpaces = {{61, 0}, {62, 0}};
     w2.config.cellExpiryMs = 5000;  // 71 归队例不受 pending 过期窗干扰
     TEST_ASSERT(w2.start(122), "w2 restarted with journal");
     const auto* s61 = w2.world->find_space_assignment(61);
@@ -1806,7 +1912,7 @@ bool test_journal_v2_assignment_state_across_restart() {
     // 随后 cell 73 首注册重认领 v2（装载版本保留 → 重认领 +1 不倒退）。
     WorldEnd w3;
     w3.config.worldJournalPath = journal.string();
-    w3.config.assignSpaces = {61, 62};
+    w3.config.assignSpaces = {{61, 0}, {62, 0}};
     w3.config.cellExpiryMs = 250;  // pending 过期窗（测试窗）
     TEST_ASSERT(w3.start(123), "w3 restarted with journal");
     TEST_ASSERT(wait_until([&] {
@@ -1872,7 +1978,7 @@ bool test_journal_owner_boot_basis_window() {
     }
     WorldEnd source;
     source.config.worldJournalPath = journal.string();
-    source.config.assignSpaces = {7, 8};
+    source.config.assignSpaces = {{7, 0}, {8, 0}};
     TEST_ASSERT(source.start(140), "evidence source world started");
     CellEnd evidence_cell;
     RegisterReply r;
@@ -1886,7 +1992,7 @@ bool test_journal_owner_boot_basis_window() {
     // 首启生成 A 终态；v2 行只有归属/版本，重启时必须补时间基准。
     WorldEnd w1;
     w1.config.worldJournalPath = journal.string();
-    w1.config.assignSpaces = {7, 8};
+    w1.config.assignSpaces = {{7, 0}, {8, 0}};
     w1.config.cellExpiryMs = 0;
     TEST_ASSERT(w1.start(141), "journal source world started");
     CellEnd c1;
@@ -1926,7 +2032,7 @@ bool test_journal_owner_boot_basis_window() {
     write_journal(expired_boot);
     WorldEnd w2;
     w2.config.worldJournalPath = journal.string();
-    w2.config.assignSpaces = {7, 8};
+    w2.config.assignSpaces = {{7, 0}, {8, 0}};
     w2.config.bootAtMs = expired_boot;
     w2.config.cellExpiryMs = 40;
     TEST_ASSERT(w2.start(142), "expired injected basis booted");
@@ -1944,7 +2050,7 @@ bool test_journal_owner_boot_basis_window() {
     write_journal(future_boot);
     WorldEnd w3;
     w3.config.worldJournalPath = journal.string();
-    w3.config.assignSpaces = {7, 8};
+    w3.config.assignSpaces = {{7, 0}, {8, 0}};
     w3.config.bootAtMs = future_boot;
     w3.config.cellExpiryMs = 2000;
     TEST_ASSERT(w3.start(143), "future injected basis booted");
@@ -1988,7 +2094,7 @@ bool test_journal_v2_write_ahead_gates_declaration() {
     fs::create_directories(missing_dir);
     WorldEnd server;
     server.config.worldJournalPath = (missing_dir / "journal.txt").string();
-    server.config.assignSpaces = {65, 66};
+    server.config.assignSpaces = {{65, 0}, {66, 0}};
     TEST_ASSERT(server.start(126), "world started for write-ahead gate");
     fs::remove_all(missing_dir);  // 启动后摘卷 = A 行 append 确定性失败
     std::map<std::uint64_t, RegisterReply> replies;
@@ -2023,7 +2129,7 @@ bool test_journal_v2_write_ahead_gates_declaration() {
 bool test_cell_space_report_adjudication() {
     std::cout << "Running: test_cell_space_report_adjudication..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {71, 72};
+    server.config.assignSpaces = {{71, 0}, {72, 0}};
     server.config.cellExpiryMs = 2500;  // 测试窗（生产默认 30000）
     TEST_ASSERT(server.start(127), "world started with M1 port");
     std::map<std::uint64_t, RegisterReply> replies;
@@ -2162,7 +2268,7 @@ bool test_cell_space_report_adjudication() {
 bool test_production_client_space_report() {
     std::cout << "Running: test_production_client_space_report..." << std::endl;
     WorldEnd server;
-    server.config.assignSpaces = {7};
+    server.config.assignSpaces = {{7, 0}};
     TEST_ASSERT(server.start(128), "world started with M1 port");
 
     world_app::CellRegisterConfig cfg;
@@ -2210,7 +2316,7 @@ bool test_world_restart_e2e_and_negative_cases() {
     }
     WorldEnd w1;
     w1.config.worldJournalPath = journal.string();
-    w1.config.assignSpaces = {7};
+    w1.config.assignSpaces = {{7, 0}};
     w1.config.m1AuthorityEpoch = 91;
     w1.config.cellExpiryMs = 200;
     w1.fixed_m1_port = 19877;
@@ -2263,7 +2369,7 @@ bool test_world_restart_e2e_and_negative_cases() {
     WorldEnd w2;
     w2.config = w1.config;
     w2.config.worldJournalPath = journal.string();
-    w2.config.assignSpaces = {7};
+    w2.config.assignSpaces = {{7, 0}};
     w2.config.m1AuthorityEpoch = 92;
     w2.config.cellExpiryMs = 200;
     w2.fixed_m1_port = 19877;
@@ -2335,7 +2441,7 @@ bool test_world_restart_e2e_and_negative_cases() {
     fs::remove(journal);
     WorldEnd missing_journal;
     missing_journal.config.worldJournalPath = journal.string();
-    missing_journal.config.assignSpaces = {7};
+    missing_journal.config.assignSpaces = {{7, 0}};
     TEST_ASSERT(missing_journal.start(134), "missing journal with tombstone boots");
     std::map<std::uint64_t, SpaceAssignFrame> frozen_assigns;
     g_assigns = &frozen_assigns;
@@ -2432,6 +2538,7 @@ int main() {
                     && test_cell_space_assignment()
                     && test_space_assignment_readiness()
                     && test_space_assignment_load_balance()
+                    && test_space_assignment_capability_filter()
                     && test_cell_retire_and_reclaim()
                     && test_cell_retire_management_command()
                     && test_production_client_space_assign_listener()
