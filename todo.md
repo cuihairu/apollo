@@ -15,6 +15,7 @@
 - [x] 区分支持协议更新的进程替换与仅代码更新；Base、cell、World 管理端各交接不同状态，TCP/会话/活动连续分别验收。
 - [x] 保持 VitePress 原生 locales：中文根目录、英文 en，各自正文与导航，新增对照入口并纳入文档 CI。
 - [x] 专用 Profiler、OpenTelemetry SDK/OTLP exporter 标为未集成，自研日志、MetricRegistry、span/trace 不作为集成证据。
+- [x] README 主标题未居中，改用 h1 align=center（README.md 与 README.zh.md 顶部主标题改 `<h1 align="center">Apollo</h1>`，本账同 commit）
 
 ## P0.1：角色实体与应用命名迁移（待实施）
 

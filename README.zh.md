@@ -4,7 +4,7 @@
   <img src="docs/zh/public/apollo.png" alt="Apollo Logo" height="80"/>
 </p>
 
-# Apollo
+<h1 align="center">Apollo</h1>
 
 **轻量副本制多人在线游戏服务器引擎。**
 
