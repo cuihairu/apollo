@@ -215,7 +215,9 @@ private:
         f[3].text = config_.advertise_host;
         f[4].integer = config_.advertise_port;
         f[5].integer = 0;  // capabilities 未声明（0——能力裁决随 L102 容量批）
-        f[6].integer = contract_compat_projection();  // 契约兼容投影（同批声明）
+        f[6].integer = config_.declared_compat != 0 ? config_.declared_compat
+                                                    : contract_compat_projection();
+        // 契约兼容投影（同批声明；0 配置 = 本进程投影，显式值 = e2e 注错缝）
         f[7].integer = reported_load();       // 负载（宿主注入；0 = 空载缺省）
         f[8].integer = reported_drain_state();
         f[9].integer = reported_ready() ? 1 : 0;  // 就绪 = 内核可分配（冻结即让位）
@@ -242,8 +244,8 @@ private:
         }
         // 裁决记账 + 失联复核（L101 失联切片）：受理（code 1/2）= World 重新
         // 认可本端 → 若曾冻结则触发解冻（链路恢复本身不解冻——复核以裁决
-        // 为准）；code 3（旧代次被替换）= World 已隔离本执行端 → 自冻结，
-        // 不得继续产生权威副作用。监听器锁外回调。
+        // 为准）；code 3（旧代次被替换）/ code 5（契约兼容投影不符）= World
+        // 已隔离本执行端 → 自冻结，不得继续产生权威副作用。监听器锁外回调。
         const bool accepted = fields[1].integer != 0;
         const auto code = static_cast<std::int32_t>(fields[2].integer);
         LinkFreezeListener freeze_fn;
@@ -263,7 +265,9 @@ private:
                 state_.frozen = false;
                 down_since_ms_ = 0;
                 readmit_fn = readmit_listener_;
-            } else if (!accepted && code == kCellRegisterRejectedStaleEpoch
+            } else if (!accepted
+                       && (code == kCellRegisterRejectedStaleEpoch
+                           || code == kCellRegisterRejectedIncompatible)
                        && !freeze_signaled_) {
                 freeze_signaled_ = true;
                 state_.frozen = true;

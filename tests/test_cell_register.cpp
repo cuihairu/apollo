@@ -1650,6 +1650,75 @@ bool test_grace_freeze_and_readmit() {
     return true;
 }
 
+// ---------- 契约不兼容自冻结：961 code 5 触发冻结监听（同 code 3 口径）----------
+
+bool test_production_client_incompat_freeze() {
+    std::cout << "Running: test_production_client_incompat_freeze..." << std::endl;
+    WorldEnd server;
+    TEST_ASSERT(server.start(130), "world started with M1 port");
+
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = server.world->m1Link().listenPort();
+    cfg.cell_id = 71;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8806;
+    cfg.start_epoch = 11;
+    cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 40;
+    // 注错缝（declared_compat e2e 注入，同 authority_epoch 惯例）：声明投影
+    // 与本进程不符 → World 判 code 5。0 = 缺省取本进程投影（正确面）。
+    cfg.declared_compat = world_app::contract_compat_projection() + 1;
+
+    std::atomic<int> freeze_fires = 0;
+    std::atomic<int> adjud_rejects = 0;
+    auto client = world_app::makeCellRegisterClient(cfg);
+    client->set_link_freeze_listener([&](world_app::LinkFreezeReason reason) {
+        ++freeze_fires;
+        if (reason == world_app::LinkFreezeReason::kAdjudicationRejected) {
+            ++adjud_rejects;
+        }
+    });
+    TEST_ASSERT(client->start(), "client started");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return client->state().replies >= 1;
+                }, 5000),
+                "first incompatible registration reply");
+    const auto st = client->state();
+    TEST_ASSERT(st.replied && !st.accepted, "incompatible not accepted");
+    TEST_ASSERT(st.code == world_app::kCellRegisterRejectedIncompatible, "code 5");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "world admitted nothing");
+
+    // 心跳重发（heartbeat_ms=40）继续收 code 5 —— 冻结只触发一次（guard）
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return freeze_fires.load() >= 1;
+                }, 5000),
+                "freeze fired on adjudication rejection");
+    TEST_ASSERT(adjud_rejects == 1, "reason = adjudication rejected");
+    TEST_ASSERT(client->state().frozen, "frozen state visible");
+    TEST_ASSERT(freeze_fires == 1, "freeze fires once across repeated code 5");
+
+    // 同 ID 正确投影客户端 → 首注册受理（旧错投影从未登记，无代次冲突）
+    client->stop();
+    cfg.declared_compat = 0;
+    auto client2 = world_app::makeCellRegisterClient(cfg);
+    TEST_ASSERT(client2->start(), "correct client started");
+    TEST_ASSERT(wait_until([&] {
+                    client2->pump(now_ms());
+                    return client2->state().replies >= 1;
+                }, 5000),
+                "correct compat registration");
+    TEST_ASSERT(client2->state().accepted, "correct compat accepted");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "world admitted one");
+
+    client2->stop();
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- 旧执行端隔离：代次水位（L101 隔离切片）----------
 // 过期摘除忘却登记，但本进程曾受理的最高代次保留（内存水位）：摘除后旧
 // 代次（< 水位）复活被拒（code 3，登记不复活）——旧执行端不能借摘除冒认
@@ -2625,6 +2694,7 @@ int main() {
                     && test_cell_retire_management_command()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
+                    && test_production_client_incompat_freeze()
                     && test_stale_epoch_watermark_isolation()
                     && test_space_release_and_reclaim()
                     && test_watermark_journal_persists_across_restart()

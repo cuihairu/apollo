@@ -58,6 +58,11 @@ struct CellRegisterConfig {
     std::uint64_t link_grace_ms = 15000;
     // 握手代次（§5.7；0 = 进程自铸）。
     std::uint64_t authority_epoch = 0;
+    // 声明契约兼容投影（960 版本/兼容批）：0 = 缺省取本进程
+    // contract_compat_projection()。非 0 = 显式声明值（e2e 注错缝同
+    // authority_epoch 惯例；未来混编白名单协商的消费面）。World 裁决
+    // 声明值须与其本进程投影同值，不符/未声明拒 961 code 5。
+    std::int64_t declared_compat = 0;
 };
 
 // 分配记录（962 cell_space_assign 应用面）：监听器只在版本前进时触发一次
