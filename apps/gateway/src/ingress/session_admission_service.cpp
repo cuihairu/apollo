@@ -9,11 +9,17 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <exception>
 #include <fstream>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <sstream>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace gateway {
 
@@ -94,6 +100,7 @@ public:
         pump_thread_ = std::thread([this]() {
             while (running_.load(std::memory_order_acquire)) {
                 manager_->pump(now_ms());
+                pump_admits();
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         });
@@ -111,6 +118,7 @@ public:
         if (pump_thread_.joinable()) {
             pump_thread_.join();
         }
+        fail_pending_admits();  // 迟到的在途 admit 立即败（不拖到调用方超时）
         // 先停泵再拆面：RpcClient 摘响应 handler 后链路随之析构（in-flight
         // admit 由调用方线程先于 shutdown 收口——宿主 stop 序保证）。
         client_.reset();
@@ -131,29 +139,43 @@ public:
         rpc_request.playerId = request.playerId;
         rpc_request.sessionId = request.sessionId;
         rpc_request.loginTicket = request.loginTicket;
-        const auto frame =
+        auto frame =
             apollo::protocol::MessageCodec::encode(rpc_request, request.sessionId);
 
-        // 同步等待（本类泵线程之外调用——rpc_channel.hpp 纪律）。
-        const auto response =
-            client_->call(frame, std::chrono::milliseconds(kTimeoutMs));
-        if (!response) {
-            // 无权威确认不准入。
+        // 链路核心单线程（零内部锁）：请求受理/响应到达都在本类泵线程，
+        // 调用方线程直发（call_async → InterServerLink::send）与泵拍并发
+        // 是无同步 UB（macOS Debug CI SEGFAULT 根因）——请求过桥到泵线程
+        // 受理，调用方同步等完成（logpush 泵内单写者同纪律）。
+        auto slot = std::make_shared<AdmitSlot>();
+        slot->frame = std::move(frame);
+        slot->deadline = std::chrono::steady_clock::now() +
+                         std::chrono::milliseconds(kTimeoutMs);
+        {
+            std::lock_guard<std::mutex> guard(admit_mutex_);
+            admit_slots_.push_back(slot);
+        }
+        std::unique_lock<std::mutex> lock(slot->mutex);
+        slot->cv.wait_until(lock, slot->deadline,
+                            [&slot] { return slot->done; });
+        lock.unlock();
+        if (!slot->done || !slot->response) {
+            // 无权威确认不准入（超时/停机/受理失败同口径）。
             return {false, "login service unavailable"};
         }
+        const auto& response = *slot->response;
 
-        if (response->size() < sizeof(apollo::protocol::MessageHeader)) {
+        if (response.size() < sizeof(apollo::protocol::MessageHeader)) {
             return {false, "invalid login response"};
         }
-        const auto header = apollo::protocol::MessageCodec::parseHeader(*response);
+        const auto header = apollo::protocol::MessageCodec::parseHeader(response);
         if (static_cast<apollo::protocol::MessageType>(header.type) !=
             apollo::protocol::MessageType::GATEWAY_ASSIGN_RESPONSE) {
             return {false, "invalid login response"};
         }
         try {
             apollo::protocol::GatewayAssignResponse parsed;
-            const std::vector<std::uint8_t> body(response->begin() + sizeof(apollo::protocol::MessageHeader),
-                                                 response->end());
+            const std::vector<std::uint8_t> body(response.begin() + sizeof(apollo::protocol::MessageHeader),
+                                                 response.end());
             apollo::protocol::MessageCodec::decodeBody(body, parsed);
             if (!parsed.success) {
                 return {false, "gateway admission rejected"};
@@ -165,7 +187,79 @@ public:
     }
 
 private:
+    // 调用方 ↔ 泵线程 admit 过桥槽：泵线程受理（call_async/poll 全在泵拍，
+    // rpc_channel 单线程测试口径同款），完成置 done 唤醒等待方。
+    struct AdmitSlot {
+        std::vector<std::uint8_t> frame;   // MessageCodec 全帧请求
+        std::chrono::steady_clock::time_point deadline;
+        std::uint64_t corr = 0;            // 泵线程单写者（0 = 未受理）
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool done = false;                 // mutex 内
+        std::optional<std::vector<std::uint8_t>> response;  // nullopt = 失败/超时
+    };
+
     static constexpr std::uint32_t kTimeoutMs = 500;  // 准入同步等待上限
+
+    // 泵线程拍内受理：新槽发 round（call_async），在途槽收 round（poll），
+    // 到点即摘表完成（迟到响应由 RpcClient 迟到弃数兜底）。
+    void pump_admits() {
+        if (client_ == nullptr) {
+            return;
+        }
+        std::vector<std::shared_ptr<AdmitSlot>> batch;
+        {
+            std::lock_guard<std::mutex> guard(admit_mutex_);
+            batch.swap(admit_slots_);
+        }
+        const auto now = std::chrono::steady_clock::now();
+        std::vector<std::shared_ptr<AdmitSlot>> requeue;
+        for (auto& slot : batch) {
+            if (slot->corr == 0) {
+                slot->corr = client_->call_async(slot->frame);
+            }
+            if (slot->corr != 0) {
+                if (auto response = client_->poll(slot->corr)) {
+                    complete_admit(*slot, std::move(response));
+                    continue;
+                }
+            }
+            if (now >= slot->deadline) {
+                if (slot->corr != 0) {
+                    (void)client_->poll(slot->corr);  // 摘表（迟到响应弃）
+                }
+                complete_admit(*slot, std::nullopt);
+            } else {
+                requeue.push_back(std::move(slot));
+            }
+        }
+        if (!requeue.empty()) {
+            std::lock_guard<std::mutex> guard(admit_mutex_);
+            admit_slots_.insert(admit_slots_.end(),
+                                std::make_move_iterator(requeue.begin()),
+                                std::make_move_iterator(requeue.end()));
+        }
+    }
+
+    static void complete_admit(AdmitSlot& slot,
+                               std::optional<std::vector<std::uint8_t>> response) {
+        std::lock_guard<std::mutex> guard(slot.mutex);
+        slot.response = std::move(response);
+        slot.done = true;
+        slot.cv.notify_all();
+    }
+
+    // 停机拍：泵已停，未受理的在途 admit 立即败（等待方不必耗满超时）。
+    void fail_pending_admits() {
+        std::vector<std::shared_ptr<AdmitSlot>> dropped;
+        {
+            std::lock_guard<std::mutex> guard(admit_mutex_);
+            dropped.swap(admit_slots_);
+        }
+        for (auto& slot : dropped) {
+            complete_admit(*slot, std::nullopt);
+        }
+    }
 
     bool load_route_table(apollo::net::link::RouteTable& table) {
         if (route_json_.empty()) {
@@ -203,6 +297,8 @@ private:
 #endif
     std::unique_ptr<apollo::net::linkrpc::RpcClient> client_;
     std::atomic<bool> running_{false};
+    std::mutex admit_mutex_;  // admit_slots_ 互斥（调用方 ↔ 泵线程过桥）
+    std::vector<std::shared_ptr<AdmitSlot>> admit_slots_;
 };
 
 } // namespace

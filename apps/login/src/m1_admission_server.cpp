@@ -64,7 +64,12 @@ public:
 
         // 受理装配随 peer 上线（fan-out 面；重连 = 同名新链重新过此装配）。
         rpc_server_ = std::make_unique<apollo::net::linkrpc::RpcServer>();
+        peer_up_.store(false, std::memory_order_release);
+        manager_->on_down([this](const std::string&, link::LinkDownReason) {
+            peer_up_.store(false, std::memory_order_release);  // 泵线程单写者
+        });
         manager_->set_peer_listener([this](link::InterServerLink& peer) {
+            peer_up_.store(true, std::memory_order_release);  // 链路 kUp（泵线程）
             peer.dispatcher().set_route_table(route_table_.get());
             peer.dispatcher().allow_domain("internal");  // RPC 信封族入闸
             rpc_server_->install(
@@ -102,15 +107,12 @@ public:
     }
 
     bool peerConnected() const override {
-        auto* peer = const_cast<M1AdmissionServerImpl*>(this)->gateway_peer();
-        return peer != nullptr && peer->state() == link::LinkState::kUp;
+        // 泵线程经 on_up/on_down 维护的快照——跨线程直查 manager 链路表与
+        // 泵拍迁移/替换并发是无同步 UB（macOS Debug CI SEGFAULT 根因）。
+        return peer_up_.load(std::memory_order_acquire);
     }
 
 private:
-    link::InterServerLink* gateway_peer() {
-        return manager_ ? manager_->link("gateway") : nullptr;
-    }
-
     bool load_route_table(link::RouteTable& table) {
         if (config_.route_json.empty()) {
             return false;
@@ -143,6 +145,7 @@ private:
     std::unique_ptr<apollo::net::linkrpc::RpcServer> rpc_server_;
     std::thread pump_thread_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> peer_up_{false};  // 泵线程单写者（on_up/on_down 快照）
 };
 
 } // namespace
