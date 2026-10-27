@@ -176,6 +176,12 @@ public:
     std::uint64_t scene_id_of_space(std::uint64_t space_id) const {
         return resolve_scene_id(space_id);
     }
+    // 路由存在查询（同 scene_id_of_space 的内核线程上下文约束）：仅本表命
+    // 中，不回落默认——撤销面「真持有」判据（962 全池视图推给每个注册
+    // cell，从未认领过某 Space 的 cell 见它方归属不得空入待撤表）。
+    bool hosts_space(std::uint64_t space_id) const {
+        return spaceToScene_.find(space_id) != spaceToScene_.end();
+    }
     std::size_t space_count() const { return spaceToScene_.size(); }
 
     squad_instance::SquadInstanceService* squadInstanceService() noexcept {

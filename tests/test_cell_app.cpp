@@ -428,6 +428,11 @@ bool test_cell_kernel_multi_space_routing_and_isolation() {
     TEST_ASSERT(cell.scene_id_of_space(7) == space7_scene, "route table holds created scene");
     TEST_ASSERT(cell.scene_id_of_space(1) != cell.scene_id_of_space(7),
                 "default and second space map to distinct scenes");
+    // 路由存在查询（撤销面「真持有」判据）：本表命中为 true，未知空间为
+    // false——不回落默认（scene_id_of_space 的未知回落语义不适合作持有判据）。
+    TEST_ASSERT(cell.hosts_space(7), "hosts the declared second space");
+    TEST_ASSERT(cell.hosts_space(1), "hosts the default space");
+    TEST_ASSERT(!cell.hosts_space(999), "never-hosted space not present");
 
     // 各空间一玩家：A 落默认 space 1，B 落 space 7
     TEST_ASSERT(cell.submitIntent(make_create_player_intent(42, 77)), "A create accepted");

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Apollo 开发编队：Database / BaseServer / Login / Gateway / World，
-# 由 machined 拉起和监督。
+# Apollo 开发编队：Database / BaseServer / Login / Gateway / World（manager
+# + 多 cell 执行端），由 machined 拉起和监督。
 # 用法：scripts/dev_fleet.sh up|down|status|roster
 # APOLLO_BUILD_DIR 指定构建目录，APOLLO_FLEET_DIR 指定运行目录。
 # Database：持久档案存储 9200（data-dir/journal 落 $APOLLO_FLEET_DIR）。
@@ -8,10 +8,18 @@
 #   编队位置在 Database 之后——存储不可达即拒起（由 machined 退避重试）。
 # World：玩法链路 9101（玩家档案链路已迁 BaseServer 9201——L19 资料归属切换；
 #   结算落账 = 返回业务请求拨 BaseServer 9201，P1 基础业务与结算迁入）。
+#   管理角色声明 `--assign-spaces 401,402` 分配池——多 cell 编队样例：注册的
+#   就绪 cell 按最小负载独占认领（401/402 归首个就绪 cell，见
+#   world-cell-management L101/L104 分配面）；无 cell 注册时池静默不推。
+# Cell 执行端（world --role=cell，L98/L101 多 cell 样例，opt-in）：
+#   APOLLO_FLEET_CELLS=<n> 启 n 个 cell（缺省 0 = 不启，既有形态不动）——
+#   cell-21 @9301 声明 501:arena/502:lobby、cell-22 @9302 声明 503:duel，均
+#   拨 World 管理 M1 9101 注册——960 注册/961 裁决、962 分配应用、967 自报
+#   对账面全走真链路。组件号：World=11，Gateway=12，Login=13，Cell=21/22。
+#   Database/BaseServer 尚未接 machined 成员注册（号=0，同运维工具口径）；
+#   注册接线属后续切片。
 # Login：认证/准入链路 9103、在线目录链路 9105；档案客户端拨 BaseServer 9201。
 # Gateway：客户端 TCP 9002。logger 9102；admin 指标链路 9106、HTTP 9107。
-# 组件号：World=11，Gateway=12，Login=13。Database/BaseServer 尚未接
-#   machined 成员注册（号=0，同运维工具口径）；注册接线属后续切片。
 
 set -euo pipefail
 
@@ -23,13 +31,35 @@ PIDFILE="$FLEET_DIR/machined.pid"
 LOGFILE="$FLEET_DIR/machined.log"
 MACHINED="$BUILD_DIR/apps/machined/machined"
 
+# Cell 执行端（多 cell 编队样例，opt-in）：APOLLO_FLEET_CELLS=<n> 启 n 个
+# cell（1 = cell-21，2 = +cell-22；>2 截 2 并告警——样例仅定义两 cell）。
+# 缺省 0 = 既有 7 成员形态不动——编队拓扑缺省值（常驻 vs opt-in）属部署
+# 口径拍板面，本批取保守 opt-in 交付样例、缺省零变化。cell 均为 world
+# --role=cell：cell-21 于 --m1-port 9301 声明 501:arena/502:lobby，
+# cell-22 于 9302 声明 503:duel，均拨 World 管理 M1 9101 注册。
+cell_entries() {
+    local n="${APOLLO_FLEET_CELLS:-0}"
+    [[ "$n" -gt 0 ]] || return 0
+    if [[ "$n" -gt 2 ]]; then
+        echo "# APOLLO_FLEET_CELLS=$n 截为 2（样例仅定义 cell-21/22）" >&2
+        n=2
+    fi
+    if [[ "$n" -ge 1 ]]; then
+        echo "cell-21 | 21 | $BUILD_DIR/apps/world/world --role=cell --world-id 1 --m1-port 9301 --register-host 127.0.0.1 --register-port 9101 --cell-id 21 --add-space 501:arena --add-space 502:lobby --machined-port 9600 --component-id 21"
+    fi
+    if [[ "$n" -ge 2 ]]; then
+        echo "cell-22 | 22 | $BUILD_DIR/apps/world/world --role=cell --world-id 1 --m1-port 9302 --register-host 127.0.0.1 --register-port 9101 --cell-id 22 --add-space 503:duel --machined-port 9600 --component-id 22"
+    fi
+}
+
 fleet_entries() {
     cat <<EOF
 logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
 database  | 0 | $BUILD_DIR/apps/database/database --port 9200 --data-dir $FLEET_DIR/data/database/players --journal $FLEET_DIR/data/database/persist.log
 base | 0 | $BUILD_DIR/apps/base/base --port 9201 --database-port 9200
-world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --machined-port 9600 --component-id 11 --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --machined-port 9600 --component-id 11 --assign-spaces 401,402 --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+$(cell_entries)
 login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9103 --world-store-m1-port 9201 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
 gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port 9103 --directory-m1-port 9105 --machined-port 9600 --component-id 12
 EOF
@@ -42,6 +72,7 @@ alive() {
 cmd_roster() {
     local missing=0
     while IFS='|' read -r name comp cmd; do
+        [[ -z "$name" && -z "$cmd" ]] && continue  # 空白条目行（opt-in 面空扩）
         local bin
         bin="$(echo "$cmd" | awk '{print $1}')"
         if [[ -x "$bin" ]]; then

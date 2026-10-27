@@ -394,7 +394,13 @@ int main(int argc, char* argv[]) {
                 register_client->setSpaceAssignListener(
                     [&cell, &config, &logger](const SpaceAssignRecord& rec) {
                         if (!rec.ready || rec.assigned_cell_id != config.cellId) {
-                            if (cell.request_space_revoke(rec.space_id)) {
+                            // 仅真持有该 Space 的陈旧本地副本才请求撤销——
+                            // 962 全池视图推给每个注册 cell，从未认领过某
+                            // Space 的 cell（首注册即见它方归属）从未持有，
+                            // 撤销请求只会空入待撤表再由 drainPendingRevokes
+                            // 自愈出表（噪声 + 空转，多 cell 编队显形）。
+                            if (cell.hosts_space(rec.space_id)
+                                && cell.request_space_revoke(rec.space_id)) {
                                 logger->info("space revoke requested: id="
                                              + std::to_string(rec.space_id)
                                              + " version="
