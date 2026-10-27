@@ -118,6 +118,10 @@ bool test_register_lifecycle() {
     ServerEnd login_end;
     TEST_ASSERT(login_end.start(), "server face starts");
     auto config = base_config(login_end.server->listenPort());
+    // 本用例验首拍一发一回：心跳放宽到 1s——100ms 拍下慢机（macOS Debug
+    // runner）RTT 也可能超拍，客户端按设计幂等重发（attempts=2）后才收到
+    // 首回执，"one send one reply" 断言即假阳性。1s 远大于实测 RTT。
+    config.heartbeat_ms = 1000;
     config.service_kind = kServiceKindBase;
     config.logical_id = 7;
     config.incarnation = 5;  // 显式代次：幂等/旧代次用例的确定基准
