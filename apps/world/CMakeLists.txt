@@ -64,3 +64,62 @@ if(WIN32)
 endif()
 
 apollo_package_crash_handler(world)
+
+# ---- cellServer：cell 执行端独立进程边界（L104 首片收口） ----
+# 只编执行端源（cell_main 入口 + CellApp 内核 + M1 受理端 + cell 注册 +
+# 协议编解码），不编 main.cpp/world_app.cpp——进程内不含 WorldApp 管理壳。
+# 模拟循环、WorldHost/Scene/Avatar、AOI、战斗与 Lua 均由 CellApp 装配。
+add_executable(cellServer
+    src/cell_server_main.cpp
+    src/cell_main.cpp
+    src/cell_app.cpp
+    src/m1_link_server.cpp
+    src/cell_register_client.cpp
+    ${WORLD_APP_PROTOCOL_SOURCES}
+)
+
+target_include_directories(cellServer
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../login/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/runtime/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/script/include
+)
+
+target_compile_definitions(cellServer PRIVATE
+    APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+
+target_link_libraries(cellServer
+    PRIVATE
+        apollo_app_services
+        apollo_squad_instance
+        apollo::base
+        apollo::core
+        apollo::game_core
+        apollo::game_world
+        apollo::script
+        apollo::net_link
+        apollo::net_contract_wire
+        apollo::net_linktrace
+        apollo::net_discovery
+        apollo::net_logpush
+        apollo_net_metricspush
+        apollo::runtime
+)
+
+if(nlohmann_json_FOUND)
+    target_link_libraries(cellServer PRIVATE nlohmann_json::nlohmann_json)
+endif()
+
+target_compile_features(cellServer PRIVATE cxx_std_20)
+
+if(WIN32)
+    target_link_libraries(cellServer PRIVATE ws2_32)
+endif()
+
+apollo_package_crash_handler(cellServer)
+
+# 入口冒烟：--help 走完整配置解析面后退出 0（不启 M1 监听/不拨号）。
+add_test(NAME CellServerEntrySmoke COMMAND cellServer --help)
