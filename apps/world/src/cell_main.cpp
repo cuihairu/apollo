@@ -132,12 +132,25 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
             config.m1AuthorityEpoch =
                 std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--role" || arg.rfind("--role=", 0) == 0) {
-            // 委托路径透传（world --role=cell → run_cell_entry_body）：角色面
-            // 已由 world 入口 parse_world_role 裁决，此处只放行不解析。独立
-            // cellServer 入口不传 --role（缺省即 cell），传了也一并放行——
-            // 执行端不接受 manager 委托，值校验仍由 caller 负责。
-            if (arg == "--role" && i + 1 < argc) {
-                ++i;
+            // 执行端只接受 cell：委托路径由 world 入口 parse_world_role 裁决
+            // 且 role==cell 才进入本运行体，独立 cellServer 入口缺省即 cell。
+            // 执行端不接受 manager 委托，值校验在本面显式完成（此前 cellServer
+            // 传 --role=worker 会静默按 cell 启动，违反入口显形口径）。
+            std::string role_value = "cell";
+            if (arg == "--role") {
+                if (i + 1 >= argc) {
+                    std::cerr << prog << ": --role requires a value (cell)"
+                              << std::endl;
+                    std::exit(2);
+                }
+                role_value = argv[++i];
+            } else {
+                role_value = arg.substr(7);
+            }
+            if (role_value != "cell") {
+                std::cerr << prog << ": unknown role '" << role_value
+                          << "' (expected cell)" << std::endl;
+                std::exit(2);
             }
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
@@ -212,7 +225,7 @@ int run_cell_entry_body(int argc, char* argv[],
     std::signal(SIGTERM, signal_handler);
 
     logger->info("Configuration:");
-    logger->info("  Role: cell (cellapp process boundary)");
+    logger->info("  Role: cell (executor entry)");
     logger->info("  M1 link: " + config.host + ":"
                  + std::to_string(config.m1Port));
     logger->info("  Space: " + config.spaceName + " ("

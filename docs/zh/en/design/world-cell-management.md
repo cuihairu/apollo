@@ -16,7 +16,7 @@ The [BigWorld CellAppMgr source](https://github.com/v2v3v4/BigWorld-Engine-14.4.
 
 ### 1.1. Application Directories and Binaries
 
-This draft adopts the short names discussed in this review: application directory, executable CMake target, and published program match, without `Server`, `-server`, or `-app` suffixes. The naming migration is complete; no competing startup aliases are retained. world defaults to the management role; the executor entry is cellServer (world --role=cell delegates to the same executor body).
+This draft adopts short names for the application directory, executable CMake target, and published program, without `Server`, `-server`, or `-app` suffixes; the naming migration is complete. world defaults to the management role; the executor entry is `cellServer`—that name keeps the `Server` suffix as an explicit exception mirroring the BigWorld executor entry name, distinct from the short-name rule above—and the `world --role=cell` compatibility delegation is retained, both launching the same executor body.
 
 | Directory / program | Responsibility |
 |---|---|

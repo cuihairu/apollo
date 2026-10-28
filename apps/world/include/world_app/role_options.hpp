@@ -38,4 +38,17 @@ inline bool parse_world_role(int argc, char* argv[], std::string& role,
     return true;
 }
 
+
+
+// manager 专用 flag（委托路径剔除集）：旧 world --role=cell 内联路径由 main
+// 的 loadConfig 解析入 config 但 cell 分支不消费（接受并忽略）；委托到执行端
+// 后原样透传会被 load_cell_config 未知参数守卫拒启，故委托前须剔除。这些参数
+// 属 manager 面，执行端不消费（含其跟随取值一并剔除）。
+inline bool is_manager_only_world_flag(const std::string& arg) {
+    return arg == "--assign-spaces" || arg == "--world-journal" ||
+           arg == "--cell-expiry-ms" || arg == "--max-instances" ||
+           arg == "--base-business-host" || arg == "--base-business-port" ||
+           arg == "--settlement-credential-dir" ||
+           arg == "--service-register-host" || arg == "--service-register-port";
+}
 } // namespace world_app

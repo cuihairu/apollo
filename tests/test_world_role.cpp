@@ -97,6 +97,30 @@ bool test_repeated_flag_last_wins() {
     return true;
 }
 
+
+bool test_manager_only_flag_set() {
+    // 委托路径剔除集须覆盖旧内联路径「接受并忽略」的全部 manager 专用 flag。
+    const char* flags[] = {
+        "--assign-spaces", "--world-journal", "--cell-expiry-ms",
+        "--max-instances", "--base-business-host", "--base-business-port",
+        "--settlement-credential-dir", "--service-register-host",
+        "--service-register-port",
+    };
+    for (const char* f : flags) {
+        TEST_ASSERT(world_app::is_manager_only_world_flag(f),
+                    std::string("manager-only flag listed: ") + f);
+    }
+    // cell 相关 flag 不得混入剔除集（委托后须原样到达执行端）。
+    TEST_ASSERT(!world_app::is_manager_only_world_flag("--m1-port"),
+                "cell flag not manager-only");
+    TEST_ASSERT(!world_app::is_manager_only_world_flag("--register-host"),
+                "cell flag not manager-only");
+    TEST_ASSERT(!world_app::is_manager_only_world_flag("--m1-authority-epoch"),
+                "cell flag not manager-only");
+    return true;
+}
+
+
 } // namespace
 
 int main() {
@@ -108,6 +132,7 @@ int main() {
         {"cell_role_forms", test_cell_role_forms},
         {"unknown_role_rejected", test_unknown_role_rejected},
         {"repeated_flag_last_wins", test_repeated_flag_last_wins},
+        {"manager_only_flag_set", test_manager_only_flag_set},
     };
     int passed = 0, failed = 0;
     for (const auto& c : cases) {

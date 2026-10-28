@@ -15,6 +15,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <vector>
 
 using namespace world_app;
 
@@ -102,6 +103,9 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.worldJournalPath = argv[++i];
         } else if (arg == "--link-grace-ms" && i + 1 < argc) {
             config.linkGraceMs = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--m1-authority-epoch" && i + 1 < argc) {
+            config.m1AuthorityEpoch =
+                std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--assign-spaces" && i + 1 < argc) {
             std::stringstream ss(argv[++i]);
             std::string item;
@@ -283,13 +287,18 @@ int main(int argc, char* argv[]) {
 
     auto config = loadConfig(argc, argv);
 
-    logger->info("Configuration:");
-    logger->info("  Role: " + config.role + " (shared binary, L27)");
-    logger->info("  M1 link: " + config.host + ":" + std::to_string(config.m1Port));
-    logger->info("  Space: " + config.spaceName + " (" + std::to_string(config.spaceWidth)
-                 + "x" + std::to_string(config.spaceHeight) + ")");
-    logger->info("  Tick rate: " + std::to_string(config.tickRateMs) + "ms ("
-                 + std::to_string(1000 / config.tickRateMs) + " Hz)");
+    // cell 角色由 run_cell_entry_body 打印执行端配置（单一装配面单次打印）；
+    // manager 角色在此打印。旧内联路径只在 main 打印一次，委托后若保留此处
+    // 会与执行端重复。
+    if (config.role != "cell") {
+        logger->info("Configuration:");
+        logger->info("  Role: " + config.role + " (world manager)");
+        logger->info("  M1 link: " + config.host + ":" + std::to_string(config.m1Port));
+        logger->info("  Space: " + config.spaceName + " (" + std::to_string(config.spaceWidth)
+                     + "x" + std::to_string(config.spaceHeight) + ")");
+        logger->info("  Tick rate: " + std::to_string(config.tickRateMs) + "ms ("
+                     + std::to_string(1000 / config.tickRateMs) + " Hz)");
+    }
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
@@ -302,7 +311,28 @@ int main(int argc, char* argv[]) {
         // manager 壳独占——委托路径完全不进 manager 受理面。信号注册由
         // run_cell_entry_body 接管（覆盖本入口的 manager 停机钩子）。
         if (config.role == "cell") {
-            return run_cell_entry_body(argc, argv, logger);
+            // manager 专用 flag 旧内联路径接受并忽略（main::loadConfig 已解析
+            // 入 config，cell 分支不消费）；委托到执行端后若原样透传会被
+            // load_cell_config 的未知参数守卫拒启，与旧语义不符。此处剔除
+            // 仅 manager 面（含其取值），执行端只见到 cell 相关参数。
+            std::vector<std::string> kept;
+            kept.reserve(static_cast<std::size_t>(argc));
+            kept.emplace_back(argv[0]);
+            for (int i = 1; i < argc; ++i) {
+                const std::string arg = argv[i];
+                if (is_manager_only_world_flag(arg)) {
+                    ++i;  // 取值一并剔除
+                    continue;
+                }
+                kept.push_back(arg);
+            }
+            std::vector<char*> cell_argv;
+            cell_argv.reserve(kept.size());
+            for (auto& a : kept) {
+                cell_argv.push_back(a.data());
+            }
+            return run_cell_entry_body(static_cast<int>(cell_argv.size()),
+                                       cell_argv.data(), logger);
         }
 
         const FleetOptions fleet = loadFleetOptions(argc, argv);
