@@ -16,18 +16,18 @@ The [BigWorld CellAppMgr source](https://github.com/v2v3v4/BigWorld-Engine-14.4.
 
 ### 1.1. Application Directories and Binaries
 
-This draft adopts the short names discussed in this review: application directory, executable CMake target, and published program match, without `Server`, `-server`, or `-app` suffixes. The naming migration is complete; no competing startup aliases are retained. world defaults to the management role and `--role=cell` selects the executor.
+This draft adopts the short names discussed in this review: application directory, executable CMake target, and published program match, without `Server`, `-server`, or `-app` suffixes. The naming migration is complete; no competing startup aliases are retained. world defaults to the management role; the executor entry is cellServer (world --role=cell delegates to the same executor body).
 
 | Directory / program | Responsibility |
 |---|---|
 | apps/gateway / gateway | Client connections, sessions, routing |
 | apps/login / login | Authentication, directory, location projections |
 | apps/base / base | Persistent player objects and business |
-| apps/world / world | Default management role; `--role=cell` executor |
+| apps/world / world | Default management role; `--role=cell` delegates to the cellServer executor |
 | apps/database / database | Storage and durable results |
 | apps/machined / machined | Local supervision |
 
-Keep cell assembly within the World application or shared libraries with module boundaries, without another application binary. The former host demo entry (apps/game-server) was removed; its hosting duties are carried by world and the shared libraries, not by another deployment role. Operations tools such as logger, admin, and fleetctl retain their own responsibilities and names.
+Keep cell assembly within the World application or shared libraries with module boundaries; the executor entry is cellServer (world --role=cell delegates compatibly) and the manager shell no longer inlines executor assembly. The former host demo entry (apps/game-server) was removed; its hosting duties are carried by world and the shared libraries, not by another deployment role. Operations tools such as logger, admin, and fleetctl retain their own responsibilities and names.
 
 C++ type names do not follow binary names mechanically: the Base part is `base::Avatar`, the Cell part `cell::Avatar`.
 

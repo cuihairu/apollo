@@ -131,6 +131,14 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
         } else if (arg == "--m1-authority-epoch" && i + 1 < argc) {
             config.m1AuthorityEpoch =
                 std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--role" || arg.rfind("--role=", 0) == 0) {
+            // 委托路径透传（world --role=cell → run_cell_entry_body）：角色面
+            // 已由 world 入口 parse_world_role 裁决，此处只放行不解析。独立
+            // cellServer 入口不传 --role（缺省即 cell），传了也一并放行——
+            // 执行端不接受 manager 委托，值校验仍由 caller 负责。
+            if (arg == "--role" && i + 1 < argc) {
+                ++i;
+            }
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -190,33 +198,16 @@ FleetOptions load_fleet_options(int argc, char* argv[]) {
 
 } // namespace
 
-int run_cell_entry(int argc, char* argv[]) {
+int run_cell_entry_body(int argc, char* argv[],
+                        const std::shared_ptr<apollo::core::log::Logger>& logger) {
     const char* prog = argc > 0 ? argv[0] : "cellapp";
     auto config = load_cell_config(argc, argv, prog);
     const auto fleet = load_fleet_options(argc, argv);
 
-    // 执行端独立日志接线（ADR-013）：identity=cell，文件面 cell
-    auto& logs = apollo::core::log::global_log_manager();
-    apollo::core::log::LogManagerConfig log_config;
-    log_config.processIdentity = "cell";
-    log_config.fileEnabled = true;
-    log_config.fileConfig.directory = "log";
-    log_config.fileConfig.baseName = "cell";
-    log_config.fileConfig.structuredOutput = true;
-    if (auto push_client =
-            apollo::net::logpush::make_log_push_from_env("cell")) {
-        log_config.pushSink = [push_client](const std::string& line) {
-            push_client->push(line);
-        };
-    }
-    logs.initialize(log_config);
-    const auto logger = logs.createLogger("cell");
-
-    auto metrics_push =
-        apollo::net::metricspush::make_metrics_push_from_env("cell");
-    (void)metrics_push;
-    apollo::runtime::init_crash_capture(argc, argv, "cell");
-
+    // 信号与停机面在本函数内装配：cellServer 独立入口与 world --role=cell
+    // 委托路径共用同一停机语义（signal_handler → g_stop_request → cell.stop）。
+    // 委托路径在此覆盖调用方（world manager）已注册的 signalHandler——后者
+    // 不持有 cell 停机面，覆盖是无害的单线程注册（装配前无并发信号面）。
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
@@ -397,6 +388,32 @@ int run_cell_entry(int argc, char* argv[]) {
         logger->error(std::string("Error: ") + e.what());
         return 1;
     }
+}
+
+int run_cell_entry(int argc, char* argv[]) {
+    // 执行端独立日志接线（ADR-013）：identity=cell，文件面 cell
+    auto& logs = apollo::core::log::global_log_manager();
+    apollo::core::log::LogManagerConfig log_config;
+    log_config.processIdentity = "cell";
+    log_config.fileEnabled = true;
+    log_config.fileConfig.directory = "log";
+    log_config.fileConfig.baseName = "cell";
+    log_config.fileConfig.structuredOutput = true;
+    if (auto push_client =
+            apollo::net::logpush::make_log_push_from_env("cell")) {
+        log_config.pushSink = [push_client](const std::string& line) {
+            push_client->push(line);
+        };
+    }
+    logs.initialize(log_config);
+    const auto logger = logs.createLogger("cell");
+
+    auto metrics_push =
+        apollo::net::metricspush::make_metrics_push_from_env("cell");
+    (void)metrics_push;
+    apollo::runtime::init_crash_capture(argc, argv, "cell");
+
+    return run_cell_entry_body(argc, argv, logger);
 }
 
 } // namespace world_app

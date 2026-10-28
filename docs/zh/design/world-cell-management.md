@@ -16,18 +16,18 @@
 
 ### 1.1. 应用目录与二进制
 
-本草案采用本轮讨论的短名：目录、CMake 可执行目标和最终程序名统一，不带 `Server`、`-server` 或 `-app` 后缀。命名迁移已完成，没有保留另一套可用别名；world 缺省即管理角色，`--role=cell` 选执行角色。
+本草案采用本轮讨论的短名：目录、CMake 可执行目标和最终程序名统一，不带 `Server`、`-server` 或 `-app` 后缀。命名迁移已完成，没有保留另一套可用别名；world 缺省即管理角色；执行端独立入口为 cellServer（world --role=cell 兼容委托同一执行端运行体）。
 
 | 应用目录 / 程序 | 职责 |
 |---|---|
 | apps/gateway / gateway | 客户端连接、会话与转发 |
 | apps/login / login | 认证、服务目录与位置投影 |
 | apps/base / base | 长期玩家对象与基础业务 |
-| apps/world / world | 默认管理角色；`--role=cell` 执行角色 |
+| apps/world / world | 默认管理角色；`--role=cell` 委托 cellServer 执行端 |
 | apps/database / database | 存储访问与持久结果 |
 | apps/machined / machined | 本机进程监督 |
 
-cell 的装配与实现放在 World 应用或共享库内，保留模块边界，不建立另一个应用二进制。曾存在的宿主演示入口（apps/game-server）已移除，其宿主职责由 world 与共享库承载，不作为短名方案之外的部署角色。运维工具如 logger、admin、fleetctl 按自身职责保留，不因本案统一改名。
+cell 的装配与实现放在 World 应用或共享库内，保留模块边界；执行端独立入口 cellServer（world --role=cell 兼容委托），管理壳不再内联执行端装配。曾存在的宿主演示入口（apps/game-server）已移除，其宿主职责由 world 与共享库承载，不作为短名方案之外的部署角色。运维工具如 logger、admin、fleetctl 按自身职责保留，不因本案统一改名。
 
 C++ 类型名不随可执行文件机械改写：Base 部分为 `base::Avatar`，Cell 部分为 `cell::Avatar`。
 

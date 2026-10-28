@@ -4,6 +4,7 @@
 #include "apollo/net/metricspush/metrics_push_env.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
+#include "world_app/cell_main.hpp"
 #include "world_app/world_app.hpp"
 #include "world_app/cell_register_client.hpp"
 #include "world_app/role_options.hpp"
@@ -266,31 +267,6 @@ static FleetOptions loadFleetOptions(int argc, char* argv[]) {
     return opts;
 }
 
-// cell 角色出口适配（L98）：IM1Egress → M1LinkServer（与 WorldApp 内嵌
-// 适配同型；链路未装配 = 尽力面落地）
-struct CellLinkEgress final : public IM1Egress {
-    M1LinkServer* link = nullptr;
-
-    void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
-                           const std::vector<std::uint8_t>& payload) override {
-        if (link) {
-            link->sendClientDeliver(session_id, gateway_id, payload);
-        }
-    }
-    void sendIntentAck(std::uint64_t request_id, std::int32_t code,
-                       const std::string& message) override {
-        if (link) {
-            link->sendIntentAck(request_id, code, message);
-        }
-    }
-    std::uint64_t receivedIntents() const override {
-        return link ? link->receivedIntents() : 0;
-    }
-    std::uint64_t rejectedFrames() const override {
-        return link ? link->rejectedFrames() : 0;
-    }
-};
-
 int main(int argc, char* argv[]) {
     // 先于 crash capture：write() 在未初始化时会惰性按默认配置建管理器（仅 console），
     // 顺序颠倒会使本进程的文件面配置被默认初始化顶掉（initialize 幂等早退）
@@ -320,199 +296,16 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     try {
-        const FleetOptions fleet = loadFleetOptions(argc, argv);
-
-        // cell 角色（L98 首切片）：执行内核 + 仅意图 M1 面。管理受理（944
-        // eval / 952 编排 / 956 排空）不装配——M1LinkServer 分发面对缺席回调
-        // 自守门（判空拒收），注册/拓扑/容量编排归 manager 侧随后续条目。
+        // cell 角色不再内联装配：委托到执行端独立运行体（cellServer 同源
+        // run_cell_entry_body）。唯一装配面 = CellApp + 仅意图 M1 面 + 注册
+        // 拨号 + 编队注册；管理受理（944 eval / 952 编排 / 956 排空）由
+        // manager 壳独占——委托路径完全不进 manager 受理面。信号注册由
+        // run_cell_entry_body 接管（覆盖本入口的 manager 停机钩子）。
         if (config.role == "cell") {
-            config.bootAtMs = steady_now_ms();
-            CellApp cell(config);
-            CellLinkEgress egress;
-            cell.set_egress(&egress);
-            // 注册拨号客户端（L101 次切片；960/961）：配置了 World 地址即
-            // 主动注册。对象先声明（pre-tick 捕获引用），装配在 M1 端点
-            // start 之后——自报端口 = 本进程受理端口实占值。
-            std::unique_ptr<CellRegisterClient> register_client;
-            // 拍首钩子 = M1 泵 + 注册泵（链路对象先行，监听在闸开之后）；
-            // post-tick 缺席——cell 角色无管理推进
-            cell.set_pre_tick([&egress, &register_client, &cell](std::uint64_t now_ms) {
-                if (egress.link) {
-                    egress.link->pump(now_ms);
-                }
-                if (register_client) {
-                    auto* squads = cell.squadInstanceService();
-                    register_client->setReportedDrainState(
-                        squads != nullptr && squads->draining() ? 1 : 0);
-                    // 负载与就绪同拍注入（受理面最小负载优先 + 排空不认领）：
-                    // 负载 = 待执行意图队列填充率百分制（容量为分母，容量缺配
-                    // 按空载）；就绪 = 内核未冻结（冻结 = 失控不承接新分配）
-                    const auto queue_cap = cell.intentQueueCap();
-                    const auto pending = cell.pendingIntentCount();
-                    register_client->setReportedLoad(
-                        queue_cap == 0
-                            ? 0
-                            : static_cast<std::int32_t>(std::min(
-                                  std::size_t{100}, pending * 100 / queue_cap)));
-                    register_client->setReportedReady(!cell.frozen());
-                    register_client->pump(now_ms);
-                }
-            });
-            auto link = makeM1LinkServer(
-                M1LinkConfig{config.host, config.m1Port, config.m1RouteJson,
-                             config.m1AuthorityEpoch},
-                [&cell](IntentEnvelope intent) { cell.onIntent(std::move(intent)); });
-            egress.link = link.get();
-            g_stop_request = [&cell] { cell.stop(); };
-            // 注册拨号客户端（L101 次切片；960/961）：配置了 World 地址即主
-            // 动注册；装配面在此（link 已在）——自报端口 = 本进程受理端口
-            // 实占值，调用在 M1 端点 start 之后。
-            auto build_register_client = [&]() {
-                if (config.registerPort == 0) {
-                    return;  // 未配置 = 注册关（缺省单机形态）
-                }
-                if (config.registerHost.empty() || config.cellId == 0) {
-                    throw std::runtime_error(
-                        "--register-port needs --register-host and --cell-id");
-                }
-                CellRegisterConfig rc;
-                rc.world_host = config.registerHost;
-                rc.world_port = config.registerPort;
-                rc.cell_id = config.cellId;
-                rc.advertise_host = config.host;
-                rc.advertise_port = link->listenPort();
-                rc.route_json = config.m1RouteJson;
-                rc.authority_epoch = config.m1AuthorityEpoch;
-                rc.link_grace_ms = config.linkGraceMs;
-                register_client = makeCellRegisterClient(std::move(rc));
-                // 962 分配应用面（L101 首切片 + L108 回收/占用联动切片）：监听
-                // 在 pre-tick 泵内同步回调 = 内核线程上下文（add_space 注册窗含
-                // 此面），按版本前进触发（客户端去重）。ready=1 且归属本 cell →
-                // 取消陈旧待撤（最新 World 视图优先）+ 幂等登记进内核路由表；
-                // ready=0 或归属它方（撤销标记：World 释放/重分配）→ 入待撤表
-                // （占用中被拒每拍重试至腾空成功，见 CellApp::drainPendingRevokes）。
-                register_client->setSpaceAssignListener(
-                    [&cell, &config, &logger](const SpaceAssignRecord& rec) {
-                        if (!rec.ready || rec.assigned_cell_id != config.cellId) {
-                            // 仅真持有该 Space 的陈旧本地副本才请求撤销——
-                            // 962 全池视图推给每个注册 cell，从未认领过某
-                            // Space 的 cell（首注册即见它方归属）从未持有，
-                            // 撤销请求只会空入待撤表再由 drainPendingRevokes
-                            // 自愈出表（噪声 + 空转，多 cell 编队显形）。
-                            if (cell.hosts_space(rec.space_id)
-                                && cell.request_space_revoke(rec.space_id)) {
-                                logger->info("space revoke requested: id="
-                                             + std::to_string(rec.space_id)
-                                             + " version="
-                                             + std::to_string(rec.version));
-                            }
-                            return;
-                        }
-                        cell.cancel_space_revoke(rec.space_id);
-                        const auto scene_id = cell.add_space(
-                            rec.space_id,
-                            space_descriptor_for(config, rec.space_id,
-                                                 declared_space_name(config,
-                                                                      rec.space_id)));
-                        logger->info("space assigned: id=" + std::to_string(rec.space_id)
-                                     + " version=" + std::to_string(rec.version)
-                                     + " scene=" + std::to_string(scene_id));
-                    });
-                // 失联冻结面（L101 失联策略切片）：宽限窗到期 / 裁决拒（code 3
-                // 旧执行端隔离）→ 冻结内核（停模拟 + 关闸，泵照跑听复核）；
-                // 961 复核受理 → 解冻。监听在 pre-tick 泵内 = 内核线程上下文。
-                register_client->set_link_freeze_listener(
-                    [&cell, &logger](LinkFreezeReason reason) {
-                        cell.set_frozen(true);
-                        logger->warning(
-                            std::string(reason == LinkFreezeReason::kGraceExpired
-                                            ? "control link grace expired"
-                                            : "adjudication rejected (stale epoch)")
-                            + ": kernel frozen");
-                    });
-                register_client->set_readmit_listener([&cell, &logger]() {
-                    cell.set_frozen(false);
-                    logger->info("re-admitted by world: kernel resumed");
-                });
-            };
-
-            logger->info("Starting server...");
-            cell.start();
-            if (!link->start()) {
-                throw std::runtime_error(
-                    "failed to start cell M1 link endpoint (route table load or bind failed)");
-            }
-            logger->info("Cell M1 link listening on " + config.host + ":"
-                         + std::to_string(link->listenPort()));
-            build_register_client();
-            if (register_client) {
-                if (!register_client->start()) {
-                    throw std::runtime_error(
-                        "failed to start cell registration client (config or route "
-                        "table invalid)");
-                }
-                logger->info("Cell registration: dialing " + config.registerHost + ":"
-                             + std::to_string(config.registerPort) + " as cell-"
-                             + std::to_string(config.cellId));
-            }
-
-            // 编队成员注册（P3-4 收尾批）：与 manager 同面（service_port =
-            // M1 受理端口，消费方按角色拨号）
-            apollo::net::discovery::FleetMember* fleet_raw = nullptr;
-            if (fleet.machined_port != 0 && fleet.component_id == 0) {
-                logger->warning(
-                    "machined-port set without --component-id; fleet "
-                    "registration disabled");
-            }
-            std::unique_ptr<apollo::net::discovery::FleetMember> cell_fleet_member;
-            if (fleet.machined_port != 0 && fleet.component_id != 0) {
-                apollo::net::discovery::UdpBeaconTransport cell_transport;
-                if (cell_transport.open()) {
-                    apollo::net::discovery::MemberId self;
-                    self.component_id = fleet.component_id;
-                    self.zone_id = fleet.zone_id != 0 ? fleet.zone_id : config.worldId;
-                    self.service_port = config.m1Port;
-                    cell_fleet_member =
-                        std::make_unique<apollo::net::discovery::FleetMember>(
-                            self, fleet.machined_host, fleet.machined_port,
-                            cell_transport);
-                    fleet_raw = cell_fleet_member.get();
-                    logger->info("fleet member: component="
-                                 + std::to_string(fleet.component_id)
-                                 + " zone=" + std::to_string(self.zone_id)
-                                 + " service_port=" + std::to_string(config.m1Port)
-                                 + " -> machined " + fleet.machined_host + ":"
-                                 + std::to_string(fleet.machined_port));
-                } else {
-                    logger->warning(
-                        "fleet transport open failed; running without fleet "
-                        "registration");
-                }
-            }
-
-            auto fleet_now_ms = [] {
-                return static_cast<std::uint64_t>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now().time_since_epoch())
-                        .count());
-            };
-
-            logger->info("Server is running. Press Ctrl+C to stop.");
-
-            while (cell.isRunning()) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                if (fleet_raw) {
-                    fleet_raw->tick(fleet_now_ms());
-                }
-            }
-            if (fleet_raw) {
-                fleet_raw->stop();
-            }
-
-            logger->info("Server stopped.");
-            g_stop_request = nullptr;
-            return 0;
+            return run_cell_entry_body(argc, argv, logger);
         }
+
+        const FleetOptions fleet = loadFleetOptions(argc, argv);
 
         WorldApp server(config);
         g_stop_request = [&server] { server.stop(); };

@@ -11,6 +11,7 @@ set(WORLD_APP_PROTOCOL_SOURCES
 add_executable(world
     src/main.cpp
     src/world_app.cpp
+    src/cell_main.cpp
     src/cell_app.cpp
     src/m1_link_server.cpp
     src/cell_register_client.cpp

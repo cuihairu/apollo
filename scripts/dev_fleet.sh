@@ -11,7 +11,7 @@
 #   管理角色声明 `--assign-spaces 401,402` 分配池——多 cell 编队样例：注册的
 #   就绪 cell 按最小负载独占认领（401/402 归首个就绪 cell，见
 #   world-cell-management L101/L104 分配面）；无 cell 注册时池静默不推。
-# Cell 执行端（world --role=cell，L98/L101 多 cell 样例，opt-in）：
+# Cell 执行端（cellServer 独立入口，L98/L104 多 cell 样例，opt-in）：
 #   APOLLO_FLEET_CELLS=<n> 启 n 个 cell（缺省 0 = 不启，既有形态不动）——
 #   cell-21 @9301 声明 501:arena/502:lobby、cell-22 @9302 声明 503:duel，均
 #   拨 World 管理 M1 9101 注册——960 注册/961 裁决、962 分配应用、967 自报
@@ -34,8 +34,8 @@ MACHINED="$BUILD_DIR/apps/machined/machined"
 # Cell 执行端（多 cell 编队样例，opt-in）：APOLLO_FLEET_CELLS=<n> 启 n 个
 # cell（1 = cell-21，2 = +cell-22；>2 截 2 并告警——样例仅定义两 cell）。
 # 缺省 0 = 既有 7 成员形态不动——编队拓扑缺省值（常驻 vs opt-in）属部署
-# 口径拍板面，本批取保守 opt-in 交付样例、缺省零变化。cell 均为 world
-# --role=cell：cell-21 于 --m1-port 9301 声明 501:arena/502:lobby，
+# 口径拍板面，本批取保守 opt-in 交付样例、缺省零变化。cell 均为独立
+# cellServer 入口：cell-21 于 --m1-port 9301 声明 501:arena/502:lobby，
 # cell-22 于 9302 声明 503:duel，均拨 World 管理 M1 9101 注册。
 cell_entries() {
     local n="${APOLLO_FLEET_CELLS:-0}"
@@ -45,10 +45,10 @@ cell_entries() {
         n=2
     fi
     if [[ "$n" -ge 1 ]]; then
-        echo "cell-21 | 21 | $BUILD_DIR/apps/world/world --role=cell --world-id 1 --m1-port 9301 --register-host 127.0.0.1 --register-port 9101 --cell-id 21 --add-space 501:arena --add-space 502:lobby --machined-port 9600 --component-id 21"
+        echo "cell-21 | 21 | $BUILD_DIR/apps/world/cellServer --world-id 1 --m1-port 9301 --register-host 127.0.0.1 --register-port 9101 --cell-id 21 --add-space 501:arena --add-space 502:lobby --machined-port 9600 --component-id 21"
     fi
     if [[ "$n" -ge 2 ]]; then
-        echo "cell-22 | 22 | $BUILD_DIR/apps/world/world --role=cell --world-id 1 --m1-port 9302 --register-host 127.0.0.1 --register-port 9101 --cell-id 22 --add-space 503:duel --machined-port 9600 --component-id 22"
+        echo "cell-22 | 22 | $BUILD_DIR/apps/world/cellServer --world-id 1 --m1-port 9302 --register-host 127.0.0.1 --register-port 9101 --cell-id 22 --add-space 503:duel --machined-port 9600 --component-id 22"
     fi
 }
 
