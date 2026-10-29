@@ -1130,6 +1130,31 @@ bool test_declared_space_reassignment_keeps_name() {
     return true;
 }
 
+// ---- L108 ID 域切分：Space / Cell 分区 / 执行进程三域分开 ----
+//
+// 断言：Space ID 是路由键（7），scene ID 是 world 自增域（≠7），执行进程
+// 身份取 config.cellId（本例 42）。分区 ID 当前退化 = scene id（每 Space
+// 单全幅 Cell），但不等于 Space ID，也不等于执行进程 ID。不启内核——观测
+// 面在构造后即可读（start 前注册窗合法）。
+bool test_id_domains_are_separate() {
+    world_app::WorldAppConfig config;
+    config.cellId = 42;
+    world_app::CellApp cell(config);
+
+    const auto space7_scene = cell.add_space(7, second_space_descriptor());
+    TEST_ASSERT(space7_scene != 0, "space 7 route created");
+    TEST_ASSERT(space7_scene != 7, "scene id independent of space id");
+
+    TEST_ASSERT(cell.executor_id() == 42, "executor id from config.cellId");
+    TEST_ASSERT(cell.partition_id_of_space(7) == space7_scene,
+                "partition id follows scene (single full-space Cell today)");
+    TEST_ASSERT(cell.partition_id_of_space(7) != 7,
+                "partition id independent of space id");
+    TEST_ASSERT(cell.partition_id_of_space(7) != cell.executor_id(),
+                "partition id independent of executor id");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1158,6 +1183,7 @@ int main() {
         {"declared_space_squad_flow_isolation", test_declared_space_squad_flow_isolation},
         {"declared_space_reassignment_keeps_name",
          test_declared_space_reassignment_keeps_name},
+        {"id_domains_are_separate", test_id_domains_are_separate},
     };
 
     for (const auto& c : cases) {

@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "world_app/world_types.hpp"
+
 // 契约路由表 JSON 的构建期默认路径（CMake 注入生成物路径；裸编时为空 =
 // M1 端点装配失败显形，不带隐式回退）。
 #ifndef APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON
@@ -14,7 +16,7 @@
 namespace world_app {
 
 struct WorldAppConfig {
-    std::uint32_t worldId = 1;
+    std::uint32_t worldId = 1;  // 执行进程所属 World 逻辑 ID
     // world 管理端角色（L104 收口片一）：manager 是唯一受理角色（缺省）。
     // 执行端由 cellServer 独立入口承担（不再 --role=cell 委托）。解析见
     // role_options.hpp——未知/缺值/cell 入口已显式拒绝；管理/执行职责随
@@ -39,7 +41,7 @@ struct WorldAppConfig {
     std::string registerHost;
     std::uint16_t registerPort = 0;
     // 逻辑 cell ID（注册开则必须非 0；PID/IP 不当身份，重启保留同 ID 换代次）。
-    std::uint64_t cellId = 0;
+    CellExecutorId cellId = 0;
 
     // login 服务注册拨号（L123 拨号次切片，manager 角色）：启动后主动向
     // loginServer 服务注册面（964/965）登记逻辑身份（kind=World，

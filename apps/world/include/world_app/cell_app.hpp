@@ -145,6 +145,16 @@ public:
     apollo::game::world::Scene* find_scene(std::uint64_t scene_id);
     std::uint64_t default_scene_id() const { return defaultSceneId_; }
 
+    // ---- L108 ID 域观测面：执行进程身份与 Cell 分区身份分开 ----
+    // 执行进程身份 = 本进程注册到所属 World 的逻辑 cell ID（config.cellId；
+    // 单机 manager 形态 0 = 未注册，进程身份由 World 注册后分配）。Cell
+    // 分区 ID 今日退化 = scene id（每 Space 单全幅 Cell，spaceToScene_ 真表
+    // 映射），跨 Space 拆分随注册/拓扑批——两域不混用，也不等于 Space ID。
+    CellExecutorId executor_id() const { return config_.cellId; }
+    CellPartitionId partition_id_of_space(std::uint64_t space_id) const {
+        return resolve_scene_id(space_id);
+    }
+
     // ---- Space ↔ Scene 映射面（L99 首切片）----
     // 口径（docs/design/bigworld-apollo-mapping §2/§6）：Space 对应现有 Scene
     // 的空间语义，不叠同义容器；space_id 是内核路由键（spaceToScene_），

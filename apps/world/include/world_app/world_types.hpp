@@ -8,6 +8,12 @@ namespace world_app {
 using EntityID = uint64_t;
 using SpaceID = uint32_t;
 
+// L108 ID 域切分：Cell 是空间分区，执行进程是承载进程——两域不混用。
+// 当前实现仍是「每 Space 一个全幅 Cell」，所以一个执行进程可承载多个
+// Cell 分区（每个 Space 一个）；executor_id 对应 CellRegistration::cell_id。
+using CellPartitionId = uint64_t;
+using CellExecutorId = uint64_t;
+
 // 实体类型
 enum class EntityType : uint8_t {
     UNKNOWN = 0,
