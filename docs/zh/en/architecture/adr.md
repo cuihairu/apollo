@@ -56,7 +56,7 @@ Reuse custom logging, MetricRegistry, span/trace, and M1 collection without bloc
 
 ## ADR-014：Names and correspondence
 
-Executables are gateway, login, base, world, database, and machined; loginServer/baseServer/worldServer in the design docs name the roles of those binaries. Add the discussed cell execution role (world binary with `--role=cell`). World management overlaps CellAppMgr, cell overlaps CellApp, Scene corresponds to Space, and Instance is Apollo gameplay. Preserve external names.
+Executables are gateway, login, base, world, cellServer, database, and machined; loginServer/baseServer/worldServer in the design docs name the roles of those binaries. Add the discussed cell execution role (standalone `cellServer` binary; `world --role=cell` is explicitly rejected). World management overlaps CellAppMgr, cell overlaps CellApp, Scene corresponds to Space, and Instance is Apollo gameplay. Preserve external names.
 
 ## ADR-015：Asynchronous admission
 

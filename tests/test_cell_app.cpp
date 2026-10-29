@@ -1152,6 +1152,10 @@ bool test_id_domains_are_separate() {
                 "partition id independent of space id");
     TEST_ASSERT(cell.partition_id_of_space(7) != cell.executor_id(),
                 "partition id independent of executor id");
+    // 未知空间边界：回落默认 scene 的 partition，与 resolve_scene_id 同一
+    // 口径（观测面明确，不作持有判据）。
+    TEST_ASSERT(cell.partition_id_of_space(999) == cell.default_scene_id(),
+                "unknown space falls back to default partition");
     return true;
 }
 

@@ -124,3 +124,19 @@ apollo_package_crash_handler(cellServer)
 
 # 入口冒烟：--help 走完整配置解析面后退出 0（不启 M1 监听/不拨号）。
 add_test(NAME CellServerEntrySmoke COMMAND cellServer --help)
+
+# L156: World/cell register and run independently without a co-located machined.
+# login (service register face) + world (manager M1 + login register dial) +
+# cellServer (executor M1 + world register dial) use direct M1 TCP only; machined
+# never participates in business registration. login target is defined before
+# this directory in apps/CMakeLists.txt, so it is visible here.
+if(NOT WIN32)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND AND TARGET login)
+        add_test(NAME WorldCellIndependentSmoke COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/world_cell_independent_smoke.py
+            $<TARGET_FILE:login> $<TARGET_FILE:world> $<TARGET_FILE:cellServer>
+            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
+        set_tests_properties(WorldCellIndependentSmoke PROPERTIES TIMEOUT 40)
+    endif()
+endif()

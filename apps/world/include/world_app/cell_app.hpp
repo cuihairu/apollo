@@ -146,12 +146,15 @@ public:
     std::uint64_t default_scene_id() const { return defaultSceneId_; }
 
     // ---- L108 ID 域观测面：执行进程身份与 Cell 分区身份分开 ----
-    // 执行进程身份 = 本进程注册到所属 World 的逻辑 cell ID（config.cellId；
-    // 单机 manager 形态 0 = 未注册，进程身份由 World 注册后分配）。Cell
-    // 分区 ID 今日退化 = scene id（每 Space 单全幅 Cell，spaceToScene_ 真表
-    // 映射），跨 Space 拆分随注册/拓扑批——两域不混用，也不等于 Space ID。
+    // 执行进程身份 = 本进程配置并自报给 World 的逻辑 cell ID
+    //（config.cellId；单机 manager 形态 0 = 未注册）。World 只裁决并回显
+    // 该身份，不另行分配。Cell 分区 ID 今日退化 = scene id（每 Space 单全
+    // 幅 Cell，spaceToScene_ 真表映射），跨 Space 拆分随注册/拓扑批——两
+    // 域不混用，也不等于 Space ID。
     CellExecutorId executor_id() const { return config_.cellId; }
     CellPartitionId partition_id_of_space(std::uint64_t space_id) const {
+        // 未知空间回落默认 scene 的 partition（resolve_scene_id 语义）——
+        // 观测面把「未注册空间」与「默认分区」混同，仅作观测不作持有判据；
         return resolve_scene_id(space_id);
     }
 
@@ -161,7 +164,7 @@ public:
     // scene_id 由 world 自增分配——两域数值独立，映射是真实的表而非恒等别名。
     // 三 ID 域分开：space id = 路由键；cell 分区 id 今日退化为 scene id（每
     // Space 单全幅 Cell，跨 Space 拆分随 L101/L102 注册批）；执行进程身份 =
-    // 本进程（worldId；注册后由 worldServer 分配）。add_space 在内核线程 /
+    // config.cellId（执行端自报，World 不分配）。add_space 在内核线程 /
     // start 前注册窗调用（同 ctor 时序）；返回目标 scene id（0 = 创建失败）。
     // 重复空间幂等返回既有 scene。
     std::uint64_t add_space(std::uint64_t space_id,
