@@ -4,7 +4,7 @@
 
 ## 1. Recommendation and Scope
 
-Use **world for placement, cell for simulation, and Base for persistent player state**. The default deployment has one World manager on a host, automatically maintaining one or more cell processes. Both roles use the `world` binary, selected at startup, with process isolation and explicit registration, commands, and authority checks.
+Use **world for placement, cell for simulation, and Base for persistent player state**. The default deployment has one World manager on a host, automatically maintaining one or more cell processes. Management uses `world`; execution uses the standalone `cellServer` by default (`world --role=cell` remains a compatibility delegation), with explicit registration, commands, and authority checks.
 
 CellApp refers to the BigWorld comparison; Apollo's execution role remains `cell`. Sharing a binary adds no `cellapp` role alias. Uppercase Cell is a spatial partition; Space maps to the spatial meaning of the existing Scene; Instance retains its eight-state gameplay lifecycle.
 
@@ -74,9 +74,9 @@ World owns placement, cell executes under valid authorization, and directory/gat
 
 Use a local monotonic clock and calibrate grace periods against heartbeat timing, jitter, and acceptable pauses. Expiry or a higher epoch alone does not prove fencing: an old process may resume from suspension while receivers retain stale caches. Activate replacement authority only after acknowledged source freezing or verified termination/access isolation. Otherwise remain blocked. Automatic failover needs separate arbitration, authorization timing, and fencing at every side-effect receiver.
 
-### 4.1. One Binary, Two Startup Roles
+### 4.1. Separate Entries and Startup Roles
 
-Proposed CLI, **not currently implemented commands**:
+Startup forms are shown below; **the `world` manager and `cellServer` executor entries are implemented, while automatic World-spawned children remain future work**:
 
 ```text
 world
@@ -84,11 +84,11 @@ world --config=<world-config>
 world --role=cell --config=<cell-config>
 ```
 
-No arguments, or no `--role`, defaults to the World manager role (`--role` accepts only `manager` and `cell`; there is no `world` form). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
+No arguments, or no `--role`, makes `world` default to the manager role (`--role` accepts only `manager` and `cell`; there is no `world` form; the standalone `cellServer` accepts only `cell` for `--role`). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
 
 World generates each child's role, logical identity, manager endpoint, separate runtime directory, and bootstrap credentials; developers do not maintain a handwritten configuration per executor. Do not log bootstrap secrets. Executors can bind ports and report them through authenticated registration rather than race between probing and binding a free port.
 
-World starts management and local supervision without a simulation host. cell starts simulation and registration without spawning more executors. Shared main performs validation and role assembly; management, simulation, and supervision retain module boundaries. Logs, metrics, and crash reports identify role, logical ID, and incarnation. cell opens neither World-management logs nor Base profile storage.
+World starts management and local supervision without a simulation host. cell starts simulation and registration without spawning more executors. The shared executor body performs validation and executor assembly; management, simulation, and supervision retain module boundaries. Logs, metrics, and crash reports identify role, logical ID, and incarnation. cell opens neither World-management logs nor Base profile storage.
 
 World chooses desired executor count and invokes local supervision by default. Extract reusable functionality from `apps/machined` and add dynamic process membership. The existing supervisor is principally POSIX with a fixed roster; cross-platform autoscaling is not implemented. Use structured argv, a spawn/exec wrapper appropriate for a multithreaded POSIX host, and separately implemented Windows process handles and cleanup.
 
