@@ -85,7 +85,7 @@ cellServer --world-id 1 --m1-port 9301 --cell-id 21 \
   --register-host 127.0.0.1 --register-port 9101 --add-space 501:arena
 ```
 
-World 角色启动管理循环和本机监督，不创建模拟宿主；cell 角色启动模拟宿主和注册客户端，不再拉起子 cell。不带参数或未指定 `--role` 时 `world` 默认管理角色（`--role` 只认 `manager` 与 `cell` 两个值，无 `world` 形式；`cellServer` 独立入口的 `--role` 仅接受 `cell`）。`--role` 缺少值、角色未知或配置非法时明确报错，不根据端口猜测角色。角色在启动时固定，不做运行中切换。
+World 角色启动管理循环和本机监督，不创建模拟宿主；cell 角色启动模拟宿主和注册客户端，不再拉起子 cell。不带参数或未指定 `--role` 时 `world` 默认管理角色（`world` 的 `--role` 只认 `manager`，无 `world` 形式，`cell` 已移出并由 `cellServer` 独立入口承担；`cellServer` 的 `--role` 仅接受 `cell`）。`--role` 缺少值、角色未知或配置非法时明确报错，不根据端口猜测角色。角色在启动时固定，不做运行中切换。
 
 World 自动生成子进程的角色、逻辑 ID、所属 World 地址、独立运行目录和启动凭据，开发者无需为每个 cell 手写一份配置。启动凭据不放进可公开日志；端口可由执行端绑定后通过认证注册回报，不依赖先探测空闲端口再启动的竞态流程。
 

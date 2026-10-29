@@ -4,7 +4,7 @@
 //   3. --role cell / --role=cell 显式拒绝并指引 cellServer（不再双角色委托）；
 //   4. 未知角色显式拒绝（不静默回退）；
 //   5. 缺值（末位 --role / 后随选项）显式拒绝；
-//   6. 重复指定后到覆盖；其余选项共存不干扰。
+//   6. 重复指定不叠加——cell 先到即失败，manager 重复仍受理；其余选项共存不干扰。
 //
 // 纯解析头直测，无网络无定时器。
 
@@ -94,15 +94,19 @@ bool test_unknown_role_rejected() {
     return true;
 }
 
-bool test_repeated_flag_last_wins() {
+bool test_repeated_flag_no_cell_override() {
     std::string role, err;
     const char* a[] = {"--role=manager", "--role", "manager"};
     TEST_ASSERT(run({a[0], a[1], a[2]}, role, err), "repeated manager parses");
-    TEST_ASSERT(role == "manager", "重复指定后到覆盖");
+    TEST_ASSERT(role == "manager", "重复 manager 仍受理");
 
     const char* b[] = {"--role", "manager", "--role=cell"};
-    TEST_ASSERT(!run({b[0], b[1], b[2]}, role, err), "cell 后到仍拒绝");
+    TEST_ASSERT(!run({b[0], b[1], b[2]}, role, err), "cell 后到仍拒绝（无覆盖语义）");
     TEST_ASSERT(err.find("cellServer") != std::string::npos, "cell 后到报错指引 cellServer");
+
+    const char* c[] = {"--role=cell", "--role", "manager"};
+    TEST_ASSERT(!run({c[0], c[1], c[2]}, role, err), "cell 先到立即失败");
+    TEST_ASSERT(err.find("cellServer") != std::string::npos, "cell 先到报错指引 cellServer");
     return true;
 }
 
@@ -118,7 +122,7 @@ int main() {
         {"manager_role_forms", test_manager_role_forms},
         {"cell_role_rejected", test_cell_role_rejected},
         {"unknown_role_rejected", test_unknown_role_rejected},
-        {"repeated_flag_last_wins", test_repeated_flag_last_wins},
+        {"repeated_flag_no_cell_override", test_repeated_flag_no_cell_override},
     };
     int passed = 0, failed = 0;
     for (const auto& c : cases) {

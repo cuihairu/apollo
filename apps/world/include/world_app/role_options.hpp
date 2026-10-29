@@ -10,9 +10,9 @@
 
 namespace world_app {
 
-// 纯解析（可直测）：遍历 argv 认 --role <v> 与 --role=<v>，重复指定以后者
-// 为准（显式后到覆盖，不叠加）。成功 true + role 填缺省或显式值；cell 与
-// 未知值均拒绝。
+// 纯解析（可直测）：遍历 argv 认 --role <v> 与 --role=<v>。manager 是唯一
+// 受理值；cell 与未知值均拒绝。重复指定不叠加——遇到 cell 即返回失败，
+// 不存在「后到覆盖」语义（cell 已移出本入口，任何一次出现都是错误）。
 inline bool parse_world_role(int argc, char* argv[], std::string& role,
                              std::string& err) {
     role = "manager";
@@ -23,7 +23,7 @@ inline bool parse_world_role(int argc, char* argv[], std::string& role,
             value = arg.substr(7);
         } else if (arg == "--role") {
             if (i + 1 >= argc) {
-                err = "--role requires a value (manager|cell)";
+                err = "--role requires a value (manager)";
                 return false;
             }
             value = argv[++i];

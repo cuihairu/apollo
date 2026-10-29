@@ -85,12 +85,6 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                 static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--settlement-credential-dir" && i + 1 < argc) {
             config.settlementCredentialDir = argv[++i];
-        } else if (arg == "--register-host" && i + 1 < argc) {
-            config.registerHost = argv[++i];
-        } else if (arg == "--register-port" && i + 1 < argc) {
-            config.registerPort = static_cast<uint16_t>(std::atoi(argv[++i]));
-        } else if (arg == "--cell-id" && i + 1 < argc) {
-            config.cellId = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--service-register-host" && i + 1 < argc) {
             config.serviceRegisterHost = argv[++i];
         } else if (arg == "--service-register-port" && i + 1 < argc) {
@@ -100,8 +94,6 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--world-journal" && i + 1 < argc) {
             config.worldJournalPath = argv[++i];
-        } else if (arg == "--link-grace-ms" && i + 1 < argc) {
-            config.linkGraceMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--m1-authority-epoch" && i + 1 < argc) {
             config.m1AuthorityEpoch =
                 std::strtoull(argv[++i], nullptr, 10);
@@ -197,14 +189,10 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
                       << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
                       << "  --settlement-credential-dir <dir>  Settlement credential dir (default: off)\n"
-                      << "  --register-host <h>        World M1 host to register with, manager role (default: off)\n"
-                      << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
-                      << "  --cell-id <id>             Logical cell id for registration, manager role (default: 0)\n"
                       << "  --service-register-host <h>  login service register host, manager role (default: off)\n"
                       << "  --service-register-port <p>  login service register port, 0 = off (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
                       << "  --world-journal <file>    Epoch tombstone journal for cross-restart cell isolation (default: off)\n"
-                      << "  --link-grace-ms <ms>      Cell-side control-link grace window before freeze, 0 = never (default: 15000)\n"
                       << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells,\n"
                          "                             each entry <id> or <id>:<needs-bits> (default: off)\n"
                       << "  --space <name>              Space name (default: main_world)\n"

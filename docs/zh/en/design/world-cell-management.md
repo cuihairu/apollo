@@ -4,9 +4,9 @@
 
 ## 1. Recommendation and Scope
 
-Use **world for placement, cell for simulation, and Base for persistent player state**. The default deployment has one World manager on a host, automatically maintaining one or more cell processes. Management uses `world`; execution uses the standalone `cellServer` by default (`world --role=cell` remains a compatibility delegation), with explicit registration, commands, and authority checks.
+Use **world for placement, cell for simulation, and Base for persistent player state**. The default deployment has one World manager on a host, automatically maintaining one or more cell processes. Management uses `world`; execution uses the standalone `cellServer` by default (`world --role=cell` is no longer accepted), with explicit registration, commands, and authority checks.
 
-CellApp refers to the BigWorld comparison; Apollo's execution role remains `cell`. The executor defaults to the standalone `cellServer` entry (`world --role=cell` remains a compatibility delegation), adding no `cellapp` role alias. Uppercase Cell is a spatial partition; Space maps to the spatial meaning of the existing Scene; Instance retains its eight-state gameplay lifecycle.
+CellApp refers to the BigWorld comparison; Apollo's execution role remains `cell`. The executor defaults to the standalone `cellServer` entry (`world --role=cell` is no longer accepted), adding no `cellapp` role alias. Uppercase Cell is a spatial partition; Space maps to the spatial meaning of the existing Scene; Instance retains its eight-state gameplay lifecycle.
 
 Initially, each Space has exactly one complete Cell. Scaling starts additional cell processes and places new Spaces on ready executors. Shrinking drains existing activities naturally. Continuous whole-Space/Instance migration comes later, followed by multiple Cells per Space, Ghost replication, and seamless boundaries when needed.
 
@@ -16,18 +16,18 @@ The [BigWorld CellAppMgr source](https://github.com/v2v3v4/BigWorld-Engine-14.4.
 
 ### 1.1. Application Directories and Binaries
 
-This draft adopts short names for the application directory, executable CMake target, and published program, without `Server`, `-server`, or `-app` suffixes; the naming migration is complete. world defaults to the management role; the executor entry is `cellServer`—that name keeps the `Server` suffix as an explicit exception mirroring the BigWorld executor entry name, distinct from the short-name rule above—and the `world --role=cell` compatibility delegation is retained, both launching the same executor body.
+This draft adopts short names for the application directory, executable CMake target, and published program, without `Server`, `-server`, or `-app` suffixes; the naming migration is complete. world defaults to the management role; the executor entry is `cellServer`—that name keeps the `Server` suffix as an explicit exception mirroring the BigWorld executor entry name, distinct from the short-name rule above—and the `world --role=cell` delegation is removed, with `cellServer` as the sole executor entry.
 
 | Directory / program | Responsibility |
 |---|---|
 | apps/gateway / gateway | Client connections, sessions, routing |
 | apps/login / login | Authentication, directory, location projections |
 | apps/base / base | Persistent player objects and business |
-| apps/world / world | Default management role; `--role=cell` delegates to the cellServer executor |
+| apps/world / world | Default management role; executor runs via the standalone `cellServer` |
 | apps/database / database | Storage and durable results |
 | apps/machined / machined | Local supervision |
 
-Keep cell assembly within the World application or shared libraries with module boundaries; the executor entry is cellServer (world --role=cell delegates compatibly) and the manager shell no longer inlines executor assembly. The former host demo entry (apps/game-server) was removed; its hosting duties are carried by world and the shared libraries, not by another deployment role. Operations tools such as logger, admin, and fleetctl retain their own responsibilities and names.
+Keep cell assembly within the World application or shared libraries with module boundaries; the executor entry is cellServer (world --role=cell delegation removed) and the manager shell no longer inlines executor assembly. The former host demo entry (apps/game-server) was removed; its hosting duties are carried by world and the shared libraries, not by another deployment role. Operations tools such as logger, admin, and fleetctl retain their own responsibilities and names.
 
 C++ type names do not follow binary names mechanically: the Base part is `base::Avatar`, the Cell part `cell::Avatar`.
 
@@ -85,7 +85,7 @@ cellServer --world-id 1 --m1-port 9301 --cell-id 21 \
   --register-host 127.0.0.1 --register-port 9101 --add-space 501:arena
 ```
 
-No arguments, or no `--role`, makes `world` default to the manager role (`--role` accepts only `manager` and `cell`; there is no `world` form; the standalone `cellServer` accepts only `cell` for `--role`). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
+No arguments, or no `--role`, makes `world` default to the manager role (`--role` accepts only `manager`; there is no `world` form or `cell` form on `world`; the standalone `cellServer` accepts only `cell` for `--role`). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
 
 World generates each child's role, logical identity, manager endpoint, separate runtime directory, and bootstrap credentials; developers do not maintain a handwritten configuration per executor. Do not log bootstrap secrets. Executors can bind ports and report them through authenticated registration rather than race between probing and binding a free port.
 
