@@ -6,7 +6,7 @@
 
 Use **world for placement, cell for simulation, and Base for persistent player state**. The default deployment has one World manager on a host, automatically maintaining one or more cell processes. Management uses `world`; execution uses the standalone `cellServer` by default (`world --role=cell` remains a compatibility delegation), with explicit registration, commands, and authority checks.
 
-CellApp refers to the BigWorld comparison; Apollo's execution role remains `cell`. Sharing a binary adds no `cellapp` role alias. Uppercase Cell is a spatial partition; Space maps to the spatial meaning of the existing Scene; Instance retains its eight-state gameplay lifecycle.
+CellApp refers to the BigWorld comparison; Apollo's execution role remains `cell`. The executor defaults to the standalone `cellServer` entry (`world --role=cell` remains a compatibility delegation), adding no `cellapp` role alias. Uppercase Cell is a spatial partition; Space maps to the spatial meaning of the existing Scene; Instance retains its eight-state gameplay lifecycle.
 
 Initially, each Space has exactly one complete Cell. Scaling starts additional cell processes and places new Spaces on ready executors. Shrinking drains existing activities naturally. Continuous whole-Space/Instance migration comes later, followed by multiple Cells per Space, Ghost replication, and seamless boundaries when needed.
 
@@ -80,8 +80,9 @@ Startup forms are shown below; **the `world` manager and `cellServer` executor e
 
 ```text
 world
-world --config=<world-config>
-world --role=cell --config=<cell-config>
+world --world-id 1 --m1-port 9101 --assign-spaces 401,402
+cellServer --world-id 1 --m1-port 9301 --cell-id 21 \
+  --register-host 127.0.0.1 --register-port 9101 --add-space 501:arena
 ```
 
 No arguments, or no `--role`, makes `world` default to the manager role (`--role` accepts only `manager` and `cell`; there is no `world` form; the standalone `cellServer` accepts only `cell` for `--role`). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
@@ -183,7 +184,7 @@ Current SceneTransfer recreates Avatar on explicit space change. It cannot imple
 
 | Risk | Incorrect shortcut | Recommendation |
 |---|---|---|
-| Excess complexity for lightweight games | Begin with partition balancing, Ghosts, and automatic failover | Shared binary/roles, local supervision, single-Cell Spaces, natural draining first |
+| Excess complexity for lightweight games | Begin with partition balancing, Ghosts, and automatic failover | Standalone cellServer executor, local supervision, single-Cell Spaces, natural draining first |
 | Manager bottleneck | Proxy movement/combat/visibility through World | Direct executor traffic, bounded control queues, summarized heartbeats, throttled migration |
 | Split simulation | Activate a copy on heartbeat timeout | Confirm source freeze/isolation; uncertainty blocks activation |
 | Manager failure | Trust executor self-reports after losing memory topology | Exclusive management, durable decisions, reconciliation; no initial automatic standby |
@@ -212,13 +213,13 @@ A separate service verifies signatures, maps external identities, transforms for
 | SceneTransfer and old profile migrations | Explicit space change is separate; moving full profiles does not implement fixed-Base simulation migration |
 | M1, directory, machined | Reuse transport/supervision primitives; add authenticated registration, wire, idempotency, authorization |
 
-Complete Base/simulation data separation, then shared binary roles, local supervision, registration, whole-Space creation/destruction, and failure freezing. Add multiple executors and bounded autoscaling, then management recovery, continuous activity migration, and both update drills. Until migration works, upgrading by natural draining is not continuous hot-update completion.
+Complete Base/simulation data separation, then standalone cellServer executor and world management roles, local supervision, registration, whole-Space creation/destruction, and failure freezing. Add multiple executors and bounded autoscaling, then management recovery, continuous activity migration, and both update drills. Until migration works, upgrading by natural draining is not continuous hot-update completion.
 
 No executables, C++ types, or protocol fields change in this draft, and no new decision is automatically accepted. Root todo.md remains the only backlog; update P2/P3/P4/P5 acceptance conditions after review.
 
 ## 12. Acceptance
 
-- Both roles run as real processes from the shared binary; no recursive cell spawning, bounded startup retries, no restart after intentional shrinking.
+- Standalone cellServer executor and world management roles run as real processes; no recursive cell spawning, bounded startup retries, no restart after intentional shrinking.
 - No executor means explicit creation failure; World neither ticks simulation nor loads complete profiles.
 - Validate thresholds, cooldown, starting counts, limits, natural draining, persistent Spaces blocking shrink, and no duplicate spawning after manager restart.
 - Test concurrent placement, Space isolation, reservations/rejection, duplicate requests, lost replies, and delayed destruction.

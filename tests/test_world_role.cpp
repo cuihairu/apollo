@@ -1,9 +1,10 @@
-// world 二进制分角色解析单测（L27）：
+// world 管理端角色解析单测（L104 收口片一）：
 //   1. 缺省/无参数 = manager（管理端缺省）；
-//   2. --role cell 与 --role=cell 两形态受理；
-//   3. 未知角色显式拒绝（不静默回退）；
-//   4. 缺值（末位 --role / 后随选项）显式拒绝；
-//   5. 重复指定后到覆盖；其余选项共存不干扰。
+//   2. --role manager 与 --role=manager 两形态受理；
+//   3. --role cell / --role=cell 显式拒绝并指引 cellServer（不再双角色委托）；
+//   4. 未知角色显式拒绝（不静默回退）；
+//   5. 缺值（末位 --role / 后随选项）显式拒绝；
+//   6. 重复指定后到覆盖；其余选项共存不干扰。
 //
 // 纯解析头直测，无网络无定时器。
 
@@ -49,23 +50,31 @@ bool test_default_is_manager() {
     return true;
 }
 
-bool test_cell_role_forms() {
+bool test_manager_role_forms() {
     std::string role, err;
-    const char* a[] = {"--role", "cell"};
+    const char* a[] = {"--role", "manager"};
     TEST_ASSERT(run({a[0], a[1]}, role, err), "space form parses");
-    TEST_ASSERT(role == "cell" && err.empty(), "--role cell = 执行端");
+    TEST_ASSERT(role == "manager" && err.empty(), "--role manager = 管理端");
 
-    const char* b[] = {"--role=cell"};
+    const char* b[] = {"--role=manager"};
     TEST_ASSERT(run({b[0]}, role, err), "equals form parses");
-    TEST_ASSERT(role == "cell", "--role=cell = 执行端");
-
-    const char* c[] = {"--role=manager"};
-    TEST_ASSERT(run({c[0]}, role, err), "explicit manager parses");
     TEST_ASSERT(role == "manager", "--role=manager 显式管理端");
 
-    const char* d[] = {"--m1-port", "9101", "--role=cell", "--world-id", "2"};
+    const char* d[] = {"--m1-port", "9101", "--role=manager", "--world-id", "2"};
     TEST_ASSERT(run({d[0], d[1], d[2], d[3], d[4]}, role, err), "mixed flags parse");
-    TEST_ASSERT(role == "cell", "与其他选项共存不干扰");
+    TEST_ASSERT(role == "manager", "与其他选项共存不干扰");
+    return true;
+}
+
+bool test_cell_role_rejected() {
+    std::string role, err;
+    const char* a[] = {"--role", "cell"};
+    TEST_ASSERT(!run({a[0], a[1]}, role, err), "space form rejected");
+    TEST_ASSERT(err.find("cellServer") != std::string::npos, "报错指引 cellServer");
+
+    const char* b[] = {"--role=cell"};
+    TEST_ASSERT(!run({b[0]}, role, err), "equals form rejected");
+    TEST_ASSERT(err.find("cellServer") != std::string::npos, "equals 报错指引 cellServer");
     return true;
 }
 
@@ -87,36 +96,13 @@ bool test_unknown_role_rejected() {
 
 bool test_repeated_flag_last_wins() {
     std::string role, err;
-    const char* a[] = {"--role=cell", "--role", "manager"};
-    TEST_ASSERT(run({a[0], a[1], a[2]}, role, err), "repeated parses");
+    const char* a[] = {"--role=manager", "--role", "manager"};
+    TEST_ASSERT(run({a[0], a[1], a[2]}, role, err), "repeated manager parses");
     TEST_ASSERT(role == "manager", "重复指定后到覆盖");
 
     const char* b[] = {"--role", "manager", "--role=cell"};
-    TEST_ASSERT(run({b[0], b[1], b[2]}, role, err), "repeated parses");
-    TEST_ASSERT(role == "cell", "重复指定后到覆盖（等号形态）");
-    return true;
-}
-
-
-bool test_manager_only_flag_set() {
-    // 委托路径剔除集须覆盖旧内联路径「接受并忽略」的全部 manager 专用 flag。
-    const char* flags[] = {
-        "--assign-spaces", "--world-journal", "--cell-expiry-ms",
-        "--max-instances", "--base-business-host", "--base-business-port",
-        "--settlement-credential-dir", "--service-register-host",
-        "--service-register-port",
-    };
-    for (const char* f : flags) {
-        TEST_ASSERT(world_app::is_manager_only_world_flag(f),
-                    std::string("manager-only flag listed: ") + f);
-    }
-    // cell 相关 flag 不得混入剔除集（委托后须原样到达执行端）。
-    TEST_ASSERT(!world_app::is_manager_only_world_flag("--m1-port"),
-                "cell flag not manager-only");
-    TEST_ASSERT(!world_app::is_manager_only_world_flag("--register-host"),
-                "cell flag not manager-only");
-    TEST_ASSERT(!world_app::is_manager_only_world_flag("--m1-authority-epoch"),
-                "cell flag not manager-only");
+    TEST_ASSERT(!run({b[0], b[1], b[2]}, role, err), "cell 后到仍拒绝");
+    TEST_ASSERT(err.find("cellServer") != std::string::npos, "cell 后到报错指引 cellServer");
     return true;
 }
 
@@ -129,10 +115,10 @@ int main() {
         bool (*fn)();
     } cases[] = {
         {"default_is_manager", test_default_is_manager},
-        {"cell_role_forms", test_cell_role_forms},
+        {"manager_role_forms", test_manager_role_forms},
+        {"cell_role_rejected", test_cell_role_rejected},
         {"unknown_role_rejected", test_unknown_role_rejected},
         {"repeated_flag_last_wins", test_repeated_flag_last_wins},
-        {"manager_only_flag_set", test_manager_only_flag_set},
     };
     int passed = 0, failed = 0;
     for (const auto& c : cases) {

@@ -4,7 +4,6 @@
 #include "apollo/net/metricspush/metrics_push_env.hpp"
 #include "apollo/net/discovery/discovery.hpp"
 #include "apollo/net/discovery/udp_transport.hpp"
-#include "world_app/cell_main.hpp"
 #include "world_app/world_app.hpp"
 #include "world_app/cell_register_client.hpp"
 #include "world_app/role_options.hpp"
@@ -191,16 +190,16 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
-                      << "  --role <manager|cell>      manager = management (default), cell = execution\n"
+                      << "  --role <manager>           manager = management (default); cell runs via cellServer\n"
                       << "  --world-id <id>            World identity (default: 1)\n"
                       << "  --max-instances <n>        Squad instance capacity (default: 16)\n"
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
                       << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
                       << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
                       << "  --settlement-credential-dir <dir>  Settlement credential dir (default: off)\n"
-                      << "  --register-host <h>        World M1 host to register with, cell role (default: off)\n"
+                      << "  --register-host <h>        World M1 host to register with, manager role (default: off)\n"
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
-                      << "  --cell-id <id>             Logical cell id for registration, cell role (default: 0)\n"
+                      << "  --cell-id <id>             Logical cell id for registration, manager role (default: 0)\n"
                       << "  --service-register-host <h>  login service register host, manager role (default: off)\n"
                       << "  --service-register-port <p>  login service register port, 0 = off (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
@@ -287,54 +286,19 @@ int main(int argc, char* argv[]) {
 
     auto config = loadConfig(argc, argv);
 
-    // cell 角色由 run_cell_entry_body 打印执行端配置（单一装配面单次打印）；
-    // manager 角色在此打印。旧内联路径只在 main 打印一次，委托后若保留此处
-    // 会与执行端重复。
-    if (config.role != "cell") {
-        logger->info("Configuration:");
-        logger->info("  Role: " + config.role + " (world manager)");
-        logger->info("  M1 link: " + config.host + ":" + std::to_string(config.m1Port));
-        logger->info("  Space: " + config.spaceName + " (" + std::to_string(config.spaceWidth)
-                     + "x" + std::to_string(config.spaceHeight) + ")");
-        logger->info("  Tick rate: " + std::to_string(config.tickRateMs) + "ms ("
-                     + std::to_string(1000 / config.tickRateMs) + " Hz)");
-    }
+    logger->info("Configuration:");
+    logger->info("  Role: " + config.role + " (world manager)");
+    logger->info("  M1 link: " + config.host + ":" + std::to_string(config.m1Port));
+    logger->info("  Space: " + config.spaceName + " (" + std::to_string(config.spaceWidth)
+                 + "x" + std::to_string(config.spaceHeight) + ")");
+    logger->info("  Tick rate: " + std::to_string(config.tickRateMs) + "ms ("
+                 + std::to_string(1000 / config.tickRateMs) + " Hz)");
 
     // 注册信号处理
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
     try {
-        // cell 角色不再内联装配：委托到执行端独立运行体（cellServer 同源
-        // run_cell_entry_body）。唯一装配面 = CellApp + 仅意图 M1 面 + 注册
-        // 拨号 + 编队注册；管理受理（944 eval / 952 编排 / 956 排空）由
-        // manager 壳独占——委托路径完全不进 manager 受理面。信号注册由
-        // run_cell_entry_body 接管（覆盖本入口的 manager 停机钩子）。
-        if (config.role == "cell") {
-            // manager 专用 flag 旧内联路径接受并忽略（main::loadConfig 已解析
-            // 入 config，cell 分支不消费）；委托到执行端后若原样透传会被
-            // load_cell_config 的未知参数守卫拒启，与旧语义不符。此处剔除
-            // 仅 manager 面（含其取值），执行端只见到 cell 相关参数。
-            std::vector<std::string> kept;
-            kept.reserve(static_cast<std::size_t>(argc));
-            kept.emplace_back(argv[0]);
-            for (int i = 1; i < argc; ++i) {
-                const std::string arg = argv[i];
-                if (is_manager_only_world_flag(arg)) {
-                    ++i;  // 取值一并剔除
-                    continue;
-                }
-                kept.push_back(arg);
-            }
-            std::vector<char*> cell_argv;
-            cell_argv.reserve(kept.size());
-            for (auto& a : kept) {
-                cell_argv.push_back(a.data());
-            }
-            return run_cell_entry_body(static_cast<int>(cell_argv.size()),
-                                       cell_argv.data(), logger);
-        }
-
         const FleetOptions fleet = loadFleetOptions(argc, argv);
 
         WorldApp server(config);

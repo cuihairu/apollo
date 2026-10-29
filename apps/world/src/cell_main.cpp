@@ -39,8 +39,7 @@ void signal_handler(int signal) {
     }
 }
 
-// 编队面参数（cellapp 与 world --role=cell 共用解析面；此处为独立入口
-// 就地解析，避免把 exec_role 私有辅助暴露给共享库层）。
+// 编队面参数（cellServer 独立入口就地解析，避免把私有辅助暴露给共享库层）。
 bool is_fleet_arg(const std::string& arg) {
     return arg == "--machined-host" || arg == "--machined-port" ||
            arg == "--component-id" || arg == "--zone-id";
@@ -132,10 +131,9 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
             config.m1AuthorityEpoch =
                 std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--role" || arg.rfind("--role=", 0) == 0) {
-            // 执行端只接受 cell：委托路径由 world 入口 parse_world_role 裁决
-            // 且 role==cell 才进入本运行体，独立 cellServer 入口缺省即 cell。
-            // 执行端不接受 manager 委托，值校验在本面显式完成（此前 cellServer
-            // 传 --role=worker 会静默按 cell 启动，违反入口显形口径）。
+            // 执行端只接受 cell：cellServer 独立入口缺省即 cell。值校验在本
+            // 面显式完成（此前传 --role=worker 会静默按 cell 启动，违反入口
+            // 显形口径）；manager 不属于执行端，显式拒绝。
             std::string role_value = "cell";
             if (arg == "--role") {
                 if (i + 1 >= argc) {
@@ -217,10 +215,8 @@ int run_cell_entry_body(int argc, char* argv[],
     auto config = load_cell_config(argc, argv, prog);
     const auto fleet = load_fleet_options(argc, argv);
 
-    // 信号与停机面在本函数内装配：cellServer 独立入口与 world --role=cell
-    // 委托路径共用同一停机语义（signal_handler → g_stop_request → cell.stop）。
-    // 委托路径在此覆盖调用方（world manager）已注册的 signalHandler——后者
-    // 不持有 cell 停机面，覆盖是无害的单线程注册（装配前无并发信号面）。
+    // 信号与停机面在本函数内装配：cellServer 独立入口停机语义（signal_handler
+    // → g_stop_request → cell.stop）。
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 

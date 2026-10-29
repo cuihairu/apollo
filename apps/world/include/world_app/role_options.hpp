@@ -1,17 +1,18 @@
 #pragma once
 
-// world 共用二进制分角色（L27）：manager = 管理端（缺省——无参数或未指定
-// 角色即管理端），cell = 执行端（--role=cell）。解析只认 manager/cell 两个
-// 值；未知角色与缺值（--role 后无参或下一参形如选项）都显式拒绝——返回
-// false 并填 err，由调用方退出非零，绝不静默回退。cell 角色不派生子进程
-// （自动拉起/扩缩容/监督接续随 P2 管理/执行设计，不在本入口递归派生）。
+// world 管理端角色（L104 收口片一）：manager 是唯一受理角色（缺省——无参
+// 数或未指定角色即管理端）。执行端不再由本二进制委托——`--role=cell` 由
+// cellServer 独立入口承担，此处显式拒绝并指引（不再保留双角色兼容分支）。
+// 解析只认 manager；未知角色与缺值（--role 后无参或下一参形如选项）都显式
+// 拒绝——返回 false 并填 err，由调用方退出非零，绝不静默回退。
 
 #include <string>
 
 namespace world_app {
 
 // 纯解析（可直测）：遍历 argv 认 --role <v> 与 --role=<v>，重复指定以后者
-// 为准（显式后到覆盖，不叠加）。成功 true + role 填缺省或显式值。
+// 为准（显式后到覆盖，不叠加）。成功 true + role 填缺省或显式值；cell 与
+// 未知值均拒绝。
 inline bool parse_world_role(int argc, char* argv[], std::string& role,
                              std::string& err) {
     role = "manager";
@@ -29,8 +30,12 @@ inline bool parse_world_role(int argc, char* argv[], std::string& role,
         } else {
             continue;
         }
-        if (value != "manager" && value != "cell") {
-            err = "unknown role '" + value + "' (expected manager|cell)";
+        if (value == "cell") {
+            err = "role 'cell' moved to the cellServer entry";
+            return false;
+        }
+        if (value != "manager") {
+            err = "unknown role '" + value + "' (expected manager)";
             return false;
         }
         role = value;
@@ -38,17 +43,4 @@ inline bool parse_world_role(int argc, char* argv[], std::string& role,
     return true;
 }
 
-
-
-// manager 专用 flag（委托路径剔除集）：旧 world --role=cell 内联路径由 main
-// 的 loadConfig 解析入 config 但 cell 分支不消费（接受并忽略）；委托到执行端
-// 后原样透传会被 load_cell_config 未知参数守卫拒启，故委托前须剔除。这些参数
-// 属 manager 面，执行端不消费（含其跟随取值一并剔除）。
-inline bool is_manager_only_world_flag(const std::string& arg) {
-    return arg == "--assign-spaces" || arg == "--world-journal" ||
-           arg == "--cell-expiry-ms" || arg == "--max-instances" ||
-           arg == "--base-business-host" || arg == "--base-business-port" ||
-           arg == "--settlement-credential-dir" ||
-           arg == "--service-register-host" || arg == "--service-register-port";
-}
 } // namespace world_app

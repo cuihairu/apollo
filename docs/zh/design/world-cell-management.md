@@ -4,9 +4,9 @@
 
 ## 1. 结论与范围
 
-方案可行，建议采用：**world 管理空间分配，cell 执行模拟，Base 持有长期资料**。默认一台主机运行一个 World 管理进程，自动维护一个或多个独立 cell 进程；管理端使用 `world`，执行端默认使用独立 `cellServer`（`world --role=cell` 保留兼容委托），仍走同一套注册、命令和权威校验。
+方案可行，建议采用：**world 管理空间分配，cell 执行模拟，Base 持有长期资料**。默认一台主机运行一个 World 管理进程，自动维护一个或多个独立 cell 进程；管理端使用 `world`，执行端使用独立 `cellServer`（执行端唯一入口，不再由 `world --role=cell` 委托），仍走同一套注册、命令和权威校验。
 
-本文中的“CellApp”只用于对照 BigWorld，Apollo 的执行角色仍叫 `cell`。共享二进制不会增加 `cellapp` 角色别名，也不把 Cell 分区改叫进程。大写 `Cell` 是分区；Space 对应现有 Scene 的空间语义；Instance 保留八态玩法生命周期。
+本文中的“CellApp”只用于对照 BigWorld，Apollo 的执行角色仍叫 `cell`。执行端独立 `cellServer` 入口（执行端唯一入口，不再保留 `world --role=cell` 委托），不会增加 `cellapp` 角色别名，也不把 Cell 分区改叫进程。大写 `Cell` 是分区；Space 对应现有 Scene 的空间语义；Instance 保留八态玩法生命周期。
 
 第一阶段支持多个执行进程，**每个 Space 只有一个完整 Cell**。扩容按需启动 cell，再把新 Space 分配到就绪执行进程；缩容先自然排空，已有 Space 暂不因负载变化自动搬迁。后续补完整 Space/Instance 的连续迁移，最后按需求实现同 Space 多 Cell、Ghost 和无缝边界。
 
@@ -16,18 +16,18 @@
 
 ### 1.1. 应用目录与二进制
 
-本草案对应用目录、CMake 可执行目标和最终程序名统一采用短名，不带 `Server`、`-server` 或 `-app` 后缀；命名迁移已完成。world 缺省即管理角色；执行端独立入口为 `cellServer`——该入口名保留 `Server` 后缀，作为对照 BigWorld 执行端入口名的明确例外，不与上方短名约定混同；并保留 `world --role=cell` 兼容委托，两者启动同一执行端运行体。
+本草案对应用目录、CMake 可执行目标和最终程序名统一采用短名，不带 `Server`、`-server` 或 `-app` 后缀；命名迁移已完成。world 缺省即管理角色；执行端独立入口为 `cellServer`——该入口名保留 `Server` 后缀，作为对照 BigWorld 执行端入口名的明确例外，不与上方短名约定混同；`cellServer` 是执行端唯一入口，`world --role=cell` 不再保留（委托已删除）。
 
 | 应用目录 / 程序 | 职责 |
 |---|---|
 | apps/gateway / gateway | 客户端连接、会话与转发 |
 | apps/login / login | 认证、服务目录与位置投影 |
 | apps/base / base | 长期玩家对象与基础业务 |
-| apps/world / world | 默认管理角色；`--role=cell` 委托 cellServer 执行端 |
+| apps/world / world | 默认管理角色；执行端由独立 `cellServer` 承担 |
 | apps/database / database | 存储访问与持久结果 |
 | apps/machined / machined | 本机进程监督 |
 
-cell 的装配与实现放在 World 应用或共享库内，保留模块边界；执行端独立入口 cellServer（world --role=cell 兼容委托），管理壳不再内联执行端装配。曾存在的宿主演示入口（apps/game-server）已移除，其宿主职责由 world 与共享库承载，不作为短名方案之外的部署角色。运维工具如 logger、admin、fleetctl 按自身职责保留，不因本案统一改名。
+cell 的装配与实现放在 World 应用或共享库内，保留模块边界；执行端独立入口 cellServer（`world --role=cell` 委托已删除，cellServer 为执行端唯一入口），管理壳不再内联执行端装配。曾存在的宿主演示入口（apps/game-server）已移除，其宿主职责由 world 与共享库承载，不作为短名方案之外的部署角色。运维工具如 logger、admin、fleetctl 按自身职责保留，不因本案统一改名。
 
 C++ 类型名不随可执行文件机械改写：Base 部分为 `base::Avatar`，Cell 部分为 `cell::Avatar`。
 
@@ -80,8 +80,9 @@ Space/实体/操作 ID 在互通范围内必须唯一，不能只用各进程从
 
 ```text
 world
-world --config=<world-config>
-world --role=cell --config=<cell-config>
+world --world-id 1 --m1-port 9101 --assign-spaces 401,402
+cellServer --world-id 1 --m1-port 9301 --cell-id 21 \
+  --register-host 127.0.0.1 --register-port 9101 --add-space 501:arena
 ```
 
 World 角色启动管理循环和本机监督，不创建模拟宿主；cell 角色启动模拟宿主和注册客户端，不再拉起子 cell。不带参数或未指定 `--role` 时 `world` 默认管理角色（`--role` 只认 `manager` 与 `cell` 两个值，无 `world` 形式；`cellServer` 独立入口的 `--role` 仅接受 `cell`）。`--role` 缺少值、角色未知或配置非法时明确报错，不根据端口猜测角色。角色在启动时固定，不做运行中切换。
@@ -183,7 +184,7 @@ Base 更新交接长期对象与存储写权，World 更新交接管理记录，
 
 | 问题 | 不合理的做法 | 本案建议 |
 |---|---|---|
-| 为轻量玩法引入过多分布式能力 | 第一版就做分区平衡、Ghost 和自动故障接管 | 先共用二进制分角色、自动启停、单 Cell/多 Space 和自然排空；接受控制故障时短暂停顿 |
+| 为轻量玩法引入过多分布式能力 | 第一版就做分区平衡、Ghost 和自动故障接管 | 先独立 cellServer 执行端、自动启停、单 Cell/多 Space 和自然排空；接受控制故障时短暂停顿 |
 | World 成为热点 | 所有移动/战斗/可见性都经 World 代理 | 业务直连 cell；控制请求有界，心跳汇总，迁移/快照限速 |
 | 网络分区双模拟 | 心跳超时就复制玩家并激活目标 | 源冻结或可验证隔离后提交，结果不明保持冻结 |
 | World 成为故障点 | 只有内存拓扑，重启相信执行端自报 | 独占管理、持久决定、清单对账；首版不承诺自动热备 |
@@ -212,13 +213,13 @@ Apollo 先预留异步接入接口，不列为默认必启进程。简单的平�
 | SceneTransfer、现有 World 间档案迁移 | 拆出显式换空间；禁止把完整档案搬迁当作 Base 固定的新模拟迁移 |
 | M1、目录和 machined | 复用传输与监督原语；补认证注册、真实 wire、幂等命令与授权校验 |
 
-建议顺序：先完成 Base/模拟长期数据边界；再落地同一二进制的 World/cell 角色、本机监督、注册、完整 Space 创建/回收和故障冻结；再支持多 cell 分配与有上限的自动扩缩容；最后补管理恢复、完整活动迁移及两种更新验收。迁移未完成前只能使用自然排空升级，不能勾选连续热更新完成。
+建议顺序：先完成 Base/模拟长期数据边界；再落地独立 cellServer 执行端与 world 管理角色、本机监督、注册、完整 Space 创建/回收和故障冻结；再支持多 cell 分配与有上限的自动扩缩容；最后补管理恢复、完整活动迁移及两种更新验收。迁移未完成前只能使用自然排空升级，不能勾选连续热更新完成。
 
 本案不改程序、C++ 类型和协议字段，不自动接受新决策；唯一实施清单仍是根目录 todo.md，评审后按本案补齐其中 P2/P3/P4/P5 的验收条件。
 
 ## 12. 启用验收
 
-- 共用二进制两个角色真进程启动；cell 角色不递归派生，启动失败有限退避，缩容退出不被误重启；
+- 独立 cellServer 执行端与 world 管理角色真进程启动；cell 角色不递归派生，启动失败有限退避，缩容退出不被误重启；
 - 单 World/单 cell 真进程启动；没有 cell 时明确不可创建；World 不再推进模拟或加载完整档案。
 - 高低水位、冷却、启动中计数、资源上限、自然排空、长驻 Space 阻塞缩容和 World 重启不重复派生得到验收；
 - 两 cell 并发创建、多 Space 隔离、容量预留/拒收、重复请求、回执丢失、迟到销毁都有确定结果。
