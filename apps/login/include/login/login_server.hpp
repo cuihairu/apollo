@@ -205,7 +205,8 @@ private:
     // M1 准入受理面（P4-4 批①；m1Port = 0 = 不装配）
     std::unique_ptr<M1AdmissionServer> m1Admission_;
 
-    // 服务目录注册受理面（L123 首切片；serviceRegisterPort = 0 = 不装配）
+    // 服务目录注册受理面（L123 首切片；显式 opt-in——CLI 传
+    // --service-register-port 才装配，不传 = 不装配；port 0 = 内核分配）
     std::unique_ptr<ServiceRegistry> serviceRegistry_;
     std::unique_ptr<M1ServiceRegisterServer> m1ServiceRegister_;
 

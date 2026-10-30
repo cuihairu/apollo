@@ -47,10 +47,11 @@ struct LoginConfig {
     std::string m1RouteJson = APOLLO_LOGIN_CONTRACT_ROUTE_JSON;
 
     // M1 服务注册受理面（L123 服务目录首切片）：Base/World 裸 964 拨入登记
-    // 逻辑身份/进程代次/管理地址/兼容/就绪；0 = 内核分配（listenPort 读回
-    // 实际端口，与 M1ServiceRegisterServer 测试惯例一致）。缺省不传该 flag
-    // 时端口仍为 0（内核分配并装配），路由表共用 m1RouteJson。
+    // 逻辑身份/进程代次/管理地址/兼容/就绪。显式 opt-in（CLI 传
+    // --service-register-port 即装配；不传 = 不装配）。port 0 = 内核分配
+    //（listenPort 读回实际端口），路由表共用 m1RouteJson。
     uint16_t serviceRegisterPort = 0;
+    bool serviceRegisterEnabled = false;
 
     // 后端服务地址
 

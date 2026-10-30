@@ -1134,12 +1134,34 @@ bool test_declared_space_reassignment_keeps_name() {
 //
 // 断言：Space ID 是路由键（7），scene ID 是 world 自增域（≠7），执行进程
 // 身份取 config.cellId（本例 42）。分区 ID 当前退化 = scene id（每 Space
-// 单全幅 Cell），但不等于 Space ID，也不等于执行进程 ID。不启内核——观测
-// 面在构造后即可读（start 前注册窗合法）。
+// 单全幅 Cell），但不等于 Space ID，也不等于执行进程 ID。start 前注册窗
+// 合法（add_space 可先建路由）；但 default_scene_id()/partition_id_of_space()
+// 是内核线程上下文访问器（单写者纪律），启动后须经 pre/post tick 钩子在内
+// 核线程内读取——未知空间回落默认 scene 的断言也须在内核线程上下文求值。
 bool test_id_domains_are_separate() {
     world_app::WorldAppConfig config;
     config.cellId = 42;
     world_app::CellApp cell(config);
+
+    // 启动后（内核线程上下文）采集回落断言所需事实：默认 scene 非零 + 未
+    // 知空间 999 回落默认分区。经 post_tick 钩子在内核线程读（单写者纪律），
+    // 免测试线程跨线程读 defaultSceneId_/spaceToScene_。钩子只记账不断言
+    // （断言失败无法从 void lambda 传播），测试线程 wait 后统一判定。
+    std::atomic<bool> fallback_seen{false};
+    std::atomic<std::uint64_t> fallback_default{0};
+    std::atomic<std::uint64_t> fallback_partition{0};
+    cell.set_post_tick([&](double) {
+        if (fallback_seen.load()) {
+            return;
+        }
+        const auto default_id = cell.default_scene_id();
+        if (default_id == 0) {
+            return;  // 默认 scene 未落地，等下一拍
+        }
+        fallback_default.store(default_id);
+        fallback_partition.store(cell.partition_id_of_space(999));
+        fallback_seen.store(true);
+    });
 
     const auto space7_scene = cell.add_space(7, second_space_descriptor());
     TEST_ASSERT(space7_scene != 0, "space 7 route created");
@@ -1152,17 +1174,17 @@ bool test_id_domains_are_separate() {
                 "partition id independent of space id");
     TEST_ASSERT(cell.partition_id_of_space(7) != cell.executor_id(),
                 "partition id independent of executor id");
-    // 未知空间边界：回落默认 scene 的 partition，与 resolve_scene_id 同一
-    // 口径（观测面明确，不作持有判据）。start 前 defaultSceneId_ 为 0，断言
-    // 会退化 0==0 恒真——必须先启动使 ensureDefaultScene() 落地（默认 scene
-    // 非零），回落断言才验证真实语义。
     cell.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(40));
-    TEST_ASSERT(cell.default_scene_id() != 0,
+    // 回落断言在 post_tick 内核线程上下文采集（ensureDefaultScene 在 start()
+    // 内同步落地，首拍即求值；wait_until 替代固定 sleep——断言所需才等）。
+    TEST_ASSERT(wait_until([&] { return fallback_seen.load(); },
+                           std::chrono::seconds(3)),
+                "unknown-space fallback observed in kernel thread");
+    TEST_ASSERT(fallback_default.load() != 0,
                 "default scene materialized after start");
-    TEST_ASSERT(cell.partition_id_of_space(999) == cell.default_scene_id(),
+    TEST_ASSERT(fallback_partition.load() == fallback_default.load(),
                 "unknown space falls back to default partition");
-    TEST_ASSERT(cell.partition_id_of_space(999) != 0,
+    TEST_ASSERT(fallback_partition.load() != 0,
                 "fallback partition is a real scene id");
     cell.stop();
     return true;

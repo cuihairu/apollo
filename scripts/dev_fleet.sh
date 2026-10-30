@@ -66,6 +66,28 @@ interfaces_entry() {
     echo "interfaces | 0 | $BUILD_DIR/apps/interfaces/interfaces --host $host --port $port"
 }
 
+# S08 决策「验证监听、合法配置与端口占用报错」：interfaces 默认加入编队
+# （127.0.0.1:8080），若该端口已被占用，编队 up 应在启动前显式报错，不能
+# 静默等 machined 日志显形。host 仅限环回/通配才可无歧义判占用（非环回
+# 绑定端口无法按本地 socket 判断，留给被拉起进程自身报错）。
+check_interfaces_port_free() {
+    [[ "${APOLLO_FLEET_INTERFACES:-1}" != "0" ]] || return 0
+    local host="${APOLLO_FLEET_INTERFACES_HOST:-127.0.0.1}"
+    local port="${APOLLO_FLEET_INTERFACES_PORT:-8080}"
+    if [[ "$host" != "127.0.0.1" && "$host" != "0.0.0.0" && "$host" != "::1" ]]; then
+        return 0  # 非本地可判端口：进程自报
+    fi
+    if ! command -v ss >/dev/null 2>&1; then
+        echo "无法检查接口端口占用（缺 ss/iproute2）：跳过 $host:$port 预检" >&2
+        return 0
+    fi
+    if ss -H -ltn "sport = :$port" 2>/dev/null | grep -q .; then
+        echo "接口端口冲突：$host:$port 已被占用（APOLLO_FLEET_INTERFACES_HOST/PORT 改监听或 APOLLO_FLEET_INTERFACES=0 关闭）" >&2
+        return 1
+    fi
+    return 0
+}
+
 fleet_entries() {
     cat <<EOF
 logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
@@ -106,6 +128,7 @@ cmd_up() {
         exit 1
     fi
     [[ -x "$MACHINED" ]] || { echo "machined 未构建：$MACHINED" >&2; exit 1; }
+    check_interfaces_port_free || exit 1
 
     mkdir -p "$FLEET_DIR"
     : > "$LOGFILE"
