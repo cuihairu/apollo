@@ -6,16 +6,23 @@ const props = defineProps<{ kind: 'system' | 'space' | 'cross-server' | 'callbac
 const { lang } = useData()
 const english = computed(() => lang.value.startsWith('en'))
 const language = computed(() => english.value ? 'en' : 'zh')
-const source = computed(() => withBase(`/architecture/${props.kind}-${language.value}.svg`))
-const narrowSource = computed(() => withBase(`/architecture/${props.kind}-${language.value}-mobile.svg`))
+// system kind uses the chorus-style process architecture (docs/public/images/architecture-{lang}.svg);
+// space / cross-server / callbacks keep their dedicated SVGs.
+const systemSource = computed(() => withBase(`/images/architecture-${language.value}.svg`))
+const source = computed(() => props.kind === 'system'
+  ? systemSource.value
+  : withBase(`/architecture/${props.kind}-${language.value}.svg`))
+const narrowSource = computed(() => props.kind === 'system'
+  ? systemSource.value
+  : withBase(`/architecture/${props.kind}-${language.value}-mobile.svg`))
 const descriptions = {
   callbacks: {
     zh: 'Apollo 外部回调与发货：interfaces 可靠受理链、按归属代次解析当前 Base 与幂等发货模块已落地；渠道验签与进程间接线规划中；apolloc init 脚手架已交付，CI 在仓库执行。',
     en: 'External callbacks and fulfillment: the interfaces intake chain, epoch-based current-Base resolution, and idempotent fulfillment modules are implemented; channel verification and inter-process wiring remain planned; the apolloc init scaffolding is delivered and CI runs in the repository.',
   },
   system: {
-    zh: 'Apollo 目标架构：gateway 分别路由到 Base 与 cell，world 管理空间和执行进程，Base 经 database 保存长期资料。',
-    en: 'Apollo target architecture: gateway routes to Base and cell; world manages spaces and executors; Base saves profiles through database.',
+    zh: 'Apollo 进程架构：world 为管理端（注册/拓扑/容量/迁移），cellServer 为独立模拟执行端（Scene/Avatar/AOI/战斗/Lua），二者经 960 注册/961 裁决/962 分配/963 retire/967 自报 协调；Base 管玩家档案与基础业务并经 database 持久；gateway 直达 Base 与 cell；interfaces 接平台回调；machined 拉起并监督各进程；logger/admin 收集日志与指标。',
+    en: 'Apollo process architecture: world is the manager (register/topology/capacity/migration) and cellServer the standalone simulation executor (Scene/Avatar/AOI/battle/Lua), coordinated over 960 register/961 verdict/962 assign/963 retire/967 self-report; Base owns player profiles and base gameplay persisted via database; gateway routes directly to Base and cell; interfaces receives platform callbacks; machined spawns and supervises; logger/admin collect logs and metrics.',
   },
   space: {
     zh: 'Space、Cell、cell 进程与 Instance 的边界：默认每 Space 一个 Cell，未来可在同一 Space 内扩展多个 Cell。',
@@ -27,8 +34,8 @@ const descriptions = {
   },
 }
 const description = computed(() => descriptions[props.kind][language.value])
-const wideHeight = computed(() => ({ system: 840, space: 700, 'cross-server': 760, callbacks: 920 })[props.kind])
-const narrowHeight = computed(() => ({ system: 1440, space: 1135, 'cross-server': 1270, callbacks: 1510 })[props.kind])
+const wideHeight = computed(() => ({ system: 1915, space: 700, 'cross-server': 760, callbacks: 920 })[props.kind])
+const narrowHeight = computed(() => ({ system: 1915, space: 1135, 'cross-server': 1270, callbacks: 1510 })[props.kind])
 </script>
 
 <template>
