@@ -85,6 +85,8 @@ check_interfaces_port_free() {
     # host=127.0.0.1 仅匹配 127.0.0.1 或 0.0.0.0 监听（IPv4），不匹配
     # 绑定到非环回地址的同端口（如 10.0.0.5:8080，实际绑定 127.0.0.1:8080
     # 可成功），消除误报；host=0.0.0.0/::1 同理按通配/环回族匹配。
+    # `ss` 对 Linux 默认 bindv6only=0 的 IPv6 dual-stack 监听显示 `*:<port>`：
+    # 该监听同时占用 IPv4 与 IPv6 地址空间，任何可预检 host 都判冲突。
     if ss -H -ltn "sport = :$port" 2>/dev/null | awk -v h="$host" -v p="$port" '
         $4 ~ ":" p "$" {
             # 本地地址字段形如 <addr>:<port>（IPv4）或 [::1]:<port>（IPv6）
@@ -92,7 +94,8 @@ check_interfaces_port_free() {
             if (last != p) next
             full = $4; sub(/:[0-9]+$/, "", full)
             addr = full
-            if (h == "0.0.0.0" && (addr == "0.0.0.0" || addr ~ /^[0-9]+\./)) found=1
+            if (addr == "*") found=1
+            else if (h == "0.0.0.0" && (addr == "0.0.0.0" || addr ~ /^[0-9]+\./)) found=1
             else if (h == "127.0.0.1" && (addr == "127.0.0.1" || addr == "0.0.0.0")) found=1
             else if (h == "::1" && (addr == "[::1]" || addr == "[::]")) found=1
         }
