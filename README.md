@@ -18,7 +18,7 @@
 
 Apollo is a C++20 server runtime for lightweight multiplayer games organized around instances and matches, such as tower defense, co-op, PvE/PvP, arenas, and dungeons. It currently delivers lightweight instances while reserving future seamless Space/Cell, authority, and visibility boundaries.
 
-The runnable processes are `gateway`, `login`, `base`, `world`, `database`, `interfaces`, and `machined`; the `loginServer`/`baseServer`/`worldServer` words in the design docs name the roles of the `login`/`base`/`world` binaries, and `cell` is the cell execution role of the `world` binary (`--role=cell`). Cell means a spatial partition.
+The runnable processes are `gateway`, `login`, `base`, `world`, `database`, `interfaces`, and `machined`; the `loginServer`/`baseServer`/`worldServer` words in the design docs name the roles of the `login`/`base`/`world` binaries, and `cellServer` is the standalone cell execution entry (the `world` binary is manager-only and rejects `--role=cell`). Cell means a spatial partition.
 
 <picture>
   <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/system-en-mobile.svg" />

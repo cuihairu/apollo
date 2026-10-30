@@ -18,7 +18,7 @@
 
 Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边界的轻量多人游戏，例如塔防、合作 PvE/PvP、竞技场和副本玩法。当前交付轻量副本路径，预留未来无缝地图的 Space/Cell、权威和可见性边界。
 
-可运行进程为 `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined`；设计文档里的 loginServer/baseServer/worldServer 是 `login`/`base`/`world` 二进制的角色称谓，`cell` 是 `world` 二进制的 cell 执行角色（`--role=cell`）。Cell 为分区。
+可运行进程为 `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined`；设计文档里的 loginServer/baseServer/worldServer 是 `login`/`base`/`world` 二进制的角色称谓，`cellServer` 是独立 cell 执行入口（`world` 二进制仅 manager 角色，显式拒绝 `--role=cell`）。Cell 为分区。
 
 <picture>
   <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/system-zh-mobile.svg" />
