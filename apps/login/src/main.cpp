@@ -117,7 +117,7 @@ LoginConfig loadConfig(int argc, char* argv[]) {
                       << "  --host <host>              Listen address (default: 0.0.0.0)\n"
                       << "  --gateway <url>             Gateway URL (can be multiple)\n"
                       << "  --m1-port <port>           M1 admission listen port (0 = off, default: 0)\n"
-                      << "  --service-register-port <port>  Service register face port; 0 disables (default: 0)\n"
+                      << "  --service-register-port <port>  Service register face port; 0 = kernel assigned (default: 0 = off, not assembled)\n"
                       << "  --world-store-m1-port <port>  World player data endpoint (default: 9104)\n"
                       << "  --directory-client-port <port>   OnlineDirectory M1 control dial port (0 = off, default: 0)\n"
                       << "  --mirror-host <ipv4>       Directory mirror target host (default: 127.0.0.1)\n"

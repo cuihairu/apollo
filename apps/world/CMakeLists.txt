@@ -137,6 +137,7 @@ if(NOT WIN32)
             ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/world_cell_independent_smoke.py
             $<TARGET_FILE:login> $<TARGET_FILE:world> $<TARGET_FILE:cellServer>
             ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
-        set_tests_properties(WorldCellIndependentSmoke PROPERTIES TIMEOUT 40)
+        set_tests_properties(WorldCellIndependentSmoke PROPERTIES TIMEOUT 40
+            RUN_SERIAL TRUE)
     endif()
 endif()

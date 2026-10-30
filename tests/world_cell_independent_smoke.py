@@ -8,8 +8,8 @@
 """
 import pathlib
 import os
+import re
 import selectors
-import socket
 import subprocess
 import sys
 import tempfile
@@ -31,15 +31,7 @@ def running_machined_pids():
         return None
 
 
-def free_port():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-def start(binary, args, cwd, markers, timeout=15):
+def start(binary, args, cwd, markers, port_marker=None, timeout=15):
     process = subprocess.Popen([binary, *args], cwd=cwd, stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT, bufsize=0)
     children.append(process)
@@ -54,7 +46,16 @@ def start(binary, args, cwd, markers, timeout=15):
                 output.append(chunk)
                 text = ''.join(output)
                 if all(m in text for m in markers):
-                    return process, text
+                    port = 0
+                    if port_marker is not None:
+                        match = re.search(
+                            re.escape(port_marker) + r"\s+\S+:(\d+)", text)
+                        if not match:
+                            raise AssertionError(
+                                f"{binary} port marker {port_marker!r} not found: "
+                                f"{text[-2000:]}")
+                        port = int(match.group(1))
+                    return process, text, port
                 if not chunk and process.poll() is not None:
                     break
         raise AssertionError(f"{binary} not ready: markers={markers} output={''.join(output)[-2000:]}")
@@ -81,31 +82,31 @@ try:
         for d in (login_dir, world_dir, cell_dir):
             d.mkdir()
 
-        login_sr_port = free_port()
-        world_m1_port = free_port()
-        cell_m1_port = free_port()
-
-        # ---- 1. login：--service-register-port 面（无 machined）----
+        # ---- 1. login：端口 0 内核分配（无 machined），从日志读回实际端口 ----
         login_args = [
             "--host", "127.0.0.1",
-            "--directory-port", str(free_port()),
+            "--directory-port", "0",
             "--directory-epochs", str(login_dir / "epochs.json"),
-            "--service-register-port", str(login_sr_port),
-            "--m1-port", str(free_port()),
+            "--service-register-port", "0",
+            "--m1-port", "0",
         ]
-        login, login_out = start(login_binary, login_args, login_dir,
-                                 ["service register listening on"], timeout=15)
+        login, login_out, login_sr_port = start(
+            login_binary, login_args, login_dir,
+            ["service register listening on"], port_marker="service register listening on",
+            timeout=15)
 
-        # ---- 2. world：--m1-port 监听 + 拨 login 注册（无 machined）----
+        # ---- 2. world：--m1-port 0 内核分配 + 拨 login 注册（无 machined）----
         world_args = [
             "--world-id", "1",
-            "--m1-port", str(world_m1_port),
+            "--m1-port", "0",
             "--service-register-host", "127.0.0.1",
             "--service-register-port", str(login_sr_port),
             "--assign-spaces", "401,402",
         ]
-        world, world_out = start(world_binary, world_args, world_dir,
-                                 ["Service register: dialing", "Server is running"], timeout=15)
+        world, world_out, world_m1_port = start(
+            world_binary, world_args, world_dir,
+            ["Service register: dialing", "Server is running"],
+            port_marker="WorldApp M1 link listening on", timeout=15)
 
         # world 注册到 login：login 日志出现 "service registered: kind=1 id=1"
         # 轮询 login 输出
@@ -126,18 +127,20 @@ try:
                     break
         assert world_registered, f"world did not register to login: {login_out[-2000:]}"
 
-        # ---- 3. cellServer：--m1-port 监听 + 拨 world 注册（无 machined）----
+        # ---- 3. cellServer：--m1-port 0 内核分配 + 拨 world 注册（无 machined）----
         cell_args = [
             "--world-id", "1",
-            "--m1-port", str(cell_m1_port),
+            "--m1-port", "0",
             "--register-host", "127.0.0.1",
             "--register-port", str(world_m1_port),
             "--cell-id", "21",
             "--add-space", "501:arena",
             "--add-space", "502:lobby",
         ]
-        cell, cell_out = start(cell_binary, cell_args, cell_dir,
-                               ["Cell registration: dialing", "Server is running"], timeout=15)
+        cell, cell_out, cell_m1_port = start(
+            cell_binary, cell_args, cell_dir,
+            ["Cell registration: dialing", "Server is running"],
+            port_marker="Cell M1 link listening on", timeout=15)
 
         # cell 注册到 world：world 日志出现 "cell registered: id=21"
         cell_registered = False

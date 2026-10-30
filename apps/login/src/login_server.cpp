@@ -414,28 +414,27 @@ void LoginServer::start() {
         }
     }
 
-    // M1 服务注册受理面（L123 首切片）：serviceRegisterPort = 0 = 不装配；
-    // 装配失败降级（警告 + 不拦启动，同准入面）。registry 常驻（面关也可
-    // 观测/后续批本地写入）。
-    if (config_.serviceRegisterPort != 0) {
-        M1ServiceRegisterConfig regConfig;
-        regConfig.host = config_.host;
-        regConfig.port = config_.serviceRegisterPort;
-        regConfig.route_json = config_.m1RouteJson;
-        m1ServiceRegister_ =
-            makeM1ServiceRegisterServer(std::move(regConfig), serviceRegistry_.get());
-        if (m1ServiceRegister_->start()) {
-            apollo::core::log::global_log_manager()
-                .createLogger("login_server")
-                ->info("service register listening on " + config_.host + ":"
-                       + std::to_string(m1ServiceRegister_->listenPort()));
-        } else {
-            apollo::core::log::global_log_manager()
-                .createLogger("login_server")
-                ->warning("service register degraded: route table unavailable ("
-                          + config_.m1RouteJson + "), register face stays off");
-            m1ServiceRegister_.reset();
-        }
+    // M1 服务注册受理面（L123 首切片）：port 0 = 内核分配（listenPort 读回
+    // 实际端口；与 M1ServiceRegisterServer 测试惯例一致）；装配失败降级
+    // （警告 + 不拦启动，同准入面）。registry 常驻（面关也可观测/后续批
+    // 本地写入）。
+    M1ServiceRegisterConfig regConfig;
+    regConfig.host = config_.host;
+    regConfig.port = config_.serviceRegisterPort;
+    regConfig.route_json = config_.m1RouteJson;
+    m1ServiceRegister_ =
+        makeM1ServiceRegisterServer(std::move(regConfig), serviceRegistry_.get());
+    if (m1ServiceRegister_->start()) {
+        apollo::core::log::global_log_manager()
+            .createLogger("login_server")
+            ->info("service register listening on " + config_.host + ":"
+                   + std::to_string(m1ServiceRegister_->listenPort()));
+    } else {
+        apollo::core::log::global_log_manager()
+            .createLogger("login_server")
+            ->warning("service register degraded: route table unavailable ("
+                      + config_.m1RouteJson + "), register face stays off");
+        m1ServiceRegister_.reset();
     }
 
     // M1 base 客户端面（P4-4 批③）：worldStoreM1Port = 0 = 不装配（RPC 面缺席
