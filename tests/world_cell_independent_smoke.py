@@ -19,6 +19,18 @@ login_binary, world_binary, cell_binary, routes = map(str, sys.argv[1:])
 children = []
 
 
+def running_machined_pids():
+    """返回当前 machined 进程 pid 集合。None 表示 pgrep 不可用（跳过进程级检测）。"""
+    try:
+        out = subprocess.run(["pgrep", "-x", "machined"], capture_output=True,
+                             text=True, check=False)
+        if out.returncode not in (0, 1):
+            return None
+        return set(out.stdout.split())
+    except (FileNotFoundError, OSError):
+        return None
+
+
 def free_port():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("127.0.0.1", 0))
@@ -65,6 +77,7 @@ try:
         login_dir = root / "login"
         world_dir = root / "world"
         cell_dir = root / "cell"
+        machined_before = running_machined_pids()
         for d in (login_dir, world_dir, cell_dir):
             d.mkdir()
 
@@ -143,9 +156,19 @@ try:
                     break
         assert cell_registered, f"cell did not register to world: {world_out[-2000:]}"
 
-        # ---- 4. machined 未参与：全程无 machined 进程 ----
+        # ---- 4. machined 未参与：进程级检测 ----
+        # 仅检查已捕获输出缓冲不足：若 machined 以独立进程运行，其输出不在任何
+        # 缓冲中。用 pgrep 对比测试前后 machined pid 集，证明无新增 machined 进程
+        # （本地预先存在的不算）。pgrep 不可用时退回输出文本检查并打印警告。
         machined_seen = "machined" in (world_out + cell_out + login_out).lower()
-        assert not machined_seen, "machined should not participate in independent registration"
+        machined_after = running_machined_pids()
+        if machined_before is not None and machined_after is not None:
+            new_machined = machined_after - machined_before
+            assert not new_machined, f"machined process appeared during test: {sorted(new_machined)}"
+        else:
+            assert not machined_seen, \
+                "machined should not participate in independent registration"
+            print("WARN: pgrep unavailable; fell back to output-text machined check")
 
         print("PASS: World/cell independent registration without machined")
         print("  - world registered to login (kind=1 id=1 peer=world-1)")
