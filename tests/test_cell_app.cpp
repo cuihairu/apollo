@@ -1153,9 +1153,18 @@ bool test_id_domains_are_separate() {
     TEST_ASSERT(cell.partition_id_of_space(7) != cell.executor_id(),
                 "partition id independent of executor id");
     // 未知空间边界：回落默认 scene 的 partition，与 resolve_scene_id 同一
-    // 口径（观测面明确，不作持有判据）。
+    // 口径（观测面明确，不作持有判据）。start 前 defaultSceneId_ 为 0，断言
+    // 会退化 0==0 恒真——必须先启动使 ensureDefaultScene() 落地（默认 scene
+    // 非零），回落断言才验证真实语义。
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    TEST_ASSERT(cell.default_scene_id() != 0,
+                "default scene materialized after start");
     TEST_ASSERT(cell.partition_id_of_space(999) == cell.default_scene_id(),
                 "unknown space falls back to default partition");
+    TEST_ASSERT(cell.partition_id_of_space(999) != 0,
+                "fallback partition is a real scene id");
+    cell.stop();
     return true;
 }
 
