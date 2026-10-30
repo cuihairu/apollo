@@ -81,7 +81,23 @@ check_interfaces_port_free() {
         echo "无法检查接口端口占用（缺 ss/iproute2）：跳过 $host:$port 预检" >&2
         return 0
     fi
-    if ss -H -ltn "sport = :$port" 2>/dev/null | grep -q .; then
+    # 按本地地址过滤：仅当监听地址与本 host 同族且能覆盖时判占用——
+    # host=127.0.0.1 仅匹配 127.0.0.1 或 0.0.0.0 监听（IPv4），不匹配
+    # 绑定到非环回地址的同端口（如 10.0.0.5:8080，实际绑定 127.0.0.1:8080
+    # 可成功），消除误报；host=0.0.0.0/::1 同理按通配/环回族匹配。
+    if ss -H -ltn "sport = :$port" 2>/dev/null | awk -v h="$host" -v p="$port" '
+        $4 ~ ":" p "$" {
+            # 本地地址字段形如 <addr>:<port>（IPv4）或 [::1]:<port>（IPv6）
+            n = split($4, a, ":"); last = a[n]
+            if (last != p) next
+            full = $4; sub(/:[0-9]+$/, "", full)
+            addr = full
+            if (h == "0.0.0.0" && (addr == "0.0.0.0" || addr ~ /^[0-9]+\./)) found=1
+            else if (h == "127.0.0.1" && (addr == "127.0.0.1" || addr == "0.0.0.0")) found=1
+            else if (h == "::1" && (addr == "[::1]" || addr == "[::]")) found=1
+        }
+        END { exit !found }
+    '; then
         echo "接口端口冲突：$host:$port 已被占用（APOLLO_FLEET_INTERFACES_HOST/PORT 改监听或 APOLLO_FLEET_INTERFACES=0 关闭）" >&2
         return 1
     fi

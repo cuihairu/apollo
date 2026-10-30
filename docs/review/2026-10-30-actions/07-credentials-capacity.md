@@ -1,6 +1,6 @@
 # D02 / S02 / S03 / D35 / D36 · 认证凭据、容量消费、帧采样、负载基线
 
-> 来源：docs/review/2026-10-30-decisions.md D02（todo.md:113）、S02（todo.md:113/138）、
+> 来源：docs/review/2026-10-30-decisions.md D02（todo.md:115）、S02（todo.md:115/138）、
 > S03（todo.md:125/129/138）、D35（todo.md:198）、D36（todo.md:199）。
 > 本文件为设计稿；凭据发放/容量上报的实现随 D02 四个子任务立项。
 

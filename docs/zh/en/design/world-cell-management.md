@@ -192,7 +192,7 @@ Current SceneTransfer recreates Avatar on explicit space change. It cannot imple
 | Cross-server writes/duplicate rewards | Direct database writes or validate only the current epoch | Original Base, stable settlement IDs, authorization history, durable deduplication |
 | Incorrect durability claim | Treat file flush as power-loss safety | Declare durability level, test crash points, refuse unsafe recovery |
 
-Parameters pending review/measurement: journal durability, heartbeat/grace intervals, capacity budgets, snapshot size/pause budgets, and each gameplay script's migratable-state inventory. Automatic failover, live management-scope transfer, and multi-Cell Spaces are separately scoped work.
+Implementation parameters decided (2026-10-30; docs/review/2026-10-30-decisions.md): management-log durability level = **A lines fsync, R/B lines flush + failure downgrade** (S05); heartbeat/grace intervals = 5s/15s/30s as a dev-validation baseline (D24, not a production promise). Implementation parameters still pending measurement: capacity budgets, snapshot size/pause budgets, and each gameplay script's migratable-state inventory — these are not written as performance promises without measurement. Automatic failover, live management-scope transfer, and multi-Cell Spaces are separately scoped work.
 
 ### 10.1. Is interfaces Needed?
 

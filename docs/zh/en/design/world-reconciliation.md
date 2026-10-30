@@ -48,7 +48,7 @@ The journal record (replayed final state — from Batch B on, the authoritative 
 | S owner C | C never returns within the expiry window | The existing release/re-claim | batch-㉘ face (version +1 as the ABA guard) |
 | — | C walks in with an epoch below the watermark | code 3 rejection + cell self-freeze | batch-㉗/㉚ face |
 
-Freeze granularity = **a single Space**, not the whole cell (minimal isolation: the same cell's other Spaces keep admitting and assigning normally). A conflicting Space unfreezes once reconciliation repairs the record — the World appends the journal line and re-pushes 962; whether a manual command is required is an open decision in §6.
+Freeze granularity = **a single Space**, not the whole cell (minimal isolation: the same cell's other Spaces keep admitting and assigning normally). A conflicting Space unfreezes once reconciliation repairs the record — the World appends the journal line and re-pushes 962; unfreezing uses a **controlled manual confirmation command** as decided (see §6 and docs/review/2026-10-30-decisions.md S04).
 
 ## 5. World Restart Sequence
 
@@ -60,17 +60,17 @@ Freeze granularity = **a single Space**, not the whole cell (minimal isolation: 
 6. No conflicts (and no missing-record evidence) → the allocation gate opens = recovery complete; with conflicts → only the conflicting Spaces freeze, the rest proceed.
 7. Steady state: later registrations/re-dials keep using 961 + 962 (the 967 self-report re-sends on every 961 admission; repeated 967s are admitted idempotently without re-adjudication).
 
-## 6. Decided vs. Open
+## 6. Decided Items
 
 **Decided at design level** (implementation batches must not deviate): 962 is the verdict carrier (no downstream verdict frame); 967 rides the same raw-frame link as 960 with no separate admission gate; bare v1 lines load compatibly; journal configured off = the current in-memory semantics (the batch-㉚ decision carries over); freezes are per-Space.
 
-**Open** (implementation parameters, decided after review):
+**Implementation parameters decided** (2026-10-30; docs/review/2026-10-30-decisions.md S04/S05/S06):
 
-- Durability level: flush or fsync for `A`/`B` lines (power-loss semantics of management decisions; the world-cell-management §10 "state the durability level explicitly" item)
-- Persistent-volume lock-file policy: advisory (warn only) or mandatory boot refusal
-- Whether unfreezing a conflicting Space needs a manual command (options: a manual admin command / automatic after repair, where automatic = trusting the appended journal line as authority)
+- Durability level: **A lines fsync (flush to media before pushing 962), R/B lines flush + warning downgrade on failure** (batch-㊸ decided and implemented; before formally promising power-loss recovery, the B management epoch and isolation watermark must be hardened with durable writes or fail-closed — the S05 boundary)
+- Persistent-volume lock-file policy: **mandatory boot refusal** (single host per persistent volume; live-PID check refuses boot, stale/malformed locks are broken; implemented at world_app.cpp:85-113)
+- Conflicting-Space unfreeze: **controlled manual confirmation command** (verify evidence, confirm the old source is isolated, durably record the repair decision, unfreeze per-Space; requires matching the expected management epoch/version and recording reason/operation ID/result — S04)
 
-(Resolved: the former "963 entry-count cap and segmentation" item — one frame per entry under 967 dissolves it.)
+(Resolved: the former "963 entry-count cap and segmentation" item — one frame per entry under 967 dissolves it; 963 now serves retire, 967 is the self-report.)
 
 ## 7. Acceptance Checklist (for todo ingestion)
 

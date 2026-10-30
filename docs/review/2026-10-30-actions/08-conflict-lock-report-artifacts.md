@@ -1,7 +1,7 @@
 # S04 / S06 / S07 / S09 · 冲突解冻命令、卷锁已决、967 上报事实、旧构建产物清单
 
-> 来源：docs/review/2026-10-30-decisions.md S04（todo.md:126/133/134）、S06（todo.md:126/134）、
-> S07（todo.md:126/133）、S09（todo.md:150）。本文件为设计稿与事实记录。
+> 来源：docs/review/2026-10-30-decisions.md S04（todo.md:138）、S06（todo.md:138）、
+> S07（todo.md:138）、S09（todo.md:148）。本文件为设计稿与事实记录。
 
 ## 1. S04 · 冲突 Space 受控人工确认命令设计
 
