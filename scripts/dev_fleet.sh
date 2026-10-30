@@ -20,6 +20,10 @@
 #   注册接线属后续切片。
 # Login：认证/准入链路 9103、在线目录链路 9105；档案客户端拨 BaseServer 9201。
 # Gateway：客户端 TCP 9002。logger 9102；admin 指标链路 9106、HTTP 9107。
+# Interfaces：平台回调/演示入口，明文 HTTP 127.0.0.1:8080（S08 已代决，
+#   docs/review/2026-10-30-decisions.md）。默认随编队加入；APOLLO_FLEET_INTERFACES=0
+#   显式关闭，APOLLO_FLEET_INTERFACES_HOST/PORT 改监听。不传 --callback-secret =
+#   验签 gate 拒绝回调（不生成渠道密钥；支付发货接线另立验收）。
 
 set -euo pipefail
 
@@ -52,6 +56,16 @@ cell_entries() {
     fi
 }
 
+# interfaces 条目（S08 已代决）：开发编队默认加入（127.0.0.1:8080 明文 HTTP）。
+# APOLLO_FLEET_INTERFACES=0 显式关闭；APOLLO_FLEET_INTERFACES_HOST/PORT 改监听。
+# --callback-secret 不传 = 验签 gate 拒绝回调（不生成渠道密钥）。
+interfaces_entry() {
+    [[ "${APOLLO_FLEET_INTERFACES:-1}" != "0" ]] || return 0
+    local host="${APOLLO_FLEET_INTERFACES_HOST:-127.0.0.1}"
+    local port="${APOLLO_FLEET_INTERFACES_PORT:-8080}"
+    echo "interfaces | 0 | $BUILD_DIR/apps/interfaces/interfaces --host $host --port $port"
+}
+
 fleet_entries() {
     cat <<EOF
 logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir log/pushed
@@ -62,6 +76,7 @@ world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-
 $(cell_entries)
 login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9103 --world-store-m1-port 9201 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
 gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port 9103 --directory-m1-port 9105 --machined-port 9600 --component-id 12
+$(interfaces_entry)
 EOF
 }
 
