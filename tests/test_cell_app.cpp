@@ -1190,6 +1190,49 @@ bool test_id_domains_are_separate() {
     return true;
 }
 
+// 畸形意图（残帧头 / 合法帧头+残 body）不得炸内核 tick——drain 逐意图消
+// 费，坏意图丢弃（已出队，不堵队列），同拍与后续好意图照常执行。坏意图无
+// 延时回执（受理已成功，执行面丢弃）：请求方按超时口径收敛。
+bool test_cell_kernel_malformed_intent_drained() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 1000;
+    world_app::CellApp cell(config);
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));  // 首拍 settle
+
+    // 坏一：整帧垃圾（parseHeader 即拒）
+    world_app::IntentEnvelope garbage_frame;
+    garbage_frame.type = protocol::MessageType::CELL_CREATE_ENTITY;
+    garbage_frame.frame = {'n', 'o', 't', ' ', 'j', 's', 'o', 'n'};
+    garbage_frame.session_id = 88;
+    TEST_ASSERT(cell.submitIntent(std::move(garbage_frame)), "garbage frame queued");
+
+    // 坏二：合法帧头 + 残 body（decodeBody 才炸）
+    auto corrupted = make_create_player_intent(999, 88);
+    for (std::size_t i = sizeof(protocol::MessageHeader); i < corrupted.frame.size(); ++i) {
+        corrupted.frame[i] = 0x7a;
+    }
+    TEST_ASSERT(cell.submitIntent(std::move(corrupted)), "corrupt body queued");
+
+    // 好：同拍后续玩家意图必须照常生效
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(43, 89)), "good queued");
+    TEST_ASSERT(cell.pendingIntentCount() == 3, "three intents queued");
+
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(89) == 43; },
+                           std::chrono::seconds(5)),
+                "good intent executed despite bad ones");
+    TEST_ASSERT(cell.pendingIntentCount() == 0, "bad intents consumed, not stuck");
+
+    // 受理面未被污染：后续好意图照常执行
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(44, 90)),
+                "accepts again after malformed batch");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(90) == 44; },
+                           std::chrono::seconds(5)),
+                "later intent executed");
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1204,6 +1247,7 @@ int main() {
         {"cell_kernel_gate_and_tick_execution", test_cell_kernel_gate_and_tick_execution},
         {"cell_kernel_overload_backpressure", test_cell_kernel_overload_backpressure},
         {"cell_kernel_shutdown_tail_scan", test_cell_kernel_shutdown_tail_scan},
+        {"cell_kernel_malformed_intent_drained", test_cell_kernel_malformed_intent_drained},
         {"cell_kernel_two_instances_isolated", test_cell_kernel_two_instances_isolated},
         {"cell_kernel_multi_space_routing_and_isolation",
          test_cell_kernel_multi_space_routing_and_isolation},
