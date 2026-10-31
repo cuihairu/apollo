@@ -435,7 +435,7 @@ if(APOLLO_BUILD_TESTS)
     enable_testing()
     # 次序修正（P1-1）：tests 必须在 modules/apps 之后处理——tests/CMakeLists
     # 以 if(TARGET apollo::game_core) 等为目标守卫，先于 modules 处理时守卫
-    # 恒假，session_world_tests / base_anchor_tests / baseappmgr_tests 全部
+    # 恒假，session_world_tests / base_avatar_tests / online_directory_tests 全部
     # 静默失联（P0-4 生命周期用例因此从未进过 Unit 门禁）
     add_subdirectory(tests)
 endif()

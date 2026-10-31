@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1915" viewBox="0 0 1280 1915" role="img" aria-labelledby="title desc" xml:lang="en-US">
+<title id="title">Apollo · Process Architecture</title>
+<desc id="desc">A lightweight instance-based game server engine. Clients connect via Gateway; Login handles authentication and the online directory; World is the manager and cellServer is the standalone simulation executor, coordinated over 960 register / 961 verdict / 962 assign / 963 retire / 967 self-report; Base owns player profiles and base gameplay and persists through database; interfaces receives platform callbacks; machined spawns and supervises each process; logger/admin collect logs and metrics. Dashed lines are control, solid lines are business data. The diagram is a target contract, not a claim that everything is implemented.</desc>
+<defs><marker id="arrow-087f5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#087f5b"/></marker><marker id="arrow-2563eb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#2563eb"/></marker><marker id="arrow-475569" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#475569"/></marker><marker id="arrow-6366f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#6366f1"/></marker><marker id="arrow-64748b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#64748b"/></marker><marker id="arrow-7c3aed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#7c3aed"/></marker><marker id="arrow-c2410c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#c2410c"/></marker></defs>
+<style>text{font-family:Arial,'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.name{font-size:23px;font-weight:700}.body{font-size:17px;fill:#435570}.small{font-size:15px;fill:#52647b}.label{font-size:15px;fill:#435570;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;stroke-linejoin:round}.edge{fill:none;stroke-linejoin:round}.control{stroke-dasharray:7 5}</style>
+<rect width="1280" height="1915" rx="20" fill="#f8fafc"/>
+<text x="40" y="48" class="title" text-anchor="start">Apollo · Process Architecture</text>
+<text x="40" y="80" class="body" text-anchor="start">Lightweight instance-based game server · manager/executor split · single-realm closed loop, still in progress</text>
+
+<path d="M210 230 V340" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="client-tcp" data-from="client" data-to="gateway" d="M210 230 V340" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow-2563eb)"/>
+<path d="M1050 230 V340" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="platform-https" data-from="platform" data-to="interfaces" d="M1050 230 V340" class="edge" style="stroke:#087f5b;stroke-width:2" marker-end="url(#arrow-087f5b)"/>
+<path d="M590 230 V290 H420 V1000 H640 V1030" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="gmcli-admin" data-from="gm-cli" data-to="world" d="M590 230 V290 H420 V1000 H640 V1030" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow-c2410c)"/>
+<path d="M360 405 H440" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="gateway-login" data-from="gateway" data-to="login" d="M360 405 H440" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow-475569)" marker-start="url(#arrow-475569)"/>
+<path d="M210 470 V1030" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="gateway-base" data-from="gateway" data-to="base" d="M210 470 V1030" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow-2563eb)"/>
+<path d="M170 470 V750 H435 V1150 H460" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="gateway-world" data-from="gateway" data-to="world" d="M170 470 V750 H435 V1150 H460" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow-64748b)"/>
+<path d="M440 445 H425 V1100 H420" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="login-base" data-from="login" data-to="base" d="M440 445 H425 V1100 H420" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow-7c3aed)"/>
+<path d="M590 470 V1030" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="login-world" data-from="login" data-to="world" d="M590 470 V1030" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow-64748b)"/>
+<path d="M820 1120 H860" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="world-cell" data-from="world" data-to="cell" d="M820 1120 H860" class="edge" style="stroke:#6366f1;stroke-width:3" marker-end="url(#arrow-6366f1)" marker-start="url(#arrow-6366f1)"/>
+<path d="M210 470 V700 H840 V1230 H860" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="gateway-cell" data-from="gateway" data-to="cell" d="M210 470 V700 H840 V1230 H860" class="edge" style="stroke:#2563eb;stroke-width:3" marker-end="url(#arrow-2563eb)"/>
+<path d="M1040 1400 V1440 H180 V1400" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="cell-base" data-from="cell" data-to="base" d="M1040 1400 V1440 H180 V1400" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow-7c3aed)"/>
+<path d="M240 1400 V1450 H640 V1680" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="base-db" data-from="base" data-to="database" d="M240 1400 V1450 H640 V1680" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow-7c3aed)"/>
+<path d="M340 1480 V1435 H640 V1400" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="machined-supervise" data-from="machined" data-to="world" d="M340 1480 V1435 H640 V1400" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow-c2410c)"/>
+<path d="M940 1480 V1430 H700 V1400" fill="none" stroke="#f8fafc" stroke-width="9"/>
+<path id="log-admin" data-from="logger-admin" data-to="world" d="M940 1480 V1430 H700 V1400" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow-64748b)"/>
+
+<g id="client" data-node="client"><rect x="60" y="130" width="300" height="100" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="80" y="164" class="name" text-anchor="start">Game Client</text>
+<text x="80" y="195" class="body" text-anchor="start">Login · Input · State</text>
+</g>
+<g id="gm-cli" data-node="gm-cli"><rect x="440" y="130" width="300" height="100" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="460" y="164" class="name" text-anchor="start">Ops / Admin CLI</text>
+<text x="460" y="195" class="body" text-anchor="start">fleetctl · apolloc · commands</text>
+</g>
+<g id="platform" data-node="platform"><rect x="900" y="130" width="300" height="100" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="920" y="164" class="name" text-anchor="start">Platform / Channel</text>
+<text x="920" y="195" class="body" text-anchor="start">Callback · Payment</text>
+</g>
+
+<g id="gateway" data-node="gateway"><rect x="60" y="340" width="300" height="130" rx="14" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="80" y="374" class="name" text-anchor="start">gateway</text>
+<text x="80" y="405" class="body" text-anchor="start">Client TCP · Session bind</text>
+<text x="80" y="432" class="body" text-anchor="start">Input forward · Downlink bind</text>
+</g>
+<g id="login" data-node="login"><rect x="440" y="340" width="300" height="130" rx="14" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="460" y="374" class="name" text-anchor="start">login</text>
+<text x="460" y="405" class="body" text-anchor="start">Online directory · Auth · Admission</text>
+<text x="460" y="432" class="body" text-anchor="start">Directory snapshot · Session resume</text>
+</g>
+<g id="interfaces" data-node="interfaces"><rect x="900" y="340" width="300" height="130" rx="14" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="920" y="374" class="name" text-anchor="start">interfaces</text>
+<text x="920" y="405" class="body" text-anchor="start">Platform callback · Verify</text>
+<text x="920" y="432" class="body" text-anchor="start">Dynamic Base · Idempotent delivery</text>
+</g>
+
+<g id="base" data-node="base"><rect x="60" y="1030" width="360" height="370" rx="14" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="80" y="1064" class="name" text-anchor="start">base</text>
+<text x="80" y="1095" class="body" text-anchor="start">Player profiles &amp; base gameplay</text>
+<text x="80" y="1122" class="body" text-anchor="start">Write epoch · Long-lived objects</text>
+<text x="80" y="1149" class="body" text-anchor="start">Todos · Sessions</text>
+<text x="80" y="1176" class="body" text-anchor="start">Settlement confirm</text>
+<text x="80" y="1203" class="small" text-anchor="start">Ownership stable, host varies</text>
+</g>
+<g id="world" data-node="world"><rect x="460" y="1030" width="360" height="370" rx="14" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="480" y="1064" class="name" text-anchor="start">world (manager)</text>
+<text x="480" y="1095" class="body" text-anchor="start">Register · Topology · Capacity · Migrate</text>
+<text x="480" y="1122" class="body" text-anchor="start">Allocation · Restart reconcile</text>
+<text x="480" y="1149" class="body" text-anchor="start">Durable management journal</text>
+<text x="480" y="1176" class="small" text-anchor="start">One Space per Cell</text>
+<text x="480" y="1203" class="small" text-anchor="start">No auto rebalance of live activity</text>
+</g>
+<g id="cell" data-node="cell"><rect x="860" y="1030" width="380" height="370" rx="14" fill="#eef8f5" stroke="#86c9b3" stroke-width="1.5"/>
+<text x="880" y="1064" class="name" text-anchor="start">cellServer (executor)</text>
+<text x="880" y="1095" class="body" text-anchor="start">Scene · Avatar · AOI</text>
+<text x="880" y="1122" class="body" text-anchor="start">Battle · Lua scripts</text>
+<text x="880" y="1149" class="small" text-anchor="start">Standalone, multi-cell optional</text>
+<text x="880" y="1176" class="small" text-anchor="start">Register 960 · Verdict 961</text>
+<text x="880" y="1203" class="small" text-anchor="start">Assign 962 · Self-report 967</text>
+</g>
+
+<g id="machined" data-node="machined"><rect x="60" y="1480" width="560" height="120" rx="14" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="80" y="1514" class="name" text-anchor="start">machined</text>
+<text x="80" y="1545" class="body" text-anchor="start">Spawn · Supervise · Reap process tree</text>
+<text x="80" y="1572" class="small" text-anchor="start">Supervises: gateway · login · base · world · cell · database · interfaces · logger · admin</text>
+</g>
+<g id="logger-admin" data-node="logger-admin"><rect x="660" y="1480" width="560" height="120" rx="14" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="680" y="1514" class="name" text-anchor="start">logger · admin</text>
+<text x="680" y="1545" class="body" text-anchor="start">Logs 9102 · Metrics 9106 / 9107</text>
+<text x="680" y="1572" class="small" text-anchor="start">Log push · metric sample stream (disconnect-degrade is the normal path)</text>
+</g>
+
+<g id="database" data-node="database"><rect x="200" y="1680" width="880" height="80" rx="14" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="220" y="1714" class="name" text-anchor="start">database</text>
+<text x="220" y="1745" class="body" text-anchor="start">Persistent store · Player data · Journal tx · Write-epoch check</text>
+</g>
+
+<text x="218" y="300" class="label" text-anchor="start" style="fill:#2563eb">TCP 9002</text>
+<text x="1042" y="300" class="label" text-anchor="end" style="fill:#087f5b">HTTPS</text>
+<text x="455" y="278" class="label" text-anchor="start" style="fill:#c2410c">Admin CLI / Ops</text>
+<text x="400" y="396" class="label" text-anchor="middle">Session / Directory 900-908</text>
+<text x="218" y="760" class="label" text-anchor="start" style="fill:#2563eb">Base gameplay forward</text>
+<text transform="translate(428 940) rotate(-90)" class="label">M1 9101</text>
+<text transform="translate(417 980) rotate(-90)" class="label" style="fill:#7c3aed">Profile 9201</text>
+<text x="598" y="760" class="label" text-anchor="start">Admission / Assign 915-916</text>
+<text x="840" y="1098" class="label" text-anchor="middle" style="fill:#6366f1">960 register · 961 verdict · 962 assign · 963 retire · 967 self-report</text>
+<text transform="translate(850 980) rotate(-90)" class="label" style="fill:#2563eb">Simulation input direct</text>
+<text x="560" y="1432" class="label" text-anchor="start" style="fill:#7c3aed">Settlement to Base 9201</text>
+<text x="452" y="1470" class="label" text-anchor="start" style="fill:#7c3aed">Player data 9200</text>
+<text x="355" y="1465" class="label" text-anchor="start" style="fill:#c2410c">Supervise / spawn</text>
+<text x="955" y="1462" class="label" text-anchor="start">Log / metric push</text>
+
+<text x="40" y="1800" class="small" text-anchor="start">Dashed: control · Solid: business data · Crossings without a dot are not connected</text>
+<text x="40" y="1825" class="small" text-anchor="start">world is the manager; cellServer is the standalone simulator; Base holds long-term profiles, database persists; principal process relations shown</text>
+<text x="40" y="1850" class="small">Unverified capabilities are shown as "still in progress" and are not a claim of acceptance.</text>
+</svg>

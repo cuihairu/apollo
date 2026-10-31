@@ -10,6 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'docs/public/architecture'
+IMG = ROOT / 'docs/public/images'
 INK = '#172b45'
 MUTED = '#4c5d73'
 BLUE = '#245bb2'
@@ -55,73 +56,12 @@ class Diagram:
     def finish(self):return '\n'.join(self.items)+ '\n</svg>\n'
 
 def system(en=False,mobile=False):
-    t=lambda zh,eng:eng if en else zh
-    d=Diagram(480 if mobile else 1280,1440 if mobile else 840,t('Apollo 目标进程与通信','Apollo target processes and communication'),t('实线表示业务请求与结果，虚线表示注册和管理。Base 管长期资料，cell 管模拟；world 管理分配，machined 只监督本机。','Solid lines carry business requests/results; dashed lines carry registration and management. Base owns profiles, cell owns simulation, World manages placement, machined supervises locally.'),'en' if en else 'zh-CN')
-    if not mobile:
-        d.text(28,40,t('目标进程与通信','Target processes and communication'),27,600)
-        d.arrow([(820,31),(866,31)]);d.text(878,37,t('业务请求 / 结果','Business / results'),16,kind='sub')
-        d.arrow([(1060,31),(1106,31)],True);d.text(1118,37,t('注册 / 管理','Control'),16,kind='sub')
-        d.text(28,75,t('已有独立原型：Base ↔ database；World/cell 拆分与整体接线待完成。','Base ↔ database has standalone prototypes; World/cell separation and full wiring remain pending.'),17,kind='sub')
-        d.rect(28,106,1224,178,'#f4f9f8')
-        d.text(48,134,t('认证、目录与空间管理','Authentication, directories and placement'),17,600,'teal')
-        d.node(300,154,270,104,'login',[t('认证 · 服务 / 在线目录','Auth · directories')])
-        d.node(760,154,320,104,'world',[t('Space/Cell 分配 · 拓扑 · 排空','Space/Cell placement · topology')],t('管理 / 执行待拆分','Manager / executor split pending'))
-        d.arrow([(760,207),(570,207)],True);d.label(665,191,t('注册 / 位置投影','Register / project'),15,'teal')
-        d.rect(28,330,1224,356,'#f8fafc')
-        d.text(48,358,t('连接、业务与模拟','Connections, gameplay and simulation'),17,600)
-        d.node(48,386,160,96,t('客户端','Client'),[t('游戏连接','Game client')],size=22)
-        d.node(278,386,220,96,'gateway',[t('socket · 会话 · 转发','Sockets · sessions')])
-        d.node(615,386,250,96,'base',[t('Avatar · Base 部分','Avatar · Base part')],t('独立原型','Standalone prototype'),'blue')
-        d.node(966,386,250,96,'database',[t('加载 / 保存 · journal','Load / save · journal')],t('独立原型','Standalone prototype'),'blue')
-        d.node(580,558,330,112,t('cell 执行进程','cell executor'),[t('Avatar/Entity · AOI · 战斗','Avatar/Entity · AOI · combat')],t('独立执行入口待实现','Dedicated executor pending'))
-        d.cylinder(1001,558,180,87,t('实际存储','Storage'),t('文件 / 数据库','Files / database'))
-        d.arrow([(208,434),(278,434)],both=True);d.label(243,374,'TCP / WS / WSS',15)
-        d.arrow([(498,434),(615,434)],both=True);d.label(556,419,t('基础业务','Base gameplay'),15)
-        d.arrow([(865,434),(966,434)],both=True);d.label(915,419,t('加载 / 保存','Load / save'),15)
-        d.arrow([(388,482),(388,614),(580,614)],both=True);d.label(477,598,t('场景输入 / 同步','Input / state sync'),16)
-        d.arrow([(745,482),(745,558)],both=True);d.label(849,526,t('快照 / 业务结果','Snapshots / outcomes'),16)
-        d.arrow([(1091,482),(1091,558)],both=True);d.label(1142,527,t('存储 I/O','Storage I/O'),15)
-        d.arrow([(378,386),(378,258)],True,both=True);d.label(411,313,t('目录查询','Directory'),15,'teal')
-        d.arrow([(650,386),(650,303),(520,303),(520,258)],True);d.label(584,295,t('Base 注册','Base registry'),15,'teal')
-        d.arrow([(48,434),(16,434),(16,207),(300,207)],True,both=True);d.label(190,192,t('认证 / 凭证','Auth / credentials'),15,'teal')
-        d.arrow([(1080,207),(1232,207),(1232,712),(745,712),(745,670)],True,both=True)
-        d.label(1010,704,t('cell 注册 / 分配 / 排空','cell registration / placement / drain'),16,'teal')
-        d.node(48,748,1168,64,'machined',[],size=21)
-        d.text(210,786,t('按机器可选部署，只拉起 / 监督本机进程；不裁决玩家归属或空间分配。','Optional per host: launch / supervise local processes; no player ownership or spatial placement decisions.'),17,kind='sub')
-    else:
-        d.text(24,37,t('目标进程与通信','Target process topology'),24,600)
-        d.text(24,67,t('Base ↔ database：独立原型已具备','Base ↔ database: standalone prototypes'),16,kind='sub')
-        d.text(24,92,t('World/cell 拆分与整体接线待完成','World/cell split and full wiring pending'),16,kind='sub')
-        d.text(30,133,t('认证、目录与空间管理','Authentication and placement'),18,600,'teal')
-        d.node(30,155,420,94,'login',[t('认证 · 服务目录 · 玩家位置投影','Auth · services · player location projections')])
-        d.node(30,291,420,102,'world',[t('管理 cell · Space/Cell 分配 · 拓扑','cell registry · Space/Cell placement')],t('管理 / 执行待拆分','Manager / executor split pending'))
-        d.arrow([(240,291),(240,249)],True);d.label(240,276,t('服务注册 / 位置投影','Service registry / location projection'),16,'teal')
-        d.text(30,421,t('cell 向 World 注册，由 World 分配空间。','cell registers with World for placement.'),17,kind='sub')
-        d.text(30,445,t('客户端向 login 认证。','Client authenticates with login.'),17,kind='sub')
-        d.arrow([(30,504),(7,504),(7,180),(30,180)],True,both=True)
-        d.node(30,464,420,80,t('客户端','Client'),[t('游戏连接','Game client')])
-        d.node(30,594,420,96,'gateway',[t('持有 socket · 缓存 Base / cell 路由','Own sockets · cache Base / cell routes')])
-        d.arrow([(240,544),(240,594)],both=True);d.label(285,575,'TCP / WS(S)',17)
-        d.arrow([(30,641),(16,641),(16,202),(30,202)],True,both=True)
-        d.node(30,806,190,112,'base',['Avatar · Base',t('长期资料','Persistent profile')],tone='blue',size=21)
-        d.node(260,806,190,112,t('cell 进程','cell executor'),['Avatar / Entity','AOI · '+t('战斗','combat')],size=21)
-        d.arrow([(240,690),(240,738),(125,738),(125,806)])
-        d.arrow([(240,738),(355,738),(355,806)])
-        d.label(125,780,t('基础业务','Base gameplay'),17)
-        d.label(355,780,t('输入 / 同步','Input / sync'),17)
-        d.arrow([(220,862),(260,862)],both=True)
-        d.text(260,954,t('Base → cell：快照','Base → cell: snapshot'),16,kind='sub')
-        d.text(260,985,t('cell → Base：业务结果','cell → Base: outcome'),16,kind='sub')
-        d.arrow([(450,339),(464,339),(464,862),(450,862)],True,both=True)
-        d.node(30,1022,190,104,'database',[t('加载 / 保存','Load / save'),'journal'],tone='blue',size=21)
-        d.arrow([(125,918),(125,1022)],both=True);d.label(125,992,t('加载 / 保存','Load / save'),17)
-        d.cylinder(30,1192,190,87,t('实际存储','Storage'),t('文件 / 数据库','Files / database'))
-        d.arrow([(125,1126),(125,1192)],both=True);d.label(186,1167,t('存储 I/O','Storage I/O'),16)
-        d.text(260,1050,t('实线：业务请求与结果','Solid: business / results'),16,kind='sub')
-        d.text(260,1081,t('虚线：注册与管理','Dashed: registration'),16,kind='sub')
-        d.text(260,1112,t('cell 独立入口待实现','cell executor pending'),15,kind='sub')
-        d.node(30,1320,420,92,'machined',[t('按机器可选，只监督本机进程','Optional per host; local supervision only')])
-    return d.finish()
+    # The chorus-style process architecture is hand-authored and kept as a
+    # regeneration source at scripts/docs/templates/architecture-{lang}[,-mobile].svg
+    # so edits stay reviewable and --check can detect silent drift. Template files
+    # are the single source for the committed SVGs under docs/public/images/.
+    tpl = ROOT / 'scripts/docs/templates' / f'architecture-{"en" if en else "zh"}{"-mobile" if mobile else ""}.svg'
+    return tpl.read_text(encoding='utf-8')
 
 def space(en=False,mobile=False):
     t=lambda zh,eng:eng if en else zh
@@ -280,10 +220,15 @@ def callbacks(en=False, mobile=False):
 
 def main():
     outputs={}
-    for name,render in [('space',space),('cross-server',cross_server),('callbacks',callbacks)]:
+    # space / cross-server / callbacks render to docs/public/architecture/;
+    # system is hand-authored but its template is checked into
+    # scripts/docs/templates and is now part of the generation/check set.
+    for name,render in [('system',system),('space',space),('cross-server',cross_server),('callbacks',callbacks)]:
+        base = 'architecture' if name=='system' else name
         for lang,en in [('zh',False),('en',True)]:
             for mobile in [False,True]:
-                outputs[OUT/f'{name}-{lang}{"-mobile" if mobile else ""}.svg']=render(en,mobile)
+                dest = (IMG if name=='system' else OUT)
+                outputs[dest/f'{base}-{lang}{"-mobile" if mobile else ""}.svg']=render(en,mobile)
     if '--check' in sys.argv:
         stale=[str(p.relative_to(ROOT)) for p,body in outputs.items() if not p.exists() or p.read_text()!=body]
         if stale:raise SystemExit('Architecture SVGs are stale:\n'+'\n'.join(stale))

@@ -79,7 +79,7 @@ bool wait_peer_up(gateway::M1RouteClient& client) {
 
 bool test_control_e2e() {
 #if !defined(_WIN32)
-    // 真 OnlineDirectory（不 start，纯内存目录面——baseappmgr_tests 同例）；
+    // 真 OnlineDirectory（不 start，纯内存目录面——online_directory_tests 同例）；
     // handler 直通 dispatchRequest，受理语义与 nng REP 路径零分叉。
     online_directory::OnlineDirectory mgr(0);
 

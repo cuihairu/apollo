@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="1560" viewBox="0 0 480 1560" role="img" aria-labelledby="title desc" xml:lang="en">
+<title id="title">Apollo · Process Architecture</title>
+<desc id="desc">world is the manager and cellServer the standalone simulation executor; Base owns profiles persisted via database; dashed control, solid business.</desc>
+<defs><marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#2563eb"/></marker><marker id="arrow-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#6366f1"/></marker><marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#c2410c"/></marker><marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#7c3aed"/></marker><marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#087f5b"/></marker><marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:Arial,'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#172b4d}.title{font-size:24px;font-weight:700}.name{font-size:22px;font-weight:700}.body{font-size:17px;fill:#435570}.small{font-size:15px;fill:#52647b}.label{font-size:15px;fill:#435570;paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}.edge{fill:none;stroke-linejoin:round}.control{stroke-dasharray:7 5}</style>
+<rect width="480" height="1560" rx="16" fill="#f8fafc"/>
+<text x="24" y="38" class="title" text-anchor="start">Apollo · Process Architecture</text>
+<text x="24" y="66" class="body" text-anchor="start">Manager / executor split · single-realm closed loop</text>
+<g data-node="Game Client"><rect x="30" y="92" width="420" height="58" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="48" y="122" class="name" text-anchor="start">Game Client</text>
+<text x="48" y="148" class="body" text-anchor="start">Login · Input · State</text>
+</g>
+<g data-node="Ops / Admin CLI"><rect x="30" y="162" width="420" height="58" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="48" y="192" class="name" text-anchor="start">Ops / Admin CLI</text>
+<text x="48" y="218" class="body" text-anchor="start">fleetctl · apolloc · commands</text>
+</g>
+<g data-node="Platform / Channel"><rect x="30" y="232" width="420" height="58" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="48" y="262" class="name" text-anchor="start">Platform / Channel</text>
+<text x="48" y="288" class="body" text-anchor="start">Callback · Payment</text>
+</g>
+<g data-node="gateway"><rect x="30" y="318" width="420" height="88" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="48" y="348" class="name" text-anchor="start">gateway</text>
+<text x="48" y="374" class="body" text-anchor="start">Client TCP · Session bind</text>
+<text x="48" y="397" class="body" text-anchor="start">Input forward · Downlink bind</text>
+</g>
+<g data-node="login"><rect x="30" y="422" width="420" height="88" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="48" y="452" class="name" text-anchor="start">login</text>
+<text x="48" y="478" class="body" text-anchor="start">Online directory · Auth · Admission</text>
+<text x="48" y="501" class="body" text-anchor="start">Directory snapshot · Session resume</text>
+</g>
+<g data-node="interfaces"><rect x="30" y="526" width="420" height="88" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="48" y="556" class="name" text-anchor="start">interfaces</text>
+<text x="48" y="582" class="body" text-anchor="start">Platform callback · Verify</text>
+<text x="48" y="605" class="body" text-anchor="start">Dynamic Base · Idempotent delivery</text>
+</g>
+<g data-node="base"><rect x="30" y="646" width="420" height="150" rx="12" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="48" y="676" class="name" text-anchor="start">base</text>
+<text x="48" y="702" class="body" text-anchor="start">Player profiles &amp; base gameplay</text>
+<text x="48" y="725" class="body" text-anchor="start">Write epoch · Long-lived objects</text>
+<text x="48" y="748" class="body" text-anchor="start">Todos · Sessions · Settlement confirm</text>
+</g>
+<g data-node="world (manager)"><rect x="30" y="812" width="420" height="150" rx="12" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="48" y="842" class="name" text-anchor="start">world (manager)</text>
+<text x="48" y="868" class="body" text-anchor="start">Register · Topology · Capacity · Migrate</text>
+<text x="48" y="891" class="body" text-anchor="start">Allocation · Restart reconcile</text>
+<text x="48" y="914" class="body" text-anchor="start">Durable management journal</text>
+</g>
+<g data-node="cellServer (executor)"><rect x="30" y="978" width="420" height="150" rx="12" fill="#eef8f5" stroke="#86c9b3" stroke-width="1.5"/>
+<text x="48" y="1008" class="name" text-anchor="start">cellServer (executor)</text>
+<text x="48" y="1034" class="body" text-anchor="start">Scene · Avatar · AOI · Battle · Lua</text>
+<text x="48" y="1057" class="body" text-anchor="start">Standalone, multi-cell optional</text>
+<text x="48" y="1080" class="body" text-anchor="start">Register 960 · Verdict 961 · Assign 962</text>
+</g>
+<g data-node="machined"><rect x="30" y="1144" width="420" height="80" rx="12" fill="#eef2ff" stroke="#a5b4fc" stroke-width="1.5"/>
+<text x="48" y="1174" class="name" text-anchor="start">machined</text>
+<text x="48" y="1200" class="body" text-anchor="start">Spawn · Supervise · Reap process tree</text>
+</g>
+<g data-node="logger · admin"><rect x="30" y="1240" width="420" height="80" rx="12" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="48" y="1270" class="name" text-anchor="start">logger · admin</text>
+<text x="48" y="1296" class="body" text-anchor="start">Logs 9102 · Metrics 9106 / 9107</text>
+</g>
+<g data-node="database"><rect x="30" y="1336" width="420" height="76" rx="12" fill="#edf5ff" stroke="#93b9e3" stroke-width="1.5"/>
+<text x="48" y="1366" class="name" text-anchor="start">database</text>
+<text x="48" y="1392" class="body" text-anchor="start">Persistent store · Journal tx · Write-epoch check</text>
+</g>
+<path d="M100 150 L100 318" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-blue)"/>
+<text x="100" y="172" class="label" text-anchor="middle" style="fill:#2563eb">TCP 9002</text>
+<path d="M380 290 L380 526" fill="none" stroke="#087f5b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-green)"/>
+<text x="380" y="312" class="label" text-anchor="middle" style="fill:#087f5b">HTTPS</text>
+<path d="M80 406 L80 646" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-blue)"/>
+<text x="80" y="526" class="label" text-anchor="middle" style="fill:#2563eb">Base gameplay</text>
+<path d="M410 406 L410 978" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-blue)"/>
+<text x="410" y="692" class="label" text-anchor="middle" style="fill:#2563eb">Simulation input</text>
+<path d="M360 510 L360 812" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="control" marker-end="url(#arrow-slate)"/>
+<text x="360" y="661" class="label" text-anchor="middle" style="fill:#64748b">Admission</text>
+<path d="M300 962 L300 978" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-indigo)"/>
+<text x="300" y="970" class="label" text-anchor="middle" style="fill:#6366f1">960-967</text>
+<path d="M150 978 L150 796" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-purple)"/>
+<text x="150" y="887" class="label" text-anchor="middle" style="fill:#7c3aed">Settlement 9201</text>
+<path d="M70 796 L70 1336" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="edge" marker-end="url(#arrow-purple)"/>
+<text x="70" y="1066" class="label" text-anchor="middle" style="fill:#7c3aed">Player data 9200</text>
+<path d="M370 1224 L370 962" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="control" marker-end="url(#arrow-orange)"/>
+<text x="370" y="1093" class="label" text-anchor="middle" style="fill:#c2410c">Supervise</text>
+<path d="M390 1320 L390 962" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="control" marker-end="url(#arrow-slate)"/>
+<text x="390" y="1141" class="label" text-anchor="middle" style="fill:#64748b">Log/metric</text>
+<text x="24" y="1434" class="small" text-anchor="start">Dashed: control · Solid: business data</text>
+<text x="24" y="1458" class="small" text-anchor="start">world is the manager; cellServer the standalone simulator; Base owns profiles, database persists</text>
+<text x="24" y="1482" class="small" text-anchor="start">Target contract; not a claim everything is implemented</text>
+</svg>
