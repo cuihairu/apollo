@@ -6,7 +6,7 @@
 // 观察面纪律：ScriptRuntime 归 gameThread_ 单写者（scripting-lua §2），故不断言
 // 其指针；一切跨线程观察走 Scene §7.1 队列（投递/回传两端自带互斥）。
 // 无 GTest，plain-assert + main 汇总（cell 族直编目标惯例）。
-#include "world_app/world_app.hpp"
+#include "world_app/cell_app.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -32,10 +32,8 @@ int g_failures = 0;
         }                                                                          \
     } while (0)
 
-const char* kRouteJson = APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON;
-
 using world_app::WorldAppConfig;
-using world_app::WorldApp;
+using world_app::CellApp;
 
 // 轮询谓词直到成立（每拍 sleep ≥2ms——macOS 裸自旋 flake 纪律）。
 template <typename Pred>
@@ -51,28 +49,27 @@ bool poll_until(Pred&& pred, int timeout_ms) {
     return pred();
 }
 
-// 服务端：boot 路径按需；m1Port 0 = 内核分配（Windows 桩 listenPort 0，不断言）。
+// 服务端：boot 路径按需；CellApp 独立宿主（切片3 内嵌内核删除后执行内核
+// 不再经由 WorldApp，脚本宿主面直接在 CellApp 上驱动）。
 struct ServerEnd {
     WorldAppConfig config;
-    std::unique_ptr<WorldApp> server;
+    std::unique_ptr<CellApp> cell;
 
     bool start(int tick_rate_ms) {
         config.tickRateMs = tick_rate_ms;
-        config.m1Port = 0;
-        config.m1RouteJson = kRouteJson;
         try {
-            server = std::make_unique<WorldApp>(config);
-            server->start();
+            cell = std::make_unique<CellApp>(config);
+            cell->start();
         } catch (const std::exception& e) {
             std::cout << "  server start failed: " << e.what() << std::endl;
             return false;
         }
-        return server->isRunning();
+        return cell->isRunning();
     }
     void stop() {
-        if (server) {
-            server->stop();
-            server.reset();
+        if (cell) {
+            cell->stop();
+            cell.reset();
         }
     }
 };
@@ -94,15 +91,15 @@ struct BootFile {
 };
 
 // 默认 scene（world 首建 = id 1）已挂上脚本宿主。
-bool default_scene_attached(WorldApp& server) {
-    auto* scene = server.find_scene(1);
+bool default_scene_attached(CellApp& cell) {
+    auto* scene = cell.find_scene(1);
     return scene != nullptr && scene->script_attached();
 }
 
 // 投一条 eval 并等回传结果（走 §7.1 队列：投递/回传自带互斥，跨线程安全）。
-bool eval_and_await(WorldApp& server, std::uint64_t id, const std::string& source,
+bool eval_and_await(CellApp& cell, std::uint64_t id, const std::string& source,
                     apollo::game::world::Scene::DebugEvalResult& out) {
-    auto* scene = server.find_scene(1);
+    auto* scene = cell.find_scene(1);
     if (scene == nullptr || !scene->enqueue_debug_eval(id, source)) {
         return false;
     }
@@ -130,13 +127,13 @@ bool test_boot_executes_and_scenes_attached() {
     TEST_ASSERT(s.start(10), "server started");
 
     // 默认 scene 下一拍自动挂上（attach_script_to_scenes 每拍幂等补挂）
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "default scene attached");
 
     // boot chunk 副作用对同一 runtime 可见（§2：runtime 建于 gameThread 开头，
     // boot 先于首拍 attach，故 attach 后即可读）
     apollo::game::world::Scene::DebugEvalResult r{};
-    TEST_ASSERT(eval_and_await(*s.server, 1, "tostring(cell_boot_ok)", r),
+    TEST_ASSERT(eval_and_await(*s.cell, 1, "tostring(cell_boot_ok)", r),
                 "boot chunk visible through eval channel");
     TEST_ASSERT(r.ok, "boot global read ok");
     TEST_ASSERT(r.result == "true", "boot chunk executed");
@@ -156,13 +153,13 @@ bool test_missing_boot_file_keeps_cell_alive() {
     TEST_ASSERT(s.start(10), "server started with missing boot file");
 
     // runtime 仍照常建（boot 加载失败只发 warning），scene 照常挂上
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "scene still attached after boot load failure");
-    TEST_ASSERT(s.server->isRunning(), "cell alive after boot load failure");
+    TEST_ASSERT(s.cell->isRunning(), "cell alive after boot load failure");
 
     // 数拍后仍运行（gameLoop 未因加载失败退出）
     std::this_thread::sleep_for(std::chrono::milliseconds(60));
-    TEST_ASSERT(s.server->isRunning(), "cell still running after several ticks");
+    TEST_ASSERT(s.cell->isRunning(), "cell still running after several ticks");
 
     s.stop();
     std::cout << "  PASSED" << std::endl;
@@ -176,11 +173,11 @@ bool test_eval_reaches_scene_tick_window() {
 
     ServerEnd s;
     TEST_ASSERT(s.start(10), "server started");
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "scene attached");
 
     apollo::game::world::Scene::DebugEvalResult r{};
-    TEST_ASSERT(eval_and_await(*s.server, 7, "1+1", r), "eval result drained");
+    TEST_ASSERT(eval_and_await(*s.cell, 7, "1+1", r), "eval result drained");
     TEST_ASSERT(r.ok, "eval ok");
     TEST_ASSERT(r.result == "2", "eval result value");
 
@@ -196,21 +193,21 @@ bool test_eval_error_keeps_host_alive() {
 
     ServerEnd s;
     TEST_ASSERT(s.start(10), "server started");
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "scene attached");
 
     apollo::game::world::Scene::DebugEvalResult bad{};
-    TEST_ASSERT(eval_and_await(*s.server, 9, "error('boom')", bad),
+    TEST_ASSERT(eval_and_await(*s.cell, 9, "error('boom')", bad),
                 "failing eval still returns a result");
     TEST_ASSERT(!bad.ok, "failing eval reports not-ok");
 
     // 失败后宿主继续服务（后续 eval 仍通）
     apollo::game::world::Scene::DebugEvalResult after{};
-    TEST_ASSERT(eval_and_await(*s.server, 10, "'alive'", after),
+    TEST_ASSERT(eval_and_await(*s.cell, 10, "'alive'", after),
                 "eval accepted after failure");
     TEST_ASSERT(after.ok && after.result == "alive", "host still serving");
 
-    TEST_ASSERT(s.server->isRunning(), "cell alive after eval failure");
+    TEST_ASSERT(s.cell->isRunning(), "cell alive after eval failure");
     s.stop();
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -243,16 +240,16 @@ bool test_contract_loads_at_boot_with_handlers() {
     s.config.scriptBootFile = boot.path;
     TEST_ASSERT(s.start(10), "server started");
 
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "scene attached");
 
     apollo::game::world::Scene::DebugEvalResult r{};
-    TEST_ASSERT(eval_and_await(*s.server, 21, "boot_seen_contract", r),
+    TEST_ASSERT(eval_and_await(*s.cell, 21, "boot_seen_contract", r),
                 "boot source ran");
     TEST_ASSERT(r.ok && r.result == "7", "contract loaded before boot source");
 
     apollo::game::world::Scene::DebugEvalResult route{};
-    TEST_ASSERT(eval_and_await(*s.server, 22, "tostring(contract.routes[42001])", route),
+    TEST_ASSERT(eval_and_await(*s.cell, 22, "tostring(contract.routes[42001])", route),
                 "route readable through eval");
     TEST_ASSERT(route.ok && route.result == "alpha_probe", "routes data face live");
 
@@ -274,15 +271,15 @@ bool test_contract_gate_rejects_missing_handler() {
     ServerEnd s;
     s.config.scriptContractFile = contract.path;
     TEST_ASSERT(s.start(10), "server started");
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "scene still attached after contract rejection");
 
     apollo::game::world::Scene::DebugEvalResult r{};
-    TEST_ASSERT(eval_and_await(*s.server, 23, "tostring(contract)", r),
+    TEST_ASSERT(eval_and_await(*s.cell, 23, "tostring(contract)", r),
                 "eval served after contract rejection");
     TEST_ASSERT(r.ok && r.result == "nil", "rejected contract not committed");
 
-    TEST_ASSERT(s.server->isRunning(), "cell alive after contract rejection");
+    TEST_ASSERT(s.cell->isRunning(), "cell alive after contract rejection");
     s.stop();
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -296,14 +293,14 @@ bool test_missing_contract_file_keeps_cell_alive() {
     ServerEnd s;
     s.config.scriptContractFile = "world_script_host_no_such_contract.lua";
     TEST_ASSERT(s.start(10), "server started with missing contract file");
-    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.server); }, 5000),
+    TEST_ASSERT(poll_until([&] { return default_scene_attached(*s.cell); }, 5000),
                 "scene attached after missing contract file");
 
     apollo::game::world::Scene::DebugEvalResult r{};
-    TEST_ASSERT(eval_and_await(*s.server, 24, "tostring(contract)", r),
+    TEST_ASSERT(eval_and_await(*s.cell, 24, "tostring(contract)", r),
                 "eval served after missing contract file");
     TEST_ASSERT(r.ok && r.result == "nil", "no contract global");
-    TEST_ASSERT(s.server->isRunning(), "cell alive after missing contract file");
+    TEST_ASSERT(s.cell->isRunning(), "cell alive after missing contract file");
 
     s.stop();
     std::cout << "  PASSED" << std::endl;

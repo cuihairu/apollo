@@ -2609,9 +2609,7 @@ if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::run
    AND TARGET apollo::script)
 add_executable(world_app_script_host_tests
     test_world_app_script_host.cpp
-    ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
-    ../apps/world/src/m1_link_server.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
@@ -2620,9 +2618,6 @@ target_include_directories(world_app_script_host_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
     ${CMAKE_SOURCE_DIR}/modules/script/include
-)
-target_compile_definitions(world_app_script_host_tests PRIVATE
-    APOLLO_WORLD_APP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
 target_link_libraries(world_app_script_host_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
