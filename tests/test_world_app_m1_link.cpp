@@ -388,10 +388,11 @@ struct ServerEnd {
     WorldAppConfig config;
     std::unique_ptr<WorldApp> server;
 
-    bool start(int tick_rate_ms) {
+    bool start(int tick_rate_ms, bool host_simulation = true) {
         config.tickRateMs = tick_rate_ms;
         config.m1Port = 0;
         config.m1RouteJson = kRouteJson;
+        config.hostSimulation = host_simulation;
         try {
             server = std::make_unique<WorldApp>(config);
             server->start();
@@ -968,6 +969,48 @@ bool test_debug_eval_failure_surface() {
     return true;
 }
 
+// 生产 world（hostSimulation=false，无内嵌 CellApp）：意图在受理点不被静默
+// 丢弃——M1 面回 2001（不受理即时回执，ADR-017「顶格拒收/不受理即时回」），
+// 与 onM1DebugEval 无模拟宿主显式回 "simulation not hosted" 同型。
+bool test_intent_no_simulation_hosted_ack() {
+    std::cout << "Running: test_intent_no_simulation_hosted_ack..." << std::endl;
+    AckLog acks;
+    g_acks = &acks;
+
+    ServerEnd s;
+    TEST_ASSERT(s.start(10, false), "server started (hostSimulation=false)");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp
+                        && s.server->m1Link().gatewayConnected();
+                }, 10000), "link up");
+
+    auto f = base_fields(9001, 88);
+    f.push_back(i64(2001));  // entity_id
+    f.push_back(i64(1));     // entity_type PLAYER
+    f.push_back(i64(1));     // space_id
+    f.push_back(f32(0.0f));
+    f.push_back(f32(0.0f));
+    f.push_back(f32(0.0f));
+    TEST_ASSERT(send_wrapped_intent_fields(c, id_of(MsgId::cell_create_entity), 9001,
+                                           std::move(f)),
+                "intent sent");
+
+    TEST_ASSERT(pump_until(c, [&] { return acks.has(9001, world_app::kIntentAckInternal); },
+                           5000),
+                "2001 not-hosted ack arrived");
+    TEST_ASSERT(acks.size() == 1, "exactly one ack for dropped intent");
+    TEST_ASSERT(s.server->m1Link().receivedIntents() == 1, "intent counted at receive");
+    TEST_ASSERT(c.cell_link()->state() == link::LinkState::kUp, "link survives drop");
+
+    s.stop();
+    c.manager.reset();
+    g_acks = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- P4 仅代码更新批（952/953 module rollout 契约面） ----------
 
 // status 轮询到期望 state（控制面聚合观察；每拍一发，request_id 单调分配）。
@@ -1216,6 +1259,7 @@ int main() {
     if (!test_debug_eval_roundtrip()) ++failed;
     if (!test_debug_eval_reject_face()) ++failed;
     if (!test_debug_eval_failure_surface()) ++failed;
+    if (!test_intent_no_simulation_hosted_ack()) ++failed;
     if (!test_module_rollout_happy_path()) ++failed;
     if (!test_module_rollout_fault_rollback()) ++failed;
     if (!test_module_rollout_abort_idle()) ++failed;

@@ -15,6 +15,7 @@
 #include "world_app/acceptance_queue.hpp"
 #include "world_app/m1_link_server.hpp"
 #include "world_app/cell_app.hpp"
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -329,7 +330,7 @@ private:
     bool volumeLocked_ = false;
     // 管理壳运行态（hostSimulation=false 时独立于内嵌内核；true 时与内核
     // 生命周期同拍）。start/stop 管理线程独占。
-    bool running_ = false;
+    std::atomic<bool> running_{false};
     // 管理壳泵线程（hostSimulation=false）：生产 world 无内嵌 CellApp 时，
     // M1 传输泵 + 管理推进（managerPreTick_/driveCellRegistry）由本线程
     // 驱动——单写者纪律同内核线程（一个管理线程独占管理面）。

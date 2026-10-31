@@ -202,7 +202,17 @@ void WorldApp::start() {
         M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson,
                      config_.m1AuthorityEpoch},
         [this](IntentEnvelope intent) {
-            if (cell_) cell_->onIntent(std::move(intent));
+            // ADR-017：意图在无内嵌执行内核（hostSimulation=false 生产 world）
+            // 时不受理——顶格拒收/不受理类即时回执（2001），不静默丢弃；与
+            // onM1DebugEval 对无模拟宿主显式回 "simulation not hosted" 同型。
+            if (cell_) {
+                cell_->onIntent(std::move(intent));
+                return;
+            }
+            if (intent.request_id != 0 && m1Link_) {
+                m1Link_->sendIntentAck(intent.request_id, kIntentAckInternal,
+                                       "simulation not hosted");
+            }
         },
         [this](const std::string& peer, const DebugEvalRequest& request) {
             onM1DebugEval(peer, request);
