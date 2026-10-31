@@ -210,6 +210,7 @@ bool build_legacy_intent(std::uint16_t msg_id, const std::vector<wire::FieldValu
 class M1LinkServerImpl final : public M1LinkServer {
 public:
     M1LinkServerImpl(M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
+                     std::function<void(const std::vector<std::uint8_t>&)> on_intent_raw,
                      std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval,
                      std::function<void(const std::string&, const ModuleRolloutRequest&)>
                          on_module_rollout,
@@ -226,9 +227,12 @@ public:
                      std::function<void(const std::string&, const CellRolloutReply&)>
                          on_cell_rollout_reply,
                      std::function<void(const std::string&, const CellDrainReply&)>
-                         on_cell_drain_reply)
+                         on_cell_drain_reply,
+                     std::function<void(const std::string&, const CellIntentAck&)>
+                         on_cell_intent_ack)
         : config_(std::move(config))
         , on_intent_(std::move(on_intent))
+        , on_intent_raw_(std::move(on_intent_raw))
         , on_debug_eval_(std::move(on_debug_eval))
         , on_module_rollout_(std::move(on_module_rollout))
         , on_world_drain_(std::move(on_world_drain))
@@ -237,7 +241,8 @@ public:
         , on_cell_space_report_(std::move(on_cell_space_report))
         , on_cell_eval_result_(std::move(on_cell_eval_result))
         , on_cell_rollout_reply_(std::move(on_cell_rollout_reply))
-        , on_cell_drain_reply_(std::move(on_cell_drain_reply)) {}
+        , on_cell_drain_reply_(std::move(on_cell_drain_reply))
+        , on_cell_intent_ack_(std::move(on_cell_intent_ack)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -570,6 +575,23 @@ public:
                == link::SendCode::kAccepted;
     }
 
+    bool sendCellIntentRaw(const std::string& peer,
+                           const std::vector<std::uint8_t>& payload) override {
+        // 意图族原样转发（切片2）：payload = 932 internal_envelope 的 packed
+        // 帧（InterServerLink 自封 u16 id，此处只传 payload）。空帧/未知
+        // peer = false（调用方可即时回 2001/2002）。
+        if (!manager_ || payload.empty()) {
+            return false;
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return false;
+        }
+        return link->send(id_of(MsgId::internal_envelope), payload.data(),
+                          payload.size(), link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
     std::uint16_t listenPort() const override {
         return manager_ ? manager_->endpoint_port("gateway") : 0;
     }
@@ -687,6 +709,13 @@ private:
             id_of(MsgId::world_drain_reply),
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_cell_drain_reply_frame(link.peer_name(), data, size);
+            });
+        // 929 cell_intent_ack（切片2 意图转发回程）：cell 宿主经注册连接反向
+        // 发送，World 在此受理并经 gateway_link() 转发 gateway。
+        dispatcher.set_handler(
+            id_of(MsgId::cell_intent_ack),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_intent_ack_frame(link.peer_name(), data, size);
             });
     }
 
@@ -849,6 +878,21 @@ private:
         on_cell_drain_reply_(peer, rep);
     }
 
+    void handle_cell_intent_ack_frame(const std::string& peer, const std::uint8_t* data,
+                                      std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::cell_intent_ack), data, size, fields)
+            || fields.size() != 3 || on_cell_intent_ack_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        CellIntentAck ack;
+        ack.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        ack.code = static_cast<std::int32_t>(fields[1].integer);
+        ack.message = fields[2].text;
+        on_cell_intent_ack_(peer, ack);
+    }
+
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
                                std::size_t size) {
         trace::EnvelopeFields env;
@@ -880,6 +924,11 @@ private:
         }
         intent.received_ms = trace::now_ms();
         ++received_;
+        if (on_intent_raw_) {
+            // 切片2 意图族转发缝：原始 932 packed envelope 原样交给宿主
+            //（World 无内嵌内核时转发到注册 cell；内嵌形态不走此面）。
+            on_intent_raw_(std::vector<std::uint8_t>(data, data + size));
+        }
         if (on_intent_) {
             on_intent_(std::move(intent));
         }
@@ -887,6 +936,7 @@ private:
 
     M1LinkConfig config_;
     std::function<void(IntentEnvelope)> on_intent_;
+    std::function<void(const std::vector<std::uint8_t>&)> on_intent_raw_;
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval_;
     std::function<void(const std::string&, const ModuleRolloutRequest&)> on_module_rollout_;
     std::function<void(const std::string&, const WorldDrainRequest&)> on_world_drain_;
@@ -896,6 +946,7 @@ private:
     std::function<void(const std::string&, const CellEvalResult&)> on_cell_eval_result_;
     std::function<void(const std::string&, const CellRolloutReply&)> on_cell_rollout_reply_;
     std::function<void(const std::string&, const CellDrainReply&)> on_cell_drain_reply_;
+    std::function<void(const std::string&, const CellIntentAck&)> on_cell_intent_ack_;
     // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
@@ -907,8 +958,39 @@ private:
 
 } // namespace
 
+bool decodeEnvelopeIntent(const std::vector<std::uint8_t>& payload,
+                          IntentEnvelope& out) {
+    // 932 internal_envelope 原始 payload 解包（cell 执行端意图监听复用）。
+    // build_legacy_intent 与匿名命名空间符号在同一 TU 内可见（匿名命名空间
+    // 本 TU 链接），此处仅做对外转发——cellServer 不编 WorldApp 管理壳，
+    // 但 m1_link_server.cpp 同时编入两个目标。
+    trace::EnvelopeFields env;
+    if (!trace::unpack_envelope(payload.data(), payload.size(), env)) {
+        return false;
+    }
+    std::uint16_t inner_id = 0;
+    const std::uint8_t* body = nullptr;
+    std::size_t body_size = 0;
+    if (!trace::split_payload(env.payload, inner_id, body, body_size)) {
+        return false;
+    }
+    std::vector<wire::FieldValue> fields;
+    if (!wire::decode_payload(inner_id, body, body_size, fields)) {
+        return false;
+    }
+    if (!build_legacy_intent(inner_id, fields, out)) {
+        return false;
+    }
+    if (env.trace.has_trace()) {
+        out.trace = env.trace;
+    }
+    out.received_ms = trace::now_ms();
+    return true;
+}
+
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
+    std::function<void(const std::vector<std::uint8_t>&)> on_intent_raw,
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval,
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
         on_module_rollout,
@@ -922,8 +1004,11 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRolloutReply&)>
         on_cell_rollout_reply,
     std::function<void(const std::string&, const CellDrainReply&)>
-        on_cell_drain_reply) {
+        on_cell_drain_reply,
+    std::function<void(const std::string&, const CellIntentAck&)>
+        on_cell_intent_ack) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
+                                              std::move(on_intent_raw),
                                               std::move(on_debug_eval),
                                               std::move(on_module_rollout),
                                               std::move(on_world_drain),
@@ -932,13 +1017,15 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
                                               std::move(on_cell_space_report),
                                               std::move(on_cell_eval_result),
                                               std::move(on_cell_rollout_reply),
-                                              std::move(on_cell_drain_reply));
+                                              std::move(on_cell_drain_reply),
+                                              std::move(on_cell_intent_ack));
 }
 
 #else // _WIN32
 
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig /*config*/, std::function<void(IntentEnvelope)> /*on_intent*/,
+    std::function<void(const std::vector<std::uint8_t>&)> /*on_intent_raw*/,
     std::function<void(const std::string&, const DebugEvalRequest&)> /*on_debug_eval*/,
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
         /*on_module_rollout*/,
@@ -955,7 +1042,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRolloutReply&)>
         /*on_cell_rollout_reply*/,
     std::function<void(const std::string&, const CellDrainReply&)>
-        /*on_cell_drain_reply*/) {
+        /*on_cell_drain_reply*/,
+    std::function<void(const std::string&, const CellIntentAck&)>
+        /*on_cell_intent_ack*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();

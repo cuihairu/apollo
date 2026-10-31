@@ -139,6 +139,14 @@ struct CellDrainReply {
     std::string detail;
 };
 
+// cell 执行端意图延时应答（929；切片2 意图转发回程）：cell 宿主经注册连接
+// 反向发送，World 在此受理并经 gateway_link() 转发 gateway。
+struct CellIntentAck {
+    std::uint64_t request_id = 0;
+    std::int32_t code = 0;
+    std::string message;
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -285,6 +293,17 @@ public:
         return false;
     }
 
+    // 切片2 意图族转发（World→cell）：把 gateway 的 932 internal_envelope
+    // 原始 packed payload 经注册连接反向转发给 cell（cell 端解包投递）。
+    // 原样转发避免 legacy↔contract 双向重编码失真；返回 true = 已入发送
+    // 队列（Reliable，不保证送达）。
+    virtual bool sendCellIntentRaw(const std::string& peer,
+                                   const std::vector<std::uint8_t>& payload) {
+        (void)peer;
+        (void)payload;
+        return false;
+    }
+
     // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
     // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
     //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =
@@ -321,6 +340,7 @@ public:
 // on_cell_space_report 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
+    std::function<void(const std::vector<std::uint8_t>&)> on_intent_raw = {},
     std::function<void(const std::string&, const DebugEvalRequest&)> on_debug_eval = {},
     std::function<void(const std::string&, const ModuleRolloutRequest&)>
         on_module_rollout = {},
@@ -337,6 +357,14 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRolloutReply&)>
         on_cell_rollout_reply = {},
     std::function<void(const std::string&, const CellDrainReply&)>
-        on_cell_drain_reply = {});
+        on_cell_drain_reply = {},
+    std::function<void(const std::string&, const CellIntentAck&)>
+        on_cell_intent_ack = {});
+
+// 932 internal_envelope 原始 payload → IntentEnvelope（legacy 帧）解包。
+// 供 cell 执行端（CellRegisterClient 意图监听）复用 World 端的解包逻辑，
+// 避免 legacy↔contract 双向映射复制。false = 载荷残缺/非意图族。
+bool decodeEnvelopeIntent(const std::vector<std::uint8_t>& payload,
+                          IntentEnvelope& out);
 
 } // namespace world_app

@@ -40,9 +40,11 @@ constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
 constexpr std::uint16_t kDebugEvalRequestId = id_of(MsgId::debug_eval_request);
 constexpr std::uint16_t kModuleRolloutRequestId = id_of(MsgId::module_rollout_request);
 constexpr std::uint16_t kWorldDrainRequestId = id_of(MsgId::world_drain_request);
+constexpr std::uint16_t kInternalEnvelopeId = id_of(MsgId::internal_envelope);
 constexpr std::uint16_t kEvalResultId = id_of(MsgId::debug_eval_result);
 constexpr std::uint16_t kRolloutReplyId = id_of(MsgId::module_rollout_reply);
 constexpr std::uint16_t kDrainReplyId = id_of(MsgId::world_drain_reply);
+constexpr std::uint16_t kIntentAckId = id_of(MsgId::cell_intent_ack);
 
 class CellRegisterClientImpl final : public CellRegisterClient {
 public:
@@ -122,6 +124,11 @@ public:
             kWorldDrainRequestId,
             [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_world_drain(data, size);
+            });
+        dispatcher.set_handler(
+            kInternalEnvelopeId,
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_intent_payload(data, size);
             });
         up_seen_ = false;
         down_since_ms_ = 0;
@@ -213,6 +220,11 @@ public:
     void set_world_drain_listener(WorldDrainListener fn) override {
         std::lock_guard<std::mutex> lock(state_mutex_);
         world_drain_listener_ = std::move(fn);
+    }
+
+    void set_intent_listener(IntentPayloadListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        intent_listener_ = std::move(fn);
     }
 
     void set_link_freeze_listener(LinkFreezeListener fn) override {
@@ -422,6 +434,22 @@ private:
         }
     }
 
+    void handle_intent_payload(const std::uint8_t* data, std::size_t size) {
+        // 932 internal_envelope 原始 payload（切片2 World→cell 意图转发）：
+        // 原样交给 cell 宿主解包投递内核。空/无监听器 = 尽力面丢弃。
+        if (data == nullptr || size == 0) {
+            return;
+        }
+        IntentPayloadListener fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            fn = intent_listener_;
+        }
+        if (fn) {
+            fn(std::vector<std::uint8_t>(data, data + size));
+        }
+    }
+
     void send_space_reports() {
         // 967 逐条目上发（批B 对账上行面）：自有归属（owner=本 cell 且 ready）
         // 各一帧——生成链无重复组，条目数即帧数。泵上下文（handle_reply 内）
@@ -520,6 +548,28 @@ private:
                 link::SendClass::kReliable);
     }
 
+    void sendIntentAck(std::uint64_t request_id, std::int32_t code,
+                       const std::string& message) override {
+        // 意图延时应答（切片2 意图转发回程）：Reliable 发回 World，World
+        // 的 M1LinkServer 经 gateway_link() 转发 gateway。链路未连 = 尽力
+        // 面（gateway pending-reply 超时面裁决）。
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || request_id == 0
+            || l->state() != link::LinkState::kUp) {
+            return;
+        }
+        std::vector<wire::FieldValue> f(3);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = code;
+        f[2].text = message;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kIntentAckId, f, payload)) {
+            return;
+        }
+        l->send(kIntentAckId, payload.data(), payload.size(),
+                link::SendClass::kReliable);
+    }
+
     std::int32_t reported_drain_state() const {
         std::lock_guard<std::mutex> lock(state_mutex_);
         return reported_drain_state_;
@@ -566,6 +616,7 @@ private:
     DebugEvalListener debug_eval_listener_;          // 宿主装配 / 泵上下文读
     ModuleRolloutListener module_rollout_listener_;  // 宿主装配 / 泵上下文读
     WorldDrainListener world_drain_listener_;        // 宿主装配 / 泵上下文读
+    IntentPayloadListener intent_listener_;          // 宿主装配 / 泵上下文读
     LinkFreezeListener freeze_listener_;             // 宿主装配 / 泵上下文读
     ReadmitListener readmit_listener_;               // 宿主装配 / 泵上下文读
     std::map<std::uint64_t, SpaceAssignRecord> applied_assigns_;  // space → 已应用视图

@@ -214,6 +214,18 @@ void WorldApp::start() {
                                        "simulation not hosted");
             }
         },
+        [this](const std::vector<std::uint8_t>& payload) {
+            // 切片2 意图族转发（生产 world 无内嵌内核）：932 原始 envelope
+            // 经首个就绪 cell 的注册连接反向转发；空目标/发送失败 = 静默
+            // （gateway pending-reply 超时面裁决重发）。
+            if (cell_ != nullptr) {
+                return;  // 内嵌形态走 on_intent 直投，不走转发缝
+            }
+            const auto cell_peer = firstReadyCellPeer();
+            if (!cell_peer.empty() && m1Link_) {
+                (void)m1Link_->sendCellIntentRaw(cell_peer, payload);
+            }
+        },
         [this](const std::string& peer, const DebugEvalRequest& request) {
             onM1DebugEval(peer, request);
         },
@@ -240,6 +252,9 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const CellDrainReply& reply) {
             onCellDrainReply(peer, reply);
+        },
+        [this](const std::string& peer, const CellIntentAck& ack) {
+            onCellIntentAck(peer, ack);
         });
     egressAdapter_.link = m1Link_.get();
     // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
@@ -1478,6 +1493,15 @@ void WorldApp::onCellDrainReply(const std::string& /*peer*/,
                                  reply.ok, reply.state, reply.active_instances,
                                  reply.detail);
     drainReplyPeers_.erase(it);
+}
+
+void WorldApp::onCellIntentAck(const std::string& /*peer*/,
+                               const CellIntentAck& ack) {
+    // 切片2 意图转发回程：cell 宿主的 929 经 gateway_link() 转发 gateway
+    //（sendIntentAck 已按 gateway_link 寻路）。0 关联键 = 拒收面静默。
+    if (m1Link_ && ack.request_id != 0) {
+        m1Link_->sendIntentAck(ack.request_id, ack.code, ack.message);
+    }
 }
 
 void WorldApp::drainDebugEvalResults() {

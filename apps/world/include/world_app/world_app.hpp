@@ -238,6 +238,7 @@ private:
     void onCellEvalResult(const std::string& peer, const CellEvalResult& result);
     void onCellRolloutReply(const std::string& peer, const CellRolloutReply& reply);
     void onCellDrainReply(const std::string& peer, const CellDrainReply& reply);
+    void onCellIntentAck(const std::string& peer, const CellIntentAck& ack);
     // 注册表过期清扫（960 心跳批；post-tick 驱动，同注册表单写者上下文）：
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。

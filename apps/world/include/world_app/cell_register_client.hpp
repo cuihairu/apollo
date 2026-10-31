@@ -132,6 +132,10 @@ struct CellWorldDrainReply {
 using DebugEvalListener = std::function<void(const CellDebugEvalRequest&)>;
 using ModuleRolloutListener = std::function<void(const CellModuleRolloutRequest&)>;
 using WorldDrainListener = std::function<void(const CellWorldDrainRequest&)>;
+// 意图族监听（切片2 World→cell 意图转发）：World 经注册连接反向发送 932
+// internal_envelope 原始 packed payload，cell 宿主解包后投递内核。泵上下文
+// 锁外同步回调（同 962 纪律）。
+using IntentPayloadListener = std::function<void(const std::vector<std::uint8_t>&)>;
 
 // 失联冻结原因（L101 失联策略切片）：kGraceExpired——链路 down 超宽限窗
 //（link_grace_ms）；kAdjudicationRejected——961 code 3（旧代次被替换，
@@ -207,6 +211,9 @@ public:
     virtual void set_module_rollout_listener(ModuleRolloutListener fn) { (void)fn; }
     virtual void set_world_drain_listener(WorldDrainListener fn) { (void)fn; }
 
+    // 意图族监听（切片2）：World 经注册连接反向转发 932 原始 envelope。
+    virtual void set_intent_listener(IntentPayloadListener fn) { (void)fn; }
+
     // 管理命令回执（cell→World 经注册连接反向发送）。链路未连 = 尽力面
     // 静默（World 侧按原请求 peer 回传；fleetctl/admin 超时重发裁决）。
     virtual void sendDebugEvalResult(const CellDebugEvalResult& result) {
@@ -217,6 +224,16 @@ public:
     }
     virtual void sendWorldDrainReply(const CellWorldDrainReply& reply) {
         (void)reply;
+    }
+
+    // 意图延时应答（929 cell_intent_ack；切片2 意图转发回程）：cell 宿主
+    // tick 边界执行后经注册连接发回 World，World 的 M1LinkServer 按
+    // gateway_link() 转发 gateway。链路未连 = 尽力面静默。
+    virtual void sendIntentAck(std::uint64_t request_id, std::int32_t code,
+                               const std::string& message) {
+        (void)request_id;
+        (void)code;
+        (void)message;
     }
 
     // 已记账（版本前进）分配条数（观测面）。

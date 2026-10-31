@@ -86,6 +86,7 @@ std::string join_lines(const std::vector<std::string>& lines) {
 // 链路未装配 = 尽力面落地）
 struct CellLinkEgress final : public IM1Egress {
     M1LinkServer* link = nullptr;
+    CellRegisterClient* register_client = nullptr;
 
     void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
                            const std::vector<std::uint8_t>& payload) override {
@@ -95,6 +96,13 @@ struct CellLinkEgress final : public IM1Egress {
     }
     void sendIntentAck(std::uint64_t request_id, std::int32_t code,
                        const std::string& message) override {
+        // 切片2 意图转发回程：注册连接优先（World→cell 意图经注册连接进入，
+        // ack 也走回程）；直连 gateway 面保留（独立 cell 直服 gateway 的
+        // 未来形态/本进程自测面）。
+        if (register_client && request_id != 0) {
+            register_client->sendIntentAck(request_id, code, message);
+            return;
+        }
         if (link) {
             link->sendIntentAck(request_id, code, message);
         }
@@ -612,6 +620,20 @@ int run_cell_entry_body(int argc, char* argv[],
                                             + std::to_string(req.op));
                             return;
                     }
+                });
+
+            // 意图族受理（切片2 World→cell 意图转发）：World 把 gateway 的
+            // 932 原始 envelope 经注册连接反向发送，cell 在此解包投递
+            // CellApp（入队；tick 边界执行）。延时应答经 CellLinkEgress 的
+            // register_client 回程（World 再 gateway_link() 转发 gateway）。
+            egress.register_client = register_client.get();
+            register_client->set_intent_listener(
+                [&cell](const std::vector<std::uint8_t>& payload) {
+                    IntentEnvelope intent;
+                    if (!decodeEnvelopeIntent(payload, intent)) {
+                        return;  // 残帧/非意图族 = 尽力面丢弃（World 已拒收计）
+                    }
+                    cell.onIntent(std::move(intent));
                 });
         };
 
