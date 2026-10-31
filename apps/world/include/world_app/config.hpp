@@ -120,6 +120,12 @@ struct WorldAppConfig {
     // Tick 配置
     int tickRateMs = 50;  // 20 ticks per second
 
+    // L104 管理/执行分离临时宿主开关：生产 world 由 main.cpp 显式置 false
+    //（管理面不承载 CellApp 模拟域）；历史 WorldApp 集成测试保持缺省 true
+    // 以保留迁移期回退。独立 cellServer 是唯一生产执行入口；开关仅覆盖装
+    // 配面，不新增双模拟语义，随切片2/3 测试迁移后移除。
+    bool hostSimulation = true;
+
     // 脚本宿主（scripting-lua §2/§5.1）：启动装载序 = handler 面 → 契约 →
     // boot 源（契约装载闸要求 handler 先行在位，boot 源可读 contract 全局）。
     // 各文件路径空 = 不加载；任一步加载/装载失败不停机（fault 走 runtime

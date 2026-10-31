@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -30,7 +31,8 @@ namespace world_app {
 
 namespace protocol = apollo::protocol;
 
-// WorldApp 服务器（manager 角色：传输 + 管理编排；执行内核 CellApp 内嵌）
+// WorldApp 服务器（manager 角色：传输 + 管理编排；hostSimulation=true 仅供
+// 历史集成测试回退装配 CellApp；生产世界不承载模拟域）
 class WorldApp {
 public:
     explicit WorldApp(const WorldAppConfig& config);
@@ -43,7 +45,9 @@ public:
     void stop();
 
     // 是否运行中
-    bool isRunning() const { return cell_ && cell_->isRunning(); }
+    // hostSimulation=false（生产 world）时管理壳无内嵌执行内核，运行态只
+    // 由管理生命周期（start/stop）驱动。
+    bool isRunning() const { return running_; }
 
     // 小队副本受理面（P2）：进程内装配完成；测试与后续 M1 入口共用。
     squad_instance::SquadInstanceService* squadInstanceService() noexcept {
@@ -323,6 +327,13 @@ private:
     // 持久卷锁已持有（§5/§6）：只锁管理 journal 同名 `.lock` 文件；启动
     // 成功保持到 stop/析构，失败回滚即清。
     bool volumeLocked_ = false;
+    // 管理壳运行态（hostSimulation=false 时独立于内嵌内核；true 时与内核
+    // 生命周期同拍）。start/stop 管理线程独占。
+    bool running_ = false;
+    // 管理壳泵线程（hostSimulation=false）：生产 world 无内嵌 CellApp 时，
+    // M1 传输泵 + 管理推进（managerPreTick_/driveCellRegistry）由本线程
+    // 驱动——单写者纪律同内核线程（一个管理线程独占管理面）。
+    std::thread managerThread_;
     // 对账冲突集（批B）：967 自报核对不上的 Space（版本冲突 / 未登记权威
     //——含池外 id）。冻结 = pushSpaceAssignments/releaseCellSpaces 跳过该
     // Space（§4「不推新分配、不释放」）；解冻随对账修复批（journal 补记 +

@@ -143,7 +143,7 @@ private:
 
 WorldApp::WorldApp(const WorldAppConfig& config)
     : config_(config)
-    , cell_(std::make_unique<CellApp>(config)) {
+    , cell_(config_.hostSimulation ? std::make_unique<CellApp>(config) : nullptr) {
     if (config_.bootAtMs == 0) {
         config_.bootAtMs = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -152,28 +152,31 @@ WorldApp::WorldApp(const WorldAppConfig& config)
     }
     // 注入缝装配（start 前即位）：出口缝 + 拍首传输泵 + 拍后管理推进。
     // 全部钩子在内核线程内执行——管理受理点（eval/编排/排空）与驱动同线程，
-    // 单写者纪律不破（ADR-015(a)）。
-    cell_->set_egress(&egressAdapter_);
-    cell_->set_pre_tick([this](std::uint64_t now_ms) {
-        if (m1Link_) {
-            m1Link_->pump(now_ms);
-        }
-        if (managerPreTick_) {
-            managerPreTick_(now_ms);  // 管理侧拨号面（L123 服务注册拨号）
-        }
-    });
-    cell_->set_post_tick([this](double) {
-        // World 排空推进（P4 更新排空批；driveSquadGameplay 后拍——本拍结算
-        // 收尾先推进，归零判定用新值）
-        driveWorldDrain();
-        // §7.1 eval 回执收账（tick 内固定调试点已执行在途 eval）
-        drainDebugEvalResults();
-        // 952 编排推进（P4 仅代码更新批）：在装模块 onTick + 观察窗/推广/
-        // 回滚队列（owning 线程纪律）
-        driveModuleRollout();
-        // cell 注册表过期清扫（960 心跳批）：last-heard 超窗摘除
-        driveCellRegistry();
-    });
+    // 单写者纪律不破（ADR-015(a)）。hostSimulation=false（生产）无内嵌内核，
+    // 管理泵由 start() 单独起线程驱动。
+    if (cell_) {
+        cell_->set_egress(&egressAdapter_);
+        cell_->set_pre_tick([this](std::uint64_t now_ms) {
+            if (m1Link_) {
+                m1Link_->pump(now_ms);
+            }
+            if (managerPreTick_) {
+                managerPreTick_(now_ms);  // 管理侧拨号面（L123 服务注册拨号）
+            }
+        });
+        cell_->set_post_tick([this](double) {
+            // World 排空推进（P4 更新排空批；driveSquadGameplay 后拍——本拍
+            // 结算收尾先推进，归零判定用新值）
+            driveWorldDrain();
+            // §7.1 eval 回执收账（tick 内固定调试点已执行在途 eval）
+            drainDebugEvalResults();
+            // 952 编排推进（P4 仅代码更新批）：在装模块 onTick + 观察窗/推广/
+            // 回滚队列（owning 线程纪律）
+            driveModuleRollout();
+            // cell 注册表过期清扫（960 心跳批）：last-heard 超窗摘除
+            driveCellRegistry();
+        });
+    }
 }
 
 WorldApp::~WorldApp() {
@@ -182,6 +185,7 @@ WorldApp::~WorldApp() {
 
 void WorldApp::start() {
     if (isRunning()) return;
+    running_ = true;
 
     if (!config_.worldJournalPath.empty()) {
         volumeLocked_ = PersistentVolumeLock::acquire(config_.worldJournalPath);
@@ -197,7 +201,9 @@ void WorldApp::start() {
     m1Link_ = makeM1LinkServer(
         M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson,
                      config_.m1AuthorityEpoch},
-        [this](IntentEnvelope intent) { cell_->onIntent(std::move(intent)); },
+        [this](IntentEnvelope intent) {
+            if (cell_) cell_->onIntent(std::move(intent));
+        },
         [this](const std::string& peer, const DebugEvalRequest& request) {
             onM1DebugEval(peer, request);
         },
@@ -221,13 +227,17 @@ void WorldApp::start() {
     //（pre-tick，内核线程）触发——注册表单写者上下文，直接改表。
     m1Link_->on_peer_down([this](const std::string& peer) { onPeerLinkDown(peer); });
 
-    // 执行内核启动：闸开（受理面就绪）+ 内核循环线程起
-    try {
-        cell_->start();
-    } catch (...) {
-        egressAdapter_.link = nullptr;
-        m1Link_.reset();
-        throw;
+    // 执行内核启动（仅历史测试回退形态）：闸开 + 内核循环线程起；生产
+    // hostSimulation=false 不装配 CellApp。
+    if (cell_) {
+        try {
+            cell_->start();
+        } catch (...) {
+            running_ = false;
+            egressAdapter_.link = nullptr;
+            m1Link_.reset();
+            throw;
+        }
     }
 
     // 监听后置（开闸先于监听不变式）：bind 失败同契约显形，回滚内核再抛
@@ -235,8 +245,26 @@ void WorldApp::start() {
         m1Link_->stop();
         egressAdapter_.link = nullptr;
         m1Link_.reset();
-        cell_->stop();
+        if (cell_) cell_->stop();
+        running_ = false;
         throw std::runtime_error("failed to start WorldApp M1 link endpoint (route table load or bind failed)");
+    }
+
+    // 管理壳泵线程（生产无内嵌执行内核）：M1 传输泵 + 管理推进。
+    if (!cell_) {
+        managerThread_ = std::thread([this] {
+            const auto tick = std::chrono::milliseconds(10);
+            while (running_) {
+                const auto now_ms = static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count());
+                if (m1Link_) m1Link_->pump(now_ms);
+                if (managerPreTick_) managerPreTick_(now_ms);
+                driveCellRegistry();
+                std::this_thread::sleep_for(tick);
+            }
+        });
     }
 
     worldLog().info("WorldApp M1 link listening on " + config_.host + ":"
@@ -247,8 +275,12 @@ void WorldApp::stop() {
     // 停机 G-3 镜像顺序（ADR-016）：内核停（关闸 → 队列尾扫 → join → 拨号
     // 收口 → worldHost stop；尾扫的延时应答经出口缝时 M1 端点仍在）→ M1
     // 端点停
+    running_ = false;
     if (cell_) {
         cell_->stop();
+    }
+    if (managerThread_.joinable()) {
+        managerThread_.join();
     }
 
     if (m1Link_) {
@@ -1314,6 +1346,10 @@ void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& re
     }
     if (evalReplyPeers_.size() >= kM1EvalBacklogMax) {
         sendM1EvalReply(peer, request.eval_id, false, "", "eval backlog full");
+        return;
+    }
+    if (cell_ == nullptr) {
+        sendM1EvalReply(peer, request.eval_id, false, "", "simulation not hosted");
         return;
     }
     const std::uint64_t scene_id =

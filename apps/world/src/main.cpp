@@ -60,6 +60,8 @@ bool is_fleet_arg(const std::string& arg) {
 // 加载配置
 WorldAppConfig loadConfig(int argc, char* argv[]) {
     WorldAppConfig config;
+    // 生产 world 管理壳不承载模拟域（L104）；模拟入口是独立 cellServer。
+    config.hostSimulation = false;
 
     // 分角色（L27）：缺省 manager；cell/manager 之外与缺值在入口显式拒绝
     // （退出非零），不静默回退默认角色。
