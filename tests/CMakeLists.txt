@@ -198,8 +198,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME BaseAvatarTests COMMAND base_avatar_tests)
 
-	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
-	    add_executable(baseappmgr_tests
+	    # OnlineDirectory（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
+	    add_executable(online_directory_tests
 	        test_baseappmgr.cpp
 	        ../apps/common/src/online_directory.cpp
 	        ../apps/common/src/directory_m1.cpp
@@ -207,15 +207,15 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
-	    target_include_directories(baseappmgr_tests PRIVATE
+	    target_include_directories(online_directory_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
-	    target_compile_definitions(baseappmgr_tests PRIVATE
+	    target_compile_definitions(online_directory_tests PRIVATE
 	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
-	    target_link_libraries(baseappmgr_tests PRIVATE
+	    target_link_libraries(online_directory_tests PRIVATE
 	        apollo
 	        apollo::base
 	        apollo::core
@@ -225,12 +225,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_net_linkrpc
 	    )
 	    if(TARGET nlohmann_json::nlohmann_json)
-	        target_link_libraries(baseappmgr_tests PRIVATE nlohmann_json::nlohmann_json)
+	        target_link_libraries(online_directory_tests PRIVATE nlohmann_json::nlohmann_json)
 	    endif()
 	    if(WIN32)
-	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
+	        target_link_libraries(online_directory_tests PRIVATE ws2_32)
 	    endif()
-	    add_test(NAME OnlineDirectoryTests COMMAND baseappmgr_tests)
+	    add_test(NAME OnlineDirectoryTests COMMAND online_directory_tests)
 	    endif()
 
 	    # 以下两个目标依赖旧 modules/protocol（默认禁用）——按目标存在性守卫
@@ -537,8 +537,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME BaseAvatarTests COMMAND base_avatar_tests)
 
-	    # baseappmgr（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
-	    add_executable(baseappmgr_tests
+	    # OnlineDirectory（目录 + 落点裁决）——与 base-app 同档（legacy protocol + game_session）
+	    add_executable(online_directory_tests
 	        test_baseappmgr.cpp
 	        ../apps/common/src/online_directory.cpp
 	        ../apps/common/src/directory_m1.cpp
@@ -546,15 +546,15 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
-	    target_include_directories(baseappmgr_tests PRIVATE
+	    target_include_directories(online_directory_tests PRIVATE
 	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/apps/common/include
 	        ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
 	    )
-	    target_compile_definitions(baseappmgr_tests PRIVATE
+	    target_compile_definitions(online_directory_tests PRIVATE
 	        APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 	    )
-	    target_link_libraries(baseappmgr_tests PRIVATE
+	    target_link_libraries(online_directory_tests PRIVATE
 	        apollo
 	        apollo::base
 	        apollo::core
@@ -564,12 +564,12 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        apollo_net_linkrpc
 	    )
 	    if(TARGET nlohmann_json::nlohmann_json)
-	        target_link_libraries(baseappmgr_tests PRIVATE nlohmann_json::nlohmann_json)
+	        target_link_libraries(online_directory_tests PRIVATE nlohmann_json::nlohmann_json)
 	    endif()
 	    if(WIN32)
-	        target_link_libraries(baseappmgr_tests PRIVATE ws2_32)
+	        target_link_libraries(online_directory_tests PRIVATE ws2_32)
 	    endif()
-	    add_test(NAME OnlineDirectoryTests COMMAND baseappmgr_tests)
+	    add_test(NAME OnlineDirectoryTests COMMAND online_directory_tests)
 	    endif()
 
 	    # gateway 入口真接线测试（link 帧定界 + TCP 底座，localhost 实 socket；
@@ -1378,7 +1378,7 @@ add_test(NAME DirectoryMirrorTests COMMAND directory_mirror_tests)
 # ========== Fleet Recovery Tests (P3-1 G-1 收尾批增量③) ==========
 # FullReport wire（APD2 kind=4）+ Reporter 分片 + Coordinator 恢复相位收敛 +
 # PlayerDirectory intake（restore-not-kick）+ UDP loopback 全链（直编源惯例；
-# 准入闸门单测随 baseappmgr_tests）
+# 准入闸门单测随 online_directory_tests）
 add_executable(fleet_recovery_tests
     test_fleet_recovery.cpp
     ../modules/game/session/src/player_directory.cpp
@@ -2512,7 +2512,7 @@ add_test(NAME ScriptStateTests COMMAND script_state_tests)
 # + 对端缺席降级。缝工厂两侧真实现直编；Windows 下 link TCP 底座不进本
 # 批，用例本体空转。
 if(TARGET apollo::game_session AND TARGET apollo_protocol)
-add_executable(baseappmgr_m1_control_tests
+add_executable(online_directory_m1_control_tests
     test_baseappmgr_m1_control.cpp
     ../apps/common/src/directory_m1.cpp
     ../apps/common/src/online_directory.cpp
@@ -2520,29 +2520,29 @@ add_executable(baseappmgr_m1_control_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
 )
-target_include_directories(baseappmgr_m1_control_tests PRIVATE
+target_include_directories(online_directory_m1_control_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/apps/common/include
     ${CMAKE_SOURCE_DIR}/apps/login/include
     ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
 )
-target_compile_definitions(baseappmgr_m1_control_tests PRIVATE
+target_compile_definitions(online_directory_m1_control_tests PRIVATE
     APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
 )
-target_link_libraries(baseappmgr_m1_control_tests PRIVATE
+target_link_libraries(online_directory_m1_control_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_session apollo::runtime
     apollo::net_link apollo::net_contract_wire apollo_net_linkrpc apollo_protocol)
 if(WIN32)
-    target_link_libraries(baseappmgr_m1_control_tests PRIVATE ws2_32)
-    target_compile_definitions(baseappmgr_m1_control_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    target_link_libraries(online_directory_m1_control_tests PRIVATE ws2_32)
+    target_compile_definitions(online_directory_m1_control_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 endif()
 if(MSVC)
-    target_compile_options(baseappmgr_m1_control_tests PRIVATE /utf-8)
+    target_compile_options(online_directory_m1_control_tests PRIVATE /utf-8)
 endif()
-add_test(NAME OnlineDirectoryM1ControlTests COMMAND baseappmgr_m1_control_tests)
+add_test(NAME OnlineDirectoryM1ControlTests COMMAND online_directory_m1_control_tests)
 
 # ========== Attribute Sync Delta Pipeline Tests ==========
 # ChangeHistory / ViewerAttrState / AttrDelta encoding / DeltaBuilder
@@ -2638,7 +2638,7 @@ add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
 endif()
 
 # Runtime sources host shared services even when executable apps are disabled.
-foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests cell_app_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests cell_register_tests update_continuity_tests gateway_push_downlink_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests baseappmgr_m1_control_tests)
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests cell_app_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests cell_register_tests update_continuity_tests gateway_push_downlink_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests online_directory_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
         # apollo_app_services 仅在 game 模块开启（⇒ apps/common 加入）时存在：
         # 其守卫是 `TARGET apollo_protocol AND apollo::game_session`，而

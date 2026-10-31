@@ -90,4 +90,4 @@
   及其内部 `set_target_properties`/依赖引用；无源码行为变化。
 - 验证：改名后 build-off 全量构建绿 + 该两套件 ctest 绿；`grep -rn baseappmgr tests/` 仅剩第三方
   域术语引用（36-MMO 等文档）。
-- **设计已定、实现另立项**（决策 S01 为「设计一次无行为变化的目标改名」，本次只产出设计）。
+- **设计已定、实现已落地**（决策 S01 为「设计一次无行为变化的目标改名」，本次只产出设计；实现另立项已交付：tests/CMakeLists.txt 目标 `baseappmgr_tests`→`online_directory_tests`、`baseappmgr_m1_control_tests`→`online_directory_m1_control_tests`，CTest 套件名 OnlineDirectoryTests/OnlineDirectoryM1ControlTests 不变，仅目标名无行为变化）。
