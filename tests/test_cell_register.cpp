@@ -389,6 +389,9 @@ struct WorldEnd {
         config.host = "127.0.0.1";
         config.m1Port = fixed_m1_port;
         config.m1RouteJson = kRouteJson;
+        // 纯管理面测试（960/961/962/966/967）：不依赖内嵌执行内核，走生产
+        // 管理壳（无 CellApp 装配）——切片3「删除内嵌内核」迁移面。
+        config.hostSimulation = false;
         if (config.m1AuthorityEpoch == 0) {
             config.m1AuthorityEpoch = 77;
         }
