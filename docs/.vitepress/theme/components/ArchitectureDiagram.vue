@@ -6,14 +6,16 @@ const props = defineProps<{ kind: 'system' | 'space' | 'cross-server' | 'callbac
 const { lang } = useData()
 const english = computed(() => lang.value.startsWith('en'))
 const language = computed(() => english.value ? 'en' : 'zh')
-// system kind uses the chorus-style process architecture (docs/public/images/architecture-{lang}.svg);
-// space / cross-server / callbacks keep their dedicated SVGs.
+// system kind uses the chorus-style process architecture (docs/public/images/architecture-{lang}.svg
+// and architecture-{lang}-mobile.svg for narrow viewports); space / cross-server / callbacks keep
+// their dedicated SVGs.
 const systemSource = computed(() => withBase(`/images/architecture-${language.value}.svg`))
+const systemNarrowSource = computed(() => withBase(`/images/architecture-${language.value}-mobile.svg`))
 const source = computed(() => props.kind === 'system'
   ? systemSource.value
   : withBase(`/architecture/${props.kind}-${language.value}.svg`))
 const narrowSource = computed(() => props.kind === 'system'
-  ? systemSource.value
+  ? systemNarrowSource.value
   : withBase(`/architecture/${props.kind}-${language.value}-mobile.svg`))
 const descriptions = {
   callbacks: {
@@ -35,7 +37,7 @@ const descriptions = {
 }
 const description = computed(() => descriptions[props.kind][language.value])
 const wideHeight = computed(() => ({ system: 1915, space: 700, 'cross-server': 760, callbacks: 920 })[props.kind])
-const narrowHeight = computed(() => ({ system: 1915, space: 1135, 'cross-server': 1270, callbacks: 1510 })[props.kind])
+const narrowHeight = computed(() => ({ system: 1560, space: 1135, 'cross-server': 1270, callbacks: 1510 })[props.kind])
 </script>
 
 <template>

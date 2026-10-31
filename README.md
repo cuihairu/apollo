@@ -21,8 +21,8 @@ Apollo is a C++20 server runtime for lightweight multiplayer games organized aro
 The runnable processes are `gateway`, `login`, `base`, `world`, `database`, `interfaces`, and `machined`; the `loginServer`/`baseServer`/`worldServer` words in the design docs name the roles of the `login`/`base`/`world` binaries, and `cellServer` is the standalone cell execution entry (the `world` binary is manager-only and rejects `--role=cell`). Cell means a spatial partition.
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/system-en-mobile.svg" />
-  <img src="docs/zh/public/architecture/system-en.svg" alt="Apollo target architecture: separate Base profiles, cell simulation, and World management" />
+  <source media="(max-width: 640px)" srcset="docs/public/images/architecture-en-mobile.svg" />
+  <img src="docs/public/images/architecture-en.svg" alt="Apollo target architecture: separate Base profiles, cell simulation, and World management" />
 </picture>
 
 Target design: standalone Base ↔ database prototypes exist; World/cell separation and full wiring remain pending.
@@ -38,8 +38,8 @@ Protocol-capable upgrades replace Base, cell, or World management independently 
 - Dynamic Base resolution and durable fulfillment (modules implemented): orders are accepted by stable player identity and journaled durably; each delivery attempt re-resolves the current Base plus epoch, so offline players, unreachable Bases, and migration windows never lose pending work; fulfillment commits a dedup credential atomically, converging duplicate notifications, lost ACKs, and crash restarts into one delivery. Inter-process wiring (interfaces→order intake, baseServer write-authority lifecycle, reward apply executor) is planned.
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/callbacks-en-mobile.svg" />
-  <img src="docs/zh/public/architecture/callbacks-en.svg" alt="Apollo external callbacks and fulfillment: interfaces intake, dynamic Base resolution, idempotent delivery" />
+  <source media="(max-width: 640px)" srcset="docs/public/architecture/callbacks-en-mobile.svg" />
+  <img src="docs/public/architecture/callbacks-en.svg" alt="Apollo external callbacks and fulfillment: interfaces intake, dynamic Base resolution, idempotent delivery" />
 </picture>
 
 ### Processes, Tools, and CI

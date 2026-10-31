@@ -21,8 +21,8 @@ Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边
 可运行进程为 `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined`；设计文档里的 loginServer/baseServer/worldServer 是 `login`/`base`/`world` 二进制的角色称谓，`cellServer` 是独立 cell 执行入口（`world` 二进制仅 manager 角色，显式拒绝 `--role=cell`）。Cell 为分区。
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/system-zh-mobile.svg" />
-  <img src="docs/zh/public/architecture/system-zh.svg" alt="Apollo 目标架构：Base 长期资料、cell 模拟与 World 管理分别负责" />
+  <source media="(max-width: 640px)" srcset="docs/public/images/architecture-zh-mobile.svg" />
+  <img src="docs/public/images/architecture-zh.svg" alt="Apollo 目标架构：Base 长期资料、cell 模拟与 World 管理分别负责" />
 </picture>
 
 目标设计图：Base ↔ database 独立原型已具备；World/cell 拆分与整体接线仍待完成。
@@ -38,8 +38,8 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 - 动态 Base 查询与持久发货（模块已落地）：订单按稳定玩家身份受理并持久记账，每次投递重新解析「当前 Base + 归属代次」，玩家离线、Base 不可达或迁移升级期间待办不丢；发货以去重凭据原子提交，重复通知、回执丢失与崩溃重启收敛为一次发货。interfaces→订单受理、baseServer 写权生命周期、奖励落账 executor 等进程间接线规划中。
 
 <picture>
-  <source media="(max-width: 640px)" srcset="docs/zh/public/architecture/callbacks-zh-mobile.svg" />
-  <img src="docs/zh/public/architecture/callbacks-zh.svg" alt="Apollo 外部回调与发货：interfaces 受理、动态 Base 解析与幂等发货" />
+  <source media="(max-width: 640px)" srcset="docs/public/architecture/callbacks-zh-mobile.svg" />
+  <img src="docs/public/architecture/callbacks-zh.svg" alt="Apollo 外部回调与发货：interfaces 受理、动态 Base 解析与幂等发货" />
 </picture>
 
 ### 进程、工具与 CI

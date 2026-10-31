@@ -1,40 +1,40 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1915" viewBox="0 0 1280 1915" role="img" aria-labelledby="title desc" xml:lang="zh-CN">
 <title id="title">Apollo · 进程架构</title>
 <desc id="desc">轻量副本制游戏服务器引擎。客户端经 Gateway 接入；Login 承担认证与在线目录；World 为管理端，cellServer 为独立模拟执行端，二者经 960 注册/961 裁决/962 分配/963 retire/967 自报 协调；Base 管玩家档案与基础业务并落 database；interfaces 接平台回调；machined 拉起并监督各进程；logger/admin 收集日志与指标。虚线为控制，实线为业务数据。图示为目标契约，不代表已全部实现。</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="context-stroke"/></marker></defs>
+<defs><marker id="arrow-087f5b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#087f5b"/></marker><marker id="arrow-2563eb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#2563eb"/></marker><marker id="arrow-475569" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#475569"/></marker><marker id="arrow-6366f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#6366f1"/></marker><marker id="arrow-64748b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#64748b"/></marker><marker id="arrow-7c3aed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#7c3aed"/></marker><marker id="arrow-c2410c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#c2410c"/></marker></defs>
 <style>text{font-family:Arial,'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#172b4d}.title{font-size:30px;font-weight:700}.name{font-size:23px;font-weight:700}.body{font-size:17px;fill:#435570}.small{font-size:15px;fill:#52647b}.label{font-size:15px;fill:#435570;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;stroke-linejoin:round}.edge{fill:none;stroke-linejoin:round}.control{stroke-dasharray:7 5}</style>
 <rect width="1280" height="1915" rx="20" fill="#f8fafc"/>
 <text x="40" y="48" class="title" text-anchor="start">Apollo · 进程架构</text>
 <text x="40" y="80" class="body" text-anchor="start">轻量副本制游戏服务器 · 管理端与执行端分离 · 单区服闭环，持续实现中</text>
 
 <path d="M210 230 V340" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="client-tcp" data-from="client" data-to="gateway" d="M210 230 V340" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="client-tcp" data-from="client" data-to="gateway" d="M210 230 V340" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow-2563eb)"/>
 <path d="M1050 230 V340" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="platform-https" data-from="platform" data-to="interfaces" d="M1050 230 V340" class="edge" style="stroke:#087f5b;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="platform-https" data-from="platform" data-to="interfaces" d="M1050 230 V340" class="edge" style="stroke:#087f5b;stroke-width:2" marker-end="url(#arrow-087f5b)"/>
 <path d="M590 230 V290 H420 V1000 H640 V1030" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="gmcli-admin" data-from="gm-cli" data-to="world" d="M590 230 V290 H420 V1000 H640 V1030" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="gmcli-admin" data-from="gm-cli" data-to="world" d="M590 230 V290 H420 V1000 H640 V1030" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow-c2410c)"/>
 <path d="M360 405 H440" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="gateway-login" data-from="gateway" data-to="login" d="M360 405 H440" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path id="gateway-login" data-from="gateway" data-to="login" d="M360 405 H440" class="edge" style="stroke:#475569;stroke-width:2" marker-end="url(#arrow-475569)" marker-start="url(#arrow-475569)"/>
 <path d="M210 470 V1030" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="gateway-base" data-from="gateway" data-to="base" d="M210 470 V1030" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="gateway-base" data-from="gateway" data-to="base" d="M210 470 V1030" class="edge" style="stroke:#2563eb;stroke-width:2" marker-end="url(#arrow-2563eb)"/>
 <path d="M170 470 V750 H435 V1150 H460" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="gateway-world" data-from="gateway" data-to="world" d="M170 470 V750 H435 V1150 H460" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="gateway-world" data-from="gateway" data-to="world" d="M170 470 V750 H435 V1150 H460" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow-64748b)"/>
 <path d="M440 445 H425 V1100 H420" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="login-base" data-from="login" data-to="base" d="M440 445 H425 V1100 H420" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="login-base" data-from="login" data-to="base" d="M440 445 H425 V1100 H420" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow-7c3aed)"/>
 <path d="M590 470 V1030" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="login-world" data-from="login" data-to="world" d="M590 470 V1030" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="login-world" data-from="login" data-to="world" d="M590 470 V1030" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow-64748b)"/>
 <path d="M820 1120 H860" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="world-cell" data-from="world" data-to="cell" d="M820 1120 H860" class="edge" style="stroke:#6366f1;stroke-width:3" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+<path id="world-cell" data-from="world" data-to="cell" d="M820 1120 H860" class="edge" style="stroke:#6366f1;stroke-width:3" marker-end="url(#arrow-6366f1)" marker-start="url(#arrow-6366f1)"/>
 <path d="M210 470 V700 H840 V1230 H860" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="gateway-cell" data-from="gateway" data-to="cell" d="M210 470 V700 H840 V1230 H860" class="edge" style="stroke:#2563eb;stroke-width:3" marker-end="url(#arrow)"/>
+<path id="gateway-cell" data-from="gateway" data-to="cell" d="M210 470 V700 H840 V1230 H860" class="edge" style="stroke:#2563eb;stroke-width:3" marker-end="url(#arrow-2563eb)"/>
 <path d="M1040 1400 V1440 H180 V1400" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="cell-base" data-from="cell" data-to="base" d="M1040 1400 V1440 H180 V1400" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="cell-base" data-from="cell" data-to="base" d="M1040 1400 V1440 H180 V1400" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow-7c3aed)"/>
 <path d="M240 1400 V1450 H640 V1680" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="base-db" data-from="base" data-to="database" d="M240 1400 V1450 H640 V1680" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="base-db" data-from="base" data-to="database" d="M240 1400 V1450 H640 V1680" class="edge" style="stroke:#7c3aed;stroke-width:2" marker-end="url(#arrow-7c3aed)"/>
 <path d="M340 1480 V1435 H640 V1400" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="machined-supervise" data-from="machined" data-to="world" d="M340 1480 V1435 H640 V1400" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="machined-supervise" data-from="machined" data-to="world" d="M340 1480 V1435 H640 V1400" class="edge control" style="stroke:#c2410c;stroke-width:2" marker-end="url(#arrow-c2410c)"/>
 <path d="M940 1480 V1430 H700 V1400" fill="none" stroke="#f8fafc" stroke-width="9"/>
-<path id="log-admin" data-from="logger-admin" data-to="world" d="M940 1480 V1430 H700 V1400" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow)"/>
+<path id="log-admin" data-from="logger-admin" data-to="world" d="M940 1480 V1430 H700 V1400" class="edge control" style="stroke:#64748b;stroke-width:2" marker-end="url(#arrow-64748b)"/>
 
 <g id="client" data-node="client"><rect x="60" y="130" width="300" height="100" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
 <text x="80" y="164" class="name" text-anchor="start">游戏客户端</text>

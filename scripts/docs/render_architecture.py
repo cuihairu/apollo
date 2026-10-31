@@ -280,7 +280,7 @@ def callbacks(en=False, mobile=False):
 
 def main():
     outputs={}
-    for name,render in [('system',system),('space',space),('cross-server',cross_server),('callbacks',callbacks)]:
+    for name,render in [('space',space),('cross-server',cross_server),('callbacks',callbacks)]:
         for lang,en in [('zh',False),('en',True)]:
             for mobile in [False,True]:
                 outputs[OUT/f'{name}-{lang}{"-mobile" if mobile else ""}.svg']=render(en,mobile)
