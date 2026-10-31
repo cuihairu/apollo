@@ -235,6 +235,7 @@ def main():
         print(f'{len(outputs)} localized architecture SVGs match their source')
     else:
         OUT.mkdir(parents=True,exist_ok=True)
+        IMG.mkdir(parents=True,exist_ok=True)
         for p,body in outputs.items():p.write_text(body)
         print(f'Generated {len(outputs)} localized architecture SVGs')
 if __name__=='__main__':main()
