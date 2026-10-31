@@ -111,6 +111,34 @@ struct CellSpaceReport {
     std::uint64_t applied_mgmt_epoch = 0;
 };
 
+// cell 执行端回执（切片2 World→cell 命令转发）：cell 宿主经注册连接反向
+// 发送 945/953/957，World 的 M1LinkServer 在 cell 连接的 dispatcher 上受理
+// 并回调（入参 = 回执 + cell peer 自报名；WorldApp 按 eval_id/request_id
+// 关联原 fleetctl/admin peer 后回传 945/953/957）。
+struct CellEvalResult {
+    std::uint64_t eval_id = 0;
+    bool ok = false;
+    std::string result;
+    std::string error;
+};
+struct CellRolloutReply {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;
+    bool ok = false;
+    std::int32_t state = 0;
+    std::uint64_t window_faults = 0;
+    std::uint64_t module_version = 0;
+    std::string detail;
+};
+struct CellDrainReply {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;
+    bool ok = false;
+    std::int32_t state = 0;
+    std::uint64_t active_instances = 0;
+    std::string detail;
+};
+
 class M1LinkServer {
 public:
     virtual ~M1LinkServer() = default;
@@ -232,6 +260,31 @@ public:
         (void)ready;
     }
 
+    // World→cell 管理命令请求转发（切片2 L104）：管理端收到的 944/952/956
+    // 不再经内嵌内核直调，改为面向执行端转发——经 cell 拨入的 M1 连接
+    // 反向发送对应请求帧（peer = cell 自报名；World 侧 manager_->link(peer)
+    // 寻链，未知 peer = 尽力面返回 false）。cell 端经 CellRegisterClient 的
+    // 注册连接受理并回执 945/953/957。kReliable 同 962。
+    // 返回 true = 请求帧已入该 cell 链路的发送队列（不保证已送达/受理）。
+    virtual bool sendCellDebugEvalRequest(const std::string& peer,
+                                          const DebugEvalRequest& request) {
+        (void)peer;
+        (void)request;
+        return false;
+    }
+    virtual bool sendCellModuleRolloutRequest(const std::string& peer,
+                                              const ModuleRolloutRequest& request) {
+        (void)peer;
+        (void)request;
+        return false;
+    }
+    virtual bool sendCellWorldDrainRequest(const std::string& peer,
+                                           const WorldDrainRequest& request) {
+        (void)peer;
+        (void)request;
+        return false;
+    }
+
     // 客户端帧下行（939 client_deliver，P2 真实下行）：session_id = 目标
     // 客户端会话（网关按此路由投递）；gateway_id = 本 World 所知网关身份
     //（0 = 不指定——单链路批缺省，多网关批按路由快照回带）；payload =
@@ -278,6 +331,12 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRetireRequest&)>
         on_cell_retire = {},
     std::function<void(const std::string&, const CellSpaceReport&)>
-        on_cell_space_report = {});
+        on_cell_space_report = {},
+    std::function<void(const std::string&, const CellEvalResult&)>
+        on_cell_eval_result = {},
+    std::function<void(const std::string&, const CellRolloutReply&)>
+        on_cell_rollout_reply = {},
+    std::function<void(const std::string&, const CellDrainReply&)>
+        on_cell_drain_reply = {});
 
 } // namespace world_app

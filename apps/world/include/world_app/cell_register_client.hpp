@@ -78,6 +78,61 @@ struct SpaceAssignRecord {
 };
 using SpaceAssignListener = std::function<void(const SpaceAssignRecord&)>;
 
+// 管理命令监听器（切片2 L104 World→cell 命令转发）：World 端经注册连接反向
+// 发送 944 debug_eval_request / 952 module_rollout_request / 956
+// world_drain_request，本类在注册连接的 dispatcher 上受理并转发给 cell 宿主
+//（泵上下文锁外同步回调，同 962 纪律——不得重入 pump/state）。cell 宿主按
+// 请求处理并回执 945/953/957（经本连接反向发给 World 的 M1 端点）。
+struct CellDebugEvalRequest {
+    std::uint64_t eval_id = 0;
+    std::uint64_t scene_id = 0;
+    std::string source;
+};
+struct CellModuleRolloutRequest {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;
+    std::string name;
+    std::uint64_t version = 0;
+    std::string deps;
+    std::string source;
+    std::uint64_t observe_ticks = 0;
+    std::uint64_t fault_threshold = 0;
+};
+struct CellWorldDrainRequest {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;
+    std::int64_t deadline_s = 0;
+};
+
+// 管理命令回执（cell→World 经注册连接反向发送；World 按 eval_id/request_id
+// 关联原 fleetctl/admin peer 后回传 945/953/957）。
+struct CellDebugEvalResult {
+    std::uint64_t eval_id = 0;
+    bool ok = false;
+    std::string result;
+    std::string error;
+};
+struct CellModuleRolloutReply {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;
+    bool ok = false;
+    std::int32_t state = 0;
+    std::uint64_t window_faults = 0;
+    std::uint64_t module_version = 0;
+    std::string detail;
+};
+struct CellWorldDrainReply {
+    std::uint64_t request_id = 0;
+    std::int32_t op = 0;
+    bool ok = false;
+    std::int32_t state = 0;
+    std::uint64_t active_instances = 0;
+    std::string detail;
+};
+using DebugEvalListener = std::function<void(const CellDebugEvalRequest&)>;
+using ModuleRolloutListener = std::function<void(const CellModuleRolloutRequest&)>;
+using WorldDrainListener = std::function<void(const CellWorldDrainRequest&)>;
+
 // 失联冻结原因（L101 失联策略切片）：kGraceExpired——链路 down 超宽限窗
 //（link_grace_ms）；kAdjudicationRejected——961 code 3（旧代次被替换，
 // World 已隔离本执行端——本端自冻结，不得继续产生权威副作用）。
@@ -146,6 +201,23 @@ public:
     // Space 分配监听（962；版本前进才触发，重推幂等）。监听器在泵上下文
     // 同步回调（与 961 同纪律——锁外回调，不得重入 pump/state）。
     virtual void setSpaceAssignListener(SpaceAssignListener fn) { (void)fn; }
+
+    // 管理命令监听（切片2）：World 经注册连接反向转发 944/952/956。
+    virtual void set_debug_eval_listener(DebugEvalListener fn) { (void)fn; }
+    virtual void set_module_rollout_listener(ModuleRolloutListener fn) { (void)fn; }
+    virtual void set_world_drain_listener(WorldDrainListener fn) { (void)fn; }
+
+    // 管理命令回执（cell→World 经注册连接反向发送）。链路未连 = 尽力面
+    // 静默（World 侧按原请求 peer 回传；fleetctl/admin 超时重发裁决）。
+    virtual void sendDebugEvalResult(const CellDebugEvalResult& result) {
+        (void)result;
+    }
+    virtual void sendModuleRolloutReply(const CellModuleRolloutReply& reply) {
+        (void)reply;
+    }
+    virtual void sendWorldDrainReply(const CellWorldDrainReply& reply) {
+        (void)reply;
+    }
 
     // 已记账（版本前进）分配条数（观测面）。
     virtual std::size_t space_assign_count() const { return 0; }

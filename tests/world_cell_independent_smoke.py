@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 
-login_binary, world_binary, cell_binary, routes = map(str, sys.argv[1:])
+login_binary, world_binary, cell_binary, routes, fleetctl_binary = map(str, sys.argv[1:])
 children = []
 
 
@@ -177,6 +177,52 @@ try:
                     break
         assert space_reconciled, (
             f"cell 967 report not reconciled by world: {world_out[-2000:]}")
+
+        # ---- 3c. 管理命令转发（切片2 L104）：fleetctl 经 956 drain 到 world
+        # M1，world（无内嵌内核）转发到独立 cell，cell 受理并在日志落
+        # "cell drain begun"；957 回执经 world 回传（fleetctl exit 0）。
+        drain = subprocess.Popen(
+            [fleetctl_binary, "drain", "--target",
+             f"127.0.0.1:{world_m1_port}", "--peer", "world",
+             "--timeout", "5"],
+            cwd=cell_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            bufsize=0)
+        children.append(drain)
+        drain_out = ""
+        drain_deadline = time.monotonic() + 15
+        while time.monotonic() < drain_deadline:
+            import select as _sel
+            if _sel.select([drain.stdout], [], [], 0.1)[0]:
+                chunk = os.read(drain.stdout.fileno(), 65536).decode(errors="replace")
+                drain_out += chunk
+                if "DRAIN_DRAINED" in drain_out or "DRAIN_REJECTED" in drain_out:
+                    break
+            if drain.poll() is not None:
+                break
+        # fleetctl drain exit 0 = 957 回执经 world 回传成功；cell 日志落
+        # "cell drain begun" = world 转发到独立 cell 成功。
+        try:
+            drain.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            drain.kill()
+            drain.wait(timeout=5)
+        assert drain.returncode == 0, (
+            f"fleetctl drain failed rc={drain.returncode}: {drain_out[-2000:]}")
+        cell_drained = False
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if "cell drain begun" in cell_out:
+                cell_drained = True
+                break
+            time.sleep(0.2)
+            import select as _sel
+            if _sel.select([cell.stdout], [], [], 0.1)[0]:
+                chunk = os.read(cell.stdout.fileno(), 65536).decode(errors="replace")
+                cell_out += chunk
+                if "cell drain begun" in cell_out:
+                    cell_drained = True
+                    break
+        assert cell_drained, f"cell did not accept forwarded drain: {cell_out[-2000:]}"
 
         # ---- 4. machined 未参与：进程级检测 ----
         # 仅检查已捕获输出缓冲不足：若 machined 以独立进程运行，其输出不在任何

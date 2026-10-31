@@ -232,6 +232,12 @@ private:
     // 版本冲突/未登记权威进冲突集（该 Space 冻结：不认领不释放不推送）；
     // 释放态上报 = 收敛滞后不冲突；未登记来源/旧化身上报丢弃。
     void onCellSpaceReport(const std::string& peer, const CellSpaceReport& report);
+    // cell 执行端回执受理（切片2 World→cell 命令转发）：cell 宿主经注册
+    // 连接反向发送 945/953/957，World 在此按 eval_id/request_id 关联原
+    // fleetctl/admin peer 后经 m1Link_ 回传对应回执帧。
+    void onCellEvalResult(const std::string& peer, const CellEvalResult& result);
+    void onCellRolloutReply(const std::string& peer, const CellRolloutReply& reply);
+    void onCellDrainReply(const std::string& peer, const CellDrainReply& reply);
     // 注册表过期清扫（960 心跳批；post-tick 驱动，同注册表单写者上下文）：
     // last-heard 超 cellExpiryMs 未刷新即整条摘除（心跳失效的 World 侧裁决；
     // 摘除后重注册走受理面首注册路径——代次墓碑随旧执行端隔离批）。0 = 关。
@@ -264,6 +270,10 @@ private:
     // 过期释放（driveCellRegistry 同上下文，注册表单写者线程）：该 cell
     // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。
     void releaseCellSpaces(std::uint64_t cell_id);
+    // 目标 cell peer 选择（切片2 转发）：首个就绪、未排空、未缩容的登记
+    // cell 的链路 peer 自报名；无合格目标返回空串。管理命令（944/952/956）
+    // 在无内嵌内核（生产 world）时经此寻址转发。
+    std::string firstReadyCellPeer() const;
     // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
     void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                          const std::string& result, const std::string& error);
@@ -297,6 +307,10 @@ private:
     // eval_id → 回传 peer 自报名；scene_id → 在途 eval id 集（drain 圈定面）。
     std::unordered_map<std::uint64_t, std::string> evalReplyPeers_;
     std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>> scenePendingEvals_;
+    // 切片2 转发关联账（World→cell 命令）：944 eval_id → 原 fleetctl peer；
+    // 952/956 request_id → 原 fleetctl peer。cell 回执按 id 查表回传。
+    std::unordered_map<std::uint64_t, std::string> rolloutReplyPeers_;
+    std::unordered_map<std::uint64_t, std::string> drainReplyPeers_;
     // cell 注册登记（960，L101 注册首切片）：cell_id → 登记；代次裁决在
     // 受理点（旧代次拒、新代次替换、同代次幂等刷新），心跳失效摘除在
     // driveCellRegistry（过期窗 cellExpiryMs）。旧执行端隔离已落地（代次

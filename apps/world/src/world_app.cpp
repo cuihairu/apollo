@@ -231,6 +231,15 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const CellSpaceReport& report) {
             onCellSpaceReport(peer, report);
+        },
+        [this](const std::string& peer, const CellEvalResult& result) {
+            onCellEvalResult(peer, result);
+        },
+        [this](const std::string& peer, const CellRolloutReply& reply) {
+            onCellRolloutReply(peer, reply);
+        },
+        [this](const std::string& peer, const CellDrainReply& reply) {
+            onCellDrainReply(peer, reply);
         });
     egressAdapter_.link = m1Link_.get();
     // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
@@ -311,6 +320,20 @@ void WorldApp::onM1ModuleRollout(const std::string& peer,
     // 契约线程（owning 线程直驱，无 tick 排队）。request_id = 0 保留；受理
     // 点同步回 953（观察窗推进随拍自驱，控制面按 status 轮询聚合）。
     if (request.request_id == 0) {
+        return;
+    }
+    if (cell_ == nullptr) {
+        // 切片2 转发：生产 world（无内嵌内核）经注册 cell 连接反向发送
+        // 952；cell 宿主处理后回 953（onCellRolloutReply 按原 fleetctl peer
+        // 回传）。无合格 cell = 即时回执（与内嵌形态同型）。
+        const auto cell_peer = firstReadyCellPeer();
+        if (cell_peer.empty()
+            || !m1Link_->sendCellModuleRolloutRequest(cell_peer, request)) {
+            m1Link_->sendModuleRolloutReply(peer, request.request_id, request.op,
+                                            false, -1, 0, 0, "script runtime not ready");
+            return;
+        }
+        rolloutReplyPeers_[request.request_id] = peer;
         return;
     }
     auto* script = cell_ ? cell_->script_runtime() : nullptr;
@@ -475,6 +498,20 @@ void WorldApp::onM1WorldDrain(const std::string& peer, const WorldDrainRequest& 
     // 956 受理（P4 更新排空批）：内核线程泵上下文 = launch/玩法推进同线程
     // ——排空状态机单线程独占无锁，受理点同步回 957。request_id = 0 保留。
     if (request.request_id == 0) {
+        return;
+    }
+    if (cell_ == nullptr) {
+        // 切片2 转发：生产 world（无内嵌内核）经注册 cell 连接反向发送
+        // 956；cell 宿主处理后回 957（onCellDrainReply 按原 fleetctl peer
+        // 回传）。无合格 cell = 即时回执（与内嵌形态同型）。
+        const auto cell_peer = firstReadyCellPeer();
+        if (cell_peer.empty()
+            || !m1Link_->sendCellWorldDrainRequest(cell_peer, request)) {
+            m1Link_->sendWorldDrainReply(peer, request.request_id, request.op,
+                                         false, 0, 0, "squad service not ready");
+            return;
+        }
+        drainReplyPeers_[request.request_id] = peer;
         return;
     }
     auto* squadInstanceService = cell_ ? cell_->squadInstanceService() : nullptr;
@@ -872,6 +909,18 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
                             + " version=" + std::to_string(entry.second.version));
         }
     }
+}
+
+std::string WorldApp::firstReadyCellPeer() const {
+    // 目标 cell peer 选择（切片2 转发）：首个就绪、未自报排空、未缩容的
+    // 登记 cell 的链路 peer。无合格目标返回空串。
+    for (const auto& entry : cellRegistrations_) {
+        const auto& reg = entry.second;
+        if (reg.ready && reg.drain_state == 0 && !reg.retire && !reg.suspect) {
+            return reg.peer;
+        }
+    }
+    return {};
 }
 
 bool WorldApp::beginCellRetire(std::uint64_t cell_id) {
@@ -1359,7 +1408,16 @@ void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& re
         return;
     }
     if (cell_ == nullptr) {
-        sendM1EvalReply(peer, request.eval_id, false, "", "simulation not hosted");
+        // 切片2 转发：生产 world（无内嵌内核）经注册 cell 连接反向发送
+        // 944；cell 宿主处理后回 945（onCellEvalResult 按原 fleetctl peer
+        // 回传）。无合格 cell = 即时回执（与内嵌形态同型）。
+        const auto cell_peer = firstReadyCellPeer();
+        if (cell_peer.empty()
+            || !m1Link_->sendCellDebugEvalRequest(cell_peer, request)) {
+            sendM1EvalReply(peer, request.eval_id, false, "", "simulation not hosted");
+            return;
+        }
+        evalReplyPeers_[request.eval_id] = peer;
         return;
     }
     const std::uint64_t scene_id =
@@ -1383,6 +1441,43 @@ void WorldApp::sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, b
     if (m1Link_) {
         m1Link_->sendEvalResult(peer, eval_id, ok, result, error);
     }
+}
+
+void WorldApp::onCellEvalResult(const std::string& /*peer*/,
+                                const CellEvalResult& result) {
+    // 切片2 转发收账：cell 宿主回 945（经注册连接），按 eval_id 关联原
+    // fleetctl/admin peer 后回传。关联键缺位/未知 = 静默弃（尽力面）。
+    const auto it = evalReplyPeers_.find(result.eval_id);
+    if (it == evalReplyPeers_.end()) {
+        return;
+    }
+    sendM1EvalReply(it->second, result.eval_id, result.ok, result.result,
+                    result.error);
+    evalReplyPeers_.erase(it);
+}
+
+void WorldApp::onCellRolloutReply(const std::string& /*peer*/,
+                                  const CellRolloutReply& reply) {
+    const auto it = rolloutReplyPeers_.find(reply.request_id);
+    if (it == rolloutReplyPeers_.end() || !m1Link_) {
+        return;
+    }
+    m1Link_->sendModuleRolloutReply(it->second, reply.request_id, reply.op,
+                                    reply.ok, reply.state, reply.window_faults,
+                                    reply.module_version, reply.detail);
+    rolloutReplyPeers_.erase(it);
+}
+
+void WorldApp::onCellDrainReply(const std::string& /*peer*/,
+                                const CellDrainReply& reply) {
+    const auto it = drainReplyPeers_.find(reply.request_id);
+    if (it == drainReplyPeers_.end() || !m1Link_) {
+        return;
+    }
+    m1Link_->sendWorldDrainReply(it->second, reply.request_id, reply.op,
+                                 reply.ok, reply.state, reply.active_instances,
+                                 reply.detail);
+    drainReplyPeers_.erase(it);
 }
 
 void WorldApp::drainDebugEvalResults() {

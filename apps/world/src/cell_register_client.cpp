@@ -37,6 +37,12 @@ constexpr std::uint16_t kRegisterRequestId = id_of(MsgId::cell_register_request)
 constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
+constexpr std::uint16_t kDebugEvalRequestId = id_of(MsgId::debug_eval_request);
+constexpr std::uint16_t kModuleRolloutRequestId = id_of(MsgId::module_rollout_request);
+constexpr std::uint16_t kWorldDrainRequestId = id_of(MsgId::world_drain_request);
+constexpr std::uint16_t kEvalResultId = id_of(MsgId::debug_eval_result);
+constexpr std::uint16_t kRolloutReplyId = id_of(MsgId::module_rollout_reply);
+constexpr std::uint16_t kDrainReplyId = id_of(MsgId::world_drain_reply);
 
 class CellRegisterClientImpl final : public CellRegisterClient {
 public:
@@ -101,6 +107,21 @@ public:
             kSpaceAssignId,
             [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_assign(data, size);
+            });
+        dispatcher.set_handler(
+            kDebugEvalRequestId,
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_debug_eval(data, size);
+            });
+        dispatcher.set_handler(
+            kModuleRolloutRequestId,
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_module_rollout(data, size);
+            });
+        dispatcher.set_handler(
+            kWorldDrainRequestId,
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_world_drain(data, size);
             });
         up_seen_ = false;
         down_since_ms_ = 0;
@@ -177,6 +198,21 @@ public:
     void setSpaceAssignListener(SpaceAssignListener fn) override {
         std::lock_guard<std::mutex> lock(state_mutex_);
         assign_listener_ = std::move(fn);
+    }
+
+    void set_debug_eval_listener(DebugEvalListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        debug_eval_listener_ = std::move(fn);
+    }
+
+    void set_module_rollout_listener(ModuleRolloutListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        module_rollout_listener_ = std::move(fn);
+    }
+
+    void set_world_drain_listener(WorldDrainListener fn) override {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        world_drain_listener_ = std::move(fn);
     }
 
     void set_link_freeze_listener(LinkFreezeListener fn) override {
@@ -319,6 +355,73 @@ private:
         send_space_reports();
     }
 
+    void handle_debug_eval(const std::uint8_t* data, std::size_t size) {
+        // 944 请求转发受理（切片2）：World 端经注册连接反向发送；cell 宿主
+        // 处理后回 945。残帧/无监听器 = 尽力面丢弃（管理面超时重发裁决）。
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(kDebugEvalRequestId, data, size, fields)
+            || fields.size() != 3) {
+            return;
+        }
+        CellDebugEvalRequest req;
+        req.eval_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.scene_id = static_cast<std::uint64_t>(fields[1].integer);
+        req.source = fields[2].text;
+        DebugEvalListener fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            fn = debug_eval_listener_;
+        }
+        if (fn) {
+            fn(req);
+        }
+    }
+
+    void handle_module_rollout(const std::uint8_t* data, std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(kModuleRolloutRequestId, data, size, fields)
+            || fields.size() != 8) {
+            return;
+        }
+        CellModuleRolloutRequest req;
+        req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.op = static_cast<std::int32_t>(fields[1].integer);
+        req.name = fields[2].text;
+        req.version = static_cast<std::uint64_t>(fields[3].integer);
+        req.deps = fields[4].text;
+        req.source = fields[5].text;
+        req.observe_ticks = static_cast<std::uint64_t>(fields[6].integer);
+        req.fault_threshold = static_cast<std::uint64_t>(fields[7].integer);
+        ModuleRolloutListener fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            fn = module_rollout_listener_;
+        }
+        if (fn) {
+            fn(req);
+        }
+    }
+
+    void handle_world_drain(const std::uint8_t* data, std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(kWorldDrainRequestId, data, size, fields)
+            || fields.size() != 3) {
+            return;
+        }
+        CellWorldDrainRequest req;
+        req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        req.op = static_cast<std::int32_t>(fields[1].integer);
+        req.deadline_s = fields[2].integer;
+        WorldDrainListener fn;
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            fn = world_drain_listener_;
+        }
+        if (fn) {
+            fn(req);
+        }
+    }
+
     void send_space_reports() {
         // 967 逐条目上发（批B 对账上行面）：自有归属（owner=本 cell 且 ready）
         // 各一帧——生成链无重复组，条目数即帧数。泵上下文（handle_reply 内）
@@ -353,6 +456,68 @@ private:
             l->send(kSpaceReportId, payload.data(), payload.size(),
                     link::SendClass::kReliable);
         }
+    }
+
+    void sendDebugEvalResult(const CellDebugEvalResult& result) override {
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || result.eval_id == 0
+            || l->state() != link::LinkState::kUp) {
+            return;  // 尽力面（World 侧超时重发裁决）
+        }
+        std::vector<wire::FieldValue> f(4);
+        f[0].integer = static_cast<std::int64_t>(result.eval_id);
+        f[1].integer = result.ok ? 1 : 0;
+        f[2].text = result.result;
+        f[3].text = result.error;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kEvalResultId, f, payload)) {
+            return;
+        }
+        l->send(kEvalResultId, payload.data(), payload.size(),
+                link::SendClass::kReliable);
+    }
+
+    void sendModuleRolloutReply(const CellModuleRolloutReply& reply) override {
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || reply.request_id == 0
+            || l->state() != link::LinkState::kUp) {
+            return;
+        }
+        std::vector<wire::FieldValue> f(7);
+        f[0].integer = static_cast<std::int64_t>(reply.request_id);
+        f[1].integer = reply.op;
+        f[2].integer = reply.ok ? 1 : 0;
+        f[3].integer = reply.state;
+        f[4].integer = static_cast<std::int64_t>(reply.window_faults);
+        f[5].integer = static_cast<std::int64_t>(reply.module_version);
+        f[6].text = reply.detail;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kRolloutReplyId, f, payload)) {
+            return;
+        }
+        l->send(kRolloutReplyId, payload.data(), payload.size(),
+                link::SendClass::kReliable);
+    }
+
+    void sendWorldDrainReply(const CellWorldDrainReply& reply) override {
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || reply.request_id == 0
+            || l->state() != link::LinkState::kUp) {
+            return;
+        }
+        std::vector<wire::FieldValue> f(6);
+        f[0].integer = static_cast<std::int64_t>(reply.request_id);
+        f[1].integer = reply.op;
+        f[2].integer = reply.ok ? 1 : 0;
+        f[3].integer = reply.state;
+        f[4].integer = static_cast<std::int64_t>(reply.active_instances);
+        f[5].text = reply.detail;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kDrainReplyId, f, payload)) {
+            return;
+        }
+        l->send(kDrainReplyId, payload.data(), payload.size(),
+                link::SendClass::kReliable);
     }
 
     std::int32_t reported_drain_state() const {
@@ -398,6 +563,9 @@ private:
     std::int32_t reported_load_ = 0;          // 宿主写 / 泵上下文读（0 = 空载缺省）
     bool reported_ready_ = true;              // 宿主写 / 泵上下文读（true = 可分配缺省）
     SpaceAssignListener assign_listener_;            // 宿主装配 / 泵上下文读
+    DebugEvalListener debug_eval_listener_;          // 宿主装配 / 泵上下文读
+    ModuleRolloutListener module_rollout_listener_;  // 宿主装配 / 泵上下文读
+    WorldDrainListener world_drain_listener_;        // 宿主装配 / 泵上下文读
     LinkFreezeListener freeze_listener_;             // 宿主装配 / 泵上下文读
     ReadmitListener readmit_listener_;               // 宿主装配 / 泵上下文读
     std::map<std::uint64_t, SpaceAssignRecord> applied_assigns_;  // space → 已应用视图

@@ -136,7 +136,8 @@ if(NOT WIN32)
         add_test(NAME WorldCellIndependentSmoke COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/world_cell_independent_smoke.py
             $<TARGET_FILE:login> $<TARGET_FILE:world> $<TARGET_FILE:cellServer>
-            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
+            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json
+            $<TARGET_FILE:fleetctl>)
         set_tests_properties(WorldCellIndependentSmoke PROPERTIES TIMEOUT 40
             RUN_SERIAL TRUE)
     endif()

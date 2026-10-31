@@ -6,6 +6,7 @@
 #include "world_app/config.hpp"
 #include "apollo/runtime/crash_capture.hpp"
 #include "apollo/core/log/log_manager.h"
+#include "apollo/script/module_rollout.hpp"
 #include "apollo/net/logpush/log_push_env.hpp"
 #include "apollo/net/metricspush/metrics_push_env.hpp"
 #include "apollo/net/discovery/discovery.hpp"
@@ -21,6 +22,8 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace world_app {
@@ -43,6 +46,40 @@ void signal_handler(int signal) {
 bool is_fleet_arg(const std::string& arg) {
     return arg == "--machined-host" || arg == "--machined-port" ||
            arg == "--component-id" || arg == "--zone-id";
+}
+
+// 逗号分隔依赖名 → 列表（952 编排请求；空段跳过，全空 = 无依赖）。
+std::vector<std::string> split_dep_list(const std::string& text) {
+    std::vector<std::string> out;
+    std::string token;
+    auto flush = [&] {
+        if (!token.empty()) {
+            out.push_back(std::move(token));
+        }
+        token.clear();
+    };
+    for (const char c : text) {
+        if (c == ',') {
+            flush();
+        } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            token.push_back(c);
+        }
+    }
+    flush();
+    return out;
+}
+
+// 错误行拼合（953 detail 多行面）。
+std::string join_lines(const std::vector<std::string>& lines) {
+    std::string out;
+    for (const auto& l : lines) {
+        if (!out.empty()) {
+            out.push_back(';');
+            out.push_back(' ');
+        }
+        out += l;
+    }
+    return out;
 }
 
 // 执行端出口适配（IM1Egress → M1LinkServer；与 WorldApp 内嵌适配同型；
@@ -237,6 +274,16 @@ int run_cell_entry_body(int argc, char* argv[],
         cell.set_egress(&egress);
 
         std::unique_ptr<CellRegisterClient> register_client;
+        // 管理命令状态（切片2 World→cell 转发；cell 宿主独占——监听器在
+        // 注册泵上下文同步回调，与 cell pre_tick 同线程单写者）。
+        std::unique_ptr<apollo::script::ModuleRollout> cell_module_rollout;
+        std::string cell_last_rollout_name;
+        std::unordered_map<std::uint64_t, std::string> cell_eval_peers;
+        std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>>
+            cell_scene_pending_evals;
+        std::int32_t cell_drain_state = 0;  // 0=serving 1=draining 2=drained
+        std::uint64_t cell_drain_deadline_ms = 0;
+        std::string cell_drain_detail;
         cell.set_pre_tick(
             [&egress, &register_client, &cell](std::uint64_t now_ms) {
                 if (egress.link) {
@@ -255,6 +302,46 @@ int run_cell_entry_body(int argc, char* argv[],
                                   std::size_t{100}, pending * 100 / queue_cap)));
                     register_client->setReportedReady(!cell.frozen());
                     register_client->pump(now_ms);
+                }
+            });
+        cell.set_post_tick(
+            [&register_client, &cell, &cell_scene_pending_evals,
+             &cell_drain_state, &cell_drain_deadline_ms, &cell_drain_detail](
+                double) {
+                // eval 收账（切片2）：Scene::tick 的固定调试点已执行在途 eval，
+                // 取回传结果经注册连接反向发回 World（World 按 eval_id 关联原
+                // fleetctl peer 回传 945）。
+                if (register_client) {
+                    for (auto it = cell_scene_pending_evals.begin();
+                         it != cell_scene_pending_evals.end();) {
+                        auto* scene = cell.find_scene(it->first);
+                        if (scene == nullptr) {
+                            it = cell_scene_pending_evals.erase(it);
+                            continue;
+                        }
+                        for (auto& r : scene->drain_debug_eval_results()) {
+                            CellDebugEvalResult res;
+                            res.eval_id = r.id;
+                            res.ok = r.ok;
+                            res.result = r.ok ? r.result : "";
+                            res.error = r.ok ? "" : r.result;
+                            register_client->sendDebugEvalResult(res);
+                            it->second.erase(r.id);
+                        }
+                        if (it->second.empty()) {
+                            it = cell_scene_pending_evals.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+                // drain 推进（切片2）：排空期 active 归零落 drained。
+                if (cell_drain_state == 1) {
+                    auto* squads = cell.squadInstanceService();
+                    if (squads != nullptr && squads->active_count() == 0) {
+                        cell_drain_state = 2;
+                        cell_drain_detail = "drained: all instances settled";
+                    }
                 }
             });
         auto link = makeM1LinkServer(
@@ -316,6 +403,216 @@ int run_cell_entry_body(int argc, char* argv[],
                 cell.set_frozen(false);
                 logger->info("re-admitted by world: kernel resumed");
             });
+
+            // 管理命令受理（切片2 World→cell 转发）：World 端经注册连接反向
+            // 发送 944/952/956，cell 宿主在此处理并回执 945/953/957（经本
+            // 连接反向发回 World，World 再按 eval_id/request_id 关联原
+            // fleetctl/admin peer 回传）。监听器在注册泵上下文同步回调，
+            // 与 cell pre_tick 同线程单写者。
+            register_client->set_debug_eval_listener(
+                [&cell, &register_client, &logger, &cell_eval_peers,
+                 &cell_scene_pending_evals](const CellDebugEvalRequest& req) {
+                    if (req.eval_id == 0) {
+                        return;  // 0 保留
+                    }
+                    auto* scene = cell.find_scene(
+                        req.scene_id != 0 ? req.scene_id : cell.default_scene_id());
+                    if (scene == nullptr || !scene->script_attached()) {
+                        CellDebugEvalResult res;
+                        res.eval_id = req.eval_id;
+                        res.ok = false;
+                        res.error = "scene not attached";
+                        register_client->sendDebugEvalResult(res);
+                        return;
+                    }
+                    if (!scene->enqueue_debug_eval(req.eval_id, req.source)) {
+                        CellDebugEvalResult res;
+                        res.eval_id = req.eval_id;
+                        res.ok = false;
+                        res.error = "eval queue full";
+                        register_client->sendDebugEvalResult(res);
+                        return;
+                    }
+                    cell_scene_pending_evals[req.scene_id != 0
+                                                ? req.scene_id
+                                                : cell.default_scene_id()]
+                        .insert(req.eval_id);
+                });
+            register_client->set_module_rollout_listener(
+                [&cell, &register_client, &logger, &cell_module_rollout,
+                 &cell_last_rollout_name](const CellModuleRolloutRequest& req) {
+                    if (req.request_id == 0) {
+                        return;
+                    }
+                    auto* script = cell.script_runtime();
+                    auto reply = [&](bool ok, std::int32_t state,
+                                     std::uint64_t faults, std::uint64_t version,
+                                     const std::string& detail) {
+                        CellModuleRolloutReply rep;
+                        rep.request_id = req.request_id;
+                        rep.op = req.op;
+                        rep.ok = ok;
+                        rep.state = state;
+                        rep.window_faults = faults;
+                        rep.module_version = version;
+                        rep.detail = detail;
+                        register_client->sendModuleRolloutReply(rep);
+                    };
+                    if (script == nullptr) {
+                        reply(false, -1, 0, 0, "script runtime not ready");
+                        return;
+                    }
+                    const auto state_of = [&]() -> std::int32_t {
+                        return cell_module_rollout
+                                   ? static_cast<std::int32_t>(
+                                         cell_module_rollout->state())
+                                   : 0;
+                    };
+                    const auto detail_of = [&]() -> std::string {
+                        if (!cell_module_rollout) {
+                            return std::string("no rollout in flight");
+                        }
+                        const auto errs = cell_module_rollout->errors();
+                        return errs.empty() ? std::string("no errors")
+                                            : join_lines(errs);
+                    };
+                    switch (req.op) {
+                        case 1: {  // prepare
+                            if (cell_module_rollout == nullptr) {
+                                cell_module_rollout =
+                                    std::make_unique<apollo::script::ModuleRollout>(
+                                        std::vector<apollo::script::RolloutTarget>{
+                                            {"cell", script}});
+                            }
+                            apollo::script::RolloutModule mod;
+                            mod.name = req.name;
+                            mod.version = req.version;
+                            mod.deps = split_dep_list(req.deps);
+                            mod.source = req.source;
+                            const bool ok = cell_module_rollout->prepare(
+                                {mod}, {"cell"},
+                                apollo::script::CanaryParams{req.observe_ticks,
+                                                             req.fault_threshold});
+                            if (ok) {
+                                cell_last_rollout_name = req.name;
+                                logger->info("cell module rollout prepared: "
+                                             + req.name + " v"
+                                             + std::to_string(req.version));
+                            }
+                            reply(ok, state_of(), 0,
+                                  script->module_version(req.name), detail_of());
+                            return;
+                        }
+                        case 2: {  // commit
+                            if (cell_module_rollout == nullptr) {
+                                reply(false, 0, 0, script->module_version(req.name),
+                                      "no rollout in flight");
+                                return;
+                            }
+                            if (cell_module_rollout->state() ==
+                                apollo::script::RolloutState::kCanaryPending) {
+                                cell_module_rollout->commit_target("cell");
+                            }
+                            const bool ok = cell_module_rollout->state() ==
+                                            apollo::script::RolloutState::kObserving;
+                            if (ok) {
+                                logger->info("cell module rollout committed: "
+                                             + req.name + " v"
+                                             + std::to_string(req.version));
+                            }
+                            reply(ok, state_of(), 0,
+                                  script->module_version(req.name), detail_of());
+                            return;
+                        }
+                        case 3: {  // rollback/abort
+                            if (cell_module_rollout == nullptr) {
+                                reply(true, 0, 0, script->module_version(req.name),
+                                      "no rollout in flight");
+                                return;
+                            }
+                            if (cell_module_rollout->state() ==
+                                apollo::script::RolloutState::kCanaryPending) {
+                                cell_module_rollout.reset();
+                                reply(true, 0, 0, script->module_version(req.name),
+                                      "aborted: nothing committed");
+                                return;
+                            }
+                            cell_module_rollout->rollback_target("cell");
+                            reply(true, state_of(), 0,
+                                  script->module_version(req.name), detail_of());
+                            return;
+                        }
+                        default: {  // status
+                            reply(true, state_of(), 0,
+                                  script->module_version(req.name), detail_of());
+                            return;
+                        }
+                    }
+                });
+            register_client->set_world_drain_listener(
+                [&cell, &register_client, &logger, &cell_drain_state,
+                 &cell_drain_deadline_ms, &cell_drain_detail](
+                    const CellWorldDrainRequest& req) {
+                    if (req.request_id == 0) {
+                        return;
+                    }
+                    auto* squads = cell.squadInstanceService();
+                    const auto active_of = [&]() -> std::uint64_t {
+                        return squads ? squads->active_count() : 0;
+                    };
+                    const auto detail_of = [&]() -> std::string {
+                        switch (cell_drain_state) {
+                            case 2:
+                                return cell_drain_detail;
+                            case 1:
+                                return "draining: "
+                                       + std::to_string(active_of())
+                                       + " active instances settling";
+                            default:
+                                return "serving";
+                        }
+                    };
+                    auto reply = [&](bool ok, const std::string& detail) {
+                        CellWorldDrainReply rep;
+                        rep.request_id = req.request_id;
+                        rep.op = req.op;
+                        rep.ok = ok;
+                        rep.state = cell_drain_state;
+                        rep.active_instances = active_of();
+                        rep.detail = detail;
+                        register_client->sendWorldDrainReply(rep);
+                    };
+                    if (squads == nullptr) {
+                        reply(false, "squad service not ready");
+                        return;
+                    }
+                    switch (req.op) {
+                        case 1: {  // begin
+                            if (cell_drain_state == 0) {
+                                squads->set_drain(true);
+                                cell_drain_state = 1;
+                                cell_drain_deadline_ms =
+                                    req.deadline_s > 0
+                                        ? steady_now_ms()
+                                              + static_cast<std::uint64_t>(
+                                                    req.deadline_s)
+                                                    * 1000U
+                                        : 0;
+                                logger->info("cell drain begun");
+                            }
+                            reply(true, detail_of());
+                            return;
+                        }
+                        case 2: {  // status
+                            reply(true, detail_of());
+                            return;
+                        }
+                        default:
+                            reply(false, "unknown op "
+                                            + std::to_string(req.op));
+                            return;
+                    }
+                });
         };
 
         logger->info("Starting server...");

@@ -220,7 +220,13 @@ public:
                      std::function<void(const std::string&, const CellRetireRequest&)>
                          on_cell_retire,
                      std::function<void(const std::string&, const CellSpaceReport&)>
-                         on_cell_space_report)
+                         on_cell_space_report,
+                     std::function<void(const std::string&, const CellEvalResult&)>
+                         on_cell_eval_result,
+                     std::function<void(const std::string&, const CellRolloutReply&)>
+                         on_cell_rollout_reply,
+                     std::function<void(const std::string&, const CellDrainReply&)>
+                         on_cell_drain_reply)
         : config_(std::move(config))
         , on_intent_(std::move(on_intent))
         , on_debug_eval_(std::move(on_debug_eval))
@@ -228,7 +234,10 @@ public:
         , on_world_drain_(std::move(on_world_drain))
         , on_cell_register_(std::move(on_cell_register))
         , on_cell_retire_(std::move(on_cell_retire))
-        , on_cell_space_report_(std::move(on_cell_space_report)) {}
+        , on_cell_space_report_(std::move(on_cell_space_report))
+        , on_cell_eval_result_(std::move(on_cell_eval_result))
+        , on_cell_rollout_reply_(std::move(on_cell_rollout_reply))
+        , on_cell_drain_reply_(std::move(on_cell_drain_reply)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -487,6 +496,80 @@ public:
                          link::SendClass::kReliable);
     }
 
+    bool sendCellDebugEvalRequest(const std::string& peer,
+                                  const DebugEvalRequest& request) override {
+        if (!manager_ || request.eval_id == 0) {
+            return false;  // 0 保留（关联键缺位即静默）
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return false;  // 未知 peer = 尽力面（管理面超时重发裁决）
+        }
+        std::vector<wire::FieldValue> fields(3);
+        fields[0].integer = static_cast<std::int64_t>(request.eval_id);
+        fields[1].integer = static_cast<std::int64_t>(request.scene_id);
+        fields[2].text = request.source;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::debug_eval_request), fields, payload)) {
+            return false;
+        }
+        // Reliable：管理命令不可丢（断连排队，重连恰一次补投；同 962）。
+        return link->send(id_of(MsgId::debug_eval_request), payload.data(),
+                          payload.size(), link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
+    bool sendCellModuleRolloutRequest(const std::string& peer,
+                                      const ModuleRolloutRequest& request) override {
+        if (!manager_ || request.request_id == 0) {
+            return false;  // 0 保留
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return false;
+        }
+        std::vector<wire::FieldValue> fields(8);
+        fields[0].integer = static_cast<std::int64_t>(request.request_id);
+        fields[1].integer = request.op;
+        fields[2].text = request.name;
+        fields[3].integer = static_cast<std::int64_t>(request.version);
+        fields[4].text = request.deps;
+        fields[5].text = request.source;
+        fields[6].integer = static_cast<std::int64_t>(request.observe_ticks);
+        fields[7].integer = static_cast<std::int64_t>(request.fault_threshold);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::module_rollout_request), fields,
+                                  payload)) {
+            return false;
+        }
+        return link->send(id_of(MsgId::module_rollout_request), payload.data(),
+                          payload.size(), link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
+    bool sendCellWorldDrainRequest(const std::string& peer,
+                                   const WorldDrainRequest& request) override {
+        if (!manager_ || request.request_id == 0) {
+            return false;  // 0 保留
+        }
+        auto* link = manager_->link(peer);
+        if (link == nullptr) {
+            return false;
+        }
+        std::vector<wire::FieldValue> fields(3);
+        fields[0].integer = static_cast<std::int64_t>(request.request_id);
+        fields[1].integer = request.op;
+        fields[2].integer = request.deadline_s;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::world_drain_request), fields,
+                                  payload)) {
+            return false;
+        }
+        return link->send(id_of(MsgId::world_drain_request), payload.data(),
+                          payload.size(), link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
     std::uint16_t listenPort() const override {
         return manager_ ? manager_->endpoint_port("gateway") : 0;
     }
@@ -586,6 +669,24 @@ private:
             id_of(MsgId::cell_space_report),
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_cell_space_report_frame(link.peer_name(), data, size);
+            });
+        // 945/953/957 cell 执行端回执（切片2 World→cell 命令转发）：cell 宿主
+        // 经注册连接反向发送，World 在此受理并按 eval_id/request_id 关联原
+        // fleetctl/admin peer 后回传。发端 peer = cell 自报名。
+        dispatcher.set_handler(
+            id_of(MsgId::debug_eval_result),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_eval_result_frame(link.peer_name(), data, size);
+            });
+        dispatcher.set_handler(
+            id_of(MsgId::module_rollout_reply),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_rollout_reply_frame(link.peer_name(), data, size);
+            });
+        dispatcher.set_handler(
+            id_of(MsgId::world_drain_reply),
+            [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_drain_reply_frame(link.peer_name(), data, size);
             });
     }
 
@@ -695,6 +796,59 @@ private:
         on_cell_space_report_(peer, req);
     }
 
+    void handle_cell_eval_result_frame(const std::string& peer, const std::uint8_t* data,
+                                       std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::debug_eval_result), data, size, fields)
+            || fields.size() != 4 || on_cell_eval_result_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        CellEvalResult res;
+        res.eval_id = static_cast<std::uint64_t>(fields[0].integer);
+        res.ok = fields[1].integer != 0;
+        res.result = fields[2].text;
+        res.error = fields[3].text;
+        on_cell_eval_result_(peer, res);
+    }
+
+    void handle_cell_rollout_reply_frame(const std::string& peer, const std::uint8_t* data,
+                                         std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::module_rollout_reply), data, size, fields)
+            || fields.size() != 7 || on_cell_rollout_reply_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        CellRolloutReply rep;
+        rep.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        rep.op = static_cast<std::int32_t>(fields[1].integer);
+        rep.ok = fields[2].integer != 0;
+        rep.state = static_cast<std::int32_t>(fields[3].integer);
+        rep.window_faults = static_cast<std::uint64_t>(fields[4].integer);
+        rep.module_version = static_cast<std::uint64_t>(fields[5].integer);
+        rep.detail = fields[6].text;
+        on_cell_rollout_reply_(peer, rep);
+    }
+
+    void handle_cell_drain_reply_frame(const std::string& peer, const std::uint8_t* data,
+                                       std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::world_drain_reply), data, size, fields)
+            || fields.size() != 6 || on_cell_drain_reply_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        CellDrainReply rep;
+        rep.request_id = static_cast<std::uint64_t>(fields[0].integer);
+        rep.op = static_cast<std::int32_t>(fields[1].integer);
+        rep.ok = fields[2].integer != 0;
+        rep.state = static_cast<std::int32_t>(fields[3].integer);
+        rep.active_instances = static_cast<std::uint64_t>(fields[4].integer);
+        rep.detail = fields[5].text;
+        on_cell_drain_reply_(peer, rep);
+    }
+
     void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
                                std::size_t size) {
         trace::EnvelopeFields env;
@@ -739,6 +893,9 @@ private:
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register_;
     std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire_;
     std::function<void(const std::string&, const CellSpaceReport&)> on_cell_space_report_;
+    std::function<void(const std::string&, const CellEvalResult&)> on_cell_eval_result_;
+    std::function<void(const std::string&, const CellRolloutReply&)> on_cell_rollout_reply_;
+    std::function<void(const std::string&, const CellDrainReply&)> on_cell_drain_reply_;
     // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
@@ -759,14 +916,23 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register,
     std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire,
     std::function<void(const std::string&, const CellSpaceReport&)>
-        on_cell_space_report) {
+        on_cell_space_report,
+    std::function<void(const std::string&, const CellEvalResult&)>
+        on_cell_eval_result,
+    std::function<void(const std::string&, const CellRolloutReply&)>
+        on_cell_rollout_reply,
+    std::function<void(const std::string&, const CellDrainReply&)>
+        on_cell_drain_reply) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
                                               std::move(on_debug_eval),
                                               std::move(on_module_rollout),
                                               std::move(on_world_drain),
                                               std::move(on_cell_register),
                                               std::move(on_cell_retire),
-                                              std::move(on_cell_space_report));
+                                              std::move(on_cell_space_report),
+                                              std::move(on_cell_eval_result),
+                                              std::move(on_cell_rollout_reply),
+                                              std::move(on_cell_drain_reply));
 }
 
 #else // _WIN32
@@ -783,7 +949,13 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRetireRequest&)>
         /*on_cell_retire*/,
     std::function<void(const std::string&, const CellSpaceReport&)>
-        /*on_cell_space_report*/) {
+        /*on_cell_space_report*/,
+    std::function<void(const std::string&, const CellEvalResult&)>
+        /*on_cell_eval_result*/,
+    std::function<void(const std::string&, const CellRolloutReply&)>
+        /*on_cell_rollout_reply*/,
+    std::function<void(const std::string&, const CellDrainReply&)>
+        /*on_cell_drain_reply*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();
