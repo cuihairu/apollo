@@ -8,11 +8,14 @@
 #   编队位置在 Database 之后——存储不可达即拒起（由 machined 退避重试）。
 # World：玩法链路 9101（玩家档案链路已迁 BaseServer 9201——L19 资料归属切换；
 #   结算落账 = 返回业务请求拨 BaseServer 9201，P1 基础业务与结算迁入）。
-#   管理角色声明 `--assign-spaces 401,402` 分配池——多 cell 编队样例：注册的
-#   就绪 cell 按最小负载独占认领（401/402 归首个就绪 cell，见
-#   world-cell-management L101/L104 分配面）；无 cell 注册时池静默不推。
-# Cell 执行端（cellServer 独立入口，L98/L104 多 cell 样例，opt-in）：
-#   APOLLO_FLEET_CELLS=<n> 启 n 个 cell（缺省 0 = 不启，既有形态不动）——
+#   管理角色声明 `--assign-spaces` 分配池（D01 已代决缺省形态，见
+#   docs/review/2026-10-30-actions/01）：默认编队常驻一个 cell（cell-21），
+#   池 = 其声明的 501/502；APOLLO_FLEET_CELLS=2 时池含 503（cell-22 声明，
+#   分配策略首阶段按首个就绪独占认领，两 cell 各自认领随拓扑批）；
+#   APOLLO_FLEET_CELLS=0 = 显式管理测试模式，池静默不推。
+# Cell 执行端（cellServer 独立入口，L98/L104 多 cell 样例；D01 已代决
+#   缺省形态）：APOLLO_FLEET_CELLS=<n> 启 n 个 cell（缺省 1 = 常驻一个
+#   cellServer；0 = 显式管理测试模式不启 cell）——
 #   cell-21 @9301 声明 501:arena/502:lobby、cell-22 @9302 声明 503:duel，均
 #   拨 World 管理 M1 9101 注册——960 注册/961 裁决、962 分配应用、967 自报
 #   对账面全走真链路。组件号：World=11，Gateway=12，Login=13，Cell=21/22。
@@ -35,14 +38,29 @@ PIDFILE="$FLEET_DIR/machined.pid"
 LOGFILE="$FLEET_DIR/machined.log"
 MACHINED="$BUILD_DIR/apps/machined/machined"
 
-# Cell 执行端（多 cell 编队样例，opt-in）：APOLLO_FLEET_CELLS=<n> 启 n 个
+# Cell 执行端（多 cell 编队样例）：APOLLO_FLEET_CELLS=<n> 启 n 个
 # cell（1 = cell-21，2 = +cell-22；>2 截 2 并告警——样例仅定义两 cell）。
-# 缺省 0 = 既有 7 成员形态不动——编队拓扑缺省值（常驻 vs opt-in）属部署
-# 口径拍板面，本批取保守 opt-in 交付样例、缺省零变化。cell 均为独立
-# cellServer 入口：cell-21 于 --m1-port 9301 声明 501:arena/502:lobby，
-# cell-22 于 9302 声明 503:duel，均拨 World 管理 M1 9101 注册。
+# 缺省 1 = 常驻一个 cellServer（D01 已代决部署缺省形态）；0 = 显式管理测试
+# 模式。cell 均为独立 cellServer 入口：cell-21 于 --m1-port 9301 声明
+# 501:arena/502:lobby，cell-22 于 9302 声明 503:duel，均拨 World 管理 M1
+# 9101 注册。
+# World 分配池（D01 已代决缺省形态）：默认常驻 cell-21 → 其声明的 501/502；
+# 双 cell 样例加 cell-22 声明的 503（首阶段首个就绪独占认领，两 cell 各自
+# 认领随拓扑/重平衡批）；APOLLO_FLEET_CELLS=0 = 管理测试模式（无 cell，池
+# 静默不推，保留 401/402 兼容占位）。
+world_assign_spaces() {
+    local n="${APOLLO_FLEET_CELLS:-1}"
+    if [[ "$n" -le 0 ]]; then
+        echo "401,402"
+    elif [[ "$n" -ge 2 ]]; then
+        echo "501,502,503"
+    else
+        echo "501,502"
+    fi
+}
+
 cell_entries() {
-    local n="${APOLLO_FLEET_CELLS:-0}"
+    local n="${APOLLO_FLEET_CELLS:-1}"
     [[ "$n" -gt 0 ]] || return 0
     if [[ "$n" -gt 2 ]]; then
         echo "# APOLLO_FLEET_CELLS=$n 截为 2（样例仅定义 cell-21/22）" >&2
@@ -113,7 +131,7 @@ logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir lo
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
 database  | 0 | $BUILD_DIR/apps/database/database --port 9200 --data-dir $FLEET_DIR/data/database/players --journal $FLEET_DIR/data/database/persist.log
 base | 0 | $BUILD_DIR/apps/base/base --port 9201 --database-port 9200
-world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --machined-port 9600 --component-id 11 --assign-spaces 401,402 --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 $(cell_entries)
 login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9103 --world-store-m1-port 9201 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
 gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port 9103 --directory-m1-port 9105 --machined-port 9600 --component-id 12
