@@ -101,7 +101,7 @@
 
 ## P2：worldServer 管理与 cell 执行分离
 
-- [ ] 从当前 WorldApp 分离 worldServer 管理职责与 cell 模拟入口；模拟循环、WorldHost/Scene/Avatar、AOI、战斗与 Lua 迁入执行端，World 保留注册、拓扑、容量和迁移管理。（BLOCKED复核 2026-10-30：WorldApp 管理壳仍内嵌 CellApp，且以 WorldApp 为模拟宿主的既有集成测试需随迁移重构——部署缺省形态已代决并落地（D01/actions-01，见本项「批⑩」证据），剩余阻塞为管理壳移除与测试迁移切片）
+- [ ] 从当前 WorldApp 分离 worldServer 管理职责与 cell 模拟入口；模拟循环、WorldHost/Scene/Avatar、AOI、战斗与 Lua 迁入执行端，World 保留注册、拓扑、容量和迁移管理。（BLOCKED复核 2026-11-01：WorldApp 管理壳仍内嵌 CellApp（world_app.hpp:276 持有 `std::unique_ptr<CellApp> cell_`、world_app.cpp:146 hostSimulation=true 时装配），切片3「删除内嵌内核」未收口（docs/review/2026-10-30-actions/01-world-cell-separation.md 切片3）；既有集成测试仍以 WorldApp 为模拟宿主需随迁移重构——阻塞仍成立）
   - 已代决：按 docs/review/2026-10-30-decisions.md 执行（2026-10-30）。
     立即动作设计稿已落 docs/review/2026-10-30-actions/（4d6f2f82）；分项状态见 decisions 各节「执行注」与 actions/00-index。
   - 批⑩（D01 部署缺省形态已代决落地，L104 本子片收口）已交付：`scripts/dev_fleet.sh` 默认 `APOLLO_FLEET_CELLS=1`（常驻独立 `cellServer`，cell-21 @9301 声明 501:arena/502:lobby）；`=2` 加 cell-22 @9302 声明 503:duel；`=0` 保留显式管理测试模式（不启 cell，World 分配池回 401/402 兼容占位）。`world_assign_spaces()` 随 cell 数派生分配池（默认 501,502；`=2` 501,502,503；`=0` 401,402），World `--assign-spaces` 与 cell 声明空间一致（首阶段首个就绪独占认领，双 cell 各自认领随拓扑/重平衡批）。真实编队冒烟（san 树二进制，`/tmp/apollo-fleet-smoke-$(id -u)`，interfaces=0）：默认 8 成员起、cell-21 经 960/961 注册到 world（`cell registered: id=21`）、962 分配应用（`space assigned: space=501/502 cell=21 version=1`）、独立 cell 进程 `Server is running` 并推进 Space。门禁定向：WorldRoleTests/WorldAppAcceptanceTests/CellRegisterTests/CellServerEntrySmoke/WorldCellIndependentSmoke 5/5 绿（san 树）。commit baf3a9f8（实现+文档+本账）。
