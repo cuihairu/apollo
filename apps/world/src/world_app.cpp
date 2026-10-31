@@ -972,7 +972,12 @@ void WorldApp::onCellSpaceReport(const std::string& peer, const CellSpaceReport&
     }
     if (entry->second.cell_id == report.cell_id) {
         if (entry->second.version == report.applied_version) {
-            // 匹配（§4 行1）：保持，无操作。
+            // 匹配（§4 行1）：保持，无操作。独立 cellServer 进程 967 真链路
+            // 对账观测行（不改变裁决，只让冒烟可断言）。
+            worldLog().info("space report reconciled: space="
+                            + std::to_string(report.space_id)
+                            + " cell=" + std::to_string(report.cell_id)
+                            + " version=" + std::to_string(report.applied_version));
             return;
         }
         // 版本冲突（§4 行2）：权威仍归属本 cell 但应用版本对不上——journal

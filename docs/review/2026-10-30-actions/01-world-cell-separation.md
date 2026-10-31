@@ -3,6 +3,7 @@
 > 来源：docs/review/2026-10-30-decisions.md D01（todo.md:104）、D04（todo.md:142）、S01（todo.md:32）。
 > 本文件为「立即执行动作」的设计稿产出；实现与验收按各切片另行立项。
 > 切片1 部署缺省形态子片已落地：scripts/dev_fleet.sh 默认 `APOLLO_FLEET_CELLS=1`（常驻 cellServer）、`=0` 显式管理测试模式、World 分配池随 cell 数对齐（见 todo.md L104 批⑩）。
+> 切片1 967 真链路对账证明面子片已落地：WorldApp 对账匹配补观测日志 + 独立 cellServer 进程 smoke 断言（见 todo.md L104 批⑩b）。
 
 ## 1. D01 · WorldApp 执行面调用与相关测试清点
 

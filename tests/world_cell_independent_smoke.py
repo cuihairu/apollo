@@ -159,6 +159,25 @@ try:
                     break
         assert cell_registered, f"cell did not register to world: {world_out[-2000:]}"
 
+        # ---- 3b. 967 自报对账（独立 cell 真链路证明面）：cell 在 961 受理后
+        # 上发 967 cell_space_report（自有归属），world 对账匹配记 reconciled 行。
+        space_reconciled = False
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if "space report reconciled" in world_out:
+                space_reconciled = True
+                break
+            time.sleep(0.2)
+            import select as _sel
+            if _sel.select([world.stdout], [], [], 0.1)[0]:
+                chunk = os.read(world.stdout.fileno(), 65536).decode(errors="replace")
+                world_out += chunk
+                if "space report reconciled" in world_out:
+                    space_reconciled = True
+                    break
+        assert space_reconciled, (
+            f"cell 967 report not reconciled by world: {world_out[-2000:]}")
+
         # ---- 4. machined 未参与：进程级检测 ----
         # 仅检查已捕获输出缓冲不足：若 machined 以独立进程运行，其输出不在任何
         # 缓冲中。用 pgrep 对比测试前后 machined pid 集，证明无新增 machined 进程
