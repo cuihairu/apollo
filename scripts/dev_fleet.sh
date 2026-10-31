@@ -164,6 +164,14 @@ cmd_up() {
         echo "编队已在运行（machined pid $(cat "$PIDFILE")）；down 后再 up。" >&2
         exit 1
     fi
+    # S10 构建目录口径（docs/review/2026-10-30-actions/08 §4.3）：报出实际
+    # APOLLO_BUILD_DIR——运行来源固定到该树，不凭名称认定可用；APOLLO_BUILD_DIR
+    # 为唯一显式覆盖，未设即默认 <repo>/build。
+    if [[ -n "${APOLLO_BUILD_DIR:-}" ]]; then
+        echo "构建树（APOLLO_BUILD_DIR 显式指定）：$BUILD_DIR"
+    else
+        echo "构建树（默认，未设 APOLLO_BUILD_DIR）：$BUILD_DIR"
+    fi
     [[ -x "$MACHINED" ]] || { echo "machined 未构建：$MACHINED" >&2; exit 1; }
     check_interfaces_port_free || exit 1
 
