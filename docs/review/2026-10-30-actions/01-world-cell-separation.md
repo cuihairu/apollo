@@ -44,6 +44,8 @@
 | **切片2 · 管理命令转发** | eval / rollout / drain / 迁移命令改为面向执行端的控制消息（963 retire 等），不再经内嵌内核直调 | 对运行中的独立 cell 发 drain/retire，活动归零后 cell 退出，World 回收分配；迁移决定经 World 提交后目标 cell 激活 | 全部「切片2」测试目标迁移到独立 cell 驱动 |
 | **切片3 · 删除内嵌内核** | 从 `world_app.hpp` 移除 `cell_` 与执行面转发；对应测试改用 cellServer 驱动宿主 | 全树构建绿、测试绿；`world --help` 仅 manager；无 `cell` 角色残留引用 | 无（切片3 完成即 D01 收口） |
 
+> **切片3 状态（2026-11-01 收口）**：`world_app.hpp` 已移除 `#include "world_app/cell_app.hpp"` 与 `std::unique_ptr<CellApp> cell_`；WorldApp 只保留管理面（M1 端点、cell 注册、管理命令受理与经注册 cell 连接反向转发，`world_app.cpp` 内 `firstRegisteredCellPeer`/`sendCellDebugEvalRequest` 等）。独立执行入口 `cellServer`（`apps/world/src/cell_main.cpp` 直接持有 `CellApp`）；测试宿主 `tests/cell_host.hpp`（CellApp + 注册客户端 + M1 泵）替代原 WorldApp 内嵌形态。全树构建绿；ctest 83/83 绿；`world --help` 仅 manager（`role_options.hpp`）。切片3 完成即 D01 收口。 |
+
 > 依据决策「明确不做/延后」：延后自动伸缩、跨机启动；**不重新加入**已移除的 `world --role=cell` 入口。
 
 ## 2. D04 · 二进制 / CMake 目标 / 参数解析器 / 编队命令 / 教程对应表
