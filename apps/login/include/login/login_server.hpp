@@ -111,6 +111,14 @@ public:
     bool validateSession(SessionID sessionId, const std::string& loginTicket,
                          PlayerID& outPlayerId, std::string& outGatewayUrl);
 
+    // 准入跨端校验（L174）：ticket 为跨端凭证主键——gateway 会话号与 login
+    // 会话号分属两个编号空间，不要求一致。以 ticket 反查 login 会话，
+    // 回传 login 会话号供观测/目录追踪。
+    bool validateSessionByTicket(const std::string& loginTicket,
+                                 SessionID& outSessionId,
+                                 PlayerID& outPlayerId,
+                                 std::string& outGatewayUrl);
+
     // 移除会话
     void removeSession(SessionID sessionId);
 
@@ -174,6 +182,12 @@ public:
     // 网关分配请求处理（M1 准入面 handler 直通——MessageCodec 全帧进出，
     // 会话校验逻辑与 M1 面直通零分叉）
     std::vector<uint8_t> handleGatewayAssignRequest(const std::vector<uint8_t>& request);
+
+    // Base 激活面对端链路就绪观测面（L174；编排/测试用，不得以此代业务
+    // 等待——拨号后激活仍以 RPC 返回为准）。面关/装配缺位 = false。
+    bool baseActivationReady() const {
+        return worldStoreClient_ && worldStoreClient_->peerUp();
+    }
 
 private:
     // 编队面主循环（P3-1 re-home，秒拍）：恢复 intake 收包/收敛、周期全量

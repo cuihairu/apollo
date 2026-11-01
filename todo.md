@@ -171,7 +171,7 @@
 - [ ] gateway 基础业务接所属 Base，模拟输入接当前 cell，下行绑定真实会话；缓存失效、迟到位置投影、重定向和旧代次拒绝可恢复，正常消息不逐条经目录或 World 管理端代理。（BLOCKED复核 2026-11-01：缺 cell 模拟输入接线与位置投影发布——批⑧/㊶/㊷ 已落地 gateway 接 Base 前递，但「模拟输入接当前 cell」「下行绑定真实会话」与位置投影/重定向仍依赖 cell 真实接线与 L146 投影发布（L146 已 BLOCKED）；正常消息不逐条经目录代理需真实 cell 路由）
   - 已代决：按 docs/review/2026-10-30-decisions.md 执行（2026-10-30）。
     立即动作设计稿已落 docs/review/2026-10-30-actions/（4d6f2f82）；分项状态见 decisions 各节「执行注」与 actions/00-index。
-- [ ] 登录串联认证 → gateway 会话 → Base 经 database 激活 → World 准入/分配 → cell 创建实体；未进玩法也可保有 Base 对象。（BLOCKED复核 2026-11-01：缺登录全链路接线——认证/会话/Base 激活/World 准入/cell 创建四段尚未串成完整真实链路，依赖 P2 管理与执行分离（L104 已 BLOCKED）与 gateway/登录真实接线）
+- [x] 登录串联认证 → gateway 会话 → Base 经 database 激活 → World 准入/分配 → cell 创建实体；未进玩法也可保有 Base 对象。（登录全链路接线：tests/test_login_chain_e2e.cpp 串联真 LoginServer 准入面+base 客户端面、真 base PlayerStore M1 面、真 WorldApp/cell 注册、真 gateway 三面全接——真实 TCP 客户端经 gateway 建会话，login 以 ticket 跨端凭证签发（login 会话号与 gateway 会话号分属独立编号空间，准入以 ticket 反查为准），gateway 准入经 login M1 真实校验+base 激活+目录 World 准入，客户端 CELL_CREATE_ENTITY 经 gateway→world→cell 创建实体；base 锚点 Online+SessionBinding 已写。LoginChainE2eTests 1/1 + 全量 ctest 84/84 绿）
   - 已代决：按 docs/review/2026-10-30-decisions.md 执行（2026-10-30）。
     立即动作设计稿已落 docs/review/2026-10-30-actions/（4d6f2f82）；分项状态见 decisions 各节「执行注」与 actions/00-index。
 - [ ] 多 gateway 重连、重复登录、旧会话撤销与路由持久性接真实网络，恢复原 Base 与当前模拟位置，不创建第二个资料写入者。（BLOCKED复核 2026-11-01：缺真实网络/多 gateway/多客户端——需真实客户端多 gateway 重连与重复登录演练，涉及 TCP 会话保持与资料写权单写者裁决，依赖 P3/P4 真实链路批次）

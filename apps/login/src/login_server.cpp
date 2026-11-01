@@ -253,6 +253,48 @@ bool SessionManager::validateSession(
     return true;
 }
 
+bool SessionManager::validateSessionByTicket(
+    const std::string& loginTicket,
+    SessionID& outSessionId,
+    PlayerID& outPlayerId,
+    std::string& outGatewayUrl
+) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    // L174：ticket 是跨端凭证主键——gateway 会话号与 login 会话号分属两个
+    // 编号空间，准入校验不要求一致，以 ticket 反查 login 会话（会话号仅
+    // 观测/目录追踪用）。
+    if (loginTicket.empty()) {
+        return false;
+    }
+    const auto ticketIt = tickets_.find(loginTicket);
+    if (ticketIt == tickets_.end()) {
+        return false;
+    }
+    const auto it = sessions_.find(ticketIt->second);
+    if (it == sessions_.end()) {
+        tickets_.erase(ticketIt);
+        return false;
+    }
+    if (it->second.loginTicket != loginTicket) {
+        return false;
+    }
+
+    const auto& info = it->second;
+    int64_t now = getCurrentTimeMs();
+    if (now - info.lastAccessMs > config_.sessionTimeoutMs) {
+        tickets_.erase(ticketIt);
+        sessions_.erase(it);
+        return false;
+    }
+    const_cast<SessionInfo&>(info).lastAccessMs = now;
+
+    outSessionId = info.sessionId;
+    outPlayerId = info.playerId;
+    outGatewayUrl = info.gatewayUrl;
+    return true;
+}
+
 void SessionManager::removeSession(SessionID sessionId) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it = sessions_.find(sessionId);
@@ -806,10 +848,14 @@ std::vector<uint8_t> LoginServer::handleGatewayAssignRequest(const std::vector<u
     protocol::GatewayAssignResponse response;
     response.success = false;
 
-    // 验证会话
+    // 准入跨端校验（L174）：gateway 会话号与 login 会话号分属两个编号空间，
+    // 以 ticket 反查 login 会话（会话号仅追踪用）；playerId 以反查结果为准
+    // （ticket 绑定玩家，防请求侧伪报 playerId）。
     PlayerID playerId = 0;
+    SessionID loginSessionId = 0;
     std::string gatewayUrl;
-    if (sessionManager_->validateSession(assignReq.sessionId, assignReq.loginTicket, playerId, gatewayUrl)) {
+    if (sessionManager_->validateSessionByTicket(assignReq.loginTicket,
+                                                 loginSessionId, playerId, gatewayUrl)) {
         response.success = true;
         response.token = assignReq.loginTicket;
         if (!parseGatewayEndpoint(gatewayUrl, response.gatewayHost, response.gatewayPort)) {
@@ -817,7 +863,7 @@ std::vector<uint8_t> LoginServer::handleGatewayAssignRequest(const std::vector<u
             response.errorMessage = "Invalid gateway endpoint";
         }
     } else {
-        response.errorMessage = "Invalid or expired session";
+        response.errorMessage = "Invalid or expired login ticket";
     }
 
     return protocol::MessageCodec::encode(response, header.sessionId);

@@ -1939,6 +1939,65 @@ endif()
 add_test(NAME GatewayPushDownlinkTests COMMAND gateway_push_downlink_tests)
 endif()
 
+# 登录全链路 e2e（L174）：认证 → gateway 会话 → Base 经 database 激活 →
+# World 准入/分配 → cell 创建实体。四段串成一条真实链路（真 login 准入面
+# + 真 base PlayerStore M1 面 + 真 WorldApp/cell + 真 gateway 三面全接）。
+# 依赖 apps/common（PlayerStore）——game 模块开启时才有 apollo_app_services。
+if(TARGET apollo::game_world AND TARGET apollo_app_services)
+add_executable(login_chain_e2e_tests
+    test_login_chain_e2e.cpp
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
+    ../apps/login/src/login_server.cpp
+    ../apps/login/src/m1_admission_server.cpp
+    ../apps/login/src/m1_base_client.cpp
+    ../apps/login/src/m1_service_register_server.cpp
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/cell_app.cpp
+    ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
+    ../modules/protocol/src/messages.cpp
+    ../modules/protocol/src/codec.cpp
+)
+target_include_directories(login_chain_e2e_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+    ${CMAKE_SOURCE_DIR}/modules/protocol/include
+    ${CMAKE_SOURCE_DIR}/modules/runtime/include
+    ${CMAKE_SOURCE_DIR}/modules/script/include
+)
+target_compile_definitions(login_chain_e2e_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(login_chain_e2e_tests PRIVATE
+    apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
+    apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+if(WIN32)
+    target_link_libraries(login_chain_e2e_tests PRIVATE ws2_32)
+    target_compile_definitions(login_chain_e2e_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(login_chain_e2e_tests PRIVATE /utf-8)
+endif()
+add_test(NAME LoginChainE2eTests COMMAND login_chain_e2e_tests)
+endif()
+
 # ========== Logger Retrieval Tests (ADR-013 批 L3) ==========
 # LoggerApp 检索面 v1：结构化行读侧（写侧契约镜像）、proc/level/ts/cat
 # 过滤、目录摄取全链（FileAppender structuredOutput → 落盘 → ingest）、
@@ -2646,7 +2705,7 @@ add_test(NAME WorldAppScriptHostTests COMMAND world_app_script_host_tests)
 endif()
 
 # Runtime sources host shared services even when executable apps are disabled.
-foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests cell_app_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests cell_register_tests update_continuity_tests gateway_push_downlink_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests online_directory_m1_control_tests)
+foreach(apollo_hosted_target world_app_acceptance_tests world_app_m1_link_tests world_app_script_host_tests cell_app_tests gateway_m1_egress_tests squad_wire_e2e_tests world_drain_tests cell_register_tests update_continuity_tests gateway_push_downlink_tests login_chain_e2e_tests fleet_rehome_chain_tests login_m1_admission_tests base_m1_tests online_directory_m1_control_tests)
     if(TARGET ${apollo_hosted_target})
         # apollo_app_services 仅在 game 模块开启（⇒ apps/common 加入）时存在：
         # 其守卫是 `TARGET apollo_protocol AND apollo::game_session`，而
