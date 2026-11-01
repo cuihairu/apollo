@@ -717,6 +717,29 @@ private:
             [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
                 handle_cell_intent_ack_frame(link.peer_name(), data, size);
             });
+        // 939 client_deliver（切片3 独立 cell 回程）：cell 宿主经注册连接
+        // 反向发送客户端帧，World 在此受理并经 gateway_link() 转发 gateway
+        //（与 sendClientDeliver 的 gateway 直连面同载荷格式）。
+        dispatcher.set_handler(
+            id_of(MsgId::client_deliver),
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                handle_cell_client_deliver_frame(data, size);
+            });
+    }
+
+    void handle_cell_client_deliver_frame(const std::uint8_t* data,
+                                          std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::client_deliver), data, size,
+                                  fields)
+            || fields.size() != 3) {
+            ++rejected_;
+            return;
+        }
+        sendClientDeliver(
+            static_cast<std::uint64_t>(fields[0].integer),
+            static_cast<std::uint32_t>(fields[1].integer),
+            std::move(fields[2].bytes));
     }
 
     void handle_debug_eval_frame(const std::string& peer, const std::uint8_t* data,

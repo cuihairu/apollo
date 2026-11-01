@@ -45,6 +45,7 @@ constexpr std::uint16_t kEvalResultId = id_of(MsgId::debug_eval_result);
 constexpr std::uint16_t kRolloutReplyId = id_of(MsgId::module_rollout_reply);
 constexpr std::uint16_t kDrainReplyId = id_of(MsgId::world_drain_reply);
 constexpr std::uint16_t kIntentAckId = id_of(MsgId::cell_intent_ack);
+constexpr std::uint16_t kClientDeliverId = id_of(MsgId::client_deliver);
 
 class CellRegisterClientImpl final : public CellRegisterClient {
 public:
@@ -567,6 +568,28 @@ private:
             return;
         }
         l->send(kIntentAckId, payload.data(), payload.size(),
+                link::SendClass::kReliable);
+    }
+
+    void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                           const std::vector<std::uint8_t>& payload) override {
+        // 939 client_deliver 下行（切片3 独立 cell 回程）：Reliable 发回
+        // World，World 的 M1LinkServer 经 gateway_link() 转发 gateway。
+        // 链路未连/空帧 = 尽力面静默。
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || payload.empty()
+            || l->state() != link::LinkState::kUp) {
+            return;
+        }
+        std::vector<wire::FieldValue> f(3);
+        f[0].integer = static_cast<std::int64_t>(session_id);
+        f[1].integer = gateway_id;
+        f[2].bytes = payload;
+        std::vector<std::uint8_t> packed;
+        if (!wire::encode_payload(kClientDeliverId, f, packed)) {
+            return;
+        }
+        l->send(kClientDeliverId, packed.data(), packed.size(),
                 link::SendClass::kReliable);
     }
 

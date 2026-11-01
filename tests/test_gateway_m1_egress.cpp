@@ -13,6 +13,7 @@
 #include "gateway/gateway_server.hpp"
 #include "gateway/m1_egress.hpp"
 #include "world_app/world_app.hpp"
+#include "cell_host.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -647,6 +648,15 @@ bool test_gateway_cell_e2e() {
     world_app::WorldApp worldApp(worldConfig);
     worldApp.start();
     TEST_ASSERT(worldApp.m1Link().listenPort() != 0, "WorldApp M1 listening");
+    // 切片3：模拟执行端独立——CellHost 注册进 World，意图经注册连接转发。
+    cell_test::CellHost cell;
+    cell.config = worldConfig;
+    TEST_ASSERT(cell.start(worldApp.m1Link().listenPort(), 21, 0,
+                           &worldApp.m1Link()),
+                "cell host started");
+    cell.set_world_link(&worldApp.m1Link());
+    cell.pump_until_registered();
+    TEST_ASSERT(cell.registered(), "cell registered with world");
 
     // 真 gateway：M1 出口指向 cell，入口真 TCP 监听
     gateway::GatewayConfig gwCfg;
@@ -709,6 +719,7 @@ bool test_gateway_cell_e2e() {
 
     client.close();
     gw.stop();
+    cell.stop();
     worldApp.stop();
     std::cout << "  PASSED" << std::endl;
     return true;

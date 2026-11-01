@@ -9,6 +9,7 @@
 // 全 TCP：WorldApp 自己的 gameLoop 泵链路；测试线程只泵 egress 并轮询。
 
 #include "world_app/world_app.hpp"
+#include "cell_host.hpp"
 #include "gateway/m1_egress.hpp"
 #include "player_store/player_store.hpp"
 #include "squad_instance/settlement_credential_store.hpp"
@@ -141,7 +142,14 @@ void squad_wire_e2e() {
     world_app::WorldApp world(world_config);
     world.start();
     require(world.m1Link().listenPort() != 0, "World M1 link did not listen");
-    auto* squads = world.squadInstanceService();
+    cell_test::CellHost cell;
+    cell.config = world_config;
+    cell.config.cellId = 21;
+    require(cell.start(world.m1Link().listenPort(), 21, 0, &world.m1Link()), "cell host started");
+    cell.set_world_link(&world.m1Link());
+    cell.pump_until_registered();
+    require(cell.registered(), "cell registered with world");
+    auto* squads = cell.squads();
     require(squads != nullptr, "Squad service not hosted");
 
     gateway::M1EgressConfig egress_config;
@@ -522,6 +530,7 @@ void squad_wire_e2e() {
     }
 
     egress->stop();
+    cell.stop();
     world.stop();
 }
 

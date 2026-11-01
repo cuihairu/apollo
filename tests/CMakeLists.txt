@@ -1573,6 +1573,7 @@ add_executable(world_app_acceptance_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
@@ -1641,10 +1642,12 @@ add_executable(world_app_m1_link_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(world_app_m1_link_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
     ${CMAKE_SOURCE_DIR}/modules/runtime/include
@@ -1691,10 +1694,12 @@ add_executable(gateway_m1_egress_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(gateway_m1_egress_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
     ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
@@ -1734,10 +1739,12 @@ add_executable(squad_wire_e2e_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(squad_wire_e2e_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
     ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
@@ -1768,10 +1775,12 @@ add_executable(world_drain_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(world_drain_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
     ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
@@ -1848,10 +1857,12 @@ add_executable(update_continuity_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(update_continuity_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
     ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include
@@ -1898,10 +1909,12 @@ add_executable(gateway_push_downlink_tests
     ../apps/world/src/world_app.cpp
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
+    ../apps/world/src/cell_register_client.cpp
     ../modules/protocol/src/messages.cpp
     ../modules/protocol/src/codec.cpp
 )
 target_include_directories(gateway_push_downlink_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/tests
     ${CMAKE_SOURCE_DIR}/apps/gateway/include
     ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/modules/protocol/include

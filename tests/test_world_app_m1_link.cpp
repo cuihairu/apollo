@@ -7,6 +7,7 @@
 // 即时回执 2101。
 // 无 GTest，plain-assert + main 汇总。
 #include "world_app/world_app.hpp"
+#include "cell_host.hpp"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/linktrace/envelope.hpp"
@@ -387,6 +388,7 @@ wire::FieldValue f32(float v) {
 struct ServerEnd {
     WorldAppConfig config;
     std::unique_ptr<WorldApp> server;
+    std::unique_ptr<cell_test::CellHost> cell;
 
     bool start(int tick_rate_ms, bool host_simulation = true) {
         config.tickRateMs = tick_rate_ms;
@@ -400,9 +402,30 @@ struct ServerEnd {
             std::cout << "  server start failed: " << e.what() << std::endl;
             return false;
         }
+        if (host_simulation) {
+            // 切片3：模拟执行端独立——CellHost 注册进 World，管理命令/意图
+            // 经注册连接反向转发（WorldApp 只承载管理面）。
+            cell = std::make_unique<cell_test::CellHost>();
+            cell->config = config;
+            if (!cell->start(server->m1Link().listenPort(), 21, 0,
+                             &server->m1Link())) {
+                std::cout << "  cell host start failed" << std::endl;
+                return false;
+            }
+            cell->set_world_link(&server->m1Link());
+            cell->pump_until_registered();
+            if (!cell->registered()) {
+                std::cout << "  cell not registered with world" << std::endl;
+                return false;
+            }
+        }
         return server->m1Link().listenPort() != 0;
     }
     void stop() {
+        if (cell) {
+            cell->stop();
+            cell.reset();
+        }
         if (server) {
             server->stop();
             server.reset();

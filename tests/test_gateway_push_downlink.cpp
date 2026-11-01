@@ -19,6 +19,7 @@
 
 #include "gateway/gateway_server.hpp"
 #include "world_app/world_app.hpp"
+#include "cell_host.hpp"
 #include "apollo/net/link/frame.hpp"
 #include "apollo/net/ws/frame.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -60,6 +61,7 @@ namespace {
 namespace netlink = apollo::net::link;
 namespace ws = apollo::net::ws;
 namespace protocol = apollo::protocol;
+struct WorldEnd;
 using world_app::WorldAppConfig;
 
 #if !defined(_WIN32)
@@ -413,16 +415,6 @@ bool wait_until(const std::function<bool()>& pred, int timeout_ms) {
     return pred();
 }
 
-// 等玩家实体出栏（spawn intent 在 tick 边界消费；resolveIntentPlayer 非零 =
-// 会话已绑玩家，场景 Avatar 已入 AOI）。
-bool wait_player_spawned(world_app::WorldApp& world, std::uint64_t session_id,
-                         std::uint64_t player_id, int timeout_ms) {
-    return wait_until(
-        [&world, session_id, player_id] {
-            return world.resolveIntentPlayer(session_id) == player_id;
-        },
-        timeout_ms);
-}
 
 // 从 TCP 客户端收帧直到命中目标类型/会话（其间帧记入 sink）；超时 false。
 // 200ms 单收超时 = 轮询拍；重试循环每拍 sleep ≥2ms（macOS CI 纪律）。
@@ -504,6 +496,7 @@ struct WorldEnd {
     TemporaryDirectory files;
     WorldAppConfig config;
     std::unique_ptr<world_app::WorldApp> world;
+    std::unique_ptr<cell_test::CellHost> cell;
     // 脚本源（非空 = 落临时文件并接进启动装载序 handler → 契约）。
     std::string scriptHandlersSrc;
     std::string scriptContractSrc;
@@ -541,16 +534,47 @@ struct WorldEnd {
             std::cout << "  world start failed: " << e.what() << std::endl;
             return false;
         }
+        cell = std::make_unique<cell_test::CellHost>();
+        cell->config = config;
+        if (!cell->start(world->m1Link().listenPort(), 21, 0, &world->m1Link())) {
+            std::cout << "  cell host start failed" << std::endl;
+            return false;
+        }
+        cell->set_world_link(&world->m1Link());
+        cell->pump_until_registered();
+        if (!cell->registered()) {
+            std::cout << "  cell not registered with world" << std::endl;
+            return false;
+        }
         return world->m1Link().listenPort() != 0;
     }
 
     void stop() {
+        if (cell) {
+            cell->stop();
+            cell.reset();
+        }
         if (world) {
             world->stop();
             world.reset();
         }
     }
+
+    std::uint64_t resolveIntentPlayer(std::uint64_t session_id) const {
+        return cell ? cell->resolveIntentPlayer(session_id) : 0;
+    }
 };
+
+// 等玩家实体出栏（spawn intent 在 tick 边界消费；resolveIntentPlayer 非零 =
+// 会话已绑玩家，场景 Avatar 已入 AOI）。
+bool wait_player_spawned(cell_test::CellHost& cell, std::uint64_t session_id,
+                         std::uint64_t player_id, int timeout_ms) {
+    return wait_until(
+        [&cell, session_id, player_id] {
+            return cell.resolveIntentPlayer(session_id) == player_id;
+        },
+        timeout_ms);
+}
 
 // 网关配置：世界 M1 真端点 + 可选 WS 入口；base/login/directory 面全关
 //（准入默认放行，激活面缺席 = 旧语义，不干扰下行路径）。
@@ -796,9 +820,9 @@ bool test_aoi_broadcast_to_viewers() {
         protocol::MessageCodec::encode(make_player_spawn_at(9203, 500.0f, 0.0f, 0.0f), sid_far)));
 
     // 三玩家全出栏再动——AOI 视野关系随 scene.enter 建立。
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_mover, 9201, 8000), "mover spawned");
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_near, 9202, 8000), "near viewer spawned");
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_far, 9203, 8000), "far client spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_mover, 9201, 8000), "mover spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_near, 9202, 8000), "near viewer spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_far, 9203, 8000), "far client spawned");
 
     // 清先导帧（spawn 无响应，但为 far 负例断言做隔离）。
     {
@@ -875,8 +899,8 @@ bool test_aoi_broadcast_to_ws_viewer() {
     append_masked_frame(ws_spawn, ws::OpCode::kBinary, true, spawn.data(), spawn.size(), 0x77);
     viewer.sendAll(ws_spawn);
 
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_mover, 9211, 8000), "mover spawned");
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_viewer, 9212, 8000), "ws viewer spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_mover, 9211, 8000), "mover spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_viewer, 9212, 8000), "ws viewer spawned");
 
     {
         std::vector<std::uint8_t> scratch;
@@ -933,8 +957,8 @@ bool test_skill_damage_broadcast() {
     target.sendAll(frame_bytes(2, 0,
         protocol::MessageCodec::encode(make_player_spawn_at(9302, 1.0f, 0.0f, 0.0f), sid_target)));
 
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_caster, 9301, 8000), "caster spawned");
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_target, 9302, 8000), "target spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_caster, 9301, 8000), "caster spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_target, 9302, 8000), "target spawned");
     {
         std::vector<std::uint8_t> scratch;
         while (caster.recvLinkFrame(scratch)) {}
@@ -1009,8 +1033,8 @@ bool test_lua_intent_push_loop() {
     viewer.sendAll(frame_bytes(2, 0,
         protocol::MessageCodec::encode(make_player_spawn_at(9402, 1.0f, 0.0f, 0.0f), sid_viewer)));
 
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_mover, 9401, 8000), "mover spawned");
-    TEST_ASSERT(wait_player_spawned(*world.world, sid_viewer, 9402, 8000), "viewer spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_mover, 9401, 8000), "mover spawned");
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_viewer, 9402, 8000), "viewer spawned");
     {
         std::vector<std::uint8_t> scratch;
         while (mover.recvLinkFrame(scratch)) {}
@@ -1068,7 +1092,7 @@ bool test_uplink_duplicate_frames_gated() {
         protocol::MessageCodec::encode(make_player_spawn_at(9501, 0.0f, 0.0f, 0.0f), sid),
         base + 1);
     mover.sendAll(frame_bytes(2, 0, spawn));
-    TEST_ASSERT(wait_player_spawned(*world.world, sid, 9501, 8000),
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid, 9501, 8000),
                 "spawn accepted and bound (seq advances watermark)");
 
     const auto move_a = with_sequence(

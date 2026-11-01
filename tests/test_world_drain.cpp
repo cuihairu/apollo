@@ -12,6 +12,7 @@
 // 无 GTest，plain-assert + main 汇总。
 #include "world_app/world_app.hpp"
 #include "world_app/m1_link_server.hpp"
+#include "cell_host.hpp"
 #include "gateway/m1_egress.hpp"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
@@ -447,6 +448,12 @@ bool test_world_drain_lifecycle() {
     std::cout << "Running: test_world_drain_lifecycle..." << std::endl;
     WorldEnd server;
     TEST_ASSERT(server.start(44), "world started with M1 port");
+    cell_test::CellHost cell;
+    cell.config = server.config;
+    TEST_ASSERT(cell.start(server.world->m1Link().listenPort(), 21, 0, &server.world->m1Link()), "cell host started");
+    cell.set_world_link(&server.world->m1Link());
+    cell.pump_until_registered();
+    TEST_ASSERT(cell.registered(), "cell registered with world");
     gateway::M1EgressConfig egress_config;
     egress_config.host = "127.0.0.1";
     egress_config.port = server.world->m1Link().listenPort();
@@ -471,7 +478,7 @@ bool test_world_drain_lifecycle() {
                 "serving snapshot");
 
     // A 队（9001-9003）开启副本到 Running（控制链已在线——意图链回执照常）
-    auto* squads = server.world->squadInstanceService();
+    auto* squads = cell.squads();
     TEST_ASSERT(squads != nullptr, "squad service hosted");
     const auto party_a = spawn_and_launch(*egress, clients,
                                           {{9001, 100}, {9002, 101}, {9003, 102}});
@@ -553,6 +560,7 @@ bool test_world_drain_lifecycle() {
 
     g_replies = nullptr;
     egress->stop();
+    cell.stop();
     server.stop();
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -564,6 +572,12 @@ bool test_world_drain_deadline_force() {
     std::cout << "Running: test_world_drain_deadline_force..." << std::endl;
     WorldEnd server;
     TEST_ASSERT(server.start(45), "world started with M1 port");
+    cell_test::CellHost cell;
+    cell.config = server.config;
+    TEST_ASSERT(cell.start(server.world->m1Link().listenPort(), 21, 0, &server.world->m1Link()), "cell host started");
+    cell.set_world_link(&server.world->m1Link());
+    cell.pump_until_registered();
+    TEST_ASSERT(cell.registered(), "cell registered with world");
     gateway::M1EgressConfig egress_config;
     egress_config.host = "127.0.0.1";
     egress_config.port = server.world->m1Link().listenPort();
@@ -590,7 +604,7 @@ bool test_world_drain_deadline_force() {
                                                      protocol::SquadOp::SQUAD_LAUNCH)) == 0;
                },
                5000, "launch-c-ok");
-    auto* squads = server.world->squadInstanceService();
+    auto* squads = cell.squads();
     TEST_ASSERT(squads->active_count() == 1, "one active binding");
 
     // begin deadline_s = 1 → 期限到强停
@@ -607,6 +621,7 @@ bool test_world_drain_deadline_force() {
 
     g_replies = nullptr;
     egress->stop();
+    cell.stop();
     server.stop();
     std::cout << "  PASSED" << std::endl;
     return true;
@@ -618,6 +633,12 @@ bool test_world_drain_unknown_op() {
     std::cout << "Running: test_world_drain_unknown_op..." << std::endl;
     WorldEnd server;
     TEST_ASSERT(server.start(46), "world started with M1 port");
+    cell_test::CellHost cell;
+    cell.config = server.config;
+    TEST_ASSERT(cell.start(server.world->m1Link().listenPort(), 21, 0, &server.world->m1Link()), "cell host started");
+    cell.set_world_link(&server.world->m1Link());
+    cell.pump_until_registered();
+    TEST_ASSERT(cell.registered(), "cell registered with world");
     gateway::M1EgressConfig egress_config;
     egress_config.host = "127.0.0.1";
     egress_config.port = server.world->m1Link().listenPort();
@@ -648,6 +669,7 @@ bool test_world_drain_unknown_op() {
 
     g_replies = nullptr;
     egress->stop();
+    cell.stop();
     server.stop();
     std::cout << "  PASSED" << std::endl;
     return true;

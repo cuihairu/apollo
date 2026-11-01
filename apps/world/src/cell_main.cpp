@@ -90,6 +90,13 @@ struct CellLinkEgress final : public IM1Egress {
 
     void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
                            const std::vector<std::uint8_t>& payload) override {
+        // 切片3 独立 cell 下行回程：注册连接优先（gateway 连 WorldApp 的
+        // M1，cell 的下行须经 World 转发 gateway）；直连 gateway 面保留
+        //（独立 cell 直服 gateway 的未来形态/本进程自测面）。
+        if (register_client) {
+            register_client->sendClientDeliver(session_id, gateway_id, payload);
+            return;
+        }
         if (link) {
             link->sendClientDeliver(session_id, gateway_id, payload);
         }
@@ -314,7 +321,8 @@ int run_cell_entry_body(int argc, char* argv[],
             });
         cell.set_post_tick(
             [&register_client, &cell, &cell_scene_pending_evals,
-             &cell_drain_state, &cell_drain_deadline_ms, &cell_drain_detail](
+             &cell_module_rollout, &cell_last_rollout_name, &cell_drain_state,
+             &cell_drain_deadline_ms, &cell_drain_detail](
                 double) {
                 // eval 收账（切片2）：Scene::tick 的固定调试点已执行在途 eval，
                 // 取回传结果经注册连接反向发回 World（World 按 eval_id 关联原
@@ -340,6 +348,31 @@ int run_cell_entry_body(int argc, char* argv[],
                             it = cell_scene_pending_evals.erase(it);
                         } else {
                             ++it;
+                        }
+                    }
+                }
+                // module rollout 观察窗推进（切片2 管理命令转发）：在装模块
+                // onTick（fault 归因源）+ 观察窗/推广/回滚队列。WorldApp 内嵌
+                // 内核 driveModuleRollout 同型——独立 cell 宿主自驱。
+                if (cell_module_rollout) {
+                    auto* script = cell.script_runtime();
+                    if (script) {
+                        for (const auto& name : {cell_last_rollout_name}) {
+                            if (!name.empty()) {
+                                (void)script->call_module(name, "onTick");
+                            }
+                        }
+                        const auto st = cell_module_rollout->state();
+                        if (st == apollo::script::RolloutState::kObserving) {
+                            cell_module_rollout->observe_target("cell");
+                        } else if (st == apollo::script::RolloutState::kPromoting) {
+                            for (const auto& k : cell_module_rollout->pending_promote()) {
+                                cell_module_rollout->commit_target(k);
+                            }
+                        } else if (st == apollo::script::RolloutState::kRollingBack) {
+                            for (const auto& k : cell_module_rollout->pending_rollback()) {
+                                cell_module_rollout->rollback_target(k);
+                            }
                         }
                     }
                 }

@@ -236,6 +236,17 @@ public:
         (void)message;
     }
 
+    // 939 client_deliver 下行（切片3 独立 cell 回程）：cell 宿主 tick 内产
+    // 生客户端帧，经注册连接发回 World，World 的 M1LinkServer 按
+    // gateway_link() 转发 gateway。链路未连 = 尽力面静默（断连排队重连
+    // 补投由 World 侧 Reliable 面承接）。
+    virtual void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                                   const std::vector<std::uint8_t>& payload) {
+        (void)session_id;
+        (void)gateway_id;
+        (void)payload;
+    }
+
     // 已记账（版本前进）分配条数（观测面）。
     virtual std::size_t space_assign_count() const { return 0; }
 

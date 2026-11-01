@@ -5,6 +5,7 @@
 // 旧 Instance 跨进程保留。断言依据为协议回执与客户端实收帧。
 #include "world_app/world_app.hpp"
 #include "world_app/m1_link_server.hpp"
+#include "cell_host.hpp"
 #include "gateway/m1_egress.hpp"
 #include "gateway/gateway_server.hpp"
 #include "apollo/net/link/frame.hpp"
@@ -520,6 +521,7 @@ struct WorldEnd {
     TemporaryDirectory files;
     WorldAppConfig config;
     std::unique_ptr<WorldApp> world;
+    std::unique_ptr<cell_test::CellHost> cell;
 
     bool start(std::uint32_t world_id, std::uint16_t port = 0, bool seed = true,
                std::uint64_t epoch = 0) {
@@ -537,14 +539,34 @@ struct WorldEnd {
             std::cout << "  world start failed: " << e.what() << std::endl;
             return false;
         }
+        cell = std::make_unique<cell_test::CellHost>();
+        cell->config = config;
+        if (!cell->start(world->m1Link().listenPort(), 21)) {
+            std::cout << "  cell host start failed" << std::endl;
+            return false;
+        }
+        cell->set_world_link(&world->m1Link());
+        cell->pump_until_registered();
+        if (!cell->registered()) {
+            std::cout << "  cell not registered with world" << std::endl;
+            return false;
+        }
         return world->m1Link().listenPort() != 0;
     }
 
     void stop() {
+        if (cell) {
+            cell->stop();
+            cell.reset();
+        }
         if (world) {
             world->stop();
             world.reset();
         }
+    }
+
+    squad_instance::SquadInstanceService* squads() {
+        return cell ? cell->squads() : nullptr;
     }
 };
 
@@ -590,7 +612,7 @@ bool test_update_continuity_lua_module() {
     TEST_ASSERT(dial_ops(server, ops), "ops dialed");
 
     // A 队开启副本到 Running，建立活动副本基线。
-    auto* squads = server.world->squadInstanceService();
+    auto* squads = server.squads();
     TEST_ASSERT(squads != nullptr, "squad service hosted");
     const auto party_a = spawn_and_launch(*egress, clients,
                                           {{9001, 100}, {9002, 101}, {9003, 102}});
@@ -718,7 +740,7 @@ bool test_update_continuity_process_replace() {
                                                      protocol::SquadOp::SQUAD_LAUNCH)) == 0;
                },
                5000, "launch-c-ok");
-    auto* squads = server.world->squadInstanceService();
+    auto* squads = server.squads();
 
     // 排空（期限 1s）：副本按设计收线——强停不是连续，是显形销毁
     DrainReply r;

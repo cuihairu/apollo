@@ -24,6 +24,14 @@ apollo::core::log::Logger& worldLog() {
     return *apollo::core::log::global_log_manager().createLogger("world_app");
 }
 
+// steady 单调毫秒（在途关联账时戳域；与 cellExpiryMs 同一单调域）。
+std::uint64_t steady_now_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
+
 // 能力位覆盖判定（容量申报裁决）：cell 声明的 capabilities 须覆盖 Space
 // 要求的 needs 全部位才有认领资格。needs=0 = 无要求——任何 cell 均
 // 合格，含未声明（capabilities=0）的现状语义。
@@ -42,41 +50,6 @@ bool pool_has(const WorldAppConfig& config, std::uint64_t space_id) {
 }
 
 // 逗号分隔依赖名 → 列表（952 编排请求；空段跳过，全空 = 无依赖）。
-std::vector<std::string> split_dep_list(const std::string& text) {
-    std::vector<std::string> out;
-    std::string token;
-    auto flush = [&] {
-        if (!token.empty()) {
-            out.push_back(std::move(token));
-        }
-        token.clear();
-    };
-    for (const char c : text) {
-        if (c == ',') {
-            flush();
-        } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-            token.push_back(c);
-        }
-    }
-    flush();
-    return out;
-}
-
-// 错误行拼合（953 detail 多行面）。
-std::string join_lines(const std::vector<std::string>& lines) {
-    std::string out;
-    for (const auto& l : lines) {
-        if (!out.empty()) {
-            out.push_back(';');
-            out.push_back(' ');
-        }
-        out += l;
-    }
-    return out;
-}
-
-// M1 eval 在途关联账上限（host 级背压——防丢最旧语义下的无界挂账；
-// 对齐 Scene 队列深度的量级放大，超过即时回执拒收）。
 constexpr std::size_t kM1EvalBacklogMax = 64;
 
 class PersistentVolumeLock {
@@ -138,44 +111,17 @@ private:
 } // namespace
 
 //==============================================================================
-// WorldApp 实现（manager 角色壳：M1 传输端点 + 管理编排；执行内核 CellApp）
+// WorldApp 实现（manager 角色壳：M1 传输端点 + 管理编排；执行内核 CellApp
+// 已分离——切片3 删除内嵌内核，管理命令经注册 cell 连接转发）
 //==============================================================================
 
 WorldApp::WorldApp(const WorldAppConfig& config)
-    : config_(config)
-    , cell_(config_.hostSimulation ? std::make_unique<CellApp>(config) : nullptr) {
+    : config_(config) {
     if (config_.bootAtMs == 0) {
         config_.bootAtMs = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch())
                 .count());
-    }
-    // 注入缝装配（start 前即位）：出口缝 + 拍首传输泵 + 拍后管理推进。
-    // 全部钩子在内核线程内执行——管理受理点（eval/编排/排空）与驱动同线程，
-    // 单写者纪律不破（ADR-015(a)）。hostSimulation=false（生产）无内嵌内核，
-    // 管理泵由 start() 单独起线程驱动。
-    if (cell_) {
-        cell_->set_egress(&egressAdapter_);
-        cell_->set_pre_tick([this](std::uint64_t now_ms) {
-            if (m1Link_) {
-                m1Link_->pump(now_ms);
-            }
-            if (managerPreTick_) {
-                managerPreTick_(now_ms);  // 管理侧拨号面（L123 服务注册拨号）
-            }
-        });
-        cell_->set_post_tick([this](double) {
-            // World 排空推进（P4 更新排空批；driveSquadGameplay 后拍——本拍
-            // 结算收尾先推进，归零判定用新值）
-            driveWorldDrain();
-            // §7.1 eval 回执收账（tick 内固定调试点已执行在途 eval）
-            drainDebugEvalResults();
-            // 952 编排推进（P4 仅代码更新批）：在装模块 onTick + 观察窗/推广/
-            // 回滚队列（owning 线程纪律）
-            driveModuleRollout();
-            // cell 注册表过期清扫（960 心跳批）：last-heard 超窗摘除
-            driveCellRegistry();
-        });
     }
 }
 
@@ -196,34 +142,29 @@ void WorldApp::start() {
     loadWorldJournal();
 
     // net M1 接收端（2b-ii，2b-iii 起 WorldApp 唯一受理入口——legacy RepSocket
-    // 已退役）：InterServerLink passive 端点装配（先建对象不监听——内核
-    // pre-tick 泵引用它在位；bind/listen 在闸开之后）
+    // 已退役）：InterServerLink passive 端点装配（先建对象不监听——管理泵
+    // 泵引用它在位；bind/listen 在泵起之后）
     m1Link_ = makeM1LinkServer(
         M1LinkConfig{config_.host, config_.m1Port, config_.m1RouteJson,
                      config_.m1AuthorityEpoch},
-        [this](IntentEnvelope intent) {
-            // ADR-017：意图在无内嵌执行内核（hostSimulation=false 生产 world）
-            // 时不受理——顶格拒收/不受理类即时回执（2001），不静默丢弃；与
-            // onM1DebugEval 对无模拟宿主显式回 "simulation not hosted" 同型。
-            if (cell_) {
-                cell_->onIntent(std::move(intent));
-                return;
-            }
-            if (intent.request_id != 0 && m1Link_) {
-                m1Link_->sendIntentAck(intent.request_id, kIntentAckInternal,
-                                       "simulation not hosted");
-            }
+        [this](IntentEnvelope /*intent*/) {
+            // 转发成功时延时应答由注册 cell 回程；失败/无 cell 时在 raw 回
+            // 调回 2001（此处只承载受理计数，不重复回执）。
         },
         [this](const std::vector<std::uint8_t>& payload) {
-            // 切片2 意图族转发（生产 world 无内嵌内核）：932 原始 envelope
-            // 经首个就绪 cell 的注册连接反向转发；空目标/发送失败 = 静默
-            // （gateway pending-reply 超时面裁决重发）。
-            if (cell_ != nullptr) {
-                return;  // 内嵌形态走 on_intent 直投，不走转发缝
-            }
+            // 切片2 意图族转发：932 原始 envelope 经首个就绪 cell 的注册
+            // 连接反向转发；空目标/发送失败 = ADR-017 即时回执（2001），
+            // 不静默丢弃（gateway pending-reply 超时面不再重发）。
             const auto cell_peer = firstReadyCellPeer();
             if (!cell_peer.empty() && m1Link_) {
                 (void)m1Link_->sendCellIntentRaw(cell_peer, payload);
+                return;
+            }
+            IntentEnvelope intent;
+            if (decodeEnvelopeIntent(payload, intent) && intent.request_id != 0
+                && m1Link_) {
+                m1Link_->sendIntentAck(intent.request_id, kIntentAckInternal,
+                                       "simulation not hosted");
             }
         },
         [this](const std::string& peer, const DebugEvalRequest& request) {
@@ -256,63 +197,40 @@ void WorldApp::start() {
         [this](const std::string& peer, const CellIntentAck& ack) {
             onCellIntentAck(peer, ack);
         });
-    egressAdapter_.link = m1Link_.get();
     // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
-    //（pre-tick，内核线程）触发——注册表单写者上下文，直接改表。
+    //（管理泵线程）触发——注册表单写者上下文，直接改表。
     m1Link_->on_peer_down([this](const std::string& peer) { onPeerLinkDown(peer); });
 
-    // 执行内核启动（仅历史测试回退形态）：闸开 + 内核循环线程起；生产
-    // hostSimulation=false 不装配 CellApp。
-    if (cell_) {
-        try {
-            cell_->start();
-        } catch (...) {
-            running_ = false;
-            egressAdapter_.link = nullptr;
-            m1Link_.reset();
-            throw;
-        }
-    }
-
-    // 监听后置（开闸先于监听不变式）：bind 失败同契约显形，回滚内核再抛
+    // 监听后置：bind 失败同契约显形，回滚再抛
     if (!m1Link_->start()) {
         m1Link_->stop();
-        egressAdapter_.link = nullptr;
         m1Link_.reset();
-        if (cell_) cell_->stop();
         running_ = false;
         throw std::runtime_error("failed to start WorldApp M1 link endpoint (route table load or bind failed)");
     }
 
-    // 管理壳泵线程（生产无内嵌执行内核）：M1 传输泵 + 管理推进。
-    if (!cell_) {
-        managerThread_ = std::thread([this] {
-            const auto tick = std::chrono::milliseconds(10);
-            while (running_) {
-                const auto now_ms = static_cast<std::uint64_t>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now().time_since_epoch())
-                        .count());
-                if (m1Link_) m1Link_->pump(now_ms);
-                if (managerPreTick_) managerPreTick_(now_ms);
-                driveCellRegistry();
-                std::this_thread::sleep_for(tick);
-            }
-        });
-    }
+    // 管理壳泵线程：M1 传输泵 + 管理推进。
+    managerThread_ = std::thread([this] {
+        const auto tick = std::chrono::milliseconds(10);
+        while (running_) {
+            const auto now_ms = static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                    .count());
+            if (m1Link_) m1Link_->pump(now_ms);
+            if (managerPreTick_) managerPreTick_(now_ms);
+            driveCellRegistry();
+            std::this_thread::sleep_for(tick);
+        }
+    });
 
     worldLog().info("WorldApp M1 link listening on " + config_.host + ":"
                 + std::to_string(m1Link_->listenPort()));
 }
 
 void WorldApp::stop() {
-    // 停机 G-3 镜像顺序（ADR-016）：内核停（关闸 → 队列尾扫 → join → 拨号
-    // 收口 → worldHost stop；尾扫的延时应答经出口缝时 M1 端点仍在）→ M1
-    // 端点停
+    // 停机：管理泵线程停（join）→ M1 端点停
     running_ = false;
-    if (cell_) {
-        cell_->stop();
-    }
     if (managerThread_.joinable()) {
         managerThread_.join();
     }
@@ -321,318 +239,11 @@ void WorldApp::stop() {
         m1Link_->stop();
         m1Link_.reset();
     }
-    egressAdapter_.link = nullptr;
     if (volumeLocked_ && !config_.worldJournalPath.empty()) {
         std::error_code ec;
         std::filesystem::remove(config_.worldJournalPath + ".lock", ec);
     }
     volumeLocked_ = false;
-}
-
-void WorldApp::onM1ModuleRollout(const std::string& peer,
-                                 const ModuleRolloutRequest& request) {
-    // 952 受理（P4 仅代码更新批）：本回调在内核线程泵上下文 = ModuleRollout
-    // 契约线程（owning 线程直驱，无 tick 排队）。request_id = 0 保留；受理
-    // 点同步回 953（观察窗推进随拍自驱，控制面按 status 轮询聚合）。
-    if (request.request_id == 0) {
-        return;
-    }
-    if (cell_ == nullptr) {
-        // 切片2 转发：生产 world（无内嵌内核）经注册 cell 连接反向发送
-        // 952；cell 宿主处理后回 953（onCellRolloutReply 按原 fleetctl peer
-        // 回传）。无合格 cell = 即时回执（与内嵌形态同型）。
-        const auto cell_peer = firstReadyCellPeer();
-        if (cell_peer.empty()
-            || !m1Link_->sendCellModuleRolloutRequest(cell_peer, request)) {
-            m1Link_->sendModuleRolloutReply(peer, request.request_id, request.op,
-                                            false, -1, 0, 0, "script runtime not ready");
-            return;
-        }
-        rolloutReplyPeers_[request.request_id] = peer;
-        return;
-    }
-    auto* script = cell_ ? cell_->script_runtime() : nullptr;
-    auto reply = [&](bool ok, std::int32_t state, std::uint64_t faults,
-                     std::uint64_t version, const std::string& detail) {
-        if (m1Link_) {
-            m1Link_->sendModuleRolloutReply(peer, request.request_id, request.op,
-                                            ok, state, faults, version, detail);
-        }
-    };
-    if (script == nullptr) {
-        reply(false, -1, 0, 0, "script runtime not ready");
-        return;
-    }
-    const auto state_of = [&]() -> std::int32_t {
-        return static_cast<std::int32_t>(moduleRollout_->state());
-    };
-    const auto detail_of = [&]() -> std::string {
-        const auto errs = moduleRollout_->errors();
-        return errs.empty() ? std::string("no errors") : join_lines(errs);
-    };
-    switch (request.op) {
-        case 1: {  // prepare：拓扑预备（独立预备沙盒），成功 → kCanaryPending
-            if (moduleRollout_ == nullptr) {
-                // 单目标编排器（懒建，仅 prepare 造对象）：target = 内核
-                // runtime，canary = 自身（跨 World 灰度 = 控制面按世界分相位
-                // 投递，世界内不再细分）。commit/rollback/status 不复活——
-                // 无在途轮次即显式拒（半开状态不可默默重建）。
-                moduleRollout_ = std::make_unique<apollo::script::ModuleRollout>(
-                    std::vector<apollo::script::RolloutTarget>{{"world", script}});
-            }
-            std::vector<std::string> deps = split_dep_list(request.deps);
-            apollo::script::RolloutModule mod;
-            mod.name = request.name;
-            mod.version = request.version;
-            mod.deps = std::move(deps);
-            mod.source = request.source;
-            const bool ok = moduleRollout_->prepare(
-                {mod}, {"world"},
-                apollo::script::CanaryParams{request.observe_ticks,
-                                             request.fault_threshold});
-            if (ok) {
-                lastRolloutName_ = request.name;
-                worldLog().info("module rollout prepared: " + request.name + " v"
-                                + std::to_string(request.version));
-            }
-            reply(ok, state_of(), 0, script->module_version(request.name),
-                  detail_of());
-            return;
-        }
-        case 2: {  // commit：kCanaryPending → 提交本目标（单目标即入观察窗）
-            if (moduleRollout_ == nullptr) {
-                reply(false, 0, 0, script->module_version(request.name),
-                      "no rollout in flight");
-                return;
-            }
-            if (moduleRollout_->state() ==
-                apollo::script::RolloutState::kCanaryPending) {
-                moduleRollout_->commit_target("world");
-            }
-            const auto st = moduleRollout_->state();
-            const bool ok = st == apollo::script::RolloutState::kObserving;
-            if (ok) {
-                // 受理名登记（onTick 驱动面；commit 即激活——驱动只对 active
-                // 版本，prepare 期不投——重名不重复登记）。
-                if (std::find(rolloutModuleNames_.begin(), rolloutModuleNames_.end(),
-                              request.name) == rolloutModuleNames_.end()) {
-                    rolloutModuleNames_.push_back(request.name);
-                }
-                worldLog().info("module rollout committed: " + request.name + " v"
-                                + std::to_string(request.version));
-            }
-            reply(ok, state_of(), 0, script->module_version(request.name),
-                  detail_of());
-            return;
-        }
-        case 3: {  // rollback / abort：kRollingBack = 回滚已提交集；
-                   // kCanaryPending = 灰度未提交 → 丢弃预备轮复位（编排器已随
-                   // 早失败即止，活跃模块表未被触碰——下轮 prepare 从零重来）
-            if (moduleRollout_ == nullptr) {
-                // 无在途轮次：幂等空操作（编排器清尾可能追到已复位的世界）
-                reply(true, 0, 0, script->module_version(request.name),
-                      "no rollout in flight");
-                return;
-            }
-            if (moduleRollout_->state() ==
-                apollo::script::RolloutState::kCanaryPending) {
-                moduleRollout_.reset();
-                worldLog().info("module rollout aborted: " + request.name);
-                reply(true, 0, 0, script->module_version(request.name),
-                      "aborted: nothing committed");
-                return;
-            }
-            moduleRollout_->rollback_target("world");
-            const bool ok = moduleRollout_->state() ==
-                            apollo::script::RolloutState::kRolledBack;
-            if (ok) {
-                worldLog().info("module rollout rolled back: " + request.name);
-            }
-            reply(ok, state_of(), 0, script->module_version(request.name),
-                  ok ? std::string("rolled back") : detail_of());
-            return;
-        }
-        case 4: {  // status：控制面聚合观察（state/faults/version）
-            std::uint64_t faults = 0;
-            const auto st = moduleRollout_ ? moduleRollout_->statuses()
-                                            : std::vector<apollo::script::TargetStatus>{};
-            if (!st.empty()) {
-                faults = st[0].window_faults;
-            }
-            reply(true, moduleRollout_ ? state_of() : 0, faults,
-                  script->module_version(request.name),
-                  moduleRollout_ ? detail_of() : std::string("no rollout"));
-            return;
-        }
-        default:
-            reply(false, state_of(), 0, script->module_version(request.name),
-                  "unknown op " + std::to_string(request.op));
-            return;
-    }
-}
-
-void WorldApp::driveModuleRollout() {
-    // post-tick 拍（drainDebugEvalResults 同址）：先驱在装模块 onTick（fault
-    // 归因源——canary 窗计账靠模块函数真被调用，runtime 按 active 版本解
-    // 析），再推观察窗/推广/回滚队列（frame 序 = rollout 单测同型）。
-    auto* script = cell_ ? cell_->script_runtime() : nullptr;
-    if (script == nullptr) {
-        return;
-    }
-    for (const auto& name : rolloutModuleNames_) {
-        (void)script->call_module(name, "onTick");
-    }
-    if (moduleRollout_ == nullptr) {
-        return;
-    }
-    const auto st = moduleRollout_->state();
-    if (st == apollo::script::RolloutState::kObserving) {
-        moduleRollout_->observe_target("world");
-    } else if (st == apollo::script::RolloutState::kPromoting) {
-        for (const auto& k : moduleRollout_->pending_promote()) {
-            moduleRollout_->commit_target(k);
-        }
-    } else if (st == apollo::script::RolloutState::kRollingBack) {
-        for (const auto& k : moduleRollout_->pending_rollback()) {
-            moduleRollout_->rollback_target(k);
-        }
-    }
-    const auto after = moduleRollout_->state();
-    if (st != after && (after == apollo::script::RolloutState::kPromoted ||
-                        after == apollo::script::RolloutState::kRolledBack)) {
-        // 自驱跃迁（观察窗判好/判坏）——控制面只拉 status，日志是唯一落证面
-        //（drill 断言 + 运维排障）。
-        worldLog().info(std::string("module rollout ")
-                         + (after == apollo::script::RolloutState::kPromoted ? "promoted"
-                                                                              : "rolled back")
-                         + ": " + lastRolloutName_);
-    }
-}
-
-void WorldApp::onM1WorldDrain(const std::string& peer, const WorldDrainRequest& request) {
-    // 956 受理（P4 更新排空批）：内核线程泵上下文 = launch/玩法推进同线程
-    // ——排空状态机单线程独占无锁，受理点同步回 957。request_id = 0 保留。
-    if (request.request_id == 0) {
-        return;
-    }
-    if (cell_ == nullptr) {
-        // 切片2 转发：生产 world（无内嵌内核）经注册 cell 连接反向发送
-        // 956；cell 宿主处理后回 957（onCellDrainReply 按原 fleetctl peer
-        // 回传）。无合格 cell = 即时回执（与内嵌形态同型）。
-        const auto cell_peer = firstReadyCellPeer();
-        if (cell_peer.empty()
-            || !m1Link_->sendCellWorldDrainRequest(cell_peer, request)) {
-            m1Link_->sendWorldDrainReply(peer, request.request_id, request.op,
-                                         false, 0, 0, "squad service not ready");
-            return;
-        }
-        drainReplyPeers_[request.request_id] = peer;
-        return;
-    }
-    auto* squadInstanceService = cell_ ? cell_->squadInstanceService() : nullptr;
-    const auto now_ms = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
-    const auto active_of = [&]() -> std::uint64_t {
-        return squadInstanceService ? squadInstanceService->active_count() : 0;
-    };
-    const auto detail_of = [&]() -> std::string {
-        switch (worldDrainState_) {
-            case kWorldDrainDrained:
-                return worldDrainDetail_;
-            case kWorldDrainDraining:
-                return "draining: " + std::to_string(active_of())
-                       + " active instances settling";
-            default:
-                return "serving";
-        }
-    };
-    auto reply = [&](bool ok, const std::string& detail) {
-        if (m1Link_) {
-            m1Link_->sendWorldDrainReply(peer, request.request_id, request.op, ok,
-                                         worldDrainState_, active_of(), detail);
-        }
-    };
-    if (squadInstanceService == nullptr) {
-        reply(false, "squad service not ready");
-        return;
-    }
-    switch (request.op) {
-        case 1: {  // begin：排空闸闭合 + 期限登记（重复 begin 幂等，期限只紧不松）
-            if (worldDrainState_ == kWorldDrainServing) {
-                squadInstanceService->set_drain(true);
-                worldDrainState_ = kWorldDrainDraining;
-                worldDrainDeadlineMs_ =
-                    request.deadline_s > 0
-                        ? now_ms + static_cast<std::uint64_t>(request.deadline_s) * 1000U
-                        : 0;
-                worldLog().info("world drain begun");
-            } else if (worldDrainState_ == kWorldDrainDraining && request.deadline_s > 0) {
-                // 已在排空：期限取更紧者（0 = 无期限不覆盖既有期限）
-                const auto deadline =
-                    now_ms + static_cast<std::uint64_t>(request.deadline_s) * 1000U;
-                if (worldDrainDeadlineMs_ == 0 || deadline < worldDrainDeadlineMs_) {
-                    worldDrainDeadlineMs_ = deadline;
-                }
-            }
-            reply(true, detail_of());
-            return;
-        }
-        case 2: {  // status：控制面聚合观察（state/active/detail）
-            reply(true, detail_of());
-            return;
-        }
-        default:
-            reply(false, "unknown op " + std::to_string(request.op));
-            return;
-    }
-}
-
-void WorldApp::driveWorldDrain() {
-    // post-tick 拍（本拍结算收尾已推进）：归零即落 drained；期限到未清强停
-    // 剩余副本——Create..Running 走 abort（取消线，不发成功奖励），已入结算
-    // 走 dismiss（收尾推进），两原语覆盖全部活动相位。drained 终态不反闸
-    //（恢复 = 进程替换）。
-    auto* squadInstanceService = cell_ ? cell_->squadInstanceService() : nullptr;
-    if (worldDrainState_ != kWorldDrainDraining || squadInstanceService == nullptr) {
-        return;
-    }
-    auto active = squadInstanceService->active_count();
-    if (active == 0) {
-        worldDrainState_ = kWorldDrainDrained;
-        worldDrainDetail_ = "drained: all instances settled";
-        worldLog().info("world " + worldDrainDetail_);
-        return;
-    }
-    if (worldDrainDeadlineMs_ == 0) {
-        return;  // 无期限：既有副本服务至自然结算
-    }
-    const auto now_ms = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-            .count());
-    if (now_ms < worldDrainDeadlineMs_) {
-        return;
-    }
-    // 强停：快照遍历（abort/dismiss 同步释放绑定，快照期内安全）
-    std::size_t force_stopped = 0;
-    for (const auto& binding : squadInstanceService->activeBindings()) {
-        if (squadInstanceService->abort(binding.party_id)
-            || squadInstanceService->dismiss(binding.party_id)) {
-            ++force_stopped;
-        }
-    }
-    active = squadInstanceService->active_count();
-    if (active == 0) {
-        worldDrainState_ = kWorldDrainDrained;
-        worldDrainDetail_ = "drained: deadline reached, " + std::to_string(force_stopped)
-                            + " instances force-aborted";
-        worldLog().info("world " + worldDrainDetail_);
-    } else {
-        worldLog().warning("world drain force-stop left " + std::to_string(active)
-                           + " instances; retrying next tick");
-    }
 }
 
 void WorldApp::onCellRegister(const std::string& peer,
@@ -756,6 +367,73 @@ void WorldApp::onPeerLinkDown(const std::string& peer) {
                             + std::to_string(entry.first) + " peer=" + peer);
         }
     }
+    dropCellReplyAccountsForPeer(peer);
+}
+
+void WorldApp::dropCellReplyAccountsForPeer(const std::string& peer) {
+    // 在途关联账撤销（L101 断连存疑切片同上下文）：目标 cell 断连后永无
+    // 回执——按 cell_peer 匹配撤账，并显式回「cell link lost」替代静默悬
+    // 挂（eval/rollout/drain 三账同型）。账内条目本就应关联目标 cell；不
+    // 匹配 peer 的条目保留（另一 cell 链路不受牵连）。
+    auto drop = [&](auto& map, auto&& reply_fn) {
+        for (auto it = map.begin(); it != map.end();) {
+            if (it->second.cell_peer == peer) {
+                reply_fn(it->second.fleetctl_peer, it->first);
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+    drop(evalReplyPeers_, [this](const std::string& fp, std::uint64_t id) {
+        sendM1EvalReply(fp, id, false, "", "cell link lost");
+    });
+    drop(rolloutReplyPeers_, [this](const std::string& fp, std::uint64_t id) {
+        if (m1Link_) {
+            m1Link_->sendModuleRolloutReply(fp, id, 0, false, -1, 0, 0,
+                                            "cell link lost");
+        }
+    });
+    drop(drainReplyPeers_, [this](const std::string& fp, std::uint64_t id) {
+        if (m1Link_) {
+            m1Link_->sendWorldDrainReply(fp, id, 0, false, 0, 0,
+                                         "cell link lost");
+        }
+    });
+}
+
+void WorldApp::sweepExpiredCellReplyAccounts(std::uint64_t now_ms) {
+    // 过期清扫（管理泵每拍，同注册表 driveCellRegistry 口径）：cell 回执
+    // 在 cellExpiryMs 内未到即撤账（cell 死亡/回执丢失——断连面已撤，此
+    // 面兜底挂起不回的链路级失效）。0 = 永不过期（同注册表面口径）。
+    if (config_.cellExpiryMs == 0) {
+        return;
+    }
+    auto sweep = [&](auto& map, auto&& reply_fn) {
+        for (auto it = map.begin(); it != map.end();) {
+            if (now_ms - it->second.sent_at_ms > config_.cellExpiryMs) {
+                reply_fn(it->second.fleetctl_peer, it->first);
+                it = map.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+    sweep(evalReplyPeers_, [this](const std::string& fp, std::uint64_t id) {
+        sendM1EvalReply(fp, id, false, "", "eval reply timeout");
+    });
+    sweep(rolloutReplyPeers_, [this](const std::string& fp, std::uint64_t id) {
+        if (m1Link_) {
+            m1Link_->sendModuleRolloutReply(fp, id, 0, false, -1, 0, 0,
+                                            "rollout reply timeout");
+        }
+    });
+    sweep(drainReplyPeers_, [this](const std::string& fp, std::uint64_t id) {
+        if (m1Link_) {
+            m1Link_->sendWorldDrainReply(fp, id, 0, false, 0, 0,
+                                         "drain reply timeout");
+        }
+    });
 }
 
 std::size_t WorldApp::suspect_cell_count() const {
@@ -932,6 +610,18 @@ std::string WorldApp::firstReadyCellPeer() const {
     for (const auto& entry : cellRegistrations_) {
         const auto& reg = entry.second;
         if (reg.ready && reg.drain_state == 0 && !reg.retire && !reg.suspect) {
+            return reg.peer;
+        }
+    }
+    return {};
+}
+
+std::string WorldApp::firstRegisteredCellPeer() const {
+    // 管理命令 cell peer 选择：首个已登记、未缩容、未存疑的 cell（排空中
+    // 仍可接收 952/956 管理命令——begin/status 是排空推进面）。
+    for (const auto& entry : cellRegistrations_) {
+        const auto& reg = entry.second;
+        if (!reg.retire && !reg.suspect) {
             return reg.peer;
         }
     }
@@ -1409,12 +1099,16 @@ void WorldApp::driveCellRegistry() {
             ++it;
         }
     }
+    // 在途关联账过期清扫（同窗）：cell 回执超窗未到即撤账显式回超时——
+    // 与注册表摘除同一裁决窗，不引入第二套过期口径。
+    sweepExpiredCellReplyAccounts(now_ms);
 }
 
 void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& request) {
-    // 944 受理（§7.1 attach transport；本回调在内核线程泵上下文）：语法面已
-    // 在 M1LinkServer 解码，此处只做定位与背压判定——失败即时回 945（不进
-    // tick 窗口），成功挂账待 Scene tick 执行后回传。
+    // 944 受理（§7.1 attach transport；管理泵上下文）：切片2 转发——World
+    // 只承载管理命令，debug eval 经注册 cell 连接反向发送；cell 宿主处理后
+    // 回 945（onCellEvalResult 按原 fleetctl peer 回传）。无合格 cell = 即时
+    // 回执。
     if (request.eval_id == 0) {
         return;  // 0 保留（admin 关联键缺位，拒收面都不给）
     }
@@ -1422,33 +1116,53 @@ void WorldApp::onM1DebugEval(const std::string& peer, const DebugEvalRequest& re
         sendM1EvalReply(peer, request.eval_id, false, "", "eval backlog full");
         return;
     }
-    if (cell_ == nullptr) {
-        // 切片2 转发：生产 world（无内嵌内核）经注册 cell 连接反向发送
-        // 944；cell 宿主处理后回 945（onCellEvalResult 按原 fleetctl peer
-        // 回传）。无合格 cell = 即时回执（与内嵌形态同型）。
-        const auto cell_peer = firstReadyCellPeer();
-        if (cell_peer.empty()
-            || !m1Link_->sendCellDebugEvalRequest(cell_peer, request)) {
-            sendM1EvalReply(peer, request.eval_id, false, "", "simulation not hosted");
-            return;
-        }
-        evalReplyPeers_[request.eval_id] = peer;
+    const auto cell_peer = firstRegisteredCellPeer();
+    if (cell_peer.empty()
+        || !m1Link_->sendCellDebugEvalRequest(cell_peer, request)) {
+        sendM1EvalReply(peer, request.eval_id, false, "", "simulation not hosted");
         return;
     }
-    const std::uint64_t scene_id =
-        request.scene_id != 0 ? request.scene_id : cell_->default_scene_id();
-    auto* scene = find_scene(scene_id);
-    if (scene == nullptr || !scene->script_attached()) {
-        sendM1EvalReply(peer, request.eval_id, false, "", "scene not attached");
+    evalReplyPeers_[request.eval_id] = PendingCellReply{
+        peer, cell_peer, steady_now_ms()};
+}
+
+void WorldApp::onM1ModuleRollout(const std::string& peer,
+                                 const ModuleRolloutRequest& request) {
+    // 952 受理：切片2 转发——World 只承载管理命令，模块投递经注册 cell
+    // 连接反向发送；cell 宿主处理后回 953（onCellRolloutReply 按原
+    // fleetctl peer 回传）。无合格 cell = 即时回执。
+    if (request.request_id == 0) {
         return;
     }
-    if (!scene->enqueue_debug_eval(request.eval_id, request.source)) {
-        // 队列满（有界 FIFO）或未挂——即时回执，admin 超时面裁决重发
-        sendM1EvalReply(peer, request.eval_id, false, "", "eval queue full");
+    const auto cell_peer = firstRegisteredCellPeer();
+    if (cell_peer.empty()
+        || !m1Link_->sendCellModuleRolloutRequest(cell_peer, request)) {
+        m1Link_->sendModuleRolloutReply(peer, request.request_id, request.op,
+                                        false, -1, 0, 0,
+                                        "script runtime not ready");
         return;
     }
-    evalReplyPeers_[request.eval_id] = peer;
-    scenePendingEvals_[scene_id].insert(request.eval_id);
+    rolloutReplyPeers_[request.request_id] = PendingCellReply{
+        peer, cell_peer, steady_now_ms()};
+}
+
+void WorldApp::onM1WorldDrain(const std::string& peer,
+                              const WorldDrainRequest& request) {
+    // 956 受理：切片2 转发——World 只承载管理命令，排空命令经注册 cell
+    // 连接反向发送；cell 宿主处理后回 957（onCellDrainReply 按原
+    // fleetctl peer 回传）。无合格 cell = 即时回执。
+    if (request.request_id == 0) {
+        return;
+    }
+    const auto cell_peer = firstRegisteredCellPeer();
+    if (cell_peer.empty()
+        || !m1Link_->sendCellWorldDrainRequest(cell_peer, request)) {
+        m1Link_->sendWorldDrainReply(peer, request.request_id, request.op,
+                                     false, 0, 0, "squad service not ready");
+        return;
+    }
+    drainReplyPeers_[request.request_id] = PendingCellReply{
+        peer, cell_peer, steady_now_ms()};
 }
 
 void WorldApp::sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
@@ -1466,7 +1180,7 @@ void WorldApp::onCellEvalResult(const std::string& /*peer*/,
     if (it == evalReplyPeers_.end()) {
         return;
     }
-    sendM1EvalReply(it->second, result.eval_id, result.ok, result.result,
+    sendM1EvalReply(it->second.fleetctl_peer, result.eval_id, result.ok, result.result,
                     result.error);
     evalReplyPeers_.erase(it);
 }
@@ -1477,7 +1191,7 @@ void WorldApp::onCellRolloutReply(const std::string& /*peer*/,
     if (it == rolloutReplyPeers_.end() || !m1Link_) {
         return;
     }
-    m1Link_->sendModuleRolloutReply(it->second, reply.request_id, reply.op,
+    m1Link_->sendModuleRolloutReply(it->second.fleetctl_peer, reply.request_id, reply.op,
                                     reply.ok, reply.state, reply.window_faults,
                                     reply.module_version, reply.detail);
     rolloutReplyPeers_.erase(it);
@@ -1489,7 +1203,7 @@ void WorldApp::onCellDrainReply(const std::string& /*peer*/,
     if (it == drainReplyPeers_.end() || !m1Link_) {
         return;
     }
-    m1Link_->sendWorldDrainReply(it->second, reply.request_id, reply.op,
+    m1Link_->sendWorldDrainReply(it->second.fleetctl_peer, reply.request_id, reply.op,
                                  reply.ok, reply.state, reply.active_instances,
                                  reply.detail);
     drainReplyPeers_.erase(it);
@@ -1501,41 +1215,6 @@ void WorldApp::onCellIntentAck(const std::string& /*peer*/,
     //（sendIntentAck 已按 gateway_link 寻路）。0 关联键 = 拒收面静默。
     if (m1Link_ && ack.request_id != 0) {
         m1Link_->sendIntentAck(ack.request_id, ack.code, ack.message);
-    }
-}
-
-void WorldApp::drainDebugEvalResults() {
-    // post-tick 收账：Scene::tick 的 §7.1 固定调试点已执行在途 eval，此处取
-    // 回传结果按 eval_id 回 945。仅在途才 drain（直接 enqueue 面不挤占）；
-    // 同拍丢最旧的结果无回执（有界 FIFO 语义——admin 超时面重发裁决）。
-    if (scenePendingEvals_.empty()) {
-        return;
-    }
-    for (auto it = scenePendingEvals_.begin(); it != scenePendingEvals_.end();) {
-        auto* scene = find_scene(it->first);
-        if (scene == nullptr) {
-            // scene 已不存在（销毁/停机路径）：挂账清空，无回执（尽力面）
-            for (auto eval_id : it->second) {
-                evalReplyPeers_.erase(eval_id);
-            }
-            it = scenePendingEvals_.erase(it);
-            continue;
-        }
-        for (auto& r : scene->drain_debug_eval_results()) {
-            const auto peer = evalReplyPeers_.find(r.id);
-            if (peer == evalReplyPeers_.end()) {
-                continue;  // 非本面投递的结果（直接 enqueue 面）——留过即弃
-            }
-            sendM1EvalReply(peer->second, r.id, r.ok, r.ok ? r.result : "",
-                            r.ok ? "" : r.result);
-            evalReplyPeers_.erase(peer);
-            it->second.erase(r.id);
-        }
-        if (it->second.empty()) {
-            it = scenePendingEvals_.erase(it);
-        } else {
-            ++it;
-        }
     }
 }
 
