@@ -1,6 +1,8 @@
 [English](README.md) | [中文](README.zh.md)
 
-<p align="center"><a href="https://cuihairu.github.io/apollo/zh/"><img src="https://img.shields.io/badge/docs-文档-blue" alt="docs"></a></p>
+<p align="center">
+  <img src="docs/zh/public/apollo.png" alt="Apollo Logo" height="80"/> <a href="https://cuihairu.github.io/apollo/zh//"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-blue" alt="docs"></a>
+</p>
 
 <h1 align="center">Apollo</h1>
 
