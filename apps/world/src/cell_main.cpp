@@ -349,6 +349,24 @@ int run_cell_entry_body(int argc, char* argv[],
                     if (squads != nullptr && squads->active_count() == 0) {
                         cell_drain_state = 2;
                         cell_drain_detail = "drained: all instances settled";
+                    } else if (squads != nullptr && cell_drain_deadline_ms != 0
+                               && steady_now_ms() >= cell_drain_deadline_ms) {
+                        // 期限到未清强停（与 WorldApp 内嵌内核 driveWorldDrain
+                        // 同语义）：快照遍历 abort/dismiss 同步释放绑定。
+                        std::size_t force_stopped = 0;
+                        for (const auto& binding : squads->activeBindings()) {
+                            if (squads->abort(binding.party_id)
+                                || squads->dismiss(binding.party_id)) {
+                                ++force_stopped;
+                            }
+                        }
+                        if (squads->active_count() == 0) {
+                            cell_drain_state = 2;
+                            cell_drain_detail =
+                                "drained: deadline reached, "
+                                + std::to_string(force_stopped)
+                                + " instances force-aborted";
+                        }
                     }
                 }
             });
