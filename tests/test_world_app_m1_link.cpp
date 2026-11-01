@@ -394,7 +394,6 @@ struct ServerEnd {
         config.tickRateMs = tick_rate_ms;
         config.m1Port = 0;
         config.m1RouteJson = kRouteJson;
-        config.hostSimulation = host_simulation;
         try {
             server = std::make_unique<WorldApp>(config);
             server->start();
@@ -992,7 +991,7 @@ bool test_debug_eval_failure_surface() {
     return true;
 }
 
-// 生产 world（hostSimulation=false，无内嵌 CellApp）：意图在受理点不被静默
+// 生产 world（无注册 cell）：意图在受理点不被静默
 // 丢弃——M1 面回 2001（不受理即时回执，ADR-017「顶格拒收/不受理即时回」），
 // 与 onM1DebugEval 无模拟宿主显式回 "simulation not hosted" 同型。
 bool test_intent_no_simulation_hosted_ack() {
@@ -1001,7 +1000,7 @@ bool test_intent_no_simulation_hosted_ack() {
     g_acks = &acks;
 
     ServerEnd s;
-    TEST_ASSERT(s.start(10, false), "server started (hostSimulation=false)");
+    TEST_ASSERT(s.start(10, false), "server started without a registered cell");
     ClientEnd c;
     TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
     TEST_ASSERT(pump_until(c, [&] {
