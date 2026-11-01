@@ -80,10 +80,13 @@ Startup forms are shown below; **the `world` manager and `cellServer` executor e
 
 ```text
 world
-world --world-id 1 --m1-port 9101 --assign-spaces 401,402
+world --world-id 1 --m1-port 9101 --assign-spaces 401,402 \
+  --service-register-host 127.0.0.1 --service-register-port 9001
 cellServer --world-id 1 --m1-port 9301 --cell-id 21 \
   --register-host 127.0.0.1 --register-port 9101 --add-space 501:arena
 ```
+
+`--service-register-host/--service-register-port` point world at the login service-register port; world registers directly via 964/965 (no machined). `--settlement-credential-dir <dir>` supplies the settlement credential directory (default off).
 
 No arguments, or no `--role`, makes `world` default to the manager role (`--role` accepts only `manager`; there is no `world` form or `cell` form on `world`; the standalone `cellServer` accepts only `cell` for `--role`). A missing role value, unknown role, or invalid configuration fails explicitly. Role is fixed at startup, never inferred from a port.
 

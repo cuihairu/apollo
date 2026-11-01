@@ -76,7 +76,7 @@ cmake --build build --config Release
 
 ### CMake options
 - `APOLLO_BUILD_TESTS=ON` - build unit tests (default: ON)
-- `APOLLO_BUILD_EXAMPLES=ON` - build example programs (default: ON)
+- `APOLLO_BUILD_EXAMPLES=ON` - build example programs (default: OFF; legacy alias `BUILD_EXAMPLES=ON` forces it on)
 - `APOLLO_ENABLE_COVERAGE=ON` - enable code coverage (requires gcov/lcov)
 - `APOLLO_ENABLE_DOXYGEN=ON` - generate API documentation (requires Doxygen)
 - `APOLLO_ENABLE_CLANG_TIDY=ON` - enable clang-tidy static analysis

@@ -19,8 +19,8 @@ Target roles and current code are distinct. The [BigWorld–Apollo mapping](../d
 | gateway | Connections, sessions, Base/cell forwarding | gateway has ingress, the old World outlet, and drain primitives; wire separate Base/executor routes. |
 | loginServer | Authentication, service/online directories | login hosts OnlineDirectory; add Base ownership and manager/executor address projections. |
 | baseServer | Avatar, persistent gameplay, settlement validation | apps/base builds base with PlayerStore/Avatar and injected remote storage; settlement admission is wired, directory ownership wiring remains pending. |
-| worldServer | Executor registration, Space/Cell placement, topology, migration | world / WorldApp currently runs Scene directly; split management from execution. |
-| cell | Local Cell entities, AOI, combat, scripts, ticks | Dedicated entry point not implemented; reuse WorldHost/Scene/Avatar execution primitives, initially in one process. |
+| worldServer | Executor registration, Space/Cell placement, topology, migration | Management/execution separation landed (L104): world is management-only; cell execution runs in `cellServer`. |
+| cell | Local Cell entities, AOI, combat, scripts, ticks | `cellServer` standalone entry landed (L104); reuses WorldHost/Scene/Avatar execution primitives. |
 | database | Load/save, storage routing, durable results | apps/database builds database with file profiles, journal, and M1 load/save; full queues, write authority, and partitioning remain pending. |
 | machined | Local supervision and restart | Reuse supervision primitives, without cross-server discovery or player placement. |
 
