@@ -2660,9 +2660,6 @@ endforeach()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(hosted_services_tests
     test_hosted_services.cpp
-    ../apps/world/src/world_app.cpp
-    ../apps/world/src/cell_app.cpp
-    ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
@@ -2670,7 +2667,6 @@ add_executable(hosted_services_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp)
 target_include_directories(hosted_services_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/apps/world/include
     ${CMAKE_SOURCE_DIR}/apps/login/include
     ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(hosted_services_tests PRIVATE
