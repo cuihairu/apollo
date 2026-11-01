@@ -1,7 +1,7 @@
 [English](README.md) | [中文](README.zh.md)
 
 <p align="center">
-  <img src="docs/zh/public/apollo.png" alt="Apollo Logo" height="80"/> <a href="https://cuihairu.github.io/apollo/en/"><img src="https://img.shields.io/badge/docs-blue" alt="docs"></a>
+  <img src="docs/public/apollo.png" alt="Apollo Logo" height="80"/> <a href="https://cuihairu.github.io/apollo/en/"><img src="https://img.shields.io/badge/docs-blue" alt="docs"></a>
 </p>
 
 <h1 align="center">Apollo</h1>
@@ -25,11 +25,11 @@ The runnable processes are `gateway`, `login`, `base`, `world`, `database`, `int
   <img src="docs/public/images/architecture-en.svg" alt="Apollo target architecture: separate Base profiles, cell simulation, and World management" />
 </picture>
 
-Target design: standalone Base ↔ database prototypes exist; World/cell separation and full wiring remain pending.
+Target design: standalone Base ↔ database prototypes and the World/cell separation (world manager-only, `cellServer` standalone entry) exist; full cross-process wiring remains pending.
 
 baseServer owns persistent-player data and base gameplay; worldServer manages executors/topology and cell runs entities/temporary gameplay. Cross-server play retains the original Base and storage affiliation. A World can serve players from multiple Bases using per-player Base associations, without database credentials or local machined.
 
-Protocol-capable upgrades replace Base, cell, or World management independently through state conversion, exclusive handoff, route switching, and source cleanup. Complete active matches require Instance state transfer. The role split and corresponding runtime wiring remain implementation tasks; see [architecture](docs/zh/zh/en/guide/architecture.md), [applications](docs/zh/zh/en/apps/index.md), and [cross-server scenes](docs/zh/zh/en/design/cross-server-scenes.md).
+Protocol-capable upgrades replace Base, cell, or World management independently through state conversion, exclusive handoff, route switching, and source cleanup. Complete active matches require Instance state transfer. The role split and corresponding runtime wiring remain implementation tasks; see [architecture](docs/zh/en/guide/architecture.md), [applications](docs/zh/en/apps/index.md), and [cross-server scenes](docs/zh/en/design/cross-server-scenes.md).
 
 ### Entry and Delivery Surfaces
 
@@ -46,7 +46,7 @@ Protocol-capable upgrades replace Base, cell, or World management independently 
 
 | Kind | Members | Boundary |
 |---|---|---|
-| Runtime processes | `gateway`, `login`, `base`, `world`, `database`, `interfaces`, `machined` | Online services; `cell` runs as a role of the `world` binary |
+| Runtime processes | `gateway`, `login`, `base`, `world`, `database`, `interfaces`, `machined` | Online services; `cellServer` is the standalone cell execution entry |
 | CLI tools | `apolloc` (project init), `fleetctl`, `admin`, `logger` | Development/ops tools, not online services |
 | CI | GitHub Actions: build/tests, contracts, docs | Runs in the repository, not in the online path |
 
@@ -66,17 +66,17 @@ Protocol-capable upgrades replace Base, cell, or World management independently 
 
 > MMO describes a game scale and product form; it does not define this engine's topology. Apollo can support MMO features built from instances and matches, while prioritizing instances and reserving seamless-map boundaries.
 
-[BigWorld–Apollo mapping](docs/zh/zh/en/design/bigworld-apollo-mapping.md)
+[BigWorld–Apollo mapping](docs/zh/en/design/bigworld-apollo-mapping.md)
 
 ## Core Concepts
 
-Core gameplay terms (the [concept guide](docs/zh/zh/en/guide/concepts.md) describes current code components):
+Core gameplay terms (the [concept guide](docs/zh/en/guide/concepts.md) describes current code components):
 
 | Concept | Responsibility | Existing code / boundary |
 |---|---|---|
 | baseServer | Persistent-player objects and base gameplay | Standalone baseServer and remote storage exist; ownership/default routing migration remains pending |
-| worldServer | Executor registration, Space/Cell topology and migration | Split current WorldApp management/execution |
-| cell | Local Cell simulation, entities, AOI, combat | Reuse WorldHost, Scene, Instance, Avatar; dedicated entry pending |
+| worldServer | Executor registration, Space/Cell topology and migration | World is manager-only; cell execution runs in `cellServer` |
+| cell | Local Cell simulation, entities, AOI, combat | `cellServer` standalone entry reuses WorldHost, Scene, Instance, Avatar |
 | Space / Cell | Runtime space / spatial partition | Space matches current Scene semantics without duplicate containers |
 | database | Load/save, storage routing, durable results | Dedicated database hosts profiles/journal; complete write authority/queues remain pending |
 | Instance | Temporary group activity | Existing eight-state lifecycle |
@@ -101,11 +101,11 @@ Protocol updates start a new Base, cell, or World management process, convert/re
 
 Code-only updates preserve contract IDs, fields, and wire format. Lua can prepare/commit, observe, and roll back modules; C++ uses process replacement. Preserve gateway to retain its TCP connections; replacing gateway requires drain or client recovery. Current primitives do not establish the full target-role upgrade workflow.
 
-See [update boundaries](docs/zh/zh/en/design/gateway-topology-survey.md) and [contract versioning](docs/zh/zh/en/design/sdk-contract.md).
+See [update boundaries](docs/zh/en/design/gateway-topology-survey.md) and [contract versioning](docs/zh/en/design/sdk-contract.md).
 
 ## Architecture
 
-> See [Architecture Overview](docs/zh/zh/en/guide/architecture.md) for the target instance-based model and [Server Applications](docs/zh/zh/en/apps/index.md) for the current executable prototypes.
+> See [Architecture Overview](docs/zh/en/guide/architecture.md) for the target instance-based model and [Server Applications](docs/zh/en/apps/index.md) for the current executable prototypes.
 
 ### Tech Stack
 
@@ -416,7 +416,7 @@ Test coverage:
 
 ```
 apollo/
-├── apps/                   # Executable prototypes and tools; see docs/zh/zh/en/apps/index.md for current status
+├── apps/                   # Executable prototypes and tools; see docs/zh/en/apps/index.md for current status
 ├── modules/                # Modular source: base/core/data/game/net/runtime, etc.
 ├── include/                # Public headers and compatibility layer headers
 ├── src/                    # Public implementations and compatibility layer implementations

@@ -80,10 +80,13 @@ Space/实体/操作 ID 在互通范围内必须唯一，不能只用各进程从
 
 ```text
 world
-world --world-id 1 --m1-port 9101 --assign-spaces 401,402
+world --world-id 1 --m1-port 9101 --assign-spaces 401,402 \
+  --service-register-host 127.0.0.1 --service-register-port 9001
 cellServer --world-id 1 --m1-port 9301 --cell-id 21 \
   --register-host 127.0.0.1 --register-port 9101 --add-space 501:arena
 ```
+
+`--service-register-host/--service-register-port` 指向 login 的服务注册端口，world 经 964/965 直接注册（不经 machined）；`--settlement-credential-dir <dir>` 提供结算凭据目录（默认 off，缺省不启用）。
 
 World 角色启动管理循环和本机监督，不创建模拟宿主；cell 角色启动模拟宿主和注册客户端，不再拉起子 cell。不带参数或未指定 `--role` 时 `world` 默认管理角色（`world` 的 `--role` 只认 `manager`，无 `world` 形式，`cell` 已移出并由 `cellServer` 独立入口承担；`cellServer` 的 `--role` 仅接受 `cell`）。`--role` 缺少值、角色未知或配置非法时明确报错，不根据端口猜测角色。角色在启动时固定，不做运行中切换。
 

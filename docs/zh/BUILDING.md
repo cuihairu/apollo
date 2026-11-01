@@ -76,7 +76,7 @@ cmake --build build --config Release
 
 ### CMake 选项
 - `APOLLO_BUILD_TESTS=ON` - 构建单元测试（默认：ON）
-- `APOLLO_BUILD_EXAMPLES=ON` - 构建示例程序（默认：ON）
+- `APOLLO_BUILD_EXAMPLES=ON` - 构建示例程序（默认：OFF；旧别名 `BUILD_EXAMPLES=ON` 会强制开启）
 - `APOLLO_ENABLE_COVERAGE=ON` - 启用代码覆盖率（需要 gcov/lcov）
 - `APOLLO_ENABLE_DOXYGEN=ON` - 生成 API 文档（需要 Doxygen）
 - `APOLLO_ENABLE_CLANG_TIDY=ON` - 启用 clang-tidy 静态分析

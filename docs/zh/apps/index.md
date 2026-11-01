@@ -19,8 +19,8 @@ tag:
 | gateway | 连接、会话、Base 与 cell 转发 | gateway 已有接入、旧 World 出口和排空；独立 Base/cell 路由待接。 |
 | loginServer | 认证、服务/在线目录 | login 已托管 OnlineDirectory；Base 归属、管理端与执行端地址投影待补。 |
 | baseServer | Avatar、长期业务与结算校验 | apps/base 构建 base，复用 PlayerStore/Avatar 并注入远程存储；结算受理已接，目录归属接线待完成。 |
-| worldServer | cell 注册、Space/Cell 分配、拓扑与迁移 | world / WorldApp 当前还直接运行 Scene，管理与执行必须拆开。 |
-| cell | Cell 内实体、AOI、战斗、脚本与 tick | 独立入口未实现；复用现有 WorldHost/Scene/Avatar 等执行原语，默认一个进程。 |
+| worldServer | cell 注册、Space/Cell 分配、拓扑与迁移 | 管理/执行已分离（L104）：world 仅管理，cell 执行由 cellServer 承担。 |
+| cell | Cell 内实体、AOI、战斗、脚本与 tick | cellServer 独立入口已落（L104）；复用现有 WorldHost/Scene/Avatar 等执行原语。 |
 | database | 加载、保存、存储路由与持久结果 | apps/database 构建 database，承载文件档案、journal 和 M1 加载/保存；完整排队、写权与分区待完成。 |
 | machined | 本机进程监督与重启 | 可复用监督原语，不负责跨服发现或玩家归属。 |
 
