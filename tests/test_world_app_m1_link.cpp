@@ -1034,6 +1034,79 @@ bool test_intent_no_simulation_hosted_ack() {
     return true;
 }
 
+// 切片2 在途关联账清扫：cell 断连（peer-down）即撤账并回「cell link lost」；
+// cell 活着但不回执超 cellExpiryMs 即撤账回「eval reply timeout」。两路径
+// 都验证后续 eval 不再被残留条目占 backlog 额。
+bool test_cell_reply_account_cleanup() {
+    std::cout << "Running: test_cell_reply_account_cleanup..." << std::endl;
+    EvalLog evals;
+    g_evals = &evals;
+
+    // 路径1：cell 断连 → 撤账 + 显式回「cell link lost」+ 额度释放。
+    ServerEnd s;
+    s.config.cellExpiryMs = 5000;
+    TEST_ASSERT(s.start(10, true), "server started with cell");
+    ClientEnd c;
+    TEST_ASSERT(c.start(s.server->m1Link().listenPort()), "client dialed");
+    TEST_ASSERT(pump_until(c, [&] {
+                    return c.cell_link()->state() == link::LinkState::kUp
+                        && s.server->m1Link().gatewayConnected();
+                }, 10000), "link up");
+
+    TEST_ASSERT(send_debug_eval(c, 8801, 0, "1+1"), "eval request sent");
+    s.cell->stop();
+    TEST_ASSERT(pump_until(c, [&] {
+                    EvalReply r;
+                    return evals.find(8801, r) && !r.ok && r.error == "cell link lost";
+                }, 5000), "cell link lost reply arrived");
+
+    // 断连后新 cell（重注册）→ eval 不被残留条目占额。
+    auto new_cell = std::make_unique<cell_test::CellHost>();
+    new_cell->config = s.config;
+    TEST_ASSERT(new_cell->start(s.server->m1Link().listenPort(), 22, 0,
+                                &s.server->m1Link()), "new cell started");
+    new_cell->set_world_link(&s.server->m1Link());
+    new_cell->pump_until_registered();
+    TEST_ASSERT(new_cell->registered(), "new cell registered");
+    TEST_ASSERT(send_debug_eval(c, 8802, 0, "1+1"), "post-crash eval sent");
+    TEST_ASSERT(pump_until(c, [&] {
+                    EvalReply r;
+                    return evals.find(8802, r) && r.ok;
+                }, 5000), "post-crash eval served");
+    new_cell->stop();
+
+    s.stop();
+    c.manager.reset();
+    evals.replies.clear();
+
+    // 路径2：cell 活着不回执超 cellExpiryMs → 撤账 + 显式回「eval reply timeout」。
+    // 注：cell 的 eval listener 不回执（空函数覆盖）——sweep 超窗兜底面。
+    ServerEnd s2;
+    s2.config.cellExpiryMs = 100;
+    TEST_ASSERT(s2.start(10, true), "server2 started with cell");
+    s2.cell->client().set_debug_eval_listener([](const auto&) {});
+    TEST_ASSERT(s2.cell->registered(), "cell2 registered");
+    ClientEnd c2;
+    TEST_ASSERT(c2.start(s2.server->m1Link().listenPort()), "client2 dialed");
+    TEST_ASSERT(pump_until(c2, [&] {
+                    return c2.cell_link()->state() == link::LinkState::kUp
+                        && s2.server->m1Link().gatewayConnected();
+                }, 10000), "link2 up");
+
+    TEST_ASSERT(send_debug_eval(c2, 8901, 0, "1+1"), "eval2 request sent");
+    TEST_ASSERT(pump_until(c2, [&] {
+                    EvalReply r;
+                    return evals.find(8901, r) && !r.ok
+                        && r.error == "eval reply timeout";
+                }, 5000), "eval reply timeout arrived");
+
+    s2.stop();
+    c2.manager.reset();
+    g_evals = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- P4 仅代码更新批（952/953 module rollout 契约面） ----------
 
 // status 轮询到期望 state（控制面聚合观察；每拍一发，request_id 单调分配）。
@@ -1283,6 +1356,7 @@ int main() {
     if (!test_debug_eval_reject_face()) ++failed;
     if (!test_debug_eval_failure_surface()) ++failed;
     if (!test_intent_no_simulation_hosted_ack()) ++failed;
+    if (!test_cell_reply_account_cleanup()) ++failed;
     if (!test_module_rollout_happy_path()) ++failed;
     if (!test_module_rollout_fault_rollback()) ++failed;
     if (!test_module_rollout_abort_idle()) ++failed;

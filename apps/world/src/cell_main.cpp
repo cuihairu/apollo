@@ -13,6 +13,7 @@
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "world_app/world_types.hpp"
 #include <chrono>
+#include <cerrno>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -139,7 +140,18 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
         } else if (arg == "--cell-id" && i + 1 < argc) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--world-id" && i + 1 < argc) {
-            config.worldId = static_cast<std::uint32_t>(std::stoul(argv[++i]));
+            const char* value_text = argv[++i];
+            errno = 0;
+            char* end = nullptr;
+            const unsigned long long value =
+                std::strtoull(value_text, &end, 10);
+            if (errno != 0 || end == value_text || *end != '\0'
+                || value == 0 || value > 0xFFFFFFFFULL) {
+                std::cerr << prog << ": --world-id expects 1..4294967295"
+                          << std::endl;
+                std::exit(2);
+            }
+            config.worldId = static_cast<std::uint32_t>(value);
         } else if (arg == "--link-grace-ms" && i + 1 < argc) {
             config.linkGraceMs = std::strtoull(argv[++i], nullptr, 10);
         } else if (arg == "--space" && i + 1 < argc) {
@@ -172,7 +184,19 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
             config.spaceWidth = static_cast<float>(std::atof(argv[++i]));
             config.spaceHeight = static_cast<float>(std::atof(argv[++i]));
         } else if (arg == "--tick-rate" && i + 1 < argc) {
-            config.tickRateMs = std::atoi(argv[++i]);
+            const char* value_text = argv[++i];
+            errno = 0;
+            char* end = nullptr;
+            const unsigned long long value =
+                std::strtoull(value_text, &end, 10);
+            if (errno != 0 || end == value_text || *end != '\0' || value == 0
+                || value > 10000) {
+                std::cerr << prog
+                          << ": --tick-rate expects 1..10000 (ms)"
+                          << std::endl;
+                std::exit(2);
+            }
+            config.tickRateMs = static_cast<int>(value);
         } else if (arg == "--script-boot" && i + 1 < argc) {
             config.scriptBootFile = argv[++i];
         } else if (arg == "--script-handlers" && i + 1 < argc) {
@@ -293,7 +317,6 @@ int run_cell_entry_body(int argc, char* argv[],
         // 注册泵上下文同步回调，与 cell pre_tick 同线程单写者）。
         std::unique_ptr<apollo::script::ModuleRollout> cell_module_rollout;
         std::string cell_last_rollout_name;
-        std::unordered_map<std::uint64_t, std::string> cell_eval_peers;
         std::unordered_map<std::uint64_t, std::unordered_set<std::uint64_t>>
             cell_scene_pending_evals;
         std::int32_t cell_drain_state = 0;  // 0=serving 1=draining 2=drained
@@ -469,7 +492,7 @@ int run_cell_entry_body(int argc, char* argv[],
             // fleetctl/admin peer 回传）。监听器在注册泵上下文同步回调，
             // 与 cell pre_tick 同线程单写者。
             register_client->set_debug_eval_listener(
-                [&cell, &register_client, &logger, &cell_eval_peers,
+                [&cell, &register_client, &logger,
                  &cell_scene_pending_evals](const CellDebugEvalRequest& req) {
                     if (req.eval_id == 0) {
                         return;  // 0 保留
@@ -647,17 +670,25 @@ int run_cell_entry_body(int argc, char* argv[],
                     }
                     switch (req.op) {
                         case 1: {  // begin
-                            if (cell_drain_state == 0) {
+                            if (cell_drain_state != 2) {
                                 squads->set_drain(true);
-                                cell_drain_state = 1;
-                                cell_drain_deadline_ms =
-                                    req.deadline_s > 0
-                                        ? steady_now_ms()
-                                              + static_cast<std::uint64_t>(
-                                                    req.deadline_s)
-                                                    * 1000U
-                                        : 0;
-                                logger->info("cell drain begun");
+                                if (cell_drain_state == 0) {
+                                    cell_drain_state = 1;
+                                    logger->info("cell drain begun");
+                                }
+                                // 重复 begin 幂等，期限只紧不松（与 WorldApp
+                                // 内嵌 driveWorldDrain 同语义）：新期限更早
+                                // 才收紧，0 = 不限时不清已有期限。
+                                if (req.deadline_s > 0) {
+                                    const auto deadline =
+                                        steady_now_ms()
+                                        + static_cast<std::uint64_t>(
+                                              req.deadline_s) * 1000U;
+                                    if (cell_drain_deadline_ms == 0
+                                        || deadline < cell_drain_deadline_ms) {
+                                        cell_drain_deadline_ms = deadline;
+                                    }
+                                }
                             }
                             reply(true, detail_of());
                             return;
