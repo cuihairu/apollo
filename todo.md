@@ -15,7 +15,7 @@
 - [x] 区分支持协议更新的进程替换与仅代码更新；Base、cell、World 管理端各交接不同状态，TCP/会话/活动连续分别验收。
 - [x] 保持 VitePress 原生 locales：中文根目录、英文 en，各自正文与导航，新增对照入口并纳入文档 CI。
 - [x] 专用 Profiler、OpenTelemetry SDK/OTLP exporter 标为未集成，自研日志、MetricRegistry、span/trace 不作为集成证据。
-- [x] README 主标题未居中，改用 h1 align=center（README.md 与 README.zh.md 顶部主标题改 `<h1 align="center">Apollo</h1>`，本账同 commit）
+- [x] README 主标题未居中，改用 h1 align=center（README.md 与 README.zh.md 顶部主标题改 `<h1 align="center">Apollo</h1>`，commit 27674136（hostSimulation 移除）+ 2fa54622（world 目标移除 cell_main + 文档刷新））
 
 ## P0.1：角色实体与应用命名迁移（待实施）
 
@@ -149,7 +149,7 @@
     立即动作设计稿已落 docs/review/2026-10-30-actions/（4d6f2f82）；分项状态见 decisions 各节「执行注」与 actions/00-index。
 - [x] 保留有界意图队列、模拟线程写入、过载拒收及停机尾扫；不得由 IO、管理端或后台线程直接改模拟状态。证据：受理单写者契约已钉（见 L141 验收记录）——有界队列顶格拒收不丢旧、两级水位滞回、过载拒收、tick 边界 drain、G-3 停机尾扫、维护/预启动闸六例既有验收；code-verified 意图消费仅 gameLoop tick 边界与停机尾扫两处，M1 泵/回执/管理面（rollout/drain/debugEval/fleet 上报/metrics）全在 gameLoop 驱动（tests/test_cell_app.cpp:269-347 断言：pre-start gated、maintenance gate immediate ack、overflow rejected、queue bounded at cap、queue drained on stop tail scan、no session before tick single-writer）；CellAppTests 15/15 绿（本批复跑）。
 - [x] 受理单写者契约已钉（P2 分离前置回归底线）：有界队列顶格拒收不丢旧、两级水位滞回、过载拒收、tick 边界 drain、G-3 停机尾扫、维护/预启动闸六例既有验收；新增第七例——模拟线程外 submitIntent 只入队不写 world（提交即刻探测会话表无绑定），会话绑定仅在 gameThread tick 边界 drain 后显形（resolveIntentPlayer 提为公开只读观测面，互斥会话表跨线程安全）；code-verified：意图消费仅 gameLoop tick 边界与停机尾扫两处，M1 泵/回执/管理面（rollout/drain/debugEval/fleet 上报/metrics）全在 gameLoop 驱动。
-- [ ] 更新真实 CMake 入口、CLI、配置、脚本和开发编队，删除冲突宿主接线与别名；文档只标记真实存在的程序，不虚构目录。（BLOCKED复核 2026-11-01：缺 L104 收口——cellServer 独立入口、role_options 显式拒绝、dev_fleet 多 cell 样例、ADR 可执行名清单已落地，但 WorldApp 管理壳仍内嵌 CellApp（world_app.hpp:17 include / :33 manager 内嵌执行内核 / 执行面访问转发 cell_），需随 L104 部署缺省形态拍板与既有集成测试迁移一并移除；编队 cell 缺省 0（常驻化同属部署拍板））
+- [x] 更新真实 CMake 入口、CLI、配置、脚本和开发编队，删除冲突宿主接线与别名；文档只标记真实存在的程序，不虚构目录。（L104 收口后清理完成：①CMake —— `world` 目标移除 `src/cell_main.cpp`，不再携带执行端入口源（apps/world/CMakeLists.txt:11-17）；cellServer 目标保留执行端源（:73）。②CLI/配置 —— 删除 `WorldAppConfig::hostSimulation` 迁移期开关与 main.cpp/test_cell_register/test_world_app_m1_link 引用（config.hpp 移除字段，`world --help` 仅 manager）；`world --role=cell` 实测 exit=2 并提示改用 cellServer。③编队 —— `scripts/dev_fleet.sh` 缺省 `APOLLO_FLEET_CELLS=1` 常驻独立 cellServer（=0 显式管理测试模式），bash -n 通过。④文档 —— docs/zh/Directory_Structure.md 与 en 移除“hostSimulation/内嵌测试宿主”过时描述，改为执行端唯一生效声明面 `cellServer --add-space`；`docs_i18n_check.py` 240 页对通过、architecture SVG 16/16 match。测试：World/Cell/Gateway/Fleet/Migration/HostedServices 定向 15/15 全绿（WorldRoleTests、WorldAppM1LinkTests、CellRegisterTests、WorldCellIndependentSmoke、CellServerEntrySmoke、WorldAppAcceptanceTests、WorldAppScriptHostTests、SquadWireE2eTests、GatewayM1EgressTests、GatewayPushDownlinkTests、WorldDrainTests、UpdateContinuityTests、FleetRehomeChainTests、MigrationChainTests、HostedServicesTests）。本账同 commit）
   - 已代决：按 docs/review/2026-10-30-decisions.md 执行（2026-10-30）。
     立即动作设计稿已落 docs/review/2026-10-30-actions/（4d6f2f82）；分项状态见 decisions 各节「执行注」与 actions/00-index。
 
