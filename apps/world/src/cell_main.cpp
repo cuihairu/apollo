@@ -380,10 +380,9 @@ int run_cell_entry_body(int argc, char* argv[],
                 if (cell_module_rollout) {
                     auto* script = cell.script_runtime();
                     if (script) {
-                        for (const auto& name : {cell_last_rollout_name}) {
-                            if (!name.empty()) {
-                                (void)script->call_module(name, "onTick");
-                            }
+                        if (!cell_last_rollout_name.empty()) {
+                            (void)script->call_module(cell_last_rollout_name,
+                                                      "onTick");
                         }
                         const auto st = cell_module_rollout->state();
                         if (st == apollo::script::RolloutState::kObserving) {
@@ -576,7 +575,6 @@ int run_cell_entry_body(int argc, char* argv[],
                                 apollo::script::CanaryParams{req.observe_ticks,
                                                              req.fault_threshold});
                             if (ok) {
-                                cell_last_rollout_name = req.name;
                                 logger->info("cell module rollout prepared: "
                                              + req.name + " v"
                                              + std::to_string(req.version));
@@ -598,6 +596,7 @@ int run_cell_entry_body(int argc, char* argv[],
                             const bool ok = cell_module_rollout->state() ==
                                             apollo::script::RolloutState::kObserving;
                             if (ok) {
+                                cell_last_rollout_name = req.name;
                                 logger->info("cell module rollout committed: "
                                              + req.name + " v"
                                              + std::to_string(req.version));
@@ -620,7 +619,9 @@ int run_cell_entry_body(int argc, char* argv[],
                                 return;
                             }
                             cell_module_rollout->rollback_target("cell");
-                            reply(true, state_of(), 0,
+                            const bool rb_ok = cell_module_rollout->state() ==
+                                               apollo::script::RolloutState::kRolledBack;
+                            reply(rb_ok, state_of(), 0,
                                   script->module_version(req.name), detail_of());
                             return;
                         }
