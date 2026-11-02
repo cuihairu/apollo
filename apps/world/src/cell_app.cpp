@@ -873,6 +873,9 @@ void CellApp::gameLoop() {
     // 用/析全在本线程。boot 源加载失败不停机（fault 走 runtime 事件面，
     // cell 继续服务）。
     script_ = std::make_unique<apollo::script::ScriptRuntime>();
+    if (faultSink_) {
+        script_->set_fault_sink(faultSink_);
+    }
     // world 模块先于 handler/契约/boot 落地（§4.1 启动期注入唯一通道）——
     // handler 面与 boot 源即可用 world.* 挂推送源。
     register_world_module();

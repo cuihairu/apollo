@@ -312,6 +312,17 @@ int run_cell_entry_body(int argc, char* argv[],
         CellLinkEgress egress;
         cell.set_egress(&egress);
 
+        // §3.2 故障观测面（诊断/测试）：ScriptRuntime 冷路径 fault 事件
+        // 落日志（模块名/类型/消息/宿主 tick），供运维定位与回归观测。
+        // 不改变任何行为，只读旁路。
+        cell.set_fault_sink([&logger](const apollo::script::ScriptFaultEvent& e) {
+            logger->warning(
+                "script fault: module=" + e.chunk
+                + " kind=" + std::to_string(static_cast<int>(e.kind))
+                + " tick=" + std::to_string(e.tick)
+                + " msg=" + e.message);
+        });
+
         std::unique_ptr<CellRegisterClient> register_client;
         // 管理命令状态（切片2 World→cell 转发；cell 宿主独占——监听器在
         // 注册泵上下文同步回调，与 cell pre_tick 同线程单写者）。
@@ -626,7 +637,14 @@ int run_cell_entry_body(int argc, char* argv[],
                             return;
                         }
                         default: {  // status
-                            reply(true, state_of(), 0,
+                            const auto statuses =
+                                cell_module_rollout ? cell_module_rollout->statuses()
+                                                    : std::vector<apollo::script::TargetStatus>{};
+                            std::uint64_t faults = 0;
+                            for (const auto& s : statuses) {
+                                faults += s.window_faults;
+                            }
+                            reply(true, state_of(), faults,
                                   script->module_version(req.name), detail_of());
                             return;
                         }

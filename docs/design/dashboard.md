@@ -24,7 +24,7 @@
 | 项 | 默认 | 说明 |
 |---|---|---|
 | 监听地址 | `127.0.0.1` | 状态页比 Prometheus 指标更敏感（含模块版本、链路对端、队列明细），默认只绑环回；对外需显式 `--dashboard-host 0.0.0.0` |
-| token | 未设 | 设置 `--dashboard-token <t>` 后，所有路由（HTML 与 JSON API）要求 `Authorization: Bearer <t>` 或 `?token=<t>`，否则 401 |
+| token | 未设 | 设置 `--dashboard-token <t>` 后，所有路由（HTML 与 JSON API）要求 `Authorization: Bearer <t>`，否则 401。不用查询串传递 token，避免浏览器历史、访问日志与 Referer 泄漏 |
 | 方向 | 只听不拨 | dashboard 只 accept，不外发任何连接（「不外发」纪律同 logging §5.10 出站白名单口径） |
 | 读写 | 只读 | 无任何状态变更端点；全部为 GET |
 | 端口 | `--dashboard-port` 显式给 | 0 = 不装配（缺省关闭，不占端口面） |
@@ -34,7 +34,7 @@
 | 区块 | 数据 | 已有接口（file:line） | 缺口与补齐计划 |
 |---|---|---|---|
 | 编队成员 | 启停/readiness/日志尾 | dev_fleet pid 记账 `.run/<role>.pid` + 日志 `logs/<role>.log`（`scripts/dev_fleet.sh`，模板 start.sh 同款 pid 面）；端口预检 `check_interfaces_port_free()`（`scripts/dev_fleet.sh:91`） | **readiness 无结构化标记**（start.sh 明示 "readiness not asserted"）→ 补：dev_fleet/start 脚本在各成员就绪日志行出现后落 `.run/<role>.ready`（内容=就绪时刻 ms）；dashboard 读 pid+ready+日志尾 |
-| link/TLS | 链路状态/对端/TLS | `LinkState{kIdle,kConnecting,kUp,kDown}`（`modules/net/link/include/apollo/net/link/interserver_link.hpp:55-59`）；LinkManager peers/staging 分域（`modules/net/link/include/apollo/net/link/link_manager.hpp:17-18,129,138`）；TLS verify 开关与凭据（`modules/net/tls/include/apollo/net/tls/tls_client.hpp:72-83`） | **LinkManager 无逐链路快照查询** → 补：`LinkManager::snapshot_links()` 只读枚举（peer 名/state/收发计数/TLS 与否），pump 线程外只读语义 |
+| link/TLS | 链路状态/对端/TLS | `LinkState{kIdle,kHandshaking,kUp,kDown}`（`modules/net/link/include/apollo/net/link/interserver_link.hpp:55-59`）；LinkManager peers/staging 分域（`modules/net/link/include/apollo/net/link/link_manager.hpp:17-18,129,138`）；TLS verify 开关与凭据（`modules/net/tls/include/apollo/net/tls/tls_client.hpp:72-83`） | **LinkManager 无逐链路快照查询** → 补：`LinkManager::snapshot_links()` 只读枚举（peer 名/state/收发计数/TLS 与否），pump 线程外只读语义 |
 | orders 队列 | pending/delivered/明细 | `OrderStore::pending()/pending_count()/delivered_count()`（`modules/game/orders/src/order_store.cpp:82,102,113`）；`OrderRecord` 状态字段 | 齐，直接接 |
 | script runtime | 模块/版本/状态 | 版本库 `VersionEntry{name,version}`（`modules/script/include/apollo/script/module_version_store.hpp:26-28`）；rollout 版本面（`modules/script/include/apollo/script/module_rollout.hpp:42`） | **运行时当前装载版本无快照查询** → 补：`ScriptRuntime` 只读 `module_versions()`（装载表逐模块 name→version） |
 | tick/负载 | ticks/队列水位 | `MetricRegistry::counter()/gauge()/snapshot()`（`modules/core/metrics/include/apollo/core/metrics/metric_registry.h:143,146,168`）；既有 `world_ticks_total` 等键 | 齐，`snapshot()` 直取 |
@@ -64,6 +64,8 @@ JSON 形状（`/api/state`）：
 }
 ```
 
+`orders.pending_detail` 最多返回前 20 条 pending 记录；`orders.pending` 仍返回完整积压计数。
+
 ## 6. 页面结构（单页，无框架，内嵌 `<script>` 每 2s `fetch('/api/state')`）
 
 ```
@@ -74,7 +76,7 @@ JSON 形状（`/api/state`）：
 ├──────────────────────────────────────────────────┤
 │ ② link/TLS  peer | state | tls | tx | rx         │  表格，kUp 绿 / kDown 红
 ├──────────────────────────────────────────────────┤
-│ ③ orders    pending N · delivered M + 明细表     │  计数 + 前 20 条 pending
+│ ③ orders    pending N · delivered M + 明细表     │  计数 + 前 20 条 pending_detail（上限 20）
 ├──────────────────────────────────────────────────┤
 │ ④ script    module | version | 状态              │  装载表
 ├──────────────────────────────────────────────────┤

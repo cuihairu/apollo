@@ -60,6 +60,30 @@ for page in sorted(pages):
         for match in re.finditer(r"^\s*(?:link|prev|next):\s*['\"]?(/[^\s'\"]+)", frontmatter, re.M):
             check_route(page, "navigation", match[1])
 
+# README 徽章 href 校验：docs 徽章必须指向正确语言站点根，防止语言错配
+# 或路径错误导致的线上 404。英文根 README → /apollo/en/，中文根 → /apollo/。
+README_BADGE_EXPECT = {
+    "README.md": "https://cuihairu.github.io/apollo/en/",
+    "README.zh.md": "https://cuihairu.github.io/apollo/",
+}
+for readme, expected in README_BADGE_EXPECT.items():
+    readme_path = ROOT / readme
+    if not readme_path.is_file():
+        errors.append(f"{readme}: missing root README")
+        continue
+    source = readme_path.read_text()
+    # docs 徽章：<a href="..."><img ... alt="docs|文档" ...></a>
+    for match in re.finditer(
+        r'<a href="(https://cuihairu\.github\.io/apollo[^"]*)"[^>]*>\s*'
+        r'<img[^>]*alt="(?:docs|文档)"',
+        source,
+    ):
+        href = match.group(1)
+        if href != expected:
+            errors.append(f"{readme}: docs badge href {href!r}, expected {expected!r}")
+    if not re.search(r'alt="(?:docs|文档)"', source):
+        errors.append(f"{readme}: missing docs badge")
+
 if args.dist:
     class PageMetadata(HTMLParser):
         def __init__(self):

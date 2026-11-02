@@ -359,6 +359,26 @@ try:
             r = m1.request(91001, 1, "prodgreet", 7, module_good, 5, 0)
             assert r["ok"] and r["state"] == 2, f"prepare not kCanaryPending: {r}"
             assert r["version"] == 0, f"prepare must not activate: {r}"
+            # 负边界（审核发现 3d/3e）：kCanaryPending 期驱动名必须尚未登记。
+            # 若回归为 prepare 即登记（原 bug 形态），post_tick 会
+            # call_module(name,"onTick") 落「module not a table」fault，且该
+            # fault 记于 tick < begin_tick，被 module_faults_since 排除——
+            # 观察窗仍零 fault 照常 promote。故在 commit 前等待几个 tick，
+            # 断言 cell 日志无该模块的「module not a table」fault 行。
+            pre_commit_fault = False
+            for _ in range(5):
+                time.sleep(0.2)
+                import select as _sel
+                if _sel.select([cell.stdout], [], [], 0.1)[0]:
+                    chunk = os.read(cell.stdout.fileno(), 65536).decode(errors="replace")
+                    cell_out += chunk
+                if ("script fault: module=prodgreet" in cell_out
+                        and "module not a table" in cell_out):
+                    pre_commit_fault = True
+                    break
+            assert not pre_commit_fault, \
+                "kCanaryPending must not register drive name (module not a table " \
+                f"fault observed): {cell_out[-2000:]}"
             # commit：kObserving，版本激活，驱动名登记（生产 cell_last_rollout_name）。
             r = m1.request(91002, 2, "prodgreet", 7, "", 5, 0)
             assert r["ok"] and r["state"] == 3, f"commit not kObserving: {r}"
@@ -368,6 +388,8 @@ try:
             for _ in range(30):
                 r = m1.request(91003, 4, "prodgreet", 7, "", 5, 0)
                 if r["state"] == 6:
+                    assert r["faults"] == 0, \
+                        f"promoted module must have zero window faults: {r}"
                     promoted = True
                     break
                 time.sleep(0.2)
@@ -418,6 +440,23 @@ try:
                     break
                 time.sleep(0.2)
             assert rolled_back, f"bad module did not roll back: {r}"
+            # 故障回执真实携带窗口 fault（fault sink 日志佐证）：
+            # 生产 op4 status 回执 faults = statuses window_faults 合计，非恒 0。
+            assert r["faults"] > 0, \
+                f"failed module must report window faults: {r}"
+            # fault sink 已把「boom」运行时错误落 cell 日志（观测面真实工作）。
+            fault_seen = False
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                import select as _sel
+                if _sel.select([cell.stdout], [], [], 0.1)[0]:
+                    chunk = os.read(cell.stdout.fileno(), 65536).decode(errors="replace")
+                    cell_out += chunk
+                if "script fault: module=prodcalc" in cell_out and "boom" in cell_out:
+                    fault_seen = True
+                    break
+                time.sleep(0.1)
+            assert fault_seen, f"fault sink did not log boom for prodcalc: {cell_out[-2000:]}"
         finally:
             m2.close()
 

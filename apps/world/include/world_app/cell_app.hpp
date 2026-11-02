@@ -40,6 +40,7 @@
 
 namespace apollo::script {
 class ScriptRuntime;
+struct ScriptFaultEvent;
 }
 
 namespace player_store {
@@ -102,6 +103,12 @@ public:
     // delta_seconds = 本拍时长（秒），与 driveSquadGameplay 同值。
     void set_post_tick(std::function<void(double delta_seconds)> hook) {
         postTick_ = std::move(hook);
+    }
+    // 故障观测缝：装配给内核 ScriptRuntime 的冷路径事件面（start 前调用；
+    // 只读旁路，不改变模拟行为）。
+    void set_fault_sink(
+        std::function<void(const apollo::script::ScriptFaultEvent&)> hook) {
+        faultSink_ = std::move(hook);
     }
 
     // ---- 生命周期 ----
@@ -280,6 +287,7 @@ private:
     std::uint64_t businessSeq_{0};
     // 脚本宿主（scripting-lua §2 一状态一逻辑线程：随内核线程生灭）
     std::unique_ptr<apollo::script::ScriptRuntime> script_;
+    std::function<void(const apollo::script::ScriptFaultEvent&)> faultSink_;
 
     std::atomic<bool> running_{false};
     // 受理面（ADR-016/017）：accepting_=false 即维护闸
