@@ -4,19 +4,139 @@
    （--m1-port + 拨 world 注册）均不经 machined 拉起，独立启动。
 2. world 经 964/965 直接注册到 login（machined 未参与）。
 3. cellServer 经 960/961 直接注册到 world（machined 未参与）。
-4. machined 不启动、不参与任何业务注册；machined 不知道资料位置/跨服去向。
+4. 生产 cellServer module rollout（952/953 转发链）：健康 promote 与故障回滚
+   全链驱动真实 cell_main.cpp（非 tests/cell_host.hpp 平行实现）。
+5. machined 不启动、不参与任何业务注册；machined 不知道资料位置/跨服去向。
 """
 import pathlib
 import os
 import re
 import selectors
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
 import time
+import json
 
 login_binary, world_binary, cell_binary, routes, fleetctl_binary = map(str, sys.argv[1:])
 children = []
+
+
+def crc32c(data):
+    poly = 0x82F63B78
+    crc = 0xFFFFFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ poly if crc & 1 else crc >> 1
+    return crc ^ 0xFFFFFFFF
+
+
+def append_frame(payload, seq, flags):
+    header = struct.pack("<HBBIIIH", 0x5041, 1, flags, seq, len(payload), 0, 0)
+    header = header[:14] + struct.pack("<H", crc32c(header[:14]) & 0xFFFF)
+    return header + payload + struct.pack("<I", crc32c(payload))
+
+
+class RolloutM1Client:
+    """仅覆盖本 smoke 需要的 M1 握手 + 952/953 平铺契约面。"""
+
+    def __init__(self, host, port, self_name, route_json, timeout=5.0):
+        with open(route_json, encoding="utf-8") as file:
+            schema_hash = json.load(file)["schema_hash"]
+        self.sock = socket.create_connection((host, port), timeout=timeout)
+        self.sock.settimeout(timeout)
+        self.route_version = int(schema_hash[:16], 16)
+        self.self_name = self_name
+        self.seq = 1
+        self.buffer = b""
+
+    def _send(self, payload, flags):
+        self.sock.sendall(append_frame(payload, self.seq, flags))
+        self.seq += 1
+
+    def _read_more(self):
+        chunk = self.sock.recv(65536)
+        if not chunk:
+            raise EOFError("M1 link closed")
+        self.buffer += chunk
+
+    def _frame(self):
+        while len(self.buffer) < 16:
+            self._read_more()
+        magic, version, flags, seq, length, _, header_crc = struct.unpack(
+            "<HBBIIHH", self.buffer[:16])
+        if magic != 0x5041 or version != 1:
+            raise AssertionError("bad M1 frame header")
+        if crc32c(self.buffer[:14]) & 0xFFFF != header_crc:
+            raise AssertionError("bad M1 frame header crc")
+        total = 20 + length
+        while len(self.buffer) < total:
+            self._read_more()
+        payload = self.buffer[16:16 + length]
+        payload_crc = struct.unpack("<I", self.buffer[16 + length:total])[0]
+        if crc32c(payload) != payload_crc:
+            raise AssertionError("bad M1 frame payload crc")
+        self.buffer = self.buffer[total:]
+        return flags, seq, payload
+
+    def handshake(self):
+        hello = (struct.pack("<I", 0x4C494E4B) + struct.pack("<QQ", self.route_version, 0)
+                 + struct.pack("<I", len(self.self_name))
+                 + self.self_name.encode("utf-8"))
+        self._send(bytes([0]) + hello, 0x01)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            flags, _, payload = self._frame()
+            if flags & 0x01 and payload and payload[0] == 0:
+                return
+        raise AssertionError("M1 handshake timeout")
+
+    def close(self):
+        self.sock.close()
+
+    @staticmethod
+    def _text(value):
+        encoded = value.encode("utf-8")
+        return struct.pack("<I", len(encoded)) + encoded
+
+    def request(self, request_id, op, name, version, source="", observe_ticks=0,
+                fault_threshold=0):
+        body = (struct.pack("<Qi", request_id, op) + self._text(name)
+                + struct.pack("<Q", version) + self._text("")
+                + self._text(source)
+                + struct.pack("<QQ", observe_ticks, fault_threshold))
+        self._send(struct.pack("<H", 952) + body, 0x02)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            flags, _, payload = self._frame()
+            if flags & 0x01:
+                continue
+            msg_id = struct.unpack("<H", payload[:2])[0]
+            if msg_id != 953:
+                continue
+            body = payload[2:]
+            offset = 0
+            request_id = struct.unpack("<Q", body[offset:offset + 8])[0]
+            offset += 8
+            op = struct.unpack("<i", body[offset:offset + 4])[0]
+            offset += 4
+            ok = body[offset] != 0
+            offset += 1
+            state = struct.unpack("<i", body[offset:offset + 4])[0]
+            offset += 4
+            faults = struct.unpack("<Q", body[offset:offset + 8])[0]
+            offset += 8
+            version = struct.unpack("<Q", body[offset:offset + 8])[0]
+            offset += 8
+            length = struct.unpack("<I", body[offset:offset + 4])[0]
+            offset += 4
+            detail = body[offset:offset + length].decode("utf-8", "replace")
+            return {"request_id": request_id, "op": op, "ok": ok, "state": state,
+                    "faults": faults, "version": version, "detail": detail}
+        raise AssertionError("module rollout reply timeout")
 
 
 def running_machined_pids():
@@ -224,6 +344,83 @@ try:
                     break
         assert cell_drained, f"cell did not accept forwarded drain: {cell_out[-2000:]}"
 
+        # ---- 3d. 生产 cellServer module rollout（审核发现 351：ok-flag 与驱动名
+        # 登记修复缺生产路径测试——WorldAppM1LinkTests/UpdateContinuityTests 只
+        # 驱动 tests/cell_host.hpp 平行实现）。这里经 world 的 952/953 转发链对
+        # 真实 cellServer 驱动完整一轮：prepare → commit（kObserving，驱动名在
+        # commit 成功才登记——观察窗 onTick 只打在已激活版本）→ 观察窗自驱 →
+        # kPromoted。回执断言 ok 与终态；cell 日志出现 committed 行（生产分支）。
+        module_good = ("return { onTick = function() end, "
+                       "smoke = function() return true end }")
+        m1 = RolloutM1Client("127.0.0.1", world_m1_port, "smoke-rollout", routes)
+        try:
+            m1.handshake()
+            # prepare：受理即 kCanaryPending（版本未激活）。
+            r = m1.request(91001, 1, "prodgreet", 7, module_good, 5, 0)
+            assert r["ok"] and r["state"] == 2, f"prepare not kCanaryPending: {r}"
+            assert r["version"] == 0, f"prepare must not activate: {r}"
+            # commit：kObserving，版本激活，驱动名登记（生产 cell_last_rollout_name）。
+            r = m1.request(91002, 2, "prodgreet", 7, "", 5, 0)
+            assert r["ok"] and r["state"] == 3, f"commit not kObserving: {r}"
+            assert r["version"] == 7, f"commit must activate version 7: {r}"
+            # 观察窗自驱到 kPromoted（健康窗零 fault）。
+            promoted = False
+            for _ in range(30):
+                r = m1.request(91003, 4, "prodgreet", 7, "", 5, 0)
+                if r["state"] == 6:
+                    promoted = True
+                    break
+                time.sleep(0.2)
+            assert promoted, f"healthy module did not promote: {r}"
+            # 终态相位纪律：kPromoted 下 rollback op = 拒（仅 kRollingBack 有义）——
+            # 生产 cellServer op3 非 kCanaryPending 分支必须按 state==kRolledBack 判定。
+            r = m1.request(91004, 3, "prodgreet", 7, "", 5, 0)
+            assert not r["ok"], f"rollback outside kRollingBack must be rejected: {r}"
+        finally:
+            m1.close()
+
+        # 驱动名登记（生产面）：cell 日志出现 committed 行 = commit 成功才登记，
+        # post_tick 的 onTick 只对已激活版本调用——不产生「module not a table」
+        # 污染观察窗。健康窗零 fault（回执 faults=0）直接证明。
+        committed = False
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if "cell module rollout committed: prodgreet v7" in cell_out:
+                committed = True
+                break
+            time.sleep(0.2)
+            import select as _sel
+            if _sel.select([cell.stdout], [], [], 0.1)[0]:
+                chunk = os.read(cell.stdout.fileno(), 65536).decode(errors="replace")
+                cell_out += chunk
+                if "cell module rollout committed: prodgreet v7" in cell_out:
+                    committed = True
+                    break
+        assert committed, "cellServer did not log committed rollout (drive-name path): " \
+                          f"{cell_out[-2000:]}"
+
+        # ---- 3e. 故障回滚（生产 cellServer op3 ok-flag）：v2 onTick 必炸 → 观察窗
+        # 早失败自驱回滚 → kRolledBack + 回执 ok（生产分支 state==kRolledBack）。
+        module_bad = ("return { onTick = function() error('boom') end, "
+                      "smoke = function() return true end }")
+        m2 = RolloutM1Client("127.0.0.1", world_m1_port, "smoke-rollout-2", routes)
+        try:
+            m2.handshake()
+            r = m2.request(91011, 1, "prodcalc", 8, module_bad, 600, 0)
+            assert r["ok"] and r["state"] == 2, f"bad prepare not kCanaryPending: {r}"
+            r = m2.request(91012, 2, "prodcalc", 8, "", 600, 0)
+            assert r["ok"] and r["state"] == 3, f"bad commit not kObserving: {r}"
+            rolled_back = False
+            for _ in range(30):
+                r = m2.request(91013, 4, "prodcalc", 8, "", 600, 0)
+                if r["state"] == 7:
+                    rolled_back = True
+                    break
+                time.sleep(0.2)
+            assert rolled_back, f"bad module did not roll back: {r}"
+        finally:
+            m2.close()
+
         # ---- 4. machined 未参与：进程级检测 ----
         # 仅检查已捕获输出缓冲不足：若 machined 以独立进程运行，其输出不在任何
         # 缓冲中。用 pgrep 对比测试前后 machined pid 集，证明无新增 machined 进程
@@ -241,6 +438,7 @@ try:
         print("PASS: World/cell independent registration without machined")
         print("  - world registered to login (kind=1 id=1 peer=world-1)")
         print("  - cell registered to world (id=21)")
+        print("  - production cellServer module rollout: healthy promote + fault rollback")
         print("  - no machined process involved")
 
         stop(cell)
