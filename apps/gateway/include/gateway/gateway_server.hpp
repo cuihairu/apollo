@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <chrono>
 #include <thread>
 #include <atomic>
 #include <functional>
@@ -128,6 +129,35 @@ public:
     ConnectionID sessionIdToConnectionId(SessionID sessionId) const;
     bool authenticateSession(SessionID sessionId, PlayerID playerId, const std::string& loginTicket);
 
+    // 客户端准入面观测（线缆 GATEWAY_ASSIGN_REQUEST 路径；跨线程安全原子）
+    std::uint64_t authRequests() const { return authRequests_.load(std::memory_order_acquire); }
+    std::uint64_t authAccepted() const { return authAccepted_.load(std::memory_order_acquire); }
+    std::uint64_t authRejected() const { return authRejected_.load(std::memory_order_acquire); }
+
+    // 拒收观测（未认证世界/Base 帧拒收；序号闸重复帧走 SessionManager 计数）
+    std::uint64_t unauthenticatedWorldDrops() const {
+        return unauthenticatedWorldDrops_.load(std::memory_order_acquire);
+    }
+    std::uint64_t unauthenticatedBaseDrops() const {
+        return unauthenticatedBaseDrops_.load(std::memory_order_acquire);
+    }
+    std::uint64_t heartbeatTimeoutClosures() const {
+        return heartbeatTimeoutClosures_.load(std::memory_order_acquire);
+    }
+
+    // 客户端入口在册连接数（观测面；dashboard /api/state 消费）
+    std::size_t getActiveConnectionCount() const {
+        return ingressServer_ ? ingressServer_->activeConnections() : 0;
+    }
+
+    // 宿主泵钩子（dashboard 等 pump 驱动的旁路面；泵线程同拍调用——挂入面
+    // 须遵守泵线程纪律，不得阻塞）。须在 start 前设置。
+    void setPumpHook(std::function<void(std::uint64_t)> hook) { pumpHook_ = std::move(hook); }
+
+    // /api/state 快照渲染（dashboard HTTP 泵线程 = 本进程宿主泵线程调用；
+    // 会话面走管理器锁，计数面全原子——无额外同步）。
+    std::string dashboardJson() const;
+
     // Base 激活面对端链路就绪观测面（编排/测试用；不得以此代业务等待——
     // 拨号后激活仍以 call 返回为准）。面关/装配降级 = false。
     bool baseActivationReady() const {
@@ -168,6 +198,10 @@ private:
 
     // 处理客户端消息
     void handleClientMessage(SessionID sessionId, const std::vector<uint8_t>& message);
+
+    // 客户端准入受理（线缆 GATEWAY_ASSIGN_REQUEST 路径；登录串联入口帧）
+    void handleClientAuth(SessionID sessionId, const ClientPacketDispatchResult& dispatch,
+                          const std::vector<uint8_t>& message);
 
     // 会话连续（L53 断线重连）：上行帧头携异地会话号 = 重连恢复尝试。仅
     // 本连接 fresh 会话未认证时受理（已认证连接不换会话——防抢线）；恢复
@@ -227,6 +261,25 @@ private:
     std::map<std::string, std::unique_ptr<M1BaseClient>> routedBaseClients_;
     std::atomic<std::uint64_t> baseForwardResolves_{0};
     std::atomic<std::uint64_t> baseForwardRejections_{0};
+
+    // 客户端准入面与拒收计数（dashboard /api/state 数据源；多线程原子——
+    // 准入点在宿主泵线程，心跳超时路径在心跳线程）
+    std::atomic<std::uint64_t> authRequests_{0};
+    std::atomic<std::uint64_t> authAccepted_{0};
+    std::atomic<std::uint64_t> authRejected_{0};
+    std::atomic<std::uint64_t> unauthenticatedWorldDrops_{0};
+    std::atomic<std::uint64_t> unauthenticatedBaseDrops_{0};
+    std::atomic<std::uint64_t> heartbeatTimeoutClosures_{0};
+    std::atomic<std::uint64_t> pumpTicks_{0};
+
+    // 进程期起点（wall 毫秒；/api/state uptime 起点，类构造即定）
+    std::uint64_t startedWallMs_{
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count()};
+
+    // 宿主泵钩子（dashboard 旁路 pump 面；泵线程同拍调用）
+    std::function<void(std::uint64_t)> pumpHook_;
 
     // 排空控制受理面（P4 排空批；controlM1Port = 0 或装配失败 = 不装配，
     // ops 不可达降级面）。on_request 回调在本泵线程（见 acceptNewConnections）。

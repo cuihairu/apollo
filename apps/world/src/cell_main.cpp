@@ -830,8 +830,10 @@ int run_cell_entry_body(int argc, char* argv[],
                 "registration disabled");
         }
         std::unique_ptr<apollo::net::discovery::FleetMember> cell_fleet_member;
+        // 传输底座须与 FleetMember 同级存活（FleetMember 持引用——块内局部
+        // 出域即析构，tick 打悬空 transport = segfault）
+        apollo::net::discovery::UdpBeaconTransport cell_transport;
         if (fleet.machined_port != 0 && fleet.component_id != 0) {
-            apollo::net::discovery::UdpBeaconTransport cell_transport;
             if (cell_transport.open()) {
                 apollo::net::discovery::MemberId self;
                 self.component_id = fleet.component_id;

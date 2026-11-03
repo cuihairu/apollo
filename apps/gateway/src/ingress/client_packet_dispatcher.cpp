@@ -26,6 +26,15 @@ ClientPacketDispatchResult ClientPacketDispatcher::dispatch(std::span<const std:
         return {ClientPacketKind::Chat, messageType};
     }
 
+    // 客户端准入（登录串联入口帧）：客户端凭 login 签发的票据向 gateway
+    // 换取会话绑定（login-flow：login 端 LOGIN_REQUEST → 票据 → gateway 端
+    // GATEWAY_ASSIGN_REQUEST 准入）。LOGIN_REQUEST 归 login 进程——gateway
+    // 端显式 decline（不静默当 Base 帧落地），客户端可读原因。
+    if (messageType == apollo::protocol::MessageType::GATEWAY_ASSIGN_REQUEST ||
+        messageType == apollo::protocol::MessageType::LOGIN_REQUEST) {
+        return {ClientPacketKind::Login, messageType};
+    }
+
     if (isWorldMessage(messageType)) {
         return {ClientPacketKind::World, messageType};
     }

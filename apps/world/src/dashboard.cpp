@@ -273,14 +273,16 @@ bool DashboardResponder::read_and_maybe_answer(Conn& conn,
 std::string DashboardResponder::route(const std::string& request,
                                       std::uint64_t now_ms) const {
     (void)now_ms;
+    const std::string& page = config_.html.empty() ? std::string(kDashboardHtml)
+                                                   : config_.html;
     std::ostringstream out;
     if (request.rfind("GET / ", 0) == 0
         || request.rfind("GET / HTTP", 0) == 0) {
         out << "HTTP/1.1 200 OK\r\n"
             << "Content-Type: text/html; charset=utf-8\r\n"
-            << "Content-Length: " << std::strlen(kDashboardHtml) << "\r\n"
+            << "Content-Length: " << page.size() << "\r\n"
             << "Connection: close\r\n\r\n"
-            << kDashboardHtml;
+            << page;
     } else if (request.rfind("GET /api/state", 0) == 0) {
         const std::string body = state_fn_ ? state_fn_() : "{}";
         out << "HTTP/1.1 200 OK\r\n"

@@ -16,12 +16,14 @@ add_executable(gateway
     src/ingress/client_packet_dispatcher.cpp
     src/ingress/gateway_connection_registry.cpp
     src/ingress/session_admission_service.cpp
+    ../world/src/dashboard.cpp
 )
 
 target_include_directories(gateway
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../gateway/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../world/include
 )
 
 # 契约路由表 JSON（M1 出口装配事实源；生成物随仓）

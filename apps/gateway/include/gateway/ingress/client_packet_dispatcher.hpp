@@ -15,6 +15,7 @@ enum class ClientPacketKind {
     Chat,
     World,
     Base,
+    Login,  // 客户端准入帧（GATEWAY_ASSIGN_REQUEST）：票据换会话绑定
 };
 
 struct ClientPacketDispatchResult {

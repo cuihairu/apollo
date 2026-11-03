@@ -302,12 +302,41 @@ bool test_data_collector() {
 
 }  // namespace
 
+bool test_html_override() {
+    // 首页 HTML 覆写（gateway 维度页复用面）：config.html 非空 = GET /
+    // 服覆写页；空 = 内建 world 页（test_routes 已证）。
+    wapp::DashboardConfig cfg;
+    cfg.port = 0;
+    cfg.html = "<!DOCTYPE html><html><body>gateway-page</body></html>";
+    wapp::DashboardResponder http(
+        cfg, [] { return std::string("{\"role\":\"gateway\"}"); });
+    TEST_ASSERT(http.start(), "http bound");
+    const std::uint16_t port = http.port();
+
+    const HttpReply root = http_fetch(http, port, "GET / HTTP/1.1\r\nHost: x\r\n\r\n");
+    TEST_ASSERT(root.connected, "root client connected");
+    TEST_ASSERT(root.body.find("gateway-page") != std::string::npos,
+                "override html served");
+    TEST_ASSERT(root.body.find("Apollo 状态") == std::string::npos,
+                "builtin html not served");
+
+    const HttpReply state = http_fetch(http, port, "GET /api/state HTTP/1.1\r\n\r\n");
+    TEST_ASSERT(state.connected, "state client connected");
+    TEST_ASSERT(state.body.find("{\"role\":\"gateway\"}") != std::string::npos,
+                "state callback still wired");
+    http.stop();
+    return true;
+}
+
 int main() {
 #if defined(_WIN32)
     std::cout << "DashboardTests: windows-scope passed" << std::endl;
     return 0;
 #else
     if (!test_routes()) {
+        return 1;
+    }
+    if (!test_html_override()) {
         return 1;
     }
     if (!test_token()) {

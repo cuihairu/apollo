@@ -8,11 +8,16 @@
 #include "apollo/protocol/messages.hpp"
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <limits>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 namespace gateway {
 
@@ -702,6 +707,7 @@ void GatewayServer::heartbeatCheckLoop() {
         auto timeoutSessions = sessionManager_->checkTimeouts(config_.sessionTimeoutMs);
 
         for (auto sessionId : timeoutSessions) {
+            ++heartbeatTimeoutClosures_;
             glog().info("Session " + std::to_string(sessionId)
                         + " timeout, disconnecting...");
             onClientDisconnect(sessionId, false);
@@ -727,7 +733,11 @@ void GatewayServer::acceptNewConnections() {
             controlServer_->pump(now_ms);
         }
         drain_pump(now_ms);
+        if (pumpHook_) {
+            pumpHook_(now_ms);
+        }
         recordMetrics();
+        ++pumpTicks_;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
@@ -784,6 +794,13 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
             return;
         }
 
+        case ClientPacketKind::Login:
+            // 客户端准入（登录串联入口帧）：凭票据换会话绑定。GATEWAY_ASSIGN
+            // 是 login-flow 里 gateway 端的唯一客户端准入词汇——LOGIN_REQUEST
+            // 归 login 进程，不经 gateway。
+            handleClientAuth(sessionId, dispatch, message);
+            return;
+
         case ClientPacketKind::Chat:
             // ChatApp 摘除（P3-4 处方③）：fleet 无 chat 进程，聊天包显式落地
             // 不再挂幽灵后端连接（chat 下游随聊天玩法批重建）
@@ -797,6 +814,7 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         case ClientPacketKind::World: {
             auto session = sessionManager_->getSession(sessionId);
             if (!session || session->playerId == 0) {
+                ++unauthenticatedWorldDrops_;
                 glog().warning(
                     "Gateway rejected unauthenticated world message for session "
                     + std::to_string(sessionId));
@@ -815,6 +833,7 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         case ClientPacketKind::Base:
             if (auto session = sessionManager_->getSession(sessionId);
                 !session || session->playerId == 0) {
+                ++unauthenticatedBaseDrops_;
                 glog().warning(
                     "Gateway rejected unauthenticated base message for session "
                     + std::to_string(sessionId));
@@ -826,6 +845,86 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         case ClientPacketKind::Invalid:
             return;
     }
+}
+
+// 客户端准入受理（登录串联入口帧；宿主泵线程调用点）。GATEWAY_ASSIGN_
+// REQUEST{playerId, sessionId, loginTicket} → 准入面裁决（login M1 准入或
+// 容忍面）→ Base 激活链（面在场时）→ bindPlayer。回执 GATEWAY_ASSIGN_
+// RESPONSE 按本会话号寻址下发；准入口径与 authenticateSession 完全一致，
+// 本帧只是把进程内调用点换成线缆可见面。
+void GatewayServer::handleClientAuth(SessionID sessionId,
+                                     const ClientPacketDispatchResult& dispatch,
+                                     const std::vector<uint8_t>& message) {
+    ++authRequests_;
+
+    const auto session = sessionManager_->getSession(sessionId);
+    if (!session) {
+        ++authRejected_;
+        return;  // 会话已销毁：无处寻址，静默落地
+    }
+    if (dispatch.messageType != apollo::protocol::MessageType::GATEWAY_ASSIGN_REQUEST) {
+        ++authRejected_;
+        // LOGIN_REQUEST 等登录族帧归 login 进程；gateway 端不受理（回执
+        // success=false 携原因，客户端不得误以为已准入）。
+        apollo::protocol::GatewayAssignResponse decline;
+        decline.success = false;
+        decline.gatewayHost = config_.host;
+        decline.gatewayPort = listenPort();
+        decline.errorMessage = "gateway accepts GATEWAY_ASSIGN_REQUEST only (login handled by login app)";
+        sendToClient(sessionId, apollo::protocol::MessageCodec::encode(decline, sessionId));
+        return;
+    }
+    if (session->playerId != 0) {
+        ++authRejected_;
+        glog().warning("Gateway auth rejected for session " + std::to_string(sessionId) +
+                       " (already bound to player " + std::to_string(session->playerId) + ")");
+        apollo::protocol::GatewayAssignResponse decline;
+        decline.success = false;
+        decline.gatewayHost = config_.host;
+        decline.gatewayPort = listenPort();
+        decline.errorMessage = "session already authenticated";
+        sendToClient(sessionId, apollo::protocol::MessageCodec::encode(decline, sessionId));
+        return;
+    }
+
+    apollo::protocol::GatewayAssignRequest request;
+    try {
+        const auto body = std::vector<uint8_t>(
+            message.begin() + sizeof(apollo::protocol::MessageHeader), message.end());
+        request = apollo::protocol::MessageCodec::decodeBody<apollo::protocol::GatewayAssignRequest>(body);
+    } catch (const std::exception&) {
+        ++authRejected_;
+        glog().warning("Gateway auth dropped malformed assign frame for session "
+                       + std::to_string(sessionId));
+        apollo::protocol::GatewayAssignResponse decline;
+        decline.success = false;
+        decline.gatewayHost = config_.host;
+        decline.gatewayPort = listenPort();
+        decline.errorMessage = "malformed assign request";
+        sendToClient(sessionId, apollo::protocol::MessageCodec::encode(decline, sessionId));
+        return;
+    }
+
+    // 准入裁决（login M1 准入面或容忍面）+ Base 激活链（面在场时）+
+    // bindPlayer——口径与 authenticateSession 单点一致。
+    const bool accepted = authenticateSession(sessionId, request.playerId, request.loginTicket);
+
+    apollo::protocol::GatewayAssignResponse response;
+    response.success = accepted;
+    response.gatewayHost = config_.host;
+    response.gatewayPort = listenPort();
+    response.token = request.loginTicket;
+    if (!accepted) {
+        ++authRejected_;
+        response.errorMessage = "admission rejected";
+        glog().warning("Gateway auth rejected for session " + std::to_string(sessionId) +
+                       " player " + std::to_string(request.playerId));
+    } else {
+        ++authAccepted_;
+        glog().info("Gateway authenticated session " + std::to_string(sessionId) +
+                    " for player " + std::to_string(request.playerId));
+    }
+    sendToClient(sessionId, apollo::protocol::MessageCodec::encode(response, sessionId));
 }
 
 SessionID GatewayServer::createPendingSession(const std::string& clientIP, uint16_t clientPort) {
@@ -1206,6 +1305,148 @@ void GatewayServer::enter_drained(const std::string& detail) {
     drain_detail_ = detail;
     drain_state_.store(kDrainDrained, std::memory_order_release);
     glog().info("gateway " + detail);
+}
+
+//------------------------------------------------------------------------------
+// /api/state 快照渲染（gateway 维度 dashboard；调用线程 = 宿主泵线程——
+// dashboard 旁路 pump 面挂在本泵上，会话面走管理器锁，计数面全原子）。
+//------------------------------------------------------------------------------
+
+namespace {
+
+// /proc/self 读取（同 world dashboard_data 口径；读失败返回 0）。
+std::uint64_t read_proc_u64(const std::string& path, std::size_t skip_fields) {
+    std::ifstream in(path);
+    if (!in) {
+        return 0;
+    }
+    std::string token;
+    for (std::size_t i = 0; i < skip_fields; ++i) {
+        if (!(in >> token)) {
+            return 0;
+        }
+    }
+    std::uint64_t v = 0;
+    in >> v;
+    return v;
+}
+
+std::uint64_t proc_rss_kb() {
+    return read_proc_u64("/proc/self/statm", 1) * 4;  // 页数 × 4KB→KB(4096/1024)
+}
+
+std::uint64_t proc_threads() {
+    std::ifstream in("/proc/self/status");
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.rfind("Threads:", 0) == 0) {
+            const auto pos = line.find('\t');
+            if (pos != std::string::npos) {
+                return std::strtoull(line.c_str() + pos + 1, nullptr, 10);
+            }
+        }
+    }
+    return 0;
+}
+
+std::uint64_t wall_now_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
+}
+
+const char* drain_state_label(std::int32_t state) {
+    switch (state) {
+        case kDrainDraining: return "draining";
+        case kDrainDrained: return "drained";
+        default: return "serving";
+    }
+}
+
+} // namespace
+
+std::string GatewayServer::dashboardJson() const {
+    // 会话面（管理器锁内取全量，按状态分桶）
+    std::uint64_t online = 0;
+    std::uint64_t authenticated = 0;
+    std::uint64_t retained = 0;
+    for (const auto& session : sessionManager_->getAllSessions()) {
+        ++online;
+        if (session->state == SessionState::DISCONNECTED) {
+            ++retained;
+        } else if (session->playerId != 0) {
+            ++authenticated;
+        }
+    }
+
+    // 进程期 uptime（wall 钟构造点起算）
+    const std::uint64_t uptime_ms = wall_now_ms() - startedWallMs_;
+    const std::uint64_t ticks = pumpTicks_.load(std::memory_order_relaxed);
+    const double pump_hz = uptime_ms > 0 ? static_cast<double>(ticks) * 1000.0 /
+                                               static_cast<double>(uptime_ms)
+                                         : 0.0;
+
+    auto& registry = apollo::core::metrics::MetricRegistry::instance();
+
+    std::ostringstream out;
+    out << "{\"role\":\"gateway\"";
+    out << ",\"process\":{\"pid\":" << static_cast<std::uint64_t>(::getpid())
+        << ",\"rss_kb\":" << proc_rss_kb()
+        << ",\"threads\":" << proc_threads()
+        << ",\"started_ms\":" << startedWallMs_
+        << ",\"uptime_ms\":" << uptime_ms << "}";
+    out << ",\"listen\":{\"host\":\"" << config_.host << "\""
+        << ",\"port\":" << listenPort()
+        << ",\"ws_port\":" << wsListenPort()
+        << ",\"wss_port\":" << wssListenPort()
+        << ",\"max_connections\":" << config_.maxConnections
+        << ",\"active_connections\":" << getActiveConnectionCount() << "}";
+    out << ",\"sessions\":{\"online\":" << online
+        << ",\"authenticated\":" << authenticated
+        << ",\"retained\":" << retained
+        << ",\"heartbeat_timeout_total\":" << heartbeatTimeoutClosures_.load() << "}";
+    out << ",\"auth\":{\"requests\":" << authRequests_.load()
+        << ",\"accepted\":" << authAccepted_.load()
+        << ",\"rejected\":" << authRejected_.load() << "}";
+    out << ",\"rejects\":{\"unauthenticated_world\":" << unauthenticatedWorldDrops_.load()
+        << ",\"unauthenticated_base\":" << unauthenticatedBaseDrops_.load()
+        << ",\"duplicate_frames\":" << sessionManager_->duplicateUplinkFrames() << "}";
+    out << ",\"rate\":{\"drain_state\":\"" << drain_state_label(drainState()) << "\""
+        << ",\"drain_detail\":\"" << drain_detail_ << "\""
+        << ",\"base_forward_resolves\":" << baseForwardResolves_.load()
+        << ",\"base_forward_rejections\":" << baseForwardRejections_.load() << "}";
+    out << ",\"intents\":{\"sent\":" << gatewayIntentsSentTotal_.load()
+        << ",\"acked\":" << gatewayIntentsAckedTotal_.load()
+        << ",\"failed\":" << gatewayIntentsFailedTotal_.load()
+        << ",\"timed_out\":" << gatewayIntentsTimedOutTotal_.load()
+        << ",\"unforwardable\":" << gatewayIntentsUnforwardableTotal_.load()
+        << ",\"dropped\":" << gatewayIntentsDroppedTotal_.load() << "}";
+    out << ",\"tick\":{\"pump_ticks\":" << ticks
+        << ",\"pump_hz\":" << std::fixed << std::setprecision(1) << pump_hz << "}";
+    out << ",\"metrics\":[";
+    {
+        bool first = true;
+        for (const auto& sample : registry.snapshot()) {
+            if (!first) {
+                out << ",";
+            }
+            first = false;
+            out << "{\"name\":\"" << sample.name << "\"";
+            if (sample.is_histogram) {
+                out << ",\"is_histogram\":true"
+                    << ",\"sum\":" << sample.histogram_sum
+                    << ",\"count\":" << sample.histogram_count;
+            } else if (sample.is_counter) {
+                out << ",\"value\":" << sample.counter_value;
+            } else {
+                out << ",\"value\":" << sample.gauge_value;
+            }
+            out << "}";
+        }
+    }
+    out << "]}";
+    return out.str();
 }
 
 } // namespace gateway

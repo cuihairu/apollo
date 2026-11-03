@@ -610,6 +610,23 @@ bool test_client_packet_dispatcher_routes_message_kinds() {
         std::span<const std::uint8_t>(baseEncoded.data(), baseEncoded.size()));
     TEST_ASSERT(baseResult.kind == gateway::ClientPacketKind::Base, "activate classified as base");
 
+    // 客户端准入族（登录串联入口帧）归 Login 类：票据换绑定走 handleClientAuth。
+    apollo::protocol::GatewayAssignRequest assign;
+    assign.playerId = 1001;
+    assign.sessionId = 11;
+    assign.loginTicket = "ticket";
+    const auto assignEncoded = apollo::protocol::MessageCodec::encode(assign, 11);
+    const auto assignResult = dispatcher.dispatch(
+        std::span<const std::uint8_t>(assignEncoded.data(), assignEncoded.size()));
+    TEST_ASSERT(assignResult.kind == gateway::ClientPacketKind::Login, "assign classified as login");
+
+    apollo::protocol::LoginRequest login;
+    login.username = "u";
+    const auto loginEncoded = apollo::protocol::MessageCodec::encode(login, 12);
+    const auto loginResult = dispatcher.dispatch(
+        std::span<const std::uint8_t>(loginEncoded.data(), loginEncoded.size()));
+    TEST_ASSERT(loginResult.kind == gateway::ClientPacketKind::Login, "login classified as login");
+
     const std::vector<std::uint8_t> invalid{1, 2, 3};
     const auto invalidResult = dispatcher.dispatch(
         std::span<const std::uint8_t>(invalid.data(), invalid.size()));

@@ -75,6 +75,12 @@ struct GatewayConfig {
     // 心跳配置
     int heartbeatCheckIntervalMs = 1000; // 服务端检查间隔
 
+    // 内部状态 dashboard（gateway 维度页；复用 world_app DashboardResponder
+    // 传输面 + html 覆写。0 = 不装配，缺省关闭）
+    std::string dashboardHost = "127.0.0.1";
+    std::uint16_t dashboardPort = 0;
+    std::string dashboardToken;
+
 };
 
 } // namespace gateway

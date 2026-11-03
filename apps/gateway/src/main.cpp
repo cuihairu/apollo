@@ -6,6 +6,8 @@
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "gateway/gateway_server.hpp"
 #include "gateway/config.hpp"
+#include "world_app/dashboard.hpp"
+#include "gateway_dashboard_page.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdint>
@@ -97,6 +99,12 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
             config.tlsCertPath = argv[++i];
         } else if (arg == "--tls-key" && i + 1 < argc) {
             config.tlsKeyPath = argv[++i];
+        } else if (arg == "--dashboard-host" && i + 1 < argc) {
+            config.dashboardHost = argv[++i];
+        } else if (arg == "--dashboard-port" && i + 1 < argc) {
+            config.dashboardPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--dashboard-token" && i + 1 < argc) {
+            config.dashboardToken = argv[++i];
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n"
                       << "Options:\n"
@@ -108,6 +116,9 @@ GatewayConfig loadConfig(int argc, char* argv[]) {
                       << "  --ws-path <path>           WebSocket upgrade path (default: /game)\n"
                       << "  --tls-cert <file>          WSS PEM cert chain (required by --wss-port)\n"
                       << "  --tls-key <file>           WSS PEM private key (required by --wss-port)\n"
+                      << "  --dashboard-host <h>       Dashboard listen host (default: 127.0.0.1)\n"
+                      << "  --dashboard-port <p>       Dashboard HTTP port, 0 = off (default: 0)\n"
+                      << "  --dashboard-token <t>      Dashboard Bearer token (default: off)\n"
                       << "  --login <url>          LoginApp URL\n"
                       << "  --world <url>           WorldApp URL (route label)\n"
                       << "  --world-m1-host <host>      WorldApp M1 link host (default: 127.0.0.1)\n"
@@ -196,6 +207,33 @@ int main(int argc, char* argv[]) {
         GatewayServer server(config);
         g_server = &server;
 
+        // 内部状态 dashboard（gateway 维度页）：传输面复用 world_app
+        // DashboardResponder（html 覆写），数据源 = GatewayServer::dashboardJson
+        // （/api/state）。pump 挂宿主泵钩子（同拍驱动，零内部线程）。
+        std::unique_ptr<world_app::DashboardResponder> dashboard;
+        if (config.dashboardPort != 0) {
+            world_app::DashboardConfig dc;
+            dc.host = config.dashboardHost;
+            dc.port = config.dashboardPort;
+            dc.token = config.dashboardToken;
+            dc.html = kGatewayDashboardHtml;
+            dashboard = std::make_unique<world_app::DashboardResponder>(
+                std::move(dc), [&server] { return server.dashboardJson(); });
+            if (!dashboard->start()) {
+                logger->warning("gateway dashboard bind failed on "
+                                + config.dashboardHost + ":"
+                                + std::to_string(config.dashboardPort));
+                dashboard.reset();
+            } else {
+                // pump 钩子只在装配成后挂（绑定失败不挂——避免泵拍触空件）
+                server.setPumpHook([&dashboard](std::uint64_t now_ms) {
+                    dashboard->pump(now_ms);
+                });
+                logger->info("Dashboard listening on " + config.dashboardHost + ":"
+                             + std::to_string(dashboard->port()));
+            }
+        }
+
         // 启动服务器
         logger->info("Starting server...");
         server.start();
@@ -249,6 +287,9 @@ int main(int argc, char* argv[]) {
         if (fleet_member) {
             fleet_member->stop();
         }
+        // 显式收线（先于 dashboard 析构——泵钩子引用 dashboard 旁路面，
+        // stop 后泵线程归零，析构窗口内无钩子调用）。
+        server.stop();
 
         logger->info("Server stopped.");
 

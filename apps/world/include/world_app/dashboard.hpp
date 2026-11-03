@@ -35,6 +35,9 @@ struct DashboardConfig {
     std::string token;               // 空 = 无认证
     std::uint32_t write_timeout_ms = 5000;  // 连接占用上限
     std::size_t max_connections = 16;
+    // 首页 HTML 覆写（空 = 内建 world 页）。复用面（如 gateway 维度页）
+    // 自带完整单页（含样式与轮询脚本），传输面不感知内容差异。
+    std::string html;
 };
 
 // 状态快照回调：返回 /api/state 的 JSON 文本（不含任何状态变更端点）。

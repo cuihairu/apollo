@@ -375,6 +375,102 @@ gateway::GatewayConfig base_config(std::int64_t retention_ms) {
     return config;
 }
 
+// ---- 线缆准入（登录串联入口帧接线）----
+
+bool test_wire_auth_login_path() {
+    std::cout << "Running: test_wire_auth_login_path..." << std::endl;
+
+    // 线缆可见面准入：GATEWAY_ASSIGN_REQUEST → RESPONSE(success) + 会话绑玩
+    // 家 + /api/state 会话面对账；LOGIN_REQUEST 在 gateway 端显式 decline
+    // （归 login 进程）；已绑定会话重复准入拒绝（防抢线同口径）。
+    gateway::GatewayServer server(base_config(2000));
+    server.start();
+    TEST_ASSERT(server.listenPort() != 0, "tcp ingress listening");
+
+    TcpTestClient client;
+    TEST_ASSERT(client.connect("127.0.0.1", server.listenPort()), "client connected");
+    client.sendAll(frame_bytes(1, 0, ping_packet(0)));
+    std::vector<std::uint8_t> reply;
+    TEST_ASSERT(client.recvLinkFrame(reply), "pong received");
+    const auto session_id = header_of(reply).sessionId;
+    TEST_ASSERT(session_id != 0, "session allocated");
+    TEST_ASSERT(server.authRequests() == 0, "no auth traffic yet");
+
+    // LOGIN_REQUEST 归 login 进程：gateway 端显式 decline（success=false，
+    // 回执仍按 GATEWAY_ASSIGN_RESPONSE 寻址本会话——客户端可读原因不悬空）。
+    apollo::protocol::LoginRequest login_frame;
+    login_frame.username = "bot";
+    login_frame.clientVersion = "bots-test";
+    client.sendAll(frame_bytes(
+        2, 0, apollo::protocol::MessageCodec::encode(login_frame, session_id)));
+    TEST_ASSERT(client.recvLinkFrame(reply), "login decline reply");
+    {
+        const auto header = header_of(reply);
+        TEST_ASSERT(static_cast<apollo::protocol::MessageType>(header.type) ==
+                        apollo::protocol::MessageType::GATEWAY_ASSIGN_RESPONSE,
+                    "decline framed as assign response");
+        apollo::protocol::GatewayAssignResponse decline;
+        const std::vector<std::uint8_t> body(
+            reply.begin() + sizeof(apollo::protocol::MessageHeader), reply.end());
+        apollo::protocol::MessageCodec::decodeBody(body, decline);
+        TEST_ASSERT(!decline.success, "login request declined at gateway");
+        TEST_ASSERT(!decline.errorMessage.empty(), "decline carries reason");
+    }
+    TEST_ASSERT(server.authRejected() == 1, "login decline counted");
+
+    // 线缆准入：GATEWAY_ASSIGN_REQUEST{playerId, sessionId, ticket} →
+    // success + 会话绑玩家（容忍准入面：loginM1Port=0 仅拒空票）。
+    apollo::protocol::GatewayAssignRequest assign;
+    assign.playerId = 4242;
+    assign.sessionId = session_id;
+    assign.loginTicket = "bot-ticket-1";
+    client.sendAll(frame_bytes(
+        3, 0, apollo::protocol::MessageCodec::encode(assign, session_id)));
+    TEST_ASSERT(client.recvLinkFrame(reply), "assign reply");
+    {
+        apollo::protocol::GatewayAssignResponse accepted;
+        const std::vector<std::uint8_t> body(
+            reply.begin() + sizeof(apollo::protocol::MessageHeader), reply.end());
+        apollo::protocol::MessageCodec::decodeBody(body, accepted);
+        TEST_ASSERT(accepted.success, "wire auth accepted");
+        TEST_ASSERT(accepted.token == "bot-ticket-1", "ticket echoed");
+    }
+    TEST_ASSERT(server.authAccepted() == 1, "accept counted");
+    TEST_ASSERT(server.authRequests() == 2, "both auth frames counted");
+
+    // /api/state 会话面对账：在线 1、已认证 1、未认证拒收零、tick 面在位。
+    const auto state = server.dashboardJson();
+    TEST_ASSERT(state.find("\"role\":\"gateway\"") != std::string::npos,
+                "dashboard role gateway");
+    TEST_ASSERT(state.find("\"online\":1") != std::string::npos,
+                "dashboard online sessions");
+    TEST_ASSERT(state.find("\"authenticated\":1") != std::string::npos,
+                "dashboard authenticated sessions");
+    TEST_ASSERT(state.find("\"accepted\":1") != std::string::npos,
+                "dashboard auth accepted");
+    TEST_ASSERT(state.find("\"unauthenticated_world\":0") != std::string::npos,
+                "dashboard unauth world zero");
+    TEST_ASSERT(state.find("\"pump_hz\"") != std::string::npos,
+                "dashboard tick face present");
+
+    // 已绑定会话重复准入：拒绝不换主。
+    client.sendAll(frame_bytes(
+        4, 0, apollo::protocol::MessageCodec::encode(assign, session_id)));
+    TEST_ASSERT(client.recvLinkFrame(reply), "re-auth reply");
+    {
+        apollo::protocol::GatewayAssignResponse again;
+        const std::vector<std::uint8_t> body(
+            reply.begin() + sizeof(apollo::protocol::MessageHeader), reply.end());
+        apollo::protocol::MessageCodec::decodeBody(body, again);
+        TEST_ASSERT(!again.success, "re-auth declined");
+    }
+    TEST_ASSERT(server.authRejected() == 2, "re-auth rejection counted");
+
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---- 1. TCP 掉线保留已认证会话 ----
 
 bool test_tcp_drop_retains_authed_session() {
@@ -653,6 +749,7 @@ int main() {
         const char* name;
         bool (*fn)();
     } cases[] = {
+        {"wire_auth_login_path", test_wire_auth_login_path},
         {"tcp_drop_retains_authed_session", test_tcp_drop_retains_authed_session},
         {"tcp_resume_same_session", test_tcp_resume_same_session},
         {"tcp_resume_after_expiry", test_tcp_resume_after_expiry},
