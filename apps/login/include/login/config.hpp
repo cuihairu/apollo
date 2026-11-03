@@ -80,6 +80,13 @@ struct LoginConfig {
     int maxLoginAttempts = 5;
     int lockoutDurationMs = 300000;  // 5分钟
 
+    // 测试用户装载门控：生产默认关，测试构建宏显式开
+#ifdef APOLLO_LOGIN_ENABLE_TEST_USERS
+    bool enableTestUsers = true;
+#else
+    bool enableTestUsers = false;
+#endif
+
     // 会话配置
     int sessionTimeoutMs = 300000;   // 5分钟
 

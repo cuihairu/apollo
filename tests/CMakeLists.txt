@@ -402,21 +402,8 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    endif()
 	    add_test(NAME ProtocolBootstrapTests COMMAND protocol_bootstrap_tests)
 
-	    # ========== Crypto Tests ==========
-	    # Note: OpenSSL header conflicts on Windows, disabled pending fix
-	    # # Note: OpenSSL header conflicts - disabled
-    # add_executable(crypto_tests test_crypto.cpp)
-	    # # target_link_libraries(crypto_tests PRIVATE apollo)
-	    # if(WIN32)
-	    #     # target_link_libraries(crypto_tests PRIVATE ws2_32)
-	    # endif()
-	    # # add_test(NAME CryptoTests COMMAND crypto_tests)
-
 	else()
 	    message(STATUS "GTest not found or APOLLO_BUILD_GTESTS=OFF, building simple tests")
-	
-		    # Note: OpenSSL header conflicts - disabled
-    # add_executable(crypto_tests test_crypto.cpp)
 	    add_executable(bigworld_api_tests
             test_bigworld_api.cpp
             ${APOLLO_BIGWORLD_TEST_SOURCES}
@@ -1960,6 +1947,7 @@ add_executable(login_chain_e2e_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
     ../apps/login/src/login_server.cpp
+    ../src/apollo/utils/crypto.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -1983,11 +1971,13 @@ target_compile_definitions(login_chain_e2e_tests PRIVATE
     APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
     APOLLO_LOGIN_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_ENABLE_TEST_USERS
 )
 target_link_libraries(login_chain_e2e_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol
+    OpenSSL::Crypto)
 if(WIN32)
     target_link_libraries(login_chain_e2e_tests PRIVATE ws2_32)
     target_compile_definitions(login_chain_e2e_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -2757,6 +2747,7 @@ if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(hosted_services_tests
     test_hosted_services.cpp
     ../apps/login/src/login_server.cpp
+    ../src/apollo/utils/crypto.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -2766,9 +2757,11 @@ target_include_directories(hosted_services_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/login/include
     ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(hosted_services_tests PRIVATE
-    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_ENABLE_TEST_USERS)
 target_link_libraries(hosted_services_tests PRIVATE apollo_app_services
-    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery
+    OpenSSL::Crypto)
 if(TARGET apollo_squad_instance)
     target_link_libraries(hosted_services_tests PRIVATE apollo_squad_instance)
 endif()
@@ -2787,6 +2780,7 @@ add_executable(fleet_rehome_chain_tests
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
+    ../src/apollo/utils/crypto.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -2797,9 +2791,11 @@ target_include_directories(fleet_rehome_chain_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/login/include
     ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(fleet_rehome_chain_tests PRIVATE
-    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_ENABLE_TEST_USERS)
 target_link_libraries(fleet_rehome_chain_tests PRIVATE apollo_app_services
-    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery
+    OpenSSL::Crypto)
 if(TARGET apollo_squad_instance)
     target_link_libraries(fleet_rehome_chain_tests PRIVATE apollo_squad_instance)
 endif()
@@ -2818,6 +2814,7 @@ add_executable(migration_chain_tests
     ../apps/world/src/cell_app.cpp
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
+    ../src/apollo/utils/crypto.cpp
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -2828,9 +2825,11 @@ target_include_directories(migration_chain_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/login/include
     ${CMAKE_SOURCE_DIR}/apps/gateway/include)
 target_compile_definitions(migration_chain_tests PRIVATE
-    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+    APOLLO_LOGIN_ENABLE_TEST_USERS)
 target_link_libraries(migration_chain_tests PRIVATE apollo_app_services
-    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery)
+    apollo::game_world apollo::script apollo::net_linktrace apollo::net_discovery
+    OpenSSL::Crypto)
 if(TARGET apollo_squad_instance)
     target_link_libraries(migration_chain_tests PRIVATE apollo_squad_instance)
 endif()

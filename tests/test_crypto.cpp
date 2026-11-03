@@ -156,6 +156,36 @@ static bool test_hmac_checksum_urlcodec() {
     return true;
 }
 
+
+static bool test_password_hash() {
+    std::cout << "Running: test_password_hash..." << std::endl;
+
+    const auto hashed = PasswordHash::hash("s3cret!");
+    TEST_ASSERT(hashed.algorithm == "pbkdf2-sha256", "algorithm");
+    TEST_ASSERT(hashed.iterations == 10000, "default iterations");
+    TEST_ASSERT(!hashed.salt.empty(), "salt generated");
+    TEST_ASSERT(hashed.hash.size() == 64, "sha256 hex length");
+
+    const std::string stored = PasswordHash::format(hashed);
+    TEST_ASSERT(stored.rfind("$pbkdf2-sha256$10000$", 0) == 0, "format prefix");
+
+    TEST_ASSERT(PasswordHash::verify("s3cret!", stored), "verify correct password");
+    TEST_ASSERT(PasswordHash::verify("wrong", stored) == false, "verify wrong password");
+
+    const auto parsed = PasswordHash::parse(stored);
+    TEST_ASSERT(parsed.algorithm == hashed.algorithm, "parse algorithm");
+    TEST_ASSERT(parsed.iterations == hashed.iterations, "parse iterations");
+    TEST_ASSERT(parsed.salt == hashed.salt, "parse salt");
+    TEST_ASSERT(parsed.hash == hashed.hash, "parse hash");
+
+    // 空/坏输入不崩溃
+    TEST_ASSERT(PasswordHash::verify("x", "$bogus") == false, "verify malformed");
+    TEST_ASSERT(PasswordHash::parse("nope").hash.empty(), "parse malformed");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 int main() {
     std::cout << "=== Crypto Unit Tests ===" << std::endl;
     int passed = 0;
@@ -175,6 +205,7 @@ int main() {
     run("test_simple_cipher", test_simple_cipher);
     run("test_secure_random_uuid_format", test_secure_random_uuid_format);
     run("test_hmac_checksum_urlcodec", test_hmac_checksum_urlcodec);
+    run("test_password_hash", test_password_hash);
 
     std::cout << std::endl;
     std::cout << "=== Results: " << passed << "/" << total << " passed ===" << std::endl;

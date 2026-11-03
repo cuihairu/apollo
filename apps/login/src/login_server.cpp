@@ -10,6 +10,9 @@
 #include <iomanip>
 #include <stdexcept>
 #include <filesystem>
+#include "apollo/utils/crypto.h"
+
+using apollo::utils::PasswordHash;
 
 namespace login {
 
@@ -19,7 +22,9 @@ namespace login {
 
 Authenticator::Authenticator(const LoginConfig& config)
     : config_(config) {
-    initTestUsers();
+    if (config_.enableTestUsers) {
+        initTestUsers();
+    }
 }
 
 void Authenticator::initTestUsers() {
@@ -27,7 +32,7 @@ void Authenticator::initTestUsers() {
     UserInfo user1;
     user1.playerId = 1001;
     user1.username = "player1";
-    user1.passwordHash = "pass1";  // 简化，实际应该用 hash
+    user1.passwordHash = PasswordHash::format(PasswordHash::hash("pass1"));
     user1.lastLoginMs = 0;
     user1.createdAtMs = 0;
 
@@ -36,7 +41,7 @@ void Authenticator::initTestUsers() {
     UserInfo user2;
     user2.playerId = 1002;
     user2.username = "player2";
-    user2.passwordHash = "pass2";
+    user2.passwordHash = PasswordHash::format(PasswordHash::hash("pass2"));
     user2.lastLoginMs = 0;
     user2.createdAtMs = 0;
 
@@ -62,7 +67,7 @@ bool Authenticator::authenticate(const std::string& username, const std::string&
     }
 
     // 验证密码
-    if (it->second.passwordHash != password) {
+    if (!PasswordHash::verify(password, it->second.passwordHash)) {
         errorMessage = "Invalid username or password";
         recordAttempt(username, false);
         return false;
