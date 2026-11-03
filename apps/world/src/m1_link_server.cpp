@@ -28,6 +28,7 @@
 
 #include <atomic>
 #include <fstream>
+#include <shared_mutex>
 #include <sstream>
 #include <utility>
 
@@ -266,8 +267,13 @@ public:
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kPassive;
-        if (!manager_->add_endpoint(ep)) {
-            manager_.reset();
+        {
+            std::unique_lock<std::shared_mutex> lock(managerMutex_);
+            if (!manager_->add_endpoint(ep)) {
+                manager_.reset();
+            }
+        }
+        if (!manager_) {
             route_table_.reset();
             return false;
         }
@@ -295,10 +301,12 @@ public:
 
     void stop() override {
         started_.store(false, std::memory_order_release);
+        std::unique_lock<std::shared_mutex> lock(managerMutex_);
         manager_.reset();  // 监听器与链路随管理器析构关闭
     }
 
     void pump(std::uint64_t now_ms) override {
+        std::shared_lock<std::shared_mutex> lock(managerMutex_);
         if (manager_) {
             manager_->pump(now_ms);
         }
@@ -309,6 +317,7 @@ public:
     }
 
     std::vector<link::LinkSnapshot> snapshot_links() const override {
+        std::shared_lock<std::shared_mutex> lock(managerMutex_);
         return manager_ ? manager_->snapshot_links() : std::vector<link::LinkSnapshot>{};
     }
 
@@ -978,6 +987,7 @@ private:
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
+    mutable std::shared_mutex managerMutex_;
     std::atomic<bool> started_{false};
     std::atomic<std::uint64_t> received_{0};
     std::atomic<std::uint64_t> rejected_{0};
