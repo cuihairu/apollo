@@ -7,6 +7,7 @@
 #include "world_app/world_app.hpp"
 #include "world_app/cell_register_client.hpp"
 #include "world_app/role_options.hpp"
+#include "world_app/dashboard.hpp"
 #include "login/m1_service_register_client.hpp"
 #include <iostream>
 #include <csignal>
@@ -189,6 +190,9 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
                       << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
                       << "  --settlement-credential-dir <dir>  Settlement credential dir (default: off)\n"
+                      << "  --dashboard-host <h>        Dashboard listen host (default: 127.0.0.1)\n"
+                      << "  --dashboard-port <p>        Dashboard HTTP port, 0 = off (default: 0)\n"
+                      << "  --dashboard-token <t>       Dashboard Bearer token (default: off)\n"
                       << "  --service-register-host <h>  login service register host, manager role (default: off)\n"
                       << "  --service-register-port <p>  login service register port, 0 = off (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
@@ -327,6 +331,29 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // 内部状态 Dashboard（DASH-1）：配置了 --dashboard-port 即装配嵌入
+        // HTTP 状态页（缺省关闭不占端口）。数据源阶段 2 接线；本批先装配
+        // responder 传输面（状态 JSON 由回调产出，缺省空对象）。
+        std::unique_ptr<DashboardResponder> dashboard;
+        if (config.dashboardPort != 0) {
+            DashboardConfig dc;
+            dc.host = config.dashboardHost;
+            dc.port = config.dashboardPort;
+            dc.token = config.dashboardToken;
+            dashboard = std::make_unique<DashboardResponder>(
+                std::move(dc), [] { return std::string("{}"); });
+            if (!dashboard->start()) {
+                logger->error("Dashboard bind failed on " + config.dashboardHost
+                              + ":" + std::to_string(config.dashboardPort));
+                throw std::runtime_error("dashboard bind failed");
+            }
+            logger->info("Dashboard listening on " + config.dashboardHost + ":"
+                         + std::to_string(dashboard->port())
+                         + (config.dashboardToken.empty()
+                                ? " (no token)"
+                                : " (token auth)"));
+        }
+
         // 编队成员注册（P3-4 收尾批）：machined 在位才上 wire；beat 交给
         // 主循环秒拍，退出路径优雅注销（TTL 兜底覆盖注销包丢失）
         apollo::net::discovery::UdpBeaconTransport fleet_transport;
@@ -369,6 +396,9 @@ int main(int argc, char* argv[]) {
 
         while (server.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (dashboard) {
+                dashboard->pump(fleet_now_ms());
+            }
             if (fleet_member) {
                 fleet_member->tick(fleet_now_ms());
             }

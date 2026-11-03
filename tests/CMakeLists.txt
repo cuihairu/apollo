@@ -2104,6 +2104,29 @@ if(MSVC)
 endif()
 add_test(NAME MetricsPushTests COMMAND metricspush_tests)
 
+# Internal State Dashboard Tests (DASH-1)
+# DashboardResponder 真端口 GET / /api/state / token / 404 / timeout 往返。
+# Windows 只跑空件面（link TCP 底座 POSIX only，同 metricspush_tests 口径）。
+add_executable(dashboard_tests
+    test_dashboard.cpp
+    ../apps/world/src/dashboard.cpp
+)
+target_include_directories(dashboard_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+)
+target_link_libraries(dashboard_tests PRIVATE
+    apollo_net_link
+    apollo::core
+)
+if(WIN32)
+    target_link_libraries(dashboard_tests PRIVATE ws2_32)
+    target_compile_definitions(dashboard_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(dashboard_tests PRIVATE /utf-8)
+endif()
+add_test(NAME DashboardTests COMMAND dashboard_tests)
+
 # Alert Notifier Tests (P3-3 余项批：告警 notifier 最小面)
 # 判定/静默/限速/出站纯逻辑面（§5.2 层 B 内核；webhook 随 curl 出站批）。
 # 纯逻辑无平台依赖，Windows 同跑。

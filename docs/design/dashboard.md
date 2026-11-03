@@ -1,7 +1,7 @@
 # 内部状态 Dashboard 设计（DASH-1）
 
 - 日期：2026-11-03
-- 状态：设计稿待用户过目（批准后进入实现）
+- 状态：实现中（阶段1 responder + 装配已落地，阶段2 数据源接线进行中）
 - 口径来源：todo.md「内部状态 Dashboard（用户令 2026-11-02）」
 - 关联：Prometheus 指标面（apps/admin `/metrics`，9107）互不重复；本页做状态面
 
@@ -97,6 +97,6 @@ JSON 形状（`/api/state`）：
 
 ## 8. 实施阶段（一阶段一 commit，增量测试全绿）
 
-1. **阶段 1 — responder 与装配**：`DashboardResponder`（路由/404/token/连接纪律，同 metrics_http 泵型）+ 内嵌 HTML/JSON 骨架 + `apps/world` 装配（`--dashboard-host/--dashboard-port/--dashboard-token`）+ 测试（路由/token 拒绝/404/JSON 形状/超时弃连）。
+1. **阶段 1 — responder 与装配**：`DashboardResponder`（路由/404/token/连接纪律，同 metrics_http 泵型）+ 内嵌 HTML/JSON 骨架 + `apps/world` 装配（`--dashboard-host/--dashboard-port/--dashboard-token`）+ 测试（路由/token 拒绝/404/JSON 形状/超时弃连）。 **已落地**（`apps/world/include/world_app/dashboard.hpp`、`apps/world/src/dashboard.cpp`、`tests/test_dashboard.cpp`，`DashboardTests` 绿）。
 2. **阶段 2 — 数据源接线**：三件补齐查询面（`snapshot_links`/`module_versions`/dev_fleet ready 标记）+ orders/metrics/fleet 文件读取接入 JSON + 测试（各数据源形状与空态）。
 3. **阶段 3 — 页面与文档**：实时刷新 JS、日志尾渲染、docs/design/dashboard.md 状态翻「已实现」+ Directory_Structure/apps-index 双语登记 + 测试（e2e：真进程起 dashboard 浏览器面 HTTP 断言）。

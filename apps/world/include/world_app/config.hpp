@@ -117,6 +117,13 @@ struct WorldAppConfig {
     };
     std::vector<SpaceDecl> spaces;
 
+    // 内部状态 Dashboard（DASH-1，用户令 2026-11-02）：嵌入式 HTTP 状态页
+    // 缺省关闭（port 0 = 不装配，不占端口面）。host 默认只绑环回；token
+    // 未设 = 无认证，设置后所有路由要求 Authorization: Bearer <t>。
+    std::string dashboardHost = "127.0.0.1";
+    std::uint16_t dashboardPort = 0;
+    std::string dashboardToken;
+
     // Tick 配置
     int tickRateMs = 50;  // 20 ticks per second
 
