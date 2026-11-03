@@ -62,6 +62,9 @@ public:
     std::uint64_t aborted() const;  // 超时未收齐/未排空即弃
     std::uint64_t unauthorized() const;  // token 缺失/错误拒收
 
+    // 请求头上限：超过即弃连接（防 recv 无界增长）。
+    static constexpr std::size_t kMaxRequestBytes = 64 * 1024;
+
 private:
     struct Conn {
         std::unique_ptr<apollo::net::link::ILinkTransport> transport;

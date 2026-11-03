@@ -242,6 +242,10 @@ bool DashboardResponder::read_and_maybe_answer(Conn& conn,
         }
         conn.recv.append(reinterpret_cast<const char*>(buf),
                          static_cast<std::size_t>(n));
+        if (conn.recv.size() > kMaxRequestBytes) {
+            ++aborted_;
+            return false;
+        }
     }
     if (conn.queued) {
         return true;
@@ -283,7 +287,10 @@ std::string DashboardResponder::route(const std::string& request,
             << "Content-Length: " << page.size() << "\r\n"
             << "Connection: close\r\n\r\n"
             << page;
-    } else if (request.rfind("GET /api/state", 0) == 0) {
+    } else if (request.rfind("GET /api/state", 0) == 0 &&
+               (request.size() == std::strlen("GET /api/state") ||
+                request[std::strlen("GET /api/state")] == ' ' ||
+                request[std::strlen("GET /api/state")] == '?')) {
         const std::string body = state_fn_ ? state_fn_() : "{}";
         out << "HTTP/1.1 200 OK\r\n"
             << "Content-Type: application/json\r\n"

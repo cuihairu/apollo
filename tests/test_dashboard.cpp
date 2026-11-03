@@ -328,6 +328,47 @@ bool test_html_override() {
     return true;
 }
 
+bool test_recv_cap() {
+    // read_and_maybe_answer recv 无上限：发送超过 kMaxRequestBytes 的请求
+    // 头应被拒弃（aborted++），不无界增长。
+    wapp::DashboardConfig cfg;
+    cfg.port = 0;
+    cfg.write_timeout_ms = 500;
+    wapp::DashboardResponder http(cfg, [] { return std::string("{}"); });
+    TEST_ASSERT(http.start(), "http bound");
+    const std::uint16_t port = http.port();
+
+    link::TcpConnector connector;
+    TEST_ASSERT(connector.start("127.0.0.1", port, 3000, now_ms()), "dial");
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(3000);
+    while (connector.state() == link::ConnectState::kConnecting) {
+        if (connector.pump(now_ms()) != link::TcpConnector::PumpResult::kInProgress) {
+            break;
+        }
+        if (std::chrono::steady_clock::now() > deadline) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    TEST_ASSERT(connector.state() == link::ConnectState::kConnected, "connected");
+    auto transport = connector.take_transport();
+    TEST_ASSERT(transport != nullptr, "transport taken");
+
+    // 发送超过上限的请求（不含空行），无边界增长。
+    const std::string big(wapp::DashboardResponder::kMaxRequestBytes + 4096, 'a');
+    transport->write(reinterpret_cast<const std::uint8_t*>(big.data()), big.size());
+
+    for (int i = 0; i < 30; ++i) {
+        http.pump(now_ms());
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    TEST_ASSERT(http.aborted() >= 1, "oversized request aborted");
+    TEST_ASSERT(http.connections() == 0, "oversized connection drained");
+    http.stop();
+    return true;
+}
+
 int main() {
 #if defined(_WIN32)
     std::cout << "DashboardTests: windows-scope passed" << std::endl;
@@ -343,6 +384,9 @@ int main() {
         return 1;
     }
     if (!test_abort()) {
+        return 1;
+    }
+    if (!test_recv_cap()) {
         return 1;
     }
     if (!test_data_collector()) {
