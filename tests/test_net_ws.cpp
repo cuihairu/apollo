@@ -265,6 +265,30 @@ bool test_fragmentation() {
     std::vector<std::uint8_t> seq2;
     append_masked_frame(seq2, ws::OpCode::kText, true, part2, 2, 0x5a);
     TEST_ASSERT(badseq.feed(seq2).fatal, "分片中途换新 text 帧 fatal");
+
+    // 分片聚合上限：逐帧各自 ≤ max_message_，但聚合超限 → fatal（禁止无界
+    // 重组——每片 60B、上限 100B，两片聚合 120B > 100B）。
+    ws::FrameParser capped(100);
+    std::vector<std::uint8_t> agg;
+    const std::uint8_t big[60] = {0};
+    append_masked_frame(agg, ws::OpCode::kText, false, big, 60, 0x37);
+    TEST_ASSERT(!capped.feed(agg).fatal, "首片 60B ≤ 上限合法");
+    std::vector<std::uint8_t> agg2;
+    append_masked_frame(agg2, ws::OpCode::kContinuation, true, big, 60, 0x5a);
+    TEST_ASSERT(capped.feed(agg2).fatal, "聚合 120B 超上限 fatal");
+
+    // 聚合恰在边界内合法：两片 50B + 50B = 100B ≤ 上限。
+    ws::FrameParser okcap(100);
+    std::vector<std::uint8_t> okraw;
+    const std::uint8_t half[50] = {0};
+    append_masked_frame(okraw, ws::OpCode::kText, false, half, 50, 0x37);
+    TEST_ASSERT(!okcap.feed(okraw).fatal, "首片 50B 合法");
+    std::vector<std::uint8_t> okraw2;
+    append_masked_frame(okraw2, ws::OpCode::kContinuation, true, half, 50, 0x5a);
+    const auto okout = okcap.feed(okraw2);
+    TEST_ASSERT(!okout.fatal, "聚合 100B 恰在边界合法");
+    TEST_ASSERT(okout.messages.size() == 1 && okout.messages[0].payload.size() == 100,
+                "边界内完整拼装");
     return true;
 }
 

@@ -155,6 +155,10 @@ FrameParser::Outcome FrameParser::feed(const std::uint8_t* data, std::size_t siz
                     out.fatal = true;  // 分片中途出现新 data 帧
                     break;
                 }
+                if (fragment_.size() + payload_size > max_message_) {
+                    out.fatal = true;  // 分片聚合超限：逐帧上限不约束聚合，禁止无界重组
+                    break;
+                }
                 fragment_.insert(fragment_.end(), payload, payload + payload_size);
             } else {
                 if (opcode == OpCode::kContinuation) {
