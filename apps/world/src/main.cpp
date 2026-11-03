@@ -12,9 +12,9 @@
 #include "login/m1_service_register_client.hpp"
 #include <iostream>
 #include <csignal>
+#include <limits>
 #include <cstdint>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <vector>
 
@@ -181,7 +181,14 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             config.spaceWidth = static_cast<float>(std::atof(argv[++i]));
             config.spaceHeight = static_cast<float>(std::atof(argv[++i]));
         } else if (arg == "--tick-rate" && i + 1 < argc) {
-            config.tickRateMs = std::atoi(argv[++i]);
+            char* parseEnd = nullptr;
+            const long tickRate = std::strtol(argv[++i], &parseEnd, 10);
+            if (parseEnd == argv[i] || *parseEnd != '\0' || tickRate <= 0 ||
+                tickRate > std::numeric_limits<int>::max()) {
+                std::cerr << "world: --tick-rate must be a positive integer" << std::endl;
+                std::exit(2);
+            }
+            config.tickRateMs = static_cast<int>(tickRate);
         } else if (arg == "--script-boot" && i + 1 < argc) {
             config.scriptBootFile = argv[++i];
         } else if (arg == "--script-handlers" && i + 1 < argc) {
