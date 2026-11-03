@@ -138,6 +138,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const CellDestroyEntity& msg) {
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCreateEntity& msg) {
+    constexpr size_t kBody = sizeof(EntityID) + sizeof(EntityType) + sizeof(SpaceID) + sizeof(Position);
+    if (data.size() < kBody) throw std::runtime_error("Invalid data size");
     const uint8_t* ptr = data.data();
     size_t offset = 0;
     std::memcpy(&msg.entityId, ptr + offset, sizeof(EntityID)); offset += sizeof(EntityID);
@@ -147,12 +149,16 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCreateEntity
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellDestroyEntity& msg) {
+    constexpr size_t kBody = sizeof(EntityID);
+    if (data.size() < kBody) throw std::runtime_error("Invalid data size");
     const uint8_t* ptr = data.data();
     size_t offset = 0;
     std::memcpy(&msg.entityId, ptr + offset, sizeof(EntityID));
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellCrossBorder& msg) {
+    constexpr size_t kBody = sizeof(EntityID) + sizeof(SpaceID) * 2 + sizeof(Position);
+    if (data.size() < kBody) throw std::runtime_error("Invalid data size");
     const uint8_t* ptr = data.data();
     size_t offset = 0;
     std::memcpy(&msg.entityId, ptr + offset, sizeof(EntityID)); offset += sizeof(EntityID);
@@ -181,6 +187,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const CellEntityMove& msg) {
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CellEntityMove& msg) {
+    constexpr size_t kBody = sizeof(EntityID) + sizeof(Position) * 2;
+    if (data.size() < kBody) throw std::runtime_error("Invalid data size");
     const uint8_t* ptr = data.data();
     size_t offset = 0;
     std::memcpy(&msg.entityId, ptr + offset, sizeof(EntityID)); offset += sizeof(EntityID);
@@ -206,6 +214,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const CombatSkillCast& msg) {
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CombatSkillCast& msg) {
+    constexpr size_t kBody = sizeof(EntityID) * 2 + sizeof(uint32_t) + sizeof(Position) * 2;
+    if (data.size() < kBody) throw std::runtime_error("Invalid data size");
     const uint8_t* ptr = data.data();
     size_t offset = 0;
     std::memcpy(&msg.casterId, ptr + offset, sizeof(EntityID)); offset += sizeof(EntityID);
@@ -225,6 +235,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const CombatDamage& msg) {
 }
 
 void MessageCodec::decodeBody(const std::vector<uint8_t>& data, CombatDamage& msg) {
+    constexpr size_t kBody = sizeof(EntityID) * 2 + sizeof(int32_t);
+    if (data.size() < kBody) throw std::runtime_error("Invalid data size");
     const uint8_t* ptr = data.data();
     size_t offset = 0;
     std::memcpy(&msg.targetId, ptr + offset, sizeof(EntityID)); offset += sizeof(EntityID);
