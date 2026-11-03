@@ -93,12 +93,14 @@ struct EventLoopStats {
 class Timer {
 public:
     Timer(TimerId id, TimerCallback cb, uint64_t intervalMs, bool periodic)
-        : id_(id), callback_(std::move(cb)), intervalMs_(intervalMs), periodic_(periodic) {
+        : id_(id), callback_(std::move(cb)), intervalMs_(intervalMs), periodic_(periodic),
+          lastTrigger_(std::chrono::steady_clock::now()) {
     }
 
     TimerId id() const { return id_; }
     uint64_t intervalMs() const { return intervalMs_; }
     bool periodic() const { return periodic_; }
+    const TimerCallback& callback() const { return callback_; }
 
     // 计算下一次触发时间
     std::chrono::steady_clock::time_point nextTrigger() const {

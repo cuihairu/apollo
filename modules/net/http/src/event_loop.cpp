@@ -318,27 +318,37 @@ private:
     }
 
     void processTimers() {
-        std::lock_guard<std::mutex> lock(timerMutex_);
-
         auto now = std::chrono::steady_clock::now();
-        std::vector<Timer*> fired;
-
-        for (auto& timer : timers_) {
-            if (now >= timer->nextTrigger()) {
-                fired.push_back(timer.get());
+        std::vector<std::pair<bool, TimerCallback>> fired;  // {periodic, callback}
+        std::vector<TimerId> oneShotIds;
+        {
+            std::lock_guard<std::mutex> lock(timerMutex_);
+            for (auto& timer : timers_) {
+                if (now >= timer->nextTrigger()) {
+                    fired.emplace_back(timer->periodic(), timer->callback());
+                    if (!timer->periodic()) {
+                        oneShotIds.push_back(timer->id());
+                    } else {
+                        timer->reset();
+                    }
+                }
+            }
+            // 一次性定时器出列（出锁后触发）
+            if (!oneShotIds.empty()) {
+                auto it = std::remove_if(timers_.begin(), timers_.end(),
+                    [&](const auto& t) {
+                        return std::find(oneShotIds.begin(), oneShotIds.end(),
+                                         t->id()) != oneShotIds.end();
+                    });
+                timers_.erase(it, timers_.end());
             }
         }
 
-        for (auto* timer : fired) {
-            timer->fire();
-            stats_.timersFired++;
-
-            // 移除一次性定时器
-            if (!timer->periodic()) {
-                auto it = std::remove_if(timers_.begin(), timers_.end(),
-                    [timer](const auto& t) { return t.get() == timer; });
-                timers_.erase(it, timers_.end());
+        for (auto& [periodic, cb] : fired) {
+            if (cb) {
+                cb();
             }
+            stats_.timersFired++;
         }
     }
 
@@ -532,7 +542,8 @@ void net::HeartbeatManager::checkTimeouts() {
 
 void net::HeartbeatManager::onCheckTimer() {
     auto now = std::chrono::steady_clock::now();
-    std::vector<socket_t> timedOut;
+    std::vector<std::pair<socket_t, HeartbeatCallback>> beatCallbacks;
+    std::vector<std::pair<socket_t, TimeoutCallback>> timeoutCallbacks;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -543,25 +554,28 @@ void net::HeartbeatManager::onCheckTimer() {
 
             // 发送心跳
             if (elapsedMs >= info.intervalMs && info.heartbeatCallback) {
-                info.heartbeatCallback(sockfd);
+                info.lastBeat = now;
+                beatCallbacks.emplace_back(sockfd, info.heartbeatCallback);
             }
 
             // 检查超时 (3倍心跳间隔)
             if (elapsedMs >= info.intervalMs * 3) {
-                timedOut.push_back(sockfd);
+                timeoutCallbacks.emplace_back(sockfd, info.timeoutCallback);
+                heartbeats_.erase(sockfd);
             }
         }
     }
 
-    // 处理超时
-    for (auto sockfd : timedOut) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = heartbeats_.find(sockfd);
-        if (it != heartbeats_.end()) {
-            if (it->second.timeoutCallback) {
-                it->second.timeoutCallback(sockfd);
-            }
-            heartbeats_.erase(it);
+    // 心跳回调出锁触发（回调可能重入 addHeartbeat/updateHeartbeat）
+    for (auto& [sockfd, cb] : beatCallbacks) {
+        if (cb) {
+            cb(sockfd);
+        }
+    }
+    // 超时回调出锁触发
+    for (auto& [sockfd, cb] : timeoutCallbacks) {
+        if (cb) {
+            cb(sockfd);
         }
     }
 }
@@ -619,27 +633,40 @@ bool net::ReconnectManager::triggerReconnect(uint64_t reconnectId) {
 }
 
 void net::ReconnectManager::onReconnectTimer(uint64_t reconnectId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = reconnects_.find(reconnectId);
-    if (it == reconnects_.end() || !it->second.active) return;
+    ReconnectCallback callback;
+    bool expired = false;
+    TimerId timerId = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = reconnects_.find(reconnectId);
+        if (it == reconnects_.end() || !it->second.active) return;
 
-    auto& info = it->second;
+        auto& info = it->second;
+        if (info.currentRetries >= info.maxRetries) {
+            expired = true;
+            timerId = info.timerId;
+            info.active = false;
+        } else {
+            info.currentRetries++;
+            callback = info.callback;
+            timerId = info.timerId;
+        }
+    }
 
-    if (info.currentRetries >= info.maxRetries) {
-        // 达到最大重试次数
-        loop_->removeTimer(info.timerId);
-        info.active = false;
+    if (expired) {
+        loop_->removeTimer(timerId);
         return;
     }
 
-    info.currentRetries++;
-
-    if (info.callback) {
-        bool success = info.callback();
+    if (callback) {
+        bool success = callback();
         if (success) {
-            // 重连成功，移除定时器
-            loop_->removeTimer(info.timerId);
-            info.active = false;
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto it = reconnects_.find(reconnectId);
+            if (it != reconnects_.end() && it->second.active) {
+                loop_->removeTimer(it->second.timerId);
+                it->second.active = false;
+            }
         }
     }
 }

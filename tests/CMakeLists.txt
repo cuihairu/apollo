@@ -1249,6 +1249,25 @@ if(MSVC)
 endif()
 add_test(NAME InterfacesHttpTests COMMAND interfaces_http_tests)
 
+# ========== EventLoop Reentrant Tests (CR-06) ==========
+# 回调重入本组件（addTimer/addHeartbeat/removeReconnect）原实现持锁自锁
+# 死锁；修复后出锁触发。本用例带超时护栏，原实现下会超时失败。
+add_executable(event_loop_reentrant_tests
+    test_event_loop_reentrant.cpp
+)
+target_link_libraries(event_loop_reentrant_tests PRIVATE
+    apollo::net_http
+    apollo::core
+)
+if(WIN32)
+    target_link_libraries(event_loop_reentrant_tests PRIVATE ws2_32)
+    target_compile_definitions(event_loop_reentrant_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(event_loop_reentrant_tests PRIVATE /utf-8)
+endif()
+add_test(NAME EventLoopReentrantTests COMMAND event_loop_reentrant_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests
