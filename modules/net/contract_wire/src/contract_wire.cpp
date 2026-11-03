@@ -192,6 +192,11 @@ bool decode_field(WireType type, const std::uint8_t* data, std::size_t size, std
             if (!get_u32(data, size, off, count)) {
                 return false;
             }
+            // 每串至少 4 字节（u32 长度前缀）——count 超过剩余字节即不可能，
+            // 拒绝在 resize 前，防无界分配（同 Int64List 的 (size-off)/N 守卫）。
+            if ((size - off) / 4 < count) {
+                return false;
+            }
             value.strings.resize(count);
             for (std::uint32_t i = 0; i < count; ++i) {
                 if (!get_text(data, size, off, value.strings[i])) {
