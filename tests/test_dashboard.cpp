@@ -5,6 +5,8 @@
 // 底座 POSIX only，同 metricspush_tests 口径）。
 
 #include "world_app/dashboard.hpp"
+#include "world_app/dashboard_data.hpp"
+#include "apollo/core/metrics/metric_registry.h"
 
 #include <chrono>
 #include <cstring>
@@ -239,6 +241,63 @@ bool test_abort() {
     return true;
 }
 
+bool test_data_collector() {
+    // DashboardDataCollector：collect_links/collect_script/collect_metrics →
+    // render JSON 形状（process/links/script/load/orders/fleet 六键），空态
+    // 与填充态。
+    wapp::DashboardProcessInfo info;
+    info.role = "world";
+    info.started_ms = 1000;
+    wapp::DashboardDataCollector collector(info);
+
+    // 空态：六键都在，fleet 空（fleet_dir 空 = 不读文件）
+    {
+        const auto text = collector.render();
+        TEST_ASSERT(text.find("\"process\"") != std::string::npos, "process key");
+        TEST_ASSERT(text.find("\"links\":[]") != std::string::npos, "links empty");
+        TEST_ASSERT(text.find("\"orders\"") != std::string::npos, "orders key");
+        TEST_ASSERT(text.find("\"script\":{\"modules\":[]}") != std::string::npos,
+                    "script empty");
+        TEST_ASSERT(text.find("\"load\"") != std::string::npos, "load key");
+        TEST_ASSERT(text.find("\"fleet\":[]") != std::string::npos, "fleet empty");
+        TEST_ASSERT(text.find("\"role\":\"world\"") != std::string::npos, "role");
+    }
+
+    // 填充态：links + script + metrics
+    std::vector<apollo::net::link::LinkSnapshot> links;
+    apollo::net::link::LinkSnapshot l;
+    l.peer = "cell-21";
+    l.state = "up";
+    l.tls = true;
+    l.tx = 42;
+    l.rx = 7;
+    links.push_back(l);
+    collector.collect_links(links);
+
+    std::map<std::string, std::uint64_t> mods;
+    mods["prodgreet"] = 5;
+    collector.collect_script(mods);
+
+    apollo::core::metrics::MetricRegistry::Sample s;
+    s.name = "world_ticks_total";
+    s.is_counter = true;
+    s.counter_value = 100;
+    std::vector<apollo::core::metrics::MetricRegistry::Sample> samples;
+    samples.push_back(s);
+    collector.collect_metrics(samples);
+
+    const auto text = collector.render();
+    TEST_ASSERT(text.find("\"peer\":\"cell-21\"") != std::string::npos, "link peer");
+    TEST_ASSERT(text.find("\"state\":\"up\"") != std::string::npos, "link state");
+    TEST_ASSERT(text.find("\"tls\":true") != std::string::npos, "link tls");
+    TEST_ASSERT(text.find("\"tx\":42") != std::string::npos, "link tx");
+    TEST_ASSERT(text.find("\"rx\":7") != std::string::npos, "link rx");
+    TEST_ASSERT(text.find("\"name\":\"prodgreet\",\"version\":5") != std::string::npos,
+                "script module");
+    TEST_ASSERT(text.find("\"ticks_total\":100") != std::string::npos, "ticks total");
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -255,6 +314,9 @@ int main() {
         return 1;
     }
     if (!test_abort()) {
+        return 1;
+    }
+    if (!test_data_collector()) {
         return 1;
     }
     std::cout << "DashboardTests: passed" << std::endl;

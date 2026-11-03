@@ -2,6 +2,8 @@
 #include "world_app/cell_app.hpp"
 #include "world_app/cell_register_client.hpp"
 #include "world_app/m1_link_server.hpp"
+#include "world_app/dashboard.hpp"
+#include "world_app/dashboard_data.hpp"
 #include "world_app/role_options.hpp"
 #include "world_app/config.hpp"
 #include "apollo/runtime/crash_capture.hpp"
@@ -203,6 +205,12 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
             config.scriptHandersFile = argv[++i];
         } else if (arg == "--script-contract" && i + 1 < argc) {
             config.scriptContractFile = argv[++i];
+        } else if (arg == "--dashboard-host" && i + 1 < argc) {
+            config.dashboardHost = argv[++i];
+        } else if (arg == "--dashboard-port" && i + 1 < argc) {
+            config.dashboardPort = static_cast<std::uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--dashboard-token" && i + 1 < argc) {
+            config.dashboardToken = argv[++i];
         } else if (arg == "--m1-authority-epoch" && i + 1 < argc) {
             config.m1AuthorityEpoch =
                 std::strtoull(argv[++i], nullptr, 10);
@@ -242,6 +250,9 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
                       << "  --script-boot <file>        Lua boot source file (default: none)\n"
                       << "  --script-handlers <file>    Lua contract handler module, loaded first (default: none)\n"
                       << "  --script-contract <file>    Lua contract table, loaded after handlers (default: none)\n"
+                      << "  --dashboard-host <h>        Dashboard listen host (default: 127.0.0.1)\n"
+                      << "  --dashboard-port <p>        Dashboard HTTP port, 0 = off (default: 0)\n"
+                      << "  --dashboard-token <t>       Dashboard Bearer token (default: off)\n"
                       << "  --help, -h                 Show this help\n";
             std::exit(0);
         } else if (is_fleet_arg(arg)) {
@@ -324,6 +335,17 @@ int run_cell_entry_body(int argc, char* argv[],
         });
 
         std::unique_ptr<CellRegisterClient> register_client;
+        // cell M1 接收端（passive 端点；pre_tick 泵引用它在位——先声明后装配）
+        std::unique_ptr<M1LinkServer> link;
+        // Dashboard 数据聚合器（DASH-1 阶段2）：pre_tick 内核线程采集、
+        // dashboard HTTP 泵读——两向经 collector 内部锁交换。
+        DashboardProcessInfo dash_info;
+        dash_info.role = "cell";
+        dash_info.started_ms = steady_now_ms();
+        if (const char* fleet_dir = std::getenv("APOLLO_FLEET_DIR")) {
+            dash_info.fleet_dir = fleet_dir;
+        }
+        auto dashboard_data = std::make_shared<DashboardDataCollector>(dash_info);
         // 管理命令状态（切片2 World→cell 转发；cell 宿主独占——监听器在
         // 注册泵上下文同步回调，与 cell pre_tick 同线程单写者）。
         std::unique_ptr<apollo::script::ModuleRollout> cell_module_rollout;
@@ -334,9 +356,27 @@ int run_cell_entry_body(int argc, char* argv[],
         std::uint64_t cell_drain_deadline_ms = 0;
         std::string cell_drain_detail;
         cell.set_pre_tick(
-            [&egress, &register_client, &cell](std::uint64_t now_ms) {
+            [&egress, &register_client, &cell, &dashboard_data, &link](
+                std::uint64_t now_ms) {
                 if (egress.link) {
                     egress.link->pump(now_ms);
+                }
+                if (dashboard_data) {
+                    std::vector<apollo::net::link::LinkSnapshot> links;
+                    if (link) {
+                        auto l = link->snapshot_links();
+                        links.insert(links.end(), l.begin(), l.end());
+                    }
+                    if (register_client) {
+                        auto l = register_client->snapshot_links();
+                        links.insert(links.end(), l.begin(), l.end());
+                    }
+                    dashboard_data->collect_links(links);
+                    if (auto* script = cell.script_runtime()) {
+                        dashboard_data->collect_script(script->active_modules());
+                    }
+                    dashboard_data->collect_metrics(
+                        apollo::core::metrics::MetricRegistry::instance().snapshot());
                 }
                 if (register_client) {
                     auto* squads = cell.squadInstanceService();
@@ -436,7 +476,7 @@ int run_cell_entry_body(int argc, char* argv[],
                     }
                 }
             });
-        auto link = makeM1LinkServer(
+        link = makeM1LinkServer(
             M1LinkConfig{config.host, config.m1Port, config.m1RouteJson,
                          config.m1AuthorityEpoch},
             [&cell](IntentEnvelope intent) { cell.onIntent(std::move(intent)); });
@@ -759,6 +799,30 @@ int run_cell_entry_body(int argc, char* argv[],
                          + " as cell-" + std::to_string(config.cellId));
         }
 
+        // 内部状态 Dashboard（DASH-1）：配置了 --dashboard-port 即装配嵌入
+        // HTTP 状态页。数据源经 dashboard_data 聚合器（pre_tick 采集）。
+        std::unique_ptr<DashboardResponder> dashboard;
+        if (config.dashboardPort != 0) {
+            DashboardConfig dc;
+            dc.host = config.dashboardHost;
+            dc.port = config.dashboardPort;
+            dc.token = config.dashboardToken;
+            dashboard = std::make_unique<DashboardResponder>(
+                std::move(dc), [dashboard_data]() {
+                    return dashboard_data->render();
+                });
+            if (!dashboard->start()) {
+                logger->error("Dashboard bind failed on " + config.dashboardHost
+                              + ":" + std::to_string(config.dashboardPort));
+                throw std::runtime_error("dashboard bind failed");
+            }
+            logger->info("Dashboard listening on " + config.dashboardHost + ":"
+                         + std::to_string(dashboard->port())
+                         + (config.dashboardToken.empty()
+                                ? " (no token)"
+                                : " (token auth)"));
+        }
+
         apollo::net::discovery::FleetMember* fleet_raw = nullptr;
         if (fleet.machined_port != 0 && fleet.component_id == 0) {
             logger->warning(
@@ -803,6 +867,9 @@ int run_cell_entry_body(int argc, char* argv[],
         logger->info("Server is running. Press Ctrl+C to stop.");
         while (cell.isRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (dashboard) {
+                dashboard->pump(fleet_now_ms());
+            }
             if (fleet_raw) {
                 fleet_raw->tick(fleet_now_ms());
             }

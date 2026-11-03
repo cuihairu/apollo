@@ -8,6 +8,7 @@
 #include "world_app/cell_register_client.hpp"
 #include "world_app/role_options.hpp"
 #include "world_app/dashboard.hpp"
+#include "world_app/dashboard_data.hpp"
 #include "login/m1_service_register_client.hpp"
 #include <iostream>
 #include <csignal>
@@ -86,6 +87,13 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                 static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--settlement-credential-dir" && i + 1 < argc) {
             config.settlementCredentialDir = argv[++i];
+        } else if (arg == "--dashboard-host" && i + 1 < argc) {
+            config.dashboardHost = argv[++i];
+        } else if (arg == "--dashboard-port" && i + 1 < argc) {
+            config.dashboardPort =
+                static_cast<std::uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--dashboard-token" && i + 1 < argc) {
+            config.dashboardToken = argv[++i];
         } else if (arg == "--service-register-host" && i + 1 < argc) {
             config.serviceRegisterHost = argv[++i];
         } else if (arg == "--service-register-port" && i + 1 < argc) {
@@ -331,9 +339,17 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // 内部状态 Dashboard（DASH-1）：配置了 --dashboard-port 即装配嵌入
-        // HTTP 状态页（缺省关闭不占端口）。数据源阶段 2 接线；本批先装配
-        // responder 传输面（状态 JSON 由回调产出，缺省空对象）。
+        // 内部状态 Dashboard（DASH-1 阶段2）：数据聚合器采集 links/load
+        // （manager 泵 pre_tick 内），dashboard HTTP 泵读。fleet 读本机编队
+        // 文件面（APOLLO_FLEET_DIR）。
+        DashboardProcessInfo dash_info;
+        dash_info.role = "world";
+        dash_info.started_ms = config.bootAtMs;
+        if (const char* fleet_dir = std::getenv("APOLLO_FLEET_DIR")) {
+            dash_info.fleet_dir = fleet_dir;
+        }
+        auto dashboard_data = std::make_shared<DashboardDataCollector>(dash_info);
+
         std::unique_ptr<DashboardResponder> dashboard;
         if (config.dashboardPort != 0) {
             DashboardConfig dc;
@@ -341,7 +357,9 @@ int main(int argc, char* argv[]) {
             dc.port = config.dashboardPort;
             dc.token = config.dashboardToken;
             dashboard = std::make_unique<DashboardResponder>(
-                std::move(dc), [] { return std::string("{}"); });
+                std::move(dc), [dashboard_data]() {
+                    return dashboard_data->render();
+                });
             if (!dashboard->start()) {
                 logger->error("Dashboard bind failed on " + config.dashboardHost
                               + ":" + std::to_string(config.dashboardPort));
@@ -352,6 +370,28 @@ int main(int argc, char* argv[]) {
                          + (config.dashboardToken.empty()
                                 ? " (no token)"
                                 : " (token auth)"));
+        }
+        // 数据源采集挂 manager 泵拍首钩子（与 service_register 共用——组合
+        // 既有钩子与采集，不覆盖 service_register 的注册泵）。
+        if (dashboard_data) {
+            const auto prior_pre_tick = [&server, &service_register](
+                                            std::uint64_t now_ms) {
+                if (service_register) {
+                    service_register->pump(now_ms);
+                }
+            };
+            server.set_manager_pre_tick(
+                [&server, &dashboard_data, prior_pre_tick](
+                    std::uint64_t now_ms) {
+                    prior_pre_tick(now_ms);
+                    if (dashboard_data) {
+                        dashboard_data->collect_links(
+                            server.m1Link().snapshot_links());
+                        dashboard_data->collect_metrics(
+                            apollo::core::metrics::MetricRegistry::instance()
+                                .snapshot());
+                    }
+                });
         }
 
         // 编队成员注册（P3-4 收尾批）：machined 在位才上 wire；beat 交给

@@ -198,7 +198,7 @@ cmd_up() {
     # 对 admin exporter 显形（kDroppable 周期推，exporter 缺席 = 丢拍）。
     export APOLLO_METRICS_PUSH_ADDR="${APOLLO_METRICS_PUSH_ADDR:-127.0.0.1:9106}"
 
-    nohup "$MACHINED" --roster "$ROSTER" >> "$LOGFILE" 2>&1 &
+    nohup "$MACHINED" --roster "$ROSTER" --run-dir "$FLEET_DIR" >> "$LOGFILE" 2>&1 &
     echo $! > "$PIDFILE"
     sleep 0.3
     if ! alive "$PIDFILE"; then

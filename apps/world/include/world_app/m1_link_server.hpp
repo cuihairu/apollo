@@ -14,6 +14,7 @@
 // 进队列，无需延后。
 
 #include "world_app/acceptance_queue.hpp"
+#include "apollo/net/link/link_manager.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -329,6 +330,12 @@ public:
     // 观测面（测试/运维共用一口；计数与 dispatcher/链路口径镜像）。
     virtual std::uint64_t receivedIntents() const { return 0; }
     virtual std::uint64_t rejectedFrames() const { return 0; }
+
+    // 逐链路快照（DASH-1 dashboard 只读查询面）：真实实现代理 LinkManager；
+    // 空实现（Null/Windows）返回空表。
+    virtual std::vector<apollo::net::link::LinkSnapshot> snapshot_links() const {
+        return {};
+    }
 };
 
 // 工厂：config.host:config.port 监听，契约路由表自 config.route_json 装载

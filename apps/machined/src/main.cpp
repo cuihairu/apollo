@@ -113,11 +113,16 @@ int main(int argc, char** argv) {
     std::uint16_t bind_port = 9600;
     std::uint32_t interval_ms = 1000;
     std::string roster_path;
+    std::string run_dir;
     std::uint32_t backoff_ms = 1000;
     for (int i = 1; i < argc; ++i) {
         const std::string flag = argv[i];
         if (flag == "--roster" && i + 1 < argc) {
             roster_path = argv[++i];
+            continue;
+        }
+        if (flag == "--run-dir" && i + 1 < argc) {
+            run_dir = argv[++i];
             continue;
         }
         if (i + 1 >= argc) {
@@ -164,7 +169,7 @@ int main(int argc, char** argv) {
             logger->error("roster not readable: " + roster_path);
         }
     }
-    machined::Supervisor supervisor(roster, 5, backoff_ms);
+    machined::Supervisor supervisor(roster, 5, backoff_ms, run_dir);
     std::vector<machined::SupervisorEvent> supervisor_events;
     supervisor.spawn_all(now_ms(), supervisor_events);
     log_supervisor_events(*logger, supervisor_events);

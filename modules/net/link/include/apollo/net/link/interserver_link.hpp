@@ -163,6 +163,8 @@ public:
     const Stats& stats() const { return stats_; }
     std::uint64_t queued_bytes() const { return reliable_bytes_ + droppable_bytes_; }
     std::size_t reliable_pending() const { return reliable_queue_.size(); }
+    // 记录层是否 TLS（DASH-1 dashboard 快照观测面；未挂传输 = false）。
+    bool isTls() const { return transport_ != nullptr && transport_->isTls(); }
 
 private:
     struct QueuedFrame {

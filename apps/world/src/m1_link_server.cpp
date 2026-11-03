@@ -308,6 +308,10 @@ public:
         on_peer_down_fn_ = std::move(fn);
     }
 
+    std::vector<link::LinkSnapshot> snapshot_links() const override {
+        return manager_ ? manager_->snapshot_links() : std::vector<link::LinkSnapshot>{};
+    }
+
     void sendIntentAck(std::uint64_t request_id, std::int32_t code,
                        const std::string& message) override {
         auto* link = gateway_link();

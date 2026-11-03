@@ -15,6 +15,7 @@ add_executable(world
     src/m1_link_server.cpp
     src/cell_register_client.cpp
     src/dashboard.cpp
+    src/dashboard_data.cpp
     ../login/src/m1_service_register_client.cpp
     ${WORLD_APP_PROTOCOL_SOURCES}
 )
@@ -77,6 +78,7 @@ add_executable(cellServer
     src/m1_link_server.cpp
     src/cell_register_client.cpp
     src/dashboard.cpp
+    src/dashboard_data.cpp
     ${WORLD_APP_PROTOCOL_SOURCES}
 )
 

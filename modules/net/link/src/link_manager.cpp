@@ -332,6 +332,43 @@ std::uint64_t LinkManager::handshake_failures(const std::string& endpoint) const
     return it == by_name_.end() ? 0 : it->second->handshake_failures;
 }
 
+std::vector<LinkSnapshot> LinkManager::snapshot_links() const {
+    std::vector<LinkSnapshot> out;
+    const auto state_name = [](LinkState s) {
+        switch (s) {
+            case LinkState::kIdle: return "idle";
+            case LinkState::kHandshaking: return "handshaking";
+            case LinkState::kUp: return "up";
+            case LinkState::kDown: return "down";
+        }
+        return "unknown";
+    };
+    for (const auto& ep : endpoints_) {
+        const Managed& m = *ep;
+        if (m.config.role == EndpointRole::kActive) {
+            LinkSnapshot s;
+            s.peer = m.config.name;
+            s.state = state_name(m.link->state());
+            s.tls = m.link->isTls();
+            s.tx = m.link->stats().reliable_queued;
+            s.rx = m.link->stats().dispatched;
+            s.queued_bytes = m.link->queued_bytes();
+            out.push_back(std::move(s));
+        }
+        for (const auto& [name, peer] : m.peers) {
+            LinkSnapshot s;
+            s.peer = name;
+            s.state = state_name(peer->state());
+            s.tls = peer->isTls();
+            s.tx = peer->stats().reliable_queued;
+            s.rx = peer->stats().dispatched;
+            s.queued_bytes = peer->queued_bytes();
+            out.push_back(std::move(s));
+        }
+    }
+    return out;
+}
+
 }  // namespace apollo::net::link
 
 #endif  // !_WIN32

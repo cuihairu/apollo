@@ -97,6 +97,7 @@ public:
     int write(const std::uint8_t* data, std::size_t size) override;
     void close() override;
     bool closed() const override { return ssl_ == nullptr; }
+    bool isTls() const override { return true; }
 
     std::string peerAddress() const override { return peer_address_; }
     std::uint16_t peerPort() const override { return peer_port_; }

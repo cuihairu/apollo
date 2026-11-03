@@ -24,6 +24,7 @@
 // 超 link_grace_ms 或收到 code 3 触发冻结监听（宿主停模拟关闸），解冻只随
 // 961 复核受理——链路恢复本身不解冻。
 
+#include "apollo/net/link/link_manager.hpp"
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -184,6 +185,12 @@ public:
 
     // 链路已握手（观测面；未装配 = false）。
     virtual bool linkUp() const { return false; }
+
+    // 逐链路快照（DASH-1 dashboard 只读查询面）：真实实现代理内部
+    // LinkManager；空实现（Null/Windows）返回空表。
+    virtual std::vector<apollo::net::link::LinkSnapshot> snapshot_links() const {
+        return {};
+    }
 
     // 注册账快照（任意线程）。
     virtual CellRegisterState state() const { return {}; }

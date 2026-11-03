@@ -183,6 +183,11 @@ public:
 
     bool linkUp() const override { return link_up(); }
 
+    std::vector<link::LinkSnapshot> snapshot_links() const override {
+        return manager_ ? manager_->snapshot_links()
+                        : std::vector<link::LinkSnapshot>{};
+    }
+
     CellRegisterState state() const override {
         std::lock_guard<std::mutex> lock(state_mutex_);
         return state_;

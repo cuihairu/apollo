@@ -33,6 +33,20 @@
 #include <unordered_map>
 #include <vector>
 
+namespace apollo::net::link {
+// 逐链路快照（DASH-1 dashboard 只读查询面；平台无关纯数据——Windows 下
+// LinkManager 空件但快照类型仍可见，消费面免 #if）。tx/rx 为链路层累计
+// 受理/分发帧计数（观测面，非字节）。
+struct LinkSnapshot {
+    std::string peer;              // 对端自报名（active = 端点名；passive = 对端名）
+    std::string state;             // "idle"/"handshaking"/"up"/"down"
+    bool tls = false;              // 记录层是否 TLS
+    std::uint64_t tx = 0;          // 本端累计受理 reliable 帧（发送面）
+    std::uint64_t rx = 0;          // 本端累计分发帧（接收面）
+    std::uint64_t queued_bytes = 0;  // 可靠+可弃队列字节（背压水位）
+};
+}  // namespace apollo::net::link
+
 #if !defined(_WIN32)
 
 namespace apollo::net::link {
@@ -115,6 +129,11 @@ public:
     // 语义连续）。未上线返回 nullptr。
     InterServerLink* link(const std::string& name);
     std::uint16_t endpoint_port(const std::string& name) const;  // passive 实占端口
+
+    // 逐链路快照（DASH-1 dashboard 只读查询面）：全部端点按配置序，每
+    // active 端点一条、passive 每已上线对端一条；握手期 staging 不计
+    //（无对端名）。tls 读自 transport 记录层标记。
+    std::vector<LinkSnapshot> snapshot_links() const;
 
     // 观测面：拨号尝试计数（退避测试与运维可见性共用一口）；passive 端点
     // 在册对端数与握手期失败数（魔数/版本失配/握手超时——装配级故障显形）。

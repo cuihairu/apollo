@@ -55,8 +55,10 @@ public:
     // roster：花名册（拷贝入监督表，启动期 spawn_all 全量拉起）；
     // restart_limit：单条目重启上限（超限放弃）；backoff_base_ms：线性退避
     // 基数（第 n 次重启延迟 = n × backoff_base_ms）
+    // run_dir：落 `.run/<name>.pid` 文件面（dashboard 编队块读取；空 = 不落）。
     explicit Supervisor(const std::vector<RosterEntry>& roster, int restart_limit = 5,
-                        std::uint32_t backoff_base_ms = 1000);
+                        std::uint32_t backoff_base_ms = 1000,
+                        std::string run_dir = {});
 
     // 拉起全部花名册条目（append 事件到 out）。已有存活子进程时幂等跳过
     void spawn_all(std::uint64_t now_ms, std::vector<SupervisorEvent>& out);
@@ -85,6 +87,7 @@ private:
     std::vector<Child> children_;
     int restart_limit_;
     std::uint32_t backoff_base_ms_;
+    std::string run_dir_;  // `.run/<name>.pid` 落盘目录（空 = 不落）
 };
 
 } // namespace machined

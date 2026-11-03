@@ -30,6 +30,9 @@ public:
 
     virtual std::string peerAddress() const { return {}; }
     virtual std::uint16_t peerPort() const { return 0; }
+    // 记录层是否 TLS（明文 TCP 底座 / 内存环回 = false；TLS 底座 override
+    // true——链路快照观测面据此标注 TLS 与否，不引 OpenSSL 类型）。
+    virtual bool isTls() const { return false; }
 };
 
 // 内存环回底座（测试/同进程装配用）：write 直投对端收缓冲，读侧排空后

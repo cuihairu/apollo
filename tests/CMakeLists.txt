@@ -2110,6 +2110,7 @@ add_test(NAME MetricsPushTests COMMAND metricspush_tests)
 add_executable(dashboard_tests
     test_dashboard.cpp
     ../apps/world/src/dashboard.cpp
+    ../apps/world/src/dashboard_data.cpp
 )
 target_include_directories(dashboard_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/world/include

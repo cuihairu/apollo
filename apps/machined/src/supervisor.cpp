@@ -8,8 +8,11 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
+#include <system_error>
 #include <utility>
 
 #if !defined(_WIN32)
@@ -125,10 +128,44 @@ bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
     return true;
 }
 
+namespace {
+
+// `.run/<name>.pid` 落盘（dashboard 编队块读取；目录缺失 = 创建；写失败 =
+// 日志告警不拦 spawn——文件面是尽力观测，不是正确性依赖）。
+void write_pid_file(const std::string& run_dir, const std::string& name, pid_t pid) {
+    if (run_dir.empty()) {
+        return;
+    }
+    const std::string dir = run_dir + "/.run";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        mlog().warning("cannot create run dir " + dir + ": " + ec.message());
+        return;
+    }
+    std::ofstream out(dir + "/" + name + ".pid", std::ios::trunc);
+    if (!out) {
+        mlog().warning("cannot write pid file " + dir + "/" + name + ".pid");
+        return;
+    }
+    out << pid << '\n';
+}
+
+void remove_pid_file(const std::string& run_dir, const std::string& name) {
+    if (run_dir.empty()) {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::remove(run_dir + "/.run/" + name + ".pid", ec);
+}
+
+}  // namespace
+
 Supervisor::Supervisor(const std::vector<RosterEntry>& roster, int restart_limit,
-                       std::uint32_t backoff_base_ms)
+                       std::uint32_t backoff_base_ms, std::string run_dir)
     : restart_limit_(restart_limit)
-    , backoff_base_ms_(backoff_base_ms) {
+    , backoff_base_ms_(backoff_base_ms)
+    , run_dir_(std::move(run_dir)) {
     children_.reserve(roster.size());
     for (const auto& e : roster) {
         Child c;
@@ -167,6 +204,7 @@ void Supervisor::spawn_one(Child& c, std::uint64_t now_ms,
     }
     c.alive = true;
     c.pid = pid;
+    write_pid_file(run_dir_, c.entry.name, pid);
     SupervisorEvent e;
     e.kind = SupervisorEvent::Kind::Born;
     e.name = c.entry.name;
@@ -199,6 +237,7 @@ void Supervisor::poll(std::uint64_t now_ms, std::vector<SupervisorEvent>& out) {
         }
         it->alive = false;
         it->pid = -1;
+        remove_pid_file(run_dir_, it->entry.name);
         SupervisorEvent e;
         e.kind = SupervisorEvent::Kind::Died;
         e.name = it->entry.name;
