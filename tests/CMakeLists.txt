@@ -1249,6 +1249,23 @@ if(MSVC)
 endif()
 add_test(NAME InterfacesHttpTests COMMAND interfaces_http_tests)
 
+# ========== Crypto Tests ==========
+# 自包含简单测试：同时覆盖 PasswordHash 的 hash/format/parse/verify。
+add_executable(crypto_tests
+    test_crypto.cpp
+    ../src/apollo/utils/crypto.cpp
+)
+target_link_libraries(crypto_tests PRIVATE OpenSSL::Crypto)
+target_include_directories(crypto_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if(WIN32)
+    target_link_libraries(crypto_tests PRIVATE ws2_32)
+    target_compile_definitions(crypto_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(crypto_tests PRIVATE /utf-8)
+endif()
+add_test(NAME CryptoTests COMMAND crypto_tests)
+
 # ========== EventLoop Reentrant Tests (CR-06) ==========
 # 回调重入本组件（addTimer/addHeartbeat/removeReconnect）原实现持锁自锁
 # 死锁；修复后出锁触发。本用例带超时护栏，原实现下会超时失败。
