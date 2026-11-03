@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
+find_package(OpenSSL REQUIRED)
+
 # LoginApp 可执行文件
 add_executable(login
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto.cpp
     src/main.cpp
     src/login_server.cpp
     src/m1_admission_server.cpp
@@ -26,6 +29,7 @@ target_link_libraries(login
         apollo_net_metricspush
         apollo_net_link
         apollo_net_linkrpc
+        OpenSSL::Crypto
 )
 
 target_compile_definitions(login PRIVATE
