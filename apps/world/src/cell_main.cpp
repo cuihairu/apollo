@@ -208,7 +208,15 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
         } else if (arg == "--dashboard-host" && i + 1 < argc) {
             config.dashboardHost = argv[++i];
         } else if (arg == "--dashboard-port" && i + 1 < argc) {
-            config.dashboardPort = static_cast<std::uint16_t>(std::atoi(argv[++i]));
+            char* parseEnd = nullptr;
+            const long port = std::strtol(argv[++i], &parseEnd, 10);
+            if (parseEnd == argv[i] || *parseEnd != '\0' || port < 0 ||
+                port > 65535) {
+                std::cerr << "cellServer: --dashboard-port must be 0..65535"
+                          << std::endl;
+                std::exit(2);
+            }
+            config.dashboardPort = static_cast<std::uint16_t>(port);
         } else if (arg == "--dashboard-token" && i + 1 < argc) {
             config.dashboardToken = argv[++i];
         } else if (arg == "--m1-authority-epoch" && i + 1 < argc) {
