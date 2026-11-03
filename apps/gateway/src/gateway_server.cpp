@@ -7,6 +7,7 @@
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -26,6 +27,31 @@ namespace {
 // 库面日志出口：cat=gateway_server（§5.1 cat= 检索键；主程已接文件面）
 apollo::core::log::Logger& glog() {
     return *apollo::core::log::global_log_manager().createLogger("gateway_server");
+}
+
+// JSON 字符串转义（drain_detail 等自由文本进 JSON 时防损坏）。
+std::string json_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (const char c : s) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof buf, "\\u%04x",
+                                  static_cast<unsigned>(static_cast<unsigned char>(c)));
+                    out += buf;
+                } else {
+                    out += c;
+                }
+        }
+    }
+    return out;
 }
 
 std::vector<uint8_t> encodeDisconnectMessage(SessionID sessionId, PlayerID playerId, bool normalClose) {
@@ -1413,7 +1439,7 @@ std::string GatewayServer::dashboardJson() const {
         << ",\"unauthenticated_base\":" << unauthenticatedBaseDrops_.load()
         << ",\"duplicate_frames\":" << sessionManager_->duplicateUplinkFrames() << "}";
     out << ",\"rate\":{\"drain_state\":\"" << drain_state_label(drainState()) << "\""
-        << ",\"drain_detail\":\"" << drain_detail_ << "\""
+        << ",\"drain_detail\":\"" << json_escape(drain_detail_) << "\""
         << ",\"base_forward_resolves\":" << baseForwardResolves_.load()
         << ",\"base_forward_rejections\":" << baseForwardRejections_.load() << "}";
     out << ",\"intents\":{\"sent\":" << gatewayIntentsSentTotal_.load()
