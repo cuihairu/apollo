@@ -369,6 +369,32 @@ bool test_recv_cap() {
     return true;
 }
 
+bool test_route_boundary() {
+    // /api/state 前缀匹配带路径边界："/api/stateXYZ" 等带后缀不命中
+    // /api/state，应 404 而非 200。
+    wapp::DashboardConfig cfg;
+    cfg.port = 0;
+    wapp::DashboardResponder http(
+        cfg, [] { return std::string("{\"process\":{\"pid\":7}}"); });
+    TEST_ASSERT(http.start(), "http bound");
+    const std::uint16_t port = http.port();
+
+    const HttpReply suffix = http_fetch(
+        http, port, "GET /api/stateXYZ HTTP/1.1\r\nHost: x\r\n\r\n");
+    TEST_ASSERT(suffix.connected, "suffix client connected");
+    TEST_ASSERT(suffix.body.rfind("HTTP/1.1 404 Not Found\r\n", 0) == 0,
+                "suffix path 404");
+
+    const HttpReply query = http_fetch(
+        http, port, "GET /api/state?x=1 HTTP/1.1\r\nHost: x\r\n\r\n");
+    TEST_ASSERT(query.connected, "query client connected");
+    TEST_ASSERT(query.body.rfind("HTTP/1.1 200 OK\r\n", 0) == 0,
+                "query path 200");
+
+    http.stop();
+    return true;
+}
+
 int main() {
 #if defined(_WIN32)
     std::cout << "DashboardTests: windows-scope passed" << std::endl;
@@ -387,6 +413,9 @@ int main() {
         return 1;
     }
     if (!test_recv_cap()) {
+        return 1;
+    }
+    if (!test_route_boundary()) {
         return 1;
     }
     if (!test_data_collector()) {
