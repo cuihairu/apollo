@@ -145,3 +145,16 @@ if(NOT WIN32)
             RUN_SERIAL TRUE)
     endif()
 endif()
+
+# DASH-1 阶段3 e2e：真 world 进程起 dashboard（空闲实端口），
+# GET / /api/state /nope + token 面 HTTP 断言。POSIX only（TcpListener 底座）。
+if(NOT WIN32)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME DashboardE2eSmoke COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/dashboard_e2e_smoke.py
+            $<TARGET_FILE:world>)
+        set_tests_properties(DashboardE2eSmoke PROPERTIES TIMEOUT 30
+            RUN_SERIAL TRUE)
+    endif()
+endif()
