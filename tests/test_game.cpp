@@ -126,6 +126,33 @@ bool test_attribute_container_change_listener() {
     return true;
 }
 
+bool test_attribute_container_listener_reentrant() {
+    AttributeContainer container(100);
+    bool setReentered = false;
+    bool addReentered = false;
+
+    container.SetChangeListener([&](const AttributeChangeEvent& event) {
+        if (event.attributeId == 1) {
+            container.SetAttribute(2, static_cast<int32_t>(20));
+            setReentered = true;
+        } else if (event.attributeId == 3) {
+            container.AddAttribute(4, static_cast<int32_t>(5));
+            addReentered = true;
+        }
+    });
+
+    container.SetAttribute(1, static_cast<int32_t>(10));
+    container.AddAttribute(3, static_cast<int32_t>(7));
+
+    TEST_ASSERT(setReentered, "SetAttribute listener re-entered without deadlock");
+    TEST_ASSERT(addReentered, "AddAttribute listener re-entered without deadlock");
+    TEST_ASSERT(container.GetAttribute<int32_t>(2, 0) == 20,
+                "SetAttribute listener mutation applied");
+    TEST_ASSERT(container.GetAttribute<int32_t>(4, 0) == 5,
+                "AddAttribute listener mutation applied");
+    return true;
+}
+
 //==============================================================================
 // AOI Tests
 //==============================================================================
@@ -387,6 +414,7 @@ int main() {
         {"Attribute: Batch Set", test_attribute_container_batch_set},
         {"Attribute: Clear", test_attribute_container_clear},
         {"Attribute: Change Listener", test_attribute_container_change_listener},
+        {"Attribute: Listener Reentrant", test_attribute_container_listener_reentrant},
 
         // AOI Tests（P1-3 等价迁移：legacy aoi.hpp 删除，场景 1:1 迁 SceneAoi）
         {"AOI: Vector3 Distance", test_vector3_distance},

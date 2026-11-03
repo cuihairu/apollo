@@ -62,16 +62,16 @@ bool Session::send(const void* data, size_t length) {
         // 实际应该缓冲后继续发送
     }
 
-    int sent = connection_->send(data, static_cast<int>(length));
-    if (sent > 0) {
-        info_.totalSentBytes += sent;
+    const bool sent = connection_->send(data, length);
+    if (sent) {
+        info_.totalSentBytes += length;
         info_.sentPackets++;
         info_.lastActiveTime = static_cast<uint64_t>(utils::Time::now());
 
         if (listener_) {
             listener_->onDataSent(info_.sessionId);
         }
-        return static_cast<size_t>(sent) == length;
+        return true;
     }
 
     return false;
@@ -195,8 +195,12 @@ ISession* SessionManager::getSessionByPlayerId(uint64_t playerId) {
     if (it == playerIdToSessionId_.end()) {
         return nullptr;
     }
+    auto sessionIt = sessions_.find(it->second);
+    if (sessionIt == sessions_.end()) {
+        return nullptr;
+    }
 
-    return getSession(it->second);
+    return sessionIt->second.get();
 }
 
 void SessionManager::closeSession(uint64_t sessionId, int reason) {
@@ -336,15 +340,21 @@ bool SessionManager::kickPlayer(uint64_t playerId, int reason) {
 }
 
 size_t SessionManager::broadcast(const void* data, size_t length, uint64_t exceptSessionId) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<Session*> sessions;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        sessions.reserve(sessions_.size());
+        for (auto& pair : sessions_) {
+            if (pair.first != exceptSessionId) {
+                sessions.push_back(pair.second.get());
+            }
+        }
+    }
 
     size_t sentCount = 0;
-
-    for (auto& pair : sessions_) {
-        if (pair.first != exceptSessionId) {
-            if (pair.second->send(data, length)) {
-                sentCount++;
-            }
+    for (auto* session : sessions) {
+        if (session->send(data, length)) {
+            ++sentCount;
         }
     }
 

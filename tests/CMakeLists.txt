@@ -2213,6 +2213,23 @@ if(MSVC)
 endif()
 add_test(NAME LinkRpcTests COMMAND linkrpc_tests)
 
+# Legacy RPC SessionManager 死锁回归（CR-07）
+add_executable(rpc_session_manager_tests
+    test_rpc_session_manager.cpp
+)
+target_link_libraries(rpc_session_manager_tests PRIVATE apollo::net_rpc)
+target_sources(rpc_session_manager_tests PRIVATE
+    ../src/apollo/utils/id_pool.cpp
+)
+if(WIN32)
+    target_link_libraries(rpc_session_manager_tests PRIVATE ws2_32)
+    target_compile_definitions(rpc_session_manager_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(rpc_session_manager_tests PRIVATE /utf-8)
+endif()
+add_test(NAME RpcSessionManagerTests COMMAND rpc_session_manager_tests)
+
 # Rest curl outbound tests (net-abstraction §5.10 出站裁决批)
 # rest_client 真实现（curl 进 vcpkg、桩路径删除）× 出站目标白名单 SSRF
 # 面（缺省全拒/精确/前导点后缀/IPv4 CIDR）× 重定向守卫 × 环回真请求。
