@@ -191,8 +191,9 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
             char* parseEnd = nullptr;
             const long tickRate = std::strtol(argv[++i], &parseEnd, 10);
             if (parseEnd == argv[i] || *parseEnd != '\0' || tickRate <= 0 ||
-                tickRate > std::numeric_limits<int>::max()) {
-                std::cerr << "world: --tick-rate must be a positive integer" << std::endl;
+                tickRate > 10000) {
+                std::cerr << "world: --tick-rate must be 1..10000 (ms)"
+                          << std::endl;
                 std::exit(2);
             }
             config.tickRateMs = static_cast<int>(tickRate);
