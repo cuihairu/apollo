@@ -274,9 +274,10 @@ private:
 
     // 进程期起点（wall 毫秒；/api/state uptime 起点，类构造即定）
     std::uint64_t startedWallMs_{
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count()};
+        static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count())};
 
     // 宿主泵钩子（dashboard 旁路 pump 面；泵线程同拍调用）
     std::function<void(std::uint64_t)> pumpHook_;
