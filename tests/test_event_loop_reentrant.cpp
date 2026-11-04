@@ -18,7 +18,7 @@ namespace {
 
 // Windows 无 ::pipe/::close，用 Win32 socketpair 语义建一对可读 fd（唤醒/
 // 心跳观测面只要求可读句柄）；返回 true = 已建，失败 = 测试断言失败。
-bool make_read_pair(socket_t& readEnd) {
+bool make_read_pair(socket_t& readEnd, socket_t& writeEnd) {
 #ifdef _WIN32
     SOCKET a = INVALID_SOCKET, b = INVALID_SOCKET;
     SOCKADDR_IN addr{};
@@ -38,11 +38,13 @@ bool make_read_pair(socket_t& readEnd) {
     ::closesocket(a);
     if (c == INVALID_SOCKET) { ::closesocket(b); return false; }
     readEnd = static_cast<socket_t>(c);
+    writeEnd = static_cast<socket_t>(b);
     return true;
 #else
     int fd[2] = {-1, -1};
     if (::pipe(fd) != 0) return false;
     readEnd = static_cast<socket_t>(fd[0]);
+    writeEnd = static_cast<socket_t>(fd[1]);
     return true;
 #endif
 }
@@ -82,14 +84,15 @@ bool test_heartbeat_callback_reentrant() {
 
     apollo::net::HeartbeatManager hb(&loop);
     std::atomic<int> beats{0};
-    socket_t sock = static_cast<socket_t>(-1);
-    TEST_ASSERT(make_read_pair(sock), "read pair");
+    socket_t readEnd = static_cast<socket_t>(-1);
+    socket_t writeEnd = static_cast<socket_t>(-1);
+    TEST_ASSERT(make_read_pair(readEnd, writeEnd), "read pair");
     // 回调内重入 updateHeartbeat/addHeartbeat（原实现持 mutex_ 调 callback，
     // 重入 addHeartbeat 即自锁死锁）。
-    hb.addHeartbeat(sock, 500, [&](socket_t) {
+    hb.addHeartbeat(readEnd, 500, [&](socket_t) {
         beats.fetch_add(1);
-        hb.updateHeartbeat(sock);
-        hb.addHeartbeat(sock, 500, [](socket_t) {},
+        hb.updateHeartbeat(readEnd);
+        hb.addHeartbeat(readEnd, 500, [](socket_t) {},
                          [](socket_t) {});
     }, [](socket_t) {});
 
@@ -100,9 +103,11 @@ bool test_heartbeat_callback_reentrant() {
     loop.stop();
     TEST_ASSERT(beats.load() >= 1, "heartbeat callback reentrant fired (would deadlock before fix)");
 #ifdef _WIN32
-    ::closesocket(sock);
+    ::closesocket(readEnd);
+    ::closesocket(writeEnd);
 #else
-    ::close(sock);
+    ::close(readEnd);
+    ::close(writeEnd);
 #endif
     return true;
 }

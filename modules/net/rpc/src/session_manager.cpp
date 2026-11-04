@@ -22,6 +22,7 @@ Session::Session(uint64_t sessionId, std::unique_ptr<IConnection> connection,
     , sendBufferOffset_(0) {
     info_.sessionId = sessionId;
     info_.state = SessionState::Connecting;
+    state_.store(SessionState::Connecting, std::memory_order_release);
     info_.connectTime = static_cast<uint64_t>(utils::Time::now());
     info_.lastActiveTime = info_.connectTime;
 
@@ -40,7 +41,7 @@ Session::~Session() {
 }
 
 void Session::markConnected() {
-    info_.state = SessionState::Connected;
+    state_.store(SessionState::Connected, std::memory_order_release);
     if (listener_) {
         listener_->onConnected(info_.sessionId);
     }
@@ -51,8 +52,9 @@ bool Session::send(const void* data, size_t length) {
         return false;
     }
 
-    if (info_.state == SessionState::Closing ||
-        info_.state == SessionState::Disconnected) {
+    const auto st = state_.load(std::memory_order_acquire);
+    if (st == SessionState::Closing ||
+        st == SessionState::Disconnected) {
         return false;
     }
 
@@ -82,11 +84,11 @@ bool Session::send(const std::vector<uint8_t>& data) {
 }
 
 void Session::close(int reason) {
-    if (info_.state == SessionState::Disconnected) {
+    if (state_.load(std::memory_order_acquire) == SessionState::Disconnected) {
         return;
     }
 
-    info_.state = SessionState::Disconnected;
+    state_.store(SessionState::Disconnected, std::memory_order_release);
 
     if (connection_) {
         connection_->close();

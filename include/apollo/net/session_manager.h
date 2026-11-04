@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include <mutex>
+#include <atomic>
 #include <functional>
 #include "apollo/utils/id_pool.h"
 #include "apollo/utils/loop_buffer.h"
@@ -140,14 +141,16 @@ public:
     uint64_t getPlayerId() const override { return info_.playerId; }
     void setPlayerId(uint64_t playerId) override {
         info_.playerId = playerId;
-        if (info_.state == SessionState::Connected) {
-            info_.state = SessionState::Authenticated;
+        if (state_.load(std::memory_order_acquire) == SessionState::Connected) {
+            state_.store(SessionState::Authenticated, std::memory_order_release);
             if (listener_) {
                 listener_->onAuthenticated(info_.sessionId, playerId);
             }
         }
     }
-    SessionState getState() const override { return info_.state; }
+    SessionState getState() const override {
+        return state_.load(std::memory_order_acquire);
+    }
 
     bool send(const void* data, size_t length) override;
     bool send(const std::vector<uint8_t>& data) override;
@@ -169,6 +172,11 @@ public:
 
 private:
     SessionInfo info_;
+    // 并发面（broadcast 锁外 send 与并发 closeSession 的 close 读/写）：
+    // info_.state 非原子成员，send 读 / close 写并发即数据竞争 UB（CR 发现）。
+    // 遗留模块无 live 引用，此处以原子 state_ 收敛并发路径；info_.state 仅
+    // 构造置初值（getInfo() 快照字段，非并发判定面）。
+    std::atomic<SessionState> state_{SessionState::Disconnected};
     std::unique_ptr<IConnection> connection_;
     ISessionListener* listener_;
     uint32_t timeoutMs_;
