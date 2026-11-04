@@ -359,3 +359,4 @@
 - [x] CI 的 pnpm 9 只读 package.json 的 overrides，删除该配置后冻结安装因 overrides 与锁文件不匹配而失败。**已修复**：overrides 回到 docs/package.json 单一来源并删除 docs/pnpm-workspace.yaml 双源，锁文件 overrides（vite 6.4.4/katex 0.18.2）核对一致（docs/package.json:20-25）。
 - [x] 并发测试把 close 返回后的认证回调一律判为失败，但 CAS 可在 close 前成功而回调被调度延迟至 close 后，正确实现也会随机误报。**已修复**：判据改为最终状态（close 恒为最后写入者，会话必须停在 Disconnected），删除回调时序判据与 AuthAfterCloseRecorder（tests/test_rpc_session_manager.cpp:190-236）。
 - [x] 并发测试只检查 close 返回后的标志而不检查最终状态，旧实现在标志设置前的复活窗口会漏报。**已修复**：并入上一条——最终状态断言下，旧实现两步写回复活必然停在 Authenticated 而失败（tests/test_rpc_session_manager.cpp:228-233）。
+- [ ] Windows 下 EventLoopReentrantTests SEGFAULT（CI 41907458774 首次 Windows Test 步实证）：socketpair 模拟 fd 进 select 事件循环崩溃，根因待 WinSock 侧定位；已按 Windows 空转口径跳过该用例，POSIX 全覆盖不变（tests/test_event_loop_reentrant.cpp:142）。
