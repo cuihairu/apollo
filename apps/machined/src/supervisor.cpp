@@ -318,7 +318,8 @@ bool load_roster(const std::string& path, std::vector<RosterEntry>& out) {
     return true;  // 空表语义：发现面照常
 }
 
-Supervisor::Supervisor(const std::vector<RosterEntry>&, int, std::uint32_t) {}
+Supervisor::Supervisor(const std::vector<RosterEntry>&, int, std::uint32_t,
+                       std::string) {}
 void Supervisor::spawn_all(std::uint64_t, std::vector<SupervisorEvent>&) {}
 void Supervisor::poll(std::uint64_t, std::vector<SupervisorEvent>&) {}
 void Supervisor::terminate_all() noexcept {}
