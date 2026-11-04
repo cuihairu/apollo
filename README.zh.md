@@ -251,6 +251,10 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **Write-ahead journal**: `PersistJournal`——append 落盘 → 定额 drain → 快照压薄 → 崩溃 replay 续接（P1-4/P1-5）
 - **序列化**: 档案 toJson/fromJson 对称序列化；连接池/外部 DB/Redis 客户端为规划态（P1-4 已删五套存量实现）
 
+### Scripting 脚本
+
+- **Lua 沙盒宿主**: `apollo::script::ScriptRuntime`（原生 Lua C API，vcpkg Lua 5.5 线）——模块热替换（冒烟/回滚）、字节码缓存 + `lua_precompile` 工具；由 world 进程消费（`--script-boot` / `--script-handlers`）；详见 [script 模块文档](docs/zh/modules/script.md)
+
 ### Utils 工具库
 - **日志系统**: 多级别日志，文件/控制台输出
 - **线程池**: 任务调度
@@ -419,8 +423,8 @@ apollo/
 ├── src/                    # 公共实现与兼容层实现
 ├── tests/                  # 测试代码
 ├── examples/               # 示例代码
-├── sdks/                   # Unity 客户端 SDK 与契约工具（contract 契约 + gen 生成器 + cpp 生成物）
-├── skds/                   # Cocos / Laya / 历史 SDK 工作区
+├── sdks/                   # 契约工具与生成物 + Unity Attributes SDK
+├── skds/                   # 客户端 SDK 工作区：Unity 客户端（ApolloClient/Network/AuthManager）、Cocos、Laya
 ├── docs/zh/                   # VitePress 文档站点
 ├── cmake/                  # CMake 辅助脚本
 └── build*/                 # 构建输出
@@ -481,7 +485,7 @@ Apollo 为本仓原创实现，非任何现有项目的 fork；架构概念与�
 - **KBEngine**：`docs/zh/qa/` 多篇条目为其源码机制分析
 - **skynet**：观测通道等设计先例（`docs/zh/analysis/architecture-review.md`）
 
-第三方依赖：[vcpkg](https://github.com/microsoft/vcpkg)（依赖管理）、[nlohmann/json](https://github.com/nlohmann/json)、[protobuf](https://github.com/protocolbuffers/protobuf)（现为依赖与测试，未上消息通路）、[GTest](https://github.com/google/googletest)、OpenSSL、libcurl、pugixml、readline、crashpad、[VitePress](https://vitepress.dev)（文档站）、GitHub Actions 与 Codecov（CI 与覆盖率）。传输层自持（`modules/net/link`），无 nng。
+第三方依赖：[vcpkg](https://github.com/microsoft/vcpkg)（依赖管理）、[nlohmann/json](https://github.com/nlohmann/json)、[Lua](https://www.lua.org) 5.5（脚本运行时，`modules/script`）、[protobuf](https://github.com/protocolbuffers/protobuf)（现为依赖与测试，未上消息通路）、[GTest](https://github.com/google/googletest)、OpenSSL、libcurl、pugixml、readline、crashpad、[VitePress](https://vitepress.dev)（文档站）、GitHub Actions 与 Codecov（CI 与覆盖率）。传输层自持（`modules/net/link`），无 nng。
 
 ## 联系方式
 

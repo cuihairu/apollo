@@ -252,6 +252,10 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **Write-ahead journal**: `PersistJournal` — append to disk → quota-based drain → snapshot compaction → crash replay continuation (P1-4/P1-5)
 - **Serialization**: symmetric toJson/fromJson profile serialization; connection pools/external DB/Redis clients are planned (P1-4 removed five legacy implementations)
 
+### Scripting
+
+- **Lua sandbox host**: `apollo::script::ScriptRuntime` (native Lua C API, vcpkg Lua 5.5 line) — module hot-swap with smoke check/rollback, bytecode cache + `lua_precompile` tool; consumed by the world process (`--script-boot` / `--script-handlers`); see [script module docs](docs/zh/modules/script.md)
+
 ### Utils
 - **Logging**: multi-level logging, file/console output
 - **Thread pool**: task scheduling
@@ -422,8 +426,8 @@ apollo/
 ├── src/                    # Public implementations and compatibility layer implementations
 ├── tests/                  # Test code
 ├── examples/               # Example code
-├── sdks/                   # Unity client SDK and contract tooling (contract + gen generator + cpp generated code)
-├── skds/                   # Cocos / Laya / legacy SDK workspace
+├── sdks/                   # Contract tooling + generated artifacts + Unity Attributes SDK
+├── skds/                   # Client SDK workspace: Unity client (ApolloClient/Network/AuthManager), Cocos, Laya
 ├── docs/zh/                   # VitePress documentation site
 ├── cmake/                  # CMake helper scripts
 └── build*/                 # Build output
@@ -484,7 +488,7 @@ Apollo is an original implementation of this repository, not a fork of any exist
 - **KBEngine**: several entries in `docs/zh/qa/` analyze its source mechanisms
 - **skynet**: design precedents such as the observability channel (`docs/zh/analysis/architecture-review.md`)
 
-Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependency management), [nlohmann/json](https://github.com/nlohmann/json), [protobuf](https://github.com/protocolbuffers/protobuf) (currently a dependency + tests, not on the message path), [GTest](https://github.com/google/googletest), OpenSSL, libcurl, pugixml, readline, crashpad, [VitePress](https://vitepress.dev) (docs site), GitHub Actions and Codecov (CI and coverage). The transport layer is self-built (`modules/net/link`), no nng.
+Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependency management), [nlohmann/json](https://github.com/nlohmann/json), [Lua](https://www.lua.org) 5.5 (script runtime, `modules/script`), [protobuf](https://github.com/protocolbuffers/protobuf) (currently a dependency + tests, not on the message path), [GTest](https://github.com/google/googletest), OpenSSL, libcurl, pugixml, readline, crashpad, [VitePress](https://vitepress.dev) (docs site), GitHub Actions and Codecov (CI and coverage). The transport layer is self-built (`modules/net/link`), no nng.
 
 ## Contact
 
