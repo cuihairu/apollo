@@ -6,7 +6,11 @@
 #include <fstream>
 #include <signal.h>
 #include <sstream>
+#if !defined(_WIN32)
 #include <unistd.h>
+#else
+#include <process.h>
+#endif
 
 namespace world_app {
 
@@ -196,7 +200,11 @@ std::string DashboardDataCollector::render() const {
 
     std::ostringstream out;
     out << "{\"process\":{";
+#if defined(_WIN32)
+    out << "\"pid\":" << ::_getpid();
+#else
     out << "\"pid\":" << ::getpid();
+#endif
     out << ",\"uptime_ms\":" << uptime_ms;
     out << ",\"rss_kb\":" << rss_kb();
     out << ",\"threads\":" << threads();

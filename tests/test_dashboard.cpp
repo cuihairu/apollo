@@ -298,8 +298,6 @@ bool test_data_collector() {
     return true;
 }
 
-#endif  // !_WIN32
-
 }  // namespace
 
 bool test_html_override() {
@@ -427,3 +425,5 @@ int main() {
     return 0;
 #endif
 }
+
+#endif  // !_WIN32
