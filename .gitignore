@@ -73,6 +73,8 @@ base-app-data/
 BIGWORLD_AUDIT.md
 ipc_audit_results.md
 docs/.vitepress/dist/
+docs/.vitepress/.temp/
+docs/.vitepress/cache/
 
 # crash capture (crash-capture 批②)：本地 dump 目录与按需构建的 breakpad 工具
 crashdumps/
