@@ -38,6 +38,24 @@ public:
     std::atomic<bool> release{false};
 };
 
+// 记录 onAuthenticated 是否在并发 close 完成之后才触发（即复活已关会话）。
+class AuthAfterCloseRecorder : public apollo::net::ISessionListener {
+public:
+    std::atomic<bool> closed{false};
+    std::atomic<int> authAfterClose{0};
+
+    void onConnected(uint64_t) override {}
+    void onDisconnected(uint64_t, int) override {}
+    void onDataReceived(uint64_t, const void*, size_t) override {}
+    void onDataSent(uint64_t) override {}
+    void onAuthenticated(uint64_t, uint64_t) override {
+        if (closed.load(std::memory_order_acquire)) {
+            authAfterClose.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    void onTimeout(uint64_t) override {}
+};
+
 // 持锁回调重入回归（CR-09 复核）：onDisconnected 持 mutex_ 内调
 // getSession 二次上锁非递归 mutex 自锁死锁。修复后直接查 sessions_ 不再
 // 二次上锁。带护栏，原实现下超时失败（exit 2）。
@@ -167,6 +185,59 @@ bool test_setPlayerId_no_revive_after_close() {
     return ok;
 }
 
+// 发现2-并发窗口：setPlayerId 与 close 真正并发（非串行）时，若 close 已置
+// Disconnected，CAS 必须失败，不得再触发 onAuthenticated（复活）。旧实现为
+// 先 load 后 store 的非原子组合，并发 close 可在两步之间置 Disconnected，
+// 随后被写回 Authenticated 并触发 onAuthenticated——此测试在旧实现下检测
+// authAfterClose > 0（或 TSan 下 data race）而失败，新实现 CAS 下通过。
+bool test_setPlayerId_concurrent_close_no_revive() {
+    auto& manager = apollo::net::SessionManager::instance();
+    AuthAfterCloseRecorder rec;
+    manager.setListener(&rec);
+    manager.initialize(1);
+
+    constexpr int kRounds = 200;
+    int failures = 0;
+    for (int i = 0; i < kRounds; ++i) {
+        auto* session = manager.createSession(std::make_unique<NullConnection>());
+        if (session == nullptr) {
+            std::cerr << "setPlayerId_concurrent: createSession failed\n";
+            manager.setListener(nullptr);
+            manager.shutdown();
+            return false;
+        }
+
+        rec.closed.store(false, std::memory_order_release);
+        rec.authAfterClose.store(0, std::memory_order_relaxed);
+        std::atomic<bool> go{false};
+        std::thread closer([&] {
+            while (!go.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            session->close(0);
+            rec.closed.store(true, std::memory_order_release);
+        });
+        std::thread setter([&] {
+            while (!go.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            session->setPlayerId(99);
+        });
+        go.store(true, std::memory_order_release);
+        closer.join();
+        setter.join();
+
+        if (rec.authAfterClose.load(std::memory_order_relaxed) != 0) {
+            ++failures;
+        }
+        manager.closeSession(session->getSessionId(), 0);
+    }
+
+    manager.setListener(nullptr);
+    manager.shutdown();
+    return failures == 0;
+}
+
 } // namespace
 
 int main() {
@@ -212,6 +283,7 @@ int main() {
     run("broadcast_keeps_alive_during_close", test_broadcast_keeps_alive_during_close);
     run("getInfo_state_reflects_atomic", test_getInfo_state_reflects_atomic);
     run("setPlayerId_no_revive_after_close", test_setPlayerId_no_revive_after_close);
+    run("setPlayerId_concurrent_close_no_revive", test_setPlayerId_concurrent_close_no_revive);
     std::cout << "=== Results: " << passed << "/" << total << " passed ===" << std::endl;
     return (passed == total) ? 0 : 1;
 }
