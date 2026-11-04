@@ -111,8 +111,8 @@ public:
     /// 更新会话（检测超时等）
     virtual void update(uint64_t currentTime) = 0;
 
-    /// 获取会话信息
-    virtual const SessionInfo& getInfo() const = 0;
+    /// 获取会话信息（按值快照，state 实时同步当前原子状态）
+    virtual SessionInfo getInfo() const = 0;
 };
 
 /// 网络连接接口
@@ -141,8 +141,12 @@ public:
     uint64_t getPlayerId() const override { return info_.playerId; }
     void setPlayerId(uint64_t playerId) override {
         info_.playerId = playerId;
-        if (state_.load(std::memory_order_acquire) == SessionState::Connected) {
-            state_.store(SessionState::Authenticated, std::memory_order_release);
+        // CAS：仅在 Connected 时原子转换 Authenticated。并发 close 若先置
+        // Disconnected，CAS 失败，不复活已关会话、不触发 onAuthenticated。
+        SessionState expected = SessionState::Connected;
+        if (state_.compare_exchange_strong(
+                expected, SessionState::Authenticated,
+                std::memory_order_acq_rel, std::memory_order_acquire)) {
             if (listener_) {
                 listener_->onAuthenticated(info_.sessionId, playerId);
             }
@@ -156,7 +160,11 @@ public:
     bool send(const std::vector<uint8_t>& data) override;
     void close(int reason = 0) override;
     void update(uint64_t currentTime) override;
-    const SessionInfo& getInfo() const override { return info_; }
+    SessionInfo getInfo() const override {
+        SessionInfo info = info_;
+        info.state = state_.load(std::memory_order_acquire);
+        return info;
+    }
 
     /// 设置超时时间（毫秒）
     void setTimeout(uint32_t timeoutMs) { timeoutMs_ = timeoutMs; }
@@ -175,7 +183,7 @@ private:
     // 并发面（broadcast 锁外 send 与并发 closeSession 的 close 读/写）：
     // info_.state 非原子成员，send 读 / close 写并发即数据竞争 UB（CR 发现）。
     // 遗留模块无 live 引用，此处以原子 state_ 收敛并发路径；info_.state 仅
-    // 构造置初值（getInfo() 快照字段，非并发判定面）。
+    // 构造置初值（getInfo() 快照时用 state_ 覆盖，接口快照与真实状态一致）。
     std::atomic<SessionState> state_{SessionState::Disconnected};
     std::unique_ptr<IConnection> connection_;
     ISessionListener* listener_;
