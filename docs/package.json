@@ -18,9 +18,9 @@
   "author": "Apollo Team",
   "license": "MIT",
   "devDependencies": {
-    "mermaid": "^12.1.0",
-    "vue": "^3.5.43",
-    "vitepress": "^1.6.4"
+    "mermaid": "^12.2.0",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.44"
   },
   "pnpm": {
     "overrides": {
