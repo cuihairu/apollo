@@ -28,6 +28,8 @@
         }                                                                                \
     } while (0)
 
+#if !defined(_WIN32)
+
 namespace {
 
 namespace link = apollo::net::link;
@@ -39,8 +41,6 @@ std::uint64_t now_ms() {
             std::chrono::steady_clock::now().time_since_epoch())
             .count());
 }
-
-#if !defined(_WIN32)
 
 struct HttpReply {
     bool connected = false;
@@ -395,6 +395,8 @@ bool test_route_boundary() {
     return true;
 }
 
+#endif  // !_WIN32
+
 int main() {
 #if defined(_WIN32)
     std::cout << "DashboardTests: windows-scope passed" << std::endl;
@@ -426,4 +428,3 @@ int main() {
 #endif
 }
 
-#endif  // !_WIN32

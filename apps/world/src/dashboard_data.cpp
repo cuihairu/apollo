@@ -150,7 +150,12 @@ bool pid_alive(std::uint64_t pid) {
     if (pid == 0) {
         return false;
     }
+#if !defined(_WIN32)
     return ::kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM;
+#else
+    (void)pid;  // Windows 退化：编队 pid 存活探针不接线（POSIX kill 语义），一律报不活
+    return false;
+#endif
 }
 
 }  // namespace
