@@ -7,10 +7,48 @@
 #include <chrono>
 #include <thread>
 
-#define TEST_ASSERT(cond, msg) \
-    do { if (!(cond)) { std::cerr << "FAIL: " << msg << " (" << __FILE__ << ":" << __LINE__ << ")" << std::endl; return false; } } while (0)
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <windows.h>
+#else
+    #include <unistd.h>
+#endif
 
 namespace {
+
+// Windows 无 ::pipe/::close，用 Win32 socketpair 语义建一对可读 fd（唤醒/
+// 心跳观测面只要求可读句柄）；返回 true = 已建，失败 = 测试断言失败。
+bool make_read_pair(socket_t& readEnd) {
+#ifdef _WIN32
+    SOCKET a = INVALID_SOCKET, b = INVALID_SOCKET;
+    SOCKADDR_IN addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+    int len = static_cast<int>(sizeof addr);
+    a = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (a == INVALID_SOCKET) return false;
+    if (::bind(a, reinterpret_cast<SOCKADDR*>(&addr), sizeof addr) != 0) { ::closesocket(a); return false; }
+    if (::getsockname(a, reinterpret_cast<SOCKADDR*>(&addr), &len) != 0) { ::closesocket(a); return false; }
+    if (::listen(a, 1) != 0) { ::closesocket(a); return false; }
+    b = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (b == INVALID_SOCKET) { ::closesocket(a); return false; }
+    if (::connect(b, reinterpret_cast<SOCKADDR*>(&addr), sizeof addr) != 0) { ::closesocket(a); ::closesocket(b); return false; }
+    SOCKET c = ::accept(a, nullptr, nullptr);
+    ::closesocket(a);
+    if (c == INVALID_SOCKET) { ::closesocket(b); return false; }
+    readEnd = static_cast<socket_t>(c);
+    return true;
+#else
+    int fd[2] = {-1, -1};
+    if (::pipe(fd) != 0) return false;
+    readEnd = static_cast<socket_t>(fd[0]);
+    return true;
+#endif
+}
+
+#define TEST_ASSERT(cond, msg) \
+    do { if (!(cond)) { std::cerr << "FAIL: " << msg << " (" << __FILE__ << ":" << __LINE__ << ")" << std::endl; return false; } } while (0)
 
 bool test_timer_callback_reentrant() {
     apollo::net::EventLoop loop;
@@ -44,9 +82,8 @@ bool test_heartbeat_callback_reentrant() {
 
     apollo::net::HeartbeatManager hb(&loop);
     std::atomic<int> beats{0};
-    int pipefd[2] = {-1, -1};
-    TEST_ASSERT(::pipe(pipefd) == 0, "pipe");
-    const socket_t sock = static_cast<socket_t>(pipefd[0]);
+    socket_t sock = static_cast<socket_t>(-1);
+    TEST_ASSERT(make_read_pair(sock), "read pair");
     // 回调内重入 updateHeartbeat/addHeartbeat（原实现持 mutex_ 调 callback，
     // 重入 addHeartbeat 即自锁死锁）。
     hb.addHeartbeat(sock, 500, [&](socket_t) {
@@ -61,8 +98,12 @@ bool test_heartbeat_callback_reentrant() {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     loop.stop();
-    ::close(pipefd[0]); ::close(pipefd[1]);
     TEST_ASSERT(beats.load() >= 1, "heartbeat callback reentrant fired (would deadlock before fix)");
+#ifdef _WIN32
+    ::closesocket(sock);
+#else
+    ::close(sock);
+#endif
     return true;
 }
 

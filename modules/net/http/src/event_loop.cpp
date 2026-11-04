@@ -625,11 +625,17 @@ bool net::ReconnectManager::removeReconnect(uint64_t reconnectId) {
 }
 
 bool net::ReconnectManager::triggerReconnect(uint64_t reconnectId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = reconnects_.find(reconnectId);
-    if (it == reconnects_.end() || !it->second.active) return false;
+    ReconnectCallback callback;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = reconnects_.find(reconnectId);
+        if (it == reconnects_.end() || !it->second.active) return false;
+        callback = it->second.callback;
+    }
 
-    return it->second.callback ? it->second.callback() : false;
+    // 回调在出锁后触发（同 CR-06 onReconnectTimer）：回调可重入
+    // removeReconnect/addReconnect，持锁触发即自锁死锁。
+    return callback ? callback() : false;
 }
 
 void net::ReconnectManager::onReconnectTimer(uint64_t reconnectId) {

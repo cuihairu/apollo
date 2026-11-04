@@ -249,7 +249,10 @@ private:
     void internalCloseSession(uint64_t sessionId, int reason);
 
     utils::IdPool sessionIdPool_;
-    std::unordered_map<uint64_t, std::unique_ptr<Session>> sessions_;
+    // 广播在出锁后逐个 send；若 sessions_ 存裸 unique_ptr，锁外并发
+    // closeSession 擦除映射即析构 Session（use-after-free）。持 shared_ptr
+    // 让广播在锁外保活目标（close 后 send 见 !isConnected 安全返回）。
+    std::unordered_map<uint64_t, std::shared_ptr<Session>> sessions_;
     std::unordered_map<uint64_t, uint64_t> playerIdToSessionId_;  // playerId -> sessionId
     size_t sessionCount_;
     size_t maxSessions_;

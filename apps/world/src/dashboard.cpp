@@ -243,7 +243,6 @@ bool DashboardResponder::read_and_maybe_answer(Conn& conn,
         conn.recv.append(reinterpret_cast<const char*>(buf),
                          static_cast<std::size_t>(n));
         if (conn.recv.size() > kMaxRequestBytes) {
-            ++aborted_;
             return false;
         }
     }

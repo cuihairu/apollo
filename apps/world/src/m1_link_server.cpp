@@ -28,7 +28,7 @@
 
 #include <atomic>
 #include <fstream>
-#include <shared_mutex>
+#include <memory>
 #include <sstream>
 #include <utility>
 
@@ -260,27 +260,21 @@ public:
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         mc.compat_route_versions = link::compat_route_versions_from_env();
         mc.authority_epoch = config_.authority_epoch;  // 0 = 进程自铸
-        manager_ = std::make_unique<link::LinkManager>(mc);
+        auto mgr = std::make_shared<link::LinkManager>(mc);
 
         link::EndpointConfig ep;
         ep.name = "gateway";  // 对端 G-1 组件名（握手身份 = 其 Link self_name）
         ep.host = config_.host;
         ep.port = config_.port;
         ep.role = link::EndpointRole::kPassive;
-        {
-            std::unique_lock<std::shared_mutex> lock(managerMutex_);
-            if (!manager_->add_endpoint(ep)) {
-                manager_.reset();
-            }
-        }
-        if (!manager_) {
+        if (!mgr->add_endpoint(ep)) {
             route_table_.reset();
             return false;
         }
 
         // handler/表/白名单随新 peer 上线装配（fan-out 面：链路对象在
         // peer_listener 回调后地址稳定，重连 = 同名新链重新过此装配）。
-        manager_->set_peer_listener([this](link::InterServerLink& peer) {
+        mgr->set_peer_listener([this](link::InterServerLink& peer) {
             install_dispatching(peer);
         });
 
@@ -288,27 +282,28 @@ public:
         // 上下文（宿主内核线程）触发；握手期坏链无名字，框架不出账——这里
         // 收到的 peer 名都可对上登记。断连原因 M1 层不透传（上层只裁决
         // 存疑与否；诊断走链路计数/日志面）。
-        manager_->on_down([this](const std::string& name, link::LinkDownReason reason) {
+        mgr->on_down([this](const std::string& name, link::LinkDownReason reason) {
             (void)reason;
             if (on_peer_down_fn_) {
                 on_peer_down_fn_(name);
             }
         });
 
+        // 先发布再置 started（读侧 load 后即见完整装配）。
+        manager_.store(mgr, std::memory_order_release);
         started_.store(true, std::memory_order_release);
         return true;
     }
 
     void stop() override {
         started_.store(false, std::memory_order_release);
-        std::unique_lock<std::shared_mutex> lock(managerMutex_);
-        manager_.reset();  // 监听器与链路随管理器析构关闭
+        manager_.store({}, std::memory_order_release);  // 读侧副本保活至析构
     }
 
     void pump(std::uint64_t now_ms) override {
-        std::shared_lock<std::shared_mutex> lock(managerMutex_);
-        if (manager_) {
-            manager_->pump(now_ms);
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (mgr) {
+            mgr->pump(now_ms);
         }
     }
 
@@ -317,8 +312,8 @@ public:
     }
 
     std::vector<link::LinkSnapshot> snapshot_links() const override {
-        std::shared_lock<std::shared_mutex> lock(managerMutex_);
-        return manager_ ? manager_->snapshot_links() : std::vector<link::LinkSnapshot>{};
+        auto mgr = manager_.load(std::memory_order_acquire);
+        return mgr ? mgr->snapshot_links() : std::vector<link::LinkSnapshot>{};
     }
 
     void sendIntentAck(std::uint64_t request_id, std::int32_t code,
@@ -343,10 +338,11 @@ public:
 
     void sendEvalResult(const std::string& peer, std::uint64_t eval_id, bool ok,
                         const std::string& result, const std::string& error) override {
-        if (!manager_ || eval_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || eval_id == 0) {
             return;  // 0 保留（回执关联键缺位即静默）
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return;  // 未知 peer = 尽力面（admin 超时面重发裁决）
         }
@@ -369,10 +365,11 @@ public:
                                 std::uint64_t window_faults,
                                 std::uint64_t module_version,
                                 const std::string& detail) override {
-        if (!manager_ || request_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request_id == 0) {
             return;  // 0 保留（回执关联键缺位即静默）
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return;  // 未知 peer = 尽力面（控制面超时面重发裁决）
         }
@@ -415,10 +412,11 @@ public:
     void sendWorldDrainReply(const std::string& peer, std::uint64_t request_id,                             std::int32_t op, bool ok, std::int32_t state,
                              std::uint64_t active_instances,
                              const std::string& detail) override {
-        if (!manager_ || request_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request_id == 0) {
             return;  // 0 保留（回执关联键缺位即静默）
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return;  // 未知 peer = 尽力面（控制面超时面重发裁决）
         }
@@ -442,10 +440,11 @@ public:
                                std::uint64_t management_epoch,
                                std::uint64_t assigned_cell_id,
                                const std::string& detail) override {
-        if (!manager_ || request_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request_id == 0) {
             return;  // 0 保留（回执关联键缺位即静默）
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return;  // 未知 peer = 尽力面（cell 超时面重发裁决）
         }
@@ -468,10 +467,11 @@ public:
                              bool accepted, std::int32_t code,
                              std::int64_t management_epoch, std::uint64_t cell_id,
                              const std::string& detail) override {
-        if (!manager_ || request_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request_id == 0) {
             return;  // 0 保留（回执关联键缺位即静默）
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return;  // 未知 peer = 尽力面
         }
@@ -493,10 +493,11 @@ public:
     void sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
                              std::uint64_t management_epoch, std::uint64_t space_id,
                              std::uint64_t assigned_cell_id, bool ready) override {
-        if (!manager_) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr) {
             return;
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return;  // 未知 peer = 尽力面（重推随下个受理拍）
         }
@@ -516,10 +517,11 @@ public:
 
     bool sendCellDebugEvalRequest(const std::string& peer,
                                   const DebugEvalRequest& request) override {
-        if (!manager_ || request.eval_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request.eval_id == 0) {
             return false;  // 0 保留（关联键缺位即静默）
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return false;  // 未知 peer = 尽力面（管理面超时重发裁决）
         }
@@ -539,10 +541,11 @@ public:
 
     bool sendCellModuleRolloutRequest(const std::string& peer,
                                       const ModuleRolloutRequest& request) override {
-        if (!manager_ || request.request_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request.request_id == 0) {
             return false;  // 0 保留
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return false;
         }
@@ -567,10 +570,11 @@ public:
 
     bool sendCellWorldDrainRequest(const std::string& peer,
                                    const WorldDrainRequest& request) override {
-        if (!manager_ || request.request_id == 0) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || request.request_id == 0) {
             return false;  // 0 保留
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return false;
         }
@@ -593,10 +597,11 @@ public:
         // 意图族原样转发（切片2）：payload = 932 internal_envelope 的 packed
         // 帧（InterServerLink 自封 u16 id，此处只传 payload）。空帧/未知
         // peer = false（调用方可即时回 2001/2002）。
-        if (!manager_ || payload.empty()) {
+        auto mgr = manager_.load(std::memory_order_acquire);
+        if (!mgr || payload.empty()) {
             return false;
         }
-        auto* link = manager_->link(peer);
+        auto* link = mgr->link(peer);
         if (link == nullptr) {
             return false;
         }
@@ -606,7 +611,8 @@ public:
     }
 
     std::uint16_t listenPort() const override {
-        return manager_ ? manager_->endpoint_port("gateway") : 0;
+        auto mgr = manager_.load(std::memory_order_acquire);
+        return mgr ? mgr->endpoint_port("gateway") : 0;
     }
 
     bool gatewayConnected() const override {
@@ -624,7 +630,8 @@ public:
 
 private:
     link::InterServerLink* gateway_link() {
-        return manager_ ? manager_->link("gateway") : nullptr;
+        auto mgr = manager_.load(std::memory_order_acquire);
+        return mgr ? mgr->link("gateway") : nullptr;
     }
 
     bool load_route_table(link::RouteTable& table) {
@@ -986,8 +993,12 @@ private:
     // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;
-    std::unique_ptr<link::LinkManager> manager_;
-    mutable std::shared_mutex managerMutex_;
+    // 原子共享所有权：start 在宿主线程写、pump/pre_tick 在管理泵/内核线程
+    // 读，约 20 处 send*/listen/gateway 访问与 start/stop 并发。shared_ptr
+    // 的 atomic 读写让读侧持本地副本保活 manager_（stop 重置不悬垂），
+    // 且不引入递归 shared_mutex（原 ddf14375 只护 pump/snapshot，未覆盖
+    // 其余访问面——CR 复核发现）。
+    std::atomic<std::shared_ptr<link::LinkManager>> manager_;
     std::atomic<bool> started_{false};
     std::atomic<std::uint64_t> received_{0};
     std::atomic<std::uint64_t> rejected_{0};

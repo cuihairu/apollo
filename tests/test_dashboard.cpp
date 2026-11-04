@@ -363,7 +363,9 @@ bool test_recv_cap() {
         http.pump(now_ms());
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    TEST_ASSERT(http.aborted() >= 1, "oversized request aborted");
+    // 双计回归：read_and_maybe_answer 超限路径不再自行 ++aborted_，pump()
+    // 对同一 return false 只计一次。若回归为双计，此处 ==1 会失败。
+    TEST_ASSERT(http.aborted() == 1, "oversized request counted exactly once");
     TEST_ASSERT(http.connections() == 0, "oversized connection drained");
     http.stop();
     return true;

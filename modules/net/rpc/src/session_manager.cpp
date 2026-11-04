@@ -170,7 +170,7 @@ ISession* SessionManager::createSession(std::unique_ptr<IConnection> connection)
         return nullptr;  // ID 耗尽
     }
 
-    auto session = std::make_unique<Session>(sessionId, std::move(connection), listener_);
+    auto session = std::make_shared<Session>(sessionId, std::move(connection), listener_);
     session->setTimeout(defaultTimeoutMs_);
     session->markConnected();
 
@@ -275,9 +275,9 @@ void SessionManager::onDisconnected(uint64_t sessionId, int reason) {
     // 移除映射
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto* session = getSession(sessionId);
-        if (session) {
-            uint64_t playerId = session->getPlayerId();
+        auto it = sessions_.find(sessionId);
+        if (it != sessions_.end()) {
+            uint64_t playerId = it->second->getPlayerId();
             if (playerId != 0) {
                 playerIdToSessionId_.erase(playerId);
             }
@@ -340,19 +340,19 @@ bool SessionManager::kickPlayer(uint64_t playerId, int reason) {
 }
 
 size_t SessionManager::broadcast(const void* data, size_t length, uint64_t exceptSessionId) {
-    std::vector<Session*> sessions;
+    std::vector<std::shared_ptr<Session>> sessions;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         sessions.reserve(sessions_.size());
         for (auto& pair : sessions_) {
             if (pair.first != exceptSessionId) {
-                sessions.push_back(pair.second.get());
+                sessions.push_back(pair.second);
             }
         }
     }
 
     size_t sentCount = 0;
-    for (auto* session : sessions) {
+    for (const auto& session : sessions) {
         if (session->send(data, length)) {
             ++sentCount;
         }
