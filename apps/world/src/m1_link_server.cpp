@@ -823,9 +823,11 @@ private:
         // 960 线格式向后兼容（L109 认证凭据面收口）：新版帧 11 字段（第 11 =
         // credential）。旧版 cell 以 10 字段旧格式（无 credential 字段）注册
         // 时，decode 层按旧字段数剥离——credential 视为未自证（空），由
-        // 受理面按 registerToken 配置裁决（配置非空即拒 code 6）。混编期间
-        // 的旧 cell 只有显式声明白名单投影才能通过兼容裁决（见 config.hpp
-        // compatWhitelist），不因旧格式静默丢弃。
+        // 受理面按 registerToken 配置裁决（配置非空即拒 code 6）。因此旧帧
+        // 受理仅在认证关（registerToken 空）时成立；认证开时旧帧在凭据裁决
+        // 处被 code 6 拒，到不了兼容白名单路径（world_app.cpp 凭据先判）。
+        // 混编期间认证关下显式声明白名单投影的旧 cell 才能通过兼容裁决
+        // （见 config.hpp compatWhitelist），不因旧格式静默丢弃。
         const bool full = wire::decode_payload(
             id_of(MsgId::cell_register_request), data, size, fields);
         const bool ok = full ? true

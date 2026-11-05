@@ -65,10 +65,11 @@ struct CellRegisterConfig {
     // config.compatWhitelist」内才受理（L109 兼容范围白名单面），不符/
     // 未声明拒 961 code 5。
     std::int64_t declared_compat = 0;
-    // 启动凭据自证（L109 认证凭据面；spawn 凭据源）：World spawn 子进程时
-    // 经独立运行目录/环境注入，cell 启动读取并随 960 上报——World 配置
-    // registerToken 非空时逐字节匹配才受理。空 = 认证关（World 未配 token
-    // 时任何凭据值均可；配置非空而本字段空 = 拒 961 code 6）。
+    // 启动凭据自证（L109 认证凭据面）：部署方在 World 与 cell 共享的进程
+    // 环境注入 APOLLO_REGISTER_TOKEN（machined fork+execvp 或同源启动脚本
+    // 透传），cell 启动读取并随 960 上报——World 配置 registerToken 非空
+    // 时逐字节匹配才受理。空 = 认证关（World 未配 token 时任何凭据值均可；
+    // 配置非空而本字段空 = 拒 961 code 6）。
     std::string credential;
 };
 

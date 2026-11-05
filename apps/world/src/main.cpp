@@ -281,8 +281,9 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
     // 启动凭据经环境注入（L109 认证凭据面声明通道）：凭据不进可公开日志、
     // 不落 /proc/<pid>/cmdline——命令行 `--register-token` 会被同宿主任意
     // 用户经 ps 读取，且 machined 子进程 exec 失败会把完整命令行打到
-    // stderr（supervisor.cpp:201）。改由 APOLLO_REGISTER_TOKEN 环境传递，
-    // 仅 World 侧配置；cell 侧同样读该环境作为自证凭据源。
+    // stderr（supervisor.cpp:201）。改由 APOLLO_REGISTER_TOKEN 环境传递：
+    // 部署方必须把它设进 World 与 cell 共享的进程环境（machined fork+
+    // execvp 或同源启动脚本透传）；本进程仅读 World 侧配置，不代子进程注入。
     if (const char* token = std::getenv("APOLLO_REGISTER_TOKEN")) {
         config.registerToken = token;
     }

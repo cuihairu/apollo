@@ -1396,8 +1396,10 @@ bool test_cell_register_credential() {
 // 1) 旧版 10 字段帧（无 credential）在新版 World 上按旧投影受理——decode
 //    层不再静默丢弃（findings 收口：旧 cell 不因加字段被拒，兼容裁决由
 //    compatWhitelist 显式声明）。
-// 2) 凭据裁决置于代次之后：旧代次执行端凭据过期/轮换收 code 3（自隔离），
-//    不因 code 6 抢答失去隔离信号。
+// 2) 凭据裁决先于代次/兼容裁决：未持/错凭据探测一律 code 6，不泄露该
+//    cell_id 是否已登记或其启动代次（audit 收口——code 3/detail oracle）。
+//    旧代次执行端凭据过期/轮换收 code 6 后仍自冻结（code 6 与 3/5 同冻结
+//    条件），隔离语义不因凭据先判丢失。
 // 3) code 6（凭据失配）触发 cell 侧自冻结（同 code 3/5 口径）。
 bool test_cell_register_credential_compat_legacy() {
     std::cout << "Running: test_cell_register_credential_compat_legacy..."
@@ -1441,8 +1443,8 @@ bool test_cell_register_credential_compat_legacy() {
                 "legacy frame code 6 (missing credential)");
     TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
 
-    // 凭据裁决置于代次之后：先注册（高代次），再以旧代次 + 错凭据重注册 →
-    // 收 code 3（自隔离），不因 code 6 抢答。
+    // 凭据裁决先于代次裁决：先注册（高代次），再以旧代次 + 错凭据重注册 →
+    // 一律 code 6（不泄露已登记高代次/登记状态）。
     TEST_ASSERT(
         register_roundtrip(cell, 9961, 92, 5, "127.0.0.1", 9242, 1, 10, 0, true, r,
                            world_app::contract_compat_projection(), "spawn-secret-1"),
@@ -1453,8 +1455,10 @@ bool test_cell_register_credential_compat_legacy() {
                            world_app::contract_compat_projection(), "wrong-secret"),
         "stale-epoch wrong-credential reply arrived");
     TEST_ASSERT(!r.accepted, "stale epoch rejected");
-    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch,
-                "stale epoch preempts credential code 6");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedCredential,
+                "wrong credential preempts stale epoch (no state oracle)");
+    TEST_ASSERT(r.detail.find("epoch") == std::string::npos,
+                "credential reject detail leaks no epoch/registration state");
     const auto* reg = server.world->find_cell_registration(92);
     TEST_ASSERT(reg != nullptr && reg->start_epoch == 5, "epoch not downgraded");
 

@@ -276,7 +276,8 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
     }
     // 启动凭据经环境注入（L109 认证凭据面声明通道）：cell 自证凭据源与
     // World 侧同源——APOLLO_REGISTER_TOKEN，不进命令行 /proc cmdline（详见
-    // main.cpp 同注）。World spawn 子进程时注入该环境变量。
+    // main.cpp 同注）。部署方须把该环境变量设进 World 与 cell 共享的进程
+    // 环境（machined fork+execvp 或同源启动脚本透传），World 侧不代注入。
     if (const char* token = std::getenv("APOLLO_REGISTER_TOKEN")) {
         config.registerToken = token;
     }
