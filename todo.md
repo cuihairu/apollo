@@ -103,7 +103,7 @@
   - 证据：测试 15/15
 - [x] cell 向所属 World 注册地址、代次、版本、就绪、负载与排空状态；World 分配完整 Space/Cell，定义心跳失效、重注册、旧执行端隔离和控制面失联策略。
   - 证据：本次补齐认证凭据面（960 credential + World registerToken 逐字节匹配，拒伪造注册）与混编兼容范围白名单（compatWhitelist，声明投影在「本进程投影 ∪ 白名单」内受理）两缺口；拓扑版本/重平衡策略属下一行（World 管理拓扑、邻接与分配版本），不在本行范围。测试 89/89。
-- [ ] World 管理拓扑、邻接与分配版本，单实体只有一个有效模拟代次；Instance 共享目标/时钟/结算明确唯一逻辑负责人。（BLOCKED）
+- [ ] World 管理拓扑、邻接与分配版本，单实体只有一个有效模拟代次；Instance 共享目标/时钟/结算明确唯一逻辑负责人。（BLOCKED复核 2026-11-06：D03 已代决=一个 Space 一个完整 Cell、World 独占分配、稳定分配无自动迁移、每 Instance 一个逻辑负责人；首阶段已落——spaceAssignments_ 每 Space 单调 assignment_version + journal A/R/B 四例版本规则（创建 v1/释放版本不变/重认领 +1/重启 B 行铸代次）与 Instance 单逻辑负责人（SquadInstanceService 按 world_id 绑定），测试 CellRegisterTests+SquadInstanceTests 绿、build-off 89/89；但 D03「明确不做/延后」=同 Space 多 Cell、邻接算法、自动动态重平衡、单实体独立权威代次（本轮未消费，仅 Space 级版本）——条件仍缺，不重试。）
 - [x] 保留有界意图队列、模拟线程写入、过载拒收及停机尾扫；不得由 IO、管理端或后台线程直接改模拟状态。
   - 证据：测试 15/15
 - [x] 受理单写者契约已钉（P2 分离前置回归底线）：有界队列顶格拒收不丢旧、两级水位滞回、过载拒收、tick 边界 drain、G-3 停机尾扫、维护/预启动闸六例既有验收；新增第七例——模拟线程外 submitIntent 只入队不写 world（提交即刻探测会话表无绑定），会话绑定仅在 gameThread tick 边界 drain 后显形（resolveIntentPlayer 提为公开只读观测面，互斥会话表跨线程安全）；code-verified：意图消费仅 gameLoop tick 边界与停机尾扫两处，M1 泵/回执/管理面（rollout/drain/debugEval/fleet 上报/metrics）全在 gameLoop 驱动。
