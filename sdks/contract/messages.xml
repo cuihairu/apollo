@@ -615,7 +615,7 @@
     <field name="accepted" type="bool" desc="1=已入锚点长期态（mark_dirty 随 SaveQueue 落档）"/>
     <field name="error_message" type="string"/>
   </msg>
-  <msg id="960" name="cell_register_request" dir="P2P" channel="events" domain="internal" desc="cell 执行进程注册请求（cell→World M1 控制受理面；声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——L101 注册首切片，认证凭据面按 world-cell-management 差距表另行挂账，本面裸帧受理同 944/952/956 惯例）">
+  <msg id="960" name="cell_register_request" dir="P2P" channel="events" domain="internal" desc="cell 执行进程注册请求（cell→World M1 控制受理面；声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——L101 注册首切片；认证凭据面=启动凭据自证（spawn 凭据源，L109 认证凭据面）；World 配置 registerToken 非空时凭据须逐字节匹配才受理，空 = 认证关（同 944/952/956 裸帧惯例））">
     <field name="request_id" type="int64" desc="控制关联键（cell 侧单调分配，0 保留）"/>
     <field name="cell_id" type="int64" desc="逻辑 cell ID（World 内唯一；PID/IP 不当身份，重启保留同 ID 换代次）"/>
     <field name="start_epoch" type="int64" desc="进程启动代次（重启自增；旧代次注册不可覆盖新代次登记）"/>
@@ -626,6 +626,7 @@
     <field name="load" type="int32" desc="当前负载 0-100（0 = 未上报）"/>
     <field name="drain_state" type="int32" desc="排空状态：0=serving 1=draining 2=drained（与 956/957 同口径）"/>
     <field name="ready" type="bool" desc="就绪（1=可分配；进程存活不等于可分配）"/>
+    <field name="credential" type="string" desc="启动凭据自证（World spawn 子进程时经独立运行目录/环境注入，cell 启动读取并随 960 上报；World config.registerToken 非空时逐字节匹配才受理，空 = 认证关。凭据不落可公开日志；0 长度与配置非空即拒）"/>
   </msg>
   <msg id="961" name="cell_register_reply" dir="P2P" channel="events" domain="internal" desc="cell 执行进程注册回执（World→cell；request_id 关联；返回管理代次——world-cell-management §4.3）">
     <field name="request_id" type="int64" desc="回带请求关联号"/>

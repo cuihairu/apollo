@@ -141,6 +141,8 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
             config.registerPort = static_cast<std::uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--cell-id" && i + 1 < argc) {
             config.cellId = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--register-token" && i + 1 < argc) {
+            config.registerToken = argv[++i];
         } else if (arg == "--world-id" && i + 1 < argc) {
             const char* value_text = argv[++i];
             errno = 0;
@@ -249,6 +251,7 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
                       << "  --register-host <h>        World M1 host to register with (default: off)\n"
                       << "  --register-port <p>        World M1 port to register with, 0 = off (default: 0)\n"
                       << "  --cell-id <id>             Logical cell id for registration (default: 0)\n"
+                      << "  --register-token <t>       Startup credential self-assertion (default: empty)\n"
                       << "  --world-id <id>            World identity (default: 1)\n"
                       << "  --link-grace-ms <ms>       Control-link grace window before freeze, 0 = never (default: 15000)\n"
                       << "  --space <name>              Space name (default: main_world)\n"
@@ -508,6 +511,7 @@ int run_cell_entry_body(int argc, char* argv[],
             rc.route_json = config.m1RouteJson;
             rc.authority_epoch = config.m1AuthorityEpoch;
             rc.link_grace_ms = config.linkGraceMs;
+            rc.credential = config.registerToken;
             register_client = makeCellRegisterClient(std::move(rc));
             register_client->setSpaceAssignListener(
                 [&cell, &config, &logger](const SpaceAssignRecord& rec) {

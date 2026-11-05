@@ -73,9 +73,10 @@ struct WorldDrainRequest {
 };
 
 // cell 执行进程注册请求（契约 960，L101 注册首切片）：cell→World M1 控制
-// 受理面。声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——
-// 认证凭据面按 world-cell-management 差距表另行挂账（裸帧受理同 944/952/
-// 956 惯例）。回执 961 按 request_id 关联（受理点同步执行——M1 泵在
+// 受理面。声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态，
+// 并自证启动凭据（L109 认证凭据面：credential 字段——World 配置
+// registerToken 非空时逐字节匹配才受理，空 = 认证关同 944/952/956 裸帧
+// 惯例）。回执 961 按 request_id 关联（受理点同步执行——M1 泵在
 // gameThread_，与 drain 同线程）。
 struct CellRegisterRequest {
     std::uint64_t request_id = 0;
@@ -88,6 +89,7 @@ struct CellRegisterRequest {
     std::int32_t load = 0;            // 负载 0-100（0 = 未上报）
     std::int32_t drain_state = 0;     // 排空状态：0=serving 1=draining 2=drained
     bool ready = false;               // 就绪（进程存活不等于可分配）
+    std::string credential;           // 启动凭据自证（World registerToken 非空时验证）
 };
 
 // cell 缩容意图命令（契约 963，L108 cell 级缩容编排的管理命令面）：

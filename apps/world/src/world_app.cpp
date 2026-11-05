@@ -250,8 +250,8 @@ void WorldApp::onCellRegister(const std::string& peer,
                               const CellRegisterRequest& request) {
     // 960 受理（L101 注册首切片；本回调在内核线程泵上下文——注册表单线程
     // 独占无锁，受理点同步回 961）。request_id = 0 保留（无回执无登记）。
-    // 认证凭据面按 world-cell-management 差距表另行挂账（裸帧受理同
-    // 944/952/956 惯例）。
+    // 认证凭据面已落地（L109）：registerToken 非空时凭据逐字节匹配才受理
+    //（拒伪造注册，见下）；空 = 认证关（同 944/952/956 裸帧惯例）。
     if (request.request_id == 0) {
         return;
     }
@@ -266,6 +266,14 @@ void WorldApp::onCellRegister(const std::string& peer,
         // 差距 ①：身份/代次非法显式驳回——逻辑 ID 与启动代次是登记前提
         //（PID/IP 不当身份，0 号即缺位）
         reply(false, kCellRegisterRejectedInvalid, "invalid cell_id or start_epoch");
+        return;
+    }
+    // 启动凭据自证（L109 认证凭据面）：World config.registerToken 非空时，
+    // cell 上报的 credential 须逐字节等于该值才受理——spawn 注入的凭据源
+    // 拒未持凭据/错凭据的伪造注册。空配置 = 认证关（任何值均可，含未声明，
+    // 同 944/952/956 裸帧惯例）。凭据不落可公开日志（detail 只给布尔面）。
+    if (!config_.registerToken.empty() && request.credential != config_.registerToken) {
+        reply(false, kCellRegisterRejectedCredential, "register credential mismatch");
         return;
     }
     const auto now_ms = static_cast<std::uint64_t>(
@@ -292,14 +300,25 @@ void WorldApp::onCellRegister(const std::string& peer,
               "stale epoch: registered=" + std::to_string(it->second.start_epoch));
         return;
     }
-    if (request.compat != contract_compat_projection()) {
-        // 契约兼容裁决（960 版本/兼容切片，§4.3「World 验证所属关系、版本
-        // 和身份」的版本面）：声明投影须与本进程同值才受理——未声明（0）
-        // 即不可验证，混编落地的兼容范围白名单随协议更新批
+    // 契约兼容裁决（960 版本/兼容切片 + L109 兼容范围白名单面，§4.3「World
+    // 验证所属关系、版本和身份」的版本面）：声明投影须落在「本进程投影 ∪
+    // compatWhitelist」内才受理——未声明（0）即不可验证，始终拒 code 5。
+    // 白名单非空时允许旧版投影（混编期间的旧 cell 与新版 World 并存）。
+    const std::int64_t compat_projection = contract_compat_projection();
+    bool compat_ok = request.compat == compat_projection;
+    if (!compat_ok) {
+        for (const auto accepted_compat : config_.compatWhitelist) {
+            if (request.compat == accepted_compat && accepted_compat != 0) {
+                compat_ok = true;
+                break;
+            }
+        }
+    }
+    if (!compat_ok) {
         reply(false, kCellRegisterRejectedIncompatible,
               "incompatible contract compat: declared="
                   + std::to_string(request.compat) + " expected="
-                  + std::to_string(contract_compat_projection()));
+                  + std::to_string(compat_projection));
         return;
     }
     if (it == cellRegistrations_.end()) {

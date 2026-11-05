@@ -52,6 +52,7 @@ inline constexpr std::int32_t kCellRegisterAcceptedIdempotent = 2;  // 同 ID �
 inline constexpr std::int32_t kCellRegisterRejectedStaleEpoch = 3;  // 旧代次不可覆盖
 inline constexpr std::int32_t kCellRegisterRejectedInvalid = 4;     // cell_id/代次非法
 inline constexpr std::int32_t kCellRegisterRejectedIncompatible = 5;  // 契约兼容投影不符
+inline constexpr std::int32_t kCellRegisterRejectedCredential = 6;  // 启动凭据不符/未自证
 
 // 契约兼容投影（960 版本/兼容裁决切片，L109 未收口）：kInternalHash 十六进制
 // 串经 FNV-1a 64 折为 int64——cell 侧声明、World 侧裁决须同值才受理（§4.3

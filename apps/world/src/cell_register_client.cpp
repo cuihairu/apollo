@@ -262,7 +262,7 @@ private:
         if (l == nullptr) {
             return;
         }
-        std::vector<wire::FieldValue> f(10);
+        std::vector<wire::FieldValue> f(11);
         f[0].integer = static_cast<std::int64_t>(++next_request_id_);  // 0 保留
         f[1].integer = static_cast<std::int64_t>(config_.cell_id);
         f[2].integer = static_cast<std::int64_t>(config_.start_epoch);
@@ -275,6 +275,7 @@ private:
         f[7].integer = reported_load();       // 负载（宿主注入；0 = 空载缺省）
         f[8].integer = reported_drain_state();
         f[9].integer = reported_ready() ? 1 : 0;  // 就绪 = 内核可分配（冻结即让位）
+        f[10].text = config_.credential;       // 启动凭据自证（L109 认证凭据面）
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return;

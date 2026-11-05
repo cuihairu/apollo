@@ -108,6 +108,25 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                 static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--cell-expiry-ms" && i + 1 < argc) {
             config.cellExpiryMs = std::strtoull(argv[++i], nullptr, 10);
+        } else if (arg == "--register-token" && i + 1 < argc) {
+            config.registerToken = argv[++i];
+        } else if (arg == "--compat-whitelist" && i + 1 < argc) {
+            std::stringstream ss(argv[++i]);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                if (item.empty()) {
+                    continue;
+                }
+                char* end = nullptr;
+                const long value = std::strtol(item.c_str(), &end, 0);
+                if (*end != '\0') {
+                    std::cerr << "world: --compat-whitelist entries must be "
+                                 "integers"
+                              << std::endl;
+                    std::exit(2);
+                }
+                config.compatWhitelist.push_back(static_cast<std::int64_t>(value));
+            }
         } else if (arg == "--world-journal" && i + 1 < argc) {
             config.worldJournalPath = argv[++i];
         } else if (arg == "--m1-authority-epoch" && i + 1 < argc) {
@@ -219,6 +238,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --service-register-host <h>  login service register host, manager role (default: off)\n"
                       << "  --service-register-port <p>  login service register port, 0 = off (default: 0)\n"
                       << "  --cell-expiry-ms <ms>     Registry expiry window for cells without heartbeats, 0 = never (default: 30000)\n"
+                      << "  --register-token <t>       Startup credential expected from cells, empty = off (default: empty)\n"
+                      << "  --compat-whitelist <ints>  Comma-separated extra accepted compat projections (default: none)\n"
                       << "  --world-journal <file>    Epoch tombstone journal for cross-restart cell isolation (default: off)\n"
                       << "  --assign-spaces <ids>      Comma-separated Space pool to assign to registered cells,\n"
                          "                             each entry <id> or <id>:<needs-bits> (default: off)\n"

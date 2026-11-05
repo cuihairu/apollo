@@ -817,7 +817,7 @@ private:
                                     std::size_t size) {
         std::vector<wire::FieldValue> fields;
         if (!wire::decode_payload(id_of(MsgId::cell_register_request), data, size, fields)
-            || fields.size() != 10 || on_cell_register_ == nullptr) {
+            || fields.size() != 11 || on_cell_register_ == nullptr) {
             ++rejected_;
             return;
         }
@@ -832,6 +832,7 @@ private:
         req.load = static_cast<std::int32_t>(fields[7].integer);
         req.drain_state = static_cast<std::int32_t>(fields[8].integer);
         req.ready = fields[9].integer != 0;
+        req.credential = fields[10].text;
         on_cell_register_(peer, req);
     }
 

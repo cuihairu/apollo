@@ -56,6 +56,22 @@ struct WorldAppConfig {
     // 时无差；cell 全停发 30s 后摘除是缺省策略）。
     std::uint64_t cellExpiryMs = 30000;
 
+    // 混编兼容范围白名单（960 版本/兼容裁决切片，L109 兼容范围白名单面）：
+    // 兼容范围白名单——cell 声明的 960 compat 投影落在「本进程投影 ∪ 白名单」
+    // 内才受理（§4.3「World 验证所属关系、版本和身份」的版本面；升级/混编
+    // 期间允许声明旧版投影的 cell 与新版 World 并存）。空 = 仅接受本进程投影
+    //（现状语义：声明值须等于 contract_compat_projection() 才受理，否则拒
+    // 961 code 5）。白名单条目为契约 schema 的 FNV-1a 投影值（与 960 compat
+    // 同口径），非 0；0 条目忽略（未声明/不可验证语义不变）。
+    std::vector<std::int64_t> compatWhitelist;
+
+    // 启动凭据自证（L109 认证凭据面，manager 侧）：cell 注册（960）时自报
+    // 的 credential 须逐字节等于本值才受理——World spawn 子进程时注入的
+    // 启动凭据源，拒未持凭据/错凭据的 cell（伪造注册）。空 = 认证关（同
+    // 944/952/956 裸帧受理惯例；任何凭据值均可，含未声明）。凭据不进可
+    // 公开日志；配置非空而 cell 未上报 = 拒 961 code 6。
+    std::string registerToken;
+
     // 代次墓碑日志（L101 管理日志切片，manager 侧）：append-only 文本行
     // `cell_id|start_epoch`，装载取每 cell 最大值重建水位。空 = 关（现状
     // 内存水位，重启忘却）；配置即受理时追加落盘，旧执行端隔离跨重启成立。

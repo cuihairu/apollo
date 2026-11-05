@@ -220,8 +220,9 @@ struct CellEnd {
                        std::uint64_t start_epoch, const std::string& host,
                        std::int32_t port, std::int32_t capabilities,
                        std::int64_t compat, std::int32_t load,
-                       std::int32_t drain_state, bool ready) {
-        std::vector<wire::FieldValue> f(10);
+                       std::int32_t drain_state, bool ready,
+                       const std::string& credential = "") {
+        std::vector<wire::FieldValue> f(11);
         f[0].integer = static_cast<std::int64_t>(request_id);
         f[1].integer = static_cast<std::int64_t>(cell_id);
         f[2].integer = static_cast<std::int64_t>(start_epoch);
@@ -232,6 +233,7 @@ struct CellEnd {
         f[7].integer = load;
         f[8].integer = drain_state;
         f[9].integer = ready ? 1 : 0;
+        f[10].text = credential;
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return false;
@@ -244,7 +246,7 @@ struct CellEnd {
 
     // 残帧：合法 960 载荷截断（decode 必败 → 服务端拒收计数）。
     bool send_truncated_register(std::uint64_t request_id) {
-        std::vector<wire::FieldValue> f(10);
+        std::vector<wire::FieldValue> f(11);
         f[0].integer = static_cast<std::int64_t>(request_id);
         f[1].integer = 5;
         f[2].integer = 1;
@@ -255,6 +257,7 @@ struct CellEnd {
         f[7].integer = 10;
         f[8].integer = 0;
         f[9].integer = 1;
+        f[10].text = "";
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kRegisterRequestId, f, payload)) {
             return false;
@@ -330,9 +333,10 @@ bool register_roundtrip(CellEnd& cell, std::uint64_t request_id, std::uint64_t c
                         std::int32_t port, std::int32_t capabilities, std::int32_t load,
                         std::int32_t drain_state, bool ready, RegisterReply& out,
                         std::int64_t compat = world_app::contract_compat_projection(),
+                        const std::string& credential = "",
                         int timeout_ms = 5000) {
     if (!cell.send_register(request_id, cell_id, start_epoch, host, port, capabilities,
-                            compat, load, drain_state, ready)) {
+                            compat, load, drain_state, ready, credential)) {
         return false;
     }
     const auto deadline = std::chrono::steady_clock::now() +
@@ -528,7 +532,7 @@ bool test_cell_register_invalid_and_reserved() {
     // request_id = 0 保留：无回执、无登记（500ms 窗口判负）
     RegisterReply r;
     TEST_ASSERT(!register_roundtrip(cell, 0, 9, 1, "127.0.0.1", 9201, 1, 10, 0, true, r,
-                                    world_app::contract_compat_projection(), 500),
+                                    world_app::contract_compat_projection(), "", 500),
                 "request_id 0 silent");
     TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
 
@@ -1285,6 +1289,124 @@ bool test_cell_register_compat_adjudication() {
     reg = server.world->find_cell_registration(62);
     TEST_ASSERT(reg != nullptr && reg->start_epoch == 5,
                 "registration not downgraded by stale wrong-compat request");
+
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// L109 认证凭据面：World config.registerToken 非空时，cell 上报的 credential
+// 须逐字节匹配才受理（拒错凭据/未自证 = code 6）；空配置 = 认证关（任何值
+// 均可）。凭据不落可公开日志（detail 只给布尔面）。
+bool test_cell_register_credential() {
+    std::cout << "Running: test_cell_register_credential..." << std::endl;
+    WorldEnd server;
+    server.config.registerToken = "spawn-secret-1";
+    TEST_ASSERT(server.start(130), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell), "cell dialed");
+    RegisterReply r;
+
+    // 未自证（credential 空，World 配置非空）：拒 code 6，不登记
+    TEST_ASSERT(
+        register_roundtrip(cell, 9951, 71, 1, "127.0.0.1", 9221, 1, 10, 0, true, r),
+        "missing-credential reply arrived");
+    TEST_ASSERT(!r.accepted, "missing credential rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedCredential,
+                "missing credential code 6");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
+
+    // 错凭据：拒 code 6，不登记
+    TEST_ASSERT(
+        register_roundtrip(cell, 9952, 71, 1, "127.0.0.1", 9221, 1, 10, 0, true, r,
+                           world_app::contract_compat_projection(), "wrong-secret"),
+        "wrong-credential reply arrived");
+    TEST_ASSERT(!r.accepted, "wrong credential rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedCredential,
+                "wrong credential code 6");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "still no registration");
+
+    // 匹配凭据：受理 code 1，登记
+    TEST_ASSERT(
+        register_roundtrip(cell, 9953, 71, 1, "127.0.0.1", 9221, 1, 10, 0, true, r,
+                           world_app::contract_compat_projection(), "spawn-secret-1"),
+        "matching-credential reply arrived");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "matching credential accepted");
+    TEST_ASSERT(server.world->registered_cell_count() == 1, "registration recorded");
+
+    // 认证关（World 未配 token）：任何凭据值均可（含空）
+    server.stop();
+    g_replies = nullptr;
+    WorldEnd server2;
+    TEST_ASSERT(server2.start(131), "auth-off world started");
+    CellEnd cell2;
+    TEST_ASSERT(dial_cell(server2, cell2), "auth-off cell dialed");
+    std::map<std::uint64_t, RegisterReply> replies2;
+    g_replies = &replies2;
+    RegisterReply r2;
+    TEST_ASSERT(
+        register_roundtrip(cell2, 9954, 72, 1, "127.0.0.1", 9222, 1, 10, 0, true, r2,
+                           world_app::contract_compat_projection(), ""),
+        "auth-off reply arrived");
+    TEST_ASSERT(r2.accepted, "auth-off accepts empty credential");
+    TEST_ASSERT(
+        register_roundtrip(cell2, 9955, 73, 1, "127.0.0.1", 9223, 1, 10, 0, true, r2,
+                           world_app::contract_compat_projection(), "any"),
+        "auth-off any-credential reply arrived");
+    TEST_ASSERT(r2.accepted, "auth-off accepts any credential");
+
+    g_replies = nullptr;
+    server2.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// L109 兼容范围白名单：World config.compatWhitelist 非空时，cell 声明的
+// compat 落在「本进程投影 ∪ 白名单」内才受理；空 = 仅本进程投影（现状）。
+bool test_cell_register_compat_whitelist() {
+    std::cout << "Running: test_cell_register_compat_whitelist..." << std::endl;
+    WorldEnd server;
+    const std::int64_t projection = world_app::contract_compat_projection();
+    // 白名单含一个旧版投影（非本进程投影）
+    const std::int64_t legacy = projection + 1000;
+    server.config.compatWhitelist = {legacy};
+    TEST_ASSERT(server.start(132), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell), "cell dialed");
+    RegisterReply r;
+
+    // 白名单外（非本进程投影，非白名单）：拒 code 5
+    TEST_ASSERT(
+        register_roundtrip(cell, 9961, 81, 1, "127.0.0.1", 9231, 1, 10, 0, true, r,
+                           projection + 2000),
+        "outside-whitelist reply arrived");
+    TEST_ASSERT(!r.accepted, "outside whitelist rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedIncompatible,
+                "outside whitelist code 5");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
+
+    // 白名单内（旧版投影）：受理，登记保留声明值
+    TEST_ASSERT(
+        register_roundtrip(cell, 9962, 81, 1, "127.0.0.1", 9231, 1, 10, 0, true, r,
+                           legacy),
+        "whitelist reply arrived");
+    TEST_ASSERT(r.accepted, "whitelist compat accepted");
+    const auto* reg = server.world->find_cell_registration(81);
+    TEST_ASSERT(reg != nullptr && reg->compat == legacy, "legacy compat recorded");
+
+    // 本进程投影仍受理（白名单是并集，不替换）
+    TEST_ASSERT(
+        register_roundtrip(cell, 9963, 82, 1, "127.0.0.1", 9232, 1, 10, 0, true, r,
+                           projection),
+        "projection reply arrived");
+    TEST_ASSERT(r.accepted && r.code == world_app::kCellRegisterAccepted,
+                "projection still accepted");
 
     g_replies = nullptr;
     server.stop();
@@ -2690,6 +2812,8 @@ int main() {
                     && test_space_assignment_load_balance()
                     && test_space_assignment_capability_filter()
                     && test_cell_register_compat_adjudication()
+                    && test_cell_register_credential()
+                    && test_cell_register_compat_whitelist()
                     && test_cell_retire_and_reclaim()
                     && test_cell_retire_management_command()
                     && test_production_client_space_assign_listener()

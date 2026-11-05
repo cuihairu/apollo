@@ -61,9 +61,15 @@ struct CellRegisterConfig {
     std::uint64_t authority_epoch = 0;
     // 声明契约兼容投影（960 版本/兼容批）：0 = 缺省取本进程
     // contract_compat_projection()。非 0 = 显式声明值（e2e 注错缝同
-    // authority_epoch 惯例；未来混编白名单协商的消费面）。World 裁决
-    // 声明值须与其本进程投影同值，不符/未声明拒 961 code 5。
+    // authority_epoch 惯例）。World 裁决声明值须落在「本进程投影 ∪
+    // config.compatWhitelist」内才受理（L109 兼容范围白名单面），不符/
+    // 未声明拒 961 code 5。
     std::int64_t declared_compat = 0;
+    // 启动凭据自证（L109 认证凭据面；spawn 凭据源）：World spawn 子进程时
+    // 经独立运行目录/环境注入，cell 启动读取并随 960 上报——World 配置
+    // registerToken 非空时逐字节匹配才受理。空 = 认证关（World 未配 token
+    // 时任何凭据值均可；配置非空而本字段空 = 拒 961 code 6）。
+    std::string credential;
 };
 
 // 分配记录（962 cell_space_assign 应用面）：监听器只在版本前进时触发一次

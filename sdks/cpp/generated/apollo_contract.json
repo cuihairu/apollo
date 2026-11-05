@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "a5b41713831f0de6b1357605c3032d00cc8ec0c72ec91b6be0f9c47d90412ff3",
+  "schema_hash": "21d9e237a4cdf5f376d4f42144fa5b6ab8f04f910ed9d20cbf29120e6402985e",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "550a003c51cb183994f1f124b6d8bbd8b0126bc3d47aa5acdff667bb39bcfecd",
+  "internal_hash": "e9f7377ff2d1be93f3f4d18f3e131bb27a110ead8a3527bded2c5e88d6d727b0",
   "contract_version": 3,
   "aliases": [
     {
@@ -3393,9 +3393,15 @@
           "type": "bool",
           "wire_type": "bool",
           "desc": "就绪（1=可分配；进程存活不等于可分配）"
+        },
+        {
+          "name": "credential",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "启动凭据自证（World spawn 子进程时经独立运行目录/环境注入，cell 启动读取并随 960 上报；World config.registerToken 非空时逐字节匹配才受理，空 = 认证关。凭据不落可公开日志；0 长度与配置非空即拒）"
         }
       ],
-      "desc": "cell 执行进程注册请求（cell→World M1 控制受理面；声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——L101 注册首切片，认证凭据面按 world-cell-management 差距表另行挂账，本面裸帧受理同 944/952/956 惯例）"
+      "desc": "cell 执行进程注册请求（cell→World M1 控制受理面；声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——L101 注册首切片；认证凭据面=启动凭据自证（spawn 凭据源，L109 认证凭据面）；World 配置 registerToken 非空时凭据须逐字节匹配才受理，空 = 认证关（同 944/952/956 裸帧惯例））"
     },
     {
       "id": 961,
