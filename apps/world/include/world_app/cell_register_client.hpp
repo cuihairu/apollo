@@ -145,8 +145,9 @@ using WorldDrainListener = std::function<void(const CellWorldDrainRequest&)>;
 using IntentPayloadListener = std::function<void(const std::vector<std::uint8_t>&)>;
 
 // 失联冻结原因（L101 失联策略切片）：kGraceExpired——链路 down 超宽限窗
-//（link_grace_ms）；kAdjudicationRejected——961 code 3（旧代次被替换，
-// World 已隔离本执行端——本端自冻结，不得继续产生权威副作用）。
+//（link_grace_ms）；kAdjudicationRejected——961 code 3/5/6（旧代次被替换/
+// 契约不兼容/凭据失配，World 已隔离本执行端——本端自冻结，不得继续产生
+// 权威副作用）。
 enum class LinkFreezeReason {
     kGraceExpired,
     kAdjudicationRejected,
@@ -264,10 +265,11 @@ public:
     virtual std::size_t space_assign_count() const { return 0; }
 
     // 失联冻结监听（L101 失联策略切片）：链路 down 超 link_grace_ms 触发
-    // kGraceExpired 一次/失联期；961 code 3 触发 kAdjudicationRejected（旧
-    // 执行端自隔离）。readmit：961 accepted（code 1/2，World 重新受理本端）
-    // 解冻——链路恢复本身不解冻（§4 不能自行解冻，复核以裁决为准）。均
-    // 泵上下文锁外同步回调（同 962 纪律——不得重入 pump/state）。
+    // kGraceExpired 一次/失联期；961 code 3/5/6 触发 kAdjudicationRejected
+    //（旧代次被替换/契约不兼容/凭据失配 = World 已隔离本执行端，自冻结
+    // 停止权威副作用）。readmit：961 accepted（code 1/2，World 重新受理
+    // 本端）解冻——链路恢复本身不解冻（§4 不能自行解冻，复核以裁决为准）。
+    // 均泵上下文锁外同步回调（同 962 纪律——不得重入 pump/state）。
     virtual void set_link_freeze_listener(LinkFreezeListener fn) { (void)fn; }
     virtual void set_readmit_listener(ReadmitListener fn) { (void)fn; }
 };

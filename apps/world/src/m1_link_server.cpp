@@ -816,8 +816,23 @@ private:
     void handle_cell_register_frame(const std::string& peer, const std::uint8_t* data,
                                     std::size_t size) {
         std::vector<wire::FieldValue> fields;
-        if (!wire::decode_payload(id_of(MsgId::cell_register_request), data, size, fields)
-            || fields.size() != 11 || on_cell_register_ == nullptr) {
+        if (on_cell_register_ == nullptr) {
+            ++rejected_;
+            return;
+        }
+        // 960 线格式向后兼容（L109 认证凭据面收口）：新版帧 11 字段（第 11 =
+        // credential）。旧版 cell 以 10 字段旧格式（无 credential 字段）注册
+        // 时，decode 层按旧字段数剥离——credential 视为未自证（空），由
+        // 受理面按 registerToken 配置裁决（配置非空即拒 code 6）。混编期间
+        // 的旧 cell 只有显式声明白名单投影才能通过兼容裁决（见 config.hpp
+        // compatWhitelist），不因旧格式静默丢弃。
+        const bool full = wire::decode_payload(
+            id_of(MsgId::cell_register_request), data, size, fields);
+        const bool ok = full ? true
+                             : wire::decode_payload_fields(
+                                   id_of(MsgId::cell_register_request), data, size,
+                                   fields, 10);
+        if (!ok) {
             ++rejected_;
             return;
         }
@@ -832,7 +847,7 @@ private:
         req.load = static_cast<std::int32_t>(fields[7].integer);
         req.drain_state = static_cast<std::int32_t>(fields[8].integer);
         req.ready = fields[9].integer != 0;
-        req.credential = fields[10].text;
+        req.credential = full ? fields[10].text : std::string{};
         on_cell_register_(peer, req);
     }
 

@@ -227,8 +227,21 @@ bool encode_payload(std::uint16_t msg_id, const std::vector<FieldValue>& fields,
     if (meta == nullptr || fields.size() != meta->fieldCount) {
         return false;
     }
+    return encode_payload_fields(msg_id, fields, out, meta->fieldCount);
+}
+
+bool encode_payload_fields(std::uint16_t msg_id,
+                           const std::vector<FieldValue>& fields,
+                           std::vector<std::uint8_t>& out,
+                           std::size_t field_count) {
+    out.clear();
+    const auto* meta = find_msg(msg_id);
+    if (meta == nullptr || field_count > meta->fieldCount
+        || fields.size() != field_count) {
+        return false;
+    }
     out.reserve(64);
-    for (std::size_t i = 0; i < fields.size(); ++i) {
+    for (std::size_t i = 0; i < field_count; ++i) {
         if (!encode_field(meta->fields[i], fields[i], out)) {
             out.clear();
             return false;
@@ -263,14 +276,24 @@ bool decode_envelope(const std::uint8_t* data, std::size_t size, std::uint16_t& 
 
 bool decode_payload(std::uint16_t msg_id, const std::uint8_t* data, std::size_t size,
                     std::vector<FieldValue>& fields) {
-    fields.clear();
     const auto* meta = find_msg(msg_id);
     if (meta == nullptr) {
         return false;
     }
-    fields.resize(meta->fieldCount);
+    return decode_payload_fields(msg_id, data, size, fields, meta->fieldCount);
+}
+
+bool decode_payload_fields(std::uint16_t msg_id, const std::uint8_t* data,
+                           std::size_t size, std::vector<FieldValue>& fields,
+                           std::size_t field_count) {
+    fields.clear();
+    const auto* meta = find_msg(msg_id);
+    if (meta == nullptr || field_count > meta->fieldCount) {
+        return false;
+    }
+    fields.resize(field_count);
     std::size_t off = 0;
-    for (std::size_t i = 0; i < meta->fieldCount; ++i) {
+    for (std::size_t i = 0; i < field_count; ++i) {
         if (!decode_field(meta->fields[i].type, data, size, off, fields[i])) {
             fields.clear();
             return false;

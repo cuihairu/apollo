@@ -299,8 +299,9 @@ private:
         }
         // 裁决记账 + 失联复核（L101 失联切片）：受理（code 1/2）= World 重新
         // 认可本端 → 若曾冻结则触发解冻（链路恢复本身不解冻——复核以裁决
-        // 为准）；code 3（旧代次被替换）/ code 5（契约兼容投影不符）= World
-        // 已隔离本执行端 → 自冻结，不得继续产生权威副作用。监听器锁外回调。
+        // 为准）；code 3（旧代次被替换）/ code 5（契约兼容投影不符）/
+        // code 6（凭据失配）= World 已隔离本执行端 → 自冻结，不得继续产生
+        // 权威副作用。监听器锁外回调。
         const bool accepted = fields[1].integer != 0;
         const auto code = static_cast<std::int32_t>(fields[2].integer);
         LinkFreezeListener freeze_fn;
@@ -322,7 +323,8 @@ private:
                 readmit_fn = readmit_listener_;
             } else if (!accepted
                        && (code == kCellRegisterRejectedStaleEpoch
-                           || code == kCellRegisterRejectedIncompatible)
+                           || code == kCellRegisterRejectedIncompatible
+                           || code == kCellRegisterRejectedCredential)
                        && !freeze_signaled_) {
                 freeze_signaled_ = true;
                 state_.frozen = true;

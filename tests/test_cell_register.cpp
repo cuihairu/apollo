@@ -269,6 +269,33 @@ struct CellEnd {
                == link::SendCode::kAccepted;
     }
 
+    // 旧版 960 帧（10 字段，无 credential 第 11 字段）：向后兼容线格式。
+    bool send_register_legacy_10(std::uint64_t request_id, std::uint64_t cell_id,
+                                 std::uint64_t start_epoch, const std::string& host,
+                                 std::int32_t port, std::int32_t capabilities,
+                                 std::int64_t compat, std::int32_t load,
+                                 std::int32_t drain_state, bool ready) {
+        std::vector<wire::FieldValue> f(10);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = static_cast<std::int64_t>(cell_id);
+        f[2].integer = static_cast<std::int64_t>(start_epoch);
+        f[3].text = host;
+        f[4].integer = port;
+        f[5].integer = capabilities;
+        f[6].integer = compat;
+        f[7].integer = load;
+        f[8].integer = drain_state;
+        f[9].integer = ready ? 1 : 0;
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload_fields(kRegisterRequestId, f, payload, 10)) {
+            return false;
+        }
+        return manager->link("world")
+                   ->send(kRegisterRequestId, payload.data(), payload.size(),
+                          link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
     // 963 缩容命令（fleetctl 同口；op 字面量 = 963 契约词汇 1=begin 2=cancel）。
     bool send_retire(std::uint64_t request_id, std::int32_t op,
                      std::uint64_t cell_id) {
@@ -1361,6 +1388,152 @@ bool test_cell_register_credential() {
 
     g_replies = nullptr;
     server2.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 认证凭据面收口（L109）：960 线格式向后兼容 + 凭据裁决次序 + 自冻结语义。
+// 1) 旧版 10 字段帧（无 credential）在新版 World 上按旧投影受理——decode
+//    层不再静默丢弃（findings 收口：旧 cell 不因加字段被拒，兼容裁决由
+//    compatWhitelist 显式声明）。
+// 2) 凭据裁决置于代次之后：旧代次执行端凭据过期/轮换收 code 3（自隔离），
+//    不因 code 6 抢答失去隔离信号。
+// 3) code 6（凭据失配）触发 cell 侧自冻结（同 code 3/5 口径）。
+bool test_cell_register_credential_compat_legacy() {
+    std::cout << "Running: test_cell_register_credential_compat_legacy..."
+              << std::endl;
+    WorldEnd server;
+    server.config.registerToken = "spawn-secret-1";
+    TEST_ASSERT(server.start(133), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell), "cell dialed");
+    RegisterReply r;
+
+    // 旧版 10 字段帧 + 认证关（token 未配）：受理，登记（credential 视为空）。
+    // 本测试 server 已配 token，故先验证旧帧 + 认证开 → code 6（未自证）。
+    TEST_ASSERT(
+        cell.send_register_legacy_10(9960, 91, 1, "127.0.0.1", 9241, 1,
+                                     world_app::contract_compat_projection(),
+                                     10, 0, true),
+        "legacy 10-field frame sent");
+    // 认证开：旧帧 credential 为空 → code 6（不静默丢弃，显式驳回）
+    {
+        bool arrived = false;
+        const auto deadline = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds(5000);
+        while (std::chrono::steady_clock::now() < deadline) {
+            cell.pump();
+            std::lock_guard<std::mutex> lock(g_replies_mutex);
+            const auto it = replies.find(9960);
+            if (it != replies.end()) {
+                r = it->second;
+                arrived = true;
+                break;
+            }
+            std::this_thread::sleep_for(10ms);
+        }
+        TEST_ASSERT(arrived, "legacy 10-field reply arrived");
+    }
+    TEST_ASSERT(!r.accepted, "legacy frame rejected when auth on");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedCredential,
+                "legacy frame code 6 (missing credential)");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "no registration");
+
+    // 凭据裁决置于代次之后：先注册（高代次），再以旧代次 + 错凭据重注册 →
+    // 收 code 3（自隔离），不因 code 6 抢答。
+    TEST_ASSERT(
+        register_roundtrip(cell, 9961, 92, 5, "127.0.0.1", 9242, 1, 10, 0, true, r,
+                           world_app::contract_compat_projection(), "spawn-secret-1"),
+        "high-epoch valid credential accepted");
+    TEST_ASSERT(r.accepted, "high epoch accepted");
+    TEST_ASSERT(
+        register_roundtrip(cell, 9962, 92, 3, "127.0.0.1", 9243, 1, 10, 0, true, r,
+                           world_app::contract_compat_projection(), "wrong-secret"),
+        "stale-epoch wrong-credential reply arrived");
+    TEST_ASSERT(!r.accepted, "stale epoch rejected");
+    TEST_ASSERT(r.code == world_app::kCellRegisterRejectedStaleEpoch,
+                "stale epoch preempts credential code 6");
+    const auto* reg = server.world->find_cell_registration(92);
+    TEST_ASSERT(reg != nullptr && reg->start_epoch == 5, "epoch not downgraded");
+
+    // code 6 自冻结（cell 侧）：独立 client 配错凭据 → 冻结监听触发。
+    server.stop();
+    g_replies = nullptr;
+    WorldEnd server3;
+    server3.config.registerToken = "spawn-secret-1";
+    TEST_ASSERT(server3.start(134), "world restarted with token");
+    world_app::CellRegisterConfig cfg;
+    cfg.world_host = "127.0.0.1";
+    cfg.world_port = server3.world->m1Link().listenPort();
+    cfg.cell_id = 93;
+    cfg.advertise_host = "127.0.0.1";
+    cfg.advertise_port = 8807;
+    cfg.start_epoch = 1;
+    cfg.route_json = kRouteJson;
+    cfg.heartbeat_ms = 40;
+    cfg.credential = "wrong-secret";
+    std::atomic<int> freeze_fires = 0;
+    std::atomic<int> adjud_rejects = 0;
+    auto client = world_app::makeCellRegisterClient(cfg);
+    client->set_link_freeze_listener([&](world_app::LinkFreezeReason reason) {
+        ++freeze_fires;
+        if (reason == world_app::LinkFreezeReason::kAdjudicationRejected) {
+            ++adjud_rejects;
+        }
+    });
+    TEST_ASSERT(client->start(), "credential-reject client started");
+    TEST_ASSERT(wait_until([&] {
+                    client->pump(now_ms());
+                    return freeze_fires.load() >= 1;
+                }, 5000),
+                "freeze fired on credential rejection");
+    TEST_ASSERT(adjud_rejects == 1, "reason = adjudication rejected (code 6)");
+    TEST_ASSERT(client->state().frozen, "frozen state visible");
+    TEST_ASSERT(client->state().code == world_app::kCellRegisterRejectedCredential,
+                "code 6 recorded");
+    client->stop();
+    server3.stop();
+
+    // 旧版 10 字段帧 + 认证关（token 未配）：受理，登记（credential 视为空）。
+    // 证明 decode 层不再静默丢弃旧帧——旧 cell 在新版 World 上可注册，
+    // 兼容裁决由 compat 投影（此处 = 本进程投影）显式把关。
+    WorldEnd server4;
+    TEST_ASSERT(server4.start(135), "auth-off world started");
+    std::map<std::uint64_t, RegisterReply> replies4;
+    g_replies = &replies4;
+    CellEnd cell4;
+    TEST_ASSERT(dial_cell(server4, cell4), "auth-off cell dialed");
+    RegisterReply r4;
+    TEST_ASSERT(
+        cell4.send_register_legacy_10(9963, 94, 1, "127.0.0.1", 9244, 1,
+                                      world_app::contract_compat_projection(),
+                                      10, 0, true),
+        "legacy 10-field frame sent (auth off)");
+    {
+        bool arrived4 = false;
+        const auto deadline4 = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds(5000);
+        while (std::chrono::steady_clock::now() < deadline4) {
+            cell4.pump();
+            std::lock_guard<std::mutex> lock(g_replies_mutex);
+            const auto it = replies4.find(9963);
+            if (it != replies4.end()) {
+                r4 = it->second;
+                arrived4 = true;
+                break;
+            }
+            std::this_thread::sleep_for(10ms);
+        }
+        TEST_ASSERT(arrived4, "legacy 10-field reply arrived (auth off)");
+    }
+    TEST_ASSERT(r4.accepted, "legacy 10-field accepted when auth off");
+    const auto* reg4 = server4.world->find_cell_registration(94);
+    TEST_ASSERT(reg4 != nullptr && reg4->start_epoch == 1, "legacy frame recorded");
+    g_replies = nullptr;
+    server4.stop();
+
     std::cout << "  PASSED" << std::endl;
     return true;
 }
@@ -2813,6 +2986,7 @@ int main() {
                     && test_space_assignment_capability_filter()
                     && test_cell_register_compat_adjudication()
                     && test_cell_register_credential()
+                    && test_cell_register_credential_compat_legacy()
                     && test_cell_register_compat_whitelist()
                     && test_cell_retire_and_reclaim()
                     && test_cell_retire_management_command()

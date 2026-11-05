@@ -25,6 +25,23 @@
 namespace apollo {
 namespace net {
 
+#ifdef _WIN32
+// EventLoop 依赖 Winsock（WSAPoll/socket/recv/send）。测试目标仅引用
+// event_loop.o，http.o 的静态初始化不保证被链接，因此在本翻译单元内
+// 显式初始化/清理 Winsock，保证任何 EventLoop 使用者都能安全建 socket。
+namespace {
+struct WinSockGuard {
+    WinSockGuard() {
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2, 2), &wsaData);
+    }
+    ~WinSockGuard() {
+        WSACleanup();
+    }
+} g_winSockGuard;
+}
+#endif
+
 //==============================================================================
 // 线程本地事件循环
 //==============================================================================
@@ -57,9 +74,31 @@ class net::EventLoop::Impl {
 public:
     explicit Impl(EventLoop& outer) : outer_(outer), running_(false), nextTimerId_(1) {
 #ifdef _WIN32
-        // Windows 使用管道进行唤醒
-        SECURITY_ATTRIBUTES sa = {sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
-        CreatePipe(&wakeupRead_, &wakeupWrite_, &sa, 0);
+        // Windows 唤醒必须用真实 Winsock socket：WSAPoll 只接受 SOCKET，
+        // 若把 CreatePipe 的 HANDLE 强转后传入，是非法 socket → UB/SEGFAULT
+        // （CI 41907458774 EventLoopReentrantTests 实证）。回环 TCP pair 是
+        // 最小可轮询对：读端 = accept，写端 = connect。
+        SOCKET ls = INVALID_SOCKET, conn = INVALID_SOCKET, acc = INVALID_SOCKET;
+        SOCKADDR_IN addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = 0;
+        int alen = static_cast<int>(sizeof addr);
+        ls = ::socket(AF_INET, SOCK_STREAM, 0);
+        if (ls != INVALID_SOCKET &&
+            ::bind(ls, reinterpret_cast<SOCKADDR*>(&addr), sizeof addr) == 0 &&
+            ::getsockname(ls, reinterpret_cast<SOCKADDR*>(&addr), &alen) == 0 &&
+            ::listen(ls, 1) == 0) {
+            conn = ::socket(AF_INET, SOCK_STREAM, 0);
+            if (conn != INVALID_SOCKET &&
+                ::connect(conn, reinterpret_cast<SOCKADDR*>(&addr), sizeof addr) == 0) {
+                acc = ::accept(ls, nullptr, nullptr);
+            }
+        }
+        if (ls != INVALID_SOCKET) ::closesocket(ls);
+        if (conn != INVALID_SOCKET && acc == INVALID_SOCKET) ::closesocket(conn);
+        wakeupRead_ = acc;
+        wakeupWrite_ = conn;
 #else
         // Unix 使用 pipe
         int pipefds[2];
@@ -74,8 +113,8 @@ public:
 
     ~Impl() {
 #ifdef _WIN32
-        if (wakeupRead_) CloseHandle(wakeupRead_);
-        if (wakeupWrite_) CloseHandle(wakeupWrite_);
+        if (wakeupRead_ != INVALID_SOCKET) ::closesocket(wakeupRead_);
+        if (wakeupWrite_ != INVALID_SOCKET) ::closesocket(wakeupWrite_);
 #else
         if (wakeupRead_ >= 0) ::close(wakeupRead_);
         if (wakeupWrite_ >= 0) ::close(wakeupWrite_);
@@ -174,8 +213,7 @@ public:
                 if (i == 0) {
                     char buf[128];
 #ifdef _WIN32
-                    DWORD bytesRead;
-                    ReadFile(wakeupRead_, buf, sizeof(buf), &bytesRead, nullptr);
+                    (void)::recv(wakeupRead_, buf, sizeof(buf), 0);
 #else
                     (void)::read(wakeupRead_, buf, sizeof(buf));  // Return value intentionally ignored for wakeup
 #endif
@@ -222,8 +260,7 @@ public:
     void wakeup() {
         char c = 1;
 #ifdef _WIN32
-        DWORD bytesWritten;
-        WriteFile(wakeupWrite_, &c, 1, &bytesWritten, nullptr);
+        (void)::send(wakeupWrite_, &c, 1, 0);
 #else
         (void)::write(wakeupWrite_, &c, 1);  // Return value intentionally ignored for wakeup
 #endif
@@ -366,11 +403,7 @@ private:
     }
 
     socket_t wakeupFd() const {
-#ifdef _WIN32
-        return reinterpret_cast<socket_t>(wakeupRead_);
-#else
         return wakeupRead_;
-#endif
     }
 
     EventLoop& outer_;
@@ -378,13 +411,8 @@ private:
     std::atomic<bool> running_;
     std::thread::id loopThreadId_;
 
-#ifdef _WIN32
-    HANDLE wakeupRead_ = nullptr;
-    HANDLE wakeupWrite_ = nullptr;
-#else
-    int wakeupRead_ = -1;
-    int wakeupWrite_ = -1;
-#endif
+    socket_t wakeupRead_ = static_cast<socket_t>(-1);
+    socket_t wakeupWrite_ = static_cast<socket_t>(-1);
 
     mutable std::mutex mutex_;
     std::unordered_map<socket_t, SocketInfo> sockets_;

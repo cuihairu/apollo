@@ -19,6 +19,21 @@
 namespace world_app {
 
 namespace {
+
+// 常量时间字符串相等（L109 认证凭据面）：凭据校验不得经计时侧信道泄
+// 露首字节差异——长度先比（泄不泄长度），再全量异或累积不早退。OpenSSL
+// CRYPTO_memcmp 口径同 apps/interfaces/src/callback_verifier.cpp:73。
+bool constant_time_string_equal(const std::string& a, const std::string& b) {
+    bool equal = a.size() == b.size();
+    unsigned char mismatch = 0;
+    const std::size_t span = a.size() < b.size() ? a.size() : b.size();
+    for (std::size_t i = 0; i < span; ++i) {
+        mismatch |= static_cast<unsigned char>(a[i]) ^
+                    static_cast<unsigned char>(b[i]);
+    }
+    return equal && mismatch == 0;
+}
+
 // 库面日志出口：cat=world_app（§5.1 cat= 检索键；主程已接文件面）
 apollo::core::log::Logger& worldLog() {
     return *apollo::core::log::global_log_manager().createLogger("world_app");
@@ -268,21 +283,15 @@ void WorldApp::onCellRegister(const std::string& peer,
         reply(false, kCellRegisterRejectedInvalid, "invalid cell_id or start_epoch");
         return;
     }
-    // 启动凭据自证（L109 认证凭据面）：World config.registerToken 非空时，
-    // cell 上报的 credential 须逐字节等于该值才受理——spawn 注入的凭据源
-    // 拒未持凭据/错凭据的伪造注册。空配置 = 认证关（任何值均可，含未声明，
-    // 同 944/952/956 裸帧惯例）。凭据不落可公开日志（detail 只给布尔面）。
-    if (!config_.registerToken.empty() && request.credential != config_.registerToken) {
-        reply(false, kCellRegisterRejectedCredential, "register credential mismatch");
-        return;
-    }
     const auto now_ms = static_cast<std::uint64_t>(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch())
             .count());
     auto it = cellRegistrations_.find(request.cell_id);
     // 代次裁决先于兼容裁决（code 3 先于 code 5）：旧代次复活凭 code 3 自冻
-    // 结隔离（客户端语义）——若被 code 5 抢答，旧执行端失去自隔离信号
+    // 结隔离（客户端语义）——若被 code 5/code 6 抢答，旧执行端失去自隔离
+    // 信号。凭据裁决置于代次之后：旧代次执行端凭据过期/轮换仍收 code 3
+    //（自隔离），不因 code 6 抢答丢失隔离语义。
     if (it == cellRegistrations_.end()) {
         // 旧执行端隔离（L101 隔离切片）：代次水位——摘除忘却登记，但本进程
         // 曾受理的更高代次仍拒旧代次复活（旧端不能借摘除冒认首注册；同代次
@@ -298,6 +307,17 @@ void WorldApp::onCellRegister(const std::string& peer,
         // 登记保持新代次；旧执行端隔离随 L101 后续切片）
         reply(false, kCellRegisterRejectedStaleEpoch,
               "stale epoch: registered=" + std::to_string(it->second.start_epoch));
+        return;
+    }
+    // 启动凭据自证（L109 认证凭据面）：World config.registerToken 非空时，
+    // cell 上报的 credential 须逐字节等于该值才受理——spawn 注入的凭据源
+    // 拒未持凭据/错凭据的伪造注册。空配置 = 认证关（任何值均可，含未声明，
+    // 同 944/952/956 裸帧惯例）。凭据不落可公开日志（detail 只给布尔面）。
+    // 常量时间比较：非定长 std::string operator!= 首字节不同即短路，可经
+    // 计时侧信道逐字节枚举（见 constant_time_string_equal）。
+    if (!config_.registerToken.empty()
+        && !constant_time_string_equal(request.credential, config_.registerToken)) {
+        reply(false, kCellRegisterRejectedCredential, "register credential mismatch");
         return;
     }
     // 契约兼容裁决（960 版本/兼容切片 + L109 兼容范围白名单面，§4.3「World

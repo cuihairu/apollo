@@ -69,7 +69,9 @@ struct WorldAppConfig {
     // 的 credential 须逐字节等于本值才受理——World spawn 子进程时注入的
     // 启动凭据源，拒未持凭据/错凭据的 cell（伪造注册）。空 = 认证关（同
     // 944/952/956 裸帧受理惯例；任何凭据值均可，含未声明）。凭据不进可
-    // 公开日志；配置非空而 cell 未上报 = 拒 961 code 6。
+    // 公开日志；配置非空而 cell 未上报 = 拒 961 code 6。传递通道为环境
+    // 变量 APOLLO_REGISTER_TOKEN（不进命令行 /proc cmdline——同机进程可读
+    // 命令行，且 machined exec 失败会把完整命令行打到 stderr）。
     std::string registerToken;
 
     // 代次墓碑日志（L101 管理日志切片，manager 侧）：append-only 文本行

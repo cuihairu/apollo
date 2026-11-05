@@ -47,10 +47,26 @@ const apollo::contract::gen::MsgMeta* find_msg(std::uint16_t msg_id);
 bool encode_payload(std::uint16_t msg_id, const std::vector<FieldValue>& fields,
                     std::vector<std::uint8_t>& out);
 
+// 按字段表编码载荷前缀（前 field_count 个字段）：用于向后兼容「旧字段数」
+// 线格式（如 960 第 11 字段 credential 之前的 10 字段旧 cell 帧）。field_count
+// 须 ≤ 表字段数且 == fields.size()。失败返回 false 且 out 清空。
+bool encode_payload_fields(std::uint16_t msg_id,
+                           const std::vector<FieldValue>& fields,
+                           std::vector<std::uint8_t>& out,
+                           std::size_t field_count);
+
 // 载荷解码（id 已剥出后的部分；归一于 Dispatcher Handler 的入参视图）。
 // false = id 不在契约 / 字段级非法 / 尾部余字节。
 bool decode_payload(std::uint16_t msg_id, const std::uint8_t* data, std::size_t size,
                     std::vector<FieldValue>& fields);
+
+// 载荷解码（前 field_count 个字段，须恰好消费全部字节）：接纳向后兼容的
+// 「旧字段数」帧（同 encode_payload_fields 对偶——960 credential 前的 10
+// 字段旧 cell 帧）。field_count 须 ≤ 表字段数。false = id 不在契约 / 字段级
+// 非法 / 余字节。
+bool decode_payload_fields(std::uint16_t msg_id, const std::uint8_t* data,
+                           std::size_t size, std::vector<FieldValue>& fields,
+                           std::size_t field_count);
 
 // u16 LE id + 载荷（业务帧载荷信封的线形视图，与 decode_envelope 对偶）。
 // 注意：InterServerLink::send(msg_id, payload, …) 自封此信封——传裸载荷，
