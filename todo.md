@@ -195,11 +195,17 @@
 - [x] 审核发现：§4.1 仍写 `world` 的 `--role` 接受 `manager|cell`，但实现已显式拒绝 `cell`，中英文档均与入口契约不符（docs/zh/design/world-cell-management.md:88）。
   - 证据：测试 10/10
 - [x] 审核发现：解析器注释仍承诺重复 `--role` 后到覆盖，但实现遇到先出现的 `cell` 会立即失败，且测试删除了 `--role=cell --role=manager` 的覆盖场景（apps/world/include/world_app/role_options.hpp:13）。
+  - 证据：commit 70e20cbf；WorldRoleTests 1/1
 - [x] 审核发现：`--role` 缺值错误仍提示 `(manager|cell)`，而 `cell` 已被拒绝，错误信息会误导用户传入必失败的取值（apps/world/include/world_app/role_options.hpp:26）。
+  - 证据：commit 70e20cbf；apps/world/include/world_app/role_options.hpp:26；WorldRoleTests 1/1
 - [x] 审核发现：`world --role=cell` 委托已删除（role_options.hpp:33-35 显式拒绝、main.cpp:67-70 exit 2），但 docs/zh/design/bigworld-apollo-mapping.md:13、:85 与 docs/zh/en/design/bigworld-apollo-mapping.md:13、:85 仍称「world --role=cell 委托同一执行端运行体 / delegates to the same executor body」，与实现不符——本批只同步了 world-cell-management.md，漏改此档（docs/zh/design/bigworld-apollo-mapping.md:13）。
+  - 证据：commit 328f17e9；docs/zh/design/bigworld-apollo-mapping.md:13
 - [x] 审核发现：同上——docs/zh/Directory_Structure.md:34 与 docs/zh/en/Directory_Structure.md:34 仍写「world --role=cell 兼容委托同一执行端运行体 / delegates to the same executor body」，且把 cell 专用 flag `--link-grace-ms`（及 register 三件套）列在 `world` 行——world 已删解析拒收（main.cpp 移除四 flag），与入口契约不符（docs/zh/Directory_Structure.md:34）。
+  - 证据：commits 70e20cbf,328f17e9；docs/zh/Directory_Structure.md:34
 - [x] 审核发现：同上——docs/zh/architecture/adr.md:59 与 docs/zh/en/architecture/adr.md:59 仍写「增加已讨论的 cell 执行职责（world 二进制 `--role=cell`）」，而 world 已不再提供 cell 角色（cellServer 独立入口承担），ADR 与实现不符（docs/zh/architecture/adr.md:59）。
+  - 证据：commit 328f17e9；docs/zh/architecture/adr.md:59
 - [x] 审核发现：同上——docs/public/architecture/system-zh.svg:13、:58、system-zh-mobile.svg:10、:82、system-en.svg:13、:58、system-en-mobile.svg:10、:82 仍以「--role=cell」标注 cell 执行入口已落地，实际执行端为 cellServer 独立入口（docs/public/architecture/system-zh.svg:13）。
+  - 证据：commit 328f17e9；现图迁移至 docs/public/images/architecture-{zh,en}[,-mobile].svg 且标注 cellServer
 - [x] 审核发现：cell_app.hpp L108 新块（:149-152）定义「执行进程身份 = 本进程注册到所属 World 的逻辑 cell ID（config.cellId）」，相邻 L99 块（:163-164）仍定义「执行进程身份 = 本进程（worldId；注册后由 worldServer 分配）」——同文件两处对「执行进程身份」给出不同定义；且两处均称 World「注册后分配」身份，实际为执行端 `--cell-id` 自报、World 仅回显（world_app.cpp:560 sendCellRegisterReply 传 request.cell_id；cell_register_client.cpp:335 自比 config_.cell_id），World 不分配（apps/world/include/world_app/cell_app.hpp:163）。
   - 证据：测试 15/15
 - [x] 审核发现：partition_id_of_space（cell_app.hpp:154-156）经 resolve_scene_id 对未注册 space 静默回落默认 scene 的 partition（cell_app.cpp:1219-1224 回落 defaultSceneId_），新注释块未注明该回落——与 hosts_space（:189-191）「回落默认语义不适合作持有判据」的既有告诫相反，观测面把「未注册空间」与「默认分区」混同；测试仅覆盖已注册 space 7，未覆盖未知空间边界（apps/world/include/world_app/cell_app.hpp:154）。
@@ -207,7 +213,9 @@
 - [x] 审核发现：tests/test_cell_app.cpp:1157-1158 新增断言 `partition_id_of_space(999)==default_scene_id()` 在未调用 `cell.start()` 时求值，`ensureDefaultScene()` 未执行、`defaultSceneId_` 保持 0，断言退化为 0==0 恒真，未实际验证「未知空间回落默认分区」语义（apps/world/include/world_app/cell_app.hpp:146）。
   - 证据：测试 15/15
 - [x] 审核发现：tests/world_cell_independent_smoke.py:147-148 machined 断言仅检查已捕获的三进程输出（cell_out 在 start() 返回后不再增量读取），无法证明 machined 未启动/未参与——若 machined 以独立进程运行其输出不在任何缓冲中，弱于文档声称的「machined 不启动、不参与」（tests/world_cell_independent_smoke.py:147）。
+  - 证据：commit e26c9869；tests/world_cell_independent_smoke.py:142-151,195,462-475；WorldCellIndependentSmoke 1/1
 - [x] 审核发现：docs/zh/Directory_Structure.md:34（及 docs/zh/en/Directory_Structure.md:34）把 `--add-space` 仅归 cellServer 执行端入口，但 apps/world/src/main.cpp:150 显示 world manager 入口同样解析并生效 `--add-space`（经内嵌 CellApp 的 config.spaces，cell_app.cpp:154 启动窗创建），实现与文档不符（docs/zh/Directory_Structure.md:34）。
+  - 证据：commit 9de9058a；docs/zh/Directory_Structure.md:34；apps/world/src/main.cpp:191
 - [x] 审核发现：tests/world_cell_independent_smoke.py:35-38 `free_port()` 串行取空闲端口后立即关闭 socket，子进程 bind 前存在 TOCTOU 窗口，端口可能被抢占致测试偶发失败；且 CMake 未设 RUN_SERIAL（apps/world/CMakeLists.txt:140），并行 ctest 下端口冲突风险更高（tests/world_cell_independent_smoke.py:35）。
   - 证据：测试 3/3
 - [x] 审核发现：`--service-register-port` 帮助文本自相矛盾——同串写「0 = kernel assigned」与「default: 0 = off, not assembled」，而代码在 0 时仍装配（内核分配），「off」表述已不成立（apps/login/src/main.cpp:120）。
@@ -221,6 +229,7 @@
 - [x] 审核发现：test_id_domains_are_separate 在 cell.start() 后从测试线程读取 default_scene_id()/partition_id_of_space()（defaultSceneId_ 非原子、spaceToScene_ 映射，注释声明为内核线程上下文/单写者纪律访问器），且 40ms sleep 并非断言所需（ensureDefaultScene 在 start() 内同步执行）；跨线程读依赖游戏线程此刻不写该表，仅偶然成立，属线程契约脆弱点（tests/test_cell_app.cpp:1160）。
   - 证据：测试 15/15
 - [x] 审核发现：dev_fleet 默认启用 interfaces 与 S08 决策一致，但未落实决策「立即执行动作」所列「验证监听、合法配置与端口占用报错」——8080 被占时仅 machined 日志显形，编队 up 不报端口冲突（scripts/dev_fleet.sh:62）。
+  - 证据：commit 318efb64；scripts/dev_fleet.sh:87-125,176
 
 - [x] 审核发现：英文镜像未随中文「已代决」同步——`docs/zh/en/design/world-reconciliation.md:51,67-70` 仍写「open decision in §6」「Open (implementation parameters, decided after review)」「advisory (warn only) or mandatory boot refusal」，`docs/zh/en/design/world-cell-management.md:195` 仍写「Parameters pending review/measurement: journal durability, heartbeat/grace intervals...」，而本区间改的中文版（`docs/zh/design/world-reconciliation.md:51,67-71`、`docs/zh/design/world-cell-management.md:195`）已定为 S04/S05/S06「已代决（强制拒启/受控人工确认/A 行 fsync、R/B 行 flush）」，违反 todo.md L32「zh/en 双语 51 文件同步」约定（docs/zh/en/design/world-reconciliation.md:67）。
   - 证据：commit 24a40754
@@ -237,8 +246,11 @@
 - [x] 审核发现：`docs/review/2026-10-30-actions/09-user-input-questionnaires.md:4` D34 的 todo.md 行号引用仍为 197，但 todo.md:197 是「立即动作设计稿已落...」（已代决附属行）而非 D34 原条目「外部 MySQL/Redis/ClickHouse 后端...」（实际在 todo.md:263），与同文件 D18→202/D33→260/D38→275 均指原条目口径不一致；本 diff 声称「已核实并修复」行号引用但遗漏 D34。
   - 证据：commit 2a8baace；测试 102/102
 - [x] 审核发现：`ArchitectureDiagram.vue:15` system 窄屏渲染回退——`narrowSource` 对 system 复用 1280×1915 全尺寸图（`systemSource`），而非原先专用的 480×1440 `system-{lang}-mobile.svg`；窄屏（容器 max-width:520px）下正文 15px 缩至约 5.6px、名称 23px 缩至约 8.6px，文字近乎不可读，属移动端可读性回退（docs/.vitepress/theme/components/ArchitectureDiagram.vue:15）。
+  - 证据：commit f5eb0b32；docs/.vitepress/theme/components/ArchitectureDiagram.vue:12-19,39-47
 - [x] 审核发现：`architecture-{lang}.svg:4` 箭头 marker 用 `fill="context-stroke"`，MDN BCD 显示 Safari 不支持该值（version_added=false），Safari 下箭头回退为默认黑色而非沿用边线颜色，与 Chrome 124+/Firefox 111+ 渲染不一致（docs/public/images/architecture-en.svg:4）。
+  - 证据：commit f5eb0b32；docs/public/images/architecture-en.svg:4 使用显式 fill 颜色
 - [x] 审核发现：`ArchitectureDiagram.vue:15` 将 system 图源切至 `/images/architecture-{lang}.svg` 后，旧的 `docs/public/architecture/system-{en,zh}.svg` 及 `system-{en,zh}-mobile.svg` 仍被 git 跟踪但组件不再引用（仅 todo.md:301 历史文字提及），成为死资产，建议清理或确认废弃（docs/.vitepress/theme/components/ArchitectureDiagram.vue:15）。
+  - 证据：commit f5eb0b32；docs/public/architecture/ 无 system-*.svg 残留
 - [x] 审核发现：本轮 diff 未见问题（4bd4185e..HEAD）。
   - 证据：commit 4bd4185e；测试 501/502
 
@@ -247,7 +259,9 @@
 - [x] 审核发现：测试目标改名（a21826ea，`baseappmgr_tests`→`online_directory_tests`、`baseappmgr_m1_control_tests`→`online_directory_m1_control_tests`）后遗留两处旧目标名注释——`CMakeLists.txt:438`「session_world_tests / base_anchor_tests / baseappmgr_tests 全部静默失联」与 `tests/test_baseappmgr_m1_control.cpp:82`「baseappmgr_tests 同例」均引用已不存在的目标名（现为 `online_directory_tests`），与「仅目标名无行为变化」同步口径不符（CMakeLists.txt:438）。
   - 证据：commit acffdda4
 - [x] 审核发现：新增源模板 scripts/docs/templates/architecture-zh-mobile.svg 的正文（body/label）文本仍为英文（如 L11 "Login · Input · State"、L38 "Player profiles & base gameplay"、L44 "Register · Topology · Capacity · Migrate"、L50 "Scene · Avatar · AOI · Battle · Lua" 等），仅节点名与图例已中文化，与已全量中文化的宽屏 architecture-zh.svg 不一致，中文窄屏图呈现英文正文（scripts/docs/templates/architecture-zh-mobile.svg:11）。
+  - 证据：commit 410591bc；scripts/docs/templates/architecture-zh-mobile.svg:8,11-64
 - [x] 审核发现：scripts/docs/render_architecture.py:237 非 `--check` 生成分支只对 OUT（docs/public/architecture）做 `mkdir`，未对新目标 IMG（docs/public/images）做 `mkdir`；若 docs/public/images 目录缺失，写入 system 图将抛 FileNotFoundError 而非自动重建，与 OUT 处理不对称（scripts/docs/render_architecture.py:237）。
+  - 证据：commit 536b7374；scripts/docs/render_architecture.py:237-238
   - 证据：测试 16/16
 - [x] 审核发现：本轮 diff 未见问题（178839d8..HEAD）。
   - 证据：commit 410591bc
@@ -273,9 +287,13 @@
 - [x] 审核发现：`cell_eval_peers`（cell_main.cpp:289）与 `cell_last_rollout_name`（cell_main.cpp:288,523）为死变量——前者在 debug_eval 监听捕获后从未读写，后者 prepare 赋值后无任何消费（cell 侧无内嵌 `lastRolloutName_` 提供的 promoted/rolled-back 落证日志面）。
   - 证据：commit a235a57d
 - [x] 审核发现：cell 执行端模块编排 op 3（rollback/abort）在非 kCanaryPending 分支无条件回执 ok=true（apps/world/src/cell_main.cpp:623），即使 rollback_target 未达 kRolledBack（如在 kObserving 期被调、state 停在 kObserving/kRollingBack）仍报成功——与原 WorldApp onM1ModuleRollout「ok = state == kRolledBack」判定分叉，fleetctl/admin 会误判回滚完成。
+  - 证据：commit af599e31；apps/world/src/cell_main.cpp:680-693；WorldAppM1LinkTests+UpdateContinuityTests 2/2
 - [x] 审核发现：cell 执行端 cell_last_rollout_name 在 prepare 成功即登记（apps/world/src/cell_main.cpp:579），而 post_tick 无条件按它 call_module(name,"onTick")（apps/world/src/cell_main.cpp:383-385）——commit 前（kCanaryPending）模块尚未换入目标 runtime，call_module 落「module not a table」fault 入 module_fault_log_，污染 canary 观察窗/熔断器，可致误判坏提前回滚；rollback/abort 后该名也未清空，onTick 持续打在已回滚模块上。
+  - 证据：commit af599e31；apps/world/src/cell_main.cpp:655-670；WorldCellIndependentSmoke 1/1
 - [x] 审核发现：README.zh.md 新增 docs 徽章 href 为 `https://cuihairu.github.io/apollo/zh//`，但 VitePress `rewrites` 把 `zh/:path*` 重写到根 `:path*`、构建产物无 `zh/` 目录——中文文档实际部署于 `https://cuihairu.github.io/apollo/`，`/apollo/zh/` 为 404（另含尾双斜杠），与中文文档位置错配（README.zh.md:4）。
+  - 证据：commits af599e31,9b8a125d；README.zh.md:12；docs_i18n_check 通过
 - [x] 审核发现：README.md 新增 docs 徽章 href 为 `https://cuihairu.github.io/apollo//`（尾双斜杠，浏览器规整为 `/apollo/`），指向中文根文档而非英文文档——英文 README 的 docs 徽章应链接英文文档 `https://cuihairu.github.io/apollo/en/`（VitePress 英文 locale 挂载 `/en/`），语言错配且含双斜杠（README.md:4）。
+  - 证据：commits af599e31,9b8a125d；README.md:12；docs_i18n_check 通过
 - [x] 审核发现：本轮 `cell_main.cpp` 的 rollout ok-flag 与驱动名登记修复没有生产 `cellServer` 路径测试，`WorldAppM1LinkTests`/`UpdateContinuityTests` 实际驱动 `tests/cell_host.hpp` 平行实现，`WorldCellIndependentSmoke` 也未覆盖 module rollout（todo.md:347）。
   - 证据：测试 84/84
 - [x] 审核发现：README.md docs 徽章 href 由 `https://cuihairu.github.io/apollo/en/`（49e385ff 时正确，英文 locale 实际部署位置）改为 `https://cuihairu.github.io/apollo/`——VitePress root locale=简体中文（`link '/'`）、英文 locale 挂载 `/en/`，英文 README 的 docs 徽章现指向中文根文档而非英文文档，语言错配回归（README.md:12）。
@@ -296,14 +314,20 @@
 
 - [x] DASH-1 阶段3（页面与文档，docs/design/dashboard.md §8 阶段3）已落地：内嵌单页 HTML 已含实时刷新 JS（`setInterval(refresh, 2000)` 2s 轮询）与日志尾渲染（`f.log_tail` join 进 `pre`）；`docs/design/dashboard.md` 状态翻「已实现」；Directory_Structure/apps-index 双语登记（world/ 行补 `--dashboard-host/--dashboard-port/--dashboard-token` 只读 HTTP 默认关，zh+en）；e2e `tests/dashboard_e2e_smoke.py`（真 world 进程 `--m1-port 0 --dashboard-port <空闲实端口>` 起；GET `/` 200 text/html 含 `Apollo 状态`+`setInterval`+`log_tail`、`/api/state` 200 application/json 六键 process/links/orders/fleet/script/load 且 role=world、`/nope` 404、token 面无 Authorization 401+正确 Bearer 200）。
 - [x] 审核发现：3d/3e 生产 cellServer module rollout 测试未真正验证「驱动名 commit 成功才登记」的 prepare 期负边界——`RolloutM1Client` 的 promote 断言（`r["state"]==6`，tests/world_cell_independent_smoke.py:368-374）与 committed 日志行（tests/world_cell_independent_smoke.py:388）只正向证明 commit 成功与观察窗健康，却无「kCanaryPending 期驱动名未登记」的负向证据：若 `cell_last_rollout_name` 回归为 prepare 即登记（原 bug 形态），kCanaryPending 期 post_tick 会 `call_module(name,"onTick")` 落「module not a table」fault，但该 fault 记于 tick < begin_tick（begin_canaries_ 在 commit 才定 begin_tick，module_rollout.cpp:170-174），被 `module_faults_since` 的 `t>=since_tick` 排除（script_runtime.cpp:928-929）——观察窗仍零 fault 照常 promote，测试在修复回退后依旧全绿，未守住该回归（tests/world_cell_independent_smoke.py:347-420；begin_canaries_ 定 begin_tick 于 module_rollout.cpp:161-174）。
+  - 证据：commit 7c48a83d；tests/world_cell_independent_smoke.py:362-380；WorldCellIndependentSmoke 1/1
 - [x] 审核发现：3d 注释声称「健康窗零 fault（回执 faults=0）直接证明」（tests/world_cell_independent_smoke.py:384），但 promote 轮询只断 `r["state"]==6`（tests/world_cell_independent_smoke.py:368-374），从未断言 `r["faults"]==0`——window_faults 仅由 kPromoted 终态隐式蕴含（ModuleRollout::evaluate_ 全窗健康才 promote，module_rollout.cpp:176-204），显式回执断言缺失，注释与代码不符。
+  - 证据：commit 7c48a83d；tests/world_cell_independent_smoke.py:381-390；WorldCellIndependentSmoke 1/1
 - [x] 审核发现：覆盖范围 49e385ff0793..HEAD（4 文件）已全审并独立核对——README.md:12 与 README.zh.md:12 两条 docs 徽章回归已修（08df2b5c 改坏 zh 徽章 `/apollo/`→`/apollo/zh/` 线上 404；8b1d9d8d 改坏 en 徽章 `/apollo/en/`→`/apollo/` 语言错；已回改正确目标并提交）；`tests/world_cell_independent_smoke.py` 新增 `RolloutM1Client` 协议逐项与实现核对无问题（crc32c 反射 0x82F63B78/检查向量 0xE3069283、帧线形 16B 头+载荷+4B 尾、Hello 子型 0+kHelloProto 0x4C494E4B+u64 route_version+u64 epoch+u32 名长、952 八字段/953 七字段序与类型含 ok=Bool 1B、RolloutState 枚举 2/3/6/7、world 952→953 转发链 world_app.cpp:1130-1198、committed 日志串 cell_main.cpp:600-601、kPromoted 下 op3 拒判定 cell_main.cpp:619-627），协议面无问题
   - 证据：commit 8b1d9d8d
 - [x] 审核发现：`scripts/ci/docs_i18n_check.py` 不校验 README 徽章 href（无 README/badge/href 匹配），本次两条徽章回归无 CI 守门——补 docs_i18n_check 的 README 徽章 href 校验（en→`/apollo/en/`、zh→`/apollo/`）。
+  - 证据：commit 7c48a83d；scripts/ci/docs_i18n_check.py:63-85
 
 - [x] 审核发现：dashboard.md:37 数据源清单把 link/TLS 状态写成 `LinkState{kIdle,kConnecting,kUp,kDown}`，但实际枚举第二值为 `kHandshaking`（modules/net/link/include/apollo/net/link/interserver_link.hpp:55-59）；`kConnecting` 只存在于另一枚举 `ConnectState`（modules/net/link/include/apollo/net/link/tcp_transport.hpp:69），LinkState 无此值——后续按此文档实现 `snapshot_links()` 会把握手态映射成不存在的状态名（docs/design/dashboard.md:37）。
+  - 证据：commit 7c48a83d；docs/design/dashboard.md:37
 - [x] 审核发现：dashboard.md:27 安全模型允许 `?token=<t>` 查询串携带 token——查询串 token 会进浏览器历史/HTTP 访问日志/Referer，与本设计自述「状态页比 Prometheus 指标更敏感、默认只绑环回」的防泄漏姿态相悖；建议仅 `Authorization: Bearer`，或显式记录查询串 token 的残留泄漏风险（docs/design/dashboard.md:27）。
+  - 证据：commit 7c48a83d；docs/design/dashboard.md:27 明确「不用查询串」
 - [x] 审核发现：dashboard.md:61 与 :77 不一致——§5 `/api/state` JSON 形状 `orders.pending_detail` 未给条数上限，§6 页面却写「前 20 条 pending」；作为脚本化查询面，orders 积压大时 `/api/state` 响应无界，建议在 API 形状同样界定 pending_detail 条数（docs/design/dashboard.md:61,77）。
+  - 证据：commit 7c48a83d；docs/design/dashboard.md:61,67,77-79 统一上限 20
 - [x] 审核发现：覆盖范围 686417c015d5080b8c139ce251eb48c68ca97fdc..HEAD（4 文件，仅文档）已全审——README.md:12/README.zh.md:12 docs 徽章已修对（en→`/apollo/en/`、zh→`/apollo/`，与 docs/.vitepress/config.mts:53-56,122-124 的 root=zh 挂 `/`、en 挂 `/en/` 一致，线上无错配）；docs/design/dashboard.md 其余 file:line 引用逐项核对属实（CMakeLists.txt:22、metrics_http.hpp:42-49、dev_fleet.sh:91、link_manager.hpp:17-18,129,138、tls_client.hpp:72-83、order_store.cpp:82,102,113、module_version_store.hpp:26-28、module_rollout.hpp:42、metric_registry.h:143,146,168）；todo.md 本轮记录的两条 3d/3e 测试缺口结论与实现核对属实（promote 轮询仅断 state==6 未见 faults==0——tests/world_cell_independent_smoke.py:368-374；begin_tick 在 commit 后才由 begin_canaries_ 的 c.begin() 定——module_canary.cpp:15、module_rollout.cpp:170-174；module_faults_since 按 t>=since_tick 过滤——script_runtime.cpp:928-929）。
 - [x] 审核发现 CR-04 [P2]：login 硬编码明文测试用户无条件装载（apps/login/src/login_server.cpp:25-43,65——构造 :22 调 initTestUsers，player1/pass1、player2/pass2，authenticate 明文比较；字段名 passwordHash 实持明文）。
   - 证据：commit 4e494ae9
@@ -336,6 +360,7 @@
 - [x] 审核发现：broadcast() 持锁拷贝裸 `Session*`、锁外逐个 `send`——锁外 send 期间并发 `closeSession`/`shutdown`/`update` 会经 `internalCloseSession` 擦除 `sessions_`（销毁 unique_ptr→Session 析构→connection_->close），悬垂指针 use-after-free（modules/net/rpc/src/session_manager.cpp:355；CR-09 修复 05aa72aa 以 UAF 换掉自锁死锁，模块为遗留脚手架、live apps 零引用）。
   - 证据：commit 05aa72aa；测试 3/3
 - [x] 审核发现：超限请求路径 `aborted_` 双计——`read_and_maybe_answer` 内 `++aborted_`（:246）且 `pump()` 对同一 `return false` 再 `++aborted_`（:198）；读错误路径只计 1，计数语义不一致（apps/world/src/dashboard.cpp:246；回归 `test_recv_cap` 仅断 `>=1` 未覆盖双计）。
+  - 证据：commit a59fdc8c；apps/world/src/dashboard.cpp:197-199 为唯一计数点；DashboardTests 1/1
 - [x] 审核发现：m1_link_server 的 manager_ 加锁不完整——`manager_ = std::make_unique<LinkManager>(mc)`（:263）与 `if (!manager_)`（:276）在 `managerMutex_` 外，且 sendEvalResult/sendModuleRolloutReply/sendIntentAck/gateway_link/endpoint_port 等约 20 处访问 manager_ 均无锁；ddf14375 声称「护 start/stop/pump/snapshot 读写」未全覆盖，pre_tick 读与主线程 start 写在 :263/:276 仍可能竞态（apps/world/src/m1_link_server.cpp:263）。
   - 证据：commit ddf14375
 - [x] 审核发现：`ReconnectManager::triggerReconnect` 仍持 mutex_ 调 `callback()`（:632）——回调重入 removeReconnect/addReconnect 即自锁死锁；CR-06 只修 onReconnectTimer，同型持锁回调在 triggerReconnect 残留（modules/net/http/src/event_loop.cpp:632；与 CR-06 宣称「出锁触发」不符，pre-existing 未在 diff）。
@@ -357,6 +382,7 @@
 - [x] 审核发现：`setPlayerId_no_revive_after_close` 仅串行先 close 后 set，旧实现同样通过，未覆盖注释声称的并发 close 竞态窗口（tests/test_rpc_session_manager.cpp:145）。
   - 证据：测试 6/6
 - [x] 审核发现：依赖迁移未删除 package.json 中已被 pnpm 忽略的 `pnpm.overrides`，与 pnpm-workspace.yaml 配置重复且易漂移（docs/package.json:25）。
+  - 证据：commit 13e1b8ee；docs/package.json:20-25 为 overrides 单一来源，docs/pnpm-workspace.yaml 已删除，pnpm-lock overrides 一致
 - [x] CI 的 pnpm 9 只读 package.json 的 overrides，删除该配置后冻结安装因 overrides 与锁文件不匹配而失败。**已修复**：overrides 回到 docs/package.json 单一来源并删除 docs/pnpm-workspace.yaml 双源，锁文件 overrides（vite 6.4.4/katex 0.18.2）核对一致（docs/package.json:20-25）。
 - [x] 并发测试把 close 返回后的认证回调一律判为失败，但 CAS 可在 close 前成功而回调被调度延迟至 close 后，正确实现也会随机误报。**已修复**：判据改为最终状态（close 恒为最后写入者，会话必须停在 Disconnected），删除回调时序判据与 AuthAfterCloseRecorder（tests/test_rpc_session_manager.cpp:190-236）。
 - [x] 并发测试只检查 close 返回后的标志而不检查最终状态，旧实现在标志设置前的复活窗口会漏报。**已修复**：并入上一条——最终状态断言下，旧实现两步写回复活必然停在 Authenticated 而失败（tests/test_rpc_session_manager.cpp:228-233）。
