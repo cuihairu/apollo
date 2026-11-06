@@ -410,4 +410,6 @@
 - [x] 审核发现：本轮 diff（c85c3dc5..HEAD）未见问题。
   - 证据：复核 c85c3dc5..HEAD 仅含 todo.md 拓扑复核注释（:106），注释所述 D03 代决（一个 Space 一个完整 Cell、World 独占分配、稳定分配无自动迁移、每 Instance 一个逻辑负责人）与 docs/review/2026-10-30-actions/02-topology-assignment.md §1.1 一致；首阶段已落（spaceAssignments_ 每 Space 单调 assignment_version + journal A/R/B 四例版本规则（创建 v1/释放版本不变/重认领 +1/重启 B 行铸代次，apps/world/src/world_app.cpp:548,557,635,1010-1027）+ SquadInstanceService 按 world_id 绑定，apps/common/src/squad_instance.cpp:55-56,83-84）；测试 CellRegisterTests+SquadInstanceTests 绿、build-off 89/89。
 - [x] 审核发现：本轮 diff 未见问题（a0ae72f9..HEAD）。
-  - 证据：`git diff --stat a0ae72f9..HEAD` 仅 `todo.md` 2 行（新增 c85c3dc5..HEAD 与 a0ae72f9..HEAD 两条复核记录，无代码/契约变更）；`ctest --test-dir build-off` 89/89 通过。
+  - 证据：`git diff --stat a0ae72f9..HEAD` 仅 `todo.md` 4 行（新增 c85c3dc5..HEAD 与 a0ae72f9..HEAD 两条复核记录，各含条目行与证据行，无代码/契约变更）；`ctest --test-dir build-off` 89/89 通过。
+- [x] 审核发现：a0ae72f9..HEAD 的复核证据称两行包含两条复核记录，但提交该记录前实际只有 c85c3dc5 复核记录及其证据两行，提交后则共有四行，所记范围和内容不符（todo.md:413）。
+  - 证据：`git diff --stat a0ae72f9 7d2cab39` = `todo.md | 4 ++++`（两条复核记录各 2 行，共 4 行，无代码/契约变更），与修正后证据行一致；修正前误记 2 行已更正为 4 行。测试：`ctest --test-dir build-off` 89/89 通过。
