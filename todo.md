@@ -383,3 +383,5 @@
   - 证据：注释收窄为「旧帧受理仅在认证关（registerToken 空）时成立；认证开时旧帧在凭据裁决处被 code 6 拒，到不了兼容白名单路径」（apps/world/src/m1_link_server.cpp:820-831）；凭据先判已由 world_app.cpp 与测试 `test_cell_register_credential_compat_legacy` 认证开旧帧断言 code 6 固定（tests/test_cell_register.cpp:1414-1423）。测试：CellRegisterTests 绿。
 - [x] 审核发现：本轮 diff（c85c3dc5..HEAD）未见问题。
   - 证据：复核 c85c3dc5..HEAD 仅含 todo.md 拓扑复核注释（:106），注释所述 D03 代决（一个 Space 一个完整 Cell、World 独占分配、稳定分配无自动迁移、每 Instance 一个逻辑负责人）与 docs/review/2026-10-30-actions/02-topology-assignment.md §1.1 一致；首阶段已落（spaceAssignments_ 每 Space 单调 assignment_version + journal A/R/B 四例版本规则（创建 v1/释放版本不变/重认领 +1/重启 B 行铸代次，apps/world/src/world_app.cpp:548,557,635,1010-1027）+ SquadInstanceService 按 world_id 绑定，apps/common/src/squad_instance.cpp:55-56,83-84）；测试 CellRegisterTests+SquadInstanceTests 绿、build-off 89/89。
+- [x] 审核发现：本轮 diff 未见问题（a0ae72f9..HEAD）。
+  - 证据：`git diff --stat a0ae72f9..HEAD` 仅 `todo.md` 2 行（新增 c85c3dc5..HEAD 与 a0ae72f9..HEAD 两条复核记录，无代码/契约变更）；`ctest --test-dir build-off` 89/89 通过。
