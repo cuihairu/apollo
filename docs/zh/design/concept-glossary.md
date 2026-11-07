@@ -46,3 +46,22 @@ Avatar 在 BigWorld 词汇中可包含玩家和 NPC；BigWorld/KBEngine 的角�
 跨 Space 换场与同 Space 跨 Cell 连续交接分别定义；后者保持实体 ID、位置、血量、技能和必要脚本状态，不触发一次完整离场重置。共享玩法有唯一逻辑负责人，不能把整个多 Cell 空间锁定在一个进程内对象或线程。
 
 协议更新分别处理 Base、worldServer 管理状态和 cell 模拟状态的进程替换；仅代码更新保持 wire 契约不变，可使用 Lua 模块发布。当前不启用无缝地图，预留空间分区、邻接可见性、Real/Ghost、权威交接和跨 Cell 交互边界。实现和验收只维护在根目录 todo.md。
+
+## 源码抽象层词汇表
+
+下表记录 2026-11-08 源码通读得到的抽象层。行号定位当前 HEAD；进程含义保留上文既有 BigWorld 词汇。
+
+| 术语 | 英文 | 定义 | 证据 |
+|---|---|---|---|
+| 进程壳 | Process shell | 进程入口、信号、崩溃捕获、参数解析与应用门控；是静态装配层和运行实例之间的边界。 | `apps/CMakeLists.txt:34`、`apps/gateway/src/main.cpp:9` |
+| 应用装配 | Application assembly | 把配置、连接、状态表、后台泵和服务器线程绑定成一个可启停的应用实例。 | `apps/gateway/include/gateway/gateway_server.hpp:200`、`apps/world/include/world_app/world_app.hpp:120` |
+| 服务器生命周期 | Server lifecycle | PreInit 到 Ready 的组件初始化、启动、主循环、停止与统计采集。 | `include/apollo/server/game_server.h:146`、`src/apollo/server/game_server.cpp:205` |
+| 会话边界 | Session edge | 客户端连接认证、状态机、心跳、限流、准入、缓存与收发缓冲。 | `include/apollo/net/session.h:86`、`apps/gateway/include/gateway/session_manager.hpp:59` |
+| 内部链路 | Internal M1 link | 服务间 intent/rpc 的收发端点、路由表装载、重连与代次回执。 | `modules/net/link/include/apollo/net/link/route_json.hpp:1`、`apps/gateway/src/m1_egress.cpp:70` |
+| IPC 通道 | IPC channel | 同机或跨主机的共享内存/Socket 传输、QoS、背压与异步 I/O。 | `include/apollo/ipc/channel.h:20`、`src/apollo/ipc/async_io.cpp:23` |
+| 服务发现 | Service discovery | 端点注册、健康心跳、订阅、负载均衡与本地缓存。 | `include/apollo/core/service_discovery.h:133`、`src/apollo/ipc/sqlite_service_discovery.cpp:137` |
+| 契约面 | Contract surface | XML/XSD 定义的属性、消息、实体和错误，经生成器输出 C++、Lua、Proto 与路由表。 | `sdks/contract/apollo.xsd:1`、`sdks/gen/src/main.cpp:105` |
+| 游戏域 | Game domain | 属性、匹配、排行、计时、AOI、Scene 与 cell 执行等玩法内核。 | `include/apollo/game/attributes/attribute.hpp:70`、`apps/world/include/world_app/cell_app.hpp:124` |
+| 数据归属 | Data ownership | 长期资料的缓存、journal、原子落盘、迁移与数据库 RPC 面。 | `apps/common/include/player_store/storage.hpp:11`、`apps/common/src/database_service.cpp:98` |
+| 观测运维 | Operations observability | 日志汇聚、指标快照、告警、看板、本机监督与进程编排。 | `apps/logger/include/logger/archive_writer.hpp:28`、`apps/admin/include/admin/metrics_hub.hpp:39` |
+| 客户端 SDK | Client SDK | Unity/Cocos/Laya 连接、认证、编解码、路由与属性同步入口。 | `skds/unity/ApolloSDK/ApolloClient.cs:1`、`skds/cocos/ApolloSDK/ApolloClient.ts:1` |

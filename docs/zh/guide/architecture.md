@@ -47,6 +47,46 @@ Base/World 服务向 loginServer 目录注册；cell 向所属 worldServer 注�
 
 仅代码更新保持消息编号、字段和 wire 不变；Lua 在所属执行边界更新，C++ 使用进程替换。保留 gateway 可保留其 TCP；替换 gateway 需排空或重连恢复。完整 Instance 连续必须包含成员、怪物、目标、计时和必要脚本状态，不能只搬玩家。详见[更新边界](../design/gateway-topology-survey.md)。
 
+## 源码分层
+
+以下九层按职责归纳，不是目录别名。所有行号对应 2026-11-08 的源码 HEAD。
+
+### L0 进程壳与生命周期
+
+`apps/CMakeLists.txt` 按目标可用性装配进程：运维进程无门控，gateway 和 legacy 应用依赖协议目标，world 依赖 game 目标（`apps/CMakeLists.txt:34`）。入口负责参数、崩溃捕获和启停（`apps/gateway/src/main.cpp:9`）；`GameServer` 提供 PreInit→Ready、组件启动、主循环和统计生命周期（`include/apollo/server/game_server.h:146`）。Gateway 配置 schema 在 `apps/gateway/include/gateway/config.hpp:12`，World 角色与拓扑配置在 `apps/world/include/world_app/config.hpp:12`；专属 wire 与路由表在 `sdks/cpp/generated/contract_route.json:1`。
+
+### L1 应用装配与状态面
+
+Gateway 把 ingress registry、dispatcher、session manager、M1 客户端、dashboard 和后台线程装配成同一实例（`apps/gateway/include/gateway/gateway_server.hpp:200`）；登录服务持有目录、注册、准入和 Base 客户端面（`apps/login/include/login/login_server.hpp:60`）。这类状态常驻内存：Gateway 会话表见 `apps/gateway/include/gateway/session_manager.hpp:136`，World 注册与分配表见 `apps/world/include/world_app/world_app.hpp:233`，Admin 指标快照见 `apps/admin/include/admin/metrics_hub.hpp:69`。专属文案在[服务器应用](../apps/index.md)。
+
+### L2 传输与会话边界
+
+基础连接、packet 解析、event loop、session manager 和 HTTP/WebSocket 属于面向客户端的传输层（`include/apollo/net/session.h:86`、`include/apollo/net/session_manager.h:150`）。Gateway 的 TCP/WS/WSS 准入、fan-in、限流与会话保持实现挂在 `apps/gateway/src/ingress/session_admission_service.cpp:311`；配置 schema 是 `apps/gateway/include/gateway/config.hpp:12`，页面文案挂 `apps/gateway/src/gateway_dashboard_page.hpp:1`。
+
+### L3 服务间协议与路由
+
+`M1LinkServer` 从契约路由 JSON 装载服务间面（`apps/world/include/world_app/m1_link_server.hpp:30`），Gateway 用 `M1Egress` 把会话意图转发到 World（`apps/gateway/src/gateway_server.cpp:190`），Login 服务注册用同一 JSON 协议声明端点（`apps/login/include/login/service_registry.hpp:24`）。协议 schema 与生成器位于 `sdks/contract/apollo.xsd:1`、`sdks/contract/messages.xml:1` 和 `sdks/gen/src/main.cpp:105`；SDK 契约说明挂[SDK 契约](../design/sdk-contract.md)。
+
+### L4 IPC 与服务发现
+
+IPC 层提供共享内存、Socket、异步 I/O 与 QoS 通道（`include/apollo/ipc/channel.h:20`、`src/apollo/ipc/async_io.cpp:23`）。服务发现可落在 SQLite、Redis 或进程内存：SQLite 建库与表见 `src/apollo/ipc/sqlite_service_discovery.cpp:137`，Redis key/PubSub 约定见 `include/apollo/ipc/redis_service_discovery.h:184`，内存注册表见 `include/apollo/core/service_discovery.h:175`。
+
+### L5 契约生成与客户端 SDK
+
+XML/XSD 契约由 `sdks/gen` 解析为 C++、Lua、Proto、JSON 与路由表（`sdks/contract/apollo.xsd:1`、`sdks/gen/src/main.cpp:105`）。客户端侧 Unity、Cocos、Laya 各自装配网络、认证、路由与属性同步（`skds/unity/ApolloSDK/ApolloClient.cs:1`、`skds/cocos/ApolloSDK/ApolloClient.ts:1`）。契约 schema 挂[XML 契约生成](../design/xml-generation.md)，SDK 目录文案挂 `skds/README.md:1`。
+
+### L6 游戏内核与 cell 执行
+
+属性、匹配、排行、定时轮和对象池组成通用玩法内核（`include/apollo/game/attributes/attribute.hpp:70`、`include/apollo/algorithm/timing_wheel.h:1`）。cell 执行器把意图队列、Scene/Space 映射、tick、冻结闸和 Lua 扩展绑定到进程内权威模拟（`apps/world/include/world_app/cell_app.hpp:124`）；cell 配置 schema 在 `apps/world/include/world_app/cell_app.hpp:52`，契约处理器挂 `apps/world/scripts/contract_handlers.lua:1`。
+
+### L7 数据归属与持久化
+
+PlayerStore 同时提供内存缓存、write-ahead journal 和原子 JSON 落盘：存储抽象在 `apps/common/include/player_store/storage.hpp:11`，journal 装载在 `apps/common/src/player_store.cpp:790`，临时文件 rename 在 `apps/common/src/database_service.cpp:104`。`PlayerStoreConfig` 同时保留 MySQL 目标和当前 `dataDir`/`journalPath` schema（`apps/common/include/player_store/config.hpp:25`）；数据库 RPC 调用面在 `apps/common/include/database/client.hpp:13`。
+
+### L8 观测、监督与运维
+
+日志应用扫描、tail、归档并可经 HTTP 推送（`apps/logger/include/logger/archive_writer.hpp:20`）；Admin 用被动链路收 931 快照，再经 `/metrics` 导出（`apps/admin/include/admin/metrics_hub.hpp:39`）。Machined 用 fork/exec 启动子进程、写 PID 文件并收割死亡事件（`apps/machined/src/supervisor.cpp:190`）。运行文案挂 `docs/zh/apps/index.md:1` 与 `docs/zh/design/logger-app.md:1`。
+
 ## 无缝地图预留
 
 现在不实现空间切分、Ghost 复制和跨边界战斗。设计保留同一 Space 多 Cell、全空间坐标、稳定实体 ID、邻接拓扑、权威代次、完整状态交接和连续可见性。显式换 Space 与同 Space 跨 Cell 是不同操作，不能复用离场重置来实现无缝迁移。

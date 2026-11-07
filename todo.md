@@ -413,3 +413,38 @@
   - 证据：`git diff --stat a0ae72f9..HEAD` 仅 `todo.md` 4 行（新增 c85c3dc5..HEAD 与 a0ae72f9..HEAD 两条复核记录，各含条目行与证据行，无代码/契约变更）；`ctest --test-dir build-off` 89/89 通过。
 - [x] 审核发现：a0ae72f9..HEAD 的复核证据称两行包含两条复核记录，但提交该记录前实际只有 c85c3dc5 复核记录及其证据两行，提交后则共有四行，所记范围和内容不符（todo.md:413）。
   - 证据：`git diff --stat a0ae72f9 7d2cab39` = `todo.md | 4 ++++`（两条复核记录各 2 行，共 4 行，无代码/契约变更），与修正后证据行一致；修正前误记 2 行已更正为 4 行。测试：`ctest --test-dir build-off` 89/89 通过。
+
+## 源码分层分析 2026-11-07
+
+### a) 抽象层清单
+
+- L0 进程壳与生命周期：统一入口参数、崩溃捕获、应用门控和 PreInit→Ready 组件生命周期。（apps/CMakeLists.txt:34；include/apollo/server/game_server.h:146）
+- L1 应用装配与状态面：把配置、连接、路由、后台泵和常驻状态表装配成单个可启停服务。（apps/gateway/include/gateway/gateway_server.hpp:200）
+- L2 传输与会话边界：承载客户端 TCP/WS/WSS/TLS、packet、认证、心跳、准入、限流和会话缓存。（include/apollo/net/session.h:86）
+- L3 服务间协议与路由：以 XML 契约生成的路由 JSON 装载 M1 intent/rpc 端点并维护代次与重连。（apps/world/include/world_app/m1_link_server.hpp:30）
+- L4 IPC 与服务发现：提供共享内存/Socket/QoS 通道和 SQLite、Redis、内存三种端点发现后端。（include/apollo/ipc/channel.h:20）
+- L5 契约生成与客户端 SDK：把 XML/XSD 属性、消息、实体生成到服务端与 Unity/Cocos/Laya 客户端调用面。（sdks/gen/src/main.cpp:105）
+- L6 游戏内核与 cell 执行：运行属性、AOI、Scene、tick、意图队列、冻结闸和 Lua 契约处理器。（apps/world/include/world_app/cell_app.hpp:124）
+- L7 数据归属与持久化：管理玩家缓存、write-ahead journal、原子文件、迁移线和数据库 RPC。（apps/common/include/player_store/storage.hpp:11）
+- L8 观测监督与运维：汇聚日志、导出指标、告警、看板、fork/exec 监督和 PID/死亡事件。（apps/machined/src/supervisor.cpp:190）
+
+### b) 超大文件候选
+
+- [ ] LAY-001 [P1] 拆分 apps/world/src/cell_app.cpp（1519 行）——进程 tick 主循环、意图受理、Space 生命周期、场景模拟和观测输出挤在同一个实现单元。（apps/world/include/world_app/cell_app.hpp:124）
+- [ ] LAY-002 [P1] 拆分 apps/gateway/src/gateway_server.cpp（1478 行）——ingress 装配、会话生命周期、三向路由、控制面和 dashboard 序列化共存。（apps/gateway/src/gateway_server.cpp:190）
+- [ ] LAY-003 [P1] 拆分 src/apollo/utils/crypto.cpp（1472 行）——通用工具路径承载了过多算法实现，难以为算法族独立测试和替换。（include/apollo/utils/crypto.h:1）
+- [ ] LAY-004 [P1] 拆分 apps/world/src/world_app.cpp（1263 行）——cell 注册裁决、容量、Space 分配、journal 回放和排空控制在一个类内交织。（apps/world/include/world_app/world_app.hpp:233）
+- [ ] LAY-005 [P1] 拆分 apps/fleetctl/src/main.cpp（1171 行）——CLI 解析、编队协议、多个 RPC 等待循环和控制流程都进入入口文件。（apps/fleetctl/src/main.cpp:586）
+- [ ] LAY-006 [P1] 拆分 apps/common/src/player_store.cpp（1152 行）——存储缓存、journal、M1 端点、迁移线与线程化保存队列集中在一个文件。（apps/common/include/player_store/storage.hpp:11）
+- [ ] LAY-007 [P1] 拆分 include/apollo/net/adapters/sdnet_adapter.h（1138 行）——适配器、帧解析、会话映射和平台分支在单一头文件实现。（include/apollo/net/adapters/native_adapter.h:1）
+- [ ] LAY-008 [P1] 拆分 apps/world/src/m1_link_server.cpp（1121 行）——路由表装载、链接生命周期、协议编解码和管理回执耦合在链路实现中。（apps/world/include/world_app/m1_link_server.hpp:30）
+- [ ] LAY-009 [P1] 拆分 src/apollo/ipc/async_io.cpp（1118 行）——平台异步队列、事件派发、背压和定时逻辑集中在 IPC 传输实现。（include/apollo/ipc/async_io.h:1）
+- [ ] LAY-010 [P1] 拆分 examples/benchmark.cpp（1108 行）——基准场景、协议生成、统计和 CLI 输入混在单个示例入口。（examples/benchmark.cpp:1）
+- [ ] LAY-011 [P1] 拆分 src/apollo/ipc/sqlite_service_discovery.cpp（1063 行）——SQLite schema、注册、订阅、健康检查和负载均衡都在一个后端实现。（include/apollo/ipc/sqlite_service_discovery.h:71）
+- [ ] LAY-012 [P1] 拆分 apps/login/src/login_server.cpp（1047 行）——认证、目录投影、M1 注册、准入、Base 代理和运行循环同文件承载。（apps/login/include/login/login_server.hpp:60）
+
+### c) 目录/分类不合理处
+
+- `apps/common` 同时承载数据库 RPC、PlayerStore、在线目录和小队结算四组边界；`target_link_libraries` 分裂为 `apollo_app_services`、`apollo_database_rpc` 和 `apollo_squad_instance`，说明并非一个稳定公共层。（apps/common/CMakeLists.txt:10）
+- `include/apollo/net` 与 `include/apollo/network` 并存，均包含 session/rpc/transport/messaging 相关 API；新旧调用面没有在文件名上表达适用边界，容易误接旧层。（include/apollo/net/session.h:86；include/apollo/network/rpc/rpc.hpp:1）
+- 客户端 SDK 目录名混用 `sdks/` 与 `skds/`，前者放契约与生成物，后者放客户端 SDK；拼写差一位但职责完全不同，增加路径检索和文档链接成本。（sdks/README.md:1；skds/README.md:1）
