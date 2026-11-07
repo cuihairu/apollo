@@ -19,7 +19,7 @@
   "license": "MIT",
   "pnpm": {
     "overrides": {
-      "vite": "6.4.4",
+      "vite": "6.4.5",
       "katex": "0.18.2"
     }
   },
