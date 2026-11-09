@@ -2,8 +2,15 @@ cmake_minimum_required(VERSION 3.20)
 
 # FleetCtl 编队探针（P0-1 路1 演练量测面：assign/resolve → baseappmgr
 # M1 控制面；drill 脚本断言面——三种退出码 = 闸开/闸拒/链不通）。
+# fleetctl 拆分实现单元（LAY-005）：入口与用法解析在 main.cpp，
+# 子命令按面分单元（rpc_cmds=assign/resolve/migrate/eval、module、drain、retire），
+# 共享内面 fleetctl_internal.hpp（别名/常量/Options/ControlDial）。
 add_executable(fleetctl
     src/main.cpp
+    src/fleetctl_rpc_cmds.cpp
+    src/fleetctl_module.cpp
+    src/fleetctl_drain.cpp
+    src/fleetctl_retire.cpp
 )
 
 # migrate 命令的 wire 面（base/migration_wire.hpp，header-only）+ eval 命令
