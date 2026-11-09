@@ -303,6 +303,7 @@ public:
 private:
     std::vector<ServiceEndpoint> endpoints_;
     mutable std::mutex mutex_;
+    std::mt19937 rng_;
 };
 
 //==============================================================================
