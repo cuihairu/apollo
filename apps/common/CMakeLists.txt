@@ -1,6 +1,9 @@
 # Application-level services shared by World and Login; no extra process roles.
 add_library(apollo_app_services STATIC
     src/player_store.cpp
+    src/player_store_session.cpp
+    src/player_store_rpc.cpp
+    src/player_store_migration.cpp
     src/database_service.cpp
     src/player_store_m1.cpp
     src/online_directory.cpp

@@ -46,6 +46,15 @@ set(APOLLO_WORLD_APP_SOURCES
     ../apps/world/src/world_m1_ops.cpp
 )
 
+# player_store 拆分实现单元（LAY-006）：生命周期/保存引擎在 player_store.cpp，
+# 其余按职责分单元（session 激活绑定 / rpc 受理 / migration 迁移面）。
+set(APOLLO_PLAYER_STORE_SOURCES
+    ../apps/common/src/player_store.cpp
+    ../apps/common/src/player_store_session.cpp
+    ../apps/common/src/player_store_rpc.cpp
+    ../apps/common/src/player_store_migration.cpp
+)
+
 if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
@@ -210,7 +219,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_avatar_tests
 	        test_base_avatar.cpp
-	        ../apps/common/src/player_store.cpp
+	        ${APOLLO_PLAYER_STORE_SOURCES}
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
@@ -245,7 +254,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_baseappmgr.cpp
 	        ../apps/common/src/online_directory.cpp
 	        ../apps/common/src/directory_m1.cpp
-	        ../apps/common/src/player_store.cpp
+	        ${APOLLO_PLAYER_STORE_SOURCES}
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
@@ -536,7 +545,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    if(TARGET apollo::game_session AND TARGET apollo_protocol)
 	    add_executable(base_avatar_tests
 	        test_base_avatar.cpp
-	        ../apps/common/src/player_store.cpp
+	        ${APOLLO_PLAYER_STORE_SOURCES}
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
@@ -571,7 +580,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	        test_baseappmgr.cpp
 	        ../apps/common/src/online_directory.cpp
 	        ../apps/common/src/directory_m1.cpp
-	        ../apps/common/src/player_store.cpp
+	        ${APOLLO_PLAYER_STORE_SOURCES}
 	        ../apps/common/src/database_service.cpp
 	        ../apps/common/src/player_store_m1.cpp
 	    )
