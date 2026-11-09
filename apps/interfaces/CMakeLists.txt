@@ -1,5 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 
+# crypto 工具拆分单元（LAY-003）：SecureRandom+Hash 门面在 crypto.cpp，
+# 其余按算法族分单元（digest/encode/cipher/checksum/password）。
+set(APOLLO_CRYPTO_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_digest.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_encode.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_cipher.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_checksum.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_password.cpp
+)
+
+
 # InterfacesApp 可执行文件（todo L45 批④）：平台/渠道回调的 HTTP/HTTPS
 # 入口进程壳。只依赖 net M1 内核三件（link 缝 + TLS/WS 底座与编解码），
 # 不链 gateway——与 gateway 游戏入口互不进入对方的连接模型（docs/zh/index.md
@@ -8,7 +20,7 @@ add_executable(interfaces
     src/main.cpp
     src/callback_verifier.cpp
     src/http_ingress.cpp
-    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
 )
 
 target_include_directories(interfaces

@@ -62,6 +62,17 @@ if(NOT APOLLO_ENABLE_MODULAR_LAYOUT)
     message(DEPRECATION "Direct apollo library build is deprecated. Use APOLLO_ENABLE_MODULAR_LAYOUT=ON for modular architecture.")
 
 # Apollo 核心库
+# crypto 工具拆分单元（LAY-003）：SecureRandom+Hash 门面在 crypto.cpp，
+# 其余按算法族分单元（digest/encode/cipher/checksum/password）。
+set(APOLLO_CRYPTO_SOURCES
+    src/apollo/utils/crypto.cpp
+    src/apollo/utils/crypto_digest.cpp
+    src/apollo/utils/crypto_encode.cpp
+    src/apollo/utils/crypto_cipher.cpp
+    src/apollo/utils/crypto_checksum.cpp
+    src/apollo/utils/crypto_password.cpp
+)
+
 add_library(apollo STATIC
     # Game - migrated to modules/game/, use modular layout instead
 
@@ -87,7 +98,7 @@ add_library(apollo STATIC
     src/utils/config/config_loader.cpp
     src/utils/threading/thread_pool.cpp
     src/apollo/utils/id_pool.cpp
-    src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
 
     # Core - Log（P3-3 收口：modules/core/log 单套，本 legacy 分支不再编旧栈——
     # 源文件已随顶层 include/apollo/core/log 树一并删除）

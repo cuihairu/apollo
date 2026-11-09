@@ -1,10 +1,22 @@
 cmake_minimum_required(VERSION 3.20)
 
+# crypto 工具拆分单元（LAY-003）：SecureRandom+Hash 门面在 crypto.cpp，
+# 其余按算法族分单元（digest/encode/cipher/checksum/password）。
+set(APOLLO_CRYPTO_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_digest.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_encode.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_cipher.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_checksum.cpp
+    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto_password.cpp
+)
+
+
 find_package(OpenSSL REQUIRED)
 
 # LoginApp 可执行文件
 add_executable(login
-    ${CMAKE_SOURCE_DIR}/src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
     src/main.cpp
     src/login_server.cpp
     src/m1_admission_server.cpp

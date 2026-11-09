@@ -25,6 +25,17 @@ set(APOLLO_GATEWAY_SERVER_SOURCES
     ../apps/gateway/src/gateway_dashboard.cpp
 )
 
+# crypto 工具拆分单元（LAY-003）：SecureRandom+Hash 门面在 crypto.cpp，
+# 其余按算法族分单元（digest/encode/cipher/checksum/password）。
+set(APOLLO_CRYPTO_SOURCES
+    ../src/apollo/utils/crypto.cpp
+    ../src/apollo/utils/crypto_digest.cpp
+    ../src/apollo/utils/crypto_encode.cpp
+    ../src/apollo/utils/crypto_cipher.cpp
+    ../src/apollo/utils/crypto_checksum.cpp
+    ../src/apollo/utils/crypto_password.cpp
+)
+
 if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
@@ -1249,7 +1260,7 @@ add_executable(interfaces_http_tests
     test_interfaces_http.cpp
     ../apps/interfaces/src/callback_verifier.cpp
     ../apps/interfaces/src/http_ingress.cpp
-    ../src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
 )
 target_include_directories(interfaces_http_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/apps/interfaces/include
@@ -1274,7 +1285,7 @@ add_test(NAME InterfacesHttpTests COMMAND interfaces_http_tests)
 # 自包含简单测试：同时覆盖 PasswordHash 的 hash/format/parse/verify。
 add_executable(crypto_tests
     test_crypto.cpp
-    ../src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
 )
 target_link_libraries(crypto_tests PRIVATE OpenSSL::Crypto)
 target_include_directories(crypto_tests PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -2004,7 +2015,7 @@ add_executable(login_chain_e2e_tests
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
     ../apps/login/src/login_server.cpp
-    ../src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -2821,7 +2832,7 @@ if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(hosted_services_tests
     test_hosted_services.cpp
     ../apps/login/src/login_server.cpp
-    ../src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -2854,7 +2865,7 @@ add_executable(fleet_rehome_chain_tests
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
-    ../src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
@@ -2888,7 +2899,7 @@ add_executable(migration_chain_tests
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
-    ../src/apollo/utils/crypto.cpp
+    ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
