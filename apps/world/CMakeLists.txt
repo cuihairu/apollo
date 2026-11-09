@@ -18,6 +18,16 @@ set(WORLD_CELL_APP_SOURCES
     src/cell_sessions.cpp
 )
 
+# M1 链路服务拆分实现单元（LAY-008）：生命周期/装配在 m1_link_server.cpp，
+# 其余按职责分单元（回执与命令发送 / 裸帧受理 / 932 意图翻译；内面头
+# m1_link_server_impl.hpp 同目录）。world 与 cellServer 两目标同源。
+set(M1_LINK_SERVER_SOURCES
+    src/m1_link_server.cpp
+    src/m1_link_server_send.cpp
+    src/m1_link_server_recv.cpp
+    src/m1_link_server_wire.cpp
+)
+
 # WorldApp 拆分实现单元（LAY-004）：生命周期/装配在 world_app.cpp，
 # 其余按职责分单元（cell 登记 / Space 分配对账 / 管理日志 / M1 命令中继）。
 set(WORLD_APP_SOURCES
@@ -33,7 +43,7 @@ add_executable(world
     src/main.cpp
     ${WORLD_APP_SOURCES}
     ${WORLD_CELL_APP_SOURCES}
-    src/m1_link_server.cpp
+    ${M1_LINK_SERVER_SOURCES}
     src/cell_register_client.cpp
     src/dashboard.cpp
     src/dashboard_data.cpp
@@ -96,7 +106,7 @@ add_executable(cellServer
     src/cell_server_main.cpp
     src/cell_main.cpp
     ${WORLD_CELL_APP_SOURCES}
-    src/m1_link_server.cpp
+    ${M1_LINK_SERVER_SOURCES}
     src/cell_register_client.cpp
     src/dashboard.cpp
     src/dashboard_data.cpp
