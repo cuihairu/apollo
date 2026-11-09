@@ -134,6 +134,11 @@ if(APOLLO_ENABLE_IPC)
         # IPC - Service Discovery
         src/apollo/ipc/service_discovery.cpp
         src/apollo/ipc/sqlite_service_discovery.cpp
+        src/apollo/ipc/sqlite_service_discovery_registry.cpp
+        src/apollo/ipc/sqlite_service_discovery_query.cpp
+        src/apollo/ipc/sqlite_service_discovery_health.cpp
+        src/apollo/ipc/sqlite_service_discovery_balancer.cpp
+        src/apollo/ipc/memory_service_discovery.cpp
         src/apollo/ipc/redis_service_discovery.cpp
         src/apollo/ipc/service_endpoint_ex.cpp
     )
