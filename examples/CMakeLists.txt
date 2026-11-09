@@ -45,6 +45,10 @@ target_link_libraries(full_loop_demo PRIVATE apollo apollo::base apollo::core ap
 # persist 段（P3-2 全帧段实测化收口批）：直编 data/orm persist_journal 单源
 # （纯 std 依赖），journal write-ahead append + drain 实测面。
 add_executable(benchmark benchmark.cpp
+    benchmark_micro.cpp
+    benchmark_scene.cpp
+    benchmark_model.cpp
+    benchmark_acceptance.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/core/src/entity.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene.cpp
     ${CMAKE_SOURCE_DIR}/modules/game/world/src/scene_aoi.cpp
