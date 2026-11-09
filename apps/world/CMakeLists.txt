@@ -18,10 +18,20 @@ set(WORLD_CELL_APP_SOURCES
     src/cell_sessions.cpp
 )
 
+# WorldApp 拆分实现单元（LAY-004）：生命周期/装配在 world_app.cpp，
+# 其余按职责分单元（cell 登记 / Space 分配对账 / 管理日志 / M1 命令中继）。
+set(WORLD_APP_SOURCES
+    src/world_app.cpp
+    src/world_cell_registry.cpp
+    src/world_space_assign.cpp
+    src/world_journal.cpp
+    src/world_m1_ops.cpp
+)
+
 # WorldApp 可执行文件
 add_executable(world
     src/main.cpp
-    src/world_app.cpp
+    ${WORLD_APP_SOURCES}
     ${WORLD_CELL_APP_SOURCES}
     src/m1_link_server.cpp
     src/cell_register_client.cpp

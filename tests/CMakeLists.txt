@@ -36,6 +36,16 @@ set(APOLLO_CRYPTO_SOURCES
     ../src/apollo/utils/crypto_password.cpp
 )
 
+# WorldApp 拆分实现单元（LAY-004）：生命周期/装配在 world_app.cpp，
+# 其余按职责分单元（cell 登记 / Space 分配对账 / 管理日志 / M1 命令中继）。
+set(APOLLO_WORLD_APP_SOURCES
+    ../apps/world/src/world_app.cpp
+    ../apps/world/src/world_cell_registry.cpp
+    ../apps/world/src/world_space_assign.cpp
+    ../apps/world/src/world_journal.cpp
+    ../apps/world/src/world_m1_ops.cpp
+)
+
 if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
@@ -283,7 +293,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
             ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
             ../apps/gateway/src/ingress/gateway_connection_registry.cpp
             ../apps/gateway/src/ingress/session_admission_service.cpp
-            ../apps/world/src/world_app.cpp
+            ${APOLLO_WORLD_APP_SOURCES}
             ${APOLLO_CELL_APP_SOURCES}
             ../apps/world/src/m1_link_server.cpp
             ../modules/protocol/src/messages.cpp
@@ -1625,7 +1635,7 @@ add_test(NAME ApolloCliTests COMMAND apollo_cli_tests)
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(world_app_acceptance_tests
     test_world_app_acceptance.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1694,7 +1704,7 @@ endif()
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(world_app_m1_link_tests
     test_world_app_m1_link.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1746,7 +1756,7 @@ add_executable(gateway_m1_egress_tests
     ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
     ../apps/gateway/src/ingress/gateway_connection_registry.cpp
     ../apps/gateway/src/ingress/session_admission_service.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1791,7 +1801,7 @@ add_executable(squad_wire_e2e_tests
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1827,7 +1837,7 @@ add_executable(world_drain_tests
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1863,7 +1873,7 @@ add_test(NAME WorldDrainTests COMMAND world_drain_tests)
 # 先例，后续切片）。
 add_executable(cell_register_tests
     test_cell_register.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1909,7 +1919,7 @@ add_executable(update_continuity_tests
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -1961,7 +1971,7 @@ add_executable(gateway_push_downlink_tests
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -2019,7 +2029,7 @@ add_executable(login_chain_e2e_tests
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
     ../apps/login/src/m1_service_register_server.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/world/src/cell_register_client.cpp
@@ -2861,7 +2871,7 @@ endif()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(fleet_rehome_chain_tests
     test_fleet_rehome_chain.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
@@ -2895,7 +2905,7 @@ endif()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(migration_chain_tests
     test_migration_chain.cpp
-    ../apps/world/src/world_app.cpp
+    ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ../apps/world/src/m1_link_server.cpp
     ../apps/login/src/login_server.cpp
