@@ -1,9 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
 
+# gateway_server 拆分实现单元（LAY-002）：生命周期/装配在 gateway_server.cpp，
+# 其余按职责分单元（路由器 / 会话与连接 / 客户端帧受理 / 宿主泵与排空 / dashboard）。
+set(GATEWAY_SERVER_SOURCES
+    src/gateway_server.cpp
+    src/gateway_router.cpp
+    src/gateway_sessions.cpp
+    src/gateway_client.cpp
+    src/gateway_pump.cpp
+    src/gateway_dashboard.cpp
+)
+
 # GatewayApp 可执行文件
 add_executable(gateway
     src/main.cpp
-    src/gateway_server.cpp
+    ${GATEWAY_SERVER_SOURCES}
     src/gateway_control_server.cpp
     src/m1_egress.cpp
     src/m1_route_client.cpp

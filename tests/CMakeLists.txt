@@ -14,6 +14,17 @@ set(APOLLO_CELL_APP_SOURCES
     ../apps/world/src/cell_sessions.cpp
 )
 
+# gateway_server 拆分实现单元（LAY-002）：生命周期/装配在 gateway_server.cpp，
+# 其余按职责分单元（路由器 / 会话与连接 / 客户端帧受理 / 宿主泵与排空 / dashboard）。
+set(APOLLO_GATEWAY_SERVER_SOURCES
+    ../apps/gateway/src/gateway_server.cpp
+    ../apps/gateway/src/gateway_router.cpp
+    ../apps/gateway/src/gateway_sessions.cpp
+    ../apps/gateway/src/gateway_client.cpp
+    ../apps/gateway/src/gateway_pump.cpp
+    ../apps/gateway/src/gateway_dashboard.cpp
+)
+
 if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
@@ -248,7 +259,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     if(TARGET apollo_protocol AND TARGET apollo_app_services)
 	    add_executable(gateway_route_tests
 	        test_gateway_route.cpp
-	        ../apps/gateway/src/gateway_server.cpp
+	        ${APOLLO_GATEWAY_SERVER_SOURCES}
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
@@ -309,7 +320,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # Windows 下 link TCP 底座不进 M1 批，TCP 用例本体空转）
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
-	        ../apps/gateway/src/gateway_server.cpp
+	        ${APOLLO_GATEWAY_SERVER_SOURCES}
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
@@ -358,7 +369,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # 本体空转）
 	    add_executable(gateway_drain_tests
 	        test_gateway_drain.cpp
-	        ../apps/gateway/src/gateway_server.cpp
+	        ${APOLLO_GATEWAY_SERVER_SOURCES}
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
@@ -573,7 +584,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # Windows 下 link TCP 底座不进 M1 批，TCP 用例本体空转）
 	    add_executable(gateway_ingress_tests
 	        test_gateway_ingress.cpp
-	        ../apps/gateway/src/gateway_server.cpp
+	        ${APOLLO_GATEWAY_SERVER_SOURCES}
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
@@ -622,7 +633,7 @@ if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
 	    # 本体空转）
 	    add_executable(gateway_drain_tests
 	        test_gateway_drain.cpp
-	        ../apps/gateway/src/gateway_server.cpp
+	        ${APOLLO_GATEWAY_SERVER_SOURCES}
 	        ../apps/gateway/src/gateway_control_server.cpp
 	        ../apps/gateway/src/m1_egress.cpp
 	        ../apps/gateway/src/m1_route_client.cpp
@@ -1075,7 +1086,7 @@ add_test(NAME WsTests COMMAND ws_tests)
 if(TARGET apollo_protocol)
 add_executable(gateway_ws_ingress_tests
     test_gateway_ws_ingress.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
@@ -1127,7 +1138,7 @@ endif()
 if(TARGET apollo_protocol)
 add_executable(gateway_session_resume_tests
     test_gateway_session_resume.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
@@ -1179,7 +1190,7 @@ endif()
 if(TARGET apollo_app_services)
 add_executable(gateway_base_activation_tests
     test_gateway_base_activation.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
@@ -1711,7 +1722,7 @@ endif()
 if(TARGET apollo::game_core AND TARGET apollo::game_world AND TARGET apollo::runtime)
 add_executable(gateway_m1_egress_tests
     test_gateway_m1_egress.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
@@ -1874,7 +1885,7 @@ add_test(NAME CellRegisterTests COMMAND cell_register_tests)
 # 排空替换分别验收。不代替业务双版本解码、生产登录或跨 Gateway 恢复。
 add_executable(update_continuity_tests
     test_update_continuity.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
@@ -1926,7 +1937,7 @@ add_test(NAME UpdateContinuityTests COMMAND update_continuity_tests)
 # 全程下行（TCP + WS + 多会话寻址隔离）。与 update_continuity 同源列表。
 add_executable(gateway_push_downlink_tests
     test_gateway_push_downlink.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
@@ -1979,7 +1990,7 @@ endif()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(login_chain_e2e_tests
     test_login_chain_e2e.cpp
-    ../apps/gateway/src/gateway_server.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
     ../apps/gateway/src/gateway_control_server.cpp
     ../apps/gateway/include/gateway/session_manager.cpp
     ../apps/gateway/src/ingress/client_ingress_server.cpp
