@@ -7,11 +7,22 @@ set(WORLD_APP_PROTOCOL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/protocol/src/codec.cpp
 )
 
+# CellApp 拆分实现单元（LAY-001）：生命周期/受理/内核循环在 cell_app.cpp，
+# 其余按职责分单元（实体消息 / 小队副本 / 脚本宿主 / Space 生命周期 / 玩家会话）。
+set(WORLD_CELL_APP_SOURCES
+    src/cell_app.cpp
+    src/cell_handlers.cpp
+    src/cell_squad.cpp
+    src/cell_script.cpp
+    src/cell_spaces.cpp
+    src/cell_sessions.cpp
+)
+
 # WorldApp 可执行文件
 add_executable(world
     src/main.cpp
     src/world_app.cpp
-    src/cell_app.cpp
+    ${WORLD_CELL_APP_SOURCES}
     src/m1_link_server.cpp
     src/cell_register_client.cpp
     src/dashboard.cpp
@@ -74,7 +85,7 @@ apollo_package_crash_handler(world)
 add_executable(cellServer
     src/cell_server_main.cpp
     src/cell_main.cpp
-    src/cell_app.cpp
+    ${WORLD_CELL_APP_SOURCES}
     src/m1_link_server.cpp
     src/cell_register_client.cpp
     src/dashboard.cpp
