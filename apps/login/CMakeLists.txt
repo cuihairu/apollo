@@ -19,6 +19,11 @@ add_executable(login
     ${APOLLO_CRYPTO_SOURCES}
     src/main.cpp
     src/login_server.cpp
+    src/login_authenticator.cpp
+    src/login_gateway_allocator.cpp
+    src/login_session_manager.cpp
+    src/login_server_handlers.cpp
+    src/login_server_agents.cpp
     src/m1_admission_server.cpp
     src/m1_base_client.cpp
     src/m1_service_register_server.cpp

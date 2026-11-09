@@ -63,6 +63,16 @@ set(APOLLO_M1_LINK_SERVER_SOURCES
     ../apps/world/src/m1_link_server_wire.cpp
 )
 
+# Login 服务拆分实现单元（LAY-012）：与 apps/login 同源。
+set(APOLLO_LOGIN_SERVER_SOURCES
+    ../apps/login/src/login_server.cpp
+    ../apps/login/src/login_authenticator.cpp
+    ../apps/login/src/login_gateway_allocator.cpp
+    ../apps/login/src/login_session_manager.cpp
+    ../apps/login/src/login_server_handlers.cpp
+    ../apps/login/src/login_server_agents.cpp
+)
+
 if(GTest_FOUND AND APOLLO_BUILD_GTESTS)
     # vcpkg often exposes headers as SYSTEM (-isystem). On macOS, /usr/local/include
     # is searched before system include dirs, which can accidentally pick up a
@@ -2041,7 +2051,7 @@ add_executable(login_chain_e2e_tests
     ../apps/gateway/src/m1_egress.cpp
     ../apps/gateway/src/m1_route_client.cpp
     ../apps/gateway/src/m1_base_client.cpp
-    ../apps/login/src/login_server.cpp
+    ${APOLLO_LOGIN_SERVER_SOURCES}
     ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
@@ -2858,7 +2868,7 @@ endforeach()
 if(TARGET apollo::game_world AND TARGET apollo_app_services)
 add_executable(hosted_services_tests
     test_hosted_services.cpp
-    ../apps/login/src/login_server.cpp
+    ${APOLLO_LOGIN_SERVER_SOURCES}
     ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
@@ -2891,7 +2901,7 @@ add_executable(fleet_rehome_chain_tests
     ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ${APOLLO_M1_LINK_SERVER_SOURCES}
-    ../apps/login/src/login_server.cpp
+    ${APOLLO_LOGIN_SERVER_SOURCES}
     ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
@@ -2925,7 +2935,7 @@ add_executable(migration_chain_tests
     ${APOLLO_WORLD_APP_SOURCES}
     ${APOLLO_CELL_APP_SOURCES}
     ${APOLLO_M1_LINK_SERVER_SOURCES}
-    ../apps/login/src/login_server.cpp
+    ${APOLLO_LOGIN_SERVER_SOURCES}
     ${APOLLO_CRYPTO_SOURCES}
     ../apps/login/src/m1_admission_server.cpp
     ../apps/login/src/m1_base_client.cpp
