@@ -1,13 +1,17 @@
 #pragma once
 
-#include <string>
-#include <memory>
-#include <queue>
-#include <vector>
-#include <chrono>
-#include <functional>
+#include <array>
 #include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <unordered_map>
 #include <variant>
+#include <vector>
 
 // ChannelConfigEx/ChannelBuilderEx 引用 TransportType/ChannelMode/
 // BackpressureStrategy/Channel，均定义于 channel.h（此前未包含，qos.cpp
