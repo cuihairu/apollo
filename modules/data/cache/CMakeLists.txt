@@ -23,3 +23,15 @@ if(MSVC)
     target_compile_options(apollo_data_cache PUBLIC /utf-8)
     target_compile_definitions(apollo_data_cache PUBLIC _CRT_SECURE_NO_WARNINGS)
 endif()
+
+if(BUILD_TESTING)
+    add_executable(apollo_data_cache_tests
+        tests/cache_tests.cpp
+    )
+    target_link_libraries(apollo_data_cache_tests
+        PRIVATE
+            apollo_data_cache
+    )
+    target_compile_features(apollo_data_cache_tests PRIVATE cxx_std_20)
+    add_test(NAME apollo_data_cache_tests COMMAND apollo_data_cache_tests)
+endif()

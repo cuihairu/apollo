@@ -847,8 +847,11 @@ TEST(time_timer) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     double elapsed = timer.elapsed_millis();
-    ASSERT_GE(elapsed, 45.0);  // Allow some tolerance
-    ASSERT_LE(elapsed, 100.0);  // Should not be too slow
+    ASSERT_GE(elapsed, 45.0);   // 下界证时钟确实走过约一个 sleep 区间
+    // 上界只防单位错误（微秒/秒级误用会落 50000+/0.05），不量调度速度：
+    // 加载下的 macOS CI 跑 50ms sleep 常越过 100ms（2026-11-12 实证红），紧
+    // 上界是对调度器的断言而非对 Timer 的断言
+    ASSERT_LE(elapsed, 5000.0);
 
     return true;
 }

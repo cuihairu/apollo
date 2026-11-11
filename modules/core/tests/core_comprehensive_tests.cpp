@@ -12,9 +12,14 @@
 #include "apollo/core/application_lifecycle.hpp"
 #include "apollo/core/config/config_registry.hpp"
 #include "apollo/core/di/application_context.hpp"
+#include "apollo/core/log/file_appender.hpp"
 #include "apollo/core/log/log_manager.hpp"
+#include "apollo/core/log/log_record.hpp"
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 #include <memory>
@@ -278,6 +283,209 @@ TEST(log_manager_to_string) {
     ASSERT_EQ(to_string(apollo::core::log::LogLevel::Warning), "WARN");
     ASSERT_EQ(to_string(apollo::core::log::LogLevel::Error), "ERROR");
 
+    return true;
+}
+
+// ============================================================================
+// FileAppender Tests
+// ============================================================================
+
+namespace file_appender_test {
+
+std::string read_file(const std::string& path) {
+    std::ifstream file(path);
+    return std::string(std::istreambuf_iterator<char>(file),
+                       std::istreambuf_iterator<char>());
+}
+
+using apollo::core::log::FileAppender;
+using apollo::core::log::FileAppenderConfig;
+using apollo::core::log::LogRecord;
+using apollo::core::log::LogRotationMode;
+
+} // namespace file_appender_test
+
+TEST(file_appender_write_and_resume) {
+    using namespace file_appender_test;
+    namespace fs = std::filesystem;
+
+    const std::string dir = "test_logs_core_resume";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+
+    FileAppenderConfig config;
+    config.directory = dir;
+    config.baseName = "resume";
+    config.extension = "log";
+    config.rotationMode = LogRotationMode::ByBoth;
+
+    std::string first_path;
+    {
+        FileAppender appender(config);
+        appender.append(LogRecord(apollo::core::log::LogLevel::Info, "first"));
+        first_path = appender.getCurrentFilePath();
+    }
+
+    // 同日重启续接：新实例扫描既有轮转文件取 max 序号 +1，不覆写旧文件
+    FileAppender resumed(config);
+    const std::string resumed_path = resumed.getCurrentFilePath();
+    ASSERT_TRUE(resumed_path != first_path);
+    ASSERT_TRUE(resumed_path.find("_1.") != std::string::npos);
+
+    resumed.append(LogRecord(apollo::core::log::LogLevel::Info, "second"));
+    resumed.flush();
+
+    ASSERT_TRUE(fs::exists(first_path));
+    ASSERT_TRUE(fs::exists(resumed_path));
+    ASSERT_TRUE(read_file(resumed_path).find("second") != std::string::npos);
+
+    fs::remove_all(dir, ec);
+    return true;
+}
+
+TEST(file_appender_rotation_cleanup) {
+    using namespace file_appender_test;
+    namespace fs = std::filesystem;
+
+    const std::string dir = "test_logs_core_cleanup";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+
+    FileAppenderConfig config;
+    config.directory = dir;
+    config.baseName = "clean";
+    config.extension = "log";
+    config.rotationMode = LogRotationMode::BySize;
+    config.maxFileSize = 64;   // 小文件强制轮转
+    config.maxFiles = 2;       // 只保留 2 个
+
+    {
+        FileAppender appender(config);
+        for (int i = 0; i < 6; ++i) {
+            appender.append(LogRecord(apollo::core::log::LogLevel::Info,
+                                      "cleanup rotation record 0123456789"));
+        }
+        appender.rotate();  // 手动轮转同样触发清理
+        appender.flush();
+    }
+
+    size_t kept = 0;
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        if (entry.is_regular_file() &&
+            entry.path().filename().string().find("clean_") == 0) {
+            ++kept;
+        }
+    }
+    ASSERT_TRUE(kept <= 2);
+
+    fs::remove_all(dir, ec);
+    return true;
+}
+
+TEST(file_appender_level_filter) {
+    using namespace file_appender_test;
+    namespace fs = std::filesystem;
+
+    const std::string dir = "test_logs_core_filter";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+
+    FileAppenderConfig config;
+    config.directory = dir;
+    config.baseName = "filter";
+    config.extension = "log";
+    config.rotationMode = LogRotationMode::None;
+
+    FileAppender appender(config);
+    // isEnabled 为位掩码口径（IAppender::hasLevel）：掩码含 Error 才放行 Error，
+    // 与阈值语义（Warning 及以上）不同
+    appender.setLevel(apollo::core::log::LogLevel::Warning |
+                      apollo::core::log::LogLevel::Error);
+
+    appender.append(LogRecord(apollo::core::log::LogLevel::Info, "filtered_out"));
+    appender.append(LogRecord(apollo::core::log::LogLevel::Error, "error_passed"));
+    appender.flush();
+
+    const std::string content = read_file(appender.getCurrentFilePath());
+    ASSERT_TRUE(content.find("filtered_out") == std::string::npos);
+    ASSERT_TRUE(content.find("error_passed") != std::string::npos);
+
+    fs::remove_all(dir, ec);
+    return true;
+}
+
+TEST(file_appender_structured_output) {
+    using namespace file_appender_test;
+    namespace fs = std::filesystem;
+
+    const std::string dir = "test_logs_core_structured";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+
+    FileAppenderConfig config;
+    config.directory = dir;
+    config.baseName = "structured";
+    config.extension = "log";
+    config.rotationMode = LogRotationMode::None;
+    config.structuredOutput = true;   // §5.1 logfmt 行契约
+
+    FileAppender appender(config);
+    appender.append(LogRecord(apollo::core::log::LogLevel::Info, "hello"));
+    appender.flush();
+
+    const std::string content = read_file(appender.getCurrentFilePath());
+    ASSERT_TRUE(content.rfind("ts=", 0) == 0);
+    ASSERT_TRUE(content.find("level=INFO") != std::string::npos);
+    ASSERT_TRUE(content.find("msg=hello") != std::string::npos);
+    // 结构化模式不落人读格式
+    ASSERT_TRUE(content.find("[INFO]") == std::string::npos);
+
+    fs::remove_all(dir, ec);
+    return true;
+}
+
+TEST(file_appender_set_config_reopen) {
+    using namespace file_appender_test;
+    namespace fs = std::filesystem;
+
+    const std::string dir_a = "test_logs_core_reopen_a";
+    const std::string dir_b = "test_logs_core_reopen_b";
+    std::error_code ec;
+    fs::remove_all(dir_a, ec);
+    fs::remove_all(dir_b, ec);
+
+    FileAppenderConfig config_a;
+    config_a.directory = dir_a;
+    config_a.baseName = "reopen";
+    config_a.extension = "log";
+    config_a.rotationMode = LogRotationMode::None;
+
+    FileAppender appender(config_a);
+    appender.append(LogRecord(apollo::core::log::LogLevel::Info, "before_switch"));
+    appender.flush();
+
+    FileAppenderConfig config_b = config_a;
+    config_b.directory = dir_b;
+    appender.setConfig(config_b);   // 换目录重开，续接口径与构造一致
+    appender.append(LogRecord(apollo::core::log::LogLevel::Info, "after_switch"));
+    appender.flush();
+
+    const std::string path_b = appender.getCurrentFilePath();
+    ASSERT_TRUE(path_b.find("test_logs_core_reopen_b") != std::string::npos);
+    ASSERT_TRUE(read_file(path_b).find("after_switch") != std::string::npos);
+
+    // 旧目录文件原样保留，未被覆写
+    bool old_kept = false;
+    for (const auto& entry : fs::directory_iterator(dir_a)) {
+        if (read_file(entry.path().string()).find("before_switch") !=
+            std::string::npos) {
+            old_kept = true;
+        }
+    }
+    ASSERT_TRUE(old_kept);
+
+    fs::remove_all(dir_a, ec);
+    fs::remove_all(dir_b, ec);
     return true;
 }
 
@@ -755,6 +963,14 @@ int main(int argc, char* argv[]) {
     RUN_TEST(log_manager_console_enabled);
     RUN_TEST(log_manager_concurrent);
     RUN_TEST(log_manager_to_string);
+
+    // FileAppender Tests
+    std::cout << "\n--- FileAppender Tests ---" << std::endl;
+    RUN_TEST(file_appender_write_and_resume);
+    RUN_TEST(file_appender_rotation_cleanup);
+    RUN_TEST(file_appender_level_filter);
+    RUN_TEST(file_appender_structured_output);
+    RUN_TEST(file_appender_set_config_reopen);
 
     // DI Tests
     std::cout << "\n--- ApplicationContext (DI) Tests ---" << std::endl;
