@@ -522,3 +522,16 @@
 - [x] 回归测试 `tests/test_shared_memory_channel.cpp`（APOLLO_ENABLE_IPC 默认 OFF、源码休眠，直编 .cpp 同 TimerManagerTests 范式）：roundtrip+type 传播+超容量拒绝 / open 容量不匹配拒绝 / 恰好接界回绕 / exact-fill 双场景约定一致 / 4 写者×400 条 size-填充模式一一对应并发无撕裂（读者校验 size↔模式配对）。CMake 注册 apollo_shared_memory_channel_tests（tests/CMakeLists.txt，SharedMemoryChannelTests）。
 - [x] 证据：commit d05a773b；build-cov 全量 **121/121 绿**（271s，含新用例）；新用例优化构建 100 连绿（40+60，其中 60 连在 4 线程自旋负载下）+ ASan/UBSan 树 5 组全绿 + TSan 10 连绿。
 - [x] 范围外备注：`template<typename T> bool send(const T&, uint32_t)`（shared_memory_channel.h:146）为无定义声明，休眠无调用方，本批不动（P0 批只修实缺陷，不扩 API 面）。
+
+### P1-9 QosManager/TokenBucket consume(0) 活锁 + TTL 时间单位错（qos.cpp:246-274, 190-191）
+
+- [x] 修复①活锁：`TokenBucket::consume` 的 timeoutMs==0 语义改为立即失败（原 else 分支 refill+yield 无限自旋——`RateLimiter::acquire` 默认路径 timeoutMs=0，令牌耗尽尤其 rate==0 永不补充时活锁占满核）。签名 void→bool 返回消费结果；`acquire` 原返回 `available()>=permits` 在"恰好消费最后一批令牌"时误报失败，改为直接报告 consume 结果（qos.cpp:255）。
+- [x] 修复②时间单位：`send`/`retry` 的 timestamp 统一存毫秒（原存 steady_clock 原始 count——Linux 为纳秒，`cleanupExpired` 按毫秒构造 time_point → sendTime 落在三万年后 → TTL 永不过期，pendingAck_ 只能靠显式 ack 清，超时统计形同虚设）（qos.cpp:31/87）。
+- [x] 附带修复（audit P2 + 直编暴露的休眠缺陷，均带测试覆盖）：
+  - retry 重新入队不补 `pendingMessages` → getNext 二次出队计数下溢为负（qos.cpp:92）。
+  - `send` 记账/追踪错位：`push(std::move(msg))` 后 `sentBytes += msg.data.size()` 恒加 0；`pendingAck_[seq] = queue.top()` 取的是全队列优先级最高者而非本条消息——队列里有更早高优消息时追踪错条目（实测：ttl=50 消息过期清理连带清掉 ttl=0 的后入队消息）。改为拷贝入队、msg 本体留作追踪（qos.cpp:60-68）。
+  - 等待时间计算 `needed*1000/rate_` 在 rate==0 时除零 SIGFPE → rate==0 直接睡到 deadline 由超时路径返回（qos.cpp:268）。
+  - 休眠树从未编译过（APOLLO_ENABLE_IPC=OFF），直编即暴露并修复：qos.h 缺 channel.h 包含；引用不存在的枚举值（TransportType::Auto→Tcp、ChannelMode::Bidirectional→Client，随 channel.h 实际枚举）；`hasPending` 等 const 方法锁非 mutable mutex_（→mutable）；`TokenBucket::setRate` 锁不存在的成员 mutex_（本类并发由 tokens_ 原子量承担）；channel.h 缺 `<future>`；service_endpoint_ex.h `LocalFirstSelector(const Config& = Config{})` NSDMI 默认实参 GCC 拒编 → 双构造等价改写。
+- [x] 回归测试 `tests/test_qos.cpp`（直编 qos.cpp 同 P0-4 范式）：consume(0) 空桶立即失败不自旋 / acquire 默认路径真伪（成功消费最后一批必报 true）+ 默认路径不自旋 / timeout>0 等待补齐与超时耗尽（rate=0 睡到超时、超量请求失败）/ TTL 50ms 实际过期+超时统计+ttl=0 永不过期 / retry 重新入队 pendingMessages 不下溢。CMake 注册 apollo_qos_tests（tests/CMakeLists.txt，QosTests）。
+- [x] 证据：commit 待填；build-cov 全量 **121/122**（唯一红 WorldDrainTests 负载假红：load avg 12-38 下直跑二进制亦 1/5 abort，该二进制 05:52 构建于本批任何改动之前、低载时 121/121 全绿含本用例——环境噪声既证）；QosTests 30 连绿 + ASan/UBSan 树 5/5。
+- [x] 范围外备注：channel.cpp 自身另有 43 处休眠编译错（ChannelBuilder 未声明等，先于本批存在），不属 P1#9 修域。

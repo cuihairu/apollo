@@ -28,7 +28,10 @@ bool QosManager::send(std::vector<uint8_t> data, const QosPolicy& qos) {
     PrioritizedMessage msg{
         .qos = qos,
         .sequence = seq,
-        .timestamp = std::chrono::steady_clock::now().time_since_epoch().count(),
+        // 统一存毫秒（audit P1#9：原存 steady_clock 原始 count——Linux 为
+        // 纳秒，cleanupExpired 却按毫秒构造 time_point → TTL 永不过期）
+        .timestamp = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count()),
         .retryCount = 0,
         .data = std::move(data)
     };
@@ -54,15 +57,18 @@ bool QosManager::send(std::vector<uint8_t> data, const QosPolicy& qos) {
         }
     }
 
-    queues_[idx].queue.push(std::move(msg));
+    queues_[idx].queue.push(msg);  // 拷贝入队：msg 本体留作 pendingAck_ 追踪与记账
     stats_.sentMessages++;
     stats_.sentBytes += msg.data.size();
     stats_.pendingMessages++;
 
-    // 对于需要确认的消息，加入待确认队列
+    // 对于需要确认的消息，加入待确认队列。原实现取 queue.top()：top() 是
+    // 全队列优先级最高者，非本条消息——队列里若有更早入队的高优先级消息，
+    // pendingAck_ 追踪到错误条目（实测：ttl=50 的消息过期清理连带清掉后入
+    // 队的 ttl=0 消息）
     if (qos.reliability == Reliability::AtLeastOnce ||
         qos.reliability == Reliability::ExactlyOnce) {
-        pendingAck_[seq] = queues_[idx].queue.top();
+        pendingAck_[seq] = std::move(msg);
     }
 
     return true;
@@ -84,12 +90,18 @@ bool QosManager::retry(uint64_t sequence) {
     }
 
     msg.retryCount++;
-    msg.timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    msg.timestamp = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
 
     // 重新加入发送队列
     size_t idx = static_cast<size_t>(msg.qos.priority);
     if (idx >= 5) idx = 2;
     queues_[idx].queue.push(std::move(msg));
+
+    // pendingMessages 口径 = 各优先级队列条目总数：getNext 每出队一条 -1，
+    // retry 重新入队须补 +1，否则同一条消息二次出队时计数下溢为负
+    // （audit P2）
+    stats_.pendingMessages++;
 
     pendingAck_.erase(it);
     stats_.retriedMessages++;
@@ -243,34 +255,46 @@ bool TokenBucket::tryConsume(size_t tokens) {
     return true;
 }
 
-void TokenBucket::consume(size_t tokens, uint32_t timeoutMs) {
+bool TokenBucket::consume(size_t tokens, uint32_t timeoutMs) {
+    // audit P1#9：timeoutMs==0 语义 = 不等待。原实现 else 分支对令牌不足
+    // 走 refill+yield 无限自旋——RateLimiter::acquire 默认路径（timeoutMs=0）
+    // 在令牌耗尽（尤其 rate_==0 永不补充）时活锁占满核。
+    if (tryConsume(tokens)) {
+        return true;
+    }
+    if (timeoutMs == 0) {
+        return false;
+    }
+
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
 
     while (!tryConsume(tokens)) {
-        if (timeoutMs > 0) {
-            auto now = std::chrono::steady_clock::now();
-            if (now >= deadline) {
-                return;  // 超时
+        auto now = std::chrono::steady_clock::now();
+        if (now >= deadline) {
+            return false;  // 超时
+        }
+
+        // 计算等待时间
+        size_t current = tokens_.load(std::memory_order_relaxed);
+        if (current < tokens) {
+            // rate_==0 永不补充令牌：无补齐时间可算（原式除以 rate_ 直接
+            // 除零 SIGFPE），睡到 deadline 后由循环超时返回
+            if (rate_ == 0) {
+                std::this_thread::sleep_until(deadline);
+                continue;
             }
+            size_t needed = tokens - current;
+            auto waitMs = static_cast<int>((needed * 1000 + rate_ - 1) / rate_);
 
-            // 计算等待时间
-            size_t current = tokens_.load(std::memory_order_relaxed);
-            if (current < tokens) {
-                size_t needed = tokens - current;
-                auto waitMs = static_cast<int>((needed * 1000 + rate_ - 1) / rate_);
+            auto waitUntil = std::min(
+                now + std::chrono::milliseconds(waitMs),
+                deadline
+            );
 
-                auto waitUntil = std::min(
-                    now + std::chrono::milliseconds(waitMs),
-                    deadline
-                );
-
-                std::this_thread::sleep_until(waitUntil);
-            }
-        } else {
-            refill();
-            std::this_thread::yield();
+            std::this_thread::sleep_until(waitUntil);
         }
     }
+    return true;
 }
 
 size_t TokenBucket::available() const {
@@ -278,7 +302,8 @@ size_t TokenBucket::available() const {
 }
 
 void TokenBucket::setRate(size_t rate) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    // 原实现 lock_guard 锁不存在的成员 mutex_（TokenBucket 无此成员，休眠
+    // 代码从未编译过）。本类并发面由 tokens_ 原子量承担，rate_ 普通存储。
     rate_ = rate;
 }
 
@@ -327,8 +352,9 @@ public:
     }
 
     bool acquire(size_t permits = 1, uint32_t timeoutMs = 0) override {
-        bucket_.consume(permits, timeoutMs);
-        return bucket_.available() >= permits;
+        // 原返回 `available() >= permits`：成功消费最后一批令牌后 available
+        // 恰小于 permits → 成功却报失败；改为直接报告消费结果
+        return bucket_.consume(permits, timeoutMs);
     }
 
     size_t available() const override {

@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
+#include <future>
 #include <vector>
 #include <string>
 #include <chrono>

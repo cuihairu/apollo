@@ -938,6 +938,25 @@ if(MSVC)
 endif()
 add_test(NAME SharedMemoryChannelTests COMMAND apollo_shared_memory_channel_tests)
 
+# ========== QoS consume(0) 活锁 / TTL 时间单位回归（audit P1#9） ==========
+# 直编源惯例：qos.cpp 处于 APOLLO_ENABLE_IPC=OFF 沉默区（且原头文件从未
+# 编译通过过），直编进测试可执行使其纳入绿色树真实执行。
+add_executable(apollo_qos_tests
+    test_qos.cpp
+    ../src/apollo/ipc/qos.cpp
+)
+target_include_directories(apollo_qos_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_compile_features(apollo_qos_tests PRIVATE cxx_std_20)
+if(WIN32)
+    target_compile_definitions(apollo_qos_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(apollo_qos_tests PRIVATE /utf-8)
+endif()
+add_test(NAME QosTests COMMAND apollo_qos_tests)
+
 # ========== Persistence Tests (P1-4) ==========
 # Write-behind journal 骨架 + 最小真链路（写盘→重启→读回）。
 # 直编源惯例：不依赖 app 目标，三平台 Unit 门禁真实执行。

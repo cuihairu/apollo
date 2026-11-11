@@ -9,6 +9,11 @@
 #include <atomic>
 #include <variant>
 
+// ChannelConfigEx/ChannelBuilderEx 引用 TransportType/ChannelMode/
+// BackpressureStrategy/Channel，均定义于 channel.h（此前未包含，qos.cpp
+// 单独编译从未成立）
+#include "apollo/ipc/channel.h"
+
 namespace apollo {
 namespace ipc {
 
@@ -59,7 +64,7 @@ struct QosPolicy {
 struct PrioritizedMessage {
     QosPolicy qos;
     uint64_t sequence;               // 序列号
-    uint64_t timestamp;              // 发送时间戳
+    uint64_t timestamp;              // 发送时间戳（毫秒，steady_clock epoch）
     uint32_t retryCount;             // 重试次数
     std::vector<uint8_t> data;       // 消息数据
 
@@ -164,7 +169,9 @@ private:
 
     // 待确认消息 (用于 AtLeastOnce / ExactlyOnce)
     std::unordered_map<uint64_t, PrioritizedMessage> pendingAck_;
-    std::mutex mutex_;
+    // mutable：hasPending/getStats 等 const 查询入口也须持锁（原非 mutable，
+    // const 方法锁非 mutable mutex 编译不过——休眠代码从未编译过）
+    mutable std::mutex mutex_;
 
     Stats stats_;
 };
@@ -180,8 +187,9 @@ public:
     // 尝试消费 tokens
     bool tryConsume(size_t tokens);
 
-    // 消费 tokens (阻塞直到可用)
-    void consume(size_t tokens, uint32_t timeoutMs = 0);
+    // 消费 tokens：timeoutMs==0 不等待，令牌不足立即失败（原实现 else
+    // 分支 refill+yield 无限自旋活锁占满核——audit P1#9）
+    bool consume(size_t tokens, uint32_t timeoutMs = 0);
 
     // 获取当前可用 tokens
     size_t available() const;
@@ -264,8 +272,10 @@ private:
 
 struct ChannelConfigEx {
     // 基础配置
-    TransportType transport = TransportType::Auto;
-    ChannelMode mode = ChannelMode::Bidirectional;
+    // 取值随 channel.h 实际枚举（原 TransportType::Auto/ChannelMode::
+    // Bidirectional 均不存在，休眠代码从未编译过）
+    TransportType transport = TransportType::Tcp;
+    ChannelMode mode = ChannelMode::Client;
     std::string name;
     std::string host = "localhost";
     uint16_t port = 0;
@@ -384,7 +394,7 @@ inline std::unique_ptr<Channel> createGameServerChannel(
     ChannelBuilderEx builder;
     builder.name(name)
            .transport(transport)
-           .mode(ChannelMode::Bidirectional)
+           .mode(ChannelMode::Client)
            .priority(MessagePriority::High)
            .reliability(Reliability::AtLeastOnce)
            .delivery(DeliveryGuarantee::FIFO)

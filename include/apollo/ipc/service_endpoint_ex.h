@@ -374,7 +374,11 @@ public:
         bool preferUnixSocket = true;
     };
 
-    LocalFirstSelector(const Config& config = Config{})
+    // 不用 `= Config{}` 默认实参：NSDMI 类在 GCC 下作为默认实参于外围类
+    // 未完结时不可用（编译错误），双构造等价且各编译器可移植
+    LocalFirstSelector()
+        : config_() {}
+    explicit LocalFirstSelector(const Config& config)
         : config_(config) {}
 
     // 从端点列表中选择最佳端点
