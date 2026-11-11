@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 namespace apollo::game::core {
@@ -105,8 +106,20 @@ public:
 
     void add_component(ComponentPtr component);
     void remove_component(const std::string& component_type);
+
+    // 声明只有头内定义（模板实例化点在调用方——此前仅声明无定义，
+    // 任何 get_component<T> 调用链接即断）
     template <typename T>
-    std::shared_ptr<T> get_component() const;
+    std::shared_ptr<T> get_component() const {
+        static_assert(std::is_base_of_v<IEntityComponent, T>,
+                      "get_component<T>: T must derive IEntityComponent");
+        for (const auto& [name, component] : components_) {
+            if (auto ptr = std::dynamic_pointer_cast<T>(component)) {
+                return ptr;
+            }
+        }
+        return nullptr;
+    }
 
 private:
     EntityId id_;

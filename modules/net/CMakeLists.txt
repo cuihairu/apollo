@@ -211,31 +211,8 @@ add_subdirectory(remoteentity)
 # 纯适配层，L2 会话增量留后续批）
 add_subdirectory(gameconnection)
 
-if(BUILD_TESTING)
-    find_package(GTest QUIET)
-    if(GTest_FOUND)
-        add_executable(apollo_net_comprehensive_tests
-            tests/net_comprehensive_tests.cpp
-        )
-
-        target_link_libraries(apollo_net_comprehensive_tests
-            PRIVATE
-                apollo_net_tcp
-                apollo_net_http
-                apollo_net_websocket
-                apollo_net_rpc
-                apollo::base
-                GTest::gtest
-                GTest::gtest_main
-        )
-
-        target_compile_features(apollo_net_comprehensive_tests PRIVATE cxx_std_20)
-
-        if(MSVC)
-            target_compile_options(apollo_net_comprehensive_tests PRIVATE /utf-8)
-            target_compile_definitions(apollo_net_comprehensive_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
-        endif()
-
-        add_test(NAME apollo_net_comprehensive_tests COMMAND apollo_net_comprehensive_tests)
-    endif()
-endif()
+# tests/net_comprehensive_tests.cpp 为初始导入脚手架：include 的
+# apollo/net/tcp|http|websocket|rpc 旧树头已随 modular 迁移删除，整个套件
+# 引用不存在的 API，无法编译（2026-11-12 BUILD_TESTING 首次接线时显形）。
+# 现行 net 面覆盖在根 tests/（NetWireTests/LinkTests 等），此脚手架删除，
+# 处置同 build 树遗留测试目标。

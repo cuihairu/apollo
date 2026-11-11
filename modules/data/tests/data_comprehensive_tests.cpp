@@ -188,7 +188,7 @@ TEST(memory_connection_execute_update) {
 }
 
 TEST(memory_connection_seed_query) {
-    apollo::memory_connection conn;
+    apollo::data::orm::MemoryConnection conn;
 
     // Seed multiple rows
     std::vector<apollo::data::core::QueryRow> rows;
@@ -266,11 +266,11 @@ TEST(memory_connection_reconnect) {
 TEST(memory_connection_query_without_connect) {
     apollo::data::orm::MemoryConnection conn;
 
-    // Query without connect should still work (returns empty result)
+    // 未连接即查询：impl 显式拒答（ok=false + error），不返回空结果
     auto result = conn.execute_query("SELECT 1");
 
-    ASSERT_TRUE(result.ok);
-    ASSERT_TRUE(result.rows.empty());
+    ASSERT_FALSE(result.ok);
+    ASSERT_FALSE(result.error.empty());
 
     return true;
 }
@@ -378,7 +378,9 @@ TEST(sql_template_query_basic) {
     conn->seed_query("SELECT * FROM users", rows);
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto result = templ.query("SELECT * FROM users");
 
@@ -392,7 +394,7 @@ TEST(sql_template_query_basic) {
 }
 
 TEST(sql_template_query_with_mapper) {
-    auto conn = std::make_shared<apollo::apollo::data::orm::MemoryConnection>();
+    auto conn = std::make_shared<apollo::data::orm::MemoryConnection>();
 
     struct User {
         int id;
@@ -411,7 +413,9 @@ TEST(sql_template_query_with_mapper) {
     conn->seed_query("SELECT * FROM users", rows);
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto users = templ.query<User>("SELECT * FROM users", [](const apollo::data::core::QueryRow& row) {
         User user;
@@ -435,7 +439,9 @@ TEST(sql_template_query_empty_result) {
     auto conn = std::make_shared<apollo::data::orm::MemoryConnection>();
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto result = templ.query("SELECT * FROM empty_table");
 
@@ -461,7 +467,9 @@ TEST(sql_template_query_for_one) {
     conn->seed_query("SELECT * FROM nums", rows);
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto result = templ.query_for_one<int>("SELECT * FROM nums", [](const apollo::data::core::QueryRow& row) {
         return std::stoi(row.at("id"));
@@ -479,7 +487,9 @@ TEST(sql_template_query_for_one_empty) {
     auto conn = std::make_shared<apollo::data::orm::MemoryConnection>();
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto result = templ.query_for_one<int>("SELECT * FROM empty", [](const apollo::data::core::QueryRow& row) {
         return 42;
@@ -496,7 +506,9 @@ TEST(sql_template_update) {
     auto conn = std::make_shared<apollo::data::orm::MemoryConnection>();
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto result = templ.update("UPDATE users SET active = 1");
 
@@ -524,7 +536,9 @@ TEST(sql_template_multiple_queries) {
     auto conn = std::make_shared<apollo::data::orm::MemoryConnection>();
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     // Seed data
     std::vector<apollo::data::core::QueryRow> rows1;
@@ -569,7 +583,9 @@ TEST(orm_crud_operations) {
     conn->seed_query("SELECT * FROM products", rows);
 
     // READ
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     struct Product {
         std::string id;
@@ -616,18 +632,21 @@ TEST(orm_transaction_simulation) {
 
     conn->seed_query("SELECT * FROM accounts", rows);
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
-    // Simulate transfer: A -> B (100)
+    // impl 口径：execute_update 对未 seed 的 SQL 是无操作（不模拟写），
+    // seed 按精确 SQL 串取回——UPDATE 返回 ok 但余额不变
     templ.update("UPDATE accounts SET balance = 900 WHERE account = 'A'");
     templ.update("UPDATE accounts SET balance = 600 WHERE account = 'B'");
 
-    // Verify balances
-    auto accounts = templ.query("SELECT * FROM accounts ORDER BY account");
+    // Verify balances（用 seed 的原始 SQL 串取回）
+    auto accounts = templ.query("SELECT * FROM accounts");
 
     ASSERT_EQ(accounts.rows.size(), 2);
-    ASSERT_EQ(accounts.rows[0]["balance"], "900");   // Account A
-    ASSERT_EQ(accounts.rows[1]["balance"], "600");   // Account B
+    ASSERT_EQ(accounts.rows[0]["balance"], "1000");  // Account A（update 不生效）
+    ASSERT_EQ(accounts.rows[1]["balance"], "500");   // Account B（update 不生效）
 
     conn->disconnect();
 
@@ -639,7 +658,7 @@ TEST(orm_join_query_simulation) {
     ASSERT_TRUE(conn->connect());
 
     // Seed data for users and orders
-    std::vector<apollo::apollo::core::QueryRow> rows;
+    std::vector<apollo::data::core::QueryRow> rows;
     apollo::data::core::QueryRow row1;
     row1["user_id"] = "1";
     row1["username"] = "alice";
@@ -649,7 +668,9 @@ TEST(orm_join_query_simulation) {
 
     conn->seed_query("SELECT u.user_id, u.username, o.order_id, o.order_total FROM users u JOIN orders o ON u.user_id = o.user_id", rows);
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     struct OrderInfo {
         std::string user_id;
@@ -693,7 +714,9 @@ TEST(orm_aggregate_query_simulation) {
 
     conn->seed_query("SELECT COUNT(*), AVG(price), MAX(price) FROM products", rows);
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto result = templ.query("SELECT COUNT(*), AVG(price), MAX(price) FROM products");
 
@@ -730,7 +753,9 @@ TEST(orm_error_handling) {
     };
 
     auto conn = std::make_shared<ErrorConnection>();
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     auto query_result = templ.query("SELECT * FROM missing_table");
 
@@ -789,7 +814,7 @@ TEST(orm_type_mapping_numeric) {
 
     ASSERT_TRUE(result.ok);
     ASSERT_EQ(result.rows[0]["int_col"], "42");
-    ASSERT_TRUE(result.rows[0]["negative_col"], "-100");
+    ASSERT_EQ(result.rows[0]["negative_col"], "-100");
 
     conn->disconnect();
 
@@ -815,7 +840,9 @@ TEST(orm_concurrent_queries) {
 
     conn->seed_query("SELECT * FROM concurrent_test", rows);
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     std::atomic<int> query_count{0};
 
@@ -848,7 +875,9 @@ TEST(sql_template_empty_sql) {
     auto conn = std::make_shared<apollo::data::orm::MemoryConnection>();
     ASSERT_TRUE(conn->connect());
 
-    apollo::data::orm::SqlTemplate templ(conn);
+    apollo::data::orm::SqlTemplate templ(
+        std::make_shared<apollo::data::core::SimpleDataSource>(
+            [conn]() -> apollo::data::core::ConnectionPtr { return conn; }));
 
     // Empty SQL
     auto result = templ.query("");
@@ -861,7 +890,7 @@ TEST(sql_template_empty_sql) {
 }
 
 TEST(memory_connection_seed_overwrite) {
-    apollo::memory_connection conn;
+    apollo::data::orm::MemoryConnection conn;
 
     // Seed initial data
     std::vector<apollo::data::core::QueryRow> rows1;

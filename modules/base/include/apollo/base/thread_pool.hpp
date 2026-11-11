@@ -47,9 +47,10 @@ public:
 
         auto task_ptr = std::make_shared<std::packaged_task<ReturnType()>>(
             [f = std::forward<F>(f), tuple = std::make_tuple(std::forward<Args>(args)...)]() mutable {
-                return std::apply([f](Args&&... args) -> ReturnType {
-                    return std::invoke(f, std::forward<Args>(args)...);
-                }, tuple);
+                // std::apply 以移动后的 tuple 元素（右值）调用 f——等价旧内层
+                // lambda 的 forward 语义，但不把 tuple 左值绑到 Args&& 形参
+                // （GCC 15 std::invoke 严格化下直接编不过）
+                return std::apply(f, std::move(tuple));
             }
         );
 

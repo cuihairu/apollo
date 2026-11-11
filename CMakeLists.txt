@@ -439,6 +439,19 @@ if(APOLLO_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+# enable_testing 必须先于 modules（P1-2）：模块本地测试套件（base/core/game/
+# bigworld/data/runtime/net 各自的 if(BUILD_TESTING) 块）随 add_subdirectory(modules)
+# 配置——enable_testing() 只置其后目录的 BUILD_TESTING，置后时模块测试全部
+# 静默失联（覆盖率基线：id_pool.cpp 0/98 等整 TU 0%）。tests 目录本身仍留在
+# modules 之后（目标守卫需要，见下方 P1-1 注）。
+if(APOLLO_BUILD_TESTS)
+    enable_testing()
+    # 模块本地套件以 if(BUILD_TESTING) 门控——enable_testing() 不定义该变量
+    # （定义它是 include(CTest) 的职责），不显式置位则 base/core/game/bigworld/
+    # data/runtime/net 七个模块套件仍不接入
+    set(BUILD_TESTING ON)
+endif()
+
 if(APOLLO_ENABLE_MODULAR_LAYOUT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/CMakeLists.txt")
     add_subdirectory(modules)
 endif()
@@ -448,7 +461,6 @@ if(TARGET apollo_protocol AND TARGET apollo::game_session)
 endif()
 
 if(APOLLO_BUILD_TESTS)
-    enable_testing()
     # 次序修正（P1-1）：tests 必须在 modules/apps 之后处理——tests/CMakeLists
     # 以 if(TARGET apollo::game_core) 等为目标守卫，先于 modules 处理时守卫
     # 恒假，session_world_tests / base_avatar_tests / online_directory_tests 全部

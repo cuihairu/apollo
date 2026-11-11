@@ -391,10 +391,16 @@ TEST(host_shutdown_hooks) {
 
     bool hook1_called = false;
     bool hook2_called = false;
+    apollo::runtime::StopReason hook1_reason = apollo::runtime::StopReason::Completed;
 
+    // hook 内不用 ASSERT 宏：宏失败分支 return false 会把 void 回调 lambda
+    // 的返回类型推导成 bool，断言通过路径直落末尾无 return——值返回函数
+    // fall-off-the-end 是 UB，GCC 15 对此直接生成 ud2（SIGILL）。改为记录
+    // 后于 hook 外断言（同文件 host_shutdown_hooks_order、test_runtime.cpp
+    // 的既有 hook 均为此写法）。
     host.add_shutdown_hook([&](apollo::runtime::StopReason reason) {
         hook1_called = true;
-        ASSERT_EQ(reason, apollo::runtime::StopReason::Completed);
+        hook1_reason = reason;
     });
 
     host.add_shutdown_hook([&](apollo::runtime::StopReason reason) {
@@ -410,6 +416,7 @@ TEST(host_shutdown_hooks) {
 
     ASSERT_TRUE(hook1_called);
     ASSERT_TRUE(hook2_called);
+    ASSERT_EQ(hook1_reason, apollo::runtime::StopReason::Completed);
 
     return true;
 }

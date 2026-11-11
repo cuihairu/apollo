@@ -10,6 +10,9 @@ namespace {
 
 bool test_sql_template_query_for_one() {
     auto connection = std::make_shared<apollo::data::orm::MemoryConnection>();
+    // impl 口径：MemoryConnection 默认断连，未连接的查询/更新一律拒答
+    // （ok=false）——先 connect 再 seed
+    connection->connect();
     connection->seed_query(
         "SELECT name, level FROM player WHERE id = 1000",
         {{{"name", "hero"}, {"level", "42"}}});
@@ -30,6 +33,7 @@ bool test_sql_template_query_for_one() {
 
 bool test_sql_template_update() {
     auto connection = std::make_shared<apollo::data::orm::MemoryConnection>();
+    connection->connect();
     connection->seed_query("UPDATE player SET online = 1 WHERE id = 1000", {});
 
     auto data_source = std::make_shared<apollo::data::core::SimpleDataSource>(
