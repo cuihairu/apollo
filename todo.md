@@ -494,3 +494,10 @@
 - [x] `find()` 返回裸指针改为 thread_local 槽副本（player_directory.cpp:314）——map 指针解锁后因他线程 erase 悬空；槽在本线程下次 find() 前有效，全部调用方均立即拷贝字段。
 - [x] 回归测试 `modules/game/session/tests/player_directory_concurrency_tests.cpp`：写线程 session_up/evict/session_down/moved × 读线程 online_ids/find/size/sweep 并发 2s 不崩 + 语义保持（顶号/窗口/迁移单线程面全保）；CMake 注册 apollo_game_session_tests（modules/game/session/CMakeLists.txt）。
 - [x] 证据：commit 待填；build-cov 全量 **118/118 绿**（含新用例，213s）。
+
+### P0-2 TimerManager executeTimer 解锁未持锁 + 回调窗口引用失效（timer_manager.cpp:344-358）
+
+- [x] 修复：`executeTimer` 的 `mutex_.unlock()`（解锁未持有的锁 = UB）删除——回调参数 TimerDesc 拷出、**锁外触发**（参照 modules/base TimerWheel fire_slot 出锁范式）；回调后按 id 重查推进 repeat（回调内 killTimer(selfId) 已删条目则不再重插，尊重回调自停）。`update()`→`processSlot`/`cascadeTimer` 全程不加锁的问题一并封口：wheel 摘桶/timers_ 访问独立加锁（原实现 update() 无锁，并发 setTimer/killTimer 竞态）。
+- [x] 附带修复（测试暴露的既有缺陷）：首次 `update()` 从 currentTime_=0 全量回放 epoch 积压（量级 O(uptime_ms)，uptime 196731s → ~1.97e8 tick 自旋，实测挂起 111s+）——`started_` 标志首次 update() 跳到当前拍，后续只处理增量。
+- [x] 回归测试 `tests/test_timer_manager.cpp`（直编 timer_manager.cpp，自包含不依赖 legacy apollo lib，绿色模块化树真实执行）：单次触发后移除 / 周期回调内 killTimer 自停（修复前悬空引用 UAF）/ 并发 setTimer-killTimer×update() 1s 不崩；CMake 注册 apollo_timer_manager_tests（tests/CMakeLists.txt，TimerManagerTests）。
+- [x] 证据：commit 待填；build-cov 全量 **119/119 绿**（202.7s）。

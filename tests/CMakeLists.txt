@@ -897,6 +897,27 @@ if(MSVC)
 endif()
 add_test(NAME PlayerDirectoryTests COMMAND player_directory_tests)
 
+# ========== TimerManager 跨线程/回调窗口回归（audit P0#2） ==========
+# 直编源惯例（同 avatar_tests/player_directory_tests）：timer_manager.cpp
+# 自包含（仅依赖 timer_manager.h），不链接 legacy apollo lib，绿色模块化树
+# 真实执行。修复前 executeTimer 解锁未持锁 + 回调窗口 TimerDesc& 悬空。
+add_executable(apollo_timer_manager_tests
+    test_timer_manager.cpp
+    ../src/apollo/core/timer/timer_manager.cpp
+)
+target_include_directories(apollo_timer_manager_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
+)
+target_compile_features(apollo_timer_manager_tests PRIVATE cxx_std_20)
+if(WIN32)
+    target_compile_definitions(apollo_timer_manager_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(apollo_timer_manager_tests PRIVATE /utf-8)
+endif()
+add_test(NAME TimerManagerTests COMMAND apollo_timer_manager_tests)
+
 # ========== Persistence Tests (P1-4) ==========
 # Write-behind journal 骨架 + 最小真链路（写盘→重启→读回）。
 # 直编源惯例：不依赖 app 目标，三平台 Unit 门禁真实执行。

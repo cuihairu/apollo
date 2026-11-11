@@ -162,6 +162,7 @@ private:
     uint32_t resolutionMs_;          ///< 定时器精度
     uint64_t currentTime_;           ///< 当前时间（相对于启动时间）
     uint32_t tickCount_;             ///< tick计数（用于时间轮旋转）
+    bool started_ = false;           ///< 首次 update() 跳过 epoch 积压（构造时尚无定时器，回放 uptime 积压无意义且量级 O(uptime_ms)）
     TimerMap timers_;                ///< 活跃定时器
     std::vector<Wheel> wheels_;      ///< 时间轮数组
     mutable std::mutex mutex_;       ///< 保护定时器操作
@@ -204,11 +205,6 @@ private:
      * @brief 降级定时器（从高层时间轮移动到低层）
      */
     void cascadeTimer(uint32_t level);
-
-    /**
-     * @brief 执行定时器回调
-     */
-    void executeTimer(TimerDesc& timer);
 };
 
 /**

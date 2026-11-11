@@ -150,6 +150,16 @@ bool TimerManager::update(int maxProcess) {
     // 注意：currentTime_ 是相对时间，单位是tick
     uint64_t nowTicks = now / resolutionMs_;
 
+    // 首次 update()：构造时尚无定时器，跳到当前拍——回放 epoch 积压
+    // （currentTime_ 初值 0 → nowTicks 量级 = uptime_ms，可达 10^8+）
+    // 无意义且纯自旋。置位后从当前拍起算，后续 update 只处理增量。
+    if (!started_) {
+        started_ = true;
+        currentTime_ = nowTicks;
+        tickCount_ = static_cast<uint32_t>(nowTicks);
+        return false;
+    }
+
     if (nowTicks <= currentTime_) {
         return false;  // 没有新的tick需要处理
     }
@@ -273,33 +283,57 @@ void TimerManager::processTick() {
 }
 
 size_t TimerManager::processSlot(uint32_t level, uint32_t slot) {
-    auto& timerIds = wheels_[level][slot];
-    if (timerIds.empty()) {
-        return 0;
-    }
-
-    // 复制定时器ID列表，避免在处理过程中修改容器
+    // 先整桶摘出（加锁），回调内 schedule/cancel 不破坏桶结构
     std::vector<TimerId> toProcess;
-    toProcess.swap(timerIds);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto& timerIds = wheels_[level][slot];
+        if (timerIds.empty()) {
+            return 0;
+        }
+        toProcess.swap(timerIds);
+    }
 
     size_t count = 0;
     for (TimerId timerId : toProcess) {
-        auto it = timers_.find(timerId);
-        if (it == timers_.end()) {
-            continue;  // 定时器已被删除
+        // 回调参数拷出（加锁，仅拷贝不持 map 引用跨回调窗口——回调内
+        // killTimer 可 erase 致悬空，audit P0#2）；TimerDesc 值拷贝，
+        // 闭包/接口指针在锁外触发期不指向容器。
+        TimerDesc desc;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto it = timers_.find(timerId);
+            if (it == timers_.end()) {
+                continue;  // 定时器已被删除
+            }
+            desc = it->second;
         }
 
-        TimerDesc& timer = it->second;
-
-        // 执行回调
-        executeTimer(timer);
+        // 锁外触发（参照 modules/base TimerWheel fire_slot 出锁范式，删除
+        // 原 executeTimer 的 unlock/lock 手法——原实现 unlock 未持有的锁 UB）
+        try {
+            if (desc.callback) {
+                desc.callback(desc.id, desc.userData);
+            } else if (desc.interfaceCb) {
+                desc.interfaceCb->onTimer(desc.id);
+            }
+        } catch (...) {
+            // 捕获回调中的异常，防止影响定时器系统
+        }
         count++;
 
-        // 处理重复逻辑
+        // 回调后按 id 重查推进 repeat（加锁）：回调内 killTimer(timerId) 已
+        // 删条目 → 不再重插（尊重回调自停）；仍在 → 递减并按 repeat 决定
+        // 重插/终结。
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = timers_.find(timerId);
+        if (it == timers_.end()) {
+            continue;
+        }
+        TimerDesc& timer = it->second;
         if (timer.repeat != 0xFFFFFFFF && timer.repeat > 0) {
             timer.repeat--;
         }
-
         if (timer.repeat == 0) {
             // 单次定时器或重复次数用完
             timers_.erase(it);
@@ -317,17 +351,20 @@ void TimerManager::cascadeTimer(uint32_t level) {
         return;
     }
 
-    uint32_t slotIndex = (tickCount_ >> (level * WHEEL_BITS)) & WHEEL_MASK;
-    auto& timerIds = wheels_[level][slotIndex];
-
-    if (timerIds.empty()) {
-        return;
+    // 整桶摘出再逐项重排（加锁：并发 setTimer/killTimer 与 processTick 同访
+    // wheels_/timers_ 的竞态，audit P0#2 一并封口）
+    std::vector<TimerId> toCascade;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        uint32_t slotIndex = (tickCount_ >> (level * WHEEL_BITS)) & WHEEL_MASK;
+        auto& timerIds = wheels_[level][slotIndex];
+        if (timerIds.empty()) {
+            return;
+        }
+        toCascade.swap(timerIds);
     }
 
-    // 将定时器重新分配到低层时间轮
-    std::vector<TimerId> toCascade;
-    toCascade.swap(timerIds);
-
+    std::lock_guard<std::mutex> lock(mutex_);
     for (TimerId timerId : toCascade) {
         auto it = timers_.find(timerId);
         if (it == timers_.end()) {
@@ -339,23 +376,6 @@ void TimerManager::cascadeTimer(uint32_t level) {
         // 实际应该计算剩余时间
         addToWheel(it->second);
     }
-}
-
-void TimerManager::executeTimer(TimerDesc& timer) {
-    // 释放锁后执行回调，避免死锁
-    mutex_.unlock();
-
-    try {
-        if (timer.callback) {
-            timer.callback(timer.id, timer.userData);
-        } else if (timer.interfaceCb) {
-            timer.interfaceCb->onTimer(timer.id);
-        }
-    } catch (...) {
-        // 捕获回调中的异常，防止影响定时器系统
-    }
-
-    mutex_.lock();
 }
 
 } // namespace timer
