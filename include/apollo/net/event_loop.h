@@ -239,6 +239,9 @@ public:
     using TimeoutCallback = std::function<void(socket_t sockfd)>;
 
     HeartbeatManager(EventLoop* loop);
+    // 析构：移除周期检查定时器——回调捕获 this，manager 先死则定时器回调
+    // 打悬空 this（audit P0#3）
+    ~HeartbeatManager();
 
     // 添加心跳检测
     void addHeartbeat(socket_t sockfd, uint64_t intervalMs,
@@ -281,6 +284,8 @@ public:
     using ReconnectCallback = std::function<bool()>;
 
     ReconnectManager(EventLoop* loop);
+    // 析构：移除全部活跃重连定时器（回调捕获 this，manager 先死则悬空）
+    ~ReconnectManager();
 
     // 添加重连任务
     uint64_t addReconnect(const std::string& address, uint16_t port,

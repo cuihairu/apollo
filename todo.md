@@ -501,3 +501,10 @@
 - [x] 附带修复（测试暴露的既有缺陷）：首次 `update()` 从 currentTime_=0 全量回放 epoch 积压（量级 O(uptime_ms)，uptime 196731s → ~1.97e8 tick 自旋，实测挂起 111s+）——`started_` 标志首次 update() 跳到当前拍，后续只处理增量。
 - [x] 回归测试 `tests/test_timer_manager.cpp`（直编 timer_manager.cpp，自包含不依赖 legacy apollo lib，绿色模块化树真实执行）：单次触发后移除 / 周期回调内 killTimer 自停（修复前悬空引用 UAF）/ 并发 setTimer-killTimer×update() 1s 不崩；CMake 注册 apollo_timer_manager_tests（tests/CMakeLists.txt，TimerManagerTests）。
 - [x] 证据：commit 待填；build-cov 全量 **119/119 绿**（202.7s）。
+
+### P0-3 event_loop onCheckTimer 边遍历边 erase + Manager 无析构（event_loop.cpp:578-594）
+
+- [x] 修复①onCheckTimer：超时 fd 先收集 `timedOut`，遍历结束后循环外 `heartbeats_.erase(fd)`——原实现在 `for (auto& [sockfd, info] : heartbeats_)` 体内 erase(sockfd) 致迭代器失效 UB。
+- [x] 修复②析构：`~HeartbeatManager()` 移除周期检查定时器 `checkTimerId_`、`~ReconnectManager()` 移除全部活跃重连定时器——两定时器回调捕获 `this`，manager 先死则回调打悬空 this → UAF。
+- [x] 回归测试 `tests/test_event_loop_heartbeat_timeout.cpp`：3 心跳同轮超时全部触发恰一次（修复前遍历中 erase 跳过/崩溃）/ 构造-析构管理器后泵过 1000ms 周期 loop 仍存活可用；CMake 注册 event_loop_heartbeat_timeout_tests（EventLoopHeartbeatTimeoutTests）。
+- [x] 证据：commit 待填；全量 119/120（WorldDrainTests 负载假红 exit134×2、直跑第 3 次全绿——load avg 26-45 环境噪声，本会话未动 world/drain 代码）。

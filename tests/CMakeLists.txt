@@ -1375,6 +1375,25 @@ if(MSVC)
 endif()
 add_test(NAME EventLoopReentrantTests COMMAND event_loop_reentrant_tests)
 
+# ========== EventLoop Heartbeat/Reconnect 超时与析构回归（audit P0#3） ==========
+# ①onCheckTimer 原实现边遍历边 erase 迭代器失效；②HeartbeatManager/
+# ReconnectManager 原无析构，定时器回调捕获 this，manager 先死则悬空。
+add_executable(event_loop_heartbeat_timeout_tests
+    test_event_loop_heartbeat_timeout.cpp
+)
+target_link_libraries(event_loop_heartbeat_timeout_tests PRIVATE
+    apollo::net_http
+    apollo::core
+)
+if(WIN32)
+    target_link_libraries(event_loop_heartbeat_timeout_tests PRIVATE ws2_32)
+    target_compile_definitions(event_loop_heartbeat_timeout_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(event_loop_heartbeat_timeout_tests PRIVATE /utf-8)
+endif()
+add_test(NAME EventLoopHeartbeatTimeoutTests COMMAND event_loop_heartbeat_timeout_tests)
+
 # ========== Social Tests (P2-4) ==========
 # Guild/Party 最小 CRUD（P2 出口判据④；social 无 core 类型依赖，双 cpp 直编）
 add_executable(social_tests

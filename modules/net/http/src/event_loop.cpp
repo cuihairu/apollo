@@ -536,6 +536,14 @@ net::HeartbeatManager::HeartbeatManager(EventLoop* loop)
     });
 }
 
+net::HeartbeatManager::~HeartbeatManager() {
+    // 移除周期检查定时器：回调捕获 this，manager 先死则回调打悬空 this
+    // （audit P0#3）
+    if (loop_) {
+        loop_->removeTimer(checkTimerId_);
+    }
+}
+
 void net::HeartbeatManager::addHeartbeat(socket_t sockfd, uint64_t intervalMs,
                                    HeartbeatCallback heartbeatCb,
                                    TimeoutCallback timeoutCb) {
@@ -572,6 +580,7 @@ void net::HeartbeatManager::onCheckTimer() {
     auto now = std::chrono::steady_clock::now();
     std::vector<std::pair<socket_t, HeartbeatCallback>> beatCallbacks;
     std::vector<std::pair<socket_t, TimeoutCallback>> timeoutCallbacks;
+    std::vector<socket_t> timedOut;
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -589,8 +598,13 @@ void net::HeartbeatManager::onCheckTimer() {
             // 检查超时 (3倍心跳间隔)
             if (elapsedMs >= info.intervalMs * 3) {
                 timeoutCallbacks.emplace_back(sockfd, info.timeoutCallback);
-                heartbeats_.erase(sockfd);
+                timedOut.push_back(sockfd);
             }
+        }
+        // 超时 fd 出锁回调前先删除——原实现在遍历体内 erase(sockfd) 致迭代器
+        // 失效 UB（audit P0#3）
+        for (const auto fd : timedOut) {
+            heartbeats_.erase(fd);
         }
     }
 
@@ -614,6 +628,17 @@ void net::HeartbeatManager::onCheckTimer() {
 
 net::ReconnectManager::ReconnectManager(EventLoop* loop)
     : loop_(loop), nextReconnectId_(1) {
+}
+
+net::ReconnectManager::~ReconnectManager() {
+    // 移除全部活跃重连定时器：每个定时器回调捕获 (this, id)，manager 先死
+    // 则回调打悬空 this（audit P0#3）
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [id, info] : reconnects_) {
+        (void)id;
+        loop_->removeTimer(info.timerId);
+    }
+    reconnects_.clear();
 }
 
 uint64_t net::ReconnectManager::addReconnect(const std::string& address, uint16_t port,
