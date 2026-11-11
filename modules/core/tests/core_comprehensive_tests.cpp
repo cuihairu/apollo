@@ -11,6 +11,7 @@
 
 #include "apollo/core/application_lifecycle.hpp"
 #include "apollo/core/config/config_registry.hpp"
+#include "apollo/core/module_manifest.hpp"
 #include "apollo/core/di/application_context.hpp"
 #include "apollo/core/log/file_appender.hpp"
 #include "apollo/core/log/log_manager.hpp"
@@ -304,6 +305,19 @@ using apollo::core::log::LogRecord;
 using apollo::core::log::LogRotationMode;
 
 } // namespace file_appender_test
+
+TEST(module_manifest_fields) {
+    const auto& manifest = apollo::core::core_manifest();
+
+    ASSERT_EQ(manifest.name, "apollo_core");
+    ASSERT_EQ(manifest.layer, "core");
+    ASSERT_TRUE(!manifest.description.empty());
+
+    // 静态单例：两次取回同一实例
+    ASSERT_TRUE(&apollo::core::core_manifest() == &manifest);
+
+    return true;
+}
 
 TEST(file_appender_write_and_resume) {
     using namespace file_appender_test;
@@ -966,6 +980,7 @@ int main(int argc, char* argv[]) {
 
     // FileAppender Tests
     std::cout << "\n--- FileAppender Tests ---" << std::endl;
+    RUN_TEST(module_manifest_fields);
     RUN_TEST(file_appender_write_and_resume);
     RUN_TEST(file_appender_rotation_cleanup);
     RUN_TEST(file_appender_level_filter);

@@ -10,6 +10,7 @@
  */
 
 #include "apollo/runtime/application_host.hpp"
+#include "apollo/runtime/runtime_manifest.hpp"
 
 #include <iostream>
 #include <string>
@@ -684,6 +685,23 @@ TEST(service_host_shutdown_hooks) {
 }
 
 // ============================================================================
+// Manifest Tests
+// ============================================================================
+
+TEST(runtime_manifest_fields) {
+    const auto& manifest = apollo::runtime::runtime_manifest();
+
+    ASSERT_EQ(manifest.name, "apollo_runtime");
+    ASSERT_EQ(manifest.layer, "runtime");
+    ASSERT_TRUE(!manifest.description.empty());
+
+    // 静态单例：两次取回同一实例
+    ASSERT_TRUE(&apollo::runtime::runtime_manifest() == &manifest);
+
+    return true;
+}
+
+// ============================================================================
 // Phase Transition Tests
 // ============================================================================
 
@@ -915,6 +933,7 @@ int main(int argc, char* argv[]) {
     RUN_TEST(service_host_delegates_to_application_host);
     RUN_TEST(service_host_console_signal_sources);
     RUN_TEST(service_host_shutdown_hooks);
+    RUN_TEST(runtime_manifest_fields);
 
     // Phase Transition Tests
     std::cout << "\n--- Phase Transition Tests ---" << std::endl;

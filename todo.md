@@ -471,4 +471,11 @@
 - [x] macOS CI 红（f8b165a3，base_comprehensive test_time_timer `elapsed<=100` 断言 50ms sleep 超窗）：上界改 5000ms 只防单位错误、不量调度速度（注释写明成因——加载下 macOS 调度 50ms sleep 常越 100ms，紧上界是对调度器的断言非对 Timer 的断言）。build-cov 115/115 绿 + WorldDrainTests 隔离重跑 2.80s 绿（负载假红既证）。
 - [x] 覆盖率批次2（同口径 gcovr `--filter modules/`，全量重链+清计数器后采集）：**TOTAL 21812 行 80.7%**（批次1 79.9%）——base 95.9 / data **93.9**（945→1035 行，cache 并入且覆盖）/ core **88.9**（84.9→）/ protocol 93.2 / runtime 92.8 / contract 91.6 / game 90.8 / script 90.4 / net 54.6。采集中 gcovr `no_working_dir_found` 崩 = 6 对 gcda/gcno stamp 错配（并发 ninja 产物），逐对 `gcov -n` 定位、删 .o 重编全量重链后复采（错配文件恰为聚合中消失的 ~600 行）。
 
+## 覆盖率批次3：net/tcp 传输层回环集成测试 + manifest 字段面（2026-11-12）
+
+- [x] `modules/net/tcp/tests/tcp_socket_tests.cpp` 首个真回环集成套件（gateway 客户端接入的生产传输栈，此前 socket.cpp 0/166）：NetAddress 构造/ToString、Socket 创建+选项组（非阻塞/TCP_NODELAY/REUSEADDR/收发缓冲/UDP）、Buffer 读写语义（Peek 不推进/读尽复位/Discard+Compact 保留未读段/EnsureWritable 扩容）、阻塞 echo 回环（端口 0 内核分配 + Accept/SendAll/ReceiveAll + GetRemoteAddress 端口核对）、对端关闭语义（非阻塞轮询 5s 上限：先收 1 字节再 EOF→SOCKET_CLOSED，不依赖阻塞死等）。CMake 注册 apollo_net_tcp_tests（modules/net/CMakeLists.txt 末段，Windows 分支补 ws2_32）。
+- [x] module_manifest/runtime_manifest 字段面（各 0/2 → 全盖）：core/runtime comprehensive 各加 1 用例断言 name/layer/description 字段值 + 静态单例同一性（`&core_manifest() == &manifest`）。
+- [x] 覆盖率批次3（同口径）：**TOTAL 21968 行 81.2%**（批次2 80.7%）——net 54.6→**56.9**（socket.cpp 0→66.3%、net_common.cpp 94.4%）、runtime 93.1、core 89.0；本地全量 116/116 绿。tcp 内剩余 0%：reactor.cpp 0/79（异步事件循环，需 Reactor 驱动的定时器/socket 事件测试，单独批）、tcp/rpc.cpp 0/121（legacy 帧面）；net 旧树其余 0% 大头不变（websocket 617/native_adapter 592/rpc_legacy 201/message_codec 122/endpoint 104/http 4）。
+
+
 

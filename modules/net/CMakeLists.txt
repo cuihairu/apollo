@@ -216,3 +216,20 @@ add_subdirectory(gameconnection)
 # 引用不存在的 API，无法编译（2026-11-12 BUILD_TESTING 首次接线时显形）。
 # 现行 net 面覆盖在根 tests/（NetWireTests/LinkTests 等），此脚手架删除，
 # 处置同 build 树遗留测试目标。
+
+if(BUILD_TESTING)
+    # net/tcp 传输层真回环集成测试（Socket/Buffer/NetAddress 面——gateway
+    # 客户端接入的生产传输栈）
+    add_executable(apollo_net_tcp_tests
+        tcp/tests/tcp_socket_tests.cpp
+    )
+    target_link_libraries(apollo_net_tcp_tests
+        PRIVATE
+            apollo::net_tcp
+    )
+    target_compile_features(apollo_net_tcp_tests PRIVATE cxx_std_20)
+    if(WIN32)
+        target_link_libraries(apollo_net_tcp_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME apollo_net_tcp_tests COMMAND apollo_net_tcp_tests)
+endif()
