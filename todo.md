@@ -533,5 +533,5 @@
   - 等待时间计算 `needed*1000/rate_` 在 rate==0 时除零 SIGFPE → rate==0 直接睡到 deadline 由超时路径返回（qos.cpp:268）。
   - 休眠树从未编译过（APOLLO_ENABLE_IPC=OFF），直编即暴露并修复：qos.h 缺 channel.h 包含；引用不存在的枚举值（TransportType::Auto→Tcp、ChannelMode::Bidirectional→Client，随 channel.h 实际枚举）；`hasPending` 等 const 方法锁非 mutable mutex_（→mutable）；`TokenBucket::setRate` 锁不存在的成员 mutex_（本类并发由 tokens_ 原子量承担）；channel.h 缺 `<future>`；service_endpoint_ex.h `LocalFirstSelector(const Config& = Config{})` NSDMI 默认实参 GCC 拒编 → 双构造等价改写。
 - [x] 回归测试 `tests/test_qos.cpp`（直编 qos.cpp 同 P0-4 范式）：consume(0) 空桶立即失败不自旋 / acquire 默认路径真伪（成功消费最后一批必报 true）+ 默认路径不自旋 / timeout>0 等待补齐与超时耗尽（rate=0 睡到超时、超量请求失败）/ TTL 50ms 实际过期+超时统计+ttl=0 永不过期 / retry 重新入队 pendingMessages 不下溢。CMake 注册 apollo_qos_tests（tests/CMakeLists.txt，QosTests）。
-- [x] 证据：commit 待填；build-cov 全量 **121/122**（唯一红 WorldDrainTests 负载假红：load avg 12-38 下直跑二进制亦 1/5 abort，该二进制 05:52 构建于本批任何改动之前、低载时 121/121 全绿含本用例——环境噪声既证）；QosTests 30 连绿 + ASan/UBSan 树 5/5。
+- [x] 证据：commit 552f119c；build-cov 全量 **121/122**（唯一红 WorldDrainTests 负载假红：load avg 12-38 下直跑二进制亦 1/5 abort，该二进制 05:52 构建于本批任何改动之前、低载时 121/121 全绿含本用例——环境噪声既证）；QosTests 30 连绿 + ASan/UBSan 树 5/5。
 - [x] 范围外备注：channel.cpp 自身另有 43 处休眠编译错（ChannelBuilder 未声明等，先于本批存在），不属 P1#9 修域。
