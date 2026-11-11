@@ -485,3 +485,12 @@
 
 
 
+
+## 审核修复批 P0（audit-batch2-6repos-2026-11-11，2026-11-12 起）
+
+### P0-1 PlayerDirectory 跨线程无锁并发（online_directory.cpp:122 + login_server.cpp:378）
+
+- [x] 修复：`PlayerDirectory` 内部 `mutable std::recursive_mutex mutex_`（player_directory.hpp:196），全部公开入口持锁串行化——M1 泵线程（bindSession/assignWorld → session_up/moved）与 login fleetLoop 线程（sweep_suspended → sweep）并发改 entries_ 无锁 → 迭代器失效/UAF，已消除。recursive 因方法间嵌套调用（session_up→evict_for_relogin、moved→advance_epoch_to、intake_full_report→session_up、sweep→session_down、reconcile→online_ids）会自死锁，普通 mutex 不可。
+- [x] `find()` 返回裸指针改为 thread_local 槽副本（player_directory.cpp:314）——map 指针解锁后因他线程 erase 悬空；槽在本线程下次 find() 前有效，全部调用方均立即拷贝字段。
+- [x] 回归测试 `modules/game/session/tests/player_directory_concurrency_tests.cpp`：写线程 session_up/evict/session_down/moved × 读线程 online_ids/find/size/sweep 并发 2s 不崩 + 语义保持（顶号/窗口/迁移单线程面全保）；CMake 注册 apollo_game_session_tests（modules/game/session/CMakeLists.txt）。
+- [x] 证据：commit 待填；build-cov 全量 **118/118 绿**（含新用例，213s）。

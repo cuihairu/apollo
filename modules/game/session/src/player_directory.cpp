@@ -7,6 +7,7 @@
 namespace apollo::game::session {
 
 void PlayerDirectory::set_event_sink(EventSink sink) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     sink_ = std::move(sink);
 }
 
@@ -17,6 +18,7 @@ void PlayerDirectory::emit(const Event& event) {
 }
 
 void PlayerDirectory::attach_epoch_store(const std::string& path) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     epoch_store_path_ = path;
     std::ifstream in(path);
     if (in) {
@@ -32,6 +34,7 @@ void PlayerDirectory::attach_epoch_store(const std::string& path) {
 }
 
 std::uint64_t PlayerDirectory::advance_epoch_to(std::uint64_t floor_value) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (floor_value > next_epoch_) {
         next_epoch_ = floor_value;
         persist_epoch_floor();
@@ -65,6 +68,7 @@ std::uint64_t PlayerDirectory::session_up(std::uint64_t player_id,
                                           const apollo::game::base::SessionBinding& binding,
                                           const apollo::game::base::WorldAssignment& assignment,
                                           std::uint32_t zone_id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (player_id == 0) {
         return 0;
     }
@@ -95,6 +99,7 @@ std::uint64_t PlayerDirectory::session_up(std::uint64_t player_id,
 }
 
 bool PlayerDirectory::session_down(std::uint64_t player_id, std::uint32_t reason) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto it = entries_.find(player_id);
     if (it == entries_.end()) {
         return false;
@@ -115,6 +120,7 @@ bool PlayerDirectory::session_down(std::uint64_t player_id, std::uint32_t reason
 bool PlayerDirectory::mark_suspended(std::uint64_t player_id,
                                      std::uint64_t now_tick,
                                      std::uint64_t window_ticks) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto it = entries_.find(player_id);
     if (it == entries_.end() || it->second.state != EntryState::Online) {
         return false;  // 未知玩家 / Leaving 不回窗口
@@ -127,6 +133,7 @@ bool PlayerDirectory::mark_suspended(std::uint64_t player_id,
 std::size_t PlayerDirectory::mark_suspended_by_zone(std::uint32_t zone_id,
                                                     std::uint64_t now_tick,
                                                     std::uint64_t window_ticks) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (zone_id == 0) {
         return 0;  // 未声明 Zone 不批量处置
     }
@@ -145,6 +152,7 @@ std::size_t PlayerDirectory::mark_suspended_by_zone(std::uint32_t zone_id,
 std::size_t PlayerDirectory::mark_suspended_by_gateway(std::uint32_t gateway_id,
                                                        std::uint64_t now_tick,
                                                        std::uint64_t window_ticks) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (gateway_id == 0) {
         return 0;  // 未声明 gateway 不批量处置
     }
@@ -163,6 +171,7 @@ std::size_t PlayerDirectory::mark_suspended_by_gateway(std::uint32_t gateway_id,
 bool PlayerDirectory::resume(std::uint64_t player_id,
                              std::uint64_t session_id,
                              std::uint64_t anchor_epoch) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto it = entries_.find(player_id);
     if (it == entries_.end() || it->second.state != EntryState::Suspended) {
         return false;
@@ -179,6 +188,7 @@ bool PlayerDirectory::resume(std::uint64_t player_id,
 
 std::uint64_t PlayerDirectory::evict_for_relogin(std::uint64_t player_id,
                                                  std::uint32_t reason) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto it = entries_.find(player_id);
     if (it == entries_.end()) {
         return 0;
@@ -200,6 +210,7 @@ std::uint64_t PlayerDirectory::evict_for_relogin(std::uint64_t player_id,
 bool PlayerDirectory::moved(std::uint64_t player_id, const apollo::game::base::WorldAssignment& assignment,
                             std::uint64_t new_anchor_epoch,
                             std::uint32_t new_zone_id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto it = entries_.find(player_id);
     if (it == entries_.end() ||
         (it->second.state != EntryState::Online && it->second.state != EntryState::Leaving)) {
@@ -229,6 +240,7 @@ bool PlayerDirectory::moved(std::uint64_t player_id, const apollo::game::base::W
 }
 
 bool PlayerDirectory::begin_leave(std::uint64_t player_id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     const auto it = entries_.find(player_id);
     if (it == entries_.end() || it->second.state != EntryState::Online) {
         return false;
@@ -238,6 +250,7 @@ bool PlayerDirectory::begin_leave(std::uint64_t player_id) {
 }
 
 std::size_t PlayerDirectory::sweep(std::uint64_t now_tick) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::vector<std::uint64_t> expired;
     for (const auto& [player_id, entry] : entries_) {
         if (entry.state == EntryState::Suspended && entry.deadline_tick != 0 &&
@@ -253,6 +266,7 @@ std::size_t PlayerDirectory::sweep(std::uint64_t now_tick) {
 }
 
 bool PlayerDirectory::reconcile(const std::vector<std::uint64_t>& reported_online) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     auto local = online_ids();
     auto reported = reported_online;
     std::sort(local.begin(), local.end());
@@ -262,6 +276,7 @@ bool PlayerDirectory::reconcile(const std::vector<std::uint64_t>& reported_onlin
 
 std::size_t PlayerDirectory::snapshot_reset(
     const std::vector<std::uint64_t>& authoritative_online) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     // 状态层快照重置（§2）：失配即全量对表——目录多出的条目静默删除、无
     // 事件（与事件层互不兜底）；上报有而目录无的条目留 P3 全量重报
     // （Zone 侧重报 SessionUp），目录侧单进程阶段无法凭空重建
@@ -282,6 +297,7 @@ std::size_t PlayerDirectory::snapshot_reset(
 
 std::size_t PlayerDirectory::intake_full_report(
     const std::vector<MirrorEntry>& sessions) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     // §6 恢复相位 intake（restore-not-kick）：报告方现存会话重建目录。
     // 已有条目保 epoch 只刷绑定/定位列（事件面静默——epoch 未变、绑定列
     // 刷新属对账修复不是变更）；无条目走 session_up 全事件面（新 epoch）。
@@ -312,11 +328,21 @@ std::size_t PlayerDirectory::intake_full_report(
 }
 
 const PlayerDirectory::Entry* PlayerDirectory::find(std::uint64_t player_id) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    // 返回指向 map 的裸指针会在解锁后因他线程 erase 而悬空（audit P0#1）。
+    // 返回 thread_local 槽副本：指针在本线程下次 find() 前有效——所有调用方
+    // 均立即拷贝字段或单线程断言用，无跨 find 持有。
+    static thread_local Entry slot;
     const auto it = entries_.find(player_id);
-    return it != entries_.end() ? &it->second : nullptr;
+    if (it == entries_.end()) {
+        return nullptr;
+    }
+    slot = it->second;
+    return &slot;
 }
 
 std::vector<std::uint64_t> PlayerDirectory::online_ids() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::vector<std::uint64_t> ids;
     ids.reserve(entries_.size());
     for (const auto& [player_id, entry] : entries_) {
@@ -328,6 +354,7 @@ std::vector<std::uint64_t> PlayerDirectory::online_ids() const {
 }
 
 std::vector<std::uint64_t> PlayerDirectory::suspended_ids() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     std::vector<std::uint64_t> ids;
     for (const auto& [player_id, entry] : entries_) {
         if (entry.state == EntryState::Suspended) {

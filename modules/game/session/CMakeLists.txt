@@ -28,3 +28,21 @@ if(MSVC)
     target_compile_options(apollo_game_session PUBLIC /utf-8)
     target_compile_definitions(apollo_game_session PUBLIC _CRT_SECURE_NO_WARNINGS)
 endif()
+
+if(BUILD_TESTING)
+    # PlayerDirectory 跨线程并发回归（audit P0#1）：写线程 session_up/evict/
+    # session_down/moved 与读线程 find/online_ids/sweep 并发，修复前迭代器
+    # 失效/UAF，修复后 2s 压测不崩 + 语义面保持。
+    add_executable(apollo_game_session_tests
+        tests/player_directory_concurrency_tests.cpp
+    )
+    target_link_libraries(apollo_game_session_tests
+        PRIVATE
+            apollo::game_session
+    )
+    target_compile_features(apollo_game_session_tests PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(apollo_game_session_tests PRIVATE /utf-8)
+    endif()
+    add_test(NAME apollo_game_session_tests COMMAND apollo_game_session_tests)
+endif()

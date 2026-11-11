@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -184,7 +185,12 @@ public:
     const Entry* find(std::uint64_t player_id) const;
     std::vector<std::uint64_t> online_ids() const;
     std::vector<std::uint64_t> suspended_ids() const;
-    [[nodiscard]] std::size_t size() const noexcept { return entries_.size(); }
+    // 持锁读 size（并发 mutation 下读取 size_t 单字无撕裂，但严格口径持锁；
+    // lock 失败即进程级异常，noexcept 终止可接受）
+    [[nodiscard]] std::size_t size() const noexcept {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        return entries_.size();
+    }
 
 private:
     void emit(const Event& event);
@@ -192,6 +198,12 @@ private:
     // 或路径不可写返回 false（分配照常）。
     bool persist_epoch_floor();
 
+    // 线程安全（audit P0#1 修复 2026-11-12）：M1 泵线程（bindSession/assignWorld）
+    // 与 login fleetLoop 线程（sweep/suspend）此前并发改同一 entries_ 无锁 → 迭代
+    // 器失效/UAF。recursive：方法间存在嵌套调用（session_up→evict_for_relogin、
+    // moved→advance_epoch_to、intake_full_report→session_up、sweep→session_down、
+    // reconcile→online_ids），普通 mutex 会自死锁。所有公开入口持锁串行化。
+    mutable std::recursive_mutex mutex_;
     std::unordered_map<std::uint64_t, Entry> entries_;
     std::uint64_t next_epoch_ = 1;           // 进程内单调；顶号/resume 竞争裁决键
     std::string epoch_store_path_;           // 水位文件（空 = 未 attach）
