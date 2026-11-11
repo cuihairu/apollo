@@ -68,7 +68,9 @@ bool test_reactor_write_then_read_events() {
 
     std::atomic<bool> write_fired{false};
     std::atomic<bool> read_fired{false};
-    std::atomic<socket_t> read_fd{-1};
+    // Windows socket_t 为无符号 SOCKET，花括号初始化 -1 属窄化转换（MSVC
+    // C2398），显式转换保哨兵语义
+    std::atomic<socket_t> read_fd{static_cast<socket_t>(-1)};
     std::atomic<char> read_byte{0};
     const socket_t conn_fd = server_conn->GetFd();
 
