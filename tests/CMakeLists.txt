@@ -918,6 +918,26 @@ if(MSVC)
 endif()
 add_test(NAME TimerManagerTests COMMAND apollo_timer_manager_tests)
 
+# ========== SharedMemoryRingBuffer 写序列化/容量校验回归（audit P0#4） ==========
+# 直编源惯例：shared_memory_channel.cpp 处于 APOLLO_ENABLE_IPC=OFF 沉默区，
+# 直编进测试可执行使其纳入绿色树真实执行。修复前并发 allocate+memcpy+commit
+# 重叠撕裂、open() 不校验容量越界、回绕边界差一误拒接界写入。
+add_executable(apollo_shared_memory_channel_tests
+    test_shared_memory_channel.cpp
+    ../src/apollo/ipc/shared_memory_channel.cpp
+)
+target_include_directories(apollo_shared_memory_channel_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_compile_features(apollo_shared_memory_channel_tests PRIVATE cxx_std_20)
+if(WIN32)
+    target_compile_definitions(apollo_shared_memory_channel_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(apollo_shared_memory_channel_tests PRIVATE /utf-8)
+endif()
+add_test(NAME SharedMemoryChannelTests COMMAND apollo_shared_memory_channel_tests)
+
 # ========== Persistence Tests (P1-4) ==========
 # Write-behind journal 骨架 + 最小真链路（写盘→重启→读回）。
 # 直编源惯例：不依赖 app 目标，三平台 Unit 门禁真实执行。

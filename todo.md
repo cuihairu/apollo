@@ -493,18 +493,32 @@
 - [x] 修复：`PlayerDirectory` 内部 `mutable std::recursive_mutex mutex_`（player_directory.hpp:196），全部公开入口持锁串行化——M1 泵线程（bindSession/assignWorld → session_up/moved）与 login fleetLoop 线程（sweep_suspended → sweep）并发改 entries_ 无锁 → 迭代器失效/UAF，已消除。recursive 因方法间嵌套调用（session_up→evict_for_relogin、moved→advance_epoch_to、intake_full_report→session_up、sweep→session_down、reconcile→online_ids）会自死锁，普通 mutex 不可。
 - [x] `find()` 返回裸指针改为 thread_local 槽副本（player_directory.cpp:314）——map 指针解锁后因他线程 erase 悬空；槽在本线程下次 find() 前有效，全部调用方均立即拷贝字段。
 - [x] 回归测试 `modules/game/session/tests/player_directory_concurrency_tests.cpp`：写线程 session_up/evict/session_down/moved × 读线程 online_ids/find/size/sweep 并发 2s 不崩 + 语义保持（顶号/窗口/迁移单线程面全保）；CMake 注册 apollo_game_session_tests（modules/game/session/CMakeLists.txt）。
-- [x] 证据：commit 待填；build-cov 全量 **118/118 绿**（含新用例，213s）。
+- [x] 证据：commit 7a531985；build-cov 全量 **118/118 绿**（含新用例，213s）。
 
 ### P0-2 TimerManager executeTimer 解锁未持锁 + 回调窗口引用失效（timer_manager.cpp:344-358）
 
 - [x] 修复：`executeTimer` 的 `mutex_.unlock()`（解锁未持有的锁 = UB）删除——回调参数 TimerDesc 拷出、**锁外触发**（参照 modules/base TimerWheel fire_slot 出锁范式）；回调后按 id 重查推进 repeat（回调内 killTimer(selfId) 已删条目则不再重插，尊重回调自停）。`update()`→`processSlot`/`cascadeTimer` 全程不加锁的问题一并封口：wheel 摘桶/timers_ 访问独立加锁（原实现 update() 无锁，并发 setTimer/killTimer 竞态）。
 - [x] 附带修复（测试暴露的既有缺陷）：首次 `update()` 从 currentTime_=0 全量回放 epoch 积压（量级 O(uptime_ms)，uptime 196731s → ~1.97e8 tick 自旋，实测挂起 111s+）——`started_` 标志首次 update() 跳到当前拍，后续只处理增量。
 - [x] 回归测试 `tests/test_timer_manager.cpp`（直编 timer_manager.cpp，自包含不依赖 legacy apollo lib，绿色模块化树真实执行）：单次触发后移除 / 周期回调内 killTimer 自停（修复前悬空引用 UAF）/ 并发 setTimer-killTimer×update() 1s 不崩；CMake 注册 apollo_timer_manager_tests（tests/CMakeLists.txt，TimerManagerTests）。
-- [x] 证据：commit 待填；build-cov 全量 **119/119 绿**（202.7s）。
+- [x] 证据：commit 3ed1eb71；build-cov 全量 **119/119 绿**（202.7s）。
 
 ### P0-3 event_loop onCheckTimer 边遍历边 erase + Manager 无析构（event_loop.cpp:578-594）
 
 - [x] 修复①onCheckTimer：超时 fd 先收集 `timedOut`，遍历结束后循环外 `heartbeats_.erase(fd)`——原实现在 `for (auto& [sockfd, info] : heartbeats_)` 体内 erase(sockfd) 致迭代器失效 UB。
 - [x] 修复②析构：`~HeartbeatManager()` 移除周期检查定时器 `checkTimerId_`、`~ReconnectManager()` 移除全部活跃重连定时器——两定时器回调捕获 `this`，manager 先死则回调打悬空 this → UAF。
 - [x] 回归测试 `tests/test_event_loop_heartbeat_timeout.cpp`：3 心跳同轮超时全部触发恰一次（修复前遍历中 erase 跳过/崩溃）/ 构造-析构管理器后泵过 1000ms 周期 loop 仍存活可用；CMake 注册 event_loop_heartbeat_timeout_tests（EventLoopHeartbeatTimeoutTests）。
-- [x] 证据：commit 待填；全量 119/120（WorldDrainTests 负载假红 exit134×2、直跑第 3 次全绿——load avg 26-45 环境噪声，本会话未动 world/drain 代码）。
+- [x] 证据：commit 458560a6；全量 119/120（WorldDrainTests 负载假红 exit134×2、直跑第 3 次全绿——load avg 26-45 环境噪声，本会话未动 world/drain 代码）。
+
+### P0-4 SharedMemoryRingBuffer 环形缓冲区读写竞态 + open() 无容量校验 + 回绕边界差一（shared_memory_channel.cpp）
+
+- [x] 修复①（audit 原文）：`allocate+memcpy+commit` 非原子——并发 `FlatBufferChannel::send` 取到同一 writePos 重叠写、撕裂发布。新增 `write()`（shared_memory_channel.cpp:318）全程持 `writeMutex_`（shared_memory_channel.h:104）串行化 allocate→memcpy→commit，writePos 在 memcpy 完成后才 release 发布；`FlatBufferChannel::send(void*)` 与 `send(BuilderFunc)`（shared_memory_channel.h:135）改走 write()。原 send(BuilderFunc) 只分配 sizeof(uoffset_t)=4 却 memcpy 整个 buffer 且 commit size+4——块头 size 与 writePos 步进记账失配，一并修复。跨进程并发生产者不在保证范围（通道单生产者约定，头文件契约注释写明）。
+- [x] 修复②：`open()` 容量校验（shared_memory_channel.cpp:152/186 双平台）——原只查 magic 不查 capacity，读写两端各按自己 totalSize_ 寻址，容量不一致即越界写/SIGBUS。
+- [x] 修复③：回绕边界差一——`readPos == totalSize` 恰好接界原 `<=` 误拒（shared_memory_channel.cpp:283）。
+- [x] 回归测试暴露并一并修复的同类缺陷（5 个，全带成因注释与测试覆盖）：
+  - `readPos==writePos` 判空（read()/isEmpty()）：回绕后 writePos 折回与 readPos 数值重合，已发布消息被永久误判为空 → 改以 count_ 为准判空（:337/:410）；commit 的 count.fetch_add 相应 relaxed→release（:315）与块数据写入同步。
+  - 恰好写满 capacity 时 commit 置 writePos=totalSize、consume 却置 0——两端回绕约定分裂，读端重读上一圈陈旧消息并冲过写端前沿 → commit 统一回 0（:309）。
+  - 回绕爬升与旧圈未读并存（单 writePos 无法表示两个前沿）：写端爬到 writePos==readPos 时 available 误判整环空闲直接覆盖旧圈 → 回绕前提 count==0 排空门（:263）+ available() 三分支按 count 消歧（:241-249）。
+  - 跳过标记写出 data 区界外（残尾 <16B 仍写 16 字节 marker）+ readPos==capacity 幻影块 → 写端残尾 <16B 静默回绕（:268）、读端 read()/consume() 同规则跳回 0（:345/:369）。
+- [x] 回归测试 `tests/test_shared_memory_channel.cpp`（APOLLO_ENABLE_IPC 默认 OFF、源码休眠，直编 .cpp 同 TimerManagerTests 范式）：roundtrip+type 传播+超容量拒绝 / open 容量不匹配拒绝 / 恰好接界回绕 / exact-fill 双场景约定一致 / 4 写者×400 条 size-填充模式一一对应并发无撕裂（读者校验 size↔模式配对）。CMake 注册 apollo_shared_memory_channel_tests（tests/CMakeLists.txt，SharedMemoryChannelTests）。
+- [x] 证据：commit 待填；build-cov 全量 **121/121 绿**（271s，含新用例）；新用例优化构建 100 连绿（40+60，其中 60 连在 4 线程自旋负载下）+ ASan/UBSan 树 5 组全绿 + TSan 10 连绿。
+- [x] 范围外备注：`template<typename T> bool send(const T&, uint32_t)`（shared_memory_channel.h:146）为无定义声明，休眠无调用方，本批不动（P0 批只修实缺陷，不扩 API 面）。

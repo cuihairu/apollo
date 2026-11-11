@@ -4,6 +4,7 @@
 #include <memory>
 #include <functional>
 #include <atomic>
+#include <mutex>
 #include <vector>
 
 #ifdef _WIN32
@@ -58,6 +59,12 @@ public:
     void* allocate(size_t size, uint32_t type = 0);
     void commit(size_t size);  // 提交写入
 
+    // 原子写：allocate+memcpy+commit 全程持 writeMutex_（audit P0#4）——
+    // 并发 send 重叠分配/撕裂发布被串行化；写指针在 memcpy 完成后才
+    // release 发布，读端 acquire 读到即完整。跨进程并发生产者不在本
+    // 保证范围（通道单生产者约定）。单写者场景可直接用 allocate/commit。
+    bool write(const void* data, size_t size, uint32_t type = 0);
+
     // 读取 (返回数据指针，可直接作为 FlatBuffers 访问)
     struct ReadResult {
         const void* data;
@@ -94,6 +101,7 @@ private:
     Header* header_{nullptr};
     uint8_t* data_{nullptr};
     bool owner_{false};  // 是否是创建者
+    std::mutex writeMutex_;  // 串行化 allocate+memcpy+commit（audit P0#4）
 };
 
 //==============================================================================
@@ -120,21 +128,14 @@ public:
     // 发送 FlatBuffers 消息 (零拷贝)
     //======================================================================
 
-    // 方式1: 直接在共享内存中构建 FlatBuffers
+    // 方式1: 构建后原子写入共享内存（audit P0#4① 同类：原实现按
+    // sizeof(uoffset_t) 分配却 memcpy 整个 buffer，块头 size 与
+    // writePos 步进失配；改经 write() 持锁原子且记账一致）
     template<typename BuilderFunc>
     bool send(BuilderFunc builder) {
-        auto* buf = ringBuffer_->allocate(sizeof(flatbuffers::uoffset_t), 0);
-        if (!buf) return false;
-
-        // 在共享内存中直接构建
         flatbuffers::FlatBufferBuilder fbb;
         builder(fbb);
-        auto size = fbb.GetSize();
-        auto ptr = fbb.GetBufferPointer();
-
-        std::memcpy(buf, ptr, size);
-        ringBuffer_->commit(size + sizeof(flatbuffers::uoffset_t));
-        return true;
+        return ringBuffer_->write(fbb.GetBufferPointer(), fbb.GetSize(), 0);
     }
 
     // 方式2: 发送已构建的 FlatBuffer
