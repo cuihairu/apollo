@@ -477,5 +477,11 @@
 - [x] module_manifest/runtime_manifest 字段面（各 0/2 → 全盖）：core/runtime comprehensive 各加 1 用例断言 name/layer/description 字段值 + 静态单例同一性（`&core_manifest() == &manifest`）。
 - [x] 覆盖率批次3（同口径）：**TOTAL 21968 行 81.2%**（批次2 80.7%）——net 54.6→**56.9**（socket.cpp 0→66.3%、net_common.cpp 94.4%）、runtime 93.1、core 89.0；本地全量 116/116 绿。tcp 内剩余 0%：reactor.cpp 0/79（异步事件循环，需 Reactor 驱动的定时器/socket 事件测试，单独批）、tcp/rpc.cpp 0/121（legacy 帧面）；net 旧树其余 0% 大头不变（websocket 617/native_adapter 592/rpc_legacy 201/message_codec 122/endpoint 104/http 4）。
 
+## 覆盖率批次4：Reactor poll 事件循环（2026-11-12）
+
+- [x] `modules/net/tcp/tests/reactor_tests.cpp` 3 用例：WRITE 即时可写事件（已建连 socket 发送缓冲即刻可写，回调触发后 Modify 切 READ、对端写后 READ 回调内 Receive 读得数据）、Remove/重复 Add/未知 fd 语义（Remove 二次失败、Modify 未知 fd 失败）、空 fd 集循环 Stop 收敛（10ms idle 分支，Stop 后 EventLoop 退出）。断言全部带 5s 上限轮询，不依赖阻塞死等。CMake 注册 apollo_net_reactor_tests（modules/net/CMakeLists.txt）。
+- [x] 覆盖率：reactor.cpp 0/79 → **93.7%**（74/79，未盖行为 Stop 后残留 fds 一轮）；tcp 内 0% 仅剩 tcp/rpc.cpp 0/121（RpcClient/RpcServer 依赖 protobuf::Service stub，需生成桩或手写最小 Service，后续批）。WorldDrainTests 全量期间负载 ~4.2 时 pump-window 假红两次、直接跑二进制全绿（exit 0）——既证环境噪声非回归。
+
+
 
 

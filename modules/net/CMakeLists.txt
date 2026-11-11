@@ -232,4 +232,18 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_net_tcp_tests PRIVATE ws2_32)
     endif()
     add_test(NAME apollo_net_tcp_tests COMMAND apollo_net_tcp_tests)
+
+    # Reactor poll 事件循环：WRITE 即时可写 / Modify 切 READ / Remove 与未知 fd
+    add_executable(apollo_net_reactor_tests
+        tcp/tests/reactor_tests.cpp
+    )
+    target_link_libraries(apollo_net_reactor_tests
+        PRIVATE
+            apollo::net_tcp
+    )
+    target_compile_features(apollo_net_reactor_tests PRIVATE cxx_std_20)
+    if(WIN32)
+        target_link_libraries(apollo_net_reactor_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME apollo_net_reactor_tests COMMAND apollo_net_reactor_tests)
 endif()
