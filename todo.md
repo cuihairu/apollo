@@ -520,5 +520,5 @@
   - 回绕爬升与旧圈未读并存（单 writePos 无法表示两个前沿）：写端爬到 writePos==readPos 时 available 误判整环空闲直接覆盖旧圈 → 回绕前提 count==0 排空门（:263）+ available() 三分支按 count 消歧（:241-249）。
   - 跳过标记写出 data 区界外（残尾 <16B 仍写 16 字节 marker）+ readPos==capacity 幻影块 → 写端残尾 <16B 静默回绕（:268）、读端 read()/consume() 同规则跳回 0（:345/:369）。
 - [x] 回归测试 `tests/test_shared_memory_channel.cpp`（APOLLO_ENABLE_IPC 默认 OFF、源码休眠，直编 .cpp 同 TimerManagerTests 范式）：roundtrip+type 传播+超容量拒绝 / open 容量不匹配拒绝 / 恰好接界回绕 / exact-fill 双场景约定一致 / 4 写者×400 条 size-填充模式一一对应并发无撕裂（读者校验 size↔模式配对）。CMake 注册 apollo_shared_memory_channel_tests（tests/CMakeLists.txt，SharedMemoryChannelTests）。
-- [x] 证据：commit 待填；build-cov 全量 **121/121 绿**（271s，含新用例）；新用例优化构建 100 连绿（40+60，其中 60 连在 4 线程自旋负载下）+ ASan/UBSan 树 5 组全绿 + TSan 10 连绿。
+- [x] 证据：commit d05a773b；build-cov 全量 **121/121 绿**（271s，含新用例）；新用例优化构建 100 连绿（40+60，其中 60 连在 4 线程自旋负载下）+ ASan/UBSan 树 5 组全绿 + TSan 10 连绿。
 - [x] 范围外备注：`template<typename T> bool send(const T&, uint32_t)`（shared_memory_channel.h:146）为无定义声明，休眠无调用方，本批不动（P0 批只修实缺陷，不扩 API 面）。
