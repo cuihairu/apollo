@@ -584,3 +584,17 @@
 - [x] 回归测试：`tests/test_net_link.cpp` `test_dispatcher_handler_error`（:301，注册 :1662）——handler 抛 runtime_error → `dispatch` 返 `kHandlerError` + `handler_error` 计数、不崩；fallback 抛同收拒；正常 handler 不误伤（不计数、仍 `kDispatched`）。
 - [x] 旧逻辑实证 FAIL（/tmp/dispatcher-old，git HEAD dispatcher.cpp + 抛异常 handler）：旧 dispatch 裸调 handler → 异常未捕获 → `std::terminate` → Abort exit 134（确定性 FAIL）；新 dispatcher.cpp 同 proof exit 0（按异常拒收不崩）。
 - [x] 证据：commit ae2873e6；新用例 link_tests **41/41**（原 40+1）+ 旧逻辑实证 FAIL + ASan/UBSan 树 link_tests 41/41（无泄漏）；build-cov 全量重建 exit 0、ctest **126/126** 全绿（168s，WorldAppM1LinkTests 本次过）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples `apollo_net_link` 重建均 exit 0。
+
+## Codex 深审发现（2026-11-12，luna profile 近5 commit 审核，3C/4M/4m，待修）
+
+- [ ] [C] m1_egress 翻译路径加异常兜底与坏帧测试（apps/gateway/src/m1_egress.cpp:329）——泵线程可被客户端残帧终止（forwardIntent 投递后 translate_and_send 裸调 MessageCodec）
+- [ ] [C] HTTP Content-Length 回绕防护与服务端大小上限（include/apollo/net/http.h:525、modules/net/http/src/http.cpp:454）——data.size() >= headerEnd+contentLength 无符号回绕为 0，协议混淆+OOM 面
+- [ ] [C] 统一 POSIX socket send 防 SIGPIPE 策略（modules/net/tcp/src/socket.cpp:122）+ native_adapter 三处（:49/:235）——对端关闭后写=SIGPIPE 杀宿主进程，同型残留
+- [ ] [M] 重构 Base forward 回调所有权与 stop 排空顺序（apps/gateway/src/gateway_server.cpp:242）——回调捕获 this 访问 messageRouter_，停机 UAF
+- [ ] [M] HTTP 路由异常捕获返回 500（modules/net/http/src/http.cpp:723）——用户路由抛异常穿出连接线程终止进程
+- [ ] [M] OnlineDirectory::dispatchRequest 异常转错误响应（apps/common/src/online_directory.cpp:238）——关闭 login 泵线程崩溃入口
+- [ ] [M] 修正 LengthPrefixPacketParser 字节序与长度加法检查（include/apollo/net/adapters/native_adapter.h:580）——跨端帧长误读
+- [ ] [M] 收紧 HttpClient 响应长度解析与状态码映射（modules/net/http/src/http.cpp:904）——客户端封顶回绕与无效码截断
+- [ ] [m] 明确 HTTP URL 能力边界或实现域名/IPv6（modules/net/http/src/http.cpp:1000）——消除"可解析但不可连"接口不实
+- [ ] [m] 补 GatewayServer::handleClientMessage 坏帧断连测试（apps/gateway/src/gateway_client.cpp:53）——本批修复入口回归保护
+- [ ] [m] 更正 todo 覆盖面声明并登记解码入口清单（todo.md:583）——避免安全审计记录虚报
