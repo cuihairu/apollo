@@ -319,6 +319,20 @@ const WorldApp::CellRegistration* WorldApp::find_cell_registration(
 }
 
 void WorldApp::driveCellRegistry() {
+    // 执行位置投影 seed（L115，首拍一次）：journal 装载的已提交归属灌入发布
+    // 镜像——链路 kUp 跃迁全量重放补投目录（World 重启窗的目录重建面，D05
+    // §1.2）。发布面缺席（未注入/面关）= 待命清零不重试，零噪声。
+    if (projectionSeedPending_) {
+        projectionSeedPending_ = false;
+        if (projection_ != nullptr) {
+            for (const auto& entry : spaceAssignments_) {
+                if (entry.second.cell_id != 0) {
+                    publishProjection(entry.first, entry.second.cell_id,
+                                      entry.second.version, true);
+                }
+            }
+        }
+    }
     // 注册表过期清扫（960 心跳批；post-tick 上下文 = 注册表单写者线程）：
     // last-heard（registered_at_ms，每次受理刷新）超 cellExpiryMs 未刷新 =
     // 心跳失效，整条摘除。摘除后该 cell 重注册走受理面首注册路径（登记

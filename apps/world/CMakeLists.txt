@@ -29,13 +29,15 @@ set(M1_LINK_SERVER_SOURCES
 )
 
 # WorldApp 拆分实现单元（LAY-004）：生命周期/装配在 world_app.cpp，
-# 其余按职责分单元（cell 登记 / Space 分配对账 / 管理日志 / M1 命令中继）。
+# 其余按职责分单元（cell 登记 / Space 分配对账 / 管理日志 / M1 命令中继 /
+# 执行位置投影发布客户端，L115）。
 set(WORLD_APP_SOURCES
     src/world_app.cpp
     src/world_cell_registry.cpp
     src/world_space_assign.cpp
     src/world_journal.cpp
     src/world_m1_ops.cpp
+    src/m1_projection_client.cpp
 )
 
 # WorldApp 可执行文件

@@ -13,6 +13,7 @@
 // m1ServiceRegisterPort = 0 = 面关（缺省形态不接线）；路由表缺位/端口占绑
 // = start false（装配错误显形，宿主降级警告）。
 
+#include "login/position_projection_registry.hpp"
 #include "login/service_registry.hpp"
 
 #include <cstdint>
@@ -46,7 +47,10 @@ public:
 
 // 工厂：POSIX 真实现（link passive 端点 + 964 裸帧 dispatch → registry）/
 // Windows 退 null 桩（start false = 面关，宿主装配面无 #if）。
+// projection_registry 非空时同面加装 968 执行位置投影受理（L115：同一
+// passive 端点，World 拨入链路逐 peer 装配 handler；缺省 nullptr = 面关）。
 std::unique_ptr<M1ServiceRegisterServer> makeM1ServiceRegisterServer(
-    M1ServiceRegisterConfig config, ServiceRegistry* registry);
+    M1ServiceRegisterConfig config, ServiceRegistry* registry,
+    PositionProjectionRegistry* projection_registry = nullptr);
 
 } // namespace login

@@ -65,7 +65,8 @@ LoginServer::LoginServer(const LoginConfig& config)
     , authenticator_(std::make_unique<Authenticator>(config))
     , gatewayAllocator_(std::make_unique<GatewayAllocator>(config))
     , sessionManager_(std::make_unique<SessionManager>(config))
-    , serviceRegistry_(std::make_unique<ServiceRegistry>()) {
+    , serviceRegistry_(std::make_unique<ServiceRegistry>())
+    , positionProjectionRegistry_(std::make_unique<PositionProjectionRegistry>()) {
 }
 
 LoginServer::~LoginServer() {
@@ -135,8 +136,9 @@ void LoginServer::start() {
         regConfig.host = config_.host;
         regConfig.port = config_.serviceRegisterPort;
         regConfig.route_json = config_.m1RouteJson;
-        m1ServiceRegister_ =
-            makeM1ServiceRegisterServer(std::move(regConfig), serviceRegistry_.get());
+        m1ServiceRegister_ = makeM1ServiceRegisterServer(
+            std::move(regConfig), serviceRegistry_.get(),
+            positionProjectionRegistry_.get());
         if (m1ServiceRegister_->start()) {
             apollo::core::log::global_log_manager()
                 .createLogger("login_server")

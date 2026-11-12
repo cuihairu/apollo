@@ -24,6 +24,8 @@ namespace world_app {
 
 namespace protocol = apollo::protocol;
 
+class M1PositionProjectionClient;
+
 // WorldApp 服务器（manager 角色：传输 + 管理编排；不承载模拟域）
 class WorldApp {
 public:
@@ -47,6 +49,14 @@ public:
     // （钩子体每拍读取成员，无竞态面）；置空 = 无。
     void set_manager_pre_tick(std::function<void(std::uint64_t now_ms)> hook) {
         managerPreTick_ = std::move(hook);
+    }
+
+    // 执行位置投影发布面注入（L115 位置投影首切片）：不拥有（宿主装配，
+    // 生命周期在 WorldApp 外）。管理泵起前注入（set 即置 seed 待命——journal
+    // 装载后首拍把已提交归属灌入发布镜像，kUp 重放补投到目录）。
+    void set_position_projection(M1PositionProjectionClient* client) {
+        projection_ = client;
+        projectionSeedPending_ = client != nullptr;
     }
 
     // ---- cell 注册登记（960/961，L101 注册首切片）----
@@ -204,6 +214,12 @@ private:
     // 过期释放（driveCellRegistry 同上下文，注册表单写者线程）：该 cell
     // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。
     void releaseCellSpaces(std::uint64_t cell_id);
+    // 已提交归属投影发布（L115，管理泵上下文直发）：claim/reclaim 推 ready=1
+    //（journal A 行落盘后调），release 推 cell_id=0 墓碑（R 行后调）；
+    // management_epoch 与 962 同源（config_.m1AuthorityEpoch）。发布面缺席
+    //（未注入/面关）= 无操作——目录侧经 kUp 重放与下次归属变更收敛。
+    void publishProjection(std::uint64_t space_id, std::uint64_t cell_id,
+                           std::uint64_t version, bool ready);
     // 目标 cell peer 选择（切片2 转发）：首个就绪、未排空、未缩容的登记
     // cell 的链路 peer 自报名；无合格目标返回空串。管理命令（932/944/952/
     // 956）经此寻址转发。
@@ -219,6 +235,12 @@ private:
     std::unique_ptr<M1LinkServer> m1Link_;
     // 管理侧拨号面拍首泵（L123）：set_manager_pre_tick 注入，管理泵每拍调用
     std::function<void(std::uint64_t)> managerPreTick_;
+    // 执行位置投影发布面（L115；宿主装配不拥有；管理泵上下文直调 publish
+    // ——与分配/释放路径同线程，无锁面）。seed 待命 = journal 装载后首拍把
+    // 已提交归属灌入发布镜像（WorldApp::start 泵线程首拍，driveCellRegistry
+    // 同上下文）。
+    M1PositionProjectionClient* projection_ = nullptr;
+    bool projectionSeedPending_ = false;
 
     // M1 eval 关联账（944 受理面；管理泵线程独占）：eval_id → 原请求方
     // 与目标 cell/时戳。回带失败或目标 cell 断连即撤销；剩余在途项随

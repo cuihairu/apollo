@@ -165,6 +165,11 @@ public:
     // 服务目录注册表观测面（L123；受理在 M1 服务注册面泵线程——跨线程只读
     // 计数/查找与 WorldApp 注册表同口径）
     ServiceRegistry* serviceRegistry() noexcept { return serviceRegistry_.get(); }
+    // 位置投影登记表观测面（L115；受理在 M1 服务注册面泵线程——跨线程只读
+    // 计数/查找同 serviceRegistry 口径）
+    PositionProjectionRegistry* positionProjectionRegistry() noexcept {
+        return positionProjectionRegistry_.get();
+    }
     std::uint16_t serviceRegisterPort() const {
         return m1ServiceRegister_ ? m1ServiceRegister_->listenPort() : 0;
     }
@@ -222,6 +227,9 @@ private:
     // 服务目录注册受理面（L123 首切片；显式 opt-in——CLI 传
     // --service-register-port 才装配，不传 = 不装配；port 0 = 内核分配）
     std::unique_ptr<ServiceRegistry> serviceRegistry_;
+    // Space 执行位置投影登记表（L115；968 受理随注册面装配，缺面 = 记账但
+    // 不受理——表常驻（面关也可观测），同 registry 口径）
+    std::unique_ptr<PositionProjectionRegistry> positionProjectionRegistry_;
     std::unique_ptr<M1ServiceRegisterServer> m1ServiceRegister_;
 
     // M1 base 客户端面（P4-4 批③；worldStoreM1Port = 0 = 不装配，RPC 面缺席

@@ -6,6 +6,7 @@
 #include "apollo/net/discovery/udp_transport.hpp"
 #include "world_app/world_app.hpp"
 #include "world_app/cell_register_client.hpp"
+#include "world_app/m1_projection_client.hpp"
 #include "world_app/role_options.hpp"
 #include "world_app/dashboard.hpp"
 #include "world_app/dashboard_data.hpp"
@@ -356,6 +357,28 @@ int main(int argc, char* argv[]) {
         WorldApp server(config);
         g_stop_request = [&server] { server.stop(); };
 
+        // 执行位置投影发布拨号（L115 位置投影首切片）：与 service register
+        // 同址拨 loginServer；发布面先于 start() 注入（journal 装载后首拍
+        // seed 已提交归属，kUp 重放补投目录——见 set_position_projection）。
+        // 装配失败降级警告不拦启动（同 service register 惯例）。
+        std::unique_ptr<world_app::M1PositionProjectionClient> position_projection;
+        if (config.serviceRegisterPort != 0) {
+            world_app::M1PositionProjectionConfig ppc;
+            ppc.login_host = config.serviceRegisterHost;
+            ppc.login_port = config.serviceRegisterPort;
+            ppc.world_id = static_cast<std::int32_t>(config.worldId);
+            ppc.route_json = config.m1RouteJson;
+            ppc.self_name = "world-proj-" + std::to_string(config.worldId);
+            position_projection = world_app::makeM1PositionProjectionClient(std::move(ppc));
+            if (position_projection->start()) {
+                server.set_position_projection(position_projection.get());
+            } else {
+                position_projection.reset();
+                logger->warning(
+                    "position projection degraded: config or route table invalid");
+            }
+        }
+
         logger->info("Starting server...");
         server.start();
 
@@ -377,8 +400,13 @@ int main(int argc, char* argv[]) {
             service_register = login::makeM1ServiceRegisterClient(std::move(src));
             if (service_register->start()) {
                 server.set_manager_pre_tick(
-                    [&service_register](std::uint64_t now_ms) {
+                    [&service_register, &position_projection](std::uint64_t now_ms) {
                         service_register->pump(now_ms);
+                        // 投影发布泵（L115）：与注册泵同拍（publish 与 pump 同
+                        // 管理泵线程——同线程纪律，见客户端头）。
+                        if (position_projection) {
+                            position_projection->pump(now_ms);
+                        }
                     });
                 logger->info("Service register: dialing "
                              + config.serviceRegisterHost + ":"
@@ -501,6 +529,10 @@ int main(int argc, char* argv[]) {
         if (service_register) {
             service_register->stop();
             service_register.reset();
+        }
+        if (position_projection) {
+            position_projection->stop();
+            position_projection.reset();
         }
 
         logger->info("Server stopped.");

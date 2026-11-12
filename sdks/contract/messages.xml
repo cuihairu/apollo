@@ -682,4 +682,12 @@
     <field name="applied_version" type="int64" desc="已应用的分配版本（与 962 version 同源）"/>
     <field name="applied_mgmt_epoch" type="int64" desc="应用时的管理代次（与 962 management_epoch 同源——源端隔离不明判定）"/>
   </msg>
+  <msg id="968" name="space_position_projection" dir="P2P" channel="events" domain="internal" desc="Space 执行位置投影（World→loginServer M1 目录投影面；L115 位置投影首切片）：journal A 行已提交的归属事实逐条投影——claim/reclaim 推 ready=1、release 推 cell_id=0 ready=0 墓碑；目录按 (world_id, space_id) 复合键以 assignment_version 水位幂等受理（重复忽略/乱序拒/墓碑命中水位即抹除），重启由 World kUp 重放全量视图重建；目录不另行分配 Cell——分配事实源仍是 World 管理面（962/journal）；裸帧受理同 960/962 惯例，无回执（水位幂等即裁决载体）">
+    <field name="world_id" type="int32" desc="投影源 World 号（目录复合键；与 964 logical_id（kind=World）同源）"/>
+    <field name="space_id" type="int64" desc="被投影的 Space id（每 Space 一条投影，与 962 space_id 同源）"/>
+    <field name="cell_id" type="int64" desc="已提交归属 cell id（执行进程；0 = 释放墓碑——目录抹除条目）"/>
+    <field name="assignment_version" type="int64" desc="归属版本水位（与 962 assignment_version 同源：认领转移时前进、释放不变；目录按版本裁决重复/乱序）"/>
+    <field name="management_epoch" type="int64" desc="World 管理代次（与 962 management_epoch 同源——源端隔离不明判定）"/>
+    <field name="ready" type="bool" desc="1=归属视图可服务（claim/reclaim）；0=释放墓碑（cell_id 同帧必为 0）"/>
+  </msg>
 </messages>

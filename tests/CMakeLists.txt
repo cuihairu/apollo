@@ -2555,6 +2555,35 @@ if(MSVC)
 endif()
 add_test(NAME LoginServiceRegisterClientTests COMMAND login_service_register_client_tests)
 
+# World 执行位置投影发布面 e2e（L115 位置投影首切片，契约 968）：registry
+# 水位裁决（受理/幂等/拒乱序/墓碑抹除/非法拒/复合键独立）+ 真链路投影生命周期
+# + 断链重启 kUp 全量镜像重放。缝工厂两侧真实现直编
+#（login_service_register_client_tests 惯例）；Windows 下 link TCP 底座不进
+# 本批，用例本体空转。
+add_executable(world_position_projection_tests
+    test_world_position_projection.cpp
+    ../apps/world/src/m1_projection_client.cpp
+    ../apps/login/src/m1_service_register_server.cpp
+)
+target_include_directories(world_position_projection_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+    ${CMAKE_SOURCE_DIR}/apps/login/include
+)
+target_compile_definitions(world_position_projection_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(world_position_projection_tests PRIVATE
+    apollo::base apollo::core apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_protocol)
+if(WIN32)
+    target_link_libraries(world_position_projection_tests PRIVATE ws2_32)
+    target_compile_definitions(world_position_projection_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(world_position_projection_tests PRIVATE /utf-8)
+endif()
+add_test(NAME WorldPositionProjectionTests COMMAND world_position_projection_tests)
+
 # BaseApp M1 base 面 × login base 客户端 e2e（P4-4 批③）：受理/应答/错误包
 # 三路径 + 对端缺席降级。缝工厂两侧真实现直编（login_m1_admission_tests
 # 惯例）；Windows 下 link TCP 底座不进本批，用例本体空转。

@@ -78,3 +78,4 @@ service_register_request = function() end
 service_register_reply = function() end
 cell_retire_reply = function() end
 cell_space_report = function() end
+space_position_projection = function() end

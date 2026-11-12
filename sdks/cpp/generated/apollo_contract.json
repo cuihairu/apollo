@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "40d80658853ea418b630892e786b9a1f0c02fb509c9dab0c7f3daa83fba946cd",
+  "schema_hash": "73c4831d9743eaa7a4f84752a92c737451dcbc6910eefaa6505634d3965d165f",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "ab4a96bab5f890962fa2e6a65bd5025df58433aa25f6d07ae0bae47030b72d2f",
+  "internal_hash": "3f283ffe31ef476e7dcb4894ebfe97e3df445df6f98d45db56f2b1a0ef4fe752",
   "contract_version": 3,
   "aliases": [
     {
@@ -3719,6 +3719,53 @@
         }
       ],
       "desc": "cell 已应用归属视图自报（cell→World M1 管理面；961 受理后逐 Space 上发一条——World 重启对账「拉取分配清单」的上行面，稳态与重启窗共用；无专用回执——962 全池权威归属视图即裁决载体；裸帧受理同 960/962 惯例。设计稿预留号 963 已被缩容管理命令面占用，本消息另取新号，每条目一帧（生成链无重复组，条目数上限/分段问题不复存在）"
+    },
+    {
+      "id": 968,
+      "name": "space_position_projection",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "world_id",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "投影源 World 号（目录复合键；与 964 logical_id（kind=World）同源）"
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "被投影的 Space id（每 Space 一条投影，与 962 space_id 同源）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "已提交归属 cell id（执行进程；0 = 释放墓碑——目录抹除条目）"
+        },
+        {
+          "name": "assignment_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "归属版本水位（与 962 assignment_version 同源：认领转移时前进、释放不变；目录按版本裁决重复/乱序）"
+        },
+        {
+          "name": "management_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "World 管理代次（与 962 management_epoch 同源——源端隔离不明判定）"
+        },
+        {
+          "name": "ready",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=归属视图可服务（claim/reclaim）；0=释放墓碑（cell_id 同帧必为 0）"
+        }
+      ],
+      "desc": "Space 执行位置投影（World→loginServer M1 目录投影面；L115 位置投影首切片）：journal A 行已提交的归属事实逐条投影——claim/reclaim 推 ready=1、release 推 cell_id=0 ready=0 墓碑；目录按 (world_id, space_id) 复合键以 assignment_version 水位幂等受理（重复忽略/乱序拒/墓碑命中水位即抹除），重启由 World kUp 重放全量视图重建；目录不另行分配 Cell——分配事实源仍是 World 管理面（962/journal）；裸帧受理同 960/962 惯例，无回执（水位幂等即裁决载体）"
     }
   ],
   "entities": [

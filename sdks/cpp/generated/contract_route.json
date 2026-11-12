@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "40d80658853ea418b630892e786b9a1f0c02fb509c9dab0c7f3daa83fba946cd",
+  "schema_hash": "73c4831d9743eaa7a4f84752a92c737451dcbc6910eefaa6505634d3965d165f",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "ab4a96bab5f890962fa2e6a65bd5025df58433aa25f6d07ae0bae47030b72d2f",
+  "internal_hash": "3f283ffe31ef476e7dcb4894ebfe97e3df445df6f98d45db56f2b1a0ef4fe752",
   "contract_version": 3,
   "routes": [
     {
@@ -832,6 +832,15 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "cell_space_report"
+    },
+    {
+      "id": 968,
+      "name": "space_position_projection",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "space_position_projection"
     }
   ]
 }

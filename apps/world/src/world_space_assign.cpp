@@ -1,4 +1,5 @@
 #include "world_app/world_app.hpp"
+#include "world_app/m1_projection_client.hpp"
 #include "world_app_detail.hpp"
 
 namespace world_app {
@@ -115,6 +116,10 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
                                 : "space assigned: space=" + std::to_string(space_id)
                                       + " cell=" + std::to_string(reg.cell_id)
                                       + " version=1");
+            // 位置投影发布（L115，D05 §1.1 时序：journal A 行 → 962 → 968）：
+            // 已提交归属事实推目录镜像——claim/reclaim 均 ready=1（版本水位
+            // 由目录侧幂等/拒乱序裁决）。
+            publishProjection(space_id, reg.cell_id, it->second.version, true);
         } else if (it->second.cell_id != reg.cell_id) {
             if (m1Link_) {
                 m1Link_->sendCellSpaceAssign(peer, it->second.version,
@@ -176,6 +181,9 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
                             + std::to_string(entry.first)
                             + " cell=" + std::to_string(cell_id)
                             + " version=" + std::to_string(entry.second.version));
+            // 释放墓碑投影（L115）：R 行已落盘（或降级告警）——内存归属事实
+            // （owner=0）推目录抹除面；版本不变由目录侧墓碑命中水位裁决。
+            publishProjection(entry.first, 0, entry.second.version, false);
         }
     }
 }
@@ -266,6 +274,16 @@ const WorldApp::SpaceAssignment* WorldApp::find_space_assignment(
     std::uint64_t space_id) const {
     const auto it = spaceAssignments_.find(space_id);
     return it != spaceAssignments_.end() ? &it->second : nullptr;
+}
+
+void WorldApp::publishProjection(std::uint64_t space_id, std::uint64_t cell_id,
+                                 std::uint64_t version, bool ready) {
+    // 发布面缺席 = 无操作（面关形态：目录侧经 kUp 重放与下次归属变更收敛）；
+    // 在场即直发（同管理泵线程——与 publish/pump 同线程纪律，见客户端头）。
+    if (projection_ != nullptr) {
+        projection_->publish(space_id, cell_id, version,
+                             config_.m1AuthorityEpoch, ready);
+    }
 }
 
 } // namespace world_app

@@ -33,9 +33,11 @@ constexpr std::uint16_t id_of(MsgId id) { return static_cast<std::uint16_t>(id);
 class M1ServiceRegisterServerImpl final : public M1ServiceRegisterServer {
 public:
     M1ServiceRegisterServerImpl(M1ServiceRegisterConfig config,
-                                ServiceRegistry* registry)
+                                ServiceRegistry* registry,
+                                PositionProjectionRegistry* projection_registry)
         : config_(std::move(config))
-        , registry_(registry) {}
+        , registry_(registry)
+        , projection_registry_(projection_registry) {}
 
     ~M1ServiceRegisterServerImpl() override {
         stop();
@@ -73,7 +75,7 @@ public:
         manager_->set_peer_listener([this](link::InterServerLink& peer) {
             auto& dispatcher = peer.dispatcher();
             dispatcher.set_route_table(route_table_.get());
-            dispatcher.allow_domain("internal");  // 964 internal 域白名单
+            dispatcher.allow_domain("internal");  // 964/968 internal 域白名单
             dispatcher.set_handler(id_of(MsgId::service_register_request),
                                    [&peer, this](std::uint16_t,
                                                  const std::uint8_t* data,
@@ -81,6 +83,16 @@ public:
                                        handle_register_frame(peer.peer_name(),
                                                              data, size);
                                    });
+            // 968 执行位置投影受理（L115，装配随 projection_registry 注入）：
+            // 同 peer 链路逐条落水位裁决——无回执（水位幂等即裁决载体）。
+            if (projection_registry_ != nullptr) {
+                dispatcher.set_handler(
+                    id_of(MsgId::space_position_projection),
+                    [this](std::uint16_t, const std::uint8_t* data,
+                           std::size_t size) {
+                        handle_projection_frame(data, size);
+                    });
+            }
         });
 
         running_.store(true, std::memory_order_release);
@@ -187,6 +199,39 @@ private:
                          payload.size(), link::SendClass::kReliable);
     }
 
+    // 968 受理：契约 wire 解包 → 水位裁决就地落表。request_id 语义不存在
+    //（无回执）；残帧拒收计数同 964 面。断言事实源 = registry 裁决计数。
+    void handle_projection_frame(const std::uint8_t* data, std::size_t size) {
+        std::vector<wire::FieldValue> fields;
+        if (!wire::decode_payload(id_of(MsgId::space_position_projection), data,
+                                  size, fields)
+            || fields.size() != 6) {
+            rejected_.fetch_add(1, std::memory_order_acq_rel);
+            return;
+        }
+        SpacePositionProjection p;
+        p.world_id = static_cast<std::int32_t>(fields[0].integer);
+        p.space_id = static_cast<std::uint64_t>(fields[1].integer);
+        p.cell_id = static_cast<std::uint64_t>(fields[2].integer);
+        p.assignment_version = static_cast<std::uint64_t>(fields[3].integer);
+        p.management_epoch = static_cast<std::uint64_t>(fields[4].integer);
+        p.ready = fields[5].integer != 0;
+        const auto verdict =
+            projection_registry_->apply_projection(p, now_ms());
+        if (verdict == ProjectionVerdict::kApplied
+            || verdict == ProjectionVerdict::kTombstoned) {
+            apollo::core::log::global_log_manager()
+                .createLogger("login_server")
+                ->info(std::string(verdict == ProjectionVerdict::kApplied
+                                       ? "position projection applied"
+                                       : "position projection tombstoned")
+                       + ": world=" + std::to_string(p.world_id) + " space="
+                       + std::to_string(p.space_id) + " cell="
+                       + std::to_string(p.cell_id) + " version="
+                       + std::to_string(p.assignment_version));
+        }
+    }
+
     bool load_route_table(link::RouteTable& table) {
         if (config_.route_json.empty()) {
             return false;
@@ -214,6 +259,7 @@ private:
 
     M1ServiceRegisterConfig config_;
     ServiceRegistry* registry_ = nullptr;
+    PositionProjectionRegistry* projection_registry_ = nullptr;
     std::unique_ptr<link::RouteTable> route_table_;
     std::unique_ptr<link::LinkManager> manager_;
     std::thread pump_thread_;
@@ -224,15 +270,18 @@ private:
 } // namespace
 
 std::unique_ptr<M1ServiceRegisterServer> makeM1ServiceRegisterServer(
-    M1ServiceRegisterConfig config, ServiceRegistry* registry) {
+    M1ServiceRegisterConfig config, ServiceRegistry* registry,
+    PositionProjectionRegistry* projection_registry) {
     return std::make_unique<M1ServiceRegisterServerImpl>(std::move(config),
-                                                         registry);
+                                                         registry,
+                                                         projection_registry);
 }
 
 #else // _WIN32
 
 std::unique_ptr<M1ServiceRegisterServer> makeM1ServiceRegisterServer(
-    M1ServiceRegisterConfig /*config*/, ServiceRegistry* /*registry*/) {
+    M1ServiceRegisterConfig /*config*/, ServiceRegistry* /*registry*/,
+    PositionProjectionRegistry* /*projection_registry*/) {
     // link TCP 底座不进本批（POSIX only）：Windows 退 null 桩（start false
     // = 面关，宿主装配面无 #if）。
     class NullServiceRegisterServer final : public M1ServiceRegisterServer {
