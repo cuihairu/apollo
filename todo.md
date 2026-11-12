@@ -575,3 +575,12 @@
 - [x] 回归测试 `modules/net/http/tests/http_tests.cpp`（链 apollo_net_http，CMake 注册 apollo_net_http_tests，CMakeLists.txt:300-315）：GET/POST 往返 + 连接关闭后表项移除 + stop() 快速收线（<1s）+ 静默对端响应超时 + 垃圾 Content-Length 客户端不抛 + 超大响应封顶（4KB 上限收 64KB 体）+ 服务端垃圾 Content-Length 不崩 + httpGet url 解析生效 + https 拒绝 + 接口面可构造。
 - [x] 旧逻辑实证 FAIL（/tmp/http-old，git HEAD 源码 + 新用例）：①旧 HttpServer 往返 abort exit 134（substr out_of_range → terminate）；②旧 HttpClient 对端静默阻塞 recv，超时杀进程 exit 124——确定性 FAIL，回归测试为真。
 - [x] 证据：commit c1ec9a7d；新用例 10/10 + 30 连绿 soak + ASan/UBSan 树 10/10（无泄漏）+ 旧逻辑实证 FAIL；build-cov 全量重建 exit 0、ctest **125/126**（唯一红 WorldAppM1LinkTests 高载 40-63 时序 flake，独立重跑 20.55s 绿，非本批回归）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples `apollo_net_http` 重建均 exit 0。
+
+### P1-11 协议解码网络面裸抛（codec.cpp 坏 JSON/残帧未捕获，dispatch 路径炸进程）
+
+- [x] 修复①链路分发兜底：`Dispatcher::dispatch` 原裸调 handler（dispatcher.cpp:25）——handler 内 `decodeBody` 的 `nlohmann::json::parse`（parse_error）与 `throw std::runtime_error("Invalid data size"/"body truncated")` 无捕获，来自对端的残帧/坏 JSON 冒泡出传输层即进程崩溃（gateway ingress / 服务器间 link / m1_egress / 在线目录 / 玩家库等全在 link Dispatcher 收口）。改 handler 与 fallback 调用包 try/catch，异常按帧拒收：新增 `DispatchResult::kHandlerError` + `Stats::handler_error` 计数（dispatcher.cpp:27-45、dispatcher.hpp:25,57；"错误是数据不是控制流"内核纪律：不抛不静默）。
+- [x] 修复②网关客户端面：`GatewayServer::handleClientMessage`（gateway_client.cpp:36）原无 try——`decodeBody<Ping>`（:57）对坏 Ping 体裸抛冒泡出宿主泵线程炸进程；其余解码（:161/:269/:303/:380）已在既有 try 内。改 switch 整体包 try/catch，异常记日志 + `removeSession` 断连兜底（gateway_client.cpp:119）。
+- [x] 覆盖面复核：login `dispatchRequest`、gateway ingress `session_admission`、world `CellApp::executeIntent`（drainAcceptanceQueue try/catch）、`database_client`、`login_server_agents`（调用方 try）均已自带 try/catch——本批补上仅剩的 link Dispatcher 与 gateway_client 客户端面两处，全网络解码入口齐备。
+- [x] 回归测试：`tests/test_net_link.cpp` `test_dispatcher_handler_error`（:301，注册 :1662）——handler 抛 runtime_error → `dispatch` 返 `kHandlerError` + `handler_error` 计数、不崩；fallback 抛同收拒；正常 handler 不误伤（不计数、仍 `kDispatched`）。
+- [x] 旧逻辑实证 FAIL（/tmp/dispatcher-old，git HEAD dispatcher.cpp + 抛异常 handler）：旧 dispatch 裸调 handler → 异常未捕获 → `std::terminate` → Abort exit 134（确定性 FAIL）；新 dispatcher.cpp 同 proof exit 0（按异常拒收不崩）。
+- [x] 证据：commit ae2873e6；新用例 link_tests **41/41**（原 40+1）+ 旧逻辑实证 FAIL + ASan/UBSan 树 link_tests 41/41（无泄漏）；build-cov 全量重建 exit 0、ctest **126/126** 全绿（168s，WorldAppM1LinkTests 本次过）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples `apollo_net_link` 重建均 exit 0。
