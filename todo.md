@@ -535,3 +535,15 @@
 - [x] 回归测试 `tests/test_qos.cpp`（直编 qos.cpp 同 P0-4 范式）：consume(0) 空桶立即失败不自旋 / acquire 默认路径真伪（成功消费最后一批必报 true）+ 默认路径不自旋 / timeout>0 等待补齐与超时耗尽（rate=0 睡到超时、超量请求失败）/ TTL 50ms 实际过期+超时统计+ttl=0 永不过期 / retry 重新入队 pendingMessages 不下溢。CMake 注册 apollo_qos_tests（tests/CMakeLists.txt，QosTests）。
 - [x] 证据：commit 552f119c；build-cov 全量 **121/122**（唯一红 WorldDrainTests 负载假红：load avg 12-38 下直跑二进制亦 1/5 abort，该二进制 05:52 构建于本批任何改动之前、低载时 121/121 全绿含本用例——环境噪声既证）；QosTests 30 连绿 + ASan/UBSan 树 5/5。
 - [x] 范围外备注：channel.cpp 自身另有 43 处休眠编译错（ChannelBuilder 未声明等，先于本批存在），不属 P1#9 修域。
+
+### P1-10 SessionManager 锁内回调死锁 + sendPacket 部分发送流错位（session_manager.cpp:50-80, 372-392）
+
+- [x] 修复①锁内回调：`internalCloseSession` 改为仅簿记（摘映射/归还 ID/计数）并返回 shared_ptr，close 由调用方出锁后触发——closeSession/closeSessionByPlayerId/kickPlayer/shutdown/update 全路径不再持 mutex_ 调 listener 回调（监听器典型实现重入 manager 查会话/踢人，std::mutex 非递归即自死锁）。update 超时路径同构：锁内只做超时判定快照，onTimeout 与 close 出锁触发，已断会话簿记同轮完成（与原实现同 pass 摘除断言语义一致）（session_manager.cpp:208-283）。
+- [x] 修复②流错位：`SessionHelper::sendPacket` 长度头与体合并为单次 send——原两次 send 中第二次失败时长度头已上流、体缺席，对端解析器把后续包字节当体吞掉，整条流从此错位且会话悬活；发送失败即 close(2) 断连（流不可续）（session_manager.cpp:384-410）。
+- [x] 回归测试 `modules/net/rpc/tests/session_manager_tests.cpp`（直编 + 链 apollo_net_rpc，补直编 legacy utils/id_pool.cpp 同 tests 惯例；单例以用例体入 lambda + 统一收尾 shutdown 防断言早退漏悬空监听器）：重入监听器（回调内调回 getSession/getSessionCount）四死锁面（closeSession/kickPlayer/update 超时/shutdown）+ 单帧单次发送与长度核对 + 失败断连 + 空载荷 4 字节头帧。旧代码直跑即挂死（timeout 124 实证）。CMake 注册 apollo_net_rpc_session_tests（modules/net/CMakeLists.txt）。
+- [x] 证据：commit 待填；新用例 10 连绿 + ASan/UBSan 树 5/5（首版测试自身 UAF 被 ASan 抓出并修）；build-cov 全量 **122/123**（唯一红 WorldAppM1LinkTests 负载假红：load avg 33-87 下直跑 4/4 全绿、该目标不链 session_manager/apollo_net_rpc——环境噪声既证）。
+- [x] 附带（P1#9 Windows CI 红）：qos.h 缺 `<array>`/`<mutex>`/`<cstdint>`/`<unordered_map>` 等（GCC 传递可得、MSVC 不可），补齐（commit 1365ccde）。
+
+### P1-8 RedisServiceDiscovery stoi 裸抛 + 心跳持锁 I/O（redis_service_discovery.cpp:152-164）——阻塞
+
+- [ ] **阻塞**：该 TU 依赖 `apollo/redis/redis_template.h`（RedisTemplate）——全仓无此文件，源码从未编译过、无测试入口；按「构建/测试绿才算完成」纪律无法验证修复。三处 stoi/stoll 裸抛与心跳线程持 registeredMutex_ 做 Redis I/O 的修复方案已定位（hashToEndpoint L152/158/164 包 try 返默认、heartbeatThreadFunc L550 快照出锁、另发现 stop() L227 持锁调 deregister（L313 再取同锁）自死锁），待 RedisTemplate 依赖落地后一并修。

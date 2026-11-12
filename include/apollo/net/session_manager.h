@@ -169,6 +169,9 @@ public:
     /// 设置超时时间（毫秒）
     void setTimeout(uint32_t timeoutMs) { timeoutMs_ = timeoutMs; }
 
+    /// 获取超时时间（毫秒）
+    uint32_t getTimeoutMs() const { return timeoutMs_; }
+
     /// 标记为已连接
     void markConnected();
 
@@ -262,7 +265,10 @@ private:
     SessionManager();
     ~SessionManager();
 
-    void internalCloseSession(uint64_t sessionId, int reason);
+    // 摘除会话并完成映射簿记（不触发回调），返回会话供调用方出锁后 close
+    // （close 触发 onDisconnected，监听器可重入 manager——锁内调即自死锁，
+    // audit P1#10）
+    std::shared_ptr<Session> internalCloseSession(uint64_t sessionId, int reason);
 
     utils::IdPool sessionIdPool_;
     // 广播在出锁后逐个 send；若 sessions_ 存裸 unique_ptr，锁外并发

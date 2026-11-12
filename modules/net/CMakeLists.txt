@@ -246,4 +246,22 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_net_reactor_tests PRIVATE ws2_32)
     endif()
     add_test(NAME apollo_net_reactor_tests COMMAND apollo_net_reactor_tests)
+
+    # SessionManager 监听回调出锁 / sendPacket 单帧发送回归（audit P1#10——
+    # closeSession/kickPlayer/update/shutdown 持锁触发可重入监听回调自死锁，
+    # 长度头与体分两次 send 失败即整条流错位）。直编 legacy utils IdPool
+    # （同 tests/CMakeLists.txt 直编惯例：utils/id_pool.cpp 仅在 apollo 目标）
+    add_executable(apollo_net_rpc_session_tests
+        rpc/tests/session_manager_tests.cpp
+        ${CMAKE_SOURCE_DIR}/src/apollo/utils/id_pool.cpp
+    )
+    target_link_libraries(apollo_net_rpc_session_tests
+        PRIVATE
+            apollo::net_rpc
+    )
+    target_compile_features(apollo_net_rpc_session_tests PRIVATE cxx_std_20)
+    if(WIN32)
+        target_link_libraries(apollo_net_rpc_session_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME apollo_net_rpc_session_tests COMMAND apollo_net_rpc_session_tests)
 endif()
