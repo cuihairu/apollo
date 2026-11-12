@@ -100,6 +100,22 @@ player p=42 在 space_id=504（cell-22）掉线（gateway g1 断开）
 > 明确不做：延后多版本长期共存；不把各版本联动递增作为省事方案。
 > 验收（接 L172 兼容矩阵）：位置查询链做一次端到端字段往返与旧代次拒绝。
 
+### 3.3 版本域载体现状（2026-11-13 L116/L117 切片对照）
+
+| 版本域 | 现载体 | 载体位置 | 缺口 |
+|---|---|---|---|
+| 进程代次 | 962/964 management_epoch + 968 management_epoch（源端隔离判定） | 注册/投影面（management_epoch 域） | 拒旧注册 code 3 + 自冻结的端到端验收待 P5 |
+| 资料写权代次 | 无独立域 | — | Base 写权校验整域未落（后续批） |
+| 实体权威代次 | `simulation_epoch`（915/918 wire + WorldAssignment.simulation_epoch） | 0 = 未声明；与 968 management_epoch 明确分域 | 模拟域接线随多 cell 批 |
+| 拓扑版本 | `topology_version`（915/918 wire + WorldAssignment/RouteSnapshot/RemoteEntityRef.topology_version） | 0 = 未声明；与 route_version 分域异值往返 | 布局演进生产者（World 布局决定）未落 |
+| 路由版本 | `route_version`（915/916/918 wire + WorldAssignment.route_version） | 旧域保留 | 旧投影拒（D05 §1.2）已由 968 水位裁决承担 |
+| 会话版本 | `session_version`（913 wire + SessionBinding.session_version；网关 nextBindGeneration 取号） | 0 = 旧端未声明；解析面 918 原样回带 | 旧会话迟到输入拒未接线 |
+
+> 分域证据：OnlineDirectoryM1ControlTests `player_record_wire_roundtrip`
+> 用异值（route=2 / topology=71 / sim_epoch=88 / session=4）断言四域经
+> codec 往返不折叠；control_e2e 经真目录（915 落表 → 918 回带）同断言。
+> legacy 残帧缺新域解码缺省 0（未声明口径），旧域（route_version）原值保留。
+
 ## 4. S11 · 混编兼容范围白名单验证表
 
 ### 4.1 验证表模板（版本对 → 各面）
