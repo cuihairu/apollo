@@ -28,6 +28,7 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
            << ", instance=" << routeSnapshot.instanceId
            << ", space=" << routeSnapshot.spaceId
            << ", version=" << routeSnapshot.routeVersion
+           << ", topo=" << routeSnapshot.topologyVersion
            << ", cell=" << routeSnapshot.cellId
            << ", sim_epoch=" << routeSnapshot.simulationEpoch
            << ", session_ver=" << routeSnapshot.sessionVersion
@@ -400,6 +401,7 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         routeSnapshot.instanceId = parsed.instanceId;
                         routeSnapshot.spaceId = parsed.spaceId;
                         routeSnapshot.routeVersion = parsed.routeVersion;
+                        routeSnapshot.topologyVersion = parsed.topologyVersion;  // L117 域分立映射
                         routeSnapshot.cellId = parsed.cellId;  // L116 分型域映射
                         routeSnapshot.simulationEpoch = parsed.simulationEpoch;
                         routeSnapshot.sessionVersion = parsed.sessionVersion;

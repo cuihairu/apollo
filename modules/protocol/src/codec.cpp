@@ -492,6 +492,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldRequest& ms
     j["instanceId"] = msg.instanceId;
     j["spaceId"] = msg.spaceId;
     j["routeVersion"] = msg.routeVersion;
+    j["topologyVersion"] = msg.topologyVersion;
     j["cellId"] = msg.cellId;
     j["simulationEpoch"] = msg.simulationEpoch;
     std::string str = j.dump();
@@ -507,6 +508,7 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorl
     msg.instanceId = j.value("instanceId", uint64_t(0));
     msg.spaceId = j.value("spaceId", uint64_t(0));
     msg.routeVersion = j.value("routeVersion", uint64_t(0));
+    msg.topologyVersion = j.value("topologyVersion", uint64_t(0));
     msg.cellId = j.value("cellId", uint64_t(0));
     msg.simulationEpoch = j.value("simulationEpoch", uint64_t(0));
 }
@@ -555,6 +557,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerResolveRouteResponse& 
     j["instanceId"] = msg.instanceId;
     j["spaceId"] = msg.spaceId;
     j["routeVersion"] = msg.routeVersion;
+    j["topologyVersion"] = msg.topologyVersion;
     j["cellId"] = msg.cellId;
     j["simulationEpoch"] = msg.simulationEpoch;
     j["sessionVersion"] = msg.sessionVersion;
@@ -576,6 +579,7 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerResolveRou
     msg.instanceId = j.value("instanceId", uint64_t(0));
     msg.spaceId = j.value("spaceId", uint64_t(0));
     msg.routeVersion = j.value("routeVersion", uint64_t(0));
+    msg.topologyVersion = j.value("topologyVersion", uint64_t(0));
     msg.cellId = j.value("cellId", uint64_t(0));
     msg.simulationEpoch = j.value("simulationEpoch", uint64_t(0));
     msg.sessionVersion = j.value("sessionVersion", uint64_t(0));

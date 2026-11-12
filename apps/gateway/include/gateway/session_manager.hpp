@@ -21,6 +21,8 @@ struct RouteSnapshot {
     uint64_t instanceId = 0;
     uint64_t spaceId = 0;
     uint64_t routeVersion = 0;
+    // L117 版本域分立：拓扑版本与路由版本分域（D07——布局演进不推路由水位）。
+    uint64_t topologyVersion = 0;
     // L116 字段分型首切片：918 回带域映射（与 WorldAssignment/SessionBinding
     // 同源）——执行进程、模拟代次、会话绑定代次。
     uint64_t cellId = 0;

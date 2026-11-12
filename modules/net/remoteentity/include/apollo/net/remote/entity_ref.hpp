@@ -30,6 +30,9 @@ struct RemoteEntityRef {
     std::string   target_app;
     AuthorityRole role          = AuthorityRole::Authoritative;
     std::uint64_t route_version = 0;
+    // 拓扑版本（D07 版本域分立）：宿主所在布局代次，与 route_version 分域
+    // ——布局演进不推路由水位，反之亦然；0 = 未声明。
+    std::uint64_t topology_version = 0;
     std::uint64_t shard_key     = 0;
 };
 

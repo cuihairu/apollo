@@ -24,6 +24,7 @@ TEST(RemoteEntityRef, DefaultConstruction) {
     EXPECT_EQ(ref.target_app, "");
     EXPECT_EQ(ref.role, AuthorityRole::Authoritative);
     EXPECT_EQ(ref.route_version, 0u);
+    EXPECT_EQ(ref.topology_version, 0u);
     EXPECT_EQ(ref.shard_key, 0u);
 }
 
@@ -34,6 +35,7 @@ TEST(RemoteEntityRef, FieldAccess) {
     ref.target_app    = "world-1";
     ref.role          = AuthorityRole::Replica;
     ref.route_version = 7;
+    ref.topology_version = 9;  // 与 route_version 分域（D07 版本域分立）
     ref.shard_key     = 3;
 
     EXPECT_EQ(ref.entity_id, 42u);
@@ -41,6 +43,7 @@ TEST(RemoteEntityRef, FieldAccess) {
     EXPECT_EQ(ref.target_app, "world-1");
     EXPECT_EQ(ref.role, AuthorityRole::Replica);
     EXPECT_EQ(ref.route_version, 7u);
+    EXPECT_EQ(ref.topology_version, 9u);
     EXPECT_EQ(ref.shard_key, 3u);
 }
 

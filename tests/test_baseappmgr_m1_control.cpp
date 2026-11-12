@@ -120,7 +120,8 @@ bool test_control_e2e() {
     TEST_ASSERT(server->peerCount() == 2, "face observes both dialed peers");
 
     // AssignWorld 经 login 客户端 → 真 OnlineDirectory 落点裁决（真目录写入）。
-    // L116 分型域（cell/模拟代次）随落点成行。
+    // L116 分型域（cell/模拟代次）随落点成行；L117 版本域分立——拓扑版本
+    // 与路由版本异值成行（2 ≠ 71），证明分域不折叠。
     protocol::PlayerAssignWorldRequest assign;
     assign.playerId = 42;
     assign.worldId = 7;
@@ -128,6 +129,7 @@ bool test_control_e2e() {
     assign.instanceId = 11;
     assign.spaceId = 5;
     assign.routeVersion = 2;
+    assign.topologyVersion = 71;
     assign.cellId = 21;
     assign.simulationEpoch = 88;
     const auto assignResp = loginClient->call(
@@ -182,6 +184,8 @@ bool test_control_e2e() {
                         parsed.instanceId == 11 && parsed.spaceId == 5 &&
                         parsed.routeVersion == 2,
                     "resolve assignment fields verbatim");
+        TEST_ASSERT(parsed.topologyVersion == 71,
+                    "resolve topology domain verbatim (L117)");
         TEST_ASSERT(parsed.cellId == 21 && parsed.simulationEpoch == 88,
                     "resolve typed domains verbatim (L116)");
         TEST_ASSERT(parsed.sessionVersion == 4,
@@ -248,10 +252,11 @@ bool test_control_e2e() {
 #endif
 }
 
-// 913/915/918 分型域 codec 往返（L116 首切片）：新字段全量回带 + 旧端残帧
-// 缺字段解码缺省 0（未声明口径，不炸解析）。
+// 913/915/918 分型域 codec 往返（L116 首切片 + L117 版本域分立）：新字段
+// 全量回带、版本域异值不折叠 + 旧端残帧缺字段解码缺省 0（未声明口径，不炸
+// 解析；路由版本等旧域原值保留）。
 bool test_player_record_wire_roundtrip() {
-    { // 915 assign：cell/模拟代次随落点
+    { // 915 assign：拓扑/路由版本异值分域 + cell/模拟代次随落点
         protocol::PlayerAssignWorldRequest assign;
         assign.playerId = 42;
         assign.worldId = 7;
@@ -259,6 +264,7 @@ bool test_player_record_wire_roundtrip() {
         assign.instanceId = 11;
         assign.spaceId = 5;
         assign.routeVersion = 2;
+        assign.topologyVersion = 71;
         assign.cellId = 21;
         assign.simulationEpoch = 88;
         const auto frame = protocol::MessageCodec::encode(assign, 9);
@@ -266,8 +272,18 @@ bool test_player_record_wire_roundtrip() {
                                              frame.end());
         const auto decoded =
             protocol::MessageCodec::decodeBody<protocol::PlayerAssignWorldRequest>(body);
-        TEST_ASSERT(decoded.cellId == 21 && decoded.simulationEpoch == 88,
-                    "assign typed domains roundtrip");
+        TEST_ASSERT(decoded.routeVersion == 2 && decoded.topologyVersion == 71 &&
+                        decoded.cellId == 21 && decoded.simulationEpoch == 88,
+                    "assign version domains stay distinct through roundtrip");
+        const std::string legacy = R"({"playerId":42,"worldId":7,"mapId":3,)"
+            R"("instanceId":11,"spaceId":5,"routeVersion":2})";
+        const std::vector<std::uint8_t> legacyBody(legacy.begin(), legacy.end());
+        const auto legacyDecoded =
+            protocol::MessageCodec::decodeBody<protocol::PlayerAssignWorldRequest>(legacyBody);
+        TEST_ASSERT(legacyDecoded.routeVersion == 2 &&
+                        legacyDecoded.topologyVersion == 0 &&
+                        legacyDecoded.cellId == 0 && legacyDecoded.simulationEpoch == 0,
+                    "legacy assign keeps route domain, defaults new domains zero");
     }
     { // 913 bind：会话绑定代次
         protocol::PlayerBindSessionRequest bind;
@@ -290,7 +306,7 @@ bool test_player_record_wire_roundtrip() {
         TEST_ASSERT(legacyDecoded.sessionVersion == 0,
                     "legacy bind defaults version zero");
     }
-    { // 918 resolve：三域同帧回带 + 旧端残帧缺省
+    { // 918 resolve：四版本域异值同帧回带 + 旧端残帧缺省
         protocol::PlayerResolveRouteResponse response;
         response.success = true;
         response.playerId = 42;
@@ -302,6 +318,7 @@ bool test_player_record_wire_roundtrip() {
         response.instanceId = 11;
         response.spaceId = 5;
         response.routeVersion = 2;
+        response.topologyVersion = 71;
         response.cellId = 21;
         response.simulationEpoch = 88;
         response.sessionVersion = 4;
@@ -310,9 +327,9 @@ bool test_player_record_wire_roundtrip() {
                                              frame.end());
         const auto decoded =
             protocol::MessageCodec::decodeBody<protocol::PlayerResolveRouteResponse>(body);
-        TEST_ASSERT(decoded.cellId == 21 && decoded.simulationEpoch == 88 &&
-                        decoded.sessionVersion == 4,
-                    "resolve typed domains roundtrip");
+        TEST_ASSERT(decoded.routeVersion == 2 && decoded.topologyVersion == 71 &&
+                        decoded.simulationEpoch == 88 && decoded.sessionVersion == 4,
+                    "resolve version domains stay distinct through roundtrip");
         const std::string legacy = R"({"success":true,"playerId":42,"sessionId":9,)"
             R"("gatewayId":1,"gatewayAddr":"tcp://127.0.0.1:9002","worldId":7,)"
             R"("mapId":3,"instanceId":11,"spaceId":5,"routeVersion":2,)"
@@ -320,10 +337,12 @@ bool test_player_record_wire_roundtrip() {
         const std::vector<std::uint8_t> legacyBody(legacy.begin(), legacy.end());
         const auto legacyDecoded =
             protocol::MessageCodec::decodeBody<protocol::PlayerResolveRouteResponse>(legacyBody);
-        TEST_ASSERT(legacyDecoded.success && legacyDecoded.cellId == 0 &&
+        TEST_ASSERT(legacyDecoded.success && legacyDecoded.routeVersion == 2 &&
+                        legacyDecoded.topologyVersion == 0 &&
+                        legacyDecoded.cellId == 0 &&
                         legacyDecoded.simulationEpoch == 0 &&
                         legacyDecoded.sessionVersion == 0,
-                    "legacy resolve defaults typed domains zero");
+                    "legacy resolve keeps route domain, defaults new domains zero");
     }
     return true;
 }

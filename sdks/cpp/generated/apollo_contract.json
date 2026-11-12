@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "c6061439bd618dc65a93a7de260061f0c8140f105658032187fd2168ce2417a4",
+  "schema_hash": "2a73f83c8304348b149c03c89f7eb55c7a85c05ee84a35157f1b4ae75922f8fa",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "6088f8ddf8429839dd4a94d6f4d81fcd8986bb062fdb5616c6c59a387b3b7684",
+  "internal_hash": "6b2f77c1587ddcf7cf3251f7045b6c03fce0018d5463697eb2e38510ebd8ddb3",
   "contract_version": 3,
   "aliases": [
     {
@@ -1574,6 +1574,12 @@
           "desc": ""
         },
         {
+          "name": "topology_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "拓扑版本（D07 版本域分立：布局代次，与路由版本分域互不推演；0 = 未声明）"
+        },
+        {
           "name": "cell_id",
           "type": "int64",
           "wire_type": "int64",
@@ -1586,7 +1592,7 @@
           "desc": "模拟代次（执行域生命周期水位；0 = 未声明）"
         }
       ],
-      "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行）"
+      "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行；L117 版本域分立——拓扑版本与路由版本分域）"
     },
     {
       "id": 916,
@@ -1709,6 +1715,12 @@
           "desc": ""
         },
         {
+          "name": "topology_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "拓扑版本（D07 版本域分立：与 915 topology_version 同源；0 = 未声明）"
+        },
+        {
           "name": "cell_id",
           "type": "int64",
           "wire_type": "int64",
@@ -1733,7 +1745,7 @@
           "desc": ""
         }
       ],
-      "desc": "路由解析应答（落点四件套+网关定位全量回带；L116 字段分型首切片——执行进程/模拟代次/会话版本随落点同帧回带）"
+      "desc": "路由解析应答（落点四件套+网关定位全量回带；L116 字段分型首切片——执行进程/模拟代次/会话版本随落点同帧回带；L117 版本域分立——拓扑版本与路由版本分域同帧回带）"
     },
     {
       "id": 919,

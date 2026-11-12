@@ -10,6 +10,9 @@ struct WorldAssignment {
     std::uint64_t instance_id = 0;
     std::uint64_t space_id = 0;
     std::uint64_t route_version = 0;
+    // 拓扑版本（D07 版本域分立，915/918 topology_version 同源）：布局代次
+    // ——布局演进时前进，与路由版本（位置路由水位）分域互不推演；0 = 未声明。
+    std::uint64_t topology_version = 0;
     // 执行进程归属 cell 号（L116 字段分型首切片，915/918 cell_id 同源）：
     // 0 = 执行进程未指派——落点先行，模拟域接线随多 cell 批。
     std::uint64_t cell_id = 0;

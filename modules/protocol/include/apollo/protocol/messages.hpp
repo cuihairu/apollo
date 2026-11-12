@@ -291,6 +291,7 @@ struct PlayerAssignWorldRequest {
     uint64_t instanceId;
     uint64_t spaceId;
     uint64_t routeVersion;
+    uint64_t topologyVersion = 0;  // 拓扑版本（L117 域分立；0 = 未声明）
     uint64_t cellId = 0;         // 执行进程归属 cell（L116；0 = 未指派）
     uint64_t simulationEpoch = 0;  // 模拟代次（L116；0 = 未声明）
 
@@ -323,6 +324,7 @@ struct PlayerResolveRouteResponse {
     uint64_t instanceId;
     uint64_t spaceId;
     uint64_t routeVersion;
+    uint64_t topologyVersion = 0;  // 拓扑版本（L117 域分立；0 = 未声明）
     uint64_t cellId = 0;           // 执行进程归属 cell（L116；0 = 未指派）
     uint64_t simulationEpoch = 0;  // 模拟代次（L116；0 = 未声明）
     uint64_t sessionVersion = 0;   // 会话绑定代次（L116；0 = 旧端未声明）
