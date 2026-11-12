@@ -264,4 +264,20 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_net_rpc_session_tests PRIVATE ws2_32)
     endif()
     add_test(NAME apollo_net_rpc_session_tests COMMAND apollo_net_rpc_session_tests)
+
+    # NativeAdapter 长度头大端解码 / listeners_/connectors_ 持锁快照回归
+    # （audit P1#5——原 reinterpret_cast 原生序裸读既是对齐 UB 又与发送侧
+    # 大端互斥；processEvents/stop 无锁迭代与多 IO 线程及变更接口竞态）
+    add_executable(apollo_net_rpc_native_adapter_tests
+        rpc/tests/native_adapter_tests.cpp
+    )
+    target_link_libraries(apollo_net_rpc_native_adapter_tests
+        PRIVATE
+            apollo::net_rpc
+    )
+    target_compile_features(apollo_net_rpc_native_adapter_tests PRIVATE cxx_std_20)
+    if(WIN32)
+        target_link_libraries(apollo_net_rpc_native_adapter_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME apollo_net_rpc_native_adapter_tests COMMAND apollo_net_rpc_native_adapter_tests)
 endif()

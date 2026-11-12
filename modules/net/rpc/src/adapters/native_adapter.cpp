@@ -176,7 +176,16 @@ bool NativeConnection::handleRecv() {
             while (recvBuffer_.readableBytes() >= sizeof(uint32_t)) {
                 char peekBuf[4];
                 recvBuffer_.peek(peekBuf, 4);
-                uint32_t packetLen = *reinterpret_cast<uint32_t*>(peekBuf);
+                // 长度头逐字节按大端组装（与 SessionHelper::sendPacket 编码一
+                // 致）：原 reinterpret_cast 原生序读取既是对齐/别名 UB，又在
+                // 小端机上与发送侧大端字节序互不兼容
+                const unsigned char* headerBytes =
+                    reinterpret_cast<const unsigned char*>(peekBuf);
+                const uint32_t packetLen =
+                    (static_cast<uint32_t>(headerBytes[0]) << 24) |
+                    (static_cast<uint32_t>(headerBytes[1]) << 16) |
+                    (static_cast<uint32_t>(headerBytes[2]) << 8) |
+                    static_cast<uint32_t>(headerBytes[3]);
 
                 if (packetLen > 64 * 1024) {
                     // 包太大，错误
@@ -408,6 +417,11 @@ syscalls::sys_close(listenSocket_);
 
 uint32_t NativeListener::getConnectionCount() const {
     return currentConnections_.load();
+}
+
+// 头内仅声明无定义（休眠代码从未被实例化，vtable 悬空引用在链接期才显形）
+bool NativeListener::isRunning() const {
+    return running_;
 }
 
 void NativeListener::setSessionFactory(SessionFactoryPtr factory) {
@@ -812,14 +826,17 @@ void NativeNetworkManager::stop() {
 
     running_ = false;
 
-    // 停止所有监听器
-    for (auto& kv : listeners_) {
-        kv.second->stop();
-    }
+    // 停止所有监听器与连接器（持锁：与 IO 线程 processEvents 的快照互斥，
+    // 原无锁迭代与仍在运行的 IO 线程构成数据竞争；stop 不重入 manager）
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& kv : listeners_) {
+            kv.second->stop();
+        }
 
-    // 停止所有连接器
-    for (auto& connector : connectors_) {
-        connector.second->stop();
+        for (auto& connector : connectors_) {
+            connector.second->stop();
+        }
     }
 
     // 关闭所有连接
@@ -1032,17 +1049,33 @@ void NativeNetworkManager::ioThreadProc() {
 
 bool NativeNetworkManager::processEvents(int timeoutMs) {
     (void)timeoutMs;
+    // listeners_/connectors_ 持锁快照、出锁处理：默认按 CPU 核数开多个 IO
+    // 线程并发进入本函数，原实现无锁迭代 map，与 createListener/
+    // removeListener 等持锁变更方构成数据竞争；出锁调用亦避免
+    // handleAccept/handleConnect 的用户回调重入 manager 持锁接口时自死锁
+    std::vector<std::shared_ptr<NativeListener>> activeListeners;
+    std::vector<std::shared_ptr<NativeConnector>> activeConnectors;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        activeListeners.reserve(listeners_.size());
+        for (auto& kv : listeners_) {
+            activeListeners.push_back(kv.second);
+        }
+        activeConnectors.reserve(connectors_.size());
+        for (auto& kv : connectors_) {
+            activeConnectors.push_back(kv.second);
+        }
+    }
+
     // 处理监听器的接受事件
-    for (auto& kv : listeners_) {
-        auto& listener = kv.second;
+    for (auto& listener : activeListeners) {
         if (listener->isRunning()) {
             listener->handleAccept();
         }
     }
 
     // 处理连接器的连接事件
-    for (auto& kv : connectors_) {
-        auto& connector = kv.second;
+    for (auto& connector : activeConnectors) {
         if (connector->isConnecting()) {
             connector->handleConnect();
         }
