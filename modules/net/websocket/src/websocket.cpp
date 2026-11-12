@@ -550,7 +550,21 @@ public:
 #ifdef _WIN32
         return ::send(socket_, data, static_cast<int>(size), 0);
 #else
+#ifdef MSG_NOSIGNAL
+        // Linux：对端关闭后的 send 不发 SIGPIPE（默认杀进程），返回 EPIPE
+        return ::send(socket_, data, size, MSG_NOSIGNAL);
+#else
+#if defined(SO_NOSIGPIPE)
+        // macOS/BSD 无 MSG_NOSIGNAL：对 socket 置 SO_NOSIGPIPE，send 改返
+        // EPIPE（一次置位即可）
+        if (!nosigpipeSet_) {
+            int on = 1;
+            ::setsockopt(socket_, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+            nosigpipeSet_ = true;
+        }
+#endif
         return ::send(socket_, data, size, 0);
+#endif
 #endif
     }
 
@@ -579,6 +593,9 @@ public:
 
 private:
     socket_t socket_;
+#if !defined(_WIN32) && !defined(MSG_NOSIGNAL) && defined(SO_NOSIGPIPE)
+    bool nosigpipeSet_ = false;
+#endif
 };
 
 //==============================================================================

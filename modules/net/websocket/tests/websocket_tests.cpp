@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstring>
 #include <functional>
 #include <iostream>
@@ -58,10 +59,14 @@ int connectTcp(uint16_t port) {
     return fd;
 }
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0  // macOS/BSD 无此标志（进程已 ignore SIGPIPE，兜底）
+#endif
+
 void sendAll(int fd, const char* data, size_t len) {
     size_t sent = 0;
     while (sent < len) {
-        ssize_t n = ::send(fd, data + sent, len - sent, 0);
+        ssize_t n = ::send(fd, data + sent, len - sent, MSG_NOSIGNAL);
         if (n <= 0) return;  // 对端关闭/错误，停止
         sent += static_cast<size_t>(n);
     }
@@ -194,6 +199,11 @@ bool test_get_connection_null_when_stopped() {
 } // namespace
 
 int main() {
+#ifndef _WIN32
+    // macOS Release：超限帧用例对端已关仍继续 send → SIGPIPE 默认杀进程
+    // （linux 用 MSG_NOSIGNAL，macOS 无该标志）——进程忽略之
+    std::signal(SIGPIPE, SIG_IGN);
+#endif
     int passed = 0, total = 0;
     auto run = [&](const char* name, bool (*fn)()) {
         std::cout << "== " << name << " ==" << std::endl;
