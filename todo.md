@@ -554,4 +554,13 @@
 - [x] 修复②map 竞态：`processEvents` 原无锁迭代 `listeners_`/`connectors_`，默认按 CPU 核数开多个 IO 线程并发进入，与 `createListener`/`removeListener` 等持锁变更方构成数据竞争——改持锁快照、出锁处理（避免 `handleAccept`/`handleConnect` 用户回调重入 manager 持锁接口自死锁，同 P1-10 纪律）；`stop()` 收线循环一并持锁（native_adapter.cpp:1049-1078, 826-840）。
 - [x] 附带休眠代码：`NativeListener::isRunning()` 头内仅声明无定义，vtable 悬空引用在本测试首次实例化该类时链接期显形——补定义（native_adapter.cpp:422-424）。
 - [x] 回归测试 `modules/net/rpc/tests/native_adapter_tests.cpp`（链 apollo_net_rpc，CMake 注册 apollo_net_rpc_native_adapter_tests）：socketpair 对拍大端帧原样送达两帧（长度/内容核验，连接不关闭）+ 超长守卫断连不派发 + 快照路径 update/stop 走通。旧代码直跑 FAIL「two packets delivered」（大端头 00 00 00 05 被小端读成 0x05000000 判超长）——实证。
-- [x] 证据：commit 906dd8f4；新用例 3/3 + 30 连绿 soak + ASan/UBSan 树 3/3 + 旧代码实证 FAIL；build-cov 全量重建 exit 0、ctest **123/124**（唯一红 CellRegisterTests 高负载假红：load avg 59-75（外部 Go 构建并发）下直跑 4/4 全绿 + ctest 复跑 1/1 绿，该二进制不链 apollo_net_rpc——环境噪声既证）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples 全量重建均 exit 0。
+- [x] 证据：commit 906dd8f4；新用例 3/3 + 30 连绿 soak + ASan/UBSan 树 3/3 + 旧代码实证 FAIL；build-cov 全量重建 exit 0、ctest **123/124**（唯一红 CellRegisterTests 高负载假红：load avg 59-75（外部 Go 构建并发）下直跑 4/4 全绿 + ctest 复跑 1/1 绿，该二进制不链 apollo_net_rpc——环境噪声既证）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples 全量重建均 exit 0；CI 906dd8f4 六作业全绿（含 Windows Release 与 coverage）。
+
+### P1-6 WebSocket 接收缓冲无上限/O(n²) 擦除 + 单次 recv 握手 + 裸指针 getConnection（websocket.cpp:662, 823, 864）
+
+- [x] 修复①缓冲：`handleReceive` 原 `receiveBuffer_` 无上限——帧声明长度（8 字节扩展长）攻击者可控，未完成帧可无限累积（任意客户端打 OOM）；且每解析一帧 `erase(begin,...)` 首部搬移 O(n)，N 帧即 O(n²)。改偏移消费（parse 自 `data()+consumed` 起），仅当前缀占比过半或已大块时压缩一次（分摊 O(1)）；未消费余量超 `config_.maxMessageSize` 即断连（websocket.cpp:664-694 服务端、1161-1185 客户端）。
+- [x] 修复②握手：服务器 `handleClient` 原单次 `recv`——请求分片到达时拿到不完整头即判定无效握手断开；改循环收至 `\r\n\r\n`（头满或缓冲满视为无效），缓冲上限 4096（websocket.cpp:885-907）。
+- [x] 修复③getConnection：原返回裸指针，连接表并发 erase 后调用方悬空；改返回 `shared_ptr`（接口 websocket.h:331 + 实现同步；仓内无其他实现/调用方）。
+- [x] 附带死锁：`WebSocketServer::stop()` 原置位后 `join()` 永等——acceptLoop 阻塞在 `accept()` 不因 running_=false 或关闭套接字解除；监听套接字改非阻塞，acceptLoop 以 10ms 周期检查 running_（websocket.cpp:794-806）。
+- [x] 回归测试 `modules/net/websocket/tests/websocket_tests.cpp`（链 apollo_net_websocket，CMake 注册 apollo_net_websocket_tests）：回环 TCP 直连服务端——正常文本帧往返（偏移消费重构后单帧完整送达）+ 分片握手（50ms 间隔两段，原单次 recv 即败）+ 声明 256MB 帧流灌超 maxMessageSize 断连（OOM 面）+ getConnection 未启动返回 nullptr。旧逻辑（仅补 stop 死锁与非阻塞 shim、隔离审计面）3/3 直跑确定性 FAIL「oversized frame closes connection」（连接悬活不断）——实证。
+- [x] 证据：commit bf6fa876；新用例 4/4 + 30 连绿 soak + ASan/UBSan 树 4/4 + 旧逻辑实证 FAIL；build-cov 全量重建 exit 0、ctest **125/125** 全绿（含新增两用例）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples 全量重建均 exit 0。
