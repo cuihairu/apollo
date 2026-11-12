@@ -29,8 +29,6 @@
 
 namespace {
 
-#if !defined(_WIN32)
-
 using login::PositionProjectionRegistry;
 using login::ProjectionVerdict;
 using login::SpacePositionProjection;
@@ -38,7 +36,10 @@ using world_app::M1PositionProjectionClient;
 using world_app::M1PositionProjectionConfig;
 using world_app::makeM1PositionProjectionClient;
 
+// 跨平台：失败计数两态都定义（Windows 空转时恒 0——main 出口共用）。
 int g_failures = 0;
+
+#if !defined(_WIN32)
 
 #define TEST_ASSERT(cond, msg)                                                     \
     do {                                                                           \
