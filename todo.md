@@ -541,7 +541,7 @@
 - [x] 修复①锁内回调：`internalCloseSession` 改为仅簿记（摘映射/归还 ID/计数）并返回 shared_ptr，close 由调用方出锁后触发——closeSession/closeSessionByPlayerId/kickPlayer/shutdown/update 全路径不再持 mutex_ 调 listener 回调（监听器典型实现重入 manager 查会话/踢人，std::mutex 非递归即自死锁）。update 超时路径同构：锁内只做超时判定快照，onTimeout 与 close 出锁触发，已断会话簿记同轮完成（与原实现同 pass 摘除断言语义一致）（session_manager.cpp:208-283）。
 - [x] 修复②流错位：`SessionHelper::sendPacket` 长度头与体合并为单次 send——原两次 send 中第二次失败时长度头已上流、体缺席，对端解析器把后续包字节当体吞掉，整条流从此错位且会话悬活；发送失败即 close(2) 断连（流不可续）（session_manager.cpp:384-410）。
 - [x] 回归测试 `modules/net/rpc/tests/session_manager_tests.cpp`（直编 + 链 apollo_net_rpc，补直编 legacy utils/id_pool.cpp 同 tests 惯例；单例以用例体入 lambda + 统一收尾 shutdown 防断言早退漏悬空监听器）：重入监听器（回调内调回 getSession/getSessionCount）四死锁面（closeSession/kickPlayer/update 超时/shutdown）+ 单帧单次发送与长度核对 + 失败断连 + 空载荷 4 字节头帧。旧代码直跑即挂死（timeout 124 实证）。CMake 注册 apollo_net_rpc_session_tests（modules/net/CMakeLists.txt）。
-- [x] 证据：commit 待填；新用例 10 连绿 + ASan/UBSan 树 5/5（首版测试自身 UAF 被 ASan 抓出并修）；build-cov 全量 **122/123**（唯一红 WorldAppM1LinkTests 负载假红：load avg 33-87 下直跑 4/4 全绿、该目标不链 session_manager/apollo_net_rpc——环境噪声既证）。
+- [x] 证据：commit f51198b7；新用例 10 连绿 + ASan/UBSan 树 5/5（首版测试自身 UAF 被 ASan 抓出并修）；build-cov 全量 **122/123**（唯一红 WorldAppM1LinkTests 负载假红：load avg 33-87 下直跑 4/4 全绿、该目标不链 session_manager/apollo_net_rpc——环境噪声既证）。
 - [x] 附带（P1#9 Windows CI 红）：qos.h 缺 `<array>`/`<mutex>`/`<cstdint>`/`<unordered_map>` 等（GCC 传递可得、MSVC 不可），补齐（commit 1365ccde）。
 
 ### P1-8 RedisServiceDiscovery stoi 裸抛 + 心跳持锁 I/O（redis_service_discovery.cpp:152-164）——阻塞
