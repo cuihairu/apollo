@@ -280,4 +280,20 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_net_rpc_native_adapter_tests PRIVATE ws2_32)
     endif()
     add_test(NAME apollo_net_rpc_native_adapter_tests COMMAND apollo_net_rpc_native_adapter_tests)
+
+    # WebSocket 接收缓冲上限/偏移消费、分片握手、getConnection shared_ptr
+    # 回归（audit P1#6——receiveBuffer_ 无上限 OOM 面 + 逐帧 erase O(n²)、
+    # 单次 recv 握手分片即败、裸指针 getConnection 悬空）
+    add_executable(apollo_net_websocket_tests
+        websocket/tests/websocket_tests.cpp
+    )
+    target_link_libraries(apollo_net_websocket_tests
+        PRIVATE
+            apollo::net_websocket
+    )
+    target_compile_features(apollo_net_websocket_tests PRIVATE cxx_std_20)
+    if(WIN32)
+        target_link_libraries(apollo_net_websocket_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME apollo_net_websocket_tests COMMAND apollo_net_websocket_tests)
 endif()

@@ -327,8 +327,9 @@ public:
     // 获取连接数
     virtual size_t getConnectionCount() const = 0;
 
-    // 获取连接
-    virtual ServerConnection* getConnection(uint64_t connId) const = 0;
+    // 获取连接（shared_ptr：连接表 erase 后调用方仍安全持有，原裸指针在
+    // 并发关闭后悬空——audit P1#6）
+    virtual std::shared_ptr<ServerConnection> getConnection(uint64_t connId) const = 0;
 
     // 设置路由 (基于路径)
     using RouteHandler = std::function<bool(ServerConnection*, const std::string& path)>;

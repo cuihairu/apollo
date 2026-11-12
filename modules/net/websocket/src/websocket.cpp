@@ -664,16 +664,31 @@ public:
         FrameParser parser;
         FrameParser::Frame frame;
 
+        // 偏移消费替代逐帧 erase（原每帧 erase(begin) 首部搬移 O(n)，N 帧
+        // 即 O(n²)）：仅当前缀占比过半或已大块时压缩一次，分摊 O(1)
+        size_t consumed = 0;
         while (true) {
-            int parsed = parser.parse(receiveBuffer_.data(), receiveBuffer_.size(), frame);
+            int parsed = parser.parse(receiveBuffer_.data() + consumed,
+                                      receiveBuffer_.size() - consumed, frame);
             if (parsed <= 0) break;
 
-            // 移除已解析的数据
-            receiveBuffer_.erase(receiveBuffer_.begin(),
-                                receiveBuffer_.begin() + parsed);
+            consumed += static_cast<size_t>(parsed);
 
             // 处理帧
             handleMessage(frame);
+        }
+
+        if (consumed > 0) {
+            if (consumed >= 65536 || consumed * 2 >= receiveBuffer_.size()) {
+                receiveBuffer_.erase(receiveBuffer_.begin(),
+                                     receiveBuffer_.begin() + consumed);
+            }
+        }
+
+        // 帧声明长度攻击者可控，未完成的帧可无限累积（原无上限，任意客户端
+        // 可打 OOM——audit P1#6）：超限断连
+        if (receiveBuffer_.size() - consumed > config_.maxMessageSize) {
+            close();
         }
     }
 
@@ -776,6 +791,17 @@ public:
             return false;
         }
 
+        // 监听套接字非阻塞：acceptLoop 无连接时以 10ms 周期检查 running_，
+        // stop() 置位后即可退出——原阻塞 accept 使 stop() 的 join() 永等
+        // （accept 不因 running_=false 或关闭套接字而解除阻塞）
+#ifdef _WIN32
+        u_long nonBlocking = 1;
+        ioctlsocket(listenSocket_.get(), FIONBIO, &nonBlocking);
+#else
+        int flags = fcntl(listenSocket_.get(), F_GETFL, 0);
+        fcntl(listenSocket_.get(), F_SETFL, flags | O_NONBLOCK);
+#endif
+
         callbacks_ = callbacks;
         config_ = config;
         running_ = true;
@@ -820,10 +846,10 @@ public:
         return connections_.size();
     }
 
-    ServerConnection* getConnection(uint64_t connId) const override {
+    std::shared_ptr<ServerConnection> getConnection(uint64_t connId) const override {
         std::lock_guard<std::mutex> lock(connsMutex_);
         auto it = connections_.find(connId);
-        return it != connections_.end() ? it->second.get() : nullptr;
+        return it != connections_.end() ? it->second : nullptr;
     }
 
     void setRoute(const std::string& path, RouteHandler handler) override {
@@ -859,17 +885,27 @@ private:
     void handleClient(socket_t sock, const std::string& remoteAddr) {
         SimpleSocket socket(sock);
 
-        // 握手阶段
+        // 握手阶段：循环接收直至头部结束符（\r\n\r\n）。原单次 recv 在
+        // 请求分片到达时拿到不完整头即判定无效握手直接断开——audit P1#6
         char buffer[4096];
-        int received = socket.receive(buffer, sizeof(buffer) - 1);
-        if (received <= 0) {
-            return;
+        std::string handshakeData;
+        size_t headerEnd = std::string::npos;
+        while (headerEnd == std::string::npos &&
+               handshakeData.size() < sizeof(buffer) - 1) {
+            int received = socket.receive(buffer, sizeof(buffer) - 1);
+            if (received <= 0) {
+                break;
+            }
+            handshakeData.append(buffer, static_cast<size_t>(received));
+            headerEnd = handshakeData.find("\r\n\r\n");
         }
-        buffer[received] = '\0';
+        if (headerEnd == std::string::npos) {
+            return; // 头部未完整或缓冲满：无效握手
+        }
 
         std::string uri, host, clientKey, protocol, version;
         if (!Handshake::parseClientRequest(
-            std::string(buffer, received), uri, host, clientKey, protocol, version)) {
+            handshakeData, uri, host, clientKey, protocol, version)) {
             return; // 无效握手
         }
 
@@ -1125,15 +1161,29 @@ public:
         FrameParser parser;
         FrameParser::Frame frame;
 
+        // 偏移消费替代逐帧 erase（O(n²) → 分摊 O(1)），同服务端 handleReceive
+        size_t consumed = 0;
         while (true) {
-            int parsed = parser.parse(receiveBuffer_.data(),
-                                     receiveBuffer_.size(), frame);
+            int parsed = parser.parse(receiveBuffer_.data() + consumed,
+                                     receiveBuffer_.size() - consumed, frame);
             if (parsed <= 0) break;
 
-            receiveBuffer_.erase(receiveBuffer_.begin(),
-                                receiveBuffer_.begin() + parsed);
+            consumed += static_cast<size_t>(parsed);
 
             handleMessage(frame);
+        }
+
+        if (consumed > 0) {
+            if (consumed >= 65536 || consumed * 2 >= receiveBuffer_.size()) {
+                receiveBuffer_.erase(receiveBuffer_.begin(),
+                                    receiveBuffer_.begin() + consumed);
+            }
+        }
+
+        // 帧装配未完成而缓冲超上限：断连（声明超长帧的 OOM 面——audit P1#6）
+        if (receiveBuffer_.size() - consumed > config_.maxMessageSize) {
+            connected_ = false;
+            socket_.close();
         }
     }
 
