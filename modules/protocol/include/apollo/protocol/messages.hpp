@@ -272,6 +272,7 @@ struct PlayerBindSessionRequest {
     SessionID sessionId;
     uint32_t gatewayId;
     std::string gatewayAddr;
+    uint64_t sessionVersion = 0;  // 会话绑定代次（L116；0 = 旧端未声明）
 
     static constexpr MessageType TYPE = MessageType::PLAYER_BIND_SESSION_REQUEST;
 };
@@ -290,6 +291,8 @@ struct PlayerAssignWorldRequest {
     uint64_t instanceId;
     uint64_t spaceId;
     uint64_t routeVersion;
+    uint64_t cellId = 0;         // 执行进程归属 cell（L116；0 = 未指派）
+    uint64_t simulationEpoch = 0;  // 模拟代次（L116；0 = 未声明）
 
     static constexpr MessageType TYPE = MessageType::PLAYER_ASSIGN_WORLD_REQUEST;
 };
@@ -320,6 +323,9 @@ struct PlayerResolveRouteResponse {
     uint64_t instanceId;
     uint64_t spaceId;
     uint64_t routeVersion;
+    uint64_t cellId = 0;           // 执行进程归属 cell（L116；0 = 未指派）
+    uint64_t simulationEpoch = 0;  // 模拟代次（L116；0 = 未声明）
+    uint64_t sessionVersion = 0;   // 会话绑定代次（L116；0 = 旧端未声明）
     std::string errorMessage;
 
     static constexpr MessageType TYPE = MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE;

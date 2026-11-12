@@ -120,6 +120,7 @@ bool test_control_e2e() {
     TEST_ASSERT(server->peerCount() == 2, "face observes both dialed peers");
 
     // AssignWorld 经 login 客户端 → 真 OnlineDirectory 落点裁决（真目录写入）。
+    // L116 分型域（cell/模拟代次）随落点成行。
     protocol::PlayerAssignWorldRequest assign;
     assign.playerId = 42;
     assign.worldId = 7;
@@ -127,6 +128,8 @@ bool test_control_e2e() {
     assign.instanceId = 11;
     assign.spaceId = 5;
     assign.routeVersion = 2;
+    assign.cellId = 21;
+    assign.simulationEpoch = 88;
     const auto assignResp = loginClient->call(
         protocol::MessageCodec::encode(assign, 9), std::chrono::milliseconds(500));
     TEST_ASSERT(assignResp.has_value(), "assign roundtrip returns");
@@ -146,11 +149,13 @@ bool test_control_e2e() {
     }
 
     // gateway 侧绑定直写目录（wire bind 面 ≠ baseappmgr 分派——nng 时代同位），
-    // ResolveRoute 才有完整 binding+assignment 可解析。
+    // ResolveRoute 才有完整 binding+assignment 可解析。session_version = 绑定
+    // 代次随绑定面入册（L116）。
     apollo::game::base::SessionBinding binding;
     binding.session_id = 9;
     binding.gateway_id = 1;
     binding.gateway_addr = "tcp://127.0.0.1:9002";
+    binding.session_version = 4;
     TEST_ASSERT(mgr.bindSession(42, binding), "session bound in directory");
 
     // ResolveRoute 经 gateway 客户端 → 全字段回填（真解析非假 echo）。
@@ -177,6 +182,10 @@ bool test_control_e2e() {
                         parsed.instanceId == 11 && parsed.spaceId == 5 &&
                         parsed.routeVersion == 2,
                     "resolve assignment fields verbatim");
+        TEST_ASSERT(parsed.cellId == 21 && parsed.simulationEpoch == 88,
+                    "resolve typed domains verbatim (L116)");
+        TEST_ASSERT(parsed.sessionVersion == 4,
+                    "resolve session version verbatim (L116)");
         TEST_ASSERT(parsed.gatewayId == 1 &&
                         parsed.gatewayAddr == "tcp://127.0.0.1:9002",
                     "resolve binding fields verbatim");
@@ -239,6 +248,86 @@ bool test_control_e2e() {
 #endif
 }
 
+// 913/915/918 分型域 codec 往返（L116 首切片）：新字段全量回带 + 旧端残帧
+// 缺字段解码缺省 0（未声明口径，不炸解析）。
+bool test_player_record_wire_roundtrip() {
+    { // 915 assign：cell/模拟代次随落点
+        protocol::PlayerAssignWorldRequest assign;
+        assign.playerId = 42;
+        assign.worldId = 7;
+        assign.mapId = 3;
+        assign.instanceId = 11;
+        assign.spaceId = 5;
+        assign.routeVersion = 2;
+        assign.cellId = 21;
+        assign.simulationEpoch = 88;
+        const auto frame = protocol::MessageCodec::encode(assign, 9);
+        const std::vector<std::uint8_t> body(frame.begin() + sizeof(protocol::MessageHeader),
+                                             frame.end());
+        const auto decoded =
+            protocol::MessageCodec::decodeBody<protocol::PlayerAssignWorldRequest>(body);
+        TEST_ASSERT(decoded.cellId == 21 && decoded.simulationEpoch == 88,
+                    "assign typed domains roundtrip");
+    }
+    { // 913 bind：会话绑定代次
+        protocol::PlayerBindSessionRequest bind;
+        bind.playerId = 42;
+        bind.sessionId = 9;
+        bind.gatewayId = 1;
+        bind.gatewayAddr = "tcp://127.0.0.1:9002";
+        bind.sessionVersion = 4;
+        const auto frame = protocol::MessageCodec::encode(bind, 9);
+        const std::vector<std::uint8_t> body(frame.begin() + sizeof(protocol::MessageHeader),
+                                             frame.end());
+        const auto decoded =
+            protocol::MessageCodec::decodeBody<protocol::PlayerBindSessionRequest>(body);
+        TEST_ASSERT(decoded.sessionVersion == 4, "bind session version roundtrip");
+        const std::string legacy = R"({"playerId":42,"sessionId":9,)"
+            R"("gatewayId":1,"gatewayAddr":"tcp://127.0.0.1:9002"})";
+        const std::vector<std::uint8_t> legacyBody(legacy.begin(), legacy.end());
+        const auto legacyDecoded =
+            protocol::MessageCodec::decodeBody<protocol::PlayerBindSessionRequest>(legacyBody);
+        TEST_ASSERT(legacyDecoded.sessionVersion == 0,
+                    "legacy bind defaults version zero");
+    }
+    { // 918 resolve：三域同帧回带 + 旧端残帧缺省
+        protocol::PlayerResolveRouteResponse response;
+        response.success = true;
+        response.playerId = 42;
+        response.sessionId = 9;
+        response.gatewayId = 1;
+        response.gatewayAddr = "tcp://127.0.0.1:9002";
+        response.worldId = 7;
+        response.mapId = 3;
+        response.instanceId = 11;
+        response.spaceId = 5;
+        response.routeVersion = 2;
+        response.cellId = 21;
+        response.simulationEpoch = 88;
+        response.sessionVersion = 4;
+        const auto frame = protocol::MessageCodec::encode(response, 9);
+        const std::vector<std::uint8_t> body(frame.begin() + sizeof(protocol::MessageHeader),
+                                             frame.end());
+        const auto decoded =
+            protocol::MessageCodec::decodeBody<protocol::PlayerResolveRouteResponse>(body);
+        TEST_ASSERT(decoded.cellId == 21 && decoded.simulationEpoch == 88 &&
+                        decoded.sessionVersion == 4,
+                    "resolve typed domains roundtrip");
+        const std::string legacy = R"({"success":true,"playerId":42,"sessionId":9,)"
+            R"("gatewayId":1,"gatewayAddr":"tcp://127.0.0.1:9002","worldId":7,)"
+            R"("mapId":3,"instanceId":11,"spaceId":5,"routeVersion":2,)"
+            R"("errorMessage":""})";
+        const std::vector<std::uint8_t> legacyBody(legacy.begin(), legacy.end());
+        const auto legacyDecoded =
+            protocol::MessageCodec::decodeBody<protocol::PlayerResolveRouteResponse>(legacyBody);
+        TEST_ASSERT(legacyDecoded.success && legacyDecoded.cellId == 0 &&
+                        legacyDecoded.simulationEpoch == 0 &&
+                        legacyDecoded.sessionVersion == 0,
+                    "legacy resolve defaults typed domains zero");
+    }
+    return true;
+}
+
 bool test_control_unreachable() {
 #if !defined(_WIN32)
     const std::uint16_t dead_port = pick_dead_port();
@@ -275,6 +364,7 @@ int main() {
         bool (*fn)();
     } cases[] = {
         {"control_e2e", test_control_e2e},
+        {"player_record_wire_roundtrip", test_player_record_wire_roundtrip},
         {"control_unreachable", test_control_unreachable},
     };
     int failed = 0;

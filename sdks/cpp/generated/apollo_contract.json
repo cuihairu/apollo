@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "73c4831d9743eaa7a4f84752a92c737451dcbc6910eefaa6505634d3965d165f",
+  "schema_hash": "c6061439bd618dc65a93a7de260061f0c8140f105658032187fd2168ce2417a4",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "3f283ffe31ef476e7dcb4894ebfe97e3df445df6f98d45db56f2b1a0ef4fe752",
+  "internal_hash": "6088f8ddf8429839dd4a94d6f4d81fcd8986bb062fdb5616c6c59a387b3b7684",
   "contract_version": 3,
   "aliases": [
     {
@@ -1496,9 +1496,15 @@
           "type": "string",
           "wire_type": "string",
           "desc": ""
+        },
+        {
+          "name": "session_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "会话绑定代次（同一 session 重绑递增：网关保留会话重连重绑 +1，新会话 1；0 = 旧端未声明，受理面照收不推演）"
         }
       ],
-      "desc": "会话绑定请求（SessionBinding 写入）"
+      "desc": "会话绑定请求（SessionBinding 写入；L116 字段分型首切片）"
     },
     {
       "id": 914,
@@ -1566,9 +1572,21 @@
           "type": "int64",
           "wire_type": "int64",
           "desc": ""
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "执行进程归属 cell 号（0 = 执行进程未指派——落点先行，模拟域接线随多 cell 批）"
+        },
+        {
+          "name": "simulation_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "模拟代次（执行域生命周期水位；0 = 未声明）"
         }
       ],
-      "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表）"
+      "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行）"
     },
     {
       "id": 916,
@@ -1691,13 +1709,31 @@
           "desc": ""
         },
         {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "执行进程归属 cell 号（与 915 cell_id 同源；0 = 未指派）"
+        },
+        {
+          "name": "simulation_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "模拟代次（与 915 simulation_epoch 同源；0 = 未声明）"
+        },
+        {
+          "name": "session_version",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "会话绑定代次（与 913 session_version 同源——绑定面写入，解析面原样回带；0 = 旧端未声明）"
+        },
+        {
           "name": "error_message",
           "type": "string",
           "wire_type": "string",
           "desc": ""
         }
       ],
-      "desc": "路由解析应答（落点四件套+网关定位全量回带）"
+      "desc": "路由解析应答（落点四件套+网关定位全量回带；L116 字段分型首切片——执行进程/模拟代次/会话版本随落点同帧回带）"
     },
     {
       "id": 919,

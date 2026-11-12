@@ -21,6 +21,11 @@ struct RouteSnapshot {
     uint64_t instanceId = 0;
     uint64_t spaceId = 0;
     uint64_t routeVersion = 0;
+    // L116 字段分型首切片：918 回带域映射（与 WorldAssignment/SessionBinding
+    // 同源）——执行进程、模拟代次、会话绑定代次。
+    uint64_t cellId = 0;
+    uint64_t simulationEpoch = 0;
+    uint64_t sessionVersion = 0;
     std::string worldServerUrl;
 
     [[nodiscard]] bool isAssigned() const {
@@ -57,6 +62,10 @@ struct ClientConnection {
     // ——重连后旧序重放同闸拦截。
     uint64_t uplinkSeqWatermark{0};
 
+    // 会话绑定代次（L116 session_version 源）：本会话已发出的 913 绑定次数
+    //（保留会话重连重绑即 +1）。只经 nextBindGeneration 在管理器锁内取号。
+    uint64_t bindGeneration{0};
+
     RouteSnapshot routeSnapshot;
 };
 
@@ -90,6 +99,9 @@ public:
     // sequence > 水位 = 受理并推水位（gap 按流传输语义视为丢帧空洞容忍）。
     // 水位随会话保留窗存活——重连后旧序重放同闸拦截。
     bool acceptUplinkSequence(SessionID sessionId, uint64_t sequence);
+    // 会话绑定代次取号（L116）：管理器锁内 ++bindGeneration 并返回；
+    // 未知会话返回 0（绑定面只对在册会话发号）。
+    uint64_t nextBindGeneration(SessionID sessionId);
 
     // 上行重复拒收累计（观测/测试面；管理器存续期恒稳定）。
     uint64_t duplicateUplinkFrames() const;

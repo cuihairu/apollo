@@ -278,6 +278,8 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerAssignWorldRequest(const std::
     assignment.instance_id = assignReq.instanceId;
     assignment.space_id = assignReq.spaceId;
     assignment.route_version = assignReq.routeVersion;
+    assignment.cell_id = assignReq.cellId;  // L116：执行进程随落点成行
+    assignment.simulation_epoch = assignReq.simulationEpoch;
 
     if (assignWorld(assignReq.playerId, assignment)) {
         response.success = true;
@@ -326,6 +328,9 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerResolveRouteRequest(const std:
     response.instanceId = assignment->instance_id;
     response.spaceId = assignment->space_id;
     response.routeVersion = assignment->route_version;
+    response.cellId = assignment->cell_id;
+    response.simulationEpoch = assignment->simulation_epoch;
+    response.sessionVersion = binding->session_version;  // 绑定面写入，解析面回带
 
     return protocol::MessageCodec::encode(response, header.sessionId);
 }

@@ -28,6 +28,9 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
            << ", instance=" << routeSnapshot.instanceId
            << ", space=" << routeSnapshot.spaceId
            << ", version=" << routeSnapshot.routeVersion
+           << ", cell=" << routeSnapshot.cellId
+           << ", sim_epoch=" << routeSnapshot.simulationEpoch
+           << ", session_ver=" << routeSnapshot.sessionVersion
            << ", url=" << routeSnapshot.worldServerUrl;
     return stream.str();
 }
@@ -286,11 +289,14 @@ bool GatewayServer::activateAndBindAtBase(SessionID sessionId, PlayerID playerId
     }
 
     // ② 绑定：会话号 + 网关身份写入 SessionBinding（下行通道落点）。
+    // session_version = 本会话绑定代次（L116：保留会话重连重绑 +1，
+    // 新会话首绑 1；未知会话 0 = 旧端未声明口径）。
     protocol::PlayerBindSessionRequest bind;
     bind.playerId = playerId;
     bind.sessionId = sessionId;
     bind.gatewayId = config_.gatewayId;
     bind.gatewayAddr = config_.host + ":" + std::to_string(listenPort());
+    bind.sessionVersion = sessionManager_->nextBindGeneration(sessionId);
     reply = baseClient_->call(protocol::MessageCodec::encode(bind, sessionId), kTimeoutMs);
     if (!reply) {
         glog().warning("Base session bind unreachable for session "
@@ -394,6 +400,9 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         routeSnapshot.instanceId = parsed.instanceId;
                         routeSnapshot.spaceId = parsed.spaceId;
                         routeSnapshot.routeVersion = parsed.routeVersion;
+                        routeSnapshot.cellId = parsed.cellId;  // L116 分型域映射
+                        routeSnapshot.simulationEpoch = parsed.simulationEpoch;
+                        routeSnapshot.sessionVersion = parsed.sessionVersion;
                         routeSnapshot.worldServerUrl = config_.worldUrl;
                         return routeSnapshot;
                     }

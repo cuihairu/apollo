@@ -75,6 +75,7 @@ bool LoginServer::preparePlayerOnline(
         bindReq.sessionId = sessionId;
         bindReq.gatewayId = 1;
         bindReq.gatewayAddr = gatewayUrl;
+        bindReq.sessionVersion = 1;  // 登录即新会话首绑（重绑代次随网关重连面）
 
         const auto bindResp =
             callBaseRpc<protocol::PlayerBindSessionRequest, protocol::PlayerBindSessionResponse>(
@@ -94,6 +95,7 @@ bool LoginServer::preparePlayerOnline(
             binding.session_id = sessionId;
             binding.gateway_id = bindReq.gatewayId;
             binding.gateway_addr = gatewayUrl;
+            binding.session_version = bindReq.sessionVersion;
             apollo::game::base::WorldAssignment assignment;
             assignment.world_id = config_.initialWorldId;
             assignment.map_id = config_.initialMapId;

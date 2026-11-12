@@ -454,6 +454,7 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerBindSessionRequest& ms
     j["sessionId"] = msg.sessionId;
     j["gatewayId"] = msg.gatewayId;
     j["gatewayAddr"] = msg.gatewayAddr;
+    j["sessionVersion"] = msg.sessionVersion;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
 }
@@ -465,6 +466,7 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerBindSessio
     msg.sessionId = j.value("sessionId", SessionID(0));
     msg.gatewayId = j.value("gatewayId", uint32_t(0));
     msg.gatewayAddr = j.value("gatewayAddr", "");
+    msg.sessionVersion = j.value("sessionVersion", uint64_t(0));
 }
 
 std::vector<uint8_t> MessageCodec::encodeBody(const PlayerBindSessionResponse& msg) {
@@ -490,6 +492,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldRequest& ms
     j["instanceId"] = msg.instanceId;
     j["spaceId"] = msg.spaceId;
     j["routeVersion"] = msg.routeVersion;
+    j["cellId"] = msg.cellId;
+    j["simulationEpoch"] = msg.simulationEpoch;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
 }
@@ -503,6 +507,8 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorl
     msg.instanceId = j.value("instanceId", uint64_t(0));
     msg.spaceId = j.value("spaceId", uint64_t(0));
     msg.routeVersion = j.value("routeVersion", uint64_t(0));
+    msg.cellId = j.value("cellId", uint64_t(0));
+    msg.simulationEpoch = j.value("simulationEpoch", uint64_t(0));
 }
 
 std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldResponse& msg) {
@@ -549,6 +555,9 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerResolveRouteResponse& 
     j["instanceId"] = msg.instanceId;
     j["spaceId"] = msg.spaceId;
     j["routeVersion"] = msg.routeVersion;
+    j["cellId"] = msg.cellId;
+    j["simulationEpoch"] = msg.simulationEpoch;
+    j["sessionVersion"] = msg.sessionVersion;
     j["errorMessage"] = msg.errorMessage;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
@@ -567,6 +576,9 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerResolveRou
     msg.instanceId = j.value("instanceId", uint64_t(0));
     msg.spaceId = j.value("spaceId", uint64_t(0));
     msg.routeVersion = j.value("routeVersion", uint64_t(0));
+    msg.cellId = j.value("cellId", uint64_t(0));
+    msg.simulationEpoch = j.value("simulationEpoch", uint64_t(0));
+    msg.sessionVersion = j.value("sessionVersion", uint64_t(0));
     msg.errorMessage = j.value("errorMessage", "");
 }
 

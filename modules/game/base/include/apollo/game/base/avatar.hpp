@@ -26,10 +26,16 @@ struct SessionBinding {
     std::uint32_t gateway_id = 0;
     std::string gateway_addr;
     std::int64_t bind_time_ms = 0;
+    // 会话绑定代次（L116 字段分型首切片，913/918 session_version 同源）：
+    // 同一 session 重绑递增（网关保留会话重连重绑 +1），新会话 1；0 = 旧端
+    // 未声明（wire 缺字段解码缺省），受理面照收不推演。
+    std::uint64_t session_version = 0;
 
     [[nodiscard]] bool is_bound() const noexcept {
         return session_id != 0;
     }
+
+    [[nodiscard]] bool operator==(const SessionBinding&) const noexcept = default;
 };
 
 // ItemStack：背包物品格（P2-4 长期态字段模型，object-model 差异清单 #1——

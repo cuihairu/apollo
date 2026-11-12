@@ -143,23 +143,26 @@
     <field name="state" type="string" desc="AvatarState 字符串（六态可观察）"/>
     <field name="error_message" type="string"/>
   </msg>
-  <msg id="913" name="player_bind_session_request" dir="P2P" channel="events" domain="internal" desc="会话绑定请求（SessionBinding 写入）">
+  <msg id="913" name="player_bind_session_request" dir="P2P" channel="events" domain="internal" desc="会话绑定请求（SessionBinding 写入；L116 字段分型首切片）">
     <field name="player_id" type="int64"/>
     <field name="session_id" type="int64"/>
     <field name="gateway_id" type="int32"/>
     <field name="gateway_addr" type="string"/>
+    <field name="session_version" type="int64" desc="会话绑定代次（同一 session 重绑递增：网关保留会话重连重绑 +1，新会话 1；0 = 旧端未声明，受理面照收不推演）"/>
   </msg>
   <msg id="914" name="player_bind_session_response" dir="P2P" channel="events" domain="internal" desc="会话绑定应答">
     <field name="success" type="bool"/>
     <field name="error_message" type="string"/>
   </msg>
-  <msg id="915" name="player_assign_world_request" dir="P2P" channel="events" domain="internal" desc="落点指派请求（WorldAssignment 写入，baseappmgr 目录表）">
+  <msg id="915" name="player_assign_world_request" dir="P2P" channel="events" domain="internal" desc="落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行）">
     <field name="player_id" type="int64"/>
     <field name="world_id" type="int32"/>
     <field name="map_id" type="int64"/>
     <field name="instance_id" type="int64"/>
     <field name="space_id" type="int64"/>
     <field name="route_version" type="int64"/>
+    <field name="cell_id" type="int64" desc="执行进程归属 cell 号（0 = 执行进程未指派——落点先行，模拟域接线随多 cell 批）"/>
+    <field name="simulation_epoch" type="int64" desc="模拟代次（执行域生命周期水位；0 = 未声明）"/>
   </msg>
   <msg id="916" name="player_assign_world_response" dir="P2P" channel="events" domain="internal" desc="落点指派应答">
     <field name="success" type="bool"/>
@@ -170,7 +173,7 @@
     <field name="player_id" type="int64"/>
     <field name="session_id" type="int64"/>
   </msg>
-  <msg id="918" name="player_resolve_route_response" dir="P2P" channel="events" domain="internal" desc="路由解析应答（落点四件套+网关定位全量回带）">
+  <msg id="918" name="player_resolve_route_response" dir="P2P" channel="events" domain="internal" desc="路由解析应答（落点四件套+网关定位全量回带；L116 字段分型首切片——执行进程/模拟代次/会话版本随落点同帧回带）">
     <field name="success" type="bool"/>
     <field name="player_id" type="int64"/>
     <field name="session_id" type="int64"/>
@@ -181,6 +184,9 @@
     <field name="instance_id" type="int64"/>
     <field name="space_id" type="int64"/>
     <field name="route_version" type="int64"/>
+    <field name="cell_id" type="int64" desc="执行进程归属 cell 号（与 915 cell_id 同源；0 = 未指派）"/>
+    <field name="simulation_epoch" type="int64" desc="模拟代次（与 915 simulation_epoch 同源；0 = 未声明）"/>
+    <field name="session_version" type="int64" desc="会话绑定代次（与 913 session_version 同源——绑定面写入，解析面原样回带；0 = 旧端未声明）"/>
     <field name="error_message" type="string"/>
   </msg>
 

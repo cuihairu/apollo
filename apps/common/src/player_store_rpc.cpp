@@ -274,6 +274,7 @@ std::vector<uint8_t> PlayerStore::handlePlayerBindSessionRequest(const std::vect
     binding.gateway_id = bindReq.gatewayId;
     binding.gateway_addr = bindReq.gatewayAddr;
     binding.bind_time_ms = getCurrentTimeMs();
+    binding.session_version = bindReq.sessionVersion;  // L116：绑定代次随帧入册
 
     if (bindSession(bindReq.playerId, binding)) {
         response.success = true;

@@ -104,6 +104,17 @@ bool SessionManager::acceptUplinkSequence(SessionID sessionId, uint64_t sequence
     return true;
 }
 
+uint64_t SessionManager::nextBindGeneration(SessionID sessionId) {
+    // 会话绑定代次取号（L116 session_version 源；保留会话重连重绑即 +1，
+    // 未知会话 = 0——绑定面只对在册会话发号）。
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = sessions_.find(sessionId);
+    if (it == sessions_.end()) {
+        return 0;
+    }
+    return ++it->second->bindGeneration;
+}
+
 uint64_t SessionManager::duplicateUplinkFrames() const {
     return duplicateUplinkFrames_.load();
 }
