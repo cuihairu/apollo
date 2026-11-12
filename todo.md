@@ -564,3 +564,14 @@
 - [x] 附带死锁：`WebSocketServer::stop()` 原置位后 `join()` 永等——acceptLoop 阻塞在 `accept()` 不因 running_=false 或关闭套接字解除；监听套接字改非阻塞，acceptLoop 以 10ms 周期检查 running_（websocket.cpp:794-806）。
 - [x] 回归测试 `modules/net/websocket/tests/websocket_tests.cpp`（链 apollo_net_websocket，CMake 注册 apollo_net_websocket_tests）：回环 TCP 直连服务端——正常文本帧往返（偏移消费重构后单帧完整送达）+ 分片握手（50ms 间隔两段，原单次 recv 即败）+ 声明 256MB 帧流灌超 maxMessageSize 断连（OOM 面）+ getConnection 未启动返回 nullptr。旧逻辑（仅补 stop 死锁与非阻塞 shim、隔离审计面）3/3 直跑确定性 FAIL「oversized frame closes connection」（连接悬活不断）——实证。
 - [x] 证据：commit bf6fa876；新用例 4/4 + 30 连绿 soak + ASan/UBSan 树 4/4 + 旧逻辑实证 FAIL；build-cov 全量重建 exit 0、ctest **125/125** 全绿（含新增两用例）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples 全量重建均 exit 0。
+
+### P1-7 内置 HTTP 连接线程悬空/泄漏 + 客户端无超时无上限 + 解析抛异常 + url 忽略（http.cpp:537, 629, 756）
+
+- [x] 修复①连接生命周期：连接线程原 detach 且闭包捕获裸 `this`，server 析构后 handler 访问 `router_` 悬空（UAF）；`connections_` 只增不减（`removeConnection` 无人调用）每连接泄漏 shared_ptr。改连接线程持 router/registry 的 shared_ptr（经共享状态访问，闭包不捕获 this），线程退出统一 `registry->remove`（http.cpp:728）；`stop()` 收线：置 shutdown 标志 → 连接线程 select 周期退出（100ms）→ join 全部连接线程（原阻塞 recv 无法收线，http.cpp:679）。监听套接字非阻塞，acceptLoop 周期检查 running_。
+- [x] 修复②客户端响应超时/大小上限：`receiveResponse` 原对端不发即永久阻塞 recv（可挂死）、响应无上限（可 OOM）。改 `connector_->waitReadable` select 超时（http.cpp:879）+ 达 `maxResponseSize_` 即停（http.cpp:873，默认 16MB）。
+- [x] 修复③解析抛异常：`Headers::contentLength` 与 `RequestParser` 对垃圾 `Content-Length` 原 `std::stoll` 抛异常（服务端连接线程未捕获 → terminate；客户端未捕获冒泡）——包 try 按无体处理（http.h:245, 511）。
+- [x] 修复④`httpGet`/`httpPost` 原忽略 url 恒连 localhost:80——`parseUrl` 按 url 解析 host/port/path（https 拒绝返回 Invalid URL，http.h:662-666）。
+- [x] 附带 RequestParser 字节多计：头部行原先 `bytesConsumed += line.size()+2` 再弹 `\r`，`line.size()` 含 `\r` 又补 `\r\n` 每行多计 1 → `bytesConsumed` 越界 → `receiveBuffer_.substr` 抛 out_of_range → 连接线程 terminate。改先弹 `\r` 再计（http.h:483-486）。
+- [x] 回归测试 `modules/net/http/tests/http_tests.cpp`（链 apollo_net_http，CMake 注册 apollo_net_http_tests，CMakeLists.txt:300-315）：GET/POST 往返 + 连接关闭后表项移除 + stop() 快速收线（<1s）+ 静默对端响应超时 + 垃圾 Content-Length 客户端不抛 + 超大响应封顶（4KB 上限收 64KB 体）+ 服务端垃圾 Content-Length 不崩 + httpGet url 解析生效 + https 拒绝 + 接口面可构造。
+- [x] 旧逻辑实证 FAIL（/tmp/http-old，git HEAD 源码 + 新用例）：①旧 HttpServer 往返 abort exit 134（substr out_of_range → terminate）；②旧 HttpClient 对端静默阻塞 recv，超时杀进程 exit 124——确定性 FAIL，回归测试为真。
+- [x] 证据：commit c1ec9a7d；新用例 10/10 + 30 连绿 soak + ASan/UBSan 树 10/10（无泄漏）+ 旧逻辑实证 FAIL；build-cov 全量重建 exit 0、ctest **125/126**（唯一红 WorldAppM1LinkTests 高载 40-63 时序 flake，独立重跑 20.55s 绿，非本批回归）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples `apollo_net_http` 重建均 exit 0。
