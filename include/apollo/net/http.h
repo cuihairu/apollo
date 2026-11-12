@@ -239,7 +239,12 @@ public:
 
     int64_t contentLength() const {
         auto len = get("Content-Length");
-        return len.empty() ? -1 : std::stoll(len);
+        if (len.empty()) return -1;
+        try {
+            return std::stoll(len);
+        } catch (const std::exception&) {
+            return -1;  // 垃圾 Content-Length：无体处理（audit P1#7）
+        }
     }
     void setContentLength(int64_t len) { set("Content-Length", std::to_string(len)); }
 
@@ -470,12 +475,14 @@ public:
         int64_t contentLength = -1;
 
         while (std::getline(iss, line)) {
-            bytesConsumed += line.size() + 2;
-
-            // 移除 \r
+            // 先移除 \r 再计字节：getline 把 \n 消费掉但 \r 留在行内，若先
+            // +line.size()+2 会把 \r 计两次（line.size() 含 \r 又补 \r\n），
+            // 每头行多计 1 → bytesConsumed 越界 → substr 抛 out_of_range。
+            // （audit P1#7 往返测试暴露）
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
             }
+            bytesConsumed += line.size() + 2;
 
             // 空行表示头部结束
             if (line.empty()) {
@@ -499,7 +506,11 @@ public:
                 request.headers.set(key, value);
 
                 if (key == "Content-Length") {
-                    contentLength = std::stoll(value);
+                    try {
+                        contentLength = std::stoll(value);
+                    } catch (const std::exception&) {
+                        contentLength = -1;  // 垃圾 Content-Length：按无体处理
+                    }
                 }
             }
         }
@@ -605,6 +616,53 @@ private:
         return false;
     }
 };
+
+//==============================================================================
+// 内置 HTTP 服务器 / 客户端（audit P1#7）
+//==============================================================================
+
+// 内置 HTTP 服务器。连接线程经 shared_ptr 状态（router/连接表）访问，server
+// 析构后不悬空；stop() 收线：置 shutdown 标志 → 连接线程 select 周期退出 →
+// join 全部连接线程（原 detached 线程捕获裸 this 在析构后 UAF，且
+// connections_ 只增不减泄漏）。
+class HttpServer {
+public:
+    virtual ~HttpServer() = default;
+    virtual void setRouter(std::shared_ptr<Router> router) = 0;
+    virtual Router* router() const = 0;
+    virtual bool start(const std::string& address, uint16_t port) = 0;
+    virtual void stop() = 0;
+    virtual bool isRunning() const = 0;
+    virtual size_t getConnectionCount() const = 0;
+};
+
+// 创建内置 HTTP 服务器
+std::unique_ptr<HttpServer> createHttpServer();
+
+// 内置 HTTP 客户端。receiveResponse 带超时与响应大小上限（原对端不发即永久
+// 阻塞/可 OOM）；Content-Length/状态码解析包 try（原垃圾值抛异常）。
+class HttpClient {
+public:
+    virtual ~HttpClient() = default;
+    virtual bool connect(const std::string& host, uint16_t port, uint32_t timeoutMs = 5000) = 0;
+    virtual void disconnect() = 0;
+    virtual Response get(const std::string& uri, const Headers& headers = {}) = 0;
+    virtual Response post(const std::string& uri, const std::string& body,
+                          const std::string& contentType = "text/plain") = 0;
+    virtual Response request(Method method, const std::string& uri,
+                             const Headers& headers = {}, const std::string& body = "") = 0;
+    virtual void setResponseTimeout(uint32_t timeoutMs) = 0;
+    virtual void setMaxResponseSize(size_t maxSize) = 0;
+};
+
+// 创建内置 HTTP 客户端
+std::unique_ptr<HttpClient> createHttpClient();
+
+// 便捷 GET/POST（原忽略 url 恒连 localhost:80——按 url 解析 host/port/path）
+Response httpGet(const std::string& url, uint32_t timeoutMs);
+Response httpPost(const std::string& url, const std::string& body,
+                  const std::string& contentType = "application/json",
+                  uint32_t timeoutMs = 5000);
 
 } // namespace http
 } // namespace net

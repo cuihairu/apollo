@@ -296,4 +296,21 @@ if(BUILD_TESTING)
         target_link_libraries(apollo_net_websocket_tests PRIVATE ws2_32)
     endif()
     add_test(NAME apollo_net_websocket_tests COMMAND apollo_net_websocket_tests)
+
+    # HTTP 连接线程收线/连接表移除、客户端响应超时+大小上限、垃圾
+    # Content-Length 不抛、httpGet url 解析回归（audit P1#7——detached 线程
+    # 捕获裸 this 析构后 UAF、connections_ 只增不减泄漏、receiveResponse
+    # 无超时无上限、stoull/stoi 抛异常、httpGet 忽略 url）
+    add_executable(apollo_net_http_tests
+        http/tests/http_tests.cpp
+    )
+    target_link_libraries(apollo_net_http_tests
+        PRIVATE
+            apollo::net_http
+    )
+    target_compile_features(apollo_net_http_tests PRIVATE cxx_std_20)
+    if(WIN32)
+        target_link_libraries(apollo_net_http_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME apollo_net_http_tests COMMAND apollo_net_http_tests)
 endif()

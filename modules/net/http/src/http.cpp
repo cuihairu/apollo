@@ -9,6 +9,9 @@
 #include <queue>
 #include <mutex>
 #include <atomic>
+#include <chrono>
+#include <exception>
+#include <functional>
 #include <sstream>
 #include <cstring>
 
@@ -98,7 +101,21 @@ public:
 #ifdef _WIN32
         return ::send(socket_, data, static_cast<int>(size), 0);
 #else
+#ifdef MSG_NOSIGNAL
+        // Linux：对端关闭后的 send 不发 SIGPIPE（默认杀进程），返回 EPIPE
+        return ::send(socket_, data, size, MSG_NOSIGNAL);
+#else
+#if defined(SO_NOSIGPIPE)
+        // macOS/BSD 无 MSG_NOSIGNAL：对 socket 置 SO_NOSIGPIPE，send 改返
+        // EPIPE（一次置位即可）
+        if (!nosigpipeSet_) {
+            int on = 1;
+            ::setsockopt(socket_, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+            nosigpipeSet_ = true;
+        }
+#endif
         return ::send(socket_, data, size, 0);
+#endif
 #endif
     }
 
@@ -124,6 +141,9 @@ public:
 
 protected:
     socket_t socket_;
+#if !defined(_WIN32) && !defined(MSG_NOSIGNAL) && defined(SO_NOSIGPIPE)
+    bool nosigpipeSet_ = false;
+#endif
 };
 
 //==============================================================================
@@ -137,6 +157,8 @@ public:
     virtual int receive(char* buffer, size_t size) = 0;
     virtual void close() = 0;
     virtual bool isConnected() const = 0;
+    // 底层套接字描述符（连接线程 select 等待可读/收线用）
+    virtual socket_t fd() const = 0;
 };
 
 //==============================================================================
@@ -162,6 +184,10 @@ public:
 
     bool isConnected() const override {
         return socket_.isValid();
+    }
+
+    socket_t fd() const override {
+        return socket_.get();
     }
 
 private:
@@ -211,10 +237,24 @@ public:
     }
 
     bool listen(int backlog = 128) {
-        return ::listen(socket_.get(), backlog) == 0;
+        if (::listen(socket_.get(), backlog) != 0) {
+            return false;
+        }
+        // 监听套接字非阻塞：acceptLoop 无连接时以 10ms 周期检查 running_，
+        // stop() 置 running_=false 即退出（阻塞 accept 不因标志/关闭解除）
+#ifdef _WIN32
+        u_long nonBlocking = 1;
+        ioctlsocket(socket_.get(), FIONBIO, &nonBlocking);
+#else
+        int flags = fcntl(socket_.get(), F_GETFL, 0);
+        if (flags >= 0) {
+            fcntl(socket_.get(), F_SETFL, flags | O_NONBLOCK);
+        }
+#endif
+        return true;
     }
 
-    std::unique_ptr<IConnection> accept() {
+    std::shared_ptr<IConnection> accept() {
         struct sockaddr_in clientAddr{};
         socklen_t addrLen = sizeof(clientAddr);
 
@@ -225,7 +265,19 @@ public:
             return nullptr;
         }
 
-        return std::unique_ptr<IConnection>(new SocketConnection(clientSock));
+        // macOS/BSD 的 accept() 从监听套接字继承 O_NONBLOCK（Linux 不继承）：
+        // 清回阻塞模式，连接线程 select/recv 按原语义等待
+#ifdef _WIN32
+        u_long blocking = 0;
+        ioctlsocket(clientSock, FIONBIO, &blocking);
+#else
+        int clientFlags = fcntl(clientSock, F_GETFL, 0);
+        if (clientFlags >= 0) {
+            fcntl(clientSock, F_SETFL, clientFlags & ~O_NONBLOCK);
+        }
+#endif
+
+        return std::make_shared<SocketConnection>(clientSock);
     }
 
     void close() {
@@ -334,6 +386,19 @@ public:
         socket_.close();
     }
 
+    // 等待对端可读（带超时）。返回：>0 可读，0 超时/无事件，<0 错误
+    int waitReadable(int timeoutMs) {
+        fd_set readSet;
+        FD_ZERO(&readSet);
+        FD_SET(socket_.get(), &readSet);
+
+        struct timeval tv{};
+        tv.tv_sec = timeoutMs / 1000;
+        tv.tv_usec = (timeoutMs % 1000) * 1000;
+
+        return select(static_cast<int>(socket_.get()) + 1, &readSet, nullptr, nullptr, &tv);
+    }
+
 private:
     Connector() = default;
 
@@ -378,8 +443,8 @@ class HttpConnection : public std::enable_shared_from_this<HttpConnection> {
 public:
     using Ptr = std::shared_ptr<HttpConnection>;
 
-    static Ptr create(IConnection* baseConn) {
-        return std::shared_ptr<HttpConnection>(new HttpConnection(baseConn));
+    static Ptr create(std::shared_ptr<IConnection> conn) {
+        return std::shared_ptr<HttpConnection>(new HttpConnection(std::move(conn)));
     }
 
     void setHandler(RequestHandler handler) {
@@ -404,8 +469,8 @@ public:
 
             // 发送响应
             std::string responseStr = response.toString();
-            if (baseConn_) {
-                baseConn_->send(responseStr.data(), responseStr.size());
+            if (conn_) {
+                conn_->send(responseStr.data(), responseStr.size());
             }
 
             // 如果不需要保持连接，关闭连接
@@ -415,15 +480,41 @@ public:
         }
     }
 
+    // 接收线程：select 等待可读（周期 ≤timeoutMs，其间检查 shutdown 标志）。
+    // 返回：1 可读 / 0 超时 / -1 shutdown 或错误。收线时 stop() 置 shutdown，
+    // 线程在下一 select 周期退出（原阻塞 recv 无法收线）
+    int waitReadable(const std::atomic<bool>& shutdown, int timeoutMs) {
+        if (!conn_) return -1;
+        fd_set readSet;
+        FD_ZERO(&readSet);
+        socket_t fd = conn_->fd();
+        FD_SET(fd, &readSet);
+        struct timeval tv{};
+        tv.tv_sec = timeoutMs / 1000;
+        tv.tv_usec = (timeoutMs % 1000) * 1000;
+        int r = select(static_cast<int>(fd) + 1, &readSet, nullptr, nullptr, &tv);
+        if (r > 0) return 1;
+        if (r == 0) return shutdown.load() ? -1 : 0;
+        return -1;
+    }
+
+    int receive(char* buffer, size_t size) {
+        if (!conn_) return -1;
+        return conn_->receive(buffer, size);
+    }
+
+    bool isConnected() const {
+        return conn_ && conn_->isConnected();
+    }
+
     void close() {
-        if (baseConn_) {
-            baseConn_->close();
-            baseConn_ = nullptr;
+        if (conn_) {
+            conn_->close();
         }
     }
 
 private:
-    HttpConnection(IConnection* baseConn) : baseConn_(baseConn) {}
+    HttpConnection(std::shared_ptr<IConnection> conn) : conn_(std::move(conn)) {}
 
     Response handleRequest(const Request& request) {
         if (handler_) {
@@ -432,7 +523,7 @@ private:
         return Response::ok("OK");
     }
 
-    IConnection* baseConn_ = nullptr;
+    std::shared_ptr<IConnection> conn_;
     RequestHandler handler_;
     std::string receiveBuffer_;
 };
@@ -441,21 +532,117 @@ private:
 // HTTP 服务器
 //==============================================================================
 
-class HttpServer {
+// 连接注册表：connections_ + 连接线程表 + shutdown 标志，以 shared_ptr 持有，
+// 连接线程仅经此共享状态访问，server 析构后不悬空（audit P1#7）
+class ConnectionRegistry {
 public:
-    HttpServer() : running_(false) {}
+    using HttpConnPtr = HttpConnection::Ptr;
 
-    ~HttpServer() {
+    void add(HttpConnPtr conn) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        connections_.push_back(conn);
+    }
+
+    // 连接线程退出时统一移除（原 removeConnection 无人调用，每连接泄漏——
+    // audit P1#7）
+    void remove(HttpConnPtr conn) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        connections_.erase(
+            std::remove(connections_.begin(), connections_.end(), conn),
+            connections_.end());
+    }
+
+    // 启动连接线程并跟踪（joinable，stop() 收线 join）。每线程带 done 标志，
+    // acceptLoop 周期回收已结束线程防向量无限增长
+    void spawn(std::function<void()> fn) {
+        auto done = std::make_shared<std::atomic<bool>>(false);
+        std::thread t([fn, done]() {
+            fn();
+            done->store(true);
+        });
+        std::lock_guard<std::mutex> lock(mutex_);
+        threads_.push_back(TrackedThread(std::move(t), std::move(done)));
+    }
+
+    void reapFinished() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto it = threads_.begin(); it != threads_.end();) {
+            if (it->done->load()) {
+                if (it->thread.joinable()) {
+                    it->thread.join();
+                }
+                it = threads_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    void shutdown() {
+        shuttingDown_.store(true);
+    }
+
+    const std::atomic<bool>& shuttingDown() const {
+        return shuttingDown_;
+    }
+
+    // 收线：置 shutdown 后 join 全部连接线程（每线程 select 周期 ≤100ms 内
+    // 退出）
+    void joinAll() {
+        std::vector<std::thread> toJoin;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (auto& t : threads_) {
+                if (t.thread.joinable()) {
+                    toJoin.push_back(std::move(t.thread));
+                }
+            }
+            threads_.clear();
+        }
+        for (auto& t : toJoin) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+    }
+
+    size_t count() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return connections_.size();
+    }
+
+private:
+    struct TrackedThread {
+        std::thread thread;
+        std::shared_ptr<std::atomic<bool>> done;
+        TrackedThread(std::thread t, std::shared_ptr<std::atomic<bool>> d)
+            : thread(std::move(t)), done(std::move(d)) {}
+    };
+
+    mutable std::mutex mutex_;
+    std::vector<HttpConnPtr> connections_;
+    std::vector<TrackedThread> threads_;
+    std::atomic<bool> shuttingDown_{false};
+};
+
+// 内置 HTTP 服务器（接口见 http.h）
+class BuiltinHttpServer : public HttpServer {
+public:
+    BuiltinHttpServer() : running_(false) {}
+
+    ~BuiltinHttpServer() override {
         stop();
     }
 
-    void setRouter(std::shared_ptr<Router> router) {
+    void setRouter(std::shared_ptr<Router> router) override {
         router_ = std::move(router);
     }
 
-    Router* router() const { return router_.get(); }
+    Router* router() const override {
+        return router_.get();
+    }
 
-    bool start(const std::string& address, uint16_t port) {
+    bool start(const std::string& address, uint16_t port) override {
         if (running_) {
             return false;
         }
@@ -469,37 +656,37 @@ public:
             return false;
         }
 
+        registry_ = std::make_shared<ConnectionRegistry>();
         running_ = true;
-        acceptThread_ = std::thread(&HttpServer::acceptLoop, this);
+        acceptThread_ = std::thread(&BuiltinHttpServer::acceptLoop, this);
 
         return true;
     }
 
-    void stop() {
-        running_ = false;
-
-        if (acceptThread_.joinable()) {
-            acceptThread_.join();
+    void stop() override {
+        if (!running_.exchange(false)) {
+            return;
         }
 
         if (listener_) {
             listener_->close();
         }
-
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        for (auto& conn : connections_) {
-            conn->close();
+        if (acceptThread_.joinable()) {
+            acceptThread_.join();
         }
-        connections_.clear();
+        if (registry_) {
+            // 收线：置 shutdown → 连接线程 select 周期退出 → join
+            registry_->shutdown();
+            registry_->joinAll();
+        }
     }
 
-    bool isRunning() const {
+    bool isRunning() const override {
         return running_;
     }
 
-    size_t getConnectionCount() const {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        return connections_.size();
+    size_t getConnectionCount() const override {
+        return registry_ ? registry_->count() : 0;
     }
 
 private:
@@ -512,61 +699,69 @@ private:
                 }
                 continue;
             }
+            if (!running_) {
+                conn->close();
+                break;
+            }
 
-            auto httpConn = HttpConnection::create(conn.get());
-            httpConn->setHandler([this](const Request& req) {
-                if (router_) {
-                    return router_->route(req);
+            registry_->reapFinished();
+
+            // 捕获 router/registry shared_ptr：连接线程仅经共享状态访问，
+            // server 析构后不悬空（原 handler 捕获裸 this——audit P1#7）
+            auto router = router_;
+            auto registry = registry_;
+            auto httpConn = HttpConnection::create(conn);
+            httpConn->setHandler([router](const Request& req) {
+                if (router) {
+                    return router->route(req);
                 }
                 return Response::ok();
             });
 
-            addConnection(httpConn);
+            registry->add(httpConn);
 
-            // 简化版：在接收线程中处理
-            std::thread([httpConn, conn = std::move(conn)]() mutable {
+            registry->spawn([httpConn, conn, registry]() {
                 char buffer[4096];
                 while (conn && conn->isConnected()) {
+                    // select 周期等待可读（其间检查 shutdown），替代阻塞 recv：
+                    // 连接仅本线程收发，stop() 置 shutdown 后线程在周期内退出
+                    int wr = httpConn->waitReadable(registry->shuttingDown(), 100);
+                    if (wr <= 0) break;
                     int bytesRead = conn->receive(buffer, sizeof(buffer));
                     if (bytesRead <= 0) break;
                     httpConn->onDataReceived(buffer, bytesRead);
                 }
-                httpConn->close();
-            }).detach();
+                conn->close();
+                registry->remove(httpConn);  // 统一移除（原无人调用，泄漏）
+            });
         }
-    }
-
-    void addConnection(HttpConnection::Ptr conn) {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        connections_.push_back(conn);
-    }
-
-    void removeConnection(HttpConnection::Ptr conn) {
-        std::lock_guard<std::mutex> lock(connectionsMutex_);
-        connections_.erase(
-            std::remove(connections_.begin(), connections_.end(), conn),
-            connections_.end());
     }
 
     std::unique_ptr<Listener> listener_;
     std::thread acceptThread_;
     std::atomic<bool> running_;
 
-    std::vector<HttpConnection::Ptr> connections_;
-    mutable std::mutex connectionsMutex_;
+    std::shared_ptr<ConnectionRegistry> registry_;
     std::shared_ptr<Router> router_;
 };
+
+std::unique_ptr<HttpServer> createHttpServer() {
+    return std::make_unique<BuiltinHttpServer>();
+}
 
 //==============================================================================
 // HTTP 客户端
 //==============================================================================
 
-class HttpClient {
+class BuiltinHttpClient : public HttpClient {
 public:
-    HttpClient() = default;
-    ~HttpClient() { disconnect(); }
+    BuiltinHttpClient() = default;
 
-    bool connect(const std::string& host, uint16_t port, uint32_t timeoutMs = 5000) {
+    ~BuiltinHttpClient() override {
+        disconnect();
+    }
+
+    bool connect(const std::string& host, uint16_t port, uint32_t timeoutMs = 5000) override {
         connector_ = Connector::create();
         if (!connector_) {
             return false;
@@ -582,7 +777,7 @@ public:
         return true;
     }
 
-    void disconnect() {
+    void disconnect() override {
         if (connector_) {
             connector_->close();
             connector_.reset();
@@ -590,32 +785,20 @@ public:
         connected_ = false;
     }
 
-    Response get(const std::string& uri, const Headers& headers = {}) {
+    Response get(const std::string& uri, const Headers& headers = {}) override {
         return request(Method::Get, uri, headers, "");
     }
 
     Response post(const std::string& uri, const std::string& body,
-                 const std::string& contentType = "text/plain") {
+                  const std::string& contentType = "text/plain") override {
         Headers headers;
         headers.setContentType(contentType);
         headers.setContentLength(body.size());
         return request(Method::Post, uri, headers, body);
     }
 
-    Response put(const std::string& uri, const std::string& body,
-                const std::string& contentType = "text/plain") {
-        Headers headers;
-        headers.setContentType(contentType);
-        headers.setContentLength(body.size());
-        return request(Method::Put, uri, headers, body);
-    }
-
-    Response del(const std::string& uri) {
-        return request(Method::Delete, uri, {}, "");
-    }
-
     Response request(Method method, const std::string& uri,
-                     const Headers& headers = {}, const std::string& body = "") {
+                     const Headers& headers = {}, const std::string& body = "") override {
         if (!connected_ && !reconnect()) {
             return Response::serverError("Not connected");
         }
@@ -656,6 +839,14 @@ public:
         return receiveResponse();
     }
 
+    void setResponseTimeout(uint32_t timeoutMs) override {
+        responseTimeoutMs_ = timeoutMs;
+    }
+
+    void setMaxResponseSize(size_t maxSize) override {
+        maxResponseSize_ = maxSize;
+    }
+
 private:
     bool reconnect() {
         if (!host_.empty() && port_ > 0) {
@@ -671,8 +862,24 @@ private:
         size_t contentLength = 0;
         size_t headerBytesReceived = 0;
         bool headersComplete = false;
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::milliseconds(responseTimeoutMs_);
 
         while (true) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= deadline) {
+                break;  // 超时（原无超时，对端不发即永久阻塞——audit P1#7）
+            }
+            if (responseData.size() >= maxResponseSize_) {
+                break;  // 响应大小上限（原无上限，可 OOM）
+            }
+
+            int waitMs = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now).count());
+            if (waitMs <= 0) break;
+            if (connector_->waitReadable(waitMs) <= 0) {
+                break;  // 超时或错误
+            }
+
             int bytesRead = connector_->receive(buffer.data(), buffer.size());
             if (bytesRead <= 0) {
                 break;
@@ -693,7 +900,11 @@ private:
                     // 获取 Content-Length
                     std::string lenStr = response.headers.get("Content-Length");
                     if (!lenStr.empty()) {
-                        contentLength = std::stoull(lenStr);
+                        try {
+                            contentLength = std::stoull(lenStr);
+                        } catch (const std::exception&) {
+                            contentLength = 0;  // 垃圾值：按无体处理（audit P1#7）
+                        }
                     }
 
                     // 如果没有 Content-Length 或已接收完整响应
@@ -731,8 +942,12 @@ private:
                 size_t pos2 = line.find(' ', pos1 + 1);
                 if (pos2 != std::string::npos) {
                     // 状态码
-                    int statusCode = std::stoi(line.substr(pos1 + 1, pos2 - pos1 - 1));
-                    response.status = static_cast<StatusCode>(statusCode);
+                    try {
+                        int statusCode = std::stoi(line.substr(pos1 + 1, pos2 - pos1 - 1));
+                        response.status = static_cast<StatusCode>(statusCode);
+                    } catch (const std::exception&) {
+                        // 垃圾状态码：保持默认
+                    }
                 }
             }
         }
@@ -767,47 +982,85 @@ private:
     bool connected_ = false;
     std::string host_;
     uint16_t port_ = 0;
+    uint32_t responseTimeoutMs_ = 5000;
+    // 响应大小上限：对端声明超大 Content-Length 不无限累积（audit P1#7）
+    size_t maxResponseSize_ = 16 * 1024 * 1024;
 };
+
+std::unique_ptr<HttpClient> createHttpClient() {
+    return std::make_unique<BuiltinHttpClient>();
+}
 
 //==============================================================================
 // 便捷函数
 //==============================================================================
 
-// 快速创建 HTTP GET 请求
-inline Response httpGet(const std::string& url, uint32_t timeoutMs) {
-    (void)url;
-    // 简化 URL 解析: http://host:port/path
-    std::string host = "localhost";
-    uint16_t port = 80;
-    std::string path = "/";
+// 解析 http://host[:port]/path。内置客户端仅 TCP 不支持 TLS（https 拒绝）。
+// 原 httpGet/httpPost 忽略 url 恒连 localhost:80——audit P1#7
+bool parseUrl(const std::string& url, std::string& host, uint16_t& port, std::string& path) {
+    std::string rest = url;
+    if (rest.rfind("http://", 0) == 0) {
+        rest = rest.substr(7);
+    } else if (rest.rfind("https://", 0) == 0) {
+        return false;  // 不支持 TLS
+    }
 
-    // TODO: 解析完整 URL
-    HttpClient client;
-    if (!client.connect(host, port, timeoutMs)) {
+    size_t slash = rest.find('/');
+    std::string authority = (slash == std::string::npos) ? rest : rest.substr(0, slash);
+    path = (slash == std::string::npos) ? "/" : rest.substr(slash);
+    if (authority.empty()) {
+        return false;
+    }
+
+    size_t colon = authority.rfind(':');
+    if (colon != std::string::npos) {
+        host = authority.substr(0, colon);
+        try {
+            port = static_cast<uint16_t>(std::stoi(authority.substr(colon + 1)));
+        } catch (const std::exception&) {
+            return false;
+        }
+    } else {
+        host = authority;
+    }
+    return !host.empty();
+}
+
+// 快速创建 HTTP GET 请求
+Response httpGet(const std::string& url, uint32_t timeoutMs) {
+    std::string host, path;
+    uint16_t port = 80;
+    if (!parseUrl(url, host, port, path)) {
+        return Response::serverError("Invalid URL");
+    }
+
+    auto client = createHttpClient();
+    if (!client->connect(host, port, timeoutMs)) {
         return Response::serverError("Connection failed");
     }
 
-    auto response = client.get(path);
-    client.disconnect();
+    auto response = client->get(path);
+    client->disconnect();
     return response;
 }
 
 // 快速创建 HTTP POST 请求
-inline Response httpPost(const std::string& url, const std::string& body,
-                         const std::string& contentType = "application/json",
-                         uint32_t timeoutMs = 5000) {
-    (void)url;
-    std::string host = "localhost";
+Response httpPost(const std::string& url, const std::string& body,
+                  const std::string& contentType,
+                  uint32_t timeoutMs) {
+    std::string host, path;
     uint16_t port = 80;
-    std::string path = "/";
+    if (!parseUrl(url, host, port, path)) {
+        return Response::serverError("Invalid URL");
+    }
 
-    HttpClient client;
-    if (!client.connect(host, port, timeoutMs)) {
+    auto client = createHttpClient();
+    if (!client->connect(host, port, timeoutMs)) {
         return Response::serverError("Connection failed");
     }
 
-    auto response = client.post(path, body, contentType);
-    client.disconnect();
+    auto response = client->post(path, body, contentType);
+    client->disconnect();
     return response;
 }
 
