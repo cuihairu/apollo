@@ -547,3 +547,11 @@
 ### P1-8 RedisServiceDiscovery stoi 裸抛 + 心跳持锁 I/O（redis_service_discovery.cpp:152-164）——阻塞
 
 - [ ] **阻塞**：该 TU 依赖 `apollo/redis/redis_template.h`（RedisTemplate）——全仓无此文件，源码从未编译过、无测试入口；按「构建/测试绿才算完成」纪律无法验证修复。三处 stoi/stoll 裸抛与心跳线程持 registeredMutex_ 做 Redis I/O 的修复方案已定位（hashToEndpoint L152/158/164 包 try 返默认、heartbeatThreadFunc L550 快照出锁、另发现 stop() L227 持锁调 deregister（L313 再取同锁）自死锁），待 RedisTemplate 依赖落地后一并修。
+
+### P1-5 NativeAdapter 长度头字节序/对齐 UB + 无锁 map 迭代竞态（native_adapter.cpp:179, 816, 1036/1044）
+
+- [x] 修复①长度头：`handleRecv` 原 `*reinterpret_cast<uint32_t*>(peekBuf)` 原生序裸读——非对齐/别名 UB，且小端机上与发送侧（`SessionHelper::sendPacket` 大端编码）字节序互斥，正常帧被判超长直接断连；改逐字节大端组装（native_adapter.cpp:179-189）。
+- [x] 修复②map 竞态：`processEvents` 原无锁迭代 `listeners_`/`connectors_`，默认按 CPU 核数开多个 IO 线程并发进入，与 `createListener`/`removeListener` 等持锁变更方构成数据竞争——改持锁快照、出锁处理（避免 `handleAccept`/`handleConnect` 用户回调重入 manager 持锁接口自死锁，同 P1-10 纪律）；`stop()` 收线循环一并持锁（native_adapter.cpp:1049-1078, 826-840）。
+- [x] 附带休眠代码：`NativeListener::isRunning()` 头内仅声明无定义，vtable 悬空引用在本测试首次实例化该类时链接期显形——补定义（native_adapter.cpp:422-424）。
+- [x] 回归测试 `modules/net/rpc/tests/native_adapter_tests.cpp`（链 apollo_net_rpc，CMake 注册 apollo_net_rpc_native_adapter_tests）：socketpair 对拍大端帧原样送达两帧（长度/内容核验，连接不关闭）+ 超长守卫断连不派发 + 快照路径 update/stop 走通。旧代码直跑 FAIL「two packets delivered」（大端头 00 00 00 05 被小端读成 0x05000000 判超长）——实证。
+- [x] 证据：commit 906dd8f4；新用例 3/3 + 30 连绿 soak + ASan/UBSan 树 3/3 + 旧代码实证 FAIL；build-cov 全量重建 exit 0、ctest **123/124**（唯一红 CellRegisterTests 高负载假红：load avg 59-75（外部 Go 构建并发）下直跑 4/4 全绿 + ctest 复跑 1/1 绿，该二进制不链 apollo_net_rpc——环境噪声既证）；build-off（APOLLO_ENABLE_IPC=OFF）/build-examples 全量重建均 exit 0。
