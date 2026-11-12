@@ -875,6 +875,21 @@ private:
             // 获取客户端地址
             std::string remoteAddr = ::inet_ntoa(clientAddr.sin_addr);
 
+            // macOS/BSD 的 accept() 从监听套接字继承 O_NONBLOCK（Linux 不继
+            // 承）：监听套接字为 stop() 收线设为非阻塞后，被接受的客户端套接
+            // 字在 macOS 上同样非阻塞，握手/消息循环 receive 在数据未即时到
+            // 达即返 EAGAIN，连接被提前断开（CI macOS 三用例齐红根因）。统一
+            // 清回阻塞模式，握手与消息循环按原语义阻塞等待。
+#ifdef _WIN32
+            u_long blocking = 0;
+            ioctlsocket(clientSock, FIONBIO, &blocking);
+#else
+            int clientFlags = fcntl(clientSock, F_GETFL, 0);
+            if (clientFlags >= 0) {
+                fcntl(clientSock, F_SETFL, clientFlags & ~O_NONBLOCK);
+            }
+#endif
+
             // 启动连接处理线程
             std::thread([this, clientSock, remoteAddr]() {
                 handleClient(clientSock, remoteAddr);
