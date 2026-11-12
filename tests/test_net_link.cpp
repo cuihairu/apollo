@@ -25,6 +25,8 @@
 #include <iostream>
 #include <set>
 #include <sstream>
+#include <exception>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -293,6 +295,47 @@ bool test_dispatcher_no_table_rejects() {
     Dispatcher d;
     TEST_ASSERT(d.dispatch(1, nullptr, 0) == DispatchResult::kUnknownId,
                 "no table = reject, not crash");
+    return true;
+}
+
+bool test_dispatcher_handler_error() {
+    // audit P1#11：handler 抛异常（坏 JSON/残帧解码）不冒泡出传输层——帧按
+    // 异常拒收（kHandlerError + handler_error 计数）。原裸调 handler 无捕获，
+    // 客户端残帧即炸进程（nlohmann parse_error / Invalid data size 裸抛）。
+    RouteTable t;
+    t.add(make_entry(900, "internal"));
+
+    Dispatcher d;
+    d.set_route_table(&t);
+    d.set_handler(900, [](std::uint16_t, const std::uint8_t*, std::size_t) {
+        throw std::runtime_error("bad json");
+    });
+
+    const std::uint8_t body[] = {1, 2, 3};
+    TEST_ASSERT(d.dispatch(900, body, sizeof(body)) == DispatchResult::kHandlerError,
+                "handler throw → kHandlerError");
+    TEST_ASSERT(d.stats().handler_error == 1 && d.stats().dispatched == 0,
+                "handler error counted, not dispatched");
+
+    // fallback（透传口）抛异常同样按异常拒收
+    Dispatcher d2;
+    d2.set_route_table(&t);
+    d2.set_fallback([](std::uint16_t, const std::uint8_t*, std::size_t) {
+        throw std::runtime_error("bad fallback");
+    });
+    TEST_ASSERT(d2.dispatch(900, body, sizeof(body)) == DispatchResult::kHandlerError,
+                "fallback throw → kHandlerError");
+    TEST_ASSERT(d2.stats().handler_error == 1, "fallback error counted");
+
+    // 正常 handler 不误伤：kDispatched 且不计 handler_error
+    Dispatcher d3;
+    d3.set_route_table(&t);
+    int hits = 0;
+    d3.set_handler(900, [&](std::uint16_t, const std::uint8_t*, std::size_t) { ++hits; });
+    TEST_ASSERT(d3.dispatch(900, body, sizeof(body)) == DispatchResult::kDispatched,
+                "normal handler unaffected");
+    TEST_ASSERT(hits == 1 && d3.stats().handler_error == 0 && d3.stats().dispatched == 1,
+                "no false handler-error count");
     return true;
 }
 
@@ -1616,6 +1659,7 @@ int main() {
         {"compat_route_versions_from_text", test_compat_route_versions_from_text},
         {"dispatcher_gates", test_dispatcher_gates},
         {"dispatcher_no_table_rejects", test_dispatcher_no_table_rejects},
+        {"dispatcher_handler_error", test_dispatcher_handler_error},
         {"load_golden_route_json", test_load_golden_route_json},
         {"watermark_levels", test_watermark_levels},
         {"watermark_admit_matrix", test_watermark_admit_matrix},

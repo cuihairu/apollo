@@ -3,6 +3,7 @@
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 #include <chrono>
+#include <exception>
 #include <span>
 #include <string>
 #include <vector>
@@ -47,6 +48,9 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
         return;
     }
 
+    // audit P1#11：客户端残帧/坏 JSON 在 decodeBody 裸抛（原未被 try 包裹），
+    // 冒泡出宿主泵线程即进程崩溃——dispatch 入口统一兜底：断连会话
+    try {
     switch (dispatch.kind) {
         case ClientPacketKind::Heartbeat: {
             sessionManager_->updateHeartbeat(sessionId);
@@ -111,6 +115,11 @@ void GatewayServer::handleClientMessage(SessionID sessionId, const std::vector<u
 
         case ClientPacketKind::Invalid:
             return;
+    }
+    } catch (const std::exception&) {
+        glog().warning("Gateway dropped malformed client message for session "
+                       + std::to_string(sessionId));
+        sessionManager_->removeSession(sessionId);
     }
 }
 

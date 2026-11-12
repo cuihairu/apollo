@@ -2,6 +2,8 @@
 
 #include "apollo/net/link/dispatcher.hpp"
 
+#include <exception>
+
 namespace apollo::net::link {
 
 DispatchResult Dispatcher::dispatch(std::uint16_t id, const std::uint8_t* data,
@@ -22,12 +24,25 @@ DispatchResult Dispatcher::dispatch(std::uint16_t id, const std::uint8_t* data,
     }
     const auto it = handlers_.find(id);
     if (it != handlers_.end() && it->second) {
-        it->second(id, data, size);
+        try {
+            it->second(id, data, size);
+        } catch (const std::exception&) {
+            // 错误是数据不是控制流（正确性内核纪律）：handler 抛异常（坏 JSON/
+            // 残帧——audit P1#11 原裸调 handler 无捕获，客户端残帧炸进程）不
+            // 冒泡到传输层，帧按异常拒收计数，由调用方（link 收线）统计落地。
+            ++stats_.handler_error;
+            return DispatchResult::kHandlerError;
+        }
         ++stats_.dispatched;
         return DispatchResult::kDispatched;
     }
     if (fallback_) {
-        fallback_(id, data, size);
+        try {
+            fallback_(id, data, size);
+        } catch (const std::exception&) {
+            ++stats_.handler_error;
+            return DispatchResult::kHandlerError;
+        }
     }
     ++stats_.no_handler;
     return DispatchResult::kNoHandler;

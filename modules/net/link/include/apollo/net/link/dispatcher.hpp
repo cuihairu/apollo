@@ -22,6 +22,7 @@ enum class DispatchResult {
     kUnknownId,        // 路由表无此 id（非契约消息——拒）
     kDomainForbidden,  // 域越权（上行白名单过滤——拒）
     kNoHandler,        // 表内有、本进程未装配 handler（计数，回调兜底）
+    kHandlerError,     // handler 抛异常（残帧/坏 JSON，audit P1#11）——帧拒收
 };
 
 class Dispatcher {
@@ -53,6 +54,7 @@ public:
         std::uint64_t unknown_id = 0;
         std::uint64_t domain_forbidden = 0;
         std::uint64_t no_handler = 0;
+        std::uint64_t handler_error = 0;  // handler 抛异常拒收帧（audit P1#11）
     };
     const Stats& stats() const { return stats_; }
 
