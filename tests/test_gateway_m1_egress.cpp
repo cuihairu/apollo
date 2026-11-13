@@ -3,6 +3,7 @@
 //   2. 929 应答回流 → pending 关联回收（acked 计数 + 账面清空）
 //   3. 应答超时清扫（timed_out 回收 + 迟到应答不误账）
 //   4. 不可前递族落地（残帧/PING/断连通知——legacy 链路死观察面同型）
+//   4b. 帧头合法但 body 坏字节：泵拍侧 body 解码抛 = 落地不终止泵线程
 //   5. 投递箱顶格溢出落地
 //   6. 路由表缺位 = 装配降级显形
 //   7. 全链 e2e：真客户端 socket → gateway 入口 → M1 出口 → 真 WorldApp M1
@@ -590,6 +591,50 @@ bool test_egress_unforwardable_frames() {
     return true;
 }
 
+bool test_egress_corrupt_body_frame() {
+    std::cout << "Running: test_egress_corrupt_body_frame..." << std::endl;
+
+    FakeCell cell;
+    TEST_ASSERT(cell.healthy(), "fake cell assembled");
+
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = cell.listen_port();
+    cfg.route_json = kRouteJson;
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->worldConnected(); }, 5000),
+                "link up");
+
+    // 客户端残帧：帧头合法（意图族 id 过受理面白名单）但 body 被截短——
+    // 泵拍侧 body 解码长度校验抛 std::runtime_error：落地计数，不终止宿主泵线程。
+    apollo::protocol::CellCreateEntity create;
+    create.entityId = 7;
+    create.entityType = static_cast<apollo::protocol::EntityType>(1);
+    create.spaceId = 5;
+    create.position = apollo::protocol::Position(1.0f, 2.0f, 3.0f);
+    auto corrupt = apollo::protocol::MessageCodec::encode(create, 5);
+    corrupt.resize(sizeof(apollo::protocol::MessageHeader) + 3);  // 帧头留全、体截短
+
+    TEST_ASSERT(egress->forwardIntent(5, corrupt), "corrupt family frame accepted");
+    egress->pump(now_ms());
+    cell.pump(now_ms());
+    TEST_ASSERT(cell.count() == 0, "corrupt frame not forwarded");
+    TEST_ASSERT(egress->unforwardableFrames() == 1, "corrupt frame landed");
+    TEST_ASSERT(egress->sentIntents() == 0, "nothing sent");
+
+    // 对照组：同族合法帧照旧前递（坏帧未污染受理/泵拍面）。
+    const auto frames = five_family_frames();
+    TEST_ASSERT(egress->forwardIntent(5, frames[0]), "healthy frame accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 1; }, 5000),
+                "healthy frame reached cell");
+    TEST_ASSERT(egress->sentIntents() == 1, "healthy frame sent");
+
+    egress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_egress_inbox_overflow() {
     std::cout << "Running: test_egress_inbox_overflow..." << std::endl;
 
@@ -805,6 +850,7 @@ int main() {
     if (!test_egress_timeout_sweep()) ++failed;
     if (!test_egress_restart_does_not_replay_ambiguous_requests()) ++failed;
     if (!test_egress_unforwardable_frames()) ++failed;
+    if (!test_egress_corrupt_body_frame()) ++failed;
     if (!test_egress_inbox_overflow()) ++failed;
     if (!test_egress_route_table_missing()) ++failed;
     if (!test_egress_wrapped_trace()) ++failed;

@@ -320,16 +320,28 @@ private:
             inbox_.clear();
         }
         for (auto& item : items) {
-            translate_and_send(item, now_ms);
+            // 泵线程推进帧体翻译：受理面只过帧头筛选，客户端残帧的 body 解码
+            // 会抛（长度校验）——落地计数不扩散，不终止宿主泵线程。
+            try {
+                translate_and_send(item, now_ms);
+            } catch (const std::exception&) {
+                ++unforwardable_;
+            } catch (...) {
+                ++unforwardable_;
+            }
         }
     }
 
     // legacy 帧 → 契约字段（序 = 契约表序，WorldApp 侧 build_legacy_intent 镜像
-    // 互逆）；帧体非法 = 落地计数（受理面已过帧头筛选，此处兜底）。
+    // 互逆）；帧体非法抛（drain_inbox 捕获落地）——受理面已过帧头筛选，此处兜底。
     void translate_and_send(const InboxItem& item, std::uint64_t now_ms) {
+        auto& frame = item.frame;
+        if (frame.size() < sizeof(apollo::protocol::MessageHeader)) {
+            ++unforwardable_;  // 残帧：body 切片越界，泵拍侧再验一次（不占关联键）
+            return;
+        }
         const auto request_id = next_request_id_++;
 
-        auto& frame = item.frame;
         const auto body = std::vector<std::uint8_t>(
             frame.begin() + sizeof(apollo::protocol::MessageHeader), frame.end());
 

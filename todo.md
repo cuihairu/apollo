@@ -591,7 +591,7 @@
 
 ## Codex 深审发现（2026-11-12，luna profile 近5 commit 审核，3C/4M/4m，待修）
 
-- [ ] [C] m1_egress 翻译路径加异常兜底与坏帧测试（apps/gateway/src/m1_egress.cpp:329）——泵线程可被客户端残帧终止（forwardIntent 投递后 translate_and_send 裸调 MessageCodec）
+- [x] [C] m1_egress 翻译路径加异常兜底与坏帧测试（apps/gateway/src/m1_egress.cpp:329）——泵线程可被客户端残帧终止（forwardIntent 投递后 translate_and_send 裸调 MessageCodec）。（2026-11-13 修复：drain_inbox 逐 item try/catch（std::exception + ...）落地计数不扩散（m1_egress.cpp:322-332）；translate_and_send 泵拍侧补帧头长度再验——body 切片越界前即返回且不占 request_id 关联键（:337-341）。回归测试 test_egress_corrupt_body_frame（tests/test_gateway_m1_egress.cpp:594）：帧头合法（过受理白名单）+ body 截短 = 泵拍解码抛，断言落地计数/零前递/后续合法帧照常；去 guard 验证该用例断言 `std::vector::operator[]` 越界失败（非凑数）。主树 ctest 127/127；san 树 GatewayM1EgressTests 1/1（ASan+UBSan 无泄漏）；off-tree2/examples/san 全量重建 exit 0。）
 - [ ] [C] HTTP Content-Length 回绕防护与服务端大小上限（include/apollo/net/http.h:525、modules/net/http/src/http.cpp:454）——data.size() >= headerEnd+contentLength 无符号回绕为 0，协议混淆+OOM 面
 - [ ] [C] 统一 POSIX socket send 防 SIGPIPE 策略（modules/net/tcp/src/socket.cpp:122）+ native_adapter 三处（:49/:235）——对端关闭后写=SIGPIPE 杀宿主进程，同型残留
 - [ ] [M] 重构 Base forward 回调所有权与 stop 排空顺序（apps/gateway/src/gateway_server.cpp:242）——回调捕获 this 访问 messageRouter_，停机 UAF
