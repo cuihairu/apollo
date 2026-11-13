@@ -334,6 +334,7 @@ bool test_httpget_url_boundary_rejected() {
 
 #endif  // !_WIN32
 
+#ifndef _WIN32  // 字节级原始套接字回归（connectTcp/recv 面），Windows 跳过
 
 // audit C2 回归：①巨值 Content-Length（u64 回绕面）→ 413 拒绝而非协议混淆；
 // ②声明体长超上限 → 413；③无 Content-Length 流式灌入顶缓冲上限 → 413 断开
@@ -405,6 +406,8 @@ bool test_server_header_flood_capped() {
     return true;
 }
 
+#endif  // !_WIN32
+
 // 接口面：createHttpServer/createHttpClient 可构造，setResponseTimeout/
 // setMaxResponseSize 接口一致（编译期），未启动服务端 isRunning 为 false
 bool test_interface_compiles() {
@@ -457,6 +460,8 @@ bool test_server_route_exception_returns_500() {
     server->stop();
     return true;
 }
+
+#ifndef _WIN32  // 原始假服务端依赖 POSIX socket 面，Windows 跳过
 
 // 原始假服务端：accept 一连后回吐预置字节，短歇后收线（字节级控制——
 // 服务端真实 Router 无法产出畸形状态行/巨值 CL 的原始字节）
@@ -553,6 +558,8 @@ bool test_client_invalid_status_rejected() {
 
     return true;
 }
+
+#endif  // !_WIN32
 
 } // namespace
 
