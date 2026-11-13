@@ -357,17 +357,19 @@ std::uint64_t GatewayServer::baseForwardRejections() const {
     return baseForwardRejections_.load(std::memory_order_acquire);
 }
 
-M1BaseClient* GatewayServer::baseClientForEndpoint(const std::string& endpoint) {
+std::shared_ptr<M1BaseClient> GatewayServer::baseClientForEndpoint(const std::string& endpoint) {
     const auto parsed = parseEndpoint(endpoint);
     if (!parsed) {
         return nullptr;
     }
 
+    // 锁只圈表操作；peerUp 等待与返回后的使用都走共享持有副本——停机清表
+    // 与调用面并发不悬垂（audit M1：裸指针曾在锁释放后逃逸）。
     {
         std::lock_guard<std::mutex> guard(baseClientMutex_);
         const auto found = routedBaseClients_.find(endpoint);
         if (found != routedBaseClients_.end()) {
-            return found->second.get();
+            return found->second;
         }
     }
 
@@ -382,14 +384,18 @@ M1BaseClient* GatewayServer::baseClientForEndpoint(const std::string& endpoint) 
         return nullptr;
     }
 
-    std::lock_guard<std::mutex> guard(baseClientMutex_);
-    const auto existing = routedBaseClients_.find(endpoint);
-    if (existing != routedBaseClients_.end()) {
-        client->stop();
-        return existing->second.get();
+    std::shared_ptr<M1BaseClient> live;
+    {
+        std::lock_guard<std::mutex> guard(baseClientMutex_);
+        const auto existing = routedBaseClients_.find(endpoint);
+        if (existing != routedBaseClients_.end()) {
+            client->stop();
+            live = existing->second;
+        } else {
+            live = std::move(client);
+            routedBaseClients_.emplace(endpoint, live);
+        }
     }
-    auto* live = client.get();
-    routedBaseClients_.emplace(endpoint, std::move(client));
 
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(kM1BaseForwardTimeoutMs);
@@ -397,9 +403,10 @@ M1BaseClient* GatewayServer::baseClientForEndpoint(const std::string& endpoint) 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     if (!live->peerUp()) {
+        // 只撤自己落表的条目（对端迟迟不上线）：并发面可能已换条目。
         std::lock_guard<std::mutex> clear(baseClientMutex_);
         const auto liveEntry = routedBaseClients_.find(endpoint);
-        if (liveEntry != routedBaseClients_.end()) {
+        if (liveEntry != routedBaseClients_.end() && liveEntry->second == live) {
             liveEntry->second->stop();
             routedBaseClients_.erase(liveEntry);
         }
@@ -435,6 +442,9 @@ void GatewayServer::stop() {
         m1RouteClient_.reset();
     }
     {
+        // Base 前递客户端面排空（共享持有：并发调用面若仍持有副本，stop
+        // 后其 callAsync 落在已停实例上返回 0，不悬垂）。此序在入口拆除前
+        // ——failPendingCalls 同步回收的应答回调仍可安全走 sendToClient。
         std::lock_guard<std::mutex> guard(baseClientMutex_);
         for (auto& [endpoint, client] : routedBaseClients_) {
             client->stop();

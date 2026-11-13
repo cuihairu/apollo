@@ -194,7 +194,8 @@ private:
     // false = 任一跳传输缺席/回执不成（调用方拒绝认证——面在场 = 无权威
     // 确认不放行）。
     bool activateAndBindAtBase(SessionID sessionId, PlayerID playerId);
-    M1BaseClient* baseClientForEndpoint(const std::string& endpoint);
+    // 共享持有返回：调用面在锁外使用，停机清表不悬垂（audit M1 所有权面）。
+    std::shared_ptr<M1BaseClient> baseClientForEndpoint(const std::string& endpoint);
 
     // 处理客户端消息
     void handleClientMessage(SessionID sessionId, const std::vector<uint8_t>& message);
@@ -258,7 +259,7 @@ private:
     std::function<std::optional<std::string>(PlayerID)> baseResolver_;
     std::mutex baseResolverMutex_;
     std::mutex baseClientMutex_;
-    std::map<std::string, std::unique_ptr<M1BaseClient>> routedBaseClients_;
+    std::map<std::string, std::shared_ptr<M1BaseClient>> routedBaseClients_;
     std::atomic<std::uint64_t> baseForwardResolves_{0};
     std::atomic<std::uint64_t> baseForwardRejections_{0};
 

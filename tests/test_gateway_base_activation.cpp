@@ -228,6 +228,97 @@ bool unreachable_face_failclosed() {
     return true;
 }
 
+// audit M1 回归：Base 前递面所有权与 stop 排空。
+//   前半：绑定玩家后经 forwardToBaseApp 前递一帧（路由客户端共享持有落表，
+//   前递受理计数前进）；
+//   后半（咬点）：stop 必须摘除 Base 前递回调——停机后的 forwardToBaseApp
+//   惰性丢弃（face absent），不再进宿主受理面（修复前会新建路由客户端并把
+//   受理计数再推一格，客户端泵线程逃逸出停机排空）。
+bool base_forward_stop_drains_callbacks() {
+    TemporaryDirectory files;
+
+    StoreHost base(base_store_config(files.path), 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base face did not listen");
+    TEST_ASSERT(base.store->adoptPlayer(11, "", 0, 0, 2), "seed player 11 profile");
+
+    auto config = gateway_config();
+    config.baseM1Host = "127.0.0.1";
+    config.baseM1Port = base.store->m1_listen_port();
+    gateway::GatewayServer server(config);
+    server.start();
+
+    const auto session_id = server.createPendingSession("127.0.0.1", 40006);
+    TEST_ASSERT(wait_until([&] { return server.baseActivationReady(); }, 3000),
+                "base activation link up");
+    TEST_ASSERT(server.authenticateSession(session_id, 11, "ticket"),
+                "auth accepted with base activation leg");
+
+    // 解析面指向同一 Base 受理端点（前递走独立路由客户端面）。
+    const std::string endpoint =
+        "127.0.0.1:" + std::to_string(base.store->m1_listen_port());
+    server.setBaseResolver(
+        [&endpoint](uint64_t) { return std::optional<std::string>(endpoint); });
+
+    const std::vector<uint8_t> frame{'p', 'i', 'n', 'g'};
+    server.messageRouter()->forwardToBaseApp(session_id, frame);
+    TEST_ASSERT(server.baseForwardResolves() == 1, "forward resolved once");
+    TEST_ASSERT(server.baseForwardRejections() == 0, "no rejection on live face");
+
+    server.stop();
+
+    // 停机后前递必须惰性：受理计数不得再前进（修复前此处 = 2）。
+    server.messageRouter()->forwardToBaseApp(session_id, frame);
+    TEST_ASSERT(server.baseForwardResolves() == 1,
+                "post-stop forward is inert (callback face drained)");
+    TEST_ASSERT(server.baseForwardRejections() == 0, "post-stop forward drops silently");
+
+    return true;
+}
+
+// audit M1 回归：并发前递 × stop 排空不悬垂。前递线程持续走路由客户端
+// 面（裸指针时代锁外逃逸副本），主线程中途 stop——共享持有下对端清表
+// 不悬垂；san 树本用例即 UAF 探针。
+bool stop_racing_base_forward_stays_memory_safe() {
+    TemporaryDirectory files;
+
+    StoreHost base(base_store_config(files.path), 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base face did not listen");
+    TEST_ASSERT(base.store->adoptPlayer(12, "", 0, 0, 2), "seed player 12 profile");
+
+    auto config = gateway_config();
+    config.baseM1Host = "127.0.0.1";
+    config.baseM1Port = base.store->m1_listen_port();
+    gateway::GatewayServer server(config);
+    server.start();
+
+    const auto session_id = server.createPendingSession("127.0.0.1", 40007);
+    TEST_ASSERT(wait_until([&] { return server.baseActivationReady(); }, 3000),
+                "base activation link up");
+    TEST_ASSERT(server.authenticateSession(session_id, 12, "ticket"),
+                "auth accepted with base activation leg");
+
+    const std::string endpoint =
+        "127.0.0.1:" + std::to_string(base.store->m1_listen_port());
+    server.setBaseResolver(
+        [&endpoint](uint64_t) { return std::optional<std::string>(endpoint); });
+
+    const std::vector<uint8_t> frame{'p', 'i', 'n', 'g'};
+    std::thread forwarder([&server, &session_id, &frame]() {
+        // macOS CI 裸自旋必 flake：每拍 sleep ≥2ms。
+        for (int i = 0; i < 150; ++i) {
+            server.messageRouter()->forwardToBaseApp(session_id, frame);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    server.stop();  // 与前递线程并发：清表 × 锁外使用同拍
+    forwarder.join();
+
+    TEST_ASSERT(server.baseForwardResolves() >= 1, "forward face resolved before stop");
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -242,6 +333,8 @@ int main() {
         {"unknown_player_rejected", unknown_player_rejected},
         {"face_off_degrades", face_off_degrades},
         {"unreachable_face_failclosed", unreachable_face_failclosed},
+        {"base_forward_stop_drains_callbacks", base_forward_stop_drains_callbacks},
+        {"stop_racing_base_forward_stays_memory_safe", stop_racing_base_forward_stays_memory_safe},
     };
 
     int failed = 0;

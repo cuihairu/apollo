@@ -56,6 +56,13 @@ void MessageRouter::stop() {
         m1Egress_->stop();
         m1Egress_.reset();
     }
+    // 摘除宿主回调（audit M1 stop 排空面）：Base 前递/应答面经宿主网关的
+    // 会话表与入口线程落地面，停机后晚到的 forwardToBaseApp 调用必须惰性
+    // （face absent 丢弃），不得再进宿主引用面。deliverToClient_ 不在此摘——
+    // 它只由本路由器自有 M1 出口泵触发（stop 已随 m1Egress_ 拆除），且
+    // start 契约保留宿主 start 前装配的下行出口。
+    forwardToBase_ = nullptr;
+    baseResponse_ = nullptr;
 }
 
 void MessageRouter::pump() {
