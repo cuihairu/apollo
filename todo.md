@@ -623,3 +623,5 @@
 | 14 | fleetctl / database / login_server_agents RPC 命令解码 | apps/fleetctl/src/fleetctl_rpc_cmds.cpp 等 | link Dispatcher（#1）受卫面下游；database_client/login_server_agents 调用方 try | 既有 |
 
 维护纪律：新增网络受理边界须在本清单登记守卫面（+回归测试），安全审计对账以本清单为准；总结性"全齐备"声明弃用（虚报面，见 :587 勘误）。
+
+跨平台注（2026-11-13）：清单 #5/#6 的字节级回归用例（C2 三例 connectTcp/recv 面、M5 startRawResponder 族）为 POSIX-only，曾致 CI Windows 编译红（自 39459b95 起链条全红）——a063dbed 补 `#ifndef _WIN32` 定义侧 guard（注册区原已 guard），Linux 四树门禁复验不受影响（主树 127/127、其余三树该套件 17/17）。
