@@ -375,6 +375,80 @@ bool test_control_unreachable() {
 #endif
 }
 
+// audit M3：受理异常转错误响应——坏帧（截断体解码抛出 / 垃圾 magic 头解析
+// 抛出）不得穿出 M1 泵线程（穿出即 std::terminate 杀宿主进程）。走 mgr.
+// start() 生产装配路径（受理 lambda 兜底翼同 player_store M1 面），错误包
+// 回程后 PING 照常（泵线程存活证明：修复前第一发即进程死，用例到不了
+// PING 断言）。
+bool test_control_corrupt_frame_error_response() {
+#if !defined(_WIN32)
+    online_directory::OnlineDirectory mgr(0);
+    mgr.set_m1_face(0, APOLLO_BASEAPPMGR_CONTRACT_ROUTE_JSON);  // 内核分配
+    mgr.start();
+    TEST_ASSERT(mgr.listenPort() != 0, "m1 face listens");
+
+    login::M1BaseClientConfig loginConfig;
+    loginConfig.host = "127.0.0.1";
+    loginConfig.port = mgr.listenPort();
+    loginConfig.route_json = APOLLO_LOGIN_CONTRACT_ROUTE_JSON;
+    loginConfig.peer_name = "login";
+    auto loginClient = login::makeM1BaseClient(loginConfig);
+    TEST_ASSERT(loginClient != nullptr, "client starts");
+    TEST_ASSERT(wait_peer_up(*loginClient), "client dials face");
+
+    // 坏帧一：截断体（915 头部完整、体只余 2 字节）→ decodeBody 抛
+    const auto good = protocol::MessageCodec::encode(protocol::PlayerAssignWorldRequest{}, 9);
+    const std::vector<std::uint8_t> truncated(
+        good.begin(), good.begin() + sizeof(protocol::MessageHeader) + 2);
+    const auto badResp = loginClient->call(truncated, std::chrono::milliseconds(500));
+    TEST_ASSERT(badResp.has_value(), "truncated body still answered");
+    {
+        const auto header = protocol::MessageCodec::parseHeader(*badResp);
+        TEST_ASSERT(static_cast<protocol::MessageType>(header.type) ==
+                        protocol::MessageType::ERROR,
+                    "truncated body gets error envelope");
+        const std::vector<std::uint8_t> body(badResp->begin() +
+                                                 sizeof(protocol::MessageHeader),
+                                             badResp->end());
+        protocol::ErrorMessage parsed;
+        protocol::MessageCodec::decodeBody(body, parsed);
+        TEST_ASSERT(parsed.message == "Directory request rejected",
+                    "rejection text verbatim");
+    }
+
+    // 坏帧二：垃圾 magic → parseHeader 抛（同兜底翼）
+    const std::vector<std::uint8_t> garbage(64, 0xAB);
+    const auto bad2 = loginClient->call(garbage, std::chrono::milliseconds(500));
+    TEST_ASSERT(bad2.has_value(), "garbage frame still answered");
+    {
+        const auto header = protocol::MessageCodec::parseHeader(*bad2);
+        TEST_ASSERT(static_cast<protocol::MessageType>(header.type) ==
+                        protocol::MessageType::ERROR,
+                    "garbage frame gets error envelope");
+    }
+
+    // 面存活：后续 PING 照常受理
+    protocol::Ping ping;
+    ping.timestamp = 1;
+    const auto pong = loginClient->call(protocol::MessageCodec::encode(ping, 9),
+                                        std::chrono::milliseconds(500));
+    TEST_ASSERT(pong.has_value(), "face alive after corrupt frames");
+    {
+        const auto header = protocol::MessageCodec::parseHeader(*pong);
+        TEST_ASSERT(static_cast<protocol::MessageType>(header.type) ==
+                        protocol::MessageType::PONG,
+                    "ping gets pong after corrupt frames");
+    }
+
+    loginClient->stop();
+    mgr.stop();
+    return true;
+#else
+    std::cout << "SKIP (windows: link tcp base posix only)" << std::endl;
+    return true;
+#endif
+}
+
 } // namespace
 
 int main() {
@@ -385,6 +459,7 @@ int main() {
         {"control_e2e", test_control_e2e},
         {"player_record_wire_roundtrip", test_player_record_wire_roundtrip},
         {"control_unreachable", test_control_unreachable},
+        {"control_corrupt_frame_error_response", test_control_corrupt_frame_error_response},
     };
     int failed = 0;
     for (const auto& c : cases) {

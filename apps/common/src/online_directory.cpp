@@ -204,7 +204,17 @@ void OnlineDirectory::start() {
         m1Config.route_json = m1_route_json_;
         m1Server_ = makeM1ControlServer(
             std::move(m1Config), [this](const std::uint8_t* frame, std::size_t size) {
-                return dispatchRequest(std::vector<std::uint8_t>(frame, frame + size));
+                // 受理异常转错误响应（audit M3）：坏帧解码/受理抛出不得穿出
+                // M1 泵线程（std::terminate 杀宿主进程面）——player_store
+                // M1 受理面同款兜底。
+                try {
+                    return dispatchRequest(std::vector<std::uint8_t>(frame, frame + size));
+                } catch (const std::exception&) {
+                    protocol::ErrorMessage error{};
+                    error.code = 1;
+                    error.message = "Directory request rejected";
+                    return protocol::MessageCodec::encode(error);
+                }
             });
         if (m1Server_->start()) {
             apollo::core::log::global_log_manager()
