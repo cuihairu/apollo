@@ -1135,6 +1135,46 @@ bool test_uplink_duplicate_frames_gated() {
     return true;
 }
 
+// audit m2（P1#11 入口回归保护）：客户端坏帧（PING 头合法——dispatch 认
+// Heartbeat；体截断——decodeBody 裸抛）在 handleClientMessage 兜底翼转
+// 断连语义：会话移除、进程照常。摘除 try/catch 复验：异常穿出宿主泵线程
+// 即 std::terminate 进程死，用例到不了断言。
+bool test_corrupt_body_frame_disconnects_session() {
+    std::cout << "Running: test_corrupt_body_frame_disconnects_session..." << std::endl;
+
+    gateway::GatewayServer server(gateway_config(0, 0));
+    server.start();
+
+    TcpTestClient client;
+    std::uint64_t sid = 0;
+    TEST_ASSERT(tcp_establish(client, server, server.listenPort(), 9601, sid),
+                "session established");
+    TEST_ASSERT(server.getSessionCount() == 1, "session created");
+
+    // 坏帧：头合法（type=PING）、体截到 2 字节（decodeBody<Ping> 抛）
+    auto corrupt = ping_packet(sid);
+    TEST_ASSERT(corrupt.size() > sizeof(protocol::MessageHeader) + 2,
+                "ping frame has a body to truncate");
+    corrupt.resize(sizeof(protocol::MessageHeader) + 2);
+    client.sendAll(frame_bytes(2, 0, corrupt));
+
+    // 兜底翼：会话移除（断连语义），进程照常——轮询等泵线程收尾
+    bool removed = false;
+    for (int i = 0; i < 250; ++i) {
+        if (server.getSessionCount() == 0) {
+            removed = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    TEST_ASSERT(removed, "corrupt frame disconnects session");
+    TEST_ASSERT(server.isRunning(), "gateway survives corrupt frame");
+
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -1153,6 +1193,7 @@ int main() {
         {"skill_damage_broadcast", test_skill_damage_broadcast},
         {"lua_intent_push_loop", test_lua_intent_push_loop},
         {"uplink_duplicate_frames_gated", test_uplink_duplicate_frames_gated},
+        {"corrupt_body_frame_disconnects_session", test_corrupt_body_frame_disconnects_session},
     };
 
     int failed = 0;
