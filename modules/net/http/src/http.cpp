@@ -1036,7 +1036,11 @@ std::unique_ptr<HttpClient> createHttpClient() {
 // 便捷函数
 //==============================================================================
 
-// 解析 http://host[:port]/path。内置客户端仅 TCP 不支持 TLS（https 拒绝）。
+// 解析 http://host[:port]/path。内置客户端能力边界（audit m1——消除
+// "可解析但不可连"接口不实面）：仅 IPv4 字面量 + TCP，无 TLS（https 拒绝）、
+// 无 DNS（域名拒绝）、无 IPv6（含 bracket 形式拒绝）——resolveHost 仅
+// inet_pton(AF_INET)（见上），能解析过的 URL 必然可发起连接；域名/IPv6
+// 随 resolveHost DNS/AF_INET6 面实现时一并放开。
 // 原 httpGet/httpPost 忽略 url 恒连 localhost:80——audit P1#7
 bool parseUrl(const std::string& url, std::string& host, uint16_t& port, std::string& path) {
     std::string rest = url;
@@ -1057,14 +1061,21 @@ bool parseUrl(const std::string& url, std::string& host, uint16_t& port, std::st
     if (colon != std::string::npos) {
         host = authority.substr(0, colon);
         try {
-            port = static_cast<uint16_t>(std::stoi(authority.substr(colon + 1)));
+            const int parsed = std::stoi(authority.substr(colon + 1));
+            if (parsed < 0 || parsed > 65535) {
+                return false;
+            }
+            port = static_cast<uint16_t>(parsed);
         } catch (const std::exception&) {
             return false;
         }
     } else {
         host = authority;
     }
-    return !host.empty();
+
+    // 能力边界执法：仅 IPv4 字面量（域名/IPv6 会"解析成功但连不上"）
+    in_addr probe{};
+    return !host.empty() && ::inet_pton(AF_INET, host.c_str(), &probe) == 1;
 }
 
 // 快速创建 HTTP GET 请求

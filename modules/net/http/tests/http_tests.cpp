@@ -309,6 +309,29 @@ bool test_httpget_https_rejected() {
     return true;
 }
 
+// audit m1：URL 能力边界执法——内置客户端仅 IPv4 字面量（resolveHost 无
+// DNS/IPv6 面）。域名 / bracket IPv6 / 裸 IPv6 / 端口越界在解析层拒绝
+// （body == "Invalid URL"，区别于连接失败的 "Connection failed"）——消除
+// "可解析但不可连"接口不实面（修复前域名解析成功、连接阶段才失败）。
+bool test_httpget_url_boundary_rejected() {
+    const char* rejected[] = {
+        "http://example.com/x",          // 域名（无 DNS 面）
+        "http://[::1]:8080/x",           // bracket IPv6
+        "http://::1/x",                  // 裸 IPv6
+        "http://127.0.0.1:abc/x",        // 端口非数字
+        "http://127.0.0.1:99999/x",      // 端口越界
+        "http://example.com:70000/x",    // 域名 + 端口越界
+    };
+    for (const char* url : rejected) {
+        const auto resp = httpGet(url, 200);
+        TEST_ASSERT(resp.status == StatusCode::InternalServerError,
+                    std::string("boundary rejected: ") + url);
+        TEST_ASSERT(resp.body == "Invalid URL",
+                    std::string("parse-stage rejection (not connect-stage): ") + url);
+    }
+    return true;
+}
+
 #endif  // !_WIN32
 
 
@@ -555,6 +578,7 @@ int main() {
     run("test_server_garbage_content_length_no_crash", test_server_garbage_content_length_no_crash);
     run("test_httpget_url_parsing", test_httpget_url_parsing);
     run("test_httpget_https_rejected", test_httpget_https_rejected);
+    run("test_httpget_url_boundary_rejected", test_httpget_url_boundary_rejected);
     run("test_server_huge_content_length_rejected", test_server_huge_content_length_rejected);
     run("test_server_body_over_cap_rejected", test_server_body_over_cap_rejected);
     run("test_server_header_flood_capped", test_server_header_flood_capped);
