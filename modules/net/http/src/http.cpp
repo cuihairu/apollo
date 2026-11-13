@@ -454,11 +454,23 @@ public:
     void onDataReceived(const char* data, size_t size) {
         receiveBuffer_.append(data, size);
 
+        // 连接面缓冲上限（audit C2）：无 Content-Length 流式灌入或头部洪泛
+        // 也能把 receiveBuffer_ 顶到 OOM——不完整且超上限即 413 断开。
+        constexpr size_t kMaxReceiveBuffer =
+            RequestParser::kMaxBodySize + 64 * 1024;  // 体上限 + 头部余量
+
         while (true) {
             size_t bytesConsumed = 0;
             Request request;
+            bool bodyTooLarge = false;
 
-            if (!RequestParser::parse(receiveBuffer_, request, bytesConsumed)) {
+            if (!RequestParser::parse(receiveBuffer_, request, bytesConsumed,
+                                      &bodyTooLarge)) {
+                if (bodyTooLarge || receiveBuffer_.size() > kMaxReceiveBuffer) {
+                    respondAndClose(Response(StatusCode::PayloadTooLarge,
+                                             "Payload Too Large"));
+                    return;
+                }
                 break; // 不完整，等待更多数据
             }
 
@@ -521,6 +533,16 @@ private:
             return handler_(request);
         }
         return Response::ok("OK");
+    }
+
+    // 带外响应 + 断开（413 拒绝面：原无上限协议混淆/OOM 面，audit C2）
+    void respondAndClose(Response response) {
+        response.headers.setContentLength(response.body.size());
+        const auto payload = response.toString();
+        if (conn_) {
+            conn_->send(payload.data(), payload.size());
+        }
+        close();
     }
 
     std::shared_ptr<IConnection> conn_;

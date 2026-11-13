@@ -10,7 +10,8 @@
 //   localhost:80——按 url 解析 host/port/path（https 拒绝）。
 // 测试经回环 TCP 直连：GET/POST 往返、连接关闭后表项移除、stop() 快速收线、
 // 静默对端响应超时、垃圾 Content-Length 不抛、超大响应封顶、服务端垃圾
-// Content-Length 不崩、httpGet url 解析生效。
+// Content-Length 不崩、httpGet url 解析生效；audit C2：巨值/超上限
+// Content-Length 与无长度流式灌入 → 413 拒绝（原协议混淆+OOM 面）。
 #include "apollo/net/http.h"
 
 #include <atomic>
@@ -309,6 +310,77 @@ bool test_httpget_https_rejected() {
 
 #endif  // !_WIN32
 
+
+// audit C2 回归：①巨值 Content-Length（u64 回绕面）→ 413 拒绝而非协议混淆；
+// ②声明体长超上限 → 413；③无 Content-Length 流式灌入顶缓冲上限 → 413 断开
+bool test_server_huge_content_length_rejected() {
+    auto server = createHttpServer();
+    server->setRouter(std::make_shared<Router>());
+    TEST_ASSERT(server->start("127.0.0.1", kPortBase + 8), "server start");
+
+    int fd = connectTcp(kPortBase + 8);
+    TEST_ASSERT(fd >= 0, "tcp connect");
+    const char* req =
+        "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 18446744073709551615\r\n\r\n";
+    sendAll(fd, req, std::strlen(req));
+
+    char buf[512] = {};
+    ssize_t n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+    TEST_ASSERT(n > 0, "server responded");
+    TEST_ASSERT(std::strstr(buf, "413") != nullptr, "huge length gets 413");
+
+    ::close(fd);
+    server->stop();
+    return true;
+}
+
+bool test_server_body_over_cap_rejected() {
+    auto server = createHttpServer();
+    server->setRouter(std::make_shared<Router>());
+    TEST_ASSERT(server->start("127.0.0.1", kPortBase + 9), "server start");
+
+    int fd = connectTcp(kPortBase + 9);
+    TEST_ASSERT(fd >= 0, "tcp connect");
+    const std::string req =
+        "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: " +
+        std::to_string(apollo::net::http::RequestParser::kMaxBodySize + 1) +
+        "\r\n\r\n";
+    sendAll(fd, req.data(), req.size());
+
+    char buf[512] = {};
+    ssize_t n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+    TEST_ASSERT(n > 0, "server responded");
+    TEST_ASSERT(std::strstr(buf, "413") != nullptr, "over-cap body gets 413");
+
+    ::close(fd);
+    server->stop();
+    return true;
+}
+
+bool test_server_header_flood_capped() {
+    auto server = createHttpServer();
+    server->setRouter(std::make_shared<Router>());
+    TEST_ASSERT(server->start("127.0.0.1", kPortBase + 10), "server start");
+
+    int fd = connectTcp(kPortBase + 10);
+    TEST_ASSERT(fd >= 0, "tcp connect");
+    // 头部洪泛：无 \r\n\r\n 终结、无 Content-Length，灌超缓冲上限
+    const std::string junk(64 * 1024, 'x');
+    const size_t flood = apollo::net::http::RequestParser::kMaxBodySize + 2 * 1024 * 1024;
+    for (size_t off = 0; off < flood; off += junk.size()) {
+        sendAll(fd, junk.data(), junk.size());  // 服务端提前断开时静默失败
+    }
+
+    char buf[512] = {};
+    ssize_t n = ::recv(fd, buf, sizeof(buf) - 1, 0);
+    TEST_ASSERT(n > 0, "server responded or closed");
+    TEST_ASSERT(std::strstr(buf, "413") != nullptr, "header flood gets 413");
+
+    ::close(fd);
+    server->stop();
+    return true;
+}
+
 // 接口面：createHttpServer/createHttpClient 可构造，setResponseTimeout/
 // setMaxResponseSize 接口一致（编译期），未启动服务端 isRunning 为 false
 bool test_interface_compiles() {
@@ -346,6 +418,9 @@ int main() {
     run("test_server_garbage_content_length_no_crash", test_server_garbage_content_length_no_crash);
     run("test_httpget_url_parsing", test_httpget_url_parsing);
     run("test_httpget_https_rejected", test_httpget_https_rejected);
+    run("test_server_huge_content_length_rejected", test_server_huge_content_length_rejected);
+    run("test_server_body_over_cap_rejected", test_server_body_over_cap_rejected);
+    run("test_server_header_flood_capped", test_server_header_flood_capped);
 #endif
     run("test_interface_compiles", test_interface_compiles);
     std::cout << "=== Results: " << passed << "/" << total << " passed ===" << std::endl;

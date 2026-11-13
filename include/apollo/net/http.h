@@ -423,10 +423,20 @@ struct Response {
 
 class RequestParser {
 public:
-    // 解析 HTTP 请求
-    static bool parse(const std::string& data, Request& request, size_t& bytesConsumed) {
+    // 请求体上限（audit C2）：声明体长超过此值 = 413 拒绝面（连接面据此回
+    // PayloadTooLarge 并断开），不进入无限缓冲（原无上限可 OOM）
+    static constexpr size_t kMaxBodySize = 16 * 1024 * 1024;
+
+    // 解析 HTTP 请求。bodyTooLarge（可空出参）：true = 声明 Content-Length
+    // 超上限——调用面应回 413 断开，而不是等更多数据（返回 false 的唯一
+    // 「拒绝」形态，原协议混淆+OOM 面）
+    static bool parse(const std::string& data, Request& request, size_t& bytesConsumed,
+                      bool* bodyTooLarge = nullptr) {
         bytesConsumed = 0;
         request = Request();
+        if (bodyTooLarge) {
+            *bodyTooLarge = false;
+        }
 
         std::istringstream iss(data);
         std::string line;
@@ -511,6 +521,15 @@ public:
                     } catch (const std::exception&) {
                         contentLength = -1;  // 垃圾 Content-Length：按无体处理
                     }
+                    if (contentLength < 0 ||
+                        static_cast<uint64_t>(contentLength) > kMaxBodySize) {
+                        // 负值/超上限（含 u64 巨值——headerEnd+contentLength
+                        // 无符号回绕面）：拒绝信号交连接面 413 断开
+                        if (bodyTooLarge) {
+                            *bodyTooLarge = true;
+                        }
+                        return false;
+                    }
                 }
             }
         }
@@ -519,15 +538,16 @@ public:
             return false; // 不完整
         }
 
-        // 读取消息体
+        // 读取消息体（减法形态防回绕：headerEnd ≤ data.size() 恒成立——
+        // 已消费行均来自 data；原 headerEnd + contentLength 无符号回绕为
+        // 小值 → 协议混淆，audit C2）
         if (contentLength > 0) {
-            size_t headerEnd = bytesConsumed;
-            if (data.size() >= headerEnd + contentLength) {
-                request.body = data.substr(headerEnd, contentLength);
-                bytesConsumed += contentLength;
-            } else {
+            const size_t headerEnd = bytesConsumed;
+            if (data.size() - headerEnd < static_cast<size_t>(contentLength)) {
                 return false; // 不完整
             }
+            request.body = data.substr(headerEnd, static_cast<size_t>(contentLength));
+            bytesConsumed += static_cast<size_t>(contentLength);
         }
 
         return true;
