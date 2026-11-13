@@ -931,7 +931,14 @@ private:
                     std::string lenStr = response.headers.get("Content-Length");
                     if (!lenStr.empty()) {
                         try {
-                            contentLength = std::stoull(lenStr);
+                            const auto declared = std::stoull(lenStr);
+                            if (declared > maxResponseSize_) {
+                                // 声明超上限：包永远不可能合法完整，按协议错
+                                // 回——原巨值经 headerBytesReceived+contentLength
+                                // 加法回绕可把残帧当完整成功包（audit M5）
+                                return Response::serverError("Response body too large");
+                            }
+                            contentLength = declared;
                         } catch (const std::exception&) {
                             contentLength = 0;  // 垃圾值：按无体处理（audit P1#7）
                         }
@@ -944,9 +951,9 @@ private:
                 }
             }
 
-            // 检查是否接收完整
+            // 检查是否接收完整（减法判据防回绕——audit M5）
             if (headersComplete && contentLength > 0) {
-                if (responseData.size() >= headerBytesReceived + contentLength) {
+                if (responseData.size() - headerBytesReceived >= contentLength) {
                     response.body = responseData.substr(headerBytesReceived, contentLength);
                     break;
                 }
@@ -971,12 +978,16 @@ private:
             if (pos1 != std::string::npos) {
                 size_t pos2 = line.find(' ', pos1 + 1);
                 if (pos2 != std::string::npos) {
-                    // 状态码
+                    // 状态码（audit M5）：有效码域 [100,599]（RFC 1xx–5xx 类）。
+                    // 垃圾文本（stoi 抛）或越界码不得静默保持默认 200 OK——
+                    // 调用面会当成功包消费（协议混淆面），按 500 上抛失败语义。
                     try {
-                        int statusCode = std::stoi(line.substr(pos1 + 1, pos2 - pos1 - 1));
-                        response.status = static_cast<StatusCode>(statusCode);
+                        const int statusCode = std::stoi(line.substr(pos1 + 1, pos2 - pos1 - 1));
+                        response.status = (statusCode >= 100 && statusCode <= 599)
+                                              ? static_cast<StatusCode>(statusCode)
+                                              : StatusCode::InternalServerError;
                     } catch (const std::exception&) {
-                        // 垃圾状态码：保持默认
+                        response.status = StatusCode::InternalServerError;
                     }
                 }
             }

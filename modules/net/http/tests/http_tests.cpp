@@ -435,6 +435,102 @@ bool test_server_route_exception_returns_500() {
     return true;
 }
 
+// 原始假服务端：accept 一连后回吐预置字节，短歇后收线（字节级控制——
+// 服务端真实 Router 无法产出畸形状态行/巨值 CL 的原始字节）
+static int startRawResponder(uint16_t port, const std::string& responseBytes) {
+    const int listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
+    int one = 1;
+    ::setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    ::inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+    if (listenFd < 0 || ::bind(listenFd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0 ||
+        ::listen(listenFd, 1) != 0) {
+        if (listenFd >= 0) ::close(listenFd);
+        return -1;
+    }
+    std::thread([listenFd, responseBytes]() {
+        const int fd = ::accept(listenFd, nullptr, nullptr);
+        if (fd >= 0) {
+            size_t off = 0;
+            while (off < responseBytes.size()) {
+#ifdef MSG_NOSIGNAL
+                const int flags = MSG_NOSIGNAL;
+#else
+                const int flags = 0;
+#endif
+                const ssize_t n =
+                    ::send(fd, responseBytes.data() + off, responseBytes.size() - off, flags);
+                if (n <= 0) break;
+                off += static_cast<size_t>(n);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            ::close(fd);
+        }
+        ::close(listenFd);
+    }).detach();
+    return 0;
+}
+
+// audit M5①：对端声明巨值 Content-Length（u64 max）不得经
+// headerBytesReceived+contentLength 加法回绕把残帧当完整成功包——超上限
+// 声明按协议错回 500（修复前 1 字节残体 + 200 OK 直接放行）。
+bool test_client_giant_content_length_rejected() {
+    TEST_ASSERT(startRawResponder(kPortBase + 12,
+                                  "HTTP/1.1 200 OK\r\n"
+                                  "Content-Length: 18446744073709551615\r\n"
+                                  "\r\n"
+                                  "x") == 0,
+                "raw responder up");
+
+    auto client = createHttpClient();
+    TEST_ASSERT(client->connect("127.0.0.1", kPortBase + 12, 2000), "client connect");
+    client->setMaxResponseSize(4096);
+    client->setResponseTimeout(2000);
+
+    const auto resp = client->get("/");
+    TEST_ASSERT(resp.status == StatusCode::InternalServerError,
+                "giant declared length rejected as protocol error");
+
+    client->disconnect();
+    return true;
+}
+
+// audit M5②：垃圾状态行（stoi 抛）与越界码（99999）不得静默保持默认
+// 200 OK（调用面会当成功包消费）——无效状态按 500 上抛失败语义。
+bool test_client_invalid_status_rejected() {
+    TEST_ASSERT(startRawResponder(kPortBase + 13,
+                                  "HTTP/1.1 abc def\r\n"
+                                  "Content-Length: 2\r\n"
+                                  "\r\n"
+                                  "hi") == 0,
+                "garbage status responder up");
+    TEST_ASSERT(startRawResponder(kPortBase + 14,
+                                  "HTTP/1.1 99999 out-of-range\r\n"
+                                  "Content-Length: 2\r\n"
+                                  "\r\n"
+                                  "hi") == 0,
+                "out-of-range status responder up");
+
+    auto client = createHttpClient();
+    client->setResponseTimeout(2000);
+
+    TEST_ASSERT(client->connect("127.0.0.1", kPortBase + 13, 2000), "client connect");
+    const auto garbage = client->get("/");
+    TEST_ASSERT(garbage.status == StatusCode::InternalServerError,
+                "garbage status line rejected");
+    client->disconnect();
+
+    TEST_ASSERT(client->connect("127.0.0.1", kPortBase + 14, 2000), "client reconnect");
+    const auto outOfRange = client->get("/");
+    TEST_ASSERT(outOfRange.status == StatusCode::InternalServerError,
+                "out-of-range status code rejected");
+    client->disconnect();
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -463,6 +559,8 @@ int main() {
     run("test_server_body_over_cap_rejected", test_server_body_over_cap_rejected);
     run("test_server_header_flood_capped", test_server_header_flood_capped);
     run("test_server_route_exception_returns_500", test_server_route_exception_returns_500);
+    run("test_client_giant_content_length_rejected", test_client_giant_content_length_rejected);
+    run("test_client_invalid_status_rejected", test_client_invalid_status_rejected);
 #endif
     run("test_interface_compiles", test_interface_compiles);
     std::cout << "=== Results: " << passed << "/" << total << " passed ===" << std::endl;
