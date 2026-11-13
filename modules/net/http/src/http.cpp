@@ -530,7 +530,15 @@ private:
 
     Response handleRequest(const Request& request) {
         if (handler_) {
-            return handler_(request);
+            // 用户路由异常不穿出连接线程（穿出即 std::terminate 杀宿主进程，
+            // audit M2）：现场渲染 500，连接照常走 keep-alive 回收面。
+            try {
+                return handler_(request);
+            } catch (const std::exception&) {
+                return Response::serverError();
+            } catch (...) {
+                return Response::serverError();
+            }
         }
         return Response::ok("OK");
     }

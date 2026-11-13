@@ -21,6 +21,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -394,6 +395,46 @@ bool test_interface_compiles() {
     return true;
 }
 
+// audit M2：用户路由抛异常不得穿出连接线程（穿出即 std::terminate 杀宿主
+// 进程）——现场渲染 500；keep-alive 连接上后续请求照常服务（连接线程存活
+// 证明：修复前第一发即进程死，用例到不了后续断言）。
+bool test_server_route_exception_returns_500() {
+    auto server = createHttpServer();
+    auto router = std::make_shared<Router>();
+    router->get("/ok", [](const apollo::net::http::Request&) {
+        return apollo::net::http::Response::ok("fine");
+    });
+    router->get("/boom", [](const apollo::net::http::Request&)
+                   -> apollo::net::http::Response {
+        throw std::runtime_error("route blew up");
+    });
+    router->get("/boom2", [](const apollo::net::http::Request&)
+                    -> apollo::net::http::Response {
+        throw 42;  // 非 std::exception 抛掷物
+    });
+    server->setRouter(router);
+    TEST_ASSERT(server->start("127.0.0.1", kPortBase + 11), "server start");
+
+    auto client = createHttpClient();
+    TEST_ASSERT(client->connect("127.0.0.1", kPortBase + 11, 2000), "client connect");
+    client->setResponseTimeout(2000);
+
+    const auto boom = client->get("/boom");
+    TEST_ASSERT(boom.status == StatusCode::InternalServerError, "throwing route renders 500");
+    TEST_ASSERT(boom.body == "Internal Server Error", "500 body rendered");
+
+    const auto boom2 = client->get("/boom2");
+    TEST_ASSERT(boom2.status == StatusCode::InternalServerError,
+                "non-exception throw renders 500 too");
+
+    const auto ok = client->get("/ok");
+    TEST_ASSERT(ok.status == StatusCode::OK, "connection survives route exception");
+
+    client->disconnect();
+    server->stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -421,6 +462,7 @@ int main() {
     run("test_server_huge_content_length_rejected", test_server_huge_content_length_rejected);
     run("test_server_body_over_cap_rejected", test_server_body_over_cap_rejected);
     run("test_server_header_flood_capped", test_server_header_flood_capped);
+    run("test_server_route_exception_returns_500", test_server_route_exception_returns_500);
 #endif
     run("test_interface_compiles", test_interface_compiles);
     std::cout << "=== Results: " << passed << "/" << total << " passed ===" << std::endl;
