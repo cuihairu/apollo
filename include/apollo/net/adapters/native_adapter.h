@@ -581,13 +581,24 @@ public:
     int32_t parse(const char* data, uint32_t length) override {
         if (length < sizeof(uint32_t)) return 0; // 需要更多数据
 
-        uint32_t packetLen = *reinterpret_cast<const uint32_t*>(data);
+        // 长度头逐字节按大端组装（与 SessionHelper::sendPacket 编码一致，
+        // audit M4 同型残留——活路径 handleRecv 已修，本类是公共 API 面
+        // 副本）：reinterpret_cast 本机序裸读既是对齐/别名 UB，又在小端
+        // 机上与发送侧大端字节序互斥（跨端帧长误读）。
+        const auto* headerBytes = reinterpret_cast<const unsigned char*>(data);
+        const uint32_t packetLen =
+            (static_cast<uint32_t>(headerBytes[0]) << 24) |
+            (static_cast<uint32_t>(headerBytes[1]) << 16) |
+            (static_cast<uint32_t>(headerBytes[2]) << 8) |
+            static_cast<uint32_t>(headerBytes[3]);
 
         if (packetLen > maxPacketSize_) {
             return -1; // 包过大，错误
         }
 
-        if (length < sizeof(uint32_t) + packetLen) {
+        // 减法判据防回绕（length ≥ 头大小已由上方保证；加法形态在 32 位
+        // size_t 面上 4+接近上限可绕回为小值）。
+        if (length - sizeof(uint32_t) < packetLen) {
             return 0; // 数据不完整
         }
 

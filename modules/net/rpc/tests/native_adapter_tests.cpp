@@ -90,6 +90,39 @@ bool test_recv_oversize_rejected() {
 }
 #endif
 
+// audit M4 同型残留：LengthPrefixPacketParser（公共 API 面第二份长度头
+// 解码）同为原生序裸读——大端帧在小端机上读成字节翻转值（5 → 0x05000000
+// 判超长返 -1）。修复为逐字节大端组装 + 减法判据防回绕（与 handleRecv
+// 同款）。
+bool test_length_prefix_parser_big_endian() {
+    using apollo::net::adapters::LengthPrefixPacketParser;
+    LengthPrefixPacketParser parser;
+
+    // 大端帧 "hello"（5）：裸读当 0x05000000 超长返 -1
+    std::string wire;
+    appendFrame(wire, "hello");
+    const int32_t r1 = parser.parse(wire.data(), static_cast<uint32_t>(wire.size()));
+    TEST_ASSERT(r1 == static_cast<int32_t>(wire.size()), "big-endian frame accepted");
+
+    // 不完整帧（头+1 字节体）：needMore 形态 0
+    const int32_t r2 = parser.parse(wire.data(), 6);
+    TEST_ASSERT(r2 == 0, "partial frame asks for more");
+    // 头都不足：0
+    TEST_ASSERT(parser.parse(wire.data(), 3) == 0, "short header asks for more");
+
+    // 超长（65537 > 64K）：返 -1
+    const unsigned char oversized[8] = {0x00, 0x01, 0x00, 0x01, 'x', 'x', 'x', 'x'};
+    TEST_ASSERT(parser.parse(reinterpret_cast<const char*>(oversized),
+                             sizeof(oversized)) == -1,
+                "oversize rejected");
+
+    // 两帧连排：首帧消费长度精确
+    appendFrame(wire, "abc");
+    const int32_t r3 = parser.parse(wire.data(), static_cast<uint32_t>(wire.size()));
+    TEST_ASSERT(r3 == static_cast<int32_t>(4 + 5), "first frame length exact");
+    return true;
+}
+
 // 快照路径：注册 listener/connector 后 update() 持锁快照、出锁轮询，
 // 再 stop() 持锁收线——修复前此路径与 IO 线程/变更接口无锁互踩
 bool test_manager_snapshot_update_stop() {
@@ -128,6 +161,7 @@ int main() {
     run("test_recv_framing_big_endian", test_recv_framing_big_endian);
     run("test_recv_oversize_rejected", test_recv_oversize_rejected);
 #endif
+    run("test_length_prefix_parser_big_endian", test_length_prefix_parser_big_endian);
     run("test_manager_snapshot_update_stop", test_manager_snapshot_update_stop);
     std::cout << "=== Results: " << passed << "/" << total << " passed ===" << std::endl;
     return (passed == total) ? 0 : 1;
