@@ -49,6 +49,13 @@ Socket& Socket::operator=(Socket&& other) noexcept {
 
 bool Socket::CreateTCP() {
     sockfd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+#if !defined(_WIN32) && !defined(MSG_NOSIGNAL) && defined(SO_NOSIGPIPE)
+    // 旧平台无 MSG_NOSIGNAL：套接字级关断 SIGPIPE（audit C3 统一防断管策略）
+    if (sockfd_ != INVALID_SOCKET) {
+        int on = 1;
+        ::setsockopt(sockfd_, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+    }
+#endif
     return sockfd_ != INVALID_SOCKET;
 }
 
@@ -119,7 +126,13 @@ NetError Socket::Send(const void* data, size_t len, size_t& sent) {
 #ifdef _WIN32
     int ret = send(sockfd_, static_cast<const char*>(data), static_cast<int>(len), 0);
 #else
+    // MSG_NOSIGNAL：对端关闭后的写返 EPIPE 而非 SIGPIPE 杀宿主进程
+    //（audit C3 统一防断管策略，http/websocket/link 同款）
+#if defined(MSG_NOSIGNAL)
+    ssize_t ret = send(sockfd_, data, len, MSG_NOSIGNAL);
+#else
     ssize_t ret = send(sockfd_, data, len, 0);
+#endif
 #endif
 
     if (ret > 0) {

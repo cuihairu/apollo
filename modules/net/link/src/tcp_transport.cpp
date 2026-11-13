@@ -187,6 +187,13 @@ bool TcpConnector::begin_current(std::uint64_t now_ms) {
     if (fd < 0) {
         return false;  // socket() 不可用：跳过该候选
     }
+#if !defined(MSG_NOSIGNAL) && defined(SO_NOSIGPIPE)
+    // 旧平台无 MSG_NOSIGNAL：套接字级关断 SIGPIPE（audit C3 统一防断管策略）
+    {
+        int on = 1;
+        ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+    }
+#endif
     fd_ = fd;
     set_nonblocking(fd_);
     deadline_ms_ = now_ms + connect_timeout_ms_;

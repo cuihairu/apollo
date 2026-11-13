@@ -208,6 +208,48 @@ bool test_receive_after_peer_close() {
            (closed != NetError::SUCCESS && closed != NetError::WOULDBLOCK);
 }
 
+// audit C3：对端关闭后的写必须返回错误（EPIPE 面）而非 SIGPIPE 杀进程——
+// 本套件不忽略 SIGPIPE（main 无 signal 设置），若 Send 未设防，写拍到断管
+// 信号进程即死，用例到不了断言
+bool test_send_after_peer_close_no_sigpipe() {
+    Socket listener;
+    if (!listener.CreateTCP() || !listener.SetReuseAddr(true) ||
+        !listener.Bind(NetAddress("127.0.0.1", 0)) || !listener.Listen(8)) {
+        return false;
+    }
+    const uint16_t port = listener.GetLocalAddress().GetPort();
+
+    std::unique_ptr<Socket> conn;
+    std::thread server([&listener, &conn]() { conn = listener.Accept(); });
+
+    Socket client;
+    if (!client.CreateTCP() || !client.Connect(NetAddress("127.0.0.1", port))) {
+        server.join();
+        return false;
+    }
+    server.join();
+    if (!conn) {
+        return false;
+    }
+
+    client.Close();  // 客户端先关：对端写必落断管路径
+    conn->SetNonBlocking(true);
+
+    // 首写可能被 TCP 缓冲吸收（FIN 只是半关，RST 未达前 SUCCESS），持续写
+    // 直到非 SUCCESS；无 MSG_NOSIGNAL/SO_NOSIGPIPE 时此循环内进程已死
+    char junk[64] = {};
+    size_t sent = 0;
+    NetError err = NetError::WOULDBLOCK;
+    for (int i = 0; i < 1000; ++i) {
+        err = conn->Send(junk, sizeof(junk), sent);
+        if (err != NetError::SUCCESS) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return err == NetError::SOCKET_SEND_FAILED;
+}
+
 } // namespace
 
 int main() {
@@ -221,6 +263,7 @@ int main() {
         {"buffer_read_write_semantics", test_buffer_read_write_semantics},
         {"tcp_echo_loopback", test_tcp_echo_loopback},
         {"receive_after_peer_close", test_receive_after_peer_close},
+        {"send_after_peer_close_no_sigpipe", test_send_after_peer_close_no_sigpipe},
     };
 
     for (const auto& t : tests) {

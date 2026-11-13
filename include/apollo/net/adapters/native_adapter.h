@@ -123,6 +123,10 @@ namespace syscalls {
     inline ssize_t sys_send(socket_t sock, const char* buf, size_t len, int flags) {
 #ifdef _WIN32
         return ::send(sock, buf, static_cast<int>(len), flags);
+#elif defined(MSG_NOSIGNAL)
+        // MSG_NOSIGNAL：对端关闭后的写返 EPIPE 而非 SIGPIPE 杀宿主进程
+        //（audit C3 统一防断管策略——三处调用面同经此包装）
+        return send(sock, buf, len, flags | MSG_NOSIGNAL);
 #else
         return send(sock, buf, len, flags);
 #endif
