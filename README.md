@@ -93,7 +93,7 @@ Core gameplay terms (the [concept guide](docs/zh/en/guide/concepts.md) describes
 - **Battle system** - `BattleRuntime` deterministic battle domain (five-phase lifecycle, hash-chain fingerprint) with settlement routed through the owning Base and database
 - **Data storage** - atomic player profile file writes + `PersistJournal` write-behind; external DB/Redis not wired up
 - **Observability** - self-built logging, structured events, MetricRegistry, and span/trace primitives; no dedicated Profiler or OpenTelemetry SDK/exporter integration
-- **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/zh/33-BigWorld_Compatibility.md`)
+- **BigWorld compatibility layer** - BigWorld-style C++ API facade (`docs/zh/en/33-BigWorld_Compatibility.md`)
 
 ## Update Modes
 
@@ -112,9 +112,9 @@ See [update boundaries](docs/zh/en/design/gateway-topology-survey.md) and [contr
 - **Language**: C++20
 - **Build system**: CMake + Ninja, vcpkg manifest mode for dependency management
 - **Networking library**: hand-written cross-platform network layer
-- **Serialization/contracts**: XML+XSD contracts define game data semantics; `apollo_gen` generates client/server contract artifacts (`docs/zh/design/sdk-contract.md`). Protobuf is a dependency used by tests, not the current message path; the implementation uses hand-written encoding.
+- **Serialization/contracts**: XML+XSD contracts define game data semantics; `apollo_gen` generates client/server contract artifacts (`docs/zh/en/design/sdk-contract.md`). Protobuf is a dependency used by tests, not the current message path; the implementation uses hand-written encoding.
 - **Database**: no external storage dependency is currently required. Player profiles use JSON files and `PersistJournal`; MySQL, Redis, and ClickHouse integration remains planned.
-- **Message queue**: Kafka for the observability pipeline (planned, decision #14); inter-service messaging uses a hand-written message bus (planned, `docs/zh/design/net-abstraction.md`)
+- **Message queue**: Kafka for the observability pipeline (planned, decision #14); inter-service messaging uses a hand-written message bus (planned, `docs/zh/en/design/net-abstraction.md`)
 - **Monitoring**: Prometheus + Grafana (planned, batch 8)
 - **Logging**: hand-written multi-level logging (`apollo::core::log`); target pipeline LogAgent→Kafka→ClickHouse (decision #14)
 - **Test framework**: zero-dependency assertion-style unit tests (unified tree, gated by ctest); legacy GTest batch is off by default
@@ -168,7 +168,7 @@ documentation should not trigger a full compile.
 
 ### Minimal Example
 
-About 40 lines to run a hosted game service (see [quick-start](docs/zh/guide/quick-start.md) for the complete compilable version, verified against the actual API):
+About 40 lines to run a hosted game service (see [quick-start](docs/zh/en/guide/quick-start.md) for the complete compilable version, verified against the actual API):
 
 ```cpp
 #include <apollo/runtime/application_host.hpp>
@@ -229,7 +229,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ### Base Infrastructure (modules/base)
 - **Role**: pure infrastructure with no framework semantics; usable standalone in any C++ project (no dependency on other Apollo modules)
 - **Components**: Time utilities, ThreadPool, IdPool, String utilities, Memory utilities, Terminal utilities
-- See [Base module docs](docs/zh/modules/base.md) for details
+- See [Base module docs](docs/zh/en/modules/base.md) for details
 
 ### Core Framework (modules/core · modules/runtime)
 - **Dependency injection**: `apollo::core::di` minimalist constructor-injection container — type-keyed bean graph, topologically ordered assembly, only Singleton/Prototype scopes
@@ -239,7 +239,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ### Game Logic
 - **AOI system**: `SceneAoi` 3×3 grid (owned by Scene, isolated by scene_id) + `ViewerState` per-observer watermarks; Enter/Sync/Leave event dispatch is delivered, the gateway downstream delivery surface is left for P3-2
 - **Battle system**: `BattleRuntime` deterministic battle domain — five-phase lifecycle, seed/substream RNG, hash-chain fingerprint, one-way reward settlement via `IRewardSink`; attached to `Instance` (P2-2). Skills/buffs content comes with gameplay batches
-- **Attribute system**: `AttributeContainer`/`AttributeManager` attribute container and definition registration; per-viewer delta sync pipeline not wired (the `attr_batch` contract is already in messages.xml)
+- **Attribute system**: `AttributeContainer`/`AttributeManager` attribute container and definition registration; per-viewer delta primitives (`modules/game/attrsync`) are delivered and wired into Scene, while gateway downstream delivery is not yet accepted (the `attr_batch` contract is already in messages.xml)
 - **Scene management**: multi-scene support + scene transfer (`scene_transfer`, prepare→detach→attach→resume + rollback on failure)
 
 ### Network
@@ -254,7 +254,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 
 ### Scripting
 
-- **Lua sandbox host**: `apollo::script::ScriptRuntime` (native Lua C API, vcpkg Lua 5.5 line) — module hot-swap with smoke check/rollback, bytecode cache + `lua_precompile` tool; consumed by the world process (`--script-boot` / `--script-handlers`); see [script module docs](docs/zh/modules/script.md)
+- **Lua sandbox host**: `apollo::script::ScriptRuntime` (native Lua C API, vcpkg Lua 5.5 line) — module hot-swap with smoke check/rollback, bytecode cache + `lua_precompile` tool; consumed by the world process (`--script-boot` / `--script-handlers`); see [script module docs](docs/zh/en/modules/script.md)
 
 ### Utils
 - **Logging**: multi-level logging, file/console output
@@ -263,7 +263,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 - **Configuration**: `ConfigRegistry` key-value registry (in-memory)
 
 ### Compatibility Layer
-- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/zh/33-BigWorld_Compatibility.md`)
+- **BigWorld Compatibility Layer**: BigWorld-style C++ API facade (see `docs/zh/en/33-BigWorld_Compatibility.md`)
 - **BigWorld API Tests**: `tests/test_bigworld_api.cpp` (CTest: `BigWorldApiTests`)
 
 ## Examples
@@ -433,13 +433,13 @@ apollo/
 └── build*/                 # Build output
 ```
 
-See [Directory Structure](docs/zh/Directory_Structure.md) for details.
+See [Directory Structure](docs/zh/en/Directory_Structure.md) for details.
 
 ## Client SDK
 
 ### Unity SDK
 
-Parts of the Unity SDK are delivered (module status: see [SDK_Structure](docs/zh/sdks/unity/SDK_Structure.md)):
+Parts of the Unity SDK are delivered (module status: see [SDK_Structure](docs/zh/en/sdks/unity/SDK_Structure.md)):
 
 - Network communication management (NetworkManager, available)
 - Login authentication (AuthManager, available)
@@ -484,9 +484,9 @@ This project is licensed under the [MIT License](LICENSE).
 
 Apollo is an original implementation of this repository, not a fork of any existing project; its architecture concepts and terminology reference the following open-source projects, with sources cited where referenced:
 
-- **BigWorld**: BigWorld-style C++ API facade (`docs/zh/33-BigWorld_Compatibility.md`); the architecture audit includes source-level comparison of BigWorld / KBEngine / skynet (`docs/zh/analysis/mmo-mechanism-deep-dive.md`)
+- **BigWorld**: BigWorld-style C++ API facade (`docs/zh/en/33-BigWorld_Compatibility.md`); the architecture audit includes source-level comparison of BigWorld / KBEngine / skynet (`docs/zh/en/analysis/mmo-mechanism-deep-dive.md`)
 - **KBEngine**: several entries in `docs/zh/qa/` analyze its source mechanisms
-- **skynet**: design precedents such as the observability channel (`docs/zh/analysis/architecture-review.md`)
+- **skynet**: design precedents such as the observability channel (`docs/zh/en/analysis/architecture-review.md`)
 
 Third-party dependencies: [vcpkg](https://github.com/microsoft/vcpkg) (dependency management), [nlohmann/json](https://github.com/nlohmann/json), [Lua](https://www.lua.org) 5.5 (script runtime, `modules/script`), [protobuf](https://github.com/protocolbuffers/protobuf) (currently a dependency + tests, not on the message path), [GTest](https://github.com/google/googletest), OpenSSL, libcurl, pugixml, readline, crashpad, [VitePress](https://vitepress.dev) (docs site), GitHub Actions and Codecov (CI and coverage). The transport layer is self-built (`modules/net/link`), no nng.
 

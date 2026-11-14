@@ -25,7 +25,7 @@ Apollo 是一个 C++20 游戏服务器运行时，面向以副本和对局为边
   <img src="docs/public/images/architecture-zh.svg" alt="Apollo 目标架构：Base 长期资料、cell 模拟与 World 管理分别负责" />
 </picture>
 
-目标设计图：Base ↔ database 独立原型已具备；World/cell 拆分与整体接线仍待完成。
+目标设计图：Base ↔ database 独立原型已具备；World/cell 分离（`world` 仅 manager、`cellServer` 独立入口）已落；跨进程整体接线仍待完成。
 
 baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运行实体与临时玩法。跨服保持原 Base 和数据库归属；同一个 World 可以通过逐玩家的 Base 关联接待多个区服，无需各服数据库凭证，也不要求同机部署 machined。
 
@@ -46,7 +46,7 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 
 | 类别 | 成员 | 边界 |
 |---|---|---|
-| 运行进程 | `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined` | 在线业务进程；`cell` 为 `world` 二进制的执行角色 |
+| 运行进程 | `gateway`、`login`、`base`、`world`、`database`、`interfaces`、`machined` | 在线业务进程；`cellServer` 为独立 cell 执行入口 |
 | CLI 工具 | `apolloc`（项目初始化 init）、`fleetctl`、`admin`、`logger` | 开发与运维工具，不参与在线业务 |
 | CI | GitHub Actions：构建/测试、契约、文档 | 仓库内执行，不参与在线业务 |
 
@@ -75,8 +75,8 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 | 概念 | 职责 | 现有代码与边界 |
 |---|---|---|
 | baseServer | 长期资料对象与基础业务 | baseServer 独立入口和远程存储已具备；目录归属及默认链路待迁移 |
-| worldServer | cell 注册、Space/Cell 拓扑与迁移 | 当前 WorldApp 管理/执行混合，需拆分 |
-| cell | 本地 Cell 模拟、实体、AOI、战斗 | 复用 WorldHost、Scene、Instance、Avatar，独立入口待实现 |
+| worldServer | cell 注册、Space/Cell 拓扑与迁移 | `world` 仅 manager；cell 执行在 `cellServer` |
+| cell | 本地 Cell 模拟、实体、AOI、战斗 | `cellServer` 独立入口复用 WorldHost、Scene、Instance、Avatar |
 | Space / Cell | 运行空间 / 空间分区 | Space 对应现有 Scene 语义，不新增同义容器 |
 | database | 加载、保存、存储路由与持久结果 | database 独立入口承载文件档案与 journal；完整写权/队列待补 |
 | Instance | 临时小队玩法 | 复用已有八态状态机 |
@@ -238,7 +238,7 @@ cmake -B build -G "Visual Studio 16 2019" ^
 ### Game 游戏逻辑
 - **AOI系统**: `SceneAoi` 九宫格（Scene 持有、scene_id 隔离）+ `ViewerState` 逐观察者水位；Enter/Sync/Leave 事件分发已交付，网关下发面留 P3-2
 - **战斗系统**: `BattleRuntime` 确定性战斗域——五段相位、seed 子流随机、hash 链指纹、经 `IRewardSink` 单向落账；挂接 `Instance`（P2-2 交付）。技能/Buff 玩法面随玩法批
-- **属性系统**: `AttributeContainer`/`AttributeManager` 属性容器与定义注册；逐 viewer delta 同步管线未接线（契约 `attr_batch` 已入 messages.xml）
+- **属性系统**: `AttributeContainer`/`AttributeManager` 属性容器与定义注册；逐 viewer delta 管线（`modules/game/attrsync`）原语已交付且 Scene 接线，网关下发未验收（契约 `attr_batch` 已入 messages.xml）
 - **场景管理**: 多场景支持 + 换幕（`scene_transfer`，prepare→detach→attach→resume + 失败回滚）
 
 ### Network 网络通信
