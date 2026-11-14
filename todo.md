@@ -627,4 +627,4 @@
 跨平台注（2026-11-13）：清单 #5/#6 的字节级回归用例（C2 三例 connectTcp/recv 面、M5 startRawResponder 族）为 POSIX-only，曾致 CI Windows 编译红（自 39459b95 起链条全红）——a063dbed 补 `#ifndef _WIN32` 定义侧 guard（注册区原已 guard），Linux 四树门禁复验不受影响（主树 127/127、其余三树该套件 17/17）。
 
 文档站双语自动切换（G2 再审计 2026-11-14 落账）：
-- [ ] [P2] 文档站双语自动切换(navigator.language → /zh/ 跳转)——待用户拍板范围
+- [ ] [P2] 浏览器语言自动识别切换（现状：手动——仅 vitepress 内置语言菜单（`docs/.vitepress/config.mts:66` `langMenuLabel`），无 `navigator.language` 探测；形态=locales `[en, root]`、root=zh-CN 在 `/`、英文在 `/en/`，`rewrites` 使 `/zh/` 返回 404，无 rootLocale 重定向）——自动跳转只能落在 `/` 或 `/en/`；若改为 root=en + `/zh/` 需重排 `docs/zh/**` 240 页目录，自动跳转范围待用户拍板
