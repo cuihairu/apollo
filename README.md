@@ -125,8 +125,8 @@ See [update boundaries](docs/zh/en/design/gateway-topology-survey.md) and [contr
 ### Requirements
 
 - C++20 or later
-- CMake 3.16+
-- GCC 9+ / Clang 10+ / MSVC 2019+
+- CMake 3.20+ (root project floor is 3.16; the `apps/*` subprojects declare 3.20)
+- GCC 11+ / Clang 16+ / MSVC 2019 16.6+ (the logging core uses C++20 `std::source_location`: libstdc++ 11+, libc++ 16+, MSVC STL 19.26+)
 
 > The current build and runtime have zero external storage dependencies (player profiles are local files + journal); MySQL/Redis runtime wiring is planned, so no pre-installation is needed.
 

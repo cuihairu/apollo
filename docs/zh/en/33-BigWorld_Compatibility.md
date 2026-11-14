@@ -15,12 +15,13 @@ Provide a familiar `BigWorld::*` C++ API surface for game/server logic while reu
 
 Headers:
 
-- `include/bigworld/BigWorld.h`: public `BigWorld::*` facade
-- `include/apollo/bw/*`: implementation types (`Runtime`, `Entity`, ids)
+- `include/bigworld/BigWorld.h` (root mirror, forwards to `include/apollo/bw/bigworld.h`): public `BigWorld::*` facade
+- `include/apollo/bw/*`: implementation types (`Runtime`, `Entity`, `BigWorld`, `types`)
 
-Implementation:
+Implementation (all under `modules/bigworld/src/`, `apollo::bw` namespace):
 
-- `src/apollo/bw/runtime.cpp`
+- `runtime.cpp` (contains the `BigWorld::*` static facade), `entity.cpp`, `callback.cpp`, `timer.cpp`
+- `runtime_wrapper.cpp` + `include/apollo/bigworld/*.hpp`: alias-exports `apollo::bw` as `apollo::bigworld`
 
 ### Global facade (`BigWorld::*`)
 

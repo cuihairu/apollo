@@ -102,7 +102,8 @@ export default defineConfig({
           '/modules/': [{ text: '模块', items: [
             { text: 'Base', link: '/modules/base' }, { text: 'Core', link: '/modules/core' },
             { text: 'Runtime', link: '/modules/runtime' }, { text: 'Data', link: '/modules/data' },
-            { text: 'Net', link: '/modules/net' }, { text: 'Game', link: '/modules/game' }, { text: 'BigWorld 参考', link: '/modules/bigworld' },
+            { text: 'Net', link: '/modules/net' }, { text: 'Game', link: '/modules/game' },
+            { text: 'Script', link: '/modules/script' }, { text: 'BigWorld 参考', link: '/modules/bigworld' },
           ] }],
           '/apps/': [{ text: '服务器应用', items: [{ text: '应用概览', link: '/apps/' }] }],
           '/api/': [{ text: 'API 参考', items: [
@@ -173,6 +174,7 @@ export default defineConfig({
           '/en/modules/': [{ text: 'Modules', items: [
             { text: 'Base', link: '/en/modules/base' }, { text: 'Core', link: '/en/modules/core' }, { text: 'Runtime', link: '/en/modules/runtime' },
             { text: 'Data', link: '/en/modules/data' }, { text: 'Net', link: '/en/modules/net' }, { text: 'Game', link: '/en/modules/game' },
+            { text: 'Script', link: '/en/modules/script' }, { text: 'BigWorld', link: '/en/modules/bigworld' },
           ] }],
           '/en/apps/': [{ text: 'Server Applications', items: [{ text: 'Overview', link: '/en/apps/' }] }],
           '/en/api/': [{ text: 'API Reference', items: [

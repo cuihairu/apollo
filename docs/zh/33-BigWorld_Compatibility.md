@@ -15,12 +15,13 @@
 
 头文件：
 
-- `include/bigworld/BigWorld.h`：公开的 `BigWorld::*` 门面
-- `include/apollo/bw/*`：实现类型（`Runtime`、`Entity`、id）
+- `include/bigworld/BigWorld.h`（根镜像，转发至 `include/apollo/bw/bigworld.h`）：公开的 `BigWorld::*` 门面
+- `include/apollo/bw/*`：实现类型（`Runtime`、`Entity`、`BigWorld`、`types`）
 
-实现：
+实现（均在 `modules/bigworld/src/`，`apollo::bw` 命名空间）：
 
-- `src/apollo/bw/runtime.cpp`
+- `runtime.cpp`（含 `BigWorld::*` 静态门面）、`entity.cpp`、`callback.cpp`、`timer.cpp`
+- `runtime_wrapper.cpp` + `include/apollo/bigworld/*.hpp`：把 `apollo::bw` 别名导出为 `apollo::bigworld`
 
 ### 全局门面（`BigWorld::*`）
 

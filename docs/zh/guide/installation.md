@@ -11,10 +11,10 @@ next: /guide/quick-start
 ## 环境要求
 
 - **操作系统**: Windows 10+, Linux (Ubuntu 20.04+), macOS 11+
-- **编译器**:
-  - Windows: MSVC 2019+ (Visual Studio 2019+)
-  - Linux: GCC 10+ 或 Clang 12+
-  - macOS: Xcode 13+ (Clang 13+)
+- **编译器**（日志内核使用 C++20 `std::source_location`，因此标准库需提供 `<source_location>`）:
+  - Windows: MSVC STL 19.26+ (Visual Studio 2019 16.6+)
+  - Linux: GCC 11+ 或 Clang 16+（libstdc++ 11+ / libc++ 16+）
+  - macOS: Apple Clang 16+ 且 libc++ 16+（Xcode 16+）
 - **CMake**: 3.20+
 - **vcpkg**: 2023.0+ (用于依赖管理)
 
@@ -37,7 +37,7 @@ cd C:/vcpkg
 
 ```bash
 # 仓库采用 vcpkg 清单模式（vcpkg.json），CMake configure 期自动安装全部依赖
-#（openssl / protobuf / gtest / curl / nlohmann-json / pugixml，Linux 另含 readline / crashpad），
+#（openssl / lua / protobuf / gtest / curl / nlohmann-json / pugixml，Linux 另含 readline / crashpad），
 # 无需手工逐个安装：
 cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=<vcpkg-root>/scripts/buildsystems/vcpkg.cmake
 ```
@@ -45,7 +45,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=<vcpkg-root>/scripts/buildsystems/vcp
 ### 3. 克隆 Apollo
 
 ```bash
-git clone https://github.com/your-org/apollo.git
+git clone https://github.com/cuihairu/apollo.git
 cd apollo
 ```
 

@@ -125,8 +125,8 @@ baseServer 管长期资料，worldServer 管执行端和空间拓扑，cell 运�
 ### 环境要求
 
 - C++20 或更高版本
-- CMake 3.16+
-- GCC 9+ / Clang 10+ / MSVC 2019+
+- CMake 3.20+（根工程下限为 3.16，`apps/*` 子工程声明 3.20）
+- GCC 11+ / Clang 16+ / MSVC 2019 16.6+（日志内核使用 C++20 `std::source_location`：libstdc++ 11+、libc++ 16+、MSVC STL 19.26+）
 
 > 现状构建与运行均零外部存储依赖（玩家档案为本地文件 + journal）；MySQL/Redis 运行时接线为规划态，无需预装。
 
