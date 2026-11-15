@@ -41,6 +41,9 @@ struct PlayerData {
     int maxMp = 50;
     // 写端自持写入代次（随档案持久化，database 验单调拒旧写）；0 = 无版本
     std::uint64_t writeGen = 0;
+    // 原区服（L118 home_zone 业务接线）：锚点 home_zone 随档案落盘——
+    // flush 自锚点回写、激活自档案播种，重启/换域后原区服不丢；0 = 未分配
+    std::uint32_t homeZoneId = 0;
 
     // —— 模拟位置/运行字段：见 PlayerRuntimeState（L92 拆分）——
     PlayerRuntimeState runtime;

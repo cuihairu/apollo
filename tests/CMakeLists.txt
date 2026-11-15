@@ -1002,6 +1002,52 @@ if(MSVC)
 endif()
 add_test(NAME PersistenceChainTests COMMAND persistence_chain_tests)
 
+# ========== Base Home Zone Wiring Tests (L118 原区服业务接线) ==========
+# 直接源编（player_directory_tests 同惯例，GTest 死区外——base_avatar_tests
+# 两处定义均挂 APOLLO_BUILD_GTESTS=OFF 门内全树不生成，覆盖搬活区）：
+# homeZoneId 随档案对称（flush 回写/激活播种/RPC 旧载荷防回卷）。
+if(TARGET apollo::game_session AND TARGET apollo_protocol AND
+   TARGET apollo_net_link AND TARGET apollo_net_linkrpc)
+add_executable(base_home_zone_tests
+    test_base_home_zone.cpp
+    ${APOLLO_PLAYER_STORE_SOURCES}
+    ../apps/common/src/database_service.cpp
+    ../apps/common/src/player_store_m1.cpp
+)
+target_include_directories(base_home_zone_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/common/include
+    ${CMAKE_SOURCE_DIR}/sdks/cpp/generated
+)
+target_compile_definitions(base_home_zone_tests PRIVATE
+    APOLLO_BASEAPP_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(base_home_zone_tests PRIVATE
+    apollo
+    apollo::base
+    apollo::core
+    apollo::game_session
+    apollo_protocol
+    apollo_net_link
+    apollo_net_linkrpc
+)
+if(TARGET nlohmann_json::nlohmann_json)
+    target_link_libraries(base_home_zone_tests PRIVATE nlohmann_json::nlohmann_json)
+else()
+    find_package(nlohmann_json CONFIG QUIET)
+    if(nlohmann_json_FOUND)
+        target_link_libraries(base_home_zone_tests PRIVATE nlohmann_json::nlohmann_json)
+    endif()
+endif()
+if(WIN32)
+    target_link_libraries(base_home_zone_tests PRIVATE ws2_32)
+    target_compile_definitions(base_home_zone_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(base_home_zone_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BaseHomeZoneTests COMMAND base_home_zone_tests)
+endif()
+
 # ========== Recovery Tests (P1-5) ==========
 # 三档清单 + restore→admission→ready + journal 消费侧（崩溃回放）。
 add_executable(recovery_tests

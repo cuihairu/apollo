@@ -38,6 +38,7 @@ std::string PlayerData::toJson() const {
     j["y"] = runtime.y;
     j["z"] = runtime.z;
     j["writeGen"] = writeGen;
+    j["homeZoneId"] = homeZoneId;
     return j.dump();
 }
 
@@ -56,6 +57,7 @@ PlayerData PlayerData::fromJson(const std::string& json) {
     data.runtime.y = j.value("y", data.runtime.y);
     data.runtime.z = j.value("z", data.runtime.z);
     data.writeGen = j.value("writeGen", std::uint64_t(0));
+    data.homeZoneId = j.value("homeZoneId", std::uint32_t(0));
     return data;
 }
 

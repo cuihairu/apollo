@@ -115,6 +115,7 @@ bool test_json_symmetry() {
     in.runtime.x = 0.5f;
     in.runtime.y = 100.0f;
     in.runtime.z = -7.75f;
+    in.homeZoneId = 7;  // L118 原区服随档案对称
 
     const auto out = player_store::PlayerData::fromJson(in.toJson());
     TEST_ASSERT(out.playerId == 7, "playerId 对称");
@@ -126,6 +127,10 @@ bool test_json_symmetry() {
     TEST_ASSERT(out.runtime.x == 0.5f && out.runtime.y == 100.0f &&
                     out.runtime.z == -7.75f,
                 "x/y/z 对称");
+    TEST_ASSERT(out.homeZoneId == 7, "homeZoneId 对称");
+    // 旧档缺键 → 缺省 0（未分配口径），不炸不幻值
+    const auto legacy = player_store::PlayerData::fromJson(R"({"playerId":8})");
+    TEST_ASSERT(legacy.homeZoneId == 0, "homeZoneId 缺键缺省 0");
     return true;
 }
 

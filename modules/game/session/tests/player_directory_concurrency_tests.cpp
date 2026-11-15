@@ -25,6 +25,7 @@ apollo::game::base::SessionBinding makeBinding(std::uint64_t session_id) {
     b.gateway_id = 7;
     b.gateway_addr = "gateway://127.0.0.1:8888";
     b.bind_time_ms = static_cast<std::int64_t>(session_id);
+    b.session_version = session_id;  // L116 绑定代次域（异值可辨）
     return b;
 }
 
@@ -35,6 +36,10 @@ apollo::game::base::WorldAssignment makeAssignment(std::uint64_t world_id) {
     a.instance_id = 1;
     a.space_id = 1000;
     a.route_version = 1;
+    // L116/L117 新域：cell/模拟代次/拓扑版本异值进并发写面
+    a.cell_id = world_id * 10;
+    a.simulation_epoch = world_id * 100;
+    a.topology_version = world_id * 1000;
     return a;
 }
 
@@ -138,6 +143,74 @@ bool test_semantics_preserved() {
     return true;
 }
 
+// L118 并发面新域用例：两个写线程竞写同一玩家集合（session_up 顶号新条目
+// → moved 以锚点 epoch 推进域值），域值取 epoch 的既定倍数——收敛后逐条
+// 核验锚点与四域值出自同一写轮次（route/cell/sim_epoch/topology 配对）。
+// 迟到 moved 被水位判失效属合法交错（对方顶号已推进条目），不算失败；
+// 终态不变量：条目 epoch 只能配到最后一次成功落表的域值组合，撕裂/错轮
+// 配对即红。session_version 随绑定稳定携带。
+bool test_domain_fields_no_tear() {
+    PlayerDirectory dir;
+    constexpr std::uint64_t kPlayers = 24;
+    constexpr std::uint64_t kRounds = 2000;
+    constexpr std::uint64_t kZone = 5;
+
+    std::atomic<bool> ok{true};
+    auto paired = [](std::uint64_t epoch) {
+        apollo::game::base::WorldAssignment a;
+        a.world_id = 1;
+        a.route_version = epoch;
+        a.cell_id = epoch * 10;
+        a.simulation_epoch = epoch * 100;
+        a.topology_version = epoch * 1000;
+        return a;
+    };
+
+    auto writer = [&]() {
+        for (std::uint64_t r = 0; r < kRounds && ok.load(); ++r) {
+            for (std::uint64_t p = 1; p <= kPlayers; ++p) {
+                const auto id = p;
+                apollo::game::base::WorldAssignment fresh;  // up 时域未声明（0），moved 配对补齐
+                fresh.world_id = 1;
+                const auto epoch = dir.session_up(id, makeBinding(id), fresh, kZone);
+                if (epoch == 0) {
+                    ok = false;
+                    return;
+                }
+                (void)dir.moved(id, paired(epoch), epoch, kZone);  // 迟到失效合法
+            }
+        }
+    };
+
+    std::thread w1([&]() { writer(); });
+    std::thread w2([&]() { writer(); });
+    w1.join();
+    w2.join();
+    if (!ok.load()) {
+        return false;
+    }
+    for (std::uint64_t p = 1; p <= kPlayers; ++p) {
+        const auto* entry = dir.find(p);
+        if (entry == nullptr || entry->state != PlayerDirectory::EntryState::Online) {
+            return false;
+        }
+        const auto epoch = entry->anchor_epoch;
+        const auto& a = entry->assignment;
+        if (entry->binding.session_version != p) {
+            return false;
+        }
+        if (a.route_version != epoch || a.cell_id != epoch * 10 ||
+            a.simulation_epoch != epoch * 100 ||
+            a.topology_version != epoch * 1000) {
+            return false;
+        }
+        if (entry->zone_id != kZone) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -148,6 +221,7 @@ int main() {
     const Named tests[] = {
         {"concurrent_read_write", test_concurrent_read_write},
         {"semantics_preserved", test_semantics_preserved},
+        {"domain_fields_no_tear", test_domain_fields_no_tear},
     };
 
     for (const auto& t : tests) {

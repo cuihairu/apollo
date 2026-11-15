@@ -170,10 +170,12 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
             task.playerId = saveReq.playerId;
             task.data = PlayerData::fromJson(saveReq.jsonData);
             // exp 以锚点长期态为准（真实奖励持久化口径）：外部载荷的 exp
-            // 可能是旧快照回放——锚点即真源，覆盖写入防旧值回卷
+            // 可能是旧快照回放——锚点即真源，覆盖写入防旧值回卷。原区服
+            // 同口径（L118）：载荷 homeZoneId 可能是旧域回放，锚点现值覆盖
             if (avatar) {
                 task.data.exp = avatar->progress(
                     apollo::game::base::AvatarRewardSink::kExpKey);
+                task.data.homeZoneId = avatar->home_zone_id();
             }
             if (database_->ownsJournal()) {
                 if (task.data.playerId != saveReq.playerId) {

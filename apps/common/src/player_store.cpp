@@ -184,6 +184,11 @@ void PlayerStore::start() {
                     avatar->add_progress(
                         apollo::game::base::AvatarRewardSink::kExpKey,
                         profile.exp);
+                    // 原区服读档播种（L118）：恢复锚点同 exp 口径自档案恢复
+                    //（档案 = flush 回写真源；迁移接权路径由 adoptPlayer 显式落）
+                    if (profile.homeZoneId != 0) {
+                        avatar->set_home_zone_id(profile.homeZoneId);
+                    }
                     avatar->clear_dirty();
                 }
             }
@@ -344,6 +349,9 @@ std::size_t PlayerStore::flushDirtyAvatars(const char* reason) {
         // 启动恢复/adoptPlayer）。
         task.data.exp = avatar->progress(
             apollo::game::base::AvatarRewardSink::kExpKey);
+        // 原区服回写（L118）：锚点 home_zone 即真源，随档案落盘——重启/
+        // 换域后读档播种不丢（正常登录路径未分配仍 0，照写不回卷）
+        task.data.homeZoneId = avatar->home_zone_id();
         if (database_->ownsJournal()) {
             // 写端自持代次（L64 Base 半；database 半验单调）——基线即现档，
             // 作缺账播种真源，不另发读

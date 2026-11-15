@@ -53,6 +53,11 @@ std::shared_ptr<apollo::game::base::Avatar> PlayerStore::activatePlayer(PlayerID
     if (fresh) {
         avatar->add_progress(apollo::game::base::AvatarRewardSink::kExpKey,
                              data.exp);
+        // 原区服读档播种（L118）：档案即原区服真源（flush 回写面），新锚点
+        // 恢复分配；0 = 未分配保持（迁移接权路径由 adoptPlayer 显式落）
+        if (data.homeZoneId != 0) {
+            avatar->set_home_zone_id(data.homeZoneId);
+        }
     }
 
     avatar->clear_dirty();
