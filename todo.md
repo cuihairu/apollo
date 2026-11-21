@@ -627,4 +627,5 @@
 跨平台注（2026-11-13）：清单 #5/#6 的字节级回归用例（C2 三例 connectTcp/recv 面、M5 startRawResponder 族）为 POSIX-only，曾致 CI Windows 编译红（自 39459b95 起链条全红）——a063dbed 补 `#ifndef _WIN32` 定义侧 guard（注册区原已 guard），Linux 四树门禁复验不受影响（主树 127/127、其余三树该套件 17/17）。
 
 文档站双语自动切换（G2 再审计 2026-11-14 落账）：
-- [ ] [P2] 浏览器语言自动识别切换（现状：手动——仅 vitepress 内置语言菜单（`docs/.vitepress/config.mts:66` `langMenuLabel`），无 `navigator.language` 探测；形态=locales `[en, root]`、root=zh-CN 在 `/`、英文在 `/en/`，`rewrites` 使 `/zh/` 返回 404，无 rootLocale 重定向）——自动跳转只能落在 `/` 或 `/en/`；若改为 root=en + `/zh/` 需重排 `docs/zh/**` 240 页目录，自动跳转范围待用户拍板
+- [x] [P2] 浏览器语言自动识别切换（2026-11-22 用户拍板：保持 root=zh + 自动跳转）已落地：`docs/.vitepress/lang-redirect.js` 预渲染 head 内联脚本（`config.mts` 以 `window.__APOLLO_BASE__` 注入部署根——dev `/`、prod `/apollo/`，esbuild minify 后内联），首访（localStorage `apollo-docs-lang` 无值）按 `navigator.languages` 首个 zh*/en* 命中在 zh 根（`/`）与 `/en/` 间整路径保留重定向（深链跳对应语言同页、query/hash 保留）；浏览器语言非 zh/en 不跳（不强行选边）；`theme/index.ts` `watch(lang)` 记录显式应用内切语（写同一 key），此后不再自动跳——不反弹手动选择。形态维持 locales `[en, root]`/root=zh-CN 在 `/`、英文在 `/en/`，不产生 `/zh/` 目标（`rewrites` 兼容前缀非站路由）。回归：`scripts/ci/docs_lang_redirect_check.js`（pick/resolve 单元 7 + 内联 `run()` 集成 7 + config 装配 1，共 15 例；`--dist` 逐页核验内联脚本与 prod base）——本地 15/15 绿 + dist 496 页 0 缺 + docs build 357s exit 0 + `docs_i18n_check.py` 通过。
+  - 证据：commit `1dfd06b9`；测试 15/15 + dist 496/496 + docs build exit 0 + i18n check 通过
