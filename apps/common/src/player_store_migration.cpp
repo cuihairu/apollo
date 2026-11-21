@@ -68,7 +68,11 @@ bool PlayerStore::freezePlayer(PlayerID playerId) {
                 // 现档，作缺账播种真源
                 data.writeGen = nextWriteGen(playerId, &data.writeGen);
                 const auto seq = appendJournal(data);
-                if (database_->savePlayer(data) && seq != 0) {
+                const bool saved = database_->savePlayer(data);
+                if (!saved) {
+                    refundWriteGen(playerId, data.writeGen);  // 拒收不烧代次（L120）
+                }
+                if (saved && seq != 0) {
                     auto& landed = landedSeqs_[playerId];
                     if (seq > landed) {
                         landed = seq;
@@ -157,6 +161,7 @@ bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
         //——database 地板随接权推进，接管后旧进程迟到写必被拒
         data.writeGen = nextWriteGen(playerId, &data.writeGen);
         if (!database_->savePlayer(data)) {
+            refundWriteGen(playerId, data.writeGen);  // 拒收不烧代次（L120）
             avatar->set_state(apollo::game::base::AvatarState::Offline);
             return false;
         }

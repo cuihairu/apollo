@@ -185,7 +185,12 @@ std::vector<uint8_t> PlayerStore::handleDbSaveRequest(const std::vector<uint8_t>
                     task.data.writeGen = nextWriteGen(saveReq.playerId, nullptr);
                     response.success = database_->savePlayer(task.data);
                     if (avatar && response.success) avatar->clear_dirty();
-                    if (!response.success) response.errorMessage = "database write not confirmed";
+                    if (!response.success) {
+                        // 拒收不烧代次（L120）：重试复用同代——迟到写不得经
+                        // 重试追平/越过地板「迟必收」
+                        refundWriteGen(saveReq.playerId, task.data.writeGen);
+                        response.errorMessage = "database write not confirmed";
+                    }
                 }
                 return protocol::MessageCodec::encode(response, header.sessionId);
             }

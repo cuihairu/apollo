@@ -1,13 +1,17 @@
 #include "database/client.hpp"
 #include "database/server.hpp"
+#include "player_store/business_wire.hpp"
 #include "player_store/database_service.hpp"
+#include "player_store/migration_wire.hpp"
 #include "player_store/player_store.hpp"
+#include "player_store/store_dial.hpp"
 #include "apollo/game/base/avatar_reward_sink.hpp"
 #include "apollo/protocol/codec.hpp"
 
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -508,6 +512,217 @@ void base_write_generation_self_managed() {
     server.stop();
 }
 
+// L120 资料写权代次 Base 半跨进程裁决（真链路面）：两活 Base 进程（A/B =
+// 真 PlayerStore + M1 受理面真 listen）共享同一 database::Server（同一写权
+// 地板）；交割走真 wire——933 冻结、937 交权均 StoreDial 直拨（937 带源地址
+// → 目标 MigrationPuller 真拨源 935/936）。断言面：
+//   ① A 落库 gen 1（958 结算入账真受理面 + autoSave 同步落库）；
+//   ② 交权接账：B adopt 首落 gen 2（自快照代次续进，不回卷 1）；
+//   ③ B 续写 gen 3、4——地板随接权单调推进；
+//   ④ 迟到写：停写闸（①）先于地板闸生效，显式归 Online 模拟「停写未生效
+//      /回滚」（933 丢失/超时形态）——A 账自 gen 1 续 → 下次 gen 2 < 地板 4
+//      → database 半拒，档案不动、锚点留脏（迟到写永不落盘）；
+//   ⑤ 重复接管：同 new_epoch 937 再拨目标 → adoptedEpochs_ 高水位拒。
+void write_generation_cross_process_adjudication() {
+    Fixture f;
+    database::Server server(f.config);
+    CHECK(server.start());
+    const auto realPort = server.port();
+
+    // 建号（无版本写端，地板 0）
+    auto seedCfg = f.client(realPort);
+    seedCfg.self_name = "xproc-seed";
+    auto seed = database::makeClient(seedCfg);
+    CHECK(seed->initialize());
+    player_store::PlayerData profile{};
+    profile.playerId = 61;
+    profile.username = "gen-cross-process";
+    profile.exp = 100;
+    CHECK(seed->savePlayer(profile));
+
+    // 权威档案读面（独立 self_name 防主链顶替）
+    auto readerCfg = f.client(realPort);
+    readerCfg.self_name = "xproc-reader";
+    auto reader = database::makeClient(readerCfg);
+    CHECK(reader->initialize());
+    std::uint64_t gen = 0;
+    std::int64_t exp = 0;
+    const auto archive = [&]() {
+        player_store::PlayerData landed{};
+        CHECK(reader->loadPlayer(61, landed));
+        gen = landed.writeGen;
+        exp = landed.exp;
+    };
+
+    // 轮询谓词（10ms 拍；autoSave 异步落库）
+    const auto pump_until = [](std::function<bool()> done, int timeout_ms,
+                               const char* tag) {
+        const auto deadline = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds(timeout_ms);
+        while (!done()) {
+            if (std::chrono::steady_clock::now() > deadline) {
+                throw std::runtime_error(std::string("pump_until exceeded: ") + tag);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    };
+
+    // 两活 Base：M1 受理面 + 同一 database（共享地板）——storage 客户端
+    // self_name 各异（对端 peer 表同名互顶）。
+    player_store::PlayerStoreConfig aCfg;
+    aCfg.host = "127.0.0.1";
+    aCfg.m1Enabled = true;
+    aCfg.m1Port = 0;                // 内核分配，m1_listen_port() 回读
+    aCfg.m1SelfName = "base";
+    aCfg.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    aCfg.dataDir = (f.path / "a" / "players").string();
+    aCfg.journalPath = (f.path / "a" / "journal" / "persist.log").string();
+    aCfg.autoSaveIntervalMs = 25;
+    player_store::PlayerStoreConfig bCfg = aCfg;
+    bCfg.dataDir = (f.path / "b" / "players").string();
+    bCfg.journalPath = (f.path / "b" / "journal" / "persist.log").string();
+    fs::create_directories(f.path / "a" / "journal");
+    fs::create_directories(f.path / "b" / "journal");
+    auto aStorage = f.client(realPort);
+    aStorage.self_name = "xproc-store-a";
+    auto bStorage = f.client(realPort);
+    bStorage.self_name = "xproc-store-b";
+    player_store::PlayerStore a(aCfg, database::makeClient(aStorage));
+    a.start();
+    player_store::PlayerStore b(bCfg, database::makeClient(bStorage));
+    b.start();
+    CHECK(a.m1_listen_port() != 0 && b.m1_listen_port() != 0);
+
+    // 958 结算入账（真链路受理面：StoreDial → M1 → dispatchRequest）
+    std::uint64_t creditSeq = 0;
+    const auto credit = [&](player_store::PlayerStore& store, std::int64_t score) {
+        player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "login", "world",
+                                     "127.0.0.1", store.m1_listen_port());
+        CHECK(dial.ready() && dial.waitUp());
+        player_store::business::ScoreCreditRequest req;
+        req.request_id = ++creditSeq;
+        req.player_id = 61;
+        req.score = score;
+        req.source_zone_id = 3;
+        const auto reply = dial.call(player_store::business::encodeFrame(req));
+        CHECK(reply);
+        player_store::business::ScoreCreditReply out;
+        protocol::SessionID sid = 0;
+        CHECK(player_store::business::decodeFrame(*reply, out, sid));
+        CHECK(out.accepted);
+    };
+
+    // ① A 激活（首载播种 writeGens_ = 0）→ 958 入账 +50 → autoSave 落 gen 1
+    auto avatarA = a.activatePlayer(61);
+    CHECK(avatarA);
+    CHECK(avatarA->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 100);
+    credit(a, 50);
+    pump_until([&] {
+        archive();
+        return gen == 1 && exp == 150;
+    }, 5000, "A first write lands gen 1");
+    archive();
+    CHECK(gen == 1 && exp == 150);
+
+    // ①' 停写（933 真拨源）：锚点 Transferring（此前写已排平——冻结段不再
+    // 新增代次）
+    {
+        player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "login", "world",
+                                     "127.0.0.1", a.m1_listen_port());
+        CHECK(dial.ready() && dial.waitUp());
+        player_store::migration::FreezeRequest req;
+        req.player_id = 61;
+        req.request_id = 900;
+        const auto reply = dial.call(player_store::migration::encodeFrame(req));
+        CHECK(reply);
+        player_store::migration::FreezeReply out;
+        protocol::SessionID sid = 0;
+        CHECK(player_store::migration::decodeFrame(*reply, out, sid));
+        CHECK(out.accepted);
+    }
+    CHECK(avatarA->state() == apollo::game::base::AvatarState::Transferring);
+
+    // ② 交权（937 真拨目标，带源地址 → MigrationPuller 真拨源 935/936）：
+    // B 接权账自快照代次（1）续进——首落 gen 2（回卷 1 则此处即显形）
+    {
+        player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "login", "world",
+                                     "127.0.0.1", b.m1_listen_port());
+        CHECK(dial.ready() && dial.waitUp());
+        player_store::migration::HandoffRequest req;
+        req.player_id = 61;
+        req.request_id = 901;
+        req.new_epoch = 2;
+        req.session_id = 6100;
+        req.gateway_id = 7;
+        req.source_host = "127.0.0.1";
+        req.source_port = a.m1_listen_port();
+        const auto reply = dial.call(player_store::migration::encodeFrame(req));
+        CHECK(reply);
+        player_store::migration::HandoffReply out;
+        protocol::SessionID sid = 0;
+        CHECK(player_store::migration::decodeFrame(*reply, out, sid));
+        CHECK(out.accepted);
+    }
+    const auto avatarB = b.findAvatar(61);
+    CHECK(avatarB);
+    CHECK(avatarB->state() == apollo::game::base::AvatarState::Online);
+    archive();
+    CHECK(gen == 2 && exp == 150);  // 接权首落 gen 2——续代不回卷
+
+    // ③ B 续写：+100 → gen 3；+200 → gen 4（地板随接权推进）
+    credit(b, 100);
+    pump_until([&] {
+        archive();
+        return gen == 3 && exp == 250;
+    }, 5000, "B continuation write gen 3");
+    credit(b, 200);
+    pump_until([&] {
+        archive();
+        return gen == 4 && exp == 450;
+    }, 5000, "B continuation write gen 4");
+
+    // ④ 迟到写（旧进程无有效账）：停写闸先于地板闸生效——显式归 Online
+    // 模拟「停写未生效/回滚」（933 丢失或超时形态）。A 账停在 gen 1 → 下次
+    // 落库 gen 2 < 地板 4 → database 半拒：档案不动、锚点留脏。
+    avatarA->set_state(apollo::game::base::AvatarState::Online);
+    credit(a, 9999);
+    pump_until([&] { return avatarA->needs_save(); }, 5000,
+               "late write marked dirty");
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));  // 足数个
+    // autoSave 拍——错误受理必已显形（迟到写若被错收，200ms 内已落档）
+    archive();
+    CHECK(gen == 4 && exp == 450);      // 档案不动（迟到写被地板拒）
+    CHECK(avatarA->needs_save());       // 落库被拒——脏位不清（永不落盘面）
+
+    // ⑤ 重复接管（迟到的旧 937 重放）：new_epoch ≤ adoptedEpochs_ 高水位 → 拒
+    {
+        player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "login", "world",
+                                     "127.0.0.1", b.m1_listen_port());
+        CHECK(dial.ready() && dial.waitUp());
+        player_store::migration::HandoffRequest req;
+        req.player_id = 61;
+        req.request_id = 902;
+        req.new_epoch = 2;  // 同代重放（≤ 已接代 2）
+        req.source_host = "127.0.0.1";
+        req.source_port = a.m1_listen_port();
+        const auto reply = dial.call(player_store::migration::encodeFrame(req));
+        CHECK(reply);
+        player_store::migration::HandoffReply out;
+        protocol::SessionID sid = 0;
+        CHECK(player_store::migration::decodeFrame(*reply, out, sid));
+        CHECK(!out.accepted);
+        CHECK(out.error_message.find("duplicate takeover") != std::string::npos);
+    }
+    archive();
+    CHECK(gen == 4 && exp == 450);  // 不重拉旧档、不二次 adopt
+
+    a.stop();
+    b.stop();
+    reader->shutdown();
+    seed->shutdown();
+    server.stop();
+}
+
 int main(int argc, char** argv) {
     try {
         if (argc == 5 && std::string(argv[1]) == "--probe") {
@@ -535,7 +750,8 @@ int main(int argc, char** argv) {
         pending_journal_recovery();
         write_generation_ordering();
         base_write_generation_self_managed();
-        std::cout << "Base/database TCP, persistence, isolation, failures, crash restart and replay passed\n";
+        write_generation_cross_process_adjudication();
+        std::cout << "Base/database TCP, persistence, isolation, failures, crash restart, replay and cross-process write-gen passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAILED: " << error.what() << '\n';

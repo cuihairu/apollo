@@ -127,6 +127,13 @@ private:
     // 至多补一次 loadPlayer。返回值即本次落库载荷的 writeGen。
     std::uint64_t nextWriteGen(PlayerID playerId, const std::uint64_t* seed_hint);
 
+    // 失败落库退代次（L120 跨进程裁决实测修）：savePlayer 被拒（database
+    // 半地板拒/瞬时不可达）不烧代次——账回退到本次载荷值，重试复用同代
+    // （database 半同代幂等受理，真落盘过的重放不双计）。否则自动保存每拍
+    // 重试自增账，数拍后追平甚至越过地板：旧进程迟到写从「必拒」变「迟必
+    // 收」，破「接管后旧进程标记值必 ≤ 地板」不变量（L64）。
+    void refundWriteGen(PlayerID playerId, std::uint64_t used);
+
     // 落点裁决与路由解析（PLAYER_ASSIGN_WORLD / PLAYER_RESOLVE_ROUTE）已拆出，
     // 归 baseappmgr 域（目录 + 调度面，BW OnlineDirectory 直系；现由 login 进程承载）。
 

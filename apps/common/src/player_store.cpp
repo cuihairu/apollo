@@ -72,6 +72,15 @@ std::uint64_t PlayerStore::nextWriteGen(PlayerID playerId,
     return ++writeGens_.emplace(playerId, seed).first->second;
 }
 
+void PlayerStore::refundWriteGen(PlayerID playerId, std::uint64_t used) {
+    // storeMutex_ 持有内调用（同 nextWriteGen）：只回退本次消耗的代——账已
+    // 被更晚的成功推进时不动（并发面由串行点收口，守卫为纵深）
+    auto it = writeGens_.find(playerId);
+    if (it != writeGens_.end() && it->second == used) {
+        --it->second;
+    }
+}
+
 std::uint64_t PlayerStore::appendJournal(const PlayerData& data) {
     if (!journal_) return 0; // Remote database owns its journal and write ordering.
     // write-ahead：先落 journal（恢复位点），再经 SaveQueue 异步落档；
@@ -359,6 +368,10 @@ std::size_t PlayerStore::flushDirtyAvatars(const char* reason) {
             if (database_->savePlayer(task.data)) {
                 avatar->clear_dirty();
                 ++flushed;
+            } else {
+                // 拒收不烧代次（L120）：重试复用同代，地板拒永续——迟到写
+                // 不得经重试追平/越过地板「迟必收」（脏位留给下轮再试）
+                refundWriteGen(task.playerId, task.data.writeGen);
             }
             continue;
         }
