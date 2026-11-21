@@ -1,6 +1,15 @@
 import { defineConfig } from 'vitepress'
+import { readFileSync } from 'node:fs'
 
 const isProd = process.env.NODE_ENV === 'production'
+
+// Locale auto-switch (docs/审计-文档一致性.md §面二): keep root=zh, add a
+// pre-hydration redirect that follows the browser language between the zh root
+// and /en/. The deploy base is baked in so the same script serves dev and prod.
+const langRedirectBase = isProd ? '/apollo/' : '/'
+const langRedirectSrc =
+  `window.__APOLLO_BASE__='${langRedirectBase}';` +
+  readFileSync(new URL('./lang-redirect.js', import.meta.url), 'utf-8')
 
 const architectureSidebar = [
   {
@@ -47,6 +56,7 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/apollo.png' }],
+    ['script', {}, langRedirectSrc],
   ],
 
   locales: {

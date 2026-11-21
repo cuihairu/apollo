@@ -61,6 +61,9 @@ jobs:
       - name: Check generated locale metadata
         run: python3 scripts/ci/docs_i18n_check.py --dist docs/.vitepress/dist
 
+      - name: Check locale auto-switch embeds in built pages
+        run: node scripts/ci/docs_lang_redirect_check.js --dist docs/.vitepress/dist
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5.0.0
         with:

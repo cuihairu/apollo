@@ -1,5 +1,5 @@
 import DefaultTheme from 'vitepress/theme'
-import { inBrowser, useRoute } from 'vitepress'
+import { inBrowser, useRoute, useData } from 'vitepress'
 import { nextTick, watch } from 'vue'
 import type { Theme } from 'vitepress'
 import './custom.css'
@@ -16,6 +16,18 @@ const theme: Theme = {
     if (!inBrowser) {
       return
     }
+
+    const { lang } = useData()
+    // Remember an explicit in-app locale switch so the pre-hydration
+    // auto-switch (config.mts head script) never bounces the visitor again.
+    watch(lang, (value) => {
+      try {
+        localStorage.setItem('apollo-docs-lang', value.startsWith('en') ? 'en' : 'zh')
+      }
+      catch {
+        /* storage unavailable: the next visit re-runs the auto-switch */
+      }
+    })
 
     const renderMermaid = async () => {
       const { default: mermaid } = await import('mermaid')
