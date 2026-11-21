@@ -313,15 +313,16 @@ bool login_chain_creates_cell_entity() {
     const auto session_id = header_of(reply).sessionId;
     TEST_ASSERT(session_id != 0, "gateway session created");
 
-    // 布局代次 stamp 前置（L120 拓扑生产者接线）：login 的初始落点
-    // （preparePlayerOnline 在 LOGIN_REQUEST 处理时写目录）从目录登记表取
-    // 布局代次——须在 login 请求前注入 (world=1, space=1) 的 968 投影
-    // （拓扑 71 / 归属版本 1），否则登录时登记表仍空 = 未声明 0。
+    // 布局/路由代次 stamp 前置（L120 拓扑+路由生产者接线）：login 的初始
+    // 落点（preparePlayerOnline 在 LOGIN_REQUEST 处理时写目录）从目录登记表
+    // 取布局代次与位置路由水位——须在 login 请求前注入 (world=1, space=1)
+    // 的 968 投影（拓扑 71 / 归属版本 5），否则登录时登记表仍空 = 未声明 0。
+    // 归属版本用 5（≠ 旧硬编码 1）：route_version 断言靠它分辨真生产者。
     login::SpacePositionProjection proj;
     proj.world_id = 1;
     proj.space_id = 1;
     proj.cell_id = 21;
-    proj.assignment_version = 1;
+    proj.assignment_version = 5;
     proj.topology_version = 71;
     proj.management_epoch = 3;
     proj.ready = true;
@@ -364,6 +365,9 @@ bool login_chain_creates_cell_entity() {
     TEST_ASSERT(assigned.has_value(), "assignment recorded");
     TEST_ASSERT(assigned->topology_version == 71,
                 "admission stamps layout epoch from projection registry");
+    // 路由版本不再是假值 1：= 投影归属版本水位（L120 路由生产者接线）。
+    TEST_ASSERT(assigned->route_version == 5,
+                "admission stamps position route watermark from projection registry");
 
     // ⑧ 客户端发 CELL_CREATE_ENTITY → gateway → world → cell 创建实体。
     client.sendAll(frame_bytes(2, 0,

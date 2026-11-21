@@ -67,6 +67,18 @@ bool LoginServer::preparePlayerOnline(
                 config_.initialWorldId, config_.initialSpaceId);
             return proj != nullptr ? proj->topology_version : 0;
         };
+        // 位置路由水位 stamp（L120 路由版本生产者接线）：route_version = 968
+        // 投影的 assignment_version（归属版本水位，与 962 同源，World 分配者
+        // 产出）——旧投影拒已由 968 水位裁决承担，本域只携带水位（网关路由
+        // 缓存按此判陈旧）。无投影 = 0 未声明（不幻值；不沿用旧硬编码 1）。
+        const auto route_version_from_projection = [this]() -> std::uint64_t {
+            if (positionProjectionRegistry_ == nullptr) {
+                return 0;
+            }
+            const auto* proj = positionProjectionRegistry_->find_projection(
+                config_.initialWorldId, config_.initialSpaceId);
+            return proj != nullptr ? proj->assignment_version : 0;
+        };
         protocol::PlayerActivateRequest activateReq;
         activateReq.playerId = playerId;
         const auto activateResp =
@@ -113,7 +125,7 @@ bool LoginServer::preparePlayerOnline(
             assignment.map_id = config_.initialMapId;
             assignment.instance_id = config_.initialInstanceId;
             assignment.space_id = config_.initialSpaceId;
-            assignment.route_version = 1;
+            assignment.route_version = route_version_from_projection();
             assignment.topology_version = topology_from_projection();
             if (!directory_->bindSession(playerId, binding) || !directory_->assignWorld(playerId, assignment)) {
                 errorMessage = "Login directory rejected admission";
@@ -128,7 +140,7 @@ bool LoginServer::preparePlayerOnline(
         assignReq.mapId = config_.initialMapId;
         assignReq.instanceId = config_.initialInstanceId;
         assignReq.spaceId = config_.initialSpaceId;
-        assignReq.routeVersion = 1;
+        assignReq.routeVersion = route_version_from_projection();
         assignReq.topologyVersion = topology_from_projection();
 
         const auto assignResp =
