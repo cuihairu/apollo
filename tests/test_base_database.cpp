@@ -723,6 +723,65 @@ void write_generation_cross_process_adjudication() {
     server.stop();
 }
 
+void stale_session_bind_rejected() {
+    // 旧会话迟到输入拒（L120，D07 §3.2）：同 session 线内低代次重绑拒。真
+    // PlayerStore 直呼 bindSession（913 受理面经 dispatchRequest 同入此件）：
+    //   ① 首绑 gen1 受理 ② 同线重绑 gen2 受理（重连重绑 +1）③ 迟到 gen1 拒
+    //     （绑定不回卷）④ 跨 session 新线 gen1 受理（网关重启归 1 形态——
+    //     新登录不误杀）⑤ 旧端未声明 0 照收（wire 缺字段解码缺省口径）。
+    Fixture f;
+    database::Server server(f.config);
+    CHECK(server.start());
+    auto seed = f.client(server.port());
+    seed.self_name = "session-gate-seed";
+    auto seedClient = database::makeClient(seed);
+    CHECK(seedClient->initialize());
+    player_store::PlayerData profile{};
+    profile.playerId = 61;
+    profile.username = "session-gate";
+    profile.exp = 100;
+    CHECK(seedClient->savePlayer(profile));
+
+    player_store::PlayerStoreConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.m1Enabled = false;
+    cfg.dataDir = (f.path / "s" / "players").string();
+    cfg.journalPath = (f.path / "s" / "journal" / "persist.log").string();
+    cfg.autoSaveIntervalMs = 25;
+    fs::create_directories(f.path / "s" / "journal");
+    auto storage = f.client(server.port());
+    storage.self_name = "session-gate-store";
+    player_store::PlayerStore base(cfg, database::makeClient(storage));
+    base.start();
+
+    CHECK(base.activatePlayer(61));
+    apollo::game::base::SessionBinding b;
+    b.session_id = 100;
+    b.gateway_id = 1;
+    b.gateway_addr = "tcp://127.0.0.1:9002";
+
+    b.session_version = 1;  // ① 首绑
+    CHECK(base.bindSession(61, b));
+    b.session_version = 2;  // ② 同线重绑 +1
+    CHECK(base.bindSession(61, b));
+    auto avatar = base.findAvatar(61);
+    CHECK(avatar);
+    CHECK(avatar->session_binding().session_version == 2);
+    b.session_version = 1;  // ③ 迟到旧代
+    CHECK(!base.bindSession(61, b));
+    CHECK(avatar->session_binding().session_version == 2);  // 不回卷
+    b.session_id = 200;     // ④ 跨线新会话（重启归 1 形态）
+    b.session_version = 1;
+    CHECK(base.bindSession(61, b));
+    b.session_id = 300;     // ⑤ 旧端未声明
+    b.session_version = 0;
+    CHECK(base.bindSession(61, b));
+
+    base.stop();
+    seedClient->shutdown();
+    server.stop();
+}
+
 int main(int argc, char** argv) {
     try {
         if (argc == 5 && std::string(argv[1]) == "--probe") {
@@ -751,7 +810,8 @@ int main(int argc, char** argv) {
         write_generation_ordering();
         base_write_generation_self_managed();
         write_generation_cross_process_adjudication();
-        std::cout << "Base/database TCP, persistence, isolation, failures, crash restart, replay and cross-process write-gen passed\n";
+        stale_session_bind_rejected();
+        std::cout << "Base/database TCP, persistence, isolation, failures, crash restart, replay, cross-process write-gen and stale session bind passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAILED: " << error.what() << '\n';

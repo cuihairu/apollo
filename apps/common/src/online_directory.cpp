@@ -113,6 +113,17 @@ bool OnlineDirectory::bindSession(PlayerID playerId, const apollo::game::base::S
     if (admission_gate_ && !admission_gate_()) {
         return false;
     }
+    // 旧会话迟到输入拒（D07 §3.2）：同 session 线内低代次重绑拒——覆写会把
+    // 目录绑定回卷。只按同 session_id 线内裁决（bindGeneration 为网关
+    // per-session 内存计数，重启归 1）：跨 session_id = 新线新登录，照常
+    // 受理（严格跨线单调会误杀正常重登录）。0 = 旧端未声明照收不推演。
+    if (const auto* entry = directory_.find(playerId);
+        entry != nullptr
+        && binding.session_id == entry->binding.session_id
+        && binding.session_version != 0 && entry->binding.session_version != 0
+        && binding.session_version < entry->binding.session_version) {
+        return false;
+    }
     sessionLocator_.bind(playerId, binding);
 
     // 目录登记锚点（P1-2）：条目级真值 + SessionUp 事件；同账号已有条目

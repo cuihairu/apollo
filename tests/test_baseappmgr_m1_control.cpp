@@ -463,6 +463,39 @@ bool test_control_corrupt_frame_error_response() {
 
 } // namespace
 
+// 旧会话迟到输入拒（L120，D07 §3.2）：OnlineDirectory::bindSession 同
+// session 线内低代次重绑拒——真目录直呼（control_e2e 同例）。断言：
+//   ① 首绑 v4 受理 ② 同线重绑 v5 受理 ③ 迟到 v4 拒（绑定不回卷）
+//   ④ 跨 session 新线 v1 受理（网关重启 bindGeneration 归 1 形态——新登录
+//     不误杀）⑤ 旧端未声明 v0 照收（wire 缺字段解码缺省口径）。
+bool test_stale_session_bind_rejected() {
+#if !defined(_WIN32)
+    online_directory::OnlineDirectory mgr(0);
+    apollo::game::base::SessionBinding b;
+    b.session_id = 9;
+    b.gateway_id = 1;
+    b.gateway_addr = "tcp://127.0.0.1:9002";
+    b.session_version = 4;
+    TEST_ASSERT(mgr.bindSession(42, b), "first bind accepted");
+    b.session_version = 5;
+    TEST_ASSERT(mgr.bindSession(42, b), "same-session rebind accepted");
+    TEST_ASSERT(mgr.resolveSessionBinding(42)->session_version == 5,
+                "rebind advances version");
+    b.session_version = 4;
+    TEST_ASSERT(!mgr.bindSession(42, b), "stale same-session bind rejected");
+    TEST_ASSERT(mgr.resolveSessionBinding(42)->session_version == 5,
+                "stale bind does not rewind binding");
+    b.session_id = 10;
+    b.session_version = 1;
+    TEST_ASSERT(mgr.bindSession(42, b), "cross-session new bind accepted");
+    b.session_id = 11;
+    b.session_version = 0;
+    TEST_ASSERT(mgr.bindSession(42, b), "undeclared version accepted");
+    mgr.stop();
+#endif
+    return true;
+}
+
 int main() {
     const struct {
         const char* name;
@@ -472,6 +505,7 @@ int main() {
         {"player_record_wire_roundtrip", test_player_record_wire_roundtrip},
         {"control_unreachable", test_control_unreachable},
         {"control_corrupt_frame_error_response", test_control_corrupt_frame_error_response},
+        {"stale_session_bind_rejected", test_stale_session_bind_rejected},
     };
     int failed = 0;
     for (const auto& c : cases) {

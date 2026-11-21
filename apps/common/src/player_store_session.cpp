@@ -97,6 +97,23 @@ bool PlayerStore::bindSession(
         return false;
     }
 
+    // 旧会话迟到输入拒（D07 §3.2）：同 session 线内低代次重绑 = 超会话旧代
+    //（网关重连重绑 bindGeneration +1 的旧代次迟到）——覆写会把绑定回卷
+    // 至失效态，拒。只按同 session_id 线内裁决：bindGeneration 是网关
+    // per-session 内存计数（重启归 1），跨 session_id（重启后新会话/新登录）
+    // 是新线新代次，照常受理——严格跨线单调会误杀正常重登录。0 = 旧端未
+    // 声明（wire 缺字段解码缺省），照收不推演。
+    const auto& current = avatar->session_binding();
+    if (binding.session_id == current.session_id
+        && binding.session_version != 0 && current.session_version != 0
+        && binding.session_version < current.session_version) {
+        blog().warning("Player " + std::to_string(playerId)
+                       + " bind rejected (stale session version "
+                       + std::to_string(binding.session_version) + " < bound "
+                       + std::to_string(current.session_version) + ")");
+        return false;
+    }
+
     avatar->bind_session(binding);
     avatar->set_state(apollo::game::base::AvatarState::Online);
     sessionLocator_->bind(playerId, binding);
