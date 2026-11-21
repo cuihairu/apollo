@@ -328,7 +328,8 @@ void WorldApp::driveCellRegistry() {
             for (const auto& entry : spaceAssignments_) {
                 if (entry.second.cell_id != 0) {
                     publishProjection(entry.first, entry.second.cell_id,
-                                      entry.second.version, true);
+                                      entry.second.version, topology_version_,
+                                      true);
                 }
             }
         }

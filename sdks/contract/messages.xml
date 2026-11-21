@@ -697,6 +697,7 @@
     <field name="space_id" type="int64" desc="被投影的 Space id（每 Space 一条投影，与 962 space_id 同源）"/>
     <field name="cell_id" type="int64" desc="已提交归属 cell id（执行进程；0 = 释放墓碑——目录抹除条目）"/>
     <field name="assignment_version" type="int64" desc="归属版本水位（与 962 assignment_version 同源：认领转移时前进、释放不变；目录按版本裁决重复/乱序）"/>
+    <field name="topology_version" type="int64" desc="布局代次（D07 拓扑版本域，915/918 topology_version 同源——布局演进生产者（World 布局决定）接线：认领/重认领/释放每项已提交布局变更全局前进；0 = 未声明（首启/重启后首次变更前）——目录按 assignment_version 水位裁决，本域为承载域随投影携带）"/>
     <field name="management_epoch" type="int64" desc="World 管理代次（与 962 management_epoch 同源——源端隔离不明判定）"/>
     <field name="ready" type="bool" desc="1=归属视图可服务（claim/reclaim）；0=释放墓碑（cell_id 同帧必为 0）"/>
   </msg>

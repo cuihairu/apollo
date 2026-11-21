@@ -36,12 +36,15 @@ enum class ProjectionVerdict {
     kInvalidRejected,    // 身份缺位（world_id/space_id=0）或 ready/cell_id 不配对
 };
 
-// 一条执行位置投影（968 六字段 + 受理面回填）
+// 一条执行位置投影（968 七字段 + 受理面回填）
 struct SpacePositionProjection {
     std::int32_t world_id = 0;             // 投影源 World 号（复合键）
     std::uint64_t space_id = 0;            // 被投影 Space
     std::uint64_t cell_id = 0;             // 已提交归属 cell（0 = 墓碑）
     std::uint64_t assignment_version = 0;  // 归属版本水位（与 962 同源）
+    std::uint64_t topology_version = 0;    // 布局代次（L120 拓扑生产者接线，968
+                                           // 携带；0 = 未声明——本表不按此裁决，
+                                           // 承载域随投影记录，查址面透传）
     std::uint64_t management_epoch = 0;    // World 管理代次（与 962 同源）
     bool ready = false;                    // 1=归属可服务；0=墓碑
     std::uint64_t received_at_ms = 0;      // steady 毫秒（last-heard 语义）

@@ -55,6 +55,18 @@ bool LoginServer::preparePlayerOnline(
     std::string& errorMessage
 ) {
     try {
+        // 布局代次 stamp（L120 拓扑生产者接线）：目录登记表持有 World 已提交
+        // 的 968 位置投影——按初始 (world, space) 查布局代次；无投影 = 0 未声明
+        //（首启/首次布局变更前，不幻值）。跨线程只读（registry 同 WorldApp
+        // 注册表口径：M1 泵线程写、查址线程读）。
+        const auto topology_from_projection = [this]() -> std::uint64_t {
+            if (positionProjectionRegistry_ == nullptr) {
+                return 0;
+            }
+            const auto* proj = positionProjectionRegistry_->find_projection(
+                config_.initialWorldId, config_.initialSpaceId);
+            return proj != nullptr ? proj->topology_version : 0;
+        };
         protocol::PlayerActivateRequest activateReq;
         activateReq.playerId = playerId;
         const auto activateResp =
@@ -102,6 +114,7 @@ bool LoginServer::preparePlayerOnline(
             assignment.instance_id = config_.initialInstanceId;
             assignment.space_id = config_.initialSpaceId;
             assignment.route_version = 1;
+            assignment.topology_version = topology_from_projection();
             if (!directory_->bindSession(playerId, binding) || !directory_->assignWorld(playerId, assignment)) {
                 errorMessage = "Login directory rejected admission";
                 return false;
@@ -116,6 +129,7 @@ bool LoginServer::preparePlayerOnline(
         assignReq.instanceId = config_.initialInstanceId;
         assignReq.spaceId = config_.initialSpaceId;
         assignReq.routeVersion = 1;
+        assignReq.topologyVersion = topology_from_projection();
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(

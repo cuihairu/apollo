@@ -201,11 +201,13 @@ private:
 
     // 968 受理：契约 wire 解包 → 水位裁决就地落表。request_id 语义不存在
     //（无回执）；残帧拒收计数同 964 面。断言事实源 = registry 裁决计数。
+    // 七字段（L120 拓扑生产者接线 +topology_version）：残帧/旧版帧（六字段）
+    // 同样拒收计数——版本域拓扑为承载域，残帧不猜缺省。
     void handle_projection_frame(const std::uint8_t* data, std::size_t size) {
         std::vector<wire::FieldValue> fields;
         if (!wire::decode_payload(id_of(MsgId::space_position_projection), data,
                                   size, fields)
-            || fields.size() != 6) {
+            || fields.size() != 7) {
             rejected_.fetch_add(1, std::memory_order_acq_rel);
             return;
         }
@@ -214,8 +216,9 @@ private:
         p.space_id = static_cast<std::uint64_t>(fields[1].integer);
         p.cell_id = static_cast<std::uint64_t>(fields[2].integer);
         p.assignment_version = static_cast<std::uint64_t>(fields[3].integer);
-        p.management_epoch = static_cast<std::uint64_t>(fields[4].integer);
-        p.ready = fields[5].integer != 0;
+        p.topology_version = static_cast<std::uint64_t>(fields[4].integer);
+        p.management_epoch = static_cast<std::uint64_t>(fields[5].integer);
+        p.ready = fields[6].integer != 0;
         const auto verdict =
             projection_registry_->apply_projection(p, now_ms());
         if (verdict == ProjectionVerdict::kApplied
@@ -228,7 +231,8 @@ private:
                        + ": world=" + std::to_string(p.world_id) + " space="
                        + std::to_string(p.space_id) + " cell="
                        + std::to_string(p.cell_id) + " version="
-                       + std::to_string(p.assignment_version));
+                       + std::to_string(p.assignment_version) + " topology="
+                       + std::to_string(p.topology_version));
         }
     }
 

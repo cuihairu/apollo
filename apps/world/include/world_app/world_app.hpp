@@ -112,6 +112,9 @@ public:
     };
     std::size_t assigned_space_count() const { return spaceAssignments_.size(); }
     const SpaceAssignment* find_space_assignment(std::uint64_t space_id) const;
+    // 布局代次观测面（L120 拓扑生产者接线；泵上下文单写者口径，测试/宿主同
+    // 线程读——同 assigned_space_count 口径）。
+    std::uint64_t topology_version() const { return topology_version_; }
     // 对账冲突集（断连对账批B 观测面；轮询口径同 registered_cell_count）：
     // 967 自报与权威归属核对不上的 Space（版本冲突 / 未登记权威——池外
     // Space）。冻结面：不认领不释放不推送（§4），解冻随对账修复批。
@@ -218,8 +221,12 @@ private:
     //（journal A 行落盘后调），release 推 cell_id=0 墓碑（R 行后调）；
     // management_epoch 与 962 同源（config_.m1AuthorityEpoch）。发布面缺席
     //（未注入/面关）= 无操作——目录侧经 kUp 重放与下次归属变更收敛。
+    // topology_version = 布局代次（L120 拓扑生产者接线）：调用面在每次已提交
+    // 布局变更（claim/reclaim/release）后前进 topology_version_ 再传本值，
+    // 随 968 携带（0 = 未声明——首启/重启后首次变更前）。
     void publishProjection(std::uint64_t space_id, std::uint64_t cell_id,
-                           std::uint64_t version, bool ready);
+                           std::uint64_t version, std::uint64_t topology_version,
+                           bool ready);
     // 目标 cell peer 选择（切片2 转发）：首个就绪、未排空、未缩容的登记
     // cell 的链路 peer 自报名；无合格目标返回空串。管理命令（932/944/952/
     // 956）经此寻址转发。
@@ -262,6 +269,12 @@ private:
     std::unordered_map<std::uint64_t, std::uint64_t> pendingJournalOwners_;
     // 分配表（962）：space_id → 归属 + 版本（单写者上下文）。
     std::unordered_map<std::uint64_t, SpaceAssignment> spaceAssignments_;
+    // 布局代次（L120 拓扑生产者接线，D07 拓扑版本域）：全局单调计数——每次
+    // 已提交布局变更（claim/reclaim/release，journal A/R 行落盘后）前进；随
+    // 968 携带。0 = 未声明（首启/重启后首次变更前——重启归 0，后续变更起
+    // 前进；目录按 assignment_version 水位裁决，本域为承载域不裁决，重启
+    // 归 0 不触发拒绝）。单写者上下文，同 spaceAssignments_ 口径。
+    std::uint64_t topology_version_ = 0;
     // 对账冲突集（967，断连对账批B）：space_id 集（该 Space 冻结）。
     std::unordered_set<std::uint64_t> conflictedSpaces_;
     std::uint64_t spaceReportCount_{0};

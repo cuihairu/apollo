@@ -313,6 +313,22 @@ bool login_chain_creates_cell_entity() {
     const auto session_id = header_of(reply).sessionId;
     TEST_ASSERT(session_id != 0, "gateway session created");
 
+    // 布局代次 stamp 前置（L120 拓扑生产者接线）：login 的初始落点
+    // （preparePlayerOnline 在 LOGIN_REQUEST 处理时写目录）从目录登记表取
+    // 布局代次——须在 login 请求前注入 (world=1, space=1) 的 968 投影
+    // （拓扑 71 / 归属版本 1），否则登录时登记表仍空 = 未声明 0。
+    login::SpacePositionProjection proj;
+    proj.world_id = 1;
+    proj.space_id = 1;
+    proj.cell_id = 21;
+    proj.assignment_version = 1;
+    proj.topology_version = 71;
+    proj.management_epoch = 3;
+    proj.ready = true;
+    TEST_ASSERT(login.positionProjectionRegistry()->apply_projection(proj, 0) ==
+                    login::ProjectionVerdict::kApplied,
+                "projection injected before login");
+
     // ⑥ login 端认证签发 loginTicket（真实会话：player1/pass1 → 1001；
     // 此时 login 会话号 = 2，gateway 会话号 = 1，编号不同）。
     protocol::LoginRequest loginReq;
@@ -342,6 +358,12 @@ bool login_chain_creates_cell_entity() {
                 "bogus login ticket rejected");
     TEST_ASSERT(gateway.authenticateSession(session_id, 1001, parsedLogin.loginTicket),
                 "gateway auth accepted with real login ticket");
+    // 登录落点携带登记表布局代次（不再恒 0 未声明）。
+    const auto assigned =
+        login.onlineDirectory()->resolveWorldAssignment(1001);
+    TEST_ASSERT(assigned.has_value(), "assignment recorded");
+    TEST_ASSERT(assigned->topology_version == 71,
+                "admission stamps layout epoch from projection registry");
 
     // ⑧ 客户端发 CELL_CREATE_ENTITY → gateway → world → cell 创建实体。
     client.sendAll(frame_bytes(2, 0,

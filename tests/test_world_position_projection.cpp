@@ -70,6 +70,7 @@ bool test_registry_first_claim_applied() {
     p.space_id = 501;
     p.cell_id = 21;
     p.assignment_version = 1;
+    p.topology_version = 1;
     p.management_epoch = 3;
     p.ready = true;
     TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
@@ -79,6 +80,8 @@ bool test_registry_first_claim_applied() {
     TEST_ASSERT(e->cell_id == 21 && e->assignment_version == 1
                     && e->management_epoch == 3 && e->ready,
                 "claim fields recorded");
+    TEST_ASSERT(e->topology_version == 1,
+                "topology version carried (registry does not adjudicate it)");
     TEST_ASSERT(r.applied_total() == 1 && r.projection_count() == 1,
                 "one applied one entry");
     return true;
@@ -228,6 +231,44 @@ bool test_registry_multi_world_keys() {
     return true;
 }
 
+// 拓扑版本为承载域（L120 拓扑生产者接线）：不参与水位裁决——更低拓扑版本
+// 的后续认领仍受理（若按拓扑裁决即「旧布局消息拒」，此处显形不拒），0 =
+// 未声明合法受理（首启/重启后首次变更前）。
+bool test_registry_topology_carried_not_adjudicated() {
+    PositionProjectionRegistry r;
+    SpacePositionProjection p;
+    p.world_id = 1;
+    p.space_id = 501;
+    p.cell_id = 21;
+    p.assignment_version = 1;
+    p.topology_version = 0;  // 未声明
+    p.ready = true;
+    TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
+                "undeclared topology (0) applied");
+    const auto* e = r.find_projection(1, 501);
+    TEST_ASSERT(e != nullptr && e->topology_version == 0,
+                "undeclared topology recorded");
+    // 重认领带高拓扑（5）→ 水位前进受理，拓扑刷新
+    p.assignment_version = 2;
+    p.topology_version = 5;
+    TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
+                "re-claim with topology applied");
+    const auto* f = r.find_projection(1, 501);
+    TEST_ASSERT(f != nullptr && f->assignment_version == 2
+                    && f->topology_version == 5,
+                "topology refreshed with advancing version");
+    // 更低拓扑（1 < 5）+ 更高归属版本：承载域不裁决，不触发旧布局拒
+    p.assignment_version = 3;
+    p.topology_version = 1;
+    TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
+                "lower topology not rejected (carried, not adjudicated)");
+    const auto* g = r.find_projection(1, 501);
+    TEST_ASSERT(g != nullptr && g->assignment_version == 3
+                    && g->topology_version == 1,
+                "lower topology carried (no old-layout rejection)");
+    return true;
+}
+
 //==============================================================================
 // Part B：真链路 e2e（login 注册面 968 受理 + World 发布客户端）
 //==============================================================================
@@ -286,8 +327,9 @@ bool test_e2e_projection_lifecycle() {
     TEST_ASSERT(wait_for(*client, [&] { return client->linkUp(); }),
                 "publisher link up");
 
-    // claim：journal A 行提交态推目录
-    client->publish(501, 21, 1, 3, true);
+    // claim：journal A 行提交态推目录（topology_version = 布局代次随帧携带，
+    // L120 拓扑生产者接线）
+    client->publish(501, 21, 1, 1, 3, true);
     TEST_ASSERT(wait_for(*client, [&] {
                     const auto* e = login_end.projections.find_projection(1, 501);
                     return e != nullptr && e->cell_id == 21;
@@ -296,18 +338,21 @@ bool test_e2e_projection_lifecycle() {
     const auto* e = login_end.projections.find_projection(1, 501);
     TEST_ASSERT(e->assignment_version == 1 && e->management_epoch == 3 && e->ready,
                 "claim fields land");
+    TEST_ASSERT(e->topology_version == 1, "topology version carried (claim)");
     TEST_ASSERT(login_end.projections.applied_total() == 1, "one applied");
 
-    // 重认领：版本前进替换
-    client->publish(501, 22, 2, 3, true);
+    // 重认领：版本前进替换（布局代次全局前进——携带 2）
+    client->publish(501, 22, 2, 2, 3, true);
     TEST_ASSERT(wait_for(*client, [&] {
                     const auto* f = login_end.projections.find_projection(1, 501);
                     return f != nullptr && f->cell_id == 22;
                 }),
                 "re-claim replaces entry");
+    const auto* f = login_end.projections.find_projection(1, 501);
+    TEST_ASSERT(f->topology_version == 2, "topology version advances (re-claim)");
 
-    // 释放墓碑：目录抹除
-    client->publish(501, 0, 2, 3, false);
+    // 释放墓碑：目录抹除（布局代次 3 随墓碑帧携带）
+    client->publish(501, 0, 2, 3, 3, false);
     TEST_ASSERT(wait_for(*client,
                          [&] { return login_end.projections.find_projection(1, 501) == nullptr; }),
                 "tombstone erases directory entry");
@@ -325,7 +370,7 @@ bool test_e2e_reconnect_replays_mirror() {
     TEST_ASSERT(client != nullptr, "publisher starts");
     TEST_ASSERT(wait_for(*client, [&] { return client->linkUp(); }),
                 "first link up");
-    client->publish(502, 31, 1, 5, true);
+    client->publish(502, 31, 1, 4, 5, true);
     TEST_ASSERT(wait_for(*client, [&] {
                     const auto* e = login_end.projections.find_projection(7, 502);
                     return e != nullptr && e->cell_id == 31;
@@ -368,6 +413,8 @@ int main() {
     run("registry_tombstone_rules", test_registry_tombstone_rules);
     run("registry_invalid_rejected", test_registry_invalid_rejected);
     run("registry_multi_world_keys", test_registry_multi_world_keys);
+    run("registry_topology_carried_not_adjudicated",
+        test_registry_topology_carried_not_adjudicated);
     run("e2e_projection_lifecycle", test_e2e_projection_lifecycle);
     run("e2e_reconnect_replays_mirror", test_e2e_reconnect_replays_mirror);
 #endif

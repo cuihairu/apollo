@@ -118,8 +118,11 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
                                       + " version=1");
             // 位置投影发布（L115，D05 §1.1 时序：journal A 行 → 962 → 968）：
             // 已提交归属事实推目录镜像——claim/reclaim 均 ready=1（版本水位
-            // 由目录侧幂等/拒乱序裁决）。
-            publishProjection(space_id, reg.cell_id, it->second.version, true);
+            // 由目录侧幂等/拒乱序裁决）。布局代次（L120 拓扑生产者接线）：
+            // 认领/重认领是已提交布局变更——全局拓扑版本前进后随投影携带。
+            ++topology_version_;
+            publishProjection(space_id, reg.cell_id, it->second.version,
+                              topology_version_, true);
         } else if (it->second.cell_id != reg.cell_id) {
             if (m1Link_) {
                 m1Link_->sendCellSpaceAssign(peer, it->second.version,
@@ -183,7 +186,11 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
                             + " version=" + std::to_string(entry.second.version));
             // 释放墓碑投影（L115）：R 行已落盘（或降级告警）——内存归属事实
             // （owner=0）推目录抹除面；版本不变由目录侧墓碑命中水位裁决。
-            publishProjection(entry.first, 0, entry.second.version, false);
+            // 布局代次（L120 拓扑生产者接线）：释放是已提交布局变更——全局
+            // 拓扑版本前进后随墓碑携带（0 = 未声明仅限首启/重启后首次变更前）。
+            ++topology_version_;
+            publishProjection(entry.first, 0, entry.second.version,
+                              topology_version_, false);
         }
     }
 }
@@ -277,11 +284,13 @@ const WorldApp::SpaceAssignment* WorldApp::find_space_assignment(
 }
 
 void WorldApp::publishProjection(std::uint64_t space_id, std::uint64_t cell_id,
-                                 std::uint64_t version, bool ready) {
+                                 std::uint64_t version,
+                                 std::uint64_t topology_version, bool ready) {
     // 发布面缺席 = 无操作（面关形态：目录侧经 kUp 重放与下次归属变更收敛）；
     // 在场即直发（同管理泵线程——与 publish/pump 同线程纪律，见客户端头）。
+    // topology_version = 布局代次透传（L120 拓扑生产者接线，968 携带）。
     if (projection_ != nullptr) {
-        projection_->publish(space_id, cell_id, version,
+        projection_->publish(space_id, cell_id, version, topology_version,
                              config_.m1AuthorityEpoch, ready);
     }
 }

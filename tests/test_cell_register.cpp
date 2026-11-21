@@ -2093,6 +2093,10 @@ bool test_space_release_and_reclaim() {
     std::map<std::uint64_t, SpaceAssignFrame> assigns;
     g_assigns = &assigns;
 
+    // 布局代次起点（L120 拓扑生产者接线）：首启未变更 = 0 未声明
+    TEST_ASSERT(server.world->topology_version() == 0,
+                "topology starts undeclared (0)");
+
     // A（cell 31）认领 7/8 v1
     CellEnd cell_a;
     TEST_ASSERT(dial_cell(server, cell_a, "cell-a"), "cell a dialed");
@@ -2106,6 +2110,9 @@ bool test_space_release_and_reclaim() {
                     return it != assigns.end() && it->second.ready;
                 }, 3000),
                 "cell a claimed space 7");
+    // 两项已提交布局变更（7/8 各一次认领）→ 全局布局代次 2
+    TEST_ASSERT(server.world->topology_version() == 2,
+                "two claims advance topology to 2");
 
     // A 停发（链路保持）→ 过期释放：owner→0，版本不变（无认领不推进）
     TEST_ASSERT(wait_until([&] {
@@ -2116,6 +2123,9 @@ bool test_space_release_and_reclaim() {
     const auto* a7 = server.world->find_space_assignment(7);
     TEST_ASSERT(a7 != nullptr && a7->version == 1, "release keeps version");
     TEST_ASSERT(server.world->registered_cell_count() == 0, "registry emptied");
+    // 释放同是已提交布局变更（7/8 各一次）→ 布局代次 2 → 4
+    TEST_ASSERT(server.world->topology_version() == 4,
+                "releases advance topology to 4");
 
     // B（cell 32）注册认领 → v2（版本连续，防离线旧主 ABA）
     CellEnd cell_b;
@@ -2128,6 +2138,10 @@ bool test_space_release_and_reclaim() {
                     return a7b != nullptr && a7b->cell_id == 32 && a7b->version == 2;
                 }, 3000),
                 "cell b reclaims at version 2");
+    // 重认领 7/8 各一次 → 布局代次 4 → 6（与每 Space 独立版本分域：
+    // assignment version 7→2、8→2，而全局布局代次连续前进）
+    TEST_ASSERT(server.world->topology_version() == 6,
+                "two reclaims advance topology to 6");
     TEST_ASSERT(wait_until([&] {
                     cell_b.pump();
                     std::lock_guard<std::mutex> lock(g_assigns_mutex);
