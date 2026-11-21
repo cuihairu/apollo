@@ -105,7 +105,7 @@ player p=42 在 space_id=504（cell-22）掉线（gateway g1 断开）
 | 版本域 | 现载体 | 载体位置 | 缺口 |
 |---|---|---|---|
 | 进程代次 | 962/964 management_epoch + 968 management_epoch（源端隔离判定） | 注册/投影面（management_epoch 域） | 拒旧注册 code 3 + 自冻结的端到端验收待 P5 |
-| 资料写权代次 | `writeGen`（档案字段，写端自持、落库验单调）+ `adoptedEpochs_` 接权高水位 + `PlayerStore::writeGens_` 代次账；记录 wire 面 `write_gen`（915/918 + `WorldAssignment.write_gen` + 网关 `RouteSnapshot.writeGen`） | `PlayerData.writeGen`（档案 JSON）/ database 落库地板 / `writeGens_`（进程内存账，首载种子取档案值不回退）/ `adoptedEpochs_` / 915 受理落表 → 918 回带（online_directory） | 跨进程写权裁决的端到端面未落（拒旧写者需真链路验收）；生产者接线未落（登录准入 stamp 0 = 未声明） |
+| 资料写权代次 | `writeGen`（档案字段，写端自持、落库验单调）+ `adoptedEpochs_` 接权高水位 + `PlayerStore::writeGens_` 代次账；记录 wire 面 `write_gen`（915/918 + `WorldAssignment.write_gen` + 网关 `RouteSnapshot.writeGen`） | `PlayerData.writeGen`（档案 JSON）/ database 落库地板 / `writeGens_`（进程内存账，首载种子取档案值不回退）/ `adoptedEpochs_` / 915 受理落表 → 918 回带（online_directory） | 存储半已真链路验：database server 地板 = 磁盘已落档 writeGen（重启自恢复）、旧写拒「stale write generation」、同代次幂等、无版本写端不清地板（database_server.cpp；base_database_tests `base_write_generation_self_managed` ③ 经真 database RPC 验 stale 拒 + 档案不动）。未落：Base 半跨进程裁决端到端（两活 Base 进程 `writeGens_` 接权账 + `adoptedEpochs_` 交接，现仅单进程内覆盖）；生产者接线未落（登录准入/World 布局决定 stamp 0 = 未声明） |
 | 实体权威代次 | `simulation_epoch`（915/918 wire + WorldAssignment.simulation_epoch） | 0 = 未声明；与 968 management_epoch 明确分域 | 模拟域接线随多 cell 批 |
 | 拓扑版本 | `topology_version`（915/918 wire + WorldAssignment/RouteSnapshot/RemoteEntityRef.topology_version） | 0 = 未声明；与 route_version 分域异值往返 | 布局演进生产者（World 布局决定）未落 |
 | 路由版本 | `route_version`（915/916/918 wire + WorldAssignment.route_version） | 旧域保留 | 旧投影拒（D05 §1.2）已由 968 水位裁决承担 |
