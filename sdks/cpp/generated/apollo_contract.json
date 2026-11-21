@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "2a73f83c8304348b149c03c89f7eb55c7a85c05ee84a35157f1b4ae75922f8fa",
+  "schema_hash": "703f023c8065db3810cf41caa91af707382c38401243134a9ea7adba6c1baa7f",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "6b2f77c1587ddcf7cf3251f7045b6c03fce0018d5463697eb2e38510ebd8ddb3",
+  "internal_hash": "7b72261679752c3ee583e6286b15a4ad7e17e4d660d7e4334f3f97031094d15e",
   "contract_version": 3,
   "aliases": [
     {
@@ -1590,6 +1590,12 @@
           "type": "int64",
           "wire_type": "int64",
           "desc": "模拟代次（执行域生命周期水位；0 = 未声明）"
+        },
+        {
+          "name": "write_gen",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "资料写权代次（归属域：Base 写权自持代次，与模拟域分域；0 = 未声明）"
         }
       ],
       "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行；L117 版本域分立——拓扑版本与路由版本分域）"
@@ -1737,6 +1743,12 @@
           "type": "int64",
           "wire_type": "int64",
           "desc": "会话绑定代次（与 913 session_version 同源——绑定面写入，解析面原样回带；0 = 旧端未声明）"
+        },
+        {
+          "name": "write_gen",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "资料写权代次（与 915 write_gen 同源——归属域随落点行回带；0 = 未声明）"
         },
         {
           "name": "error_message",

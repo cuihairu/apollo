@@ -164,6 +164,7 @@
     <field name="topology_version" type="int64" desc="拓扑版本（D07 版本域分立：布局代次，与路由版本分域互不推演；0 = 未声明）"/>
     <field name="cell_id" type="int64" desc="执行进程归属 cell 号（0 = 执行进程未指派——落点先行，模拟域接线随多 cell 批）"/>
     <field name="simulation_epoch" type="int64" desc="模拟代次（执行域生命周期水位；0 = 未声明）"/>
+    <field name="write_gen" type="int64" desc="资料写权代次（归属域：Base 写权自持代次，与模拟域分域；0 = 未声明）"/>
   </msg>
   <msg id="916" name="player_assign_world_response" dir="P2P" channel="events" domain="internal" desc="落点指派应答">
     <field name="success" type="bool"/>
@@ -189,6 +190,7 @@
     <field name="cell_id" type="int64" desc="执行进程归属 cell 号（与 915 cell_id 同源；0 = 未指派）"/>
     <field name="simulation_epoch" type="int64" desc="模拟代次（与 915 simulation_epoch 同源；0 = 未声明）"/>
     <field name="session_version" type="int64" desc="会话绑定代次（与 913 session_version 同源——绑定面写入，解析面原样回带；0 = 旧端未声明）"/>
+    <field name="write_gen" type="int64" desc="资料写权代次（与 915 write_gen 同源——归属域随落点行回带；0 = 未声明）"/>
     <field name="error_message" type="string"/>
   </msg>
 

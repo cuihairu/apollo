@@ -28,6 +28,9 @@ struct RouteSnapshot {
     uint64_t cellId = 0;
     uint64_t simulationEpoch = 0;
     uint64_t sessionVersion = 0;
+    // L118 归属域：资料写权代次（918 write_gen 回带；0 = 未声明）。与
+    // simulationEpoch（模拟域）分域——归属代次不随模拟域接线代写。
+    uint64_t writeGen = 0;
     std::string worldServerUrl;
 
     [[nodiscard]] bool isAssigned() const {

@@ -105,16 +105,19 @@ player p=42 在 space_id=504（cell-22）掉线（gateway g1 断开）
 | 版本域 | 现载体 | 载体位置 | 缺口 |
 |---|---|---|---|
 | 进程代次 | 962/964 management_epoch + 968 management_epoch（源端隔离判定） | 注册/投影面（management_epoch 域） | 拒旧注册 code 3 + 自冻结的端到端验收待 P5 |
-| 资料写权代次 | `writeGen`（档案字段，写端自持、落库验单调）+ `adoptedEpochs_` 接权高水位 + `PlayerStore::writeGens_` 代次账 | `PlayerData.writeGen`（档案 JSON）/ database 落库地板 / `writeGens_`（进程内存账，首载种子取档案值不回退）/ `adoptedEpochs_` | 跨进程写权裁决的端到端面未落（拒旧写者需真链路验收）；归属代次未进记录 wire 面（915/918 无对应字段，L118 仍缺项） |
+| 资料写权代次 | `writeGen`（档案字段，写端自持、落库验单调）+ `adoptedEpochs_` 接权高水位 + `PlayerStore::writeGens_` 代次账；记录 wire 面 `write_gen`（915/918 + `WorldAssignment.write_gen` + 网关 `RouteSnapshot.writeGen`） | `PlayerData.writeGen`（档案 JSON）/ database 落库地板 / `writeGens_`（进程内存账，首载种子取档案值不回退）/ `adoptedEpochs_` / 915 受理落表 → 918 回带（online_directory） | 跨进程写权裁决的端到端面未落（拒旧写者需真链路验收）；生产者接线未落（登录准入 stamp 0 = 未声明） |
 | 实体权威代次 | `simulation_epoch`（915/918 wire + WorldAssignment.simulation_epoch） | 0 = 未声明；与 968 management_epoch 明确分域 | 模拟域接线随多 cell 批 |
 | 拓扑版本 | `topology_version`（915/918 wire + WorldAssignment/RouteSnapshot/RemoteEntityRef.topology_version） | 0 = 未声明；与 route_version 分域异值往返 | 布局演进生产者（World 布局决定）未落 |
 | 路由版本 | `route_version`（915/916/918 wire + WorldAssignment.route_version） | 旧域保留 | 旧投影拒（D05 §1.2）已由 968 水位裁决承担 |
 | 会话版本 | `session_version`（913 wire + SessionBinding.session_version；网关 nextBindGeneration 取号） | 0 = 旧端未声明；解析面 918 原样回带 | 旧会话迟到输入拒未接线 |
 
 > 分域证据：OnlineDirectoryM1ControlTests `player_record_wire_roundtrip`
-> 用异值（route=2 / topology=71 / sim_epoch=88 / session=4）断言四域经
-> codec 往返不折叠；control_e2e 经真目录（915 落表 → 918 回带）同断言。
+> 用异值（route=2 / topology=71 / cell=21 / sim_epoch=88 / write_gen=55 /
+> session=4）断言五域经 codec 往返不折叠（归属域与模拟域同帧异值）；
+> control_e2e 经真目录（915 落表 → 918 回带）同断言。
 > legacy 残帧缺新域解码缺省 0（未声明口径），旧域（route_version）原值保留。
+> PlayerDirectory 并发面 `domain_fields_no_tear` 以锚点 epoch 的既定倍数
+> 配对推进 route/cell/sim_epoch/topology/write_gen 五域，断言同轮配对不撕裂。
 
 ## 4. S11 · 混编兼容范围白名单验证表
 

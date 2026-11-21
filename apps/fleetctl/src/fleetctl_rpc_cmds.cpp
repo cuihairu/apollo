@@ -73,7 +73,8 @@ int runResolve(const Options& opt, ControlDial& dial) {
                   << " gateway=" << res.gatewayId << " addr=" << res.gatewayAddr
                   << " world=" << res.worldId << " map=" << res.mapId
                   << " instance=" << res.instanceId
-                  << " route_version=" << res.routeVersion << std::endl;
+                  << " route_version=" << res.routeVersion
+                  << " write_gen=" << res.writeGen << std::endl;
         return 0;
     }
     std::cout << "RESOLVE_FAILED player=" << opt.player_id

@@ -291,6 +291,7 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerAssignWorldRequest(const std::
     assignment.topology_version = assignReq.topologyVersion;  // L117：拓扑域随落点成行
     assignment.cell_id = assignReq.cellId;  // L116：执行进程随落点成行
     assignment.simulation_epoch = assignReq.simulationEpoch;
+    assignment.write_gen = assignReq.writeGen;  // L118：归属域随落点成行
 
     if (assignWorld(assignReq.playerId, assignment)) {
         response.success = true;
@@ -343,6 +344,7 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerResolveRouteRequest(const std:
     response.cellId = assignment->cell_id;
     response.simulationEpoch = assignment->simulation_epoch;
     response.sessionVersion = binding->session_version;  // 绑定面写入，解析面回带
+    response.writeGen = assignment->write_gen;  // L118：归属域解析面回带
 
     return protocol::MessageCodec::encode(response, header.sessionId);
 }

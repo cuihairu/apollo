@@ -32,6 +32,7 @@ std::string routeLabel(const RouteSnapshot& routeSnapshot) {
            << ", cell=" << routeSnapshot.cellId
            << ", sim_epoch=" << routeSnapshot.simulationEpoch
            << ", session_ver=" << routeSnapshot.sessionVersion
+           << ", write_gen=" << routeSnapshot.writeGen
            << ", url=" << routeSnapshot.worldServerUrl;
     return stream.str();
 }
@@ -405,6 +406,7 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         routeSnapshot.cellId = parsed.cellId;  // L116 分型域映射
                         routeSnapshot.simulationEpoch = parsed.simulationEpoch;
                         routeSnapshot.sessionVersion = parsed.sessionVersion;
+                        routeSnapshot.writeGen = parsed.writeGen;  // L118 归属域映射
                         routeSnapshot.worldServerUrl = config_.worldUrl;
                         return routeSnapshot;
                     }

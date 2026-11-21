@@ -40,6 +40,7 @@ apollo::game::base::WorldAssignment makeAssignment(std::uint64_t world_id) {
     a.cell_id = world_id * 10;
     a.simulation_epoch = world_id * 100;
     a.topology_version = world_id * 1000;
+    a.write_gen = world_id * 10000;  // L118 归属域（资料写权代次）异值
     return a;
 }
 
@@ -145,7 +146,8 @@ bool test_semantics_preserved() {
 
 // L118 并发面新域用例：两个写线程竞写同一玩家集合（session_up 顶号新条目
 // → moved 以锚点 epoch 推进域值），域值取 epoch 的既定倍数——收敛后逐条
-// 核验锚点与四域值出自同一写轮次（route/cell/sim_epoch/topology 配对）。
+// 核验锚点与五域值出自同一写轮次（route/cell/sim_epoch/topology/write_gen
+// 配对，归属域与模拟域分域同轮推进）。
 // 迟到 moved 被水位判失效属合法交错（对方顶号已推进条目），不算失败；
 // 终态不变量：条目 epoch 只能配到最后一次成功落表的域值组合，撕裂/错轮
 // 配对即红。session_version 随绑定稳定携带。
@@ -163,6 +165,7 @@ bool test_domain_fields_no_tear() {
         a.cell_id = epoch * 10;
         a.simulation_epoch = epoch * 100;
         a.topology_version = epoch * 1000;
+        a.write_gen = epoch * 10000;  // L118 归属域配对
         return a;
     };
 
@@ -201,7 +204,8 @@ bool test_domain_fields_no_tear() {
         }
         if (a.route_version != epoch || a.cell_id != epoch * 10 ||
             a.simulation_epoch != epoch * 100 ||
-            a.topology_version != epoch * 1000) {
+            a.topology_version != epoch * 1000 ||
+            a.write_gen != epoch * 10000) {
             return false;
         }
         if (entry->zone_id != kZone) {

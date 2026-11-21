@@ -20,6 +20,11 @@ struct WorldAssignment {
     // 0 = 未声明。与 968 management_epoch（管理代次）分域——管理面代次不
     // 代指模拟域生命周期。
     std::uint64_t simulation_epoch = 0;
+    // 资料写权代次（L118 归属域，915/918 write_gen 同源）：Base 写权自持的
+    // 代次（档案 writeGen 同源）。与 simulation_epoch（模拟域生命周期）分域
+    // 互不推演——换 Base 承载不动模拟代次，模拟域接线不代写归属代次；
+    // 0 = 未声明。
+    std::uint64_t write_gen = 0;
 
     [[nodiscard]] bool is_assigned() const noexcept {
         return world_id != 0 || instance_id != 0 || space_id != 0;
