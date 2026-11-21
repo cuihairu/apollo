@@ -264,7 +264,10 @@ jobs:
         lcov --remove coverage.info '*/vcpkg_installed/*' --output-file coverage.info $LCOV_SUPPRESS || true
         lcov --remove coverage.info '*/_deps/*' --output-file coverage.info $LCOV_SUPPRESS || true
         lcov --list coverage.info $LCOV_SUPPRESS || true
-        genhtml -o coverage-html coverage.info
+        # genhtml 亦跑同一一致性检查，同样被该编码漂移假红（已知同类）——应用
+        # 同一组抑制；`corrupt` 类别保持严格（真实 trace 损坏必须显形），真门禁
+        # 语义不变。
+        genhtml -o coverage-html coverage.info $LCOV_SUPPRESS
 
     - name: Upload Coverage Artifact
       uses: actions/upload-artifact@v7.0.2
