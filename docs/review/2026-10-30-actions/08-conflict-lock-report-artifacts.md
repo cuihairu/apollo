@@ -72,7 +72,7 @@ world-admin conflict resolve --space <S> \
 
 ## 4. S09 · build-examples 旧目标产物候选清单
 
-### 4.1 候选路径与归属（静态核对，2026-10-30）
+### 4.1 候选路径与归属（静态核对 2026-10-30；2026-11-21 四树复核同清单仍在）
 
 `build-examples/apps/` 现有二进制：`admin`、`apolloc`、`base`、`database`、`fleetctl`、
 `gateway`、`interfaces`、`logger`、`login`、`machined`、`world`。
@@ -95,5 +95,8 @@ logger、login、machined、world）：
 
 - 脚本运行来源固定到**已验证构建树**（`APOLLO_BUILD_DIR` 唯一显式覆盖，默认 ``<repo>/build``）；
   不自动扫描多目录找「能运行」的旧二进制。
-- 当前 `build/` 缺 `interfaces` 二进制（`build-off`/`build-examples` 有）——按 S10 应显式指定
-  已验证树，不凭名称认定可用；roster 对未构建二进制跳过（已有行为）。
+- 四树二进制台账（2026-11-21 复核；树名按 2026-11-13 换血：`build` / `build-off-tree2` /
+  `build-examples` / `build-san-game`）：§4.1 的 11 个 `apps/` 二进制在四树均存在且可执行
+  （含 `interfaces`——旧记录「`build/` 缺 `interfaces`、树名 `build-off`」已过时，
+  `build-off` 已换血为 `build-off-tree2`）。S10 原则不变：脚本运行来源显式指定**已验证
+  构建树**，不凭名称认定可用；roster 对未构建二进制跳过（已有行为）。
