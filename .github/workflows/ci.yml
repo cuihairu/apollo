@@ -250,17 +250,20 @@ jobs:
         # 每次随机命中与改动无关的文件）：inconsistent/mismatch 类别抑制告警、
         # check_data_consistency=0 跳过一致性硬校验（lcovrc(5) 专用开关）。这些
         # 开关约束主进程；filter 并行子进程的一致性检查不受 --ignore-errors 约束，
-        # 需 stop_on_error=0 让其不 die（子进程仅按 die 判定失败）。capture 之后的
-        # 每条 --remove 会在合并 info 上重跑一致性检查——同样 die，故同一组抑制
-        # 旗标必须应用到全部 lcov 命令（共享变量，word-split 展开为独立参数）。
+        # stop_on_error=0 也不改最终退出码。capture 之后的每条 --remove 会在合并
+        # info 上重跑一致性检查——数据先写盘（已见 "Writing data to coverage.info"
+        # + Summary 后）再报 inconsistent 退 1，属已知假红；在 set -e 的 run 块里
+        # 会中断整块，故 remove/list 步容忍（|| true），由末尾 genhtml 校验 .info
+        # 可解析做真门禁（capture 保持严格：真实采集失败必须显形）。同一组抑制
+        # 旗标应用到全部 lcov 命令（共享变量，word-split 展开为独立参数）。
         LCOV_SUPPRESS="--ignore-errors mismatch,inconsistent,unused --rc check_data_consistency=0 --rc stop_on_error=0"
         lcov --capture --directory . --output-file coverage.info $LCOV_SUPPRESS
-        lcov --remove coverage.info '/usr/*' --output-file coverage.info $LCOV_SUPPRESS
-        lcov --remove coverage.info '*/tests/*' --output-file coverage.info $LCOV_SUPPRESS
-        lcov --remove coverage.info '*/examples/*' --output-file coverage.info $LCOV_SUPPRESS
-        lcov --remove coverage.info '*/vcpkg_installed/*' --output-file coverage.info $LCOV_SUPPRESS
-        lcov --remove coverage.info '*/_deps/*' --output-file coverage.info $LCOV_SUPPRESS
-        lcov --list coverage.info
+        lcov --remove coverage.info '/usr/*' --output-file coverage.info $LCOV_SUPPRESS || true
+        lcov --remove coverage.info '*/tests/*' --output-file coverage.info $LCOV_SUPPRESS || true
+        lcov --remove coverage.info '*/examples/*' --output-file coverage.info $LCOV_SUPPRESS || true
+        lcov --remove coverage.info '*/vcpkg_installed/*' --output-file coverage.info $LCOV_SUPPRESS || true
+        lcov --remove coverage.info '*/_deps/*' --output-file coverage.info $LCOV_SUPPRESS || true
+        lcov --list coverage.info $LCOV_SUPPRESS || true
         genhtml -o coverage-html coverage.info
 
     - name: Upload Coverage Artifact
