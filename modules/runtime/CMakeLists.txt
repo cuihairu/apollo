@@ -15,6 +15,25 @@ add_library(apollo::runtime ALIAS apollo_runtime)
 if(crashpad_FOUND)
     target_link_libraries(apollo_runtime PRIVATE crashpad::crashpad)
     target_compile_definitions(apollo_runtime PRIVATE APOLLO_HAS_CRASHPAD=1)
+    # UBSan vptr 检查与 crashpad 无 RTTI 边界（GCC/Clang；MSVC 无此 flag）。
+    #
+    # 成因：crashpad 预构建静态库（vcpkg）以 -fno-rtti 编译——库内 crashpad 类
+    # 的 typeinfo 符号为零（nm 实证）。本 TU 以 -fsanitize=undefined 编译且树级
+    # 开 -fno-sanitize-recover=all 时，UBSan vptr 检查经 typeinfo 链解析动态
+    # 类型，无 typeinfo 即恒判「member call on ... does not point to an object
+    # of type 'CrashReportDatabase'」并报 invalid vptr，在 init_crash_capture
+    # 的 GetPendingReports 虚调用（db-> 经 unique_ptr::operator-> 内联）处 abort。
+    # 这是未插桩第三方对象的检查边界假阳性，非本 TU 的 UB：db 由
+    # CrashReportDatabase::Initialize 返回、vptr 有效，仅动态类型不可解析。
+    # 函数级 no_sanitize("vptr") 属性不抑制内联头文件中的检查（GCC PR88311），
+    # 故取 TU 级 -fno-sanitize=vptr。TU 内无自有多态类型（仅 struct/string/
+    # filesystem::path + crashpad 边界），对自有对象的 vptr 覆盖无损失。
+    # flag 在未开 sanitizer 的构建中为无害空操作，但仅在 crashpad 接入分支
+    # 施加——边界存在时才需豁免。
+    if(NOT MSVC)
+        set_source_files_properties(src/crash_capture.cpp PROPERTIES
+            COMPILE_OPTIONS "-fno-sanitize=vptr")
+    endif()
     # handler 编译期缓存路径（运行期三级定位的兜底档）：vcpkg tools 产物
     find_file(CRASHPAD_HANDLER_EXE crashpad_handler
         PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/crashpad"
