@@ -249,7 +249,9 @@ jobs:
         # runner 镜像的 lcov 2.4 与新版 GCC 的覆盖数据不兼容（函数末行编码漂移，
         # 每次随机命中与改动无关的文件）：inconsistent 类别抑制逐文件告警，
         # check_data_consistency=0 跳过收尾一致性硬校验（lcovrc(5) 专用开关）。
-        lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch,inconsistent --rc check_data_consistency=0
+        # 上述两者只约束主进程；filter 并行子进程的一致性检查不受它们约束，
+        # 需 stop_on_error=0 让其不 die（子进程仅按 die 判定失败）。
+        lcov --capture --directory . --output-file coverage.info --ignore-errors mismatch,inconsistent --rc check_data_consistency=0 --rc stop_on_error=0
         lcov --remove coverage.info '/usr/*' --output-file coverage.info --ignore-errors unused
         lcov --remove coverage.info '*/tests/*' --output-file coverage.info --ignore-errors unused
         lcov --remove coverage.info '*/examples/*' --output-file coverage.info --ignore-errors unused
