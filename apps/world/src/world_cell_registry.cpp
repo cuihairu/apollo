@@ -359,9 +359,20 @@ void WorldApp::driveCellRegistry() {
         if (projection_ != nullptr) {
             for (const auto& entry : spaceAssignments_) {
                 if (entry.second.cell_id != 0) {
+                    // 端点发现面（L122）：归属 cell 的 M1 监听端点随投影携带；
+                    // 归属 cell 尚未（重新）登记（重启窗）= 空/0 未声明——目录
+                    // 透传不幻值，网关侧回落 World 中继。
+                    const auto* owning = find_cell_registration(entry.second.cell_id);
+                    const std::string endpoint_host =
+                        owning != nullptr ? owning->host : std::string{};
+                    const std::uint32_t endpoint_port =
+                        owning != nullptr
+                            ? static_cast<std::uint32_t>(
+                                  owning->port < 0 ? 0 : owning->port)
+                            : 0;
                     publishProjection(entry.first, entry.second.cell_id,
                                       entry.second.version, topology_version_,
-                                      true);
+                                      endpoint_host, endpoint_port, true);
                 }
             }
         }

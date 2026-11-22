@@ -165,6 +165,8 @@
     <field name="cell_id" type="int64" desc="执行进程归属 cell 号（0 = 执行进程未指派——落点先行，模拟域接线随多 cell 批）"/>
     <field name="simulation_epoch" type="int64" desc="模拟代次（执行域生命周期水位；0 = 未声明）"/>
     <field name="write_gen" type="int64" desc="资料写权代次（归属域：Base 写权自持代次，与模拟域分域；0 = 未声明）"/>
+    <field name="cell_host" type="string" desc="归属 cell 的 M1 监听地址（与 968 cell_host 同源——网关直连 cell 端点发现；空 = 未声明/未监听）"/>
+    <field name="cell_port" type="int32" desc="归属 cell 的 M1 监听端口（与 968 cell_port 同源；0 = 未声明）"/>
   </msg>
   <msg id="916" name="player_assign_world_response" dir="P2P" channel="events" domain="internal" desc="落点指派应答">
     <field name="success" type="bool"/>
@@ -191,6 +193,8 @@
     <field name="simulation_epoch" type="int64" desc="模拟代次（与 915 simulation_epoch 同源；0 = 未声明）"/>
     <field name="session_version" type="int64" desc="会话绑定代次（与 913 session_version 同源——绑定面写入，解析面原样回带；0 = 旧端未声明）"/>
     <field name="write_gen" type="int64" desc="资料写权代次（与 915 write_gen 同源——归属域随落点行回带；0 = 未声明）"/>
+    <field name="cell_host" type="string" desc="归属 cell 的 M1 监听地址（与 915/968 cell_host 同源——网关直连 cell 端点发现；空 = 未声明/未监听）"/>
+    <field name="cell_port" type="int32" desc="归属 cell 的 M1 监听端口（与 915/968 cell_port 同源；0 = 未声明）"/>
     <field name="error_message" type="string"/>
   </msg>
 
@@ -702,5 +706,7 @@
     <field name="topology_version" type="int64" desc="布局代次（D07 拓扑版本域，915/918 topology_version 同源——布局演进生产者（World 布局决定）接线：认领/重认领/释放每项已提交布局变更全局前进；0 = 未声明（首启/重启后首次变更前）——目录按 assignment_version 水位裁决，本域为承载域随投影携带）"/>
     <field name="management_epoch" type="int64" desc="World 管理代次（与 962 management_epoch 同源——源端隔离不明判定）"/>
     <field name="ready" type="bool" desc="1=归属视图可服务（claim/reclaim）；0=释放墓碑（cell_id 同帧必为 0）"/>
+    <field name="cell_host" type="string" desc="已提交归属 cell 的 M1 监听地址（与 960 host 同源——网关直连端点发现面；claim 携带、墓碑空串）"/>
+    <field name="cell_port" type="int32" desc="已提交归属 cell 的 M1 监听端口（与 960 port 同源；0 = 未监听/未声明）"/>
   </msg>
 </messages>

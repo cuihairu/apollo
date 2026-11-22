@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace apollo::game::base {
 
@@ -25,6 +26,13 @@ struct WorldAssignment {
     // 互不推演——换 Base 承载不动模拟代次，模拟域接线不代写归属代次；
     // 0 = 未声明。
     std::uint64_t write_gen = 0;
+    // 归属 cell 的 M1 监听端点（L122 网关直连端点发现面，915/918/968
+    // cell_host/cell_port 同源）：网关据此直连归属 cell 送模拟输入，不经
+    // World 管理端物理中继。host 空串 = 端点未声明（cell 未声明监听/未登记），
+    // 网关回落 World 中继；port 0 = 未监听。承载域——落点行原样携带，网关
+    // 不据此裁决（裁决源仍是 assignment_version 水位）。
+    std::string cell_host;
+    std::uint32_t cell_port = 0;
 
     [[nodiscard]] bool is_assigned() const noexcept {
         return world_id != 0 || instance_id != 0 || space_id != 0;

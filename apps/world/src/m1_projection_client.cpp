@@ -43,6 +43,9 @@ struct MirrorEntry {
     std::uint64_t assignment_version = 0;
     std::uint64_t topology_version = 0;
     std::uint64_t management_epoch = 0;
+    // 归属 cell 的 M1 监听端点（L122 端点发现面；空/0 = 未声明）
+    std::string cell_host;
+    std::uint32_t cell_port = 0;
 };
 
 class M1PositionProjectionClientImpl final : public M1PositionProjectionClient {
@@ -117,7 +120,9 @@ public:
     void publish(std::uint64_t space_id, std::uint64_t cell_id,
                  std::uint64_t assignment_version,
                  std::uint64_t topology_version,
-                 std::uint64_t management_epoch, bool ready) override {
+                 std::uint64_t management_epoch,
+                 const std::string& cell_host, std::uint32_t cell_port,
+                 bool ready) override {
         // 镜像先行（重放事实源）：claim 入表 / 墓碑抹除。镜像 = World 当前
         // 已提交视图，version 0 的 claim 是非法发布（962 版本自 1 起）不记账。
         if (ready && cell_id != 0) {
@@ -126,14 +131,16 @@ public:
             }
             mirror_[space_id] = MirrorEntry{space_id, cell_id,
                                             assignment_version,
-                                            topology_version, management_epoch};
+                                            topology_version, management_epoch,
+                                            cell_host, cell_port};
         } else if (!ready && cell_id == 0) {
             mirror_.erase(space_id);
         } else {
             return;  // ready/cell_id 不配对：解耦面违例，不发布不记账
         }
         send_frame(space_id, cell_id, assignment_version,
-                   topology_version, management_epoch, ready);
+                   topology_version, management_epoch,
+                   cell_host, cell_port, ready);
     }
 
     M1PositionProjectionState state() const override {
@@ -158,21 +165,25 @@ private:
         for (const auto& kv : mirror_) {
             const auto& e = kv.second;
             send_frame(e.space_id, e.cell_id, e.assignment_version,
-                       e.topology_version, e.management_epoch, true);
+                       e.topology_version, e.management_epoch,
+                       e.cell_host, e.cell_port, true);
         }
     }
 
     void send_frame(std::uint64_t space_id, std::uint64_t cell_id,
                     std::uint64_t assignment_version,
                     std::uint64_t topology_version,
-                    std::uint64_t management_epoch, bool ready) {
+                    std::uint64_t management_epoch,
+                    const std::string& cell_host, std::uint32_t cell_port,
+                    bool ready) {
         auto* l = manager_ ? manager_->link(kLoginEndpoint) : nullptr;
         if (l == nullptr) {
             return;  // 未启动/链路缺席：镜像先行，kUp 重放补投
         }
-        // 968 七字段：world_id / space_id / cell_id / assignment_version /
-        // topology_version / management_epoch / ready（受理面同序解）。
-        std::vector<wire::FieldValue> fields(7);
+        // 968 九字段：world_id / space_id / cell_id / assignment_version /
+        // topology_version / management_epoch / ready / cell_host / cell_port
+        //（受理面同序解；端点承载域随归属事实逐帧透传）。
+        std::vector<wire::FieldValue> fields(9);
         fields[0].integer = config_.world_id;
         fields[1].integer = static_cast<std::int64_t>(space_id);
         fields[2].integer = static_cast<std::int64_t>(cell_id);
@@ -180,6 +191,9 @@ private:
         fields[4].integer = static_cast<std::int64_t>(topology_version);
         fields[5].integer = static_cast<std::int64_t>(management_epoch);
         fields[6].integer = ready ? 1 : 0;
+        fields[7].text = cell_host;
+        fields[8].integer = static_cast<std::int64_t>(
+            static_cast<std::int32_t>(cell_port));
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(kProjectionId, fields, payload)) {
             return;
@@ -237,7 +251,8 @@ public:
     bool linkUp() const override { return false; }
     void publish(std::uint64_t space_id, std::uint64_t cell_id,
                  std::uint64_t assignment_version, std::uint64_t,
-                 std::uint64_t, bool ready) override {
+                 std::uint64_t, const std::string&, std::uint32_t,
+                 bool ready) override {
         if (ready && cell_id != 0 && assignment_version != 0) {
             mirror_[space_id] = assignment_version;
         } else if (!ready && cell_id == 0) {

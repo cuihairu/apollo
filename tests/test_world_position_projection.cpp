@@ -269,6 +269,46 @@ bool test_registry_topology_carried_not_adjudicated() {
     return true;
 }
 
+// cell 端点（L122 网关直连端点发现面）为承载域：不参与水位裁决——随归属
+// 事实携带，claim 刷新端点、重认领换端点、空端点（cell 未声明监听）均受理。
+bool test_registry_endpoint_carried_not_adjudicated() {
+    PositionProjectionRegistry r;
+    SpacePositionProjection p;
+    p.world_id = 1;
+    p.space_id = 501;
+    p.cell_id = 21;
+    p.assignment_version = 1;
+    p.cell_host = "10.0.0.5";
+    p.cell_port = 9200;
+    p.ready = true;
+    TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
+                "claim with endpoint applied");
+    const auto* e = r.find_projection(1, 501);
+    TEST_ASSERT(e != nullptr && e->cell_host == "10.0.0.5" && e->cell_port == 9200,
+                "endpoint recorded with claim");
+    // 重认领换 cell → 端点刷新
+    p.assignment_version = 2;
+    p.cell_id = 22;
+    p.cell_host = "10.0.0.6";
+    p.cell_port = 9201;
+    TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
+                "re-claim with new endpoint applied");
+    const auto* f = r.find_projection(1, 501);
+    TEST_ASSERT(f != nullptr && f->cell_host == "10.0.0.6" && f->cell_port == 9201,
+                "endpoint refreshed on re-claim");
+    // 重认领空端点（cell 未声明监听）→ 受理，端点清空（承载域不拒）
+    p.assignment_version = 3;
+    p.cell_id = 23;
+    p.cell_host.clear();
+    p.cell_port = 0;
+    TEST_ASSERT(r.apply_projection(p, now_ms()) == ProjectionVerdict::kApplied,
+                "re-claim with empty endpoint applied (carried, not adjudicated)");
+    const auto* g = r.find_projection(1, 501);
+    TEST_ASSERT(g != nullptr && g->cell_host.empty() && g->cell_port == 0,
+                "empty endpoint carried (no endpoint adjudication)");
+    return true;
+}
+
 //==============================================================================
 // Part B：真链路 e2e（login 注册面 968 受理 + World 发布客户端）
 //==============================================================================
@@ -328,8 +368,9 @@ bool test_e2e_projection_lifecycle() {
                 "publisher link up");
 
     // claim：journal A 行提交态推目录（topology_version = 布局代次随帧携带，
-    // L120 拓扑生产者接线）
-    client->publish(501, 21, 1, 1, 3, true);
+    // L120 拓扑生产者接线；cell_host/cell_port = 归属 cell M1 端点随帧携带，
+    // L122 网关直连端点发现面）
+    client->publish(501, 21, 1, 1, 3, "10.0.0.5", 9200, true);
     TEST_ASSERT(wait_for(*client, [&] {
                     const auto* e = login_end.projections.find_projection(1, 501);
                     return e != nullptr && e->cell_id == 21;
@@ -339,10 +380,12 @@ bool test_e2e_projection_lifecycle() {
     TEST_ASSERT(e->assignment_version == 1 && e->management_epoch == 3 && e->ready,
                 "claim fields land");
     TEST_ASSERT(e->topology_version == 1, "topology version carried (claim)");
+    TEST_ASSERT(e->cell_host == "10.0.0.5" && e->cell_port == 9200,
+                "cell endpoint carried (claim)");
     TEST_ASSERT(login_end.projections.applied_total() == 1, "one applied");
 
-    // 重认领：版本前进替换（布局代次全局前进——携带 2）
-    client->publish(501, 22, 2, 2, 3, true);
+    // 重认领：版本前进替换（布局代次全局前进——携带 2；端点随新归属刷新）
+    client->publish(501, 22, 2, 2, 3, "10.0.0.6", 9201, true);
     TEST_ASSERT(wait_for(*client, [&] {
                     const auto* f = login_end.projections.find_projection(1, 501);
                     return f != nullptr && f->cell_id == 22;
@@ -350,9 +393,11 @@ bool test_e2e_projection_lifecycle() {
                 "re-claim replaces entry");
     const auto* f = login_end.projections.find_projection(1, 501);
     TEST_ASSERT(f->topology_version == 2, "topology version advances (re-claim)");
+    TEST_ASSERT(f->cell_host == "10.0.0.6" && f->cell_port == 9201,
+                "cell endpoint refreshed (re-claim)");
 
-    // 释放墓碑：目录抹除（布局代次 3 随墓碑帧携带）
-    client->publish(501, 0, 2, 3, 3, false);
+    // 释放墓碑：目录抹除（布局代次 3 随墓碑帧携带；端点空/0）
+    client->publish(501, 0, 2, 3, 3, "", 0, false);
     TEST_ASSERT(wait_for(*client,
                          [&] { return login_end.projections.find_projection(1, 501) == nullptr; }),
                 "tombstone erases directory entry");
@@ -370,7 +415,7 @@ bool test_e2e_reconnect_replays_mirror() {
     TEST_ASSERT(client != nullptr, "publisher starts");
     TEST_ASSERT(wait_for(*client, [&] { return client->linkUp(); }),
                 "first link up");
-    client->publish(502, 31, 1, 4, 5, true);
+    client->publish(502, 31, 1, 4, 5, "10.0.0.7", 9202, true);
     TEST_ASSERT(wait_for(*client, [&] {
                     const auto* e = login_end.projections.find_projection(7, 502);
                     return e != nullptr && e->cell_id == 31;
@@ -389,6 +434,8 @@ bool test_e2e_reconnect_replays_mirror() {
     const auto* e = login_end.projections.find_projection(7, 502);
     TEST_ASSERT(e != nullptr && e->cell_id == 31 && e->assignment_version == 1,
                 "entry survives replay");
+    TEST_ASSERT(e != nullptr && e->cell_host == "10.0.0.7" && e->cell_port == 9202,
+                "cell endpoint survives replay (mirror carries endpoint)");
     TEST_ASSERT(login_end.projections.applied_total() == applied_before,
                 "replay idempotent (no double bookkeeping)");
     client->stop();
@@ -415,6 +462,8 @@ int main() {
     run("registry_multi_world_keys", test_registry_multi_world_keys);
     run("registry_topology_carried_not_adjudicated",
         test_registry_topology_carried_not_adjudicated);
+    run("registry_endpoint_carried_not_adjudicated",
+        test_registry_endpoint_carried_not_adjudicated);
     run("e2e_projection_lifecycle", test_e2e_projection_lifecycle);
     run("e2e_reconnect_replays_mirror", test_e2e_reconnect_replays_mirror);
 #endif

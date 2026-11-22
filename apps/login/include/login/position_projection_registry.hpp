@@ -47,6 +47,11 @@ struct SpacePositionProjection {
                                            // 承载域随投影记录，查址面透传）
     std::uint64_t management_epoch = 0;    // World 管理代次（与 962 同源）
     bool ready = false;                    // 1=归属可服务；0=墓碑
+    // 归属 cell 的 M1 监听端点（L122 网关直连端点发现面，与 960 host/port
+    // 同源）：claim 携带（host 空串/port 0 = cell 未声明监听，查址面透传
+    // 不幻值）；墓碑不携带。承载域——本表不裁决，随 claim 条目记录。
+    std::string cell_host;                 // M1 监听地址（空 = 未声明）
+    std::uint32_t cell_port = 0;           // M1 监听端口（0 = 未监听）
     std::uint64_t received_at_ms = 0;      // steady 毫秒（last-heard 语义）
 };
 

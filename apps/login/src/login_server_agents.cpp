@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <iostream>
 #include <chrono>
+#include <utility>
 #include <random>
 #include <sstream>
 #include <iomanip>
@@ -79,6 +80,22 @@ bool LoginServer::preparePlayerOnline(
                 config_.initialWorldId, config_.initialSpaceId);
             return proj != nullptr ? proj->assignment_version : 0;
         };
+        // 归属 cell 的 M1 端点 stamp（L122 网关直连端点发现面）：目录登记表
+        // 持有 968 投影的归属 cell M1 监听端点（与 960 host/port 同源）——随
+        // 落点成行入 915，网关经 918 直连归属 cell。无投影 / cell 未声明监听
+        // = 空/0 未声明（不幻值；网关侧回落 World 中继）。
+        const auto cell_endpoint_from_projection =
+            [this]() -> std::pair<std::string, std::uint32_t> {
+                if (positionProjectionRegistry_ == nullptr) {
+                    return {};
+                }
+                const auto* proj = positionProjectionRegistry_->find_projection(
+                    config_.initialWorldId, config_.initialSpaceId);
+                if (proj == nullptr) {
+                    return {};
+                }
+                return {proj->cell_host, proj->cell_port};
+            };
         protocol::PlayerActivateRequest activateReq;
         activateReq.playerId = playerId;
         const auto activateResp =
@@ -127,6 +144,9 @@ bool LoginServer::preparePlayerOnline(
             assignment.space_id = config_.initialSpaceId;
             assignment.route_version = route_version_from_projection();
             assignment.topology_version = topology_from_projection();
+            const auto cell_endpoint = cell_endpoint_from_projection();
+            assignment.cell_host = cell_endpoint.first;  // L122：端点域随落点成行
+            assignment.cell_port = cell_endpoint.second;
             if (!directory_->bindSession(playerId, binding) || !directory_->assignWorld(playerId, assignment)) {
                 errorMessage = "Login directory rejected admission";
                 return false;
@@ -142,6 +162,9 @@ bool LoginServer::preparePlayerOnline(
         assignReq.spaceId = config_.initialSpaceId;
         assignReq.routeVersion = route_version_from_projection();
         assignReq.topologyVersion = topology_from_projection();
+        const auto cell_endpoint = cell_endpoint_from_projection();
+        assignReq.cellHost = cell_endpoint.first;  // L122：端点域随落点成行
+        assignReq.cellPort = cell_endpoint.second;
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(

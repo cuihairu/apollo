@@ -226,6 +226,7 @@ private:
     // 随 968 携带（0 = 未声明——首启/重启后首次变更前）。
     void publishProjection(std::uint64_t space_id, std::uint64_t cell_id,
                            std::uint64_t version, std::uint64_t topology_version,
+                           const std::string& cell_host, std::uint32_t cell_port,
                            bool ready);
     // 目标 cell peer 选择（切片2 转发）：首个就绪、未排空、未缩容的登记
     // cell 的链路 peer 自报名；无合格目标返回空串。管理命令（932/944/952/

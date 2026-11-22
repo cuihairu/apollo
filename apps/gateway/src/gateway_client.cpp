@@ -407,6 +407,10 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         routeSnapshot.simulationEpoch = parsed.simulationEpoch;
                         routeSnapshot.sessionVersion = parsed.sessionVersion;
                         routeSnapshot.writeGen = parsed.writeGen;  // L118 归属域映射
+                        // L122 网关直连端点发现面：归属 cell M1 端点映射——
+                        // 出口经 932 直连归属 cell（不经 World 管理端物理中继）。
+                        routeSnapshot.cellHost = parsed.cellHost;
+                        routeSnapshot.cellPort = static_cast<std::uint16_t>(parsed.cellPort);
                         routeSnapshot.worldServerUrl = config_.worldUrl;
                         return routeSnapshot;
                     }

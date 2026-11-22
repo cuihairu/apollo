@@ -60,11 +60,16 @@ public:
     // 发布已提交归属：claim = cell_id≠0 且 ready=true；释放墓碑 = cell_id=0
     // 且 ready=false（镜像抹除 + 目录抹除面）。management_epoch 与 962 同源
     //（World 管理代次，逐帧透传）。topology_version = 布局代次（L120 拓扑
-    // 生产者接线，968 携带；0 = 未声明）。未启动时镜像照记（kUp 重放补投）。
+    // 生产者接线，968 携带；0 = 未声明）。cell_host/cell_port = 归属 cell 的
+    // M1 监听端点（L122 网关直连端点发现面，968 携带；与 960 host/port 同
+    // 源——claim 携带、墓碑空串/0；0 = 未声明）。未启动时镜像照记（kUp 重放
+    // 补投）。
     virtual void publish(std::uint64_t space_id, std::uint64_t cell_id,
                          std::uint64_t assignment_version,
                          std::uint64_t topology_version,
-                         std::uint64_t management_epoch, bool ready) = 0;
+                         std::uint64_t management_epoch,
+                         const std::string& cell_host, std::uint32_t cell_port,
+                         bool ready) = 0;
 
     virtual M1PositionProjectionState state() const = 0;
 };

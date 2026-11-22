@@ -80,14 +80,22 @@ public:
     // 路由提示（多 cell 批，0 = 未带）：space_id/cell_id 从 RouteSnapshot 映
     // 入 932 信封——World 管理端据空间归属把模拟输入路由到当前 cell，不逐条
     // 经目录代理。缺省 0 = 旧调用面（单 cell 批）不携带，World 按首就绪回退。
+    // 归属 cell 的 M1 直连端点（L122 网关→cell 直连，0 = 未带）：host 非空
+    // 时出口为该端点建/复用直连链，意图直连归属 cell 送达——不经 World 管理
+    // 端物理中继（World 前递面保留为未声明端点时的回退）。端点受理时刻定格
+    //（入箱即定格纪律）；链路未连接时留箱等待（重连退避自驱），不落地不阻塞。
     virtual bool forwardIntent(std::uint64_t session_id,
                                const std::vector<std::uint8_t>& legacy_frame,
                                std::uint64_t space_id = 0,
-                               std::uint64_t cell_id = 0) {
+                               std::uint64_t cell_id = 0,
+                               const std::string& cell_host = {},
+                               std::uint16_t cell_port = 0) {
         (void)session_id;
         (void)legacy_frame;
         (void)space_id;
         (void)cell_id;
+        (void)cell_host;
+        (void)cell_port;
         return false;
     }
 
@@ -100,6 +108,7 @@ public:
     virtual std::uint64_t unforwardableFrames() const { return 0; } // 非五族/残帧/箱满
     virtual std::uint64_t droppedSends() const { return 0; }        // 链路拒收（背压）
     virtual std::uint64_t retriedIntents() const { return 0; }      // 2001 透明重试已发出
+    virtual std::uint64_t directCellIntents() const { return 0; }   // L122 直连归属 cell 发出
     virtual std::uint64_t deliveredClients() const { return 0; }    // 939 下行成功投递
     virtual std::uint64_t undeliverableClients() const { return 0; }// 939 残帧/身份不匹配
     // pending 关联账面（仅限宿主泵线程读——泵拍外的原子计数只有其余各面）

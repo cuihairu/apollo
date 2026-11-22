@@ -25,6 +25,7 @@
 #include <atomic>
 #include <chrono>
 #include <fstream>
+#include <iterator>
 #include <mutex>
 #include <sstream>
 #include <unordered_map>
@@ -99,6 +100,8 @@ std::uint16_t contract_id_for(apollo::protocol::MessageType type) {
 // enqueued_ms = 入箱时刻（gateway span 计时起点——受理→发出全程）。
 // space_id/cell_id = 路由提示（多 cell 批；0 = 未带）——受理面快照，入箱
 // 即定格（路由事实以入箱时刻为准，不随泵拍晚到改写）。
+// cell_host/cell_port = 归属 cell 的 M1 直连端点（L122；空/0 = 未带——出口
+// 走 World 前递回退面），同定格纪律。
 struct InboxItem {
     std::uint64_t session_id;
     std::uint16_t contract_id;
@@ -106,6 +109,8 @@ struct InboxItem {
     std::uint64_t enqueued_ms = 0;
     std::uint64_t space_id = 0;
     std::uint64_t cell_id = 0;
+    std::string cell_host;
+    std::uint16_t cell_port = 0;
 };
 
 class M1EgressImpl final : public M1Egress {
@@ -175,16 +180,19 @@ public:
             return;
         }
         manager_->pump(now_ms);
-        if (worldConnected()) {
-            process_due_retries(now_ms);  // 旧意图先走（近似保序）
-            drain_inbox(now_ms);
-        }
+        // 逐项就绪门（L122 多端点）：意图各自等各自的目标链（World 前递链
+        // 或归属 cell 直连链）——就绪的当拍发出，未就绪的留箱/留队重排，
+        // 不因单条链路未起而堵死其余端点的投递。
+        process_due_retries(now_ms);  // 旧意图先走（近似保序）
+        drain_inbox(now_ms);
         sweep_timeouts(now_ms);
     }
 
     bool forwardIntent(std::uint64_t session_id,
                        const std::vector<std::uint8_t>& legacy_frame,
-                       std::uint64_t space_id, std::uint64_t cell_id) override {
+                       std::uint64_t space_id, std::uint64_t cell_id,
+                       const std::string& cell_host,
+                       std::uint16_t cell_port) override {
         if (!started_.load(std::memory_order_acquire)) {
             return false;
         }
@@ -208,7 +216,8 @@ public:
                 return false;
             }
             inbox_.push_back(InboxItem{session_id, contract_id, legacy_frame,
-                                       trace::now_ms(), space_id, cell_id});
+                                       trace::now_ms(), space_id, cell_id,
+                                       cell_host, cell_port});
         }
         return true;
     }
@@ -246,6 +255,10 @@ public:
         return retried_.load(std::memory_order_relaxed);
     }
 
+    std::uint64_t directCellIntents() const override {
+        return direct_cell_.load(std::memory_order_relaxed);
+    }
+
     std::uint64_t deliveredClients() const override {
         return deliver_count_.load(std::memory_order_relaxed);
     }
@@ -259,8 +272,41 @@ public:
     }
 
 private:
+    // 发送结果（L122 多端点就绪门）：kSent 已交链路；kRequeue 目标链未就绪
+    //（拨号/退避窗）——留箱/留队等下一拍，不落地不丢；kDrop 不可恢复（翻译
+    // 失败/背压/端点未装配）落地计数。
+    enum class SendOutcome { kSent, kRequeue, kDrop };
+
     link::InterServerLink* gateway_link() {
         return manager_ ? manager_->link("world") : nullptr;
+    }
+
+    // 目标链路（L122 网关→cell 直连）：带归属 cell 端点 = 直连该 cell 的 M1
+    // 面（首见即建 active 端点，端点名按 host:port 定名——地址换则链换名，
+    // 重连不换名，链路对象跨重连稳定）；未带端点 = World 前递链（既有回退
+    // 面，端点未声明/旧端未上报时）。装配一次（同 world 端点纪律）。
+    link::InterServerLink* target_link(const InboxItem& item) {
+        if (manager_ == nullptr) {
+            return nullptr;
+        }
+        if (item.cell_host.empty() || item.cell_port == 0) {
+            return gateway_link();
+        }
+        const std::string name = "cell-" + item.cell_host + ":"
+                                + std::to_string(item.cell_port);
+        if (manager_->link(name) == nullptr) {
+            link::EndpointConfig ep;
+            ep.name = name;
+            ep.host = item.cell_host;
+            ep.port = item.cell_port;
+            ep.role = link::EndpointRole::kActive;
+            if (!manager_->add_endpoint(ep)) {
+                ++dropped_;  // 装配失败（同名已存/坏配置）= 静默面
+                return nullptr;
+            }
+            install_dispatching(*manager_->link(name));
+        }
+        return manager_->link(name);
     }
 
     bool load_route_table(link::RouteTable& table) {
@@ -333,24 +379,38 @@ private:
     }
 
     // 透明重试到期拍（L122 末批）：延迟窗给 World/cell 就绪机会；到期项走与
-    // 新意图同一翻译/发送路径（新 request_id、新 pending 账面）。链路未连接
-    // 时留在队列等下一拍（pump 只在 worldConnected 时进入本面）。发不出去
-    //（背压/拆线）= 终局落地（dropped 计数，translate_and_send 内）。
+    // 新意图同一翻译/发送路径（新 request_id、新 pending 账面）。目标链未
+    // 就绪（拨号/退避窗）= 原样留队等下一拍；发不出去（背压/拆线）= 终局
+    // 落地（dropped 计数，translate_and_send 内）。到期项先整体摘出再处理
+    //（处理中留队回填不能与迭代同拍——push_back 扩容会使未完成迭代器失效）。
     void process_due_retries(std::uint64_t now_ms) {
-        for (auto it = retry_queue_.begin(); it != retry_queue_.end();) {
-            if (now_ms < it->retry_at_ms) {
-                ++it;  // 未到期（近似单调推进：队列按到期时间乱序插入）
-                continue;
+        std::vector<RetryItem> due;
+        std::vector<RetryItem> deferred;
+        for (auto& entry : retry_queue_) {
+            if (now_ms >= entry.retry_at_ms) {
+                due.push_back(std::move(entry));
+            } else {
+                deferred.push_back(std::move(entry));  // 未到期（乱序到期时间）
             }
-            const auto item = std::move(it->item);
-            it = retry_queue_.erase(it);
+        }
+        retry_queue_ = std::move(deferred);
+        std::vector<RetryItem> requeue;
+        for (auto& entry : due) {
+            InboxItem item = std::move(entry.item);
             try {
-                translate_and_send(item, now_ms, /*is_retry=*/true);
+                if (translate_and_send(item, now_ms, /*is_retry=*/true)
+                    == SendOutcome::kRequeue) {
+                    // 目标链未就绪：留队，下一拍原样重试（不落地不续时窗）
+                    requeue.push_back(RetryItem{now_ms, std::move(item)});
+                }
             } catch (const std::exception&) {
                 ++unforwardable_;
             } catch (...) {
                 ++unforwardable_;
             }
+        }
+        for (auto& entry : requeue) {
+            retry_queue_.push_back(std::move(entry));
         }
     }
 
@@ -361,28 +421,52 @@ private:
             items = std::move(inbox_);
             inbox_.clear();
         }
+        std::vector<InboxItem> requeue;
         for (auto& item : items) {
             // 泵线程推进帧体翻译：受理面只过帧头筛选，客户端残帧的 body 解码
             // 会抛（长度校验）——落地计数不扩散，不终止宿主泵线程。
             try {
-                translate_and_send(item, now_ms);
+                if (translate_and_send(item, now_ms)
+                    == SendOutcome::kRequeue) {
+                    // 目标链未就绪（L122 逐项就绪门）：留箱等下一拍
+                    requeue.push_back(std::move(item));
+                }
             } catch (const std::exception&) {
                 ++unforwardable_;
             } catch (...) {
                 ++unforwardable_;
             }
         }
+        if (!requeue.empty()) {
+            // 未就绪项回填箱首（保受理序：本轮未发出的项仍排在后续入箱项前）
+            std::lock_guard<std::mutex> lock(inbox_mutex_);
+            inbox_.insert(inbox_.begin(), std::make_move_iterator(requeue.begin()),
+                           std::make_move_iterator(requeue.end()));
+        }
     }
 
     // legacy 帧 → 契约字段（序 = 契约表序，WorldApp 侧 build_legacy_intent 镜像
     // 互逆）；帧体非法抛（drain_inbox 捕获落地）——受理面已过帧头筛选，此处兜底。
     // is_retry = 透明重试发送（新 pending 条目标记 retried，不再续试）。
-    void translate_and_send(const InboxItem& item, std::uint64_t now_ms,
-                            bool is_retry = false) {
+    // 返回 SendOutcome（见枚举注）：kSent / kRequeue（目标链未就绪，留箱）/
+    // kDrop（不可恢复，落地计数）。
+    SendOutcome translate_and_send(const InboxItem& item, std::uint64_t now_ms,
+                                   bool is_retry = false) {
         auto& frame = item.frame;
         if (frame.size() < sizeof(apollo::protocol::MessageHeader)) {
             ++unforwardable_;  // 残帧：body 切片越界，泵拍侧再验一次（不占关联键）
-            return;
+            return SendOutcome::kDrop;
+        }
+        // 目标链就绪门前置（L122 逐项就绪门）：链未就绪时先判后建载荷——
+        // request_id 关联键只为真发送的帧配发（未就绪留箱/留队的帧不占键，
+        // 补投时按当拍序号重新配发，键序与到达序一致）。
+        auto* link = target_link(item);
+        if (link == nullptr) {
+            ++dropped_;  // 端点未装配（同名已存/坏配置）= 静默面
+            return SendOutcome::kDrop;
+        }
+        if (link->state() != link::LinkState::kUp) {
+            return SendOutcome::kRequeue;  // 拨号/退避窗：留箱等下一拍
         }
         const auto request_id = next_request_id_++;
 
@@ -496,7 +580,7 @@ private:
             }
             default:
                 ++unforwardable_;
-                return;
+                return SendOutcome::kDrop;
         }
 
         // 头部两字段：request_id（应答关联键）+ session_id（源会话透传）
@@ -506,7 +590,7 @@ private:
         std::vector<std::uint8_t> payload;
         if (!wire::encode_payload(item.contract_id, fields, payload)) {
             ++unforwardable_;  // 帧体翻译失败（decodeBody 不抛但字节面可能错位）
-            return;
+            return SendOutcome::kDrop;
         }
 
         // trace 子集（P3-3 语义层批）：意图恒走 932 internal_envelope——
@@ -533,21 +617,19 @@ private:
         std::vector<std::uint8_t> packed;
         if (!trace::pack_envelope(env, packed)) {
             ++unforwardable_;  // 信封装配失败 = 契约面失配（正常不发生）
-            return;
+            return SendOutcome::kDrop;
         }
 
-        auto* link = gateway_link();
-        if (link == nullptr) {
-            ++dropped_;
-            return;
-        }
         // Reliable：意图不可丢；链路断连期间入队，重连恰一次补投。
         //（InterServerLink::send 自封 u16 id 信封——传裸载荷，勿再包一层）
         const auto code = link->send(id_of(MsgId::internal_envelope), packed.data(),
                                      packed.size(), link::SendClass::kReliable);
         if (code != link::SendCode::kAccepted) {
             ++dropped_;  // 背压/拒收：legacy 链路死观察面同型，落地不重试
-            return;
+            return SendOutcome::kDrop;
+        }
+        if (!item.cell_host.empty() && item.cell_port != 0) {
+            ++direct_cell_;  // L122 直连归属 cell 发出（观测面）
         }
         // 首发条目保留原帧（2001 透明重试的载荷源）；重试条目不再续试，帧不
         // 复留（pending 生命周期由 ack 超时清扫封顶，帧容量随箱顶格同界）。
@@ -571,6 +653,7 @@ private:
             span.end_ms = trace::now_ms();
             trace::emit_span(span);
         }
+        return SendOutcome::kSent;
     }
 
     void handle_ack(const std::uint8_t* data, std::size_t size) {
@@ -674,6 +757,7 @@ private:
     std::atomic<std::uint64_t> unforwardable_{0};
     std::atomic<std::uint64_t> dropped_{0};
     std::atomic<std::uint64_t> retried_{0};
+    std::atomic<std::uint64_t> direct_cell_{0};  // L122 直连归属 cell 发出
     std::atomic<std::uint64_t> deliver_count_{0};
     std::atomic<std::uint64_t> undeliverable_{0};
 };

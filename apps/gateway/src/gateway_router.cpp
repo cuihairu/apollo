@@ -91,7 +91,8 @@ void MessageRouter::forwardToWorld(
     // 路由提示（多 cell 批）：RouteSnapshot 的当前 cell/空间映入 932 信封——
     // World 管理端据空间归属把模拟输入路由到当前 cell（0 = 未带，按首就绪回退）。
     if (!m1Egress_->forwardIntent(sessionId, message, routeSnapshot.spaceId,
-                                  routeSnapshot.cellId)) {
+                                  routeSnapshot.cellId, routeSnapshot.cellHost,
+                                  routeSnapshot.cellPort)) {
         // 不可前递（非五族意图——如断连通知，cell 感知面随契约后续批收口）
         glog().info("Gateway dropped unforwardable world message for session "
                     + std::to_string(sessionId));

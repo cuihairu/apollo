@@ -160,6 +160,8 @@ struct IntentRecord {
     std::vector<wire::FieldValue> fields;
     bool wrapped{false};
     trace::TraceContext trace{};
+    std::uint64_t cell_id{0};    // L122 信封路由提示（归属 cell）
+    std::uint64_t space_id{0};   // L122 信封路由提示（归属 space）
 };
 
 class FakeCell {
@@ -250,7 +252,8 @@ public:
         records_.push_back(IntentRecord{inner_id,
                                         static_cast<std::uint64_t>(fields[0].integer),
                                         static_cast<std::uint64_t>(fields[1].integer),
-                                        std::move(fields), true, env.trace});
+                                        std::move(fields), true, env.trace,
+                                        env.cell_id, env.space_id});
     }
 
     std::vector<IntentRecord> records() {
@@ -292,6 +295,26 @@ public:
             }
         }
         return n;
+    }
+
+    // 回 939 客户端帧下行（L122 直连链 939 回流面）
+    bool deliver(std::uint64_t session_id, std::uint32_t gateway_id,
+                 const std::vector<std::uint8_t>& payload) {
+        auto* gw = manager_ ? manager_->link("gateway") : nullptr;
+        if (gw == nullptr) {
+            return false;
+        }
+        std::vector<wire::FieldValue> fields(3);
+        fields[0].integer = static_cast<std::int64_t>(session_id);
+        fields[1].integer = static_cast<std::int64_t>(gateway_id);
+        fields[2].bytes = payload;
+        std::vector<std::uint8_t> p;
+        if (!wire::encode_payload(id_of(MsgId::client_deliver), fields, p)) {
+            return false;
+        }
+        (void)gw->send(id_of(MsgId::client_deliver), p.data(), p.size(),
+                       link::SendClass::kReliable);
+        return true;
     }
 
 private:
@@ -984,6 +1007,71 @@ bool test_egress_transparent_retry_once() {
     return true;
 }
 
+// L122 网关→cell 直连：带归属 cell 端点的意图直连该 cell 的 M1 面送达
+//（不经 World 管理端物理中继），929 应答与 939 客户端下行经同一直连链回流，
+// 端点未就绪时留箱等下一拍（逐项就绪门，不落地不堵其余端点）。
+bool test_egress_direct_cell_dial() {
+    std::cout << "Running: test_egress_direct_cell_dial..." << std::endl;
+
+    FakeCell cell;  // 归属 cell 的 M1 接收端（self_name=world，被动 gateway 端点）
+    TEST_ASSERT(cell.healthy(), "cell assembled");
+    const auto cell_port = cell.listen_port();
+
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = 1;  // 不可达 World 端口：直连路径不依赖 World 中继链
+    cfg.route_json = kRouteJson;
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+    TEST_ASSERT(!egress->worldConnected(), "world relay link stays down");
+
+    // 客户端帧（939 下行载荷）
+    apollo::protocol::CellEntityMove move;
+    move.entityId = 7;
+    move.oldPos = apollo::protocol::Position(1.0f, 1.0f, 1.0f);
+    move.newPos = apollo::protocol::Position(2.0f, 2.0f, 2.0f);
+    const auto downlink = apollo::protocol::MessageCodec::encode(move, 77);
+    std::vector<std::uint8_t> delivered;
+    egress->setClientDeliver([&delivered](std::uint64_t, std::uint32_t,
+                                          const std::vector<std::uint8_t>& payload) {
+        delivered = payload;
+    });
+
+    const auto frames = five_family_frames();
+    TEST_ASSERT(egress->forwardIntent(77, frames[0], /*space_id=*/7, /*cell_id=*/3,
+                                      "127.0.0.1", cell_port),
+                "direct intent accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 1; }, 5000),
+                "direct intent reached owning cell");
+    TEST_ASSERT(egress->directCellIntents() == 1, "direct cell intent counted");
+    TEST_ASSERT(egress->sentIntents() == 1, "one sent");
+    TEST_ASSERT(!egress->worldConnected(), "still direct only (no relay dial)");
+
+    const auto rec = cell.records().at(0);
+    TEST_ASSERT(rec.wrapped, "direct intent still 932 envelope");
+    TEST_ASSERT(rec.contract_id == id_of(MsgId::cell_create_entity), "inner family id");
+    TEST_ASSERT(rec.cell_id == 3 && rec.space_id == 7,
+                "direct envelope carries owning cell/space hints");
+
+    // 929 应答经直连链回流 → 关联回收
+    TEST_ASSERT(cell.ack(rec.request_id, 0), "direct ack sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->ackedIntents() == 1; }, 5000),
+                "direct ack resolved");
+    TEST_ASSERT(egress->pendingAcks() == 0, "pending drained");
+    TEST_ASSERT(egress->failedAcks() == 0, "no failed acks");
+
+    // 939 客户端下行经直连链回流 → 投递出口
+    TEST_ASSERT(cell.deliver(77, 0, downlink), "direct deliver sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return !delivered.empty(); }, 5000),
+                "direct client downlink delivered");
+    TEST_ASSERT(egress->deliveredClients() == 1, "one downlink delivered");
+    TEST_ASSERT(delivered == downlink, "downlink payload verbatim");
+
+    egress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 int main() {
     std::cout << "=== Apollo Gateway M1 Egress Test Suite ===" << std::endl;
 
@@ -1002,6 +1090,7 @@ int main() {
     if (!test_egress_wrapped_trace()) ++failed;
     if (!test_egress_route_invalidate_on_not_hosted()) ++failed;
     if (!test_egress_transparent_retry_once()) ++failed;
+    if (!test_egress_direct_cell_dial()) ++failed;
     if (!test_gateway_cell_e2e()) ++failed;
 
     if (failed == 0) {

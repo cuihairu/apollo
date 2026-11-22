@@ -326,6 +326,8 @@ bool login_chain_creates_cell_entity() {
     proj.topology_version = 71;
     proj.management_epoch = 3;
     proj.ready = true;
+    proj.cell_host = "10.0.0.9";  // L122 直连端点发现面：归属 cell M1 监听端点
+    proj.cell_port = 9200;
     TEST_ASSERT(login.positionProjectionRegistry()->apply_projection(proj, 0) ==
                     login::ProjectionVerdict::kApplied,
                 "projection injected before login");
@@ -368,6 +370,9 @@ bool login_chain_creates_cell_entity() {
     // 路由版本不再是假值 1：= 投影归属版本水位（L120 路由生产者接线）。
     TEST_ASSERT(assigned->route_version == 5,
                 "admission stamps position route watermark from projection registry");
+    // 落点携带归属 cell 直连端点（L122 网关→cell 直连端点发现面）。
+    TEST_ASSERT(assigned->cell_host == "10.0.0.9" && assigned->cell_port == 9200,
+                "admission stamps direct cell endpoint from projection registry");
 
     // ⑧ 客户端发 CELL_CREATE_ENTITY → gateway → world → cell 创建实体。
     client.sendAll(frame_bytes(2, 0,

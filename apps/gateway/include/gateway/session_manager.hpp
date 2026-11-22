@@ -31,6 +31,11 @@ struct RouteSnapshot {
     // L118 归属域：资料写权代次（918 write_gen 回带；0 = 未声明）。与
     // simulationEpoch（模拟域）分域——归属代次不随模拟域接线代写。
     uint64_t writeGen = 0;
+    // L122 网关直连端点发现面：归属 cell 的 M1 监听端点（918 cell_host/
+    // cell_port 回带，源 = 968 投影 ← 960 自报）。host 空/0 = 未声明——模拟
+    // 输入经 World 管理端中继（既有回退面）；在场即出口直连归属 cell。
+    std::string cellHost;
+    uint16_t cellPort = 0;
     std::string worldServerUrl;
 
     [[nodiscard]] bool isAssigned() const {

@@ -303,6 +303,9 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerAssignWorldRequest(const std::
     assignment.cell_id = assignReq.cellId;  // L116：执行进程随落点成行
     assignment.simulation_epoch = assignReq.simulationEpoch;
     assignment.write_gen = assignReq.writeGen;  // L118：归属域随落点成行
+    // L122：归属 cell 的 M1 端点域随落点成行（968 承载域，目录只携带）
+    assignment.cell_host = assignReq.cellHost;
+    assignment.cell_port = assignReq.cellPort;
 
     if (assignWorld(assignReq.playerId, assignment)) {
         response.success = true;
@@ -356,6 +359,8 @@ std::vector<uint8_t> OnlineDirectory::handlePlayerResolveRouteRequest(const std:
     response.simulationEpoch = assignment->simulation_epoch;
     response.sessionVersion = binding->session_version;  // 绑定面写入，解析面回带
     response.writeGen = assignment->write_gen;  // L118：归属域解析面回带
+    response.cellHost = assignment->cell_host;  // L122：归属 cell 端点域解析面回带
+    response.cellPort = assignment->cell_port;
 
     return protocol::MessageCodec::encode(response, header.sessionId);
 }

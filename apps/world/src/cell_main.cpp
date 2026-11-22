@@ -93,9 +93,14 @@ struct CellLinkEgress final : public IM1Egress {
 
     void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
                            const std::vector<std::uint8_t>& payload) override {
-        // 切片3 独立 cell 下行回程：注册连接优先（gateway 连 WorldApp 的
-        // M1，cell 的下行须经 World 转发 gateway）；直连 gateway 面保留
-        //（独立 cell 直服 gateway 的未来形态/本进程自测面）。
+        // L122 直连回程：网关直连本进程 M1 面（"gateway" 入站链）已连即直发
+        // ——939 下行不再经 World 转发 gateway。注册回程（World 中继）为回退
+        //（网关未直连 / 归属 cell 端点未声明）。单网关批：网关侧 request_id
+        // 单调不跨路径碰撞，直连/中继两路的 929/939 均落同网关 egress。
+        if (link != nullptr && link->gatewayConnected()) {
+            link->sendClientDeliver(session_id, gateway_id, payload);
+            return;
+        }
         if (register_client) {
             register_client->sendClientDeliver(session_id, gateway_id, payload);
             return;
@@ -106,9 +111,12 @@ struct CellLinkEgress final : public IM1Egress {
     }
     void sendIntentAck(std::uint64_t request_id, std::int32_t code,
                        const std::string& message) override {
-        // 切片2 意图转发回程：注册连接优先（World→cell 意图经注册连接进入，
-        // ack 也走回程）；直连 gateway 面保留（独立 cell 直服 gateway 的
-        // 未来形态/本进程自测面）。
+        // L122 直连回程：同 sendClientDeliver——网关直连链已连即直发 ack；
+        // 注册回程（World 中继）为回退（网关未直连 / 未声明端点）。
+        if (link != nullptr && link->gatewayConnected()) {
+            link->sendIntentAck(request_id, code, message);
+            return;
+        }
         if (register_client && request_id != 0) {
             register_client->sendIntentAck(request_id, code, message);
             return;

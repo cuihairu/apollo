@@ -295,6 +295,10 @@ struct PlayerAssignWorldRequest {
     uint64_t cellId = 0;         // 执行进程归属 cell（L116；0 = 未指派）
     uint64_t simulationEpoch = 0;  // 模拟代次（L116；0 = 未声明）
     uint64_t writeGen = 0;       // 资料写权代次（L118 归属域；0 = 未声明）
+    // 归属 cell 的 M1 监听端点（L122 网关直连端点发现面；空/0 = 未声明——
+    // 网关回落 World 中继，不幻值）。
+    std::string cellHost;
+    uint32_t cellPort = 0;
 
     static constexpr MessageType TYPE = MessageType::PLAYER_ASSIGN_WORLD_REQUEST;
 };
@@ -330,6 +334,9 @@ struct PlayerResolveRouteResponse {
     uint64_t simulationEpoch = 0;  // 模拟代次（L116；0 = 未声明）
     uint64_t sessionVersion = 0;   // 会话绑定代次（L116；0 = 旧端未声明）
     uint64_t writeGen = 0;         // 资料写权代次（L118 归属域；0 = 未声明）
+    // 归属 cell 的 M1 监听端点（L122 网关直连端点发现面；空/0 = 未声明）。
+    std::string cellHost;
+    uint32_t cellPort = 0;
     std::string errorMessage;
 
     static constexpr MessageType TYPE = MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE;

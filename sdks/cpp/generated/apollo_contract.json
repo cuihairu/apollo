@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "3fd01d8474cd401cdbaa55acfdcf398d7b93773637a7f59991c56afb7ef6b185",
+  "schema_hash": "a7f657781109a1546bab919107796876291bc00e752f921cbbac51a934fe0f83",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "758049bd06f93b8f5ad223bc87eeef4157c752b5b31700be854c809b80f2fbae",
+  "internal_hash": "cb93c5433630d838d6926253d4f98ee77406071e04b4535d6e4ebf4fc276f0e5",
   "contract_version": 3,
   "aliases": [
     {
@@ -1596,6 +1596,18 @@
           "type": "int64",
           "wire_type": "int64",
           "desc": "资料写权代次（归属域：Base 写权自持代次，与模拟域分域；0 = 未声明）"
+        },
+        {
+          "name": "cell_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "归属 cell 的 M1 监听地址（与 968 cell_host 同源——网关直连 cell 端点发现；空 = 未声明/未监听）"
+        },
+        {
+          "name": "cell_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "归属 cell 的 M1 监听端口（与 968 cell_port 同源；0 = 未声明）"
         }
       ],
       "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行；L117 版本域分立——拓扑版本与路由版本分域）"
@@ -1749,6 +1761,18 @@
           "type": "int64",
           "wire_type": "int64",
           "desc": "资料写权代次（与 915 write_gen 同源——归属域随落点行回带；0 = 未声明）"
+        },
+        {
+          "name": "cell_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "归属 cell 的 M1 监听地址（与 915/968 cell_host 同源——网关直连 cell 端点发现；空 = 未声明/未监听）"
+        },
+        {
+          "name": "cell_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "归属 cell 的 M1 监听端口（与 915/968 cell_port 同源；0 = 未声明）"
         },
         {
           "name": "error_message",
@@ -3841,6 +3865,18 @@
           "type": "bool",
           "wire_type": "bool",
           "desc": "1=归属视图可服务（claim/reclaim）；0=释放墓碑（cell_id 同帧必为 0）"
+        },
+        {
+          "name": "cell_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "已提交归属 cell 的 M1 监听地址（与 960 host 同源——网关直连端点发现面；claim 携带、墓碑空串）"
+        },
+        {
+          "name": "cell_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "已提交归属 cell 的 M1 监听端口（与 960 port 同源；0 = 未监听/未声明）"
         }
       ],
       "desc": "Space 执行位置投影（World→loginServer M1 目录投影面；L115 位置投影首切片）：journal A 行已提交的归属事实逐条投影——claim/reclaim 推 ready=1、release 推 cell_id=0 ready=0 墓碑；目录按 (world_id, space_id) 复合键以 assignment_version 水位幂等受理（重复忽略/乱序拒/墓碑命中水位即抹除），重启由 World kUp 重放全量视图重建；目录不另行分配 Cell——分配事实源仍是 World 管理面（962/journal）；裸帧受理同 960/962 惯例，无回执（水位幂等即裁决载体）"
