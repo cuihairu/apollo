@@ -202,6 +202,19 @@ bool decodeEnvelopeIntent(const std::vector<std::uint8_t>& payload,
     return true;
 }
 
+void decodeEnvelopeRoutingHints(const std::vector<std::uint8_t>& payload,
+                                std::uint64_t& space_id, std::uint64_t& cell_id) {
+    // 路由提示提取（多 cell 批）：解包失败 = 未带提示（0/0）——World 按
+    // 首就绪回退。trace 编解码知识收拢在 wire 单元，WorldApp 不直接引信封头。
+    space_id = 0;
+    cell_id = 0;
+    trace::EnvelopeFields env;
+    if (trace::unpack_envelope(payload.data(), payload.size(), env)) {
+        space_id = env.space_id;
+        cell_id = env.cell_id;
+    }
+}
+
 
 } // namespace world_app
 

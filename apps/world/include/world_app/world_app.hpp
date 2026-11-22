@@ -234,6 +234,11 @@ private:
     // 管理命令 cell peer 选择：首个已登记、未缩容、未存疑的 cell（不要求
     // ready/未排空——排空中 cell 仍应接收 952/956 status/begin 命令）。
     std::string firstRegisteredCellPeer() const;
+    // 模拟输入路由选择（多 cell 批）：按 932 信封路由提示（space_id 优先 →
+    // 权威空间归属 cell；其次 cell_id 提示；再回退 firstReadyCellPeer）。
+    // 0/未分配/归属 cell 不可服务逐级回退——单 cell 批（提示缺位）行为同
+    // 首就绪。返回空串 = 无 cell 可服务（调用面即时回执模拟未托管）。
+    std::string routeIntentPeer(std::uint64_t space_id, std::uint64_t cell_id) const;
     // eval 回执出口（945 debug_eval_result；peer 按名查链路，未知 = 静默弃）。
     void sendM1EvalReply(const std::string& peer, std::uint64_t eval_id, bool ok,
                          const std::string& result, const std::string& error);

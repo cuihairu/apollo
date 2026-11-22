@@ -14,6 +14,7 @@
 #include "world_app/m1_link_server.hpp"
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
+#include "apollo/net/linktrace/envelope.hpp"
 #include "apollo/net/wire/contract_wire.hpp"
 #include "apollo_contract.h"
 
@@ -36,6 +37,7 @@
 namespace {
 namespace link = apollo::net::link;
 namespace wire = apollo::net::wire;
+namespace trace = apollo::net::trace;
 using namespace std::chrono_literals;
 using world_app::WorldApp;
 using world_app::WorldAppConfig;
@@ -60,6 +62,7 @@ constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 constexpr std::uint16_t kRetireRequestId = id_of(MsgId::cell_retire_request);
 constexpr std::uint16_t kRetireReplyId = id_of(MsgId::cell_retire_reply);
 constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
+constexpr std::uint16_t kIntentEnvelopeId = id_of(MsgId::internal_envelope);
 const char* kRouteJson = APOLLO_TEST_ROUTE_JSON;
 
 std::uint64_t now_ms() {
@@ -209,6 +212,14 @@ struct CellEnd {
                                        (*g_retire_replies)[request_id] = std::move(r);
                                    }
                                });
+        // 932 意图转发接收（多 cell 路由测试；World→cell 原样转发）——
+        // 记录原始 packed payload，测试侧解包断言路由目标。
+        dispatcher.set_handler(kIntentEnvelopeId,
+                               [this](std::uint16_t, const std::uint8_t* data,
+                                      std::size_t size) {
+                                   std::lock_guard<std::mutex> lock(envelope_mutex_);
+                                   received_envelopes_.emplace_back(data, data + size);
+                               });
         return true;
     }
 
@@ -351,6 +362,47 @@ struct CellEnd {
                           link::SendClass::kReliable)
                == link::SendCode::kAccepted;
     }
+
+    // 932 internal_envelope 上行（多 cell 路由测试）：pack 产物直接发 World
+    //（send 自封 u16 信封）。
+    bool send_envelope(const std::vector<std::uint8_t>& packed) {
+        auto* link = manager->link("world");
+        if (link == nullptr) {
+            return false;
+        }
+        return link->send(kIntentEnvelopeId, packed.data(), packed.size(),
+                          link::SendClass::kReliable) == link::SendCode::kAccepted;
+    }
+
+    // 收到的 932 转发计数（World→cell 路由测试断言面；串行泵读）。
+    std::size_t envelope_count() const {
+        std::lock_guard<std::mutex> lock(envelope_mutex_);
+        return received_envelopes_.size();
+    }
+    std::size_t envelope_count_clear() {
+        std::lock_guard<std::mutex> lock(envelope_mutex_);
+        const auto n = received_envelopes_.size();
+        received_envelopes_.clear();
+        return n;
+    }
+    // 解包路由提示（最近转发；cell 执行端语义 = unpack_envelope 原样）。
+    bool last_envelope_hints(std::uint64_t& space_id, std::uint64_t& cell_id) const {
+        std::lock_guard<std::mutex> lock(envelope_mutex_);
+        if (received_envelopes_.empty()) {
+            return false;
+        }
+        trace::EnvelopeFields env;
+        const auto& raw = received_envelopes_.back();
+        if (!trace::unpack_envelope(raw.data(), raw.size(), env)) {
+            return false;
+        }
+        space_id = env.space_id;
+        cell_id = env.cell_id;
+        return true;
+    }
+
+    mutable std::mutex envelope_mutex_;
+    std::vector<std::vector<std::uint8_t>> received_envelopes_;
 };
 
 // 960 单发 + 961 等（request_id 关联；服务端 gameLoop 自泵，本线程泵客户端）。
@@ -925,6 +977,176 @@ bool test_cell_space_assignment() {
         const auto it7 = assigns.find(7);
         TEST_ASSERT(it7 != assigns.end() && it7->second.version == 1,
                     "refresh re-push keeps version");
+    }
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// ---------- 模拟输入按空间归属路由（多 cell 批）----------
+// 池内两空间按能力位分片给两 cell（7→21、8→22）；932 信封携带路由提示
+//（space_id/cell_id）从网关探针上行，World 按权威空间归属裁决目标 cell
+//——归属优先、cell 提示次之、无提示回退首就绪。收端断言 = 转发落点
+//（cell-a / cell-b 的 932 接收计数）+ World 分配表观测面。
+
+bool test_intent_routing_by_space() {
+    std::cout << "Running: test_intent_routing_by_space..." << std::endl;
+    WorldEnd server;
+    // 能力位分片：space 7 需能力位 0x1（cell 21 具备），space 8 需 0x2（cell 22）
+    server.config.assignSpaces = {{7, 0x1}, {8, 0x2}};
+    TEST_ASSERT(server.start(117), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    RegisterReply r;
+
+    // cell 21（能力 0x1）：就绪即认领 space 7（8 需 0x2 不合格）
+    CellEnd cell_a;
+    TEST_ASSERT(dial_cell(server, cell_a, "cell-a"), "cell a dialed");
+    TEST_ASSERT(register_roundtrip(cell_a, 9801, 21, 1, "127.0.0.1", 9201,
+                                   0x1, 10, 0, true, r),
+                "cell 21 registered");
+    TEST_ASSERT(r.accepted, "cell 21 accepted");
+    // cell 22（能力 0x2）：认领 space 8
+    CellEnd cell_b;
+    TEST_ASSERT(dial_cell(server, cell_b, "cell-b"), "cell b dialed");
+    TEST_ASSERT(register_roundtrip(cell_b, 9802, 22, 1, "127.0.0.1", 9202,
+                                   0x2, 10, 0, true, r),
+                "cell 22 registered");
+    TEST_ASSERT(r.accepted, "cell 22 accepted");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.size() >= 2;
+                }, 3000),
+                "both pool spaces pushed");
+    {
+        const auto* a7 = server.world->find_space_assignment(7);
+        const auto* a8 = server.world->find_space_assignment(8);
+        TEST_ASSERT(a7 != nullptr && a7->cell_id == 21, "space 7 owned by cell 21");
+        TEST_ASSERT(a8 != nullptr && a8->cell_id == 22, "space 8 owned by cell 22");
+    }
+
+    // 网关探针：未注册的第三连接发 932（生产形态 = gateway 经 M1 上行；
+    // 932 受理面不看来源注册态）
+    CellEnd gw;
+    TEST_ASSERT(dial_cell(server, gw, "gw-probe"), "gateway probe dialed");
+
+    // 打包一带路由提示的意图信封（内层 = 合法 cell_entity_move）
+    const auto pack_intent = [](std::uint64_t request_id, std::uint64_t space_hint,
+                                std::uint64_t cell_hint) {
+        std::vector<wire::FieldValue> f(9);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = 77;  // session_id
+        f[2].integer = 1001;  // entity_id
+        f[3].real = 1.0f; f[4].real = 2.0f; f[5].real = 3.0f;
+        f[6].real = 4.0f; f[7].real = 5.0f; f[8].real = 6.0f;
+        std::vector<std::uint8_t> inner;
+        (void)wire::encode_payload(id_of(MsgId::cell_entity_move), f, inner);
+        trace::EnvelopeFields env{};
+        env.message_type = trace::EnvelopeKind::EntityMethodCall;
+        env.request_id = request_id;
+        env.source_app = "gateway";
+        env.target_app = "world";
+        env.cell_id = cell_hint;
+        env.space_id = space_hint;
+        env.payload = wire::append_envelope(id_of(MsgId::cell_entity_move), inner);
+        std::vector<std::uint8_t> packed;
+        (void)trace::pack_envelope(env, packed);
+        return packed;
+    };
+
+    // ① 空间提示路由：space 7 → cell 21（cell_b 零接收）
+    cell_a.envelope_count_clear();
+    cell_b.envelope_count_clear();
+    TEST_ASSERT(gw.send_envelope(pack_intent(101, 7, 0)),
+                "space-7 routed intent sent");
+    TEST_ASSERT(wait_until([&] {
+                    gw.pump(); cell_a.pump(); cell_b.pump();
+                    return cell_a.envelope_count() >= 1;
+                }, 3000),
+                "space 7 intent forwarded to owning cell 21");
+    std::this_thread::sleep_for(200ms);
+    gw.pump(); cell_a.pump(); cell_b.pump();
+    TEST_ASSERT(cell_b.envelope_count() == 0, "space 7 not leaked to cell 22");
+
+    // ② 空间提示路由：space 8 → cell 22（cell_a 零接收）
+    cell_a.envelope_count_clear();
+    cell_b.envelope_count_clear();
+    TEST_ASSERT(gw.send_envelope(pack_intent(102, 8, 0)),
+                "space-8 routed intent sent");
+    TEST_ASSERT(wait_until([&] {
+                    gw.pump(); cell_a.pump(); cell_b.pump();
+                    return cell_b.envelope_count() >= 1;
+                }, 3000),
+                "space 8 intent forwarded to owning cell 22");
+    std::this_thread::sleep_for(200ms);
+    gw.pump(); cell_a.pump(); cell_b.pump();
+    TEST_ASSERT(cell_a.envelope_count() == 0, "space 8 not leaked to cell 21");
+
+    // ③ 权威归属压倒 cell 提示：space 8 + 迟到提示 cell 21 → 仍路由 cell 22
+    //（网关投影滞后于 World 归属——迟到位置投影不致误路由）
+    cell_a.envelope_count_clear();
+    cell_b.envelope_count_clear();
+    TEST_ASSERT(gw.send_envelope(pack_intent(103, 8, 21)),
+                "stale-hint intent sent");
+    TEST_ASSERT(wait_until([&] {
+                    gw.pump(); cell_a.pump(); cell_b.pump();
+                    return cell_b.envelope_count() >= 1;
+                }, 3000),
+                "authoritative owner wins over stale cell hint");
+    std::this_thread::sleep_for(200ms);
+    gw.pump(); cell_a.pump(); cell_b.pump();
+    TEST_ASSERT(cell_a.envelope_count() == 0, "stale hint not followed");
+
+    // ④ 池外空间回退 cell 提示：space 999（未分配）+ cell 22 → cell 22
+    cell_a.envelope_count_clear();
+    cell_b.envelope_count_clear();
+    TEST_ASSERT(gw.send_envelope(pack_intent(104, 999, 22)),
+                "unassigned-space hint intent sent");
+    TEST_ASSERT(wait_until([&] {
+                    gw.pump(); cell_a.pump(); cell_b.pump();
+                    return cell_b.envelope_count() >= 1;
+                }, 3000),
+                "cell hint fallback routes to hinted cell");
+    std::this_thread::sleep_for(200ms);
+    gw.pump(); cell_a.pump(); cell_b.pump();
+    TEST_ASSERT(cell_a.envelope_count() == 0, "fallback not to first cell");
+
+    // ⑤ 转发原样性：cell 端解包提示与网关发送一致（envelope 路由域不丢）
+    {
+        std::uint64_t got_space = 0;
+        std::uint64_t got_cell = 0;
+        TEST_ASSERT(cell_b.last_envelope_hints(got_space, got_cell),
+                    "cell 22 can unpack last envelope");
+        // ④ 最后到达 cell_b（space 999 / cell 22）
+        TEST_ASSERT(got_space == 999 && got_cell == 22,
+                    "routing hints carried verbatim to cell");
+    }
+
+    // ⑥ 无提示回退首就绪：space 0 + cell 0 → 任一就绪 cell（单 cell 批行为；
+    // 多 cell 下 firstReadyCellPeer 迭代无序表选第一个——两 cell 都是就绪，
+    // 断言恰一者接收，不假设具体落点）
+    cell_a.envelope_count_clear();
+    cell_b.envelope_count_clear();
+    TEST_ASSERT(gw.send_envelope(pack_intent(105, 0, 0)),
+                "hintless intent sent");
+    TEST_ASSERT(wait_until([&] {
+                    gw.pump(); cell_a.pump(); cell_b.pump();
+                    return cell_a.envelope_count() + cell_b.envelope_count() >= 1;
+                }, 3000),
+                "hintless intent falls back to a ready cell");
+    std::this_thread::sleep_for(200ms);
+    gw.pump(); cell_a.pump(); cell_b.pump();
+    {
+        const auto na = cell_a.envelope_count();
+        const auto nb = cell_b.envelope_count();
+        TEST_ASSERT((na == 1 && nb == 0) || (na == 0 && nb == 1),
+                    "fallback targets exactly one ready cell");
     }
 
     g_assigns = nullptr;
@@ -2999,6 +3221,7 @@ int main() {
                     && test_production_client_invalid_config()
                     && test_cell_heartbeat_and_expiry()
                     && test_cell_space_assignment()
+                    && test_intent_routing_by_space()
                     && test_space_assignment_readiness()
                     && test_space_assignment_load_balance()
                     && test_space_assignment_capability_filter()

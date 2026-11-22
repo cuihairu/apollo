@@ -134,10 +134,15 @@ void WorldApp::start() {
             // 调回 2001（此处只承载受理计数，不重复回执）。
         },
         [this](const std::vector<std::uint8_t>& payload) {
-            // 切片2 意图族转发：932 原始 envelope 经首个就绪 cell 的注册
-            // 连接反向转发；空目标/发送失败 = ADR-017 即时回执（2001），
-            // 不静默丢弃（gateway pending-reply 超时面不再重发）。
-            const auto cell_peer = firstReadyCellPeer();
+            // 切片2 意图族转发（多 cell 批）：932 原始 envelope 按路由提示
+            // （space_id → 权威空间归属 cell；cell_id 提示次之；无提示回退
+            // 首就绪）经注册 cell 连接反向转发，不逐条经目录代理；空目标/
+            // 发送失败 = ADR-017 即时回执（2001），不静默丢弃（gateway
+            // pending-reply 超时面不再重发）。
+            std::uint64_t hint_space = 0;
+            std::uint64_t hint_cell = 0;
+            decodeEnvelopeRoutingHints(payload, hint_space, hint_cell);
+            const auto cell_peer = routeIntentPeer(hint_space, hint_cell);
             if (!cell_peer.empty() && m1Link_) {
                 (void)m1Link_->sendCellIntentRaw(cell_peer, payload);
                 return;

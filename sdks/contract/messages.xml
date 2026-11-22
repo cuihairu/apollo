@@ -337,6 +337,8 @@
     <field name="trace_id" type="bytes" desc="W3C trace-id（16B；空=未带 trace）"/>
     <field name="parent_span_id" type="bytes" desc="W3C parent span-id（8B；空=根 span）"/>
     <field name="payload" type="bytes" desc="载荷（u16 LE id + 契约载荷，内层自识）"/>
+    <field name="cell_id" type="int64" desc="路由提示——网关侧目标 cell（RouteSnapshot.cellId 映；0=未带，由 World 按空间归属裁决）"/>
+    <field name="space_id" type="int64" desc="路由提示——网关侧目标空间（RouteSnapshot.spaceId 映；0=未带，由 World 按首就绪回退）"/>
   </msg>
 
   <!-- 玩家迁移族（P0-2 路 2 第一步，backup-revive §9.2 五步 ①②③ wire 面：

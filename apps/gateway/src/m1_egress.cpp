@@ -92,11 +92,15 @@ std::uint16_t contract_id_for(apollo::protocol::MessageType type) {
 
 // 投递箱项：受理线程入箱的原始世界帧（翻译延至泵拍，链路单写者）。
 // enqueued_ms = 入箱时刻（gateway span 计时起点——受理→发出全程）。
+// space_id/cell_id = 路由提示（多 cell 批；0 = 未带）——受理面快照，入箱
+// 即定格（路由事实以入箱时刻为准，不随泵拍晚到改写）。
 struct InboxItem {
     std::uint64_t session_id;
     std::uint16_t contract_id;
     std::vector<std::uint8_t> frame;
     std::uint64_t enqueued_ms = 0;
+    std::uint64_t space_id = 0;
+    std::uint64_t cell_id = 0;
 };
 
 class M1EgressImpl final : public M1Egress {
@@ -168,7 +172,8 @@ public:
     }
 
     bool forwardIntent(std::uint64_t session_id,
-                       const std::vector<std::uint8_t>& legacy_frame) override {
+                       const std::vector<std::uint8_t>& legacy_frame,
+                       std::uint64_t space_id, std::uint64_t cell_id) override {
         if (!started_.load(std::memory_order_acquire)) {
             return false;
         }
@@ -191,8 +196,8 @@ public:
                 ++unforwardable_;  // 箱满落地：legacy 链路死观察面同型
                 return false;
             }
-            inbox_.push_back(
-                InboxItem{session_id, contract_id, legacy_frame, trace::now_ms()});
+            inbox_.push_back(InboxItem{session_id, contract_id, legacy_frame,
+                                       trace::now_ms(), space_id, cell_id});
         }
         return true;
     }
@@ -480,6 +485,11 @@ private:
         env.trace.parent_span_id = trace::generate_span_id();
         env.trace.sampled = sampler.should_sample();
         env.payload = wire::append_envelope(item.contract_id, payload);
+        // 路由提示（多 cell 批）：受理面快照的当前 cell/空间入信封——World 管理端
+        // 据空间归属把模拟输入路由到当前 cell，不逐条经目录或 World 管理端代理。
+        // 0 = 未带（单 cell 批/未解析路由），World 按首就绪回退。
+        env.cell_id = item.cell_id;
+        env.space_id = item.space_id;
 
         std::vector<std::uint8_t> packed;
         if (!trace::pack_envelope(env, packed)) {

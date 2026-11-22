@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "93014bede461a4162d5cd38a59db9f291dd260bb32019a13350972c77e2d9f43",
+  "schema_hash": "3fd01d8474cd401cdbaa55acfdcf398d7b93773637a7f59991c56afb7ef6b185",
   "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
-  "internal_hash": "223c3deb50af1b2b0a6ed24a8eda69f1cdcaec88e9d05c1ca1317bef58690ec6",
+  "internal_hash": "758049bd06f93b8f5ad223bc87eeef4157c752b5b31700be854c809b80f2fbae",
   "contract_version": 3,
   "routes": [
     {

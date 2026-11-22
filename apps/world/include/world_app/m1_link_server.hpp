@@ -376,4 +376,10 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
 bool decodeEnvelopeIntent(const std::vector<std::uint8_t>& payload,
                           IntentEnvelope& out);
 
+// 932 信封路由提示提取（多 cell 批）：解包 cell_id/space_id 两字段供 World
+// 管理端按空间归属路由模拟输入。解包失败 = 未带提示（0/0）——路由回退首
+// 就绪，不影响意图转发本身（转发仍走原 932 原样）。
+void decodeEnvelopeRoutingHints(const std::vector<std::uint8_t>& payload,
+                                std::uint64_t& space_id, std::uint64_t& cell_id);
+
 } // namespace world_app

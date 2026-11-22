@@ -215,6 +215,38 @@ std::string WorldApp::firstRegisteredCellPeer() const {
     return {};
 }
 
+std::string WorldApp::routeIntentPeer(std::uint64_t space_id,
+                                      std::uint64_t cell_id) const {
+    // 模拟输入路由（多 cell 批）：932 信封路由提示 → 权威归属裁决，不逐条
+    // 经目录代理。裁决序：
+    //   ① space_id 提示 → 权威分配表（spaceAssignments_ 是唯一归属事实源，
+    //     网关提示投影可能迟到/过期——以本表裁决，迟到投影不致误路由）；
+    //   ② 归属 cell 不可服务（未登记/未就绪/自报排空/缩容/存疑）→ cell_id
+    //     提示同判据复验——空间未入池（单 cell 部署 assignSpaces 空）时
+    //     提示是唯一可路由事实；
+    //   ③ 首就绪回退（切片2 单 cell 行为保持——无提示即到此）。
+    // 空串 = 无可服务 cell（调用面即时回执模拟未托管，不静默丢）。
+    const auto serviceable = [](const CellRegistration& reg) {
+        return reg.ready && reg.drain_state == 0 && !reg.retire && !reg.suspect;
+    };
+    if (space_id != 0) {
+        const auto* assignment = find_space_assignment(space_id);
+        if (assignment != nullptr && assignment->cell_id != 0) {
+            const auto* reg = find_cell_registration(assignment->cell_id);
+            if (reg != nullptr && serviceable(*reg)) {
+                return reg->peer;
+            }
+        }
+    }
+    if (cell_id != 0) {
+        const auto* reg = find_cell_registration(cell_id);
+        if (reg != nullptr && serviceable(*reg)) {
+            return reg->peer;
+        }
+    }
+    return firstReadyCellPeer();
+}
+
 bool WorldApp::beginCellRetire(std::uint64_t cell_id) {
     // 缩容编排（L104 缩容切片，注册表单写者上下文）：置 World 单方缩容意图
     // ——与 cell 自报 drain_state 分面（自报是 cell 自己的活动状态，本位是

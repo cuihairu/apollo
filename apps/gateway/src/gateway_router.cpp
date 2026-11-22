@@ -79,13 +79,15 @@ void MessageRouter::forwardToWorld(
     const RouteSnapshot& routeSnapshot,
     const std::vector<uint8_t>& message
 ) {
-    (void)routeSnapshot;  // M1 单 cell 端点：路由快照仅存档，选择面随多 cell 批回归
     if (!m1Egress_) {
         glog().warning("Gateway dropped world message for session "
                        + std::to_string(sessionId) + " (M1 egress degraded)");
         return;
     }
-    if (!m1Egress_->forwardIntent(sessionId, message)) {
+    // 路由提示（多 cell 批）：RouteSnapshot 的当前 cell/空间映入 932 信封——
+    // World 管理端据空间归属把模拟输入路由到当前 cell（0 = 未带，按首就绪回退）。
+    if (!m1Egress_->forwardIntent(sessionId, message, routeSnapshot.spaceId,
+                                  routeSnapshot.cellId)) {
         // 不可前递（非五族意图——如断连通知，cell 感知面随契约后续批收口）
         glog().info("Gateway dropped unforwardable world message for session "
                     + std::to_string(sessionId));
@@ -135,7 +137,8 @@ RouteSnapshot MessageRouter::buildDefaultRoute() const {
     routeSnapshot.spaceId = 1;
     routeSnapshot.routeVersion = 1;
     // 路由名目留存（路由解析面与快照消费方仍按 url 标认 world 落点）；
-    // M1 出口单端点直连，不据其选择——选择面随多 cell 批回归。
+    // M1 出口单端点直连（cellId=0 = 未带提示）——World 管理端按空间归属
+    // 路由（spaceId 提示入 932 信封），无可服务归属时首就绪回退。
     routeSnapshot.worldServerUrl = config_.worldUrl;
     return routeSnapshot;
 }

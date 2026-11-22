@@ -42,6 +42,11 @@ struct EnvelopeFields {
     std::uint64_t authority_epoch = 0;
     TraceContext trace;                      // trace_id 空 = 未带 trace
     std::vector<std::uint8_t> payload;       // u16 LE id + 契约载荷（内层自识）
+    // 路由提示（多 cell 批；0 = 未带）：gateway 从 RouteSnapshot 映目标 cell
+    // 与空间入信封——World 管理端据此把模拟输入路由到空间归属 cell（按自身
+    // 权威分配表裁决，提示是次级事实源），不逐条经目录代理。
+    std::uint64_t cell_id = 0;
+    std::uint64_t space_id = 0;
 };
 
 // false = 契约面失配（正常装配不发生；out 清空）。旗标 bit0 以

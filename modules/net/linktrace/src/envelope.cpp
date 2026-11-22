@@ -10,7 +10,7 @@ namespace {
 
 std::vector<apollo::net::wire::FieldValue> to_wire_fields(const EnvelopeFields& in) {
     using apollo::net::wire::FieldValue;
-    std::vector<FieldValue> fields(12);
+    std::vector<FieldValue> fields(14);
     fields[0].integer = static_cast<std::int64_t>(in.message_type);
     fields[1].integer = in.flags;
     fields[2].integer = static_cast<std::int64_t>(in.request_id);
@@ -26,6 +26,9 @@ std::vector<apollo::net::wire::FieldValue> to_wire_fields(const EnvelopeFields& 
         fields[10].bytes.assign(in.trace.parent_span_id.begin(), in.trace.parent_span_id.end());
     }
     fields[11].bytes = in.payload;
+    // 路由提示（多 cell 批；0 = 未带）——尾随两字段，既有 12 字段序不动
+    fields[12].integer = static_cast<std::int64_t>(in.cell_id);
+    fields[13].integer = static_cast<std::int64_t>(in.space_id);
     return fields;
 }
 
@@ -51,16 +54,23 @@ bool pack_envelope(const EnvelopeFields& in, std::vector<std::uint8_t>& out) {
 }
 
 bool unpack_envelope(const std::uint8_t* data, std::size_t size, EnvelopeFields& out) {
-    using apollo::net::wire::decode_payload;
+    using apollo::net::wire::decode_payload_fields;
 
     out = EnvelopeFields{};
     std::vector<apollo::net::wire::FieldValue> fields;
-    if (!decode_payload(
-            static_cast<std::uint16_t>(apollo::contract::gen::MsgId::internal_envelope), data,
-            size, fields)) {
+    // 多 cell 批前旧端信封（12 字段）与 13/14 字段新端混编滚动升级（旧
+    // gateway → 新 World）：字段平铺无 tag、帧不自描述字段数——按 14→13→12
+    // 顺序探测，恰好消费全部字节者命中（新端 14 字段帧不会误判为 13/12；
+    // 真坏帧在各级均因余字节/字段级非法拒收）。缺尾随路由提示字段缺省 0
+    // （未带提示，World 按首就绪回退）。
+    constexpr std::uint16_t kEnvelopeId =
+        static_cast<std::uint16_t>(apollo::contract::gen::MsgId::internal_envelope);
+    if (!decode_payload_fields(kEnvelopeId, data, size, fields, 14)
+        && !decode_payload_fields(kEnvelopeId, data, size, fields, 13)
+        && !decode_payload_fields(kEnvelopeId, data, size, fields, 12)) {
         return false;
     }
-    if (fields.size() != 12) return false;
+    const std::size_t field_count = fields.size();
 
     out.message_type = static_cast<EnvelopeKind>(fields[0].integer);
     out.flags = static_cast<std::int32_t>(fields[1].integer);
@@ -87,6 +97,13 @@ bool unpack_envelope(const std::uint8_t* data, std::size_t size, EnvelopeFields&
 
     out.payload = fields[11].bytes;
     if (!out.payload.empty() && out.payload.size() < 2) return false;  // u16 id 不全
+    // 路由提示（多 cell 批；0 = 未带）——尾随两字段，缺省 0（legacy 12 字段）
+    if (field_count >= 13) {
+        out.cell_id = static_cast<std::uint64_t>(fields[12].integer);
+    }
+    if (field_count >= 14) {
+        out.space_id = static_cast<std::uint64_t>(fields[13].integer);
+    }
     return true;
 }
 

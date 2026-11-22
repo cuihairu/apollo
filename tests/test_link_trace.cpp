@@ -175,6 +175,8 @@ trace::EnvelopeFields make_full_envelope() {
     env.authority_epoch = 3;
     env.trace = make_context("000102030405060708090a0b0c0d0e0f", "0102030405060708", true);
     env.payload = {0x2c, 0x01, 0xde, 0xad, 0xbe, 0xef};  // 内层 id 0x012c + 体
+    env.cell_id = 21;        // 多 cell 批：路由提示（目标 cell）
+    env.space_id = 7;        // 多 cell 批：路由提示（目标空间）
     return env;
 }
 
@@ -185,7 +187,8 @@ bool envelope_equal(const trace::EnvelopeFields& a, const trace::EnvelopeFields&
            a.method_alias == b.method_alias && a.route_version == b.route_version &&
            a.authority_epoch == b.authority_epoch && a.trace.trace_id == b.trace.trace_id &&
            a.trace.parent_span_id == b.trace.parent_span_id &&
-           a.trace.sampled == b.trace.sampled && a.payload == b.payload;
+           a.trace.sampled == b.trace.sampled && a.payload == b.payload &&
+           a.cell_id == b.cell_id && a.space_id == b.space_id;
 }
 
 bool test_envelope_roundtrip() {
@@ -230,6 +233,45 @@ bool test_envelope_roundtrip() {
     TEST_ASSERT(trace::unpack_envelope(linked.data() + 2, linked.size() - 2, relinked),
                 "unpack through link envelope");
     TEST_ASSERT(envelope_equal(env, relinked), "fields survive link envelope roundtrip");
+    return true;
+}
+
+// 旧端信封（12 字段，多 cell 批前）解码缺省路由提示 0——混编滚动升级
+//（旧 gateway → 新 World）照收不误，World 按首就绪回退。
+bool test_envelope_legacy_12_field() {
+    std::cout << "Running: test_envelope_legacy_12_field..." << std::endl;
+    // 手构 12 字段旧端帧（旧 to_wire_fields 序：…payload 收尾）
+    std::vector<wire::FieldValue> f12(12);
+    f12[0].integer = static_cast<std::int64_t>(trace::EnvelopeKind::EntityMethodCall);
+    f12[1].integer = trace::kFlagSampled;
+    f12[2].integer = 42;
+    f12[3].text = "gw";
+    f12[4].text = "world";
+    f12[5].integer = 987654321;
+    f12[6].text = "move_to";
+    f12[7].integer = 7;
+    f12[8].integer = 3;
+    f12[9].bytes = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+    f12[10].bytes = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    f12[11].bytes = {0x2c, 0x01, 0xde, 0xad};
+    std::vector<std::uint8_t> raw;
+    // encode_payload 按当前契约 14 字段定案；旧端 12 字段帧经 partial 口编码
+    //（混编期实际线形）。
+    TEST_ASSERT(wire::encode_payload_fields(id_of(MsgId::internal_envelope), f12,
+                                            raw, 12),
+                "legacy 12-field frame encoded");
+
+    trace::EnvelopeFields out{};
+    TEST_ASSERT(trace::unpack_envelope(raw.data(), raw.size(), out),
+                "legacy 12-field frame decoded");
+    TEST_ASSERT(out.request_id == 42 && out.route_version == 7 &&
+                    out.authority_epoch == 3 && out.payload.size() == 4,
+                "legacy fields decoded");
+    TEST_ASSERT(out.trace.has_trace(), "legacy trace decoded");
+    TEST_ASSERT(out.cell_id == 0 && out.space_id == 0,
+                "legacy envelope yields zero routing hints");
+    std::cout << "  PASSED" << std::endl;
     return true;
 }
 
@@ -353,6 +395,7 @@ int main() {
         {"hex_roundtrip", test_hex_roundtrip},
         {"sampler", test_sampler},
         {"envelope_roundtrip", test_envelope_roundtrip},
+        {"envelope_legacy_12_field", test_envelope_legacy_12_field},
         {"envelope_rejects", test_envelope_rejects},
         {"span_emission", test_span_emission},
         {"span_id_uniqueness", test_span_id_uniqueness},

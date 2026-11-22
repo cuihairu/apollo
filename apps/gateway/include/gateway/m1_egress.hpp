@@ -58,10 +58,17 @@ public:
 
     // legacy 世界帧前递（见类注线程纪律）。false = 不可前递（非五族意图 /
     // 帧残缺 / 箱满 / 未装配），消息落地。
+    // 路由提示（多 cell 批，0 = 未带）：space_id/cell_id 从 RouteSnapshot 映
+    // 入 932 信封——World 管理端据空间归属把模拟输入路由到当前 cell，不逐条
+    // 经目录代理。缺省 0 = 旧调用面（单 cell 批）不携带，World 按首就绪回退。
     virtual bool forwardIntent(std::uint64_t session_id,
-                               const std::vector<std::uint8_t>& legacy_frame) {
+                               const std::vector<std::uint8_t>& legacy_frame,
+                               std::uint64_t space_id = 0,
+                               std::uint64_t cell_id = 0) {
         (void)session_id;
         (void)legacy_frame;
+        (void)space_id;
+        (void)cell_id;
         return false;
     }
 
