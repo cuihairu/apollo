@@ -208,6 +208,7 @@ struct CellHost {
         rc.advertise_port = link->listenPort();
         rc.route_json = config.m1RouteJson;
         rc.heartbeat_ms = 500;
+        rc.capabilities = config.declaredCapabilities;  // L134：声明能力位透传
         register_client = world_app::makeCellRegisterClient(std::move(rc));
         if (!register_client) {
             return false;
@@ -433,6 +434,12 @@ struct CellHost {
     }
 
     world_app::CellRegisterClient& client() { return *register_client; }
+
+    // L134：本 cell 的 M1 监听端点（960 advertise_host/port 同源——968 投影
+    // 与 962 分配均携带，断言/装配用）。
+    std::uint16_t listen_port() const {
+        return link ? link->listenPort() : 0;
+    }
 
     void set_world_link(world_app::M1LinkServer* wl) {
         egress.world_link = wl;

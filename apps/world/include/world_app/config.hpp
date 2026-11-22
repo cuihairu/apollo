@@ -75,6 +75,14 @@ struct WorldAppConfig {
     // exec 失败不会打印其值）。
     std::string registerToken;
 
+    // 声明能力位（容量申报裁决，cell 侧，L134 真实多 cell 分配批）：cell 随
+    // 960 上报的能力位掩码，host 装配透传 CellRegisterConfig.capabilities
+    //（CLI --declare-capabilities）。World 侧 assignSpaces 各 space 的 needs
+    // 须被本值全覆盖该 cell 才有认领资格（world_space_assign capability_fit
+    // ——needs=0 无要求，现状语义不变）。0 = 未声明（仅认领 needs=0 的
+    // Space，多 cell 下首就绪独占——缺省单 cell 形态不变）。
+    std::int32_t declaredCapabilities = 0;
+
     // 代次墓碑日志（L101 管理日志切片，manager 侧）：append-only 文本行
     // `cell_id|start_epoch`，装载取每 cell 最大值重建水位。空 = 关（现状
     // 内存水位，重启忘却）；配置即受理时追加落盘，旧执行端隔离跨重启成立。

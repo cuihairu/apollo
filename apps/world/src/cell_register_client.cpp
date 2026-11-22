@@ -268,7 +268,7 @@ private:
         f[2].integer = static_cast<std::int64_t>(config_.start_epoch);
         f[3].text = config_.advertise_host;
         f[4].integer = config_.advertise_port;
-        f[5].integer = 0;  // capabilities 未声明（0——能力裁决随 L102 容量批）
+        f[5].integer = config_.capabilities;  // 声明能力位（L134；0 = 未声明）
         f[6].integer = config_.declared_compat != 0 ? config_.declared_compat
                                                     : contract_compat_projection();
         // 契约兼容投影（同批声明；0 配置 = 本进程投影，显式值 = e2e 注错缝）

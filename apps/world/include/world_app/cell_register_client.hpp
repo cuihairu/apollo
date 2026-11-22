@@ -65,6 +65,13 @@ struct CellRegisterConfig {
     // config.compatWhitelist」内才受理（L109 兼容范围白名单面），不符/
     // 未声明拒 961 code 5。
     std::int64_t declared_compat = 0;
+    // 声明能力位（容量申报裁决，L134 真实多 cell 分配批）：960 携带，World
+    // 侧 capability_fit 以「本值覆盖 assignSpaces 各 space 的 needs 全部位」
+    // 裁决认领资格——确定性分空间（如 501 需 0x1 → cell 21、503 需 0x2 →
+    // cell 22）靠它，不依赖首就绪顺序。0 = 未声明（现状语义：仅认领
+    // needs=0 的 Space，多 cell 下首就绪独占）。与 WorldAppConfig
+    // declaredCapabilities 同源，host 装配透传。
+    std::int32_t capabilities = 0;
     // 启动凭据自证（L109 认证凭据面）：部署方在 World 与 cell 共享的进程
     // 环境注入 APOLLO_REGISTER_TOKEN（machined fork+execvp 或同源启动脚本
     // 透传），cell 启动读取并随 960 上报——World 配置 registerToken 非空

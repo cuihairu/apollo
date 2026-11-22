@@ -575,6 +575,222 @@ bool login_chain_two_gateway_concurrent() {
     return true;
 }
 
+// D14 真实多 cell 分配批（L134 首切片）：真实链路两 cell 确定性分空间与
+// 路由隔离——两个真 CellApp（cell-21 声明能力 0x1、cell-22 声明 0x2）经
+// 960/961 注册，World assignSpaces {501:0x1, 503:0x2} 按能力位全覆盖裁决
+// 归属（非首就绪独占——不合格 cell 不落到缺能力的 Space 上凑数），网关按
+// 玩家目录落点空间路由到归属 cell，另一 cell 零接收（跨 cell 不误路由）。
+// 断言：501→cell-21、503→cell-22（World 权威归属表）；玩家 1001 输入到达
+// cell-21、1002 输入到达 cell-22；cell-21 无 1002、cell-22 无 1001（隔离）；
+// 两玩家各自 base 锚点在线（单 cell 模拟不受影响，D14 #5）。
+bool login_chain_two_cell_space_routing() {
+    TemporaryDirectory files;
+
+    // ① base：PlayerStore M1 面 + 播种 player1/player2。
+    StoreHost base(base_store_config(files.path), 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base face did not listen");
+    TEST_ASSERT(base.store->adoptPlayer(1001, "", 0, 0, 2), "seed player 1001 profile");
+    TEST_ASSERT(base.store->adoptPlayer(1002, "", 0, 0, 2), "seed player 1002 profile");
+
+    // ② login：准入面 + base 客户端面 + 内建 OnlineDirectory。初始空间 501
+    //（玩家 1001 落 501；1002 落点由本测试按 503 覆写目录——D14 场景前提
+    //「玩家进入指定 Space」，登录全局 initialSpaceId 仅为落点缺省，目录是
+    // World 准入权威、落点按玩家独立）。
+    auto lconfig = login_config();
+    lconfig.initialSpaceId = 501;
+    lconfig.worldStoreM1Host = "127.0.0.1";
+    lconfig.worldStoreM1Port = base.store->m1_listen_port();
+    login::LoginServer login(lconfig);
+    login.start();
+    TEST_ASSERT(login.admissionPort() != 0, "login admission face up");
+    TEST_ASSERT(login.onlineDirectory() != nullptr, "login online directory up");
+    TEST_ASSERT(wait_until([&] { return login.baseActivationReady(); }, 3000),
+                "login base activation link up");
+
+    // ③ world：Space 分配池按能力位（501 需 0x1、503 需 0x2）确定性分空间。
+    world_app::WorldAppConfig wconfig;
+    wconfig.worldId = 1;
+    wconfig.host = "127.0.0.1";
+    wconfig.m1Port = 0;
+    wconfig.m1RouteJson = kRouteJson;
+    wconfig.tickRateMs = 20;
+    wconfig.assignSpaces = {{501, 0x1}, {503, 0x2}};
+    auto world = std::make_unique<world_app::WorldApp>(wconfig);
+    world->start();
+    TEST_ASSERT(world->isRunning(), "world starts");
+
+    // ④ 两 cell 注册（cell-21 声明 0x1、cell-22 声明 0x2）→ World 按能力归属。
+    cell_test::CellHost cell21;
+    cell21.config = wconfig;
+    cell21.config.declaredCapabilities = 0x1;
+    TEST_ASSERT(cell21.start(world->m1Link().listenPort(), 21, 0, &world->m1Link()),
+                "cell-21 host starts");
+    cell21.set_world_link(&world->m1Link());
+    cell21.pump_until_registered();
+    TEST_ASSERT(cell21.registered(), "cell-21 registered with world");
+
+    cell_test::CellHost cell22;
+    cell22.config = wconfig;
+    cell22.config.declaredCapabilities = 0x2;
+    TEST_ASSERT(cell22.start(world->m1Link().listenPort(), 22, 0, &world->m1Link()),
+                "cell-22 host starts");
+    cell22.set_world_link(&world->m1Link());
+    cell22.pump_until_registered();
+    TEST_ASSERT(cell22.registered(), "cell-22 registered with world");
+
+    // ⑤ 权威归属：501→cell-21、503→cell-22（能力位裁决，非首就绪独占——
+    // cell-21 无 0x2 不落 503，cell-22 无 0x1 不落 501）。
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a501 = world->find_space_assignment(501);
+                    const auto* a503 = world->find_space_assignment(503);
+                    return a501 != nullptr && a501->cell_id == 21
+                           && a503 != nullptr && a503->cell_id == 22;
+                }, 5000),
+                "world assigns 501->21 and 503->22 by capability");
+
+    // ⑥ 登录登记表投影（L120 既有注入口径：World 未直连本 login 的 968 拨号，
+    // 端点取各 cell 真实 M1 监听端点——L122 同源）。
+    const auto inject = [&](std::uint64_t space_id, std::uint64_t cell_id,
+                            std::uint16_t port) {
+        login::SpacePositionProjection proj;
+        proj.world_id = 1;
+        proj.space_id = space_id;
+        proj.cell_id = cell_id;
+        proj.assignment_version = 5;
+        proj.topology_version = 71;
+        proj.management_epoch = 3;
+        proj.ready = true;
+        proj.cell_host = "127.0.0.1";
+        proj.cell_port = port;
+        return login.positionProjectionRegistry()->apply_projection(proj, 0)
+               == login::ProjectionVerdict::kApplied;
+    };
+    TEST_ASSERT(inject(501, 21, cell21.listen_port()), "501 projection injected");
+    TEST_ASSERT(inject(503, 22, cell22.listen_port()), "503 projection injected");
+
+    // ⑦ gateway：login 准入 + base 激活 + world M1 三面全接 + 目录 M1 路由面。
+    // directoryM1Port 必须接 login 内建 OnlineDirectory 的 M1 控制面
+    // （listenPort 读回真实端点）——缺省 0 = 不装配路由客户端，网关首意图
+    // 懒解析 fetchRouteSnapshot 得 nullopt → buildDefaultRoute() 空间 0，
+    // 真实按玩家空间的选路（D14 #1/#2）将退化为首就绪兜底而失真。
+    auto gconfig = gateway_config(world->m1Link().listenPort(),
+                                  login.admissionPort(), base.store->m1_listen_port());
+    gconfig.directoryM1Host = "127.0.0.1";
+    gconfig.directoryM1Port = login.onlineDirectory()->listenPort();
+    TEST_ASSERT(gconfig.directoryM1Port != 0, "gateway route client wired to directory");
+    gateway::GatewayServer gateway(gconfig);
+    gateway.start();
+
+    // ⑧ 两客户端连 gateway → PING 建会话。
+    TcpTestClient c1;
+    TcpTestClient c2;
+    TEST_ASSERT(c1.connect("127.0.0.1", gconfig.port), "client1 connects");
+    TEST_ASSERT(c2.connect("127.0.0.1", gconfig.port), "client2 connects");
+    protocol::Ping ping;
+    ping.timestamp = 1;
+    c1.sendAll(frame_bytes(1, 0, protocol::MessageCodec::encode(ping, 0)));
+    std::vector<std::uint8_t> reply1;
+    TEST_ASSERT(c1.recvLinkFrame(reply1), "ping pong received on c1");
+    const auto session1 = header_of(reply1).sessionId;
+    c2.sendAll(frame_bytes(1, 0, protocol::MessageCodec::encode(ping, 0)));
+    std::vector<std::uint8_t> reply2;
+    TEST_ASSERT(c2.recvLinkFrame(reply2), "ping pong received on c2");
+    const auto session2 = header_of(reply2).sessionId;
+    TEST_ASSERT(session1 != 0 && session2 != 0, "both gateway sessions created");
+
+    // ⑨ login 端认证签发两票（player1→1001，player2→1002）。
+    protocol::LoginRequest loginReq1;
+    loginReq1.username = "player1";
+    loginReq1.password = "pass1";
+    const auto loginResp1 = login.dispatchRequest(
+        protocol::MessageCodec::encode(loginReq1, 0));
+    TEST_ASSERT(loginResp1.size() > sizeof(protocol::MessageHeader), "login1 response");
+    protocol::LoginResponse parsedLogin1;
+    protocol::MessageCodec::decodeBody(
+        std::vector<std::uint8_t>(loginResp1.begin() + sizeof(protocol::MessageHeader),
+                                  loginResp1.end()), parsedLogin1);
+    TEST_ASSERT(parsedLogin1.success && parsedLogin1.playerId == 1001,
+                "login1 accepted for 1001");
+    protocol::LoginRequest loginReq2;
+    loginReq2.username = "player2";
+    loginReq2.password = "pass2";
+    const auto loginResp2 = login.dispatchRequest(
+        protocol::MessageCodec::encode(loginReq2, 0));
+    TEST_ASSERT(loginResp2.size() > sizeof(protocol::MessageHeader), "login2 response");
+    protocol::LoginResponse parsedLogin2;
+    protocol::MessageCodec::decodeBody(
+        std::vector<std::uint8_t>(loginResp2.begin() + sizeof(protocol::MessageHeader),
+                                  loginResp2.end()), parsedLogin2);
+    TEST_ASSERT(parsedLogin2.success && parsedLogin2.playerId == 1002,
+                "login2 accepted for 1002");
+    TEST_ASSERT(!parsedLogin1.loginTicket.empty() && !parsedLogin2.loginTicket.empty(),
+                "both login tickets issued");
+
+    // ⑩ 玩家 1002 的目录落点覆写为 503（D14 场景前提「玩家进入指定 Space」
+    //——登录全局 initialSpaceId 只给 1001 的 501）。覆写须在 1002 首个模拟
+    // 输入前——网关 ensureRouteSnapshot 懒解析（首个 world 意图）即取 503。
+    // 不设 cell_id：登录流程落点亦不戳 cell_id，路由按权威空间归属（space_id
+    // → 归属 cell）裁决，本测试即验证该裁决面。
+    auto a2 = login.onlineDirectory()->resolveWorldAssignment(1002);
+    TEST_ASSERT(a2.has_value(), "1002 assignment recorded");
+    a2->space_id = 503;
+    a2->cell_host = "127.0.0.1";
+    a2->cell_port = cell22.listen_port();
+    TEST_ASSERT(login.onlineDirectory()->assignWorld(1002, *a2),
+                "1002 re-assigned to space 503");
+
+    // ⑪ 网关准入（login M1 真校验 + base 激活 + 目录 World 准入）。
+    TEST_ASSERT(wait_until([&] { return gateway.baseActivationReady(); }, 3000),
+                "base activation link up");
+    TEST_ASSERT(gateway.authenticateSession(session1, 1001, parsedLogin1.loginTicket),
+                "g1 auth accepted for 1001");
+    TEST_ASSERT(gateway.authenticateSession(session2, 1002, parsedLogin2.loginTicket),
+                "g2 auth accepted for 1002");
+
+    // ⑫ 落点空间各归其所：1001→501、1002→503（目录按玩家独立，非全局）。
+    const auto assigned1 = login.onlineDirectory()->resolveWorldAssignment(1001);
+    const auto assigned2 = login.onlineDirectory()->resolveWorldAssignment(1002);
+    TEST_ASSERT(assigned1.has_value() && assigned1->space_id == 501,
+                "1001 assigned to space 501");
+    TEST_ASSERT(assigned2.has_value() && assigned2->space_id == 503,
+                "1002 assigned to space 503");
+
+    // ⑬ 两客户端各自发 CELL_CREATE_ENTITY → gateway → world → 归属 cell。
+    c1.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn(1001), session1)));
+    c2.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn(1002), session2)));
+
+    // ⑭ 断言：1001 到达 cell-21、1002 到达 cell-22（选路正确，D14 #1/#2）。
+    TEST_ASSERT(wait_until(
+                    [&] { return cell21.resolveIntentPlayer(session1) == 1001; }, 8000),
+                "cell-21 spawned player 1001");
+    TEST_ASSERT(wait_until(
+                    [&] { return cell22.resolveIntentPlayer(session2) == 1002; }, 8000),
+                "cell-22 spawned player 1002");
+    // ⑮ 跨 cell 隔离：cell-21 无 1002、cell-22 无 1001（不误路由，D14 #3）。
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    TEST_ASSERT(cell21.resolveIntentPlayer(session2) == 0,
+                "cell-21 did not receive 1002 (isolation)");
+    TEST_ASSERT(cell22.resolveIntentPlayer(session1) == 0,
+                "cell-22 did not receive 1001 (isolation)");
+
+    // ⑯ 两玩家各自 base 锚点在线（同 cell 单空间模拟不受影响，D14 #5）。
+    const auto avatar1 = base.store->findAvatar(1001);
+    const auto avatar2 = base.store->findAvatar(1002);
+    TEST_ASSERT(avatar1 != nullptr && avatar2 != nullptr, "both avatars loaded at base");
+    TEST_ASSERT(avatar1->state() == apollo::game::base::AvatarState::Online &&
+                avatar2->state() == apollo::game::base::AvatarState::Online,
+                "both avatars online after chain");
+
+    gateway.stop();
+    cell21.stop();
+    cell22.stop();
+    world->stop();
+    login.stop();
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -587,6 +803,7 @@ int main() {
     const struct { const char* name; bool (*fn)(); } cases[] = {
         {"login_chain_creates_cell_entity", login_chain_creates_cell_entity},
         {"login_chain_two_gateway_concurrent", login_chain_two_gateway_concurrent},
+        {"login_chain_two_cell_space_routing", login_chain_two_cell_space_routing},
     };
     int failed = 0;
     for (const auto& c : cases) {

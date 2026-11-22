@@ -49,11 +49,14 @@ MACHINED="$BUILD_DIR/apps/machined/machined"
 # 认领随拓扑/重平衡批）；APOLLO_FLEET_CELLS=0 = 管理测试模式（无 cell，池
 # 静默不推，保留 401/402 兼容占位）。
 world_assign_spaces() {
+    # L134 真实多 cell 分配批：能力位（<id>:<needs>）确定性分空间——cell-21
+    # 声明 0x1（认领 501/502），cell-22 声明 0x2（认领 503）；首就绪独占语义
+    # 只在 needs=0（单 cell 缺省）时成立。
     local n="${APOLLO_FLEET_CELLS:-1}"
     if [[ "$n" -le 0 ]]; then
         echo "401,402"
     elif [[ "$n" -ge 2 ]]; then
-        echo "501,502,503"
+        echo "501:1,502:1,503:2"
     else
         echo "501,502"
     fi
@@ -67,10 +70,10 @@ cell_entries() {
         n=2
     fi
     if [[ "$n" -ge 1 ]]; then
-        echo "cell-21 | 21 | $BUILD_DIR/apps/world/cellServer --world-id 1 --m1-port 9301 --register-host 127.0.0.1 --register-port 9101 --cell-id 21 --add-space 501:arena --add-space 502:lobby --machined-port 9600 --component-id 21"
+        echo "cell-21 | 21 | $BUILD_DIR/apps/world/cellServer --world-id 1 --m1-port 9301 --register-host 127.0.0.1 --register-port 9101 --cell-id 21 --declare-capabilities 1 --add-space 501:arena --add-space 502:lobby --machined-port 9600 --component-id 21"
     fi
     if [[ "$n" -ge 2 ]]; then
-        echo "cell-22 | 22 | $BUILD_DIR/apps/world/cellServer --world-id 1 --m1-port 9302 --register-host 127.0.0.1 --register-port 9101 --cell-id 22 --add-space 503:duel --machined-port 9600 --component-id 22"
+        echo "cell-22 | 22 | $BUILD_DIR/apps/world/cellServer --world-id 1 --m1-port 9302 --register-host 127.0.0.1 --register-port 9101 --cell-id 22 --declare-capabilities 2 --add-space 503:duel --machined-port 9600 --component-id 22"
     fi
 }
 
