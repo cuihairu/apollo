@@ -50,6 +50,10 @@ public:
     [[nodiscard]] std::size_t session_count() const;
 
 private:
+    // 同玩家顶号（D10 case 4 唯一资料写入者）：新会话落表前撤销旧会话。
+    // 调用方须持 mutex_（仅 create_session 内调用）。
+    void evict_superseded_session(WorldSession::SessionId old_session_id);
+
     mutable std::mutex mutex_;
     std::unordered_map<WorldSession::SessionId, SessionPtr> sessions_;
     // 玩家索引：键为强分型 PlayerId（P0-2）——索引语义明确「按玩家身份查会话」，

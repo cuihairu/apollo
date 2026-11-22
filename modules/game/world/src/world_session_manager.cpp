@@ -7,10 +7,36 @@ WorldSessionManager::SessionPtr WorldSessionManager::create_session(
     WorldSession::PlayerId player_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    // 同玩家顶号（D10 case 4 唯一资料写入者）：新会话号落表前撤销已被顶替
+    // 的旧会话——旧会话号从此 find_session 归 null，其迟到模拟输入/结算
+    // 不再解析到玩家（「旧会话撤销后仅新会话可写」）。同号重入（find_session
+    // 命中路径不调 create_session）不受影响；跨玩家同号（不应发生）也不顶。
+    if (const auto it = player_index_.find(player_id);
+        it != player_index_.end() && it->second != session_id) {
+        evict_superseded_session(it->second);
+    }
+
     auto session = std::make_shared<WorldSession>(session_id, player_id);
     sessions_[session_id] = session;
     player_index_[player_id] = session_id;
     return session;
+}
+
+void WorldSessionManager::evict_superseded_session(WorldSession::SessionId old_session_id) {
+    const auto it = sessions_.find(old_session_id);
+    if (it == sessions_.end()) {
+        return;
+    }
+    const auto session = it->second;
+    // 顶号撤销：旧会话无条件置终态并摘除索引（set_state 为公开面，终态对
+    // 任何状态迁移方法均拒绝；调用方持 shared_ptr 观察 Closed 即知已撤销）。
+    session->set_state(WorldSessionState::Closed);
+    sessions_.erase(it);
+    // 摘除玩家索引：仅当仍指向旧会话——新会话接管后不得误删新条目。
+    if (const auto pi = player_index_.find(session->player_id());
+        pi != player_index_.end() && pi->second == old_session_id) {
+        player_index_.erase(pi);
+    }
 }
 
 WorldSessionManager::SessionPtr WorldSessionManager::find_session(WorldSession::SessionId session_id) const {

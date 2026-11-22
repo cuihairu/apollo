@@ -1233,6 +1233,46 @@ bool test_cell_kernel_malformed_intent_drained() {
     return true;
 }
 
+// 顶号（D10 case 4 唯一资料写入者）：同玩家重登顶号后旧会话撤销——旧会话
+// 号的模拟输入/结算不再解析到玩家（仅新会话可写）。旧会话号经
+// resolveIntentPlayer 归 0（意图消费面丢旧会话输入），新会话号照常解析。
+bool test_cell_relogin_supersedes_old_session() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));  // 首拍 settle
+
+    // 首登：session 77 挂玩家 42（Avatar 入默认 scene）
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(42, 77)), "first login accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(77) == 42; },
+                           std::chrono::seconds(3)),
+                "first session bound");
+
+    // 重登顶号：同玩家 42 新 session 88（旧网关仍活、旧会话未 detach）——
+    // 顶号后旧会话 77 撤销：新会话 88 落表解析、旧会话号归 0
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(42, 88)), "relogin accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(88) == 42; },
+                           std::chrono::seconds(3)),
+                "new session bound at tick");
+    TEST_ASSERT(cell.resolveIntentPlayer(77) == 0,
+                "superseded session no longer resolves (old writes blocked)");
+
+    // 顶号幂等：同玩家再顶一次（session 99）——旧新会话 88 亦撤销，单活跃
+    // 会话不变量持续
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(42, 99)), "re-relogin accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(99) == 42; },
+                           std::chrono::seconds(3)),
+                "third session bound");
+    TEST_ASSERT(cell.resolveIntentPlayer(88) == 0 && cell.resolveIntentPlayer(77) == 0,
+                "all superseded sessions unresolvable");
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1263,6 +1303,7 @@ int main() {
         {"declared_space_reassignment_keeps_name",
          test_declared_space_reassignment_keeps_name},
         {"id_domains_are_separate", test_id_domains_are_separate},
+        {"cell_relogin_supersedes_old_session", test_cell_relogin_supersedes_old_session},
     };
 
     for (const auto& c : cases) {

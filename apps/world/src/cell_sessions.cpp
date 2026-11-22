@@ -45,7 +45,21 @@ void CellApp::attachPlayerWorldSession(
 
     auto session = worldSessionManager_->find_session(session_id);
     if (!session) {
+        // 顶号（D10 case 4 唯一资料写入者）：同玩家已绑别号 = 重登录顶替——
+        // 先记旧会话以定位其旧 Avatar 所在 scene（create_session 随即撤销
+        // 旧会话并置 Closed，旧会话号的模拟输入/结算不再解析到玩家），随后
+        // 把旧 Avatar 自旧 scene 出列，让新 Avatar 可入场（Scene::enter 对
+        // 重复玩家拒入，不离场则新会话卡死在门外）。
+        const auto superseded = worldSessionManager_->find_by_player(player_id);
         session = worldSessionManager_->create_session(session_id, player_id);
+        if (superseded && superseded->session_id() != session_id) {
+            if (auto* old_scene = find_scene_by_entity(superseded->avatar_entity_id().value())) {
+                old_scene->leave(player_id);
+                if (auto* old_instance = world_->find_instance_by_scene(old_scene->scene_id())) {
+                    old_instance->leave(player_id);
+                }
+            }
+        }
     }
 
     // L99：会话落点随 space 路由解析（未知空间回落默认 scene）；实例按落点

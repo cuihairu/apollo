@@ -147,6 +147,44 @@ bool test_world_session_manager_lifecycle() {
     return true;
 }
 
+bool test_world_session_manager_relogin_supersedes() {
+    std::cout << "Running: test_world_session_manager_relogin_supersedes..." << std::endl;
+
+    apollo::game::world::WorldSessionManager manager;
+    const auto player = apollo::game::core::PlayerId(4001);
+
+    // 首登：会话 A 绑定玩家
+    auto session_a = manager.create_session(3001, player);
+    session_a->set_state(apollo::game::world::WorldSessionState::Active);
+    TEST_ASSERT(manager.find_by_player(player) == session_a, "first session bound");
+    TEST_ASSERT(manager.session_count() == 1, "one session after first login");
+
+    // 重登顶号（D10 case 4 唯一资料写入者）：同玩家新会话 B 落表——旧会话
+    // A 撤销，旧会话号不再解析（其迟到模拟输入/结算不得再写）
+    auto session_b = manager.create_session(3002, player);
+    TEST_ASSERT(manager.find_by_player(player) == session_b, "new session supersedes");
+    TEST_ASSERT(manager.find_session(3001) == nullptr, "superseded session no longer resolves");
+    TEST_ASSERT(session_a->state() == apollo::game::world::WorldSessionState::Closed,
+                "superseded session terminal Closed");
+    TEST_ASSERT(manager.find_session(3002) == session_b, "new session resolves");
+    TEST_ASSERT(manager.session_count() == 1, "old session evicted");
+
+    // 顶号后再顶：会话 C 顶 B——单活跃会话不变量持续
+    auto session_c = manager.create_session(3003, player);
+    TEST_ASSERT(manager.find_session(3002) == nullptr, "second supersession evicts prior");
+    TEST_ASSERT(manager.find_by_player(player) == session_c, "latest session bound");
+    TEST_ASSERT(manager.session_count() == 1, "single live session invariant");
+
+    // 跨玩家同号不受影响：另一玩家新会话独立落表
+    auto other = manager.create_session(3001, apollo::game::core::PlayerId(4002));
+    TEST_ASSERT(other != nullptr, "different player new session independent");
+    TEST_ASSERT(manager.find_session(3001) == other, "cross-player session resolves");
+    TEST_ASSERT(manager.find_session(3003) == session_c, "player's session unaffected");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_world_create_scene_and_instance() {
     std::cout << "Running: test_world_create_scene_and_instance..." << std::endl;
 
@@ -579,6 +617,7 @@ int main() {
     run(test_avatar_manager_activate_and_find);
     run(test_session_locator_bind_and_unbind);
     run(test_world_session_manager_lifecycle);
+    run(test_world_session_manager_relogin_supersedes);
     run(test_world_create_scene_and_instance);
     run(test_scene_transfer_end_to_end);
     run(test_scene_transfer_prepare_rejections);
