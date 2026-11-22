@@ -1608,6 +1608,251 @@ bool test_squad_multi_world_allocation_order() {
     return true;
 }
 
+//------------------------------------------------------------------------------
+// D11 入场准入凭证（有期限、单次消费；四负例：过期/错实例/重复使用/资格变更）
+//------------------------------------------------------------------------------
+
+// 名册摘要稳定且序无关：同集合等价、名册变更即摘要变化（资格变更判据）。
+bool test_admission_roster_hash_stability() {
+    using squad_instance::roster_hash_of;
+    TEST_ASSERT(roster_hash_of({100, 101, 102}) == roster_hash_of({102, 100, 101}),
+                "hash order independent");
+    TEST_ASSERT(roster_hash_of({100, 101, 102}) != roster_hash_of({100, 101, 103}),
+                "roster change changes hash");
+    TEST_ASSERT(roster_hash_of({}) != roster_hash_of({1}), "empty vs one differs");
+    return true;
+}
+
+// 凭证面单次消费：verify 不核销、consume 后重放判重复使用；身份绑定拒错玩家。
+bool test_admission_face_issue_verify_consume() {
+    using squad_instance::AdmissionCredentialFace;
+    using squad_instance::AdmissionReject;
+    using squad_instance::AdmissionCredential;
+    AdmissionCredentialFace face;
+    face.set_issuer("cell:7", 0);
+    const auto ids = face.issue_for(/*squad_id=*/1, /*instance_id=*/9001,
+                                    /*cell_id=*/7, {100, 101, 102});
+    TEST_ASSERT(ids.size() == 3, "one credential per member");
+    TEST_ASSERT(face.size() == 3, "table size");
+    const auto* first = face.find(ids[0]);
+    TEST_ASSERT(first != nullptr && first->player_id == 100 && first->squad_id == 1 &&
+                    first->target_instance == 9001 && first->target_cell == 7 &&
+                    first->issuer == "cell:7" && !first->consumed,
+                "credential fields bound at issue");
+
+    const auto roster = std::vector<std::uint64_t>{100, 101, 102};
+    const auto [ok, matched] = face.verify(1, 9001, 100, roster);
+    TEST_ASSERT(ok == AdmissionReject::Ok && matched == ids[0], "verify passes");
+    face.consume(matched);
+    // 重复使用：核销后同凭证一律拒（auto 与显式呈出同判）
+    const auto [dup, dup_id] = face.verify(1, 9001, 100, roster);
+    TEST_ASSERT(dup == AdmissionReject::AlreadyConsumed && dup_id == matched,
+                "consumed credential replay rejected");
+    const auto [auto_dup, _] = face.verify(1, 9001, 100, roster);
+    TEST_ASSERT(auto_dup == AdmissionReject::AlreadyConsumed,
+                "auto path sees consumed too");
+    // 身份绑定：他人未核销凭证显式呈出判目标不符（ids[0] 已核销会先判
+    // 重复使用，故取 ids[1]）
+    const auto [wrong_player, _2] = face.verify(1, 9001, 999, roster, ids[1]);
+    TEST_ASSERT(wrong_player == AdmissionReject::NotTarget, "foreign player rejected");
+    // 未知凭证号
+    const auto [unknown, _3] = face.verify(1, 9001, 100, roster, 4242);
+    TEST_ASSERT(unknown == AdmissionReject::NoCredential, "unknown credential rejected");
+    return true;
+}
+
+// 过期与错实例：过期拒入且不烧凭证；目标副本不符拒入（显式呈出直测）。
+bool test_admission_face_expiry_and_not_target() {
+    using squad_instance::AdmissionCredentialFace;
+    using squad_instance::AdmissionReject;
+    using squad_instance::AdmissionCredential;
+    AdmissionCredentialFace face;
+    face.set_issuer("cell:7", /*ttl_ms=*/1000);
+    std::uint64_t now = 1000;
+    face.set_clock([&now] { return now; });
+    const auto ids = face.issue_for(1, 9001, 7, {100, 101});
+    const auto roster = std::vector<std::uint64_t>{100, 101};
+    const auto [fresh, _] = face.verify(1, 9001, 100, roster);
+    TEST_ASSERT(fresh == AdmissionReject::Ok, "fresh credential accepted");
+    // 到期：过期拒入（不核销——过期不消耗单次消费权）
+    now = 2500;
+    const auto [expired, expired_id] = face.verify(1, 9001, 100, roster);
+    TEST_ASSERT(expired == AdmissionReject::Expired && expired_id == ids[0],
+                "expired credential rejected");
+    // 错实例：显式呈出他人副本的凭证（目标不匹配）
+    const auto [not_target, _2] = face.verify(1, 9001, 100, roster, /*presented=*/99999);
+    TEST_ASSERT(not_target == AdmissionReject::NoCredential,
+                "unknown presented id treated as missing");
+    const auto other_ids = face.issue_for(1, 9002, 7, {100, 101});
+    const auto [wrong_instance, _3] = face.verify(1, 9001, 100, roster, other_ids[0]);
+    TEST_ASSERT(wrong_instance == AdmissionReject::NotTarget, "wrong instance rejected");
+    return true;
+}
+
+// 凭证随副本终态回收：drop_instance 清该副本全部凭证、他副本不受影响。
+bool test_admission_face_drop_instance() {
+    using squad_instance::AdmissionCredentialFace;
+    AdmissionCredentialFace face;
+    face.set_issuer("cell:7", 0);
+    (void)face.issue_for(1, 9001, 7, {100, 101});
+    (void)face.issue_for(2, 9002, 7, {102});
+    TEST_ASSERT(face.size() == 3, "two instances issued");
+    TEST_ASSERT(face.drop_instance(9001) == 2, "dropped by instance");
+    TEST_ASSERT(face.size() == 1, "only other instance remains");
+    face.clear();
+    TEST_ASSERT(face.size() == 0, "clear empties table");
+    return true;
+}
+
+// 服务级正路径：受理签发 → 凭证核销准入 → 全员到齐启动；重进判重复使用。
+bool test_admission_service_positive_flow() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.enable_admission_credentials("cell:1", 0);  // 无期限
+    TEST_ASSERT(service.admission_face() != nullptr, "face assembled");
+    TEST_ASSERT(service.admission_face()->size() == 0, "no credentials before launch");
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.admission_face()->size() == 3,
+                "three members issued at acceptance");
+
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "leader enters under credential");
+    // 重复使用：核销后重进先于副本 Duplicate 判定（凭证面拒）
+    TEST_ASSERT(service.enter(1, kLeader) ==
+                    SquadInstanceService::EnterError::CredentialConsumed,
+                "replay of consumed credential rejected");
+    TEST_ASSERT(service.enter(1, kMemberB) == SquadInstanceService::EnterError::Ok,
+                "member B enters under own credential");
+    TEST_ASSERT(service.enter(1, kMemberC) == SquadInstanceService::EnterError::Ok,
+                "member C enters under own credential");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    SquadInstanceService::EnterError::Ok,
+                "all entered, gameplay starts");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    SquadInstanceService::EnterError::StateRejected,
+                "second start rejected");
+    return true;
+}
+
+// 服务级过期：受理签发后超期进入拒入（有期限语义）。
+bool test_admission_service_expired_reject() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.enable_admission_credentials("cell:1", /*ttl_ms=*/1000);
+    std::uint64_t now = 1000;
+    service.admission_face()->set_clock([&now] { return now; });
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    now = 9999;  // 超过有效期
+    TEST_ASSERT(service.enter(1, kLeader) ==
+                    SquadInstanceService::EnterError::CredentialExpired,
+                "expired credential rejected at admission");
+    return true;
+}
+
+// 服务级资格变更：受理后名册变更，成员进入判名册不符；新入者仍判非快照成员。
+bool test_admission_service_roster_changed_reject() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.enable_admission_credentials("cell:1", 0);
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+
+    // 受理快照之后加入队列：资格变更（名册快照与准入时点不符）
+    auto* party = parties.find(1);
+    TEST_ASSERT(party != nullptr, "party exists");
+    TEST_ASSERT(party->add_member(kOutsider), "outsider joins after launch");
+    TEST_ASSERT(service.enter(1, kLeader) ==
+                    SquadInstanceService::EnterError::CredentialRosterChanged,
+                "member entry rejected on roster change");
+    // 新入者：非受理快照成员，先名册拒（准入口）
+    TEST_ASSERT(service.enter(1, kOutsider) ==
+                    SquadInstanceService::EnterError::NotRoster,
+                "joiner never in snapshot");
+    return true;
+}
+
+// 服务级退出重臂：leave 恢复该成员该副本凭证的单次消费权（凭证面）。
+// 副本实例层的重进窗口另有 battle 参战者闩锁（Waiting 期离开后重进判
+// Duplicate）——该缺口与本凭证面无关，随实例层重进语义批次处理；此处钉住
+// 两层现状分工，防将来有人把实例层行为误记到凭证面。
+bool test_admission_service_leave_rearms_reentry() {
+    using squad_instance::AdmissionReject;
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.enable_admission_credentials("cell:1", 0);
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "first entry consumed credential");
+    const std::vector<std::uint64_t> roster{kLeader, kMemberB, kMemberC};
+    auto* face = service.admission_face();
+    const auto [inside, _] =
+        face->verify(1, launch.instance_id, kLeader, roster);
+    TEST_ASSERT(inside == AdmissionReject::AlreadyConsumed,
+                "credential consumed while inside");
+    TEST_ASSERT(service.leave(1, kLeader) ==
+                    squad_instance::SquadInstanceService::LeaveError::Ok,
+                "left");
+    const auto [rearmed, _2] =
+        face->verify(1, launch.instance_id, kLeader, roster);
+    TEST_ASSERT(rearmed == AdmissionReject::Ok,
+                "leave rearms the single-use admission right");
+    // 副本实例层现状：Waiting 期离开后重进由 battle 参战者闩锁判 Duplicate。
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Duplicate,
+                "instance-layer re-entry latch unchanged");
+    return true;
+}
+
+// 服务级默认关：未装配凭证面 = 旧口径（零回归；测试桩兼容面）。
+bool test_admission_service_default_off() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    TEST_ASSERT(service.admission_face() == nullptr, "face absent by default");
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched without credential face");
+    TEST_ASSERT(service.enter(1, kLeader) == SquadInstanceService::EnterError::Ok,
+                "entry carries no credential check");
+    return true;
+}
+
+// 服务级终态回收：副本终态后凭证随绑定回收（结算代次口径）。
+bool test_admission_service_drop_on_release() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.enable_admission_credentials("cell:1", 0);
+
+    const auto launch = service.launch(basic_request(1));
+    TEST_ASSERT(launch.error == LaunchError::Ok, "launched");
+    TEST_ASSERT(service.admission_face()->size() == 3, "issued");
+    TEST_ASSERT(service.abort(1), "aborted");
+    TEST_ASSERT(service.admission_face()->size() == 0, "credentials dropped on teardown");
+    return true;
+}
+
 
 } // namespace
 
@@ -1655,6 +1900,16 @@ int main() {
         {"squad_concurrent_instances_gameplay_isolation",
          test_squad_concurrent_instances_gameplay_isolation},
         {"squad_multi_world_allocation_order", test_squad_multi_world_allocation_order},
+        {"admission_roster_hash_stability", test_admission_roster_hash_stability},
+        {"admission_face_issue_verify_consume", test_admission_face_issue_verify_consume},
+        {"admission_face_expiry_and_not_target", test_admission_face_expiry_and_not_target},
+        {"admission_face_drop_instance", test_admission_face_drop_instance},
+        {"admission_service_positive_flow", test_admission_service_positive_flow},
+        {"admission_service_expired_reject", test_admission_service_expired_reject},
+        {"admission_service_roster_changed_reject", test_admission_service_roster_changed_reject},
+        {"admission_service_leave_rearms_reentry", test_admission_service_leave_rearms_reentry},
+        {"admission_service_default_off", test_admission_service_default_off},
+        {"admission_service_drop_on_release", test_admission_service_drop_on_release},
     };
 
     int passed = 0;

@@ -1,6 +1,6 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "client_hash": "074a9a4d8a2a89d3868c0152ab35b5a595c7c03e3ce65d790682fa062364aa68",
+  "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
   "messages": [
     {
       "id": 10,
@@ -610,6 +610,31 @@
       "code": 1118,
       "name": "squad_world_draining",
       "desc": "World 排空中，停止分配新副本（既有副本服务至结算销毁）"
+    },
+    {
+      "code": 1119,
+      "name": "squad_credential_missing",
+      "desc": "未持本副本准入凭证"
+    },
+    {
+      "code": 1120,
+      "name": "squad_credential_expired",
+      "desc": "准入凭证已过期（过期拒入）"
+    },
+    {
+      "code": 1121,
+      "name": "squad_credential_not_target",
+      "desc": "准入凭证目标不符（错实例拒入）"
+    },
+    {
+      "code": 1122,
+      "name": "squad_credential_consumed",
+      "desc": "准入凭证已消费（重复使用拒入）"
+    },
+    {
+      "code": 1123,
+      "name": "squad_credential_roster_changed",
+      "desc": "资格变更（名册快照与准入时点不符，拒入）"
     },
     {
       "code": 2001,

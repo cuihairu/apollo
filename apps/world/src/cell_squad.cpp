@@ -190,6 +190,11 @@ std::vector<uint8_t> CellApp::handleSquadEnter(const std::vector<uint8_t>& reque
         case squad_instance::SquadInstanceService::EnterError::Duplicate: code = 1111; break;
         case squad_instance::SquadInstanceService::EnterError::NotLeader: code = 1102; break;
         case squad_instance::SquadInstanceService::EnterError::NotAllEntered: code = 1112; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialMissing: code = 1119; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialExpired: code = 1120; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialNotTarget: code = 1121; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialConsumed: code = 1122; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialRosterChanged: code = 1123; break;
     }
     const auto* binding = squadInstanceService_->find_by_party(msg.partyId);
     deliverSquadResult(header.sessionId,
@@ -219,6 +224,11 @@ std::vector<uint8_t> CellApp::handleSquadStart(const std::vector<uint8_t>& reque
         case squad_instance::SquadInstanceService::EnterError::Duplicate: code = 1111; break;
         case squad_instance::SquadInstanceService::EnterError::NotLeader: code = 1102; break;
         case squad_instance::SquadInstanceService::EnterError::NotAllEntered: code = 1112; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialMissing: code = 1119; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialExpired: code = 1120; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialNotTarget: code = 1121; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialConsumed: code = 1122; break;
+        case squad_instance::SquadInstanceService::EnterError::CredentialRosterChanged: code = 1123; break;
     }
     if (code == 0) {
         // 宿主玩法内容（骨架）：启动即设默认目标 + 首波怪（击杀配额/波次

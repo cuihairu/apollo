@@ -5,6 +5,7 @@
 #include "apollo/game/social/party.hpp"
 #include "apollo/game/world/scene_descriptor.hpp"
 #include "apollo/game/world/world.hpp"
+#include "squad_instance/admission_credential.hpp"
 #include "squad_instance/settlement_ledger.hpp"
 #include "squad_instance/settlement_credential_store.hpp"
 
@@ -130,6 +131,11 @@ public:
         Duplicate,      // 重复进入
         NotLeader,      // 启动请求者非队长
         NotAllEntered,  // 尚有成员未进入
+        CredentialMissing,       // 未持准入凭证（D11 准入面启用后必持）
+        CredentialExpired,       // 凭证过期（四负例之一）
+        CredentialNotTarget,     // 凭证目标不符（错实例，四负例之一）
+        CredentialConsumed,      // 凭证已消费（重复使用，四负例之一）
+        CredentialRosterChanged, // 资格变更（名册快照不符，四负例之一）
     };
     EnterError enter(std::uint64_t party_id, std::uint64_t player_id);
     EnterError start_gameplay(std::uint64_t party_id, std::uint64_t requester_id);
@@ -198,6 +204,17 @@ public:
     // 落账唯一路径 = 返回业务请求（958/959）；本域不持锚点指针（todo L84
     // 跨界纪律：禁止跨界使用本地 Anchor 指针修改资料）。
     void set_business_sink(SettlementLedger::BusinessSink fn);
+
+    // ---- D11 入场准入凭证面装配（cell 准入可信绑定）----
+    // 启用后：launch 受理收口按受理快照逐成员签发有期限、单次消费凭证；
+    // enter 准入先校验凭证（四负例）再进副本。未启用 = 无凭证面（测试桩
+    // 兼容，零回归）。issuer = 签发方（本切片为受理面自签；Base 经 World
+    // 预留容量后签发随后续链路批次切换）。ttl_ms = 有效期（0 = 无期限）。
+    void enable_admission_credentials(std::string issuer, std::uint64_t ttl_ms);
+    // 准入面访问（测试钟控/直测面；未启用返回 nullptr）。
+    [[nodiscard]] AdmissionCredentialFace* admission_face() noexcept {
+        return admission_credential_face_.get();
+    }
 
     // 结算去重凭据面装配（真实奖励持久化）：设置后每条落账先持久提交
     // (小队, 玩家, 分值) 凭据再提业务请求——未提交挂账不落。未设置 = 无凭据
@@ -290,6 +307,8 @@ private:
     InstanceClosingFn instance_closing_;
     SettlementLedger::BusinessSink business_sink_;
     std::unique_ptr<SettlementCredentialStore> credential_store_;
+    // D11 入场准入凭证面（受理签发 + 准入核销）；未启用为 nullptr。
+    std::unique_ptr<AdmissionCredentialFace> admission_credential_face_;
 
     struct WorldSlot {
         std::size_t max_instances = 0;

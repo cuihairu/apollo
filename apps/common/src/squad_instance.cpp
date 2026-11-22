@@ -39,6 +39,12 @@ void SquadInstanceService::set_credential_dir(const std::string& dir) {
     credential_store_ = std::make_unique<SettlementCredentialStore>(dir);
 }
 
+void SquadInstanceService::enable_admission_credentials(std::string issuer,
+                                                       std::uint64_t ttl_ms) {
+    admission_credential_face_ = std::make_unique<AdmissionCredentialFace>();
+    admission_credential_face_->set_issuer(std::move(issuer), ttl_ms);
+}
+
 std::size_t SquadInstanceService::ingest_restored_credentials() {
     if (!credential_store_) return 0;
     std::size_t ingested = 0;
@@ -60,6 +66,24 @@ SquadInstanceService::EnterError SquadInstanceService::enter(std::uint64_t party
         binding->members.end();
     if (!in_roster) return EnterError::NotRoster;
 
+    // D11 准入凭证（启用准入面后必持）：身份/期限/目标/单次消费/名册快照
+    // 五关。校验不核销——核销待副本进入成功（进入失败不烧凭证）。
+    std::uint64_t credential_id = 0;
+    if (admission_credential_face_) {
+        auto* party = parties_.find(party_id);
+        const auto* current_roster = party ? &party->members() : &binding->members;
+        const auto [reject, matched] = admission_credential_face_->verify(
+            party_id, binding->instance_id, player_id, *current_roster);
+        switch (reject) {
+            case AdmissionReject::Ok: credential_id = matched; break;
+            case AdmissionReject::NoCredential: return EnterError::CredentialMissing;
+            case AdmissionReject::Expired: return EnterError::CredentialExpired;
+            case AdmissionReject::NotTarget: return EnterError::CredentialNotTarget;
+            case AdmissionReject::AlreadyConsumed: return EnterError::CredentialConsumed;
+            case AdmissionReject::RosterChanged: return EnterError::CredentialRosterChanged;
+        }
+    }
+
     auto* instance = local_world_->find_instance(binding->instance_id);
     if (!instance) return EnterError::NoBinding;
     // 首进驱动建场：Create→Initialize→Waiting（成员可预进），失败即拒。
@@ -73,6 +97,9 @@ SquadInstanceService::EnterError SquadInstanceService::enter(std::uint64_t party
         return EnterError::StateRejected;
     if (!instance->enter(apollo::game::core::PlayerId{player_id}))
         return EnterError::Duplicate;
+    // D11 单次消费：副本进入成功才核销（重复使用判据）。
+    if (admission_credential_face_ && credential_id != 0)
+        admission_credential_face_->consume(credential_id);
     return EnterError::Ok;
 }
 
@@ -111,6 +138,10 @@ SquadInstanceService::LeaveError SquadInstanceService::leave(std::uint64_t party
     if (!instance) return LeaveError::NoBinding;
     if (!instance->leave(apollo::game::core::PlayerId{player_id}))
         return LeaveError::NotInInstance;
+    // D11 准入凭证重臂：退出后重进走 enter 准入窗口（凭证期内单次消费权
+    // 恢复；未退出期间的凭证期内重放仍判重复使用）。
+    if (admission_credential_face_)
+        admission_credential_face_->rearm(player_id, binding->instance_id);
     // 全员退出（掉线同口径）= 失败判定：Running 期无人可续。
     if (instance->state() == apollo::game::world::Instance::State::Running &&
         instance->player_count() == 0) {
@@ -508,6 +539,12 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
     for (const auto member : binding.members) busy_members_.insert(member);
     party_to_instance_[binding.party_id] = binding.instance_id;
     ++worlds_[result.world_id].used;
+    // D11 准入凭证签发：受理收口按受理快照逐成员签发（有期限、单次消费）。
+    if (admission_credential_face_) {
+        admission_credential_face_->issue_for(
+            binding.party_id, binding.instance_id,
+            static_cast<std::uint64_t>(binding.world_id), binding.members);
+    }
     active_.emplace(result.instance_id, std::move(binding));
     return result;
 }
@@ -568,6 +605,9 @@ void SquadInstanceService::erase_binding(
     settlements_.erase(it->second.instance_id);
     // 凭据生命周期 = 结算代次：终局回收（重启装载的挂起标记同队已消费）
     if (credential_store_) credential_store_->erase(it->second.party_id);
+    // D11 入场准入凭证：副本终态随绑定回收（同结算凭据的世代口径）。
+    if (admission_credential_face_)
+        admission_credential_face_->drop_instance(it->second.instance_id);
     for (const auto member : it->second.members) busy_members_.erase(member);
     auto wit = worlds_.find(it->second.world_id);
     if (wit != worlds_.end() && wit->second.used > 0) --wit->second.used;

@@ -108,6 +108,12 @@ CellApp::CellApp(const WorldAppConfig& config)
                    sessions->find_by_player(
                        apollo::game::core::PlayerId{player_id}) != nullptr;
         });
+    // D11 入场准入凭证（cell 准入可信绑定）：受理副本时按受理快照逐成员签发
+    // 有期限、单次消费凭证，enter 准入先校验再进副本（四负例拒入）。签发方
+    // 本批为受理面自签（cell 宿主）；Base 经 World 预留容量后签发随后续链路
+    // 批次切换。有效期 5 分钟（覆盖受理→全员到齐→启动的正常窗口）。
+    squadInstanceService_->enable_admission_credentials(
+        "cell:" + std::to_string(config_.worldId), /*ttl_ms=*/300000);
 }
 
 CellApp::~CellApp() {
