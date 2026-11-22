@@ -165,6 +165,7 @@ public:
             std::lock_guard<std::mutex> lock(inbox_mutex_);
             inbox_.clear();
         }
+        retry_queue_.clear();  // 停机不落重试（原请求已无 pending 账面，请求方按超时收敛）
         manager_.reset();  // 链路随管理器析构拆线
         route_table_.reset();
     }
@@ -175,6 +176,7 @@ public:
         }
         manager_->pump(now_ms);
         if (worldConnected()) {
+            process_due_retries(now_ms);  // 旧意图先走（近似保序）
             drain_inbox(now_ms);
         }
         sweep_timeouts(now_ms);
@@ -238,6 +240,10 @@ public:
 
     std::uint64_t droppedSends() const override {
         return dropped_.load(std::memory_order_relaxed);
+    }
+
+    std::uint64_t retriedIntents() const override {
+        return retried_.load(std::memory_order_relaxed);
     }
 
     std::uint64_t deliveredClients() const override {
@@ -326,6 +332,28 @@ private:
         }
     }
 
+    // 透明重试到期拍（L122 末批）：延迟窗给 World/cell 就绪机会；到期项走与
+    // 新意图同一翻译/发送路径（新 request_id、新 pending 账面）。链路未连接
+    // 时留在队列等下一拍（pump 只在 worldConnected 时进入本面）。发不出去
+    //（背压/拆线）= 终局落地（dropped 计数，translate_and_send 内）。
+    void process_due_retries(std::uint64_t now_ms) {
+        for (auto it = retry_queue_.begin(); it != retry_queue_.end();) {
+            if (now_ms < it->retry_at_ms) {
+                ++it;  // 未到期（近似单调推进：队列按到期时间乱序插入）
+                continue;
+            }
+            const auto item = std::move(it->item);
+            it = retry_queue_.erase(it);
+            try {
+                translate_and_send(item, now_ms, /*is_retry=*/true);
+            } catch (const std::exception&) {
+                ++unforwardable_;
+            } catch (...) {
+                ++unforwardable_;
+            }
+        }
+    }
+
     void drain_inbox(std::uint64_t now_ms) {
         std::vector<InboxItem> items;
         {
@@ -348,7 +376,9 @@ private:
 
     // legacy 帧 → 契约字段（序 = 契约表序，WorldApp 侧 build_legacy_intent 镜像
     // 互逆）；帧体非法抛（drain_inbox 捕获落地）——受理面已过帧头筛选，此处兜底。
-    void translate_and_send(const InboxItem& item, std::uint64_t now_ms) {
+    // is_retry = 透明重试发送（新 pending 条目标记 retried，不再续试）。
+    void translate_and_send(const InboxItem& item, std::uint64_t now_ms,
+                            bool is_retry = false) {
         auto& frame = item.frame;
         if (frame.size() < sizeof(apollo::protocol::MessageHeader)) {
             ++unforwardable_;  // 残帧：body 切片越界，泵拍侧再验一次（不占关联键）
@@ -519,7 +549,14 @@ private:
             ++dropped_;  // 背压/拒收：legacy 链路死观察面同型，落地不重试
             return;
         }
-        pending_.emplace(request_id, Pending{item.session_id, now_ms});
+        // 首发条目保留原帧（2001 透明重试的载荷源）；重试条目不再续试，帧不
+        // 复留（pending 生命周期由 ack 超时清扫封顶，帧容量随箱顶格同界）。
+        if (is_retry) {
+            pending_.emplace(request_id, Pending{item.session_id, now_ms, {}, true});
+            ++retried_;
+        } else {
+            pending_.emplace(request_id, Pending{item.session_id, now_ms, item, false});
+        }
         ++sent_;
 
         // gateway span（根；受理→发出，成对视图——落地意图无 cell 对侧
@@ -544,30 +581,47 @@ private:
         }
         const auto request_id = static_cast<std::uint64_t>(fields[0].integer);
         const auto code = static_cast<std::int32_t>(fields[1].integer);
-        const auto it = pending_.find(request_id);
+        auto it = pending_.find(request_id);
         if (it == pending_.end()) {
             // 超时清扫后迟到的应答 / 未知关联键——无挂账可消，观察面记 debug
             m1log().debug("WorldApp intent ack without pending entry: request_id="
                           + std::to_string(request_id));
             return;
         }
-        const auto session_id = it->second.session_id;
-        pending_.erase(it);
         if (code == 0) {
+            pending_.erase(it);
             ++acked_;
-        } else {
-            ++failed_;
-            m1log().warning("WorldApp intent rejected by remote: request_id="
-                            + std::to_string(request_id) + " code="
-                            + std::to_string(code));
-            // 路由型拒绝（2001 = World「simulation not hosted」，契约对齐
-            // acceptance_queue.hpp kIntentAckInternal）：会话路由缓存作废，
-            // 下一意图经 ensureRouteSnapshot 重解析——迟到的旧 cell/空间提示
-            // 不因缓存残留反复命中。背压（2101）/其余非 0 不作废（非路由因）。
-            if (code == kWorldNotHostedAck && on_route_invalidate_) {
-                on_route_invalidate_(session_id);
+            return;
+        }
+        const auto session_id = it->second.session_id;
+        const auto retried = it->second.retried;
+        ++failed_;
+        m1log().warning("WorldApp intent rejected by remote: request_id="
+                        + std::to_string(request_id) + " code="
+                        + std::to_string(code));
+        // 路由型拒绝（2001 = World「simulation not hosted」，契约对齐
+        // acceptance_queue.hpp kIntentAckInternal）：会话路由缓存作废，
+        // 下一意图经 ensureRouteSnapshot 重解析——迟到的旧 cell/空间提示
+        // 不因缓存残留反复命中。背压（2101）/其余非 0 不作废（非路由因）。
+        if (code == kWorldNotHostedAck && on_route_invalidate_) {
+            on_route_invalidate_(session_id);
+        }
+        // 被拒意图透明重试一次（L122 末批 · 用户拍板「网关内透明重试一
+        // 次」）：2001 为路由型拒绝（暂无可服务 cell，多为瞬时——cell 注
+        // 册/重注册窗口），网关在链路内延迟重发同一条意图一次，不重写协
+        // 议、无客户端可见同步面（请求方按既有超时收敛）。已重试过 / 重试
+        // 关闭 / 重试队列顶格 = 终局失败（failed_ 已计，不再续试）。
+        if (code == kWorldNotHostedAck && !retried && config_.intent_retry_enabled) {
+            if (retry_queue_.size() < config_.inbox_cap) {
+                retry_queue_.push_back(
+                    RetryItem{trace::now_ms() + config_.intent_retry_delay_ms,
+                              std::move(it->second.item)});
+            } else {
+                m1log().warning("WorldApp intent retry skipped (retry queue full): "
+                                "request_id=" + std::to_string(request_id));
             }
         }
+        pending_.erase(it);
     }
 
     void sweep_timeouts(std::uint64_t now_ms) {
@@ -587,6 +641,15 @@ private:
     struct Pending {
         std::uint64_t session_id;
         std::uint64_t sent_at_ms;
+        InboxItem item;   // 首发载荷（2001 透明重试源；重试条目为空帧 + retried）
+        bool retried;     // 已重试过（不再续试）
+    };
+
+    // 透明重试到期项（L122 末批）：retry_at_ms = 到期拍（延迟窗），item = 原帧
+    // + 路由提示（入箱时刻定格）。
+    struct RetryItem {
+        std::uint64_t retry_at_ms;
+        InboxItem item;
     };
 
     M1EgressConfig config_;
@@ -596,6 +659,7 @@ private:
     std::mutex inbox_mutex_;               // forwardIntent（受理/心跳线程）↔ 泵拍
     std::vector<InboxItem> inbox_;
 
+    std::vector<RetryItem> retry_queue_;   // 透明重试到期队列（泵线程独占，同 pending_）
     std::unordered_map<std::uint64_t, Pending> pending_;  // 泵线程独占
     std::uint64_t next_request_id_ = 1;    // 0 = legacy 无应答哨兵，不配发
 
@@ -609,6 +673,7 @@ private:
     std::atomic<std::uint64_t> timed_out_{0};
     std::atomic<std::uint64_t> unforwardable_{0};
     std::atomic<std::uint64_t> dropped_{0};
+    std::atomic<std::uint64_t> retried_{0};
     std::atomic<std::uint64_t> deliver_count_{0};
     std::atomic<std::uint64_t> undeliverable_{0};
 };

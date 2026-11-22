@@ -850,6 +850,9 @@ bool test_egress_route_invalidate_on_not_hosted() {
     cfg.host = "127.0.0.1";
     cfg.port = cell.listen_port();
     cfg.route_json = kRouteJson;
+    // 本用例只测失效回调面，不测重试——关闭重试保持「一次 2001 = 一次失效」
+    // 断言（重试批的 2001 语义见 test_egress_transparent_retry_once）。
+    cfg.intent_retry_enabled = false;
     auto egress = makeM1Egress(cfg);
     TEST_ASSERT(egress->start(), "egress started");
 
@@ -893,6 +896,94 @@ bool test_egress_route_invalidate_on_not_hosted() {
     return true;
 }
 
+// 被拒意图透明重试一次（L122 末批 · 用户拍板「网关内透明重试一次」）：World
+// 2001「simulation not hosted」→ 网关在链路内延迟重发同一条意图一次（新
+// request_id、同路由提示、无客户端可见面）；重试成功 = 收口；重试仍 2001 =
+// 终局失败不再续试。
+bool test_egress_transparent_retry_once() {
+    std::cout << "Running: test_egress_transparent_retry_once..." << std::endl;
+
+    FakeCell cell;
+    TEST_ASSERT(cell.healthy(), "fake cell assembled");
+
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = cell.listen_port();
+    cfg.route_json = kRouteJson;
+    cfg.intent_retry_delay_ms = 30;  // 测试快速拍（生产缺省 500ms）
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+
+    std::vector<std::uint64_t> invalidated;
+    egress->setRouteInvalidate(
+        [&invalidated](std::uint64_t session_id) { invalidated.push_back(session_id); });
+
+    const auto frames = five_family_frames();
+
+    // ① 首发 2001 → 失效回调 + 透明重试到达（同字段、新 request_id、仍 932 信封）
+    TEST_ASSERT(egress->forwardIntent(77, frames[0]), "first accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 1; }, 5000),
+                "first delivered");
+    TEST_ASSERT(egress->sentIntents() == 1, "one sent before rejection");
+    TEST_ASSERT(egress->retriedIntents() == 0, "no retry before rejection");
+    TEST_ASSERT(cell.ack(cell.records().at(0).request_id, 2001), "ack not hosted sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return !invalidated.empty(); }, 5000),
+                "route invalidated on first 2001");
+
+    // 重试到期 → 同一条意图重发（cell 收到第 2 条记录）
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 2; }, 5000),
+                "transparent retry delivered");
+    TEST_ASSERT(egress->retriedIntents() == 1, "one retry issued");
+    TEST_ASSERT(egress->sentIntents() == 2, "two sends total");
+    const auto retry_record = cell.records().at(1);
+    TEST_ASSERT(retry_record.contract_id == id_of(MsgId::cell_create_entity),
+                "retry same family");
+    TEST_ASSERT(retry_record.session_id == 77, "retry same session");
+    TEST_ASSERT(retry_record.request_id != cell.records().at(0).request_id,
+                "retry fresh request_id");
+    TEST_ASSERT(retry_record.wrapped, "retry still 932 envelope");
+    TEST_ASSERT(retry_record.trace.has_trace(), "retry carries trace");
+    // 字段镜像逐项与首发一致（entityId/entityType/spaceId/位置）
+    const auto first = cell.records().at(0).fields;
+    const auto second = retry_record.fields;
+    TEST_ASSERT(first.size() == second.size(), "same field count");
+    for (std::size_t i = 2; i < first.size(); ++i) {
+        TEST_ASSERT(first[i].integer == second[i].integer &&
+                        first[i].real == second[i].real,
+                    "retry field mirror");
+    }
+
+    // 重试应答成功（code 0）→ 收口（retried 不再续试，failed=1 原始拒收）
+    TEST_ASSERT(cell.ack(retry_record.request_id, 0), "retry ack ok sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->ackedIntents() == 1; }, 5000),
+                "retry acked");
+    TEST_ASSERT(egress->failedAcks() == 1, "first 2001 counted as raw rejection");
+    TEST_ASSERT(egress->timedOutIntents() == 0, "no timeout");
+    TEST_ASSERT(egress->pendingAcks() == 0, "pending drained");
+
+    // ② 首发 2001 + 重试仍 2001 = 终局失败（不第三次发送）
+    TEST_ASSERT(egress->forwardIntent(77, frames[1]), "second intent accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 3; }, 5000),
+                "second intent delivered");
+    TEST_ASSERT(cell.ack(cell.records().at(2).request_id, 2001), "second not hosted ack");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 4; }, 5000),
+                "second intent retried");
+    TEST_ASSERT(egress->retriedIntents() == 2, "two retries issued");
+    TEST_ASSERT(cell.ack(cell.records().at(3).request_id, 2001), "retry again not hosted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->pendingAcks() == 0; }, 5000),
+                "retry rejection settles");
+    TEST_ASSERT(egress->failedAcks() == 3, "three raw rejections (2001 pairs)");
+    TEST_ASSERT(egress->retriedIntents() == 2, "no third retry");
+    TEST_ASSERT(egress->sentIntents() == 4, "four sends total (two intents × two attempts)");
+    TEST_ASSERT(cell.count() == 4, "exactly two deliveries for second intent");
+    // 终局 2001 同样触发失效回调（无害——下一意图照常重解析），共三次
+    TEST_ASSERT(invalidated.size() == 3, "invalidate fired for every 2001 round");
+
+    egress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 int main() {
     std::cout << "=== Apollo Gateway M1 Egress Test Suite ===" << std::endl;
 
@@ -910,6 +1001,7 @@ int main() {
     if (!test_egress_route_table_missing()) ++failed;
     if (!test_egress_wrapped_trace()) ++failed;
     if (!test_egress_route_invalidate_on_not_hosted()) ++failed;
+    if (!test_egress_transparent_retry_once()) ++failed;
     if (!test_gateway_cell_e2e()) ++failed;
 
     if (failed == 0) {

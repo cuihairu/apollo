@@ -29,6 +29,14 @@ struct M1EgressConfig {
     std::size_t inbox_cap = 4096;         // 投递箱顶格：溢出落地（legacy 死面同型）
     std::uint32_t gateway_id = 0;         // 本网关身份（0 = 未配；939 回带非 0
                                          // 且不匹配时落地不投——多网关防串投）
+    // 被拒意图透明重试（L122 末批 · 用户拍板「网关内透明重试一次」）：World
+    // 回 2001「simulation not hosted」（路由型拒绝——暂无可服务 cell）时，网关
+    // 在链路内透明重发同一条意图一次（不重写协议、无客户端可见同步面——请求
+    // 方仍按超时收敛）。重试仍拒/发送落地 = 终局失败（failed/dropped 计数），
+    // 不再续试。重试载荷带原路由提示（入箱即定格纪律：路由事实以受理时刻为准，
+    // 不因泵拍晚到改写——World 侧空间归属为权威裁决，提示只作池外回退）。
+    bool intent_retry_enabled = true;
+    std::uint64_t intent_retry_delay_ms = 500;  // 重试延迟（给 World/cell 就绪窗口）
 };
 
 // 客户端帧下行回调（P2 真实下行；契约 939 client_deliver 到达时调用）：
@@ -91,6 +99,7 @@ public:
     virtual std::uint64_t timedOutIntents() const { return 0; }     // 清扫线回收
     virtual std::uint64_t unforwardableFrames() const { return 0; } // 非五族/残帧/箱满
     virtual std::uint64_t droppedSends() const { return 0; }        // 链路拒收（背压）
+    virtual std::uint64_t retriedIntents() const { return 0; }      // 2001 透明重试已发出
     virtual std::uint64_t deliveredClients() const { return 0; }    // 939 下行成功投递
     virtual std::uint64_t undeliverableClients() const { return 0; }// 939 残帧/身份不匹配
     // pending 关联账面（仅限宿主泵线程读——泵拍外的原子计数只有其余各面）
