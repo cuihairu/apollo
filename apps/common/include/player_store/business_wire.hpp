@@ -41,10 +41,11 @@ static_assert(static_cast<std::uint16_t>(apollo::contract::gen::MsgId::player_sc
 
 struct ScoreCreditRequest {
     static constexpr std::uint16_t TYPE = 958;
-    std::uint64_t request_id = 0;    // 调用方关联号（账本幂等在调用方）
+    std::uint64_t request_id = 0;    // 调用方关联号（单次投递关联；跨重试非稳定）
     std::uint64_t player_id = 0;
     std::int64_t score = 0;          // 结算分值（入 exp 键）
     std::uint32_t source_zone_id = 0; // 发起玩法域（排查面）
+    std::uint64_t settlement_id = 0; // 稳定玩法/结算 ID（重试/回执丢失重放不变；0=旧口径）
 };
 
 struct ScoreCreditReply {
@@ -53,6 +54,8 @@ struct ScoreCreditReply {
     std::uint64_t player_id = 0;
     bool accepted = false;           // 1=已入锚点长期态；0=暂不可落（挂账待补）
     std::string error_message;
+    std::uint64_t settlement_id = 0; // 回带稳定玩法/结算 ID（关联/排查面）
+    bool duplicate = false;          // 1=同结算 ID 已受理的重放——不再落账
 };
 
 inline std::vector<std::uint8_t> encodeBody(const ScoreCreditRequest& m) {
@@ -61,6 +64,7 @@ inline std::vector<std::uint8_t> encodeBody(const ScoreCreditRequest& m) {
     put_u64(b, m.player_id);
     put_u64(b, static_cast<std::uint64_t>(m.score));
     put_u32(b, m.source_zone_id);
+    put_u64(b, m.settlement_id);
     return b;
 }
 
@@ -70,19 +74,22 @@ inline std::vector<std::uint8_t> encodeBody(const ScoreCreditReply& m) {
     put_u64(b, m.player_id);
     put_bool(b, m.accepted);
     put_str(b, m.error_message);
+    put_u64(b, m.settlement_id);
+    put_bool(b, m.duplicate);
     return b;
 }
 
 inline bool decodeBody(BodyReader& r, ScoreCreditRequest& m) {
     std::uint64_t score = 0;
     return r.u64(m.request_id) && r.u64(m.player_id) && r.u64(score)
-           && r.u32(m.source_zone_id)
+           && r.u32(m.source_zone_id) && r.u64(m.settlement_id)
            && (m.score = static_cast<std::int64_t>(score), true);
 }
 
 inline bool decodeBody(BodyReader& r, ScoreCreditReply& m) {
     return r.u64(m.request_id) && r.u64(m.player_id) && r.boolean(m.accepted)
-           && r.str(m.error_message);
+           && r.str(m.error_message) && r.u64(m.settlement_id)
+           && r.boolean(m.duplicate);
 }
 
 inline std::vector<std::uint8_t> encodeFrame(const ScoreCreditRequest& m,

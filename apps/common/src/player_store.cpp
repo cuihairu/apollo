@@ -198,6 +198,11 @@ void PlayerStore::start() {
                     if (profile.homeZoneId != 0) {
                         avatar->set_home_zone_id(profile.homeZoneId);
                     }
+                    // 已结算环读档播种（L132 结算幂等）：回执丢失重放命中环
+                    // → 受理不双记（环与 exp 同一持久单元）
+                    if (!profile.settledIds.empty()) {
+                        avatar->restore_settled(profile.settledIds);
+                    }
                     avatar->clear_dirty();
                 }
             }
@@ -361,6 +366,10 @@ std::size_t PlayerStore::flushDirtyAvatars(const char* reason) {
         // 原区服回写（L118）：锚点 home_zone 即真源，随档案落盘——重启/
         // 换域后读档播种不丢（正常登录路径未分配仍 0，照写不回卷）
         task.data.homeZoneId = avatar->home_zone_id();
+        // 已结算环回写（L132 结算幂等）：锚点环即真源，与 exp 同一次落盘
+        // （同一持久单元——exp 已写而环未写不存在，重试命中即不双记）
+        task.data.settledIds.assign(avatar->settled_ids().begin(),
+                                    avatar->settled_ids().end());
         if (database_->ownsJournal()) {
             // 写端自持代次（L64 Base 半；database 半验单调）——基线即现档，
             // 作缺账播种真源，不另发读

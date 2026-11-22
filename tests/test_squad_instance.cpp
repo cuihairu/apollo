@@ -620,19 +620,31 @@ bool test_squad_gameplay_guards_and_quotas() {
 // 结算业务受理面替身（Base 锚点长期态的进程内替身）：账本已不持锚点指针
 // （todo L84 跨界纪律），生产落账走 958/959 返回业务请求；替身按玩家记已
 // 受理分值充当 Base 侧真值，missing 名单注入受理失败（挂账/补账路径）。
+// L132：替身与生产同语义——同 (玩家, 结算 ID) 重放不双记（记 duplicate
+// 次数）；settlement_id = 0 = 旧口径不记重放。
 struct BusinessTable {
     std::map<std::uint64_t, std::int64_t> credited;  // Base 侧累计已受理分值
     std::map<std::uint64_t, std::size_t> submits;     // 业务请求次数
+    std::map<std::uint64_t, std::size_t> duplicates;  // 同结算 ID 重放次数
     std::set<std::uint64_t> missing;
-    bool submit(std::uint64_t id, std::int64_t score) {
+    bool drop_reply = false;  // 回执丢失注入（D12 #1）：Base 已写但调用方未收到回执
+    bool submit(std::uint64_t id, std::int64_t score, std::uint64_t settlement_id) {
         if (missing.contains(id)) return false;
         ++submits[id];
+        if (settlement_id != 0) {
+            const bool seen = settled_ids[id].insert(settlement_id).second;
+            if (!seen) {
+                ++duplicates[id];  // 回执丢失重放：受理不双记
+                return true;
+            }
+        }
         credited[id] += score;
-        return true;
+        return !drop_reply;  // 回执丢失：表已记（database 已写），调用方视为未受理
     }
     bool has(std::uint64_t id) const {
         return credited.contains(id) && !missing.contains(id);
     }
+    std::map<std::uint64_t, std::set<std::uint64_t>> settled_ids;  // 玩家 → 结算 ID 集合
 };
 
 BusinessTable make_business_table(std::initializer_list<std::uint64_t> ids) {
@@ -649,8 +661,10 @@ std::int64_t exp_of(const BusinessTable& table, std::uint64_t id) {
 // 业务受理缝装配（须在 launch 前设置；受理即取本缝）
 void wire_business_sink(squad_instance::SquadInstanceService& service,
                         BusinessTable& table) {
-    service.set_business_sink([&table](std::uint64_t player_id, std::int64_t score) {
-        return table.submit(player_id, score)
+    service.set_business_sink(
+        [&table](std::uint64_t player_id, std::int64_t score,
+                 std::uint64_t settlement_id) {
+        return table.submit(player_id, score, settlement_id)
                    ? squad_instance::SettlementLedger::ApplyError::Ok
                    : squad_instance::SettlementLedger::ApplyError::AvatarUnavailable;
     });
@@ -718,6 +732,43 @@ bool test_squad_settlement_idempotent_credit_and_retry() {
                 "member B credited");
     snap = service.settlement(1);
     TEST_ASSERT(snap->complete && snap->applied == 3, "settlement complete");
+    return true;
+}
+
+// D12 #1（L132 结算幂等）：database 已写而回执丢失 → 同结算 ID 重试不重复。
+// 生产口径 = 账本（World 侧挂账，重试同结算 ID）+ Base 侧同结算 ID 去重
+// （环与 exp 同一持久单元）；本例 BusinessTable 替身按同语义建模
+// （drop_reply 注入「Base 已写但回执未达」）。
+bool test_squad_settlement_lost_reply_retry_same_settlement_id() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_business_table({kLeader});
+    wire_business_sink(service, table);
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+
+    // 回执丢失：Base 已记账（credited），账本视为未受理（挂账待补）
+    table.drop_reply = true;
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
+                    squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                "lost reply deferred");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "base wrote despite lost reply");
+    auto snap = service.settlement(1);
+    TEST_ASSERT(snap.has_value() && snap->pending == 1 && snap->applied == 0,
+                "ledger shows pending after lost reply");
+
+    // 回执恢复 → 补账重放同结算 ID：Base 去重命中，不双记
+    table.drop_reply = false;
+    TEST_ASSERT(service.retry_settlement(1) == 1, "retry re-submits same settlement");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "replay did not double credit");
+    const auto dup = table.duplicates.find(kLeader);
+    TEST_ASSERT(dup != table.duplicates.end() && dup->second == 1,
+                "lost-reply replay flagged duplicate");
+    snap = service.settlement(1);
+    TEST_ASSERT(snap.has_value() && snap->applied == 1 && snap->pending == 0,
+                "ledger closed after lost-reply replay");
     return true;
 }
 
@@ -1874,6 +1925,8 @@ int main() {
         {"squad_gameplay_guards_and_quotas", test_squad_gameplay_guards_and_quotas},
         {"squad_settlement_idempotent_credit_and_retry",
          test_squad_settlement_idempotent_credit_and_retry},
+        {"squad_settlement_lost_reply_retry_same_settlement_id",
+         test_squad_settlement_lost_reply_retry_same_settlement_id},
         {"squad_settlement_battle_settles_on_goal_completion",
          test_squad_settlement_battle_settles_on_goal_completion},
         {"departure keeps long term state",

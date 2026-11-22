@@ -20,7 +20,9 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -49,12 +51,14 @@ business::ScoreCreditReply fire_credit(player_store::StoreDial& dial,
                                         std::uint64_t request_id,
                                         std::uint64_t player_id,
                                         std::int64_t score,
-                                        std::uint32_t zone) {
+                                        std::uint32_t zone,
+                                        std::uint64_t settlement_id = 0) {
     business::ScoreCreditRequest req;
     req.request_id = request_id;
     req.player_id = player_id;
     req.score = score;
     req.source_zone_id = zone;
+    req.settlement_id = settlement_id;
     auto reply = dial.call(business::encodeFrame(req));
     require(reply.has_value(), "score credit wire: no reply (store face down)");
     business::ScoreCreditReply rep;
@@ -71,12 +75,14 @@ business::ScoreCreditReply fire_credit(player_store::StoreDial& dial,
 SettlementLedger::ApplyError wire_sink(player_store::StoreDial& dial,
                                        std::uint64_t& seq,
                                        std::uint64_t player_id,
-                                       std::int64_t score) {
+                                       std::int64_t score,
+                                       std::uint64_t settlement_id = 0) {
     business::ScoreCreditRequest req;
     req.request_id = ++seq;
     req.player_id = player_id;
     req.score = score;
     req.source_zone_id = 2;
+    req.settlement_id = settlement_id;
     const auto reply = dial.call(business::encodeFrame(req));
     business::ScoreCreditReply rep;
     apollo::protocol::SessionID sid = 0;
@@ -144,14 +150,16 @@ void base_business_wire() {
         require(!rep.accepted, "score credit on transferring avatar accepted");
     }
 
-    // ---- 4. SettlementLedger 业务受理装配：Ok + 幂等（双投不双记）----
+    // ---- 4. SettlementLedger 业务受理装配：settlement_id 穿透 + 幂等 ----
+    //（L132：稳定玩法/结算 ID 随 begin 定账——重试/回执丢失重放不变）
     require(base.store->adoptPlayer(9, "", 7003, 7, 2), "player 9 adopt failed");
     {
         SettlementLedger ledger;
-        ledger.begin({9});  // 账本不持锚点解析（资料归属在 Base，唯一落账路径 = 业务请求）
+        ledger.begin({9}, 9001);  // 账本不持锚点解析（资料归属在 Base，唯一落账路径 = 业务请求）
         std::uint64_t seq = 100;
-        ledger.set_business_sink([&](std::uint64_t player_id, std::int64_t score) {
-            return wire_sink(dial, seq, player_id, score);
+        ledger.set_business_sink([&](std::uint64_t player_id, std::int64_t score,
+                                     std::uint64_t settlement_id) {
+            return wire_sink(dial, seq, player_id, score, settlement_id);
         });
         require(ledger.apply(9, 80) == SettlementLedger::ApplyError::Ok,
                 "ledger business apply not Ok");
@@ -163,15 +171,55 @@ void base_business_wire() {
         const auto snap = ledger.snapshot();
         require(snap.applied == 1 && snap.pending == 0 && snap.complete,
                 "ledger snapshot wrong after business apply");
+        // 回执丢失重放（同结算 ID、新 request_id）：Base 幂等——受理不双记
+        const auto dup = fire_credit(dial, 101, 9, 80, 2, 9001);
+        require(dup.accepted && dup.duplicate && dup.settlement_id == 9001,
+                "replayed settlement id not flagged duplicate");
+        require(avatar->progress("exp") == 80,
+                "replayed settlement id double credited exp");
     }
 
-    // ---- 5. 受理面停 → AvatarUnavailable 挂账（分值保留不丢）----
+    // ---- 5. D12「database 已写、回执丢失 → 同结算 ID 重试不重复」持久闭环 ----
+    //（L132 结算幂等核心：环随档案落盘 = 与 exp 同一持久单元，重放命中不双记）
+    require(base.store->adoptPlayer(11, "", 7004, 8, 2), "player 11 adopt failed");
+    {
+        const auto first = fire_credit(dial, 300, 11, 100, 2, 4242);
+        require(first.accepted && !first.duplicate && first.settlement_id == 4242,
+                "first settlement credit not accepted");
+        const auto avatar = base.store->findAvatar(11);
+        require(avatar != nullptr && avatar->progress("exp") == 100,
+                "first settlement did not land exp");
+        base.store->flushDirtyAvatars("test_d12");  // 环随档落盘（同一持久单元）
+        // 回执丢失重放（新 request_id、同结算 ID）→ duplicate，exp 不双记
+        const auto replay = fire_credit(dial, 301, 11, 100, 2, 4242);
+        require(replay.accepted && replay.duplicate && replay.settlement_id == 4242,
+                "lost-reply replay not flagged duplicate");
+        require(avatar->progress("exp") == 100,
+                "lost-reply replay double credited exp");
+        // 持久断言：档案 JSON 携带环（Base 重启后同结算 ID 重放仍不双记）
+        std::ifstream in((files.path / "players" / "player_11.json").string());
+        const std::string profile((std::istreambuf_iterator<char>(in)),
+                                  std::istreambuf_iterator<char>());
+        require(profile.find("4242") != std::string::npos,
+                "settled ring not persisted to profile json");
+        // 迁移接权（937 adopt 同口径）：档案 JSON → 新域锚点播种环 → 重放不双记
+        require(base.store->adoptPlayer(11, profile, 8001, 8, 2),
+                "player 11 re-adopt failed");
+        const auto replay2 = fire_credit(dial, 302, 11, 100, 2, 4242);
+        require(replay2.accepted && replay2.duplicate,
+                "re-adopted avatar re-credited lost-reply replay");
+        require(avatar->progress("exp") == 100,
+                "re-adopted avatar double credited exp");
+    }
+
+    // ---- 6. 受理面停 → AvatarUnavailable 挂账（分值保留不丢）----
     {
         SettlementLedger ledger;
         ledger.begin({10});
         std::uint64_t seq = 200;
-        ledger.set_business_sink([&](std::uint64_t player_id, std::int64_t score) {
-            return wire_sink(dial, seq, player_id, score);
+        ledger.set_business_sink([&](std::uint64_t player_id, std::int64_t score,
+                                     std::uint64_t settlement_id) {
+            return wire_sink(dial, seq, player_id, score, settlement_id);
         });
         base.store->stop();  // Base 受理面退场（真死亡拓扑：面关）
         require(ledger.apply(10, 90) ==

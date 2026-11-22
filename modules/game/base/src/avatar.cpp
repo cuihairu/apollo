@@ -203,4 +203,52 @@ void Avatar::set_guild_id(std::uint64_t guild_id) {
     mark_dirty("guild_change");
 }
 
+// ---- 已结算去重环（L132 结算幂等）----
+
+void Avatar::mark_settled(std::uint64_t settlement_id, std::int64_t score) {
+    if (settlement_id == 0) {
+        return;  // 0 = 未启用（旧口径不记重放）
+    }
+    if (settled_scores_.count(settlement_id) != 0) {
+        return;  // 已记（重放路径不会走到 mark；幂等防卫）
+    }
+    settled_scores_[settlement_id] = score;
+    settled_order_.push_back(settlement_id);
+    while (settled_order_.size() > kMaxSettledIds) {
+        const auto evicted = settled_order_.front();
+        settled_order_.pop_front();
+        settled_scores_.erase(evicted);
+    }
+    mark_dirty("settlement_id");
+}
+
+bool Avatar::was_settled(std::uint64_t settlement_id) const noexcept {
+    return settlement_id != 0 && settled_scores_.count(settlement_id) != 0;
+}
+
+std::int64_t Avatar::settled_score(std::uint64_t settlement_id) const noexcept {
+    const auto it = settled_scores_.find(settlement_id);
+    return it == settled_scores_.end() ? 0 : it->second;
+}
+
+const std::deque<std::uint64_t>& Avatar::settled_ids() const noexcept {
+    return settled_order_;
+}
+
+void Avatar::restore_settled(const std::vector<std::uint64_t>& settlement_ids) {
+    for (const auto id : settlement_ids) {
+        if (id == 0 || settled_scores_.count(id) != 0) {
+            continue;
+        }
+        settled_scores_[id] = 0;  // 分值仅内存面；读档播种只带 ID
+        settled_order_.push_back(id);
+    }
+    while (settled_order_.size() > kMaxSettledIds) {
+        const auto evicted = settled_order_.front();
+        settled_order_.pop_front();
+        settled_scores_.erase(evicted);
+    }
+    // 不标脏：档案即真源（调用方随后 clear_dirty）
+}
+
 } // namespace apollo::game::base

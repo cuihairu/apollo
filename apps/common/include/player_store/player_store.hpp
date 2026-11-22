@@ -100,6 +100,12 @@ public:
                      std::uint64_t sessionId, std::uint32_t gatewayId,
                      std::uint32_t homeZoneId);
 
+    // 脏锚点 flush（P0-4）：把 needs_save() 的锚点置 Saving 并入保存队列；
+    // 关闭协议与自动保存共用；维护/测试显式落盘面（L132 结算幂等：已结算
+    // 环随档案同一次落盘，验收需可显式触盘）。返回入队数量。
+    // 自同步（storeMutex_ 内取基线）——可在受理面线程外调用。
+    std::size_t flushDirtyAvatars(const char* reason);
+
 private:
     // 处理数据库加载请求
     std::vector<uint8_t> handleDbLoadRequest(const std::vector<uint8_t>& request);
@@ -142,10 +148,6 @@ private:
 
     // 自动保存循环
     void autoSaveLoop();
-
-    // 脏锚点 flush（P0-4）：把 needs_save() 的锚点置 Saving 并入保存队列；
-    // 关闭协议与自动保存共用。返回入队数量（占位实现，落库接 P1）。
-    std::size_t flushDirtyAvatars(const char* reason);
 
     // journal write-ahead 与消费侧（P1-5）：appendJournal 返回段全局序
     // （0 = 写盘失败）——随 SaveTask 落档记水位，drain 跳过已被更新落档

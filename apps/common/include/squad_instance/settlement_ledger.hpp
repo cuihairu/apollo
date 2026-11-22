@@ -43,7 +43,10 @@ public:
     };
 
     // 开账：结算名册 = 受理快照成员（全序由调用面保证 = 名册顺序）。
-    void begin(std::vector<std::uint64_t> roster);
+    // settlement_id = 稳定玩法/结算 ID（L132 结算幂等键：同副本同玩家重试/
+    // 回执丢失重放不变，随每次 apply/retry 传入业务受理面）；0 = 未启用
+    // （旧口径不回放判定，测试桩兼容）。
+    void begin(std::vector<std::uint64_t> roster, std::uint64_t settlement_id = 0);
 
     // 凭据出口（真实奖励持久化）：落账前先经此持久提交 (player, score)
     // 凭据，返回 false = 未持久提交（挂账待补）——绝不无凭据落账。重试同
@@ -57,9 +60,11 @@ public:
     // 唯一路径 = 分值经 958/959 受理 wire 入 Base 锚点长期态（本域不解析
     // 本地锚点——todo L84 跨界纪律）。未装配 = 无业务面，全部挂账待补。
     // 返回 Ok = 已受理（applied 收口）；其余 = 挂账待补（分值保留，retry
-    // 同路径重提）。须在 begin 之后、结算流之前设置。
+    // 同路径重提）。settlement_id = 本账稳定玩法/结算 ID（幂等键，重试不变）
+    // 须在 begin 之后、结算流之前设置。
     using BusinessSink = std::function<ApplyError(std::uint64_t player_id,
-                                                  std::int64_t score)>;
+                                                  std::int64_t score,
+                                                  std::uint64_t settlement_id)>;
     void set_business_sink(BusinessSink sink);
 
     // 单条落账：名册校验 → 凭据提交 → 业务受理（958/959）→ 标记已落。
@@ -87,6 +92,7 @@ private:
     };
     std::unordered_map<std::uint64_t, Entry> entries_;
     std::vector<std::uint64_t> roster_;
+    std::uint64_t settlement_id_ = 0;  // 稳定玩法/结算 ID（begin 定，重试不变）
     CredentialSink credential_sink_;
     BusinessSink business_sink_;
 };

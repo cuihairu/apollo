@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "188a546ae5853c0ab3c1513445789e2cf03253385c3ece2d6dca856770dcbfc9",
+  "schema_hash": "ce00cf663e0ed96c89bbaebd400a87b0b20beaefc2bdf10dafa253acf4585b79",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "cb93c5433630d838d6926253d4f98ee77406071e04b4535d6e4ebf4fc276f0e5",
+  "internal_hash": "8b2f40d5b6dd44c699b232c96bab78961f0b5a2f6d48c0f7e266e3b915ac526c",
   "contract_version": 3,
   "aliases": [
     {
@@ -3364,7 +3364,7 @@
           "name": "request_id",
           "type": "int64",
           "wire_type": "int64",
-          "desc": "调用方关联号（账本幂等在 World 侧 SettlementLedger——Base 只受理不记重放）"
+          "desc": "调用方关联号（单次投递关联；跨重试非稳定——幂等归 settlement_id）"
         },
         {
           "name": "player_id",
@@ -3383,6 +3383,12 @@
           "type": "int32",
           "wire_type": "int32",
           "desc": "发起玩法域（排查面；不参与受理裁决）"
+        },
+        {
+          "name": "settlement_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "稳定玩法/结算 ID（L132 结算幂等键：同副本同玩家重试/回执丢失重放不变，0=未启用=旧口径不回放判定）"
         }
       ],
       "desc": "结算分值入账受理（World→Base 业务面；资料归属切换后锚点写权在 Base——World 结算面以返回业务请求落账，不跨界持锚点指针）"
@@ -3418,9 +3424,21 @@
           "type": "string",
           "wire_type": "string",
           "desc": ""
+        },
+        {
+          "name": "settlement_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带稳定玩法/结算 ID（调用方关联/排查面）"
+        },
+        {
+          "name": "duplicate",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=同结算 ID 已受理过的重放——不再落账（幂等回执，不双记）"
         }
       ],
-      "desc": "结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补）"
+      "desc": "结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补；duplicate=1 = 同结算 ID 已受理的重放——受理但不双记）"
     },
     {
       "id": 960,

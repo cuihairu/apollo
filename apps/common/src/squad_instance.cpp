@@ -473,7 +473,9 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
         // （IRewardSink 单向口）→ 返回业务请求（958/959）入 Base 锚点
         // 长期态（P2-4 幂等落账；todo L84 跨界纪律：本地不持锚点指针）。
         auto ledger = std::make_unique<SettlementLedger>();
-        ledger->begin(members);
+        // 稳定玩法/结算 ID = Instance ID（L132 结算幂等键：同副本同玩家重试/
+        // 回执丢失重放不变；battle seed 与 Instance 同 id，确定性可复算）。
+        ledger->begin(members, instance->id());
         // 业务受理面（P1 结算迁入）：落账唯一路径 = 受理 wire 返回业务
         // 请求（958/959）；未装配 = 无落账路径，全挂账不落。
         if (business_sink_) {

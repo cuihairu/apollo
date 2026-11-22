@@ -162,12 +162,16 @@ void CellApp::start() {
             config_.baseBusinessPort);
         if (baseBusinessDial_->ready()) {
             squadInstanceService_->set_business_sink(
-                [this](std::uint64_t player_id, std::int64_t score) {
+                [this](std::uint64_t player_id, std::int64_t score,
+                       std::uint64_t settlement_id) {
                     player_store::business::ScoreCreditRequest req;
                     req.request_id = businessSeq_++;
                     req.player_id = player_id;
                     req.score = score;
                     req.source_zone_id = config_.worldId;
+                    // 稳定玩法/结算 ID（L132）：重试/回执丢失重放不变——Base
+                    // 侧同 ID 幂等（duplicate 回执不双记）
+                    req.settlement_id = settlement_id;
                     const auto reply = baseBusinessDial_->call(
                         player_store::business::encodeFrame(req));
                     player_store::business::ScoreCreditReply rep;

@@ -143,6 +143,9 @@ bool PlayerStore::adoptPlayer(PlayerID playerId, const std::string& profileJson,
         binding.gateway_id = gatewayId;
         avatar->bind_session(binding);
         avatar->set_home_zone_id(homeZoneId);
+        // 已结算环随档接权（L132 结算幂等）：快照 JSON 携带源域环——目标
+        // 域锚点播种后，回执丢失重放在新域命中环同样不双记
+        avatar->restore_settled(data.settledIds);
         // 临时只读闸：Transferring 闸住 flush/RPC/drain 的同玩家新任务，
         // 在途任务排干后本域直写档案（终值 = 快照），无旧快照晚落覆盖
         avatar->set_state(apollo::game::base::AvatarState::Transferring);
@@ -218,15 +221,25 @@ std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
     business::ScoreCreditReply reply;
     reply.player_id = req.player_id;
     reply.request_id = req.request_id;
+    reply.settlement_id = req.settlement_id;
     const auto avatar = findAvatar(req.player_id);
     if (!avatar) {
         reply.error_message = "unknown player or no avatar";
     } else if (avatar->state() ==
                apollo::game::base::AvatarState::Transferring) {
         reply.error_message = "avatar transferring";
+    } else if (req.settlement_id != 0 &&
+               avatar->was_settled(req.settlement_id)) {
+        // L132 结算幂等：同结算 ID 已受理（回执丢失重放/崩溃后读档重放）——
+        // 受理但不双记（幂等回执）。分值以账本重提为准，不重落。
+        reply.accepted = true;
+        reply.duplicate = true;
     } else {
         apollo::game::base::AvatarRewardSink sink(*avatar);
         sink.on_reward(req.player_id, req.score);
+        // 已结算环记名（与 exp 记账同一持久单元；mark_dirty 随 SaveQueue
+        // 落档——exp 已写而环未写不存在，重试命中环即不双记）
+        avatar->mark_settled(req.settlement_id, req.score);
         reply.accepted = true;
     }
     return business::encodeFrame(reply, session);

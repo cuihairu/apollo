@@ -44,6 +44,10 @@ struct PlayerData {
     // 原区服（L118 home_zone 业务接线）：锚点 home_zone 随档案落盘——
     // flush 自锚点回写、激活自档案播种，重启/换域后原区服不丢；0 = 未分配
     std::uint32_t homeZoneId = 0;
+    // 已结算去重环（L132 结算幂等）：锚点 settled_ids 随档案落盘——与 exp
+    // 记账同一持久单元（同一次 savePlayer 原子写），Base 重启后回执丢失
+    // 重放同结算 ID 命中环 → 受理但不双记；越界最旧淘汰（环宽 = 重试窗口）
+    std::vector<std::uint64_t> settledIds;
 
     // —— 模拟位置/运行字段：见 PlayerRuntimeState（L92 拆分）——
     PlayerRuntimeState runtime;

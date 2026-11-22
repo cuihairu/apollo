@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -101,6 +102,19 @@ public:
     [[nodiscard]] std::uint64_t guild_id() const noexcept;
     void set_guild_id(std::uint64_t guild_id);
 
+    // 已结算去重环（L132 结算幂等：Base 侧同结算 ID 回执丢失重放不双记）。
+    // 键 = 稳定玩法/结算 ID（重试/回执丢失重放不变）；环有界（kMaxSettledIds
+    // 条，最旧淘汰）——重试窗口远小于环宽，跨重启自档案播种（settledIds 随
+    // 档案落盘，与 exp 记账同一持久单元 → 重试命中即受理不双记，exactly-once）。
+    // mark_settled 变更即脏（mark_dirty），随 SaveQueue 落档。
+    static constexpr std::size_t kMaxSettledIds = 128;
+    void mark_settled(std::uint64_t settlement_id, std::int64_t score);
+    [[nodiscard]] bool was_settled(std::uint64_t settlement_id) const noexcept;
+    // 已落账分值（重放回执/排查面；未记 = 0）
+    [[nodiscard]] std::int64_t settled_score(std::uint64_t settlement_id) const noexcept;
+    // 已结算 ID 全量（持久化回写面；序 = 落账先后）
+    [[nodiscard]] const std::deque<std::uint64_t>& settled_ids() const noexcept;
+
     // 脏数据出队（journal）钩子（P0-2，object-model O-1/O-4）：Avatar 变更时
     // 回调注入方（持久化职责在 Base 侧，P0-4 与 SaveQueue 挂钩；此处只保证
     // 「上报有变更」这一契约）。回调在 mark_dirty 的调用链上同步执行。
@@ -113,6 +127,10 @@ public:
     [[nodiscard]] bool needs_save() const noexcept;
     void clear_dirty() noexcept;
     [[nodiscard]] const std::vector<std::string>& dirty_reasons() const noexcept;
+
+    // 已结算环读档播种（同 home_zone_id 口径）：档案 → 锚点，不标脏（调用方
+    // 随后 clear_dirty——档案即真源，回写不产生增量）
+    void restore_settled(const std::vector<std::uint64_t>& settlement_ids);
 
 private:
     std::uint64_t player_id_ = 0;
@@ -128,6 +146,11 @@ private:
     std::unordered_map<std::uint64_t, std::uint64_t> quests_;
     std::unordered_map<std::string, std::int64_t> progresses_;
     std::uint64_t guild_id_ = 0;
+
+    // 已结算去重环（L132）：环序保落账先后（最旧先淘汰）；分值仅内存面
+    // （读档播种只带 ID——重试只需 ID 判重，分值由 World 账本重提）
+    std::deque<std::uint64_t> settled_order_;
+    std::unordered_map<std::uint64_t, std::int64_t> settled_scores_;
 
     bool dirty_ = false;
     std::vector<std::string> dirty_reasons_;

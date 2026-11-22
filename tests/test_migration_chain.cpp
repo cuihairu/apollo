@@ -407,11 +407,13 @@ void migration_chain() {
         ledger.begin({42});
         std::uint64_t credit_seq = 1;
         ledger.set_business_sink([&world_old, &credit_seq](std::uint64_t pid,
-                                                           std::int64_t score) {
+                                                           std::int64_t score,
+                                                           std::uint64_t settlement_id) {
             player_store::business::ScoreCreditRequest req;
             req.request_id = ++credit_seq;
             req.player_id = pid;
             req.score = score;
+            req.settlement_id = settlement_id;
             const auto reply =
                 world_old.store->dispatchRequest(player_store::business::encodeFrame(req));
             player_store::business::ScoreCreditReply rep;

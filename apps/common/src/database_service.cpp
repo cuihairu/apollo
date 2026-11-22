@@ -39,6 +39,7 @@ std::string PlayerData::toJson() const {
     j["z"] = runtime.z;
     j["writeGen"] = writeGen;
     j["homeZoneId"] = homeZoneId;
+    j["settledIds"] = settledIds;  // 已结算去重环（L132；空环写空数组）
     return j.dump();
 }
 
@@ -58,6 +59,11 @@ PlayerData PlayerData::fromJson(const std::string& json) {
     data.runtime.z = j.value("z", data.runtime.z);
     data.writeGen = j.value("writeGen", std::uint64_t(0));
     data.homeZoneId = j.value("homeZoneId", std::uint32_t(0));
+    if (j.contains("settledIds") && j["settledIds"].is_array()) {
+        for (const auto& v : j["settledIds"]) {
+            data.settledIds.push_back(v.get<std::uint64_t>());
+        }
+    }
     return data;
 }
 

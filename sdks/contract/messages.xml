@@ -620,16 +620,19 @@
     <field name="detail" type="string" desc="状态摘要（drained 时含强停结果；ok=0 为拒绝原因）"/>
   </msg>
   <msg id="958" name="player_score_credit_request" dir="P2P" channel="events" domain="internal" desc="结算分值入账受理（World→Base 业务面；资料归属切换后锚点写权在 Base——World 结算面以返回业务请求落账，不跨界持锚点指针）">
-    <field name="request_id" type="int64" desc="调用方关联号（账本幂等在 World 侧 SettlementLedger——Base 只受理不记重放）"/>
+    <field name="request_id" type="int64" desc="调用方关联号（单次投递关联；跨重试非稳定——幂等归 settlement_id）"/>
     <field name="player_id" type="int64"/>
     <field name="score" type="int64" desc="结算分值（入 exp 键）"/>
     <field name="source_zone_id" type="int32" desc="发起玩法域（排查面；不参与受理裁决）"/>
+    <field name="settlement_id" type="int64" desc="稳定玩法/结算 ID（L132 结算幂等键：同副本同玩家重试/回执丢失重放不变，0=未启用=旧口径不回放判定）"/>
   </msg>
-  <msg id="959" name="player_score_credit_reply" dir="P2P" channel="events" domain="internal" desc="结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补）">
+  <msg id="959" name="player_score_credit_reply" dir="P2P" channel="events" domain="internal" desc="结算分值入账回执（Base→World；accepted=0 = 锚点暂不可落——离线/迁移中冻结，调用方挂账待补；duplicate=1 = 同结算 ID 已受理的重放——受理但不双记）">
     <field name="request_id" type="int64"/>
     <field name="player_id" type="int64"/>
     <field name="accepted" type="bool" desc="1=已入锚点长期态（mark_dirty 随 SaveQueue 落档）"/>
     <field name="error_message" type="string"/>
+    <field name="settlement_id" type="int64" desc="回带稳定玩法/结算 ID（调用方关联/排查面）"/>
+    <field name="duplicate" type="bool" desc="1=同结算 ID 已受理过的重放——不再落账（幂等回执，不双记）"/>
   </msg>
   <msg id="960" name="cell_register_request" dir="P2P" channel="events" domain="internal" desc="cell 执行进程注册请求（cell→World M1 控制受理面；声明逻辑 ID、启动代次、控制/模拟地址、能力与就绪/排空状态——L101 注册首切片；认证凭据面=启动凭据自证（spawn 凭据源，L109 认证凭据面）；World 配置 registerToken 非空时凭据须逐字节匹配才受理，空 = 认证关（同 944/952/956 裸帧惯例））">
     <field name="request_id" type="int64" desc="控制关联键（cell 侧单调分配，0 保留）"/>

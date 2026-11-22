@@ -2,8 +2,10 @@
 
 namespace squad_instance {
 
-void SettlementLedger::begin(std::vector<std::uint64_t> roster) {
+void SettlementLedger::begin(std::vector<std::uint64_t> roster,
+                             std::uint64_t settlement_id) {
     roster_ = std::move(roster);
+    settlement_id_ = settlement_id;
     entries_.clear();
     for (const auto player : roster_) entries_.emplace(player, Entry{});
 }
@@ -36,7 +38,7 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
         it->second.score = score;
         return ApplyError::AvatarUnavailable;
     }
-    const auto rc = business_sink_(player_id, score);
+    const auto rc = business_sink_(player_id, score, settlement_id_);
     if (rc != ApplyError::Ok) {
         it->second.score = score;
         return rc;
