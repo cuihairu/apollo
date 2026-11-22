@@ -64,6 +64,11 @@ public:
         std::function<std::uint64_t(SessionID, const std::vector<std::uint8_t>&)> forward,
         BaseResponseFn onResponse);
 
+    // 路由失效装配（start 前调）：World 2001「simulation not hosted」应答时
+    // 回调（宿主把会话路由缓存作废，下一意图重解析——见 M1Egress
+    // RouteInvalidateFn 注）。
+    void setRouteInvalidate(RouteInvalidateFn fn);
+
     RouteSnapshot buildDefaultRoute() const;
 
     // M1 出口观测面（降级时为空）
@@ -77,6 +82,7 @@ private:
     // cell 面（2b-iii：world nng 通道池退役，M1 出口单端点直连）
     std::unique_ptr<M1Egress> m1Egress_;
     std::function<void(SessionID, const std::vector<uint8_t>&)> deliverToClient_;
+    RouteInvalidateFn routeInvalidate_;    // 2001 路由失效出口（宿主侧作废缓存）
     std::function<std::uint64_t(SessionID, const std::vector<std::uint8_t>&)> forwardToBase_;
     BaseResponseFn baseResponse_;
 

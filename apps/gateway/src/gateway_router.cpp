@@ -46,6 +46,10 @@ void MessageRouter::start() {
     if (m1Egress_ && deliverToClient_) {
         setDeliverToClient(deliverToClient_);
     }
+    // 路由失效出口（start 前装配 → egress 晚建后重装，同 setDeliverToClient 序）。
+    if (m1Egress_ && routeInvalidate_) {
+        setRouteInvalidate(routeInvalidate_);
+    }
 
     running_ = true;
 }
@@ -126,6 +130,19 @@ void MessageRouter::setDeliverToClient(
         [fn = deliverToClient_](std::uint64_t session_id, std::uint32_t /*gateway_id*/,
                              const std::vector<std::uint8_t>& payload) {
             if (fn) fn(session_id, payload);
+        });
+}
+
+void MessageRouter::setRouteInvalidate(RouteInvalidateFn fn) {
+    // 路由失效出口（2001 应答 → 宿主作废会话路由缓存）。egress 降级时闭包
+    // 不装——无 M1 链路即无 2001 来源，宿主侧缓存重解析面不受影响。
+    routeInvalidate_ = std::move(fn);
+    if (!m1Egress_) {
+        return;
+    }
+    m1Egress_->setRouteInvalidate(
+        [fn = routeInvalidate_](std::uint64_t session_id) {
+            if (fn) fn(session_id);
         });
 }
 

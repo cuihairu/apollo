@@ -197,6 +197,16 @@ void GatewayServer::start() {
         [this](SessionID sessionId, const std::vector<uint8_t>& message) {
             sendToClient(sessionId, message);
         });
+    // 路由失效出口（缓存失效批 · L122 切片）：World 2001「simulation not
+    // hosted」→ 作废会话路由缓存（clearRoute），下一意图经 ensureRouteSnapshot
+    // 重解析——迟到的旧 cell/空间提示不因缓存残留反复命中。泵线程回调（
+    // SessionManager 线程安全）。
+    messageRouter_->setRouteInvalidate(
+        [this](SessionID sessionId) {
+            if (sessionManager_) {
+                sessionManager_->clearRoute(sessionId);
+            }
+        });
     messageRouter_->setBaseForwarding(
         [this](SessionID sessionId, const std::vector<uint8_t>& message) {
             std::function<std::optional<std::string>(PlayerID)> resolver;

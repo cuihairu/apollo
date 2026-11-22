@@ -39,6 +39,13 @@ using ClientDeliverFn = std::function<void(std::uint64_t session_id,
                                            std::uint32_t gateway_id,
                                            const std::vector<std::uint8_t>& payload)>;
 
+// 路由失效回调（缓存失效批 · L122 切片）：World 回 2001「simulation not
+// hosted」时调用（session_id = 被拒意图所属会话）。宿主把会话路由缓存作废
+//（SessionManager::clearRoute），下一意图经 ensureRouteSnapshot 重解析——
+// 迟到的旧 cell/空间提示不因缓存残留反复命中。仅路由型拒绝（2001）触发，
+// 背压（2101）/成功（0）不触发。在宿主泵线程上回调。
+using RouteInvalidateFn = std::function<void(std::uint64_t session_id)>;
+
 class M1Egress {
 public:
     virtual ~M1Egress() = default;
@@ -51,6 +58,10 @@ public:
 
     // 下行装配（start 前设置）：939 到达时的客户端投递出口。
     virtual void setClientDeliver(ClientDeliverFn fn) { (void)fn; }
+
+    // 路由失效装配（start 前设置）：World 2001「simulation not hosted」应答
+    // 到达时回调（见 RouteInvalidateFn 注）。缺省空 = 仅计数不失效（legacy 面）。
+    virtual void setRouteInvalidate(RouteInvalidateFn fn) { (void)fn; }
 
     // 宿主泵一拍：链路推进 → 已连接时投递箱排空（翻译+发送）→ 超时清扫。
     // 未发送帧留在有界箱；已发但未确认帧不跨 World 进程代次自动重放。

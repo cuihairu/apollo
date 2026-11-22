@@ -51,6 +51,11 @@ constexpr std::uint16_t id_of(MsgId id) {
     return static_cast<std::uint16_t>(id);
 }
 
+// World 意图应答码：2001 = 「simulation not hosted」（路由型拒绝——无可用
+// cell 承接）。与 apps/world/include/world_app/acceptance_queue.hpp
+// kIntentAckInternal 对齐；2101 背压不作路由失效（非路由因）。
+constexpr std::int32_t kWorldNotHostedAck = 2001;
+
 // 库面日志出口：cat=gateway_m1_egress（§5.1 cat= 检索键）
 apollo::core::log::Logger& m1log() {
     return *apollo::core::log::global_log_manager().createLogger("gateway_m1_egress");
@@ -148,6 +153,10 @@ public:
 
     void setClientDeliver(ClientDeliverFn fn) override {
         client_deliver_ = std::move(fn);
+    }
+
+    void setRouteInvalidate(RouteInvalidateFn fn) override {
+        on_route_invalidate_ = std::move(fn);
     }
 
     void stop() override {
@@ -542,6 +551,7 @@ private:
                           + std::to_string(request_id));
             return;
         }
+        const auto session_id = it->second.session_id;
         pending_.erase(it);
         if (code == 0) {
             ++acked_;
@@ -550,6 +560,13 @@ private:
             m1log().warning("WorldApp intent rejected by remote: request_id="
                             + std::to_string(request_id) + " code="
                             + std::to_string(code));
+            // 路由型拒绝（2001 = World「simulation not hosted」，契约对齐
+            // acceptance_queue.hpp kIntentAckInternal）：会话路由缓存作废，
+            // 下一意图经 ensureRouteSnapshot 重解析——迟到的旧 cell/空间提示
+            // 不因缓存残留反复命中。背压（2101）/其余非 0 不作废（非路由因）。
+            if (code == kWorldNotHostedAck && on_route_invalidate_) {
+                on_route_invalidate_(session_id);
+            }
         }
     }
 
@@ -583,6 +600,7 @@ private:
     std::uint64_t next_request_id_ = 1;    // 0 = legacy 无应答哨兵，不配发
 
     ClientDeliverFn client_deliver_;       // 泵线程回调（939 下行出口）
+    RouteInvalidateFn on_route_invalidate_;  // 泵线程回调（2001 路由失效出口）
 
     std::atomic<bool> started_{false};
     std::atomic<std::uint64_t> sent_{0};

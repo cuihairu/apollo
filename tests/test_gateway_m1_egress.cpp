@@ -838,6 +838,61 @@ bool test_egress_wrapped_trace() {
     return true;
 }
 
+// 路由失效（缓存失效批 · L122 切片）：World 2001「simulation not hosted」应答
+// → setRouteInvalidate 回调触发；成功（0）与背压（2101）不作废。
+bool test_egress_route_invalidate_on_not_hosted() {
+    std::cout << "Running: test_egress_route_invalidate_on_not_hosted..." << std::endl;
+
+    FakeCell cell;
+    TEST_ASSERT(cell.healthy(), "fake cell assembled");
+
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = cell.listen_port();
+    cfg.route_json = kRouteJson;
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+
+    std::vector<std::uint64_t> invalidated;
+    egress->setRouteInvalidate(
+        [&invalidated](std::uint64_t session_id) { invalidated.push_back(session_id); });
+
+    const auto frames = five_family_frames();
+
+    // ① 成功（code 0）：不作废
+    TEST_ASSERT(egress->forwardIntent(77, frames[0]), "first accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 1; }, 5000),
+                "first delivered");
+    TEST_ASSERT(cell.ack(cell.records().at(0).request_id, 0), "ack ok sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->ackedIntents() == 1; }, 5000),
+                "ack ok observed");
+    TEST_ASSERT(invalidated.empty(), "code 0 does not invalidate route");
+
+    // ② 背压（2101）：非路由因，不作废
+    TEST_ASSERT(egress->forwardIntent(77, frames[1]), "second accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 2; }, 5000),
+                "second delivered");
+    TEST_ASSERT(cell.ack(cell.records().at(1).request_id, 2101), "ack backpressure sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->failedAcks() == 1; }, 5000),
+                "backpressure observed");
+    TEST_ASSERT(invalidated.empty(), "backpressure does not invalidate route");
+
+    // ③ 路由型拒绝（2001 not hosted）：作废会话路由
+    TEST_ASSERT(egress->forwardIntent(77, frames[2]), "third accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 3; }, 5000),
+                "third delivered");
+    TEST_ASSERT(cell.ack(cell.records().at(2).request_id, 2001), "ack not hosted sent");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return !invalidated.empty(); }, 5000),
+                "route invalidate observed");
+    TEST_ASSERT(invalidated.size() == 1 && invalidated[0] == 77,
+                "route invalidated for the not-hosted session");
+    TEST_ASSERT(egress->failedAcks() == 2, "both rejections counted");
+
+    egress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 int main() {
     std::cout << "=== Apollo Gateway M1 Egress Test Suite ===" << std::endl;
 
@@ -854,6 +909,7 @@ int main() {
     if (!test_egress_inbox_overflow()) ++failed;
     if (!test_egress_route_table_missing()) ++failed;
     if (!test_egress_wrapped_trace()) ++failed;
+    if (!test_egress_route_invalidate_on_not_hosted()) ++failed;
     if (!test_gateway_cell_e2e()) ++failed;
 
     if (failed == 0) {
