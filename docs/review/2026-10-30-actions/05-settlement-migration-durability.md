@@ -17,6 +17,8 @@
 | 1 | database 已写、回执丢失 | 同结算 ID 重试**不重复**发放 |
 | 2 | 两 Base 部分成功 | 已成功 Base 不重发；失败 Base 补齐（不默认扣回） |
 
+> 第 1 行 2026-11-23 已落地（commit c5966bbe，见 todo.md L132）：稳定结算 ID（cell `instance->id()` 单调）经 `ledger.begin(members, settlement_id)` → BusinessSink 三参 → 958/959（+settlement_id/+duplicate，承载域 internal-only、client_hash 不动）→ Base `Avatar` 去重环（宽 128），环与 exp 记账**同一次 SaveTask 落盘**（`PlayerData.settledIds` 随档案 JSON 原子写）；回执丢失重放受理为 accepted+duplicate 不双记（测试：`squad_instance_tests` 41/41、`base_business_wire` 持久闭环含迁移接权播种、主树 ctest 128/128、san 三套件绿、off-tree2/examples 全量重建 exit 0）。第 2 行仍缺——多 Base 分别确认/补偿/待重试编排未接线（归 D13 恢复记录切片），不重试。
+
 > 明确不做：延后跨区运行和全局强原子事务；不因跨服未启用而延后单区多 Base 的结算正确性。
 
 ## 2. D13 · 结算恢复记录与异常结束
