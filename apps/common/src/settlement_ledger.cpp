@@ -18,6 +18,10 @@ void SettlementLedger::set_business_sink(BusinessSink sink) {
     business_sink_ = std::move(sink);
 }
 
+void SettlementLedger::set_confirmation_sink(ConfirmationSink sink) {
+    confirmation_sink_ = std::move(sink);
+}
+
 SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
                                                      std::int64_t score) {
     auto it = entries_.find(player_id);
@@ -45,6 +49,8 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
     }
     it->second.applied = true;
     it->second.score = 0;
+    // 落账确认（D13 恢复记录）：业务面收口即同步观察——调用面写持久确认位。
+    if (confirmation_sink_) confirmation_sink_(player_id, score);
     return ApplyError::Ok;
 }
 

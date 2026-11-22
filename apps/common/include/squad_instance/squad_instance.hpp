@@ -8,6 +8,7 @@
 #include "squad_instance/admission_credential.hpp"
 #include "squad_instance/settlement_ledger.hpp"
 #include "squad_instance/settlement_credential_store.hpp"
+#include "squad_instance/settlement_record_store.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -221,6 +222,20 @@ public:
     // 面（测试桩兼容）。目录按 World 数据域挂放（宿主派生）。
     void set_credential_dir(const std::string& dir);
 
+    // ---- D13 结算恢复记录面装配（未持久确认保留唯一结算与恢复记录）----
+    // 设置后：开账即按稳定结算 ID 建立唯一意图记录（pending），逐玩家落账
+    // 确认随记；全部所需确认完成才删记录（done）——失败取消置 cancelled
+    // 不发成功奖励、已发部分随记录保留（后续处理状态）。未设置 = 无恢复
+    // 记录面（测试桩兼容，零回归）。
+    void set_settlement_record_dir(const std::string& dir);
+    // 重启恢复扫描：装载既有记录，返回 pending（未持久确认——保留唯一
+    // 记录待重试/对账）份数。cancelled/done 留档不驱动；pending 不自动重发
+    // （重发归后续修复流程——先删记录会永久漏奖且无法追查，故宁可留）。
+    std::size_t ingest_restored_settlement_records();
+    // 恢复记录查询（验收/审计面）：有记录返回其生命周期态，无 = nullopt。
+    [[nodiscard]] std::optional<SettlementLifecycle> settlement_record_state(
+        std::uint64_t settlement_id) const;
+
     // 重启装载：凭据目录内的小队凭据 → 挂起恢复标记（该小队下次受理即回
     // 填新账本并重写凭据——重放不双记），返回装载份数。文件不在此删除：
     // 回写在 launch、回收在终局 teardown，期间再崩凭据仍在盘。
@@ -307,6 +322,8 @@ private:
     InstanceClosingFn instance_closing_;
     SettlementLedger::BusinessSink business_sink_;
     std::unique_ptr<SettlementCredentialStore> credential_store_;
+    // D13 结算恢复记录（唯一意图记录持久面）；未装配为 nullptr。
+    std::unique_ptr<SettlementRecordStore> record_store_;
     // D11 入场准入凭证面（受理签发 + 准入核销）；未启用为 nullptr。
     std::unique_ptr<AdmissionCredentialFace> admission_credential_face_;
 

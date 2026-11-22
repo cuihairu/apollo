@@ -131,7 +131,7 @@ logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir lo
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
 database  | 0 | $BUILD_DIR/apps/database/database --port 9200 --data-dir $FLEET_DIR/data/database/players --journal $FLEET_DIR/data/database/persist.log
 base | 0 | $BUILD_DIR/apps/base/base --port 9201 --database-port 9200
-world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --settlement-record-dir $FLEET_DIR/data/world/settlement_records --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 $(cell_entries)
 login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9103 --world-store-m1-port 9201 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
 gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port ${APOLLO_FLEET_GATEWAY_LOGIN_M1_PORT:-9103} --directory-m1-port 9105 --machined-port 9600 --component-id 12 --dashboard-port ${APOLLO_FLEET_GATEWAY_DASHBOARD_PORT:-0}

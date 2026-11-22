@@ -15,6 +15,7 @@
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/world.hpp"
 #include "squad_instance/settlement_credential_store.hpp"
+#include "squad_instance/settlement_record_store.hpp"
 #include "squad_instance/squad_instance.hpp"
 
 #include <chrono>
@@ -1425,6 +1426,281 @@ bool test_squad_settlement_credential_replay_dedup_across_restart() {
     return true;
 }
 
+// D13 结算恢复记录（未持久确认保留唯一结算与恢复记录）：唯一意图记录以稳定
+// 结算 ID 为键落盘——开账即 pending、逐玩家确认随落账写入、全部所需确认
+// 完成才删（done）；失败取消置 cancelled（不发成功奖励，已发部分随记录
+// 保留进后续处理状态）。覆盖故障注入：回执丢失/未持久确认（记录留盘待
+// 重试/对账）、进程重启（恢复扫描见 pending）、Base 暂不可达（重试补齐
+// 才 done）、超时/解散（cancelled 不发奖励）。
+
+bool test_settlement_record_store_lifecycle() {
+    const auto dir = make_tmp_dir("rec");
+    squad_instance::SettlementRecordStore store(dir);
+
+    // 建立唯一记录（pending）：意图（结算 ID/名册/终局态）持久
+    TEST_ASSERT(store.open(5, 1, 7, 500, {kLeader, kMemberB, kMemberC}),
+                "record opened");
+    {
+        std::ifstream in(std::filesystem::path(dir) / "settlement_5.rec");
+        TEST_ASSERT(in.good(), "record file committed");
+        std::stringstream buf;
+        buf << in.rdbuf();
+        const auto text = buf.str();
+        TEST_ASSERT(text.find("lifecycle pending") != std::string::npos &&
+                        text.find("party 1") != std::string::npos &&
+                        text.find("instance 500") != std::string::npos,
+                    "intent fields persisted");
+    }
+
+    // 逐玩家确认（幂等）
+    TEST_ASSERT(store.confirm(5, kLeader, 40), "leader confirmed");
+    TEST_ASSERT(store.confirm(5, kLeader, 40), "confirm idempotent");
+    {
+        auto all = store.load_all();
+        TEST_ASSERT(all.size() == 1 && all[0].settlement_id == 5 &&
+                        all[0].lifecycle == squad_instance::SettlementLifecycle::Pending &&
+                        all[0].members.size() == 3 && all[0].confirmed.size() == 1 &&
+                        all[0].confirmed.at(kLeader) == 40,
+                    "pending record with one confirmed");
+    }
+
+    // open 幂等：重启装载后重入保留已确认位/名册
+    TEST_ASSERT(store.open(5, 1, 7, 500, {kOutsider}), "re-open idempotent");
+    {
+        auto all = store.load_all();
+        TEST_ASSERT(all.size() == 1 && all[0].members.size() == 3,
+                    "re-open preserves confirmed roster");
+    }
+
+    // 取消（失败线）：cancelled，已发部分随记录保留（后续处理状态）
+    TEST_ASSERT(store.cancel(5), "cancelled");
+    {
+        auto all = store.load_all();
+        TEST_ASSERT(all.size() == 1 &&
+                        all[0].lifecycle ==
+                            squad_instance::SettlementLifecycle::Cancelled &&
+                        all[0].confirmed.at(kLeader) == 40,
+                    "cancelled keeps granted partial");
+    }
+
+    // done 不回退已取消（取消是终局态）
+    TEST_ASSERT(store.complete(5), "complete on cancelled is no-op");
+    {
+        auto all = store.load_all();
+        TEST_ASSERT(all.size() == 1 &&
+                        all[0].lifecycle ==
+                            squad_instance::SettlementLifecycle::Cancelled,
+                    "done never overrides cancelled");
+    }
+
+    // 全量确认 → done 并删唯一记录（D13 §2.1：只有全部所需确认才删）
+    TEST_ASSERT(store.open(6, 2, 7, 501, {kLeader, kMemberB}), "second opened");
+    TEST_ASSERT(store.confirm(6, kLeader, 10), "second leader confirmed");
+    TEST_ASSERT(store.confirm(6, kMemberB, 20), "second member confirmed");
+    TEST_ASSERT(store.complete(6), "complete deletes record");
+    TEST_ASSERT(!std::filesystem::exists(std::filesystem::path(dir) / "settlement_6.rec"),
+                "record reclaimed when done");
+    TEST_ASSERT(!store.confirm(6, kLeader, 10), "confirm without record fails");
+
+    // 脏行/未知键/缺 lifecycle 头跳过；可解析行保留
+    {
+        std::ofstream garbage(std::filesystem::path(dir) / "settlement_9.rec",
+                              std::ios::binary | std::ios::trunc);
+        garbage << "lifecycle pending\nparty 9\nworld 7\ninstance 9\nmember 7\nconfirm 7 5\n";
+        std::ofstream bad(std::filesystem::path(dir) / "settlement_10.rec",
+                          std::ios::binary | std::ios::trunc);
+        bad << "lifecycle pending\nblob xyz\n";  // 未知键 = 脏记录
+        std::ofstream headerless(std::filesystem::path(dir) / "settlement_11.rec",
+                                 std::ios::binary | std::ios::trunc);
+        headerless << "party 11\nmember 12\n";
+    }
+    {
+        auto all = store.load_all();
+        bool has9 = false;
+        for (const auto& r : all) has9 = has9 || r.settlement_id == 9;
+        TEST_ASSERT(all.size() == 2 && has9, "garbage skipped, parseable kept");
+    }
+
+    // 目录不可造（常规文件占位）：如实上报 false
+    const auto blocker = std::filesystem::path(dir) / "blocker2";
+    {
+        std::ofstream file(blocker, std::ios::binary | std::ios::trunc);
+        file << "x";
+    }
+    squad_instance::SettlementRecordStore blocked((blocker / "settlements").string());
+    TEST_ASSERT(!blocked.open(9, 1, 7, 9, {kLeader}),
+                "uncommittable record reports false");
+    TEST_ASSERT(blocked.load_all().empty(), "unreadable record store loads empty");
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+bool test_squad_settlement_record_pending_kept_on_incomplete_teardown() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    const auto dir = make_tmp_dir("rec_pending");
+
+    std::uint64_t instance_id = 0;
+    // 代次一：只落 1/3——进程在结算中途消亡（未 teardown，记录留盘）
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_business_table({kLeader, kMemberB, kMemberC});
+        wire_business_sink(service, table);
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok,
+                    "launched with record dir");
+        instance_id = service.find_by_party(1)->instance_id;
+        TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Pending,
+            "pending record exists mid-settlement");
+        // 作用域退出 = 进程消亡（无 teardown）
+    }
+
+    // 代次二：恢复扫描见 pending（未持久确认——保留唯一记录待重试/对账）
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_business_table({kLeader, kMemberB, kMemberC});
+        wire_business_sink(service, table);
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.ingest_restored_settlement_records() == 1,
+                    "one pending record ingested");
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Pending,
+            "pending record survives restart");
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+bool test_squad_settlement_record_complete_and_cancel_lifecycle() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 2);
+    make_party(parties, 3);
+    const auto dir = make_tmp_dir("rec_life");
+
+    // 完成线：全量确认 → done → 唯一记录删除（先删记录=永久漏奖且无法追查）
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_business_table({kLeader, kMemberB, kMemberC});
+        wire_business_sink(service, table);
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(2)).error == LaunchError::Ok,
+                    "complete-line launched");
+        const auto instance_id = service.find_by_party(2)->instance_id;
+        TEST_ASSERT(service.credit_settlement(2, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Pending,
+            "still pending until fully confirmed");
+        TEST_ASSERT(service.credit_settlement(2, kMemberB, 20) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "member B credited");
+        TEST_ASSERT(service.credit_settlement(2, kMemberC, 30) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+            "member C credited");
+        TEST_ASSERT(!service.settlement_record_state(instance_id).has_value(),
+            "record reclaimed when fully confirmed");
+        TEST_ASSERT(!std::filesystem::exists(
+                        std::filesystem::path(dir) /
+                        ("settlement_" + std::to_string(instance_id) + ".rec")),
+            "record file gone on done");
+    }
+
+    // 失败线（策略收尾）：取消置 cancelled，不发成功奖励，已发部分保留
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_business_table({kLeader, kMemberB, kMemberC});
+        wire_business_sink(service, table);
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(3)).error == LaunchError::Ok,
+                    "cancel-line launched");
+        const auto instance_id = service.find_by_party(3)->instance_id;
+        TEST_ASSERT(service.credit_settlement(3, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+            "leader credited before cancel");
+        TEST_ASSERT(service.abort(3), "cancelled at teardown");
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Cancelled,
+            "cancelled record retained after failure line");
+        {
+            squad_instance::SettlementRecordStore probe(dir);
+            for (const auto& r : probe.load_all()) {
+                if (r.settlement_id == instance_id) {
+                    TEST_ASSERT(r.lifecycle ==
+                                    squad_instance::SettlementLifecycle::Cancelled &&
+                                r.confirmed.count(kLeader) == 1,
+                        "cancelled keeps granted partial for follow-up");
+                }
+            }
+            TEST_ASSERT(probe.load_all().size() == 1,
+                        "cancelled record is the only one on disk");
+        }
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+bool test_squad_settlement_record_base_unreachable_retries() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 4);
+    const auto dir = make_tmp_dir("rec_unreach");
+
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    auto table = make_business_table({kLeader, kMemberB, kMemberC});
+    wire_business_sink(service, table);
+    table.missing = {kMemberB, kMemberC};  // Base 暂不可达：成员 B/C 受理挂账
+    service.set_settlement_record_dir(dir);
+
+    TEST_ASSERT(service.launch(basic_request(4)).error == LaunchError::Ok,
+                "base-unreachable launched");
+    const auto instance_id = service.find_by_party(4)->instance_id;
+
+    TEST_ASSERT(service.credit_settlement(4, kLeader, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+        "leader reachable credited");
+    TEST_ASSERT(service.credit_settlement(4, kMemberB, 20) ==
+                    squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+        "member B held (Base unreachable)");
+    TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                    squad_instance::SettlementLifecycle::Pending,
+        "record stays pending while members held");
+
+    // Base 恢复：重试补齐 → 全量确认 → done（记录删除）
+    table.missing.clear();
+    TEST_ASSERT(service.retry_settlement(4) == 1, "one member re-credited");
+    TEST_ASSERT(service.credit_settlement(4, kMemberC, 30) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+        "member C credited after recovery");
+    TEST_ASSERT(!service.settlement_record_state(instance_id).has_value(),
+        "record reclaimed after full re-drive");
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
 bool test_squad_settlement_credential_failure_holds_ledger() {
     PartyManager parties;
     World world;
@@ -1945,6 +2221,13 @@ int main() {
         {"squad_party_disband_aborts_instance", test_squad_party_disband_aborts_instance},
         {"squad_process_recovery_policy", test_squad_process_recovery_policy},
         {"settlement_credential_store_roundtrip", test_settlement_credential_store_roundtrip},
+        {"settlement_record_store_lifecycle", test_settlement_record_store_lifecycle},
+        {"squad_settlement_record_pending_kept_on_incomplete_teardown",
+         test_squad_settlement_record_pending_kept_on_incomplete_teardown},
+        {"squad_settlement_record_complete_and_cancel_lifecycle",
+         test_squad_settlement_record_complete_and_cancel_lifecycle},
+        {"squad_settlement_record_base_unreachable_retries",
+         test_squad_settlement_record_base_unreachable_retries},
         {"squad_settlement_credential_replay_dedup_across_restart",
          test_squad_settlement_credential_replay_dedup_across_restart},
         {"squad_settlement_credential_failure_holds_ledger",

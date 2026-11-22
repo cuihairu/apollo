@@ -90,6 +90,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                 static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--settlement-credential-dir" && i + 1 < argc) {
             config.settlementCredentialDir = argv[++i];
+        } else if (arg == "--settlement-record-dir" && i + 1 < argc) {
+            config.settlementRecordDir = argv[++i];
         } else if (arg == "--dashboard-host" && i + 1 < argc) {
             config.dashboardHost = argv[++i];
         } else if (arg == "--dashboard-port" && i + 1 < argc) {

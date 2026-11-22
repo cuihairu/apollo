@@ -117,6 +117,11 @@ struct WorldAppConfig {
     // 空 = 不持久化（凭据仅进程内存，降级态）。
     std::string settlementCredentialDir;
 
+    // 结算恢复记录目录（D13 唯一结算与恢复记录面）：以稳定结算 ID 为键的
+    // 持久意图记录——开账即 pending、逐玩家确认随落账写入、全部所需确认
+    // 完成才删；失败取消置 cancelled。空 = 不持久化（降级态）。
+    std::string settlementRecordDir;
+
     // 空间配置
     std::string spaceName = "main_world";
     float spaceWidth = 1000.0f;

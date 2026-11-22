@@ -67,6 +67,14 @@ public:
                                                   std::uint64_t settlement_id)>;
     void set_business_sink(BusinessSink sink);
 
+    // 落账确认出口（D13 恢复记录：逐玩家持久确认观察面）：每条 apply 收口
+    // （业务面已受理）后同步回调——调用面据此把该玩家的确认位写入持久恢复
+    // 记录（唯一记录按 D13 §2.1 只在全部确认完成才删）。须在 begin 之后、
+    // 结算流之前设置；未设置（测试桩兼容）= 无确认面。
+    using ConfirmationSink = std::function<void(std::uint64_t player_id,
+                                               std::int64_t score)>;
+    void set_confirmation_sink(ConfirmationSink sink);
+
     // 单条落账：名册校验 → 凭据提交 → 业务受理（958/959）→ 标记已落。
     // applied 后重复调用返回 AlreadyApplied（幂等核心）。
     ApplyError apply(std::uint64_t player_id, std::int64_t score);
@@ -95,6 +103,7 @@ private:
     std::uint64_t settlement_id_ = 0;  // 稳定玩法/结算 ID（begin 定，重试不变）
     CredentialSink credential_sink_;
     BusinessSink business_sink_;
+    ConfirmationSink confirmation_sink_;
 };
 
 } // namespace squad_instance

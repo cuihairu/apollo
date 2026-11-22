@@ -210,6 +210,20 @@ void CellApp::start() {
                         + std::to_string(restored) + ")");
     }
 
+    // 结算恢复记录（D13 唯一结算与恢复记录）：以稳定结算 ID 为键的持久意图
+    // 记录——开账即 pending、逐玩家确认随落账写入、全部所需确认完成才删；
+    // 失败取消置 cancelled（不发成功奖励，已发部分随记录保留）。未配置 =
+    // 降级态（记录仅进程内存）。
+    if (!config_.settlementRecordDir.empty()) {
+        squadInstanceService_->set_settlement_record_dir(
+            config_.settlementRecordDir);
+        const auto pending =
+            squadInstanceService_->ingest_restored_settlement_records();
+        worldLog().info("settlement records dir "
+                        + config_.settlementRecordDir + " (pending records="
+                        + std::to_string(pending) + ")");
+    }
+
     // 开闸先于宿主传输监听（WorldApp::start 随后挂 M1 端点）：受理面就绪
     // 后网关才见得到入口
     accepting_ = true;

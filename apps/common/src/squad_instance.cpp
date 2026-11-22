@@ -39,6 +39,31 @@ void SquadInstanceService::set_credential_dir(const std::string& dir) {
     credential_store_ = std::make_unique<SettlementCredentialStore>(dir);
 }
 
+void SquadInstanceService::set_settlement_record_dir(const std::string& dir) {
+    record_store_ = std::make_unique<SettlementRecordStore>(dir);
+}
+
+std::size_t SquadInstanceService::ingest_restored_settlement_records() {
+    if (!record_store_) return 0;
+    std::size_t pending = 0;
+    for (auto& record : record_store_->load_all()) {
+        // 恢复扫描（D13 §2.2 故障注入 3「进程重启」）：pending = 未持久确认
+        // 的唯一记录——保留待重试/对账，计数供宿主日志；cancelled/done 只
+        // 留档（done 已删、cancelled 不发奖励），不驱动、不自动重发。
+        if (record.lifecycle == SettlementLifecycle::Pending) ++pending;
+    }
+    return pending;
+}
+
+std::optional<SettlementLifecycle> SquadInstanceService::settlement_record_state(
+    std::uint64_t settlement_id) const {
+    if (!record_store_) return std::nullopt;
+    for (const auto& record : record_store_->load_all()) {
+        if (record.settlement_id == settlement_id) return record.lifecycle;
+    }
+    return std::nullopt;
+}
+
 void SquadInstanceService::enable_admission_credentials(std::string issuer,
                                                        std::uint64_t ttl_ms) {
     admission_credential_face_ = std::make_unique<AdmissionCredentialFace>();
@@ -158,6 +183,8 @@ bool SquadInstanceService::abort(std::uint64_t party_id) {
     if (!instance) return false;
     // 前置结算相位（Create..Running）才可取消收尾；结算期走 dismiss。
     if (!instance->cancel()) return false;
+    // D13 失败取消：唯一记录置 cancelled（不发成功奖励，已发部分随记录保留）。
+    if (record_store_) (void)record_store_->cancel(binding->instance_id);
     return evict_and_release(*binding);
 }
 
@@ -165,6 +192,9 @@ void SquadInstanceService::fail_running(const ActiveSquadInstance& binding,
                                         apollo::game::world::Instance* instance) {
     if (auto it = gameplay_.find(binding.instance_id); it != gameplay_.end())
         it->second.all_exited = true;
+    // D13 失败取消：唯一记录置 cancelled——不发成功奖励（已发部分随记录
+    // 保留进后续处理状态，不静默删）。
+    if (record_store_) (void)record_store_->cancel(binding.instance_id);
     // 失败线：取消流程不发成功奖励（battle 随 cancel 复位，无结算事件流）。
     instance->cancel();
 }
@@ -314,6 +344,8 @@ SquadInstanceService::GameplayError SquadInstanceService::advance_tick(
     if (state.goal_set && !state.timed_out && state.goal.timeout_ticks != 0 &&
         instance->tick_count() - state.goal_base_ticks >= state.goal.timeout_ticks) {
         state.timed_out = true;
+        // D13 失败取消（超时）：唯一记录置 cancelled——不发成功奖励。
+        if (record_store_) (void)record_store_->cancel(binding->instance_id);
         instance->cancel();
     }
     return GameplayError::Ok;
@@ -476,6 +508,24 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
         // 稳定玩法/结算 ID = Instance ID（L132 结算幂等键：同副本同玩家重试/
         // 回执丢失重放不变；battle seed 与 Instance 同 id，确定性可复算）。
         ledger->begin(members, instance->id());
+        // D13 结算恢复记录：开账即建唯一意图记录（pending）——结算意图持久
+        // 面（应发什么/发到哪一步/终局态）。确认位逐玩家随落账写入；全部
+        // 所需确认完成才删记录（D13 §2.1）；失败取消置 cancelled。
+        if (record_store_) {
+            (void)record_store_->open(instance->id(), request.party_id,
+                                      local_world_id_, instance->id(), members);
+            ledger->set_confirmation_sink(
+                [store = record_store_.get(), sid = instance->id(),
+                 ledger_ptr = ledger.get()](std::uint64_t player_id,
+                                            std::int64_t score) {
+                    (void)store->confirm(sid, player_id, score);
+                    // 全部所需持久确认完成 → done 并删唯一记录（账本
+                    // snapshot 为权威：全部名册成员 applied 即 complete）。
+                    if (ledger_ptr->snapshot().complete) {
+                        (void)store->complete(sid);
+                    }
+                });
+        }
         // 业务受理面（P1 结算迁入）：落账唯一路径 = 受理 wire 返回业务
         // 请求（958/959）；未装配 = 无落账路径，全挂账不落。
         if (business_sink_) {
