@@ -37,8 +37,11 @@ std::unique_ptr<SessionAdmissionService> makeDefaultSessionAdmissionService();
 // Link M1 准入面（P4-4 批①）：active 端点拨 login 准入受理面 + linkrpc
 // 关联原语。工厂即装配（返回已起面的就绪服务）；null = 装配缺位（路由表
 // 缺/Windows），调用方退退化容忍面。
+// self_name 缺省 "gateway"（单网关批缺省面）；多网关批由宿主按进程身份派生
+// （gateway_self_name(gatewayId)）传入——对端槽位按名键控，同名互挤。
 std::unique_ptr<SessionAdmissionService> makeLinkSessionAdmissionService(
-    const std::string& host, std::uint16_t port, const std::string& route_json
+    const std::string& host, std::uint16_t port, const std::string& route_json,
+    std::string self_name = "gateway"
 );
 
 } // namespace gateway

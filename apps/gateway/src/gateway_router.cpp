@@ -36,6 +36,8 @@ void MessageRouter::start() {
     egressConfig.host = config_.worldM1Host;
     egressConfig.port = config_.worldM1Port;
     egressConfig.route_json = config_.worldM1RouteJson;
+    // 本网关身份（多网关批：self_name/请求号基址按其派生；单网关缺省 0 = 兼容）。
+    egressConfig.gateway_id = config_.gatewayId;
     m1Egress_ = makeM1Egress(std::move(egressConfig));
     if (!m1Egress_->start()) {
         glog().warning("gateway WorldApp M1 egress degraded: route table unavailable ("

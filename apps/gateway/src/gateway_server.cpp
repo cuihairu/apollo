@@ -1,4 +1,5 @@
 #include "gateway/gateway_server.hpp"
+#include "gateway/self_name.hpp"
 #include "gateway/ingress/ingress_fan_in.hpp"
 #include "gateway/ingress/tcp_client_ingress_server.hpp"
 #include "gateway/ingress/ws_client_ingress_server.hpp"
@@ -150,7 +151,8 @@ std::unique_ptr<SessionAdmissionService> makeAdmissionService(const GatewayConfi
         return makeDefaultSessionAdmissionService();
     }
     auto linkService = makeLinkSessionAdmissionService(
-        config.loginM1Host, config.loginM1Port, config.worldM1RouteJson);
+        config.loginM1Host, config.loginM1Port, config.worldM1RouteJson,
+        gateway_self_name(config.gatewayId));
     if (!linkService) {
         glog().warning("gateway login M1 admission degraded: route table unavailable ("
                        + config.worldM1RouteJson + "), admission degrades tolerant");
@@ -167,7 +169,7 @@ std::unique_ptr<SessionAdmissionService> makeAdmissionService(const GatewayConfi
 
 GatewayServer::GatewayServer(const GatewayConfig& config)
     : config_(config)
-    , sessionManager_(std::make_unique<SessionManager>())
+    , sessionManager_(std::make_unique<SessionManager>(config.gatewayId))
     , packetDispatcher_(std::make_unique<ClientPacketDispatcher>())
     , connectionRegistry_(std::make_unique<GatewayConnectionRegistry>())
     , admissionService_(makeAdmissionService(config))
@@ -296,6 +298,7 @@ void GatewayServer::start() {
         routeConfig.host = config_.directoryM1Host;
         routeConfig.port = config_.directoryM1Port;
         routeConfig.route_json = config_.worldM1RouteJson;
+        routeConfig.self_name = gateway_self_name(config_.gatewayId);
         m1RouteClient_ = makeM1RouteClient(std::move(routeConfig));
         if (m1RouteClient_) {
             glog().info("Gateway M1 route client dialing " + config_.directoryM1Host
@@ -314,6 +317,7 @@ void GatewayServer::start() {
         baseConfig.host = config_.baseM1Host;
         baseConfig.port = config_.baseM1Port;
         baseConfig.route_json = config_.worldM1RouteJson;
+        baseConfig.self_name = gateway_self_name(config_.gatewayId);
         baseClient_ = makeM1BaseClient(std::move(baseConfig));
         if (baseClient_) {
             glog().info("Gateway M1 base client dialing " + config_.baseM1Host + ":"
@@ -331,6 +335,7 @@ void GatewayServer::start() {
         controlConfig.host = config_.host;
         controlConfig.port = config_.controlM1Port;
         controlConfig.route_json = config_.worldM1RouteJson;
+        controlConfig.self_name = gateway_self_name(config_.gatewayId);
         controlServer_ = makeGatewayControlServer(
             std::move(controlConfig), [this](const DrainControlRequest& request) {
                 return handleDrainRequest(request);

@@ -65,6 +65,7 @@ struct GatewayControlConfig {
     // 契约路由表 JSON（生成物）：dispatcher 白名单 + 握手 route_version
     // 事实源。空路径 = 装配失败（start false）。
     std::string route_json;
+    std::string self_name = "gateway";  // 本进程 M1 握手身份（多网关进程唯一）
 };
 
 // 工厂：on_request 在泵线程内同步调用（宿主 = GatewayServer 泵线程），

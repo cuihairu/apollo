@@ -44,7 +44,7 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "gateway";
+        mc.self_name = config_.self_name;  // 本进程握手身份（多网关 peer 键区分）
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         mc.compat_route_versions = link::compat_route_versions_from_env();
         manager_ = std::make_unique<link::LinkManager>(mc);

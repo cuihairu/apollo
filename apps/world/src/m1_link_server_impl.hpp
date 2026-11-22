@@ -18,7 +18,9 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace world_app {
@@ -143,8 +145,14 @@ private:
                                        std::size_t size);
     void handle_cell_intent_ack_frame(const std::string& peer, const std::uint8_t* data,
                                       std::size_t size);
-    void handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
-                               std::size_t size);
+    void handle_envelope_frame(const std::string& peer, std::uint16_t /*msg_id*/,
+                               const std::uint8_t* data, std::size_t size);
+    // 多网关 peer 路由（L125 case 1）：932 入站按对端自报名记 会话/请求 →
+    // 网关 peer——下行 client_deliver 与 intent ack 按所属网关转发（单网关
+    // gateway_link 兜底；多网关且无记录 = 未源自网关，静默丢弃面同旧契约）。
+    void record_intent_peer(std::uint64_t session_id, std::uint64_t request_id,
+                            const std::string& peer);
+    link::InterServerLink* resolve_gateway_peer(std::uint64_t key, bool by_request);
 
     M1LinkConfig config_;
     std::function<void(IntentEnvelope)> on_intent_;
@@ -171,6 +179,14 @@ private:
     std::atomic<bool> started_{false};
     std::atomic<std::uint64_t> received_{0};
     std::atomic<std::uint64_t> rejected_{0};
+
+    // 多网关 peer 路由账（入站泵线程记，发送面宿主线程查——互斥过桥）。
+    // request 条目回执后即摘（一次性关联键）；session 条目随会话长驻——顶格
+    // 清账防漫溢（清后未知会话回退 gateway_link 兜底面，行为同旧单网关契约）。
+    static constexpr std::size_t kPeerMapCap = 1u << 20;
+    mutable std::mutex peer_map_mutex_;
+    std::unordered_map<std::uint64_t, std::string> request_peer_;
+    std::unordered_map<std::uint64_t, std::string> session_peer_;
 };
 
 } // namespace world_app

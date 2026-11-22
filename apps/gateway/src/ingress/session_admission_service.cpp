@@ -51,10 +51,12 @@ public:
 // success=false 才拒。
 class LinkSessionAdmissionService final : public SessionAdmissionService {
 public:
-    LinkSessionAdmissionService(std::string host, std::uint16_t port, std::string route_json)
+    LinkSessionAdmissionService(std::string host, std::uint16_t port,
+                                std::string route_json, std::string self_name)
         : host_(std::move(host))
         , port_(port)
-        , route_json_(std::move(route_json)) {}
+        , route_json_(std::move(route_json))
+        , self_name_(std::move(self_name)) {}
 
     ~LinkSessionAdmissionService() override {
         shutdown();
@@ -72,7 +74,7 @@ public:
         }
 
         apollo::net::link::LinkManagerConfig mc;
-        mc.self_name = "gateway";
+        mc.self_name = self_name_;  // 本进程握手身份（多网关 peer 键区分）
         mc.route_version =
             apollo::net::link::route_version_from_hash(route_table_->schema_hash());
         mc.compat_route_versions = apollo::net::link::compat_route_versions_from_env();
@@ -289,6 +291,7 @@ private:
     std::string host_;
     std::uint16_t port_ = 0;
     std::string route_json_;
+    std::string self_name_;  // 本进程 M1 握手身份（多网关进程唯一）
 #if !defined(_WIN32)
     // link 传输底座 POSIX only（Windows 工厂 start false 退桩，成员同收守卫）
     std::unique_ptr<apollo::net::link::RouteTable> route_table_;
@@ -308,11 +311,13 @@ std::unique_ptr<SessionAdmissionService> makeDefaultSessionAdmissionService() {
 }
 
 std::unique_ptr<SessionAdmissionService> makeLinkSessionAdmissionService(
-    const std::string& host, std::uint16_t port, const std::string& route_json
+    const std::string& host, std::uint16_t port, const std::string& route_json,
+    std::string self_name
 ) {
     // 工厂即装配：start false = 装配缺位（路由表缺/Windows），返回 null
     // 由调用方退桩传输（起进程不拦，处方①同口径）。
-    auto service = std::make_unique<LinkSessionAdmissionService>(host, port, route_json);
+    auto service = std::make_unique<LinkSessionAdmissionService>(
+        host, port, route_json, std::move(self_name));
     if (!service->start()) {
         return nullptr;
     }

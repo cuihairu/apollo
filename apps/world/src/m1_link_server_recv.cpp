@@ -214,7 +214,8 @@ void M1LinkServerImpl::handle_cell_intent_ack_frame(const std::string& peer, con
     on_cell_intent_ack_(peer, ack);
 }
 
-void M1LinkServerImpl::handle_envelope_frame(std::uint16_t /*msg_id*/, const std::uint8_t* data,
+void M1LinkServerImpl::handle_envelope_frame(const std::string& peer,
+                           std::uint16_t /*msg_id*/, const std::uint8_t* data,
                            std::size_t size) {
     trace::EnvelopeFields env;
     if (!trace::unpack_envelope(data, size, env)) {
@@ -240,6 +241,9 @@ void M1LinkServerImpl::handle_envelope_frame(std::uint16_t /*msg_id*/, const std
         ++rejected_;
         return;
     }
+    // 多网关 peer 路由（L125 case 1）：入站意图按对端自报名记 会话/请求 →
+    // 网关 peer（下行/回执按所属网关转发）。
+    record_intent_peer(intent.session_id, intent.request_id, peer);
     if (env.trace.has_trace()) {
         intent.trace = env.trace;  // 旗标随信封传播，下游不再重采
     }

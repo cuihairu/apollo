@@ -82,7 +82,9 @@ struct ClientConnection {
 // 会话管理器
 class SessionManager {
 public:
-    SessionManager();
+    // gateway_id = 本进程身份（0 = 未配/单网关，编号自 1；非 0 时会话号带网关
+    // 身份域——多网关同面共存跨网关唯一，World 会话表按单键消解）。
+    explicit SessionManager(std::uint32_t gateway_id = 0);
     ~SessionManager() = default;
 
     // 创建新会话
@@ -156,7 +158,7 @@ private:
 
     mutable std::mutex mutex_;
     std::unordered_map<SessionID, std::shared_ptr<ClientConnection>> sessions_;
-    std::atomic<uint64_t> nextSessionId_{1};
+    std::atomic<uint64_t> nextSessionId_{1};  // 基址随 gateway_id 域（ctor 设）
     std::atomic<uint64_t> duplicateUplinkFrames_{0};
 };
 

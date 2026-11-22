@@ -1,4 +1,5 @@
 #include "gateway/m1_egress.hpp"
+#include "gateway/self_name.hpp"
 
 #if !defined(_WIN32)
 
@@ -116,7 +117,10 @@ struct InboxItem {
 class M1EgressImpl final : public M1Egress {
 public:
     explicit M1EgressImpl(M1EgressConfig config)
-        : config_(std::move(config)) {}
+        : config_(std::move(config))
+        // 请求号基址含网关身份域（多网关：两网关各从 1 起会在 World 请求关联键
+        // 互撞——ack 按单键寻路无歧义需跨网关唯一；单网关基址 1 兼容）。
+        , next_request_id_(gateway_id_base(config_.gateway_id)) {}
 
     bool start() override {
         if (started_.load(std::memory_order_acquire)) {
@@ -129,7 +133,9 @@ public:
         }
 
         link::LinkManagerConfig mc;
-        mc.self_name = "gateway";  // 对端 cell 装配的端点名（握手身份）
+        // 对端 cell 装配的端点名（握手身份 = 本网关进程唯一 self_name——多网关
+        // 同面共存 peer 键区分，gateway_self_name 单网关缺省同旧值）。
+        mc.self_name = gateway_self_name(config_.gateway_id);
         mc.route_version = link::route_version_from_hash(route_table_->schema_hash());
         mc.compat_route_versions = link::compat_route_versions_from_env();
         manager_ = std::make_unique<link::LinkManager>(mc);
@@ -744,7 +750,7 @@ private:
 
     std::vector<RetryItem> retry_queue_;   // 透明重试到期队列（泵线程独占，同 pending_）
     std::unordered_map<std::uint64_t, Pending> pending_;  // 泵线程独占
-    std::uint64_t next_request_id_ = 1;    // 0 = legacy 无应答哨兵，不配发
+    std::uint64_t next_request_id_ = 1;    // 网关身份域基址（ctor 按 gateway_id 设）；0 = legacy 无应答哨兵，不配发
 
     ClientDeliverFn client_deliver_;       // 泵线程回调（939 下行出口）
     RouteInvalidateFn on_route_invalidate_;  // 泵线程回调（2001 路由失效出口）

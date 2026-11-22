@@ -8,9 +8,59 @@
 
 namespace world_app {
 
+// 多网关 peer 路由记录（L125 case 1）：932 入站按对端自报名记 会话/请求 →
+// 网关 peer。session 条目随会话长驻；request 条目一次性（回执后即摘）。
+// 顶格清账防漫溢（长跑会话换血面；清后未知键回退 gateway_link 兜底）。
+void M1LinkServerImpl::record_intent_peer(std::uint64_t session_id,
+                                          std::uint64_t request_id,
+                                          const std::string& peer) {
+    if (peer.empty()) {
+        return;  // 握手期坏链无名（框架不出账同口径）
+    }
+    std::lock_guard<std::mutex> lock(peer_map_mutex_);
+    if (session_id != 0) {
+        if (session_peer_.size() >= kPeerMapCap) {
+            session_peer_.clear();
+        }
+        session_peer_[session_id] = peer;
+    }
+    if (request_id != 0) {
+        if (request_peer_.size() >= kPeerMapCap) {
+            request_peer_.clear();
+        }
+        request_peer_[request_id] = peer;
+    }
+}
+
+// 按记录解析目标网关链路：无记录回退 gateway_link()（单网关 1:1 兜底——
+// 多网关端点名消歧失败即 nullptr，同旧静默面）。
+link::InterServerLink* M1LinkServerImpl::resolve_gateway_peer(std::uint64_t key,
+                                                              bool by_request) {
+    auto mgr = manager_.load(std::memory_order_acquire);
+    if (!mgr || key == 0) {
+        return by_request ? nullptr : gateway_link();
+    }
+    std::string peer;
+    {
+        std::lock_guard<std::mutex> lock(peer_map_mutex_);
+        auto& m = by_request ? request_peer_ : session_peer_;
+        auto it = m.find(key);
+        if (it != m.end()) {
+            peer = it->second;
+            if (by_request) {
+                m.erase(it);  // 回执一次性关联键，用后即摘
+            }
+        }
+    }
+    if (!peer.empty()) {
+        return mgr->link(peer);
+    }
+    return gateway_link();
+}
+
 void M1LinkServerImpl::sendIntentAck(std::uint64_t request_id, std::int32_t code,
                    const std::string& message) {
-    auto* link = gateway_link();
+    auto* link = resolve_gateway_peer(request_id, /*by_request=*/true);
     if (link == nullptr) {
         return;  // 端点未装配 = 静默（start 前回调不应发生）
     }
@@ -83,7 +133,7 @@ void M1LinkServerImpl::sendModuleRolloutReply(const std::string& peer, std::uint
 
 void M1LinkServerImpl::sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
                        const std::vector<std::uint8_t>& payload) {
-    auto* link = gateway_link();
+    auto* link = resolve_gateway_peer(session_id, /*by_request=*/false);
     if (link == nullptr || payload.empty()) {
         return;  // 端点未装配 = 静默（start 前回调不应发生）
     }

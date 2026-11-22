@@ -1,10 +1,13 @@
 #include "gateway/session_manager.hpp"
+#include "gateway/self_name.hpp"
 #include <chrono>
 
 namespace gateway {
 
-SessionManager::SessionManager() {
-    // 初始化
+SessionManager::SessionManager(std::uint32_t gateway_id) {
+    // 会话号基址含网关身份域（多网关同面共存：两网关各自从 1 起会在 World 会话
+    // 表互撞；单网关 gateway_id 0 基址 1 = 兼容旧编号）。
+    nextSessionId_.store(gateway_id_base(gateway_id));
 }
 
 SessionID SessionManager::createSession(

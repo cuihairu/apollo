@@ -27,6 +27,7 @@ struct M1BaseClientConfig {
     std::string host = "127.0.0.1";
     std::uint16_t port = 0;              // 0 = 面关
     std::string route_json;              // 契约路由表（缺位 = start false）
+    std::string self_name = "gateway";   // 本进程 M1 握手身份（多网关进程唯一）
 };
 
 class M1BaseClient {

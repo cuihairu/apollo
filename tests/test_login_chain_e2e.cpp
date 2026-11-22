@@ -222,7 +222,8 @@ login::LoginConfig login_config() {
 
 gateway::GatewayConfig gateway_config(std::uint16_t world_m1_port,
                                       std::uint16_t login_m1_port,
-                                      std::uint16_t base_m1_port) {
+                                      std::uint16_t base_m1_port,
+                                      std::uint32_t gateway_id = 77) {
     gateway::GatewayConfig config;
     config.host = "127.0.0.1";
     config.port = probe_free_port();
@@ -236,7 +237,7 @@ gateway::GatewayConfig gateway_config(std::uint16_t world_m1_port,
     config.loginM1Port = login_m1_port;
     config.baseM1Host = "127.0.0.1";
     config.baseM1Port = base_m1_port;
-    config.gatewayId = 77;
+    config.gatewayId = gateway_id;
     return config;
 }
 
@@ -400,6 +401,180 @@ bool login_chain_creates_cell_entity() {
     return true;
 }
 
+// D10 用例 1（L125 多网关身份批）：两网关并行在线（gatewayId 77/88），两
+// 客户端同时登录。缺口三项在此实测：
+//   1. 网关 M1 self_name 按进程区分（"gateway-77"/"gateway-88"）——World
+//      被动端对端槽位不再互挤（旧恒 "gateway" 时第二网关挤掉第一网关）。
+//   2. 会话/请求号身份域基址分家（gateway_id<<32|1）——两网关首个会话
+//      均号 1 亦合法（跨网关身份 = gateway_id + session_id），不互覆。
+//   3. World 按 932 入站对端记 会话/请求 → 网关 peer，下行/回执按所属
+//      网关寻路（非单租户 gateway_link）。
+// 断言：两会话各自有效、实体各自入 AOI、base 锚点各自绑定所属网关。
+bool login_chain_two_gateway_concurrent() {
+    TemporaryDirectory files;
+
+    // ① base：PlayerStore M1 面 + 播种 player1/player2。
+    StoreHost base(base_store_config(files.path), 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base face did not listen");
+    TEST_ASSERT(base.store->adoptPlayer(1001, "", 0, 0, 2), "seed player 1001 profile");
+    TEST_ASSERT(base.store->adoptPlayer(1002, "", 0, 0, 2), "seed player 1002 profile");
+
+    // ② login：准入面 + base 客户端面 + 内建 OnlineDirectory。
+    auto lconfig = login_config();
+    lconfig.worldStoreM1Host = "127.0.0.1";
+    lconfig.worldStoreM1Port = base.store->m1_listen_port();
+    login::LoginServer login(lconfig);
+    login.start();
+    TEST_ASSERT(login.admissionPort() != 0, "login admission face up");
+    TEST_ASSERT(login.onlineDirectory() != nullptr, "login online directory up");
+    TEST_ASSERT(wait_until([&] { return login.baseActivationReady(); }, 3000),
+                "login base activation link up");
+
+    // ③ world + cell：管理面 + cell 注册客户端（两网关共宿同一 world/cell）。
+    world_app::WorldAppConfig wconfig;
+    wconfig.worldId = 1;
+    wconfig.host = "127.0.0.1";
+    wconfig.m1Port = 0;
+    wconfig.m1RouteJson = kRouteJson;
+    wconfig.tickRateMs = 20;
+    auto world = std::make_unique<world_app::WorldApp>(wconfig);
+    world->start();
+    TEST_ASSERT(world->isRunning(), "world starts");
+    cell_test::CellHost cell;
+    cell.config = wconfig;
+    TEST_ASSERT(cell.start(world->m1Link().listenPort(), 21, 0, &world->m1Link()),
+                "cell host starts");
+    cell.set_world_link(&world->m1Link());
+    cell.pump_until_registered();
+    TEST_ASSERT(cell.registered(), "cell registered with world");
+
+    // 布局/路由代次投影（同单网关批）：两玩家同落 (world=1, space=1, cell=21)。
+    login::SpacePositionProjection proj;
+    proj.world_id = 1;
+    proj.space_id = 1;
+    proj.cell_id = 21;
+    proj.assignment_version = 5;
+    proj.topology_version = 71;
+    proj.management_epoch = 3;
+    proj.ready = true;
+    proj.cell_host = "10.0.0.9";
+    proj.cell_port = 9200;
+    TEST_ASSERT(login.positionProjectionRegistry()->apply_projection(proj, 0) ==
+                    login::ProjectionVerdict::kApplied,
+                "projection injected before login");
+
+    // ④ 两网关（gatewayId 77/88）：各自 login 准入 + base 激活 + world M1。
+    auto g1config = gateway_config(world->m1Link().listenPort(),
+                                   login.admissionPort(), base.store->m1_listen_port(), 77);
+    auto g2config = gateway_config(world->m1Link().listenPort(),
+                                   login.admissionPort(), base.store->m1_listen_port(), 88);
+    gateway::GatewayServer g1(g1config);
+    gateway::GatewayServer g2(g2config);
+    g1.start();
+    g2.start();
+
+    // ⑤ 两客户端分别连两网关 → PING 建会话。
+    TcpTestClient c1;
+    TcpTestClient c2;
+    TEST_ASSERT(c1.connect("127.0.0.1", g1config.port), "client1 connects to g1");
+    TEST_ASSERT(c2.connect("127.0.0.1", g2config.port), "client2 connects to g2");
+    protocol::Ping ping;
+    ping.timestamp = 1;
+    c1.sendAll(frame_bytes(1, 0, protocol::MessageCodec::encode(ping, 0)));
+    std::vector<std::uint8_t> reply1;
+    TEST_ASSERT(c1.recvLinkFrame(reply1), "ping pong received on g1");
+    const auto session1 = header_of(reply1).sessionId;
+    c2.sendAll(frame_bytes(1, 0, protocol::MessageCodec::encode(ping, 0)));
+    std::vector<std::uint8_t> reply2;
+    TEST_ASSERT(c2.recvLinkFrame(reply2), "ping pong received on g2");
+    const auto session2 = header_of(reply2).sessionId;
+    TEST_ASSERT(session1 != 0 && session2 != 0, "both gateway sessions created");
+    // 身份域基址分家：会话号携带网关身份域（gateway_id<<32），跨网关不互撞。
+    TEST_ASSERT(session1 != session2, "sessions across gateways are distinct");
+
+    // ⑥ login 端认证签发两票（player1→1001，player2→1002）。
+    protocol::LoginRequest loginReq1;
+    loginReq1.username = "player1";
+    loginReq1.password = "pass1";
+    const auto loginResp1 = login.dispatchRequest(
+        protocol::MessageCodec::encode(loginReq1, 0));
+    TEST_ASSERT(loginResp1.size() > sizeof(protocol::MessageHeader), "login1 response");
+    protocol::LoginResponse parsedLogin1;
+    protocol::MessageCodec::decodeBody(
+        std::vector<std::uint8_t>(loginResp1.begin() + sizeof(protocol::MessageHeader),
+                                  loginResp1.end()), parsedLogin1);
+    TEST_ASSERT(parsedLogin1.success && parsedLogin1.playerId == 1001,
+                "login1 accepted for 1001");
+    protocol::LoginRequest loginReq2;
+    loginReq2.username = "player2";
+    loginReq2.password = "pass2";
+    const auto loginResp2 = login.dispatchRequest(
+        protocol::MessageCodec::encode(loginReq2, 0));
+    TEST_ASSERT(loginResp2.size() > sizeof(protocol::MessageHeader), "login2 response");
+    protocol::LoginResponse parsedLogin2;
+    protocol::MessageCodec::decodeBody(
+        std::vector<std::uint8_t>(loginResp2.begin() + sizeof(protocol::MessageHeader),
+                                  loginResp2.end()), parsedLogin2);
+    TEST_ASSERT(parsedLogin2.success && parsedLogin2.playerId == 1002,
+                "login2 accepted for 1002");
+    TEST_ASSERT(!parsedLogin1.loginTicket.empty() && !parsedLogin2.loginTicket.empty(),
+                "both login tickets issued");
+
+    // ⑦ 两网关并行准入（各自经 login M1 真校验 + base 激活 + 目录 World 准入）。
+    TEST_ASSERT(wait_until([&] { return g1.baseActivationReady(); }, 3000),
+                "g1 base activation link up");
+    TEST_ASSERT(wait_until([&] { return g2.baseActivationReady(); }, 3000),
+                "g2 base activation link up");
+    TEST_ASSERT(g1.authenticateSession(session1, 1001, parsedLogin1.loginTicket),
+                "g1 auth accepted for 1001");
+    TEST_ASSERT(g2.authenticateSession(session2, 1002, parsedLogin2.loginTicket),
+                "g2 auth accepted for 1002");
+    const auto assigned1 = login.onlineDirectory()->resolveWorldAssignment(1001);
+    const auto assigned2 = login.onlineDirectory()->resolveWorldAssignment(1002);
+    TEST_ASSERT(assigned1.has_value() && assigned2.has_value(), "both assignments recorded");
+    TEST_ASSERT(assigned1->topology_version == 71 && assigned1->route_version == 5,
+                "assignment1 stamps layout/route epoch");
+    TEST_ASSERT(assigned2->topology_version == 71 && assigned2->route_version == 5,
+                "assignment2 stamps layout/route epoch");
+
+    // ⑧ 两客户端各自发 CELL_CREATE_ENTITY → 各自网关 → world → cell。
+    c1.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn(1001), session1)));
+    c2.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn(1002), session2)));
+    // 互不覆盖：两会话各自解析到各自玩家（旧单键槽位时 1/2 相撞）。
+    TEST_ASSERT(wait_until(
+                    [&] { return cell.resolveIntentPlayer(session1) == 1001; }, 8000),
+                "cell spawned player 1001 (g1 session)");
+    TEST_ASSERT(wait_until(
+                    [&] { return cell.resolveIntentPlayer(session2) == 1002; }, 8000),
+                "cell spawned player 1002 (g2 session)");
+
+    // ⑨ base 锚点各自 Online + 各自绑定所属网关。
+    const auto avatar1 = base.store->findAvatar(1001);
+    const auto avatar2 = base.store->findAvatar(1002);
+    TEST_ASSERT(avatar1 != nullptr && avatar2 != nullptr, "both avatars loaded at base");
+    TEST_ASSERT(avatar1->state() == apollo::game::base::AvatarState::Online &&
+                avatar2->state() == apollo::game::base::AvatarState::Online,
+                "both avatars online after chain");
+    TEST_ASSERT(avatar1->session_binding().is_bound() &&
+                avatar2->session_binding().is_bound(),
+                "both session bindings written");
+    TEST_ASSERT(avatar1->session_binding().session_id == session1 &&
+                avatar1->session_binding().gateway_id == 77,
+                "binding1 carries g1 session/gateway id");
+    TEST_ASSERT(avatar2->session_binding().session_id == session2 &&
+                avatar2->session_binding().gateway_id == 88,
+                "binding2 carries g2 session/gateway id");
+
+    g1.stop();
+    g2.stop();
+    cell.stop();
+    world->stop();
+    login.stop();
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -411,6 +586,7 @@ int main() {
 #else
     const struct { const char* name; bool (*fn)(); } cases[] = {
         {"login_chain_creates_cell_entity", login_chain_creates_cell_entity},
+        {"login_chain_two_gateway_concurrent", login_chain_two_gateway_concurrent},
     };
     int failed = 0;
     for (const auto& c : cases) {

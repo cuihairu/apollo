@@ -196,8 +196,11 @@ void M1LinkServerImpl::install_dispatching(link::InterServerLink& link) {
     // no_handler 静默丢弃：不受理、不回执、不断连、不计 handler 拒收。
     dispatcher.set_handler(
         id_of(MsgId::internal_envelope),
-        [this](std::uint16_t msg_id, const std::uint8_t* data, std::size_t size) {
-            handle_envelope_frame(msg_id, data, size);
+        // [&link] 捕获对端自报名（多网关 peer 路由记录面）：重连 = 同名新链重装
+        // 本 handler，&link 恒当前链。
+        [&link, this](std::uint16_t msg_id, const std::uint8_t* data,
+                      std::size_t size) {
+            handle_envelope_frame(link.peer_name(), msg_id, data, size);
         });
     // 944 debug_eval_request 裸帧受理（§7.1 attach transport 契约面：
     // admin 单入口上行——eval 非意图信封族，不走 932；回执 945 按
