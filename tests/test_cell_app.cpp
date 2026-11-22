@@ -1273,6 +1273,48 @@ bool test_cell_relogin_supersedes_old_session() {
     return true;
 }
 
+bool test_cell_session_id_reuse_cross_player() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 20;
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+    cell.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));  // 首拍 settle
+
+    // 首登：session 77 挂玩家 42（Avatar 入默认 scene）
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(42, 77)), "first login accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(77) == 42; },
+                           std::chrono::seconds(3)),
+                "first session bound");
+
+    // 会话号复用（网关重启归基址重发旧号）：玩家 43 拿同一号 77——旧主 42
+    // 的会话行被撤（create_session 撞号），旧主 Avatar 出 scene（撤行后
+    // find_by_player 已查不到 42、走不了既有顶号出列路径，必须就地出列否则
+    // 42 重登被 Scene::enter 重复拒入卡死）。
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(43, 77)), "reuse accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(77) == 43; },
+                           std::chrono::seconds(3)),
+                "reused id now resolves to new player");
+    auto* scene = cell.find_scene(cell.default_scene_id());
+    TEST_ASSERT(scene != nullptr &&
+                    scene->get_avatar(apollo::game::core::PlayerId(42)) == nullptr,
+                "evicted player's avatar left the scene (not orphaned)");
+
+    // 被撤玩家 42 换新号重登：不再被旧 Avatar 滞留卡死，新 Avatar 可入场
+    TEST_ASSERT(cell.submitIntent(make_create_player_intent(42, 55)), "re-login accepted");
+    TEST_ASSERT(wait_until([&] { return cell.resolveIntentPlayer(55) == 42; },
+                           std::chrono::seconds(3)),
+                "evicted player re-establishes session");
+    scene = cell.find_scene(cell.default_scene_id());
+    TEST_ASSERT(scene != nullptr &&
+                    scene->get_avatar(apollo::game::core::PlayerId(42)) != nullptr,
+                "re-login avatar enters the scene");
+
+    cell.stop();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -1304,6 +1346,7 @@ int main() {
          test_declared_space_reassignment_keeps_name},
         {"id_domains_are_separate", test_id_domains_are_separate},
         {"cell_relogin_supersedes_old_session", test_cell_relogin_supersedes_old_session},
+        {"cell_session_id_reuse_cross_player", test_cell_session_id_reuse_cross_player},
     };
 
     for (const auto& c : cases) {

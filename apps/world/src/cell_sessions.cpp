@@ -44,6 +44,22 @@ void CellApp::attachPlayerWorldSession(
     const auto avatar_entity_id = apollo::game::core::EntityId(entity_id);
 
     auto session = worldSessionManager_->find_session(session_id);
+    // 会话号复用（网关重启归基址重发旧号）：同号已属其他玩家——旧主 Avatar
+    // 先出 scene/instance（撤行后旧主重登时 find_by_player 已查不到行，走不
+    // 了既有顶号出列路径，Avatar 滞留会被 Scene::enter 重复拒入卡死），再置
+    // 空走重建（create_session 撞号撤旧行，本号转归新玩家）。
+    if (session && session->player_id() != player_id) {
+        const auto old_avatar = session->avatar_entity_id();
+        if (old_avatar.is_valid()) {
+            if (auto* old_scene = find_scene_by_entity(old_avatar.value())) {
+                old_scene->leave(session->player_id());
+                if (auto* old_instance = world_->find_instance_by_scene(old_scene->scene_id())) {
+                    old_instance->leave(session->player_id());
+                }
+            }
+        }
+        session = nullptr;
+    }
     if (!session) {
         // 顶号（D10 case 4 唯一资料写入者）：同玩家已绑别号 = 重登录顶替——
         // 先记旧会话以定位其旧 Avatar 所在 scene（create_session 随即撤销

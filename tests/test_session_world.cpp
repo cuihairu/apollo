@@ -185,6 +185,47 @@ bool test_world_session_manager_relogin_supersedes() {
     return true;
 }
 
+bool test_world_session_manager_session_id_reuse() {
+    std::cout << "Running: test_world_session_manager_session_id_reuse..." << std::endl;
+
+    apollo::game::world::WorldSessionManager manager;
+    const auto player_a = apollo::game::core::PlayerId(4001);
+    const auto player_b = apollo::game::core::PlayerId(4002);
+
+    // 玩家 A 持号 3001（活跃）
+    auto session_a = manager.create_session(3001, player_a);
+    session_a->set_state(apollo::game::world::WorldSessionState::Active);
+    TEST_ASSERT(manager.find_session(3001) == session_a, "A owns 3001");
+    TEST_ASSERT(manager.find_by_player(player_a) == session_a, "A indexed");
+
+    // 会话号复用（网关重启归基址重发旧号）：玩家 B 拿同一号 3001——撤销
+    // A 的旧行，不静默覆写（跨玩家串号禁）
+    auto session_b = manager.create_session(3001, player_b);
+    TEST_ASSERT(session_b != nullptr, "B takes the reused id");
+    TEST_ASSERT(manager.find_session(3001) == session_b, "id now resolves to B");
+    TEST_ASSERT(manager.find_by_player(player_b) == session_b, "B indexed");
+    TEST_ASSERT(manager.find_by_player(player_a) == nullptr, "A no longer resolves");
+    TEST_ASSERT(session_a->state() == apollo::game::world::WorldSessionState::Closed,
+                "reclaimed session terminal Closed");
+    TEST_ASSERT(manager.session_count() == 1, "one row per id");
+
+    // 同号同玩家重入：幂等返回既有行，不新建不覆写
+    auto same = manager.create_session(3001, player_b);
+    TEST_ASSERT(same == session_b, "same-player same-id is idempotent");
+    TEST_ASSERT(manager.find_session(3001) == session_b, "row unchanged");
+    TEST_ASSERT(manager.find_by_player(player_b) == session_b, "index kept");
+    TEST_ASSERT(manager.session_count() == 1, "no duplicate row");
+
+    // 换号顶替仍成立：B 新号 3002 顶 3001——旧号撤销
+    auto session_b2 = manager.create_session(3002, player_b);
+    TEST_ASSERT(manager.find_session(3002) == session_b2, "new id bound");
+    TEST_ASSERT(manager.find_session(3001) == nullptr, "old id evicted");
+    TEST_ASSERT(manager.session_count() == 1, "single live session invariant");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_world_create_scene_and_instance() {
     std::cout << "Running: test_world_create_scene_and_instance..." << std::endl;
 
@@ -618,6 +659,7 @@ int main() {
     run(test_session_locator_bind_and_unbind);
     run(test_world_session_manager_lifecycle);
     run(test_world_session_manager_relogin_supersedes);
+    run(test_world_session_manager_session_id_reuse);
     run(test_world_create_scene_and_instance);
     run(test_scene_transfer_end_to_end);
     run(test_scene_transfer_prepare_rejections);

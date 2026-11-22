@@ -9,11 +9,26 @@ WorldSessionManager::SessionPtr WorldSessionManager::create_session(
 
     // 同玩家顶号（D10 case 4 唯一资料写入者）：新会话号落表前撤销已被顶替
     // 的旧会话——旧会话号从此 find_session 归 null，其迟到模拟输入/结算
-    // 不再解析到玩家（「旧会话撤销后仅新会话可写」）。同号重入（find_session
-    // 命中路径不调 create_session）不受影响；跨玩家同号（不应发生）也不顶。
+    // 不再解析到玩家（「旧会话撤销后仅新会话可写」）。
     if (const auto it = player_index_.find(player_id);
         it != player_index_.end() && it->second != session_id) {
         evict_superseded_session(it->second);
+    }
+
+    // 会话号复用（网关重启归基址重发旧号）：同号已属其他玩家——撤销旧行，
+    // 不静默覆写（跨玩家串号破坏「一行一号/一行一玩家」双不变量）。复用
+    // 既有顶号 helper：旧会话置终态并摘除其玩家索引，随后本号可安全接管。
+    if (const auto it = sessions_.find(session_id);
+        it != sessions_.end() && it->second->player_id() != player_id) {
+        evict_superseded_session(session_id);
+    }
+
+    // 同号同玩家重入（顶号后旧号仍驻表、或调用方重复声明）：幂等返回既有
+    // 会话行，不新建不覆写（避免调用方持有旧对象与新行脱节）；索引同步
+    // 写回，防未来顶号路径漂移导致「号在表、玩家索引失准」。
+    if (const auto it = sessions_.find(session_id); it != sessions_.end()) {
+        player_index_[player_id] = session_id;
+        return it->second;
     }
 
     auto session = std::make_shared<WorldSession>(session_id, player_id);
