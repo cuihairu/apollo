@@ -22,16 +22,24 @@ void SettlementLedger::set_confirmation_sink(ConfirmationSink sink) {
     confirmation_sink_ = std::move(sink);
 }
 
+void SettlementLedger::set_intent_sink(IntentSink sink) {
+    intent_sink_ = std::move(sink);
+}
+
 SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
                                                      std::int64_t score) {
     auto it = entries_.find(player_id);
     if (it == entries_.end()) return ApplyError::UnknownPlayer;
     if (it->second.applied) return ApplyError::AlreadyApplied;
     it->second.attempted = true;
+    // 已定分值 = 意图（D13 pending 自动重驱动）：结算段裁决即记——无论业务
+    // 面是否受理，未确认成员的分值据此重驱动（重发 958 同结算 ID）。未落账
+    // 时保留供 retry 重提；落账收口清零。
+    it->second.score = score;
+    if (intent_sink_) intent_sink_(player_id, score);
     // 凭据持久提交先于业务入账（真实奖励持久化）：未提交 = 挂账待补，
     // 绝不无凭据入账；重试同路径重提，提交方须幂等。
     if (credential_sink_ && !credential_sink_(player_id, score)) {
-        it->second.score = score;
         return ApplyError::AvatarUnavailable;
     }
     // 业务受理出口（P1 结算迁入）：锚点写权在 Base——落账唯一路径 = 分值经
@@ -39,12 +47,10 @@ SettlementLedger::ApplyError SettlementLedger::apply(std::uint64_t player_id,
     // 纪律）。Ok = 已受理收口；其余 = 挂账待补（分值保留，retry 同路径重
     // 提）。未装配业务面 = 无落账路径，同样挂账不落（分值保留待补账）。
     if (!business_sink_) {
-        it->second.score = score;
         return ApplyError::AvatarUnavailable;
     }
     const auto rc = business_sink_(player_id, score, settlement_id_);
     if (rc != ApplyError::Ok) {
-        it->second.score = score;
         return rc;
     }
     it->second.applied = true;

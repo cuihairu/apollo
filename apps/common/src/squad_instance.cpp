@@ -46,11 +46,31 @@ void SquadInstanceService::set_settlement_record_dir(const std::string& dir) {
 std::size_t SquadInstanceService::ingest_restored_settlement_records() {
     if (!record_store_) return 0;
     std::size_t pending = 0;
-    for (auto& record : record_store_->load_all()) {
+    for (const auto& record : record_store_->load_all()) {
         // 恢复扫描（D13 §2.2 故障注入 3「进程重启」）：pending = 未持久确认
         // 的唯一记录——保留待重试/对账，计数供宿主日志；cancelled/done 只
         // 留档（done 已删、cancelled 不发奖励），不驱动、不自动重发。
-        if (record.lifecycle == SettlementLifecycle::Pending) ++pending;
+        if (record.lifecycle != SettlementLifecycle::Pending) continue;
+        ++pending;
+        // pending 自动重驱动（D13）：intent 已知（分值已定）而未确认的成员
+        // 重发 958——同结算 ID，Base 去重环兜底不双记（已发不重发、未发补
+        // 齐）；业务面暂不可受理（离线/迁移/传输不可达）挂账保留待下次扫描。
+        // 无业务面（未装配）或成员无 intent（奖励未裁决 = 人工修复面）不
+        // 自动驱动，记录保留。
+        if (!business_sink_) continue;
+        std::size_t confirmed = record.confirmed.size();
+        for (const auto& [player, score] : record.intent) {
+            if (record.confirmed.count(player)) continue;
+            if (business_sink_(player, score, record.settlement_id) ==
+                SettlementLedger::ApplyError::Ok &&
+                record_store_->confirm(record.settlement_id, player, score)) {
+                ++confirmed;
+            }
+        }
+        // 全部所需持久确认完成才删唯一记录（D13 §2.1）。
+        if (!record.members.empty() && confirmed == record.members.size()) {
+            (void)record_store_->complete(record.settlement_id);
+        }
     }
     return pending;
 }
@@ -514,6 +534,13 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
         if (record_store_) {
             (void)record_store_->open(instance->id(), request.party_id,
                                       local_world_id_, instance->id(), members);
+            // 意图面（D13 pending 自动重驱动）：分值刚定（结算段裁决）即记
+            // 持久意图——重启后未确认成员据此重驱动（重发 958 同结算 ID）。
+            ledger->set_intent_sink(
+                [store = record_store_.get(), sid = instance->id()](
+                    std::uint64_t player_id, std::int64_t score) {
+                    (void)store->set_intent(sid, player_id, score);
+                });
             ledger->set_confirmation_sink(
                 [store = record_store_.get(), sid = instance->id(),
                  ledger_ptr = ledger.get()](std::uint64_t player_id,

@@ -9,6 +9,12 @@
 // / cancelled（失败取消不发成功奖励，已发部分进后续处理状态——记录保留，
 // 不静默删）。
 //
+// 「应发什么」的持久面：`intent` 记逐成员**已定分值**（结算段已裁决奖励，
+// 与业务面是否受理无关）——重启后未确认成员的分值不随之丢失，恢复扫描才能
+// 重驱动（重发 958 同结算 ID，Base 去重环兜底不双记）。`confirmed` 是 intent
+// 的确认子集（intent ⊇ confirmed）。分值未裁决的成员无 intent——奖励未定，
+// 属人工修复面，不自动驱动。
+//
 // 目录 = World 数据域下 settlement_records/；每份 settlement_<id>.rec，
 // 行式 "<key> <value...>"（人类可查、解析零依赖）；写 = tmp + rename 原子
 // 替换（Windows 覆盖 rename 对已存在目标必败，先删后替）。并发口径与账本
@@ -35,6 +41,9 @@ struct SettlementRecord {
     std::uint64_t instance_id = 0;
     SettlementLifecycle lifecycle = SettlementLifecycle::Pending;
     std::vector<std::uint64_t> members;  // 受理名册（结算意图）
+    // 已定分值的玩家 → 分值（应发什么）：结算段裁决即记，与业务面是否受理
+    // 无关——重启后未确认成员重驱动（自动重发）的分值来源。intent ⊇ confirmed。
+    std::unordered_map<std::uint64_t, std::int64_t> intent;
     // 已持久确认玩家 → 分值与结算名册对齐（幂等回执，不双记）。
     std::unordered_map<std::uint64_t, std::int64_t> confirmed;
 };
@@ -53,6 +62,13 @@ public:
     // false = 未持久提交——调用面据此不撤账本已落标记（账本为权威）。
     bool confirm(std::uint64_t settlement_id, std::uint64_t player_id,
                  std::int64_t score);
+
+    // 逐玩家记已定分值（应发什么；D13 pending 自动重驱动）：结算段裁决
+    // 即记，与业务面是否受理无关（幂等：同玩家重复同值无副作用）。重启后
+    // 恢复扫描据此重驱动未确认成员（intent 已知、confirmed 缺位 = 重发）。
+    // false = 无此记录（open 未落/已终局）——调用面忽略。
+    bool set_intent(std::uint64_t settlement_id, std::uint64_t player_id,
+                    std::int64_t score);
 
     // 全部所需持久确认完成 → done 并删除唯一记录（D13 §2.1：只有全部所需
     // 持久确认完成才删除唯一记录）。无此记录亦返回 true（已不在）。

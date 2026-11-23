@@ -228,9 +228,11 @@ public:
     // 不发成功奖励、已发部分随记录保留（后续处理状态）。未设置 = 无恢复
     // 记录面（测试桩兼容，零回归）。
     void set_settlement_record_dir(const std::string& dir);
-    // 重启恢复扫描：装载既有记录，返回 pending（未持久确认——保留唯一
-    // 记录待重试/对账）份数。cancelled/done 留档不驱动；pending 不自动重发
-    // （重发归后续修复流程——先删记录会永久漏奖且无法追查，故宁可留）。
+    // 重启恢复扫描：装载既有记录并**自动重驱动** pending（未持久确认——
+    // intent 已知而未确认的成员重发 958 同结算 ID，Base 去重环兜底不双记；
+    // 全部所需确认完成才删唯一记录）；奖励未裁决（无 intent）的成员不自动
+    // 驱动（人工修复面），记录保留；cancelled/done 留档不驱动。
+    // 返回扫描到的 pending 份数（先删记录会永久漏奖且无法追查，故宁可留）。
     std::size_t ingest_restored_settlement_records();
     // 恢复记录查询（验收/审计面）：有记录返回其生命周期态，无 = nullopt。
     [[nodiscard]] std::optional<SettlementLifecycle> settlement_record_state(

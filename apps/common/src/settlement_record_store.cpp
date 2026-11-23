@@ -65,6 +65,9 @@ bool SettlementRecordStore::write(const SettlementRecord& record) const {
         for (const auto member : record.members) {
             out << "member " << member << '\n';
         }
+        for (const auto& [player, score] : record.intent) {
+            out << "intent " << player << ' ' << score << '\n';
+        }
         for (const auto& [player, score] : record.confirmed) {
             out << "confirm " << player << ' ' << score << '\n';
         }
@@ -134,6 +137,12 @@ std::optional<SettlementRecord> SettlementRecordStore::read(const std::string& p
             if (probe >> member) {
                 record.members.push_back(member);
             }
+        } else if (key == "intent") {
+            std::uint64_t player = 0;
+            std::int64_t score = 0;
+            if (probe >> player >> score) {
+                record.intent[player] = score;
+            }
         } else if (key == "confirm") {
             std::uint64_t player = 0;
             std::int64_t score = 0;
@@ -177,6 +186,18 @@ bool SettlementRecordStore::confirm(std::uint64_t settlement_id, std::uint64_t p
         return false;  // 无意图记录——确认无主（不应发生；调用面据此不撤账本标记）
     }
     record->confirmed[player_id] = score;
+    return write(*record);
+}
+
+bool SettlementRecordStore::set_intent(std::uint64_t settlement_id,
+                                       std::uint64_t player_id,
+                                       std::int64_t score) {
+    const auto path = path_for(settlement_id);
+    auto record = read(path);
+    if (!record) {
+        return false;  // 无意图记录（open 未落/已终局回收）——调用面忽略
+    }
+    record->intent[player_id] = score;
     return write(*record);
 }
 

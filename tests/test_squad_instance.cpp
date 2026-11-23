@@ -1701,6 +1701,151 @@ bool test_squad_settlement_record_base_unreachable_retries() {
     return true;
 }
 
+bool test_squad_settlement_record_redrive_after_restart() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 5);
+    const auto dir = make_tmp_dir("rec_redrive");
+    std::uint64_t instance_id = 0;
+    // Base 长期态跨服务实例持久（进程重启只重启 cell 服务，Base 不重启）——
+    // 同表贯穿两代次，重驱动只补未确认成员、已确认不重发。
+    auto table = make_business_table({kLeader, kMemberB, kMemberC});
+
+    // 代次一：三分值全部已裁决（intent 记），但 B/C 业务面未受理（挂账）——
+    // 进程在结算收口前消亡，记录留盘（intent 3、confirmed 1）。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        table.missing = {kMemberB, kMemberC};
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(5)).error == LaunchError::Ok,
+                    "launched");
+        instance_id = service.find_by_party(5)->instance_id;
+        TEST_ASSERT(service.credit_settlement(5, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        TEST_ASSERT(service.credit_settlement(5, kMemberB, 20) ==
+                        squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                    "member B held");
+        TEST_ASSERT(service.credit_settlement(5, kMemberC, 30) ==
+                        squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                    "member C held");
+        // 意图已记（分值已定）而确认只 1——未确认成员的意图已在记录。
+        {
+            squad_instance::SettlementRecordStore probe(dir);
+            for (const auto& r : probe.load_all()) {
+                if (r.settlement_id == instance_id) {
+                    TEST_ASSERT(r.intent.size() == 3 && r.confirmed.size() == 1,
+                                "intent recorded for all, confirmed only leader");
+                }
+            }
+        }
+    }
+
+    // 代次二（Base 恢复）：恢复扫描自动重驱动——B/C 分值已定（intent），
+    // 重发 958 同结算 ID → 确认补齐 → 全部所需确认完成 → 唯一记录删除。
+    // leader 已确认不重发（不双记）；B/C 首次受理（重驱动即补发）。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        table.missing.clear();
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.ingest_restored_settlement_records() == 1,
+                    "one pending re-driven");
+        TEST_ASSERT(!service.settlement_record_state(instance_id).has_value(),
+                    "record reclaimed after redrive");
+        TEST_ASSERT(exp_of(table, kLeader) == 40 && exp_of(table, kMemberB) == 20 &&
+                        exp_of(table, kMemberC) == 30,
+                    "redrive credits all, no double");
+        TEST_ASSERT(table.submits[kLeader] == 1 &&
+                        table.submits[kMemberB] == 1 && table.submits[kMemberC] == 1,
+                    "leader not re-submitted, B/C submitted once each");
+        TEST_ASSERT(table.duplicates[kMemberB] == 0 && table.duplicates[kMemberC] == 0,
+                    "redrive is first accept for held members");
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+bool test_squad_settlement_record_redrive_base_still_unreachable() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 6);
+    const auto dir = make_tmp_dir("rec_redrive_down");
+    std::uint64_t instance_id = 0;
+    // Base 长期态跨服务实例持久（同表贯穿）。
+    auto table = make_business_table({kLeader, kMemberB, kMemberC});
+
+    // 代次一：leader 确认，B/C 分值已定但业务面未受理（挂账）。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        table.missing = {kMemberB, kMemberC};
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(6)).error == LaunchError::Ok,
+                    "launched");
+        instance_id = service.find_by_party(6)->instance_id;
+        TEST_ASSERT(service.credit_settlement(6, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        TEST_ASSERT(service.credit_settlement(6, kMemberB, 20) ==
+                        squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                    "member B held");
+        TEST_ASSERT(service.credit_settlement(6, kMemberC, 30) ==
+                        squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                    "member C held");
+    }
+
+    // 代次二：Base 仍暂不可达——重驱动挂账保留（intent 已知、confirmed 缺位），
+    // 记录 pending 不删（不因暂不可达漏奖）；再次扫描（Base 恢复）补齐删除。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        table.missing = {kMemberB, kMemberC};
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.ingest_restored_settlement_records() == 1,
+                    "pending kept while base unreachable");
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Pending,
+                    "record retained while base unreachable");
+        {
+            squad_instance::SettlementRecordStore probe(dir);
+            for (const auto& r : probe.load_all()) {
+                if (r.settlement_id == instance_id) {
+                    TEST_ASSERT(r.confirmed.size() == 1,
+                                "only leader confirmed while base down");
+                }
+            }
+        }
+        TEST_ASSERT(exp_of(table, kLeader) == 40 &&
+                        exp_of(table, kMemberB) == 0 && exp_of(table, kMemberC) == 0,
+                    "leader credit persists, held credits not delivered while down");
+
+        // Base 恢复 → 再次恢复扫描自动补齐 → 全量确认 → 记录删除
+        table.missing.clear();
+        TEST_ASSERT(service.ingest_restored_settlement_records() == 1,
+                    "second scan re-drives");
+        TEST_ASSERT(!service.settlement_record_state(instance_id).has_value(),
+                    "record reclaimed once base recovers");
+        TEST_ASSERT(exp_of(table, kMemberB) == 20 && exp_of(table, kMemberC) == 30,
+                    "held credits delivered after recovery");
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
 bool test_squad_settlement_credential_failure_holds_ledger() {
     PartyManager parties;
     World world;
@@ -2228,6 +2373,10 @@ int main() {
          test_squad_settlement_record_complete_and_cancel_lifecycle},
         {"squad_settlement_record_base_unreachable_retries",
          test_squad_settlement_record_base_unreachable_retries},
+        {"squad_settlement_record_redrive_after_restart",
+         test_squad_settlement_record_redrive_after_restart},
+        {"squad_settlement_record_redrive_base_still_unreachable",
+         test_squad_settlement_record_redrive_base_still_unreachable},
         {"squad_settlement_credential_replay_dedup_across_restart",
          test_squad_settlement_credential_replay_dedup_across_restart},
         {"squad_settlement_credential_failure_holds_ledger",
