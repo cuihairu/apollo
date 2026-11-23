@@ -37,6 +37,30 @@ std::uint64_t CellApp::resolve_scene_id(std::uint64_t space_id) const {
     return route != spaceToScene_.end() ? route->second : defaultSceneId_;
 }
 
+std::uint64_t CellApp::space_of_player(std::uint64_t player_id) const {
+    // Avatar 挂 scene 归属是唯一权威（scene_transfer 的会话 space 字段只是
+    // 路由投影，不在此反推）——逐 scene 反查 has_avatar，再经 spaceToScene_
+    // 反查 space（默认 Space 未登记路由 → 0，与「未登记=回落默认」口径一致）。
+    apollo::game::core::PlayerId pid{player_id};
+    apollo::game::world::Scene* holder = nullptr;
+    for (apollo::game::world::Scene* scene : world_->scenes()) {
+        if (scene != nullptr && scene->has_avatar(pid)) {
+            holder = scene;
+            break;
+        }
+    }
+    if (holder == nullptr) {
+        return 0;
+    }
+    const auto holder_scene = holder->scene_id();
+    for (const auto& [space_id, target_scene] : spaceToScene_) {
+        if (target_scene == holder_scene) {
+            return space_id;
+        }
+    }
+    return 0;  // 默认 Space（未登记路由）
+}
+
 apollo::game::world::SceneDescriptor space_descriptor_for(const WorldAppConfig& config,
                                                           std::uint64_t space_id,
                                                           const std::string& name) {

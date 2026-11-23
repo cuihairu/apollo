@@ -10,6 +10,7 @@
 #include "world_app/m1_link_server.hpp"
 #include "apollo/script/module_rollout.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <algorithm>
@@ -61,6 +62,18 @@ struct CellHost {
     std::int32_t drain_state = 0;
     std::uint64_t drain_deadline_ms = 0;
     std::string drain_detail;
+    // 显式换场观测面（L135/D15 真链路验证）：cell 的 scene 表单写者 = 内核
+    // 线程，测试线程直读即数据竞争——post_tick（= 内核线程）采样被跟踪玩家
+    // 所在 Space 并经 atomic 发布（同 reportedReady/reportedLoad 纪律）。
+    // observedPlayer_ = 0 未跟踪（不采样、不发布）。
+    std::atomic<std::uint64_t> observedPlayer_{0};
+    std::atomic<std::uint64_t> observedSpace_{0};
+    void observe_player_space(std::uint64_t player_id) {
+        observedPlayer_.store(player_id, std::memory_order_release);
+    }
+    std::uint64_t observed_space() const {
+        return observedSpace_.load(std::memory_order_acquire);
+    }
 
     bool start(std::uint16_t world_m1_port, std::uint64_t cell_id = 21,
                std::uint16_t port = 0,
@@ -165,6 +178,14 @@ struct CellHost {
                 for (const auto& space_id : cell->takeCompletedReclaims()) {
                     register_client->sendSpaceReclaim(space_id);
                 }
+            }
+            // 显式换场观测采样（L135/D15 真链路验证）：post_tick = 内核线程，
+            // 读 scene 表合法；经 atomic 发布供测试线程读（同 reportedReady
+            // 纪律；未跟踪玩家 = 0 不采样）。
+            if (const auto pid = observedPlayer_.load(std::memory_order_acquire);
+                pid != 0) {
+                observedSpace_.store(cell->space_of_player(pid),
+                                     std::memory_order_release);
             }
             auto* squads = cell->squadInstanceService();
             if (squads == nullptr || drain_state != 1) {

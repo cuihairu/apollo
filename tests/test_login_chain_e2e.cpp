@@ -743,8 +743,9 @@ bool login_chain_two_cell_space_routing() {
     wconfig.m1Port = 0;
     wconfig.m1RouteJson = kRouteJson;
     wconfig.tickRateMs = 20;
-    // 池含临时 Instance 504:instance（需 0x2，D14 设计 §2.2「504 归 cell-22」）
-    wconfig.assignSpaces = {{501, 0x1}, {503, 0x2}, {504, 0x2}};
+    // 池含 502（需 0x1 → 与 501 同归 cell-21，D15 显式换场「同 cell 两 Space」
+    // 落点）与临时 Instance 504:instance（需 0x2，D14 设计 §2.2「504 归 cell-22」）
+    wconfig.assignSpaces = {{501, 0x1}, {502, 0x1}, {503, 0x2}, {504, 0x2}};
     auto world = std::make_unique<world_app::WorldApp>(wconfig);
     world->start();
     TEST_ASSERT(world->isRunning(), "world starts");
@@ -768,17 +769,19 @@ bool login_chain_two_cell_space_routing() {
     cell22.pump_until_registered();
     TEST_ASSERT(cell22.registered(), "cell-22 registered with world");
 
-    // ⑤ 权威归属：501→cell-21、503/504→cell-22（能力位裁决，非首就绪独占——
-    // cell-21 无 0x2 不落 503/504，cell-22 无 0x1 不落 501）。
+    // ⑤ 权威归属：501/502→cell-21、503/504→cell-22（能力位裁决，非首就绪独占
+    // ——cell-21 无 0x2 不落 503/504，cell-22 无 0x1 不落 501/502）。
     TEST_ASSERT(wait_until([&] {
                     const auto* a501 = world->find_space_assignment(501);
+                    const auto* a502 = world->find_space_assignment(502);
                     const auto* a503 = world->find_space_assignment(503);
                     const auto* a504 = world->find_space_assignment(504);
                     return a501 != nullptr && a501->cell_id == 21
+                           && a502 != nullptr && a502->cell_id == 21
                            && a503 != nullptr && a503->cell_id == 22
                            && a504 != nullptr && a504->cell_id == 22;
                 }, 5000),
-                "world assigns 501->21 and 503/504->22 by capability");
+                "world assigns 501/502->21 and 503/504->22 by capability");
 
     // ⑥ 登录登记表投影（L120 既有注入口径：World 未直连本 login 的 968 拨号，
     // 端点取各 cell 真实 M1 监听端点——L122 同源）。
@@ -939,6 +942,37 @@ bool login_chain_two_cell_space_routing() {
     TEST_ASSERT(world->find_reclaim_confirmation(503) == nullptr,
                 "occupied 503 not destroyed (no receipt)");
     ctl.stop();
+
+    // ⑱ D15 显式换场真链路验证（L135）：同 cell 两 Space（501/502 均归
+    // cell-21）间离场重建换场——真实客户端经 gateway→World→cell-21 发
+    // cell_cross_border，scene_transfer 走完 prepare→begin→detach→attach→
+    // complete（离场重建 Avatar，易失态不带走），1001 从 501 的 scene 迁到
+    // 502 的 scene。失败返回面：目标 Space 不在本 cell 路由（503 归 cell-22）
+    // → prepare 显式驳回（非静默同场搬运），1001 留在 502。观测走
+    // CellHost 的内核线程采样发布面（scene 表单写者 = 内核线程）。
+    cell21.observe_player_space(1001);
+    TEST_ASSERT(wait_until([&] { return cell21.observed_space() == 501; }, 5000),
+                "1001 observed in 501 before explicit change");
+    protocol::CellCrossBorder xborder;
+    xborder.entityId = 0;  // 会话在场即由会话解析玩家号（实体号仅缺失时反查）
+    xborder.fromSpace = 501;
+    xborder.toSpace = 502;
+    xborder.position = protocol::Position(10.f, 0.f, 10.f);
+    c1.sendAll(frame_bytes(3, 0,
+        protocol::MessageCodec::encode(xborder, session1)));
+    TEST_ASSERT(wait_until([&] { return cell21.observed_space() == 502; }, 8000),
+                "explicit change moved 1001 from 501 to 502 (real link)");
+    // 失败返回：目标 503 归 cell-22（本 cell 无路由）→ 驳回，1001 留在 502。
+    protocol::CellCrossBorder rejected;
+    rejected.entityId = 0;
+    rejected.fromSpace = 502;
+    rejected.toSpace = 503;
+    rejected.position = protocol::Position(10.f, 0.f, 10.f);
+    c1.sendAll(frame_bytes(4, 0,
+        protocol::MessageCodec::encode(rejected, session1)));
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+    TEST_ASSERT(cell21.observed_space() == 502,
+                "transfer to space owned by another cell rejected (stays in 502)");
 
     gateway.stop();
     cell21.stop();

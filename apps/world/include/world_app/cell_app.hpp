@@ -210,6 +210,13 @@ public:
         return spaceToScene_.find(space_id) != spaceToScene_.end();
     }
     std::size_t space_count() const { return spaceToScene_.size(); }
+    // 玩家当前所在 Space（L135/D15 显式换场真链路观测面）：Avatar 挂 scene
+    // 归属是唯一权威（scene_transfer 的会话 space 字段只是路由投影，不在此
+    // 反推）——逐 scene 反查 has_avatar 后经 spaceToScene_ 反查 space。同
+    // find_scene 的内核线程上下文约束（跨线程读 scene 表即数据竞争）；宿主
+    // 在 tick 边界采样后经自身发布面供测试线程读。0 = 不在册 / 在默认 Space
+    //（未登记路由，spaceToScene_ 无对应 scene）。
+    std::uint64_t space_of_player(std::uint64_t player_id) const;
 
     squad_instance::SquadInstanceService* squadInstanceService() noexcept {
         return squadInstanceService_.get();
