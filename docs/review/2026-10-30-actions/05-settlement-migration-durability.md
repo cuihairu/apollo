@@ -41,7 +41,7 @@
 
 > 明确不做：延后高级自动补偿策略；不把网络超时当成支付或奖励必然失败。
 
-> 单 Base 路径首切片 2026-11-23 已落地（commit cd8849d4，见 todo.md L133）：唯一结算意图记录以稳定结算 ID（= Instance ID）为键持久化（`SettlementRecordStore`，settlement_records/settlement_<id>.rec，生命周期 pending/done/cancelled），逐玩家落账确认经账本 `ConfirmationSink` 写入、全部名册成员 applied 即 done 并删记录（只有全部所需确认才删）；失败取消（全员退出/策略收尾/超时）置 cancelled 不发成功奖励、已发部分随记录保留；重启恢复扫描计数 pending 不自动重发。故障注入覆盖（单 Base 路径）：#1 Base 暂不可达（挂账 pending→重试补齐→done）、#2 回执丢失（同 ID 重试不重复，随 L132 c5966bbe）、#3 进程重启（恢复扫描见 pending）、#4 解散/超时（cancelled 不发奖励）；#5 奖励数核对（确认位与账本 applied 对齐，无漏发/重发）部分覆盖。**仍缺**（另起批）：逐 Base 独立持久确认编排（多 Base/部分成功，D12 #2）、pending 自动重驱动（重试节奏/修复流程）、已发部分补偿/核对面。
+> 单 Base 路径首切片 2026-11-23 已落地（commit cd8849d4，见 todo.md L133）：唯一结算意图记录以稳定结算 ID（= Instance ID）为键持久化（`SettlementRecordStore`，`settlement_records/settlement_<id>.rec`，生命周期 pending/done/cancelled），逐玩家落账确认经账本 `ConfirmationSink` 写入、全部名册成员 applied 即 done 并删记录（只有全部所需确认才删）；失败取消（全员退出/策略收尾/超时）置 cancelled 不发成功奖励、已发部分随记录保留；重启恢复扫描计数 pending 不自动重发。故障注入覆盖（单 Base 路径）：#1 Base 暂不可达（挂账 pending→重试补齐→done）、#2 回执丢失（同 ID 重试不重复，随 L132 c5966bbe）、#3 进程重启（恢复扫描见 pending）、#4 解散/超时（cancelled 不发奖励）；#5 奖励数核对（确认位与账本 applied 对齐，无漏发/重发）部分覆盖。**仍缺**（另起批）：逐 Base 独立持久确认编排（多 Base/部分成功，D12 #2）、pending 自动重驱动（重试节奏/修复流程）、已发部分补偿/核对面。
 
 ## 3. D16 · 迁移状态机与冻结提交顺序
 
