@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "ce00cf663e0ed96c89bbaebd400a87b0b20beaefc2bdf10dafa253acf4585b79",
+  "schema_hash": "0f0d2ee6b66c1aa296285e9a961a8cbbff4f39f5d96282d84cbf359be37ac967",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "8b2f40d5b6dd44c699b232c96bab78961f0b5a2f6d48c0f7e266e3b915ac526c",
+  "internal_hash": "5e11828af82664967e6c1a58d70fe210c99326d820fcf31db7f8237e13eb6afc",
   "contract_version": 3,
   "aliases": [
     {
@@ -3898,6 +3898,41 @@
         }
       ],
       "desc": "Space 执行位置投影（World→loginServer M1 目录投影面；L115 位置投影首切片）：journal A 行已提交的归属事实逐条投影——claim/reclaim 推 ready=1、release 推 cell_id=0 ready=0 墓碑；目录按 (world_id, space_id) 复合键以 assignment_version 水位幂等受理（重复忽略/乱序拒/墓碑命中水位即抹除），重启由 World kUp 重放全量视图重建；目录不另行分配 Cell——分配事实源仍是 World 管理面（962/journal）；裸帧受理同 960/962 惯例，无回执（水位幂等即裁决载体）"
+    },
+    {
+      "id": 969,
+      "name": "cell_space_reclaim_done",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（调用方单调分配，0 保留）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回执方 cell 的 logical_id（与 960 logical_id 同源）"
+        },
+        {
+          "name": "start_epoch",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回执方进程启动代次（与 960 start_epoch 同源——旧化身后置丢弃）"
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "已本地销毁的 Space"
+        }
+      ],
+      "desc": "cell 远端销毁回执（cell→World M1 管理面；L134 两 cell 回收确认批）：962 ready=0 撤销标记驱动的 remove_space 成功后逐 Space 上发一帧——远端回收有确认（D14 断言 #4），World 侧记账即确认面；无专用下行（962 全池权威视图即裁决载体同 967 惯例）；裸帧受理同 967 惯例"
     }
   ],
   "entities": [

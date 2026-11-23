@@ -37,6 +37,7 @@ constexpr std::uint16_t kRegisterRequestId = id_of(MsgId::cell_register_request)
 constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
+constexpr std::uint16_t kSpaceReclaimId = id_of(MsgId::cell_space_reclaim_done);
 constexpr std::uint16_t kDebugEvalRequestId = id_of(MsgId::debug_eval_request);
 constexpr std::uint16_t kModuleRolloutRequestId = id_of(MsgId::module_rollout_request);
 constexpr std::uint16_t kWorldDrainRequestId = id_of(MsgId::world_drain_request);
@@ -364,8 +365,18 @@ private:
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
             const auto it = applied_assigns_.find(rec.space_id);
-            if (it != applied_assigns_.end() && rec.version <= it->second.version) {
-                return;  // 重推/旧推——版本不前进不触发
+            if (it != applied_assigns_.end()) {
+                const bool version_advances = rec.version > it->second.version;
+                // 释放墓碑放行（L134 两 cell 回收确认批）：release 版本不变
+                //（owner=0，D03 设计「释放 版本不变」），同版本 ready=0 撤销
+                // 标记会被版本闸吞——原主永远收不到释放通知（beginCellRetire
+                // 注记的「随下次重认领收敛」在 retire/无合格候选时永不收敛）。
+                // 放行 ready 1→0 迁移一次（释放事件）；落库后本端 ready=0，
+                // 后续同版本重推再被闸（不重放不重发 969）。
+                const bool release_tombstone = !rec.ready && it->second.ready;
+                if (!version_advances && !release_tombstone) {
+                    return;  // 重推/旧推——版本不前进且非释放迁移不触发
+                }
             }
             applied_assigns_[rec.space_id] = rec;
             fn = assign_listener_;
@@ -598,6 +609,29 @@ private:
             return;
         }
         l->send(kClientDeliverId, packed.data(), packed.size(),
+                link::SendClass::kReliable);
+    }
+
+    void sendSpaceReclaim(std::uint64_t space_id) override {
+        // 969 远端销毁回执（L134 两 cell 回收确认批）：本地 remove_space
+        // 成功（scene 已销毁）后 Reliable 发回 World——World 凭此确认远端
+        // 回收已生效（D14 断言 #4）。链路未连 = 尽力面跳过（无专用下行，
+        // 漏收的确认随后续回收重发）。cell_id/start_epoch 与 960 同源
+        //（config_ 自报面，World 侧登记裁决同 967）。
+        auto* l = manager_ ? manager_->link("world") : nullptr;
+        if (l == nullptr || space_id == 0 || l->state() != link::LinkState::kUp) {
+            return;
+        }
+        std::vector<wire::FieldValue> f(4);
+        f[0].integer = static_cast<std::int64_t>(++next_request_id_);
+        f[1].integer = static_cast<std::int64_t>(config_.cell_id);
+        f[2].integer = static_cast<std::int64_t>(config_.start_epoch);
+        f[3].integer = static_cast<std::int64_t>(space_id);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kSpaceReclaimId, f, payload)) {
+            return;
+        }
+        l->send(kSpaceReclaimId, payload.data(), payload.size(),
                 link::SendClass::kReliable);
     }
 

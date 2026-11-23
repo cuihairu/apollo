@@ -158,6 +158,14 @@ struct CellHost {
                     }
                 }
             }
+            // 远端销毁回执（L134 两 cell 回收确认批）：tick 边界取走内核
+            // 线程入队的已腾空销毁，逐条经注册连接发 969 给 World（同生产
+            // cell 宿主 post_tick 纪律；须在下方 drain 早退分支之前）。
+            if (register_client) {
+                for (const auto& space_id : cell->takeCompletedReclaims()) {
+                    register_client->sendSpaceReclaim(space_id);
+                }
+            }
             auto* squads = cell->squadInstanceService();
             if (squads == nullptr || drain_state != 1) {
                 return;
@@ -213,6 +221,26 @@ struct CellHost {
         if (!register_client) {
             return false;
         }
+        // 962 Space 归属视图应用面（L134 两 cell 回收确认批；同生产 cell 宿主
+        // 纪律）：ready=1 且归属本 cell = 建 scene + 取消陈旧待撤；ready=0 或
+        // 归属它方 = 让渡——真持有才入待撤表（从未认领过该 Space 的 cell 见
+        // 它方归属不得空入表），占用中 remove_space 拒绝保持路由、下一拍再试。
+        register_client->setSpaceAssignListener(
+            [this](const world_app::SpaceAssignRecord& rec) {
+                if (!rec.ready || rec.assigned_cell_id != config.cellId) {
+                    if (!cell->hosts_space(rec.space_id)) {
+                        return;
+                    }
+                    cell->request_space_revoke(rec.space_id);
+                    return;
+                }
+                cell->cancel_space_revoke(rec.space_id);
+                cell->add_space(
+                    rec.space_id,
+                    world_app::space_descriptor_for(
+                        config, rec.space_id,
+                        world_app::declared_space_name(config, rec.space_id)));
+            });
         register_client->set_intent_listener(
             [this](const std::vector<std::uint8_t>& payload) {
                 world_app::IntentEnvelope intent;

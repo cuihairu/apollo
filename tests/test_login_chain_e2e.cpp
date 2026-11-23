@@ -23,15 +23,24 @@
 #include "cell_host.hpp"
 #include "store_host.hpp"
 #include "apollo/net/link/frame.hpp"
+#include "apollo/net/link/route_json.hpp"
+#include "apollo/net/wire/contract_wire.hpp"
+#include "apollo_contract.h"
 #include "apollo/protocol/codec.hpp"
 #include "apollo/protocol/messages.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -57,12 +66,16 @@ namespace {
 
 namespace netlink = apollo::net::link;
 namespace protocol = apollo::protocol;
+namespace wire = apollo::net::wire;
 
 #if !defined(_WIN32)
 
 const auto kTick = std::chrono::milliseconds(2);
 
 const char* kRouteJson = APOLLO_TEST_ROUTE_JSON;
+
+using apollo::contract::gen::MsgId;
+constexpr std::uint16_t id_of(MsgId id) { return static_cast<std::uint16_t>(id); }
 
 template <typename Pred>
 bool wait_until(Pred pred, int timeout_ms) {
@@ -185,11 +198,12 @@ protocol::MessageHeader header_of(const std::vector<std::uint8_t>& frame) {
     return protocol::MessageCodec::parseHeader(frame.data(), frame.size());
 }
 
-protocol::CellCreateEntity make_player_spawn(std::uint64_t player_id) {
+protocol::CellCreateEntity make_player_spawn(std::uint64_t player_id,
+                                             std::uint64_t space_id = 0) {
     protocol::CellCreateEntity msg;
     msg.entityId = player_id;
     msg.entityType = protocol::EntityType::PLAYER;
-    msg.spaceId = 0;
+    msg.spaceId = space_id;
     return msg;
 }
 
@@ -575,6 +589,121 @@ bool login_chain_two_gateway_concurrent() {
     return true;
 }
 
+// ---- D14 #4 远端销毁回执（L134 两 cell 回收确认批）----
+// World 管理面裸帧客户端（963 cell_retire_request → 966 回执）：release 只在
+// 过期/缩容路径触发，测试须经真实 963 缩容命令释放 Space（World 状态单写者
+// 在 M1 泵线程——不直调 beginCellRetire）。自泵线程 + 966 按 request_id 收账。
+struct WorldControlClient {
+    std::unique_ptr<netlink::RouteTable> table;
+    std::unique_ptr<netlink::LinkManager> manager;
+    std::atomic<bool> running{false};
+    std::thread pump;
+    std::mutex replies_mutex;
+    std::map<std::uint64_t, bool> retire_accepted;  // request_id → accepted
+
+    bool start(std::uint16_t world_port) {
+        table = std::make_unique<netlink::RouteTable>();
+        std::ifstream in(kRouteJson, std::ios::binary);
+        if (!in) {
+            return false;
+        }
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        if (!netlink::load_route_table_json(buffer.str(), *table)) {
+            return false;
+        }
+        netlink::LinkManagerConfig mc;
+        mc.self_name = "e2e-control";
+        mc.route_version = netlink::route_version_from_hash(table->schema_hash());
+        manager = std::make_unique<netlink::LinkManager>(mc);
+        netlink::EndpointConfig ep;
+        ep.name = "world";
+        ep.host = "127.0.0.1";
+        ep.port = world_port;
+        ep.role = netlink::EndpointRole::kActive;
+        if (!manager->add_endpoint(ep)) {
+            return false;
+        }
+        auto& dispatcher = manager->link("world")->dispatcher();
+        dispatcher.set_route_table(table.get());
+        dispatcher.allow_domain("internal");
+        dispatcher.set_handler(
+            id_of(MsgId::cell_retire_reply),
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                std::vector<wire::FieldValue> fields;
+                if (!wire::decode_payload(id_of(MsgId::cell_retire_reply), data, size,
+                                          fields)
+                    || fields.size() != 6) {
+                    return;
+                }
+                const auto request_id =
+                    static_cast<std::uint64_t>(fields[0].integer);
+                std::lock_guard<std::mutex> lock(replies_mutex);
+                retire_accepted[request_id] = fields[1].integer != 0;
+            });
+        running.store(true, std::memory_order_release);
+        pump = std::thread([this] {
+            const auto now_ms = [] {
+                return static_cast<std::uint64_t>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count());
+            };
+            while (running.load(std::memory_order_acquire)) {
+                manager->pump(now_ms());
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+        });
+        return true;
+    }
+
+    bool wait_up() const {
+        for (int i = 0; i < 3000; i += 2) {
+            if (manager != nullptr
+                && manager->link("world")->state() == netlink::LinkState::kUp) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return false;
+    }
+
+    bool send_retire(std::uint64_t request_id, std::int32_t op,
+                     std::uint64_t cell_id) {
+        auto* link = manager ? manager->link("world") : nullptr;
+        if (link == nullptr) {
+            return false;
+        }
+        std::vector<wire::FieldValue> f(3);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = op;
+        f[2].integer = static_cast<std::int64_t>(cell_id);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::cell_retire_request), f, payload)) {
+            return false;
+        }
+        link->send(id_of(MsgId::cell_retire_request), payload.data(), payload.size(),
+                   netlink::SendClass::kReliable);
+        return true;
+    }
+
+    bool accepted(std::uint64_t request_id) {
+        std::lock_guard<std::mutex> lock(replies_mutex);
+        return retire_accepted.count(request_id) != 0;
+    }
+
+    void stop() {
+        if (!running.exchange(false, std::memory_order_acq_rel)) {
+            return;
+        }
+        if (pump.joinable()) {
+            pump.join();
+        }
+        manager.reset();
+        table.reset();
+    }
+};
+
 // D14 真实多 cell 分配批（L134 首切片）：真实链路两 cell 确定性分空间与
 // 路由隔离——两个真 CellApp（cell-21 声明能力 0x1、cell-22 声明 0x2）经
 // 960/961 注册，World assignSpaces {501:0x1, 503:0x2} 按能力位全覆盖裁决
@@ -614,7 +743,8 @@ bool login_chain_two_cell_space_routing() {
     wconfig.m1Port = 0;
     wconfig.m1RouteJson = kRouteJson;
     wconfig.tickRateMs = 20;
-    wconfig.assignSpaces = {{501, 0x1}, {503, 0x2}};
+    // 池含临时 Instance 504:instance（需 0x2，D14 设计 §2.2「504 归 cell-22」）
+    wconfig.assignSpaces = {{501, 0x1}, {503, 0x2}, {504, 0x2}};
     auto world = std::make_unique<world_app::WorldApp>(wconfig);
     world->start();
     TEST_ASSERT(world->isRunning(), "world starts");
@@ -638,15 +768,17 @@ bool login_chain_two_cell_space_routing() {
     cell22.pump_until_registered();
     TEST_ASSERT(cell22.registered(), "cell-22 registered with world");
 
-    // ⑤ 权威归属：501→cell-21、503→cell-22（能力位裁决，非首就绪独占——
-    // cell-21 无 0x2 不落 503，cell-22 无 0x1 不落 501）。
+    // ⑤ 权威归属：501→cell-21、503/504→cell-22（能力位裁决，非首就绪独占——
+    // cell-21 无 0x2 不落 503/504，cell-22 无 0x1 不落 501）。
     TEST_ASSERT(wait_until([&] {
                     const auto* a501 = world->find_space_assignment(501);
                     const auto* a503 = world->find_space_assignment(503);
+                    const auto* a504 = world->find_space_assignment(504);
                     return a501 != nullptr && a501->cell_id == 21
-                           && a503 != nullptr && a503->cell_id == 22;
+                           && a503 != nullptr && a503->cell_id == 22
+                           && a504 != nullptr && a504->cell_id == 22;
                 }, 5000),
-                "world assigns 501->21 and 503->22 by capability");
+                "world assigns 501->21 and 503/504->22 by capability");
 
     // ⑥ 登录登记表投影（L120 既有注入口径：World 未直连本 login 的 968 拨号，
     // 端点取各 cell 真实 M1 监听端点——L122 同源）。
@@ -756,10 +888,13 @@ bool login_chain_two_cell_space_routing() {
                 "1002 assigned to space 503");
 
     // ⑬ 两客户端各自发 CELL_CREATE_ENTITY → gateway → world → 归属 cell。
+    // 落点空间随请求（1001→501、1002→503）——选路按目录落点空间（网关→World
+    // 按 space 路由到归属 cell），实体入归属空间真实 scene（503 占用中是
+    // D14 #4「占用不销毁」前提）。
     c1.sendAll(frame_bytes(2, 0,
-        protocol::MessageCodec::encode(make_player_spawn(1001), session1)));
+        protocol::MessageCodec::encode(make_player_spawn(1001, 501), session1)));
     c2.sendAll(frame_bytes(2, 0,
-        protocol::MessageCodec::encode(make_player_spawn(1002), session2)));
+        protocol::MessageCodec::encode(make_player_spawn(1002, 503), session2)));
 
     // ⑭ 断言：1001 到达 cell-21、1002 到达 cell-22（选路正确，D14 #1/#2）。
     TEST_ASSERT(wait_until(
@@ -782,6 +917,28 @@ bool login_chain_two_cell_space_routing() {
     TEST_ASSERT(avatar1->state() == apollo::game::base::AvatarState::Online &&
                 avatar2->state() == apollo::game::base::AvatarState::Online,
                 "both avatars online after chain");
+
+    // ⑰ D14 #4：释放 504 → cell-22 确认远端销毁（销毁回执，L134 两 cell 回收
+    // 确认批）。经真实 963 缩容命令触发释放（World 状态单写者在 M1 泵线程，
+    // 不直调 beginCellRetire）：releaseCellSpaces → 962 ready=0 撤销标记 →
+    // cell-22 remove_space 销毁 504 → 969 cell_space_reclaim_done 回执 → World
+    // 记账即确认面。503 占用中（1002 avatar 在位）拒绝销毁保持路由、无回执
+    //——确认账只落 504（销毁的是腾空的临时 Instance）。
+    WorldControlClient ctl;
+    TEST_ASSERT(ctl.start(world->m1Link().listenPort()), "world control client up");
+    TEST_ASSERT(ctl.wait_up(), "world control client linked");
+    constexpr std::uint64_t kRetireReq = 4242;
+    TEST_ASSERT(ctl.send_retire(kRetireReq, 1, 22), "retire begin frame sent");
+    TEST_ASSERT(wait_until([&] { return ctl.accepted(kRetireReq); }, 5000),
+                "world accepts retire begin for cell-22");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* conf = world->find_reclaim_confirmation(504);
+                    return conf != nullptr && conf->cell_id == 22;
+                }, 8000),
+                "cell-22 confirms remote destroy of released 504");
+    TEST_ASSERT(world->find_reclaim_confirmation(503) == nullptr,
+                "occupied 503 not destroyed (no receipt)");
+    ctl.stop();
 
     gateway.stop();
     cell21.stop();

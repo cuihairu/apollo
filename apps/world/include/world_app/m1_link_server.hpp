@@ -114,6 +114,17 @@ struct CellSpaceReport {
     std::uint64_t applied_mgmt_epoch = 0;
 };
 
+// cell 远端销毁回执（契约 969，L134 两 cell 回收确认批）：cell 宿主经注册
+// 连接反向发送——962 ready=0 撤销标记驱动 remove_space 成功后逐 Space 一帧；
+// 受理点同步记账（M1 泵上下文 = 注册表单写者），World 侧凭此确认远端回收
+//（D14 断言 #4）。无专用下行（962 全池权威视图即裁决载体，同 967 惯例）。
+struct CellSpaceReclaimDone {
+    std::uint64_t request_id = 0;     // 0 保留（静默弃）
+    std::uint64_t cell_id = 0;        // 回执方 logical_id
+    std::uint64_t start_epoch = 0;    // 回执方进程启动代次（旧化身丢弃）
+    std::uint64_t space_id = 0;
+};
+
 // cell 执行端回执（切片2 World→cell 命令转发）：cell 宿主经注册连接反向
 // 发送 945/953/957，World 的 M1LinkServer 在 cell 连接的 dispatcher 上受理
 // 并回调（入参 = 回执 + cell peer 自报名；WorldApp 按 eval_id/request_id
@@ -344,9 +355,11 @@ public:
 // （schema_hash → 握手 route_version）；解出的意图信封经 on_intent 投给宿主
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
 // module_rollout_request / 956 world_drain_request / 960 cell_register_request
-// / 963 cell_retire_request / 967 cell_space_report 裸帧分别经 on_debug_eval /
+// / 963 cell_retire_request / 967 cell_space_report / 969
+// cell_space_reclaim_done 裸帧分别经 on_debug_eval /
 // on_module_rollout / on_world_drain / on_cell_register / on_cell_retire /
-// on_cell_space_report 投递（入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
+// on_cell_space_report / on_cell_space_reclaim_done 投递（入参 = 请求 + 发端
+// peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::vector<std::uint8_t>&)> on_intent_raw = {},
@@ -361,6 +374,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
         on_cell_retire = {},
     std::function<void(const std::string&, const CellSpaceReport&)>
         on_cell_space_report = {},
+    std::function<void(const std::string&, const CellSpaceReclaimDone&)>
+        on_cell_space_reclaim_done = {},
     std::function<void(const std::string&, const CellEvalResult&)>
         on_cell_eval_result = {},
     std::function<void(const std::string&, const CellRolloutReply&)>

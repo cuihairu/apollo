@@ -251,11 +251,11 @@ bool WorldApp::beginCellRetire(std::uint64_t cell_id) {
     // 缩容编排（L104 缩容切片，注册表单写者上下文）：置 World 单方缩容意图
     // ——与 cell 自报 drain_state 分面（自报是 cell 自己的活动状态，本位是
     // World 的调度决定），此后该 cell 停止认领新 Space；名下归属即刻回池
-    // （owner 归零、版本不变——在途活动在 cell 本地自然排空，不强断），再
-    // 向其推当前权威视图：它收到的自有 Space 现为撤销标记，962 应用面据此
-    // 撤本地路由。撤路由受客户端版本去重约束（释放不推进版本），故实际撤
-    // 除随下次合格 peer 重认领后版本前进的那一拍收敛——同 L108 离线期缺口
-    // 的收敛口径，不为强收敛改写版本号语义。
+    // （owner 归零、版本不变——在途活动在 cell 本地自然排空，不强断）。撤
+    // 销标记由 releaseCellSpaces 直发 ready=0（L134 两 cell 回收确认批）——
+    // cell 侧按 ready 1→0 迁移放行版本闸（释放不推进版本），腾空 Space 即刻
+    // 销毁并经 969 回执确认（D14 #4）；占用中的留在本地待撤表逐拍重试至
+    // 腾空（在途活动自然排空）。
     auto it = cellRegistrations_.find(cell_id);
     if (it == cellRegistrations_.end()) {
         return false;

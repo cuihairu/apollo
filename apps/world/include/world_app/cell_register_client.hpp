@@ -272,6 +272,12 @@ public:
     // 已记账（版本前进）分配条数（观测面）。
     virtual std::size_t space_assign_count() const { return 0; }
 
+    // 远端销毁回执（969，L134 两 cell 回收确认批）：cell 宿主在本地
+    // remove_space 成功后经注册连接发回 World——World 凭此确认远端回收已
+    // 生效（D14 断言 #4）。链路非 kUp = 尽力面跳过（World 侧记账即确认面，
+    // 无专用下行；漏收的确认随后续回收重发）。request_id 客户端单调分配。
+    virtual void sendSpaceReclaim(std::uint64_t space_id) { (void)space_id; }
+
     // 失联冻结监听（L101 失联策略切片）：链路 down 超 link_grace_ms 触发
     // kGraceExpired 一次/失联期；961 code 3/5/6 触发 kAdjudicationRejected
     //（旧代次被替换/契约不兼容/凭据失配 = World 已隔离本执行端，自冻结

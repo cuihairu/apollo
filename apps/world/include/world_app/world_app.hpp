@@ -122,6 +122,18 @@ public:
     // 已裁决自报条目数（967 受理并核对的条数；丢弃面——未登记/旧化身/
     // 0 保留——不计）。
     std::uint64_t space_report_count() const { return spaceReportCount_; }
+    // 远端销毁确认账（969，L134 两 cell 回收确认批）：space_id → 最后一个
+    // 确认方 cell_id（null = 从未确认）。非当前状态——释放后重认领不影响
+    // 既有确认记录（确认的是「那一次远端销毁已生效」）。观测面口径同
+    // space_report_count（泵上下文单写者，测试/宿主同线程读）。
+    struct ReclaimConfirmation {
+        std::uint64_t space_id = 0;
+        std::uint64_t cell_id = 0;   // 确认方（销毁方）cell_id
+        std::uint64_t count = 0;     // 该 space 累计确认次数
+    };
+    const ReclaimConfirmation* find_reclaim_confirmation(
+        std::uint64_t space_id) const;
+    std::uint64_t reclaim_done_count() const { return reclaimDoneCount_; }
 
     // ---- cell 缩容编排（L104 缩容切片；管理面入口）----
     // 单写者纪律：与 driveCellRegistry 同上下文（受理点/M1 泵线程 = 注册表单
@@ -174,6 +186,13 @@ private:
     // 版本冲突/未登记权威进冲突集（该 Space 冻结：不认领不释放不推送）；
     // 释放态上报 = 收敛滞后不冲突；未登记来源/旧化身上报丢弃。
     void onCellSpaceReport(const std::string& peer, const CellSpaceReport& report);
+    // 远端销毁回执受理点（969，L134 两 cell 回收确认批；M1 泵上下文 = 注册
+    // 表单写者上下文，同 onCellSpaceReport）：登记来源 + 同代次 + 非存疑
+    // 才记账（reclaimConfirmations_，space_id → 确认方 cell_id）——World 凭此
+    // 确认远端回收已生效（D14 断言 #4）。记账不裁决归属（962 全池权威视图
+    // 即裁决载体，同 967 惯例）；无专用下行。
+    void onCellSpaceReclaimDone(const std::string& peer,
+                                const CellSpaceReclaimDone& done);
     // cell 执行端回执受理（切片2 World→cell 命令转发）：cell 宿主经注册
     // 连接反向发送 945/953/957，World 在此按 eval_id/request_id 关联原
     // fleetctl/admin peer 后经 m1Link_ 回传对应回执帧。
@@ -215,7 +234,9 @@ private:
     bool lower_load_peer(std::uint64_t cell_id, std::int32_t load,
                          std::int32_t needs) const;
     // 过期释放（driveCellRegistry 同上下文，注册表单写者线程）：该 cell
-    // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。
+    // 名下的归属置 0，版本不变、条目保留（见 spaceAssignments_ 注）。释放
+    // 即向该 cell 的注册链路推 962 ready=0 撤销标记（L134 两 cell 回收确认
+    // 批：cell 侧 remove_space 成功后经 969 回执确认远端销毁——D14 #4）。
     void releaseCellSpaces(std::uint64_t cell_id);
     // 已提交归属投影发布（L115，管理泵上下文直发）：claim/reclaim 推 ready=1
     //（journal A 行落盘后调），release 推 cell_id=0 墓碑（R 行后调）；
@@ -284,6 +305,11 @@ private:
     // 对账冲突集（967，断连对账批B）：space_id 集（该 Space 冻结）。
     std::unordered_set<std::uint64_t> conflictedSpaces_;
     std::uint64_t spaceReportCount_{0};
+    // 远端销毁确认账（969，L134 两 cell 回收确认批）：space_id → 确认方
+    // cell_id + 累计次数。单写者上下文（M1 泵线程），同 spaceAssignments_
+    // 口径；计数面 = 已记账回执总数（丢弃面不计）。
+    std::unordered_map<std::uint64_t, ReclaimConfirmation> reclaimConfirmations_;
+    std::uint64_t reclaimDoneCount_ = 0;
     // 空日志缺失证据（§2）：journal 文件缺失，首个 cell 拨入即形成旧管理
     // 关系证据；true = 全池冻结，不开新分配。
     bool missingJournal_ = false;

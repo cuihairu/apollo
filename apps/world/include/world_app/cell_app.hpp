@@ -192,6 +192,13 @@ public:
     std::size_t pending_revoke_count() const {
         return pendingRevokes_.load(std::memory_order_acquire);
     }
+    // 远端销毁回执队列（L134 两 cell 回收确认批）：内核线程在撤销重试腾空
+    // 成功（remove_space 真销毁 scene）时入队；宿主在 tick 边界（内核线程
+    // 上下文）取走并经注册连接逐条发 969 给 World——回执不经内核直发
+    //（CellApp 不持注册客户端，同 egress 缝的宿主承接纪律）。占用中被拒
+    // 的撤销不入队（尚未销毁）；同 space 重放不重复入队（受理面去重）。
+    std::vector<std::uint64_t> takeCompletedReclaims();
+    std::size_t completed_reclaim_count() const;
     // 路由查询（同 default_scene_id 的内核线程上下文约束；未知空间回落默认）
     std::uint64_t scene_id_of_space(std::uint64_t space_id) const {
         return resolve_scene_id(space_id);
@@ -312,6 +319,11 @@ private:
     std::mutex pendingRevokesMutex_;
     std::unordered_set<std::uint64_t> pendingRevokesSet_;
     std::atomic<std::size_t> pendingRevokes_{0};
+    // 已腾空销毁回执（L134 两 cell 回收确认批）：内核线程入队（互斥表）/
+    // 宿主 tick 边界取走（同 pendingRevokes 纪律，但消费在宿主而非内核）。
+    // mutex mutable——completed_reclaim_count 只读观测面也持锁。
+    mutable std::mutex completedReclaimsMutex_;
+    std::vector<std::uint64_t> completedReclaims_;
 
     // metrics admin 通道计数面（last_* 为绝对值→Counter 增量推进的影子读数，
     // 内核线程独占）

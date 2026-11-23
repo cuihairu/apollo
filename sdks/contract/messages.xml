@@ -712,4 +712,10 @@
     <field name="cell_host" type="string" desc="已提交归属 cell 的 M1 监听地址（与 960 host 同源——网关直连端点发现面；claim 携带、墓碑空串）"/>
     <field name="cell_port" type="int32" desc="已提交归属 cell 的 M1 监听端口（与 960 port 同源；0 = 未监听/未声明）"/>
   </msg>
+  <msg id="969" name="cell_space_reclaim_done" dir="P2P" channel="events" domain="internal" desc="cell 远端销毁回执（cell→World M1 管理面；L134 两 cell 回收确认批）：962 ready=0 撤销标记驱动的 remove_space 成功后逐 Space 上发一帧——远端回收有确认（D14 断言 #4），World 侧记账即确认面；无专用下行（962 全池权威视图即裁决载体同 967 惯例）；裸帧受理同 967 惯例">
+    <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
+    <field name="cell_id" type="int64" desc="回执方 cell 的 logical_id（与 960 logical_id 同源）"/>
+    <field name="start_epoch" type="int64" desc="回执方进程启动代次（与 960 start_epoch 同源——旧化身后置丢弃）"/>
+    <field name="space_id" type="int64" desc="已本地销毁的 Space"/>
+  </msg>
 </messages>

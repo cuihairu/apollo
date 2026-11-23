@@ -502,6 +502,14 @@ int run_cell_entry_body(int argc, char* argv[],
                         }
                     }
                 }
+                // 远端销毁回执（L134 两 cell 回收确认批）：内核线程在撤销
+                // 重试腾空成功（remove_space 真销毁 scene）后入队——tick 边界
+                // 取走逐条经注册连接发 969 给 World（World 记账即确认面）。
+                if (register_client) {
+                    for (const auto& space_id : cell.takeCompletedReclaims()) {
+                        register_client->sendSpaceReclaim(space_id);
+                    }
+                }
             });
         link = makeM1LinkServer(
             M1LinkConfig{config.host, config.m1Port, config.m1RouteJson,

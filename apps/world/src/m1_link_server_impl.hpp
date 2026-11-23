@@ -64,6 +64,8 @@ public:
                          on_cell_retire,
                      std::function<void(const std::string&, const CellSpaceReport&)>
                          on_cell_space_report,
+                     std::function<void(const std::string&, const CellSpaceReclaimDone&)>
+                         on_cell_space_reclaim_done,
                      std::function<void(const std::string&, const CellEvalResult&)>
                          on_cell_eval_result,
                      std::function<void(const std::string&, const CellRolloutReply&)>
@@ -137,6 +139,8 @@ private:
                                   std::size_t size);
     void handle_cell_space_report_frame(const std::string& peer, const std::uint8_t* data,
                                         std::size_t size);
+    void handle_cell_space_reclaim_done_frame(const std::string& peer,
+                                              const std::uint8_t* data, std::size_t size);
     void handle_cell_eval_result_frame(const std::string& peer, const std::uint8_t* data,
                                        std::size_t size);
     void handle_cell_rollout_reply_frame(const std::string& peer, const std::uint8_t* data,
@@ -163,6 +167,8 @@ private:
     std::function<void(const std::string&, const CellRegisterRequest&)> on_cell_register_;
     std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire_;
     std::function<void(const std::string&, const CellSpaceReport&)> on_cell_space_report_;
+    std::function<void(const std::string&, const CellSpaceReclaimDone&)>
+        on_cell_space_reclaim_done_;
     std::function<void(const std::string&, const CellEvalResult&)> on_cell_eval_result_;
     std::function<void(const std::string&, const CellRolloutReply&)> on_cell_rollout_reply_;
     std::function<void(const std::string&, const CellDrainReply&)> on_cell_drain_reply_;

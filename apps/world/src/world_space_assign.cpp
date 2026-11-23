@@ -193,6 +193,20 @@ void WorldApp::releaseCellSpaces(std::uint64_t cell_id) {
             ++topology_version_;
             publishProjection(entry.first, 0, entry.second.version,
                               topology_version_, "", 0, false);
+            // 释放撤销标记推原主（L134 两 cell 回收确认批）：此前释放只回池
+            // 不通知——pushSpaceAssignments 对 owner=0 只走重认领分支，被释放
+            // 端在 retire/无合格候选时永远收不到通知（beginCellRetire 注记的
+            // 「随下次重认领收敛」实际收敛不了）。此处直发 ready=0 让原主即刻
+            // 让渡；登记已除名（journal 过期主无 peer）= 尽力面跳过。cell 侧
+            // 应用面靠 ready 1→0 迁移放行版本闸（释放版本不变），remove_space
+            // 成功后经 969 回执确认远端销毁（D14 #4）。
+            const auto releasing = cellRegistrations_.find(cell_id);
+            if (releasing != cellRegistrations_.end() && m1Link_) {
+                m1Link_->sendCellSpaceAssign(releasing->second.peer,
+                                             entry.second.version,
+                                             config_.m1AuthorityEpoch,
+                                             entry.first, 0, false);
+            }
         }
     }
 }
@@ -283,6 +297,52 @@ const WorldApp::SpaceAssignment* WorldApp::find_space_assignment(
     std::uint64_t space_id) const {
     const auto it = spaceAssignments_.find(space_id);
     return it != spaceAssignments_.end() ? &it->second : nullptr;
+}
+
+void WorldApp::onCellSpaceReclaimDone(const std::string& peer,
+                                      const CellSpaceReclaimDone& done) {
+    // 远端销毁回执受理（969，L134 两 cell 回收确认批；M1 泵上下文 = 注册表单
+    // 写者上下文，同 onCellSpaceReport）。记账即确认面——World 凭此得知「远端
+    // 回收已生效」（D14 断言 #4）。来源验证同 967：request_id=0 保留弃、
+    // 未登记来源无裁决地位弃、旧化身（start_epoch 不符）弃、存疑期弃。
+    // 记账不裁决归属（962 全池权威视图即裁决载体，同 967 惯例）；确认记录
+    // 非当前状态——释放后重认领不影响既有确认。
+    if (done.request_id == 0 || done.cell_id == 0 || done.space_id == 0) {
+        return;
+    }
+    const auto reg = cellRegistrations_.find(done.cell_id);
+    if (reg == cellRegistrations_.end()) {
+        worldLog().info("space reclaim done from unregistered cell dropped: cell="
+                        + std::to_string(done.cell_id)
+                        + " space=" + std::to_string(done.space_id));
+        return;
+    }
+    if (done.start_epoch != reg->second.start_epoch) {
+        worldLog().info("space reclaim done from stale incarnation dropped: cell="
+                        + std::to_string(done.cell_id)
+                        + " reported_epoch=" + std::to_string(done.start_epoch));
+        return;
+    }
+    if (reg->second.suspect) {
+        worldLog().warning("space reclaim done from suspect cell dropped: cell="
+                           + std::to_string(done.cell_id)
+                           + " space=" + std::to_string(done.space_id));
+        return;
+    }
+    auto& conf = reclaimConfirmations_[done.space_id];
+    conf.space_id = done.space_id;
+    conf.cell_id = done.cell_id;
+    ++conf.count;
+    ++reclaimDoneCount_;
+    worldLog().info("space reclaim confirmed: space=" + std::to_string(done.space_id)
+                    + " cell=" + std::to_string(done.cell_id)
+                    + " count=" + std::to_string(conf.count));
+}
+
+const WorldApp::ReclaimConfirmation* WorldApp::find_reclaim_confirmation(
+    std::uint64_t space_id) const {
+    const auto it = reclaimConfirmations_.find(space_id);
+    return it != reclaimConfirmations_.end() ? &it->second : nullptr;
 }
 
 void WorldApp::publishProjection(std::uint64_t space_id, std::uint64_t cell_id,

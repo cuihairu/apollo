@@ -161,6 +161,13 @@ void CellApp::drainPendingRevokes() {
                 ++done;
                 worldLog().info("space revoked (pending retry): space="
                                 + std::to_string(space_id));
+                // 远端销毁回执（L134 两 cell 回收确认批）：remove_space 真
+                // 销毁 scene（非占用拒绝/路由已消失）才入队——宿主经 969
+                // 回 World，凭此确认远端回收（D14 #4）。
+                {
+                    std::lock_guard<std::mutex> lock(completedReclaimsMutex_);
+                    completedReclaims_.push_back(space_id);
+                }
                 continue;
             }
             ++it;  // 占用中：下一拍再试
@@ -169,6 +176,22 @@ void CellApp::drainPendingRevokes() {
     if (done != 0) {
         pendingRevokes_.fetch_sub(done, std::memory_order_acq_rel);
     }
+}
+
+std::vector<std::uint64_t> CellApp::takeCompletedReclaims() {
+    // 远端销毁回执出队（L134 两 cell 回收确认批）：宿主 tick 边界（内核线程
+    // 上下文）取走后逐条经注册连接发 969——World 记账即确认面。
+    std::vector<std::uint64_t> out;
+    {
+        std::lock_guard<std::mutex> lock(completedReclaimsMutex_);
+        out.swap(completedReclaims_);
+    }
+    return out;
+}
+
+std::size_t CellApp::completed_reclaim_count() const {
+    std::lock_guard<std::mutex> lock(completedReclaimsMutex_);
+    return completedReclaims_.size();
 }
 
 void CellApp::ensureDefaultScene() {

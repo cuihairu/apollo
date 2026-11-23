@@ -52,6 +52,8 @@ M1LinkServerImpl::M1LinkServerImpl(M1LinkConfig config, std::function<void(Inten
                      on_cell_retire,
                  std::function<void(const std::string&, const CellSpaceReport&)>
                      on_cell_space_report,
+                 std::function<void(const std::string&, const CellSpaceReclaimDone&)>
+                     on_cell_space_reclaim_done,
                  std::function<void(const std::string&, const CellEvalResult&)>
                      on_cell_eval_result,
                  std::function<void(const std::string&, const CellRolloutReply&)>
@@ -69,6 +71,7 @@ M1LinkServerImpl::M1LinkServerImpl(M1LinkConfig config, std::function<void(Inten
     , on_cell_register_(std::move(on_cell_register))
     , on_cell_retire_(std::move(on_cell_retire))
     , on_cell_space_report_(std::move(on_cell_space_report))
+    , on_cell_space_reclaim_done_(std::move(on_cell_space_reclaim_done))
     , on_cell_eval_result_(std::move(on_cell_eval_result))
     , on_cell_rollout_reply_(std::move(on_cell_rollout_reply))
     , on_cell_drain_reply_(std::move(on_cell_drain_reply))
@@ -249,6 +252,13 @@ void M1LinkServerImpl::install_dispatching(link::InterServerLink& link) {
         [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
             handle_cell_space_report_frame(link.peer_name(), data, size);
         });
+    // 969 cell_space_reclaim_done 裸帧受理（L134 两 cell 回收确认批）：远端
+    // 销毁回执记账即确认（无专用下行——962 全池权威视图即裁决载体，同 967）。
+    dispatcher.set_handler(
+        id_of(MsgId::cell_space_reclaim_done),
+        [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+            handle_cell_space_reclaim_done_frame(link.peer_name(), data, size);
+        });
     // 945/953/957 cell 执行端回执（切片2 World→cell 命令转发）：cell 宿主
     // 经注册连接反向发送，World 在此受理并按 eval_id/request_id 关联原
     // fleetctl/admin peer 后回传。发端 peer = cell 自报名。
@@ -295,6 +305,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellRetireRequest&)> on_cell_retire,
     std::function<void(const std::string&, const CellSpaceReport&)>
         on_cell_space_report,
+    std::function<void(const std::string&, const CellSpaceReclaimDone&)>
+        on_cell_space_reclaim_done,
     std::function<void(const std::string&, const CellEvalResult&)>
         on_cell_eval_result,
     std::function<void(const std::string&, const CellRolloutReply&)>
@@ -311,6 +323,7 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
                                               std::move(on_cell_register),
                                               std::move(on_cell_retire),
                                               std::move(on_cell_space_report),
+                                              std::move(on_cell_space_reclaim_done),
                                               std::move(on_cell_eval_result),
                                               std::move(on_cell_rollout_reply),
                                               std::move(on_cell_drain_reply),
@@ -333,6 +346,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
         /*on_cell_retire*/,
     std::function<void(const std::string&, const CellSpaceReport&)>
         /*on_cell_space_report*/,
+    std::function<void(const std::string&, const CellSpaceReclaimDone&)>
+        /*on_cell_space_reclaim_done*/,
     std::function<void(const std::string&, const CellEvalResult&)>
         /*on_cell_eval_result*/,
     std::function<void(const std::string&, const CellRolloutReply&)>
