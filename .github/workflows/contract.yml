@@ -60,6 +60,9 @@ jobs:
         uses: arduino/setup-protoc@v3.0.0
         with:
           version: "29.3"  # pin：descriptor.bin 字节稳定性前提（sdk-contract §10.3 纪律）；升级 = 换包重签
+          # authenticated release lookup: unauthenticated calls are rate-limited
+          # per egress IP (2026-11-23 contract_pack failed on 3.42.157.121)
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assemble contract packs
         run: scripts/ci/contract_pack.sh . dist
