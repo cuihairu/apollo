@@ -252,6 +252,11 @@ public:
     // 裁决（无 intent）的受理成员点名（谁待裁决、已确认几人）；自动重驱动
     // 只补 intent 已知的成员，此处列出的成员靠人工裁决补分值后交回自动面。
     [[nodiscard]] std::vector<SettlementRepairEntry> settlement_repair_entries() const;
+    // 核对面观察（D13 cancelled 已发部分）：每份 cancelled 记录的取消前已
+    // 持久确认成员与分值（已发生事实，记录保留供后续处理状态）。本面只核对
+    // 不改账——补偿策略另拍板。无恢复记录面/无 cancelled 记录 = 空列。
+    [[nodiscard]] std::vector<SettlementCancelledPartial>
+    cancelled_settlement_partials() const;
     // 人工裁决：为 pending 记录中尚未确认的成员补定分值（应发什么）。终局记录
     // （done/cancelled）、名册外玩家、已确认玩家均拒（返回 false，无副作用）。
     // 裁决成功后既有周期重驱动按新 intent 重发 958（同结算 ID，Base 去重环

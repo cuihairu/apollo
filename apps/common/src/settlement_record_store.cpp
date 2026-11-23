@@ -288,6 +288,23 @@ std::vector<SettlementRepairEntry> SettlementRecordStore::pending_repair_entries
     return out;
 }
 
+std::vector<SettlementCancelledPartial> SettlementRecordStore::cancelled_partials() const {
+    std::vector<SettlementCancelledPartial> out;
+    for (const auto& record : load_all()) {
+        if (record.lifecycle != SettlementLifecycle::Cancelled) continue;
+        SettlementCancelledPartial partial;
+        partial.settlement_id = record.settlement_id;
+        partial.party_id = record.party_id;
+        partial.world_id = record.world_id;
+        partial.instance_id = record.instance_id;
+        // 已发部分 = 取消前已持久确认的成员与分值（确认位是已发生事实——
+        // 记录保留供后续处理状态，本面点名供核对；不裁决不改账）。
+        partial.granted = record.confirmed;
+        out.push_back(std::move(partial));
+    }
+    return out;
+}
+
 bool SettlementRecordStore::adjudicate(std::uint64_t settlement_id,
                                       std::uint64_t player_id, std::int64_t score) {
     const auto path = path_for(settlement_id);

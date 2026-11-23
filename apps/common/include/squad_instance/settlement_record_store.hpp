@@ -44,6 +44,18 @@ struct SettlementRepairEntry {
     std::size_t confirmed_count = 0;      // 已持久确认人数（进度参照）
 };
 
+// 已取消结算的已发部分（D13 核对面）：失败取消不发成功奖励，但取消前已
+// 持久确认的部分是已发生事实——记录保留供后续处理状态。本面把每份
+// cancelled 记录的已发部分点名（谁在取消前已拿到多少），供运营核对/补偿
+// 决策的观测输入（补偿策略另拍板，本面只核对不改账）。
+struct SettlementCancelledPartial {
+    std::uint64_t settlement_id = 0;
+    std::uint64_t party_id = 0;
+    std::uint32_t world_id = 0;
+    std::uint64_t instance_id = 0;
+    std::unordered_map<std::uint64_t, std::int64_t> granted;  // 已发（确认位）
+};
+
 struct SettlementRecord {
     std::uint64_t settlement_id = 0;
     std::uint64_t party_id = 0;
@@ -94,6 +106,10 @@ public:
     // 人工修复面观察：pending 且尚有成员分值未裁决（无 intent）的记录。
     // cancelled（已发部分走后续处理状态）与 done（已回收）不入列——不做裁决。
     [[nodiscard]] std::vector<SettlementRepairEntry> pending_repair_entries() const;
+
+    // 核对面观察：每份 cancelled 记录的已发部分（取消前已持久确认的成员与
+    // 分值）。pending/done 不入列（pending 未终局、done 已回收）。
+    [[nodiscard]] std::vector<SettlementCancelledPartial> cancelled_partials() const;
 
     // 人工裁决（修复面写入口）：为 pending 记录中尚未确认的成员补定分值
     //（应发什么）。终局记录（done/cancelled）与名册外玩家、已确认玩家（确认位

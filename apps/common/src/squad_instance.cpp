@@ -112,6 +112,12 @@ bool SquadInstanceService::adjudicate_settlement_score(
     return record_store_->adjudicate(settlement_id, player_id, score);
 }
 
+std::vector<SettlementCancelledPartial>
+SquadInstanceService::cancelled_settlement_partials() const {
+    if (!record_store_) return {};
+    return record_store_->cancelled_partials();
+}
+
 void SquadInstanceService::enable_admission_credentials(std::string issuer,
                                                        std::uint64_t ttl_ms) {
     admission_credential_face_ = std::make_unique<AdmissionCredentialFace>();

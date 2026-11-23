@@ -2511,6 +2511,99 @@ bool test_squad_settlement_manual_repair_surface() {
 }
 
 
+// D13 核对面（cancelled 已发部分）：失败取消不发成功奖励，但取消前已持久
+// 确认的部分是已发生事实——记录保留供后续处理状态。本用例钉「核对观察面」：
+// 点名每份 cancelled 记录的取消前已发成员与分值（谁在失败取消前已拿到多少，
+// 供运营核对/补偿决策输入）；pending/done 不入列、终局态不回收（complete 对
+// cancelled 不覆盖）。补偿策略另拍板——本面只核对不改账。
+bool test_squad_settlement_cancelled_partial_surface() {
+    const auto dir = make_tmp_dir("rec_partial");
+    squad_instance::SettlementRecordStore store(dir);
+
+    // pending：leader 已发 40（确认位），B 未发——失败线取消。
+    TEST_ASSERT(store.open(60, 7, 1, 600, {kLeader, kMemberB}), "record opened");
+    TEST_ASSERT(store.confirm(60, kLeader, 40), "leader granted before cancel");
+    // 取消前该记录仍是 pending 且全员无 intent（只确认未裁决）——修复面
+    // 点名它（跨面一致性：确认位不算裁决）。
+    {
+        const auto repair = store.pending_repair_entries();
+        TEST_ASSERT(repair.size() == 1 && repair[0].settlement_id == 60 &&
+                        repair[0].awaiting.size() == 2 &&
+                        repair[0].confirmed_count == 1,
+                    "pending with unadjudicated members offered for repair");
+        const bool has_leader = std::find(repair[0].awaiting.begin(),
+                                          repair[0].awaiting.end(),
+                                          kLeader) != repair[0].awaiting.end();
+        const bool has_b = std::find(repair[0].awaiting.begin(),
+                                     repair[0].awaiting.end(),
+                                     kMemberB) != repair[0].awaiting.end();
+        TEST_ASSERT(has_leader && has_b,
+                    "awaiting lists roster members regardless of confirmation");
+    }
+    TEST_ASSERT(store.cancel(60), "cancelled on failure line");
+    TEST_ASSERT(store.pending_repair_entries().empty(),
+                "cancelled record no longer offered for repair");
+
+    // 核对面：cancelled 记录点名已发部分（leader 40；未发的 B 不在列）。
+    {
+        const auto partials = store.cancelled_partials();
+        TEST_ASSERT(partials.size() == 1, "one cancelled record listed");
+        TEST_ASSERT(partials[0].settlement_id == 60 && partials[0].party_id == 7 &&
+                        partials[0].world_id == 1 && partials[0].instance_id == 600,
+                    "partial carries record identity");
+        TEST_ASSERT(partials[0].granted.size() == 1 &&
+                        partials[0].granted.at(kLeader) == 40,
+                    "granted partial names leader only");
+    }
+    // 终局态：complete 对 cancelled 不覆盖（done 不回退取消），已发部分照常
+    // 可核对；无取消前确认的 cancelled 记录列为空 granted。
+    TEST_ASSERT(store.complete(60), "done never overrides cancelled");
+    TEST_ASSERT(store.cancelled_partials().size() == 1,
+                "cancelled partial still observable after complete no-op");
+    TEST_ASSERT(store.open(61, 8, 1, 601, {kMemberB, kMemberC}), "second opened");
+    TEST_ASSERT(store.cancel(61), "second cancelled with nothing granted");
+    {
+        const auto partials = store.cancelled_partials();
+        TEST_ASSERT(partials.size() == 2, "both cancelled records listed");
+        const auto it = std::find_if(partials.begin(), partials.end(),
+                                     [](const auto& p) {
+                                         return p.settlement_id == 61;
+                                     });
+        TEST_ASSERT(it != partials.end() && it->granted.empty(),
+                    "cancelled without grants lists empty partial");
+    }
+    // pending/done 不入列。
+    TEST_ASSERT(store.open(62, 9, 1, 602, {kLeader}), "pending opened");
+    TEST_ASSERT(store.open(63, 10, 1, 603, {kLeader}), "third opened");
+    TEST_ASSERT(store.confirm(63, kLeader, 5) && store.complete(63),
+                "third completed and reclaimed");
+    TEST_ASSERT(store.cancelled_partials().size() == 2,
+                "pending and done not listed");
+
+    // 服务级转发：挂同目录读到同样核对列；未装配恢复记录面 = 空列。
+    {
+        PartyManager parties;
+        World world;
+        SquadInstanceService service(parties, &world, 1);
+        TEST_ASSERT(service.cancelled_settlement_partials().empty(),
+                    "no record face yields empty list");
+        service.set_settlement_record_dir(dir);
+        const auto via_service = service.cancelled_settlement_partials();
+        const auto via_it = std::find_if(via_service.begin(), via_service.end(),
+                                         [](const auto& p) {
+                                             return p.settlement_id == 60;
+                                         });
+        TEST_ASSERT(via_service.size() == 2 && via_it != via_service.end() &&
+                        via_it->granted.at(kLeader) == 40,
+                    "service forwards cancelled partials");
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+
 } // namespace
 
 int main() {
@@ -2566,6 +2659,8 @@ int main() {
          test_squad_settlement_redrive_cadence},
         {"squad_settlement_manual_repair_surface",
          test_squad_settlement_manual_repair_surface},
+        {"squad_settlement_cancelled_partial_surface",
+         test_squad_settlement_cancelled_partial_surface},
         {"squad_settlement_credential_replay_dedup_across_restart",
          test_squad_settlement_credential_replay_dedup_across_restart},
         {"squad_settlement_credential_failure_holds_ledger",
