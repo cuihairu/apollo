@@ -102,3 +102,18 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 
 > 明确不做：延后同 Space 多 Cell 连续交接，触发条件为明确跨边界玩法需求；
 > 不把该延后项阻塞所有普通换场。
+
+### 5.3 显式换场真链路验证（2026-11-23，commit 054fc004，见 todo.md L135）
+
+D15 立即执行动作「验证真实链路」的落地面——同一 cell 两 Space（501/502 均归
+cell-21，池需 0x1；cell-22 无 0x1 不落 501/502）：
+
+- **提交**：真实客户端经 gateway→World→cell-21 发 `cell_cross_border`，
+  `scene_transfer` 走完 prepare→begin→detach→attach→complete（离场重建
+  Avatar，易失态不带走），1001 从 501 的 scene 迁到 502 的 scene；
+- **失败返回**：目标 503 归 cell-22（本 cell 无路由）→ prepare 显式驳回，
+  1001 留在 502（不静默同场搬运）；
+- **观测面**：`CellApp::space_of_player`（Avatar 挂 scene 归属是唯一权威——
+  scene_transfer 的会话 space 字段只是路由投影，不反推；内核线程上下文约束）
+  + 宿主 post_tick 内核线程采样经 atomic 发布（测试线程直读 scene 表即数据
+  竞争，同 reportedReady 纪律）。
