@@ -34,6 +34,16 @@ enum class SettlementLifecycle : std::uint32_t {
     Cancelled = 2,
 };
 
+// 人工修复面（D13 仍缺：分值未裁决成员）：pending 记录中分值未裁决（无
+// intent）的受理成员不自动驱动（奖励未定不能猜）——本面把它们点名暴露：
+// 哪份记录、谁待裁决、已确认几人。修复方据此补裁决（adjudicate），
+// 裁决后交回既有自动重驱动接管（同结算 ID 重发，Base 去重环兜底不双记）。
+struct SettlementRepairEntry {
+    std::uint64_t settlement_id = 0;
+    std::vector<std::uint64_t> awaiting;  // 无 intent 的受理成员（待裁决）
+    std::size_t confirmed_count = 0;      // 已持久确认人数（进度参照）
+};
+
 struct SettlementRecord {
     std::uint64_t settlement_id = 0;
     std::uint64_t party_id = 0;
@@ -80,6 +90,18 @@ public:
 
     // 全量装载（重启恢复扫描面）：脏行/未知扩展名跳过，可解析保留。
     [[nodiscard]] std::vector<SettlementRecord> load_all() const;
+
+    // 人工修复面观察：pending 且尚有成员分值未裁决（无 intent）的记录。
+    // cancelled（已发部分走后续处理状态）与 done（已回收）不入列——不做裁决。
+    [[nodiscard]] std::vector<SettlementRepairEntry> pending_repair_entries() const;
+
+    // 人工裁决（修复面写入口）：为 pending 记录中尚未确认的成员补定分值
+    //（应发什么）。终局记录（done/cancelled）与名册外玩家、已确认玩家（确认位
+    // 是权威事实不覆写）均拒。裁决成功后交回自动重驱动接管（maybe_redrive_pending
+    // / ingest_restored_settlement_records 据新 intent 重发 958，Base 去重环兜底
+    // 不双记）。false = 记录不存在/已终局/名册外/已确认（无副作用）。
+    bool adjudicate(std::uint64_t settlement_id, std::uint64_t player_id,
+                    std::int64_t score);
 
 private:
     [[nodiscard]] std::string path_for(std::uint64_t settlement_id) const;

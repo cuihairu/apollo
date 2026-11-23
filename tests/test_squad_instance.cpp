@@ -2414,6 +2414,103 @@ bool test_admission_service_drop_on_release() {
 }
 
 
+// D13 人工修复面（分值未裁决成员）：pending 记录中分值未定（无 intent）的受理
+// 成员不自动驱动（奖励未定不能猜），也无从观测——本用例覆盖「点名暴露待裁决
+// 成员 → 人工裁决补分值 → 既有自动重驱动接管重发」闭环，并钉住裁决边界（终局
+// 记录不裁决、名册外玩家拒、已确认玩家不覆写、无记录拒）。
+bool test_squad_settlement_manual_repair_surface() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 7);
+    const auto dir = make_tmp_dir("rec_repair");
+    std::uint64_t instance_id = 0;
+    auto table = make_business_table({kLeader, kMemberB, kMemberC});
+
+    // 代次一：leader 分值已裁决且确认；B/C 分值**未裁决**（奖励规则未定/
+    // 裁决前进程消亡）——记录留盘但 B/C 无 intent。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(7)).error == LaunchError::Ok,
+                    "launched");
+        instance_id = service.find_by_party(7)->instance_id;
+        TEST_ASSERT(service.credit_settlement(7, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        // B/C 分值未裁决：自动面不驱动（无 intent）——修复面前它们无从暴露。
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Pending,
+                    "record pending");
+
+        // 人工修复面**观察**：点名待裁决成员（B/C）与已确认进度。
+        const auto entries = service.settlement_repair_entries();
+        TEST_ASSERT(entries.size() == 1 &&
+                        entries[0].settlement_id == instance_id,
+                    "repair entry names the pending record");
+        TEST_ASSERT(entries[0].confirmed_count == 1,
+                    "repair entry reports confirmed progress");
+        TEST_ASSERT(entries[0].awaiting.size() == 2 &&
+                        entries[0].awaiting[0] == kMemberB &&
+                        entries[0].awaiting[1] == kMemberC,
+                    "repair entry lists members awaiting adjudication");
+
+        // 人工裁决：为 B/C 补定分值（应发什么）——终局/名册外/已确认/无记录拒。
+        TEST_ASSERT(service.adjudicate_settlement_score(instance_id, kMemberB, 20),
+                    "adjudicate member B");
+        TEST_ASSERT(service.adjudicate_settlement_score(instance_id, kMemberC, 30),
+                    "adjudicate member C");
+        TEST_ASSERT(!service.adjudicate_settlement_score(instance_id, kLeader, 999),
+                    "adjudicate refuses confirmed member (no clobber)");
+        TEST_ASSERT(!service.adjudicate_settlement_score(instance_id, 999, 1),
+                    "adjudicate refuses out-of-roster player");
+        TEST_ASSERT(!service.adjudicate_settlement_score(0xDEAD, kMemberB, 1),
+                    "adjudicate refuses missing record");
+        // 裁决后修复面无待办（intent 齐备，交回自动面）。
+        TEST_ASSERT(service.settlement_repair_entries().empty(),
+                    "repair queue empty after adjudication");
+
+        // 裁决后由**既有**自动重驱动接管重发（修复不旁路自动面）：
+        // 同结算 ID 重发，Base 去重环兜底不双记；全量确认 → 记录删除。
+        TEST_ASSERT(service.ingest_restored_settlement_records() == 1,
+                    "redrive picks up adjudicated scores");
+        TEST_ASSERT(!service.settlement_record_state(instance_id).has_value(),
+                    "record reclaimed after redrive");
+        TEST_ASSERT(exp_of(table, kLeader) == 40 &&
+                        exp_of(table, kMemberB) == 20 && exp_of(table, kMemberC) == 30,
+                    "all members credited, no double");
+        TEST_ASSERT(table.duplicates[kMemberB] == 0 && table.duplicates[kMemberC] == 0,
+                    "adjudicated members credited once");
+    }
+
+    // 终局记录不做裁决：cancelled 的已发部分走后续处理状态，裁决会复活
+    // 失败取消的奖励发放（store 面直接钉边界）。
+    {
+        const auto dir2 = make_tmp_dir("rec_repair_cancel");
+        squad_instance::SettlementRecordStore store(dir2);
+        TEST_ASSERT(store.open(50, 7, 1, 500, {kLeader, kMemberB}),
+                    "cancelled-case record opened");
+        TEST_ASSERT(store.confirm(50, kLeader, 40), "partial confirmation granted");
+        TEST_ASSERT(store.cancel(50), "cancelled on failure line");
+        TEST_ASSERT(!store.adjudicate(50, kMemberB, 20),
+                    "adjudicate refuses cancelled record");
+        TEST_ASSERT(!store.adjudicate(50, kLeader, 999),
+                    "adjudicate refuses confirmed member at store face");
+        TEST_ASSERT(store.pending_repair_entries().empty(),
+                    "cancelled record not offered for repair");
+        TEST_ASSERT(store.complete(50), "done never overrides cancelled");
+        std::error_code ec;
+        std::filesystem::remove_all(dir2, ec);
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
+
 } // namespace
 
 int main() {
@@ -2467,6 +2564,8 @@ int main() {
          test_squad_settlement_record_redrive_base_still_unreachable},
         {"squad_settlement_redrive_cadence",
          test_squad_settlement_redrive_cadence},
+        {"squad_settlement_manual_repair_surface",
+         test_squad_settlement_manual_repair_surface},
         {"squad_settlement_credential_replay_dedup_across_restart",
          test_squad_settlement_credential_replay_dedup_across_restart},
         {"squad_settlement_credential_failure_holds_ledger",

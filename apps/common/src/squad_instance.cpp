@@ -101,6 +101,17 @@ std::optional<SettlementLifecycle> SquadInstanceService::settlement_record_state
     return std::nullopt;
 }
 
+std::vector<SettlementRepairEntry> SquadInstanceService::settlement_repair_entries() const {
+    if (!record_store_) return {};
+    return record_store_->pending_repair_entries();
+}
+
+bool SquadInstanceService::adjudicate_settlement_score(
+    std::uint64_t settlement_id, std::uint64_t player_id, std::int64_t score) {
+    if (!record_store_) return false;  // 无恢复记录面（未装配）——无裁决落点
+    return record_store_->adjudicate(settlement_id, player_id, score);
+}
+
 void SquadInstanceService::enable_admission_credentials(std::string issuer,
                                                        std::uint64_t ttl_ms) {
     admission_credential_face_ = std::make_unique<AdmissionCredentialFace>();

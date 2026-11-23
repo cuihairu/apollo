@@ -269,4 +269,49 @@ std::vector<SettlementRecord> SettlementRecordStore::load_all() const {
     return out;
 }
 
+std::vector<SettlementRepairEntry> SettlementRecordStore::pending_repair_entries() const {
+    std::vector<SettlementRepairEntry> out;
+    for (const auto& record : load_all()) {
+        if (record.lifecycle != SettlementLifecycle::Pending) continue;
+        SettlementRepairEntry entry;
+        entry.settlement_id = record.settlement_id;
+        entry.confirmed_count = record.confirmed.size();
+        for (const auto member : record.members) {
+            if (record.intent.count(member) == 0) {
+                entry.awaiting.push_back(member);
+            }
+        }
+        if (!entry.awaiting.empty()) {
+            out.push_back(entry);
+        }
+    }
+    return out;
+}
+
+bool SettlementRecordStore::adjudicate(std::uint64_t settlement_id,
+                                      std::uint64_t player_id, std::int64_t score) {
+    const auto path = path_for(settlement_id);
+    auto record = read(path);
+    if (!record) {
+        return false;  // 记录不存在（未开账/已回收）——修复无主
+    }
+    if (record->lifecycle != SettlementLifecycle::Pending) {
+        // 终局态不做裁决：done 已回收、cancelled 的已发部分走后续处理状态，
+        // 裁决会复活失败取消的奖励发放。
+        return false;
+    }
+    if (record->confirmed.count(player_id) > 0) {
+        // 确认位是权威事实——人工裁决不覆写已发记录。
+        return false;
+    }
+    const bool in_roster =
+        std::find(record->members.begin(), record->members.end(), player_id) !=
+        record->members.end();
+    if (!in_roster) {
+        return false;  // 名册外玩家——无结算资格
+    }
+    record->intent[player_id] = score;
+    return write(*record);
+}
+
 }  // namespace squad_instance

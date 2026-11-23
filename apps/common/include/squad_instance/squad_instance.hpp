@@ -248,6 +248,18 @@ public:
     // 恢复记录查询（验收/审计面）：有记录返回其生命周期态，无 = nullopt。
     [[nodiscard]] std::optional<SettlementLifecycle> settlement_record_state(
         std::uint64_t settlement_id) const;
+    // 人工修复面（D13 仍缺：分值未裁决成员）——观察：pending 记录中分值未
+    // 裁决（无 intent）的受理成员点名（谁待裁决、已确认几人）；自动重驱动
+    // 只补 intent 已知的成员，此处列出的成员靠人工裁决补分值后交回自动面。
+    [[nodiscard]] std::vector<SettlementRepairEntry> settlement_repair_entries() const;
+    // 人工裁决：为 pending 记录中尚未确认的成员补定分值（应发什么）。终局记录
+    // （done/cancelled）、名册外玩家、已确认玩家均拒（返回 false，无副作用）。
+    // 裁决成功后既有周期重驱动按新 intent 重发 958（同结算 ID，Base 去重环
+    // 兜底不双记）——修复不旁路自动面。false = 无恢复记录面/记录不存在/
+    // 已终局/名册外/已确认。
+    [[nodiscard]] bool adjudicate_settlement_score(std::uint64_t settlement_id,
+                                                  std::uint64_t player_id,
+                                                  std::int64_t score);
 
     // 重启装载：凭据目录内的小队凭据 → 挂起恢复标记（该小队下次受理即回
     // 填新账本并重写凭据——重放不双记），返回装载份数。文件不在此删除：
