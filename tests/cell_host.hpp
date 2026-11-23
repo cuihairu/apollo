@@ -74,6 +74,17 @@ struct CellHost {
     std::uint64_t observed_space() const {
         return observedSpace_.load(std::memory_order_acquire);
     }
+    // 动态创建分配观测面（L134 动态创建分配路径批）：单 space 宿主采样——
+    // post_tick（内核线程）读 scene 表合法，atomic 发布（测试线程不直读）。
+    // watchedSpace_ = 0 未跟踪。
+    std::atomic<std::uint64_t> watchedSpace_{0};
+    std::atomic<bool> watchedSpaceHosted_{false};
+    void watch_hosts_space(std::uint64_t space_id) {
+        watchedSpace_.store(space_id, std::memory_order_release);
+    }
+    bool watched_hosts_space() const {
+        return watchedSpaceHosted_.load(std::memory_order_acquire);
+    }
 
     bool start(std::uint16_t world_m1_port, std::uint64_t cell_id = 21,
                std::uint16_t port = 0,
@@ -186,6 +197,13 @@ struct CellHost {
                 pid != 0) {
                 observedSpace_.store(cell->space_of_player(pid),
                                      std::memory_order_release);
+            }
+            // 动态创建分配观测采样（L134）：同 observedSpace_ 纪律——内核
+            // 线程读 scene 表，atomic 发布；未跟踪 space 不采样不发布。
+            if (const auto w = watchedSpace_.load(std::memory_order_acquire);
+                w != 0) {
+                watchedSpaceHosted_.store(cell->hosts_space(w),
+                                          std::memory_order_release);
             }
             auto* squads = cell->squadInstanceService();
             if (squads == nullptr || drain_state != 1) {

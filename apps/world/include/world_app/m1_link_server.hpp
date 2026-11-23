@@ -125,6 +125,17 @@ struct CellSpaceReclaimDone {
     std::uint64_t space_id = 0;
 };
 
+// World 侧动态创建分配临时 Instance Space 命令（契约 970，L134 动态创建
+// 分配路径批）：fleetctl→World M1 管理面。非静态池分配——World 单方铸造
+// space_id 并归属目标 cell（write-ahead journal A 行后推 962，cell 现有
+// 分配应用面建 scene）；释放仍走既有 963 缩容 + 969 回收面。回执 971 按
+// request_id 关联，回带铸造的 space_id（调用方据此发起后续缩容释放）。
+// 受理点同步执行（M1 泵在 gameThread_，同 963）。
+struct SpaceCreateRequest {
+    std::uint64_t request_id = 0;
+    std::uint64_t cell_id = 0;        // 目标 cell logical_id（0 = 非法）
+};
+
 // cell 执行端回执（切片2 World→cell 命令转发）：cell 宿主经注册连接反向
 // 发送 945/953/957，World 的 M1LinkServer 在 cell 连接的 dispatcher 上受理
 // 并回调（入参 = 回执 + cell peer 自报名；WorldApp 按 eval_id/request_id
@@ -268,6 +279,20 @@ public:
         (void)detail;
     }
 
+    // 动态创建分配回执（971 space_create_reply，L134 动态创建分配路径批）：
+    // peer/关联键同 966 面。code 0 = 已铸造 space_id 并归属目标 cell（journal
+    // A 行落盘后回带——调用方据此发起后续 963 缩容释放）；非 0 = 拒绝原因，
+    // space_id 为 0（不铸造不分配）。kReliable 同 945。
+    virtual void sendSpaceCreateReply(const std::string& peer, std::uint64_t request_id,
+                                      std::uint64_t space_id, std::uint64_t cell_id,
+                                      std::int32_t code) {
+        (void)peer;
+        (void)request_id;
+        (void)space_id;
+        (void)cell_id;
+        (void)code;
+    }
+
     // Space 分配推送（962 cell_space_assign，L101 分配面首切片）：peer = cell
     // 自报名；分配版本 = 该 Space 当前版本（首分配 = 1，重平衡随 L108）。
     // kReliable 同 945。
@@ -356,10 +381,10 @@ public:
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
 // module_rollout_request / 956 world_drain_request / 960 cell_register_request
 // / 963 cell_retire_request / 967 cell_space_report / 969
-// cell_space_reclaim_done 裸帧分别经 on_debug_eval /
+// cell_space_reclaim_done / 970 space_create_request 裸帧分别经 on_debug_eval /
 // on_module_rollout / on_world_drain / on_cell_register / on_cell_retire /
-// on_cell_space_report / on_cell_space_reclaim_done 投递（入参 = 请求 + 发端
-// peer 自报名，回执按名回链路）。
+// on_cell_space_report / on_cell_space_reclaim_done / on_space_create 投递
+// （入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
     std::function<void(const std::vector<std::uint8_t>&)> on_intent_raw = {},
@@ -376,6 +401,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
         on_cell_space_report = {},
     std::function<void(const std::string&, const CellSpaceReclaimDone&)>
         on_cell_space_reclaim_done = {},
+    std::function<void(const std::string&, const SpaceCreateRequest&)>
+        on_space_create = {},
     std::function<void(const std::string&, const CellEvalResult&)>
         on_cell_eval_result = {},
     std::function<void(const std::string&, const CellRolloutReply&)>

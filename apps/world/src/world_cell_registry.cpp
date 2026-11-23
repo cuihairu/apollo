@@ -1,6 +1,7 @@
 #include "world_app/world_app.hpp"
 #include "world_app_detail.hpp"
 #include <chrono>
+#include <limits>
 
 namespace world_app {
 
@@ -331,6 +332,94 @@ void WorldApp::onCellRetire(const std::string& peer, const CellRetireRequest& re
                                  kCellRetireRejectedInvalid,
                                  config_.m1AuthorityEpoch, request.cell_id,
                                  "unknown op");
+}
+
+void WorldApp::onSpaceCreate(const std::string& peer, const SpaceCreateRequest& request) {
+    // 动态创建分配受理（970 → 971，L134 动态创建分配路径批；M1 泵上下文 =
+    // 注册表/分配池单写者上下文）：与 onCellRetire 同口——请求合法性先看
+    //（cell_id 非法 → 拒 code 1），再查目标资格（未登记/未就绪/排空/缩容/
+    // 存疑 → code 1），再查 journal 证据（丢失冻结 → code 2）。合格才铸造
+    // space_id（单调计数，避开静态池 + 已铸 id），write-ahead D 行（铸标记）
+    // + A 行（归属）双行落盘后推 962 + 回 971（回带铸造 space_id，调用方据
+    // 此发起后续 963 缩容释放）。
+    if (m1Link_ == nullptr) {
+        return;
+    }
+    if (request.cell_id == 0) {
+        m1Link_->sendSpaceCreateReply(peer, request.request_id, 0, request.cell_id,
+                                      kSpaceCreateRejectedCellUnfit);
+        return;
+    }
+    const auto it = cellRegistrations_.find(request.cell_id);
+    // 资格面（契约 971 code 1）：已注册 + 就绪 + 非排空 + 非缩容意图 + 非
+    // 存疑（链路未决不声明新归属）。动态空间无静态池 needs 声明（needs=0
+    // 恒覆盖——capability_fit(任意, 0) 恒真，无需显式裁决）。
+    const bool eligible = it != cellRegistrations_.end() && it->second.ready &&
+                          it->second.drain_state == 0 && !it->second.retire &&
+                          !it->second.suspect;
+    if (!eligible) {
+        m1Link_->sendSpaceCreateReply(peer, request.request_id, 0, request.cell_id,
+                                      kSpaceCreateRejectedCellUnfit);
+        return;
+    }
+    // 丢失 journal 证据冻结（§2）：全池冻结时不开新分配——丢失 journal 可能
+    // 含已铸 id（重启重铸会与在役动态空间撞 id），铸造一律拒（code 2 journal
+    // 面）。journal 关（纯内存语义）不受此闸。
+    if (journalMissingAtBoot_ || missingJournal_) {
+        m1Link_->sendSpaceCreateReply(peer, request.request_id, 0, request.cell_id,
+                                      kSpaceCreateRejectedJournal);
+        return;
+    }
+    if (nextDynamicSpaceId_ == 0 ||
+        nextDynamicSpaceId_ == std::numeric_limits<std::uint64_t>::max()) {
+        m1Link_->sendSpaceCreateReply(peer, request.request_id, 0, request.cell_id,
+                                      kSpaceCreateRejectedJournal);
+        return;
+    }
+    const std::uint64_t space_id = nextDynamicSpaceId_++;
+    // write-ahead（批A journal v2 口径，同静态认领）：D 行（铸标记）+ A 行
+    //（归属 version 1）append+flush 成功才推 962——持久决定先于对外声明。
+    // 失败回滚铸造计数并拒（D 行已落 = 铸了未分配，计数回退让同进程重试可
+    // 复用 id；重启后计数已过该 id，留一小间隔无害）。journal 关 = 恒成功。
+    const bool journal_ok =
+        config_.worldJournalPath.empty() ||
+        (appendJournalRow("D " + std::to_string(space_id), true) &&
+         appendJournalRow("A " + std::to_string(space_id) + "|"
+                              + std::to_string(request.cell_id) + "|1",
+                          true));
+    if (!journal_ok) {
+        --nextDynamicSpaceId_;
+        worldLog().warning(
+            "world journal append failed: " + config_.worldJournalPath
+            + " (space create withheld: space=" + std::to_string(space_id)
+            + " cell=" + std::to_string(request.cell_id) + ")");
+        m1Link_->sendSpaceCreateReply(peer, request.request_id, 0, request.cell_id,
+                                      kSpaceCreateRejectedJournal);
+        return;
+    }
+    mintedDynamicSpaces_.insert(space_id);
+    SpaceAssignment a;
+    a.space_id = space_id;
+    a.cell_id = request.cell_id;
+    a.version = 1;
+    spaceAssignments_.emplace(space_id, a);
+    worldLog().info("dynamic space created: space=" + std::to_string(space_id)
+                    + " cell=" + std::to_string(request.cell_id) + " version=1");
+    // 位置投影发布（同静态认领 L115 时序：journal 行 → 962 → 968）：
+    // ready=1；布局代次前进后随投影携带。
+    ++topology_version_;
+    publishProjection(space_id, request.cell_id, 1, topology_version_,
+                      it->second.host,
+                      static_cast<std::uint32_t>(it->second.port < 0 ? 0 : it->second.port),
+                      true);
+    // 962 推给目标 cell（cell 现有 962 监听建 scene——空间无关，默认
+    // descriptor map_id=1 由 space_descriptor_for 兜底）。
+    if (m1Link_) {
+        m1Link_->sendCellSpaceAssign(it->second.peer, 1, config_.m1AuthorityEpoch,
+                                     space_id, request.cell_id, true);
+    }
+    m1Link_->sendSpaceCreateReply(peer, request.request_id, space_id, request.cell_id,
+                                  kSpaceCreateOk);
 }
 
 std::size_t WorldApp::retired_cell_count() const {

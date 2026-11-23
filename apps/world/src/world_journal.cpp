@@ -40,6 +40,13 @@ void WorldApp::loadWorldJournal() {
     // 数字/缺字段/多字段 = 损坏显式拒启（不静默部分回放——orders journal
     // 同口径）；行尾 \r 剥除（Windows 落盘坑账防御）。文件缺省 = 首启，
     // append 建档（空日志顶替禁令的判定随批C）。
+    // 动态铸造计数基准（L134 动态创建分配路径批）：先按池 id 对齐（journal
+    // 关/缺失路径提前返回也保持有效）；journal 在时，解析 D 行/A 行后抬升
+    // 至 max(池 ∪ D ∪ A) + 1——重启不重铸已铸 id。
+    for (const auto& slot : config_.assignSpaces) {
+        nextDynamicSpaceId_ = std::max(nextDynamicSpaceId_, slot.space_id);
+    }
+    ++nextDynamicSpaceId_;
     if (config_.worldJournalPath.empty()) {
         return;
     }
@@ -133,6 +140,23 @@ void WorldApp::loadWorldJournal() {
             // 无 A 的 R = 无操作（释放等价于从未认领）
             continue;
         }
+        if (line.compare(0, 2, "D ") == 0) {
+            // D 行（L134 动态创建分配路径批）：`D space_id` 动态铸造标记——
+            // 铸造是持久事实的首行（write-ahead 先于 A 行），装载凭它把池外
+            // 动态空间照常重建（静态池配置变更后的旧 A 行仍跳过，批B 对账
+            // 语义不破）；重复 D = 幂等（set 收敛）。无 A 的 D = 铸了未分配
+            //（落盘中断面）：只抬计数不建条目，空间留待重铸（计数已过）。
+            const std::string body = line.substr(2);
+            if (body.find('|') != std::string::npos) {
+                bad_line(line_no, "extra field");
+            }
+            const auto space_id = parse_u64(body, line_no);
+            if (space_id == 0) {
+                bad_line(line_no, "zero space id");
+            }
+            mintedDynamicSpaces_.insert(space_id);
+            continue;
+        }
         if (line.compare(0, 2, "B ") == 0) {
             const std::string body = line.substr(2);
             if (body.find('|') != std::string::npos) {
@@ -203,7 +227,11 @@ void WorldApp::loadWorldJournal() {
     std::size_t seeded = 0;
     std::size_t skipped = 0;
     for (const auto& entry : replay) {
-        if (!pool_has(config_, entry.first)) {
+        // 池外条目：仅动态铸造标记（D 行）照常重建——静态池配置变更后的旧
+        // 记录（无 D 行）仍跳过（批B 对账，无权威落点）；动态空间是 D 行铸
+        // 造事实的权威，重建保持其归属（cell 967 对账不误判未登记权威）。
+        if (!pool_has(config_, entry.first) &&
+            mintedDynamicSpaces_.count(entry.first) == 0) {
             ++skipped;
             continue;
         }
@@ -217,9 +245,18 @@ void WorldApp::loadWorldJournal() {
         }
         ++seeded;
     }
+    // 动态铸造计数抬升（L134 动态创建分配路径批）：max(池 ∪ D 行 ∪ A 行) + 1
+    // ——重启不重铸已铸 id（A 行含被跳过的池外旧记录，一并抬升防撞）。
+    for (const auto& sid : mintedDynamicSpaces_) {
+        nextDynamicSpaceId_ = std::max(nextDynamicSpaceId_, sid + 1);
+    }
+    for (const auto& kv : replay) {
+        nextDynamicSpaceId_ = std::max(nextDynamicSpaceId_, kv.first + 1);
+    }
     worldLog().info("world journal loaded: " + config_.worldJournalPath
                     + " watermarks=" + std::to_string(cellEpochWatermarks_.size())
                     + " spaces=" + std::to_string(seeded)
+                    + " dynamic=" + std::to_string(mintedDynamicSpaces_.size())
                     + (skipped != 0
                            ? " skipped_nonpool=" + std::to_string(skipped)
                            : "")

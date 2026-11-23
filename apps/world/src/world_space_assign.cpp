@@ -139,6 +139,27 @@ void WorldApp::pushSpaceAssignments(const std::string& peer,
                                          it->second.cell_id, true);
         }
     }
+    // 动态空间（池外，L134 动态创建分配路径批）：池循环只覆盖池成员——池外
+    // 铸造空间同样须把本 cell 的当前归属视图推给它（重注册/重启后 962 刷新：
+    // 本 cell 归属 = ready=1，归属它方 = ready=0 撤销标记，owner=0 释放态不
+    // 推——动态空间是临时 Instance，释放即销毁不复活）。冲突冻结期不推（同
+    // 池循环 §4）。mintedDynamicSpaces_ 装载自 D 行回放（journal 关 = 空，
+    // 同池归属亦无重启记忆，一致）。
+    for (const auto& space_id : mintedDynamicSpaces_) {
+        if (conflictedSpaces_.count(space_id) > 0) {
+            continue;
+        }
+        const auto dit = spaceAssignments_.find(space_id);
+        if (dit == spaceAssignments_.end() || dit->second.cell_id == 0) {
+            continue;  // 无条目 / 已释放：不推（不复活）
+        }
+        const bool mine = dit->second.cell_id == reg.cell_id;
+        if (m1Link_) {
+            m1Link_->sendCellSpaceAssign(peer, dit->second.version,
+                                         config_.m1AuthorityEpoch, space_id,
+                                         dit->second.cell_id, mine);
+        }
+    }
 }
 
 bool WorldApp::lower_load_peer(std::uint64_t cell_id, std::int32_t load,

@@ -232,6 +232,32 @@ void M1LinkServerImpl::sendCellRetireReply(const std::string& peer, std::uint64_
                      link::SendClass::kReliable);
 }
 
+void M1LinkServerImpl::sendSpaceCreateReply(const std::string& peer,
+                                            std::uint64_t request_id,
+                                            std::uint64_t space_id,
+                                            std::uint64_t cell_id,
+                                            std::int32_t code) {
+    auto mgr = manager_.load(std::memory_order_acquire);
+    if (!mgr || request_id == 0) {
+        return;  // 0 保留（回执关联键缺位即静默）
+    }
+    auto* link = mgr->link(peer);
+    if (link == nullptr) {
+        return;  // 未知 peer = 尽力面
+    }
+    std::vector<wire::FieldValue> fields(4);
+    fields[0].integer = static_cast<std::int64_t>(request_id);
+    fields[1].integer = static_cast<std::int64_t>(space_id);
+    fields[2].integer = static_cast<std::int64_t>(cell_id);
+    fields[3].integer = code;
+    std::vector<std::uint8_t> payload;
+    if (!wire::encode_payload(id_of(MsgId::space_create_reply), fields, payload)) {
+        return;
+    }
+    (void)link->send(id_of(MsgId::space_create_reply), payload.data(), payload.size(),
+                     link::SendClass::kReliable);
+}
+
 void M1LinkServerImpl::sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
                          std::uint64_t management_epoch, std::uint64_t space_id,
                          std::uint64_t assigned_cell_id, bool ready) {

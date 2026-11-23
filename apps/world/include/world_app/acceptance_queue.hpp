@@ -80,6 +80,12 @@ inline constexpr std::int32_t kCellRetireCancelled = 2;
 inline constexpr std::int32_t kCellRetireRejectedUnknownCell = 3;   // 目标未登记
 inline constexpr std::int32_t kCellRetireRejectedInvalid = 4;       // op 未知/cell_id 非法
 
+// 动态创建分配受理码（970/971 契约面，L134 动态创建分配路径批）：code 取
+// 971 code 字段的契约词汇。
+inline constexpr std::int32_t kSpaceCreateOk = 0;
+inline constexpr std::int32_t kSpaceCreateRejectedCellUnfit = 1;  // 目标 cell 未注册/未就绪/排空/缩容/能力不符
+inline constexpr std::int32_t kSpaceCreateRejectedJournal = 2;    // journal 写入失败/缺 journal 证据冻结
+
 // ADR-016：受理队列——有界两级水位（告警线 + 顶格拒收，不丢旧不静默）。
 // 数值口径 = tick 预算锚定（ADR-016 #3）+ 实测校准（2026-10-11，P3-2 批 D，
 // examples/benchmark --acceptance 三跑 min，负载噪声期下界口径）：

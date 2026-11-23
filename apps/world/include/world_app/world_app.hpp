@@ -193,6 +193,13 @@ private:
     // 即裁决载体，同 967 惯例）；无专用下行。
     void onCellSpaceReclaimDone(const std::string& peer,
                                 const CellSpaceReclaimDone& done);
+    // 动态创建分配受理点（970→971，L134 动态创建分配路径批；泵上下文 = 注册
+    // 表单/分配池单写者上下文）：World 单方铸造 space_id（单调计数器，避开静态
+    // 池冲突）并归属目标 cell——目标须已注册、就绪、未排空未缩容（能力覆盖
+    // needs=0）才受理；write-ahead journal A 行（先 fsync）后 push 962 + 回 971。
+    // 拒绝（code 1/2）不铸造不分配。回执 971 同步回带铸造 space_id（调用方据
+    // 此发起后续 963 缩容释放）。
+    void onSpaceCreate(const std::string& peer, const SpaceCreateRequest& request);
     // cell 执行端回执受理（切片2 World→cell 命令转发）：cell 宿主经注册
     // 连接反向发送 945/953/957，World 在此按 eval_id/request_id 关联原
     // fleetctl/admin peer 后经 m1Link_ 回传对应回执帧。
@@ -296,6 +303,15 @@ private:
     std::unordered_map<std::uint64_t, std::uint64_t> pendingJournalOwners_;
     // 分配表（962）：space_id → 归属 + 版本（单写者上下文）。
     std::unordered_map<std::uint64_t, SpaceAssignment> spaceAssignments_;
+    // 动态创建分配（L134 动态创建分配路径批）：下个铸造 space_id（单调）。
+    // 装载对齐 max(池 id ∪ D 行 id ∪ A 行 space) + 1——重启不重铸已铸 id
+    //（丢失 journal 冻结面另见 journalMissingAtBoot_）；journal 关 = 纯内存
+    // 语义，池 id 对齐。单写者上下文，同 spaceAssignments_ 口径。
+    std::uint64_t nextDynamicSpaceId_ = 0;
+    // 动态铸造标记（journal D 行回放，L134 动态创建分配路径批）：space_id ∈
+    // 集合 = 动态空间——装载时池外 D 行条目照常重建（静态池配置变更后的旧
+    // 记录仍跳过，批B 对账语义不破）。单写者上下文，同 spaceAssignments_。
+    std::unordered_set<std::uint64_t> mintedDynamicSpaces_;
     // 布局代次（L120 拓扑生产者接线，D07 拓扑版本域）：全局单调计数——每次
     // 已提交布局变更（claim/reclaim/release，journal A/R 行落盘后）前进；随
     // 968 携带。0 = 未声明（首启/重启后首次变更前——重启归 0，后续变更起

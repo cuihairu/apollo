@@ -61,6 +61,8 @@ constexpr std::uint16_t kRegisterReplyId = id_of(MsgId::cell_register_reply);
 constexpr std::uint16_t kSpaceAssignId = id_of(MsgId::cell_space_assign);
 constexpr std::uint16_t kRetireRequestId = id_of(MsgId::cell_retire_request);
 constexpr std::uint16_t kRetireReplyId = id_of(MsgId::cell_retire_reply);
+constexpr std::uint16_t kSpaceCreateRequestId = id_of(MsgId::space_create_request);
+constexpr std::uint16_t kSpaceCreateReplyId = id_of(MsgId::space_create_reply);
 constexpr std::uint16_t kSpaceReportId = id_of(MsgId::cell_space_report);
 constexpr std::uint16_t kIntentEnvelopeId = id_of(MsgId::internal_envelope);
 const char* kRouteJson = APOLLO_TEST_ROUTE_JSON;
@@ -104,6 +106,15 @@ struct RetireReply {
 };
 std::mutex g_retire_replies_mutex;
 std::map<std::uint64_t, RetireReply>* g_retire_replies = nullptr;
+
+// 971 动态创建分配回执账（同上惯例：dispatcher 写 / 断言读，指针注入 + 串行）。
+struct SpaceCreateReply {
+    std::uint64_t space_id = 0;
+    std::uint64_t cell_id = 0;
+    std::int32_t code = -1;
+};
+std::mutex g_space_create_replies_mutex;
+std::map<std::uint64_t, SpaceCreateReply>* g_space_create_replies = nullptr;
 
 // cell 侧投影：cell→World M1 控制受理面（裸 960 上行，961 按 request_id
 // 收账）。peer 自报名 = 链路名（服务端按名回链路与记入注册表）。
@@ -210,6 +221,30 @@ struct CellEnd {
                                        g_retire_replies_mutex);
                                    if (g_retire_replies != nullptr) {
                                        (*g_retire_replies)[request_id] = std::move(r);
+                                   }
+                               });
+        // 971 动态创建分配回执（World 回；test_cell_space_create_dynamic 断言面）
+        dispatcher.set_handler(kSpaceCreateReplyId,
+                               [](std::uint16_t, const std::uint8_t* data,
+                                  std::size_t size) {
+                                   std::vector<wire::FieldValue> fields;
+                                   if (!wire::decode_payload(kSpaceCreateReplyId, data,
+                                                             size, fields)
+                                       || fields.size() != 4) {
+                                       return;
+                                   }
+                                   SpaceCreateReply r;
+                                   r.space_id =
+                                       static_cast<std::uint64_t>(fields[1].integer);
+                                   r.cell_id =
+                                       static_cast<std::uint64_t>(fields[2].integer);
+                                   r.code = static_cast<std::int32_t>(fields[3].integer);
+                                   const auto request_id =
+                                       static_cast<std::uint64_t>(fields[0].integer);
+                                   std::lock_guard<std::mutex> lock(
+                                       g_space_create_replies_mutex);
+                                   if (g_space_create_replies != nullptr) {
+                                       (*g_space_create_replies)[request_id] = r;
                                    }
                                });
         // 932 意图转发接收（多 cell 路由测试；World→cell 原样转发）——
@@ -341,6 +376,21 @@ struct CellEnd {
                == link::SendCode::kAccepted;
     }
 
+    // 970 动态创建命令（fleetctl 同口；L134 动态创建分配路径批）。
+    bool send_space_create(std::uint64_t request_id, std::uint64_t cell_id) {
+        std::vector<wire::FieldValue> f(2);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = static_cast<std::int64_t>(cell_id);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(kSpaceCreateRequestId, f, payload)) {
+            return false;
+        }
+        return manager->link("world")
+                   ->send(kSpaceCreateRequestId, payload.data(), payload.size(),
+                          link::SendClass::kReliable)
+               == link::SendCode::kAccepted;
+    }
+
     // 967 自报（对账批B）：已应用归属视图逐 Space 一帧。
     bool send_space_report(std::uint64_t request_id, std::uint64_t cell_id,
                            std::uint64_t start_epoch, std::uint64_t space_id,
@@ -450,6 +500,30 @@ bool retire_roundtrip(CellEnd& cell, std::uint64_t request_id, std::int32_t op,
             std::lock_guard<std::mutex> lock(g_retire_replies_mutex);
             const auto it = g_retire_replies->find(request_id);
             if (it != g_retire_replies->end()) {
+                out = it->second;
+                return true;
+            }
+        }
+        std::this_thread::sleep_for(10ms);
+    }
+    return false;
+}
+
+// 970 单发 + 971 等（request_id 关联；服务端 gameLoop 自泵，本线程泵客户端）。
+bool space_create_roundtrip(CellEnd& cell, std::uint64_t request_id,
+                            std::uint64_t cell_id, SpaceCreateReply& out,
+                            int timeout_ms = 5000) {
+    if (!cell.send_space_create(request_id, cell_id)) {
+        return false;
+    }
+    const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        cell.pump();
+        {
+            std::lock_guard<std::mutex> lock(g_space_create_replies_mutex);
+            const auto it = g_space_create_replies->find(request_id);
+            if (it != g_space_create_replies->end()) {
                 out = it->second;
                 return true;
             }
@@ -3207,6 +3281,178 @@ bool test_cell_link_down_marks_suspect() {
     return true;
 }
 
+// ---------- 动态创建分配路径（L134 仍缺批；970 → 971，非静态池分配）----------
+
+bool test_cell_space_create_dynamic() {
+    std::cout << "Running: test_cell_space_create_dynamic..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {{7, 0}, {8, 0}};
+    TEST_ASSERT(server.start(124), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceCreateReply> create_replies;
+    g_space_create_replies = &create_replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    RegisterReply reg;
+    SpaceCreateReply c;
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell, "cell-dyn"), "create cell dialed");
+    TEST_ASSERT(
+        register_roundtrip(cell, 8001, 51, 1, "127.0.0.1", 9208, 0, 10, 0, true, reg),
+        "cell registered");
+
+    // 请求合法性先看：cell_id = 0 与未登记目标均驳回（code 1，不铸造不分配）。
+    TEST_ASSERT(space_create_roundtrip(cell, 8002, 0, c), "invalid cell_id reply");
+    TEST_ASSERT(c.code == world_app::kSpaceCreateRejectedCellUnfit && c.space_id == 0,
+                "invalid cell_id code (no mint)");
+    TEST_ASSERT(space_create_roundtrip(cell, 8003, 999, c), "unknown cell reply");
+    TEST_ASSERT(c.code == world_app::kSpaceCreateRejectedCellUnfit && c.space_id == 0,
+                "unknown cell code (no mint)");
+    TEST_ASSERT(server.world->assigned_space_count() == 2,
+                "rejections mint nothing (pool 7/8 claimed only)");
+
+    // 合格目标：铸造 9（池外，单调基准 = max(7,8)+1）并归属 51；962 推送建 scene。
+    TEST_ASSERT(space_create_roundtrip(cell, 8004, 51, c), "create reply delivered");
+    TEST_ASSERT(c.code == world_app::kSpaceCreateOk && c.space_id == 9
+                    && c.cell_id == 51,
+                "minted space 9 owned by cell 51");
+    const auto* a9 = server.world->find_space_assignment(9);
+    TEST_ASSERT(a9 != nullptr && a9->cell_id == 51 && a9->version == 1,
+                "authoritative assignment for minted space");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(9) && assigns[9].ready
+                           && assigns[9].assigned_cell_id == 51;
+                }, 3000),
+                "962 push reaches cell for minted space");
+
+    // 再次铸造：单调递增（10），不重铸已铸 9。
+    TEST_ASSERT(space_create_roundtrip(cell, 8005, 51, c), "second create reply");
+    TEST_ASSERT(c.code == world_app::kSpaceCreateOk && c.space_id == 10,
+                "second mint is next id");
+
+    // request_id = 0 保留：对端不关联静默不回（超时判负）。
+    TEST_ASSERT(cell.send_space_create(0, 51), "reserved request id sent");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    while (std::chrono::steady_clock::now() < deadline) {
+        cell.pump();
+        std::this_thread::sleep_for(10ms);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_space_create_replies_mutex);
+        TEST_ASSERT(create_replies.find(0) == create_replies.end(),
+                    "reserved request id not replied");
+    }
+
+    g_replies = nullptr;
+    g_space_create_replies = nullptr;
+    g_assigns = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+// 动态铸造跨重启（D 行回放）：池外动态 A 行照常重建 + 铸造计数抬升不重铸 +
+// 池外无 D 标记旧行仍跳过（批B 对账语义不破）。
+bool test_journal_dynamic_space_across_restart() {
+    std::cout << "Running: test_journal_dynamic_space_across_restart..." << std::endl;
+    namespace fs = std::filesystem;
+    const fs::path journal_dir = "/tmp/apollo-cell-register-tests";
+    fs::create_directories(journal_dir);  // 临时目录不自动建坑账：落盘前显式建
+    const fs::path journal = journal_dir / "journal-dynamic.txt";
+    fs::remove(journal);
+    // 首启预置空 journal（同 journal-v2/restart-e2e 惯例）：文件缺省被裁成
+    // 「journalMissingAtBoot_」→ 首个 cell 拨入即冻结全池（证据缺失裁定），
+    // 但本段是真实首启——空文件存在即无「丢失证据」，铸造与认领照常。
+    {
+        std::ofstream seed(journal, std::ios::binary);
+        seed << "";
+    }
+
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceCreateReply> create_replies;
+    g_space_create_replies = &create_replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+    RegisterReply r;
+    SpaceCreateReply c;
+
+    // W1：池 {61}，cell 71 认领 61；动态铸造 62（池外，D+A 行落盘）。
+    WorldEnd w1;
+    w1.config.worldJournalPath = journal.string();
+    w1.config.assignSpaces = {{61, 0}};
+    w1.config.cellExpiryMs = 5000;  // 本段无关过期（停机即收）
+    TEST_ASSERT(w1.start(125), "w1 started with journal");
+    CellEnd c1;
+    TEST_ASSERT(dial_cell(w1, c1, "cell-dynw1"), "cell 71 dialed w1");
+    TEST_ASSERT(register_roundtrip(c1, 8201, 71, 1, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "cell 71 fresh admission");
+    TEST_ASSERT(space_create_roundtrip(c1, 8202, 71, c), "dynamic create reply");
+    TEST_ASSERT(c.code == world_app::kSpaceCreateOk && c.space_id == 62
+                    && c.cell_id == 71,
+                "minted 62 (outside pool 61)");
+    {
+        std::ifstream in(journal, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+        TEST_ASSERT(text.find("\nD 62\n") != std::string::npos,
+                    "D row for 62 on disk");
+        TEST_ASSERT(text.find("\nA 62|71|1\n") != std::string::npos,
+                    "A row 62 on disk");
+    }
+    w1.stop();
+
+    // 模拟移除池的静态空间旧 A 行（无 D 标记）：装载应跳过（批B 对账语义）。
+    {
+        std::ofstream out(journal, std::ios::app | std::ios::binary);
+        out << "A 99|71|1\n";
+    }
+
+    // W2 重启：动态 62 照常重建（D 行）；99 跳过（无 D 标记）；铸造计数抬升
+    // 至 max(池 ∪ D ∪ A) + 1 = 100（含被跳过的 99，防铸撞已复用静态 id）。
+    WorldEnd w2;
+    w2.config.worldJournalPath = journal.string();
+    w2.config.assignSpaces = {{61, 0}};
+    w2.config.cellExpiryMs = 5000;
+    TEST_ASSERT(w2.start(126), "w2 restarted with journal");
+    const auto* d62 = w2.world->find_space_assignment(62);
+    TEST_ASSERT(d62 != nullptr && d62->cell_id == 71 && d62->version == 1,
+                "dynamic space reseeded from D+A rows");
+    TEST_ASSERT(w2.world->find_space_assignment(99) == nullptr,
+                "removed-pool space still skipped (no D marker)");
+    CellEnd c2;
+    TEST_ASSERT(dial_cell(w2, c2, "cell-dynw2"), "cell 71 dialed w2");
+    TEST_ASSERT(register_roundtrip(c2, 8203, 71, 1, "127.0.0.1", 9301, 1, 10, 0, true, r),
+                "cell 71 re-admitted");
+    // 重注册推面：动态 62 归本 cell → 962 ready=1 刷新（池外同样推送）。
+    TEST_ASSERT(wait_until([&] {
+                    c2.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(62) && assigns[62].ready
+                           && assigns[62].assigned_cell_id == 71
+                           && assigns[62].version == 1;
+                }, 3000),
+                "dynamic space refreshed to owner after restart");
+    TEST_ASSERT(space_create_roundtrip(c2, 8204, 71, c), "post-restart create reply");
+    // 计数抬升 max(池 ∪ D ∪ A) + 1：A 行含被跳过的池外旧记录（99）→ 下次铸
+    // 100（> 99 防撞已复用静态 id；> 62 防重铸已铸动态 id）。
+    TEST_ASSERT(c.code == world_app::kSpaceCreateOk && c.space_id > 99,
+                "mint resumes above restored dynamic and removed-pool ids");
+    const auto* d_mint = w2.world->find_space_assignment(c.space_id);
+    TEST_ASSERT(d_mint != nullptr && d_mint->cell_id == 71 && d_mint->version == 1,
+                "post-restart mint assigned");
+    w2.stop();
+
+    g_replies = nullptr;
+    g_space_create_replies = nullptr;
+    g_assigns = nullptr;
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -3231,6 +3477,8 @@ int main() {
                     && test_cell_register_compat_whitelist()
                     && test_cell_retire_and_reclaim()
                     && test_cell_retire_management_command()
+                    && test_cell_space_create_dynamic()
+                    && test_journal_dynamic_space_across_restart()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
                     && test_production_client_incompat_freeze()

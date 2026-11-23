@@ -590,16 +590,25 @@ bool login_chain_two_gateway_concurrent() {
 }
 
 // ---- D14 #4 远端销毁回执（L134 两 cell 回收确认批）----
-// World 管理面裸帧客户端（963 cell_retire_request → 966 回执）：release 只在
-// 过期/缩容路径触发，测试须经真实 963 缩容命令释放 Space（World 状态单写者
-// 在 M1 泵线程——不直调 beginCellRetire）。自泵线程 + 966 按 request_id 收账。
+// World 管理面裸帧客户端（963 cell_retire_request → 966 回执；970
+// space_create_request → 971 回执，L134 动态创建分配路径批）：release 只在
+// 过期/缩容路径触发、动态创建只在真实 970 命令触发（World 状态单写者在 M1
+// 泵线程——不直调 beginCellRetire/铸造路径）。自泵线程 + 966/971 按
+// request_id 收账。
 struct WorldControlClient {
+    // 971 回执面（request_id → {space_id, cell_id, code}）。
+    struct SpaceCreateReplyView {
+        std::uint64_t space_id = 0;
+        std::uint64_t cell_id = 0;
+        std::int32_t code = -1;
+    };
     std::unique_ptr<netlink::RouteTable> table;
     std::unique_ptr<netlink::LinkManager> manager;
     std::atomic<bool> running{false};
     std::thread pump;
     std::mutex replies_mutex;
     std::map<std::uint64_t, bool> retire_accepted;  // request_id → accepted
+    std::map<std::uint64_t, SpaceCreateReplyView> space_create_replies;
 
     bool start(std::uint16_t world_port) {
         table = std::make_unique<netlink::RouteTable>();
@@ -640,6 +649,24 @@ struct WorldControlClient {
                     static_cast<std::uint64_t>(fields[0].integer);
                 std::lock_guard<std::mutex> lock(replies_mutex);
                 retire_accepted[request_id] = fields[1].integer != 0;
+            });
+        dispatcher.set_handler(
+            id_of(MsgId::space_create_reply),
+            [this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+                std::vector<wire::FieldValue> fields;
+                if (!wire::decode_payload(id_of(MsgId::space_create_reply), data, size,
+                                          fields)
+                    || fields.size() != 4) {
+                    return;
+                }
+                const auto request_id =
+                    static_cast<std::uint64_t>(fields[0].integer);
+                SpaceCreateReplyView view;
+                view.space_id = static_cast<std::uint64_t>(fields[1].integer);
+                view.cell_id = static_cast<std::uint64_t>(fields[2].integer);
+                view.code = static_cast<std::int32_t>(fields[3].integer);
+                std::lock_guard<std::mutex> lock(replies_mutex);
+                space_create_replies[request_id] = view;
             });
         running.store(true, std::memory_order_release);
         pump = std::thread([this] {
@@ -690,6 +717,35 @@ struct WorldControlClient {
     bool accepted(std::uint64_t request_id) {
         std::lock_guard<std::mutex> lock(replies_mutex);
         return retire_accepted.count(request_id) != 0;
+    }
+
+    bool send_space_create(std::uint64_t request_id, std::uint64_t cell_id) {
+        auto* link = manager ? manager->link("world") : nullptr;
+        if (link == nullptr) {
+            return false;
+        }
+        std::vector<wire::FieldValue> f(2);
+        f[0].integer = static_cast<std::int64_t>(request_id);
+        f[1].integer = static_cast<std::int64_t>(cell_id);
+        std::vector<std::uint8_t> payload;
+        if (!wire::encode_payload(id_of(MsgId::space_create_request), f, payload)) {
+            return false;
+        }
+        link->send(id_of(MsgId::space_create_request), payload.data(), payload.size(),
+                   netlink::SendClass::kReliable);
+        return true;
+    }
+
+    bool space_create_done(std::uint64_t request_id) {
+        std::lock_guard<std::mutex> lock(replies_mutex);
+        return space_create_replies.count(request_id) != 0;
+    }
+
+    // 空指针 = 未收到该 request_id 回执（调用方先 wait space_create_done）。
+    const SpaceCreateReplyView* space_create_reply(std::uint64_t request_id) {
+        std::lock_guard<std::mutex> lock(replies_mutex);
+        const auto it = space_create_replies.find(request_id);
+        return it != space_create_replies.end() ? &it->second : nullptr;
     }
 
     void stop() {
@@ -941,7 +997,6 @@ bool login_chain_two_cell_space_routing() {
                 "cell-22 confirms remote destroy of released 504");
     TEST_ASSERT(world->find_reclaim_confirmation(503) == nullptr,
                 "occupied 503 not destroyed (no receipt)");
-    ctl.stop();
 
     // ⑱ D15 显式换场真链路验证（L135）：同 cell 两 Space（501/502 均归
     // cell-21）间离场重建换场——真实客户端经 gateway→World→cell-21 发
@@ -973,6 +1028,47 @@ bool login_chain_two_cell_space_routing() {
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
     TEST_ASSERT(cell21.observed_space() == 502,
                 "transfer to space owned by another cell rejected (stays in 502)");
+
+    // ⑲ L134 动态创建分配路径（仍缺批）：非静态池分配——经真实 970 命令让
+    // World 铸造 space_id（单调计数避开静态池 501-504 → 首铸 505）并归属
+    // cell-21（write-ahead journal 后推 962，cell 现有分配应用面建 scene）；
+    // 已缩容（⑰ 置 retire 意图未 cancel）的 cell-22 目标拒绝（code 1，不
+    // 铸造不分配）。观测：World 权威表命中归属 21 + cell-21 真建 scene
+    //（hosts_space）+ cell-22 不持有（隔离）。
+    constexpr std::uint64_t kCreateOkReq = 4301;
+    constexpr std::uint64_t kCreateRefusedReq = 4302;
+    TEST_ASSERT(ctl.send_space_create(kCreateOkReq, 21),
+                "space create (cell-21) frame sent");
+    TEST_ASSERT(ctl.send_space_create(kCreateRefusedReq, 22),
+                "space create (retired cell-22) frame sent");
+    TEST_ASSERT(wait_until([&] {
+                    return ctl.space_create_done(kCreateOkReq)
+                           && ctl.space_create_done(kCreateRefusedReq);
+                }, 5000),
+                "space create replies received");
+    const auto ok_reply = ctl.space_create_reply(kCreateOkReq);
+    TEST_ASSERT(ok_reply != nullptr && ok_reply->code == 0 && ok_reply->space_id != 0
+                    && ok_reply->cell_id == 21,
+                "dynamic create minted a space owned by cell-21 (code 0)");
+    const auto refused = ctl.space_create_reply(kCreateRefusedReq);
+    TEST_ASSERT(refused != nullptr && refused->code == 1 && refused->space_id == 0,
+                "retired cell target refused (code 1, no mint)");
+    TEST_ASSERT(ok_reply->space_id != 501 && ok_reply->space_id != 502
+                    && ok_reply->space_id != 503 && ok_reply->space_id != 504,
+                "minted space id outside static pool");
+    const auto* dyn = world->find_space_assignment(ok_reply->space_id);
+    TEST_ASSERT(dyn != nullptr && dyn->cell_id == 21 && dyn->version == 1,
+                "world authoritative assignment holds minted space");
+    // scene 表单写者 = 内核线程：宿主观测走 post_tick 采样 atomic 发布
+    //（测试线程不直读 scene 表）。
+    cell21.watch_hosts_space(ok_reply->space_id);
+    cell22.watch_hosts_space(ok_reply->space_id);
+    TEST_ASSERT(wait_until([&] { return cell21.watched_hosts_space(); }, 5000),
+                "cell-21 created scene for minted space (962 applied)");
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+    TEST_ASSERT(!cell22.watched_hosts_space(),
+                "cell-22 does not host minted space (isolation)");
+    ctl.stop();
 
     gateway.stop();
     cell21.stop();

@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "0f0d2ee6b66c1aa296285e9a961a8cbbff4f39f5d96282d84cbf359be37ac967",
+  "schema_hash": "e6f6361b07b23980c6ea0b07f0c828a2baad39dc8b852462a0921e5a8b0887ee",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "5e11828af82664967e6c1a58d70fe210c99326d820fcf31db7f8237e13eb6afc",
+  "internal_hash": "d4b623d3d34e974c1edfb20d374f79087aba06b960223fe516f774718e384cea",
   "contract_version": 3,
   "aliases": [
     {
@@ -3933,6 +3933,64 @@
         }
       ],
       "desc": "cell 远端销毁回执（cell→World M1 管理面；L134 两 cell 回收确认批）：962 ready=0 撤销标记驱动的 remove_space 成功后逐 Space 上发一帧——远端回收有确认（D14 断言 #4），World 侧记账即确认面；无专用下行（962 全池权威视图即裁决载体同 967 惯例）；裸帧受理同 967 惯例"
+    },
+    {
+      "id": 970,
+      "name": "space_create_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（调用方单调分配，0 保留）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标 cell 的 logical_id（与 960 logical_id 同源；该 cell 须已注册且就绪、未排空未缩容，能力覆盖 needs=0）"
+        }
+      ],
+      "desc": "World 侧动态创建分配临时 Instance Space 命令（fleetctl→world M1 管理面；L134 动态创建分配路径批——非静态池分配：World 单方铸造 space_id 并归属目标 cell，write-ahead journal A 行后推 962、cell 现有分配应用面建 scene；静态池（assignSpaces）外的临时 Instance 空间由此路径动态开——释放仍走既有 963 缩容+969 回收面。认证凭据面同 960 惯例另行挂账，裸帧受理）"
+    },
+    {
+      "id": 971,
+      "name": "space_create_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（回带请求方单调分配）"
+        },
+        {
+          "name": "space_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "已铸造并分配的动态 Instance Space（code 0 有效）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "归属 cell（回带请求方目标 cell；拒绝时为请求 cell_id）"
+        },
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "0=成功；1=目标 cell 未注册/未就绪/排空/缩容/能力不符；2=journal 写入失败或缺 journal 证据冻结"
+        }
+      ],
+      "desc": "World 侧动态创建分配回执（world→fleetctl M1 管理面；request_id 关联；code 0 = 已铸造 space_id 并归属目标 cell、journal A 行已落——回带 space_id 供调用方后续 963 缩容释放；非 0 = 拒绝原因，不铸造不分配）"
     }
   ],
   "entities": [

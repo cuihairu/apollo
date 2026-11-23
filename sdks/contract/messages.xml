@@ -718,4 +718,14 @@
     <field name="start_epoch" type="int64" desc="回执方进程启动代次（与 960 start_epoch 同源——旧化身后置丢弃）"/>
     <field name="space_id" type="int64" desc="已本地销毁的 Space"/>
   </msg>
+  <msg id="970" name="space_create_request" dir="P2P" channel="events" domain="internal" desc="World 侧动态创建分配临时 Instance Space 命令（fleetctl→world M1 管理面；L134 动态创建分配路径批——非静态池分配：World 单方铸造 space_id 并归属目标 cell，write-ahead journal A 行后推 962、cell 现有分配应用面建 scene；静态池（assignSpaces）外的临时 Instance 空间由此路径动态开——释放仍走既有 963 缩容+969 回收面。认证凭据面同 960 惯例另行挂账，裸帧受理）">
+    <field name="request_id" type="int64" desc="控制关联键（调用方单调分配，0 保留）"/>
+    <field name="cell_id" type="int64" desc="目标 cell 的 logical_id（与 960 logical_id 同源；该 cell 须已注册且就绪、未排空未缩容，能力覆盖 needs=0）"/>
+  </msg>
+  <msg id="971" name="space_create_reply" dir="P2P" channel="events" domain="internal" desc="World 侧动态创建分配回执（world→fleetctl M1 管理面；request_id 关联；code 0 = 已铸造 space_id 并归属目标 cell、journal A 行已落——回带 space_id 供调用方后续 963 缩容释放；非 0 = 拒绝原因，不铸造不分配）">
+    <field name="request_id" type="int64" desc="控制关联键（回带请求方单调分配）"/>
+    <field name="space_id" type="int64" desc="已铸造并分配的动态 Instance Space（code 0 有效）"/>
+    <field name="cell_id" type="int64" desc="归属 cell（回带请求方目标 cell；拒绝时为请求 cell_id）"/>
+    <field name="code" type="int32" desc="0=成功；1=目标 cell 未注册/未就绪/排空/缩容/能力不符；2=journal 写入失败或缺 journal 证据冻结"/>
+  </msg>
 </messages>

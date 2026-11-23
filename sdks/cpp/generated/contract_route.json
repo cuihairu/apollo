@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "0f0d2ee6b66c1aa296285e9a961a8cbbff4f39f5d96282d84cbf359be37ac967",
+  "schema_hash": "e6f6361b07b23980c6ea0b07f0c828a2baad39dc8b852462a0921e5a8b0887ee",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "5e11828af82664967e6c1a58d70fe210c99326d820fcf31db7f8237e13eb6afc",
+  "internal_hash": "d4b623d3d34e974c1edfb20d374f79087aba06b960223fe516f774718e384cea",
   "contract_version": 3,
   "routes": [
     {
@@ -850,6 +850,24 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "cell_space_reclaim_done"
+    },
+    {
+      "id": 970,
+      "name": "space_create_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "space_create_request"
+    },
+    {
+      "id": 971,
+      "name": "space_create_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "space_create_reply"
     }
   ]
 }

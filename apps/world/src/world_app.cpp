@@ -175,6 +175,9 @@ void WorldApp::start() {
         [this](const std::string& peer, const CellSpaceReclaimDone& done) {
             onCellSpaceReclaimDone(peer, done);
         },
+        [this](const std::string& peer, const SpaceCreateRequest& request) {
+            onSpaceCreate(peer, request);
+        },
         [this](const std::string& peer, const CellEvalResult& result) {
             onCellEvalResult(peer, result);
         },

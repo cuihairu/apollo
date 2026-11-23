@@ -162,6 +162,21 @@ void M1LinkServerImpl::handle_cell_space_reclaim_done_frame(
     on_cell_space_reclaim_done_(peer, done);
 }
 
+void M1LinkServerImpl::handle_space_create_frame(const std::string& peer,
+                                                 const std::uint8_t* data,
+                                                 std::size_t size) {
+    std::vector<wire::FieldValue> fields;
+    if (!wire::decode_payload(id_of(MsgId::space_create_request), data, size, fields)
+        || fields.size() != 2 || on_space_create_ == nullptr) {
+        ++rejected_;
+        return;
+    }
+    SpaceCreateRequest req;
+    req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+    req.cell_id = static_cast<std::uint64_t>(fields[1].integer);
+    on_space_create_(peer, req);
+}
+
 void M1LinkServerImpl::handle_cell_eval_result_frame(const std::string& peer, const std::uint8_t* data,
                                    std::size_t size) {
     std::vector<wire::FieldValue> fields;

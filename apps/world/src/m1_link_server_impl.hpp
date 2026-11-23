@@ -66,6 +66,8 @@ public:
                          on_cell_space_report,
                      std::function<void(const std::string&, const CellSpaceReclaimDone&)>
                          on_cell_space_reclaim_done,
+                     std::function<void(const std::string&, const SpaceCreateRequest&)>
+                         on_space_create,
                      std::function<void(const std::string&, const CellEvalResult&)>
                          on_cell_eval_result,
                      std::function<void(const std::string&, const CellRolloutReply&)>
@@ -105,6 +107,9 @@ public:
                              bool accepted, std::int32_t code,
                              std::int64_t management_epoch, std::uint64_t cell_id,
                              const std::string& detail) override;
+    void sendSpaceCreateReply(const std::string& peer, std::uint64_t request_id,
+                              std::uint64_t space_id, std::uint64_t cell_id,
+                              std::int32_t code) override;
     void sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
                              std::uint64_t management_epoch, std::uint64_t space_id,
                              std::uint64_t assigned_cell_id, bool ready) override;
@@ -141,6 +146,8 @@ private:
                                         std::size_t size);
     void handle_cell_space_reclaim_done_frame(const std::string& peer,
                                               const std::uint8_t* data, std::size_t size);
+    void handle_space_create_frame(const std::string& peer, const std::uint8_t* data,
+                                   std::size_t size);
     void handle_cell_eval_result_frame(const std::string& peer, const std::uint8_t* data,
                                        std::size_t size);
     void handle_cell_rollout_reply_frame(const std::string& peer, const std::uint8_t* data,
@@ -169,6 +176,7 @@ private:
     std::function<void(const std::string&, const CellSpaceReport&)> on_cell_space_report_;
     std::function<void(const std::string&, const CellSpaceReclaimDone&)>
         on_cell_space_reclaim_done_;
+    std::function<void(const std::string&, const SpaceCreateRequest&)> on_space_create_;
     std::function<void(const std::string&, const CellEvalResult&)> on_cell_eval_result_;
     std::function<void(const std::string&, const CellRolloutReply&)> on_cell_rollout_reply_;
     std::function<void(const std::string&, const CellDrainReply&)> on_cell_drain_reply_;
