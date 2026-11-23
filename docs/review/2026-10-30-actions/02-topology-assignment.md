@@ -57,7 +57,9 @@
 
 > 明确不做：不按实时负载搬迁正在运行的 Space；不用玩家档案搬迁（旧 World 间演示）替代模拟选路验收。
 
-> D14 首切片 2026-11-23 已落地（commit 88900e71，见 todo.md L134）：cell 侧能力位声明接线——cell 随 960 携带声明能力位（`--declare-capabilities`，0=未声明），World 侧 `world_space_assign` capability_fit 以「声明覆盖 Space needs 全部位」裁决认领资格（needs=0 无要求 = 首就绪独占语义不变）→ 确定性两 cell 分空间（501:1→cell-21、503:2→cell-22，非首就绪）；真实两 cell 选路 e2e（两独立 cellServer + 登录/网关真链路，网关路由客户端接 login 内建 OnlineDirectory M1 控制面 `directoryM1Port=listenPort`——缺省 0 不装配路由客户端，首意图懒解析 fetchRouteSnapshot 得 nullopt→buildDefaultRoute 空间 0→真实按玩家空间选路退化首就绪兜底），覆盖断言 #1（1001 进 501 输入到 cell-21）、#2（1002 目录覆写 503 输入到 cell-22）、#3（跨 cell 隔离：cell-21 无 1002、cell-22 无 1001）、#5（同 cell 锚点在线不受影响）。**仍缺**（另起批）：#4 释放 504 → cell-22 确认远端销毁回执（远端回收）；临时 Instance 504 分配/远端销毁接线；#3 的真观察者无广播语义（本切片以隔离断言覆盖）。
+> D14 首切片 2026-11-23 已落地（commit 88900e71，见 todo.md L134）：cell 侧能力位声明接线——cell 随 960 携带声明能力位（`--declare-capabilities`，0=未声明），World 侧 `world_space_assign` capability_fit 以「声明覆盖 Space needs 全部位」裁决认领资格（needs=0 无要求 = 首就绪独占语义不变）→ 确定性两 cell 分空间（501:1→cell-21、503:2→cell-22，非首就绪）；真实两 cell 选路 e2e（两独立 cellServer + 登录/网关真链路，网关路由客户端接 login 内建 OnlineDirectory M1 控制面 `directoryM1Port=listenPort`——缺省 0 不装配路由客户端，首意图懒解析 fetchRouteSnapshot 得 nullopt→buildDefaultRoute 空间 0→真实按玩家空间选路退化首就绪兜底），覆盖断言 #1（1001 进 501 输入到 cell-21）、#2（1002 目录覆写 503 输入到 cell-22）、#3（跨 cell 隔离：cell-21 无 1002、cell-22 无 1001）、#5（同 cell 锚点在线不受影响）。
+
+> D14 回收确认批 2026-11-23 已落地（commit 39f74e87，见 todo.md L134）：释放→远端销毁有确认（断言 #4）——releaseCellSpaces 对在册 releasing cell 直发 962 ready=0 撤销标记（D03「释放 版本不变」，cell 侧版本闸按 ready 1→0 迁移放行一次），腾空即 remove_space 销毁、经新契约 969 cell_space_reclaim_done 回执（request_id/cell_id/start_epoch/space_id，967 同型验证），World 侧 reclaimConfirmations_ 记账即确认面；e2e 经 963 retire 触发释放 504 → cell-22 确认销毁回执（503 占用中无回执）。**仍缺**（另起批）：临时 Instance 动态创建分配路径（本批 504 以静态池条目覆盖分配与释放确认，未覆盖动态创建）；#3 的真观察者无广播语义（本切片以隔离断言覆盖）。
 
 ## 3. D29 · 同 Space 多 Cell 契约预留（分区描述草案）
 
