@@ -320,4 +320,18 @@ void CellApp::driveSquadGameplay(double delta_seconds) {
     }
 }
 
+void CellApp::driveSettlementRedrive() {
+    // 关闭（settlementRedriveMs <= 0 = 仅启动扫描一次）：不进钩子。
+    if (!squadInstanceService_ || config_.settlementRedriveMs <= 0) return;
+    // 接线观测面（内核线程自增；测试断言钩子已进 gameLoop）
+    settlementRedriveCalls_.fetch_add(1, std::memory_order_release);
+    // 重驱动逻辑（节奏门 + Base 链路门 + intent 重发）在服务
+    // maybe_redrive_pending 单测覆盖——本钩子只把 game 拍的 now 与拨号链
+    // 路态转进去（Base 链路未起：拨号装配缺位或 peer 不到 kUp）。
+    (void)squadInstanceService_->maybe_redrive_pending(
+        std::chrono::milliseconds(config_.settlementRedriveMs),
+        std::chrono::steady_clock::now(),
+        baseBusinessDial_ != nullptr && baseBusinessDial_->peerUp());
+}
+
 } // namespace world_app

@@ -10,6 +10,7 @@
 #include "squad_instance/settlement_credential_store.hpp"
 #include "squad_instance/settlement_record_store.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <atomic>
@@ -234,6 +235,16 @@ public:
     // 驱动（人工修复面），记录保留；cancelled/done 留档不驱动。
     // 返回扫描到的 pending 份数（先删记录会永久漏奖且无法追查，故宁可留）。
     std::size_t ingest_restored_settlement_records();
+    // 周期重驱动（重试节奏，D13 #1 Base 延后恢复补齐）：距上次实际扫盘 >=
+    // interval 才重驱动 pending 记录（ingest_restored_settlement_records 同
+    // 型——intent 已知而未确认的成员重发 958 同结算 ID，Base 去重环兜底不
+    // 双记）。link_ready=false（Base 链路未起）时跳过且**不推进节奏**——链
+    // 路恢复后立即补扫（不拖 tick）。interval <= 0 = 关闭（仅启动扫描一次）。
+    // 返回本次重驱动的 pending 份数（0 = 未到节奏/关闭/链路未起/无事可做）。
+    // now 由调用面注入（宿主 game 拍传 steady_clock::now()，测试注合成时刻）。
+    std::size_t maybe_redrive_pending(std::chrono::milliseconds interval,
+                                      std::chrono::steady_clock::time_point now,
+                                      bool link_ready);
     // 恢复记录查询（验收/审计面）：有记录返回其生命周期态，无 = nullopt。
     [[nodiscard]] std::optional<SettlementLifecycle> settlement_record_state(
         std::uint64_t settlement_id) const;
@@ -326,6 +337,9 @@ private:
     std::unique_ptr<SettlementCredentialStore> credential_store_;
     // D13 结算恢复记录（唯一意图记录持久面）；未装配为 nullptr。
     std::unique_ptr<SettlementRecordStore> record_store_;
+    // 上次实际扫盘重驱动的时刻（周期重驱动节奏基准）；nullopt = 尚未扫过
+    // （首拍可扫——重启后不靠跨重启记忆节奏，Base 链路恢复即补扫）。
+    std::optional<std::chrono::steady_clock::time_point> last_redrive_;
     // D11 入场准入凭证面（受理签发 + 准入核销）；未启用为 nullptr。
     std::unique_ptr<AdmissionCredentialFace> admission_credential_face_;
 

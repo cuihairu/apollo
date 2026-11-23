@@ -130,6 +130,13 @@ struct WorldAppConfig {
     // 完成才删；失败取消置 cancelled。空 = 不持久化（降级态）。
     std::string settlementRecordDir;
 
+    // 周期重驱动节奏（D13 #1 Base 延后恢复补齐，2026-11-23）：挂账 pending
+    // 记录按该间隔在 game 拍重驱动（intent 已知而未确认的成员重发 958，
+    // Base 去重环兜底不双记）——启动扫描时 Base 不可达的挂账不再依赖重启
+    // 补齐。Base 链路未起（拨号 peerUp=false）的拍跳过且不推进节奏；0 =
+    // 关闭（仅启动扫描一次）。
+    int settlementRedriveMs = 30000;
+
     // 空间配置
     std::string spaceName = "main_world";
     float spaceWidth = 1000.0f;

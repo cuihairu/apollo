@@ -75,6 +75,23 @@ std::size_t SquadInstanceService::ingest_restored_settlement_records() {
     return pending;
 }
 
+std::size_t SquadInstanceService::maybe_redrive_pending(
+    std::chrono::milliseconds interval,
+    std::chrono::steady_clock::time_point now, bool link_ready) {
+    // 关闭（宿主仅启动扫描一次）或未装配恢复记录面：无事可做。链路未起
+    // 也跳过且不推进节奏——Base 延后恢复后首次链路即起的拍即补扫（不拖
+    // tick，不把网络超时当支付失败）。
+    if (interval.count() <= 0 || !record_store_ || !link_ready) return 0;
+    // 节奏门（重试节奏）：距上次实际扫盘 >= interval 才再扫——挂账待补的
+    // pending 记录按节奏补齐，不依赖重启。steady_clock 单调（宿主 game 拍
+    // 每 tick 注入 now，测试注合成时刻）。
+    if (last_redrive_ && now - *last_redrive_ < interval) {
+        return 0;
+    }
+    last_redrive_ = now;
+    return ingest_restored_settlement_records();
+}
+
 std::optional<SettlementLifecycle> SquadInstanceService::settlement_record_state(
     std::uint64_t settlement_id) const {
     if (!record_store_) return std::nullopt;

@@ -1846,6 +1846,94 @@ bool test_squad_settlement_record_redrive_base_still_unreachable() {
     return true;
 }
 
+// D13 #1 重试节奏（pending 自动重驱动的**节奏**面）：启动扫描时 Base 不可达
+// 的挂账按节奏补齐，不依赖重启——节奏门（interval 内不重复扫）+ Base 链路
+// 门（未起不扫且不推进节奏，恢复后首拍即补扫）+ 关闭（interval 0 = 仅启动
+// 扫描一次）。重驱动本身（intent 重发/不双记）在上两用例覆盖——本用例只
+// 测 maybe_redrive_pending 的门控语义。
+bool test_squad_settlement_redrive_cadence() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 7);
+    const auto dir = make_tmp_dir("rec_cadence");
+    std::uint64_t instance_id = 0;
+    // Base 长期态跨服务实例持久（同表贯穿）。
+    auto table = make_business_table({kLeader, kMemberB, kMemberC});
+    // 节奏基准：取真实 now（离 epoch 远），偏移合成时刻推进节奏。
+    const auto t0 = std::chrono::steady_clock::now();
+
+    // 代次一：leader 确认，B/C 分值已定但业务面未受理（挂账）——pending 记录。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        table.missing = {kMemberB, kMemberC};
+        service.set_settlement_record_dir(dir);
+
+        TEST_ASSERT(service.launch(basic_request(7)).error == LaunchError::Ok,
+                    "launched");
+        instance_id = service.find_by_party(7)->instance_id;
+        TEST_ASSERT(service.credit_settlement(7, kLeader, 40) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "leader credited");
+        TEST_ASSERT(service.credit_settlement(7, kMemberB, 20) ==
+                        squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                    "member B held");
+        TEST_ASSERT(service.credit_settlement(7, kMemberC, 30) ==
+                        squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                    "member C held");
+    }
+
+    // 代次二（Base 已恢复，业务缝在位）：maybe_redrive_pending 门控语义。
+    {
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        wire_business_sink(service, table);
+        table.missing.clear();
+        service.set_settlement_record_dir(dir);
+
+        // 链路未起：跳过且不推进节奏（不拖 tick）——挂账保留，B/C 未重发。
+        TEST_ASSERT(service.maybe_redrive_pending(
+                        std::chrono::seconds(30), t0, false) == 0,
+                    "link down skips redrive");
+        TEST_ASSERT(service.settlement_record_state(instance_id) ==
+                        squad_instance::SettlementLifecycle::Pending,
+                    "record retained while link down");
+        TEST_ASSERT(table.submits[kLeader] == 1 && table.submits[kMemberB] == 0 &&
+                        table.submits[kMemberC] == 0,
+                    "no resubmit while link down");
+
+        // 链路恢复：last_redrive_ 未推进（nullopt = 首拍可扫）→ 立即补扫
+        // 重驱动——B/C 分值已定重发同结算 ID → 全量确认 → 记录删除。
+        TEST_ASSERT(service.maybe_redrive_pending(
+                        std::chrono::seconds(30), t0, true) == 1,
+                    "link recovery redrives immediately");
+        TEST_ASSERT(!service.settlement_record_state(instance_id).has_value(),
+                    "record reclaimed after cadence redrive");
+        TEST_ASSERT(exp_of(table, kLeader) == 40 && exp_of(table, kMemberB) == 20 &&
+                        exp_of(table, kMemberC) == 30,
+                    "cadence redrive credits all, no double");
+        TEST_ASSERT(table.submits[kLeader] == 1 && table.submits[kMemberB] == 1 &&
+                        table.submits[kMemberC] == 1,
+                    "leader not re-submitted, B/C submitted once each");
+
+        // 节奏门：interval 内再次调用不扫（无事可做也返回 0）。
+        TEST_ASSERT(service.maybe_redrive_pending(
+                        std::chrono::seconds(30), t0 + std::chrono::seconds(10),
+                        true) == 0,
+                    "within interval no rescan");
+        // 关闭（interval 0）：仅启动扫描一次，不再重驱动。
+        TEST_ASSERT(service.maybe_redrive_pending(
+                        std::chrono::milliseconds(0),
+                        t0 + std::chrono::seconds(20), true) == 0,
+                    "zero interval disables periodic redrive");
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    return true;
+}
+
 bool test_squad_settlement_credential_failure_holds_ledger() {
     PartyManager parties;
     World world;
@@ -2377,6 +2465,8 @@ int main() {
          test_squad_settlement_record_redrive_after_restart},
         {"squad_settlement_record_redrive_base_still_unreachable",
          test_squad_settlement_record_redrive_base_still_unreachable},
+        {"squad_settlement_redrive_cadence",
+         test_squad_settlement_redrive_cadence},
         {"squad_settlement_credential_replay_dedup_across_restart",
          test_squad_settlement_credential_replay_dedup_across_restart},
         {"squad_settlement_credential_failure_holds_ledger",

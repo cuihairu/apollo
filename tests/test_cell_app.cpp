@@ -639,6 +639,55 @@ bool test_cell_kernel_freeze_face() {
     return true;
 }
 
+// D13 重试节奏接线（gameLoop → driveSettlementRedrive → 服务 maybe_redrive
+// _pending）：启用（settlementRedriveMs > 0）时内核线程每拍触发钩子（调用
+// 计数自增）；冻结拍不触发（钩子在 !frozen_ 段内）；关闭（= 0）不触发。
+// 节奏门 + Base 链路门的门控语义在服务单测（squad_instance_tests
+// squad_settlement_redrive_cadence）覆盖——本用例只钉「钩子接进 gameLoop」
+// 与「冻结/关闭即停」。
+bool test_cell_settlement_redrive_hook() {
+    world_app::WorldAppConfig config;
+    config.tickRateMs = 5;
+    config.settlementRedriveMs = 1;  // 每拍节奏（快窗断言钩子连续触发）
+    world_app::CellApp cell(config);
+    FakeEgress egress;
+    cell.set_egress(&egress);
+    cell.start();
+
+    // 启用 + 未冻结：钩子随 game 拍触发
+    TEST_ASSERT(wait_until([&] { return cell.settlementRedriveCalls() >= 2; },
+                           std::chrono::seconds(3)),
+                "redrive hook fires each tick while enabled");
+    const auto before_freeze = cell.settlementRedriveCalls();
+    // 冻结拍不触发（模拟推进暂停：玩法拍/重驱动一并停）
+    cell.set_frozen(true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));  // > 拍窗
+    TEST_ASSERT(cell.settlementRedriveCalls() == before_freeze,
+                "redrive hook stops while frozen");
+    // 解冻恢复触发
+    cell.set_frozen(false);
+    TEST_ASSERT(wait_until(
+                    [&] { return cell.settlementRedriveCalls() > before_freeze; },
+                    std::chrono::seconds(3)),
+                "redrive hook resumes after unfreeze");
+
+    cell.stop();
+
+    // 关闭（settlementRedriveMs = 0 = 仅启动扫描一次）：钩子不触发
+    world_app::WorldAppConfig disabled;
+    disabled.tickRateMs = 5;
+    disabled.settlementRedriveMs = 0;
+    world_app::CellApp cell_off(disabled);
+    FakeEgress egress_off;
+    cell_off.set_egress(&egress_off);
+    cell_off.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(60));
+    TEST_ASSERT(cell_off.settlementRedriveCalls() == 0,
+                "redrive hook idle while disabled");
+    cell_off.stop();
+    return true;
+}
+
 // L108 回收首切片：内核撤销面 remove_space——默认 Space 拒撤、未知空间幂
 // 等 0、占用中（scene 有 avatar）拒撤保路由、清场后撤销 = 摘路由 + 销毁空
 // scene。撤销面在生产里由 962 监听在 pre-tick 泵上下文调用（内核线程），
@@ -1338,6 +1387,7 @@ int main() {
          test_cell_kernel_unknown_space_falls_back_to_default},
         {"config_declared_spaces", test_config_declared_spaces},
         {"cell_kernel_freeze_face", test_cell_kernel_freeze_face},
+        {"cell_settlement_redrive_hook", test_cell_settlement_redrive_hook},
         {"cell_kernel_remove_space", test_cell_kernel_remove_space},
         {"cell_kernel_pending_revoke_retry", test_cell_kernel_pending_revoke_retry},
         {"cell_kernel_cancel_space_revoke", test_cell_kernel_cancel_space_revoke},

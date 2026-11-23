@@ -489,6 +489,11 @@ void CellApp::gameLoop() {
             // 小队副本玩法拍（P2 真实链路）：Running 副本 tick 推进（含已受理
             // 击杀的 battle 输入序）+ 结算期副本收尾；状态帧随后续操作/收尾下发
             driveSquadGameplay(delta_seconds);
+
+            // 结算恢复周期重驱动（D13 #1 重试节奏）：启动扫描时 Base 不可达
+            // 的挂账 pending 记录按 config.settlementRedriveMs 节奏补齐，不
+            // 依赖重启；Base 链路未起的拍跳过且不推进节奏（不拖 tick）。
+            driveSettlementRedrive();
         }
 
         // 玩法拍后钩子（管理推进：排空 / eval 收账 / 模块编排——宿主在

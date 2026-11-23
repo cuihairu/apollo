@@ -221,6 +221,10 @@ public:
     squad_instance::SquadInstanceService* squadInstanceService() noexcept {
         return squadInstanceService_.get();
     }
+    // 结算恢复周期重驱动调用计数（接线观测面，原子读）。
+    std::size_t settlementRedriveCalls() const {
+        return settlementRedriveCalls_.load(std::memory_order_acquire);
+    }
     // 脚本宿主（管理面专用：模块编排 target / 版本查询）。scripting-lua §2
     // 一状态一逻辑线程——指针只有内核线程可读。
     apollo::script::ScriptRuntime* script_runtime() noexcept { return script_.get(); }
@@ -260,6 +264,11 @@ private:
     void driveSquadGameplay(double delta_seconds);
     // 待撤销重试（tick 边界，内核线程——见 request_space_revoke 注）
     void drainPendingRevokes();
+    // 结算恢复周期重驱动（D13 #1 重试节奏，tick 边界内核线程）：挂账
+    // pending 记录按 config.settlementRedriveMs 节奏重驱动——启动扫描时
+    // Base 不可达的挂账不再依赖重启补齐。Base 链路未起（拨号 peerUp=false）
+    // 跳过且不推进节奏（不拖 tick）。
+    void driveSettlementRedrive();
 
     // 延时应答出口（929；request_id = 0 静默）。经 egress 缝。
     void sendAck(std::uint64_t request_id, std::int32_t code, const std::string& message);
@@ -326,6 +335,10 @@ private:
     std::mutex pendingRevokesMutex_;
     std::unordered_set<std::uint64_t> pendingRevokesSet_;
     std::atomic<std::size_t> pendingRevokes_{0};
+    // 结算恢复周期重驱动调用计数（D13 重试节奏接线观测面）：game 拍每拍
+    // 经 driveSettlementRedrive 触发，内核线程原子自增——测试断言钩子已
+    // 接进 gameLoop（重驱动本身逻辑在服务 maybe_redrive_pending 单测）。
+    std::atomic<std::size_t> settlementRedriveCalls_{0};
     // 已腾空销毁回执（L134 两 cell 回收确认批）：内核线程入队（互斥表）/
     // 宿主 tick 边界取走（同 pendingRevokes 纪律，但消费在宿主而非内核）。
     // mutex mutable——completed_reclaim_count 只读观测面也持锁。
