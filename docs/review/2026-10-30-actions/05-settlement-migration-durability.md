@@ -43,7 +43,9 @@
 
 > 单 Base 路径首切片 2026-11-23 已落地（commit cd8849d4，见 todo.md L133）：唯一结算意图记录以稳定结算 ID（= Instance ID）为键持久化（`SettlementRecordStore`，`settlement_records/settlement_<id>.rec`，生命周期 pending/done/cancelled），逐玩家落账确认经账本 `ConfirmationSink` 写入、全部名册成员 applied 即 done 并删记录（只有全部所需确认才删）；失败取消（全员退出/策略收尾/超时）置 cancelled 不发成功奖励、已发部分随记录保留；重启恢复扫描计数 pending 不自动重发。故障注入覆盖（单 Base 路径）：#1 Base 暂不可达（挂账 pending→重试补齐→done）、#2 回执丢失（同 ID 重试不重复，随 L132 c5966bbe）、#3 进程重启（恢复扫描见 pending）、#4 解散/超时（cancelled 不发奖励）；#5 奖励数核对（确认位与账本 applied 对齐，无漏发/重发）部分覆盖。
 
-> pending 自动重驱动批 2026-11-23 已落地（commit 0496d63c，见 todo.md L133）：记录补记 `intent`（已定分值 = 应发什么，intent ⊇ confirmed——未确认成员的分值重启不丢）；账本 `IntentSink`（apply 起始即记持久意图，与业务面是否受理无关，同路径覆盖 credit_settlement/on_reward）；恢复扫描 `ingest_restored_settlement_records` 改为自动重驱动——pending 记录中 intent 已知而未确认的成员重发 958（同结算 ID，Base 去重环兜底不双记：已发不重发、未发补齐），全部所需确认完成才删唯一记录（§2.1）；无业务面（未装配）或分值未裁决（无 intent = 人工修复面）成员不自动驱动，记录保留。故障注入补充：#3 进程重启自动补齐、#1 Base 仍暂不可达（挂账保留，恢复后再次扫描补齐）。**仍缺**（另起批）：pending 重试节奏/人工修复流程（自动重驱动机制已落——无业务面或分值未裁决成员的重试节奏/人工修复面仍缺）、多 Base 分别确认与部分成功/补偿编排（D12 #2）、已发部分补偿/核对面。
+> pending 自动重驱动批 2026-11-23 已落地（commit 0496d63c，见 todo.md L133）：记录补记 `intent`（已定分值 = 应发什么，intent ⊇ confirmed——未确认成员的分值重启不丢）；账本 `IntentSink`（apply 起始即记持久意图，与业务面是否受理无关，同路径覆盖 credit_settlement/on_reward）；恢复扫描 `ingest_restored_settlement_records` 改为自动重驱动——pending 记录中 intent 已知而未确认的成员重发 958（同结算 ID，Base 去重环兜底不双记：已发不重发、未发补齐），全部所需确认完成才删唯一记录（§2.1）；无业务面（未装配）或分值未裁决（无 intent = 人工修复面）成员不自动驱动，记录保留。故障注入补充：#3 进程重启自动补齐、#1 Base 仍暂不可达（挂账保留，恢复后再次扫描补齐）。
+
+> D13 重试节奏批 2026-11-23 已落地（commit 55539edb，见 todo.md L133）：挂账 pending 记录按节奏补齐不依赖重启——服务 `maybe_redrive_pending`（节奏门：interval 内不重扫；Base 链路未起跳过且不推进节奏——恢复后首拍即补扫；interval 0 = 关闭仅启动扫描一次；now 由调用面注入）、`WorldAppConfig.settlementRedriveMs`（缺省 30s）、`CellApp::driveSettlementRedrive`（game 拍触发，冻结拍不触发，拨号 peerUp 门，`settlementRedriveCalls` 接线观测面）。故障注入补充：#1 Base 延后恢复（启动扫描时不可达 → 链路恢复后按节奏补扫补齐，不再依赖重启）。测试：`squad_settlement_redrive_cadence`（链路未起跳过 / 恢复首拍即补扫 / interval 内不重扫 / 关闭）与 `cell_settlement_redrive_hook`（每拍触发 / 冻结停 / 关闭停）。**仍缺**（另起批）：人工修复流程（分值未裁决 = 无 intent 成员的人工修复面仍缺——重试节奏已落地）、多 Base 分别确认与部分成功/补偿编排（D12 #2）、已发部分补偿/核对面。
 
 ## 3. D16 · 迁移状态机与冻结提交顺序
 
