@@ -20,6 +20,18 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 | 4 | 重复重定向 | 重定向次数受限（限次后回退查目录） |
 | 5 | 正常消息不逐条经目录/管理端代理 | 仅冷启动、过期、拒旧后查目录 |
 
+> 验收 #1「基础业务直达当前 Base」2026-11-26 已接线（commit 2f9b6d30，见 todo.md L122）：
+> 归属 Base 的 M1 端点随 915 落点成行（登录实拨端点），目录 918 回带进网关
+> `RouteSnapshot.baseHost/basePort`；`setBaseForwarding` 按快照端点经
+> `baseClientForEndpoint` 直连归属 Base，端点未声明回退激活面静态链路（旧语义
+> 零回归），已装 `baseResolver_` 权威裁决仍优先。测试
+> `test_base_forward_via_directory_endpoint`（活区 GatewayPushDownlinkTests；
+> `test_gateway_route.cpp` 属 `APOLLO_BUILD_GTESTS=OFF` 死区，覆盖不落死文件）：
+> 静态链路 A / 目录归属 B 分置两真 Base——声明端点玩家积分落 B 不落 A、未声明
+> 玩家回退落 A 不留痕 B，回执各回本会话。四树验证：主树/off-tree2/examples
+> ctest 各 128/128；san 目标 6/6（ASan+UBSan）。**仍缺**（延后项，不重试）：
+> 被拒意图的客户可见重同步（协议设计拍板），以及 D08 #4 重定向限次、D10 case 3。
+
 ## 2. D09 · 登录完整链路分段表
 
 ### 2.1 分段与成功条件/超时动作
