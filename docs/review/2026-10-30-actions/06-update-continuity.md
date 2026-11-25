@@ -15,6 +15,19 @@
 
 - 未知消息和坏帧现有兜底继续保留；握手 schema_hash 白名单只是入口条件，不能代替兼容实现。
 
+> 真实样本切片 2026-11-25 已落地（commit e869a102，见 todo.md L143）：业务字段演进选 958/959 结算入账
+> （请求+回执曾加 `settlement_id`、回执曾加 `duplicate`；旧形 = 4 字段）。`business_wire.hpp`：
+> **旧写新读**——新端 `decodeBody` 公共前部读尽即受理旧形（缺尾字段默认 `settlement_id=0` 落既有
+> 「旧口径不记重放」环语义、`duplicate=false`）；**新写旧读**——Base 回执按请求帧形回带
+> （`score_credit_request_legacy_shape` 按帧形判不按值判：旧形请求得旧形回执、新形请求得全字段回执），
+> 新帧对旧端语义为整帧拒（`decodeFrameLegacyStrict` 旧端实现快照：公共前部 + done()），拒 → 结构化
+> ERROR → 调用方挂账待补（不假受理不崩）；**未升级客户端**——真拨真 Base：旧形请求 exp 照落、
+> 重复旧形逐笔照落不误判 duplicate（0=不记重放）、冻结（Transferring）/无锚点状态转换回旧形
+> accepted=0；**帧纪律**——旧形 body 尾部未知余字节整帧拒不静默截断。测试 `base_business_wire_d19_
+> compat`（真拨真受理面）。**仍缺**（P5 批余）：多进程 cell/Base/World 更新演练（D20–D23 依赖拓扑批）、
+> 多版本真机样本；版本拒绝维持现状（route_version 失配断连 kRouteVersionMismatch）；快照转换即档案
+> JSON 新字段 `settledIds` 旧档缺字段缺省（`j.contains` 守卫），独立演进样本另行验收。
+
 ## 2. D20 · cell 更新（先自然排空）
 
 ### 2.1 排空更新多进程演练
