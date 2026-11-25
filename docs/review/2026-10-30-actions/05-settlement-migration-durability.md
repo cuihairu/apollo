@@ -17,7 +17,7 @@
 | 1 | database 已写、回执丢失 | 同结算 ID 重试**不重复**发放 |
 | 2 | 两 Base 部分成功 | 已成功 Base 不重发；失败 Base 补齐（不默认扣回） |
 
-> 第 1 行 2026-11-23 已落地（commit c5966bbe，见 todo.md L132）：稳定结算 ID（cell `instance->id()` 单调）经 `ledger.begin(members, settlement_id)` → BusinessSink 三参 → 958/959（+settlement_id/+duplicate，承载域 internal-only、client_hash 不动）→ Base `Avatar` 去重环（宽 128），环与 exp 记账**同一次 SaveTask 落盘**（`PlayerData.settledIds` 随档案 JSON 原子写）；回执丢失重放受理为 accepted+duplicate 不双记（测试：`squad_instance_tests` 41/41、`base_business_wire` 持久闭环含迁移接权播种、主树 ctest 128/128、san 三套件绿、off-tree2/examples 全量重建 exit 0）。第 2 行仍缺——多 Base 分别确认/补偿/待重试编排未接线（归 D13 恢复记录切片），不重试。
+> 第 1 行 2026-11-23 已落地（commit c5966bbe，见 todo.md L132）：稳定结算 ID（cell `instance->id()` 单调）经 `ledger.begin(members, settlement_id)` → BusinessSink 三参 → 958/959（+settlement_id/+duplicate，承载域 internal-only、client_hash 不动）→ Base `Avatar` 去重环（宽 128），环与 exp 记账**同一次 SaveTask 落盘**（`PlayerData.settledIds` 随档案 JSON 原子写）；回执丢失重放受理为 accepted+duplicate 不双记（测试：`squad_instance_tests` 41/41、`base_business_wire` 持久闭环含迁移接权播种、主树 ctest 128/128、san 三套件绿、off-tree2/examples 全量重建 exit 0）。第 2 行选路前置 2026-11-26 已落地（commit 392cdf71，见 todo.md L132）：915/918 +base_host/base_port 目录承载登录实拨端点（承载域，不裁决），cell 侧 `SettlementBaseRouter` 按玩家 917/918 解析归属 Base 逐玩家拨 958（端点缓存 + 传输失败/业务失配清缓存重解析自愈 + 每端点懒拨 + 单 Base 兜底零回归）——已成功 Base 不重发（Base 去重环 accepted+duplicate）、失败 Base 补齐（挂账重驱动重解析新端点）经真链路样本验证（`settlement_base_router_multi_base`：A/B 异端点分账不串、停面挂账→目录改指重拨补齐、同 ID 重放不双记、误投异端锚点拒）；**仍缺**：多 Base 真机编队演练（dev_fleet 现仍单 Base）、Base↔Base 锚点迁移改指的编排接线与补偿编排——不重试。
 
 > 明确不做：延后跨区运行和全局强原子事务；不因跨服未启用而延后单区多 Base 的结算正确性。
 
