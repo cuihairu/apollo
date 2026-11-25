@@ -34,6 +34,15 @@
 > 规则：一次 Instance 只有一个提交结算者；同一 Space 的每次转移都记一行 A（版本单调），
 > 杜绝两写者通过版本回退同时生效。
 
+> D03 单提交者落地批 2026-11-26 已执行（commit 3594b6fe，见 todo.md L106）：结算三写面
+> `credit_settlement`/`retry_settlement`/`restore_settlement` 补齐与 enter/start/abort/dismiss
+> 同款的归属 World 守卫——远端 World 持有绑定但本进程无本地实例时，显式奖励口拒
+> （UnknownPlayer）、补账与恢复回填空操作；归属方同路径照常落账。测试：
+> `squad_settlement_single_owner_world`（远端三写面全拒且不改账本/业务面、归属方逐玩家
+> 落账一次），SquadInstanceTests 51/51；主树/off-tree2/examples ctest 各 128/128；
+> san 树目标 6/6（ASan+UBSan）。仍缺（D03 明确延后，不重试）：邻接算法、同 Space
+> 多 Cell、自动动态重平衡、单实体独立权威模拟代次。
+
 ## 2. D14 · 两 cell 真实隔离与回收用例设计
 
 ### 2.1 用例拓扑
