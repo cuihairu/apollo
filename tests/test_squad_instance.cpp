@@ -2168,6 +2168,65 @@ bool test_squad_multi_world_allocation_order() {
     return true;
 }
 
+// D03「一次 Instance 只有一个提交结算者」：远端 World 持有副本绑定但无本地
+// 实例时，显式奖励口/补账/恢复回填三写面均须拒（NotLocal 守卫），归属
+// World 侧同路径照常落账；结算快照在任何非归属写尝试后不变（第二提交者
+// 不可凭共享 party 账制造双记）。
+bool test_squad_settlement_single_owner_world() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    // 本进程 = World 2；副本由 World 1 承载（远端 spawner 供 instance/scene
+    // id）——绑定.world_id = 1，本进程有账但无本地实例。
+    SquadInstanceService service(parties, &world, /*local_world_id=*/2);
+    // 只登记远端 World 1：本地 2 无容量登记，pick_world 不走本地优先。
+    service.register_world(1, 4);
+    service.set_remote_spawner([](std::uint32_t, const LaunchRequest&) {
+        return std::make_pair(9100, 8100);
+    });
+    auto table = make_business_table({kLeader, kMemberB, kMemberC});
+    wire_business_sink(service, table);
+
+    const auto result = service.launch(basic_request(1));
+    TEST_ASSERT(result.error == LaunchError::Ok && result.world_id == 1,
+                "remote-owned instance launched");
+    const auto* binding = service.find_by_party(1);
+    TEST_ASSERT(binding != nullptr && binding->world_id == 1,
+                "binding records owning world 1");
+
+    // 远端 World 持有绑定但本进程未有本地结算账——所有写尝试均不得改变它。
+    TEST_ASSERT(!service.settlement(1).has_value(), "no settlement opened at launch");
+
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::UnknownPlayer,
+                "non-owner world credit rejected");
+    TEST_ASSERT(service.retry_settlement(1) == 0,
+                "non-owner world retry rejected");
+    service.restore_settlement(1, {kLeader});
+    TEST_ASSERT(table.credited[kLeader] == 0,
+                "non-owner world wrote nothing to business sink");
+    TEST_ASSERT(!service.settlement(1).has_value(),
+                "non-owner world did not open/settle a ledger");
+
+    // 归属方侧同路径照常受理（独立宿主：binding.world_id=1 且本地实例在位）
+    PartyManager owner_parties;
+    World owner_world;
+    make_party(owner_parties, 1);
+    SquadInstanceService owner(owner_parties, &owner_world, /*local_world_id=*/1);
+    owner.register_world(1, 4);
+    auto owner_table = make_business_table({kLeader, kMemberB, kMemberC});
+    wire_business_sink(owner, owner_table);
+    TEST_ASSERT(owner.launch(basic_request(1)).error == LaunchError::Ok,
+                "owner launched locally");
+    TEST_ASSERT(owner.credit_settlement(1, kLeader, 40) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "owner world credit path still works");
+    TEST_ASSERT(exp_of(owner_table, kLeader) == 40, "owner credit landed once");
+    TEST_ASSERT(owner.retry_settlement(1) == 0,
+                "owner retry has nothing pending after settled credit");
+    return true;
+}
+
 //------------------------------------------------------------------------------
 // D11 入场准入凭证（有期限、单次消费；四负例：过期/错实例/重复使用/资格变更）
 //------------------------------------------------------------------------------
@@ -2669,6 +2728,7 @@ int main() {
         {"squad_concurrent_instances_gameplay_isolation",
          test_squad_concurrent_instances_gameplay_isolation},
         {"squad_multi_world_allocation_order", test_squad_multi_world_allocation_order},
+        {"squad_settlement_single_owner_world", test_squad_settlement_single_owner_world},
         {"admission_roster_hash_stability", test_admission_roster_hash_stability},
         {"admission_face_issue_verify_consume", test_admission_face_issue_verify_consume},
         {"admission_face_expiry_and_not_target", test_admission_face_expiry_and_not_target},

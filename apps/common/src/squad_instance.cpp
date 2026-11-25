@@ -432,6 +432,11 @@ SettlementLedger::ApplyError SquadInstanceService::credit_settlement(
     std::uint64_t party_id, std::uint64_t player_id, std::int64_t score) {
     const auto* binding = find_by_party(party_id);
     if (!binding) return SettlementLedger::ApplyError::UnknownPlayer;
+    // D03「一次 Instance 只有一个提交结算者」：结算写权随副本归属 World——
+    // 远端 World 持有绑定但无本地实例，非归属进程不得经显式奖励口落账
+    // （与 enter/start/abort/dismiss 的同款 NotLocal 守卫对称）。
+    if (binding->world_id != local_world_id_ || !local_world_)
+        return SettlementLedger::ApplyError::UnknownPlayer;
     const auto it = settlements_.find(binding->instance_id);
     if (it == settlements_.end()) return SettlementLedger::ApplyError::UnknownPlayer;
     return it->second->apply(player_id, score);
@@ -440,6 +445,9 @@ SettlementLedger::ApplyError SquadInstanceService::credit_settlement(
 std::size_t SquadInstanceService::retry_settlement(std::uint64_t party_id) {
     const auto* binding = find_by_party(party_id);
     if (!binding) return 0;
+    // 同结算写权守卫：非归属 World 不得补账（远端挂账由归属方自己的
+    // 重驱动路径承接——本进程连本地实例都没有，不可造第二提交者）。
+    if (binding->world_id != local_world_id_ || !local_world_) return 0;
     const auto it = settlements_.find(binding->instance_id);
     return it == settlements_.end() ? 0 : it->second->retry();
 }
@@ -448,6 +456,9 @@ void SquadInstanceService::restore_settlement(
     std::uint64_t party_id, const std::vector<std::uint64_t>& applied_players) {
     const auto* binding = find_by_party(party_id);
     if (!binding) return;
+    // 恢复回填同为结算写权面：非归属 World 不回填（避免远端进程凭旧档
+    // 痕迹在本进程造成已落假象）。
+    if (binding->world_id != local_world_id_ || !local_world_) return;
     if (const auto it = settlements_.find(binding->instance_id); it != settlements_.end())
         it->second->restore(applied_players);
 }
