@@ -218,6 +218,10 @@ std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
         return protocol::MessageCodec::encode(
             err, protocol::MessageCodec::parseHeader(request).sessionId);
     }
+    // D19 未升级客户端兼容：回执按请求帧形回带——旧形请求（无 settlement_
+    // id 尾字段）得旧形回执（旧端严格解码整帧通过）；新形请求得全字段回执。
+    // 按帧形判不按值判（新形请求显式 settlement_id=0 仍回全字段）。
+    const bool legacy_shape = business::score_credit_request_legacy_shape(request);
     business::ScoreCreditReply reply;
     reply.player_id = req.player_id;
     reply.request_id = req.request_id;
@@ -231,7 +235,8 @@ std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
     } else if (req.settlement_id != 0 &&
                avatar->was_settled(req.settlement_id)) {
         // L132 结算幂等：同结算 ID 已受理（回执丢失重放/崩溃后读档重放）——
-        // 受理但不双记（幂等回执）。分值以账本重提为准，不重落。
+        // 受理但不双记（幂等回执）。分值以账本重提为准，不重落。旧形请求
+        // settlement_id=0 = 旧口径不记重放（was_settled(0) 恒否，逐笔照落）。
         reply.accepted = true;
         reply.duplicate = true;
     } else {
@@ -242,7 +247,8 @@ std::vector<uint8_t> PlayerStore::handlePlayerScoreCreditRequest(
         avatar->mark_settled(req.settlement_id, req.score);
         reply.accepted = true;
     }
-    return business::encodeFrame(reply, session);
+    return legacy_shape ? business::encodeFrameLegacy(reply, session)
+                        : business::encodeFrame(reply, session);
 }
 
 std::vector<uint8_t> PlayerStore::handlePlayerSnapshotRequest(

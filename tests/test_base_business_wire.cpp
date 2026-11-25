@@ -232,6 +232,242 @@ void base_business_wire() {
     dial.shutdown();
 }
 
+// D19 真实新旧业务解码兼容（958/959 字段演进样本：请求+回执加
+// settlement_id、回执加 duplicate；旧形 = 4 字段）——真拨真 Base 受理面：
+//   1. 旧写新读：旧形请求帧新端解码受理（settlement_id=0 落「旧口径不记
+//      重放」环语义）；旧形回执帧新端解码受理（duplicate=false）；
+//   2. 新写旧读：新形帧对旧端实现快照（decodeFrameLegacyStrict：公共前部
+//      + done()）整帧拒——不静默截断、不误受理；
+//   3. 未升级客户端（旧形请求 → 新 Base）：回执按请求帧形回带旧形（旧端
+//      严格解码整帧通过）；exp 照落；重复旧形请求不误判 duplicate（0=旧
+//      口径不记重放，逐笔照落）；冻结（Transferring）与无锚点状态转换
+//      回旧形 accepted=0（挂账语义不变）；
+//   4. 帧纪律：旧形 body 尾部未知余字节（未来形）新端整帧拒，不默认吞。
+void base_business_wire_d19_compat() {
+    TemporaryDirectory files;
+
+    player_store::PlayerStoreConfig store_config;
+    store_config.host = "127.0.0.1";
+    store_config.m1Enabled = true;
+    store_config.m1Port = 0;
+    store_config.m1SelfName = "base";
+    store_config.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_config.dataDir = (files.path / "players").string();
+    store_config.journalPath = (files.path / "journal/persist.log").string();
+
+    StoreHost base(store_config, 0, 0, 0, 0);
+    require(base.store->m1_listen_port() != 0, "d19 base store did not listen");
+
+    player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "world", "base",
+                                 "127.0.0.1", base.store->m1_listen_port());
+    require(dial.ready(), "d19 store dial did not assemble");
+    require(dial.waitUp(), "d19 store dial did not reach base face");
+
+    require(base.store->adoptPlayer(21, "", 7101, 9, 2), "player 21 adopt failed");
+    require(base.store->adoptPlayer(22, "", 7102, 10, 2), "player 22 adopt failed");
+
+    // ---- 1. 旧写新读（帧级：旧形字节 → 新端解码器）----
+    {
+        business::ScoreCreditRequest legacy_req;
+        legacy_req.request_id = 1;
+        legacy_req.player_id = 21;
+        legacy_req.score = 40;
+        legacy_req.source_zone_id = 2;
+        legacy_req.settlement_id = 999;  // 编码面丢弃（旧形无此字段）
+        const auto legacy_frame = business::encodeFrameLegacy(legacy_req);
+        business::ScoreCreditRequest parsed;
+        apollo::protocol::SessionID sid = 0;
+        require(business::decodeFrame(legacy_frame, parsed, sid),
+                "legacy request frame rejected by new decoder");
+        require(parsed.request_id == 1 && parsed.player_id == 21 &&
+                    parsed.score == 40 && parsed.source_zone_id == 2 &&
+                    parsed.settlement_id == 0,
+                "legacy request decoded fields wrong (settlement_id must default 0)");
+        // 旧端快照对旧形帧照常受理（两侧互通基线）
+        business::ScoreCreditRequest legacy_parsed;
+        require(business::decodeFrameLegacyStrict(legacy_frame, legacy_parsed, sid),
+                "legacy request frame rejected by legacy snapshot decoder");
+    }
+    {
+        business::ScoreCreditReply legacy_rep;
+        legacy_rep.request_id = 1;
+        legacy_rep.player_id = 21;
+        legacy_rep.accepted = true;
+        legacy_rep.settlement_id = 777;  // 编码面丢弃
+        legacy_rep.duplicate = true;     // 编码面丢弃
+        const auto legacy_frame = business::encodeFrameLegacy(legacy_rep);
+        business::ScoreCreditReply parsed;
+        apollo::protocol::SessionID sid = 0;
+        require(business::decodeFrame(legacy_frame, parsed, sid),
+                "legacy reply frame rejected by new decoder");
+        require(parsed.accepted && parsed.settlement_id == 0 && !parsed.duplicate,
+                "legacy reply decoded fields wrong (defaults must be 0/false)");
+    }
+
+    // ---- 2. 新写旧读（帧级：新形字节 → 旧端实现快照整帧拒）----
+    {
+        business::ScoreCreditRequest req;
+        req.request_id = 2;
+        req.player_id = 21;
+        req.score = 10;
+        req.source_zone_id = 2;
+        req.settlement_id = 777;
+        const auto frame = business::encodeFrame(req);
+        business::ScoreCreditRequest parsed;
+        apollo::protocol::SessionID sid = 0;
+        require(!business::decodeFrameLegacyStrict(frame, parsed, sid),
+                "new request frame must be rejected by legacy snapshot decoder");
+
+        business::ScoreCreditReply rep;
+        rep.request_id = 2;
+        rep.player_id = 21;
+        rep.accepted = true;
+        rep.settlement_id = 777;
+        business::ScoreCreditReply rep_parsed;
+        require(!business::decodeFrameLegacyStrict(business::encodeFrame(rep),
+                                                   rep_parsed, sid),
+                "new reply frame must be rejected by legacy snapshot decoder");
+    }
+
+    // ---- 3. 未升级客户端 × 新 Base（真拨：旧形请求 → 旧形回执回带）----
+    {
+        business::ScoreCreditRequest legacy_req;
+        legacy_req.request_id = 3;
+        legacy_req.player_id = 21;
+        legacy_req.score = 40;
+        legacy_req.source_zone_id = 2;
+        const auto reply = dial.call(business::encodeFrameLegacy(legacy_req));
+        require(reply.has_value(), "d19 legacy credit wire: no reply");
+        // 回执是旧形：新端与旧端快照都整帧解过
+        business::ScoreCreditReply rep;
+        apollo::protocol::SessionID sid = 0;
+        require(business::decodeFrame(*reply, rep, sid),
+                "legacy-echoed reply rejected by new decoder");
+        business::ScoreCreditReply legacy_rep;
+        apollo::protocol::SessionID legacy_sid = 0;
+        require(business::decodeFrameLegacyStrict(*reply, legacy_rep, legacy_sid),
+                "legacy-echoed reply rejected by legacy snapshot decoder");
+        require(legacy_sid == sid, "legacy-echoed reply session lost");
+        require(rep.accepted && !rep.duplicate && rep.settlement_id == 0,
+                "legacy credit reply fields wrong");
+        require(rep.request_id == 3 && rep.player_id == 21,
+                "legacy credit reply correlation broken");
+        const auto avatar = base.store->findAvatar(21);
+        require(avatar != nullptr && avatar->progress("exp") == 40,
+                "legacy credit did not land exp");
+        // 旧口径无稳定结算 ID：重复旧形请求逐笔照落（0=不记重放环）
+        legacy_req.request_id = 4;
+        legacy_req.score = 5;
+        const auto reply2 = dial.call(business::encodeFrameLegacy(legacy_req));
+        require(reply2.has_value(), "d19 legacy repeat wire: no reply");
+        business::ScoreCreditReply rep2;
+        require(business::decodeFrame(*reply2, rep2, sid),
+                "legacy repeat reply undecodable");
+        require(rep2.accepted && !rep2.duplicate,
+                "legacy repeat wrongly flagged duplicate");
+        require(avatar->progress("exp") == 45,
+                "legacy repeat did not accumulate (old-style must not dedupe)");
+        // 新形请求回执仍是全字段（回带按帧形判不按值判——settlement_id=0
+        // 的新形请求也得全字段回执）
+        business::ScoreCreditRequest new_req;
+        new_req.request_id = 5;
+        new_req.player_id = 21;
+        new_req.score = 1;
+        new_req.source_zone_id = 2;  // settlement_id = 0（显式旧值、新形帧）
+        const auto reply3 = dial.call(business::encodeFrame(new_req));
+        require(reply3.has_value(), "d19 zero-id new-shape wire: no reply");
+        business::ScoreCreditReply rep3;
+        require(business::decodeFrame(*reply3, rep3, sid) && rep3.settlement_id == 0,
+                "zero-id new-shape reply undecodable or fields wrong");
+        require(!business::decodeFrameLegacyStrict(*reply3, rep3, sid),
+                "zero-id new-shape reply must carry full fields (frame-shape echo)");
+    }
+
+    // ---- 3b. 状态转换兼容：冻结（Transferring）与无锚点 → 旧形 accepted=0 ----
+    {
+        migration::FreezeRequest freeze;
+        freeze.player_id = 22;
+        freeze.request_id = 11;
+        auto fr_reply = dial.call(migration::encodeFrame(freeze));
+        require(fr_reply.has_value(), "d19 freeze wire: no reply");
+        migration::FreezeReply fr;
+        apollo::protocol::SessionID sid = 0;
+        require(migration::decodeFrame(*fr_reply, fr, sid) && fr.accepted,
+                "d19 freeze on player 22 not accepted");
+
+        business::ScoreCreditRequest legacy_req;
+        legacy_req.request_id = 6;
+        legacy_req.player_id = 22;
+        legacy_req.score = 30;
+        legacy_req.source_zone_id = 2;
+        auto reply = dial.call(business::encodeFrameLegacy(legacy_req));
+        require(reply.has_value(), "d19 frozen legacy wire: no reply");
+        business::ScoreCreditReply rep;
+        require(business::decodeFrame(*reply, rep, sid) && !rep.accepted &&
+                    !rep.error_message.empty(),
+                "frozen avatar legacy credit must defer (accepted=0 with reason)");
+        require(business::decodeFrameLegacyStrict(*reply, rep, sid),
+                "frozen legacy reply must stay legacy-shaped");
+
+        legacy_req.request_id = 7;
+        legacy_req.player_id = 31337;  // 无锚点
+        reply = dial.call(business::encodeFrameLegacy(legacy_req));
+        require(reply.has_value(), "d19 unknown legacy wire: no reply");
+        require(business::decodeFrame(*reply, rep, sid) && !rep.accepted,
+                "unknown player legacy credit must defer");
+    }
+
+    // ---- 3c. 新 World × 新 Base：全字段回执 + settlement_id 幂等照旧 ----
+    {
+        business::ScoreCreditRequest req;
+        req.request_id = 8;
+        req.player_id = 21;
+        req.score = 20;
+        req.source_zone_id = 2;
+        req.settlement_id = 777;
+        auto reply = dial.call(business::encodeFrame(req));
+        require(reply.has_value(), "d19 new-shape wire: no reply");
+        business::ScoreCreditReply rep;
+        apollo::protocol::SessionID sid = 0;
+        require(business::decodeFrame(*reply, rep, sid) && rep.accepted &&
+                    !rep.duplicate && rep.settlement_id == 777,
+                "new-shape credit reply fields wrong");
+        business::ScoreCreditReply legacy_rep;
+        require(!business::decodeFrameLegacyStrict(*reply, legacy_rep, sid),
+                "new-shape reply must be rejected by legacy snapshot decoder");
+        const auto avatar = base.store->findAvatar(21);
+        require(avatar != nullptr && avatar->progress("exp") == 66,
+                "new-shape credit did not land exp");
+        // 同结算 ID 重放 → duplicate 不双记（既有 L132 语义不回归）
+        req.request_id = 9;
+        reply = dial.call(business::encodeFrame(req));
+        require(reply.has_value() && business::decodeFrame(*reply, rep, sid) &&
+                    rep.accepted && rep.duplicate,
+                "settlement replay not flagged duplicate");
+        require(avatar->progress("exp") == 66, "settlement replay double credited");
+    }
+
+    // ---- 4. 帧纪律：旧形 body 尾部未知余字节（未来形）整帧拒 ----
+    {
+        business::ScoreCreditRequest legacy_req;
+        legacy_req.request_id = 10;
+        legacy_req.player_id = 21;
+        legacy_req.score = 1;
+        legacy_req.source_zone_id = 2;
+        auto body = business::encodeBodyLegacy(legacy_req);
+        body.push_back(0xAB);
+        body.push_back(0xCD);  // 未知未来字段残片（header.length 计入）
+        const auto frame =
+            business::encodeLegacyFrame(std::move(body), business::ScoreCreditRequest::TYPE, 0);
+        business::ScoreCreditRequest parsed;
+        apollo::protocol::SessionID sid = 0;
+        require(!business::decodeFrame(frame, parsed, sid),
+                "unknown trailing bytes must be rejected (no silent truncation)");
+    }
+
+    dial.shutdown();
+}
+
 } // namespace
 
 int main() {
@@ -241,6 +477,7 @@ int main() {
 #else
     try {
         base_business_wire();
+        base_business_wire_d19_compat();
     } catch (const std::exception& ex) {
         std::cerr << "FAIL: " << ex.what() << '\n';
         return 1;
