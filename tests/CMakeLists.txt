@@ -2145,7 +2145,10 @@ target_compile_definitions(gateway_push_downlink_tests PRIVATE
 target_link_libraries(gateway_push_downlink_tests PRIVATE
     apollo apollo::base apollo::core apollo::game_core apollo::game_world apollo::script
     apollo::runtime apollo::net_tcp apollo::net_protocol apollo::net_link
-    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol)
+    apollo_net_tls apollo_net_ws apollo::net_contract_wire apollo::net_linktrace apollo_net_linkrpc apollo_protocol
+    # L122 基础业务直连选路用例依赖：真 OnlineDirectory（目录路由解析面）
+    # + 真 PlayerStore M1 面（StoreHost 双 Base 落点断言）+ 目录事件面同源。
+    apollo_app_services apollo::net_discovery)
 if(WIN32)
     target_link_libraries(gateway_push_downlink_tests PRIVATE ws2_32)
     target_compile_definitions(gateway_push_downlink_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)

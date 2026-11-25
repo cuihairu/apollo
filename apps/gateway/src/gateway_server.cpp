@@ -264,6 +264,42 @@ void GatewayServer::start() {
                 return result;
             }
 
+            // L122 基础业务直连选路：前递目标按会话路由快照的归属 Base 端点（918
+            // base_host/base_port ← 915 落点 ← 登录实拨 Base）裁决——基础业务
+            // 直连归属 Base，不经激活面静态链路。快照未声明（落点未携端点/
+            // 路由未解析）= 未声明，回退激活面静态链路（旧语义零回归）。
+            std::optional<std::string> resolvedEndpoint;
+            if (const auto session = sessionManager_ ? sessionManager_->getSession(sessionId)
+                                                     : nullptr;
+                session && !session->routeSnapshot.baseHost.empty() &&
+                session->routeSnapshot.basePort != 0) {
+                resolvedEndpoint = session->routeSnapshot.baseHost + ":" +
+                                   std::to_string(session->routeSnapshot.basePort);
+            }
+            if (resolvedEndpoint) {
+                ++baseForwardResolves_;
+                const auto routed = baseClientForEndpoint(*resolvedEndpoint);
+                if (!routed || !routed->peerUp()) {
+                    ++baseForwardRejections_;
+                    glog().warning("Base forward rejected: directory endpoint " +
+                                   *resolvedEndpoint + " is unreachable");
+                    return std::uint64_t{0};
+                }
+                return routed->callAsync(
+                    message,
+                    std::chrono::milliseconds(kM1BaseForwardTimeoutMs),
+                    [this, sessionId](std::optional<std::vector<std::uint8_t>> response) {
+                        if (!response) {
+                            glog().warning("Base forward timeout for session "
+                                           + std::to_string(sessionId));
+                            return;
+                        }
+                        if (messageRouter_ && messageRouter_->baseResponse()) {
+                            messageRouter_->baseResponse()(sessionId, std::move(response));
+                        }
+                    });
+            }
+
             if (!baseClient_) return std::uint64_t{0};
             const auto result = baseClient_->callAsync(
                 message,

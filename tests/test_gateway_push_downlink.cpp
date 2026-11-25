@@ -20,6 +20,10 @@
 #include "gateway/gateway_server.hpp"
 #include "world_app/world_app.hpp"
 #include "cell_host.hpp"
+#include "online_directory/online_directory.hpp"
+#include "player_store/business_wire.hpp"
+#include "store_host.hpp"
+#include "apollo/game/base/avatar_reward_sink.hpp"
 #include "apollo/net/link/frame.hpp"
 #include "apollo/net/ws/frame.hpp"
 #include "apollo/protocol/codec.hpp"
@@ -1175,6 +1179,184 @@ bool test_corrupt_body_frame_disconnects_session() {
     return true;
 }
 
+// L122 前递回执收帧：Base 前递回执经 baseResponse 下行面回本会话——
+// 读帧直到命中本会话的该笔积分回执（其间异型帧落地丢弃）。
+bool wait_credit_reply(TcpTestClient& client, std::uint64_t want_request,
+                       std::uint64_t want_session, const char* what) {
+    const auto deadline = std::chrono::steady_clock::now()
+                          + std::chrono::milliseconds(8000);
+    for (;;) {
+        std::vector<std::uint8_t> payload;
+        if (client.recvLinkFrame(payload)) {
+            player_store::business::ScoreCreditReply reply;
+            protocol::SessionID reply_session = 0;
+            if (player_store::business::decodeFrame(payload, reply, reply_session) &&
+                reply.request_id == want_request) {
+                TEST_ASSERT(reply.accepted, what);
+                TEST_ASSERT(reply_session == want_session, "reply session addressed");
+                return true;
+            }
+        }
+        TEST_ASSERT(std::chrono::steady_clock::now() < deadline, what);
+        std::this_thread::sleep_for(kTick);
+    }
+}
+
+// L122 基础业务直连选路：路由快照声明归属 Base 端点（918 base_host/base_port
+// ← 915 落点 ← 目录名册）时，Base 前递直连快照端点；快照未声明 = 回退激活面
+// 静态链路（旧语义零回归）。静态链路（A）与目录归属（B）分置两 Base——积分
+// 落在 B 证明走的是快照直连面而非静态链路。
+bool test_base_forward_via_directory_endpoint() {
+    std::cout << "Running: test_base_forward_via_directory_endpoint..." << std::endl;
+
+    TemporaryDirectory files;
+    player_store::PlayerStoreConfig baseAConfig;
+    baseAConfig.host = "127.0.0.1";
+    baseAConfig.m1Enabled = true;
+    baseAConfig.m1Port = 0;
+    baseAConfig.m1SelfName = "base-a";
+    baseAConfig.m1EndpointName = "gateway";
+    baseAConfig.m1RouteJson = kRouteJson;
+    baseAConfig.dataDir = (files.path / "a/players").string();
+    baseAConfig.journalPath = (files.path / "a/journal/persist.log").string();
+    StoreHost baseA(baseAConfig, 0, 0, 0, 0);
+    TEST_ASSERT(baseA.store->m1_listen_port() != 0, "base A M1 face listening");
+    TEST_ASSERT(baseA.store->adoptPlayer(1301, "", 0, 0, 2), "seed base A 1301");
+    TEST_ASSERT(baseA.store->adoptPlayer(1302, "", 0, 0, 2), "seed base A 1302");
+
+    player_store::PlayerStoreConfig baseBConfig;
+    baseBConfig.host = "127.0.0.1";
+    baseBConfig.m1Enabled = true;
+    baseBConfig.m1Port = 0;
+    baseBConfig.m1SelfName = "base-b";
+    baseBConfig.m1EndpointName = "gateway";
+    baseBConfig.m1RouteJson = kRouteJson;
+    baseBConfig.dataDir = (files.path / "b/players").string();
+    baseBConfig.journalPath = (files.path / "b/journal/persist.log").string();
+    StoreHost baseB(baseBConfig, 0, 0, 0, 0);
+    TEST_ASSERT(baseB.store->m1_listen_port() != 0, "base B M1 face listening");
+    TEST_ASSERT(baseB.store->adoptPlayer(1301, "", 0, 0, 2), "seed base B 1301");
+
+    // 真 OnlineDirectory + M1 控制面（ephemeral）——网关路由解析面拨此处。
+    online_directory::OnlineDirectory directory(0);
+    directory.set_m1_face(0, kRouteJson);
+    directory.start();
+    TEST_ASSERT(directory.listenPort() != 0, "directory M1 face listening");
+
+    // 激活面静态链路指 A；目录路由解析面指目录——两者端点分立是本用例前提。
+    gateway::GatewayConfig config;
+    config.host = "127.0.0.1";
+    config.port = probe_free_port();
+    config.sessionTimeoutMs = 600000;
+    config.heartbeatCheckIntervalMs = 50;
+    config.controlM1Port = 0;
+    config.worldM1Host = "127.0.0.1";
+    config.worldM1Port = 0;
+    config.worldM1RouteJson = kRouteJson;
+    config.baseM1Host = "127.0.0.1";
+    config.baseM1Port = baseA.store->m1_listen_port();
+    config.directoryM1Host = "127.0.0.1";
+    config.directoryM1Port = directory.listenPort();
+    config.gatewayId = 88;
+    gateway::GatewayServer server(config);
+    server.start();
+    TEST_ASSERT(wait_until([&] { return server.baseActivationReady(); }, 3000),
+                "static base A activation link up");
+    TEST_ASSERT(wait_until([&] { return server.routeResolutionReady(); }, 3000),
+                "directory route resolution link up");
+
+    TcpTestClient declaredClient;
+    std::uint64_t declaredSession = 0;
+    TEST_ASSERT(tcp_establish(declaredClient, server, server.listenPort(), 1301,
+                              declaredSession),
+                "declared player session established");
+    TcpTestClient undeclaredClient;
+    std::uint64_t undeclaredSession = 0;
+    TEST_ASSERT(tcp_establish(undeclaredClient, server, server.listenPort(), 1302,
+                              undeclaredSession),
+                "undeclared player session established");
+
+    // 目录名册（915 落点随登录实拨成行）：1301 声明归属 Base = B；1302 落点
+    // 在册但不带端点（Base 面关/未承接口径）= 未声明。快照懒解析在此后首个
+    // World 意图触发——名册先于意图落目录。
+    const auto seed_directory = [&](std::uint64_t player_id, std::uint64_t session_id,
+                                    std::uint16_t base_port) {
+        apollo::game::base::SessionBinding binding;
+        binding.session_id = session_id;
+        binding.gateway_id = 88;
+        binding.gateway_addr = "127.0.0.1:" + std::to_string(server.listenPort());
+        binding.session_version = 1;
+        TEST_ASSERT(directory.bindSession(player_id, binding), "directory bind");
+        apollo::game::base::WorldAssignment assignment;
+        assignment.world_id = 2;
+        assignment.space_id = player_id == 1301 ? 501 : 502;
+        assignment.route_version = 1;
+        if (base_port != 0) {
+            assignment.base_host = "127.0.0.1";
+            assignment.base_port = base_port;
+        }
+        TEST_ASSERT(directory.assignWorld(player_id, assignment), "directory assign");
+        return true;
+    };
+    seed_directory(1301, declaredSession, baseB.store->m1_listen_port());
+    seed_directory(1302, undeclaredSession, 0);
+
+    // 首个 World 意图触发懒解析（ensureRouteSnapshot）——快照随目录落点成行。
+    declaredClient.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_move(1301, 1, 2, 3), declaredSession)));
+    undeclaredClient.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_move(1302, 4, 5, 6), undeclaredSession)));
+
+    const auto initialResolves = server.baseForwardResolves();
+    const auto initialRejections = server.baseForwardRejections();
+    player_store::business::ScoreCreditRequest declaredRequest;
+    declaredRequest.request_id = 91;
+    declaredRequest.player_id = 1301;
+    declaredRequest.score = 30;
+    declaredRequest.source_zone_id = 7;
+    declaredClient.sendAll(frame_bytes(3, 0,
+        player_store::business::encodeFrame(declaredRequest, declaredSession)));
+    player_store::business::ScoreCreditRequest undeclaredRequest;
+    undeclaredRequest.request_id = 92;
+    undeclaredRequest.player_id = 1302;
+    undeclaredRequest.score = 40;
+    undeclaredRequest.source_zone_id = 7;
+    undeclaredClient.sendAll(frame_bytes(3, 0,
+        player_store::business::encodeFrame(undeclaredRequest, undeclaredSession)));
+
+    // 两笔前递各回本会话（快照直连与静态回退共用 baseResponse 下行面）。
+    wait_credit_reply(declaredClient, 91, declaredSession,
+                      "declared base forwarded reply reached the session");
+    wait_credit_reply(undeclaredClient, 92, undeclaredSession,
+                      "static base fallback reply reached the session");
+
+    // 落点分置：1301（快照声明端点）落 B、不落 A；1302（快照未声明）落静态
+    // 链路 A、B 无痕。
+    const auto declaredAvatarB = baseB.store->findAvatar(1301);
+    TEST_ASSERT(declaredAvatarB &&
+                declaredAvatarB->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 30,
+                "declared endpoint forward landed on the directory base B");
+    TEST_ASSERT(baseA.store->findAvatar(1301) == nullptr ||
+                baseA.store->findAvatar(1301)->progress(
+                    apollo::game::base::AvatarRewardSink::kExpKey) == 0,
+                "declared forward did not land on the static base A");
+    const auto fallbackAvatarA = baseA.store->findAvatar(1302);
+    TEST_ASSERT(fallbackAvatarA &&
+                fallbackAvatarA->progress(apollo::game::base::AvatarRewardSink::kExpKey) == 40,
+                "undeclared forward fell back to the static base A");
+    TEST_ASSERT(baseB.store->findAvatar(1302) == nullptr,
+                "undeclared forward left no trace on base B");
+    TEST_ASSERT(server.baseForwardResolves() == initialResolves + 1,
+                "declared forward attempted endpoint resolution");
+    TEST_ASSERT(server.baseForwardRejections() == initialRejections,
+                "no forward rejected (declared direct + undeclared static fallback)");
+
+    server.stop();
+    directory.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -1194,6 +1376,7 @@ int main() {
         {"lua_intent_push_loop", test_lua_intent_push_loop},
         {"uplink_duplicate_frames_gated", test_uplink_duplicate_frames_gated},
         {"corrupt_body_frame_disconnects_session", test_corrupt_body_frame_disconnects_session},
+        {"base_forward_via_directory_endpoint", test_base_forward_via_directory_endpoint},
     };
 
     int failed = 0;

@@ -36,6 +36,11 @@ struct RouteSnapshot {
     // 输入经 World 管理端中继（既有回退面）；在场即出口直连归属 cell。
     std::string cellHost;
     uint16_t cellPort = 0;
+    // L122 基础业务直连端点发现面：归属 Base 的 M1 监听端点（918 base_host/
+    // base_port 回带，源 = 915 落点 ← 登录实拨 Base 端点）。host 空/0 = 未声明
+    // ——基础业务经激活面静态链路（既有回退面）；在场即直连归属 Base。
+    std::string baseHost;
+    uint16_t basePort = 0;
     std::string worldServerUrl;
 
     [[nodiscard]] bool isAssigned() const {

@@ -170,6 +170,12 @@ public:
         return baseClient_ && baseClient_->peerUp();
     }
 
+    // 目录路由解析面对端链路就绪观测面（编排/测试用；directoryM1Port = 0
+    // 不装配 = false——路由解析缺席态，首意图走 buildDefaultRoute 兜底）。
+    bool routeResolutionReady() const {
+        return m1RouteClient_ && m1RouteClient_->peerUp();
+    }
+
     std::optional<ClientEndpoint> findClientEndpoint(SessionID sessionId) const;
     std::size_t getRegisteredConnectionCount() const;
 

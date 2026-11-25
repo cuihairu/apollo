@@ -411,6 +411,10 @@ std::optional<RouteSnapshot> GatewayServer::fetchRouteSnapshot(SessionID session
                         // 出口经 932 直连归属 cell（不经 World 管理端物理中继）。
                         routeSnapshot.cellHost = parsed.cellHost;
                         routeSnapshot.cellPort = static_cast<std::uint16_t>(parsed.cellPort);
+                        // L122 基础业务直连端点发现面：归属 Base M1 端点映射——
+                        // 前递经 918 落点直连归属 Base（不经激活面静态链路）。
+                        routeSnapshot.baseHost = parsed.baseHost;
+                        routeSnapshot.basePort = static_cast<std::uint16_t>(parsed.basePort);
                         routeSnapshot.worldServerUrl = config_.worldUrl;
                         return routeSnapshot;
                     }
