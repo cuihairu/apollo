@@ -147,6 +147,14 @@ bool LoginServer::preparePlayerOnline(
             const auto cell_endpoint = cell_endpoint_from_projection();
             assignment.cell_host = cell_endpoint.first;  // L122：端点域随落点成行
             assignment.cell_port = cell_endpoint.second;
+            // D12 逐 Base 结算选路：登录实拨归属 Base 的 M1 端点随落点成行——
+            // cell 结算面据此逐玩家拨 958。面关（port 0）= 未声明（空/0 不幻
+            // 值），结算面按单 Base 配置兜底。
+            assignment.base_host = config_.worldStoreM1Port != 0
+                                       ? config_.worldStoreM1Host
+                                       : std::string();
+            assignment.base_port =
+                config_.worldStoreM1Port != 0 ? config_.worldStoreM1Port : 0;
             if (!directory_->bindSession(playerId, binding) || !directory_->assignWorld(playerId, assignment)) {
                 errorMessage = "Login directory rejected admission";
                 return false;
@@ -165,6 +173,13 @@ bool LoginServer::preparePlayerOnline(
         const auto cell_endpoint = cell_endpoint_from_projection();
         assignReq.cellHost = cell_endpoint.first;  // L122：端点域随落点成行
         assignReq.cellPort = cell_endpoint.second;
+        // D12 逐 Base 结算选路：登录实拨归属 Base 的 M1 端点随落点成行（面关
+        // = 空/0 未声明，不幻值）。
+        assignReq.baseHost = config_.worldStoreM1Port != 0
+                                 ? config_.worldStoreM1Host
+                                 : std::string();
+        assignReq.basePort =
+            config_.worldStoreM1Port != 0 ? config_.worldStoreM1Port : 0;
 
         const auto assignResp =
             callBaseRpc<protocol::PlayerAssignWorldRequest, protocol::PlayerAssignWorldResponse>(

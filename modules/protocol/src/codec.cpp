@@ -498,6 +498,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldRequest& ms
     j["writeGen"] = msg.writeGen;
     j["cellHost"] = msg.cellHost;
     j["cellPort"] = msg.cellPort;
+    j["baseHost"] = msg.baseHost;
+    j["basePort"] = msg.basePort;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
 }
@@ -518,6 +520,9 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerAssignWorl
     // legacy 残帧（旧端缺键）缺省 0/空 不炸解析（端点域 L122）
     msg.cellHost = j.value("cellHost", std::string());
     msg.cellPort = j.value("cellPort", uint32_t(0));
+    // legacy 残帧（旧端缺键）缺省 0/空 不炸解析（归属 Base 端点域 D12）
+    msg.baseHost = j.value("baseHost", std::string());
+    msg.basePort = j.value("basePort", uint32_t(0));
 }
 
 std::vector<uint8_t> MessageCodec::encodeBody(const PlayerAssignWorldResponse& msg) {
@@ -571,6 +576,8 @@ std::vector<uint8_t> MessageCodec::encodeBody(const PlayerResolveRouteResponse& 
     j["writeGen"] = msg.writeGen;
     j["cellHost"] = msg.cellHost;
     j["cellPort"] = msg.cellPort;
+    j["baseHost"] = msg.baseHost;
+    j["basePort"] = msg.basePort;
     j["errorMessage"] = msg.errorMessage;
     std::string str = j.dump();
     return std::vector<uint8_t>(str.begin(), str.end());
@@ -597,6 +604,9 @@ void MessageCodec::decodeBody(const std::vector<uint8_t>& data, PlayerResolveRou
     // legacy 残帧（旧端缺键）缺省 0/空 不炸解析（端点域 L122）
     msg.cellHost = j.value("cellHost", std::string());
     msg.cellPort = j.value("cellPort", uint32_t(0));
+    // legacy 残帧（旧端缺键）缺省 0/空 不炸解析（归属 Base 端点域 D12）
+    msg.baseHost = j.value("baseHost", std::string());
+    msg.basePort = j.value("basePort", uint32_t(0));
     msg.errorMessage = j.value("errorMessage", "");
 }
 

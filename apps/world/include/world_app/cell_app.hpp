@@ -45,6 +45,7 @@ struct ScriptFaultEvent;
 
 namespace player_store {
 class StoreDial;
+class SettlementBaseRouter;
 }
 
 namespace world_app {
@@ -306,6 +307,9 @@ private:
 
     // Base 业务受理面拨号（P1 结算迁入；实现随析构取完整类型）
     std::unique_ptr<player_store::StoreDial> baseBusinessDial_;
+    // 逐 Base 结算选路（D12 同区多 Base 部分成功切片）：按玩家 918 解析归
+    // 属 Base 端点逐玩家拨 958；未配目录面 = 单 Base 兜底（语义零回归）。
+    std::unique_ptr<player_store::SettlementBaseRouter> baseBusinessRouter_;
     // 业务受理关联号（内核线程结算段独占）
     std::uint64_t businessSeq_{0};
     // 脚本宿主（scripting-lua §2 一状态一逻辑线程：随内核线程生灭）

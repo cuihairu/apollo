@@ -388,6 +388,11 @@ bool login_chain_creates_cell_entity() {
     // 落点携带归属 cell 直连端点（L122 网关→cell 直连端点发现面）。
     TEST_ASSERT(assigned->cell_host == "10.0.0.9" && assigned->cell_port == 9200,
                 "admission stamps direct cell endpoint from projection registry");
+    // D12 逐 Base 结算选路：落点携带登录实拨归属 Base 的 M1 端点（目录
+    // 承载域；cell 结算面据此逐玩家拨 958）。
+    TEST_ASSERT(assigned->base_host == "127.0.0.1" &&
+                    assigned->base_port == lconfig.worldStoreM1Port,
+                "admission stamps dialed base endpoint for settlement routing");
 
     // ⑧ 客户端发 CELL_CREATE_ENTITY → gateway → world → cell 创建实体。
     client.sendAll(frame_bytes(2, 0,

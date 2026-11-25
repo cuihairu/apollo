@@ -10,9 +10,11 @@
 //      双投 AlreadyApplied（幂等归调用方账本，二次不达 wire）；
 //   5. 受理面停 → AvatarUnavailable 挂账（传输不可达同挂账语义）。
 
+#include "online_directory/online_directory.hpp"
 #include "player_store/business_wire.hpp"
 #include "player_store/migration_wire.hpp"
 #include "player_store/player_store.hpp"
+#include "player_store/settlement_base_router.hpp"
 #include "player_store/store_dial.hpp"
 #include "squad_instance/settlement_ledger.hpp"
 #include "store_host.hpp"
@@ -468,6 +470,189 @@ void base_business_wire_d19_compat() {
     dial.shutdown();
 }
 
+// D12 逐 Base 结算选路（同区多 Base 部分成功切片）真链路：真 OnlineDirectory
+// M1 控制面（917/918 分派直通）× 两独立 StoreHost 异端点（A/B）——
+//   1. 落点行带归属 Base 端点（assignWorld 真裁决）：登记玩家经 917/918 解析
+//      后逐玩家拨 958——A 归属玩家落 A、B 归属玩家落 B，exp 各归各账；
+//   2. 同玩家重发命中端点缓存（不重解析）；目录无册玩家落单 Base 兜底；
+//   3. 端点迁移补齐：归属 Base 停面 → 首拨失败（挂账语义）；目录改指后重
+//      拨新端点落账（失败已清缓存——重解析生效）；同 settlement_id 重放 Base
+//      幂等不双记；
+//   4. 旧口径零回归：目录面未配（port 0）= 恒走单 Base 兜底，异端锚点
+//      误投被 Base 锚点校验拒绝（跨 Base 双记防线——不幻值不落账）。
+void settlement_base_router_multi_base() {
+    TemporaryDirectory files;
+    player_store::PlayerStoreConfig store_a;
+    store_a.host = "127.0.0.1";
+    store_a.m1Enabled = true;
+    store_a.m1Port = 0;
+    store_a.m1SelfName = "base";
+    store_a.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_a.dataDir = (files.path / "a/players").string();
+    store_a.journalPath = (files.path / "a/journal/persist.log").string();
+    StoreHost base_a(store_a, 0, 0, 0, 0);
+    require(base_a.store->m1_listen_port() != 0, "router base A did not listen");
+
+    player_store::PlayerStoreConfig store_b;
+    store_b.host = "127.0.0.1";
+    store_b.m1Enabled = true;
+    store_b.m1Port = 0;
+    store_b.m1SelfName = "base";
+    store_b.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_b.dataDir = (files.path / "b/players").string();
+    store_b.journalPath = (files.path / "b/journal/persist.log").string();
+    StoreHost base_b(store_b, 0, 0, 0, 0);
+    require(base_b.store->m1_listen_port() != 0, "router base B did not listen");
+
+    // 真 OnlineDirectory + M1 控制面（ephemeral；drain 未置——assign 受理）。
+    online_directory::OnlineDirectory directory(0);
+    directory.set_m1_face(0, APOLLO_TEST_ROUTE_JSON);
+    directory.start();
+    require(directory.listenPort() != 0, "router directory face did not listen");
+
+    // 锚点分置两 Base（101/103 在 A；104/102 在 B——102 随迁移演进入籍 B）。
+    require(base_a.store->adoptPlayer(101, "", 7101, 5, 2), "adopt 101 failed");
+    require(base_a.store->adoptPlayer(103, "", 7103, 5, 2), "adopt 103 failed");
+    require(base_b.store->adoptPlayer(104, "", 7104, 5, 2), "adopt 104 failed");
+    require(base_b.store->adoptPlayer(102, "", 7102, 5, 2), "adopt 102 failed");
+
+    // 目录名册：bind + assign（resolve 门槛 = binding+assignment 双全——
+    // 登录实拨归属 Base 端点随落点成行；101/103 → A、104/102 → B）。
+    const auto seed_assignment = [&directory](std::uint64_t player_id,
+                                              const std::string& host,
+                                              std::uint16_t port) {
+        apollo::game::base::SessionBinding binding;
+        binding.session_id = player_id;
+        binding.gateway_id = 1;
+        binding.gateway_addr = "tcp://127.0.0.1:9002";
+        binding.session_version = 1;
+        require(directory.bindSession(player_id, binding), "router bind failed");
+        apollo::game::base::WorldAssignment assignment;
+        assignment.world_id = 2;
+        assignment.space_id = 1;
+        assignment.route_version = 1;
+        assignment.base_host = host;
+        assignment.base_port = port;
+        require(directory.assignWorld(player_id, assignment), "router assign failed");
+    };
+    seed_assignment(101, "127.0.0.1", base_a.store->m1_listen_port());
+    seed_assignment(103, "127.0.0.1", base_a.store->m1_listen_port());
+    seed_assignment(104, "127.0.0.1", base_b.store->m1_listen_port());
+    seed_assignment(102, "127.0.0.1", base_b.store->m1_listen_port());
+
+    player_store::SettlementBaseRouter::Config config;
+    config.route_json = APOLLO_TEST_ROUTE_JSON;
+    config.self_name = "world";
+    config.default_host = "127.0.0.1";
+    config.default_port = base_a.store->m1_listen_port();  // 单 Base 兜底 = A
+    config.directory_host = "127.0.0.1";
+    config.directory_port = directory.listenPort();
+    player_store::SettlementBaseRouter router(std::move(config));
+
+    std::uint64_t seq = 500;
+    const auto make_req = [&seq](std::uint64_t player_id, std::int64_t score,
+                                 std::uint64_t settlement_id) {
+        business::ScoreCreditRequest req;
+        req.request_id = ++seq;
+        req.player_id = player_id;
+        req.score = score;
+        req.source_zone_id = 2;
+        req.settlement_id = settlement_id;
+        return req;
+    };
+
+    // ---- 1. 逐玩家选路：A 归属落 A、B 归属落 B（不串账）----
+    require(router.send(101, make_req(101, 120, 9001)),
+            "router per-player credit to A not accepted");
+    require(router.send(104, make_req(104, 90, 9002)),
+            "router per-player credit to B not accepted");
+    {
+        const auto avatar_a = base_a.store->findAvatar(101);
+        require(avatar_a != nullptr && avatar_a->progress("exp") == 120,
+                "player 101 exp did not land on base A");
+        require(base_a.store->findAvatar(104) == nullptr,
+                "player 104 anchor leaked onto base A");
+        const auto avatar_b = base_b.store->findAvatar(104);
+        require(avatar_b != nullptr && avatar_b->progress("exp") == 90,
+                "player 104 exp did not land on base B");
+        require(base_b.store->findAvatar(101) == nullptr,
+                "player 101 anchor leaked onto base B");
+    }
+    require(router.resolve_count() == 2, "first sends did not resolve via 917/918");
+
+    // ---- 2. 端点缓存命中不重解析；目录无册玩家落单 Base 兜底 ----
+    require(router.send(101, make_req(101, 30, 9003)),
+            "router cached credit to A not accepted");
+    require(router.resolve_count() == 2 && router.cache_hit_count() == 1,
+            "known player re-resolved directory instead of cache hit");
+    // 103 无册：解析 miss（计数涨）落兜底 A——不入缓存（目录缺席非归属）
+    require(router.send(103, make_req(103, 40, 9004)),
+            "router unassigned player fallback not accepted");
+    {
+        const auto avatar_a = base_a.store->findAvatar(101);
+        require(avatar_a != nullptr && avatar_a->progress("exp") == 150,
+                "player 101 exp accumulation broken");
+        const auto avatar_103 = base_a.store->findAvatar(103);
+        require(avatar_103 != nullptr && avatar_103->progress("exp") == 40,
+                "fallback credit did not land on default base A");
+    }
+
+    // ---- 3. 端点迁移补齐：B 停面 → 首拨挂账；目录改指 A 后重拨落账；
+    //         同 settlement_id 重放 Base 幂等不双记 ----
+    base_b.store->stop();  // B 归属端点退场（真死亡拓扑：面关）
+    require(!router.send(102, make_req(102, 60, 9005)),
+            "credit on down base endpoint reported accepted");
+    // 目录改指（端点迁移完成：归属 B → A）
+    {
+        apollo::game::base::WorldAssignment moved;
+        moved.world_id = 2;
+        moved.space_id = 1;
+        moved.route_version = 2;
+        moved.base_host = "127.0.0.1";
+        moved.base_port = base_a.store->m1_listen_port();
+        require(directory.assignWorld(102, moved), "router re-assign failed");
+        require(base_a.store->adoptPlayer(102, "", 7102, 5, 2),
+                "re-adopt 102 on A failed");
+    }
+    require(router.send(102, make_req(102, 60, 9005)),
+            "router moved player credit not accepted after re-assign");
+    require(router.send(102, make_req(102, 60, 9005)),
+            "router moved player replay not accepted");
+    {
+        const auto avatar = base_a.store->findAvatar(102);
+        require(avatar != nullptr && avatar->progress("exp") == 60,
+                "moved player 102 exp wrong on A (missing or double credited)");
+        const auto avatar_b = base_b.store->findAvatar(102);
+        require(avatar_b == nullptr || avatar_b->progress("exp") == 0,
+                "player 102 credited on the dead/old base B");
+    }
+
+    // ---- 4. 旧口径零回归：目录面未配 = 恒单 Base 兜底；异端锚点误投被
+    //         Base 锚点校验拒（跨 Base 双记防线）----
+    player_store::SettlementBaseRouter::Config single;
+    single.route_json = APOLLO_TEST_ROUTE_JSON;
+    single.self_name = "world";
+    single.default_host = "127.0.0.1";
+    single.default_port = base_a.store->m1_listen_port();
+    player_store::SettlementBaseRouter single_router(std::move(single));
+    require(single_router.send(103, make_req(103, 20, 9006)),
+            "single-base fallback credit not accepted");
+    require(single_router.resolve_count() == 1,
+            "single-base fallback attempted directory resolution");
+    // 104 归属 B（锚点不在 A）：兜底端 A 拒（accepted=0）——不幻值不落账
+    require(!single_router.send(104, make_req(104, 20, 9007)),
+            "misrouted credit on A accepted despite anchor on B");
+    {
+        const auto avatar = base_a.store->findAvatar(103);
+        require(avatar != nullptr && avatar->progress("exp") == 60,
+                "single-base fallback accumulation broken");
+        require(base_a.store->findAvatar(104) == nullptr,
+                "misrouted credit created phantom anchor on A");
+    }
+
+    directory.stop();
+}
+
 } // namespace
 
 int main() {
@@ -478,6 +663,7 @@ int main() {
     try {
         base_business_wire();
         base_business_wire_d19_compat();
+        settlement_base_router_multi_base();
     } catch (const std::exception& ex) {
         std::cerr << "FAIL: " << ex.what() << '\n';
         return 1;

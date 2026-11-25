@@ -136,6 +136,8 @@ bool test_control_e2e() {
     assign.writeGen = 55;
     assign.cellHost = "10.0.0.9";   // L122 网关直连端点发现面：归属 cell M1 端点
     assign.cellPort = 9200;
+    assign.baseHost = "10.0.0.7";   // D12 逐 Base 结算选路：归属 Base M1 端点
+    assign.basePort = 9501;
     const auto assignResp = loginClient->call(
         protocol::MessageCodec::encode(assign, 9), std::chrono::milliseconds(500));
     TEST_ASSERT(assignResp.has_value(), "assign roundtrip returns");
@@ -198,6 +200,8 @@ bool test_control_e2e() {
                     "resolve ownership write generation verbatim (L118)");
         TEST_ASSERT(parsed.cellHost == "10.0.0.9" && parsed.cellPort == 9200,
                     "resolve direct cell endpoint verbatim (L122)");
+        TEST_ASSERT(parsed.baseHost == "10.0.0.7" && parsed.basePort == 9501,
+                    "resolve base endpoint verbatim (D12)");
         TEST_ASSERT(parsed.gatewayId == 1 &&
                         parsed.gatewayAddr == "tcp://127.0.0.1:9002",
                     "resolve binding fields verbatim");
@@ -278,6 +282,8 @@ bool test_player_record_wire_roundtrip() {
         assign.writeGen = 55;
         assign.cellHost = "10.0.0.9";
         assign.cellPort = 9200;
+        assign.baseHost = "10.0.0.7";
+        assign.basePort = 9501;
         const auto frame = protocol::MessageCodec::encode(assign, 9);
         const std::vector<std::uint8_t> body(frame.begin() + sizeof(protocol::MessageHeader),
                                              frame.end());
@@ -290,6 +296,8 @@ bool test_player_record_wire_roundtrip() {
                     "assign ownership write generation roundtrip (L118)");
         TEST_ASSERT(decoded.cellHost == "10.0.0.9" && decoded.cellPort == 9200,
                     "assign direct cell endpoint roundtrip (L122)");
+        TEST_ASSERT(decoded.baseHost == "10.0.0.7" && decoded.basePort == 9501,
+                    "assign base endpoint roundtrip (D12)");
         const std::string legacy = R"({"playerId":42,"worldId":7,"mapId":3,)"
             R"("instanceId":11,"spaceId":5,"routeVersion":2})";
         const std::vector<std::uint8_t> legacyBody(legacy.begin(), legacy.end());
@@ -299,7 +307,8 @@ bool test_player_record_wire_roundtrip() {
                         legacyDecoded.topologyVersion == 0 &&
                         legacyDecoded.cellId == 0 && legacyDecoded.simulationEpoch == 0 &&
                         legacyDecoded.writeGen == 0 &&
-                        legacyDecoded.cellHost.empty() && legacyDecoded.cellPort == 0,
+                        legacyDecoded.cellHost.empty() && legacyDecoded.cellPort == 0 &&
+                        legacyDecoded.baseHost.empty() && legacyDecoded.basePort == 0,
                     "legacy assign keeps route domain, defaults new domains zero");
     }
     { // 913 bind：会话绑定代次
@@ -342,6 +351,8 @@ bool test_player_record_wire_roundtrip() {
         response.writeGen = 55;
         response.cellHost = "10.0.0.9";
         response.cellPort = 9200;
+        response.baseHost = "10.0.0.7";
+        response.basePort = 9501;
         const auto frame = protocol::MessageCodec::encode(response, 9);
         const std::vector<std::uint8_t> body(frame.begin() + sizeof(protocol::MessageHeader),
                                              frame.end());
@@ -354,6 +365,8 @@ bool test_player_record_wire_roundtrip() {
                     "resolve ownership write generation roundtrip (L118)");
         TEST_ASSERT(decoded.cellHost == "10.0.0.9" && decoded.cellPort == 9200,
                     "resolve direct cell endpoint roundtrip (L122)");
+        TEST_ASSERT(decoded.baseHost == "10.0.0.7" && decoded.basePort == 9501,
+                    "resolve base endpoint roundtrip (D12)");
         const std::string legacy = R"({"success":true,"playerId":42,"sessionId":9,)"
             R"("gatewayId":1,"gatewayAddr":"tcp://127.0.0.1:9002","worldId":7,)"
             R"("mapId":3,"instanceId":11,"spaceId":5,"routeVersion":2,)"
@@ -367,7 +380,8 @@ bool test_player_record_wire_roundtrip() {
                         legacyDecoded.simulationEpoch == 0 &&
                         legacyDecoded.sessionVersion == 0 &&
                         legacyDecoded.writeGen == 0 &&
-                        legacyDecoded.cellHost.empty() && legacyDecoded.cellPort == 0,
+                        legacyDecoded.cellHost.empty() && legacyDecoded.cellPort == 0 &&
+                        legacyDecoded.baseHost.empty() && legacyDecoded.basePort == 0,
                     "legacy resolve keeps route domain, defaults new domains zero");
     }
     return true;

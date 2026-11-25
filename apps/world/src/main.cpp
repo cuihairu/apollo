@@ -88,6 +88,11 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
         } else if (arg == "--base-business-port" && i + 1 < argc) {
             config.baseBusinessPort =
                 static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--settlement-directory-host" && i + 1 < argc) {
+            config.settlementDirectoryHost = argv[++i];
+        } else if (arg == "--settlement-directory-port" && i + 1 < argc) {
+            config.settlementDirectoryPort =
+                static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--settlement-credential-dir" && i + 1 < argc) {
             config.settlementCredentialDir = argv[++i];
         } else if (arg == "--settlement-record-dir" && i + 1 < argc) {
@@ -240,6 +245,8 @@ WorldAppConfig loadConfig(int argc, char* argv[]) {
                       << "  --m1-port <port>           M1 link listen port (default: 9101)\n"
                       << "  --base-business-host <h>   Base business face host (default: 127.0.0.1)\n"
                       << "  --base-business-port <p>   Base business face port, 0 = off (default: 0)\n"
+                      << "  --settlement-directory-host <h>  Directory resolve host for per-Base settlement (default: 127.0.0.1)\n"
+                      << "  --settlement-directory-port <p>  Directory resolve port, 0 = single-Base fallback (default: 0)\n"
                       << "  --settlement-credential-dir <dir>  Settlement credential dir (default: off)\n"
                       << "  --dashboard-host <h>        Dashboard listen host (default: 127.0.0.1)\n"
                       << "  --dashboard-port <p>        Dashboard HTTP port, 0 = off (default: 0)\n"

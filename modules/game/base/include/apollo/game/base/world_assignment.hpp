@@ -34,6 +34,13 @@ struct WorldAssignment {
     std::string cell_host;
     std::uint32_t cell_port = 0;
 
+    // 归属 Base 的 M1 监听端点（D12 逐 Base 结算选路，915/918 base_host/
+    // base_port 同源）：登录实拨归属 Base 端点随落点成行，cell 结算面据此
+    // 逐玩家拨 958。host 空串 = 端点未声明（Base 面关/目录未承接）——结算
+    // 面按单 Base 配置兜底（承载域，不幻值）。
+    std::string base_host;
+    std::uint32_t base_port = 0;
+
     [[nodiscard]] bool is_assigned() const noexcept {
         return world_id != 0 || instance_id != 0 || space_id != 0;
     }

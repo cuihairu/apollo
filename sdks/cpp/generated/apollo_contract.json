@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "e6f6361b07b23980c6ea0b07f0c828a2baad39dc8b852462a0921e5a8b0887ee",
+  "schema_hash": "9f2f2841310eca9cfb223fefd92664da9e73653762455ac69a1871263e5198fc",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "d4b623d3d34e974c1edfb20d374f79087aba06b960223fe516f774718e384cea",
+  "internal_hash": "55ae68f5c2e36e9c720a5662087d12118fede94a6e6dd0610d51c1e965d65068",
   "contract_version": 3,
   "aliases": [
     {
@@ -1608,6 +1608,18 @@
           "type": "int32",
           "wire_type": "int32",
           "desc": "归属 cell 的 M1 监听端口（与 968 cell_port 同源；0 = 未声明）"
+        },
+        {
+          "name": "base_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "归属 Base 的 M1 监听地址（D12 逐 Base 结算——登录实拨归属 Base 端点随落点成行，cell 结算面据此逐玩家拨 958；空 = 未声明，结算面按单 Base 配置兜底）"
+        },
+        {
+          "name": "base_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "归属 Base 的 M1 监听端口（与 base_host 同源；0 = 未声明）"
         }
       ],
       "desc": "落点指派请求（WorldAssignment 写入，baseappmgr 目录表；L116 字段分型首切片——执行进程与模拟代次随落点成行；L117 版本域分立——拓扑版本与路由版本分域）"
@@ -1773,6 +1785,18 @@
           "type": "int32",
           "wire_type": "int32",
           "desc": "归属 cell 的 M1 监听端口（与 915/968 cell_port 同源；0 = 未声明）"
+        },
+        {
+          "name": "base_host",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "归属 Base 的 M1 监听地址（与 915 base_host 同源——D12 逐 Base 结算选路解析面回带；空 = 未声明）"
+        },
+        {
+          "name": "base_port",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "归属 Base 的 M1 监听端口（与 base_host 同源；0 = 未声明）"
         },
         {
           "name": "error_message",

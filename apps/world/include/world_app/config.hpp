@@ -116,9 +116,16 @@ struct WorldAppConfig {
 
     // Base 业务受理面（P1 结算迁入）：结算落账 = 返回业务请求拨 base
     // store M1 面（958/959）。port = 0 = 面关（结算挂账降级态——L19 资料
-    // 归属切换后 World 无锚点解析器）。
+    // 归属切换后 World 无锚点解析器）。多 Base 时此端点 = 单 Base 兜底
+    // （目录解析缺席/端点未声明落此）。
     std::string baseBusinessHost = "127.0.0.1";
     std::uint16_t baseBusinessPort = 0;
+
+    // 结算目录解析面（D12 逐 Base 结算选路）：cell 结算面拨 OnlineDirectory
+    // M1 控制面（917/918）按玩家解析归属 Base 端点（登录实拨端点随落点成
+    // 行）。port = 0 = 不解析——恒走单 Base 兜底（现状语义零回归）。
+    std::string settlementDirectoryHost = "127.0.0.1";
+    std::uint16_t settlementDirectoryPort = 0;
 
     // 结算凭据目录（L67 去重凭据面生产接线）：(小队, 玩家, 分值) 凭据
     // 持久提交——settle 与 release 崩溃窗内重启装载回填，重放不双记。

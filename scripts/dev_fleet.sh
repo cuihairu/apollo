@@ -7,7 +7,10 @@
 # BaseServer：玩家档案与基础业务受理 9201，存储后端为 Database 9200；
 #   编队位置在 Database 之后——存储不可达即拒起（由 machined 退避重试）。
 # World：玩法链路 9101（玩家档案链路已迁 BaseServer 9201——L19 资料归属切换；
-#   结算落账 = 返回业务请求拨 BaseServer 9201，P1 基础业务与结算迁入）。
+#   结算落账 = 返回业务请求拨 BaseServer 9201，P1 基础业务与结算迁入）；
+#   D12 逐 Base 结算选路：结算目录解析面拨 Login 在线目录 9105（917/918），
+#   按玩家解析归属 Base 端点（登录实拨端点随落点成行）逐玩家拨 958；未配 =
+#   单 Base 9201 兜底。
 #   管理角色声明 `--assign-spaces` 分配池（D01 已代决缺省形态，见
 #   docs/review/2026-10-30-actions/01）：默认编队常驻一个 cell（cell-21），
 #   池 = 其声明的 501/502；APOLLO_FLEET_CELLS=2 时池含 503（cell-22 声明，
@@ -134,7 +137,7 @@ logger    | 0 | $BUILD_DIR/apps/logger/logger serve --port 9102 --archive-dir lo
 admin     | 0 | $BUILD_DIR/apps/admin/admin serve
 database  | 0 | $BUILD_DIR/apps/database/database --port 9200 --data-dir $FLEET_DIR/data/database/players --journal $FLEET_DIR/data/database/persist.log
 base | 0 | $BUILD_DIR/apps/base/base --port 9201 --database-port 9200
-world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-credential-dir $FLEET_DIR/data/world/settlements --settlement-record-dir $FLEET_DIR/data/world/settlement_records --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-directory-port 9105 --settlement-credential-dir $FLEET_DIR/data/world/settlements --settlement-record-dir $FLEET_DIR/data/world/settlement_records --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 $(cell_entries)
 login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9103 --world-store-m1-port 9201 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13
 gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port ${APOLLO_FLEET_GATEWAY_LOGIN_M1_PORT:-9103} --directory-m1-port 9105 --machined-port 9600 --component-id 12 --dashboard-port ${APOLLO_FLEET_GATEWAY_DASHBOARD_PORT:-0}

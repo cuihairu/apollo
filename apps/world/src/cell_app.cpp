@@ -1,5 +1,6 @@
 #include "world_app/cell_app.hpp"
 #include "player_store/business_wire.hpp"
+#include "player_store/settlement_base_router.hpp"
 #include "player_store/store_dial.hpp"
 #include "apollo/core/log/log_manager.h"
 #include "apollo/net/linktrace/span_emitter.hpp"
@@ -161,6 +162,19 @@ void CellApp::start() {
             config_.m1RouteJson, "world", "base", config_.baseBusinessHost,
             config_.baseBusinessPort);
         if (baseBusinessDial_->ready()) {
+            // D12 逐 Base 结算选路：目录解析面（917/918）配了才逐玩家解析归
+            // 属 Base 端点（登录实拨端点随落点成行）；未配 = 单 Base 兜底
+            // （baseBusinessDial_ 借用为兜底拨——现状语义零回归）。
+            player_store::SettlementBaseRouter::Config router_config;
+            router_config.route_json = config_.m1RouteJson;
+            router_config.default_host = config_.baseBusinessHost;
+            router_config.default_port = config_.baseBusinessPort;
+            router_config.default_dial = baseBusinessDial_.get();
+            router_config.directory_host = config_.settlementDirectoryHost;
+            router_config.directory_port = config_.settlementDirectoryPort;
+            baseBusinessRouter_ =
+                std::make_unique<player_store::SettlementBaseRouter>(
+                    std::move(router_config));
             squadInstanceService_->set_business_sink(
                 [this](std::uint64_t player_id, std::int64_t score,
                        std::uint64_t settlement_id) {
@@ -172,23 +186,21 @@ void CellApp::start() {
                     // 稳定玩法/结算 ID（L132）：重试/回执丢失重放不变——Base
                     // 侧同 ID 幂等（duplicate 回执不双记）
                     req.settlement_id = settlement_id;
-                    const auto reply = baseBusinessDial_->call(
-                        player_store::business::encodeFrame(req));
-                    player_store::business::ScoreCreditReply rep;
-                    protocol::SessionID sid = 0;
-                    if (!reply ||
-                        !player_store::business::decodeFrame(*reply, rep, sid)) {
-                        return squad_instance::SettlementLedger::ApplyError::
-                            AvatarUnavailable;  // 传输不可达/回包畸形：挂账待补
-                    }
-                    return rep.accepted
+                    const bool accepted =
+                        baseBusinessRouter_->send(player_id, req);
+                    return accepted
                                ? squad_instance::SettlementLedger::ApplyError::Ok
                                : squad_instance::SettlementLedger::ApplyError::
-                                     AvatarUnavailable;  // 离线/迁移中：挂账待补
+                                     AvatarUnavailable;  // 传输不可达/回包畸形/离线迁移中：挂账待补
                 });
             worldLog().info(
                 "base business dialing " + config_.baseBusinessHost + ":"
-                + std::to_string(config_.baseBusinessPort));
+                + std::to_string(config_.baseBusinessPort)
+                + (config_.settlementDirectoryPort != 0
+                       ? " (per-player base via directory "
+                             + config_.settlementDirectoryHost + ":"
+                             + std::to_string(config_.settlementDirectoryPort) + ")"
+                       : " (single-base fallback)"));
         } else {
             baseBusinessDial_.reset();
             worldLog().warning(
@@ -266,7 +278,11 @@ void CellApp::stop() {
         gameThread_.join();
     }
 
-    // Base 业务拨号面随内核线程收口（结算面唯一调用者已 join）。
+    // Base 业务拨号面随内核线程收口（结算面唯一调用者已 join；选路器先
+    // 收口——借用拨还持 baseBusinessDial_ 裸指）。
+    if (baseBusinessRouter_) {
+        baseBusinessRouter_.reset();
+    }
     if (baseBusinessDial_) {
         baseBusinessDial_->shutdown();
         baseBusinessDial_.reset();

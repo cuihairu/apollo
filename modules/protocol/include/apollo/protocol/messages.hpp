@@ -299,6 +299,11 @@ struct PlayerAssignWorldRequest {
     // 网关回落 World 中继，不幻值）。
     std::string cellHost;
     uint32_t cellPort = 0;
+    // 归属 Base 的 M1 监听端点（D12 逐 Base 结算——登录实拨归属 Base 端点
+    // 随落点成行，cell 结算面据此逐玩家拨 958；空/0 = 未声明——结算面按
+    // 单 Base 配置兜底，不幻值）。
+    std::string baseHost;
+    uint32_t basePort = 0;
 
     static constexpr MessageType TYPE = MessageType::PLAYER_ASSIGN_WORLD_REQUEST;
 };
@@ -337,6 +342,9 @@ struct PlayerResolveRouteResponse {
     // 归属 cell 的 M1 监听端点（L122 网关直连端点发现面；空/0 = 未声明）。
     std::string cellHost;
     uint32_t cellPort = 0;
+    // 归属 Base 的 M1 监听端点（D12 逐 Base 结算选路解析面回带；空/0 = 未声明）。
+    std::string baseHost;
+    uint32_t basePort = 0;
     std::string errorMessage;
 
     static constexpr MessageType TYPE = MessageType::PLAYER_RESOLVE_ROUTE_RESPONSE;

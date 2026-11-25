@@ -167,6 +167,8 @@
     <field name="write_gen" type="int64" desc="资料写权代次（归属域：Base 写权自持代次，与模拟域分域；0 = 未声明）"/>
     <field name="cell_host" type="string" desc="归属 cell 的 M1 监听地址（与 968 cell_host 同源——网关直连 cell 端点发现；空 = 未声明/未监听）"/>
     <field name="cell_port" type="int32" desc="归属 cell 的 M1 监听端口（与 968 cell_port 同源；0 = 未声明）"/>
+    <field name="base_host" type="string" desc="归属 Base 的 M1 监听地址（D12 逐 Base 结算——登录实拨归属 Base 端点随落点成行，cell 结算面据此逐玩家拨 958；空 = 未声明，结算面按单 Base 配置兜底）"/>
+    <field name="base_port" type="int32" desc="归属 Base 的 M1 监听端口（与 base_host 同源；0 = 未声明）"/>
   </msg>
   <msg id="916" name="player_assign_world_response" dir="P2P" channel="events" domain="internal" desc="落点指派应答">
     <field name="success" type="bool"/>
@@ -195,6 +197,8 @@
     <field name="write_gen" type="int64" desc="资料写权代次（与 915 write_gen 同源——归属域随落点行回带；0 = 未声明）"/>
     <field name="cell_host" type="string" desc="归属 cell 的 M1 监听地址（与 915/968 cell_host 同源——网关直连 cell 端点发现；空 = 未声明/未监听）"/>
     <field name="cell_port" type="int32" desc="归属 cell 的 M1 监听端口（与 915/968 cell_port 同源；0 = 未声明）"/>
+    <field name="base_host" type="string" desc="归属 Base 的 M1 监听地址（与 915 base_host 同源——D12 逐 Base 结算选路解析面回带；空 = 未声明）"/>
+    <field name="base_port" type="int32" desc="归属 Base 的 M1 监听端口（与 base_host 同源；0 = 未声明）"/>
     <field name="error_message" type="string"/>
   </msg>
 
