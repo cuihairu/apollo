@@ -2159,6 +2159,57 @@ endif()
 add_test(NAME GatewayPushDownlinkTests COMMAND gateway_push_downlink_tests)
 endif()
 
+# gateway 排空/换装承接（D27；原 gateway_drain_tests 两处定义均挂
+# APOLLO_BUILD_GTESTS=OFF 门内全树不生成，覆盖搬活区）：954/955 排空状态机
+# + 双网关承接演练（排空窗新连接由第二网关承接并持续服务），localhost 实
+# socket；Windows 下 link TCP 底座不进 M1 批，TCP 用例本体空转。活区目标
+# 独立命名（GTESTS=ON 时死区同名目标不撞车），与死区块共用同一源文件。
+add_executable(gateway_drain_swap_tests
+    test_gateway_drain.cpp
+    ${APOLLO_GATEWAY_SERVER_SOURCES}
+    ../apps/gateway/src/gateway_control_server.cpp
+    ../apps/gateway/src/m1_egress.cpp
+    ../apps/gateway/src/m1_route_client.cpp
+    ../apps/gateway/src/m1_base_client.cpp
+    ../apps/gateway/include/gateway/session_manager.cpp
+    ../apps/gateway/src/ingress/client_ingress_server.cpp
+    ../apps/gateway/src/ingress/tcp_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ws_client_ingress_server.cpp
+    ../apps/gateway/src/ingress/ingress_fan_in.cpp
+    ../apps/gateway/src/ingress/client_packet_dispatcher.cpp
+    ../apps/gateway/src/ingress/gateway_connection_registry.cpp
+    ../apps/gateway/src/ingress/session_admission_service.cpp
+)
+target_include_directories(gateway_drain_swap_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/gateway/include
+)
+target_compile_definitions(gateway_drain_swap_tests PRIVATE
+    APOLLO_GATEWAY_CONTRACT_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(gateway_drain_swap_tests PRIVATE
+    apollo
+    apollo::base
+    apollo::core
+    apollo::runtime
+    apollo::net_tcp
+    apollo::net_protocol
+    apollo::net_link
+    apollo_net_tls
+    apollo_net_ws
+    apollo::net_contract_wire
+    apollo::net_linktrace
+    apollo_net_linkrpc
+    apollo_protocol
+)
+if(WIN32)
+    target_link_libraries(gateway_drain_swap_tests PRIVATE ws2_32)
+    target_compile_definitions(gateway_drain_swap_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(gateway_drain_swap_tests PRIVATE /utf-8)
+endif()
+add_test(NAME GatewayDrainSwapTests COMMAND gateway_drain_swap_tests)
+
 # 登录全链路 e2e（L174）：认证 → gateway 会话 → Base 经 database 激活 →
 # World 准入/分配 → cell 创建实体。四段串成一条真实链路（真 login 准入面
 # + 真 base PlayerStore M1 面 + 真 WorldApp/cell + 真 gateway 三面全接）。

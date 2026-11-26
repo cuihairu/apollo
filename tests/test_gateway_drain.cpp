@@ -403,6 +403,92 @@ bool test_gateway_drain_deadline_force() {
     return true;
 }
 
+// 换装承接（face 1 + face 2 联合）：旧网关起排后新连接在本机被拒、新网关
+// 同窗承接新连接并照常服务（排空窗前后双探针）；旧网关既有连接自然离开落
+// drained。承接点=第二网关；同端口交接（SO_REUSEPORT 等部署面）不在本测内。
+bool test_gateway_drain_replacement_serves_newcomers() {
+    std::cout << "Running: test_gateway_drain_replacement_serves_newcomers..."
+              << std::endl;
+
+    ServerHarness ha;
+    TEST_ASSERT(ha.start(), "old gateway started");
+    ServerHarness hb;
+    TEST_ASSERT(hb.start(), "replacement gateway started");
+
+    OpsEnd ops_old;
+    TEST_ASSERT(ops_old.start(ha.server->drainControlPort()), "old ops end started");
+    TEST_ASSERT(wait_up(ops_old), "old ops link up");
+    OpsEnd ops_new;
+    TEST_ASSERT(ops_new.start(hb.server->drainControlPort()), "new ops end started");
+    TEST_ASSERT(wait_up(ops_new), "new ops link up");
+
+    // 新网关基线：serving 无连接
+    DrainReply r;
+    TEST_ASSERT(drain_roundtrip(ops_new, 1, 2, 0, r), "replacement status arrived");
+    TEST_ASSERT(r.ok && r.state == 0 && r.active == 0, "replacement serving idle");
+
+    // 旧网关两既有连接 → 起排
+    TestClient a;
+    TestClient b;
+    TEST_ASSERT(a.connect("127.0.0.1", ha.server->listenPort()),
+                "old client a connected");
+    TEST_ASSERT(b.connect("127.0.0.1", ha.server->listenPort()),
+                "old client b connected");
+    pump_until(ops_old, [] { return false; }, 200);  // 泵几拍：连接落表
+    TEST_ASSERT(drain_roundtrip(ops_old, 2, 1, 0, r), "old gateway drain begin accepted");
+    TEST_ASSERT(r.ok && r.state == 1 && r.active == 2,
+                "old gateway draining with two connections");
+
+    // 旧网关新连接拒；同窗新网关承接新连接（face 1 承接面）
+    TestClient newcomer_old;
+    TEST_ASSERT(!newcomer_old.connect("127.0.0.1", ha.server->listenPort()),
+                "new connection refused at draining gateway");
+    TestClient newcomer_new;
+    TEST_ASSERT(newcomer_new.connect("127.0.0.1", hb.server->listenPort()),
+                "new connection accepted at replacement gateway");
+    pump_until(ops_new, [] { return false; }, 200);
+    TEST_ASSERT(drain_roundtrip(ops_new, 3, 2, 0, r),
+                "replacement status after newcomer");
+    TEST_ASSERT(r.ok && r.state == 0 && r.active == 1,
+                "replacement serving one newcomer");
+
+    // 新网关照常服务新连接（PING→PONG，排空窗内）
+    apollo::protocol::Ping ping;
+    ping.timestamp = 888;
+    newcomer_new.sendAll(frame_bytes(1, 0, apollo::protocol::MessageCodec::encode(ping, 0)));
+    std::vector<std::uint8_t> received;
+    TEST_ASSERT(newcomer_new.recvFrame(received),
+                "replacement served newcomer (pong)");
+
+    // 旧网关既有连接自然离开 → drained（face 2 自然排空）
+    a.close();
+    b.close();
+    DrainReply drained;
+    TEST_ASSERT(pump_until(ops_old,
+                           [&] {
+                               return drain_roundtrip(ops_old, 4, 2, 0, drained, 100)
+                                   && drained.state == 2;
+                           },
+                           5000),
+                "old gateway drained status arrived");
+    TEST_ASSERT(drained.active == 0, "old gateway no active connections left");
+    TEST_ASSERT(drained.detail.find("all client connections left") != std::string::npos,
+                "old gateway natural drain detail");
+
+    // 旧网关排空完成后新网关服务不中断（第二探针）
+    apollo::protocol::Ping ping2;
+    ping2.timestamp = 889;
+    newcomer_new.sendAll(frame_bytes(2, 0, apollo::protocol::MessageCodec::encode(ping2, 0)));
+    std::vector<std::uint8_t> received2;
+    TEST_ASSERT(newcomer_new.recvFrame(received2),
+                "replacement still serving after old gateway drained");
+
+    ha.server->stop();
+    hb.server->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // 受理面口径：未知 op 显式拒（不静默，detail 点名）
 bool test_gateway_drain_unknown_op() {
     std::cout << "Running: test_gateway_drain_unknown_op..." << std::endl;
@@ -435,6 +521,7 @@ int main() {
 #if !defined(_WIN32)
     if (!test_gateway_drain_lifecycle()) ++failed;
     if (!test_gateway_drain_deadline_force()) ++failed;
+    if (!test_gateway_drain_replacement_serves_newcomers()) ++failed;
     if (!test_gateway_drain_unknown_op()) ++failed;
 #endif
     if (failed == 0) {
