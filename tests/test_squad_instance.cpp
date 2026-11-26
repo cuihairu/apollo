@@ -15,6 +15,7 @@
 #include "apollo/game/world/scene.hpp"
 #include "apollo/game/world/world.hpp"
 #include "squad_instance/settlement_credential_store.hpp"
+#include "squad_instance/settlement_id.hpp"
 #include "squad_instance/settlement_record_store.hpp"
 #include "squad_instance/squad_instance.hpp"
 
@@ -770,6 +771,142 @@ bool test_squad_settlement_lost_reply_retry_same_settlement_id() {
     snap = service.settlement(1);
     TEST_ASSERT(snap.has_value() && snap->applied == 1 && snap->pending == 0,
                 "ledger closed after lost-reply replay");
+    return true;
+}
+
+// L132 结算 ID 模拟代次域：组装面纯函数（settlement_id.hpp 口径）。
+// 盐逐域区分（world/cell/epoch 任一变即异、同入参恒定）、0 保留（未装配
+// = 旧口径 instance_id 直用）、超宽实例号确定性折叠。
+bool test_settlement_id_salt_and_compose_faces() {
+    using squad_instance::compose_settlement_id;
+    using squad_instance::settlement_id_salt;
+    const auto salt_a = settlement_id_salt(1, 21, 1000);
+    TEST_ASSERT(salt_a != 0, "assembled salt never 0");
+    TEST_ASSERT(settlement_id_salt(1, 21, 1000) == salt_a, "salt deterministic");
+    TEST_ASSERT(settlement_id_salt(1, 21, 2000) != salt_a,
+                "epoch advance changes salt (process generation)");
+    TEST_ASSERT(settlement_id_salt(1, 22, 1000) != salt_a,
+                "cell identity changes salt (parallel cells)");
+    TEST_ASSERT(settlement_id_salt(2, 21, 1000) != salt_a,
+                "world identity changes salt");
+
+    TEST_ASSERT(compose_settlement_id(0, 7) == 7,
+                "unassembled salt keeps legacy instance id passthrough");
+    TEST_ASSERT(compose_settlement_id(salt_a, 7) == ((salt_a << 32) | 7),
+                "composed id = salt high | instance low");
+    const auto folded = compose_settlement_id(salt_a, 0x1FFFFFFFFULL);
+    TEST_ASSERT(folded == compose_settlement_id(salt_a, 0x1FFFFFFFFULL),
+                "oversized instance fold deterministic");
+    TEST_ASSERT((folded >> 32) == salt_a, "folded id stays in salt domain");
+    return true;
+}
+
+// L132 缺口关死：实例号是进程内裸计数（重启归 1、多 cell 各自从 1 铸），
+// 直用作结算 ID 会跨代次撞号——Base 去重环把新代次合法结算误判
+// duplicate = 静默漏奖。装配盐后：跨进程代次（epoch 变）/跨 cell 必异，
+// 同代次内恒定。
+bool test_squad_settlement_id_generation_distinct() {
+    // 旧口径（未装配盐）：两代次同实例号 → 同结算 ID（撞号缺口现状）。
+    {
+        PartyManager parties;
+        World world;
+        make_party(parties, 1);
+        SquadInstanceService service(parties, &world, 1);
+        service.register_world(1, 4);
+        auto table = make_business_table({kLeader});
+        wire_business_sink(service, table);
+        const auto launch = service.launch(basic_request(1));
+        TEST_ASSERT(launch.error == LaunchError::Ok, "legacy gen1 launched");
+        TEST_ASSERT(service.credit_settlement(1, kLeader, 30) ==
+                        squad_instance::SettlementLedger::ApplyError::Ok,
+                    "legacy gen1 credited");
+        TEST_ASSERT(*table.settled_ids.at(kLeader).begin() == launch.instance_id,
+                    "unwired salt keeps instance id verbatim (legacy)");
+    }
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService gen1(parties, &world, 1);
+    gen1.register_world(1, 4);
+    gen1.set_settlement_id_salt(
+        squad_instance::settlement_id_salt(1, 21, /*start_epoch=*/1000));
+    auto table1 = make_business_table({kLeader});
+    wire_business_sink(gen1, table1);
+    const auto l1 = gen1.launch(basic_request(1));
+    TEST_ASSERT(l1.error == LaunchError::Ok, "gen1 launched");
+    TEST_ASSERT(gen1.credit_settlement(1, kLeader, 30) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "gen1 credited");
+    const auto id1 = *table1.settled_ids.at(kLeader).begin();
+
+    // 同 cell 新进程代次（重启归 1 的同实例号）：盐异 → 结算 ID 异。
+    World world2;
+    SquadInstanceService gen2(parties, &world2, 1);
+    gen2.register_world(1, 4);
+    gen2.set_settlement_id_salt(
+        squad_instance::settlement_id_salt(1, 21, /*start_epoch=*/2000));
+    auto table2 = make_business_table({kLeader});
+    wire_business_sink(gen2, table2);
+    const auto l2 = gen2.launch(basic_request(1));
+    TEST_ASSERT(l2.error == LaunchError::Ok && l2.instance_id == l1.instance_id,
+                "gen2 re-mints same instance id (bare counter reset)");
+    TEST_ASSERT(gen2.credit_settlement(1, kLeader, 30) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "gen2 credited");
+    const auto id2 = *table2.settled_ids.at(kLeader).begin();
+    TEST_ASSERT(id1 != id2,
+                "new generation settlement id differs (no silent reward loss)");
+    TEST_ASSERT(table2.duplicates.find(kLeader) == table2.duplicates.end(),
+                "gen2 credit not misjudged duplicate");
+
+    // 并行 cell（同 world 同代次毫秒、异 cell 身份）：盐异 → 结算 ID 异。
+    World world3;
+    SquadInstanceService gen3(parties, &world3, 1);
+    gen3.register_world(1, 4);
+    gen3.set_settlement_id_salt(
+        squad_instance::settlement_id_salt(1, 22, /*start_epoch=*/1000));
+    auto table3 = make_business_table({kLeader});
+    wire_business_sink(gen3, table3);
+    const auto l3 = gen3.launch(basic_request(1));
+    TEST_ASSERT(l3.error == LaunchError::Ok && l3.instance_id == l1.instance_id,
+                "parallel cell re-mints same instance id");
+    TEST_ASSERT(gen3.credit_settlement(1, kLeader, 30) ==
+                    squad_instance::SettlementLedger::ApplyError::Ok,
+                "parallel cell credited");
+    const auto id3 = *table3.settled_ids.at(kLeader).begin();
+    TEST_ASSERT(id1 != id3 && id3 != id2, "parallel cell settlement id differs");
+    return true;
+}
+
+// L132 盐装配后去重契约不变：同代次内回执丢失重放仍同结算 ID——
+// Base 去重命中不双记（复合键域内稳定性）。
+bool test_squad_settlement_id_salted_lost_reply_retry_same_id() {
+    PartyManager parties;
+    World world;
+    make_party(parties, 1);
+    SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.set_settlement_id_salt(
+        squad_instance::settlement_id_salt(1, 21, /*start_epoch=*/1000));
+    auto table = make_business_table({kLeader});
+    wire_business_sink(service, table);
+    TEST_ASSERT(service.launch(basic_request(1)).error == LaunchError::Ok, "launched");
+
+    table.drop_reply = true;
+    TEST_ASSERT(service.credit_settlement(1, kLeader, 50) ==
+                    squad_instance::SettlementLedger::ApplyError::AvatarUnavailable,
+                "lost reply deferred");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "base wrote despite lost reply");
+    const auto first_id = *table.settled_ids.at(kLeader).begin();
+    TEST_ASSERT((first_id >> 32) != 0, "salted id carries generation domain");
+
+    table.drop_reply = false;
+    TEST_ASSERT(service.retry_settlement(1) == 1, "retry re-submits same settlement");
+    TEST_ASSERT(exp_of(table, kLeader) == 50, "replay did not double credit");
+    TEST_ASSERT(table.duplicates.at(kLeader) == 1,
+                "salted replay flagged duplicate exactly once");
+    TEST_ASSERT(table.settled_ids.at(kLeader).size() == 1,
+                "retry kept the same settlement id");
     return true;
 }
 
@@ -2685,6 +2822,10 @@ int main() {
          test_squad_settlement_idempotent_credit_and_retry},
         {"squad_settlement_lost_reply_retry_same_settlement_id",
          test_squad_settlement_lost_reply_retry_same_settlement_id},
+        {"settlement_id_salt_and_compose_faces", test_settlement_id_salt_and_compose_faces},
+        {"squad_settlement_id_generation_distinct", test_squad_settlement_id_generation_distinct},
+        {"squad_settlement_id_salted_lost_reply_retry_same_id",
+         test_squad_settlement_id_salted_lost_reply_retry_same_id},
         {"squad_settlement_battle_settles_on_goal_completion",
          test_squad_settlement_battle_settles_on_goal_completion},
         {"departure keeps long term state",

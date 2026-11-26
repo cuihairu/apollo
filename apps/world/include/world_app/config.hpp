@@ -42,6 +42,10 @@ struct WorldAppConfig {
     std::uint16_t registerPort = 0;
     // 逻辑 cell ID（注册开则必须非 0；PID/IP 不当身份，重启保留同 ID 换代次）。
     CellExecutorId cellId = 0;
+    // 进程化身代次毫秒（L132 结算 ID 模拟代次域）：load_cell_config 装载时
+    // 自铸（steady_now_ms，重启必增），960 注册代次（969 化身裁决）与结算
+    // ID 盐同源共用——两处各自铸会分叉。0 = 未铸（注册面自铸回退照旧）。
+    std::uint64_t startEpochMs = 0;
 
     // login 服务注册拨号（L123 拨号次切片，manager 角色）：启动后主动向
     // loginServer 服务注册面（964/965）登记逻辑身份（kind=World，

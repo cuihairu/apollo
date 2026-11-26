@@ -1,5 +1,6 @@
 #include "world_app/cell_app.hpp"
 #include "player_store/business_wire.hpp"
+#include "squad_instance/settlement_id.hpp"
 #include "player_store/settlement_base_router.hpp"
 #include "player_store/store_dial.hpp"
 #include "apollo/core/log/log_manager.h"
@@ -115,6 +116,13 @@ CellApp::CellApp(const WorldAppConfig& config)
     // 批次切换。有效期 5 分钟（覆盖受理→全员到齐→启动的正常窗口）。
     squadInstanceService_->enable_admission_credentials(
         "cell:" + std::to_string(config_.worldId), /*ttl_ms=*/300000);
+    // L132 结算 ID 模拟代次域：结算幂等键融进程化身（start_epoch 与 960
+    // 注册代次同源）与 cell 身份——实例号是进程内裸计数（重启归 1），直用
+    // 会在进程重启/多 cell 并存时跨代次撞号，Base 去重环误判 duplicate
+    // 静默漏奖。
+    squadInstanceService_->set_settlement_id_salt(squad_instance::settlement_id_salt(
+        config_.worldId, static_cast<std::uint64_t>(config_.cellId),
+        config_.startEpochMs));
 }
 
 CellApp::~CellApp() {

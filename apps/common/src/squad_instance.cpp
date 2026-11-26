@@ -1,4 +1,5 @@
 #include "squad_instance/squad_instance.hpp"
+#include "squad_instance/settlement_id.hpp"
 
 #include <algorithm>
 
@@ -570,24 +571,29 @@ LaunchResult SquadInstanceService::launch(const LaunchRequest& request) {
         // （IRewardSink 单向口）→ 返回业务请求（958/959）入 Base 锚点
         // 长期态（P2-4 幂等落账；todo L84 跨界纪律：本地不持锚点指针）。
         auto ledger = std::make_unique<SettlementLedger>();
-        // 稳定玩法/结算 ID = Instance ID（L132 结算幂等键：同副本同玩家重试/
-        // 回执丢失重放不变；battle seed 与 Instance 同 id，确定性可复算）。
-        ledger->begin(members, instance->id());
+        // 稳定玩法/结算 ID = (盐 << 32) | 实例号（L132 结算幂等键 + 模拟代次
+        // 域：实例号是进程内裸计数重启归 1，直用会跨代次撞号致 Base 去重环
+        // 误判 duplicate 静默漏奖；盐融进程化身——同副本同玩家重试/回执丢失
+        // 重放不变，跨 cell/跨进程代次必异；未装配盐 = 旧口径 instance_id
+        // 直用。battle seed 仍与 Instance 同 id，确定性可复算）。
+        const auto settlement_id =
+            compose_settlement_id(settlement_id_salt_, instance->id());
+        ledger->begin(members, settlement_id);
         // D13 结算恢复记录：开账即建唯一意图记录（pending）——结算意图持久
         // 面（应发什么/发到哪一步/终局态）。确认位逐玩家随落账写入；全部
         // 所需确认完成才删记录（D13 §2.1）；失败取消置 cancelled。
         if (record_store_) {
-            (void)record_store_->open(instance->id(), request.party_id,
+            (void)record_store_->open(settlement_id, request.party_id,
                                       local_world_id_, instance->id(), members);
             // 意图面（D13 pending 自动重驱动）：分值刚定（结算段裁决）即记
             // 持久意图——重启后未确认成员据此重驱动（重发 958 同结算 ID）。
             ledger->set_intent_sink(
-                [store = record_store_.get(), sid = instance->id()](
+                [store = record_store_.get(), sid = settlement_id](
                     std::uint64_t player_id, std::int64_t score) {
                     (void)store->set_intent(sid, player_id, score);
                 });
             ledger->set_confirmation_sink(
-                [store = record_store_.get(), sid = instance->id(),
+                [store = record_store_.get(), sid = settlement_id,
                  ledger_ptr = ledger.get()](std::uint64_t player_id,
                                             std::int64_t score) {
                     (void)store->confirm(sid, player_id, score);

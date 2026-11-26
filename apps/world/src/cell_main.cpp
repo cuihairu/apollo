@@ -292,6 +292,9 @@ WorldAppConfig load_cell_config(int argc, char* argv[], const char* prog) {
     if (const char* token = std::getenv("APOLLO_REGISTER_TOKEN")) {
         config.registerToken = token;
     }
+    // 进程化身代次（L132 结算 ID 盐 + 960 注册代次同源单铸）：装载即铸，
+    // 重启必增（steady_clock 单调）；注册面与结算 ID 域共用同一值。
+    config.startEpochMs = steady_now_ms();
     return config;
 }
 
@@ -530,6 +533,7 @@ int run_cell_entry_body(int argc, char* argv[],
             rc.world_host = config.registerHost;
             rc.world_port = config.registerPort;
             rc.cell_id = config.cellId;
+            rc.start_epoch = config.startEpochMs;  // L132：与结算 ID 盐同源
             rc.advertise_host = config.host;
             rc.advertise_port = link->listenPort();
             rc.route_json = config.m1RouteJson;

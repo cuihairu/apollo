@@ -207,6 +207,16 @@ public:
     // 跨界纪律：禁止跨界使用本地 Anchor 指针修改资料）。
     void set_business_sink(SettlementLedger::BusinessSink fn);
 
+    // ---- L132 结算 ID 模拟代次域装配 ----
+    // 装配后：开账结算 ID = (盐 << 32) | 实例号（settlement_id.hpp 口径）
+    // ——实例号是进程内裸计数（重启归 1），直用作结算 ID 会在进程重启/
+    // 多 cell 并存时跨代次撞号，Base 去重环误判 duplicate 静默漏奖。盐取
+    // 进程化身（world/cell/start_epoch）折叠。未装配（0）= 旧口径
+    // instance_id 直用（测试桩兼容，零回归）。
+    void set_settlement_id_salt(std::uint64_t salt) noexcept {
+        settlement_id_salt_ = salt;
+    }
+
     // ---- D11 入场准入凭证面装配（cell 准入可信绑定）----
     // 启用后：launch 受理收口按受理快照逐成员签发有期限、单次消费凭证；
     // enter 准入先校验凭证（四负例）再进副本。未启用 = 无凭证面（测试桩
@@ -351,6 +361,9 @@ private:
     InstanceStartedFn instance_started_;
     InstanceClosingFn instance_closing_;
     SettlementLedger::BusinessSink business_sink_;
+    // L132 结算 ID 盐（settlement_id.hpp 口径）；0 = 未装配 = 旧口径
+    // instance_id 直用。
+    std::uint64_t settlement_id_salt_ = 0;
     std::unique_ptr<SettlementCredentialStore> credential_store_;
     // D13 结算恢复记录（唯一意图记录持久面）；未装配为 nullptr。
     std::unique_ptr<SettlementRecordStore> record_store_;
