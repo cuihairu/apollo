@@ -12,6 +12,9 @@
 #include "world_app/world_app.hpp"
 #include "world_app/cell_register_client.hpp"
 #include "world_app/m1_link_server.hpp"
+#include "apollo/protocol/messages.hpp"
+#include "apollo/protocol/codec.hpp"
+#include "cell_host.hpp"  // cell_test::CellHost（D24 时间线例：真执行端装配）
 #include "apollo/net/link/link_manager.hpp"
 #include "apollo/net/link/route_json.hpp"
 #include "apollo/net/linktrace/envelope.hpp"
@@ -38,6 +41,7 @@ namespace {
 namespace link = apollo::net::link;
 namespace wire = apollo::net::wire;
 namespace trace = apollo::net::trace;
+namespace protocol = apollo::protocol;  // D24 时间线例：意图帧构造（同 test_cell_app 惯例）
 using namespace std::chrono_literals;
 using world_app::WorldApp;
 using world_app::WorldAppConfig;
@@ -2245,6 +2249,134 @@ bool test_grace_freeze_and_readmit() {
     return true;
 }
 
+// ---------- D24 时间线数值化：断链租约窗 → 宽限冻结 → 停推进/停下行 → 复核恢复 ----------
+// 基线（开发验证窗，非生产承诺）：心跳 5s / cell 宽限 15s / World 过期 30s
+//（06 §6；config.hpp 缺省注释同口径），本例按比例缩窗（宽限 200ms）。钉四个
+// 时刻：① 断链不立即停服——宽限窗 = 租约，意图照常受理执行、下行照发；
+// ② 宽限到期冻结——生产接线（freeze 监听器 → set_frozen）真链触发：受理
+//    闸关（新输入拒）+ 下行停发（外部副作用停在冻结时刻）；
+// ③ 恢复只随 961 复核受理——World 同址重启 → 首受理 → 解冻 → 闸重开 →
+//    下行恢复（已受理滞留意图恢复后补排由单面例 test_cell_kernel_freeze_face
+//    钉住，本例不重复）。
+// World 侧「过期才释放（后释放半）」与复活对账已随 test_revived_cell_reclaims_
+// and_reconciles 钉住；两窗安全次序（cell 先自冻结、World 后摘除）由缺省窗
+// 配置断言在此钉住。
+
+world_app::IntentEnvelope make_timeline_create_intent(std::uint64_t entity_id,
+                                                     std::uint64_t session_id,
+                                                     std::uint64_t request_id = 0) {
+    protocol::CellCreateEntity msg;
+    msg.entityId = entity_id;
+    msg.entityType = protocol::EntityType::PLAYER;
+    msg.spaceId = 1;
+    msg.position.x = 1.0f;
+    msg.position.y = 2.0f;
+    msg.position.z = 3.0f;
+    world_app::IntentEnvelope intent;
+    intent.type = protocol::MessageType::CELL_CREATE_ENTITY;
+    intent.frame = protocol::MessageCodec::encode(msg, session_id);
+    intent.session_id = session_id;
+    intent.request_id = request_id;
+    return intent;
+}
+
+world_app::IntentEnvelope make_timeline_move_intent(std::uint64_t entity_id,
+                                                    std::uint64_t session_id) {
+    protocol::CellEntityMove msg;
+    msg.entityId = entity_id;
+    msg.newPos.x = 4.0f;
+    msg.newPos.y = 5.0f;
+    msg.newPos.z = 6.0f;
+    world_app::IntentEnvelope intent;
+    intent.type = protocol::MessageType::CELL_ENTITY_MOVE;
+    intent.frame = protocol::MessageCodec::encode(msg, session_id);
+    intent.session_id = session_id;
+    return intent;
+}
+
+bool test_cell_freeze_timeline_lease_and_recovery() {
+    std::cout << "Running: test_cell_freeze_timeline_lease_and_recovery..."
+              << std::endl;
+    // 安全次序（D24 基线，缺省窗配置断言）：cell 宽限 < World 过期——cell
+    // 先自冻结（停推进停副作用），World 后摘除释放。
+    TEST_ASSERT(world_app::WorldAppConfig{}.linkGraceMs
+                    < world_app::WorldAppConfig{}.cellExpiryMs,
+                "safety ordering: cell grace shorter than world expiry");
+
+    WorldEnd server;
+    server.fixed_m1_port = 18899;
+    TEST_ASSERT(server.start(131), "world started on fixed port");
+
+    cell_test::CellHost host;
+    host.config.tickRateMs = 10;
+    host.config.linkGraceMs = 200;  // 测试窗（生产默认 15000）
+    host.config.m1RouteJson = kRouteJson;
+    TEST_ASSERT(host.start(server.world->m1Link().listenPort(), 21),
+                "cell host started and dialed world");
+    TEST_ASSERT(wait_until([&] {
+                    return host.register_client->state().accepted;
+                }, 5000),
+                "first registration accepted");
+
+    // ① 链路在位：受理 + 执行 + 下行全链活
+    TEST_ASSERT(host.cell->submitIntent(
+                    make_timeline_create_intent(42, 3001, 7001)),
+                "create accepted while link up");
+    TEST_ASSERT(wait_until([&] {
+                    return host.cell->resolveIntentPlayer(3001) == 42;
+                }, 3000),
+                "create executed at tick boundary");
+    TEST_ASSERT(host.cell->submitIntent(make_timeline_move_intent(42, 3001)),
+                "move accepted while link up");
+    TEST_ASSERT(wait_until([&] {
+                    return host.egress.deliver_count.load() >= 1;
+                }, 3000),
+                "downstream emitted while link up");
+
+    // ② 断链租约窗：World 全停、宽限未到——照常受理执行（短暂断连不停服）
+    server.stop();
+    TEST_ASSERT(host.cell->submitIntent(make_timeline_move_intent(42, 3001)),
+                "lease window: intent still accepted during grace");
+    TEST_ASSERT(wait_until([&] {
+                    return host.egress.deliver_count.load() >= 2;
+                }, 3000),
+                "lease window: downstream still emitted during grace");
+    TEST_ASSERT(!host.cell->frozen(), "no freeze within grace window");
+
+    // ③ 宽限到期冻结（生产接线真链触发）：受理闸关 + 下行停发
+    TEST_ASSERT(wait_until([&] { return host.cell->frozen(); }, 3000),
+                "freeze fired at grace expiry via production wiring");
+    TEST_ASSERT(host.freeze_count.load() == 1, "freeze fired exactly once");
+    TEST_ASSERT(
+        !host.cell->submitIntent(make_timeline_create_intent(43, 3002, 7002)),
+        "admission gate closed when frozen");
+    const auto downstream_at_freeze = host.egress.deliver_count.load();
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    TEST_ASSERT(host.egress.deliver_count.load() == downstream_at_freeze,
+                "downstream stopped while frozen (side effects halted)");
+    TEST_ASSERT(host.cell->resolveIntentPlayer(3001) == 42,
+                "session binding survives freeze");
+
+    // ④ 恢复只随 961 复核受理：同址重启 → 首受理 → 解冻 → 闸重开 → 下行恢复
+    WorldEnd world2;
+    world2.fixed_m1_port = 18899;
+    TEST_ASSERT(world2.start(131), "world restarted on same address");
+    TEST_ASSERT(wait_until([&] { return host.readmit_count.load() >= 1; }, 5000),
+                "re-admitted via fresh acceptance after restart");
+    TEST_ASSERT(!host.cell->frozen(), "gate reopened on re-admission");
+    TEST_ASSERT(host.cell->submitIntent(make_timeline_move_intent(42, 3001)),
+                "admission gate reopened after re-admission");
+    TEST_ASSERT(wait_until([&] {
+                    return host.egress.deliver_count.load() > downstream_at_freeze;
+                }, 3000),
+                "downstream resumed after re-admission");
+
+    host.stop();
+    world2.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- 契约不兼容自冻结：961 code 5 触发冻结监听（同 code 3 口径）----------
 
 bool test_production_client_incompat_freeze() {
@@ -3585,6 +3717,7 @@ int main() {
                     && test_journal_dynamic_space_across_restart()
                     && test_production_client_space_assign_listener()
                     && test_grace_freeze_and_readmit()
+                    && test_cell_freeze_timeline_lease_and_recovery()
                     && test_production_client_incompat_freeze()
                     && test_stale_epoch_watermark_isolation()
                     && test_space_release_and_reclaim()

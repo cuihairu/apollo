@@ -27,9 +27,14 @@ struct CellLinkEgress final : public world_app::IM1Egress {
     world_app::M1LinkServer* link = nullptr;
     world_app::CellRegisterClient* register_client = nullptr;
     world_app::M1LinkServer* world_link = nullptr;
+    // 内核下行发射计数（D24 时间线观测面）：deliverToClient 每次出口调用
+    // +1——链路是否送达无关（断链期调用照发生效失败）。冻结停推进 = 计数
+    // 停走（外部副作用停在冻结时刻），复核解冻 = 计数恢复前进。
+    std::atomic<std::uint64_t> deliver_count{0};
 
     void sendClientDeliver(std::uint64_t session_id, std::uint32_t gateway_id,
                            const std::vector<std::uint8_t>& payload) override {
+        deliver_count.fetch_add(1, std::memory_order_relaxed);
         if (world_link) {
             // 下行经 World M1 端点转发 gateway（生产 cell 宿主经注册连接回
             // World，World 再 gateway_link() 转发；测试 cell 无 gateway 直连，
@@ -85,6 +90,11 @@ struct CellHost {
     bool watched_hosts_space() const {
         return watchedSpaceHosted_.load(std::memory_order_acquire);
     }
+    // 冻结/解冻计数（D24 时间线观测面）：生产接线（freeze 监听器 →
+    // set_frozen(true)；readmit 监听器 → set_frozen(false)）随 start() 接
+    // 线，触发即计数——真链断链宽限到期/复核解冻时刻的测试断言面。
+    std::atomic<int> freeze_count{0};
+    std::atomic<int> readmit_count{0};
 
     bool start(std::uint16_t world_m1_port, std::uint64_t cell_id = 21,
                std::uint16_t port = 0,
@@ -255,6 +265,7 @@ struct CellHost {
         rc.advertise_port = link->listenPort();
         rc.route_json = config.m1RouteJson;
         rc.heartbeat_ms = 500;
+        rc.link_grace_ms = config.linkGraceMs;  // D24：宽限窗透传（缺省 15000）
         rc.capabilities = config.declaredCapabilities;  // L134：声明能力位透传
         register_client = world_app::makeCellRegisterClient(std::move(rc));
         if (!register_client) {
@@ -280,6 +291,18 @@ struct CellHost {
                         config, rec.space_id,
                         world_app::declared_space_name(config, rec.space_id)));
             });
+        // 控制面失联冻结接线（D24 时间线批补齐的生产镜像半面；同生产
+        // cell_main 纪律）：宽限到期/裁决拒 → 内核冻结；解冻只随 961 复核
+        // 受理。缺省宽限 15000ms 下既有用例不受影响（短断链不触窗）。
+        register_client->set_link_freeze_listener(
+            [this](world_app::LinkFreezeReason) {
+                cell->set_frozen(true);
+                freeze_count.fetch_add(1, std::memory_order_relaxed);
+            });
+        register_client->set_readmit_listener([this] {
+            cell->set_frozen(false);
+            readmit_count.fetch_add(1, std::memory_order_relaxed);
+        });
         register_client->set_intent_listener(
             [this](const std::vector<std::uint8_t>& payload) {
                 world_app::IntentEnvelope intent;
