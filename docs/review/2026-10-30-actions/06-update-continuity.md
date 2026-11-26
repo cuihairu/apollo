@@ -105,6 +105,18 @@
 断言：拒旧生效、奖励待办不丢、无第二个资料写入者
 ```
 
+> 复核实测 2026-11-26（测试面 `write_generation_cross_process_adjudication`
+> （Base database）+ `test_migration_chain` 真拨交接 e2e）：演练主链已有真实
+> 覆盖——① 停写冻结：933 真拨源受理 → 锚点 Transferring，冻结段不再新增
+> 代次；② 交权：937 真拨目标带源地址 → MigrationPuller 真拨源 935/936，
+> 接权账自快照代次续进不回卷（首落 gen 2，续写 gen 3/4 地板随接权推进）；
+> ③ 旧写隔离：旧进程 933 丢失/超时形态的迟到保存，停写闸先于地板闸生效、
+> 地板之下降级半拒（档案不动、锚点留脏），陈旧/重复 938 拒
+> （adoptedEpochs_ 去重）。断言「拒旧生效、无第二个资料写入者」成立。
+> **仍缺**（主行不勾，均需设计裁决）：刷新 Base 路由（migratePlayer 复用
+> 旧 assignment，base_host/base_port 刷新归属未定）；待办不丢（跨 Base
+> 待处理结算转移无格式）；清理旧 Base（源端留 Transferring 无清理面）。
+
 ## 5. D23 · World 管理端更新（首阶段：同卷、受控停止重启）
 
 ### 5.1 管理状态清单
