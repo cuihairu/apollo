@@ -74,6 +74,8 @@
 
 > 迁移 ID 稳定；单一提交点让超时后可查询；只搬玩家/重新开副本不算完整迁移。
 
+> D16 首切片 2026-11-26 已落地（commit 974ac98c，见 todo.md L136）：同进程显式换场路径从 D15「离场重建、易失态清零」升级为**完整运行态随迁 + 五步逐步确认**——①源冻结（准入校验 + `AvatarRuntimeState` 捕获 + `AvatarState::Frozen` 不收输入/伤害，源无 Avatar 显式驳回不降级重建）；②目标未激活准备（实体 ID 不变重建 + `GameplaySnapshot` 长期属性投影 + 运行态覆盖播种，血量/序号水位随迁保旧包重放门）；③条件提交（scene+instance 成员资格成立——无实例空间 = 无需 enter 即成立；提交前失败 = 取消，目标丢弃 + 源解冻，源对象全程未离场、原态无损，区别于 D15 快照重建回滚）；④路由投影更新（会话 TransferringOut + 字段切换，提交后失败不自动回滚，以 `CommitInconsistent` 上报对账）；⑤目标激活与源清理（complete resume 后源清理，冻结 Avatar 出列）。`confirmed_steps` 位掩码逐步确认可观察（失败定位到步）。`handleCellCrossBorder` 生产接线已切换迁移路径，契约零改动。字段边界：`AvatarRuntimeState` 只收 Avatar 上真实存在的状态（实体 ID/血量/输入序号水位）；§3.1 冷却/玩法时钟/脚本状态尚无字段与消费点——不空画，随对应玩法批接入再扩。测试：`avatar_migration_freeze_unfreeze`/`avatar_runtime_capture_restore`（AvatarTests 10/10）、`test_scene_migration_runtime_preserved`/`_commit_cancel_unfreezes_source`/`_rejections`（SessionWorldTests 15/15）、CellAppTests 19/19（首轮此套件红=无实例空间条件提交三元链误判，已修）；四树门禁：主树 ctest 128/128、off-tree2 全量重建+ctest 128/128、examples 全量重建+ctest 128/128（两轮 WorldAppM1LinkTests 负载时窗红，隔离+复跑绿）、san 树 7 套件绿（ASan+UBSan）。**仍缺**：冷却/时钟/脚本状态字段（需求触发）、迁移 ID 持久提交与对账（D17 跨 World 批）、跨 Cell 连续交接（D15/D17/D30 延后）——不重试。
+
 ## 4. D17 · 跨 World 唯一迁移决定设计约束
 
 | 约束 | 设计 |
