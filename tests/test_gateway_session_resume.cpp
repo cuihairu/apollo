@@ -739,6 +739,56 @@ bool test_tcp_resume_after_ws_drop() {
     return true;
 }
 
+// ---- 8. 网关重启（新进程实例）认证绑定不跨进程携带（D10 case 3 隔离半面）：
+// 会话表在网关内存、重启即失。同 gateway_id 重启复用号域（nextSessionId_
+// 基址随 gateway_id、进程内计数——号值相等是文档化性质，非会话复活）；判别
+// 面是认证态：新实例上零认证计数（旧绑定未随号携带），恢复须显式重走
+// authenticateSession。恢复半面（重启后免重认证恢复原位置）需会话持久化/
+// 交接协议，另行设计拍板。
+
+bool test_gateway_restart_discards_old_sessions() {
+    std::cout << "Running: test_gateway_restart_discards_old_sessions..." << std::endl;
+
+    gateway::GatewayServer server_a(base_config(600000));
+    server_a.start();
+    TcpTestClient first;
+    TEST_ASSERT(first.connect("127.0.0.1", server_a.listenPort()), "first connected");
+    first.sendAll(frame_bytes(1, 0, ping_packet(0)));
+    std::vector<std::uint8_t> reply;
+    TEST_ASSERT(first.recvLinkFrame(reply), "pong received");
+    const auto old_id = header_of(reply).sessionId;
+    TEST_ASSERT(old_id != 0, "session id echoed");
+    TEST_ASSERT(server_a.authenticateSession(old_id, 900004, "ticket"), "player bound");
+
+    // 「重启」：旧实例下线（内存会话表随之消失）
+    server_a.stop();
+
+    // 新实例：同 gateway_id 号域 + 同长保留窗
+    gateway::GatewayServer server_b(base_config(600000));
+    server_b.start();
+    TcpTestClient second;
+    TEST_ASSERT(second.connect("127.0.0.1", server_b.listenPort()),
+                "restarted gateway connected");
+    second.sendAll(frame_bytes(1, 0, ping_packet(old_id)));
+    TEST_ASSERT(second.recvLinkFrame(reply), "pong received on restarted gateway");
+    // 号域复用（进程内计数器基址随 gateway_id，重启归 1）——同 gateway_id
+    // 重启后首个会话号与旧号同值是预期性质，此处显式钉住。
+    TEST_ASSERT(header_of(reply).sessionId == old_id,
+                "session id domain restarts with gateway (per-process counter)");
+    TEST_ASSERT(server_b.getSessionCount() == 1, "only the fresh session exists");
+    // 隔离面：旧认证绑定未随号复活——新实例零认证计数，携旧号不等于已认证。
+    TEST_ASSERT(server_b.authAccepted() == 0,
+                "no auth binding carried across restart");
+    // 恢复须显式重走认证（同玩家重登同一会话号照常受理；authAccepted_ 计数
+    // 只随 wire 登录路径自增，直调 API 不入账——零计数即「未携带」的铁证）。
+    TEST_ASSERT(server_b.authenticateSession(old_id, 900004, "ticket"),
+                "explicit re-auth binds the fresh session");
+
+    server_b.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 #endif  // !_WIN32
 
 }  // namespace
@@ -757,6 +807,7 @@ int main() {
         {"retention_zero_legacy_destroy", test_retention_zero_legacy_destroy},
         {"ws_resume_after_tcp_drop", test_ws_resume_after_tcp_drop},
         {"tcp_resume_after_ws_drop", test_tcp_resume_after_ws_drop},
+        {"gateway_restart_discards_old_sessions", test_gateway_restart_discards_old_sessions},
     };
 
     int failed = 0;
