@@ -140,6 +140,42 @@ void runtime_field_split() {
     CHECK(no_pos.runtime.z == 0.0f);
 }
 
+// D19 快照转换样本（todo L143 仍缺面）：档案 JSON 新字段 settledIds（L132
+// 结算去重环）旧档缺字段缺省——升级点前旧档无环记忆（不装作记得升级前的
+// 结算），升级后新落档案总带键（空环写空数组，读档不再走缺省分支）；环值
+// roundtrip 对称（环与 exp 同一持久单元）；键形坏（非数组）守卫拒读。
+void settled_ring_legacy_archive_default() {
+    // 旧档（L132 升级前落盘）：无 settledIds 键 → 环缺省空。
+    const std::string legacy =
+        R"({"playerId":85,"username":"pre-ring","level":2,"exp":77,)"
+        R"("hp":50,"maxHp":60,"mp":10,"maxMp":20,"x":0,"y":0,"z":0,"writeGen":3})";
+    auto restored = player_store::PlayerData::fromJson(legacy);
+    CHECK(restored.settledIds.empty());
+    CHECK(restored.exp == 77 && restored.writeGen == 3);
+
+    // 升级后首个档案：空环也写空数组（键总在场）。
+    const auto first_save = restored.toJson();
+    CHECK(first_save.find("\"settledIds\":[]") != std::string::npos);
+
+    // 升级点后结算入环：环值随档案 roundtrip 对称。
+    player_store::PlayerData post{};
+    post.playerId = 86;
+    post.username = "post-ring";
+    post.exp = 78;
+    post.settledIds = {5001, 5002};
+    const auto encoded = post.toJson();
+    CHECK(encoded.find("5001") != std::string::npos
+          && encoded.find("5002") != std::string::npos);
+    const auto back = player_store::PlayerData::fromJson(encoded);
+    CHECK(back.settledIds.size() == 2);
+    CHECK(back.settledIds[0] == 5001 && back.settledIds[1] == 5002);
+
+    // 键形坏（非数组）守卫拒读：环缺省空，不炸不部分采纳。
+    const auto malformed =
+        player_store::PlayerData::fromJson(R"({"playerId":87,"settledIds":7})");
+    CHECK(malformed.settledIds.empty());
+}
+
 void reject_bad_requests_and_failures() {
     Fixture f;
     database::Server server(f.config);
@@ -804,6 +840,7 @@ int main(int argc, char** argv) {
         }
         roundtrip_and_base_restart();
         runtime_field_split();
+        settled_ring_legacy_archive_default();
         reject_bad_requests_and_failures();
         database_crash_survives_restart();
         pending_journal_recovery();
