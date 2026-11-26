@@ -2470,6 +2470,110 @@ bool test_space_release_and_reclaim() {
     return true;
 }
 
+// ---------- 旧端复活（D24 场景 5 机械面）：清扫→同代次重注册→重认领→967 对账 ----------
+// 复活受理已有切片（心跳例：过期后同代次重注册=首注册；释放例：别家认领 +
+// 旧主收敛撤销标记）；此处钉住同代次旧端自己复活的全链：失联窗口期池位无人
+// 自动接管（owner=0 挂池），复活重认领版本前进（防离线旧主 ABA），967 对账
+// 双面——按重认领新版本自报=匹配恢复；按清扫前旧视图自报=版本冲突冻结
+//（旧视图不静默过闸，安全侧）。
+bool test_revived_cell_reclaims_and_reconciles() {
+    std::cout << "Running: test_revived_cell_reclaims_and_reconciles..." << std::endl;
+    WorldEnd server;
+    server.config.assignSpaces = {{503, 0}, {504, 0}};
+    server.config.cellExpiryMs = 150;  // 测试窗（生产默认 30000）
+    TEST_ASSERT(server.start(119), "world started with M1 port");
+    std::map<std::uint64_t, RegisterReply> replies;
+    g_replies = &replies;
+    std::map<std::uint64_t, SpaceAssignFrame> assigns;
+    g_assigns = &assigns;
+
+    // 首注册认领 503/504 v1（链路保持，停发等过期）
+    CellEnd cell;
+    TEST_ASSERT(dial_cell(server, cell, "cell-revive"), "cell dialed");
+    RegisterReply r;
+    TEST_ASSERT(
+        register_roundtrip(cell, 9901, 21, 9, "127.0.0.1", 9209, 0, 0, 0, true, r),
+        "cell registered epoch 9");
+    TEST_ASSERT(wait_until([&] {
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(503) && assigns.count(504)
+                           && assigns[503].ready && assigns[504].ready
+                           && assigns[503].version == 1
+                           && assigns[503].assigned_cell_id == 21;
+                }, 3000),
+                "both pool spaces claimed at v1");
+
+    // 过期清扫：注册摘除、503/504 owner→0 版本不变；失联窗口期无自动接管
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a = server.world->find_space_assignment(503);
+                    const auto* b = server.world->find_space_assignment(504);
+                    return a != nullptr && b != nullptr && a->cell_id == 0
+                           && b->cell_id == 0;
+                }, 3000),
+                "expiry releases both spaces to pool");
+    TEST_ASSERT(server.world->registered_cell_count() == 0, "registry emptied");
+    {
+        const auto* a = server.world->find_space_assignment(503);
+        TEST_ASSERT(a != nullptr && a->version == 1, "release keeps version");
+    }
+
+    // 复活：同 cell 同代次重注册 → 首注册受理（水位同代次不拦）
+    TEST_ASSERT(
+        register_roundtrip(cell, 9902, 21, 9, "127.0.0.1", 9209, 0, 0, 0, true, r),
+        "revived cell re-admitted");
+    TEST_ASSERT(r.code == world_app::kCellRegisterAccepted, "fresh admission code 1");
+
+    // 重认领：版本前进 v2（防 ABA）+ ready=1 归属视图推送复活端
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a = server.world->find_space_assignment(503);
+                    const auto* b = server.world->find_space_assignment(504);
+                    return a != nullptr && b != nullptr && a->cell_id == 21
+                           && b->cell_id == 21 && a->version == 2 && b->version == 2;
+                }, 3000),
+                "revived cell reclaims both at v2");
+    TEST_ASSERT(wait_until([&] {
+                    cell.pump();
+                    std::lock_guard<std::mutex> lock(g_assigns_mutex);
+                    return assigns.count(503) && assigns.count(504)
+                           && assigns[503].ready && assigns[504].ready
+                           && assigns[503].assigned_cell_id == 21
+                           && assigns[504].assigned_cell_id == 21
+                           && assigns[503].version == 2 && assigns[504].version == 2;
+                }, 3000),
+                "revived cell receives ownership pushes at v2");
+
+    // 967 对账恢复面：503 按重认领新版本 v2 自报 → 受理记账、无冲突
+    TEST_ASSERT(cell.send_space_report(9903, 21, 9, 503, 2, 77),
+                "reconcile report at reclaimed v2");
+    TEST_ASSERT(wait_until([&] {
+                    cell.pump();
+                    return server.world->space_report_count() >= 1;
+                }, 3000),
+                "matched report processed");
+    TEST_ASSERT(server.world->conflicted_space_count() == 0,
+                "v2 self-report matches authority");
+
+    // 967 对账隔离面：504 按清扫前旧视图 v1 自报 → 版本冲突冻结（保 owner）
+    TEST_ASSERT(cell.send_space_report(9904, 21, 9, 504, 1, 77),
+                "stale pre-sweep view self-reported");
+    TEST_ASSERT(wait_until([&] {
+                    cell.pump();
+                    return server.world->space_report_count() >= 2
+                           && server.world->conflicted_space_count() == 1;
+                }, 3000),
+                "stale version self-report freezes space 504");
+    {
+        const auto* b = server.world->find_space_assignment(504);
+        TEST_ASSERT(b != nullptr && b->cell_id == 21, "frozen space keeps owner");
+    }
+
+    g_assigns = nullptr;
+    g_replies = nullptr;
+    server.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---------- 持久墓碑（L101 管理日志切片）：代次水位跨 World 重启 ----------
 // 批㉗ 水位是内存面（重启忘却）——墓碑日志把「本进程曾受理的最高启动代次」
 // 落盘，旧执行端隔离跨 World 重启成立。同代次回拨仍放行（批㉔ 语义跨重启
@@ -3484,6 +3588,7 @@ int main() {
                     && test_production_client_incompat_freeze()
                     && test_stale_epoch_watermark_isolation()
                     && test_space_release_and_reclaim()
+                    && test_revived_cell_reclaims_and_reconciles()
                     && test_watermark_journal_persists_across_restart()
                     && test_journal_v2_assignment_state_across_restart()
                     && test_journal_owner_boot_basis_window()
