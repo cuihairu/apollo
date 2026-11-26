@@ -190,6 +190,20 @@
 
 > TCP 无断开 = 独立后续能力（连接句柄交接），待明确需求立项。
 
+> 搬活区+承接演练 2026-11-27 已落地（commit 303ff71c，测试
+> `gateway_drain_swap_tests` / ctest `GatewayDrainSwapTests`）：原
+> GatewayDrainTests 挂 APOLLO_BUILD_GTESTS=OFF 死区（四树均未注册未执行），
+> 本批活区注册首跑即绿——自然排空全生命周期（begin → 新连接拒 / 既有
+> PING→PONG → 自然离开 → drained "all client connections left" → 监听仍
+> 关）、期限强停（deadline 到 force-closed + 客户端 EOF 显形）、未知 op
+> 显式拒（detail 点名、状态不动）均真 socket 实测。新增换装承接演练
+> （face 1+2 联合）：旧网关起排后新连接在本机被拒，第二网关同窗承接新
+> 连接（status active=1）并持续服务（排空窗前后双 PING→PONG 探针），
+> 旧网关既有连接自然离开落 drained——「更新期间新连接持续接入」的承接点
+> =第二网关；同端口交接（SO_REUSEPORT 等部署面）不在测试内。
+> **仍缺**（主行不勾）：face 4 免重登恢复（=D10 case 3，协议设计拍板，
+> 不重试）；TCP 无断开=独立连接交接实现（明确未实现，待需求立项）。
+
 ## 9. D28 · 四类连续性验收矩阵
 
 | 列 | 客户端 | 进程数 | 失败注入点 | 恢复时间 | 业务结果 |
