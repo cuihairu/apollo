@@ -40,7 +40,7 @@
 
 - 验收：排空期间已接活动正常结束；无新分配进入；退出后 World 分配回收、可重挂新 cell。
 
-> 自然排空首切片 2026-11-26 已落地：`login_chain_cell_natural_drain_cycle`
+> 自然排空首切片 2026-11-26 已落地（commit 66c59bc6）：`login_chain_cell_natural_drain_cycle`
 > 真线全环——①**停止新分配 + 占用活动自然结束**：963 op=1（真 wire）置缩容意图，World
 > releaseCellSpaces 推 962 ready=0；腾空的 504 即刻被 cell 销毁并经 969 回执确认，
 > 占用中的 503（1002 avatar 在位）本地拒绝销毁、入待撤表逐拍重试；随后真线
