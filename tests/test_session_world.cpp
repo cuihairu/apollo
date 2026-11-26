@@ -9,8 +9,10 @@
 #include "apollo/game/world/scene_transfer.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
+#include "apollo/base/rng.hpp"
 
 #include <iostream>
+#include <vector>
 
 namespace {
 
@@ -635,6 +637,68 @@ bool test_scene_migration_commit_cancel_unfreezes_source() {
     return true;
 }
 
+// D21 §3 项 6「随机」等价表示验收：RNG 无可变游标——任意 (world_seed, tick,
+// stream) 由纯函数派生子流。在真实迁移路径前后按同一三元组取样，断言逐值
+// 相等：迁移不需要搬运随机状态，也不产生调用次序/进程替换漂移。
+bool test_scene_migration_rng_equivalence() {
+    std::cout << "Running: test_scene_migration_rng_equivalence..." << std::endl;
+
+    using apollo::base::StreamId;
+    using apollo::base::derive_substream;
+    constexpr std::uint64_t kWorldSeed = 0x5EED'1234'ABCD'5678ULL;
+
+    const auto sample = [](std::uint64_t tick, StreamId stream) {
+        auto rng = derive_substream(kWorldSeed, tick, stream);
+        std::vector<std::uint32_t> values;
+        for (int i = 0; i < 8; ++i) {
+            values.push_back(rng.next_uint32());
+        }
+        return values;
+    };
+    const auto combat_before = sample(37, StreamId::CombatRoll);
+    const auto drop_before = sample(37, StreamId::Drop);
+
+    TwoSceneFixture fx;
+    const auto player = apollo::game::core::PlayerId(7007);
+    auto session = fx.sessions.create_session(6007, player);
+    TEST_ASSERT(session != nullptr, "session created");
+    const auto entity = apollo::game::core::EntityId(9008);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player, entity);
+    TEST_ASSERT(fx.scene_a->enter(avatar, {1.0f, 2.0f, 3.0f}), "avatar entered scene a");
+    TEST_ASSERT(fx.instance_a->enter(player), "player entered instance a");
+    session->assign_world(1);
+    session->assign_map_instance(fx.instance_a->id());
+    session->assign_space(fx.scene_a->scene_id());
+    session->bind_avatar(entity);
+    session->set_state(apollo::game::world::WorldSessionState::Active);
+
+    // 先消费一次其它流（次序无关，证明不靠全局游标续流）
+    auto interleaved = derive_substream(kWorldSeed, 37, StreamId::AiDecision);
+    (void)interleaved.next_uint32();
+
+    apollo::game::world::SceneTransferRequest request;
+    request.player_id = player;
+    request.target_scene_id = fx.scene_b->scene_id();
+    request.landing = {10.0f, 20.0f, 30.0f};
+    const auto outcome =
+        apollo::game::world::execute_migration_transfer(fx.world, fx.sessions, request);
+    TEST_ASSERT(outcome.ok(), "migration ok");
+
+    const auto combat_after = sample(37, StreamId::CombatRoll);
+    const auto drop_after = sample(37, StreamId::Drop);
+    TEST_ASSERT(combat_after == combat_before, "combat substream identical across migration");
+    TEST_ASSERT(drop_after == drop_before, "drop substream identical across migration");
+    TEST_ASSERT(combat_before != drop_before, "stream domains stay isolated");
+    // 后续 tick 仍可独立重放（迁移不推进任何随机游标）
+    const auto next_tick = sample(38, StreamId::CombatRoll);
+    TEST_ASSERT(next_tick != combat_before, "next tick derives a distinct sequence");
+    TEST_ASSERT(sample(37, StreamId::CombatRoll) == combat_before,
+                "prior tick remains replayable after migration");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_scene_migration_rejections() {
     std::cout << "Running: test_scene_migration_rejections..." << std::endl;
 
@@ -847,6 +911,7 @@ int main() {
     run(test_scene_transfer_rollback_on_attach_failure);
     run(test_scene_migration_runtime_preserved);
     run(test_scene_migration_commit_cancel_unfreezes_source);
+    run(test_scene_migration_rng_equivalence);
     run(test_scene_migration_rejections);
     run(test_transfer_disconnect_window);
     run(test_avatar_longterm_state_fields);
