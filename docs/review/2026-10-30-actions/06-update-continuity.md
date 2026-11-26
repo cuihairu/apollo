@@ -27,6 +27,11 @@
 > compat`（真拨真受理面）。**仍缺**（P5 批余）：多进程 cell/Base/World 更新演练（D20–D23 依赖拓扑批）、
 > 多版本真机样本；版本拒绝维持现状（route_version 失配断连 kRouteVersionMismatch）；快照转换即档案
 > JSON 新字段 `settledIds` 旧档缺字段缺省（`j.contains` 守卫），独立演进样本另行验收。
+>
+> 快照转换样本 2026-11-27 已落测试（commit 9d74f4c4，`settled_ring_legacy_archive_default`，
+> `BaseDatabaseTests`）：升级点前旧档无 `settledIds` 键 → 环缺省空（不伪造升级前结算记忆）；
+> 升级后首个档案空环也写空数组（键总在场，读档不再走缺省分支）；环值随档案 roundtrip 对称
+>（环与 exp 同一持久单元）；键形坏（非数组）守卫拒读不炸不部分采纳。
 
 ## 2. D20 · cell 更新（先自然排空）
 
