@@ -122,9 +122,10 @@ std::vector<uint8_t> CellApp::handleCellCrossBorder(const std::vector<uint8_t>& 
     std::vector<uint8_t> bodyData(request.begin() + sizeof(protocol::MessageHeader), request.end());
     auto msg = protocol::MessageCodec::decodeBody<protocol::CellCrossBorder>(bodyData);
 
-    // P1-1 重写：走 scene_transfer 流程模块（prepare→begin→detach→attach→
-    // complete，六差距收口），替换旧「字段搬运 + 瞬时 complete」路径——
-    // 旧路径无准入、无对象投影、无回滚、目标不存在时静默同场搬运。
+    // P1-1 重写：走 scene_transfer 流程模块替换旧「字段搬运 + 瞬时 complete」
+    // 路径（六差距收口）；D16 起走 execute_migration_transfer 迁移路径——
+    // 完整运行态随迁 + 五步逐步确认（源冻结→目标准备→条件提交→路由投影→
+    // 目标激活/源清理），替换 D15 离场重建（易失态清零）路径。
     const auto route = spaceToScene_.find(static_cast<std::uint64_t>(msg.toSpace));
     if (route == spaceToScene_.end()) {
         // 目标 space 无路由（差距 ⑥ 显式驳回面；跨 cell 转移随 P3 部署面）
@@ -166,15 +167,18 @@ std::vector<uint8_t> CellApp::handleCellCrossBorder(const std::vector<uint8_t>& 
     // 请求落点进场；服务端权威可改）
     transfer.landing = SceneAoi::Vec3{msg.position.x, msg.position.y, msg.position.z};
 
+    // D16：显式换场走迁移路径——完整运行态随迁（实体 ID/血量/输入序号
+    // 水位），源冻结→目标准备→条件提交→路由投影→目标激活/源清理逐步确认
     const auto outcome =
-        apollo::game::world::execute_scene_transfer(*world_, *worldSessionManager_, transfer);
+        apollo::game::world::execute_migration_transfer(*world_, *worldSessionManager_, transfer);
     if (!outcome.ok()) {
-        // 驳回/回滚面：单进程阶段仅可观察日志；错误下发随网关面（P1-6）
-        worldLog().warning("scene transfer rejected: player="
+        // 驳回/取消/提交后不一致面：单进程阶段仅可观察日志；错误下发随网关面（P1-6）
+        worldLog().warning("scene migration rejected: player="
                        + std::to_string(player_id.value()) + " target_scene="
                        + std::to_string(transfer.target_scene_id) + " result="
                        + std::string(apollo::game::world::to_string(outcome.result))
-                       + " at_step=" + std::to_string(static_cast<int>(outcome.failed_at)));
+                       + " at_step="
+                       + std::string(apollo::game::world::to_string(outcome.failed_at)));
     }
 
     return {};

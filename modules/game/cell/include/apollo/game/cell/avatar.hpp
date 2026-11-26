@@ -11,15 +11,33 @@
 
 namespace apollo::game::cell {
 
+// D16 迁移运行态（值语义）：cell 权威模拟态的跨 scene 迁移载荷——区别于
+// base::GameplaySnapshot（Base 长期资料的入场播种值）。实体 ID 稳定跨迁移
+// 不变；血量是 cell 模拟态（restore 覆盖快照播种值）；输入序号水位随迁
+// （迁移清零 = 旧包重放门失效）。字段只收「Avatar 上真实存在的状态」——
+// 冷却/玩法时钟/脚本状态（D16 §3.1 清单其余项）尚无字段，随对应玩法批
+// 接入后再扩，不在本批空画。
+struct AvatarRuntimeState {
+    apollo::game::core::EntityId entity_id{};
+    int hp = 0;
+    int max_hp = 0;
+    std::uint64_t last_reconciled_seq = 0;
+
+    [[nodiscard]] bool operator==(const AvatarRuntimeState&) const noexcept = default;
+};
+
 // Avatar 生命周期状态（term-contract §1.2 / player-object-model §3）。
 // 「进 scene 生、出 scene 死」：
 //   Active    —— 已在 scene 内，可参与三职责（移动/战斗/AOI 广播）；
 //   Suspended —— 断线保活窗口内挂机（#12 掉线保活窗口）；窗口满由 scene 移除销毁；
-//   Leaving   —— 已发起出 scene（换幕/登出），不再接收新输入，等待 scene 侧销毁。
+//   Leaving   —— 已发起出 scene（换幕/登出），不再接收新输入，等待 scene 侧销毁；
+//   Frozen    —— 迁移冻结窗口（D16 源冻结）：不再接收输入/伤害，等待迁移结论
+//                （解冻回 Active 或随源清理销毁）；迁移确认前源对象不动。
 enum class AvatarState : std::uint8_t {
     Active = 0,
     Suspended,
     Leaving,
+    Frozen,
 };
 
 // 场景内空间权威（player-object-model §2 Cell 精简）：Cell 职责收窄后只剩三件——
@@ -50,6 +68,12 @@ public:
     void suspend() noexcept;
     void resume() noexcept;
     void begin_leave() noexcept;
+
+    // ---- 迁移冻结窗口（D16 源冻结）：确认前源对象不动 ----
+    // freeze：Active → Frozen（不收输入/伤害，等待迁移结论）；仅 Active 可冻结。
+    // unfreeze：Frozen → Active（取消路径唯一出口——条件提交失败源解冻）。
+    void freeze() noexcept;
+    void unfreeze() noexcept;
 
     // ---- 移动权威（Cell 职责一）：server-authority 位置 + 客户端 reconcile ----
     struct Position {
@@ -89,6 +113,13 @@ public:
     void project_from(const apollo::game::base::GameplaySnapshot& snapshot) noexcept;
     [[nodiscard]] bool has_projection() const noexcept;
     [[nodiscard]] std::uint32_t home_zone_id() const noexcept;
+
+    // ---- D16 迁移：cell 权威运行态捕获/播种（值语义，与投影分离）----
+    // capture：源冻结前定格（hp/max_hp/序号水位/实体 ID）；
+    // restore：目标侧播种（实体 ID 必须一致——错体拒收不改状态；血量越界
+    // 收口同 set_hp；序号水位直移防旧包重放）。
+    [[nodiscard]] AvatarRuntimeState capture_runtime() const noexcept;
+    [[nodiscard]] bool restore_runtime(const AvatarRuntimeState& state) noexcept;
 
 private:
     apollo::game::core::PlayerId player_id_;

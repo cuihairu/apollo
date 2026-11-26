@@ -37,6 +37,24 @@ std::string_view to_string(SceneTransferResult result) {
         return "AttachFailed";
     case SceneTransferResult::RollbackFailed:
         return "RollbackFailed";
+    case SceneTransferResult::CommitInconsistent:
+        return "CommitInconsistent";
+    }
+    return "Unknown";
+}
+
+std::string_view to_string(SceneMigrationStep step) {
+    switch (step) {
+    case SceneMigrationStep::SourceFreeze:
+        return "SourceFreeze";
+    case SceneMigrationStep::TargetPrepare:
+        return "TargetPrepare";
+    case SceneMigrationStep::Commit:
+        return "Commit";
+    case SceneMigrationStep::RouteProject:
+        return "RouteProject";
+    case SceneMigrationStep::ActivateAndCleanup:
+        return "ActivateAndCleanup";
     }
     return "Unknown";
 }
@@ -154,6 +172,124 @@ SceneTransferOutcome execute_scene_transfer(World& world,
     }
 
     outcome.result = SceneTransferResult::Ok;
+    return outcome;
+}
+
+SceneMigrationOutcome execute_migration_transfer(World& world,
+                                                 WorldSessionManager& sessions,
+                                                 const SceneTransferRequest& request) {
+    SceneMigrationOutcome outcome;
+    outcome.target_scene_id = request.target_scene_id;
+
+    const auto confirm = [&outcome](SceneMigrationStep step) {
+        outcome.confirmed_steps |= std::uint32_t{1} << static_cast<std::uint32_t>(step);
+    };
+
+    // ---- ① 源冻结：准入校验 + 运行态捕获 + Avatar 冻结（不收输入/伤害）----
+    auto session = sessions.find_by_player(request.player_id);
+    if (!session) {
+        outcome.result = SceneTransferResult::UnknownSession;
+        return outcome;
+    }
+    if (session->state() != WorldSessionState::Active) {
+        // 准入驳回：仅 Active 可发起（转移中/挂机/离场均不可重入）
+        outcome.result = SceneTransferResult::RejectedByState;
+        return outcome;
+    }
+
+    Scene* source = find_session_scene(world, *session);
+    Scene* target = world.find_scene(request.target_scene_id);
+    auto source_avatar = source != nullptr ? source->get_avatar(request.player_id) : nullptr;
+    if (target == nullptr || target == source || source_avatar == nullptr) {
+        // 目标不存在 / 同场无意义 / 源无 Avatar（运行态无从捕获）——
+        // 无副作用驳回，不静默降级为重建
+        outcome.result = SceneTransferResult::PrepareFailed;
+        return outcome;
+    }
+    outcome.source_scene_id = source->scene_id();
+
+    // 目标 instance 准入预检（不产生副作用；正式进入在条件提交一步）
+    Instance* target_instance = world.find_instance_by_scene(request.target_scene_id);
+    if (target_instance != nullptr) {
+        const auto st = target_instance->state();
+        if (st != Instance::State::Waiting && st != Instance::State::Running) {
+            outcome.result = SceneTransferResult::PrepareFailed;
+            return outcome;
+        }
+    }
+    Instance* source_instance = world.find_instance(session->map_instance_id());
+
+    const auto runtime = source_avatar->capture_runtime();  // 冻结前定格
+    source_avatar->freeze();
+    confirm(SceneMigrationStep::SourceFreeze);
+
+    // ---- ② 目标未激活准备：Avatar 重建（实体 ID 不变）+ 运行态播种 ----
+    auto staged = std::make_shared<apollo::game::cell::Avatar>(request.player_id,
+                                                               runtime.entity_id);
+    if (request.gameplay_snapshot.has_value()) {
+        staged->project_from(*request.gameplay_snapshot);  // 长期属性（快照播种值）
+    }
+    if (!staged->restore_runtime(runtime)) {
+        // 不可达（同 entity_id 构造）；防御：解冻回源、目标丢弃
+        outcome.result = SceneTransferResult::PrepareFailed;
+        outcome.failed_at = SceneMigrationStep::TargetPrepare;
+        source_avatar->unfreeze();
+        return outcome;
+    }
+    confirm(SceneMigrationStep::TargetPrepare);
+
+    // ---- ③ 条件提交：目标成员资格成立（scene + instance）----
+    // instance 语义同 D15：无实例空间（持续开放 Space）= 无需 enter 即成立
+    const bool scene_entered = target->enter(staged, request.landing);
+    const bool instance_entered =
+        scene_entered && (target_instance == nullptr || target_instance->enter(request.player_id));
+    if (!scene_entered || !instance_entered) {
+        // 取消（D16 §3.2 准备失败唯一动作）：目标丢弃、源解冻——源对象
+        // 全程未离场，无重建（区别于 D15 回滚的快照重建路径）
+        if (scene_entered && !instance_entered) {
+            target->leave(request.player_id);  // 目标丢弃（scene 已入而 instance 未入）
+        }
+        source_avatar->unfreeze();
+        outcome.result = SceneTransferResult::AttachFailed;
+        outcome.failed_at = SceneMigrationStep::Commit;
+        return outcome;
+    }
+    confirm(SceneMigrationStep::Commit);
+    // 提交点：此后按已提交决定完成，不再自动回滚（D25 激活期原则）
+
+    // ---- ④ 路由投影更新：会话转移窗口 + 字段切换 ----
+    session = sessions.transfer_session(session->session_id(),
+                                        session->world_id(),
+                                        target_instance != nullptr ? target_instance->id() : 0,
+                                        request.target_scene_id,
+                                        false);
+    if (!session) {
+        // 提交后失败（防御）：目标成员资格保留，清理源场成员防双场在册
+        outcome.result = SceneTransferResult::CommitInconsistent;
+        outcome.failed_at = SceneMigrationStep::RouteProject;
+        source->leave(request.player_id);
+        if (source_instance != nullptr) {
+            source_instance->leave(request.player_id);
+        }
+        return outcome;
+    }
+    confirm(SceneMigrationStep::RouteProject);
+
+    // ---- ⑤ 目标激活（complete resume）与源清理（幂等）----
+    if (sessions.complete_transfer(session->session_id()) == nullptr) {
+        // 理论不可达（本流程内刚转入 TransferringOut）；按已提交决定完成：
+        // 目标保留、源清理照做、上报不一致（不自动回滚已提交迁移）
+        outcome.result = SceneTransferResult::CommitInconsistent;
+        outcome.failed_at = SceneMigrationStep::ActivateAndCleanup;
+    }
+    source->leave(request.player_id);  // 源清理（冻结态 Avatar 出列销毁）
+    if (source_instance != nullptr) {
+        source_instance->leave(request.player_id);
+    }
+    confirm(SceneMigrationStep::ActivateAndCleanup);
+    if (outcome.result != SceneTransferResult::Ok) {
+        return outcome;  // 提交后不一致：已逐步确认到源清理，调用方对账
+    }
     return outcome;
 }
 

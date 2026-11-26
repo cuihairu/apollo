@@ -246,6 +246,73 @@ bool test_playerid_strong_typing() {
     return true;
 }
 
+bool test_avatar_migration_freeze_unfreeze() {
+    Avatar avatar(PlayerId(31), EntityId(3031));
+
+    // 冻结窗口：Active → Frozen（D16 源冻结——确认前不收输入/伤害）
+    avatar.set_hp(40, 90);
+    avatar.reconcile(8, {1.0f, 2.0f, 3.0f});
+    avatar.freeze();
+    TEST_ASSERT(avatar.state() == AvatarState::Frozen, "冻结进入 Frozen 态");
+    TEST_ASSERT(!avatar.reconcile(9, {4.0f, 5.0f, 6.0f}), "冻结态不收移动输入");
+    TEST_ASSERT(avatar.last_reconciled_seq() == 8, "冻结态输入不落序");
+    TEST_ASSERT(!avatar.apply_damage(10), "冻结态不结算伤害");
+    TEST_ASSERT(avatar.hp() == 40, "冻结态血量定格");
+
+    // 源解冻（取消路径唯一出口）：Frozen → Active，原态无损
+    avatar.unfreeze();
+    TEST_ASSERT(avatar.state() == AvatarState::Active, "解冻回 Active");
+    TEST_ASSERT(avatar.reconcile(9, {4.0f, 5.0f, 6.0f}), "解冻后恢复受理");
+    TEST_ASSERT(avatar.apply_damage(10) == false && avatar.hp() == 30, "解冻后恢复结算");
+
+    // 非法迁移拒绝：仅 Active 可冻结；仅 Frozen 可解冻
+    avatar.suspend();
+    avatar.freeze();
+    TEST_ASSERT(avatar.state() == AvatarState::Suspended, "挂起态不可冻结");
+    avatar.resume();
+    avatar.unfreeze();
+    TEST_ASSERT(avatar.state() == AvatarState::Active, "非冻结态解冻无效");
+    avatar.begin_leave();
+    avatar.freeze();
+    TEST_ASSERT(avatar.state() == AvatarState::Leaving, "离场态不可被冻结覆盖");
+    return true;
+}
+
+bool test_avatar_runtime_capture_restore() {
+    // 捕获：cell 权威运行态定格（实体 ID/血量/序号水位）
+    Avatar source(PlayerId(32), EntityId(3032));
+    source.set_hp(37, 80);
+    source.reconcile(12, {1.0f, 1.0f, 1.0f});
+    const auto captured = source.capture_runtime();
+    TEST_ASSERT(captured.entity_id == EntityId(3032), "捕获含实体 ID");
+    TEST_ASSERT(captured.hp == 37 && captured.max_hp == 80, "捕获含血量");
+    TEST_ASSERT(captured.last_reconciled_seq == 12, "捕获含序号水位");
+    TEST_ASSERT(captured == source.capture_runtime(), "捕获值可比对（值语义）");
+
+    // 播种：同实体目标恢复运行态（血量越界收口、水位直移）
+    Avatar target(PlayerId(32), EntityId(3032));
+    TEST_ASSERT(target.restore_runtime(captured), "同实体播种受理");
+    TEST_ASSERT(target.hp() == 37 && target.max_hp() == 80, "血量恢复");
+    TEST_ASSERT(target.last_reconciled_seq() == 12, "序号水位直移");
+    TEST_ASSERT(!target.reconcile(5, {}), "旧包重放门随水位保留（迁移清零即失效）");
+    TEST_ASSERT(target.reconcile(13, {2.0f, 2.0f, 2.0f}), "新序号受理");
+
+    // 越界收口：捕获值超界落回有效血面（max 兜底 1、hp 收进 [0, max]）
+    Avatar clamped(PlayerId(32), EntityId(3032));
+    auto over = captured;
+    over.max_hp = 0;
+    over.hp = 999;
+    TEST_ASSERT(clamped.restore_runtime(over), "越界播种受理");
+    TEST_ASSERT(clamped.max_hp() == 1 && clamped.hp() == 1, "越界值收口");
+
+    // 错体拒收：实体 ID 稳定跨迁移不变——错体不改状态
+    Avatar stranger(PlayerId(32), EntityId(7777));
+    const auto before = stranger.capture_runtime();
+    TEST_ASSERT(!stranger.restore_runtime(captured), "错体播种拒收");
+    TEST_ASSERT(stranger.capture_runtime() == before, "拒收不改状态");
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -264,6 +331,8 @@ int main() {
         {"avatar_projection_from_gameplay_snapshot",
          test_avatar_projection_from_gameplay_snapshot},
         {"avatar_home_zone_journal", test_avatar_home_zone_journal},
+        {"avatar_migration_freeze_unfreeze", test_avatar_migration_freeze_unfreeze},
+        {"avatar_runtime_capture_restore", test_avatar_runtime_capture_restore},
         {"playerid_strong_typing", test_playerid_strong_typing},
     };
 

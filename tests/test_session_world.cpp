@@ -493,6 +493,187 @@ bool test_scene_transfer_rollback_on_attach_failure() {
     return true;
 }
 
+bool test_scene_migration_runtime_preserved() {
+    std::cout << "Running: test_scene_migration_runtime_preserved..." << std::endl;
+
+    TwoSceneFixture fx;
+    const auto player = apollo::game::core::PlayerId(7004);
+    auto session = fx.sessions.create_session(6004, player);
+    TEST_ASSERT(session != nullptr, "session created");
+
+    const auto entity = apollo::game::core::EntityId(9005);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player, entity);
+    TEST_ASSERT(fx.scene_a->enter(avatar, {1.0f, 2.0f, 3.0f}), "avatar entered scene a");
+    TEST_ASSERT(fx.instance_a->enter(player), "player entered instance a");
+    session->assign_world(1);
+    session->assign_map_instance(fx.instance_a->id());
+    session->assign_space(fx.scene_a->scene_id());
+    session->bind_avatar(entity);
+    session->set_state(apollo::game::world::WorldSessionState::Active);
+
+    // cell 权威运行态（血量/序号水位）——迁移应随迁的载荷
+    avatar->set_hp(37, 80);
+    TEST_ASSERT(avatar->reconcile(12, {4.0f, 5.0f, 6.0f}), "runtime seq advanced");
+
+    // 快照只管长期属性；运行态必须覆盖快照播种值（hp 90/120 不得胜出）
+    apollo::game::base::GameplaySnapshot snapshot;
+    snapshot.home_zone_id = 42;
+    snapshot.max_hp = 120;
+    snapshot.hp = 90;
+
+    apollo::game::world::SceneTransferRequest request;
+    request.player_id = player;
+    request.target_scene_id = fx.scene_b->scene_id();
+    request.landing = {10.0f, 20.0f, 30.0f};
+    request.gameplay_snapshot = snapshot;
+
+    const auto outcome =
+        apollo::game::world::execute_migration_transfer(fx.world, fx.sessions, request);
+    TEST_ASSERT(outcome.ok(), "migration ok");
+    TEST_ASSERT(outcome.source_scene_id == fx.scene_a->scene_id(), "source recorded");
+
+    // 五步逐步确认（D16：源冻结→目标准备→条件提交→路由投影→激活/清理）
+    using SM = apollo::game::world::SceneMigrationStep;
+    TEST_ASSERT(outcome.step_confirmed(SM::SourceFreeze), "step 1 confirmed");
+    TEST_ASSERT(outcome.step_confirmed(SM::TargetPrepare), "step 2 confirmed");
+    TEST_ASSERT(outcome.step_confirmed(SM::Commit), "step 3 confirmed");
+    TEST_ASSERT(outcome.step_confirmed(SM::RouteProject), "step 4 confirmed");
+    TEST_ASSERT(outcome.step_confirmed(SM::ActivateAndCleanup), "step 5 confirmed");
+
+    // 运行态随迁：实体 ID 稳定、血量为 cell 模拟态（非快照播种值）
+    const auto rebuilt = fx.scene_b->get_avatar(player);
+    TEST_ASSERT(rebuilt != nullptr, "avatar rebuilt in target");
+    TEST_ASSERT(rebuilt->entity_id() == entity, "entity id stable across migration");
+    TEST_ASSERT(rebuilt->hp() == 37 && rebuilt->max_hp() == 80,
+                "cell-authoritative hp survives (not snapshot seed)");
+    TEST_ASSERT(rebuilt->last_reconciled_seq() == 12, "seq watermark preserved");
+    TEST_ASSERT(rebuilt->position().x == 10.0f && rebuilt->position().z == 30.0f,
+                "landing applied (坐标仍是易失态)");
+    TEST_ASSERT(rebuilt->home_zone_id() == 42, "long-term projection kept");
+
+    // 水位门随迁：旧包重放拒绝、新序号受理（迁移清零即反作弊门失效）
+    TEST_ASSERT(!rebuilt->reconcile(5, {7.0f, 7.0f, 7.0f}), "stale replay rejected");
+    TEST_ASSERT(rebuilt->reconcile(13, {7.0f, 7.0f, 7.0f}), "new seq accepted");
+    TEST_ASSERT(rebuilt->apply_damage(7) == false && rebuilt->hp() == 30,
+                "combat settles on migrated avatar");
+
+    TEST_ASSERT(fx.scene_a->avatar_count() == 0, "source cleaned after activation");
+    TEST_ASSERT(fx.scene_b->aoi().contains(entity), "aoi re-registered in target");
+    TEST_ASSERT(fx.instance_a->has_player(player) == false, "left source instance");
+    TEST_ASSERT(fx.instance_b->has_player(player) == true, "joined target instance");
+
+    TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Active,
+                "session active after migration");
+    TEST_ASSERT(session->map_instance_id() == fx.instance_b->id(), "instance switched");
+    TEST_ASSERT(session->space_id() == fx.scene_b->scene_id(), "space switched");
+    TEST_ASSERT(session->route_version() == 1, "route version bumped");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_scene_migration_commit_cancel_unfreezes_source() {
+    std::cout << "Running: test_scene_migration_commit_cancel_unfreezes_source..." << std::endl;
+
+    TwoSceneFixture fx;
+    const auto player = apollo::game::core::PlayerId(7005);
+    auto session = fx.sessions.create_session(6005, player);
+    const auto entity = apollo::game::core::EntityId(9006);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(player, entity);
+    TEST_ASSERT(fx.scene_a->enter(avatar, {5.0f, 6.0f, 7.0f}), "avatar entered scene a");
+    TEST_ASSERT(fx.instance_a->enter(player), "player entered instance a");
+    session->assign_map_instance(fx.instance_a->id());
+    session->assign_space(fx.scene_a->scene_id());
+    session->set_state(apollo::game::world::WorldSessionState::Active);
+    avatar->set_hp(55, 90);
+    TEST_ASSERT(avatar->reconcile(7, {8.0f, 8.0f, 8.0f}), "runtime seq advanced");
+
+    // 预占目标：B 场已有同玩家 Avatar → 条件提交必败（重复进入拒绝）
+    auto blocker = std::make_shared<apollo::game::cell::Avatar>(player,
+                                                                apollo::game::core::EntityId(9007));
+    TEST_ASSERT(fx.scene_b->enter(blocker, {}), "blocker pre-entered target");
+
+    apollo::game::world::SceneTransferRequest request;
+    request.player_id = player;
+    request.target_scene_id = fx.scene_b->scene_id();
+    request.landing = {1.0f, 1.0f, 1.0f};
+
+    const auto outcome =
+        apollo::game::world::execute_migration_transfer(fx.world, fx.sessions, request);
+    TEST_ASSERT(outcome.result == apollo::game::world::SceneTransferResult::AttachFailed,
+                "commit failed as staged");
+    TEST_ASSERT(outcome.failed_at == apollo::game::world::SceneMigrationStep::Commit,
+                "failed at commit step");
+
+    // 取消确认轨迹：只确认前两步，提交位不得置位
+    using SM = apollo::game::world::SceneMigrationStep;
+    TEST_ASSERT(outcome.step_confirmed(SM::SourceFreeze), "freeze confirmed");
+    TEST_ASSERT(outcome.step_confirmed(SM::TargetPrepare), "prepare confirmed");
+    TEST_ASSERT(!outcome.step_confirmed(SM::Commit), "commit not confirmed on cancel");
+    TEST_ASSERT(!outcome.step_confirmed(SM::RouteProject), "route not confirmed on cancel");
+    TEST_ASSERT(!outcome.step_confirmed(SM::ActivateAndCleanup), "cleanup not confirmed on cancel");
+
+    // 源解冻（非重建）：原对象未离场，运行态无损（D16 序反转——目标激活
+    // 才源清理，提交失败即源解冻，区别于 D15 的快照重建回滚）
+    const auto restored = fx.scene_a->get_avatar(player);
+    TEST_ASSERT(restored == avatar, "source avatar never left scene (same object)");
+    TEST_ASSERT(restored->state() == apollo::game::cell::AvatarState::Active,
+                "source unfrozen to Active");
+    TEST_ASSERT(restored->hp() == 55 && restored->max_hp() == 90, "source hp intact");
+    TEST_ASSERT(restored->last_reconciled_seq() == 7, "source seq intact");
+    TEST_ASSERT(restored->reconcile(8, {9.0f, 9.0f, 9.0f}), "source accepts input again");
+
+    TEST_ASSERT(fx.scene_b->avatar_count() == 1, "target keeps only blocker (staged discarded)");
+    TEST_ASSERT(fx.scene_b->get_avatar(player) == blocker, "staged not left in target");
+    TEST_ASSERT(fx.instance_a->has_player(player), "source instance membership intact");
+    TEST_ASSERT(fx.instance_b->has_player(player) == false, "target instance untouched");
+    TEST_ASSERT(session->state() == apollo::game::world::WorldSessionState::Active,
+                "session stays Active (transfer window never opened)");
+    TEST_ASSERT(session->pending_space_id() == 0, "no pending route");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
+bool test_scene_migration_rejections() {
+    std::cout << "Running: test_scene_migration_rejections..." << std::endl;
+
+    TwoSceneFixture fx;
+    const auto player = apollo::game::core::PlayerId(7006);
+    auto session = fx.sessions.create_session(6006, player);
+    session->set_state(apollo::game::world::WorldSessionState::Active);
+
+    // 源无 Avatar：运行态无从捕获——显式驳回，不静默降级为重建
+    apollo::game::world::SceneTransferRequest no_avatar;
+    no_avatar.player_id = player;
+    no_avatar.target_scene_id = fx.scene_b->scene_id();
+    auto outcome =
+        apollo::game::world::execute_migration_transfer(fx.world, fx.sessions, no_avatar);
+    TEST_ASSERT(outcome.result == apollo::game::world::SceneTransferResult::PrepareFailed,
+                "no source avatar rejected");
+    TEST_ASSERT(outcome.failed_at == apollo::game::world::SceneMigrationStep::SourceFreeze,
+                "rejected at freeze step");
+    TEST_ASSERT(outcome.confirmed_steps == 0, "no steps confirmed");
+    TEST_ASSERT(fx.scene_b->avatar_count() == 0, "no side effect on target");
+
+    // 非 Active 会话驳回（冻结/转移中不可发起）
+    TEST_ASSERT(fx.sessions.suspend_session(6006) != nullptr, "suspended");
+    outcome = apollo::game::world::execute_migration_transfer(fx.world, fx.sessions, no_avatar);
+    TEST_ASSERT(outcome.result == apollo::game::world::SceneTransferResult::RejectedByState,
+                "non-active session rejected");
+
+    // 未知会话驳回
+    apollo::game::world::SceneTransferRequest ghost;
+    ghost.player_id = apollo::game::core::PlayerId(8889);
+    ghost.target_scene_id = fx.scene_b->scene_id();
+    outcome = apollo::game::world::execute_migration_transfer(fx.world, fx.sessions, ghost);
+    TEST_ASSERT(outcome.result == apollo::game::world::SceneTransferResult::UnknownSession,
+                "unknown session rejected");
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_transfer_disconnect_window() {
     std::cout << "Running: test_transfer_disconnect_window..." << std::endl;
 
@@ -664,6 +845,9 @@ int main() {
     run(test_scene_transfer_end_to_end);
     run(test_scene_transfer_prepare_rejections);
     run(test_scene_transfer_rollback_on_attach_failure);
+    run(test_scene_migration_runtime_preserved);
+    run(test_scene_migration_commit_cancel_unfreezes_source);
+    run(test_scene_migration_rejections);
     run(test_transfer_disconnect_window);
     run(test_avatar_longterm_state_fields);
     run(test_avatar_reward_sink_wiring);

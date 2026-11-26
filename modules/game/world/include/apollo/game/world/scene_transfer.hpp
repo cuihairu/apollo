@@ -53,11 +53,13 @@ enum class SceneTransferStep : std::uint8_t {
 // 结果码（六差距收口的可观察面）
 enum class SceneTransferResult : std::uint8_t {
     Ok = 0,
-    UnknownSession,    // 会话不存在
-    RejectedByState,   // 准入驳回：会话非 Active（转移/离场中不可再发起）
-    PrepareFailed,     // 准入驳回：目标 scene 不存在 / 目标 instance 态不放行
-    AttachFailed,      // attach 失败（已回滚至原 scene）
-    RollbackFailed,    // 回滚也失败（原 scene 不可回）——调用方须隔离会话
+    UnknownSession,     // 会话不存在
+    RejectedByState,    // 准入驳回：会话非 Active（转移/离场中不可再发起）
+    PrepareFailed,      // 准入驳回：目标 scene 不存在 / 目标 instance 态不放行
+    AttachFailed,       // attach 失败（已回滚至原 scene）
+    RollbackFailed,     // 回滚也失败（原 scene 不可回）——调用方须隔离会话
+    CommitInconsistent, // D16/D25 提交后失败：目标成员资格已提交保留（不自动
+                        // 回滚），调用方按已提交决定对账/隔离
 };
 
 std::string_view to_string(SceneTransferResult result);
@@ -77,5 +79,49 @@ struct SceneTransferOutcome {
 SceneTransferOutcome execute_scene_transfer(World& world,
                                             WorldSessionManager& sessions,
                                             const SceneTransferRequest& request);
+
+// ---- D16 迁移状态机：完整运行态随迁 + 五步逐步确认 ----
+//
+// 与 execute_scene_transfer（D15 换场原语，离场重建、易失态清零）的差异：
+//   1. 运行态随迁——源冻结捕获 AvatarRuntimeState（实体 ID/血量/输入序号
+//      水位），目标播种；快照（如有）只管长期属性，运行态覆盖播种值；
+//      落点坐标仍是请求易失态（不随迁）。
+//   2. 序反转——目标激活后才源清理（D15 是先 detach 后 attach）：
+//      条件提交前源对象全程未离场，取消即源解冻（无重建）。
+//   3. 五步逐步确认——confirmed_steps 逐位记录，失败定位到步；提交点
+//      （目标成员资格成立）之后不再自动回滚（D25：按已提交决定完成）。
+//
+// 迁移 ID 持久提交（D16 §3.2 持久提交阶段）与跨 World 协调（D17）留
+// 跨进程批；本入口是同进程显式换场的迁移路径，五步语义与确认轨迹由
+// 后续 D20/D21 更新演练复用。
+enum class SceneMigrationStep : std::uint8_t {
+    SourceFreeze = 0,   // 源冻结：准入校验 + 运行态捕获 + Avatar 冻结
+    TargetPrepare,      // 目标未激活准备：Avatar 重建 + 运行态播种（未进场）
+    Commit,             // 条件提交：目标成员资格成立（此后不自动回滚）
+    RouteProject,       // 路由投影更新：会话转移窗口 + 字段切换
+    ActivateAndCleanup, // 目标激活（complete resume）与源清理（幂等）
+};
+
+std::string_view to_string(SceneMigrationStep step);
+
+struct SceneMigrationOutcome {
+    SceneTransferResult result = SceneTransferResult::Ok;
+    SceneMigrationStep failed_at = SceneMigrationStep::SourceFreeze;
+    std::uint64_t source_scene_id = 0;
+    std::uint64_t target_scene_id = 0;
+    std::uint32_t confirmed_steps = 0;  // bit i = SceneMigrationStep i 已确认
+
+    [[nodiscard]] bool step_confirmed(SceneMigrationStep step) const noexcept {
+        return (confirmed_steps & (std::uint32_t{1} << static_cast<std::uint32_t>(step))) != 0;
+    }
+    [[nodiscard]] bool ok() const noexcept { return result == SceneTransferResult::Ok; }
+};
+
+// 执行迁移：同进程显式换场的 D16 路径（运行态随迁 + 五步确认）。
+// 准入/驳回语义与 execute_scene_transfer 一致；另驳回「源无 Avatar」
+// （运行态无从捕获，PrepareFailed——不静默降级为重建）。
+SceneMigrationOutcome execute_migration_transfer(World& world,
+                                                 WorldSessionManager& sessions,
+                                                 const SceneTransferRequest& request);
 
 } // namespace apollo::game::world

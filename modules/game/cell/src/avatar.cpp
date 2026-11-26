@@ -64,6 +64,18 @@ void Avatar::begin_leave() noexcept {
     }
 }
 
+void Avatar::freeze() noexcept {
+    if (state_ == AvatarState::Active) {
+        state_ = AvatarState::Frozen;  // 迁移源冻结：确认前不收输入/伤害
+    }
+}
+
+void Avatar::unfreeze() noexcept {
+    if (state_ == AvatarState::Frozen) {
+        state_ = AvatarState::Active;  // 取消路径源解冻：对象未离场，原态恢复
+    }
+}
+
 const Avatar::Position& Avatar::position() const noexcept {
     return position_;
 }
@@ -105,8 +117,8 @@ void Avatar::set_hp(int hp, int max_hp) noexcept {
 }
 
 bool Avatar::apply_damage(int amount) noexcept {
-    if (state_ == AvatarState::Leaving) {
-        return false;  // 出场景态不再结算
+    if (state_ == AvatarState::Leaving || state_ == AvatarState::Frozen) {
+        return false;  // 出场景/迁移冻结态不再结算
     }
     hp_ = std::clamp(hp_ - std::max(amount, 0), 0, max_hp_);
     return hp_ <= 0;
@@ -159,6 +171,25 @@ bool Avatar::has_projection() const noexcept {
 
 std::uint32_t Avatar::home_zone_id() const noexcept {
     return home_zone_id_;
+}
+
+AvatarRuntimeState Avatar::capture_runtime() const noexcept {
+    AvatarRuntimeState state;
+    state.entity_id = entity_id_;
+    state.hp = hp_;
+    state.max_hp = max_hp_;
+    state.last_reconciled_seq = last_reconciled_seq_;
+    return state;
+}
+
+bool Avatar::restore_runtime(const AvatarRuntimeState& state) noexcept {
+    if (state.entity_id != entity_id_) {
+        return false;  // 实体 ID 稳定跨迁移不变（D16）：错体播种拒收不改状态
+    }
+    max_hp_ = std::max(state.max_hp, 1);
+    hp_ = std::clamp(state.hp, 0, max_hp_);
+    last_reconciled_seq_ = state.last_reconciled_seq;
+    return true;
 }
 
 } // namespace apollo::game::cell
