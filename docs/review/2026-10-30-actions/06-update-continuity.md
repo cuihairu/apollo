@@ -79,6 +79,18 @@
 | 6 | 随机 | 随机序列状态一致（或可等价表示） |
 | 7 | 脚本状态 | 模块私有状态/协程一致（不能迁移的先自然结束） |
 
+> D21 项 6（随机）等价表示验收 2026-11-26 已落地（commit 4616df9c）：RNG 为纯函数派生
+> （`derive_substream(world_seed, tick, stream_id)`，模块 base `rng.hpp`），无可变
+> 游标。`test_scene_migration_rng_equivalence`（SessionWorldTests）在真实
+> `execute_migration_transfer` 路径前后按同一三元组取样：迁移前后逐值相等、
+> 中途穿插消费其它流不影响、后续 tick 仍可独立重放——迁移无需搬运随机状态、
+> 不产生调用次序/进程替换漂移。项 2（实体 ID/血量）已随 D16 落地
+> （`test_scene_migration_runtime_preserved`）。**项 1/3/4/5/7 仍空**：成员
+> （`Party::members_`/`ActiveSquadInstance::members`）、怪物（
+> `GameplayState::monsters`，无仇恨/刷新字段）、目标/计时（`GameplayGoal`、
+> `tick_count_`，随副本释放销毁，无快照）、脚本（显式零迁移纪律，生产 Lua 处理器
+> 为空壳）均无跨迁移快照格式——补这些需新增快照协议与设计裁决，主行不勾。
+
 - 记录迁移前后状态及事件序列；加入迁移中触发计时、击杀和结算的场景；未满足的状态明确列缺口。
 - 不把自然结束、强停重开或仅玩家重建算成功。
 
