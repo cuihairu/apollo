@@ -32,6 +32,17 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 > ctest 各 128/128；san 目标 6/6（ASan+UBSan）。**仍缺**（延后项，不重试）：
 > 被拒意图的客户可见重同步（协议设计拍板），以及 D08 #4 重定向限次、D10 case 3。
 
+> 验收 #1「模拟输入直达当前 cell」2026-11-22 已接线（commit 1c602137，todo.md
+> L122 过期注记 2026-11-27 复核刷新）：gateway 不再经 World 管理端物理中继模拟
+> 输入——端点发现链 968 投影（World 发布归属 cell 注册端点）→ 登录投影名册 →
+> 915/918 → `RouteSnapshot.cellHost/cellPort`；M1 出口逐 cell active 端点按
+> host:port 拨装（`target_link`，逐条目就绪门：未就绪 cell 不阻塞其它端点），
+> 929 应答与 939 下行直回直连链，World 前递保留为回退面（端点未声明/未连接）；
+> 请求号只对实发帧分配（requeue 不耗号）。测试：`test_gateway_m1_egress` 直连
+> 观测面（`directCellIntents` 计数）+ login_chain 落点断言
+> `assigned->cell_host/cell_port`。D08 #1 两半（Base 直达 + cell 直达）验收面
+> 均关闭；本节仍缺同上（重同步拍板、#4 限次、D10 case 3）。
+
 ## 2. D09 · 登录完整链路分段表
 
 ### 2.1 分段与成功条件/超时动作
