@@ -166,6 +166,19 @@
   保存前后契约差异证明 wire 未变（消息编号、字段、字节格式不变）。
 - 明确不做：延后任意协程在线搬迁与通用热重载。
 
+> 首切片 2026-11-27 已落地（commit 1f64671d，测试 `contract_handler_tests`）：
+> 样本级「仅代码更新保持编号、字段与 wire」验收——真实 shipped
+> `contract_handlers.lua` 走 `ScriptRuntime` 装载闸。① 纯内部改动 patch
+> （handler 体内局部化，全局名/签名/路由面不动）→ 闸绿且契约面与基线全等
+> （`contract_version` 相等 + `contract_routes` 逐条 map 全等）；② 破坏
+> wire 的 patch（删 handler 行 → 裸名解析失败）→ `load_contract` 红、
+> fault 点名 `route handler missing: <名>`、拒换后旧数据面不动（version/
+> routes 零值）——编号/路由漂移不得静默过闸。**仍缺**（主行不勾）：执行
+> 边界核对（旧任务结束/计时器归属/异常回退/副作用次数——生产 handler 仍
+> 占位无可观测行为，随玩法批填充）；§3.1 模块表化后接真实 patch 流
+> （`load_patch_directory` → `prepare_module` → `commit_module` →
+> canary）样本演练；C++ 角色进程替换复用验收。
+
 ## 8. D27 · 网关更新与 TCP 连续（近期目标）
 
 | # | 测试 | 断言 |
