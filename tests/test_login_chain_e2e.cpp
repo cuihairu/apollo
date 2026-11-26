@@ -1083,6 +1083,225 @@ bool login_chain_two_cell_space_routing() {
     return true;
 }
 
+// D20 §2.1 自然排空全环真线路演练（L150 首切片）：缩容意图 → 占用 Space
+// 随活动结束自然排空（cell 侧逐拍补销）→ 回收确认；取消缩容 → 重认领资格
+// 复原（962 ready=1 自认领重建 + 970 动态铸造解禁）；cell 无通知退出 →
+// 心跳过期清扫余量回池（健康 cell 不误伤）。全程走真实 wire（963/966 缩容
+// 命令、962 分配/撤销、969 回收回执、970/971 动态铸造），World 状态单写者
+// 在 M1 泵线程不直调内部面；cell 内核态观测走 post_tick 采样发布面。
+bool login_chain_cell_natural_drain_cycle() {
+    TemporaryDirectory files;
+
+    // ① base + login + world + 双 cell（骨架同 D14 双 cell 案例；占用者只
+    // 1002 一个）。world 过期窗 3000ms：CellHost 心跳 500ms，健康 cell 窗内
+    // 刷新 6 拍不误伤；退出 cell 超 1 窗即被清扫摘除。
+    StoreHost base(base_store_config(files.path), 0, 0, 0, 0);
+    TEST_ASSERT(base.store->m1_listen_port() != 0, "base face did not listen");
+    TEST_ASSERT(base.store->adoptPlayer(1002, "", 0, 0, 2), "seed player 1002 profile");
+
+    auto lconfig = login_config();
+    lconfig.initialSpaceId = 501;
+    lconfig.worldStoreM1Host = "127.0.0.1";
+    lconfig.worldStoreM1Port = base.store->m1_listen_port();
+    login::LoginServer login(lconfig);
+    login.start();
+    TEST_ASSERT(login.admissionPort() != 0, "login admission face up");
+    TEST_ASSERT(login.onlineDirectory() != nullptr, "login online directory up");
+    TEST_ASSERT(wait_until([&] { return login.baseActivationReady(); }, 3000),
+                "login base activation link up");
+
+    world_app::WorldAppConfig wconfig;
+    wconfig.worldId = 1;
+    wconfig.host = "127.0.0.1";
+    wconfig.m1Port = 0;
+    wconfig.m1RouteJson = kRouteJson;
+    wconfig.tickRateMs = 20;
+    wconfig.cellExpiryMs = 3000;  // 演练专用短窗（缺省 30000 拖慢退出切片）
+    wconfig.assignSpaces = {{501, 0x1}, {502, 0x1}, {503, 0x2}, {504, 0x2}};
+    auto world = std::make_unique<world_app::WorldApp>(wconfig);
+    world->start();
+    TEST_ASSERT(world->isRunning(), "world starts");
+
+    cell_test::CellHost cell21;
+    cell21.config = wconfig;
+    cell21.config.declaredCapabilities = 0x1;
+    TEST_ASSERT(cell21.start(world->m1Link().listenPort(), 21, 0, &world->m1Link()),
+                "cell-21 host starts");
+    cell21.set_world_link(&world->m1Link());
+    cell21.pump_until_registered();
+    TEST_ASSERT(cell21.registered(), "cell-21 registered with world");
+
+    cell_test::CellHost cell22;
+    cell22.config = wconfig;
+    cell22.config.declaredCapabilities = 0x2;
+    TEST_ASSERT(cell22.start(world->m1Link().listenPort(), 22, 0, &world->m1Link()),
+                "cell-22 host starts");
+    cell22.set_world_link(&world->m1Link());
+    cell22.pump_until_registered();
+    TEST_ASSERT(cell22.registered(), "cell-22 registered with world");
+
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a503 = world->find_space_assignment(503);
+                    const auto* a504 = world->find_space_assignment(504);
+                    return a503 != nullptr && a503->cell_id == 22
+                           && a504 != nullptr && a504->cell_id == 22;
+                }, 5000),
+                "world assigns 503/504->22 by capability");
+
+    const auto inject = [&](std::uint64_t space_id, std::uint64_t cell_id,
+                            std::uint16_t port) {
+        login::SpacePositionProjection proj;
+        proj.world_id = 1;
+        proj.space_id = space_id;
+        proj.cell_id = cell_id;
+        proj.assignment_version = 5;
+        proj.topology_version = 71;
+        proj.management_epoch = 3;
+        proj.ready = true;
+        proj.cell_host = "127.0.0.1";
+        proj.cell_port = port;
+        return login.positionProjectionRegistry()->apply_projection(proj, 0)
+               == login::ProjectionVerdict::kApplied;
+    };
+    TEST_ASSERT(inject(503, 22, cell22.listen_port()), "503 projection injected");
+
+    auto gconfig = gateway_config(world->m1Link().listenPort(),
+                                  login.admissionPort(), base.store->m1_listen_port());
+    gconfig.directoryM1Host = "127.0.0.1";
+    gconfig.directoryM1Port = login.onlineDirectory()->listenPort();
+    gateway::GatewayServer gateway(gconfig);
+    gateway.start();
+
+    // ② 1002 登录链：会话 → 认证 → 目录落点 503 → 网关准入 → spawn 占用。
+    TcpTestClient c2;
+    TEST_ASSERT(c2.connect("127.0.0.1", gconfig.port), "client2 connects");
+    protocol::Ping ping;
+    ping.timestamp = 1;
+    c2.sendAll(frame_bytes(1, 0, protocol::MessageCodec::encode(ping, 0)));
+    std::vector<std::uint8_t> reply2;
+    TEST_ASSERT(c2.recvLinkFrame(reply2), "ping pong received on c2");
+    const auto session2 = header_of(reply2).sessionId;
+    TEST_ASSERT(session2 != 0, "gateway session created");
+
+    protocol::LoginRequest loginReq2;
+    loginReq2.username = "player2";
+    loginReq2.password = "pass2";
+    const auto loginResp2 = login.dispatchRequest(
+        protocol::MessageCodec::encode(loginReq2, 0));
+    TEST_ASSERT(loginResp2.size() > sizeof(protocol::MessageHeader), "login2 response");
+    protocol::LoginResponse parsedLogin2;
+    protocol::MessageCodec::decodeBody(
+        std::vector<std::uint8_t>(loginResp2.begin() + sizeof(protocol::MessageHeader),
+                                  loginResp2.end()), parsedLogin2);
+    TEST_ASSERT(parsedLogin2.success && parsedLogin2.playerId == 1002
+                    && !parsedLogin2.loginTicket.empty(),
+                "login2 ticket issued for 1002");
+
+    auto a2 = login.onlineDirectory()->resolveWorldAssignment(1002);
+    TEST_ASSERT(a2.has_value(), "1002 assignment recorded");
+    a2->space_id = 503;
+    a2->cell_host = "127.0.0.1";
+    a2->cell_port = cell22.listen_port();
+    TEST_ASSERT(login.onlineDirectory()->assignWorld(1002, *a2),
+                "1002 re-assigned to space 503");
+
+    TEST_ASSERT(wait_until([&] { return gateway.baseActivationReady(); }, 3000),
+                "base activation link up");
+    TEST_ASSERT(gateway.authenticateSession(session2, 1002, parsedLogin2.loginTicket),
+                "g2 auth accepted for 1002");
+    c2.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn(1002, 503), session2)));
+    TEST_ASSERT(wait_until(
+                    [&] { return cell22.resolveIntentPlayer(session2) == 1002; }, 8000),
+                "cell-22 spawned player 1002 (503 occupied)");
+
+    // ③ 缩容开始（963 op=1 → 966）：504 腾空即刻销毁并有 969 回执；503
+    // 占用中（1002 在位）cell 侧拒绝销毁保持路由、无回执——进入待撤表。
+    WorldControlClient ctl;
+    TEST_ASSERT(ctl.start(world->m1Link().listenPort()), "world control client up");
+    TEST_ASSERT(ctl.wait_up(), "world control client linked");
+    constexpr std::uint64_t kRetireBegin = 4342;
+    TEST_ASSERT(ctl.send_retire(kRetireBegin, 1, 22), "retire begin frame sent");
+    TEST_ASSERT(wait_until([&] { return ctl.accepted(kRetireBegin); }, 5000),
+                "world accepts retire begin for cell-22");
+    TEST_ASSERT(wait_until([&] {
+                    const auto* conf = world->find_reclaim_confirmation(504);
+                    return conf != nullptr && conf->cell_id == 22;
+                }, 8000),
+                "cell-22 confirms remote destroy of vacant 504");
+    TEST_ASSERT(world->find_reclaim_confirmation(503) == nullptr,
+                "occupied 503 not destroyed yet (no receipt)");
+
+    // ④ 1002 真线离场（CELL_DESTROY_ENTITY 经 gateway → World → cell-22
+    // detach：出 scene/instance → 503 腾空）→ cell 待撤表下一拍补销 503 →
+    // 969 回执 → World 确认。自然排空归零全程无 WorldDrain 命令介入。
+    protocol::CellDestroyEntity destroyMsg;
+    destroyMsg.entityId = 1002;
+    c2.sendAll(frame_bytes(3, 0,
+        protocol::MessageCodec::encode(destroyMsg, session2)));
+    TEST_ASSERT(wait_until([&] {
+                    const auto* conf = world->find_reclaim_confirmation(503);
+                    return conf != nullptr && conf->cell_id == 22;
+                }, 8000),
+                "503 drains naturally after player leaves (969 received)");
+
+    // ⑤ 取消缩容（963 op=2 → 966）：资格复原——releaseCellSpaces 留在池中
+    // 的 503/504（owner=0）随全池推送由恢复资格的 cell-22 自认领（版本 +1），
+    // 962 ready=1 → cell 侧重建 scene；970 动态铸造对 cell-22 解禁（此前
+    // retire 意图拒绝 code 1 的反向面）。
+    const auto* a503_before = world->find_space_assignment(503);
+    TEST_ASSERT(a503_before != nullptr && a503_before->cell_id == 0,
+                "503 sits in pool (owner 0) before cancel");
+    const auto version_before = a503_before->version;
+    constexpr std::uint64_t kRetireCancel = 4343;
+    TEST_ASSERT(ctl.send_retire(kRetireCancel, 2, 22), "retire cancel frame sent");
+    TEST_ASSERT(wait_until([&] { return ctl.accepted(kRetireCancel); }, 5000),
+                "world accepts retire cancel for cell-22");
+    cell22.watch_hosts_space(503);
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a = world->find_space_assignment(503);
+                    return a != nullptr && a->cell_id == 22 && a->version > version_before;
+                }, 5000),
+                "cell-22 re-claims 503 with bumped version after cancel");
+    TEST_ASSERT(wait_until([&] { return cell22.watched_hosts_space(); }, 5000),
+                "cell-22 recreated scene for 503 (962 ready=1 applied)");
+
+    constexpr std::uint64_t kCreateOkReq = 4351;
+    TEST_ASSERT(ctl.send_space_create(kCreateOkReq, 22),
+                "space create (cell-22) frame sent");
+    TEST_ASSERT(wait_until([&] { return ctl.space_create_done(kCreateOkReq); }, 5000),
+                "space create reply received");
+    const auto minted_reply = ctl.space_create_reply(kCreateOkReq);
+    TEST_ASSERT(minted_reply != nullptr && minted_reply->code == 0
+                    && minted_reply->space_id != 0 && minted_reply->cell_id == 22,
+                "dynamic create allowed for recovered cell-22 (code 0)");
+    const auto minted_id = minted_reply != nullptr ? minted_reply->space_id : 0;
+
+    // ⑥ cell-22 无通知退出（真停宿主）→ 心跳过期清扫（>3s 无 960）→
+    // 注册摘除 + 名下余量回池（owner=0：503/504/铸出空间；无合格 0x2 cell
+    // 认领，留池待命）；健康 cell-21 窗内心跳不断，不误伤（501 仍归属 21）。
+    cell22.stop();
+    TEST_ASSERT(wait_until([&] {
+                    const auto* a503 = world->find_space_assignment(503);
+                    const auto* a504 = world->find_space_assignment(504);
+                    const auto* minted = world->find_space_assignment(minted_id);
+                    return a503 != nullptr && a503->cell_id == 0
+                           && a504 != nullptr && a504->cell_id == 0
+                           && minted != nullptr && minted->cell_id == 0;
+                }, 10000),
+                "cell-22 expiry sweep releases owned spaces back to pool");
+    const auto* a501 = world->find_space_assignment(501);
+    TEST_ASSERT(a501 != nullptr && a501->cell_id == 21,
+                "healthy cell-21 unaffected by expiry window");
+
+    ctl.stop();
+    gateway.stop();
+    cell21.stop();
+    world->stop();
+    login.stop();
+    return true;
+}
+
 #endif // !_WIN32
 
 } // namespace
@@ -1096,6 +1315,7 @@ int main() {
         {"login_chain_creates_cell_entity", login_chain_creates_cell_entity},
         {"login_chain_two_gateway_concurrent", login_chain_two_gateway_concurrent},
         {"login_chain_two_cell_space_routing", login_chain_two_cell_space_routing},
+        {"login_chain_cell_natural_drain_cycle", login_chain_cell_natural_drain_cycle},
     };
     int failed = 0;
     for (const auto& c : cases) {
