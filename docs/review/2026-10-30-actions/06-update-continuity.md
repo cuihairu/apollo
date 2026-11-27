@@ -112,7 +112,7 @@
 > 为空壳）均无跨迁移快照格式——补这些需新增快照协议与设计裁决，主行不勾。
 
 > 立即执行动作「记录迁移前后状态及事件序列，加入迁移中触发计时、击杀和结算的场景」
-> 2026-11-28 已落（commit 待填，`test_scene_migration_activity_gameplay_sample`，
+> 2026-11-28 已落（commit 477f2e7d，`test_scene_migration_activity_gameplay_sample`，
 > SessionWorldTests）：真实 `SquadInstanceService` 全链（launch→enter×2→start→
 > goal{配额 2, 超时 60}→spawn_wave→report_monster_defeated→advance_tick→settle→
 > dismiss）+ 队长成员在 Running 期走真 `execute_migration_transfer`（五步 D16 路
