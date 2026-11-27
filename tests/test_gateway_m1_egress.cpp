@@ -1007,6 +1007,112 @@ bool test_egress_transparent_retry_once() {
     return true;
 }
 
+// D08 #4 重定向限次（L122 末批）：同一路由身份（space/cell/直连端点四元组）
+// 上连续 2001 达上限后停透明重试——每次 2001 仍作废会话路由缓存（宿主回退
+// 查目录重解析），但不再烧重试预算；宿主重解析换路（提示变化）或 code 0
+// 证明路由可用 → 预算重置。
+bool test_egress_redirect_limit_resets_on_route_change() {
+    std::cout << "Running: test_egress_redirect_limit_resets_on_route_change..." << std::endl;
+
+    FakeCell cell;
+    TEST_ASSERT(cell.healthy(), "fake cell assembled");
+
+    M1EgressConfig cfg;
+    cfg.host = "127.0.0.1";
+    cfg.port = cell.listen_port();
+    cfg.route_json = kRouteJson;
+    cfg.intent_retry_delay_ms = 30;       // 测试快速拍（生产缺省 500ms）
+    cfg.max_redirects_per_route = 2;      // 同一路由 2 次 2001 后停重试
+    auto egress = makeM1Egress(cfg);
+    TEST_ASSERT(egress->start(), "egress started");
+
+    std::vector<std::uint64_t> invalidated;
+    egress->setRouteInvalidate(
+        [&invalidated](std::uint64_t session_id) { invalidated.push_back(session_id); });
+
+    const auto frames = five_family_frames();
+    const auto records = [&cell] { return cell.records(); };
+
+    // ① 路由 A（space=7/cell=3）意图 1：首发 2001 + 重试 2001 = 两次重定向
+    //（rejects=2，预算耗尽；重试应答本身也计入连续 2001）。
+    TEST_ASSERT(egress->forwardIntent(77, frames[0], 7, 3), "intent 1 accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 1; }, 5000),
+                "intent 1 delivered");
+    TEST_ASSERT(cell.ack(records().at(0).request_id, 2001), "intent 1 first 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 2; }, 5000),
+                "intent 1 retried");
+    TEST_ASSERT(egress->retriedIntents() == 1, "intent 1 one retry within budget");
+    TEST_ASSERT(cell.ack(records().at(1).request_id, 2001), "intent 1 retry 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->pendingAcks() == 0; }, 5000),
+                "intent 1 settles");
+    TEST_ASSERT(egress->redirectLimitHits() == 0, "budget not exhausted yet");
+
+    // ② 同路由意图 2：第三次 2001 越限——停重试，但仍作废缓存（目录回退面）。
+    TEST_ASSERT(egress->forwardIntent(77, frames[1], 7, 3), "intent 2 accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 3; }, 5000),
+                "intent 2 delivered");
+    TEST_ASSERT(cell.ack(records().at(2).request_id, 2001), "intent 2 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->redirectLimitHits() == 1; }, 5000),
+                "redirect limit hit on intent 2");
+    TEST_ASSERT(egress->retriedIntents() == 1, "intent 2 not retried (limit)");
+    TEST_ASSERT(egress->pendingAcks() == 0, "intent 2 terminal");
+    TEST_ASSERT(cell.count() == 3, "intent 2 exact one delivery");
+    TEST_ASSERT(invalidated.size() == 3, "every 2001 still invalidates (directory fallback)");
+
+    // ③ 同路由意图 3：持续越限——不重试，仅作废缓存。
+    TEST_ASSERT(egress->forwardIntent(77, frames[2], 7, 3), "intent 3 accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 4; }, 5000),
+                "intent 3 delivered");
+    TEST_ASSERT(cell.ack(records().at(3).request_id, 2001), "intent 3 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->redirectLimitHits() == 2; }, 5000),
+                "redirect limit hit again on intent 3");
+    TEST_ASSERT(egress->retriedIntents() == 1, "intent 3 still not retried");
+    TEST_ASSERT(cell.count() == 4, "intent 3 exact one delivery");
+    TEST_ASSERT(invalidated.size() == 4, "intent 3 invalidation fired");
+
+    // ④ 宿主换路（space=8/cell=4，模拟目录重解析后新投影）：预算重置，重试恢复。
+    TEST_ASSERT(egress->forwardIntent(77, frames[3], 8, 4), "intent 4 accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 5; }, 5000),
+                "intent 4 delivered");
+    TEST_ASSERT(cell.ack(records().at(4).request_id, 2001), "intent 4 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 6; }, 5000),
+                "intent 4 retried after route change");
+    TEST_ASSERT(egress->retriedIntents() == 2, "new route restores retry budget");
+    TEST_ASSERT(cell.ack(records().at(5).request_id, 2001), "intent 4 retry 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->pendingAcks() == 0; }, 5000),
+                "intent 4 settles");
+    TEST_ASSERT(egress->redirectLimitHits() == 2, "new route did not trip limit");
+
+    // ⑤ 同路由 code 0 = 路由可用证明：限次账清零。
+    TEST_ASSERT(egress->forwardIntent(77, frames[4], 8, 4), "intent 5 accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 7; }, 5000),
+                "intent 5 delivered");
+    TEST_ASSERT(cell.ack(records().at(6).request_id, 0), "intent 5 ack ok");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->ackedIntents() == 1; }, 5000),
+                "intent 5 acked");
+
+    // ⑥ 同路由再 2001：账已清零 → 首次计数（1 ≤ 2）重试恢复（未清零则 3 > 2 被限）。
+    TEST_ASSERT(egress->forwardIntent(77, frames[0], 8, 4), "intent 6 accepted");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 8; }, 5000),
+                "intent 6 delivered");
+    TEST_ASSERT(cell.ack(records().at(7).request_id, 2001), "intent 6 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return cell.count() == 9; }, 5000),
+                "intent 6 retried after ack-0 reset");
+    TEST_ASSERT(egress->retriedIntents() == 3, "ack-0 reset restores retry budget");
+    TEST_ASSERT(cell.ack(records().at(8).request_id, 2001), "intent 6 retry 2001");
+    TEST_ASSERT(pump_both(*egress, cell, [&] { return egress->pendingAcks() == 0; }, 5000),
+                "intent 6 settles");
+    TEST_ASSERT(egress->redirectLimitHits() == 2, "ack-0 reset did not trip limit");
+
+    TEST_ASSERT(egress->failedAcks() == 8, "eight raw 2001 rejections");
+    TEST_ASSERT(egress->sentIntents() == 9, "nine sends total");
+    TEST_ASSERT(invalidated.size() == 8, "invalidate fired for every 2001 round");
+
+    egress->stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // L122 网关→cell 直连：带归属 cell 端点的意图直连该 cell 的 M1 面送达
 //（不经 World 管理端物理中继），929 应答与 939 客户端下行经同一直连链回流，
 // 端点未就绪时留箱等下一拍（逐项就绪门，不落地不堵其余端点）。
@@ -1090,6 +1196,7 @@ int main() {
     if (!test_egress_wrapped_trace()) ++failed;
     if (!test_egress_route_invalidate_on_not_hosted()) ++failed;
     if (!test_egress_transparent_retry_once()) ++failed;
+    if (!test_egress_redirect_limit_resets_on_route_change()) ++failed;
     if (!test_egress_direct_cell_dial()) ++failed;
     if (!test_gateway_cell_e2e()) ++failed;
 

@@ -37,6 +37,10 @@ struct M1EgressConfig {
     // 不因泵拍晚到改写——World 侧空间归属为权威裁决，提示只作池外回退）。
     bool intent_retry_enabled = true;
     std::uint64_t intent_retry_delay_ms = 500;  // 重试延迟（给 World/cell 就绪窗口）
+    // D08 #4 重定向限次（L122 末批）：会话在同一个路由版本上连续收到 2001
+    // 即视为重定向循环——达到上限后不再透明重试，宿主按目录重解析收口。
+    // 0 = 不限次（旧语义）；计数随新路由版本/成功应答清零。
+    std::uint32_t max_redirects_per_route = 2;
 };
 
 // 客户端帧下行回调（P2 真实下行；契约 939 client_deliver 到达时调用）：
@@ -108,6 +112,7 @@ public:
     virtual std::uint64_t unforwardableFrames() const { return 0; } // 非五族/残帧/箱满
     virtual std::uint64_t droppedSends() const { return 0; }        // 链路拒收（背压）
     virtual std::uint64_t retriedIntents() const { return 0; }      // 2001 透明重试已发出
+    virtual std::uint64_t redirectLimitHits() const { return 0; }   // D08 #4 限次命中（停重试）
     virtual std::uint64_t directCellIntents() const { return 0; }   // L122 直连归属 cell 发出
     virtual std::uint64_t deliveredClients() const { return 0; }    // 939 下行成功投递
     virtual std::uint64_t undeliverableClients() const { return 0; }// 939 残帧/身份不匹配

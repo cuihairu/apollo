@@ -177,6 +177,7 @@ public:
             inbox_.clear();
         }
         retry_queue_.clear();  // 停机不落重试（原请求已无 pending 账面，请求方按超时收敛）
+        route_health_.clear();
         manager_.reset();  // 链路随管理器析构拆线
         route_table_.reset();
     }
@@ -259,6 +260,10 @@ public:
 
     std::uint64_t retriedIntents() const override {
         return retried_.load(std::memory_order_relaxed);
+    }
+
+    std::uint64_t redirectLimitHits() const override {
+        return redirect_limit_hits_.load(std::memory_order_relaxed);
     }
 
     std::uint64_t directCellIntents() const override {
@@ -639,11 +644,26 @@ private:
         }
         // 首发条目保留原帧（2001 透明重试的载荷源）；重试条目不再续试，帧不
         // 复留（pending 生命周期由 ack 超时清扫封顶，帧容量随箱顶格同界）。
+        // 路由身份随条目定格（D08 #4 限次键），发送同时刷新会话路由账：提示
+        // 与既有账不同 = 宿主已重解析换路 → 预算重置；同路照常累计。
+        auto& health = route_health_[item.session_id];
+        if (health.space_id != item.space_id || health.cell_id != item.cell_id ||
+            health.cell_host != item.cell_host ||
+            health.cell_port != item.cell_port) {
+            health = RouteHealth{item.space_id, item.cell_id, item.cell_host,
+                                 item.cell_port, 0, now_ms};
+        } else {
+            health.last_ms = now_ms;
+        }
         if (is_retry) {
-            pending_.emplace(request_id, Pending{item.session_id, now_ms, {}, true});
+            pending_.emplace(request_id,
+                             Pending{item.session_id, now_ms, {}, true, item.space_id,
+                                     item.cell_id, item.cell_host, item.cell_port});
             ++retried_;
         } else {
-            pending_.emplace(request_id, Pending{item.session_id, now_ms, item, false});
+            pending_.emplace(request_id,
+                             Pending{item.session_id, now_ms, item, false, item.space_id,
+                                     item.cell_id, item.cell_host, item.cell_port});
         }
         ++sent_;
 
@@ -678,6 +698,16 @@ private:
             return;
         }
         if (code == 0) {
+            // 路由证明可用（D08 #4）：清该会话限次账（迟到应答落在新路由上
+            // 不清旧账——身份不符保留计数）。
+            const auto health_it = route_health_.find(it->second.session_id);
+            if (health_it != route_health_.end() &&
+                health_it->second.space_id == it->second.space_id &&
+                health_it->second.cell_id == it->second.cell_id &&
+                health_it->second.cell_host == it->second.cell_host &&
+                health_it->second.cell_port == it->second.cell_port) {
+                route_health_.erase(health_it);
+            }
             pending_.erase(it);
             ++acked_;
             return;
@@ -695,12 +725,44 @@ private:
         if (code == kWorldNotHostedAck && on_route_invalidate_) {
             on_route_invalidate_(session_id);
         }
+        // 会话级重定向限次（D08 #4）：同一路由身份上的连续 2001 计数（含重
+        // 试应答——重试本身也是重定向）；达上限后不再透明重试，但每次 2001
+        // 照常作废缓存（宿主回退查目录重解析）。0 = 不限次（旧语义）。
+        bool retry_allowed = false;
+        if (code == kWorldNotHostedAck) {
+            auto& health = route_health_[session_id];
+            if (health.space_id != it->second.space_id ||
+                health.cell_id != it->second.cell_id ||
+                health.cell_host != it->second.cell_host ||
+                health.cell_port != it->second.cell_port) {
+                // 账面身份与本条不符（账被换路重置/回收后重建）——按本条
+                // 路由重建账面后计数。
+                health = RouteHealth{it->second.space_id, it->second.cell_id,
+                                     it->second.cell_host, it->second.cell_port,
+                                     0, trace::now_ms()};
+            }
+            ++health.rejects;
+            health.last_ms = trace::now_ms();
+            if (!retried && config_.intent_retry_enabled) {
+                retry_allowed = config_.max_redirects_per_route == 0 ||
+                                health.rejects <= config_.max_redirects_per_route;
+                if (!retry_allowed) {
+                    ++redirect_limit_hits_;
+                    m1log().info("WorldApp redirect limit reached: session="
+                                 + std::to_string(session_id) + " rejects="
+                                 + std::to_string(health.rejects) + " on route "
+                                 + std::to_string(health.space_id) + "/"
+                                 + std::to_string(health.cell_id));
+                }
+            }
+        }
         // 被拒意图透明重试一次（L122 末批 · 用户拍板「网关内透明重试一
         // 次」）：2001 为路由型拒绝（暂无可服务 cell，多为瞬时——cell 注
         // 册/重注册窗口），网关在链路内延迟重发同一条意图一次，不重写协
         // 议、无客户端可见同步面（请求方按既有超时收敛）。已重试过 / 重试
-        // 关闭 / 重试队列顶格 = 终局失败（failed_ 已计，不再续试）。
-        if (code == kWorldNotHostedAck && !retried && config_.intent_retry_enabled) {
+        // 关闭 / 会话限次命中 / 重试队列顶格 = 终局失败（failed_ 已计，不
+        // 再续试）。
+        if (code == kWorldNotHostedAck && retry_allowed) {
             if (retry_queue_.size() < config_.inbox_cap) {
                 retry_queue_.push_back(
                     RetryItem{trace::now_ms() + config_.intent_retry_delay_ms,
@@ -725,6 +787,17 @@ private:
                 ++it;
             }
         }
+        // 限次账回收（D08 #4）：会话消亡无通知面，出口侧以闲置窗界定账面
+        // 规模——idle 超 4×ack_timeout 清除（换路/成功应答本就重置，回收
+        // 陈旧账只影响长闲置后的一次预算，属可接受退化）。
+        const std::uint64_t health_idle_ms = 4 * config_.ack_timeout_ms;
+        for (auto it = route_health_.begin(); it != route_health_.end();) {
+            if (now_ms - it->second.last_ms > health_idle_ms) {
+                it = route_health_.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     struct Pending {
@@ -732,6 +805,13 @@ private:
         std::uint64_t sent_at_ms;
         InboxItem item;   // 首发载荷（2001 透明重试源；重试条目为空帧 + retried）
         bool retried;     // 已重试过（不再续试）
+        // 路由身份定格（D08 #4 限次键，与受理入箱同纪律）：本条发送所用
+        // 的路由提示四元组——2001 计数按此归属会话的路由账（提示变化 =
+        // 宿主已重解析换路 = 预算重置）。
+        std::uint64_t space_id = 0;
+        std::uint64_t cell_id = 0;
+        std::string cell_host;
+        std::uint16_t cell_port = 0;
     };
 
     // 透明重试到期项（L122 末批）：retry_at_ms = 到期拍（延迟窗），item = 原帧
@@ -752,6 +832,20 @@ private:
     std::unordered_map<std::uint64_t, Pending> pending_;  // 泵线程独占
     std::uint64_t next_request_id_ = 1;    // 网关身份域基址（ctor 按 gateway_id 设）；0 = legacy 无应答哨兵，不配发
 
+    // D08 #4 重定向限次账（泵线程独占，同 pending_）：会话在「同一路由身份」
+    // （space/cell/直连端点四元组，受理定格）上的连续 2001 计数。宿主重解析
+    // 换路（提示变化）或 code 0 证明路由可用 → 账面重置；会话消亡无通知面
+    // ——idle 超 4×ack_timeout 的陈旧账在 sweep_timeouts 回收（界内重入续账）。
+    struct RouteHealth {
+        std::uint64_t space_id = 0;
+        std::uint64_t cell_id = 0;
+        std::string cell_host;
+        std::uint16_t cell_port = 0;
+        std::uint32_t rejects = 0;
+        std::uint64_t last_ms = 0;
+    };
+    std::unordered_map<std::uint64_t, RouteHealth> route_health_;
+
     ClientDeliverFn client_deliver_;       // 泵线程回调（939 下行出口）
     RouteInvalidateFn on_route_invalidate_;  // 泵线程回调（2001 路由失效出口）
 
@@ -763,6 +857,7 @@ private:
     std::atomic<std::uint64_t> unforwardable_{0};
     std::atomic<std::uint64_t> dropped_{0};
     std::atomic<std::uint64_t> retried_{0};
+    std::atomic<std::uint64_t> redirect_limit_hits_{0};  // D08 #4 限次命中（不再重试）
     std::atomic<std::uint64_t> direct_cell_{0};  // L122 直连归属 cell 发出
     std::atomic<std::uint64_t> deliver_count_{0};
     std::atomic<std::uint64_t> undeliverable_{0};
