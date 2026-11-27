@@ -15,7 +15,12 @@
      - 奖励待办不丢：冻结期挂账的结算重驱落新 Base（exp 落档）；迁移前
        已受理结算跨迁移重放 = duplicate（去重环随快照携带，不双记）；
      - 无第二个资料写入者：源库档案冻结在冻结时刻态（迟到保存/重启都
-       没再动它），权威态在新 Base 库。
+       没再动它），权威态在新 Base 库；
+     - 更新阶段边界（D25）：源不可达（调用方超时形态 + 目录不动）、交权
+       中断（提交不明：冻结已生效、目录不改指、源停冻结）、目标复活后
+       重试收口（冻结幂等重受 → 交权直达 → 改指）；
+     - 替换端回归服务（D26 C++ 角色进程替换复用面）：反向迁移把玩家交
+       回重启后的旧 Base（快照自权威库拉取、目录回指、重放去重）。
 """
 import json
 import pathlib
@@ -272,31 +277,55 @@ try:
         assert rc == 0 and f"base=127.0.0.1:{base_b_port}" in out, \
             f"resolve after restart regressed: rc={rc} {out}"
 
-        # ---- 13. 优雅停机 flush（新 Base 落档）→ 探针回读双库 ----
+        # ---- 13. 替换端首停 → 源库冻结态复核（重启零写入）----
         stop(base_a2, "base a restarted")
-        stop(base_b, "base b")
-        rc, line = probe(["--probe-load", str(db_b_port), str(PLAYER)])
-        assert f"exp={SEED + 120 + 50} settled=2" in line, \
-            f"authoritative profile: {line}"
         rc, line = probe(["--probe-load", str(db_a_port), str(PLAYER)])
         assert f"exp={SEED + 120} settled=1" in line, f"frozen profile: {line}"
+
+        # ---- 14. 替换端回归服务（反向迁移）：重启后的旧 Base 重新承接
+        #         玩家——锚点在现任源（B 在位）；快照自权威库拉取、交权、
+        #         目录回指替换端 ----
+        base_a3, _, base_a3_port = start(base_binary, base_args(db_a_port),
+                                         dirs["base_a"], ["base ready port="],
+                                         port_marker="base ready port=")
+        rc, out = fleetctl(["migrate", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER),
+                            "--source-port", str(base_b_port),
+                            "--target-port", str(base_a3_port),
+                            "--target-zone", "2"])
+        assert rc == 0 and f"MIGRATE_OK player={PLAYER} zone=2" in out, \
+            f"reverse migrate: rc={rc} {out}"
+        rc, out = fleetctl(["resolve", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER)])
+        assert rc == 0 and f"base=127.0.0.1:{base_a3_port}" in out, \
+            f"resolve not re-pointed to replacement: rc={rc} {out}"
+        rc, line = probe(["--probe-base", str(base_a3_port), "credit", str(PLAYER),
+                          str(SETTLE_1), "120", "20"])
+        assert rc == 0 and "accepted=1 duplicate=1" in line, \
+            f"replay on replacement: {line}"
+
+        # ---- 15. 双库终态（替换端权威、原端冻结在反向冻结时刻态）----
+        stop(base_a3, "base a replacement")
+        stop(base_b, "base b reverse source")
+        rc, line = probe(["--probe-load", str(db_a_port), str(PLAYER)])
+        assert f"exp={SEED + 120 + 50} settled=2" in line, \
+            f"replacement authoritative profile: {line}"
+        rc, line = probe(["--probe-load", str(db_b_port), str(PLAYER)])
+        assert f"exp={SEED + 120 + 50} settled=2" in line, \
+            f"reverse frozen profile: {line}"
 
         stop(login, "login")
         stop(db_a, "database a")
         stop(db_b, "database b")
         children.clear()
 
-        # ---- 14. 档案落盘断言：权威态在新库、源库冻结在冻结时刻态 ----
-        profile_new = load_json(dirs["db_b"] / "players" / f"player_{PLAYER}.json")
-        assert profile_new["exp"] == SEED + 120 + 50, profile_new
-        assert SETTLE_1 in profile_new.get("settledIds", []), profile_new
-        assert SETTLE_2 in profile_new.get("settledIds", []), profile_new
-        assert profile_new["username"] == f"drill-{PLAYER}", profile_new
-
-        profile_old = load_json(dirs["db_a"] / "players" / f"player_{PLAYER}.json")
-        assert profile_old["exp"] == SEED + 120, profile_old
-        assert profile_old.get("settledIds") == [SETTLE_1], profile_old
-        assert profile_old["username"] == f"drill-{PLAYER}", profile_old
+        # ---- 16. 档案落盘断言：终态随反向迁移回替换端库、双库一致 ----
+        for db_dir in (dirs["db_a"], dirs["db_b"]):
+            profile = load_json(db_dir / "players" / f"player_{PLAYER}.json")
+            assert profile["exp"] == SEED + 120 + 50, (db_dir, profile)
+            assert SETTLE_1 in profile.get("settledIds", []), (db_dir, profile)
+            assert SETTLE_2 in profile.get("settledIds", []), (db_dir, profile)
+            assert profile["username"] == f"drill-{PLAYER}", (db_dir, profile)
 
         print("Base update migration drill passed")
 finally:
