@@ -137,6 +137,39 @@
 > 旧 assignment，base_host/base_port 刷新归属未定）；待办不丢（跨 Base
 > 待处理结算转移无格式）；清理旧 Base（源端留 Transferring 无清理面）。
 
+> 单区更新演练 2026-11-28 已落地（D22 立即执行动作：一玩家两 Base、注入旧
+> Base 迟到保存与重启、检查拒旧及待办不丢；commit 2cee59cb + cfb2bb72，测试
+> `BaseUpdateMigrationDrill`，tests/base_update_migration_drill.py）：真进程
+> 真编排全链——双 database/base 独立进程 + login 宿主目录（915/918 + M1 准
+> 入），player1 登录落 base A → fleetctl migrate 真拨（933 冻结〔停写+排平
+> flush〕→ 935/936 快照真拉 → 937 交权〔目标接权落库 + 写权地板〕→ 目录改
+> 指 + 立即推快照）。三断言面：
+> - **刷新 Base 路由（落地）**：migrate rehome 把归属 Base 端点刷新进 918
+>   解析投影表（`updateWorldAssignment` 同步 assignments_ 投影——此前只改
+>   PlayerDirectory 条目、投影表残留旧端点，resolve 回带冻结源）；resolve
+>   改指后回带新 Base。write_gen 别域不动（L118：随 915 落点成行，迁移编排
+>   不代推演）。
+> - **待办不丢（实证，无需转移格式）**：挂账留在调用方（冻结源 958 拒 =
+>   accepted 0，账本挂账口径同 test_migration_chain 8d），重驱拨 918 解析
+>   端点即落新 Base（accepted 1 落档）；迁移前已受理结算跨域重放 =
+>   accepted + duplicate 不双记（settledIds 环随快照过河）。
+> - **拒旧三注入（真进程）**：冻结源 958 业务写拒；迟到 DB 存档 wire 拒
+>   （新探针 `--probe-base <port> save` 面——旧状态直拨存档 wire，saved 0、
+>   源档不动）；旧 Base 重启后无锚点写全拒（无复活）；源库档案冻结在冻结
+>   时刻态——无第二写入者跨重启成立。
+>
+> 演练揪出真 bug 已修（cfb2bb72）：冻结排平同步直写只回写 exp 不回写结算环
+> ——周期 flush 未跑即迁移时，快照带出的档案 exp 含新结算而环缺记，目标域
+> 重放同 ID 当新账双记（环与 exp 同一持久单元的纪律在冻结路径破约）。修复
+> = 冻结排平与周期 flush 同口径回写锚点环。
+>
+> **仍缺**（主行不勾，需设计裁决）：① 清理旧 Base——源端 Transferring 锚
+> 点无清理面（938 回执达 login 不达源，源无感知触发点）；② 旧端复活激活
+> 路由——重登激活落点固定拨旧 Base（login worldStore 单端点配置）时，重启
+> 后旧 Base 可自源库旧档复活第二写者（本演练不激活不触发；激活归属裁决
+> 需设计）。四树门禁：主树全量 132/132（新演练 5 连跑稳）、off-tree2/
+> examples/san 受影响 6 套件全绿（san 树 ASan+UBSan 下真进程演练绿）。
+
 ## 5. D23 · World 管理端更新（首阶段：同卷、受控停止重启）
 
 ### 5.1 管理状态清单
