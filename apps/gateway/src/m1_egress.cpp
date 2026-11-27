@@ -789,10 +789,16 @@ private:
         }
         // 限次账回收（D08 #4）：会话消亡无通知面，出口侧以闲置窗界定账面
         // 规模——idle 超 4×ack_timeout 清除（换路/成功应答本就重置，回收
-        // 陈旧账只影响长闲置后的一次预算，属可接受退化）。
+        // 陈旧账只影响长闲置后的一次预算，属可接受退化）。age 饱和下探
+        //（last_ms 取自应答处理时刻 trace::now_ms()，同一 pump 拍内晚于入参
+        // now——无符号直减回绕成巨值，把刚触账的活账误判陈旧回收，ASan 慢拍
+        // 下高发：限次预算被静默清零，重定向循环不收敛）。
         const std::uint64_t health_idle_ms = 4 * config_.ack_timeout_ms;
         for (auto it = route_health_.begin(); it != route_health_.end();) {
-            if (now_ms - it->second.last_ms > health_idle_ms) {
+            const auto age = it->second.last_ms > now_ms
+                                 ? 0
+                                 : now_ms - it->second.last_ms;
+            if (age > health_idle_ms) {
                 it = route_health_.erase(it);
             } else {
                 ++it;

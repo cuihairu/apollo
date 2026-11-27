@@ -10,13 +10,18 @@
 //      双投 AlreadyApplied（幂等归调用方账本，二次不达 wire）；
 //   5. 受理面停 → AvatarUnavailable 挂账（传输不可达同挂账语义）。
 
+#include "apollo/game/social/party.hpp"
+#include "apollo/game/world/world.hpp"
 #include "online_directory/online_directory.hpp"
 #include "player_store/business_wire.hpp"
 #include "player_store/migration_wire.hpp"
 #include "player_store/player_store.hpp"
 #include "player_store/settlement_base_router.hpp"
 #include "player_store/store_dial.hpp"
+#include "squad_instance/settlement_id.hpp"
 #include "squad_instance/settlement_ledger.hpp"
+#include "squad_instance/settlement_record_store.hpp"
+#include "squad_instance/squad_instance.hpp"
 #include "store_host.hpp"
 
 #include <chrono>
@@ -25,6 +30,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -653,6 +659,238 @@ void settlement_base_router_multi_base() {
     directory.stop();
 }
 
+// D12 #2 服务级多 Base 部分成功真链路（L133 编排切片）：SquadInstanceService
+// 装配真 SettlementBaseRouter 业务缝（生产 CellApp 同款——958 带稳定结算 ID
+// 经 917/918 逐玩家拨归属 Base）× 两独立 StoreHost × 真 OnlineDirectory ×
+// 恢复记录面（D13）：
+//   1. 多 Base 分别确认：B 归属成员先落 B 逐玩家选路，恢复记录逐成员记
+//      intent+confirm——各 Base 各自收口，互不等待；
+//   2. 部分成功：B 停面 → A 归属成员照常落 A 独立确认（B 故障不拖 A），
+//      B 归属成员挂账（AvatarUnavailable）——意图先于业务面落记录，挂账
+//      不丢应发分值；
+//   3. 账本补账纪律：retry 只重提挂账成员——已确认成员不再发业务请求
+//      （缝调用计数不前进）；
+//   4. 恢复补齐：端点迁移（目录改指 + 重锚）后周期重驱动（记录面路径，
+//      跨重启语义）补齐挂账成员——全部确认记录 done 删除；账本路径随后
+//      重提同结算 ID，Base 去重环收口不双记。
+void squad_settlement_multi_base_partial_success() {
+    TemporaryDirectory files;
+
+    player_store::PlayerStoreConfig store_a;
+    store_a.host = "127.0.0.1";
+    store_a.m1Enabled = true;
+    store_a.m1Port = 0;
+    store_a.m1SelfName = "base";
+    store_a.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_a.dataDir = (files.path / "a/players").string();
+    store_a.journalPath = (files.path / "a/journal/persist.log").string();
+    StoreHost base_a(store_a, 0, 0, 0, 0);
+    require(base_a.store->m1_listen_port() != 0, "settlement base A did not listen");
+
+    player_store::PlayerStoreConfig store_b;
+    store_b.host = "127.0.0.1";
+    store_b.m1Enabled = true;
+    store_b.m1Port = 0;
+    store_b.m1SelfName = "base";
+    store_b.m1RouteJson = APOLLO_TEST_ROUTE_JSON;
+    store_b.dataDir = (files.path / "b/players").string();
+    store_b.journalPath = (files.path / "b/journal/persist.log").string();
+    StoreHost base_b(store_b, 0, 0, 0, 0);
+    require(base_b.store->m1_listen_port() != 0, "settlement base B did not listen");
+
+    online_directory::OnlineDirectory directory(0);
+    directory.set_m1_face(0, APOLLO_TEST_ROUTE_JSON);
+    directory.start();
+    require(directory.listenPort() != 0, "settlement directory face did not listen");
+
+    constexpr std::uint64_t kLeader = 100;   // 归属 A
+    constexpr std::uint64_t kMemberB = 101;  // 归属 B
+    constexpr std::uint64_t kMemberC = 102;  // 归属 B
+
+    require(base_a.store->adoptPlayer(kLeader, "", 7100, 5, 2),
+            "settlement adopt leader failed");
+    require(base_b.store->adoptPlayer(kMemberB, "", 7101, 5, 2),
+            "settlement adopt member B failed");
+    require(base_b.store->adoptPlayer(kMemberC, "", 7102, 5, 2),
+            "settlement adopt member C failed");
+
+    const auto seed_assignment = [&directory](std::uint64_t player_id,
+                                              const std::string& host,
+                                              std::uint16_t port) {
+        apollo::game::base::SessionBinding binding;
+        binding.session_id = player_id;
+        binding.gateway_id = 1;
+        binding.gateway_addr = "tcp://127.0.0.1:9002";
+        binding.session_version = 1;
+        require(directory.bindSession(player_id, binding), "settlement bind failed");
+        apollo::game::base::WorldAssignment assignment;
+        assignment.world_id = 2;
+        assignment.space_id = 1;
+        assignment.route_version = 1;
+        assignment.base_host = host;
+        assignment.base_port = port;
+        require(directory.assignWorld(player_id, assignment),
+                "settlement assign failed");
+    };
+    seed_assignment(kLeader, "127.0.0.1", base_a.store->m1_listen_port());
+    seed_assignment(kMemberB, "127.0.0.1", base_b.store->m1_listen_port());
+    seed_assignment(kMemberC, "127.0.0.1", base_b.store->m1_listen_port());
+
+    player_store::SettlementBaseRouter::Config config;
+    config.route_json = APOLLO_TEST_ROUTE_JSON;
+    config.self_name = "world";
+    config.default_host = "127.0.0.1";
+    config.default_port = base_a.store->m1_listen_port();  // 单 Base 兜底 = A
+    config.directory_host = "127.0.0.1";
+    config.directory_port = directory.listenPort();
+    player_store::SettlementBaseRouter router(std::move(config));
+
+    // 服务装配（受理即开账前完成）：稳定结算 ID 盐 + 恢复记录面 + 真路由
+    // 业务缝（生产 CellApp 同款：958 带结算 ID，router false = 挂账）。
+    apollo::game::social::PartyManager parties;
+    apollo::game::world::World world;
+    auto* party = parties.create(1, kLeader);
+    party->add_member(kMemberB);
+    party->add_member(kMemberC);
+    squad_instance::SquadInstanceService service(parties, &world, 1);
+    service.register_world(1, 4);
+    service.set_settlement_id_salt(9);
+    service.set_settlement_record_dir((files.path / "records").string());
+
+    std::uint64_t seq = 800;
+    std::map<std::uint64_t, std::uint64_t> sink_calls;
+    service.set_business_sink(
+        [&](std::uint64_t player_id, std::int64_t score,
+            std::uint64_t settlement_id) {
+            ++sink_calls[player_id];
+            business::ScoreCreditRequest req;
+            req.request_id = ++seq;
+            req.player_id = player_id;
+            req.score = score;
+            req.source_zone_id = 2;
+            req.settlement_id = settlement_id;
+            return router.send(player_id, req)
+                       ? SettlementLedger::ApplyError::Ok
+                       : SettlementLedger::ApplyError::AvatarUnavailable;
+        });
+
+    squad_instance::SettlementRecordStore records((files.path / "records").string());
+
+    squad_instance::LaunchRequest request;
+    request.party_id = 1;
+    request.requester_id = kLeader;
+    request.map_id = 42;
+    request.map_name = "settlement-map";
+    const auto launch = service.launch(request);
+    require(launch.error == squad_instance::LaunchError::Ok,
+            "settlement service launch refused");
+    const auto sid = squad_instance::compose_settlement_id(9, launch.instance_id);
+    require(sid != 0, "settlement id composed to zero");
+
+    // ---- 1. 多 Base 分别确认：B 归属成员落 B（逐玩家选路），记录记
+    //         intent+confirm——A 面零锚点零分值 ----
+    require(service.credit_settlement(1, kMemberB, 30) ==
+                SettlementLedger::ApplyError::Ok,
+            "member B credit via router not accepted");
+    {
+        const auto avatar = base_b.store->findAvatar(kMemberB);
+        require(avatar != nullptr && avatar->progress("exp") == 30,
+                "member B exp did not land on base B");
+        require(base_a.store->findAvatar(kMemberB) == nullptr,
+                "member B anchor leaked onto base A");
+        const auto snap = service.settlement(1);
+        require(snap.has_value() && snap->applied == 1 && !snap->complete,
+                "settlement ledger did not open with roster");
+        const auto loaded = records.load_all();
+        require(loaded.size() == 1 &&
+                    loaded[0].lifecycle == squad_instance::SettlementLifecycle::Pending &&
+                    loaded[0].intent.at(kMemberB) == 30 &&
+                    loaded[0].confirmed.count(kMemberB) == 1,
+                "record did not capture member B intent+confirm");
+    }
+
+    // ---- 2. 部分成功：B 停面——A 成员独立确认不拖带；B 成员挂账不丢
+    //         意图（intent 先于业务面落记录）----
+    base_b.store->stop();
+    require(service.credit_settlement(1, kLeader, 50) ==
+                SettlementLedger::ApplyError::Ok,
+            "leader credit dragged by down base B");
+    require(service.credit_settlement(1, kMemberC, 20) ==
+                SettlementLedger::ApplyError::AvatarUnavailable,
+            "member C credit on down base reported accepted");
+    {
+        const auto avatar = base_a.store->findAvatar(kLeader);
+        require(avatar != nullptr && avatar->progress("exp") == 50,
+                "leader exp did not land on base A");
+        require(base_b.store->findAvatar(kLeader) == nullptr,
+                "leader anchor leaked onto base B");
+        require(base_a.store->findAvatar(kMemberC) == nullptr,
+                "pending member C credited on base A early");
+        const auto snap = service.settlement(1);
+        require(snap.has_value() && snap->applied == 2 && snap->pending == 1 &&
+                    !snap->complete,
+                "partial settlement ledger state wrong");
+        const auto loaded = records.load_all();
+        require(loaded.size() == 1 && loaded[0].intent.size() == 3 &&
+                    loaded[0].intent.at(kMemberC) == 20 &&
+                    loaded[0].confirmed.count(kMemberC) == 0,
+                "pending member intent not preserved while base down");
+    }
+
+    // ---- 3. 账本补账纪律：retry 只重提挂账成员——已确认成员缝调用计数
+    //         不前进（不重发业务请求）----
+    require(service.retry_settlement(1) == 0,
+            "retry against down base reported progress");
+    require(sink_calls.at(kLeader) == 1 && sink_calls.at(kMemberB) == 1 &&
+                sink_calls.at(kMemberC) == 2,
+            "retry re-sent confirmed members instead of pending only");
+
+    // ---- 4. 恢复补齐：端点迁移（目录改指 + 重锚）→ 周期重驱动补齐不
+    //         双记 → 记录 done 删除；账本路径重提命中 Base 去重环 ----
+    {
+        apollo::game::base::WorldAssignment moved;
+        moved.world_id = 2;
+        moved.space_id = 1;
+        moved.route_version = 2;
+        moved.base_host = "127.0.0.1";
+        moved.base_port = base_a.store->m1_listen_port();
+        require(directory.assignWorld(kMemberC, moved),
+                "settlement re-assign failed");
+        require(base_a.store->adoptPlayer(kMemberC, "", 7102, 5, 2),
+                "re-adopt member C on A failed");
+    }
+    const auto redriven = service.maybe_redrive_pending(
+        std::chrono::milliseconds{1000}, std::chrono::steady_clock::now(),
+        /*link_ready=*/true);
+    require(redriven == 1, "cadence redrive did not pick up the pending record");
+    require(sink_calls.at(kMemberC) == 3,
+            "redrive sent member C more than once");
+    require(service.settlement_record_state(sid) == std::nullopt,
+            "fully confirmed record not deleted");
+    require(base_a.store->findAvatar(kMemberC) != nullptr &&
+                base_a.store->findAvatar(kMemberC)->progress("exp") == 20,
+            "member C exp wrong on A after redrive (missing or double credit)");
+    require(base_b.store->findAvatar(kMemberB)->progress("exp") == 30,
+            "member B exp changed after unrelated redrive");
+    // 记录面路径不触账本：账本挂账成员由补账路径收口——同结算 ID 重提命中
+    // Base 去重环（duplicate 回执照受理），分值不双记。
+    require(service.retry_settlement(1) == 1,
+            "ledger retry did not close the outstanding member");
+    require(base_a.store->findAvatar(kMemberC)->progress("exp") == 20 &&
+                base_a.store->findAvatar(kLeader)->progress("exp") == 50,
+            "duplicate settlement replay double credited on base A");
+    require(service.settlement(1)->complete, "settlement not complete");
+    require(service.retry_settlement(1) == 0,
+            "completed settlement re-credited");
+    require(service.maybe_redrive_pending(
+                std::chrono::milliseconds{1000},
+                std::chrono::steady_clock::now() + std::chrono::seconds{2},
+                /*link_ready=*/true) == 0,
+            "deleted record redriven after completion");
+
+    directory.stop();
+}
+
 } // namespace
 
 int main() {
@@ -664,6 +902,7 @@ int main() {
         base_business_wire();
         base_business_wire_d19_compat();
         settlement_base_router_multi_base();
+        squad_settlement_multi_base_partial_success();
     } catch (const std::exception& ex) {
         std::cerr << "FAIL: " << ex.what() << '\n';
         return 1;
