@@ -46,6 +46,10 @@ public:
     bool bindSession(PlayerID playerId, const apollo::game::base::SessionBinding& binding);
     bool unbindSession(protocol::SessionID sessionId);
 
+    // 内部：迁移编排刷新路由投影（§9.2 ④ 刷新归属 Base 端点——drain/准
+    // 入闸不过期，迁移是权威内部操作）。
+    void updateWorldAssignment(PlayerID playerId, const apollo::game::base::WorldAssignment& assignment);
+
     // ---- 目录查询 ----
     std::optional<PlayerID> findPlayerBySession(protocol::SessionID sessionId) const;
     std::optional<apollo::game::base::WorldAssignment> resolveWorldAssignment(

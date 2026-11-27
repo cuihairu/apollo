@@ -97,6 +97,12 @@ bool OnlineDirectory::assignWorld(
     return true;
 }
 
+void OnlineDirectory::updateWorldAssignment(
+    PlayerID playerId, const apollo::game::base::WorldAssignment& assignment) {
+    std::lock_guard<std::mutex> lock(assignmentsMutex_);
+    assignments_[playerId] = assignment;
+}
+
 bool OnlineDirectory::clearWorldAssignment(PlayerID playerId) {
     std::lock_guard<std::mutex> lock(assignmentsMutex_);
     return assignments_.erase(playerId) > 0;
@@ -567,11 +573,18 @@ OnlineDirectory::MigrationResult OnlineDirectory::migratePlayer(
     }
     out.handoff_ms = msSince();
 
-    // ④ 目录改指 + 立即推快照（§9.2 ④：不许等 10s 快照周期）
-    if (!directory_.moved(player_id, assignment, newEpoch, target_zone_id)) {
+    // ④ 目录改指 + 立即推快照（§9.2 ④：不许等 10s 快照周期）。归属 Base
+    // 端点随改指刷新到目标（D22 演练线 ③ 刷新 Base 路由：918 解析回带新
+    // 归属，结算面重驱落新 Base 不再回拨冻结源）；write_gen 别域不动——
+    // 资料写权代次随 915 落点成行，迁移编排不代推演（L118 分域纪律）。
+    auto rehomed = assignment;
+    rehomed.base_host = target_host;
+    rehomed.base_port = target_port;
+    if (!directory_.moved(player_id, rehomed, newEpoch, target_zone_id)) {
         out.error_message = "directory moved rejected";
         return out;
     }
+    updateWorldAssignment(player_id, rehomed);  // 918 解析读投影表，同步改指
     std::size_t pushed_parts = 0;
     if (snapshot_publisher_) {
         pushed_parts = snapshot_publisher_->publish_snapshot(collectMirrorEntries());

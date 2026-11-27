@@ -874,6 +874,36 @@ int main(int argc, char** argv) {
                       << " settled=" << loaded.settledIds.size() << std::endl;
             return 0;
         }
+        if (argc == 7 && std::string(argv[1]) == "--probe-base" &&
+            std::string(argv[3]) == "save") {
+            // --probe-base <base_port> save <player> <exp> <request_id>：
+            // 迟到存档注入（D22）——旧 Base 持旧状态直拨 DB 存档 wire，
+            // 冻结锚点须拒（回执 saved=0）；打印回执面供演练断言。
+            player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "multi-base-probe",
+                                         "base", "127.0.0.1",
+                                         static_cast<std::uint16_t>(std::stoul(argv[2])));
+            CHECK(dial.ready());
+            CHECK(dial.waitUp());
+            protocol::DbSaveRequest req;
+            req.playerId = std::stoull(argv[4]);
+            player_store::PlayerData stale{};
+            stale.playerId = req.playerId;
+            stale.username = "late-save";
+            stale.exp = std::stoll(argv[5]);
+            req.jsonData = stale.toJson();
+            const auto reply = dial.call(protocol::MessageCodec::encode(req, 0));
+            CHECK(reply.has_value());
+            const auto header = protocol::MessageCodec::parseHeader(*reply);
+            CHECK(static_cast<protocol::MessageType>(header.type)
+                  == protocol::MessageType::DB_SAVE_RESPONSE);
+            protocol::DbSaveResponse res =
+                protocol::MessageCodec::decodeBody<protocol::DbSaveResponse>(
+                    std::vector<std::uint8_t>(reply->begin() + sizeof(protocol::MessageHeader),
+                                              reply->end()));
+            std::cout << "BASE_PROBE ok=1 saved=" << (res.success ? 1 : 0)
+                      << " error=" << res.errorMessage << std::endl;
+            return res.success ? 0 : 2;
+        }
         if (argc == 8 && std::string(argv[1]) == "--probe-base") {
             // --probe-base <base_port> <activate|credit> <player>
             //              <settlement_id> <score> <request_id>

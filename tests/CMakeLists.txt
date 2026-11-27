@@ -3223,6 +3223,17 @@ if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
             $<TARGET_FILE:base_database_tests>
             ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
         set_tests_properties(BaseMultiBaseProcessSmoke PROPERTIES TIMEOUT 120)
+        # D22 Base 更新演练（单区服一玩家两 Base）：真 fleetctl migrate 编排
+        # （933 冻结 → 935/936 快照 → 937 交权 → 改指 + 归属端点刷新）+ 拒旧
+        # （冻结源业务写/迟到存档/重启无复活）+ 待办重驱与跨迁移去重
+        # （base_update_migration_drill.py）。
+        add_test(NAME BaseUpdateMigrationDrill COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/base_update_migration_drill.py
+            $<TARGET_FILE:base> $<TARGET_FILE:database>
+            $<TARGET_FILE:login> $<TARGET_FILE:fleetctl>
+            $<TARGET_FILE:base_database_tests>
+            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
+        set_tests_properties(BaseUpdateMigrationDrill PROPERTIES TIMEOUT 120)
         # D19 清单第 5 行真机样本：不支持 route_version 隔离（kRouteVersionMismatch
         # 断连现状）+ APOLLO_ROUTE_COMPAT 兼容窗口受理与窗外仍拒
         # （net_route_version_compat_smoke.py）。
