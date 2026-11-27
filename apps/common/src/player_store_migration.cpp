@@ -64,6 +64,11 @@ bool PlayerStore::freezePlayer(PlayerID playerId) {
                 // 直接记入水位（drain 回放同段消费不重写）
                 data.exp = avatar->progress(
                     apollo::game::base::AvatarRewardSink::kExpKey);
+                // 已结算环与 exp 同一持久单元（L132）：冻结排平同样回写锚点
+                // 环——排平若只写 exp 不写环，快照带出的档案 exp 含新结算而
+                // 环缺记，跨域重放即双记（环缺 = 重放当新账受理）
+                data.settledIds.assign(avatar->settled_ids().begin(),
+                                       avatar->settled_ids().end());
                 // 写端自持代次（L64 Base 半；database 半验单调）——基线即
                 // 现档，作缺账播种真源
                 data.writeGen = nextWriteGen(playerId, &data.writeGen);
