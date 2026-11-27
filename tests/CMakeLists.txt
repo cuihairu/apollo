@@ -3223,5 +3223,13 @@ if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
             $<TARGET_FILE:base_database_tests>
             ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
         set_tests_properties(BaseMultiBaseProcessSmoke PROPERTIES TIMEOUT 120)
+        # D19 清单第 5 行真机样本：不支持 route_version 隔离（kRouteVersionMismatch
+        # 断连现状）+ APOLLO_ROUTE_COMPAT 兼容窗口受理与窗外仍拒
+        # （net_route_version_compat_smoke.py）。
+        add_test(NAME RouteVersionCompatSmoke COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/net_route_version_compat_smoke.py
+            $<TARGET_FILE:database>
+            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
+        set_tests_properties(RouteVersionCompatSmoke PROPERTIES TIMEOUT 60)
     endif()
 endif()
