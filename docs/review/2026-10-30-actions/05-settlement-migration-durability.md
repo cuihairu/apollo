@@ -39,6 +39,24 @@
 > 清零——已饱和下探修复，隔离 25/25 稳绿）。**仍缺**：多 Base 真机编队演练
 > （dev_fleet 单 Base）、Base↔Base 锚点迁移改指的编排接线——不重试。
 >
+> 多 Base 真机演练 2026-11-27 已落地（commit 56284629，见 todo.md L132）：
+> 真实进程全链无一桩——新 `BaseMultiBaseProcessSmoke` 起 2×database + 2×base
+> 独立进程独立工作目录，login 宿主目录（915/918 承载面）+ M1 准入面
+> （`--enable-test-users` 显式装载内建测试用户 player1/player2，生产默认关
+> 不进生产路径）；LOGIN_REQUEST 全链认证绑定（激活落 base A）→ `fleetctl
+> assign` 盖章归属 Base 端点（915 新参 `--base-host/--base-port`）→
+> `fleetctl resolve` 逐玩家回带断言（918 `base=<host>:<port>`；无绑定玩家
+> RESOLVE_FAILED）→ 958 逐 Base 送分：各归属 Base 受理（exp 1000+120 /
+> 2000+90）、同结算 ID 重放 accepted+duplicate 不双记（Base 去重环真盘）、
+> 错 Base（player1 在 B 无锚点）与无册玩家拒；优雅停机 flush 后探针经真
+> database 链回读 + 档案 JSON 断言逐 Base exp 与 settledIds、零串扰
+> （player1 不落 db_b、player2 在 db_a 无分值无结算环）。四树门禁：主树
+> ctest **130/130**（终态 login 重链后新烟复跑绿）、off-tree2 **130/130**、
+> examples **130/130**、san 树全量重建 exit 0 + ctest **129/130**
+> （CellAppTests 全量扫负载时窗假红、隔离复跑绿）+ 受影响三套件 ASan+UBSan
+> 绿。**仍缺**：Base↔Base 锚点迁移改指编排、dev_fleet 两 Base 编队编排
+> （编排批）——不重试。
+>
 > 明确不做：延后跨区运行和全局强原子事务；不因跨服未启用而延后单区多 Base 的结算正确性。
 
 ## 2. D13 · 结算恢复记录与异常结束
