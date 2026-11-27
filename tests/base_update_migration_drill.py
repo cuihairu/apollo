@@ -171,14 +171,62 @@ try:
                           str(SETTLE_1), "120", "11"])
         assert rc == 0 and "accepted=1 duplicate=0" in line, f"credit 1: {line}"
 
-        # ---- 6. fleetctl migrate：933 冻结 → 935/936 快照 → 937 交权 → 改指 ----
+        # ---- 6a. 源不可达（超时形态）：回环拒连也走满拨号窗（StoreDial
+        #         waitUp 3s ≥ fleetctl RPC 窗 3s）——调用方见 MIGRATE_
+        #         UNREACHABLE（调用方先失 patience 的真实边界形态）；事后
+        #         对账 = 目录不动、源锚点照常受理（冻结未生效）。----
+        dead_port = free_port()
+        rc, out = fleetctl(["migrate", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER),
+                            "--source-port", str(dead_port),
+                            "--target-port", str(base_b_port),
+                            "--target-zone", "5"])
+        assert rc != 0 and "MIGRATE" in out, f"unreachable source: rc={rc} {out}"
+        rc, out = fleetctl(["resolve", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER)])
+        assert rc == 0 and f"base=127.0.0.1:{base_a_port}" in out, \
+            f"failed resolve disturbed projection: rc={rc} {out}"
+        rc, line = probe(["--probe-base", str(base_a_port), "credit", str(PLAYER),
+                          str(SETTLE_1), "120", "18"])
+        assert rc == 0 and "accepted=1 duplicate=1" in line, \
+            f"failed migrate disturbed source anchor: {line}"
+
+        # ---- 6b. 交权中断（提交不明/不可逆转换）：冻结已生效、目标不可达
+        #         = 冻结先行落地（源停写），交权拨号失败——回执面同 6a 是
+        #         调用方超时形态（编排在后台如实失败），事后对账 = 目录不
+        #         改指 + 源锚点已冻结（业务写拒）——③ 后不可撤销面。----
+        stop(base_b, "base b before handoff")
+        rc, out = fleetctl(["migrate", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER),
+                            "--source-port", str(base_a_port),
+                            "--target-port", str(base_b_port),
+                            "--target-zone", "5"])
+        assert rc != 0 and "MIGRATE" in out, f"unreachable target: rc={rc} {out}"
+        rc, out = fleetctl(["resolve", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER)])
+        assert rc == 0 and f"base=127.0.0.1:{base_a_port}" in out, \
+            f"partial migrate re-pointed projection: rc={rc} {out}"
+        rc, line = probe(["--probe-base", str(base_a_port), "credit", str(PLAYER),
+                          str(SETTLE_1), "120", "19"])
+        assert rc != 0 and "accepted=0" in line, \
+            f"source not frozen after partial migrate: {line}"
+
+        # ---- 6c. 回滚边界（重试收口）：目标复活后同玩家重跑编排 = 补完
+        #         交接（冻结幂等重受、交权直达、改指落新端点）----
+        base_b, _, base_b_port = start(base_binary, base_args(db_b_port),
+                                       dirs["base_b"], ["base ready port="],
+                                       port_marker="base ready port=")
         rc, out = fleetctl(["migrate", "--host", "127.0.0.1", "--port", str(directory_port),
                             "--player", str(PLAYER),
                             "--source-port", str(base_a_port),
                             "--target-port", str(base_b_port),
                             "--target-zone", "5"])
         assert rc == 0 and f"MIGRATE_OK player={PLAYER} zone=5" in out, \
-            f"migrate: rc={rc} {out}"
+            f"retry migrate: rc={rc} {out}"
+        rc, out = fleetctl(["resolve", "--host", "127.0.0.1", "--port", str(directory_port),
+                            "--player", str(PLAYER)])
+        assert rc == 0 and f"base=127.0.0.1:{base_b_port}" in out, \
+            f"resolve not re-pointed after retry: rc={rc} {out}"
 
         # ---- 7. 刷新路由：918 回带新归属端点（D22 线 ③ 刷新 Base 路由）----
         rc, out = fleetctl(["resolve", "--host", "127.0.0.1", "--port", str(directory_port),
