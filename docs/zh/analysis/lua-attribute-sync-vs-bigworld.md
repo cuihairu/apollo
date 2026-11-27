@@ -22,7 +22,7 @@ per-viewer delta + seq/ACK 水位 + 域投影 + 降级快照**；BigWorld 的同
 
 ### 1.1 单一写入者 + 正规写面
 
-写路径只有一条入口：`AttrSyncManager::set_attribute`（[attr_sync_manager.hpp](../../../modules/game/attrsync/include/apollo/game/attrsync/attr_sync_manager.hpp:31)）。
+写路径只有一条入口：`AttrSyncManager::set_attribute`（[attr_sync_manager.hpp](https://github.com/cuihairu/apollo/blob/main/modules/game/attrsync/include/apollo/game/attrsync/attr_sync_manager.hpp#L31)）。
 它更新 `EntityAttrs.values_`、追加 `ChangeHistory`、置 dirty，并触发 `ChangeSink`
 （持久化交接，§5）。所有感知者共用这一面：C++ 模拟写、Lua 钩子修订值，最终都经它落账，
 不存在第二份影子表。这是 BigWorld 生成访问器收敛到的同一目标，但 Apollo 用运行时
@@ -32,7 +32,7 @@ per-viewer delta + seq/ACK 水位 + 域投影 + 降级快照**；BigWorld 的同
 
 - **C++ 直写**：模拟逻辑直接调 `set_attribute`，天然感知。
 - **Lua 钩子窗口**（scripting-lua §5.1）：Scene 六阶段 tick 在 **dirty 固定后、收集前**
-  执行 `apply_attr_hook`（[scene.cpp:335](../../../modules/game/world/src/scene.cpp:335)）。
+  执行 `apply_attr_hook`（[scene.cpp:335](https://github.com/cuihairu/apollo/blob/main/modules/game/world/src/scene.cpp#L335)）。
   桥 `install_attr_hook_bridge` 把 attrsync 的 `HookChange` 窗口翻译成 `ScriptRuntime::AttrChange`
   快照，喂 `run_attr_hook_window`（白名单取 `contract_write_whitelist` 数据面、帧预算逐帧
   取 `attr_hook_frame_budget_`），修订值写回 HookChange 后**经正规写路径落存储+history+sink**。
@@ -52,7 +52,7 @@ delta = `entries_since(acked_seq)`，快照 = 当前值集。**感知不需要 d
 ### 2.1 触发与裁剪
 
 Scene 挂 `AttrSyncManager` 后，AOI Enter/Sync 建 `ViewerAttrState`、Leave 回收
-（[scene.cpp:287](../../../modules/game/world/src/scene.cpp:287)）。AOI 决定**能否看见实体**，
+（[scene.cpp:287](https://github.com/cuihairu/apollo/blob/main/modules/game/world/src/scene.cpp#L287)）。AOI 决定**能否看见实体**，
 `AttrDomain` 决定**能否看到其属性**，二者独立：Public/World 恒可见、Self 仅 owner、
 Team/Guild 经 group gate（未设置=不可见）。快照与 delta 用同一裁剪规则。
 
@@ -111,7 +111,7 @@ tick 固定边界运行、白名单+帧预算+错误保持、模块熔断/回滚
 2. **客户端线帧**：`FrameCodec` 的帧需要一个契约消息（attr_sync delta/snapshot/ack），
    目前 messages.xml 无此族——机制产出帧但无线上出口（design §0 明示"完整 World→Gateway→
     client 交付仍需验收"）。
-3. **Scene 出帧宿主消费**：`drain_attrsync_frames` 已实现（[scene.cpp:281](../../../modules/game/world/src/scene.cpp:281)），
+3. **Scene 出帧宿主消费**：`drain_attrsync_frames` 已实现（[scene.cpp:281](https://github.com/cuihairu/apollo/blob/main/modules/game/world/src/scene.cpp#L281)），
    **apps/world 无任何消费者**——帧出 Scene 后在 cell 进程内落地即止。需要 cell→World
    中继或 939 出口接线。
 4. **玩法属性真实写入**：哪怕一个战斗属性（如 ATK）从 Lua/模拟经 `set_attribute` 写入、
