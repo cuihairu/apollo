@@ -30,7 +30,8 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 > 静态链路 A / 目录归属 B 分置两真 Base——声明端点玩家积分落 B 不落 A、未声明
 > 玩家回退落 A 不留痕 B，回执各回本会话。四树验证：主树/off-tree2/examples
 > ctest 各 128/128；san 目标 6/6（ASan+UBSan）。**仍缺**（延后项，不重试）：
-> 被拒意图的客户可见重同步（协议设计拍板），以及 D08 #4 重定向限次、D10 case 3。
+> 被拒意图的客户可见重同步（协议设计拍板），以及 D10 case 3。（D08 #4 重定向
+> 限次已于 2026-11-27 关闭，commit 55097e17，见下。）
 
 > 验收 #1「模拟输入直达当前 cell」2026-11-22 已接线（commit 1c602137，todo.md
 > L122 过期注记 2026-11-27 复核刷新）：gateway 不再经 World 管理端物理中继模拟
@@ -41,7 +42,23 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 > 请求号只对实发帧分配（requeue 不耗号）。测试：`test_gateway_m1_egress` 直连
 > 观测面（`directCellIntents` 计数）+ login_chain 落点断言
 > `assigned->cell_host/cell_port`。D08 #1 两半（Base 直达 + cell 直达）验收面
-> 均关闭；本节仍缺同上（重同步拍板、#4 限次、D10 case 3）。
+> 均关闭；本节仍缺：重同步拍板、D10 case 3（#4 限次 2026-11-27 已关闭）。
+
+> 验收 #4「重复重定向」2026-11-27 已落地（commit 55097e17）：会话级重定向限次
+> 进 M1 出口重试闸——同一路由身份（space/cell/直连端点四元组，受理定格）上
+> 连续 2001 计数（重试应答也计入——重试本身即重定向）达上限
+>（`M1EgressConfig.max_redirects_per_route`，缺省 2；0 = 不限次旧语义）后
+> 停透明重试，但每次 2001 照常作废会话路由缓存（宿主回退查目录重解析——
+> 既有 ensureRouteSnapshot→fetchRouteSnapshot 链即回退面，不新增协议）；宿主
+> 重解析换路（提示变化）或 code 0 证明路由可用 → 预算重置。限次账 idle 超
+> 4×ack_timeout 回收（会话消亡无通知面，出口侧闲置窗界定账面规模）。观测面
+> 新增 `redirectLimitHits()`。测试 `test_egress_redirect_limit_resets_on_
+> route_change`（活区 GatewayM1EgressTests）六段断言：① 同路由 2001 对预算
+> 内重试两发；② 第三次 2001 越限停重试、缓存照常作废；③ 持续越限仅作废；
+> ④ 换路预算重置重试恢复；⑤ code 0 清账；⑥ 清账后重试恢复。计数收口
+> failedAcks=8/sent=9/redirectLimitHits=2/invalidated=8。主树全量重建 exit 0 +
+> ctest **129/129**；off-tree2/examples 全量重建 exit 0 + ctest 各 **129/129**；
+> san 树 GatewayM1EgressTests+GatewayPushDownlinkTests 2/2（ASan+UBSan）。
 
 > 验收 #1「下行绑定真实会话」2026-11-27 已落真链缆线 drill（`GatewayPushDownlinkTests`
 > 新增 `downlink_binds_live_session_only`，todo.md L122）：正半面（939 按会话号真投
