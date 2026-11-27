@@ -32,6 +32,21 @@
 > `BaseDatabaseTests`）：升级点前旧档无 `settledIds` 键 → 环缺省空（不伪造升级前结算记忆）；
 > 升级后首个档案空环也写空数组（键总在场，读档不再走缺省分支）；环值随档案 roundtrip 对称
 >（环与 exp 同一持久单元）；键形坏（非数组）守卫拒读不炸不部分采纳。
+>
+> 不支持版本拒绝真机样本 2026-11-27 已落地（commit 83083471，`RouteVersionCompatSmoke`，
+> tests/net_route_version_compat_smoke.py）：真 database 进程 M1 face 真拨真断——本代
+> （schema_hash 前缀同源）握手受理；窗外版本拨入 → 服务端 finish_down 隔离
+>（kRouteVersionMismatch：无握手回执、连接被对端关闭 = 客户端 EOF）保持现状；
+> `APOLLO_ROUTE_COMPAT` 开窗（token = hash 前缀十六进制，≤16 位左对齐同
+> route_version_from_hash 口径，非十进制）→ 窗内旧代握手受理、窗外第三版本仍拒、
+> 本代恒受理（窗不顶替本代）。版本维度的未升级客户端 = 窗内旧代握手受理（业务往返
+> 维度已由 e869a102 958 旧形真拨真受理覆盖，不重复）。至此 §1 清单五行全落：
+> 旧写新读 / 新写旧读 / 未升级客户端（e869a102）、快照转换（9d74f4c4）、不支持版本
+> 拒绝（83083471）。四树门禁：主树 ctest **131/131**（新烟 5 连跑稳）、off-tree2/
+> examples/san 三树 cmake 重配过 + 新烟各自绿（本批零 C++ 改动无重编面；san 树
+> database 进程 ASan+UBSan 下绿）。**仍缺**（决策延后，不重试）：任意版本混编、
+> protobuf/zstd 顺带迁移（D19 明确不做）；存储结构更广演进另行验收（settledIds
+> 单字段样本已立模板）；多版本真机样本与 D20–D23 更新演练随拓扑批。
 
 ## 2. D20 · cell 更新（先自然排空）
 
