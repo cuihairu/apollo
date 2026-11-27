@@ -21,6 +21,24 @@
 >
 > 模拟代次校验（L132 主文点名缺口「稳定玩法/结算 ID 校验模拟代次」）2026-11-26 已落地（commit dd3fb4c5）：稳定结算 ID 原 = cell 实例号——实例号是 cell **进程内裸计数**（`World::create_instance` 的 `next_instance_id_` 从 1 起步，进程重启归 1、多 cell 并存各自从 1 铸号），直用作结算 ID 在跨进程代次/跨 cell 两个维度撞号，Base 去重环按 ID 单键判重把新代次的合法结算误判 duplicate = **静默漏奖**。新件 `settlement_id.hpp`：结算 ID = `(盐 << 32) | 实例号`，盐 = FNV-1a32(world_id, cell_id, start_epoch) 折叠 31 位（0 保留=未装配盐旧口径 instance_id 直用、折叠 0→1 装配面永不退化）；`start_epoch` 装载时单铸（`load_cell_config`，`steady_now_ms` 单调重启必增，与 960 注册代次同源——注册面与结算 ID 域共用一个值，避免两处铸分叉）；service `set_settlement_id_salt` 装配，开账合成经 ledger/记录库/意图/确认/回执全链（`record_store_->open` 分离原始实例引用）；超宽实例号（≥2^32，单进程 >40 亿实例不可达域）确定性折叠。同代次内盐恒定——重试/回执丢失重放同 ID，D12 #1 去重契约不变；跨代次/跨 cell 必异。测试：`settlement_id_salt_and_compose_faces`（盐逐域区分/0 保留/折叠确定）、`squad_settlement_id_generation_distinct`（同实例号跨重启代次/跨并行 cell 结算 ID 必异、旧口径零回归直用）、`squad_settlement_id_salted_lost_reply_retry_same_id`（盐装配后回执丢失重放同 ID 去重不双记）；主树 ctest **128/128**（首轮 BaseDatabaseTests 负载时窗假红，隔离绿+全量复跑绿）；off-tree2/examples 全量重建 exit 0 + ctest **128/128**；san 树 SquadInstance/CellApp 2/2 + BaseBusinessWire/MigrationChain/SquadWire 3/3（ASan+UBSan）。**仍缺**：多 Base 真机编队演练、Base↔Base 锚点迁移改指编排（同上，不重试）。
 
+> 第 2 行服务级编排切片 2026-11-27 已落地（commit 1b83d0ca，见 todo.md L133）：
+> `SquadInstanceService` 装配真 `SettlementBaseRouter` 作业务缝（生产 CellApp 同款
+> ——958 带稳定结算 ID 经目录 917/918 逐玩家拨归属 Base）× 两真 StoreHost ×
+> 真 OnlineDirectory × D13 恢复记录面，服务级验收 `squad_settlement_multi_base_
+> partial_success`（活区 BaseBusinessWireTests）四段断言：① 名册跨两 Base
+> 分别确认（B 归属成员落 B、A 面零锚点零分值，恢复记录逐玩家 intent+confirm，
+> 账本 applied 独立推进）；② 部分成功（B 停面 → A 归属成员照常落 A 独立确认
+> 不被拖带，B 归属成员挂账 AvatarUnavailable，意图先于业务面落盘不丢应发分值）；
+> ③ 账本 retry 只重提挂账成员（已确认成员缝调用计数不前进）；④ 端点迁移
+> （目录改指 + 重锚）后周期重驱动补齐挂账成员 → 全部确认记录 done 删除，
+> 账本路径随后重提同结算 ID 命中 Base 去重环不双记，头部 exp 分账不变。
+> 主树全量重建 exit 0 + ctest **129/129**；off-tree2/examples 全量重建 exit 0
+> + ctest 各 **129/129**；san 树 GatewayM1EgressTests/BaseBusinessWireTests/
+> SquadInstanceTests 3/3（ASan+UBSan；GatewayM1Egress 在扫及本批 D08 #4 限次账
+> 时暴露同拍 `now` 与 `trace::now_ms()` 无符号直减回绕误删活账、重试预算静默
+> 清零——已饱和下探修复，隔离 25/25 稳绿）。**仍缺**：多 Base 真机编队演练
+> （dev_fleet 单 Base）、Base↔Base 锚点迁移改指的编排接线——不重试。
+>
 > 明确不做：延后跨区运行和全局强原子事务；不因跨服未启用而延后单区多 Base 的结算正确性。
 
 ## 2. D13 · 结算恢复记录与异常结束
@@ -49,7 +67,7 @@
 
 > D13 重试节奏批 2026-11-23 已落地（commit 55539edb，见 todo.md L133）：挂账 pending 记录按节奏补齐不依赖重启——服务 `maybe_redrive_pending`（节奏门：interval 内不重扫；Base 链路未起跳过且不推进节奏——恢复后首拍即补扫；interval 0 = 关闭仅启动扫描一次；now 由调用面注入）、`WorldAppConfig.settlementRedriveMs`（缺省 30s）、`CellApp::driveSettlementRedrive`（game 拍触发，冻结拍不触发，拨号 peerUp 门，`settlementRedriveCalls` 接线观测面）。故障注入补充：#1 Base 延后恢复（启动扫描时不可达 → 链路恢复后按节奏补扫补齐，不再依赖重启）。测试：`squad_settlement_redrive_cadence`（链路未起跳过 / 恢复首拍即补扫 / interval 内不重扫 / 关闭）与 `cell_settlement_redrive_hook`（每拍触发 / 冻结停 / 关闭停）。
 > D13 人工修复面批 2026-11-23 已落地（commit 7bd185bc，见 todo.md L133）：pending 记录中分值未裁决（无 intent）的受理成员此前不可见、不可修——观察面 `SettlementRepairEntry`（settlement_id + awaiting + confirmed_count）与 `pending_repair_entries`（pending 且有未裁决成员的记录点名；cancelled/done 不入列），`adjudicate` 修复写入口仅受理 pending 记录：终局记录拒（done 已回收、cancelled 已发部分走后续处理状态，不做裁决防复活失败取消的奖励发放）、名册外玩家拒、已确认玩家拒覆写（确认位是权威事实）。裁决成功交回既有周期重驱动接管重发（同结算 ID，Base 去重环兜底不双记——修复不旁路自动面）。测试：`squad_settlement_manual_repair_surface`（点名待裁决 + 进度、四拒（终局/名册外/已确认/无记录）、裁决后队清空、自动重驱动补齐删除记录不双记、cancelled 记录 store 面裁决拒）squad_instance_tests 49/49；主树 ctest 128/128；off-tree2/examples ctest 128/128；san 树 ctest 128/128（ASan+UBSan）。
-> D13 核对面批 2026-11-23 已落地（commit bb9e3742，见 todo.md L133）：失败取消不发成功奖励但取消前已发部分是已发生事实——记录留盘却从未可观测。`SettlementCancelledPartial`（settlement_id/party/world/instance + granted 已发部分 = 取消前确认位）+ `cancelled_partials`（每份 cancelled 记录点名取消前已发成员与分值；pending/done 不入列）+ 服务级 `cancelled_settlement_partials` 转发；终局态不回收（complete 对 cancelled 不覆盖）；观测按结算 ID 查不按目录迭代序。**只核对不改账**——补偿策略（回收/补发口径）另拍板，本面不动账本。测试：`squad_settlement_cancelled_partial_surface`（单份点名已发 40、complete 不回退、无已发部分列空 granted、pending+done 不入列、服务级转发、未装配空列）squad_instance_tests 50/50；主树 ctest 128/128；off-tree2/examples 全量重建 exit 0 + ctest 128/128；san 树 ctest 128/128（ASan+UBSan）。**仍缺**（另起批）：多 Base 分别确认与部分成功/补偿编排（D12 #2）、cancelled 已发部分的补偿策略（待拍板）。
+> D13 核对面批 2026-11-23 已落地（commit bb9e3742，见 todo.md L133）：失败取消不发成功奖励但取消前已发部分是已发生事实——记录留盘却从未可观测。`SettlementCancelledPartial`（settlement_id/party/world/instance + granted 已发部分 = 取消前确认位）+ `cancelled_partials`（每份 cancelled 记录点名取消前已发成员与分值；pending/done 不入列）+ 服务级 `cancelled_settlement_partials` 转发；终局态不回收（complete 对 cancelled 不覆盖）；观测按结算 ID 查不按目录迭代序。**只核对不改账**——补偿策略（回收/补发口径）另拍板，本面不动账本。测试：`squad_settlement_cancelled_partial_surface`（单份点名已发 40、complete 不回退、无已发部分列空 granted、pending+done 不入列、服务级转发、未装配空列）squad_instance_tests 50/50；主树 ctest 128/128；off-tree2/examples 全量重建 exit 0 + ctest 128/128；san 树 ctest 128/128（ASan+UBSan）。（多 Base 分别确认与部分成功编排 2026-11-27 已落地，commit 1b83d0ca，见 §1 D12 #2 服务级验收。）**仍缺**（另起批）：cancelled 已发部分的补偿策略（待拍板）。
 
 ## 3. D16 · 迁移状态机与冻结提交顺序
 
