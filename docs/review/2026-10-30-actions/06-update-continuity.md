@@ -111,6 +111,32 @@
 > `tick_count_`，随副本释放销毁，无快照）、脚本（显式零迁移纪律，生产 Lua 处理器
 > 为空壳）均无跨迁移快照格式——补这些需新增快照协议与设计裁决，主行不勾。
 
+> 立即执行动作「记录迁移前后状态及事件序列，加入迁移中触发计时、击杀和结算的场景」
+> 2026-11-28 已落（commit 待填，`test_scene_migration_activity_gameplay_sample`，
+> SessionWorldTests）：真实 `SquadInstanceService` 全链（launch→enter×2→start→
+> goal{配额 2, 超时 60}→spawn_wave→report_monster_defeated→advance_tick→settle→
+> dismiss）+ 队长成员在 Running 期走真 `execute_migration_transfer`（五步 D16 路
+> 径全确认）。事件序列与状态记录：
+> - **S1 迁移前**：玩法时钟 4 拍、击杀 1（队长归属，分值经 battle 输入序）、
+>   存活怪 1——活动 Running 中。
+> - **S2 迁移中**：五步（SourceFreeze→TargetPrepare→Commit→RouteProject→
+>   ActivateAndCleanup）全确认；玩家面 = 世界级成员位随迁（活动实例 has_player
+>   false、目标场重建 Avatar）；活动面 = 副本/怪/目标/时钟零扰动（binding 不动、
+>   进度原样）。行为证据：名册不感知迁移（队长仍在名册快照，`all_exited` 等在场
+>   语义不随世界级换场触发）。
+> - **S3 迁移后**：计时续走 4+2+1（不重置不回溯）；后一击杀由留场成员归属、达标
+>   进结算（Finishing）。
+> - **S4 结算**：958 按名册发 2 笔（**迁移离场成员不缺席**——结算按名册不按在
+>   场），同一结算 ID，账本 applied=2 complete，dismiss 收口终局。
+>
+> **未满足的状态（如实列缺口，不冒充活动连续）**：可用迁移面只有玩家级
+> `execute_migration_transfer`——**活动级迁移原语不存在**（无 scene/cell 迁移
+> 面；实例排空模型 = 副本临时态随进程消亡），故本样本证明的是「成员迁移不扰活
+> 动、结算按名册不按在场」，不是活动随迁：D21 项 1（成员名册跨迁移同步）、
+> 3（怪物跨活动快照）、4/5（目标/计时跨活动快照）、7（脚本）仍未满足——补全
+> 需新增活动快照协议与设计裁决，主行不勾。四树门禁：主树 ctest 132/132、
+> off-tree2/examples/san 新用例各自绿（san ASan+UBSan）。
+
 - 记录迁移前后状态及事件序列；加入迁移中触发计时、击杀和结算的场景；未满足的状态明确列缺口。
 - 不把自然结束、强停重开或仅玩家重建算成功。
 
