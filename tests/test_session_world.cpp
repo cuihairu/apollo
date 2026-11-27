@@ -9,8 +9,12 @@
 #include "apollo/game/world/scene_transfer.hpp"
 #include "apollo/game/world/world.hpp"
 #include "apollo/game/world/world_session_manager.hpp"
+#include "apollo/game/social/party.hpp"
 #include "apollo/base/rng.hpp"
+#include "squad_instance/squad_instance.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <vector>
 
@@ -699,6 +703,211 @@ bool test_scene_migration_rng_equivalence() {
     return true;
 }
 
+// D21 立即执行动作：样本玩法在真实迁移路径前后记录状态与事件序列，迁移中
+// 触发计时/击杀/结算；未满足的状态列缺口（见 06-update-continuity §3 记录）。
+// 结构事实：可用迁移面只有玩家级 execute_migration_transfer——活动（副本
+// Instance、怪、目标、玩法时钟）不随迁、留源场继续走。本样本证明的是「成员
+// 迁移不扰活动、结算按名册不按在场」，不是活动级连续：D21 项 1/3/4/5/7 的
+// 跨活动快照协议未设计（主行缺口），此处只钉住现有面上的行为事实。
+bool test_scene_migration_activity_gameplay_sample() {
+    std::cout << "Running: test_scene_migration_activity_gameplay_sample..." << std::endl;
+
+    apollo::game::social::PartyManager parties;
+    apollo::game::world::World world;
+    apollo::game::world::WorldSessionManager sessions;
+
+    constexpr std::uint64_t kLeader = 7100;
+    constexpr std::uint64_t kMember = 7101;
+    auto* party = parties.create(1, kLeader);
+    party->add_member(kMember);
+
+    squad_instance::SquadInstanceService service(parties, &world, /*local_world_id=*/3);
+    service.register_world(3, 4);
+
+    // 结算缝（launch 前装配）：记录 958 落账调用（事件序列 S4 面）
+    struct SinkCall {
+        std::uint64_t player = 0;
+        std::int64_t score = 0;
+        std::uint64_t settlement_id = 0;
+    };
+    std::vector<SinkCall> sink_calls;
+    service.set_business_sink(
+        [&](std::uint64_t player_id, std::int64_t score, std::uint64_t settlement_id) {
+            sink_calls.push_back({player_id, score, settlement_id});
+            return squad_instance::SettlementLedger::ApplyError::Ok;
+        });
+
+    squad_instance::LaunchRequest request;
+    request.party_id = 1;
+    request.requester_id = kLeader;
+    request.map_id = 42;
+    request.map_name = "activity-map";
+    const auto launch = service.launch(request);
+    TEST_ASSERT(launch.error == squad_instance::LaunchError::Ok, "activity launched");
+    const auto* binding = service.find_by_party(1);
+    TEST_ASSERT(binding != nullptr && binding->members.size() == 2,
+                "roster snapshot taken");
+    auto* activity = world.find_instance(launch.instance_id);
+    TEST_ASSERT(activity != nullptr, "activity instance exists");
+
+    // 成员进入 + 队长启动（Waiting→Running）
+    TEST_ASSERT(service.enter(1, kLeader) ==
+                    squad_instance::SquadInstanceService::EnterError::Ok,
+                "leader entered");
+    TEST_ASSERT(service.enter(1, kMember) ==
+                    squad_instance::SquadInstanceService::EnterError::Ok,
+                "member entered");
+    TEST_ASSERT(service.start_gameplay(1, kLeader) ==
+                    squad_instance::SquadInstanceService::EnterError::Ok,
+                "gameplay running");
+    TEST_ASSERT(activity->state() == apollo::game::world::Instance::State::Running,
+                "activity Running");
+
+    // 目标 + 刷怪（配额 2；超时 60 tick 本样本不触线）
+    squad_instance::GameplayGoal goal;
+    goal.monsters_to_defeat = 2;
+    goal.timeout_ticks = 60;
+    TEST_ASSERT(service.set_goal(1, goal) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "goal set");
+    TEST_ASSERT(service.spawn_wave(1, 2) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "wave spawned");
+    auto progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->monsters_alive.size() == 2,
+                "two monsters alive");
+    const auto monster_a = progress->monsters_alive[0];
+    const auto monster_b = progress->monsters_alive[1];
+
+    // 迁移目标场（普通场 + 普通实例，同 TwoSceneFixture 形）
+    apollo::game::world::SceneDescriptor plain;
+    plain.map_id = 9;
+    plain.map_name = "plain-b";
+    plain.width = 100.0f;
+    plain.height = 100.0f;
+    auto* plain_scene = world.create_scene(plain);
+    auto plain_instance = world.create_instance(plain_scene->scene_id(), "plain-run");
+    plain_instance->initialize();
+    plain_instance->ready();
+    plain_instance->start();
+
+    // 队长会话入副本场（attach 面与 world_app 同构）
+    const auto leader_id = apollo::game::core::PlayerId(kLeader);
+    auto session = sessions.create_session(6100, leader_id);
+    TEST_ASSERT(session != nullptr, "leader session created");
+    const auto entity = apollo::game::core::EntityId(9100);
+    auto avatar = std::make_shared<apollo::game::cell::Avatar>(leader_id, entity);
+    TEST_ASSERT(world.find_scene(binding->scene_id)->enter(avatar, {1.0f, 2.0f, 3.0f}),
+                "leader avatar in activity scene");
+    session->assign_world(3);
+    session->assign_map_instance(launch.instance_id);
+    session->assign_space(binding->scene_id);
+    session->bind_avatar(entity);
+    session->set_state(apollo::game::world::WorldSessionState::Active);
+
+    // ---- S1 迁移前（活动 Running 中）：计时走 4 拍 + 击杀 1（队长归属）----
+    TEST_ASSERT(service.advance_tick(1, 3) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "timer advanced");
+    TEST_ASSERT(service.report_monster_defeated(1, monster_a, kLeader) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "kill by leader admitted");
+    TEST_ASSERT(service.advance_tick(1, 1) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "kill score entered battle seq");
+    progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->ticks_elapsed == 4 &&
+                    progress->monsters_defeated == 1 && progress->monsters_spawned == 2 &&
+                    progress->monsters_alive.size() == 1,
+                "pre-migration state recorded");
+    std::cout << "  S1 pre-migration: ticks=" << progress->ticks_elapsed
+              << " defeated=" << progress->monsters_defeated
+              << " alive=" << progress->monsters_alive.size() << std::endl;
+
+    // ---- S2 迁移中：Running 期队长真迁移（五步 D16 路径）----
+    apollo::game::world::SceneTransferRequest migration;
+    migration.player_id = leader_id;
+    migration.target_scene_id = plain_scene->scene_id();
+    migration.landing = {10.0f, 20.0f, 30.0f};
+    const auto outcome =
+        apollo::game::world::execute_migration_transfer(world, sessions, migration);
+    TEST_ASSERT(outcome.ok(), "mid-gameplay migration ok");
+    using SM = apollo::game::world::SceneMigrationStep;
+    TEST_ASSERT(outcome.step_confirmed(SM::SourceFreeze) &&
+                    outcome.step_confirmed(SM::TargetPrepare) &&
+                    outcome.step_confirmed(SM::Commit) &&
+                    outcome.step_confirmed(SM::RouteProject) &&
+                    outcome.step_confirmed(SM::ActivateAndCleanup),
+                "all five steps confirmed");
+    // 玩家面：世界级成员随迁移换场
+    TEST_ASSERT(activity->has_player(leader_id) == false, "left activity instance");
+    TEST_ASSERT(plain_instance->has_player(leader_id) == true, "joined plain instance");
+    TEST_ASSERT(world.find_scene(binding->scene_id)->avatar_count() == 0,
+                "activity scene emptied of leader avatar");
+    TEST_ASSERT(plain_scene->avatar_count() == 1, "leader avatar rebuilt in target");
+    // 活动面：副本/怪/目标/时钟原地不动（迁移不触活动）
+    const auto* binding_after = service.find_by_party(1);
+    TEST_ASSERT(binding_after->instance_id == launch.instance_id &&
+                    binding_after->scene_id == binding->scene_id,
+                "activity binding untouched");
+    // 名册不感知迁移（D21 项 1 缺口的行为证据）：队长仍在名册快照中
+    TEST_ASSERT(std::find(binding_after->members.begin(), binding_after->members.end(),
+                          kLeader) != binding_after->members.end(),
+                "roster unaware of migration (gap, recorded)");
+    progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->goal_set &&
+                    progress->monsters_spawned == 2 && progress->monsters_defeated == 1 &&
+                    progress->monsters_alive.size() == 1,
+                "activity state intact through member migration");
+    std::cout << "  S2 migration: 5 steps confirmed, member left scene, "
+                 "activity untouched" << std::endl;
+
+    // ---- S3 迁移后：计时续走（不重置）+ 击杀 2（留场成员归属）→ 目标达标 ----
+    TEST_ASSERT(service.advance_tick(1, 2) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "timer continues after migration");
+    progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->ticks_elapsed == 6,
+                "clock monotonic across migration (4 pre + 2, no reset)");
+    TEST_ASSERT(service.report_monster_defeated(1, monster_b, kMember) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "post-migration kill attributed to remaining member");
+    TEST_ASSERT(service.advance_tick(1, 1) ==
+                    squad_instance::SquadInstanceService::GameplayError::Ok,
+                "quota met, settlement entered next tick");
+    progress = service.gameplay(1);
+    TEST_ASSERT(progress.has_value() && progress->ticks_elapsed == 7,
+                "clock kept counting into settlement tick");
+    TEST_ASSERT(activity->state() == apollo::game::world::Instance::State::Finishing,
+                "goal completion drives settlement");
+    TEST_ASSERT(activity->settle(), "settlement advances to Rewarding");
+
+    // ---- S4 结算落账：958 按名册发放（迁移离场成员不缺席）----
+    TEST_ASSERT(sink_calls.size() == 2, "one credit per roster member");
+    bool leader_paid = false;
+    bool member_paid = false;
+    for (const auto& call : sink_calls) {
+        TEST_ASSERT(call.score > 0, "kill score attributed");
+        TEST_ASSERT(call.settlement_id == sink_calls[0].settlement_id &&
+                        call.settlement_id != 0,
+                    "one settlement id for the run");
+        leader_paid |= call.player == kLeader;
+        member_paid |= call.player == kMember;
+    }
+    TEST_ASSERT(leader_paid, "migrated member still settled (by roster)");
+    TEST_ASSERT(member_paid, "remaining member settled");
+    const auto settle_snap = service.settlement(1);
+    TEST_ASSERT(settle_snap.has_value() && settle_snap->applied == 2 && settle_snap->complete,
+                "settlement complete for full roster");
+    TEST_ASSERT(service.dismiss(1), "activity released after settlement");
+    TEST_ASSERT(service.active_count() == 0, "binding cleared");
+    std::cout << "  S4 settlement: 2 credits (full roster), settlement_id="
+              << sink_calls[0].settlement_id << std::endl;
+
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 bool test_scene_migration_rejections() {
     std::cout << "Running: test_scene_migration_rejections..." << std::endl;
 
@@ -912,6 +1121,7 @@ int main() {
     run(test_scene_migration_runtime_preserved);
     run(test_scene_migration_commit_cancel_unfreezes_source);
     run(test_scene_migration_rng_equivalence);
+    run(test_scene_migration_activity_gameplay_sample);
     run(test_scene_migration_rejections);
     run(test_transfer_disconnect_window);
     run(test_avatar_longterm_state_fields);
