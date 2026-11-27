@@ -43,6 +43,16 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 > `assigned->cell_host/cell_port`。D08 #1 两半（Base 直达 + cell 直达）验收面
 > 均关闭；本节仍缺同上（重同步拍板、#4 限次、D10 case 3）。
 
+> 验收 #1「下行绑定真实会话」2026-11-27 已落真链缆线 drill（`GatewayPushDownlinkTests`
+> 新增 `downlink_binds_live_session_only`，todo.md L122）：正半面（939 按会话号真投
+> + 双活会话隔离）既有 `push_session_addressed` 已钉；本批补负半面与恢复半面——
+> World 侧无断线通知接线 = 掉线玩家实体留场，A 的寻址拷贝持续可造，三面全走
+> 939 → 网关 `sendToClient` 会话闸（保留窗缩窗 800ms）：① 保留窗内
+> （connectionId=0）AOI 广播仍寻址 sid_a → 闸落不投任何 socket（B 缆面零 sid_a
+> 帧）+ 新观测面 `staleDownlinkDrops()` 计数前进；② 窗内同号重连恢复 → 广播帧头
+> sid_a 真投**新** socket（绑定跟随活会话，不随旧连接死亡）；③ 保留窗到期销毁 →
+> 迟到 939(sid_a) 落 unknown-session 闸 → 不投 + 网关存活（B PING→PONG）。
+
 ## 2. D09 · 登录完整链路分段表
 
 ### 2.1 分段与成功条件/超时动作
