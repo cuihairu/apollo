@@ -150,6 +150,11 @@ public:
     std::uint64_t heartbeatTimeoutClosures() const {
         return heartbeatTimeoutClosures_.load(std::memory_order_acquire);
     }
+    // 下行绑定真实会话闸（观测面）：939 目标会话不在（保留窗到期销毁/
+    // 未知号）或留存无连接（connectionId=0）——不投任何 socket，仅计数。
+    std::uint64_t staleDownlinkDrops() const {
+        return staleDownlinkDrops_.load(std::memory_order_acquire);
+    }
 
     // 客户端入口在册连接数（观测面；dashboard /api/state 消费）
     std::size_t getActiveConnectionCount() const {
@@ -283,6 +288,7 @@ private:
     std::atomic<std::uint64_t> unauthenticatedWorldDrops_{0};
     std::atomic<std::uint64_t> unauthenticatedBaseDrops_{0};
     std::atomic<std::uint64_t> heartbeatTimeoutClosures_{0};
+    std::atomic<std::uint64_t> staleDownlinkDrops_{0};
     std::atomic<std::uint64_t> pumpTicks_{0};
 
     // 进程期起点（wall 毫秒；/api/state uptime 起点，类构造即定）

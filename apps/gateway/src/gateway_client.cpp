@@ -335,6 +335,9 @@ bool GatewayServer::activateAndBindAtBase(SessionID sessionId, PlayerID playerId
 void GatewayServer::sendToClient(SessionID sessionId, const std::vector<uint8_t>& message) {
     auto session = sessionManager_->getSession(sessionId);
     if (!session || session->connectionId == 0 || !ingressServer_) {
+        // 下行绑定真实会话闸：目标会话不在或留存无连接——不投任何 socket
+        // （迟到/异会话 939 不得串线），计数供观测（staleDownlinkDrops）。
+        staleDownlinkDrops_.fetch_add(1, std::memory_order_relaxed);
         glog().info("Gateway sendToClient placeholder for session "
                     + std::to_string(sessionId));
         return;

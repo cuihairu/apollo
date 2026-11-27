@@ -791,6 +791,110 @@ bool test_push_session_addressed() {
     return true;
 }
 
+// ---- 3.5 下行绑定真实会话：陈旧下行不串线、恢复后跟随新连接 ----
+//
+// 真链三面（World 939 → 网关 sendToClient 会话闸，World 侧无断线通知
+// 接线 = A 的实体留场，A 的寻址拷贝持续可造）：
+//   ① 保留窗内：A 断线留存（connectionId=0）→ AOI 广播仍寻址 sid_a →
+//     网关闸不投任何 socket（B 缆面零 sid_a 帧）+ 计数前进；
+//   ② 窗内恢复：A 同号重连 → 广播帧头 sid_a 真投新 socket（绑定跟随
+//     活会话，不随旧连接死亡）；
+//   ③ 窗到期销毁：会话移除 → 迟到 939(sid_a) 落 unknown-session 闸 →
+//     不投 + 网关存活（B PING→PONG）。
+
+bool test_downlink_binds_live_session_only() {
+    std::cout << "Running: test_downlink_binds_live_session_only..." << std::endl;
+    WorldEnd world;
+    TEST_ASSERT(world.start(60), "world started with M1 port");
+    auto config = gateway_config(world.world->m1Link().listenPort(), 0);
+    config.sessionRetentionMs = 800;  // 断线保留窗缩窗：窗内恢复/窗后销毁两面
+    gateway::GatewayServer server(config);
+    server.start();
+
+    // A 原点，B 视野内 (1,0,0)——B 动即广播达 A 的寻址拷贝。
+    TcpTestClient a;
+    std::uint64_t sid_a = 0;
+    TEST_ASSERT(tcp_establish(a, server, server.listenPort(), 9501, sid_a),
+                "session A established + authenticated");
+    a.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9501, 0.0f, 0.0f, 0.0f), sid_a)));
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_a, 9501, 8000), "A spawned");
+
+    TcpTestClient b;
+    std::uint64_t sid_b = 0;
+    TEST_ASSERT(tcp_establish(b, server, server.listenPort(), 9502, sid_b),
+                "session B established + authenticated");
+    b.sendAll(frame_bytes(2, 0,
+        protocol::MessageCodec::encode(make_player_spawn_at(9502, 1.0f, 0.0f, 0.0f), sid_b)));
+    TEST_ASSERT(wait_player_spawned(*world.cell, sid_b, 9502, 8000), "B spawned");
+
+    const auto drops0 = server.staleDownlinkDrops();
+
+    // ① A 断线留存：连接拆、会话留（connectionId=0）→ 广播含 sid_a 拷贝
+    //    → 闸落不投，B 只见自己的重编帧头。
+    a.close();
+    TEST_ASSERT(wait_until([&] { return server.getRegisteredConnectionCount() == 1; }, 2000),
+                "A connection torn down, session retained");
+    b.sendAll(frame_bytes(3, 0,
+        protocol::MessageCodec::encode(make_move(9502, 2.0f, 0.0f, 0.0f), sid_b)));
+    ProtocolFrame out_b;
+    std::vector<ProtocolFrame> sink_b;
+    TEST_ASSERT(wait_tcp_frame(b, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                               sid_b, out_b, sink_b, 8000),
+                "B receives its own re-addressed move while A retained");
+    TEST_ASSERT(wait_until([&] { return server.staleDownlinkDrops() > drops0; }, 2000),
+                "stale downlink for retained session counted (connectionId=0 gate)");
+    for (const auto& f : sink_b) {
+        TEST_ASSERT(f.session_id != sid_a,
+                    "no frame bearing stale sid_a reached B while A retained");
+    }
+
+    // ② 窗内恢复：A 同号重连 → 下行跟随活会话新连接（缆线可见）。
+    TcpTestClient a2;
+    TEST_ASSERT(a2.connect("127.0.0.1", server.listenPort()), "A reconnected");
+    a2.sendAll(frame_bytes(1, 0, ping_packet(sid_a)));
+    std::vector<std::uint8_t> reply;
+    TEST_ASSERT(a2.recvLinkFrame(reply), "resume pong received");
+    TEST_ASSERT(header_of(reply).sessionId == sid_a, "same session id resumed");
+    TEST_ASSERT(wait_until([&] { return server.getRegisteredConnectionCount() == 2; }, 2000),
+                "A connection re-registered");
+    b.sendAll(frame_bytes(4, 0,
+        protocol::MessageCodec::encode(make_move(9502, 3.0f, 0.0f, 0.0f), sid_b)));
+    ProtocolFrame out_a;
+    std::vector<ProtocolFrame> sink_a;
+    TEST_ASSERT(wait_tcp_frame(a2, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                               sid_a, out_a, sink_a, 8000),
+                "resumed A receives re-addressed move on NEW connection");
+    const auto move = protocol::MessageCodec::decodeBody<protocol::CellEntityMove>(out_a.body);
+    TEST_ASSERT(move.entityId == 9502, "move body is B's broadcast");
+
+    // ③ 窗到期销毁：会话移除 → 迟到 939(sid_a) 落 unknown-session 闸。
+    a2.close();
+    TEST_ASSERT(wait_until([&] { return server.getSessionCount() == 1; }, 4000),
+                "A session destroyed after retention window");
+    const auto drops1 = server.staleDownlinkDrops();
+    b.sendAll(frame_bytes(5, 0,
+        protocol::MessageCodec::encode(make_move(9502, 4.0f, 0.0f, 0.0f), sid_b)));
+    ProtocolFrame out_b2;
+    std::vector<ProtocolFrame> sink_b2;
+    TEST_ASSERT(wait_tcp_frame(b, static_cast<std::uint16_t>(protocol::MessageType::CELL_ENTITY_MOVE),
+                               sid_b, out_b2, sink_b2, 8000),
+                "B still served after A destroyed");
+    TEST_ASSERT(wait_until([&] { return server.staleDownlinkDrops() > drops1; }, 2000),
+                "late downlink for destroyed session counted (unknown session gate)");
+    for (const auto& f : sink_b2) {
+        TEST_ASSERT(f.session_id != sid_a,
+                    "no frame bearing destroyed sid_a reached B");
+    }
+    b.sendAll(frame_bytes(6, 0, ping_packet(sid_b)));
+    TEST_ASSERT(b.recvLinkFrame(reply), "gateway healthy after stale drops (pong)");
+
+    server.stop();
+    world.stop();
+    std::cout << "  PASSED" << std::endl;
+    return true;
+}
+
 // ---- 4. AOI 移动广播只达视野内会话（缆线可见：真客户端收帧） ----
 
 bool test_aoi_broadcast_to_viewers() {
@@ -1370,6 +1474,7 @@ int main() {
         {"tcp_push_downlink", test_tcp_push_downlink},
         {"ws_push_downlink", test_ws_push_downlink},
         {"push_session_addressed", test_push_session_addressed},
+        {"downlink_binds_live_session_only", test_downlink_binds_live_session_only},
         {"aoi_broadcast_to_viewers", test_aoi_broadcast_to_viewers},
         {"aoi_broadcast_to_ws_viewer", test_aoi_broadcast_to_ws_viewer},
         {"skill_damage_broadcast", test_skill_damage_broadcast},
