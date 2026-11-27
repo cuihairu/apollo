@@ -36,6 +36,8 @@ Lua 返回修订值写回 → apply_attr_hook 正规落账。**Lua 不能主动�
 - ❌ 弊：**玩法脚本写法受限**（不能自然写 `self.hp = 8500` 或 `self.bag[3].level=4`，必须调 API）；路径语法需要每个容器手工设计；深度上限要约束
 
 ### 方案 C：BigWorld 式 PropertyOwner 冒泡
+> **最小 demo 已跑通**：`demos/lua-tracking/demo-c-owner.cpp`（`./demos/lua-tracking/run.sh c`）——
+> 验证 owner 链冒泡 + path 深度增量，输出 `entity.slot[3]`。
 **机制**：脚本写 → `DataType::attach(value, owner, index)` → 容器值本身是 PropertyOwnerBase
 子类 → 子变更 `onOwnedPropertyChanged(change)` 沿父链冒泡到 Entity → 按属性旗标分发。
 深度变更 = path 序列（叶→根索引链）+ 叶子值，位压缩下发。
@@ -44,6 +46,9 @@ Lua 返回修订值写回 → apply_attr_hook 正规落账。**Lua 不能主动�
 - ❌ 弊：**要照搬整套 PropertyOwner/DataType attach 架构**（apollo 现在是 int64+slice，无 owner 链）；Python setattr 拦截不能直接搬到 Lua；工作量大
 
 ### 方案 D：Sidecar Metadata + Mutation Observer（外部评审推荐）
+> **最小 demo 已跑通**：`demos/lua-tracking/demo-d-coverage.lua`（`./demos/lua-tracking/run.sh d`）——
+> 在真实 Lua 5.5.1 上实测四条写入路径，钉死「不改源码无法全捕获」：`__newindex` 漏
+> 已存在 key 赋值 / rawset / C API；`debug.sethook` 快照能兜但慢。
 **机制**：不改 Lua Table 布局；弱键表（Lua 存活判定）+ C++ IdentityMap（快速查身份）+ Metadata Pool（sidecar 数据）+ Generation（防 handle 复用）；**改 Lua 5.5.1 C 源码**（ltable.c 快/慢写入路径、lvm.c、lapi.c、lgc.c）挂写入观察 → Mutation Journal → Attribute Transaction → 复用 AttrSyncManager。
 - 仓内状态：外部评审，**未实现、未验证可行性**；apollo 用原生 Lua C API，未见改引擎 Lua 源码
 - ✅ 利：能捕获**所有写入**（普通赋值/rawset/C API/stdlib/快速路径）；深度嵌套+GC 生命周期完整；是通用基础设施（调试器/审计/热迁移复用）；普通 table 零开销
