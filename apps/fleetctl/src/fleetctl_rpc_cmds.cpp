@@ -22,6 +22,10 @@ int runAssign(const Options& opt, ControlDial& dial) {
     req.instanceId = opt.instance_id;
     req.spaceId = opt.space_id;
     req.routeVersion = opt.route_version;
+    // D12 逐 Base 结算选路：归属 Base M1 端点随落点成行（承载域；空/0 =
+    // 未声明，目录原样携带不裁决）。
+    req.baseHost = opt.base_host;
+    req.basePort = opt.base_port;
 
     const auto reply = dial.call(protocol::MessageCodec::encode(req));
     if (!reply) {
@@ -74,7 +78,12 @@ int runResolve(const Options& opt, ControlDial& dial) {
                   << " world=" << res.worldId << " map=" << res.mapId
                   << " instance=" << res.instanceId
                   << " route_version=" << res.routeVersion
-                  << " write_gen=" << res.writeGen << std::endl;
+                  << " write_gen=" << res.writeGen;
+        // D12 归属 Base 端点（918 回带；未声明不打印）
+        if (!res.baseHost.empty() && res.basePort != 0) {
+            std::cout << " base=" << res.baseHost << ":" << res.basePort;
+        }
+        std::cout << std::endl;
         return 0;
     }
     std::cout << "RESOLVE_FAILED player=" << opt.player_id

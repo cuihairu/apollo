@@ -34,7 +34,11 @@ void printUsage() {
               << "Usage:\n"
               << "  fleetctl assign  [--host H] [--port P] --player N [--world W] [--map M]\n"
               << "                   [--instance I] [--space S] [--route-version V]\n"
+              << "                   [--base-host BH] [--base-port BP]\n"
+              << "                   (D12: base endpoint stamped on 915 assignment;\n"
+              << "                    empty/0 = undeclared, settlement falls back)\n"
               << "  fleetctl resolve [--host H] [--port P] --player N\n"
+              << "                   (RESOLVE_OK prints base=<host>:<port> when declared)\n"
               << "  fleetctl migrate [--host H] [--port P] --player N --source-port SP\n"
               << "                   --target-port TP --target-zone Z\n"
               << "                   [--source-host SH] [--target-host TH]\n"
@@ -144,6 +148,11 @@ bool parseArgs(int argc, char* argv[], Options& opt) {
             else return false;
         } else if (arg == "--route-version") {
             if (const auto* v = next()) opt.route_version = std::strtoull(v, nullptr, 10);
+            else return false;
+        } else if (arg == "--base-host") {
+            if (const auto* v = next()) opt.base_host = v; else return false;
+        } else if (arg == "--base-port") {
+            if (const auto* v = next()) opt.base_port = static_cast<std::uint16_t>(std::atoi(v));
             else return false;
         } else if (arg == "--peer") {
             if (const auto* v = next()) opt.peer = v; else return false;

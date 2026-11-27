@@ -3212,5 +3212,16 @@ if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
             $<TARGET_FILE:base_database_tests>
             ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
         set_tests_properties(BaseDatabaseProcessSmoke PROPERTIES TIMEOUT 40)
+        # L132 多 Base 真机编队演练：真 login（宿主目录 + M1 准入）+ 双
+        # database/base 独立进程 + fleetctl assign/resolve（915/918 盖章回带）
+        # + 958 逐 Base 送分与去重重放（base_multi_base_process_smoke.py）。
+        add_dependencies(base_database_tests login fleetctl)
+        add_test(NAME BaseMultiBaseProcessSmoke COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/base_multi_base_process_smoke.py
+            $<TARGET_FILE:base> $<TARGET_FILE:database>
+            $<TARGET_FILE:login> $<TARGET_FILE:fleetctl>
+            $<TARGET_FILE:base_database_tests>
+            ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
+        set_tests_properties(BaseMultiBaseProcessSmoke PROPERTIES TIMEOUT 120)
     endif()
 endif()

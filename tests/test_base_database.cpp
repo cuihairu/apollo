@@ -838,6 +838,115 @@ int main(int argc, char** argv) {
             CHECK(loaded.exp == profile.exp);
             return 0;
         }
+        // L132 多 Base 真机编队演练探针（base_multi_base_process_smoke.py）：
+        // 独立进程短连真 M1 面，单行打印结果供脚本断言。
+        if (argc == 5 && std::string(argv[1]) == "--probe-seed") {
+            // --probe-seed <db_port> <player> <exp>：登录用户档案落库
+            database::ClientConfig config;
+            config.port = static_cast<std::uint16_t>(std::stoul(argv[2]));
+            config.peer_name = "database";
+            config.self_name = "multi-base-probe";
+            config.route_json = APOLLO_TEST_ROUTE_JSON;
+            auto client = database::makeClient(config);
+            CHECK(client->initialize());
+            player_store::PlayerData profile{};
+            profile.playerId = std::stoull(argv[3]);
+            profile.username = std::string("drill-") + argv[3];
+            profile.exp = std::stoll(argv[4]);
+            CHECK(client->savePlayer(profile));
+            std::cout << "PLAYER_SEED player=" << profile.playerId
+                      << " exp=" << profile.exp << std::endl;
+            return 0;
+        }
+        if (argc == 4 && std::string(argv[1]) == "--probe-load") {
+            // --probe-load <db_port> <player>：回读档案 exp / 去重环计数
+            database::ClientConfig config;
+            config.port = static_cast<std::uint16_t>(std::stoul(argv[2]));
+            config.peer_name = "database";
+            config.self_name = "multi-base-probe";
+            config.route_json = APOLLO_TEST_ROUTE_JSON;
+            auto client = database::makeClient(config);
+            CHECK(client->initialize());
+            player_store::PlayerData loaded{};
+            CHECK(client->loadPlayer(std::stoull(argv[3]), loaded));
+            std::cout << "PLAYER_LOAD player=" << loaded.playerId
+                      << " exp=" << loaded.exp
+                      << " settled=" << loaded.settledIds.size() << std::endl;
+            return 0;
+        }
+        if (argc == 8 && std::string(argv[1]) == "--probe-base") {
+            // --probe-base <base_port> <activate|credit> <player>
+            //              <settlement_id> <score> <request_id>
+            // activate = 0x60 激活锚点；credit = 958 送分（稳定结算 ID）。
+            player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "multi-base-probe",
+                                         "base", "127.0.0.1",
+                                         static_cast<std::uint16_t>(std::stoul(argv[2])));
+            CHECK(dial.ready());
+            CHECK(dial.waitUp());
+            const std::string action = argv[3];
+            const auto player = std::stoull(argv[4]);
+            const auto settlement_id = std::stoull(argv[5]);
+            const auto score = std::stoll(argv[6]);
+            const auto request_id = std::stoull(argv[7]);
+            if (action == "activate") {
+                protocol::PlayerActivateRequest req;
+                req.playerId = player;
+                const auto reply = dial.call(
+                    protocol::MessageCodec::encode(req, 0));
+                CHECK(reply.has_value());
+                protocol::PlayerActivateResponse res =
+                    protocol::MessageCodec::decodeBody<protocol::PlayerActivateResponse>(
+                        std::vector<std::uint8_t>(reply->begin() + sizeof(protocol::MessageHeader),
+                                                  reply->end()));
+                std::cout << "BASE_PROBE ok=" << (res.success ? 1 : 0)
+                          << " accepted=0 duplicate=0 error=" << res.errorMessage
+                          << std::endl;
+                return res.success ? 0 : 2;
+            }
+            player_store::business::ScoreCreditRequest req;
+            req.request_id = request_id;
+            req.player_id = player;
+            req.score = score;
+            req.source_zone_id = 1;
+            req.settlement_id = settlement_id;
+            const auto reply = dial.call(player_store::business::encodeFrame(req));
+            CHECK(reply.has_value());
+            player_store::business::ScoreCreditReply res;
+            protocol::SessionID sid = 0;
+            CHECK(player_store::business::decodeFrame(*reply, res, sid));
+            std::cout << "BASE_PROBE ok=1"
+                      << " accepted=" << (res.accepted ? 1 : 0)
+                      << " duplicate=" << (res.duplicate ? 1 : 0)
+                      << " error=" << res.error_message << std::endl;
+            return res.accepted ? 0 : 2;
+        }
+        if (argc == 5 && std::string(argv[1]) == "--probe-login") {
+            // --probe-login <admission_port> <username> <password>：真 LOGIN
+            // REQUEST 全链（认证 → base 激活/绑定 → 目录绑定+落点盖章）
+            player_store::StoreDial dial(APOLLO_TEST_ROUTE_JSON, "multi-base-probe",
+                                         "gateway", "127.0.0.1",
+                                         static_cast<std::uint16_t>(std::stoul(argv[2])));
+            CHECK(dial.ready());
+            CHECK(dial.waitUp());
+            protocol::LoginRequest req;
+            req.username = argv[3];
+            req.password = argv[4];
+            req.timestamp = 1;
+            const auto reply = dial.call(protocol::MessageCodec::encode(req, 0));
+            CHECK(reply.has_value());
+            const auto header = protocol::MessageCodec::parseHeader(*reply);
+            CHECK(static_cast<protocol::MessageType>(header.type)
+                  == protocol::MessageType::LOGIN_RESPONSE);
+            protocol::LoginResponse res =
+                protocol::MessageCodec::decodeBody<protocol::LoginResponse>(
+                    std::vector<std::uint8_t>(reply->begin() + sizeof(protocol::MessageHeader),
+                                              reply->end()));
+            std::cout << "LOGIN_PROBE ok=" << (res.success ? 1 : 0)
+                      << " player=" << res.playerId
+                      << " session=" << res.sessionId
+                      << " error=" << res.errorMessage << std::endl;
+            return res.success ? 0 : 2;
+        }
         roundtrip_and_base_restart();
         runtime_field_split();
         settled_ring_legacy_archive_default();

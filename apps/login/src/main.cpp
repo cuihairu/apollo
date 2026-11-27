@@ -82,6 +82,10 @@ LoginConfig loadConfig(int argc, char* argv[]) {
             config.worldStoreM1Port = static_cast<uint16_t>(std::atoi(argv[++i]));
         } else if (arg == "--directory-client-port" && i + 1 < argc) {
             config.m1OnlineDirectoryPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        } else if (arg == "--enable-test-users") {
+            // 演练口径：显式装载内建测试用户（player1/pass1、player2/pass2）；
+            // 生产默认关（LoginConfig.enableTestUsers 缺省 false）。
+            config.enableTestUsers = true;
         } else if (arg == "--mirror-host" && i + 1 < argc) {
             config.mirrorHost = argv[++i];
         } else if (arg == "--mirror-port" && i + 1 < argc) {
@@ -121,6 +125,7 @@ LoginConfig loadConfig(int argc, char* argv[]) {
                       << "  --service-register-port <port>  Service register face port; opt-in; 0 = kernel assigned (omit = off)\n"
                       << "  --world-store-m1-port <port>  World player data endpoint (default: 9104)\n"
                       << "  --directory-client-port <port>   OnlineDirectory M1 control dial port (0 = off, default: 0)\n"
+                      << "  --enable-test-users              Load built-in test users (drill/dev only; off by default)\n"
                       << "  --mirror-host <ipv4>       Directory mirror target host (default: 127.0.0.1)\n"
                       << "  --mirror-port <port>       Directory mirror target port; 0 disables (default: 0)\n"
                       << "  --mirror-snapshot-ms <ms>  Full snapshot publish period (default: 10000)\n"

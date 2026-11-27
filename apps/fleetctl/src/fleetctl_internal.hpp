@@ -58,6 +58,10 @@ struct Options {
     std::uint64_t instance_id = 0;
     std::uint64_t space_id = 0;
     std::uint64_t route_version = 1;
+    // D12 逐 Base 结算选路：归属 Base 的 M1 端点随落点成行（915/918 承载域，
+    // 目录只携带不裁决；cell 结算面据此逐玩家拨 958）。空/0 = 未声明。
+    std::string base_host;
+    std::uint16_t base_port = 0;
     // migrate 面（P0-2 路 2 编排命令；源/目标 zone M1 地址 + 落点 zone）
     std::string source_host = "127.0.0.1";
     std::uint16_t source_port = 0;
