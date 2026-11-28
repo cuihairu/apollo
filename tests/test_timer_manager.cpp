@@ -77,19 +77,33 @@ bool test_periodic_callback_self_kill() {
     return ctx.kill_result.load() && mgr.getTimerCount() == 0;
 }
 
-// 并发 setTimer/killTimer 与 update()：修复前 wheel/timers_ 无锁竞态
+// 并发 setTimer/killTimer 与 update()：修复前 wheel/timers_ 无锁竞态。
+// 活跃集须定界（环形 kill）：1ms interval 全落 wheel0 slot0 同一桶，无界
+// 增长会使 update() 单次调用陷入整桶排空风暴（CI ubuntu Debug 600s 超时
+// 根因 2026-11-28——慢 runner 上 mutator 造速 > 主线程排空速率，update()
+// 回不到墙钟检查点，join 永不被调）；定界后竞态覆盖不变。
 bool test_concurrent_set_kill_during_update() {
     TimerManager mgr;
     std::atomic<bool> stop{false};
     std::thread mutator([&]() {
         std::uint64_t n = 0;
+        apollo::core::timer::TimerId ring[64] = {};
         while (!stop.load()) {
             auto id = mgr.setTimer(1, [](apollo::core::timer::TimerId, void*) {},
                                    0xFFFFFFFF, nullptr);
-            if (id != apollo::core::timer::INVALID_TIMER_ID && n % 3 == 0) {
-                mgr.killTimer(id);
+            if (id != apollo::core::timer::INVALID_TIMER_ID) {
+                const auto slot = n % 64;
+                if (ring[slot] != apollo::core::timer::INVALID_TIMER_ID) {
+                    mgr.killTimer(ring[slot]);  // 回收上一轮同槽（活跃集 ≈64）
+                }
+                ring[slot] = id;
             }
             ++n;
+        }
+        for (const auto id : ring) {
+            if (id != apollo::core::timer::INVALID_TIMER_ID) {
+                mgr.killTimer(id);
+            }
         }
     });
     const auto deadline = std::chrono::steady_clock::now() +
