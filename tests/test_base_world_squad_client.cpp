@@ -22,6 +22,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -567,6 +568,9 @@ int main() {
 }
 
 #else // _WIN32
+// 匿名空间开在守卫外（41 行）、闭在 POSIX 分支内——MSVC 裁掉 POSIX 区后
+// namespace 未闭（CI C1075），Windows 侧按态补闭。
+} // namespace
 
 int main() {
     std::cout << "test_base_world_squad_client: skipped (link TCP 底座 POSIX only)"
