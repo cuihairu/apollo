@@ -334,6 +334,49 @@ void WorldApp::onCellRetire(const std::string& peer, const CellRetireRequest& re
                                  "unknown op");
 }
 
+// 小队容量视图（D11 issuer=Base 批②过桥，成员类定义）：目标 instance 已知
+// = 分配表在册；排空 = 归属 cell 自报 drain_state 或 World 缩容意图 retire；
+// cell 余量原值 = 配置面 squadSlotsPerCell（真自报容量随 S03 落地批换装）。
+// 调用上下文 = 管理泵（注册表/分配池单写者），直查表无锁。
+bool WorldApp::SquadCapacityBridgeView::instance_known(std::uint64_t instance_id) const {
+    return owner != nullptr && owner->find_space_assignment(instance_id) != nullptr;
+}
+
+bool WorldApp::SquadCapacityBridgeView::instance_draining(std::uint64_t instance_id) const {
+    if (owner == nullptr) {
+        return true;  // 未装配 = 不放行（防御，正常路径 owner 恒在）
+    }
+    const auto* assignment = owner->find_space_assignment(instance_id);
+    if (assignment == nullptr) {
+        return true;
+    }
+    const auto* reg = owner->find_cell_registration(assignment->cell_id);
+    return reg == nullptr || reg->drain_state != 0 || reg->retire;
+}
+
+std::int32_t WorldApp::SquadCapacityBridgeView::free_slots(std::uint64_t cell_id) const {
+    (void)cell_id;  // 过桥口径：全 cell 同配置值；S03 自报落地后按 cell 分化
+    return owner != nullptr ? owner->config_.squadSlotsPerCell : 0;
+}
+
+void WorldApp::onSquadCapacityRequest(const std::string& peer,
+                                      const SquadCapacityRequest& request) {
+    // 容量预留受理（974 → 975，D11 issuer=Base 批②；M1 泵上下文 = 账本
+    // 单写者）：账本裁决（实例未知/排空/无容量显式码）后按名回 975——
+    // granted 带预留号 + 过期窗；到期未消费整批回收见管理泵 sweep。
+    if (m1Link_ == nullptr) {
+        return;
+    }
+    const auto now_ms = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+    const auto reply = squadLedger_.request(request, now_ms);
+    m1Link_->sendSquadCapacityGrant(peer, reply.request_id, reply.granted,
+                                    reply.reservation_id, reply.expires_at,
+                                    reply.code);
+}
+
 void WorldApp::onSpaceCreate(const std::string& peer, const SpaceCreateRequest& request) {
     // 动态创建分配受理（970 → 971，L134 动态创建分配路径批；M1 泵上下文 =
     // 注册表/分配池单写者上下文）：与 onCellRetire 同口——请求合法性先看

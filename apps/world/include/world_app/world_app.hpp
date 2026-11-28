@@ -200,6 +200,8 @@ private:
     // 拒绝（code 1/2）不铸造不分配。回执 971 同步回带铸造 space_id（调用方据
     // 此发起后续 963 缩容释放）。
     void onSpaceCreate(const std::string& peer, const SpaceCreateRequest& request);
+    // 974 受理点（D11 批②）：预留账本记账 + 975 回执（管理泵上下文同步）。
+    void onSquadCapacityRequest(const std::string& peer, const SquadCapacityRequest& request);
     // cell 执行端回执受理（切片2 World→cell 命令转发）：cell 宿主经注册
     // 连接反向发送 945/953/957，World 在此按 eval_id/request_id 关联原
     // fleetctl/admin peer 后经 m1Link_ 回传对应回执帧。
@@ -273,6 +275,23 @@ private:
                          const std::string& result, const std::string& error);
 
     WorldAppConfig config_;
+
+    // 小队容量视图（D11 issuer=Base 批②过桥，04 §4.3 S03 槽位语义）：目标
+    // instance 已知 = 分配表在册；排空 = 归属 cell 自报 drain_state 或
+    // World 缩容意图 retire；cell 余量原值 = 配置面 squadSlotsPerCell（真
+    // 自报容量随 S03 落地批换装）。账本 hold 自行抵扣（有效余量 = 原值 −
+    // hold）。单写者口径：974 受理点/回收扫均在管理泵上下文。
+    class SquadCapacityBridgeView final : public SquadCapacityView {
+    public:
+        WorldApp* owner = nullptr;
+        bool instance_known(std::uint64_t instance_id) const override;
+        bool instance_draining(std::uint64_t instance_id) const override;
+        std::int32_t free_slots(std::uint64_t cell_id) const override;
+    };
+    SquadCapacityBridgeView squadCapacityView_;
+    // 类内初始化：config_ 声明序在前已初始化（NSDMI 可引用 this 成员）。
+    SquadReservationLedger squadLedger_{squadCapacityView_, config_.squadGrantWindowMs};
+
     std::unique_ptr<M1LinkServer> m1Link_;
     // 管理侧拨号面拍首泵（L123）：set_manager_pre_tick 注入，管理泵每拍调用
     std::function<void(std::uint64_t)> managerPreTick_;

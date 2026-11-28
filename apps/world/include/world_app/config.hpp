@@ -24,6 +24,13 @@ struct WorldAppConfig {
     std::string role = "manager";
     // 小队副本容量（P2）：本 World 可同时承载的独立 Instance 数上限。
     std::size_t maxInstances = 16;
+    // 小队容量预留过桥值（D11 issuer=Base 批②；04 §4.3 S03 槽位语义）：
+    // 每 cell 的小队槽位余量原值（974 申请记账面），账本 hold 自行抵扣。
+    // 过桥口径——真自报容量随 S03 落地批（967 族自报值）换装。
+    std::int32_t squadSlotsPerCell = 64;
+    // 预留过期窗（975 expires_at = now + 窗；到期未消费整批回收；与准入
+    // 凭证 TTL 5min 同量级）。
+    std::uint64_t squadGrantWindowMs = 300000;
     // 监听配置
     std::string host = "0.0.0.0";
 

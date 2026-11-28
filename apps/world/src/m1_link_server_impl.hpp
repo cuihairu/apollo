@@ -75,7 +75,9 @@ public:
                      std::function<void(const std::string&, const CellDrainReply&)>
                          on_cell_drain_reply,
                      std::function<void(const std::string&, const CellIntentAck&)>
-                         on_cell_intent_ack);
+                         on_cell_intent_ack,
+                     std::function<void(const std::string&, const SquadCapacityRequest&)>
+                         on_squad_capacity_request);
 
     bool start() override;
     void stop() override;
@@ -110,6 +112,9 @@ public:
     void sendSpaceCreateReply(const std::string& peer, std::uint64_t request_id,
                               std::uint64_t space_id, std::uint64_t cell_id,
                               std::int32_t code) override;
+    void sendSquadCapacityGrant(const std::string& peer, std::uint64_t request_id,
+                                bool granted, const std::string& reservation_id,
+                                std::uint64_t expires_at, std::int32_t code) override;
     void sendCellSpaceAssign(const std::string& peer, std::uint64_t assignment_version,
                              std::uint64_t management_epoch, std::uint64_t space_id,
                              std::uint64_t assigned_cell_id, bool ready) override;
@@ -148,6 +153,9 @@ private:
                                               const std::uint8_t* data, std::size_t size);
     void handle_space_create_frame(const std::string& peer, const std::uint8_t* data,
                                    std::size_t size);
+    void handle_squad_capacity_request_frame(const std::string& peer,
+                                             const std::uint8_t* data,
+                                             std::size_t size);
     void handle_cell_eval_result_frame(const std::string& peer, const std::uint8_t* data,
                                        std::size_t size);
     void handle_cell_rollout_reply_frame(const std::string& peer, const std::uint8_t* data,
@@ -181,6 +189,8 @@ private:
     std::function<void(const std::string&, const CellRolloutReply&)> on_cell_rollout_reply_;
     std::function<void(const std::string&, const CellDrainReply&)> on_cell_drain_reply_;
     std::function<void(const std::string&, const CellIntentAck&)> on_cell_intent_ack_;
+    std::function<void(const std::string&, const SquadCapacityRequest&)>
+        on_squad_capacity_request_;
     // 对端断连转报（L101 断连存疑切片）：peer 自报名 → WorldApp 存疑标记
     std::function<void(const std::string&)> on_peer_down_fn_;
     std::unique_ptr<link::RouteTable> route_table_;

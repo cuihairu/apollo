@@ -37,6 +37,7 @@ set(WORLD_APP_SOURCES
     src/world_space_assign.cpp
     src/world_journal.cpp
     src/world_m1_ops.cpp
+    src/squad_reservation_ledger.cpp
     src/m1_projection_client.cpp
 )
 

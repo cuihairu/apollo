@@ -14,6 +14,7 @@
 // 进队列，无需延后。
 
 #include "world_app/acceptance_queue.hpp"
+#include "world_app/squad_reservation_ledger.hpp"
 #include "apollo/net/link/link_manager.hpp"
 
 #include <cstdint>
@@ -307,6 +308,23 @@ public:
         (void)ready;
     }
 
+    // 小队容量回执（975 squad_capacity_grant，D11 issuer=Base 批②）：peer =
+    // Base 拨入自报名；request_id 关联 974；granted = code == 0（0=已预留
+    // 1=无容量 2=实例未知 3=排空中）；reservation_id/expires_at 仅 granted
+    // 有义。kReliable 同 945。
+    virtual void sendSquadCapacityGrant(const std::string& peer,
+                                        std::uint64_t request_id, bool granted,
+                                        const std::string& reservation_id,
+                                        std::uint64_t expires_at,
+                                        std::int32_t code) {
+        (void)peer;
+        (void)request_id;
+        (void)granted;
+        (void)reservation_id;
+        (void)expires_at;
+        (void)code;
+    }
+
     // World→cell 管理命令请求转发（切片2 L104）：管理端收到的 944/952/956
     // 不再经内嵌内核直调，改为面向执行端转发——经 cell 拨入的 M1 连接
     // 反向发送对应请求帧（peer = cell 自报名；World 侧 manager_->link(peer)
@@ -381,9 +399,11 @@ public:
 //（pump 线程 = 宿主泵线程内同步调用）。944 debug_eval_request / 952
 // module_rollout_request / 956 world_drain_request / 960 cell_register_request
 // / 963 cell_retire_request / 967 cell_space_report / 969
-// cell_space_reclaim_done / 970 space_create_request 裸帧分别经 on_debug_eval /
+// cell_space_reclaim_done / 970 space_create_request / 974
+// squad_capacity_request 裸帧分别经 on_debug_eval /
 // on_module_rollout / on_world_drain / on_cell_register / on_cell_retire /
-// on_cell_space_report / on_cell_space_reclaim_done / on_space_create 投递
+// on_cell_space_report / on_cell_space_reclaim_done / on_space_create /
+// on_squad_capacity_request 投递
 // （入参 = 请求 + 发端 peer 自报名，回执按名回链路）。
 std::unique_ptr<M1LinkServer> makeM1LinkServer(
     M1LinkConfig config, std::function<void(IntentEnvelope)> on_intent,
@@ -410,7 +430,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellDrainReply&)>
         on_cell_drain_reply = {},
     std::function<void(const std::string&, const CellIntentAck&)>
-        on_cell_intent_ack = {});
+        on_cell_intent_ack = {},
+    std::function<void(const std::string&, const SquadCapacityRequest&)>
+        on_squad_capacity_request = {});
 
 // 932 internal_envelope 原始 payload → IntentEnvelope（legacy 帧）解包。
 // 供 cell 执行端（CellRegisterClient 意图监听）复用 World 端的解包逻辑，

@@ -99,6 +99,7 @@ private:
 
 WorldApp::WorldApp(const WorldAppConfig& config)
     : config_(config) {
+    squadCapacityView_.owner = this;
     if (config_.bootAtMs == 0) {
         config_.bootAtMs = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -189,6 +190,9 @@ void WorldApp::start() {
         },
         [this](const std::string& peer, const CellIntentAck& ack) {
             onCellIntentAck(peer, ack);
+        },
+        [this](const std::string& peer, const SquadCapacityRequest& request) {
+            onSquadCapacityRequest(peer, request);
         });
     // 断连存疑标记接线（L101 断连存疑切片）：on_peer_down 在 M1 泵上下文
     //（管理泵线程）触发——注册表单写者上下文，直接改表。
@@ -213,6 +217,7 @@ void WorldApp::start() {
             if (m1Link_) m1Link_->pump(now_ms);
             if (managerPreTick_) managerPreTick_(now_ms);
             driveCellRegistry();
+            squadLedger_.sweep_expired(now_ms);  // D11 批②：到期整批回收
             std::this_thread::sleep_for(tick);
         }
     });

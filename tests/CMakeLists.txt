@@ -44,6 +44,7 @@ set(APOLLO_WORLD_APP_SOURCES
     ../apps/world/src/world_space_assign.cpp
     ../apps/world/src/world_journal.cpp
     ../apps/world/src/world_m1_ops.cpp
+    ../apps/world/src/squad_reservation_ledger.cpp
 )
 
 # player_store 拆分实现单元（LAY-006）：生命周期/保存引擎在 player_store.cpp，
@@ -2683,6 +2684,19 @@ if(MSVC)
     target_compile_options(base_world_squad_client_tests PRIVATE /utf-8)
 endif()
 add_test(NAME BaseWorldSquadClientTests COMMAND base_world_squad_client_tests)
+
+# 小队容量预留账本单测（D11 issuer=Base 批②验收：四路径 + 实例未知 + hold 抵扣）
+add_executable(world_squad_reservation_ledger_tests
+    test_world_squad_reservation_ledger.cpp
+    ../apps/world/src/squad_reservation_ledger.cpp
+)
+target_include_directories(world_squad_reservation_ledger_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/world/include
+)
+if(MSVC)
+    target_compile_options(world_squad_reservation_ledger_tests PRIVATE /utf-8)
+endif()
+add_test(NAME SquadReservationLedgerTests COMMAND world_squad_reservation_ledger_tests)
 
 # World 执行位置投影发布面 e2e（L115 位置投影首切片，契约 968）：registry
 # 水位裁决（受理/幂等/拒乱序/墓碑抹除/非法拒/复合键独立）+ 真链路投影生命周期

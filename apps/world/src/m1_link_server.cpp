@@ -63,7 +63,9 @@ M1LinkServerImpl::M1LinkServerImpl(M1LinkConfig config, std::function<void(Inten
                  std::function<void(const std::string&, const CellDrainReply&)>
                      on_cell_drain_reply,
                  std::function<void(const std::string&, const CellIntentAck&)>
-                     on_cell_intent_ack)
+                     on_cell_intent_ack,
+                 std::function<void(const std::string&, const SquadCapacityRequest&)>
+                     on_squad_capacity_request)
     : config_(std::move(config))
     , on_intent_(std::move(on_intent))
     , on_intent_raw_(std::move(on_intent_raw))
@@ -78,7 +80,8 @@ M1LinkServerImpl::M1LinkServerImpl(M1LinkConfig config, std::function<void(Inten
     , on_cell_eval_result_(std::move(on_cell_eval_result))
     , on_cell_rollout_reply_(std::move(on_cell_rollout_reply))
     , on_cell_drain_reply_(std::move(on_cell_drain_reply))
-    , on_cell_intent_ack_(std::move(on_cell_intent_ack)) {}
+    , on_cell_intent_ack_(std::move(on_cell_intent_ack))
+    , on_squad_capacity_request_(std::move(on_squad_capacity_request)) {}
 
 bool M1LinkServerImpl::start() {
     if (started_.load(std::memory_order_acquire)) {
@@ -270,6 +273,14 @@ void M1LinkServerImpl::install_dispatching(link::InterServerLink& link) {
         [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
             handle_space_create_frame(link.peer_name(), data, size);
         });
+    // 974 squad_capacity_request 裸帧受理（D11 issuer=Base 批②）：Base 拨入
+    // 申请容量——受理点同步记账于 gameThread_（预留账本单写者上下文），
+    // 同步回 975（grant/拒绝码显式回传）。
+    dispatcher.set_handler(
+        id_of(MsgId::squad_capacity_request),
+        [&link, this](std::uint16_t, const std::uint8_t* data, std::size_t size) {
+            handle_squad_capacity_request_frame(link.peer_name(), data, size);
+        });
     // 945/953/957 cell 执行端回执（切片2 World→cell 命令转发）：cell 宿主
     // 经注册连接反向发送，World 在此受理并按 eval_id/request_id 关联原
     // fleetctl/admin peer 后回传。发端 peer = cell 自报名。
@@ -327,7 +338,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellDrainReply&)>
         on_cell_drain_reply,
     std::function<void(const std::string&, const CellIntentAck&)>
-        on_cell_intent_ack) {
+        on_cell_intent_ack,
+    std::function<void(const std::string&, const SquadCapacityRequest&)>
+        on_squad_capacity_request) {
     return std::make_unique<M1LinkServerImpl>(std::move(config), std::move(on_intent),
                                               std::move(on_intent_raw),
                                               std::move(on_debug_eval),
@@ -341,7 +354,8 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
                                               std::move(on_cell_eval_result),
                                               std::move(on_cell_rollout_reply),
                                               std::move(on_cell_drain_reply),
-                                              std::move(on_cell_intent_ack));
+                                              std::move(on_cell_intent_ack),
+                                              std::move(on_squad_capacity_request));
 }
 
 #else // _WIN32
@@ -371,7 +385,9 @@ std::unique_ptr<M1LinkServer> makeM1LinkServer(
     std::function<void(const std::string&, const CellDrainReply&)>
         /*on_cell_drain_reply*/,
     std::function<void(const std::string&, const CellIntentAck&)>
-        /*on_cell_intent_ack*/) {
+        /*on_cell_intent_ack*/,
+    std::function<void(const std::string&, const SquadCapacityRequest&)>
+        /*on_squad_capacity_request*/) {
     // link TCP 底座不进 M1 批（POSIX only）——Windows 退 null 桩（缝缺省
     // 实现：start true / 泵空转 / 应答丢弃），WorldApp 装配面无 #if。
     return std::make_unique<M1LinkServer>();

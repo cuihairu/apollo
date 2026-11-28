@@ -177,6 +177,24 @@ void M1LinkServerImpl::handle_space_create_frame(const std::string& peer,
     on_space_create_(peer, req);
 }
 
+void M1LinkServerImpl::handle_squad_capacity_request_frame(
+    const std::string& peer, const std::uint8_t* data, std::size_t size) {
+    std::vector<wire::FieldValue> fields;
+    if (!wire::decode_payload(id_of(MsgId::squad_capacity_request), data, size, fields)
+        || fields.size() != 6 || on_squad_capacity_request_ == nullptr) {
+        ++rejected_;
+        return;
+    }
+    SquadCapacityRequest req;
+    req.request_id = static_cast<std::uint64_t>(fields[0].integer);
+    req.party_id = static_cast<std::uint64_t>(fields[1].integer);
+    req.instance_id = static_cast<std::uint64_t>(fields[2].integer);
+    req.cell_id = static_cast<std::uint64_t>(fields[3].integer);
+    req.roster_hash = fields[4].text;
+    req.slots = static_cast<std::int32_t>(fields[5].integer);
+    on_squad_capacity_request_(peer, req);
+}
+
 void M1LinkServerImpl::handle_cell_eval_result_frame(const std::string& peer, const std::uint8_t* data,
                                    std::size_t size) {
     std::vector<wire::FieldValue> fields;
