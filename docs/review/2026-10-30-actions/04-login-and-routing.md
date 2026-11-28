@@ -135,6 +135,89 @@ L146 最小位置投影（D05）可用后，用**真实 gateway + cell** 验证�
 
 > 跨区成员复用这套规则，等 L168 触发再接；先接一 Base 的真实入场链。
 
+### 4.3 issuer=Base 签发与容量预留切片设计（2026-11-28 开卷，多日批）
+
+> L131 剩余缺口（todo.md:131「仍缺」）的设计面：受理面自签（2026-11-23 批
+> 1c3e9bf0）→ issuer=Base 真实链。开卷条件已变——双 Base 真机编队已落
+> （dev_fleet 941b289b：database-b/base-b + 目录逐玩家归属）、容量槽位语义
+> 已有设计（07 §3.1 S03）、cell 校验面已落地（凭证字段/负例/重臂/回收全
+> 口径）。原「不重试」标记按条件变化解除，实现按下列五批推进。
+
+#### 现状锚点（设计输入）
+
+| 面 | 现状 | 权威方 |
+|---|---|---|
+| 名册（party roster） | `PartyManager` cell 侧内存（构造注入 SquadInstanceService） | cell（社交易变面） |
+| launch 路径 | client → gateway → World M1 → cell（`SQUAD_LAUNCH`） | 不改入口 |
+| 凭证签发 | 受理收口自签 `cell:<worldId>`，进程内自持不走 wire | cell（待移 Base） |
+| 凭证核验 | `enter()` 内部查（`resolveIntentPlayer` 会话→玩家已在认证面绑定） | cell |
+| 资格判定依据 | Base 档案（exp/settledIds/迁移冻结标记），零小队存在 | Base（档案权威，D06） |
+| 容量语义 | S03 槽位（07 §3.1）：967 自报、心跳窗过期、World 准入消费 | World |
+
+#### 职责切分（不反转 launch 入口，受理点改道）
+
+Base 校验**资格**（档案面），不接手**名册权威**——party 仍是 cell 侧内存社
+交面（空队回收、队长移交语义不动），Base 只对送来的名册快照逐成员盖资格章
+并铸 roster_hash。launch 路径保持 client→gateway→World→cell；受理点从
+「自签」改「代申请」：cell 经 World 向 Base 送名册快照 → Base 盖章 → Base
+向 World 申请容量 → World 预留（S03 槽位记账）→ grant → Base 签发 → 凭证
+包经 World 下推目标 cell → enter 时核验消费。装配 flag 门控（未启用=自签
+旧口径，零回归）。
+
+#### 新增 M1 消息（internal-only 域，client hash 不动）
+
+| 消息 | 走向 | 载荷要点 |
+|---|---|---|
+| `squad_validation_request` | cell→World→Base | party_id、名册快照（成员列表）、目标 instance/cell、request_id |
+| `squad_validation_reply` | Base→World→cell | 逐成员资格裁定 + roster_hash 盖戳，或拒绝码 |
+| `squad_capacity_request` | Base→World | 已盖章名册 + 目标 + 申请槽数（=成员数） |
+| `squad_capacity_grant` | World→Base | 预留 id + 过期窗，或拒绝码（无容量/实例未知/排空中） |
+| `squad_credential_bundle` | Base→World→cell | 逐成员凭证（issuer=`base:<id>` + 原 Base 端点绑定） |
+
+新链路：base → World M1（9101）出向一条（cell_register_client 同型拨装）；
+M1 request/reply 双向，同链承载校验来向与签发去向。契约加消息须同步
+test_contract 计数断言 + contract_handlers.lua 占位行（两套闸）。
+
+#### 资格规则（最小口径，不发明门槛）
+
+成员在原 Base 档案存在 + 未冻结（迁移冻结标记）即合格；roster_hash 沿用
+已落地序无关 FNV-1a，盖戳含资格版本（受理快照代次）。不做等级/付费等发明
+性门槛——产品化资格规则触发时另批。
+
+#### 会话可信绑定（原缺口③的收口口径）
+
+凭证按 player_id 绑定即可：enter 只能来自该玩家已认证的 gateway 会话
+（`resolveIntentPlayer(sessionId)` 已在受理面把会话钉到玩家），会话→玩家
+→凭证传递闭包成立，凭证无需携带会话号。重登新会话照常凭在期凭证进入；
+凭证过期/消费后重入须重走签发面。
+
+#### 预留生命周期
+
+申请槽数 = 成员数，对目标 instance 所在 cell 的自报容量记账（S03 槽位）；
+grant 带过期窗——签发时预留已过期则按拒绝处理（不放凭证）；成员 enter 消
+费各自凭证即释放对应槽；到期未消费整批回收。容量拒绝 = 明确码回传（不静
+默降级为无凭证放行）。
+
+#### 分批与验收
+
+| 批 | 内容 | 验收 |
+|---|---|---|
+| ① wire | 970-974 契约五件套 + base→World M1 链路（未启用） | 契约 golden 闸二；echo/编解码测试；全树既有套件零回归 |
+| ② 预留 | World 侧槽位记账 + grant/拒绝/过期回收 | 预留记账单测（无容量/排空/过期/消费释放四路径） |
+| ③ 校验签发 | Base 资格盖章 + 签发 + bundle 下推 | 资格单测（存在/缺席/冻结/序无关 hash 稳定）；签发字段口径 |
+| ④ 受理改道 | flag 门控自签→代申请 + enter 消费接 wire 凭证 | dev_fleet 真链 e2e：签发→下推→enter 消费→leave 重臂；四负例真链化 |
+| ⑤ 双 Base 落点 | 原 Base 端点绑定逐成员落 base/base-b | 真机双 Base：两库玩家各自凭证 issuer/原 Base 绑定正确、串库负例 |
+
+#### 明确不做（边界）
+
+- 名册权威不移 Base（不落库 party；社交易变面保持 cell 内存）；
+- 多 World 容量仲裁不在本卷（单 World 先真链，多 World 随 D17 跨 World
+  唯一决定面）；
+- 跨区成员复用随 L168 触发（§4.2 既有边界不变）；
+- 资格门槛止步「存在+未冻结」，产品化规则另批；
+- 凭证密码学签名不在首卷（签发方身份以 issuer 字段 + 链路可信为界，与
+  S02 启动凭据「开发模式受限传递」同口径；生产签名面留替换接口）。
+
 ## 5. D15 · 显式换场与同 Space 连续交接两条路径
 
 ### 5.1 两条路径的 UX 与状态清单
