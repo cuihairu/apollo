@@ -168,11 +168,11 @@ Base 校验**资格**（档案面），不接手**名册权威**——party 仍�
 
 | 消息 | 走向 | 载荷要点 |
 |---|---|---|
-| `squad_validation_request` | cell→World→Base | party_id、名册快照（成员列表）、目标 instance/cell、request_id |
-| `squad_validation_reply` | Base→World→cell | 逐成员资格裁定 + roster_hash 盖戳，或拒绝码 |
-| `squad_capacity_request` | Base→World | 已盖章名册 + 目标 + 申请槽数（=成员数） |
-| `squad_capacity_grant` | World→Base | 预留 id + 过期窗，或拒绝码（无容量/实例未知/排空中） |
-| `squad_credential_bundle` | Base→World→cell | 逐成员凭证（issuer=`base:<id>` + 原 Base 端点绑定） |
+| `squad_validation_request`（972） | cell→World→Base | party_id、名册快照（成员列表）、目标 instance/cell、request_id |
+| `squad_validation_reply`（973） | Base→World→cell | 逐成员资格裁定 + roster_hash 盖戳，或拒绝码 |
+| `squad_capacity_request`（974） | Base→World | 已盖章名册 + 目标 + 申请槽数（=成员数） |
+| `squad_capacity_grant`（975） | World→Base | 预留 id + 过期窗，或拒绝码（无容量/实例未知/排空中） |
+| `squad_credential_bundle`（976） | Base→World→cell | 逐成员凭证（issuer=`base:<id>` + 原 Base 端点绑定） |
 
 新链路：base → World M1（9101）出向一条（cell_register_client 同型拨装）；
 M1 request/reply 双向，同链承载校验来向与签发去向。契约加消息须同步
@@ -202,7 +202,7 @@ grant 带过期窗——签发时预留已过期则按拒绝处理（不放凭�
 
 | 批 | 内容 | 验收 |
 |---|---|---|
-| ① wire | 970-974 契约五件套 + base→World M1 链路（未启用） | 契约 golden 闸二；echo/编解码测试；全树既有套件零回归 |
+| ① wire | 972-976 契约五件套 + base→World M1 链路（未启用；970/971 已被 L134 动态创建批占用） | 契约 golden 闸二；echo/编解码测试；全树既有套件零回归 |
 | ② 预留 | World 侧槽位记账 + grant/拒绝/过期回收 | 预留记账单测（无容量/排空/过期/消费释放四路径） |
 | ③ 校验签发 | Base 资格盖章 + 签发 + bundle 下推 | 资格单测（存在/缺席/冻结/序无关 hash 稳定）；签发字段口径 |
 | ④ 受理改道 | flag 门控自签→代申请 + enter 消费接 wire 凭证 | dev_fleet 真链 e2e：签发→下推→enter 消费→leave 重臂；四负例真链化 |
