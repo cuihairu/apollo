@@ -11,6 +11,8 @@
 #   编队位置在 Database 之后——存储不可达即拒起（由 machined 退避重试）。
 # World：玩法链路 9101（玩家档案链路已迁 BaseServer 9201——L19 资料归属切换；
 #   结算落账 = 返回业务请求拨 BaseServer 9201，P1 基础业务与结算迁入）；
+#   拓扑 epoch 日志 --world-journal（重启重放恢复旧归属 + fresh B 代次，
+#   D23 用例面）；
 #   D12 逐 Base 结算选路：结算目录解析面拨 Login 在线目录 9105（917/918），
 #   按玩家解析归属 Base 端点（登录实拨端点随落点成行）逐玩家拨 958；未配 =
 #   单 Base 9201 兜底。
@@ -31,8 +33,12 @@
 #   准入缺省 9113 不用 9103——9103 与本机常驻 docker 发布端口冲突（bind 即
 #   败，准入面告警 "route table unavailable" 停摆，实为端口占用）。
 #   9113 带 --enable-test-users（内建 player1/pass1，演练/开发专用，生产默认
-#   关）——编队上的激活/迁移演练（fleetctl + probe）由此面登录。
-# Gateway：客户端 TCP 9002。logger 9102；admin 指标链路 9106、HTTP 9107。
+#   关）——编队上的激活/迁移演练（fleetctl + probe）由此面登录。目录代次
+#   水位落 $FLEET_DIR/data/login/epochs.json（D05 单调恢复线；玩家→Base 归属
+#   投影仍是内存态，重启后凭重登激活重盖）。
+# Gateway：客户端 TCP 9002、排空控制面 9116（--control-m1-port；缺省
+#   9106 与 admin 指标面撞口——bind 失败降级 "drain ops unreachable"）。
+#   logger 9102；admin 指标链路 9106、HTTP 9107。
 # Interfaces：平台回调/演示入口，明文 HTTP 127.0.0.1:8080（S08 已代决，
 #   docs/review/2026-10-30-decisions.md）。默认随编队加入；APOLLO_FLEET_INTERFACES=0
 #   显式关闭，APOLLO_FLEET_INTERFACES_HOST/PORT 改监听。不传 --callback-secret =
@@ -146,10 +152,10 @@ database  | 0 | $BUILD_DIR/apps/database/database --port 9200 --data-dir $FLEET_
 database-b| 0 | $BUILD_DIR/apps/database/database --port 9202 --data-dir $FLEET_DIR/data/database-b/players --journal $FLEET_DIR/data/database-b/persist.log
 base | 0 | $BUILD_DIR/apps/base/base --port 9201 --database-port 9200
 base-b    | 0 | $BUILD_DIR/apps/base/base --port 9203 --database-port 9202
-world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-directory-port 9105 --settlement-credential-dir $FLEET_DIR/data/world/settlements --settlement-record-dir $FLEET_DIR/data/world/settlement_records --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
+world     | 11 | $BUILD_DIR/apps/world/world --world-id 1 --m1-port 9101 --base-business-port 9201 --settlement-directory-port 9105 --settlement-credential-dir $FLEET_DIR/data/world/settlements --settlement-record-dir $FLEET_DIR/data/world/settlement_records --world-journal $FLEET_DIR/data/world/journal.log --machined-port 9600 --component-id 11 --assign-spaces $(world_assign_spaces) --script-handlers $REPO_ROOT/apps/world/scripts/contract_handlers.lua --script-contract $REPO_ROOT/sdks/cpp/generated/contract.lua
 $(cell_entries)
-login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9113 --world-store-m1-port 9201 --directory-port 9105 --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13 --enable-test-users
-gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port ${APOLLO_FLEET_GATEWAY_LOGIN_M1_PORT:-9113} --directory-m1-port 9105 --machined-port 9600 --component-id 12 --dashboard-port ${APOLLO_FLEET_GATEWAY_DASHBOARD_PORT:-0}
+login     | 13 | $BUILD_DIR/apps/login/login --m1-port 9113 --world-store-m1-port 9201 --directory-port 9105 --directory-epochs $FLEET_DIR/data/login/epochs.json --gateway tcp://127.0.0.1:9002 --machined-port 9600 --component-id 13 --enable-test-users
+gateway   | 12 | $BUILD_DIR/apps/gateway/gateway --port 9002 --world tcp://127.0.0.1:9101 --world-m1-port 9101 --login-m1-port ${APOLLO_FLEET_GATEWAY_LOGIN_M1_PORT:-9113} --directory-m1-port 9105 --control-m1-port ${APOLLO_FLEET_GATEWAY_CONTROL_M1_PORT:-9116} --machined-port 9600 --component-id 12 --dashboard-port ${APOLLO_FLEET_GATEWAY_DASHBOARD_PORT:-0}
 $(interfaces_entry)
 EOF
 }
@@ -191,6 +197,9 @@ cmd_up() {
     check_interfaces_port_free || exit 1
 
     mkdir -p "$FLEET_DIR"
+    # 落盘父目录先建：world journal 卷锁与 login epochs 水位均拒启/降级于
+    # 父目录缺失（world 拒启后 machined 退避 5 次放弃 = 编队成员永久缺席）。
+    mkdir -p "$FLEET_DIR/data/world" "$FLEET_DIR/data/login"
     : > "$LOGFILE"
     cmd_roster > "$ROSTER"
 

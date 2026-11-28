@@ -3205,6 +3205,27 @@ if(TARGET apollo_database_rpc AND NOT WIN32)
     add_test(NAME BaseDatabaseTests COMMAND base_database_tests)
     set_tests_properties(BaseDatabaseTests PROPERTIES TIMEOUT 30)
 endif()
+# D31 最终拓扑演练 ops 探针（954/955 gateway 排空 + 963/966 world 缩容的
+# 裸帧控制面客户端——客户端投影同 GatewayDrainTests OpsEnd /
+# LoginChainE2eTests WorldControlClient，独立成可执行供 python 演练外部驱动
+# 真进程控制面）。Windows 下 link TCP 底座不进 M1 批，探针不建。
+if(TARGET apollo_database_rpc AND NOT WIN32)
+    add_executable(ops_probe ops_probe.cpp)
+    target_compile_definitions(ops_probe PRIVATE
+        APOLLO_OPS_PROBE_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json")
+    target_link_libraries(ops_probe PRIVATE
+        apollo
+        apollo::core
+        apollo::runtime
+        apollo::net_tcp
+        apollo::net_protocol
+        apollo::net_link
+        apollo::net_contract_wire
+        apollo_net_linktrace
+        apollo_net_linkrpc
+        apollo_protocol
+    )
+endif()
 if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
@@ -3251,6 +3272,25 @@ if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
             ${CMAKE_BINARY_DIR})
         set_tests_properties(DevFleetTwoBaseSmoke PROPERTIES
             TIMEOUT 240 RUN_SERIAL TRUE)
+        # D31 最终拓扑同卷重接演练（L177；docs/06 §10）：同一 machined 编队
+        # （双 database/base + world + 双 cell + gateway + 可恢复目录 epochs +
+        # world journal）上把已交付能力各面真链重接一遍——准入激活/958 结算、
+        # 双库终态、fleetctl migrate 真编排、954/955 gateway 排空真拨、963/966
+        # 缩容真拨 + cell 崩溃 machined 重启再注册、world 崩溃 journal 重放 +
+        # cells 复活、base-b 崩溃无锚点拒、down/up 后目录 D05 水位保留
+        # （d31_final_topology_drill.py）。编队占机器级端口，RUN_SERIAL。
+        if(TARGET ops_probe)
+            add_dependencies(ops_probe world gateway login fleetctl)
+            add_test(NAME D31FinalTopologyDrill COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/d31_final_topology_drill.py
+                ${CMAKE_SOURCE_DIR}/scripts/dev_fleet.sh
+                $<TARGET_FILE:base_database_tests>
+                $<TARGET_FILE:ops_probe>
+                $<TARGET_FILE:fleetctl>
+                ${CMAKE_BINARY_DIR})
+            set_tests_properties(D31FinalTopologyDrill PROPERTIES
+                TIMEOUT 400 RUN_SERIAL TRUE)
+        endif()
         # D19 清单第 5 行真机样本：不支持 route_version 隔离（kRouteVersionMismatch
         # 断连现状）+ APOLLO_ROUTE_COMPAT 兼容窗口受理与窗外仍拒
         # （net_route_version_compat_smoke.py）。
