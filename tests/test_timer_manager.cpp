@@ -103,6 +103,30 @@ bool test_concurrent_set_kill_during_update() {
     return true;  // 不崩即过（竞态回归信号）
 }
 
+// 高 uptime 回归（CI TimerManagerTests 挂死根因 2026-11-28）：tickCount_ 曾为
+// uint32，首拍 static_cast<uint32_t>(nowTicks) 截断，uptime ≥ 2^32 ms（49.71
+// 天）时 processTick 的 currentTime_ = tickCount_ 塌缩进 uint32 循环域，
+// update() 的 while (currentTime_ < nowTicks) 永不终止。tickCount_ 升 uint64
+// 后首拍不再截断；本用例以时钟缝模拟 60 天 uptime，1ms 单次定时器须正常触发。
+bool test_high_uptime_first_update_no_hang() {
+    struct OffsetGuard {
+        ~OffsetGuard() { TimerManager::set_clock_offset_for_test(0); }
+    } guard;
+    TimerManager::set_clock_offset_for_test(60LL * 24 * 3600 * 1000);  // 60 天
+    TimerManager mgr;
+    std::atomic<int> fired{0};
+    const auto id = mgr.setTimer(1, [&](apollo::core::timer::TimerId, void*) {
+        fired++;
+    }, 0, nullptr);
+    if (id == apollo::core::timer::INVALID_TIMER_ID) {
+        return false;
+    }
+    if (!pump(mgr, [&] { return fired.load() > 0; }, 3000)) {
+        return false;
+    }
+    return fired.load() == 1 && mgr.getTimerCount() == 0;
+}
+
 } // namespace
 
 int main() {
@@ -114,6 +138,7 @@ int main() {
         {"one_shot_fires_and_removed", test_one_shot_fires_and_removed},
         {"periodic_callback_self_kill", test_periodic_callback_self_kill},
         {"concurrent_set_kill_during_update", test_concurrent_set_kill_during_update},
+        {"high_uptime_first_update_no_hang", test_high_uptime_first_update_no_hang},
     };
 
     for (const auto& t : tests) {

@@ -21,12 +21,18 @@ namespace timer {
 namespace {
 
 /**
+ * @brief 测试时钟偏移（set_clock_offset_for_test 写入，模拟高 uptime 主机）
+ */
+std::atomic<int64_t> g_clockOffsetMs{0};
+
+/**
  * @brief 获取单调时钟时间（毫秒）
  */
 uint64_t getSteadyTimeMs() {
     auto now = std::chrono::steady_clock::now();
     auto duration = now.time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() +
+           static_cast<uint64_t>(g_clockOffsetMs.load(std::memory_order_relaxed));
 }
 
 /**
@@ -156,7 +162,7 @@ bool TimerManager::update(int maxProcess) {
     if (!started_) {
         started_ = true;
         currentTime_ = nowTicks;
-        tickCount_ = static_cast<uint32_t>(nowTicks);
+        tickCount_ = nowTicks;  // 与 currentTime_ 同域（uint64），禁截断
         return false;
     }
 
@@ -180,6 +186,10 @@ bool TimerManager::update(int maxProcess) {
 
 uint64_t TimerManager::getCurrentTimeMs() {
     return getSteadyTimeMs();
+}
+
+void TimerManager::set_clock_offset_for_test(int64_t offset_ms) {
+    g_clockOffsetMs.store(offset_ms, std::memory_order_relaxed);
 }
 
 TimerId TimerManager::generateTimerId() {

@@ -144,6 +144,13 @@ public:
      */
     std::string dumpInfo() const;
 
+    /**
+     * @brief 测试专用：偏移内部单调时钟（模拟高 uptime 主机）；传 0 清除
+     *
+     * 仅测试二进制使用；offset 为相对真实时钟的毫秒偏移。
+     */
+    static void set_clock_offset_for_test(int64_t offset_ms);
+
 private:
     // 时间轮参数
     static constexpr uint32_t WHEEL_SIZE = 256;         // 每层槽数
@@ -161,7 +168,12 @@ private:
 
     uint32_t resolutionMs_;          ///< 定时器精度
     uint64_t currentTime_;           ///< 当前时间（相对于启动时间）
-    uint32_t tickCount_;             ///< tick计数（用于时间轮旋转）
+    // 必须与 currentTime_ 同为 uint64：processTick 以 currentTime_ = tickCount_
+    // 收口，若此字段为 uint32，首拍截断（uptime ≥ 2^32 ms ≈ 49.71 天）后
+    // currentTime_ 塌缩进 uint32 循环域，update() 的 while (currentTime_ <
+    // nowTicks) 永不终止（CI ubuntu 长不重启 runner 上 TimerManagerTests 挂死
+    // 根因，2026-11-28）。
+    uint64_t tickCount_;             ///< tick计数（用于时间轮旋转）
     bool started_ = false;           ///< 首次 update() 跳过 epoch 积压（构造时尚无定时器，回放 uptime 积压无意义且量级 O(uptime_ms)）
     TimerMap timers_;                ///< 活跃定时器
     std::vector<Wheel> wheels_;      ///< 时间轮数组
