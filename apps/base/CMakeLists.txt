@@ -1,6 +1,7 @@
 add_executable(base
     src/main.cpp
     src/world_squad_client.cpp
+    src/squad_validation_service.cpp
     ../login/src/m1_service_register_client.cpp
 )
 target_include_directories(base PRIVATE

@@ -16,6 +16,8 @@
 //
 // 线程契约：与宿主服务一致（受理/准入同宿主玩法线程），无自持锁。
 
+#include "squad_instance/roster_hash.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -48,9 +50,8 @@ struct AdmissionCredential {
     bool consumed = false;               // 已核销（单次消费）
 };
 
-// 名册摘要：受理快照成员的可复算指纹（签发侧与准入侧同算法）。成员作集合
-// 处理（排序后 FNV-1a 64），与入队次序无关——名册变更即摘要变化。
-[[nodiscard]] std::string roster_hash_of(const std::vector<std::uint64_t>& members);
+// 名册摘要 roster_hash_of(...) 迁至 roster_hash.hpp（inline，签发侧与
+// 准入侧同算法同口径；本头随 include 继续暴露）。
 
 // 单进程内凭证表（受理签发 + 准入核销）。宿主（SquadInstanceService）
 // 持有并驱动；签发随 launch 受理收口，核销随 enter 准入，回收随副本终态。

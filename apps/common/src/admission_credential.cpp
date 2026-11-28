@@ -1,48 +1,8 @@
 #include "squad_instance/admission_credential.hpp"
 
-#include <algorithm>
-#include <array>
 #include <chrono>
 
 namespace squad_instance {
-
-namespace {
-
-constexpr std::uint64_t kFnvOffset = 1469598103934665603ULL;
-constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
-
-const std::array<char, 16>& hex_digits() {
-    static const std::array<char, 16> digits = {
-        '0', '1', '2', '3', '4', '5', '6', '7',
-        '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
-    };
-    return digits;
-}
-
-std::string to_hex(std::uint64_t value) {
-    const auto& digits = hex_digits();
-    std::string out(16, '\0');
-    for (std::size_t i = 16; i-- > 0;) {
-        out[i] = digits[value & 0xfULL];
-        value >>= 4;
-    }
-    return out;
-}
-
-}  // namespace
-
-std::string roster_hash_of(const std::vector<std::uint64_t>& members) {
-    std::vector<std::uint64_t> sorted(members);
-    std::sort(sorted.begin(), sorted.end());
-    std::uint64_t hash = kFnvOffset;
-    for (const auto member : sorted) {
-        for (int shift = 0; shift < 8; ++shift) {
-            hash ^= static_cast<std::uint8_t>((member >> (shift * 8)) & 0xffULL);
-            hash *= kFnvPrime;
-        }
-    }
-    return to_hex(hash);
-}
 
 AdmissionCredentialFace::AdmissionCredentialFace() {
     // 默认取挂钟毫秒（单调钟）；测试注入固定钟控期。

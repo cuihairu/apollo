@@ -2698,6 +2698,23 @@ if(MSVC)
 endif()
 add_test(NAME SquadReservationLedgerTests COMMAND world_squad_reservation_ledger_tests)
 
+# Base 侧小队资格盖章与签发编排单测（D11 issuer=Base 批③验收：资格四例
+# + 序无关 hash 稳定 + 976 签发字段口径 + 过期/拒绝/重放/链断负例）。
+# 假管道录帧直驱编排，纯 std 依赖零链接。
+add_executable(base_squad_validation_service_tests
+    test_base_squad_validation_service.cpp
+    ../apps/base/src/squad_validation_service.cpp
+)
+target_include_directories(base_squad_validation_service_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/base/include
+    ${CMAKE_SOURCE_DIR}/apps/common/include
+)
+if(MSVC)
+    target_compile_options(base_squad_validation_service_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BaseSquadValidationServiceTests
+    COMMAND base_squad_validation_service_tests)
+
 # World 执行位置投影发布面 e2e（L115 位置投影首切片，契约 968）：registry
 # 水位裁决（受理/幂等/拒乱序/墓碑抹除/非法拒/复合键独立）+ 真链路投影生命周期
 # + 断链重启 kUp 全量镜像重放。缝工厂两侧真实现直编
