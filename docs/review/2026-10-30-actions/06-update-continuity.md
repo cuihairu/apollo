@@ -456,3 +456,23 @@
 > §10.1 目标矩阵与现有演练的差距如实记录：单区服/1 World/2 cell/真实
 > gateway/可恢复目录五要素均有独立证据，但尚无一条演练把五要素**同卷重接**
 > （D31 原条目「重接最终拓扑」= 待各能力批收口后的最终验收演练，主行不勾）。
+>
+> **同卷重接已落地（2026-11-28，commit 8771474f）**：`D31FinalTopologyDrill`
+> （tests/d31_final_topology_drill.py + tests/ops_probe.cpp 控制面探针）——
+> 单 machined 编队（§10.1 五要素同卷：双 database/base + 1 World + 2
+> cellServer + 真实 gateway + 可恢复目录 epochs + world journal；dev_fleet.sh
+> roster 接 9116 排空控制/9113 准入/落盘父目录预建）上一条演练串起：
+> ① 契约/真实网络（probe-login 经 9113 准入激活落 base A → 958 结算）；
+> ② 持久化（probe-seed/credit/load 双库终态一致）；③ Base 更新演练
+> （fleetctl migrate 真编排 A→B + 冻结源拒旧 + 跨迁移去重）；④ gateway
+> 排空（954/955 begin/status 真拨）；⑤ 模拟恢复（963 缩容 cell-22 + cell-21
+> SIGKILL machined 退避真重启再注册）；⑥ 管理恢复（world SIGKILL journal
+> 重放 "world journal loaded" + cells 复活重注册 world 受理面
+> "cell re-registered: id=21" + 未知 cell 显式 966 拒非静默）；⑦ 资料恢复
+> （base-b SIGKILL 重启无锚点拒 = 无第二写入者复活，权威库档案存活）；
+> ⑧ 目录 D05（down/up 后 epochs.json 水位保留不回退，归属投影内存态
+> resolve rc=2 按现状断言——重登重盖随 D22 单端点拍板）。进程崩溃全部由
+> machined 1s 退避真重启，非测试内拉起。四树门禁 main/off-tree2/examples/
+> san 各 134/134 绿（2026-11-28）。与 §10.1 目标差距残余：活动级迁移/TCP
+> 无断开/跨服/无缝不在本卷（§10.2 延后能力清单同口径）；重登落点单端点
+> 拍板后归属投影重盖面随拍板批。todo.md L177 主行已勾（7608af6f）。
