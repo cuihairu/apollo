@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "9f2f2841310eca9cfb223fefd92664da9e73653762455ac69a1871263e5198fc",
+  "schema_hash": "cae080551714d204b0c8e002501c65a93efeefd94704902236e5e53810499051",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "55ae68f5c2e36e9c720a5662087d12118fede94a6e6dd0610d51c1e965d65068",
+  "internal_hash": "1e906a5b131a00d597980106b4ef74783eabae34519e1794cda45029ac6604e9",
   "contract_version": 3,
   "routes": [
     {
@@ -868,6 +868,51 @@
       "domain": "internal",
       "binding": "reflect",
       "handler": "space_create_reply"
+    },
+    {
+      "id": 972,
+      "name": "squad_validation_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "squad_validation_request"
+    },
+    {
+      "id": 973,
+      "name": "squad_validation_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "squad_validation_reply"
+    },
+    {
+      "id": 974,
+      "name": "squad_capacity_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "squad_capacity_request"
+    },
+    {
+      "id": 975,
+      "name": "squad_capacity_grant",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "squad_capacity_grant"
+    },
+    {
+      "id": 976,
+      "name": "squad_credential_bundle",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "handler": "squad_credential_bundle"
     }
   ]
 }

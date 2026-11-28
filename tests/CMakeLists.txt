@@ -2658,6 +2658,32 @@ if(MSVC)
 endif()
 add_test(NAME LoginServiceRegisterClientTests COMMAND login_service_register_client_tests)
 
+# Base→World 小队准入链路客户端 e2e（D11 issuer=Base 批①）：972-976 wire
+# 面双向 + 装配守卫 + 死端口不空发 + 残帧计数。缝工厂真实现直编（
+# login_service_register_client_tests 惯例），世界侧裸被动 LinkManager 自扮
+# （World 受理面属批②）；Windows 下 link TCP 底座不进本批，用例本体空转。
+add_executable(base_world_squad_client_tests
+    test_base_world_squad_client.cpp
+    ../apps/base/src/world_squad_client.cpp
+)
+target_include_directories(base_world_squad_client_tests PRIVATE
+    ${CMAKE_SOURCE_DIR}/apps/base/include
+)
+target_compile_definitions(base_world_squad_client_tests PRIVATE
+    APOLLO_TEST_ROUTE_JSON="${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json"
+)
+target_link_libraries(base_world_squad_client_tests PRIVATE
+    apollo::base apollo::core apollo::runtime
+    apollo::net_link apollo::net_contract_wire apollo_protocol)
+if(WIN32)
+    target_link_libraries(base_world_squad_client_tests PRIVATE ws2_32)
+    target_compile_definitions(base_world_squad_client_tests PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(base_world_squad_client_tests PRIVATE /utf-8)
+endif()
+add_test(NAME BaseWorldSquadClientTests COMMAND base_world_squad_client_tests)
+
 # World 执行位置投影发布面 e2e（L115 位置投影首切片，契约 968）：registry
 # 水位裁决（受理/幂等/拒乱序/墓碑抹除/非法拒/复合键独立）+ 真链路投影生命周期
 # + 断链重启 kUp 全量镜像重放。缝工厂两侧真实现直编

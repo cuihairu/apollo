@@ -1,8 +1,8 @@
 {
   "generator": "apollo-gen 0.2.0",
-  "schema_hash": "9f2f2841310eca9cfb223fefd92664da9e73653762455ac69a1871263e5198fc",
+  "schema_hash": "cae080551714d204b0c8e002501c65a93efeefd94704902236e5e53810499051",
   "client_hash": "aeaed975e2f79043742d9af6b23a3d5784b9df70b9c78efb343c9ef430b613cd",
-  "internal_hash": "55ae68f5c2e36e9c720a5662087d12118fede94a6e6dd0610d51c1e965d65068",
+  "internal_hash": "1e906a5b131a00d597980106b4ef74783eabae34519e1794cda45029ac6604e9",
   "contract_version": 3,
   "aliases": [
     {
@@ -4015,6 +4015,253 @@
         }
       ],
       "desc": "World 侧动态创建分配回执（world→fleetctl M1 管理面；request_id 关联；code 0 = 已铸造 space_id 并归属目标 cell、journal A 行已落——回带 space_id 供调用方后续 963 缩容释放；非 0 = 拒绝原因，不铸造不分配）"
+    },
+    {
+      "id": 972,
+      "name": "squad_validation_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（受理方单调分配，0 保留）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标小队"
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标副本（用途绑定）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标执行端（受理 cell 自报 logical_id）"
+        },
+        {
+          "name": "members",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "名册快照（受理时成员 player_id，逗号分隔；空 = 非法拒）"
+        }
+      ],
+      "desc": "小队入场资格校验请求（cell→World→Base M1 管理面；D11 issuer=Base 切片批①——受理面代申请路径：cell 受理副本后不自签凭证，经 World 向成员归属 Base 送名册快照逐成员盖资格章。名册权威仍在 cell 侧 PartyManager 内存面，Base 只做资格盖章（档案存在+未冻结），设计见 docs/review/2026-10-30-actions/04 §4.3。成员列表逗号分隔循 deps 惯例（生成链无重复组）。认证凭据面同 960 惯例另行挂账，裸帧受理）"
+    },
+    {
+      "id": 973,
+      "name": "squad_validation_reply",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带请求关联号"
+        },
+        {
+          "name": "accepted",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=全员合格已盖章；0=拒绝（code/failed_members 为原因）"
+        },
+        {
+          "name": "roster_hash",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "资格盖戳（序无关 FNV-1a 摘要，与 AdmissionCredentialFace 同算法同口径；accepted=0 为空）"
+        },
+        {
+          "name": "failed_members",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "拒因成员（player_id 逗号分隔；空=无）"
+        },
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "0=全员合格；1=有成员档案缺席；2=有成员冻结（迁移冻结标记在册）；3=名册空/非法；4=Base 不受理（非该小队成员归属方）"
+        }
+      ],
+      "desc": "小队入场资格校验回执（Base→World→cell；request_id 关联；accepted=1 = 全员合格并盖 roster_hash 章——章随 974 容量申请回带、随 976 凭证下发；非 0 code 带拒因成员清单，不盖章不签发）"
+    },
+    {
+      "id": 974,
+      "name": "squad_capacity_request",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（签发方单调分配，0 保留）"
+        },
+        {
+          "name": "party_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标小队"
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标副本"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标执行端"
+        },
+        {
+          "name": "roster_hash",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "973 盖章回带（预留与盖戳关联；空 = 未盖章拒）"
+        },
+        {
+          "name": "slots",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "申请槽数（=成员数；≤0 非法拒）"
+        }
+      ],
+      "desc": "小队容量预留申请（Base→World M1 管理面；D11 口径「经 World 预留容量后签发」：资格章在手后按 S03 槽位语义申请——槽数=成员数，对目标 instance 所在 cell 的自报容量记账；roster_hash 回带使预留与盖戳关联）"
+    },
+    {
+      "id": 975,
+      "name": "squad_capacity_grant",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "回带请求关联号"
+        },
+        {
+          "name": "granted",
+          "type": "bool",
+          "wire_type": "bool",
+          "desc": "1=已预留；0=拒绝（code 为原因）"
+        },
+        {
+          "name": "reservation_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "预留凭证 id（granted=1 有效；976 逐帧回带）"
+        },
+        {
+          "name": "expires_at",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "预留过期时刻（ms；0=不设窗）"
+        },
+        {
+          "name": "code",
+          "type": "int32",
+          "wire_type": "int32",
+          "desc": "0=已预留；1=无容量（cell 自报槽位不足）；2=实例未知；3=排空中；4=签发时预留窗已过"
+        }
+      ],
+      "desc": "小队容量预留回执（World→Base；request_id 关联；granted=1 回带预留 id 与过期窗——签发时预留已过期按拒绝处理不放凭证；成员 enter 消费各自凭证即释放对应槽，到期未消费整批回收；容量拒绝=明确码回传，不静默降级为无凭证放行）"
+    },
+    {
+      "id": 976,
+      "name": "squad_credential_bundle",
+      "dir": "P2P",
+      "channel": "events",
+      "domain": "internal",
+      "binding": "reflect",
+      "fields": [
+        {
+          "name": "request_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "控制关联键（与 974 请求同号关联整批）"
+        },
+        {
+          "name": "reservation_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "容量预留 id（975 granted 回带）"
+        },
+        {
+          "name": "credential_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "凭证唯一 ID（单次消费；签发方分配）"
+        },
+        {
+          "name": "player_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "绑定玩家"
+        },
+        {
+          "name": "squad_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "所属小队"
+        },
+        {
+          "name": "instance_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标副本（用途绑定）"
+        },
+        {
+          "name": "cell_id",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "目标执行端"
+        },
+        {
+          "name": "roster_hash",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "成员/资格快照摘要（973 盖章）"
+        },
+        {
+          "name": "issued_at",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "签发时刻（ms）"
+        },
+        {
+          "name": "expires_at",
+          "type": "int64",
+          "wire_type": "int64",
+          "desc": "有效期止（ms；0=无期限）"
+        },
+        {
+          "name": "issuer",
+          "type": "string",
+          "wire_type": "string",
+          "desc": "签发方（base:<id>）"
+        }
+      ],
+      "desc": "小队入场凭证下推（Base→World→cell M1 管理面；预留 grant 后 Base 逐成员签发一帧一凭证——967 每条目一帧惯例，生成链无重复组；字段与 AdmissionCredentialFace 全口径对齐（roster_hash string）；cell 收帧入表即 enter 可验（issuer=base 语义切换随受理改道批启用））"
     }
   ],
   "entities": [
