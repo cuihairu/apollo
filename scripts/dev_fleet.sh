@@ -200,6 +200,11 @@ cmd_up() {
     # 落盘父目录先建：world journal 卷锁与 login epochs 水位均拒启/降级于
     # 父目录缺失（world 拒启后 machined 退避 5 次放弃 = 编队成员永久缺席）。
     mkdir -p "$FLEET_DIR/data/world" "$FLEET_DIR/data/login"
+    # journal 空文件预建（仅缺失时建，不截断既有日志）：world 只在首次
+    # append 才建档——virgin 装载时文件缺失即 journalMissingAtBoot_，首个
+    # cell 拨入触发「无墓碑全池冻结」推分配闸（空日志顶替禁令判定随批C 的
+    # 保守占位），编队空间分配面静默冻死。空文件在 = 显式 virgin 声明。
+    [ -e "$FLEET_DIR/data/world/journal.log" ] || : > "$FLEET_DIR/data/world/journal.log"
     : > "$LOGFILE"
     cmd_roster > "$ROSTER"
 

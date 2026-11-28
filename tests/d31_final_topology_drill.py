@@ -183,6 +183,16 @@ with tempfile.TemporaryDirectory(prefix="apollo_d31_final_topology_") as directo
         wait_base(BASE_B_PORT)
         seed_player(DB_A_PORT, PLAYER)
 
+        # ---- 1b. 分配面活性：journal 空文件预建后 virgin 装载不触发
+        # 「无墓碑全池冻结」（boot 文件缺失 = journalMissingAtBoot_ 保守占位，
+        # 首个拨入冻结一切认领）；cell-21 认领 501/502、cell-22 认领 503
+        # 必须显形（认领标记缺席 = 分配面静默冻死）。
+        whole_log = log_path(env).read_text(errors="replace")
+        assert "missing journal evidence" not in whole_log, \
+            "assignment freeze fired on virgin fleet"
+        wait_log(env, "space assigned: space=501", 0)
+        wait_log(env, "space assigned: space=503", 0)
+
         # ---- 2. 契约/真实网络/持久化：准入激活落 A + 958 结算 ----
         rc, line = probe(["--probe-login", str(LOGIN_M1_PORT), "player1", "pass1"])
         assert rc == 0 and f"ok=1 player={PLAYER}" in line, f"login: {line}"
