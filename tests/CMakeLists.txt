@@ -3237,6 +3237,20 @@ if(TARGET base_database_tests AND APOLLO_BUILD_APPS)
             $<TARGET_FILE:base_database_tests>
             ${CMAKE_SOURCE_DIR}/sdks/cpp/generated/contract_route.json)
         set_tests_properties(BaseUpdateMigrationDrill PROPERTIES TIMEOUT 120)
+        # L132 D12 编队批：常驻 machined 开发编队（roster 双 database + 双 base）
+        # 上走 D22 同型真链——probe-login 经 9113 准入激活落 base A → fleetctl
+        # resolve → migrate 真编排改派 base B → 拒旧 → 跨迁移去重重放 → 双库终
+        # 态一致 → 编队 down 无残留（dev_fleet_two_base_smoke.py）。编队占机器
+        # 级端口，RUN_SERIAL 防与其它编队演练并发。
+        add_dependencies(base_database_tests machined world gateway login)
+        add_test(NAME DevFleetTwoBaseSmoke COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/dev_fleet_two_base_smoke.py
+            ${CMAKE_SOURCE_DIR}/scripts/dev_fleet.sh
+            $<TARGET_FILE:base_database_tests>
+            $<TARGET_FILE:fleetctl>
+            ${CMAKE_BINARY_DIR})
+        set_tests_properties(DevFleetTwoBaseSmoke PROPERTIES
+            TIMEOUT 240 RUN_SERIAL TRUE)
         # D19 清单第 5 行真机样本：不支持 route_version 隔离（kRouteVersionMismatch
         # 断连现状）+ APOLLO_ROUTE_COMPAT 兼容窗口受理与窗外仍拒
         # （net_route_version_compat_smoke.py）。
